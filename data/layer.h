@@ -11,10 +11,12 @@ class Layer : public DOMElement
 public:
     // Attributes from Layer element
     std::string name;
-    uint8_t color[4];
+    uint8_t color[4] = {0, 0, 0, 255}; // Default to opaque black
     std::string current;
-    bool autoNamed;
-    bool isSelected;
+    bool autoNamed = false;
+    bool selected = false;
+    bool locked = false;
+    bool visible = true;
 
     std::vector<Frame*> frames;
 

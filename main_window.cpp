@@ -1,6 +1,7 @@
 #include "main_window.h"
 #include "phoenix_view.h"
 #include "parse/fla_parser.h"
+#include <QApplication>
 #include <QFileDialog>
 #include <QMessageBox>
 #include <QFileInfo>
@@ -30,7 +31,7 @@ MainWindow::MainWindow(QWidget *parent)
 
     // Try to load a default FLA file
     //loadFLAFile("d:\\fla\\test_4_symbol.fla");
-    loadFLAFile("d:\\fla\\MensWear_04.fla");
+    loadFLAFile("d:\\fla\\MensWear_04_2.fla");
     //loadFLAFile("d:\\fla\\test_1.fla");
 }
 
@@ -72,7 +73,12 @@ void MainWindow::setupMenus()
     openAction->setStatusTip("Open an FLA file");
     connect(openAction, &QAction::triggered, this, &MainWindow::openFile);
     fileMenu->addAction(openAction);
-    
+
+    QAction* exitAction = new QAction("&Exit", this);
+    exitAction->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_Q));
+    connect(exitAction, &QAction::triggered, this, &MainWindow::quit);
+    fileMenu->addAction(exitAction);
+
     // View menu
     QMenu* viewMenu = menuBar->addMenu("&View");
     
@@ -91,6 +97,11 @@ void MainWindow::openFile()
     {
         loadFLAFile(fileName);
     }
+}
+
+void MainWindow::quit()
+{
+    qApp->exit();
 }
 
 void MainWindow::viewDocument()

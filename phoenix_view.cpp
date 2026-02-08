@@ -89,7 +89,8 @@ void PhoenixView::drawTimeline(QPainter& painter, const Timeline* timeline)
     for (int i = timeline->layers.size() - 1; i >= 0; --i)
     {
         const Layer* layer = timeline->layers[i];
-        drawLayer(painter, layer);
+        if (layer->visible)
+            drawLayer(painter, layer);
     }
 }
 
@@ -188,7 +189,7 @@ void PhoenixView::drawShape(QPainter& painter, const Shape* shape)
     // Draw edges
     for (const Path* path : shape->edges)
     {
-        const FillStyle* fillStyle = shape->getFillStyleByIndex(path->fillStyle);
+        const FillStyle* fillStyle = shape->getFillStyleByIndex(path->fillStyle[1] != -1 ? path->fillStyle[1] : path->fillStyle[0]);
         if (fillStyle)
         {
             if (fillStyle->type() == FillStyle::Type::SolidColor)
@@ -251,7 +252,19 @@ void PhoenixView::drawShape(QPainter& painter, const Shape* shape)
 
                     painter.setPen(pen);
                 }
+                else
+                {
+                    painter.setPen(Qt::NoPen);
+                }
             }
+            else
+            {
+                painter.setPen(Qt::NoPen);
+            }
+        }
+        else
+        {
+            painter.setPen(Qt::NoPen);
         }
 
         QPainterPath painterPath;

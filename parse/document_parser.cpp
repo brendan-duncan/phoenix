@@ -109,8 +109,18 @@ Path* parsePath(const QDomElement& element)
         return nullptr;
     }
 
-    path->fillStyle = element.attribute("fillStyle1").toInt();
-    path->strokeStyle = element.attribute("strokeStyle").toInt();
+    path->fillStyle[0] = element.hasAttribute("fillStyle0") ? element.attribute("fillStyle0").toInt() : -1;
+    path->fillStyle[1] = element.hasAttribute("fillStyle1") ? element.attribute("fillStyle1").toInt() : -1;
+    path->fillStyle[2] = element.hasAttribute("fillStyle2") ? element.attribute("fillStyle2").toInt() : -1;
+    path->fillStyle[3] = element.hasAttribute("fillStyle3") ? element.attribute("fillStyle3").toInt() : -1;
+    path->fillStyle[4] = element.hasAttribute("fillStyle4") ? element.attribute("fillStyle4").toInt() : -1;
+    path->fillStyle[5] = element.hasAttribute("fillStyle5") ? element.attribute("fillStyle5").toInt() : -1;
+    path->fillStyle[6] = element.hasAttribute("fillStyle6") ? element.attribute("fillStyle6").toInt() : -1;
+    path->fillStyle[7] = element.hasAttribute("fillStyle7") ? element.attribute("fillStyle7").toInt() : -1;
+    path->fillStyle[8] = element.hasAttribute("fillStyle8") ? element.attribute("fillStyle8").toInt() : -1;
+    path->fillStyle[9] = element.hasAttribute("fillStyle9") ? element.attribute("fillStyle9").toInt() : -1;
+
+    path->strokeStyle = element.hasAttribute("strokeStyle") ? element.attribute("strokeStyle").toInt() : -1;
 
     return path;
 }
@@ -605,8 +615,10 @@ bool parseLayer(const QDomElement& element, Layer* layer)
     parseHexColor(color, layer->color);
 
     layer->current = element.attribute("current").toStdString();
-    layer->isSelected = element.attribute("isSelected") == "true";
+    layer->selected = element.attribute("isSelected") == "true";
     layer->autoNamed = element.attribute("autoNamed") == "true";
+    layer->locked = element.attribute("locked") == "true";
+    layer->visible = element.attribute("visible") != "false";
 
     QDomNodeList childNodes = element.childNodes();
     for (int i = 0; i < childNodes.size(); ++i)

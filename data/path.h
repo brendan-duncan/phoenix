@@ -26,15 +26,15 @@ struct PathSection
 struct PathSegment
 {
     int styleIndex = -1;
-    int fillStyleIndex = -1;
     int lineStyleIndex = -1;
+    int fillStyleIndex = -1;
     std::vector<PathSection> sections;
 };
 
 class Path : DOMElement
 {
 public:
-    int fillStyle = -1;
+    int fillStyle[10] = {-1, -1, -1, -1, -1, -1, -1, -1, -1, -1};
     int strokeStyle = -1;
 
     std::vector<PathSegment> segments;

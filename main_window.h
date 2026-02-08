@@ -20,6 +20,9 @@ public:
 
 private slots:
     void openFile();
+
+    void quit();
+
     void viewDocument();
 
 private:
