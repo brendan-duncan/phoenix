@@ -1,0 +1,20 @@
+#pragma once
+
+#include "dom_element.h"
+#include "timeline.h"
+#include <vector>
+#include <string>
+
+class Symbol : public DOMElement
+{
+public:
+    std::string name;
+    std::string itemId;
+    std::string lastModified;
+
+    std::vector<Timeline*> timelines;
+
+    Symbol();
+
+    ~Symbol() override;
+};
