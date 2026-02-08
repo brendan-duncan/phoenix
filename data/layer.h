@@ -16,7 +16,6 @@ public:
     bool autoNamed = false;
     bool selected = false;
     bool locked = false;
-    bool visible = true;
 
     std::vector<Frame*> frames;
 

@@ -15,11 +15,18 @@
 PhoenixView::PhoenixView(QWidget *parent)
     : QWidget(parent)
     , _flaDocument(nullptr)
+    , _zoom(1.0)
+    , _panX(0)
+    , _panY(0)
+    , _isDragging(false)
 {
     // Set widget properties
     setMinimumSize(400, 300);
     setBackgroundRole(QPalette::Base);
     setAutoFillBackground(true);
+    
+    // Enable mouse tracking for smooth panning
+    setMouseTracking(true);
 }
 
 PhoenixView::~PhoenixView()
@@ -59,17 +66,21 @@ void PhoenixView::paintEvent(QPaintEvent *event)
         return;
     }
 
-    // Calculate scale to fit document in widget
+    // Calculate initial scale to fit document in widget (if zoom is 1.0)
     QRectF widgetRect = rect();
     double scaleX = (widgetRect.width() - 20) / docWidth;
     double scaleY = (widgetRect.height() - 20) / docHeight;
-    double scale = qMin(scaleX, scaleY);
+    double defaultScale = qMin(scaleX, scaleY);
 
-    double offsetX = (widgetRect.width() - docWidth * scale) / 2.0;
-    double offsetY = (widgetRect.height() - docHeight * scale) / 2.0;
+    // Use zoom level if not default (1.0), otherwise fit to widget
+    double scale = (_zoom != 1.0) ? _zoom : defaultScale;
+    
+    // Calculate center offset for initial fit
+    double centerX = (_zoom == 1.0) ? (widgetRect.width() - docWidth * scale) / 2.0 : 0;
+    double centerY = (_zoom == 1.0) ? (widgetRect.height() - docHeight * scale) / 2.0 : 0;
 
-    // Apply transformation
-    painter.translate(offsetX, offsetY);
+    // Apply transformations: pan + zoom + center offset
+    painter.translate(_panX + centerX, _panY + centerY);
     painter.scale(scale, scale);
 
     // Draw document content
@@ -271,4 +282,91 @@ void PhoenixView::drawShape(QPainter& painter, const Shape* shape)
         pathToPainterPath(path, painterPath);
         painter.drawPath(painterPath);
     }
+}
+
+void PhoenixView::mousePressEvent(QMouseEvent *event)
+{
+    if (event->button() == Qt::LeftButton)
+    {
+        _isDragging = true;
+        _lastMousePos = event->pos();
+        setCursor(Qt::ClosedHandCursor);
+    }
+}
+
+void PhoenixView::mouseMoveEvent(QMouseEvent *event)
+{
+    if (_isDragging)
+    {
+        QPoint delta = event->pos() - _lastMousePos;
+        _panX += delta.x();
+        _panY += delta.y();
+        _lastMousePos = event->pos();
+        update();
+    }
+}
+
+void PhoenixView::mouseReleaseEvent(QMouseEvent *event)
+{
+    if (event->button() == Qt::LeftButton)
+    {
+        _isDragging = false;
+        setCursor(Qt::ArrowCursor);
+    }
+}
+
+void PhoenixView::wheelEvent(QWheelEvent *event)
+{
+    // Zoom with mouse wheel
+    double scaleFactor = 1.15;
+    if (event->angleDelta().y() < 0)
+        scaleFactor = 1.0 / scaleFactor;
+    
+    double oldZoom = _zoom;
+    double newZoom = _zoom * scaleFactor;
+    
+    // Limit zoom range
+    if (newZoom < 0.1 || newZoom > 50.0)
+        return;
+    
+    // Get mouse position in screen coordinates
+    QPointF mousePos = event->position();
+    
+    // Calculate what scene point is under the mouse before zoom
+    QPointF scenePosBefore = (mousePos - QPointF(_panX, _panY)) / oldZoom;
+    
+    // Apply zoom
+    _zoom = newZoom;
+    
+    // Calculate new pan to keep the same scene point under the mouse
+    QPointF newScreenPos = scenePosBefore * newZoom + QPointF(_panX, _panY);
+    QPointF delta = newScreenPos - mousePos;
+    _panX -= delta.x();
+    _panY -= delta.y();
+    
+    update();
+}
+
+void PhoenixView::resetView()
+{
+    _zoom = 1.0;
+    _panX = 0;
+    _panY = 0;
+    update();
+}
+
+QPointF PhoenixView::screenToScene(const QPointF& screenPos) const
+{
+    return QPointF(
+        (screenPos.x() - _panX) / _zoom,
+        (screenPos.y() - _panY) / _zoom
+    );
+}
+
+QPointF PhoenixView::sceneToScreen(const QPointF& scenePos) const
+{
+    return QPointF(
+        scenePos.x() * _zoom + _panX,
+        scenePos.y() * _zoom + _panY
+    );
 }

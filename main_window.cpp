@@ -32,6 +32,7 @@ MainWindow::MainWindow(QWidget *parent)
     // Try to load a default FLA file
     //loadFLAFile("d:\\fla\\test_4_symbol.fla");
     loadFLAFile("d:\\fla\\MensWear_04_2.fla");
+    //loadFLAFile("d:\\fla\\MensWear_04.fla");
     //loadFLAFile("d:\\fla\\test_1.fla");
 }
 
