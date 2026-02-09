@@ -1,9 +1,9 @@
 #pragma once
 
+#include "edge.h"
 #include "element.h"
 #include "fill_style.h"
 #include "stroke_style.h"
-#include "path.h"
 #include "transform.h"
 #include <vector>
 #include <map>
@@ -13,7 +13,7 @@ class Shape : public Element
 public:
     std::vector<FillStyle *> fills;
     std::vector<StrokeStyle *> strokes;
-    std::vector<Path *> edges;
+    std::vector<Edge *> edges;
 
     std::map<int, StrokeStyle*> strokesMap;
     std::map<int, FillStyle*> fillsMap;

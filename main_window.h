@@ -1,13 +1,14 @@
 #pragma once
 
+#include "phoenix_view.h"
+#include "document_view.h"
 #include "data/fla_document.h"
 #include <QMainWindow>
 #include <QMenuBar>
 #include <QMenu>
 #include <QAction>
 #include <QString>
-
-class PhoenixView;
+#include <QSplitter>
 
 class MainWindow : public QMainWindow
 {
@@ -25,8 +26,16 @@ private slots:
 
     void viewDocument();
 
+    void onVisibilityChanged();
+
 private:
-    PhoenixView* _phoenixView;
-    FLADocument* _flaDocument;
+    void setupUI();
+
     void setupMenus();
+
+    FLADocument* _flaDocument;
+
+    QSplitter* _splitter;
+    DocumentView* _documentView;
+    PhoenixView* _phoenixView;
 };

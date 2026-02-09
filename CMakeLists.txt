@@ -21,12 +21,14 @@ include_directories(${CMAKE_PREFIX_PATH}/include/QtCore/6.10.2/QtCore/private)
 set(HEADERS
     main_window.h
     phoenix_view.h
+    document_view.h
     parse/document_parser.h
     parse/zip_reader.h
     parse/fla_parser.h
     parse/path_parser.h
     data/document.h
     data/dom_element.h
+    data/edge.h
     data/element.h
     data/fill_style.h
     data/fla_document.h
@@ -34,7 +36,6 @@ set(HEADERS
     data/group.h
     data/layer.h
     data/linear_gradient.h
-    data/path.h
     data/point.h
     data/shape.h
     data/solid_color.h
@@ -49,12 +50,14 @@ set(SOURCES
     main.cpp
     main_window.cpp
     phoenix_view.cpp
+    document_view.cpp
     parse/document_parser.cpp
     parse/zip_reader.cpp
     parse/fla_parser.cpp
     parse/path_parser.cpp
     data/document.cpp
     data/dom_element.cpp
+    data/edge.cpp
     data/element.cpp
     data/fill_style.cpp
     data/fla_document.cpp
@@ -62,7 +65,6 @@ set(SOURCES
     data/group.cpp
     data/layer.cpp
     data/linear_gradient.cpp
-    data/path.cpp
     data/point.cpp
     data/shape.cpp
     data/solid_color.cpp

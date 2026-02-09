@@ -1,9 +1,9 @@
 #include "path_parser.h"
 #include <iostream>
 
-Path* PathParser::parse(const std::string& data)
+Edge* PathParser::parse(const std::string& data, bool isCubic)
 {
-    Path* path = new Path();
+    Edge* edge = new Edge();
 
     int pos = 0;
 
@@ -33,8 +33,8 @@ Path* PathParser::parse(const std::string& data)
                     firstPoint = point;
                 isFirst = false;
 
-                path->segments.push_back({});
-                lastSegment = &path->segments.back();
+                edge->segments.push_back({});
+                lastSegment = &edge->segments.back();
 
                 lastSegment->sections.push_back({PathSection::Command::MoveTo, {point}});
 
@@ -55,7 +55,7 @@ Path* PathParser::parse(const std::string& data)
             else
             {
                 _errorString = "Path data error: QuadTo command without a preceding MoveTo.";
-                delete path;
+                delete edge;
                 return nullptr;
             }
 
@@ -73,7 +73,7 @@ Path* PathParser::parse(const std::string& data)
             else
             {
                 _errorString = "Path data error: LineTo command without a preceding MoveTo.";
-                delete path;
+                delete edge;
                 return nullptr;
             }
             lastPoint = point;
@@ -90,7 +90,7 @@ Path* PathParser::parse(const std::string& data)
             else
             {
                 _errorString = "Path data error: LineTo command without a preceding MoveTo.";
-                delete path;
+                delete edge;
                 return nullptr;
             }
             lastPoint = point;
@@ -144,7 +144,7 @@ Path* PathParser::parse(const std::string& data)
         }
     }
 
-    return path;
+    return edge;
 }
 
 Point PathParser::parsePoint(const std::string& data, int& pos)

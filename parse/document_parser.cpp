@@ -98,31 +98,27 @@ bool parseLinearGradient(const QDomElement& element, LinearGradient* linearGradi
     return true;
 }
 
-Path* parsePath(const QDomElement& element)
+Edge* parsePath(const QDomElement& element)
 {
-    std::string edgeData = element.attribute("edges").toStdString();
+    bool isCubic = element.hasAttribute("cubic");
+
+    std::string edgeData = isCubic ? element.attribute("cubic").toStdString() : element.attribute("edges").toStdString();
+
     PathParser pathParser;
-    Path* path = pathParser.parse(edgeData);
-    if (!path)
+    Edge* edge = pathParser.parse(edgeData, isCubic);
+
+    if (!edge)
     {
         qDebug() << "Failed to parse path edges:" << QString::fromStdString(pathParser.errorString());
         return nullptr;
     }
 
-    path->fillStyle[0] = element.hasAttribute("fillStyle0") ? element.attribute("fillStyle0").toInt() : -1;
-    path->fillStyle[1] = element.hasAttribute("fillStyle1") ? element.attribute("fillStyle1").toInt() : -1;
-    path->fillStyle[2] = element.hasAttribute("fillStyle2") ? element.attribute("fillStyle2").toInt() : -1;
-    path->fillStyle[3] = element.hasAttribute("fillStyle3") ? element.attribute("fillStyle3").toInt() : -1;
-    path->fillStyle[4] = element.hasAttribute("fillStyle4") ? element.attribute("fillStyle4").toInt() : -1;
-    path->fillStyle[5] = element.hasAttribute("fillStyle5") ? element.attribute("fillStyle5").toInt() : -1;
-    path->fillStyle[6] = element.hasAttribute("fillStyle6") ? element.attribute("fillStyle6").toInt() : -1;
-    path->fillStyle[7] = element.hasAttribute("fillStyle7") ? element.attribute("fillStyle7").toInt() : -1;
-    path->fillStyle[8] = element.hasAttribute("fillStyle8") ? element.attribute("fillStyle8").toInt() : -1;
-    path->fillStyle[9] = element.hasAttribute("fillStyle9") ? element.attribute("fillStyle9").toInt() : -1;
+    edge->fillStyle0 = element.hasAttribute("fillStyle0") ? element.attribute("fillStyle0").toInt() : -1;
+    edge->fillStyle1 = element.hasAttribute("fillStyle1") ? element.attribute("fillStyle1").toInt() : -1;
 
-    path->strokeStyle = element.hasAttribute("strokeStyle") ? element.attribute("strokeStyle").toInt() : -1;
+    edge->strokeStyle = element.hasAttribute("strokeStyle") ? element.attribute("strokeStyle").toInt() : -1;
 
-    return path;
+    return edge;
 }
 
 bool parseEdges(const QDomElement& element, Shape* shape)
@@ -136,12 +132,12 @@ bool parseEdges(const QDomElement& element, Shape* shape)
             QDomElement childElement = node.toElement();
             if (childElement.tagName() == "Edge")
             {
-                Path* path = parsePath(childElement);
-                if (!path)
+                Edge* edge = parsePath(childElement);
+                if (!edge)
                 {
                     return false;
                 }
-                shape->edges.push_back(path);
+                shape->edges.push_back(edge);
             }
             else
             {

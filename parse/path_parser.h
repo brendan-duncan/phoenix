@@ -1,13 +1,13 @@
 #pragma once
 
 #include "../data/point.h"
-#include "../data/path.h"
+#include "../data/edge.h"
 #include <string>
 
 class PathParser
 {
 public:
-    Path* parse(const std::string& edgeData);
+    Edge* parse(const std::string& data, bool isCubic);
 
     const std::string& errorString() const
     {

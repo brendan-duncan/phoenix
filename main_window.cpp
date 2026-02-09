@@ -16,23 +16,24 @@
 
 MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent)
-    , _phoenixView(new PhoenixView(this))
+    , _phoenixView(nullptr)
+    , _documentView(nullptr)
     , _flaDocument(nullptr)
 {
-    // Set the PhoenixView as central widget
-    setCentralWidget(_phoenixView);
-
     // Set window properties
     setWindowTitle("Phoenix - FLA Viewer");
-    resize(800, 600);
 
-    // Setup menus
+    setupUI();
     setupMenus();
+
+    resize(1024, 768);
 
     // Try to load a default FLA file
     //loadFLAFile("d:\\fla\\test_4_symbol.fla");
-    loadFLAFile("d:\\fla\\MensWear_04_2.fla");
-    //loadFLAFile("d:\\fla\\MensWear_04.fla");
+    //loadFLAFile("d:\\fla\\MensWear_04_2.fla");
+    //loadFLAFile("d:\\fla\\MensWear_04_3.fla");
+    //loadFLAFile("d:\\fla\\MensWear_04_4.fla");
+    loadFLAFile("d:\\fla\\MensWear_04.fla");
     //loadFLAFile("d:\\fla\\test_1.fla");
 }
 
@@ -47,6 +48,7 @@ void MainWindow::loadFLAFile(const QString& filePath)
     FLAParser parser;
     _flaDocument = parser.parse(filePath.toStdString());
     _phoenixView->setDocument(_flaDocument);
+    _documentView->setDocument(_flaDocument);
 
     if (_flaDocument)
     {
@@ -59,6 +61,40 @@ void MainWindow::loadFLAFile(const QString& filePath)
                            .arg(filePath)
                            .arg(parser.errorString()));
     }
+}
+
+void MainWindow::setupUI()
+{
+    // Create the main layout
+    QVBoxLayout* mainLayout = new QVBoxLayout();
+    QWidget* centralWidget = new QWidget(this);
+    centralWidget->setLayout(mainLayout);
+    setCentralWidget(centralWidget);
+
+    // Create the splitter
+    _splitter = new QSplitter(Qt::Horizontal, this);
+    mainLayout->addWidget(_splitter);
+
+    // Create the document view (left panel)
+    _documentView = new DocumentView(this);
+    _documentView->setMinimumWidth(150);
+    _documentView->setMaximumWidth(400);
+
+    // Create the phoenix view (right panel)
+    _phoenixView = new PhoenixView(this);
+
+    // Add widgets to splitter
+    _splitter->addWidget(_documentView);
+    _splitter->addWidget(_phoenixView);
+
+    // Set splitter properties
+    _splitter->setCollapsible(0, false);  // Don't collapse document view
+    _splitter->setCollapsible(1, false);  // Don't collapse phoenix view
+    _splitter->setStretchFactor(0, 0);    // Document view doesn't stretch
+    _splitter->setStretchFactor(1, 1);    // Phoenix view stretches
+
+    connect(_documentView, &DocumentView::visibilityChanged,
+            this, &MainWindow::onVisibilityChanged);
 }
 
 void MainWindow::setupMenus()
@@ -130,4 +166,13 @@ void MainWindow::viewDocument()
     dialog->setLayout(layout);
     
     dialog->exec();
+}
+
+void MainWindow::onVisibilityChanged()
+{
+    // Trigger a repaint of the phoenix view when visibility changes
+    if (_phoenixView)
+    {
+        _phoenixView->update();
+    }
 }

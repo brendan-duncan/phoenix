@@ -31,13 +31,14 @@ struct PathSegment
     std::vector<PathSection> sections;
 };
 
-class Path : DOMElement
+class Edge : DOMElement
 {
 public:
-    int fillStyle[10] = {-1, -1, -1, -1, -1, -1, -1, -1, -1, -1};
+    int fillStyle0 = -1;
+    int fillStyle1 = -1;
     int strokeStyle = -1;
 
     std::vector<PathSegment> segments;
 
-    Path();
+    Edge();
 };

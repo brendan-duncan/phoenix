@@ -13,7 +13,7 @@ Shape::~Shape()
     {
         delete stroke;
     }
-    for (Path* edge : edges)
+    for (Edge* edge : edges)
     {
         delete edge;
     }
