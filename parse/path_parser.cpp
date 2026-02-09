@@ -16,7 +16,8 @@ bool isDigit(char c)
 
 bool isSpace(char c)
 {
-    return std::isspace(static_cast<unsigned char>(c));
+    //return std::isspace(static_cast<unsigned char>(c));
+    return c == '\n' || c == '\r' || c == ' ' || c == '\t';
 }
 } // namespace
 
@@ -439,7 +440,29 @@ double PathParser::parseNumber(const std::string& data, int& pos)
 
         std::string hexPart = data.substr(start, pos - start);
         bool ok;
-        double value = std::stoi(hexPart, nullptr, 16);
+        long long value = std::stoll(hexPart, nullptr, 16);
+
+        // Handle two's complement negative numbers
+        // Determine bit width based on number of hex digits
+        int hexDigits = hexPart.length();
+        if (hexDigits > 0)
+        {
+            // Calculate the bit width (round up to 8, 16, 24, or 32 bits)
+            int bitWidth = ((hexDigits + 1) / 2) * 8;
+            if (bitWidth > 32) bitWidth = 32;
+
+            // Check if high bit is set (indicating negative in two's complement)
+            long long maxPositive = 1LL << (bitWidth - 1);
+            long long maxValue = 1LL << bitWidth;
+
+            if (value >= maxPositive)
+            {
+                // Convert from two's complement to negative
+                value = value - maxValue;
+            }
+        }
+
+        double result = static_cast<double>(value);
 
         // Check for decimal part (e.g., #1608.53)
         if (pos < data.size() && data[pos] == '.')
@@ -454,13 +477,13 @@ double PathParser::parseNumber(const std::string& data, int& pos)
             std::string decPart = data.substr(decStart, pos - decStart);
             if (!decPart.empty())
             {
-                double decValue = std::stoi(decPart, nullptr, 16);
+                double decValue = std::stoll(decPart, nullptr, 16);
                 int decDigits = pos - decStart;
-                value += decValue / pow(16.0, decDigits);
+                result += decValue / pow(16.0, decDigits);
             }
         }
 
-        return value;
+        return result;
     }
     else
     {

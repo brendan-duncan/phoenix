@@ -232,6 +232,9 @@ static bool pathToPainterPath(const Edge* edge, QPainterPath& painterPath)
 {
     for (const PathSegment& segment : edge->segments)
     {
+        if (!segment.visible)
+            continue;
+
         for (const PathSection& section : segment.sections)
         {
             if (section.command == PathSection::Command::Move)
@@ -268,6 +271,9 @@ void PhoenixView::drawShape(QPainter& painter, const Shape* shape)
     // Draw edges
     for (const Edge* edge : shape->edges)
     {
+        if (!edge->visible)
+            continue;
+
         const FillStyle* fillStyle = shape->getFillStyleByIndex(edge->fillStyle0 != -1 ? edge->fillStyle0 : edge->fillStyle1);
         if (fillStyle)
         {

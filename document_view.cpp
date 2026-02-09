@@ -1,6 +1,8 @@
 #include "document_view.h"
+#include "data/bitmap_instance.h"
 #include "data/group.h"
 #include "data/symbol_instance.h"
+#include "data/shape.h"
 #include <QHeaderView>
 #include <QIcon>
 #include <QMouseEvent>
@@ -12,7 +14,7 @@ DocumentView::DocumentView(QWidget *parent)
 {
     // Set up the tree widget
     setColumnCount(1);
-    setHeaderLabels(QStringList() << "Name");
+    setHeaderLabels(QStringList() << "Name");// << "Type");
     //header()->resizeSection(0, 200);
     //header()->resizeSection(1, 100);
 
@@ -129,22 +131,80 @@ void DocumentView::buildElementTree(QTreeWidgetItem* parentItem, const Element* 
     QString elementName;
     switch (element->elementType())
     {
-    case Element::Type::Shape:
-        elementName = "Shape";
-        break;
-    case Element::Type::SymbolInstance:
-        {
-            const SymbolInstance* instance = static_cast<const SymbolInstance*>(element);
-            elementName = QString("Symbol: %1").arg(QString::fromStdString(instance->libraryItemName));
-        }
-        break;
-    case Element::Type::Group:
-        elementName = "Group";
-        break;
+        case Element::Type::Shape:
+            elementName = "Shape";
+            break;
+        case Element::Type::SymbolInstance:
+            {
+                const SymbolInstance* instance = static_cast<const SymbolInstance*>(element);
+                elementName = QString("Symbol: %1").arg(QString::fromStdString(instance->libraryItemName));
+            }
+            break;
+        case Element::Type::Group:
+            elementName = "Group";
+            break;
+        case Element::Type::StaticText:
+            elementName = "StaticText";
+            break;
+        case Element::Type::BitmapInstance:
+            {
+                const BitmapInstance* instance = static_cast<const BitmapInstance*>(element);
+                elementName = QString("Bitmap: %1").arg(QString::fromStdString(instance->libraryItemName));
+            }
+            break;
     }
 
     QTreeWidgetItem* elementItem = createTreeItem(elementName, (DOMElement*)element, parentItem);
     updateItemVisibility(elementItem);
+
+    // If it's a shape, add its edges
+    if (element->elementType() == Element::Type::Shape)
+    {
+        const ::Shape* shape = static_cast<const ::Shape*>(element);
+        int edgeIndex = 0;
+        for (const Edge* edge : shape->edges)
+        {
+            QString edgeName = QString("Edge %1").arg(edgeIndex++);
+            QTreeWidgetItem* edgeItem = createTreeItem(edgeName, (DOMElement*)edge, elementItem);
+
+            // Add segments as children of the edge
+            int segmentIndex = 0;
+            for (const PathSegment& segment : edge->segments)
+            {
+                QString segmentName = QString("Segment %1").arg(segmentIndex++);
+                QTreeWidgetItem* segmentItem = createTreeItem(segmentName, (DOMElement*)&segment, edgeItem);
+                // Add sections as children of the segment
+                for (const PathSection& section : segment.sections)
+                {
+                    QString sectionName;
+                    switch (section.command)
+                    {
+                        case PathSection::Command::Move:
+                            sectionName = "Move To";                            
+                            break;
+                        case PathSection::Command::Line:
+                            sectionName = "Line To";
+                            break;
+                        case PathSection::Command::Quad:
+                            sectionName = "Quadratic Curve To";
+                            break;
+                        case PathSection::Command::Cubic:
+                            sectionName = "Cubic Curve To";
+                            break;
+                        case PathSection::Command::Close:
+                            sectionName = "Close Path";
+                            break;
+                    }
+                    for (size_t i = 0; i < section.points.size(); ++i)
+                    {
+                        const Point& pt = section.points[i];
+                        sectionName += QString(" (x: %1, y: %2)").arg(pt.x).arg(pt.y);
+                    }
+                    createTreeItem(sectionName, nullptr, segmentItem);
+                }
+            }
+        }
+    }
 
     // If it's a group, add its children
     if (element->elementType() == Element::Type::Group)
@@ -186,6 +246,7 @@ QTreeWidgetItem* DocumentView::createTreeItem(const QString& text, DOMElement* d
     }
 
     item->setText(0, text);
+    //item->setText(1, QString::fromStdString(domElement ? domElement->domTypeName() : ""));
     item->setIcon(0, getVisibilityIcon(domElement ? domElement->visible : true));
 
     // Store mapping for quick lookup

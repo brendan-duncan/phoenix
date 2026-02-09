@@ -24,15 +24,19 @@ struct PathSection
     {}
 };
 
-struct PathSegment
+struct PathSegment : public DOMElement
 {
     int styleIndex = -1;
     int lineStyleIndex = -1;
     int fillStyleIndex = -1;
     std::vector<PathSection> sections;
+
+    PathSegment() = default;
+
+    std::string domTypeName() const override { return "PathSegment"; }
 };
 
-class Edge : DOMElement
+class Edge : public DOMElement
 {
 public:
     int fillStyle0 = -1;

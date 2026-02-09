@@ -35,6 +35,7 @@ MainWindow::MainWindow(QWidget *parent)
     //loadFLAFile("d:\\fla\\MensWear_04_4.fla");
     //loadFLAFile("d:\\fla\\MensWear_04.fla");
     loadFLAFile("d:\\fla\\HulaBunny_Sticker_2018.fla");
+    //loadFLAFile("d:\\fla\\HulaBunny_Sticker_2018_2.fla");
     //loadFLAFile("d:\\fla\\fluid_brush_tool.fla");
     //loadFLAFile("d:\\fla\\classic_brush_tool.fla");
     //loadFLAFile("d:\\fla\\test_1.fla");
@@ -86,7 +87,7 @@ void MainWindow::setupUI()
     // Create the document view (left panel)
     _documentView = new DocumentView(this);
     _documentView->setMinimumWidth(150);
-    _documentView->setMaximumWidth(400);
+    //_documentView->setMaximumWidth(400);
 
     // Create the phoenix view (right panel)
     _phoenixView = new PhoenixView(this);
