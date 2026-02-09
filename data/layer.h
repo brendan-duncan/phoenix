@@ -21,5 +21,7 @@ public:
 
     Layer();
 
-    ~Layer() override; 
+    ~Layer() override;
+
+    std::string domTypeName() const override { return "Layer"; }
 };

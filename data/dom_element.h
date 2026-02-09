@@ -1,5 +1,7 @@
 #pragma once
 
+#include <string>
+
 class DOMElement
 {
 public:
@@ -8,4 +10,6 @@ public:
     DOMElement();
 
     virtual ~DOMElement() = default;
+
+    virtual std::string domTypeName() const = 0;
 };

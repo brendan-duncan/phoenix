@@ -13,4 +13,6 @@ public:
     SymbolInstance();
 
     Element::Type elementType() const override { return Element::Type::SymbolInstance; }
+
+    std::string domTypeName() const override { return "SymbolInstance"; }
 };

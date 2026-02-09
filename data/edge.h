@@ -42,4 +42,6 @@ public:
     std::vector<PathSegment> segments;
 
     Edge();
+
+    std::string domTypeName() const override { return "Edge"; }
 };

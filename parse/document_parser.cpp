@@ -8,8 +8,8 @@
 #include "../data/solid_color.h"
 #include "../data/static_text.h"
 #include "../data/symbol_instance.h"
-
 #include <algorithm>
+
 #include <QDomElement>
 #include <QFile>
 #include <QDomNodeList>
@@ -17,6 +17,8 @@
 
 namespace 
 {
+
+std::string _currentFile;
 
 void parseHexColor(const std::string& hexColor, uint8_t rgba[4])
 {
@@ -103,16 +105,19 @@ bool parseLinearGradient(const QDomElement& element, LinearGradient* linearGradi
 
 Edge* parsePath(const QDomElement& element)
 {
-    bool isCubic = element.hasAttribute("cubics");
-
-    std::string edgeData = isCubic ? element.attribute("cubics").toStdString() : element.attribute("edges").toStdString();
+    std::string edgeData =element.attribute("edges").toStdString();
+    if (edgeData.empty())
+    {
+        qDebug() << "Edge element missing edges attribute" << (_currentFile.empty() ? "" : " from") << QString::fromStdString(_currentFile);
+        return nullptr;
+    }
 
     PathParser pathParser;
-    Edge* edge = pathParser.parse(edgeData, isCubic);
+    Edge* edge = pathParser.parse(edgeData);
 
     if (!edge)
     {
-        qDebug() << "Failed to parse path edges:" << QString::fromStdString(pathParser.errorString());
+        qDebug() << "Failed to parse path edges:" << QString::fromStdString(pathParser.errorString()) << (_currentFile.empty() ? "" : " from") << QString::fromStdString(_currentFile);
         return nullptr;
     }
 
@@ -135,16 +140,23 @@ bool parseEdges(const QDomElement& element, Shape* shape)
             QDomElement childElement = node.toElement();
             if (childElement.tagName() == "Edge")
             {
+                if (childElement.hasAttribute("cubics"))
+                {
+                    // Cubics are used for the editor, not for rendering, so they can be skipped for now
+                    continue;
+                }
+
                 Edge* edge = parsePath(childElement);
                 if (!edge)
                 {
                     return false;
                 }
+
                 shape->edges.push_back(edge);
             }
             else
             {
-                qDebug() << "!!!! Unhandled edge element:" << childElement.tagName();
+                qDebug() << "!!!! Unhandled edge element:" << childElement.tagName() << (_currentFile.empty() ? "" : " from") << QString::fromStdString(_currentFile);
             }
         }
     }
@@ -174,7 +186,7 @@ FillStyle* parseFillStyle(const QDomElement& element)
         }
         return linearFill;
     }
-    qDebug() << "!!!! Unhandled fill element:" << element.tagName();
+    qDebug() << "!!!! Unhandled fill element:" << element.tagName() << (_currentFile.empty() ? "" : " from") << QString::fromStdString(_currentFile);
     return nullptr;
 }
 
@@ -215,7 +227,7 @@ bool parseStroke(const QDomElement& element, Stroke* stroke)
             }
             else
             {
-                qDebug() << "!!!! Unhandled stroke element:" << childElement.tagName();
+                qDebug() << "!!!! Unhandled stroke element:" << childElement.tagName() << (_currentFile.empty() ? "" : " from") << QString::fromStdString(_currentFile);
             }
         }
     }
@@ -233,22 +245,41 @@ bool parseStrokeStyle(const QDomElement& element, StrokeStyle* strokeStyle)
         if (node.isElement())
         {
             QDomElement childElement = node.toElement();
-            if (childElement.tagName() == "SolidStroke" ||
-                childElement.tagName() == "DashedStroke" ||
-                childElement.tagName() == "RaggedStroke" ||
-                childElement.tagName() == "StippleStroke")
+            Stroke* stroke = nullptr;
+            if (childElement.tagName() == "SolidStroke")
             {
-                strokeStyle->stroke = new Stroke();
-                strokeStyle->stroke->style = childElement.tagName().toStdString();
-                if (!parseStroke(childElement, strokeStyle->stroke))
-                {
-                    return false;
-                }
+                stroke = new SolidStroke();
+            }
+            else if (childElement.tagName() == "DashedStroke")
+            {
+                stroke = new DashedStroke();
+            }
+            else if (childElement.tagName() == "RaggedStroke")
+            {
+                stroke = new RaggedStroke();
+            }
+            else if (childElement.tagName() == "StippleStroke")
+            {
+                stroke = new StippleStroke();
+            }
+            else if (childElement.tagName() == "DottedStroke")
+            {
+                stroke = new DottedStroke();
             }
             else
             {
-                qDebug() << "!!!! Unhandled stroke element:" << childElement.tagName();
+                qDebug() << "!!!! Unhandled stroke element:" << childElement.tagName() << (_currentFile.empty() ? "" : " from") << QString::fromStdString(_currentFile);
+                continue;
             }
+
+             if (!parseStroke(childElement, stroke))
+             {
+                 delete stroke;
+                 return false;
+             }
+
+             stroke->style = childElement.tagName().toStdString();
+             strokeStyle->stroke = stroke;
         }
     }
     return true;
@@ -276,7 +307,7 @@ bool parseStrokes(const QDomElement& element, Shape* shape)
             }
             else
             {
-                qDebug() << "!!!! Unhandled strokes element:" << childElement.tagName();
+                qDebug() << "!!!! Unhandled strokes element:" << childElement.tagName() << (_currentFile.empty() ? "" : " from") << QString::fromStdString(_currentFile);
             }
         }
     }
@@ -314,7 +345,7 @@ bool parseFills(const QDomElement& element, Shape* shape)
             }
             else
             {
-                qDebug() << "!!!! Unhandled fills element:" << childElement.tagName();
+                qDebug() << "!!!! Unhandled fills element:" << childElement.tagName() << (_currentFile.empty() ? "" : " from") << QString::fromStdString(_currentFile);
             }
         }
     }
@@ -347,7 +378,7 @@ bool parseElement(const QDomElement& element, Element* el)
         }
         else
         {
-            qDebug() << "!!!! Unhandled element matrix element:" << matrixElement.tagName();
+            qDebug() << "!!!! Unhandled element matrix element:" << matrixElement.tagName() << (_currentFile.empty() ? "" : " from") << QString::fromStdString(_currentFile);
         }
     }
 
@@ -366,7 +397,7 @@ bool parseElement(const QDomElement& element, Element* el)
         }
         else
         {
-            qDebug() << "!!!! Unhandled element transformation point element:" << pointElement.tagName();
+            qDebug() << "!!!! Unhandled element transformation point element:" << pointElement.tagName() << (_currentFile.empty() ? "" : " from") << QString::fromStdString(_currentFile);
         }
     }
 
@@ -418,7 +449,7 @@ bool parseShape(const QDomElement& element, Shape* shape)
             }
             else
             {
-                qDebug() << "!!!! Unhandled shape element:" << childElement.tagName();
+                qDebug() << "!!!! Unhandled shape element:" << childElement.tagName() << (_currentFile.empty() ? "" : " from") << QString::fromStdString(_currentFile);
             }
         }
     }
@@ -433,72 +464,6 @@ bool parseSymbolInstance(const QDomElement& element, SymbolInstance* instance)
     }
 
     instance->libraryItemName = element.attribute("libraryItemName").toStdString();
-
-    return true;
-}
-
-bool parseGroup(const QDomElement& element, Group* group)
-{
-    if (!parseElement(element, group))
-    {
-        return false;
-    }
-
-    QDomNodeList memberNodes = element.elementsByTagName("members");
-    for (QDomNode memberNode : memberNodes)
-    {
-        QDomElement memberElement = memberNode.toElement();
-
-        for (int i = 0; i < memberElement.childNodes().size(); ++i)
-        {
-            QDomNode node = memberElement.childNodes().at(i);
-            if (node.isElement())
-            {
-                QDomElement childElement = node.toElement();
-                if (childElement.tagName() == "DOMShape")
-                {
-                    Shape* shape = new Shape();
-                    if (!parseShape(childElement, shape))
-                    {
-                        return false;
-                    }
-                    group->members.push_back(shape);
-                }
-                else if (childElement.tagName() == "DOMSymbolInstance")
-                {
-                    SymbolInstance* instance = new SymbolInstance();
-                    if (!parseSymbolInstance(childElement, instance))
-                    {
-                        delete instance;
-                        return false;
-                    }
-                    group->members.push_back(instance);
-                }
-                else if (childElement.tagName() == "DOMGroup")
-                {
-                    Group* subgroup = new Group();
-                    if (!parseGroup(childElement, subgroup))
-                    {
-                        delete subgroup;
-                        return false;
-                    }
-                    group->members.push_back(subgroup);
-                }
-                else if (childElement.tagName() == "matrix")
-                {
-                    // from parseElement
-                }
-                else if (childElement.tagName() == "transformationPoint")
-                {
-                    // from parseElement
-                }
-                else
-                {
-                    qDebug() << "!!!! Unhandled group member element:" << childElement.tagName();
-                }
-            }
-        }
-    }
 
     return true;
 }
@@ -590,20 +555,20 @@ bool parseStaticText(const QDomElement& element, StaticText* staticText)
                                                 }
                                                 else
                                                 {
-                                                    qDebug() << "!!!! Unhandled text attribute:" << attr.name();
+                                                    qDebug() << "!!!! Unhandled text attribute:" << attr.name() << (_currentFile.empty() ? "" : " from") << QString::fromStdString(_currentFile);
                                                 }
                                             }
                                         }
                                         else
                                         {
-                                            qDebug() << "!!!! Unhandled text attribute element:" << attrElement.tagName();
+                                            qDebug() << "!!!! Unhandled text attribute element:" << attrElement.tagName() << (_currentFile.empty() ? "" : " from") << QString::fromStdString(_currentFile);
                                         }
                                     }
                                 }
                             }
                             else
                             {
-                                qDebug() << "!!!! Unhandled text run child element:" << textRunChildElement.tagName();
+                                qDebug() << "!!!! Unhandled text run child element:" << textRunChildElement.tagName() << (_currentFile.empty() ? "" : " from") << QString::fromStdString(_currentFile);
                             }
                         }
                     }
@@ -613,7 +578,93 @@ bool parseStaticText(const QDomElement& element, StaticText* staticText)
                 }
                 else
                 {
-                    qDebug() << "!!!! Unhandled static text run element:" << childElement.tagName();
+                    qDebug() << "!!!! Unhandled static text run element:" << childElement.tagName() << (_currentFile.empty() ? "" : " from") << QString::fromStdString(_currentFile);
+                }
+            }
+        }
+    }
+
+    return true;
+}
+
+bool parseGroup(const QDomElement& element, Group* group)
+{
+    if (!parseElement(element, group))
+    {
+        return false;
+    }
+
+    QDomNodeList memberNodes = element.elementsByTagName("members");
+    for (QDomNode memberNode : memberNodes)
+    {
+        QDomElement memberElement = memberNode.toElement();
+
+        for (int i = 0; i < memberElement.childNodes().size(); ++i)
+        {
+            QDomNode node = memberElement.childNodes().at(i);
+            if (node.isElement())
+            {
+                QDomElement childElement = node.toElement();
+                if (childElement.tagName() == "DOMShape")
+                {
+                    Shape* shape = new Shape();
+                    if (!parseShape(childElement, shape))
+                    {
+                        return false;
+                    }
+                    group->members.push_back(shape);
+                }
+                else if (childElement.tagName() == "DOMSymbolInstance")
+                {
+                    SymbolInstance* instance = new SymbolInstance();
+                    if (!parseSymbolInstance(childElement, instance))
+                    {
+                        delete instance;
+                        return false;
+                    }
+                    group->members.push_back(instance);
+                }
+                else if (childElement.tagName() == "DOMGroup")
+                {
+                    Group* subgroup = new Group();
+                    if (!parseGroup(childElement, subgroup))
+                    {
+                        delete subgroup;
+                        return false;
+                    }
+                    group->members.push_back(subgroup);
+                }
+                else if (childElement.tagName() == "DOMStaticText")
+                {
+                    StaticText* staticText = new StaticText();
+                    if (!parseStaticText(childElement, staticText))
+                    {
+                        delete staticText;
+                        return false;
+                    }
+                    group->members.push_back(staticText);
+                }
+                else if (childElement.tagName() == "DOMBitmapInstance")
+                {
+                    BitmapInstance* bitmapInstance = new BitmapInstance();
+                    if (!parseBitmapInstance(childElement, bitmapInstance))
+                    {
+                        delete bitmapInstance;
+                        return false;
+                    }
+                    group->members.push_back(bitmapInstance);
+                }
+                else if (childElement.tagName() == "matrix")
+                {
+                    // from parseElement
+                }
+                else if (childElement.tagName() == "transformationPoint")
+                {
+                    // from parseElement
+                }
+                else
+                {
+                    qDebug() << "!!!! Unhandled group member element:" << childElement.tagName() << (_currentFile.empty() ? "" : " from") << QString::fromStdString(_currentFile);
                 }
             }
         }
@@ -683,7 +734,7 @@ bool parseElements(const QDomElement& element, Frame* frame)
             }
             else
             {
-                qDebug() << "!!!! Unhandled elements element:" << childElement.tagName();
+                qDebug() << "!!!! Unhandled elements element:" << childElement.tagName() << (_currentFile.empty() ? "" : " from") << QString::fromStdString(_currentFile);
             }
         }
     }
@@ -711,7 +762,7 @@ bool parseFrame(const QDomElement& element, Frame* frame)
             }
             else
             {
-                qDebug() << "!!!! Unhandled frame element:" << childElement.tagName();
+                qDebug() << "!!!! Unhandled frame element:" << childElement.tagName() << (_currentFile.empty() ? "" : " from") << QString::fromStdString(_currentFile);
             }
         }
     }
@@ -738,7 +789,7 @@ bool parseFrames(const QDomElement& element, Layer* layer)
             }
             else
             {
-                qDebug() << "!!!! Unhandled frames element:" << childElement.tagName();
+                qDebug() << "!!!! Unhandled frames element:" << childElement.tagName() << (_currentFile.empty() ? "" : " from") << QString::fromStdString(_currentFile);
             }
         }
     }
@@ -774,7 +825,7 @@ bool parseLayer(const QDomElement& element, Layer* layer)
             }
             else
             {
-                qDebug() << "!!!! Unhandled layer element:" << childElement.tagName();
+                qDebug() << "!!!! Unhandled layer element:" << childElement.tagName() << (_currentFile.empty() ? "" : " from") << QString::fromStdString(_currentFile);
             }
         }
     }
@@ -801,7 +852,7 @@ bool parseLayers(const QDomElement& element, Timeline* timeline)
             }
             else
             {
-                qDebug() << "!!!! Unhandled layer element:" << childElement.tagName();
+                qDebug() << "!!!! Unhandled layer element:" << childElement.tagName() << (_currentFile.empty() ? "" : " from") << QString::fromStdString(_currentFile);
             }
         }
     }
@@ -829,7 +880,7 @@ bool parseTimeline(const QDomElement& element, Timeline* timeline)
             }
             else
             {
-                qDebug() << "!!!! Unhandled timeline element:" << childElement.tagName();
+                qDebug() << "!!!! Unhandled timeline element:" << childElement.tagName() << (_currentFile.empty() ? "" : " from") << QString::fromStdString(_currentFile);
             }
         }
     }
@@ -856,7 +907,7 @@ bool parseTimelines(const QDomElement& element, std::vector<Timeline*>& timeline
             }
             else
             {
-                qDebug() << "!!!! Unhandled timeline element:" << childElement.tagName();
+                qDebug() << "!!!! Unhandled timeline element:" << childElement.tagName() << (_currentFile.empty() ? "" : " from") << QString::fromStdString(_currentFile);
             }
         }
     }
@@ -873,7 +924,7 @@ bool parseSymbolInclude(const QDomElement& element, Document* document, ZipReade
     }
 
     std::string libraryPath = "LIBRARY/" + href;
-
+    
     if (!zipReader->containsFile(libraryPath))
     {
         qDebug() << "Symbol include not found in fla";
@@ -882,11 +933,14 @@ bool parseSymbolInclude(const QDomElement& element, Document* document, ZipReade
 
     std::string content = zipReader->readTextFile(libraryPath);
 
+    _currentFile = href;
+
     // Parse the included symbol XML content
     QDomDocument symbolDoc;
     if (!symbolDoc.setContent(QString::fromStdString(content)))
     {
         qDebug() << "Failed to parse symbol XML content from:" << QString::fromStdString(href);
+        _currentFile.clear();
         return false;
     }
 
@@ -894,6 +948,7 @@ bool parseSymbolInclude(const QDomElement& element, Document* document, ZipReade
     if (root.tagName() != "DOMSymbolItem")
     {
         qDebug() << "Root element of symbol file is not DOMSymbolItem:" << QString::fromStdString(href);
+        _currentFile.clear();
         return false;
     }
 
@@ -914,18 +969,20 @@ bool parseSymbolInclude(const QDomElement& element, Document* document, ZipReade
             {
                 if (!parseTimelines(childElement, symbol->timelines))
                 {
+                    _currentFile.clear();
                     return false;
                 }
             }
             else
             {
-                qDebug() << "!!!! Unhandled symbol timeline element:" << childElement.tagName();
+                qDebug() << "!!!! Unhandled symbol timeline element:" << childElement.tagName() << " from" << QString::fromStdString(href);
             }
         }
     }
 
     document->symbols.push_back(symbol);
     document->symbolMap[symbol->name] = symbol;
+    _currentFile.clear();
 
     return true;
 }
@@ -1077,6 +1134,8 @@ DocumentParser::DocumentParser(ZipReader* zipReader)
 
 Document* DocumentParser::parse(const std::string& xmlContent)
 {
+    _currentFile.clear();
+
     QDomDocument doc;
     if (!doc.setContent(xmlContent))
     {

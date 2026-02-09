@@ -16,4 +16,6 @@ public:
     Frame();
 
     ~Frame() override;
+
+    std::string domTypeName() const override { return "Frame"; }
 };

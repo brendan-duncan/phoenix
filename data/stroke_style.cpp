@@ -34,3 +34,7 @@ RaggedStroke::RaggedStroke()
 StippleStroke::StippleStroke()
     : Stroke()
 {}
+
+DottedStroke::DottedStroke()
+    : Stroke()
+{}

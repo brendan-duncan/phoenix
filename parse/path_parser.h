@@ -7,7 +7,7 @@
 class PathParser
 {
 public:
-    Edge* parse(const std::string& data, bool isCubic);
+    Edge* parse(const std::string& data);
 
     const std::string& errorString() const
     {

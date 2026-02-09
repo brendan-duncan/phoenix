@@ -310,6 +310,8 @@ void PhoenixView::drawShape(QPainter& painter, const Shape* shape)
                         pen.setStyle(Qt::DashDotLine);
                     else if (strokeStyle->stroke->style == "StippleStroke")
                         pen.setStyle(Qt::DashDotDotLine);
+                    else if (strokeStyle->stroke->style == "DottedStroke")
+                        pen.setStyle(Qt::DotLine);
 
                     if (strokeStyle->stroke->fill->type() == FillStyle::Type::SolidColor)
                     {

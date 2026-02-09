@@ -42,4 +42,6 @@ public:
     Document();
 
     ~Document() override;
+
+    std::string domTypeName() const override { return "Document"; }
 };

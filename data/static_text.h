@@ -24,4 +24,6 @@ public:
     StaticText() = default;
 
     Element::Type elementType() const override { return Element::Type::StaticText; }
+
+    std::string domTypeName() const override { return "StaticText"; }
 };

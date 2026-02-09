@@ -20,7 +20,7 @@ bool isSpace(char c)
 }
 } // namespace
 
-Edge* PathParser::parse(const std::string& data, bool isCubic)
+Edge* PathParser::parse(const std::string& data)
 {
     Edge* edge = new Edge();
 

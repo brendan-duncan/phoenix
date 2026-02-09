@@ -11,4 +11,6 @@ public:
     SolidColor();
 
     Type type() const override { return Type::SolidColor; }
+
+    std::string domTypeName() const override { return "SolidColor"; }
 };

@@ -18,4 +18,6 @@ public:
     LinearGradient();
 
     Type type() const override { return Type::LinearGradient; }
+
+    std::string domTypeName() const override { return "LinearGradient"; }
 };

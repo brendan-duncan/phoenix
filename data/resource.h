@@ -1,6 +1,8 @@
 #pragma once
 
-class Resource
+#include "dom_element.h"
+
+class Resource : public DOMElement
 {
 public:
     enum class Type

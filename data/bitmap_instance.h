@@ -11,4 +11,6 @@ public:
     BitmapInstance() = default;
 
     Element::Type elementType() const override { return Element::Type::BitmapInstance; }
+
+    std::string domTypeName() const override { return "BitmapInstance"; }
 };

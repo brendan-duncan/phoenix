@@ -39,4 +39,6 @@ public:
             return it->second;
         return nullptr;
     }
+
+    std::string domTypeName() const override { return "Shape"; }
 };

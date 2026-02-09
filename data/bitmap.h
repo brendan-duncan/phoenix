@@ -27,4 +27,6 @@ public:
     Bitmap() = default;
 
     Type resourceType() const override { return Type::Bitmap; }
+
+    std::string domTypeName() const override { return "Bitmap"; }
 };

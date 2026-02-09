@@ -1,6 +1,8 @@
 #pragma once
 
-class FillStyle
+#include "dom_element.h"
+
+class FillStyle : public DOMElement
 {
 public:
     enum class Type

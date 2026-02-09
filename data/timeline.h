@@ -16,4 +16,6 @@ public:
     Timeline();
 
     ~Timeline() override;
+
+    std::string domTypeName() const override { return "Timeline"; }
 };

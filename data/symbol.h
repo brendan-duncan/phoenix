@@ -17,4 +17,6 @@ public:
     Symbol();
 
     ~Symbol() override;
+
+    std::string domTypeName() const override { return "Symbol"; }
 };
