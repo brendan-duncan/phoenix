@@ -9,9 +9,10 @@ struct PathSection
 {
     enum class Command
     {
-        MoveTo,
-        LineTo,
-        QuadTo,
+        Move,
+        Line,
+        Quad,
+        Cubic,
         Close
     };
 

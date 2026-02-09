@@ -1,9 +1,13 @@
 #include "phoenix_view.h"
+#include "data/bitmap.h"
+#include "data/bitmap_instance.h"
 #include "data/group.h"
 #include "data/linear_gradient.h"
 #include "data/solid_color.h"
+#include "data/static_text.h"
 #include "data/symbol_instance.h"
 
+#include <QFont>
 #include <QPainter>
 #include <QPaintEvent>
 #include <QPainterPath>
@@ -23,7 +27,7 @@ PhoenixView::PhoenixView(QWidget *parent)
     setMinimumSize(400, 300);
     setBackgroundRole(QPalette::Base);
     setAutoFillBackground(true);
-    
+
     // Enable mouse tracking for smooth panning
     setMouseTracking(true);
 }
@@ -55,8 +59,8 @@ void PhoenixView::paintEvent(QPaintEvent *event)
     }
 
     // Get document dimensions
-    double docWidth = _flaDocument->document->width;
-    double docHeight = _flaDocument->document->height;
+    double docWidth = MAX(_flaDocument->document->width, 1024);
+    double docHeight = MAX(_flaDocument->document->height, 768);
 
     if (docWidth <= 0 || docHeight <= 0)
     {
@@ -73,7 +77,7 @@ void PhoenixView::paintEvent(QPaintEvent *event)
 
     // Use zoom level if not default (1.0), otherwise fit to widget
     double scale = (_zoom != 1.0) ? _zoom : defaultScale;
-    
+
     // Calculate center offset for initial fit
     double centerX = (_zoom == 1.0) ? (widgetRect.width() - docWidth * scale) / 2.0 : 0;
     double centerY = (_zoom == 1.0) ? (widgetRect.height() - docHeight * scale) / 2.0 : 0;
@@ -91,7 +95,7 @@ void PhoenixView::drawDocument(QPainter& painter, const Document* document)
     // Check document visibility
     if (!document->visible)
         return;
-        
+
     for (const Timeline* timeline : document->timelines)
     {
         drawTimeline(painter, timeline);
@@ -103,7 +107,7 @@ void PhoenixView::drawTimeline(QPainter& painter, const Timeline* timeline)
     // Check timeline visibility
     if (!timeline->visible)
         return;
-        
+
     for (int i = timeline->layers.size() - 1; i >= 0; --i)
     {
         const Layer* layer = timeline->layers[i];
@@ -117,7 +121,7 @@ void PhoenixView::drawLayer(QPainter& painter, const Layer* layer)
     // Check layer visibility (already checked in drawTimeline, but keeping for safety)
     if (!layer->visible)
         return;
-        
+
     QColor color;
     color.setRgb(layer->color[0], layer->color[1], layer->color[2], layer->color[3]);
     painter.setPen(QPen(color, 1.0));
@@ -133,7 +137,7 @@ void PhoenixView::drawFrame(QPainter& painter, const Frame* frame)
     // Check frame visibility
     if (!frame->visible)
         return;
-        
+
     for (const Element* element : frame->elements)
     {
         drawElement(painter, element);
@@ -167,7 +171,7 @@ void PhoenixView::drawElement(QPainter& painter, const Element* element)
     }
     else if (type == Element::Type::SymbolInstance)
     {
-        const SymbolInstance* instance = static_cast<const SymbolInstance*>(element);   
+        const SymbolInstance* instance = static_cast<const SymbolInstance*>(element);
         const Symbol* symbol = findSymbolByName(_flaDocument->document, instance->libraryItemName);
         if (symbol)
         {
@@ -185,6 +189,41 @@ void PhoenixView::drawElement(QPainter& painter, const Element* element)
             drawElement(painter, member);
         }
     }
+    else if (type == Element::Type::StaticText)
+    {
+        StaticText* staticText = (StaticText*)element;
+        for (const TextRun& run : staticText->runs)
+        {
+            painter.setPen(QPen(QColor(run.fillColor[0], run.fillColor[1], run.fillColor[2], run.fillColor[3]), run.size));
+            painter.setFont(QFont(run.face.empty() ? "Arial" : QString::fromStdString(run.face), (int)run.size));
+            painter.drawText(0, 0, QString::fromStdString(run.text));
+        }
+    }
+    else if (type == Element::Type::BitmapInstance)
+    {
+        const BitmapInstance* instance = static_cast<const BitmapInstance*>(element);
+        const Bitmap* bitmap = nullptr;
+        for (Resource* resource : _flaDocument->document->resources)
+        {
+            if (resource->resourceType() == Resource::Type::Bitmap)
+            {
+                Bitmap* bmp = static_cast<Bitmap*>(resource);
+                if (bmp->name == instance->libraryItemName)
+                {
+                    bitmap = bmp;
+                    break;
+                }
+            }
+        }
+
+        if (bitmap && !bitmap->imageData.empty())
+        {
+            QPixmap pixmap;
+            QByteArray imgData(reinterpret_cast<const char*>(bitmap->imageData.data()), bitmap->imageData.size());
+            pixmap.loadFromData(imgData);
+            painter.drawPixmap(0, 0, pixmap);
+        }
+    }
 
     painter.restore();
 }
@@ -195,18 +234,28 @@ static bool pathToPainterPath(const Edge* edge, QPainterPath& painterPath)
     {
         for (const PathSection& section : segment.sections)
         {
-            if (section.command == PathSection::Command::MoveTo)
+            if (section.command == PathSection::Command::Move)
             {
                 painterPath.moveTo(section.points[0].x, section.points[0].y);
             }
-            else if (section.command == PathSection::Command::LineTo)
+            else if (section.command == PathSection::Command::Line)
             {
                 painterPath.lineTo(section.points[0].x, section.points[0].y);
             }
-            else if (section.command == PathSection::Command::QuadTo)
+            else if (section.command == PathSection::Command::Quad)
             {
                 painterPath.quadTo(section.points[0].x, section.points[0].y,
                                    section.points[1].x, section.points[1].y);
+            }
+            else if (section.command == PathSection::Command::Cubic)
+            {
+                painterPath.cubicTo(section.points[0].x, section.points[0].y,
+                                    section.points[1].x, section.points[1].y,
+                                    section.points[2].x, section.points[2].y);
+            }
+            else if (section.command == PathSection::Command::Close)
+            {
+                painterPath.closeSubpath();
             }
         }
     }
@@ -340,29 +389,29 @@ void PhoenixView::wheelEvent(QWheelEvent *event)
     double scaleFactor = 1.15;
     if (event->angleDelta().y() < 0)
         scaleFactor = 1.0 / scaleFactor;
-    
+
     double oldZoom = _zoom;
     double newZoom = _zoom * scaleFactor;
-    
+
     // Limit zoom range
     if (newZoom < 0.1 || newZoom > 50.0)
         return;
-    
+
     // Get mouse position in screen coordinates
     QPointF mousePos = event->position();
-    
+
     // Calculate what scene point is under the mouse before zoom
     QPointF scenePosBefore = (mousePos - QPointF(_panX, _panY)) / oldZoom;
-    
+
     // Apply zoom
     _zoom = newZoom;
-    
+
     // Calculate new pan to keep the same scene point under the mouse
     QPointF newScreenPos = scenePosBefore * newZoom + QPointF(_panX, _panY);
     QPointF delta = newScreenPos - mousePos;
     _panX -= delta.x();
     _panY -= delta.y();
-    
+
     update();
 }
 

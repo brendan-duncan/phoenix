@@ -34,7 +34,15 @@ MainWindow::MainWindow(QWidget *parent)
     //loadFLAFile("d:\\fla\\MensWear_04_3.fla");
     //loadFLAFile("d:\\fla\\MensWear_04_4.fla");
     loadFLAFile("d:\\fla\\MensWear_04.fla");
+    //loadFLAFile("d:\\fla\\HulaBunny_Sticker_2018.fla");
+    //loadFLAFile("d:\\fla\\fluid_brush_tool.fla");
+    //loadFLAFile("d:\\fla\\classic_brush_tool.fla");
     //loadFLAFile("d:\\fla\\test_1.fla");
+    //loadFLAFile("d:\\fla\\pen_tool.fla");
+    //loadFLAFile("d:\\fla\\static_text.fla");
+    //loadFLAFile("d:\\fla\\template_bike_girl.fla");
+    //loadFLAFile("d:\\fla\\template_robot.fla");
+    //loadFLAFile("d:\\fla\\bitmap.fla");
 }
 
 void MainWindow::loadFLAFile(const QString& filePath)

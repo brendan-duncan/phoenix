@@ -1,6 +1,25 @@
 #include "path_parser.h"
 #include <iostream>
 
+namespace {
+bool isHexDigit(char c)
+{
+    return (c >= '0' && c <= '9') || 
+            (c >= 'A' && c <= 'F') || 
+            (c >= 'a' && c <= 'f');
+}
+
+bool isDigit(char c)
+{
+    return (c >= '0' && c <= '9');
+}
+
+bool isSpace(char c)
+{
+    return std::isspace(static_cast<unsigned char>(c));
+}
+} // namespace
+
 Edge* PathParser::parse(const std::string& data, bool isCubic)
 {
     Edge* edge = new Edge();
@@ -36,30 +55,10 @@ Edge* PathParser::parse(const std::string& data, bool isCubic)
                 edge->segments.push_back({});
                 lastSegment = &edge->segments.back();
 
-                lastSegment->sections.push_back({PathSection::Command::MoveTo, {point}});
+                lastSegment->sections.push_back({PathSection::Command::Move, {point}});
 
                 lastPoint = point;
             }
-        }
-        else if (cmd == '[')
-        {
-            // Quadratic curve: [cx cy x y
-            pos++;
-            Point control = parsePoint(data, pos);
-            Point end = parsePoint(data, pos);
-
-            if (lastSegment)
-            {
-                lastSegment->sections.push_back({PathSection::Command::QuadTo, {control, end}});
-            }
-            else
-            {
-                _errorString = "Path data error: QuadTo command without a preceding MoveTo.";
-                delete edge;
-                return nullptr;
-            }
-
-            lastPoint = end;
         }
         else if (cmd == '|')
         {
@@ -68,7 +67,7 @@ Edge* PathParser::parse(const std::string& data, bool isCubic)
             Point point = parsePoint(data, pos);
             if (lastSegment)
             {
-                lastSegment->sections.push_back({PathSection::Command::LineTo, {point}});
+                lastSegment->sections.push_back({PathSection::Command::Line, {point}});
             }
             else
             {
@@ -85,7 +84,7 @@ Edge* PathParser::parse(const std::string& data, bool isCubic)
             Point point = parsePoint(data, pos);
             if (lastSegment)
             {
-                lastSegment->sections.push_back({PathSection::Command::LineTo, {point}});
+                lastSegment->sections.push_back({PathSection::Command::Line, {point}});
             }
             else
             {
@@ -94,6 +93,52 @@ Edge* PathParser::parse(const std::string& data, bool isCubic)
                 return nullptr;
             }
             lastPoint = point;
+        }
+        else if (cmd == '[')
+        {
+            // Quadratic curve: [cx cy x y
+            pos++;
+            Point control = parsePoint(data, pos);
+            Point end = parsePoint(data, pos);
+
+            if (lastSegment)
+            {
+                lastSegment->sections.push_back({PathSection::Command::Quad, {control, end}});
+            }
+            else
+            {
+                _errorString = "Path data error: QuadTo command without a preceding MoveTo.";
+                delete edge;
+                return nullptr;
+            }
+
+            lastPoint = end;
+        }
+        else if (cmd == '(')
+        {
+            // Cubic curve: (x1,y1 x2,y2 x3,y3...)
+            pos++;
+            //std::vector<Point> cubicPoints;
+            //parseCubicCurve(data, pos, cubicPoints);
+            parseCubicCurve(data, pos, lastSegment);
+            /*if (cubicPoints.size() >= 3)
+            {
+                if (lastSegment)
+                {
+                    lastSegment->sections.push_back({PathSection::Command::Cubic, {cubicPoints[0], cubicPoints[1], cubicPoints[2]}});
+                    for (int i = 3; i + 2 < cubicPoints.size(); i += 3)
+                    {
+                        lastSegment->sections.push_back({PathSection::Command::Cubic, {cubicPoints[i], cubicPoints[i + 1], cubicPoints[i + 2]}});
+                    }
+                }
+                else
+                {
+                    _errorString = "Path data error: CubicTo command without a preceding MoveTo.";
+                    delete edge;
+                    return nullptr;
+                }
+                lastPoint = cubicPoints.back();
+            }*/
         }
         else if (cmd == 'S' || cmd == 's')
         {
@@ -127,6 +172,11 @@ Edge* PathParser::parse(const std::string& data, bool isCubic)
                 lastSegment->lineStyleIndex = strokeStyleIndex;
             }
         }
+        else if (cmd == ';' || cmd == ')')
+        {
+            // End of cubic curve or separator
+            pos++;
+        }
         else
         {
             // Skip unknown character
@@ -147,29 +197,216 @@ Edge* PathParser::parse(const std::string& data, bool isCubic)
     return edge;
 }
 
+void PathParser::parseCubicCurve(const std::string& data, int& pos, PathSegment* path)
+{
+    std::vector<Point> controlPoints;
+    Point startPoint = path->sections[0].points[0]; // Starting point is the last MoveTo point of the current segment
+    Point endPoint;
+    bool hasExplicitEndpoint = false;
+
+    skipWhitespace(data, pos);
+
+    // Skip leading semicolon if present
+    if (pos < data.length() && data[pos] == ';')
+    {
+        pos++;
+    }
+
+    // Parse coordinate pairs until we hit 'q', 'Q', or ')'
+    while (pos < data.length() && data[pos] != ')' && data[pos] != 'q' && data[pos] != 'Q')
+    {
+        skipWhitespace(data, pos);
+
+        if (data[pos] == ';')
+        {
+            pos++;
+            continue;
+        }
+
+        if (isDigit(data[pos]) || data[pos] == '-' || data[pos] == '#')
+        {
+            double x = parseNumber(data, pos);
+            skipWhitespace(data, pos);
+
+            // Skip comma separator
+            if (pos < data.length() && data[pos] == ',')
+            {
+                pos++;
+                skipWhitespace(data, pos);
+            }
+
+            double y = parseNumber(data, pos);
+            controlPoints.push_back(Point(x / 20.0, y / 20.0));
+
+            // Skip comma/space after y coordinate
+            skipWhitespace(data, pos);
+            if (pos < data.length() && data[pos] == ',')
+            {
+                pos++;
+            }
+        }
+        else
+        {
+            break;
+        }
+    }
+
+    // Skip 'q' or 'Q' section (reference data)
+    if (pos < data.length() && (data[pos] == 'q' || data[pos] == 'Q'))
+    {
+        while (pos < data.length() && data[pos] != ')')
+        {
+            if (data[pos] == 'q' || data[pos] == 'Q')
+            {
+                pos++;
+                skipWhitespace(data, pos);
+            }
+            else if (isDigit(data[pos]) || data[pos] == '-' || data[pos] == '#')
+            {
+                parseNumber(data, pos);
+                skipWhitespace(data, pos);
+            }
+            else
+            {
+                pos++;
+            }
+        }
+    }
+
+    // Skip closing parenthesis
+    if (pos < data.length() && data[pos] == ')')
+    {
+        pos++;
+    }
+
+    // Check if there's an explicit endpoint after ')'
+    skipWhitespace(data, pos);
+
+    // If next char is semicolon, no explicit endpoint
+    if (pos < data.length() && data[pos] == ';')
+    {
+        pos++;
+        hasExplicitEndpoint = false;
+    }
+    // Otherwise try to parse endpoint coordinates
+    else if (pos < data.length() && (isDigit(data[pos]) || data[pos] == '-' || data[pos] == '#'))
+    {
+        double x = parseNumber(data, pos);
+        skipWhitespace(data, pos);
+
+        if (pos < data.length() && data[pos] == ',')
+        {
+            pos++;
+            skipWhitespace(data, pos);
+        }
+
+        double y = parseNumber(data, pos);
+        endPoint = Point(x / 20.0, y / 20.0);
+        hasExplicitEndpoint = true;
+
+        // Skip trailing semicolon
+        if (pos < data.length() && data[pos] == ';')
+        {
+            pos++;
+        }
+    }
+
+    // Construct the cubic Bezier curve
+    if (hasExplicitEndpoint && controlPoints.size() >= 2)
+    {
+        // Format: (;cp1 cp2 cp3 q... )endpoint;
+        // cp1, cp2 are control points, endpoint is separate
+        Point cp1 = controlPoints[0];
+        Point cp2 = controlPoints[1];
+        path->sections.push_back({PathSection::Command::Cubic, {cp1, cp2, endPoint}});
+    }
+    else if (!hasExplicitEndpoint && controlPoints.size() >= 3)
+    {
+        // Format: (;cp1 cp2 endpoint q... );
+        // Last point in controlPoints is the endpoint
+        Point cp1 = controlPoints[0];
+        Point cp2 = controlPoints[1];
+        Point ep = controlPoints[2];
+        path->sections.push_back({PathSection::Command::Cubic, {cp1, cp2, ep}});
+    }
+    else if (controlPoints.size() >= 2)
+    {
+        // Fallback: use first two as control points, last as endpoint
+        Point cp1 = controlPoints[0];
+        Point cp2 = controlPoints[1];
+        Point ep = controlPoints.size() >= 3 ? controlPoints[2] : controlPoints[1];
+        path->sections.push_back({PathSection::Command::Cubic, {cp1, cp2, ep}});
+    }
+    else if (hasExplicitEndpoint)
+    {
+        // Only explicit endpoint available
+        path->sections.push_back({PathSection::Command::Line, {endPoint}});
+    }
+}
+
+/*void PathParser::parseCubicCurve(const std::string& data, int& pos, std::vector<Point>& points)
+{
+    // Parse cubic curve notation: (;x1,y1 x2,y2 x3,y3...);
+    // This is a complex format that may contain multiple points
+
+    while (pos < data.length() && data[pos] != ')')
+    {
+        skipWhitespace(data, pos);
+
+        if (data[pos] == ';')
+        {
+            pos++;
+            continue;
+        }
+
+        if (data[pos] == 'q' || data[pos] == 'Q')
+        {
+            pos++;
+            Point point = parsePoint(data, pos);
+            points.push_back(point);
+            continue;
+        }
+
+        // Parse comma-separated coordinates
+        if (isDigit(data[pos]) || data[pos] == '-' || data[pos] == '#')
+        {
+            double x = parseNumber(data, pos);
+            skipWhitespace(data, pos);
+
+            if (pos < data.length() && data[pos] == ',')
+            {
+                pos++;
+                skipWhitespace(data, pos);
+            }
+
+            double y = parseNumber(data, pos);
+            points.push_back(Point(x / 20.0, y / 20.0));
+
+            // Skip optional comma
+            skipWhitespace(data, pos);
+            if (pos < data.length() && data[pos] == ',')
+            {
+                pos++;
+            }
+        }
+        else
+        {
+            pos++;
+        }
+    }
+
+    if (pos < data.length() && data[pos] == ')')
+    {
+        pos++;
+    }
+}*/
+
 Point PathParser::parsePoint(const std::string& data, int& pos)
 {
     double x = parseNumber(data, pos);
     double y = parseNumber(data, pos);
     // Convert from twips to pixels (1 twip = 1/20 pixel)
     return Point(x / 20.0, y / 20.0);
-}
-
-static bool isHexDigit(char c)
-{
-    return (c >= '0' && c <= '9') || 
-            (c >= 'A' && c <= 'F') || 
-            (c >= 'a' && c <= 'f');
-}
-
-static bool isDigit(char c)
-{
-    return (c >= '0' && c <= '9');
-}
-
-static bool isSpace(char c)
-{
-    return std::isspace(static_cast<unsigned char>(c));
 }
 
 double PathParser::parseNumber(const std::string& data, int& pos)

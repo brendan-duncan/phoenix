@@ -11,7 +11,9 @@ public:
     {
         Shape,
         SymbolInstance,
-        Group
+        Group,
+        StaticText,
+        BitmapInstance
     };
 
     bool isSelected = false;

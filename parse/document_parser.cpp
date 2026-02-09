@@ -1,9 +1,12 @@
 #include "document_parser.h"
 #include "path_parser.h"
+#include "../data/bitmap.h"
+#include "../data/bitmap_instance.h"
 #include "../data/group.h"
 #include "../data/linear_gradient.h"
 #include "../data/shape.h"
 #include "../data/solid_color.h"
+#include "../data/static_text.h"
 #include "../data/symbol_instance.h"
 
 #include <algorithm>
@@ -100,9 +103,9 @@ bool parseLinearGradient(const QDomElement& element, LinearGradient* linearGradi
 
 Edge* parsePath(const QDomElement& element)
 {
-    bool isCubic = element.hasAttribute("cubic");
+    bool isCubic = element.hasAttribute("cubics");
 
-    std::string edgeData = isCubic ? element.attribute("cubic").toStdString() : element.attribute("edges").toStdString();
+    std::string edgeData = isCubic ? element.attribute("cubics").toStdString() : element.attribute("edges").toStdString();
 
     PathParser pathParser;
     Edge* edge = pathParser.parse(edgeData, isCubic);
@@ -430,7 +433,7 @@ bool parseSymbolInstance(const QDomElement& element, SymbolInstance* instance)
     }
 
     instance->libraryItemName = element.attribute("libraryItemName").toStdString();
-    
+
     return true;
 }
 
@@ -442,9 +445,9 @@ bool parseGroup(const QDomElement& element, Group* group)
     }
 
     QDomNodeList memberNodes = element.elementsByTagName("members");
-    if (!memberNodes.isEmpty())
+    for (QDomNode memberNode : memberNodes)
     {
-        QDomElement memberElement = memberNodes.at(0).toElement();
+        QDomElement memberElement = memberNode.toElement();
 
         for (int i = 0; i < memberElement.childNodes().size(); ++i)
         {
@@ -500,6 +503,125 @@ bool parseGroup(const QDomElement& element, Group* group)
     return true;
 }
 
+bool parseBitmapInstance(const QDomElement& element, BitmapInstance* instance)
+{
+    if (!parseElement(element, instance))
+    {
+        return false;
+    }
+
+    instance->libraryItemName = element.attribute("libraryItemName").toStdString();
+
+    return true;
+}
+
+bool parseStaticText(const QDomElement& element, StaticText* staticText)
+{
+    if (!parseElement(element, staticText))
+    {
+        return false;
+    }
+
+    QDomNodeList textRunsNodes = element.elementsByTagName("textRuns");
+    for (QDomNode textRunNode : textRunsNodes)
+    {
+        QDomElement textRunElement = textRunNode.toElement();
+
+        for (int i = 0; i < textRunElement.childNodes().size(); ++i)
+        {
+            QDomNode node = textRunElement.childNodes().at(i);
+            if (node.isElement())
+            {
+                QDomElement childElement = node.toElement();
+                if (childElement.tagName() == "DOMTextRun")
+                {
+                    TextRun textRun;
+
+                    QDomNodeList textRunChildNodes = childElement.childNodes();
+                    for (int j = 0; j < textRunChildNodes.size(); ++j)
+                    {
+                        QDomNode textRunChildNode = textRunChildNodes.at(j);
+                        if (textRunChildNode.isElement())
+                        {
+                            QDomElement textRunChildElement = textRunChildNode.toElement();
+                            if (textRunChildElement.tagName() == "characters")
+                            {
+                                textRun.text = textRunChildElement.text().toStdString();
+                            }
+                            else if (textRunChildElement.tagName() == "textAttrs")
+                            {
+                                for (int k = 0; k < textRunChildElement.childNodes().size(); ++k)
+                                {
+                                    QDomNode attrNode = textRunChildElement.childNodes().at(k);
+                                    if (attrNode.isElement())
+                                    {
+                                        QDomElement attrElement = attrNode.toElement();
+
+                                        if (attrElement.tagName() == "DOMTextAttrs")
+                                        {
+                                            QDomNamedNodeMap attributes = attrElement.attributes();
+                                            for (int i = 0; i < attributes.length(); ++i)
+                                            {
+                                                QDomAttr attr = attributes.item(i).toAttr();
+                                                if (attr.name() == "aliasText")
+                                                {
+                                                    textRun.aliasText = attr.value() == "true";
+                                                }
+                                                else if (attr.name() == "lineHeight")
+                                                {
+                                                    textRun.lineHeight = attr.value().toDouble();
+                                                }
+                                                else if (attr.name() == "size")
+                                                {
+                                                    textRun.size = attr.value().toDouble();
+                                                }
+                                                else if (attr.name() == "bitmapSize")
+                                                {
+                                                    textRun.bitmapSize = attr.value().toDouble();
+                                                }
+                                                else if (attr.name() == "face")
+                                                {
+                                                    textRun.face = attr.value().toStdString();
+                                                }
+                                                else if (attr.name() == "fillColor")
+                                                {
+                                                    std::string color = attr.value().toStdString();
+                                                    parseHexColor(color, textRun.fillColor);
+                                                }
+                                                else
+                                                {
+                                                    qDebug() << "!!!! Unhandled text attribute:" << attr.name();
+                                                }
+                                            }
+                                        }
+                                        else
+                                        {
+                                            qDebug() << "!!!! Unhandled text attribute element:" << attrElement.tagName();
+                                        }
+                                    }
+                                }
+                            }
+                            else
+                            {
+                                qDebug() << "!!!! Unhandled text run child element:" << textRunChildElement.tagName();
+                            }
+                        }
+                    }
+
+                    if (!textRun.text.empty())
+                        staticText->runs.push_back(textRun);
+                }
+                else
+                {
+                    qDebug() << "!!!! Unhandled static text run element:" << childElement.tagName();
+                }
+            }
+        }
+    }
+
+    return true;
+}
+
 bool parseElements(const QDomElement& element, Frame* frame)
 {
     QDomNodeList childNodes = element.childNodes();
@@ -538,6 +660,26 @@ bool parseElements(const QDomElement& element, Frame* frame)
                     return false;
                 }
                 frame->elements.push_back(group);
+            }
+            else if (childElement.tagName() == "DOMStaticText")
+            {
+                StaticText* staticText = new StaticText();
+                if (!parseStaticText(childElement, staticText))
+                {
+                    delete staticText;
+                    return false;
+                }
+                frame->elements.push_back(staticText);
+            }
+            else if (childElement.tagName() == "DOMBitmapInstance")
+            {
+                BitmapInstance* bitmapInstance = new BitmapInstance();
+                if (!parseBitmapInstance(childElement, bitmapInstance))
+                {
+                    delete bitmapInstance;
+                    return false;
+                }
+                frame->elements.push_back(bitmapInstance);
             }
             else
             {
@@ -814,6 +956,53 @@ bool parseSymbols(const QDomElement& element, Document* document, ZipReader* zip
     return true;
 }
 
+bool parseMedia(const QDomElement& element, Document* document, ZipReader* zipReader)
+{
+    QDomNodeList childNodes = element.childNodes();
+    for (int i = 0; i < childNodes.size(); ++i)
+    {
+        QDomNode node = childNodes.at(i);
+        if (node.isElement())
+        {
+            QDomElement childElement = node.toElement();
+            if (childElement.tagName() == "DOMBitmapItem")
+            {
+                Bitmap* bitmap = new Bitmap();
+
+                bitmap->name = childElement.attribute("name").toStdString();
+                bitmap->itemId = childElement.attribute("itemId").toStdString();
+                bitmap->href = childElement.attribute("href").toStdString();
+
+                std::string bitmapDataHRef = childElement.attribute("bitmapDataHRef").toStdString();
+                if (bitmapDataHRef.empty())
+                {
+                    qDebug() << "Bitmap item missing bitmapDataHRef attribute";
+                    delete bitmap;
+                    return false;
+                }
+
+                std::string mediaPath = "bin/" + bitmapDataHRef;
+
+                if (!zipReader->containsFile(mediaPath))
+                {
+                    qDebug() << "Bitmap media not found in fla:" << QString::fromStdString(bitmapDataHRef);
+                    delete bitmap;
+                    return false;
+                }
+
+                bitmap->imageData = zipReader->readFile(mediaPath);
+
+                document->resources.push_back(bitmap);
+            }
+            else
+            {
+                qDebug() << "!!!! Unhandled media element:" << childElement.tagName();
+            }
+        }
+    }
+    return true;
+}
+
 bool parseDocument(Document* document, const QDomElement& element, ZipReader* zipReader)
 {
     // Parse attributes
@@ -859,6 +1048,13 @@ bool parseDocument(Document* document, const QDomElement& element, ZipReader* zi
             else if (childElement.tagName() == "symbols")
             {
                 if (!parseSymbols(childElement, document, zipReader))
+                {
+                    return false;
+                }
+            }
+            else if (childElement.tagName() == "media")
+            {
+                if (!parseMedia(childElement, document, zipReader))
                 {
                     return false;
                 }

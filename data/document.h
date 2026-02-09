@@ -1,5 +1,6 @@
 #pragma once
 
+#include "resource.h"
 #include "timeline.h"
 #include "symbol.h"
 #include <map>
@@ -32,6 +33,7 @@ public:
     std::string fileGUID;
 
     // Child elements
+    std::vector<Resource*> resources;
     std::vector<Symbol*> symbols;
     std::vector<Timeline*> timelines;
 

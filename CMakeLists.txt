@@ -26,6 +26,7 @@ set(HEADERS
     parse/zip_reader.h
     parse/fla_parser.h
     parse/path_parser.h
+    data/bitmap.h
     data/document.h
     data/dom_element.h
     data/edge.h
@@ -39,6 +40,7 @@ set(HEADERS
     data/point.h
     data/shape.h
     data/solid_color.h
+    data/static_text.h
     data/stroke_style.h
     data/symbol_instance.h
     data/symbol.h
@@ -55,6 +57,7 @@ set(SOURCES
     parse/zip_reader.cpp
     parse/fla_parser.cpp
     parse/path_parser.cpp
+    data/bitmap.cpp
     data/document.cpp
     data/dom_element.cpp
     data/edge.cpp
@@ -68,6 +71,7 @@ set(SOURCES
     data/point.cpp
     data/shape.cpp
     data/solid_color.cpp
+    data/static_text.cpp
     data/stroke_style.cpp
     data/symbol_instance.cpp
     data/symbol.cpp
