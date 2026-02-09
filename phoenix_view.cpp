@@ -4,7 +4,6 @@
 #include "data/solid_color.h"
 #include "data/symbol_instance.h"
 
-
 #include <QPainter>
 #include <QPaintEvent>
 #include <QPainterPath>
@@ -89,6 +88,10 @@ void PhoenixView::paintEvent(QPaintEvent *event)
 
 void PhoenixView::drawDocument(QPainter& painter, const Document* document)
 {
+    // Check document visibility
+    if (!document->visible)
+        return;
+        
     for (const Timeline* timeline : document->timelines)
     {
         drawTimeline(painter, timeline);
@@ -97,6 +100,10 @@ void PhoenixView::drawDocument(QPainter& painter, const Document* document)
 
 void PhoenixView::drawTimeline(QPainter& painter, const Timeline* timeline)
 {
+    // Check timeline visibility
+    if (!timeline->visible)
+        return;
+        
     for (int i = timeline->layers.size() - 1; i >= 0; --i)
     {
         const Layer* layer = timeline->layers[i];
@@ -107,6 +114,10 @@ void PhoenixView::drawTimeline(QPainter& painter, const Timeline* timeline)
 
 void PhoenixView::drawLayer(QPainter& painter, const Layer* layer)
 {
+    // Check layer visibility (already checked in drawTimeline, but keeping for safety)
+    if (!layer->visible)
+        return;
+        
     QColor color;
     color.setRgb(layer->color[0], layer->color[1], layer->color[2], layer->color[3]);
     painter.setPen(QPen(color, 1.0));
@@ -119,6 +130,10 @@ void PhoenixView::drawLayer(QPainter& painter, const Layer* layer)
 
 void PhoenixView::drawFrame(QPainter& painter, const Frame* frame)
 {
+    // Check frame visibility
+    if (!frame->visible)
+        return;
+        
     for (const Element* element : frame->elements)
     {
         drawElement(painter, element);
@@ -135,6 +150,10 @@ static Symbol* findSymbolByName(const Document* document, const std::string& nam
 
 void PhoenixView::drawElement(QPainter& painter, const Element* element)
 {
+    // Check element visibility
+    if (!element->visible)
+        return;
+
     Element::Type type = element->elementType();
     painter.save();
     QTransform transform(element->transform.m11, element->transform.m12, element->transform.m21, element->transform.m22,
@@ -170,9 +189,9 @@ void PhoenixView::drawElement(QPainter& painter, const Element* element)
     painter.restore();
 }
 
-static bool pathToPainterPath(const Path* path, QPainterPath& painterPath)
+static bool pathToPainterPath(const Edge* edge, QPainterPath& painterPath)
 {
-    for (const PathSegment& segment : path->segments)
+    for (const PathSegment& segment : edge->segments)
     {
         for (const PathSection& section : segment.sections)
         {
@@ -198,9 +217,9 @@ static bool pathToPainterPath(const Path* path, QPainterPath& painterPath)
 void PhoenixView::drawShape(QPainter& painter, const Shape* shape)
 {
     // Draw edges
-    for (const Path* path : shape->edges)
+    for (const Edge* edge : shape->edges)
     {
-        const FillStyle* fillStyle = shape->getFillStyleByIndex(path->fillStyle[1] != -1 ? path->fillStyle[1] : path->fillStyle[0]);
+        const FillStyle* fillStyle = shape->getFillStyleByIndex(edge->fillStyle0 != -1 ? edge->fillStyle0 : edge->fillStyle1);
         if (fillStyle)
         {
             if (fillStyle->type() == FillStyle::Type::SolidColor)
@@ -226,7 +245,7 @@ void PhoenixView::drawShape(QPainter& painter, const Shape* shape)
             painter.setBrush(Qt::NoBrush);
         }
 
-        const StrokeStyle* strokeStyle = shape->getStrokeStyleByIndex(path->strokeStyle);
+        const StrokeStyle* strokeStyle = shape->getStrokeStyleByIndex(edge->strokeStyle);
         if (strokeStyle)
         {
             if (strokeStyle->stroke)
@@ -279,7 +298,7 @@ void PhoenixView::drawShape(QPainter& painter, const Shape* shape)
         }
 
         QPainterPath painterPath;
-        pathToPainterPath(path, painterPath);
+        pathToPainterPath(edge, painterPath);
         painter.drawPath(painterPath);
     }
 }
