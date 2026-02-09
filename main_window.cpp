@@ -34,8 +34,8 @@ MainWindow::MainWindow(QWidget *parent)
     //loadFLAFile("d:\\fla\\MensWear_04_3.fla");
     //loadFLAFile("d:\\fla\\MensWear_04_4.fla");
     //loadFLAFile("d:\\fla\\MensWear_04.fla");
-    //loadFLAFile("d:\\fla\\HulaBunny_Sticker_2018.fla");
-    loadFLAFile("d:\\fla\\HulaBunny_Sticker_2018_2\\DOMDocument.xml");
+    loadFLAFile("d:\\fla\\HulaBunny_Sticker_2018.fla");
+    //loadFLAFile("d:\\fla\\HulaBunny_Sticker_2018_2");
     //loadFLAFile("d:\\fla\\HulaBunny_Sticker_2018_2.fla");
     //loadFLAFile("d:\\fla\\fluid_brush_tool.fla");
     //loadFLAFile("d:\\fla\\classic_brush_tool.fla");

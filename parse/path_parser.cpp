@@ -1,20 +1,21 @@
 #include "path_parser.h"
 #include <iostream>
+#include <cmath>
 
 namespace {
-bool isHexDigit(char c)
+inline bool isHexDigit(char c)
 {
     return (c >= '0' && c <= '9') || 
             (c >= 'A' && c <= 'F') || 
             (c >= 'a' && c <= 'f');
 }
 
-bool isDigit(char c)
+inline bool isDigit(char c)
 {
-    return (c >= '0' && c <= '9');
+    return c >= '0' && c <= '9';
 }
 
-bool isSpace(char c)
+inline bool isSpace(char c)
 {
     //return std::isspace(static_cast<unsigned char>(c));
     return c == '\n' || c == '\r' || c == ' ' || c == '\t';
@@ -47,7 +48,35 @@ Edge* PathParser::parse(const std::string& data)
             // Move to command: !x y
             pos++;
             Point point = parsePoint(data, pos);
-            if (isFirst || point.x != lastPoint.x || point.y != lastPoint.y)
+
+            // Close previous segment if it exists and endpoints match
+            if (lastSegment && !lastSegment->sections.empty())
+            {
+                Point segmentStart = lastSegment->sections[0].points[0];
+                if (std::abs(segmentStart.x - lastPoint.x) < 0.01 &&
+                    std::abs(segmentStart.y - lastPoint.y) < 0.01)
+                {
+                    lastSegment->sections.push_back({PathSection::Command::Close, {}});
+                    //std::cout << "!!!! Auto-closing path segment at point (" << lastPoint.x << ", " << lastPoint.y << ")" << std::endl;
+
+                    edge->segments.push_back({});
+                    lastSegment = &edge->segments.back();
+                    lastSegment->sections.push_back({PathSection::Command::Move, {point}});
+                }
+            }
+            else if (lastSegment == nullptr)
+            {
+                edge->segments.push_back({});
+                lastSegment = &edge->segments.back();
+                lastSegment->sections.push_back({PathSection::Command::Move, {point}});
+            }
+            else
+            {
+                lastSegment->sections.push_back({PathSection::Command::Move, {point}});
+            }
+            lastPoint = point;
+
+            /*if (isFirst || point.x != lastPoint.x || point.y != lastPoint.y)
             {
                 if (isFirst)
                     firstPoint = point;
@@ -59,7 +88,7 @@ Edge* PathParser::parse(const std::string& data)
                 lastSegment->sections.push_back({PathSection::Command::Move, {point}});
 
                 lastPoint = point;
-            }
+            }*/
         }
         else if (cmd == '|')
         {
@@ -119,27 +148,31 @@ Edge* PathParser::parse(const std::string& data)
         {
             // Cubic curve: (x1,y1 x2,y2 x3,y3...)
             pos++;
-            //std::vector<Point> cubicPoints;
-            //parseCubicCurve(data, pos, cubicPoints);
-            parseCubicCurve(data, pos, lastSegment);
-            /*if (cubicPoints.size() >= 3)
+            if (lastSegment)
             {
-                if (lastSegment)
+                int sectionCountBefore = lastSegment->sections.size();
+                parseCubicCurve(data, pos, lastSegment);
+
+                // Update lastPoint to the endpoint of the cubic curve
+                if (lastSegment->sections.size() > sectionCountBefore)
                 {
-                    lastSegment->sections.push_back({PathSection::Command::Cubic, {cubicPoints[0], cubicPoints[1], cubicPoints[2]}});
-                    for (int i = 3; i + 2 < cubicPoints.size(); i += 3)
+                    const PathSection& lastSection = lastSegment->sections.back();
+                    if (lastSection.command == PathSection::Command::Cubic && lastSection.points.size() >= 3)
                     {
-                        lastSegment->sections.push_back({PathSection::Command::Cubic, {cubicPoints[i], cubicPoints[i + 1], cubicPoints[i + 2]}});
+                        lastPoint = lastSection.points[2]; // Endpoint is the 3rd point
+                    }
+                    else if (lastSection.command == PathSection::Command::Line && lastSection.points.size() >= 1)
+                    {
+                        lastPoint = lastSection.points[0];
                     }
                 }
-                else
-                {
-                    _errorString = "Path data error: CubicTo command without a preceding MoveTo.";
-                    delete edge;
-                    return nullptr;
-                }
-                lastPoint = cubicPoints.back();
-            }*/
+            }
+            else
+            {
+                _errorString = "Path data error: CubicTo command without a preceding MoveTo.";
+                delete edge;
+                return nullptr;
+            }
         }
         else if (cmd == 'S' || cmd == 's')
         {
@@ -187,11 +220,18 @@ Edge* PathParser::parse(const std::string& data)
         }
     }
 
-    if (firstPoint.x == lastPoint.x && firstPoint.y == lastPoint.y)
+    // Close the last segment if endpoints match
+    if (lastSegment && !lastSegment->sections.empty())
     {
-        if (lastSegment)
+        Point segmentStart = lastSegment->sections[0].points[0];
+        if (std::abs(segmentStart.x - lastPoint.x) < 0.01 &&
+            std::abs(segmentStart.y - lastPoint.y) < 0.01)
         {
-            lastSegment->sections.push_back({PathSection::Command::Close, {}});
+            // Only add Close command if not already present
+            if (lastSegment->sections.back().command != PathSection::Command::Close)
+            {
+                lastSegment->sections.push_back({PathSection::Command::Close, {}});
+            }
         }
     }
 

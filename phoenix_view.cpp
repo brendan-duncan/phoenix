@@ -173,7 +173,7 @@ void PhoenixView::drawElement(QPainter& painter, const Element* element)
     {
         const SymbolInstance* instance = static_cast<const SymbolInstance*>(element);
         const Symbol* symbol = findSymbolByName(_flaDocument->document, instance->libraryItemName);
-        if (symbol)
+        if (symbol && symbol->visible)
         {
             for (const Timeline* timeline : symbol->timelines)
             {
@@ -268,95 +268,122 @@ static bool pathToPainterPath(const Edge* edge, QPainterPath& painterPath)
 
 void PhoenixView::drawShape(QPainter& painter, const Shape* shape)
 {
-    // Draw edges
+    // Draw edges - iterate through segments separately
     for (const Edge* edge : shape->edges)
     {
         if (!edge->visible)
             continue;
 
-        const FillStyle* fillStyle = shape->getFillStyleByIndex(edge->fillStyle0 != -1 ? edge->fillStyle0 : edge->fillStyle1);
-        if (fillStyle)
+        // Render each segment separately with its own styles
+        for (const PathSegment& segment : edge->segments)
         {
-            if (fillStyle->type() == FillStyle::Type::SolidColor)
+            if (!segment.visible || segment.sections.empty())
+                continue;
+
+            // Determine fill style for this segment
+            int fillStyleIdx = segment.fillStyleIndex != -1 ? segment.fillStyleIndex :
+                              (edge->fillStyle0 != -1 ? edge->fillStyle0 : edge->fillStyle1);
+
+            const FillStyle* fillStyle = shape->getFillStyleByIndex(fillStyleIdx);
+            if (fillStyle)
             {
-                const SolidColor* solidFill = static_cast<const SolidColor*>(fillStyle);
-                QColor color(solidFill->color[0], solidFill->color[1], solidFill->color[2], solidFill->color[3]);
-                painter.setBrush(QBrush(color));
-            }
-            else if (fillStyle->type() == FillStyle::Type::LinearGradient)
-            {
-                const LinearGradient* linearFill = static_cast<const LinearGradient*>(fillStyle);
-                QLinearGradient gradient(0, 0, 100, 100); // Placeholder gradient coordinates
-                for (const GradientEntry& entry : linearFill->entries)
+                if (fillStyle->type() == FillStyle::Type::SolidColor)
                 {
-                    QColor color(entry.color[0], entry.color[1], entry.color[2], entry.color[3]);
-                    gradient.setColorAt(entry.ratio, color);
+                    const SolidColor* solidFill = static_cast<const SolidColor*>(fillStyle);
+                    QColor color(solidFill->color[0], solidFill->color[1], solidFill->color[2], solidFill->color[3]);
+                    painter.setBrush(QBrush(color));
                 }
-                painter.setBrush(QBrush(gradient));
-            }
-        }
-        else
-        {
-            painter.setBrush(Qt::NoBrush);
-        }
-
-        const StrokeStyle* strokeStyle = shape->getStrokeStyleByIndex(edge->strokeStyle);
-        if (strokeStyle)
-        {
-            if (strokeStyle->stroke)
-            {
-                if (strokeStyle->stroke->fill)
+                else if (fillStyle->type() == FillStyle::Type::LinearGradient)
                 {
-                    double weight = MAX(strokeStyle->stroke->weight, 0.5);
-                    QPen pen(QColor(0, 0, 0, 255), weight);
-
-                    if (strokeStyle->stroke->style == "DashedStroke")
-                        pen.setStyle(Qt::DashLine);
-                    else if (strokeStyle->stroke->style == "RaggedStroke")
-                        pen.setStyle(Qt::DashDotLine);
-                    else if (strokeStyle->stroke->style == "StippleStroke")
-                        pen.setStyle(Qt::DashDotDotLine);
-                    else if (strokeStyle->stroke->style == "DottedStroke")
-                        pen.setStyle(Qt::DotLine);
-
-                    if (strokeStyle->stroke->fill->type() == FillStyle::Type::SolidColor)
+                    const LinearGradient* linearFill = static_cast<const LinearGradient*>(fillStyle);
+                    QLinearGradient gradient(0, 0, 100, 100);
+                    for (const GradientEntry& entry : linearFill->entries)
                     {
-                        const SolidColor* fill = static_cast<const SolidColor*>(strokeStyle->stroke->fill);
-                        QColor color(fill->color[0], fill->color[1], fill->color[2], fill->color[3]);
-                        pen.setColor(color);
+                        QColor color(entry.color[0], entry.color[1], entry.color[2], entry.color[3]);
+                        gradient.setColorAt(entry.ratio, color);
                     }
-                    else if (strokeStyle->stroke->fill->type() == FillStyle::Type::LinearGradient)
-                    {
-                        const LinearGradient* fill = static_cast<const LinearGradient*>(strokeStyle->stroke->fill);
-                        QLinearGradient gradient(0, 0, 100, 100); // Placeholder gradient coordinates
-                        for (const GradientEntry& entry : fill->entries)
-                        {
-                            QColor color(entry.color[0], entry.color[1], entry.color[2], entry.color[3]);
-                            gradient.setColorAt(entry.ratio, color);
-                        }
-                        pen.setBrush(QBrush(gradient));
-                    }
+                    painter.setBrush(QBrush(gradient));
+                }
+            }
+            else
+            {
+                painter.setBrush(Qt::NoBrush);
+            }
 
-                    painter.setPen(pen);
-                }
-                else
+            // Determine stroke style for this segment
+            int strokeStyleIdx = segment.lineStyleIndex != -1 ? segment.lineStyleIndex : edge->strokeStyle;
+            const StrokeStyle* strokeStyle = shape->getStrokeStyleByIndex(strokeStyleIdx);
+
+            if (strokeStyle && strokeStyle->stroke && strokeStyle->stroke->fill)
+            {
+                double weight = MAX(strokeStyle->stroke->weight, 0.5);
+                QPen pen(QColor(0, 0, 0, 255), weight);
+
+                if (strokeStyle->stroke->style == "DashedStroke")
+                    pen.setStyle(Qt::DashLine);
+                else if (strokeStyle->stroke->style == "RaggedStroke")
+                    pen.setStyle(Qt::DashDotLine);
+                else if (strokeStyle->stroke->style == "StippleStroke")
+                    pen.setStyle(Qt::DashDotDotLine);
+                else if (strokeStyle->stroke->style == "DottedStroke")
+                    pen.setStyle(Qt::DotLine);
+
+                if (strokeStyle->stroke->fill->type() == FillStyle::Type::SolidColor)
                 {
-                    painter.setPen(Qt::NoPen);
+                    const SolidColor* fill = static_cast<const SolidColor*>(strokeStyle->stroke->fill);
+                    QColor color(fill->color[0], fill->color[1], fill->color[2], fill->color[3]);
+                    pen.setColor(color);
                 }
+                else if (strokeStyle->stroke->fill->type() == FillStyle::Type::LinearGradient)
+                {
+                    const LinearGradient* fill = static_cast<const LinearGradient*>(strokeStyle->stroke->fill);
+                    QLinearGradient gradient(0, 0, 100, 100);
+                    for (const GradientEntry& entry : fill->entries)
+                    {
+                        QColor color(entry.color[0], entry.color[1], entry.color[2], entry.color[3]);
+                        gradient.setColorAt(entry.ratio, color);
+                    }
+                    pen.setBrush(QBrush(gradient));
+                }
+
+                painter.setPen(pen);
             }
             else
             {
                 painter.setPen(Qt::NoPen);
             }
-        }
-        else
-        {
-            painter.setPen(Qt::NoPen);
-        }
 
-        QPainterPath painterPath;
-        pathToPainterPath(edge, painterPath);
-        painter.drawPath(painterPath);
+            // Create path for this segment only
+            QPainterPath painterPath;
+            for (const PathSection& section : segment.sections)
+            {
+                if (section.command == PathSection::Command::Move)
+                {
+                    painterPath.moveTo(section.points[0].x, section.points[0].y);
+                }
+                else if (section.command == PathSection::Command::Line)
+                {
+                    painterPath.lineTo(section.points[0].x, section.points[0].y);
+                }
+                else if (section.command == PathSection::Command::Quad)
+                {
+                    painterPath.quadTo(section.points[0].x, section.points[0].y,
+                                       section.points[1].x, section.points[1].y);
+                }
+                else if (section.command == PathSection::Command::Cubic)
+                {
+                    painterPath.cubicTo(section.points[0].x, section.points[0].y,
+                                        section.points[1].x, section.points[1].y,
+                                        section.points[2].x, section.points[2].y);
+                }
+                else if (section.command == PathSection::Command::Close)
+                {
+                    painterPath.closeSubpath();
+                }
+            }
+
+            painter.drawPath(painterPath);
+        }
     }
 }
 
