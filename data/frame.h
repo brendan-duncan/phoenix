@@ -1,6 +1,7 @@
 #pragma once
 
 #include "dom_element.h"
+#include "action_script.h"
 #include "element.h"
 #include <string>
 #include <vector>
@@ -11,6 +12,7 @@ public:
     int index;
     std::string keyMode;
 
+    ActionScript* actionScript = nullptr;
     std::vector<Element*> elements;
 
     Frame();

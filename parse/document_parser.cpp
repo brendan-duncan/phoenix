@@ -4,6 +4,7 @@
 #include "../data/bitmap_instance.h"
 #include "../data/group.h"
 #include "../data/linear_gradient.h"
+#include "../data/radial_gradient.h"
 #include "../data/shape.h"
 #include "../data/solid_color.h"
 #include "../data/static_text.h"
@@ -103,6 +104,29 @@ bool parseLinearGradient(const QDomElement& element, LinearGradient* linearGradi
     return true;
 }
 
+bool parseRadialGradient(const QDomElement& element, RadialGradient* radialGradient)
+{
+    QDomNodeList entryNodes = element.elementsByTagName("GradientEntry");
+    for (size_t i = 0; i < entryNodes.size(); ++i)
+    {
+        QDomElement entryElement = entryNodes.at(i).toElement();
+        RadialEntry entry;
+        entry.ratio = entryElement.attribute("ratio").toDouble();
+
+        std::string color = entryElement.attribute("color").toStdString();
+        parseHexColor(color, entry.color);
+
+        radialGradient->entries.push_back(entry);
+    }
+
+    std::sort(radialGradient->entries.begin(), radialGradient->entries.end(),
+        [](const RadialEntry& a, const RadialEntry& b) {
+            return a.ratio < b.ratio;
+        });
+
+    return true;
+}
+
 Edge* parsePath(const QDomElement& element)
 {
     std::string edgeData =element.attribute("edges").toStdString();
@@ -185,6 +209,16 @@ FillStyle* parseFillStyle(const QDomElement& element)
             return nullptr;
         }
         return linearFill;
+    }
+    else if (element.tagName() == "RadialGradient")
+    {
+        RadialGradient* radialFill = new RadialGradient();
+        if (!parseRadialGradient(element, radialFill))
+        {
+            delete radialFill;
+            return nullptr;
+        }
+        return radialFill;
     }
     qDebug() << "!!!! Unhandled fill element:" << element.tagName() << (_currentFile.empty() ? "" : " from") << QString::fromStdString(_currentFile);
     return nullptr;
@@ -553,16 +587,16 @@ bool parseStaticText(const QDomElement& element, StaticText* staticText)
                                                     std::string color = attr.value().toStdString();
                                                     parseHexColor(color, textRun.fillColor);
                                                 }
-                                                else
+                                               /*else
                                                 {
                                                     qDebug() << "!!!! Unhandled text attribute:" << attr.name() << (_currentFile.empty() ? "" : " from") << QString::fromStdString(_currentFile);
-                                                }
+                                                }*/
                                             }
                                         }
-                                        else
+                                        /*else
                                         {
                                             qDebug() << "!!!! Unhandled text attribute element:" << attrElement.tagName() << (_currentFile.empty() ? "" : " from") << QString::fromStdString(_currentFile);
-                                        }
+                                        }*/
                                     }
                                 }
                             }
@@ -741,6 +775,29 @@ bool parseElements(const QDomElement& element, Frame* frame)
     return true;
 }
 
+bool parseActionScript(const QDomElement& element, ActionScript* actionScript)
+{
+    QDomNodeList childNodes = element.childNodes();
+    for (int i = 0; i < childNodes.size(); ++i)
+    {
+        QDomNode node = childNodes.at(i);
+        if (node.isElement())
+        {
+            QDomElement childElement = node.toElement();
+            if (childElement.tagName() == "script")
+            {
+                actionScript->code = element.text().toStdString();
+            }
+            else
+            {
+                qDebug() << "!!!! Unhandled ActionScript element:" << childElement.tagName() << (_currentFile.empty() ? "" : " from") << QString::fromStdString(_currentFile);
+            }
+        }
+    }
+    
+    return true;
+}
+
 bool parseFrame(const QDomElement& element, Frame* frame)
 {
     frame->index = element.attribute("index").toInt();
@@ -753,7 +810,17 @@ bool parseFrame(const QDomElement& element, Frame* frame)
         if (node.isElement())
         {
             QDomElement childElement = node.toElement();
-            if (childElement.tagName() == "elements") 
+            if (childElement.tagName() == "Actionscript")
+            {
+                ActionScript* actionScript = new ActionScript();
+                if (!parseActionScript(childElement, actionScript))
+                {
+                    delete actionScript;
+                    return false;
+                }
+                frame->actionScript = actionScript;
+            }
+            else if (childElement.tagName() == "elements") 
             {
                 if (!parseElements(childElement, frame))
                 {

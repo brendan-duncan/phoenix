@@ -26,6 +26,7 @@ set(HEADERS
     parse/zip_reader.h
     parse/fla_parser.h
     parse/path_parser.h
+    data/action_script.h
     data/bitmap.h
     data/document.h
     data/dom_element.h
@@ -38,6 +39,7 @@ set(HEADERS
     data/layer.h
     data/linear_gradient.h
     data/point.h
+    data/radial_gradient.h
     data/shape.h
     data/solid_color.h
     data/static_text.h
@@ -57,6 +59,7 @@ set(SOURCES
     parse/zip_reader.cpp
     parse/fla_parser.cpp
     parse/path_parser.cpp
+    data/action_script.cpp
     data/bitmap.cpp
     data/document.cpp
     data/dom_element.cpp
@@ -69,6 +72,7 @@ set(SOURCES
     data/layer.cpp
     data/linear_gradient.cpp
     data/point.cpp
+    data/radial_gradient.cpp
     data/shape.cpp
     data/solid_color.cpp
     data/static_text.cpp

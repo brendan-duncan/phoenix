@@ -34,7 +34,8 @@ MainWindow::MainWindow(QWidget *parent)
     //loadFLAFile("d:\\fla\\MensWear_04_3.fla");
     //loadFLAFile("d:\\fla\\MensWear_04_4.fla");
     //loadFLAFile("d:\\fla\\MensWear_04.fla");
-    loadFLAFile("d:\\fla\\HulaBunny_Sticker_2018.fla");
+    //loadFLAFile("d:\\fla\\HulaBunny_Sticker_2018.fla");
+    loadFLAFile("d:\\fla\\HulaBunny_Sticker_2018_2\\DOMDocument.xml");
     //loadFLAFile("d:\\fla\\HulaBunny_Sticker_2018_2.fla");
     //loadFLAFile("d:\\fla\\fluid_brush_tool.fla");
     //loadFLAFile("d:\\fla\\classic_brush_tool.fla");
@@ -53,6 +54,7 @@ void MainWindow::loadFLAFile(const QString& filePath)
         delete _flaDocument;
         _flaDocument = nullptr;
     }
+
 
     FLAParser parser;
     _flaDocument = parser.parse(filePath.toStdString());
@@ -137,7 +139,7 @@ void MainWindow::setupMenus()
 void MainWindow::openFile()
 {
     QString fileName = QFileDialog::getOpenFileName(this,
-        tr("Open FLA File"), "", tr("FLA Files (*.fla);;All Files (*)"));
+        tr("Open FLA File"), "", tr("FLA Files (*.fla;DOMDocument.xml);;All Files (*)"));
     
     if (!fileName.isEmpty())
     {

@@ -38,6 +38,8 @@ public:
 
 private:
     QZipReader* _zipReader;
+    std::string _path;
     std::string _errorString;
     bool _isOpen;
+    bool _isDirectory;
 };
