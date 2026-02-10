@@ -22,6 +22,9 @@ DocumentView::DocumentView(QWidget *parent)
     setSortingEnabled(false);
     setSelectionMode(QAbstractItemView::SingleSelection);
 
+    // Connect lazy loading signal
+    connect(this, &QTreeWidget::itemExpanded, this, &DocumentView::onItemExpanded);
+
     // Visible icon
     {
         QString iconText = "👁";
@@ -65,7 +68,7 @@ void DocumentView::refreshTree()
         return;
 
     buildDocumentTree();
-    expandToDepth(2); // Expand first few levels by default
+    // Don't auto-expand - let user expand as needed for lazy loading
 }
 
 void DocumentView::clearTree()
@@ -73,6 +76,176 @@ void DocumentView::clearTree()
     clear();
     _itemToElement.clear();
     _elementToItem.clear();
+    _populatedItems.clear();
+}
+
+void DocumentView::setItemTypeData(QTreeWidgetItem* item, ItemType type, void* data)
+{
+    item->setData(0, ItemTypeRole, QVariant::fromValue(static_cast<int>(type)));
+    item->setData(0, ItemDataRole, QVariant::fromValue(reinterpret_cast<quintptr>(data)));
+}
+
+DocumentView::ItemType DocumentView::getItemType(QTreeWidgetItem* item) const
+{
+    return static_cast<ItemType>(item->data(0, ItemTypeRole).toInt());
+}
+
+void* DocumentView::getItemData(QTreeWidgetItem* item) const
+{
+    return reinterpret_cast<void*>(item->data(0, ItemDataRole).value<quintptr>());
+}
+
+void DocumentView::onItemExpanded(QTreeWidgetItem* item)
+{
+    // If this item hasn't been populated yet, populate it now
+    if (!_populatedItems.contains(item))
+    {
+        populateItemChildren(item);
+        _populatedItems.insert(item);
+    }
+}
+
+void DocumentView::populateItemChildren(QTreeWidgetItem* item)
+{
+    // Remove the dummy child if present
+    if (item->childCount() == 1 && item->child(0)->text(0) == "Loading...")
+    {
+        delete item->takeChild(0);
+    }
+
+    ItemType itemType = getItemType(item);
+    void* data = getItemData(item);
+
+    switch (itemType)
+    {
+        case ItemType::Timeline:
+            if (data)
+            {
+                const Timeline* timeline = static_cast<const Timeline*>(data);
+                for (const Layer* layer : timeline->layers)
+                {
+                    buildLayerTree(item, layer, true);
+                }
+            }
+            break;
+
+        case ItemType::Layer:
+            if (data)
+            {
+                const Layer* layer = static_cast<const Layer*>(data);
+                for (const Frame* frame : layer->frames)
+                {
+                    buildFrameTree(item, frame, true);
+                }
+            }
+            break;
+
+        case ItemType::Frame:
+            if (data)
+            {
+                const Frame* frame = static_cast<const Frame*>(data);
+                for (const Element* element : frame->elements)
+                {
+                    buildElementTree(item, element, true);
+                }
+            }
+            break;
+
+        case ItemType::Element:
+            if (data)
+            {
+                const Element* element = static_cast<const Element*>(data);
+
+                // If it's a shape, add its edges
+                if (element->elementType() == Element::Type::Shape)
+                {
+                    const ::Shape* shape = static_cast<const ::Shape*>(element);
+                    int edgeIndex = 0;
+                    for (const Edge* edge : shape->edges)
+                    {
+                        QString edgeName = QString("Edge %1").arg(edgeIndex++);
+                        QTreeWidgetItem* edgeItem = createTreeItem(edgeName, (DOMElement*)edge, item);
+                        setItemTypeData(edgeItem, ItemType::Other, nullptr);
+
+                        // Add segments as children of the edge
+                        int segmentIndex = 0;
+                        for (const PathSegment& segment : edge->segments)
+                        {
+                            QString segmentName = QString("Segment %1").arg(segmentIndex++);
+                            QTreeWidgetItem* segmentItem = createTreeItem(segmentName, (DOMElement*)&segment, edgeItem);
+                            setItemTypeData(segmentItem, ItemType::Other, nullptr);
+
+                            // Add sections as children of the segment
+                            for (const PathSection& section : segment.sections)
+                            {
+                                QString sectionName;
+                                switch (section.command)
+                                {
+                                    case PathSection::Command::Move:
+                                        sectionName = "Move To";
+                                        break;
+                                    case PathSection::Command::Line:
+                                        sectionName = "Line To";
+                                        break;
+                                    case PathSection::Command::Quad:
+                                        sectionName = "Quadratic Curve To";
+                                        break;
+                                    case PathSection::Command::Cubic:
+                                        sectionName = "Cubic Curve To";
+                                        break;
+                                    case PathSection::Command::Close:
+                                        sectionName = "Close Path";
+                                        break;
+                                }
+                                for (size_t i = 0; i < section.points.size(); ++i)
+                                {
+                                    const Point& pt = section.points[i];
+                                    sectionName += QString(" (x: %1, y: %2)").arg(pt.x).arg(pt.y);
+                                }
+                                QTreeWidgetItem* sectionItem = createTreeItem(sectionName, nullptr, segmentItem);
+                                setItemTypeData(sectionItem, ItemType::Other, nullptr);
+                            }
+                        }
+                    }
+                }
+
+                // If it's a group, add its children
+                if (element->elementType() == Element::Type::Group)
+                {
+                    const Group* group = static_cast<const Group*>(element);
+                    for (const Element* member : group->members)
+                    {
+                        buildElementTree(item, member, true);
+                    }
+                }
+            }
+            break;
+
+        case ItemType::Symbol:
+            if (data)
+            {
+                const Symbol* symbol = static_cast<const Symbol*>(data);
+                for (const Timeline* timeline : symbol->timelines)
+                {
+                    buildTimelineTree(item, timeline, true);
+                }
+            }
+            break;
+
+        case ItemType::SymbolList:
+            if (_flaDocument && _flaDocument->document)
+            {
+                for (const auto& symbolPair : _flaDocument->document->symbolMap)
+                {
+                    const Symbol* symbol = symbolPair.second;
+                    buildSymbolTree(item, symbol, true);
+                }
+            }
+            break;
+
+        default:
+            break;
+    }
 }
 
 void DocumentView::buildDocumentTree()
@@ -86,73 +259,119 @@ void DocumentView::buildDocumentTree()
         _flaDocument->document
     );
     addTopLevelItem(docItem);
+    setItemTypeData(docItem, ItemType::Document, _flaDocument->document);
 
     // Add main timeline
     if (!_flaDocument->document->timelines.empty())
     {
         const Timeline* mainTimeline = _flaDocument->document->timelines[0];
-        buildTimelineTree(docItem, mainTimeline);
+        buildTimelineTree(docItem, mainTimeline, true);
     }
 
-    // Add symbols
+    // Add symbols container
     QTreeWidgetItem* symbolsItem = createTreeItem("Symbols", nullptr, docItem);
-    for (const auto& symbolPair : _flaDocument->document->symbolMap)
+    setItemTypeData(symbolsItem, ItemType::SymbolList, nullptr);
+
+    // Add dummy child to enable expansion if there are symbols
+    if (!_flaDocument->document->symbolMap.empty())
     {
-        const Symbol* symbol = symbolPair.second;
-        buildSymbolTree(symbolsItem, symbol);
+        QTreeWidgetItem* dummyItem = new QTreeWidgetItem(symbolsItem);
+        dummyItem->setText(0, "Loading...");
     }
+
+    // Expand document by default
+    docItem->setExpanded(true);
 }
 
-void DocumentView::buildTimelineTree(QTreeWidgetItem* parentItem, const Timeline* timeline)
+void DocumentView::buildTimelineTree(QTreeWidgetItem* parentItem, const Timeline* timeline, bool lazy)
 {
     QString timelineName = timeline->name.empty() ? "Timeline" : QString::fromStdString(timeline->name);
     QTreeWidgetItem* timelineItem = createTreeItem(timelineName, (DOMElement*)timeline, parentItem);
+    setItemTypeData(timelineItem, ItemType::Timeline, (void*)timeline);
 
-    // Add layers (in reverse order for proper visual stacking)
-    for (const Layer* layer : timeline->layers)
+    if (lazy && !timeline->layers.empty())
     {
-        buildLayerTree(timelineItem, layer);
+        // Add dummy child to enable expansion
+        QTreeWidgetItem* dummyItem = new QTreeWidgetItem(timelineItem);
+        dummyItem->setText(0, "Loading...");
+    }
+    else
+    {
+        // Build immediately
+        for (const Layer* layer : timeline->layers)
+        {
+            buildLayerTree(timelineItem, layer, lazy);
+        }
+        _populatedItems.insert(timelineItem);
     }
 }
 
-void DocumentView::buildLayerTree(QTreeWidgetItem* parentItem, const Layer* layer)
+void DocumentView::buildLayerTree(QTreeWidgetItem* parentItem, const Layer* layer, bool lazy)
 {
-    QString layerName = QString("Layer %1 %2")
+    QString layerName = QString("%1 %2")
         .arg(layer->name.empty() ? "Layer" : QString::fromStdString(layer->name))
         .arg(layer->visible ? "" : "(Hidden)");
 
     QTreeWidgetItem* layerItem = createTreeItem(layerName, (DOMElement*)layer, parentItem);
+    setItemTypeData(layerItem, ItemType::Layer, (void*)layer);
     updateItemVisibility(layerItem);
 
-    // Add frames
-    for (const Frame* frame : layer->frames)
+    if (lazy && !layer->frames.empty())
     {
-        buildFrameTree(layerItem, frame);
+        // Add dummy child to enable expansion
+        QTreeWidgetItem* dummyItem = new QTreeWidgetItem(layerItem);
+        dummyItem->setText(0, "Loading...");
+    }
+    else
+    {
+        // Build immediately
+        for (const Frame* frame : layer->frames)
+        {
+            buildFrameTree(layerItem, frame, lazy);
+        }
+        _populatedItems.insert(layerItem);
     }
 }
 
-void DocumentView::buildFrameTree(QTreeWidgetItem* parentItem, const Frame* frame)
+void DocumentView::buildFrameTree(QTreeWidgetItem* parentItem, const Frame* frame, bool lazy)
 {
     QTreeWidgetItem* frameItem = createTreeItem(
         QString("Frame %1").arg(frame->index),
         (DOMElement*)frame,
         parentItem
     );
+    setItemTypeData(frameItem, ItemType::Frame, (void*)frame);
 
-    // Add elements
-    for (const Element* element : frame->elements)
+    if (lazy && !frame->elements.empty())
     {
-        buildElementTree(frameItem, element);
+        // Add dummy child to enable expansion
+        QTreeWidgetItem* dummyItem = new QTreeWidgetItem(frameItem);
+        dummyItem->setText(0, "Loading...");
+    }
+    else
+    {
+        // Build immediately
+        for (const Element* element : frame->elements)
+        {
+            buildElementTree(frameItem, element, lazy);
+        }
+        _populatedItems.insert(frameItem);
     }
 }
 
-void DocumentView::buildElementTree(QTreeWidgetItem* parentItem, const Element* element)
+void DocumentView::buildElementTree(QTreeWidgetItem* parentItem, const Element* element, bool lazy)
 {
     QString elementName;
+    bool hasChildren = false;
+
     switch (element->elementType())
     {
         case Element::Type::Shape:
-            elementName = "Shape";
+            {
+                const ::Shape* shape = static_cast<const ::Shape*>(element);
+                elementName = "Shape";
+                hasChildren = !shape->edges.empty();
+            }
             break;
         case Element::Type::SymbolInstance:
             {
@@ -161,7 +380,11 @@ void DocumentView::buildElementTree(QTreeWidgetItem* parentItem, const Element* 
             }
             break;
         case Element::Type::Group:
-            elementName = "Group";
+            {
+                const Group* group = static_cast<const Group*>(element);
+                elementName = "Group";
+                hasChildren = !group->members.empty();
+            }
             break;
         case Element::Type::StaticText:
             elementName = "StaticText";
@@ -175,80 +398,46 @@ void DocumentView::buildElementTree(QTreeWidgetItem* parentItem, const Element* 
     }
 
     QTreeWidgetItem* elementItem = createTreeItem(elementName, (DOMElement*)element, parentItem);
+    setItemTypeData(elementItem, ItemType::Element, (void*)element);
     updateItemVisibility(elementItem);
 
-    // If it's a shape, add its edges
-    if (element->elementType() == Element::Type::Shape)
+    if (lazy && hasChildren)
     {
-        const ::Shape* shape = static_cast<const ::Shape*>(element);
-        int edgeIndex = 0;
-        for (const Edge* edge : shape->edges)
-        {
-            QString edgeName = QString("Edge %1").arg(edgeIndex++);
-            QTreeWidgetItem* edgeItem = createTreeItem(edgeName, (DOMElement*)edge, elementItem);
-
-            // Add segments as children of the edge
-            int segmentIndex = 0;
-            for (const PathSegment& segment : edge->segments)
-            {
-                QString segmentName = QString("Segment %1").arg(segmentIndex++);
-                QTreeWidgetItem* segmentItem = createTreeItem(segmentName, (DOMElement*)&segment, edgeItem);
-                // Add sections as children of the segment
-                for (const PathSection& section : segment.sections)
-                {
-                    QString sectionName;
-                    switch (section.command)
-                    {
-                        case PathSection::Command::Move:
-                            sectionName = "Move To";                            
-                            break;
-                        case PathSection::Command::Line:
-                            sectionName = "Line To";
-                            break;
-                        case PathSection::Command::Quad:
-                            sectionName = "Quadratic Curve To";
-                            break;
-                        case PathSection::Command::Cubic:
-                            sectionName = "Cubic Curve To";
-                            break;
-                        case PathSection::Command::Close:
-                            sectionName = "Close Path";
-                            break;
-                    }
-                    for (size_t i = 0; i < section.points.size(); ++i)
-                    {
-                        const Point& pt = section.points[i];
-                        sectionName += QString(" (x: %1, y: %2)").arg(pt.x).arg(pt.y);
-                    }
-                    createTreeItem(sectionName, nullptr, segmentItem);
-                }
-            }
-        }
+        // Add dummy child to enable expansion
+        QTreeWidgetItem* dummyItem = new QTreeWidgetItem(elementItem);
+        dummyItem->setText(0, "Loading...");
     }
-
-    // If it's a group, add its children
-    if (element->elementType() == Element::Type::Group)
+    else if (!lazy)
     {
-        const Group* group = static_cast<const Group*>(element);
-        for (const Element* member : group->members)
-        {
-            buildElementTree(elementItem, member);
-        }
+        // Build children immediately (handled by populateItemChildren for consistency)
+        populateItemChildren(elementItem);
+        _populatedItems.insert(elementItem);
     }
 }
 
-void DocumentView::buildSymbolTree(QTreeWidgetItem* parentItem, const Symbol* symbol)
+void DocumentView::buildSymbolTree(QTreeWidgetItem* parentItem, const Symbol* symbol, bool lazy)
 {
     QTreeWidgetItem* symbolItem = createTreeItem(
-        QString("Symbol: %1").arg(QString::fromStdString(symbol->name)),
+        QString("%1").arg(QString::fromStdString(symbol->name)),
         (DOMElement*)symbol,
         parentItem
     );
+    setItemTypeData(symbolItem, ItemType::Symbol, (void*)symbol);
 
-    // Add symbol's timelines
-    for (const Timeline* timeline : symbol->timelines)
+    if (lazy && !symbol->timelines.empty())
     {
-        buildTimelineTree(symbolItem, timeline);
+        // Add dummy child to enable expansion
+        QTreeWidgetItem* dummyItem = new QTreeWidgetItem(symbolItem);
+        dummyItem->setText(0, "Loading...");
+    }
+    else
+    {
+        // Build immediately
+        for (const Timeline* timeline : symbol->timelines)
+        {
+            buildTimelineTree(symbolItem, timeline, lazy);
+        }
+        _populatedItems.insert(symbolItem);
     }
 }
 
