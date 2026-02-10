@@ -21,6 +21,30 @@ DocumentView::DocumentView(QWidget *parent)
     setRootIsDecorated(true);
     setSortingEnabled(false);
     setSelectionMode(QAbstractItemView::SingleSelection);
+
+    // Visible icon
+    {
+        QString iconText = "👁";
+        QPixmap pixmap(16, 16);
+        pixmap.fill(Qt::transparent);
+        QPainter painter(&pixmap);
+        painter.setFont(QFont("Segoe UI Emoji", 10));
+        painter.setPen(Qt::black);
+        painter.drawText(pixmap.rect(), Qt::AlignCenter, iconText);
+        _visibleIcon = QIcon(pixmap);
+    }
+    // Hidden icon
+    {
+        // Use Unicode characters for visibility icons
+        QString iconText = "⚠";
+        QPixmap pixmap(16, 16);
+        pixmap.fill(Qt::transparent);
+        QPainter painter(&pixmap);
+        painter.setFont(QFont("Segoe UI Emoji", 10));
+        painter.setPen(Qt::gray);
+        painter.drawText(pixmap.rect(), Qt::AlignCenter, iconText);
+        _hiddenIcon = QIcon(pixmap);
+    }
 }
 
 DocumentView::~DocumentView()
@@ -242,8 +266,9 @@ QTreeWidgetItem* DocumentView::createTreeItem(const QString& text, DOMElement* d
     }
 
     item->setText(0, text);
-    //item->setText(1, QString::fromStdString(domElement ? domElement->domTypeName() : ""));
-    item->setIcon(0, getVisibilityIcon(domElement ? domElement->visible : true));
+
+    bool isVisible = domElement ? domElement->visible : true;
+    item->setIcon(0, isVisible ? _visibleIcon : _hiddenIcon);
 
     // Store mapping for quick lookup
     if (domElement)
@@ -261,7 +286,7 @@ void DocumentView::updateItemVisibility(QTreeWidgetItem* item)
         return;
 
     DOMElement* element = _itemToElement[item];
-    item->setIcon(0, getVisibilityIcon(element->visible));
+    item->setIcon(0, element->visible ? _visibleIcon : _hiddenIcon);
 
     // Update item text to reflect visibility
     QString text = item->text(0);
@@ -275,23 +300,6 @@ void DocumentView::updateItemVisibility(QTreeWidgetItem* item)
     {
         item->setText(0, text.replace(" (Hidden)", ""));
     }
-}
-
-QIcon DocumentView::getVisibilityIcon(bool visible) const
-{
-    // Use Unicode characters for visibility icons
-    QString iconText = visible ? "👁" : "⚠";
-    
-    // Create a simple text-based icon
-    QPixmap pixmap(16, 16);
-    pixmap.fill(Qt::transparent);
-    
-    QPainter painter(&pixmap);
-    painter.setFont(QFont("Segoe UI Emoji", 10));
-    painter.setPen(visible ? Qt::black : Qt::gray);
-    painter.drawText(pixmap.rect(), Qt::AlignCenter, iconText);
-    
-    return QIcon(pixmap);
 }
 
 void DocumentView::mousePressEvent(QMouseEvent *event)

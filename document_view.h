@@ -43,9 +43,10 @@ private:
 
     void updateItemVisibility(QTreeWidgetItem* item);
 
-    QIcon getVisibilityIcon(bool visible) const;
-
     // Map items to their DOMElement pointers for quick access
     QMap<QTreeWidgetItem*, DOMElement*> _itemToElement;
     QMap<DOMElement*, QTreeWidgetItem*> _elementToItem;
+
+    QIcon _visibleIcon;
+    QIcon _hiddenIcon;
 };
