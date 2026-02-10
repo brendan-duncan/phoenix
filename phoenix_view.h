@@ -5,6 +5,7 @@
 
 #include <QList>
 #include <QMap>
+#include <QRectF>
 #include <QWidget>
 #include <QPainter>
 #include <QPainterPath>
@@ -21,6 +22,9 @@ public:
     ~PhoenixView();
 
     void setDocument(const FLADocument* document);
+
+    void setShowBounds(bool show) { _showBounds = show; update(); }
+    bool showBounds() const { return _showBounds; }
 
 protected:
     void paintEvent(QPaintEvent *event) override;
@@ -43,6 +47,12 @@ private:
     bool _isDragging;
     QPoint _lastMousePos;
 
+    // Visible rect in document coordinates (for culling)
+    QRectF _visibleRect;
+
+    // Debug: show bounding boxes
+    bool _showBounds;
+
     struct PathCacheEntry
     {
         QBrush fillBrush;
@@ -53,6 +63,9 @@ private:
     QMap<const Shape*, PathCacheList> _pathCache;
 
     QMap<QString, QPixmap> _bitmapCache;
+
+    // Bounds cache for culling
+    QMap<const Element*, QRectF> _boundsCache;
 
     void drawDocument(QPainter& painter, const Document* document);
 
@@ -65,6 +78,11 @@ private:
     void drawElement(QPainter& painter, const Element* element);
 
     void drawShape(QPainter& painter, const Shape* shape);
+
+    // Bounds calculation
+    QRectF calculateElementBounds(const Element* element);
+    QRectF calculateShapeBounds(const Shape* shape);
+    QRectF getElementBounds(const Element* element);
 
     // Helper methods
     void resetView();

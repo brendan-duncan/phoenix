@@ -17,6 +17,8 @@
 
 #define MAX(a, b) ((a) > (b) ? (a) : (b))
 
+uint32_t _skippedElement = 0;
+
 PhoenixView::PhoenixView(QWidget *parent)
     : QWidget(parent)
     , _flaDocument(nullptr)
@@ -24,6 +26,7 @@ PhoenixView::PhoenixView(QWidget *parent)
     , _panX(0)
     , _panY(0)
     , _isDragging(false)
+    , _showBounds(false)
 {
     // Set widget properties
     setMinimumSize(400, 300);
@@ -41,6 +44,8 @@ PhoenixView::~PhoenixView()
 void PhoenixView::setDocument(const FLADocument* document)
 {
     _bitmapCache.clear(); // Clear bitmap cache when loading new document
+    _boundsCache.clear(); // Clear bounds cache for new document
+    _pathCache.clear(); // Clear path cache for new document
     _flaDocument = document;
     update(); // Trigger repaint
 }
@@ -87,6 +92,15 @@ void PhoenixView::paintEvent(QPaintEvent *event)
     double centerX = (_zoom == 1.0) ? (widgetRect.width() - docWidth * scale) / 2.0 : 0;
     double centerY = (_zoom == 1.0) ? (widgetRect.height() - docHeight * scale) / 2.0 : 0;
 
+    // Calculate visible rect in document coordinates for culling
+    double invScale = 1.0 / scale;
+    _visibleRect = QRectF(
+        (-_panX - centerX) * invScale,
+        (-_panY - centerY) * invScale,
+        widgetRect.width() * invScale,
+        widgetRect.height() * invScale
+    );
+
     // Apply transformations: pan + zoom + center offset
     painter.translate(_panX + centerX, _panY + centerY);
     painter.scale(scale, scale);
@@ -94,10 +108,17 @@ void PhoenixView::paintEvent(QPaintEvent *event)
     // Draw white background for document area
     painter.fillRect(0, 0, docWidth, docHeight, QColor(255, 255, 255));
 
+    // Draw visible rect if debug mode is enabled
+    if (_showBounds)
+    {
+        painter.save();
+        painter.setPen(QPen(QColor(0, 0, 255, 100), 2.0, Qt::DashLine)); // Blue dashed for visible area
+        painter.setBrush(Qt::NoBrush);
+        painter.drawRect(_visibleRect);
+        painter.restore();
+    }
+
     // Draw document content
-    drawDocument(painter, _flaDocument->document);
-    // Improve antialiasing
-    painter.translate(1, 1);
     drawDocument(painter, _flaDocument->document);
 }
 
@@ -107,10 +128,14 @@ void PhoenixView::drawDocument(QPainter& painter, const Document* document)
     if (!document->visible)
         return;
 
+    _skippedElement = 0;
+
     for (const Timeline* timeline : document->timelines)
     {
         drawTimeline(painter, timeline);
     }
+
+    qDebug() << "Skipped elements due to culling:" << _skippedElement;
 }
 
 void PhoenixView::drawTimeline(QPainter& painter, const Timeline* timeline)
@@ -170,16 +195,68 @@ void PhoenixView::drawElement(QPainter& painter, const Element* element)
     if (!element->visible)
         return;
 
-    painter.save();
-
-    QTransform transform(element->transform.m11, element->transform.m12, element->transform.m21, element->transform.m22,
-                         element->transform.tx, element->transform.ty);
-
+    // Prepare transform data
+    QTransform transform(element->transform.m11, element->transform.m12,
+                       element->transform.m21, element->transform.m22,
+                       element->transform.tx, element->transform.ty);
     QPointF instancePoint(element->transformationPoint.x, element->transformationPoint.y);
+
+    // View frustum culling: Get element bounds and check if visible
+    QRectF elementBounds = getElementBounds(element);
+
+    bool culled = false;
+
+    // Skip culling check if bounds are invalid (shouldn't happen, but be safe)
+    if (!elementBounds.isNull() && elementBounds.isValid())
+    {
+        // Build full transformation matrix for bounds checking
+        QTransform fullTransform;
+        fullTransform.translate(instancePoint.x(), instancePoint.y());
+        fullTransform = transform * fullTransform;
+        fullTransform.translate(-instancePoint.x(), -instancePoint.y());
+
+        QRectF transformedBounds = fullTransform.mapRect(elementBounds);
+
+        // Cull if completely outside visible rect
+        // Add margin to account for strokes and anti-aliasing
+        QRectF expandedVisible = _visibleRect.adjusted(-100, -100, 100, 100);
+        if (!transformedBounds.intersects(expandedVisible))
+        {
+            _skippedElement++;
+            culled = true;
+
+            // Draw culled bounds if debug mode is enabled
+            if (_showBounds)
+            {
+                painter.save();
+                painter.setPen(QPen(QColor(255, 0, 0, 100), 1.0)); // Red for culled
+                painter.setBrush(Qt::NoBrush);
+                painter.translate(instancePoint);
+                painter.setTransform(transform, true);
+                painter.translate(-instancePoint);
+                painter.drawRect(elementBounds);
+                painter.restore();
+            }
+
+            return; // Element is outside viewport, skip rendering
+        }
+    }
+
+    painter.save();
 
     painter.translate(instancePoint);
     painter.setTransform(transform, true);
     painter.translate(-instancePoint);
+
+    // Draw element bounds if debug mode is enabled (for rendered elements)
+    if (_showBounds && !elementBounds.isNull() && elementBounds.isValid() && !culled)
+    {
+        painter.save();
+        painter.setPen(QPen(QColor(0, 255, 0, 150), 1.0)); // Green for rendered
+        painter.setBrush(Qt::NoBrush);
+        painter.drawRect(elementBounds);
+        painter.restore();
+    }
 
     Element::Type type = element->elementType();
 
@@ -585,4 +662,176 @@ QPointF PhoenixView::sceneToScreen(const QPointF& scenePos) const
         scenePos.x() * _zoom + _panX,
         scenePos.y() * _zoom + _panY
     );
+}
+
+QRectF PhoenixView::getElementBounds(const Element* element)
+{
+    // Check cache first
+    auto it = _boundsCache.find(element);
+    if (it != _boundsCache.end())
+        return it.value();
+
+    // Calculate bounds
+    QRectF bounds = calculateElementBounds(element);
+    _boundsCache[element] = bounds;
+    return bounds;
+}
+
+QRectF PhoenixView::calculateElementBounds(const Element* element)
+{
+    Element::Type type = element->elementType();
+
+    if (type == Element::Type::Shape)
+    {
+        return calculateShapeBounds(static_cast<const Shape*>(element));
+    }
+    else if (type == Element::Type::Group)
+    {
+        const Group* group = static_cast<const Group*>(element);
+        QRectF bounds;
+        for (const Element* member : group->members)
+        {
+            QRectF memberBounds = getElementBounds(member);
+
+            // Apply member's transform
+            QTransform transform(member->transform.m11, member->transform.m12,
+                               member->transform.m21, member->transform.m22,
+                               member->transform.tx, member->transform.ty);
+            QRectF transformedBounds = transform.mapRect(memberBounds);
+
+            if (bounds.isNull())
+                bounds = transformedBounds;
+            else
+                bounds = bounds.united(transformedBounds);
+        }
+        return bounds;
+    }
+    else if (type == Element::Type::SymbolInstance)
+    {
+        const SymbolInstance* instance = static_cast<const SymbolInstance*>(element);
+        if (_flaDocument && _flaDocument->document)
+        {
+            const Symbol* symbol = findSymbolByName(_flaDocument->document, instance->libraryItemName);
+            if (symbol && !symbol->timelines.empty())
+            {
+                // Calculate bounds from symbol's first timeline
+                const Timeline* timeline = symbol->timelines[0];
+                QRectF bounds;
+
+                for (const Layer* layer : timeline->layers)
+                {
+                    if (!layer->visible || layer->frames.empty())
+                        continue;
+
+                    const Frame* frame = layer->frames[0];
+                    for (const Element* elem : frame->elements)
+                    {
+                        QRectF elemBounds = getElementBounds(elem);
+
+                        // Apply element's transform
+                        QTransform transform(elem->transform.m11, elem->transform.m12,
+                                           elem->transform.m21, elem->transform.m22,
+                                           elem->transform.tx, elem->transform.ty);
+                        QRectF transformedBounds = transform.mapRect(elemBounds);
+
+                        if (bounds.isNull())
+                            bounds = transformedBounds;
+                        else
+                            bounds = bounds.united(transformedBounds);
+                    }
+                }
+                return bounds;
+            }
+        }
+        // Default bounds for symbol instances without data
+        return QRectF(-50, -50, 100, 100);
+    }
+    else if (type == Element::Type::BitmapInstance)
+    {
+        // Approximate bounds for bitmap instances
+        return QRectF(0, 0, 100, 100);
+    }
+    else if (type == Element::Type::StaticText)
+    {
+        // Approximate bounds for text
+        return QRectF(0, 0, 200, 50);
+    }
+
+    // Default bounds
+    return QRectF(-10, -10, 20, 20);
+}
+
+QRectF PhoenixView::calculateShapeBounds(const Shape* shape)
+{
+    QRectF bounds;
+    double maxStrokeWeight = 0.0;
+
+    for (const Edge* edge : shape->edges)
+    {
+        if (!edge->visible)
+            continue;
+
+        // Track maximum stroke weight for bounds expansion
+        const StrokeStyle* strokeStyle = shape->getStrokeStyleByIndex(edge->strokeStyle);
+        if (strokeStyle && strokeStyle->stroke)
+        {
+            maxStrokeWeight = qMax(maxStrokeWeight, strokeStyle->stroke->weight);
+        }
+
+        for (const PathSegment& segment : edge->segments)
+        {
+            if (!segment.visible)
+                continue;
+
+            // Check segment-specific stroke
+            if (segment.lineStyleIndex != -1)
+            {
+                const StrokeStyle* segStroke = shape->getStrokeStyleByIndex(segment.lineStyleIndex);
+                if (segStroke && segStroke->stroke)
+                {
+                    maxStrokeWeight = qMax(maxStrokeWeight, segStroke->stroke->weight);
+                }
+            }
+
+            for (const PathSection& section : segment.sections)
+            {
+                // Add all points from this section to bounds
+                for (const Point& pt : section.points)
+                {
+                    QPointF qpt(pt.x, pt.y);
+
+                    if (bounds.isNull())
+                        bounds = QRectF(qpt, QSizeF(0, 0));
+                    else
+                    {
+                        if (qpt.x() < bounds.left())
+                            bounds.setLeft(qpt.x());
+                        if (qpt.x() > bounds.right())
+                            bounds.setRight(qpt.x());
+                        if (qpt.y() < bounds.top())
+                            bounds.setTop(qpt.y());
+                        if (qpt.y() > bounds.bottom())
+                            bounds.setBottom(qpt.y());
+                    }
+                }
+
+                // Note: For perfect accuracy with cubic/quad curves, we should
+                // check control points too, but endpoints are sufficient for culling
+            }
+        }
+    }
+
+    // Expand bounds by half the stroke weight (stroke extends on both sides)
+    if (!bounds.isNull() && maxStrokeWeight > 0)
+    {
+        double expansion = maxStrokeWeight / 2.0 + 2.0; // +2 for safety margin
+        bounds = bounds.adjusted(-expansion, -expansion, expansion, expansion);
+    }
+    else if (!bounds.isNull())
+    {
+        // Default small margin for anti-aliasing
+        bounds = bounds.adjusted(-2, -2, 2, 2);
+    }
+
+    return bounds;
 }

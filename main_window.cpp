@@ -136,6 +136,16 @@ void MainWindow::setupMenus()
     viewDocumentAction->setStatusTip("View the current document source");
     connect(viewDocumentAction, &QAction::triggered, this, &MainWindow::viewDocument);
     viewMenu->addAction(viewDocumentAction);
+
+    viewMenu->addSeparator();
+
+    QAction* showBoundsAction = new QAction("Show Bounding Boxes", this);
+    showBoundsAction->setCheckable(true);
+    showBoundsAction->setChecked(false);
+    showBoundsAction->setShortcut(QKeySequence(Qt::Key_B));
+    showBoundsAction->setStatusTip("Show element bounding boxes used for culling (Green=rendered, Red=culled, Blue=visible area)");
+    connect(showBoundsAction, &QAction::toggled, _phoenixView, &PhoenixView::setShowBounds);
+    viewMenu->addAction(showBoundsAction);
 }
 
 void MainWindow::openFile()
