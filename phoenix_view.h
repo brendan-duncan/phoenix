@@ -41,6 +41,8 @@ protected:
 private:
     const fla::FLADocument* _flaDocument;
 
+    bool _highQualityAntiAliasing = true;
+
     // Pan and zoom state
     double _zoom;
     double _panX;

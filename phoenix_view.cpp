@@ -118,8 +118,18 @@ void PhoenixView::paintEvent(QPaintEvent *event)
         painter.restore();
     }
 
+    painter.save();
     // Draw document content
     drawDocument(painter, _flaDocument->document);
+    painter.restore();
+
+    if (_highQualityAntiAliasing)
+    {
+        // An extra draw slightly shiften eliminates the white line artifacts that can appear
+        // between shapes due to anti-aliasing and subpixel rendering issues.
+        painter.translate(1, 1);
+        drawDocument(painter, _flaDocument->document);
+    }
 }
 
 void PhoenixView::drawDocument(QPainter& painter, const fla::Document* document)
@@ -278,7 +288,6 @@ void PhoenixView::drawElement(QPainter& painter, const fla::Element* element)
         const fla::StaticText* staticText = static_cast<const fla::StaticText*>(element);
         for (const fla::TextRun& run : staticText->runs)
         {
-            qDebug() << "Drawing text run:" << QString::fromStdString(run.text) << "with font:" << QString::fromStdString(run.face) << "size:" << run.size;
             painter.setPen(QPen(QColor(run.fillColor[0], run.fillColor[1], run.fillColor[2], run.fillColor[3]), run.size));
             painter.setFont(QFont(run.face.empty() ? "Arial" : QString::fromStdString(run.face), (int)run.size));
             painter.drawText(0, 0, QString::fromStdString(run.text));
