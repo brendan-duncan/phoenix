@@ -40,6 +40,7 @@ PhoenixView::~PhoenixView()
 
 void PhoenixView::setDocument(const FLADocument* document)
 {
+    _bitmapCache.clear(); // Clear bitmap cache when loading new document
     _flaDocument = document;
     update(); // Trigger repaint
 }
@@ -47,10 +48,12 @@ void PhoenixView::setDocument(const FLADocument* document)
 void PhoenixView::paintEvent(QPaintEvent *event)
 {
     QPainter painter(this);
-    painter.setRenderHint(QPainter::Antialiasing);
+    painter.setRenderHint(QPainter::Antialiasing, true);
+    painter.setRenderHint(QPainter::TextAntialiasing, true);
+    painter.setRenderHint(QPainter::SmoothPixmapTransform, true);
 
     // Set default background
-    painter.fillRect(rect(), Qt::white);
+    painter.fillRect(rect(), QColor(37, 37, 37));
 
     if (!_flaDocument || !_flaDocument->document)
     {
@@ -88,7 +91,13 @@ void PhoenixView::paintEvent(QPaintEvent *event)
     painter.translate(_panX + centerX, _panY + centerY);
     painter.scale(scale, scale);
 
+    // Draw white background for document area
+    painter.fillRect(0, 0, docWidth, docHeight, QColor(255, 255, 255));
+
     // Draw document content
+    drawDocument(painter, _flaDocument->document);
+    // Improve antialiasing
+    painter.translate(1, 1);
     drawDocument(painter, _flaDocument->document);
 }
 
@@ -160,12 +169,18 @@ void PhoenixView::drawElement(QPainter& painter, const Element* element)
     if (!element->visible)
         return;
 
-    Element::Type type = element->elementType();
     painter.save();
+
     QTransform transform(element->transform.m11, element->transform.m12, element->transform.m21, element->transform.m22,
                          element->transform.tx, element->transform.ty);
+
+    QPointF instancePoint(element->transformationPoint.x, element->transformationPoint.y);
+
+    painter.translate(instancePoint);
     painter.setTransform(transform, true);
-    //painter.translate(instance->transformationPoint);
+    painter.translate(-instancePoint);
+
+    Element::Type type = element->elementType();
 
     if (type == Element::Type::Shape)
     {

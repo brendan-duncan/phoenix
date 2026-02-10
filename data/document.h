@@ -15,9 +15,9 @@ class Document : public DOMElement
 public:
     std::string source;
 
-    double width;
-    double height;
-    double frameRate;
+    int width = 550;
+    int height = 400;
+    double frameRate = 24.0;
     std::string currentTimeline;
     std::string xflVersion;
     std::string creatorInfo;
@@ -45,7 +45,7 @@ public:
 
     std::map<std::string, Symbol*> symbolMap; // For quick lookup of symbols by name
 
-    Document();
+    Document() = default;
 
     ~Document() override;
 

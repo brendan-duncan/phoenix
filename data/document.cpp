@@ -1,8 +1,5 @@
 #include "document.h"
 
-Document::Document()
-{}
-
 Document::~Document()
 {
     // Clean up dynamically allocated symbols

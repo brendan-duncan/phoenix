@@ -1,6 +1,7 @@
 #include "main_window.h"
 #include "phoenix_view.h"
 #include "parse/fla_parser.h"
+
 #include <QApplication>
 #include <QFileDialog>
 #include <QMessageBox>
@@ -13,38 +14,33 @@
 #include <QDialog>
 #include <QVBoxLayout>
 #include <QKeySequence>
+#include <QSettings>
+#include <QDir>
 
 MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent)
     , _phoenixView(nullptr)
     , _documentView(nullptr)
     , _flaDocument(nullptr)
+    , _recentFilesMenu(nullptr)
 {
-    // Set window properties
     setWindowTitle("Phoenix - FLA Viewer");
+
+    QCoreApplication::setOrganizationName("Phoenix");
+    QCoreApplication::setApplicationName("FLAViewer");
+
+    loadSettings();
 
     setupUI();
     setupMenus();
 
     resize(1024, 768);
 
-    // Try to load a default FLA file
-    //loadFLAFile("d:\\fla\\test_4_symbol.fla");
-    //loadFLAFile("d:\\fla\\MensWear_04_2.fla");
-    //loadFLAFile("d:\\fla\\MensWear_04_3.fla");
-    //loadFLAFile("d:\\fla\\MensWear_04_4.fla");
-    //loadFLAFile("d:\\fla\\MensWear_04.fla");
-    //loadFLAFile("d:\\fla\\HulaBunny_Sticker_2018.fla");
-    loadFLAFile("d:\\fla\\HulaBunny_Sticker_2018_2.fla");
-    //loadFLAFile("d:\\fla\\HulaBunny_Sticker_2018_2.fla");
-    //loadFLAFile("d:\\fla\\fluid_brush_tool.fla");
-    //loadFLAFile("d:\\fla\\classic_brush_tool.fla");
-    //loadFLAFile("d:\\fla\\test_1.fla");
-    //loadFLAFile("d:\\fla\\pen_tool.fla");
-    //loadFLAFile("d:\\fla\\static_text.fla");
-    //loadFLAFile("d:\\fla\\template_bike_girl.fla");
-    //loadFLAFile("d:\\fla\\template_robot.fla");
-    //loadFLAFile("d:\\fla\\bitmap.fla");
+    // Auto-open last file if available
+    if (!_recentFiles.isEmpty())
+    {
+        loadFLAFile(_recentFiles.first());
+    }
 }
 
 void MainWindow::loadFLAFile(const QString& filePath)
@@ -55,7 +51,6 @@ void MainWindow::loadFLAFile(const QString& filePath)
         _flaDocument = nullptr;
     }
 
-
     FLAParser parser;
     _flaDocument = parser.parse(filePath.toStdString());
     _phoenixView->setDocument(_flaDocument);
@@ -64,6 +59,7 @@ void MainWindow::loadFLAFile(const QString& filePath)
     if (_flaDocument)
     {
         setWindowTitle(QString("Phoenix - %1").arg(QFileInfo(filePath).baseName()));
+        addToRecentFiles(filePath);
     }
     else
     {
@@ -112,15 +108,21 @@ void MainWindow::setupMenus()
 {
     // Create menu bar
     QMenuBar* menuBar = this->menuBar();
-    
+
     // File menu
     QMenu* fileMenu = menuBar->addMenu("&File");
-    
+
     QAction* openAction = new QAction("&Open...", this);
     openAction->setShortcut(QKeySequence::Open);
     openAction->setStatusTip("Open an FLA file");
     connect(openAction, &QAction::triggered, this, &MainWindow::openFile);
     fileMenu->addAction(openAction);
+
+    // Add Open Recent submenu
+    _recentFilesMenu = fileMenu->addMenu("Open &Recent");
+    updateRecentFilesMenu();
+
+    fileMenu->addSeparator();
 
     QAction* exitAction = new QAction("&Exit", this);
     exitAction->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_Q));
@@ -129,7 +131,7 @@ void MainWindow::setupMenus()
 
     // View menu
     QMenu* viewMenu = menuBar->addMenu("&View");
-    
+
     QAction* viewDocumentAction = new QAction("View Document...", this);
     viewDocumentAction->setStatusTip("View the current document source");
     connect(viewDocumentAction, &QAction::triggered, this, &MainWindow::viewDocument);
@@ -139,10 +141,12 @@ void MainWindow::setupMenus()
 void MainWindow::openFile()
 {
     QString fileName = QFileDialog::getOpenFileName(this,
-        tr("Open FLA File"), "", tr("FLA Files (*.fla;DOMDocument.xml);;All Files (*)"));
-    
+        tr("Open FLA File"), _lastDirectory, tr("FLA Files (*.fla;DOMDocument.xml);;All Files (*)"));
+
     if (!fileName.isEmpty())
     {
+        _lastDirectory = QFileInfo(fileName).absolutePath();
+        saveSettings();
         loadFLAFile(fileName);
     }
 }
@@ -159,23 +163,23 @@ void MainWindow::viewDocument()
         QMessageBox::information(this, "No Document", "No FLA document is currently loaded.");
         return;
     }
-    
+
     QDialog* dialog = new QDialog(this);
     dialog->setWindowTitle("Document Source");
     dialog->resize(600, 400);
-    
+
     QTextEdit* textEdit = new QTextEdit(dialog);
     textEdit->setReadOnly(true);
-    
+
     // For now, just show basic document info
     QString docText = QString::fromStdString(_flaDocument->document->source);
 
     textEdit->setPlainText(docText);
-    
+
     QVBoxLayout* layout = new QVBoxLayout(dialog);
     layout->addWidget(textEdit);
     dialog->setLayout(layout);
-    
+
     dialog->exec();
 }
 
@@ -186,4 +190,65 @@ void MainWindow::onVisibilityChanged()
     {
         _phoenixView->update();
     }
+}
+
+void MainWindow::openRecentFile()
+{
+    QAction* action = qobject_cast<QAction*>(sender());
+    if (action)
+    {
+        QString filePath = action->data().toString();
+        loadFLAFile(filePath);
+    }
+}
+
+void MainWindow::updateRecentFilesMenu()
+{
+    _recentFilesMenu->clear();
+
+    if (_recentFiles.isEmpty())
+    {
+        QAction* noRecentAction = _recentFilesMenu->addAction("No recent files");
+        noRecentAction->setEnabled(false);
+        return;
+    }
+
+    for (int i = 0; i < _recentFiles.size() && i < MAX_RECENT_FILES; ++i)
+    {
+        QString filePath = _recentFiles[i];
+        QAction* action = _recentFilesMenu->addAction(QString("&%1 %2").arg(i + 1).arg(QFileInfo(filePath).fileName()));
+        action->setData(filePath);
+        connect(action, &QAction::triggered, this, &MainWindow::openRecentFile);
+    }
+}
+
+void MainWindow::addToRecentFiles(const QString& filePath)
+{
+    if (_recentFiles.length() > 0 && _recentFiles[0] == filePath)
+        return;
+
+    _recentFiles.removeAll(filePath);
+    _recentFiles.prepend(filePath);
+
+    while (_recentFiles.size() > MAX_RECENT_FILES)
+    {
+        _recentFiles.removeLast();
+    }
+
+    updateRecentFilesMenu();
+    saveSettings();
+}
+
+void MainWindow::loadSettings()
+{
+    QSettings settings;
+    _recentFiles = settings.value("recentFiles").toStringList();
+    _lastDirectory = settings.value("lastDirectory").toString();
+}
+
+void MainWindow::saveSettings()
+{
+    QSettings settings;
+    settings.setValue("recentFiles", _recentFiles);
+    settings.setValue("lastDirectory", _lastDirectory);
 }

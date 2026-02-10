@@ -14,9 +14,7 @@ DocumentView::DocumentView(QWidget *parent)
 {
     // Set up the tree widget
     setColumnCount(1);
-    setHeaderLabels(QStringList() << "Name");// << "Type");
-    //header()->resizeSection(0, 200);
-    //header()->resizeSection(1, 100);
+    setHeaderLabels(QStringList() << "Name");
 
     // Configure appearance
     setAlternatingRowColors(true);
@@ -87,10 +85,8 @@ void DocumentView::buildTimelineTree(QTreeWidgetItem* parentItem, const Timeline
     QTreeWidgetItem* timelineItem = createTreeItem(timelineName, (DOMElement*)timeline, parentItem);
 
     // Add layers (in reverse order for proper visual stacking)
-    //for (int i = timeline->layers.size() - 1; i >= 0; --i)
     for (const Layer* layer : timeline->layers)
     {
-        //const Layer* layer = timeline->layers[i];
         buildLayerTree(timelineItem, layer);
     }
 }

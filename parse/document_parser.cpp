@@ -1131,12 +1131,13 @@ bool parseDocument(Document* document, const QDomElement& element, ZipReader* zi
 {
     // Parse attributes
     bool ok;
-    double w = element.attribute("width").toDouble(&ok);
-    document->width = ok ? w : 0.0;
-    double h = element.attribute("height").toDouble(&ok);
-    document->height = ok ? h : 0.0;
-    double fr = element.attribute("frameRate").toDouble(&ok);
-    document->frameRate = ok ? fr : 0.0;
+    if (element.hasAttribute("width"))
+        document->width = element.attribute("width").toInt();
+    if (element.hasAttribute("height"))
+        document->height = element.attribute("height").toInt();
+    if (element.hasAttribute("frameRate"))
+        document->frameRate = element.attribute("frameRate").toDouble();
+
     document->currentTimeline = element.attribute("currentTimeline").toStdString();
     document->xflVersion = element.attribute("xflVersion").toStdString();
     document->creatorInfo = element.attribute("creatorInfo").toStdString();
