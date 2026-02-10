@@ -14,8 +14,8 @@ DocumentView::DocumentView(QWidget *parent)
     , _flaDocument(nullptr)
 {
     // Set up the tree widget
-    setColumnCount(1);
-    setHeaderLabels(QStringList() << "Name");
+    setColumnCount(2);
+    setHeaderLabels(QStringList() << "Name" << "Type");
 
     // Configure appearance
     setAlternatingRowColors(true);
@@ -23,8 +23,17 @@ DocumentView::DocumentView(QWidget *parent)
     setSortingEnabled(false);
     setSelectionMode(QAbstractItemView::SingleSelection);
 
+    // Set column widths
+    header()->setStretchLastSection(false);
+    header()->setSectionResizeMode(0, QHeaderView::Stretch);
+    header()->setSectionResizeMode(1, QHeaderView::Fixed);
+    setColumnWidth(1, 24); // Type icon column width
+
     // Connect lazy loading signal
     connect(this, &QTreeWidget::itemExpanded, this, &DocumentView::onItemExpanded);
+
+    // Create type icons
+    createTypeIcons();
 
     // Visible icon
     {
@@ -39,7 +48,6 @@ DocumentView::DocumentView(QWidget *parent)
     }
     // Hidden icon
     {
-        // Use Unicode characters for visibility icons
         QString iconText = "⚠";
         QPixmap pixmap(16, 16);
         pixmap.fill(Qt::transparent);
@@ -49,6 +57,31 @@ DocumentView::DocumentView(QWidget *parent)
         painter.drawText(pixmap.rect(), Qt::AlignCenter, iconText);
         _hiddenIcon = QIcon(pixmap);
     }
+}
+
+void DocumentView::createTypeIcons()
+{
+    // Helper lambda to create icon from text
+    auto createIcon = [](const QString& text, const QColor& color) -> QIcon {
+        QPixmap pixmap(16, 16);
+        pixmap.fill(Qt::transparent);
+        QPainter painter(&pixmap);
+        painter.setFont(QFont("Segoe UI Emoji", 10));
+        painter.setPen(color);
+        painter.drawText(pixmap.rect(), Qt::AlignCenter, text);
+        return QIcon(pixmap);
+    };
+
+    // Create type-specific icons with Unicode symbols
+    _documentIcon = createIcon("📋", QColor(70, 130, 180));   // Clipboard for document
+    _timelineIcon = createIcon("⏱", QColor(100, 100, 200));   // Clock for timeline
+    _layerIcon = createIcon("≣", QColor(150, 150, 50));      // Document for layer
+    _frameIcon = createIcon("🎞", QColor(200, 100, 100));      // Film for frame
+    _shapeIcon = createIcon("▢", QColor(100, 200, 100));      // Square for shape
+    _groupIcon = createIcon("📁", QColor(200, 150, 50));       // Folder for group
+    _symbolIcon = createIcon("⭐", QColor(200, 200, 50));      // Star for symbol
+    _bitmapIcon = createIcon("🖼", QColor(150, 100, 200));     // Picture for bitmap
+    _textIcon = createIcon("A", QColor(255, 255, 255));          // A for text
 }
 
 DocumentView::~DocumentView()
@@ -84,6 +117,83 @@ void DocumentView::setItemTypeData(QTreeWidgetItem* item, ItemType type, void* d
 {
     item->setData(0, ItemTypeRole, QVariant::fromValue(static_cast<int>(type)));
     item->setData(0, ItemDataRole, QVariant::fromValue(reinterpret_cast<quintptr>(data)));
+
+    // Set type icon and tooltip based on item type
+    QIcon typeIcon;
+    QString typeTooltip;
+
+    switch (type)
+    {
+        case ItemType::Document:
+            typeIcon = _documentIcon;
+            typeTooltip = "Document";
+            break;
+        case ItemType::Timeline:
+            typeIcon = _timelineIcon;
+            typeTooltip = "Timeline";
+            break;
+        case ItemType::Layer:
+            typeIcon = _layerIcon;
+            typeTooltip = "Layer";
+            break;
+        case ItemType::Frame:
+            typeIcon = _frameIcon;
+            typeTooltip = "Frame";
+            break;
+        case ItemType::Symbol:
+            typeIcon = _symbolIcon;
+            typeTooltip = "Symbol";
+            break;
+        case ItemType::SymbolList:
+            typeIcon = _symbolIcon;
+            typeTooltip = "Symbols Folder";
+            break;
+        case ItemType::Element:
+            // For elements, we need to check the actual element type
+            if (data)
+            {
+                const fla::Element* element = static_cast<const fla::Element*>(data);
+                switch (element->elementType())
+                {
+                    case fla::Element::Type::Shape:
+                        typeIcon = _shapeIcon;
+                        typeTooltip = "Shape";
+                        break;
+                    case fla::Element::Type::Group:
+                        typeIcon = _groupIcon;
+                        typeTooltip = "Group";
+                        break;
+                    case fla::Element::Type::SymbolInstance:
+                        typeIcon = _symbolIcon;
+                        typeTooltip = "Symbol Instance";
+                        break;
+                    case fla::Element::Type::BitmapInstance:
+                        typeIcon = _bitmapIcon;
+                        typeTooltip = "Bitmap Instance";
+                        break;
+                    case fla::Element::Type::StaticText:
+                        typeIcon = _textIcon;
+                        typeTooltip = "Static Text";
+                        break;
+                }
+            }
+            break;
+        case ItemType::Other:
+            typeTooltip = "Other";
+            break;
+        default:
+            break;
+    }
+
+    if (!typeIcon.isNull())
+    {
+        item->setIcon(1, typeIcon);
+    }
+
+    if (!typeTooltip.isEmpty())
+    {
+        item->setToolTip(1, typeTooltip);
+    }
 }
 
 DocumentView::ItemType DocumentView::getItemType(QTreeWidgetItem* item) const
@@ -167,6 +277,8 @@ void DocumentView::populateItemChildren(QTreeWidgetItem* item)
                         QString edgeName = QString("Edge %1").arg(edgeIndex++);
                         QTreeWidgetItem* edgeItem = createTreeItem(edgeName, (fla::DOMElement*)edge, item);
                         setItemTypeData(edgeItem, ItemType::Other, nullptr);
+                        edgeItem->setIcon(1, _shapeIcon); // Use shape icon for edges
+                        edgeItem->setToolTip(1, "Edge");
 
                         // Add segments as children of the edge
                         int segmentIndex = 0;
@@ -175,27 +287,35 @@ void DocumentView::populateItemChildren(QTreeWidgetItem* item)
                             QString segmentName = QString("Segment %1").arg(segmentIndex++);
                             QTreeWidgetItem* segmentItem = createTreeItem(segmentName, (fla::DOMElement*)&segment, edgeItem);
                             setItemTypeData(segmentItem, ItemType::Other, nullptr);
+                            segmentItem->setIcon(1, _shapeIcon);
+                            segmentItem->setToolTip(1, "Path Segment");
 
                             // Add sections as children of the segment
                             for (const fla::PathSection& section : segment.sections)
                             {
                                 QString sectionName;
+                                QString sectionType;
                                 switch (section.command)
                                 {
                                     case fla::PathSection::Command::Move:
                                         sectionName = "Move To";
+                                        sectionType = "Move Command";
                                         break;
                                     case fla::PathSection::Command::Line:
                                         sectionName = "Line To";
+                                        sectionType = "Line Command";
                                         break;
                                     case fla::PathSection::Command::Quad:
                                         sectionName = "Quadratic Curve To";
+                                        sectionType = "Quadratic Bezier";
                                         break;
                                     case fla::PathSection::Command::Cubic:
                                         sectionName = "Cubic Curve To";
+                                        sectionType = "Cubic Bezier";
                                         break;
                                     case fla::PathSection::Command::Close:
                                         sectionName = "Close Path";
+                                        sectionType = "Close Command";
                                         break;
                                 }
                                 for (size_t i = 0; i < section.points.size(); ++i)
@@ -205,6 +325,8 @@ void DocumentView::populateItemChildren(QTreeWidgetItem* item)
                                 }
                                 QTreeWidgetItem* sectionItem = createTreeItem(sectionName, nullptr, segmentItem);
                                 setItemTypeData(sectionItem, ItemType::Other, nullptr);
+                                sectionItem->setIcon(1, _shapeIcon);
+                                sectionItem->setToolTip(1, sectionType);
                             }
                         }
                     }

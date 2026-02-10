@@ -76,4 +76,17 @@ private:
 
     QIcon _visibleIcon;
     QIcon _hiddenIcon;
+
+    // Type icons
+    QIcon _documentIcon;
+    QIcon _timelineIcon;
+    QIcon _layerIcon;
+    QIcon _frameIcon;
+    QIcon _shapeIcon;
+    QIcon _groupIcon;
+    QIcon _symbolIcon;
+    QIcon _bitmapIcon;
+    QIcon _textIcon;
+
+    void createTypeIcons();
 };
