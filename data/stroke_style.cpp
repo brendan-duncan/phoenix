@@ -3,42 +3,33 @@
 namespace fla {
 
 StrokeStyle::StrokeStyle()
-    : stroke(nullptr)
-{}
-
-StrokeStyle::~StrokeStyle()
-{
-    delete stroke;
-}
-
-Stroke::Stroke()
     : weight(1.0)
     , fill(nullptr)
 {}
 
-Stroke::~Stroke()
+StrokeStyle::~StrokeStyle()
 {
     delete fill;
 }
 
 SolidStroke::SolidStroke()
-    : Stroke()
+    : StrokeStyle()
 {}
 
 DashedStroke::DashedStroke()
-    : Stroke()
+    : StrokeStyle()
 {}
 
 RaggedStroke::RaggedStroke()
-    : Stroke()
+    : StrokeStyle()
 {}
 
 StippleStroke::StippleStroke()
-    : Stroke()
+    : StrokeStyle()
 {}
 
 DottedStroke::DottedStroke()
-    : Stroke()
+    : StrokeStyle()
 {}
 
 } // namespace fla

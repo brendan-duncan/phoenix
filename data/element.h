@@ -2,6 +2,7 @@
 
 #include "dom_element.h"
 #include "point.h"
+#include "rect.h"
 #include "transform.h"
 
 namespace fla {
@@ -22,6 +23,7 @@ public:
     bool isFloating = false;
     Transform transform;
     Point transformationPoint;
+    fla::Rect bounds;
 
     Element();
 

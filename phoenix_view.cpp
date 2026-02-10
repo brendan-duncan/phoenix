@@ -135,7 +135,7 @@ void PhoenixView::drawDocument(QPainter& painter, const fla::Document* document)
         drawTimeline(painter, timeline);
     }
 
-    qDebug() << "Skipped elements due to culling:" << _skippedElement;
+    //qDebug() << "Skipped elements due to culling:" << _skippedElement;
 }
 
 void PhoenixView::drawTimeline(QPainter& painter, const fla::Timeline* timeline)
@@ -207,20 +207,12 @@ void PhoenixView::drawElement(QPainter& painter, const fla::Element* element)
     bool culled = false;
 
     // Skip culling check if bounds are invalid (shouldn't happen, but be safe)
-    if (!elementBounds.isNull() && elementBounds.isValid())
+    /*if (!elementBounds.isNull() && elementBounds.isValid())
     {
-        // Build full transformation matrix for bounds checking
-        QTransform fullTransform;
-        fullTransform.translate(instancePoint.x(), instancePoint.y());
-        fullTransform = transform * fullTransform;
-        fullTransform.translate(-instancePoint.x(), -instancePoint.y());
-
-        QRectF transformedBounds = fullTransform.mapRect(elementBounds);
-
         // Cull if completely outside visible rect
         // Add margin to account for strokes and anti-aliasing
         QRectF expandedVisible = _visibleRect.adjusted(-100, -100, 100, 100);
-        if (!transformedBounds.intersects(expandedVisible))
+        if (!elementBounds.intersects(expandedVisible))
         {
             _skippedElement++;
             culled = true;
@@ -231,22 +223,15 @@ void PhoenixView::drawElement(QPainter& painter, const fla::Element* element)
                 painter.save();
                 painter.setPen(QPen(QColor(255, 0, 0, 100), 1.0)); // Red for culled
                 painter.setBrush(Qt::NoBrush);
-                painter.translate(instancePoint);
-                painter.setTransform(transform, true);
-                painter.translate(-instancePoint);
                 painter.drawRect(elementBounds);
                 painter.restore();
             }
 
             return; // Element is outside viewport, skip rendering
         }
-    }
+    }*/
 
     painter.save();
-
-    painter.translate(instancePoint);
-    painter.setTransform(transform, true);
-    painter.translate(-instancePoint);
 
     // Draw element bounds if debug mode is enabled (for rendered elements)
     if (_showBounds && !elementBounds.isNull() && elementBounds.isValid() && !culled)
@@ -257,6 +242,10 @@ void PhoenixView::drawElement(QPainter& painter, const fla::Element* element)
         painter.drawRect(elementBounds);
         painter.restore();
     }
+
+    painter.translate(instancePoint);
+    painter.setTransform(transform, true);
+    painter.translate(-instancePoint);   
 
     fla::Element::Type type = element->elementType();
 
@@ -508,44 +497,54 @@ void PhoenixView::drawShape(QPainter& painter, const fla::Shape* shape)
     for (const fla::Edge* edge : shape->edges)
     {
         if (!edge->visible)
+        {
             continue;
+        }
 
         for (const fla::PathSegment& segment : edge->segments)
         {
             if (!segment.visible || segment.sections.empty())
+            {
                 continue;
+            }
 
             int strokeStyleIdx = segment.lineStyleIndex != -1 ? segment.lineStyleIndex : edge->strokeStyle;
             if (strokeStyleIdx == -1)
+            {
                 continue;
+            }
 
             const fla::StrokeStyle* strokeStyle = shape->getStrokeStyleByIndex(strokeStyleIdx);
-            if (!strokeStyle || !strokeStyle->stroke || !strokeStyle->stroke->fill)
+            if (!strokeStyle || !strokeStyle->fill)
+            {
                 continue;
+            }
 
             QPainterPath strokePath = buildPath(segment);
 
-            double weight = MAX(strokeStyle->stroke->weight, 0.5);
+            double weight = MAX(strokeStyle->weight, 0.5);
             QPen pen(QColor(0, 0, 0, 255), weight);
 
-            if (strokeStyle->stroke->style == "DashedStroke")
+            if (strokeStyle->style() == fla::StrokeStyle::Style::Solid)
+                pen.setStyle(Qt::SolidLine);
+            else if (strokeStyle->style() == fla::StrokeStyle::Style::Dashed)
                 pen.setStyle(Qt::DashLine);
-            else if (strokeStyle->stroke->style == "RaggedStroke")
+            else if (strokeStyle->style() == fla::StrokeStyle::Style::Ragged)
                 pen.setStyle(Qt::DashDotLine);
-            else if (strokeStyle->stroke->style == "StippleStroke")
+            else if (strokeStyle->style() == fla::StrokeStyle::Style::Stipple)
                 pen.setStyle(Qt::DashDotDotLine);
-            else if (strokeStyle->stroke->style == "DottedStroke")
+            else if (strokeStyle->style() == fla::StrokeStyle::Style::Dotted)
                 pen.setStyle(Qt::DotLine);
 
-            if (strokeStyle->stroke->fill->type() == fla::FillStyle::Type::SolidColor)
+            if (strokeStyle->fill->type() == fla::FillStyle::Type::SolidColor)
             {
-                const fla::SolidColor* fill = static_cast<const fla::SolidColor*>(strokeStyle->stroke->fill);
+                const fla::SolidColor* fill = static_cast<const fla::SolidColor*>(strokeStyle->fill);
                 QColor color(fill->color[0], fill->color[1], fill->color[2], fill->color[3]);
                 pen.setColor(color);
             }
-            else if (strokeStyle->stroke->fill->type() == fla::FillStyle::Type::LinearGradient)
+            else if (strokeStyle->fill->type() == fla::FillStyle::Type::LinearGradient)
             {
-                const fla::LinearGradient* fill = static_cast<const fla::LinearGradient*>(strokeStyle->stroke->fill);
+                const fla::LinearGradient* fill = static_cast<const fla::LinearGradient*>(strokeStyle->fill);
                 QLinearGradient gradient(0, 0, 100, 100);
                 for (const fla::GradientEntry& entry : fill->entries)
                 {
@@ -554,9 +553,9 @@ void PhoenixView::drawShape(QPainter& painter, const fla::Shape* shape)
                 }
                 pen.setBrush(QBrush(gradient));
             }
-            else if (strokeStyle->stroke->fill->type() == fla::FillStyle::Type::RadialGradient)
+            else if (strokeStyle->fill->type() == fla::FillStyle::Type::RadialGradient)
             {
-                const fla::RadialGradient* fill = static_cast<const fla::RadialGradient*>(strokeStyle->stroke->fill);
+                const fla::RadialGradient* fill = static_cast<const fla::RadialGradient*>(strokeStyle->fill);
                 QRadialGradient gradient(50, 50, 50);
                 for (const fla::RadialEntry& entry : fill->entries)
                 {
@@ -692,18 +691,17 @@ QRectF PhoenixView::calculateElementBounds(const fla::Element* element)
         for (const fla::Element* member : group->members)
         {
             QRectF memberBounds = getElementBounds(member);
-
-            // Apply member's transform
-            QTransform transform(member->transform.m11, member->transform.m12,
-                               member->transform.m21, member->transform.m22,
-                               member->transform.tx, member->transform.ty);
-            QRectF transformedBounds = transform.mapRect(memberBounds);
-
             if (bounds.isNull())
-                bounds = transformedBounds;
+                bounds = memberBounds;
             else
-                bounds = bounds.united(transformedBounds);
+                bounds = bounds.united(memberBounds);
         }
+        QTransform transform(group->transform.m11, group->transform.m12,
+                            group->transform.m21, group->transform.m22,
+                            group->transform.tx, group->transform.ty);
+        bounds.translate(group->transformationPoint.x, group->transformationPoint.y);
+        bounds = transform.mapRect(bounds);
+        bounds.translate(-group->transformationPoint.x, -group->transformationPoint.y);
         return bounds;
     }
     else if (type == fla::Element::Type::SymbolInstance)
@@ -728,18 +726,20 @@ QRectF PhoenixView::calculateElementBounds(const fla::Element* element)
                     {
                         QRectF elemBounds = getElementBounds(elem);
 
-                        // Apply element's transform
-                        QTransform transform(elem->transform.m11, elem->transform.m12,
-                                           elem->transform.m21, elem->transform.m22,
-                                           elem->transform.tx, elem->transform.ty);
-                        QRectF transformedBounds = transform.mapRect(elemBounds);
-
                         if (bounds.isNull())
-                            bounds = transformedBounds;
+                            bounds = elemBounds;
                         else
-                            bounds = bounds.united(transformedBounds);
+                            bounds = bounds.united(elemBounds);
                     }
                 }
+
+                QTransform transform(instance->transform.m11, instance->transform.m12,
+                                            instance->transform.m21, instance->transform.m22,
+                                            instance->transform.tx, instance->transform.ty);
+                bounds.translate(instance->transformationPoint.x, instance->transformationPoint.y);
+                bounds = transform.mapRect(bounds);
+                bounds.translate(-instance->transformationPoint.x, -instance->transformationPoint.y);
+
                 return bounds;
             }
         }
@@ -773,9 +773,9 @@ QRectF PhoenixView::calculateShapeBounds(const fla::Shape* shape)
 
         // Track maximum stroke weight for bounds expansion
         const fla::StrokeStyle* strokeStyle = shape->getStrokeStyleByIndex(edge->strokeStyle);
-        if (strokeStyle && strokeStyle->stroke)
+        if (strokeStyle)
         {
-            maxStrokeWeight = qMax(maxStrokeWeight, strokeStyle->stroke->weight);
+            maxStrokeWeight = qMax(maxStrokeWeight, strokeStyle->weight);
         }
 
         for (const fla::PathSegment& segment : edge->segments)
@@ -787,9 +787,9 @@ QRectF PhoenixView::calculateShapeBounds(const fla::Shape* shape)
             if (segment.lineStyleIndex != -1)
             {
                 const fla::StrokeStyle* segStroke = shape->getStrokeStyleByIndex(segment.lineStyleIndex);
-                if (segStroke && segStroke->stroke)
+                if (segStroke)
                 {
-                    maxStrokeWeight = qMax(maxStrokeWeight, segStroke->stroke->weight);
+                    maxStrokeWeight = qMax(maxStrokeWeight, segStroke->weight);
                 }
             }
 
@@ -833,5 +833,11 @@ QRectF PhoenixView::calculateShapeBounds(const fla::Shape* shape)
         bounds = bounds.adjusted(-2, -2, 2, 2);
     }
 
+    QTransform transform(shape->transform.m11, shape->transform.m12,
+                        shape->transform.m21, shape->transform.m22,
+                        shape->transform.tx, shape->transform.ty);
+    bounds.translate(shape->transformationPoint.x, shape->transformationPoint.y);
+    bounds = transform.mapRect(bounds);
+    bounds.translate(-shape->transformationPoint.x, -shape->transformationPoint.y);
     return bounds;
 }

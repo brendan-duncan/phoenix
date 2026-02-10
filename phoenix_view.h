@@ -82,7 +82,9 @@ private:
 
     // Bounds calculation
     QRectF calculateElementBounds(const fla::Element* element);
+
     QRectF calculateShapeBounds(const fla::Shape* shape);
+
     QRectF getElementBounds(const fla::Element* element);
 
     // Helper methods

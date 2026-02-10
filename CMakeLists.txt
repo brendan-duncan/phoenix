@@ -42,6 +42,7 @@ set(HEADERS
     data/printer_settings.h
     data/publish_history.h
     data/radial_gradient.h
+    data/rect.h
     data/resource.h
     data/scripts.h
     data/shape.h
@@ -79,6 +80,7 @@ set(SOURCES
     data/printer_settings.cpp
     data/publish_history.cpp    
     data/radial_gradient.cpp
+    data/rect.cpp
     data/scripts.cpp
     data/shape.cpp
     data/solid_color.cpp

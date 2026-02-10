@@ -224,7 +224,7 @@ fla::FillStyle* parseFillStyle(const QDomElement& element)
     return nullptr;
 }
 
-bool parseStroke(const QDomElement& element, fla::Stroke* stroke)
+bool parseStroke(const QDomElement& element, fla::StrokeStyle* stroke)
 {
     stroke->scaleMode = element.attribute("scaleMode").toStdString();
     bool ok;
@@ -268,10 +268,8 @@ bool parseStroke(const QDomElement& element, fla::Stroke* stroke)
     return true;
 }
 
-bool parseStrokeStyle(const QDomElement& element, fla::StrokeStyle* strokeStyle)
+fla::StrokeStyle* parseStrokeStyle(const QDomElement& element)
 {
-    strokeStyle->index = element.attribute("index").toInt();
-
     QDomNodeList childNodes = element.childNodes();
     for (int i = 0; i < childNodes.size(); ++i)
     {
@@ -279,7 +277,7 @@ bool parseStrokeStyle(const QDomElement& element, fla::StrokeStyle* strokeStyle)
         if (node.isElement())
         {
             QDomElement childElement = node.toElement();
-            fla::Stroke* stroke = nullptr;
+            fla::StrokeStyle* stroke = nullptr;
             if (childElement.tagName() == "SolidStroke")
             {
                 stroke = new fla::SolidStroke();
@@ -302,21 +300,21 @@ bool parseStrokeStyle(const QDomElement& element, fla::StrokeStyle* strokeStyle)
             }
             else
             {
-                qDebug() << "!!!! Unhandled stroke element:" << childElement.tagName() << (_currentFile.empty() ? "" : " from") << QString::fromStdString(_currentFile);
+                qDebug() << "!!!! Unhandled strokestyle element:" << childElement.tagName() << (_currentFile.empty() ? "" : " from") << QString::fromStdString(_currentFile);
                 continue;
             }
 
-             if (!parseStroke(childElement, stroke))
-             {
-                 delete stroke;
-                 return false;
-             }
+            if (!parseStroke(childElement, stroke))
+            {
+                delete stroke;
+                return nullptr;
+            }
 
-             stroke->style = childElement.tagName().toStdString();
-             strokeStyle->stroke = stroke;
+            return stroke;
         }
     }
-    return true;
+
+    return nullptr;
 }
 
 bool parseStrokes(const QDomElement& element, fla::Shape* shape)
@@ -330,14 +328,15 @@ bool parseStrokes(const QDomElement& element, fla::Shape* shape)
             QDomElement childElement = node.toElement();
             if (childElement.tagName() == "StrokeStyle")
             {
-                fla::StrokeStyle* strokeStyle = new fla::StrokeStyle();
-                if (!parseStrokeStyle(childElement, strokeStyle))
+                int index = childElement.hasAttribute("index") ? childElement.attribute("index").toInt() : -1;
+                fla::StrokeStyle* strokeStyle = parseStrokeStyle(childElement);
+                if (!strokeStyle)
                 {
                     return false;
                 }
                 shape->strokes.push_back(strokeStyle);
                 // Add to strokesMap for quick lookup by index
-                shape->strokesMap[strokeStyle->index] = strokeStyle;
+                shape->strokesMap[index] = strokeStyle;
             }
             else
             {
@@ -487,6 +486,30 @@ bool parseShape(const QDomElement& element, fla::Shape* shape)
             }
         }
     }
+
+    shape->bounds.reset();
+
+    for (fla::Edge* edge : shape->edges)
+    {
+        for (const fla::PathSegment& segment : edge->segments)
+        {
+            for (const fla::PathSection& section : segment.sections)
+            {
+                for (const fla::Point& point : section.points)
+                {
+                    shape->bounds.topLeft.x = std::min(shape->bounds.topLeft.x, point.x);
+                    shape->bounds.topLeft.y = std::min(shape->bounds.topLeft.y, point.y);
+                    shape->bounds.bottomRight.x = std::max(shape->bounds.bottomRight.x, point.x);
+                    shape->bounds.bottomRight.y = std::max(shape->bounds.bottomRight.y, point.y);
+                }
+            }
+        }
+    }
+
+    shape->bounds.translate(shape->transformationPoint.x, shape->transformationPoint.y);
+    shape->bounds.transform(shape->transform);
+    shape->bounds.translate(-shape->transformationPoint.x, -shape->transformationPoint.y);
+
     return true;
 }
 
@@ -618,6 +641,22 @@ bool parseStaticText(const QDomElement& element, fla::StaticText* staticText)
         }
     }
 
+    staticText->bounds.reset();
+    for (const fla::TextRun& run : staticText->runs)
+    {
+        // For simplicity, we can estimate the bounds based on the number of characters and font size
+        double width = run.text.length() * run.size * 0.6; // Approximate character width
+        double height = run.lineHeight > 0 ? run.lineHeight : run.size; // Use lineHeight if specified, otherwise use size
+
+        staticText->bounds.topLeft.x = std::min(staticText->bounds.topLeft.x, 0.0);
+        staticText->bounds.topLeft.y = std::min(staticText->bounds.topLeft.y, -height);
+        staticText->bounds.bottomRight.x = std::max(staticText->bounds.bottomRight.x, width);
+        staticText->bounds.bottomRight.y = std::max(staticText->bounds.bottomRight.y, 0.0);
+    }
+    staticText->bounds.translate(staticText->transformationPoint.x, staticText->transformationPoint.y);
+    staticText->bounds.transform(staticText->transform);
+    staticText->bounds.translate(-staticText->transformationPoint.x, -staticText->transformationPoint.y);
+
     return true;
 }
 
@@ -703,6 +742,15 @@ bool parseGroup(const QDomElement& element, fla::Group* group)
             }
         }
     }
+
+    group->bounds.reset();
+    for (fla::Element* member : group->members)
+    {
+        group->bounds.expandToInclude(member->bounds);
+    }
+    group->bounds.translate(group->transformationPoint.x, group->transformationPoint.y);
+    group->bounds.transform(group->transform);
+    group->bounds.translate(-group->transformationPoint.x, -group->transformationPoint.y);
 
     return true;
 }

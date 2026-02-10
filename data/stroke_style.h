@@ -7,72 +7,78 @@
 
 namespace fla {
 
-class Stroke : public DOMElement
-{
-public:
-    double weight;
-    std::string scaleMode;
-    std::string style;
-
-    FillStyle* fill;
-
-    Stroke();
-
-    ~Stroke();
-};
-
-class SolidStroke : public Stroke
-{
-public:
-    SolidStroke();
-
-    std::string domTypeName() const override { return "SolidStroke"; }
-};
-
-class DashedStroke : public Stroke
-{
-public:
-    DashedStroke();
-
-    std::string domTypeName() const override { return "DashedStroke"; }
-};
-
-class RaggedStroke : public Stroke
-{
-public:
-    RaggedStroke();
-
-    std::string domTypeName() const override { return "RaggedStroke"; }
-};
-
-class StippleStroke : public Stroke
-{
-public:
-    StippleStroke();
-
-    std::string domTypeName() const override { return "StippleStroke"; }
-};
-
-class DottedStroke : public Stroke
-{
-public:
-    DottedStroke();
-
-    std::string domTypeName() const override { return "DottedStroke"; }
-};
-
 class StrokeStyle : public DOMElement
 {
 public:
-    int index;
+    enum class Style
+    {
+        Solid,
+        Dashed,
+        Ragged,
+        Stipple,
+        Dotted
+    };
 
-    Stroke* stroke;
+    double weight;
+    std::string scaleMode;
+
+    FillStyle* fill;
 
     StrokeStyle();
 
     ~StrokeStyle() override;
 
-    std::string domTypeName() const override { return "StrokeStyle"; }
+    virtual Style style() const = 0;
+};
+
+class SolidStroke : public StrokeStyle
+{
+public:
+    SolidStroke();
+
+    std::string domTypeName() const override { return "SolidStroke"; }
+
+    Style style() const override { return Style::Solid; }
+};
+
+class DashedStroke : public StrokeStyle
+{
+public:
+    DashedStroke();
+
+    std::string domTypeName() const override { return "DashedStroke"; }
+
+    Style style() const override { return Style::Dashed; }
+};
+
+class RaggedStroke : public StrokeStyle
+{
+public:
+    RaggedStroke();
+
+    std::string domTypeName() const override { return "RaggedStroke"; }
+
+    Style style() const override { return Style::Ragged; }
+};
+
+class StippleStroke : public StrokeStyle
+{
+public:
+    StippleStroke();
+
+    std::string domTypeName() const override { return "StippleStroke"; }
+
+    Style style() const override { return Style::Stipple; }
+};
+
+class DottedStroke : public StrokeStyle
+{
+public:
+    DottedStroke();
+
+    std::string domTypeName() const override { return "DottedStroke"; }
+
+    Style style() const override { return Style::Dotted; }
 };
 
 } // namespace fla
