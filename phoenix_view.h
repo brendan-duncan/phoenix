@@ -28,14 +28,15 @@ protected:
 
 private:
     const FLADocument* _flaDocument;
-    
+
     // Pan and zoom state
     double _zoom;
     double _panX;
     double _panY;
     bool _isDragging;
     QPoint _lastMousePos;
-    
+    QMap<QString, QPixmap> _bitmapCache; // Cache for loaded bitmaps
+
     void drawDocument(QPainter& painter, const Document* document);
 
     void drawTimeline(QPainter& painter, const Timeline* timeline);
@@ -47,9 +48,11 @@ private:
     void drawElement(QPainter& painter, const Element* element);
 
     void drawShape(QPainter& painter, const Shape* shape);
-    
+
     // Helper methods
     void resetView();
+
     QPointF screenToScene(const QPointF& screenPos) const;
+
     QPointF sceneToScreen(const QPointF& scenePos) const;
 };

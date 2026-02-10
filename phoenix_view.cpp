@@ -3,6 +3,7 @@
 #include "data/bitmap_instance.h"
 #include "data/group.h"
 #include "data/linear_gradient.h"
+#include "data/radial_gradient.h"
 #include "data/solid_color.h"
 #include "data/static_text.h"
 #include "data/symbol_instance.h"
@@ -218,10 +219,19 @@ void PhoenixView::drawElement(QPainter& painter, const Element* element)
 
         if (bitmap && !bitmap->imageData.empty())
         {
-            QPixmap pixmap;
-            QByteArray imgData(reinterpret_cast<const char*>(bitmap->imageData.data()), bitmap->imageData.size());
-            pixmap.loadFromData(imgData);
-            painter.drawPixmap(0, 0, pixmap);
+            QString bitmapName = QString::fromStdString(bitmap->name);
+            if (_bitmapCache.contains(bitmapName))
+            {
+                painter.drawPixmap(0, 0, _bitmapCache[bitmapName]);
+            }
+            else
+            {
+                 QPixmap pixmap;
+                 QByteArray imgData(reinterpret_cast<const char*>(bitmap->imageData.data()), bitmap->imageData.size());
+                 pixmap.loadFromData(imgData);
+                 _bitmapCache[bitmapName] = pixmap;
+                 painter.drawPixmap(0, 0, pixmap);
+            }
         }
     }
 
@@ -282,7 +292,7 @@ void PhoenixView::drawShape(QPainter& painter, const Shape* shape)
 
             // Determine fill style for this segment
             int fillStyleIdx = segment.fillStyleIndex != -1 ? segment.fillStyleIndex :
-                              (edge->fillStyle0 != -1 ? edge->fillStyle0 : edge->fillStyle1);
+                              (edge->fillStyle1 != -1 ? edge->fillStyle1 : edge->fillStyle0);
 
             const FillStyle* fillStyle = shape->getFillStyleByIndex(fillStyleIdx);
             if (fillStyle)
@@ -344,6 +354,28 @@ void PhoenixView::drawShape(QPainter& painter, const Shape* shape)
                         gradient.setColorAt(entry.ratio, color);
                     }
                     pen.setBrush(QBrush(gradient));
+                }
+                else if (strokeStyle->stroke->fill->type() == FillStyle::Type::RadialGradient)
+                {
+                    const RadialGradient* fill = static_cast<const RadialGradient*>(strokeStyle->stroke->fill);
+                    QRadialGradient gradient(50, 50, 50);
+                    for (const RadialEntry& entry : fill->entries)
+                    {
+                        QColor color(entry.color[0], entry.color[1], entry.color[2], entry.color[3]);
+                        gradient.setColorAt(entry.ratio, color);
+                    }
+                    pen.setBrush(QBrush(gradient));
+                }
+                else if (strokeStyle->stroke->fill->type() == FillStyle::Type::BitmapFill)
+                {
+                    /*QBrush brush;
+                    brush.setTexture(QPixmap());
+                    pen.setBrush(brush);*/
+                    pen.setBrush(Qt::NoBrush);
+                }
+                else
+                {
+                    pen.setBrush(Qt::NoBrush);
                 }
 
                 painter.setPen(pen);

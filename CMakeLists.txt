@@ -39,7 +39,11 @@ set(HEADERS
     data/layer.h
     data/linear_gradient.h
     data/point.h
+    data/printer_settings.h
+    data/publish_history.h
     data/radial_gradient.h
+    data/resource.h
+    data/scripts.h
     data/shape.h
     data/solid_color.h
     data/static_text.h
@@ -72,7 +76,10 @@ set(SOURCES
     data/layer.cpp
     data/linear_gradient.cpp
     data/point.cpp
+    data/printer_settings.cpp
+    data/publish_history.cpp    
     data/radial_gradient.cpp
+    data/scripts.cpp
     data/shape.cpp
     data/solid_color.cpp
     data/static_text.cpp

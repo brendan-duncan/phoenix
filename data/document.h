@@ -2,6 +2,9 @@
 
 #include "resource.h"
 #include "timeline.h"
+#include "printer_settings.h"
+#include "publish_history.h"
+#include "scripts.h"
 #include "symbol.h"
 #include <map>
 #include <string>
@@ -36,6 +39,9 @@ public:
     std::vector<Resource*> resources;
     std::vector<Symbol*> symbols;
     std::vector<Timeline*> timelines;
+    Scripts* scripts = nullptr;
+    PublishHistory* publishHistory = nullptr;
+    PrinterSettings* printerSettings = nullptr;
 
     std::map<std::string, Symbol*> symbolMap; // For quick lookup of symbols by name
 

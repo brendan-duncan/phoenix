@@ -1183,6 +1183,36 @@ bool parseDocument(Document* document, const QDomElement& element, ZipReader* zi
                     return false;
                 }
             }
+            else if (childElement.tagName() == "publishHistory")
+            {
+                PublishHistory* publishHistory = new PublishHistory();
+                /*if (!parsePublishHistory(childElement, publishHistory))
+                {
+                    delete publishHistory;
+                    return false;
+                }*/
+                document->publishHistory = publishHistory;
+            }
+            else if (childElement.tagName() == "PrinterSettings")
+            {
+                PrinterSettings* printerSettings = new PrinterSettings();
+                /*if (!parsePrinterSettings(childElement, printerSettings))
+                {
+                    delete printerSettings;
+                    return false;
+                }*/
+                document->printerSettings = printerSettings;
+            }
+            else if (childElement.tagName() == "scripts")
+            {
+                Scripts* scripts = new Scripts();
+                /*if (!parseScripts(childElement, scripts))
+                {
+                    delete scripts;
+                    return false;
+                }*/
+                document->scripts = scripts;
+            }
             else
             {
                 qDebug() << "!!!! Unhandled document element:" << childElement.tagName();
