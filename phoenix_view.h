@@ -2,12 +2,15 @@
 
 #include "data/fla_document.h"
 #include "data/shape.h"
+
+#include <QList>
+#include <QMap>
 #include <QWidget>
 #include <QPainter>
+#include <QPainterPath>
+#include <QPoint>
 #include <QMouseEvent>
 #include <QWheelEvent>
-
-
 
 class PhoenixView : public QWidget
 {
@@ -21,9 +24,13 @@ public:
 
 protected:
     void paintEvent(QPaintEvent *event) override;
+
     void mousePressEvent(QMouseEvent *event) override;
+
     void mouseMoveEvent(QMouseEvent *event) override;
+
     void mouseReleaseEvent(QMouseEvent *event) override;
+
     void wheelEvent(QWheelEvent *event) override;
 
 private:
@@ -35,7 +42,17 @@ private:
     double _panY;
     bool _isDragging;
     QPoint _lastMousePos;
-    QMap<QString, QPixmap> _bitmapCache; // Cache for loaded bitmaps
+
+    struct PathCacheEntry
+    {
+        QBrush fillBrush;
+        QPen pen;
+        QPainterPath painterPath;
+    };
+    typedef QList<PathCacheEntry> PathCacheList;
+    QMap<const Shape*, PathCacheList> _pathCache;
+
+    QMap<QString, QPixmap> _bitmapCache;
 
     void drawDocument(QPainter& painter, const Document* document);
 

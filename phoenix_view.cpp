@@ -140,6 +140,7 @@ void PhoenixView::drawLayer(QPainter& painter, const Layer* layer)
     for (const Frame* frame : layer->frames)
     {
         drawFrame(painter, frame);
+        break;
     }
 }
 
@@ -294,6 +295,20 @@ static bool pathToPainterPath(const Edge* edge, QPainterPath& painterPath)
 
 void PhoenixView::drawShape(QPainter& painter, const Shape* shape)
 {
+    if (_pathCache.contains(shape))
+    {
+        // Use cached paths
+        for (const PathCacheEntry& entry : _pathCache[shape])
+        {
+            painter.setBrush(entry.fillBrush);
+            painter.setPen(entry.pen);
+            painter.drawPath(entry.painterPath);
+        }
+        return;
+    }
+
+    PathCacheList cacheEntries;
+
     // Helper lambda to build a path from segments
     auto buildPath = [](const PathSegment& segment) -> QPainterPath {
         QPainterPath path;
@@ -408,6 +423,8 @@ void PhoenixView::drawShape(QPainter& painter, const Shape* shape)
         setFillBrush(fillStyle);
         painter.setPen(Qt::NoPen);
         painter.drawPath(compoundPath);
+
+        cacheEntries.push_back({ painter.brush(), Qt::NoPen, compoundPath });
     }
 
     // Now render strokes separately (per segment)
@@ -475,8 +492,12 @@ void PhoenixView::drawShape(QPainter& painter, const Shape* shape)
             painter.setBrush(Qt::NoBrush);
             painter.setPen(pen);
             painter.drawPath(strokePath);
+
+            cacheEntries.push_back({ painter.brush(), pen, strokePath });
         }
     }
+
+    _pathCache[shape] = cacheEntries;
 }
 
 void PhoenixView::mousePressEvent(QMouseEvent *event)
