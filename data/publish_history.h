@@ -2,6 +2,8 @@
 
 #include "dom_element.h"
 
+namespace fla {
+
 class PublishHistory : public DOMElement
 {
 public:
@@ -9,3 +11,5 @@ public:
 
     std::string domTypeName() const override { return "PublishHistory"; }
 };
+
+} // namespace fla

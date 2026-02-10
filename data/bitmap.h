@@ -5,6 +5,8 @@
 #include <vector>
 #include <cstdint>
 
+namespace fla {
+
 class Bitmap : public Resource
 {
 public:
@@ -30,3 +32,5 @@ public:
 
     std::string domTypeName() const override { return "Bitmap"; }
 };
+
+} // namespace fla

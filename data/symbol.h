@@ -5,6 +5,8 @@
 #include <vector>
 #include <string>
 
+namespace fla {
+
 class Symbol : public DOMElement
 {
 public:
@@ -20,3 +22,5 @@ public:
 
     std::string domTypeName() const override { return "Symbol"; }
 };
+
+} // namespace fla

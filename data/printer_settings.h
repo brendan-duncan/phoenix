@@ -2,6 +2,8 @@
 
 #include "dom_element.h"
 
+namespace fla {
+
 class PrinterSettings : public DOMElement
 {
 public:
@@ -9,3 +11,5 @@ public:
 
     std::string domTypeName() const override { return "PrinterSettings"; }
 };
+
+} // namespace fla

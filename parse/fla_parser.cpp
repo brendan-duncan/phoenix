@@ -4,7 +4,9 @@
 #include "zip_reader.h"
 #include <iostream>
 
-FLADocument* FLAParser::parse(const std::string& filePath)
+using namespace fla;
+
+fla::FLADocument* FLAParser::parse(const std::string& filePath)
 {
     ZipReader zipReader;
     if (!zipReader.open(filePath))

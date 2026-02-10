@@ -3,6 +3,8 @@
 #include "fill_style.h"
 #include <cstdint>
 
+namespace fla {
+
 class SolidColor : public FillStyle
 {
 public:
@@ -14,3 +16,5 @@ public:
 
     std::string domTypeName() const override { return "SolidColor"; }
 };
+
+} // namespace fla

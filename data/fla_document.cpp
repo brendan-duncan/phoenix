@@ -1,5 +1,7 @@
 #include "fla_document.h"
 
+namespace fla {
+
 FLADocument::FLADocument()
     : document(nullptr)
 {}
@@ -12,3 +14,5 @@ FLADocument::~FLADocument()
         document = nullptr;
     }
 }
+
+} // namespace fla

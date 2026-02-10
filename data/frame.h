@@ -6,6 +6,8 @@
 #include <string>
 #include <vector>
 
+namespace fla {
+
 class Frame : public DOMElement
 {
 public:
@@ -21,3 +23,5 @@ public:
 
     std::string domTypeName() const override { return "Frame"; }
 };
+
+} // namespace fla

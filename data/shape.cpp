@@ -1,5 +1,7 @@
 #include "shape.h"
 
+namespace fla {
+
 Shape::Shape()
 {}
 
@@ -23,3 +25,5 @@ Shape::~Shape()
     strokesMap.clear();
     fillsMap.clear();
 }
+
+} // namespace fla

@@ -4,6 +4,8 @@
 #include <string>
 #include <vector>
 
+namespace fla {
+
 struct TextRun
 {
     std::string text;
@@ -27,3 +29,5 @@ public:
 
     std::string domTypeName() const override { return "StaticText"; }
 };
+
+} // namespace fla

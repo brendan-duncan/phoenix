@@ -1,5 +1,7 @@
 #include "layer.h"
 
+namespace fla {
+
 Layer::Layer()
 {
 }
@@ -11,3 +13,5 @@ Layer::~Layer()
         delete frame;
     }
 }
+
+} // namespace fla

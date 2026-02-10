@@ -1,5 +1,7 @@
 #pragma once
 
+namespace fla {
+
 class Point
 {
 public:
@@ -11,3 +13,5 @@ public:
     double x;
     double y;
 };
+
+} // namespace fla

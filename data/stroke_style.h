@@ -5,6 +5,8 @@
 #include "fill_style.h"
 #include <string>
 
+namespace fla {
+
 class Stroke : public DOMElement
 {
 public:
@@ -72,3 +74,5 @@ public:
 
     std::string domTypeName() const override { return "StrokeStyle"; }
 };
+
+} // namespace fla

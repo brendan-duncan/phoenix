@@ -21,9 +21,10 @@ public:
 
     ~PhoenixView();
 
-    void setDocument(const FLADocument* document);
+    void setDocument(const fla::FLADocument* document);
 
     void setShowBounds(bool show) { _showBounds = show; update(); }
+
     bool showBounds() const { return _showBounds; }
 
 protected:
@@ -38,7 +39,7 @@ protected:
     void wheelEvent(QWheelEvent *event) override;
 
 private:
-    const FLADocument* _flaDocument;
+    const fla::FLADocument* _flaDocument;
 
     // Pan and zoom state
     double _zoom;
@@ -60,29 +61,29 @@ private:
         QPainterPath painterPath;
     };
     typedef QList<PathCacheEntry> PathCacheList;
-    QMap<const Shape*, PathCacheList> _pathCache;
+    QMap<const fla::Shape*, PathCacheList> _pathCache;
 
     QMap<QString, QPixmap> _bitmapCache;
 
     // Bounds cache for culling
-    QMap<const Element*, QRectF> _boundsCache;
+    QMap<const fla::Element*, QRectF> _boundsCache;
 
-    void drawDocument(QPainter& painter, const Document* document);
+    void drawDocument(QPainter& painter, const fla::Document* document);
 
-    void drawTimeline(QPainter& painter, const Timeline* timeline);
+    void drawTimeline(QPainter& painter, const fla::Timeline* timeline);
 
-    void drawLayer(QPainter& painter, const Layer* layer);
+    void drawLayer(QPainter& painter, const fla::Layer* layer);
 
-    void drawFrame(QPainter& painter, const Frame* frame);
+    void drawFrame(QPainter& painter, const fla::Frame* frame);
 
-    void drawElement(QPainter& painter, const Element* element);
+    void drawElement(QPainter& painter, const fla::Element* element);
 
-    void drawShape(QPainter& painter, const Shape* shape);
+    void drawShape(QPainter& painter, const fla::Shape* shape);
 
     // Bounds calculation
-    QRectF calculateElementBounds(const Element* element);
-    QRectF calculateShapeBounds(const Shape* shape);
-    QRectF getElementBounds(const Element* element);
+    QRectF calculateElementBounds(const fla::Element* element);
+    QRectF calculateShapeBounds(const fla::Shape* shape);
+    QRectF getElementBounds(const fla::Element* element);
 
     // Helper methods
     void resetView();

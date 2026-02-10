@@ -16,7 +16,7 @@
 #include <QDomNodeList>
 #include <QDebug>
 
-namespace 
+namespace
 {
 
 std::string _currentFile;
@@ -71,7 +71,7 @@ void parseHexColor(const std::string& hexColor, uint8_t rgba[4])
     }
 }
 
-bool parseSolidColor(const QDomElement& element, SolidColor* solidColor)
+bool parseSolidColor(const QDomElement& element, fla::SolidColor* solidColor)
 {
     std::string color = element.attribute("color").toStdString();
 
@@ -81,13 +81,13 @@ bool parseSolidColor(const QDomElement& element, SolidColor* solidColor)
     return true;
 }
 
-bool parseLinearGradient(const QDomElement& element, LinearGradient* linearGradient)
+bool parseLinearGradient(const QDomElement& element, fla::LinearGradient* linearGradient)
 {
     QDomNodeList entryNodes = element.elementsByTagName("GradientEntry");
     for (size_t i = 0; i < entryNodes.size(); ++i)
     {
         QDomElement entryElement = entryNodes.at(i).toElement();
-        GradientEntry entry;
+        fla::GradientEntry entry;
         entry.ratio = entryElement.attribute("ratio").toDouble();
 
         std::string color = entryElement.attribute("color").toStdString();
@@ -97,20 +97,20 @@ bool parseLinearGradient(const QDomElement& element, LinearGradient* linearGradi
     }
 
     std::sort(linearGradient->entries.begin(), linearGradient->entries.end(),
-        [](const GradientEntry& a, const GradientEntry& b) {
+        [](const fla::GradientEntry& a, const fla::GradientEntry& b) {
             return a.ratio < b.ratio;
         });
 
     return true;
 }
 
-bool parseRadialGradient(const QDomElement& element, RadialGradient* radialGradient)
+bool parseRadialGradient(const QDomElement& element, fla::RadialGradient* radialGradient)
 {
     QDomNodeList entryNodes = element.elementsByTagName("GradientEntry");
     for (size_t i = 0; i < entryNodes.size(); ++i)
     {
         QDomElement entryElement = entryNodes.at(i).toElement();
-        RadialEntry entry;
+        fla::RadialEntry entry;
         entry.ratio = entryElement.attribute("ratio").toDouble();
 
         std::string color = entryElement.attribute("color").toStdString();
@@ -120,14 +120,14 @@ bool parseRadialGradient(const QDomElement& element, RadialGradient* radialGradi
     }
 
     std::sort(radialGradient->entries.begin(), radialGradient->entries.end(),
-        [](const RadialEntry& a, const RadialEntry& b) {
+        [](const fla::RadialEntry& a, const fla::RadialEntry& b) {
             return a.ratio < b.ratio;
         });
 
     return true;
 }
 
-Edge* parsePath(const QDomElement& element)
+fla::Edge* parsePath(const QDomElement& element)
 {
     std::string edgeData =element.attribute("edges").toStdString();
     if (edgeData.empty())
@@ -137,7 +137,7 @@ Edge* parsePath(const QDomElement& element)
     }
 
     PathParser pathParser;
-    Edge* edge = pathParser.parse(edgeData);
+    fla::Edge* edge = pathParser.parse(edgeData);
 
     if (!edge)
     {
@@ -153,7 +153,7 @@ Edge* parsePath(const QDomElement& element)
     return edge;
 }
 
-bool parseEdges(const QDomElement& element, Shape* shape)
+bool parseEdges(const QDomElement& element, fla::Shape* shape)
 {
     QDomNodeList childNodes = element.childNodes();
     for (int i = 0; i < childNodes.size(); ++i)
@@ -170,7 +170,7 @@ bool parseEdges(const QDomElement& element, Shape* shape)
                     continue;
                 }
 
-                Edge* edge = parsePath(childElement);
+                fla::Edge* edge = parsePath(childElement);
                 if (!edge)
                 {
                     return false;
@@ -187,11 +187,11 @@ bool parseEdges(const QDomElement& element, Shape* shape)
     return true;
 }
 
-FillStyle* parseFillStyle(const QDomElement& element)
+fla::FillStyle* parseFillStyle(const QDomElement& element)
 {
     if (element.tagName() == "SolidColor")
     {
-        SolidColor* solidFill = new SolidColor();
+        fla::SolidColor* solidFill = new fla::SolidColor();
         if (!parseSolidColor(element, solidFill))
         {
             delete solidFill;
@@ -202,7 +202,7 @@ FillStyle* parseFillStyle(const QDomElement& element)
     }
     else if (element.tagName() == "LinearGradient")
     {
-        LinearGradient* linearFill = new LinearGradient();
+        fla::LinearGradient* linearFill = new fla::LinearGradient();
         if (!parseLinearGradient(element, linearFill))
         {
             delete linearFill;
@@ -212,7 +212,7 @@ FillStyle* parseFillStyle(const QDomElement& element)
     }
     else if (element.tagName() == "RadialGradient")
     {
-        RadialGradient* radialFill = new RadialGradient();
+        fla::RadialGradient* radialFill = new fla::RadialGradient();
         if (!parseRadialGradient(element, radialFill))
         {
             delete radialFill;
@@ -224,7 +224,7 @@ FillStyle* parseFillStyle(const QDomElement& element)
     return nullptr;
 }
 
-bool parseStroke(const QDomElement& element, Stroke* stroke)
+bool parseStroke(const QDomElement& element, fla::Stroke* stroke)
 {
     stroke->scaleMode = element.attribute("scaleMode").toStdString();
     bool ok;
@@ -268,7 +268,7 @@ bool parseStroke(const QDomElement& element, Stroke* stroke)
     return true;
 }
 
-bool parseStrokeStyle(const QDomElement& element, StrokeStyle* strokeStyle)
+bool parseStrokeStyle(const QDomElement& element, fla::StrokeStyle* strokeStyle)
 {
     strokeStyle->index = element.attribute("index").toInt();
 
@@ -279,26 +279,26 @@ bool parseStrokeStyle(const QDomElement& element, StrokeStyle* strokeStyle)
         if (node.isElement())
         {
             QDomElement childElement = node.toElement();
-            Stroke* stroke = nullptr;
+            fla::Stroke* stroke = nullptr;
             if (childElement.tagName() == "SolidStroke")
             {
-                stroke = new SolidStroke();
+                stroke = new fla::SolidStroke();
             }
             else if (childElement.tagName() == "DashedStroke")
             {
-                stroke = new DashedStroke();
+                stroke = new fla::DashedStroke();
             }
             else if (childElement.tagName() == "RaggedStroke")
             {
-                stroke = new RaggedStroke();
+                stroke = new fla::RaggedStroke();
             }
             else if (childElement.tagName() == "StippleStroke")
             {
-                stroke = new StippleStroke();
+                stroke = new fla::StippleStroke();
             }
             else if (childElement.tagName() == "DottedStroke")
             {
-                stroke = new DottedStroke();
+                stroke = new fla::DottedStroke();
             }
             else
             {
@@ -319,7 +319,7 @@ bool parseStrokeStyle(const QDomElement& element, StrokeStyle* strokeStyle)
     return true;
 }
 
-bool parseStrokes(const QDomElement& element, Shape* shape)
+bool parseStrokes(const QDomElement& element, fla::Shape* shape)
 {
     QDomNodeList childNodes = element.childNodes();
     for (int i = 0; i < childNodes.size(); ++i)
@@ -330,7 +330,7 @@ bool parseStrokes(const QDomElement& element, Shape* shape)
             QDomElement childElement = node.toElement();
             if (childElement.tagName() == "StrokeStyle")
             {
-                StrokeStyle* strokeStyle = new StrokeStyle();
+                fla::StrokeStyle* strokeStyle = new fla::StrokeStyle();
                 if (!parseStrokeStyle(childElement, strokeStyle))
                 {
                     return false;
@@ -348,7 +348,7 @@ bool parseStrokes(const QDomElement& element, Shape* shape)
     return true;
 }
 
-bool parseFills(const QDomElement& element, Shape* shape)
+bool parseFills(const QDomElement& element, fla::Shape* shape)
 {
     QDomNodeList childNodes = element.childNodes();
     for (int i = 0; i < childNodes.size(); ++i)
@@ -368,7 +368,7 @@ bool parseFills(const QDomElement& element, Shape* shape)
                 }
 
                 QDomElement fillElement = fillNodes.at(0).toElement();
-                FillStyle *fillStyle = parseFillStyle(fillElement);
+                fla::FillStyle *fillStyle = parseFillStyle(fillElement);
                 if (!fillStyle)
                 {
                     return false;
@@ -386,7 +386,7 @@ bool parseFills(const QDomElement& element, Shape* shape)
     return true;
 }
 
-bool parseElement(const QDomElement& element, Element* el)
+bool parseElement(const QDomElement& element, fla::Element* el)
 {
     if (element.hasAttribute("isSelected"))
         el ->isSelected = (element.attribute("isSelected") == "true");
@@ -427,7 +427,7 @@ bool parseElement(const QDomElement& element, Element* el)
             QDomElement pointEl = pointList.at(0).toElement();
             double x = pointEl.hasAttribute("x") ? pointEl.attribute("x").toDouble() : 0.0;
             double y = pointEl.hasAttribute("y") ? pointEl.attribute("y").toDouble() : 0.0;
-            el->transformationPoint = Point(x, y);
+            el->transformationPoint = fla::Point(x, y);
         }
         else
         {
@@ -438,7 +438,7 @@ bool parseElement(const QDomElement& element, Element* el)
     return true;
 }
 
-bool parseShape(const QDomElement& element, Shape* shape)
+bool parseShape(const QDomElement& element, fla::Shape* shape)
 {
     if (!parseElement(element, shape))
     {
@@ -490,7 +490,7 @@ bool parseShape(const QDomElement& element, Shape* shape)
     return true;
 }
 
-bool parseSymbolInstance(const QDomElement& element, SymbolInstance* instance)
+bool parseSymbolInstance(const QDomElement& element, fla::SymbolInstance* instance)
 {
     if (!parseElement(element, instance))
     {
@@ -502,7 +502,7 @@ bool parseSymbolInstance(const QDomElement& element, SymbolInstance* instance)
     return true;
 }
 
-bool parseBitmapInstance(const QDomElement& element, BitmapInstance* instance)
+bool parseBitmapInstance(const QDomElement& element, fla::BitmapInstance* instance)
 {
     if (!parseElement(element, instance))
     {
@@ -514,7 +514,7 @@ bool parseBitmapInstance(const QDomElement& element, BitmapInstance* instance)
     return true;
 }
 
-bool parseStaticText(const QDomElement& element, StaticText* staticText)
+bool parseStaticText(const QDomElement& element, fla::StaticText* staticText)
 {
     if (!parseElement(element, staticText))
     {
@@ -534,7 +534,7 @@ bool parseStaticText(const QDomElement& element, StaticText* staticText)
                 QDomElement childElement = node.toElement();
                 if (childElement.tagName() == "DOMTextRun")
                 {
-                    TextRun textRun;
+                    fla::TextRun textRun;
 
                     QDomNodeList textRunChildNodes = childElement.childNodes();
                     for (int j = 0; j < textRunChildNodes.size(); ++j)
@@ -621,7 +621,7 @@ bool parseStaticText(const QDomElement& element, StaticText* staticText)
     return true;
 }
 
-bool parseGroup(const QDomElement& element, Group* group)
+bool parseGroup(const QDomElement& element, fla::Group* group)
 {
     if (!parseElement(element, group))
     {
@@ -641,7 +641,7 @@ bool parseGroup(const QDomElement& element, Group* group)
                 QDomElement childElement = node.toElement();
                 if (childElement.tagName() == "DOMShape")
                 {
-                    Shape* shape = new Shape();
+                    fla::Shape* shape = new fla::Shape();
                     if (!parseShape(childElement, shape))
                     {
                         return false;
@@ -650,7 +650,7 @@ bool parseGroup(const QDomElement& element, Group* group)
                 }
                 else if (childElement.tagName() == "DOMSymbolInstance")
                 {
-                    SymbolInstance* instance = new SymbolInstance();
+                    fla::SymbolInstance* instance = new fla::SymbolInstance();
                     if (!parseSymbolInstance(childElement, instance))
                     {
                         delete instance;
@@ -660,7 +660,7 @@ bool parseGroup(const QDomElement& element, Group* group)
                 }
                 else if (childElement.tagName() == "DOMGroup")
                 {
-                    Group* subgroup = new Group();
+                    fla::Group* subgroup = new fla::Group();
                     if (!parseGroup(childElement, subgroup))
                     {
                         delete subgroup;
@@ -670,7 +670,7 @@ bool parseGroup(const QDomElement& element, Group* group)
                 }
                 else if (childElement.tagName() == "DOMStaticText")
                 {
-                    StaticText* staticText = new StaticText();
+                    fla::StaticText* staticText = new fla::StaticText();
                     if (!parseStaticText(childElement, staticText))
                     {
                         delete staticText;
@@ -680,7 +680,7 @@ bool parseGroup(const QDomElement& element, Group* group)
                 }
                 else if (childElement.tagName() == "DOMBitmapInstance")
                 {
-                    BitmapInstance* bitmapInstance = new BitmapInstance();
+                    fla::BitmapInstance* bitmapInstance = new fla::BitmapInstance();
                     if (!parseBitmapInstance(childElement, bitmapInstance))
                     {
                         delete bitmapInstance;
@@ -707,7 +707,7 @@ bool parseGroup(const QDomElement& element, Group* group)
     return true;
 }
 
-bool parseElements(const QDomElement& element, Frame* frame)
+bool parseElements(const QDomElement& element, fla::Frame* frame)
 {
     QDomNodeList childNodes = element.childNodes();
     for (int i = 0; i < childNodes.size(); ++i)
@@ -718,7 +718,7 @@ bool parseElements(const QDomElement& element, Frame* frame)
             QDomElement childElement = node.toElement();
             if (childElement.tagName() == "DOMShape")
             {
-                Shape* shape = new Shape();
+                fla::Shape* shape = new fla::Shape();
                 if (!parseShape(childElement, shape))
                 {
                     delete shape;
@@ -728,7 +728,7 @@ bool parseElements(const QDomElement& element, Frame* frame)
             }
             else if (childElement.tagName() == "DOMSymbolInstance")
             {
-                SymbolInstance* instance = new SymbolInstance();
+                fla::SymbolInstance* instance = new fla::SymbolInstance();
                 if (!parseSymbolInstance(childElement, instance))
                 {
                     delete instance;
@@ -738,7 +738,7 @@ bool parseElements(const QDomElement& element, Frame* frame)
             }
             else if (childElement.tagName() == "DOMGroup")
             {
-                Group* group = new Group();
+                fla::Group* group = new fla::Group();
                 if (!parseGroup(childElement, group))
                 {
                     delete group;
@@ -748,7 +748,7 @@ bool parseElements(const QDomElement& element, Frame* frame)
             }
             else if (childElement.tagName() == "DOMStaticText")
             {
-                StaticText* staticText = new StaticText();
+                fla::StaticText* staticText = new fla::StaticText();
                 if (!parseStaticText(childElement, staticText))
                 {
                     delete staticText;
@@ -758,7 +758,7 @@ bool parseElements(const QDomElement& element, Frame* frame)
             }
             else if (childElement.tagName() == "DOMBitmapInstance")
             {
-                BitmapInstance* bitmapInstance = new BitmapInstance();
+                fla::BitmapInstance* bitmapInstance = new fla::BitmapInstance();
                 if (!parseBitmapInstance(childElement, bitmapInstance))
                 {
                     delete bitmapInstance;
@@ -775,7 +775,7 @@ bool parseElements(const QDomElement& element, Frame* frame)
     return true;
 }
 
-bool parseActionScript(const QDomElement& element, ActionScript* actionScript)
+bool parseActionScript(const QDomElement& element, fla::ActionScript* actionScript)
 {
     QDomNodeList childNodes = element.childNodes();
     for (int i = 0; i < childNodes.size(); ++i)
@@ -798,7 +798,7 @@ bool parseActionScript(const QDomElement& element, ActionScript* actionScript)
     return true;
 }
 
-bool parseFrame(const QDomElement& element, Frame* frame)
+bool parseFrame(const QDomElement& element, fla::Frame* frame)
 {
     frame->index = element.attribute("index").toInt();
     frame->keyMode = element.attribute("keyMode").toStdString();
@@ -812,7 +812,7 @@ bool parseFrame(const QDomElement& element, Frame* frame)
             QDomElement childElement = node.toElement();
             if (childElement.tagName() == "Actionscript")
             {
-                ActionScript* actionScript = new ActionScript();
+                fla::ActionScript* actionScript = new fla::ActionScript();
                 if (!parseActionScript(childElement, actionScript))
                 {
                     delete actionScript;
@@ -836,7 +836,7 @@ bool parseFrame(const QDomElement& element, Frame* frame)
     return true;
 }
 
-bool parseFrames(const QDomElement& element, Layer* layer)
+bool parseFrames(const QDomElement& element, fla::Layer* layer)
 {
     QDomNodeList childNodes = element.childNodes();
     for (int i = 0; i < childNodes.size(); ++i)
@@ -847,7 +847,7 @@ bool parseFrames(const QDomElement& element, Layer* layer)
             QDomElement childElement = node.toElement();
             if (childElement.tagName() == "DOMFrame")
             {
-                Frame* frame = new Frame();
+                fla::Frame* frame = new fla::Frame();
                 if (!parseFrame(childElement, frame))
                 {
                     return false;
@@ -863,7 +863,7 @@ bool parseFrames(const QDomElement& element, Layer* layer)
     return true;
 }
 
-bool parseLayer(const QDomElement& element, Layer* layer)
+bool parseLayer(const QDomElement& element, fla::Layer* layer)
 {
     layer->name = element.attribute("name").toStdString();
 
@@ -899,7 +899,7 @@ bool parseLayer(const QDomElement& element, Layer* layer)
     return true;
 }
 
-bool parseLayers(const QDomElement& element, Timeline* timeline)
+bool parseLayers(const QDomElement& element, fla::Timeline* timeline)
 {
     QDomNodeList childNodes = element.childNodes();
     for (int i = 0; i < childNodes.size(); ++i)
@@ -910,7 +910,7 @@ bool parseLayers(const QDomElement& element, Timeline* timeline)
             QDomElement childElement = node.toElement();
             if (childElement.tagName() == "DOMLayer")
             {
-                Layer* layer = new Layer();
+                fla::Layer* layer = new fla::Layer();
                 if (!parseLayer(childElement, layer))
                 {
                     return false;
@@ -926,7 +926,7 @@ bool parseLayers(const QDomElement& element, Timeline* timeline)
     return true;
 }
 
-bool parseTimeline(const QDomElement& element, Timeline* timeline)
+bool parseTimeline(const QDomElement& element, fla::Timeline* timeline)
 {
     timeline->name = element.attribute("name").toStdString();
     timeline->layerDepthEnabled = element.attribute("layerDepthEnabled") == "true";
@@ -954,7 +954,7 @@ bool parseTimeline(const QDomElement& element, Timeline* timeline)
     return true;
 }
 
-bool parseTimelines(const QDomElement& element, std::vector<Timeline*>& timelines)
+bool parseTimelines(const QDomElement& element, std::vector<fla::Timeline*>& timelines)
 {
     QDomNodeList childNodes = element.childNodes();
     for (int i = 0; i < childNodes.size(); ++i)
@@ -965,7 +965,7 @@ bool parseTimelines(const QDomElement& element, std::vector<Timeline*>& timeline
             QDomElement childElement = node.toElement();
             if (childElement.tagName() == "DOMTimeline")
             {
-                Timeline* timeline = new Timeline();
+                fla::Timeline* timeline = new fla::Timeline();
                 if (!parseTimeline(childElement, timeline))
                 {
                     return false;
@@ -981,7 +981,7 @@ bool parseTimelines(const QDomElement& element, std::vector<Timeline*>& timeline
     return true;
 }
 
-bool parseSymbolInclude(const QDomElement& element, Document* document, ZipReader* zipReader)
+bool parseSymbolInclude(const QDomElement& element, fla::Document* document, ZipReader* zipReader)
 {
     std::string href = element.attribute("href").toStdString();
     if (href.empty())
@@ -1019,7 +1019,7 @@ bool parseSymbolInclude(const QDomElement& element, Document* document, ZipReade
         return false;
     }
 
-    Symbol* symbol = new Symbol();
+    fla::Symbol* symbol = new fla::Symbol();
     symbol->name = root.attribute("name").toStdString();
     symbol->itemId = root.attribute("itemId").toStdString();
     symbol->lastModified = root.attribute("lastModified").toStdString();
@@ -1054,7 +1054,7 @@ bool parseSymbolInclude(const QDomElement& element, Document* document, ZipReade
     return true;
 }
 
-bool parseSymbols(const QDomElement& element, Document* document, ZipReader* zipReader)
+bool parseSymbols(const QDomElement& element, fla::Document* document, ZipReader* zipReader)
 {
     QDomNodeList childNodes = element.childNodes();
     for (int i = 0; i < childNodes.size(); ++i)
@@ -1080,7 +1080,7 @@ bool parseSymbols(const QDomElement& element, Document* document, ZipReader* zip
     return true;
 }
 
-bool parseMedia(const QDomElement& element, Document* document, ZipReader* zipReader)
+bool parseMedia(const QDomElement& element, fla::Document* document, ZipReader* zipReader)
 {
     QDomNodeList childNodes = element.childNodes();
     for (int i = 0; i < childNodes.size(); ++i)
@@ -1091,7 +1091,7 @@ bool parseMedia(const QDomElement& element, Document* document, ZipReader* zipRe
             QDomElement childElement = node.toElement();
             if (childElement.tagName() == "DOMBitmapItem")
             {
-                Bitmap* bitmap = new Bitmap();
+                fla::Bitmap* bitmap = new fla::Bitmap();
 
                 bitmap->name = childElement.attribute("name").toStdString();
                 bitmap->itemId = childElement.attribute("itemId").toStdString();
@@ -1127,7 +1127,7 @@ bool parseMedia(const QDomElement& element, Document* document, ZipReader* zipRe
     return true;
 }
 
-bool parseDocument(Document* document, const QDomElement& element, ZipReader* zipReader)
+bool parseDocument(fla::Document* document, const QDomElement& element, ZipReader* zipReader)
 {
     // Parse attributes
     bool ok;
@@ -1186,7 +1186,7 @@ bool parseDocument(Document* document, const QDomElement& element, ZipReader* zi
             }
             else if (childElement.tagName() == "publishHistory")
             {
-                PublishHistory* publishHistory = new PublishHistory();
+                fla::PublishHistory* publishHistory = new fla::PublishHistory();
                 /*if (!parsePublishHistory(childElement, publishHistory))
                 {
                     delete publishHistory;
@@ -1196,7 +1196,7 @@ bool parseDocument(Document* document, const QDomElement& element, ZipReader* zi
             }
             else if (childElement.tagName() == "PrinterSettings")
             {
-                PrinterSettings* printerSettings = new PrinterSettings();
+                fla::PrinterSettings* printerSettings = new fla::PrinterSettings();
                 /*if (!parsePrinterSettings(childElement, printerSettings))
                 {
                     delete printerSettings;
@@ -1206,7 +1206,7 @@ bool parseDocument(Document* document, const QDomElement& element, ZipReader* zi
             }
             else if (childElement.tagName() == "scripts")
             {
-                Scripts* scripts = new Scripts();
+                fla::Scripts* scripts = new fla::Scripts();
                 /*if (!parseScripts(childElement, scripts))
                 {
                     delete scripts;
@@ -1230,7 +1230,7 @@ DocumentParser::DocumentParser(ZipReader* zipReader)
     : _zipReader(zipReader)
 {}
 
-Document* DocumentParser::parse(const std::string& xmlContent)
+fla::Document* DocumentParser::parse(const std::string& xmlContent)
 {
     _currentFile.clear();
 
@@ -1248,7 +1248,7 @@ Document* DocumentParser::parse(const std::string& xmlContent)
         return nullptr;
     }
 
-    Document* document = new Document();
+    fla::Document* document = new fla::Document();
     if (!parseDocument(document, root, _zipReader))
     {
         delete document;

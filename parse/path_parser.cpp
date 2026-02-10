@@ -5,8 +5,8 @@
 namespace {
 inline bool isHexDigit(char c)
 {
-    return (c >= '0' && c <= '9') || 
-            (c >= 'A' && c <= 'F') || 
+    return (c >= '0' && c <= '9') ||
+            (c >= 'A' && c <= 'F') ||
             (c >= 'a' && c <= 'f');
 }
 
@@ -22,17 +22,17 @@ inline bool isSpace(char c)
 }
 } // namespace
 
-Edge* PathParser::parse(const std::string& data)
+fla::Edge* PathParser::parse(const std::string& data)
 {
-    Edge* edge = new Edge();
+    fla::Edge* edge = new fla::Edge();
 
     int pos = 0;
 
     bool isFirst = true;
-    Point firstPoint;
-    Point lastPoint;
+    fla::Point firstPoint;
+    fla::Point lastPoint;
 
-    PathSegment* lastSegment = nullptr;
+    fla::PathSegment* lastSegment = nullptr;
 
     while (pos < data.size())
     {
@@ -47,32 +47,32 @@ Edge* PathParser::parse(const std::string& data)
         {
             // Move to command: !x y
             pos++;
-            Point point = parsePoint(data, pos);
+            fla::Point point = parsePoint(data, pos);
 
             // Close previous segment if it exists and endpoints match
             if (lastSegment && !lastSegment->sections.empty())
             {
-                Point segmentStart = lastSegment->sections[0].points[0];
+                fla::Point segmentStart = lastSegment->sections[0].points[0];
                 if (std::abs(segmentStart.x - lastPoint.x) < 0.01 &&
                     std::abs(segmentStart.y - lastPoint.y) < 0.01)
                 {
-                    lastSegment->sections.push_back({PathSection::Command::Close, {}});
+                    lastSegment->sections.push_back({fla::PathSection::Command::Close, {}});
                     //std::cout << "!!!! Auto-closing path segment at point (" << lastPoint.x << ", " << lastPoint.y << ")" << std::endl;
 
                     edge->segments.push_back({});
                     lastSegment = &edge->segments.back();
-                    lastSegment->sections.push_back({PathSection::Command::Move, {point}});
+                    lastSegment->sections.push_back({fla::PathSection::Command::Move, {point}});
                 }
             }
             else if (lastSegment == nullptr)
             {
                 edge->segments.push_back({});
                 lastSegment = &edge->segments.back();
-                lastSegment->sections.push_back({PathSection::Command::Move, {point}});
+                lastSegment->sections.push_back({fla::PathSection::Command::Move, {point}});
             }
             else
             {
-                lastSegment->sections.push_back({PathSection::Command::Move, {point}});
+                lastSegment->sections.push_back({fla::PathSection::Command::Move, {point}});
             }
             lastPoint = point;
 
@@ -85,7 +85,7 @@ Edge* PathParser::parse(const std::string& data)
                 edge->segments.push_back({});
                 lastSegment = &edge->segments.back();
 
-                lastSegment->sections.push_back({PathSection::Command::Move, {point}});
+                lastSegment->sections.push_back({fla::PathSection::Command::Move, {point}});
 
                 lastPoint = point;
             }*/
@@ -94,10 +94,10 @@ Edge* PathParser::parse(const std::string& data)
         {
             // Line to command: |x y
             pos++;
-            Point point = parsePoint(data, pos);
+            fla::Point point = parsePoint(data, pos);
             if (lastSegment)
             {
-                lastSegment->sections.push_back({PathSection::Command::Line, {point}});
+                lastSegment->sections.push_back({fla::PathSection::Command::Line, {point}});
             }
             else
             {
@@ -111,10 +111,10 @@ Edge* PathParser::parse(const std::string& data)
         {
             // Line to command: /x y
             pos++;
-            Point point = parsePoint(data, pos);
+            fla::Point point = parsePoint(data, pos);
             if (lastSegment)
             {
-                lastSegment->sections.push_back({PathSection::Command::Line, {point}});
+                lastSegment->sections.push_back({fla::PathSection::Command::Line, {point}});
             }
             else
             {
@@ -128,12 +128,12 @@ Edge* PathParser::parse(const std::string& data)
         {
             // Quadratic curve: [cx cy x y
             pos++;
-            Point control = parsePoint(data, pos);
-            Point end = parsePoint(data, pos);
+            fla::Point control = parsePoint(data, pos);
+            fla::Point end = parsePoint(data, pos);
 
             if (lastSegment)
             {
-                lastSegment->sections.push_back({PathSection::Command::Quad, {control, end}});
+                lastSegment->sections.push_back({fla::PathSection::Command::Quad, {control, end}});
             }
             else
             {
@@ -156,12 +156,12 @@ Edge* PathParser::parse(const std::string& data)
                 // Update lastPoint to the endpoint of the cubic curve
                 if (lastSegment->sections.size() > sectionCountBefore)
                 {
-                    const PathSection& lastSection = lastSegment->sections.back();
-                    if (lastSection.command == PathSection::Command::Cubic && lastSection.points.size() >= 3)
+                    const fla::PathSection& lastSection = lastSegment->sections.back();
+                    if (lastSection.command == fla::PathSection::Command::Cubic && lastSection.points.size() >= 3)
                     {
                         lastPoint = lastSection.points[2]; // Endpoint is the 3rd point
                     }
-                    else if (lastSection.command == PathSection::Command::Line && lastSection.points.size() >= 1)
+                    else if (lastSection.command == fla::PathSection::Command::Line && lastSection.points.size() >= 1)
                     {
                         lastPoint = lastSection.points[0];
                     }
@@ -223,14 +223,14 @@ Edge* PathParser::parse(const std::string& data)
     // Close the last segment if endpoints match
     if (lastSegment && !lastSegment->sections.empty())
     {
-        Point segmentStart = lastSegment->sections[0].points[0];
+        fla::Point segmentStart = lastSegment->sections[0].points[0];
         if (std::abs(segmentStart.x - lastPoint.x) < 0.01 &&
             std::abs(segmentStart.y - lastPoint.y) < 0.01)
         {
             // Only add Close command if not already present
-            if (lastSegment->sections.back().command != PathSection::Command::Close)
+            if (lastSegment->sections.back().command != fla::PathSection::Command::Close)
             {
-                lastSegment->sections.push_back({PathSection::Command::Close, {}});
+                lastSegment->sections.push_back({fla::PathSection::Command::Close, {}});
             }
         }
     }
@@ -238,11 +238,11 @@ Edge* PathParser::parse(const std::string& data)
     return edge;
 }
 
-void PathParser::parseCubicCurve(const std::string& data, int& pos, PathSegment* path)
+void PathParser::parseCubicCurve(const std::string& data, int& pos, fla::PathSegment* path)
 {
-    std::vector<Point> controlPoints;
-    Point startPoint = path->sections[0].points[0]; // Starting point is the last MoveTo point of the current segment
-    Point endPoint;
+    std::vector<fla::Point> controlPoints;
+    fla::Point startPoint = path->sections[0].points[0]; // Starting point is the last MoveTo point of the current segment
+    fla::Point endPoint;
     bool hasExplicitEndpoint = false;
 
     skipWhitespace(data, pos);
@@ -277,7 +277,7 @@ void PathParser::parseCubicCurve(const std::string& data, int& pos, PathSegment*
             }
 
             double y = parseNumber(data, pos);
-            controlPoints.push_back(Point(x / 20.0, y / 20.0));
+            controlPoints.push_back(fla::Point(x / 20.0, y / 20.0));
 
             // Skip comma/space after y coordinate
             skipWhitespace(data, pos);
@@ -342,7 +342,7 @@ void PathParser::parseCubicCurve(const std::string& data, int& pos, PathSegment*
         }
 
         double y = parseNumber(data, pos);
-        endPoint = Point(x / 20.0, y / 20.0);
+        endPoint = fla::Point(x / 20.0, y / 20.0);
         hasExplicitEndpoint = true;
 
         // Skip trailing semicolon
@@ -357,35 +357,35 @@ void PathParser::parseCubicCurve(const std::string& data, int& pos, PathSegment*
     {
         // Format: (;cp1 cp2 cp3 q... )endpoint;
         // cp1, cp2 are control points, endpoint is separate
-        Point cp1 = controlPoints[0];
-        Point cp2 = controlPoints[1];
-        path->sections.push_back({PathSection::Command::Cubic, {cp1, cp2, endPoint}});
+        fla::Point cp1 = controlPoints[0];
+        fla::Point cp2 = controlPoints[1];
+        path->sections.push_back({fla::PathSection::Command::Cubic, {cp1, cp2, endPoint}});
     }
     else if (!hasExplicitEndpoint && controlPoints.size() >= 3)
     {
         // Format: (;cp1 cp2 endpoint q... );
         // Last point in controlPoints is the endpoint
-        Point cp1 = controlPoints[0];
-        Point cp2 = controlPoints[1];
-        Point ep = controlPoints[2];
-        path->sections.push_back({PathSection::Command::Cubic, {cp1, cp2, ep}});
+        fla::Point cp1 = controlPoints[0];
+        fla::Point cp2 = controlPoints[1];
+        fla::Point ep = controlPoints[2];
+        path->sections.push_back({fla::PathSection::Command::Cubic, {cp1, cp2, ep}});
     }
     else if (controlPoints.size() >= 2)
     {
         // Fallback: use first two as control points, last as endpoint
-        Point cp1 = controlPoints[0];
-        Point cp2 = controlPoints[1];
-        Point ep = controlPoints.size() >= 3 ? controlPoints[2] : controlPoints[1];
-        path->sections.push_back({PathSection::Command::Cubic, {cp1, cp2, ep}});
+        fla::Point cp1 = controlPoints[0];
+        fla::Point cp2 = controlPoints[1];
+        fla::Point ep = controlPoints.size() >= 3 ? controlPoints[2] : controlPoints[1];
+        path->sections.push_back({fla::PathSection::Command::Cubic, {cp1, cp2, ep}});
     }
     else if (hasExplicitEndpoint)
     {
         // Only explicit endpoint available
-        path->sections.push_back({PathSection::Command::Line, {endPoint}});
+        path->sections.push_back({fla::PathSection::Command::Line, {endPoint}});
     }
 }
 
-/*void PathParser::parseCubicCurve(const std::string& data, int& pos, std::vector<Point>& points)
+/*void PathParser::parseCubicCurve(const std::string& data, int& pos, std::vector<fla::Point>& points)
 {
     // Parse cubic curve notation: (;x1,y1 x2,y2 x3,y3...);
     // This is a complex format that may contain multiple points
@@ -403,7 +403,7 @@ void PathParser::parseCubicCurve(const std::string& data, int& pos, PathSegment*
         if (data[pos] == 'q' || data[pos] == 'Q')
         {
             pos++;
-            Point point = parsePoint(data, pos);
+            fla::Point point = parsePoint(data, pos);
             points.push_back(point);
             continue;
         }
@@ -421,7 +421,7 @@ void PathParser::parseCubicCurve(const std::string& data, int& pos, PathSegment*
             }
 
             double y = parseNumber(data, pos);
-            points.push_back(Point(x / 20.0, y / 20.0));
+            points.push_back(fla::Point(x / 20.0, y / 20.0));
 
             // Skip optional comma
             skipWhitespace(data, pos);
@@ -442,12 +442,12 @@ void PathParser::parseCubicCurve(const std::string& data, int& pos, PathSegment*
     }
 }*/
 
-Point PathParser::parsePoint(const std::string& data, int& pos)
+fla::Point PathParser::parsePoint(const std::string& data, int& pos)
 {
     double x = parseNumber(data, pos);
     double y = parseNumber(data, pos);
     // Convert from twips to pixels (1 twip = 1/20 pixel)
-    return Point(x / 20.0, y / 20.0);
+    return fla::Point(x / 20.0, y / 20.0);
 }
 
 double PathParser::parseNumber(const std::string& data, int& pos)

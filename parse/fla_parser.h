@@ -5,7 +5,7 @@
 class FLAParser
 {
 public:
-    FLADocument* parse(const std::string& filePath);
+    fla::FLADocument* parse(const std::string& filePath);
 
     const std::string& errorString() const
     {

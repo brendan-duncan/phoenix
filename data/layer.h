@@ -6,6 +6,8 @@
 #include <string>
 #include <vector>
 
+namespace fla {
+
 class Layer : public DOMElement
 {
 public:
@@ -25,3 +27,5 @@ public:
 
     std::string domTypeName() const override { return "Layer"; }
 };
+
+} // namespace fla

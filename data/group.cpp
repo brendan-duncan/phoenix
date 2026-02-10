@@ -1,5 +1,7 @@
 #include "group.h"
 
+namespace fla {
+
 Group::Group()
 {}
 
@@ -10,3 +12,5 @@ Group::~Group()
         delete member;
     }
 }
+
+} // namespace fla

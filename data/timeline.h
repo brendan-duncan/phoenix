@@ -5,13 +5,15 @@
 #include <string>
 #include <vector>
 
+namespace fla {
+
 class Timeline : public DOMElement
 {
 public:
     std::string name;
     bool layerDepthEnabled;
-    
-    std::vector<Layer*> layers; 
+
+    std::vector<Layer*> layers;
 
     Timeline();
 
@@ -19,3 +21,5 @@ public:
 
     std::string domTypeName() const override { return "Timeline"; }
 };
+
+} // namespace fla

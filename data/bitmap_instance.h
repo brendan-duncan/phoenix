@@ -3,6 +3,8 @@
 #include "element.h"
 #include <string>
 
+namespace fla {
+
 class BitmapInstance : public Element
 {
 public:
@@ -14,3 +16,5 @@ public:
 
     std::string domTypeName() const override { return "BitmapInstance"; }
 };
+
+} // namespace fla

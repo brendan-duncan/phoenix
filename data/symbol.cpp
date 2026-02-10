@@ -1,5 +1,7 @@
 #include "symbol.h"
 
+namespace fla {
+
 Symbol::Symbol()
 {}
 
@@ -11,3 +13,5 @@ Symbol::~Symbol()
     }
     timelines.clear();
 }
+
+} // namespace fla

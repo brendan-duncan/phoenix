@@ -1,5 +1,7 @@
 #pragma once
 
+namespace fla {
+
 class Transform
 {
 public:
@@ -22,3 +24,5 @@ public:
     double tx; // Translate X
     double ty; // Translate Y
 };
+
+} // namespace fla

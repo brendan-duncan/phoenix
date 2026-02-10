@@ -3,6 +3,8 @@
 #include "element.h"
 #include <vector>
 
+namespace fla {
+
 class Group : public Element
 {
 public:
@@ -16,3 +18,5 @@ public:
 
     std::string domTypeName() const override { return "Group"; }
 };
+
+} // namespace fla

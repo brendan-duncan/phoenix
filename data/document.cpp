@@ -1,5 +1,7 @@
 #include "document.h"
 
+namespace fla {
+
 Document::~Document()
 {
     // Clean up dynamically allocated symbols
@@ -18,3 +20,5 @@ Document::~Document()
 
     symbolMap.clear();
 }
+
+} // namespace fla

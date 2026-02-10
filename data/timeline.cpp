@@ -1,5 +1,7 @@
 #include "timeline.h"
 
+namespace fla {
+
 Timeline::Timeline()
 {}
 
@@ -12,3 +14,5 @@ Timeline::~Timeline()
     }
     layers.clear();
 }
+
+} // namespace fla

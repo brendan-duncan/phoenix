@@ -4,6 +4,8 @@
 #include <cstdint>
 #include <vector>
 
+namespace fla {
+
 struct RadialEntry
 {
     double ratio;
@@ -21,3 +23,5 @@ public:
 
     std::string domTypeName() const override { return "RadialGradient"; }
 };
+
+} // namespace fla

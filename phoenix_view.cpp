@@ -15,7 +15,7 @@
 #include <QDebug>
 #include <map>
 
-#define MAX(a, b) ((a) > (b) ? (a) : (b))
+    #define MAX(a, b) ((a) > (b) ? (a) : (b))
 
 uint32_t _skippedElement = 0;
 
@@ -41,7 +41,7 @@ PhoenixView::~PhoenixView()
 {
 }
 
-void PhoenixView::setDocument(const FLADocument* document)
+void PhoenixView::setDocument(const fla::FLADocument* document)
 {
     _bitmapCache.clear(); // Clear bitmap cache when loading new document
     _boundsCache.clear(); // Clear bounds cache for new document
@@ -122,7 +122,7 @@ void PhoenixView::paintEvent(QPaintEvent *event)
     drawDocument(painter, _flaDocument->document);
 }
 
-void PhoenixView::drawDocument(QPainter& painter, const Document* document)
+void PhoenixView::drawDocument(QPainter& painter, const fla::Document* document)
 {
     // Check document visibility
     if (!document->visible)
@@ -130,7 +130,7 @@ void PhoenixView::drawDocument(QPainter& painter, const Document* document)
 
     _skippedElement = 0;
 
-    for (const Timeline* timeline : document->timelines)
+    for (const fla::Timeline* timeline : document->timelines)
     {
         drawTimeline(painter, timeline);
     }
@@ -138,7 +138,7 @@ void PhoenixView::drawDocument(QPainter& painter, const Document* document)
     qDebug() << "Skipped elements due to culling:" << _skippedElement;
 }
 
-void PhoenixView::drawTimeline(QPainter& painter, const Timeline* timeline)
+void PhoenixView::drawTimeline(QPainter& painter, const fla::Timeline* timeline)
 {
     // Check timeline visibility
     if (!timeline->visible)
@@ -146,13 +146,13 @@ void PhoenixView::drawTimeline(QPainter& painter, const Timeline* timeline)
 
     for (int i = timeline->layers.size() - 1; i >= 0; --i)
     {
-        const Layer* layer = timeline->layers[i];
+        const fla::Layer* layer = timeline->layers[i];
         if (layer->visible)
             drawLayer(painter, layer);
     }
 }
 
-void PhoenixView::drawLayer(QPainter& painter, const Layer* layer)
+void PhoenixView::drawLayer(QPainter& painter, const fla::Layer* layer)
 {
     // Check layer visibility (already checked in drawTimeline, but keeping for safety)
     if (!layer->visible)
@@ -162,26 +162,26 @@ void PhoenixView::drawLayer(QPainter& painter, const Layer* layer)
     color.setRgb(layer->color[0], layer->color[1], layer->color[2], layer->color[3]);
     painter.setPen(QPen(color, 1.0));
 
-    for (const Frame* frame : layer->frames)
+    for (const fla::Frame* frame : layer->frames)
     {
         drawFrame(painter, frame);
         break;
     }
 }
 
-void PhoenixView::drawFrame(QPainter& painter, const Frame* frame)
+void PhoenixView::drawFrame(QPainter& painter, const fla::Frame* frame)
 {
     // Check frame visibility
     if (!frame->visible)
         return;
 
-    for (const Element* element : frame->elements)
+    for (const fla::Element* element : frame->elements)
     {
         drawElement(painter, element);
     }
 }
 
-static Symbol* findSymbolByName(const Document* document, const std::string& name)
+static fla::Symbol* findSymbolByName(const fla::Document* document, const std::string& name)
 {
     auto it = document->symbolMap.find(name);
     if (it != document->symbolMap.end())
@@ -189,7 +189,7 @@ static Symbol* findSymbolByName(const Document* document, const std::string& nam
     return nullptr;
 }
 
-void PhoenixView::drawElement(QPainter& painter, const Element* element)
+void PhoenixView::drawElement(QPainter& painter, const fla::Element* element)
 {
     // Check element visibility
     if (!element->visible)
@@ -258,51 +258,51 @@ void PhoenixView::drawElement(QPainter& painter, const Element* element)
         painter.restore();
     }
 
-    Element::Type type = element->elementType();
+    fla::Element::Type type = element->elementType();
 
-    if (type == Element::Type::Shape)
+    if (type == fla::Element::Type::Shape)
     {
-        drawShape(painter, static_cast<const Shape*>(element));
+        drawShape(painter, static_cast<const fla::Shape*>(element));
     }
-    else if (type == Element::Type::SymbolInstance)
+    else if (type == fla::Element::Type::SymbolInstance)
     {
-        const SymbolInstance* instance = static_cast<const SymbolInstance*>(element);
-        const Symbol* symbol = findSymbolByName(_flaDocument->document, instance->libraryItemName);
+        const fla::SymbolInstance* instance = static_cast<const fla::SymbolInstance*>(element);
+        const fla::Symbol* symbol = findSymbolByName(_flaDocument->document, instance->libraryItemName);
         if (symbol && symbol->visible)
         {
-            for (const Timeline* timeline : symbol->timelines)
+            for (const fla::Timeline* timeline : symbol->timelines)
             {
                 drawTimeline(painter, timeline);
             }
         }
     }
-    else if (type == Element::Type::Group)
+    else if (type == fla::Element::Type::Group)
     {
-        const Group* group = static_cast<const Group*>(element);
-        for (const Element* member : group->members)
+        const fla::Group* group = static_cast<const fla::Group*>(element);
+        for (const fla::Element* member : group->members)
         {
             drawElement(painter, member);
         }
     }
-    else if (type == Element::Type::StaticText)
+    else if (type == fla::Element::Type::StaticText)
     {
-        StaticText* staticText = (StaticText*)element;
-        for (const TextRun& run : staticText->runs)
+        const fla::StaticText* staticText = static_cast<const fla::StaticText*>(element);
+        for (const fla::TextRun& run : staticText->runs)
         {
             painter.setPen(QPen(QColor(run.fillColor[0], run.fillColor[1], run.fillColor[2], run.fillColor[3]), run.size));
             painter.setFont(QFont(run.face.empty() ? "Arial" : QString::fromStdString(run.face), (int)run.size));
             painter.drawText(0, 0, QString::fromStdString(run.text));
         }
     }
-    else if (type == Element::Type::BitmapInstance)
+    else if (type == fla::Element::Type::BitmapInstance)
     {
-        const BitmapInstance* instance = static_cast<const BitmapInstance*>(element);
-        const Bitmap* bitmap = nullptr;
-        for (Resource* resource : _flaDocument->document->resources)
+        const fla::BitmapInstance* instance = static_cast<const fla::BitmapInstance*>(element);
+        const fla::Bitmap* bitmap = nullptr;
+        for (fla::Resource* resource : _flaDocument->document->resources)
         {
-            if (resource->resourceType() == Resource::Type::Bitmap)
+            if (resource->resourceType() == fla::Resource::Type::Bitmap)
             {
-                Bitmap* bmp = static_cast<Bitmap*>(resource);
+                fla::Bitmap* bmp = static_cast<fla::Bitmap*>(resource);
                 if (bmp->name == instance->libraryItemName)
                 {
                     bitmap = bmp;
@@ -332,35 +332,35 @@ void PhoenixView::drawElement(QPainter& painter, const Element* element)
     painter.restore();
 }
 
-static bool pathToPainterPath(const Edge* edge, QPainterPath& painterPath)
+static bool pathToPainterPath(const fla::Edge* edge, QPainterPath& painterPath)
 {
-    for (const PathSegment& segment : edge->segments)
+    for (const fla::PathSegment& segment : edge->segments)
     {
         if (!segment.visible)
             continue;
 
-        for (const PathSection& section : segment.sections)
+        for (const fla::PathSection& section : segment.sections)
         {
-            if (section.command == PathSection::Command::Move)
+            if (section.command == fla::PathSection::Command::Move)
             {
                 painterPath.moveTo(section.points[0].x, section.points[0].y);
             }
-            else if (section.command == PathSection::Command::Line)
+            else if (section.command == fla::PathSection::Command::Line)
             {
                 painterPath.lineTo(section.points[0].x, section.points[0].y);
             }
-            else if (section.command == PathSection::Command::Quad)
+            else if (section.command == fla::PathSection::Command::Quad)
             {
                 painterPath.quadTo(section.points[0].x, section.points[0].y,
                                    section.points[1].x, section.points[1].y);
             }
-            else if (section.command == PathSection::Command::Cubic)
+            else if (section.command == fla::PathSection::Command::Cubic)
             {
                 painterPath.cubicTo(section.points[0].x, section.points[0].y,
                                     section.points[1].x, section.points[1].y,
                                     section.points[2].x, section.points[2].y);
             }
-            else if (section.command == PathSection::Command::Close)
+            else if (section.command == fla::PathSection::Command::Close)
             {
                 painterPath.closeSubpath();
             }
@@ -370,7 +370,7 @@ static bool pathToPainterPath(const Edge* edge, QPainterPath& painterPath)
     return true;
 }
 
-void PhoenixView::drawShape(QPainter& painter, const Shape* shape)
+void PhoenixView::drawShape(QPainter& painter, const fla::Shape* shape)
 {
     if (_pathCache.contains(shape))
     {
@@ -387,23 +387,23 @@ void PhoenixView::drawShape(QPainter& painter, const Shape* shape)
     PathCacheList cacheEntries;
 
     // Helper lambda to build a path from segments
-    auto buildPath = [](const PathSegment& segment) -> QPainterPath {
+    auto buildPath = [](const fla::PathSegment& segment) -> QPainterPath {
         QPainterPath path;
         path.setFillRule(Qt::WindingFill);
-        for (const PathSection& section : segment.sections)
+        for (const fla::PathSection& section : segment.sections)
         {
-            if (section.command == PathSection::Command::Move)
+            if (section.command == fla::PathSection::Command::Move)
                 path.moveTo(section.points[0].x, section.points[0].y);
-            else if (section.command == PathSection::Command::Line)
+            else if (section.command == fla::PathSection::Command::Line)
                 path.lineTo(section.points[0].x, section.points[0].y);
-            else if (section.command == PathSection::Command::Quad)
+            else if (section.command == fla::PathSection::Command::Quad)
                 path.quadTo(section.points[0].x, section.points[0].y,
                            section.points[1].x, section.points[1].y);
-            else if (section.command == PathSection::Command::Cubic)
+            else if (section.command == fla::PathSection::Command::Cubic)
                 path.cubicTo(section.points[0].x, section.points[0].y,
                             section.points[1].x, section.points[1].y,
                             section.points[2].x, section.points[2].y);
-            else if (section.command == PathSection::Command::Close)
+            else if (section.command == fla::PathSection::Command::Close)
                 path.closeSubpath();
         }
         return path;
@@ -411,15 +411,15 @@ void PhoenixView::drawShape(QPainter& painter, const Shape* shape)
 
     // Group segments by fill style
     std::map<int, QPainterPath> fillStylePaths;
-    std::map<int, const FillStyle*> fillStyles;
+    std::map<int, const fla::FillStyle*> fillStyles;
 
     // Collect all segments and group by their fill styles
-    for (const Edge* edge : shape->edges)
+    for (const fla::Edge* edge : shape->edges)
     {
         if (!edge->visible)
             continue;
 
-        for (const PathSegment& segment : edge->segments)
+        for (const fla::PathSegment& segment : edge->segments)
         {
             if (!segment.visible || segment.sections.empty())
                 continue;
@@ -449,35 +449,35 @@ void PhoenixView::drawShape(QPainter& painter, const Shape* shape)
     }
 
     // Helper lambda to set fill brush from FillStyle
-    auto setFillBrush = [&](const FillStyle* fill) {
+    auto setFillBrush = [&](const fla::FillStyle* fill) {
         if (!fill)
         {
             painter.setBrush(Qt::NoBrush);
             return;
         }
 
-        if (fill->type() == FillStyle::Type::SolidColor)
+        if (fill->type() == fla::FillStyle::Type::SolidColor)
         {
-            const SolidColor* solidFill = static_cast<const SolidColor*>(fill);
+            const fla::SolidColor* solidFill = static_cast<const fla::SolidColor*>(fill);
             QColor color(solidFill->color[0], solidFill->color[1], solidFill->color[2], solidFill->color[3]);
             painter.setBrush(QBrush(color));
         }
-        else if (fill->type() == FillStyle::Type::LinearGradient)
+        else if (fill->type() == fla::FillStyle::Type::LinearGradient)
         {
-            const LinearGradient* linearFill = static_cast<const LinearGradient*>(fill);
+            const fla::LinearGradient* linearFill = static_cast<const fla::LinearGradient*>(fill);
             QLinearGradient gradient(0, 0, 100, 100);
-            for (const GradientEntry& entry : linearFill->entries)
+            for (const fla::GradientEntry& entry : linearFill->entries)
             {
                 QColor color(entry.color[0], entry.color[1], entry.color[2], entry.color[3]);
                 gradient.setColorAt(entry.ratio, color);
             }
             painter.setBrush(QBrush(gradient));
         }
-        else if (fill->type() == FillStyle::Type::RadialGradient)
+        else if (fill->type() == fla::FillStyle::Type::RadialGradient)
         {
-            const RadialGradient* radialFill = static_cast<const RadialGradient*>(fill);
+            const fla::RadialGradient* radialFill = static_cast<const fla::RadialGradient*>(fill);
             QRadialGradient gradient(50, 50, 50);
-            for (const RadialEntry& entry : radialFill->entries)
+            for (const fla::RadialEntry& entry : radialFill->entries)
             {
                 QColor color(entry.color[0], entry.color[1], entry.color[2], entry.color[3]);
                 gradient.setColorAt(entry.ratio, color);
@@ -493,7 +493,7 @@ void PhoenixView::drawShape(QPainter& painter, const Shape* shape)
     // Render each fill style with its compound path
     for (const auto& [fillIdx, compoundPath] : fillStylePaths)
     {
-        const FillStyle* fillStyle = fillStyles[fillIdx];
+        const fla::FillStyle* fillStyle = fillStyles[fillIdx];
         if (!fillStyle)
             continue;
 
@@ -505,12 +505,12 @@ void PhoenixView::drawShape(QPainter& painter, const Shape* shape)
     }
 
     // Now render strokes separately (per segment)
-    for (const Edge* edge : shape->edges)
+    for (const fla::Edge* edge : shape->edges)
     {
         if (!edge->visible)
             continue;
 
-        for (const PathSegment& segment : edge->segments)
+        for (const fla::PathSegment& segment : edge->segments)
         {
             if (!segment.visible || segment.sections.empty())
                 continue;
@@ -519,7 +519,7 @@ void PhoenixView::drawShape(QPainter& painter, const Shape* shape)
             if (strokeStyleIdx == -1)
                 continue;
 
-            const StrokeStyle* strokeStyle = shape->getStrokeStyleByIndex(strokeStyleIdx);
+            const fla::StrokeStyle* strokeStyle = shape->getStrokeStyleByIndex(strokeStyleIdx);
             if (!strokeStyle || !strokeStyle->stroke || !strokeStyle->stroke->fill)
                 continue;
 
@@ -537,28 +537,28 @@ void PhoenixView::drawShape(QPainter& painter, const Shape* shape)
             else if (strokeStyle->stroke->style == "DottedStroke")
                 pen.setStyle(Qt::DotLine);
 
-            if (strokeStyle->stroke->fill->type() == FillStyle::Type::SolidColor)
+            if (strokeStyle->stroke->fill->type() == fla::FillStyle::Type::SolidColor)
             {
-                const SolidColor* fill = static_cast<const SolidColor*>(strokeStyle->stroke->fill);
+                const fla::SolidColor* fill = static_cast<const fla::SolidColor*>(strokeStyle->stroke->fill);
                 QColor color(fill->color[0], fill->color[1], fill->color[2], fill->color[3]);
                 pen.setColor(color);
             }
-            else if (strokeStyle->stroke->fill->type() == FillStyle::Type::LinearGradient)
+            else if (strokeStyle->stroke->fill->type() == fla::FillStyle::Type::LinearGradient)
             {
-                const LinearGradient* fill = static_cast<const LinearGradient*>(strokeStyle->stroke->fill);
+                const fla::LinearGradient* fill = static_cast<const fla::LinearGradient*>(strokeStyle->stroke->fill);
                 QLinearGradient gradient(0, 0, 100, 100);
-                for (const GradientEntry& entry : fill->entries)
+                for (const fla::GradientEntry& entry : fill->entries)
                 {
                     QColor color(entry.color[0], entry.color[1], entry.color[2], entry.color[3]);
                     gradient.setColorAt(entry.ratio, color);
                 }
                 pen.setBrush(QBrush(gradient));
             }
-            else if (strokeStyle->stroke->fill->type() == FillStyle::Type::RadialGradient)
+            else if (strokeStyle->stroke->fill->type() == fla::FillStyle::Type::RadialGradient)
             {
-                const RadialGradient* fill = static_cast<const RadialGradient*>(strokeStyle->stroke->fill);
+                const fla::RadialGradient* fill = static_cast<const fla::RadialGradient*>(strokeStyle->stroke->fill);
                 QRadialGradient gradient(50, 50, 50);
-                for (const RadialEntry& entry : fill->entries)
+                for (const fla::RadialEntry& entry : fill->entries)
                 {
                     QColor color(entry.color[0], entry.color[1], entry.color[2], entry.color[3]);
                     gradient.setColorAt(entry.ratio, color);
@@ -664,7 +664,7 @@ QPointF PhoenixView::sceneToScreen(const QPointF& scenePos) const
     );
 }
 
-QRectF PhoenixView::getElementBounds(const Element* element)
+QRectF PhoenixView::getElementBounds(const fla::Element* element)
 {
     // Check cache first
     auto it = _boundsCache.find(element);
@@ -677,19 +677,19 @@ QRectF PhoenixView::getElementBounds(const Element* element)
     return bounds;
 }
 
-QRectF PhoenixView::calculateElementBounds(const Element* element)
+QRectF PhoenixView::calculateElementBounds(const fla::Element* element)
 {
-    Element::Type type = element->elementType();
+    fla::Element::Type type = element->elementType();
 
-    if (type == Element::Type::Shape)
+    if (type == fla::Element::Type::Shape)
     {
-        return calculateShapeBounds(static_cast<const Shape*>(element));
+        return calculateShapeBounds(static_cast<const fla::Shape*>(element));
     }
-    else if (type == Element::Type::Group)
+    else if (type == fla::Element::Type::Group)
     {
-        const Group* group = static_cast<const Group*>(element);
+        const fla::Group* group = static_cast<const fla::Group*>(element);
         QRectF bounds;
-        for (const Element* member : group->members)
+        for (const fla::Element* member : group->members)
         {
             QRectF memberBounds = getElementBounds(member);
 
@@ -706,25 +706,25 @@ QRectF PhoenixView::calculateElementBounds(const Element* element)
         }
         return bounds;
     }
-    else if (type == Element::Type::SymbolInstance)
+    else if (type == fla::Element::Type::SymbolInstance)
     {
-        const SymbolInstance* instance = static_cast<const SymbolInstance*>(element);
+        const fla::SymbolInstance* instance = static_cast<const fla::SymbolInstance*>(element);
         if (_flaDocument && _flaDocument->document)
         {
-            const Symbol* symbol = findSymbolByName(_flaDocument->document, instance->libraryItemName);
+            const fla::Symbol* symbol = findSymbolByName(_flaDocument->document, instance->libraryItemName);
             if (symbol && !symbol->timelines.empty())
             {
                 // Calculate bounds from symbol's first timeline
-                const Timeline* timeline = symbol->timelines[0];
+                const fla::Timeline* timeline = symbol->timelines[0];
                 QRectF bounds;
 
-                for (const Layer* layer : timeline->layers)
+                for (const fla::Layer* layer : timeline->layers)
                 {
                     if (!layer->visible || layer->frames.empty())
                         continue;
 
-                    const Frame* frame = layer->frames[0];
-                    for (const Element* elem : frame->elements)
+                    const fla::Frame* frame = layer->frames[0];
+                    for (const fla::Element* elem : frame->elements)
                     {
                         QRectF elemBounds = getElementBounds(elem);
 
@@ -746,12 +746,12 @@ QRectF PhoenixView::calculateElementBounds(const Element* element)
         // Default bounds for symbol instances without data
         return QRectF(-50, -50, 100, 100);
     }
-    else if (type == Element::Type::BitmapInstance)
+    else if (type == fla::Element::Type::BitmapInstance)
     {
         // Approximate bounds for bitmap instances
         return QRectF(0, 0, 100, 100);
     }
-    else if (type == Element::Type::StaticText)
+    else if (type == fla::Element::Type::StaticText)
     {
         // Approximate bounds for text
         return QRectF(0, 0, 200, 50);
@@ -761,24 +761,24 @@ QRectF PhoenixView::calculateElementBounds(const Element* element)
     return QRectF(-10, -10, 20, 20);
 }
 
-QRectF PhoenixView::calculateShapeBounds(const Shape* shape)
+QRectF PhoenixView::calculateShapeBounds(const fla::Shape* shape)
 {
     QRectF bounds;
     double maxStrokeWeight = 0.0;
 
-    for (const Edge* edge : shape->edges)
+    for (const fla::Edge* edge : shape->edges)
     {
         if (!edge->visible)
             continue;
 
         // Track maximum stroke weight for bounds expansion
-        const StrokeStyle* strokeStyle = shape->getStrokeStyleByIndex(edge->strokeStyle);
+        const fla::StrokeStyle* strokeStyle = shape->getStrokeStyleByIndex(edge->strokeStyle);
         if (strokeStyle && strokeStyle->stroke)
         {
             maxStrokeWeight = qMax(maxStrokeWeight, strokeStyle->stroke->weight);
         }
 
-        for (const PathSegment& segment : edge->segments)
+        for (const fla::PathSegment& segment : edge->segments)
         {
             if (!segment.visible)
                 continue;
@@ -786,17 +786,17 @@ QRectF PhoenixView::calculateShapeBounds(const Shape* shape)
             // Check segment-specific stroke
             if (segment.lineStyleIndex != -1)
             {
-                const StrokeStyle* segStroke = shape->getStrokeStyleByIndex(segment.lineStyleIndex);
+                const fla::StrokeStyle* segStroke = shape->getStrokeStyleByIndex(segment.lineStyleIndex);
                 if (segStroke && segStroke->stroke)
                 {
                     maxStrokeWeight = qMax(maxStrokeWeight, segStroke->stroke->weight);
                 }
             }
 
-            for (const PathSection& section : segment.sections)
+            for (const fla::PathSection& section : segment.sections)
             {
                 // Add all points from this section to bounds
-                for (const Point& pt : section.points)
+                for (const fla::Point& pt : section.points)
                 {
                     QPointF qpt(pt.x, pt.y);
 

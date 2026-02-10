@@ -7,7 +7,7 @@
 class PathParser
 {
 public:
-    Edge* parse(const std::string& data);
+    fla::Edge* parse(const std::string& data);
 
     const std::string& errorString() const
     {
@@ -17,10 +17,10 @@ public:
 private:
     std::string _errorString;
 
-    static void parseCubicCurve(const std::string& data, int& pos, PathSegment* path);
-    //static void parseCubicCurve(const std::string& data, int& pos, std::vector<Point>& points);
+    static void parseCubicCurve(const std::string& data, int& pos, fla::PathSegment* path);
+    //static void parseCubicCurve(const std::string& data, int& pos, std::vector<fla::Point>& points);
 
-    static Point parsePoint(const std::string& data, int& pos);
+    static fla::Point parsePoint(const std::string& data, int& pos);
 
     static double parseNumber(const std::string& data, int& pos);
 

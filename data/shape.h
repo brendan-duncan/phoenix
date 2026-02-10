@@ -8,6 +8,8 @@
 #include <vector>
 #include <map>
 
+namespace fla {
+
 class Shape : public Element
 {
 public:
@@ -42,3 +44,5 @@ public:
 
     std::string domTypeName() const override { return "Shape"; }
 };
+
+} // namespace fla

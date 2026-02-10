@@ -1,5 +1,7 @@
 #include "frame.h"
 
+namespace fla {
+
 Frame::Frame()
 {}
 
@@ -16,3 +18,5 @@ Frame::~Frame()
     }
     elements.clear();
 }
+
+} // namespace fla

@@ -1,5 +1,7 @@
 #include "stroke_style.h"
 
+namespace fla {
+
 StrokeStyle::StrokeStyle()
     : stroke(nullptr)
 {}
@@ -38,3 +40,5 @@ StippleStroke::StippleStroke()
 DottedStroke::DottedStroke()
     : Stroke()
 {}
+
+} // namespace fla

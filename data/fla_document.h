@@ -3,6 +3,8 @@
 #include "document.h"
 #include "dom_element.h"
 
+namespace fla {
+
 class FLADocument : public DOMElement
 {
 public:
@@ -15,3 +17,5 @@ public:
 
     std::string domTypeName() const override { return "FLADocument"; }
 };
+
+} // namespace fla

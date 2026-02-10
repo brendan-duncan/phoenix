@@ -12,7 +12,7 @@ public:
 
     ~DocumentView();
 
-    void setDocument(const FLADocument* document);
+    void setDocument(const fla::FLADocument* document);
 
     void refreshTree();
 
@@ -37,25 +37,25 @@ private:
         Other
     };
 
-    const FLADocument* _flaDocument;
+    const fla::FLADocument* _flaDocument;
 
     void clearTree();
 
     void buildDocumentTree();
 
-    void buildTimelineTree(QTreeWidgetItem* parentItem, const Timeline* timeline, bool lazy = true);
+    void buildTimelineTree(QTreeWidgetItem* parentItem, const fla::Timeline* timeline, bool lazy = true);
 
-    void buildLayerTree(QTreeWidgetItem* parentItem, const Layer* layer, bool lazy = true);
+    void buildLayerTree(QTreeWidgetItem* parentItem, const fla::Layer* layer, bool lazy = true);
 
-    void buildFrameTree(QTreeWidgetItem* parentItem, const Frame* frame, bool lazy = true);
+    void buildFrameTree(QTreeWidgetItem* parentItem, const fla::Frame* frame, bool lazy = true);
 
-    void buildElementTree(QTreeWidgetItem* parentItem, const Element* element, bool lazy = true);
+    void buildElementTree(QTreeWidgetItem* parentItem, const fla::Element* element, bool lazy = true);
 
-    void buildSymbolTree(QTreeWidgetItem* parentItem, const Symbol* symbol, bool lazy = true);
+    void buildSymbolTree(QTreeWidgetItem* parentItem, const fla::Symbol* symbol, bool lazy = true);
 
     void populateItemChildren(QTreeWidgetItem* item);
 
-    QTreeWidgetItem* createTreeItem(const QString& text, DOMElement* domElement, QTreeWidgetItem* parent = nullptr);
+    QTreeWidgetItem* createTreeItem(const QString& text, fla::DOMElement* domElement, QTreeWidgetItem* parent = nullptr);
 
     void updateItemVisibility(QTreeWidgetItem* item);
 
@@ -64,8 +64,8 @@ private:
     void* getItemData(QTreeWidgetItem* item) const;
 
     // Map items to their DOMElement pointers for quick access
-    QMap<QTreeWidgetItem*, DOMElement*> _itemToElement;
-    QMap<DOMElement*, QTreeWidgetItem*> _elementToItem;
+    QMap<QTreeWidgetItem*, fla::DOMElement*> _itemToElement;
+    QMap<fla::DOMElement*, QTreeWidgetItem*> _elementToItem;
 
     // Track which items have been populated
     QSet<QTreeWidgetItem*> _populatedItems;

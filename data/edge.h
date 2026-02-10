@@ -5,6 +5,8 @@
 #include <string>
 #include <vector>
 
+namespace fla {
+
 struct PathSection
 {
     enum class Command
@@ -49,3 +51,5 @@ public:
 
     std::string domTypeName() const override { return "Edge"; }
 };
+
+} // namespace fla

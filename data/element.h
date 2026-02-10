@@ -4,6 +4,8 @@
 #include "point.h"
 #include "transform.h"
 
+namespace fla {
+
 class Element : public DOMElement
 {
 public:
@@ -25,3 +27,5 @@ public:
 
     virtual Type elementType() const = 0;
 };
+
+} // namespace fla

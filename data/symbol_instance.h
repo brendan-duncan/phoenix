@@ -5,6 +5,8 @@
 #include <string>
 #include "transform.h"
 
+namespace fla {
+
 class SymbolInstance : public Element
 {
 public:
@@ -16,3 +18,5 @@ public:
 
     std::string domTypeName() const override { return "SymbolInstance"; }
 };
+
+} // namespace fla

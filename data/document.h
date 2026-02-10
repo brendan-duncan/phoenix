@@ -10,6 +10,8 @@
 #include <string>
 #include <vector>
 
+namespace fla {
+
 class Document : public DOMElement
 {
 public:
@@ -51,3 +53,5 @@ public:
 
     std::string domTypeName() const override { return "Document"; }
 };
+
+} // namespace fla

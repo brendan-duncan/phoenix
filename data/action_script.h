@@ -2,6 +2,8 @@
 
 #include "dom_element.h"
 
+namespace fla {
+
 class ActionScript : public DOMElement
 {
 public:
@@ -11,3 +13,5 @@ public:
 
     std::string domTypeName() const override { return "ActionScript"; }
 };
+
+} // namespace fla

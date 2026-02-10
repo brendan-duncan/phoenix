@@ -2,6 +2,8 @@
 
 #include <string>
 
+namespace fla {
+
 class DOMElement
 {
 public:
@@ -13,3 +15,5 @@ public:
 
     virtual std::string domTypeName() const = 0;
 };
+
+} // namespace fla
