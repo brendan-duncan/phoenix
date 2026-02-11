@@ -102,6 +102,7 @@ void PhoenixView::paintEvent(QPaintEvent *event)
     );
 
     // Apply transformations: pan + zoom + center offset
+    painter.save();
     painter.translate(_panX + centerX, _panY + centerY);
     painter.scale(scale, scale);
 
@@ -123,11 +124,15 @@ void PhoenixView::paintEvent(QPaintEvent *event)
     drawDocument(painter, _flaDocument->document);
     painter.restore();
 
+    painter.restore();
+
     if (_highQualityAntiAliasing)
     {
         // An extra draw slightly shiften eliminates the white line artifacts that can appear
         // between shapes due to anti-aliasing and subpixel rendering issues.
-        painter.translate(1, 1);
+        //painter.translate(1, 1);
+        painter.translate(_panX + centerX + 1, _panY + centerY + 1);
+        painter.scale(scale, scale);
         drawDocument(painter, _flaDocument->document);
     }
 }
@@ -655,6 +660,12 @@ void PhoenixView::resetView()
     _panX = 0;
     _panY = 0;
     update();
+}
+
+void PhoenixView::clearCaches()
+{
+    _pathCache.clear();
+    _boundsCache.clear();
 }
 
 QPointF PhoenixView::screenToScene(const QPointF& screenPos) const

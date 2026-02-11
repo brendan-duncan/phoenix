@@ -208,9 +208,10 @@ void MainWindow::viewDocument()
 
 void MainWindow::onVisibilityChanged()
 {
-    // Trigger a repaint of the phoenix view when visibility changes
+    // Clear caches and trigger a repaint when visibility changes
     if (_phoenixView)
     {
+        _phoenixView->clearCaches();
         _phoenixView->update();
     }
 }

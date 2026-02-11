@@ -27,6 +27,8 @@ public:
 
     bool showBounds() const { return _showBounds; }
 
+    void clearCaches();
+
 protected:
     void paintEvent(QPaintEvent *event) override;
 
