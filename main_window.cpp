@@ -16,6 +16,12 @@
 #include <QKeySequence>
 #include <QSettings>
 #include <QDir>
+#include <QIcon>
+#include <QPixmap>
+#include <QPainter>
+#include <QPainterPath>
+#include <QLinearGradient>
+#include <QRadialGradient>
 
 MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent)
@@ -28,6 +34,11 @@ MainWindow::MainWindow(QWidget *parent)
 
     QCoreApplication::setOrganizationName("Phoenix");
     QCoreApplication::setApplicationName("FLAViewer");
+
+    // Set application icon
+    QIcon phoenixIcon = createPhoenixIcon();
+    setWindowIcon(phoenixIcon);
+    QApplication::setWindowIcon(phoenixIcon);
 
     loadSettings();
 
@@ -263,4 +274,109 @@ void MainWindow::saveSettings()
     QSettings settings;
     settings.setValue("recentFiles", _recentFiles);
     settings.setValue("lastDirectory", _lastDirectory);
+}
+
+QIcon MainWindow::createPhoenixIcon()
+{
+    // Create multiple sizes for better quality at different scales
+    QIcon icon;
+    QList<int> sizes = {16, 32, 48, 64, 128, 256};
+
+    for (int size : sizes)
+    {
+        QPixmap pixmap(size, size);
+        pixmap.fill(Qt::transparent);
+        QPainter painter(&pixmap);
+        painter.setRenderHint(QPainter::Antialiasing);
+
+        // Scale factor for drawing
+        double scale = size / 256.0;
+        painter.scale(scale, scale);
+
+        // Define colors - orange to red gradient for phoenix
+        QLinearGradient bodyGradient(128, 80, 128, 200);
+        bodyGradient.setColorAt(0, QColor(255, 165, 0));  // Orange
+        bodyGradient.setColorAt(1, QColor(220, 20, 60));  // Crimson
+
+        QLinearGradient wingGradient(50, 100, 200, 150);
+        wingGradient.setColorAt(0, QColor(255, 69, 0));   // Red-Orange
+        wingGradient.setColorAt(0.5, QColor(255, 140, 0)); // Dark Orange
+        wingGradient.setColorAt(1, QColor(255, 215, 0));  // Gold
+
+        // Draw stylized phoenix bird
+
+        // Left wing (flame-like)
+        QPainterPath leftWing;
+        leftWing.moveTo(128, 140);
+        leftWing.cubicTo(80, 120, 40, 100, 30, 80);
+        leftWing.cubicTo(25, 70, 35, 60, 50, 70);
+        leftWing.cubicTo(60, 75, 70, 80, 80, 90);
+        leftWing.cubicTo(90, 100, 100, 110, 110, 120);
+        leftWing.lineTo(128, 140);
+        painter.fillPath(leftWing, QBrush(wingGradient));
+
+        // Right wing (flame-like)
+        QPainterPath rightWing;
+        rightWing.moveTo(128, 140);
+        rightWing.cubicTo(176, 120, 216, 100, 226, 80);
+        rightWing.cubicTo(231, 70, 221, 60, 206, 70);
+        rightWing.cubicTo(196, 75, 186, 80, 176, 90);
+        rightWing.cubicTo(166, 100, 156, 110, 146, 120);
+        rightWing.lineTo(128, 140);
+        painter.fillPath(rightWing, QBrush(wingGradient));
+
+        // Body (bird body shape)
+        QPainterPath body;
+        body.moveTo(128, 100);
+        body.cubicTo(140, 100, 150, 110, 150, 130);
+        body.cubicTo(150, 150, 145, 170, 135, 180);
+        body.cubicTo(130, 185, 128, 190, 128, 195);
+        body.cubicTo(128, 190, 126, 185, 121, 180);
+        body.cubicTo(111, 170, 106, 150, 106, 130);
+        body.cubicTo(106, 110, 116, 100, 128, 100);
+        painter.fillPath(body, QBrush(bodyGradient));
+
+        // Head
+        QRadialGradient headGradient(128, 90, 15);
+        headGradient.setColorAt(0, QColor(255, 200, 0));  // Bright yellow
+        headGradient.setColorAt(1, QColor(255, 140, 0));  // Orange
+        painter.setBrush(QBrush(headGradient));
+        painter.setPen(Qt::NoPen);
+        painter.drawEllipse(QPointF(128, 90), 15, 15);
+
+        // Eye
+        painter.setBrush(QBrush(QColor(50, 50, 50)));
+        painter.drawEllipse(QPointF(135, 88), 3, 3);
+
+        // Beak
+        QPainterPath beak;
+        beak.moveTo(143, 90);
+        beak.lineTo(153, 92);
+        beak.lineTo(143, 94);
+        beak.closeSubpath();
+        painter.setBrush(QBrush(QColor(255, 215, 0)));
+        painter.drawPath(beak);
+
+        // Tail feathers (flame-like)
+        QPainterPath tail;
+        tail.moveTo(128, 195);
+        tail.cubicTo(120, 210, 115, 230, 118, 250);
+        tail.cubicTo(120, 240, 124, 220, 128, 210);
+        tail.cubicTo(132, 220, 136, 240, 138, 250);
+        tail.cubicTo(141, 230, 136, 210, 128, 195);
+        QLinearGradient tailGradient(128, 195, 128, 250);
+        tailGradient.setColorAt(0, QColor(255, 140, 0));
+        tailGradient.setColorAt(1, QColor(255, 69, 0));
+        painter.fillPath(tail, QBrush(tailGradient));
+
+        // Flame accents on wings
+        painter.setPen(QPen(QColor(255, 215, 0, 150), 2));
+        painter.drawLine(50, 75, 80, 95);
+        painter.drawLine(206, 75, 176, 95);
+
+        painter.end();
+        icon.addPixmap(pixmap);
+    }
+
+    return icon;
 }

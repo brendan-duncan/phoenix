@@ -35,16 +35,18 @@ private slots:
 
 private:
     void setupUI();
-    
+
     void setupMenus();
-    
+
     void updateRecentFilesMenu();
-    
+
     void addToRecentFiles(const QString& filePath);
-    
+
     void loadSettings();
 
     void saveSettings();
+
+    QIcon createPhoenixIcon();
 
     static const int MAX_RECENT_FILES = 10;
 
