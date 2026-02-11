@@ -1145,19 +1145,14 @@ bool parseMedia(const QDomElement& element, fla::Document* document, ZipReader* 
                 bitmap->itemId = childElement.attribute("itemId").toStdString();
                 bitmap->href = childElement.attribute("href").toStdString();
 
-                std::string bitmapDataHRef = childElement.attribute("bitmapDataHRef").toStdString();
-                if (bitmapDataHRef.empty())
+                std::string mediaPath = "LIBRARY/" + bitmap->href;
+                if (zipReader->containsFile(mediaPath))
                 {
-                    qDebug() << "Bitmap item missing bitmapDataHRef attribute";
-                    delete bitmap;
-                    return false;
+                    bitmap->imageData = zipReader->readFile(mediaPath);
                 }
-
-                std::string mediaPath = "bin/" + bitmapDataHRef;
-
-                if (!zipReader->containsFile(mediaPath))
+                else
                 {
-                    qDebug() << "Bitmap media not found in fla:" << QString::fromStdString(bitmapDataHRef);
+                    qDebug() << "Bitmap media not found in fla:" << QString::fromStdString(bitmap->href);
                     delete bitmap;
                     return false;
                 }
