@@ -16,9 +16,12 @@ public:
         SymbolInstance,
         Group,
         StaticText,
-        BitmapInstance
+        BitmapInstance,
+        Rectangle,
+        Oval
     };
 
+    bool isLocked = false;
     bool isSelected = false;
     bool isFloating = false;
     Transform transform;

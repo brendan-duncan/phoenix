@@ -38,11 +38,13 @@ set(HEADERS
     data/group.h
     data/layer.h
     data/linear_gradient.h
+    data/oval_primitive.h
     data/point.h
     data/printer_settings.h
     data/publish_history.h
     data/radial_gradient.h
     data/rect.h
+    data/rectangle_primitive.h
     data/resource.h
     data/scripts.h
     data/shape.h
@@ -76,11 +78,14 @@ set(SOURCES
     data/group.cpp
     data/layer.cpp
     data/linear_gradient.cpp
+    data/oval_primitive.cpp
     data/point.cpp
     data/printer_settings.cpp
     data/publish_history.cpp    
     data/radial_gradient.cpp
     data/rect.cpp
+    data/rectangle_primitive.cpp
+    data/resource.cpp
     data/scripts.cpp
     data/shape.cpp
     data/solid_color.cpp

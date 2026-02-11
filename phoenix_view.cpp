@@ -3,10 +3,13 @@
 #include "data/bitmap_instance.h"
 #include "data/group.h"
 #include "data/linear_gradient.h"
+#include "data/oval_primitive.h"
 #include "data/radial_gradient.h"
+#include "data/rectangle_primitive.h"
 #include "data/solid_color.h"
 #include "data/static_text.h"
 #include "data/symbol_instance.h"
+
 
 #include <QFont>
 #include <QPainter>
@@ -58,7 +61,8 @@ void PhoenixView::paintEvent(QPaintEvent *event)
     painter.setRenderHint(QPainter::SmoothPixmapTransform, true);
 
     // Set default background
-    painter.fillRect(rect(), QColor(37, 37, 37));
+    QColor backgroundColor(37, 37, 37); // Dark gray background
+    painter.fillRect(rect(), backgroundColor);
 
     if (!_flaDocument || !_flaDocument->document)
     {
@@ -69,8 +73,8 @@ void PhoenixView::paintEvent(QPaintEvent *event)
     }
 
     // Get document dimensions
-    double docWidth = MAX(_flaDocument->document->width, 1024);
-    double docHeight = MAX(_flaDocument->document->height, 768);
+    double docWidth = _flaDocument->document->width;
+    double docHeight = _flaDocument->document->height;
 
     if (docWidth <= 0 || docHeight <= 0)
     {
@@ -288,6 +292,24 @@ void PhoenixView::drawElement(QPainter& painter, const fla::Element* element)
             drawElement(painter, member);
         }
     }
+    else if (type == fla::Element::Type::Rectangle)
+    {
+        const fla::RectanglePrimitive* rectangle = static_cast<const fla::RectanglePrimitive*>(element);
+        QPen pen = getPen(rectangle->strokeStyle);
+        QBrush brush = getFillBrush(rectangle->fillStyle);
+        painter.setPen(pen);
+        painter.setBrush(brush);
+        painter.drawRect(rectangle->rect.topLeft.x, rectangle->rect.topLeft.y, rectangle->rect.width(), rectangle->rect.height());
+    }
+    else if (type == fla::Element::Type::Oval)
+    {
+        const fla::OvalPrimitive* oval = static_cast<const fla::OvalPrimitive*>(element);
+        QPen pen = getPen(oval->strokeStyle);
+        QBrush brush = getFillBrush(oval->fillStyle);
+        painter.setPen(pen);
+        painter.setBrush(brush);
+        painter.drawEllipse(oval->rect.topLeft.x, oval->rect.topLeft.y, oval->rect.width(), oval->rect.height());
+    }
     else if (type == fla::Element::Type::StaticText)
     {
         const fla::StaticText* staticText = static_cast<const fla::StaticText*>(element);
@@ -374,6 +396,96 @@ static bool pathToPainterPath(const fla::Edge* edge, QPainterPath& painterPath)
     return true;
 }
 
+QPen PhoenixView::getPen(const fla::StrokeStyle* strokeStyle)
+{
+    if (!strokeStyle || !strokeStyle->fill)
+    {
+        return QPen(Qt::NoPen);
+    }
+
+    double weight = MAX(strokeStyle->weight, 0.5);
+    QPen pen(QColor(0, 0, 0, 255), weight);
+
+    if (strokeStyle->style() == fla::StrokeStyle::Style::Solid)
+        pen.setStyle(Qt::SolidLine);
+    else if (strokeStyle->style() == fla::StrokeStyle::Style::Dashed)
+        pen.setStyle(Qt::DashLine);
+    else if (strokeStyle->style() == fla::StrokeStyle::Style::Ragged)
+        pen.setStyle(Qt::DashDotLine);
+    else if (strokeStyle->style() == fla::StrokeStyle::Style::Stipple)
+        pen.setStyle(Qt::DashDotDotLine);
+    else if (strokeStyle->style() == fla::StrokeStyle::Style::Dotted)
+        pen.setStyle(Qt::DotLine);
+
+    if (strokeStyle->fill->type() == fla::FillStyle::Type::SolidColor)
+    {
+        const fla::SolidColor* fill = static_cast<const fla::SolidColor*>(strokeStyle->fill);
+        QColor color(fill->color[0], fill->color[1], fill->color[2], fill->color[3]);
+        pen.setColor(color);
+    }
+    else if (strokeStyle->fill->type() == fla::FillStyle::Type::LinearGradient)
+    {
+        const fla::LinearGradient* fill = static_cast<const fla::LinearGradient*>(strokeStyle->fill);
+        QLinearGradient gradient(0, 0, 100, 100);
+        for (const fla::GradientEntry& entry : fill->entries)
+        {
+            QColor color(entry.color[0], entry.color[1], entry.color[2], entry.color[3]);
+            gradient.setColorAt(entry.ratio, color);
+        }
+        pen.setBrush(QBrush(gradient));
+    }
+    else if (strokeStyle->fill->type() == fla::FillStyle::Type::RadialGradient)
+    {
+        const fla::RadialGradient* fill = static_cast<const fla::RadialGradient*>(strokeStyle->fill);
+        QRadialGradient gradient(50, 50, 50);
+        for (const fla::RadialEntry& entry : fill->entries)
+        {
+            QColor color(entry.color[0], entry.color[1], entry.color[2], entry.color[3]);
+            gradient.setColorAt(entry.ratio, color);
+        }
+        pen.setBrush(QBrush(gradient));
+    }
+    
+    return pen;
+}
+
+QBrush PhoenixView::getFillBrush(const fla::FillStyle* fillStyle)
+{
+    if (!fillStyle)
+        return Qt::NoBrush;
+
+    if (fillStyle->type() == fla::FillStyle::Type::SolidColor)
+    {
+        const fla::SolidColor* solidFill = static_cast<const fla::SolidColor*>(fillStyle);
+        QColor color(solidFill->color[0], solidFill->color[1], solidFill->color[2], solidFill->color[3]);
+        return QBrush(color);
+    }
+    else if (fillStyle->type() == fla::FillStyle::Type::LinearGradient)
+    {
+        const fla::LinearGradient* linearFill = static_cast<const fla::LinearGradient*>(fillStyle);
+        QLinearGradient gradient(0, 0, 100, 100);
+        for (const fla::GradientEntry& entry : linearFill->entries)
+        {
+            QColor color(entry.color[0], entry.color[1], entry.color[2], entry.color[3]);
+            gradient.setColorAt(entry.ratio, color);
+        }
+        return QBrush(gradient);
+    }
+    else if (fillStyle->type() == fla::FillStyle::Type::RadialGradient)
+    {
+        const fla::RadialGradient* radialFill = static_cast<const fla::RadialGradient*>(fillStyle);
+        QRadialGradient gradient(50, 50, 50);
+        for (const fla::RadialEntry& entry : radialFill->entries)
+        {
+            QColor color(entry.color[0], entry.color[1], entry.color[2], entry.color[3]);
+            gradient.setColorAt(entry.ratio, color);
+        }
+        return QBrush(gradient);
+    }
+
+    return Qt::NoBrush;
+}
+
 void PhoenixView::drawShape(QPainter& painter, const fla::Shape* shape)
 {
     if (_pathCache.contains(shape))
@@ -453,45 +565,10 @@ void PhoenixView::drawShape(QPainter& painter, const fla::Shape* shape)
     }
 
     // Helper lambda to set fill brush from FillStyle
-    auto setFillBrush = [&](const fla::FillStyle* fill) {
-        if (!fill)
-        {
-            painter.setBrush(Qt::NoBrush);
-            return;
-        }
-
-        if (fill->type() == fla::FillStyle::Type::SolidColor)
-        {
-            const fla::SolidColor* solidFill = static_cast<const fla::SolidColor*>(fill);
-            QColor color(solidFill->color[0], solidFill->color[1], solidFill->color[2], solidFill->color[3]);
-            painter.setBrush(QBrush(color));
-        }
-        else if (fill->type() == fla::FillStyle::Type::LinearGradient)
-        {
-            const fla::LinearGradient* linearFill = static_cast<const fla::LinearGradient*>(fill);
-            QLinearGradient gradient(0, 0, 100, 100);
-            for (const fla::GradientEntry& entry : linearFill->entries)
-            {
-                QColor color(entry.color[0], entry.color[1], entry.color[2], entry.color[3]);
-                gradient.setColorAt(entry.ratio, color);
-            }
-            painter.setBrush(QBrush(gradient));
-        }
-        else if (fill->type() == fla::FillStyle::Type::RadialGradient)
-        {
-            const fla::RadialGradient* radialFill = static_cast<const fla::RadialGradient*>(fill);
-            QRadialGradient gradient(50, 50, 50);
-            for (const fla::RadialEntry& entry : radialFill->entries)
-            {
-                QColor color(entry.color[0], entry.color[1], entry.color[2], entry.color[3]);
-                gradient.setColorAt(entry.ratio, color);
-            }
-            painter.setBrush(QBrush(gradient));
-        }
-        else
-        {
-            painter.setBrush(Qt::NoBrush);
-        }
+    auto setFillBrush = [&](const fla::FillStyle* fill)
+    {
+        QBrush brush = getFillBrush(fill);
+        painter.setBrush(brush);
     };
 
     // Render each fill style with its compound path
@@ -537,48 +614,7 @@ void PhoenixView::drawShape(QPainter& painter, const fla::Shape* shape)
 
             QPainterPath strokePath = buildPath(segment);
 
-            double weight = MAX(strokeStyle->weight, 0.5);
-            QPen pen(QColor(0, 0, 0, 255), weight);
-
-            if (strokeStyle->style() == fla::StrokeStyle::Style::Solid)
-                pen.setStyle(Qt::SolidLine);
-            else if (strokeStyle->style() == fla::StrokeStyle::Style::Dashed)
-                pen.setStyle(Qt::DashLine);
-            else if (strokeStyle->style() == fla::StrokeStyle::Style::Ragged)
-                pen.setStyle(Qt::DashDotLine);
-            else if (strokeStyle->style() == fla::StrokeStyle::Style::Stipple)
-                pen.setStyle(Qt::DashDotDotLine);
-            else if (strokeStyle->style() == fla::StrokeStyle::Style::Dotted)
-                pen.setStyle(Qt::DotLine);
-
-            if (strokeStyle->fill->type() == fla::FillStyle::Type::SolidColor)
-            {
-                const fla::SolidColor* fill = static_cast<const fla::SolidColor*>(strokeStyle->fill);
-                QColor color(fill->color[0], fill->color[1], fill->color[2], fill->color[3]);
-                pen.setColor(color);
-            }
-            else if (strokeStyle->fill->type() == fla::FillStyle::Type::LinearGradient)
-            {
-                const fla::LinearGradient* fill = static_cast<const fla::LinearGradient*>(strokeStyle->fill);
-                QLinearGradient gradient(0, 0, 100, 100);
-                for (const fla::GradientEntry& entry : fill->entries)
-                {
-                    QColor color(entry.color[0], entry.color[1], entry.color[2], entry.color[3]);
-                    gradient.setColorAt(entry.ratio, color);
-                }
-                pen.setBrush(QBrush(gradient));
-            }
-            else if (strokeStyle->fill->type() == fla::FillStyle::Type::RadialGradient)
-            {
-                const fla::RadialGradient* fill = static_cast<const fla::RadialGradient*>(strokeStyle->fill);
-                QRadialGradient gradient(50, 50, 50);
-                for (const fla::RadialEntry& entry : fill->entries)
-                {
-                    QColor color(entry.color[0], entry.color[1], entry.color[2], entry.color[3]);
-                    gradient.setColorAt(entry.ratio, color);
-                }
-                pen.setBrush(QBrush(gradient));
-            }
+            QPen pen = getPen(strokeStyle);
 
             painter.setBrush(Qt::NoBrush);
             painter.setPen(pen);

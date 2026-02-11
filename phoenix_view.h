@@ -72,6 +72,10 @@ private:
     // Bounds cache for culling
     QMap<const fla::Element*, QRectF> _boundsCache;
 
+    QPen getPen(const fla::StrokeStyle* strokeStyle);
+
+    QBrush getFillBrush(const fla::FillStyle* fillStyle);
+
     void drawDocument(QPainter& painter, const fla::Document* document);
 
     void drawTimeline(QPainter& painter, const fla::Timeline* timeline);

@@ -24,6 +24,10 @@ public:
         , bottomRight(other.bottomRight)
     {}
 
+    double width() const { return bottomRight.x - topLeft.x; }
+
+    double height() const { return bottomRight.y - topLeft.y; }
+
     void reset()
     {
         topLeft = Point(1.0e30, 1.0e30);

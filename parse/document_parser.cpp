@@ -4,7 +4,9 @@
 #include "../data/bitmap_instance.h"
 #include "../data/group.h"
 #include "../data/linear_gradient.h"
+#include "../data/oval_primitive.h"
 #include "../data/radial_gradient.h"
+#include "../data/rectangle_primitive.h"
 #include "../data/shape.h"
 #include "../data/solid_color.h"
 #include "../data/static_text.h"
@@ -20,6 +22,8 @@ namespace
 {
 
 std::string _currentFile;
+
+bool parseGroup(const QDomElement& element, fla::Group* group);
 
 void parseHexColor(const std::string& hexColor, uint8_t rgba[4])
 {
@@ -392,6 +396,9 @@ bool parseElement(const QDomElement& element, fla::Element* el)
 
     if (element.hasAttribute("isFloating"))
         el->isFloating = (element.attribute("isFloating") == "true");
+    
+    if (element.hasAttribute("lockFlag"))
+        el->isLocked = (element.attribute("lockFlag") == "true");
 
     // Parse transformation matrix
     QDomNodeList matrixNodes = element.elementsByTagName("matrix");
@@ -537,6 +544,120 @@ bool parseBitmapInstance(const QDomElement& element, fla::BitmapInstance* instan
     return true;
 }
 
+bool parseRectanglePrimitive(const QDomElement& element, fla::RectanglePrimitive* rectangle)
+{
+    if (!parseElement(element, rectangle))
+    {
+        return false;
+    }
+
+    rectangle->rect.topLeft.x = element.attribute("x").toDouble();
+    rectangle->rect.topLeft.y = element.attribute("y").toDouble();
+    rectangle->rect.bottomRight.x = rectangle->rect.topLeft.x + element.attribute("objectWidth").toDouble();
+    rectangle->rect.bottomRight.y = rectangle->rect.topLeft.y + element.attribute("objectHeight").toDouble();
+
+    rectangle->bounds = rectangle->rect;
+
+    for (const QDomNode& childNode : element.childNodes())
+    {
+        if (!childNode.isElement())
+        {
+            continue;
+        }
+
+        QDomElement childElement = childNode.toElement();
+
+        if (childElement.tagName() == "fill")
+        {
+            QDomNodeList fillNodes = childElement.childNodes();
+            for (int j = 0; j < fillNodes.size(); ++j)
+            {
+                QDomNode fillNode = fillNodes.at(j);
+                if (fillNode.isElement())
+                {
+                    QDomElement fillElement = fillNode.toElement();
+                    rectangle->fillStyle = parseFillStyle(fillElement);
+                }
+            }
+        }
+        else if (childElement.tagName() == "stroke")
+        {
+            rectangle->strokeStyle = parseStrokeStyle(childElement);
+        }
+        else if (childElement.tagName() == "matrix")
+        {
+            // from parseElement
+        }
+        else if (childElement.tagName() == "transformationPoint")
+        {
+            // from parseElement
+        }
+        else
+        {
+            qDebug() << "!!!! Unhandled rectangle primitive child element:" << childElement.tagName() << (_currentFile.empty() ? "" : " from") << QString::fromStdString(_currentFile);
+        }
+    }
+
+    return true;
+}
+
+bool parseOvalPrimitive(const QDomElement& element, fla::OvalPrimitive* oval)
+{
+    if (!parseElement(element, oval))
+    {
+        return false;
+    }
+
+    oval->rect.topLeft.x = element.attribute("x").toDouble();
+    oval->rect.topLeft.y = element.attribute("y").toDouble();
+    oval->rect.bottomRight.x = oval->rect.topLeft.x + element.attribute("objectWidth").toDouble();
+    oval->rect.bottomRight.y = oval->rect.topLeft.y + element.attribute("objectHeight").toDouble();
+
+    oval->bounds = oval->rect;
+
+    for (const QDomNode& childNode : element.childNodes())
+    {
+        if (!childNode.isElement())
+        {
+            continue;
+        }
+
+        QDomElement childElement = childNode.toElement();
+
+        if (childElement.tagName() == "fill")
+        {
+            QDomNodeList fillNodes = childElement.childNodes();
+            for (int j = 0; j < fillNodes.size(); ++j)
+            {
+                QDomNode fillNode = fillNodes.at(j);
+                if (fillNode.isElement())
+                {
+                    QDomElement fillElement = fillNode.toElement();
+                    oval->fillStyle = parseFillStyle(fillElement);
+                }
+            }
+        }
+        else if (childElement.tagName() == "stroke")
+        {
+            oval->strokeStyle = parseStrokeStyle(childElement);
+        }
+        else if (childElement.tagName() == "matrix")
+        {
+            // from parseElement
+        }
+        else if (childElement.tagName() == "transformationPoint")
+        {
+            // from parseElement
+        }
+        else
+        {
+            qDebug() << "!!!! Unhandled oval primitive child element:" << childElement.tagName() << (_currentFile.empty() ? "" : " from") << QString::fromStdString(_currentFile);
+        }
+    }
+
+    return true;
+}
+
 bool parseStaticText(const QDomElement& element, fla::StaticText* staticText)
 {
     if (!parseElement(element, staticText))
@@ -660,6 +781,83 @@ bool parseStaticText(const QDomElement& element, fla::StaticText* staticText)
     return true;
 }
 
+fla::Element* parseElementByType(const QDomElement& element)
+{
+    if (element.tagName() == "DOMShape")
+    {
+        fla::Shape* shape = new fla::Shape();
+        if (!parseShape(element, shape))
+        {
+            delete shape;
+            return nullptr;
+        }
+        return shape;
+    }
+    else if (element.tagName() == "DOMSymbolInstance")
+    {
+        fla::SymbolInstance* instance = new fla::SymbolInstance();
+        if (!parseSymbolInstance(element, instance))
+        {
+            delete instance;
+            return nullptr;
+        }
+        return instance;
+    }
+    else if (element.tagName() == "DOMGroup")
+    {
+        fla::Group* group = new fla::Group();
+        if (!parseGroup(element, group))
+        {
+            delete group;
+            return nullptr;
+        }
+        return group;
+    }
+    else if (element.tagName() == "DOMStaticText")
+    {
+        fla::StaticText* staticText = new fla::StaticText();
+        if (!parseStaticText(element, staticText))
+        {
+            delete staticText;
+            return nullptr;
+        }
+        return staticText;
+    }
+    else if (element.tagName() == "DOMBitmapInstance")
+    {
+        fla::BitmapInstance* bitmapInstance = new fla::BitmapInstance();
+        if (!parseBitmapInstance(element, bitmapInstance))
+        {
+            delete bitmapInstance;
+            return nullptr;
+        }
+        return bitmapInstance;
+    }
+    else if (element.tagName() == "DOMRectangleObject")
+    {
+        fla::RectanglePrimitive* rectangle = new fla::RectanglePrimitive();
+        if (!parseRectanglePrimitive(element, rectangle))
+        {
+            delete rectangle;
+            return nullptr;
+        }
+        return rectangle;
+    }
+    else if (element.tagName() == "DOMOvalObject")
+    {
+        fla::OvalPrimitive* oval = new fla::OvalPrimitive();
+        if (!parseOvalPrimitive(element, oval))
+        {
+            delete oval;
+            return nullptr;
+        }
+        return oval;
+    }
+    
+    qDebug() << "!!!! Unhandled element type:" << element.tagName() << (_currentFile.empty() ? "" : " from") << QString::fromStdString(_currentFile);
+    return nullptr;
+}
+
 bool parseGroup(const QDomElement& element, fla::Group* group)
 {
     if (!parseElement(element, group))
@@ -678,66 +876,11 @@ bool parseGroup(const QDomElement& element, fla::Group* group)
             if (node.isElement())
             {
                 QDomElement childElement = node.toElement();
-                if (childElement.tagName() == "DOMShape")
+
+                fla::Element* member = parseElementByType(childElement);
+                if (member)
                 {
-                    fla::Shape* shape = new fla::Shape();
-                    if (!parseShape(childElement, shape))
-                    {
-                        return false;
-                    }
-                    group->members.push_back(shape);
-                }
-                else if (childElement.tagName() == "DOMSymbolInstance")
-                {
-                    fla::SymbolInstance* instance = new fla::SymbolInstance();
-                    if (!parseSymbolInstance(childElement, instance))
-                    {
-                        delete instance;
-                        return false;
-                    }
-                    group->members.push_back(instance);
-                }
-                else if (childElement.tagName() == "DOMGroup")
-                {
-                    fla::Group* subgroup = new fla::Group();
-                    if (!parseGroup(childElement, subgroup))
-                    {
-                        delete subgroup;
-                        return false;
-                    }
-                    group->members.push_back(subgroup);
-                }
-                else if (childElement.tagName() == "DOMStaticText")
-                {
-                    fla::StaticText* staticText = new fla::StaticText();
-                    if (!parseStaticText(childElement, staticText))
-                    {
-                        delete staticText;
-                        return false;
-                    }
-                    group->members.push_back(staticText);
-                }
-                else if (childElement.tagName() == "DOMBitmapInstance")
-                {
-                    fla::BitmapInstance* bitmapInstance = new fla::BitmapInstance();
-                    if (!parseBitmapInstance(childElement, bitmapInstance))
-                    {
-                        delete bitmapInstance;
-                        return false;
-                    }
-                    group->members.push_back(bitmapInstance);
-                }
-                else if (childElement.tagName() == "matrix")
-                {
-                    // from parseElement
-                }
-                else if (childElement.tagName() == "transformationPoint")
-                {
-                    // from parseElement
-                }
-                else
-                {
-                    qDebug() << "!!!! Unhandled group member element:" << childElement.tagName() << (_currentFile.empty() ? "" : " from") << QString::fromStdString(_currentFile);
+                    group->members.push_back(member);
                 }
             }
         }
@@ -764,59 +907,11 @@ bool parseElements(const QDomElement& element, fla::Frame* frame)
         if (node.isElement())
         {
             QDomElement childElement = node.toElement();
-            if (childElement.tagName() == "DOMShape")
+
+            fla::Element* el = parseElementByType(childElement);
+            if (el)
             {
-                fla::Shape* shape = new fla::Shape();
-                if (!parseShape(childElement, shape))
-                {
-                    delete shape;
-                    return false;
-                }
-                frame->elements.push_back(shape);
-            }
-            else if (childElement.tagName() == "DOMSymbolInstance")
-            {
-                fla::SymbolInstance* instance = new fla::SymbolInstance();
-                if (!parseSymbolInstance(childElement, instance))
-                {
-                    delete instance;
-                    return false;
-                }
-                frame->elements.push_back(instance);
-            }
-            else if (childElement.tagName() == "DOMGroup")
-            {
-                fla::Group* group = new fla::Group();
-                if (!parseGroup(childElement, group))
-                {
-                    delete group;
-                    return false;
-                }
-                frame->elements.push_back(group);
-            }
-            else if (childElement.tagName() == "DOMStaticText")
-            {
-                fla::StaticText* staticText = new fla::StaticText();
-                if (!parseStaticText(childElement, staticText))
-                {
-                    delete staticText;
-                    return false;
-                }
-                frame->elements.push_back(staticText);
-            }
-            else if (childElement.tagName() == "DOMBitmapInstance")
-            {
-                fla::BitmapInstance* bitmapInstance = new fla::BitmapInstance();
-                if (!parseBitmapInstance(childElement, bitmapInstance))
-                {
-                    delete bitmapInstance;
-                    return false;
-                }
-                frame->elements.push_back(bitmapInstance);
-            }
-            else
-            {
-                qDebug() << "!!!! Unhandled elements element:" << childElement.tagName() << (_currentFile.empty() ? "" : " from") << QString::fromStdString(_currentFile);
+                frame->elements.push_back(el);
             }
         }
     }
