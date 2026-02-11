@@ -1137,7 +1137,7 @@ bool parseSymbolInclude(const QDomElement& element, fla::Document* document, Zip
     
     if (!zipReader->containsFile(libraryPath))
     {
-        qDebug() << "Symbol include not found in fla";
+        qDebug() << "Symbol include not found:" << QString::fromStdString(href);
         return false;
     }
 
@@ -1244,17 +1244,13 @@ bool parseMedia(const QDomElement& element, fla::Document* document, ZipReader* 
                 if (zipReader->containsFile(mediaPath))
                 {
                     bitmap->imageData = zipReader->readFile(mediaPath);
+                    document->resources.push_back(bitmap);
                 }
                 else
                 {
-                    qDebug() << "Bitmap media not found in fla:" << QString::fromStdString(bitmap->href);
+                    qDebug() << "Bitmap media not found:" << QString::fromStdString(bitmap->href);
                     delete bitmap;
-                    return false;
                 }
-
-                bitmap->imageData = zipReader->readFile(mediaPath);
-
-                document->resources.push_back(bitmap);
             }
             else
             {
