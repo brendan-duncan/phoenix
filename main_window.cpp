@@ -1,6 +1,6 @@
 #include "main_window.h"
 #include "phoenix_view.h"
-#include "parse/fla_parser.h"
+#include "parser/fla_parser.h"
 
 #include <QApplication>
 #include <QFileDialog>

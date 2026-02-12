@@ -12,7 +12,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 # Set Qt path
 set(CMAKE_PREFIX_PATH "C:/Qt/6.10.2/msvc2022_64" ${CMAKE_PREFIX_PATH})
 
-find_package(Qt6 REQUIRED COMPONENTS Widgets Xml Svg)
+find_package(Qt6 REQUIRED COMPONENTS Widgets)
 
 # Add zlib from third_party
 set(ZLIB_BUILD_EXAMPLES OFF CACHE BOOL "Don't build zlib examples")
@@ -36,14 +36,19 @@ set(ZLIB_LIBRARY zlibstatic CACHE STRING "" FORCE)
 set(ZLIB_LIBRARIES zlibstatic CACHE STRING "" FORCE)
 set(ZLIB_VERSION_STRING "1.3.1" CACHE STRING "" FORCE)
 
+# Add tinyxml2 from third_party
+set(tinyxml2_SHARED_LIBS OFF CACHE BOOL "Don't build tinyxml2 as a shared library")
+set(tinyxml2_BUILD_TESTING OFF CACHE BOOL "Don't build tinyxml2 tests")
+add_subdirectory(third_party/tinyxml2)
+
 set(HEADERS
     main_window.h
     phoenix_view.h
     document_view.h
-    parse/document_parser.h
-    parse/zip_reader.h
-    parse/fla_parser.h
-    parse/path_parser.h
+    parser/document_parser.h
+    parser/zip_reader.h
+    parser/fla_parser.h
+    parser/path_parser.h
     data/action_script.h
     data/bitmap.h
     data/document.h
@@ -81,10 +86,10 @@ set(SOURCES
     main_window.cpp
     phoenix_view.cpp
     document_view.cpp
-    parse/document_parser.cpp
-    parse/zip_reader.cpp
-    parse/fla_parser.cpp
-    parse/path_parser.cpp
+    parser/document_parser.cpp
+    parser/zip_reader.cpp
+    parser/fla_parser.cpp
+    parser/path_parser.cpp
     data/action_script.cpp
     data/bitmap.cpp
     data/document.cpp
@@ -121,7 +126,7 @@ qt6_standard_project_setup()
 
 qt6_add_executable(Phoenix MANUAL_FINALIZATION ${SOURCES} ${HEADERS})
 
-target_link_libraries(Phoenix PRIVATE Qt6::Widgets Qt6::Xml zlibstatic)
+target_link_libraries(Phoenix PRIVATE Qt6::Widgets zlibstatic tinyxml2)
 
 if(TRUE)
     qt_finalize_executable(Phoenix)
