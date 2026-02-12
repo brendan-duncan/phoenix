@@ -1,9 +1,9 @@
 #include "zip_archive.h"
+#include "../third_party/zlib/zlib.h"
 #include <fstream>
 #include <cstring>
 #include <filesystem>
 #include <iostream>
-#include <zlib.h>
 
 namespace fs = std::filesystem;
 
