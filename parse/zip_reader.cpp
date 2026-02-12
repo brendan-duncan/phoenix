@@ -1,13 +1,14 @@
 #include "zip_reader.h"
+#include "../util/zip_archive.h"
+#include <filesystem>
+#include <fstream>
+#include <iostream>
+#include <cstring>
 
-#include <QDir>
-#include <QFile>
-#include <QFileInfo>
-#include <QtCore/private/qzipreader_p.h>
-#include <QDebug>
+namespace fs = std::filesystem;
 
 ZipReader::ZipReader()
-    : _zipReader(nullptr)
+    : _zipArchive(nullptr)
     , _isOpen(false)
     , _isDirectory(false)
 {}
@@ -21,81 +22,66 @@ bool ZipReader::open(const std::string& zipFilePath)
 {
     close();
 
-    QString filePath = QString::fromStdString(zipFilePath);
-    if (filePath.endsWith(".xml"))
+    fs::path filePath(zipFilePath);
+
+    // Handle .xml files by using their parent directory
+    if (filePath.extension() == ".xml")
     {
-        QFileInfo fileInfo(filePath);
-        if (!fileInfo.exists() || !fileInfo.isFile())
+        if (!fs::exists(filePath) || !fs::is_regular_file(filePath))
         {
             _errorString = "XML file does not exist: " + zipFilePath;
             return false;
         }
         // Use the directory containing the XML file as the path
-        filePath = fileInfo.path();
-        qDebug() << "Opening XML file directly, using directory:" << filePath;
+        filePath = filePath.parent_path();
+        std::cout << "Opening XML file directly, using directory: " << filePath.string() << std::endl;
     }
 
-    if (!QFile::exists(filePath))
+    if (!fs::exists(filePath))
     {
-        _errorString =  "Zip file does not exist: " + filePath.toStdString();
+        _errorString = "Zip file does not exist: " + filePath.string();
         return false;
     }
 
-    QFileInfo fileInfo(filePath);
-    _isDirectory = fileInfo.isDir();
+    _isDirectory = fs::is_directory(filePath);
 
     if (_isDirectory)
     {
-        if (!QFile::exists(filePath + "/DOMDocument.xml"))
+        fs::path domDocPath = filePath / "DOMDocument.xml";
+        if (!fs::exists(domDocPath))
         {
-            _errorString = "Specified path is a directory but does not contain DOMDocument.xml: " + filePath.toStdString();
+            _errorString = "Specified path is a directory but does not contain DOMDocument.xml: " + filePath.string();
             return false;
         }
 
-        _path = filePath.toStdString();
+        _path = filePath.string();
         _isOpen = true;
         return true;
     }
 
-    try
+    // Open zip file using libzip
+    int error = 0;
+    _zipArchive = new ZipArchive();
+    if (!_zipArchive->open(filePath.string()))
     {
-        // Create QZipReader instance
-        _zipReader = new QZipReader(filePath);
-
-        // Check if the zip file is valid
-        if (_zipReader->status() != QZipReader::NoError)
-        {
-            _errorString = "Invalid zip file: " + filePath.toStdString() + " (status: " + std::to_string(_zipReader->status()) + ")";
-
-            delete _zipReader;
-            _zipReader = nullptr;
-            return false;
-        }
-
-        _path = filePath.toStdString();
-        _isOpen = true;
-        return true;
-    }
-    catch (const std::exception& e)
-    {
-        _errorString = "Failed to open zip file: " + std::string(e.what());
-        _zipReader = nullptr;
+        _errorString = "Failed to open zip file: " + filePath.string();
+        delete _zipArchive;
+        _zipArchive = nullptr;
         return false;
     }
-    catch (...)
-    {
-        _errorString = "Unknown error occurred while opening zip file";
-        _zipReader = nullptr;
-        return false;
-    }
+
+    _path = filePath.string();
+    _isOpen = true;
+
+    return true;
 }
 
 void ZipReader::close()
 {
-    if (_zipReader)
+    if (_zipArchive)
     {
-        delete _zipReader;
-        _zipReader = nullptr;
+        delete _zipArchive;
+        _zipArchive = nullptr;
     }
     _isOpen = false;
     _isDirectory = false;
@@ -103,7 +89,7 @@ void ZipReader::close()
 
 bool ZipReader::isOpen() const
 {
-    return _isOpen && (_zipReader || _isDirectory);
+    return _isOpen && (_zipArchive || _isDirectory);
 }
 
 std::vector<std::string> ZipReader::getFileList() const
@@ -117,40 +103,34 @@ std::vector<std::string> ZipReader::getFileList() const
 
     if (_isDirectory)
     {
-        // If it's a directory, we can just return the list of files in that directory
-        QDir dir(QString::fromStdString(_path));
-        QFileInfoList fileInfoList = dir.entryInfoList(QDir::Files | QDir::NoDotAndDotDot);
-        for (const QFileInfo& fileInfo : fileInfoList)
+        // If it's a directory, return the list of files in that directory
+        try
         {
-            fileList.push_back(fileInfo.fileName().toStdString());
-        }
-        return fileList;
-    }
-
-    try
-    {
-        QList<QZipReader::FileInfo> fileInfoList = _zipReader->fileInfoList();
-
-        for (const QZipReader::FileInfo& fileInfo : fileInfoList)
-        {
-            // Skip directories (entries ending with '/')
-            if (!fileInfo.filePath.endsWith("/"))
+            for (const auto& entry : fs::directory_iterator(_path))
             {
-                fileList.push_back(fileInfo.filePath.toStdString());
+                if (fs::is_regular_file(entry))
+                {
+                    fileList.push_back(entry.path().filename().string());
+                }
             }
         }
+        catch (const std::exception& e)
+        {
+            // Return empty list on error
+        }
+        return fileList;
+    }
 
-        return fileList;
+    for (const auto& entry : _zipArchive->getEntries())
+    {
+        // Skip directories (entries ending with '/')
+        if (!entry.filename.empty() && entry.filename.back() != '/')
+        {
+            fileList.push_back(entry.filename);
+        }
+    }
 
-    }
-    catch (const std::exception& e)
-    {
-        return fileList;
-    }
-    catch (...)
-    {
-        return fileList;
-    }
+    return fileList;
 }
 
 std::vector<uint8_t> ZipReader::readFile(const std::string& fileName) const
@@ -160,31 +140,36 @@ std::vector<uint8_t> ZipReader::readFile(const std::string& fileName) const
         return std::vector<uint8_t>();
     }
 
-    try
+    if (_isDirectory)
     {
-        if (_isDirectory)
+        // Read from filesystem
+        fs::path filePath = fs::path(_path) / fileName;
+
+        std::ifstream file(filePath, std::ios::binary | std::ios::ate);
+        if (!file.is_open())
         {
-            QFile file(QString::fromStdString(_path + "/" + fileName));
-            if (!file.open(QIODevice::ReadOnly))
-            {
-                return std::vector<uint8_t>();
-            }
-            QByteArray data = file.readAll();
-            return std::vector<uint8_t>(data.begin(), data.end());
+            return std::vector<uint8_t>();
         }
 
-        QByteArray data = _zipReader->fileData(QString::fromStdString(fileName));
-        return std::vector<uint8_t>(data.begin(), data.end());
+        std::streamsize size = file.tellg();
+        file.seekg(0, std::ios::beg);
 
+        std::vector<uint8_t> buffer(size);
+        if (!file.read(reinterpret_cast<char*>(buffer.data()), size))
+        {
+            return std::vector<uint8_t>();
+        }
+
+        return buffer;
     }
-    catch (const std::exception& e)
+
+    std::vector<uint8_t> buffer;
+    if (!_zipArchive->extractFile(fileName, buffer))
     {
         return std::vector<uint8_t>();
     }
-    catch (...)
-    {
-        return std::vector<uint8_t>();
-    }
+
+    return buffer;
 }
 
 std::string ZipReader::readTextFile(const std::string& fileName) const
@@ -198,31 +183,21 @@ bool ZipReader::containsFile(const std::string& fileName) const
     if (!isOpen())
         return false;
 
-    try
+    if (_isDirectory)
     {
-        if (_isDirectory)
-        {
-            QFileInfo fileInfo(QString::fromStdString(_path + "/" + fileName));
-            return fileInfo.exists() && fileInfo.isFile();
-        }
-
-        QList<QZipReader::FileInfo> fileInfoList = _zipReader->fileInfoList();
-
-        for (const QZipReader::FileInfo& fileInfo : fileInfoList)
-        {
-            if (fileInfo.filePath == QString::fromStdString(fileName))
-            {
-                return true;
-            }
-        }
-
-        return false;
-
+        fs::path filePath = fs::path(_path) / fileName;
+        return fs::exists(filePath) && fs::is_regular_file(filePath);
     }
-    catch (...)
+
+    // Check if file exists in zip archive
+    for (const auto& entry : _zipArchive->getEntries())
     {
-        return false;
+        if (entry.filename == fileName)
+        {
+            return true;
+        }
     }
+    return false;
 }
 
 std::string ZipReader::errorString() const

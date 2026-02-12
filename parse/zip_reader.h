@@ -3,7 +3,7 @@
 #include <string>
 #include <vector>
 
-class QZipReader;
+class ZipArchive;
 
 class ZipReader
 {
@@ -37,7 +37,7 @@ public:
     std::string errorString() const;
 
 private:
-    QZipReader* _zipReader;
+    ZipArchive* _zipArchive;
     std::string _path;
     std::string _errorString;
     bool _isOpen;

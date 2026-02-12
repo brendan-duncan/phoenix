@@ -14,9 +14,27 @@ set(CMAKE_PREFIX_PATH "C:/Qt/6.10.2/msvc2022_64" ${CMAKE_PREFIX_PATH})
 
 find_package(Qt6 REQUIRED COMPONENTS Widgets Xml Svg)
 
-# Add Qt private headers include path for QZipReader
-include_directories(${CMAKE_PREFIX_PATH}/include/QtCore/6.10.2)
-include_directories(${CMAKE_PREFIX_PATH}/include/QtCore/6.10.2/QtCore/private)
+# Add zlib from third_party
+set(ZLIB_BUILD_EXAMPLES OFF CACHE BOOL "Don't build zlib examples")
+add_subdirectory(third_party/zlib)
+
+# Add zlib include directory
+include_directories(${CMAKE_CURRENT_SOURCE_DIR}/third_party/zlib)
+
+# Remove debug postfix from zlibstatic to avoid library name conflicts
+set_target_properties(zlibstatic PROPERTIES
+    DEBUG_POSTFIX ""
+    OUTPUT_NAME "zlibstatic"
+)
+set_target_properties(zlib PROPERTIES DEBUG_POSTFIX "")
+
+# Set ZLIB variables for compatibility with find_package
+set(ZLIB_FOUND TRUE CACHE BOOL "" FORCE)
+set(ZLIB_INCLUDE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/third_party/zlib;${CMAKE_CURRENT_BINARY_DIR}/third_party/zlib" CACHE STRING "" FORCE)
+set(ZLIB_INCLUDE_DIRS "${ZLIB_INCLUDE_DIR}" CACHE STRING "" FORCE)
+set(ZLIB_LIBRARY zlibstatic CACHE STRING "" FORCE)
+set(ZLIB_LIBRARIES zlibstatic CACHE STRING "" FORCE)
+set(ZLIB_VERSION_STRING "1.3.1" CACHE STRING "" FORCE)
 
 set(HEADERS
     main_window.h
@@ -55,6 +73,7 @@ set(HEADERS
     data/symbol.h
     data/timeline.h
     data/transform.h
+    util/zip_archive.h
 )
 
 set(SOURCES
@@ -95,13 +114,14 @@ set(SOURCES
     data/symbol.cpp
     data/timeline.cpp
     data/transform.cpp
+    util/zip_archive.cpp
 )
 
 qt6_standard_project_setup()
 
 qt6_add_executable(Phoenix MANUAL_FINALIZATION ${SOURCES} ${HEADERS})
 
-target_link_libraries(Phoenix PRIVATE Qt6::Widgets Qt6::Xml)
+target_link_libraries(Phoenix PRIVATE Qt6::Widgets Qt6::Xml zlibstatic)
 
 if(TRUE)
     qt_finalize_executable(Phoenix)
