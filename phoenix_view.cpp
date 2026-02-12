@@ -10,7 +10,6 @@
 #include "data/static_text.h"
 #include "data/symbol_instance.h"
 
-
 #include <QFont>
 #include <QPainter>
 #include <QPaintEvent>
@@ -18,7 +17,7 @@
 #include <QDebug>
 #include <map>
 
-    #define MAX(a, b) ((a) > (b) ? (a) : (b))
+#define MAX(a, b) ((a) > (b) ? (a) : (b))
 
 uint32_t _skippedElement = 0;
 
@@ -134,7 +133,6 @@ void PhoenixView::paintEvent(QPaintEvent *event)
     {
         // An extra draw slightly shiften eliminates the white line artifacts that can appear
         // between shapes due to anti-aliasing and subpixel rendering issues.
-        //painter.translate(1, 1);
         painter.translate(_panX + centerX + 1, _panY + centerY + 1);
         painter.scale(scale, scale);
         drawDocument(painter, _flaDocument->document);
@@ -207,6 +205,8 @@ static fla::Symbol* findSymbolByName(const fla::Document* document, const std::s
         return it->second;
     return nullptr;
 }
+
+int indent = 0;
 
 void PhoenixView::drawElement(QPainter& painter, const fla::Element* element)
 {
@@ -312,12 +312,45 @@ void PhoenixView::drawElement(QPainter& painter, const fla::Element* element)
     }
     else if (type == fla::Element::Type::StaticText)
     {
+        painter.setBrush(Qt::NoBrush);
         const fla::StaticText* staticText = static_cast<const fla::StaticText*>(element);
         for (const fla::TextRun& run : staticText->runs)
         {
-            painter.setPen(QPen(QColor(run.fillColor[0], run.fillColor[1], run.fillColor[2], run.fillColor[3]), run.size));
-            painter.setFont(QFont(run.face.empty() ? "Arial" : QString::fromStdString(run.face), (int)run.size));
-            painter.drawText(0, 0, QString::fromStdString(run.text));
+            painter.setPen(QPen(QColor(run.fillColor[0], run.fillColor[1], run.fillColor[2], run.fillColor[3]), 1.0));
+            QString fontFace = run.face.empty() ? "Arial" : QString::fromStdString(run.face);
+
+            if (!_fontCache.contains(fontFace))
+            {
+                 bool isItalic = false;
+                if (fontFace.endsWith("-Italic"))
+                {
+                    fontFace = fontFace.left(fontFace.length() - 7);
+                    isItalic = true;
+                }
+
+                QString fontFamily;
+                fontFamily = fontFace[0];
+                for (int ci = 1; ci < fontFace.length(); ++ci)
+                {
+                    QChar c = fontFace[ci];
+                    if (c >= 'A' && c <= 'Z')
+                    {
+                        QChar c0 = fontFace[ci - 1];
+                        if (c0 >= 'a' && c0 <= 'z')
+                        {
+                            fontFamily += " ";
+                        }
+                    }
+                    fontFamily += c;
+                }
+
+                QFont font(fontFamily, (int)run.size, -1, isItalic);
+                _fontCache[fontFace] = font;
+            }
+
+            QFont font = _fontCache[fontFace];
+            painter.setFont(font);
+            painter.drawText(0, run.size, QString::fromStdString(run.text));
         }
     }
     else if (type == fla::Element::Type::BitmapInstance)

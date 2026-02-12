@@ -518,6 +518,15 @@ void DocumentView::buildElementTree(QTreeWidgetItem* parentItem, const fla::Elem
                 elementName = QString("Bitmap: %1").arg(QString::fromStdString(instance->libraryItemName));
             }
             break;
+        case fla::Element::Type::Rectangle:
+            elementName = "Rectangle";
+            break;
+        case fla::Element::Type::Oval:
+            elementName = "Oval";
+            break;
+        default:
+            elementName = "Unknown";
+            break;
     }
 
     QTreeWidgetItem* elementItem = createTreeItem(elementName, (fla::DOMElement*)element, parentItem);

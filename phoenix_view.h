@@ -69,6 +69,8 @@ private:
 
     QMap<QString, QPixmap> _bitmapCache;
 
+    QMap<QString, QFont> _fontCache;
+
     // Bounds cache for culling
     QMap<const fla::Element*, QRectF> _boundsCache;
 
