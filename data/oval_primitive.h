@@ -8,6 +8,9 @@ class OvalPrimitive : public Element
 {
 public:
     Rect rect;
+    double startAngle = 0.0;
+    double endAngle = 0.0;
+    double innerRadius = 0.0;
     FillStyle* fillStyle = nullptr;
     StrokeStyle* strokeStyle = nullptr;
 

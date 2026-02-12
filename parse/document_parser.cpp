@@ -18,8 +18,7 @@
 #include <QDomNodeList>
 #include <QDebug>
 
-namespace
-{
+namespace {
 
 std::string _currentFile;
 
@@ -612,6 +611,10 @@ bool parseOvalPrimitive(const QDomElement& element, fla::OvalPrimitive* oval)
     oval->rect.topLeft.y = element.attribute("y").toDouble();
     oval->rect.bottomRight.x = oval->rect.topLeft.x + element.attribute("objectWidth").toDouble();
     oval->rect.bottomRight.y = oval->rect.topLeft.y + element.attribute("objectHeight").toDouble();
+
+    oval->startAngle = element.hasAttribute("startAngle") ? element.attribute("startAngle").toDouble() : 0.0;
+    oval->endAngle = element.hasAttribute("endAngle") ? element.attribute("endAngle").toDouble() : 0.0;
+    oval->innerRadius = element.hasAttribute("innerRadius") ? element.attribute("innerRadius").toDouble() : 0.0;
 
     oval->bounds = oval->rect;
 

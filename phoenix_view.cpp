@@ -106,11 +106,15 @@ void PhoenixView::paintEvent(QPaintEvent *event)
 
     // Apply transformations: pan + zoom + center offset
     painter.save();
+
     painter.translate(_panX + centerX, _panY + centerY);
     painter.scale(scale, scale);
 
     // Draw white background for document area
     painter.fillRect(0, 0, docWidth, docHeight, QColor(255, 255, 255));
+
+    // Draw document content
+    drawDocument(painter, _flaDocument->document);
 
     // Draw visible rect if debug mode is enabled
     if (_showBounds)
@@ -122,20 +126,30 @@ void PhoenixView::paintEvent(QPaintEvent *event)
         painter.restore();
     }
 
-    painter.save();
-    // Draw document content
-    drawDocument(painter, _flaDocument->document);
-    painter.restore();
-
     painter.restore();
 
     if (_highQualityAntiAliasing)
     {
-        // An extra draw slightly shiften eliminates the white line artifacts that can appear
+        painter.save();
+        // An extra draw slightly shifted eliminates the white line artifacts that can appear
         // between shapes due to anti-aliasing and subpixel rendering issues.
         painter.translate(_panX + centerX + 1, _panY + centerY + 1);
         painter.scale(scale, scale);
         drawDocument(painter, _flaDocument->document);
+
+        painter.restore();
+    }
+
+    // Draw visible rect if debug mode is enabled
+    if (_showBounds)
+    {
+        painter.save();
+        painter.translate(_panX + centerX, _panY + centerY);
+        painter.scale(scale, scale);
+        painter.setPen(QPen(QColor(0, 0, 255, 100), 2.0, Qt::DashLine)); // Blue dashed for visible area
+        painter.setBrush(Qt::NoBrush);
+        painter.drawRect(_visibleRect);
+        painter.restore();
     }
 }
 
@@ -252,19 +266,14 @@ void PhoenixView::drawElement(QPainter& painter, const fla::Element* element)
 
     painter.save();
 
-    // Draw element bounds if debug mode is enabled (for rendered elements)
-    if (_showBounds && !elementBounds.isNull() && elementBounds.isValid() && !culled)
+    // Why does a group have a transform, if applying the groups transform
+    // is incorrect because the children are already transformed by the group transform?
+    if (element->elementType() != fla::Element::Type::Group)
     {
-        painter.save();
-        painter.setPen(QPen(QColor(0, 255, 0, 150), 1.0)); // Green for rendered
-        painter.setBrush(Qt::NoBrush);
-        painter.drawRect(elementBounds);
-        painter.restore();
+        painter.translate(instancePoint);
+        painter.setTransform(transform, true);
+        painter.translate(-instancePoint);   
     }
-
-    painter.translate(instancePoint);
-    painter.setTransform(transform, true);
-    painter.translate(-instancePoint);   
 
     fla::Element::Type type = element->elementType();
 
@@ -350,6 +359,7 @@ void PhoenixView::drawElement(QPainter& painter, const fla::Element* element)
 
             QFont font = _fontCache[fontFace];
             painter.setFont(font);
+            // The origin is the top-left, not the bottom-left, so we use the text size as an approximation for line height
             painter.drawText(0, run.size, QString::fromStdString(run.text));
         }
     }
@@ -386,6 +396,16 @@ void PhoenixView::drawElement(QPainter& painter, const fla::Element* element)
                  painter.drawPixmap(0, 0, pixmap);
             }
         }
+    }
+
+    // Draw element bounds if debug mode is enabled (for rendered elements)
+    if (_showBounds && !elementBounds.isNull() && elementBounds.isValid() && !culled)
+    {
+        painter.save();
+        painter.setPen(QPen(QColor(0, 255, 0, 150), 1.0)); // Green for rendered
+        painter.setBrush(Qt::NoBrush);
+        painter.drawRect(elementBounds);
+        painter.restore();
     }
 
     painter.restore();
