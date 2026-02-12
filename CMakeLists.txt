@@ -10,6 +10,7 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 # Set Qt path
+# TODO: this isn't right...how should this be set up so that it's not hard-coded?
 set(CMAKE_PREFIX_PATH "C:/Qt/6.10.2/msvc2022_64" ${CMAKE_PREFIX_PATH})
 
 find_package(Qt6 REQUIRED COMPONENTS Widgets)
@@ -42,9 +43,9 @@ set(tinyxml2_BUILD_TESTING OFF CACHE BOOL "Don't build tinyxml2 tests")
 add_subdirectory(third_party/tinyxml2)
 
 set(HEADERS
-    main_window.h
-    phoenix_view.h
-    document_view.h
+    gui/main_window.h
+    gui/phoenix_view.h
+    gui/document_view.h
     parser/document_parser.h
     parser/zip_reader.h
     parser/fla_parser.h
@@ -83,9 +84,9 @@ set(HEADERS
 
 set(SOURCES
     main.cpp
-    main_window.cpp
-    phoenix_view.cpp
-    document_view.cpp
+    gui/main_window.cpp
+    gui/phoenix_view.cpp
+    gui/document_view.cpp
     parser/document_parser.cpp
     parser/zip_reader.cpp
     parser/fla_parser.cpp

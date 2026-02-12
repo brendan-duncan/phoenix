@@ -2,7 +2,7 @@
 
 #include "phoenix_view.h"
 #include "document_view.h"
-#include "data/fla_document.h"
+#include "../data/fla_document.h"
 
 #include <QMainWindow>
 #include <QMenuBar>

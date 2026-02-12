@@ -1,6 +1,6 @@
 #pragma once
 
-#include "data/fla_document.h"
+#include "../data/fla_document.h"
 #include <QTreeWidget>
 #include <QTreeWidgetItem>
 

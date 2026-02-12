@@ -1,7 +1,7 @@
 #pragma once
 
-#include "data/fla_document.h"
-#include "data/shape.h"
+#include "../data/fla_document.h"
+#include "../data/shape.h"
 
 #include <QList>
 #include <QMap>

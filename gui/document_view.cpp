@@ -1,8 +1,8 @@
 #include "document_view.h"
-#include "data/bitmap_instance.h"
-#include "data/group.h"
-#include "data/symbol_instance.h"
-#include "data/shape.h"
+#include "../data/bitmap_instance.h"
+#include "../data/group.h"
+#include "../data/symbol_instance.h"
+#include "../data/shape.h"
 
 #include <QHeaderView>
 #include <QIcon>
