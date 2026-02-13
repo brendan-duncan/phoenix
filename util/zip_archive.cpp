@@ -5,6 +5,8 @@
 #include <filesystem>
 #include <iostream>
 
+//#include <QImage>
+
 namespace fs = std::filesystem;
 
 #pragma pack(push, 1)
@@ -161,9 +163,88 @@ bool ZipArchive::Impl::decompressData(const std::vector<uint8_t>& compressed,
     return ret == Z_STREAM_END;
 }
 
+struct ImageDataHeader
+{
+    uint32_t identifier;
+    uint16_t width;
+    uint16_t height;
+    uint16_t unknown;
+    uint32_t compression_size;
+    uint32_t unknown2;
+    uint32_t totalChunks;
+    uint32_t formatFlags;
+};
+
 ZipArchive::ZipArchive()
     : pImpl(new Impl())
-{}
+{
+    /*std::string filePath = "D:\\fla\\Charlotte_06_2021\\bin\\M 24 1313864024.dat";
+    std::ifstream testFile(filePath, std::ios::binary);
+    if (testFile.is_open())
+    {
+        std::vector<uint8_t> data((std::istreambuf_iterator<char>(testFile)), std::istreambuf_iterator<char>());
+        std::cout << "Test file read successfully, size: " << data.size() << " bytes" << std::endl;
+        std::cout << "Header Size: " << sizeof(ImageDataHeader) << " bytes" << std::endl;
+
+        uint8_t* ptr = data.data();
+        ImageDataHeader* header = reinterpret_cast<ImageDataHeader*>(ptr);
+        std::cout << "Identifier: " << std::hex << header->identifier << std::dec << std::endl;
+        std::cout << "Width: " << header->width << std::endl;
+        std::cout << "Height: " << header->height << std::endl;
+        std::cout << "Unknown: " << header->unknown << std::endl;
+        std::cout << "Compression Size: " << header->compression_size << std::endl;
+        std::cout << "Unknown2: " << header->unknown2 << std::endl;
+        std::cout << "Total Chunks: " << header->totalChunks << std::endl;
+        std::cout << "Format Flags: " << std::hex << header->formatFlags << std::dec << std::endl;
+        for (size_t i = 28; i < 28 + 8; ++i)
+        {
+            std::cout << "Byte " << i << ": " << (int)ptr[i] << " : " << std::hex << (int)ptr[i] << std::dec << std::endl;
+        }
+        uint8_t* compressedData = ptr + sizeof(ImageDataHeader);
+        std::vector<uint8_t> compressed(compressedData, compressedData + header->compression_size);
+        size_t uncompressed_size = header->width * header->height * 4;
+        std::vector<uint8_t> decompressed;
+
+        decompressed.resize(uncompressed_size);
+
+        z_stream stream;
+        memset(&stream, 0, sizeof(stream));
+
+        stream.next_in = const_cast<uint8_t*>(compressed.data());
+        stream.avail_in = compressed.size();
+        stream.next_out = decompressed.data();
+        stream.avail_out = uncompressed_size;
+
+        if (inflateInit2(&stream, MAX_WBITS) != Z_OK)
+        {
+            std::cout << "Failed to init ZLib" << std::endl;
+        }
+        else
+        {
+            int ret = inflate(&stream, Z_FULL_FLUSH);
+            inflateEnd(&stream);
+            std::cout << "INFLATE: " << ret << std::endl;
+            if (ret == Z_OK)
+            {
+                QImage image(header->width, header->height, QImage::Format_ARGB32);
+				for (int y = 0, idx = 0; y < header->height; ++y)
+				{
+					for (int x = 0; x < header->width; ++x, idx += 4)
+					{
+						uint8_t a = decompressed[idx];
+						uint8_t r = decompressed[idx + 1];
+						uint8_t g = decompressed[idx + 2];
+						uint8_t b = decompressed[idx + 3];
+						image.setPixel(x, y, qRgba(r, g, b, a));
+					}
+				}
+                bool res = image.save("d:/test.png");
+                if (!res)
+                    std::cout << "Failed to save image" << std::endl;
+            }
+        }
+    }*/
+}
 
 ZipArchive::~ZipArchive()
 {
