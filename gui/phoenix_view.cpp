@@ -120,7 +120,7 @@ void PhoenixView::paintEvent(QPaintEvent *event)
     if (_showBounds)
     {
         painter.save();
-        painter.setPen(QPen(QColor(0, 0, 255, 100), 2.0, Qt::DashLine)); // Blue dashed for visible area
+        painter.setPen(QPen(QColor(255, 0, 0, 100), 2.0, Qt::DashLine));
         painter.setBrush(Qt::NoBrush);
         painter.drawRect(_visibleRect);
         painter.restore();
@@ -146,9 +146,13 @@ void PhoenixView::paintEvent(QPaintEvent *event)
         painter.save();
         painter.translate(_panX + centerX, _panY + centerY);
         painter.scale(scale, scale);
-        painter.setPen(QPen(QColor(0, 0, 255, 100), 2.0, Qt::DashLine)); // Blue dashed for visible area
+        
+        painter.setPen(QPen(QColor(255, 0, 255, 100), 2.0, Qt::DashLine));
         painter.setBrush(Qt::NoBrush);
-        painter.drawRect(_visibleRect);
+        painter.drawRect(QRectF(0, 0, docWidth, docHeight));
+
+        drawDocumentBounds(painter, _flaDocument->document);
+
         painter.restore();
     }
 }
@@ -212,7 +216,7 @@ void PhoenixView::drawFrame(QPainter& painter, const fla::Frame* frame)
     }
 }
 
-static fla::Symbol* findSymbolByName(const fla::Document* document, const std::string& name)
+fla::Symbol* PhoenixView::findSymbolByName(const fla::Document* document, const std::string& name)
 {
     auto it = document->symbolMap.find(name);
     if (it != document->symbolMap.end())
@@ -235,7 +239,7 @@ void PhoenixView::drawElement(QPainter& painter, const fla::Element* element)
     QPointF instancePoint(element->transformationPoint.x, element->transformationPoint.y);
 
     // View frustum culling: Get element bounds and check if visible
-    QRectF elementBounds = getElementBounds(element);
+    //QRectF elementBounds = getElementBounds(element);
 
     bool culled = false;
 
@@ -396,16 +400,6 @@ void PhoenixView::drawElement(QPainter& painter, const fla::Element* element)
                  painter.drawPixmap(0, 0, pixmap);
             }
         }
-    }
-
-    // Draw element bounds if debug mode is enabled (for rendered elements)
-    if (_showBounds && !elementBounds.isNull() && elementBounds.isValid() && !culled)
-    {
-        painter.save();
-        painter.setPen(QPen(QColor(0, 255, 0, 150), 1.0)); // Green for rendered
-        painter.setBrush(Qt::NoBrush);
-        painter.drawRect(elementBounds);
-        painter.restore();
     }
 
     painter.restore();
@@ -806,12 +800,12 @@ QRectF PhoenixView::calculateElementBounds(const fla::Element* element)
             else
                 bounds = bounds.united(memberBounds);
         }
-        QTransform transform(group->transform.m11, group->transform.m12,
+        /*QTransform transform(group->transform.m11, group->transform.m12,
                             group->transform.m21, group->transform.m22,
                             group->transform.tx, group->transform.ty);
         bounds.translate(group->transformationPoint.x, group->transformationPoint.y);
         bounds = transform.mapRect(bounds);
-        bounds.translate(-group->transformationPoint.x, -group->transformationPoint.y);
+        bounds.translate(-group->transformationPoint.x, -group->transformationPoint.y);*/
         return bounds;
     }
     else if (type == fla::Element::Type::SymbolInstance)
@@ -843,32 +837,85 @@ QRectF PhoenixView::calculateElementBounds(const fla::Element* element)
                     }
                 }
 
-                QTransform transform(instance->transform.m11, instance->transform.m12,
-                                            instance->transform.m21, instance->transform.m22,
-                                            instance->transform.tx, instance->transform.ty);
-                bounds.translate(instance->transformationPoint.x, instance->transformationPoint.y);
+                QTransform transform(element->transform.m11, element->transform.m12,
+                                    element->transform.m21, element->transform.m22,
+                                    element->transform.tx, element->transform.ty);
+                bounds.translate(element->transformationPoint.x, element->transformationPoint.y);
                 bounds = transform.mapRect(bounds);
-                bounds.translate(-instance->transformationPoint.x, -instance->transformationPoint.y);
+                bounds.translate(-element->transformationPoint.x, -element->transformationPoint.y);
 
                 return bounds;
             }
         }
+
         // Default bounds for symbol instances without data
-        return QRectF(-50, -50, 100, 100);
+        QRectF bounds = QRectF(-50, -50, 100, 100);
+        QTransform transform(element->transform.m11, element->transform.m12,
+                            element->transform.m21, element->transform.m22,
+                            element->transform.tx, element->transform.ty);
+        bounds.translate(element->transformationPoint.x, element->transformationPoint.y);
+        bounds = transform.mapRect(bounds);
+        bounds.translate(-element->transformationPoint.x, -element->transformationPoint.y);
+        return bounds;
     }
     else if (type == fla::Element::Type::BitmapInstance)
     {
         // Approximate bounds for bitmap instances
-        return QRectF(0, 0, 100, 100);
+        QRectF bounds(0, 0, 100, 100);
+        QTransform transform(element->transform.m11, element->transform.m12,
+                            element->transform.m21, element->transform.m22,
+                            element->transform.tx, element->transform.ty);
+        bounds.translate(element->transformationPoint.x, element->transformationPoint.y);
+        bounds = transform.mapRect(bounds);
+        bounds.translate(-element->transformationPoint.x, -element->transformationPoint.y);
+        return bounds;
     }
     else if (type == fla::Element::Type::StaticText)
     {
         // Approximate bounds for text
-        return QRectF(0, 0, 200, 50);
+        QRectF bounds(0, 0, 200, 50);
+        QTransform transform(element->transform.m11, element->transform.m12,
+                            element->transform.m21, element->transform.m22,
+                            element->transform.tx, element->transform.ty);
+        bounds.translate(element->transformationPoint.x, element->transformationPoint.y);
+        bounds = transform.mapRect(bounds);
+        bounds.translate(-element->transformationPoint.x, -element->transformationPoint.y);
+        return bounds;
+    }
+    else if (type == fla::Element::Type::Rectangle)
+    {
+        const fla::RectanglePrimitive* rectangle = static_cast<const fla::RectanglePrimitive*>(element);
+        QRectF bounds(rectangle->rect.topLeft.x, rectangle->rect.topLeft.y, rectangle->rect.width(), rectangle->rect.height());
+        QTransform transform(element->transform.m11, element->transform.m12,
+                            element->transform.m21, element->transform.m22,
+                            element->transform.tx, element->transform.ty);
+        bounds.translate(element->transformationPoint.x, element->transformationPoint.y);
+        bounds = transform.mapRect(bounds);
+        bounds.translate(-element->transformationPoint.x, -element->transformationPoint.y);
+        return bounds;
+    }
+    else if (type == fla::Element::Type::Oval)
+    {
+        const fla::OvalPrimitive* oval = static_cast<const fla::OvalPrimitive*>(element);
+        QRectF bounds(oval->rect.topLeft.x, oval->rect.topLeft.y, oval->rect.width(), oval->rect.height());
+        QTransform transform(element->transform.m11, element->transform.m12,
+                            element->transform.m21, element->transform.m22,
+                            element->transform.tx, element->transform.ty);
+        bounds.translate(element->transformationPoint.x, element->transformationPoint.y);
+        bounds = transform.mapRect(bounds);
+        bounds.translate(-element->transformationPoint.x, -element->transformationPoint.y);
+        return bounds;
     }
 
     // Default bounds
-    return QRectF(-10, -10, 20, 20);
+    QRectF bounds(-10, -10, 20, 20);
+    QTransform transform(element->transform.m11, element->transform.m12,
+                        element->transform.m21, element->transform.m22,
+                        element->transform.tx, element->transform.ty);
+    bounds.translate(element->transformationPoint.x, element->transformationPoint.y);
+    bounds = transform.mapRect(bounds);
+    bounds.translate(-element->transformationPoint.x, -element->transformationPoint.y);
+    return bounds;
 }
 
 QRectF PhoenixView::calculateShapeBounds(const fla::Shape* shape)
@@ -950,4 +997,66 @@ QRectF PhoenixView::calculateShapeBounds(const fla::Shape* shape)
     bounds = transform.mapRect(bounds);
     bounds.translate(-shape->transformationPoint.x, -shape->transformationPoint.y);
     return bounds;
+}
+
+void PhoenixView::drawElementBounds(QPainter& painter, const fla::Element* element)
+{
+    if (!element->visible)
+        return;
+
+    QRectF bounds = getElementBounds(element);
+    if (bounds.isValid())
+    {
+        painter.save();
+        painter.setPen(QPen(QColor(255, 0, 0, 255), 2.0, Qt::DashLine)); // Red dashed for element bounds
+        painter.setBrush(Qt::NoBrush);
+        painter.drawRect(bounds);
+        painter.restore();
+    }
+
+    if (element->elementType() == fla::Element::Type::Group)
+    {
+        const fla::Group* group = static_cast<const fla::Group*>(element);
+        for (const fla::Element* member : group->members)
+        {
+            drawElementBounds(painter, member);
+        }
+    }
+    else if (element->elementType() == fla::Element::Type::SymbolInstance)
+    {
+        const fla::SymbolInstance* instance = static_cast<const fla::SymbolInstance*>(element);
+        const fla::Symbol* symbol = findSymbolByName(_flaDocument->document, instance->libraryItemName);
+        if (symbol && symbol->visible)
+        {
+            for (const fla::Timeline* timeline : symbol->timelines)
+            {
+                drawTimelineBounds(painter, timeline);
+            }
+        }
+    }
+}
+
+void PhoenixView::drawTimelineBounds(QPainter& painter, const fla::Timeline* timeline)
+{
+    for (const fla::Layer* layer : timeline->layers)
+    {
+        for (const fla::Frame* frame : layer->frames)
+        {
+            if (frame->index != 0)
+                continue; // Only draw bounds for first frame of each layer for clarity
+
+            for (const fla::Element* element : frame->elements)
+            {
+                drawElementBounds(painter, element);
+            }
+        }
+    }
+}
+
+void PhoenixView::drawDocumentBounds(QPainter& painter, const fla::Document* document)
+{
+    for (const fla::Timeline* timeline : document->timelines)
+    {
+        drawTimelineBounds(painter, timeline);
+    }
 }

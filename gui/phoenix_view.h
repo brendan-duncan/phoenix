@@ -103,4 +103,12 @@ private:
     QPointF screenToScene(const QPointF& screenPos) const;
 
     QPointF sceneToScreen(const QPointF& scenePos) const;
+
+    void drawDocumentBounds(QPainter& painter, const fla::Document* document);
+
+    void drawTimelineBounds(QPainter& painter, const fla::Timeline* timeline);
+
+    void drawElementBounds(QPainter& painter, const fla::Element* element);
+
+    fla::Symbol* findSymbolByName(const fla::Document* document, const std::string& name);
 };
