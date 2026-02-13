@@ -9,13 +9,13 @@
 #include "../data/solid_color.h"
 #include "../data/static_text.h"
 #include "../data/symbol_instance.h"
+#include <map>
 
 #include <QFont>
 #include <QPainter>
 #include <QPaintEvent>
 #include <QPainterPath>
 #include <QDebug>
-#include <map>
 
 #define MAX(a, b) ((a) > (b) ? (a) : (b))
 
@@ -237,36 +237,6 @@ void PhoenixView::drawElement(QPainter& painter, const fla::Element* element)
                        element->transform.m21, element->transform.m22,
                        element->transform.tx, element->transform.ty);
     QPointF instancePoint(element->transformationPoint.x, element->transformationPoint.y);
-
-    // View frustum culling: Get element bounds and check if visible
-    //QRectF elementBounds = getElementBounds(element);
-
-    bool culled = false;
-
-    // Skip culling check if bounds are invalid (shouldn't happen, but be safe)
-    /*if (!elementBounds.isNull() && elementBounds.isValid())
-    {
-        // Cull if completely outside visible rect
-        // Add margin to account for strokes and anti-aliasing
-        QRectF expandedVisible = _visibleRect.adjusted(-100, -100, 100, 100);
-        if (!elementBounds.intersects(expandedVisible))
-        {
-            _skippedElement++;
-            culled = true;
-
-            // Draw culled bounds if debug mode is enabled
-            if (_showBounds)
-            {
-                painter.save();
-                painter.setPen(QPen(QColor(255, 0, 0, 100), 1.0)); // Red for culled
-                painter.setBrush(Qt::NoBrush);
-                painter.drawRect(elementBounds);
-                painter.restore();
-            }
-
-            return; // Element is outside viewport, skip rendering
-        }
-    }*/
 
     painter.save();
 
@@ -550,24 +520,35 @@ void PhoenixView::drawShape(QPainter& painter, const fla::Shape* shape)
     PathCacheList cacheEntries;
 
     // Helper lambda to build a path from segments
-    auto buildPath = [](const fla::PathSegment& segment) -> QPainterPath {
+    auto buildPath = [](const fla::PathSegment& segment) -> QPainterPath
+    {
         QPainterPath path;
         path.setFillRule(Qt::WindingFill);
         for (const fla::PathSection& section : segment.sections)
         {
             if (section.command == fla::PathSection::Command::Move)
+            {
                 path.moveTo(section.points[0].x, section.points[0].y);
+            }
             else if (section.command == fla::PathSection::Command::Line)
+            {
                 path.lineTo(section.points[0].x, section.points[0].y);
+            }
             else if (section.command == fla::PathSection::Command::Quad)
+            {
                 path.quadTo(section.points[0].x, section.points[0].y,
                            section.points[1].x, section.points[1].y);
+            }
             else if (section.command == fla::PathSection::Command::Cubic)
+            {
                 path.cubicTo(section.points[0].x, section.points[0].y,
                             section.points[1].x, section.points[1].y,
                             section.points[2].x, section.points[2].y);
+            }
             else if (section.command == fla::PathSection::Command::Close)
+            {
                 path.closeSubpath();
+            }
         }
         return path;
     };
@@ -598,7 +579,9 @@ void PhoenixView::drawShape(QPainter& painter, const fla::Shape* shape)
             {
                 fillStylePaths[fillStyleIdx1].addPath(segmentPath);
                 if (fillStyles.find(fillStyleIdx1) == fillStyles.end())
+                {
                     fillStyles[fillStyleIdx1] = shape->getFillStyleByIndex(fillStyleIdx1);
+                }
             }
 
             // Add this path to fillStyle0 if present and different from fillStyle1
@@ -606,7 +589,9 @@ void PhoenixView::drawShape(QPainter& painter, const fla::Shape* shape)
             {
                 fillStylePaths[fillStyleIdx0].addPath(segmentPath);
                 if (fillStyles.find(fillStyleIdx0) == fillStyles.end())
+                {
                     fillStyles[fillStyleIdx0] = shape->getFillStyleByIndex(fillStyleIdx0);
+                }
             }
         }
     }
@@ -636,28 +621,20 @@ void PhoenixView::drawShape(QPainter& painter, const fla::Shape* shape)
     for (const fla::Edge* edge : shape->edges)
     {
         if (!edge->visible)
-        {
             continue;
-        }
 
         for (const fla::PathSegment& segment : edge->segments)
         {
             if (!segment.visible || segment.sections.empty())
-            {
                 continue;
-            }
 
             int strokeStyleIdx = segment.lineStyleIndex != -1 ? segment.lineStyleIndex : edge->strokeStyle;
             if (strokeStyleIdx == -1)
-            {
                 continue;
-            }
 
             const fla::StrokeStyle* strokeStyle = shape->getStrokeStyleByIndex(strokeStyleIdx);
             if (!strokeStyle || !strokeStyle->fill)
-            {
                 continue;
-            }
 
             QPainterPath strokePath = buildPath(segment);
 
@@ -800,12 +777,6 @@ QRectF PhoenixView::calculateElementBounds(const fla::Element* element)
             else
                 bounds = bounds.united(memberBounds);
         }
-        /*QTransform transform(group->transform.m11, group->transform.m12,
-                            group->transform.m21, group->transform.m22,
-                            group->transform.tx, group->transform.ty);
-        bounds.translate(group->transformationPoint.x, group->transformationPoint.y);
-        bounds = transform.mapRect(bounds);
-        bounds.translate(-group->transformationPoint.x, -group->transformationPoint.y);*/
         return bounds;
     }
     else if (type == fla::Element::Type::SymbolInstance)
@@ -920,6 +891,7 @@ QRectF PhoenixView::calculateElementBounds(const fla::Element* element)
 
 QRectF PhoenixView::calculateShapeBounds(const fla::Shape* shape)
 {
+    bool first = true;
     QRectF bounds;
     double maxStrokeWeight = 0.0;
 
@@ -957,8 +929,11 @@ QRectF PhoenixView::calculateShapeBounds(const fla::Shape* shape)
                 {
                     QPointF qpt(pt.x, pt.y);
 
-                    if (bounds.isNull())
+                    if (first)
+                    {
+                        first = false;
                         bounds = QRectF(qpt, QSizeF(0, 0));
+                    }
                     else
                     {
                         if (qpt.x() < bounds.left())
@@ -996,6 +971,7 @@ QRectF PhoenixView::calculateShapeBounds(const fla::Shape* shape)
     bounds.translate(shape->transformationPoint.x, shape->transformationPoint.y);
     bounds = transform.mapRect(bounds);
     bounds.translate(-shape->transformationPoint.x, -shape->transformationPoint.y);
+
     return bounds;
 }
 
@@ -1005,6 +981,7 @@ void PhoenixView::drawElementBounds(QPainter& painter, const fla::Element* eleme
         return;
 
     QRectF bounds = getElementBounds(element);
+    qDebug() << "Element type:" << static_cast<int>(element->elementType()) << "Bounds:" << bounds;
     if (bounds.isValid())
     {
         painter.save();
