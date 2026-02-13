@@ -117,14 +117,14 @@ void PhoenixView::paintEvent(QPaintEvent *event)
     drawDocument(painter, _flaDocument->document);
 
     // Draw visible rect if debug mode is enabled
-    if (_showBounds)
+    /*if (_showBounds)
     {
         painter.save();
         painter.setPen(QPen(QColor(255, 0, 0, 100), 2.0, Qt::DashLine));
         painter.setBrush(Qt::NoBrush);
         painter.drawRect(_visibleRect);
         painter.restore();
-    }
+    }*/
 
     painter.restore();
 
@@ -146,8 +146,8 @@ void PhoenixView::paintEvent(QPaintEvent *event)
         painter.save();
         painter.translate(_panX + centerX, _panY + centerY);
         painter.scale(scale, scale);
-        
-        painter.setPen(QPen(QColor(255, 0, 255, 100), 2.0, Qt::DashLine));
+
+        painter.setPen(QPen(QColor(255, 0, 0, 100), 2.0, Qt::DashLine));
         painter.setBrush(Qt::NoBrush);
         painter.drawRect(QRectF(0, 0, docWidth, docHeight));
 
@@ -981,7 +981,6 @@ void PhoenixView::drawElementBounds(QPainter& painter, const fla::Element* eleme
         return;
 
     QRectF bounds = getElementBounds(element);
-    qDebug() << "Element type:" << static_cast<int>(element->elementType()) << "Bounds:" << bounds;
     if (bounds.isValid())
     {
         painter.save();
