@@ -17,8 +17,7 @@ public:
 private:
     std::string _errorString;
 
-    static void parseCubicCurve(const std::string& data, int& pos, fla::PathSegment* path);
-    //static void parseCubicCurve(const std::string& data, int& pos, std::vector<fla::Point>& points);
+    static void parseCubicCurve(const std::string& data, int& pos, fla::Path* path);
 
     static fla::Point parsePoint(const std::string& data, int& pos);
 

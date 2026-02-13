@@ -491,11 +491,11 @@ bool parseShape(const tinyxml2::XMLElement* element, fla::Shape* shape)
 
     for (fla::Edge* edge : shape->edges)
     {
-        for (const fla::PathSegment& segment : edge->segments)
+        for (const fla::Path& path : edge->paths)
         {
-            for (const fla::PathSection& section : segment.sections)
+            for (const fla::PathSegment& segment : path.segments)
             {
-                for (const fla::Point& point : section.points)
+                for (const fla::Point& point : segment.points)
                 {
                     shape->bounds.topLeft.x = std::min(shape->bounds.topLeft.x, point.x);
                     shape->bounds.topLeft.y = std::min(shape->bounds.topLeft.y, point.y);

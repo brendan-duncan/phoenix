@@ -282,51 +282,51 @@ void DocumentView::populateItemChildren(QTreeWidgetItem* item)
 
                         // Add segments as children of the edge
                         int segmentIndex = 0;
-                        for (const fla::PathSegment& segment : edge->segments)
+                        for (const fla::Path& path : edge->paths)
                         {
                             QString segmentName = QString("Segment %1").arg(segmentIndex++);
-                            QTreeWidgetItem* segmentItem = createTreeItem(segmentName, (fla::DOMElement*)&segment, edgeItem);
+                            QTreeWidgetItem* segmentItem = createTreeItem(segmentName, (fla::DOMElement*)&path, edgeItem);
                             setItemTypeData(segmentItem, ItemType::Other, nullptr);
                             segmentItem->setIcon(1, _shapeIcon);
                             segmentItem->setToolTip(1, "Path Segment");
 
-                            // Add sections as children of the segment
-                            for (const fla::PathSection& section : segment.sections)
+                            // Add segments as children of the segment
+                            for (const fla::PathSegment& segment : path.segments)
                             {
-                                QString sectionName;
-                                QString sectionType;
-                                switch (section.command)
+                                QString segmentName;
+                                QString segmentType;
+                                switch (segment.command)
                                 {
-                                    case fla::PathSection::Command::Move:
-                                        sectionName = "Move To";
-                                        sectionType = "Move Command";
+                                    case fla::PathSegment::Command::Move:
+                                        segmentName = "Move To";
+                                        segmentType = "Move Command";
                                         break;
-                                    case fla::PathSection::Command::Line:
-                                        sectionName = "Line To";
-                                        sectionType = "Line Command";
+                                    case fla::PathSegment::Command::Line:
+                                        segmentName = "Line To";
+                                        segmentType = "Line Command";
                                         break;
-                                    case fla::PathSection::Command::Quad:
-                                        sectionName = "Quadratic Curve To";
-                                        sectionType = "Quadratic Bezier";
+                                    case fla::PathSegment::Command::Quad:
+                                        segmentName = "Quadratic Curve To";
+                                        segmentType = "Quadratic Bezier";
                                         break;
-                                    case fla::PathSection::Command::Cubic:
-                                        sectionName = "Cubic Curve To";
-                                        sectionType = "Cubic Bezier";
+                                    case fla::PathSegment::Command::Cubic:
+                                        segmentName = "Cubic Curve To";
+                                        segmentType = "Cubic Bezier";
                                         break;
-                                    case fla::PathSection::Command::Close:
-                                        sectionName = "Close Path";
-                                        sectionType = "Close Command";
+                                    case fla::PathSegment::Command::Close:
+                                        segmentName = "Close Path";
+                                        segmentType = "Close Command";
                                         break;
                                 }
-                                for (size_t i = 0; i < section.points.size(); ++i)
+                                for (size_t i = 0; i < segment.points.size(); ++i)
                                 {
-                                    const fla::Point& pt = section.points[i];
-                                    sectionName += QString(" (x: %1, y: %2)").arg(pt.x).arg(pt.y);
+                                    const fla::Point& pt = segment.points[i];
+                                    segmentName += QString(" (x: %1, y: %2)").arg(pt.x).arg(pt.y);
                                 }
-                                QTreeWidgetItem* sectionItem = createTreeItem(sectionName, nullptr, segmentItem);
-                                setItemTypeData(sectionItem, ItemType::Other, nullptr);
-                                sectionItem->setIcon(1, _shapeIcon);
-                                sectionItem->setToolTip(1, sectionType);
+                                QTreeWidgetItem* segmentItem = createTreeItem(segmentName, nullptr, segmentItem);
+                                setItemTypeData(segmentItem, ItemType::Other, nullptr);
+                                segmentItem->setIcon(1, _shapeIcon);
+                                segmentItem->setToolTip(1, segmentType);
                             }
                         }
                     }

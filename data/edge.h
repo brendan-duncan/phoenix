@@ -7,7 +7,7 @@
 
 namespace fla {
 
-struct PathSection
+struct PathSegment
 {
     enum class Command
     {
@@ -21,21 +21,21 @@ struct PathSection
     Command command;
     std::vector<Point> points;
 
-    PathSection(Command cmd, const std::vector<Point>& pts)
+    PathSegment(Command cmd, const std::vector<Point>& pts)
         : command(cmd), points(pts)
     {}
 };
 
-struct PathSegment : public DOMElement
+struct Path : public DOMElement
 {
     int styleIndex = -1;
     int lineStyleIndex = -1;
     int fillStyleIndex = -1;
-    std::vector<PathSection> sections;
+    std::vector<PathSegment> segments;
 
-    PathSegment() = default;
+    Path() = default;
 
-    std::string domTypeName() const override { return "PathSegment"; }
+    std::string domTypeName() const override { return "Path"; }
 };
 
 class Edge : public DOMElement
@@ -45,7 +45,7 @@ public:
     int fillStyle1 = -1;
     int strokeStyle = -1;
 
-    std::vector<PathSegment> segments;
+    std::vector<Path> paths;
 
     Edge() = default;
 
