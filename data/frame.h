@@ -17,7 +17,7 @@ public:
     ActionScript* actionScript = nullptr;
     std::vector<Element*> elements;
 
-    Frame();
+    Frame() = default;
 
     ~Frame() override;
 
