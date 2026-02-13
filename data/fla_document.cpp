@@ -2,10 +2,6 @@
 
 namespace fla {
 
-FLADocument::FLADocument()
-    : document(nullptr)
-{}
-
 FLADocument::~FLADocument()
 {
     if (document)

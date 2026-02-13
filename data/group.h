@@ -10,7 +10,7 @@ class Group : public Element
 public:
     std::vector<Element*> members;
 
-    Group();
+    Group() = default;
 
     ~Group() override;
 

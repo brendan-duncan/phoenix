@@ -2,8 +2,4 @@
 
 namespace fla {
 
-LinearGradient::LinearGradient()
-{
-}
-
 } // namespace fla

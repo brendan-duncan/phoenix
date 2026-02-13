@@ -2,9 +2,6 @@
 
 namespace fla {
 
-Shape::Shape()
-{}
-
 Shape::~Shape()
 {
     for (FillStyle* fill : fills)

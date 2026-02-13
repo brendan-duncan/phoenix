@@ -2,9 +2,6 @@
 
 namespace fla {
 
-Timeline::Timeline()
-{}
-
 Timeline::~Timeline()
 {
     // Clean up dynamically allocated layers

@@ -2,9 +2,6 @@
 
 namespace fla {
 
-Group::Group()
-{}
-
 Group::~Group()
 {
     for (Element* member : members)

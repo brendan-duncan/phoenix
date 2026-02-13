@@ -19,12 +19,12 @@ public:
         Dotted
     };
 
-    double weight;
+    double weight = 1.0;
     std::string scaleMode;
 
-    FillStyle* fill;
+    FillStyle* fill = nullptr;
 
-    StrokeStyle();
+    StrokeStyle() = default;
 
     ~StrokeStyle() override;
 
@@ -34,7 +34,7 @@ public:
 class SolidStroke : public StrokeStyle
 {
 public:
-    SolidStroke();
+    SolidStroke() = default;
 
     std::string domTypeName() const override { return "SolidStroke"; }
 
@@ -44,7 +44,7 @@ public:
 class DashedStroke : public StrokeStyle
 {
 public:
-    DashedStroke();
+    DashedStroke() = default;
 
     std::string domTypeName() const override { return "DashedStroke"; }
 
@@ -54,7 +54,7 @@ public:
 class RaggedStroke : public StrokeStyle
 {
 public:
-    RaggedStroke();
+    RaggedStroke() = default;
 
     std::string domTypeName() const override { return "RaggedStroke"; }
 
@@ -64,7 +64,7 @@ public:
 class StippleStroke : public StrokeStyle
 {
 public:
-    StippleStroke();
+    StippleStroke() = default;
 
     std::string domTypeName() const override { return "StippleStroke"; }
 
@@ -74,7 +74,7 @@ public:
 class DottedStroke : public StrokeStyle
 {
 public:
-    DottedStroke();
+    DottedStroke() = default;
 
     std::string domTypeName() const override { return "DottedStroke"; }
 

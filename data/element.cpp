@@ -2,7 +2,4 @@
 
 namespace fla {
 
-Element::Element()
-{}
-
 } // namespace fla

@@ -20,7 +20,7 @@ public:
     std::map<int, StrokeStyle*> strokesMap;
     std::map<int, FillStyle*> fillsMap;
 
-    Shape();
+    Shape() = default;
 
     ~Shape() override;
 

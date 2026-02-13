@@ -17,7 +17,7 @@ class LinearGradient : public FillStyle
 public:
     std::vector<GradientEntry> entries;
 
-    LinearGradient();
+    LinearGradient() = default;
 
     Type type() const override { return Type::LinearGradient; }
 

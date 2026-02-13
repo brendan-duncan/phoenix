@@ -11,11 +11,11 @@ class Timeline : public DOMElement
 {
 public:
     std::string name;
-    bool layerDepthEnabled;
+    bool layerDepthEnabled = false;
 
     std::vector<Layer*> layers;
 
-    Timeline();
+    Timeline() = default;
 
     ~Timeline() override;
 

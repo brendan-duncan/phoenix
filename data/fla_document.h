@@ -9,9 +9,9 @@ class FLADocument : public DOMElement
 {
 public:
     std::string filepath;
-    Document* document;
+    Document* document = nullptr;
 
-    FLADocument();
+    FLADocument() = default;
 
     ~FLADocument();
 

@@ -17,7 +17,7 @@ class RadialGradient : public FillStyle
 public:
     std::vector<RadialEntry> entries;
 
-    RadialGradient();
+    RadialGradient() = default;
 
     Type type() const override { return Type::RadialGradient; }
 

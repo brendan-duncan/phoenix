@@ -21,7 +21,7 @@ public:
 
     std::vector<Frame*> frames;
 
-    Layer();
+    Layer() = default;
 
     ~Layer() override;
 

@@ -2,7 +2,4 @@
 
 namespace fla {
 
-SymbolInstance::SymbolInstance()
-{}
-
 } // namespace fla

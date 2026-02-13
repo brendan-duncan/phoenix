@@ -11,7 +11,7 @@ namespace fla {
 class Frame : public DOMElement
 {
 public:
-    int index;
+    int index = 0;
     std::string keyMode;
 
     ActionScript* actionScript = nullptr;

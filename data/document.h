@@ -37,7 +37,6 @@ public:
     std::string filetypeGUID;
     std::string fileGUID;
 
-    // Child elements
     std::vector<Resource*> resources;
     std::vector<Symbol*> symbols;
     std::vector<Timeline*> timelines;

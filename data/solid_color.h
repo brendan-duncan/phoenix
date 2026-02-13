@@ -8,9 +8,9 @@ namespace fla {
 class SolidColor : public FillStyle
 {
 public:
-    uint8_t color[4];
+    uint8_t color[4] = {0, 0, 0, 255}; // RGBA format
 
-    SolidColor();
+    SolidColor() = default;
 
     Type type() const override { return Type::SolidColor; }
 

@@ -2,9 +2,6 @@
 
 namespace fla {
 
-Symbol::Symbol()
-{}
-
 Symbol::~Symbol()
 {
     for (Timeline* timeline : timelines)

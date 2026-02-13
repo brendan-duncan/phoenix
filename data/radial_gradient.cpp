@@ -2,7 +2,4 @@
 
 namespace fla {
 
-RadialGradient::RadialGradient()
-{}
-
 } // namespace fla

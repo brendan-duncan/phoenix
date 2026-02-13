@@ -2,10 +2,6 @@
 
 namespace fla {
 
-Layer::Layer()
-{
-}
-
 Layer::~Layer()
 {
     for (Frame* frame : frames)

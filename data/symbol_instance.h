@@ -12,7 +12,7 @@ class SymbolInstance : public Element
 public:
     std::string libraryItemName;
 
-    SymbolInstance();
+    SymbolInstance() = default;
 
     Element::Type elementType() const override { return Element::Type::SymbolInstance; }
 

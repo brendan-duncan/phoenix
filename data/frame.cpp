@@ -2,9 +2,6 @@
 
 namespace fla {
 
-Frame::Frame()
-{}
-
 Frame::~Frame()
 {
     if (actionScript)

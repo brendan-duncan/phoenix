@@ -16,7 +16,7 @@ public:
 
     std::vector<Timeline*> timelines;
 
-    Symbol();
+    Symbol() = default;
 
     ~Symbol() override;
 

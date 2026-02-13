@@ -28,7 +28,7 @@ public:
     Point transformationPoint;
     fla::Rect bounds;
 
-    Element();
+    Element() = default;
 
     virtual Type elementType() const = 0;
 };
