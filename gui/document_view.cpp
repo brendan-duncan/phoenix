@@ -285,10 +285,10 @@ void DocumentView::populateItemChildren(QTreeWidgetItem* item)
                         for (const fla::Path& path : edge->paths)
                         {
                             QString segmentName = QString("Segment %1").arg(segmentIndex++);
-                            QTreeWidgetItem* segmentItem = createTreeItem(segmentName, (fla::DOMElement*)&path, edgeItem);
-                            setItemTypeData(segmentItem, ItemType::Other, nullptr);
-                            segmentItem->setIcon(1, _shapeIcon);
-                            segmentItem->setToolTip(1, "Path Segment");
+                            QTreeWidgetItem* pathItem = createTreeItem(segmentName, (fla::DOMElement*)&path, edgeItem);
+                            setItemTypeData(pathItem, ItemType::Other, nullptr);
+                            pathItem->setIcon(1, _shapeIcon);
+                            pathItem->setToolTip(1, "Path Segment");
 
                             // Add segments as children of the segment
                             for (const fla::PathSegment& segment : path.segments)
@@ -323,7 +323,7 @@ void DocumentView::populateItemChildren(QTreeWidgetItem* item)
                                     const fla::Point& pt = segment.points[i];
                                     segmentName += QString(" (x: %1, y: %2)").arg(pt.x).arg(pt.y);
                                 }
-                                QTreeWidgetItem* segmentItem = createTreeItem(segmentName, nullptr, segmentItem);
+                                QTreeWidgetItem* segmentItem = createTreeItem(segmentName, nullptr, pathItem);
                                 setItemTypeData(segmentItem, ItemType::Other, nullptr);
                                 segmentItem->setIcon(1, _shapeIcon);
                                 segmentItem->setToolTip(1, segmentType);

@@ -386,15 +386,27 @@ QPen PhoenixView::getPen(const fla::StrokeStyle* strokeStyle)
     QPen pen(QColor(0, 0, 0, 255), weight);
 
     if (strokeStyle->style() == fla::StrokeStyle::Style::Solid)
+    {
         pen.setStyle(Qt::SolidLine);
+    }
     else if (strokeStyle->style() == fla::StrokeStyle::Style::Dashed)
+    {
         pen.setStyle(Qt::DashLine);
+    }
     else if (strokeStyle->style() == fla::StrokeStyle::Style::Ragged)
+    {
         pen.setStyle(Qt::DashDotLine);
+    }
     else if (strokeStyle->style() == fla::StrokeStyle::Style::Stipple)
+    {
         pen.setStyle(Qt::DashDotDotLine);
+    }
     else if (strokeStyle->style() == fla::StrokeStyle::Style::Dotted)
+    {
         pen.setStyle(Qt::DotLine);
+        pen.setCapStyle(Qt::RoundCap);
+        pen.setJoinStyle(Qt::RoundJoin);
+    }
 
     if (strokeStyle->fill->type() == fla::FillStyle::Type::SolidColor)
     {
@@ -1146,7 +1158,10 @@ void PhoenixView::drawElementBounds(QPainter& painter, const fla::Element* eleme
     if (bounds.isValid())
     {
         painter.save();
-        painter.setPen(QPen(QColor(255, 0, 0, 255), 2.0, Qt::DashLine)); // Red dashed for element bounds
+        if (element->elementType() == fla::Element::Type::SymbolInstance)
+            painter.setPen(QPen(QColor(0, 0, 255, 255), 2.0, Qt::DashLine)); // Blue dashed for shapes
+        else
+            painter.setPen(QPen(QColor(255, 0, 0, 255), 2.0, Qt::DashLine)); // Red dashed for element bounds
         painter.setBrush(Qt::NoBrush);
         painter.drawRect(bounds);
         painter.restore();
@@ -1166,10 +1181,22 @@ void PhoenixView::drawElementBounds(QPainter& painter, const fla::Element* eleme
         const fla::Symbol* symbol = findSymbolByName(_flaDocument->document, instance->libraryItemName);
         if (symbol && symbol->visible)
         {
+            QTransform transform(element->transform.m11, element->transform.m12,
+                                 element->transform.m21, element->transform.m22,
+                                 element->transform.tx, element->transform.ty);
+            QPointF transformationPoint(element->transformationPoint.x, element->transformationPoint.y);
+
+            painter.save();
+            painter.translate(transformationPoint);
+            painter.setTransform(transform, true);
+            painter.translate(-transformationPoint);
+
             for (const fla::Timeline* timeline : symbol->timelines)
             {
                 drawTimelineBounds(painter, timeline);
             }
+
+            painter.restore();
         }
     }
 }
