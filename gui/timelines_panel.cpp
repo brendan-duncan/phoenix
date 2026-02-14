@@ -84,9 +84,8 @@ void TimelineGrid::updatePlayerFromMouse(int x)
 
     const int frameWidth = 20;
     const int margin = 1;
-    const int headerHeight = 25;
 
-    int frameX = x - headerHeight;
+    int frameX = x;
     if (frameX < 0)
         frameX = 0;
 
@@ -210,7 +209,7 @@ void TimelineGrid::paintEvent(QPaintEvent* event)
     {
         const int playHeadY = 5;
         int currentFrame = _player->currentFrame();
-        int playheadX = headerHeight + currentFrame * (frameWidth + margin) + frameWidth / 2;
+        int playheadX = currentFrame * (frameWidth + margin) + frameWidth / 2;
         
         painter.setPen(QColor(50, 150, 255));
         painter.drawLine(playheadX, playHeadY, playheadX, height());
@@ -230,7 +229,7 @@ void TimelineGrid::paintEvent(QPaintEvent* event)
     painter.setFont(frameFont);
     for (int i = 0; i < MAX_FRAMES; i += 5)
     {
-        int x = headerHeight + i * (frameWidth + margin);
+        int x = i * (frameWidth + margin);
         QString label = QString::number(i);
         painter.drawText(x + 2, 20, label);
     }
