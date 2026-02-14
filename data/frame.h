@@ -12,6 +12,7 @@ class Frame : public DOMElement
 {
 public:
     int index = 0;
+    int duration = 1;
     std::string keyMode;
 
     ActionScript* actionScript = nullptr;

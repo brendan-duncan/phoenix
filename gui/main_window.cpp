@@ -1,5 +1,6 @@
 #include "main_window.h"
 #include "phoenix_view.h"
+#include "timeline_view.h"
 #include "../parser/fla_parser.h"
 
 #include <QApplication>
@@ -27,7 +28,9 @@ MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent)
     , _phoenixView(nullptr)
     , _documentView(nullptr)
+    , _timelineView(nullptr)
     , _flaDocument(nullptr)
+    , _player(new Player(this))
     , _recentFilesMenu(nullptr)
 {
     setWindowTitle("Phoenix - FLA Viewer");
@@ -66,6 +69,7 @@ void MainWindow::loadFLAFile(const QString& filePath)
     _flaDocument = parser.parse(filePath.toStdString());
     _phoenixView->setDocument(_flaDocument);
     _documentView->setDocument(_flaDocument);
+    _timelineView->setDocument(_flaDocument);
 
     if (_flaDocument)
     {
@@ -91,27 +95,43 @@ void MainWindow::setupUI()
     centralWidget->setLayout(mainLayout);
     setCentralWidget(centralWidget);
 
-    // Create the splitter
-    _splitter = new QSplitter(Qt::Horizontal, this);
-    mainLayout->addWidget(_splitter);
+    // Create the main vertical splitter
+    _mainSplitter = new QSplitter(Qt::Vertical, this);
+    mainLayout->addWidget(_mainSplitter);
+
+    // Create the horizontal splitter for document and phoenix views
+    _viewSplitter = new QSplitter(Qt::Horizontal, this);
 
     // Create the document view (left panel)
     _documentView = new DocumentView(this);
     _documentView->setMinimumWidth(150);
-    //_documentView->setMaximumWidth(400);
 
     // Create the phoenix view (right panel)
-    _phoenixView = new PhoenixView(this);
+    _phoenixView = new PhoenixView(_player, this);
 
-    // Add widgets to splitter
-    _splitter->addWidget(_documentView);
-    _splitter->addWidget(_phoenixView);
+    // Add widgets to view splitter
+    _viewSplitter->addWidget(_documentView);
+    _viewSplitter->addWidget(_phoenixView);
 
-    // Set splitter properties
-    _splitter->setCollapsible(0, false);  // Don't collapse document view
-    _splitter->setCollapsible(1, false);  // Don't collapse phoenix view
-    _splitter->setStretchFactor(0, 0);    // Document view doesn't stretch
-    _splitter->setStretchFactor(1, 1);    // Phoenix view stretches
+    // Set view splitter properties
+    _viewSplitter->setCollapsible(0, false);
+    _viewSplitter->setCollapsible(1, false);
+    _viewSplitter->setStretchFactor(0, 0);
+    _viewSplitter->setStretchFactor(1, 1);
+
+    // Create the timeline view
+    _timelineView = new TimelineView(_player, this);
+    _timelineView->setMinimumHeight(150);
+
+    // Add to main vertical splitter
+    _mainSplitter->addWidget(_viewSplitter);
+    _mainSplitter->addWidget(_timelineView);
+
+    // Set main splitter properties
+    _mainSplitter->setCollapsible(0, false);
+    _mainSplitter->setCollapsible(1, true);
+    _mainSplitter->setStretchFactor(0, 1);
+    _mainSplitter->setStretchFactor(1, 0);
 
     connect(_documentView, &DocumentView::visibilityChanged,
             this, &MainWindow::onVisibilityChanged);

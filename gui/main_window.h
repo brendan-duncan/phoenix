@@ -2,6 +2,8 @@
 
 #include "phoenix_view.h"
 #include "document_view.h"
+#include "timeline_view.h"
+#include "player.h"
 #include "../data/fla_document.h"
 
 #include <QMainWindow>
@@ -51,9 +53,12 @@ private:
     static const int MAX_RECENT_FILES = 10;
 
     fla::FLADocument* _flaDocument;
-    QSplitter* _splitter;
+    Player* _player;
+    QSplitter* _mainSplitter;
+    QSplitter* _viewSplitter;
     DocumentView* _documentView;
     PhoenixView* _phoenixView;
+    TimelineView* _timelineView;
     QMenu* _recentFilesMenu;
 
     QStringList _recentFiles;

@@ -902,6 +902,7 @@ bool parseActionScript(const tinyxml2::XMLElement* element, fla::ActionScript* a
 bool parseFrame(const tinyxml2::XMLElement* element, fla::Frame* frame)
 {
     frame->index = getIntAttribute(element, "index");
+    frame->duration = getIntAttribute(element, "duration", 1);
     frame->keyMode = getAttribute(element, "keyMode");
 
     for (const tinyxml2::XMLElement* childElement = element->FirstChildElement();

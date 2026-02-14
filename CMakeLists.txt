@@ -46,6 +46,10 @@ set(HEADERS
     gui/main_window.h
     gui/phoenix_view.h
     gui/document_view.h
+    gui/timeline_view.h
+    gui/layers_panel.h
+    gui/timelines_panel.h
+    gui/player.h
     parser/document_parser.h
     parser/zip_reader.h
     parser/fla_parser.h
@@ -87,6 +91,10 @@ set(SOURCES
     gui/main_window.cpp
     gui/phoenix_view.cpp
     gui/document_view.cpp
+    gui/timeline_view.cpp
+    gui/layers_panel.cpp
+    gui/timelines_panel.cpp
+    gui/player.cpp
     parser/document_parser.cpp
     parser/zip_reader.cpp
     parser/fla_parser.cpp

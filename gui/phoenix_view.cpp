@@ -1,4 +1,5 @@
 #include "phoenix_view.h"
+#include "player.h"
 #include "../data/bitmap.h"
 #include "../data/bitmap_instance.h"
 #include "../data/group.h"
@@ -23,9 +24,10 @@
 
 uint32_t _skippedElement = 0;
 
-PhoenixView::PhoenixView(QWidget *parent)
+PhoenixView::PhoenixView(Player* player, QWidget *parent)
     : QWidget(parent)
     , _flaDocument(nullptr)
+    , _player(player)
     , _zoom(1.0)
     , _panX(0)
     , _panY(0)
@@ -39,10 +41,17 @@ PhoenixView::PhoenixView(QWidget *parent)
 
     // Enable mouse tracking for smooth panning
     setMouseTracking(true);
+
+    connect(_player, &Player::currentFrameChanged, this, &PhoenixView::onPlayerFrameChanged);
 }
 
 PhoenixView::~PhoenixView()
 {
+}
+
+void PhoenixView::onPlayerFrameChanged(int frame)
+{
+    update(); // Trigger repaint when player frame changes
 }
 
 void PhoenixView::setDocument(const fla::FLADocument* document)
@@ -185,33 +194,36 @@ void PhoenixView::drawTimeline(QPainter& painter, const fla::Timeline* timeline)
     {
         const fla::Layer* layer = timeline->layers[i];
         if (layer->visible)
+        {
             drawLayer(painter, layer);
+        }
     }
 }
 
 void PhoenixView::drawLayer(QPainter& painter, const fla::Layer* layer)
 {
-    // Check layer visibility (already checked in drawTimeline, but keeping for safety)
-    if (!layer->visible)
-        return;
-
     QColor color;
     color.setRgb(layer->color[0], layer->color[1], layer->color[2], layer->color[3]);
     painter.setPen(QPen(color, 1.0));
 
+    const fla::Frame* currentFrame = nullptr;
+
     for (const fla::Frame* frame : layer->frames)
     {
-        drawFrame(painter, frame);
-        break;
+        if (frame->index <= _player->currentFrame())
+        {
+            currentFrame = frame;
+        }
+    }
+
+    if (currentFrame && currentFrame->visible)
+    {
+        drawFrame(painter, currentFrame);
     }
 }
 
 void PhoenixView::drawFrame(QPainter& painter, const fla::Frame* frame)
 {
-    // Check frame visibility
-    if (!frame->visible)
-        return;
-
     for (const fla::Element* element : frame->elements)
     {
         drawElement(painter, element);

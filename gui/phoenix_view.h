@@ -13,11 +13,13 @@
 #include <QMouseEvent>
 #include <QWheelEvent>
 
+class Player;
+
 class PhoenixView : public QWidget
 {
     Q_OBJECT
 public:
-    PhoenixView(QWidget *parent = nullptr);
+    PhoenixView(Player* player, QWidget *parent = nullptr);
 
     ~PhoenixView();
 
@@ -40,8 +42,12 @@ protected:
 
     void wheelEvent(QWheelEvent *event) override;
 
+private slots:
+    void onPlayerFrameChanged(int frame);
+
 private:
     const fla::FLADocument* _flaDocument;
+    Player* _player;
 
     bool _highQualityAntiAliasing = true;
 
