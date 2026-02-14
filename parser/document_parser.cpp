@@ -159,10 +159,16 @@ bool parseRadialGradient(const tinyxml2::XMLElement* element, fla::RadialGradien
 
 fla::Edge* parsePath(const tinyxml2::XMLElement* element)
 {
+    // Try to get edge data from either "edges" or "cubics" attribute
     std::string edgeData = getAttribute(element, "edges");
     if (edgeData.empty())
     {
-        std::cerr << "Edge element missing edges attribute" << (_currentFile.empty() ? "" : " from ") << _currentFile << std::endl;
+        edgeData = getAttribute(element, "cubics");
+    }
+
+    if (edgeData.empty())
+    {
+        std::cerr << "Edge element missing edges/cubics attribute" << (_currentFile.empty() ? "" : " from ") << _currentFile << std::endl;
         return nullptr;
     }
 
@@ -191,12 +197,6 @@ bool parseEdges(const tinyxml2::XMLElement* element, fla::Shape* shape)
     {
         if (std::strcmp(childElement->Name(), "Edge") == 0)
         {
-            if (hasAttribute(childElement, "cubics"))
-            {
-                // Cubics are used for the editor, not for rendering, so they can be skipped for now
-                continue;
-            }
-
             fla::Edge* edge = parsePath(childElement);
             if (!edge)
             {

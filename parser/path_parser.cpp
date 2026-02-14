@@ -57,21 +57,17 @@ fla::Edge* PathParser::parse(const std::string& data)
                     std::abs(segmentStart.y - lastPoint.y) < 0.01)
                 {
                     lastPath->segments.push_back({fla::PathSegment::Command::Close, {}});
-                    //std::cout << "!!!! Auto-closing path segment at point (" << lastPoint.x << ", " << lastPoint.y << ")" << std::endl;
-
-                    edge->paths.push_back({});
-                    lastPath = &edge->paths.back();
-                    lastPath->segments.push_back({fla::PathSegment::Command::Move, {point}});
                 }
+
+                // Always start a new Path object for each Move command
+                edge->paths.push_back({});
+                lastPath = &edge->paths.back();
+                lastPath->segments.push_back({fla::PathSegment::Command::Move, {point}});
             }
             else if (lastPath == nullptr)
             {
                 edge->paths.push_back({});
                 lastPath = &edge->paths.back();
-                lastPath->segments.push_back({fla::PathSegment::Command::Move, {point}});
-            }
-            else
-            {
                 lastPath->segments.push_back({fla::PathSegment::Command::Move, {point}});
             }
             lastPoint = point;
