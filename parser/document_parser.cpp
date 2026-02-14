@@ -967,6 +967,8 @@ bool parseLayer(const tinyxml2::XMLElement* element, fla::Layer* layer)
     parseHexColor(color, layer->color);
 
     layer->current = getAttribute(element, "current");
+    layer->layerType = getAttribute(element, "layerType") == "folder" ? fla::Layer::Type::Folder : fla::Layer::Type::Normal;
+    layer->parentLayerIndex = getIntAttribute(element, "parentLayerIndex", -1);
     layer->selected = getAttribute(element, "isSelected") == "true";
     layer->autoNamed = getAttribute(element, "autoNamed") == "true";
     layer->locked = getAttribute(element, "locked") == "true";

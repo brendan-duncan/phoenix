@@ -31,7 +31,7 @@ void TimelineGrid::updatePlayerFromMouse(int x)
     if (frame < 0)
         frame = 0;
 
-    int maxFrame = 0;
+    int maxFrame = 600;
     for (const fla::Timeline* timeline : _flaDocument->document->timelines)
     {
         for (const fla::Layer* layer : timeline->layers)
@@ -123,25 +123,7 @@ void TimelinesPanel::refreshTimelines()
     const int layerRowHeight = 30;
     const int headerHeight = 25;
 
-    int maxFrames = 0;
-    for (const fla::Timeline* timeline : _flaDocument->document->timelines)
-    {
-        for (const fla::Layer* layer : timeline->layers)
-        {
-            int layerEndFrame = 0;
-            for (const fla::Frame* f : layer->frames)
-            {
-                int endFrame = f->index + f->duration;
-                if (endFrame > layerEndFrame)
-                    layerEndFrame = endFrame;
-            }
-            if (layerEndFrame > maxFrames)
-                maxFrames = layerEndFrame;
-        }
-    }
-
-    if (maxFrames == 0)
-        maxFrames = 100;
+    int maxFrames = 600;
 
     int numRows = 0;
     for (const fla::Timeline* timeline : _flaDocument->document->timelines)
@@ -175,6 +157,32 @@ void TimelineGrid::paintEvent(QPaintEvent* event)
 
     painter.fillRect(event->rect(), QColor(30, 30, 30));
 
+    painter.setPen(textColor);
+    QFont frameFont = painter.font();
+    frameFont.setPointSize(8);
+    painter.setFont(frameFont);
+
+    int maxFrame = 600;
+    /*for (const fla::Timeline* timeline : _flaDocument->document->timelines)
+    {
+        for (const fla::Layer* layer : timeline->layers)
+        {
+            for (const fla::Frame* f : layer->frames)
+            {
+                int endFrame = f->index + f->duration;
+                if (endFrame > maxFrame)
+                    maxFrame = endFrame;
+            }
+        }
+    }*/
+
+    for (int i = 0; i < maxFrame; i += 5)
+    {
+        int x = headerHeight + i * (frameWidth + margin);
+        QString label = QString::number(i);
+        painter.drawText(x + 2, 12, label);
+    }
+
     int y = headerHeight;
 
     for (const fla::Timeline* timeline : _flaDocument->document->timelines)
@@ -189,13 +197,14 @@ void TimelineGrid::paintEvent(QPaintEvent* event)
                 frameMap[frame->index] = frame;
             }
 
-            int layerMaxFrame = 0;
+            int layerMaxFrame = 600;
+            /*int layerMaxFrame = 0;
             for (const fla::Frame* f : layer->frames)
             {
                 int endFrame = f->index + f->duration;
                 if (endFrame > layerMaxFrame)
                     layerMaxFrame = endFrame;
-            }
+            }*/
 
             for (int i = 0; i < layerMaxFrame; ++i)
             {
