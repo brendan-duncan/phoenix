@@ -20,13 +20,18 @@ public:
 
     void setPlayer(Player* player) { _player = player; }
 
+    void updateSize();
+
 public slots:
     void onPlayerFrameChanged(int frame) { update(); }
 
 protected:
     void paintEvent(QPaintEvent* event) override;
+
     void mousePressEvent(QMouseEvent* event) override;
+
     void mouseMoveEvent(QMouseEvent* event) override;
+
     void mouseReleaseEvent(QMouseEvent* event) override;
 
 private:
@@ -48,6 +53,7 @@ public:
 private:
     const fla::FLADocument* _flaDocument;
     QScrollArea* _scrollArea;
+    QWidget* _header;
     TimelineGrid* _gridContainer;
     Player* _player;
 

@@ -7,11 +7,74 @@
 #include <QPaintEvent>
 #include <QMouseEvent>
 
+static const int MAX_FRAMES = 600;
+
+TimelinesPanel::TimelinesPanel(Player* player, QWidget *parent)
+    : QWidget(parent)
+    , _flaDocument(nullptr)
+    , _player(player)
+{
+    QVBoxLayout* layout = new QVBoxLayout(this);
+    layout->setContentsMargins(0, 0, 0, 0);
+
+    _scrollArea = new QScrollArea(this);
+    _scrollArea->setWidgetResizable(true);
+    _scrollArea->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOn);
+
+    QWidget* container = new QWidget();
+    _scrollArea->setWidget(container);
+    QVBoxLayout* containerLayout = new QVBoxLayout(container);
+    containerLayout->setContentsMargins(0, 0, 0, 0);
+
+    _header = new QWidget(this);
+    _header->setFixedHeight(25);
+    containerLayout->addWidget(_header);
+
+    _gridContainer = new TimelineGrid(_player, this);
+    containerLayout->addWidget(_gridContainer);
+
+    connect(_player, &Player::currentFrameChanged, _gridContainer, &TimelineGrid::onPlayerFrameChanged);
+
+    layout->addWidget(_scrollArea);
+}
+
+void TimelinesPanel::setDocument(const fla::FLADocument* document)
+{
+    _flaDocument = document;
+    _gridContainer->setDocument(document);
+    _gridContainer->updateSize();
+}
+
 TimelineGrid::TimelineGrid(Player* player, QWidget* parent)
     : QWidget(parent)
     , _flaDocument(nullptr)
     , _player(player)
 {
+}
+
+void TimelineGrid::updateSize()
+{
+    if (!_flaDocument || !_flaDocument->document)
+    {
+        setMinimumSize(0, 0);
+        return;
+    }
+
+    const int frameWidth = 20;
+    const int frameHeight = 20;
+    const int layerRowHeight = 30;
+    const int headerHeight = 25;
+
+    int numRows = 0;
+    for (const fla::Timeline* timeline : _flaDocument->document->timelines)
+    {
+        numRows += static_cast<int>(timeline->layers.size());
+    }
+
+    int totalWidth = headerHeight + MAX_FRAMES * (frameWidth + 2);
+    int totalHeight = headerHeight + numRows * layerRowHeight;
+
+    setMinimumSize(totalWidth, totalHeight);
 }
 
 void TimelineGrid::updatePlayerFromMouse(int x)
@@ -31,7 +94,6 @@ void TimelineGrid::updatePlayerFromMouse(int x)
     if (frame < 0)
         frame = 0;
 
-    int maxFrame = 600;
     for (const fla::Timeline* timeline : _flaDocument->document->timelines)
     {
         for (const fla::Layer* layer : timeline->layers)
@@ -43,13 +105,8 @@ void TimelineGrid::updatePlayerFromMouse(int x)
                 if (endFrame > layerEndFrame)
                     layerEndFrame = endFrame;
             }
-            if (layerEndFrame > maxFrame)
-                maxFrame = layerEndFrame;
         }
     }
-
-    if (frame >= maxFrame)
-        frame = maxFrame > 0 ? maxFrame - 1 : 0;
 
     _player->setCurrentFrame(frame);
 }
@@ -82,62 +139,6 @@ void TimelineGrid::mouseReleaseEvent(QMouseEvent* event)
     QWidget::mouseReleaseEvent(event);
 }
 
-TimelinesPanel::TimelinesPanel(Player* player, QWidget *parent)
-    : QWidget(parent)
-    , _flaDocument(nullptr)
-    , _player(player)
-{
-    QVBoxLayout* layout = new QVBoxLayout(this);
-    layout->setContentsMargins(0, 0, 0, 0);
-
-    _scrollArea = new QScrollArea(this);
-    _scrollArea->setWidgetResizable(true);
-    _scrollArea->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOn);
-
-    _gridContainer = new TimelineGrid(_player, this);
-    _scrollArea->setWidget(_gridContainer);
-
-    connect(_player, &Player::currentFrameChanged, _gridContainer, &TimelineGrid::onPlayerFrameChanged);
-
-    layout->addWidget(_scrollArea);
-}
-
-void TimelinesPanel::setDocument(const fla::FLADocument* document)
-{
-    _flaDocument = document;
-    _gridContainer->setDocument(document);
-    refreshTimelines();
-}
-
-void TimelinesPanel::refreshTimelines()
-{
-    if (!_flaDocument || !_flaDocument->document)
-    {
-        _gridContainer->setMinimumSize(0, 0);
-        return;
-    }
-
-    const int frameWidth = 20;
-    const int frameHeight = 20;
-    const int framesPerRow = 30;
-    const int layerRowHeight = 30;
-    const int headerHeight = 25;
-
-    int maxFrames = 600;
-
-    int numRows = 0;
-    for (const fla::Timeline* timeline : _flaDocument->document->timelines)
-    {
-        numRows += static_cast<int>(timeline->layers.size());
-    }
-
-    int totalWidth = headerHeight + maxFrames * (frameWidth + 2);
-    int totalHeight = headerHeight + numRows * layerRowHeight;
-
-    _gridContainer->setMinimumSize(totalWidth, totalHeight);
-    _gridContainer->update();
-}
-
 void TimelineGrid::paintEvent(QPaintEvent* event)
 {
     QPainter painter(this);
@@ -153,35 +154,9 @@ void TimelineGrid::paintEvent(QPaintEvent* event)
 
     QColor darkColor(40, 40, 40);
     QColor lightColor(70, 70, 70);
-    QColor textColor(200, 200, 200);
+    QColor textColor(135, 135, 135);
 
     painter.fillRect(event->rect(), QColor(30, 30, 30));
-
-    painter.setPen(textColor);
-    QFont frameFont = painter.font();
-    frameFont.setPointSize(8);
-    painter.setFont(frameFont);
-
-    int maxFrame = 600;
-    /*for (const fla::Timeline* timeline : _flaDocument->document->timelines)
-    {
-        for (const fla::Layer* layer : timeline->layers)
-        {
-            for (const fla::Frame* f : layer->frames)
-            {
-                int endFrame = f->index + f->duration;
-                if (endFrame > maxFrame)
-                    maxFrame = endFrame;
-            }
-        }
-    }*/
-
-    for (int i = 0; i < maxFrame; i += 5)
-    {
-        int x = headerHeight + i * (frameWidth + margin);
-        QString label = QString::number(i);
-        painter.drawText(x + 2, 12, label);
-    }
 
     int y = headerHeight;
 
@@ -197,18 +172,9 @@ void TimelineGrid::paintEvent(QPaintEvent* event)
                 frameMap[frame->index] = frame;
             }
 
-            int layerMaxFrame = 600;
-            /*int layerMaxFrame = 0;
-            for (const fla::Frame* f : layer->frames)
+            for (int i = 0; i < MAX_FRAMES; ++i)
             {
-                int endFrame = f->index + f->duration;
-                if (endFrame > layerMaxFrame)
-                    layerMaxFrame = endFrame;
-            }*/
-
-            for (int i = 0; i < layerMaxFrame; ++i)
-            {
-                int x = headerHeight + i * (frameWidth + margin);
+                int x = i * (frameWidth + margin);
                 int yOffset = y;
 
                 QRect frameRect(x, yOffset, frameWidth, frameHeight);
@@ -242,7 +208,7 @@ void TimelineGrid::paintEvent(QPaintEvent* event)
 
     if (_player)
     {
-        const int playHeadY = 15;
+        const int playHeadY = 5;
         int currentFrame = _player->currentFrame();
         int playheadX = headerHeight + currentFrame * (frameWidth + margin) + frameWidth / 2;
         
@@ -256,5 +222,16 @@ void TimelineGrid::paintEvent(QPaintEvent* event)
         painter.setBrush(QColor(50, 150, 255));
         painter.setPen(Qt::NoPen);
         painter.drawPolygon(triangle);
+    }
+
+    painter.setPen(textColor);
+    QFont frameFont = painter.font();
+    frameFont.setPointSize(8);
+    painter.setFont(frameFont);
+    for (int i = 0; i < MAX_FRAMES; i += 5)
+    {
+        int x = headerHeight + i * (frameWidth + margin);
+        QString label = QString::number(i);
+        painter.drawText(x + 2, 20, label);
     }
 }
