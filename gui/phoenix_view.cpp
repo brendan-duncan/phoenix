@@ -541,14 +541,10 @@ void PhoenixView::drawShape(QPainter& painter, const fla::Shape* shape)
     };
 
     // Process all edges and collect directed paths
-    std::cout << "\n=== Processing Shape with " << shape->edges.size() << " edges ===" << std::endl;
     for (const fla::Edge* edge : shape->edges)
     {
         if (!edge->visible)
             continue;
-
-        std::cout << "Edge: fillStyle0=" << edge->fillStyle0 << " fillStyle1=" << edge->fillStyle1
-                  << " paths=" << edge->paths.size() << std::endl;
 
         for (const fla::Path& path : edge->paths)
         {
@@ -556,8 +552,6 @@ void PhoenixView::drawShape(QPainter& painter, const fla::Shape* shape)
                 continue;
 
             auto [start, end] = getPathEndpoints(path);
-            std::cout << "  Path: start=(" << start.x() << "," << start.y() << ") end=("
-                      << end.x() << "," << end.y() << ") segments=" << path.segments.size() << std::endl;
 
             int fillStyleIdx1 = path.fillStyleIndex != -1 ? path.fillStyleIndex : edge->fillStyle1;
             int fillStyleIdx0 = edge->fillStyle0;
@@ -570,7 +564,6 @@ void PhoenixView::drawShape(QPainter& painter, const fla::Shape* shape)
                 {
                     fillStyles[fillStyleIdx1] = shape->getFillStyleByIndex(fillStyleIdx1);
                 }
-                std::cout << "    Added to fillStyle1=" << fillStyleIdx1 << " (forward)" << std::endl;
             }
 
             // Add to fillStyle0 (reverse direction)
@@ -581,15 +574,8 @@ void PhoenixView::drawShape(QPainter& painter, const fla::Shape* shape)
                 {
                     fillStyles[fillStyleIdx0] = shape->getFillStyleByIndex(fillStyleIdx0);
                 }
-                std::cout << "    Added to fillStyle0=" << fillStyleIdx0 << " (reverse)" << std::endl;
             }
         }
-    }
-
-    std::cout << "\n=== Fill Style Path Counts ===" << std::endl;
-    for (const auto& [fillIdx, paths] : fillStylePaths)
-    {
-        std::cout << "FillStyle " << fillIdx << ": " << paths.size() << " directed paths" << std::endl;
     }
 
     // Helper lambda to build a complete path from a path (for stroke rendering)
@@ -742,8 +728,6 @@ void PhoenixView::drawShape(QPainter& painter, const fla::Shape* shape)
         if (!fillStyle)
             continue;
 
-        std::cout << "\n=== Building loops for FillStyle " << fillIdx << " ===" << std::endl;
-
         QPainterPath compoundPath;
         compoundPath.setFillRule(Qt::OddEvenFill);
 
@@ -757,7 +741,6 @@ void PhoenixView::drawShape(QPainter& painter, const fla::Shape* shape)
             // Check if this path is already closed (start == end)
             if (pointsMatch(directedPath.start, directedPath.end))
             {
-                std::cout << "  Already closed path: (" << directedPath.start.x() << "," << directedPath.start.y() << ")" << std::endl;
                 QPainterPath loopPath;
                 loopPath.moveTo(directedPath.start);
                 addSegmentToPath(loopPath, *directedPath.path, directedPath.reversed);
@@ -767,7 +750,6 @@ void PhoenixView::drawShape(QPainter& painter, const fla::Shape* shape)
                 closedCount++;
             }
         }
-        std::cout << "  Found " << closedCount << " pre-closed paths" << std::endl;
 
         // Second pass: connect remaining paths into closed loops
         int loopNum = 0;
@@ -777,7 +759,6 @@ void PhoenixView::drawShape(QPainter& painter, const fla::Shape* shape)
                 continue;
 
             loopNum++;
-            std::cout << "  Loop " << loopNum << " starting at (" << directedPath.start.x() << "," << directedPath.start.y() << ")" << std::endl;
 
             QPainterPath loopPath;
             loopPath.moveTo(directedPath.start);
@@ -795,7 +776,6 @@ void PhoenixView::drawShape(QPainter& painter, const fla::Shape* shape)
                 // Check if we've closed the loop
                 if (pointsMatch(currentEnd, loopStart))
                 {
-                    std::cout << "    Closed after " << connectedCount << " segments" << std::endl;
                     loopPath.closeSubpath();
                     break;
                 }
@@ -824,8 +804,6 @@ void PhoenixView::drawShape(QPainter& painter, const fla::Shape* shape)
 
                 if (found && bestMatch)
                 {
-                    std::cout << "    Connected to (" << bestMatch->start.x() << "," << bestMatch->start.y()
-                              << ") dist=" << sqrt(bestDistance) << std::endl;
                     addSegmentToPath(loopPath, *bestMatch->path, bestMatch->reversed);
                     bestMatch->used = true;
                     currentEnd = bestMatch->end;
@@ -833,7 +811,6 @@ void PhoenixView::drawShape(QPainter& painter, const fla::Shape* shape)
                 }
                 else
                 {
-                    std::cout << "    No match found for (" << currentEnd.x() << "," << currentEnd.y() << ")" << std::endl;
                     break;
                 }
             }
@@ -842,11 +819,6 @@ void PhoenixView::drawShape(QPainter& painter, const fla::Shape* shape)
             if (pointsMatch(currentEnd, loopStart))
             {
                 loopPath.closeSubpath();
-            }
-            else
-            {
-                std::cout << "    WARNING: Loop not closed! End=(" << currentEnd.x() << "," << currentEnd.y()
-                          << ") Start=(" << loopStart.x() << "," << loopStart.y() << ")" << std::endl;
             }
 
             compoundPath.addPath(loopPath);

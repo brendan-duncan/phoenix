@@ -51,15 +51,16 @@ int getIntAttribute(const tinyxml2::XMLElement* element, const char* name, int d
     return value;
 }
 
-void parseHexColor(const std::string& hexColor, uint8_t rgba[4])
+void parseHexColor(const std::string& hexColor, uint8_t rgba[4], double alpha = 1.0)
 {
+    uint8_t a = static_cast<uint8_t>(std::max(0.0, std::min(1.0, alpha)) * 255);
     // Remove '#' if present
     if (hexColor.size() == 0)
     {
         rgba[0] = 0;
         rgba[1] = 0;
         rgba[2] = 0;
-        rgba[3] = 255; // Default to opaque black
+        rgba[3] = a; // Default to opaque black
         return;
     }
 
@@ -89,7 +90,7 @@ void parseHexColor(const std::string& hexColor, uint8_t rgba[4])
         rgba[0] = std::stoi(color.substr(0, 2), nullptr, 16);
         rgba[1] = std::stoi(color.substr(2, 2), nullptr, 16);
         rgba[2] = std::stoi(color.substr(4, 2), nullptr, 16);
-        rgba[3] = 255; // Alpha is fully opaque
+        rgba[3] = a; // Alpha is fully opaque
     }
     else
     {
@@ -97,16 +98,17 @@ void parseHexColor(const std::string& hexColor, uint8_t rgba[4])
         rgba[0] = 0;
         rgba[1] = 0;
         rgba[2] = 0;
-        rgba[3] = 255;
+        rgba[3] = a;
     }
 }
 
 bool parseSolidColor(const tinyxml2::XMLElement* element, fla::SolidColor* solidColor)
 {
     std::string color = getAttribute(element, "color");
+    double alpha = getDoubleAttribute(element, "alpha", 1.0);
 
     // Parse CSS hex color if it starts with '#'
-    parseHexColor(color, solidColor->color);
+    parseHexColor(color, solidColor->color, alpha);
 
     return true;
 }
