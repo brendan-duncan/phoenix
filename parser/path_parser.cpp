@@ -49,7 +49,7 @@ fla::Edge* PathParser::parse(const std::string& data)
             pos++;
             fla::Point point = parsePoint(data, pos);
 
-            // Close previous segment if it exists and endpoints match
+            // Close previous segment if it exists and endpoints match the start
             if (lastPath && !lastPath->segments.empty())
             {
                 fla::Point segmentStart = lastPath->segments[0].points[0];
@@ -59,10 +59,20 @@ fla::Edge* PathParser::parse(const std::string& data)
                     lastPath->segments.push_back({fla::PathSegment::Command::Close, {}});
                 }
 
-                // Always start a new Path object for each Move command
-                edge->paths.push_back({});
-                lastPath = &edge->paths.back();
-                lastPath->segments.push_back({fla::PathSegment::Command::Move, {point}});
+                // Check if this Move is actually a continuation (starts where we ended)
+                if (std::abs(point.x - lastPoint.x) < 0.01 &&
+                    std::abs(point.y - lastPoint.y) < 0.01)
+                {
+                    // This is a continuation - don't create a new path, just continue the current one
+                    // No need to add anything since we're already at this point
+                }
+                else
+                {
+                    // This is a real move to a new location - start a new Path
+                    edge->paths.push_back({});
+                    lastPath = &edge->paths.back();
+                    lastPath->segments.push_back({fla::PathSegment::Command::Move, {point}});
+                }
             }
             else if (lastPath == nullptr)
             {
