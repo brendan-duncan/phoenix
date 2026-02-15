@@ -346,7 +346,9 @@ void PhoenixView::drawElement(QPainter& painter, const fla::Element* element)
             {
                 if (timeline->visible)
                 {
+                    painter.save();
                     drawTimeline(painter, timeline, instance->loopType, instance->firstFrame);
+                    painter.restore();
                 }
             }
         }
@@ -358,7 +360,9 @@ void PhoenixView::drawElement(QPainter& painter, const fla::Element* element)
         {
             if (member->visible)
             {
+                painter.save();
                 drawElement(painter, member);
+                painter.restore();
             }
         }
     }
