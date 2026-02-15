@@ -11,6 +11,9 @@ class SymbolInstance : public Element
 {
 public:
     std::string libraryItemName;
+    int firstFrame = 0;
+    SymbolType symbolType = SymbolType::Graphic;
+    LoopType loopType = LoopType::PlayOnce;
 
     SymbolInstance() = default;
 

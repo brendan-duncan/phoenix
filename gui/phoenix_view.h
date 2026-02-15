@@ -49,7 +49,7 @@ private:
     const fla::FLADocument* _flaDocument;
     Player* _player;
 
-    bool _highQualityAntiAliasing = true;
+    bool _highQualityAntiAliasing;
 
     // Pan and zoom state
     double _zoom;
@@ -63,6 +63,8 @@ private:
 
     // Debug: show bounding boxes
     bool _showBounds;
+
+    bool _disableStaticText = false;
 
     struct PathCacheEntry
     {
@@ -86,9 +88,9 @@ private:
 
     void drawDocument(QPainter& painter, const fla::Document* document);
 
-    void drawTimeline(QPainter& painter, const fla::Timeline* timeline);
+    void drawTimeline(QPainter& painter, const fla::Timeline* timeline, fla::LoopType loopType = fla::LoopType::PlayOnce, int firstFrame = 0);
 
-    void drawLayer(QPainter& painter, const fla::Layer* layer);
+    void drawLayer(QPainter& painter, const fla::Layer* layer, fla::LoopType loopType, int firstFrame);
 
     void drawFrame(QPainter& painter, const fla::Frame* frame);
 

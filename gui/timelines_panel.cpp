@@ -3,6 +3,8 @@
 #include <map>
 
 #include <QVBoxLayout>
+#include <QHBoxLayout>
+#include <QFont>
 #include <QPainter>
 #include <QPaintEvent>
 #include <QMouseEvent>
@@ -13,29 +15,68 @@ TimelinesPanel::TimelinesPanel(Player* player, QWidget *parent)
     : QWidget(parent)
     , _flaDocument(nullptr)
     , _player(player)
+    , _playTimer(new QTimer(this))
 {
     QVBoxLayout* layout = new QVBoxLayout(this);
     layout->setContentsMargins(0, 0, 0, 0);
 
+    _header = new QWidget(this);
+    _header->setAutoFillBackground(true);
+    _header->setFixedHeight(50);
+    QPalette headerPalette = _header->palette();
+    headerPalette.setColor(QPalette::Window, QColor("#2d2d2d"));
+    _header->setPalette(headerPalette);
+    _header->setFixedHeight(25);
+    QHBoxLayout* headerLayout = new QHBoxLayout(_header);
+    headerLayout->setContentsMargins(0, 0, 0, 0);
+    headerLayout->setSpacing(2);
+    layout->addWidget(_header);
+
     _scrollArea = new QScrollArea(this);
     _scrollArea->setWidgetResizable(true);
     _scrollArea->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOn);
+    layout->addWidget(_scrollArea);
 
-    QWidget* container = new QWidget();
-    _scrollArea->setWidget(container);
-    QVBoxLayout* containerLayout = new QVBoxLayout(container);
-    containerLayout->setContentsMargins(0, 0, 0, 0);
+    QFont btnFont;
+    btnFont.setPointSize(16);
 
-    _header = new QWidget(this);
-    _header->setFixedHeight(25);
-    containerLayout->addWidget(_header);
+    headerLayout->addStretch();
+
+    QPushButton* gotoFirstBtn = new QPushButton("⏮️", _header);
+    gotoFirstBtn->setFixedSize(30, 30);
+    gotoFirstBtn->setFont(btnFont);
+    gotoFirstBtn->setToolTip("Go to first frame");
+    connect(gotoFirstBtn, &QPushButton::clicked, this, &TimelinesPanel::onGotoFirstFrame);
+    headerLayout->addWidget(gotoFirstBtn);
+
+    QPushButton* stepBackBtn = new QPushButton("⏪", _header);
+    stepBackBtn->setFixedSize(30, 30);
+    stepBackBtn->setFont(btnFont);
+    stepBackBtn->setToolTip("Step back");
+    connect(stepBackBtn, &QPushButton::clicked, this, &TimelinesPanel::onStepBack);
+    headerLayout->addWidget(stepBackBtn);
+
+    _playButton = new QPushButton("▶️", _header);
+    _playButton->setFixedSize(30, 30);
+    _playButton->setFont(btnFont);
+    _playButton->setToolTip("Play/Stop");
+    connect(_playButton, &QPushButton::clicked, this, &TimelinesPanel::onPlayStop);
+    headerLayout->addWidget(_playButton);
+
+    QPushButton* stepForwardBtn = new QPushButton("⏩", _header);
+    stepForwardBtn->setFixedSize(30, 30);
+    stepForwardBtn->setFont(btnFont);
+    stepForwardBtn->setToolTip("Step forward");
+    connect(stepForwardBtn, &QPushButton::clicked, this, &TimelinesPanel::onStepForward);
+    headerLayout->addWidget(stepForwardBtn);
+
+    headerLayout->addStretch();
 
     _gridContainer = new TimelineGrid(_player, this);
-    containerLayout->addWidget(_gridContainer);
+    _scrollArea->setWidget(_gridContainer);
 
     connect(_player, &Player::currentFrameChanged, _gridContainer, &TimelineGrid::onPlayerFrameChanged);
-
-    layout->addWidget(_scrollArea);
+    connect(_playTimer, &QTimer::timeout, this, &TimelinesPanel::onTimerTick);
 }
 
 void TimelinesPanel::setDocument(const fla::FLADocument* document)
@@ -43,6 +84,53 @@ void TimelinesPanel::setDocument(const fla::FLADocument* document)
     _flaDocument = document;
     _gridContainer->setDocument(document);
     _gridContainer->updateSize();
+}
+
+void TimelinesPanel::onGotoFirstFrame()
+{
+    if (_player)
+    {
+        _player->setCurrentFrame(0);
+    }
+}
+
+void TimelinesPanel::onStepBack()
+{
+    if (_player)
+    {
+        _player->setCurrentFrame(_player->currentFrame() - 1);
+    }
+}
+
+void TimelinesPanel::onPlayStop()
+{
+    if (_isPlaying)
+    {
+        _playTimer->stop();
+        _playButton->setText("▶️");
+    }
+    else
+    {
+        _playTimer->start(1000 / 24); // Assuming 24 FPS
+        _playButton->setText("⏹️");
+    }
+    _isPlaying = !_isPlaying;
+}
+
+void TimelinesPanel::onStepForward()
+{
+    if (_player)
+    {
+        _player->setCurrentFrame(_player->currentFrame() + 1);
+    }
+}
+
+void TimelinesPanel::onTimerTick()
+{
+    if (_player)
+    {
+        _player->setCurrentFrame(_player->currentFrame() + 1);
+    }
 }
 
 TimelineGrid::TimelineGrid(Player* player, QWidget* parent)

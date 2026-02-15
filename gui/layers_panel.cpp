@@ -7,6 +7,7 @@
 #include <QFont>
 #include <QColor>
 #include <QSize>
+#include <QPalette>
 
 LayersPanel::LayersPanel(QWidget *parent)
     : QWidget(parent)
@@ -22,6 +23,9 @@ LayersPanel::LayersPanel(QWidget *parent)
     QWidget* header = new QWidget(this);
     header->setAutoFillBackground(true);
     header->setFixedHeight(50);
+    QPalette headerPalette = header->palette();
+    headerPalette.setColor(QPalette::Window, QColor("#2d2d2d"));
+    header->setPalette(headerPalette);
     layout->addWidget(header);
 
     _treeWidget = new QTreeWidget(this);
@@ -82,10 +86,7 @@ void LayersPanel::refreshLayers()
 
     for (const fla::Timeline* timeline : _flaDocument->document->timelines)
     {
-        QMap<int, QTreeWidgetItem*> folderIndexMap;
-        folderIndexMap[0] = nullptr;
-
-        int folderIndex = 1;
+        QList<QTreeWidgetItem*> layerIndexMap;
 
         for (const fla::Layer* layer : timeline->layers)
         {
@@ -94,11 +95,11 @@ void LayersPanel::refreshLayers()
             {
                 if (layer->layerType == fla::Layer::Type::Folder)
                 {
-                    layerName = QString("Folder %1").arg(folderIndex);
+                    layerName = QString("Folder %1").arg(layerIndexMap.size());
                 }
                 else
                 {
-                    layerName = "Layer";
+                    layerName = QString("Layer %1").arg(layerIndexMap.size());
                 }
             }
 
@@ -108,51 +109,43 @@ void LayersPanel::refreshLayers()
             QTreeWidgetItem* item = new QTreeWidgetItem();
             item->setSizeHint(0, QSize(100, 30));
 
-            if (layer->layerType == fla::Layer::Type::Folder)
-            {
-                item->setText(0, layerName);
-                item->setIcon(0, _openFolderIcon);
-                folderIndexMap[folderIndex] = item;
-                folderIndex++;
+            layerIndexMap.push_back(item);
 
-                if (layer->parentLayerIndex == -1)
-                {
-                    _treeWidget->addTopLevelItem(item);
-                }
-                else
-                {
-                    QTreeWidgetItem* parent = folderIndexMap.value(layer->parentLayerIndex, nullptr);
-                    if (parent)
-                    {
-                        parent->addChild(item);
-                    }
-                    else
-                    {
-                        _treeWidget->addTopLevelItem(item);
-                    }
-                }
-                item->setExpanded(true);
+            item->setText(0, layerName);
+            item->setExpanded(true);
+            switch (layer->layerType)
+            {
+                case fla::Layer::Type::Normal:
+                    item->setIcon(0, _layerIcon);
+                    break;
+                case fla::Layer::Type::Folder:
+                    item->setIcon(0, _openFolderIcon);
+                    break;
+                case fla::Layer::Type::Mask:
+                    item->setIcon(0, _layerIcon);
+                    break;
+                case fla::Layer::Type::Masked:
+                    item->setIcon(0, _layerIcon);
+                    break;
+                case fla::Layer::Type::Guide:
+                    item->setIcon(0, _layerIcon);
+                    break;
+            }
+
+            if (layer->parentLayerIndex == -1)
+            {
+                _treeWidget->addTopLevelItem(item);
             }
             else
             {
-                item->setText(0, layerName);
-                item->setIcon(0, _layerIcon);
-
-                if (layer->parentLayerIndex == -1)
+                QTreeWidgetItem* parent = layerIndexMap.value(layer->parentLayerIndex, nullptr);
+                if (parent)
                 {
-                    _treeWidget->addTopLevelItem(item);
+                    parent->addChild(item);
                 }
                 else
                 {
-                    QTreeWidgetItem* parent = folderIndexMap.value(layer->parentLayerIndex, nullptr);
-                    if (parent)
-                    {
-                        parent->addChild(item);
-                    }
-                    else
-                    {
-                        _treeWidget->addTopLevelItem(item);
-                    }
+                    _treeWidget->addTopLevelItem(item);
                 }
             }
         }

@@ -15,6 +15,7 @@
 #include <cmath>
 
 #include <QFont>
+#include <QFontDatabase>
 #include <QPainter>
 #include <QPaintEvent>
 #include <QPainterPath>
@@ -28,6 +29,7 @@ PhoenixView::PhoenixView(Player* player, QWidget *parent)
     : QWidget(parent)
     , _flaDocument(nullptr)
     , _player(player)
+    , _highQualityAntiAliasing(true)
     , _zoom(1.0)
     , _panX(0)
     , _panY(0)
@@ -125,17 +127,9 @@ void PhoenixView::paintEvent(QPaintEvent *event)
     painter.fillRect(0, 0, docWidth, docHeight, QColor(255, 255, 255));
 
     // Draw document content
+    _disableStaticText = _highQualityAntiAliasing;
     drawDocument(painter, _flaDocument->document);
-
-    // Draw visible rect if debug mode is enabled
-    /*if (_showBounds)
-    {
-        painter.save();
-        painter.setPen(QPen(QColor(255, 0, 0, 100), 2.0, Qt::DashLine));
-        painter.setBrush(Qt::NoBrush);
-        painter.drawRect(_visibleRect);
-        painter.restore();
-    }*/
+    _disableStaticText = false;
 
     painter.restore();
 
@@ -144,7 +138,7 @@ void PhoenixView::paintEvent(QPaintEvent *event)
         painter.save();
         // An extra draw slightly shifted eliminates the white line artifacts that can appear
         // between shapes due to anti-aliasing and subpixel rendering issues.
-        painter.translate(_panX + centerX + 1, _panY + centerY + 1);
+        painter.translate(_panX + centerX + 0.25, _panY + centerY + 0.25);
         painter.scale(scale, scale);
         drawDocument(painter, _flaDocument->document);
 
@@ -178,29 +172,28 @@ void PhoenixView::drawDocument(QPainter& painter, const fla::Document* document)
 
     for (const fla::Timeline* timeline : document->timelines)
     {
-        drawTimeline(painter, timeline);
+        if (timeline->visible)
+        {
+            drawTimeline(painter, timeline);
+        }
     }
 
     //qDebug() << "Skipped elements due to culling:" << _skippedElement;
 }
 
-void PhoenixView::drawTimeline(QPainter& painter, const fla::Timeline* timeline)
+void PhoenixView::drawTimeline(QPainter& painter, const fla::Timeline* timeline, fla::LoopType loopType, int firstFrame)
 {
-    // Check timeline visibility
-    if (!timeline->visible)
-        return;
-
     for (int i = timeline->layers.size() - 1; i >= 0; --i)
     {
         const fla::Layer* layer = timeline->layers[i];
         if (layer->visible)
         {
-            drawLayer(painter, layer);
+            drawLayer(painter, layer, loopType, firstFrame);
         }
     }
 }
 
-void PhoenixView::drawLayer(QPainter& painter, const fla::Layer* layer)
+void PhoenixView::drawLayer(QPainter& painter, const fla::Layer* layer, fla::LoopType loopType, int firstFrame)
 {
     QColor color;
     color.setRgb(layer->color[0], layer->color[1], layer->color[2], layer->color[3]);
@@ -208,9 +201,11 @@ void PhoenixView::drawLayer(QPainter& painter, const fla::Layer* layer)
 
     const fla::Frame* currentFrame = nullptr;
 
+    int currentFrameIndex = firstFrame + _player->currentFrame();
+
     for (const fla::Frame* frame : layer->frames)
     {
-        if (frame->index <= _player->currentFrame())
+        if (frame->index <= currentFrameIndex)
         {
             currentFrame = frame;
         }
@@ -226,7 +221,10 @@ void PhoenixView::drawFrame(QPainter& painter, const fla::Frame* frame)
 {
     for (const fla::Element* element : frame->elements)
     {
-        drawElement(painter, element);
+        if (element->visible)
+        {
+            drawElement(painter, element);
+        }
     }
 }
 
@@ -234,7 +232,9 @@ fla::Symbol* PhoenixView::findSymbolByName(const fla::Document* document, const 
 {
     auto it = document->symbolMap.find(name);
     if (it != document->symbolMap.end())
+    {
         return it->second;
+    }
     return nullptr;
 }
 
@@ -242,10 +242,6 @@ int indent = 0;
 
 void PhoenixView::drawElement(QPainter& painter, const fla::Element* element)
 {
-    // Check element visibility
-    if (!element->visible)
-        return;
-
     // Prepare transform data
     QTransform transform(element->transform.m11, element->transform.m12,
                        element->transform.m21, element->transform.m22,
@@ -277,7 +273,10 @@ void PhoenixView::drawElement(QPainter& painter, const fla::Element* element)
         {
             for (const fla::Timeline* timeline : symbol->timelines)
             {
-                drawTimeline(painter, timeline);
+                if (timeline->visible)
+                {
+                    drawTimeline(painter, timeline, instance->loopType, instance->firstFrame);
+                }
             }
         }
     }
@@ -286,7 +285,10 @@ void PhoenixView::drawElement(QPainter& painter, const fla::Element* element)
         const fla::Group* group = static_cast<const fla::Group*>(element);
         for (const fla::Element* member : group->members)
         {
-            drawElement(painter, member);
+            if (member->visible)
+            {
+                drawElement(painter, member);
+            }
         }
     }
     else if (type == fla::Element::Type::Rectangle)
@@ -309,6 +311,12 @@ void PhoenixView::drawElement(QPainter& painter, const fla::Element* element)
     }
     else if (type == fla::Element::Type::StaticText)
     {
+        if (_disableStaticText)
+        {
+            painter.restore();
+            return;
+        }
+
         painter.setBrush(Qt::NoBrush);
         const fla::StaticText* staticText = static_cast<const fla::StaticText*>(element);
         for (const fla::TextRun& run : staticText->runs)
@@ -341,14 +349,42 @@ void PhoenixView::drawElement(QPainter& painter, const fla::Element* element)
                     fontFamily += c;
                 }
 
+                if (fontFamily.endsWith(" MT"))
+                {
+                    fontFamily = fontFamily.left(fontFamily.length() - 3);
+                }
+                else if (fontFamily.endsWith(" PS"))
+                {
+                    fontFamily = fontFamily.left(fontFamily.length() - 3);
+                }
+                else if (fontFamily.endsWith(" PSMT"))
+                {
+                    fontFamily = fontFamily.left(fontFamily.length() - 5);
+                }
+
+                qDebug() << "Loading font:" << fontFamily << "size:" << run.size << "italic:" << isItalic;
+
+                QFontDatabase fontDatabase;
+                if (!fontDatabase.families().contains(fontFamily))
+                {
+                    qDebug() << "Font family not found:" << fontFamily << "- using default";
+                    /*for (const QString& availableFamily : fontDatabase.families())
+                    {
+                        qDebug() << "    family:" << availableFamily;
+                    }*/
+                    fontFamily = "Arial";
+                }
+
                 QFont font(fontFamily, (int)run.size, -1, isItalic);
                 _fontCache[fontFace] = font;
             }
 
             QFont font = _fontCache[fontFace];
+            font.setWeight(QFont::Normal);
+            font.setPointSizeF(run.size * 0.75); // Adjust size to better match Flash's rendering
             painter.setFont(font);
             // The origin is the top-left, not the bottom-left, so we use the text size as an approximation for line height
-            painter.drawText(0, run.size, QString::fromStdString(run.text));
+            painter.drawText(staticText->left, staticText->top + run.size, QString::fromStdString(run.text));
         }
     }
     else if (type == fla::Element::Type::BitmapInstance)

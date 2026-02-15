@@ -4,6 +4,22 @@
 
 namespace fla {
 
+enum class SymbolType
+{
+    MovieClip,
+    Button,
+    Graphic
+};
+
+enum class LoopType
+{
+    None,
+    SingleFrame,
+    Loop,
+    PlayOnce,
+    PingPong
+};
+
 class DOMElement
 {
 public:

@@ -51,6 +51,14 @@ int getIntAttribute(const tinyxml2::XMLElement* element, const char* name, int d
     return value;
 }
 
+// Helper function to get bool attribute with default
+bool getBoolAttribute(const tinyxml2::XMLElement* element, const char* name, bool defaultValue = false)
+{
+    bool value = defaultValue;
+    element->QueryBoolAttribute(name, &value);
+    return value;
+}
+
 void parseHexColor(const std::string& hexColor, uint8_t rgba[4], double alpha = 1.0)
 {
     uint8_t a = static_cast<uint8_t>(std::max(0.0, std::min(1.0, alpha)) * 255);
@@ -99,6 +107,15 @@ void parseHexColor(const std::string& hexColor, uint8_t rgba[4], double alpha = 
         rgba[1] = 0;
         rgba[2] = 0;
         rgba[3] = a;
+    }
+}
+
+void getColorAttribute(const tinyxml2::XMLElement* element, const char* attributeName, uint8_t rgba[4])
+{
+    if (hasAttribute(element, attributeName))
+    {
+        std::string color = getAttribute(element, attributeName);
+        parseHexColor(color, rgba);
     }
 }
 
@@ -392,14 +409,9 @@ bool parseFills(const tinyxml2::XMLElement* element, fla::Shape* shape)
 
 bool parseElement(const tinyxml2::XMLElement* element, fla::Element* el)
 {
-    if (hasAttribute(element, "isSelected"))
-        el->isSelected = (getAttribute(element, "isSelected") == "true");
-
-    if (hasAttribute(element, "isFloating"))
-        el->isFloating = (getAttribute(element, "isFloating") == "true");
-
-    if (hasAttribute(element, "lockFlag"))
-        el->isLocked = (getAttribute(element, "lockFlag") == "true");
+    el->isSelected = getBoolAttribute(element, "isSelected", false);
+    el->isFloating = getBoolAttribute(element, "isFloating", false);
+    el->isLocked = getBoolAttribute(element, "lockFlag", false);
 
     // Parse transformation matrix
     const tinyxml2::XMLElement* matrixNode = element->FirstChildElement("matrix");
@@ -523,6 +535,49 @@ bool parseSymbolInstance(const tinyxml2::XMLElement* element, fla::SymbolInstanc
     }
 
     instance->libraryItemName = getAttribute(element, "libraryItemName");
+    instance->firstFrame = getIntAttribute(element, "firstFrame", 0);
+
+    std::string symbolType = getAttribute(element, "symbolType", "graphic");
+    if (symbolType == "graphic")
+    {
+        instance->symbolType = fla::SymbolType::Graphic;
+    }
+    else if (symbolType == "button")
+    {
+        instance->symbolType = fla::SymbolType::Button;
+    }
+    else if (symbolType == "movie clip")
+    {
+        instance->symbolType = fla::SymbolType::MovieClip;
+    }
+    else
+    {
+        std::cerr << "Unknown symbol type: " << symbolType << (_currentFile.empty() ? "" : " from ") << _currentFile << std::endl;
+        instance->symbolType = fla::SymbolType::Graphic; // Default to graphic
+    }
+
+    std::string loopType = getAttribute(element, "loopType", "play once");
+    if (loopType == "single frame")
+    {
+        instance->loopType = fla::LoopType::SingleFrame;
+    }
+    else if (loopType == "loop")
+    {
+        instance->loopType = fla::LoopType::Loop;
+    }
+    else if (loopType == "play once")
+    {
+        instance->loopType = fla::LoopType::PlayOnce;
+    }
+    else if (loopType == "ping pong")
+    {
+        instance->loopType = fla::LoopType::PingPong;
+    }
+    else
+    {
+        std::cerr << "Unknown loop type: " << loopType << (_currentFile.empty() ? "" : " from ") << _currentFile << std::endl;
+        instance->loopType = fla::LoopType::PlayOnce; // Default to play once
+    }
 
     return true;
 }
@@ -650,6 +705,12 @@ bool parseStaticText(const tinyxml2::XMLElement* element, fla::StaticText* stati
         return false;
     }
 
+    staticText->left = getDoubleAttribute(element, "left", 0.0);
+    staticText->top = getDoubleAttribute(element, "top", 0.0);
+    staticText->width = getDoubleAttribute(element, "width", 0.0);
+    staticText->height = getDoubleAttribute(element, "height", 0.0);
+    staticText->autoExpand = getBoolAttribute(element, "autoExpand", false);
+
     for (const tinyxml2::XMLElement* textRunsNode = element->FirstChildElement("textRuns");
          textRunsNode != nullptr;
          textRunsNode = textRunsNode->NextSiblingElement("textRuns"))
@@ -684,31 +745,34 @@ bool parseStaticText(const tinyxml2::XMLElement* element, fla::StaticText* stati
                         {
                             if (std::strcmp(attrElement->Name(), "DOMTextAttrs") == 0)
                             {
-                                if (hasAttribute(attrElement, "aliasText"))
+                                std::string alignment = getAttribute(attrElement, "alignment");
+                                if (!alignment.empty())
                                 {
-                                    textRun.aliasText = (getAttribute(attrElement, "aliasText") == "true");
+                                    if (alignment == "left")
+                                    {
+                                        textRun.alignment = fla::TextRun::Alignment::Left;
+                                    }
+                                    else if (alignment == "center")
+                                    {
+                                        textRun.alignment = fla::TextRun::Alignment::Center;
+                                    }
+                                    else if (alignment == "right")
+                                    {
+                                        textRun.alignment = fla::TextRun::Alignment::Right;
+                                    }
+                                    else
+                                    {
+                                        std::cerr << "!!!! Unhandled text alignment value: " << alignment << (_currentFile.empty() ? "" : " from ") << _currentFile << std::endl;
+                                    }
                                 }
-                                if (hasAttribute(attrElement, "lineHeight"))
-                                {
-                                    textRun.lineHeight = getDoubleAttribute(attrElement, "lineHeight");
-                                }
-                                if (hasAttribute(attrElement, "size"))
-                                {
-                                    textRun.size = getDoubleAttribute(attrElement, "size");
-                                }
-                                if (hasAttribute(attrElement, "bitmapSize"))
-                                {
-                                    textRun.bitmapSize = getDoubleAttribute(attrElement, "bitmapSize");
-                                }
-                                if (hasAttribute(attrElement, "face"))
-                                {
-                                    textRun.face = getAttribute(attrElement, "face");
-                                }
-                                if (hasAttribute(attrElement, "fillColor"))
-                                {
-                                    std::string color = getAttribute(attrElement, "fillColor");
-                                    parseHexColor(color, textRun.fillColor);
-                                }
+                                textRun.aliasText = getBoolAttribute(attrElement, "aliasText", false);
+                                textRun.autoKern = getBoolAttribute(attrElement, "autoKern", false);
+                                textRun.letterSpacing = getDoubleAttribute(attrElement, "letterSpacing", 0.0);
+                                textRun.lineHeight = getDoubleAttribute(attrElement, "lineHeight", 0.0);
+                                textRun.size = getDoubleAttribute(attrElement, "size", 0.0);
+                                textRun.bitmapSize = getDoubleAttribute(attrElement, "bitmapSize", 0.0);
+                                textRun.face = getAttribute(attrElement, "face");
+                                getColorAttribute(attrElement, "fillColor", textRun.fillColor);
                             }
                         }
                     }
@@ -967,12 +1031,39 @@ bool parseLayer(const tinyxml2::XMLElement* element, fla::Layer* layer)
     parseHexColor(color, layer->color);
 
     layer->current = getAttribute(element, "current");
-    layer->layerType = getAttribute(element, "layerType") == "folder" ? fla::Layer::Type::Folder : fla::Layer::Type::Normal;
+
+    std::string layerType = getAttribute(element, "layerType", "normal");
+    if (layerType == "normal")
+    {
+        layer->layerType = fla::Layer::Type::Normal;
+    }
+    else if (layerType == "folder")
+    {
+        layer->layerType = fla::Layer::Type::Folder;
+    }
+    else if (layerType == "mask")
+    {
+        layer->layerType = fla::Layer::Type::Mask;
+    }
+    else if (layerType == "masked")
+    {
+        layer->layerType = fla::Layer::Type::Masked;
+    }
+    else if (layerType == "guide")
+    {
+        layer->layerType = fla::Layer::Type::Guide;
+    }
+    else
+    {
+        std::cerr << "Unknown layer type: " << layerType << (_currentFile.empty() ? "" : " from ") << _currentFile << std::endl;
+        layer->layerType = fla::Layer::Type::Normal;
+    }
+
     layer->parentLayerIndex = getIntAttribute(element, "parentLayerIndex", -1);
-    layer->selected = getAttribute(element, "isSelected") == "true";
-    layer->autoNamed = getAttribute(element, "autoNamed") == "true";
-    layer->locked = getAttribute(element, "locked") == "true";
-    layer->visible = getAttribute(element, "visible") != "false";
+    layer->selected = getBoolAttribute(element, "isSelected", false);
+    layer->autoNamed = getBoolAttribute(element, "autoNamed", true);
+    layer->locked = getBoolAttribute(element, "locked", false);
+    layer->visible = getBoolAttribute(element, "visible", true);
 
     for (const tinyxml2::XMLElement* childElement = element->FirstChildElement();
          childElement != nullptr;
@@ -1006,6 +1097,18 @@ bool parseLayers(const tinyxml2::XMLElement* element, fla::Timeline* timeline)
             {
                 return false;
             }
+
+            if (layer->parentLayerIndex >= 0 && layer->parentLayerIndex < timeline->layers.size())
+            {
+                layer->parentLayer = timeline->layers[layer->parentLayerIndex];
+
+                // For whatever reason, Flash doesn't set the layer type of masked layers to "masked", it just sets the parent layer to "mask".
+                if (layer->parentLayer->layerType == fla::Layer::Type::Mask)
+                {
+                    layer->layerType = fla::Layer::Type::Masked;
+                }
+            }
+
             timeline->layers.push_back(layer);
         }
         else
@@ -1019,7 +1122,7 @@ bool parseLayers(const tinyxml2::XMLElement* element, fla::Timeline* timeline)
 bool parseTimeline(const tinyxml2::XMLElement* element, fla::Timeline* timeline)
 {
     timeline->name = getAttribute(element, "name");
-    timeline->layerDepthEnabled = getAttribute(element, "layerDepthEnabled") == "true";
+    timeline->layerDepthEnabled = getBoolAttribute(element, "layerDepthEnabled");
 
     for (const tinyxml2::XMLElement* childElement = element->FirstChildElement();
          childElement != nullptr;
@@ -1203,15 +1306,15 @@ bool parseDocument(fla::Document* document, const tinyxml2::XMLElement* element,
     document->creatorInfo = getAttribute(element, "creatorInfo");
     document->platform = getAttribute(element, "platform");
     document->versionInfo = getAttribute(element, "versionInfo");
-    document->majorVersion = getAttribute(element, "majorVersion");
-    document->buildNumber = getAttribute(element, "buildNumber");
-    document->viewAngle3D = getAttribute(element, "viewAngle3D");
-    document->vanishingPoint3DX = getAttribute(element, "vanishingPoint3DX");
-    document->vanishingPoint3DY = getAttribute(element, "vanishingPoint3DY");
-    document->nextSceneIdentifier = getAttribute(element, "nextSceneIdentifier");
-    document->playOptionsPlayLoop = getAttribute(element, "playOptionsPlayLoop");
-    document->playOptionsPlayPages = getAttribute(element, "playOptionsPlayPages");
-    document->playOptionsPlayFrameActions = getAttribute(element, "playOptionsPlayFrameActions");
+    document->majorVersion = getIntAttribute(element, "majorVersion");
+    document->buildNumber = getIntAttribute(element, "buildNumber");
+    document->viewAngle3D = getIntAttribute(element, "viewAngle3D");
+    document->vanishingPoint3DX = getIntAttribute(element, "vanishingPoint3DX");
+    document->vanishingPoint3DY = getIntAttribute(element, "vanishingPoint3DY");
+    document->nextSceneIdentifier = getIntAttribute(element, "nextSceneIdentifier");
+    document->playOptionsPlayLoop = getBoolAttribute(element, "playOptionsPlayLoop");
+    document->playOptionsPlayPages = getBoolAttribute(element, "playOptionsPlayPages");
+    document->playOptionsPlayFrameActions = getBoolAttribute(element, "playOptionsPlayFrameActions");
     document->filetypeGUID = getAttribute(element, "filetypeGUID");
     document->fileGUID = getAttribute(element, "fileGUID");
 

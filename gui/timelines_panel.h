@@ -4,6 +4,8 @@
 
 #include <QWidget>
 #include <QScrollArea>
+#include <QPushButton>
+#include <QTimer>
 
 class Player;
 
@@ -50,12 +52,24 @@ public:
 
     void setDocument(const fla::FLADocument* document);
 
+private slots:
+    void onGotoFirstFrame();
+
+    void onStepBack();
+
+    void onPlayStop();
+
+    void onStepForward();
+
+    void onTimerTick();
+
 private:
     const fla::FLADocument* _flaDocument;
     QScrollArea* _scrollArea;
     QWidget* _header;
     TimelineGrid* _gridContainer;
     Player* _player;
-
-    void refreshTimelines();
+    QPushButton* _playButton;
+    QTimer* _playTimer;
+    bool _isPlaying = false;
 };

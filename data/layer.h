@@ -14,7 +14,10 @@ public:
     enum class Type
     {
         Normal,
-        Folder
+        Mask,
+        Masked,
+        Folder,
+        Guide
     };
     // Attributes from Layer element
     std::string name;
@@ -27,6 +30,8 @@ public:
     bool locked = false;
 
     std::vector<Frame*> frames;
+
+    Layer* parentLayer = nullptr; // Pointer to parent layer (if any)
 
     Layer() = default;
 
