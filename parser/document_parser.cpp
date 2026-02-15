@@ -200,10 +200,9 @@ fla::Edge* parsePath(const tinyxml2::XMLElement* element)
         return nullptr;
     }
 
-    edge->fillStyle0 = hasAttribute(element, "fillStyle0") ? getIntAttribute(element, "fillStyle0") : -1;
-    edge->fillStyle1 = hasAttribute(element, "fillStyle1") ? getIntAttribute(element, "fillStyle1") : -1;
-
-    edge->strokeStyle = hasAttribute(element, "strokeStyle") ? getIntAttribute(element, "strokeStyle") : -1;
+    edge->fillStyle0 = getIntAttribute(element, "fillStyle0", -1);
+    edge->fillStyle1 = getIntAttribute(element, "fillStyle1", -1);
+    edge->strokeStyle = getIntAttribute(element, "strokeStyle", -1);
 
     return edge;
 }
@@ -229,6 +228,7 @@ bool parseEdges(const tinyxml2::XMLElement* element, fla::Shape* shape)
             std::cerr << "!!!! Unhandled edge element: " << childElement->Name() << (_currentFile.empty() ? "" : " from ") << _currentFile << std::endl;
         }
     }
+
     return true;
 }
 
@@ -356,7 +356,7 @@ bool parseStrokes(const tinyxml2::XMLElement* element, fla::Shape* shape)
     {
         if (std::strcmp(childElement->Name(), "StrokeStyle") == 0)
         {
-            int index = hasAttribute(childElement, "index") ? getIntAttribute(childElement, "index") : -1;
+            int index = getIntAttribute(childElement, "index", -1);
             fla::StrokeStyle* strokeStyle = parseStrokeStyle(childElement);
             if (!strokeStyle)
             {
@@ -505,12 +505,16 @@ bool parseShape(const tinyxml2::XMLElement* element, fla::Shape* shape)
 
     for (fla::Edge* edge : shape->edges)
     {
-        for (const fla::Path& path : edge->paths)
+        for (fla::Path& path : edge->paths)
         {
-            for (const fla::PathSegment& segment : path.segments)
+            for (fla::PathSegment& segment : path.segments)
             {
-                for (const fla::Point& point : segment.points)
+                for (fla::Point& point : segment.points)
                 {
+                    //point.translate(shape->transformationPoint.x, shape->transformationPoint.y);
+                    //point.transform(shape->transform);
+                    //point.translate(-shape->transformationPoint.x, -shape->transformationPoint.y);
+
                     shape->bounds.topLeft.x = std::min(shape->bounds.topLeft.x, point.x);
                     shape->bounds.topLeft.y = std::min(shape->bounds.topLeft.y, point.y);
                     shape->bounds.bottomRight.x = std::max(shape->bounds.bottomRight.x, point.x);
@@ -523,6 +527,9 @@ bool parseShape(const tinyxml2::XMLElement* element, fla::Shape* shape)
     shape->bounds.translate(shape->transformationPoint.x, shape->transformationPoint.y);
     shape->bounds.transform(shape->transform);
     shape->bounds.translate(-shape->transformationPoint.x, -shape->transformationPoint.y);
+
+    //shape->transform.reset();
+    //shape->transformationPoint.reset();
 
     return true;
 }
@@ -1294,27 +1301,24 @@ bool parseMedia(const tinyxml2::XMLElement* element, fla::Document* document, Zi
 bool parseDocument(fla::Document* document, const tinyxml2::XMLElement* element, ZipReader* zipReader)
 {
     // Parse attributes
-    if (hasAttribute(element, "width"))
-        document->width = getIntAttribute(element, "width");
-    if (hasAttribute(element, "height"))
-        document->height = getIntAttribute(element, "height");
-    if (hasAttribute(element, "frameRate"))
-        document->frameRate = getDoubleAttribute(element, "frameRate");
+    document->width = getIntAttribute(element, "width", 550);
+    document->height = getIntAttribute(element, "height", 400);
+    document->frameRate = getDoubleAttribute(element, "frameRate", 24.0);
 
     document->currentTimeline = getAttribute(element, "currentTimeline");
     document->xflVersion = getAttribute(element, "xflVersion");
     document->creatorInfo = getAttribute(element, "creatorInfo");
     document->platform = getAttribute(element, "platform");
     document->versionInfo = getAttribute(element, "versionInfo");
-    document->majorVersion = getIntAttribute(element, "majorVersion");
-    document->buildNumber = getIntAttribute(element, "buildNumber");
-    document->viewAngle3D = getIntAttribute(element, "viewAngle3D");
-    document->vanishingPoint3DX = getIntAttribute(element, "vanishingPoint3DX");
-    document->vanishingPoint3DY = getIntAttribute(element, "vanishingPoint3DY");
-    document->nextSceneIdentifier = getIntAttribute(element, "nextSceneIdentifier");
-    document->playOptionsPlayLoop = getBoolAttribute(element, "playOptionsPlayLoop");
-    document->playOptionsPlayPages = getBoolAttribute(element, "playOptionsPlayPages");
-    document->playOptionsPlayFrameActions = getBoolAttribute(element, "playOptionsPlayFrameActions");
+    document->majorVersion = getIntAttribute(element, "majorVersion", 0);
+    document->buildNumber = getIntAttribute(element, "buildNumber", 0);
+    document->viewAngle3D = getIntAttribute(element, "viewAngle3D", 0);
+    document->vanishingPoint3DX = getIntAttribute(element, "vanishingPoint3DX", 0);
+    document->vanishingPoint3DY = getIntAttribute(element, "vanishingPoint3DY", 0);
+    document->nextSceneIdentifier = getIntAttribute(element, "nextSceneIdentifier", 0);
+    document->playOptionsPlayLoop = getBoolAttribute(element, "playOptionsPlayLoop", false);
+    document->playOptionsPlayPages = getBoolAttribute(element, "playOptionsPlayPages", false);
+    document->playOptionsPlayFrameActions = getBoolAttribute(element, "playOptionsPlayFrameActions", false);
     document->filetypeGUID = getAttribute(element, "filetypeGUID");
     document->fileGUID = getAttribute(element, "fileGUID");
 

@@ -15,16 +15,32 @@ public:
         , y(y)
     {}
 
+    void reset()
+    {
+        x = 0.0;
+        y = 0.0;
+    }
+
     void translate(double tx, double ty)
     {
         x += tx;
         y += ty;
     }
 
-    void transform(const Transform& t)
+    Point& transform(const Transform& t)
     {
-        x = t.m11 * x + t.m21 * y + t.tx;
-        y = t.m12 * x + t.m22 * y + t.ty;
+        double newX = t.m11 * x + t.m21 * y + t.tx;
+        double newY = t.m12 * x + t.m22 * y + t.ty;
+        x = newX;
+        y = newY;
+        return *this;
+    }
+
+    Point transformed(const Transform& t) const
+    {
+        double newX = t.m11 * x + t.m21 * y + t.tx;
+        double newY = t.m12 * x + t.m22 * y + t.ty;
+        return Point(newX, newY);
     }
 };
 
