@@ -73,7 +73,19 @@ void MainWindow::loadFLAFile(const QString& filePath)
 
     if (_flaDocument)
     {
-        setWindowTitle(QString("Phoenix - %1").arg(QFileInfo(filePath).baseName()));
+        QString displayName;
+        QFileInfo fileInfo(filePath);
+        if (filePath.endsWith(".xml"))
+        {
+            QDir parentDir = fileInfo.dir();
+            displayName = parentDir.dirName() + "/" + fileInfo.fileName();
+        }
+        else
+        {
+            displayName = fileInfo.fileName();
+        }
+        
+        setWindowTitle(QString("Phoenix - %1").arg(displayName));
         addToRecentFiles(filePath);
     }
     else
@@ -260,7 +272,18 @@ void MainWindow::updateRecentFilesMenu()
     for (int i = 0; i < _recentFiles.size() && i < MAX_RECENT_FILES; ++i)
     {
         QString filePath = _recentFiles[i];
-        QAction* action = _recentFilesMenu->addAction(QString("&%1 %2").arg(i + 1).arg(QFileInfo(filePath).fileName()));
+        QFileInfo fileInfo(filePath);
+        QString displayName;
+        if (filePath.endsWith(".xml"))
+        {
+            QDir parentDir = fileInfo.dir();
+            displayName = parentDir.dirName() + "/" + fileInfo.fileName();
+        }
+        else
+        {
+            displayName = fileInfo.fileName();
+        }
+        QAction* action = _recentFilesMenu->addAction(QString("&%1 %2").arg(i + 1).arg(displayName));
         action->setData(filePath);
         connect(action, &QAction::triggered, this, &MainWindow::openRecentFile);
     }
