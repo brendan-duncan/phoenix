@@ -20,6 +20,8 @@
 #include <QPaintEvent>
 #include <QPainterPath>
 #include <QDebug>
+#include <QPixmap>
+#include <QBitmap>
 
 #define MAX(a, b) ((a) > (b) ? (a) : (b))
 
@@ -183,17 +185,86 @@ void PhoenixView::drawDocument(QPainter& painter, const fla::Document* document)
 
 void PhoenixView::drawTimeline(QPainter& painter, const fla::Timeline* timeline, fla::LoopType loopType, int firstFrame)
 {
+    QMap<int, QRegion> maskCache;
+    QTransform painterTransform = painter.transform();
+
+    // Render masks for all mask layers first.
+    for (int i = 0; i < timeline->layers.size(); ++i)
+    {
+        const fla::Layer* layer = timeline->layers[i];
+        if (layer->layerType != fla::Layer::Type::Mask || !layer->isVisible())
+        {
+            continue;
+        }
+
+        QRect r = rect();
+        QPixmap docPixmap(r.width(), r.height());
+        docPixmap.fill(Qt::transparent);
+
+        QPainter maskPainter(&docPixmap);
+        maskPainter.setRenderHint(QPainter::Antialiasing, true);
+        maskPainter.setRenderHint(QPainter::TextAntialiasing, true);
+        maskPainter.setRenderHint(QPainter::SmoothPixmapTransform, true);
+
+        // Render mask in window coordinates by applying the transform
+        maskPainter.setTransform(painterTransform);
+
+        drawLayer(maskPainter, layer, loopType, firstFrame, nullptr);
+
+        QBitmap mask = docPixmap.mask();
+        QRegion maskRegion = QRegion(mask);
+
+        // Transform the mask region from window coordinates to the painter's coordinate space
+        QTransform inverseTransform = painterTransform.inverted();
+        maskRegion = inverseTransform.map(maskRegion);
+
+        maskCache[i] = maskRegion;
+    }
+
+    // Draw layers bottom to top, applying masks as needed
     for (int i = timeline->layers.size() - 1; i >= 0; --i)
     {
         const fla::Layer* layer = timeline->layers[i];
-        if (layer->visible)
+
+        // Ignore hidden layrs, and we've alreayd rendered mask layers
+        if (layer->layerType == fla::Layer::Type::Mask || !layer->isVisible())
         {
-            drawLayer(painter, layer, loopType, firstFrame);
+            continue;
+        }
+
+        if (layer->layerType == fla::Layer::Type::Masked)
+        {
+            // Find the corresponding mask layer
+            auto maskIt = maskCache.find(layer->parentLayerIndex);
+            if (maskIt != maskCache.end())
+            {
+                painter.save();
+                painter.setClipRegion(maskIt.value());
+                painter.setClipping(true);
+                drawLayer(painter, layer, loopType, firstFrame, nullptr);
+                painter.restore();
+                continue;
+            }
+        }
+        else if (layer->layerType == fla::Layer::Type::Normal)
+        {
+            drawLayer(painter, layer, loopType, firstFrame, nullptr);
+        }
+        else if (layer->layerType == fla::Layer::Type::Folder)
+        {
+            // Folders don't have content. They just affect the visibility of their children,
+            // which is already handled by checking layer->isVisible().
+        }
+        else if (layer->layerType == fla::Layer::Type::Guide)
+        {
+            // What should we do with guide layers? They are not rendered in Flash, but maybe we want to render
+            // them in a special way for debugging?
+            //drawLayer(painter, layer, loopType, firstFrame, nullptr);
         }
     }
 }
 
-void PhoenixView::drawLayer(QPainter& painter, const fla::Layer* layer, fla::LoopType loopType, int firstFrame)
+void PhoenixView::drawLayer(QPainter& painter, const fla::Layer* layer, fla::LoopType loopType, int firstFrame, const QPixmap* maskPixmap)
 {
     QColor color;
     color.setRgb(layer->color[0], layer->color[1], layer->color[2], layer->color[3]);

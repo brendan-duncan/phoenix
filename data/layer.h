@@ -38,6 +38,16 @@ public:
     ~Layer() override;
 
     std::string domTypeName() const override { return "Layer"; }
+
+    // Checks if the layer is visible, taking into account all ancestor layers.
+    bool isVisible() const
+    {
+        if (!visible)
+            return false;
+        if (parentLayer)
+            return parentLayer->isVisible();
+        return true;
+    }
 };
 
 } // namespace fla

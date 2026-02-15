@@ -90,7 +90,7 @@ private:
 
     void drawTimeline(QPainter& painter, const fla::Timeline* timeline, fla::LoopType loopType = fla::LoopType::PlayOnce, int firstFrame = 0);
 
-    void drawLayer(QPainter& painter, const fla::Layer* layer, fla::LoopType loopType, int firstFrame);
+    void drawLayer(QPainter& painter, const fla::Layer* layer, fla::LoopType loopType, int firstFrame, const QPixmap* maskPixmap = nullptr);
 
     void drawFrame(QPainter& painter, const fla::Frame* frame);
 
