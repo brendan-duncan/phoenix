@@ -64,6 +64,9 @@ void PhoenixView::setDocument(const fla::FLADocument* document)
     _boundsCache.clear(); // Clear bounds cache for new document
     _pathCache.clear(); // Clear path cache for new document
     _flaDocument = document;
+    _panX = 0;
+    _panY = 0;
+    _zoom = 1.0;
     update(); // Trigger repaint
 }
 
@@ -1043,7 +1046,7 @@ void PhoenixView::wheelEvent(QWheelEvent *event)
     double newZoom = _zoom * scaleFactor;
 
     // Limit zoom range
-    if (newZoom < 0.1 || newZoom > 50.0)
+    if (newZoom < _minZoom || newZoom > _maxZoom)
         return;
 
     // Get mouse position in screen coordinates

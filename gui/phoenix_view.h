@@ -55,6 +55,8 @@ private:
     double _zoom;
     double _panX;
     double _panY;
+    double _minZoom = 0.05;
+    double _maxZoom = 100.0;
     bool _isDragging;
     QPoint _lastMousePos;
 
