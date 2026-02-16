@@ -377,63 +377,6 @@ void PathParser::parseCubicCurve(const std::string& data, int& pos, fla::Path* p
     }
 }
 
-/*void PathParser::parseCubicCurve(const std::string& data, int& pos, std::vector<fla::Point>& points)
-{
-    // Parse cubic curve notation: (;x1,y1 x2,y2 x3,y3...);
-    // This is a complex format that may contain multiple points
-
-    while (pos < data.length() && data[pos] != ')')
-    {
-        skipWhitespace(data, pos);
-
-        if (data[pos] == ';')
-        {
-            pos++;
-            continue;
-        }
-
-        if (data[pos] == 'q' || data[pos] == 'Q')
-        {
-            pos++;
-            fla::Point point = parsePoint(data, pos);
-            points.push_back(point);
-            continue;
-        }
-
-        // Parse comma-separated coordinates
-        if (isDigit(data[pos]) || data[pos] == '-' || data[pos] == '#')
-        {
-            double x = parseNumber(data, pos);
-            skipWhitespace(data, pos);
-
-            if (pos < data.length() && data[pos] == ',')
-            {
-                pos++;
-                skipWhitespace(data, pos);
-            }
-
-            double y = parseNumber(data, pos);
-            points.push_back(fla::Point(x / 20.0, y / 20.0));
-
-            // Skip optional comma
-            skipWhitespace(data, pos);
-            if (pos < data.length() && data[pos] == ',')
-            {
-                pos++;
-            }
-        }
-        else
-        {
-            pos++;
-        }
-    }
-
-    if (pos < data.length() && data[pos] == ')')
-    {
-        pos++;
-    }
-}*/
-
 fla::Point PathParser::parsePoint(const std::string& data, int& pos)
 {
     double x = parseNumber(data, pos);

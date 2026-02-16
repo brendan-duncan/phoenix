@@ -25,12 +25,21 @@ public:
     bool isSelected = false;
     bool isFloating = false;
     Transform transform;
+    /// transformationPoint is the pivot for applying new transformstions. It is
+    /// not used in the rendering process.
     Point transformationPoint;
     fla::Rect bounds;
 
     Element() = default;
 
     virtual Type elementType() const = 0;
+
+    Point transformPoint(const Point& p) const
+    {
+        Point transformed = p;
+        transformed.transform(transform);
+        return transformed;
+    }
 };
 
 } // namespace fla

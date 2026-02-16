@@ -25,13 +25,11 @@
 
 #define MAX(a, b) ((a) > (b) ? (a) : (b))
 
-uint32_t _skippedElement = 0;
-
 PhoenixView::PhoenixView(Player* player, QWidget *parent)
     : QWidget(parent)
     , _flaDocument(nullptr)
     , _player(player)
-    , _highQualityAntiAliasing(true)
+    , _highQualityAntiAliasing(false)
     , _zoom(1.0)
     , _panX(0)
     , _panY(0)
@@ -173,8 +171,6 @@ void PhoenixView::drawDocument(QPainter& painter, const fla::Document* document)
     if (!document->visible)
         return;
 
-    _skippedElement = 0;
-
     for (const fla::Timeline* timeline : document->timelines)
     {
         if (timeline->visible)
@@ -182,13 +178,12 @@ void PhoenixView::drawDocument(QPainter& painter, const fla::Document* document)
             drawTimeline(painter, timeline);
         }
     }
-
-    //qDebug() << "Skipped elements due to culling:" << _skippedElement;
 }
 
 void PhoenixView::drawTimeline(QPainter& painter, const fla::Timeline* timeline, fla::LoopType loopType, int firstFrame)
 {
     QMap<int, QRegion> maskCache;
+    QMap<int, QPixmap> maskPixmapCache;
     QTransform painterTransform = painter.transform();
 
     // Render masks for all mask layers first.
@@ -215,6 +210,7 @@ void PhoenixView::drawTimeline(QPainter& painter, const fla::Timeline* timeline,
         drawLayer(maskPainter, layer, loopType, firstFrame, nullptr);
 
         QBitmap mask = docPixmap.mask();
+        //mask.save("d:/mask_bitmap.png"); // Debug: save mask bitmap to file
         QRegion maskRegion = QRegion(mask);
 
         // Transform the mask region from window coordinates to the painter's coordinate space
@@ -222,6 +218,7 @@ void PhoenixView::drawTimeline(QPainter& painter, const fla::Timeline* timeline,
         maskRegion = inverseTransform.map(maskRegion);
 
         maskCache[i] = maskRegion;
+        maskPixmapCache[i] = mask;
     }
 
     // Draw layers bottom to top, applying masks as needed
@@ -246,6 +243,11 @@ void PhoenixView::drawTimeline(QPainter& painter, const fla::Timeline* timeline,
                 painter.setClipping(true);
                 drawLayer(painter, layer, loopType, firstFrame, nullptr);
                 painter.restore();
+
+                /*painter.save();
+                painter.resetTransform();
+                painter.drawPixmap(0, 0, maskPixmapCache[layer->parentLayerIndex]);
+                painter.restore();*/
                 continue;
             }
         }
@@ -320,7 +322,6 @@ void PhoenixView::drawElement(QPainter& painter, const fla::Element* element)
     QTransform transform(element->transform.m11, element->transform.m12,
                        element->transform.m21, element->transform.m22,
                        element->transform.tx, element->transform.ty);
-    QPointF instancePoint(element->transformationPoint.x, element->transformationPoint.y);
 
     painter.save();
 
@@ -328,9 +329,7 @@ void PhoenixView::drawElement(QPainter& painter, const fla::Element* element)
     // is incorrect because the children are already transformed by the group transform?
     if (element->elementType() != fla::Element::Type::Group)
     {
-        painter.translate(instancePoint);
         painter.setTransform(transform, true);
-        painter.translate(-instancePoint);   
     }
 
     fla::Element::Type type = element->elementType();
@@ -624,8 +623,8 @@ void PhoenixView::drawShape(QPainter& painter, const fla::Shape* shape)
     // Helper struct to represent an edge path with direction
     struct DirectedPath
     {
-        QPointF start;
-        QPointF end;
+        fla::Point start;
+        fla::Point end;
         const fla::Path* path;
         bool reversed; // true if this path should be traced backwards
         bool used = false;
@@ -636,30 +635,30 @@ void PhoenixView::drawShape(QPainter& painter, const fla::Shape* shape)
     std::map<int, const fla::FillStyle*> fillStyles;
 
     // Helper to get start/end points of a path
-    auto getPathEndpoints = [](const fla::Path& path) -> std::pair<QPointF, QPointF>
+    auto getPathEndpoints = [](const fla::Path& path) -> std::pair<fla::Point, fla::Point>
     {
-        QPointF start, end;
+        fla::Point start, end;
         bool hasStart = false;
 
         for (const fla::PathSegment& segment : path.segments)
         {
             if (segment.command == fla::PathSegment::Command::Move)
             {
-                start = QPointF(segment.points[0].x, segment.points[0].y);
+                start = segment.points[0];
                 end = start;
                 hasStart = true;
             }
             else if (segment.command == fla::PathSegment::Command::Line)
             {
-                end = QPointF(segment.points[0].x, segment.points[0].y);
+                end = segment.points[0];
             }
             else if (segment.command == fla::PathSegment::Command::Quad)
             {
-                end = QPointF(segment.points[1].x, segment.points[1].y);
+                end = segment.points[1];
             }
             else if (segment.command == fla::PathSegment::Command::Cubic)
             {
-                end = QPointF(segment.points[2].x, segment.points[2].y);
+                end = segment.points[2];
             }
         }
 
@@ -705,7 +704,7 @@ void PhoenixView::drawShape(QPainter& painter, const fla::Shape* shape)
     }
 
     // Helper lambda to build a complete path from a path (for stroke rendering)
-    auto buildPath = [](const fla::Path& path) -> QPainterPath
+    auto buildPath = [](const fla::Path& path, const fla::Element* shape) -> QPainterPath
     {
         QPainterPath painterPath;
         painterPath.setFillRule(Qt::OddEvenFill);
@@ -713,22 +712,26 @@ void PhoenixView::drawShape(QPainter& painter, const fla::Shape* shape)
         {
             if (segment.command == fla::PathSegment::Command::Move)
             {
-                painterPath.moveTo(segment.points[0].x, segment.points[0].y);
+                fla::Point p = segment.points[0];
+                painterPath.moveTo(p.x, p.y);
             }
             else if (segment.command == fla::PathSegment::Command::Line)
             {
-                painterPath.lineTo(segment.points[0].x, segment.points[0].y);
+                fla::Point p = segment.points[0];
+                painterPath.lineTo(p.x, p.y);
             }
             else if (segment.command == fla::PathSegment::Command::Quad)
             {
-                painterPath.quadTo(segment.points[0].x, segment.points[0].y,
-                           segment.points[1].x, segment.points[1].y);
+                fla::Point p1 = segment.points[0];
+                fla::Point p2 = segment.points[1];
+                painterPath.quadTo(p1.x, p1.y, p2.x, p2.y);
             }
             else if (segment.command == fla::PathSegment::Command::Cubic)
             {
-                painterPath.cubicTo(segment.points[0].x, segment.points[0].y,
-                            segment.points[1].x, segment.points[1].y,
-                            segment.points[2].x, segment.points[2].y);
+                fla::Point p1 = segment.points[0];
+                fla::Point p2 = segment.points[1];
+                fla::Point p3 = segment.points[2];
+                painterPath.cubicTo(p1.x, p1.y, p2.x, p2.y, p3.x, p3.y);
             }
             else if (segment.command == fla::PathSegment::Command::Close)
             {
@@ -739,7 +742,7 @@ void PhoenixView::drawShape(QPainter& painter, const fla::Shape* shape)
     };
 
     // Helper to add path to path in forward or reverse direction
-    auto addSegmentToPath = [](QPainterPath& painterPath, const fla::Path& path, bool reversed)
+    auto addSegmentToPath = [](QPainterPath& painterPath, const fla::Path& path, bool reversed, const fla::Element* shape)
     {
         if (!reversed)
         {
@@ -752,18 +755,21 @@ void PhoenixView::drawShape(QPainter& painter, const fla::Shape* shape)
                 }
                 else if (segment.command == fla::PathSegment::Command::Line)
                 {
-                    painterPath.lineTo(segment.points[0].x, segment.points[0].y);
+                    fla::Point p = segment.points[0];
+                    painterPath.lineTo(p.x, p.y);
                 }
                 else if (segment.command == fla::PathSegment::Command::Quad)
                 {
-                    painterPath.quadTo(segment.points[0].x, segment.points[0].y,
-                               segment.points[1].x, segment.points[1].y);
+                    fla::Point p1 = segment.points[0];
+                    fla::Point p2 = segment.points[1];
+                    painterPath.quadTo(p1.x, p1.y, p2.x, p2.y);
                 }
                 else if (segment.command == fla::PathSegment::Command::Cubic)
                 {
-                    painterPath.cubicTo(segment.points[0].x, segment.points[0].y,
-                                segment.points[1].x, segment.points[1].y,
-                                segment.points[2].x, segment.points[2].y);
+                    fla::Point p1 = segment.points[0];
+                    fla::Point p2 = segment.points[1];
+                    fla::Point p3 = segment.points[2];
+                    painterPath.cubicTo(p1.x, p1.y, p2.x, p2.y, p3.x, p3.y);
                 }
             }
         }
@@ -772,13 +778,13 @@ void PhoenixView::drawShape(QPainter& painter, const fla::Shape* shape)
             // Add path in reverse - traverse segments backwards and reverse curves
             // Build list of segments (excluding Move)
             std::vector<fla::PathSegment> pathSegments;
-            QPointF startPoint;
+            fla::Point startPoint;
 
             for (const fla::PathSegment& segment : path.segments)
             {
                 if (segment.command == fla::PathSegment::Command::Move)
                 {
-                    startPoint = QPointF(segment.points[0].x, segment.points[0].y);
+                    startPoint = segment.points[0];
                 }
                 else if (segment.command != fla::PathSegment::Command::Close)
                 {
@@ -787,13 +793,13 @@ void PhoenixView::drawShape(QPainter& painter, const fla::Shape* shape)
             }
 
             // Traverse backwards and reverse each segment
-            QPointF currentPos = startPoint;
+            fla::Point currentPos = startPoint;
             for (int i = pathSegments.size() - 1; i >= 0; --i)
             {
                 const fla::PathSegment& segment = pathSegments[i];
 
                 // Calculate the start position of this segment (which becomes our end in reverse)
-                QPointF segmentStart = currentPos;
+                fla::Point segmentStart = currentPos;
 
                 // Update current position to the endpoint of this segment
                 if (i > 0)
@@ -801,15 +807,15 @@ void PhoenixView::drawShape(QPainter& painter, const fla::Shape* shape)
                     const fla::PathSegment& prevSeg = pathSegments[i - 1];
                     if (prevSeg.command == fla::PathSegment::Command::Line)
                     {
-                        currentPos = QPointF(prevSeg.points[0].x, prevSeg.points[0].y);
+                        currentPos = prevSeg.points[0];
                     }
                     else if (prevSeg.command == fla::PathSegment::Command::Quad)
                     {
-                        currentPos = QPointF(prevSeg.points[1].x, prevSeg.points[1].y);
+                        currentPos = prevSeg.points[1];
                     }
                     else if (prevSeg.command == fla::PathSegment::Command::Cubic)
                     {
-                        currentPos = QPointF(prevSeg.points[2].x, prevSeg.points[2].y);
+                        currentPos = prevSeg.points[2];
                     }
                 }
                 else
@@ -820,20 +826,23 @@ void PhoenixView::drawShape(QPainter& painter, const fla::Shape* shape)
                 // Reverse this segment
                 if (segment.command == fla::PathSegment::Command::Line)
                 {
-                    painterPath.lineTo(currentPos);
+                    fla::Point p = currentPos;
+                    painterPath.lineTo(p.x, p.y);
                 }
                 else if (segment.command == fla::PathSegment::Command::Quad)
                 {
                     // Reverse quadratic: end -> control -> start becomes start -> control -> end
-                    painterPath.quadTo(segment.points[0].x, segment.points[0].y,
-                                      currentPos.x(), currentPos.y());
+                    fla::Point p1 = segment.points[0];
+                    fla::Point p2 = currentPos;
+                    painterPath.quadTo(p1.x, p1.y, p2.x, p2.y);
                 }
                 else if (segment.command == fla::PathSegment::Command::Cubic)
                 {
                     // Reverse cubic: end -> c2 -> c1 -> start becomes start -> c2 -> c1 -> end
-                    painterPath.cubicTo(segment.points[1].x, segment.points[1].y,
-                                       segment.points[0].x, segment.points[0].y,
-                                       currentPos.x(), currentPos.y());
+                    fla::Point p1 = segment.points[1];
+                    fla::Point p2 = segment.points[0];
+                    fla::Point p3 = currentPos;
+                    painterPath.cubicTo(p1.x, p1.y, p2.x, p2.y, p3.x, p3.y);
                 }
             }
         }
@@ -842,9 +851,9 @@ void PhoenixView::drawShape(QPainter& painter, const fla::Shape* shape)
     // Helper to check if two points match
     // Increased tolerance to account for floating-point accumulation errors
     // from twips conversion (1/20 pixel) and path transformations
-    auto pointsMatch = [](const QPointF& p1, const QPointF& p2) -> bool
+    auto pointsMatch = [](const fla::Point& p1, const fla::Point& p2) -> bool
     {
-        return qAbs(p1.x() - p2.x()) < 0.5 && qAbs(p1.y() - p2.y()) < 0.5;
+        return qAbs(p1.x - p2.x) < 0.5 && qAbs(p1.y - p2.y) < 0.5;
     };
 
     // For each fill style, connect paths into closed loops
@@ -868,8 +877,9 @@ void PhoenixView::drawShape(QPainter& painter, const fla::Shape* shape)
             if (pointsMatch(directedPath.start, directedPath.end))
             {
                 QPainterPath loopPath;
-                loopPath.moveTo(directedPath.start);
-                addSegmentToPath(loopPath, *directedPath.path, directedPath.reversed);
+                fla::Point startPoint = directedPath.start;
+                loopPath.moveTo(startPoint.x, startPoint.y);
+                addSegmentToPath(loopPath, *directedPath.path, directedPath.reversed, shape);
                 loopPath.closeSubpath();
                 compoundPath.addPath(loopPath);
                 directedPath.used = true;
@@ -887,12 +897,13 @@ void PhoenixView::drawShape(QPainter& painter, const fla::Shape* shape)
             loopNum++;
 
             QPainterPath loopPath;
-            loopPath.moveTo(directedPath.start);
-            addSegmentToPath(loopPath, *directedPath.path, directedPath.reversed);
+            fla::Point startPoint = directedPath.start;
+            loopPath.moveTo(startPoint.x, startPoint.y);
+            addSegmentToPath(loopPath, *directedPath.path, directedPath.reversed, shape);
             directedPath.used = true;
 
-            QPointF currentEnd = directedPath.end;
-            QPointF loopStart = directedPath.start;
+            fla::Point currentEnd = directedPath.end;
+            fla::Point loopStart = directedPath.start;
             int maxIterations = directedPaths.size() * 2;
             int iterations = 0;
             int connectedCount = 1;
@@ -916,8 +927,8 @@ void PhoenixView::drawShape(QPainter& painter, const fla::Shape* shape)
                     if (nextDirectedPath.used)
                         continue;
 
-                    double dx = currentEnd.x() - nextDirectedPath.start.x();
-                    double dy = currentEnd.y() - nextDirectedPath.start.y();
+                    double dx = currentEnd.x - nextDirectedPath.start.x;
+                    double dy = currentEnd.y - nextDirectedPath.start.y;
                     double distance = dx * dx + dy * dy;
 
                     if (distance < 0.5 * 0.5 && distance < bestDistance)
@@ -930,7 +941,7 @@ void PhoenixView::drawShape(QPainter& painter, const fla::Shape* shape)
 
                 if (found && bestMatch)
                 {
-                    addSegmentToPath(loopPath, *bestMatch->path, bestMatch->reversed);
+                    addSegmentToPath(loopPath, *bestMatch->path, bestMatch->reversed, shape);
                     bestMatch->used = true;
                     currentEnd = bestMatch->end;
                     connectedCount++;
@@ -989,7 +1000,7 @@ void PhoenixView::drawShape(QPainter& painter, const fla::Shape* shape)
             if (!strokeStyle || !strokeStyle->fill)
                 continue;
 
-            QPainterPath strokePath = buildPath(path);
+            QPainterPath strokePath = buildPath(path, shape);
 
             QPen pen = getPen(strokeStyle);
 
@@ -1164,9 +1175,7 @@ QRectF PhoenixView::calculateElementBounds(const fla::Element* element)
                 QTransform transform(element->transform.m11, element->transform.m12,
                                     element->transform.m21, element->transform.m22,
                                     element->transform.tx, element->transform.ty);
-                bounds.translate(element->transformationPoint.x, element->transformationPoint.y);
                 bounds = transform.mapRect(bounds);
-                bounds.translate(-element->transformationPoint.x, -element->transformationPoint.y);
 
                 return bounds;
             }
@@ -1177,9 +1186,7 @@ QRectF PhoenixView::calculateElementBounds(const fla::Element* element)
         QTransform transform(element->transform.m11, element->transform.m12,
                             element->transform.m21, element->transform.m22,
                             element->transform.tx, element->transform.ty);
-        bounds.translate(element->transformationPoint.x, element->transformationPoint.y);
         bounds = transform.mapRect(bounds);
-        bounds.translate(-element->transformationPoint.x, -element->transformationPoint.y);
         return bounds;
     }
     else if (type == fla::Element::Type::BitmapInstance)
@@ -1189,9 +1196,7 @@ QRectF PhoenixView::calculateElementBounds(const fla::Element* element)
         QTransform transform(element->transform.m11, element->transform.m12,
                             element->transform.m21, element->transform.m22,
                             element->transform.tx, element->transform.ty);
-        bounds.translate(element->transformationPoint.x, element->transformationPoint.y);
         bounds = transform.mapRect(bounds);
-        bounds.translate(-element->transformationPoint.x, -element->transformationPoint.y);
         return bounds;
     }
     else if (type == fla::Element::Type::StaticText)
@@ -1201,9 +1206,7 @@ QRectF PhoenixView::calculateElementBounds(const fla::Element* element)
         QTransform transform(element->transform.m11, element->transform.m12,
                             element->transform.m21, element->transform.m22,
                             element->transform.tx, element->transform.ty);
-        bounds.translate(element->transformationPoint.x, element->transformationPoint.y);
         bounds = transform.mapRect(bounds);
-        bounds.translate(-element->transformationPoint.x, -element->transformationPoint.y);
         return bounds;
     }
     else if (type == fla::Element::Type::Rectangle)
@@ -1213,9 +1216,7 @@ QRectF PhoenixView::calculateElementBounds(const fla::Element* element)
         QTransform transform(element->transform.m11, element->transform.m12,
                             element->transform.m21, element->transform.m22,
                             element->transform.tx, element->transform.ty);
-        bounds.translate(element->transformationPoint.x, element->transformationPoint.y);
         bounds = transform.mapRect(bounds);
-        bounds.translate(-element->transformationPoint.x, -element->transformationPoint.y);
         return bounds;
     }
     else if (type == fla::Element::Type::Oval)
@@ -1225,9 +1226,7 @@ QRectF PhoenixView::calculateElementBounds(const fla::Element* element)
         QTransform transform(element->transform.m11, element->transform.m12,
                             element->transform.m21, element->transform.m22,
                             element->transform.tx, element->transform.ty);
-        bounds.translate(element->transformationPoint.x, element->transformationPoint.y);
         bounds = transform.mapRect(bounds);
-        bounds.translate(-element->transformationPoint.x, -element->transformationPoint.y);
         return bounds;
     }
 
@@ -1236,9 +1235,7 @@ QRectF PhoenixView::calculateElementBounds(const fla::Element* element)
     QTransform transform(element->transform.m11, element->transform.m12,
                         element->transform.m21, element->transform.m22,
                         element->transform.tx, element->transform.ty);
-    bounds.translate(element->transformationPoint.x, element->transformationPoint.y);
     bounds = transform.mapRect(bounds);
-    bounds.translate(-element->transformationPoint.x, -element->transformationPoint.y);
     return bounds;
 }
 
@@ -1321,9 +1318,7 @@ QRectF PhoenixView::calculateShapeBounds(const fla::Shape* shape)
     QTransform transform(shape->transform.m11, shape->transform.m12,
                         shape->transform.m21, shape->transform.m22,
                         shape->transform.tx, shape->transform.ty);
-    bounds.translate(shape->transformationPoint.x, shape->transformationPoint.y);
     bounds = transform.mapRect(bounds);
-    bounds.translate(-shape->transformationPoint.x, -shape->transformationPoint.y);
 
     return bounds;
 }
@@ -1338,9 +1333,13 @@ void PhoenixView::drawElementBounds(QPainter& painter, const fla::Element* eleme
     {
         painter.save();
         if (element->elementType() == fla::Element::Type::SymbolInstance)
-            painter.setPen(QPen(QColor(0, 0, 255, 255), 2.0, Qt::DashLine)); // Blue dashed for shapes
+        {
+            painter.setPen(QPen(QColor(0, 0, 255, 255), 1.0, Qt::DashLine)); // Blue dashed for shapes
+        }
         else
-            painter.setPen(QPen(QColor(255, 0, 0, 255), 2.0, Qt::DashLine)); // Red dashed for element bounds
+        {
+            painter.setPen(QPen(QColor(255, 0, 0, 255), 1.0, Qt::DashLine)); // Red dashed for element bounds
+        }
         painter.setBrush(Qt::NoBrush);
         painter.drawRect(bounds);
         painter.restore();
@@ -1363,12 +1362,9 @@ void PhoenixView::drawElementBounds(QPainter& painter, const fla::Element* eleme
             QTransform transform(element->transform.m11, element->transform.m12,
                                  element->transform.m21, element->transform.m22,
                                  element->transform.tx, element->transform.ty);
-            QPointF transformationPoint(element->transformationPoint.x, element->transformationPoint.y);
 
             painter.save();
-            painter.translate(transformationPoint);
             painter.setTransform(transform, true);
-            painter.translate(-transformationPoint);
 
             for (const fla::Timeline* timeline : symbol->timelines)
             {
@@ -1387,7 +1383,9 @@ void PhoenixView::drawTimelineBounds(QPainter& painter, const fla::Timeline* tim
         for (const fla::Frame* frame : layer->frames)
         {
             if (frame->index != 0)
+            {
                 continue; // Only draw bounds for first frame of each layer for clarity
+            }
 
             for (const fla::Element* element : frame->elements)
             {
