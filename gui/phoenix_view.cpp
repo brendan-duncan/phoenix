@@ -182,11 +182,15 @@ void PhoenixView::drawDocument(QPainter& painter, const fla::Document* document)
 
 void PhoenixView::drawTimeline(QPainter& painter, const fla::Timeline* timeline, fla::LoopType loopType, int firstFrame)
 {
-    QMap<int, QRegion> maskCache;
-    QMap<int, QPixmap> maskPixmapCache;
+    struct MaskData
+    {
+        QPixmap maskPixmap;
+        QPointF offset;
+    };
+    QMap<int, MaskData> maskCache;
     QTransform painterTransform = painter.transform();
 
-    // Render masks for all mask layers first.
+    // First pass: render mask layers to pixmaps
     for (int i = 0; i < timeline->layers.size(); ++i)
     {
         const fla::Layer* layer = timeline->layers[i];
@@ -195,38 +199,27 @@ void PhoenixView::drawTimeline(QPainter& painter, const fla::Timeline* timeline,
             continue;
         }
 
+        // Use full widget resolution for mask
         QRect r = rect();
-        QPixmap docPixmap(r.width(), r.height());
-        docPixmap.fill(Qt::transparent);
+        QPixmap maskPixmap(r.width(), r.height());
+        maskPixmap.fill(Qt::transparent);
 
-        QPainter maskPainter(&docPixmap);
+        QPainter maskPainter(&maskPixmap);
         maskPainter.setRenderHint(QPainter::Antialiasing, true);
         maskPainter.setRenderHint(QPainter::TextAntialiasing, true);
         maskPainter.setRenderHint(QPainter::SmoothPixmapTransform, true);
-
-        // Render mask in window coordinates by applying the transform
         maskPainter.setTransform(painterTransform);
 
         drawLayer(maskPainter, layer, loopType, firstFrame, nullptr);
 
-        QBitmap mask = docPixmap.mask();
-        //mask.save("d:/mask_bitmap.png"); // Debug: save mask bitmap to file
-        QRegion maskRegion = QRegion(mask);
-
-        // Transform the mask region from window coordinates to the painter's coordinate space
-        QTransform inverseTransform = painterTransform.inverted();
-        maskRegion = inverseTransform.map(maskRegion);
-
-        maskCache[i] = maskRegion;
-        maskPixmapCache[i] = mask;
+        maskCache[i] = { maskPixmap, QPointF(0, 0) };
     }
 
-    // Draw layers bottom to top, applying masks as needed
+    // Second pass: draw layers with masks applied
     for (int i = timeline->layers.size() - 1; i >= 0; --i)
     {
         const fla::Layer* layer = timeline->layers[i];
 
-        // Ignore hidden layrs, and we've alreayd rendered mask layers
         if (layer->layerType == fla::Layer::Type::Mask || !layer->isVisible())
         {
             continue;
@@ -234,20 +227,43 @@ void PhoenixView::drawTimeline(QPainter& painter, const fla::Timeline* timeline,
 
         if (layer->layerType == fla::Layer::Type::Masked)
         {
-            // Find the corresponding mask layer
             auto maskIt = maskCache.find(layer->parentLayerIndex);
             if (maskIt != maskCache.end())
             {
+                const QPixmap& maskPixmap = maskIt.value().maskPixmap;
+                const QPointF& maskOffset = maskIt.value().offset;
+
+                // Use full widget resolution for content
+                QRect r = rect();
+                QPixmap contentPixmap(r.width(), r.height());
+                contentPixmap.fill(Qt::transparent);
+
+                QPainter contentPainter(&contentPixmap);
+                contentPainter.setRenderHint(QPainter::Antialiasing, true);
+                contentPainter.setRenderHint(QPainter::TextAntialiasing, true);
+                contentPainter.setRenderHint(QPainter::SmoothPixmapTransform, true);
+                contentPainter.setTransform(painterTransform);
+
+                drawLayer(contentPainter, layer, loopType, firstFrame, nullptr);
+
+                // Composite: content masked by mask
+                QPixmap maskedResult(contentPixmap.size());
+                maskedResult.fill(Qt::transparent);
+                {
+                    QPainter composite(&maskedResult);
+                    composite.setCompositionMode(QPainter::CompositionMode_Source);
+                    composite.drawPixmap(0, 0, contentPixmap);
+                    composite.setCompositionMode(QPainter::CompositionMode_DestinationIn);
+                    composite.drawPixmap(0, 0, maskPixmap);
+                }
+
+                // Draw to main painter
                 painter.save();
-                painter.setClipRegion(maskIt.value());
-                painter.setClipping(true);
-                drawLayer(painter, layer, loopType, firstFrame, nullptr);
+                painter.resetTransform();
+                painter.setCompositionMode(QPainter::CompositionMode_SourceOver);
+                painter.drawPixmap(0, 0, maskedResult);
                 painter.restore();
 
-                /*painter.save();
-                painter.resetTransform();
-                painter.drawPixmap(0, 0, maskPixmapCache[layer->parentLayerIndex]);
-                painter.restore();*/
                 continue;
             }
         }
@@ -257,14 +273,11 @@ void PhoenixView::drawTimeline(QPainter& painter, const fla::Timeline* timeline,
         }
         else if (layer->layerType == fla::Layer::Type::Folder)
         {
-            // Folders don't have content. They just affect the visibility of their children,
-            // which is already handled by checking layer->isVisible().
+            // Folders don't have content
         }
         else if (layer->layerType == fla::Layer::Type::Guide)
         {
-            // What should we do with guide layers? They are not rendered in Flash, but maybe we want to render
-            // them in a special way for debugging?
-            //drawLayer(painter, layer, loopType, firstFrame, nullptr);
+            // Guide layers not rendered
         }
     }
 }
