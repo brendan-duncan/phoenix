@@ -29,6 +29,9 @@ TimelineView::TimelineView(Player* player, QWidget *parent)
     _splitter->setStretchFactor(1, 1);
 
     mainLayout->addWidget(_splitter);
+
+    connect(_layersPanel, &LayersPanel::layerVisibilityChanged,
+            this, &TimelineView::layerVisibilityChanged);
 }
 
 void TimelineView::setDocument(const fla::FLADocument* document)

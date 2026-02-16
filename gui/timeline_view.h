@@ -17,6 +17,9 @@ public:
 
     void setDocument(const fla::FLADocument* document);
 
+signals:
+    void layerVisibilityChanged(const QString& timelineName, int layerIndex, bool visible);
+
 private:
     const fla::FLADocument* _flaDocument;
     QSplitter* _splitter;

@@ -15,12 +15,17 @@ public:
 
     void setDocument(const fla::FLADocument* document);
 
+signals:
+    void layerVisibilityChanged(const QString& timelineName, int layerIndex, bool visible);
+
 private:
     const fla::FLADocument* _flaDocument;
     QTreeWidget* _treeWidget;
     QIcon _layerIcon;
     QIcon _folderIcon;
     QIcon _openFolderIcon;
+    QIcon _visibleIcon;
+    QIcon _hiddenIcon;
 
     void refreshLayers();
 
@@ -33,4 +38,5 @@ private:
 private slots:
     void onItemExpanded(QTreeWidgetItem* item);
     void onItemCollapsed(QTreeWidgetItem* item);
+    void onVisibilityToggle(QTreeWidgetItem* item, int column);
 };

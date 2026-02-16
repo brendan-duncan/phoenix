@@ -147,6 +147,9 @@ void MainWindow::setupUI()
 
     connect(_documentView, &DocumentView::visibilityChanged,
             this, &MainWindow::onVisibilityChanged);
+
+    connect(_timelineView, &TimelineView::layerVisibilityChanged,
+            this, &MainWindow::onVisibilityChanged);
 }
 
 void MainWindow::setupMenus()
