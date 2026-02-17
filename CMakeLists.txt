@@ -62,6 +62,7 @@ set(HEADERS
     data/element.h
     data/fill_style.h
     data/fla_document.h
+    data/folder.h
     data/frame.h
     data/group.h
     data/layer.h
@@ -107,6 +108,7 @@ set(SOURCES
     data/element.cpp
     data/fill_style.cpp
     data/fla_document.cpp
+    data/folder.cpp
     data/frame.cpp
     data/group.cpp
     data/layer.cpp

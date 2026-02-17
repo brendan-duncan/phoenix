@@ -18,6 +18,13 @@ Document::~Document()
     }
     timelines.clear();
 
+    // Clean up dynamically allocated folders
+    for (Folder* folder : folders)
+    {
+        delete folder;
+    }
+    folders.clear();
+
     symbolMap.clear();
 }
 

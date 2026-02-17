@@ -46,6 +46,7 @@ TimelinesPanel::TimelinesPanel(Player* player, QWidget *parent)
     gotoFirstBtn->setFixedSize(30, 30);
     gotoFirstBtn->setFont(btnFont);
     gotoFirstBtn->setToolTip("Go to first frame");
+    gotoFirstBtn->setStyleSheet("QPushButton { color: white; background-color: transparent; border: none; }");
     connect(gotoFirstBtn, &QPushButton::clicked, this, &TimelinesPanel::onGotoFirstFrame);
     headerLayout->addWidget(gotoFirstBtn);
 
@@ -53,6 +54,7 @@ TimelinesPanel::TimelinesPanel(Player* player, QWidget *parent)
     stepBackBtn->setFixedSize(30, 30);
     stepBackBtn->setFont(btnFont);
     stepBackBtn->setToolTip("Step back");
+    stepBackBtn->setStyleSheet("QPushButton { color: white; background-color: transparent; border: none; }");
     connect(stepBackBtn, &QPushButton::clicked, this, &TimelinesPanel::onStepBack);
     headerLayout->addWidget(stepBackBtn);
 
@@ -60,6 +62,7 @@ TimelinesPanel::TimelinesPanel(Player* player, QWidget *parent)
     _playButton->setFixedSize(30, 30);
     _playButton->setFont(btnFont);
     _playButton->setToolTip("Play/Stop");
+    _playButton->setStyleSheet("QPushButton { color: white; background-color: transparent; border: none; }");
     connect(_playButton, &QPushButton::clicked, this, &TimelinesPanel::onPlayStop);
     headerLayout->addWidget(_playButton);
 
@@ -67,6 +70,7 @@ TimelinesPanel::TimelinesPanel(Player* player, QWidget *parent)
     stepForwardBtn->setFixedSize(30, 30);
     stepForwardBtn->setFont(btnFont);
     stepForwardBtn->setToolTip("Step forward");
+    stepForwardBtn->setStyleSheet("QPushButton { color: white; background-color: transparent; border: none; }");
     connect(stepForwardBtn, &QPushButton::clicked, this, &TimelinesPanel::onStepForward);
     headerLayout->addWidget(stepForwardBtn);
 
@@ -298,7 +302,7 @@ void TimelineGrid::paintEvent(QPaintEvent* event)
         const int playHeadY = 5;
         int currentFrame = _player->currentFrame();
         int playheadX = currentFrame * (frameWidth + margin) + frameWidth / 2;
-        
+
         painter.setPen(QColor(50, 150, 255));
         painter.drawLine(playheadX, playHeadY, playheadX, height());
 

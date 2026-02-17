@@ -1,5 +1,6 @@
 #pragma once
 
+#include "folder.h"
 #include "resource.h"
 #include "timeline.h"
 #include "printer_settings.h"
@@ -9,38 +10,6 @@
 #include <map>
 #include <string>
 #include <vector>
-
-
-/*
-xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" 
-xmlns="http://ns.adobe.com/xfl/2008/" 
-gridColor="#C0C0C0" 
-guidesColor="#00FF00" 
-width="800" 
-height="550" 
-frameRate="12" 
-currentTimeline="1" 
-xflVersion="23.0"
-creatorInfo="Adobe Animate" 
-platform="Windows" 
-versionInfo="Saved by Animate Windows 24.0 build 3" 
-majorVersion="24" 
-buildNumber="3" 
-gridSpacingX="18" 
-gridSpacingY="18" 
-snapAlignBorderSpacing="18" 
-objectsSnapTo="false"
-timelineHeight="197"
-timelineLabelWidth="256"
-vanishingPoint3DX="400" 
-vanishingPoint3DY="275" 
-nextSceneIdentifier="2" 
-playOptionsPlayLoop="false" 
-playOptionsPlayPages="false"
-playOptionsPlayFrameActions="false" 
-filetypeGUID="DD0DDBBF-5BEF-45B2-9F24-A3048D2A676F" 
-fileGUID="3B34B1C2CFEFE745B7B9147CA627619E
-*/
 
 namespace fla {
 
@@ -83,6 +52,7 @@ public:
     Scripts* scripts = nullptr;
     PublishHistory* publishHistory = nullptr;
     PrinterSettings* printerSettings = nullptr;
+    std::vector<Folder*> folders;
 
     std::map<std::string, Symbol*> symbolMap; // For quick lookup of symbols by name
 

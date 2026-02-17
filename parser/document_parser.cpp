@@ -1298,6 +1298,37 @@ bool parseMedia(const tinyxml2::XMLElement* element, fla::Document* document, Zi
     return true;
 }
 
+bool parseFolder(const tinyxml2::XMLElement* element, fla::Folder* folder)
+{
+    folder->name = getAttribute(element, "name");
+    folder->itemId = getAttribute(element, "itemId");
+    folder->isExpanded = getBoolAttribute(element, "isExpanded", false);
+    return true;
+}
+
+bool parseFolders(const tinyxml2::XMLElement* element, fla::Document* document)
+{
+    for (const tinyxml2::XMLElement* childElement = element->FirstChildElement();
+         childElement != nullptr;
+         childElement = childElement->NextSiblingElement())
+    {
+        if (std::strcmp(childElement->Name(), "DOMFolderItem") == 0)
+        {
+            fla::Folder* folder = new fla::Folder();
+            if (!parseFolder(childElement, folder))
+            {
+                return false;
+            }
+            document->folders.push_back(folder);
+        }
+        else
+        {
+            std::cerr << "!!!! Unhandled folder element: " << childElement->Name() << std::endl;
+        }
+    }
+    return true;
+}
+
 bool parseDocument(fla::Document* document, const tinyxml2::XMLElement* element, ZipReader* zipReader)
 {
     // Parse attributes
@@ -1379,6 +1410,13 @@ bool parseDocument(fla::Document* document, const tinyxml2::XMLElement* element,
                 return false;
             }*/
             document->scripts = scripts;
+        }
+        else if (std::strcmp(tagName, "folders") == 0)
+        {
+            if (!parseFolders(childElement, document))
+            {
+                return false;
+            }
         }
         else
         {

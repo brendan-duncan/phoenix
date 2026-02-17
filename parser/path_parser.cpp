@@ -245,8 +245,8 @@ void PathParser::parseCubicCurve(const std::string& data, int& pos, fla::Path* p
         pos++;
     }
 
-    // Parse coordinate pairs until we hit 'q', 'Q', or ')'
-    while (pos < data.length() && data[pos] != ')' && data[pos] != 'q' && data[pos] != 'Q')
+    // Parse coordinate pairs until we hit 'q', 'Q', 'p', 'P', or ')'
+    while (pos < data.length() && data[pos] != ')' && data[pos] != 'q' && data[pos] != 'Q' && data[pos] != 'p' && data[pos] != 'P')
     {
         skipWhitespace(data, pos);
 
@@ -284,12 +284,12 @@ void PathParser::parseCubicCurve(const std::string& data, int& pos, fla::Path* p
         }
     }
 
-    // Skip 'q' or 'Q' section (reference data)
-    if (pos < data.length() && (data[pos] == 'q' || data[pos] == 'Q'))
+    // Skip 'q'/'Q' or 'p'/'P' section (reference data)
+    if (pos < data.length() && (data[pos] == 'q' || data[pos] == 'Q' || data[pos] == 'p' || data[pos] == 'P'))
     {
         while (pos < data.length() && data[pos] != ')')
         {
-            if (data[pos] == 'q' || data[pos] == 'Q')
+            if (data[pos] == 'q' || data[pos] == 'Q' || data[pos] == 'p' || data[pos] == 'P')
             {
                 pos++;
                 skipWhitespace(data, pos);
