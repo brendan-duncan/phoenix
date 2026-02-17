@@ -193,13 +193,13 @@ fla::Edge* parsePath(const tinyxml2::XMLElement* element)
 
     PathParser pathParser;
     fla::Edge* edge = pathParser.parse(edgeData);
-
     if (!edge)
     {
         std::cerr << "Failed to parse path edges: " << pathParser.errorString() << (_currentFile.empty() ? "" : " from ") << _currentFile << std::endl;
         return nullptr;
     }
 
+    edge->data = edgeData;
     edge->fillStyle0 = getIntAttribute(element, "fillStyle0", -1);
     edge->fillStyle1 = getIntAttribute(element, "fillStyle1", -1);
     edge->strokeStyle = getIntAttribute(element, "strokeStyle", -1);

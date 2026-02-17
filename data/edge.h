@@ -44,7 +44,7 @@ public:
     int fillStyle0 = -1;
     int fillStyle1 = -1;
     int strokeStyle = -1;
-
+    std::string data; // Original path data string from XML
     std::vector<Path> paths;
 
     Edge() = default;
