@@ -10,6 +10,7 @@
 #include "../data/shape.h"
 #include "../data/solid_color.h"
 #include "../data/static_text.h"
+#include "../data/swatch.h"
 #include "../data/symbol_instance.h"
 #include "../third_party/tinyxml2/tinyxml2.h"
 #include <algorithm>
@@ -182,11 +183,6 @@ fla::Edge* parsePath(const tinyxml2::XMLElement* element)
     std::string edgeData = getAttribute(element, "edges");
     if (edgeData.empty())
     {
-        edgeData = getAttribute(element, "cubics");
-    }
-
-    if (edgeData.empty())
-    {
         std::cerr << "Edge element missing edges/cubics attribute" << (_currentFile.empty() ? "" : " from ") << _currentFile << std::endl;
         return nullptr;
     }
@@ -215,13 +211,20 @@ bool parseEdges(const tinyxml2::XMLElement* element, fla::Shape* shape)
     {
         if (std::strcmp(childElement->Name(), "Edge") == 0)
         {
-            fla::Edge* edge = parsePath(childElement);
-            if (!edge)
+            if (hasAttribute(childElement, "edges"))
             {
-                return false;
-            }
+                fla::Edge* edge = parsePath(childElement);
+                if (!edge)
+                {
+                    return false;
+                }
 
-            shape->edges.push_back(edge);
+                shape->edges.push_back(edge);
+            }
+            else if (hasAttribute(childElement, "cubics"))
+            {
+                // Skip for now. Cubics are used for the editor only.
+            }
         }
         else
         {
@@ -539,6 +542,56 @@ bool parseSymbolInstance(const tinyxml2::XMLElement* element, fla::SymbolInstanc
     if (!parseElement(element, instance))
     {
         return false;
+    }
+
+    for (const tinyxml2::XMLElement* childElement = element->FirstChildElement();
+         childElement != nullptr;
+         childElement = childElement->NextSiblingElement())
+    {
+        const char* tagName = childElement->Name();
+
+        if (std::strcmp(tagName, "color") == 0)
+        {
+            for (const tinyxml2::XMLElement* colorElement = childElement->FirstChildElement();
+                 colorElement != nullptr;
+                 colorElement = colorElement->NextSiblingElement())
+            {
+                if (std::strcmp(colorElement->Name(), "Color") == 0)
+                {
+                    instance->colorTransform.tintMultiplier = getDoubleAttribute(colorElement, "tintMultiplier", 0.0);
+                    instance->colorTransform.alphaMultiplier = getDoubleAttribute(colorElement, "alphaMultiplier", 1.0);
+                    instance->colorTransform.redMultiplier = getDoubleAttribute(colorElement, "redMultiplier", 1.0);
+                    instance->colorTransform.greenMultiplier = getDoubleAttribute(colorElement, "greenMultiplier", 1.0);
+                    instance->colorTransform.blueMultiplier = getDoubleAttribute(colorElement, "blueMultiplier", 1.0);
+                    instance->colorTransform.alphaOffset = getDoubleAttribute(colorElement, "alphaOffset", 0.0);
+                    instance->colorTransform.redOffset = getDoubleAttribute(colorElement, "redOffset", 0.0);
+                    instance->colorTransform.greenOffset = getDoubleAttribute(colorElement, "greenOffset", 0.0);
+                    instance->colorTransform.blueOffset = getDoubleAttribute(colorElement, "blueOffset", 0.0);
+                    instance->colorTransform.brightness = getDoubleAttribute(colorElement, "brightness", 0.0);
+                    std::string tintColor = getAttribute(colorElement, "tintColor", "");
+                    if (!tintColor.empty())
+                    {
+                        parseHexColor(tintColor, instance->colorTransform.tintColor);
+                    }
+                }
+                else
+                {
+                    std::cerr << "!!!! Unhandled symbol instance color element: " << colorElement->Name() << (_currentFile.empty() ? "" : " from ") << _currentFile << std::endl;
+                }
+            }
+        }
+        else if (std::strcmp(tagName, "matrix") == 0)
+        {
+            // from parseElement
+        }
+        else if (std::strcmp(tagName, "transformationPoint") == 0)
+        {
+            // from parseElement
+        }
+        else
+        {
+            std::cerr << "!!!! Unhandled SymbolInstance element: " << tagName << (_currentFile.empty() ? "" : " from ") << _currentFile << std::endl;
+        }
     }
 
     instance->libraryItemName = getAttribute(element, "libraryItemName");
@@ -1329,6 +1382,75 @@ bool parseFolders(const tinyxml2::XMLElement* element, fla::Document* document)
     return true;
 }
 
+bool parseSwatchList(const tinyxml2::XMLElement* element, fla::SwatchList* swatchList)
+{
+    for (const tinyxml2::XMLElement* childElement = element->FirstChildElement();
+         childElement != nullptr;
+         childElement = childElement->NextSiblingElement())
+    {
+        if (std::strcmp(childElement->Name(), "swatchListInfo") == 0)
+        {
+            swatchList->name = getAttribute(childElement, "name");
+        }
+        else if (std::strcmp(childElement->Name(), "swatches") == 0)
+        {
+            for (const tinyxml2::XMLElement* swatchElement = childElement->FirstChildElement();
+                 swatchElement != nullptr;
+                 swatchElement = swatchElement->NextSiblingElement())
+            {
+                if (std::strcmp(swatchElement->Name(), "swatchListInfo") == 0)
+                {
+                    // Don't know why this is repeated here
+                }
+                else if (std::strcmp(swatchElement->Name(), "SolidSwatchItem") == 0)
+                {
+                    fla::SolidSwatch* solidSwatch = new fla::SolidSwatch();
+                    if (hasAttribute(swatchElement, "color"))
+                    {
+                        std::string color = getAttribute(swatchElement, "color");
+                        parseHexColor(color, solidSwatch->color);
+                    }
+                    swatchList->swatches.push_back(solidSwatch);
+                }
+                else
+                {
+                    std::cout << "!!!! Unhandled swatch element: " << swatchElement->Name() << std::endl;
+                }
+            }
+        }
+        else
+        {
+            std::cerr << "!!!! Unhandled swatch list element: " << childElement->Name() << std::endl;
+        }
+    }
+
+    return true;
+}
+
+bool parseSwatchLists(const tinyxml2::XMLElement* element, fla::Document* document)
+{
+    for (const tinyxml2::XMLElement* childElement = element->FirstChildElement();
+         childElement != nullptr;
+         childElement = childElement->NextSiblingElement())
+    {
+        if (std::strcmp(childElement->Name(), "swatchList") == 0)
+        {
+            fla::SwatchList* swatchList = new fla::SwatchList();
+            if (!parseSwatchList(childElement, swatchList))
+            {
+                delete swatchList;
+                return false;
+            }
+            document->swatchLists.push_back(swatchList);
+        }
+        else
+        {
+            std::cout << "!!!! Unhandled swatch lists element: " << childElement->Name() << std::endl;
+        }
+    }
+    return true;
+}
+
 bool parseDocument(fla::Document* document, const tinyxml2::XMLElement* element, ZipReader* zipReader)
 {
     // Parse attributes
@@ -1414,6 +1536,13 @@ bool parseDocument(fla::Document* document, const tinyxml2::XMLElement* element,
         else if (std::strcmp(tagName, "folders") == 0)
         {
             if (!parseFolders(childElement, document))
+            {
+                return false;
+            }
+        }
+        else if (std::strcmp(tagName, "swatchLists") == 0)
+        {
+            if (!parseSwatchLists(childElement, document))
             {
                 return false;
             }

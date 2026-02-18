@@ -187,6 +187,15 @@ void MainWindow::setupMenus()
 
     viewMenu->addSeparator();
 
+    _phoenixView->setHighQualityAntiAliasing(_highQualityAntiAliasing);
+
+    QAction* highQualityAntialiasingAction = new QAction("High Quality Anti-Aliasing", this);
+    highQualityAntialiasingAction->setCheckable(true);
+    highQualityAntialiasingAction->setChecked(_highQualityAntiAliasing);
+    highQualityAntialiasingAction->setStatusTip("Use higher quality anti-aliasing (may reduce gaps between shapes)");
+    connect(highQualityAntialiasingAction, &QAction::toggled, this, &MainWindow::onHighQualityAntiAliasingToggled);
+    viewMenu->addAction(highQualityAntialiasingAction);
+
     QAction* showBoundsAction = new QAction("Show Bounding Boxes", this);
     showBoundsAction->setCheckable(true);
     showBoundsAction->setChecked(false);
@@ -314,6 +323,7 @@ void MainWindow::loadSettings()
     QSettings settings;
     _recentFiles = settings.value("recentFiles").toStringList();
     _lastDirectory = settings.value("lastDirectory").toString();
+    _highQualityAntiAliasing = settings.value("view/highQualityAntiAliasing", true).toBool();
 }
 
 void MainWindow::saveSettings()
@@ -321,6 +331,14 @@ void MainWindow::saveSettings()
     QSettings settings;
     settings.setValue("recentFiles", _recentFiles);
     settings.setValue("lastDirectory", _lastDirectory);
+    settings.setValue("view/highQualityAntiAliasing", _highQualityAntiAliasing);
+}
+
+void MainWindow::onHighQualityAntiAliasingToggled(bool checked)
+{
+    _highQualityAntiAliasing = checked;
+    _phoenixView->setHighQualityAntiAliasing(checked);
+    saveSettings();
 }
 
 QIcon MainWindow::createPhoenixIcon()

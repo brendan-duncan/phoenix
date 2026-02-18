@@ -35,6 +35,8 @@ private slots:
     
     void onVisibilityChanged();
 
+    void onHighQualityAntiAliasingToggled(bool checked);
+
 private:
     void setupUI();
 
@@ -63,4 +65,5 @@ private:
 
     QStringList _recentFiles;
     QString _lastDirectory;
+    bool _highQualityAntiAliasing = true;
 };

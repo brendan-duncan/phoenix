@@ -56,6 +56,7 @@ set(HEADERS
     parser/path_parser.h
     data/action_script.h
     data/bitmap.h
+    data/color_transform.h
     data/document.h
     data/dom_element.h
     data/edge.h
@@ -80,6 +81,8 @@ set(HEADERS
     data/solid_color.h
     data/static_text.h
     data/stroke_style.h
+    data/swatch.h
+    data/swatch_list.h
     data/symbol_instance.h
     data/symbol.h
     data/timeline.h
@@ -126,6 +129,8 @@ set(SOURCES
     data/solid_color.cpp
     data/static_text.cpp
     data/stroke_style.cpp
+    data/swatch.cpp
+    data/swatch_list.cpp
     data/symbol_instance.cpp
     data/symbol.cpp
     data/timeline.cpp

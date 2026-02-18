@@ -2,8 +2,9 @@
 
 #include "element.h"
 #include "point.h"
+#include "color_transform.h"
 #include <string>
-#include "transform.h"
+
 
 namespace fla {
 
@@ -14,6 +15,7 @@ public:
     int firstFrame = 0;
     SymbolType symbolType = SymbolType::Graphic;
     LoopType loopType = LoopType::PlayOnce;
+    ColorTransform colorTransform;
 
     SymbolInstance() = default;
 

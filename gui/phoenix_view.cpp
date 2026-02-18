@@ -21,6 +21,7 @@
 #include <QPainterPath>
 #include <QDebug>
 #include <QPixmap>
+#include <QImage>
 #include <QBitmap>
 
 #define MAX(a, b) ((a) > (b) ? (a) : (b))
@@ -66,6 +67,15 @@ void PhoenixView::setDocument(const fla::FLADocument* document)
     _panY = 0;
     _zoom = 1.0;
     update(); // Trigger repaint
+}
+
+void PhoenixView::setHighQualityAntiAliasing(bool on)
+{
+    if (_highQualityAntiAliasing == on)
+        return;
+    _highQualityAntiAliasing = on;
+    clearCaches();
+    update();
 }
 
 void PhoenixView::paintEvent(QPaintEvent *event)
@@ -120,31 +130,56 @@ void PhoenixView::paintEvent(QPaintEvent *event)
         widgetRect.height() * invScale
     );
 
-    // Apply transformations: pan + zoom + center offset
-    painter.save();
-
-    painter.translate(_panX + centerX, _panY + centerY);
-    painter.scale(scale, scale);
-
-    // Draw white background for document area
-    painter.fillRect(0, 0, docWidth, docHeight, QColor(255, 255, 255));
-
-    // Draw document content
-    _disableStaticText = _highQualityAntiAliasing;
-    drawDocument(painter, _flaDocument->document);
-    _disableStaticText = false;
-
-    painter.restore();
-
     if (_highQualityAntiAliasing)
     {
-        painter.save();
-        // An extra draw slightly shifted eliminates the white line artifacts that can appear
-        // between shapes due to anti-aliasing and subpixel rendering issues.
-        painter.translate(_panX + centerX + 0.25, _panY + centerY + 0.25);
-        painter.scale(scale, scale);
-        drawDocument(painter, _flaDocument->document);
+        // Supersampling: render at 2x resolution and scale down for smoother edges
+        const int supersampleFactor = 2;
+        int bufW = width() * supersampleFactor;
+        int bufH = height() * supersampleFactor;
+        QImage buffer(bufW, bufH, QImage::Format_ARGB32_Premultiplied);
+        buffer.fill(backgroundColor);
 
+        QPainter bufferPainter(&buffer);
+        bufferPainter.setRenderHint(QPainter::Antialiasing, true);
+        bufferPainter.setRenderHint(QPainter::TextAntialiasing, true);
+        bufferPainter.setRenderHint(QPainter::SmoothPixmapTransform, true);
+
+        double ss = static_cast<double>(supersampleFactor);
+        double tx = ss * (_panX + centerX);
+        double ty = ss * (_panY + centerY);
+        double s = scale * ss;
+
+        bufferPainter.translate(tx, ty);
+        bufferPainter.scale(s, s);
+        bufferPainter.fillRect(QRectF(0, 0, docWidth, docHeight), QColor(255, 255, 255));
+
+        _disableStaticText = true;
+        drawDocument(bufferPainter, _flaDocument->document);
+        _disableStaticText = false;
+
+        /*bufferPainter.resetTransform();
+        // Offset draws to reduce white-line artifacts between shapes
+        bufferPainter.translate(tx + ss, ty + ss);
+        bufferPainter.scale(s, s);
+        drawDocument(bufferPainter, _flaDocument->document);
+
+        bufferPainter.resetTransform();
+        bufferPainter.translate(tx - ss, ty - ss);
+        bufferPainter.scale(s, s);
+        drawDocument(bufferPainter, _flaDocument->document);*/
+
+        bufferPainter.end();
+
+        painter.setRenderHint(QPainter::SmoothPixmapTransform, true);
+        painter.drawImage(rect(), buffer, buffer.rect());
+    }
+    else
+    {
+        painter.save();
+        painter.translate(_panX + centerX, _panY + centerY);
+        painter.scale(scale, scale);
+        painter.fillRect(0, 0, docWidth, docHeight, QColor(255, 255, 255));
+        drawDocument(painter, _flaDocument->document);
         painter.restore();
     }
 
@@ -471,7 +506,8 @@ void PhoenixView::drawElement(QPainter& painter, const fla::Element* element)
 
             QFont font = _fontCache[fontFace];
             font.setWeight(QFont::Normal);
-            font.setPointSizeF(run.size * 0.75); // Adjust size to better match Flash's rendering
+            double size = run.size == 0.0 ? 12.0 : run.size;
+            font.setPointSizeF(size * 0.75); // Adjust size to better match Flash's rendering
             painter.setFont(font);
             // The origin is the top-left, not the bottom-left, so we use the text size as an approximation for line height
             painter.drawText(staticText->left, staticText->top + run.size, QString::fromStdString(run.text));

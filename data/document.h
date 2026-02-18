@@ -6,6 +6,7 @@
 #include "printer_settings.h"
 #include "publish_history.h"
 #include "scripts.h"
+#include "swatch_list.h"
 #include "symbol.h"
 #include <map>
 #include <string>
@@ -53,6 +54,7 @@ public:
     PublishHistory* publishHistory = nullptr;
     PrinterSettings* printerSettings = nullptr;
     std::vector<Folder*> folders;
+    std::vector<SwatchList*> swatchLists;
 
     std::map<std::string, Symbol*> symbolMap; // For quick lookup of symbols by name
 

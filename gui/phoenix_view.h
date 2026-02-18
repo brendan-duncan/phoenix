@@ -29,6 +29,10 @@ public:
 
     bool showBounds() const { return _showBounds; }
 
+    void setHighQualityAntiAliasing(bool on);
+
+    bool highQualityAntiAliasing() const { return _highQualityAntiAliasing; }
+
     void clearCaches();
 
 protected:

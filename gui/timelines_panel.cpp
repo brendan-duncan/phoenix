@@ -8,8 +8,73 @@
 #include <QPainter>
 #include <QPaintEvent>
 #include <QMouseEvent>
+#include <QIcon>
+#include <QPixmap>
+#include <QImage>
 
 static const int MAX_FRAMES = 600;
+
+enum class TransportIcon { First, Prev, Play, Stop, Next };
+
+static QIcon makeTransportIcon(TransportIcon icon, int size = 24)
+{
+    QImage img(size, size, QImage::Format_ARGB32);
+    img.fill(0);
+    QPainter p(&img);
+    p.setRenderHint(QPainter::Antialiasing);
+    p.setRenderHint(QPainter::SmoothPixmapTransform);
+    p.setPen(Qt::NoPen);
+    p.setBrush(Qt::white);
+
+    const float pad = size * 0.2f;
+    const float h = size - 2 * pad;
+    const float w = h * 0.6f;
+    const float cx = size / 2.0f;
+    const float cy = size / 2.0f;
+    const float barWidth = size * 0.12f;  // narrow vertical bar
+
+    auto leftTriangle = [&](float centerX, float centerY) {
+        QPolygonF tri;
+        tri << QPointF(centerX + w/2, centerY - h/2)
+            << QPointF(centerX + w/2, centerY + h/2)
+            << QPointF(centerX - w/2, centerY);
+        p.drawPolygon(tri);
+    };
+    auto rightTriangle = [&](float centerX, float centerY) {
+        QPolygonF tri;
+        tri << QPointF(centerX - w/2, centerY - h/2)
+            << QPointF(centerX - w/2, centerY + h/2)
+            << QPointF(centerX + w/2, centerY);
+        p.drawPolygon(tri);
+    };
+    auto narrowRect = [&](float left, float top, float width, float height) {
+        p.drawRoundedRect(QRectF(left, top, width, height), 1, 1);
+    };
+
+    switch (icon)
+    {
+    case TransportIcon::First:
+        leftTriangle(cx - w - 0.5f, cy);
+        leftTriangle(cx, cy);
+        break;
+    case TransportIcon::Prev:
+        leftTriangle(cx - w/2 - barWidth/2 - 1, cy);
+        narrowRect(cx - barWidth/2, cy - h/2, barWidth, h);
+        break;
+    case TransportIcon::Play:
+        rightTriangle(cx + 1, cy);
+        break;
+    case TransportIcon::Stop:
+        p.drawRoundedRect(QRectF(pad, pad, size - 2*pad, size - 2*pad), 2, 2);
+        break;
+    case TransportIcon::Next:
+        narrowRect(cx - barWidth/2, cy - h/2, barWidth, h);
+        rightTriangle(cx + w/2 + barWidth/2 + 1, cy);
+        break;
+    }
+    p.end();
+    return QIcon(QPixmap::fromImage(img));
+}
 
 TimelinesPanel::TimelinesPanel(Player* player, QWidget *parent)
     : QWidget(parent)
@@ -37,40 +102,49 @@ TimelinesPanel::TimelinesPanel(Player* player, QWidget *parent)
     _scrollArea->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOn);
     layout->addWidget(_scrollArea);
 
-    QFont btnFont;
-    btnFont.setPointSize(16);
+    // Transport icons: drawn white on transparent (no font/symbol coloring)
+    const QString styleTransport =
+        "QPushButton { background-color: transparent; border: none; }"
+        "QPushButton:hover { background-color: rgba(255,255,255,0.08); border-radius: 4px; }"
+        "QPushButton:pressed { background-color: rgba(255,255,255,0.15); border-radius: 4px; }";
+    const int btnSize = 28;
+    const int iconSize = 22;
 
     headerLayout->addStretch();
 
-    QPushButton* gotoFirstBtn = new QPushButton("⏮️", _header);
-    gotoFirstBtn->setFixedSize(30, 30);
-    gotoFirstBtn->setFont(btnFont);
+    QPushButton* gotoFirstBtn = new QPushButton(_header);
+    gotoFirstBtn->setFixedSize(btnSize, btnSize);
+    gotoFirstBtn->setIcon(makeTransportIcon(TransportIcon::First, iconSize));
+    gotoFirstBtn->setIconSize(QSize(iconSize, iconSize));
     gotoFirstBtn->setToolTip("Go to first frame");
-    gotoFirstBtn->setStyleSheet("QPushButton { color: white; background-color: transparent; border: none; }");
+    gotoFirstBtn->setStyleSheet(styleTransport);
     connect(gotoFirstBtn, &QPushButton::clicked, this, &TimelinesPanel::onGotoFirstFrame);
     headerLayout->addWidget(gotoFirstBtn);
 
-    QPushButton* stepBackBtn = new QPushButton("⏪", _header);
-    stepBackBtn->setFixedSize(30, 30);
-    stepBackBtn->setFont(btnFont);
+    QPushButton* stepBackBtn = new QPushButton(_header);
+    stepBackBtn->setFixedSize(btnSize, btnSize);
+    stepBackBtn->setIcon(makeTransportIcon(TransportIcon::Prev, iconSize));
+    stepBackBtn->setIconSize(QSize(iconSize, iconSize));
     stepBackBtn->setToolTip("Step back");
-    stepBackBtn->setStyleSheet("QPushButton { color: white; background-color: transparent; border: none; }");
+    stepBackBtn->setStyleSheet(styleTransport);
     connect(stepBackBtn, &QPushButton::clicked, this, &TimelinesPanel::onStepBack);
     headerLayout->addWidget(stepBackBtn);
 
-    _playButton = new QPushButton("▶️", _header);
-    _playButton->setFixedSize(30, 30);
-    _playButton->setFont(btnFont);
+    _playButton = new QPushButton(_header);
+    _playButton->setFixedSize(btnSize, btnSize);
+    _playButton->setIcon(makeTransportIcon(TransportIcon::Play, iconSize));
+    _playButton->setIconSize(QSize(iconSize, iconSize));
     _playButton->setToolTip("Play/Stop");
-    _playButton->setStyleSheet("QPushButton { color: white; background-color: transparent; border: none; }");
+    _playButton->setStyleSheet(styleTransport);
     connect(_playButton, &QPushButton::clicked, this, &TimelinesPanel::onPlayStop);
     headerLayout->addWidget(_playButton);
 
-    QPushButton* stepForwardBtn = new QPushButton("⏩", _header);
-    stepForwardBtn->setFixedSize(30, 30);
-    stepForwardBtn->setFont(btnFont);
+    QPushButton* stepForwardBtn = new QPushButton(_header);
+    stepForwardBtn->setFixedSize(btnSize, btnSize);
+    stepForwardBtn->setIcon(makeTransportIcon(TransportIcon::Next, iconSize));
+    stepForwardBtn->setIconSize(QSize(iconSize, iconSize));
     stepForwardBtn->setToolTip("Step forward");
-    stepForwardBtn->setStyleSheet("QPushButton { color: white; background-color: transparent; border: none; }");
+    stepForwardBtn->setStyleSheet(styleTransport);
     connect(stepForwardBtn, &QPushButton::clicked, this, &TimelinesPanel::onStepForward);
     headerLayout->addWidget(stepForwardBtn);
 
@@ -111,12 +185,12 @@ void TimelinesPanel::onPlayStop()
     if (_isPlaying)
     {
         _playTimer->stop();
-        _playButton->setText("▶️");
+        _playButton->setIcon(makeTransportIcon(TransportIcon::Play, 22));
     }
     else
     {
         _playTimer->start(1000 / 24); // Assuming 24 FPS
-        _playButton->setText("⏹️");
+        _playButton->setIcon(makeTransportIcon(TransportIcon::Stop, 22));
     }
     _isPlaying = !_isPlaying;
 }
