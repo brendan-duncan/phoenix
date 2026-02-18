@@ -392,13 +392,50 @@ void PhoenixView::drawElement(QPainter& painter, const fla::Element* element)
         const fla::Symbol* symbol = findSymbolByName(_flaDocument->document, instance->libraryItemName);
         if (symbol && symbol->visible)
         {
-            for (const fla::Timeline* timeline : symbol->timelines)
+            if (!instance->colorTransform.isIdentity())
             {
-                if (timeline->visible)
+                QRectF symbolBounds = calculateSymbolLocalBounds(symbol);
+                int pixWidth = qMax(1, static_cast<int>(qCeil(symbolBounds.width())));
+                int pixHeight = qMax(1, static_cast<int>(qCeil(symbolBounds.height())));
+
+                QImage symbolImage(pixWidth, pixHeight, QImage::Format_ARGB32_Premultiplied);
+                symbolImage.fill(Qt::transparent);
+
+                QPainter symbolPainter(&symbolImage);
+                symbolPainter.setRenderHint(QPainter::Antialiasing, true);
+                symbolPainter.setRenderHint(QPainter::TextAntialiasing, true);
+                symbolPainter.setRenderHint(QPainter::SmoothPixmapTransform, true);
+                symbolPainter.translate(-symbolBounds.topLeft().x(), -symbolBounds.topLeft().y());
+
+                for (const fla::Timeline* timeline : symbol->timelines)
                 {
-                    painter.save();
-                    drawTimeline(painter, timeline, instance->loopType, instance->firstFrame);
-                    painter.restore();
+                    if (timeline->visible)
+                    {
+                        symbolPainter.save();
+                        drawTimeline(symbolPainter, timeline, instance->loopType, instance->firstFrame);
+                        symbolPainter.restore();
+                    }
+                }
+                symbolPainter.end();
+
+                applyColorTransform(symbolImage, instance->colorTransform);
+
+                QPixmap resultPixmap = QPixmap::fromImage(symbolImage);
+
+                painter.save();
+                painter.drawPixmap(symbolBounds.topLeft().toPoint(), resultPixmap);
+                painter.restore();
+            }
+            else
+            {
+                for (const fla::Timeline* timeline : symbol->timelines)
+                {
+                    if (timeline->visible)
+                    {
+                        painter.save();
+                        drawTimeline(painter, timeline, instance->loopType, instance->firstFrame);
+                        painter.restore();
+                    }
                 }
             }
         }
@@ -1450,4 +1487,244 @@ void PhoenixView::drawDocumentBounds(QPainter& painter, const fla::Document* doc
     {
         drawTimelineBounds(painter, timeline);
     }
+}
+
+void PhoenixView::applyColorTransform(QImage& image, const fla::ColorTransform& colorTransform)
+{
+    if (image.format() != QImage::Format_ARGB32_Premultiplied &&
+        image.format() != QImage::Format_ARGB32)
+    {
+        image = image.convertToFormat(QImage::Format_ARGB32_Premultiplied);
+    }
+
+    for (int y = 0; y < image.height(); ++y)
+    {
+        QRgb* line = reinterpret_cast<QRgb*>(image.scanLine(y));
+        for (int x = 0; x < image.width(); ++x)
+        {
+            QRgb pixel = line[x];
+            if (qAlpha(pixel) == 0)
+                continue;
+
+            int r = qRed(pixel);
+            int g = qGreen(pixel);
+            int b = qBlue(pixel);
+            int a = qAlpha(pixel);
+
+            if (colorTransform.tintMultiplier != 0.0)
+            {
+                double t = colorTransform.tintMultiplier;
+                int tintR = colorTransform.tintColor[0];
+                int tintG = colorTransform.tintColor[1];
+                int tintB = colorTransform.tintColor[2];
+                int tintA = colorTransform.tintColor[3];
+
+                r = static_cast<int>((1.0 - t) * r + t * tintR);
+                g = static_cast<int>((1.0 - t) * g + t * tintG);
+                b = static_cast<int>((1.0 - t) * b + t * tintB);
+                a = static_cast<int>((1.0 - t) * a + t * tintA);
+            }
+
+            if (colorTransform.brightness != 0.0)
+            {
+                double br = colorTransform.brightness;
+
+                double rf = r / 255.0;
+                double gf = g / 255.0;
+                double bf = b / 255.0;
+
+                double maxC = qMax(qMax(rf, gf), bf);
+                double minC = qMin(qMin(rf, gf), bf);
+                double delta = maxC - minC;
+
+                double h = 0, s = 0, l = (maxC + minC) / 2.0;
+
+                if (delta != 0.0)
+                {
+                    s = l < 0.5 ? delta / (maxC + minC) : delta / (2.0 - maxC - minC);
+
+                    if (maxC == rf)
+                        h = ((gf - bf) / delta) + (gf < bf ? 6.0 : 0.0);
+                    else if (maxC == gf)
+                        h = ((bf - rf) / delta) + 2.0;
+                    else
+                        h = ((rf - gf) / delta) + 4.0;
+
+                    h /= 6.0;
+                }
+
+                l = l + br;
+                l = qBound(0.0, l, 1.0);
+
+                if (l == 0.0)
+                {
+                    r = g = b = 0;
+                }
+                else if (l == 1.0)
+                {
+                    r = g = b = 255;
+                }
+                else if (s == 0.0)
+                {
+                    r = g = b = static_cast<int>(l * 255.0);
+                }
+                else
+                {
+                    double q = l < 0.5 ? l * (1.0 + s) : l + s - l * s;
+                    double p = 2.0 * l - q;
+
+                    auto hueToRgb = [](double p, double q, double t) -> double {
+                        while (t < 0.0) t += 1.0;
+                        while (t > 1.0) t -= 1.0;
+                        if (t < 1.0/6.0) return p + (q - p) * 6.0 * t;
+                        if (t < 1.0/2.0) return q;
+                        if (t < 2.0/3.0) return p + (q - p) * (2.0/3.0 - t) * 6.0;
+                        return p;
+                    };
+
+                    r = static_cast<int>(hueToRgb(p, q, h + 1.0/3.0) * 255.0);
+                    g = static_cast<int>(hueToRgb(p, q, h) * 255.0);
+                    b = static_cast<int>(hueToRgb(p, q, h - 1.0/3.0) * 255.0);
+                }
+            }
+
+            r = static_cast<int>(r * colorTransform.redMultiplier) + colorTransform.redOffset;
+            g = static_cast<int>(g * colorTransform.greenMultiplier) + colorTransform.greenOffset;
+            b = static_cast<int>(b * colorTransform.blueMultiplier) + colorTransform.blueOffset;
+            a = static_cast<int>(a * colorTransform.alphaMultiplier) + colorTransform.alphaOffset;
+
+            r = qBound(0, r, 255);
+            g = qBound(0, g, 255);
+            b = qBound(0, b, 255);
+            a = qBound(0, a, 255);
+
+            line[x] = qRgba(r, g, b, a);
+        }
+    }
+}
+
+QRectF PhoenixView::calculateSymbolLocalBounds(const fla::Symbol* symbol)
+{
+    QRectF bounds;
+    if (!symbol || symbol->timelines.empty())
+        return QRectF(0, 0, 100, 100);
+
+    const fla::Timeline* timeline = symbol->timelines[0];
+    for (const fla::Layer* layer : timeline->layers)
+    {
+        if (!layer->visible || layer->frames.empty())
+            continue;
+
+        const fla::Frame* frame = layer->frames[0];
+        for (const fla::Element* elem : frame->elements)
+        {
+            QRectF elemBounds = calculateElementLocalBounds(elem);
+            if (bounds.isNull())
+                bounds = elemBounds;
+            else
+                bounds = bounds.united(elemBounds);
+        }
+    }
+
+    if (bounds.isNull())
+        bounds = QRectF(0, 0, 100, 100);
+
+    return bounds;
+}
+
+QRectF PhoenixView::calculateElementLocalBounds(const fla::Element* element)
+{
+    fla::Element::Type type = element->elementType();
+
+    if (type == fla::Element::Type::Shape)
+    {
+        const fla::Shape* shape = static_cast<const fla::Shape*>(element);
+        bool first = true;
+        QRectF bounds;
+
+        for (const fla::Edge* edge : shape->edges)
+        {
+            if (!edge->visible)
+                continue;
+
+            for (const fla::Path& path : edge->paths)
+            {
+                if (!path.visible)
+                    continue;
+
+                for (const fla::PathSegment& segment : path.segments)
+                {
+                    for (const fla::Point& pt : segment.points)
+                    {
+                        if (first)
+                        {
+                            first = false;
+                            bounds = QRectF(pt.x, pt.y, 0, 0);
+                        }
+                        else
+                        {
+                            if (pt.x < bounds.left())
+                                bounds.setLeft(pt.x);
+                            if (pt.x > bounds.right())
+                                bounds.setRight(pt.x);
+                            if (pt.y < bounds.top())
+                                bounds.setTop(pt.y);
+                            if (pt.y > bounds.bottom())
+                                bounds.setBottom(pt.y);
+                        }
+                    }
+                }
+            }
+        }
+
+        if (bounds.isNull())
+            bounds = QRectF(0, 0, 1, 1);
+
+        bounds = bounds.adjusted(-2, -2, 2, 2);
+        return bounds;
+    }
+    else if (type == fla::Element::Type::Group)
+    {
+        const fla::Group* group = static_cast<const fla::Group*>(element);
+        QRectF bounds;
+        for (const fla::Element* member : group->members)
+        {
+            QRectF memberBounds = calculateElementLocalBounds(member);
+            if (bounds.isNull())
+                bounds = memberBounds;
+            else
+                bounds = bounds.united(memberBounds);
+        }
+        return bounds;
+    }
+    else if (type == fla::Element::Type::SymbolInstance)
+    {
+        const fla::SymbolInstance* instance = static_cast<const fla::SymbolInstance*>(element);
+        const fla::Symbol* symbol = findSymbolByName(_flaDocument->document, instance->libraryItemName);
+        if (symbol)
+        {
+            return calculateSymbolLocalBounds(symbol);
+        }
+        return QRectF(0, 0, 100, 100);
+    }
+    else if (type == fla::Element::Type::BitmapInstance)
+    {
+        return QRectF(0, 0, 100, 100);
+    }
+    else if (type == fla::Element::Type::StaticText)
+    {
+        return QRectF(0, 0, 200, 50);
+    }
+    else if (type == fla::Element::Type::Rectangle)
+    {
+        const fla::RectanglePrimitive* rectangle = static_cast<const fla::RectanglePrimitive*>(element);
+        return QRectF(rectangle->rect.topLeft.x, rectangle->rect.topLeft.y, rectangle->rect.width(), rectangle->rect.height());
+    }
+    else if (type == fla::Element::Type::Oval)
+    {
+        const fla::OvalPrimitive* oval = static_cast<const fla::OvalPrimitive*>(element);
+        return QRectF(oval->rect.topLeft.x, oval->rect.topLeft.y, oval->rect.width(), oval->rect.height());
+    }
+
+    return QRectF(0, 0, 20, 20);
 }

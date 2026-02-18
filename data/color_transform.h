@@ -21,6 +21,20 @@ public:
     int alphaOffset = 0;
 
     ColorTransform() = default;
+
+    bool isIdentity() const
+    {
+        return tintMultiplier == 0.0 &&
+               brightness == 0.0 &&
+               redMultiplier == 1.0 &&
+               greenMultiplier == 1.0 &&
+               blueMultiplier == 1.0 &&
+               alphaMultiplier == 1.0 &&
+               redOffset == 0 &&
+               greenOffset == 0 &&
+               blueOffset == 0 &&
+               alphaOffset == 0;
+    }
 };
 
 } // namespace fla
