@@ -1,6 +1,7 @@
 #pragma once
 
 #include "../data/fla_document.h"
+#include "../data/edge.h"
 #include <QTreeWidget>
 #include <QTreeWidgetItem>
 
@@ -18,12 +19,14 @@ public:
 
 signals:
     void visibilityChanged();
+    void segmentSelected(const fla::PathSegment* segment, const QPointF& point);
 
 protected:
     void mousePressEvent(QMouseEvent *event) override;
 
 private slots:
     void onItemExpanded(QTreeWidgetItem* item);
+    void onSelectionChanged();
 
 private:
     enum class ItemType {

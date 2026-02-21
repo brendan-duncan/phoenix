@@ -212,21 +212,6 @@ fla::Edge* PathParser::parse(const std::string& data)
         }
     }
 
-    // Close the last segment if endpoints match
-    if (lastPath && !lastPath->segments.empty())
-    {
-        fla::Point segmentStart = lastPath->segments[0].points[0];
-        if (std::abs(segmentStart.x - lastPoint.x) < 0.01 &&
-            std::abs(segmentStart.y - lastPoint.y) < 0.01)
-        {
-            // Only add Close command if not already present
-            if (lastPath->segments.back().command != fla::PathSegment::Command::Close)
-            {
-                lastPath->segments.push_back({fla::PathSegment::Command::Close, {}});
-            }
-        }
-    }
-
     return edge;
 }
 

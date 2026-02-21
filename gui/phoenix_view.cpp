@@ -57,6 +57,13 @@ void PhoenixView::onPlayerFrameChanged(int frame)
     update(); // Trigger repaint when player frame changes
 }
 
+void PhoenixView::onSegmentSelected(const fla::PathSegment* segment, const QPointF& point)
+{
+    _selectedSegmentPoint = point;
+    _hasSelectedSegment = true;
+    update();
+}
+
 void PhoenixView::setDocument(const fla::FLADocument* document)
 {
     _bitmapCache.clear(); // Clear bitmap cache when loading new document
@@ -168,6 +175,9 @@ void PhoenixView::paintEvent(QPaintEvent *event)
         bufferPainter.scale(s, s);
         drawDocument(bufferPainter, _flaDocument->document);*/
 
+        bufferPainter.setPen(QPen(QColor(0, 0, 0, 255), 1.0));
+        bufferPainter.drawRect(0, 0, docWidth, docHeight);
+
         bufferPainter.end();
 
         painter.setRenderHint(QPainter::SmoothPixmapTransform, true);
@@ -180,6 +190,9 @@ void PhoenixView::paintEvent(QPaintEvent *event)
         painter.scale(scale, scale);
         painter.fillRect(0, 0, docWidth, docHeight, QColor(255, 255, 255));
         drawDocument(painter, _flaDocument->document);
+        
+        painter.setPen(QPen(QColor(0, 0, 0, 255), 1.0));
+        painter.drawRect(0, 0, docWidth, docHeight);
         painter.restore();
     }
 
@@ -195,6 +208,20 @@ void PhoenixView::paintEvent(QPaintEvent *event)
         painter.drawRect(QRectF(0, 0, docWidth, docHeight));
 
         drawDocumentBounds(painter, _flaDocument->document);
+
+        painter.restore();
+    }
+
+    // Draw selected segment point overlay
+    if (_hasSelectedSegment)
+    {
+        painter.save();
+        painter.translate(_panX + centerX, _panY + centerY);
+        painter.scale(scale, scale);
+
+        painter.setPen(QPen(QColor(0, 0, 0, 255), 2.0));
+        painter.setBrush(QBrush(QColor(255, 255, 0, 100)));
+        painter.drawEllipse(_selectedSegmentPoint, 5.0, 5.0);
 
         painter.restore();
     }

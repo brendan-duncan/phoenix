@@ -1,6 +1,7 @@
 #pragma once
 
 #include "../data/color_transform.h"
+#include "../data/edge.h"
 #include "../data/fla_document.h"
 #include "../data/shape.h"
 
@@ -37,6 +38,11 @@ public:
 
     void clearCaches();
 
+public slots:
+    void onPlayerFrameChanged(int frame);
+
+    void onSegmentSelected(const fla::PathSegment* segment, const QPointF& point);
+
 protected:
     void paintEvent(QPaintEvent *event) override;
 
@@ -47,9 +53,6 @@ protected:
     void mouseReleaseEvent(QMouseEvent *event) override;
 
     void wheelEvent(QWheelEvent *event) override;
-
-private slots:
-    void onPlayerFrameChanged(int frame);
 
 private:
     const fla::FLADocument* _flaDocument;
@@ -73,6 +76,10 @@ private:
     bool _showBounds;
 
     bool _disableStaticText = false;
+
+    // Selected segment point for overlay
+    QPointF _selectedSegmentPoint;
+    bool _hasSelectedSegment = false;
 
     struct PathCacheEntry
     {

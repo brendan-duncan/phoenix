@@ -31,6 +31,7 @@ DocumentView::DocumentView(QWidget *parent)
 
     // Connect lazy loading signal
     connect(this, &QTreeWidget::itemExpanded, this, &DocumentView::onItemExpanded);
+    connect(this, &QTreeWidget::itemSelectionChanged, this, &DocumentView::onSelectionChanged);
 
     // Create type icons
     createTypeIcons();
@@ -323,8 +324,10 @@ void DocumentView::populateItemChildren(QTreeWidgetItem* item)
                                     const fla::Point& pt = segment.points[i];
                                     segmentName += QString(" (x: %1, y: %2)").arg(pt.x).arg(pt.y);
                                 }
+                                // Store pointer to the segment for selection handling
+                                const fla::PathSegment* segmentPtr = &segment;
                                 QTreeWidgetItem* segmentItem = createTreeItem(segmentName, nullptr, pathItem);
-                                setItemTypeData(segmentItem, ItemType::Other, nullptr);
+                                setItemTypeData(segmentItem, ItemType::Other, (void*)segmentPtr);
                                 segmentItem->setIcon(1, _shapeIcon);
                                 segmentItem->setToolTip(1, segmentType);
                             }
@@ -654,4 +657,35 @@ void DocumentView::mousePressEvent(QMouseEvent *event)
     
     // For other clicks, use default behavior
     QTreeWidget::mousePressEvent(event);
+}
+
+void DocumentView::onSelectionChanged()
+{
+    QList<QTreeWidgetItem*> selected = selectedItems();
+    if (selected.isEmpty())
+        return;
+
+    QTreeWidgetItem* item = selected.first();
+    if (!item)
+        return;
+
+    ItemType type = getItemType(item);
+    if (type != ItemType::Other)
+        return;
+
+    void* data = getItemData(item);
+    const fla::PathSegment* segment = static_cast<const fla::PathSegment*>(data);
+    if (!segment)
+        return;
+
+    // Only handle Move and Line commands
+    if (segment->command != fla::PathSegment::Command::Move &&
+        segment->command != fla::PathSegment::Command::Line)
+        return;
+
+    if (segment->points.empty())
+        return;
+
+    const fla::Point& pt = segment->points[0];
+    emit segmentSelected(segment, QPointF(pt.x, pt.y));
 }
