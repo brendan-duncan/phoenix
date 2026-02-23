@@ -24,7 +24,9 @@ public:
 
     FillStyle* fill = nullptr;
 
-    StrokeStyle() = default;
+    StrokeStyle(DOMElement* parent)
+        : DOMElement(parent)
+    {}
 
     ~StrokeStyle() override;
 
@@ -34,9 +36,13 @@ public:
 class SolidStroke : public StrokeStyle
 {
 public:
-    SolidStroke() = default;
+    SolidStroke(DOMElement* parent)
+        : StrokeStyle(parent)
+    {}
 
     std::string domTypeName() const override { return "SolidStroke"; }
+
+    DOMType domType() const override { return DOMType::SolidStroke; }
 
     Style style() const override { return Style::Solid; }
 };
@@ -44,9 +50,13 @@ public:
 class DashedStroke : public StrokeStyle
 {
 public:
-    DashedStroke() = default;
+    DashedStroke(DOMElement* parent)
+        : StrokeStyle(parent)
+    {}
 
     std::string domTypeName() const override { return "DashedStroke"; }
+
+    DOMType domType() const override { return DOMType::DashedStroke; }
 
     Style style() const override { return Style::Dashed; }
 };
@@ -54,9 +64,13 @@ public:
 class RaggedStroke : public StrokeStyle
 {
 public:
-    RaggedStroke() = default;
+    RaggedStroke(DOMElement* parent)
+        : StrokeStyle(parent)
+    {}
 
     std::string domTypeName() const override { return "RaggedStroke"; }
+
+    DOMType domType() const override { return DOMType::RaggedStroke; }
 
     Style style() const override { return Style::Ragged; }
 };
@@ -64,9 +78,13 @@ public:
 class StippleStroke : public StrokeStyle
 {
 public:
-    StippleStroke() = default;
+    StippleStroke(DOMElement* parent)
+        : StrokeStyle(parent)
+    {}
 
     std::string domTypeName() const override { return "StippleStroke"; }
+
+    DOMType domType() const override { return DOMType::StippleStroke; }
 
     Style style() const override { return Style::Stipple; }
 };
@@ -74,9 +92,13 @@ public:
 class DottedStroke : public StrokeStyle
 {
 public:
-    DottedStroke() = default;
+    DottedStroke(DOMElement* parent)
+        : StrokeStyle(parent)
+    {}
 
     std::string domTypeName() const override { return "DottedStroke"; }
+
+    DOMType domType() const override { return DOMType::DottedStroke; }
 
     Style style() const override { return Style::Dotted; }
 };

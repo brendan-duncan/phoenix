@@ -10,7 +10,7 @@ class DocumentParser
 public:
     DocumentParser(ZipReader* zipReader);
 
-    fla::Document* parse(const std::string& xmlContent);
+    fla::Document* parse(const std::string& xmlContent, fla::DOMElement* parent);
 
     std::string errorString() const
     {

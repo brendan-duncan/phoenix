@@ -16,11 +16,15 @@ public:
 
     std::vector<Timeline*> timelines;
 
-    Symbol() = default;
+    Symbol(DOMElement* parent)
+        : DOMElement(parent)
+    {}
 
     ~Symbol() override;
 
     std::string domTypeName() const override { return "Symbol"; }
+
+    DOMType domType() const override { return DOMType::Symbol; }
 };
 
 } // namespace fla

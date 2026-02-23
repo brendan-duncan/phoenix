@@ -10,11 +10,15 @@ class SolidColor : public FillStyle
 public:
     uint8_t color[4] = {0, 0, 0, 255}; // RGBA format
 
-    SolidColor() = default;
+    SolidColor(DOMElement* parent)
+        : FillStyle(parent)
+    {}
 
     Type type() const override { return Type::SolidColor; }
 
     std::string domTypeName() const override { return "SolidColor"; }
+
+    DOMType domType() const override { return DOMType::SolidColor; }
 };
 
 } // namespace fla

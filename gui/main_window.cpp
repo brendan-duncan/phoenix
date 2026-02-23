@@ -148,8 +148,8 @@ void MainWindow::setupUI()
     connect(_documentView, &DocumentView::visibilityChanged,
             this, &MainWindow::onVisibilityChanged);
 
-    connect(_documentView, &DocumentView::segmentSelected,
-            _phoenixView, &PhoenixView::onSegmentSelected);
+    connect(_documentView, &DocumentView::elementSelected,
+            _phoenixView, &PhoenixView::onElementSelected);
 
     connect(_timelineView, &TimelineView::layerVisibilityChanged,
             this, &MainWindow::onVisibilityChanged);

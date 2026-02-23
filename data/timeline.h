@@ -15,11 +15,15 @@ public:
 
     std::vector<Layer*> layers;
 
-    Timeline() = default;
+    Timeline(DOMElement* parent)
+        : DOMElement(parent)
+    {}
 
     ~Timeline() override;
 
     std::string domTypeName() const override { return "Timeline"; }
+
+    DOMType domType() const override { return DOMType::Timeline; }
 };
 
 } // namespace fla

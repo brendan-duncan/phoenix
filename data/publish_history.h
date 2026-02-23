@@ -7,9 +7,13 @@ namespace fla {
 class PublishHistory : public DOMElement
 {
 public:
-    PublishHistory() = default;
+    PublishHistory(DOMElement* parent)
+        : DOMElement(parent)
+    {}
 
     std::string domTypeName() const override { return "PublishHistory"; }
+
+    DOMType domType() const override { return DOMType::PublishHistory; }
 };
 
 } // namespace fla

@@ -17,11 +17,15 @@ public:
     LoopType loopType = LoopType::PlayOnce;
     ColorTransform colorTransform;
 
-    SymbolInstance() = default;
+    SymbolInstance(DOMElement* parent)
+        : Element(parent)
+    {}
 
     Element::Type elementType() const override { return Element::Type::SymbolInstance; }
 
     std::string domTypeName() const override { return "SymbolInstance"; }
+
+    DOMType domType() const override { return DOMType::SymbolInstance; }
 };
 
 } // namespace fla

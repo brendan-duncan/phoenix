@@ -177,7 +177,7 @@ bool parseRadialGradient(const tinyxml2::XMLElement* element, fla::RadialGradien
     return true;
 }
 
-fla::Edge* parsePath(const tinyxml2::XMLElement* element)
+fla::Edge* parsePath(const tinyxml2::XMLElement* element, fla::DOMElement* parent)
 {
     // Try to get edge data from either "edges" or "cubics" attribute
     std::string edgeData = getAttribute(element, "edges");
@@ -188,7 +188,7 @@ fla::Edge* parsePath(const tinyxml2::XMLElement* element)
     }
 
     PathParser pathParser;
-    fla::Edge* edge = pathParser.parse(edgeData);
+    fla::Edge* edge = pathParser.parse(edgeData, parent);
     if (!edge)
     {
         std::cerr << "Failed to parse path edges: " << pathParser.errorString() << (_currentFile.empty() ? "" : " from ") << _currentFile << std::endl;
@@ -213,7 +213,7 @@ bool parseEdges(const tinyxml2::XMLElement* element, fla::Shape* shape)
         {
             if (hasAttribute(childElement, "edges"))
             {
-                fla::Edge* edge = parsePath(childElement);
+                fla::Edge* edge = parsePath(childElement, shape);
                 if (!edge)
                 {
                     return false;
@@ -235,13 +235,13 @@ bool parseEdges(const tinyxml2::XMLElement* element, fla::Shape* shape)
     return true;
 }
 
-fla::FillStyle* parseFillStyle(const tinyxml2::XMLElement* element)
+fla::FillStyle* parseFillStyle(const tinyxml2::XMLElement* element, fla::DOMElement* parent)
 {
     const char* tagName = element->Name();
 
     if (std::strcmp(tagName, "SolidColor") == 0)
     {
-        fla::SolidColor* solidFill = new fla::SolidColor();
+        fla::SolidColor* solidFill = new fla::SolidColor(parent);
         if (!parseSolidColor(element, solidFill))
         {
             delete solidFill;
@@ -252,7 +252,7 @@ fla::FillStyle* parseFillStyle(const tinyxml2::XMLElement* element)
     }
     else if (std::strcmp(tagName, "LinearGradient") == 0)
     {
-        fla::LinearGradient* linearFill = new fla::LinearGradient();
+        fla::LinearGradient* linearFill = new fla::LinearGradient(parent);
         if (!parseLinearGradient(element, linearFill))
         {
             delete linearFill;
@@ -262,7 +262,7 @@ fla::FillStyle* parseFillStyle(const tinyxml2::XMLElement* element)
     }
     else if (std::strcmp(tagName, "RadialGradient") == 0)
     {
-        fla::RadialGradient* radialFill = new fla::RadialGradient();
+        fla::RadialGradient* radialFill = new fla::RadialGradient(parent);
         if (!parseRadialGradient(element, radialFill))
         {
             delete radialFill;
@@ -289,7 +289,7 @@ bool parseStroke(const tinyxml2::XMLElement* element, fla::StrokeStyle* stroke)
                  fillElement != nullptr;
                  fillElement = fillElement->NextSiblingElement())
             {
-                stroke->fill = parseFillStyle(fillElement);
+                stroke->fill = parseFillStyle(fillElement, stroke);
                 if (!stroke->fill)
                 {
                     return false;
@@ -304,7 +304,7 @@ bool parseStroke(const tinyxml2::XMLElement* element, fla::StrokeStyle* stroke)
     return true;
 }
 
-fla::StrokeStyle* parseStrokeStyle(const tinyxml2::XMLElement* element)
+fla::StrokeStyle* parseStrokeStyle(const tinyxml2::XMLElement* element, fla::DOMElement* parent)
 {
     for (const tinyxml2::XMLElement* childElement = element->FirstChildElement();
          childElement != nullptr;
@@ -315,23 +315,23 @@ fla::StrokeStyle* parseStrokeStyle(const tinyxml2::XMLElement* element)
 
         if (std::strcmp(tagName, "SolidStroke") == 0)
         {
-            stroke = new fla::SolidStroke();
+            stroke = new fla::SolidStroke(parent);
         }
         else if (std::strcmp(tagName, "DashedStroke") == 0)
         {
-            stroke = new fla::DashedStroke();
+            stroke = new fla::DashedStroke(parent);
         }
         else if (std::strcmp(tagName, "RaggedStroke") == 0)
         {
-            stroke = new fla::RaggedStroke();
+            stroke = new fla::RaggedStroke(parent);
         }
         else if (std::strcmp(tagName, "StippleStroke") == 0)
         {
-            stroke = new fla::StippleStroke();
+            stroke = new fla::StippleStroke(parent);
         }
         else if (std::strcmp(tagName, "DottedStroke") == 0)
         {
-            stroke = new fla::DottedStroke();
+            stroke = new fla::DottedStroke(parent);
         }
         else
         {
@@ -360,7 +360,7 @@ bool parseStrokes(const tinyxml2::XMLElement* element, fla::Shape* shape)
         if (std::strcmp(childElement->Name(), "StrokeStyle") == 0)
         {
             int index = getIntAttribute(childElement, "index", -1);
-            fla::StrokeStyle* strokeStyle = parseStrokeStyle(childElement);
+            fla::StrokeStyle* strokeStyle = parseStrokeStyle(childElement, shape);
             if (!strokeStyle)
             {
                 return false;
@@ -393,7 +393,7 @@ bool parseFills(const tinyxml2::XMLElement* element, fla::Shape* shape)
                 continue;
             }
 
-            fla::FillStyle *fillStyle = parseFillStyle(fillElement);
+            fla::FillStyle *fillStyle = parseFillStyle(fillElement, shape);
             if (!fillStyle)
             {
                 return false;
@@ -508,11 +508,11 @@ bool parseShape(const tinyxml2::XMLElement* element, fla::Shape* shape)
 
     for (fla::Edge* edge : shape->edges)
     {
-        for (fla::Path& path : edge->paths)
+        for (fla::Path* path : edge->paths)
         {
-            for (fla::PathSegment& segment : path.segments)
+            for (fla::PathSegment* segment : path->segments)
             {
-                for (fla::Point& point : segment.points)
+                for (fla::Point& point : segment->points)
                 {
                     //point.translate(shape->transformationPoint.x, shape->transformationPoint.y);
                     //point.transform(shape->transform);
@@ -616,7 +616,10 @@ bool parseSymbolInstance(const tinyxml2::XMLElement* element, fla::SymbolInstanc
         instance->symbolType = fla::SymbolType::Graphic; // Default to graphic
     }
 
-    std::string loopType = getAttribute(element, "loopType", "play once");
+    // XFL may use "loop" or "loopType" for the loop mode
+    std::string loopType = getAttribute(element, "loopType", "");
+    if (loopType.empty())
+        loopType = getAttribute(element, "loop", "play once");
     if (loopType == "single frame")
     {
         instance->loopType = fla::LoopType::SingleFrame;
@@ -680,12 +683,12 @@ bool parseRectanglePrimitive(const tinyxml2::XMLElement* element, fla::Rectangle
                  fillElement != nullptr;
                  fillElement = fillElement->NextSiblingElement())
             {
-                rectangle->fillStyle = parseFillStyle(fillElement);
+                rectangle->fillStyle = parseFillStyle(fillElement, rectangle);
             }
         }
         else if (std::strcmp(tagName, "stroke") == 0)
         {
-            rectangle->strokeStyle = parseStrokeStyle(childElement);
+            rectangle->strokeStyle = parseStrokeStyle(childElement, rectangle);
         }
         else if (std::strcmp(tagName, "matrix") == 0)
         {
@@ -734,12 +737,12 @@ bool parseOvalPrimitive(const tinyxml2::XMLElement* element, fla::OvalPrimitive*
                  fillElement != nullptr;
                  fillElement = fillElement->NextSiblingElement())
             {
-                oval->fillStyle = parseFillStyle(fillElement);
+                oval->fillStyle = parseFillStyle(fillElement, oval);
             }
         }
         else if (std::strcmp(tagName, "stroke") == 0)
         {
-            oval->strokeStyle = parseStrokeStyle(childElement);
+            oval->strokeStyle = parseStrokeStyle(childElement, oval);
         }
         else if (std::strcmp(tagName, "matrix") == 0)
         {
@@ -871,13 +874,13 @@ bool parseStaticText(const tinyxml2::XMLElement* element, fla::StaticText* stati
     return true;
 }
 
-fla::Element* parseElementByType(const tinyxml2::XMLElement* element)
+fla::Element* parseElementByType(const tinyxml2::XMLElement* element, fla::DOMElement* parent)
 {
     const char* tagName = element->Name();
 
     if (std::strcmp(tagName, "DOMShape") == 0)
     {
-        fla::Shape* shape = new fla::Shape();
+        fla::Shape* shape = new fla::Shape(parent);
         if (!parseShape(element, shape))
         {
             delete shape;
@@ -887,7 +890,7 @@ fla::Element* parseElementByType(const tinyxml2::XMLElement* element)
     }
     else if (std::strcmp(tagName, "DOMSymbolInstance") == 0)
     {
-        fla::SymbolInstance* instance = new fla::SymbolInstance();
+        fla::SymbolInstance* instance = new fla::SymbolInstance(parent);
         if (!parseSymbolInstance(element, instance))
         {
             delete instance;
@@ -897,7 +900,7 @@ fla::Element* parseElementByType(const tinyxml2::XMLElement* element)
     }
     else if (std::strcmp(tagName, "DOMGroup") == 0)
     {
-        fla::Group* group = new fla::Group();
+        fla::Group* group = new fla::Group(parent);
         if (!parseGroup(element, group))
         {
             delete group;
@@ -907,7 +910,7 @@ fla::Element* parseElementByType(const tinyxml2::XMLElement* element)
     }
     else if (std::strcmp(tagName, "DOMStaticText") == 0)
     {
-        fla::StaticText* staticText = new fla::StaticText();
+        fla::StaticText* staticText = new fla::StaticText(parent);
         if (!parseStaticText(element, staticText))
         {
             delete staticText;
@@ -917,7 +920,7 @@ fla::Element* parseElementByType(const tinyxml2::XMLElement* element)
     }
     else if (std::strcmp(tagName, "DOMBitmapInstance") == 0)
     {
-        fla::BitmapInstance* bitmapInstance = new fla::BitmapInstance();
+        fla::BitmapInstance* bitmapInstance = new fla::BitmapInstance(parent);
         if (!parseBitmapInstance(element, bitmapInstance))
         {
             delete bitmapInstance;
@@ -927,7 +930,7 @@ fla::Element* parseElementByType(const tinyxml2::XMLElement* element)
     }
     else if (std::strcmp(tagName, "DOMRectangleObject") == 0)
     {
-        fla::RectanglePrimitive* rectangle = new fla::RectanglePrimitive();
+        fla::RectanglePrimitive* rectangle = new fla::RectanglePrimitive(parent);
         if (!parseRectanglePrimitive(element, rectangle))
         {
             delete rectangle;
@@ -937,7 +940,7 @@ fla::Element* parseElementByType(const tinyxml2::XMLElement* element)
     }
     else if (std::strcmp(tagName, "DOMOvalObject") == 0)
     {
-        fla::OvalPrimitive* oval = new fla::OvalPrimitive();
+        fla::OvalPrimitive* oval = new fla::OvalPrimitive(parent);
         if (!parseOvalPrimitive(element, oval))
         {
             delete oval;
@@ -965,7 +968,7 @@ bool parseGroup(const tinyxml2::XMLElement* element, fla::Group* group)
              childElement != nullptr;
              childElement = childElement->NextSiblingElement())
         {
-            fla::Element* member = parseElementByType(childElement);
+            fla::Element* member = parseElementByType(childElement, group);
             if (member)
             {
                 group->members.push_back(member);
@@ -991,7 +994,7 @@ bool parseElements(const tinyxml2::XMLElement* element, fla::Frame* frame)
          childElement != nullptr;
          childElement = childElement->NextSiblingElement())
     {
-        fla::Element* el = parseElementByType(childElement);
+        fla::Element* el = parseElementByType(childElement, frame);
         if (el)
         {
             frame->elements.push_back(el);
@@ -1037,7 +1040,7 @@ bool parseFrame(const tinyxml2::XMLElement* element, fla::Frame* frame)
 
         if (std::strcmp(tagName, "Actionscript") == 0)
         {
-            fla::ActionScript* actionScript = new fla::ActionScript();
+            fla::ActionScript* actionScript = new fla::ActionScript(frame);
             if (!parseActionScript(childElement, actionScript))
             {
                 delete actionScript;
@@ -1068,7 +1071,7 @@ bool parseFrames(const tinyxml2::XMLElement* element, fla::Layer* layer)
     {
         if (std::strcmp(childElement->Name(), "DOMFrame") == 0)
         {
-            fla::Frame* frame = new fla::Frame();
+            fla::Frame* frame = new fla::Frame(layer);
             if (!parseFrame(childElement, frame))
             {
                 return false;
@@ -1152,7 +1155,7 @@ bool parseLayers(const tinyxml2::XMLElement* element, fla::Timeline* timeline)
     {
         if (std::strcmp(childElement->Name(), "DOMLayer") == 0)
         {
-            fla::Layer* layer = new fla::Layer();
+            fla::Layer* layer = new fla::Layer(timeline);
             if (!parseLayer(childElement, layer))
             {
                 return false;
@@ -1203,7 +1206,7 @@ bool parseTimeline(const tinyxml2::XMLElement* element, fla::Timeline* timeline)
     return true;
 }
 
-bool parseTimelines(const tinyxml2::XMLElement* element, std::vector<fla::Timeline*>& timelines)
+bool parseTimelines(const tinyxml2::XMLElement* element, std::vector<fla::Timeline*>& timelines, fla::DOMElement* parent)
 {
     for (const tinyxml2::XMLElement* childElement = element->FirstChildElement();
          childElement != nullptr;
@@ -1211,7 +1214,7 @@ bool parseTimelines(const tinyxml2::XMLElement* element, std::vector<fla::Timeli
     {
         if (std::strcmp(childElement->Name(), "DOMTimeline") == 0)
         {
-            fla::Timeline* timeline = new fla::Timeline();
+            fla::Timeline* timeline = new fla::Timeline(parent);
             if (!parseTimeline(childElement, timeline))
             {
                 return false;
@@ -1226,7 +1229,7 @@ bool parseTimelines(const tinyxml2::XMLElement* element, std::vector<fla::Timeli
     return true;
 }
 
-bool parseSymbolInclude(const tinyxml2::XMLElement* element, fla::Document* document, ZipReader* zipReader)
+bool parseSymbolInclude(const tinyxml2::XMLElement* element, fla::SymbolList* symbolList, ZipReader* zipReader)
 {
     std::string href = getAttribute(element, "href");
     if (href.empty())
@@ -1264,7 +1267,7 @@ bool parseSymbolInclude(const tinyxml2::XMLElement* element, fla::Document* docu
         return false;
     }
 
-    fla::Symbol* symbol = new fla::Symbol();
+    fla::Symbol* symbol = new fla::Symbol(symbolList);
     symbol->name = getAttribute(root, "name");
     symbol->itemId = getAttribute(root, "itemId");
     symbol->lastModified = getAttribute(root, "lastModified");
@@ -1276,7 +1279,7 @@ bool parseSymbolInclude(const tinyxml2::XMLElement* element, fla::Document* docu
     {
         if (std::strcmp(childElement->Name(), "timeline") == 0)
         {
-            if (!parseTimelines(childElement, symbol->timelines))
+            if (!parseTimelines(childElement, symbol->timelines, symbol))
             {
                 _currentFile.clear();
                 return false;
@@ -1288,8 +1291,8 @@ bool parseSymbolInclude(const tinyxml2::XMLElement* element, fla::Document* docu
         }
     }
 
-    document->symbols.push_back(symbol);
-    document->symbolMap[symbol->name] = symbol;
+    symbolList->symbols.push_back(symbol);
+    symbolList->symbolMap[symbol->name] = symbol;
     _currentFile.clear();
 
     return true;
@@ -1297,13 +1300,16 @@ bool parseSymbolInclude(const tinyxml2::XMLElement* element, fla::Document* docu
 
 bool parseSymbols(const tinyxml2::XMLElement* element, fla::Document* document, ZipReader* zipReader)
 {
+    fla::SymbolList* symbolList = new fla::SymbolList(document);
+    document->symbolList = symbolList;
+
     for (const tinyxml2::XMLElement* childElement = element->FirstChildElement();
          childElement != nullptr;
          childElement = childElement->NextSiblingElement())
     {
         if (std::strcmp(childElement->Name(), "Include") == 0)
         {
-            if (!parseSymbolInclude(childElement, document, zipReader))
+            if (!parseSymbolInclude(childElement, symbolList, zipReader))
             {
                 return false;
             }
@@ -1325,7 +1331,7 @@ bool parseMedia(const tinyxml2::XMLElement* element, fla::Document* document, Zi
     {
         if (std::strcmp(childElement->Name(), "DOMBitmapItem") == 0)
         {
-            fla::Bitmap* bitmap = new fla::Bitmap();
+            fla::Bitmap* bitmap = new fla::Bitmap(document);
 
             bitmap->name = getAttribute(childElement, "name");
             bitmap->itemId = getAttribute(childElement, "itemId");
@@ -1367,7 +1373,7 @@ bool parseFolders(const tinyxml2::XMLElement* element, fla::Document* document)
     {
         if (std::strcmp(childElement->Name(), "DOMFolderItem") == 0)
         {
-            fla::Folder* folder = new fla::Folder();
+            fla::Folder* folder = new fla::Folder(document);
             if (!parseFolder(childElement, folder))
             {
                 return false;
@@ -1404,7 +1410,7 @@ bool parseSwatchList(const tinyxml2::XMLElement* element, fla::SwatchList* swatc
                 }
                 else if (std::strcmp(swatchElement->Name(), "SolidSwatchItem") == 0)
                 {
-                    fla::SolidSwatch* solidSwatch = new fla::SolidSwatch();
+                    fla::SolidSwatch* solidSwatch = new fla::SolidSwatch(swatchList);
                     if (hasAttribute(swatchElement, "color"))
                     {
                         std::string color = getAttribute(swatchElement, "color");
@@ -1435,7 +1441,7 @@ bool parseSwatchLists(const tinyxml2::XMLElement* element, fla::Document* docume
     {
         if (std::strcmp(childElement->Name(), "swatchList") == 0)
         {
-            fla::SwatchList* swatchList = new fla::SwatchList();
+            fla::SwatchList* swatchList = new fla::SwatchList(document);
             if (!parseSwatchList(childElement, swatchList))
             {
                 delete swatchList;
@@ -1484,7 +1490,7 @@ bool parseDocument(fla::Document* document, const tinyxml2::XMLElement* element,
 
         if (std::strcmp(tagName, "timelines") == 0)
         {
-            if (!parseTimelines(childElement, document->timelines))
+            if (!parseTimelines(childElement, document->timelines, document))
             {
                 return false;
             }
@@ -1505,7 +1511,7 @@ bool parseDocument(fla::Document* document, const tinyxml2::XMLElement* element,
         }
         else if (std::strcmp(tagName, "publishHistory") == 0)
         {
-            fla::PublishHistory* publishHistory = new fla::PublishHistory();
+            fla::PublishHistory* publishHistory = new fla::PublishHistory(document);
             /*if (!parsePublishHistory(childElement, publishHistory))
             {
                 delete publishHistory;
@@ -1515,7 +1521,7 @@ bool parseDocument(fla::Document* document, const tinyxml2::XMLElement* element,
         }
         else if (std::strcmp(tagName, "PrinterSettings") == 0)
         {
-            fla::PrinterSettings* printerSettings = new fla::PrinterSettings();
+            fla::PrinterSettings* printerSettings = new fla::PrinterSettings(document);
             /*if (!parsePrinterSettings(childElement, printerSettings))
             {
                 delete printerSettings;
@@ -1525,13 +1531,13 @@ bool parseDocument(fla::Document* document, const tinyxml2::XMLElement* element,
         }
         else if (std::strcmp(tagName, "scripts") == 0)
         {
-            fla::Scripts* scripts = new fla::Scripts();
+            fla::ScriptList* scripts = new fla::ScriptList(document);
             /*if (!parseScripts(childElement, scripts))
             {
                 delete scripts;
                 return false;
             }*/
-            document->scripts = scripts;
+            document->scriptList = scripts;
         }
         else if (std::strcmp(tagName, "folders") == 0)
         {
@@ -1562,7 +1568,7 @@ DocumentParser::DocumentParser(ZipReader* zipReader)
     : _zipReader(zipReader)
 {}
 
-fla::Document* DocumentParser::parse(const std::string& xmlContent)
+fla::Document* DocumentParser::parse(const std::string& xmlContent, fla::DOMElement* parent)
 {
     _currentFile.clear();
 
@@ -1580,7 +1586,7 @@ fla::Document* DocumentParser::parse(const std::string& xmlContent)
         return nullptr;
     }
 
-    fla::Document* document = new fla::Document();
+    fla::Document* document = new fla::Document(parent);
     if (!parseDocument(document, root, _zipReader))
     {
         delete document;

@@ -1,6 +1,7 @@
 #pragma once
 
 #include "transform.h"
+#include <string>
 
 namespace fla {
 
@@ -9,10 +10,14 @@ class Point
 public:
     double x;
     double y;
+    std::string xs;
+    std::string ys;
 
-    Point(double x = 0.0, double y = 0.0)
+    Point(double x = 0.0, double y = 0.0, const std::string& xs = "", const std::string& ys = "")
         : x(x)
         , y(y)
+        , xs(xs)
+        , ys(ys)
     {}
 
     void reset()

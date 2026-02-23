@@ -11,13 +11,17 @@ public:
     FillStyle* fillStyle = nullptr;
     StrokeStyle* strokeStyle = nullptr;
 
-    RectanglePrimitive() = default;
+    RectanglePrimitive(DOMElement* parent)
+        : Element(parent)
+    {}
 
     ~RectanglePrimitive() override;
 
     Type elementType() const override { return Type::Rectangle; }
 
     std::string domTypeName() const override { return "DOMRectanglePrimitive"; }
+
+    DOMType domType() const override { return DOMType::RectanglePrimitive; }
 };
 
 }

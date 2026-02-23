@@ -7,7 +7,7 @@
 class PathParser
 {
 public:
-    fla::Edge* parse(const std::string& data);
+    fla::Edge* parse(const std::string& data, fla::DOMElement* parent);
 
     const std::string& errorString() const
     {
@@ -21,7 +21,7 @@ private:
 
     static fla::Point parsePoint(const std::string& data, int& pos);
 
-    static double parseNumber(const std::string& data, int& pos);
+    static double parseNumber(const std::string& data, int& pos, std::string* outStr = nullptr);
 
     static void skipWhitespace(const std::string& data, int& pos);
 };

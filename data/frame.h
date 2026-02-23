@@ -18,11 +18,15 @@ public:
     ActionScript* actionScript = nullptr;
     std::vector<Element*> elements;
 
-    Frame() = default;
+    Frame(DOMElement* parent)
+        : DOMElement(parent)
+    {}
 
     ~Frame() override;
 
     std::string domTypeName() const override { return "Frame"; }
+
+    DOMType domType() const override { return DOMType::Frame; }
 };
 
 } // namespace fla

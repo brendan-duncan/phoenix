@@ -23,13 +23,57 @@ enum class LoopType
 class DOMElement
 {
 public:
-    bool visible = true;
+    enum class DOMType
+    {
+        ActionScript,
+        BitmapInstance,
+        Bitmap,
+        Document,
+        Edge,
+        Path,
+        PathSegment,
+        FLADocument,
+        Folder,
+        Frame,
+        Group,
+        Layer,
+        LinearGradient,
+        OvalPrimitive,
+        PrinterSettings,
+        PublishHistory,
+        RadialGradient,
+        RectanglePrimitive,
+        ScriptList,
+        Shape,
+        SolidColor,
+        StaticText,
+        SolidStroke,
+        DashedStroke,
+        RaggedStroke,
+        StippleStroke,
+        DottedStroke,
+        SwatchList,
+        SolidSwatch,
+        LinearGradientSwatch,
+        RadialGradientSwatch,
+        SymbolInstance,
+        Symbol,
+        SymbolList,
+        Timeline,
+    };
 
-    DOMElement();
+    bool visible = true;
+    DOMElement* parent = nullptr;
+
+    DOMElement(DOMElement* parent)
+        : parent(parent)
+    {}
 
     virtual ~DOMElement() = default;
 
     virtual std::string domTypeName() const = 0;
+
+    virtual DOMType domType() const = 0;
 };
 
 } // namespace fla

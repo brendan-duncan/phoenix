@@ -39,11 +39,15 @@ public:
 
     std::vector<TextRun> runs;
 
-    StaticText() = default;
+    StaticText(DOMElement* parent)
+        : Element(parent)
+    {}
 
     Element::Type elementType() const override { return Element::Type::StaticText; }
 
     std::string domTypeName() const override { return "StaticText"; }
+
+    DOMType domType() const override { return DOMType::StaticText; }
 };
 
 } // namespace fla

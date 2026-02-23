@@ -10,11 +10,15 @@ class BitmapInstance : public Element
 public:
     std::string libraryItemName;
 
-    BitmapInstance() = default;
+    BitmapInstance(DOMElement* parent)
+        : Element(parent)
+    {}
 
     Element::Type elementType() const override { return Element::Type::BitmapInstance; }
 
     std::string domTypeName() const override { return "BitmapInstance"; }
+
+    DOMType domType() const override { return DOMType::BitmapInstance; }
 };
 
 } // namespace fla

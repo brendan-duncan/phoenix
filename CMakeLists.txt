@@ -76,7 +76,7 @@ set(HEADERS
     data/rect.h
     data/rectangle_primitive.h
     data/resource.h
-    data/scripts.h
+    data/script_list.h
     data/shape.h
     data/solid_color.h
     data/static_text.h
@@ -84,6 +84,7 @@ set(HEADERS
     data/swatch.h
     data/swatch_list.h
     data/symbol_instance.h
+    data/symbol_list.h
     data/symbol.h
     data/timeline.h
     data/transform.h
@@ -124,7 +125,7 @@ set(SOURCES
     data/rect.cpp
     data/rectangle_primitive.cpp
     data/resource.cpp
-    data/scripts.cpp
+    data/script_list.cpp
     data/shape.cpp
     data/solid_color.cpp
     data/static_text.cpp
@@ -133,6 +134,7 @@ set(SOURCES
     data/swatch_list.cpp
     data/symbol_instance.cpp
     data/symbol.cpp
+    data/symbol_list.cpp
     data/timeline.cpp
     data/transform.cpp
     util/zip_archive.cpp

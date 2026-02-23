@@ -13,11 +13,15 @@ public:
     std::string name;
     std::vector<Swatch*> swatches;
 
-    SwatchList() = default;
+    SwatchList(DOMElement* parent)
+        : DOMElement(parent)
+    {}
 
     ~SwatchList() override;
 
     std::string domTypeName() const override { return "SwatchList"; }
+
+    DOMType domType() const override { return DOMType::SwatchList; }
 };
 
 } // namespace fla

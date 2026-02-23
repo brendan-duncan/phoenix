@@ -26,11 +26,15 @@ public:
 
     std::vector<uint8_t> imageData; // Raw image data (e.g., JPEG or PNG bytes)
 
-    Bitmap() = default;
+    Bitmap(DOMElement* parent)
+        : Resource(parent)
+    {}
 
     Type resourceType() const override { return Type::Bitmap; }
 
     std::string domTypeName() const override { return "Bitmap"; }
+
+    DOMType domType() const override { return DOMType::Bitmap; }
 };
 
 } // namespace fla

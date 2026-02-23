@@ -7,7 +7,7 @@
 
 namespace fla {
 
-struct PathSegment
+struct PathSegment : public DOMElement
 {
     enum class Command
     {
@@ -21,9 +21,15 @@ struct PathSegment
     Command command;
     std::vector<Point> points;
 
-    PathSegment(Command cmd, const std::vector<Point>& pts)
-        : command(cmd), points(pts)
+    PathSegment(Command cmd, const std::vector<Point>& pts, DOMElement* parent)
+        : DOMElement(parent)
+        , command(cmd)
+        , points(pts)
     {}
+
+    std::string domTypeName() const override { return "PathSegment"; }
+
+    DOMType domType() const override { return DOMType::PathSegment; }
 };
 
 struct Path : public DOMElement
@@ -31,11 +37,16 @@ struct Path : public DOMElement
     int styleIndex = -1;
     int lineStyleIndex = -1;
     int fillStyleIndex = -1;
-    std::vector<PathSegment> segments;
+    std::vector<PathSegment*> segments;
 
-    Path() = default;
+    Path(DOMElement* parent)
+        : DOMElement(parent)
+    {}
+
+    ~Path() override;
 
     std::string domTypeName() const override { return "Path"; }
+    DOMType domType() const override { return DOMType::Path; }
 };
 
 class Edge : public DOMElement
@@ -45,11 +56,16 @@ public:
     int fillStyle1 = -1;
     int strokeStyle = -1;
     std::string data; // Original path data string from XML
-    std::vector<Path> paths;
+    std::vector<Path*> paths;
 
-    Edge() = default;
+    Edge(DOMElement* parent)
+        : DOMElement(parent)
+    {}
+
+    ~Edge() override;
 
     std::string domTypeName() const override { return "Edge"; }
+    DOMType domType() const override { return DOMType::Edge; }
 };
 
 } // namespace fla

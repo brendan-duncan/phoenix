@@ -1,5 +1,6 @@
 #include "document_view.h"
 #include "../data/bitmap_instance.h"
+#include "../data/edge.h"
 #include "../data/group.h"
 #include "../data/symbol_instance.h"
 #include "../data/shape.h"
@@ -114,75 +115,62 @@ void DocumentView::clearTree()
     _populatedItems.clear();
 }
 
-void DocumentView::setItemTypeData(QTreeWidgetItem* item, ItemType type, void* data)
+void DocumentView::setItemData(QTreeWidgetItem* item, const fla::DOMElement* element)
 {
-    item->setData(0, ItemTypeRole, QVariant::fromValue(static_cast<int>(type)));
-    item->setData(0, ItemDataRole, QVariant::fromValue(reinterpret_cast<quintptr>(data)));
+    item->setData(0, ItemDataRole, QVariant::fromValue(reinterpret_cast<quintptr>(element)));
 
     // Set type icon and tooltip based on item type
     QIcon typeIcon;
     QString typeTooltip;
 
-    switch (type)
+    switch (element->domType())
     {
-        case ItemType::Document:
+        case fla::DOMElement::DOMType::Document:
             typeIcon = _documentIcon;
             typeTooltip = "Document";
             break;
-        case ItemType::Timeline:
+        case fla::DOMElement::DOMType::Timeline:
             typeIcon = _timelineIcon;
             typeTooltip = "Timeline";
             break;
-        case ItemType::Layer:
+        case fla::DOMElement::DOMType::Layer:
             typeIcon = _layerIcon;
             typeTooltip = "Layer";
             break;
-        case ItemType::Frame:
+        case fla::DOMElement::DOMType::Frame:
             typeIcon = _frameIcon;
             typeTooltip = "Frame";
             break;
-        case ItemType::Symbol:
+        case fla::DOMElement::DOMType::Symbol:
             typeIcon = _symbolIcon;
             typeTooltip = "Symbol";
             break;
-        case ItemType::SymbolList:
+        case fla::DOMElement::DOMType::SymbolList:
             typeIcon = _symbolIcon;
             typeTooltip = "Symbols Folder";
             break;
-        case ItemType::Element:
-            // For elements, we need to check the actual element type
-            if (data)
-            {
-                const fla::Element* element = static_cast<const fla::Element*>(data);
-                switch (element->elementType())
-                {
-                    case fla::Element::Type::Shape:
-                        typeIcon = _shapeIcon;
-                        typeTooltip = "Shape";
-                        break;
-                    case fla::Element::Type::Group:
-                        typeIcon = _groupIcon;
-                        typeTooltip = "Group";
-                        break;
-                    case fla::Element::Type::SymbolInstance:
-                        typeIcon = _symbolIcon;
-                        typeTooltip = "Symbol Instance";
-                        break;
-                    case fla::Element::Type::BitmapInstance:
-                        typeIcon = _bitmapIcon;
-                        typeTooltip = "Bitmap Instance";
-                        break;
-                    case fla::Element::Type::StaticText:
-                        typeIcon = _textIcon;
-                        typeTooltip = "Static Text";
-                        break;
-                }
-            }
+        case fla::DOMElement::DOMType::Shape:
+            typeIcon = _shapeIcon;
+            typeTooltip = "Shape";
             break;
-        case ItemType::Other:
-            typeTooltip = "Other";
+        case fla::DOMElement::DOMType::Group:
+            typeIcon = _groupIcon;
+            typeTooltip = "Group";
+            break;
+        case fla::DOMElement::DOMType::SymbolInstance:
+            typeIcon = _symbolIcon;
+            typeTooltip = "Symbol Instance";
+            break;
+        case fla::DOMElement::DOMType::BitmapInstance:
+            typeIcon = _bitmapIcon;
+            typeTooltip = "Bitmap Instance";
+            break;
+        case fla::DOMElement::DOMType::StaticText:
+            typeIcon = _textIcon;
+            typeTooltip = "Static Text";
             break;
         default:
+            typeTooltip = "Other";
             break;
     }
 
@@ -197,14 +185,9 @@ void DocumentView::setItemTypeData(QTreeWidgetItem* item, ItemType type, void* d
     }
 }
 
-DocumentView::ItemType DocumentView::getItemType(QTreeWidgetItem* item) const
+const fla::DOMElement* DocumentView::getItemData(QTreeWidgetItem* item) const
 {
-    return static_cast<ItemType>(item->data(0, ItemTypeRole).toInt());
-}
-
-void* DocumentView::getItemData(QTreeWidgetItem* item) const
-{
-    return reinterpret_cast<void*>(item->data(0, ItemDataRole).value<quintptr>());
+    return reinterpret_cast<const fla::DOMElement*>(item->data(0, ItemDataRole).value<quintptr>());
 }
 
 void DocumentView::onItemExpanded(QTreeWidgetItem* item)
@@ -225,149 +208,133 @@ void DocumentView::populateItemChildren(QTreeWidgetItem* item)
         delete item->takeChild(0);
     }
 
-    ItemType itemType = getItemType(item);
-    void* data = getItemData(item);
+    const fla::DOMElement* element = getItemData(item);
 
-    switch (itemType)
+    switch (element->domType())
     {
-        case ItemType::Timeline:
-            if (data)
+        case fla::DOMElement::DOMType::Timeline:
+        {
+            const fla::Timeline* timeline = static_cast<const fla::Timeline*>(element);
+            for (const fla::Layer* layer : timeline->layers)
             {
-                const fla::Timeline* timeline = static_cast<const fla::Timeline*>(data);
-                for (const fla::Layer* layer : timeline->layers)
-                {
-                    buildLayerTree(item, layer, true);
-                }
+                buildLayerTree(item, layer, true);
             }
             break;
-
-        case ItemType::Layer:
-            if (data)
+        }
+        case fla::DOMElement::DOMType::Layer:
+        {
+            const fla::Layer* layer = static_cast<const fla::Layer*>(element);
+            for (const fla::Frame* frame : layer->frames)
             {
-                const fla::Layer* layer = static_cast<const fla::Layer*>(data);
-                for (const fla::Frame* frame : layer->frames)
-                {
-                    buildFrameTree(item, frame, true);
-                }
+                buildFrameTree(item, frame, true);
             }
             break;
-
-        case ItemType::Frame:
-            if (data)
+        }
+        case fla::DOMElement::DOMType::Frame:
+        {
+            const fla::Frame* frame = static_cast<const fla::Frame*>(element);
+            for (const fla::Element* element : frame->elements)
             {
-                const fla::Frame* frame = static_cast<const fla::Frame*>(data);
-                for (const fla::Element* element : frame->elements)
-                {
-                    buildElementTree(item, element, true);
-                }
+                buildElementTree(item, element, true);
             }
             break;
-
-        case ItemType::Element:
-            if (data)
+        }
+        case fla::DOMElement::DOMType::Symbol:
+        {
+            const fla::Symbol* symbol = static_cast<const fla::Symbol*>(element);
+            for (const fla::Timeline* timeline : symbol->timelines)
             {
-                const fla::Element* element = static_cast<const fla::Element*>(data);
-
-                // If it's a shape, add its edges
-                if (element->elementType() == fla::Element::Type::Shape)
-                {
-                    const fla::Shape* shape = static_cast<const fla::Shape*>(element);
-                    int edgeIndex = 0;
-                    for (const fla::Edge* edge : shape->edges)
-                    {
-                        QString edgeName = QString("Edge %1").arg(edgeIndex++);
-                        QTreeWidgetItem* edgeItem = createTreeItem(edgeName, (fla::DOMElement*)edge, item);
-                        setItemTypeData(edgeItem, ItemType::Other, nullptr);
-                        edgeItem->setIcon(1, _shapeIcon); // Use shape icon for edges
-                        edgeItem->setToolTip(1, "Edge");
-
-                        // Add segments as children of the edge
-                        int segmentIndex = 0;
-                        for (const fla::Path& path : edge->paths)
-                        {
-                            QString segmentName = QString("Segment %1").arg(segmentIndex++);
-                            QTreeWidgetItem* pathItem = createTreeItem(segmentName, (fla::DOMElement*)&path, edgeItem);
-                            setItemTypeData(pathItem, ItemType::Other, nullptr);
-                            pathItem->setIcon(1, _shapeIcon);
-                            pathItem->setToolTip(1, "Path Segment");
-
-                            // Add segments as children of the segment
-                            for (const fla::PathSegment& segment : path.segments)
-                            {
-                                QString segmentName;
-                                QString segmentType;
-                                switch (segment.command)
-                                {
-                                    case fla::PathSegment::Command::Move:
-                                        segmentName = "Move To";
-                                        segmentType = "Move Command";
-                                        break;
-                                    case fla::PathSegment::Command::Line:
-                                        segmentName = "Line To";
-                                        segmentType = "Line Command";
-                                        break;
-                                    case fla::PathSegment::Command::Quad:
-                                        segmentName = "Quadratic Curve To";
-                                        segmentType = "Quadratic Bezier";
-                                        break;
-                                    case fla::PathSegment::Command::Cubic:
-                                        segmentName = "Cubic Curve To";
-                                        segmentType = "Cubic Bezier";
-                                        break;
-                                    case fla::PathSegment::Command::Close:
-                                        segmentName = "Close Path";
-                                        segmentType = "Close Command";
-                                        break;
-                                }
-                                for (size_t i = 0; i < segment.points.size(); ++i)
-                                {
-                                    const fla::Point& pt = segment.points[i];
-                                    segmentName += QString(" (x: %1, y: %2)").arg(pt.x).arg(pt.y);
-                                }
-                                // Store pointer to the segment for selection handling
-                                const fla::PathSegment* segmentPtr = &segment;
-                                QTreeWidgetItem* segmentItem = createTreeItem(segmentName, nullptr, pathItem);
-                                setItemTypeData(segmentItem, ItemType::Other, (void*)segmentPtr);
-                                segmentItem->setIcon(1, _shapeIcon);
-                                segmentItem->setToolTip(1, segmentType);
-                            }
-                        }
-                    }
-                }
-
-                // If it's a group, add its children
-                if (element->elementType() == fla::Element::Type::Group)
-                {
-                    const fla::Group* group = static_cast<const fla::Group*>(element);
-                    for (const fla::Element* member : group->members)
-                    {
-                        buildElementTree(item, member, true);
-                    }
-                }
+                buildTimelineTree(item, timeline, true);
             }
             break;
-
-        case ItemType::Symbol:
-            if (data)
+        }
+        case fla::DOMElement::DOMType::SymbolList:
+        {
+            if (_flaDocument && _flaDocument->document && _flaDocument->document->symbolList)
             {
-                const fla::Symbol* symbol = static_cast<const fla::Symbol*>(data);
-                for (const fla::Timeline* timeline : symbol->timelines)
-                {
-                    buildTimelineTree(item, timeline, true);
-                }
-            }
-            break;
-
-        case ItemType::SymbolList:
-            if (_flaDocument && _flaDocument->document)
-            {
-                for (const auto& symbolPair : _flaDocument->document->symbolMap)
+                for (const auto& symbolPair : _flaDocument->document->symbolList->symbolMap)
                 {
                     const fla::Symbol* symbol = symbolPair.second;
                     buildSymbolTree(item, symbol, true);
                 }
             }
             break;
+        }
+        case fla::DOMElement::DOMType::Shape:
+        {
+            const fla::Shape* shape = static_cast<const fla::Shape*>(element);
+            int edgeIndex = 0;
+            for (const fla::Edge* edge : shape->edges)
+            {
+                QString edgeName = QString("Edge %1").arg(edgeIndex++);
+                QTreeWidgetItem* edgeItem = createTreeItem(edgeName, edge, item);
+                setItemData(edgeItem, edge);
+                edgeItem->setIcon(1, _shapeIcon); // Use shape icon for edges
+                edgeItem->setToolTip(1, "Edge");
+
+                // Add segments as children of the edge
+                int segmentIndex = 0;
+                for (const fla::Path* path : edge->paths)
+                {
+                    QString segmentName = QString("Path %1").arg(segmentIndex++);
+                    QTreeWidgetItem* pathItem = createTreeItem(segmentName, path, edgeItem);
+                    setItemData(pathItem, path);
+                    pathItem->setIcon(1, _shapeIcon);
+                    pathItem->setToolTip(1, "Path");
+
+                    // Add segments as children of the segment
+                    for (const fla::PathSegment* segment : path->segments)
+                    {
+                        QString segmentName;
+                        QString segmentType;
+                        switch (segment->command)
+                        {
+                            case fla::PathSegment::Command::Move:
+                                segmentName = "Move To";
+                                segmentType = "Move Command";
+                                break;
+                            case fla::PathSegment::Command::Line:
+                                segmentName = "Line To";
+                                segmentType = "Line Command";
+                                break;
+                            case fla::PathSegment::Command::Quad:
+                                segmentName = "Quadratic Curve To";
+                                segmentType = "Quadratic Bezier";
+                                break;
+                            case fla::PathSegment::Command::Cubic:
+                                segmentName = "Cubic Curve To";
+                                segmentType = "Cubic Bezier";
+                                break;
+                            case fla::PathSegment::Command::Close:
+                                segmentName = "Close Path";
+                                segmentType = "Close Command";
+                                break;
+                        }
+                        for (size_t i = 0; i < segment->points.size(); ++i)
+                        {
+                            const fla::Point& pt = segment->points[i];
+                            segmentName += QString(" (x: %1, y: %2)").arg(pt.x).arg(pt.y);
+                        }
+                        // Store pointer to the segment for selection handling
+                        const fla::PathSegment* segmentPtr = segment;
+                        QTreeWidgetItem* segmentItem = createTreeItem(segmentName, nullptr, pathItem);
+                        setItemData(segmentItem, segmentPtr);
+                        segmentItem->setIcon(1, _shapeIcon);
+                        segmentItem->setToolTip(1, segmentType);
+                    }
+                }
+            }
+            break;
+        }
+        case fla::DOMElement::DOMType::Group:
+        {
+            const fla::Group* group = static_cast<const fla::Group*>(element);
+            for (const fla::Element* member : group->members)
+            {
+                buildElementTree(item, member, true);
+            }
+            break;
+        }
 
         default:
             break;
@@ -385,7 +352,7 @@ void DocumentView::buildDocumentTree()
         _flaDocument->document
     );
     addTopLevelItem(docItem);
-    setItemTypeData(docItem, ItemType::Document, _flaDocument->document);
+    setItemData(docItem, _flaDocument->document);
 
     // Add main timeline
     if (!_flaDocument->document->timelines.empty())
@@ -395,12 +362,12 @@ void DocumentView::buildDocumentTree()
     }
 
     // Add symbols container
-    QTreeWidgetItem* symbolsItem = createTreeItem("Symbols", nullptr, docItem);
-    setItemTypeData(symbolsItem, ItemType::SymbolList, nullptr);
-
-    // Add dummy child to enable expansion if there are symbols
-    if (!_flaDocument->document->symbolMap.empty())
+    if (_flaDocument->document->symbolList)
     {
+        QTreeWidgetItem* symbolsItem = createTreeItem("Symbols", _flaDocument->document->symbolList, docItem);
+        setItemData(symbolsItem, _flaDocument->document->symbolList);
+
+        // Add dummy child to enable expansion if there are symbols
         QTreeWidgetItem* dummyItem = new QTreeWidgetItem(symbolsItem);
         dummyItem->setText(0, "Loading...");
     }
@@ -412,8 +379,8 @@ void DocumentView::buildDocumentTree()
 void DocumentView::buildTimelineTree(QTreeWidgetItem* parentItem, const fla::Timeline* timeline, bool lazy)
 {
     QString timelineName = timeline->name.empty() ? "Timeline" : QString::fromStdString(timeline->name);
-    QTreeWidgetItem* timelineItem = createTreeItem(timelineName, (fla::DOMElement*)timeline, parentItem);
-    setItemTypeData(timelineItem, ItemType::Timeline, (void*)timeline);
+    QTreeWidgetItem* timelineItem = createTreeItem(timelineName, timeline, parentItem);
+    setItemData(timelineItem, timeline);
 
     if (lazy && !timeline->layers.empty())
     {
@@ -438,8 +405,8 @@ void DocumentView::buildLayerTree(QTreeWidgetItem* parentItem, const fla::Layer*
         .arg(layer->name.empty() ? "Layer" : QString::fromStdString(layer->name))
         .arg(layer->visible ? "" : "(Hidden)");
 
-    QTreeWidgetItem* layerItem = createTreeItem(layerName, (fla::DOMElement*)layer, parentItem);
-    setItemTypeData(layerItem, ItemType::Layer, (void*)layer);
+    QTreeWidgetItem* layerItem = createTreeItem(layerName, layer, parentItem);
+    setItemData(layerItem, layer);
     updateItemVisibility(layerItem);
 
     if (lazy && !layer->frames.empty())
@@ -461,12 +428,8 @@ void DocumentView::buildLayerTree(QTreeWidgetItem* parentItem, const fla::Layer*
 
 void DocumentView::buildFrameTree(QTreeWidgetItem* parentItem, const fla::Frame* frame, bool lazy)
 {
-    QTreeWidgetItem* frameItem = createTreeItem(
-        QString("Frame %1").arg(frame->index),
-        (fla::DOMElement*)frame,
-        parentItem
-    );
-    setItemTypeData(frameItem, ItemType::Frame, (void*)frame);
+    QTreeWidgetItem* frameItem = createTreeItem(QString("Frame %1").arg(frame->index), frame, parentItem);
+    setItemData(frameItem, frame);
 
     if (lazy && !frame->elements.empty())
     {
@@ -532,8 +495,8 @@ void DocumentView::buildElementTree(QTreeWidgetItem* parentItem, const fla::Elem
             break;
     }
 
-    QTreeWidgetItem* elementItem = createTreeItem(elementName, (fla::DOMElement*)element, parentItem);
-    setItemTypeData(elementItem, ItemType::Element, (void*)element);
+    QTreeWidgetItem* elementItem = createTreeItem(elementName, element, parentItem);
+    setItemData(elementItem, element);
     updateItemVisibility(elementItem);
 
     if (lazy && hasChildren)
@@ -552,12 +515,8 @@ void DocumentView::buildElementTree(QTreeWidgetItem* parentItem, const fla::Elem
 
 void DocumentView::buildSymbolTree(QTreeWidgetItem* parentItem, const fla::Symbol* symbol, bool lazy)
 {
-    QTreeWidgetItem* symbolItem = createTreeItem(
-        QString("%1").arg(QString::fromStdString(symbol->name)),
-        (fla::DOMElement*)symbol,
-        parentItem
-    );
-    setItemTypeData(symbolItem, ItemType::Symbol, (void*)symbol);
+    QTreeWidgetItem* symbolItem = createTreeItem(QString("%1").arg(QString::fromStdString(symbol->name)), symbol, parentItem);
+    setItemData(symbolItem, symbol);
 
     if (lazy && !symbol->timelines.empty())
     {
@@ -576,7 +535,7 @@ void DocumentView::buildSymbolTree(QTreeWidgetItem* parentItem, const fla::Symbo
     }
 }
 
-QTreeWidgetItem* DocumentView::createTreeItem(const QString& text, fla::DOMElement* domElement, QTreeWidgetItem* parent)
+QTreeWidgetItem* DocumentView::createTreeItem(const QString& text, const fla::DOMElement* domElement, QTreeWidgetItem* parent)
 {
     QTreeWidgetItem* item;
 
@@ -609,7 +568,7 @@ void DocumentView::updateItemVisibility(QTreeWidgetItem* item)
     if (!_itemToElement.contains(item))
         return;
 
-    fla::DOMElement* element = _itemToElement[item];
+    const fla::DOMElement* element = _itemToElement[item];
     item->setIcon(0, element->visible ? _visibleIcon : _hiddenIcon);
 
     // Update item text to reflect visibility
@@ -629,32 +588,32 @@ void DocumentView::updateItemVisibility(QTreeWidgetItem* item)
 void DocumentView::mousePressEvent(QMouseEvent *event)
 {
     QTreeWidgetItem* item = itemAt(event->pos());
-    
+
     if (item && _itemToElement.contains(item) && event->button() == Qt::LeftButton)
     {
         // Get the visual rectangle of the item
         QRect itemRect = visualItemRect(item);
-        
+
         // Calculate icon area (first ~20 pixels)
         int iconWidth = 25; // Approximate icon area width including indentation
         QRect iconRect = itemRect;
         iconRect.setWidth(iconWidth);
-        
+
         // Check if click is within icon area
         if (iconRect.contains(event->pos()))
         {
             // Toggle visibility
-            fla::DOMElement* element = _itemToElement[item];
-            element->visible = !element->visible;
-            
+            const fla::DOMElement* element = _itemToElement[item];
+            const_cast<fla::DOMElement*>(element)->visible = !element->visible;
+
             updateItemVisibility(item);
             emit visibilityChanged();
-            
+
             // Don't propagate the click to the base class
             return;
         }
     }
-    
+
     // For other clicks, use default behavior
     QTreeWidget::mousePressEvent(event);
 }
@@ -663,29 +622,38 @@ void DocumentView::onSelectionChanged()
 {
     QList<QTreeWidgetItem*> selected = selectedItems();
     if (selected.isEmpty())
+    {
+        emit elementSelected(nullptr);
         return;
+    }
 
     QTreeWidgetItem* item = selected.first();
     if (!item)
+    {
+        emit elementSelected(nullptr);
         return;
+    }
 
-    ItemType type = getItemType(item);
-    if (type != ItemType::Other)
+    const fla::DOMElement* element = getItemData(item);
+    if (!element)
+    {
+        emit elementSelected(nullptr);
         return;
+    }
 
-    void* data = getItemData(item);
-    const fla::PathSegment* segment = static_cast<const fla::PathSegment*>(data);
-    if (!segment)
-        return;
-
-    // Only handle Move and Line commands
-    if (segment->command != fla::PathSegment::Command::Move &&
-        segment->command != fla::PathSegment::Command::Line)
-        return;
-
-    if (segment->points.empty())
-        return;
-
-    const fla::Point& pt = segment->points[0];
-    emit segmentSelected(segment, QPointF(pt.x, pt.y));
+    fla::DOMElement::DOMType type = element->domType();
+    // Only emit for our specific types
+    if (type == fla::DOMElement::DOMType::Symbol ||
+        type == fla::DOMElement::DOMType::Shape ||
+        type == fla::DOMElement::DOMType::Edge ||
+        type == fla::DOMElement::DOMType::Path ||
+        type == fla::DOMElement::DOMType::PathSegment)
+    {
+        emit elementSelected(element);
+    }
+    else
+    {
+        // For other types, emit nullptr to indicate no selection
+        emit elementSelected(nullptr);
+    }
 }

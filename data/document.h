@@ -5,9 +5,10 @@
 #include "timeline.h"
 #include "printer_settings.h"
 #include "publish_history.h"
-#include "scripts.h"
+#include "script_list.h"
 #include "swatch_list.h"
 #include "symbol.h"
+#include "symbol_list.h"
 #include <map>
 #include <string>
 #include <vector>
@@ -47,22 +48,24 @@ public:
     bool playOptionsPlayPages = false;
     bool playOptionsPlayFrameActions = false;
 
-    std::vector<Resource*> resources;
-    std::vector<Symbol*> symbols;
-    std::vector<Timeline*> timelines;
-    Scripts* scripts = nullptr;
+    SymbolList* symbolList = nullptr;
+    ScriptList* scriptList = nullptr;
     PublishHistory* publishHistory = nullptr;
     PrinterSettings* printerSettings = nullptr;
+    std::vector<Resource*> resources;
+    std::vector<Timeline*> timelines;
     std::vector<Folder*> folders;
     std::vector<SwatchList*> swatchLists;
 
-    std::map<std::string, Symbol*> symbolMap; // For quick lookup of symbols by name
-
-    Document() = default;
+    Document(DOMElement* parent)
+        : DOMElement(parent)
+    {}
 
     ~Document() override;
 
     std::string domTypeName() const override { return "Document"; }
+
+    DOMType domType() const override { return DOMType::Document; }
 };
 
 } // namespace fla

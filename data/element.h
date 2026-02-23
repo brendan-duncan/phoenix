@@ -30,7 +30,9 @@ public:
     Point transformationPoint;
     fla::Rect bounds;
 
-    Element() = default;
+    Element(DOMElement* parent)
+        : DOMElement(parent)
+    {}
 
     virtual Type elementType() const = 0;
 

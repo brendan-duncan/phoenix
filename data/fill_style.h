@@ -15,6 +15,10 @@ public:
         BitmapFill
     };
 
+    FillStyle(DOMElement* parent)
+        : DOMElement(parent)
+    {}
+
     virtual Type type() const = 0;
 };
 

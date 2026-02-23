@@ -11,11 +11,15 @@ public:
     std::string filepath;
     Document* document = nullptr;
 
-    FLADocument() = default;
+    FLADocument(DOMElement* parent)
+        : DOMElement(parent)
+    {}
 
     ~FLADocument();
 
     std::string domTypeName() const override { return "FLADocument"; }
+
+    DOMType domType() const override { return DOMType::FLADocument; }
 };
 
 } // namespace fla

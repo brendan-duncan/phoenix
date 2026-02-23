@@ -4,12 +4,11 @@ namespace fla {
 
 Document::~Document()
 {
-    // Clean up dynamically allocated symbols
-    for (Symbol* symbol : symbols)
+    if (symbolList)
     {
-        delete symbol;
+        delete symbolList;
+        symbolList = nullptr;
     }
-    symbols.clear();
 
     // Clean up dynamically allocated timelines
     for (Timeline* timeline : timelines)
@@ -24,8 +23,6 @@ Document::~Document()
         delete folder;
     }
     folders.clear();
-
-    symbolMap.clear();
 }
 
 } // namespace fla

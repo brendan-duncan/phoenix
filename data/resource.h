@@ -13,7 +13,9 @@ public:
         Font
     };
 
-    Resource() = default;
+    Resource(DOMElement* parent)
+        : DOMElement(parent)
+    {}
 
     virtual Type resourceType() const = 0;
 };

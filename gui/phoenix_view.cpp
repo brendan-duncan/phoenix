@@ -57,10 +57,9 @@ void PhoenixView::onPlayerFrameChanged(int frame)
     update(); // Trigger repaint when player frame changes
 }
 
-void PhoenixView::onSegmentSelected(const fla::PathSegment* segment, const QPointF& point)
+void PhoenixView::onElementSelected(const fla::DOMElement* element)
 {
-    _selectedSegmentPoint = point;
-    _hasSelectedSegment = true;
+    _selectedElement = element;
     update();
 }
 
@@ -212,18 +211,220 @@ void PhoenixView::paintEvent(QPaintEvent *event)
         painter.restore();
     }
 
-    // Draw selected segment point overlay
-    if (_hasSelectedSegment)
+    // Draw selected element overlay
+    if (_selectedElement)
     {
-        painter.save();
-        painter.translate(_panX + centerX, _panY + centerY);
-        painter.scale(scale, scale);
+        bool drawOverlay = false;
+        if (_selectedElement->domType() == fla::DOMElement::DOMType::Path
+            || _selectedElement->domType() == fla::DOMElement::DOMType::PathSegment
+            || _selectedElement->domType() == fla::DOMElement::DOMType::Edge
+            || _selectedElement->domType() == fla::DOMElement::DOMType::Shape)
+        {
+            drawOverlay = true;
+        }
 
-        painter.setPen(QPen(QColor(0, 0, 0, 255), 2.0));
-        painter.setBrush(QBrush(QColor(255, 255, 0, 100)));
-        painter.drawEllipse(_selectedSegmentPoint, 5.0, 5.0);
+        if (drawOverlay)
+        {
+            painter.save();
+            painter.translate(_panX + centerX, _panY + centerY);
+            painter.scale(scale, scale);
 
-        painter.restore();
+            double penWidth = 1.0 / scale;
+            double radius = 3.0 / scale;
+            painter.setPen(QPen(QColor(0, 255, 255, 255), penWidth));
+            painter.setBrush(QBrush(QColor(0, 255, 255, 150)));
+
+            auto getElementSymbol = [&]() -> const fla::Symbol*
+            {
+                if (_selectedElement->domType() == fla::DOMElement::DOMType::Symbol)
+                {
+                    return static_cast<const fla::Symbol*>(_selectedElement);
+                }
+                else if (_selectedElement->domType() == fla::DOMElement::DOMType::Shape || _selectedElement->domType() == fla::DOMElement::DOMType::Edge ||
+                    _selectedElement->domType() == fla::DOMElement::DOMType::Path || _selectedElement->domType() == fla::DOMElement::DOMType::PathSegment)
+                {
+                    const fla::DOMElement* elem = static_cast<const fla::DOMElement*>(_selectedElement);
+                    while (elem)
+                    {
+                        if (elem->domType() == fla::DOMElement::DOMType::Symbol)
+                        {
+                            return static_cast<const fla::Symbol*>(elem);
+                        }
+                        elem = elem->parent;
+                    }
+                }
+                return nullptr;
+            };
+
+            auto getParentElement = [&]() -> const fla::Element*
+            {
+                const fla::DOMElement* parent = _selectedElement;
+                while (parent != nullptr)
+                {
+                    const fla::Element* elem = dynamic_cast<const fla::Element*>(parent);
+                    if (elem != nullptr)
+                    {
+                        return elem;
+                    }
+                    parent = parent->parent;
+                }
+            };
+
+            const fla::Symbol* parentSymbol = getElementSymbol();
+
+            QList<QTransform> transforms;
+            std::vector<fla::SymbolInstance*> instances;
+            if (parentSymbol)
+            {
+                // Find all instances of this symbol in the document
+                for (const fla::Timeline* timeline : _flaDocument->document->timelines)
+                {
+                    for (const fla::Layer* layer : timeline->layers)
+                    {
+                        for (const fla::Frame* frame : layer->frames)
+                        {
+                            for (const fla::Element* elem : frame->elements)
+                            {
+                                if (elem->domType() == fla::DOMElement::DOMType::SymbolInstance)
+                                {
+                                    const fla::SymbolInstance* instance = static_cast<const fla::SymbolInstance*>(elem);
+                                    if (instance->libraryItemName == parentSymbol->name)
+                                    {
+                                        instances.push_back(const_cast<fla::SymbolInstance*>(instance));
+                                        transforms.push_back(QTransform(instance->transform.m11, instance->transform.m12,
+                                            instance->transform.m21, instance->transform.m22,
+                                            instance->transform.tx, instance->transform.ty));
+                                    }
+                                }
+                                else if (elem->domType() == fla::DOMElement::DOMType::Group)
+                                {
+                                    const fla::Group* group = static_cast<const fla::Group*>(elem);
+                                    for (const fla::Element* groupElem : group->members)
+                                    {
+                                        if (groupElem->domType() == fla::DOMElement::DOMType::SymbolInstance)
+                                        {
+                                            const fla::SymbolInstance* instance = static_cast<const fla::SymbolInstance*>(groupElem);
+                                            if (instance->libraryItemName == parentSymbol->name)
+                                            {
+                                                instances.push_back(const_cast<fla::SymbolInstance*>(instance));
+                                                transforms.push_back(QTransform(instance->transform.m11, instance->transform.m12,
+                                                    instance->transform.m21, instance->transform.m22,
+                                                    instance->transform.tx, instance->transform.ty));
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            else
+            {
+                const fla::Element* elem = getParentElement();
+                if (elem)
+                {
+                    // Apply element's own transform if it has one
+                    transforms.push_back(QTransform(elem->transform.m11, elem->transform.m12,
+                        elem->transform.m21, elem->transform.m22,
+                        elem->transform.tx, elem->transform.ty));
+                }
+                else
+                {
+                    // No transform, just use identity
+                    transforms.push_back(QTransform());
+                }
+            }
+
+            // Helper to draw points at a given transform
+            auto drawPointsAtTransforms = [&](const QList<QPointF>& points)
+            {
+                for (const QTransform& instTransform : transforms)
+                {
+                    for (const QPointF& pt : points)
+                    {
+                        QPointF transformed = instTransform.map(pt);
+                        painter.drawEllipse(transformed, radius, radius);
+                    }
+                }
+            };
+
+            auto drawLineAtTransforms = [&](const QPointF& p1, const QPointF& p2)
+            {
+                for (const QTransform& instTransform : transforms)
+                {
+                    QPointF tp1 = instTransform.map(p1);
+                    QPointF tp2 = instTransform.map(p2);
+                    painter.drawLine(tp1, tp2);
+                }
+            };
+
+            auto drawPathSegment = [&](const fla::PathSegment* segment)
+            {
+                switch (segment->command)
+                {
+                    case fla::PathSegment::Command::Move:
+                    case fla::PathSegment::Command::Line:
+                        drawPointsAtTransforms({QPointF(segment->points[0].x, segment->points[0].y)});
+                        break;
+                    case fla::PathSegment::Command::Quad:
+                        if (segment->points.size() >= 1)
+                            drawPointsAtTransforms({QPointF(segment->points[0].x, segment->points[0].y)});
+                        if (segment->points.size() >= 2)
+                            drawPointsAtTransforms({QPointF(segment->points[1].x, segment->points[1].y)});
+                        break;
+                    case fla::PathSegment::Command::Cubic:
+                        for (size_t i = 0; i < segment->points.size() && i < 3; ++i)
+                        {
+                            drawPointsAtTransforms({QPointF(segment->points[i].x, segment->points[i].y)});
+                        }
+                        break;
+                    case fla::PathSegment::Command::Close:
+                        break;
+                }
+            };
+
+            if (_selectedElement->domType() == fla::DOMElement::DOMType::PathSegment)
+            {
+                const fla::PathSegment* segment = static_cast<const fla::PathSegment*>(_selectedElement);
+                drawPathSegment(segment);
+            }
+            else if (_selectedElement->domType() == fla::DOMElement::DOMType::Path)
+            {
+                const fla::Path* path = static_cast<const fla::Path*>(_selectedElement);
+                for (const fla::PathSegment* segment : path->segments)
+                {
+                    drawPathSegment(segment);
+                }
+            }
+            else if (_selectedElement->domType() == fla::DOMElement::DOMType::Edge)
+            {
+                const fla::Edge* edge = static_cast<const fla::Edge*>(_selectedElement);
+                for (const fla::Path* path : edge->paths)
+                {
+                    for (const fla::PathSegment* segment : path->segments)
+                    {
+                        drawPathSegment(segment);
+                    }
+                }
+            }
+            else if (_selectedElement->domType() == fla::DOMElement::DOMType::Shape)
+            {
+                const fla::Shape* shape = static_cast<const fla::Shape*>(_selectedElement);
+                for (const fla::Edge* edge : shape->edges)
+                {
+                    for (const fla::Path* path : edge->paths)
+                    {
+                        for (const fla::PathSegment* segment : path->segments)
+                        {
+                            drawPathSegment(segment);
+                        }
+                    }
+                }
+            }
+
+            painter.restore();
+        } // drawOverlay
     }
 }
 
@@ -381,8 +582,11 @@ void PhoenixView::drawFrame(QPainter& painter, const fla::Frame* frame)
 
 fla::Symbol* PhoenixView::findSymbolByName(const fla::Document* document, const std::string& name)
 {
-    auto it = document->symbolMap.find(name);
-    if (it != document->symbolMap.end())
+    if (document->symbolList == nullptr)
+        return nullptr;
+
+    auto it = document->symbolList->symbolMap.find(name);
+    if (it != document->symbolList->symbolMap.end())
     {
         return it->second;
     }
@@ -748,30 +952,30 @@ void PhoenixView::drawShape(QPainter& painter, const fla::Shape* shape)
     std::map<int, const fla::FillStyle*> fillStyles;
 
     // Helper to get start/end points of a path
-    auto getPathEndpoints = [](const fla::Path& path) -> std::pair<fla::Point, fla::Point>
+    auto getPathEndpoints = [](const fla::Path* path) -> std::pair<fla::Point, fla::Point>
     {
         fla::Point start, end;
         bool hasStart = false;
 
-        for (const fla::PathSegment& segment : path.segments)
+        for (const fla::PathSegment* segment : path->segments)
         {
-            if (segment.command == fla::PathSegment::Command::Move)
+            if (segment->command == fla::PathSegment::Command::Move)
             {
-                start = segment.points[0];
+                start = segment->points[0];
                 end = start;
                 hasStart = true;
             }
-            else if (segment.command == fla::PathSegment::Command::Line)
+            else if (segment->command == fla::PathSegment::Command::Line)
             {
-                end = segment.points[0];
+                end = segment->points[0];
             }
-            else if (segment.command == fla::PathSegment::Command::Quad)
+            else if (segment->command == fla::PathSegment::Command::Quad)
             {
-                end = segment.points[1];
+                end = segment->points[1];
             }
-            else if (segment.command == fla::PathSegment::Command::Cubic)
+            else if (segment->command == fla::PathSegment::Command::Cubic)
             {
-                end = segment.points[2];
+                end = segment->points[2];
             }
         }
 
@@ -784,20 +988,20 @@ void PhoenixView::drawShape(QPainter& painter, const fla::Shape* shape)
         if (!edge->visible)
             continue;
 
-        for (const fla::Path& path : edge->paths)
+        for (const fla::Path* path : edge->paths)
         {
-            if (!path.visible || path.segments.empty())
+            if (!path->visible || path->segments.empty())
                 continue;
 
             auto [start, end] = getPathEndpoints(path);
 
-            int fillStyleIdx1 = path.fillStyleIndex != -1 ? path.fillStyleIndex : edge->fillStyle1;
+            int fillStyleIdx1 = path->fillStyleIndex != -1 ? path->fillStyleIndex : edge->fillStyle1;
             int fillStyleIdx0 = edge->fillStyle0;
 
             // Add to fillStyle1 (forward direction)
             if (fillStyleIdx1 != -1)
             {
-                fillStylePaths[fillStyleIdx1].push_back({start, end, &path, false, false});
+                fillStylePaths[fillStyleIdx1].push_back({start, end, path, false, false});
                 if (fillStyles.find(fillStyleIdx1) == fillStyles.end())
                 {
                     fillStyles[fillStyleIdx1] = shape->getFillStyleByIndex(fillStyleIdx1);
@@ -807,7 +1011,7 @@ void PhoenixView::drawShape(QPainter& painter, const fla::Shape* shape)
             // Add to fillStyle0 (reverse direction)
             if (fillStyleIdx0 != -1 && fillStyleIdx0 != fillStyleIdx1)
             {
-                fillStylePaths[fillStyleIdx0].push_back({end, start, &path, true, false});
+                fillStylePaths[fillStyleIdx0].push_back({end, start, path, true, false});
                 if (fillStyles.find(fillStyleIdx0) == fillStyles.end())
                 {
                     fillStyles[fillStyleIdx0] = shape->getFillStyleByIndex(fillStyleIdx0);
@@ -817,36 +1021,36 @@ void PhoenixView::drawShape(QPainter& painter, const fla::Shape* shape)
     }
 
     // Helper lambda to build a complete path from a path (for stroke rendering)
-    auto buildPath = [](const fla::Path& path, const fla::Element* shape) -> QPainterPath
+    auto buildPath = [](const fla::Path* path, const fla::Element* shape) -> QPainterPath
     {
         QPainterPath painterPath;
-        painterPath.setFillRule(Qt::OddEvenFill);
-        for (const fla::PathSegment& segment : path.segments)
+        painterPath.setFillRule(Qt::WindingFill);
+        for (const fla::PathSegment* segment : path->segments)
         {
-            if (segment.command == fla::PathSegment::Command::Move)
+            if (segment->command == fla::PathSegment::Command::Move)
             {
-                fla::Point p = segment.points[0];
+                fla::Point p = segment->points[0];
                 painterPath.moveTo(p.x, p.y);
             }
-            else if (segment.command == fla::PathSegment::Command::Line)
+            else if (segment->command == fla::PathSegment::Command::Line)
             {
-                fla::Point p = segment.points[0];
+                fla::Point p = segment->points[0];
                 painterPath.lineTo(p.x, p.y);
             }
-            else if (segment.command == fla::PathSegment::Command::Quad)
+            else if (segment->command == fla::PathSegment::Command::Quad)
             {
-                fla::Point p1 = segment.points[0];
-                fla::Point p2 = segment.points[1];
+                fla::Point p1 = segment->points[0];
+                fla::Point p2 = segment->points[1];
                 painterPath.quadTo(p1.x, p1.y, p2.x, p2.y);
             }
-            else if (segment.command == fla::PathSegment::Command::Cubic)
+            else if (segment->command == fla::PathSegment::Command::Cubic)
             {
-                fla::Point p1 = segment.points[0];
-                fla::Point p2 = segment.points[1];
-                fla::Point p3 = segment.points[2];
+                fla::Point p1 = segment->points[0];
+                fla::Point p2 = segment->points[1];
+                fla::Point p3 = segment->points[2];
                 painterPath.cubicTo(p1.x, p1.y, p2.x, p2.y, p3.x, p3.y);
             }
-            else if (segment.command == fla::PathSegment::Command::Close)
+            else if (segment->command == fla::PathSegment::Command::Close)
             {
                 painterPath.closeSubpath();
             }
@@ -855,33 +1059,33 @@ void PhoenixView::drawShape(QPainter& painter, const fla::Shape* shape)
     };
 
     // Helper to add path to path in forward or reverse direction
-    auto addSegmentToPath = [](QPainterPath& painterPath, const fla::Path& path, bool reversed, const fla::Element* shape)
+    auto addSegmentToPath = [](QPainterPath& painterPath, const fla::Path* path, bool reversed, const fla::Element* shape)
     {
         if (!reversed)
         {
             // Add path forward (skip initial Move)
-            for (const fla::PathSegment& segment : path.segments)
+            for (const fla::PathSegment* segment : path->segments)
             {
-                if (segment.command == fla::PathSegment::Command::Move)
+                if (segment->command == fla::PathSegment::Command::Move)
                 {
                     continue;
                 }
-                else if (segment.command == fla::PathSegment::Command::Line)
+                else if (segment->command == fla::PathSegment::Command::Line)
                 {
-                    fla::Point p = segment.points[0];
+                    fla::Point p = segment->points[0];
                     painterPath.lineTo(p.x, p.y);
                 }
-                else if (segment.command == fla::PathSegment::Command::Quad)
+                else if (segment->command == fla::PathSegment::Command::Quad)
                 {
-                    fla::Point p1 = segment.points[0];
-                    fla::Point p2 = segment.points[1];
+                    fla::Point p1 = segment->points[0];
+                    fla::Point p2 = segment->points[1];
                     painterPath.quadTo(p1.x, p1.y, p2.x, p2.y);
                 }
-                else if (segment.command == fla::PathSegment::Command::Cubic)
+                else if (segment->command == fla::PathSegment::Command::Cubic)
                 {
-                    fla::Point p1 = segment.points[0];
-                    fla::Point p2 = segment.points[1];
-                    fla::Point p3 = segment.points[2];
+                    fla::Point p1 = segment->points[0];
+                    fla::Point p2 = segment->points[1];
+                    fla::Point p3 = segment->points[2];
                     painterPath.cubicTo(p1.x, p1.y, p2.x, p2.y, p3.x, p3.y);
                 }
             }
@@ -890,16 +1094,16 @@ void PhoenixView::drawShape(QPainter& painter, const fla::Shape* shape)
         {
             // Add path in reverse - traverse segments backwards and reverse curves
             // Build list of segments (excluding Move)
-            std::vector<fla::PathSegment> pathSegments;
+            std::vector<const fla::PathSegment*> pathSegments;
             fla::Point startPoint;
 
-            for (const fla::PathSegment& segment : path.segments)
+            for (const fla::PathSegment* segment : path->segments)
             {
-                if (segment.command == fla::PathSegment::Command::Move)
+                if (segment->command == fla::PathSegment::Command::Move)
                 {
-                    startPoint = segment.points[0];
+                    startPoint = segment->points[0];
                 }
-                else if (segment.command != fla::PathSegment::Command::Close)
+                else if (segment->command != fla::PathSegment::Command::Close)
                 {
                     pathSegments.push_back(segment);
                 }
@@ -909,7 +1113,7 @@ void PhoenixView::drawShape(QPainter& painter, const fla::Shape* shape)
             fla::Point currentPos = startPoint;
             for (int i = pathSegments.size() - 1; i >= 0; --i)
             {
-                const fla::PathSegment& segment = pathSegments[i];
+                const fla::PathSegment* segment = pathSegments[i];
 
                 // Calculate the start position of this segment (which becomes our end in reverse)
                 fla::Point segmentStart = currentPos;
@@ -917,18 +1121,18 @@ void PhoenixView::drawShape(QPainter& painter, const fla::Shape* shape)
                 // Update current position to the endpoint of this segment
                 if (i > 0)
                 {
-                    const fla::PathSegment& prevSeg = pathSegments[i - 1];
-                    if (prevSeg.command == fla::PathSegment::Command::Line)
+                    const fla::PathSegment* prevSeg = pathSegments[i - 1];
+                    if (prevSeg->command == fla::PathSegment::Command::Line)
                     {
-                        currentPos = prevSeg.points[0];
+                        currentPos = prevSeg->points[0];
                     }
-                    else if (prevSeg.command == fla::PathSegment::Command::Quad)
+                    else if (prevSeg->command == fla::PathSegment::Command::Quad)
                     {
-                        currentPos = prevSeg.points[1];
+                        currentPos = prevSeg->points[1];
                     }
-                    else if (prevSeg.command == fla::PathSegment::Command::Cubic)
+                    else if (prevSeg->command == fla::PathSegment::Command::Cubic)
                     {
-                        currentPos = prevSeg.points[2];
+                        currentPos = prevSeg->points[2];
                     }
                 }
                 else
@@ -937,23 +1141,23 @@ void PhoenixView::drawShape(QPainter& painter, const fla::Shape* shape)
                 }
 
                 // Reverse this segment
-                if (segment.command == fla::PathSegment::Command::Line)
+                if (segment->command == fla::PathSegment::Command::Line)
                 {
                     fla::Point p = currentPos;
                     painterPath.lineTo(p.x, p.y);
                 }
-                else if (segment.command == fla::PathSegment::Command::Quad)
+                else if (segment->command == fla::PathSegment::Command::Quad)
                 {
                     // Reverse quadratic: end -> control -> start becomes start -> control -> end
-                    fla::Point p1 = segment.points[0];
+                    fla::Point p1 = segment->points[0];
                     fla::Point p2 = currentPos;
                     painterPath.quadTo(p1.x, p1.y, p2.x, p2.y);
                 }
-                else if (segment.command == fla::PathSegment::Command::Cubic)
+                else if (segment->command == fla::PathSegment::Command::Cubic)
                 {
                     // Reverse cubic: end -> c2 -> c1 -> start becomes start -> c2 -> c1 -> end
-                    fla::Point p1 = segment.points[1];
-                    fla::Point p2 = segment.points[0];
+                    fla::Point p1 = segment->points[1];
+                    fla::Point p2 = segment->points[0];
                     fla::Point p3 = currentPos;
                     painterPath.cubicTo(p1.x, p1.y, p2.x, p2.y, p3.x, p3.y);
                 }
@@ -977,7 +1181,51 @@ void PhoenixView::drawShape(QPainter& painter, const fla::Shape* shape)
             continue;
 
         QPainterPath compoundPath;
-        compoundPath.setFillRule(Qt::OddEvenFill);
+        compoundPath.setFillRule(Qt::WindingFill);
+
+        // Heuristic: for very simple shapes (few edge paths), avoid the complex
+        // stitching logic and just render each path as-is. This matches how
+        // Flash often stores small symbol shapes (like the eyes) and avoids
+        // over-connecting segments that should remain separate.
+        if (directedPaths.size() <= 2)
+        {
+            for (const DirectedPath& directedPath : directedPaths)
+            {
+                if (!directedPath.path)
+                    continue;
+
+                QPainterPath simplePath;
+                simplePath.setFillRule(Qt::WindingFill);
+
+                // Start at the first Move point
+                bool hasMove = false;
+                for (const fla::PathSegment* segment : directedPath.path->segments)
+                {
+                    if (segment->command == fla::PathSegment::Command::Move)
+                    {
+                        fla::Point p = segment->points[0];
+                        simplePath.moveTo(p.x, p.y);
+                        hasMove = true;
+                        break;
+                    }
+                }
+
+                if (!hasMove)
+                    continue;
+
+                addSegmentToPath(simplePath, directedPath.path, directedPath.reversed, shape);
+                simplePath.closeSubpath();
+                compoundPath.addPath(simplePath);
+            }
+
+            QBrush brush = getFillBrush(fillStyle);
+            painter.setBrush(brush);
+            painter.setPen(Qt::NoPen);
+            painter.drawPath(compoundPath);
+
+            cacheEntries.push_back({ brush, Qt::NoPen, compoundPath });
+            continue;
+        }
 
         // First pass: render paths that are already closed
         int closedCount = 0;
@@ -992,7 +1240,7 @@ void PhoenixView::drawShape(QPainter& painter, const fla::Shape* shape)
                 QPainterPath loopPath;
                 fla::Point startPoint = directedPath.start;
                 loopPath.moveTo(startPoint.x, startPoint.y);
-                addSegmentToPath(loopPath, *directedPath.path, directedPath.reversed, shape);
+                addSegmentToPath(loopPath, directedPath.path, directedPath.reversed, shape);
                 loopPath.closeSubpath();
                 compoundPath.addPath(loopPath);
                 directedPath.used = true;
@@ -1012,7 +1260,7 @@ void PhoenixView::drawShape(QPainter& painter, const fla::Shape* shape)
             QPainterPath loopPath;
             fla::Point startPoint = directedPath.start;
             loopPath.moveTo(startPoint.x, startPoint.y);
-            addSegmentToPath(loopPath, *directedPath.path, directedPath.reversed, shape);
+            addSegmentToPath(loopPath, directedPath.path, directedPath.reversed, shape);
             directedPath.used = true;
 
             fla::Point currentEnd = directedPath.end;
@@ -1054,7 +1302,7 @@ void PhoenixView::drawShape(QPainter& painter, const fla::Shape* shape)
 
                 if (found && bestMatch)
                 {
-                    addSegmentToPath(loopPath, *bestMatch->path, bestMatch->reversed, shape);
+                    addSegmentToPath(loopPath, bestMatch->path, bestMatch->reversed, shape);
                     bestMatch->used = true;
                     currentEnd = bestMatch->end;
                     connectedCount++;
@@ -1100,12 +1348,12 @@ void PhoenixView::drawShape(QPainter& painter, const fla::Shape* shape)
         if (!edge->visible)
             continue;
 
-        for (const fla::Path& path : edge->paths)
+        for (const fla::Path* path : edge->paths)
         {
-            if (!path.visible || path.segments.empty())
+            if (!path->visible || path->segments.empty())
                 continue;
 
-            int strokeStyleIdx = path.lineStyleIndex != -1 ? path.lineStyleIndex : edge->strokeStyle;
+            int strokeStyleIdx = path->lineStyleIndex != -1 ? path->lineStyleIndex : edge->strokeStyle;
             if (strokeStyleIdx == -1)
                 continue;
 
@@ -1370,25 +1618,25 @@ QRectF PhoenixView::calculateShapeBounds(const fla::Shape* shape)
             maxStrokeWeight = qMax(maxStrokeWeight, strokeStyle->weight);
         }
 
-        for (const fla::Path& path : edge->paths)
+        for (const fla::Path* path : edge->paths)
         {
-            if (!path.visible)
+            if (!path->visible)
                 continue;
 
             // Check segment-specific stroke
-            if (path.lineStyleIndex != -1)
+            if (path->lineStyleIndex != -1)
             {
-                const fla::StrokeStyle* segStroke = shape->getStrokeStyleByIndex(path.lineStyleIndex);
+                const fla::StrokeStyle* segStroke = shape->getStrokeStyleByIndex(path->lineStyleIndex);
                 if (segStroke)
                 {
                     maxStrokeWeight = qMax(maxStrokeWeight, segStroke->weight);
                 }
             }
 
-            for (const fla::PathSegment& segment : path.segments)
+            for (const fla::PathSegment* segment : path->segments)
             {
                 // Add all points from this segment to bounds
-                for (const fla::Point& pt : segment.points)
+                for (const fla::Point& pt : segment->points)
                 {
                     QPointF qpt(pt.x, pt.y);
 
@@ -1674,14 +1922,14 @@ QRectF PhoenixView::calculateElementLocalBounds(const fla::Element* element)
             if (!edge->visible)
                 continue;
 
-            for (const fla::Path& path : edge->paths)
+            for (const fla::Path* path : edge->paths)
             {
-                if (!path.visible)
+                if (!path->visible)
                     continue;
 
-                for (const fla::PathSegment& segment : path.segments)
+                for (const fla::PathSegment* segment : path->segments)
                 {
-                    for (const fla::Point& pt : segment.points)
+                    for (const fla::Point& pt : segment->points)
                     {
                         if (first)
                         {

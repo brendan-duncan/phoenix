@@ -20,7 +20,9 @@ public:
     std::map<int, StrokeStyle*> strokesMap;
     std::map<int, FillStyle*> fillsMap;
 
-    Shape() = default;
+    Shape(DOMElement* parent)
+        : Element(parent)
+    {}
 
     ~Shape() override;
 
@@ -43,6 +45,8 @@ public:
     }
 
     std::string domTypeName() const override { return "Shape"; }
+
+    DOMType domType() const override { return DOMType::Shape; }
 };
 
 } // namespace fla

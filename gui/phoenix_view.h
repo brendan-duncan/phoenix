@@ -41,7 +41,7 @@ public:
 public slots:
     void onPlayerFrameChanged(int frame);
 
-    void onSegmentSelected(const fla::PathSegment* segment, const QPointF& point);
+    void onElementSelected(const fla::DOMElement* element);
 
 protected:
     void paintEvent(QPaintEvent *event) override;
@@ -77,9 +77,8 @@ private:
 
     bool _disableStaticText = false;
 
-    // Selected segment point for overlay
-    QPointF _selectedSegmentPoint;
-    bool _hasSelectedSegment = false;
+    // Selected element for overlay
+    const fla::DOMElement* _selectedElement = nullptr;
 
     struct PathCacheEntry
     {

@@ -7,9 +7,13 @@ namespace fla {
 class PrinterSettings : public DOMElement
 {
 public:
-    PrinterSettings() = default;
+    PrinterSettings(DOMElement* parent)
+        : DOMElement(parent)
+    {}
 
     std::string domTypeName() const override { return "PrinterSettings"; }
+
+    DOMType domType() const override { return DOMType::PrinterSettings; }
 };
 
 } // namespace fla

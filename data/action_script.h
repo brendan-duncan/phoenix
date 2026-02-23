@@ -9,9 +9,13 @@ class ActionScript : public DOMElement
 public:
     std::string code;
 
-    ActionScript() = default;
+    ActionScript(fla::DOMElement* parent)
+        : DOMElement(parent)
+    {}
 
     std::string domTypeName() const override { return "ActionScript"; }
+
+    DOMType domType() const override { return DOMType::ActionScript; }
 };
 
 } // namespace fla

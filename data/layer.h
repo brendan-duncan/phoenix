@@ -33,11 +33,15 @@ public:
 
     Layer* parentLayer = nullptr; // Pointer to parent layer (if any)
 
-    Layer() = default;
+    Layer(DOMElement* parent)
+        : DOMElement(parent)
+    {}
 
     ~Layer() override;
 
     std::string domTypeName() const override { return "Layer"; }
+
+    DOMType domType() const override { return DOMType::Layer; }
 
     // Checks if the layer is visible, taking into account all ancestor layers.
     bool isVisible() const

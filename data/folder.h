@@ -11,9 +11,13 @@ public:
     std::string itemId;
     bool isExpanded = false;
 
-    Folder() = default;
+    Folder(DOMElement* parent)
+        : DOMElement(parent)
+    {}
 
     std::string domTypeName() const override { return "Folder"; }
+
+    DOMType domType() const override { return DOMType::Folder; }
 };
 
 } // namespace fla

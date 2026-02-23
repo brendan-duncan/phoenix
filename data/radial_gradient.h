@@ -17,11 +17,15 @@ class RadialGradient : public FillStyle
 public:
     std::vector<RadialEntry> entries;
 
-    RadialGradient() = default;
+    RadialGradient(DOMElement* parent)
+        : FillStyle(parent)
+    {}
 
     Type type() const override { return Type::RadialGradient; }
 
     std::string domTypeName() const override { return "RadialGradient"; }
+
+    DOMType domType() const override { return DOMType::RadialGradient; }
 };
 
 } // namespace fla

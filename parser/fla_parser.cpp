@@ -30,11 +30,11 @@ fla::FLADocument* FLAParser::parse(const std::string& filePath)
         return nullptr;
     }
 
-    FLADocument* flaDocument = new FLADocument();
+    FLADocument* flaDocument = new FLADocument(nullptr);
     flaDocument->filepath = filePath;
 
     DocumentParser parser(&zipReader);
-    flaDocument->document = parser.parse(documentFile);
+    flaDocument->document = parser.parse(documentFile, flaDocument);
     if (flaDocument->document == nullptr)
     {
         _errorString = "Failed to parse XML content: " + parser.errorString();

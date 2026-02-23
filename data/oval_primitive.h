@@ -14,13 +14,17 @@ public:
     FillStyle* fillStyle = nullptr;
     StrokeStyle* strokeStyle = nullptr;
 
-    OvalPrimitive() = default;
+    OvalPrimitive(DOMElement* parent)
+        : Element(parent)
+    {}
 
     ~OvalPrimitive() override;
 
     Type elementType() const override { return Type::Oval; }
 
     std::string domTypeName() const override { return "DOMOvalPrimitive"; }
+
+    DOMType domType() const override { return DOMType::OvalPrimitive; }
 };
 
 } // namespace fla

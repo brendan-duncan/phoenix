@@ -2,6 +2,7 @@
 
 #include "../data/fla_document.h"
 #include "../data/edge.h"
+
 #include <QTreeWidget>
 #include <QTreeWidgetItem>
 
@@ -19,27 +20,18 @@ public:
 
 signals:
     void visibilityChanged();
-    void segmentSelected(const fla::PathSegment* segment, const QPointF& point);
+
+    void elementSelected(const fla::DOMElement* element);
 
 protected:
     void mousePressEvent(QMouseEvent *event) override;
 
 private slots:
     void onItemExpanded(QTreeWidgetItem* item);
+
     void onSelectionChanged();
 
 private:
-    enum class ItemType {
-        Document,
-        Timeline,
-        Layer,
-        Frame,
-        Element,
-        Symbol,
-        SymbolList,
-        Other
-    };
-
     const fla::FLADocument* _flaDocument;
 
     void clearTree();
@@ -58,17 +50,17 @@ private:
 
     void populateItemChildren(QTreeWidgetItem* item);
 
-    QTreeWidgetItem* createTreeItem(const QString& text, fla::DOMElement* domElement, QTreeWidgetItem* parent = nullptr);
+    QTreeWidgetItem* createTreeItem(const QString& text, const fla::DOMElement* domElement, QTreeWidgetItem* parent = nullptr);
 
     void updateItemVisibility(QTreeWidgetItem* item);
 
-    void setItemTypeData(QTreeWidgetItem* item, ItemType type, void* data = nullptr);
-    ItemType getItemType(QTreeWidgetItem* item) const;
-    void* getItemData(QTreeWidgetItem* item) const;
+    void setItemData(QTreeWidgetItem* item, const fla::DOMElement* element);
+
+    const fla::DOMElement* getItemData(QTreeWidgetItem* item) const;
 
     // Map items to their DOMElement pointers for quick access
-    QMap<QTreeWidgetItem*, fla::DOMElement*> _itemToElement;
-    QMap<fla::DOMElement*, QTreeWidgetItem*> _elementToItem;
+    QMap<QTreeWidgetItem*, const fla::DOMElement*> _itemToElement;
+    QMap<const fla::DOMElement*, QTreeWidgetItem*> _elementToItem;
 
     // Track which items have been populated
     QSet<QTreeWidgetItem*> _populatedItems;
