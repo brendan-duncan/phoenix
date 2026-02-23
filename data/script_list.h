@@ -14,6 +14,8 @@ public:
     std::string domTypeName() const override { return "ScriptList"; }
 
     DOMType domType() const override { return DOMType::ScriptList; }
+
+    static DOMType staticDomType() { return DOMType::ScriptList; }
 };
 
 } // namespace fla

@@ -27,6 +27,8 @@ public:
     std::string domTypeName() const override { return "Frame"; }
 
     DOMType domType() const override { return DOMType::Frame; }
+
+    static DOMType staticDomType() { return DOMType::Frame; }
 };
 
 } // namespace fla

@@ -26,6 +26,8 @@ public:
     std::string domTypeName() const override { return "RadialGradient"; }
 
     DOMType domType() const override { return DOMType::RadialGradient; }
+
+    static DOMType staticDomType() { return DOMType::RadialGradient; }
 };
 
 } // namespace fla

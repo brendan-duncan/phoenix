@@ -24,6 +24,8 @@ public:
     std::string domTypeName() const override { return "Timeline"; }
 
     DOMType domType() const override { return DOMType::Timeline; }
+
+    static DOMType staticDomType() { return DOMType::Timeline; }
 };
 
 } // namespace fla

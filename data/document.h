@@ -8,6 +8,7 @@
 #include "script_list.h"
 #include "swatch_list.h"
 #include "symbol.h"
+#include "symbol_instance.h"
 #include "symbol_list.h"
 #include <map>
 #include <string>
@@ -57,6 +58,9 @@ public:
     std::vector<Folder*> folders;
     std::vector<SwatchList*> swatchLists;
 
+    std::vector<fla::SymbolInstance*> symbolInstances; // List of all symbol instances in the document
+    std::map<const fla::Symbol*, std::vector<const fla::SymbolInstance*>> symbolInstancesMap; // Map of symbols to their instances
+
     Document(DOMElement* parent)
         : DOMElement(parent)
     {}
@@ -66,6 +70,8 @@ public:
     std::string domTypeName() const override { return "Document"; }
 
     DOMType domType() const override { return DOMType::Document; }
+
+    static DOMType staticDomType() { return DOMType::Document; }
 };
 
 } // namespace fla

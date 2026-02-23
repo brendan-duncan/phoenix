@@ -16,6 +16,8 @@ public:
     std::string domTypeName() const override { return "ActionScript"; }
 
     DOMType domType() const override { return DOMType::ActionScript; }
+
+    static DOMType staticDomType() { return DOMType::ActionScript; }
 };
 
 } // namespace fla

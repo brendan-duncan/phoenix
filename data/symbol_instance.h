@@ -5,8 +5,9 @@
 #include "color_transform.h"
 #include <string>
 
-
 namespace fla {
+
+class Symbol;
 
 class SymbolInstance : public Element
 {
@@ -17,6 +18,8 @@ public:
     LoopType loopType = LoopType::PlayOnce;
     ColorTransform colorTransform;
 
+    Symbol* symbol = nullptr; // Resolved symbol reference after parsing
+
     SymbolInstance(DOMElement* parent)
         : Element(parent)
     {}
@@ -26,6 +29,8 @@ public:
     std::string domTypeName() const override { return "SymbolInstance"; }
 
     DOMType domType() const override { return DOMType::SymbolInstance; }
+
+    static DOMType staticDomType() { return DOMType::SymbolInstance; }
 };
 
 } // namespace fla

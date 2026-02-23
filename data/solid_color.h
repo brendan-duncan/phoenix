@@ -19,6 +19,8 @@ public:
     std::string domTypeName() const override { return "SolidColor"; }
 
     DOMType domType() const override { return DOMType::SolidColor; }
+
+    static DOMType staticDomType() { return DOMType::SolidColor; }
 };
 
 } // namespace fla

@@ -36,6 +36,8 @@ public:
 
     virtual Type elementType() const = 0;
 
+    static DOMType staticDomType() { return DOMType::Element; }
+
     Point transformPoint(const Point& p) const
     {
         Point transformed = p;

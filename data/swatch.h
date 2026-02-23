@@ -35,6 +35,8 @@ public:
     std::string domTypeName() const override { return "SolidSwatch"; }
 
     DOMType domType() const override { return DOMType::SolidSwatch; }
+
+    static DOMType staticDomType() { return DOMType::SolidSwatch; }
 };
 
 class LinearGradientSwatch : public Swatch
@@ -49,6 +51,8 @@ public:
     std::string domTypeName() const override { return "LinearGradientSwatch"; }
 
     DOMType domType() const override { return DOMType::LinearGradientSwatch; }
+
+    static DOMType staticDomType() { return DOMType::LinearGradientSwatch; }
 };
 
 class RadialGradientSwatch : public Swatch
@@ -63,6 +67,8 @@ public:
     std::string domTypeName() const override { return "RadialGradientSwatch"; }
 
     DOMType domType() const override { return DOMType::RadialGradientSwatch; }
+
+    static DOMType staticDomType() { return DOMType::RadialGradientSwatch; }
 };
 
 } // namespace fla

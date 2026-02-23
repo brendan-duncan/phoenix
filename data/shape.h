@@ -47,6 +47,8 @@ public:
     std::string domTypeName() const override { return "Shape"; }
 
     DOMType domType() const override { return DOMType::Shape; }
+
+    static DOMType staticDomType() { return DOMType::Shape; }
 };
 
 } // namespace fla

@@ -22,6 +22,8 @@ public:
     std::string domTypeName() const override { return "SymbolList"; }
 
     DOMType domType() const override { return DOMType::SymbolList; }
+
+    static DOMType staticDomType() { return DOMType::SymbolList; }
 };
 
 } // namespace fla

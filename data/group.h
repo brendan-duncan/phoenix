@@ -21,6 +21,8 @@ public:
     std::string domTypeName() const override { return "Group"; }
 
     DOMType domType() const override { return DOMType::Group; }
+
+    static DOMType staticDomType() { return DOMType::Group; }
 };
 
 } // namespace fla

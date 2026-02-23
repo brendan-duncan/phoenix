@@ -22,6 +22,8 @@ public:
     std::string domTypeName() const override { return "DOMRectanglePrimitive"; }
 
     DOMType domType() const override { return DOMType::RectanglePrimitive; }
+
+    static DOMType staticDomType() { return DOMType::RectanglePrimitive; }
 };
 
 }

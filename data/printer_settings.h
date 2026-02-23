@@ -14,6 +14,8 @@ public:
     std::string domTypeName() const override { return "PrinterSettings"; }
 
     DOMType domType() const override { return DOMType::PrinterSettings; }
+
+    static DOMType staticDomType() { return DOMType::PrinterSettings; }
 };
 
 } // namespace fla

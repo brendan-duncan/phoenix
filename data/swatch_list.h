@@ -22,6 +22,8 @@ public:
     std::string domTypeName() const override { return "SwatchList"; }
 
     DOMType domType() const override { return DOMType::SwatchList; }
+
+    static DOMType staticDomType() { return DOMType::SwatchList; }
 };
 
 } // namespace fla

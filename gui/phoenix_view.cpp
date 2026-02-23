@@ -59,6 +59,7 @@ void PhoenixView::onPlayerFrameChanged(int frame)
 
 void PhoenixView::onElementSelected(const fla::DOMElement* element)
 {
+    qDebug() << "onElementSelected" << (element ? element->domTypeName() : "<null>");
     _selectedElement = element;
     update();
 }
@@ -189,7 +190,7 @@ void PhoenixView::paintEvent(QPaintEvent *event)
         painter.scale(scale, scale);
         painter.fillRect(0, 0, docWidth, docHeight, QColor(255, 255, 255));
         drawDocument(painter, _flaDocument->document);
-        
+
         painter.setPen(QPen(QColor(0, 0, 0, 255), 1.0));
         painter.drawRect(0, 0, docWidth, docHeight);
         painter.restore();
@@ -214,192 +215,114 @@ void PhoenixView::paintEvent(QPaintEvent *event)
     // Draw selected element overlay
     if (_selectedElement)
     {
-        bool drawOverlay = false;
-        if (_selectedElement->domType() == fla::DOMElement::DOMType::Path
-            || _selectedElement->domType() == fla::DOMElement::DOMType::PathSegment
-            || _selectedElement->domType() == fla::DOMElement::DOMType::Edge
-            || _selectedElement->domType() == fla::DOMElement::DOMType::Shape)
+        painter.save();
+        painter.translate(_panX + centerX, _panY + centerY);
+        painter.scale(scale, scale);
+
+        double penWidth = 1.0 / scale;
+        double radius = 3.0 / scale;
+        painter.setPen(QPen(QColor(0, 255, 255, 255), penWidth));
+        painter.setBrush(QBrush(QColor(0, 255, 255, 150)));
+
+        const fla::Symbol* parentSymbol = _selectedElement->findAncestorOfType<fla::Symbol>();
+
+        QList<QTransform> transforms;
+        std::vector<const fla::SymbolInstance*> instances;
+        if (parentSymbol)
         {
-            drawOverlay = true;
+            // Find all instances of this symbol in the document
+            instances = _flaDocument->document->symbolInstancesMap[parentSymbol];
+            for (const fla::SymbolInstance* instance : instances)
+            {
+                transforms.push_back(QTransform(instance->transform.m11, instance->transform.m12,
+                    instance->transform.m21, instance->transform.m22,
+                    instance->transform.tx, instance->transform.ty));
+            }
         }
-
-        if (drawOverlay)
+        else
         {
-            painter.save();
-            painter.translate(_panX + centerX, _panY + centerY);
-            painter.scale(scale, scale);
-
-            double penWidth = 1.0 / scale;
-            double radius = 3.0 / scale;
-            painter.setPen(QPen(QColor(0, 255, 255, 255), penWidth));
-            painter.setBrush(QBrush(QColor(0, 255, 255, 150)));
-
-            auto getElementSymbol = [&]() -> const fla::Symbol*
+            const fla::Element* elem = _selectedElement->findAncestorOfType<fla::Element>();
+            if (elem)
             {
-                if (_selectedElement->domType() == fla::DOMElement::DOMType::Symbol)
-                {
-                    return static_cast<const fla::Symbol*>(_selectedElement);
-                }
-                else if (_selectedElement->domType() == fla::DOMElement::DOMType::Shape || _selectedElement->domType() == fla::DOMElement::DOMType::Edge ||
-                    _selectedElement->domType() == fla::DOMElement::DOMType::Path || _selectedElement->domType() == fla::DOMElement::DOMType::PathSegment)
-                {
-                    const fla::DOMElement* elem = static_cast<const fla::DOMElement*>(_selectedElement);
-                    while (elem)
-                    {
-                        if (elem->domType() == fla::DOMElement::DOMType::Symbol)
-                        {
-                            return static_cast<const fla::Symbol*>(elem);
-                        }
-                        elem = elem->parent;
-                    }
-                }
-                return nullptr;
-            };
-
-            auto getParentElement = [&]() -> const fla::Element*
-            {
-                const fla::DOMElement* parent = _selectedElement;
-                while (parent != nullptr)
-                {
-                    const fla::Element* elem = dynamic_cast<const fla::Element*>(parent);
-                    if (elem != nullptr)
-                    {
-                        return elem;
-                    }
-                    parent = parent->parent;
-                }
-            };
-
-            const fla::Symbol* parentSymbol = getElementSymbol();
-
-            QList<QTransform> transforms;
-            std::vector<fla::SymbolInstance*> instances;
-            if (parentSymbol)
-            {
-                // Find all instances of this symbol in the document
-                for (const fla::Timeline* timeline : _flaDocument->document->timelines)
-                {
-                    for (const fla::Layer* layer : timeline->layers)
-                    {
-                        for (const fla::Frame* frame : layer->frames)
-                        {
-                            for (const fla::Element* elem : frame->elements)
-                            {
-                                if (elem->domType() == fla::DOMElement::DOMType::SymbolInstance)
-                                {
-                                    const fla::SymbolInstance* instance = static_cast<const fla::SymbolInstance*>(elem);
-                                    if (instance->libraryItemName == parentSymbol->name)
-                                    {
-                                        instances.push_back(const_cast<fla::SymbolInstance*>(instance));
-                                        transforms.push_back(QTransform(instance->transform.m11, instance->transform.m12,
-                                            instance->transform.m21, instance->transform.m22,
-                                            instance->transform.tx, instance->transform.ty));
-                                    }
-                                }
-                                else if (elem->domType() == fla::DOMElement::DOMType::Group)
-                                {
-                                    const fla::Group* group = static_cast<const fla::Group*>(elem);
-                                    for (const fla::Element* groupElem : group->members)
-                                    {
-                                        if (groupElem->domType() == fla::DOMElement::DOMType::SymbolInstance)
-                                        {
-                                            const fla::SymbolInstance* instance = static_cast<const fla::SymbolInstance*>(groupElem);
-                                            if (instance->libraryItemName == parentSymbol->name)
-                                            {
-                                                instances.push_back(const_cast<fla::SymbolInstance*>(instance));
-                                                transforms.push_back(QTransform(instance->transform.m11, instance->transform.m12,
-                                                    instance->transform.m21, instance->transform.m22,
-                                                    instance->transform.tx, instance->transform.ty));
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
+                // Apply element's own transform if it has one
+                transforms.push_back(QTransform(elem->transform.m11, elem->transform.m12,
+                    elem->transform.m21, elem->transform.m22,
+                    elem->transform.tx, elem->transform.ty));
             }
             else
             {
-                const fla::Element* elem = getParentElement();
-                if (elem)
+                // No transform, just use identity
+                transforms.push_back(QTransform());
+            }
+        }
+
+        // Helper to draw points at a given transform
+        auto drawPointsAtTransforms = [&](const QList<QPointF>& points) -> void
+        {
+            for (const QTransform& instTransform : transforms)
+            {
+                for (const QPointF& pt : points)
                 {
-                    // Apply element's own transform if it has one
-                    transforms.push_back(QTransform(elem->transform.m11, elem->transform.m12,
-                        elem->transform.m21, elem->transform.m22,
-                        elem->transform.tx, elem->transform.ty));
-                }
-                else
-                {
-                    // No transform, just use identity
-                    transforms.push_back(QTransform());
+                    QPointF transformed = instTransform.map(pt);
+                    painter.drawEllipse(transformed, radius, radius);
                 }
             }
+        };
 
-            // Helper to draw points at a given transform
-            auto drawPointsAtTransforms = [&](const QList<QPointF>& points)
+        auto drawLineAtTransforms = [&](const QPointF& p1, const QPointF& p2) -> void
+        {
+            for (const QTransform& instTransform : transforms)
             {
-                for (const QTransform& instTransform : transforms)
-                {
-                    for (const QPointF& pt : points)
-                    {
-                        QPointF transformed = instTransform.map(pt);
-                        painter.drawEllipse(transformed, radius, radius);
-                    }
-                }
-            };
+                QPointF tp1 = instTransform.map(p1);
+                QPointF tp2 = instTransform.map(p2);
+                painter.drawLine(tp1, tp2);
+            }
+        };
 
-            auto drawLineAtTransforms = [&](const QPointF& p1, const QPointF& p2)
+        auto drawPathSegment = [&](const fla::PathSegment* segment) -> void
+        {
+            switch (segment->command)
             {
-                for (const QTransform& instTransform : transforms)
-                {
-                    QPointF tp1 = instTransform.map(p1);
-                    QPointF tp2 = instTransform.map(p2);
-                    painter.drawLine(tp1, tp2);
-                }
-            };
-
-            auto drawPathSegment = [&](const fla::PathSegment* segment)
-            {
-                switch (segment->command)
-                {
-                    case fla::PathSegment::Command::Move:
-                    case fla::PathSegment::Command::Line:
+                case fla::PathSegment::Command::Move:
+                case fla::PathSegment::Command::Line:
+                    drawPointsAtTransforms({QPointF(segment->points[0].x, segment->points[0].y)});
+                    break;
+                case fla::PathSegment::Command::Quad:
+                    if (segment->points.size() >= 1)
                         drawPointsAtTransforms({QPointF(segment->points[0].x, segment->points[0].y)});
-                        break;
-                    case fla::PathSegment::Command::Quad:
-                        if (segment->points.size() >= 1)
-                            drawPointsAtTransforms({QPointF(segment->points[0].x, segment->points[0].y)});
-                        if (segment->points.size() >= 2)
-                            drawPointsAtTransforms({QPointF(segment->points[1].x, segment->points[1].y)});
-                        break;
-                    case fla::PathSegment::Command::Cubic:
-                        for (size_t i = 0; i < segment->points.size() && i < 3; ++i)
-                        {
-                            drawPointsAtTransforms({QPointF(segment->points[i].x, segment->points[i].y)});
-                        }
-                        break;
-                    case fla::PathSegment::Command::Close:
-                        break;
-                }
-            };
+                    if (segment->points.size() >= 2)
+                        drawPointsAtTransforms({QPointF(segment->points[1].x, segment->points[1].y)});
+                    break;
+                case fla::PathSegment::Command::Cubic:
+                    for (size_t i = 0; i < segment->points.size() && i < 3; ++i)
+                    {
+                        drawPointsAtTransforms({QPointF(segment->points[i].x, segment->points[i].y)});
+                    }
+                    break;
+                case fla::PathSegment::Command::Close:
+                    break;
+            }
+        };
 
-            if (_selectedElement->domType() == fla::DOMElement::DOMType::PathSegment)
+        auto drawElement = [&](auto&& self, const fla::DOMElement* elem) -> void
+        {
+            fla::DOMElement::DOMType type = elem->domType();
+            if (type == fla::DOMElement::DOMType::PathSegment)
             {
-                const fla::PathSegment* segment = static_cast<const fla::PathSegment*>(_selectedElement);
+                const fla::PathSegment* segment = static_cast<const fla::PathSegment*>(elem);
                 drawPathSegment(segment);
             }
-            else if (_selectedElement->domType() == fla::DOMElement::DOMType::Path)
+            else if (type == fla::DOMElement::DOMType::Path)
             {
-                const fla::Path* path = static_cast<const fla::Path*>(_selectedElement);
+                const fla::Path* path = static_cast<const fla::Path*>(elem);
                 for (const fla::PathSegment* segment : path->segments)
                 {
                     drawPathSegment(segment);
                 }
             }
-            else if (_selectedElement->domType() == fla::DOMElement::DOMType::Edge)
+            else if (type == fla::DOMElement::DOMType::Edge)
             {
-                const fla::Edge* edge = static_cast<const fla::Edge*>(_selectedElement);
+                const fla::Edge* edge = static_cast<const fla::Edge*>(elem);
                 for (const fla::Path* path : edge->paths)
                 {
                     for (const fla::PathSegment* segment : path->segments)
@@ -408,9 +331,9 @@ void PhoenixView::paintEvent(QPaintEvent *event)
                     }
                 }
             }
-            else if (_selectedElement->domType() == fla::DOMElement::DOMType::Shape)
+            else if (type == fla::DOMElement::DOMType::Shape)
             {
-                const fla::Shape* shape = static_cast<const fla::Shape*>(_selectedElement);
+                const fla::Shape* shape = static_cast<const fla::Shape*>(elem);
                 for (const fla::Edge* edge : shape->edges)
                 {
                     for (const fla::Path* path : edge->paths)
@@ -422,9 +345,47 @@ void PhoenixView::paintEvent(QPaintEvent *event)
                     }
                 }
             }
+            else if (type == fla::DOMElement::DOMType::Group)
+            {
+                const fla::Group* group = static_cast<const fla::Group*>(elem);
+                for (const fla::Element* member : group->members)
+                {
+                    const fla::DOMElement* domMember = static_cast<const fla::DOMElement*>(member);
+                    self(self, domMember);
+                }
+            }
+            else if (type == fla::DOMElement::DOMType::Symbol)
+            {
+                const fla::Symbol* symbol = static_cast<const fla::Symbol*>(elem);
+                for (const fla::Timeline* timeline : symbol->timelines)
+                {
+                    for (const fla::Layer* layer : timeline->layers)
+                    {
+                        for (const fla::Frame* frame : layer->frames)
+                        {
+                            for (const fla::Element* elem : frame->elements)
+                            {
+                                const fla::DOMElement* domElem = static_cast<const fla::DOMElement*>(elem);
+                                self(self, domElem);
+                            }
+                        }
+                    }
+                }
+            }
+            else if (type == fla::DOMElement::DOMType::SymbolInstance)
+            {
+                const fla::SymbolInstance* instance = static_cast<const fla::SymbolInstance*>(elem);
+                const fla::Symbol* symbol = instance->symbol;
+                if (symbol)
+                {
+                    self(self, symbol);
+                }
+            }
+        };
 
-            painter.restore();
-        } // drawOverlay
+        drawElement(drawElement, _selectedElement);
+
+        painter.restore();
     }
 }
 
@@ -580,19 +541,6 @@ void PhoenixView::drawFrame(QPainter& painter, const fla::Frame* frame)
     }
 }
 
-fla::Symbol* PhoenixView::findSymbolByName(const fla::Document* document, const std::string& name)
-{
-    if (document->symbolList == nullptr)
-        return nullptr;
-
-    auto it = document->symbolList->symbolMap.find(name);
-    if (it != document->symbolList->symbolMap.end())
-    {
-        return it->second;
-    }
-    return nullptr;
-}
-
 int indent = 0;
 
 void PhoenixView::drawElement(QPainter& painter, const fla::Element* element)
@@ -620,7 +568,7 @@ void PhoenixView::drawElement(QPainter& painter, const fla::Element* element)
     else if (type == fla::Element::Type::SymbolInstance)
     {
         const fla::SymbolInstance* instance = static_cast<const fla::SymbolInstance*>(element);
-        const fla::Symbol* symbol = findSymbolByName(_flaDocument->document, instance->libraryItemName);
+        const fla::Symbol* symbol = instance->symbol;
         if (symbol && symbol->visible)
         {
             if (!instance->colorTransform.isIdentity())
@@ -1509,7 +1457,7 @@ QRectF PhoenixView::calculateElementBounds(const fla::Element* element)
         const fla::SymbolInstance* instance = static_cast<const fla::SymbolInstance*>(element);
         if (_flaDocument && _flaDocument->document)
         {
-            const fla::Symbol* symbol = findSymbolByName(_flaDocument->document, instance->libraryItemName);
+            const fla::Symbol* symbol = instance->symbol;
             if (symbol && !symbol->timelines.empty())
             {
                 // Calculate bounds from symbol's first timeline
@@ -1717,7 +1665,7 @@ void PhoenixView::drawElementBounds(QPainter& painter, const fla::Element* eleme
     else if (element->elementType() == fla::Element::Type::SymbolInstance)
     {
         const fla::SymbolInstance* instance = static_cast<const fla::SymbolInstance*>(element);
-        const fla::Symbol* symbol = findSymbolByName(_flaDocument->document, instance->libraryItemName);
+        const fla::Symbol* symbol = instance->symbol;
         if (symbol && symbol->visible)
         {
             QTransform transform(element->transform.m11, element->transform.m12,
@@ -1975,7 +1923,7 @@ QRectF PhoenixView::calculateElementLocalBounds(const fla::Element* element)
     else if (type == fla::Element::Type::SymbolInstance)
     {
         const fla::SymbolInstance* instance = static_cast<const fla::SymbolInstance*>(element);
-        const fla::Symbol* symbol = findSymbolByName(_flaDocument->document, instance->libraryItemName);
+        const fla::Symbol* symbol = instance->symbol;
         if (symbol)
         {
             return calculateSymbolLocalBounds(symbol);

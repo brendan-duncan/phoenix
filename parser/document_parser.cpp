@@ -514,9 +514,7 @@ bool parseShape(const tinyxml2::XMLElement* element, fla::Shape* shape)
             {
                 for (fla::Point& point : segment->points)
                 {
-                    //point.translate(shape->transformationPoint.x, shape->transformationPoint.y);
                     //point.transform(shape->transform);
-                    //point.translate(-shape->transformationPoint.x, -shape->transformationPoint.y);
 
                     shape->bounds.topLeft.x = std::min(shape->bounds.topLeft.x, point.x);
                     shape->bounds.topLeft.y = std::min(shape->bounds.topLeft.y, point.y);
@@ -527,9 +525,7 @@ bool parseShape(const tinyxml2::XMLElement* element, fla::Shape* shape)
         }
     }
 
-    shape->bounds.translate(shape->transformationPoint.x, shape->transformationPoint.y);
     shape->bounds.transform(shape->transform);
-    shape->bounds.translate(-shape->transformationPoint.x, -shape->transformationPoint.y);
 
     //shape->transform.reset();
     //shape->transformationPoint.reset();
@@ -896,6 +892,11 @@ fla::Element* parseElementByType(const tinyxml2::XMLElement* element, fla::DOMEl
             delete instance;
             return nullptr;
         }
+        fla::Document* document = parent->findAncestorOfType<fla::Document>();
+        if (document)
+        {
+            document->symbolInstances.push_back(instance);
+        }
         return instance;
     }
     else if (std::strcmp(tagName, "DOMGroup") == 0)
@@ -981,9 +982,7 @@ bool parseGroup(const tinyxml2::XMLElement* element, fla::Group* group)
     {
         group->bounds.expandToInclude(member->bounds);
     }
-    group->bounds.translate(group->transformationPoint.x, group->transformationPoint.y);
-    group->bounds.transform(group->transform);
-    group->bounds.translate(-group->transformationPoint.x, -group->transformationPoint.y);
+    //group->bounds.transform(group->transform);
 
     return true;
 }
@@ -1592,6 +1591,24 @@ fla::Document* DocumentParser::parse(const std::string& xmlContent, fla::DOMElem
         delete document;
         _errorString = "Failed to parse document content";
         return nullptr;
+    }
+
+    if (document->symbolList)
+    {
+        // Resolve symbol references in symbol instances
+        for (fla::SymbolInstance* instance : document->symbolInstances)
+        {
+            auto it = document->symbolList->symbolMap.find(instance->libraryItemName);
+            if (it != document->symbolList->symbolMap.end())
+            {
+                instance->symbol = it->second;
+                document->symbolInstancesMap[it->second].push_back(instance);
+            }
+            else
+            {
+                std::cerr << "Symbol instance references unknown symbol: " << instance->libraryItemName << std::endl;
+            }
+        }
     }
 
     document->source = xmlContent;

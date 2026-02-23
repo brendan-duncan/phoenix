@@ -43,6 +43,8 @@ public:
 
     DOMType domType() const override { return DOMType::Layer; }
 
+    static DOMType staticDomType() { return DOMType::Layer; }
+
     // Checks if the layer is visible, taking into account all ancestor layers.
     bool isVisible() const
     {

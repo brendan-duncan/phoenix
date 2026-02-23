@@ -25,6 +25,8 @@ public:
     std::string domTypeName() const override { return "DOMOvalPrimitive"; }
 
     DOMType domType() const override { return DOMType::OvalPrimitive; }
+
+    static DOMType staticDomType() { return DOMType::OvalPrimitive; }
 };
 
 } // namespace fla

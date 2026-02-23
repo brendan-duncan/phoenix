@@ -30,6 +30,8 @@ struct PathSegment : public DOMElement
     std::string domTypeName() const override { return "PathSegment"; }
 
     DOMType domType() const override { return DOMType::PathSegment; }
+
+    static DOMType staticDomType() { return DOMType::PathSegment; }
 };
 
 struct Path : public DOMElement
@@ -46,7 +48,10 @@ struct Path : public DOMElement
     ~Path() override;
 
     std::string domTypeName() const override { return "Path"; }
+
     DOMType domType() const override { return DOMType::Path; }
+
+    static DOMType staticDomType() { return DOMType::Path; }
 };
 
 class Edge : public DOMElement
@@ -65,7 +70,10 @@ public:
     ~Edge() override;
 
     std::string domTypeName() const override { return "Edge"; }
+
     DOMType domType() const override { return DOMType::Edge; }
+
+    static DOMType staticDomType() { return DOMType::Edge; }
 };
 
 } // namespace fla

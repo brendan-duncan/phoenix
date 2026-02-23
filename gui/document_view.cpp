@@ -644,6 +644,8 @@ void DocumentView::onSelectionChanged()
     fla::DOMElement::DOMType type = element->domType();
     // Only emit for our specific types
     if (type == fla::DOMElement::DOMType::Symbol ||
+        type == fla::DOMElement::DOMType::SymbolInstance ||
+        type == fla::DOMElement::DOMType::Group ||
         type == fla::DOMElement::DOMType::Shape ||
         type == fla::DOMElement::DOMType::Edge ||
         type == fla::DOMElement::DOMType::Path ||

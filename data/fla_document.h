@@ -20,6 +20,8 @@ public:
     std::string domTypeName() const override { return "FLADocument"; }
 
     DOMType domType() const override { return DOMType::FLADocument; }
+
+    static DOMType staticDomType() { return DOMType::FLADocument; }
 };
 
 } // namespace fla

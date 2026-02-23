@@ -48,6 +48,8 @@ public:
     std::string domTypeName() const override { return "StaticText"; }
 
     DOMType domType() const override { return DOMType::StaticText; }
+
+    static DOMType staticDomType() { return DOMType::StaticText; }
 };
 
 } // namespace fla

@@ -26,6 +26,8 @@ public:
     std::string domTypeName() const override { return "LinearGradient"; }
 
     DOMType domType() const override { return DOMType::LinearGradient; }
+
+    static DOMType staticDomType() { return DOMType::LinearGradient; }
 };
 
 } // namespace fla

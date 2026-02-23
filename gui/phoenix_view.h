@@ -132,8 +132,6 @@ private:
 
     void drawElementBounds(QPainter& painter, const fla::Element* element);
 
-    fla::Symbol* findSymbolByName(const fla::Document* document, const std::string& name);
-
     void applyColorTransform(QImage& image, const fla::ColorTransform& colorTransform);
 
     QRectF calculateSymbolLocalBounds(const fla::Symbol* symbol);

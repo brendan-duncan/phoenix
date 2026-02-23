@@ -10,12 +10,15 @@ public:
     enum class Type
     {
         Bitmap,
-        Font
+        Font,
+        Symbol,
     };
 
     Resource(DOMElement* parent)
         : DOMElement(parent)
     {}
+
+    static DOMType staticDomType() { return DOMType::Resource; }
 
     virtual Type resourceType() const = 0;
 };

@@ -19,6 +19,8 @@ public:
     std::string domTypeName() const override { return "BitmapInstance"; }
 
     DOMType domType() const override { return DOMType::BitmapInstance; }
+
+    static DOMType staticDomType() { return DOMType::BitmapInstance; }
 };
 
 } // namespace fla
