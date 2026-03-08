@@ -26,6 +26,8 @@
 
 #define MAX(a, b) ((a) > (b) ? (a) : (b))
 
+static const int supersampleFactor = 2;
+
 PhoenixView::PhoenixView(Player* player, QWidget *parent)
     : QWidget(parent)
     , _flaDocument(nullptr)
@@ -140,7 +142,6 @@ void PhoenixView::paintEvent(QPaintEvent *event)
     if (_highQualityAntiAliasing)
     {
         // Supersampling: render at 2x resolution and scale down for smoother edges
-        const int supersampleFactor = 2;
         int bufW = width() * supersampleFactor;
         int bufH = height() * supersampleFactor;
         QImage buffer(bufW, bufH, QImage::Format_ARGB32_Premultiplied);
@@ -423,15 +424,19 @@ void PhoenixView::drawTimeline(QPainter& painter, const fla::Timeline* timeline,
             continue;
         }
 
-        // Use full widget resolution for mask
+        // Use full widget resolution for mask (2x for HQAA)
+        const int supersampleFactor = _highQualityAntiAliasing ? 2 : 1;
         QRect r = rect();
-        QPixmap maskPixmap(r.width(), r.height());
+        QPixmap maskPixmap(r.width() * supersampleFactor, r.height() * supersampleFactor);
         maskPixmap.fill(Qt::transparent);
 
         QPainter maskPainter(&maskPixmap);
         maskPainter.setRenderHint(QPainter::Antialiasing, true);
         maskPainter.setRenderHint(QPainter::TextAntialiasing, true);
         maskPainter.setRenderHint(QPainter::SmoothPixmapTransform, true);
+        if (supersampleFactor > 1) {
+            maskPainter.scale(supersampleFactor, supersampleFactor);
+        }
         maskPainter.setTransform(painterTransform);
 
         drawLayer(maskPainter, layer, loopType, firstFrame, nullptr);
@@ -457,15 +462,18 @@ void PhoenixView::drawTimeline(QPainter& painter, const fla::Timeline* timeline,
                 const QPixmap& maskPixmap = maskIt.value().maskPixmap;
                 const QPointF& maskOffset = maskIt.value().offset;
 
-                // Use full widget resolution for content
+                // Use full widget resolution for content (2x for HQAA)
                 QRect r = rect();
-                QPixmap contentPixmap(r.width(), r.height());
+                QPixmap contentPixmap(r.width() * supersampleFactor, r.height() * supersampleFactor);
                 contentPixmap.fill(Qt::transparent);
 
                 QPainter contentPainter(&contentPixmap);
                 contentPainter.setRenderHint(QPainter::Antialiasing, true);
                 contentPainter.setRenderHint(QPainter::TextAntialiasing, true);
                 contentPainter.setRenderHint(QPainter::SmoothPixmapTransform, true);
+                if (supersampleFactor > 1) {
+                    contentPainter.scale(supersampleFactor, supersampleFactor);
+                }
                 contentPainter.setTransform(painterTransform);
 
                 drawLayer(contentPainter, layer, loopType, firstFrame, nullptr);
@@ -1118,7 +1126,12 @@ void PhoenixView::drawShape(QPainter& painter, const fla::Shape* shape)
     // from twips conversion (1/20 pixel) and path transformations
     auto pointsMatch = [](const fla::Point& p1, const fla::Point& p2) -> bool
     {
-        return qAbs(p1.x - p2.x) < 0.5 && qAbs(p1.y - p2.y) < 0.5;
+        int p1x = static_cast<int>(std::round(p1.x * 20.0));
+        int p1y = static_cast<int>(std::round(p1.y * 20.0));
+        int p2x = static_cast<int>(std::round(p2.x * 20.0));
+        int p2y = static_cast<int>(std::round(p2.y * 20.0));
+        return p1x == p2x && p1y == p2y;
+        //return qAbs(p1.x - p2.x) < 0.5 && qAbs(p1.y - p2.y) < 0.5;
     };
 
     // For each fill style, connect paths into closed loops
@@ -1240,7 +1253,7 @@ void PhoenixView::drawShape(QPainter& painter, const fla::Shape* shape)
                     double dy = currentEnd.y - nextDirectedPath.start.y;
                     double distance = dx * dx + dy * dy;
 
-                    if (distance < 0.5 * 0.5 && distance < bestDistance)
+                    if (distance < (0.5 * 0.5) && distance < bestDistance)
                     {
                         bestDistance = distance;
                         bestMatch = &nextDirectedPath;

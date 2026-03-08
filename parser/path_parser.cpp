@@ -20,6 +20,15 @@ inline bool isSpace(char c)
     //return std::isspace(static_cast<unsigned char>(c));
     return c == '\n' || c == '\r' || c == ' ' || c == '\t';
 }
+
+inline bool pointsMatch(const fla::Point& p1, const fla::Point& p2)
+{
+    int p1x = static_cast<int>(std::round(p1.x * 20.0));
+    int p1y = static_cast<int>(std::round(p1.y * 20.0));
+    int p2x = static_cast<int>(std::round(p2.x * 20.0));
+    int p2y = static_cast<int>(std::round(p2.y * 20.0));
+    return p1x == p2x && p1y == p2y;
+}
 } // namespace
 
 fla::Edge* PathParser::parse(const std::string& data, fla::DOMElement* parent)
@@ -53,15 +62,13 @@ fla::Edge* PathParser::parse(const std::string& data, fla::DOMElement* parent)
             if (lastPath && !lastPath->segments.empty())
             {
                 fla::Point segmentStart = lastPath->segments[0]->points[0];
-                if (std::abs(segmentStart.x - lastPoint.x) < 0.01 &&
-                    std::abs(segmentStart.y - lastPoint.y) < 0.01)
+                if (pointsMatch(segmentStart, lastPoint))
                 {
                     lastPath->segments.push_back(new fla::PathSegment{fla::PathSegment::Command::Close, {}, lastPath});
                 }
 
                 // Check if this Move is actually a continuation (starts where we ended)
-                if (std::abs(point.x - lastPoint.x) < 0.01 &&
-                    std::abs(point.y - lastPoint.y) < 0.01)
+                if (pointsMatch(point, lastPoint))
                 {
                     // This is a continuation - don't create a new path, just continue the current one
                     // No need to add anything since we're already at this point
@@ -406,16 +413,15 @@ double PathParser::parseNumber(const std::string& data, int& pos, std::string* o
         int hexDigits = hexPart.length();
         if (hexDigits > 0)
         {
-            // Calculate the bit width (round up to 8, 16, 24, or 32 bits)
-            int bitWidth = ((hexDigits + 1) / 2) * 8;
-            if (bitWidth > 32)
-                bitWidth = 32;
+            int bitWidth = 24; // Flash uses 24-bit signed integers for coordinates
 
             // Check if high bit is set (indicating negative in two's complement)
             long long maxPositive = 1LL << (bitWidth - 1);
             long long maxValue = 1LL << bitWidth;
 
-            if (value >= maxPositive)
+            // Only treat as negative if value exceeds signed positive range
+            // e.g., for 8-bit: 0-127 positive, 128-255 negative (-128 to -1)
+            if (value > maxPositive - 1)
             {
                 // Convert from two's complement to negative
                 value = value - maxValue;
