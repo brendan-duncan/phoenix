@@ -161,20 +161,7 @@ void PhoenixView::paintEvent(QPaintEvent *event)
         bufferPainter.scale(s, s);
         bufferPainter.fillRect(QRectF(0, 0, docWidth, docHeight), QColor(255, 255, 255));
 
-        _disableStaticText = true;
         drawDocument(bufferPainter, _flaDocument->document);
-        _disableStaticText = false;
-
-        /*bufferPainter.resetTransform();
-        // Offset draws to reduce white-line artifacts between shapes
-        bufferPainter.translate(tx + ss, ty + ss);
-        bufferPainter.scale(s, s);
-        drawDocument(bufferPainter, _flaDocument->document);
-
-        bufferPainter.resetTransform();
-        bufferPainter.translate(tx - ss, ty - ss);
-        bufferPainter.scale(s, s);
-        drawDocument(bufferPainter, _flaDocument->document);*/
 
         bufferPainter.setPen(QPen(QColor(0, 0, 0, 255), 1.0));
         bufferPainter.drawRect(0, 0, docWidth, docHeight);
