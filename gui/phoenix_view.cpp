@@ -471,7 +471,8 @@ void PhoenixView::drawTimeline(QPainter& painter, const fla::Timeline* timeline,
                 contentPainter.setRenderHint(QPainter::Antialiasing, true);
                 contentPainter.setRenderHint(QPainter::TextAntialiasing, true);
                 contentPainter.setRenderHint(QPainter::SmoothPixmapTransform, true);
-                if (supersampleFactor > 1) {
+                if (supersampleFactor > 1)
+                {
                     contentPainter.scale(supersampleFactor, supersampleFactor);
                 }
                 contentPainter.setTransform(painterTransform);
@@ -497,6 +498,11 @@ void PhoenixView::drawTimeline(QPainter& painter, const fla::Timeline* timeline,
                 painter.restore();
 
                 continue;
+            }
+            else
+            {
+                // No mask found for this masked layer, just draw it normally
+                drawLayer(painter, layer, loopType, firstFrame, nullptr);
             }
         }
         else if (layer->layerType == fla::Layer::Type::Normal)
@@ -893,7 +899,6 @@ QBrush PhoenixView::getFillBrush(const fla::FillStyle* fillStyle, const fla::Rec
         double cx = 0.0;
         double cy = 0.0;
         double radius = 1625.0;
-        //double radius = 3250.0;
 
         QRadialGradient gradient(cx, cy, radius);
 
@@ -909,7 +914,6 @@ QBrush PhoenixView::getFillBrush(const fla::FillStyle* fillStyle, const fla::Rec
         QBrush brush(gradient);
 
         const double s = 0.5;
-        //const double s = 1.0;
         QTransform brushTransform(radialFill->transform.m11 * s, radialFill->transform.m12 * s,
                             radialFill->transform.m21 * s, radialFill->transform.m22 * s,
                             radialFill->transform.tx, radialFill->transform.ty);

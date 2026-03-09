@@ -50,8 +50,10 @@ public:
     {
         if (!visible)
             return false;
-        if (parentLayer)
+        if (parentLayer && parentLayer->layerType == Type::Folder)
+        {
             return parentLayer->isVisible();
+        }
         return true;
     }
 };
