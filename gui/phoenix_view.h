@@ -78,6 +78,8 @@ private:
 
     bool _disableStaticText = false;
 
+    double _radius = 1.0;
+
     // Selected element for overlay
     const fla::DOMElement* _selectedElement = nullptr;
 
@@ -138,4 +140,14 @@ private:
     QRectF calculateSymbolLocalBounds(const fla::Symbol* symbol);
 
     QRectF calculateElementLocalBounds(const fla::Element* element);
+
+    void drawPointsAtTransforms(QPainter& painter, const QList<QPointF>& points, const QList<QTransform>& transforms);
+
+    void drawLineAtTransforms(QPainter& painter, const QPointF& p1, const QPointF& p2, const QList<QTransform>& transforms);
+
+    void drawElementPathSegments(QPainter& painter, const fla::PathSegment* segment, const QList<QTransform>& transforms);
+
+    void drawElementPoints(QPainter& painter, const fla::DOMElement* element, const QList<QTransform>& transforms);
+
+    void drawSelectedElementOverlay(QPainter& painter, double scale);
 };

@@ -4,6 +4,8 @@
 
 namespace fla {
 
+class Element;
+
 enum class SymbolType
 {
     MovieClip,
@@ -93,6 +95,8 @@ public:
             type == DOMType::SymbolInstance || type == DOMType::OvalPrimitive ||
             type == DOMType::RectanglePrimitive || type == DOMType::StaticText;
     }
+
+    const Element* findParentElement() const;
 
     bool isFillStyleType() const
     {
