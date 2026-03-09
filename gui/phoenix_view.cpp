@@ -862,25 +862,23 @@ QBrush PhoenixView::getFillBrush(const fla::FillStyle* fillStyle, const fla::Rec
     else if (fillStyle->type() == fla::FillStyle::Type::LinearGradient)
     {
         const fla::LinearGradient* linearFill = static_cast<const fla::LinearGradient*>(fillStyle);
-        fla::Point start = bounds.topLeft;
-        fla::Point end = bounds.bottomRight;
-        double halfWidth = bounds.width() / 2.0;
-        double halfHeight = bounds.height() / 2.0;
 
-        QLinearGradient gradient(start.x, start.y + halfHeight, end.x, start.y + halfHeight);
+        const double halfSpan = 1625.0;
+        QLinearGradient gradient(QPointF(-halfSpan, 0.0), QPointF(halfSpan, 0.0));
         for (const fla::GradientEntry& entry : linearFill->entries)
         {
             QColor color(entry.color[0], entry.color[1], entry.color[2], entry.color[3]);
             gradient.setColorAt(entry.ratio, color);
         }
-
         QBrush brush(gradient);
+        const double s = 0.5;
+        QTransform brushTransform(
+            linearFill->transform.m11 * s, linearFill->transform.m12 * s,
+            linearFill->transform.m21 * s, linearFill->transform.m22 * s,
+            linearFill->transform.tx,      linearFill->transform.ty
+        );
 
-        /*QTransform transform(linearFill->transform.m11, linearFill->transform.m12,
-                            linearFill->transform.m21, linearFill->transform.m22,
-                            linearFill->transform.tx, linearFill->transform.ty);
-
-        brush.setTransform(transform);*/
+        brush.setTransform(brushTransform);
 
         return brush;
     }
@@ -895,6 +893,7 @@ QBrush PhoenixView::getFillBrush(const fla::FillStyle* fillStyle, const fla::Rec
         double cx = 0.0;
         double cy = 0.0;
         double radius = 1625.0;
+        //double radius = 3250.0;
 
         QRadialGradient gradient(cx, cy, radius);
 
@@ -910,6 +909,7 @@ QBrush PhoenixView::getFillBrush(const fla::FillStyle* fillStyle, const fla::Rec
         QBrush brush(gradient);
 
         const double s = 0.5;
+        //const double s = 1.0;
         QTransform brushTransform(radialFill->transform.m11 * s, radialFill->transform.m12 * s,
                             radialFill->transform.m21 * s, radialFill->transform.m22 * s,
                             radialFill->transform.tx, radialFill->transform.ty);
