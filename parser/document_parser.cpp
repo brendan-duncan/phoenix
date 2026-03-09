@@ -120,6 +120,28 @@ void getColorAttribute(const tinyxml2::XMLElement* element, const char* attribut
     }
 }
 
+void parseFillStyle(const tinyxml2::XMLElement* element, fla::FillStyle* fillStyle)
+{
+    const tinyxml2::XMLElement* matrixNode = element->FirstChildElement("matrix");
+    if (matrixNode)
+    {
+        const tinyxml2::XMLElement* matrixEl = matrixNode->FirstChildElement("Matrix");
+        if (matrixEl)
+        {
+            fillStyle->transform.m11 = getDoubleAttribute(matrixEl, "a", 1.0);
+            fillStyle->transform.m12 = getDoubleAttribute(matrixEl, "b", 0.0);
+            fillStyle->transform.m21 = getDoubleAttribute(matrixEl, "c", 0.0);
+            fillStyle->transform.m22 = getDoubleAttribute(matrixEl, "d", 1.0);
+            fillStyle->transform.tx = getDoubleAttribute(matrixEl, "tx", 0.0);
+            fillStyle->transform.ty = getDoubleAttribute(matrixEl, "ty", 0.0);
+        }
+        else
+        {
+            std::cerr << "!!!! Unhandled fillStyle matrix element: " << matrixNode->Name() << (_currentFile.empty() ? "" : " from ") << _currentFile << std::endl;
+        }
+    }
+}
+
 bool parseSolidColor(const tinyxml2::XMLElement* element, fla::SolidColor* solidColor)
 {
     std::string color = getAttribute(element, "color");
@@ -133,6 +155,8 @@ bool parseSolidColor(const tinyxml2::XMLElement* element, fla::SolidColor* solid
 
 bool parseLinearGradient(const tinyxml2::XMLElement* element, fla::LinearGradient* linearGradient)
 {
+    parseFillStyle(element, linearGradient);
+
     for (const tinyxml2::XMLElement* entryElement = element->FirstChildElement("GradientEntry");
          entryElement != nullptr;
          entryElement = entryElement->NextSiblingElement("GradientEntry"))
@@ -156,6 +180,13 @@ bool parseLinearGradient(const tinyxml2::XMLElement* element, fla::LinearGradien
 
 bool parseRadialGradient(const tinyxml2::XMLElement* element, fla::RadialGradient* radialGradient)
 {
+    parseFillStyle(element, radialGradient);
+
+    if (hasAttribute(element, "focalPointRatio"))
+    {
+        radialGradient->focalPointRatio = getDoubleAttribute(element, "focalPointRatio");
+    }
+
     for (const tinyxml2::XMLElement* entryElement = element->FirstChildElement("GradientEntry");
          entryElement != nullptr;
          entryElement = entryElement->NextSiblingElement("GradientEntry"))
@@ -514,8 +545,6 @@ bool parseShape(const tinyxml2::XMLElement* element, fla::Shape* shape)
             {
                 for (fla::Point& point : segment->points)
                 {
-                    //point.transform(shape->transform);
-
                     shape->bounds.topLeft.x = std::min(shape->bounds.topLeft.x, point.x);
                     shape->bounds.topLeft.y = std::min(shape->bounds.topLeft.y, point.y);
                     shape->bounds.bottomRight.x = std::max(shape->bounds.bottomRight.x, point.x);
@@ -524,11 +553,8 @@ bool parseShape(const tinyxml2::XMLElement* element, fla::Shape* shape)
             }
         }
     }
-
+    shape->localBounds = shape->bounds;
     shape->bounds.transform(shape->transform);
-
-    //shape->transform.reset();
-    //shape->transformationPoint.reset();
 
     return true;
 }
@@ -666,6 +692,7 @@ bool parseRectanglePrimitive(const tinyxml2::XMLElement* element, fla::Rectangle
     rectangle->rect.bottomRight.y = rectangle->rect.topLeft.y + getDoubleAttribute(element, "objectHeight");
 
     rectangle->bounds = rectangle->rect;
+    rectangle->localBounds = rectangle->rect;
 
     for (const tinyxml2::XMLElement* childElement = element->FirstChildElement();
          childElement != nullptr;
@@ -720,6 +747,7 @@ bool parseOvalPrimitive(const tinyxml2::XMLElement* element, fla::OvalPrimitive*
     oval->innerRadius = getDoubleAttribute(element, "innerRadius", 0.0);
 
     oval->bounds = oval->rect;
+    oval->localBounds = oval->rect;
 
     for (const tinyxml2::XMLElement* childElement = element->FirstChildElement();
          childElement != nullptr;
@@ -863,6 +891,7 @@ bool parseStaticText(const tinyxml2::XMLElement* element, fla::StaticText* stati
         staticText->bounds.bottomRight.x = std::max(staticText->bounds.bottomRight.x, width);
         staticText->bounds.bottomRight.y = std::max(staticText->bounds.bottomRight.y, 0.0);
     }
+    staticText->localBounds = staticText->bounds;
     staticText->bounds.translate(staticText->transformationPoint.x, staticText->transformationPoint.y);
     staticText->bounds.transform(staticText->transform);
     staticText->bounds.translate(-staticText->transformationPoint.x, -staticText->transformationPoint.y);
@@ -982,7 +1011,7 @@ bool parseGroup(const tinyxml2::XMLElement* element, fla::Group* group)
     {
         group->bounds.expandToInclude(member->bounds);
     }
-    //group->bounds.transform(group->transform);
+    group->localBounds = group->bounds;
 
     return true;
 }

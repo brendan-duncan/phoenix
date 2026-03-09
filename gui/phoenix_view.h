@@ -3,6 +3,7 @@
 #include "../data/color_transform.h"
 #include "../data/edge.h"
 #include "../data/fla_document.h"
+#include "../data/rect.h"
 #include "../data/shape.h"
 
 #include <QList>
@@ -98,7 +99,7 @@ private:
 
     QPen getPen(const fla::StrokeStyle* strokeStyle);
 
-    QBrush getFillBrush(const fla::FillStyle* fillStyle);
+    QBrush getFillBrush(const fla::FillStyle* fillStyle, const fla::Rect& bounds);
 
     void drawDocument(QPainter& painter, const fla::Document* document);
 

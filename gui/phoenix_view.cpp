@@ -644,7 +644,7 @@ void PhoenixView::drawElement(QPainter& painter, const fla::Element* element)
     {
         const fla::RectanglePrimitive* rectangle = static_cast<const fla::RectanglePrimitive*>(element);
         QPen pen = getPen(rectangle->strokeStyle);
-        QBrush brush = getFillBrush(rectangle->fillStyle);
+        QBrush brush = getFillBrush(rectangle->fillStyle, rectangle->localBounds);
         painter.setPen(pen);
         painter.setBrush(brush);
         painter.drawRect(rectangle->rect.topLeft.x, rectangle->rect.topLeft.y, rectangle->rect.width(), rectangle->rect.height());
@@ -653,7 +653,7 @@ void PhoenixView::drawElement(QPainter& painter, const fla::Element* element)
     {
         const fla::OvalPrimitive* oval = static_cast<const fla::OvalPrimitive*>(element);
         QPen pen = getPen(oval->strokeStyle);
-        QBrush brush = getFillBrush(oval->fillStyle);
+        QBrush brush = getFillBrush(oval->fillStyle, oval->localBounds);
         painter.setPen(pen);
         painter.setBrush(brush);
         painter.drawEllipse(oval->rect.topLeft.x, oval->rect.topLeft.y, oval->rect.width(), oval->rect.height());
@@ -828,19 +828,27 @@ QPen PhoenixView::getPen(const fla::StrokeStyle* strokeStyle)
     else if (strokeStyle->fill->type() == fla::FillStyle::Type::RadialGradient)
     {
         const fla::RadialGradient* fill = static_cast<const fla::RadialGradient*>(strokeStyle->fill);
-        QRadialGradient gradient(50, 50, 50);
+
+        double cx = 50, cy = 50, radius = 50;
+
+        QRadialGradient gradient(cx, cy, radius);
+
+        double focalOffset = fill->focalPointRatio * radius;
+        gradient.setFocalPoint(cx + focalOffset, cy);
+
         for (const fla::RadialEntry& entry : fill->entries)
         {
             QColor color(entry.color[0], entry.color[1], entry.color[2], entry.color[3]);
             gradient.setColorAt(entry.ratio, color);
         }
+
         pen.setBrush(QBrush(gradient));
     }
-    
+
     return pen;
 }
 
-QBrush PhoenixView::getFillBrush(const fla::FillStyle* fillStyle)
+QBrush PhoenixView::getFillBrush(const fla::FillStyle* fillStyle, const fla::Rect& bounds)
 {
     if (!fillStyle)
         return Qt::NoBrush;
@@ -854,24 +862,60 @@ QBrush PhoenixView::getFillBrush(const fla::FillStyle* fillStyle)
     else if (fillStyle->type() == fla::FillStyle::Type::LinearGradient)
     {
         const fla::LinearGradient* linearFill = static_cast<const fla::LinearGradient*>(fillStyle);
-        QLinearGradient gradient(0, 0, 100, 100);
+        fla::Point start = bounds.topLeft;
+        fla::Point end = bounds.bottomRight;
+        double halfWidth = bounds.width() / 2.0;
+        double halfHeight = bounds.height() / 2.0;
+
+        QLinearGradient gradient(start.x, start.y + halfHeight, end.x, start.y + halfHeight);
         for (const fla::GradientEntry& entry : linearFill->entries)
         {
             QColor color(entry.color[0], entry.color[1], entry.color[2], entry.color[3]);
             gradient.setColorAt(entry.ratio, color);
         }
-        return QBrush(gradient);
+
+        QBrush brush(gradient);
+
+        QTransform transform(linearFill->transform.m11, linearFill->transform.m12,
+                            linearFill->transform.m21, linearFill->transform.m22,
+                            0.0, 0.0);
+                            //linearFill->transform.tx, linearFill->transform.ty);
+
+        //brush.setTransform(transform.inverted());
+
+        return brush;
     }
     else if (fillStyle->type() == fla::FillStyle::Type::RadialGradient)
     {
         const fla::RadialGradient* radialFill = static_cast<const fla::RadialGradient*>(fillStyle);
-        QRadialGradient gradient(50, 50, 50);
+
+        fla::Point center = bounds.center();
+
+        double cx = center.x;
+        double cy = center.y;
+        double radius = std::min(bounds.width(), bounds.height()) / 2.0;
+        QRadialGradient gradient(cx, cy, radius);
+
+        const double maxRatio = 0.99;
+        double focalRatio = std::max(-maxRatio, std::min(maxRatio, radialFill->focalPointRatio));
+        double focalOffset = focalRatio * radius;
+        gradient.setFocalPoint(cx + focalOffset, cy);
+
         for (const fla::RadialEntry& entry : radialFill->entries)
         {
             QColor color(entry.color[0], entry.color[1], entry.color[2], entry.color[3]);
             gradient.setColorAt(entry.ratio, color);
         }
-        return QBrush(gradient);
+
+        QBrush brush(gradient);
+
+        /*QTransform transform(radialFill->transform.m11, radialFill->transform.m12,
+                            radialFill->transform.m21, radialFill->transform.m22,
+                            radialFill->transform.tx, radialFill->transform.ty);
+
+        brush.setTransform(transform);*/
+
+        return brush;
     }
 
     return Qt::NoBrush;
@@ -1179,7 +1223,10 @@ void PhoenixView::drawShape(QPainter& painter, const fla::Shape* shape)
                 compoundPath.addPath(simplePath);
             }
 
-            QBrush brush = getFillBrush(fillStyle);
+            QRectF bounds = compoundPath.boundingRect();
+            fla::Rect rect({bounds.left(), bounds.top()}, {bounds.left() + bounds.width(), bounds.top() + bounds.height()});
+            //QBrush brush = getFillBrush(fillStyle, shape->localBounds);
+            QBrush brush = getFillBrush(fillStyle, rect);
             painter.setBrush(brush);
             painter.setPen(Qt::NoPen);
             painter.drawPath(compoundPath);
@@ -1295,7 +1342,10 @@ void PhoenixView::drawShape(QPainter& painter, const fla::Shape* shape)
             std::cout << "  WARNING: " << unusedCount << " unused paths!" << std::endl;
         }
 
-        QBrush brush = getFillBrush(fillStyle);
+        QRectF bounds = compoundPath.boundingRect();
+        fla::Rect rect({bounds.left(), bounds.top()}, {bounds.left() + bounds.width(), bounds.top() + bounds.height()});
+        QBrush brush = getFillBrush(fillStyle, rect);
+        //QBrush brush = getFillBrush(fillStyle, shape->localBounds);
         painter.setBrush(brush);
         painter.setPen(Qt::NoPen);
         painter.drawPath(compoundPath);

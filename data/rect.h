@@ -28,6 +28,8 @@ public:
 
     double height() const { return bottomRight.y - topLeft.y; }
 
+    Point center() const { return Point((topLeft.x + bottomRight.x) / 2.0, (topLeft.y + bottomRight.y) / 2.0); }
+
     void reset()
     {
         topLeft = Point(1.0e30, 1.0e30);

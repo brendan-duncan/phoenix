@@ -1,6 +1,7 @@
 #pragma once
 
 #include "dom_element.h"
+#include "transform.h"
 
 namespace fla {
 
@@ -14,6 +15,8 @@ public:
         RadialGradient,
         BitmapFill
     };
+
+    Transform transform;
 
     FillStyle(DOMElement* parent)
         : DOMElement(parent)

@@ -28,6 +28,7 @@ public:
     /// transformationPoint is the pivot for applying new transformstions. It is
     /// not used in the rendering process.
     Point transformationPoint;
+    fla::Rect localBounds;
     fla::Rect bounds;
 
     Element(DOMElement* parent)
