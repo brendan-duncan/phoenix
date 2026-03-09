@@ -876,12 +876,11 @@ QBrush PhoenixView::getFillBrush(const fla::FillStyle* fillStyle, const fla::Rec
 
         QBrush brush(gradient);
 
-        QTransform transform(linearFill->transform.m11, linearFill->transform.m12,
+        /*QTransform transform(linearFill->transform.m11, linearFill->transform.m12,
                             linearFill->transform.m21, linearFill->transform.m22,
-                            0.0, 0.0);
-                            //linearFill->transform.tx, linearFill->transform.ty);
+                            linearFill->transform.tx, linearFill->transform.ty);
 
-        //brush.setTransform(transform.inverted());
+        brush.setTransform(transform);*/
 
         return brush;
     }
@@ -890,14 +889,15 @@ QBrush PhoenixView::getFillBrush(const fla::FillStyle* fillStyle, const fla::Rec
         const fla::RadialGradient* radialFill = static_cast<const fla::RadialGradient*>(fillStyle);
 
         fla::Point center = bounds.center();
-
-        double cx = center.x;
-        double cy = center.y;
-        double radius = std::min(bounds.width(), bounds.height()) / 2.0;
-        QRadialGradient gradient(cx, cy, radius);
-
         const double maxRatio = 0.99;
         double focalRatio = std::max(-maxRatio, std::min(maxRatio, radialFill->focalPointRatio));
+
+        double cx = 0.0;
+        double cy = 0.0;
+        double radius = 1625.0;
+
+        QRadialGradient gradient(cx, cy, radius);
+
         double focalOffset = focalRatio * radius;
         gradient.setFocalPoint(cx + focalOffset, cy);
 
@@ -909,11 +909,12 @@ QBrush PhoenixView::getFillBrush(const fla::FillStyle* fillStyle, const fla::Rec
 
         QBrush brush(gradient);
 
-        /*QTransform transform(radialFill->transform.m11, radialFill->transform.m12,
-                            radialFill->transform.m21, radialFill->transform.m22,
+        const double s = 0.5;
+        QTransform brushTransform(radialFill->transform.m11 * s, radialFill->transform.m12 * s,
+                            radialFill->transform.m21 * s, radialFill->transform.m22 * s,
                             radialFill->transform.tx, radialFill->transform.ty);
 
-        brush.setTransform(transform);*/
+        brush.setTransform(brushTransform);
 
         return brush;
     }
@@ -1225,7 +1226,6 @@ void PhoenixView::drawShape(QPainter& painter, const fla::Shape* shape)
 
             QRectF bounds = compoundPath.boundingRect();
             fla::Rect rect({bounds.left(), bounds.top()}, {bounds.left() + bounds.width(), bounds.top() + bounds.height()});
-            //QBrush brush = getFillBrush(fillStyle, shape->localBounds);
             QBrush brush = getFillBrush(fillStyle, rect);
             painter.setBrush(brush);
             painter.setPen(Qt::NoPen);
@@ -1345,7 +1345,6 @@ void PhoenixView::drawShape(QPainter& painter, const fla::Shape* shape)
         QRectF bounds = compoundPath.boundingRect();
         fla::Rect rect({bounds.left(), bounds.top()}, {bounds.left() + bounds.width(), bounds.top() + bounds.height()});
         QBrush brush = getFillBrush(fillStyle, rect);
-        //QBrush brush = getFillBrush(fillStyle, shape->localBounds);
         painter.setBrush(brush);
         painter.setPen(Qt::NoPen);
         painter.drawPath(compoundPath);
