@@ -3,8 +3,10 @@
 #include "../data/color_transform.h"
 #include "../data/edge.h"
 #include "../data/fla_document.h"
+#include "../data/group.h"
 #include "../data/rect.h"
 #include "../data/shape.h"
+#include "../data/symbol.h"
 
 #include <QList>
 #include <QMap>
@@ -79,6 +81,8 @@ private:
     bool _disableStaticText = false;
 
     double _radius = 1.0;
+    QPen _overlayPen;
+    QBrush _overlayBrush;
 
     // Selected element for overlay
     const fla::DOMElement* _selectedElement = nullptr;
@@ -141,13 +145,11 @@ private:
 
     QRectF calculateElementLocalBounds(const fla::Element* element);
 
-    void drawPointsAtTransforms(QPainter& painter, const QList<QPointF>& points, const QList<QTransform>& transforms);
+    bool isElementSelected(const fla::DOMElement* element) const;
 
-    void drawLineAtTransforms(QPainter& painter, const QPointF& p1, const QPointF& p2, const QList<QTransform>& transforms);
+    bool isElementInsideSymbol(const fla::DOMElement* element, const fla::Symbol* symbol) const;
 
-    void drawElementPathSegments(QPainter& painter, const fla::PathSegment* segment, const QList<QTransform>& transforms);
+    bool isElementInsideGroup(const fla::DOMElement* element, const fla::Group* group) const;
 
-    void drawElementPoints(QPainter& painter, const fla::DOMElement* element, const QList<QTransform>& transforms);
-
-    void drawSelectedElementOverlay(QPainter& painter, double scale);
+    void drawOverlayPoints(QPainter& painter, const fla::Shape* shape);
 };
