@@ -1061,15 +1061,69 @@ void PhoenixView::drawShape(QPainter& painter, const fla::Shape* shape)
         // over-connecting segments that should remain separate.
         if (directedPaths.size() <= 2)
         {
+            // Try to connect paths into closed loops (similar to complex case)
+            for (DirectedPath& directedPath : directedPaths)
+            {
+                if (directedPath.used)
+                    continue;
+
+                // Skip if path is already closed
+                if (pointsMatch(directedPath.start, directedPath.end))
+                    continue;
+
+                QPainterPath loopPath;
+                fla::Point startPoint = directedPath.start;
+                loopPath.moveTo(startPoint.x, startPoint.y);
+                addSegmentToPath(loopPath, directedPath.path, directedPath.reversed, shape);
+                directedPath.used = true;
+
+                fla::Point currentEnd = directedPath.end;
+                fla::Point loopStart = directedPath.start;
+
+                // Try to connect to other paths
+                for (int iter = 0; iter < directedPaths.size(); iter++)
+                {
+                    if (pointsMatch(currentEnd, loopStart))
+                    {
+                        loopPath.closeSubpath();
+                        break;
+                    }
+
+                    bool found = false;
+                    for (DirectedPath& nextDP : directedPaths)
+                    {
+                        if (nextDP.used)
+                            continue;
+
+                        if (pointsMatch(currentEnd, nextDP.start))
+                        {
+                            addSegmentToPath(loopPath, nextDP.path, nextDP.reversed, shape);
+                            nextDP.used = true;
+                            currentEnd = nextDP.end;
+                            found = true;
+                            break;
+                        }
+                    }
+
+                    if (!found)
+                        break;
+                }
+
+                if (pointsMatch(currentEnd, loopStart))
+                    loopPath.closeSubpath();
+
+                compoundPath.addPath(loopPath);
+            }
+
+            // Add any remaining unused paths that don't form loops
             for (const DirectedPath& directedPath : directedPaths)
             {
-                if (!directedPath.path)
+                if (directedPath.used)
                     continue;
 
                 QPainterPath simplePath;
                 simplePath.setFillRule(Qt::WindingFill);
 
-                // Start at the first Move point
                 bool hasMove = false;
                 for (const fla::PathSegment* segment : directedPath.path->segments)
                 {
@@ -1086,7 +1140,10 @@ void PhoenixView::drawShape(QPainter& painter, const fla::Shape* shape)
                     continue;
 
                 addSegmentToPath(simplePath, directedPath.path, directedPath.reversed, shape);
-                simplePath.closeSubpath();
+
+                if (pointsMatch(directedPath.start, directedPath.end))
+                    simplePath.closeSubpath();
+
                 compoundPath.addPath(simplePath);
             }
 
