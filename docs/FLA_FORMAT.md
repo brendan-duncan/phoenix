@@ -198,12 +198,6 @@ Symbol instances support color transformations:
 - `blueMultiplier`, `blueOffset`: Blue channel
 - `brightness`: Brightness adjustment
 
-### View Features
-
-- **Zoom**: Mouse wheel zoom (0.1x to 10x range)
-- **Pan**: Click and drag to pan
-- **Anti-aliasing**: Optional supersampling (2x resolution)
-- **Debug bounds**: Show element bounding boxes
 
 ## Data Model Summary
 
