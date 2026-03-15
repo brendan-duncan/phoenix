@@ -408,7 +408,7 @@ void PhoenixView::drawElement(QPainter& painter, const fla::Element* element)
                 int pixWidth = qMax(1, static_cast<int>(qCeil(symbolBounds.width())));
                 int pixHeight = qMax(1, static_cast<int>(qCeil(symbolBounds.height())));
 
-                QImage symbolImage(pixWidth, pixHeight, QImage::Format_ARGB32_Premultiplied);
+                QImage symbolImage(pixWidth, pixHeight, QImage::Format_ARGB32);
                 symbolImage.fill(Qt::transparent);
 
                 QPainter symbolPainter(&symbolImage);
@@ -430,10 +430,8 @@ void PhoenixView::drawElement(QPainter& painter, const fla::Element* element)
 
                 applyColorTransform(symbolImage, instance->colorTransform);
 
-                QPixmap resultPixmap = QPixmap::fromImage(symbolImage);
-
                 painter.save();
-                painter.drawPixmap(symbolBounds.topLeft().toPoint(), resultPixmap);
+                painter.drawImage(symbolBounds.topLeft().toPoint(), symbolImage);
                 painter.restore();
             }
             else
