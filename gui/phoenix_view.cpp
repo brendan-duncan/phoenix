@@ -106,8 +106,10 @@ void PhoenixView::paintEvent(QPaintEvent *event)
     }
 
     // Get document dimensions
-    double docWidth = _flaDocument->document->width;
-    double docHeight = _flaDocument->document->height;
+    fla::Document* document = _flaDocument->document;
+
+    double docWidth = document->width;
+    double docHeight = document->height;
 
     if (docWidth <= 0 || docHeight <= 0)
     {
@@ -164,9 +166,11 @@ void PhoenixView::paintEvent(QPaintEvent *event)
 
         bufferPainter.translate(tx, ty);
         bufferPainter.scale(s, s);
-        bufferPainter.fillRect(QRectF(0, 0, docWidth, docHeight), QColor(255, 255, 255));
+        bufferPainter.fillRect(QRectF(0, 0, docWidth, docHeight),
+            QColor(document->backgroundColor[0], document->backgroundColor[1],
+                document->backgroundColor[2], document->backgroundColor[3]));
 
-        drawDocument(bufferPainter, _flaDocument->document);
+        drawDocument(bufferPainter, document);
 
         bufferPainter.setPen(QPen(QColor(0, 0, 0, 255), 1.0));
         bufferPainter.drawRect(0, 0, docWidth, docHeight);
@@ -181,8 +185,11 @@ void PhoenixView::paintEvent(QPaintEvent *event)
         painter.save();
         painter.translate(_panX + centerX, _panY + centerY);
         painter.scale(scale, scale);
-        painter.fillRect(0, 0, docWidth, docHeight, QColor(255, 255, 255));
-        drawDocument(painter, _flaDocument->document);
+        painter.fillRect(0, 0, docWidth, docHeight,
+            QColor(document->backgroundColor[0], document->backgroundColor[1],
+                document->backgroundColor[2], document->backgroundColor[3]));
+
+        drawDocument(painter, document);
 
         painter.setPen(QPen(QColor(0, 0, 0, 255), 1.0));
         painter.drawRect(0, 0, docWidth, docHeight);
@@ -200,7 +207,7 @@ void PhoenixView::paintEvent(QPaintEvent *event)
         painter.setBrush(Qt::NoBrush);
         painter.drawRect(QRectF(0, 0, docWidth, docHeight));
 
-        drawDocumentBounds(painter, _flaDocument->document);
+        drawDocumentBounds(painter, document);
 
         painter.restore();
     }

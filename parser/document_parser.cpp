@@ -1503,10 +1503,11 @@ bool parseSwatchLists(const tinyxml2::XMLElement* element, fla::Document* docume
 bool parseDocument(fla::Document* document, const tinyxml2::XMLElement* element, ZipReader* zipReader)
 {
     // Parse attributes
+    document->filetypeGUID = getAttribute(element, "filetypeGUID");
+    document->fileGUID = getAttribute(element, "fileGUID");
     document->width = getIntAttribute(element, "width", 550);
     document->height = getIntAttribute(element, "height", 400);
     document->frameRate = getDoubleAttribute(element, "frameRate", 24.0);
-
     document->currentTimeline = getAttribute(element, "currentTimeline");
     document->xflVersion = getAttribute(element, "xflVersion");
     document->creatorInfo = getAttribute(element, "creatorInfo");
@@ -1515,14 +1516,17 @@ bool parseDocument(fla::Document* document, const tinyxml2::XMLElement* element,
     document->majorVersion = getIntAttribute(element, "majorVersion", 0);
     document->buildNumber = getIntAttribute(element, "buildNumber", 0);
     document->viewAngle3D = getIntAttribute(element, "viewAngle3D", 0);
+    getColorAttribute(element, "backgroundColor", document->backgroundColor);
+    getColorAttribute(element, "gridColor", document->gridColor);
+    getColorAttribute(element, "guidesColor", document->guidesColor);
     document->vanishingPoint3DX = getIntAttribute(element, "vanishingPoint3DX", 0);
     document->vanishingPoint3DY = getIntAttribute(element, "vanishingPoint3DY", 0);
     document->nextSceneIdentifier = getIntAttribute(element, "nextSceneIdentifier", 0);
     document->playOptionsPlayLoop = getBoolAttribute(element, "playOptionsPlayLoop", false);
     document->playOptionsPlayPages = getBoolAttribute(element, "playOptionsPlayPages", false);
     document->playOptionsPlayFrameActions = getBoolAttribute(element, "playOptionsPlayFrameActions", false);
-    document->filetypeGUID = getAttribute(element, "filetypeGUID");
-    document->fileGUID = getAttribute(element, "fileGUID");
+    
+    
 
     // Parse child elements
     for (const tinyxml2::XMLElement* childElement = element->FirstChildElement();

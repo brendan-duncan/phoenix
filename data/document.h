@@ -34,6 +34,7 @@ public:
     int majorVersion = 0;
     int buildNumber = 0;
     int viewAngle3D = 0;
+    uint8_t backgroundColor[4] = {255, 255, 255, 255};
     uint8_t gridColor[4] = {0, 0, 0, 255};
     uint8_t guidesColor[4] = {0, 255, 0, 255};
     int gridSpacingX = 18;
