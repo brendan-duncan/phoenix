@@ -9,6 +9,11 @@ Frame::~Frame()
         delete actionScript;
         actionScript = nullptr;
     }
+    if (morphShape)
+    {
+        delete morphShape;
+        morphShape = nullptr;
+    }
     for (Element* element : elements)
     {
         delete element;

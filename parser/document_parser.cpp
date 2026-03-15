@@ -4,6 +4,7 @@
 #include "../data/bitmap_instance.h"
 #include "../data/group.h"
 #include "../data/linear_gradient.h"
+#include "../data/morph_shape.h"
 #include "../data/oval_primitive.h"
 #include "../data/radial_gradient.h"
 #include "../data/rectangle_primitive.h"
@@ -1054,6 +1055,175 @@ bool parseActionScript(const tinyxml2::XMLElement* element, fla::ActionScript* a
     return true;
 }
 
+bool parseMorphCurves(const tinyxml2::XMLElement* element, fla::MorphCurves* curves)
+{
+    auto parsePointString = [](const std::string& str) -> fla::Point {
+        fla::Point point;
+        std::string s = str;
+        if (!s.empty() && s[0] == '#')
+        {
+            s = s.substr(1);
+        }
+
+        size_t commaPos = s.find(',');
+        if (commaPos != std::string::npos)
+        {
+            std::string xStr = s.substr(0, commaPos);
+            std::string yStr = s.substr(commaPos + 1);
+
+            while (!xStr.empty() && (xStr[0] == ' ' || xStr[0] == '.'))
+                xStr = xStr.substr(1);
+            while (!yStr.empty() && (yStr[0] == ' ' || yStr[0] == '.'))
+                yStr = yStr.substr(1);
+
+            try
+            {
+                if (xStr.find('.') != std::string::npos || xStr.find('#') != std::string::npos)
+                {
+                    point.x = std::stod(xStr);
+                }
+                else
+                {
+                    point.x = std::stoi(xStr, nullptr, 16);
+                }
+
+                if (yStr.find('.') != std::string::npos || yStr.find('#') != std::string::npos)
+                {
+                    point.y = std::stod(yStr);
+                }
+                else
+                {
+                    point.y = std::stoi(yStr, nullptr, 16);
+                }
+            }
+            catch (...)
+            {
+                point.x = 0;
+                point.y = 0;
+            }
+        }
+        return point;
+    };
+
+    curves->controlPointA = parsePointString(getAttribute(element, "controlPointA"));
+    curves->anchorPointA = parsePointString(getAttribute(element, "anchorPointA"));
+    curves->controlPointB = parsePointString(getAttribute(element, "controlPointB"));
+    curves->anchorPointB = parsePointString(getAttribute(element, "anchorPointB"));
+
+    return true;
+}
+
+bool parseMorphSegment(const tinyxml2::XMLElement* element, fla::MorphSegment* segment)
+{
+    auto parsePointString = [](const std::string& str) -> fla::Point {
+        fla::Point point;
+        std::string s = str;
+        if (!s.empty() && s[0] == '#')
+        {
+            s = s.substr(1);
+        }
+
+        size_t commaPos = s.find(',');
+        if (commaPos != std::string::npos)
+        {
+            std::string xStr = s.substr(0, commaPos);
+            std::string yStr = s.substr(commaPos + 1);
+
+            while (!xStr.empty() && (xStr[0] == ' ' || xStr[0] == '.'))
+                xStr = xStr.substr(1);
+            while (!yStr.empty() && (yStr[0] == ' ' || yStr[0] == '.'))
+                yStr = yStr.substr(1);
+
+            try
+            {
+                if (xStr.find('.') != std::string::npos)
+                {
+                    point.x = std::stod(xStr);
+                }
+                else
+                {
+                    point.x = std::stoi(xStr, nullptr, 16);
+                }
+
+                if (yStr.find('.') != std::string::npos)
+                {
+                    point.y = std::stod(yStr);
+                }
+                else
+                {
+                    point.y = std::stoi(yStr, nullptr, 16);
+                }
+            }
+            catch (...)
+            {
+                point.x = 0;
+                point.y = 0;
+            }
+        }
+        return point;
+    };
+
+    segment->startPointA = parsePointString(getAttribute(element, "startPointA"));
+    segment->startPointB = parsePointString(getAttribute(element, "startPointB"));
+    segment->strokeIndex1 = getIntAttribute(element, "strokeIndex1", 0);
+    segment->strokeIndex2 = getIntAttribute(element, "strokeIndex2", 0);
+    segment->fillIndex1 = getIntAttribute(element, "fillIndex1", 0);
+    segment->fillIndex2 = getIntAttribute(element, "fillIndex2", 0);
+
+    for (const tinyxml2::XMLElement* childElement = element->FirstChildElement();
+         childElement != nullptr;
+         childElement = childElement->NextSiblingElement())
+    {
+        if (std::strcmp(childElement->Name(), "MorphCurves") == 0)
+        {
+            fla::MorphCurves* curves = new fla::MorphCurves(segment);
+            if (!parseMorphCurves(childElement, curves))
+            {
+                delete curves;
+                return false;
+            }
+            segment->curves.push_back(curves);
+        }
+    }
+
+    return true;
+}
+
+bool parseMorphShape(const tinyxml2::XMLElement* element, fla::MorphShape* morphShape)
+{
+    for (const tinyxml2::XMLElement* childElement = element->FirstChildElement();
+         childElement != nullptr;
+         childElement = childElement->NextSiblingElement())
+    {
+        const char* tagName = childElement->Name();
+
+        if (std::strcmp(tagName, "morphSegments") == 0)
+        {
+            for (const tinyxml2::XMLElement* segmentElement = childElement->FirstChildElement("MorphSegment");
+                 segmentElement != nullptr;
+                 segmentElement = segmentElement->NextSiblingElement("MorphSegment"))
+            {
+                fla::MorphSegment* segment = new fla::MorphSegment(morphShape);
+                if (!parseMorphSegment(segmentElement, segment))
+                {
+                    delete segment;
+                    return false;
+                }
+                morphShape->segments.push_back(segment);
+            }
+        }
+        else if (std::strcmp(tagName, "morphHintsList") == 0)
+        {
+        }
+        else
+        {
+            std::cerr << "!!!! Unhandled morph shape element: " << tagName << (_currentFile.empty() ? "" : " from ") << _currentFile << std::endl;
+        }
+    }
+
+    return true;
+}
+
 bool parseFrame(const tinyxml2::XMLElement* element, fla::Frame* frame)
 {
     frame->index = getIntAttribute(element, "index");
@@ -1090,6 +1260,16 @@ bool parseFrame(const tinyxml2::XMLElement* element, fla::Frame* frame)
                 return false;
             }
             frame->actionScript = actionScript;
+        }
+        else if (std::strcmp(tagName, "MorphShape") == 0)
+        {
+            fla::MorphShape* morphShape = new fla::MorphShape(frame);
+            if (!parseMorphShape(childElement, morphShape))
+            {
+                delete morphShape;
+                return false;
+            }
+            frame->morphShape = morphShape;
         }
         else if (std::strcmp(tagName, "elements") == 0)
         {

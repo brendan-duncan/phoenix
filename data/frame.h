@@ -3,6 +3,7 @@
 #include "dom_element.h"
 #include "action_script.h"
 #include "element.h"
+#include "morph_shape.h"
 #include <string>
 #include <vector>
 
@@ -18,6 +19,7 @@ public:
     bool motionTWeenSnap = false;
 
     ActionScript* actionScript = nullptr;
+    MorphShape* morphShape = nullptr;
     std::vector<Element*> elements;
 
     Frame(DOMElement* parent)

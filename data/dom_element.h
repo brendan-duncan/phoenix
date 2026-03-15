@@ -71,6 +71,9 @@ public:
         Symbol,
         SymbolList,
         Timeline,
+        MorphShape,
+        MorphSegment,
+        MorphCurves,
     };
 
     bool visible = true;
