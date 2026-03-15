@@ -14,6 +14,8 @@ public:
     int index = 0;
     int duration = 1;
     std::string keyMode;
+    TweenType tweenType = TweenType::None;
+    bool motionTWeenSnap = false;
 
     ActionScript* actionScript = nullptr;
     std::vector<Element*> elements;

@@ -22,6 +22,13 @@ enum class LoopType
     PingPong
 };
 
+enum class TweenType
+{
+    None,
+    Motion,
+    Shape
+};
+
 class DOMElement
 {
 public:

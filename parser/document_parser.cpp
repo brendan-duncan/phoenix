@@ -1059,6 +1059,21 @@ bool parseFrame(const tinyxml2::XMLElement* element, fla::Frame* frame)
     frame->index = getIntAttribute(element, "index");
     frame->duration = getIntAttribute(element, "duration", 1);
     frame->keyMode = getAttribute(element, "keyMode");
+    frame->motionTWeenSnap = getBoolAttribute(element, "motionTWeenSnap", false);
+
+    std::string tweenType = getAttribute(element, "tweenType");
+    if (tweenType == "motion")
+    {
+        frame->tweenType = fla::TweenType::Motion;
+    }
+    else if (tweenType == "shape")
+    {
+        frame->tweenType = fla::TweenType::Shape;
+    }
+    else
+    {
+        frame->tweenType = fla::TweenType::None;
+    }
 
     for (const tinyxml2::XMLElement* childElement = element->FirstChildElement();
          childElement != nullptr;
@@ -1525,8 +1540,6 @@ bool parseDocument(fla::Document* document, const tinyxml2::XMLElement* element,
     document->playOptionsPlayLoop = getBoolAttribute(element, "playOptionsPlayLoop", false);
     document->playOptionsPlayPages = getBoolAttribute(element, "playOptionsPlayPages", false);
     document->playOptionsPlayFrameActions = getBoolAttribute(element, "playOptionsPlayFrameActions", false);
-    
-    
 
     // Parse child elements
     for (const tinyxml2::XMLElement* childElement = element->FirstChildElement();
