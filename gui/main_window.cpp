@@ -87,6 +87,8 @@ void MainWindow::loadFLAFile(const QString& filePath)
         
         setWindowTitle(QString("Phoenix - %1").arg(displayName));
         addToRecentFiles(filePath);
+
+        _player->setCurrentFrame(0);
     }
     else
     {

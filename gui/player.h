@@ -9,6 +9,7 @@ public:
     explicit Player(QObject *parent = nullptr);
 
     int currentFrame() const { return _currentFrame; }
+
     void setCurrentFrame(int frame);
 
 signals:
