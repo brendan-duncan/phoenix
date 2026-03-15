@@ -1345,7 +1345,6 @@ void PhoenixView::mouseReleaseEvent(QMouseEvent *event)
 
 void PhoenixView::wheelEvent(QWheelEvent *event)
 {
-    // Zoom with mouse wheel
     double scaleFactor = 1.15;
     if (event->angleDelta().y() < 0)
         scaleFactor = 1.0 / scaleFactor;
@@ -1353,21 +1352,25 @@ void PhoenixView::wheelEvent(QWheelEvent *event)
     double oldZoom = _zoom;
     double newZoom = _zoom * scaleFactor;
 
-    // Limit zoom range
     if (newZoom < _minZoom || newZoom > _maxZoom)
         return;
 
-    // Get mouse position in screen coordinates
     QPointF mousePos = event->position();
 
-    // Calculate what scene point is under the mouse before zoom
-    QPointF scenePosBefore = (mousePos - QPointF(_panX, _panY)) / oldZoom;
+    QRectF widgetRect = rect();
+    double docWidth = _flaDocument->document->width;
+    double docHeight = _flaDocument->document->height;
+    double centerX = (widgetRect.width() - docWidth * oldZoom) / 2.0;
+    double centerY = (widgetRect.height() - docHeight * oldZoom) / 2.0;
 
-    // Apply zoom
+    QPointF scenePosBefore = (mousePos - QPointF(centerX, centerY) - QPointF(_panX, _panY)) / oldZoom;
+
     _zoom = newZoom;
 
-    // Calculate new pan to keep the same scene point under the mouse
-    QPointF newScreenPos = scenePosBefore * newZoom + QPointF(_panX, _panY);
+    centerX = (widgetRect.width() - docWidth * newZoom) / 2.0;
+    centerY = (widgetRect.height() - docHeight * newZoom) / 2.0;
+
+    QPointF newScreenPos = scenePosBefore * newZoom + QPointF(centerX, centerY) + QPointF(_panX, _panY);
     QPointF delta = newScreenPos - mousePos;
     _panX -= delta.x();
     _panY -= delta.y();
