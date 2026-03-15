@@ -351,6 +351,8 @@ void PhoenixView::drawLayer(QPainter& painter, const fla::Layer* layer, fla::Loo
     painter.setPen(QPen(color, 1.0));
 
     const fla::Frame* currentFrame = nullptr;
+    const fla::Frame* nextTweenFrame = nullptr;
+    double tweenProgress = 0.0;
 
     int currentFrameIndex;
     if (loopType == fla::LoopType::SingleFrame || layer->frames.empty())
@@ -370,31 +372,81 @@ void PhoenixView::drawLayer(QPainter& painter, const fla::Layer* layer, fla::Loo
         }
     }
 
+    if (currentFrame && currentFrame->tweenType == fla::TweenType::Motion)
+    {
+        int tweenStartIndex = currentFrame->index;
+        int tweenEndIndex = currentFrame->index + currentFrame->duration;
+
+        if (currentFrameIndex > tweenStartIndex && currentFrameIndex < tweenEndIndex)
+        {
+            tweenProgress = static_cast<double>(currentFrameIndex - tweenStartIndex) / currentFrame->duration;
+
+            for (const fla::Frame* frame : layer->frames)
+            {
+                if (frame->index == tweenEndIndex)
+                {
+                    nextTweenFrame = frame;
+                    break;
+                }
+            }
+        }
+    }
+
     if (currentFrame && currentFrame->visible)
     {
-        drawFrame(painter, currentFrame);
+        drawFrame(painter, currentFrame, nextTweenFrame, tweenProgress);
     }
 }
 
-void PhoenixView::drawFrame(QPainter& painter, const fla::Frame* frame)
+void PhoenixView::drawFrame(QPainter& painter, const fla::Frame* frame, const fla::Frame* nextTweenFrame, double tweenProgress)
 {
     for (const fla::Element* element : frame->elements)
     {
         if (element->visible)
         {
-            drawElement(painter, element);
+            fla::Transform transform = element->transform;
+
+            if (nextTweenFrame && tweenProgress > 0.0)
+            {
+                const fla::Element* nextElement = nullptr;
+                if (!nextTweenFrame->elements.empty())
+                {
+                    nextElement = nextTweenFrame->elements[0];
+                }
+
+                if (nextElement && nextElement->elementType() == element->elementType())
+                {
+                    transform = interpolateTransform(element->transform, nextElement->transform, tweenProgress);
+                }
+            }
+
+            drawElement(painter, element, nextTweenFrame && tweenProgress > 0.0 ? &transform : nullptr);
         }
     }
 }
 
+fla::Transform PhoenixView::interpolateTransform(const fla::Transform& a, const fla::Transform& b, double t)
+{
+    fla::Transform result;
+    result.m11 = a.m11 + (b.m11 - a.m11) * t;
+    result.m12 = a.m12 + (b.m12 - a.m12) * t;
+    result.m21 = a.m21 + (b.m21 - a.m21) * t;
+    result.m22 = a.m22 + (b.m22 - a.m22) * t;
+    result.tx = a.tx + (b.tx - a.tx) * t;
+    result.ty = a.ty + (b.ty - a.ty) * t;
+    return result;
+}
+
 int indent = 0;
 
-void PhoenixView::drawElement(QPainter& painter, const fla::Element* element)
+void PhoenixView::drawElement(QPainter& painter, const fla::Element* element, const fla::Transform* transformOverride)
 {
-    // Prepare transform data
-    QTransform transform(element->transform.m11, element->transform.m12,
-                       element->transform.m21, element->transform.m22,
-                       element->transform.tx, element->transform.ty);
+    // Prepare transform data - use override transform if provided, otherwise use element's transform
+    const fla::Transform& transformToUse = transformOverride ? *transformOverride : element->transform;
+
+    QTransform transform(transformToUse.m11, transformToUse.m12,
+                       transformToUse.m21, transformToUse.m22,
+                       transformToUse.tx, transformToUse.ty);
 
     painter.save();
 
