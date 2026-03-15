@@ -208,6 +208,13 @@ void MainWindow::setupMenus()
     showBoundsAction->setStatusTip("Show element bounding boxes used for culling (Green=rendered, Red=culled, Blue=visible area)");
     connect(showBoundsAction, &QAction::toggled, _phoenixView, &PhoenixView::setShowBounds);
     viewMenu->addAction(showBoundsAction);
+
+    QAction* dimOutsideDocumentAction = new QAction("Dim Outside Document", this);
+    dimOutsideDocumentAction->setCheckable(true);
+    dimOutsideDocumentAction->setChecked(false);
+    dimOutsideDocumentAction->setStatusTip("Dim the area outside the document rectangle");
+    connect(dimOutsideDocumentAction, &QAction::toggled, _phoenixView, &PhoenixView::setDimOutsideDocument);
+    viewMenu->addAction(dimOutsideDocumentAction);
 }
 
 void MainWindow::openFile()

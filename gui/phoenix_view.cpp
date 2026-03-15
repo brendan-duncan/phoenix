@@ -196,6 +196,22 @@ void PhoenixView::paintEvent(QPaintEvent *event)
         painter.restore();
     }
 
+    // Draw dimming overlay outside document area if enabled
+    if (_dimOutsideDocument)
+    {
+        QRectF docRect(centerX, centerY, docWidth * scale, docHeight * scale);
+        QPainterPath dimPath;
+        dimPath.addRect(rect());
+        QPainterPath docPath;
+        docPath.addRect(docRect);
+        QPainterPath maskedPath = dimPath.subtracted(docPath);
+
+        painter.save();
+        painter.setRenderHint(QPainter::Antialiasing, true);
+        painter.fillPath(maskedPath, QColor(0, 0, 0, 180));
+        painter.restore();
+    }
+
     // Draw visible rect if debug mode is enabled
     if (_showBounds)
     {

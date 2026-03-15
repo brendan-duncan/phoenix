@@ -35,6 +35,10 @@ public:
 
     bool showBounds() const { return _showBounds; }
 
+    void setDimOutsideDocument(bool dim) { _dimOutsideDocument = dim; update(); }
+
+    bool dimOutsideDocument() const { return _dimOutsideDocument; }
+
     void setHighQualityAntiAliasing(bool on);
 
     bool highQualityAntiAliasing() const { return _highQualityAntiAliasing; }
@@ -77,6 +81,9 @@ private:
 
     // Debug: show bounding boxes
     bool _showBounds;
+
+    // Dim area outside document
+    bool _dimOutsideDocument = false;
 
     bool _disableStaticText = false;
 

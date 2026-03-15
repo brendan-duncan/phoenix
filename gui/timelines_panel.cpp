@@ -154,6 +154,7 @@ TimelinesPanel::TimelinesPanel(Player* player, QWidget *parent)
     _scrollArea->setWidget(_gridContainer);
 
     connect(_player, &Player::currentFrameChanged, _gridContainer, &TimelineGrid::onPlayerFrameChanged);
+    connect(_player, &Player::currentFrameChanged, this, &TimelinesPanel::onPlayerFrameChanged);
     connect(_playTimer, &QTimer::timeout, this, &TimelinesPanel::onTimerTick);
 }
 
@@ -209,6 +210,14 @@ void TimelinesPanel::onTimerTick()
     {
         _player->setCurrentFrame(_player->currentFrame() + 1);
     }
+}
+
+void TimelinesPanel::onPlayerFrameChanged(int frame)
+{
+    const int frameWidth = 20;
+    const int margin = 1;
+    int playheadX = frame * (frameWidth + margin) + frameWidth / 2;
+    _scrollArea->ensureVisible(playheadX, 0, 50, 0);
 }
 
 TimelineGrid::TimelineGrid(Player* player, QWidget* parent)

@@ -63,6 +63,8 @@ private slots:
 
     void onTimerTick();
 
+    void onPlayerFrameChanged(int frame);
+
 private:
     const fla::FLADocument* _flaDocument;
     QScrollArea* _scrollArea;
