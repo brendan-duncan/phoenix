@@ -31,6 +31,9 @@ public:
 
     std::vector<Frame*> frames;
 
+    int firstFrame = 0;
+    int lastFrame = 0;
+
     Layer* parentLayer = nullptr; // Pointer to parent layer (if any)
 
     Layer(DOMElement* parent)

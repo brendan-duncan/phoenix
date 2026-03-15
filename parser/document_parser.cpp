@@ -1111,6 +1111,21 @@ bool parseFrames(const tinyxml2::XMLElement* element, fla::Layer* layer)
             std::cerr << "!!!! Unhandled frames element: " << childElement->Name() << (_currentFile.empty() ? "" : " from ") << _currentFile << std::endl;
         }
     }
+
+    if (!layer->frames.empty())
+    {
+        layer->firstFrame = layer->frames[0]->index;
+        layer->lastFrame = layer->frames[0]->index + layer->frames[0]->duration;
+        for (const fla::Frame* frame : layer->frames)
+        {
+            if (frame->index < layer->firstFrame)
+                layer->firstFrame = frame->index;
+            int frameEnd = frame->index + frame->duration;
+            if (frameEnd > layer->lastFrame)
+                layer->lastFrame = frameEnd;
+        }
+    }
+
     return true;
 }
 

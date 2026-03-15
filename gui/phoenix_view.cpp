@@ -345,7 +345,15 @@ void PhoenixView::drawLayer(QPainter& painter, const fla::Layer* layer, fla::Loo
 
     const fla::Frame* currentFrame = nullptr;
 
-    int currentFrameIndex = firstFrame + _player->currentFrame();
+    int currentFrameIndex;
+    if (loopType == fla::LoopType::SingleFrame || layer->frames.empty())
+    {
+        currentFrameIndex = layer->firstFrame + firstFrame;
+    }
+    else 
+    {
+        currentFrameIndex = firstFrame + _player->currentFrame();
+    }
 
     for (const fla::Frame* frame : layer->frames)
     {
@@ -402,6 +410,9 @@ void PhoenixView::drawElement(QPainter& painter, const fla::Element* element)
         const fla::Symbol* symbol = instance->symbol;
         if (symbol && symbol->visible)
         {
+            int frameOffset = (instance->symbolType == fla::SymbolType::Button) ? 0 : instance->firstFrame;
+            fla::LoopType loopType = (instance->symbolType == fla::SymbolType::Button) ? fla::LoopType::SingleFrame : instance->loopType;
+
             if (!instance->colorTransform.isIdentity())
             {
                 QRectF symbolBounds = calculateSymbolLocalBounds(symbol);
@@ -422,7 +433,7 @@ void PhoenixView::drawElement(QPainter& painter, const fla::Element* element)
                     if (timeline->visible)
                     {
                         symbolPainter.save();
-                        drawTimeline(symbolPainter, timeline, instance->loopType, instance->firstFrame);
+                        drawTimeline(symbolPainter, timeline, loopType, frameOffset);
                         symbolPainter.restore();
                     }
                 }
@@ -441,7 +452,7 @@ void PhoenixView::drawElement(QPainter& painter, const fla::Element* element)
                     if (timeline->visible)
                     {
                         painter.save();
-                        drawTimeline(painter, timeline, instance->loopType, instance->firstFrame);
+                        drawTimeline(painter, timeline, loopType, frameOffset);
                         painter.restore();
                     }
                 }
