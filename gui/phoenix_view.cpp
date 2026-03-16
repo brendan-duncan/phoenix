@@ -199,7 +199,7 @@ void PhoenixView::paintEvent(QPaintEvent *event)
     // Draw dimming overlay outside document area if enabled
     if (_dimOutsideDocument)
     {
-        QRectF docRect(centerX, centerY, docWidth * scale, docHeight * scale);
+        QRectF docRect(centerX + _panX, centerY + _panY, docWidth * scale, docHeight * scale);
         QPainterPath dimPath;
         dimPath.addRect(rect());
         QPainterPath docPath;
@@ -218,7 +218,6 @@ void PhoenixView::paintEvent(QPaintEvent *event)
         painter.save();
         painter.translate(_panX + centerX, _panY + centerY);
         painter.scale(scale, scale);
-
         painter.setPen(QPen(QColor(255, 0, 0, 100), 2.0, Qt::DashLine));
         painter.setBrush(Qt::NoBrush);
         painter.drawRect(QRectF(0, 0, docWidth, docHeight));
