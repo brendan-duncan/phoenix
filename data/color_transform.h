@@ -8,7 +8,7 @@ class ColorTransform
 {
 public:
     double tintMultiplier = 0.0;
-    uint8_t tintColor[4] = {255, 255, 255, 255}; // RGBA
+    uint8_t tintColor[4] = {0, 0, 0, 255}; // RGBA
     double brightness = 0.0;
 
     double redMultiplier = 1.0;

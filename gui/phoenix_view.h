@@ -120,13 +120,13 @@ private:
 
     void drawLayer(QPainter& painter, const fla::Layer* layer, fla::LoopType loopType, int firstFrame, const QPixmap* maskPixmap = nullptr);
 
-    void drawFrame(QPainter& painter, const fla::Frame* frame, const fla::Frame* nextTweenFrame = nullptr, double tweenProgress = 0.0);
+    void drawFrame(QPainter& painter, const fla::Frame* frame, const fla::Frame* tweenFrame = nullptr, double tweenProgress = 0.0);
 
-    void drawElement(QPainter& painter, const fla::Element* element, const fla::Transform* transformOverride = nullptr);
+    void drawElement(QPainter& painter, const fla::Element* element, const fla::Element* tweenElement, double tweenProgress);
 
     fla::Transform interpolateTransform(const fla::Transform& a, const fla::Transform& b, double t);
 
-    void drawShape(QPainter& painter, const fla::Shape* shape);
+    void drawShape(QPainter& painter, const fla::Shape* shape, const fla::Shape* tweenShape, double tweenProgress);
 
     // Bounds calculation
     QRectF calculateElementBounds(const fla::Element* element);
