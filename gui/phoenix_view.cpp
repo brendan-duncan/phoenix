@@ -370,13 +370,32 @@ void PhoenixView::drawLayer(QPainter& painter, const fla::Layer* layer, fla::Loo
     double tweenProgress = 0.0;
 
     int currentFrameIndex;
+    int layerDuration = calculateLayerDuration(layer);
+    bool pingPongReverse = false;
+
     if (loopType == fla::LoopType::SingleFrame || layer->frames.empty())
     {
         currentFrameIndex = layer->firstFrame + firstFrame;
     }
-    else 
+    else if (loopType == fla::LoopType::Loop)
     {
-        currentFrameIndex = firstFrame + _player->currentFrame();
+        int relativeFrame = _player->currentFrame() % layerDuration;
+        currentFrameIndex = layer->firstFrame + firstFrame + relativeFrame;
+    }
+    else if (loopType == fla::LoopType::PingPong)
+    {
+        int pingPongDuration = layerDuration * 2;
+        int t = _player->currentFrame() % pingPongDuration;
+        if (t >= layerDuration)
+        {
+            t = pingPongDuration - t;
+            pingPongReverse = true;
+        }
+        currentFrameIndex = layer->firstFrame + firstFrame + t;
+    }
+    else // PlayOnce
+    {
+        currentFrameIndex = layer->firstFrame + firstFrame + _player->currentFrame();
     }
 
     for (const fla::Frame* frame : layer->frames)
@@ -405,6 +424,11 @@ void PhoenixView::drawLayer(QPainter& painter, const fla::Layer* layer, fla::Loo
                 }
             }
         }
+    }
+
+    if (pingPongReverse && tweenProgress > 0.0)
+    {
+        tweenProgress = 1.0 - tweenProgress;
     }
 
     if (currentFrame && currentFrame->visible)
@@ -440,6 +464,16 @@ fla::Transform PhoenixView::interpolateTransform(const fla::Transform& a, const 
     result.tx = a.tx + (b.tx - a.tx) * t;
     result.ty = a.ty + (b.ty - a.ty) * t;
     return result;
+}
+
+int PhoenixView::calculateLayerDuration(const fla::Layer* layer)
+{
+    int total = 0;
+    for (const fla::Frame* frame : layer->frames)
+    {
+        total += frame->duration;
+    }
+    return total > 0 ? total : 1;
 }
 
 void PhoenixView::drawElement(QPainter& painter, const fla::Element* element, const fla::Element* tweenElement, double tweenProgress)

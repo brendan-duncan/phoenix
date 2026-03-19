@@ -126,6 +126,8 @@ private:
 
     fla::Transform interpolateTransform(const fla::Transform& a, const fla::Transform& b, double t);
 
+    int calculateLayerDuration(const fla::Layer* layer);
+
     void drawShape(QPainter& painter, const fla::Shape* shape, const fla::Shape* tweenShape, double tweenProgress);
 
     // Bounds calculation
