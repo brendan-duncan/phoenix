@@ -14,14 +14,18 @@ public:
         return _errorString;
     }
 
+    /// Flash-style number (#hex with optional fractional hex, or decimal). Same as edge path syntax.
+    static double parseNumber(const std::string& data, int& pos, std::string* outStr = nullptr);
+
+    static void skipWhitespace(const std::string& data, int& pos);
+
+    /// Morph attribute value: "x, y" (comma-separated), same units as path edges; returns pixels (twips / 20).
+    static fla::Point parseMorphPoint(const std::string& attributeValue);
+
 private:
     std::string _errorString;
 
     static void parseCubicCurve(const std::string& data, int& pos, fla::Path* path);
 
     static fla::Point parsePoint(const std::string& data, int& pos);
-
-    static double parseNumber(const std::string& data, int& pos, std::string* outStr = nullptr);
-
-    static void skipWhitespace(const std::string& data, int& pos);
 };

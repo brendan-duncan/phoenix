@@ -1057,114 +1057,18 @@ bool parseActionScript(const tinyxml2::XMLElement* element, fla::ActionScript* a
 
 bool parseMorphCurves(const tinyxml2::XMLElement* element, fla::MorphCurves* curves)
 {
-    auto parsePointString = [](const std::string& str) -> fla::Point {
-        fla::Point point;
-        std::string s = str;
-        if (!s.empty() && s[0] == '#')
-        {
-            s = s.substr(1);
-        }
-
-        size_t commaPos = s.find(',');
-        if (commaPos != std::string::npos)
-        {
-            std::string xStr = s.substr(0, commaPos);
-            std::string yStr = s.substr(commaPos + 1);
-
-            while (!xStr.empty() && (xStr[0] == ' ' || xStr[0] == '.'))
-                xStr = xStr.substr(1);
-            while (!yStr.empty() && (yStr[0] == ' ' || yStr[0] == '.'))
-                yStr = yStr.substr(1);
-
-            try
-            {
-                if (xStr.find('.') != std::string::npos || xStr.find('#') != std::string::npos)
-                {
-                    point.x = std::stod(xStr);
-                }
-                else
-                {
-                    point.x = std::stoi(xStr, nullptr, 16);
-                }
-
-                if (yStr.find('.') != std::string::npos || yStr.find('#') != std::string::npos)
-                {
-                    point.y = std::stod(yStr);
-                }
-                else
-                {
-                    point.y = std::stoi(yStr, nullptr, 16);
-                }
-            }
-            catch (...)
-            {
-                point.x = 0;
-                point.y = 0;
-            }
-        }
-        return point;
-    };
-
-    curves->controlPointA = parsePointString(getAttribute(element, "controlPointA"));
-    curves->anchorPointA = parsePointString(getAttribute(element, "anchorPointA"));
-    curves->controlPointB = parsePointString(getAttribute(element, "controlPointB"));
-    curves->anchorPointB = parsePointString(getAttribute(element, "anchorPointB"));
+    curves->controlPointA = PathParser::parseMorphPoint(getAttribute(element, "controlPointA"));
+    curves->anchorPointA = PathParser::parseMorphPoint(getAttribute(element, "anchorPointA"));
+    curves->controlPointB = PathParser::parseMorphPoint(getAttribute(element, "controlPointB"));
+    curves->anchorPointB = PathParser::parseMorphPoint(getAttribute(element, "anchorPointB"));
 
     return true;
 }
 
 bool parseMorphSegment(const tinyxml2::XMLElement* element, fla::MorphSegment* segment)
 {
-    auto parsePointString = [](const std::string& str) -> fla::Point {
-        fla::Point point;
-        std::string s = str;
-        if (!s.empty() && s[0] == '#')
-        {
-            s = s.substr(1);
-        }
-
-        size_t commaPos = s.find(',');
-        if (commaPos != std::string::npos)
-        {
-            std::string xStr = s.substr(0, commaPos);
-            std::string yStr = s.substr(commaPos + 1);
-
-            while (!xStr.empty() && (xStr[0] == ' ' || xStr[0] == '.'))
-                xStr = xStr.substr(1);
-            while (!yStr.empty() && (yStr[0] == ' ' || yStr[0] == '.'))
-                yStr = yStr.substr(1);
-
-            try
-            {
-                if (xStr.find('.') != std::string::npos)
-                {
-                    point.x = std::stod(xStr);
-                }
-                else
-                {
-                    point.x = std::stoi(xStr, nullptr, 16);
-                }
-
-                if (yStr.find('.') != std::string::npos)
-                {
-                    point.y = std::stod(yStr);
-                }
-                else
-                {
-                    point.y = std::stoi(yStr, nullptr, 16);
-                }
-            }
-            catch (...)
-            {
-                point.x = 0;
-                point.y = 0;
-            }
-        }
-        return point;
-    };
-
-    segment->startPointA = parsePointString(getAttribute(element, "startPointA"));
-    segment->startPointB = parsePointString(getAttribute(element, "startPointB"));
+    segment->startPointA = PathParser::parseMorphPoint(getAttribute(element, "startPointA"));
+    segment->startPointB = PathParser::parseMorphPoint(getAttribute(element, "startPointB"));
     segment->strokeIndex1 = getIntAttribute(element, "strokeIndex1", 0);
     segment->strokeIndex2 = getIntAttribute(element, "strokeIndex2", 0);
     segment->fillIndex1 = getIntAttribute(element, "fillIndex1", 0);

@@ -50,6 +50,8 @@ private:
 
     void saveSettings();
 
+    void closeEvent(QCloseEvent* event) override;
+
     QIcon createPhoenixIcon();
 
     static const int MAX_RECENT_FILES = 10;

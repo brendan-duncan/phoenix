@@ -10,6 +10,9 @@
 #include "../data/solid_color.h"
 #include "../data/static_text.h"
 #include "../data/symbol_instance.h"
+#include "../data/frame.h"
+#include "../data/morph_shape.h"
+#include "../data/morph_curves.h"
 #include <map>
 #include <iostream>
 #include <cmath>
@@ -27,6 +30,115 @@
 #define MAX(a, b) ((a) > (b) ? (a) : (b))
 
 static const int supersampleFactor = 2;
+
+namespace {
+
+fla::Point lerpMorphPoint(const fla::Point& a, const fla::Point& b, double t)
+{
+    return fla::Point(a.x + (b.x - a.x) * t, a.y + (b.y - a.y) * t);
+}
+
+void expandBounds(QRectF& r, const QPointF& p, bool& first)
+{
+    if (first)
+    {
+        r = QRectF(p, QSizeF(0, 0));
+        first = false;
+    }
+    else
+    {
+        r.setLeft(qMin(r.left(), p.x()));
+        r.setRight(qMax(r.right(), p.x()));
+        r.setTop(qMin(r.top(), p.y()));
+        r.setBottom(qMax(r.bottom(), p.y()));
+    }
+}
+
+/// Build morphed outline from Flash MorphShape (quadratic segments), in morph document space.
+bool buildMorphShapePath(const fla::MorphShape* morph, double t, QPainterPath& outPath, QRectF& outBounds)
+{
+    outPath = QPainterPath();
+    outPath.setFillRule(Qt::WindingFill);
+    bool first = true;
+    QRectF bounds;
+    bool any = false;
+
+    for (const fla::MorphSegment* seg : morph->segments)
+    {
+        if (!seg)
+            continue;
+
+        fla::Point s = lerpMorphPoint(seg->startPointA, seg->startPointB, t);
+        QPointF start(s.x, s.y);
+        outPath.moveTo(start);
+        expandBounds(bounds, start, first);
+        any = true;
+
+        for (const fla::MorphCurves* curve : seg->curves)
+        {
+            if (!curve)
+                continue;
+            fla::Point cp = lerpMorphPoint(curve->controlPointA, curve->controlPointB, t);
+            fla::Point ap = lerpMorphPoint(curve->anchorPointA, curve->anchorPointB, t);
+            QPointF qcp(cp.x, cp.y);
+            QPointF qap(ap.x, ap.y);
+            outPath.quadTo(qcp, qap);
+            expandBounds(bounds, qcp, first);
+            expandBounds(bounds, qap, first);
+        }
+        outPath.closeSubpath();
+    }
+
+    outBounds = bounds;
+    return any && !outPath.isEmpty();
+}
+
+/// Interpolate axis-aligned bounds between two keyframe shapes (position + size).
+fla::Rect lerpLocalBounds(const fla::Rect& a, const fla::Rect& b, double t)
+{
+    fla::Rect r;
+    r.topLeft.x = a.topLeft.x + (b.topLeft.x - a.topLeft.x) * t;
+    r.topLeft.y = a.topLeft.y + (b.topLeft.y - a.topLeft.y) * t;
+    r.bottomRight.x = a.bottomRight.x + (b.bottomRight.x - a.bottomRight.x) * t;
+    r.bottomRight.y = a.bottomRight.y + (b.bottomRight.y - a.bottomRight.y) * t;
+    return r;
+}
+
+QTransform morphBoundsToShapeBounds(const QRectF& morphBounds, const fla::Rect& shapeLocalBounds)
+{
+    QRectF shapeBounds(
+        shapeLocalBounds.topLeft.x,
+        shapeLocalBounds.topLeft.y,
+        qMax(0.0, shapeLocalBounds.width()),
+        qMax(0.0, shapeLocalBounds.height()));
+
+    if (morphBounds.width() < 1e-9 || morphBounds.height() < 1e-9 ||
+        shapeBounds.width() < 1e-9 || shapeBounds.height() < 1e-9)
+        return QTransform();
+
+    const double sx = shapeBounds.width() / morphBounds.width();
+    const double sy = shapeBounds.height() / morphBounds.height();
+    const QPointF mc = morphBounds.center();
+    const QPointF sc = shapeBounds.center();
+
+    QTransform xf;
+    xf.translate(sc.x(), sc.y());
+    xf.scale(sx, sy);
+    xf.translate(-mc.x(), -mc.y());
+    return xf;
+}
+
+const fla::Frame* owningFrame(const fla::Shape* shape)
+{
+    for (const fla::DOMElement* p = shape->parent; p; p = p->parent)
+    {
+        if (p->domType() == fla::DOMElement::DOMType::Frame)
+            return static_cast<const fla::Frame*>(p);
+    }
+    return nullptr;
+}
+
+} // namespace
 
 PhoenixView::PhoenixView(Player* player, QWidget *parent)
     : QWidget(parent)
@@ -903,36 +1015,6 @@ void PhoenixView::drawOverlayPoints(QPainter& painter, const fla::Shape* shape)
 
 void PhoenixView::drawShape(QPainter& painter, const fla::Shape* shape, const fla::Shape* tweenShape, double tweenProgress)
 {
-    std::map<const fla::PathSegment*, const fla::PathSegment*> pathSegmentTweenMap;
-    if (tweenShape)
-    {
-        for (int i = 0; i < shape->edges.size() && i < tweenShape->edges.size(); ++i)
-        {
-            const fla::Edge* edge = shape->edges[i];
-            const fla::Edge* tweenEdge = tweenShape->edges[i];
-
-            if (edge->paths.size() != tweenEdge->paths.size())
-                continue;
-
-            for (int j = 0; j < edge->paths.size(); ++j)
-            {
-                const fla::Path* path = edge->paths[j];
-                const fla::Path* tweenPath = tweenEdge->paths[j];
-
-                if (path->segments.size() != tweenPath->segments.size())
-                    continue;
-
-                // Map segments by their order in the path
-                for (int k = 0; k < path->segments.size(); ++k)
-                {
-                    const fla::PathSegment* segment = path->segments[k];
-                    const fla::PathSegment* tweenSegment = tweenPath->segments[k];
-                    pathSegmentTweenMap[segment] = tweenSegment;
-                }
-            }
-        }
-    }
-
     const bool isSelected = isElementSelected(shape);
 
     // Don't use cache for tweened shapes
@@ -950,6 +1032,59 @@ void PhoenixView::drawShape(QPainter& painter, const fla::Shape* shape, const fl
             drawOverlayPoints(painter, shape);
         }
         return;
+    }
+
+    // Shape tween: use MorphShape quadratic segments (interpolated A/B) mapped to this shape's bounds.
+    const fla::Frame* frame = owningFrame(shape);
+    if (frame && frame->morphShape && frame->tweenType == fla::TweenType::Shape && tweenShape &&
+        tweenProgress > 0.0 && tweenProgress < 1.0)
+    {
+        QPainterPath morphPath;
+        QRectF morphBounds;
+        if (buildMorphShapePath(frame->morphShape, tweenProgress, morphPath, morphBounds))
+        {
+            // Map morph outline into the bounds that interpolate between start and end keyframes
+            // so the tween moves across the stage like Animate (not locked to frame 0 only).
+            const fla::Rect targetBounds = lerpLocalBounds(shape->localBounds, tweenShape->localBounds, tweenProgress);
+            QTransform xf = morphBoundsToShapeBounds(morphBounds, targetBounds);
+            QPainterPath drawnPath = xf.isIdentity() ? morphPath : xf.map(morphPath);
+
+            QBrush brush = Qt::NoBrush;
+            const fla::FillStyle* fillA = shape->getFillStyleByIndex(1);
+            const fla::FillStyle* fillB = tweenShape->getFillStyleByIndex(1);
+            if (!fillA && !shape->fillsMap.empty())
+                fillA = shape->fillsMap.begin()->second;
+            if (!fillB && !tweenShape->fillsMap.empty())
+                fillB = tweenShape->fillsMap.begin()->second;
+            if (fillA && fillB && fillA->type() == fla::FillStyle::Type::SolidColor &&
+                fillB->type() == fla::FillStyle::Type::SolidColor)
+            {
+                const fla::SolidColor* sa = static_cast<const fla::SolidColor*>(fillA);
+                const fla::SolidColor* sb = static_cast<const fla::SolidColor*>(fillB);
+                auto lerpCh = [&](int i) -> int {
+                    return static_cast<int>(sa->color[i] + (sb->color[i] - sa->color[i]) * tweenProgress + 0.5);
+                };
+                QColor c(
+                    qBound(0, lerpCh(0), 255),
+                    qBound(0, lerpCh(1), 255),
+                    qBound(0, lerpCh(2), 255),
+                    qBound(0, lerpCh(3), 255));
+                brush = QBrush(c);
+            }
+            else if (fillA)
+            {
+                brush = getFillBrush(fillA, targetBounds);
+            }
+
+            painter.setBrush(brush);
+            painter.setPen(Qt::NoPen);
+            painter.drawPath(drawnPath);
+            if (isSelected)
+            {
+                drawOverlayPoints(painter, shape);
+            }
+            return;
+        }
     }
 
     PathCacheList cacheEntries;
@@ -1047,53 +1182,17 @@ void PhoenixView::drawShape(QPainter& painter, const fla::Shape* shape, const fl
             if (segment->command == fla::PathSegment::Command::Move)
             {
                 fla::Point p = segment->points[0];
-                if (tweenShape)
-                {
-                    auto it = pathSegmentTweenMap.find(segment);
-                    if (it != pathSegmentTweenMap.end())
-                    {
-                        const fla::PathSegment* tweenSegment = it->second;
-                        fla::Point tweenP = tweenSegment->points[0];
-                        p.x = p.x + (tweenP.x - p.x) * tweenProgress;
-                        p.y = p.y + (tweenP.y - p.y) * tweenProgress;
-                    }
-                }
                 painterPath.moveTo(p.x, p.y);
             }
             else if (segment->command == fla::PathSegment::Command::Line)
             {
                 fla::Point p = segment->points[0];
-                if (tweenShape)
-                {
-                    auto it = pathSegmentTweenMap.find(segment);
-                    if (it != pathSegmentTweenMap.end())
-                    {
-                        const fla::PathSegment* tweenSegment = it->second;
-                        fla::Point tweenP = tweenSegment->points[0];
-                        p.x = p.x + (tweenP.x - p.x) * tweenProgress;
-                        p.y = p.y + (tweenP.y - p.y) * tweenProgress;
-                    }
-                }
                 painterPath.lineTo(p.x, p.y);
             }
             else if (segment->command == fla::PathSegment::Command::Quad)
             {
                 fla::Point p1 = segment->points[0];
                 fla::Point p2 = segment->points[1];
-                if (tweenShape)
-                {
-                    auto it = pathSegmentTweenMap.find(segment);
-                    if (it != pathSegmentTweenMap.end())
-                    {
-                        const fla::PathSegment* tweenSegment = it->second;
-                        fla::Point tweenP1 = tweenSegment->points[0];
-                        fla::Point tweenP2 = tweenSegment->points[1];
-                        p1.x = p1.x + (tweenP1.x - p1.x) * tweenProgress;
-                        p1.y = p1.y + (tweenP1.y - p1.y) * tweenProgress;
-                        p2.x = p2.x + (tweenP2.x - p2.x) * tweenProgress;
-                        p2.y = p2.y + (tweenP2.y - p2.y) * tweenProgress;
-                    }
-                }
                 painterPath.quadTo(p1.x, p1.y, p2.x, p2.y);
             }
             else if (segment->command == fla::PathSegment::Command::Cubic)
@@ -1101,23 +1200,6 @@ void PhoenixView::drawShape(QPainter& painter, const fla::Shape* shape, const fl
                 fla::Point p1 = segment->points[0];
                 fla::Point p2 = segment->points[1];
                 fla::Point p3 = segment->points[2];
-                if (tweenShape)
-                {
-                    auto it = pathSegmentTweenMap.find(segment);
-                    if (it != pathSegmentTweenMap.end())
-                    {
-                        const fla::PathSegment* tweenSegment = it->second;
-                        fla::Point tweenP1 = tweenSegment->points[0];
-                        fla::Point tweenP2 = tweenSegment->points[1];
-                        fla::Point tweenP3 = tweenSegment->points[2];
-                        p1.x = p1.x + (tweenP1.x - p1.x) * tweenProgress;
-                        p1.y = p1.y + (tweenP1.y - p1.y) * tweenProgress;
-                        p2.x = p2.x + (tweenP2.x - p2.x) * tweenProgress;
-                        p2.y = p2.y + (tweenP2.y - p2.y) * tweenProgress;
-                        p3.x = p3.x + (tweenP3.x - p3.x) * tweenProgress;
-                        p3.y = p3.y + (tweenP3.y - p3.y) * tweenProgress;
-                    }
-                }
                 painterPath.cubicTo(p1.x, p1.y, p2.x, p2.y, p3.x, p3.y);
             }
             else if (segment->command == fla::PathSegment::Command::Close)
@@ -1143,37 +1225,12 @@ void PhoenixView::drawShape(QPainter& painter, const fla::Shape* shape, const fl
                 else if (segment->command == fla::PathSegment::Command::Line)
                 {
                     fla::Point p = segment->points[0];
-                    if (tweenShape)
-                    {
-                        auto it = pathSegmentTweenMap.find(segment);
-                        if (it != pathSegmentTweenMap.end())
-                        {
-                            const fla::PathSegment* tweenSegment = it->second;
-                            fla::Point tweenP = tweenSegment->points[0];
-                            p.x = p.x + (tweenP.x - p.x) * tweenProgress;
-                            p.y = p.y + (tweenP.y - p.y) * tweenProgress;
-                        }
-                    }
                     painterPath.lineTo(p.x, p.y);
                 }
                 else if (segment->command == fla::PathSegment::Command::Quad)
                 {
                     fla::Point p1 = segment->points[0];
                     fla::Point p2 = segment->points[1];
-                    if (tweenShape)
-                    {
-                        auto it = pathSegmentTweenMap.find(segment);
-                        if (it != pathSegmentTweenMap.end())
-                        {
-                            const fla::PathSegment* tweenSegment = it->second;
-                            fla::Point tweenP1 = tweenSegment->points[0];
-                            fla::Point tweenP2 = tweenSegment->points[1];
-                            p1.x = p1.x + (tweenP1.x - p1.x) * tweenProgress;
-                            p1.y = p1.y + (tweenP1.y - p1.y) * tweenProgress;
-                            p2.x = p2.x + (tweenP2.x - p2.x) * tweenProgress;
-                            p2.y = p2.y + (tweenP2.y - p2.y) * tweenProgress;
-                        }
-                    }
                     painterPath.quadTo(p1.x, p1.y, p2.x, p2.y);
                 }
                 else if (segment->command == fla::PathSegment::Command::Cubic)
@@ -1181,23 +1238,6 @@ void PhoenixView::drawShape(QPainter& painter, const fla::Shape* shape, const fl
                     fla::Point p1 = segment->points[0];
                     fla::Point p2 = segment->points[1];
                     fla::Point p3 = segment->points[2];
-                    if (tweenShape)
-                    {
-                        auto it = pathSegmentTweenMap.find(segment);
-                        if (it != pathSegmentTweenMap.end())
-                        {
-                            const fla::PathSegment* tweenSegment = it->second;
-                            fla::Point tweenP1 = tweenSegment->points[0];
-                            fla::Point tweenP2 = tweenSegment->points[1];
-                            fla::Point tweenP3 = tweenSegment->points[2];
-                            p1.x = p1.x + (tweenP1.x - p1.x) * tweenProgress;
-                            p1.y = p1.y + (tweenP1.y - p1.y) * tweenProgress;
-                            p2.x = p2.x + (tweenP2.x - p2.x) * tweenProgress;
-                            p2.y = p2.y + (tweenP2.y - p2.y) * tweenProgress;
-                            p3.x = p3.x + (tweenP3.x - p3.x) * tweenProgress;
-                            p3.y = p3.y + (tweenP3.y - p3.y) * tweenProgress;
-                        }
-                    }
                     painterPath.cubicTo(p1.x, p1.y, p2.x, p2.y, p3.x, p3.y);
                 }
             }
@@ -1216,45 +1256,18 @@ void PhoenixView::drawShape(QPainter& painter, const fla::Shape* shape, const fl
                 if (segment->command == fla::PathSegment::Command::Move)
                 {
                     startPoint = segment->points[0];
-                    if (tweenShape)
-                    {
-                        auto it = pathSegmentTweenMap.find(segment);
-                        if (it != pathSegmentTweenMap.end())
-                        {
-                            const fla::PathSegment* tweenSegment = it->second;
-                            tweenStartPoint = tweenSegment->points[0];
-                        }
-                        else
-                        {
-                            tweenStartPoint = startPoint;
-                        }
-                    }
                 }
                 else if (segment->command != fla::PathSegment::Command::Close)
                 {
                     pathSegments.push_back(segment);
-                    if (tweenShape)
-                    {
-                        auto it = pathSegmentTweenMap.find(segment);
-                        if (it != pathSegmentTweenMap.end())
-                        {
-                            tweenPathSegments.push_back(it->second);
-                        }
-                        else
-                        {
-                            tweenPathSegments.push_back(segment);
-                        }
-                    }
                 }
             }
 
             // Traverse backwards and reverse each segment
             fla::Point currentPos = startPoint;
-            fla::Point tweenCurrentPos = tweenStartPoint;
             for (int i = pathSegments.size() - 1; i >= 0; --i)
             {
                 const fla::PathSegment* segment = pathSegments[i];
-                const fla::PathSegment* tweenSegment = tweenShape ? tweenPathSegments[i] : nullptr;
 
                 // Calculate the start position of this segment (which becomes our end in reverse)
                 fla::Point segmentStart = currentPos;
@@ -1263,49 +1276,29 @@ void PhoenixView::drawShape(QPainter& painter, const fla::Shape* shape, const fl
                 if (i > 0)
                 {
                     const fla::PathSegment* prevSeg = pathSegments[i - 1];
-                    const fla::PathSegment* prevTweenSeg = tweenShape ? tweenPathSegments[i - 1] : nullptr;
-                    
+
                     if (prevSeg->command == fla::PathSegment::Command::Line)
                     {
                         currentPos = prevSeg->points[0];
-                        if (tweenShape && prevTweenSeg)
-                        {
-                            tweenCurrentPos = prevTweenSeg->points[0];
-                        }
                     }
                     else if (prevSeg->command == fla::PathSegment::Command::Quad)
                     {
                         currentPos = prevSeg->points[1];
-                        if (tweenShape && prevTweenSeg)
-                        {
-                            tweenCurrentPos = prevTweenSeg->points[1];
-                        }
                     }
                     else if (prevSeg->command == fla::PathSegment::Command::Cubic)
                     {
                         currentPos = prevSeg->points[2];
-                        if (tweenShape && prevTweenSeg)
-                        {
-                            tweenCurrentPos = prevTweenSeg->points[2];
-                        }
                     }
                 }
                 else
                 {
                     currentPos = startPoint;
-                    tweenCurrentPos = tweenStartPoint;
                 }
 
                 // Reverse this segment
                 if (segment->command == fla::PathSegment::Command::Line)
                 {
                     fla::Point p = currentPos;
-                    if (tweenShape && tweenSegment)
-                    {
-                        fla::Point tweenP = tweenCurrentPos;
-                        p.x = p.x + (tweenP.x - p.x) * tweenProgress;
-                        p.y = p.y + (tweenP.y - p.y) * tweenProgress;
-                    }
                     painterPath.lineTo(p.x, p.y);
                 }
                 else if (segment->command == fla::PathSegment::Command::Quad)
@@ -1313,15 +1306,6 @@ void PhoenixView::drawShape(QPainter& painter, const fla::Shape* shape, const fl
                     // Reverse quadratic: end -> control -> start becomes start -> control -> end
                     fla::Point p1 = segment->points[0];
                     fla::Point p2 = currentPos;
-                    if (tweenShape && tweenSegment)
-                    {
-                        fla::Point tweenP1 = tweenSegment->points[0];
-                        fla::Point tweenP2 = tweenCurrentPos;
-                        p1.x = p1.x + (tweenP1.x - p1.x) * tweenProgress;
-                        p1.y = p1.y + (tweenP1.y - p1.y) * tweenProgress;
-                        p2.x = p2.x + (tweenP2.x - p2.x) * tweenProgress;
-                        p2.y = p2.y + (tweenP2.y - p2.y) * tweenProgress;
-                    }
                     painterPath.quadTo(p1.x, p1.y, p2.x, p2.y);
                 }
                 else if (segment->command == fla::PathSegment::Command::Cubic)
@@ -1330,18 +1314,6 @@ void PhoenixView::drawShape(QPainter& painter, const fla::Shape* shape, const fl
                     fla::Point p1 = segment->points[1];
                     fla::Point p2 = segment->points[0];
                     fla::Point p3 = currentPos;
-                    if (tweenShape && tweenSegment)
-                    {
-                        fla::Point tweenP1 = tweenSegment->points[1];
-                        fla::Point tweenP2 = tweenSegment->points[0];
-                        fla::Point tweenP3 = tweenCurrentPos;
-                        p1.x = p1.x + (tweenP1.x - p1.x) * tweenProgress;
-                        p1.y = p1.y + (tweenP1.y - p1.y) * tweenProgress;
-                        p2.x = p2.x + (tweenP2.x - p2.x) * tweenProgress;
-                        p2.y = p2.y + (tweenP2.y - p2.y) * tweenProgress;
-                        p3.x = p3.x + (tweenP3.x - p3.x) * tweenProgress;
-                        p3.y = p3.y + (tweenP3.y - p3.y) * tweenProgress;
-                    }
                     painterPath.cubicTo(p1.x, p1.y, p2.x, p2.y, p3.x, p3.y);
                 }
             }
@@ -1358,7 +1330,6 @@ void PhoenixView::drawShape(QPainter& painter, const fla::Shape* shape, const fl
         int p2x = static_cast<int>(std::round(p2.x * 20.0));
         int p2y = static_cast<int>(std::round(p2.y * 20.0));
         return p1x == p2x && p1y == p2y;
-        //return qAbs(p1.x - p2.x) < 0.5 && qAbs(p1.y - p2.y) < 0.5;
     };
 
     // For each fill style, connect paths into closed loops

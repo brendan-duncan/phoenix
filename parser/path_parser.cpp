@@ -378,6 +378,23 @@ fla::Point PathParser::parsePoint(const std::string& data, int& pos)
     return fla::Point(x / 20.0, y / 20.0, xStr, yStr);
 }
 
+fla::Point PathParser::parseMorphPoint(const std::string& data)
+{
+    if (data.empty())
+        return fla::Point();
+
+    int pos = 0;
+    skipWhitespace(data, pos);
+    double x = parseNumber(data, pos);
+    skipWhitespace(data, pos);
+    if (static_cast<size_t>(pos) < data.size() && data[static_cast<size_t>(pos)] == ',')
+        pos++;
+    skipWhitespace(data, pos);
+    double y = parseNumber(data, pos);
+    // Same as parsePoint: morph coordinates use the same Flash twip encoding as edge paths
+    return fla::Point(x / 20.0, y / 20.0);
+}
+
 double PathParser::parseNumber(const std::string& data, int& pos, std::string* outStr)
 {
     skipWhitespace(data, pos);

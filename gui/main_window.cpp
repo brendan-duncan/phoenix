@@ -4,6 +4,7 @@
 #include "../parser/fla_parser.h"
 
 #include <QApplication>
+#include <QCloseEvent>
 #include <QFileDialog>
 #include <QMessageBox>
 #include <QFileInfo>
@@ -47,8 +48,6 @@ MainWindow::MainWindow(QWidget *parent)
 
     setupUI();
     setupMenus();
-
-    resize(1024, 768);
 
     // Auto-open last file if available
     if (!_recentFiles.isEmpty())
@@ -336,6 +335,12 @@ void MainWindow::loadSettings()
     _recentFiles = settings.value("recentFiles").toStringList();
     _lastDirectory = settings.value("lastDirectory").toString();
     _highQualityAntiAliasing = settings.value("view/highQualityAntiAliasing", true).toBool();
+
+    QByteArray geometry = settings.value("window/geometry").toByteArray();
+    if (!geometry.isEmpty())
+    {
+        restoreGeometry(geometry);
+    }
 }
 
 void MainWindow::saveSettings()
@@ -344,6 +349,13 @@ void MainWindow::saveSettings()
     settings.setValue("recentFiles", _recentFiles);
     settings.setValue("lastDirectory", _lastDirectory);
     settings.setValue("view/highQualityAntiAliasing", _highQualityAntiAliasing);
+    settings.setValue("window/geometry", saveGeometry());
+}
+
+void MainWindow::closeEvent(QCloseEvent* event)
+{
+    saveSettings();
+    event->accept();
 }
 
 void MainWindow::onHighQualityAntiAliasingToggled(bool checked)
