@@ -12,9 +12,27 @@
 #include <QPixmap>
 #include <QImage>
 
-static const int MAX_FRAMES = 600;
-
 enum class TransportIcon { First, Prev, Play, Stop, Next };
+
+static int getMaxFrames(const fla::FLADocument* doc)
+{
+    if (!doc || !doc->document)
+        return 0;
+    int maxFrame = 0;
+    for (const fla::Timeline* timeline : doc->document->timelines)
+    {
+        for (const fla::Layer* layer : timeline->layers)
+        {
+            for (const fla::Frame* frame : layer->frames)
+            {
+                int endFrame = frame->index + frame->duration;
+                if (endFrame > maxFrame)
+                    maxFrame = endFrame;
+            }
+        }
+    }
+    return maxFrame + 10;
+}
 
 static QIcon makeTransportIcon(TransportIcon icon, int size = 24)
 {
@@ -246,7 +264,8 @@ void TimelineGrid::updateSize()
         numRows += static_cast<int>(timeline->layers.size());
     }
 
-    int totalWidth = headerHeight + MAX_FRAMES * (frameWidth + 2);
+    int maxFrames = getMaxFrames(_flaDocument);
+    int totalWidth = headerHeight + maxFrames * (frameWidth + 2);
     int totalHeight = headerHeight + numRows * layerRowHeight;
 
     setMinimumSize(totalWidth, totalHeight);
@@ -332,6 +351,7 @@ void TimelineGrid::paintEvent(QPaintEvent* event)
 
     painter.fillRect(event->rect(), QColor(30, 30, 30));
 
+    int maxFrames = getMaxFrames(_flaDocument);
     int y = headerHeight;
 
     for (const fla::Timeline* timeline : _flaDocument->document->timelines)
@@ -346,7 +366,7 @@ void TimelineGrid::paintEvent(QPaintEvent* event)
                 frameMap[frame->index] = frame;
             }
 
-            for (int i = 0; i < MAX_FRAMES; ++i)
+            for (int i = 0; i < maxFrames; ++i)
             {
                 int x = i * (frameWidth + margin);
                 int yOffset = y;
@@ -402,7 +422,7 @@ void TimelineGrid::paintEvent(QPaintEvent* event)
     QFont frameFont = painter.font();
     frameFont.setPointSize(8);
     painter.setFont(frameFont);
-    for (int i = 0; i < MAX_FRAMES; i += 5)
+    for (int i = 0; i < maxFrames; i += 5)
     {
         int x = i * (frameWidth + margin);
         QString label = QString::number(i);
