@@ -75,6 +75,7 @@ private:
     double _maxZoom = 100.0;
     bool _isDragging;
     QPoint _lastMousePos;
+    QTransform viewTransform;
 
     // Visible rect in document coordinates (for culling)
     QRectF _visibleRect;

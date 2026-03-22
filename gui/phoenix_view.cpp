@@ -278,6 +278,9 @@ void PhoenixView::paintEvent(QPaintEvent *event)
 
         bufferPainter.translate(tx, ty);
         bufferPainter.scale(s, s);
+
+        viewTransform = bufferPainter.transform();
+
         bufferPainter.fillRect(QRectF(0, 0, docWidth, docHeight),
             QColor(document->backgroundColor[0], document->backgroundColor[1],
                 document->backgroundColor[2], document->backgroundColor[3]));
@@ -297,6 +300,9 @@ void PhoenixView::paintEvent(QPaintEvent *event)
         painter.save();
         painter.translate(_panX + centerX, _panY + centerY);
         painter.scale(scale, scale);
+
+        viewTransform = painter.transform();
+
         painter.fillRect(0, 0, docWidth, docHeight,
             QColor(document->backgroundColor[0], document->backgroundColor[1],
                 document->backgroundColor[2], document->backgroundColor[3]));
@@ -629,7 +635,7 @@ void PhoenixView::drawElement(QPainter& painter, const fla::Element* element, co
 
             if (!instance->colorTransform.isIdentity())
             {
-                QRectF symbolBounds = calculateSymbolLocalBounds(symbol);
+                QRectF symbolBounds = QRectF(0, 0, _flaDocument->document->width, _flaDocument->document->height);
                 int pixWidth = qMax(1, static_cast<int>(qCeil(symbolBounds.width())));
                 int pixHeight = qMax(1, static_cast<int>(qCeil(symbolBounds.height())));
 
@@ -640,7 +646,7 @@ void PhoenixView::drawElement(QPainter& painter, const fla::Element* element, co
                 symbolPainter.setRenderHint(QPainter::Antialiasing, true);
                 symbolPainter.setRenderHint(QPainter::TextAntialiasing, true);
                 symbolPainter.setRenderHint(QPainter::SmoothPixmapTransform, true);
-                symbolPainter.translate(-symbolBounds.topLeft().x(), -symbolBounds.topLeft().y());
+                symbolPainter.setTransform(qTransform, false);
 
                 for (const fla::Timeline* timeline : symbol->timelines)
                 {
@@ -656,7 +662,8 @@ void PhoenixView::drawElement(QPainter& painter, const fla::Element* element, co
                 applyColorTransform(symbolImage, instance->colorTransform);
 
                 painter.save();
-                painter.drawImage(symbolBounds.topLeft().toPoint(), symbolImage);
+                painter.setTransform(viewTransform, false);
+                painter.drawImage(0, 0, symbolImage);
                 painter.restore();
             }
             else
