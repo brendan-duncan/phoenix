@@ -1,5 +1,16 @@
 cmake_minimum_required(VERSION 3.16)
 
+include(FetchContent)
+FetchContent_Declare(
+    libas3
+    GIT_REPOSITORY https://github.com/brendan-duncan/libas3
+    GIT_TAG main
+)
+FetchContent_MakeAvailable(libas3)
+
+add_library(libas3 INTERFACE)
+add_dependencies(libas3 as3_parser)
+
 project(Phoenix VERSION 0.1 LANGUAGES CXX)
 
 set(CMAKE_AUTOUIC ON)
@@ -17,10 +28,10 @@ find_package(Qt6 REQUIRED COMPONENTS Widgets)
 
 # Add zlib from third_party
 set(ZLIB_BUILD_EXAMPLES OFF CACHE BOOL "Don't build zlib examples")
-add_subdirectory(third_party/zlib)
+add_subdirectory(src/third_party/zlib)
 
 # Add zlib include directory
-include_directories(${CMAKE_CURRENT_SOURCE_DIR}/third_party/zlib)
+include_directories(${CMAKE_CURRENT_SOURCE_DIR}/src/third_party/zlib)
 
 # Remove debug postfix from zlibstatic to avoid library name conflicts
 set_target_properties(zlibstatic PROPERTIES
@@ -31,7 +42,7 @@ set_target_properties(zlib PROPERTIES DEBUG_POSTFIX "")
 
 # Set ZLIB variables for compatibility with find_package
 set(ZLIB_FOUND TRUE CACHE BOOL "" FORCE)
-set(ZLIB_INCLUDE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/third_party/zlib;${CMAKE_CURRENT_BINARY_DIR}/third_party/zlib" CACHE STRING "" FORCE)
+set(ZLIB_INCLUDE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/src/third_party/zlib;${CMAKE_CURRENT_BINARY_DIR}/src/third_party/zlib" CACHE STRING "" FORCE)
 set(ZLIB_INCLUDE_DIRS "${ZLIB_INCLUDE_DIR}" CACHE STRING "" FORCE)
 set(ZLIB_LIBRARY zlibstatic CACHE STRING "" FORCE)
 set(ZLIB_LIBRARIES zlibstatic CACHE STRING "" FORCE)
@@ -40,111 +51,111 @@ set(ZLIB_VERSION_STRING "1.3.1" CACHE STRING "" FORCE)
 # Add tinyxml2 from third_party
 set(tinyxml2_SHARED_LIBS OFF CACHE BOOL "Don't build tinyxml2 as a shared library")
 set(tinyxml2_BUILD_TESTING OFF CACHE BOOL "Don't build tinyxml2 tests")
-add_subdirectory(third_party/tinyxml2)
+add_subdirectory(src/third_party/tinyxml2)
 
 set(HEADERS
-    gui/main_window.h
-    gui/phoenix_view.h
-    gui/document_view.h
-    gui/timeline_view.h
-    gui/layers_panel.h
-    gui/timelines_panel.h
-    gui/player.h
-    parser/document_parser.h
-    parser/zip_reader.h
-    parser/fla_parser.h
-    parser/path_parser.h
-    data/action_script.h
-    data/bitmap.h
-    data/color_transform.h
-    data/document.h
-    data/dom_element.h
-    data/edge.h
-    data/element.h
-    data/fill_style.h
-    data/fla_document.h
-    data/folder.h
-    data/frame.h
-    data/group.h
-    data/layer.h
-    data/linear_gradient.h
-    data/oval_primitive.h
-    data/point.h
-    data/printer_settings.h
-    data/publish_history.h
-    data/radial_gradient.h
-    data/rect.h
-    data/rectangle_primitive.h
-    data/resource.h
-    data/script_list.h
-    data/shape.h
-    data/solid_color.h
-    data/static_text.h
-    data/stroke_style.h
-    data/swatch.h
-    data/swatch_list.h
-    data/symbol_instance.h
-    data/symbol_list.h
-    data/symbol.h
-    data/timeline.h
-    data/transform.h
-    util/zip_archive.h
+    src/gui/main_window.h
+    src/gui/phoenix_view.h
+    src/gui/document_view.h
+    src/gui/timeline_view.h
+    src/gui/layers_panel.h
+    src/gui/timelines_panel.h
+    src/gui/player.h
+    src/parser/document_parser.h
+    src/parser/zip_reader.h
+    src/parser/fla_parser.h
+    src/parser/path_parser.h
+    src/data/action_script.h
+    src/data/bitmap.h
+    src/data/color_transform.h
+    src/data/document.h
+    src/data/dom_element.h
+    src/data/edge.h
+    src/data/element.h
+    src/data/fill_style.h
+    src/data/fla_document.h
+    src/data/folder.h
+    src/data/frame.h
+    src/data/group.h
+    src/data/layer.h
+    src/data/linear_gradient.h
+    src/data/oval_primitive.h
+    src/data/point.h
+    src/data/printer_settings.h
+    src/data/publish_history.h
+    src/data/radial_gradient.h
+    src/data/rect.h
+    src/data/rectangle_primitive.h
+    src/data/resource.h
+    src/data/script_list.h
+    src/data/shape.h
+    src/data/solid_color.h
+    src/data/static_text.h
+    src/data/stroke_style.h
+    src/data/swatch.h
+    src/data/swatch_list.h
+    src/data/symbol_instance.h
+    src/data/symbol_list.h
+    src/data/symbol.h
+    src/data/timeline.h
+    src/data/transform.h
+    src/util/zip_archive.h
 )
 
 set(SOURCES
-    main.cpp
-    gui/main_window.cpp
-    gui/phoenix_view.cpp
-    gui/document_view.cpp
-    gui/timeline_view.cpp
-    gui/layers_panel.cpp
-    gui/timelines_panel.cpp
-    gui/player.cpp
-    parser/document_parser.cpp
-    parser/zip_reader.cpp
-    parser/fla_parser.cpp
-    parser/path_parser.cpp
-    data/action_script.cpp
-    data/bitmap.cpp
-    data/document.cpp
-    data/dom_element.cpp
-    data/edge.cpp
-    data/element.cpp
-    data/fill_style.cpp
-    data/fla_document.cpp
-    data/folder.cpp
-    data/frame.cpp
-    data/group.cpp
-    data/layer.cpp
-    data/linear_gradient.cpp
-    data/oval_primitive.cpp
-    data/point.cpp
-    data/printer_settings.cpp
-    data/publish_history.cpp    
-    data/radial_gradient.cpp
-    data/rect.cpp
-    data/rectangle_primitive.cpp
-    data/resource.cpp
-    data/script_list.cpp
-    data/shape.cpp
-    data/solid_color.cpp
-    data/static_text.cpp
-    data/stroke_style.cpp
-    data/swatch.cpp
-    data/swatch_list.cpp
-    data/symbol_instance.cpp
-    data/symbol.cpp
-    data/symbol_list.cpp
-    data/timeline.cpp
-    data/transform.cpp
-    util/zip_archive.cpp
+    src/main.cpp
+    src/gui/main_window.cpp
+    src/gui/phoenix_view.cpp
+    src/gui/document_view.cpp
+    src/gui/timeline_view.cpp
+    src/gui/layers_panel.cpp
+    src/gui/timelines_panel.cpp
+    src/gui/player.cpp
+    src/parser/document_parser.cpp
+    src/parser/zip_reader.cpp
+    src/parser/fla_parser.cpp
+    src/parser/path_parser.cpp
+    src/data/action_script.cpp
+    src/data/bitmap.cpp
+    src/data/document.cpp
+    src/data/dom_element.cpp
+    src/data/edge.cpp
+    src/data/element.cpp
+    src/data/fill_style.cpp
+    src/data/fla_document.cpp
+    src/data/folder.cpp
+    src/data/frame.cpp
+    src/data/group.cpp
+    src/data/layer.cpp
+    src/data/linear_gradient.cpp
+    src/data/oval_primitive.cpp
+    src/data/point.cpp
+    src/data/printer_settings.cpp
+    src/data/publish_history.cpp    
+    src/data/radial_gradient.cpp
+    src/data/rect.cpp
+    src/data/rectangle_primitive.cpp
+    src/data/resource.cpp
+    src/data/script_list.cpp
+    src/data/shape.cpp
+    src/data/solid_color.cpp
+    src/data/static_text.cpp
+    src/data/stroke_style.cpp
+    src/data/swatch.cpp
+    src/data/swatch_list.cpp
+    src/data/symbol_instance.cpp
+    src/data/symbol.cpp
+    src/data/symbol_list.cpp
+    src/data/timeline.cpp
+    src/data/transform.cpp
+    src/util/zip_archive.cpp
 )
 
 qt6_standard_project_setup()
 
 qt6_add_executable(Phoenix MANUAL_FINALIZATION ${SOURCES} ${HEADERS})
 
-target_link_libraries(Phoenix PRIVATE Qt6::Widgets zlibstatic tinyxml2)
+target_link_libraries(Phoenix PRIVATE Qt6::Widgets zlibstatic tinyxml2 libas3)
 
 if(TRUE)
     qt_finalize_executable(Phoenix)
