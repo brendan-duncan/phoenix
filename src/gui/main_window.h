@@ -26,7 +26,9 @@ public:
 
 private slots:
     void openFile();
-    
+
+    void exportSvg();
+
     void openRecentFile();
     
     void quit();

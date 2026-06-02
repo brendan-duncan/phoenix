@@ -26,6 +26,8 @@
 #include <QPixmap>
 #include <QImage>
 #include <QBitmap>
+#include <QSvgGenerator>
+#include <QtMath>
 
 #define MAX(a, b) ((a) > (b) ? (a) : (b))
 
@@ -196,6 +198,49 @@ void PhoenixView::setHighQualityAntiAliasing(bool on)
     _highQualityAntiAliasing = on;
     clearCaches();
     update();
+}
+
+bool PhoenixView::exportToSvg(const QString& filePath)
+{
+    if (!_flaDocument || !_flaDocument->document)
+        return false;
+
+    fla::Document* document = _flaDocument->document;
+
+    double docWidth = document->width;
+    double docHeight = document->height;
+    if (docWidth <= 0 || docHeight <= 0)
+        return false;
+
+    QSvgGenerator generator;
+    generator.setFileName(filePath);
+    generator.setSize(QSize(qCeil(docWidth), qCeil(docHeight)));
+    generator.setViewBox(QRectF(0, 0, docWidth, docHeight));
+    generator.setTitle("Phoenix SVG Export");
+    generator.setDescription("Single frame exported from Phoenix.");
+
+    QPainter painter(&generator);
+    painter.setRenderHint(QPainter::Antialiasing, true);
+    painter.setRenderHint(QPainter::TextAntialiasing, true);
+    painter.setRenderHint(QPainter::SmoothPixmapTransform, true);
+
+    // Render in pure document space: no pan/zoom and no supersampling, so SVG
+    // coordinates map 1:1 to document pixels. The traversal below reuses the
+    // exact same drawing code as on-screen rendering, so vector shapes,
+    // gradients, strokes and text are written out as real SVG primitives.
+    // viewTransform is consulted by the color-transformed symbol path; here the
+    // painter's base transform is identity (document space).
+    viewTransform = painter.transform();
+    _visibleRect = QRectF(0, 0, docWidth, docHeight);
+
+    painter.fillRect(QRectF(0, 0, docWidth, docHeight),
+        QColor(document->backgroundColor[0], document->backgroundColor[1],
+            document->backgroundColor[2], document->backgroundColor[3]));
+
+    drawDocument(painter, document);
+
+    painter.end();
+    return true;
 }
 
 void PhoenixView::paintEvent(QPaintEvent *event)

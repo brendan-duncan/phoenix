@@ -24,7 +24,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 # TODO: this isn't right...how should this be set up so that it's not hard-coded?
 set(CMAKE_PREFIX_PATH "C:/Qt/6.10.2/msvc2022_64" ${CMAKE_PREFIX_PATH})
 
-find_package(Qt6 REQUIRED COMPONENTS Widgets)
+find_package(Qt6 REQUIRED COMPONENTS Widgets Svg)
 
 # Add zlib from third_party
 set(ZLIB_BUILD_EXAMPLES OFF CACHE BOOL "Don't build zlib examples")
@@ -155,7 +155,7 @@ qt6_standard_project_setup()
 
 qt6_add_executable(Phoenix MANUAL_FINALIZATION ${SOURCES} ${HEADERS})
 
-target_link_libraries(Phoenix PRIVATE Qt6::Widgets zlibstatic tinyxml2 libas3)
+target_link_libraries(Phoenix PRIVATE Qt6::Widgets Qt6::Svg zlibstatic tinyxml2 libas3)
 
 if(TRUE)
     qt_finalize_executable(Phoenix)

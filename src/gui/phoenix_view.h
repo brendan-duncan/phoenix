@@ -45,6 +45,10 @@ public:
 
     void clearCaches();
 
+    // Export the currently displayed frame to an SVG file (no animation).
+    // Renders in document space using the same traversal as on-screen drawing.
+    bool exportToSvg(const QString& filePath);
+
 public slots:
     void onPlayerFrameChanged(int frame);
 

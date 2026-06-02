@@ -12,6 +12,7 @@
 #include <QMenuBar>
 #include <QMenu>
 #include <QAction>
+#include <QStatusBar>
 #include <QTextEdit>
 #include <QDialog>
 #include <QVBoxLayout>
@@ -176,6 +177,13 @@ void MainWindow::setupMenus()
 
     fileMenu->addSeparator();
 
+    QAction* exportSvgAction = new QAction("Export to &SVG...", this);
+    exportSvgAction->setStatusTip("Export the current frame to an SVG file");
+    connect(exportSvgAction, &QAction::triggered, this, &MainWindow::exportSvg);
+    fileMenu->addAction(exportSvgAction);
+
+    fileMenu->addSeparator();
+
     QAction* exitAction = new QAction("&Exit", this);
     exitAction->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_Q));
     connect(exitAction, &QAction::triggered, this, &MainWindow::quit);
@@ -226,6 +234,40 @@ void MainWindow::openFile()
         _lastDirectory = QFileInfo(fileName).absolutePath();
         saveSettings();
         loadFLAFile(fileName);
+    }
+}
+
+void MainWindow::exportSvg()
+{
+    if (!_flaDocument || !_flaDocument->document)
+    {
+        QMessageBox::information(this, "No Document", "No FLA document is currently loaded.");
+        return;
+    }
+
+    QString defaultName = QFileInfo(windowTitle()).baseName();
+    QString suggested = _lastDirectory.isEmpty() ? QString("export.svg")
+                                                 : QDir(_lastDirectory).filePath("export.svg");
+
+    QString fileName = QFileDialog::getSaveFileName(this,
+        tr("Export to SVG"), suggested, tr("SVG Files (*.svg);;All Files (*)"));
+
+    if (fileName.isEmpty())
+        return;
+
+    if (!fileName.endsWith(".svg", Qt::CaseInsensitive))
+        fileName += ".svg";
+
+    if (_phoenixView->exportToSvg(fileName))
+    {
+        _lastDirectory = QFileInfo(fileName).absolutePath();
+        saveSettings();
+        statusBar()->showMessage(QString("Exported SVG to %1").arg(fileName), 5000);
+    }
+    else
+    {
+        QMessageBox::warning(this, "Export Failed",
+            QString("Failed to export SVG to:\n%1").arg(fileName));
     }
 }
 
