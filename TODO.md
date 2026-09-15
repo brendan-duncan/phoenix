@@ -42,21 +42,68 @@ Status legend: `[ ]` todo · `[~]` in progress · `[x]` done
 - [ ] Mutation API on the data model (`Shape`, `Edge`, `Path`, `Frame`, `Layer`)
       and the concrete commands that drive it -- deferred until step 3/4, when
       the first tool defines what the commands actually need
-- [ ] Upgrade the unsaved-changes prompt to offer Save once step 2 lands
-      (it currently offers only Discard / Cancel, which is all it can honestly do)
+- [ ] Upgrade the unsaved-changes prompt to offer Save now that step 2 has
+      landed (it still offers only Discard / Cancel)
 
 ## 2. XFL serialization (write)
 
-Do this before building editing UI — it proves the data model is complete.
+Done. Verified against a 74-document corpus: every one parses, serializes, and
+re-parses to an identical tree.
 
-- [ ] XML writer for `DOMDocument.xml` and `LIBRARY/*.xml` (tinyxml2 `XMLPrinter`)
-- [ ] Edge-data string emitter (inverse of `path_parser.cpp`): `!` move,
-      `|` / `/` line, `[` quad, `S` / `FS` / `LS` style selects, `#` hex fixed point.
-      Prefer emitting quadratics — Flash's native curve type, and the `(...)`
-      cubic form carries `q`/`p` reference data the parser deliberately skips
-- [ ] Uncompressed XFL directory output first (a valid Animate format)
-- [ ] Zip writer for `.fla` (zlib is already vendored)
-- [ ] Round-trip tests: parse → serialize → re-parse → compare trees
+- [x] XML writer for `DOMDocument.xml` and `LIBRARY/*.xml`
+      (`src/writer/xfl_writer.*`, tinyxml2 `XMLPrinter`). Attributes matching the
+      reader's default are omitted, the way Animate writes them
+- [x] Edge-data string emitter (`src/writer/edge_writer.*`), the inverse of
+      `path_parser.cpp`: `!` move, `|` line, `[` quad, `(...)` cubic,
+      `S` / `FS` / `LS` style selects, decimal twips for whole values and
+      `#` hex fixed point for fractions
+  - A style select has to follow the move that opened its path, not lead it:
+      the reader attaches it to the current path and silently drops one that
+      arrives before any path exists
+  - Unmodified edges are re-emitted from `Edge::data`, the text they were read
+      with, so they round-trip exactly. The generator is for edited geometry
+- [x] Uncompressed XFL folder output (`src/writer/xfl_folder_writer.*`),
+      including the `.xfl` project marker
+- [x] Zip writer for `.fla` (`src/util/zip_writer.*`, deflate via the vendored
+      zlib, with a store fallback; no data descriptors or ZIP64). Output verified
+      against an independent ZIP reader
+- [x] `src/writer/xfl_content.*` builds the file list once, so the folder and
+      `.fla` targets are the same content in different containers
+- [x] Round-trip tests: parse → serialize → re-parse → compare trees, both
+      hand-written cases and a real corpus
+- [x] File > Save / Save As in the GUI, writing `.fla` or an XFL folder
+
+Two bugs this turned up, both fixed:
+
+- Flash uses CR for line breaks inside text runs, and XML normalises a literal
+  CR to LF on read. Those now go out as `&#13;`. Before the fix, 12 of the 74
+  corpus documents came back with altered text and layer names
+- `parseActionScript` read `element->GetText()` instead of
+  `childElement->GetText()`, so frame ActionScript never actually loaded
+
+### Not written back yet
+
+The writer records anything it cannot represent rather than dropping it in
+silence (`XFLWriter::unsupported()`), and the GUI warns before a save that would
+lose content. Across the corpus that is:
+
+- [ ] document scripts (`<scripts>`)
+- [ ] publish history
+- [ ] printer settings
+- [ ] swatch lists
+
+These are all document metadata rather than geometry, and the reader keeps only
+a partial model of each, so writing them faithfully means extending the reader
+first.
+
+### Also outstanding
+
+- [ ] Verify Animate itself opens what we write. Round-tripping through our own
+      reader proves self-consistency, not compatibility. The cubic `(...)` form
+      is the likeliest sticking point: Flash stores a `q`/`p` quadratic
+      approximation inside the parens that our reader skips and our writer omits
+- [ ] Save to a temporary file and move it into place, so an interrupted save
+      cannot destroy the original
 
 ## 3. Tool framework + selection
 

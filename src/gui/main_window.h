@@ -28,6 +28,10 @@ public:
 private slots:
     void openFile();
 
+    void saveFile();
+
+    void saveFileAs();
+
     void exportSvg();
 
     void openRecentFile();
@@ -59,6 +63,15 @@ private:
     /// Offers to abandon unsaved changes. Returns false if the user cancels.
     bool confirmDiscardChanges();
 
+    /// Writes the document to  filePath, as a .fla when the name ends in
+    /// .fla and as an uncompressed XFL folder otherwise. Reports failures and
+    /// updates the saved state.
+    bool saveToPath(const QString& filePath);
+
+    /// Warns when saving would drop content the writer cannot represent yet.
+    /// Returns false if the user would rather not go ahead.
+    bool confirmLossySave();
+
     void updateRecentFilesMenu();
 
     void addToRecentFiles(const QString& filePath);
@@ -79,6 +92,8 @@ private:
     QAction* _redoAction = nullptr;
     /// Display name of the open file, without the modified marker.
     QString _documentName;
+    /// Where the document was last saved or loaded from, for File > Save.
+    QString _documentPath;
     Player* _player;
     QSplitter* _mainSplitter;
     QSplitter* _viewSplitter;

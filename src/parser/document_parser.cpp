@@ -1040,7 +1040,9 @@ bool parseActionScript(const tinyxml2::XMLElement* element, fla::ActionScript* a
     {
         if (std::strcmp(childElement->Name(), "script") == 0)
         {
-            const char* text = element->GetText();
+            // Read the <script> element's own text. This used to read the
+            // enclosing Actionscript element, which never carries the code.
+            const char* text = childElement->GetText();
             if (text)
             {
                 actionScript->code = text;
@@ -1413,6 +1415,7 @@ bool parseSymbolInclude(const tinyxml2::XMLElement* element, fla::SymbolList* sy
     symbol->name = getAttribute(root, "name");
     symbol->itemId = getAttribute(root, "itemId");
     symbol->lastModified = getAttribute(root, "lastModified");
+    symbol->href = href;
 
     // Parse timelines within the symbol
     for (const tinyxml2::XMLElement* childElement = root->FirstChildElement();

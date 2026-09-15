@@ -2,6 +2,9 @@
 #include "phoenix_view.h"
 #include "timeline_view.h"
 #include "../parser/fla_parser.h"
+#include "../writer/fla_writer.h"
+#include "../writer/xfl_content.h"
+#include "../writer/xfl_folder_writer.h"
 
 #include <QApplication>
 #include <QCloseEvent>
@@ -95,6 +98,7 @@ void MainWindow::loadFLAFile(const QString& filePath)
         }
         
         _documentName = displayName;
+        _documentPath = filePath;
         updateWindowTitle();
         addToRecentFiles(filePath);
 
@@ -103,6 +107,7 @@ void MainWindow::loadFLAFile(const QString& filePath)
     else
     {
         _documentName.clear();
+        _documentPath.clear();
         updateWindowTitle();
         QMessageBox::warning(this, "Failed to Load FLA",
                            QString("Failed to load FLA file:\n%1\n\nError: %2")
@@ -189,6 +194,20 @@ void MainWindow::setupMenus()
 
     fileMenu->addSeparator();
 
+    QAction* saveAction = new QAction("&Save", this);
+    saveAction->setShortcut(QKeySequence::Save);
+    saveAction->setStatusTip("Save the document");
+    connect(saveAction, &QAction::triggered, this, &MainWindow::saveFile);
+    fileMenu->addAction(saveAction);
+
+    QAction* saveAsAction = new QAction("Save &As...", this);
+    saveAsAction->setShortcut(QKeySequence::SaveAs);
+    saveAsAction->setStatusTip("Save the document to a new file or XFL folder");
+    connect(saveAsAction, &QAction::triggered, this, &MainWindow::saveFileAs);
+    fileMenu->addAction(saveAsAction);
+
+    fileMenu->addSeparator();
+
     QAction* exportSvgAction = new QAction("Export to &SVG...", this);
     exportSvgAction->setStatusTip("Export the current frame to an SVG file");
     connect(exportSvgAction, &QAction::triggered, this, &MainWindow::exportSvg);
@@ -264,6 +283,114 @@ void MainWindow::openFile()
         _lastDirectory = QFileInfo(fileName).absolutePath();
         saveSettings();
         loadFLAFile(fileName);
+    }
+}
+
+bool MainWindow::confirmLossySave()
+{
+    if (!_flaDocument || !_flaDocument->document)
+        return false;
+
+    const std::vector<std::string> lost = fla::unsupportedContent(*_flaDocument->document);
+    if (lost.empty())
+        return true;
+
+    QStringList items;
+    for (const std::string& description : lost)
+        items << "    " + QString::fromStdString(description);
+
+    // Checked before writing rather than after, so declining leaves whatever is
+    // already on disk untouched.
+    const QMessageBox::StandardButton answer = QMessageBox::warning(this,
+        "Some Content Will Be Lost",
+        QString("Phoenix cannot write this part of the document yet:\n\n%1\n\n"
+                "Saving will drop it. Overwriting the original file would lose it "
+                "for good.").arg(items.join("\n")),
+        QMessageBox::Save | QMessageBox::Cancel,
+        QMessageBox::Cancel);
+
+    return answer == QMessageBox::Save;
+}
+
+bool MainWindow::saveToPath(const QString& filePath)
+{
+    if (!_flaDocument || !_flaDocument->document)
+    {
+        QMessageBox::information(this, "No Document", "No FLA document is currently loaded.");
+        return false;
+    }
+
+    if (!confirmLossySave())
+        return false;
+
+    QString error;
+
+    if (filePath.endsWith(".fla", Qt::CaseInsensitive))
+    {
+        fla::FLAWriter writer;
+        if (!writer.write(*_flaDocument->document, filePath.toStdString()))
+            error = QString::fromStdString(writer.errorString());
+    }
+    else
+    {
+        // Anything that is not a .fla is written as an uncompressed XFL folder,
+        // which Animate opens just as happily and which stays readable on disk.
+        fla::XFLFolderWriter writer;
+        if (!writer.write(*_flaDocument->document, filePath.toStdString()))
+            error = QString::fromStdString(writer.errorString());
+    }
+
+    if (!error.isEmpty())
+    {
+        QMessageBox::warning(this, "Save Failed",
+            QString("Failed to save:\n%1\n\n%2").arg(filePath).arg(error));
+        return false;
+    }
+
+    _documentPath = filePath;
+    _documentName = QFileInfo(filePath).fileName();
+    _editContext.markSaved();
+    updateEditState();
+    addToRecentFiles(filePath);
+    statusBar()->showMessage(QString("Saved %1").arg(filePath), 5000);
+    return true;
+}
+
+void MainWindow::saveFile()
+{
+    if (_documentPath.isEmpty())
+    {
+        saveFileAs();
+        return;
+    }
+
+    saveToPath(_documentPath);
+}
+
+void MainWindow::saveFileAs()
+{
+    if (!_flaDocument || !_flaDocument->document)
+    {
+        QMessageBox::information(this, "No Document", "No FLA document is currently loaded.");
+        return;
+    }
+
+    const QString suggested = _documentPath.isEmpty()
+        ? (_lastDirectory.isEmpty() ? QString("untitled.fla")
+                                    : QDir(_lastDirectory).filePath("untitled.fla"))
+        : _documentPath;
+
+    QString fileName = QFileDialog::getSaveFileName(this,
+        tr("Save As"), suggested,
+        tr("FLA Files (*.fla);;XFL Folder (*)"));
+
+    if (fileName.isEmpty())
+        return;
+
+    if (saveToPath(fileName))
+    {
+        _lastDirectory = QFileInfo(fileName).absolutePath();
+        saveSettings();
     }
 }
 

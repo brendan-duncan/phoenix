@@ -14,6 +14,10 @@ public:
     std::string name;
     std::string itemId;
     std::string lastModified;
+    /// Path of this symbol's file inside LIBRARY/, as the document's Include
+    /// referred to it. Usually the name plus ".xml", but not necessarily, so it
+    /// is kept rather than derived.
+    std::string href;
 
     std::vector<Timeline*> timelines;
 

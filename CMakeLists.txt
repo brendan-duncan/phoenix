@@ -129,7 +129,13 @@ set(HEADERS
     src/edit/command.h
     src/edit/command_stack.h
     src/edit/edit_context.h
+    src/writer/edge_writer.h
+    src/writer/fla_writer.h
+    src/writer/xfl_content.h
+    src/writer/xfl_folder_writer.h
+    src/writer/xfl_writer.h
     src/util/zip_archive.h
+    src/util/zip_writer.h
 )
 
 set(SOURCES
@@ -180,7 +186,13 @@ set(SOURCES
     src/data/transform.cpp
     src/edit/command_stack.cpp
     src/edit/edit_context.cpp
+    src/writer/edge_writer.cpp
+    src/writer/fla_writer.cpp
+    src/writer/xfl_content.cpp
+    src/writer/xfl_folder_writer.cpp
+    src/writer/xfl_writer.cpp
     src/util/zip_archive.cpp
+    src/util/zip_writer.cpp
 )
 
 qt6_standard_project_setup()
