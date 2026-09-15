@@ -50,6 +50,10 @@ MainWindow::MainWindow(QWidget *parent)
     setupUI();
     setupMenus();
 
+    // Keep the Edit menu and the title bar in step with the undo history.
+    _editContext.commandStack().setChangedCallback([this]() { updateEditState(); });
+    updateEditState();
+
     // Auto-open last file if available
     if (!_recentFiles.isEmpty())
     {
@@ -59,6 +63,10 @@ MainWindow::MainWindow(QWidget *parent)
 
 void MainWindow::loadFLAFile(const QString& filePath)
 {
+    // Detach the old document before deleting it: the undo history holds
+    // pointers into it and must not outlive it.
+    _editContext.setDocument(nullptr);
+
     if (_flaDocument)
     {
         delete _flaDocument;
@@ -67,6 +75,7 @@ void MainWindow::loadFLAFile(const QString& filePath)
 
     FLAParser parser;
     _flaDocument = parser.parse(filePath.toStdString());
+    _editContext.setDocument(_flaDocument);
     _phoenixView->setDocument(_flaDocument);
     _documentView->setDocument(_flaDocument);
     _timelineView->setDocument(_flaDocument);
@@ -85,13 +94,16 @@ void MainWindow::loadFLAFile(const QString& filePath)
             displayName = fileInfo.fileName();
         }
         
-        setWindowTitle(QString("Phoenix - %1").arg(displayName));
+        _documentName = displayName;
+        updateWindowTitle();
         addToRecentFiles(filePath);
 
         _player->setCurrentFrame(0);
     }
     else
     {
+        _documentName.clear();
+        updateWindowTitle();
         QMessageBox::warning(this, "Failed to Load FLA",
                            QString("Failed to load FLA file:\n%1\n\nError: %2")
                            .arg(filePath)
@@ -189,6 +201,21 @@ void MainWindow::setupMenus()
     connect(exitAction, &QAction::triggered, this, &MainWindow::quit);
     fileMenu->addAction(exitAction);
 
+    // Edit menu
+    QMenu* editMenu = menuBar->addMenu("&Edit");
+
+    _undoAction = new QAction("&Undo", this);
+    _undoAction->setShortcut(QKeySequence::Undo);
+    connect(_undoAction, &QAction::triggered, this, &MainWindow::undo);
+    editMenu->addAction(_undoAction);
+
+    _redoAction = new QAction("&Redo", this);
+    // QKeySequence::Redo is Ctrl+Y on Windows; Ctrl+Shift+Z is what anyone
+    // coming from Animate will reach for, so accept both.
+    _redoAction->setShortcuts({QKeySequence::Redo, QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_Z)});
+    connect(_redoAction, &QAction::triggered, this, &MainWindow::redo);
+    editMenu->addAction(_redoAction);
+
     // View menu
     QMenu* viewMenu = menuBar->addMenu("&View");
 
@@ -231,6 +258,9 @@ void MainWindow::openFile()
 
     if (!fileName.isEmpty())
     {
+        if (!confirmDiscardChanges())
+            return;
+
         _lastDirectory = QFileInfo(fileName).absolutePath();
         saveSettings();
         loadFLAFile(fileName);
@@ -273,7 +303,9 @@ void MainWindow::exportSvg()
 
 void MainWindow::quit()
 {
-    qApp->exit();
+    // close() goes through closeEvent(), so File > Exit gets the same
+    // unsaved-changes prompt as closing the window.
+    close();
 }
 
 void MainWindow::viewDocument()
@@ -303,6 +335,78 @@ void MainWindow::viewDocument()
     dialog->exec();
 }
 
+void MainWindow::undo()
+{
+    _editContext.commandStack().undo();
+    if (_phoenixView)
+    {
+        _phoenixView->clearCaches();
+        _phoenixView->update();
+    }
+}
+
+void MainWindow::redo()
+{
+    _editContext.commandStack().redo();
+    if (_phoenixView)
+    {
+        _phoenixView->clearCaches();
+        _phoenixView->update();
+    }
+}
+
+void MainWindow::updateEditState()
+{
+    const fla::CommandStack& stack = _editContext.commandStack();
+
+    if (_undoAction)
+    {
+        _undoAction->setEnabled(stack.canUndo());
+        // Name the specific edit, the way Animate does: "Undo Draw Rectangle".
+        const QString name = QString::fromStdString(stack.undoName());
+        _undoAction->setText(name.isEmpty() ? QString("&Undo") : QString("&Undo %1").arg(name));
+    }
+
+    if (_redoAction)
+    {
+        _redoAction->setEnabled(stack.canRedo());
+        const QString name = QString::fromStdString(stack.redoName());
+        _redoAction->setText(name.isEmpty() ? QString("&Redo") : QString("&Redo %1").arg(name));
+    }
+
+    updateWindowTitle();
+}
+
+void MainWindow::updateWindowTitle()
+{
+    if (_documentName.isEmpty())
+    {
+        setWindowTitle("Phoenix - FLA Viewer");
+        return;
+    }
+
+    setWindowTitle(QString("Phoenix - %1%2")
+        .arg(_documentName)
+        .arg(_editContext.isModified() ? "*" : ""));
+}
+
+bool MainWindow::confirmDiscardChanges()
+{
+    if (!_editContext.isModified())
+        return true;
+
+    // TODO: offer to save once XFL writing exists; until then the only honest
+    // options are to discard the changes or to stay put.
+    const QMessageBox::StandardButton answer = QMessageBox::warning(this,
+        "Unsaved Changes",
+        QString("%1 has unsaved changes.\n\n"
+                "Saving is not implemented yet, so continuing will discard them.").arg(_documentName),
+        QMessageBox::Discard | QMessageBox::Cancel,
+        QMessageBox::Cancel);
+
+    return answer == QMessageBox::Discard;
+}
+
 void MainWindow::onVisibilityChanged()
 {
     // Clear caches and trigger a repaint when visibility changes
@@ -318,6 +422,9 @@ void MainWindow::openRecentFile()
     QAction* action = qobject_cast<QAction*>(sender());
     if (action)
     {
+        if (!confirmDiscardChanges())
+            return;
+
         QString filePath = action->data().toString();
         loadFLAFile(filePath);
     }
@@ -396,6 +503,12 @@ void MainWindow::saveSettings()
 
 void MainWindow::closeEvent(QCloseEvent* event)
 {
+    if (!confirmDiscardChanges())
+    {
+        event->ignore();
+        return;
+    }
+
     saveSettings();
     event->accept();
 }

@@ -5,6 +5,7 @@
 #include "timeline_view.h"
 #include "player.h"
 #include "../data/fla_document.h"
+#include "../edit/edit_context.h"
 
 #include <QMainWindow>
 #include <QMenuBar>
@@ -39,10 +40,24 @@ private slots:
 
     void onHighQualityAntiAliasingToggled(bool checked);
 
+    void undo();
+
+    void redo();
+
 private:
     void setupUI();
 
     void setupMenus();
+
+    /// Refreshes everything that depends on the undo history: the Edit menu
+    /// entries and the modified marker in the title bar.
+    void updateEditState();
+
+    /// Rebuilds the title from the open file plus the modified marker.
+    void updateWindowTitle();
+
+    /// Offers to abandon unsaved changes. Returns false if the user cancels.
+    bool confirmDiscardChanges();
 
     void updateRecentFilesMenu();
 
@@ -59,6 +74,11 @@ private:
     static const int MAX_RECENT_FILES = 10;
 
     fla::FLADocument* _flaDocument;
+    fla::EditContext _editContext;
+    QAction* _undoAction = nullptr;
+    QAction* _redoAction = nullptr;
+    /// Display name of the open file, without the modified marker.
+    QString _documentName;
     Player* _player;
     QSplitter* _mainSplitter;
     QSplitter* _viewSplitter;

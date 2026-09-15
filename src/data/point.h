@@ -35,7 +35,7 @@ public:
 
     Point& transform(const Transform& t)
     {
-        double newX = t.m11 * x + t.m12 * y + t.tx;
+        double newX = t.m11 * x + t.m21 * y + t.tx;
         double newY = t.m12 * x + t.m22 * y + t.ty;
         x = newX;
         y = newY;

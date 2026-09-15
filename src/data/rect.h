@@ -44,12 +44,27 @@ public:
         bottomRight.y += ty;
     }
 
+    /// Transforms the rect in place, becoming the axis-aligned bounding box of
+    /// the transformed corners. All four corners are mapped, so this stays
+    /// correct when the transform rotates or skews.
     void transform(const Transform& t)
     {
-        topLeft.x = t.m11 * topLeft.x + t.m21 * topLeft.y + t.tx;
-        topLeft.y = t.m12 * topLeft.x + t.m22 * topLeft.y + t.ty;
-        bottomRight.x = t.m11 * bottomRight.x + t.m21 * bottomRight.y + t.tx;
-        bottomRight.y = t.m12 * bottomRight.x + t.m22 * bottomRight.y + t.ty;
+        const Point corners[4] = {
+            topLeft,
+            Point(bottomRight.x, topLeft.y),
+            bottomRight,
+            Point(topLeft.x, bottomRight.y)
+        };
+
+        reset();
+        for (const Point& corner : corners)
+        {
+            const Point p = corner.transformed(t);
+            topLeft.x = std::min(topLeft.x, p.x);
+            topLeft.y = std::min(topLeft.y, p.y);
+            bottomRight.x = std::max(bottomRight.x, p.x);
+            bottomRight.y = std::max(bottomRight.y, p.y);
+        }
     }
 
     void expandToInclude(const Rect& other);
