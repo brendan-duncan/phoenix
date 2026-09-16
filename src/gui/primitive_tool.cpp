@@ -1,5 +1,6 @@
 #include "primitive_tool.h"
 
+#include "draw_placement.h"
 #include "phoenix_view.h"
 
 #include "../data/frame.h"
@@ -188,15 +189,8 @@ bool PrimitiveTool::mouseRelease(PhoenixView& view, QMouseEvent* event, const QP
         return true;
     }
 
-    _commandStack.push(fla::CommandPtr(new fla::AddElementCommand(
-        frame, element, name().toStdString(), &_selection)));
-    _commandStack.breakMergeChain();
-
-    // Adding an object changes what is on stage, so cached geometry keyed by
-    // element pointer has to go.
-    view.clearCaches();
-    _selection.select(element);
-    view.update();
+    placeDrawnElement(view, _commandStack, _selection, frame, element, name(),
+        _style.objectDrawing);
     return true;
 }
 
@@ -259,12 +253,15 @@ fla::Element* PrimitiveTool::createElement(fla::Frame* frame, const QPointF& sta
     case Kind::Rectangle:
         if (rect.width() < kMinimumSize || rect.height() < kMinimumSize)
             return nullptr;
-        return createRectangle(frame, rect);
+        // A primitive cannot merge, so merge mode gets a plain shape instead.
+        return _style.objectDrawing ? createRectangle(frame, rect)
+                                    : createRectangleShape(frame, rect);
 
     case Kind::Oval:
         if (rect.width() < kMinimumSize || rect.height() < kMinimumSize)
             return nullptr;
-        return createOval(frame, rect);
+        return _style.objectDrawing ? createOval(frame, rect)
+                                    : createOvalShape(frame, rect);
 
     case Kind::Line:
         if (std::hypot(end.x() - start.x(), end.y() - start.y()) < kMinimumSize)
@@ -278,6 +275,100 @@ fla::Element* PrimitiveTool::createElement(fla::Frame* frame, const QPointF& sta
     }
 
     return nullptr;
+}
+
+namespace {
+
+/// Builds the fill and stroke a generated shape needs, filing them under the
+/// usual indices and reporting which ones were actually made.
+void addStylesTo(fla::Shape* shape, const fla::DrawingStyle& style,
+    int& fillIndex, int& strokeIndex)
+{
+    fillIndex = -1;
+    strokeIndex = -1;
+
+    if (fla::FillStyle* fill = style.createFill(shape))
+    {
+        shape->fills.push_back(fill);
+        shape->fillsMap[kStyleIndex] = fill;
+        fillIndex = kStyleIndex;
+    }
+
+    if (fla::StrokeStyle* stroke = style.createStroke(shape))
+    {
+        shape->strokes.push_back(stroke);
+        shape->strokesMap[kStyleIndex] = stroke;
+        strokeIndex = kStyleIndex;
+    }
+}
+
+} // namespace
+
+fla::Element* PrimitiveTool::createRectangleShape(fla::Frame* frame, const QRectF& rect) const
+{
+    fla::Shape* shape = new fla::Shape(frame);
+
+    int fillIndex = -1;
+    int strokeIndex = -1;
+    addStylesTo(shape, _style, fillIndex, strokeIndex);
+
+    addClosedPath(shape, {
+        rect.topLeft(), rect.topRight(), rect.bottomRight(), rect.bottomLeft()
+    }, fillIndex, strokeIndex);
+
+    setShapeBounds(shape, rect);
+    return shape;
+}
+
+fla::Element* PrimitiveTool::createOvalShape(fla::Frame* frame, const QRectF& rect) const
+{
+    fla::Shape* shape = new fla::Shape(frame);
+
+    int fillIndex = -1;
+    int strokeIndex = -1;
+    addStylesTo(shape, _style, fillIndex, strokeIndex);
+
+    // Four cubics, with the control points at the usual fraction of the radius
+    // that makes a bezier follow an ellipse to within a fraction of a percent.
+    const double kappa = 0.5522847498;
+    const double rx = rect.width() * 0.5;
+    const double ry = rect.height() * 0.5;
+    const double cx = rect.center().x();
+    const double cy = rect.center().y();
+
+    const QPointF top(cx, cy - ry);
+    const QPointF right(cx + rx, cy);
+    const QPointF bottom(cx, cy + ry);
+    const QPointF left(cx - rx, cy);
+
+    fla::Edge* edge = new fla::Edge(shape);
+    edge->fillStyle1 = fillIndex;
+    edge->strokeStyle = strokeIndex;
+
+    fla::Path* path = new fla::Path(edge);
+    path->segments.push_back(new fla::PathSegment(
+        fla::PathSegment::Command::Move, {fla::Point(top.x(), top.y())}, path));
+
+    const auto arc = [&](const QPointF& from, const QPointF& to,
+                         const QPointF& fromControl, const QPointF& toControl) {
+        path->segments.push_back(new fla::PathSegment(
+            fla::PathSegment::Command::Cubic,
+            {fla::Point(fromControl.x(), fromControl.y()),
+             fla::Point(toControl.x(), toControl.y()),
+             fla::Point(to.x(), to.y())}, path));
+        (void)from;
+    };
+
+    arc(top, right, QPointF(cx + rx * kappa, cy - ry), QPointF(cx + rx, cy - ry * kappa));
+    arc(right, bottom, QPointF(cx + rx, cy + ry * kappa), QPointF(cx + rx * kappa, cy + ry));
+    arc(bottom, left, QPointF(cx - rx * kappa, cy + ry), QPointF(cx - rx, cy + ry * kappa));
+    arc(left, top, QPointF(cx - rx, cy - ry * kappa), QPointF(cx - rx * kappa, cy - ry));
+
+    edge->paths.push_back(path);
+    shape->edges.push_back(edge);
+
+    setShapeBounds(shape, rect);
+    return shape;
 }
 
 fla::Element* PrimitiveTool::createRectangle(fla::Frame* frame, const QRectF& rect) const

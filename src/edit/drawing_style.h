@@ -25,6 +25,14 @@ public:
     uint8_t strokeColor[4] = {0, 0, 0, 255};
     double strokeWeight = 1.0;
 
+    /// Whether a new shape stays a separate object instead of merging into what
+    /// is already there.
+    ///
+    /// Animate calls this Object Drawing Mode and leaves it off, so drawing
+    /// merges by default: outlines cut each other and the newer fill replaces
+    /// the older. Turning it on keeps each drawing its own object.
+    bool objectDrawing = false;
+
     /// How the pencil tidies a freehand stroke.
     enum class PencilMode
     {

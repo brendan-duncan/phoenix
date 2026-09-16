@@ -76,6 +76,15 @@ private:
 
     fla::Element* createOval(fla::Frame* frame, const QRectF& rect) const;
 
+    /// A rectangle or oval as an ordinary shape rather than a primitive object.
+    ///
+    /// The format's rectangle and oval objects are object-drawing by nature:
+    /// they are single objects with their own outline and cannot take part in a
+    /// merge. Drawing one with merge mode on has to produce a shape instead.
+    fla::Element* createRectangleShape(fla::Frame* frame, const QRectF& rect) const;
+
+    fla::Element* createOvalShape(fla::Frame* frame, const QRectF& rect) const;
+
     fla::Element* createLine(fla::Frame* frame, const QPointF& start,
         const QPointF& end) const;
 

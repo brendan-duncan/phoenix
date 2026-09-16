@@ -1,5 +1,6 @@
 #include "pen_tool.h"
 
+#include "draw_placement.h"
 #include "phoenix_view.h"
 
 #include "../data/frame.h"
@@ -199,20 +200,13 @@ void PenTool::finish(PhoenixView& view, bool close)
         return;
     }
 
-    _commandStack.push(fla::CommandPtr(new fla::AddElementCommand(
-        frame, shape, "Pen", &_selection)));
-    _commandStack.breakMergeChain();
-
     _path = fla::EditablePath();
     _active = false;
     _draggingHandle = false;
     _overFirstAnchor = false;
 
-    // A new object changes what is on stage, so geometry cached by element
-    // pointer has to go.
-    view.clearCaches();
-    _selection.select(shape);
-    view.update();
+    placeDrawnElement(view, _commandStack, _selection, frame, shape, "Pen",
+        _style.objectDrawing);
 }
 
 void PenTool::cancel(PhoenixView& view)

@@ -1,5 +1,6 @@
 #include "pencil_tool.h"
 
+#include "draw_placement.h"
 #include "phoenix_view.h"
 
 #include "../data/frame.h"
@@ -121,15 +122,8 @@ void PencilTool::finish(PhoenixView& view)
         return;
     }
 
-    _commandStack.push(fla::CommandPtr(new fla::AddElementCommand(
-        frame, shape, "Pencil", &_selection)));
-    _commandStack.breakMergeChain();
-
-    // A new object changes what is on stage, so geometry cached by element
-    // pointer has to go.
-    view.clearCaches();
-    _selection.select(shape);
-    view.update();
+    placeDrawnElement(view, _commandStack, _selection, frame, shape, "Pencil",
+        _style.objectDrawing);
 }
 
 fla::Element* PencilTool::createShape(fla::Frame* frame, const fla::EditablePath& path) const

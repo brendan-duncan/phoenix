@@ -39,6 +39,8 @@
 #include <QSpinBox>
 #include <QToolButton>
 
+#include "tool_icons.h"
+
 MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent)
     , _phoenixView(nullptr)
@@ -635,13 +637,18 @@ void MainWindow::setupToolBar()
     QToolBar* toolBar = addToolBar("Tools");
     toolBar->setObjectName("toolsToolBar");
     toolBar->setMovable(false);
+    // Icons only: nine tools named in full make a very wide bar, and the name
+    // stays available as a tooltip.
+    toolBar->setToolButtonStyle(Qt::ToolButtonIconOnly);
+    toolBar->setIconSize(QSize(22, 22));
 
     // One action group so the tools behave like a radio button set, the way a
     // toolbox does.
     QActionGroup* toolGroup = new QActionGroup(this);
     toolGroup->setExclusive(true);
 
-    QAction* selectionAction = new QAction("Selection", this);
+    QAction* selectionAction = new QAction(
+        ToolIcons::icon(ToolIcons::Tool::Selection), "Selection", this);
     selectionAction->setCheckable(true);
     selectionAction->setChecked(true);
     selectionAction->setShortcut(QKeySequence(Qt::Key_V));
@@ -653,7 +660,8 @@ void MainWindow::setupToolBar()
     toolGroup->addAction(selectionAction);
     toolBar->addAction(selectionAction);
 
-    QAction* subselectionAction = new QAction("Subselection", this);
+    QAction* subselectionAction = new QAction(
+        ToolIcons::icon(ToolIcons::Tool::Subselection), "Subselection", this);
     subselectionAction->setCheckable(true);
     subselectionAction->setShortcut(QKeySequence(Qt::Key_A));
     subselectionAction->setStatusTip(
@@ -664,7 +672,8 @@ void MainWindow::setupToolBar()
     toolGroup->addAction(subselectionAction);
     toolBar->addAction(subselectionAction);
 
-    QAction* freeTransformAction = new QAction("Free Transform", this);
+    QAction* freeTransformAction = new QAction(
+        ToolIcons::icon(ToolIcons::Tool::FreeTransform), "Free Transform", this);
     freeTransformAction->setCheckable(true);
     freeTransformAction->setShortcut(QKeySequence(Qt::Key_Q));
     freeTransformAction->setStatusTip(
@@ -683,25 +692,27 @@ void MainWindow::setupToolBar()
     struct ShapeEntry
     {
         const char* label;
+        ToolIcons::Tool icon;
         Qt::Key shortcut;
         const char* tip;
         std::unique_ptr<PrimitiveTool>* tool;
     };
 
     const ShapeEntry shapes[] = {
-        {"Rectangle", Qt::Key_R, "Drag to draw a rectangle. Shift for a square.",
-            &_rectangleTool},
-        {"Oval", Qt::Key_O, "Drag to draw an oval. Shift for a circle.",
-            &_ovalTool},
-        {"Line", Qt::Key_N, "Drag to draw a line. Shift for 45 degree steps.",
-            &_lineTool},
-        {"PolyStar", Qt::Key_Y, "Drag from the centre outwards. Sides and star mode "
-            "are in the Properties panel.", &_polyStarTool},
+        {"Rectangle", ToolIcons::Tool::Rectangle, Qt::Key_R,
+            "Drag to draw a rectangle. Shift for a square.", &_rectangleTool},
+        {"Oval", ToolIcons::Tool::Oval, Qt::Key_O,
+            "Drag to draw an oval. Shift for a circle.", &_ovalTool},
+        {"Line", ToolIcons::Tool::Line, Qt::Key_N,
+            "Drag to draw a line. Shift for 45 degree steps.", &_lineTool},
+        {"PolyStar", ToolIcons::Tool::PolyStar, Qt::Key_Y,
+            "Drag from the centre outwards. Sides and star mode are in the "
+            "Properties panel.", &_polyStarTool},
     };
 
     for (const ShapeEntry& shape : shapes)
     {
-        QAction* action = new QAction(shape.label, this);
+        QAction* action = new QAction(ToolIcons::icon(shape.icon), shape.label, this);
         action->setCheckable(true);
         action->setShortcut(QKeySequence(shape.shortcut));
         action->setStatusTip(shape.tip);
@@ -715,7 +726,8 @@ void MainWindow::setupToolBar()
 
     toolBar->addSeparator();
 
-    QAction* penAction = new QAction("Pen", this);
+    QAction* penAction = new QAction(
+        ToolIcons::icon(ToolIcons::Tool::Pen), "Pen", this);
     penAction->setCheckable(true);
     // P for the pen, as in Animate. B is already the bounding-box toggle, and a
     // clash leaves Qt firing neither.
@@ -729,7 +741,8 @@ void MainWindow::setupToolBar()
     toolGroup->addAction(penAction);
     toolBar->addAction(penAction);
 
-    QAction* pencilAction = new QAction("Pencil", this);
+    QAction* pencilAction = new QAction(
+        ToolIcons::icon(ToolIcons::Tool::Pencil), "Pencil", this);
     pencilAction->setCheckable(true);
     pencilAction->setShortcut(QKeySequence(Qt::Key_D));
     pencilAction->setStatusTip(
@@ -740,6 +753,23 @@ void MainWindow::setupToolBar()
     });
     toolGroup->addAction(pencilAction);
     toolBar->addAction(pencilAction);
+
+    toolBar->addSeparator();
+
+    // Not a tool, so it stands outside the exclusive group: it changes what
+    // every drawing tool does rather than replacing them.
+    QAction* objectDrawingAction = new QAction(
+        ToolIcons::icon(ToolIcons::Tool::ObjectDrawing), "Object Drawing", this);
+    objectDrawingAction->setCheckable(true);
+    objectDrawingAction->setChecked(_drawingStyle.objectDrawing);
+    objectDrawingAction->setShortcut(QKeySequence(Qt::Key_J));
+    objectDrawingAction->setStatusTip(
+        "Keep each new drawing as its own object. With this off, drawings merge: "
+        "outlines cut each other and the newer fill replaces the older.");
+    connect(objectDrawingAction, &QAction::toggled, this, [this](bool on) {
+        _drawingStyle.objectDrawing = on;
+    });
+    toolBar->addAction(objectDrawingAction);
 }
 
 namespace {

@@ -135,6 +135,10 @@ Selecting things on the stage works. Transforming them does not yet.
       status bar
 - [x] Toolbar with the Selection tool (`V`), as an exclusive action group ready
       for the tools that follow
+- [x] Toolbar buttons carry drawn icons (`src/gui/tool_icons.h`) rather than
+      names. Ten small glyphs are not worth a dependency on an image set or a
+      resource file to keep in step with the build, and drawing them means they
+      scale to whatever size the toolbar asks for
 - [x] Free transform: move, scale, rotate, skew of whole elements
   - `SetElementTransformCommand` (`src/edit/element_commands.h`, 7 tests) is the
     one edit underneath all four gestures -- only the matrix and the name differ
@@ -409,10 +413,18 @@ to it, so nothing in the application uses it yet.
       a copy of both sides rather than trying to reverse the operation. The merge
       runs once, when the command is built; redo and undo only swap a snapshot
       back, so going back and forth cannot drift
-- [ ] Wire it into the tools. The pen, pencil and shape tools still always add a
-      new element; merge mode needs a toggle (Animate's `J`) and, when it is on,
-      the rectangle and oval tools have to produce shapes rather than the
-      primitive object types
+- [x] Wired into the tools. **Merge drawing is now the default**, as in Animate,
+      with an Object Drawing toggle (`J`) to keep each drawing separate
+  - The pen, pencil and shape tools all finish through one
+      `placeDrawnElement`, so the mode is decided in a single place rather than
+      three times over
+  - A new shape merges into the topmost shape in the frame it touches; one drawn
+      clear of everything becomes an object of its own
+  - With merge mode on the rectangle and oval tools build plain shapes rather
+      than `DOMRectangleObject` and `DOMOvalObject`. Those primitives are
+      object-drawing by nature and cannot take part in a merge
+  - Verified in the running application: two overlapping rectangles come out as
+      one object, with the selection box spanning both
 - [ ] Paint bucket (flood fill over the map), ink bottle, eraser
 - [ ] Selection tool edge-dragging (fill follows the edge)
 - [ ] Stroke-to-outline conversion (needed by the brush tool)
