@@ -471,3 +471,8 @@ cmake -S tests -B build-tests -G Ninja
 cmake --build build-tests
 ctest --test-dir build-tests --output-on-failure
 ```
+
+Ninja needs the compiler on `PATH` already, so run that from a Developer Command
+Prompt. Dropping `-G Ninja` uses the default generator instead, which finds MSVC
+on its own but is multi-config, so the build and the test run then need
+`--config Debug` and `-C Debug` respectively. See the README for the detail.
