@@ -189,13 +189,47 @@ one `documentToWidget` transform shared by painting, picking and the zoom anchor
 
 ## 4. Primitive tools
 
-- [ ] Rectangle (reuse parsed `RectanglePrimitive`)
-- [ ] Oval (reuse parsed `OvalPrimitive`)
-- [ ] Line
-- [ ] PolyStar
-- [ ] Fill/stroke property panel
+Done. Drawn shapes were saved to a .fla and round-tripped back with no
+differences, so what the tools build is valid XFL, not just something that
+happens to render.
+
+- [x] `AddElementCommand` / `RemoveElementCommand` (`src/edit/element_commands.h`,
+      8 tests). Ownership moves with the element: a `Frame` deletes what it holds,
+      so while the element is out of the frame the command owns it, and dropping
+      the history then frees it. Z-order is restored on redo, not appended
+  - The commands take an optional `Selection` and drop the element from it
+    whenever it leaves the document, so undo cannot leave the selection pointing
+    at freed memory
+- [x] Rectangle (`R`) and Oval (`O`), built as the `DOMRectangleObject` and
+      `DOMOvalObject` primitives the format already has
+- [x] Line (`N`) and PolyStar (`P`), built as ordinary shapes with an edge, since
+      the format has no primitive for either
+  - A polystar's outline closes by repeating its first point, which is what the
+    fill reconstruction expects
+  - Drawing a line with strokes switched off falls back to a hairline rather than
+    creating an invisible object
+- [x] All four share one `PrimitiveTool`: same press-drag-release gesture,
+      differing only in what they build from the two corners
+- [x] Shift constrains -- square, circle, and 45 degree line steps -- and the
+      drag snaps to the grid and to other objects like any other gesture
+- [x] Fill/stroke properties panel: colour swatches with alpha, stroke weight,
+      and the polystar's sides and star mode. One `DrawingStyle`
+      (`src/edit/drawing_style.h`) lives for the session, so the next shape picks
+      up the last one's settings
+
+### Rough edges
+
+- [ ] New objects go into the current frame of the first drawable layer, or one
+      the file marks selected. There is no way to choose a layer yet, so
+      `PhoenixView::activeFrame()` guesses. Needs layer selection in the timeline
+- [ ] Drawing on a frame that has no keyframe should create one. Right now the
+      object joins whatever frame is showing
+- [ ] Star mode is implemented but only polygon mode was checked on screen
+- [ ] Rectangle corner radius and the oval's start/end angle and inner radius are
+      in the data model and get written, but no tool sets them
 
 ## 5. Pen + subselection (object drawing mode)
+
 
 - [ ] Authoring-side anchor model (tangent linked/broken, corner vs. smooth) that
       compiles down to `PathSegment` — the current model stores only on-curve

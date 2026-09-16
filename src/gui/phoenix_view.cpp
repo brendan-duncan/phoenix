@@ -2063,6 +2063,57 @@ void PhoenixView::setSelection(fla::Selection* selection)
     update();
 }
 
+fla::Frame* PhoenixView::activeFrame()
+{
+    if (!_flaDocument || !_flaDocument->document)
+        return nullptr;
+
+    // TODO: follow the layer the user picked once the timeline offers one. Until
+    // then, prefer a layer the file marks as selected and otherwise take the
+    // first one that can actually be drawn on.
+    const fla::Layer* fallback = nullptr;
+    const fla::Layer* chosen = nullptr;
+
+    for (const fla::Timeline* timeline : _flaDocument->document->timelines)
+    {
+        if (!timeline->visible)
+            continue;
+
+        for (const fla::Layer* layer : timeline->layers)
+        {
+            if (!layer || !layer->isVisible() || layer->locked)
+                continue;
+
+            // Folders hold no artwork, and guide layers are drawing aids that
+            // never render.
+            if (layer->layerType == fla::Layer::Type::Folder ||
+                layer->layerType == fla::Layer::Type::Guide)
+            {
+                continue;
+            }
+
+            if (!fallback)
+                fallback = layer;
+
+            if (layer->selected)
+            {
+                chosen = layer;
+                break;
+            }
+        }
+
+        if (chosen)
+            break;
+    }
+
+    const fla::Layer* layer = chosen ? chosen : fallback;
+    if (!layer)
+        return nullptr;
+
+    const LayerFrame state = resolveLayerFrame(layer, fla::LoopType::PlayOnce, 0);
+    return const_cast<fla::Frame*>(state.frame);
+}
+
 void PhoenixView::setSnapper(fla::Snapper* snapper)
 {
     _snapper = snapper;

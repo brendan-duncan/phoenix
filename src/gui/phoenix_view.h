@@ -104,6 +104,10 @@ public:
     void gatherSnapCandidates(fla::Snapper& snapper,
         const std::vector<fla::Element*>& exclude);
 
+    /// The frame a new object would be drawn into: the currently showing frame
+    /// of the layer being edited. Null when there is nowhere to draw.
+    fla::Frame* activeFrame();
+
     void setShowGrid(bool show) { _showGrid = show; update(); }
 
     bool showGrid() const { return _showGrid; }

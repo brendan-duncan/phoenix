@@ -6,9 +6,11 @@
 #include "player.h"
 #include "../data/fla_document.h"
 #include "free_transform_tool.h"
+#include "primitive_tool.h"
 #include "selection_tool.h"
 #include "../edit/edit_context.h"
 #include "../edit/selection.h"
+#include "../edit/drawing_style.h"
 #include "../edit/snapping.h"
 
 #include <memory>
@@ -65,6 +67,8 @@ private:
 
     void setupToolBar();
 
+    void setupPropertiesPanel();
+
     /// Refreshes the actions that only make sense with something selected.
     void updateSelectionState();
 
@@ -107,6 +111,13 @@ private:
     fla::Snapper _snapper;
     std::unique_ptr<SelectionTool> _selectionTool;
     std::unique_ptr<FreeTransformTool> _freeTransformTool;
+    std::unique_ptr<PrimitiveTool> _rectangleTool;
+    std::unique_ptr<PrimitiveTool> _ovalTool;
+    std::unique_ptr<PrimitiveTool> _lineTool;
+    std::unique_ptr<PrimitiveTool> _polyStarTool;
+    fla::DrawingStyle _drawingStyle;
+    QToolButton* _fillColorButton = nullptr;
+    QToolButton* _strokeColorButton = nullptr;
     QAction* _selectAllAction = nullptr;
     QAction* _deselectAllAction = nullptr;
     QAction* _undoAction = nullptr;

@@ -30,6 +30,13 @@
 #include <QRadialGradient>
 #include <QToolBar>
 #include <QActionGroup>
+#include <QCheckBox>
+#include <QColorDialog>
+#include <QDockWidget>
+#include <QDoubleSpinBox>
+#include <QFormLayout>
+#include <QSpinBox>
+#include <QToolButton>
 
 MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent)
@@ -55,6 +62,7 @@ MainWindow::MainWindow(QWidget *parent)
     setupUI();
     setupMenus();
     setupToolBar();
+    setupPropertiesPanel();
 
     // Keep the Edit menu and the title bar in step with the undo history.
     _editContext.commandStack().setChangedCallback([this]() { updateEditState(); });
@@ -76,6 +84,16 @@ MainWindow::MainWindow(QWidget *parent)
     _selectionTool = std::make_unique<SelectionTool>(_selection, _editContext.commandStack());
     _freeTransformTool = std::make_unique<FreeTransformTool>(
         _selection, _editContext.commandStack());
+
+    fla::CommandStack& stack = _editContext.commandStack();
+    _rectangleTool = std::make_unique<PrimitiveTool>(
+        PrimitiveTool::Kind::Rectangle, _selection, stack, _drawingStyle);
+    _ovalTool = std::make_unique<PrimitiveTool>(
+        PrimitiveTool::Kind::Oval, _selection, stack, _drawingStyle);
+    _lineTool = std::make_unique<PrimitiveTool>(
+        PrimitiveTool::Kind::Line, _selection, stack, _drawingStyle);
+    _polyStarTool = std::make_unique<PrimitiveTool>(
+        PrimitiveTool::Kind::PolyStar, _selection, stack, _drawingStyle);
     _phoenixView->setSelection(&_selection);
     _phoenixView->setActiveTool(_selectionTool.get());
     updateSelectionState();
@@ -642,6 +660,159 @@ void MainWindow::setupToolBar()
     });
     toolGroup->addAction(freeTransformAction);
     toolBar->addAction(freeTransformAction);
+
+    toolBar->addSeparator();
+
+    // The shape tools all behave the same way, so they are wired from a table
+    // rather than four near-identical blocks.
+    struct ShapeEntry
+    {
+        const char* label;
+        Qt::Key shortcut;
+        const char* tip;
+        std::unique_ptr<PrimitiveTool>* tool;
+    };
+
+    const ShapeEntry shapes[] = {
+        {"Rectangle", Qt::Key_R, "Drag to draw a rectangle. Shift for a square.",
+            &_rectangleTool},
+        {"Oval", Qt::Key_O, "Drag to draw an oval. Shift for a circle.",
+            &_ovalTool},
+        {"Line", Qt::Key_N, "Drag to draw a line. Shift for 45 degree steps.",
+            &_lineTool},
+        {"PolyStar", Qt::Key_P, "Drag from the centre outwards. Sides and star mode "
+            "are in the Properties panel.", &_polyStarTool},
+    };
+
+    for (const ShapeEntry& shape : shapes)
+    {
+        QAction* action = new QAction(shape.label, this);
+        action->setCheckable(true);
+        action->setShortcut(QKeySequence(shape.shortcut));
+        action->setStatusTip(shape.tip);
+        std::unique_ptr<PrimitiveTool>* tool = shape.tool;
+        connect(action, &QAction::triggered, this, [this, tool]() {
+            _phoenixView->setActiveTool(tool->get());
+        });
+        toolGroup->addAction(action);
+        toolBar->addAction(action);
+    }
+}
+
+namespace {
+
+/// Renders a colour swatch for the fill and stroke buttons.
+QIcon swatchIcon(const uint8_t rgba[4])
+{
+    QPixmap pixmap(20, 20);
+    pixmap.fill(Qt::transparent);
+
+    QPainter painter(&pixmap);
+    painter.setRenderHint(QPainter::Antialiasing, false);
+    // A checker behind the swatch so a transparent colour reads as transparent
+    // rather than as black.
+    painter.fillRect(0, 0, 20, 20, QColor(120, 120, 120));
+    painter.fillRect(0, 0, 10, 10, QColor(160, 160, 160));
+    painter.fillRect(10, 10, 10, 10, QColor(160, 160, 160));
+    painter.fillRect(1, 1, 18, 18, QColor(rgba[0], rgba[1], rgba[2], rgba[3]));
+    painter.setPen(QColor(30, 30, 30));
+    painter.drawRect(0, 0, 19, 19);
+
+    return QIcon(pixmap);
+}
+
+void applyColor(const QColor& color, uint8_t rgba[4])
+{
+    rgba[0] = static_cast<uint8_t>(color.red());
+    rgba[1] = static_cast<uint8_t>(color.green());
+    rgba[2] = static_cast<uint8_t>(color.blue());
+    rgba[3] = static_cast<uint8_t>(color.alpha());
+}
+
+} // namespace
+
+void MainWindow::setupPropertiesPanel()
+{
+    QDockWidget* dock = new QDockWidget("Properties", this);
+    dock->setObjectName("propertiesDock");
+    dock->setAllowedAreas(Qt::RightDockWidgetArea | Qt::LeftDockWidgetArea);
+
+    QWidget* panel = new QWidget(dock);
+    QFormLayout* layout = new QFormLayout(panel);
+
+    // Fill.
+    _fillColorButton = new QToolButton(panel);
+    _fillColorButton->setIcon(swatchIcon(_drawingStyle.fillColor));
+    _fillColorButton->setToolTip("Fill colour for new shapes");
+    connect(_fillColorButton, &QToolButton::clicked, this, [this]() {
+        const QColor current(_drawingStyle.fillColor[0], _drawingStyle.fillColor[1],
+            _drawingStyle.fillColor[2], _drawingStyle.fillColor[3]);
+        const QColor chosen = QColorDialog::getColor(current, this, "Fill Colour",
+            QColorDialog::ShowAlphaChannel);
+        if (!chosen.isValid())
+            return;
+        applyColor(chosen, _drawingStyle.fillColor);
+        _fillColorButton->setIcon(swatchIcon(_drawingStyle.fillColor));
+    });
+
+    QCheckBox* fillEnabled = new QCheckBox("Fill", panel);
+    fillEnabled->setChecked(_drawingStyle.hasFill);
+    connect(fillEnabled, &QCheckBox::toggled, this, [this](bool on) {
+        _drawingStyle.hasFill = on;
+    });
+    layout->addRow(fillEnabled, _fillColorButton);
+
+    // Stroke.
+    _strokeColorButton = new QToolButton(panel);
+    _strokeColorButton->setIcon(swatchIcon(_drawingStyle.strokeColor));
+    _strokeColorButton->setToolTip("Stroke colour for new shapes");
+    connect(_strokeColorButton, &QToolButton::clicked, this, [this]() {
+        const QColor current(_drawingStyle.strokeColor[0], _drawingStyle.strokeColor[1],
+            _drawingStyle.strokeColor[2], _drawingStyle.strokeColor[3]);
+        const QColor chosen = QColorDialog::getColor(current, this, "Stroke Colour",
+            QColorDialog::ShowAlphaChannel);
+        if (!chosen.isValid())
+            return;
+        applyColor(chosen, _drawingStyle.strokeColor);
+        _strokeColorButton->setIcon(swatchIcon(_drawingStyle.strokeColor));
+    });
+
+    QCheckBox* strokeEnabled = new QCheckBox("Stroke", panel);
+    strokeEnabled->setChecked(_drawingStyle.hasStroke);
+    connect(strokeEnabled, &QCheckBox::toggled, this, [this](bool on) {
+        _drawingStyle.hasStroke = on;
+    });
+    layout->addRow(strokeEnabled, _strokeColorButton);
+
+    QDoubleSpinBox* weight = new QDoubleSpinBox(panel);
+    weight->setRange(0.1, 200.0);
+    weight->setSingleStep(0.5);
+    weight->setValue(_drawingStyle.strokeWeight);
+    connect(weight, &QDoubleSpinBox::valueChanged, this, [this](double value) {
+        _drawingStyle.strokeWeight = value;
+    });
+    layout->addRow("Weight", weight);
+
+    // PolyStar settings, which only the polystar tool reads.
+    QSpinBox* sides = new QSpinBox(panel);
+    sides->setRange(3, 32);
+    sides->setValue(_drawingStyle.sides);
+    connect(sides, &QSpinBox::valueChanged, this, [this](int value) {
+        _drawingStyle.sides = value;
+    });
+    layout->addRow("Sides", sides);
+
+    QCheckBox* star = new QCheckBox("Star", panel);
+    star->setChecked(_drawingStyle.star);
+    star->setToolTip("Draw a star rather than a regular polygon");
+    connect(star, &QCheckBox::toggled, this, [this](bool on) {
+        _drawingStyle.star = on;
+    });
+    layout->addRow(QString(), star);
+
+    panel->setLayout(layout);
+    dock->setWidget(panel);
+    addDockWidget(Qt::RightDockWidgetArea, dock);
 }
 
 void MainWindow::selectAll()

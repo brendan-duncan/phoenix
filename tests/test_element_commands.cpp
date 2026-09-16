@@ -2,7 +2,9 @@
 
 #include "../src/data/group.h"
 #include "../src/edit/command_stack.h"
+#include "../src/data/frame.h"
 #include "../src/edit/element_commands.h"
+#include "../src/edit/selection.h"
 
 using fla::CommandPtr;
 using fla::CommandStack;
@@ -146,4 +148,174 @@ TEST(transform_command_undoes_a_whole_multi_element_gesture)
     stack.redo();
     CHECK(sameTransform(first.transform, Transform::fromTranslate(5.0, 5.0)));
     CHECK(sameTransform(second.transform, Transform::fromTranslate(5.0, 5.0)));
+}
+
+namespace {
+
+/// Counts live instances so a test can prove an undone creation is freed rather
+/// than leaked, and that a live one is never freed twice.
+class CountedElement : public fla::Group
+{
+public:
+    CountedElement()
+        : fla::Group(nullptr)
+    {
+        ++liveCount;
+    }
+
+    ~CountedElement() override { --liveCount; }
+
+    static int liveCount;
+};
+
+int CountedElement::liveCount = 0;
+
+} // namespace
+
+TEST(add_element_command_inserts_and_removes)
+{
+    fla::Frame frame(nullptr);
+    TestElement* element = new TestElement();
+
+    CommandStack stack;
+    stack.push(CommandPtr(new fla::AddElementCommand(&frame, element, "Rectangle")));
+
+    CHECK(frame.elements.size() == 1);
+    CHECK(frame.elements[0] == element);
+
+    stack.undo();
+    CHECK(frame.elements.empty());
+
+    stack.redo();
+    CHECK(frame.elements.size() == 1);
+    CHECK(frame.elements[0] == element);
+
+    // The frame owns it now and will delete it.
+}
+
+TEST(add_element_command_keeps_z_order)
+{
+    fla::Frame frame(nullptr);
+    TestElement* first = new TestElement();
+    TestElement* last = new TestElement();
+    frame.elements.push_back(first);
+    frame.elements.push_back(last);
+
+    TestElement* middle = new TestElement();
+    CommandStack stack;
+    stack.push(CommandPtr(new fla::AddElementCommand(&frame, middle, "Oval", nullptr, 1)));
+
+    CHECK(frame.elements.size() == 3);
+    CHECK(frame.elements[1] == middle);
+
+    stack.undo();
+    CHECK(frame.elements.size() == 2);
+
+    // Redo must put it back where it was, not on top.
+    stack.redo();
+    CHECK(frame.elements.size() == 3);
+    CHECK(frame.elements[1] == middle);
+}
+
+TEST(add_element_command_frees_an_undone_element)
+{
+    fla::Frame frame(nullptr);
+    CountedElement::liveCount = 0;
+
+    {
+        CommandStack stack;
+        stack.push(CommandPtr(new fla::AddElementCommand(
+            &frame, new CountedElement(), "Rectangle")));
+        CHECK(CountedElement::liveCount == 1);
+
+        stack.undo();
+        // Out of the frame but still held by the command, ready for redo.
+        CHECK(CountedElement::liveCount == 1);
+        CHECK(frame.elements.empty());
+    }
+
+    // The history went away while the element was out, so the command had to
+    // free it. Anything else would leak.
+    CHECK(CountedElement::liveCount == 0);
+}
+
+TEST(add_element_command_leaves_a_live_element_to_the_frame)
+{
+    CountedElement::liveCount = 0;
+
+    {
+        fla::Frame frame(nullptr);
+        {
+            CommandStack stack;
+            stack.push(CommandPtr(new fla::AddElementCommand(
+                &frame, new CountedElement(), "Rectangle")));
+            CHECK(CountedElement::liveCount == 1);
+        }
+
+        // The command is gone but the element is in the frame, so it must still
+        // be alive: a double delete would show up here.
+        CHECK(CountedElement::liveCount == 1);
+        CHECK(frame.elements.size() == 1);
+    }
+
+    // The frame owns it and frees it.
+    CHECK(CountedElement::liveCount == 0);
+}
+
+TEST(add_element_command_drops_the_element_from_the_selection)
+{
+    fla::Frame frame(nullptr);
+    fla::Selection selection;
+    TestElement* element = new TestElement();
+
+    CommandStack stack;
+    stack.push(CommandPtr(new fla::AddElementCommand(
+        &frame, element, "Rectangle", &selection)));
+    selection.select(element);
+    CHECK(selection.contains(element));
+
+    // Undoing takes the element out of the document, so the selection must let
+    // go rather than keep a pointer that redo might never restore.
+    stack.undo();
+    CHECK(!selection.contains(element));
+    CHECK(selection.isEmpty());
+}
+
+TEST(remove_element_command_takes_out_and_restores)
+{
+    fla::Frame frame(nullptr);
+    TestElement* first = new TestElement();
+    TestElement* second = new TestElement();
+    frame.elements.push_back(first);
+    frame.elements.push_back(second);
+
+    CommandStack stack;
+    stack.push(CommandPtr(new fla::RemoveElementCommand(&frame, first, "Delete")));
+
+    CHECK(frame.elements.size() == 1);
+    CHECK(frame.elements[0] == second);
+
+    stack.undo();
+    CHECK(frame.elements.size() == 2);
+    // Restored to its original position, not appended.
+    CHECK(frame.elements[0] == first);
+}
+
+TEST(remove_element_command_frees_what_it_holds)
+{
+    CountedElement::liveCount = 0;
+    fla::Frame frame(nullptr);
+    frame.elements.push_back(new CountedElement());
+
+    {
+        CommandStack stack;
+        stack.push(CommandPtr(new fla::RemoveElementCommand(
+            &frame, frame.elements[0], "Delete")));
+        CHECK(frame.elements.empty());
+        CHECK(CountedElement::liveCount == 1);
+    }
+
+    // The removal was never undone, so the command owned the element when the
+    // history was dropped.
+    CHECK(CountedElement::liveCount == 0);
 }

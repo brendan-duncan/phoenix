@@ -1,6 +1,10 @@
 #include "element_commands.h"
 
 #include "../data/element.h"
+#include "../data/frame.h"
+#include "selection.h"
+
+#include <algorithm>
 
 namespace fla {
 
@@ -52,6 +56,103 @@ bool SetElementTransformCommand::mergeWith(const Command* other)
     // gesture began, and take the later end state.
     _after = next->_after;
     return true;
+}
+
+AddElementCommand::AddElementCommand(Frame* frame, Element* element,
+    const std::string& name, Selection* selection, int index)
+    : _frame(frame)
+    , _element(element)
+    , _name(name)
+    , _selection(selection)
+    , _index(index)
+{}
+
+AddElementCommand::~AddElementCommand()
+{
+    // Only delete it if it is not in the frame: once it is in, the frame owns it.
+    if (_owned)
+        delete _element;
+}
+
+void AddElementCommand::redo()
+{
+    if (!_frame || !_element || !_owned)
+        return;
+
+    std::vector<Element*>& elements = _frame->elements;
+
+    // Re-inserting at the recorded index is what preserves z-order across an
+    // undo and redo, rather than the object jumping to the front.
+    if (_index < 0 || _index > static_cast<int>(elements.size()))
+        _index = static_cast<int>(elements.size());
+
+    elements.insert(elements.begin() + _index, _element);
+    _owned = false;
+}
+
+void AddElementCommand::undo()
+{
+    if (!_frame || !_element || _owned)
+        return;
+
+    std::vector<Element*>& elements = _frame->elements;
+    const auto it = std::find(elements.begin(), elements.end(), _element);
+    if (it == elements.end())
+        return;
+
+    _index = static_cast<int>(it - elements.begin());
+    elements.erase(it);
+    _owned = true;
+
+    // The element is no longer in the document, so nothing may keep pointing at
+    // it.
+    if (_selection)
+        _selection->remove(_element);
+}
+
+RemoveElementCommand::RemoveElementCommand(Frame* frame, Element* element,
+    const std::string& name, Selection* selection)
+    : _frame(frame)
+    , _element(element)
+    , _name(name)
+    , _selection(selection)
+{}
+
+RemoveElementCommand::~RemoveElementCommand()
+{
+    if (_owned)
+        delete _element;
+}
+
+void RemoveElementCommand::redo()
+{
+    if (!_frame || !_element || _owned)
+        return;
+
+    std::vector<Element*>& elements = _frame->elements;
+    const auto it = std::find(elements.begin(), elements.end(), _element);
+    if (it == elements.end())
+        return;
+
+    _index = static_cast<int>(it - elements.begin());
+    elements.erase(it);
+    _owned = true;
+
+    if (_selection)
+        _selection->remove(_element);
+}
+
+void RemoveElementCommand::undo()
+{
+    if (!_frame || !_element || !_owned)
+        return;
+
+    std::vector<Element*>& elements = _frame->elements;
+    if (_index < 0 || _index > static_cast<int>(elements.size()))
+        _index = static_cast<int>(elements.size());
+
+    elements.insert(elements.begin() + _index, _element);
+    _owned = false;
 }
 
 } // namespace fla

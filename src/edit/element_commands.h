@@ -9,6 +9,8 @@
 namespace fla {
 
 class Element;
+class Frame;
+class Selection;
 
 /// Replaces an element's transform.
 ///
@@ -46,6 +48,77 @@ private:
     Transform _before;
     Transform _after;
     std::string _name;
+};
+
+/// Adds an element to a frame, and takes it out again on undo.
+///
+/// Ownership moves with the element: a Frame deletes the elements it holds, so
+/// while the element is out of the frame this command owns it, and deleting the
+/// command then deletes the element. That is what makes it safe for an undone
+/// creation to fall off the end of the history.
+class AddElementCommand : public Command
+{
+public:
+    /// The index is where the element sits among the frame's elements, which is
+    /// its z-order; a negative index appends. The selection, when given, is told
+    /// to let go of the element whenever it leaves the document, so undo cannot
+    /// leave a selection pointing at freed memory.
+    AddElementCommand(Frame* frame, Element* element, const std::string& name,
+        Selection* selection = nullptr, int index = -1);
+
+    ~AddElementCommand() override;
+
+    AddElementCommand(const AddElementCommand&) = delete;
+    AddElementCommand& operator=(const AddElementCommand&) = delete;
+
+    void redo() override;
+
+    void undo() override;
+
+    std::string name() const override { return _name; }
+
+    Element* element() const { return _element; }
+
+private:
+    Frame* _frame;
+    Element* _element;
+    std::string _name;
+    Selection* _selection;
+    int _index;
+
+    /// True while the element is out of the frame and this command holds it.
+    bool _owned = true;
+};
+
+/// Removes an element from a frame, and puts it back on undo. The mirror of
+/// AddElementCommand, with the same ownership rules.
+class RemoveElementCommand : public Command
+{
+public:
+    RemoveElementCommand(Frame* frame, Element* element, const std::string& name,
+        Selection* selection = nullptr);
+
+    ~RemoveElementCommand() override;
+
+    RemoveElementCommand(const RemoveElementCommand&) = delete;
+    RemoveElementCommand& operator=(const RemoveElementCommand&) = delete;
+
+    void redo() override;
+
+    void undo() override;
+
+    std::string name() const override { return _name; }
+
+private:
+    Frame* _frame;
+    Element* _element;
+    std::string _name;
+    Selection* _selection;
+
+    /// Where it sat before removal, so undo restores the z-order too.
+    int _index = -1;
+
+    bool _owned = false;
 };
 
 } // namespace fla

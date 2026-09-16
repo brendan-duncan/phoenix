@@ -86,6 +86,7 @@ set(HEADERS
     src/gui/tool.h
     src/gui/selection_tool.h
     src/gui/free_transform_tool.h
+    src/gui/primitive_tool.h
     src/gui/document_view.h
     src/gui/timeline_view.h
     src/gui/layers_panel.h
@@ -135,6 +136,7 @@ set(HEADERS
     src/edit/element_commands.h
     src/edit/selection.h
     src/edit/snapping.h
+    src/edit/drawing_style.h
     src/writer/edge_writer.h
     src/writer/fla_writer.h
     src/writer/xfl_content.h
@@ -150,6 +152,7 @@ set(SOURCES
     src/gui/phoenix_view.cpp
     src/gui/selection_tool.cpp
     src/gui/free_transform_tool.cpp
+    src/gui/primitive_tool.cpp
     src/gui/document_view.cpp
     src/gui/timeline_view.cpp
     src/gui/layers_panel.cpp
@@ -197,6 +200,7 @@ set(SOURCES
     src/edit/element_commands.cpp
     src/edit/selection.cpp
     src/edit/snapping.cpp
+    src/edit/drawing_style.cpp
     src/writer/edge_writer.cpp
     src/writer/fla_writer.cpp
     src/writer/xfl_content.cpp
