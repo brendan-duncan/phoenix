@@ -37,6 +37,8 @@ public:
     void loadFLAFile(const QString& filePath);
 
 private slots:
+    void newFile();
+
     void openFile();
 
     void saveFile();
@@ -84,6 +86,19 @@ private:
 
     /// Offers to abandon unsaved changes. Returns false if the user cancels.
     bool confirmDiscardChanges();
+
+    /// Lets go of the open document and deletes it, leaving nothing open.
+    ///
+    /// The selection and the undo history both hold pointers into the document,
+    /// so both are detached first.
+    void releaseDocument();
+
+    /// Takes over  document and shows it, replacing whatever was open.
+    ///
+    /// Takes ownership. A null document leaves the window with nothing open,
+    /// which is what a failed load wants.
+    void adoptDocument(fla::FLADocument* document, const QString& filePath,
+        const QString& displayName);
 
     /// Writes the document to  filePath, as a .fla when the name ends in
     /// .fla and as an uncompressed XFL folder otherwise. Reports failures and

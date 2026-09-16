@@ -11,6 +11,8 @@
 #include <QKeyEvent>
 #include <QMouseEvent>
 
+#include <cmath>
+
 namespace {
 
 /// A press within this many screen pixels of where it started counts as a click
@@ -230,6 +232,7 @@ void SelectionTool::beginMove(PhoenixView& view, const QPointF& documentPos)
         return;
 
     _moveActive = true;
+    _moveDragging = false;
     _moveStart = documentPos;
     _moveBounds = bounds;
 
@@ -267,7 +270,21 @@ QPointF SelectionTool::snapMove(PhoenixView& view, const QPointF& delta) const
 
 void SelectionTool::updateMove(PhoenixView& view, const QPointF& documentPos)
 {
-    const QPointF delta = snapMove(view, documentPos - _moveStart);
+    const QPointF raw = documentPos - _moveStart;
+
+    // Until the press has travelled, it is still just a selection click, and
+    // clicking something must not move it. The same threshold the marquee uses
+    // decides when a press becomes a drag.
+    if (!_moveDragging)
+    {
+        const double threshold = kDragThresholdPixels * view.pickTolerance() / 4.0;
+        if (std::abs(raw.x()) <= threshold && std::abs(raw.y()) <= threshold)
+            return;
+
+        _moveDragging = true;
+    }
+
+    const QPointF delta = snapMove(view, raw);
 
     for (const Target& target : _targets)
     {
@@ -320,6 +337,7 @@ void SelectionTool::commitMove(PhoenixView& view)
     }
 
     _moveActive = false;
+    _moveDragging = false;
     _targets.clear();
     view.update();
 }

@@ -79,6 +79,14 @@ private:
     bool _moveActive = false;
     QPointF _moveStart;
 
+    /// Whether the press has travelled far enough to count as a drag.
+    ///
+    /// A press alone is a selection click, and must leave the objects where they
+    /// are. Snapping asks where the box would land rather than how far the
+    /// cursor moved, so running it at zero distance would answer "on the nearest
+    /// grid line" and shift anything not already sitting on one.
+    bool _moveDragging = false;
+
     /// Document-space bounds of the selection when the drag began. Snapping
     /// works on where the box would land, not on the cursor.
     QRectF _moveBounds;

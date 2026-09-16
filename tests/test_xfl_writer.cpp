@@ -13,6 +13,7 @@
 #include "../src/data/static_text.h"
 #include "../src/data/symbol.h"
 #include "../src/data/symbol_list.h"
+#include "../src/edit/new_document.h"
 #include "../src/parser/document_parser.h"
 #include "../src/parser/fla_parser.h"
 #include "../src/writer/xfl_folder_writer.h"
@@ -657,4 +658,36 @@ TEST(xfl_round_trips_real_documents)
     for (const std::string& description : unsupported)
         std::printf("    not written back: %s\n", description.c_str());
     CHECK(checked > 0);
+}
+
+/// A document Phoenix built itself, rather than one it read, still has to come
+/// out of the writer as valid XFL. Everything else here starts from parsed text,
+/// so nothing would otherwise catch a new document that cannot be saved.
+TEST(xfl_writes_a_new_document)
+{
+    std::unique_ptr<fla::FLADocument> created(fla::createEmptyDocument());
+    CHECK(created != nullptr && created->document != nullptr);
+    if (!created || !created->document)
+        return;
+
+    XFLWriter writer;
+    const std::string written = writer.writeDocument(*created->document);
+
+    std::unique_ptr<fla::Document> reparsed = parseDocumentText(written);
+    CHECK(reparsed != nullptr);
+    if (!reparsed)
+    {
+        std::printf("    re-parse failed, written was:\n%s\n", written.c_str());
+        return;
+    }
+
+    TreeComparer comparer;
+    comparer.compareDocuments(*created->document, *reparsed);
+    if (!comparer.equal())
+    {
+        for (const std::string& difference : comparer.differences())
+            std::printf("    differs: %s\n", difference.c_str());
+        std::printf("    written:\n%s\n", written.c_str());
+    }
+    CHECK(comparer.equal());
 }

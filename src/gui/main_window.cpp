@@ -1,6 +1,7 @@
 #include "main_window.h"
 #include "phoenix_view.h"
 #include "timeline_view.h"
+#include "../edit/new_document.h"
 #include "../parser/fla_parser.h"
 #include "../writer/fla_writer.h"
 #include "../writer/xfl_content.h"
@@ -111,10 +112,8 @@ MainWindow::MainWindow(QWidget *parent)
     }
 }
 
-void MainWindow::loadFLAFile(const QString& filePath)
+void MainWindow::releaseDocument()
 {
-    // Detach the old document before deleting it: the undo history holds
-    // pointers into it and must not outlive it.
     // The selection and the undo history both point into the document, so both
     // have to let go before it is deleted.
     _selection.clear();
@@ -125,9 +124,14 @@ void MainWindow::loadFLAFile(const QString& filePath)
         delete _flaDocument;
         _flaDocument = nullptr;
     }
+}
 
-    FLAParser parser;
-    _flaDocument = parser.parse(filePath.toStdString());
+void MainWindow::adoptDocument(fla::FLADocument* document, const QString& filePath,
+    const QString& displayName)
+{
+    releaseDocument();
+
+    _flaDocument = document;
     _editContext.setDocument(_flaDocument);
 
     // Grid spacing comes from the document, so it has to be picked up per file.
@@ -140,7 +144,32 @@ void MainWindow::loadFLAFile(const QString& filePath)
     _documentView->setDocument(_flaDocument);
     _timelineView->setDocument(_flaDocument);
 
+    _documentName = displayName;
+    _documentPath = filePath;
+    updateWindowTitle();
+
     if (_flaDocument)
+        _player->setCurrentFrame(0);
+}
+
+void MainWindow::newFile()
+{
+    if (!confirmDiscardChanges())
+        return;
+
+    // No path: the first Save has to ask where to put it, which saveFile()
+    // already does by falling through to Save As.
+    adoptDocument(fla::createEmptyDocument(), QString(), "Untitled");
+}
+
+void MainWindow::loadFLAFile(const QString& filePath)
+{
+    releaseDocument();
+
+    FLAParser parser;
+    fla::FLADocument* document = parser.parse(filePath.toStdString());
+
+    if (document)
     {
         QString displayName;
         QFileInfo fileInfo(filePath);
@@ -153,19 +182,13 @@ void MainWindow::loadFLAFile(const QString& filePath)
         {
             displayName = fileInfo.fileName();
         }
-        
-        _documentName = displayName;
-        _documentPath = filePath;
-        updateWindowTitle();
-        addToRecentFiles(filePath);
 
-        _player->setCurrentFrame(0);
+        adoptDocument(document, filePath, displayName);
+        addToRecentFiles(filePath);
     }
     else
     {
-        _documentName.clear();
-        _documentPath.clear();
-        updateWindowTitle();
+        adoptDocument(nullptr, QString(), QString());
         QMessageBox::warning(this, "Failed to Load FLA",
                            QString("Failed to load FLA file:\n%1\n\nError: %2")
                            .arg(filePath)
@@ -238,6 +261,12 @@ void MainWindow::setupMenus()
 
     // File menu
     QMenu* fileMenu = menuBar->addMenu("&File");
+
+    QAction* newAction = new QAction("&New", this);
+    newAction->setShortcut(QKeySequence::New);
+    newAction->setStatusTip("Start a new, empty document");
+    connect(newAction, &QAction::triggered, this, &MainWindow::newFile);
+    fileMenu->addAction(newAction);
 
     QAction* openAction = new QAction("&Open...", this);
     openAction->setShortcut(QKeySequence::Open);
@@ -620,16 +649,26 @@ bool MainWindow::confirmDiscardChanges()
     if (!_editContext.isModified())
         return true;
 
-    // TODO: offer to save once XFL writing exists; until then the only honest
-    // options are to discard the changes or to stay put.
     const QMessageBox::StandardButton answer = QMessageBox::warning(this,
         "Unsaved Changes",
-        QString("%1 has unsaved changes.\n\n"
-                "Saving is not implemented yet, so continuing will discard them.").arg(_documentName),
-        QMessageBox::Discard | QMessageBox::Cancel,
-        QMessageBox::Cancel);
+        QString("%1 has unsaved changes.").arg(_documentName),
+        QMessageBox::Save | QMessageBox::Discard | QMessageBox::Cancel,
+        QMessageBox::Save);
 
-    return answer == QMessageBox::Discard;
+    if (answer == QMessageBox::Cancel)
+        return false;
+
+    if (answer == QMessageBox::Save)
+    {
+        saveFile();
+
+        // Saving can still not happen: Save As can be cancelled, a lossy save
+        // can be declined, and a write can fail. The changes are then still
+        // there, and carrying on would throw away what the user asked to keep.
+        return !_editContext.isModified();
+    }
+
+    return true;
 }
 
 void MainWindow::setupToolBar()

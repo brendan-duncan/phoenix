@@ -43,8 +43,22 @@ Status legend: `[ ]` todo · `[~]` in progress · `[x]` done
       the transform tools (see step 3)
 - [ ] Mutation API for the rest of the model (`Shape`, `Edge`, `Path`, `Frame`,
       `Layer`) and its commands -- still waiting on the tools that need it
-- [ ] Upgrade the unsaved-changes prompt to offer Save now that step 2 has
-      landed (it still offers only Discard / Cancel)
+- [x] Upgrade the unsaved-changes prompt to offer Save now that step 2 has
+      landed. Save / Discard / Cancel, and Save that does not happen -- a
+      cancelled Save As, a declined lossy save, a failed write -- cancels the
+      thing that asked, rather than discarding the changes anyway
+- [x] File > New (`src/edit/new_document.h`, 11 tests). One scene, one layer,
+      one empty keyframe, 550x400 at 24fps, shaped like a parsed document rather
+      than a minimal stand-in so the view, the timeline and the writer all see
+      what they would see from a file
+  - The layer's `firstFrame` / `lastFrame` are bookkeeping the parser normally
+      supplies and frame resolution relies on; a built document has to fill them
+      in or nothing can be drawn on it
+  - Verified end to end in the running application: new document, draw a
+      rectangle, save, reopen, select what comes back. The written `.fla` also
+      checks out against Python's `zipfile`
+  - `adoptDocument` / `releaseDocument` now hold the one copy of "replace what
+      is open", which New and Open both go through
 
 ## 2. XFL serialization (write)
 
@@ -173,6 +187,9 @@ Selecting things on the stage works. Transforming them does not yet.
   - Grid spacing, `objectsSnapTo` and `snapAlignBorderSpacing` were declared on
     `Document` but never read, so the grid silently always used the built-in
     default of 18. They are now parsed and written
+- [ ] `main.cpp` ignores `argv`, so opening a file from the shell or by dropping
+      one on the executable does nothing -- it always reopens the most recent
+      file instead
 - [ ] Ruler guides. Animate snaps to these too, but nothing models them yet --
       no rulers, no guide objects in the document. Needs that feature first, and
       is not the same thing as the guide *layers* the parser already knows about
@@ -183,6 +200,14 @@ Two things to tidy:
       drives `PhoenixView::_selectedElement` for inspecting edges and paths
       inside a shape, while the stage drives `Selection`. They should be the one
       model, with the tree simply selecting finer-grained nodes
+- [x] A click that only selects no longer moves anything. Snapping asks where
+      the box would land rather than how far the cursor travelled, so running it
+      at zero distance answered "on the nearest grid line" and shifted any
+      object not already sitting on one -- a select became an edit, and the
+      document came up modified. A press now has to pass the same drag threshold
+      the marquee uses before it moves anything
+  - Only showed up on artwork drawn by hand: files authored in Animate tend to
+      sit on round coordinates already, where the snap was a no-op
 - [ ] A marquee tests element bounds, not geometry, so it catches a shape whose
       bounding box overlaps even when no part of the shape does
 
@@ -431,6 +456,34 @@ to it, so nothing in the application uses it yet.
 - [ ] Consider rendering *from* the planar map, replacing the fill-stitching
       heuristic in `drawShape` (the `directedPaths.size() <= 2` special case and
       twip-rounded point matching). Likely fixes rendering bugs rather than adding risk
+
+## 7. Symbol editing -- the reason a loaded file looks read-only
+
+Artwork in a real document lives inside library symbols. Across the corpus the
+root timelines hold 31 shapes against 1415 symbol instances, so roughly
+everything a file draws is one level down or more.
+
+Clicking a symbol instance deliberately selects the instance rather than the
+artwork inside it, which is what Animate does too. What Animate also has, and
+Phoenix does not, is a way in: nothing enters a symbol, so the shapes inside
+cannot be reached at all. Confirmed on screen -- clicking the character in
+`Charlotte_06_2021.fla` selects the whole 800x550 instance, and double-clicking
+does nothing.
+
+The few shapes that do sit on a root timeline select and edit correctly, so this
+is the missing feature rather than a fault in the tools.
+
+- [ ] An edit scope: which timeline the tools act on, as a stack, so entering and
+      leaving nests properly
+- [ ] Enter a symbol by double-clicking an instance, and leave it again
+- [ ] Draw the enclosing scope dimmed behind the symbol being edited, which is
+      what makes edit-in-place readable
+- [ ] A breadcrumb showing the scope, and a way back to the root
+- [ ] Tools have to work in the symbol's coordinate space, not the stage's
+- [ ] The timeline panel should follow the scope rather than always showing the
+      root
+- [ ] Editing a symbol changes every instance of it. That is correct, but it
+      needs to be visible, and the render cache has to notice
 
 ## Explicitly out of scope
 

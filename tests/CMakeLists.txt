@@ -23,7 +23,9 @@ set(PHOENIX_SRC ${CMAKE_CURRENT_SOURCE_DIR}/../src)
 # Free of Qt and of the file readers.
 set(TEST_CORE_SOURCES
     ${PHOENIX_SRC}/data/dom_element.cpp
+    ${PHOENIX_SRC}/data/document.cpp
     ${PHOENIX_SRC}/data/edge.cpp
+    ${PHOENIX_SRC}/data/fla_document.cpp
     ${PHOENIX_SRC}/data/element.cpp
     ${PHOENIX_SRC}/data/fill_style.cpp
     ${PHOENIX_SRC}/data/frame.cpp
@@ -44,6 +46,7 @@ set(TEST_CORE_SOURCES
     ${PHOENIX_SRC}/edit/editable_path.cpp
     ${PHOENIX_SRC}/edit/edit_context.cpp
     ${PHOENIX_SRC}/edit/element_commands.cpp
+    ${PHOENIX_SRC}/edit/new_document.cpp
     ${PHOENIX_SRC}/edit/selection.cpp
     ${PHOENIX_SRC}/edit/shape_merge.cpp
     ${PHOENIX_SRC}/edit/snapping.cpp
@@ -67,6 +70,7 @@ set(TEST_SOURCES
     test_fill_attribution.cpp
     test_geometry.cpp
     test_intersect.cpp
+    test_new_document.cpp
     test_planar_map.cpp
     test_selection.cpp
     test_shape_merge.cpp
@@ -75,8 +79,6 @@ set(TEST_SOURCES
 
 if(TARGET tinyxml2 AND TARGET zlibstatic)
     list(APPEND TEST_CORE_SOURCES
-        ${PHOENIX_SRC}/data/document.cpp
-        ${PHOENIX_SRC}/data/fla_document.cpp
         ${PHOENIX_SRC}/data/swatch_list.cpp
         ${PHOENIX_SRC}/data/symbol.cpp
         ${PHOENIX_SRC}/data/symbol_list.cpp
