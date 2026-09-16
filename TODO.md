@@ -153,9 +153,27 @@ Selecting things on the stage works. Transforming them does not yet.
     gesture and puts everything back
   - Dragging only changes where things sit, so `invalidateBounds()` drops the
     bounds cache while the expensive path cache survives the drag
-- [ ] Snapping: grid, guides, object snapping
+- [x] Snapping to the grid and to other objects (`src/edit/snapping.h`, Qt-free,
+      14 tests), with View menu toggles and grid rendering
+  - A gesture hands over the coordinates that are moving -- for a box, its left,
+    centre and right -- and gets back one adjustment for the whole axis, so a
+    shape shifts to meet a line rather than distorting because one edge snapped
+  - Lining up with another object beats the grid at equal distance; the grid only
+    wins when it is strictly closer
+  - Candidates are the edges and centres of everything else on stage, plus the
+    stage edges and centre. The dragged objects are excluded, since something
+    snapped to its own edge would never move
+  - Candidates are gathered once at the start of a gesture, not per mouse move
+  - Rotation does not snap the cursor: it is an angle, not a position, so
+    snapping would fight the shift-key angle steps
+  - Grid spacing, `objectsSnapTo` and `snapAlignBorderSpacing` were declared on
+    `Document` but never read, so the grid silently always used the built-in
+    default of 18. They are now parsed and written
+- [ ] Ruler guides. Animate snaps to these too, but nothing models them yet --
+      no rulers, no guide objects in the document. Needs that feature first, and
+      is not the same thing as the guide *layers* the parser already knows about
 
-Snapping is what is left here. Two other things to tidy:
+Two things to tidy:
 
 - [ ] The stage selection and the document tree still track separately: the tree
       drives `PhoenixView::_selectedElement` for inspecting edges and paths

@@ -756,6 +756,10 @@ std::string XFLWriter::writeDocument(const Document& document)
     setInt(root, "viewAngle3D", document.viewAngle3D, 0);
     setColor(root, "backgroundColor", nullptr, document.backgroundColor);
     setColor(root, "gridColor", nullptr, document.gridColor);
+    setInt(root, "gridSpacingX", document.gridSpacingX, 18);
+    setInt(root, "gridSpacingY", document.gridSpacingY, 18);
+    setBool(root, "objectsSnapTo", document.objectsSnapTo, false);
+    setInt(root, "snapAlignBorderSpacing", document.snapAlignBorderSpacing, 18);
     setColor(root, "guidesColor", nullptr, document.guidesColor);
     setInt(root, "vanishingPoint3DX", document.vanishingPoint3DX, 0);
     setInt(root, "vanishingPoint3DY", document.vanishingPoint3DY, 0);

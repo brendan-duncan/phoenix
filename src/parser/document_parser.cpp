@@ -1620,6 +1620,10 @@ bool parseDocument(fla::Document* document, const tinyxml2::XMLElement* element,
     document->viewAngle3D = getIntAttribute(element, "viewAngle3D", 0);
     getColorAttribute(element, "backgroundColor", document->backgroundColor);
     getColorAttribute(element, "gridColor", document->gridColor);
+    document->gridSpacingX = getIntAttribute(element, "gridSpacingX", 18);
+    document->gridSpacingY = getIntAttribute(element, "gridSpacingY", 18);
+    document->objectsSnapTo = getBoolAttribute(element, "objectsSnapTo", false);
+    document->snapAlignBorderSpacing = getIntAttribute(element, "snapAlignBorderSpacing", 18);
     getColorAttribute(element, "guidesColor", document->guidesColor);
     document->vanishingPoint3DX = getIntAttribute(element, "vanishingPoint3DX", 0);
     document->vanishingPoint3DY = getIntAttribute(element, "vanishingPoint3DY", 0);

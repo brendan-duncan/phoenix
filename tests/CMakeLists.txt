@@ -25,6 +25,7 @@ set(TEST_CORE_SOURCES
     ${PHOENIX_SRC}/edit/edit_context.cpp
     ${PHOENIX_SRC}/edit/element_commands.cpp
     ${PHOENIX_SRC}/edit/selection.cpp
+    ${PHOENIX_SRC}/edit/snapping.cpp
     ${PHOENIX_SRC}/parser/path_parser.cpp
     ${PHOENIX_SRC}/writer/edge_writer.cpp
 )
@@ -37,6 +38,7 @@ set(TEST_SOURCES
     test_edge_writer.cpp
     test_selection.cpp
     test_element_commands.cpp
+    test_snapping.cpp
 )
 
 if(TARGET tinyxml2 AND TARGET zlibstatic)

@@ -97,6 +97,10 @@ private:
 
     QTransform adjustForDrag(const QPointF& documentPos, Qt::KeyboardModifiers modifiers) const;
 
+    /// Nudges the cursor position onto the grid or a neighbouring edge before
+    /// the gesture is computed from it.
+    QPointF snapDragPoint(PhoenixView& view, const QPointF& documentPos) const;
+
     fla::Selection& _selection;
     fla::CommandStack& _commandStack;
 

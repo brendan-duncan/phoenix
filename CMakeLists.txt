@@ -134,6 +134,7 @@ set(HEADERS
     src/edit/edit_context.h
     src/edit/element_commands.h
     src/edit/selection.h
+    src/edit/snapping.h
     src/writer/edge_writer.h
     src/writer/fla_writer.h
     src/writer/xfl_content.h
@@ -195,6 +196,7 @@ set(SOURCES
     src/edit/edit_context.cpp
     src/edit/element_commands.cpp
     src/edit/selection.cpp
+    src/edit/snapping.cpp
     src/writer/edge_writer.cpp
     src/writer/fla_writer.cpp
     src/writer/xfl_content.cpp

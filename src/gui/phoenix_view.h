@@ -25,6 +25,7 @@
 
 namespace fla {
 class Selection;
+class Snapper;
 }
 
 class Player;
@@ -91,6 +92,21 @@ public:
     void setSelection(fla::Selection* selection);
 
     fla::Selection* selection() const { return _selection; }
+
+    /// The snapping settings tools should obey. Borrowed, not owned.
+    void setSnapper(fla::Snapper* snapper);
+
+    fla::Snapper* snapper() const { return _snapper; }
+
+    /// Loads \p snapper with the edges and centres of everything on stage apart
+    /// from \p exclude, so a drag can line up with its neighbours but not with
+    /// itself.
+    void gatherSnapCandidates(fla::Snapper& snapper,
+        const std::vector<fla::Element*>& exclude);
+
+    void setShowGrid(bool show) { _showGrid = show; update(); }
+
+    bool showGrid() const { return _showGrid; }
 
     bool highQualityAntiAliasing() const { return _highQualityAntiAliasing; }
 
@@ -159,6 +175,8 @@ private:
 
     Tool* _activeTool = nullptr;
     fla::Selection* _selection = nullptr;
+    fla::Snapper* _snapper = nullptr;
+    bool _showGrid = false;
 
     struct PathCacheEntry
     {
@@ -265,4 +283,8 @@ private:
     /// Draws the marks that show what is selected, plus whatever the active tool
     /// wants on top. Runs in document coordinates after the stage is drawn.
     void drawToolOverlay(QPainter& painter);
+
+    /// Draws the document's grid under the artwork, using the spacing and colour
+    /// the file specifies.
+    void drawGrid(QPainter& painter, const fla::Document* document);
 };

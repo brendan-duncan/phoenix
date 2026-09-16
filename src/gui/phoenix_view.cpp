@@ -1,6 +1,7 @@
 #include "phoenix_view.h"
 
 #include "../edit/selection.h"
+#include "../edit/snapping.h"
 #include "player.h"
 #include "../data/bitmap.h"
 #include "../data/bitmap_instance.h"
@@ -330,6 +331,9 @@ void PhoenixView::paintEvent(QPaintEvent *event)
             QColor(document->backgroundColor[0], document->backgroundColor[1],
                 document->backgroundColor[2], document->backgroundColor[3]));
 
+        if (_showGrid)
+            drawGrid(bufferPainter, document);
+
         drawDocument(bufferPainter, document);
 
         bufferPainter.setPen(QPen(QColor(0, 0, 0, 255), 1.0));
@@ -357,6 +361,9 @@ void PhoenixView::paintEvent(QPaintEvent *event)
         painter.fillRect(0, 0, docWidth, docHeight,
             QColor(document->backgroundColor[0], document->backgroundColor[1],
                 document->backgroundColor[2], document->backgroundColor[3]));
+
+        if (_showGrid)
+            drawGrid(painter, document);
 
         drawDocument(painter, document);
 
@@ -2054,6 +2061,88 @@ void PhoenixView::setSelection(fla::Selection* selection)
 {
     _selection = selection;
     update();
+}
+
+void PhoenixView::setSnapper(fla::Snapper* snapper)
+{
+    _snapper = snapper;
+    update();
+}
+
+void PhoenixView::gatherSnapCandidates(fla::Snapper& snapper,
+    const std::vector<fla::Element*>& exclude)
+{
+    snapper.clearCandidates();
+
+    if (!snapper.objectSnapEnabled() || !_flaDocument || !_flaDocument->document)
+        return;
+
+    const fla::Document* document = _flaDocument->document;
+
+    // The stage edges and centre are worth lining up with too.
+    snapper.addCandidateX(0.0);
+    snapper.addCandidateX(document->width / 2.0);
+    snapper.addCandidateX(document->width);
+    snapper.addCandidateY(0.0);
+    snapper.addCandidateY(document->height / 2.0);
+    snapper.addCandidateY(document->height);
+
+    // Everything on stage apart from what is being dragged: an object that
+    // snapped to its own edge would simply never move.
+    const QRectF everything(-1.0e6, -1.0e6, 2.0e6, 2.0e6);
+    for (fla::Element* element : elementsIn(everything))
+    {
+        bool skip = false;
+        for (const fla::Element* excluded : exclude)
+            skip = skip || excluded == element;
+        if (skip)
+            continue;
+
+        const QRectF bounds = getElementBounds(element);
+        if (!bounds.isValid())
+            continue;
+
+        snapper.addCandidateX(bounds.left());
+        snapper.addCandidateX(bounds.center().x());
+        snapper.addCandidateX(bounds.right());
+        snapper.addCandidateY(bounds.top());
+        snapper.addCandidateY(bounds.center().y());
+        snapper.addCandidateY(bounds.bottom());
+    }
+}
+
+void PhoenixView::drawGrid(QPainter& painter, const fla::Document* document)
+{
+    const double spacingX = document->gridSpacingX;
+    const double spacingY = document->gridSpacingY;
+    if (spacingX <= 0.0 && spacingY <= 0.0)
+        return;
+
+    painter.save();
+
+    QColor color(document->gridColor[0], document->gridColor[1],
+        document->gridColor[2], document->gridColor[3]);
+    // The stored colour is meant for lines over artwork, so it is dialled well
+    // back rather than drawn at full strength.
+    color.setAlpha(60);
+    painter.setPen(QPen(color, 1.0 / qMax(_zoom, 1.0e-6)));
+
+    const double width = document->width;
+    const double height = document->height;
+
+    if (spacingX > 0.0)
+    {
+        for (double x = 0.0; x <= width; x += spacingX)
+            painter.drawLine(QPointF(x, 0.0), QPointF(x, height));
+    }
+
+    if (spacingY > 0.0)
+    {
+        for (double y = 0.0; y <= height; y += spacingY)
+            painter.drawLine(QPointF(0.0, y), QPointF(width, y));
+    }
+
+    painter.restore();
 }
 
 void PhoenixView::drawToolOverlay(QPainter& painter)

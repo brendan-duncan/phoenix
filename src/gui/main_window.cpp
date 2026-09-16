@@ -69,6 +69,10 @@ MainWindow::MainWindow(QWidget *parent)
             _phoenixView->update();
     });
 
+    // Object snapping on by default, grid snapping off, matching Animate.
+    _snapper.setObjectSnapEnabled(true);
+    _phoenixView->setSnapper(&_snapper);
+
     _selectionTool = std::make_unique<SelectionTool>(_selection, _editContext.commandStack());
     _freeTransformTool = std::make_unique<FreeTransformTool>(
         _selection, _editContext.commandStack());
@@ -101,6 +105,13 @@ void MainWindow::loadFLAFile(const QString& filePath)
     FLAParser parser;
     _flaDocument = parser.parse(filePath.toStdString());
     _editContext.setDocument(_flaDocument);
+
+    // Grid spacing comes from the document, so it has to be picked up per file.
+    if (_flaDocument && _flaDocument->document)
+    {
+        _snapper.setGridSpacing(_flaDocument->document->gridSpacingX,
+            _flaDocument->document->gridSpacingY);
+    }
     _phoenixView->setDocument(_flaDocument);
     _documentView->setDocument(_flaDocument);
     _timelineView->setDocument(_flaDocument);
@@ -295,6 +306,35 @@ void MainWindow::setupMenus()
     showBoundsAction->setStatusTip("Show element bounding boxes used for culling (Green=rendered, Red=culled, Blue=visible area)");
     connect(showBoundsAction, &QAction::toggled, _phoenixView, &PhoenixView::setShowBounds);
     viewMenu->addAction(showBoundsAction);
+
+    viewMenu->addSeparator();
+
+    QAction* showGridAction = new QAction("Show &Grid", this);
+    showGridAction->setCheckable(true);
+    showGridAction->setStatusTip("Show the document grid");
+    connect(showGridAction, &QAction::toggled, _phoenixView, &PhoenixView::setShowGrid);
+    viewMenu->addAction(showGridAction);
+
+    QAction* snapToGridAction = new QAction("Snap to Grid", this);
+    snapToGridAction->setCheckable(true);
+    snapToGridAction->setStatusTip("Snap dragged objects to the document grid");
+    connect(snapToGridAction, &QAction::toggled, this, [this](bool on) {
+        _snapper.setGridEnabled(on);
+        saveSettings();
+    });
+    viewMenu->addAction(snapToGridAction);
+
+    QAction* snapToObjectsAction = new QAction("Snap to &Objects", this);
+    snapToObjectsAction->setCheckable(true);
+    snapToObjectsAction->setChecked(true);
+    snapToObjectsAction->setStatusTip("Line dragged objects up with other objects and the stage");
+    connect(snapToObjectsAction, &QAction::toggled, this, [this](bool on) {
+        _snapper.setObjectSnapEnabled(on);
+        saveSettings();
+    });
+    viewMenu->addAction(snapToObjectsAction);
+
+    viewMenu->addSeparator();
 
     QAction* dimOutsideDocumentAction = new QAction("Dim Outside Document", this);
     dimOutsideDocumentAction->setCheckable(true);

@@ -6,6 +6,7 @@
 #include "../edit/command_stack.h"
 #include "../edit/element_commands.h"
 #include "../edit/selection.h"
+#include "../edit/snapping.h"
 
 #include <QKeyEvent>
 #include <QMouseEvent>
@@ -44,7 +45,7 @@ bool SelectionTool::mousePress(PhoenixView& view, QMouseEvent* event, const QPoi
             _selection.select(hit.element);
 
         if (!_additive && _selection.contains(hit.element))
-            beginMove(documentPos);
+            beginMove(view, documentPos);
 
         view.update();
         return true;
@@ -202,15 +203,27 @@ void SelectionTool::deactivate(PhoenixView& view)
     view.update();
 }
 
-void SelectionTool::beginMove(const QPointF& documentPos)
+void SelectionTool::beginMove(PhoenixView& view, const QPointF& documentPos)
 {
     _targets.clear();
+
+    QRectF bounds;
+    bool first = true;
 
     for (fla::DOMElement* selected : _selection.elements())
     {
         fla::Element* element = dynamic_cast<fla::Element*>(selected);
-        if (element)
-            _targets.push_back({element, element->transform});
+        if (!element)
+            continue;
+
+        _targets.push_back({element, element->transform});
+
+        const QRectF elementBounds = view.elementBounds(element);
+        if (elementBounds.isValid())
+        {
+            bounds = first ? elementBounds : bounds.united(elementBounds);
+            first = false;
+        }
     }
 
     if (_targets.empty())
@@ -218,11 +231,43 @@ void SelectionTool::beginMove(const QPointF& documentPos)
 
     _moveActive = true;
     _moveStart = documentPos;
+    _moveBounds = bounds;
+
+    // Gather the things this drag can line up with once, at the start: they do
+    // not move while it runs.
+    if (fla::Snapper* snapper = view.snapper())
+    {
+        std::vector<fla::Element*> moving;
+        moving.reserve(_targets.size());
+        for (const Target& target : _targets)
+            moving.push_back(target.element);
+        view.gatherSnapCandidates(*snapper, moving);
+    }
+}
+
+QPointF SelectionTool::snapMove(PhoenixView& view, const QPointF& delta) const
+{
+    fla::Snapper* snapper = view.snapper();
+    if (!snapper || !snapper->isEnabled() || !_moveBounds.isValid())
+        return delta;
+
+    // Snapping is about where the box lands, so the candidates are its edges and
+    // centre at the proposed position.
+    const QRectF moved = _moveBounds.translated(delta);
+
+    snapper->setTolerance(view.pickTolerance() * 2.0);
+
+    const fla::SnapResult x = snapper->snapX(
+        {moved.left(), moved.center().x(), moved.right()});
+    const fla::SnapResult y = snapper->snapY(
+        {moved.top(), moved.center().y(), moved.bottom()});
+
+    return QPointF(delta.x() + x.adjustment, delta.y() + y.adjustment);
 }
 
 void SelectionTool::updateMove(PhoenixView& view, const QPointF& documentPos)
 {
-    const QPointF delta = documentPos - _moveStart;
+    const QPointF delta = snapMove(view, documentPos - _moveStart);
 
     for (const Target& target : _targets)
     {

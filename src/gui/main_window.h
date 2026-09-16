@@ -9,6 +9,7 @@
 #include "selection_tool.h"
 #include "../edit/edit_context.h"
 #include "../edit/selection.h"
+#include "../edit/snapping.h"
 
 #include <memory>
 
@@ -103,6 +104,7 @@ private:
     fla::FLADocument* _flaDocument;
     fla::EditContext _editContext;
     fla::Selection _selection;
+    fla::Snapper _snapper;
     std::unique_ptr<SelectionTool> _selectionTool;
     std::unique_ptr<FreeTransformTool> _freeTransformTool;
     QAction* _selectAllAction = nullptr;

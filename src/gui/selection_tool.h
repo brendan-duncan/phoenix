@@ -53,7 +53,10 @@ private:
     QRectF marqueeRect() const;
 
     /// Begins dragging the current selection from documentPos.
-    void beginMove(const QPointF& documentPos);
+    void beginMove(PhoenixView& view, const QPointF& documentPos);
+
+    /// Snaps a proposed move, returning the delta to actually apply.
+    QPointF snapMove(PhoenixView& view, const QPointF& delta) const;
 
     /// Applies the move so far and repaints.
     void updateMove(PhoenixView& view, const QPointF& documentPos);
@@ -75,6 +78,10 @@ private:
 
     bool _moveActive = false;
     QPointF _moveStart;
+
+    /// Document-space bounds of the selection when the drag began. Snapping
+    /// works on where the box would land, not on the cursor.
+    QRectF _moveBounds;
 
     bool _marqueeActive = false;
     QPointF _marqueeStart;
