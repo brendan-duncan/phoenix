@@ -1,5 +1,7 @@
 #include "phoenix_view.h"
 
+#include <QTimer>
+
 #include "../edit/selection.h"
 #include "../edit/snapping.h"
 #include "player.h"
@@ -164,6 +166,13 @@ PhoenixView::PhoenixView(Player* player, QWidget *parent)
     // Enable mouse tracking for smooth panning
     setMouseTracking(true);
 
+    // Long enough that a continuous wheel gesture never refines mid-scroll,
+    // short enough that the sharp frame feels immediate once it stops.
+    _settleTimer = new QTimer(this);
+    _settleTimer->setSingleShot(true);
+    _settleTimer->setInterval(120);
+    connect(_settleTimer, &QTimer::timeout, this, &PhoenixView::endInteraction);
+
     connect(_player, &Player::currentFrameChanged, this, &PhoenixView::onPlayerFrameChanged);
 }
 
@@ -306,7 +315,7 @@ void PhoenixView::paintEvent(QPaintEvent *event)
     _overlayPen = QPen(QColor(0, 255, 255, 255), penWidth);
     _overlayBrush = QBrush(QColor(0, 255, 255, 150));
 
-    if (_highQualityAntiAliasing)
+    if (_highQualityAntiAliasing && !_interacting)
     {
         // Supersampling: render at 2x resolution and scale down for smoother edges
         int bufW = width() * supersampleFactor;
@@ -1945,6 +1954,8 @@ void PhoenixView::mousePressEvent(QMouseEvent *event)
     // left those silently doing nothing.
     const bool forcePan = event->button() == Qt::MiddleButton;
 
+    beginInteraction();
+
     if (!forcePan && _activeTool &&
         _activeTool->mousePress(*this, event, mapToDocument(event->position())))
     {
@@ -1979,6 +1990,10 @@ void PhoenixView::mouseMoveEvent(QMouseEvent *event)
 
 void PhoenixView::mouseReleaseEvent(QMouseEvent *event)
 {
+    // Whatever handles the release, the gesture is over and the next frame
+    // should be the good one.
+    endInteraction();
+
     if (!_isDragging && _activeTool &&
         _activeTool->mouseRelease(*this, event, mapToDocument(event->position())))
     {
@@ -2289,7 +2304,33 @@ void PhoenixView::wheelEvent(QWheelEvent *event)
     _panX -= delta.x();
     _panY -= delta.y();
 
+    // A wheel gesture has no release to end it, so each notch pushes the
+    // settle back and quality returns once the wheel stops.
+    beginInteraction();
+    _settleTimer->start();
+
     update();
+}
+
+void PhoenixView::beginInteraction()
+{
+    if (!_interacting)
+    {
+        _interacting = true;
+        update();
+    }
+}
+
+void PhoenixView::endInteraction()
+{
+    if (_settleTimer)
+        _settleTimer->stop();
+
+    if (_interacting)
+    {
+        _interacting = false;
+        update();
+    }
 }
 
 void PhoenixView::resetView()

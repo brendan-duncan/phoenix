@@ -485,6 +485,61 @@ is the missing feature rather than a fault in the tools.
 - [ ] Editing a symbol changes every instance of it. That is correct, but it
       needs to be visible, and the render cache has to notice
 
+## 8. Matching Animate's behaviour
+
+The tools work, but they are not shaped like Animate's. The gap is one decision,
+not a list of small ones: **selection is element-level, and Animate's is
+region-level.**
+
+Phoenix selects a whole `DOMShape`. Animate, on merge-drawn artwork, selects the
+fill or the stroke segment you clicked. Clicking one of the two rectangles in
+`rect_2.fla` selects both, because they are one shape -- in Animate you would get
+the one fill. Everything below follows from that, and the planar map built in
+step 6 is already the right structure to fix it: a face is what Animate would
+select.
+
+- [ ] Select a face or an edge of the arrangement rather than the whole shape
+- [ ] Draw a selected fill with Animate's stipple over the fill itself. The blue
+      bounding box with corner handles is what Animate shows for objects, groups
+      and symbols, so using it for everything makes merge-drawn artwork look
+      like object drawing
+- [ ] Double-click a fill to take its enclosing strokes with it; double-click a
+      stroke to take every connected segment
+- [ ] A marquee should cut geometry, not pick whole elements -- half a fill
+      selected is half a fill you can drag away
+- [x] Alt draws a rectangle or an oval from its centre. The polystar already
+      works from the centre and a line has no centre, so neither takes it
+- [ ] Hovering an edge with the selection tool should show the corner/curve
+      cursor that says it can be bent (pairs with edge dragging in step 6)
+
+## Performance
+
+Measured on `COM01_034_alvin_and_the_monks_v2.fla` (1260 symbol instances),
+dragging, at a maximised window on a 3856x1568 display:
+
+| build | per frame |
+| --- | --- |
+| Debug, before | ~270 ms |
+| Release, before | 37 ms |
+| Release, after | ~5 ms while dragging |
+
+- [x] Stop supersampling while a gesture is running. High quality rendering
+      draws the stage into an offscreen image at 2x in each direction, which at
+      that window size is a 97 MB buffer allocated, filled and scaled down for
+      **every frame**. It accounted for about 84% of the paint cost. It is now
+      dropped for the duration of a gesture and the sharp frame is drawn once
+      the gesture ends, which is what Animate does
+  - A wheel gesture has no release to end it, so a 120 ms settle timer does
+      instead
+- [ ] Debug builds are ~7x slower than Release. Worth knowing before reading
+      anything into a timing taken from the default build
+- [ ] The whole stage is redrawn on every mouse move. Culling exists
+      (`_visibleRect`), but nothing caches the static part of the scene, so a
+      drag repaints 1260 instances to move one thing. Caching everything except
+      the moving object is the next real win
+- [ ] `getElementBounds` is cached, but `gatherSnapCandidates` walks every
+      element on the stage at the start of each drag to collect snap targets
+
 ## Explicitly out of scope
 
 

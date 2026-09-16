@@ -61,6 +61,14 @@ private:
     /// The rectangle the drag has swept out, normalised.
     QRectF dragRect() const;
 
+    /// Where the drag counts as having started.
+    ///
+    /// Normally the press point, but alt grows the shape from its centre the
+    /// way Animate does, which mirrors the press point across the cursor. Going
+    /// through one accessor keeps the preview and the finished object agreeing
+    /// about it.
+    QPointF effectiveStart() const;
+
     /// Snaps a drag position, unless the modifiers say otherwise.
     QPointF snap(PhoenixView& view, const QPointF& documentPos) const;
 
@@ -103,4 +111,7 @@ private:
     /// Whether the last move had shift held, so the preview and the finished
     /// object agree.
     bool _constrained = false;
+
+    /// Whether the last move had alt held, drawing from the centre out.
+    bool _fromCentre = false;
 };

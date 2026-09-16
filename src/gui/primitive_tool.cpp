@@ -91,7 +91,19 @@ QString PrimitiveTool::name() const
 
 QRectF PrimitiveTool::dragRect() const
 {
-    return QRectF(_start, _end).normalized();
+    return QRectF(effectiveStart(), _end).normalized();
+}
+
+QPointF PrimitiveTool::effectiveStart() const
+{
+    // A polystar already grows from its centre, and a line has no centre to
+    // grow from, so neither takes the modifier.
+    if (!_fromCentre || (_kind != Kind::Rectangle && _kind != Kind::Oval))
+        return _start;
+
+    // Reflecting the press point across the cursor makes the press the middle
+    // and the drag reach out to a corner in both directions at once.
+    return _start - (_end - _start);
 }
 
 QPointF PrimitiveTool::snap(PhoenixView& view, const QPointF& documentPos) const
@@ -143,6 +155,7 @@ bool PrimitiveTool::mousePress(PhoenixView& view, QMouseEvent* event, const QPoi
 
     _dragging = true;
     _constrained = false;
+    _fromCentre = false;
     _start = snap(view, documentPos);
     _end = _start;
     view.update();
@@ -155,6 +168,7 @@ bool PrimitiveTool::mouseMove(PhoenixView& view, QMouseEvent* event, const QPoin
         return false;
 
     _constrained = (event->modifiers() & Qt::ShiftModifier) != 0;
+    _fromCentre = (event->modifiers() & Qt::AltModifier) != 0;
     _end = snap(view, documentPos);
     if (_constrained)
         _end = constrain(_end);
@@ -170,6 +184,7 @@ bool PrimitiveTool::mouseRelease(PhoenixView& view, QMouseEvent* event, const QP
 
     _dragging = false;
     _constrained = (event->modifiers() & Qt::ShiftModifier) != 0;
+    _fromCentre = (event->modifiers() & Qt::AltModifier) != 0;
     _end = snap(view, documentPos);
     if (_constrained)
         _end = constrain(_end);
@@ -181,7 +196,7 @@ bool PrimitiveTool::mouseRelease(PhoenixView& view, QMouseEvent* event, const QP
         return true;
     }
 
-    fla::Element* element = createElement(frame, _start, _end);
+    fla::Element* element = createElement(frame, effectiveStart(), _end);
     if (!element)
     {
         // Too small to be a shape, so the click drew nothing.

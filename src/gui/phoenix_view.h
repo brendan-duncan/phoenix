@@ -19,6 +19,8 @@
 #include <QWheelEvent>
 #include <QImage>
 
+class QTimer;
+
 #include "tool.h"
 
 #include <vector>
@@ -150,6 +152,24 @@ private:
     Player* _player;
 
     bool _highQualityAntiAliasing;
+
+    /// Whether the view is mid-gesture, and so should render for speed rather
+    /// than for looks.
+    ///
+    /// High quality rendering supersamples the whole stage into an offscreen
+    /// image, which at a full-screen window means tens of megabytes allocated,
+    /// filled and scaled down for every frame. That is affordable for a view
+    /// being looked at and ruinous for one being dragged, so it is dropped while
+    /// a gesture runs and the refined frame is drawn once it ends.
+    bool _interacting = false;
+
+    /// Restores quality rendering shortly after the last wheel event, which has
+    /// no natural end the way a press and release do.
+    QTimer* _settleTimer = nullptr;
+
+    /// Marks the start of a gesture, and returns to quality rendering after it.
+    void beginInteraction();
+    void endInteraction();
 
     // Pan and zoom state
     double _zoom;
