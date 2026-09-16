@@ -7,6 +7,7 @@
 #include "../data/fla_document.h"
 #include "free_transform_tool.h"
 #include "pen_tool.h"
+#include "pencil_tool.h"
 #include "primitive_tool.h"
 #include "subselection_tool.h"
 #include "selection_tool.h"
@@ -118,6 +119,7 @@ private:
     std::unique_ptr<PrimitiveTool> _lineTool;
     std::unique_ptr<PrimitiveTool> _polyStarTool;
     std::unique_ptr<PenTool> _penTool;
+    std::unique_ptr<PencilTool> _pencilTool;
     std::unique_ptr<SubselectionTool> _subselectionTool;
     fla::DrawingStyle _drawingStyle;
     QToolButton* _fillColorButton = nullptr;

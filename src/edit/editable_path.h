@@ -75,6 +75,42 @@ public:
     /// Replaces everything on \a edge with a single path built from these
     /// anchors.
     void applyTo(Edge& edge) const;
+
+    /// Number of segments. A closed path has one more than an open one, since
+    /// the last anchor joins back to the first.
+    size_t segmentCount() const;
+
+    /// The anchors a segment runs between. Returns false for an out-of-range
+    /// index.
+    bool segmentAnchors(size_t segment, size_t& from, size_t& to) const;
+
+    /// A point found on the path, used for inserting an anchor where the user
+    /// clicked.
+    struct PathPoint
+    {
+        bool valid = false;
+        size_t segment = 0;
+        /// Where along the segment, from 0 at its start to 1 at its end.
+        double t = 0.0;
+        Point position;
+        double distance = 0.0;
+    };
+
+    /// The closest point on the path to a given point.
+    PathPoint closestPoint(const Point& point) const;
+
+    /// Inserts an anchor partway along a segment, leaving the curve exactly as
+    /// it was. Returns the new anchor's index, or -1 if the segment is not
+    /// there.
+    int splitSegment(size_t segment, double t);
+
+    /// Removes an anchor, joining its neighbours directly. Refuses to leave
+    /// fewer than two anchors, since that is no longer a path.
+    bool removeAnchor(size_t index);
+
+    /// Flips an anchor between smooth and corner: a smooth point loses its
+    /// handles, a corner grows them along the line through its neighbours.
+    bool toggleAnchorSmooth(size_t index);
 };
 
 } // namespace fla

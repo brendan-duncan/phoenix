@@ -25,6 +25,23 @@ public:
     uint8_t strokeColor[4] = {0, 0, 0, 255};
     double strokeWeight = 1.0;
 
+    /// How the pencil tidies a freehand stroke.
+    enum class PencilMode
+    {
+        /// Fit smooth curves through the stroke.
+        Smooth,
+        /// Fit straight runs, keeping the corners.
+        Straighten,
+        /// Keep the points as drawn.
+        Ink
+    };
+
+    PencilMode pencilMode = PencilMode::Smooth;
+
+    /// How far, in document units, the fitted stroke may stray from what was
+    /// drawn. Larger means smoother and fewer anchors.
+    double pencilTolerance = 2.0;
+
     /// PolyStar settings. Sides is the point count in star mode.
     int sides = 5;
     bool star = false;

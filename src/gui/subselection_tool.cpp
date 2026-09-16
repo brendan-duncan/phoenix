@@ -117,11 +117,46 @@ bool SubselectionTool::mousePress(PhoenixView& view, QMouseEvent* event, const Q
             _grip = grip;
             _anchorIndex = i;
             _dragStart = localPos;
+
+            // Remembered so Delete knows which anchor to remove.
+            _selectedEdge = edge;
+            _selectedAnchor = i;
+            _hasSelectedAnchor = true;
+
+            view.update();
+            return true;
+        }
+    }
+
+    // Alt-clicking the outline inserts an anchor there, which is how a path
+    // gains detail without redrawing it.
+    if ((event->modifiers() & Qt::AltModifier) != 0)
+    {
+        for (fla::Edge* edge : shape->edges)
+        {
+            if (!edge || edge->paths.empty() || !edge->paths[0])
+                continue;
+
+            const fla::EditablePath before = fla::EditablePath::fromPath(*edge->paths[0]);
+            const fla::EditablePath::PathPoint found = before.closestPoint(toPoint(localPos));
+            if (!found.valid || found.distance > tolerance * 2.0)
+                continue;
+
+            fla::EditablePath after = before;
+            const int inserted = after.splitSegment(found.segment, found.t);
+            if (inserted < 0)
+                continue;
+
+            commitGeometry(view, edge, before, after, "Add Anchor");
+            _selectedEdge = edge;
+            _selectedAnchor = static_cast<size_t>(inserted);
+            _hasSelectedAnchor = true;
             return true;
         }
     }
 
     // Clicking off the anchors picks whatever is under the cursor instead.
+    _hasSelectedAnchor = false;
     const HitResult hit = view.hitTest(documentPos, view.pickTolerance());
     if (hit)
         _selection.select(hit.element);
@@ -205,6 +240,24 @@ bool SubselectionTool::mouseRelease(PhoenixView& view, QMouseEvent* event, const
 
 bool SubselectionTool::keyPress(PhoenixView& view, QKeyEvent* event)
 {
+    if ((event->key() == Qt::Key_Delete || event->key() == Qt::Key_Backspace) &&
+        _hasSelectedAnchor && _selectedEdge && _grip == Grip::None)
+    {
+        if (_selectedEdge->paths.empty() || !_selectedEdge->paths[0])
+            return false;
+
+        const fla::EditablePath before =
+            fla::EditablePath::fromPath(*_selectedEdge->paths[0]);
+
+        fla::EditablePath after = before;
+        if (!after.removeAnchor(_selectedAnchor))
+            return false;
+
+        commitGeometry(view, _selectedEdge, before, after, "Delete Anchor");
+        _hasSelectedAnchor = false;
+        return true;
+    }
+
     if (event->key() != Qt::Key_Escape)
         return false;
 
@@ -222,6 +275,85 @@ bool SubselectionTool::keyPress(PhoenixView& view, QKeyEvent* event)
     }
 
     return false;
+}
+
+bool SubselectionTool::mouseDoubleClick(PhoenixView& view, QMouseEvent* event,
+    const QPointF& documentPos)
+{
+    if (event->button() != Qt::LeftButton)
+        return false;
+
+    fla::Edge* edge = nullptr;
+    fla::EditablePath before;
+    size_t index = 0;
+
+    bool invertible = false;
+    const QTransform toShape = shapeToDocument(view).inverted(&invertible);
+    if (!invertible)
+        return false;
+
+    if (!anchorAt(view, toShape.map(documentPos), edge, before, index))
+        return false;
+
+    // Double-clicking an anchor flips it between smooth and corner, which is the
+    // convert gesture every pen tool has.
+    fla::EditablePath after = before;
+    if (!after.toggleAnchorSmooth(index))
+        return false;
+
+    commitGeometry(view, edge, before, after, "Convert Anchor");
+    _selectedEdge = edge;
+    _selectedAnchor = index;
+    _hasSelectedAnchor = true;
+    return true;
+}
+
+bool SubselectionTool::anchorAt(PhoenixView& view, const QPointF& localPos,
+    fla::Edge*& edge, fla::EditablePath& path, size_t& index) const
+{
+    const fla::Shape* shape = editedShape();
+    if (!shape)
+        return false;
+
+    const double tolerance = view.pickTolerance() * 1.5;
+
+    for (fla::Edge* candidate : shape->edges)
+    {
+        if (!candidate || candidate->paths.empty() || !candidate->paths[0])
+            continue;
+
+        const fla::EditablePath candidatePath =
+            fla::EditablePath::fromPath(*candidate->paths[0]);
+
+        for (size_t i = 0; i < candidatePath.anchors.size(); ++i)
+        {
+            const fla::Point& position = candidatePath.anchors[i].position;
+            if (std::hypot(position.x - localPos.x(), position.y - localPos.y()) <= tolerance)
+            {
+                edge = candidate;
+                path = candidatePath;
+                index = i;
+                return true;
+            }
+        }
+    }
+
+    return false;
+}
+
+void SubselectionTool::commitGeometry(PhoenixView& view, fla::Edge* edge,
+    const fla::EditablePath& before, const fla::EditablePath& after,
+    const char* gesture)
+{
+    after.applyTo(*edge);
+
+    _commandStack.push(fla::CommandPtr(new fla::SetEdgeGeometryCommand(
+        edge, before, after, gesture)));
+    _commandStack.breakMergeChain();
+
+    // The path geometry changed, so cached paths for this shape are stale.
+    view.clearCaches();
+    view.update();
 }
 
 void SubselectionTool::cancelDrag(PhoenixView& view)
@@ -274,8 +406,11 @@ void SubselectionTool::paintOverlay(PhoenixView& view, QPainter& painter, double
 
             // Smooth points are drawn round and corners square, the way every
             // pen tool distinguishes them.
+            const bool picked = _hasSelectedAnchor && edge == _selectedEdge &&
+                &anchor == &path.anchors[qMin(_selectedAnchor, path.anchors.size() - 1)];
+
             painter.setPen(QPen(QColor(0, 120, 200), 1.0 * scale));
-            painter.setBrush(QColor(255, 255, 255));
+            painter.setBrush(picked ? QColor(255, 220, 0) : QColor(255, 255, 255));
             if (anchor.smooth)
                 painter.drawEllipse(position, anchorSize, anchorSize);
             else

@@ -84,6 +84,14 @@ public:
         return false;
     }
 
+    /// Handles a double click. Returning false leaves it to be treated as an
+    /// ordinary press.
+    virtual bool mouseDoubleClick(PhoenixView& view, QMouseEvent* event, const QPointF& documentPos)
+    {
+        (void)view; (void)event; (void)documentPos;
+        return false;
+    }
+
     virtual bool keyPress(PhoenixView& view, QKeyEvent* event)
     {
         (void)view; (void)event;

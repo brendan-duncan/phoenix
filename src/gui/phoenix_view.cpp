@@ -1937,10 +1937,13 @@ bool PhoenixView::isNearAnchor(const fla::Shape& shape, const QPointF& localPos,
 
 void PhoenixView::mousePressEvent(QMouseEvent *event)
 {
-    // The active tool gets first refusal. Middle-drag and space-drag always pan,
-    // so panning stays available whatever tool is selected.
-    const bool forcePan = event->button() == Qt::MiddleButton ||
-        (event->modifiers() & Qt::AltModifier) != 0;
+    // The active tool gets first refusal. Middle-drag always pans, so panning
+    // stays available whatever tool is selected.
+    //
+    // Alt deliberately is not a pan modifier: the drawing tools need it for
+    // breaking a tangent and for inserting an anchor, and swallowing it here
+    // left those silently doing nothing.
+    const bool forcePan = event->button() == Qt::MiddleButton;
 
     if (!forcePan && _activeTool &&
         _activeTool->mousePress(*this, event, mapToDocument(event->position())))
@@ -1987,6 +1990,17 @@ void PhoenixView::mouseReleaseEvent(QMouseEvent *event)
         _isDragging = false;
         setCursor(_activeTool ? _activeTool->cursor() : QCursor(Qt::ArrowCursor));
     }
+}
+
+void PhoenixView::mouseDoubleClickEvent(QMouseEvent* event)
+{
+    if (_activeTool &&
+        _activeTool->mouseDoubleClick(*this, event, mapToDocument(event->position())))
+    {
+        return;
+    }
+
+    QWidget::mouseDoubleClickEvent(event);
 }
 
 void PhoenixView::keyPressEvent(QKeyEvent* event)

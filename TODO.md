@@ -230,7 +230,8 @@ happens to render.
 
 ## 5. Pen + subselection (object drawing mode)
 
-Drawing and editing bezier paths works. Two items are still open.
+Done. Bezier paths can be drawn with the pen or the pencil, and edited anchor by
+anchor.
 
 - [x] Authoring-side anchor model (`src/edit/editable_path.h`, 12 tests).
       `PathSegment` records only what a renderer needs: it cannot say whether an
@@ -259,22 +260,51 @@ Drawing and editing bezier paths works. Two items are still open.
       sides of the join
 - [x] Tools that draw their own handles suppress the selection bounding box, so
       it does not sit on top of what the user is trying to grab
-- [ ] Add / delete / convert anchor point (de Casteljau splitting)
-- [ ] Pencil with curve fitting (Schneider) + smoothing/straightening modes
+- [x] Add / delete / convert anchor point (9 tests)
+  - Alt-click the outline inserts an anchor. De Casteljau subdivision means the
+    curve is untouched by the insertion: the two halves describe exactly what
+    the one segment did
+  - Delete removes the anchor last clicked, refusing to go below two, which is
+    the least that still draws something
+  - Double-clicking an anchor converts it. A smooth point loses its handles; a
+    corner grows them along the line through its neighbours, a third of the way
+    to the closer one
+  - `EditablePath::closestPoint` sweeps coarsely then refines by bisection, so a
+    click lands where the user aimed rather than on the nearest sample
+- [x] Pencil (`D`) with Schneider curve fitting (`src/edit/curve_fit.h`, 10
+      tests) and smooth / straighten / ink modes, with tolerance in the
+      properties panel
+  - Fit one cubic to the whole stroke by least squares, improve the
+    parameterisation with Newton-Raphson, and split at the worst point only if
+    it is still outside tolerance. A sine drawn with sixty cursor points comes
+    back as a handful of anchors
+  - Straighten mode drops points that already lie near the line between their
+    neighbours, keeping the corners
+  - The end points are kept exactly: a stroke has to start and finish where the
+    user's did
 
 ### Rough edges
 
 - [ ] The pen cannot resume an existing open path from one of its endpoints
+- [ ] Deleting an anchor joins its neighbours with whatever handles they already
+      had, rather than refitting the curve through the gap the way Animate does
+- [ ] Picking a one-pixel stroke by clicking it is fiddly. Anchor editing was
+      verified on a polygon; the tolerance may want widening for thin strokes
 - [ ] Subselection edits the first path of each edge. A shape whose edge holds
       several paths shows them all but only the first is editable
 - [ ] Shape bounds are computed from anchor and control points, so the selection
       box can sit slightly inside a curve that bulges past its control polygon.
       Fine for culling, loose for a handle box
 
-Also fixed: the pen's shortcut was `B`, which the "Show Bounding Boxes" toggle
-already owned. Qt fires neither key on a clash, so the tool silently never
-activated. The shape tools now use Animate's keys -- `V` `A` `Q` `R` `O` `N` `Y`
-`P` -- with `B` left to the bounding-box toggle.
+Two input bugs fixed along the way, both of which made a tool silently do
+nothing rather than fail visibly:
+
+- The pen's shortcut was `B`, which the "Show Bounding Boxes" toggle already
+  owned. Qt fires neither key on a clash. The tools now use Animate's keys --
+  `V` `A` `Q` `R` `O` `N` `Y` `P` `D` -- with `B` left to the bounding-box toggle
+- Alt-drag was a pan modifier at the view level, so Alt never reached a tool.
+  That broke the pen's alt-drag-to-break-tangent and alt-click-to-insert-anchor.
+  Only middle-drag forces a pan now; Alt belongs to the tools, as in Animate
 
 ## 6. Merge drawing model — the hard part
 

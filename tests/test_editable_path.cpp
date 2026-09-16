@@ -253,3 +253,165 @@ TEST(an_empty_path_clears_the_edge)
     EditablePath().applyTo(*edge);
     CHECK(edge->paths.empty());
 }
+
+TEST(segment_count_follows_open_or_closed)
+{
+    EditablePath path;
+    CHECK(path.segmentCount() == 0);
+
+    path.anchors.push_back(Anchor(Point(0.0, 0.0)));
+    path.anchors.push_back(Anchor(Point(10.0, 0.0)));
+    path.anchors.push_back(Anchor(Point(10.0, 10.0)));
+
+    // Three anchors, two joins.
+    CHECK(path.segmentCount() == 2);
+
+    // Closing adds the join back to the start.
+    path.closed = true;
+    CHECK(path.segmentCount() == 3);
+
+    size_t from = 0;
+    size_t to = 0;
+    CHECK(path.segmentAnchors(2, from, to));
+    CHECK(from == 2);
+    CHECK(to == 0);
+}
+
+TEST(splitting_a_line_puts_a_point_on_it)
+{
+    EditablePath path;
+    path.anchors.push_back(Anchor(Point(0.0, 0.0)));
+    path.anchors.push_back(Anchor(Point(10.0, 0.0)));
+
+    const int index = path.splitSegment(0, 0.5);
+
+    CHECK(index == 1);
+    CHECK(path.anchors.size() == 3);
+    if (path.anchors.size() != 3)
+        return;
+
+    CHECK(samePoint(path.anchors[1].position, Point(5.0, 0.0)));
+    // A straight segment stays straight.
+    CHECK(!path.anchors[1].hasInCurve());
+    CHECK(!path.anchors[1].hasOutCurve());
+}
+
+TEST(splitting_a_curve_leaves_it_unchanged)
+{
+    EditablePath path;
+    Anchor start(Point(0.0, 0.0));
+    start.outHandle = Point(0.0, 10.0);
+    Anchor end(Point(10.0, 0.0));
+    end.inHandle = Point(10.0, 10.0);
+    path.anchors.push_back(start);
+    path.anchors.push_back(end);
+
+    // Sample the curve before splitting.
+    const EditablePath::PathPoint quarter = path.closestPoint(
+        path.closestPoint(Point(2.0, 5.0)).position);
+
+    path.splitSegment(0, 0.5);
+    CHECK(path.anchors.size() == 3);
+    if (path.anchors.size() != 3)
+        return;
+
+    // Subdividing describes the same curve, so a point that was on it still is.
+    const EditablePath::PathPoint after = path.closestPoint(quarter.position);
+    CHECK(after.valid);
+    CHECK(after.distance < 1.0e-6);
+
+    // The inserted anchor is smooth, with handles from the subdivision.
+    CHECK(path.anchors[1].smooth);
+    CHECK(path.anchors[1].hasInCurve());
+    CHECK(path.anchors[1].hasOutCurve());
+}
+
+TEST(splitting_rejects_a_segment_that_is_not_there)
+{
+    EditablePath path;
+    path.anchors.push_back(Anchor(Point(0.0, 0.0)));
+    path.anchors.push_back(Anchor(Point(10.0, 0.0)));
+
+    CHECK(path.splitSegment(5, 0.5) == -1);
+    CHECK(path.anchors.size() == 2);
+}
+
+TEST(closest_point_finds_the_nearest_segment)
+{
+    EditablePath path;
+    path.anchors.push_back(Anchor(Point(0.0, 0.0)));
+    path.anchors.push_back(Anchor(Point(10.0, 0.0)));
+    path.anchors.push_back(Anchor(Point(10.0, 10.0)));
+
+    const EditablePath::PathPoint found = path.closestPoint(Point(9.0, 6.0));
+
+    CHECK(found.valid);
+    // Nearest the vertical second segment, not the horizontal first.
+    CHECK(found.segment == 1);
+    CHECK(std::fabs(found.position.x - 10.0) < 0.6);
+}
+
+TEST(removing_an_anchor_joins_its_neighbours)
+{
+    EditablePath path;
+    path.anchors.push_back(Anchor(Point(0.0, 0.0)));
+    path.anchors.push_back(Anchor(Point(5.0, 5.0)));
+    path.anchors.push_back(Anchor(Point(10.0, 0.0)));
+
+    CHECK(path.removeAnchor(1));
+    CHECK(path.anchors.size() == 2);
+    if (path.anchors.size() != 2)
+        return;
+    CHECK(samePoint(path.anchors[1].position, Point(10.0, 0.0)));
+}
+
+TEST(removing_refuses_to_destroy_the_path)
+{
+    EditablePath path;
+    path.anchors.push_back(Anchor(Point(0.0, 0.0)));
+    path.anchors.push_back(Anchor(Point(10.0, 0.0)));
+
+    // Two anchors is the least that still draws something.
+    CHECK(!path.removeAnchor(0));
+    CHECK(path.anchors.size() == 2);
+    CHECK(!path.removeAnchor(9));
+}
+
+TEST(converting_a_corner_grows_handles_through_its_neighbours)
+{
+    EditablePath path;
+    path.anchors.push_back(Anchor(Point(0.0, 0.0)));
+    path.anchors.push_back(Anchor(Point(10.0, 0.0)));
+    path.anchors.push_back(Anchor(Point(20.0, 0.0)));
+
+    CHECK(path.toggleAnchorSmooth(1));
+
+    const Anchor& anchor = path.anchors[1];
+    CHECK(anchor.smooth);
+    CHECK(anchor.hasInCurve());
+    CHECK(anchor.hasOutCurve());
+    // Neighbours are level, so the tangent runs along x and the handles sit
+    // opposite each other.
+    CHECK(near(anchor.inHandle.y, 0.0));
+    CHECK(near(anchor.outHandle.y, 0.0));
+    CHECK(anchor.inHandle.x < anchor.position.x);
+    CHECK(anchor.outHandle.x > anchor.position.x);
+}
+
+TEST(converting_a_smooth_point_makes_it_a_corner)
+{
+    EditablePath path;
+    path.anchors.push_back(Anchor(Point(0.0, 0.0)));
+    Anchor middle(Point(10.0, 0.0));
+    middle.smooth = true;
+    middle.inHandle = Point(5.0, 0.0);
+    middle.outHandle = Point(15.0, 0.0);
+    path.anchors.push_back(middle);
+    path.anchors.push_back(Anchor(Point(20.0, 0.0)));
+
+    CHECK(path.toggleAnchorSmooth(1));
+
+    CHECK(!path.anchors[1].smooth);
+    CHECK(!path.anchors[1].hasInCurve());
+    CHECK(!path.anchors[1].hasOutCurve());
+}

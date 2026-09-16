@@ -143,6 +143,8 @@ protected:
 
     void keyPressEvent(QKeyEvent *event) override;
 
+    void mouseDoubleClickEvent(QMouseEvent *event) override;
+
 private:
     const fla::FLADocument* _flaDocument;
     Player* _player;

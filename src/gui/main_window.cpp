@@ -31,6 +31,7 @@
 #include <QToolBar>
 #include <QActionGroup>
 #include <QCheckBox>
+#include <QComboBox>
 #include <QColorDialog>
 #include <QDockWidget>
 #include <QDoubleSpinBox>
@@ -95,6 +96,7 @@ MainWindow::MainWindow(QWidget *parent)
     _polyStarTool = std::make_unique<PrimitiveTool>(
         PrimitiveTool::Kind::PolyStar, _selection, stack, _drawingStyle);
     _penTool = std::make_unique<PenTool>(_selection, stack, _drawingStyle);
+    _pencilTool = std::make_unique<PencilTool>(_selection, stack, _drawingStyle);
     _subselectionTool = std::make_unique<SubselectionTool>(_selection, stack);
     _phoenixView->setSelection(&_selection);
     _phoenixView->setActiveTool(_selectionTool.get());
@@ -726,6 +728,18 @@ void MainWindow::setupToolBar()
     });
     toolGroup->addAction(penAction);
     toolBar->addAction(penAction);
+
+    QAction* pencilAction = new QAction("Pencil", this);
+    pencilAction->setCheckable(true);
+    pencilAction->setShortcut(QKeySequence(Qt::Key_D));
+    pencilAction->setStatusTip(
+        "Draw freehand. The stroke is fitted on release; the mode is in the "
+        "Properties panel.");
+    connect(pencilAction, &QAction::triggered, this, [this]() {
+        _phoenixView->setActiveTool(_pencilTool.get());
+    });
+    toolGroup->addAction(pencilAction);
+    toolBar->addAction(pencilAction);
 }
 
 namespace {
@@ -830,6 +844,26 @@ void MainWindow::setupPropertiesPanel()
         _drawingStyle.sides = value;
     });
     layout->addRow("Sides", sides);
+
+    QComboBox* pencilMode = new QComboBox(panel);
+    pencilMode->addItem("Smooth");
+    pencilMode->addItem("Straighten");
+    pencilMode->addItem("Ink");
+    pencilMode->setToolTip("How the pencil tidies a freehand stroke");
+    connect(pencilMode, &QComboBox::currentIndexChanged, this, [this](int index) {
+        _drawingStyle.pencilMode = static_cast<fla::DrawingStyle::PencilMode>(index);
+    });
+    layout->addRow("Pencil", pencilMode);
+
+    QDoubleSpinBox* smoothing = new QDoubleSpinBox(panel);
+    smoothing->setRange(0.1, 50.0);
+    smoothing->setSingleStep(0.5);
+    smoothing->setValue(_drawingStyle.pencilTolerance);
+    smoothing->setToolTip("How far a fitted stroke may stray from what was drawn");
+    connect(smoothing, &QDoubleSpinBox::valueChanged, this, [this](double value) {
+        _drawingStyle.pencilTolerance = value;
+    });
+    layout->addRow("Smoothing", smoothing);
 
     QCheckBox* star = new QCheckBox("Star", panel);
     star->setChecked(_drawingStyle.star);

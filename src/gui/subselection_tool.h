@@ -36,6 +36,8 @@ public:
 
     bool mousePress(PhoenixView& view, QMouseEvent* event, const QPointF& documentPos) override;
 
+    bool mouseDoubleClick(PhoenixView& view, QMouseEvent* event, const QPointF& documentPos) override;
+
     bool mouseMove(PhoenixView& view, QMouseEvent* event, const QPointF& documentPos) override;
 
     bool mouseRelease(PhoenixView& view, QMouseEvent* event, const QPointF& documentPos) override;
@@ -66,6 +68,15 @@ private:
 
     void cancelDrag(PhoenixView& view);
 
+    /// Rewrites  edge to  path as one undo step.
+    void commitGeometry(PhoenixView& view, fla::Edge* edge,
+        const fla::EditablePath& before, const fla::EditablePath& after,
+        const char* gesture);
+
+    /// Finds the anchor under the cursor. Returns false when there is none.
+    bool anchorAt(PhoenixView& view, const QPointF& localPos, fla::Edge*& edge,
+        fla::EditablePath& path, size_t& index) const;
+
     fla::Selection& _selection;
     fla::CommandStack& _commandStack;
 
@@ -77,4 +88,9 @@ private:
     Grip _grip = Grip::None;
     size_t _anchorIndex = 0;
     QPointF _dragStart;
+
+    /// The anchor the last click landed on, which Delete removes.
+    fla::Edge* _selectedEdge = nullptr;
+    size_t _selectedAnchor = 0;
+    bool _hasSelectedAnchor = false;
 };
