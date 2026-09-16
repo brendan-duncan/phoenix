@@ -308,18 +308,46 @@ nothing rather than fail visibly:
 
 ## 6. Merge drawing model — the hard part
 
-
 Animate's default mode maintains a planar map: every edge carries a left and a
 right fill (that is what `fillStyle0` / `fillStyle1` already are). Drawing across
-a fill splits both at intersections and rebuilds faces. Not started; decide
-whether it is worth it only after 1-5 land.
+a fill splits both at intersections and rebuilds faces.
 
-- [ ] Evaluate boolean kernel: Skia `SkPathOps` (BSD, handles cubics directly)
-      vs. Clipper2 (integer, polygon-only, would flatten to twip resolution)
-- [ ] Planar map: curve-curve intersection, splitting, face extraction
-- [ ] Per-half-edge fill attribution (`fillStyle0` / `fillStyle1`)
+Started. The geometry foundation is in; the map itself is not.
+
+- [x] Kernel decision: **build the arrangement directly**, rather than adopting a
+      boolean library
+  - Both candidates return *paths*. What a merge model needs is the arrangement
+    itself -- vertices, half-edges, faces -- plus a left and right fill on each
+    half-edge. A boolean kernel gives output shaped wrong for that, and the fill
+    attribution layer would still have to be written on top
+  - Skia's `SkPathOps` is BSD and handles cubics, but vendoring Skia for one
+    subsystem is enormous
+  - Clipper2 is small and integer, which suits twips, but is polygon-only: every
+    merge would flatten the beziers the pen and pencil produce, making stored
+    geometry lossy on each edit
+  - Revisit if the arrangement turns out to be harder to make robust than
+    expected. The intersection layer is the part a library would have replaced,
+    and it is now written and tested
+- [x] `src/geom/curve.h`: one piece of path geometry, line or cubic, with
+      evaluation, tangents, control bounds, splitting and subcurves. Quadratics
+      are raised to cubics on the way in, so there is one curved case not two.
+      A line keeps its inner controls on the chord, so the cubic formulae work
+      unchanged and nothing has to special-case it
+- [x] `src/geom/intersect.h`: curve-curve intersection and self-intersection
+      (21 tests). Straight pairs are solved exactly; anything curved is found by
+      subdivision against control-polygon boxes, halving until the pieces are
+      flat enough to treat as segments
+  - Slower than Bezier clipping, but it degrades into the exact line solver
+    rather than into guesswork, and the line case is the overwhelmingly common
+    one
+  - Collinear overlap reports no crossing: running along together is not a
+    crossing, and a point there would be a meaningless vertex in the map
+  - Verified to resolve a crossing at twip scale, and mutation-checked --
+    breaking the subdivision's parameter mapping fails four tests
+- [ ] Planar map: vertices, half-edges, faces, built from the split pieces
 - [ ] Snap intersections to the twip grid (1/20 px) — Flash geometry is already
       twip-quantized, which is what makes an exact integer map tractable
+- [ ] Per-half-edge fill attribution (`fillStyle0` / `fillStyle1`)
 - [ ] Paint bucket (flood fill over the map), ink bottle, eraser
 - [ ] Selection tool edge-dragging (fill follows the edge)
 - [ ] Stroke-to-outline conversion (needed by the brush tool)
@@ -328,6 +356,7 @@ whether it is worth it only after 1-5 land.
       twip-rounded point matching). Likely fixes rendering bugs rather than adding risk
 
 ## Explicitly out of scope
+
 
 Bones/IK, motion editor, asset warp, variable-width strokes, art/pattern brushes,
 pressure/tilt input, text authoring. Each is a project in itself.

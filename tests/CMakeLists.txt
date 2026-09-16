@@ -24,6 +24,8 @@ set(TEST_CORE_SOURCES
     ${PHOENIX_SRC}/edit/command_stack.cpp
     ${PHOENIX_SRC}/edit/edit_context.cpp
     ${PHOENIX_SRC}/edit/curve_fit.cpp
+    ${PHOENIX_SRC}/geom/curve.cpp
+    ${PHOENIX_SRC}/geom/intersect.cpp
     ${PHOENIX_SRC}/edit/editable_path.cpp
     ${PHOENIX_SRC}/edit/element_commands.cpp
     ${PHOENIX_SRC}/edit/selection.cpp
@@ -43,6 +45,7 @@ set(TEST_SOURCES
     test_snapping.cpp
     test_editable_path.cpp
     test_curve_fit.cpp
+    test_intersect.cpp
 )
 
 if(TARGET tinyxml2 AND TARGET zlibstatic)

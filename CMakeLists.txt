@@ -141,6 +141,8 @@ set(HEADERS
     src/edit/snapping.h
     src/edit/drawing_style.h
     src/edit/curve_fit.h
+    src/geom/curve.h
+    src/geom/intersect.h
     src/edit/editable_path.h
     src/writer/edge_writer.h
     src/writer/fla_writer.h
@@ -210,6 +212,8 @@ set(SOURCES
     src/edit/snapping.cpp
     src/edit/drawing_style.cpp
     src/edit/curve_fit.cpp
+    src/geom/curve.cpp
+    src/geom/intersect.cpp
     src/edit/editable_path.cpp
     src/writer/edge_writer.cpp
     src/writer/fla_writer.cpp
