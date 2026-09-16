@@ -143,6 +143,7 @@ set(HEADERS
     src/edit/curve_fit.h
     src/geom/curve.h
     src/geom/intersect.h
+    src/geom/fill_attribution.h
     src/geom/planar_map.h
     src/edit/editable_path.h
     src/writer/edge_writer.h
@@ -215,6 +216,7 @@ set(SOURCES
     src/edit/curve_fit.cpp
     src/geom/curve.cpp
     src/geom/intersect.cpp
+    src/geom/fill_attribution.cpp
     src/geom/planar_map.cpp
     src/edit/editable_path.cpp
     src/writer/edge_writer.cpp

@@ -363,11 +363,23 @@ to it, so nothing in the application uses it yet.
 - [x] Coincident edges are merged. Two shapes sharing an edge each contribute
       their own copy, and collinear overlap is deliberately not a crossing, so
       keeping both would leave a zero-width sliver between them
-- [ ] Per-half-edge fill attribution (`fillStyle0` / `fillStyle1`). The next
-      piece: the faces are the regions a fill can occupy, and each half-edge
-      records the fill on its left
+- [x] Per-half-edge fill attribution (`src/geom/fill_attribution.h`, 11 tests).
+      Each face gets the fill of the last drawn outline covering it, and each
+      half-edge records the fill of the face it borders -- the fill on its left.
+      A half-edge and its twin together are what the format stores as
+      `fillStyle0` and `fillStyle1`
+  - Paint order is the whole of the merge behaviour: drawing a shape across
+    another does not stack them, it replaces what was underneath inside the new
+    outline and leaves the rest
+  - An outline carrying no fill still cuts, and an open stroke cuts without
+    being a region at all: it has no inside, so it splits faces and takes no
+    part in attribution. That is what lets a line drawn across a fill divide it
+    into halves that can be dragged apart
 - [ ] Intersection is tested pairwise, which is quadratic. Fine for the tens of
       curves a shape holds; a sweep line if that ever stops being true
+- [ ] Convert a `Shape` to regions and back, so the map can be driven from the
+      document rather than from hand-built curves. Nothing in the application
+      uses any of this yet
 - [ ] Paint bucket (flood fill over the map), ink bottle, eraser
 - [ ] Selection tool edge-dragging (fill follows the edge)
 - [ ] Stroke-to-outline conversion (needed by the brush tool)

@@ -410,6 +410,129 @@ void PlanarMap::linkFaces()
     }
 }
 
+std::vector<int> PlanarMap::cycleFrom(int halfEdge) const
+{
+    std::vector<int> edges;
+    if (halfEdge < 0 || halfEdge >= static_cast<int>(_halfEdges.size()))
+        return edges;
+
+    int current = halfEdge;
+    for (size_t step = 0; step <= _halfEdges.size(); ++step)
+    {
+        edges.push_back(current);
+        current = _halfEdges[current].next;
+        if (current < 0 || current == halfEdge)
+            break;
+    }
+
+    return edges;
+}
+
+bool PlanarMap::faceContains(int face, const Point& point) const
+{
+    if (face < 0 || face >= static_cast<int>(_faces.size()))
+        return false;
+
+    const MapFace& target = _faces[face];
+
+    // The unbounded face is everything the drawing does not cover, so it
+    // contains whatever falls outside all of its boundaries.
+    if (target.unbounded)
+    {
+        for (int hole : target.holes)
+        {
+            Cycle cycle;
+            cycle.edges = cycleFrom(hole);
+            if (cycleContains(cycle, point))
+                return false;
+        }
+        return true;
+    }
+
+    Cycle outer;
+    outer.edges = cycleFrom(target.halfEdge);
+    if (!cycleContains(outer, point))
+        return false;
+
+    // Inside the outer boundary but inside a hole is not inside the face.
+    for (int hole : target.holes)
+    {
+        Cycle cycle;
+        cycle.edges = cycleFrom(hole);
+        if (cycleContains(cycle, point))
+            return false;
+    }
+
+    return true;
+}
+
+bool PlanarMap::interiorPoint(int face, Point& result) const
+{
+    if (face < 0 || face >= static_cast<int>(_faces.size()))
+        return false;
+
+    const MapFace& target = _faces[face];
+    if (target.unbounded || target.halfEdge < 0)
+        return false;
+
+    // Step off each boundary edge in turn until a point lands inside. One edge
+    // is usually enough; a sliver of a face may need another.
+    const std::vector<int> outer = cycleFrom(target.halfEdge);
+    const double step = kTwip * 0.25;
+
+    for (int edge : outer)
+    {
+        const Curve& curve = _halfEdges[edge].curve;
+        const Point middle = curve.pointAt(0.5);
+        const Point tangent = curve.tangentAt(0.5);
+
+        const double length = std::hypot(tangent.x, tangent.y);
+        if (length <= 1.0e-12)
+            continue;
+
+        const Point offset(-tangent.y / length * step, tangent.x / length * step);
+
+        const Point candidates[2] = {
+            Point(middle.x + offset.x, middle.y + offset.y),
+            Point(middle.x - offset.x, middle.y - offset.y)
+        };
+
+        for (const Point& candidate : candidates)
+        {
+            if (faceContains(face, candidate))
+            {
+                result = candidate;
+                return true;
+            }
+        }
+    }
+
+    return false;
+}
+
+int PlanarMap::faceFill(int face) const
+{
+    if (face < 0 || face >= static_cast<int>(_faces.size()))
+        return -1;
+    return _faces[face].fillStyle;
+}
+
+void PlanarMap::setFaceFill(int face, int fillStyle)
+{
+    if (face < 0 || face >= static_cast<int>(_faces.size()))
+        return;
+
+    _faces[face].fillStyle = fillStyle;
+
+    // A half-edge carries the fill of the face it borders, which is the fill on
+    // its left.
+    for (HalfEdge& edge : _halfEdges)
+    {
+        if (edge.face == face)
+            edge.leftFill = fillStyle;
+    }
+}
+
 void PlanarMap::build(double tolerance)
 {
     _vertices.clear();

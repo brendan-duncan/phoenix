@@ -42,6 +42,12 @@ struct HalfEdge
 
     /// Which input curve this piece came from, so styles can be carried across.
     int source = -1;
+
+    /// The fill on the left of this direction, which is the fill of the face
+    /// this half-edge belongs to. The opposite direction carries the fill on the
+    /// other side, and the pair of them is what the file format stores as
+    /// `fillStyle0` and `fillStyle1`.
+    int leftFill = -1;
 };
 
 /// A region enclosed by half-edges.
@@ -60,6 +66,9 @@ struct MapFace
 
     /// Signed area of the boundary. Bounded faces come out positive.
     double area = 0.0;
+
+    /// What paints this region, or -1 for nothing.
+    int fillStyle = -1;
 };
 
 /// The arrangement of a set of curves: every crossing becomes a vertex, every
@@ -102,6 +111,22 @@ public:
 
     /// Rounds a coordinate onto the twip grid.
     static Point snapToTwips(const Point& point);
+
+    /// The half-edges forming a boundary, starting from one of them.
+    std::vector<int> cycleFrom(int halfEdge) const;
+
+    /// Whether a point is inside a face: within its outer boundary and outside
+    /// every hole.
+    bool faceContains(int face, const Point& point) const;
+
+    /// A point strictly inside a face, for asking what covers it. Returns false
+    /// for the unbounded face, which has no inside.
+    bool interiorPoint(int face, Point& result) const;
+
+    /// The fill each face ended up with, assigned by attributeFills().
+    int faceFill(int face) const;
+
+    void setFaceFill(int face, int fillStyle);
 
 private:
     struct Input
