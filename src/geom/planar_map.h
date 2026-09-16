@@ -135,6 +135,13 @@ public:
     /// The fill each face ended up with, assigned by attributeFills().
     int faceFill(int face) const;
 
+    /// The face containing a point, or -1 when it falls outside everything.
+    int faceAt(const Point& point) const;
+
+    /// The fill painted where a point falls, or -1 for nothing. This is what a
+    /// paint bucket asks, and what a merge asks of the drawing underneath.
+    int fillAt(const Point& point) const;
+
     void setFaceFill(int face, int fillStyle);
 
 private:

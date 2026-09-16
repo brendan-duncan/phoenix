@@ -13,6 +13,7 @@ class Edge;
 class Element;
 class Frame;
 class Selection;
+class Shape;
 
 /// Replaces an element's transform.
 ///
@@ -79,6 +80,37 @@ private:
     Edge* _edge;
     EditablePath _before;
     EditablePath _after;
+    std::string _name;
+};
+
+/// Merges a newly drawn shape into an existing one.
+///
+/// A merge rewrites the target completely -- its edges, its fills and its
+/// strokes -- so undo keeps a copy of what was there rather than trying to
+/// reverse the operation. Both snapshots are taken once, when the command is
+/// built, and redo and undo just put one or the other back.
+class MergeShapeCommand : public Command
+{
+public:
+    /// Merges  addition into  target straight away, keeping snapshots of
+    /// both sides of the edit. The addition is left untouched.
+    MergeShapeCommand(Shape* target, const Shape& addition, const std::string& name);
+
+    ~MergeShapeCommand() override;
+
+    MergeShapeCommand(const MergeShapeCommand&) = delete;
+    MergeShapeCommand& operator=(const MergeShapeCommand&) = delete;
+
+    void redo() override;
+
+    void undo() override;
+
+    std::string name() const override { return _name; }
+
+private:
+    Shape* _target;
+    Shape* _before = nullptr;
+    Shape* _after = nullptr;
     std::string _name;
 };
 

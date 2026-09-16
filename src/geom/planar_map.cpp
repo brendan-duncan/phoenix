@@ -512,6 +512,25 @@ bool PlanarMap::interiorPoint(int face, Point& result) const
     return false;
 }
 
+int PlanarMap::faceAt(const Point& point) const
+{
+    // Faces do not overlap, so the first one containing the point is the answer.
+    for (size_t i = 0; i < _faces.size(); ++i)
+    {
+        if (_faces[i].unbounded)
+            continue;
+        if (faceContains(static_cast<int>(i), point))
+            return static_cast<int>(i);
+    }
+
+    return -1;
+}
+
+int PlanarMap::fillAt(const Point& point) const
+{
+    return faceFill(faceAt(point));
+}
+
 int PlanarMap::faceFill(int face) const
 {
     if (face < 0 || face >= static_cast<int>(_faces.size()))

@@ -4,6 +4,9 @@
 #include "../data/element.h"
 #include "../data/frame.h"
 #include "selection.h"
+#include "shape_merge.h"
+
+#include "../data/shape.h"
 
 #include <algorithm>
 
@@ -99,6 +102,41 @@ bool SetEdgeGeometryCommand::mergeWith(const Command* other)
     // gesture began.
     _after = next->_after;
     return true;
+}
+
+MergeShapeCommand::MergeShapeCommand(Shape* target, const Shape& addition,
+    const std::string& name)
+    : _target(target)
+    , _name(name)
+{
+    if (!_target)
+        return;
+
+    _before = cloneShape(*_target, nullptr);
+
+    // The merge runs once, here. redo() and undo() only ever swap a snapshot
+    // back in, so repeating either is cheap and cannot drift.
+    ShapeMerger::merge(*_target, addition);
+
+    _after = cloneShape(*_target, nullptr);
+}
+
+MergeShapeCommand::~MergeShapeCommand()
+{
+    delete _before;
+    delete _after;
+}
+
+void MergeShapeCommand::redo()
+{
+    if (_target && _after)
+        setShapeContents(*_target, *_after);
+}
+
+void MergeShapeCommand::undo()
+{
+    if (_target && _before)
+        setShapeContents(*_target, *_before);
 }
 
 AddElementCommand::AddElementCommand(Frame* frame, Element* element,

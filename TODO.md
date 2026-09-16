@@ -399,8 +399,20 @@ to it, so nothing in the application uses it yet.
 - [ ] Chain neighbouring pieces that share styles into one path. Correct as it
       stands -- one edge per piece, which the renderer stitches back into loops --
       but it writes far more edges than Flash would
-- [ ] Wire it into the application. All of section 6 is still Qt-free geometry
-      with tests; no tool calls any of it yet
+- [x] `ShapeMerger::merge` (`src/edit/shape_merge.h`, 12 tests): the whole
+      behaviour, at the data-model level. Outlines cut each other, the newer fill
+      replaces the older where they overlap, a stroke across a fill divides it
+      without erasing, and a seam between two regions of the same colour vanishes
+  - The two shapes number their styles independently, so the addition's fills
+    and strokes are copied in and renumbered before anything looks at them
+- [x] `MergeShapeCommand`: a merge rewrites the target completely, so undo keeps
+      a copy of both sides rather than trying to reverse the operation. The merge
+      runs once, when the command is built; redo and undo only swap a snapshot
+      back, so going back and forth cannot drift
+- [ ] Wire it into the tools. The pen, pencil and shape tools still always add a
+      new element; merge mode needs a toggle (Animate's `J`) and, when it is on,
+      the rectangle and oval tools have to produce shapes rather than the
+      primitive object types
 - [ ] Paint bucket (flood fill over the map), ink bottle, eraser
 - [ ] Selection tool edge-dragging (fill follows the edge)
 - [ ] Stroke-to-outline conversion (needed by the brush tool)
