@@ -71,6 +71,12 @@ public:
     /// feels the same however far in or out the view is.
     double pickTolerance() const;
 
+    double zoom() const { return _zoom; }
+
+    /// Document-space bounds of an element, cached. Tools use this to place
+    /// handles around what is selected.
+    QRectF elementBounds(const fla::Element* element) { return getElementBounds(element); }
+
     /// Top-level elements of the visible frames whose bounds meet
     /// \p documentRect. Does not descend into groups or symbols: a marquee
     /// picks whole objects at the level being edited, the way Animate does.
@@ -89,6 +95,11 @@ public:
     bool highQualityAntiAliasing() const { return _highQualityAntiAliasing; }
 
     void clearCaches();
+
+    /// Drops just the cached bounds. Transforming an element changes where it
+    /// sits but not its path geometry, so the expensive path cache survives a
+    /// drag.
+    void invalidateBounds();
 
     // Export the currently displayed frame to an SVG file (no animation).
     // Renders in document space using the same traversal as on-screen drawing.

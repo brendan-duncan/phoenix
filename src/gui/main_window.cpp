@@ -62,11 +62,16 @@ MainWindow::MainWindow(QWidget *parent)
 
     _selection.setChangedCallback([this]() {
         updateSelectionState();
+        // The transform box belongs to the old selection, so drop it.
+        if (_freeTransformTool)
+            _freeTransformTool->resetBox();
         if (_phoenixView)
             _phoenixView->update();
     });
 
-    _selectionTool = std::make_unique<SelectionTool>(_selection);
+    _selectionTool = std::make_unique<SelectionTool>(_selection, _editContext.commandStack());
+    _freeTransformTool = std::make_unique<FreeTransformTool>(
+        _selection, _editContext.commandStack());
     _phoenixView->setSelection(&_selection);
     _phoenixView->setActiveTool(_selectionTool.get());
     updateSelectionState();
@@ -585,6 +590,18 @@ void MainWindow::setupToolBar()
     });
     toolGroup->addAction(selectionAction);
     toolBar->addAction(selectionAction);
+
+    QAction* freeTransformAction = new QAction("Free Transform", this);
+    freeTransformAction->setCheckable(true);
+    freeTransformAction->setShortcut(QKeySequence(Qt::Key_Q));
+    freeTransformAction->setStatusTip(
+        "Move, scale, rotate and skew the selection. Shift constrains, Escape cancels.");
+    connect(freeTransformAction, &QAction::triggered, this, [this]() {
+        _freeTransformTool->resetBox();
+        _phoenixView->setActiveTool(_freeTransformTool.get());
+    });
+    toolGroup->addAction(freeTransformAction);
+    toolBar->addAction(freeTransformAction);
 }
 
 void MainWindow::selectAll()

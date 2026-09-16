@@ -2,26 +2,34 @@
 
 #include "tool.h"
 
+#include "../data/transform.h"
+
 #include <QPointF>
 #include <QRectF>
 
+#include <vector>
+
 namespace fla {
+class CommandStack;
+class Element;
 class Selection;
 }
 
 /// Animate's arrow tool, in the part of its job that exists so far: picking
 /// things on the stage.
 ///
-/// Click selects the topmost object, shift-click adds or removes, dragging on
-/// empty stage sweeps out a marquee, and clicking empty stage clears.
+/// Click selects the topmost object, shift-click adds or removes, dragging an
+/// object moves it, dragging empty stage sweeps out a marquee, and clicking
+/// empty stage clears.
 ///
-/// Moving, scaling and rotating the selection is not here yet; that is the free
-/// transform work.
+/// Scaling, rotating and skewing live in FreeTransformTool, the same split
+/// Animate makes between its arrow and free transform tools.
 class SelectionTool : public Tool
 {
 public:
-    explicit SelectionTool(fla::Selection& selection)
+    SelectionTool(fla::Selection& selection, fla::CommandStack& commandStack)
         : _selection(selection)
+        , _commandStack(commandStack)
     {}
 
     QString name() const override { return "Selection"; }
@@ -44,7 +52,29 @@ private:
     /// The marquee so far, normalised so it is valid whichever way it was drawn.
     QRectF marqueeRect() const;
 
+    /// Begins dragging the current selection from documentPos.
+    void beginMove(const QPointF& documentPos);
+
+    /// Applies the move so far and repaints.
+    void updateMove(PhoenixView& view, const QPointF& documentPos);
+
+    /// Turns the completed move into one undo step.
+    void commitMove(PhoenixView& view);
+
     fla::Selection& _selection;
+    fla::CommandStack& _commandStack;
+
+    /// What is being dragged, with the transform each element had when the drag
+    /// began, so the move is always measured from the start.
+    struct Target
+    {
+        fla::Element* element = nullptr;
+        fla::Transform startTransform;
+    };
+    std::vector<Target> _targets;
+
+    bool _moveActive = false;
+    QPointF _moveStart;
 
     bool _marqueeActive = false;
     QPointF _marqueeStart;

@@ -5,6 +5,7 @@
 #include "timeline_view.h"
 #include "player.h"
 #include "../data/fla_document.h"
+#include "free_transform_tool.h"
 #include "selection_tool.h"
 #include "../edit/edit_context.h"
 #include "../edit/selection.h"
@@ -103,6 +104,7 @@ private:
     fla::EditContext _editContext;
     fla::Selection _selection;
     std::unique_ptr<SelectionTool> _selectionTool;
+    std::unique_ptr<FreeTransformTool> _freeTransformTool;
     QAction* _selectAllAction = nullptr;
     QAction* _deselectAllAction = nullptr;
     QAction* _undoAction = nullptr;

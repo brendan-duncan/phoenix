@@ -39,9 +39,10 @@ Status legend: `[ ]` todo · `[~]` in progress · `[x]` done
       `closeEvent` so it prompts too)
 - [x] Wire Edit menu: Undo / Redo, enabled state and live action text
       ("Undo Draw Rectangle"), Ctrl+Z and Ctrl+Y / Ctrl+Shift+Z
-- [ ] Mutation API on the data model (`Shape`, `Edge`, `Path`, `Frame`, `Layer`)
-      and the concrete commands that drive it -- deferred until step 3/4, when
-      the first tool defines what the commands actually need
+- [x] First concrete mutation command, `SetElementTransformCommand`, driven by
+      the transform tools (see step 3)
+- [ ] Mutation API for the rest of the model (`Shape`, `Edge`, `Path`, `Frame`,
+      `Layer`) and its commands -- still waiting on the tools that need it
 - [ ] Upgrade the unsaved-changes prompt to offer Save now that step 2 has
       landed (it still offers only Discard / Cancel)
 
@@ -134,14 +135,27 @@ Selecting things on the stage works. Transforming them does not yet.
       status bar
 - [x] Toolbar with the Selection tool (`V`), as an exclusive action group ready
       for the tools that follow
-- [ ] Free transform: move, scale, rotate, skew of whole elements
+- [x] Free transform: move, scale, rotate, skew of whole elements
+  - `SetElementTransformCommand` (`src/edit/element_commands.h`, 7 tests) is the
+    one edit underneath all four gestures -- only the matrix and the name differ
+  - A drag applies its transform live and pushes a single command on release, so
+    the gesture is one undo step. Merging exists for the other case, repeated
+    arrow-key nudges, which should also collapse
+  - Every frame of a drag recomputes from the transform the element had when the
+    drag began, so a long drag does not accumulate rounding error
+  - `SelectionTool` moves what is under the cursor, `FreeTransformTool` (`Q`)
+    scales, rotates and skews -- the same split Animate makes between its arrow
+    and free transform tools
+  - The free transform box is carried by each gesture rather than recomputed as
+    an axis-aligned box, so a rotated object keeps a rotated box with its handles
+    on the corners
+  - Shift constrains (uniform scale, 45 degree rotation steps), Escape abandons a
+    gesture and puts everything back
+  - Dragging only changes where things sit, so `invalidateBounds()` drops the
+    bounds cache while the expensive path cache survives the drag
 - [ ] Snapping: grid, guides, object snapping
 
-Free transform is the natural next piece, and it needs the mutation API and
-concrete commands that step 1 deferred -- moving an element has to be undoable,
-so `MoveElementCommand` and friends come first.
-
-Two things to tidy when that lands:
+Snapping is what is left here. Two other things to tidy:
 
 - [ ] The stage selection and the document tree still track separately: the tree
       drives `PhoenixView::_selectedElement` for inspecting edges and paths

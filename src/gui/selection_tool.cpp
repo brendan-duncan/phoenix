@@ -3,6 +3,8 @@
 #include "phoenix_view.h"
 
 #include "../data/element.h"
+#include "../edit/command_stack.h"
+#include "../edit/element_commands.h"
 #include "../edit/selection.h"
 
 #include <QKeyEvent>
@@ -32,10 +34,17 @@ bool SelectionTool::mousePress(PhoenixView& view, QMouseEvent* event, const QPoi
 
     if (hit)
     {
+        // Dragging something already selected moves the whole selection, so a
+        // press on it must not collapse the selection down to that one object.
+        const bool alreadySelected = _selection.contains(hit.element);
+
         if (_additive)
             _selection.toggle(hit.element);
-        else
+        else if (!alreadySelected)
             _selection.select(hit.element);
+
+        if (!_additive && _selection.contains(hit.element))
+            beginMove(documentPos);
 
         view.update();
         return true;
@@ -53,6 +62,12 @@ bool SelectionTool::mouseMove(PhoenixView& view, QMouseEvent* event, const QPoin
 {
     (void)event;
 
+    if (_moveActive)
+    {
+        updateMove(view, documentPos);
+        return true;
+    }
+
     if (!_marqueeActive)
         return false;
 
@@ -63,7 +78,17 @@ bool SelectionTool::mouseMove(PhoenixView& view, QMouseEvent* event, const QPoin
 
 bool SelectionTool::mouseRelease(PhoenixView& view, QMouseEvent* event, const QPointF& documentPos)
 {
-    if (event->button() != Qt::LeftButton || !_marqueeActive)
+    if (event->button() != Qt::LeftButton)
+        return false;
+
+    if (_moveActive)
+    {
+        updateMove(view, documentPos);
+        commitMove(view);
+        return true;
+    }
+
+    if (!_marqueeActive)
         return false;
 
     _marqueeActive = false;
@@ -107,6 +132,21 @@ bool SelectionTool::keyPress(PhoenixView& view, QKeyEvent* event)
 {
     if (event->key() == Qt::Key_Escape)
     {
+        if (_moveActive)
+        {
+            // Put everything back where the drag started and abandon it.
+            for (const Target& target : _targets)
+            {
+                if (target.element)
+                    target.element->transform = target.startTransform;
+            }
+            _targets.clear();
+            _moveActive = false;
+            view.invalidateBounds();
+            view.update();
+            return true;
+        }
+
         if (_marqueeActive)
         {
             _marqueeActive = false;
@@ -140,10 +180,101 @@ void SelectionTool::paintOverlay(PhoenixView& view, QPainter& painter, double sc
 
 void SelectionTool::deactivate(PhoenixView& view)
 {
-    if (!_marqueeActive)
+    if (_moveActive)
+    {
+        for (const Target& target : _targets)
+        {
+            if (target.element)
+                target.element->transform = target.startTransform;
+        }
+        _targets.clear();
+        _moveActive = false;
+        view.invalidateBounds();
+    }
+
+    if (_marqueeActive)
+    {
+        // Abandon a marquee in progress rather than leaving it drawn over the
+        // stage.
+        _marqueeActive = false;
+    }
+
+    view.update();
+}
+
+void SelectionTool::beginMove(const QPointF& documentPos)
+{
+    _targets.clear();
+
+    for (fla::DOMElement* selected : _selection.elements())
+    {
+        fla::Element* element = dynamic_cast<fla::Element*>(selected);
+        if (element)
+            _targets.push_back({element, element->transform});
+    }
+
+    if (_targets.empty())
         return;
 
-    // Abandon a marquee in progress rather than leaving it drawn over the stage.
-    _marqueeActive = false;
+    _moveActive = true;
+    _moveStart = documentPos;
+}
+
+void SelectionTool::updateMove(PhoenixView& view, const QPointF& documentPos)
+{
+    const QPointF delta = documentPos - _moveStart;
+
+    for (const Target& target : _targets)
+    {
+        if (!target.element)
+            continue;
+
+        // Measured from the starting transform every time, so a long drag does
+        // not accumulate rounding error.
+        target.element->transform = target.startTransform;
+        target.element->transform.tx += delta.x();
+        target.element->transform.ty += delta.y();
+    }
+
+    // Only positions changed, so the path cache stays warm.
+    view.invalidateBounds();
+    view.update();
+}
+
+void SelectionTool::commitMove(PhoenixView& view)
+{
+    std::vector<fla::CommandPtr> commands;
+
+    for (const Target& target : _targets)
+    {
+        if (!target.element)
+            continue;
+
+        const fla::Transform& now = target.element->transform;
+        if (now.tx == target.startTransform.tx && now.ty == target.startTransform.ty)
+            continue;
+
+        commands.push_back(fla::CommandPtr(new fla::SetElementTransformCommand(
+            target.element, target.startTransform, now, "Move")));
+    }
+
+    // A click that did not actually move anything is not an edit.
+    if (!commands.empty())
+    {
+        const bool needsMacro = commands.size() > 1;
+        if (needsMacro)
+            _commandStack.beginMacro("Move");
+
+        for (fla::CommandPtr& command : commands)
+            _commandStack.push(std::move(command));
+
+        if (needsMacro)
+            _commandStack.endMacro();
+
+        _commandStack.breakMergeChain();
+    }
+
+    _moveActive = false;
+    _targets.clear();
     view.update();
 }

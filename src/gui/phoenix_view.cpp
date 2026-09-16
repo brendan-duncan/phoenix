@@ -2150,6 +2150,11 @@ void PhoenixView::clearCaches()
     _boundsCache.clear();
 }
 
+void PhoenixView::invalidateBounds()
+{
+    _boundsCache.clear();
+}
+
 QTransform PhoenixView::documentToWidget() const
 {
     double docWidth = 0.0;
