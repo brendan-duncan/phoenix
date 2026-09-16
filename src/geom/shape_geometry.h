@@ -1,6 +1,7 @@
 #pragma once
 
 #include "curve.h"
+#include "planar_map.h"
 
 #include <vector>
 
@@ -35,5 +36,26 @@ struct ShapeCurve
 ///
 /// Free of Qt.
 std::vector<ShapeCurve> shapeCurves(const Shape& shape);
+
+/// Reads the fills the file already recorded into the arrangement's faces.
+///
+/// Each half-edge's source says what lies on each of its sides, and the
+/// convention is that `fillStyle1` is the fill on the left of the direction the
+/// edge was written in. That is enough to say what every face is painted with,
+/// without re-deciding it from paint order.
+///
+/// Useful for taking an existing shape apart and putting it back together, and
+/// for checking that an arrangement agrees with the file it came from.
+void attributeFillsFromSource(PlanarMap& map, const std::vector<ShapeCurve>& sources);
+
+/// Replaces a shape's edges with the arrangement's, keeping its fill and stroke
+/// styles.
+///
+/// Each pair of opposite half-edges becomes one edge, carrying the fill from
+/// each of its sides. A piece with no fill on either side and no stroke draws
+/// nothing and is left out, which is how the seams inside a merged shape
+/// disappear.
+void rebuildShapeEdges(Shape& shape, const PlanarMap& map,
+    const std::vector<ShapeCurve>& sources);
 
 } // namespace fla

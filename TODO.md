@@ -388,8 +388,19 @@ to it, so nothing in the application uses it yet.
       out of 44, against 3 out of 44 for the opposite reading
   - That it agrees at all is the stronger result: the arrangement reproduces the
     topology real Flash files encode, not merely something plausible
-- [ ] Convert the merged map back into `Edge` objects, so an edit can be written
-      to the document. Nothing in the application uses any of this yet
+- [x] Convert the arrangement back into `Edge` objects, so an edit can be
+      written to the document (`rebuildShapeEdges`). Each pair of opposite
+      half-edges becomes one edge carrying the fill from each side
+  - An edge with the same thing on both sides separates nothing and is left out,
+    whether that is two empty sides or the same fill on each. That is exactly how
+    the seam vanishes where two shapes merged into one region
+  - Verified on real data: 36 shapes from six documents went through the
+    arrangement and back without changing which fills they use
+- [ ] Chain neighbouring pieces that share styles into one path. Correct as it
+      stands -- one edge per piece, which the renderer stitches back into loops --
+      but it writes far more edges than Flash would
+- [ ] Wire it into the application. All of section 6 is still Qt-free geometry
+      with tests; no tool calls any of it yet
 - [ ] Paint bucket (flood fill over the map), ink bottle, eraser
 - [ ] Selection tool edge-dragging (fill follows the edge)
 - [ ] Stroke-to-outline conversion (needed by the brush tool)

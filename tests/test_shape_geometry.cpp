@@ -8,6 +8,7 @@
 #include "../src/parser/fla_parser.h"
 #include "../src/parser/path_parser.h"
 
+#include <algorithm>
 #include <cstdlib>
 #include <filesystem>
 #include <memory>
@@ -280,4 +281,235 @@ TEST(real_shapes_agree_on_which_side_a_fill_is)
 
     CHECK(share >= 0.9);
     CHECK(leftIsStyle1 > leftIsStyle0);
+}
+
+namespace {
+
+/// Runs a shape through the arrangement and back, keeping its own fills.
+void roundTripThroughMap(Shape& shape)
+{
+    const std::vector<ShapeCurve> curves = fla::shapeCurves(shape);
+
+    PlanarMap map;
+    for (size_t i = 0; i < curves.size(); ++i)
+        map.addCurve(curves[i].curve, static_cast<int>(i));
+    map.build();
+
+    fla::attributeFillsFromSource(map, curves);
+    fla::rebuildShapeEdges(shape, map, curves);
+}
+
+/// The fills a shape's edges mention, so two shapes can be compared on what they
+/// paint rather than on how they were written.
+std::vector<int> mentionedFills(const Shape& shape)
+{
+    std::vector<int> fills;
+    for (const fla::Edge* edge : shape.edges)
+    {
+        for (int fill : {edge->fillStyle0, edge->fillStyle1})
+        {
+            if (fill == -1)
+                continue;
+            bool seen = false;
+            for (int existing : fills)
+                seen = seen || existing == fill;
+            if (!seen)
+                fills.push_back(fill);
+        }
+    }
+    std::sort(fills.begin(), fills.end());
+    return fills;
+}
+
+} // namespace
+
+TEST(rebuilding_a_square_keeps_its_fill_on_the_inside)
+{
+    std::unique_ptr<Shape> shape =
+        shapeFromEdges("!0 0|2000 0|2000 2000|0 2000|0 0", -1, 1, -1);
+
+    roundTripThroughMap(*shape);
+
+    // Four sides, each knowing the fill is on one side and nothing on the other.
+    CHECK(shape->edges.size() == 4);
+
+    for (const fla::Edge* edge : shape->edges)
+    {
+        const bool oneSided = (edge->fillStyle1 == 1 && edge->fillStyle0 == -1) ||
+                              (edge->fillStyle0 == 1 && edge->fillStyle1 == -1);
+        CHECK(oneSided);
+    }
+}
+
+TEST(rebuilding_drops_edges_that_draw_nothing)
+{
+    // A square with a line across it that has no fill on either side and no
+    // stroke. The line splits the arrangement, but once both halves carry the
+    // same fill there is nothing to draw along it.
+    std::unique_ptr<Shape> shape =
+        shapeFromEdges("!0 0|2000 0|2000 2000|0 2000|0 0", -1, 1, -1);
+
+    PathParser parser;
+    fla::Edge* cut = parser.parse("!1000 0|1000 2000", shape.get());
+    CHECK(cut != nullptr);
+    if (!cut)
+        return;
+    cut->fillStyle0 = 1;
+    cut->fillStyle1 = 1;
+    cut->strokeStyle = -1;
+    shape->edges.push_back(cut);
+
+    roundTripThroughMap(*shape);
+
+    // The seam is gone: every surviving edge has something different on each
+    // side, so it is a real boundary.
+    for (const fla::Edge* edge : shape->edges)
+        CHECK(edge->fillStyle0 != edge->fillStyle1);
+
+    // Six, not four: the cut meets the top and bottom edges, splitting each in
+    // two. The outline survives in pieces; only the seam itself goes.
+    CHECK(shape->edges.size() == 6);
+}
+
+TEST(rebuilding_keeps_a_stroke_with_no_fill)
+{
+    // A bare line has nothing on either side but still has to survive, because
+    // the stroke is the whole of it.
+    std::unique_ptr<Shape> shape = shapeFromEdges("!0 0|2000 0", -1, -1, 1);
+
+    roundTripThroughMap(*shape);
+
+    CHECK(shape->edges.size() == 1);
+    if (shape->edges.empty())
+        return;
+    CHECK(shape->edges[0]->strokeStyle == 1);
+}
+
+TEST(rebuilding_splits_where_two_outlines_cross)
+{
+    // Two squares overlapping. Going through the arrangement has to cut both
+    // outlines at the crossings, so the result has more edges than it started
+    // with.
+    std::unique_ptr<Shape> shape =
+        shapeFromEdges("!0 0|2000 0|2000 2000|0 2000|0 0", -1, 1, -1);
+
+    PathParser parser;
+    fla::Edge* second = parser.parse("!1000 1000|3000 1000|3000 3000|1000 3000|1000 1000",
+        shape.get());
+    CHECK(second != nullptr);
+    if (!second)
+        return;
+    second->fillStyle0 = -1;
+    second->fillStyle1 = 1;
+    shape->edges.push_back(second);
+
+    const size_t before = shape->edges.size();
+    roundTripThroughMap(*shape);
+
+    CHECK(shape->edges.size() > before);
+
+    // Every surviving edge draws something.
+    for (const fla::Edge* edge : shape->edges)
+    {
+        const bool draws = edge->fillStyle0 != -1 || edge->fillStyle1 != -1 ||
+            edge->strokeStyle != -1;
+        CHECK(draws);
+    }
+}
+
+TEST(real_shapes_survive_a_trip_through_the_arrangement)
+{
+    // Taking a shape apart into an arrangement and putting it back together must
+    // not change what it paints.
+    const char* corpus = std::getenv("PHOENIX_FLA_CORPUS");
+    if (!corpus || !std::filesystem::exists(corpus))
+    {
+        std::printf("    skipped: set PHOENIX_FLA_CORPUS to a folder of FLA files\n");
+        return;
+    }
+
+    int checked = 0;
+    int mismatched = 0;
+    int documents = 0;
+
+    for (const auto& entry : std::filesystem::directory_iterator(corpus))
+    {
+        if (documents >= 6)
+            break;
+
+        std::string path;
+        if (entry.is_directory() && std::filesystem::exists(entry.path() / "DOMDocument.xml"))
+            path = entry.path().string();
+        else if (entry.is_regular_file() && entry.path().extension() == ".fla")
+            path = entry.path().string();
+        else
+            continue;
+
+        FLAParser parser;
+        std::unique_ptr<fla::FLADocument> document(parser.parse(path));
+        if (!document || !document->document)
+            continue;
+
+        ++documents;
+
+        std::vector<const Shape*> shapes;
+        for (const fla::Timeline* timeline : document->document->timelines)
+            collectShapes(timeline, shapes);
+
+        for (const Shape* original : shapes)
+        {
+            const std::vector<ShapeCurve> curves = fla::shapeCurves(*original);
+            if (curves.empty() || curves.size() > 40)
+                continue;
+
+            // Work on a copy so the document is left alone.
+            Shape rebuilt(nullptr);
+            for (const ShapeCurve& source : curves)
+            {
+                fla::Edge* edge = new fla::Edge(&rebuilt);
+                edge->fillStyle0 = source.fillStyle0;
+                edge->fillStyle1 = source.fillStyle1;
+                edge->strokeStyle = source.strokeStyle;
+
+                fla::Path* p = new fla::Path(edge);
+                p->segments.push_back(new fla::PathSegment(
+                    fla::PathSegment::Command::Move, {source.curve.start()}, p));
+                if (source.curve.isLine())
+                {
+                    p->segments.push_back(new fla::PathSegment(
+                        fla::PathSegment::Command::Line, {source.curve.end()}, p));
+                }
+                else
+                {
+                    p->segments.push_back(new fla::PathSegment(
+                        fla::PathSegment::Command::Cubic,
+                        {source.curve.controlPoint(1), source.curve.controlPoint(2),
+                         source.curve.end()}, p));
+                }
+                edge->paths.push_back(p);
+                rebuilt.edges.push_back(edge);
+            }
+
+            const std::vector<int> before = mentionedFills(rebuilt);
+            roundTripThroughMap(rebuilt);
+            const std::vector<int> after = mentionedFills(rebuilt);
+
+            ++checked;
+            if (before != after)
+                ++mismatched;
+        }
+    }
+
+    std::printf("    %d documents, %d shapes: %d changed which fills they use\n",
+        documents, checked, mismatched);
+
+    CHECK(checked > 0);
+    if (checked == 0)
+        return;
+
+    // The same fills have to come out as went in. A shape that loses one has had
+    // a region misattributed.
+    const double kept = 1.0 - static_cast<double>(mismatched) / checked;
+    std::printf("    fills preserved for %.0f%% of shapes\n", kept * 100.0);
+    CHECK(kept >= 0.9);
 }

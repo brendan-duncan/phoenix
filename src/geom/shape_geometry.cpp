@@ -111,4 +111,92 @@ std::vector<ShapeCurve> shapeCurves(const Shape& shape)
     return curves;
 }
 
+void attributeFillsFromSource(PlanarMap& map, const std::vector<ShapeCurve>& sources)
+{
+    for (size_t face = 0; face < map.faces().size(); ++face)
+    {
+        const int index = static_cast<int>(face);
+
+        if (map.faces()[face].unbounded)
+        {
+            map.setFaceFill(index, -1);
+            continue;
+        }
+
+        // Any half-edge bordering the face answers the question; they all agree
+        // when the arrangement matches the file it came from.
+        int fill = -1;
+        for (const HalfEdge& edge : map.halfEdges())
+        {
+            if (edge.face != index)
+                continue;
+            if (edge.source < 0 || edge.source >= static_cast<int>(sources.size()))
+                continue;
+
+            const ShapeCurve& source = sources[edge.source];
+            fill = edge.forward ? source.fillStyle1 : source.fillStyle0;
+            break;
+        }
+
+        map.setFaceFill(index, fill);
+    }
+}
+
+void rebuildShapeEdges(Shape& shape, const PlanarMap& map,
+    const std::vector<ShapeCurve>& sources)
+{
+    for (Edge* edge : shape.edges)
+        delete edge;
+    shape.edges.clear();
+
+    for (const HalfEdge& half : map.halfEdges())
+    {
+        // One edge per pair, not per direction.
+        if (!half.forward)
+            continue;
+
+        const int leftFill = half.leftFill;
+        const int rightFill = half.twin >= 0 &&
+            half.twin < static_cast<int>(map.halfEdges().size())
+            ? map.halfEdges()[half.twin].leftFill : -1;
+
+        int strokeStyle = -1;
+        if (half.source >= 0 && half.source < static_cast<int>(sources.size()))
+            strokeStyle = sources[half.source].strokeStyle;
+
+        // An edge with the same thing on both sides separates nothing. Whether
+        // that is two empty sides or the same fill on each, it draws nothing and
+        // is left out -- which is exactly how the seam vanishes where two shapes
+        // merged into one region.
+        if (leftFill == rightFill && strokeStyle == -1)
+            continue;
+
+        Edge* edge = new Edge(&shape);
+        edge->fillStyle1 = leftFill;
+        edge->fillStyle0 = rightFill;
+        edge->strokeStyle = strokeStyle;
+
+        Path* path = new Path(edge);
+
+        path->segments.push_back(new PathSegment(
+            PathSegment::Command::Move, {half.curve.start()}, path));
+
+        if (half.curve.isLine())
+        {
+            path->segments.push_back(new PathSegment(
+                PathSegment::Command::Line, {half.curve.end()}, path));
+        }
+        else
+        {
+            path->segments.push_back(new PathSegment(
+                PathSegment::Command::Cubic,
+                {half.curve.controlPoint(1), half.curve.controlPoint(2), half.curve.end()},
+                path));
+        }
+
+        edge->paths.push_back(path);
+        shape.edges.push_back(edge);
+    }
+}
+
 } // namespace fla
