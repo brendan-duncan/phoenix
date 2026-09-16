@@ -312,7 +312,8 @@ Animate's default mode maintains a planar map: every edge carries a left and a
 right fill (that is what `fillStyle0` / `fillStyle1` already are). Drawing across
 a fill splits both at intersections and rebuilds faces.
 
-Started. The geometry foundation is in; the map itself is not.
+Started. The geometry and the arrangement are in; fills are not yet attributed
+to it, so nothing in the application uses it yet.
 
 - [x] Kernel decision: **build the arrangement directly**, rather than adopting a
       boolean library
@@ -344,10 +345,29 @@ Started. The geometry foundation is in; the map itself is not.
     crossing, and a point there would be a meaningless vertex in the map
   - Verified to resolve a crossing at twip scale, and mutation-checked --
     breaking the subdivision's parameter mapping fails four tests
-- [ ] Planar map: vertices, half-edges, faces, built from the split pieces
-- [ ] Snap intersections to the twip grid (1/20 px) — Flash geometry is already
-      twip-quantized, which is what makes an exact integer map tractable
-- [ ] Per-half-edge fill attribution (`fillStyle0` / `fillStyle1`)
+- [x] Planar map (`src/geom/planar_map.h`, 15 tests): every crossing becomes a
+      vertex, every piece between crossings a pair of opposite half-edges, and
+      every enclosed region a face
+  - Two rectangles laid over each other come out as three regions, which is the
+    case merge drawing exists for
+- [x] Snap to the twip grid (1/20 px). Flash geometry is already twip-quantized,
+      so this turns "are these two points the same" from a tolerance question
+      into a dictionary lookup, which is what keeps the topology consistent
+- [x] Faces with holes. A shape drawn inside another leaves a hole, not a
+      separate region, and disconnected boundaries mean several cycles walked
+      the wrong way round -- only one of them is the outside
+  - Which face a boundary sits in is decided by a ray cast from a point a
+    quarter twip off the edge. A vertex of the cycle will not do: it lies on the
+    boundary, where the cast can answer either way. That was a real bug, caught
+    by the touching-rectangles test
+- [x] Coincident edges are merged. Two shapes sharing an edge each contribute
+      their own copy, and collinear overlap is deliberately not a crossing, so
+      keeping both would leave a zero-width sliver between them
+- [ ] Per-half-edge fill attribution (`fillStyle0` / `fillStyle1`). The next
+      piece: the faces are the regions a fill can occupy, and each half-edge
+      records the fill on its left
+- [ ] Intersection is tested pairwise, which is quadratic. Fine for the tens of
+      curves a shape holds; a sweep line if that ever stops being true
 - [ ] Paint bucket (flood fill over the map), ink bottle, eraser
 - [ ] Selection tool edge-dragging (fill follows the edge)
 - [ ] Stroke-to-outline conversion (needed by the brush tool)
