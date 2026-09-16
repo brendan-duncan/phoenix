@@ -377,9 +377,19 @@ to it, so nothing in the application uses it yet.
     into halves that can be dragged apart
 - [ ] Intersection is tested pairwise, which is quadratic. Fine for the tens of
       curves a shape holds; a sweep line if that ever stops being true
-- [ ] Convert a `Shape` to regions and back, so the map can be driven from the
-      document rather than from hand-built curves. Nothing in the application
-      uses any of this yet
+- [x] `src/geom/shape_geometry.h`: a shape's edges become curves carrying the
+      styles the file recorded for them, which is what feeds the arrangement from
+      a real document
+- [x] **The side convention, settled by data rather than guessed.** The format
+      records a fill for each side of an edge but never says which side is which.
+      Reading eight real documents and checking which way round makes every face
+      agree with itself: `fillStyle1` is the fill on the **left** of the edge's
+      direction, `fillStyle0` the one on the **right**. Agreement was 44 faces
+      out of 44, against 3 out of 44 for the opposite reading
+  - That it agrees at all is the stronger result: the arrangement reproduces the
+    topology real Flash files encode, not merely something plausible
+- [ ] Convert the merged map back into `Edge` objects, so an edit can be written
+      to the document. Nothing in the application uses any of this yet
 - [ ] Paint bucket (flood fill over the map), ink bottle, eraser
 - [ ] Selection tool edge-dragging (fill follows the edge)
 - [ ] Stroke-to-outline conversion (needed by the brush tool)

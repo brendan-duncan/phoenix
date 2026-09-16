@@ -192,6 +192,7 @@ void PlanarMap::buildHalfEdges(const std::vector<Input>& pieces)
         a.twin = backward;
         a.curve = curve;
         a.source = piece.source;
+        a.forward = true;
         _halfEdges.push_back(a);
 
         HalfEdge b;
@@ -200,6 +201,7 @@ void PlanarMap::buildHalfEdges(const std::vector<Input>& pieces)
         b.twin = forward;
         b.curve = reversed;
         b.source = piece.source;
+        b.forward = false;
         _halfEdges.push_back(b);
 
         _vertices[from].outgoing.push_back(forward);

@@ -145,6 +145,7 @@ set(HEADERS
     src/geom/intersect.h
     src/geom/fill_attribution.h
     src/geom/planar_map.h
+    src/geom/shape_geometry.h
     src/edit/editable_path.h
     src/writer/edge_writer.h
     src/writer/fla_writer.h
@@ -218,6 +219,7 @@ set(SOURCES
     src/geom/intersect.cpp
     src/geom/fill_attribution.cpp
     src/geom/planar_map.cpp
+    src/geom/shape_geometry.cpp
     src/edit/editable_path.cpp
     src/writer/edge_writer.cpp
     src/writer/fla_writer.cpp

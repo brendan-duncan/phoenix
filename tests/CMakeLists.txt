@@ -79,9 +79,10 @@ if(TARGET tinyxml2 AND TARGET zlibstatic)
         ${PHOENIX_SRC}/writer/fla_writer.cpp
         ${PHOENIX_SRC}/writer/xfl_content.cpp
         ${PHOENIX_SRC}/writer/xfl_folder_writer.cpp
+        ${PHOENIX_SRC}/geom/shape_geometry.cpp
         ${PHOENIX_SRC}/writer/xfl_writer.cpp
     )
-    list(APPEND TEST_SOURCES test_xfl_writer.cpp test_fla_writer.cpp)
+    list(APPEND TEST_SOURCES test_xfl_writer.cpp test_fla_writer.cpp test_shape_geometry.cpp)
     set(PHOENIX_TESTS_HAVE_PARSER TRUE)
 else()
     message(STATUS

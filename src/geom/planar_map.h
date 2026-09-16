@@ -43,10 +43,19 @@ struct HalfEdge
     /// Which input curve this piece came from, so styles can be carried across.
     int source = -1;
 
+    /// Whether this direction matches the input curve's own. The twin runs the
+    /// other way. Styles recorded per side only make sense against a known
+    /// direction, so this is what lets them be read back.
+    bool forward = true;
+
     /// The fill on the left of this direction, which is the fill of the face
     /// this half-edge belongs to. The opposite direction carries the fill on the
-    /// other side, and the pair of them is what the file format stores as
-    /// `fillStyle0` and `fillStyle1`.
+    /// other side.
+    ///
+    /// The format stores that pair as `fillStyle1` for the left and
+    /// `fillStyle0` for the right. The format does not state which is which;
+    /// that was settled by reading real files and checking which way round makes
+    /// every face agree with itself.
     int leftFill = -1;
 };
 
