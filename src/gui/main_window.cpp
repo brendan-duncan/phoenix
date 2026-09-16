@@ -94,6 +94,8 @@ MainWindow::MainWindow(QWidget *parent)
         PrimitiveTool::Kind::Line, _selection, stack, _drawingStyle);
     _polyStarTool = std::make_unique<PrimitiveTool>(
         PrimitiveTool::Kind::PolyStar, _selection, stack, _drawingStyle);
+    _penTool = std::make_unique<PenTool>(_selection, stack, _drawingStyle);
+    _subselectionTool = std::make_unique<SubselectionTool>(_selection, stack);
     _phoenixView->setSelection(&_selection);
     _phoenixView->setActiveTool(_selectionTool.get());
     updateSelectionState();
@@ -649,6 +651,17 @@ void MainWindow::setupToolBar()
     toolGroup->addAction(selectionAction);
     toolBar->addAction(selectionAction);
 
+    QAction* subselectionAction = new QAction("Subselection", this);
+    subselectionAction->setCheckable(true);
+    subselectionAction->setShortcut(QKeySequence(Qt::Key_A));
+    subselectionAction->setStatusTip(
+        "Show a shape's anchors and drag them. Alt breaks a smooth point's tangent.");
+    connect(subselectionAction, &QAction::triggered, this, [this]() {
+        _phoenixView->setActiveTool(_subselectionTool.get());
+    });
+    toolGroup->addAction(subselectionAction);
+    toolBar->addAction(subselectionAction);
+
     QAction* freeTransformAction = new QAction("Free Transform", this);
     freeTransformAction->setCheckable(true);
     freeTransformAction->setShortcut(QKeySequence(Qt::Key_Q));
@@ -680,7 +693,7 @@ void MainWindow::setupToolBar()
             &_ovalTool},
         {"Line", Qt::Key_N, "Drag to draw a line. Shift for 45 degree steps.",
             &_lineTool},
-        {"PolyStar", Qt::Key_P, "Drag from the centre outwards. Sides and star mode "
+        {"PolyStar", Qt::Key_Y, "Drag from the centre outwards. Sides and star mode "
             "are in the Properties panel.", &_polyStarTool},
     };
 
@@ -697,6 +710,22 @@ void MainWindow::setupToolBar()
         toolGroup->addAction(action);
         toolBar->addAction(action);
     }
+
+    toolBar->addSeparator();
+
+    QAction* penAction = new QAction("Pen", this);
+    penAction->setCheckable(true);
+    // P for the pen, as in Animate. B is already the bounding-box toggle, and a
+    // clash leaves Qt firing neither.
+    penAction->setShortcut(QKeySequence(Qt::Key_P));
+    penAction->setStatusTip(
+        "Click for a corner point, drag for a smooth one. Alt-drag breaks the tangent, "
+        "clicking the first point closes the path, Enter finishes it open.");
+    connect(penAction, &QAction::triggered, this, [this]() {
+        _phoenixView->setActiveTool(_penTool.get());
+    });
+    toolGroup->addAction(penAction);
+    toolBar->addAction(penAction);
 }
 
 namespace {

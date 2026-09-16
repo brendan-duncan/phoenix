@@ -1,5 +1,6 @@
 #include "element_commands.h"
 
+#include "../data/edge.h"
 #include "../data/element.h"
 #include "../data/frame.h"
 #include "selection.h"
@@ -13,6 +14,9 @@ namespace {
 /// Shared by every transform command. Whether two of them actually merge is
 /// decided by mergeWith, which also checks the element and the gesture.
 constexpr int kTransformMergeId = 1;
+
+/// Shared by every edge-geometry command; mergeWith decides the rest.
+constexpr int kGeometryMergeId = 2;
 
 } // namespace
 
@@ -54,6 +58,45 @@ bool SetElementTransformCommand::mergeWith(const Command* other)
 
     // Keep this command's starting point so undo still returns to where the
     // gesture began, and take the later end state.
+    _after = next->_after;
+    return true;
+}
+
+SetEdgeGeometryCommand::SetEdgeGeometryCommand(Edge* edge, const EditablePath& before,
+    const EditablePath& after, const std::string& name)
+    : _edge(edge)
+    , _before(before)
+    , _after(after)
+    , _name(name)
+{}
+
+void SetEdgeGeometryCommand::redo()
+{
+    if (_edge)
+        _after.applyTo(*_edge);
+}
+
+void SetEdgeGeometryCommand::undo()
+{
+    if (_edge)
+        _before.applyTo(*_edge);
+}
+
+int SetEdgeGeometryCommand::mergeId() const
+{
+    return kGeometryMergeId;
+}
+
+bool SetEdgeGeometryCommand::mergeWith(const Command* other)
+{
+    const SetEdgeGeometryCommand* next =
+        static_cast<const SetEdgeGeometryCommand*>(other);
+
+    if (next->_edge != _edge || next->_name != _name)
+        return false;
+
+    // Keep this command's starting geometry so undo still returns to where the
+    // gesture began.
     _after = next->_after;
     return true;
 }

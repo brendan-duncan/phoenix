@@ -23,6 +23,7 @@ set(TEST_CORE_SOURCES
     ${PHOENIX_SRC}/data/transform.cpp
     ${PHOENIX_SRC}/edit/command_stack.cpp
     ${PHOENIX_SRC}/edit/edit_context.cpp
+    ${PHOENIX_SRC}/edit/editable_path.cpp
     ${PHOENIX_SRC}/edit/element_commands.cpp
     ${PHOENIX_SRC}/edit/selection.cpp
     ${PHOENIX_SRC}/edit/snapping.cpp
@@ -39,6 +40,7 @@ set(TEST_SOURCES
     test_selection.cpp
     test_element_commands.cpp
     test_snapping.cpp
+    test_editable_path.cpp
 )
 
 if(TARGET tinyxml2 AND TARGET zlibstatic)

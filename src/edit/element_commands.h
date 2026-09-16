@@ -3,11 +3,13 @@
 #include "command.h"
 
 #include "../data/transform.h"
+#include "editable_path.h"
 
 #include <string>
 
 namespace fla {
 
+class Edge;
 class Element;
 class Frame;
 class Selection;
@@ -47,6 +49,36 @@ private:
     Element* _element;
     Transform _before;
     Transform _after;
+    std::string _name;
+};
+
+/// Replaces the geometry of one edge.
+///
+/// Dragging an anchor or a handle rewrites the whole path rather than patching
+/// one segment, because an anchor spans two segments and its handles live on
+/// both sides of the join. Storing the before and after anchors keeps that
+/// simple and makes undo exact.
+class SetEdgeGeometryCommand : public Command
+{
+public:
+    SetEdgeGeometryCommand(Edge* edge, const EditablePath& before,
+        const EditablePath& after, const std::string& name);
+
+    void redo() override;
+
+    void undo() override;
+
+    std::string name() const override { return _name; }
+
+    int mergeId() const override;
+
+    /// Folds a later edit of the same edge under the same name into this one.
+    bool mergeWith(const Command* other) override;
+
+private:
+    Edge* _edge;
+    EditablePath _before;
+    EditablePath _after;
     std::string _name;
 };
 

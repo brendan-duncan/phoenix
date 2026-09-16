@@ -98,6 +98,11 @@ public:
         (void)view; (void)painter; (void)scale;
     }
 
+    /// Whether the view should draw its selection bounding box while this tool
+    /// is active. Tools that show their own handles turn it off, so the box does
+    /// not sit on top of what the user is trying to grab.
+    virtual bool showsSelectionBounds() const { return true; }
+
     /// Called when the tool stops being the active one, so it can abandon any
     /// gesture in progress.
     virtual void deactivate(PhoenixView& view) { (void)view; }

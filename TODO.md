@@ -230,17 +230,54 @@ happens to render.
 
 ## 5. Pen + subselection (object drawing mode)
 
+Drawing and editing bezier paths works. Two items are still open.
 
-- [ ] Authoring-side anchor model (tangent linked/broken, corner vs. smooth) that
-      compiles down to `PathSegment` — the current model stores only on-curve
-      points plus controls, which cannot express handle state
-- [ ] Pen: click for corner, drag for handles, alt-drag to break tangents,
-      close on first anchor, resume from an endpoint
-- [ ] Subselection: display and drag anchors + handles
+- [x] Authoring-side anchor model (`src/edit/editable_path.h`, 12 tests).
+      `PathSegment` records only what a renderer needs: it cannot say whether an
+      anchor's handles are linked, and it splits one conceptual anchor across two
+      segments. `EditablePath` holds anchors with in and out handles and a smooth
+      flag, and compiles down to segments when an edit finishes
+  - Quadratics are raised to the cubic that draws the same curve, so one anchor
+    model covers both
+  - A path whose last point repeats its first is recognised as closed, however it
+    was recorded, rather than ending up with two anchors on top of each other
+  - A smooth anchor keeps one straight tangent through it: moving one handle
+    swings the other to stay opposite, at its own length
+- [x] Pen tool (`P`): click for a corner point, drag for a smooth one, alt-drag
+      to break the tangent, click the first point to close, Enter to finish open,
+      Escape to abandon. Nothing reaches the document until the path is finished,
+      so an abandoned path leaves no trace and a finished one is one undo step
+  - A closed path gets a fill, an open one is stroke only, since only a closed
+    outline encloses an area
+- [x] Subselection tool (`A`): shows every anchor and handle on the selected
+      shape and drags them. Smooth points draw round, corners square. Handles are
+      checked before anchors when picking, or a handle pulled back over its
+      anchor could never be grabbed
+- [x] `SetEdgeGeometryCommand`: a drag edits live and pushes one command on
+      release. It stores the before and after anchors rather than patching a
+      segment, because an anchor spans two segments and its handles live on both
+      sides of the join
+- [x] Tools that draw their own handles suppress the selection bounding box, so
+      it does not sit on top of what the user is trying to grab
 - [ ] Add / delete / convert anchor point (de Casteljau splitting)
 - [ ] Pencil with curve fitting (Schneider) + smoothing/straightening modes
 
+### Rough edges
+
+- [ ] The pen cannot resume an existing open path from one of its endpoints
+- [ ] Subselection edits the first path of each edge. A shape whose edge holds
+      several paths shows them all but only the first is editable
+- [ ] Shape bounds are computed from anchor and control points, so the selection
+      box can sit slightly inside a curve that bulges past its control polygon.
+      Fine for culling, loose for a handle box
+
+Also fixed: the pen's shortcut was `B`, which the "Show Bounding Boxes" toggle
+already owned. Qt fires neither key on a clash, so the tool silently never
+activated. The shape tools now use Animate's keys -- `V` `A` `Q` `R` `O` `N` `Y`
+`P` -- with `B` left to the bounding-box toggle.
+
 ## 6. Merge drawing model — the hard part
+
 
 Animate's default mode maintains a planar map: every edge carries a left and a
 right fill (that is what `fillStyle0` / `fillStyle1` already are). Drawing across

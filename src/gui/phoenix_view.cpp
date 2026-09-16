@@ -2202,7 +2202,9 @@ void PhoenixView::drawToolOverlay(QPainter& painter)
     // in document units scaled back by the zoom.
     const double scale = _zoom > 0.0 ? 1.0 / _zoom : 1.0;
 
-    if (_selection && !_selection->isEmpty())
+    const bool showBounds = !_activeTool || _activeTool->showsSelectionBounds();
+
+    if (showBounds && _selection && !_selection->isEmpty())
     {
         painter.save();
         painter.setBrush(Qt::NoBrush);
