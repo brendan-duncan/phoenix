@@ -107,14 +107,53 @@ first.
 
 ## 3. Tool framework + selection
 
-- [ ] Stage hit-testing: fill vs. edge vs. anchor, zoom-aware tolerance
-- [ ] `Tool` base class, active-tool routing in `PhoenixView` mouse events
-      (currently pan-only), per-tool cursors
-- [ ] Overlay/handle rendering layer (extend `drawOverlayPoints`)
-- [ ] Selection model: click, shift-click, marquee; selection-aware Edit menu
+Selecting things on the stage works. Transforming them does not yet.
+
+- [x] Stage hit-testing (`PhoenixView::hitTest`): fill vs. stroke vs. anchor,
+      with a tolerance in document units derived from a few screen pixels so
+      picking feels the same at every zoom
+  - Mirrors the draw traversal, so what is pickable is exactly what is visible:
+    hidden and locked layers are skipped, guide and folder layers are not
+    pickable, and a symbol instance reports itself rather than the artwork
+    inside it
+  - `drawShape` was split into a painter-free `buildShapePaths` plus a cached
+    `shapePaths`, so hit-testing tests the same geometry the renderer draws
+    instead of a second, drifting copy
+  - `resolveLayerFrame` was pulled out of `drawLayer` for the same reason: one
+    answer to "which frame is showing", used by both
+- [x] `Tool` base class (`src/gui/tool.h`) and active-tool routing in
+      `PhoenixView`, with per-tool cursors. A tool that declines an event lets
+      the view fall back to panning, and middle-drag or alt-drag always pans
+- [x] Overlay layer (`PhoenixView::drawToolOverlay`): selection bounds with
+      corner grips, drawn at screen resolution so handles stay crisp under
+      supersampling, and sized in screen pixels so they do not grow with zoom
+- [x] Selection model (`src/edit/selection.h`, Qt-free, 10 tests): click,
+      shift-click to toggle, marquee, click-empty to clear, Escape to clear.
+      Holds `DOMElement` so the stage and the document tree can share one model
+- [x] Selection-aware Edit menu: Select All, Deselect All, plus a count in the
+      status bar
+- [x] Toolbar with the Selection tool (`V`), as an exclusive action group ready
+      for the tools that follow
 - [ ] Free transform: move, scale, rotate, skew of whole elements
-- [ ] Toolbar UI + keyboard shortcuts
 - [ ] Snapping: grid, guides, object snapping
+
+Free transform is the natural next piece, and it needs the mutation API and
+concrete commands that step 1 deferred -- moving an element has to be undoable,
+so `MoveElementCommand` and friends come first.
+
+Two things to tidy when that lands:
+
+- [ ] The stage selection and the document tree still track separately: the tree
+      drives `PhoenixView::_selectedElement` for inspecting edges and paths
+      inside a shape, while the stage drives `Selection`. They should be the one
+      model, with the tree simply selecting finer-grained nodes
+- [ ] A marquee tests element bounds, not geometry, so it catches a shape whose
+      bounding box overlaps even when no part of the shape does
+
+Also fixed along the way: `screenToScene` and `sceneToScreen` were dead code and
+wrong -- they left out the centring that `paintEvent` applies, so any hit-testing
+built on them would have been off by half the unused widget space. They are now
+one `documentToWidget` transform shared by painting, picking and the zoom anchor.
 
 ## 4. Primitive tools
 

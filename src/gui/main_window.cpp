@@ -28,6 +28,8 @@
 #include <QPainterPath>
 #include <QLinearGradient>
 #include <QRadialGradient>
+#include <QToolBar>
+#include <QActionGroup>
 
 MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent)
@@ -52,10 +54,22 @@ MainWindow::MainWindow(QWidget *parent)
 
     setupUI();
     setupMenus();
+    setupToolBar();
 
     // Keep the Edit menu and the title bar in step with the undo history.
     _editContext.commandStack().setChangedCallback([this]() { updateEditState(); });
     updateEditState();
+
+    _selection.setChangedCallback([this]() {
+        updateSelectionState();
+        if (_phoenixView)
+            _phoenixView->update();
+    });
+
+    _selectionTool = std::make_unique<SelectionTool>(_selection);
+    _phoenixView->setSelection(&_selection);
+    _phoenixView->setActiveTool(_selectionTool.get());
+    updateSelectionState();
 
     // Auto-open last file if available
     if (!_recentFiles.isEmpty())
@@ -68,6 +82,9 @@ void MainWindow::loadFLAFile(const QString& filePath)
 {
     // Detach the old document before deleting it: the undo history holds
     // pointers into it and must not outlive it.
+    // The selection and the undo history both point into the document, so both
+    // have to let go before it is deleted.
+    _selection.clear();
     _editContext.setDocument(nullptr);
 
     if (_flaDocument)
@@ -234,6 +251,18 @@ void MainWindow::setupMenus()
     _redoAction->setShortcuts({QKeySequence::Redo, QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_Z)});
     connect(_redoAction, &QAction::triggered, this, &MainWindow::redo);
     editMenu->addAction(_redoAction);
+
+    editMenu->addSeparator();
+
+    _selectAllAction = new QAction("Select &All", this);
+    _selectAllAction->setShortcut(QKeySequence::SelectAll);
+    connect(_selectAllAction, &QAction::triggered, this, &MainWindow::selectAll);
+    editMenu->addAction(_selectAllAction);
+
+    _deselectAllAction = new QAction("&Deselect All", this);
+    _deselectAllAction->setShortcut(QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_A));
+    connect(_deselectAllAction, &QAction::triggered, this, &MainWindow::deselectAll);
+    editMenu->addAction(_deselectAllAction);
 
     // View menu
     QMenu* viewMenu = menuBar->addMenu("&View");
@@ -532,6 +561,78 @@ bool MainWindow::confirmDiscardChanges()
         QMessageBox::Cancel);
 
     return answer == QMessageBox::Discard;
+}
+
+void MainWindow::setupToolBar()
+{
+    QToolBar* toolBar = addToolBar("Tools");
+    toolBar->setObjectName("toolsToolBar");
+    toolBar->setMovable(false);
+
+    // One action group so the tools behave like a radio button set, the way a
+    // toolbox does.
+    QActionGroup* toolGroup = new QActionGroup(this);
+    toolGroup->setExclusive(true);
+
+    QAction* selectionAction = new QAction("Selection", this);
+    selectionAction->setCheckable(true);
+    selectionAction->setChecked(true);
+    selectionAction->setShortcut(QKeySequence(Qt::Key_V));
+    selectionAction->setStatusTip(
+        "Select objects. Shift-click to add, drag to sweep a marquee.");
+    connect(selectionAction, &QAction::triggered, this, [this]() {
+        _phoenixView->setActiveTool(_selectionTool.get());
+    });
+    toolGroup->addAction(selectionAction);
+    toolBar->addAction(selectionAction);
+}
+
+void MainWindow::selectAll()
+{
+    if (!_flaDocument || !_flaDocument->document || !_phoenixView)
+        return;
+
+    // A rect large enough to cover anything placed off-stage as well.
+    const QRectF everything(-1.0e6, -1.0e6, 2.0e6, 2.0e6);
+
+    std::vector<fla::Element*> elements = _phoenixView->elementsIn(everything);
+
+    std::vector<fla::DOMElement*> picked;
+    picked.reserve(elements.size());
+    for (fla::Element* element : elements)
+        picked.push_back(element);
+
+    _selection.select(picked);
+    _phoenixView->update();
+}
+
+void MainWindow::deselectAll()
+{
+    _selection.clear();
+    if (_phoenixView)
+        _phoenixView->update();
+}
+
+void MainWindow::updateSelectionState()
+{
+    const bool hasDocument = _flaDocument && _flaDocument->document;
+
+    if (_selectAllAction)
+        _selectAllAction->setEnabled(hasDocument);
+
+    if (_deselectAllAction)
+        _deselectAllAction->setEnabled(!_selection.isEmpty());
+
+    if (_selection.isEmpty())
+    {
+        statusBar()->clearMessage();
+    }
+    else
+    {
+        statusBar()->showMessage(_selection.count() == 1
+            ? QString("1 object selected")
+            : QString("%1 objects selected").arg(_selection.count()));
+    }
 }
 
 void MainWindow::onVisibilityChanged()

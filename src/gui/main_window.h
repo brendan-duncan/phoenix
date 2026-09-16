@@ -5,7 +5,11 @@
 #include "timeline_view.h"
 #include "player.h"
 #include "../data/fla_document.h"
+#include "selection_tool.h"
 #include "../edit/edit_context.h"
+#include "../edit/selection.h"
+
+#include <memory>
 
 #include <QMainWindow>
 #include <QMenuBar>
@@ -48,10 +52,19 @@ private slots:
 
     void redo();
 
+    void selectAll();
+
+    void deselectAll();
+
 private:
     void setupUI();
 
     void setupMenus();
+
+    void setupToolBar();
+
+    /// Refreshes the actions that only make sense with something selected.
+    void updateSelectionState();
 
     /// Refreshes everything that depends on the undo history: the Edit menu
     /// entries and the modified marker in the title bar.
@@ -88,6 +101,10 @@ private:
 
     fla::FLADocument* _flaDocument;
     fla::EditContext _editContext;
+    fla::Selection _selection;
+    std::unique_ptr<SelectionTool> _selectionTool;
+    QAction* _selectAllAction = nullptr;
+    QAction* _deselectAllAction = nullptr;
     QAction* _undoAction = nullptr;
     QAction* _redoAction = nullptr;
     /// Display name of the open file, without the modified marker.

@@ -1,4 +1,6 @@
 #include "phoenix_view.h"
+
+#include "../edit/selection.h"
 #include "player.h"
 #include "../data/bitmap.h"
 #include "../data/bitmap_instance.h"
@@ -316,13 +318,11 @@ void PhoenixView::paintEvent(QPaintEvent *event)
         bufferPainter.setRenderHint(QPainter::TextAntialiasing, true);
         bufferPainter.setRenderHint(QPainter::SmoothPixmapTransform, true);
 
-        double ss = static_cast<double>(supersampleFactor);
-        double tx = ss * (_panX + centerX);
-        double ty = ss * (_panY + centerY);
-        double s = scale * ss;
-
-        bufferPainter.translate(tx, ty);
-        bufferPainter.scale(s, s);
+        // Same mapping as everything else, just rendered at a larger scale and
+        // scaled back down afterwards.
+        const double ss = static_cast<double>(supersampleFactor);
+        bufferPainter.scale(ss, ss);
+        bufferPainter.setTransform(documentToWidget(), true);
 
         viewTransform = bufferPainter.transform();
 
@@ -339,12 +339,18 @@ void PhoenixView::paintEvent(QPaintEvent *event)
 
         painter.setRenderHint(QPainter::SmoothPixmapTransform, true);
         painter.drawImage(rect(), buffer, buffer.rect());
+
+        // Overlays go on at screen resolution rather than through the
+        // supersampled buffer, so handles stay crisp.
+        painter.save();
+        painter.setTransform(documentToWidget(), true);
+        drawToolOverlay(painter);
+        painter.restore();
     }
     else
     {
         painter.save();
-        painter.translate(_panX + centerX, _panY + centerY);
-        painter.scale(scale, scale);
+        painter.setTransform(documentToWidget(), true);
 
         viewTransform = painter.transform();
 
@@ -356,6 +362,7 @@ void PhoenixView::paintEvent(QPaintEvent *event)
 
         painter.setPen(QPen(QColor(0, 0, 0, 255), 1.0));
         painter.drawRect(0, 0, docWidth, docHeight);
+        drawToolOverlay(painter);
         painter.restore();
     }
 
@@ -522,12 +529,11 @@ void PhoenixView::drawTimeline(QPainter& painter, const fla::Timeline* timeline,
     }
 }
 
-void PhoenixView::drawLayer(QPainter& painter, const fla::Layer* layer, fla::LoopType loopType, int firstFrame, const QPixmap* maskPixmap)
+/// Works out which frame of a layer is showing and how far any tween on it has
+/// run. Pulled out of drawLayer so hit-testing picks exactly what is drawn.
+PhoenixView::LayerFrame PhoenixView::resolveLayerFrame(const fla::Layer* layer,
+    fla::LoopType loopType, int firstFrame)
 {
-    QColor color;
-    color.setRgb(layer->color[0], layer->color[1], layer->color[2], layer->color[3]);
-    painter.setPen(QPen(color, 1.0));
-
     const fla::Frame* currentFrame = nullptr;
     const fla::Frame* nextTweenFrame = nullptr;
     double tweenProgress = 0.0;
@@ -594,9 +600,24 @@ void PhoenixView::drawLayer(QPainter& painter, const fla::Layer* layer, fla::Loo
         tweenProgress = 1.0 - tweenProgress;
     }
 
-    if (currentFrame && currentFrame->visible)
+    LayerFrame state;
+    state.frame = currentFrame;
+    state.tweenFrame = nextTweenFrame;
+    state.tweenProgress = tweenProgress;
+    return state;
+}
+
+void PhoenixView::drawLayer(QPainter& painter, const fla::Layer* layer, fla::LoopType loopType, int firstFrame, const QPixmap* maskPixmap)
+{
+    QColor color;
+    color.setRgb(layer->color[0], layer->color[1], layer->color[2], layer->color[3]);
+    painter.setPen(QPen(color, 1.0));
+
+    const LayerFrame state = resolveLayerFrame(layer, loopType, firstFrame);
+
+    if (state.frame && state.frame->visible)
     {
-        drawFrame(painter, currentFrame, nextTweenFrame, tweenProgress);
+        drawFrame(painter, state.frame, state.tweenFrame, state.tweenProgress);
     }
 }
 
@@ -1065,82 +1086,10 @@ void PhoenixView::drawOverlayPoints(QPainter& painter, const fla::Shape* shape)
     painter.restore();
 }
 
-void PhoenixView::drawShape(QPainter& painter, const fla::Shape* shape, const fla::Shape* tweenShape, double tweenProgress)
+/// Builds the fill and stroke paths for a shape without touching a painter, so
+/// hit-testing can ask for the same geometry the renderer draws.
+void PhoenixView::buildShapePaths(const fla::Shape* shape, PathCacheList& cacheEntries)
 {
-    const bool isSelected = isElementSelected(shape);
-
-    // Don't use cache for tweened shapes
-    if (_pathCache.contains(shape) && !tweenShape)
-    {
-        // Use cached paths
-        for (const PathCacheEntry& entry : _pathCache[shape])
-        {
-            painter.setBrush(entry.fillBrush);
-            painter.setPen(entry.pen);
-            painter.drawPath(entry.painterPath);
-        }
-        if (isSelected)
-        {
-            drawOverlayPoints(painter, shape);
-        }
-        return;
-    }
-
-    // Shape tween: use MorphShape quadratic segments (interpolated A/B) mapped to this shape's bounds.
-    const fla::Frame* frame = owningFrame(shape);
-    if (frame && frame->morphShape && frame->tweenType == fla::TweenType::Shape && tweenShape &&
-        tweenProgress > 0.0 && tweenProgress < 1.0)
-    {
-        QPainterPath morphPath;
-        QRectF morphBounds;
-        if (buildMorphShapePath(frame->morphShape, tweenProgress, morphPath, morphBounds))
-        {
-            // Map morph outline into the bounds that interpolate between start and end keyframes
-            // so the tween moves across the stage like Animate (not locked to frame 0 only).
-            const fla::Rect targetBounds = lerpLocalBounds(shape->localBounds, tweenShape->localBounds, tweenProgress);
-            QTransform xf = morphBoundsToShapeBounds(morphBounds, targetBounds);
-            QPainterPath drawnPath = xf.isIdentity() ? morphPath : xf.map(morphPath);
-
-            QBrush brush = Qt::NoBrush;
-            const fla::FillStyle* fillA = shape->getFillStyleByIndex(1);
-            const fla::FillStyle* fillB = tweenShape->getFillStyleByIndex(1);
-            if (!fillA && !shape->fillsMap.empty())
-                fillA = shape->fillsMap.begin()->second;
-            if (!fillB && !tweenShape->fillsMap.empty())
-                fillB = tweenShape->fillsMap.begin()->second;
-            if (fillA && fillB && fillA->type() == fla::FillStyle::Type::SolidColor &&
-                fillB->type() == fla::FillStyle::Type::SolidColor)
-            {
-                const fla::SolidColor* sa = static_cast<const fla::SolidColor*>(fillA);
-                const fla::SolidColor* sb = static_cast<const fla::SolidColor*>(fillB);
-                auto lerpCh = [&](int i) -> int {
-                    return static_cast<int>(sa->color[i] + (sb->color[i] - sa->color[i]) * tweenProgress + 0.5);
-                };
-                QColor c(
-                    qBound(0, lerpCh(0), 255),
-                    qBound(0, lerpCh(1), 255),
-                    qBound(0, lerpCh(2), 255),
-                    qBound(0, lerpCh(3), 255));
-                brush = QBrush(c);
-            }
-            else if (fillA)
-            {
-                brush = getFillBrush(fillA, targetBounds);
-            }
-
-            painter.setBrush(brush);
-            painter.setPen(Qt::NoPen);
-            painter.drawPath(drawnPath);
-            if (isSelected)
-            {
-                drawOverlayPoints(painter, shape);
-            }
-            return;
-        }
-    }
-
-    PathCacheList cacheEntries;
-
     // Helper struct to represent an edge path with direction
     struct DirectedPath
     {
@@ -1489,10 +1438,6 @@ void PhoenixView::drawShape(QPainter& painter, const fla::Shape* shape, const fl
             QRectF bounds = compoundPath.boundingRect();
             fla::Rect rect({bounds.left(), bounds.top()}, {bounds.left() + bounds.width(), bounds.top() + bounds.height()});
             QBrush brush = getFillBrush(fillStyle, rect);
-            painter.setBrush(brush);
-            painter.setPen(Qt::NoPen);
-            painter.drawPath(compoundPath);
-
             cacheEntries.push_back({ brush, Qt::NoPen, compoundPath });
             continue;
         }
@@ -1607,10 +1552,6 @@ void PhoenixView::drawShape(QPainter& painter, const fla::Shape* shape, const fl
         QRectF bounds = compoundPath.boundingRect();
         fla::Rect rect({bounds.left(), bounds.top()}, {bounds.left() + bounds.width(), bounds.top() + bounds.height()});
         QBrush brush = getFillBrush(fillStyle, rect);
-        painter.setBrush(brush);
-        painter.setPen(Qt::NoPen);
-        painter.drawPath(compoundPath);
-
         cacheEntries.push_back({ brush, Qt::NoPen, compoundPath });
     }
 
@@ -1637,25 +1578,370 @@ void PhoenixView::drawShape(QPainter& painter, const fla::Shape* shape, const fl
 
             QPen pen = getPen(strokeStyle);
 
-            painter.setBrush(Qt::NoBrush);
-            painter.setPen(pen);
-            painter.drawPath(strokePath);
-
-            cacheEntries.push_back({ painter.brush(), pen, strokePath });
+            cacheEntries.push_back({ QBrush(Qt::NoBrush), pen, strokePath });
         }
+    }
+}
+
+const PhoenixView::PathCacheList& PhoenixView::shapePaths(const fla::Shape* shape)
+{
+    const auto it = _pathCache.find(shape);
+    if (it != _pathCache.end())
+        return it.value();
+
+    PathCacheList entries;
+    buildShapePaths(shape, entries);
+    return *_pathCache.insert(shape, entries);
+}
+
+void PhoenixView::drawShape(QPainter& painter, const fla::Shape* shape, const fla::Shape* tweenShape, double tweenProgress)
+{
+    const bool isSelected = isElementSelected(shape);
+
+    // A shape tween replaces the shape's own geometry for the duration of the
+    // tween, so it is checked before falling back to the cached paths.
+    // Shape tween: use MorphShape quadratic segments (interpolated A/B) mapped to this shape's bounds.
+    const fla::Frame* frame = owningFrame(shape);
+    if (frame && frame->morphShape && frame->tweenType == fla::TweenType::Shape && tweenShape &&
+        tweenProgress > 0.0 && tweenProgress < 1.0)
+    {
+        QPainterPath morphPath;
+        QRectF morphBounds;
+        if (buildMorphShapePath(frame->morphShape, tweenProgress, morphPath, morphBounds))
+        {
+            // Map morph outline into the bounds that interpolate between start and end keyframes
+            // so the tween moves across the stage like Animate (not locked to frame 0 only).
+            const fla::Rect targetBounds = lerpLocalBounds(shape->localBounds, tweenShape->localBounds, tweenProgress);
+            QTransform xf = morphBoundsToShapeBounds(morphBounds, targetBounds);
+            QPainterPath drawnPath = xf.isIdentity() ? morphPath : xf.map(morphPath);
+
+            QBrush brush = Qt::NoBrush;
+            const fla::FillStyle* fillA = shape->getFillStyleByIndex(1);
+            const fla::FillStyle* fillB = tweenShape->getFillStyleByIndex(1);
+            if (!fillA && !shape->fillsMap.empty())
+                fillA = shape->fillsMap.begin()->second;
+            if (!fillB && !tweenShape->fillsMap.empty())
+                fillB = tweenShape->fillsMap.begin()->second;
+            if (fillA && fillB && fillA->type() == fla::FillStyle::Type::SolidColor &&
+                fillB->type() == fla::FillStyle::Type::SolidColor)
+            {
+                const fla::SolidColor* sa = static_cast<const fla::SolidColor*>(fillA);
+                const fla::SolidColor* sb = static_cast<const fla::SolidColor*>(fillB);
+                auto lerpCh = [&](int i) -> int {
+                    return static_cast<int>(sa->color[i] + (sb->color[i] - sa->color[i]) * tweenProgress + 0.5);
+                };
+                QColor c(
+                    qBound(0, lerpCh(0), 255),
+                    qBound(0, lerpCh(1), 255),
+                    qBound(0, lerpCh(2), 255),
+                    qBound(0, lerpCh(3), 255));
+                brush = QBrush(c);
+            }
+            else if (fillA)
+            {
+                brush = getFillBrush(fillA, targetBounds);
+            }
+
+            painter.setBrush(brush);
+            painter.setPen(Qt::NoPen);
+            painter.drawPath(drawnPath);
+            if (isSelected)
+            {
+                drawOverlayPoints(painter, shape);
+            }
+            return;
+        }
+    }
+
+    for (const PathCacheEntry& entry : shapePaths(shape))
+    {
+        painter.setBrush(entry.fillBrush);
+        painter.setPen(entry.pen);
+        painter.drawPath(entry.painterPath);
     }
 
     if (isSelected)
     {
         drawOverlayPoints(painter, shape);
     }
+}
 
-    _pathCache[shape] = cacheEntries;
+double PhoenixView::pickTolerance() const
+{
+    // A few screen pixels, expressed in document units, so picking feels the
+    // same at every zoom level.
+    const double screenPixels = 4.0;
+    return _zoom > 0.0 ? screenPixels / _zoom : screenPixels;
+}
+
+namespace {
+
+/// Whether a point is within \a tolerance of a path's outline, as opposed to
+/// inside the area it encloses.
+bool isNearOutline(const QPainterPath& path, const QPointF& point, double tolerance)
+{
+    // Walking the path's own elements would mean re-flattening curves, so lean
+    // on Qt: stroke the outline into a shape and test containment.
+    QPainterPathStroker stroker;
+    stroker.setWidth(tolerance * 2.0);
+    return stroker.createStroke(path).contains(point);
+}
+
+} // namespace
+
+HitResult PhoenixView::hitTest(const QPointF& documentPos, double tolerance) const
+{
+    HitResult result;
+    if (!_flaDocument || !_flaDocument->document)
+        return result;
+
+    // const_cast is confined to here: hit-testing builds and caches shape paths
+    // exactly as drawing does, and returns non-const elements because the caller
+    // is about to edit them.
+    PhoenixView* self = const_cast<PhoenixView*>(this);
+
+    const fla::Document* document = _flaDocument->document;
+    if (!document->visible)
+        return result;
+
+    for (const fla::Timeline* timeline : document->timelines)
+    {
+        if (!timeline->visible)
+            continue;
+
+        self->hitTestTimeline(*timeline, fla::LoopType::PlayOnce, 0,
+            QTransform(), documentPos, tolerance, result);
+    }
+
+    return result;
+}
+
+void PhoenixView::hitTestTimeline(const fla::Timeline& timeline, fla::LoopType loopType,
+    int firstFrame, const QTransform& toDocument, const QPointF& documentPos,
+    double tolerance, HitResult& result)
+{
+    for (const fla::Layer* layer : timeline.layers)
+    {
+        if (!layer || !layer->isVisible() || layer->locked)
+            continue;
+
+        // Guide layers are authoring aids and never rendered, so they cannot be
+        // picked on the stage either.
+        if (layer->layerType == fla::Layer::Type::Guide ||
+            layer->layerType == fla::Layer::Type::Folder)
+        {
+            continue;
+        }
+
+        const LayerFrame state = resolveLayerFrame(layer, loopType, firstFrame);
+        if (!state.frame)
+            continue;
+
+        for (fla::Element* element : state.frame->elements)
+        {
+            if (element)
+            {
+                hitTestElement(*element, const_cast<fla::Frame*>(state.frame), loopType,
+                    toDocument, documentPos, tolerance, result);
+            }
+        }
+    }
+}
+
+void PhoenixView::hitTestElement(fla::Element& element, fla::Frame* frame,
+    fla::LoopType loopType, const QTransform& toDocument, const QPointF& documentPos,
+    double tolerance, HitResult& result)
+{
+    if (!element.visible)
+        return;
+
+    const fla::Transform& t = element.transform;
+    const QTransform elementTransform(t.m11, t.m12, t.m21, t.m22, t.tx, t.ty);
+
+    // Groups pre-transform their children, so applying the group's own transform
+    // as well would move them twice. drawElement skips it for the same reason.
+    const bool isGroup = element.elementType() == fla::Element::Type::Group;
+    const QTransform elementToDocument = isGroup
+        ? toDocument
+        : (elementTransform * toDocument);
+
+    bool invertible = false;
+    const QTransform toElement = elementToDocument.inverted(&invertible);
+    if (!invertible)
+        return;
+
+    const QPointF localPos = toElement.map(documentPos);
+
+    // Tolerance is in document units; scaling it into element space keeps the
+    // grab distance constant on screen even under a scaled element.
+    const double localTolerance = toleranceInLocalSpace(elementToDocument, tolerance);
+
+    switch (element.elementType())
+    {
+    case fla::Element::Type::Group:
+    {
+        fla::Group& group = static_cast<fla::Group&>(element);
+        for (fla::Element* member : group.members)
+        {
+            if (member)
+            {
+                hitTestElement(*member, frame, loopType, elementToDocument,
+                    documentPos, tolerance, result);
+            }
+        }
+        return;
+    }
+
+    case fla::Element::Type::SymbolInstance:
+    {
+        fla::SymbolInstance& instance = static_cast<fla::SymbolInstance&>(element);
+        const fla::Symbol* symbol = instance.symbol;
+        if (!symbol || !symbol->visible)
+            return;
+
+        // Record what the instance contains, but report the instance itself:
+        // clicking a symbol on the stage selects the instance, not the artwork
+        // inside it. Editing the contents means entering the symbol.
+        HitResult inner;
+        const int frameOffset = (instance.symbolType == fla::SymbolType::Button)
+            ? 0 : instance.firstFrame;
+        const fla::LoopType instanceLoop = (instance.symbolType == fla::SymbolType::Button)
+            ? fla::LoopType::SingleFrame : instance.loopType;
+
+        for (const fla::Timeline* timeline : symbol->timelines)
+        {
+            if (timeline->visible)
+            {
+                hitTestTimeline(*timeline, instanceLoop, frameOffset, elementToDocument,
+                    documentPos, tolerance, inner);
+            }
+        }
+
+        if (inner)
+        {
+            result.element = &element;
+            result.frame = frame;
+            result.part = inner.part;
+            result.elementToDocument = elementToDocument;
+        }
+        return;
+    }
+
+    case fla::Element::Type::Shape:
+    {
+        const fla::Shape& shape = static_cast<const fla::Shape&>(element);
+        HitResult::Part part = HitResult::Part::None;
+
+        for (const PathCacheEntry& entry : shapePaths(&shape))
+        {
+            const bool stroked = entry.pen.style() != Qt::NoPen;
+
+            if (stroked)
+            {
+                const double half = qMax(entry.pen.widthF() * 0.5, 0.0);
+                if (isNearOutline(entry.painterPath, localPos, half + localTolerance))
+                {
+                    part = HitResult::Part::Stroke;
+                    break;
+                }
+            }
+            else if (entry.painterPath.contains(localPos))
+            {
+                // Keep looking: a stroke drawn later sits on top of this fill.
+                part = HitResult::Part::Fill;
+            }
+        }
+
+        if (part == HitResult::Part::None)
+            return;
+
+        // An anchor under the cursor beats the fill or stroke it belongs to,
+        // since that is what the user is reaching for.
+        if (isNearAnchor(shape, localPos, localTolerance))
+            part = HitResult::Part::Anchor;
+
+        result.element = &element;
+        result.frame = frame;
+        result.part = part;
+        result.elementToDocument = elementToDocument;
+        return;
+    }
+
+    default:
+        break;
+    }
+
+    // Text, bitmaps and the primitive shapes have no path geometry to test, so
+    // they fall back to their bounding box.
+    const QRectF bounds = calculateElementLocalBounds(&element);
+    if (bounds.isValid() && bounds.adjusted(-localTolerance, -localTolerance,
+            localTolerance, localTolerance).contains(localPos))
+    {
+        result.element = &element;
+        result.frame = frame;
+        result.part = HitResult::Part::Fill;
+        result.elementToDocument = elementToDocument;
+    }
+}
+
+double PhoenixView::toleranceInLocalSpace(const QTransform& elementToDocument, double tolerance)
+{
+    // How much one unit of element space stretches on the way to document space.
+    // Using the average of the two axes keeps this stable under a non-uniform
+    // scale without needing a full singular value decomposition.
+    const double sx = std::hypot(elementToDocument.m11(), elementToDocument.m12());
+    const double sy = std::hypot(elementToDocument.m21(), elementToDocument.m22());
+    const double scale = (sx + sy) * 0.5;
+    return scale > 1.0e-9 ? tolerance / scale : tolerance;
+}
+
+bool PhoenixView::isNearAnchor(const fla::Shape& shape, const QPointF& localPos, double tolerance)
+{
+    const double limit = tolerance * tolerance;
+
+    for (const fla::Edge* edge : shape.edges)
+    {
+        if (!edge || !edge->visible)
+            continue;
+
+        for (const fla::Path* path : edge->paths)
+        {
+            if (!path || !path->visible)
+                continue;
+
+            for (const fla::PathSegment* segment : path->segments)
+            {
+                if (!segment)
+                    continue;
+
+                for (const fla::Point& point : segment->points)
+                {
+                    const double dx = point.x - localPos.x();
+                    const double dy = point.y - localPos.y();
+                    if (dx * dx + dy * dy <= limit)
+                        return true;
+                }
+            }
+        }
+    }
+
+    return false;
 }
 
 void PhoenixView::mousePressEvent(QMouseEvent *event)
 {
-    if (event->button() == Qt::LeftButton)
+    // The active tool gets first refusal. Middle-drag and space-drag always pan,
+    // so panning stays available whatever tool is selected.
+    const bool forcePan = event->button() == Qt::MiddleButton ||
+        (event->modifiers() & Qt::AltModifier) != 0;
+
+    if (!forcePan && _activeTool &&
+        _activeTool->mousePress(*this, event, mapToDocument(event->position())))
+    {
+        return;
+    }
+
+    if (event->button() == Qt::LeftButton || event->button() == Qt::MiddleButton)
     {
         _isDragging = true;
         _lastMousePos = event->pos();
@@ -1665,6 +1951,12 @@ void PhoenixView::mousePressEvent(QMouseEvent *event)
 
 void PhoenixView::mouseMoveEvent(QMouseEvent *event)
 {
+    if (!_isDragging && _activeTool &&
+        _activeTool->mouseMove(*this, event, mapToDocument(event->position())))
+    {
+        return;
+    }
+
     if (_isDragging)
     {
         QPoint delta = event->pos() - _lastMousePos;
@@ -1677,12 +1969,146 @@ void PhoenixView::mouseMoveEvent(QMouseEvent *event)
 
 void PhoenixView::mouseReleaseEvent(QMouseEvent *event)
 {
-    if (event->button() == Qt::LeftButton)
+    if (!_isDragging && _activeTool &&
+        _activeTool->mouseRelease(*this, event, mapToDocument(event->position())))
+    {
+        return;
+    }
+
+    if (_isDragging)
     {
         _isDragging = false;
-        setCursor(Qt::ArrowCursor);
+        setCursor(_activeTool ? _activeTool->cursor() : QCursor(Qt::ArrowCursor));
     }
 }
+
+void PhoenixView::keyPressEvent(QKeyEvent* event)
+{
+    if (_activeTool && _activeTool->keyPress(*this, event))
+        return;
+
+    QWidget::keyPressEvent(event);
+}
+
+std::vector<fla::Element*> PhoenixView::elementsIn(const QRectF& documentRect)
+{
+    std::vector<fla::Element*> found;
+    if (!_flaDocument || !_flaDocument->document)
+        return found;
+
+    const fla::Document* document = _flaDocument->document;
+    if (!document->visible)
+        return found;
+
+    for (const fla::Timeline* timeline : document->timelines)
+    {
+        if (!timeline->visible)
+            continue;
+
+        for (const fla::Layer* layer : timeline->layers)
+        {
+            if (!layer || !layer->isVisible() || layer->locked)
+                continue;
+
+            if (layer->layerType == fla::Layer::Type::Guide ||
+                layer->layerType == fla::Layer::Type::Folder)
+            {
+                continue;
+            }
+
+            const LayerFrame state = resolveLayerFrame(layer, fla::LoopType::PlayOnce, 0);
+            if (!state.frame || !state.frame->visible)
+                continue;
+
+            for (fla::Element* element : state.frame->elements)
+            {
+                if (!element || !element->visible)
+                    continue;
+
+                // Top-level elements carry their own transform into the bounds,
+                // so these are already document-space.
+                const QRectF bounds = getElementBounds(element);
+                if (bounds.isValid() && documentRect.intersects(bounds))
+                    found.push_back(element);
+            }
+        }
+    }
+
+    return found;
+}
+
+void PhoenixView::setActiveTool(Tool* tool)
+{
+    if (_activeTool == tool)
+        return;
+
+    if (_activeTool)
+        _activeTool->deactivate(*this);
+
+    _activeTool = tool;
+    setCursor(_activeTool ? _activeTool->cursor() : QCursor(Qt::ArrowCursor));
+    update();
+}
+
+void PhoenixView::setSelection(fla::Selection* selection)
+{
+    _selection = selection;
+    update();
+}
+
+void PhoenixView::drawToolOverlay(QPainter& painter)
+{
+    // Handles have to stay the same size on screen, so everything here is drawn
+    // in document units scaled back by the zoom.
+    const double scale = _zoom > 0.0 ? 1.0 / _zoom : 1.0;
+
+    if (_selection && !_selection->isEmpty())
+    {
+        painter.save();
+        painter.setBrush(Qt::NoBrush);
+
+        QPen outline(QColor(0, 170, 255), 1.5 * scale);
+        outline.setCosmetic(false);
+        painter.setPen(outline);
+
+        for (fla::DOMElement* selected : _selection->elements())
+        {
+            if (!selected || selected->domType() == fla::DOMElement::DOMType::Element)
+                continue;
+
+            fla::Element* element = dynamic_cast<fla::Element*>(selected);
+            if (!element)
+                continue;
+
+            const QRectF bounds = getElementBounds(element);
+            if (!bounds.isValid())
+                continue;
+
+            painter.drawRect(bounds);
+
+            // Corner grips, sized in screen pixels.
+            const double grip = 3.0 * scale;
+            painter.setBrush(QColor(0, 170, 255));
+            const QPointF corners[4] = {
+                bounds.topLeft(), bounds.topRight(),
+                bounds.bottomRight(), bounds.bottomLeft()
+            };
+            for (const QPointF& corner : corners)
+                painter.drawRect(QRectF(corner.x() - grip, corner.y() - grip, grip * 2, grip * 2));
+            painter.setBrush(Qt::NoBrush);
+        }
+
+        painter.restore();
+    }
+
+    if (_activeTool)
+    {
+        painter.save();
+        _activeTool->paintOverlay(*this, painter, scale);
+        painter.restore();
+    }
+}
+
 
 void PhoenixView::wheelEvent(QWheelEvent *event)
 {
@@ -1690,29 +2116,20 @@ void PhoenixView::wheelEvent(QWheelEvent *event)
     if (event->angleDelta().y() < 0)
         scaleFactor = 1.0 / scaleFactor;
 
-    double oldZoom = _zoom;
     double newZoom = _zoom * scaleFactor;
 
     if (newZoom < _minZoom || newZoom > _maxZoom)
         return;
 
-    QPointF mousePos = event->position();
+    const QPointF mousePos = event->position();
 
-    QRectF widgetRect = rect();
-    double docWidth = _flaDocument->document->width;
-    double docHeight = _flaDocument->document->height;
-    double centerX = (widgetRect.width() - docWidth * oldZoom) / 2.0;
-    double centerY = (widgetRect.height() - docHeight * oldZoom) / 2.0;
-
-    QPointF scenePosBefore = (mousePos - QPointF(centerX, centerY) - QPointF(_panX, _panY)) / oldZoom;
+    // Keep whatever is under the cursor under the cursor: note the document
+    // point first, zoom, then pan by however far it moved.
+    const QPointF anchor = mapToDocument(mousePos);
 
     _zoom = newZoom;
 
-    centerX = (widgetRect.width() - docWidth * newZoom) / 2.0;
-    centerY = (widgetRect.height() - docHeight * newZoom) / 2.0;
-
-    QPointF newScreenPos = scenePosBefore * newZoom + QPointF(centerX, centerY) + QPointF(_panX, _panY);
-    QPointF delta = newScreenPos - mousePos;
+    const QPointF delta = mapToWidget(anchor) - mousePos;
     _panX -= delta.x();
     _panY -= delta.y();
 
@@ -1733,20 +2150,39 @@ void PhoenixView::clearCaches()
     _boundsCache.clear();
 }
 
-QPointF PhoenixView::screenToScene(const QPointF& screenPos) const
+QTransform PhoenixView::documentToWidget() const
 {
-    return QPointF(
-        (screenPos.x() - _panX) / _zoom,
-        (screenPos.y() - _panY) / _zoom
-    );
+    double docWidth = 0.0;
+    double docHeight = 0.0;
+    if (_flaDocument && _flaDocument->document)
+    {
+        docWidth = _flaDocument->document->width;
+        docHeight = _flaDocument->document->height;
+    }
+
+    // The stage sits centred in whatever space the widget has, so the centring
+    // offset is part of the mapping and not just a painting detail.
+    const double centerX = (width() - docWidth * _zoom) / 2.0;
+    const double centerY = (height() - docHeight * _zoom) / 2.0;
+
+    QTransform transform;
+    transform.translate(_panX + centerX, _panY + centerY);
+    transform.scale(_zoom, _zoom);
+    return transform;
 }
 
-QPointF PhoenixView::sceneToScreen(const QPointF& scenePos) const
+QPointF PhoenixView::mapToDocument(const QPointF& widgetPos) const
 {
-    return QPointF(
-        scenePos.x() * _zoom + _panX,
-        scenePos.y() * _zoom + _panY
-    );
+    bool invertible = false;
+    const QTransform inverse = documentToWidget().inverted(&invertible);
+    if (!invertible)
+        return QPointF();
+    return inverse.map(widgetPos);
+}
+
+QPointF PhoenixView::mapToWidget(const QPointF& documentPos) const
+{
+    return documentToWidget().map(documentPos);
 }
 
 QRectF PhoenixView::getElementBounds(const fla::Element* element)
