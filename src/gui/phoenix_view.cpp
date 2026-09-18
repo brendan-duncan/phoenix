@@ -1,5 +1,10 @@
 #include "phoenix_view.h"
 
+#include "draw_placement.h"
+
+#include "../edit/command_stack.h"
+#include "../edit/selection.h"
+
 #include <QTimer>
 
 #include "../edit/selection.h"
@@ -1956,11 +1961,19 @@ void PhoenixView::mousePressEvent(QMouseEvent *event)
 
     beginInteraction();
 
-    if (!forcePan && _activeTool &&
-        _activeTool->mousePress(*this, event, mapToDocument(event->position())))
+    // Ctrl reaches for the selection tool whatever is active, so something can
+    // be moved without putting the drawing tool down. The gesture then belongs
+    // to that tool until the button comes up, even if ctrl is let go first.
+    _gestureTool = ((event->modifiers() & Qt::ControlModifier) && _modifierTool)
+        ? _modifierTool : _activeTool;
+
+    if (!forcePan && _gestureTool &&
+        _gestureTool->mousePress(*this, event, mapToDocument(event->position())))
     {
         return;
     }
+
+    _gestureTool = nullptr;
 
     if (event->button() == Qt::LeftButton || event->button() == Qt::MiddleButton)
     {
@@ -1972,8 +1985,8 @@ void PhoenixView::mousePressEvent(QMouseEvent *event)
 
 void PhoenixView::mouseMoveEvent(QMouseEvent *event)
 {
-    if (!_isDragging && _activeTool &&
-        _activeTool->mouseMove(*this, event, mapToDocument(event->position())))
+    if (!_isDragging && gestureTool() &&
+        gestureTool()->mouseMove(*this, event, mapToDocument(event->position())))
     {
         return;
     }
@@ -1994,8 +2007,11 @@ void PhoenixView::mouseReleaseEvent(QMouseEvent *event)
     // should be the good one.
     endInteraction();
 
-    if (!_isDragging && _activeTool &&
-        _activeTool->mouseRelease(*this, event, mapToDocument(event->position())))
+    Tool* tool = gestureTool();
+    _gestureTool = nullptr;
+
+    if (!_isDragging && tool &&
+        tool->mouseRelease(*this, event, mapToDocument(event->position())))
     {
         return;
     }
@@ -2090,6 +2106,46 @@ void PhoenixView::setSelection(fla::Selection* selection)
 {
     _selection = selection;
     update();
+}
+
+void PhoenixView::setPendingMerge(fla::Shape* shape, fla::Frame* frame)
+{
+    _pendingMerge = shape;
+    _pendingMergeFrame = frame;
+}
+
+void PhoenixView::clearPendingMerge()
+{
+    _pendingMerge = nullptr;
+    _pendingMergeFrame = nullptr;
+}
+
+void PhoenixView::flushPendingMerge()
+{
+    if (!_pendingMerge || !_selection || !_commandStack || _committingMerge)
+        return;
+
+    fla::Shape* addition = _pendingMerge;
+    fla::Frame* frame = _pendingMergeFrame;
+    clearPendingMerge();
+
+    // Removing the drawing changes the selection, which would come straight back
+    // round through selectionChanged().
+    _committingMerge = true;
+    commitPendingMerge(*this, *_commandStack, *_selection, addition, frame);
+    _committingMerge = false;
+}
+
+void PhoenixView::selectionChanged()
+{
+    if (!_pendingMerge || !_selection || _committingMerge)
+        return;
+
+    // Still being worked on: it stays its own object until it is let go.
+    if (_selection->contains(_pendingMerge))
+        return;
+
+    flushPendingMerge();
 }
 
 fla::Frame* PhoenixView::activeFrame()

@@ -114,6 +114,37 @@ private:
     std::string _name;
 };
 
+/// Cuts a shape's area out of another, leaving a hole.
+///
+/// Drawing over existing artwork destroys what was under it there and then, so
+/// this runs when the drawing is placed rather than when it is moved. Moving it
+/// afterwards simply uncovers the hole.
+///
+/// Like a merge, this rewrites the target completely and keeps snapshots of
+/// both sides rather than trying to reverse the cut.
+class SubtractShapeCommand : public Command
+{
+public:
+    SubtractShapeCommand(Shape* target, const Shape& cutter, const std::string& name);
+
+    ~SubtractShapeCommand() override;
+
+    SubtractShapeCommand(const SubtractShapeCommand&) = delete;
+    SubtractShapeCommand& operator=(const SubtractShapeCommand&) = delete;
+
+    void redo() override;
+
+    void undo() override;
+
+    std::string name() const override { return _name; }
+
+private:
+    Shape* _target;
+    Shape* _before = nullptr;
+    Shape* _after = nullptr;
+    std::string _name;
+};
+
 /// Adds an element to a frame, and takes it out again on undo.
 ///
 /// Ownership moves with the element: a Frame deletes the elements it holds, so

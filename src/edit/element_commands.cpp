@@ -139,6 +139,40 @@ void MergeShapeCommand::undo()
         setShapeContents(*_target, *_before);
 }
 
+SubtractShapeCommand::SubtractShapeCommand(Shape* target, const Shape& cutter,
+    const std::string& name)
+    : _target(target)
+    , _name(name)
+{
+    if (!_target)
+        return;
+
+    _before = cloneShape(*_target, nullptr);
+
+    // The cut runs once, here, for the same reason a merge does.
+    ShapeMerger::subtract(*_target, cutter);
+
+    _after = cloneShape(*_target, nullptr);
+}
+
+SubtractShapeCommand::~SubtractShapeCommand()
+{
+    delete _before;
+    delete _after;
+}
+
+void SubtractShapeCommand::redo()
+{
+    if (_target && _after)
+        setShapeContents(*_target, *_after);
+}
+
+void SubtractShapeCommand::undo()
+{
+    if (_target && _before)
+        setShapeContents(*_target, *_before);
+}
+
 AddElementCommand::AddElementCommand(Frame* frame, Element* element,
     const std::string& name, Selection* selection, int index)
     : _frame(frame)

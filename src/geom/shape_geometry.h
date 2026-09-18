@@ -3,6 +3,7 @@
 #include "curve.h"
 #include "planar_map.h"
 
+#include <functional>
 #include <vector>
 
 namespace fla {
@@ -48,6 +49,13 @@ std::vector<ShapeCurve> shapeCurves(const Shape& shape);
 /// for checking that an arrangement agrees with the file it came from.
 void attributeFillsFromSource(PlanarMap& map, const std::vector<ShapeCurve>& sources);
 
+/// Decides whether a rebuilt piece keeps the stroke its source carried.
+///
+/// A merge uses this to drop the older artwork's strokes where the newer
+/// drawing's fill has buried them: drawing a filled shape over something covers
+/// what was there, outlines included.
+using StrokeFilter = std::function<bool(const HalfEdge& half)>;
+
 /// Replaces a shape's edges with the arrangement's, keeping its fill and stroke
 /// styles.
 ///
@@ -55,7 +63,11 @@ void attributeFillsFromSource(PlanarMap& map, const std::vector<ShapeCurve>& sou
 /// each of its sides. A piece with no fill on either side and no stroke draws
 /// nothing and is left out, which is how the seams inside a merged shape
 /// disappear.
+///  keepStroke, when given, is asked about each piece; a piece it rejects is
+/// rebuilt without its stroke. A piece left with nothing on either side and no
+/// stroke then drops out entirely, as any other such piece does.
 void rebuildShapeEdges(Shape& shape, const PlanarMap& map,
-    const std::vector<ShapeCurve>& sources);
+    const std::vector<ShapeCurve>& sources,
+    const StrokeFilter& keepStroke = nullptr);
 
 } // namespace fla

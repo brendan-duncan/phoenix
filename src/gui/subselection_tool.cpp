@@ -111,11 +111,20 @@ bool SubselectionTool::mousePress(PhoenixView& view, QMouseEvent* event, const Q
             if (grip == Grip::None)
                 continue;
 
-            _edge = edge;
-            _path = path;
-            _pathAtDragStart = path;
+            _grabbed.clear();
+            if (grip == Grip::Anchor)
+            {
+                // Every anchor at this point comes along, or the pieces of
+                // outline meeting here come apart.
+                grabCoincidentAnchors(*shape, anchor.position);
+            }
+            else
+            {
+                // A handle belongs to one curve, so only that one moves.
+                _grabbed.push_back({edge, i, path, path});
+            }
+
             _grip = grip;
-            _anchorIndex = i;
             _dragStart = localPos;
 
             // Remembered so Delete knows which anchor to remove.
@@ -169,7 +178,7 @@ bool SubselectionTool::mousePress(PhoenixView& view, QMouseEvent* event, const Q
 
 bool SubselectionTool::mouseMove(PhoenixView& view, QMouseEvent* event, const QPointF& documentPos)
 {
-    if (_grip == Grip::None || !_edge)
+    if (_grip == Grip::None || _grabbed.empty())
         return false;
 
     bool invertible = false;
@@ -178,40 +187,42 @@ bool SubselectionTool::mouseMove(PhoenixView& view, QMouseEvent* event, const QP
         return false;
 
     const QPointF localPos = toShape.map(documentPos);
+    const QPointF delta = localPos - _dragStart;
 
-    if (_anchorIndex >= _pathAtDragStart.anchors.size())
-        return false;
-
-    // Rebuilt from the geometry the drag started with, so a long drag does not
-    // accumulate rounding error.
-    _path = _pathAtDragStart;
-    fla::Anchor& anchor = _path.anchors[_anchorIndex];
-
-    switch (_grip)
+    for (Grabbed& grabbed : _grabbed)
     {
-    case Grip::Anchor:
-    {
-        const QPointF delta = localPos - _dragStart;
-        anchor.translate(delta.x(), delta.y());
-        break;
+        if (!grabbed.edge || grabbed.anchorIndex >= grabbed.before.anchors.size())
+            continue;
+
+        // Rebuilt from the geometry the drag started with, so a long drag does
+        // not accumulate rounding error.
+        grabbed.current = grabbed.before;
+        fla::Anchor& anchor = grabbed.current.anchors[grabbed.anchorIndex];
+
+        switch (_grip)
+        {
+        case Grip::Anchor:
+            anchor.translate(delta.x(), delta.y());
+            break;
+
+        case Grip::InHandle:
+            // Alt breaks the tangent for this drag, letting the two sides
+            // diverge.
+            anchor.smooth = (event->modifiers() & Qt::AltModifier) == 0 && anchor.smooth;
+            anchor.setInHandle(toPoint(localPos));
+            break;
+
+        case Grip::OutHandle:
+            anchor.smooth = (event->modifiers() & Qt::AltModifier) == 0 && anchor.smooth;
+            anchor.setOutHandle(toPoint(localPos));
+            break;
+
+        case Grip::None:
+            return false;
+        }
+
+        grabbed.current.applyTo(*grabbed.edge);
     }
-
-    case Grip::InHandle:
-        // Alt breaks the tangent for this drag, letting the two sides diverge.
-        anchor.smooth = (event->modifiers() & Qt::AltModifier) == 0 && anchor.smooth;
-        anchor.setInHandle(toPoint(localPos));
-        break;
-
-    case Grip::OutHandle:
-        anchor.smooth = (event->modifiers() & Qt::AltModifier) == 0 && anchor.smooth;
-        anchor.setOutHandle(toPoint(localPos));
-        break;
-
-    case Grip::None:
-        return false;
-    }
-
-    _path.applyTo(*_edge);
 
     // The shape's own path geometry changed, so its cached paths are stale.
     view.clearCaches();
@@ -223,16 +234,32 @@ bool SubselectionTool::mouseRelease(PhoenixView& view, QMouseEvent* event, const
 {
     (void)documentPos;
 
-    if (event->button() != Qt::LeftButton || _grip == Grip::None || !_edge)
+    if (event->button() != Qt::LeftButton || _grip == Grip::None || _grabbed.empty())
         return false;
 
     const char* gesture = _grip == Grip::Anchor ? "Move Anchor" : "Move Handle";
 
-    _commandStack.push(fla::CommandPtr(new fla::SetEdgeGeometryCommand(
-        _edge, _pathAtDragStart, _path, gesture)));
+    // Moving a shared corner rewrites several edges, which is still one thing
+    // the user did and so one thing to undo.
+    const bool needsMacro = _grabbed.size() > 1;
+    if (needsMacro)
+        _commandStack.beginMacro(gesture);
+
+    for (const Grabbed& grabbed : _grabbed)
+    {
+        if (!grabbed.edge)
+            continue;
+
+        _commandStack.push(fla::CommandPtr(new fla::SetEdgeGeometryCommand(
+            grabbed.edge, grabbed.before, grabbed.current, gesture)));
+    }
+
+    if (needsMacro)
+        _commandStack.endMacro();
+
     _commandStack.breakMergeChain();
 
-    _edge = nullptr;
+    _grabbed.clear();
     _grip = Grip::None;
     view.update();
     return true;
@@ -358,13 +385,46 @@ void SubselectionTool::commitGeometry(PhoenixView& view, fla::Edge* edge,
 
 void SubselectionTool::cancelDrag(PhoenixView& view)
 {
-    if (_edge)
-        _pathAtDragStart.applyTo(*_edge);
+    // Every edge the drag touched goes back to what it was.
+    for (const Grabbed& grabbed : _grabbed)
+    {
+        if (grabbed.edge)
+            grabbed.before.applyTo(*grabbed.edge);
+    }
 
-    _edge = nullptr;
+    _grabbed.clear();
     _grip = Grip::None;
     view.clearCaches();
     view.update();
+}
+
+void SubselectionTool::grabCoincidentAnchors(fla::Shape& shape, const fla::Point& position)
+{
+    // The geometry is in pixels and the format stores twips, so anchors that
+    // are meant to be the same point agree to well inside half a twip. Anything
+    // further apart is a different corner, and Flash could not tell them apart
+    // either.
+    constexpr double kHalfTwip = 1.0 / 40.0;
+
+    for (fla::Edge* edge : shape.edges)
+    {
+        if (!edge || edge->paths.empty() || !edge->paths[0])
+            continue;
+
+        const fla::EditablePath path = fla::EditablePath::fromPath(*edge->paths[0]);
+
+        for (size_t i = 0; i < path.anchors.size(); ++i)
+        {
+            const fla::Point& at = path.anchors[i].position;
+            if (std::fabs(at.x - position.x) > kHalfTwip ||
+                std::fabs(at.y - position.y) > kHalfTwip)
+            {
+                continue;
+            }
+
+            _grabbed.push_back({edge, i, path, path});
+        }
+    }
 }
 
 void SubselectionTool::paintOverlay(PhoenixView& view, QPainter& painter, double scale)

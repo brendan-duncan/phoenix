@@ -26,6 +26,11 @@ FLADocument* createEmptyDocument(int width, int height, double frameRate)
     document->height = height;
     document->frameRate = frameRate;
 
+    // Animate puts the 3D vanishing point at the middle of the stage, so it
+    // follows the size rather than keeping the model's own default.
+    document->vanishingPoint3DX = width / 2;
+    document->vanishingPoint3DY = height / 2;
+
     // Written into DOMDocument.xml so the file says what made it. The version
     // is the XFL schema's, not ours, and has to match what the format expects.
     document->xflVersion = "23.0";

@@ -139,6 +139,7 @@ set(HEADERS
     src/edit/command_stack.h
     src/edit/edit_context.h
     src/edit/new_document.h
+    src/edit/shape_transform.h
     src/edit/element_commands.h
     src/edit/selection.h
     src/edit/shape_merge.h
@@ -217,6 +218,7 @@ set(SOURCES
     src/edit/command_stack.cpp
     src/edit/edit_context.cpp
     src/edit/new_document.cpp
+    src/edit/shape_transform.cpp
     src/edit/element_commands.cpp
     src/edit/selection.cpp
     src/edit/shape_merge.cpp

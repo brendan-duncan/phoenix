@@ -143,7 +143,7 @@ void attributeFillsFromSource(PlanarMap& map, const std::vector<ShapeCurve>& sou
 }
 
 void rebuildShapeEdges(Shape& shape, const PlanarMap& map,
-    const std::vector<ShapeCurve>& sources)
+    const std::vector<ShapeCurve>& sources, const StrokeFilter& keepStroke)
 {
     for (Edge* edge : shape.edges)
         delete edge;
@@ -163,6 +163,9 @@ void rebuildShapeEdges(Shape& shape, const PlanarMap& map,
         int strokeStyle = -1;
         if (half.source >= 0 && half.source < static_cast<int>(sources.size()))
             strokeStyle = sources[half.source].strokeStyle;
+
+        if (strokeStyle != -1 && keepStroke && !keepStroke(half))
+            strokeStyle = -1;
 
         // An edge with the same thing on both sides separates nothing. Whether
         // that is two empty sides or the same fill on each, it draws nothing and

@@ -38,6 +38,31 @@ public:
     ///
     /// Returns false when there is nothing to merge, leaving the target alone.
     static bool merge(Shape& target, const Shape& addition);
+
+    /// Takes  cutter's filled area out of  target, leaving a hole.
+    ///
+    /// The inverse of merging, and what lifting a drawing back out of the
+    /// artwork leaves behind. Drawing over something destroys what was under it,
+    /// so moving the drawing away afterwards reveals the hole rather than
+    /// putting anything back.
+    ///
+    /// The cutter contributes nothing of its own: no fill, and no outline around
+    /// the hole. Only where it is filled does anything happen, so a stroke-only
+    /// cutter takes nothing away.
+    ///
+    /// Returns false when there is nothing to cut, leaving the target alone.
+    static bool subtract(Shape& target, const Shape& cutter);
+
+private:
+    enum class Operation
+    {
+        /// The addition paints its area, replacing what was there.
+        Paint,
+        /// The addition takes its area away.
+        Erase
+    };
+
+    static bool combine(Shape& target, const Shape& addition, Operation operation);
 };
 
 } // namespace fla

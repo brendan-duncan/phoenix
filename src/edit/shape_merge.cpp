@@ -232,6 +232,16 @@ void setShapeContents(Shape& target, const Shape& source)
 
 bool ShapeMerger::merge(Shape& target, const Shape& addition)
 {
+    return combine(target, addition, Operation::Paint);
+}
+
+bool ShapeMerger::subtract(Shape& target, const Shape& cutter)
+{
+    return combine(target, cutter, Operation::Erase);
+}
+
+bool ShapeMerger::combine(Shape& target, const Shape& addition, Operation operation)
+{
     const std::vector<ShapeCurve> additionCurves = shapeCurves(addition);
     if (additionCurves.empty())
         return false;
@@ -321,14 +331,65 @@ bool ShapeMerger::merge(Shape& target, const Shape& addition)
         // outside it, or inside an unfilled part of it -- whatever was already
         // there shows through, which is how an outline drawn over a fill cuts
         // without erasing.
-        int fill = additionMap.fillAt(inside);
-        if (fill == -1)
+        const int additionFill = additionMap.fillAt(inside);
+
+        int fill;
+        if (additionFill == -1)
+        {
             fill = targetMap.fillAt(inside);
+        }
+        else
+        {
+            // Erasing takes the same area away instead of painting it, which is
+            // what lifting a drawing back out of the artwork leaves behind.
+            fill = operation == Operation::Paint ? additionFill : -1;
+        }
 
         merged.setFaceFill(index, fill);
     }
 
-    rebuildShapeEdges(target, merged, combined);
+    // Drawing a filled shape over something covers what was there, outlines
+    // included. A stroke that belonged to the target and has the addition's
+    // fill on both sides of it is buried, and goes.
+    //
+    // The addition's own outline stays whatever it lies over: it is the thing
+    // that was just drawn.
+    const size_t targetCurveCount = targetCurves.size();
+    const auto keepStroke = [&](const HalfEdge& half) {
+        const bool fromAddition = half.source < 0 ||
+            static_cast<size_t>(half.source) >= targetCurveCount;
+
+        // Erasing leaves nothing of its own behind: the cutter is a hole being
+        // punched, not artwork being added.
+        if (fromAddition)
+            return operation == Operation::Paint;
+
+        // Both sides, because a stroke along the edge of the addition's fill is
+        // still visible from the outside and has to stay.
+        const int sides[2] = {
+            half.face,
+            half.twin >= 0 && half.twin < static_cast<int>(merged.halfEdges().size())
+                ? merged.halfEdges()[half.twin].face : -1
+        };
+
+        for (const int face : sides)
+        {
+            if (face < 0 || face >= static_cast<int>(merged.faces().size()))
+                return true;
+            if (merged.faces()[face].unbounded)
+                return true;
+
+            Point inside;
+            if (!merged.interiorPoint(face, inside))
+                return true;
+            if (additionMap.fillAt(inside) == -1)
+                return true;
+        }
+
+        return false;
+    };
+
+    rebuildShapeEdges(target, merged, combined, keepStroke);
     return true;
 }
 

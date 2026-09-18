@@ -4,9 +4,9 @@ namespace fla {
 
 class FLADocument;
 
-/// The stage a new document starts with, matching Animate's own default.
-constexpr int kDefaultDocumentWidth = 550;
-constexpr int kDefaultDocumentHeight = 400;
+/// The stage a new document starts with.
+constexpr int kDefaultDocumentWidth = 1920;
+constexpr int kDefaultDocumentHeight = 1080;
 constexpr double kDefaultDocumentFrameRate = 24.0;
 
 /// Builds an empty document: one scene, one layer, one empty keyframe.

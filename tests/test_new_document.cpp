@@ -42,6 +42,20 @@ TEST(new_document_honours_a_requested_stage)
     CHECK_NEAR(fla->document->frameRate, 30.0);
 }
 
+/// Animate puts the vanishing point at the middle of the stage, so it has to
+/// follow the size rather than keep the model's own default.
+TEST(new_document_centres_the_vanishing_point)
+{
+    std::unique_ptr<FLADocument> fla = makeEmpty();
+
+    CHECK(fla->document->vanishingPoint3DX == kDefaultDocumentWidth / 2);
+    CHECK(fla->document->vanishingPoint3DY == kDefaultDocumentHeight / 2);
+
+    std::unique_ptr<FLADocument> other(createEmptyDocument(1280, 720, 30.0));
+    CHECK(other->document->vanishingPoint3DX == 640);
+    CHECK(other->document->vanishingPoint3DY == 360);
+}
+
 TEST(new_document_has_one_scene_one_layer_one_frame)
 {
     std::unique_ptr<FLADocument> fla = makeEmpty();

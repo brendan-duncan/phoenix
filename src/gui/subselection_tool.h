@@ -6,6 +6,9 @@
 
 #include <QPointF>
 
+#include <cstddef>
+#include <vector>
+
 namespace fla {
 class CommandStack;
 class Edge;
@@ -77,13 +80,31 @@ private:
     bool anchorAt(PhoenixView& view, const QPointF& localPos, fla::Edge*& edge,
         fla::EditablePath& path, size_t& index) const;
 
+    /// One anchor caught by a drag: which edge it lives on, which anchor it is,
+    /// and that edge's geometry when the drag began.
+    struct Grabbed
+    {
+        fla::Edge* edge = nullptr;
+        size_t anchorIndex = 0;
+        fla::EditablePath before;
+        fla::EditablePath current;
+    };
+
+    /// Gathers every anchor in  shape sitting at  position into _grabbed.
+    void grabCoincidentAnchors(fla::Shape& shape, const fla::Point& position);
+
     fla::Selection& _selection;
     fla::CommandStack& _commandStack;
 
-    /// The edge being dragged and the geometry it had when the drag began.
-    fla::Edge* _edge = nullptr;
-    fla::EditablePath _pathAtDragStart;
-    fla::EditablePath _path;
+    /// Every anchor the drag is moving.
+    ///
+    /// A corner where two pieces of outline meet is two anchors, one on each
+    /// piece: a merged shape is written as one edge per piece, so all of its
+    /// corners are shared. Moving only the anchor that was grabbed leaves the
+    /// others behind and tears the outline apart, so an anchor drag takes every
+    /// anchor sitting at that point. A handle belongs to one curve alone, so a
+    /// handle drag holds a single entry.
+    std::vector<Grabbed> _grabbed;
 
     Grip _grip = Grip::None;
     size_t _anchorIndex = 0;

@@ -319,6 +319,21 @@ anchor.
       had, rather than refitting the curve through the gap the way Animate does
 - [ ] Picking a one-pixel stroke by clicking it is fiddly. Anchor editing was
       verified on a polygon; the tolerance may want widening for thin strokes
+- [x] **Dragging a corner no longer tears the outline apart.** A merged shape
+      is written as one edge per piece, so every corner is shared between two
+      or more edges. The tool tracked a single edge, so moving a corner moved
+      one piece's endpoint and left the others behind -- the outline came apart
+      and the fill collapsed into a triangle with a line hanging off it
+  - An anchor drag now takes every anchor sitting at that point. A handle still
+      moves alone, since a handle belongs to one curve and moving it
+      disconnects nothing
+  - Coincidence is judged to half a twip. The format stores twips, so anchors
+      meant to be the same point agree well inside that, and Flash could not
+      tell two closer points apart either
+  - Moving a shared corner rewrites several edges, which is one thing the user
+      did and so one thing to undo
+- [ ] Deleting an anchor has the same problem the drag had: it only edits the
+      one edge, so removing a shared corner will still break the outline
 - [ ] Subselection edits the first path of each edge. A shape whose edge holds
       several paths shows them all but only the first is editable
 - [ ] Shape bounds are computed from anchor and control points, so the selection
@@ -438,6 +453,64 @@ to it, so nothing in the application uses it yet.
       a copy of both sides rather than trying to reverse the operation. The merge
       runs once, when the command is built; redo and undo only swap a snapshot
       back, so going back and forth cannot drift
+- [x] **Merging happens on deselect, not on draw.** A new drawing is its own
+      object first: selected, sitting above the artwork, draggable from anywhere
+      on it as one piece. Letting go of it is what folds it in. That is Animate's
+      model, and it is what makes a shape repositionable right after drawing it
+  - Starting another drawing commits the waiting one first, so it merges into
+      what was under it rather than into the drawing being laid on top
+  - A drawing merges only into shapes **below** it. Searching from the top of
+      the z-order could pick something stacked above, which merged a shape into
+      one drawn after it and produced nonsense geometry
+  - `bakeTransform` (`src/edit/shape_transform.h`, 8 tests) folds a shape's
+      transform down into its points, so a drawing that was dragged before being
+      let go merges where it was left rather than where it was drawn. Merging
+      reads raw edge coordinates and a drag lives in the transform
+  - Edge coordinates are twips in the file but the parser converts, so a `Point`
+      and a transform are both in pixels and the transform applies directly
+  - Baking clears `Edge::data`. The writer prefers the text an edge was read
+      with, so leaving it would save the geometry exactly where it used to be
+  - Undo is one step for the merge: the target's snapshot and the drawing's
+      removal go on as a single macro. Verified on screen -- one undo puts both
+      separate rectangles back
+  - Saving commits a floating drawing first, so saving with one selected and
+      saving just after letting it go write the same file
+- [x] **A fill drawn over something buries it, outlines included.** The merge
+      resolved fills by paint order but carried every stroke through, so the
+      older rectangle's edges kept drawing across the newer one. A stroke that
+      came from the target and has the addition's fill on both sides of it is
+      now dropped
+  - Only the buried part goes: the older outline outside the new drawing stays,
+      and the new drawing's own outline survives whatever it lies over
+  - An outline drawn with no fill behind it still cuts without erasing, which is
+      what lets a line dropped across a shape divide it
+  - `rebuildShapeEdges` takes an optional `StrokeFilter` for this, so the rule
+      lives with the merge rather than in the geometry
+- [x] Ctrl held reaches for the selection tool whatever tool is active, so
+      something can be moved without putting the drawing tool down. The gesture
+      belongs to that tool until the button comes up, even if ctrl is released
+      part way through
+- [x] **The cut happens when the drawing is placed, not when it is moved.**
+      Drawing over artwork destroys what was under it there and then. The
+      drawing sits exactly over the hole it just made, so nothing looks
+      different until it is moved -- and then the hole is uncovered rather than
+      appearing from nowhere. Drawing a rectangle over another and dragging it
+      off now leaves the L-shaped notch, which is what Animate does
+  - `ShapeMerger::subtract` is the merge run the other way: the same
+      arrangement, but the covered faces are emptied instead of painted, and the
+      cutter leaves nothing of its own -- no fill, and no outline round the hole
+  - A stroke-only cutter takes nothing away, since it has no area. That is what
+      keeps a line dropped across a shape dividing it rather than erasing it
+  - Adding the drawing and cutting what it covers are one undo step
+  - Deselecting without moving merges it straight back, reproducing the plain
+      merge exactly: one shape, one outline, no seam
+- [ ] One shape per layer is correct and is what Animate writes -- checked
+      against `rect_2.fla`, where two overlapping rectangles came back as a
+      single `DOMShape` with two fills and three edges. What is still missing is
+      selecting a *region* of that shape rather than all of it (see step 8).
+      Re-selecting merged artwork and dragging still moves the whole thing
+- [ ] Cutting leaves the cutter's fills and strokes in the target's style
+      tables, unused. Harmless, but it grows the file
 - [x] Wired into the tools. **Merge drawing is now the default**, as in Animate,
       with an Object Drawing toggle (`J`) to keep each drawing separate
   - The pen, pencil and shape tools all finish through one
@@ -511,6 +584,13 @@ select.
       works from the centre and a line has no centre, so neither takes it
 - [ ] Hovering an edge with the selection tool should show the corner/curve
       cursor that says it can be bent (pairs with edge dragging in step 6)
+- [ ] Ctrl-dragging should cut the dragged region out of what is under it. The
+      move itself works; the cut does not, and cannot until selection is
+      region-level. A drawing that has not merged yet has nothing to cut out of,
+      and one that has merged is a single shape, so clicking it selects the
+      whole thing rather than the face that was drawn
+- [ ] While ctrl is held the cursor should change to the selection arrow, and
+      the selection bounds should draw even under a tool that hides them
 
 ## Performance
 

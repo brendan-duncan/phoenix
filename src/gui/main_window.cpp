@@ -78,7 +78,13 @@ MainWindow::MainWindow(QWidget *parent)
         if (_freeTransformTool)
             _freeTransformTool->resetBox();
         if (_phoenixView)
+        {
+            // Letting go of a freshly drawn shape is what merges it into the
+            // artwork underneath, so the view hears about this before it
+            // repaints.
+            _phoenixView->selectionChanged();
             _phoenixView->update();
+        }
     });
 
     // Object snapping on by default, grid snapping off, matching Animate.
@@ -102,6 +108,8 @@ MainWindow::MainWindow(QWidget *parent)
     _pencilTool = std::make_unique<PencilTool>(_selection, stack, _drawingStyle);
     _subselectionTool = std::make_unique<SubselectionTool>(_selection, stack);
     _phoenixView->setSelection(&_selection);
+    _phoenixView->setCommandStack(&_editContext.commandStack());
+    _phoenixView->setModifierTool(_selectionTool.get());
     _phoenixView->setActiveTool(_selectionTool.get());
     updateSelectionState();
 
@@ -114,6 +122,12 @@ MainWindow::MainWindow(QWidget *parent)
 
 void MainWindow::releaseDocument()
 {
+    // A drawing still waiting to merge points into the document too, and must
+    // not outlive it. It is dropped rather than committed: the document is on
+    // its way out either way.
+    if (_phoenixView)
+        _phoenixView->clearPendingMerge();
+
     // The selection and the undo history both point into the document, so both
     // have to let go before it is deleted.
     _selection.clear();
@@ -446,6 +460,12 @@ bool MainWindow::saveToPath(const QString& filePath)
         QMessageBox::information(this, "No Document", "No FLA document is currently loaded.");
         return false;
     }
+
+    // A drawing still floating is committed before anything is written, so that
+    // saving with one selected and saving just after letting it go produce the
+    // same file rather than two shapes in one case and one in the other.
+    if (_phoenixView)
+        _phoenixView->flushPendingMerge();
 
     if (!confirmLossySave())
         return false;

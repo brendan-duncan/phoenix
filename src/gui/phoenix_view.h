@@ -26,6 +26,7 @@ class QTimer;
 #include <vector>
 
 namespace fla {
+class CommandStack;
 class Selection;
 class Snapper;
 }
@@ -92,6 +93,38 @@ public:
 
     /// The selection shown on the stage. Borrowed, not owned.
     void setSelection(fla::Selection* selection);
+
+    /// The tool that takes over while ctrl is held.
+    ///
+    /// Holding ctrl reaches for the selection tool whatever is active, so
+    /// something can be moved without putting the drawing tool down. Animate
+    /// does the same.
+    void setModifierTool(Tool* tool) { _modifierTool = tool; }
+
+    /// The command stack edits go through. Borrowed, and needed because the
+    /// view itself commits a waiting merge when the selection moves on.
+    void setCommandStack(fla::CommandStack* commandStack) { _commandStack = commandStack; }
+
+    /// Remembers a drawing that has been placed but not yet merged into the
+    /// artwork under it. Deselecting it is what commits it.
+    void setPendingMerge(fla::Shape* shape, fla::Frame* frame);
+
+    /// Forgets any waiting drawing without merging it. For when the document it
+    /// belongs to is going away.
+    void clearPendingMerge();
+
+    /// Commits a waiting drawing now, whether or not it is still selected.
+    ///
+    /// Starting another drawing does this, so the waiting one merges into what
+    /// was under it rather than into the drawing about to be laid on top.
+    void flushPendingMerge();
+
+    /// Commits a waiting drawing if the selection has moved off it.
+    ///
+    /// Called when the selection changes, which is the moment Animate uses: a
+    /// drawing stays its own object while it is selected, and becomes part of
+    /// the artwork when it is let go.
+    void selectionChanged();
 
     fla::Selection* selection() const { return _selection; }
 
@@ -201,6 +234,26 @@ private:
 
     Tool* _activeTool = nullptr;
     fla::Selection* _selection = nullptr;
+
+    /// Borrowed. Used for a gesture started with ctrl held.
+    Tool* _modifierTool = nullptr;
+
+    /// The tool handling the gesture in progress, which is the active one unless
+    /// ctrl took over at the press. A gesture finishes with the tool that began
+    /// it, whatever happens to the modifier part way through.
+    Tool* _gestureTool = nullptr;
+
+    /// The tool a mouse gesture should go to.
+    Tool* gestureTool() const { return _gestureTool ? _gestureTool : _activeTool; }
+    fla::CommandStack* _commandStack = nullptr;
+
+    /// A drawing placed in the document but not yet merged into what is under
+    /// it, and the frame holding it. Borrowed, never owned.
+    fla::Shape* _pendingMerge = nullptr;
+    fla::Frame* _pendingMergeFrame = nullptr;
+
+    /// Guards against the merge's own selection changes re-entering the commit.
+    bool _committingMerge = false;
     fla::Snapper* _snapper = nullptr;
     bool _showGrid = false;
 
