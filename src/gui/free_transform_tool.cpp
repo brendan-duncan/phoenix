@@ -3,6 +3,7 @@
 #include "phoenix_view.h"
 
 #include "../data/element.h"
+#include "../data/shape.h"
 #include "../edit/command_stack.h"
 #include "../edit/element_commands.h"
 #include "../edit/selection.h"
@@ -424,6 +425,11 @@ void FreeTransformTool::commit(PhoenixView& view)
 
         commands.push_back(fla::CommandPtr(new fla::SetElementTransformCommand(
             target.element, target.startTransform, now, gestureName)));
+
+        // A shape that has been moved or reshaped belongs to the artwork it now
+        // sits on, so letting go of it drops it in as a drawn one would be.
+        if (target.element->elementType() == fla::Element::Type::Shape)
+            view.markShapeEdited(static_cast<fla::Shape*>(target.element));
     }
 
     // A click that moved nothing is not an edit.

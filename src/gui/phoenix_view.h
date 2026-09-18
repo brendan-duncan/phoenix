@@ -109,6 +109,14 @@ public:
     /// artwork under it. Deselecting it is what commits it.
     void setPendingMerge(fla::Shape* shape, fla::Frame* frame);
 
+    /// Remembers a shape that has just been moved or reshaped.
+    ///
+    /// A shape that has been picked up and put down somewhere else belongs to
+    /// the artwork it now sits on, exactly as a freshly drawn one does, so
+    /// deselecting it commits it the same way. Finds the shape's own frame, so
+    /// a tool need not know it.
+    void markShapeEdited(fla::Shape* shape);
+
     /// Forgets any waiting drawing without merging it. For when the document it
     /// belongs to is going away.
     void clearPendingMerge();
@@ -247,10 +255,17 @@ private:
     Tool* gestureTool() const { return _gestureTool ? _gestureTool : _activeTool; }
     fla::CommandStack* _commandStack = nullptr;
 
-    /// A drawing placed in the document but not yet merged into what is under
-    /// it, and the frame holding it. Borrowed, never owned.
-    fla::Shape* _pendingMerge = nullptr;
-    fla::Frame* _pendingMergeFrame = nullptr;
+    /// A shape waiting to be dropped into the artwork under it, and the frame
+    /// holding it. Borrowed, never owned.
+    struct PendingDrop
+    {
+        fla::Shape* shape = nullptr;
+        fla::Frame* frame = nullptr;
+    };
+
+    /// Everything waiting. A drag can move several things at once, and each is
+    /// dropped where it now sits.
+    std::vector<PendingDrop> _pending;
 
     /// Guards against the merge's own selection changes re-entering the commit.
     bool _committingMerge = false;

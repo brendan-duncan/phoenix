@@ -2110,42 +2110,73 @@ void PhoenixView::setSelection(fla::Selection* selection)
 
 void PhoenixView::setPendingMerge(fla::Shape* shape, fla::Frame* frame)
 {
-    _pendingMerge = shape;
-    _pendingMergeFrame = frame;
+    if (!shape || !frame)
+        return;
+
+    for (const PendingDrop& pending : _pending)
+    {
+        if (pending.shape == shape)
+            return;
+    }
+
+    _pending.push_back({shape, frame});
+}
+
+void PhoenixView::markShapeEdited(fla::Shape* shape)
+{
+    if (!shape)
+        return;
+
+    setPendingMerge(shape, const_cast<fla::Frame*>(owningFrame(shape)));
 }
 
 void PhoenixView::clearPendingMerge()
 {
-    _pendingMerge = nullptr;
-    _pendingMergeFrame = nullptr;
+    _pending.clear();
 }
 
 void PhoenixView::flushPendingMerge()
 {
-    if (!_pendingMerge || !_selection || !_commandStack || _committingMerge)
+    if (_pending.empty() || !_selection || !_commandStack || _committingMerge)
         return;
 
-    fla::Shape* addition = _pendingMerge;
-    fla::Frame* frame = _pendingMergeFrame;
-    clearPendingMerge();
+    const std::vector<PendingDrop> dropping = _pending;
+    _pending.clear();
 
-    // Removing the drawing changes the selection, which would come straight back
-    // round through selectionChanged().
+    // Dropping one changes the selection and can remove another, either of which
+    // would come straight back round through selectionChanged().
     _committingMerge = true;
-    commitPendingMerge(*this, *_commandStack, *_selection, addition, frame);
+    for (const PendingDrop& pending : dropping)
+        commitPendingMerge(*this, *_commandStack, *_selection, pending.shape, pending.frame);
     _committingMerge = false;
 }
 
 void PhoenixView::selectionChanged()
 {
-    if (!_pendingMerge || !_selection || _committingMerge)
+    if (_pending.empty() || !_selection || _committingMerge)
         return;
 
-    // Still being worked on: it stays its own object until it is let go.
-    if (_selection->contains(_pendingMerge))
+    // Anything still selected is still being worked on, and stays its own object
+    // until it is let go.
+    std::vector<PendingDrop> keep;
+    std::vector<PendingDrop> dropping;
+    for (const PendingDrop& pending : _pending)
+    {
+        if (_selection->contains(pending.shape))
+            keep.push_back(pending);
+        else
+            dropping.push_back(pending);
+    }
+
+    if (dropping.empty())
         return;
 
-    flushPendingMerge();
+    _pending = keep;
+
+    _committingMerge = true;
+    for (const PendingDrop& pending : dropping)
+        commitPendingMerge(*this, *_commandStack, *_selection, pending.shape, pending.frame);
+    _committingMerge = false;
 }
 
 fla::Frame* PhoenixView::activeFrame()

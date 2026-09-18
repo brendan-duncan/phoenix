@@ -13,51 +13,16 @@
 
 namespace {
 
-/// The shape a drawing should merge into: the nearest one *below* it that it
-/// overlaps. A drawing clear of everything has nothing to merge with and simply
-/// stays as it is.
+/// Every shape below  addition that it overlaps, nearest first.
 ///
-/// Only shapes below count. A drawing merges into the artwork it was laid over,
-/// never into something stacked on top of it, so the search starts at the
-/// addition's own place in the z-order and works down.
+/// Only shapes below count. A drawing joins the artwork it was laid over, never
+/// something stacked on top of it, so the search starts at the addition's own
+/// place in the z-order and works down.
 ///
 /// Bounds come from the view rather than from the shape's own `localBounds`,
 /// which is recorded when a shape is built and not kept up to date through a
 /// merge. The view computes them from the geometry, in document space, so a
 /// shape that has been dragged is measured where it actually sits.
-fla::Shape* mergeTarget(PhoenixView& view, fla::Frame& frame, fla::Shape& addition)
-{
-    const QRectF additionBounds = view.elementBounds(&addition);
-    if (!additionBounds.isValid())
-        return nullptr;
-
-    size_t additionIndex = frame.elements.size();
-    for (size_t i = 0; i < frame.elements.size(); ++i)
-    {
-        if (frame.elements[i] == &addition)
-        {
-            additionIndex = i;
-            break;
-        }
-    }
-
-    for (size_t i = additionIndex; i > 0; --i)
-    {
-        fla::Element* element = frame.elements[i - 1];
-        if (!element || element->elementType() != fla::Element::Type::Shape)
-            continue;
-
-        fla::Shape* candidate = static_cast<fla::Shape*>(element);
-
-        const QRectF candidateBounds = view.elementBounds(candidate);
-        if (candidateBounds.isValid() && candidateBounds.intersects(additionBounds))
-            return candidate;
-    }
-
-    return nullptr;
-}
-
-/// Every shape below  addition that it overlaps, topmost first.
 std::vector<fla::Shape*> shapesUnder(PhoenixView& view, fla::Frame& frame,
     fla::Shape& addition)
 {
@@ -169,21 +134,33 @@ bool commitPendingMerge(PhoenixView& view, fla::CommandStack& commandStack,
     if (!present)
         return false;
 
-    fla::Shape* target = mergeTarget(view, *frame, *addition);
-    if (!target)
+    // Everything it now sits on, nearest first.
+    const std::vector<fla::Shape*> below = shapesUnder(view, *frame, *addition);
+    if (below.empty())
         return false;
 
-    // Merging reads raw edge coordinates, so both sides have to be in the same
-    // space first. A shape dragged after it was drawn carries that move in its
-    // transform, and the target may carry one of its own.
+    // Merging reads raw edge coordinates, so everything involved has to be in
+    // the same space first. A shape that was dragged carries the move in its
+    // transform, and what it landed on may carry one of its own.
     fla::bakeTransform(*addition);
-    fla::bakeTransform(*target);
+    for (fla::Shape* target : below)
+        fla::bakeTransform(*target);
 
-    // Two edits, one undo step: the target takes on the merged geometry and the
-    // drawing stops existing separately.
+    // One undo step for the whole drop.
     commandStack.beginMacro("Merge Shape");
+
+    // It joins the nearest thing below it, and destroys what it covers of
+    // everything further down. Merging already replaces what it lands on, so
+    // only the rest need cutting.
     commandStack.push(fla::CommandPtr(new fla::MergeShapeCommand(
-        target, *addition, "Merge Shape")));
+        below.front(), *addition, "Merge Shape")));
+
+    for (size_t i = 1; i < below.size(); ++i)
+    {
+        commandStack.push(fla::CommandPtr(new fla::SubtractShapeCommand(
+            below[i], *addition, "Merge Shape")));
+    }
+
     commandStack.push(fla::CommandPtr(new fla::RemoveElementCommand(
         frame, addition, "Merge Shape", &selection)));
     commandStack.endMacro();

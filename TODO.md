@@ -490,6 +490,15 @@ to it, so nothing in the application uses it yet.
       something can be moved without putting the drawing tool down. The gesture
       belongs to that tool until the button comes up, even if ctrl is released
       part way through
+- [x] **Moving or reshaping a shape drops it in again, as drawing does.**
+      Only a freshly drawn shape used to be waiting to be committed, so moving
+      an existing one onto other artwork and letting go left it sitting on top,
+      merging with nothing. Finishing a move, a free transform or an anchor drag
+      now marks the shape, and deselecting commits it where it now sits
+  - The commit takes on everything below it, not just the nearest: it merges
+      into the one it lands on and cuts itself out of the rest
+  - Several shapes can be waiting at once, since one drag moves a whole
+      selection, and each is dropped where it ended up
 - [x] **The cut happens when the drawing is placed, not when it is moved.**
       Drawing over artwork destroys what was under it there and then. The
       drawing sits exactly over the hole it just made, so nothing looks

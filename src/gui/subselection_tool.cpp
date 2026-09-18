@@ -259,6 +259,11 @@ bool SubselectionTool::mouseRelease(PhoenixView& view, QMouseEvent* event, const
 
     _commandStack.breakMergeChain();
 
+    // A reshaped shape belongs to the artwork it now covers, so letting go of it
+    // drops it in the same way a drawn one is.
+    if (fla::Shape* shape = editedShape())
+        view.markShapeEdited(shape);
+
     _grabbed.clear();
     _grip = Grip::None;
     view.update();
