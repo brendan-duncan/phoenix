@@ -80,6 +80,14 @@ StrokeStyle* cloneStroke(const StrokeStyle* stroke, DOMElement* parent)
 
     copy->weight = stroke->weight;
     copy->scaleMode = stroke->scaleMode;
+    copy->solidStyle = stroke->solidStyle;
+    copy->caps = stroke->caps;
+    copy->joints = stroke->joints;
+    copy->miterLimit = stroke->miterLimit;
+    copy->pixelHinting = stroke->pixelHinting;
+    copy->dash1 = stroke->dash1;
+    copy->dash2 = stroke->dash2;
+    copy->dotSpace = stroke->dotSpace;
     copy->fill = cloneFill(stroke->fill, copy);
     return copy;
 }
@@ -155,6 +163,7 @@ Shape* cloneShape(const Shape& shape, DOMElement* parent)
     copy->transformationPoint = shape.transformationPoint;
     copy->localBounds = shape.localBounds;
     copy->bounds = shape.bounds;
+    copy->isDrawingObject = shape.isDrawingObject;
 
     // The index a style is filed under is part of the geometry's meaning, so the
     // table is rebuilt with the same numbers rather than renumbered.

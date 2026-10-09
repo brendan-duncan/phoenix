@@ -11,6 +11,12 @@ public:
     FillStyle* fillStyle = nullptr;
     StrokeStyle* strokeStyle = nullptr;
 
+    /// Corner radii, in pixels. A negative radius is an inward curve.
+    double topLeftRadius = 0.0;
+    double topRightRadius = 0.0;
+    double bottomLeftRadius = 0.0;
+    double bottomRightRadius = 0.0;
+
     RectanglePrimitive(DOMElement* parent)
         : Element(parent)
     {}

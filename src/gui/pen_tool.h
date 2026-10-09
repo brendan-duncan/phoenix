@@ -1,5 +1,6 @@
 #pragma once
 
+#include "edge_bend.h"
 #include "tool.h"
 
 #include "../edit/editable_path.h"
@@ -95,4 +96,14 @@ private:
     void refreshCursor(PhoenixView& view);
 
     int _cursorKind = -1;
+
+    /// With no path being drawn, the pen hovers the selected shape: over an
+    /// anchor it removes, over a segment it adds, as Animate's does.
+    EdgeBender::Probe probeSelection(PhoenixView& view, const QPointF& documentPos) const;
+
+    /// Carries out the add or remove the hover promised. Returns false when
+    /// there was nothing to do.
+    bool editSelectedShape(PhoenixView& view, const QPointF& documentPos);
+
+    EdgeBender::Probe _hover;
 };

@@ -76,16 +76,93 @@ QCursor PenTool::cursor() const
     Cursors::Kind kind = Cursors::Kind::PenStart;
     if (_active)
         kind = _overFirstAnchor ? Cursors::Kind::PenClose : Cursors::Kind::Pen;
+    else if (_hover.grab == EdgeBender::Grab::Corner)
+        kind = Cursors::Kind::PenRemove;
+    else if (_hover.grab == EdgeBender::Grab::Curve)
+        kind = Cursors::Kind::PenAdd;
     return Cursors::cursor(kind);
 }
 
 void PenTool::refreshCursor(PhoenixView& view)
 {
-    const int kind = !_active ? 0 : (_overFirstAnchor ? 2 : 1);
+    int kind = 0;
+    if (_active)
+        kind = _overFirstAnchor ? 2 : 1;
+    else if (_hover.grab == EdgeBender::Grab::Corner)
+        kind = 3;
+    else if (_hover.grab == EdgeBender::Grab::Curve)
+        kind = 4;
     if (kind == _cursorKind)
         return;
     _cursorKind = kind;
     view.setCursor(cursor());
+}
+
+EdgeBender::Probe PenTool::probeSelection(PhoenixView& view, const QPointF& documentPos) const
+{
+    EdgeBender::Probe none;
+
+    fla::DOMElement* single = _selection.single();
+    fla::Element* element = single ? dynamic_cast<fla::Element*>(single) : nullptr;
+    if (!element || element->elementType() != fla::Element::Type::Shape)
+        return none;
+
+    HitResult hit;
+    hit.element = element;
+    const fla::Transform& t = element->transform;
+    hit.elementToDocument = QTransform(t.m11, t.m12, t.m21, t.m22, t.tx, t.ty);
+    return EdgeBender::probe(view, hit, documentPos);
+}
+
+bool PenTool::editSelectedShape(PhoenixView& view, const QPointF& documentPos)
+{
+    const EdgeBender::Probe probe = probeSelection(view, documentPos);
+    if (probe.grab == EdgeBender::Grab::None || !probe.edge ||
+        probe.pathIndex >= probe.edge->paths.size() || !probe.edge->paths[probe.pathIndex])
+    {
+        return false;
+    }
+
+    const fla::EditablePath before = fla::EditablePath::fromPath(*probe.edge->paths[probe.pathIndex]);
+    fla::EditablePath after = before;
+    const char* gesture = nullptr;
+
+    if (probe.grab == EdgeBender::Grab::Corner)
+    {
+        constexpr double kHalfTwip = 1.0 / 40.0;
+        bool removed = false;
+        for (size_t i = 0; i < before.anchors.size() && !removed; ++i)
+        {
+            const fla::Point& at = before.anchors[i].position;
+            if (std::fabs(at.x - probe.position.x) <= kHalfTwip &&
+                std::fabs(at.y - probe.position.y) <= kHalfTwip)
+            {
+                removed = after.removeAnchor(i);
+            }
+        }
+        if (!removed)
+            return false;
+        gesture = "Delete Anchor";
+    }
+    else
+    {
+        if (after.splitSegment(probe.segment, probe.t) < 0)
+            return false;
+        gesture = "Add Anchor";
+    }
+
+    _commandStack.push(fla::CommandPtr(new fla::SetEdgeGeometryCommand(
+        probe.edge, before, after, gesture, probe.pathIndex)));
+    _commandStack.breakMergeChain();
+
+    if (probe.shape)
+        view.markShapeEdited(probe.shape);
+
+    view.clearCaches();
+    _hover = probeSelection(view, documentPos);
+    refreshCursor(view);
+    view.update();
+    return true;
 }
 
 bool PenTool::mousePress(PhoenixView& view, QMouseEvent* event, const QPointF& documentPos)
@@ -95,6 +172,11 @@ bool PenTool::mousePress(PhoenixView& view, QMouseEvent* event, const QPointF& d
 
     if (!view.activeFrame())
         return false;
+
+    // Before a path starts, a click on the selected shape's outline edits it
+    // rather than beginning a new path.
+    if (!_active && editSelectedShape(view, documentPos))
+        return true;
 
     QPointF position = documentPos;
     if (fla::Snapper* snapper = view.snapper())
@@ -138,7 +220,11 @@ bool PenTool::mousePress(PhoenixView& view, QMouseEvent* event, const QPointF& d
 bool PenTool::mouseMove(PhoenixView& view, QMouseEvent* event, const QPointF& documentPos)
 {
     if (!_active)
+    {
+        _hover = probeSelection(view, documentPos);
+        refreshCursor(view);
         return false;
+    }
 
     _cursor = documentPos;
 

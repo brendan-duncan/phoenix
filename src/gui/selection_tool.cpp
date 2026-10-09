@@ -3,10 +3,12 @@
 #include "phoenix_view.h"
 
 #include "../data/element.h"
+#include "../data/frame.h"
 #include "../data/shape.h"
 #include "../edit/command_stack.h"
 #include "../edit/element_commands.h"
 #include "../edit/selection.h"
+#include "../edit/shape_merge.h"
 #include "../edit/snapping.h"
 
 #include <QKeyEvent>
@@ -20,11 +22,55 @@ namespace {
 /// rather than a drag, so a slightly shaky click still selects.
 constexpr double kDragThresholdPixels = 3.0;
 
+constexpr double kPi = 3.14159265358979323846;
+
+/// Shift constrains a move to the eight compass directions.
+QPointF constrainToCompass(const QPointF& delta)
+{
+    const double length = std::hypot(delta.x(), delta.y());
+    if (length < 1.0e-9)
+        return delta;
+
+    const double step = kPi / 4.0;
+    const double angle = std::round(std::atan2(delta.y(), delta.x()) / step) * step;
+    return QPointF(length * std::cos(angle), length * std::sin(angle));
+}
+
+const fla::Frame* frameOf(const fla::Element* element)
+{
+    for (const fla::DOMElement* p = element ? element->parent : nullptr; p; p = p->parent)
+    {
+        if (p->domType() == fla::DOMElement::DOMType::Frame)
+            return static_cast<const fla::Frame*>(p);
+    }
+    return nullptr;
+}
+
 } // namespace
 
 QRectF SelectionTool::marqueeRect() const
 {
     return QRectF(_marqueeStart, _marqueeEnd).normalized();
+}
+
+Cursors::Kind SelectionTool::hoverKindAt(PhoenixView& view, const QPointF& documentPos) const
+{
+    const HitResult hit = view.hitTest(documentPos, view.pickTolerance());
+    if (!hit)
+        return Cursors::Kind::Arrow;
+
+    // An unselected shape's outline can be bent or its corner moved; anything
+    // else, and anything selected, moves as a whole.
+    if (!_selection.contains(hit.element))
+    {
+        const EdgeBender::Probe probe = EdgeBender::probe(view, hit, documentPos);
+        if (probe.grab == EdgeBender::Grab::Corner)
+            return Cursors::Kind::ArrowCorner;
+        if (probe.grab == EdgeBender::Grab::Curve)
+            return Cursors::Kind::ArrowCurve;
+    }
+
+    return Cursors::Kind::ArrowMove;
 }
 
 bool SelectionTool::mousePress(PhoenixView& view, QMouseEvent* event, const QPointF& documentPos)
@@ -33,21 +79,49 @@ bool SelectionTool::mousePress(PhoenixView& view, QMouseEvent* event, const QPoi
         return false;
 
     _additive = (event->modifiers() & Qt::ShiftModifier) != 0;
+    _pressedElement = nullptr;
+    _removeOnRelease = false;
+    _duplicated = false;
 
     const HitResult hit = view.hitTest(documentPos, view.pickTolerance());
 
     if (hit)
     {
-        // Dragging something already selected moves the whole selection, so a
-        // press on it must not collapse the selection down to that one object.
         const bool alreadySelected = _selection.contains(hit.element);
 
-        if (_additive)
-            _selection.toggle(hit.element);
-        else if (!alreadySelected)
-            _selection.select(hit.element);
+        // The outline of something not yet selected bends under the arrow
+        // rather than moving. Ctrl here, with this tool active in its own
+        // right, adds a corner; from another tool ctrl is only the temporary
+        // arrow.
+        if (!alreadySelected && !_additive)
+        {
+            const EdgeBender::Probe probe = EdgeBender::probe(view, hit, documentPos);
+            if (probe.grab != EdgeBender::Grab::None)
+            {
+                const bool insertCorner = (event->modifiers() & Qt::ControlModifier) != 0 &&
+                    view.activeTool() == this;
+                _bender.begin(view, probe, documentPos, insertCorner);
+                if (_bender.active())
+                    return true;
+            }
+        }
 
-        if (!_additive && _selection.contains(hit.element))
+        // Shift adds to the selection on the press, so a shift-drag moves the
+        // lot; taking something away waits for a release that did not drag.
+        if (_additive)
+        {
+            if (alreadySelected)
+                _removeOnRelease = true;
+            else
+                _selection.add(hit.element);
+            _pressedElement = hit.element;
+        }
+        else if (!alreadySelected)
+        {
+            _selection.select(hit.element);
+        }
+
+        if (_selection.contains(hit.element))
             beginMove(view, documentPos);
 
         view.update();
@@ -64,19 +138,22 @@ bool SelectionTool::mousePress(PhoenixView& view, QMouseEvent* event, const QPoi
 
 bool SelectionTool::mouseMove(PhoenixView& view, QMouseEvent* event, const QPointF& documentPos)
 {
-    (void)event;
+    if (_bender.active())
+    {
+        _bender.update(view, documentPos);
+        return true;
+    }
 
     if (_moveActive)
     {
-        updateMove(view, documentPos);
+        updateMove(view, documentPos, event->modifiers());
         return true;
     }
 
     if (!_marqueeActive)
     {
-        // Hovering: the arrow grows a small box over something it can move.
-        const HitResult hit = view.hitTest(documentPos, view.pickTolerance());
-        const Cursors::Kind kind = hit ? Cursors::Kind::ArrowMove : Cursors::Kind::Arrow;
+        // Hovering: the arrow says what a press would do.
+        const Cursors::Kind kind = hoverKindAt(view, documentPos);
         if (kind != _hoverKind)
         {
             _hoverKind = kind;
@@ -95,10 +172,26 @@ bool SelectionTool::mouseRelease(PhoenixView& view, QMouseEvent* event, const QP
     if (event->button() != Qt::LeftButton)
         return false;
 
+    if (_bender.active())
+    {
+        _bender.update(view, documentPos);
+        _bender.commit(view, _commandStack);
+        return true;
+    }
+
     if (_moveActive)
     {
-        updateMove(view, documentPos);
+        updateMove(view, documentPos, event->modifiers());
+        const bool dragged = _moveDragging;
         commitMove(view);
+
+        // A shift-click, not a shift-drag, on something already selected takes
+        // it out of the selection.
+        if (!dragged && _removeOnRelease && _pressedElement)
+            _selection.remove(_pressedElement);
+        _pressedElement = nullptr;
+        _removeOnRelease = false;
+        view.update();
         return true;
     }
 
@@ -146,7 +239,7 @@ bool SelectionTool::keyPress(PhoenixView& view, QKeyEvent* event)
 {
     const int key = event->key();
     if ((key == Qt::Key_Left || key == Qt::Key_Right || key == Qt::Key_Up || key == Qt::Key_Down) &&
-        !_moveActive && !_marqueeActive && !_selection.isEmpty())
+        !_moveActive && !_marqueeActive && !_bender.active() && !_selection.isEmpty())
     {
         // One pixel, or ten with shift, as in Animate.
         const double step = (event->modifiers() & Qt::ShiftModifier) ? 10.0 : 1.0;
@@ -158,18 +251,15 @@ bool SelectionTool::keyPress(PhoenixView& view, QKeyEvent* event)
 
     if (event->key() == Qt::Key_Escape)
     {
+        if (_bender.active())
+        {
+            _bender.cancel(view);
+            return true;
+        }
+
         if (_moveActive)
         {
-            // Put everything back where the drag started and abandon it.
-            for (const Target& target : _targets)
-            {
-                if (target.element)
-                    target.element->transform = target.startTransform;
-            }
-            _targets.clear();
-            _moveActive = false;
-            view.invalidateBounds();
-            view.update();
+            cancelMove(view);
             return true;
         }
 
@@ -253,21 +343,30 @@ void SelectionTool::nudge(PhoenixView& view, double dx, double dy)
     view.update();
 }
 
+void SelectionTool::cancelMove(PhoenixView& view)
+{
+    // Put everything back where the drag started and abandon it.
+    for (const Target& target : _targets)
+    {
+        if (target.element)
+            target.element->transform = target.startTransform;
+    }
+    _targets.clear();
+    _moveActive = false;
+    _moveDragging = false;
+    view.invalidateBounds();
+    view.update();
+}
+
 void SelectionTool::deactivate(PhoenixView& view)
 {
     _hoverKind = Cursors::Kind::Arrow;
 
+    if (_bender.active())
+        _bender.cancel(view);
+
     if (_moveActive)
-    {
-        for (const Target& target : _targets)
-        {
-            if (target.element)
-                target.element->transform = target.startTransform;
-        }
-        _targets.clear();
-        _moveActive = false;
-        view.invalidateBounds();
-    }
+        cancelMove(view);
 
     if (_marqueeActive)
     {
@@ -345,9 +444,51 @@ QPointF SelectionTool::snapMove(PhoenixView& view, const QPointF& delta)
     return QPointF(delta.x() + x.adjustment, delta.y() + y.adjustment);
 }
 
-void SelectionTool::updateMove(PhoenixView& view, const QPointF& documentPos)
+void SelectionTool::duplicateTargets(PhoenixView& view)
 {
-    const QPointF raw = documentPos - _moveStart;
+    // Only shapes can be copied so far; a mixed selection moves as it is.
+    for (const Target& target : _targets)
+    {
+        if (!target.element || target.element->elementType() != fla::Element::Type::Shape ||
+            !frameOf(target.element))
+        {
+            return;
+        }
+    }
+
+    std::vector<Target> copies;
+    _commandStack.beginMacro("Duplicate");
+
+    for (const Target& target : _targets)
+    {
+        fla::Frame* frame = const_cast<fla::Frame*>(frameOf(target.element));
+        fla::Shape* original = static_cast<fla::Shape*>(target.element);
+
+        // The original goes back where it was; the copy takes over the drag.
+        original->transform = target.startTransform;
+
+        fla::Shape* copy = fla::cloneShape(*original, frame);
+        _commandStack.push(fla::CommandPtr(new fla::AddElementCommand(
+            frame, copy, "Duplicate", &_selection)));
+        copies.push_back({copy, target.startTransform});
+    }
+
+    _commandStack.endMacro();
+    _commandStack.breakMergeChain();
+
+    std::vector<fla::DOMElement*> picked;
+    for (const Target& copy : copies)
+        picked.push_back(copy.element);
+    _selection.select(picked);
+
+    _targets = copies;
+    _duplicated = true;
+    view.clearCaches();
+}
+
+void SelectionTool::updateMove(PhoenixView& view, const QPointF& documentPos, Qt::KeyboardModifiers modifiers)
+{
+    QPointF raw = documentPos - _moveStart;
 
     // Until the press has travelled, it is still just a selection click, and
     // clicking something must not move it. The same threshold the marquee uses
@@ -359,7 +500,14 @@ void SelectionTool::updateMove(PhoenixView& view, const QPointF& documentPos)
             return;
 
         _moveDragging = true;
+
+        // Alt at the moment the drag begins means "move a copy".
+        if ((modifiers & Qt::AltModifier) && !_duplicated)
+            duplicateTargets(view);
     }
+
+    if (modifiers & Qt::ShiftModifier)
+        raw = constrainToCompass(raw);
 
     const QPointF delta = snapMove(view, raw);
     _snapRingPos = documentPos;
@@ -421,6 +569,7 @@ void SelectionTool::commitMove(PhoenixView& view)
 
     _moveActive = false;
     _moveDragging = false;
+    _duplicated = false;
     _targets.clear();
     view.update();
 }

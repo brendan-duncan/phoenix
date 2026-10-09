@@ -540,6 +540,10 @@ void XFLWriter::writeRectanglePrimitive(const RectanglePrimitive& rectangle, XML
     setDouble(node, "y", rectangle.rect.topLeft.y, 0.0);
     setDouble(node, "objectWidth", rectangle.rect.width(), 0.0);
     setDouble(node, "objectHeight", rectangle.rect.height(), 0.0);
+    setDouble(node, "topLeftRadius", rectangle.topLeftRadius, 0.0);
+    setDouble(node, "topRightRadius", rectangle.topRightRadius, 0.0);
+    setDouble(node, "bottomLeftRadius", rectangle.bottomLeftRadius, 0.0);
+    setDouble(node, "bottomRightRadius", rectangle.bottomRightRadius, 0.0);
 
     writeElementCommon(rectangle, node);
 

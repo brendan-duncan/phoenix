@@ -62,8 +62,10 @@ private:
 class SetEdgeGeometryCommand : public Command
 {
 public:
+    ///  pathIndex is which of the edge's paths the anchors describe; the
+    /// others are left alone.
     SetEdgeGeometryCommand(Edge* edge, const EditablePath& before,
-        const EditablePath& after, const std::string& name);
+        const EditablePath& after, const std::string& name, size_t pathIndex = 0);
 
     void redo() override;
 
@@ -81,6 +83,7 @@ private:
     EditablePath _before;
     EditablePath _after;
     std::string _name;
+    size_t _pathIndex = 0;
 };
 
 /// Merges a newly drawn shape into an existing one.

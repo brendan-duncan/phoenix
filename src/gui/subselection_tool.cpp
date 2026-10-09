@@ -164,34 +164,8 @@ bool SubselectionTool::mousePress(PhoenixView& view, QMouseEvent* event, const Q
         }
     }
 
-    // Alt-clicking the outline inserts an anchor there, which is how a path
-    // gains detail without redrawing it.
-    if ((event->modifiers() & Qt::AltModifier) != 0)
-    {
-        for (fla::Edge* edge : shape->edges)
-        {
-            if (!edge || edge->paths.empty() || !edge->paths[0])
-                continue;
-
-            const fla::EditablePath before = fla::EditablePath::fromPath(*edge->paths[0]);
-            const fla::EditablePath::PathPoint found = before.closestPoint(toPoint(localPos));
-            if (!found.valid || found.distance > tolerance * 2.0)
-                continue;
-
-            fla::EditablePath after = before;
-            const int inserted = after.splitSegment(found.segment, found.t);
-            if (inserted < 0)
-                continue;
-
-            commitGeometry(view, edge, before, after, "Add Anchor");
-            _selectedEdge = edge;
-            _selectedAnchor = static_cast<size_t>(inserted);
-            _hasSelectedAnchor = true;
-            return true;
-        }
-    }
-
     // Clicking off the anchors picks whatever is under the cursor instead.
+    // Adding an anchor is the pen's job, as in Animate.
     _hasSelectedAnchor = false;
     const HitResult hit = view.hitTest(documentPos, view.pickTolerance());
     if (hit)

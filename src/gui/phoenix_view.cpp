@@ -173,6 +173,70 @@ QColor highlightColourFor(const fla::Element* element)
     return QColor(0, 170, 255);
 }
 
+/// A rectangle primitive's outline with its corner radii. Each radius is
+/// clamped to half the shorter side, as Animate clamps it; a negative radius
+/// scoops the corner inwards.
+QPainterPath roundedRectanglePath(const fla::RectanglePrimitive& rectangle)
+{
+    const double x0 = rectangle.rect.topLeft.x;
+    const double y0 = rectangle.rect.topLeft.y;
+    const double x1 = rectangle.rect.bottomRight.x;
+    const double y1 = rectangle.rect.bottomRight.y;
+    const double limit = std::min(std::fabs(x1 - x0), std::fabs(y1 - y0)) / 2.0;
+
+    const auto clamp = [&](double r) { return std::max(-limit, std::min(limit, r)); };
+    const double tl = clamp(rectangle.topLeftRadius);
+    const double tr = clamp(rectangle.topRightRadius);
+    const double br = clamp(rectangle.bottomRightRadius);
+    const double bl = clamp(rectangle.bottomLeftRadius);
+
+    QPainterPath path;
+    if (tl == 0.0 && tr == 0.0 && br == 0.0 && bl == 0.0)
+    {
+        path.addRect(QRectF(QPointF(x0, y0), QPointF(x1, y1)));
+        return path;
+    }
+
+    // A positive radius arcs round a centre inside the corner; a negative one
+    // arcs round a centre outside it, which is the inward scoop.
+    constexpr double kappa = 0.5522847498;
+    const auto corner = [&](double cx, double cy, double r, double sx, double sy,
+                            const QPointF& from, const QPointF& to) {
+        // from and to sit r away from the corner (cx, cy) along the two sides;
+        // (sx, sy) is the direction into the rectangle from the corner.
+        (void)cx; (void)cy; (void)sx; (void)sy;
+        const double a = std::fabs(r);
+        if (r > 0.0)
+        {
+            // Bulge outwards: controls pull towards the corner itself.
+            const QPointF c1 = from + (QPointF(cx, cy) - from) * kappa;
+            const QPointF c2 = to + (QPointF(cx, cy) - to) * kappa;
+            path.cubicTo(c1, c2, to);
+        }
+        else
+        {
+            // Scoop inwards: the arc's centre is the corner, so the controls
+            // run along the tangents into the rectangle.
+            const QPointF inner(cx + sx * a, cy + sy * a);
+            const QPointF c1 = from + (inner - from) * kappa;
+            const QPointF c2 = to + (inner - to) * kappa;
+            path.cubicTo(c1, c2, to);
+        }
+    };
+
+    path.moveTo(x0 + std::fabs(tl), y0);
+    path.lineTo(x1 - std::fabs(tr), y0);
+    corner(x1, y0, tr, -1.0, 1.0, QPointF(x1 - std::fabs(tr), y0), QPointF(x1, y0 + std::fabs(tr)));
+    path.lineTo(x1, y1 - std::fabs(br));
+    corner(x1, y1, br, -1.0, -1.0, QPointF(x1, y1 - std::fabs(br)), QPointF(x1 - std::fabs(br), y1));
+    path.lineTo(x0 + std::fabs(bl), y1);
+    corner(x0, y1, bl, 1.0, -1.0, QPointF(x0 + std::fabs(bl), y1), QPointF(x0, y1 - std::fabs(bl)));
+    path.lineTo(x0, y0 + std::fabs(tl));
+    corner(x0, y0, tl, 1.0, 1.0, QPointF(x0, y0 + std::fabs(tl)), QPointF(x0 + std::fabs(tl), y0));
+    path.closeSubpath();
+    return path;
+}
+
 /// Animate's magnification presets, which Zoom In and Zoom Out step through.
 constexpr double kZoomPresets[] = {0.08, 0.25, 0.5, 1.0, 2.0, 4.0, 8.0, 16.0, 32.0};
 
@@ -819,7 +883,7 @@ void PhoenixView::drawElement(QPainter& painter, const fla::Element* element, co
         QBrush brush = getFillBrush(rectangle->fillStyle, rectangle->localBounds);
         painter.setPen(pen);
         painter.setBrush(brush);
-        painter.drawRect(rectangle->rect.topLeft.x, rectangle->rect.topLeft.y, rectangle->rect.width(), rectangle->rect.height());
+        painter.drawPath(roundedRectanglePath(*rectangle));
     }
     else if (type == fla::Element::Type::Oval)
     {
@@ -1967,6 +2031,16 @@ void PhoenixView::hitTestElement(fla::Element& element, fla::Frame* frame,
             {
                 // Keep looking: a stroke drawn later sits on top of this fill.
                 part = HitResult::Part::Fill;
+            }
+            else if (part == HitResult::Part::None &&
+                entry.painterPath.controlPointRect().adjusted(-localTolerance, -localTolerance,
+                    localTolerance, localTolerance).contains(localPos) &&
+                isNearOutline(entry.painterPath, localPos, localTolerance))
+            {
+                // Just outside an unstroked fill still counts as its outline:
+                // Animate lets the arrow grab and bend a fill's edge from
+                // either side, stroke or no stroke.
+                part = HitResult::Part::Stroke;
             }
         }
 

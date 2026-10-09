@@ -18,6 +18,7 @@
 #include "../edit/snapping.h"
 
 #include <memory>
+#include <vector>
 
 #include <QMainWindow>
 #include <QMenuBar>
@@ -27,6 +28,8 @@
 #include <QSplitter>
 #include <QSettings>
 #include <QStringList>
+
+class QDoubleSpinBox;
 
 class MainWindow : public QMainWindow
 {
@@ -65,6 +68,16 @@ private slots:
     void selectAll();
 
     void deselectAll();
+
+    void cut();
+
+    void copy();
+
+    void paste();
+
+    void pasteInPlace();
+
+    void duplicateSelection();
 
 private:
     void setupUI();
@@ -144,8 +157,27 @@ private:
     fla::DrawingStyle _drawingStyle;
     QToolButton* _fillColorButton = nullptr;
     QToolButton* _strokeColorButton = nullptr;
+    QDoubleSpinBox* _cornerRadiusBox = nullptr;
     QAction* _selectAllAction = nullptr;
     QAction* _deselectAllAction = nullptr;
+    QAction* _cutAction = nullptr;
+    QAction* _copyAction = nullptr;
+    QAction* _pasteAction = nullptr;
+    QAction* _pasteInPlaceAction = nullptr;
+    QAction* _duplicateAction = nullptr;
+
+    /// Copies of the shapes last cut or copied. Only shapes can be copied so
+    /// far, since nothing else can be cloned yet.
+    std::vector<std::unique_ptr<fla::Shape>> _clipboard;
+
+    /// The shapes currently selected, in selection order.
+    std::vector<fla::Shape*> selectedShapes() const;
+
+    /// Adds copies of \a sources to the current frame as one undo step and
+    /// selects them. With \a centreInView the copies are moved so that they
+    /// sit in the middle of the view, which is where Animate pastes.
+    void placeCopies(const std::vector<const fla::Shape*>& sources, const char* name,
+        bool centreInView);
     QAction* _undoAction = nullptr;
     QAction* _redoAction = nullptr;
     /// Display name of the open file, without the modified marker.

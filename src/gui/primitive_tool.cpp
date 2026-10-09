@@ -159,6 +159,7 @@ bool PrimitiveTool::mousePress(PhoenixView& view, QMouseEvent* event, const QPoi
     _dragging = true;
     _constrained = false;
     _fromCentre = false;
+    _cornerRadius = _style.cornerRadius;
     _start = snap(view, documentPos);
     _end = _start;
     view.update();
@@ -214,7 +215,21 @@ bool PrimitiveTool::mouseRelease(PhoenixView& view, QMouseEvent* event, const QP
 
 bool PrimitiveTool::keyPress(PhoenixView& view, QKeyEvent* event)
 {
-    if (event->key() != Qt::Key_Escape || !_dragging)
+    if (!_dragging)
+        return false;
+
+    // Up and Down change the corner radius mid-drag, as Animate's rectangle
+    // tool does; shift moves it ten at a time.
+    if ((event->key() == Qt::Key_Up || event->key() == Qt::Key_Down) &&
+        (_kind == Kind::Rectangle || _kind == Kind::RectanglePrimitive))
+    {
+        const double step = (event->modifiers() & Qt::ShiftModifier) ? 10.0 : 1.0;
+        _cornerRadius += event->key() == Qt::Key_Up ? step : -step;
+        view.update();
+        return true;
+    }
+
+    if (event->key() != Qt::Key_Escape)
         return false;
 
     _dragging = false;
@@ -236,8 +251,16 @@ void PrimitiveTool::paintOverlay(PhoenixView& view, QPainter& painter, double sc
     {
     case Kind::Rectangle:
     case Kind::RectanglePrimitive:
-        painter.drawRect(dragRect());
+    {
+        const QRectF rect = dragRect();
+        const double limit = std::min(rect.width(), rect.height()) / 2.0;
+        const double radius = std::max(0.0, std::min(limit, _cornerRadius));
+        if (radius > 0.0)
+            painter.drawRoundedRect(rect, radius, radius);
+        else
+            painter.drawRect(rect);
         break;
+    }
     case Kind::Oval:
     case Kind::OvalPrimitive:
         painter.drawEllipse(dragRect());
@@ -352,9 +375,59 @@ fla::Element* PrimitiveTool::createRectangleShape(fla::Frame* frame, const QRect
     int strokeIndex = -1;
     addStylesTo(shape, _style, fillIndex, strokeIndex);
 
-    addClosedPath(shape, {
-        rect.topLeft(), rect.topRight(), rect.bottomRight(), rect.bottomLeft()
-    }, fillIndex, strokeIndex);
+    // The radius is clamped to half the shorter side, as Animate clamps it.
+    const double radius = std::max(0.0,
+        std::min(_cornerRadius, std::min(rect.width(), rect.height()) / 2.0));
+
+    if (radius <= 0.0)
+    {
+        addClosedPath(shape, {
+            rect.topLeft(), rect.topRight(), rect.bottomRight(), rect.bottomLeft()
+        }, fillIndex, strokeIndex);
+    }
+    else
+    {
+        // Four sides and four quarter arcs, traced clockwise on screen like the
+        // plain rectangle so the fill lands on the same side.
+        const double x0 = rect.left();
+        const double y0 = rect.top();
+        const double x1 = rect.right();
+        const double y1 = rect.bottom();
+        const double r = radius;
+        const double k = r * 0.5522847498;
+
+        fla::Edge* edge = new fla::Edge(shape);
+        edge->fillStyle1 = fillIndex;
+        edge->strokeStyle = strokeIndex;
+
+        fla::Path* path = new fla::Path(edge);
+        const auto moveTo = [&](double x, double y) {
+            path->segments.push_back(new fla::PathSegment(
+                fla::PathSegment::Command::Move, {fla::Point(x, y)}, path));
+        };
+        const auto lineTo = [&](double x, double y) {
+            path->segments.push_back(new fla::PathSegment(
+                fla::PathSegment::Command::Line, {fla::Point(x, y)}, path));
+        };
+        const auto arcTo = [&](double c1x, double c1y, double c2x, double c2y, double x, double y) {
+            path->segments.push_back(new fla::PathSegment(
+                fla::PathSegment::Command::Cubic,
+                {fla::Point(c1x, c1y), fla::Point(c2x, c2y), fla::Point(x, y)}, path));
+        };
+
+        moveTo(x0 + r, y0);
+        lineTo(x1 - r, y0);
+        arcTo(x1 - r + k, y0, x1, y0 + r - k, x1, y0 + r);
+        lineTo(x1, y1 - r);
+        arcTo(x1, y1 - r + k, x1 - r + k, y1, x1 - r, y1);
+        lineTo(x0 + r, y1);
+        arcTo(x0 + r - k, y1, x0, y1 - r + k, x0, y1 - r);
+        lineTo(x0, y0 + r);
+        arcTo(x0, y0 + r - k, x0 + r - k, y0, x0 + r, y0);
+
+        edge->paths.push_back(path);
+        shape->edges.push_back(edge);
+    }
 
     setShapeBounds(shape, rect);
     return shape;
@@ -419,6 +492,10 @@ fla::Element* PrimitiveTool::createRectangle(fla::Frame* frame, const QRectF& re
         fla::Point(rect.right(), rect.bottom()));
     rectangle->fillStyle = _style.createFill(rectangle);
     rectangle->strokeStyle = _style.createStroke(rectangle);
+    rectangle->topLeftRadius = _cornerRadius;
+    rectangle->topRightRadius = _cornerRadius;
+    rectangle->bottomLeftRadius = _cornerRadius;
+    rectangle->bottomRightRadius = _cornerRadius;
     rectangle->localBounds = rectangle->rect;
     rectangle->bounds = rectangle->rect;
     return rectangle;

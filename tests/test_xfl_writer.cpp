@@ -247,6 +247,10 @@ private:
                   ra.rect.topLeft.y == rb.rect.topLeft.y &&
                   ra.rect.width() == rb.rect.width() &&
                   ra.rect.height() == rb.rect.height(), where + " rect");
+            check(ra.topLeftRadius == rb.topLeftRadius &&
+                  ra.topRightRadius == rb.topRightRadius &&
+                  ra.bottomLeftRadius == rb.bottomLeftRadius &&
+                  ra.bottomRightRadius == rb.bottomRightRadius, where + " radii");
             break;
         }
 
@@ -540,7 +544,8 @@ TEST(xfl_round_trips_primitives_and_text)
         "<DOMDocument xmlns='http://ns.adobe.com/xfl/2008/'>"
         "<timelines><DOMTimeline name='Scene 1'><layers>"
         "<DOMLayer name='Layer 1'><frames><DOMFrame index='0'><elements>"
-        "<DOMRectangleObject x='10' y='20' objectWidth='30' objectHeight='40'>"
+        "<DOMRectangleObject x='10' y='20' objectWidth='30' objectHeight='40' "
+        "topLeftRadius='5' topRightRadius='6' bottomLeftRadius='7' bottomRightRadius='-8'>"
         "<fill><SolidColor color='#123456'/></fill>"
         "<stroke><SolidStroke weight='3'/></stroke>"
         "</DOMRectangleObject>"

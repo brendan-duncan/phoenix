@@ -705,6 +705,11 @@ bool parseRectanglePrimitive(const tinyxml2::XMLElement* element, fla::Rectangle
     rectangle->bounds = rectangle->rect;
     rectangle->localBounds = rectangle->rect;
 
+    rectangle->topLeftRadius = getDoubleAttribute(element, "topLeftRadius", 0.0);
+    rectangle->topRightRadius = getDoubleAttribute(element, "topRightRadius", 0.0);
+    rectangle->bottomLeftRadius = getDoubleAttribute(element, "bottomLeftRadius", 0.0);
+    rectangle->bottomRightRadius = getDoubleAttribute(element, "bottomRightRadius", 0.0);
+
     for (const tinyxml2::XMLElement* childElement = element->FirstChildElement();
          childElement != nullptr;
          childElement = childElement->NextSiblingElement())

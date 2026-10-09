@@ -66,23 +66,24 @@ bool SetElementTransformCommand::mergeWith(const Command* other)
 }
 
 SetEdgeGeometryCommand::SetEdgeGeometryCommand(Edge* edge, const EditablePath& before,
-    const EditablePath& after, const std::string& name)
+    const EditablePath& after, const std::string& name, size_t pathIndex)
     : _edge(edge)
     , _before(before)
     , _after(after)
     , _name(name)
+    , _pathIndex(pathIndex)
 {}
 
 void SetEdgeGeometryCommand::redo()
 {
     if (_edge)
-        _after.applyTo(*_edge);
+        _after.applyTo(*_edge, _pathIndex);
 }
 
 void SetEdgeGeometryCommand::undo()
 {
     if (_edge)
-        _before.applyTo(*_edge);
+        _before.applyTo(*_edge, _pathIndex);
 }
 
 int SetEdgeGeometryCommand::mergeId() const
@@ -95,7 +96,7 @@ bool SetEdgeGeometryCommand::mergeWith(const Command* other)
     const SetEdgeGeometryCommand* next =
         static_cast<const SetEdgeGeometryCommand*>(other);
 
-    if (next->_edge != _edge || next->_name != _name)
+    if (next->_edge != _edge || next->_name != _name || next->_pathIndex != _pathIndex)
         return false;
 
     // Keep this command's starting geometry so undo still returns to where the

@@ -51,6 +51,10 @@ public:
     /// zoomed out.
     int pencilSmoothing = 50;
 
+    /// Corner radius for the rectangle tools, in pixels. The Up and Down
+    /// arrows change it while a rectangle is being dragged out, as in Animate.
+    double cornerRadius = 0.0;
+
     /// PolyStar settings. Sides is the point count in star mode.
     int sides = 5;
     bool star = false;

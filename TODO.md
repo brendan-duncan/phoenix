@@ -534,7 +534,8 @@ to it, so nothing in the application uses it yet.
   - Verified in the running application: two overlapping rectangles come out as
       one object, with the selection box spanning both
 - [ ] Paint bucket (flood fill over the map), ink bottle, eraser
-- [ ] Selection tool edge-dragging (fill follows the edge)
+- [x] Selection tool edge-dragging (fill follows the edge)
+  - Done, see step 13
 - [ ] Stroke-to-outline conversion (needed by the brush tool)
 - [ ] Consider rendering *from* the planar map, replacing the fill-stitching
       heuristic in `drawShape` (the `directedPaths.size() <= 2` special case and
@@ -592,13 +593,15 @@ select.
       selected is half a fill you can drag away
 - [x] Alt draws a rectangle or an oval from its centre. The polystar already
       works from the centre and a line has no centre, so neither takes it
-- [ ] Hovering an edge with the selection tool should show the corner/curve
+- [x] Hovering an edge with the selection tool should show the corner/curve
       cursor that says it can be bent (pairs with edge dragging in step 6)
-- [ ] Ctrl-dragging should cut the dragged region out of what is under it. The
+  - Done
+- [x] Ctrl-dragging should cut the dragged region out of what is under it. The
       move itself works; the cut does not, and cannot until selection is
       region-level. A drawing that has not merged yet has nothing to cut out of,
       and one that has merged is a single shape, so clicking it selects the
       whole thing rather than the face that was drawn
+  - Ctrl-drag on an unselected edge now adds a corner, as in Animate; cutting a region out still waits on region selection
 - [ ] While ctrl is held the cursor should change to the selection arrow, and
       the selection bounds should draw even under a tool that hides them
 
@@ -870,10 +873,12 @@ All in `phoenix_view.cpp` unless noted.
       (`selection_tool.cpp:236-271`); the merging in `CommandStack` was built for
       this
   - Done; repeated nudges merge into one undo step
-- [ ] Shift-drag constrains to 45 degrees. A shift-press currently toggles and
+- [x] Shift-drag constrains to 45 degrees. A shift-press currently toggles and
       never moves (`:146-152`); defer the toggle to release when nothing was
       dragged (VectorCraft `tools/src/select.rs:251-265, 359-365`)
-- [ ] Alt-drag duplicates
+  - Done; the shift toggle waits for a release without a drag
+- [x] Alt-drag duplicates
+  - Done for shapes
 - [ ] Cursor follows what is under the pointer (move, corner, curve, handle
       directions rotated by the box angle, `select.rs:381-453`)
 - [x] Draw snap feedback: `SnapResult.kind/target` (`snapping.cpp:23-63`) is
@@ -969,10 +974,11 @@ All in `phoenix_view.cpp` unless noted.
 
 ### Primitives
 
-- [ ] Rectangle corner radius: the setback at a corner of angle theta is
+- [x] Rectangle corner radius: the setback at a corner of angle theta is
       `r(1+cos)/sin` (r at 90 degrees), the arc handle `r * 4/3 * tan(theta/4)`,
       and the radius is clamped to half the shorter side (VectorCraft
       `geom/src/corners.rs:65-125`). Replaces the step 4 item
+  - Done for the uniform radius a tool sets; per-corner radii on primitives render too
 - [ ] Oval start/end angle and inner radius: split the sweep into arcs of at most
       90 degrees, each with handle `r * 4/3 * tan(delta/4)`; trace the outer arc,
       then the inner arc reversed (or a line to the centre), and close
@@ -986,7 +992,7 @@ All the merge-mode tools below are variations of `ShapeMerger::combine`
 (`shape_merge.cpp:245-394`): each face's fill comes from the target and
 addition maps, plus a rule for which strokes survive.
 
-- [ ] **Edge bending** (selection tool dragging an edge; pairs with step 6). At
+- [x] **Edge bending** (selection tool dragging an edge; pairs with step 6). At
       press find the nearest parameter t on the edge and clamp it to
       [0.05, 0.95]. For a quadratic move the control point by
       `delta / (2t(1-t))`, for a cubic both inner controls by `delta / (3t(1-t))`,
@@ -995,6 +1001,7 @@ addition maps, plus a rule for which strokes survive.
       edge. A straight edge first becomes a quadratic with its control at the
       midpoint. Corner/curve cursor on hover. Ctrl-drag inserting a corner has no
       VectorCraft counterpart
+  - Done 2026-10-08 (`edge_bend.h`): drag a segment of an unselected shape to bend it, a corner to move it, ctrl-drag a segment to add a corner. Corner and curve cursors on hover. An unstroked fill's outline can be grabbed from just outside it
 - [ ] **Region selection** (step 8). A selection is a set of face and edge ids on
       a cached map; re-find them after a rebuild by interior point or by source
       plus parameter. Click: the face containing the point, or the nearest edge
@@ -1137,17 +1144,17 @@ in the code or against a real XFL document.
       an anchor is not Animate's either -- anchors are added by clicking a
       segment with the pen or the Add Anchor Point tool, and removed by the
       Delete Anchor Point tool or by hovering an anchor with the pen
-  - Done: hollow squares, filled when selected; alt-drag a corner pulls out handles, alt-click a curve point makes it a corner; the double-click convert is gone. Alt-click insert stays until the pen gains add/delete anchor
+  - Done: hollow squares, filled when selected; alt-drag a corner pulls out handles, alt-click a curve point makes it a corner. The double-click convert and the alt-click insert are gone; the pen adds and removes anchors
 - [x] **Pen cursors.** x for a new path, o for closing, + and - over segments and
       anchors, ^ for convert. The plain crosshair cannot show any of this
-  - Partly: x and o are wired; + - and ^ are drawn (`cursors.h`) but the pen does not yet hover existing anchors or segments
+  - Done: x, o, + and -. With no path started the pen hovers the selected shape: a click on an anchor removes it, on a segment adds one. ^ (convert) is drawn but not wired; the subselection tool's alt-drag converts instead
 - [x] **Snap ring**, not guide lines: a small circle under the cursor while snap
       to objects is on, which grows when the drag locks onto a target
   - Done for the selection and shape tools
 - [x] **Selection cursors.** Arrow with a small box (move), corner (bend a
       corner) or arc (bend a curve). Belongs with edge bending as a first-class
       item, since the hover state is how the merge model is discoverable
-  - Partly: the move box on hover is in; corner and arc wait on edge bending
+  - Done: move box, corner and arc, see step 13
 - [x] **Pencil smoothing** is a 0-100 value applied in screen space, not a
       document-unit tolerance. Straighten mode depends on the "connect lines"
       and "recognize shapes" drawing settings
@@ -1156,8 +1163,9 @@ in the code or against a real XFL document.
       merge shapes. Handles are hollow white squares, the transform point a
       white circle, and the cursor changes to rotate, skew and scale arrows by
       region
-- [ ] **Rectangle tool** changes the corner radius with Up and Down during the
+- [x] **Rectangle tool** changes the corner radius with Up and Down during the
       drag
+  - Done: Up and Down during the drag (shift x10), plus a Corner radius field in Properties. Rectangle primitives carry per-corner radii, which are now parsed, written and drawn
 - [ ] Ctrl-drag on an unselected edge adds a corner; a plain drag of a selected
       region already cuts it out. The step 8 "ctrl-dragging should cut" item is
       really "ctrl is the temporary arrow tool", which exists
@@ -1176,9 +1184,10 @@ in the code or against a real XFL document.
       point, alt-click out, drag a marquee to zoom to it
   - Done
 - [ ] Lasso (L), Eyedropper (I) and Text (T) tools
-- [ ] Edit menu: Cut, Copy, Paste, Paste in Place (ctrl+shift+V), Duplicate
+- [x] Edit menu: Cut, Copy, Paste, Paste in Place (ctrl+shift+V), Duplicate
       (ctrl+D), Group (ctrl+G), Break Apart (ctrl+B), Convert to Symbol (F8),
       Arrange (ctrl+up/down)
+  - Cut, Copy, Paste in Center, Paste in Place and Duplicate done for shapes. Group, Break Apart, Convert to Symbol and Arrange still to do
 - [x] Arrow-key nudge (shift x10), shift-drag constrain, alt-drag duplicate --
       also in step 12
   - Nudge done; shift-drag constrain and alt-drag duplicate still to do

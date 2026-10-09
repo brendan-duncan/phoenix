@@ -1,7 +1,10 @@
 #include "main_window.h"
 #include "phoenix_view.h"
 #include "timeline_view.h"
+#include "../data/frame.h"
+#include "../edit/element_commands.h"
 #include "../edit/new_document.h"
+#include "../edit/shape_merge.h"
 #include "../parser/fla_parser.h"
 #include "../writer/fla_writer.h"
 #include "../writer/xfl_content.h"
@@ -359,6 +362,33 @@ void MainWindow::setupMenus()
     _deselectAllAction->setShortcut(QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_A));
     connect(_deselectAllAction, &QAction::triggered, this, &MainWindow::deselectAll);
     editMenu->addAction(_deselectAllAction);
+
+    editMenu->addSeparator();
+
+    _cutAction = new QAction("Cu&t", this);
+    _cutAction->setShortcut(QKeySequence::Cut);
+    connect(_cutAction, &QAction::triggered, this, &MainWindow::cut);
+    editMenu->addAction(_cutAction);
+
+    _copyAction = new QAction("&Copy", this);
+    _copyAction->setShortcut(QKeySequence::Copy);
+    connect(_copyAction, &QAction::triggered, this, &MainWindow::copy);
+    editMenu->addAction(_copyAction);
+
+    _pasteAction = new QAction("&Paste in Center", this);
+    _pasteAction->setShortcut(QKeySequence::Paste);
+    connect(_pasteAction, &QAction::triggered, this, &MainWindow::paste);
+    editMenu->addAction(_pasteAction);
+
+    _pasteInPlaceAction = new QAction("Paste in P&lace", this);
+    _pasteInPlaceAction->setShortcut(QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_V));
+    connect(_pasteInPlaceAction, &QAction::triggered, this, &MainWindow::pasteInPlace);
+    editMenu->addAction(_pasteInPlaceAction);
+
+    _duplicateAction = new QAction("D&uplicate", this);
+    _duplicateAction->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_D));
+    connect(_duplicateAction, &QAction::triggered, this, &MainWindow::duplicateSelection);
+    editMenu->addAction(_duplicateAction);
 
     editMenu->addSeparator();
 
@@ -1031,6 +1061,16 @@ void MainWindow::setupPropertiesPanel()
     });
     layout->addRow("Weight", weight);
 
+    _cornerRadiusBox = new QDoubleSpinBox(panel);
+    _cornerRadiusBox->setRange(-500.0, 500.0);
+    _cornerRadiusBox->setSingleStep(1.0);
+    _cornerRadiusBox->setValue(_drawingStyle.cornerRadius);
+    _cornerRadiusBox->setToolTip("Corner radius for rectangles; Up and Down change it while dragging");
+    connect(_cornerRadiusBox, &QDoubleSpinBox::valueChanged, this, [this](double value) {
+        _drawingStyle.cornerRadius = value;
+    });
+    layout->addRow("Corner radius", _cornerRadiusBox);
+
     // PolyStar settings, which only the polystar tool reads.
     QSpinBox* sides = new QSpinBox(panel);
     sides->setRange(3, 32);
@@ -1099,6 +1139,137 @@ void MainWindow::deselectAll()
         _phoenixView->update();
 }
 
+std::vector<fla::Shape*> MainWindow::selectedShapes() const
+{
+    std::vector<fla::Shape*> shapes;
+    for (fla::DOMElement* selected : _selection.elements())
+    {
+        fla::Element* element = dynamic_cast<fla::Element*>(selected);
+        if (element && element->elementType() == fla::Element::Type::Shape)
+            shapes.push_back(static_cast<fla::Shape*>(element));
+    }
+    return shapes;
+}
+
+void MainWindow::copy()
+{
+    const std::vector<fla::Shape*> shapes = selectedShapes();
+    if (shapes.empty())
+        return;
+
+    _clipboard.clear();
+    for (const fla::Shape* shape : shapes)
+        _clipboard.emplace_back(fla::cloneShape(*shape, nullptr));
+
+    updateSelectionState();
+}
+
+void MainWindow::cut()
+{
+    if (selectedShapes().empty())
+        return;
+
+    copy();
+    if (_phoenixView)
+        _phoenixView->deleteSelection();
+}
+
+void MainWindow::placeCopies(const std::vector<const fla::Shape*>& sources, const char* name,
+    bool centreInView)
+{
+    if (!_phoenixView || sources.empty())
+        return;
+
+    fla::Frame* frame = _phoenixView->activeFrame();
+    if (!frame)
+        return;
+
+    // Anything still waiting to merge goes in first, so the copies land on
+    // the artwork as it will be rather than on a drawing about to vanish.
+    _phoenixView->flushPendingMerge();
+
+    fla::CommandStack& stack = _editContext.commandStack();
+    stack.beginMacro(name);
+
+    std::vector<fla::Shape*> copies;
+    for (const fla::Shape* source : sources)
+    {
+        fla::Shape* copy = fla::cloneShape(*source, frame);
+        stack.push(fla::CommandPtr(new fla::AddElementCommand(frame, copy, name, &_selection)));
+        copies.push_back(copy);
+    }
+
+    stack.endMacro();
+    stack.breakMergeChain();
+    _phoenixView->clearCaches();
+
+    if (centreInView)
+    {
+        QRectF bounds;
+        for (fla::Shape* copy : copies)
+        {
+            const QRectF copyBounds = _phoenixView->elementBounds(copy);
+            if (copyBounds.isValid())
+                bounds = bounds.isValid() ? bounds.united(copyBounds) : copyBounds;
+        }
+
+        if (bounds.isValid())
+        {
+            const QPointF centre = _phoenixView->mapToDocument(
+                QPointF(_phoenixView->width() / 2.0, _phoenixView->height() / 2.0));
+            const QPointF delta = centre - bounds.center();
+            for (fla::Shape* copy : copies)
+            {
+                copy->transform.tx += delta.x();
+                copy->transform.ty += delta.y();
+            }
+            _phoenixView->invalidateBounds();
+        }
+    }
+
+    // Pasted merge artwork floats, selected, until it is let go, just like a
+    // fresh drawing; drawing objects keep to themselves.
+    std::vector<fla::DOMElement*> picked;
+    for (fla::Shape* copy : copies)
+    {
+        if (!copy->isDrawingObject)
+            _phoenixView->setPendingMerge(copy, frame);
+        picked.push_back(copy);
+    }
+    _selection.select(picked);
+    _phoenixView->update();
+}
+
+void MainWindow::paste()
+{
+    std::vector<const fla::Shape*> sources;
+    for (const std::unique_ptr<fla::Shape>& shape : _clipboard)
+        sources.push_back(shape.get());
+    placeCopies(sources, "Paste", true);
+}
+
+void MainWindow::pasteInPlace()
+{
+    std::vector<const fla::Shape*> sources;
+    for (const std::unique_ptr<fla::Shape>& shape : _clipboard)
+        sources.push_back(shape.get());
+    placeCopies(sources, "Paste in Place", false);
+}
+
+void MainWindow::duplicateSelection()
+{
+    // Copies are taken before anything is added, since adding changes the
+    // selection the sources came from.
+    std::vector<std::unique_ptr<fla::Shape>> snapshots;
+    for (const fla::Shape* shape : selectedShapes())
+        snapshots.emplace_back(fla::cloneShape(*shape, nullptr));
+
+    std::vector<const fla::Shape*> sources;
+    for (const std::unique_ptr<fla::Shape>& shape : snapshots)
+        sources.push_back(shape.get());
+    placeCopies(sources, "Duplicate", false);
+}
+
 void MainWindow::updateSelectionState()
 {
     const bool hasDocument = _flaDocument && _flaDocument->document;
@@ -1108,6 +1279,18 @@ void MainWindow::updateSelectionState()
 
     if (_deselectAllAction)
         _deselectAllAction->setEnabled(!_selection.isEmpty());
+
+    const bool hasShapes = !selectedShapes().empty();
+    if (_cutAction)
+        _cutAction->setEnabled(hasShapes);
+    if (_copyAction)
+        _copyAction->setEnabled(hasShapes);
+    if (_duplicateAction)
+        _duplicateAction->setEnabled(hasShapes);
+    if (_pasteAction)
+        _pasteAction->setEnabled(hasDocument && !_clipboard.empty());
+    if (_pasteInPlaceAction)
+        _pasteInPlaceAction->setEnabled(hasDocument && !_clipboard.empty());
 
     if (_selection.isEmpty())
     {

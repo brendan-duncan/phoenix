@@ -1,6 +1,7 @@
 #pragma once
 
 #include "cursors.h"
+#include "edge_bend.h"
 #include "tool.h"
 
 #include "../data/transform.h"
@@ -16,12 +17,14 @@ class Element;
 class Selection;
 }
 
-/// Animate's arrow tool, in the part of its job that exists so far: picking
-/// things on the stage.
+/// Animate's arrow tool.
 ///
 /// Click selects the topmost object, shift-click adds or removes, dragging an
 /// object moves it, dragging empty stage sweeps out a marquee, and clicking
-/// empty stage clears.
+/// empty stage clears. Dragging the outline of a shape that is not selected
+/// bends it, dragging one of its corners moves the corner, and ctrl-drag on an
+/// outline makes a new corner. Shift constrains a move to 45 degree steps and
+/// alt-drag moves a copy.
 ///
 /// Scaling, rotating and skewing live in FreeTransformTool, the same split
 /// Animate makes between its arrow and free transform tools.
@@ -65,10 +68,20 @@ private:
     void nudge(PhoenixView& view, double dx, double dy);
 
     /// Applies the move so far and repaints.
-    void updateMove(PhoenixView& view, const QPointF& documentPos);
+    void updateMove(PhoenixView& view, const QPointF& documentPos, Qt::KeyboardModifiers modifiers);
 
     /// Turns the completed move into one undo step.
     void commitMove(PhoenixView& view);
+
+    /// Alt-drag: replaces the moving shapes with copies, so the originals stay
+    /// where they were. Only shapes can be copied yet.
+    void duplicateTargets(PhoenixView& view);
+
+    /// Puts the dragged objects back and forgets the move.
+    void cancelMove(PhoenixView& view);
+
+    /// What the arrow should show over \a documentPos when nothing is pressed.
+    Cursors::Kind hoverKindAt(PhoenixView& view, const QPointF& documentPos) const;
 
     fla::Selection& _selection;
     fla::CommandStack& _commandStack;
@@ -97,6 +110,9 @@ private:
     /// works on where the box would land, not on the cursor.
     QRectF _moveBounds;
 
+    /// Whether this drag has already swapped the originals for copies.
+    bool _duplicated = false;
+
     bool _marqueeActive = false;
     QPointF _marqueeStart;
     QPointF _marqueeEnd;
@@ -104,6 +120,14 @@ private:
     /// Whether the press that started this gesture had shift held, which decides
     /// between replacing the selection and adding to it.
     bool _additive = false;
+
+    /// Shift-click on something already selected removes it, but only once the
+    /// button comes up without a drag: a shift-drag moves the lot.
+    fla::Element* _pressedElement = nullptr;
+    bool _removeOnRelease = false;
+
+    /// Reshaping an unselected shape's outline.
+    EdgeBender _bender;
 
     /// What the arrow is over, so the cursor can say what a press would do.
     Cursors::Kind _hoverKind = Cursors::Kind::Arrow;

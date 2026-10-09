@@ -112,6 +112,42 @@ constexpr int kBlue = 0x0000FF;
 
 } // namespace
 
+TEST(cloning_keeps_stroke_attributes_and_the_drawing_object_flag)
+{
+    std::unique_ptr<Shape> shape = filledRectangle(0, 0, 100, 100, 1, 2, 3);
+    shape->isDrawingObject = true;
+
+    fla::DashedStroke* stroke = new fla::DashedStroke(shape.get());
+    stroke->weight = 2.5;
+    stroke->solidStyle = "hairline";
+    stroke->caps = "none";
+    stroke->joints = "miter";
+    stroke->miterLimit = 7.0;
+    stroke->pixelHinting = true;
+    stroke->dash1 = 11.0;
+    stroke->dash2 = 4.0;
+    stroke->dotSpace = 9.0;
+    stroke->fill = new fla::SolidColor(stroke);
+    shape->strokes.push_back(stroke);
+    shape->strokesMap[1] = stroke;
+
+    std::unique_ptr<Shape> copy(fla::cloneShape(*shape, nullptr));
+    CHECK(copy->isDrawingObject);
+    const fla::StrokeStyle* copied = copy->getStrokeStyleByIndex(1);
+    CHECK(copied != nullptr);
+    if (!copied)
+        return;
+    CHECK(copied->style() == fla::StrokeStyle::Style::Dashed);
+    CHECK(copied->solidStyle == "hairline");
+    CHECK(copied->caps == "none");
+    CHECK(copied->joints == "miter");
+    CHECK_NEAR(copied->miterLimit, 7.0);
+    CHECK(copied->pixelHinting);
+    CHECK_NEAR(copied->dash1, 11.0);
+    CHECK_NEAR(copied->dash2, 4.0);
+    CHECK_NEAR(copied->dotSpace, 9.0);
+}
+
 TEST(merging_nothing_leaves_the_target_alone)
 {
     std::unique_ptr<Shape> target = filledRectangle(0, 0, 2000, 2000, 255, 0, 0);

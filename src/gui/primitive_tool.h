@@ -122,6 +122,10 @@ private:
     /// Whether the last snapped position actually snapped, for the ring.
     mutable bool _snapped = false;
 
+    /// The corner radius for this drag, taken from the style at the press and
+    /// nudged by the arrow keys while the drag runs.
+    double _cornerRadius = 0.0;
+
     /// Rectangles and ovals, primitive or not: the kinds drawn from a box.
     bool isBoxKind() const
     {
