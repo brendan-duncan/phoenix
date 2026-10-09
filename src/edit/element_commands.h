@@ -188,6 +188,47 @@ private:
     bool _owned = true;
 };
 
+/// Lifts a region out of a merge-drawn shape as a shape of its own.
+///
+/// Selecting a fill or a stroke of merge artwork is what this serves: the
+/// region becomes the piece, floating above what is left of the source. Redo
+/// rewrites the source with the remainder and puts the piece in the frame just
+/// above it; undo takes the piece out and restores the source. The piece is
+/// owned here while it is out of the frame, as AddElementCommand owns its
+/// element.
+class SplitRegionCommand : public Command
+{
+public:
+    /// Takes ownership of \a piece. \a remainder is copied.
+    SplitRegionCommand(Shape* source, const Shape& remainder, Frame* frame,
+        Shape* piece, const std::string& name, Selection* selection = nullptr);
+
+    ~SplitRegionCommand() override;
+
+    SplitRegionCommand(const SplitRegionCommand&) = delete;
+    SplitRegionCommand& operator=(const SplitRegionCommand&) = delete;
+
+    void redo() override;
+
+    void undo() override;
+
+    std::string name() const override { return _name; }
+
+    Shape* piece() const { return _piece; }
+
+    Shape* source() const { return _source; }
+
+private:
+    Shape* _source;
+    Shape* _before = nullptr;
+    Shape* _remainder = nullptr;
+    Frame* _frame;
+    Shape* _piece;
+    std::string _name;
+    Selection* _selection;
+    bool _owned = true;
+};
+
 /// Removes an element from a frame, and puts it back on undo. The mirror of
 /// AddElementCommand, with the same ownership rules.
 class RemoveElementCommand : public Command

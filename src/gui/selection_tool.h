@@ -46,6 +46,10 @@ public:
 
     bool mouseRelease(PhoenixView& view, QMouseEvent* event, const QPointF& documentPos) override;
 
+    /// Double-click widens a region selection: a fill with its strokes, a
+    /// stroke with the strokes joined to it.
+    bool mouseDoubleClick(PhoenixView& view, QMouseEvent* event, const QPointF& documentPos) override;
+
     bool keyPress(PhoenixView& view, QKeyEvent* event) override;
 
     void paintOverlay(PhoenixView& view, QPainter& painter, double scale) override;
@@ -128,6 +132,11 @@ private:
 
     /// Reshaping an unselected shape's outline.
     EdgeBender _bender;
+
+    /// Where and on what the bend gesture began, so a press on an outline that
+    /// never moves can turn into a click that selects the stroke or fill.
+    HitResult _bendHit;
+    QPointF _bendPress;
 
     /// What the arrow is over, so the cursor can say what a press would do.
     Cursors::Kind _hoverKind = Cursors::Kind::Arrow;

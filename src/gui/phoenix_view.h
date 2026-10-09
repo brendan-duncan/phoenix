@@ -26,6 +26,7 @@ class QTimer;
 #include <vector>
 
 namespace fla {
+class Command;
 class CommandStack;
 class Selection;
 class Snapper;
@@ -105,6 +106,19 @@ public:
 
     /// Removes everything selected from the document as one undo step.
     void deleteSelection();
+
+    /// Selects a region of merge-drawn artwork the way Animate's arrow does:
+    /// the fill or the stroke under the cursor, not the whole shape. The
+    /// region is lifted out as a shape of its own, which floats selected
+    /// exactly where it was; let go untouched it goes straight back. With
+    /// \p extended, a fill takes its surrounding strokes and a stroke takes
+    /// the strokes joined to it, as a double-click does. Returns false when
+    /// nothing under the cursor is region-selectable.
+    bool selectRegionAt(const HitResult& hit, const QPointF& documentPos,
+        bool extended, bool additive);
+
+    /// Whether \p element is a region lifted out of another shape.
+    bool isFloatingRegion(const fla::Element* element) const;
 
     /// Document-space bounds of an element, cached. Tools use this to place
     /// handles around what is selected.
@@ -303,6 +317,25 @@ private:
     /// Everything waiting. A drag can move several things at once, and each is
     /// dropped where it now sits.
     std::vector<PendingDrop> _pending;
+
+    /// A region lifted out of a shape by selecting it. While its split is
+    /// still the last thing on the history, letting go of it untouched
+    /// discards the split and the source is whole again; once anything has
+    /// been done to it, it is dropped back in like any moved shape.
+    struct FloatingRegion
+    {
+        fla::Shape* source = nullptr;
+        fla::Shape* piece = nullptr;
+        fla::Frame* frame = nullptr;
+        const fla::Command* split = nullptr;
+    };
+    std::vector<FloatingRegion> _floating;
+
+    /// Puts back every floating region that is no longer selected and was
+    /// never touched, and forgets the ones that were.
+    void settleFloating();
+
+    const FloatingRegion* floatingFor(const fla::Element* element) const;
 
     /// Guards against the merge's own selection changes re-entering the commit.
     bool _committingMerge = false;

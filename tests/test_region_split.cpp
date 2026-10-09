@@ -1,0 +1,249 @@
+#include "test_util.h"
+
+#include "../src/data/frame.h"
+#include "../src/data/shape.h"
+#include "../src/data/solid_color.h"
+#include "../src/data/stroke_style.h"
+#include "../src/edit/command_stack.h"
+#include "../src/edit/element_commands.h"
+#include "../src/edit/region_split.h"
+#include "../src/geom/shape_geometry.h"
+#include "../src/parser/path_parser.h"
+
+#include <cstdio>
+#include <memory>
+
+using fla::Point;
+using fla::RegionPick;
+using fla::RegionSplitter;
+using fla::Shape;
+
+namespace {
+
+/// Two rectangles merged the way rect_2.fla stores them: fill 1 on the
+/// left, fill 2 on the right, sharing an edge, with a stroke round the lot.
+/// Coordinates in twips; the edge strings are the file's own format.
+std::unique_ptr<Shape> twoFills(bool stroked)
+{
+    std::unique_ptr<Shape> shape(new Shape(nullptr));
+
+    for (int index = 1; index <= 2; ++index)
+    {
+        fla::SolidColor* fill = new fla::SolidColor(shape.get());
+        fill->color[0] = static_cast<uint8_t>(index * 100);
+        shape->fills.push_back(fill);
+        shape->fillsMap[index] = fill;
+    }
+
+    if (stroked)
+    {
+        fla::SolidStroke* stroke = new fla::SolidStroke(shape.get());
+        stroke->weight = 1.0;
+        stroke->fill = new fla::SolidColor(stroke);
+        shape->strokes.push_back(stroke);
+        shape->strokesMap[1] = stroke;
+    }
+
+    // Left square 0..100, right square 100..200, both 0..100 tall, clockwise
+    // on screen so the fill sits on fillStyle1.
+    const char* outlines[3] = {
+        "!0 0|100 0",
+        "!100 0|200 0|200 100|100 100",
+        "!100 100|0 100|0 0",
+    };
+    const int fill1[3] = {1, 2, 1};
+
+    PathParser parser;
+    for (int i = 0; i < 3; ++i)
+    {
+        fla::Edge* edge = parser.parse(outlines[i], shape.get());
+        if (!edge)
+            continue;
+        edge->fillStyle1 = fill1[i];
+        edge->fillStyle0 = -1;
+        edge->strokeStyle = stroked ? 1 : -1;
+        shape->edges.push_back(edge);
+    }
+
+    // The shared edge, with fill 1 on one side and fill 2 on the other.
+    fla::Edge* shared = parser.parse("!100 0|100 100", shape.get());
+    if (shared)
+    {
+        shared->fillStyle1 = 2;
+        shared->fillStyle0 = 1;
+        shared->strokeStyle = -1;
+        shape->edges.push_back(shared);
+    }
+
+    return shape;
+}
+
+/// Which fills the shape's edges still refer to.
+bool usesFill(const Shape& shape, int fill)
+{
+    for (const fla::ShapeCurve& curve : fla::shapeCurves(shape))
+    {
+        if (curve.fillStyle0 == fill || curve.fillStyle1 == fill)
+            return true;
+    }
+    return false;
+}
+
+bool usesStroke(const Shape& shape)
+{
+    for (const fla::ShapeCurve& curve : fla::shapeCurves(shape))
+    {
+        if (curve.strokeStyle != -1)
+            return true;
+    }
+    return false;
+}
+
+} // namespace
+
+TEST(clicking_a_fill_picks_that_face_alone)
+{
+    std::unique_ptr<Shape> shape = twoFills(false);
+    RegionSplitter splitter(*shape);
+    CHECK(splitter.valid());
+
+    // Coordinates here are pixels: the parser converts twips.
+    const RegionPick left = splitter.pickAt(Point(1.0, 2.0), 0.2, false);
+    CHECK(left.kind == RegionPick::Kind::Fill);
+    CHECK(left.strokeHalfEdges.empty());
+
+    const RegionPick right = splitter.pickAt(Point(8.0, 2.0), 0.2, false);
+    CHECK(right.kind == RegionPick::Kind::Fill);
+    CHECK(right.face != left.face);
+
+    const RegionPick outside = splitter.pickAt(Point(50.0, 50.0), 0.2, false);
+    CHECK(outside.isEmpty());
+}
+
+TEST(splitting_a_fill_lifts_it_and_leaves_the_rest)
+{
+    std::unique_ptr<Shape> shape = twoFills(false);
+    RegionSplitter splitter(*shape);
+
+    const RegionPick left = splitter.pickAt(Point(1.0, 2.0), 0.2, false);
+    Shape* piece = nullptr;
+    Shape* remainder = nullptr;
+    CHECK(splitter.split(left, piece, remainder));
+    std::unique_ptr<Shape> pieceOwner(piece);
+    std::unique_ptr<Shape> remainderOwner(remainder);
+    if (!piece || !remainder)
+        return;
+
+    // The piece is the left fill and nothing else.
+    CHECK(usesFill(*piece, 1));
+    CHECK(!usesFill(*piece, 2));
+    for (const fla::ShapeCurve& curve : fla::shapeCurves(*piece))
+        CHECK(curve.fillStyle1 == 1 && curve.fillStyle0 == -1);
+
+    // The remainder keeps the right fill and has lost the left one.
+    CHECK(usesFill(*remainder, 2));
+    CHECK(!usesFill(*remainder, 1));
+
+    // The shared edge survives in the remainder as the right fill's boundary.
+    RegionSplitter after(*remainder);
+    CHECK(after.pickAt(Point(8.0, 2.0), 0.2, false).kind == RegionPick::Kind::Fill);
+    CHECK(after.pickAt(Point(1.0, 2.0), 0.2, false).isEmpty());
+}
+
+TEST(a_stroke_within_reach_wins_over_the_fill_under_it)
+{
+    std::unique_ptr<Shape> shape = twoFills(true);
+    RegionSplitter splitter(*shape);
+
+    // On the top edge of the left square.
+    const RegionPick pick = splitter.pickAt(Point(2.0, 0.1), 0.3, false);
+    CHECK(pick.kind == RegionPick::Kind::Stroke);
+    CHECK(pick.strokeHalfEdges.size() == 1);
+
+    Shape* piece = nullptr;
+    Shape* remainder = nullptr;
+    CHECK(splitter.split(pick, piece, remainder));
+    std::unique_ptr<Shape> pieceOwner(piece);
+    std::unique_ptr<Shape> remainderOwner(remainder);
+    if (!piece || !remainder)
+        return;
+
+    // The piece is a stroke only; the remainder keeps both fills.
+    CHECK(usesStroke(*piece));
+    CHECK(!usesFill(*piece, 1) && !usesFill(*piece, 2));
+    CHECK(usesFill(*remainder, 1) && usesFill(*remainder, 2));
+}
+
+TEST(a_double_click_takes_the_strokes_with_the_fill)
+{
+    std::unique_ptr<Shape> shape = twoFills(true);
+    RegionSplitter splitter(*shape);
+
+    const RegionPick pick = splitter.pickAt(Point(1.0, 2.0), 0.2, true);
+    CHECK(pick.kind == RegionPick::Kind::Fill);
+    // Three stroked sides round the left square; the shared edge is unstroked.
+    CHECK(pick.strokeHalfEdges.size() == 3);
+
+    Shape* piece = nullptr;
+    Shape* remainder = nullptr;
+    CHECK(splitter.split(pick, piece, remainder));
+    std::unique_ptr<Shape> pieceOwner(piece);
+    std::unique_ptr<Shape> remainderOwner(remainder);
+    if (!piece || !remainder)
+        return;
+
+    CHECK(usesStroke(*piece));
+
+    // The remainder's stroke now runs only round the right square.
+    int strokedPieces = 0;
+    for (const fla::ShapeCurve& curve : fla::shapeCurves(*remainder))
+        strokedPieces += curve.strokeStyle != -1 ? 1 : 0;
+    CHECK(strokedPieces == 3);
+}
+
+TEST(a_double_click_on_a_stroke_follows_it_round_corners)
+{
+    std::unique_ptr<Shape> shape = twoFills(true);
+    RegionSplitter splitter(*shape);
+
+    // The outline round both squares is one run of six stroked pieces joined
+    // through corners where only two pieces meet; the top-left corner of the
+    // right square has three (the shared edge too), which ends the run.
+    const RegionPick pick = splitter.pickAt(Point(2.0, 0.1), 0.3, true);
+    CHECK(pick.kind == RegionPick::Kind::Stroke);
+    CHECK(pick.strokeHalfEdges.size() == 3);
+}
+
+TEST(the_split_command_undoes_back_to_one_shape)
+{
+    std::unique_ptr<Shape> shape = twoFills(false);
+    fla::Frame frame(nullptr);
+    frame.elements.push_back(shape.get());
+
+    RegionSplitter splitter(*shape);
+    const RegionPick left = splitter.pickAt(Point(1.0, 2.0), 0.2, false);
+    Shape* piece = nullptr;
+    Shape* remainder = nullptr;
+    CHECK(splitter.split(left, piece, remainder));
+    if (!piece || !remainder)
+        return;
+
+    fla::CommandStack stack;
+    stack.push(fla::CommandPtr(new fla::SplitRegionCommand(
+        shape.get(), *remainder, &frame, piece, "Select Fill")));
+    delete remainder;
+
+    CHECK(frame.elements.size() == 2);
+    CHECK(frame.elements[1] == piece);
+    CHECK(!usesFill(*shape, 1));
+
+    // Discarding the split is how an untouched selection is let go: no trace
+    // is left, and the shape is whole again.
+    CHECK(stack.discardLast());
+    CHECK(frame.elements.size() == 1);
+    CHECK(usesFill(*shape, 1));
+    CHECK(stack.count() == 0);
+    CHECK(stack.isClean());
+
+    frame.elements.clear();
+}

@@ -102,8 +102,22 @@ bool SelectionTool::mousePress(PhoenixView& view, QMouseEvent* event, const QPoi
                     view.activeTool() == this;
                 _bender.begin(view, probe, documentPos, insertCorner);
                 if (_bender.active())
+                {
+                    _bendHit = hit;
+                    _bendPress = documentPos;
                     return true;
+                }
             }
+        }
+
+        // Merge-drawn artwork is selected by region: the fill or stroke under
+        // the cursor is lifted out and becomes the selection, and dragging it
+        // moves just that.
+        if (!alreadySelected && view.selectRegionAt(hit, documentPos, false, _additive))
+        {
+            beginMove(view, documentPos);
+            view.update();
+            return true;
         }
 
         // Shift adds to the selection on the press, so a shift-drag moves the
@@ -175,7 +189,18 @@ bool SelectionTool::mouseRelease(PhoenixView& view, QMouseEvent* event, const QP
     if (_bender.active())
     {
         _bender.update(view, documentPos);
+        const bool bent = _bender.moved();
         _bender.commit(view, _commandStack);
+
+        // A press on an outline that never moved is a click, and a click on
+        // merge artwork selects the stroke or fill it landed on.
+        if (!bent)
+        {
+            const HitResult hit = view.hitTest(_bendPress, view.pickTolerance());
+            if (hit && !view.selectRegionAt(hit, _bendPress, false, false))
+                _selection.select(hit.element);
+            view.update();
+        }
         return true;
     }
 
@@ -233,6 +258,23 @@ bool SelectionTool::mouseRelease(PhoenixView& view, QMouseEvent* event, const QP
 
     view.update();
     return true;
+}
+
+bool SelectionTool::mouseDoubleClick(PhoenixView& view, QMouseEvent* event, const QPointF& documentPos)
+{
+    if (event->button() != Qt::LeftButton)
+        return false;
+
+    // The press of the double-click already selected the region and may have
+    // begun a move; that move is abandoned in favour of the wider selection.
+    if (_moveActive)
+        cancelMove(view);
+
+    const HitResult hit = view.hitTest(documentPos, view.pickTolerance());
+    if (!hit)
+        return false;
+
+    return view.selectRegionAt(hit, documentPos, true, false);
 }
 
 bool SelectionTool::keyPress(PhoenixView& view, QKeyEvent* event)

@@ -147,6 +147,7 @@ set(HEADERS
     src/edit/selection.h
     src/edit/shape_merge.h
     src/edit/snapping.h
+    src/edit/region_split.h
     src/edit/drawing_style.h
     src/edit/curve_fit.h
     src/geom/curve.h
@@ -229,6 +230,7 @@ set(SOURCES
     src/edit/selection.cpp
     src/edit/shape_merge.cpp
     src/edit/snapping.cpp
+    src/edit/region_split.cpp
     src/edit/drawing_style.cpp
     src/edit/curve_fit.cpp
     src/geom/curve.cpp

@@ -84,6 +84,24 @@ void CommandStack::undo()
     notifyChanged();
 }
 
+bool CommandStack::discardLast()
+{
+    if (!canUndo() || !_macroStack.empty())
+        return false;
+
+    --_index;
+    _commands[_index]->undo();
+    _commands.erase(_commands.begin() + static_cast<std::ptrdiff_t>(_index));
+
+    // A saved position past the cut can no longer be reached.
+    if (_cleanIndex > static_cast<int>(_index))
+        _cleanIndex = -1;
+
+    _mergeAllowed = false;
+    notifyChanged();
+    return true;
+}
+
 void CommandStack::redo()
 {
     if (!canRedo())

@@ -514,11 +514,12 @@ to it, so nothing in the application uses it yet.
   - Adding the drawing and cutting what it covers are one undo step
   - Deselecting without moving merges it straight back, reproducing the plain
       merge exactly: one shape, one outline, no seam
-- [ ] One shape per layer is correct and is what Animate writes -- checked
+- [x] One shape per layer is correct and is what Animate writes -- checked
       against `rect_2.fla`, where two overlapping rectangles came back as a
       single `DOMShape` with two fills and three edges. What is still missing is
       selecting a *region* of that shape rather than all of it (see step 8).
       Re-selecting merged artwork and dragging still moves the whole thing
+  - Done: regions are selected and dragged individually now
 - [ ] Cutting leaves the cutter's fills and strokes in the target's style
       tables, unused. Harmless, but it grows the file
 - [x] Wired into the tools. **Merge drawing is now the default**, as in Animate,
@@ -582,13 +583,16 @@ the one fill. Everything below follows from that, and the planar map built in
 step 6 is already the right structure to fix it: a face is what Animate would
 select.
 
-- [ ] Select a face or an edge of the arrangement rather than the whole shape
-- [ ] Draw a selected fill with Animate's stipple over the fill itself. The blue
+- [x] Select a face or an edge of the arrangement rather than the whole shape
+  - Done 2026-10-09 (`region_split.h`): a click lifts the fill or stroke out as a floating shape (`SplitRegionCommand`); let go untouched the split is discarded from the history (`CommandStack::discardLast`) and the shape is whole again; moved or deleted, it is dropped back in like any shape
+- [x] Draw a selected fill with Animate's stipple over the fill itself. The blue
       bounding box with corner handles is what Animate shows for objects, groups
       and symbols, so using it for everything makes merge-drawn artwork look
       like object drawing
-- [ ] Double-click a fill to take its enclosing strokes with it; double-click a
+  - Done: the lifted region is a shape of its own, so the dot screen covers exactly the selected fill or stroke
+- [x] Double-click a fill to take its enclosing strokes with it; double-click a
       stroke to take every connected segment
+  - Done
 - [ ] A marquee should cut geometry, not pick whole elements -- half a fill
       selected is half a fill you can drag away
 - [x] Alt draws a rectangle or an oval from its centre. The polystar already
@@ -1002,19 +1006,21 @@ addition maps, plus a rule for which strokes survive.
       midpoint. Corner/curve cursor on hover. Ctrl-drag inserting a corner has no
       VectorCraft counterpart
   - Done 2026-10-08 (`edge_bend.h`): drag a segment of an unselected shape to bend it, a corner to move it, ctrl-drag a segment to add a corner. Corner and curve cursors on hover. An unstroked fill's outline can be grabbed from just outside it
-- [ ] **Region selection** (step 8). A selection is a set of face and edge ids on
+- [x] **Region selection** (step 8). A selection is a set of face and edge ids on
       a cached map; re-find them after a rebuild by interior point or by source
       plus parameter. Click: the face containing the point, or the nearest edge
       within tolerance (VectorCraft's Live Paint Selection,
       `tools/src/builder.rs:73-100, 715-765`). Double-click: a face plus its
       boundary edges, or every edge connected through degree-2 vertices with the
       same stroke
-- [ ] **Drag out and ctrl-drag cut.** Build a new shape from the selected faces'
+  - Done by lifting the region out rather than by holding face ids: see step 8
+- [x] **Drag out and ctrl-drag cut.** Build a new shape from the selected faces'
       boundary half-edges (an edge between two selected faces keeps both
       fills). In the source, set those faces to no fill and drop edges left with
       the same fill on both sides -- `subtract` done topologically, with no
       re-intersection. Float the new shape as a pending drawing so
       commit-on-deselect merges it where it lands
+  - Done as the natural consequence: dragging a lifted fill leaves the hole and drops it in where it lands
 - [ ] **Marquee and lasso cutting.** Insert the outline as a stroke-only cutter,
       which already divides without erasing, then select the faces inside. The
       lasso collects points at least 1 px apart and tests with even-odd

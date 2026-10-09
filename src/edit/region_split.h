@@ -1,0 +1,86 @@
+#pragma once
+
+#include "../data/point.h"
+#include "../geom/planar_map.h"
+#include "../geom/shape_geometry.h"
+
+#include <vector>
+
+namespace fla {
+
+class Shape;
+
+/// What a click on merge-drawn artwork picked: one fill region, or one run of
+/// stroke, of the shape's arrangement.
+struct RegionPick
+{
+    enum class Kind
+    {
+        None,
+        Fill,
+        Stroke
+    };
+
+    Kind kind = Kind::None;
+
+    /// The face, for a fill.
+    int face = -1;
+
+    /// Forward half-edges whose strokes are picked: the one clicked for a
+    /// stroke, or the fill's boundary strokes when a double-click took them
+    /// with it. Empty for a plain fill.
+    std::vector<int> strokeHalfEdges;
+
+    bool isEmpty() const { return kind == Kind::None; }
+};
+
+/// Takes a merge-drawn shape apart the way Animate's arrow tool selects it:
+/// by region rather than as a whole.
+///
+/// Animate selects the fill or the stroke segment you click, not the shape it
+/// is part of. Phoenix keeps one shape per layer, so selecting a region means
+/// lifting it out as a shape of its own -- the piece -- and leaving the rest
+/// behind as the remainder. The piece floats, selected, exactly where it was,
+/// so nothing looks different until it is moved or deleted; letting go of it
+/// untouched puts it straight back.
+///
+/// Free of Qt.
+class RegionSplitter
+{
+public:
+    explicit RegionSplitter(const Shape& shape);
+
+    /// Whether the shape had any geometry to arrange.
+    bool valid() const { return !_curves.empty(); }
+
+    /// What sits under \a localPos, in the shape's own space. A stroke within
+    /// \a tolerance wins over the fill beneath it, since strokes draw on top.
+    /// With \a extended, as for a double-click, a fill takes the strokes round
+    /// it and a stroke takes every stroke connected to it through corners
+    /// where nothing else meets.
+    RegionPick pickAt(const Point& localPos, double tolerance, bool extended) const;
+
+    /// Builds the lifted piece and what is left. Both are new shapes the caller
+    /// owns; the remainder carries the source's styles and is meant to replace
+    /// the source's contents. Returns false for an empty pick.
+    bool split(const RegionPick& pick, Shape*& piece, Shape*& remainder) const;
+
+private:
+    int strokeOf(const HalfEdge& half) const;
+
+    /// The forward half-edge of a pair.
+    int forwardOf(int half) const;
+
+    /// Every half-edge round a face: its outer boundary and each hole.
+    std::vector<int> faceBoundary(int face) const;
+
+    /// Strokes joined to \a half through vertices where exactly two pieces
+    /// meet, which is what a double-click on a stroke selects.
+    std::vector<int> connectedStrokes(int half) const;
+
+    const Shape& _shape;
+    std::vector<ShapeCurve> _curves;
+    PlanarMap _map;
+};
+
+} // namespace fla

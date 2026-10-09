@@ -174,6 +174,59 @@ void SubtractShapeCommand::undo()
         setShapeContents(*_target, *_before);
 }
 
+SplitRegionCommand::SplitRegionCommand(Shape* source, const Shape& remainder, Frame* frame,
+    Shape* piece, const std::string& name, Selection* selection)
+    : _source(source)
+    , _before(source ? cloneShape(*source, nullptr) : nullptr)
+    , _remainder(cloneShape(remainder, nullptr))
+    , _frame(frame)
+    , _piece(piece)
+    , _name(name)
+    , _selection(selection)
+{}
+
+SplitRegionCommand::~SplitRegionCommand()
+{
+    delete _before;
+    delete _remainder;
+    if (_owned)
+        delete _piece;
+}
+
+void SplitRegionCommand::redo()
+{
+    if (!_source || !_frame || !_piece || !_owned)
+        return;
+
+    setShapeContents(*_source, *_remainder);
+
+    // Just above the source, so the piece draws over the hole it left.
+    std::vector<Element*>& elements = _frame->elements;
+    auto at = std::find(elements.begin(), elements.end(), static_cast<Element*>(_source));
+    if (at == elements.end())
+        elements.push_back(_piece);
+    else
+        elements.insert(at + 1, _piece);
+    _owned = false;
+}
+
+void SplitRegionCommand::undo()
+{
+    if (!_source || !_frame || !_piece || _owned)
+        return;
+
+    std::vector<Element*>& elements = _frame->elements;
+    const auto it = std::find(elements.begin(), elements.end(), static_cast<Element*>(_piece));
+    if (it != elements.end())
+        elements.erase(it);
+    _owned = true;
+
+    if (_selection)
+        _selection->remove(_piece);
+
+    setShapeContents(*_source, *_before);
+}
+
 AddElementCommand::AddElementCommand(Frame* frame, Element* element,
     const std::string& name, Selection* selection, int index)
     : _frame(frame)

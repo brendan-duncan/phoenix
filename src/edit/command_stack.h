@@ -55,6 +55,19 @@ public:
 
     void redo();
 
+    /// The command undo() would reverse, or null. Used to tell whether an
+    /// edit has happened since a particular command was pushed.
+    const Command* topCommand() const
+    {
+        return _index > 0 ? _commands[_index - 1].get() : nullptr;
+    }
+
+    /// Reverses and removes the most recent command as if it had never been
+    /// pushed. For edits that exist only to serve a selection, such as lifting
+    /// a region out of a shape, which should leave no trace when the selection
+    /// is let go untouched. Refused inside a macro or when nothing is applied.
+    bool discardLast();
+
     /// Drops the entire history and any open macros. Does not change the
     /// document, but does reset the clean state, so the current document counts
     /// as saved -- which is what loading a file wants.

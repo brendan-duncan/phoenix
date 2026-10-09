@@ -4,6 +4,7 @@
 
 #include "../edit/command_stack.h"
 #include "../edit/element_commands.h"
+#include "../edit/region_split.h"
 #include "../edit/selection.h"
 
 #include <QTimer>
@@ -2291,12 +2292,16 @@ void PhoenixView::deleteSelection()
     if (doomed.empty())
         return;
 
-    // A drawing that was waiting to merge has nothing left to drop in.
+    // A drawing that was waiting to merge has nothing left to drop in, and a
+    // deleted region stays gone: the hole it leaves is what Animate leaves too.
     for (const Doomed& entry : doomed)
     {
         _pending.erase(std::remove_if(_pending.begin(), _pending.end(),
             [&](const PendingDrop& pending) { return pending.shape == entry.element; }),
             _pending.end());
+        _floating.erase(std::remove_if(_floating.begin(), _floating.end(),
+            [&](const FloatingRegion& region) { return region.piece == entry.element; }),
+            _floating.end());
     }
 
     const bool needsMacro = doomed.size() > 1;
@@ -2410,11 +2415,145 @@ void PhoenixView::markShapeEdited(fla::Shape* shape)
 void PhoenixView::clearPendingMerge()
 {
     _pending.clear();
+    _floating.clear();
+}
+
+const PhoenixView::FloatingRegion* PhoenixView::floatingFor(const fla::Element* element) const
+{
+    for (const FloatingRegion& region : _floating)
+    {
+        if (region.piece == element)
+            return &region;
+    }
+    return nullptr;
+}
+
+bool PhoenixView::isFloatingRegion(const fla::Element* element) const
+{
+    return floatingFor(element) != nullptr;
+}
+
+void PhoenixView::settleFloating()
+{
+    if (_floating.empty() || !_selection || !_commandStack)
+        return;
+
+    std::vector<FloatingRegion> keep;
+    for (const FloatingRegion& region : _floating)
+    {
+        if (_selection->contains(region.piece))
+        {
+            keep.push_back(region);
+            continue;
+        }
+
+        // Untouched: the split is still the last edit, so it is taken back
+        // and the source is whole again, with no trace in the history. Touched:
+        // the ordinary drop puts the piece back in wherever it now sits.
+        if (_commandStack->topCommand() == region.split && !_commandStack->isInMacro())
+        {
+            _pending.erase(std::remove_if(_pending.begin(), _pending.end(),
+                [&](const PendingDrop& pending) { return pending.shape == region.piece; }),
+                _pending.end());
+            _commandStack->discardLast();
+            clearCaches();
+        }
+    }
+    _floating = keep;
+}
+
+bool PhoenixView::selectRegionAt(const HitResult& hit, const QPointF& documentPos,
+    bool extended, bool additive)
+{
+    if (!hit || !_selection || !_commandStack || _committingMerge)
+        return false;
+    if (hit.element->elementType() != fla::Element::Type::Shape)
+        return false;
+
+    fla::Shape* shape = static_cast<fla::Shape*>(hit.element);
+    if (shape->isDrawingObject)
+        return false;
+
+    QTransform toDocument = hit.elementToDocument;
+
+    // A click on a region already lifted is a click on its source: it goes back
+    // first, and the pick is made again on the whole shape. That is what makes a
+    // double-click widen a single-click's selection.
+    if (const FloatingRegion* region = floatingFor(shape))
+    {
+        if (!extended)
+            return true;
+
+        fla::Shape* source = region->source;
+        _committingMerge = true;
+        _selection->remove(shape);
+        _committingMerge = false;
+        settleFloating();
+
+        // If the piece had already been edited it was dropped back in by the
+        // merge, and the source carries the result either way.
+        shape = source;
+        const fla::Transform& t = shape->transform;
+        toDocument = QTransform(t.m11, t.m12, t.m21, t.m22, t.tx, t.ty);
+    }
+
+    bool invertible = false;
+    const QTransform toShape = toDocument.inverted(&invertible);
+    if (!invertible)
+        return false;
+
+    const QPointF local = toShape.map(documentPos);
+    const double tolerance = toleranceInLocalSpace(toDocument, pickTolerance());
+
+    fla::RegionSplitter splitter(*shape);
+    const fla::RegionPick pick = splitter.pickAt(fla::Point(local.x(), local.y()), tolerance, extended);
+    if (pick.isEmpty())
+        return false;
+
+    fla::Shape* piece = nullptr;
+    fla::Shape* remainder = nullptr;
+    if (!splitter.split(pick, piece, remainder))
+        return false;
+
+    fla::Frame* frame = const_cast<fla::Frame*>(owningFrame(shape));
+    if (!frame)
+    {
+        delete piece;
+        delete remainder;
+        return false;
+    }
+
+    piece->transform = shape->transform;
+
+    const char* name = pick.kind == fla::RegionPick::Kind::Stroke ? "Select Stroke" : "Select Fill";
+    _commandStack->push(fla::CommandPtr(new fla::SplitRegionCommand(
+        shape, *remainder, frame, piece, name, _selection)));
+    _commandStack->breakMergeChain();
+    delete remainder;
+
+    _floating.push_back({shape, piece, frame, _commandStack->topCommand()});
+    setPendingMerge(piece, frame);
+    clearCaches();
+
+    if (additive)
+        _selection->add(piece);
+    else
+        _selection->select(piece);
+
+    update();
+    return true;
 }
 
 void PhoenixView::flushPendingMerge()
 {
-    if (_pending.empty() || !_selection || !_commandStack || _committingMerge)
+    if (!_selection || !_commandStack || _committingMerge)
+        return;
+
+    _committingMerge = true;
+    settleFloating();
+    _committingMerge = false;
+
+    if (_pending.empty())
         return;
 
     const std::vector<PendingDrop> dropping = _pending;
@@ -2430,7 +2569,15 @@ void PhoenixView::flushPendingMerge()
 
 void PhoenixView::selectionChanged()
 {
-    if (_pending.empty() || !_selection || _committingMerge)
+    if (!_selection || _committingMerge)
+        return;
+
+    // Regions let go of untouched go straight back before anything is dropped.
+    _committingMerge = true;
+    settleFloating();
+    _committingMerge = false;
+
+    if (_pending.empty())
         return;
 
     // Anything still selected is still being worked on, and stays its own object

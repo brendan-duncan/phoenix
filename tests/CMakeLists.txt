@@ -51,6 +51,7 @@ set(TEST_CORE_SOURCES
     ${PHOENIX_SRC}/edit/shape_merge.cpp
     ${PHOENIX_SRC}/edit/shape_transform.cpp
     ${PHOENIX_SRC}/edit/snapping.cpp
+    ${PHOENIX_SRC}/edit/region_split.cpp
     ${PHOENIX_SRC}/geom/curve.cpp
     ${PHOENIX_SRC}/geom/fill_attribution.cpp
     ${PHOENIX_SRC}/geom/intersect.cpp
@@ -74,6 +75,7 @@ set(TEST_SOURCES
     test_new_document.cpp
     test_planar_map.cpp
     test_selection.cpp
+    test_region_split.cpp
     test_shape_merge.cpp
     test_shape_transform.cpp
     test_snapping.cpp
