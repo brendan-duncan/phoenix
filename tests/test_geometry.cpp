@@ -128,3 +128,64 @@ TEST(flatness_measures_distance_to_the_chord_segment)
     const Curve straight = Curve::cubic(Point(0.0, 0.0), Point(30.0, 0.0), Point(70.0, 0.0), Point(100.0, 0.0));
     CHECK_NEAR(straight.flatness(), 0.0);
 }
+
+#include "../src/geom/intersect.h"
+
+namespace {
+
+/// Crossings of a curve with itself found the slow way: a fine polyline
+/// checked segment against segment.
+int bruteForceSelfCrossings(const fla::Curve& curve)
+{
+    const int n = 600;
+    std::vector<fla::Point> pts;
+    for (int i = 0; i <= n; ++i)
+        pts.push_back(curve.pointAt(static_cast<double>(i) / n));
+    int crossings = 0;
+    for (int i = 0; i + 1 <= n; ++i)
+    {
+        for (int j = i + 2; j + 1 <= n; ++j)
+        {
+            const fla::Point& p0 = pts[i];
+            const fla::Point& p1 = pts[i + 1];
+            const fla::Point& q0 = pts[j];
+            const fla::Point& q1 = pts[j + 1];
+            const double rx = p1.x - p0.x, ry = p1.y - p0.y;
+            const double sx = q1.x - q0.x, sy = q1.y - q0.y;
+            const double den = rx * sy - ry * sx;
+            if (std::fabs(den) < 1.0e-12)
+                continue;
+            const double dx = q0.x - p0.x, dy = q0.y - p0.y;
+            const double t = (dx * sy - dy * sx) / den;
+            const double u = (dx * ry - dy * rx) / den;
+            if (t > 0.0 && t < 1.0 && u > 0.0 && u < 1.0)
+                ++crossings;
+        }
+    }
+    return crossings;
+}
+
+} // namespace
+
+TEST(self_intersections_are_found_wherever_the_loop_lies)
+{
+    using fla::Curve;
+    using fla::Point;
+
+    const Curve loops[] = {
+        // A loop across the middle.
+        Curve::cubic(Point(0.0, 0.0), Point(120.0, 80.0), Point(-80.0, 80.0), Point(40.0, 0.0)),
+        // A loop lying in the first half of the parameter range.
+        Curve::cubic(Point(0.0, 0.0), Point(200.0, 100.0), Point(-150.0, 60.0), Point(400.0, 0.0)),
+        // And one in the second half.
+        Curve::cubic(Point(0.0, 0.0), Point(400.0, 0.0), Point(-150.0, 60.0), Point(200.0, 100.0)),
+        // No loop at all.
+        Curve::cubic(Point(0.0, 0.0), Point(30.0, 40.0), Point(70.0, 40.0), Point(100.0, 0.0)),
+    };
+    for (const Curve& curve : loops)
+    {
+        const int expected = bruteForceSelfCrossings(curve);
+        const std::vector<fla::CurveIntersection> found = fla::selfIntersections(curve);
+        CHECK(static_cast<int>(found.size()) == expected);
+    }
+}

@@ -1000,3 +1000,26 @@ TEST(a_stroke_drawn_along_a_fill_edge_keeps_its_stroke)
     CHECK(colourAt(*target, Point(50.0, 50.0)) == kRed);
     CHECK(colourAt(*target, Point(150.0, 50.0)) == kBlue);
 }
+
+/// A line drawn across a fill and then taken away again: the outline it cut
+/// in two is one edge again, not two pieces with a seam vertex.
+TEST(pieces_of_one_edge_are_joined_back_when_the_cut_between_them_goes)
+{
+    std::unique_ptr<Shape> target = filledRectangle(0, 0, 2000, 2000, 255, 0, 0);
+    std::unique_ptr<Shape> line = strokedLine(1000, -400, 1000, 2400);
+    CHECK(ShapeMerger::merge(*target, *line));
+    CHECK(target->edges.size() > 4);
+
+    // The same line cut out again, which removes only its stroke: the fill
+    // stays and the outline no longer has anything meeting it at the top or
+    // bottom.
+    CHECK(ShapeMerger::eraseStrokes(*target, *line));
+    size_t stroked = 0;
+    for (const fla::Edge* edge : target->edges)
+        stroked += edge->strokeStyle != -1 ? 1 : 0;
+    CHECK(stroked == 0);
+    // Four sides again.
+    CHECK(target->edges.size() == 4);
+    CHECK(colourAt(*target, Point(25.0, 50.0)) == kRed);
+    CHECK(colourAt(*target, Point(75.0, 50.0)) == kRed);
+}

@@ -53,6 +53,7 @@ public:
         PrinterSettings,
         PublishHistory,
         RadialGradient,
+        BitmapFill,
         RectanglePrimitive,
         ScriptList,
         Shape,

@@ -89,7 +89,7 @@ bool XFLContent::build(const Document& document, const std::string& projectName,
             return false;
         }
 
-        if (bitmap->imageData.empty())
+        if (bitmap->imageData.empty() && bitmap->datData.empty())
         {
             // Writing an empty file would look like a valid but blank image, so
             // leave it out and say so.
@@ -97,10 +97,22 @@ bool XFLContent::build(const Document& document, const std::string& projectName,
             continue;
         }
 
-        XFLEntry entry;
-        entry.path = "LIBRARY/" + bitmap->href;
-        entry.binary = &bitmap->imageData;
-        entries.push_back(std::move(entry));
+        if (!bitmap->imageData.empty())
+        {
+            XFLEntry entry;
+            entry.path = "LIBRARY/" + bitmap->href;
+            entry.binary = &bitmap->imageData;
+            entries.push_back(std::move(entry));
+        }
+
+        if (!bitmap->datData.empty() && !bitmap->bitmapDataHRef.empty() &&
+            isSafeRelativePath(bitmap->bitmapDataHRef))
+        {
+            XFLEntry entry;
+            entry.path = "bin/" + bitmap->bitmapDataHRef;
+            entry.binary = &bitmap->datData;
+            entries.push_back(std::move(entry));
+        }
     }
 
     for (const std::string& description : writer.unsupported())

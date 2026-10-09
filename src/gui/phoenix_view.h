@@ -11,6 +11,8 @@
 #include <QList>
 #include <QMap>
 #include <QRectF>
+#include <QGradient>
+#include <QPixmap>
 #include <QWidget>
 #include <QPainter>
 #include <QPainterPath>
@@ -423,6 +425,12 @@ private:
     QMap<const fla::Shape*, PathCacheList> _pathCache;
 
     QMap<QString, QPixmap> _bitmapCache;
+
+    /// The library bitmap of that name, decoded once and kept.
+    QPixmap libraryBitmap(const QString& name);
+
+    /// Qt's spread for a gradient's spreadMethod attribute.
+    static QGradient::Spread gradientSpread(const std::string& method);
 
 
     // Bounds cache for culling

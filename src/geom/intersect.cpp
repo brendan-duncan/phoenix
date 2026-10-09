@@ -191,30 +191,68 @@ std::vector<CurveIntersection> selfIntersections(const Curve& curve, double tole
 
     tolerance = std::max(tolerance, 1.0e-9);
 
-    // Split into two halves and cross them. They share the midpoint, so the join
-    // itself has to be discarded.
-    Curve first;
-    Curve second;
-    curve.split(0.5, first, second);
+    // Cut the curve where it turns back in x or y. Each piece is then
+    // monotone in both and cannot cross itself, so every crossing lies
+    // between two different pieces, which the pair search finds. Halving at
+    // the midpoint alone missed a loop lying wholly in one half.
+    std::vector<double> splits = {0.0};
+    for (const double t : curve.extremaParameters())
+        splits.push_back(t);
+    splits.push_back(1.0);
 
-    std::vector<CurveIntersection> found;
-    searchMapped(first, second, first, second, Range{}, Range{}, tolerance, 0, found);
+    const size_t pieceCount = splits.size() - 1;
+    std::vector<Curve> pieces;
+    for (size_t i = 0; i < pieceCount; ++i)
+        pieces.push_back(curve.subcurve(splits[i], splits[i + 1]));
 
-    const Point midpoint = curve.pointAt(0.5);
-
-    for (const CurveIntersection& hit : found)
+    for (size_t i = 0; i < pieceCount; ++i)
     {
-        if (std::hypot(hit.position.x - midpoint.x,
-                       hit.position.y - midpoint.y) <= tolerance)
+        for (size_t j = i + 1; j < pieceCount; ++j)
         {
-            continue;
-        }
+            std::vector<CurveIntersection> found;
+            searchMapped(pieces[i], pieces[j], pieces[i], pieces[j], Range{}, Range{},
+                tolerance, 0, found);
 
-        CurveIntersection mapped;
-        mapped.t1 = hit.t1 * 0.5;
-        mapped.t2 = 0.5 + hit.t2 * 0.5;
-        mapped.position = hit.position;
-        hits.push_back(mapped);
+            for (const CurveIntersection& hit : found)
+            {
+                const double t1 = splits[i] + hit.t1 * (splits[i + 1] - splits[i]);
+                const double t2 = splits[j] + hit.t2 * (splits[j + 1] - splits[j]);
+
+                // Neighbouring pieces share their join, and the curve's two
+                // ends may coincide: neither is a crossing.
+                if (j == i + 1)
+                {
+                    const Point join = curve.pointAt(splits[j]);
+                    if (std::hypot(hit.position.x - join.x, hit.position.y - join.y) <= tolerance)
+                        continue;
+                }
+                if (i == 0 && j == pieceCount - 1)
+                {
+                    const Point& start = curve.start();
+                    if (std::hypot(hit.position.x - start.x, hit.position.y - start.y) <= tolerance)
+                        continue;
+                }
+
+                bool known = false;
+                for (const CurveIntersection& existing : hits)
+                {
+                    if (std::hypot(existing.position.x - hit.position.x,
+                        existing.position.y - hit.position.y) <= tolerance)
+                    {
+                        known = true;
+                        break;
+                    }
+                }
+                if (known)
+                    continue;
+
+                CurveIntersection mapped;
+                mapped.t1 = t1;
+                mapped.t2 = t2;
+                mapped.position = hit.position;
+                hits.push_back(mapped);
+            }
+        }
     }
 
     std::sort(hits.begin(), hits.end(),

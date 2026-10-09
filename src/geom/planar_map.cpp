@@ -259,6 +259,8 @@ std::vector<PlanarMap::Input> PlanarMap::splitAtCrossings(double tolerance) cons
             Input piece;
             piece.curve = _inputs[i].curve.subcurve(from.t, to.t);
             piece.source = _inputs[i].source;
+            piece.t0 = from.t;
+            piece.t1 = to.t;
 
             // Pin the ends to the points the cuts were made at, so the curve
             // this piece meets there ends on exactly the same point.
@@ -307,7 +309,9 @@ void PlanarMap::buildHalfEdges(const std::vector<Input>& pieces)
         const int to = vertexAt(end);
 
         // Welding collapsed the piece to a point, so there is no edge here.
-        if (from == to && piece.curve.chordLength() < kMinimumPieceLength)
+        // A loop back to its own start is not collapsed, which only the
+        // control polygon tells: its chord is zero too.
+        if (from == to && piece.curve.controlPolygonLength() < kMinimumPieceLength)
             continue;
 
         const Point middle = piece.curve.pointAt(0.5);
@@ -332,6 +336,8 @@ void PlanarMap::buildHalfEdges(const std::vector<Input>& pieces)
                 backward.source = piece.source;
                 forward.forward = sameWay;
                 backward.forward = !sameWay;
+                forward.t0 = backward.t0 = piece.t0;
+                forward.t1 = backward.t1 = piece.t1;
             }
             break;
         }
@@ -361,6 +367,8 @@ void PlanarMap::buildHalfEdges(const std::vector<Input>& pieces)
         a.curve = curve;
         a.source = piece.source;
         a.forward = true;
+        a.t0 = piece.t0;
+        a.t1 = piece.t1;
         _halfEdges.push_back(a);
 
         HalfEdge b;
@@ -370,6 +378,8 @@ void PlanarMap::buildHalfEdges(const std::vector<Input>& pieces)
         b.curve = reversed;
         b.source = piece.source;
         b.forward = false;
+        b.t0 = piece.t0;
+        b.t1 = piece.t1;
         _halfEdges.push_back(b);
 
         _vertices[from].outgoing.push_back(forward);
@@ -381,12 +391,74 @@ void PlanarMap::sortOutgoingEdges()
 {
     for (MapVertex& vertex : _vertices)
     {
-        std::sort(vertex.outgoing.begin(), vertex.outgoing.end(),
-            [this](int left, int right) {
-                const Point a = _halfEdges[left].curve.tangentAt(0.0);
-                const Point b = _halfEdges[right].curve.tangentAt(0.0);
-                return std::atan2(a.y, a.x) < std::atan2(b.y, b.x);
-            });
+        if (vertex.outgoing.size() < 2)
+            continue;
+
+        // The direction an edge leaves in is where it first crosses a small
+        // circle round the vertex, not its tangent at the vertex: a pen
+        // handle pulled back onto its anchor has no tangent there, and two
+        // curves tangent at the vertex but bending apart are told apart by
+        // where they have got to a little way out. The circle is half the
+        // shortest chord here, so every edge reaches it.
+        double radius = 1.0e300;
+        for (const int edge : vertex.outgoing)
+            radius = std::min(radius, _halfEdges[edge].curve.chordLength());
+        radius = std::max(radius * 0.5, kTwip * 0.5);
+
+        const Point& centre = vertex.position;
+        const auto departure = [&](int edge) {
+            const Curve& curve = _halfEdges[edge].curve;
+            const auto distanceAt = [&](double t) {
+                const Point p = curve.pointAt(t);
+                return std::hypot(p.x - centre.x, p.y - centre.y);
+            };
+
+            double low = 0.0;
+            double high = 1.0;
+            bool found = false;
+            double previous = 0.0;
+            for (int i = 1; i <= 32; ++i)
+            {
+                const double t = static_cast<double>(i) / 32.0;
+                if (distanceAt(t) >= radius)
+                {
+                    low = previous;
+                    high = t;
+                    found = true;
+                    break;
+                }
+                previous = t;
+            }
+
+            Point direction;
+            if (found)
+            {
+                for (int i = 0; i < 30; ++i)
+                {
+                    const double mid = (low + high) * 0.5;
+                    if (distanceAt(mid) >= radius)
+                        high = mid;
+                    else
+                        low = mid;
+                }
+                const Point p = curve.pointAt(high);
+                direction = Point(p.x - centre.x, p.y - centre.y);
+            }
+            else
+            {
+                direction = Point(curve.end().x - centre.x, curve.end().y - centre.y);
+            }
+            if (std::hypot(direction.x, direction.y) <= 1.0e-12)
+                direction = curve.tangentAt(0.0);
+            return std::atan2(direction.y, direction.x);
+        };
+
+        std::vector<std::pair<double, int>> keyed;
+        for (const int edge : vertex.outgoing)
+            keyed.push_back({departure(edge), edge});
+        std::sort(keyed.begin(), keyed.end());
+        for (size_t i = 0; i < keyed.size(); ++i)
+            vertex.outgoing[i] = keyed[i].second;
     }
 }
 

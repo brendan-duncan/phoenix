@@ -4,6 +4,7 @@
 #include "../src/data/document.h"
 #include "../src/data/fla_document.h"
 #include "../src/data/group.h"
+#include "../src/data/bitmap_fill.h"
 #include "../src/data/linear_gradient.h"
 #include "../src/data/oval_primitive.h"
 #include "../src/data/radial_gradient.h"
@@ -316,8 +317,17 @@ private:
         }
 
         case fla::FillStyle::Type::BitmapFill:
+        {
+            const auto& ba = static_cast<const fla::BitmapFill&>(a);
+            const auto& bb = static_cast<const fla::BitmapFill&>(b);
+            compareTransform(ba.transform, bb.transform, where + " bitmap fill");
+            check(ba.bitmapPath == bb.bitmapPath, where + " bitmapPath");
+            check(ba.bitmapIsClipped == bb.bitmapIsClipped, where + " bitmapIsClipped");
             break;
         }
+        }
+        check(a.spreadMethod == b.spreadMethod, where + " spreadMethod");
+        check(a.interpolationMethod == b.interpolationMethod, where + " interpolationMethod");
     }
 
     void compareShapes(const fla::Shape& a, const fla::Shape& b, const std::string& where)
@@ -602,6 +612,27 @@ TEST(xfl_round_trips_dynamic_and_input_text)
         CHECK(written.find("<DOMInputText") != std::string::npos);
         CHECK(written.find("instanceName=\"name_txt\"") != std::string::npos);
     }
+}
+
+TEST(xfl_round_trips_bitmap_fills_and_gradient_spread)
+{
+    checkRoundTrip(
+        "<DOMDocument xmlns='http://ns.adobe.com/xfl/2008/'>"
+        "<timelines><DOMTimeline name='Scene 1'><layers>"
+        "<DOMLayer name='Layer 1'><frames><DOMFrame index='0'><elements>"
+        "<DOMShape><fills>"
+        "<FillStyle index='1'><BitmapFill bitmapPath='photo.png' bitmapIsClipped='true'>"
+        "<matrix><Matrix a='20' d='20' tx='5' ty='6'/></matrix></BitmapFill></FillStyle>"
+        "<FillStyle index='2'><LinearGradient spreadMethod='reflect' interpolationMethod='linearRGB'>"
+        "<matrix><Matrix a='0.1' d='0.1'/></matrix>"
+        "<GradientEntry color='#FF0000' ratio='0'/><GradientEntry color='#0000FF' ratio='1'/>"
+        "</LinearGradient></FillStyle>"
+        "</fills><edges>"
+        "<Edge fillStyle1='1' edges='!0 0|2000 0|2000 2000|0 2000|0 0'/>"
+        "<Edge fillStyle1='2' edges='!3000 0|5000 0|5000 2000|3000 2000|3000 0'/>"
+        "</edges></DOMShape>"
+        "</elements></DOMFrame></frames></DOMLayer>"
+        "</layers></DOMTimeline></timelines></DOMDocument>");
 }
 
 TEST(xfl_round_trips_layer_structure)

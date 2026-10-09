@@ -2,6 +2,8 @@
 
 #include "../data/point.h"
 
+#include <vector>
+
 namespace fla {
 
 /// One piece of path geometry: a straight line or a cubic bezier.
@@ -65,8 +67,18 @@ public:
     /// the point is inside.
     int horizontalRayCrossings(const Point& point) const;
 
+    /// The parameters strictly inside (0, 1) where the curve turns back in x
+    /// or in y, in order. Between them the curve is monotone in both, so a
+    /// piece cut there cannot cross itself.
+    std::vector<double> extremaParameters() const;
+
     /// Length of the chord from start to end.
     double chordLength() const;
+
+    /// The length of the control polygon, which is zero only for a curve
+    /// collapsed to a point: a loop that starts and ends at one point has a
+    /// zero chord but a long polygon.
+    double controlPolygonLength() const;
 
 private:
     /// Control points, always four. A line repeats its endpoints inward.

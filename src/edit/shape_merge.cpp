@@ -1,5 +1,6 @@
 #include "shape_merge.h"
 
+#include "../data/bitmap_fill.h"
 #include "../data/linear_gradient.h"
 #include "../data/radial_gradient.h"
 #include "../data/shape.h"
@@ -35,6 +36,8 @@ FillStyle* cloneFill(const FillStyle* fill, DOMElement* parent)
         const LinearGradient* source = static_cast<const LinearGradient*>(fill);
         LinearGradient* copy = new LinearGradient(parent);
         copy->entries = source->entries;
+        copy->spreadMethod = source->spreadMethod;
+        copy->interpolationMethod = source->interpolationMethod;
         copy->transform = source->transform;
         return copy;
     }
@@ -44,14 +47,22 @@ FillStyle* cloneFill(const FillStyle* fill, DOMElement* parent)
         const RadialGradient* source = static_cast<const RadialGradient*>(fill);
         RadialGradient* copy = new RadialGradient(parent);
         copy->entries = source->entries;
+        copy->spreadMethod = source->spreadMethod;
+        copy->interpolationMethod = source->interpolationMethod;
         copy->focalPointRatio = source->focalPointRatio;
         copy->transform = source->transform;
         return copy;
     }
 
     case FillStyle::Type::BitmapFill:
-        // Not modelled by the reader either, so there is nothing to copy.
-        break;
+    {
+        const BitmapFill* source = static_cast<const BitmapFill*>(fill);
+        BitmapFill* copy = new BitmapFill(parent);
+        copy->bitmapPath = source->bitmapPath;
+        copy->bitmapIsClipped = source->bitmapIsClipped;
+        copy->transform = source->transform;
+        return copy;
+    }
     }
 
     return nullptr;

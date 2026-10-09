@@ -442,9 +442,10 @@ to it, so nothing in the application uses it yet.
     the seam vanishes where two shapes merged into one region
   - Verified on real data: 36 shapes from six documents went through the
     arrangement and back without changing which fills they use
-- [ ] Chain neighbouring pieces that share styles into one path. Correct as it
+- [x] Chain neighbouring pieces that share styles into one path. Correct as it
       stands -- one edge per piece, which the renderer stitches back into loops --
       but it writes far more edges than Flash would
+  - Done 2026-10-09, see "Chain the output" in step 10
 - [x] `ShapeMerger::merge` (`src/edit/shape_merge.h`, 12 tests): the whole
       behaviour, at the data-model level. Outlines cut each other, the newer fill
       replaces the older where they overlap, a stroke across a fill divides it
@@ -695,11 +696,12 @@ should be reproduced before fixing.
       coordinates (`:84, :100, :350`), so picking is off on scaled shapes. Use the
       existing `toleranceInLocalSpace`
   - Done
-- [ ] Subselection takes the first match, not the nearest (`:111`), so an earlier
+- [x] Subselection takes the first match, not the nearest (`:111`), so an earlier
       anchor beats a later handle; alt-insert takes the first edge in range, not
       the closest (`:151`). Pick the nearest anchor within tolerance, and a handle
       only when it is nearer than its own anchor (VectorCraft
       `tools/src/direct.rs:206-260`)
+  - Done 2026-10-09 for anchors and handles: every anchor and handle within tolerance is a candidate, the nearest wins, and a handle only beats its own anchor when it is nearer. Alt-insert on the nearest edge is still the first in range
 - [x] `isNearAnchor` (`phoenix_view.cpp:1881`) tests quadratic control points as
       well as on-curve points, so clicking near a control point reports an anchor
   - Done
@@ -765,19 +767,21 @@ The merge model sits on this, so these come before the tools in step 12.
       rotation in `bakeTransform`, collinear lines then produce arbitrary
       crossings. Make it relative to the segments' lengths
   - Done 2026-10-09: relative to the product of the segments' lengths
-- [ ] Edges round a vertex are sorted by `atan2(tangentAt(0))`
+- [x] Edges round a vertex are sorted by `atan2(tangentAt(0))`
       (`planar_map.cpp:218-220`), which is (0,0) for every retracted pen handle,
       and ties between tangent curves fall in arbitrary order, so `next` links
       the wrong edges. Sort by where each edge first crosses a small circle
       round the vertex (radius half the shortest edge chord there), falling back
       to P2/P3 for a retracted handle (VectorCraft `leaving_angle`,
       `pathops/src/planar.rs:176`)
-- [ ] Self-intersections: `selfIntersections` (`intersect.cpp:187-194`) only
+  - Done 2026-10-09: the departure direction is where the curve first crosses a circle of half the shortest chord at the vertex (at least half a twip), found by sampling and bisection, with the end point and then the tangent as fallbacks (test with a retracted handle and two tangent curves)
+- [x] Self-intersections: `selfIntersections` (`intersect.cpp:187-194`) only
       crosses [0,1/2] against [1/2,1], so a loop with both parameters on one side
       is missed (the one test is symmetric). A loop that is found is then dropped
       by `planar_map.cpp:161`, which measures the chord, which is zero for a
       loop. Measure the control polygon instead, and find self-intersections by
       splitting at inflections and extrema first
+  - Done 2026-10-09: the curve is cut at its x and y extrema (`Curve::extremaParameters`), every pair of the monotone pieces is searched and hits at shared joins discarded (test against a brute-force polyline count, loops in either half); a loop piece back to its own vertex is kept by measuring `controlPolygonLength` (test: a looping cubic encloses one face)
 - [x] `flatness()` (`curve.cpp:148`) measures distance to the infinite chord
       line, so a cubic whose controls lie on that line beyond the ends counts as
       flat and its overshoot is lost. Measure distance to the chord segment
@@ -790,7 +794,7 @@ The merge model sits on this, so these come before the tools in step 12.
       unstroked fill loses its stroke there (affects `keepStroke`,
       `shape_merge.cpp:358`). Keep the newer source's stroke
   - Done 2026-10-09: the later source claims a coincident edge, direction flags following its own direction; a stroked rectangle drawn along an unstroked fill's edge keeps its stroke there (test)
-- [ ] Chain the output (replaces the "chain neighbouring pieces" item in step 6).
+- [x] Chain the output (replaces the "chain neighbouring pieces" item in step 6).
       Each piece knows its source curve and parameter range, so walk through
       degree-2 vertices whose pieces share (left fill, right fill, stroke) and
       the same source, and rebuild each run as `subcurve(t0, t2)` of the original
@@ -798,6 +802,8 @@ The merge model sits on this, so these come before the tools in step 12.
       without its nearest-point search; for pieces from different sources fall
       back to a least-squares refit with fixed end tangents, accepted only within
       tolerance (`tidy_segments`, `boolean.rs:410`)
+  - Done 2026-10-09: half-edges carry `t0`/`t1` on their source curve; `rebuildShapeEdges` walks runs through vertices where exactly two drawn edges meet (dropped seam edges do not break a run) with equal styles and either the same source at a matching parameter or two collinear lines, and writes one edge per run as the source's subcurve pinned to the run's end vertices, or one line. The least-squares refit for cubic pieces from different sources is not done
+- [ ] Chain cubic pieces from different sources (an earlier merge already cut the curve into separate edges) with a least-squares refit with fixed end tangents, accepted only within tolerance (`tidy_segments`, `boolean.rs:410`)
 - [x] Bounding-box broad phase before curve-pair tests (`intersect.cpp:101`
       tests every pair); `setFaceFill` scans every edge (`:550`). Sort by x first;
       a sweep line only if big pencil shapes need it
@@ -821,20 +827,25 @@ The merge model sits on this, so these come before the tools in step 12.
 
 All in `phoenix_view.cpp` unless noted.
 
-- [ ] **(confirmed) Bitmap fills draw nothing:** `getFillBrush` returns
+- [x] **(confirmed) Bitmap fills draw nothing:** `getFillBrush` returns
       `Qt::NoBrush` for them (`:1068`). Use `QBrush(QPixmap)` with the fill matrix
       as the brush transform for repeating fills, and clip to the shape for
       clipped ones. Honour the bitmap's `allowSmoothing` (bitmap instances
       always smooth, `:888-920`)
+  - Done 2026-10-09: `BitmapFill` is parsed, written and cloned (`bitmapPath`, `bitmapIsClipped`, matrix), and drawn as a tiled `QBrush(QPixmap)` with the fill matrix over 20 as the brush transform. Library bitmaps are decoded through one cache (`libraryBitmap`), from the LIBRARY copy when there is one and otherwise from `bin/<bitmapDataHRef>`: JPEG as is, Animate's lossless `.dat` (magic 0x0503, row bytes, width, height, then the zlib stream in u16-length pieces, pixels A,R,G,B premultiplied) through `bitmap_decoder.cpp`. The `.dat` is kept on the bitmap and written back on save; the bitmap item's other attributes round-trip too. Instances honour `allowSmoothing`. Also found: `itemID` was read and written as `itemId`, so every library item lost its id on load and on save; fixed for symbols, folders and bitmaps
+  - Still open: `bitmapIsClipped` fills tile like repeating ones; clip to one copy of the bitmap
 - [x] **(confirmed) Hairlines scale with zoom:** `MAX(weight, 0.5)` (`:933`)
       turns weight 0 into a 0.5 px document line. Flash hairlines are 1 device
       pixel: use a cosmetic pen
   - Done, see step 14
-- [ ] **(confirmed) Gradients are about 0.8% short:** the half-span is 1625 x 0.5
+- [x] **(confirmed) Gradients are about 0.8% short:** the half-span is 1625 x 0.5
       (`:1014, :1043`), but the gradient square is +-16384 twips = +-819.2 px
-- [ ] `spreadMethod` (pad/reflect/repeat) is not parsed; map it to
+  - Done 2026-10-09: 1638.4
+- [x] `spreadMethod` (pad/reflect/repeat) is not parsed; map it to
       `QGradient::setSpread`. `interpolationMethod="linearRGB"` is not parsed;
       approximate it by expanding the stops into many sRGB stops
+  - Done 2026-10-09 for `spreadMethod`: parsed, written, cloned and applied with `QGradient::setSpread` (reflect and repeat checked on screen). `interpolationMethod` is parsed and written back but still rendered as sRGB
+- [ ] Render `interpolationMethod="linearRGB"` by expanding the stops into many sRGB stops
 - [ ] Gradient strokes ignore their matrix and use a fixed 0..100 line or a 50 px
       circle (`:965-994`)
 - [ ] Stroke `scaleMode` is parsed but ignored. Compute the pen width from the

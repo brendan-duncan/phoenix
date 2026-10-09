@@ -3,6 +3,7 @@
 #include "edge_writer.h"
 
 #include "../data/bitmap.h"
+#include "../data/bitmap_fill.h"
 #include "../data/bitmap_instance.h"
 #include "../data/document.h"
 #include "../data/folder.h"
@@ -270,6 +271,8 @@ void XFLWriter::writeFillStyle(const FillStyle& fill, XMLElement* parent)
     {
         const LinearGradient& gradient = static_cast<const LinearGradient&>(fill);
         XMLElement* node = doc->NewElement("LinearGradient");
+        setString(node, "spreadMethod", gradient.spreadMethod);
+        setString(node, "interpolationMethod", gradient.interpolationMethod);
         writeMatrix(gradient.transform, node);
         for (const GradientEntry& entry : gradient.entries)
         {
@@ -287,6 +290,8 @@ void XFLWriter::writeFillStyle(const FillStyle& fill, XMLElement* parent)
         const RadialGradient& gradient = static_cast<const RadialGradient&>(fill);
         XMLElement* node = doc->NewElement("RadialGradient");
         setDouble(node, "focalPointRatio", gradient.focalPointRatio, 0.0);
+        setString(node, "spreadMethod", gradient.spreadMethod);
+        setString(node, "interpolationMethod", gradient.interpolationMethod);
         writeMatrix(gradient.transform, node);
         for (const RadialEntry& entry : gradient.entries)
         {
@@ -300,10 +305,15 @@ void XFLWriter::writeFillStyle(const FillStyle& fill, XMLElement* parent)
     }
 
     case FillStyle::Type::BitmapFill:
-        // The reader does not build these yet either, so nothing can reach here
-        // from a parsed file.
-        note("BitmapFill fill style");
+    {
+        const BitmapFill& bitmap = static_cast<const BitmapFill&>(fill);
+        XMLElement* node = doc->NewElement("BitmapFill");
+        setString(node, "bitmapPath", bitmap.bitmapPath);
+        setBool(node, "bitmapIsClipped", bitmap.bitmapIsClipped, false);
+        writeMatrix(bitmap.transform, node);
+        parent->InsertEndChild(node);
         break;
+    }
     }
 }
 
@@ -801,7 +811,7 @@ std::string XFLWriter::writeDocument(const Document& document)
                 continue;
             XMLElement* node = doc.NewElement("DOMFolderItem");
             setString(node, "name", folder->name);
-            setString(node, "itemId", folder->itemId);
+            setString(node, "itemID", folder->itemId);
             setBool(node, "isExpanded", folder->isExpanded, false);
             folders->InsertEndChild(node);
         }
@@ -823,8 +833,16 @@ std::string XFLWriter::writeDocument(const Document& document)
             const Bitmap* bitmap = static_cast<const Bitmap*>(resource);
             XMLElement* node = doc.NewElement("DOMBitmapItem");
             setString(node, "name", bitmap->name);
-            setString(node, "itemId", bitmap->itemId);
+            setString(node, "itemID", bitmap->itemId);
+            setString(node, "sourceExternalFilepath", bitmap->sourceExternalFilepath);
+            if (bitmap->sourceLastImported != 0)
+                setString(node, "sourceLastImported", std::to_string(bitmap->sourceLastImported));
+            setBool(node, "allowSmoothing", bitmap->allowSmoothing, false);
+            setInt(node, "quality", bitmap->quality, 0);
             setString(node, "href", bitmap->href);
+            setString(node, "bitmapDataHRef", bitmap->bitmapDataHRef);
+            setInt(node, "frameRight", bitmap->frameRight, 0);
+            setInt(node, "frameBottom", bitmap->frameBottom, 0);
             media->InsertEndChild(node);
         }
         root->InsertEndChild(media);
@@ -876,7 +894,7 @@ std::string XFLWriter::writeSymbol(const Symbol& symbol)
     root->SetAttribute("xmlns:xsi", "http://www.w3.org/2001/XMLSchema-instance");
 
     setString(root, "name", symbol.name);
-    setString(root, "itemId", symbol.itemId);
+    setString(root, "itemID", symbol.itemId);
     setString(root, "lastModified", symbol.lastModified);
 
     // The reader expects a <timeline> wrapper holding DOMTimeline children.

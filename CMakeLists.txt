@@ -113,6 +113,7 @@ set(HEADERS
     src/parser/path_parser.h
     src/data/action_script.h
     src/data/bitmap.h
+    src/data/bitmap_decoder.h
     src/data/color_transform.h
     src/data/document.h
     src/data/dom_element.h
@@ -125,6 +126,7 @@ set(HEADERS
     src/data/group.h
     src/data/layer.h
     src/data/linear_gradient.h
+    src/data/bitmap_fill.h
     src/data/oval_primitive.h
     src/data/point.h
     src/data/printer_settings.h
@@ -206,6 +208,7 @@ set(SOURCES
     src/parser/path_parser.cpp
     src/data/action_script.cpp
     src/data/bitmap.cpp
+    src/data/bitmap_decoder.cpp
     src/data/document.cpp
     src/data/dom_element.cpp
     src/data/edge.cpp

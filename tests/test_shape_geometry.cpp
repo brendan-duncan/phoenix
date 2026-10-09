@@ -366,9 +366,10 @@ TEST(rebuilding_drops_edges_that_draw_nothing)
     for (const fla::Edge* edge : shape->edges)
         CHECK(edge->fillStyle0 != edge->fillStyle1);
 
-    // Six, not four: the cut meets the top and bottom edges, splitting each in
-    // two. The outline survives in pieces; only the seam itself goes.
-    CHECK(shape->edges.size() == 6);
+    // Four: the cut met the top and bottom edges and split each in two, but
+    // with the seam gone nothing else meets there, and the two halves of
+    // each side are joined back into one edge.
+    CHECK(shape->edges.size() == 4);
 }
 
 TEST(rebuilding_keeps_a_stroke_with_no_fill)

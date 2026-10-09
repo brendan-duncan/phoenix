@@ -26,6 +26,12 @@ public:
 
     std::vector<uint8_t> imageData; // Raw image data (e.g., JPEG or PNG bytes)
 
+    /// The bin/<bitmapDataHRef> entry as stored: Animate's own encoding of
+    /// the pixels (see bitmap_decoder.h), kept so a save carries it through
+    /// and so files whose LIBRARY folder holds no copy of the image still
+    /// have something to draw.
+    std::vector<uint8_t> datData;
+
     Bitmap(DOMElement* parent)
         : Resource(parent)
     {}

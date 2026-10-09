@@ -169,6 +169,51 @@ double Curve::flatness() const
     return std::max(distanceToChord(_points[1]), distanceToChord(_points[2]));
 }
 
+std::vector<double> Curve::extremaParameters() const
+{
+    std::vector<double> result;
+    if (_isLine)
+        return result;
+
+    for (int axis = 0; axis < 2; ++axis)
+    {
+        const double p0 = axis == 0 ? _points[0].x : _points[0].y;
+        const double p1 = axis == 0 ? _points[1].x : _points[1].y;
+        const double p2 = axis == 0 ? _points[2].x : _points[2].y;
+        const double p3 = axis == 0 ? _points[3].x : _points[3].y;
+
+        // The derivative of the cubic, a quadratic in t.
+        const double qa = 3.0 * (-p0 + 3.0 * p1 - 3.0 * p2 + p3);
+        const double qb = 2.0 * (3.0 * p0 - 6.0 * p1 + 3.0 * p2);
+        const double qc = -3.0 * p0 + 3.0 * p1;
+
+        if (std::fabs(qa) > 1.0e-12)
+        {
+            const double disc = qb * qb - 4.0 * qa * qc;
+            if (disc >= 0.0)
+            {
+                const double root = std::sqrt(disc);
+                for (const double t : {(-qb - root) / (2.0 * qa), (-qb + root) / (2.0 * qa)})
+                {
+                    if (t > 1.0e-9 && t < 1.0 - 1.0e-9)
+                        result.push_back(t);
+                }
+            }
+        }
+        else if (std::fabs(qb) > 1.0e-12)
+        {
+            const double t = -qc / qb;
+            if (t > 1.0e-9 && t < 1.0 - 1.0e-9)
+                result.push_back(t);
+        }
+    }
+
+    std::sort(result.begin(), result.end());
+    result.erase(std::unique(result.begin(), result.end(),
+        [](double a, double b) { return std::fabs(a - b) < 1.0e-9; }), result.end());
+    return result;
+}
+
 int Curve::horizontalRayCrossings(const Point& point) const
 {
     const double y0 = _points[0].y;
@@ -249,6 +294,16 @@ int Curve::horizontalRayCrossings(const Point& point) const
 double Curve::chordLength() const
 {
     return std::hypot(_points[3].x - _points[0].x, _points[3].y - _points[0].y);
+}
+
+double Curve::controlPolygonLength() const
+{
+    if (_isLine)
+        return chordLength();
+    double length = 0.0;
+    for (int i = 0; i < 3; ++i)
+        length += std::hypot(_points[i + 1].x - _points[i].x, _points[i + 1].y - _points[i].y);
+    return length;
 }
 
 } // namespace fla

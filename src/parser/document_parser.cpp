@@ -1,6 +1,7 @@
 #include "document_parser.h"
 #include "path_parser.h"
 #include "../data/bitmap.h"
+#include "../data/bitmap_fill.h"
 #include "../data/bitmap_instance.h"
 #include "../data/group.h"
 #include "../data/linear_gradient.h"
@@ -123,6 +124,9 @@ void getColorAttribute(const tinyxml2::XMLElement* element, const char* attribut
 
 void parseFillStyle(const tinyxml2::XMLElement* element, fla::FillStyle* fillStyle)
 {
+    fillStyle->spreadMethod = getAttribute(element, "spreadMethod");
+    fillStyle->interpolationMethod = getAttribute(element, "interpolationMethod");
+
     const tinyxml2::XMLElement* matrixNode = element->FirstChildElement("matrix");
     if (matrixNode)
     {
@@ -301,6 +305,14 @@ fla::FillStyle* parseFillStyle(const tinyxml2::XMLElement* element, fla::DOMElem
             return nullptr;
         }
         return radialFill;
+    }
+    else if (std::strcmp(tagName, "BitmapFill") == 0)
+    {
+        fla::BitmapFill* bitmapFill = new fla::BitmapFill(parent);
+        parseFillStyle(element, bitmapFill);
+        bitmapFill->bitmapPath = getAttribute(element, "bitmapPath");
+        bitmapFill->bitmapIsClipped = getBoolAttribute(element, "bitmapIsClipped", false);
+        return bitmapFill;
     }
     std::cerr << "!!!! Unhandled fill element: " << tagName << (_currentFile.empty() ? "" : " from ") << _currentFile << std::endl;
     return nullptr;
@@ -1436,7 +1448,7 @@ bool parseSymbolInclude(const tinyxml2::XMLElement* element, fla::SymbolList* sy
 
     fla::Symbol* symbol = new fla::Symbol(symbolList);
     symbol->name = getAttribute(root, "name");
-    symbol->itemId = getAttribute(root, "itemId");
+    symbol->itemId = getAttribute(root, "itemID");
     symbol->lastModified = getAttribute(root, "lastModified");
     symbol->href = href;
 
@@ -1502,13 +1514,29 @@ bool parseMedia(const tinyxml2::XMLElement* element, fla::Document* document, Zi
             fla::Bitmap* bitmap = new fla::Bitmap(document);
 
             bitmap->name = getAttribute(childElement, "name");
-            bitmap->itemId = getAttribute(childElement, "itemId");
+            bitmap->itemId = getAttribute(childElement, "itemID");
             bitmap->href = getAttribute(childElement, "href");
+            bitmap->bitmapDataHRef = getAttribute(childElement, "bitmapDataHRef");
+            bitmap->sourceExternalFilepath = getAttribute(childElement, "sourceExternalFilepath");
+            bitmap->sourceLastImported = static_cast<uint32_t>(
+                getDoubleAttribute(childElement, "sourceLastImported", 0.0));
+            bitmap->allowSmoothing = getBoolAttribute(childElement, "allowSmoothing", false);
+            bitmap->quality = getIntAttribute(childElement, "quality", 0);
+            bitmap->frameRight = getIntAttribute(childElement, "frameRight", 0);
+            bitmap->frameBottom = getIntAttribute(childElement, "frameBottom", 0);
 
-            std::string mediaPath = "LIBRARY/" + bitmap->href;
-            if (zipReader->containsFile(mediaPath))
-            {
+            // The image as imported sits under LIBRARY when Animate kept a
+            // copy; the pixels in its own encoding sit under bin. Either is
+            // enough to draw from.
+            const std::string mediaPath = "LIBRARY/" + bitmap->href;
+            if (!bitmap->href.empty() && zipReader->containsFile(mediaPath))
                 bitmap->imageData = zipReader->readFile(mediaPath);
+            const std::string dataPath = "bin/" + bitmap->bitmapDataHRef;
+            if (!bitmap->bitmapDataHRef.empty() && zipReader->containsFile(dataPath))
+                bitmap->datData = zipReader->readFile(dataPath);
+
+            if (!bitmap->imageData.empty() || !bitmap->datData.empty())
+            {
                 document->resources.push_back(bitmap);
             }
             else
@@ -1528,7 +1556,7 @@ bool parseMedia(const tinyxml2::XMLElement* element, fla::Document* document, Zi
 bool parseFolder(const tinyxml2::XMLElement* element, fla::Folder* folder)
 {
     folder->name = getAttribute(element, "name");
-    folder->itemId = getAttribute(element, "itemId");
+    folder->itemId = getAttribute(element, "itemID");
     folder->isExpanded = getBoolAttribute(element, "isExpanded", false);
     return true;
 }

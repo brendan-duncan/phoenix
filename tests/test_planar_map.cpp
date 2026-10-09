@@ -373,3 +373,46 @@ TEST(planar_map_clear_forgets_everything)
     CHECK(map.halfEdges().empty());
     CHECK(map.faces().empty());
 }
+
+/// Two curves leaving a vertex along the same tangent but bending apart are
+/// ordered by where they have got to a little way out, and a curve whose
+/// first control point sits on the vertex (a retracted pen handle) still
+/// finds its place.
+TEST(planar_map_orders_edges_by_where_they_leave)
+{
+    PlanarMap map;
+    // A square, with two curves from its top-left corner into the inside:
+    // both set off straight down, one bending right, one bending further
+    // right, and one of them with a retracted first handle.
+    addPolygon(map, rectangle(0.0, 0.0, 100.0, 100.0));
+    map.addCurve(Curve::cubic(Point(0.0, 0.0), Point(0.0, 0.0), Point(20.0, 60.0), Point(60.0, 100.0)), 1);
+    map.addCurve(Curve::cubic(Point(0.0, 0.0), Point(0.0, 40.0), Point(60.0, 40.0), Point(100.0, 60.0)), 2);
+    map.build();
+
+    // Every half-edge still finds a face and every face walk closes: the
+    // ordering round the corner did not link the wrong edges.
+    for (const fla::HalfEdge& half : map.halfEdges())
+    {
+        CHECK(half.face >= 0);
+        CHECK(half.next >= 0);
+    }
+    // The two curves cross once inside, so the square is cut into four.
+    CHECK(boundedFaces(map).size() == 4);
+}
+
+/// A cubic that crosses itself is cut at the crossing, and the loop between
+/// the two cuts, which starts and ends at the same vertex, is a face of its
+/// own rather than a dropped piece.
+TEST(a_curve_that_loops_back_on_itself_encloses_a_face)
+{
+    PlanarMap map;
+    map.addCurve(Curve::cubic(Point(0.0, 0.0), Point(120.0, 80.0), Point(-80.0, 80.0), Point(40.0, 0.0)), 0);
+    map.build();
+
+    CHECK(boundedFaces(map).size() == 1);
+    for (const fla::HalfEdge& half : map.halfEdges())
+    {
+        CHECK(half.face >= 0);
+        CHECK(half.next >= 0);
+    }
+}

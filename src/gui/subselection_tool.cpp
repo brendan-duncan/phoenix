@@ -87,8 +87,21 @@ bool SubselectionTool::mousePress(PhoenixView& view, QMouseEvent* event, const Q
     _dragMoved = false;
     _convertDrag = false;
 
-    // Handles are checked before anchors: a handle pulled hard back toward its
-    // anchor would otherwise be impossible to grab.
+    // Of every anchor and handle within reach, the nearest wins, and a
+    // handle only beats its own anchor when it is nearer than the anchor
+    // is: an earlier anchor must not shadow a later handle that is closer,
+    // and a handle pulled hard back onto its anchor stays grabbable.
+    struct Candidate
+    {
+        fla::Edge* edge = nullptr;
+        size_t index = 0;
+        fla::EditablePath path;
+        Grip grip = Grip::None;
+        double distance = 0.0;
+    };
+    Candidate best;
+    bool haveBest = false;
+
     for (fla::Edge* edge : shape->edges)
     {
         if (!edge || edge->paths.empty() || !edge->paths[0])
@@ -99,69 +112,99 @@ bool SubselectionTool::mousePress(PhoenixView& view, QMouseEvent* event, const Q
         for (size_t i = 0; i < path.anchors.size(); ++i)
         {
             const fla::Anchor& anchor = path.anchors[i];
-
-            const auto grab = [&](const fla::Point& point) {
-                return std::hypot(point.x - localPos.x(), point.y - localPos.y()) <= tolerance;
+            const auto distanceTo = [&](const fla::Point& point) {
+                return std::hypot(point.x - localPos.x(), point.y - localPos.y());
             };
 
-            Grip grip = Grip::None;
-            if (anchor.hasInCurve() && grab(anchor.inHandle))
-                grip = Grip::InHandle;
-            else if (anchor.hasOutCurve() && grab(anchor.outHandle))
-                grip = Grip::OutHandle;
-            else if (grab(anchor.position))
-                grip = Grip::Anchor;
-
+            const double anchorDistance = distanceTo(anchor.position);
+            double nearest = anchorDistance;
+            Grip grip = anchorDistance <= tolerance ? Grip::Anchor : Grip::None;
+            if (anchor.hasInCurve())
+            {
+                const double d = distanceTo(anchor.inHandle);
+                if (d <= tolerance && d < nearest)
+                {
+                    nearest = d;
+                    grip = Grip::InHandle;
+                }
+            }
+            if (anchor.hasOutCurve())
+            {
+                const double d = distanceTo(anchor.outHandle);
+                if (d <= tolerance && d < nearest)
+                {
+                    nearest = d;
+                    grip = Grip::OutHandle;
+                }
+            }
             if (grip == Grip::None)
                 continue;
-
-            _grabbed.clear();
-            if (grip == Grip::Anchor && alt)
+            if (!haveBest || nearest < best.distance)
             {
-                // Alt on an anchor is the convert gesture: dragging a corner
-                // point pulls handles out of it, and a click on a curve point
-                // makes it a corner.
-                _grabbed.push_back({edge, i, path, path});
-                if (anchor.smooth || anchor.hasInCurve() || anchor.hasOutCurve())
-                {
-                    fla::EditablePath after = path;
-                    fla::Anchor& corner = after.anchors[i];
-                    corner.smooth = false;
-                    corner.inHandle = corner.position;
-                    corner.outHandle = corner.position;
-                    commitGeometry(view, edge, path, after, "Convert Anchor");
-                    _grabbed.clear();
-                    _selectedEdge = edge;
-                    _selectedAnchor = i;
-                    _hasSelectedAnchor = true;
-                    return true;
-                }
-                grip = Grip::OutHandle;
-                _convertDrag = true;
+                best.edge = edge;
+                best.index = i;
+                best.path = path;
+                best.grip = grip;
+                best.distance = nearest;
+                haveBest = true;
             }
-            else if (grip == Grip::Anchor)
-            {
-                // Every anchor at this point comes along, or the pieces of
-                // outline meeting here come apart.
-                grabCoincidentAnchors(*shape, anchor.position);
-            }
-            else
-            {
-                // A handle belongs to one curve, so only that one moves.
-                _grabbed.push_back({edge, i, path, path});
-            }
-
-            _grip = grip;
-            _dragStart = localPos;
-
-            // Remembered so Delete knows which anchor to remove.
-            _selectedEdge = edge;
-            _selectedAnchor = i;
-            _hasSelectedAnchor = true;
-
-            view.update();
-            return true;
         }
+    }
+
+    if (haveBest)
+    {
+        fla::Edge* edge = best.edge;
+        const size_t i = best.index;
+        const fla::EditablePath path = best.path;
+        const fla::Anchor& anchor = path.anchors[i];
+        Grip grip = best.grip;
+
+        _grabbed.clear();
+        if (grip == Grip::Anchor && alt)
+        {
+            // Alt on an anchor is the convert gesture: dragging a corner
+            // point pulls handles out of it, and a click on a curve point
+            // makes it a corner.
+            _grabbed.push_back({edge, i, path, path});
+            if (anchor.smooth || anchor.hasInCurve() || anchor.hasOutCurve())
+            {
+                fla::EditablePath after = path;
+                fla::Anchor& corner = after.anchors[i];
+                corner.smooth = false;
+                corner.inHandle = corner.position;
+                corner.outHandle = corner.position;
+                commitGeometry(view, edge, path, after, "Convert Anchor");
+                _grabbed.clear();
+                _selectedEdge = edge;
+                _selectedAnchor = i;
+                _hasSelectedAnchor = true;
+                return true;
+            }
+            grip = Grip::OutHandle;
+            _convertDrag = true;
+        }
+        else if (grip == Grip::Anchor)
+        {
+            // Every anchor at this point comes along, or the pieces of
+            // outline meeting here come apart.
+            grabCoincidentAnchors(*shape, anchor.position);
+        }
+        else
+        {
+            // A handle belongs to one curve, so only that one moves.
+            _grabbed.push_back({edge, i, path, path});
+        }
+
+        _grip = grip;
+        _dragStart = localPos;
+
+        // Remembered so Delete knows which anchor to remove.
+        _selectedEdge = edge;
+        _selectedAnchor = i;
+        _hasSelectedAnchor = true;
+
+        view.update();
+        return true;
     }
 
     // Clicking off the anchors picks whatever is under the cursor instead.

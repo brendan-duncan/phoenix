@@ -21,6 +21,8 @@
 #include "../data/radial_gradient.h"
 #include "../data/rectangle_primitive.h"
 #include "../data/solid_color.h"
+#include "../data/bitmap_decoder.h"
+#include "../data/bitmap_fill.h"
 #include "../data/static_text.h"
 #include "text_layout.h"
 #include "../data/symbol.h"
@@ -42,6 +44,8 @@
 #include <QDebug>
 #include <QPixmap>
 #include <QImage>
+
+#include <cstring>
 #include <QBitmap>
 #include <QSvgGenerator>
 #include <QtMath>
@@ -938,20 +942,13 @@ void PhoenixView::drawElement(QPainter& painter, const fla::Element* element, co
             }
         }
 
-        if (bitmap && !bitmap->imageData.empty())
+        if (bitmap)
         {
-            QString bitmapName = QString::fromStdString(bitmap->name);
-            if (_bitmapCache.contains(bitmapName))
+            const QPixmap pixmap = libraryBitmap(QString::fromStdString(bitmap->name));
+            if (!pixmap.isNull())
             {
-                painter.drawPixmap(0, 0, _bitmapCache[bitmapName]);
-            }
-            else
-            {
-                 QPixmap pixmap;
-                 QByteArray imgData(reinterpret_cast<const char*>(bitmap->imageData.data()), bitmap->imageData.size());
-                 pixmap.loadFromData(imgData);
-                 _bitmapCache[bitmapName] = pixmap;
-                 painter.drawPixmap(0, 0, pixmap);
+                painter.setRenderHint(QPainter::SmoothPixmapTransform, bitmap->allowSmoothing);
+                painter.drawPixmap(0, 0, pixmap);
             }
         }
     }
@@ -1070,8 +1067,11 @@ QBrush PhoenixView::getFillBrush(const fla::FillStyle* fillStyle, const fla::Rec
     {
         const fla::LinearGradient* linearFill = static_cast<const fla::LinearGradient*>(fillStyle);
 
-        const double halfSpan = 1625.0;
+        // Flash's gradient square is 1638.4 twips across before the matrix,
+        // which the half scale below brings to 819.2 either side of centre.
+        const double halfSpan = 1638.4;
         QLinearGradient gradient(QPointF(-halfSpan, 0.0), QPointF(halfSpan, 0.0));
+        gradient.setSpread(gradientSpread(linearFill->spreadMethod));
         for (const fla::GradientEntry& entry : linearFill->entries)
         {
             QColor color(entry.color[0], entry.color[1], entry.color[2], entry.color[3]);
@@ -1099,9 +1099,10 @@ QBrush PhoenixView::getFillBrush(const fla::FillStyle* fillStyle, const fla::Rec
 
         double cx = 0.0;
         double cy = 0.0;
-        double radius = 1625.0;
+        double radius = 1638.4;
 
         QRadialGradient gradient(cx, cy, radius);
+        gradient.setSpread(gradientSpread(radialFill->spreadMethod));
 
         double focalOffset = focalRatio * radius;
         gradient.setFocalPoint(cx + focalOffset, cy);
@@ -1123,8 +1124,87 @@ QBrush PhoenixView::getFillBrush(const fla::FillStyle* fillStyle, const fla::Rec
 
         return brush;
     }
+    else if (fillStyle->type() == fla::FillStyle::Type::BitmapFill)
+    {
+        const fla::BitmapFill* bitmapFill = static_cast<const fla::BitmapFill*>(fillStyle);
+        const QPixmap pixmap = libraryBitmap(QString::fromStdString(bitmapFill->bitmapPath));
+        if (pixmap.isNull())
+            return Qt::NoBrush;
+
+        // The fill's matrix maps bitmap pixels to twips: an unscaled bitmap
+        // carries a scale of 20, so a twentieth of it maps pixels to pixels.
+        // A clipped fill shows the bitmap once; a tiled brush is the nearest
+        // Qt comes, so the clipping is still to do.
+        QBrush brush(pixmap);
+        const double s = 1.0 / 20.0;
+        brush.setTransform(QTransform(
+            bitmapFill->transform.m11 * s, bitmapFill->transform.m12 * s,
+            bitmapFill->transform.m21 * s, bitmapFill->transform.m22 * s,
+            bitmapFill->transform.tx, bitmapFill->transform.ty));
+        return brush;
+    }
 
     return Qt::NoBrush;
+}
+
+QGradient::Spread PhoenixView::gradientSpread(const std::string& method)
+{
+    if (method == "reflect")
+        return QGradient::ReflectSpread;
+    if (method == "repeat")
+        return QGradient::RepeatSpread;
+    return QGradient::PadSpread;
+}
+
+QPixmap PhoenixView::libraryBitmap(const QString& name)
+{
+    if (_bitmapCache.contains(name))
+        return _bitmapCache[name];
+    if (!_flaDocument || !_flaDocument->document)
+        return QPixmap();
+
+    for (fla::Resource* resource : _flaDocument->document->resources)
+    {
+        if (!resource || resource->resourceType() != fla::Resource::Type::Bitmap)
+            continue;
+        const fla::Bitmap* bitmap = static_cast<const fla::Bitmap*>(resource);
+        if (bitmap->name != name.toStdString())
+            continue;
+
+        QPixmap pixmap;
+        if (!bitmap->imageData.empty())
+        {
+            // The imported file as Animate kept it.
+            const QByteArray data(reinterpret_cast<const char*>(bitmap->imageData.data()),
+                static_cast<int>(bitmap->imageData.size()));
+            pixmap.loadFromData(data);
+        }
+        if (pixmap.isNull() && fla::isJpegData(bitmap->datData))
+        {
+            const QByteArray data(reinterpret_cast<const char*>(bitmap->datData.data()),
+                static_cast<int>(bitmap->datData.size()));
+            pixmap.loadFromData(data);
+        }
+        if (pixmap.isNull())
+        {
+            // Animate's own lossless encoding of the pixels.
+            fla::DecodedBitmap decoded;
+            if (fla::decodeLosslessBitmap(bitmap->datData, decoded))
+            {
+                QImage image(decoded.width, decoded.height, QImage::Format_ARGB32_Premultiplied);
+                for (int y = 0; y < decoded.height; ++y)
+                {
+                    std::memcpy(image.scanLine(y),
+                        decoded.pixels.data() + static_cast<size_t>(y) * decoded.width,
+                        static_cast<size_t>(decoded.width) * 4);
+                }
+                pixmap = QPixmap::fromImage(image);
+            }
+        }
+        _bitmapCache[name] = pixmap;
+        return pixmap;
+    }
+    return QPixmap();
 }
 
 void PhoenixView::drawOverlayPoints(QPainter& painter, const fla::Shape* shape)

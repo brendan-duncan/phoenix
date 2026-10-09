@@ -48,6 +48,13 @@ struct HalfEdge
     /// direction, so this is what lets them be read back.
     bool forward = true;
 
+    /// The stretch of the input curve this piece is, as parameters on that
+    /// curve in its own direction (the same for both twins). Neighbouring
+    /// pieces of one curve that end up with nothing between them can be
+    /// joined back into one piece of the original by these.
+    double t0 = 0.0;
+    double t1 = 1.0;
+
     /// The fill on the left of this direction, which is the fill of the face
     /// this half-edge belongs to. The opposite direction carries the fill on the
     /// other side.
@@ -149,6 +156,8 @@ private:
     {
         Curve curve;
         int source = -1;
+        double t0 = 0.0;
+        double t1 = 1.0;
     };
 
     /// Finds or creates the vertex at a snapped position.
