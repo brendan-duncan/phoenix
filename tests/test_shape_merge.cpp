@@ -11,8 +11,10 @@
 #include "../src/geom/shape_geometry.h"
 #include "../src/parser/path_parser.h"
 
+#include <cmath>
 #include <memory>
 #include <string>
+#include <vector>
 
 using fla::Point;
 using fla::Shape;
@@ -172,6 +174,119 @@ TEST(a_shape_drawn_over_another_replaces_it_where_they_overlap)
     CHECK(colourAt(*target, Point(125.0, 125.0)) == kBlue);
     // Outside both, still nothing.
     CHECK(colourAt(*target, Point(-25.0, -25.0)) == -1);
+}
+
+TEST(a_drawing_cut_out_and_merged_back_keeps_its_own_colour)
+{
+    // What placing a drawing does: cut its area out of what is under it, then
+    // later merge it in where it sits. The drawing's colour must survive both.
+    std::unique_ptr<Shape> target = filledRectangle(0, 0, 2000, 2000, 255, 0, 0);
+    std::unique_ptr<Shape> band = filledRectangle(1000, 800, 3000, 1200, 0, 0, 255);
+
+    CHECK(ShapeMerger::subtract(*target, *band));
+    CHECK(colourAt(*target, Point(75.0, 50.0)) == -1);
+    CHECK(colourAt(*target, Point(25.0, 25.0)) == kRed);
+
+    CHECK(ShapeMerger::merge(*target, *band));
+    CHECK(colourAt(*target, Point(75.0, 50.0)) == kBlue);
+    CHECK(colourAt(*target, Point(125.0, 50.0)) == kBlue);
+    CHECK(colourAt(*target, Point(25.0, 25.0)) == kRed);
+}
+
+/// A closed polygon, in twips, with the fill on the side its direction implies.
+std::unique_ptr<Shape> filledPolygon(const std::vector<std::pair<int, int>>& points,
+    uint8_t red, uint8_t green, uint8_t blue)
+{
+    std::unique_ptr<Shape> shape(new Shape(nullptr));
+
+    fla::SolidColor* fill = new fla::SolidColor(shape.get());
+    fill->color[0] = red;
+    fill->color[1] = green;
+    fill->color[2] = blue;
+    fill->color[3] = 255;
+    shape->fills.push_back(fill);
+    shape->fillsMap[1] = fill;
+
+    std::string data = "!" + std::to_string(points[0].first) + " " + std::to_string(points[0].second);
+    for (size_t i = 1; i <= points.size(); ++i)
+    {
+        const auto& p = points[i % points.size()];
+        data += "|" + std::to_string(p.first) + " " + std::to_string(p.second);
+    }
+
+    double area = 0.0;
+    for (size_t i = 0; i < points.size(); ++i)
+    {
+        const auto& a = points[i];
+        const auto& b = points[(i + 1) % points.size()];
+        area += double(a.first) * b.second - double(b.first) * a.second;
+    }
+
+    PathParser parser;
+    fla::Edge* edge = parser.parse(data, shape.get());
+    if (edge)
+    {
+        if (area >= 0.0)
+            edge->fillStyle1 = 1;
+        else
+            edge->fillStyle0 = 1;
+        shape->edges.push_back(edge);
+    }
+    return shape;
+}
+
+/// A brush stroke the way the stroker leaves it: a thin band whose long sides
+/// are polylines of short, nearly collinear pieces, with polygonal round caps.
+std::unique_ptr<Shape> brushBand(double x0, double y0, double x1, double y1, double width, int steps)
+{
+    const double dx = x1 - x0;
+    const double dy = y1 - y0;
+    const double length = std::sqrt(dx * dx + dy * dy);
+    const double nx = -dy / length * width / 2.0;
+    const double ny = dx / length * width / 2.0;
+
+    std::vector<std::pair<int, int>> points;
+    const auto add = [&](double x, double y) {
+        points.push_back({static_cast<int>(std::lround(x * 20.0)), static_cast<int>(std::lround(y * 20.0))});
+    };
+
+    // One side, the far cap, the other side back, the near cap.
+    for (int i = 0; i <= steps; ++i)
+        add(x0 + dx * i / steps + nx, y0 + dy * i / steps + ny);
+    const double angle0 = std::atan2(ny, nx);
+    for (int i = 1; i < 10; ++i)
+    {
+        const double a = angle0 - 3.14159265358979323846 * i / 10.0;
+        add(x1 + std::cos(a) * width / 2.0, y1 + std::sin(a) * width / 2.0);
+    }
+    for (int i = steps; i >= 0; --i)
+        add(x0 + dx * i / steps - nx, y0 + dy * i / steps - ny);
+    for (int i = 1; i < 10; ++i)
+    {
+        const double a = angle0 + 3.14159265358979323846 + 3.14159265358979323846 * (10 - i) / 10.0;
+        add(x0 + std::cos(a) * width / 2.0, y0 + std::sin(a) * width / 2.0);
+    }
+
+    return filledPolygon(points, 0, 0, 255);
+}
+
+TEST(a_brush_band_cut_out_and_merged_back_keeps_its_own_colour)
+{
+    // The square is 0..100 px; the band runs from well left of it to well
+    // right, across its top-left corner, as a brush stroke did on screen.
+    std::unique_ptr<Shape> target = filledRectangle(0, 0, 2000, 2000, 255, 0, 0);
+    std::unique_ptr<Shape> band = brushBand(-60.0, 30.0, 160.0, 5.0, 12.0, 16);
+
+    CHECK(ShapeMerger::subtract(*target, *band));
+    CHECK(colourAt(*target, Point(50.0, 17.5)) == -1);
+    CHECK(colourAt(*target, Point(50.0, 60.0)) == kRed);
+
+    CHECK(ShapeMerger::merge(*target, *band));
+    CHECK(colourAt(*target, Point(50.0, 17.5)) == kBlue);
+    CHECK(colourAt(*target, Point(-40.0, 27.7)) == kBlue);
+    CHECK(colourAt(*target, Point(140.0, 7.3)) == kBlue);
+    CHECK(colourAt(*target, Point(50.0, 60.0)) == kRed);
+    CHECK(colourAt(*target, Point(150.0, 60.0)) == -1);
 }
 
 TEST(merging_renumbers_the_addition_styles)

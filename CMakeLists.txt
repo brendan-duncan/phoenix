@@ -88,6 +88,7 @@ set(HEADERS
     src/gui/cursors.h
     src/gui/edge_bend.h
     src/gui/paint_tools.h
+    src/gui/brush_tools.h
     src/gui/navigation_tools.h
     src/gui/draw_placement.h
     src/gui/selection_tool.h
@@ -175,6 +176,7 @@ set(SOURCES
     src/gui/cursors.cpp
     src/gui/edge_bend.cpp
     src/gui/paint_tools.cpp
+    src/gui/brush_tools.cpp
     src/gui/navigation_tools.cpp
     src/gui/draw_placement.cpp
     src/gui/free_transform_tool.cpp

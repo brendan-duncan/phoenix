@@ -538,7 +538,8 @@ to it, so nothing in the application uses it yet.
   - Bucket and ink bottle done; eraser still to do
 - [x] Selection tool edge-dragging (fill follows the edge)
   - Done, see step 13
-- [ ] Stroke-to-outline conversion (needed by the brush tool)
+- [x] Stroke-to-outline conversion (needed by the brush tool)
+  - Done for the brush through QPainterPathStroker
 - [ ] Consider rendering *from* the planar map, replacing the fill-stitching
       heuristic in `drawShape` (the `directedPaths.size() <= 2` special case and
       twip-rounded point matching). Likely fixes rendering bugs rather than adding risk
@@ -721,25 +722,28 @@ The merge model sits on this, so these come before the tools in step 12.
       interior points the robust way: flatten finely, scan about 9 horizontal
       lines offset off the grid, and return the middle of the widest span with
       non-zero winding (VectorCraft `pathops/src/planar.rs:721`)
-- [ ] **(confirmed) Collinear overlap is not split.** `intersectSegments`
+- [x] **(confirmed) Collinear overlap is not split.** `intersectSegments`
       (`intersect.cpp:51`) returns false for parallel segments, though
       `intersect.h:32-34` promises the ends of an overlapping stretch. With
       (0,0)-(10,0) and (5,0)-(15,0) neither is cut, so half-edges run through
       vertices not on them and the face walk breaks. Common: abutting rectangles
       of unequal size, a pencil stroke retracing itself. Split each segment at
       the other's endpoints when they lie on it
-- [ ] T-junctions: the line-line path accepts only `t` in [0,1] with no slack
+  - Done 2026-10-09: `splitAtCrossings` cuts a curve wherever another curve's endpoint lies on it, which covers overlaps and T-junctions; the overlapping stretch then deduplicates to one edge
+- [x] T-junctions: the line-line path accepts only `t` in [0,1] with no slack
       (`intersect.cpp:161`) while the curve path allows 1e-6 (`:115`), and twips
       are not exact binary fractions, so an endpoint lying on a line can be
       dropped. Split any curve where another curve's endpoint lies within half a
       twip of it
-- [ ] One crossing can become two vertices: each piece end is rebuilt as
+  - Done, see the item above
+- [x] One crossing can become two vertices: each piece end is rebuilt as
       `A.pointAt(t1)` and `B.pointAt(t2)` and rounded separately (`:154-155`).
       Give each crossing one vertex id that both curves resolve to, and weld
       vertices with union-find within a radius rather than by rounding into a
       cell (VectorCraft welds on a 4-epsilon grid checking neighbouring cells,
       `pathops/src/planar.rs:500-517`). Snapping also moves vertices up to half a
       twip without re-checking for new crossings
+  - Done: every cut carries the point it was made at and both pieces are pinned to it. Also found and fixed: the duplicate-piece key rounded midpoints to the twip grid separately, so a midpoint on a half-twip let both copies through and collapsed the faces round it -- which is what turned a brush stroke merged back over its own cut the colour of the artwork under it
 - [ ] The parallel test is an absolute 1e-12 (`intersect.cpp:51`). After a
       rotation in `bakeTransform`, collinear lines then produce arbitrary
       crossings. Make it relative to the segments' lengths
@@ -1026,7 +1030,7 @@ addition maps, plus a rule for which strokes survive.
       which already divides without erasing, then select the faces inside. The
       lasso collects points at least 1 px apart and tests with even-odd
       point-in-polygon (VectorCraft `tools/src/xform/wand.rs:46-130`)
-- [ ] **Brush** (paints fills). Fit the centreline as the pencil does, outline it
+- [x] **Brush** (paints fills). Fit the centreline as the pencil does, outline it
       with round caps and joins (in Qt, `QPainterPathStroker` then `simplified()`,
       then refit the outline), and merge it. Same-colour seams vanish on their
       own. Modes are face rules: Normal = merge; Behind = target fill if any,
@@ -1036,13 +1040,15 @@ addition maps, plus a rule for which strokes survive.
       `+-(w/2) * profile(t)` along the normal, miter or round the outer joins,
       join the sides with caps, and fill the ring non-zero (VectorCraft
       `effects/src/stroke/width.rs:158-217`)
-- [ ] **Eraser.** Normal = `ShapeMerger::subtract` with the brush outline; Fills =
+  - Done 2026-10-09 (`brush_tools.cpp`, B): the fitted centreline is stroked with round caps and joins, resolved with `simplified()`, and each loop written with the fill on the side its direction implies. Normal mode only; the other modes and pressure are still to do
+- [x] **Eraser.** Normal = `ShapeMerger::subtract` with the brush outline; Fills =
       keep all target strokes; Lines = keep fills, drop strokes inside;
       Selected Fills / Inside restrict as for the brush; Faucet clears the
       connected same-fill faces. For object-drawing strokes: sample each segment
       24 times against "inside the brush", bisect each in/out change 30 times,
       cut there, and rejoin a closed path's first and last runs (VectorCraft
       `engine/src/cmd/draw2.rs:329-441`)
+  - Done (E) in normal mode through `SubtractShapeCommand`; the other modes and the faucet are still to do
 - [x] **Paint bucket.** Arrange the merge shapes under the click with strokes as
       cutting edges, take the face under the click, flood across edges with no
       stroke and the same fill on both sides, set the fill and rebuild. Gap

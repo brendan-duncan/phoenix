@@ -51,6 +51,10 @@ public:
     /// zoomed out.
     int pencilSmoothing = 50;
 
+    /// Brush and eraser widths, in pixels.
+    double brushSize = 12.0;
+    double eraserSize = 12.0;
+
     /// Corner radius for the rectangle tools, in pixels. The Up and Down
     /// arrows change it while a rectangle is being dragged out, as in Animate.
     double cornerRadius = 0.0;

@@ -85,17 +85,110 @@ int PlanarMap::vertexAt(const Point& snapped)
     return index;
 }
 
+namespace {
+
+/// The parameter on \a curve nearest to \a point, and how far away it is.
+/// A line is solved by projection; a cubic by a coarse sweep refined by
+/// bisection, which is as exact as picking needs.
+double nearestParameter(const Curve& curve, const Point& point, double& distance)
+{
+    const auto distanceAt = [&](double t) {
+        const Point at = curve.pointAt(t);
+        return std::hypot(at.x - point.x, at.y - point.y);
+    };
+
+    if (curve.isLine())
+    {
+        const Point& a = curve.start();
+        const Point& b = curve.end();
+        const double dx = b.x - a.x;
+        const double dy = b.y - a.y;
+        const double lengthSquared = dx * dx + dy * dy;
+        double t = 0.0;
+        if (lengthSquared > 1.0e-18)
+            t = std::max(0.0, std::min(1.0, ((point.x - a.x) * dx + (point.y - a.y) * dy) / lengthSquared));
+        distance = distanceAt(t);
+        return t;
+    }
+
+    constexpr int kSamples = 32;
+    double best = 0.0;
+    double bestDistance = distanceAt(0.0);
+    for (int i = 1; i <= kSamples; ++i)
+    {
+        const double t = static_cast<double>(i) / kSamples;
+        const double d = distanceAt(t);
+        if (d < bestDistance)
+        {
+            bestDistance = d;
+            best = t;
+        }
+    }
+
+    double step = 1.0 / kSamples;
+    for (int i = 0; i < 24; ++i)
+    {
+        step *= 0.5;
+        for (const double t : {best - step, best + step})
+        {
+            if (t < 0.0 || t > 1.0)
+                continue;
+            const double d = distanceAt(t);
+            if (d < bestDistance)
+            {
+                bestDistance = d;
+                best = t;
+            }
+        }
+    }
+
+    distance = bestDistance;
+    return best;
+}
+
+/// Where a curve has to be cut, and the exact point the cut lands on when one
+/// is known. Every crossing is given to both curves as the same point, and a
+/// curve cut where another's endpoint touches it takes that endpoint, so the
+/// pieces weld to one vertex instead of two neighbouring ones.
+struct Cut
+{
+    double t = 0.0;
+    bool hasPoint = false;
+    Point point;
+};
+
+} // namespace
+
 std::vector<PlanarMap::Input> PlanarMap::splitAtCrossings(double tolerance) const
 {
-    // Parameters along each input curve where it has to be cut.
-    std::vector<std::vector<double>> cuts(_inputs.size());
+    std::vector<std::vector<Cut>> cuts(_inputs.size());
+
+    // An endpoint has to sit clear of the other curve's own ends to count as a
+    // T-junction; at the ends, welding does the job.
+    const double touch = std::max(tolerance, kTwip / 2.0);
+
+    const auto addTouch = [&](size_t onto, const Point& point) {
+        const Curve& curve = _inputs[onto].curve;
+        for (const Point& end : {curve.start(), curve.end()})
+        {
+            if (std::hypot(end.x - point.x, end.y - point.y) <= touch)
+                return;
+        }
+
+        double distance = 0.0;
+        const double t = nearestParameter(curve, point, distance);
+        if (distance > touch || t <= 1.0e-6 || t >= 1.0 - 1.0e-6)
+            return;
+
+        cuts[onto].push_back({t, true, point});
+    };
 
     for (size_t i = 0; i < _inputs.size(); ++i)
     {
         for (const CurveIntersection& hit : selfIntersections(_inputs[i].curve, tolerance))
         {
-            cuts[i].push_back(hit.t1);
-            cuts[i].push_back(hit.t2);
+            cuts[i].push_back({hit.t1, true, hit.position});
+            cuts[i].push_back({hit.t2, true, hit.position});
         }
 
         for (size_t j = i + 1; j < _inputs.size(); ++j)
@@ -107,9 +200,19 @@ std::vector<PlanarMap::Input> PlanarMap::splitAtCrossings(double tolerance) cons
 
             for (const CurveIntersection& hit : hits)
             {
-                cuts[i].push_back(hit.t1);
-                cuts[j].push_back(hit.t2);
+                cuts[i].push_back({hit.t1, true, hit.position});
+                cuts[j].push_back({hit.t2, true, hit.position});
             }
+
+            // T-junctions and collinear overlaps: an end of one curve lying on
+            // the other splits it there. Running along together is not a
+            // crossing, so the pair test above leaves these alone, and without
+            // the split a piece would run straight through a vertex it ought
+            // to stop at.
+            addTouch(j, _inputs[i].curve.start());
+            addTouch(j, _inputs[i].curve.end());
+            addTouch(i, _inputs[j].curve.start());
+            addTouch(i, _inputs[j].curve.end());
         }
     }
 
@@ -117,23 +220,37 @@ std::vector<PlanarMap::Input> PlanarMap::splitAtCrossings(double tolerance) cons
 
     for (size_t i = 0; i < _inputs.size(); ++i)
     {
-        std::vector<double>& parameters = cuts[i];
-        parameters.push_back(0.0);
-        parameters.push_back(1.0);
-        std::sort(parameters.begin(), parameters.end());
+        std::vector<Cut>& parameters = cuts[i];
+        parameters.push_back({0.0, false, Point()});
+        parameters.push_back({1.0, false, Point()});
+        std::sort(parameters.begin(), parameters.end(),
+            [](const Cut& a, const Cut& b) { return a.t < b.t; });
 
         for (size_t k = 1; k < parameters.size(); ++k)
         {
-            const double from = parameters[k - 1];
-            const double to = parameters[k];
+            const Cut& from = parameters[k - 1];
+            const Cut& to = parameters[k];
 
             // Cuts that land on top of each other produce nothing worth keeping.
-            if (to - from <= 1.0e-9)
+            if (to.t - from.t <= 1.0e-9)
                 continue;
 
             Input piece;
-            piece.curve = _inputs[i].curve.subcurve(from, to);
+            piece.curve = _inputs[i].curve.subcurve(from.t, to.t);
             piece.source = _inputs[i].source;
+
+            // Pin the ends to the points the cuts were made at, so the curve
+            // this piece meets there ends on exactly the same point.
+            if (from.hasPoint || to.hasPoint)
+            {
+                const Point start = from.hasPoint ? from.point : piece.curve.start();
+                const Point end = to.hasPoint ? to.point : piece.curve.end();
+                piece.curve = piece.curve.isLine()
+                    ? Curve::line(start, end)
+                    : Curve::cubic(start, piece.curve.controlPoint(1),
+                        piece.curve.controlPoint(2), end);
+            }
+
             pieces.push_back(piece);
         }
     }
@@ -147,7 +264,12 @@ void PlanarMap::buildHalfEdges(const std::vector<Input>& pieces)
     // Running along together is not a crossing, so the intersection pass leaves
     // both, and keeping both would put a zero-width sliver between them where
     // there is nothing. One piece of geometry means one edge.
-    std::map<std::tuple<int, int, int64_t, int64_t>, bool> seen;
+    //
+    // Two pieces are the same edge when they join the same vertices and bulge
+    // the same way, which the midpoint captures. The comparison is tolerant: a
+    // midpoint can sit on a half-twip, where the two copies' rounding noise
+    // would send it to different grid points and let both copies through.
+    std::map<std::pair<int, int>, std::vector<Point>> seen;
 
     for (const Input& piece : pieces)
     {
@@ -161,15 +283,20 @@ void PlanarMap::buildHalfEdges(const std::vector<Input>& pieces)
         if (from == to && piece.curve.chordLength() < kMinimumPieceLength)
             continue;
 
-        // Two pieces count as the same edge when they join the same vertices and
-        // bulge the same way, which the midpoint captures.
-        const Point middle = snapToTwips(piece.curve.pointAt(0.5));
-        const std::tuple<int, int, int64_t, int64_t> key(
-            std::min(from, to), std::max(from, to),
-            toTwips(middle.x), toTwips(middle.y));
-
-        if (!seen.emplace(key, true).second)
+        const Point middle = piece.curve.pointAt(0.5);
+        std::vector<Point>& middles = seen[{std::min(from, to), std::max(from, to)}];
+        bool duplicate = false;
+        for (const Point& other : middles)
+        {
+            if (std::hypot(other.x - middle.x, other.y - middle.y) <= kTwip)
+            {
+                duplicate = true;
+                break;
+            }
+        }
+        if (duplicate)
             continue;
+        middles.push_back(middle);
 
         // Rebuild the geometry on the welded endpoints. The shift is under half
         // a twip, which is below what the format can store anyway.

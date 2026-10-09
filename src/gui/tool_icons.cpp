@@ -260,6 +260,37 @@ void drawEyedropper(QPainter& painter)
     painter.drawEllipse(QRectF(14.0, 4.0, 6.0, 6.0));
 }
 
+void drawBrush(QPainter& painter)
+{
+    // A handle running down to a rounded tip.
+    painter.setPen(QPen(strokeColour(), 1.3));
+    painter.setBrush(Qt::NoBrush);
+    painter.drawLine(QPointF(19.5, 4.5), QPointF(11.0, 13.0));
+    painter.setPen(Qt::NoPen);
+    painter.setBrush(strokeColour());
+    QPainterPath tip;
+    tip.moveTo(11.5, 12.0);
+    tip.quadTo(6.0, 12.0, 5.0, 19.5);
+    tip.quadTo(12.5, 18.5, 12.5, 13.0);
+    tip.closeSubpath();
+    painter.drawPath(tip);
+}
+
+void drawEraser(QPainter& painter)
+{
+    // A tilted block with a darker end.
+    painter.save();
+    painter.translate(12.0, 12.0);
+    painter.rotate(-45.0);
+    painter.setPen(QPen(strokeColour(), 1.3));
+    painter.setBrush(Qt::NoBrush);
+    painter.drawRoundedRect(QRectF(-8.0, -4.0, 16.0, 8.0), 1.5, 1.5);
+    painter.setPen(Qt::NoPen);
+    painter.setBrush(strokeColour());
+    painter.drawRect(QRectF(-8.0, -4.0, 5.0, 8.0));
+    painter.restore();
+}
+
 void drawObjectDrawing(QPainter& painter)
 {
     // A shape inside its own boundary: what the mode does is keep the two
@@ -302,6 +333,8 @@ QPixmap render(ToolIcons::Tool tool, int size)
     case ToolIcons::Tool::PaintBucket:   drawPaintBucket(painter); break;
     case ToolIcons::Tool::InkBottle:     drawInkBottle(painter); break;
     case ToolIcons::Tool::Eyedropper:    drawEyedropper(painter); break;
+    case ToolIcons::Tool::Brush:         drawBrush(painter); break;
+    case ToolIcons::Tool::Eraser:        drawEraser(painter); break;
     case ToolIcons::Tool::ObjectDrawing: drawObjectDrawing(painter); break;
     }
 

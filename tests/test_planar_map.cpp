@@ -66,6 +66,26 @@ bool nearly(double a, double b, double tolerance = 1.0e-6)
 
 } // namespace
 
+TEST(planar_map_splits_collinear_overlaps_and_t_junctions)
+{
+    // Two segments running along the same line and overlapping for a stretch:
+    // each is cut where the other ends, and the shared stretch is one edge.
+    PlanarMap overlap;
+    overlap.addCurve(Curve::line(Point(0.0, 0.0), Point(10.0, 0.0)), 0);
+    overlap.addCurve(Curve::line(Point(5.0, 0.0), Point(15.0, 0.0)), 1);
+    overlap.build();
+    CHECK(overlap.vertices().size() == 4);
+    CHECK(overlap.halfEdges().size() == 6);
+
+    // A segment ending on the middle of another splits it there.
+    PlanarMap tee;
+    tee.addCurve(Curve::line(Point(0.0, 0.0), Point(10.0, 0.0)), 0);
+    tee.addCurve(Curve::line(Point(5.0, 0.0), Point(5.0, 8.0)), 1);
+    tee.build();
+    CHECK(tee.vertices().size() == 4);
+    CHECK(tee.halfEdges().size() == 6);
+}
+
 TEST(planar_map_starts_empty)
 {
     PlanarMap map;

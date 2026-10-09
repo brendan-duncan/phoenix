@@ -113,6 +113,8 @@ MainWindow::MainWindow(QWidget *parent)
         PrimitiveTool::Kind::OvalPrimitive, _selection, stack, _drawingStyle);
     _handTool = std::make_unique<HandTool>();
     _zoomTool = std::make_unique<ZoomTool>();
+    _brushTool = std::make_unique<BrushTool>(_selection, stack, _drawingStyle);
+    _eraserTool = std::make_unique<EraserTool>(stack, _drawingStyle);
     _paintBucketTool = std::make_unique<PaintBucketTool>(stack, _drawingStyle);
     _inkBottleTool = std::make_unique<InkBottleTool>(stack, _drawingStyle);
     // Sampling hands over to the bucket or the bottle, as Animate does.
@@ -485,7 +487,8 @@ void MainWindow::setupMenus()
     QAction* showBoundsAction = new QAction("Show Bounding Boxes", this);
     showBoundsAction->setCheckable(true);
     showBoundsAction->setChecked(false);
-    showBoundsAction->setShortcut(QKeySequence(Qt::Key_B));
+    // B belongs to the brush, as in Animate; the debug toggle moves aside.
+    showBoundsAction->setShortcut(QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_B));
     showBoundsAction->setStatusTip("Show element bounding boxes used for culling (Green=rendered, Red=culled, Blue=visible area)");
     connect(showBoundsAction, &QAction::toggled, _phoenixView, &PhoenixView::setShowBounds);
     viewMenu->addAction(showBoundsAction);
@@ -948,6 +951,26 @@ void MainWindow::setupToolBar()
     toolGroup->addAction(handAction);
     toolBar->addAction(handAction);
 
+    QAction* brushAction = new QAction(ToolIcons::icon(ToolIcons::Tool::Brush), "Brush", this);
+    brushAction->setCheckable(true);
+    brushAction->setShortcut(QKeySequence(Qt::Key_B));
+    brushAction->setStatusTip("Paint a fill along the drag. The size is in the Properties panel.");
+    connect(brushAction, &QAction::triggered, this, [this]() {
+        _phoenixView->setActiveTool(_brushTool.get());
+    });
+    toolGroup->addAction(brushAction);
+    toolBar->addAction(brushAction);
+
+    QAction* eraserAction = new QAction(ToolIcons::icon(ToolIcons::Tool::Eraser), "Eraser", this);
+    eraserAction->setCheckable(true);
+    eraserAction->setShortcut(QKeySequence(Qt::Key_E));
+    eraserAction->setStatusTip("Erase fills and strokes along the drag from merge-drawn artwork.");
+    connect(eraserAction, &QAction::triggered, this, [this]() {
+        _phoenixView->setActiveTool(_eraserTool.get());
+    });
+    toolGroup->addAction(eraserAction);
+    toolBar->addAction(eraserAction);
+
     _paintBucketAction = new QAction(ToolIcons::icon(ToolIcons::Tool::PaintBucket), "Paint Bucket", this);
     _paintBucketAction->setCheckable(true);
     _paintBucketAction->setShortcut(QKeySequence(Qt::Key_K));
@@ -1111,6 +1134,24 @@ void MainWindow::setupPropertiesPanel()
         _drawingStyle.cornerRadius = value;
     });
     layout->addRow("Corner radius", _cornerRadiusBox);
+
+    QDoubleSpinBox* brushSize = new QDoubleSpinBox(panel);
+    brushSize->setRange(1.0, 200.0);
+    brushSize->setSingleStep(1.0);
+    brushSize->setValue(_drawingStyle.brushSize);
+    connect(brushSize, &QDoubleSpinBox::valueChanged, this, [this](double value) {
+        _drawingStyle.brushSize = value;
+    });
+    layout->addRow("Brush size", brushSize);
+
+    QDoubleSpinBox* eraserSize = new QDoubleSpinBox(panel);
+    eraserSize->setRange(1.0, 200.0);
+    eraserSize->setSingleStep(1.0);
+    eraserSize->setValue(_drawingStyle.eraserSize);
+    connect(eraserSize, &QDoubleSpinBox::valueChanged, this, [this](double value) {
+        _drawingStyle.eraserSize = value;
+    });
+    layout->addRow("Eraser size", eraserSize);
 
     // PolyStar settings, which only the polystar tool reads.
     QSpinBox* sides = new QSpinBox(panel);

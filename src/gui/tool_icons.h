@@ -28,6 +28,8 @@ public:
         PaintBucket,
         InkBottle,
         Eyedropper,
+        Brush,
+        Eraser,
         /// Not a tool: the toggle that keeps a drawing its own object.
         ObjectDrawing
     };
