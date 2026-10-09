@@ -845,11 +845,14 @@ All in `phoenix_view.cpp` unless noted.
       `QGradient::setSpread`. `interpolationMethod="linearRGB"` is not parsed;
       approximate it by expanding the stops into many sRGB stops
   - Done 2026-10-09 for `spreadMethod`: parsed, written, cloned and applied with `QGradient::setSpread` (reflect and repeat checked on screen). `interpolationMethod` is parsed and written back but still rendered as sRGB
-- [ ] Render `interpolationMethod="linearRGB"` by expanding the stops into many sRGB stops
-- [ ] Gradient strokes ignore their matrix and use a fixed 0..100 line or a 50 px
+- [x] Render `interpolationMethod="linearRGB"` by expanding the stops into many sRGB stops
+  - Done 2026-10-09: eight stops per span computed in linear light (`addGradientStops`), fills and strokes alike
+- [x] Gradient strokes ignore their matrix and use a fixed 0..100 line or a 50 px
       circle (`:965-994`)
-- [ ] Stroke `scaleMode` is parsed but ignored. Compute the pen width from the
+  - Done 2026-10-09: the pen's brush is the same brush the fill would be (`getFillBrush`), matrix, spread and interpolation included; bitmap strokes come with it
+- [x] Stroke `scaleMode` is parsed but ignored. Compute the pen width from the
       current transform's x/y scale for none/horizontal/vertical
+  - Done 2026-10-09: `drawElement` keeps the element's transform relative to the stage (`_elementTransform`), and `scaledStrokeWeight` divides the weight by the square root of its area change for "none", putting one axis's scale back for horizontal/vertical. Cached pens hold the plain weight and are adjusted per draw (`penForHere`). Checked: a weight-4 "none" stroke inside a 2.5x instance measures 4 px
 - [x] Caps, joints, miterLimit and pixelHinting are never parsed (`stroke_style.h`
       has only weight, scaleMode, fill), so Flash's default round caps and joins
       are lost
@@ -863,7 +866,7 @@ All in `phoenix_view.cpp` unless noted.
       ignored. A custom dasher walks each subpath by arc length, restarts per
       subpath, and turns zero-length dashes into dots shaped by the cap
       (VectorCraft `effects/src/stroke/dash.rs:47, 174, 311`)
-- [ ] Colour transforms (`:723-755, :2772-2884`) render the instance into a
+- [x] Colour transforms (`:723-755, :2772-2884`) render the instance into a
       stage-sized image with only its own matrix (`:736`), so the parent
       transform is dropped, content off the stage is clipped, and the result is
       1x and blurry when zoomed. Use an isolated offscreen sized to the
@@ -872,26 +875,31 @@ All in `phoenix_view.cpp` unless noted.
       `render/src/group.rs:92-133, 253-262`). An alpha-only transform on a single
       shape can multiply brush and pen alpha instead of rendering an image
       (VectorCraft `render/src/lib.rs:762-790`)
-- [ ] Tint also blends alpha (`a = it*a + t*tintA`); Flash tint is per-channel
+  - Done 2026-10-09: an alpha-only transform is the painter's opacity, which scales each shape's own alpha as Flash does (overlapping shapes inside the symbol show through each other). Anything else renders into an offscreen cropped to the instance's device bounds (all frames of all layers, plus 2 px) with the full transform shifted to the crop, so it is sharp at any zoom, keeps the parent transform and is not clipped to the stage
+- [x] Tint also blends alpha (`a = it*a + t*tintA`); Flash tint is per-channel
       multiply `1-t` plus offset `t*colour` and leaves alpha alone. Brightness is
       done as an HSL lightness shift; it is also multiply+add (b > 0: multiply
       `1-b`, add `255b`; b < 0: multiply `1+b`)
+  - Done 2026-10-09, and the arithmetic now runs on straight (unpremultiplied) colour so offsets do not brighten translucent edges
 - [ ] Masks use the mask art's alpha; Flash masks use coverage only, so a
       semi-transparent mask fill should not fade the content. A mask inside a
       colour-transformed symbol is sized from the widget `rect()` but drawn into
       the stage-sized image, so it is misaligned
-- [ ] Motion tweens lerp matrix entries (`:662`), so rotation shrinks and skews.
+- [x] Motion tweens lerp matrix entries (`:662`), so rotation shrinks and skews.
       Decompose into translate, rotation, scale and shear, take the shortest
       rotation, and recompose (VectorCraft `doc/src/blend.rs:271-285`). Easing,
       custom ease, rotate-N-times and colour-transform tweening are not parsed.
       Elements are paired by index (`:652`)
+  - Done 2026-10-09 for the matrix: `blendTransforms` (`src/edit/transform_blend.cpp`, Qt-free, 4 tests) takes each matrix apart into translation, x/y scale and Animate's two skew angles, blends the angles the short way round and a flip as a negative scale, and puts it back together. A 0 to 90 degree tween is at 45 degrees and full size half way
+- [ ] Motion tween easing (`acceleration`), custom ease curves, `motionTweenRotate` with `motionTweenRotateTimes`, and colour-transform tweening are not parsed or applied; elements are still paired by index
 - [ ] Shape tweens force-close morph segments (`:101`) and rescale them to the
       lerped keyframe bounds (`:1626-1674`); only fill index 1 is used, gradients
       are not interpolated and strokes vanish mid-tween. Interpolate each morph
       segment and its fill/stroke indices directly; lerp gradients through a
       shared stop set (VectorCraft `doc/src/blend.rs:89-159`)
-- [ ] Oval primitives ignore start/end angle and inner radius (`:810`); rectangle
+- [x] Oval primitives ignore start/end angle and inner radius (`:810`); rectangle
       corner radii are never parsed. See step 12 for the geometry
+  - Done 2026-10-09: `ovalPrimitivePath` draws the sector from the start angle clockwise to the end angle with a notch to the centre or, with an inner radius, a ring sector; a whole oval with an inner radius is a ring. Rectangle corner radii were already parsed and drawn (`roundedRectanglePath`). The primitive's hit test and bounds still use the whole oval
 - [ ] Filters are not implemented. Flash blur is an iterated box blur with
       separate blurX/blurY and quality = number of passes: use running-sum box
       blurs (VectorCraft `render/src/fx.rs:203-263`). Drop shadow and glow are the
@@ -1026,9 +1034,10 @@ All in `phoenix_view.cpp` unless noted.
       and the radius is clamped to half the shorter side (VectorCraft
       `geom/src/corners.rs:65-125`). Replaces the step 4 item
   - Done for the uniform radius a tool sets; per-corner radii on primitives render too
-- [ ] Oval start/end angle and inner radius: split the sweep into arcs of at most
+- [x] Oval start/end angle and inner radius: split the sweep into arcs of at most
       90 degrees, each with handle `r * 4/3 * tan(delta/4)`; trace the outer arc,
       then the inner arc reversed (or a line to the centre), and close
+  - Done 2026-10-09 for rendering (`ovalPrimitivePath`, Qt arcs); the oval tool still has no way to set the angles or inner radius
 - [ ] PolyStar with shift scales the radius by up to sqrt(2) and snaps the angle,
       because it squares the delta (`primitive_tool.cpp:136-140`). Shift should
       only hold the rotation upright. Arrow keys could change the side count
@@ -1299,8 +1308,9 @@ dragging, at a maximised window on a 3856x1568 display:
       than a quarter pixel. `getElementBounds` is already cached, so this is cheap
 - [ ] Cache stroke outlines per zoom octave (key on the power of two nearest the
       scale), so panning and small zooms reuse them
-- [ ] Bitmap instances scan the library linearly on every draw
+- [x] Bitmap instances scan the library linearly on every draw
       (`phoenix_view.cpp:888`); look them up in a map
+  - Done 2026-10-09: `libraryBitmap` caches the decoded pixmap by name, so the scan happens once per bitmap per document
 - [ ] Colour-transformed instances and mask layers allocate a stage- or
       widget-sized image per frame. Size the offscreen to the content's
       device-pixel bounds instead (see step 11)

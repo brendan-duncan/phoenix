@@ -252,3 +252,74 @@ TEST(prepare_for_warp_cuts_lines_into_cubics)
         CHECK(onVertical || onHorizontal);
     }
 }
+
+#include "../src/edit/transform_blend.h"
+
+namespace {
+
+fla::Transform rotation(double degrees, double scale = 1.0)
+{
+    const double radians = degrees * 3.14159265358979323846 / 180.0;
+    fla::Transform m;
+    m.m11 = scale * std::cos(radians);
+    m.m12 = scale * std::sin(radians);
+    m.m21 = -scale * std::sin(radians);
+    m.m22 = scale * std::cos(radians);
+    return m;
+}
+
+bool near(double a, double b)
+{
+    return std::fabs(a - b) < 1.0e-6;
+}
+
+} // namespace
+
+TEST(tween_blends_rotation_without_shrinking)
+{
+    // Half way from upright to a quarter turn is an eighth of a turn at full
+    // size. Blending the entries would give a matrix of scale cos(45).
+    const fla::Transform mid = fla::blendTransforms(rotation(0.0), rotation(90.0), 0.5);
+    const fla::Transform expected = rotation(45.0);
+    CHECK(near(mid.m11, expected.m11));
+    CHECK(near(mid.m12, expected.m12));
+    CHECK(near(mid.m21, expected.m21));
+    CHECK(near(mid.m22, expected.m22));
+    CHECK(near(std::hypot(mid.m11, mid.m12), 1.0));
+}
+
+TEST(tween_turns_the_short_way_round)
+{
+    // From 350 to 10 degrees goes through 0, not back through 180.
+    const fla::Transform mid = fla::blendTransforms(rotation(350.0), rotation(10.0), 0.5);
+    const fla::Transform expected = rotation(0.0);
+    CHECK(near(mid.m11, expected.m11));
+    CHECK(near(mid.m12, expected.m12));
+}
+
+TEST(tween_blends_scale_and_position_linearly)
+{
+    fla::Transform from = rotation(0.0, 1.0);
+    from.tx = 0.0;
+    from.ty = 0.0;
+    fla::Transform to = rotation(0.0, 3.0);
+    to.tx = 100.0;
+    to.ty = 50.0;
+    const fla::Transform mid = fla::blendTransforms(from, to, 0.5);
+    CHECK(near(mid.m11, 2.0));
+    CHECK(near(mid.m22, 2.0));
+    CHECK(near(mid.tx, 50.0));
+    CHECK(near(mid.ty, 25.0));
+}
+
+TEST(tween_keeps_a_mirrored_keyframe_mirrored)
+{
+    fla::Transform flipped;
+    flipped.m11 = 1.0;
+    flipped.m22 = -1.0;
+    const fla::Transform same = fla::blendTransforms(flipped, flipped, 0.5);
+    CHECK(near(same.m11, 1.0));
+    CHECK(near(same.m22, -1.0));
+    CHECK(near(same.m12, 0.0));
+    CHECK(near(same.m21, 0.0));
+}

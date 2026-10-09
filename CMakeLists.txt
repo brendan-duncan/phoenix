@@ -152,6 +152,7 @@ set(HEADERS
     src/edit/edit_context.h
     src/edit/new_document.h
     src/edit/shape_transform.h
+    src/edit/transform_blend.h
     src/edit/element_commands.h
     src/edit/element_clone.h
     src/edit/selection.h
@@ -244,6 +245,7 @@ set(SOURCES
     src/edit/edit_context.cpp
     src/edit/new_document.cpp
     src/edit/shape_transform.cpp
+    src/edit/transform_blend.cpp
     src/edit/element_commands.cpp
     src/edit/element_clone.cpp
     src/edit/selection.cpp

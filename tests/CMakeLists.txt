@@ -55,6 +55,7 @@ set(TEST_CORE_SOURCES
     ${PHOENIX_SRC}/edit/selection.cpp
     ${PHOENIX_SRC}/edit/shape_merge.cpp
     ${PHOENIX_SRC}/edit/shape_transform.cpp
+    ${PHOENIX_SRC}/edit/transform_blend.cpp
     ${PHOENIX_SRC}/edit/shape_recognition.cpp
     ${PHOENIX_SRC}/edit/snapping.cpp
     ${PHOENIX_SRC}/edit/region_split.cpp

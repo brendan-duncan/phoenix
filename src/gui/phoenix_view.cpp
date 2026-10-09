@@ -22,6 +22,7 @@
 #include "../data/rectangle_primitive.h"
 #include "../data/solid_color.h"
 #include "../data/bitmap_decoder.h"
+#include "../edit/transform_blend.h"
 #include "../data/bitmap_fill.h"
 #include "../data/static_text.h"
 #include "text_layout.h"
@@ -180,6 +181,43 @@ QColor highlightColourFor(const fla::Element* element)
     if (const fla::Layer* layer = owningLayer(element))
         return QColor(layer->color[0], layer->color[1], layer->color[2]);
     return QColor(0, 170, 255);
+}
+
+/// An oval primitive's outline: the whole ellipse, or the sector from its
+/// start angle clockwise to its end angle, with a hole or a notch of the
+/// inner radius (a percentage of the outer). Animate measures angles
+/// clockwise from three o'clock; Qt's arcs run the other way.
+QPainterPath ovalPrimitivePath(const fla::OvalPrimitive& oval)
+{
+    const QRectF outer(QPointF(oval.rect.topLeft.x, oval.rect.topLeft.y),
+        QPointF(oval.rect.bottomRight.x, oval.rect.bottomRight.y));
+    const double inner = std::max(0.0, std::min(99.0, oval.innerRadius)) / 100.0;
+    const QPointF centre = outer.center();
+    const QRectF hole(centre.x() - outer.width() * inner / 2.0, centre.y() - outer.height() * inner / 2.0,
+        outer.width() * inner, outer.height() * inner);
+
+    double sweep = std::fmod(oval.endAngle - oval.startAngle, 360.0);
+    if (sweep < 0.0)
+        sweep += 360.0;
+    const bool whole = sweep == 0.0;
+
+    QPainterPath path;
+    if (whole)
+    {
+        path.addEllipse(outer);
+        if (inner > 0.0)
+            path.addEllipse(hole);
+        return path;
+    }
+
+    path.arcMoveTo(outer, -oval.startAngle);
+    path.arcTo(outer, -oval.startAngle, -sweep);
+    if (inner > 0.0)
+        path.arcTo(hole, -oval.endAngle, sweep);
+    else
+        path.lineTo(centre);
+    path.closeSubpath();
+    return path;
 }
 
 /// A rectangle primitive's outline with its corner radii. Each radius is
@@ -767,14 +805,7 @@ void PhoenixView::drawFrame(QPainter& painter, const fla::Frame* frame, const fl
 
 fla::Transform PhoenixView::interpolateTransform(const fla::Transform& a, const fla::Transform& b, double t)
 {
-    fla::Transform result;
-    result.m11 = a.m11 + (b.m11 - a.m11) * t;
-    result.m12 = a.m12 + (b.m12 - a.m12) * t;
-    result.m21 = a.m21 + (b.m21 - a.m21) * t;
-    result.m22 = a.m22 + (b.m22 - a.m22) * t;
-    result.tx = a.tx + (b.tx - a.tx) * t;
-    result.ty = a.ty + (b.ty - a.ty) * t;
-    return result;
+    return fla::blendTransforms(a, b, t);
 }
 
 int PhoenixView::calculateLayerDuration(const fla::Layer* layer)
@@ -801,11 +832,22 @@ void PhoenixView::drawElement(QPainter& painter, const fla::Element* element, co
 
     painter.save();
 
+    // The element's transform relative to the stage, for strokes whose width
+    // must not scale with it; put back when this element is done.
+    struct ElementScope
+    {
+        QTransform& slot;
+        QTransform saved;
+        ~ElementScope() { slot = saved; }
+    };
+    ElementScope elementScope{_elementTransform, _elementTransform};
+
     // Why does a group have a transform, if applying the groups transform
     // is incorrect because the children are already transformed by the group transform?
     if (element->elementType() != fla::Element::Type::Group)
     {
         painter.setTransform(qTransform, true);
+        _elementTransform = qTransform * _elementTransform;
     }
 
     fla::Element::Type type = element->elementType();
@@ -826,38 +868,87 @@ void PhoenixView::drawElement(QPainter& painter, const fla::Element* element, co
             int frameOffset = (instance->symbolType == fla::SymbolType::Button) ? 0 : instance->firstFrame;
             fla::LoopType loopType = (instance->symbolType == fla::SymbolType::Button) ? fla::LoopType::SingleFrame : instance->loopType;
 
-            if (!instance->colorTransform.isIdentity())
+            const fla::ColorTransform& colour = instance->colorTransform;
+            const bool alphaOnly = colour.tintMultiplier == 0.0 && colour.brightness == 0.0 &&
+                colour.redMultiplier == 1.0 && colour.greenMultiplier == 1.0 &&
+                colour.blueMultiplier == 1.0 && colour.redOffset == 0 &&
+                colour.greenOffset == 0 && colour.blueOffset == 0 && colour.alphaOffset == 0;
+
+            if (!colour.isIdentity() && alphaOnly)
             {
-                QRectF symbolBounds = QRectF(0, 0, _flaDocument->document->width, _flaDocument->document->height);
-                int pixWidth = qMax(1, static_cast<int>(qCeil(symbolBounds.width())));
-                int pixHeight = qMax(1, static_cast<int>(qCeil(symbolBounds.height())));
-
-                QImage symbolImage(pixWidth, pixHeight, QImage::Format_ARGB32);
-                symbolImage.fill(Qt::transparent);
-
-                QPainter symbolPainter(&symbolImage);
-                symbolPainter.setRenderHint(QPainter::Antialiasing, true);
-                symbolPainter.setRenderHint(QPainter::TextAntialiasing, true);
-                symbolPainter.setRenderHint(QPainter::SmoothPixmapTransform, true);
-                symbolPainter.setTransform(qTransform, false);
-
+                // Flash scales every shape's own alpha, so overlapping
+                // shapes inside the symbol show through each other: the
+                // painter's opacity does exactly that.
+                painter.save();
+                painter.setOpacity(painter.opacity() * std::max(0.0, std::min(1.0, colour.alphaMultiplier)));
                 for (const fla::Timeline* timeline : symbol->timelines)
                 {
                     if (timeline->visible)
                     {
-                        symbolPainter.save();
-                        drawTimeline(symbolPainter, timeline, loopType, frameOffset);
-                        symbolPainter.restore();
+                        painter.save();
+                        drawTimeline(painter, timeline, loopType, frameOffset);
+                        painter.restore();
                     }
                 }
-                symbolPainter.end();
-
-                applyColorTransform(symbolImage, instance->colorTransform);
-
-                painter.save();
-                painter.setTransform(viewTransform, false);
-                painter.drawImage(0, 0, symbolImage);
                 painter.restore();
+            }
+            else if (!colour.isIdentity())
+            {
+                // Everything the symbol draws, over all its frames, on the
+                // device, so the offscreen is sized to the instance as seen
+                // (full parent transform and zoom, nothing off the stage
+                // lost) rather than to the stage at 1x.
+                QRectF local;
+                for (const fla::Timeline* timeline : symbol->timelines)
+                {
+                    for (const fla::Layer* layer : timeline->layers)
+                    {
+                        for (const fla::Frame* frame : layer->frames)
+                        {
+                            for (const fla::Element* member : frame->elements)
+                            {
+                                const QRectF bounds = calculateElementLocalBounds(member);
+                                local = local.isNull() ? bounds : local.united(bounds);
+                            }
+                        }
+                    }
+                }
+                if (local.isNull())
+                    local = QRectF(0, 0, 100, 100);
+
+                const QTransform full = painter.transform();
+                QRectF device = full.mapRect(local).adjusted(-2.0, -2.0, 2.0, 2.0);
+                device = device.intersected(QRectF(0, 0, painter.device()->width(), painter.device()->height()));
+                const QRect crop = device.toAlignedRect();
+                if (!crop.isEmpty())
+                {
+                    QImage symbolImage(crop.size(), QImage::Format_ARGB32_Premultiplied);
+                    symbolImage.fill(Qt::transparent);
+
+                    QPainter symbolPainter(&symbolImage);
+                    symbolPainter.setRenderHint(QPainter::Antialiasing, true);
+                    symbolPainter.setRenderHint(QPainter::TextAntialiasing, true);
+                    symbolPainter.setRenderHint(QPainter::SmoothPixmapTransform, true);
+                    symbolPainter.setTransform(full * QTransform::fromTranslate(-crop.x(), -crop.y()), false);
+
+                    for (const fla::Timeline* timeline : symbol->timelines)
+                    {
+                        if (timeline->visible)
+                        {
+                            symbolPainter.save();
+                            drawTimeline(symbolPainter, timeline, loopType, frameOffset);
+                            symbolPainter.restore();
+                        }
+                    }
+                    symbolPainter.end();
+
+                    applyColorTransform(symbolImage, colour);
+
+                    painter.save();
+                    painter.resetTransform();
+                    painter.drawImage(crop.topLeft(), symbolImage);
+                    painter.restore();
+                }
             }
             else
             {
@@ -913,7 +1004,7 @@ void PhoenixView::drawElement(QPainter& painter, const fla::Element* element, co
         QBrush brush = getFillBrush(oval->fillStyle, oval->localBounds);
         painter.setPen(pen);
         painter.setBrush(brush);
-        painter.drawEllipse(oval->rect.topLeft.x, oval->rect.topLeft.y, oval->rect.width(), oval->rect.height());
+        painter.drawPath(ovalPrimitivePath(*oval));
     }
     else if (type == fla::Element::Type::StaticText)
     {
@@ -956,7 +1047,7 @@ void PhoenixView::drawElement(QPainter& painter, const fla::Element* element, co
     painter.restore();
 }
 
-QPen PhoenixView::getPen(const fla::StrokeStyle* strokeStyle)
+QPen PhoenixView::getPen(const fla::StrokeStyle* strokeStyle, bool scaleForElement)
 {
     if (!strokeStyle || !strokeStyle->fill)
     {
@@ -966,7 +1057,9 @@ QPen PhoenixView::getPen(const fla::StrokeStyle* strokeStyle)
     // A hairline is one device pixel wide whatever the zoom or the transform,
     // which is what a cosmetic pen of width zero draws.
     const bool hairline = strokeStyle->isHairline();
-    const double weight = hairline ? 0.0 : std::max(strokeStyle->weight, 0.05);
+    double weight = hairline ? 0.0 : std::max(strokeStyle->weight, 0.05);
+    if (!hairline && scaleForElement)
+        weight = scaledStrokeWeight(weight, strokeStyle->scaleMode);
     QPen pen(QColor(0, 0, 0, 255), weight);
     pen.setCosmetic(hairline);
 
@@ -1018,39 +1111,106 @@ QPen PhoenixView::getPen(const fla::StrokeStyle* strokeStyle)
         QColor color(fill->color[0], fill->color[1], fill->color[2], fill->color[3]);
         pen.setColor(color);
     }
-    else if (strokeStyle->fill->type() == fla::FillStyle::Type::LinearGradient)
+    else
     {
-        const fla::LinearGradient* fill = static_cast<const fla::LinearGradient*>(strokeStyle->fill);
-        QLinearGradient gradient(0, 0, 100, 100);
-        for (const fla::GradientEntry& entry : fill->entries)
-        {
-            QColor color(entry.color[0], entry.color[1], entry.color[2], entry.color[3]);
-            gradient.setColorAt(entry.ratio, color);
-        }
-        pen.setBrush(QBrush(gradient));
-    }
-    else if (strokeStyle->fill->type() == fla::FillStyle::Type::RadialGradient)
-    {
-        const fla::RadialGradient* fill = static_cast<const fla::RadialGradient*>(strokeStyle->fill);
-
-        double cx = 50, cy = 50, radius = 50;
-
-        QRadialGradient gradient(cx, cy, radius);
-
-        double focalOffset = fill->focalPointRatio * radius;
-        gradient.setFocalPoint(cx + focalOffset, cy);
-
-        for (const fla::RadialEntry& entry : fill->entries)
-        {
-            QColor color(entry.color[0], entry.color[1], entry.color[2], entry.color[3]);
-            gradient.setColorAt(entry.ratio, color);
-        }
-
-        pen.setBrush(QBrush(gradient));
+        // A gradient or bitmap stroke is the same brush as the fill would
+        // be, matrix and all.
+        pen.setBrush(getFillBrush(strokeStyle->fill, fla::Rect()));
     }
 
     return pen;
 }
+
+QPen PhoenixView::penForHere(const PathCacheEntry& entry) const
+{
+    const fla::StrokeStyle* stroke = entry.strokeStyle;
+    if (!stroke || stroke->isHairline() || stroke->scaleMode.empty() || stroke->scaleMode == "normal")
+        return entry.pen;
+    QPen pen = entry.pen;
+    pen.setWidthF(scaledStrokeWeight(entry.pen.widthF(), stroke->scaleMode));
+    return pen;
+}
+
+double PhoenixView::scaledStrokeWeight(double weight, const std::string& scaleMode) const
+{
+    if (scaleMode.empty() || scaleMode == "normal")
+        return weight;
+
+    const QTransform& m = _elementTransform;
+    const double scaleX = std::hypot(m.m11(), m.m12());
+    const double scaleY = std::hypot(m.m21(), m.m22());
+    const double area = std::sqrt(std::fabs(m.determinant()));
+    if (area <= 1.0e-9)
+        return weight;
+
+    // The pen is drawn through the element's transform, which scales it by
+    // about the square root of the area change; dividing that out leaves the
+    // weight as it is on the stage, and one axis's scale puts it back.
+    if (scaleMode == "none")
+        return weight / area;
+    if (scaleMode == "horizontal")
+        return weight * scaleX / area;
+    if (scaleMode == "vertical")
+        return weight * scaleY / area;
+    return weight;
+}
+
+namespace {
+
+double toLinearLight(double c)
+{
+    return c <= 0.04045 ? c / 12.92 : std::pow((c + 0.055) / 1.055, 2.4);
+}
+
+double toSrgb(double c)
+{
+    return c <= 0.0031308 ? c * 12.92 : 1.055 * std::pow(c, 1.0 / 2.4) - 0.055;
+}
+
+struct GradientStop
+{
+    double ratio;
+    QColor color;
+};
+
+/// The stops on the gradient. Qt blends between stops in sRGB; a gradient
+/// marked linearRGB is blended in linear light, which is approximated by
+/// filling each span with stops computed there.
+void addGradientStops(QGradient& gradient, const std::vector<GradientStop>& stops, bool linearRgb)
+{
+    if (!linearRgb || stops.size() < 2)
+    {
+        for (const GradientStop& stop : stops)
+            gradient.setColorAt(stop.ratio, stop.color);
+        return;
+    }
+
+    constexpr int kSteps = 8;
+    for (size_t i = 0; i + 1 < stops.size(); ++i)
+    {
+        const GradientStop& a = stops[i];
+        const GradientStop& b = stops[i + 1];
+        gradient.setColorAt(a.ratio, a.color);
+        for (int k = 1; k < kSteps; ++k)
+        {
+            const double t = static_cast<double>(k) / kSteps;
+            const auto mix = [&](double x, double y) {
+                const double lx = toLinearLight(x);
+                const double ly = toLinearLight(y);
+                return std::max(0.0, std::min(1.0, toSrgb(lx + (ly - lx) * t)));
+            };
+            const QColor color = QColor::fromRgbF(
+                mix(a.color.redF(), b.color.redF()),
+                mix(a.color.greenF(), b.color.greenF()),
+                mix(a.color.blueF(), b.color.blueF()),
+                a.color.alphaF() + (b.color.alphaF() - a.color.alphaF()) * t);
+            gradient.setColorAt(a.ratio + (b.ratio - a.ratio) * t, color);
+        }
+    }
+    gradient.setColorAt(stops.back().ratio, stops.back().color);
+}
+
+} // namespace
 
 QBrush PhoenixView::getFillBrush(const fla::FillStyle* fillStyle, const fla::Rect& bounds)
 {
@@ -1072,11 +1232,10 @@ QBrush PhoenixView::getFillBrush(const fla::FillStyle* fillStyle, const fla::Rec
         const double halfSpan = 1638.4;
         QLinearGradient gradient(QPointF(-halfSpan, 0.0), QPointF(halfSpan, 0.0));
         gradient.setSpread(gradientSpread(linearFill->spreadMethod));
+        std::vector<GradientStop> stops;
         for (const fla::GradientEntry& entry : linearFill->entries)
-        {
-            QColor color(entry.color[0], entry.color[1], entry.color[2], entry.color[3]);
-            gradient.setColorAt(entry.ratio, color);
-        }
+            stops.push_back({entry.ratio, QColor(entry.color[0], entry.color[1], entry.color[2], entry.color[3])});
+        addGradientStops(gradient, stops, linearFill->interpolationMethod == "linearRGB");
         QBrush brush(gradient);
         const double s = 0.5;
         QTransform brushTransform(
@@ -1107,11 +1266,10 @@ QBrush PhoenixView::getFillBrush(const fla::FillStyle* fillStyle, const fla::Rec
         double focalOffset = focalRatio * radius;
         gradient.setFocalPoint(cx + focalOffset, cy);
 
+        std::vector<GradientStop> stops;
         for (const fla::RadialEntry& entry : radialFill->entries)
-        {
-            QColor color(entry.color[0], entry.color[1], entry.color[2], entry.color[3]);
-            gradient.setColorAt(entry.ratio, color);
-        }
+            stops.push_back({entry.ratio, QColor(entry.color[0], entry.color[1], entry.color[2], entry.color[3])});
+        addGradientStops(gradient, stops, radialFill->interpolationMethod == "linearRGB");
 
         QBrush brush(gradient);
 
@@ -1824,7 +1982,8 @@ void PhoenixView::buildShapePaths(const fla::Shape* shape, PathCacheList& cacheE
 
     for (auto& [strokeIdx, pieces] : strokePieces)
     {
-        const QPen pen = getPen(shape->getStrokeStyleByIndex(strokeIdx));
+        const fla::StrokeStyle* strokeStyle = shape->getStrokeStyleByIndex(strokeIdx);
+        const QPen pen = getPen(strokeStyle, false);
 
         for (size_t first = 0; first < pieces.size(); ++first)
         {
@@ -1889,7 +2048,7 @@ void PhoenixView::buildShapePaths(const fla::Shape* shape, PathCacheList& cacheE
             if (pointsMatch(runEnd, runStart))
                 strokePath.closeSubpath();
 
-            cacheEntries.push_back({ QBrush(Qt::NoBrush), pen, strokePath });
+            cacheEntries.push_back({ QBrush(Qt::NoBrush), pen, strokePath, strokeStyle });
         }
     }
 }
@@ -1967,7 +2126,7 @@ void PhoenixView::drawShape(QPainter& painter, const fla::Shape* shape, const fl
     for (const PathCacheEntry& entry : shapePaths(shape))
     {
         painter.setBrush(entry.fillBrush);
-        painter.setPen(entry.pen);
+        painter.setPen(penForHere(entry));
         painter.drawPath(entry.painterPath);
     }
 
@@ -3794,6 +3953,10 @@ void PhoenixView::applyColorTransform(QImage& image, const fla::ColorTransform& 
         image = image.convertToFormat(QImage::Format_ARGB32_Premultiplied);
     }
 
+    // The arithmetic is on straight colour: offsets added to premultiplied
+    // channels would brighten the edges of anything translucent.
+    const bool premultiplied = image.format() == QImage::Format_ARGB32_Premultiplied;
+
     for (int y = 0; y < image.height(); ++y)
     {
         QRgb* line = reinterpret_cast<QRgb*>(image.scanLine(y));
@@ -3802,6 +3965,8 @@ void PhoenixView::applyColorTransform(QImage& image, const fla::ColorTransform& 
             QRgb pixel = line[x];
             if (qAlpha(pixel) == 0)
                 continue;
+            if (premultiplied)
+                pixel = qUnpremultiply(pixel);
 
             int r = qRed(pixel);
             int g = qGreen(pixel);
@@ -3810,80 +3975,32 @@ void PhoenixView::applyColorTransform(QImage& image, const fla::ColorTransform& 
 
             if (colorTransform.tintMultiplier != 0.0)
             {
-                double t = colorTransform.tintMultiplier;
-                double it = 1.0 - t;
-
-                int tintR = colorTransform.tintColor[0];
-                int tintG = colorTransform.tintColor[1];
-                int tintB = colorTransform.tintColor[2];
-                int tintA = colorTransform.tintColor[3];
-
-                r = static_cast<int>(it * r + t * tintR);
-                g = static_cast<int>(it * g + t * tintG);
-                b = static_cast<int>(it * b + t * tintB);
-                a = static_cast<int>(it * a + t * tintA);
+                // Tint multiplies each colour channel by 1 - t and adds t of
+                // the tint colour; alpha is left alone.
+                const double t = colorTransform.tintMultiplier;
+                const double it = 1.0 - t;
+                r = static_cast<int>(it * r + t * colorTransform.tintColor[0]);
+                g = static_cast<int>(it * g + t * colorTransform.tintColor[1]);
+                b = static_cast<int>(it * b + t * colorTransform.tintColor[2]);
             }
 
             if (colorTransform.brightness != 0.0)
             {
-                double br = colorTransform.brightness;
-
-                double rf = r / 255.0;
-                double gf = g / 255.0;
-                double bf = b / 255.0;
-
-                double maxC = qMax(qMax(rf, gf), bf);
-                double minC = qMin(qMin(rf, gf), bf);
-                double delta = maxC - minC;
-
-                double h = 0, s = 0, l = (maxC + minC) / 2.0;
-
-                if (delta != 0.0)
+                // Brightness is a multiply and add too: towards white it
+                // multiplies by 1 - b and adds 255 b, towards black it
+                // multiplies by 1 + b.
+                const double br = colorTransform.brightness;
+                if (br > 0.0)
                 {
-                    s = l < 0.5 ? delta / (maxC + minC) : delta / (2.0 - maxC - minC);
-
-                    if (maxC == rf)
-                        h = ((gf - bf) / delta) + (gf < bf ? 6.0 : 0.0);
-                    else if (maxC == gf)
-                        h = ((bf - rf) / delta) + 2.0;
-                    else
-                        h = ((rf - gf) / delta) + 4.0;
-
-                    h /= 6.0;
-                }
-
-                l = l + br;
-                l = qBound(0.0, l, 1.0);
-
-                if (l == 0.0)
-                {
-                    r = g = b = 0;
-                }
-                else if (l == 1.0)
-                {
-                    r = g = b = 255;
-                }
-                else if (s == 0.0)
-                {
-                    r = g = b = static_cast<int>(l * 255.0);
+                    r = static_cast<int>(r * (1.0 - br) + 255.0 * br);
+                    g = static_cast<int>(g * (1.0 - br) + 255.0 * br);
+                    b = static_cast<int>(b * (1.0 - br) + 255.0 * br);
                 }
                 else
                 {
-                    double q = l < 0.5 ? l * (1.0 + s) : l + s - l * s;
-                    double p = 2.0 * l - q;
-
-                    auto hueToRgb = [](double p, double q, double t) -> double {
-                        while (t < 0.0) t += 1.0;
-                        while (t > 1.0) t -= 1.0;
-                        if (t < 1.0/6.0) return p + (q - p) * 6.0 * t;
-                        if (t < 1.0/2.0) return q;
-                        if (t < 2.0/3.0) return p + (q - p) * (2.0/3.0 - t) * 6.0;
-                        return p;
-                    };
-
-                    r = static_cast<int>(hueToRgb(p, q, h + 1.0/3.0) * 255.0);
-                    g = static_cast<int>(hueToRgb(p, q, h) * 255.0);
-                    b = static_cast<int>(hueToRgb(p, q, h - 1.0/3.0) * 255.0);
+                    r = static_cast<int>(r * (1.0 + br));
+                    g = static_cast<int>(g * (1.0 + br));
+                    b = static_cast<int>(b * (1.0 + br));
                 }
             }
 
@@ -3897,7 +4014,7 @@ void PhoenixView::applyColorTransform(QImage& image, const fla::ColorTransform& 
             b = qBound(0, b, 255);
             a = qBound(0, a, 255);
 
-            line[x] = qRgba(r, g, b, a);
+            line[x] = premultiplied ? qPremultiply(qRgba(r, g, b, a)) : qRgba(r, g, b, a);
         }
     }
 }

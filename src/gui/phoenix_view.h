@@ -341,6 +341,15 @@ private:
     void drawStageContents(QPainter& painter, const fla::Document* document);
     QTransform viewTransform;
 
+    /// The transform of the element being drawn, relative to the stage:
+    /// the product of its own matrix and its parents', without the zoom.
+    QTransform _elementTransform;
+
+    /// A stroke weight in the element's own units for its scaleMode, so
+    /// that a "none" stroke stays its weight on the stage however the
+    /// element is scaled, and horizontal/vertical ones follow one axis.
+    double scaledStrokeWeight(double weight, const std::string& scaleMode) const;
+
     // Visible rect in document coordinates (for culling)
     QRectF _visibleRect;
 
@@ -420,8 +429,15 @@ private:
         QBrush fillBrush;
         QPen pen;
         QPainterPath painterPath;
+
+        /// The stroke the pen came from, for widths that depend on where
+        /// the shape is drawn (scaleMode); null for a fill entry.
+        const fla::StrokeStyle* strokeStyle = nullptr;
     };
     typedef QList<PathCacheEntry> PathCacheList;
+
+    /// A cached stroke entry's pen with its width set for the element being drawn.
+    QPen penForHere(const PathCacheEntry& entry) const;
     QMap<const fla::Shape*, PathCacheList> _pathCache;
 
     QMap<QString, QPixmap> _bitmapCache;
@@ -436,7 +452,10 @@ private:
     // Bounds cache for culling
     QMap<const fla::Element*, QRectF> _boundsCache;
 
-    QPen getPen(const fla::StrokeStyle* strokeStyle);
+    /// The pen for a stroke. The width follows the stroke's scaleMode for
+    /// the element being drawn unless told not to, which a cached pen is,
+    /// since it is drawn under many transforms.
+    QPen getPen(const fla::StrokeStyle* strokeStyle, bool scaleForElement = true);
 
     QBrush getFillBrush(const fla::FillStyle* fillStyle, const fla::Rect& bounds);
 
