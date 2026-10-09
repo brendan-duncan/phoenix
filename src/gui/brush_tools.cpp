@@ -373,43 +373,52 @@ fla::Shape* brushOutlineShape(const std::vector<fla::Point>& points, double widt
         else
             edge->fillStyle0 = kStyleIndex;
 
-        fla::Path* path = new fla::Path(edge);
-        const QPointF start(subpath.elementAt(0).x, subpath.elementAt(0).y);
-        path->segments.push_back(new fla::PathSegment(
-            fla::PathSegment::Command::Move, {fla::Point(start.x(), start.y())}, path));
-
-        QPointF last = start;
-        for (int i = 1; i < subpath.elementCount(); ++i)
+        // The resolved outline is a dense polygon: the stroker and the
+        // simplification both flatten curves into short straight runs. Fitted
+        // again, as the pencil fits a freehand stroke, each loop becomes a
+        // few cubics, which is what Animate's brush leaves behind.
+        std::vector<fla::Point> ring;
+        const QPolygonF polygon = subpath.toFillPolygon();
+        for (const QPointF& point : polygon)
+            ring.push_back(fla::Point(point.x(), point.y()));
+        if (ring.size() > 1 &&
+            std::hypot(ring.back().x - ring.front().x, ring.back().y - ring.front().y) > 1.0e-6)
         {
-            const QPainterPath::Element& element = subpath.elementAt(i);
-            if (element.type == QPainterPath::LineToElement)
-            {
-                last = QPointF(element.x, element.y);
-                path->segments.push_back(new fla::PathSegment(
-                    fla::PathSegment::Command::Line, {fla::Point(last.x(), last.y())}, path));
-            }
-            else if (element.type == QPainterPath::CurveToElement && i + 2 < subpath.elementCount())
-            {
-                const QPainterPath::Element& c2 = subpath.elementAt(i + 1);
-                const QPainterPath::Element& end = subpath.elementAt(i + 2);
-                last = QPointF(end.x, end.y);
-                path->segments.push_back(new fla::PathSegment(
-                    fla::PathSegment::Command::Cubic,
-                    {fla::Point(element.x, element.y), fla::Point(c2.x, c2.y),
-                     fla::Point(last.x(), last.y())}, path));
-                i += 2;
-            }
+            ring.push_back(ring.front());
         }
 
-        // Back to the start, which is what tells the arrangement the loop
-        // encloses an area.
-        if (std::hypot(last.x() - start.x(), last.y() - start.y()) > 1.0e-6)
+        fla::CurveFit::Options options;
+        options.tolerance = 0.3;
+        options.minimumSpacing = 0.2;
+        fla::EditablePath fitted = fla::CurveFit::fit(ring, options);
+        if (fitted.anchors.size() >= 2)
         {
+            // Ending where it began makes it a loop; the fitter may keep the
+            // seam point as a last anchor, which the closing segment covers.
+            const fla::Point& first = fitted.anchors.front().position;
+            const fla::Point& last = fitted.anchors.back().position;
+            if (fitted.anchors.size() > 2 &&
+                std::hypot(last.x - first.x, last.y - first.y) < 1.0e-6)
+            {
+                fitted.anchors.pop_back();
+            }
+            fitted.closed = true;
+            fitted.applyTo(*edge);
+        }
+        else
+        {
+            // Too little to fit: the polygon as it is.
+            fla::Path* path = new fla::Path(edge);
             path->segments.push_back(new fla::PathSegment(
-                fla::PathSegment::Command::Line, {fla::Point(start.x(), start.y())}, path));
+                fla::PathSegment::Command::Move, {ring.front()}, path));
+            for (size_t i = 1; i < ring.size(); ++i)
+            {
+                path->segments.push_back(new fla::PathSegment(
+                    fla::PathSegment::Command::Line, {ring[i]}, path));
+            }
+            edge->paths.push_back(path);
         }
 
-        edge->paths.push_back(path);
         shape->edges.push_back(edge);
         subpath = QPainterPath();
     };
