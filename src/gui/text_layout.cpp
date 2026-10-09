@@ -311,6 +311,16 @@ void draw(QPainter& painter, const fla::StaticText& text)
     const Layout laid = layout(text);
     const QString joined = joinedText(text);
     painter.setBrush(Qt::NoBrush);
+
+    // A dynamic or input field shows its box on the stage as a dotted
+    // outline, the way Animate marks a field that is not plain artwork.
+    if (text.textType != fla::StaticText::TextType::Static)
+    {
+        QPen outline(QColor(0, 0, 0), 0.0);
+        outline.setStyle(Qt::DotLine);
+        painter.setPen(outline);
+        painter.drawRect(laid.bounds);
+    }
     for (const Line& line : laid.lines)
     {
         for (const Segment& segment : line.segments)
@@ -355,6 +365,30 @@ int indexAt(const fla::StaticText& text, const QPointF& localPos)
         }
     }
     return best;
+}
+
+std::vector<QRectF> selectionRects(const fla::StaticText& text, int from, int to)
+{
+    std::vector<QRectF> bands;
+    if (to <= from)
+        return bands;
+    const Layout laid = layout(text);
+    const QString joined = joinedText(text);
+    for (const Line& line : laid.lines)
+    {
+        const int lineEnd = line.start + line.length;
+        const int a = std::max(from, line.start);
+        const int b = std::min(to, lineEnd);
+        if (b <= a && !(from <= line.start && to > lineEnd))
+            continue;
+        const double x1 = xOfIndex(text, line, std::max(a, line.start), joined);
+        double x2 = xOfIndex(text, line, std::max(b, line.start), joined);
+        // A line break inside the range shows as a sliver past the line's end.
+        if (to > lineEnd && from <= lineEnd)
+            x2 = std::max(x2, x1 + 3.0);
+        bands.push_back(QRectF(x1, line.top, x2 - x1, line.height));
+    }
+    return bands;
 }
 
 QRectF caretRect(const fla::StaticText& text, int index)

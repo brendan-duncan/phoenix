@@ -56,6 +56,16 @@ public:
     double brushSize = 12.0;
     double eraserSize = 12.0;
 
+    /// Whether a pen's pressure varies the brush's width, as Animate's Use
+    /// Pressure option does. A mouse always paints at full width.
+    bool brushPressure = false;
+
+    /// The pencil's Straighten mode settings: join the ends of a stroke that
+    /// nearly meet, and replace a stroke that is clearly a rectangle, oval or
+    /// triangle with the ideal one.
+    bool connectLines = true;
+    bool recognizeShapes = true;
+
     /// Animate's brush modes: where a stroke of the brush lands.
     enum class BrushMode
     {
@@ -92,6 +102,16 @@ public:
     /// on, whole, instead of a drag taking a band out of it.
     bool faucet = false;
 
+    /// Which of the free transform tool's modes is on: plain, Distort (a
+    /// corner drags on its own) or Envelope (the box's sides bend).
+    enum class TransformMode
+    {
+        Free,
+        Distort,
+        Envelope
+    };
+    TransformMode transformMode = TransformMode::Free;
+
     /// How far apart the ends of an outline may be for the paint bucket to
     /// treat it as closed: Animate's gap size setting.
     enum class GapSize
@@ -119,6 +139,10 @@ public:
     /// is in pixels. Text takes the fill colour.
     std::string textFace = "ArialMT";
     double textSize = 12.0;
+
+    /// The kind of text field new text makes: 0 static, 1 dynamic, 2 input,
+    /// in the order of StaticText::TextType.
+    int textType = 0;
 
     /// Builds the fill for a new object. Returns null when fills are switched
     /// off. The caller owns the result.

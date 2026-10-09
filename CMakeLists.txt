@@ -158,6 +158,7 @@ set(HEADERS
     src/edit/region_split.h
     src/edit/drawing_style.h
     src/edit/curve_fit.h
+    src/edit/shape_recognition.h
     src/geom/curve.h
     src/geom/intersect.h
     src/geom/fill_attribution.h
@@ -248,6 +249,7 @@ set(SOURCES
     src/edit/region_split.cpp
     src/edit/drawing_style.cpp
     src/edit/curve_fit.cpp
+    src/edit/shape_recognition.cpp
     src/geom/curve.cpp
     src/geom/intersect.cpp
     src/geom/fill_attribution.cpp

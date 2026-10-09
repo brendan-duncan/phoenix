@@ -7,6 +7,7 @@
 #include "../data/symbol_instance.h"
 #include "../data/symbol_list.h"
 #include "../edit/element_commands.h"
+#include "../edit/element_clone.h"
 #include "../edit/new_document.h"
 #include "../edit/shape_merge.h"
 #include "../parser/fla_parser.h"
@@ -106,7 +107,7 @@ MainWindow::MainWindow(QWidget *parent)
 
     _selectionTool = std::make_unique<SelectionTool>(_selection, _editContext.commandStack());
     _freeTransformTool = std::make_unique<FreeTransformTool>(
-        _selection, _editContext.commandStack());
+        _selection, _editContext.commandStack(), _drawingStyle);
 
     fla::CommandStack& stack = _editContext.commandStack();
     _rectangleTool = std::make_unique<PrimitiveTool>(
@@ -1196,6 +1197,9 @@ void MainWindow::setupPropertiesPanel()
             return;
         applyColor(chosen, _drawingStyle.fillColor);
         _fillColorButton->setIcon(swatchIcon(_drawingStyle.fillColor));
+        // Text being typed takes the colour on its selection too.
+        if (_textTool)
+            _textTool->applyColor(_drawingStyle.fillColor);
     });
 
     QCheckBox* fillEnabled = new QCheckBox("Fill", panel);
@@ -1264,6 +1268,28 @@ void MainWindow::setupPropertiesPanel()
     });
     layout->addRow("Eraser size", eraserSize);
 
+    QComboBox* transformMode = new QComboBox(panel);
+    transformMode->addItem("Free Transform");
+    transformMode->addItem("Distort");
+    transformMode->addItem("Envelope");
+    transformMode->setToolTip("The free transform tool's mode; Distort and Envelope work on shapes");
+    connect(transformMode, &QComboBox::currentIndexChanged, this, [this](int index) {
+        _drawingStyle.transformMode = static_cast<fla::DrawingStyle::TransformMode>(index);
+        if (_freeTransformTool)
+            _freeTransformTool->resetBox();
+        if (_phoenixView)
+            _phoenixView->update();
+    });
+    layout->addRow("Transform", transformMode);
+
+    QCheckBox* usePressure = new QCheckBox("Use pressure", panel);
+    usePressure->setChecked(_drawingStyle.brushPressure);
+    usePressure->setToolTip("Let a pen's pressure vary the brush width");
+    connect(usePressure, &QCheckBox::toggled, this, [this](bool on) {
+        _drawingStyle.brushPressure = on;
+    });
+    layout->addRow(QString(), usePressure);
+
     QComboBox* brushMode = new QComboBox(panel);
     brushMode->addItem("Paint Normal");
     brushMode->addItem("Paint Fills");
@@ -1323,7 +1349,11 @@ void MainWindow::setupPropertiesPanel()
             {"Courier New", "CourierNewPSMT"},
         };
         const QString family = font.family();
-        _drawingStyle.textFace = postScriptNames.value(family, QString(family).remove(' ')).toStdString();
+        const std::string face = postScriptNames.value(family, QString(family).remove(' ')).toStdString();
+        // A selection in an open text box takes the font; otherwise it is the
+        // font for the next text.
+        if (!_textTool || !_textTool->applyFace(face))
+            _drawingStyle.textFace = face;
     });
     layout->addRow("Font", textFont);
 
@@ -1334,9 +1364,24 @@ void MainWindow::setupPropertiesPanel()
     textSize->setValue(_drawingStyle.textSize);
     textSize->setToolTip("Size of new text, in pixels");
     connect(textSize, &QDoubleSpinBox::valueChanged, this, [this](double value) {
-        _drawingStyle.textSize = value;
+        if (!_textTool || !_textTool->applySize(value))
+            _drawingStyle.textSize = value;
     });
     layout->addRow("Size", textSize);
+
+    QComboBox* textType = new QComboBox(panel);
+    textType->addItem("Static Text");
+    textType->addItem("Dynamic Text");
+    textType->addItem("Input Text");
+    textType->setToolTip("What kind of field the text is: artwork, scriptable, or typed into");
+    connect(textType, &QComboBox::currentIndexChanged, this, [this](int index) {
+        _drawingStyle.textType = index;
+        const fla::StaticText::TextType type = static_cast<fla::StaticText::TextType>(index);
+        if (_textTool && _textTool->applyTextType(type))
+            return;
+        setSelectedTextType(type);
+    });
+    layout->addRow("Text type", textType);
 
     // PolyStar settings, which only the polystar tool reads.
     QSpinBox* sides = new QSpinBox(panel);
@@ -1366,6 +1411,22 @@ void MainWindow::setupPropertiesPanel()
         _drawingStyle.pencilSmoothing = value;
     });
     layout->addRow("Smoothing", smoothing);
+
+    QCheckBox* connectLines = new QCheckBox("Connect lines", panel);
+    connectLines->setChecked(_drawingStyle.connectLines);
+    connectLines->setToolTip("In Straighten mode, close a pencil stroke whose ends nearly meet");
+    connect(connectLines, &QCheckBox::toggled, this, [this](bool on) {
+        _drawingStyle.connectLines = on;
+    });
+    layout->addRow(QString(), connectLines);
+
+    QCheckBox* recognizeShapes = new QCheckBox("Recognize shapes", panel);
+    recognizeShapes->setChecked(_drawingStyle.recognizeShapes);
+    recognizeShapes->setToolTip("In Straighten mode, turn a roughly drawn rectangle or oval into the real thing");
+    connect(recognizeShapes, &QCheckBox::toggled, this, [this](bool on) {
+        _drawingStyle.recognizeShapes = on;
+    });
+    layout->addRow(QString(), recognizeShapes);
 
     QCheckBox* star = new QCheckBox("Star", panel);
     star->setChecked(_drawingStyle.star);
@@ -1863,6 +1924,39 @@ void MainWindow::duplicateSelection()
     for (const std::unique_ptr<fla::Shape>& shape : snapshots)
         sources.push_back(shape.get());
     placeCopies(sources, "Duplicate", false);
+}
+
+void MainWindow::setSelectedTextType(fla::StaticText::TextType type)
+{
+    if (!_phoenixView)
+        return;
+
+    // Every selected text field, each as its own undo step inside one.
+    std::vector<fla::StaticText*> texts;
+    for (fla::DOMElement* selected : _selection.elements())
+    {
+        fla::Element* element = dynamic_cast<fla::Element*>(selected);
+        if (element && element->elementType() == fla::Element::Type::StaticText)
+            texts.push_back(static_cast<fla::StaticText*>(element));
+    }
+    if (texts.empty())
+        return;
+
+    fla::CommandStack& stack = _editContext.commandStack();
+    stack.beginMacro("Text Type");
+    for (fla::StaticText* text : texts)
+    {
+        if (text->textType == type)
+            continue;
+        std::unique_ptr<fla::StaticText> after(
+            static_cast<fla::StaticText*>(fla::cloneElement(*text, nullptr)));
+        after->textType = type;
+        stack.push(fla::CommandPtr(new fla::SetTextContentsCommand(text, *text, *after, "Text Type")));
+    }
+    stack.endMacro();
+    stack.breakMergeChain();
+    _phoenixView->clearCaches();
+    _phoenixView->update();
 }
 
 void MainWindow::updateSelectionState()

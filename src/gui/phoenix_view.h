@@ -82,6 +82,10 @@ public:
 
     double zoom() const { return _zoom; }
 
+    /// A tablet's pen pressure, 0 to 1, while the pen is down; 1 for a mouse.
+    /// The brush reads it to vary its width.
+    double pressure() const { return _pressure; }
+
     /// Zoom steps follow Animate's magnification presets. The view centre
     /// stays put.
     void zoomIn();
@@ -263,6 +267,8 @@ protected:
 
     bool event(QEvent* event) override;
 
+    void tabletEvent(QTabletEvent* event) override;
+
     void keyPressEvent(QKeyEvent *event) override;
 
     void keyReleaseEvent(QKeyEvent *event) override;
@@ -356,6 +362,8 @@ private:
 
     /// Borrowed. Used for a gesture started with ctrl held.
     Tool* _modifierTool = nullptr;
+
+    double _pressure = 1.0;
 
     /// The tool handling the gesture in progress, which is the active one unless
     /// ctrl took over at the press. A gesture finishes with the tool that began

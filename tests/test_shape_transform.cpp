@@ -5,6 +5,7 @@
 #include "../src/edit/shape_transform.h"
 #include "../src/parser/path_parser.h"
 
+#include <cmath>
 #include <cstdio>
 #include <memory>
 #include <vector>
@@ -215,4 +216,39 @@ TEST(warp_shape_moves_every_point_through_the_map)
     CHECK_NEAR(shape->localBounds.topLeft.y, 10.0);
     CHECK_NEAR(shape->localBounds.bottomRight.x, 10.0);
     CHECK_NEAR(shape->localBounds.bottomRight.y, 20.0);
+}
+
+TEST(prepare_for_warp_cuts_lines_into_cubics)
+{
+    // A 5 by 10 pixel rectangle (twips in the helper): sides of 5 and 10.
+    std::unique_ptr<Shape> shape = rectangle(0, 0, 100, 200);
+    fla::prepareForWarp(*shape, 4.0);
+
+    int cubics = 0;
+    int lines = 0;
+    for (const fla::Edge* edge : shape->edges)
+    {
+        for (const fla::Path* path : edge->paths)
+        {
+            for (const fla::PathSegment* segment : path->segments)
+            {
+                if (segment->command == fla::PathSegment::Command::Cubic)
+                    ++cubics;
+                if (segment->command == fla::PathSegment::Command::Line)
+                    ++lines;
+            }
+        }
+    }
+    // Sides of 5 become two pieces, sides of 10 three: ten cubics in all.
+    CHECK(lines == 0);
+    CHECK(cubics == 10);
+    CHECK(shape->edges[0]->data.empty());
+
+    // The pieces still trace the rectangle: every point stays on its edge.
+    for (const Point& point : points(*shape))
+    {
+        const bool onVertical = std::fabs(point.x) < 1.0e-9 || std::fabs(point.x - 5.0) < 1.0e-9;
+        const bool onHorizontal = std::fabs(point.y) < 1.0e-9 || std::fabs(point.y - 10.0) < 1.0e-9;
+        CHECK(onVertical || onHorizontal);
+    }
 }

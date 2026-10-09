@@ -9,6 +9,7 @@
 #include "../data/stroke_style.h"
 #include "../edit/command_stack.h"
 #include "../edit/curve_fit.h"
+#include "../edit/shape_recognition.h"
 #include "../edit/drawing_style.h"
 #include "../edit/element_commands.h"
 #include "../edit/selection.h"
@@ -92,6 +93,18 @@ void PencilTool::finish(PhoenixView& view)
     options.minimumSpacing = 0.5 / zoom;
 
     fla::EditablePath path = fla::CurveFit::fit(_points, options);
+
+    // Straighten mode tidies what it drew: ends that nearly meet are joined,
+    // and a stroke that is clearly a rectangle or an oval becomes one.
+    if (options.straighten)
+    {
+        fla::StrokeTidyOptions tidy;
+        tidy.connectLines = _style.connectLines;
+        tidy.recognizeShapes = _style.recognizeShapes;
+        // Animate's normal Connect Lines reach, in screen pixels.
+        tidy.closeTolerance = 15.0 / zoom;
+        fla::tidyStraightenedStroke(path, _points, tidy);
+    }
 
     _points.clear();
 

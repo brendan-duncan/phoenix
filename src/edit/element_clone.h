@@ -2,6 +2,7 @@
 
 namespace fla {
 
+class ColorTransform;
 class DOMElement;
 class Element;
 class StaticText;
@@ -16,6 +17,12 @@ Element* cloneElement(const Element& element, DOMElement* parent);
 /// Replaces a text's box and runs with another's, leaving its transform and
 /// its place in the frame alone. What the text tool's undo swaps.
 void setTextContents(StaticText& target, const StaticText& source);
+
+/// Bakes a colour effect into an element's own colours: every solid fill,
+/// gradient stop and stroke colour of its shapes and primitives, down
+/// through groups. What Break Apart does with an instance's colour effect,
+/// since the copies no longer have an instance to carry it.
+void applyColorTransform(Element& element, const ColorTransform& transform);
 
 
 } // namespace fla

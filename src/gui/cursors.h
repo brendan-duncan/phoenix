@@ -22,6 +22,8 @@ public:
         ArrowCorner,
         /// Arrow with an arc: dragging bends a curve.
         ArrowCurve,
+        /// Arrow with a leaning box: ctrl-dragging a corner distorts.
+        ArrowDistort,
         /// Pen with an x: the next click starts a path.
         PenStart,
         /// Pen with nothing: the next click continues the path.

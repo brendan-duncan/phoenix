@@ -5,6 +5,7 @@
 #include "timeline_view.h"
 #include "player.h"
 #include "../data/fla_document.h"
+#include "../data/static_text.h"
 #include "free_transform_tool.h"
 #include "brush_tools.h"
 #include "lasso_tool.h"
@@ -90,6 +91,9 @@ private slots:
     void breakApartSelection();
 
     void convertToSymbol();
+
+    /// Makes every selected text field static, dynamic or input.
+    void setSelectedTextType(fla::StaticText::TextType type);
 
     /// Arrange: moves the selection in the z-order by \a step, or to the
     /// front or back when \a toEnd is set.

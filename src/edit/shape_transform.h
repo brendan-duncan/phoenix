@@ -28,4 +28,11 @@ void bakeTransform(Shape& shape);
 /// writer prefers is dropped, since it no longer describes the geometry.
 void warpShape(Shape& shape, const std::function<Point(const Point&)>& map);
 
+/// Readies a shape's geometry for a warp that is not straight: a straight
+/// segment only has its two ends to move, so it would stay straight however
+/// the space between bends. Every segment is cut into pieces no longer than
+///  pieceLength and written as a cubic, whose control points the warp can
+/// then carry round the bend.
+void prepareForWarp(Shape& shape, double pieceLength);
+
 } // namespace fla

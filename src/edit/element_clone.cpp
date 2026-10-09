@@ -1,6 +1,11 @@
 #include "element_clone.h"
 
 #include "../data/bitmap_instance.h"
+#include "../data/color_transform.h"
+#include "../data/linear_gradient.h"
+#include "../data/radial_gradient.h"
+#include "../data/solid_color.h"
+#include "../data/stroke_style.h"
 #include "../data/element.h"
 #include "../data/group.h"
 #include "../data/oval_primitive.h"
@@ -83,6 +88,9 @@ Element* cloneElement(const Element& element, DOMElement* parent)
         copy->width = text.width;
         copy->height = text.height;
         copy->autoExpand = text.autoExpand;
+        copy->textType = text.textType;
+        copy->instanceName = text.instanceName;
+        copy->lineType = text.lineType;
         copy->runs = text.runs;
         return copy;
     }
@@ -117,6 +125,123 @@ Element* cloneElement(const Element& element, DOMElement* parent)
     return nullptr;
 }
 
+namespace {
+
+uint8_t clampByte(double value)
+{
+    return static_cast<uint8_t>(value < 0.0 ? 0.0 : (value > 255.0 ? 255.0 : value));
+}
+
+/// One colour through the effect, the way the stage draws it: tint, then
+/// brightness towards white or black, then the advanced multipliers and
+/// offsets.
+void recolour(uint8_t colour[4], const ColorTransform& t)
+{
+    double c[4] = {static_cast<double>(colour[0]), static_cast<double>(colour[1]),
+        static_cast<double>(colour[2]), static_cast<double>(colour[3])};
+
+    if (t.tintMultiplier != 0.0)
+    {
+        for (int i = 0; i < 3; ++i)
+            c[i] = (1.0 - t.tintMultiplier) * c[i] + t.tintMultiplier * t.tintColor[i];
+    }
+
+    if (t.brightness > 0.0)
+    {
+        for (int i = 0; i < 3; ++i)
+            c[i] = c[i] + (255.0 - c[i]) * t.brightness;
+    }
+    else if (t.brightness < 0.0)
+    {
+        for (int i = 0; i < 3; ++i)
+            c[i] = c[i] * (1.0 + t.brightness);
+    }
+
+    c[0] = c[0] * t.redMultiplier + t.redOffset;
+    c[1] = c[1] * t.greenMultiplier + t.greenOffset;
+    c[2] = c[2] * t.blueMultiplier + t.blueOffset;
+    c[3] = c[3] * t.alphaMultiplier + t.alphaOffset;
+
+    for (int i = 0; i < 4; ++i)
+        colour[i] = clampByte(c[i]);
+}
+
+void recolourFill(FillStyle* fill, const ColorTransform& t)
+{
+    if (!fill)
+        return;
+    switch (fill->type())
+    {
+    case FillStyle::Type::SolidColor:
+        recolour(static_cast<SolidColor*>(fill)->color, t);
+        break;
+    case FillStyle::Type::LinearGradient:
+        for (GradientEntry& entry : static_cast<LinearGradient*>(fill)->entries)
+            recolour(entry.color, t);
+        break;
+    case FillStyle::Type::RadialGradient:
+        for (RadialEntry& entry : static_cast<RadialGradient*>(fill)->entries)
+            recolour(entry.color, t);
+        break;
+    case FillStyle::Type::BitmapFill:
+        break;
+    }
+}
+
+} // namespace
+
+void applyColorTransform(Element& element, const ColorTransform& transform)
+{
+    if (transform.isIdentity())
+        return;
+
+    switch (element.elementType())
+    {
+    case Element::Type::Shape:
+    {
+        Shape& shape = static_cast<Shape&>(element);
+        for (FillStyle* fill : shape.fills)
+            recolourFill(fill, transform);
+        for (StrokeStyle* stroke : shape.strokes)
+        {
+            if (stroke)
+                recolourFill(stroke->fill, transform);
+        }
+        break;
+    }
+    case Element::Type::Group:
+        for (Element* member : static_cast<Group&>(element).members)
+        {
+            if (member)
+                applyColorTransform(*member, transform);
+        }
+        break;
+    case Element::Type::Rectangle:
+    {
+        RectanglePrimitive& rectangle = static_cast<RectanglePrimitive&>(element);
+        recolourFill(rectangle.fillStyle, transform);
+        if (rectangle.strokeStyle)
+            recolourFill(rectangle.strokeStyle->fill, transform);
+        break;
+    }
+    case Element::Type::Oval:
+    {
+        OvalPrimitive& oval = static_cast<OvalPrimitive&>(element);
+        recolourFill(oval.fillStyle, transform);
+        if (oval.strokeStyle)
+            recolourFill(oval.strokeStyle->fill, transform);
+        break;
+    }
+    case Element::Type::StaticText:
+        for (TextRun& run : static_cast<StaticText&>(element).runs)
+            recolour(run.fillColor, transform);
+        break;
+    case Element::Type::SymbolInstance:
+    case Element::Type::BitmapInstance:
+        break;
+    }
+}
+
 void setTextContents(StaticText& target, const StaticText& source)
 {
     target.left = source.left;
@@ -124,6 +249,9 @@ void setTextContents(StaticText& target, const StaticText& source)
     target.width = source.width;
     target.height = source.height;
     target.autoExpand = source.autoExpand;
+    target.textType = source.textType;
+    target.instanceName = source.instanceName;
+    target.lineType = source.lineType;
     target.runs = source.runs;
     target.localBounds = source.localBounds;
     target.bounds = source.bounds;

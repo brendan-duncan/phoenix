@@ -81,6 +81,14 @@ void drawMark(QPainter& painter, Cursors::Kind kind)
         break;
     }
 
+    case Cursors::Kind::ArrowDistort:
+        painter.setBrush(Qt::white);
+        painter.drawPolygon(QPolygonF({
+            QPointF(origin.x(), origin.y() + 2.0), QPointF(origin.x() + 7.0, origin.y()),
+            QPointF(origin.x() + 8.0, origin.y() + 8.0), QPointF(origin.x() + 2.0, origin.y() + 6.0)
+        }));
+        break;
+
     case Cursors::Kind::PenStart:
         painter.drawLine(QPointF(origin.x(), origin.y()), QPointF(origin.x() + 6.0, origin.y() + 6.0));
         painter.drawLine(QPointF(origin.x() + 6.0, origin.y()), QPointF(origin.x(), origin.y() + 6.0));
@@ -224,6 +232,7 @@ QCursor build(Cursors::Kind kind, int eighthTurns)
     case Cursors::Kind::ArrowMove:
     case Cursors::Kind::ArrowCorner:
     case Cursors::Kind::ArrowCurve:
+    case Cursors::Kind::ArrowDistort:
         outlined(painter, arrowPath());
         drawMark(painter, kind);
         break;

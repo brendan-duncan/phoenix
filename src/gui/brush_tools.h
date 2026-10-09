@@ -24,8 +24,11 @@ class Shape;
 /// filled with \a fill (which the shape takes ownership of). The outline is
 /// resolved so it has no self-crossings, and each loop is written with the
 /// fill on the correct side for the merge.
+/// With \a pressures, one per point, the width follows the pen's pressure
+/// along the stroke.
 fla::Shape* brushOutlineShape(const std::vector<fla::Point>& points, double width,
-    bool smooth, fla::Frame* parent, const fla::DrawingStyle& style, bool asFill);
+    bool smooth, fla::Frame* parent, const fla::DrawingStyle& style, bool asFill,
+    const std::vector<double>* pressures = nullptr);
 
 /// Animate's brush: paints a fill along the drag, as wide as the brush size.
 /// The stroke is a shape with a fill and no outline, and merges like any other
@@ -71,6 +74,8 @@ private:
     const fla::DrawingStyle& _style;
 
     std::vector<fla::Point> _points;
+    /// The pen pressure at each point, for a stroke that varies its width.
+    std::vector<double> _pressures;
     bool _drawing = false;
     QPointF _hover;
     bool _hoverValid = false;

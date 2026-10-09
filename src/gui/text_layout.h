@@ -76,4 +76,7 @@ int indexAt(const fla::StaticText& text, const QPointF& localPos);
 /// of its line.
 QRectF caretRect(const fla::StaticText& text, int index);
 
+/// The bands a selected range covers, one per line it touches.
+std::vector<QRectF> selectionRects(const fla::StaticText& text, int from, int to);
+
 } // namespace TextLayout

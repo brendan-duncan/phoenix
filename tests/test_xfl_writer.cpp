@@ -225,6 +225,8 @@ private:
             const auto& tb = static_cast<const fla::StaticText&>(b);
             check(ta.left == tb.left && ta.top == tb.top, where + " text origin");
             check(ta.width == tb.width && ta.height == tb.height, where + " text size");
+            check(ta.textType == tb.textType, where + " text type");
+            check(ta.instanceName == tb.instanceName && ta.lineType == tb.lineType, where + " text field attributes");
             if (!check(ta.runs.size() == tb.runs.size(), where + " text run count"))
                 break;
             for (size_t i = 0; i < ta.runs.size(); ++i)
@@ -562,6 +564,44 @@ TEST(xfl_round_trips_primitives_and_text)
         "</DOMStaticText>"
         "</elements></DOMFrame></frames></DOMLayer>"
         "</layers></DOMTimeline></timelines></DOMDocument>");
+}
+
+TEST(xfl_round_trips_dynamic_and_input_text)
+{
+    checkRoundTrip(
+        "<DOMDocument xmlns='http://ns.adobe.com/xfl/2008/'>"
+        "<timelines><DOMTimeline name='Scene 1'><layers>"
+        "<DOMLayer name='Layer 1'><frames><DOMFrame index='0'><elements>"
+        "<DOMDynamicText left='5' top='6' width='200' height='30' instanceName='score_txt' lineType='multiline'>"
+        "<textRuns><DOMTextRun><characters>0</characters>"
+        "<textAttrs><DOMTextAttrs face='ArialMT' size='24'/></textAttrs>"
+        "</DOMTextRun></textRuns>"
+        "</DOMDynamicText>"
+        "<DOMInputText left='5' top='40' width='200' height='30' instanceName='name_txt'>"
+        "<textRuns><DOMTextRun><characters>type here</characters>"
+        "<textAttrs><DOMTextAttrs face='ArialMT' size='12'/></textAttrs>"
+        "</DOMTextRun></textRuns>"
+        "</DOMInputText>"
+        "</elements></DOMFrame></frames></DOMLayer>"
+        "</layers></DOMTimeline></timelines></DOMDocument>");
+
+    std::unique_ptr<fla::Document> document = parseDocumentText(
+        "<DOMDocument xmlns='http://ns.adobe.com/xfl/2008/'>"
+        "<timelines><DOMTimeline name='Scene 1'><layers>"
+        "<DOMLayer name='Layer 1'><frames><DOMFrame index='0'><elements>"
+        "<DOMInputText left='5' top='40' width='200' height='30' instanceName='name_txt'>"
+        "<textRuns><DOMTextRun><characters>x</characters></DOMTextRun></textRuns>"
+        "</DOMInputText>"
+        "</elements></DOMFrame></frames></DOMLayer>"
+        "</layers></DOMTimeline></timelines></DOMDocument>");
+    CHECK(document != nullptr);
+    if (document)
+    {
+        XFLWriter writer;
+        const std::string written = writer.writeDocument(*document);
+        CHECK(written.find("<DOMInputText") != std::string::npos);
+        CHECK(written.find("instanceName=\"name_txt\"") != std::string::npos);
+    }
 }
 
 TEST(xfl_round_trips_layer_structure)

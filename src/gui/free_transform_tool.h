@@ -12,6 +12,7 @@
 
 namespace fla {
 class CommandStack;
+class DrawingStyle;
 class Element;
 class Selection;
 class Shape;
@@ -29,9 +30,11 @@ class Shape;
 class FreeTransformTool : public Tool
 {
 public:
-    FreeTransformTool(fla::Selection& selection, fla::CommandStack& commandStack)
+    FreeTransformTool(fla::Selection& selection, fla::CommandStack& commandStack,
+        const fla::DrawingStyle& style)
         : _selection(selection)
         , _commandStack(commandStack)
+        , _style(style)
     {}
 
     ~FreeTransformTool() override;
@@ -63,7 +66,11 @@ public:
 
     /// Discards the current transform box, so the next paint rebuilds it from
     /// the selection. Call when the selection changes.
-    void resetBox() { _boxValid = false; }
+    void resetBox()
+    {
+        _boxValid = false;
+        clearEnvelope();
+    }
 
 private:
     /// What the press grabbed.
@@ -82,8 +89,49 @@ private:
         /// moves on its own and the geometry is warped to follow, Animate's
         /// Distort. Shift moves the neighbouring corner the opposite way
         /// along their edge, which tapers.
-        Distort
+        Distort,
+        /// An anchor or a handle of the envelope: the box's sides bend and
+        /// the geometry follows.
+        Envelope
     };
+
+    /// Envelope mode's mesh: eight anchors round the box, a corner and a
+    /// midpoint on each side, each with a handle towards either neighbour.
+    /// The eight cubics they make are the sides of a Coons patch, and the
+    /// shapes are warped from the straight box the session began with onto
+    /// that patch. The session lasts until the selection or the box changes.
+    struct EnvelopeAnchor
+    {
+        QPointF point;
+        QPointF in;
+        QPointF out;
+    };
+
+    /// Builds the envelope on the current box and snapshots the shapes.
+    void setUpEnvelope();
+
+    void clearEnvelope();
+
+    bool envelopeReady() const { return _envelope.size() == 8; }
+
+    /// A point of the patch for (u, v) in the unit square.
+    QPointF envelopePoint(double u, double v) const;
+
+    /// The patch side segment from anchor \a index to the next, at \a t.
+    QPointF envelopeSegment(int index, double t) const;
+
+    /// What is under a point: an anchor (handle -1) or one of its handles
+    /// (0 in, 1 out). Returns false for neither.
+    bool envelopeHit(const QPointF& documentPos, double tolerance, int& anchor, int& handle) const;
+
+    /// Rewrites the shapes from their session originals onto the patch.
+    void applyEnvelope(PhoenixView& view);
+
+    /// Records the envelope drag as one undo step per shape, keeping the
+    /// session going.
+    void commitEnvelope(PhoenixView& view);
+
+    void drawEnvelope(QPainter& painter, double scale) const;
 
     /// Corner and edge-midpoint handles, in the order they sit around the box.
     static constexpr int kHandleCount = 8;
@@ -99,6 +147,9 @@ private:
 
     /// The nearest 45 degree step to a direction, for turning a cursor.
     static int eighthTurnsFor(const QPointF& direction);
+
+    /// Whether everything selected is a shape, which Distort needs.
+    bool onlyShapesSelected() const;
 
     /// Index of the handle within \a tolerance of \a documentPos, or -1.
     int handleAt(const QPointF& documentPos, double tolerance) const;
@@ -145,6 +196,7 @@ private:
 
     fla::Selection& _selection;
     fla::CommandStack& _commandStack;
+    const fla::DrawingStyle& _style;
 
     /// The four corners of the transform box, in document space.
     QPolygonF _box;
@@ -190,4 +242,14 @@ private:
         fla::Shape* original = nullptr;
     };
     std::vector<DistortTarget> _distortTargets;
+
+    std::vector<EnvelopeAnchor> _envelope;
+    QPolygonF _envelopeBase;
+    std::vector<DistortTarget> _envelopeOriginals;
+    /// What a drag of the envelope started from: the mesh, and each shape
+    /// as it was, for the undo step.
+    std::vector<EnvelopeAnchor> _envelopeAtDragStart;
+    std::vector<DistortTarget> _envelopeDragBefore;
+    int _envelopeAnchor = -1;
+    int _envelopeHandle = -1;
 };

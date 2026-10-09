@@ -2,16 +2,20 @@
 
 #include "tool.h"
 
+#include "../data/static_text.h"
+
 #include <QPointF>
 #include <QRectF>
 #include <QTransform>
+
+#include <cstdint>
+#include <string>
 
 namespace fla {
 class CommandStack;
 class DrawingStyle;
 class Frame;
 class Selection;
-class StaticText;
 }
 
 /// Animate's text tool.
@@ -19,9 +23,13 @@ class StaticText;
 /// A click on empty stage opens an auto-expanding text box there; a drag
 /// opens a fixed-width one that wraps. Typing fills the box, Return starts a
 /// new line, and clicking an existing text with the tool puts the caret in
-/// it. Escape, clicking elsewhere or changing tool finishes the edit: a new
-/// box with nothing typed vanishes, otherwise it becomes a static text
-/// element in the current frame, selected, as one undo step.
+/// it. Dragging across the text, shift with the arrow keys, a double-click on
+/// a word or ctrl+A select a range, which typing replaces and which the font,
+/// size and fill colour in Properties restyle. Dragging the box's handle sets
+/// a fixed width; double-clicking it lets the box grow again. Escape,
+/// clicking elsewhere or changing tool finishes the edit: a new box with
+/// nothing typed vanishes, otherwise it becomes a text element in the current
+/// frame, selected, as one undo step.
 class TextTool : public Tool
 {
 public:
@@ -44,6 +52,8 @@ public:
 
     bool mouseRelease(PhoenixView& view, QMouseEvent* event, const QPointF& documentPos) override;
 
+    bool mouseDoubleClick(PhoenixView& view, QMouseEvent* event, const QPointF& documentPos) override;
+
     bool keyPress(PhoenixView& view, QKeyEvent* event) override;
 
     bool capturesKeyboard() const override { return _text != nullptr; }
@@ -54,6 +64,16 @@ public:
 
     /// Whether a text box is open for typing.
     bool isEditing() const { return _text != nullptr; }
+
+    /// Restyle the selected range of the open box. Each returns false when
+    /// no box is open or nothing is selected, so the caller can treat the
+    /// change as a setting for new text instead.
+    bool applyFace(const std::string& face);
+    bool applySize(double size);
+    bool applyColor(const uint8_t color[4]);
+
+    /// Changes the open box's kind: static, dynamic or input text.
+    bool applyTextType(fla::StaticText::TextType type);
 
 private:
     /// Opens a new box at a point, fixed to a width when one is given.
@@ -71,6 +91,32 @@ private:
     void deleteBackward();
     void deleteForward();
 
+    /// The selected range, in joined-text offsets, or false when there is
+    /// only a caret.
+    bool selectedRange(int& from, int& to) const;
+
+    /// Removes the selected range, leaving the caret where it began.
+    void deleteSelection();
+
+    /// Removes a range of the joined text.
+    void removeRange(int from, int to);
+
+    /// Splits the runs at an offset so a run boundary falls there.
+    void splitRunAt(int offset);
+
+    /// Restyles the runs covering the selection with \a change.
+    template <typename Change>
+    bool restyleSelection(Change change);
+
+    /// Joins neighbouring runs that have come to share one style.
+    void mergeRuns();
+
+    /// Where the box's handle sits, in the text's own coordinates.
+    QPointF handlePosition() const;
+
+    /// Whether a point in the text's coordinates is on the box handle.
+    bool onHandle(PhoenixView& view, const QPointF& local) const;
+
     /// Writes the measured box back into the text, which is what gets saved.
     void measure();
 
@@ -83,10 +129,15 @@ private:
     fla::StaticText* _text = nullptr;
     fla::StaticText* _before = nullptr;
     fla::Frame* _frame = nullptr;
+    PhoenixView* _view = nullptr;
     /// Whether the box is new and still the tool's, not yet in any frame.
     bool _owned = false;
     QTransform _toDocument;
     int _caret = 0;
+    /// The other end of the selection, or -1 for a caret alone.
+    int _anchor = -1;
+    bool _selecting = false;
+    bool _resizing = false;
 
     bool _pressed = false;
     QPointF _pressPos;

@@ -6,6 +6,7 @@
 #include "../data/element.h"
 #include "../data/shape.h"
 #include "../edit/command_stack.h"
+#include "../edit/drawing_style.h"
 #include "../edit/element_commands.h"
 #include "../edit/selection.h"
 #include "../edit/shape_merge.h"
@@ -14,6 +15,7 @@
 
 #include <QKeyEvent>
 #include <QMouseEvent>
+#include <QPainterPath>
 
 #include <cmath>
 
@@ -116,6 +118,243 @@ double distanceToSegment(const QPointF& point, const QPointF& a, const QPointF& 
 FreeTransformTool::~FreeTransformTool()
 {
     clearDistortTargets();
+    clearEnvelope();
+}
+
+void FreeTransformTool::clearEnvelope()
+{
+    _envelope.clear();
+    _envelopeBase.clear();
+    for (DistortTarget& target : _envelopeOriginals)
+        delete target.original;
+    _envelopeOriginals.clear();
+    for (DistortTarget& target : _envelopeDragBefore)
+        delete target.original;
+    _envelopeDragBefore.clear();
+    _envelopeAtDragStart.clear();
+    _envelopeAnchor = -1;
+    _envelopeHandle = -1;
+}
+
+void FreeTransformTool::setUpEnvelope()
+{
+    clearEnvelope();
+    if (!_boxValid || _box.size() != 4)
+        return;
+
+    _envelopeBase = _box;
+    for (int i = 0; i < kHandleCount; ++i)
+    {
+        EnvelopeAnchor anchor;
+        anchor.point = handlePoint(_box, i);
+        _envelope.push_back(anchor);
+    }
+    // Straight sides to begin with: each handle a third of the way to the
+    // neighbour it faces.
+    for (int i = 0; i < kHandleCount; ++i)
+    {
+        const QPointF& a = _envelope[i].point;
+        const QPointF& b = _envelope[(i + 1) % kHandleCount].point;
+        _envelope[i].out = a + (b - a) / 3.0;
+        _envelope[(i + 1) % kHandleCount].in = b - (b - a) / 3.0;
+    }
+
+    for (fla::Element* element : transformLeaves(_selection))
+    {
+        if (element && element->elementType() == fla::Element::Type::Shape)
+        {
+            fla::Shape* shape = static_cast<fla::Shape*>(element);
+            _envelopeOriginals.push_back({shape, fla::cloneShape(*shape, nullptr)});
+        }
+    }
+}
+
+QPointF FreeTransformTool::envelopeSegment(int index, double t) const
+{
+    const EnvelopeAnchor& a = _envelope[index % kHandleCount];
+    const EnvelopeAnchor& b = _envelope[(index + 1) % kHandleCount];
+    const double s = 1.0 - t;
+    return a.point * (s * s * s) + a.out * (3.0 * s * s * t) + b.in * (3.0 * s * t * t) +
+        b.point * (t * t * t);
+}
+
+QPointF FreeTransformTool::envelopePoint(double u, double v) const
+{
+    // The four sides, each two segments long, read left to right and top to
+    // bottom. The anchors run clockwise: 0 top left, 2 top right, 4 bottom
+    // right, 6 bottom left, with the midpoints between.
+    const auto top = [&](double s) {
+        return s < 0.5 ? envelopeSegment(0, s * 2.0) : envelopeSegment(1, s * 2.0 - 1.0);
+    };
+    const auto right = [&](double s) {
+        return s < 0.5 ? envelopeSegment(2, s * 2.0) : envelopeSegment(3, s * 2.0 - 1.0);
+    };
+    const auto bottom = [&](double s) {
+        return s < 0.5 ? envelopeSegment(5, 1.0 - s * 2.0) : envelopeSegment(4, 2.0 - s * 2.0);
+    };
+    const auto left = [&](double s) {
+        return s < 0.5 ? envelopeSegment(7, 1.0 - s * 2.0) : envelopeSegment(6, 2.0 - s * 2.0);
+    };
+
+    const QPointF p00 = _envelope[0].point;
+    const QPointF p10 = _envelope[2].point;
+    const QPointF p11 = _envelope[4].point;
+    const QPointF p01 = _envelope[6].point;
+
+    // Coons: blend the opposite sides both ways, less the corners counted twice.
+    return top(u) * (1.0 - v) + bottom(u) * v + left(v) * (1.0 - u) + right(v) * u -
+        (p00 * ((1.0 - u) * (1.0 - v)) + p10 * (u * (1.0 - v)) + p01 * ((1.0 - u) * v) + p11 * (u * v));
+}
+
+bool FreeTransformTool::envelopeHit(const QPointF& documentPos, double tolerance,
+    int& anchor, int& handle) const
+{
+    anchor = -1;
+    handle = -1;
+    if (!envelopeReady())
+        return false;
+
+    // Handles first: they sit near their anchors and are the finer control.
+    for (int i = 0; i < kHandleCount; ++i)
+    {
+        if (distance(documentPos, _envelope[i].in) <= tolerance)
+        {
+            anchor = i;
+            handle = 0;
+            return true;
+        }
+        if (distance(documentPos, _envelope[i].out) <= tolerance)
+        {
+            anchor = i;
+            handle = 1;
+            return true;
+        }
+    }
+    for (int i = 0; i < kHandleCount; ++i)
+    {
+        if (distance(documentPos, _envelope[i].point) <= tolerance)
+        {
+            anchor = i;
+            return true;
+        }
+    }
+    return false;
+}
+
+void FreeTransformTool::applyEnvelope(PhoenixView& view)
+{
+    if (!envelopeReady() || _envelopeBase.size() != 4)
+        return;
+
+    for (const DistortTarget& target : _envelopeOriginals)
+    {
+        if (!target.shape || !target.original)
+            continue;
+
+        fla::setShapeContents(*target.shape, *target.original);
+        // Straight runs cannot bend, so they are cut into short cubics first.
+        fla::prepareForWarp(*target.shape, 20.0);
+
+        const QTransform toDocument = toQTransform(target.shape->transform);
+        bool invertible = false;
+        const QTransform toShape = toDocument.inverted(&invertible);
+        if (!invertible)
+            continue;
+
+        fla::warpShape(*target.shape, [&](const fla::Point& point) {
+            const QPointF inDocument = toDocument.map(QPointF(point.x, point.y));
+            const QPointF uv = inverseBilinear(_envelopeBase, inDocument);
+            const QPointF warped = toShape.map(envelopePoint(uv.x(), uv.y()));
+            return fla::Point(warped.x(), warped.y());
+        });
+    }
+
+    view.clearCaches();
+    view.update();
+}
+
+void FreeTransformTool::commitEnvelope(PhoenixView& view)
+{
+    std::vector<fla::CommandPtr> commands;
+    for (const DistortTarget& before : _envelopeDragBefore)
+    {
+        if (!before.shape || !before.original)
+            continue;
+        // The command snapshots its target as the "before", so the shape is
+        // put back to where the drag started first.
+        std::unique_ptr<fla::Shape> after(fla::cloneShape(*before.shape, nullptr));
+        fla::setShapeContents(*before.shape, *before.original);
+        commands.push_back(fla::CommandPtr(
+            new fla::SetShapeContentsCommand(before.shape, *after, "Envelope")));
+    }
+    for (DistortTarget& before : _envelopeDragBefore)
+        delete before.original;
+    _envelopeDragBefore.clear();
+
+    if (!commands.empty())
+    {
+        const bool needsMacro = commands.size() > 1;
+        if (needsMacro)
+            _commandStack.beginMacro("Envelope");
+        for (fla::CommandPtr& command : commands)
+            _commandStack.push(std::move(command));
+        if (needsMacro)
+            _commandStack.endMacro();
+        _commandStack.breakMergeChain();
+
+        for (const DistortTarget& target : _envelopeOriginals)
+        {
+            if (target.shape)
+                view.markShapeEdited(target.shape);
+        }
+    }
+
+    _grip = Grip::None;
+    _gripIndex = -1;
+    _envelopeAnchor = -1;
+    _envelopeHandle = -1;
+    _targets.clear();
+    view.clearCaches();
+    view.update();
+}
+
+void FreeTransformTool::drawEnvelope(QPainter& painter, double scale) const
+{
+    if (!envelopeReady())
+        return;
+
+    // The bent sides.
+    QPainterPath sides;
+    sides.moveTo(_envelope[0].point);
+    for (int i = 0; i < kHandleCount; ++i)
+    {
+        const EnvelopeAnchor& a = _envelope[i];
+        const EnvelopeAnchor& b = _envelope[(i + 1) % kHandleCount];
+        sides.cubicTo(a.out, b.in, b.point);
+    }
+    painter.setBrush(Qt::NoBrush);
+    painter.setPen(QPen(QColor(0, 0, 0), 1.0 * scale));
+    painter.drawPath(sides);
+
+    // Each handle on a thin line from its anchor, as a hollow circle; the
+    // anchors as hollow squares.
+    const double half = kHandleScreenSize * scale;
+    for (const EnvelopeAnchor& anchor : _envelope)
+    {
+        painter.setPen(QPen(QColor(0, 0, 0), 0.5 * scale));
+        painter.drawLine(anchor.point, anchor.in);
+        painter.drawLine(anchor.point, anchor.out);
+        painter.setPen(QPen(QColor(0, 0, 0), 1.0 * scale));
+        painter.setBrush(QColor(255, 255, 255));
+        painter.drawEllipse(anchor.in, half, half);
+        painter.drawEllipse(anchor.out, half, half);
+    }
+    for (const EnvelopeAnchor& anchor : _envelope)
+    {
+        painter.setPen(QPen(QColor(0, 0, 0), 1.0 * scale));
+        painter.setBrush(QColor(255, 255, 255));
+        painter.drawRect(QRectF(anchor.point.x() - half, anchor.point.y() - half, half * 2.0, half * 2.0));
+    }
 }
 
 QPointF FreeTransformTool::centerOf(const QPolygonF& box)
@@ -206,6 +445,7 @@ void FreeTransformTool::rebuildBox(PhoenixView& view)
         _box.removeLast(); // QPolygonF(QRectF) closes the ring
     _boxValid = _box.size() == 4;
     rememberBoxOwners();
+    clearEnvelope();
 }
 
 void FreeTransformTool::rememberBoxOwners()
@@ -406,22 +646,42 @@ bool FreeTransformTool::mousePress(PhoenixView& view, QMouseEvent* event, const 
     }
 
     _gripIndex = -1;
+
+    // Envelope mode: the mesh's anchors and handles come before the box's
+    // own grips, which it replaces.
+    if (_style.transformMode == fla::DrawingStyle::TransformMode::Envelope && onlyShapesSelected())
+    {
+        if (!envelopeReady())
+            setUpEnvelope();
+        const double tolerance = qMax(view.pickTolerance(),
+            kHandleScreenSize / qMax(view.zoom(), 1.0e-6));
+        int anchor = -1;
+        int handle = -1;
+        if (envelopeHit(documentPos, tolerance, anchor, handle))
+        {
+            _grip = Grip::Envelope;
+            _envelopeAnchor = anchor;
+            _envelopeHandle = handle;
+            _envelopeAtDragStart = _envelope;
+            _dragStart = documentPos;
+            for (DistortTarget& before : _envelopeDragBefore)
+                delete before.original;
+            _envelopeDragBefore.clear();
+            for (const DistortTarget& target : _envelopeOriginals)
+                _envelopeDragBefore.push_back({target.shape, fla::cloneShape(*target.shape, nullptr)});
+            return true;
+        }
+    }
+
     _grip = gripAt(view, documentPos, _gripIndex);
 
-    // Ctrl on a corner is Distort, which only shapes can take: their points
-    // are rewritten, where a symbol or text has only a matrix to change.
-    if (_grip == Grip::Handle && _gripIndex % 2 == 0 && (event->modifiers() & Qt::ControlModifier))
-    {
-        const std::vector<fla::Element*> leaves = transformLeaves(_selection);
-        bool allShapes = !leaves.empty();
-        for (fla::Element* leaf : leaves)
-        {
-            if (!leaf || leaf->elementType() != fla::Element::Type::Shape)
-                allShapes = false;
-        }
-        if (allShapes)
-            _grip = Grip::Distort;
-    }
+    // Ctrl on a corner, or the Distort option, is Distort, which only shapes
+    // can take: their points are rewritten, where a symbol or text has only
+    // a matrix to change.
+    const bool distortWanted = (event->modifiers() & Qt::ControlModifier) ||
+        _style.transformMode == fla::DrawingStyle::TransformMode::Distort;
+    if (_grip == Grip::Handle && _gripIndex % 2 == 0 && distortWanted && onlyShapesSelected())
+        _grip = Grip::Distort;
 
     if (_grip == Grip::None)
     {
@@ -514,6 +774,19 @@ FreeTransformTool::Grip FreeTransformTool::gripAt(PhoenixView& view, const QPoin
     return Grip::None;
 }
 
+bool FreeTransformTool::onlyShapesSelected() const
+{
+    const std::vector<fla::Element*> leaves = transformLeaves(_selection);
+    if (leaves.empty())
+        return false;
+    for (fla::Element* leaf : leaves)
+    {
+        if (!leaf || leaf->elementType() != fla::Element::Type::Shape)
+            return false;
+    }
+    return true;
+}
+
 int FreeTransformTool::eighthTurnsFor(const QPointF& direction)
 {
     if (std::abs(direction.x()) < 1.0e-9 && std::abs(direction.y()) < 1.0e-9)
@@ -549,9 +822,10 @@ void FreeTransformTool::showCursorFor(PhoenixView& view, Grip grip, int index)
         kind = Cursors::Kind::Rotate;
         break;
     case Grip::Distort:
-        kind = Cursors::Kind::Scale;
-        if (index >= 0 && _box.size() == 4)
-            turns = eighthTurnsFor(handlePoint(_box, index) - centerOf(_box));
+        kind = Cursors::Kind::ArrowDistort;
+        break;
+    case Grip::Envelope:
+        kind = Cursors::Kind::ArrowMove;
         break;
     case Grip::None:
         break;
@@ -573,9 +847,46 @@ bool FreeTransformTool::mouseMove(PhoenixView& view, QMouseEvent* event, const Q
         if (!_selection.isEmpty() && (!_boxValid || !boxMatchesSelection()))
             rebuildBox(view);
         int index = -1;
-        const Grip grip = _selection.isEmpty() ? Grip::None : gripAt(view, documentPos, index);
+        Grip grip = _selection.isEmpty() ? Grip::None : gripAt(view, documentPos, index);
+        const bool distortWanted = (event->modifiers() & Qt::ControlModifier) ||
+            _style.transformMode == fla::DrawingStyle::TransformMode::Distort;
+        if (grip == Grip::Handle && index % 2 == 0 && distortWanted && onlyShapesSelected())
+            grip = Grip::Distort;
+        if (_style.transformMode == fla::DrawingStyle::TransformMode::Envelope && envelopeReady())
+        {
+            int anchor = -1;
+            int handle = -1;
+            const double tolerance = qMax(view.pickTolerance(),
+                kHandleScreenSize / qMax(view.zoom(), 1.0e-6));
+            grip = envelopeHit(documentPos, tolerance, anchor, handle) ? Grip::Envelope : Grip::None;
+            index = -1;
+        }
         showCursorFor(view, grip, index);
         return false;
+    }
+
+    if (_grip == Grip::Envelope)
+    {
+        const QPointF delta = documentPos - _dragStart;
+        if (_envelopeAnchor >= 0 && _envelopeAnchor < static_cast<int>(_envelope.size()) &&
+            _envelopeAtDragStart.size() == _envelope.size())
+        {
+            const EnvelopeAnchor& start = _envelopeAtDragStart[_envelopeAnchor];
+            EnvelopeAnchor& anchor = _envelope[_envelopeAnchor];
+            if (_envelopeHandle == 0)
+                anchor.in = start.in + delta;
+            else if (_envelopeHandle == 1)
+                anchor.out = start.out + delta;
+            else
+            {
+                // An anchor carries its handles with it.
+                anchor.point = start.point + delta;
+                anchor.in = start.in + delta;
+                anchor.out = start.out + delta;
+            }
+        }
+        applyEnvelope(view);
+        return true;
     }
 
     if (_grip == Grip::Distort)
@@ -644,6 +955,8 @@ void FreeTransformTool::applyDistort(PhoenixView& view, const QPolygonF& box)
         // Every move starts again from the untouched geometry, so the warp
         // is always the one drag, not a pile of small ones.
         fla::setShapeContents(*target.shape, *target.original);
+        // Straight runs cannot bend, so they are cut into short cubics first.
+        fla::prepareForWarp(*target.shape, 20.0);
 
         const QTransform toDocument = toQTransform(target.shape->transform);
         bool invertible = false;
@@ -731,6 +1044,12 @@ bool FreeTransformTool::mouseRelease(PhoenixView& view, QMouseEvent* event, cons
     if (event->button() != Qt::LeftButton || _grip == Grip::None)
         return false;
 
+    if (_grip == Grip::Envelope)
+    {
+        commitEnvelope(view);
+        return true;
+    }
+
     if (_grip == Grip::Distort)
     {
         const QPolygonF box = distortedBox(snapDragPoint(view, documentPos), event->modifiers());
@@ -755,6 +1074,10 @@ bool FreeTransformTool::mouseRelease(PhoenixView& view, QMouseEvent* event, cons
 
 void FreeTransformTool::commit(PhoenixView& view)
 {
+    // Moving or scaling the shapes leaves the mesh behind; it is rebuilt on
+    // the new box.
+    clearEnvelope();
+
     const char* gestureName = "Transform";
     switch (_grip)
     {
@@ -763,6 +1086,7 @@ void FreeTransformTool::commit(PhoenixView& view)
     case Grip::Rotate: gestureName = "Rotate"; break;
     case Grip::Skew:   gestureName = "Skew"; break;
     case Grip::Distort: gestureName = "Distort"; break;
+    case Grip::Envelope: gestureName = "Envelope"; break;
     case Grip::None:   break;
     }
 
@@ -836,6 +1160,23 @@ bool FreeTransformTool::keyPress(PhoenixView& view, QKeyEvent* event)
         clearDistortTargets();
         view.clearCaches();
     }
+    if (_grip == Grip::Envelope)
+    {
+        _envelope = _envelopeAtDragStart;
+        for (DistortTarget& before : _envelopeDragBefore)
+        {
+            if (before.shape && before.original)
+                fla::setShapeContents(*before.shape, *before.original);
+            delete before.original;
+        }
+        _envelopeDragBefore.clear();
+        _grip = Grip::None;
+        _envelopeAnchor = -1;
+        _envelopeHandle = -1;
+        view.clearCaches();
+        view.update();
+        return true;
+    }
 
     _box = _boxAtDragStart;
     _grip = Grip::None;
@@ -860,6 +1201,17 @@ void FreeTransformTool::paintOverlay(PhoenixView& view, QPainter& painter, doubl
 
     if (!_boxValid)
         return;
+
+    if (_style.transformMode == fla::DrawingStyle::TransformMode::Envelope && onlyShapesSelected())
+    {
+        if (!envelopeReady() && _grip == Grip::None)
+            const_cast<FreeTransformTool*>(this)->setUpEnvelope();
+        if (envelopeReady())
+        {
+            drawEnvelope(painter, scale);
+            return;
+        }
+    }
 
     // Animate's transform box: a thin black outline, hollow white handles with
     // a black border, and a white circle for the transformation point.
@@ -899,12 +1251,22 @@ void FreeTransformTool::deactivate(PhoenixView& view)
             clearDistortTargets();
             view.clearCaches();
         }
+        if (_grip == Grip::Envelope)
+        {
+            for (DistortTarget& before : _envelopeDragBefore)
+            {
+                if (before.shape && before.original)
+                    fla::setShapeContents(*before.shape, *before.original);
+            }
+            view.clearCaches();
+        }
         _targets.clear();
         _grip = Grip::None;
         view.invalidateBounds();
         view.update();
     }
 
+    clearEnvelope();
     _boxValid = false;
     _hoverKind = Cursors::Kind::Arrow;
     _hoverTurns = 0;

@@ -37,6 +37,23 @@ public:
     double height = 0.0;
     bool autoExpand = false;
 
+    /// Animate's three kinds of text field. A static field is artwork; a
+    /// dynamic one can be set from a script, an input one typed into, and
+    /// both are written as DOMDynamicText and DOMInputText.
+    enum class TextType
+    {
+        Static,
+        Dynamic,
+        Input
+    };
+    TextType textType = TextType::Static;
+
+    /// For dynamic and input text: the name a script reaches the field by,
+    /// and the line type Animate records (single line, multiline, multiline
+    /// no wrap, password), carried through as written.
+    std::string instanceName;
+    std::string lineType;
+
     std::vector<TextRun> runs;
 
     StaticText(DOMElement* parent)

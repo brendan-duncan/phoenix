@@ -813,6 +813,8 @@ bool parseStaticText(const tinyxml2::XMLElement* element, fla::StaticText* stati
     staticText->width = getDoubleAttribute(element, "width", 0.0);
     staticText->height = getDoubleAttribute(element, "height", 0.0);
     staticText->autoExpand = getBoolAttribute(element, "autoExpand", false);
+    staticText->instanceName = getAttribute(element, "instanceName");
+    staticText->lineType = getAttribute(element, "lineType");
 
     for (const tinyxml2::XMLElement* textRunsNode = element->FirstChildElement("textRuns");
          textRunsNode != nullptr;
@@ -954,7 +956,9 @@ fla::Element* parseElementByType(const tinyxml2::XMLElement* element, fla::DOMEl
         }
         return group;
     }
-    else if (std::strcmp(tagName, "DOMStaticText") == 0)
+    else if (std::strcmp(tagName, "DOMStaticText") == 0 ||
+        std::strcmp(tagName, "DOMDynamicText") == 0 ||
+        std::strcmp(tagName, "DOMInputText") == 0)
     {
         fla::StaticText* staticText = new fla::StaticText(parent);
         if (!parseStaticText(element, staticText))
@@ -962,6 +966,10 @@ fla::Element* parseElementByType(const tinyxml2::XMLElement* element, fla::DOMEl
             delete staticText;
             return nullptr;
         }
+        if (std::strcmp(tagName, "DOMDynamicText") == 0)
+            staticText->textType = fla::StaticText::TextType::Dynamic;
+        else if (std::strcmp(tagName, "DOMInputText") == 0)
+            staticText->textType = fla::StaticText::TextType::Input;
         return staticText;
     }
     else if (std::strcmp(tagName, "DOMBitmapInstance") == 0)

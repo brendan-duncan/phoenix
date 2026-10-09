@@ -4,6 +4,7 @@
 #include "../src/data/group.h"
 #include "../src/data/layer.h"
 #include "../src/data/shape.h"
+#include "../src/data/solid_color.h"
 #include "../src/data/static_text.h"
 #include "../src/edit/element_clone.h"
 #include "../src/data/symbol.h"
@@ -680,5 +681,55 @@ TEST(set_text_contents_command_swaps_the_runs_and_box)
 
     stack.clear();
     delete text;
+    frame.elements.clear();
+}
+
+TEST(breaking_an_instance_apart_bakes_its_colour_effect)
+{
+    fla::Symbol symbol(nullptr);
+    fla::Timeline* timeline = new fla::Timeline(&symbol);
+    symbol.timelines.push_back(timeline);
+    fla::Layer* layer = new fla::Layer(timeline);
+    timeline->layers.push_back(layer);
+    fla::Frame* inside = new fla::Frame(layer);
+    layer->frames.push_back(inside);
+
+    fla::Shape* shape = new fla::Shape(inside);
+    fla::SolidColor* fill = new fla::SolidColor(shape);
+    fill->color[0] = 100;
+    fill->color[1] = 100;
+    fill->color[2] = 100;
+    fill->color[3] = 255;
+    shape->fills.push_back(fill);
+    shape->fillsMap[1] = fill;
+    inside->elements.push_back(shape);
+
+    fla::Frame frame(nullptr);
+    fla::SymbolInstance* instance = new fla::SymbolInstance(&frame);
+    instance->symbol = &symbol;
+    instance->symbolType = fla::SymbolType::MovieClip;
+    // Half brightness towards white, and half alpha.
+    instance->colorTransform.brightness = 0.5;
+    instance->colorTransform.alphaMultiplier = 0.5;
+    frame.elements.push_back(instance);
+
+    CommandStack stack;
+    stack.push(CommandPtr(new fla::BreakApartInstanceCommand(&frame, instance, "Break Apart")));
+    CHECK(frame.elements.size() == 1);
+    fla::Shape* copy = frame.elements.empty() ? nullptr : dynamic_cast<fla::Shape*>(frame.elements[0]);
+    CHECK(copy != nullptr);
+    if (copy && !copy->fills.empty())
+    {
+        const fla::SolidColor* colour = static_cast<const fla::SolidColor*>(copy->fills[0]);
+        CHECK(colour->color[0] == 177);
+        CHECK(colour->color[3] == 127);
+    }
+
+    // The symbol's own colours are untouched.
+    CHECK(fill->color[0] == 100 && fill->color[3] == 255);
+
+    stack.clear();
+    for (fla::Element* element : frame.elements)
+        delete element;
     frame.elements.clear();
 }

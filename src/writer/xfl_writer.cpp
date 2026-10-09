@@ -487,13 +487,20 @@ void XFLWriter::writeBitmapInstance(const BitmapInstance& instance, XMLElement* 
 void XFLWriter::writeStaticText(const StaticText& text, XMLElement* parent)
 {
     XMLDocument* doc = parent->GetDocument();
-    XMLElement* node = doc->NewElement("DOMStaticText");
+    const char* tag = "DOMStaticText";
+    if (text.textType == StaticText::TextType::Dynamic)
+        tag = "DOMDynamicText";
+    else if (text.textType == StaticText::TextType::Input)
+        tag = "DOMInputText";
+    XMLElement* node = doc->NewElement(tag);
 
     setDouble(node, "left", text.left, 0.0);
     setDouble(node, "top", text.top, 0.0);
     setDouble(node, "width", text.width, 0.0);
     setDouble(node, "height", text.height, 0.0);
     setBool(node, "autoExpand", text.autoExpand, false);
+    setString(node, "instanceName", text.instanceName);
+    setString(node, "lineType", text.lineType);
 
     writeElementCommon(text, node);
 

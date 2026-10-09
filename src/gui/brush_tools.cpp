@@ -83,8 +83,110 @@ QPainterPath centreline(const std::vector<fla::Point>& points, bool smooth, doub
     return path;
 }
 
-QPainterPath brushOutline(const std::vector<fla::Point>& points, double width, bool smooth, double zoom)
+/// The outline of a stroke whose width follows the pen's pressure: the
+/// centreline is walked at a steady pace, each step offset to either side by
+/// half the width the pressure there allows, the two sides joined by round
+/// caps, and the ring resolved so that where it overlaps itself it is still
+/// one region.
+QPainterPath pressureOutline(const QPainterPath& centre, double width,
+    const std::vector<fla::Point>& raw, const std::vector<double>& pressures)
 {
+    const double length = centre.length();
+    if (length < 1.0e-6 || raw.size() != pressures.size() || raw.empty())
+        return QPainterPath();
+
+    std::vector<double> along(raw.size(), 0.0);
+    for (size_t i = 1; i < raw.size(); ++i)
+        along[i] = along[i - 1] + std::hypot(raw[i].x - raw[i - 1].x, raw[i].y - raw[i - 1].y);
+    const double total = along.back();
+
+    const auto pressureAt = [&](double fraction) {
+        if (total <= 1.0e-9)
+            return pressures.front();
+        const double target = fraction * total;
+        for (size_t i = 1; i < raw.size(); ++i)
+        {
+            if (along[i] >= target)
+            {
+                const double span = along[i] - along[i - 1];
+                const double t = span > 1.0e-9 ? (target - along[i - 1]) / span : 1.0;
+                return pressures[i - 1] + (pressures[i] - pressures[i - 1]) * t;
+            }
+        }
+        return pressures.back();
+    };
+
+    const int steps = std::max(8, static_cast<int>(length / 1.5));
+    std::vector<QPointF> left;
+    std::vector<QPointF> right;
+    std::vector<QPointF> centres;
+    std::vector<QPointF> directions;
+    for (int s = 0; s <= steps; ++s)
+    {
+        const double t = static_cast<double>(s) / steps;
+        const QPointF p = centre.pointAtPercent(t);
+        const double degrees = centre.angleAtPercent(t);
+        const double radians = degrees * 3.14159265358979323846 / 180.0;
+        // Qt measures the angle with y up; the stage has y down.
+        const QPointF d(std::cos(radians), -std::sin(radians));
+        const QPointF n(-d.y(), d.x());
+        const double half = std::max(0.05, std::min(1.0, pressureAt(t))) * width * 0.5;
+        left.push_back(p + n * half);
+        right.push_back(p - n * half);
+        centres.push_back(p);
+        directions.push_back(d);
+    }
+
+    // A half circle from one side to the other round an end, bulging the way
+    // the stroke travels there.
+    const auto cap = [](std::vector<QPointF>& out, const QPointF& centre, const QPointF& from,
+        const QPointF& travel) {
+        const QPointF v = from - centre;
+        QPointF turned(-v.y(), v.x());
+        double sign = 1.0;
+        if (turned.x() * travel.x() + turned.y() * travel.y() < 0.0)
+            sign = -1.0;
+        const int pieces = 12;
+        for (int k = 1; k < pieces; ++k)
+        {
+            const double theta = sign * 3.14159265358979323846 * k / pieces;
+            const double c = std::cos(theta);
+            const double sn = std::sin(theta);
+            out.push_back(centre + QPointF(v.x() * c - v.y() * sn, v.x() * sn + v.y() * c));
+        }
+    };
+
+    std::vector<QPointF> ring(left.begin(), left.end());
+    cap(ring, centres.back(), left.back(), directions.back());
+    for (auto it = right.rbegin(); it != right.rend(); ++it)
+        ring.push_back(*it);
+    cap(ring, centres.front(), right.front(), -directions.front());
+
+    QPainterPath outline;
+    outline.setFillRule(Qt::WindingFill);
+    outline.addPolygon(QPolygonF(ring.begin(), ring.end()));
+    outline.closeSubpath();
+    return outline.simplified();
+}
+
+QPainterPath brushOutline(const std::vector<fla::Point>& points, double width, bool smooth, double zoom,
+    const std::vector<double>* pressures = nullptr)
+{
+    // Pressure only matters when it varied: a mouse reports 1 throughout.
+    bool varied = false;
+    if (pressures && pressures->size() == points.size())
+    {
+        for (const double p : *pressures)
+            varied = varied || std::fabs(p - 1.0) > 0.01;
+    }
+    if (varied && points.size() >= 2)
+    {
+        const QPainterPath outline = pressureOutline(
+            centreline(points, smooth, zoom), std::max(width, 0.5), points, *pressures);
+        if (!outline.isEmpty())
+            return outline;
+    }
+
     QPainterPathStroker stroker;
     stroker.setWidth(std::max(width, 0.5));
     stroker.setCapStyle(Qt::RoundCap);
@@ -127,8 +229,11 @@ Arranged arrange(fla::Shape* shape)
     return entry;
 }
 
-/// The merge shapes under an area, bottom to top, each arranged.
-std::vector<Arranged> arrangeShapesIn(PhoenixView& view, const QRectF& area)
+/// The shapes under an area, bottom to top, each arranged. Drawing objects
+/// are left out unless asked for: the brush paints over them as fresh
+/// artwork, while the eraser takes from them as it does from merge art.
+std::vector<Arranged> arrangeShapesIn(PhoenixView& view, const QRectF& area,
+    bool includeObjects = false)
 {
     std::vector<Arranged> arranged;
     for (fla::Element* element : view.elementsIn(area))
@@ -136,7 +241,7 @@ std::vector<Arranged> arrangeShapesIn(PhoenixView& view, const QRectF& area)
         if (!element || element->elementType() != fla::Element::Type::Shape)
             continue;
         fla::Shape* shape = static_cast<fla::Shape*>(element);
-        if (shape->isDrawingObject)
+        if (shape->isDrawingObject && !includeObjects)
             continue;
         arranged.push_back(arrange(shape));
     }
@@ -202,12 +307,13 @@ fla::Shape* restrictTo(const fla::Shape& brush, const std::vector<Arranged>& arr
 /// The topmost shape with a region, painted or merely enclosed, under a
 /// point: where a stroke in the Inside modes begins. Returns false on empty
 /// stage.
-bool regionUnder(PhoenixView& view, const QPointF& documentPos, Arranged& found, int& face)
+bool regionUnder(PhoenixView& view, const QPointF& documentPos, Arranged& found, int& face,
+    bool includeObjects)
 {
     const double tolerance = view.pickTolerance();
     const QRectF probe(documentPos.x() - tolerance, documentPos.y() - tolerance,
         tolerance * 2.0, tolerance * 2.0);
-    std::vector<Arranged> under = arrangeShapesIn(view, probe);
+    std::vector<Arranged> under = arrangeShapesIn(view, probe, includeObjects);
     for (auto it = under.rbegin(); it != under.rend(); ++it)
     {
         const int candidate = it->regions->faceAt(fla::Point(documentPos.x(), documentPos.y()));
@@ -230,9 +336,10 @@ QRectF boundsOf(const fla::Shape& shape)
 } // namespace
 
 fla::Shape* brushOutlineShape(const std::vector<fla::Point>& points, double width,
-    bool smooth, fla::Frame* parent, const fla::DrawingStyle& style, bool asFill)
+    bool smooth, fla::Frame* parent, const fla::DrawingStyle& style, bool asFill,
+    const std::vector<double>* pressures)
 {
-    const QPainterPath outline = brushOutline(points, width, smooth, 1.0);
+    const QPainterPath outline = brushOutline(points, width, smooth, 1.0, pressures);
     if (outline.isEmpty())
         return nullptr;
 
@@ -358,7 +465,7 @@ bool BrushTool::mousePress(PhoenixView& view, QMouseEvent* event, const QPointF&
     {
         Arranged hit;
         int face = -1;
-        if (regionUnder(view, documentPos, hit, face))
+        if (regionUnder(view, documentPos, hit, face, false))
         {
             _insideShape = hit.shape;
             _insideFace = face;
@@ -368,7 +475,9 @@ bool BrushTool::mousePress(PhoenixView& view, QMouseEvent* event, const QPointF&
 
     _drawing = true;
     _points.clear();
+    _pressures.clear();
     _points.push_back(fla::Point(documentPos.x(), documentPos.y()));
+    _pressures.push_back(_style.brushPressure ? view.pressure() : 1.0);
     view.update();
     return true;
 }
@@ -381,7 +490,10 @@ bool BrushTool::mouseMove(PhoenixView& view, QMouseEvent* event, const QPointF& 
     _hoverValid = true;
 
     if (_drawing)
+    {
         _points.push_back(fla::Point(documentPos.x(), documentPos.y()));
+        _pressures.push_back(_style.brushPressure ? view.pressure() : 1.0);
+    }
 
     view.update();
     return _drawing;
@@ -393,6 +505,7 @@ bool BrushTool::mouseRelease(PhoenixView& view, QMouseEvent* event, const QPoint
         return false;
 
     _points.push_back(fla::Point(documentPos.x(), documentPos.y()));
+    _pressures.push_back(_style.brushPressure ? view.pressure() : 1.0);
     _drawing = false;
     finish(view);
     return true;
@@ -419,8 +532,10 @@ void BrushTool::finish(PhoenixView& view)
         return;
     }
 
-    fla::Shape* shape = brushOutlineShape(_points, _style.brushSize, true, frame, _style, true);
+    fla::Shape* shape = brushOutlineShape(_points, _style.brushSize, true, frame, _style, true,
+        &_pressures);
     _points.clear();
+    _pressures.clear();
     if (!shape)
     {
         view.update();
@@ -513,7 +628,7 @@ void BrushTool::paintOverlay(PhoenixView& view, QPainter& painter, double scale)
         // The stroke as it will land: the fill colour along the drag.
         painter.setBrush(QColor(_style.fillColor[0], _style.fillColor[1],
             _style.fillColor[2], _style.fillColor[3]));
-        painter.drawPath(brushOutline(_points, _style.brushSize, false, 1.0));
+        painter.drawPath(brushOutline(_points, _style.brushSize, false, 1.0, &_pressures));
     }
 
     if (_hoverValid)
@@ -561,7 +676,7 @@ bool EraserTool::mousePress(PhoenixView& view, QMouseEvent* event, const QPointF
     {
         Arranged hit;
         int face = -1;
-        if (regionUnder(view, documentPos, hit, face))
+        if (regionUnder(view, documentPos, hit, face, true))
         {
             _insideShape = hit.shape;
             _insideFace = face;
@@ -643,9 +758,10 @@ void EraserTool::finish(PhoenixView& view)
     case EraserMode::Fills:
     case EraserMode::Lines:
         // Anything floating goes in first, so the eraser works on the artwork
-        // as it will be.
+        // as it will be. Drawing objects lose what the eraser covers too, and
+        // stay objects.
         view.flushPendingMerge();
-        targets = arrangeShapesIn(view, boundsOf(*cutter));
+        targets = arrangeShapesIn(view, boundsOf(*cutter), true);
         break;
 
     case EraserMode::SelectedFills:
@@ -712,7 +828,7 @@ void EraserTool::faucet(PhoenixView& view, const QPointF& documentPos)
         tolerance * 2.0, tolerance * 2.0);
 
     // Topmost first: what the click lands on is what the stage shows there.
-    std::vector<Arranged> under = arrangeShapesIn(view, probe);
+    std::vector<Arranged> under = arrangeShapesIn(view, probe, true);
     for (auto it = under.rbegin(); it != under.rend(); ++it)
     {
         const fla::RegionPick pick = it->regions->pickAt(

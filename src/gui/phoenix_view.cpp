@@ -2281,6 +2281,18 @@ void PhoenixView::mouseDoubleClickEvent(QMouseEvent* event)
     QWidget::mouseDoubleClickEvent(event);
 }
 
+void PhoenixView::tabletEvent(QTabletEvent* event)
+{
+    // Only the pressure is taken; the event is left alone so that Qt goes on
+    // to deliver the same movement as mouse events, which is what the tools
+    // handle.
+    if (event->type() == QEvent::TabletRelease)
+        _pressure = 1.0;
+    else
+        _pressure = std::max(0.0, std::min(1.0, event->pressure()));
+    event->ignore();
+}
+
 bool PhoenixView::event(QEvent* event)
 {
     // While a tool is taking typed text, a plain key is a character for it,
@@ -2291,7 +2303,8 @@ bool PhoenixView::event(QEvent* event)
         const Qt::KeyboardModifiers modifiers =
             key->modifiers() & ~(Qt::ShiftModifier | Qt::KeypadModifier);
         const bool altGr = modifiers == (Qt::ControlModifier | Qt::AltModifier);
-        if (modifiers == Qt::NoModifier || altGr)
+        const bool selectAll = modifiers == Qt::ControlModifier && key->key() == Qt::Key_A;
+        if (modifiers == Qt::NoModifier || altGr || selectAll)
         {
             event->accept();
             return true;
