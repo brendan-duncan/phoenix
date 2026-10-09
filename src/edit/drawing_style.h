@@ -56,6 +56,53 @@ public:
     double brushSize = 12.0;
     double eraserSize = 12.0;
 
+    /// Animate's brush modes: where a stroke of the brush lands.
+    enum class BrushMode
+    {
+        /// Over everything, burying lines and fills it covers.
+        Normal,
+        /// Over fills and empty stage, under the lines.
+        Fills,
+        /// Only on empty stage, behind everything already there.
+        Behind,
+        /// Only within the selected fills.
+        Selection,
+        /// Only within the fill the stroke began in.
+        Inside
+    };
+    BrushMode brushMode = BrushMode::Normal;
+
+    /// Animate's eraser modes: what a pass of the eraser takes away.
+    enum class EraserMode
+    {
+        /// Lines and fills alike.
+        Normal,
+        /// Fills only, leaving the lines.
+        Fills,
+        /// Lines only, leaving the fills.
+        Lines,
+        /// Only the selected fills.
+        SelectedFills,
+        /// Only the fill the pass began in.
+        Inside
+    };
+    EraserMode eraserMode = EraserMode::Normal;
+
+    /// The eraser's faucet: a click removes the fill or the stroke it lands
+    /// on, whole, instead of a drag taking a band out of it.
+    bool faucet = false;
+
+    /// How far apart the ends of an outline may be for the paint bucket to
+    /// treat it as closed: Animate's gap size setting.
+    enum class GapSize
+    {
+        None,
+        Small,
+        Medium,
+        Large
+    };
+    GapSize gapSize = GapSize::Small;
+
     /// Corner radius for the rectangle tools, in pixels. The Up and Down
     /// arrows change it while a rectangle is being dragged out, as in Animate.
     double cornerRadius = 0.0;

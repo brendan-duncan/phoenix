@@ -167,6 +167,27 @@ QCursor build(Cursors::Kind kind, int eighthTurns)
         break;
     }
 
+    case Cursors::Kind::Faucet:
+    {
+        // A tap seen from the side: a horizontal pipe with a handle on top
+        // and the spout turning down to the drop, which is the hotspot.
+        QPainterPath pipe;
+        pipe.addRoundedRect(QRectF(4.0, 9.0, 16.0, 6.0), 2.0, 2.0);
+        outlined(painter, pipe);
+        QPainterPath spout;
+        spout.addRect(QRectF(16.0, 14.0, 5.0, 7.0));
+        outlined(painter, spout);
+        QPainterPath handle;
+        handle.addRect(QRectF(9.0, 4.0, 3.0, 6.0));
+        handle.addRect(QRectF(6.0, 2.0, 9.0, 3.0));
+        outlined(painter, handle);
+        painter.setPen(QPen(Qt::black, 1.0));
+        painter.setBrush(Qt::black);
+        painter.drawEllipse(QRectF(16.5, 23.0, 4.0, 5.0));
+        hotspot = QPoint(18, 25);
+        break;
+    }
+
     case Cursors::Kind::Rotate:
     {
         // An arc most of the way round the hotspot, ending in an arrowhead.

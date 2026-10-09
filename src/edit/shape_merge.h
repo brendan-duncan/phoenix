@@ -23,6 +23,15 @@ Shape* cloneShape(const Shape& shape, DOMElement* parent);
 /// Replaces everything in a target shape with a copy of another.
 void setShapeContents(Shape& target, const Shape& source);
 
+/// How a merge or a cut treats what it covers. The brush and eraser modes
+/// are these rules.
+struct MergeOptions
+{
+    /// The target's strokes survive even where the addition's fill covers
+    /// both sides of them: Paint Fills, Paint Behind, Erase Fills.
+    bool keepStrokes = false;
+};
+
 /// Merges one shape into another, the way Animate's default drawing mode does.
 ///
 /// Drawing over an existing shape does not stack a second object on top of it.
@@ -45,7 +54,8 @@ public:
     /// The addition is left untouched; the caller still owns it.
     ///
     /// Returns false when there is nothing to merge, leaving the target alone.
-    static bool merge(Shape& target, const Shape& addition);
+    static bool merge(Shape& target, const Shape& addition,
+        const MergeOptions& options = MergeOptions());
 
     /// Takes  cutter's filled area out of  target, leaving a hole.
     ///
@@ -59,7 +69,12 @@ public:
     /// cutter takes nothing away.
     ///
     /// Returns false when there is nothing to cut, leaving the target alone.
-    static bool subtract(Shape& target, const Shape& cutter);
+    static bool subtract(Shape& target, const Shape& cutter,
+        const MergeOptions& options = MergeOptions());
+
+    /// Takes away only the strokes lying inside \a cutter's filled area,
+    /// leaving every fill as it was: the eraser's Erase Lines mode.
+    static bool eraseStrokes(Shape& target, const Shape& cutter);
 
 private:
     enum class Operation
@@ -67,10 +82,12 @@ private:
         /// The addition paints its area, replacing what was there.
         Paint,
         /// The addition takes its area away.
-        Erase
+        Erase,
+        /// The addition takes away the strokes inside it and nothing else.
+        EraseStrokes
     };
-
-    static bool combine(Shape& target, const Shape& addition, Operation operation);
+    static bool combine(Shape& target, const Shape& addition, Operation operation,
+        const MergeOptions& options);
 };
 
 } // namespace fla

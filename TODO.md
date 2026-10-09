@@ -542,6 +542,7 @@ to it, so nothing in the application uses it yet.
 - [x] Stroke-to-outline conversion (needed by the brush tool)
   - Done for the brush through QPainterPathStroker
 - [ ] Consider rendering *from* the planar map, replacing the fill-stitching
+  - 2026-10-09: the stitcher now traces region boundaries properly rather than taking the first path that happens to start where the last ended: every directed path has its fill on its right, so at a junction it keeps right (the most clockwise outgoing path, never a reversal), and a piece with the same fill on both sides goes in both directions. This fixed fills vanishing from regions bounded by a stroke running through a fill (a line across a rectangle, then a brush stroke across the line). Rendering from the map remains the thorough option
       heuristic in `drawShape` (the `directedPaths.size() <= 2` special case and
       twip-rounded point matching). Likely fixes rendering bugs rather than adding risk
 
@@ -1052,7 +1053,7 @@ addition maps, plus a rule for which strokes survive.
       `+-(w/2) * profile(t)` along the normal, miter or round the outer joins,
       join the sides with caps, and fill the ring non-zero (VectorCraft
       `effects/src/stroke/width.rs:158-217`)
-  - Done 2026-10-09 (`brush_tools.cpp`, B): the fitted centreline is stroked with round caps and joins, resolved with `simplified()`, and each loop written with the fill on the side its direction implies. Normal mode only; the other modes and pressure are still to do
+  - Done 2026-10-09 (`brush_tools.cpp`, B): the fitted centreline is stroked with round caps and joins, resolved with `simplified()`, and each loop written with the fill on the side its direction implies. The modes done 2026-10-09 as a Brush mode field in Properties: Paint Fills merges with `MergeOptions::keepStrokes`, so lines survive under the paint (the pending drop carries the flag through to the merge on deselect); Paint Behind, Paint Selection and Paint Inside cut the stroke down first by arranging it with the outlines of the shapes under it (`RegionSplitter` with cutters) and keeping the regions where nothing is painted, where a selected fill is, or where the face the stroke began in is; verified on screen. Pressure still to do
 - [x] **Eraser.** Normal = `ShapeMerger::subtract` with the brush outline; Fills =
       keep all target strokes; Lines = keep fills, drop strokes inside;
       Selected Fills / Inside restrict as for the brush; Faucet clears the
@@ -1060,7 +1061,7 @@ addition maps, plus a rule for which strokes survive.
       24 times against "inside the brush", bisect each in/out change 30 times,
       cut there, and rejoin a closed path's first and last runs (VectorCraft
       `engine/src/cmd/draw2.rs:329-441`)
-  - Done (E) in normal mode through `SubtractShapeCommand`; the other modes and the faucet are still to do
+  - Done (E) in normal mode through `SubtractShapeCommand`. The modes done 2026-10-09 as an Eraser mode field: Erase Fills subtracts with strokes kept, Erase Lines is a new `ShapeMerger::eraseStrokes` (every fill stays, strokes inside the cutter go), Erase Selected Fills works on the lifted selection only, Erase Inside cuts the pass down to the face it began in; the Faucet checkbox makes a click remove the fill region or the stroke under it whole, with its own cursor. Verified on screen. Object-drawing strokes are still not cut
 - [x] **Paint bucket.** Arrange the merge shapes under the click with strokes as
       cutting edges, take the face under the click, flood across edges with no
       stroke and the same fill on both sides, set the fill and rebuild. Gap
@@ -1069,7 +1070,7 @@ addition maps, plus a rule for which strokes survive.
       size (about 3 / 8 / 20 screen pixels for small / medium / large), add the
       joins as invisible edges, rebuild, and fill only if the clicked face is now
       bounded. Keep the joins as fill boundaries without a stroke
-  - Done 2026-10-09 (`paint_tools.cpp`, K): paints the face under the click, enclosed empty areas included, through `RegionSplitter::withFaceFill`. No gap closing yet
+  - Done 2026-10-09 (`paint_tools.cpp`, K): paints the face under the click, enclosed empty areas included, through `RegionSplitter::withFaceFill`. Gap closing done 2026-10-09: when the click lands in no bounded face, `RegionSplitter::gapJoins` joins each loose stroke end to the nearest other loose end, or to the nearest point on another piece, within the gap (3, 8 or 20 screen pixels for the Gap size setting's small, medium, large), the shape is arranged again with the joins as cutters, and the face is filled only if it is bounded now; the joins stay as fill boundaries without a stroke
 - [x] **Ink bottle.** On a fill: flood its connected same-fill faces and give the
       new stroke to every boundary half-edge whose twin's face has a different
       fill. On a stroke: restyle the strokes connected through degree-2

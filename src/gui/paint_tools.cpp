@@ -128,6 +128,10 @@ bool PaintBucketTool::mousePress(PhoenixView& view, QMouseEvent* event, const QP
     if (event->button() != Qt::LeftButton || !_style.hasFill)
         return false;
 
+    // A line just drawn is part of the artwork as far as the bucket is
+    // concerned, so anything still floating goes in first.
+    view.flushPendingMerge();
+
     for (fla::Shape* shape : shapesNear(view, documentPos))
     {
         bool invertible = false;
@@ -140,10 +144,34 @@ bool PaintBucketTool::mousePress(PhoenixView& view, QMouseEvent* event, const QP
         // Work on a copy that carries the new fill, so the arrangement is
         // built once with the style already in place.
         std::unique_ptr<fla::Shape> painted(fla::cloneShape(*shape, nullptr));
-        fla::RegionSplitter regions(*painted);
-        const int face = regions.faceAt(fla::Point(local.x(), local.y()));
+        fla::RegionSplitter open(*painted);
+        const fla::Point localPoint(local.x(), local.y());
+        int face = open.faceAt(localPoint);
+
+        // An outline that does not quite meet: join its loose ends across
+        // gaps up to the chosen size, as Animate does, and ask again. The
+        // joins stay in the result as fill boundaries with no stroke.
+        std::unique_ptr<fla::RegionSplitter> closed;
+        if (face < 0 && _style.gapSize != fla::DrawingStyle::GapSize::None)
+        {
+            double screenGap = 3.0;
+            if (_style.gapSize == fla::DrawingStyle::GapSize::Medium)
+                screenGap = 8.0;
+            else if (_style.gapSize == fla::DrawingStyle::GapSize::Large)
+                screenGap = 20.0;
+            const double gap = screenGap / qMax(view.zoom(), 1.0e-6);
+
+            const std::vector<fla::Curve> joins = open.gapJoins(gap);
+            if (!joins.empty())
+            {
+                closed.reset(new fla::RegionSplitter(*painted, joins));
+                face = closed->faceAt(localPoint);
+            }
+        }
         if (face < 0)
             continue;
+
+        const fla::RegionSplitter& regions = closed ? *closed : open;
 
         const int fill = ensureFill(*painted, _style);
         if (fill < 0)
@@ -174,6 +202,8 @@ bool InkBottleTool::mousePress(PhoenixView& view, QMouseEvent* event, const QPoi
 {
     if (event->button() != Qt::LeftButton || !_style.hasStroke)
         return false;
+
+    view.flushPendingMerge();
 
     for (fla::Shape* shape : shapesNear(view, documentPos))
     {

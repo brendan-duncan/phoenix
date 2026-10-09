@@ -1241,8 +1241,14 @@ void PhoenixView::buildShapePaths(const fla::Shape* shape, PathCacheList& cacheE
                 }
             }
 
-            // Add to fillStyle0 (reverse direction)
-            if (fillStyleIdx0 != -1 && fillStyleIdx0 != fillStyleIdx1)
+            // Add to fillStyle0 (reverse direction). A piece with the same fill
+            // on both sides -- a stroke running through a fill -- bounds a
+            // region on each side, so it goes in both ways; only a loop closed
+            // on itself with one fill inside and out is taken once.
+            const bool closedOnItself =
+                std::lround(start.x * 20.0) == std::lround(end.x * 20.0) &&
+                std::lround(start.y * 20.0) == std::lround(end.y * 20.0);
+            if (fillStyleIdx0 != -1 && (fillStyleIdx0 != fillStyleIdx1 || !closedOnItself))
             {
                 fillStylePaths[fillStyleIdx0].push_back({end, start, path, true, false});
                 if (fillStyles.find(fillStyleIdx0) == fillStyles.end())
@@ -1361,6 +1367,98 @@ void PhoenixView::buildShapePaths(const fla::Shape* shape, PathCacheList& cacheE
                 }
             }
         }
+    };
+
+    // The direction a path sets off in, and the direction it arrives with,
+    // read from its first and last legs. A reversed path swaps the two and
+    // turns them round. Junctions are decided by these.
+    auto forwardStartTangent = [](const fla::Path* path) -> fla::Point
+    {
+        fla::Point at;
+        bool started = false;
+        for (const fla::PathSegment* segment : path->segments)
+        {
+            if (segment->command == fla::PathSegment::Command::Move)
+            {
+                at = segment->points[0];
+                started = true;
+                continue;
+            }
+            if (!started || segment->points.empty())
+                continue;
+            for (const fla::Point& point : segment->points)
+            {
+                const fla::Point d(point.x - at.x, point.y - at.y);
+                if (std::hypot(d.x, d.y) > 1.0e-9)
+                    return d;
+            }
+            at = segment->points.back();
+        }
+        return fla::Point(0.0, 0.0);
+    };
+    auto forwardEndTangent = [](const fla::Path* path) -> fla::Point
+    {
+        fla::Point at;
+        bool started = false;
+        fla::Point tangent(0.0, 0.0);
+        for (const fla::PathSegment* segment : path->segments)
+        {
+            if (segment->command == fla::PathSegment::Command::Move)
+            {
+                at = segment->points[0];
+                started = true;
+                continue;
+            }
+            if (!started || segment->points.empty())
+                continue;
+            // From the last point before the end, back to the segment's start
+            // when the controls sit on the end.
+            const fla::Point& end = segment->points.back();
+            fla::Point from = at;
+            for (size_t i = segment->points.size() - 1; i > 0; --i)
+            {
+                const fla::Point& candidate = segment->points[i - 1];
+                if (std::hypot(end.x - candidate.x, end.y - candidate.y) > 1.0e-9)
+                {
+                    from = candidate;
+                    break;
+                }
+            }
+            const fla::Point d(end.x - from.x, end.y - from.y);
+            if (std::hypot(d.x, d.y) > 1.0e-9)
+                tangent = d;
+            at = end;
+        }
+        return tangent;
+    };
+    auto startTangent = [&](const DirectedPath& directed) -> fla::Point
+    {
+        if (!directed.reversed)
+            return forwardStartTangent(directed.path);
+        const fla::Point t = forwardEndTangent(directed.path);
+        return fla::Point(-t.x, -t.y);
+    };
+    auto endTangent = [&](const DirectedPath& directed) -> fla::Point
+    {
+        if (!directed.reversed)
+            return forwardEndTangent(directed.path);
+        const fla::Point t = forwardStartTangent(directed.path);
+        return fla::Point(-t.x, -t.y);
+    };
+
+    // How far round to the right \a out turns from \a in, on screen (y down):
+    // pi for the sharpest right turn, -pi for the sharpest left, and a
+    // straight reversal counted as the sharpest left, since doubling back
+    // along the edge just walked is never the way round a region.
+    auto rightTurn = [](const fla::Point& in, const fla::Point& out) -> double
+    {
+        const double cross = in.x * out.y - in.y * out.x;
+        const double dot = in.x * out.x + in.y * out.y;
+        double angle = std::atan2(cross, dot);
+        const double pi = 3.14159265358979323846;
+        if (angle > pi - 1.0e-6)
+            angle = -pi;
+        return angle;
     };
 
     // Helper to check if two points match
@@ -1522,6 +1620,7 @@ void PhoenixView::buildShapePaths(const fla::Shape* shape, PathCacheList& cacheE
 
             fla::Point currentEnd = directedPath.end;
             fla::Point loopStart = directedPath.start;
+            fla::Point arriving = endTangent(directedPath);
             int maxIterations = directedPaths.size() * 2;
             int iterations = 0;
             int connectedCount = 1;
@@ -1535,9 +1634,14 @@ void PhoenixView::buildShapePaths(const fla::Shape* shape, PathCacheList& cacheE
                     break;
                 }
 
-                // Find next connecting segment - try to find the closest match first
+                // Every directed path here has its fill on the right, so the
+                // boundary of one region is traced by keeping right: at a
+                // junction, of the paths that set off from here, take the one
+                // that turns furthest to the right. Taking whichever came
+                // first would wander into the neighbouring region and leave
+                // this one half drawn.
                 bool found = false;
-                double bestDistance = 1e9;
+                double bestTurn = -1e9;
                 DirectedPath* bestMatch = nullptr;
 
                 for (DirectedPath& nextDirectedPath : directedPaths)
@@ -1548,10 +1652,13 @@ void PhoenixView::buildShapePaths(const fla::Shape* shape, PathCacheList& cacheE
                     double dx = currentEnd.x - nextDirectedPath.start.x;
                     double dy = currentEnd.y - nextDirectedPath.start.y;
                     double distance = dx * dx + dy * dy;
+                    if (distance >= (0.5 * 0.5))
+                        continue;
 
-                    if (distance < (0.5 * 0.5) && distance < bestDistance)
+                    const double turn = rightTurn(arriving, startTangent(nextDirectedPath));
+                    if (!found || turn > bestTurn)
                     {
-                        bestDistance = distance;
+                        bestTurn = turn;
                         bestMatch = &nextDirectedPath;
                         found = true;
                     }
@@ -1562,6 +1669,7 @@ void PhoenixView::buildShapePaths(const fla::Shape* shape, PathCacheList& cacheE
                     addSegmentToPath(loopPath, bestMatch->path, bestMatch->reversed, shape);
                     bestMatch->used = true;
                     currentEnd = bestMatch->end;
+                    arriving = endTangent(*bestMatch);
                     connectedCount++;
                 }
                 else
@@ -2372,7 +2480,7 @@ void PhoenixView::setSelection(fla::Selection* selection)
     update();
 }
 
-void PhoenixView::setPendingMerge(fla::Shape* shape, fla::Frame* frame)
+void PhoenixView::setPendingMerge(fla::Shape* shape, fla::Frame* frame, bool keepStrokes)
 {
     if (!shape || !frame)
         return;
@@ -2383,7 +2491,7 @@ void PhoenixView::setPendingMerge(fla::Shape* shape, fla::Frame* frame)
             return;
     }
 
-    _pending.push_back({shape, frame});
+    _pending.push_back({shape, frame, keepStrokes});
 }
 
 void PhoenixView::markShapeEdited(fla::Shape* shape)
@@ -2678,7 +2786,8 @@ void PhoenixView::flushPendingMerge()
     // would come straight back round through selectionChanged().
     _committingMerge = true;
     for (const PendingDrop& pending : dropping)
-        commitPendingMerge(*this, *_commandStack, *_selection, pending.shape, pending.frame);
+        commitPendingMerge(*this, *_commandStack, *_selection, pending.shape, pending.frame,
+            pending.keepStrokes);
     _committingMerge = false;
 }
 
@@ -2716,7 +2825,8 @@ void PhoenixView::selectionChanged()
 
     _committingMerge = true;
     for (const PendingDrop& pending : dropping)
-        commitPendingMerge(*this, *_commandStack, *_selection, pending.shape, pending.frame);
+        commitPendingMerge(*this, *_commandStack, *_selection, pending.shape, pending.frame,
+            pending.keepStrokes);
     _committingMerge = false;
 }
 

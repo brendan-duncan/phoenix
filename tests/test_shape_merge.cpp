@@ -704,3 +704,146 @@ TEST(subtracting_something_clear_of_the_target_changes_nothing)
 
     CHECK(colourAt(*target, Point(50.0, 50.0)) == kRed);
 }
+
+/// The brush's fills-only modes paint under the lines: a stroke the new fill
+/// covers on both sides stays where a normal merge would bury it.
+TEST(merging_with_strokes_kept_spares_what_it_covers)
+{
+    std::unique_ptr<Shape> target = strokedRectangle(0, 0, 2000, 2000, 255, 0, 0);
+    std::unique_ptr<Shape> addition = filledRectangle(1000, 1000, 3000, 3000, 0, 0, 255);
+
+    fla::MergeOptions options;
+    options.keepStrokes = true;
+    CHECK(ShapeMerger::merge(*target, *addition, options));
+
+    // The target's right edge between 50 and 100 lies inside the addition.
+    bool keptBuriedEdge = false;
+    for (const Point& point : strokedMidpoints(*target))
+    {
+        if (point.x > 99.5 && point.y > 50.5 && point.y < 99.5)
+            keptBuriedEdge = true;
+    }
+    CHECK(keptBuriedEdge);
+
+    // The fill underneath still changed hands.
+    CHECK(colourAt(*target, Point(75.0, 75.0)) == kBlue);
+    CHECK(colourAt(*target, Point(25.0, 25.0)) == kRed);
+}
+
+/// Erase Fills takes the fill out and leaves the lines through the hole.
+TEST(subtracting_with_strokes_kept_cuts_the_fill_only)
+{
+    std::unique_ptr<Shape> target = strokedRectangle(0, 0, 2000, 2000, 255, 0, 0);
+    std::unique_ptr<Shape> cutter = filledRectangle(1000, 1000, 3000, 3000, 0, 0, 255);
+
+    fla::MergeOptions options;
+    options.keepStrokes = true;
+    CHECK(ShapeMerger::subtract(*target, *cutter, options));
+
+    CHECK(colourAt(*target, Point(75.0, 75.0)) == -1);
+    CHECK(colourAt(*target, Point(25.0, 25.0)) == kRed);
+
+    bool keptEdgeInHole = false;
+    for (const Point& point : strokedMidpoints(*target))
+    {
+        if (point.x > 99.5 && point.y > 50.5 && point.y < 99.5)
+            keptEdgeInHole = true;
+    }
+    CHECK(keptEdgeInHole);
+}
+
+/// Erase Lines takes the strokes inside the cutter and leaves every fill.
+TEST(erasing_strokes_leaves_the_fills)
+{
+    std::unique_ptr<Shape> target = strokedRectangle(0, 0, 2000, 2000, 255, 0, 0);
+    std::unique_ptr<Shape> cutter = filledRectangle(1000, 1000, 3000, 3000, 0, 0, 255);
+
+    CHECK(ShapeMerger::eraseStrokes(*target, *cutter));
+
+    CHECK(colourAt(*target, Point(75.0, 75.0)) == kRed);
+    CHECK(colourAt(*target, Point(25.0, 25.0)) == kRed);
+
+    bool keptTopEdge = false;
+    bool keptEdgeInCutter = false;
+    for (const Point& point : strokedMidpoints(*target))
+    {
+        if (point.y < 0.5 && point.x > 0.0 && point.x < 100.0)
+            keptTopEdge = true;
+        if (point.x > 99.5 && point.y > 50.5 && point.y < 99.5)
+            keptEdgeInCutter = true;
+    }
+    CHECK(keptTopEdge);
+    CHECK(!keptEdgeInCutter);
+}
+
+/// A fill divided by a line, then cut by a band crossing the line: every
+/// region the cut leaves behind keeps the fill it had.
+TEST(cutting_across_a_dividing_line_keeps_the_fill_on_both_sides)
+{
+    std::unique_ptr<Shape> target = filledRectangle(0, 0, 2000, 2000, 255, 0, 0);
+    std::unique_ptr<Shape> line = strokedLine(-500, 1000, 2500, 1000);
+    CHECK(ShapeMerger::merge(*target, *line));
+
+    // A slanted band from the top left to the bottom right, crossing the line.
+    std::unique_ptr<Shape> band(new Shape(nullptr));
+    fla::SolidColor* fill = new fla::SolidColor(band.get());
+    fill->color[2] = 255;
+    fill->color[3] = 255;
+    band->fills.push_back(fill);
+    band->fillsMap[1] = fill;
+    PathParser parser;
+    fla::Edge* edge = parser.parse("!-200 200|200 -200|2200 1800|1800 2200|-200 200", band.get());
+    CHECK(edge != nullptr);
+    if (!edge)
+        return;
+    edge->fillStyle1 = 1;
+    band->edges.push_back(edge);
+
+    CHECK(ShapeMerger::subtract(*target, *band));
+
+    // Above the line, clear of the band on either side.
+    CHECK(colourAt(*target, Point(5.0, 40.0)) == kRed);
+    CHECK(colourAt(*target, Point(90.0, 20.0)) == kRed);
+    // Below the line, both sides.
+    CHECK(colourAt(*target, Point(10.0, 90.0)) == kRed);
+    CHECK(colourAt(*target, Point(95.0, 60.0)) == kRed);
+    // In the band: gone.
+    CHECK(colourAt(*target, Point(50.0, 50.0)) == -1);
+}
+
+/// A click with the line tool that never moved makes a line of no length.
+/// Merging it must not disturb anything, and cutting afterwards must still
+/// leave every other region its fill.
+TEST(a_zero_length_line_merges_harmlessly)
+{
+    std::unique_ptr<Shape> target = filledRectangle(0, 0, 2000, 2000, 255, 0, 0);
+    std::unique_ptr<Shape> line = strokedLine(-500, 1000, 2500, 1000);
+    CHECK(ShapeMerger::merge(*target, *line));
+
+    std::unique_ptr<Shape> dot = strokedLine(3000, 3000, 3000, 3000);
+    ShapeMerger::merge(*target, *dot);
+
+    CHECK(colourAt(*target, Point(25.0, 25.0)) == kRed);
+    CHECK(colourAt(*target, Point(75.0, 75.0)) == kRed);
+
+    std::unique_ptr<Shape> band(new Shape(nullptr));
+    fla::SolidColor* fill = new fla::SolidColor(band.get());
+    fill->color[2] = 255;
+    fill->color[3] = 255;
+    band->fills.push_back(fill);
+    band->fillsMap[1] = fill;
+    PathParser parser;
+    fla::Edge* edge = parser.parse("!-200 200|200 -200|2200 1800|1800 2200|-200 200", band.get());
+    CHECK(edge != nullptr);
+    if (!edge)
+        return;
+    edge->fillStyle1 = 1;
+    band->edges.push_back(edge);
+
+    CHECK(ShapeMerger::subtract(*target, *band));
+    CHECK(colourAt(*target, Point(5.0, 40.0)) == kRed);
+    CHECK(colourAt(*target, Point(90.0, 20.0)) == kRed);
+    CHECK(colourAt(*target, Point(10.0, 90.0)) == kRed);
+    CHECK(colourAt(*target, Point(95.0, 60.0)) == kRed);
+    CHECK(colourAt(*target, Point(50.0, 50.0)) == -1);
+}

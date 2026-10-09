@@ -184,7 +184,7 @@ public:
 
     /// Remembers a drawing that has been placed but not yet merged into the
     /// artwork under it. Deselecting it is what commits it.
-    void setPendingMerge(fla::Shape* shape, fla::Frame* frame);
+    void setPendingMerge(fla::Shape* shape, fla::Frame* frame, bool keepStrokes = false);
 
     /// Remembers a shape that has just been moved or reshaped.
     ///
@@ -372,6 +372,9 @@ private:
     {
         fla::Shape* shape = nullptr;
         fla::Frame* frame = nullptr;
+        /// Whether the drop paints under the artwork's strokes (the brush's
+        /// fills-only modes) rather than burying them.
+        bool keepStrokes = false;
     };
 
     /// Everything waiting. A drag can move several things at once, and each is

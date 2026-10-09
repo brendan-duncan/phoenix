@@ -238,18 +238,24 @@ void setShapeContents(Shape& target, const Shape& source)
     target.bounds = source.bounds;
 }
 
-bool ShapeMerger::merge(Shape& target, const Shape& addition)
+bool ShapeMerger::merge(Shape& target, const Shape& addition, const MergeOptions& options)
 {
-    return combine(target, addition, Operation::Paint);
+    return combine(target, addition, Operation::Paint, options);
 }
 
-bool ShapeMerger::subtract(Shape& target, const Shape& cutter)
+bool ShapeMerger::subtract(Shape& target, const Shape& cutter, const MergeOptions& options)
 {
-    return combine(target, cutter, Operation::Erase);
+    return combine(target, cutter, Operation::Erase, options);
+}
+
+bool ShapeMerger::eraseStrokes(Shape& target, const Shape& cutter)
+{
+    return combine(target, cutter, Operation::EraseStrokes, MergeOptions());
 }
 
 
-bool ShapeMerger::combine(Shape& target, const Shape& addition, Operation operation)
+bool ShapeMerger::combine(Shape& target, const Shape& addition, Operation operation,
+    const MergeOptions& options)
 {
     const std::vector<ShapeCurve> additionCurves = shapeCurves(addition);
     if (additionCurves.empty())
@@ -343,8 +349,9 @@ bool ShapeMerger::combine(Shape& target, const Shape& addition, Operation operat
         const int additionFill = additionMap.fillAt(inside);
 
         int fill;
-        if (additionFill == -1)
+        if (additionFill == -1 || operation == Operation::EraseStrokes)
         {
+            // Erasing strokes alone leaves every fill as it was.
             fill = targetMap.fillAt(inside);
         }
         else
@@ -372,6 +379,14 @@ bool ShapeMerger::combine(Shape& target, const Shape& addition, Operation operat
         // punched, not artwork being added.
         if (fromAddition)
             return operation == Operation::Paint;
+
+        // Erasing strokes takes every piece lying inside the cutter's area.
+        if (operation == Operation::EraseStrokes)
+            return additionMap.fillAt(half.curve.pointAt(0.5)) == -1;
+
+        // The fills-only modes paint or cut under the strokes and leave them.
+        if (options.keepStrokes)
+            return true;
 
         // Both sides, because a stroke along the edge of the addition's fill is
         // still visible from the outside and has to stay.

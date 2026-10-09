@@ -50,7 +50,9 @@ public:
         /// Two half arrows pulling opposite ways: skew, turned along the edge.
         Skew,
         /// An arrow curling round the hotspot: rotate.
-        Rotate
+        Rotate,
+        /// A tap with a drop at the hotspot: the eraser's faucet.
+        Faucet
     };
 
     /// The cursor for \a kind, built once and shared.

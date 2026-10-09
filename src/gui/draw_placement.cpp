@@ -66,8 +66,11 @@ std::vector<fla::Shape*> shapesUnder(PhoenixView& view, fla::Frame& frame,
 
 void placeDrawnElement(PhoenixView& view, fla::CommandStack& commandStack,
     fla::Selection& selection, fla::Frame* frame, fla::Element* element,
-    const QString& gestureName, bool objectDrawing)
+    const QString& gestureName, bool objectDrawing, bool keepStrokes)
 {
+    fla::MergeOptions options;
+    options.keepStrokes = keepStrokes;
+
     if (!frame || !element)
     {
         delete element;
@@ -112,13 +115,13 @@ void placeDrawnElement(PhoenixView& view, fla::CommandStack& commandStack,
             fla::bakeTransform(*target);
 
             commandStack.push(fla::CommandPtr(new fla::SubtractShapeCommand(
-                target, *addition, name)));
+                target, *addition, name, options)));
         }
 
         // It is still its own object, selected and draggable as one piece, until
         // it is let go. Letting go drops it back into the artwork wherever it
         // now sits.
-        view.setPendingMerge(addition, frame);
+        view.setPendingMerge(addition, frame, keepStrokes);
     }
 
     commandStack.endMacro();
@@ -130,10 +133,14 @@ void placeDrawnElement(PhoenixView& view, fla::CommandStack& commandStack,
 }
 
 bool commitPendingMerge(PhoenixView& view, fla::CommandStack& commandStack,
-    fla::Selection& selection, fla::Shape* addition, fla::Frame* frame)
+    fla::Selection& selection, fla::Shape* addition, fla::Frame* frame,
+    bool keepStrokes)
 {
     if (!addition || !frame || addition->isDrawingObject)
         return false;
+
+    fla::MergeOptions options;
+    options.keepStrokes = keepStrokes;
 
     // The drawing may have been undone, or removed some other way, while it was
     // still waiting to merge.
@@ -162,12 +169,12 @@ bool commitPendingMerge(PhoenixView& view, fla::CommandStack& commandStack,
     // everything further down. Merging already replaces what it lands on, so
     // only the rest need cutting.
     commandStack.push(fla::CommandPtr(new fla::MergeShapeCommand(
-        below.front(), *addition, "Merge Shape")));
+        below.front(), *addition, "Merge Shape", options)));
 
     for (size_t i = 1; i < below.size(); ++i)
     {
         commandStack.push(fla::CommandPtr(new fla::SubtractShapeCommand(
-            below[i], *addition, "Merge Shape")));
+            below[i], *addition, "Merge Shape", options)));
     }
 
     commandStack.push(fla::CommandPtr(new fla::RemoveElementCommand(

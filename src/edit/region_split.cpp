@@ -121,6 +121,129 @@ RegionSplitter::RegionSplitter(const Shape& shape, const std::vector<Curve>& cut
     }
 }
 
+namespace {
+
+/// The nearest point of a curve to \a target, by sampling and then closing
+/// in on the best sample. Returns the distance.
+double closestOnCurve(const Curve& curve, const Point& target, Point& nearest)
+{
+    const auto distanceAt = [&](double t) {
+        const Point p = curve.pointAt(t);
+        return std::hypot(p.x - target.x, p.y - target.y);
+    };
+
+    const int samples = 32;
+    double bestT = 0.0;
+    double best = distanceAt(0.0);
+    for (int i = 1; i <= samples; ++i)
+    {
+        const double t = static_cast<double>(i) / samples;
+        const double d = distanceAt(t);
+        if (d < best)
+        {
+            best = d;
+            bestT = t;
+        }
+    }
+
+    double low = std::max(0.0, bestT - 1.0 / samples);
+    double high = std::min(1.0, bestT + 1.0 / samples);
+    for (int i = 0; i < 24; ++i)
+    {
+        const double a = low + (high - low) / 3.0;
+        const double b = high - (high - low) / 3.0;
+        if (distanceAt(a) < distanceAt(b))
+            high = b;
+        else
+            low = a;
+    }
+    const double t = (low + high) * 0.5;
+    const double d = distanceAt(t);
+    if (d < best)
+    {
+        best = d;
+        bestT = t;
+    }
+    nearest = curve.pointAt(bestT);
+    return best;
+}
+
+} // namespace
+
+std::vector<Curve> RegionSplitter::gapJoins(double gap) const
+{
+    std::vector<Curve> joins;
+    if (!valid() || gap <= 0.0)
+        return joins;
+
+    const std::vector<MapVertex>& vertices = _map.vertices();
+    const std::vector<HalfEdge>& halves = _map.halfEdges();
+
+    // A loose end is a vertex with one piece leaving it; fills cannot dangle,
+    // so these are stroke ends.
+    std::vector<int> loose;
+    for (size_t v = 0; v < vertices.size(); ++v)
+    {
+        if (vertices[v].outgoing.size() == 1)
+            loose.push_back(static_cast<int>(v));
+    }
+
+    std::vector<bool> joined(vertices.size(), false);
+    for (const int v : loose)
+    {
+        if (joined[v])
+            continue;
+        const Point& from = vertices[v].position;
+
+        // Another loose end first: two strokes that nearly meet.
+        int bestVertex = -1;
+        double bestDistance = gap;
+        for (const int other : loose)
+        {
+            if (other == v || joined[other])
+                continue;
+            const Point& to = vertices[other].position;
+            const double d = std::hypot(to.x - from.x, to.y - from.y);
+            if (d <= bestDistance)
+            {
+                bestDistance = d;
+                bestVertex = other;
+            }
+        }
+        if (bestVertex >= 0)
+        {
+            joins.push_back(Curve::line(from, vertices[bestVertex].position));
+            joined[v] = true;
+            joined[bestVertex] = true;
+            continue;
+        }
+
+        // Otherwise the side of a piece that the stroke stops short of.
+        Point bestPoint;
+        bool found = false;
+        bestDistance = gap;
+        for (const HalfEdge& half : halves)
+        {
+            if (!half.forward || half.from == v || half.to == v)
+                continue;
+            Point nearest;
+            const double d = closestOnCurve(half.curve, from, nearest);
+            if (d <= bestDistance)
+            {
+                bestDistance = d;
+                bestPoint = nearest;
+                found = true;
+            }
+        }
+        if (found && bestDistance > 1.0e-9)
+        {
+            joins.push_back(Curve::line(from, bestPoint));
+            joined[v] = true;
+        }
+    }
+    return joins;
+}
+
 int RegionSplitter::strokeOf(const HalfEdge& half) const
 {
     if (half.source < 0 || half.source >= static_cast<int>(_curves.size()))

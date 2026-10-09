@@ -118,7 +118,7 @@ bool SetEdgeGeometryCommand::mergeWith(const Command* other)
 }
 
 MergeShapeCommand::MergeShapeCommand(Shape* target, const Shape& addition,
-    const std::string& name)
+    const std::string& name, const MergeOptions& options)
     : _target(target)
     , _name(name)
 {
@@ -129,7 +129,7 @@ MergeShapeCommand::MergeShapeCommand(Shape* target, const Shape& addition,
 
     // The merge runs once, here. redo() and undo() only ever swap a snapshot
     // back in, so repeating either is cheap and cannot drift.
-    ShapeMerger::merge(*_target, addition);
+    ShapeMerger::merge(*_target, addition, options);
 
     _after = cloneShape(*_target, nullptr);
 }
@@ -153,7 +153,7 @@ void MergeShapeCommand::undo()
 }
 
 SubtractShapeCommand::SubtractShapeCommand(Shape* target, const Shape& cutter,
-    const std::string& name)
+    const std::string& name, const MergeOptions& options)
     : _target(target)
     , _name(name)
 {
@@ -163,9 +163,40 @@ SubtractShapeCommand::SubtractShapeCommand(Shape* target, const Shape& cutter,
     _before = cloneShape(*_target, nullptr);
 
     // The cut runs once, here, for the same reason a merge does.
-    ShapeMerger::subtract(*_target, cutter);
+    ShapeMerger::subtract(*_target, cutter, options);
 
     _after = cloneShape(*_target, nullptr);
+}
+
+EraseStrokesCommand::EraseStrokesCommand(Shape* target, const Shape& cutter,
+    const std::string& name)
+    : _target(target)
+    , _name(name)
+{
+    if (!_target)
+        return;
+
+    _before = cloneShape(*_target, nullptr);
+    ShapeMerger::eraseStrokes(*_target, cutter);
+    _after = cloneShape(*_target, nullptr);
+}
+
+EraseStrokesCommand::~EraseStrokesCommand()
+{
+    delete _before;
+    delete _after;
+}
+
+void EraseStrokesCommand::redo()
+{
+    if (_target && _after)
+        setShapeContents(*_target, *_after);
+}
+
+void EraseStrokesCommand::undo()
+{
+    if (_target && _before)
+        setShapeContents(*_target, *_before);
 }
 
 SubtractShapeCommand::~SubtractShapeCommand()

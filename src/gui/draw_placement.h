@@ -26,9 +26,11 @@ class PhoenixView;
 /// end here rather than each deciding for itself.
 ///
 /// Takes ownership of \a element.
+/// With \a keepStrokes the drawing paints under the artwork's strokes rather
+/// than burying them, both when it cuts its hole and when it is let go.
 void placeDrawnElement(PhoenixView& view, fla::CommandStack& commandStack,
     fla::Selection& selection, fla::Frame* frame, fla::Element* element,
-    const QString& gestureName, bool objectDrawing);
+    const QString& gestureName, bool objectDrawing, bool keepStrokes = false);
 
 /// Folds a drawing that was waiting into the artwork underneath it.
 ///
@@ -42,4 +44,5 @@ void placeDrawnElement(PhoenixView& view, fla::CommandStack& commandStack,
 /// merge with or the drawing is no longer in the frame -- which is what an undo
 /// while it was still waiting looks like.
 bool commitPendingMerge(PhoenixView& view, fla::CommandStack& commandStack,
-    fla::Selection& selection, fla::Shape* addition, fla::Frame* frame);
+    fla::Selection& selection, fla::Shape* addition, fla::Frame* frame,
+    bool keepStrokes = false);

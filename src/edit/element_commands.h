@@ -5,6 +5,7 @@
 #include "../data/dom_element.h"
 #include "../data/transform.h"
 #include "editable_path.h"
+#include "shape_merge.h"
 
 #include <string>
 #include <vector>
@@ -104,12 +105,38 @@ class MergeShapeCommand : public Command
 public:
     /// Merges  addition into  target straight away, keeping snapshots of
     /// both sides of the edit. The addition is left untouched.
-    MergeShapeCommand(Shape* target, const Shape& addition, const std::string& name);
+    MergeShapeCommand(Shape* target, const Shape& addition, const std::string& name,
+        const MergeOptions& options = MergeOptions());
 
     ~MergeShapeCommand() override;
 
     MergeShapeCommand(const MergeShapeCommand&) = delete;
     MergeShapeCommand& operator=(const MergeShapeCommand&) = delete;
+
+    void redo() override;
+
+    void undo() override;
+
+    std::string name() const override { return _name; }
+
+private:
+    Shape* _target;
+    Shape* _before = nullptr;
+    Shape* _after = nullptr;
+    std::string _name;
+};
+
+/// Takes the strokes inside a cutter's area out of a shape, leaving its
+/// fills: the eraser's Erase Lines mode. Snapshots both sides like a merge.
+class EraseStrokesCommand : public Command
+{
+public:
+    EraseStrokesCommand(Shape* target, const Shape& cutter, const std::string& name);
+
+    ~EraseStrokesCommand() override;
+
+    EraseStrokesCommand(const EraseStrokesCommand&) = delete;
+    EraseStrokesCommand& operator=(const EraseStrokesCommand&) = delete;
 
     void redo() override;
 
@@ -135,7 +162,8 @@ private:
 class SubtractShapeCommand : public Command
 {
 public:
-    SubtractShapeCommand(Shape* target, const Shape& cutter, const std::string& name);
+    SubtractShapeCommand(Shape* target, const Shape& cutter, const std::string& name,
+        const MergeOptions& options = MergeOptions());
 
     ~SubtractShapeCommand() override;
 

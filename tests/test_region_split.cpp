@@ -364,3 +364,66 @@ TEST(the_split_command_undoes_back_to_one_shape)
 
     frame.elements.clear();
 }
+
+/// A stroked square whose last side stops six pixels short of closing. The
+/// bucket cannot fill it as it is; joined across the gap, it can.
+TEST(gap_joins_close_an_outline_that_stops_short)
+{
+    std::unique_ptr<Shape> shape(new Shape(nullptr));
+
+    fla::SolidColor* fill = new fla::SolidColor(shape.get());
+    fill->color[0] = 200;
+    shape->fills.push_back(fill);
+    shape->fillsMap[1] = fill;
+
+    fla::SolidStroke* stroke = new fla::SolidStroke(shape.get());
+    stroke->weight = 1.0;
+    stroke->fill = new fla::SolidColor(stroke);
+    shape->strokes.push_back(stroke);
+    shape->strokesMap[1] = stroke;
+
+    PathParser parser;
+    fla::Edge* outline = parser.parse("!0 0|2000 0|2000 2000|0 2000|0 120", shape.get());
+    CHECK(outline != nullptr);
+    if (!outline)
+        return;
+    outline->strokeStyle = 1;
+    shape->edges.push_back(outline);
+
+    RegionSplitter open(*shape);
+    CHECK(open.valid());
+    CHECK(open.faceAt(Point(50.0, 50.0)) == -1);
+
+    // Too small a gap setting finds nothing; a large enough one joins the
+    // loose end to the stroke's start.
+    CHECK(open.gapJoins(4.0).empty());
+    const std::vector<fla::Curve> joins = open.gapJoins(8.0);
+    CHECK(joins.size() == 1);
+    if (joins.empty())
+        return;
+
+    RegionSplitter closed(*shape, joins);
+    const int face = closed.faceAt(Point(50.0, 50.0));
+    CHECK(face >= 0);
+    if (face < 0)
+        return;
+    CHECK(closed.faceFill(face) == -1);
+
+    std::unique_ptr<Shape> painted(closed.withFaceFill(face, 1));
+    CHECK(painted != nullptr);
+    if (!painted)
+        return;
+
+    RegionSplitter check(*painted);
+    const int filled = check.faceAt(Point(50.0, 50.0));
+    CHECK(filled >= 0 && check.faceFill(filled) == 1);
+
+    // The join bounds the fill but draws no stroke.
+    bool joinWithoutStroke = false;
+    for (const fla::Edge* edge : painted->edges)
+    {
+        if (edge->strokeStyle == -1 && (edge->fillStyle0 == 1 || edge->fillStyle1 == 1))
+            joinWithoutStroke = true;
+    }
+    CHECK(joinWithoutStroke);
+}

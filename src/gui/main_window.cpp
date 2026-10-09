@@ -125,7 +125,7 @@ MainWindow::MainWindow(QWidget *parent)
     _zoomTool = std::make_unique<ZoomTool>();
     _lassoTool = std::make_unique<LassoTool>(_selection);
     _brushTool = std::make_unique<BrushTool>(_selection, stack, _drawingStyle);
-    _eraserTool = std::make_unique<EraserTool>(stack, _drawingStyle);
+    _eraserTool = std::make_unique<EraserTool>(_selection, stack, _drawingStyle);
     _paintBucketTool = std::make_unique<PaintBucketTool>(stack, _drawingStyle);
     _inkBottleTool = std::make_unique<InkBottleTool>(stack, _drawingStyle);
     // Sampling hands over to the bucket or the bottle, as Animate does.
@@ -1263,6 +1263,52 @@ void MainWindow::setupPropertiesPanel()
         _drawingStyle.eraserSize = value;
     });
     layout->addRow("Eraser size", eraserSize);
+
+    QComboBox* brushMode = new QComboBox(panel);
+    brushMode->addItem("Paint Normal");
+    brushMode->addItem("Paint Fills");
+    brushMode->addItem("Paint Behind");
+    brushMode->addItem("Paint Selection");
+    brushMode->addItem("Paint Inside");
+    brushMode->setToolTip("Where a brush stroke lands, as in Animate");
+    connect(brushMode, &QComboBox::currentIndexChanged, this, [this](int index) {
+        _drawingStyle.brushMode = static_cast<fla::DrawingStyle::BrushMode>(index);
+    });
+    layout->addRow("Brush mode", brushMode);
+
+    QComboBox* eraserMode = new QComboBox(panel);
+    eraserMode->addItem("Erase Normal");
+    eraserMode->addItem("Erase Fills");
+    eraserMode->addItem("Erase Lines");
+    eraserMode->addItem("Erase Selected Fills");
+    eraserMode->addItem("Erase Inside");
+    eraserMode->setToolTip("What a pass of the eraser takes away, as in Animate");
+    connect(eraserMode, &QComboBox::currentIndexChanged, this, [this](int index) {
+        _drawingStyle.eraserMode = static_cast<fla::DrawingStyle::EraserMode>(index);
+    });
+    layout->addRow("Eraser mode", eraserMode);
+
+    QCheckBox* faucet = new QCheckBox("Faucet", panel);
+    faucet->setChecked(_drawingStyle.faucet);
+    faucet->setToolTip("Click a fill or a stroke with the eraser to remove it whole");
+    connect(faucet, &QCheckBox::toggled, this, [this](bool on) {
+        _drawingStyle.faucet = on;
+        if (_phoenixView && _phoenixView->activeTool() == _eraserTool.get())
+            _phoenixView->setCursor(_eraserTool->cursor());
+    });
+    layout->addRow(QString(), faucet);
+
+    QComboBox* gapSize = new QComboBox(panel);
+    gapSize->addItem("Don't Close Gaps");
+    gapSize->addItem("Close Small Gaps");
+    gapSize->addItem("Close Medium Gaps");
+    gapSize->addItem("Close Large Gaps");
+    gapSize->setCurrentIndex(static_cast<int>(_drawingStyle.gapSize));
+    gapSize->setToolTip("How far apart an outline's ends may be for the paint bucket to fill it");
+    connect(gapSize, &QComboBox::currentIndexChanged, this, [this](int index) {
+        _drawingStyle.gapSize = static_cast<fla::DrawingStyle::GapSize>(index);
+    });
+    layout->addRow("Gap size", gapSize);
 
     // Text settings, which only the text tool reads. The face is kept the
     // way Animate writes it, the family without its spaces.

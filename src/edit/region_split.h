@@ -77,6 +77,14 @@ public:
     /// within that area.
     std::vector<int> facesWhere(const std::function<bool(const Point&)>& inside) const;
 
+    /// Straight joins that close the gaps in an outline that does not quite
+    /// meet: each loose stroke end is joined to the nearest other loose end
+    /// within \a gap, or failing that to the nearest point on another piece
+    /// within \a gap. Arranging the shape with these as cutters is how the
+    /// paint bucket's gap size setting lets it fill such an outline; the
+    /// joins become fill boundaries without a stroke.
+    std::vector<Curve> gapJoins(double gap) const;
+
     /// Every stroked piece, as a forward half-edge, lying wholly where
     /// \a inside holds.
     std::vector<int> strokesWhere(const std::function<bool(const Point&)>& inside) const;
