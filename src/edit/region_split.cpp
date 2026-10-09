@@ -106,13 +106,26 @@ RegionSplitter::RegionSplitter(const Shape& shape, const std::vector<Curve>& cut
     _map.build();
 
     // Every face, cut or not, is painted with whatever the shape painted
-    // where it lies. Sampling rather than reading the cutters' sides is what
-    // keeps a face bordered only by cutter pieces correct.
+    // where it lies: read off the shape's own edge where one borders the
+    // face, and asked of the shape's arrangement for a face bordered only by
+    // cutter pieces.
+    const size_t shapeCurveCount = _curves.size() - cutters.size();
     for (size_t face = 0; face < _map.faces().size(); ++face)
     {
         const int index = static_cast<int>(face);
+        if (_map.faces()[face].unbounded)
+        {
+            _map.setFaceFill(index, -1);
+            continue;
+        }
+        int fill = -1;
+        if (faceFillFromSources(_map, index, _curves, 0, shapeCurveCount, fill))
+        {
+            _map.setFaceFill(index, fill);
+            continue;
+        }
         Point inside;
-        if (_map.faces()[face].unbounded || !_map.interiorPoint(index, inside))
+        if (!_map.interiorPoint(index, inside))
         {
             _map.setFaceFill(index, -1);
             continue;

@@ -3,6 +3,7 @@
 #include "../src/data/point.h"
 #include "../src/data/rect.h"
 #include "../src/data/transform.h"
+#include "../src/geom/curve.h"
 
 using fla::Point;
 using fla::Rect;
@@ -80,4 +81,50 @@ TEST(rect_transform_rotation_stays_axis_aligned)
     CHECK_NEAR(r.bottomRight.y, 2.0);
     CHECK(r.width() >= 0.0);
     CHECK(r.height() >= 0.0);
+}
+
+TEST(horizontal_ray_crossings_are_exact)
+{
+    using fla::Curve;
+    using fla::Point;
+
+    // A straight segment: crossed once from the left, not from the right.
+    const Curve line = Curve::line(Point(10.0, 0.0), Point(10.0, 10.0));
+    CHECK(line.horizontalRayCrossings(Point(0.0, 5.0)) == 1);
+    CHECK(line.horizontalRayCrossings(Point(20.0, 5.0)) == 0);
+    // Through the segment's ends: counted once over the two pieces that meet
+    // there, so a ray through a vertex of a closed outline counts once.
+    const Curve next = Curve::line(Point(10.0, 10.0), Point(10.0, 20.0));
+    CHECK(line.horizontalRayCrossings(Point(0.0, 10.0)) +
+        next.horizontalRayCrossings(Point(0.0, 10.0)) == 1);
+
+    // A quarter circle of radius 50 round the origin, from the top to the
+    // right. A point just inside the arc sees one crossing; just outside, none.
+    const double r = 50.0;
+    const double k = r * 0.5522847498;
+    const Curve arc = Curve::cubic(Point(0.0, -r), Point(k, -r), Point(r, -k), Point(r, 0.0));
+    const double y = -r * 0.7071;
+    const double xOnArc = r * 0.7071;
+    CHECK(arc.horizontalRayCrossings(Point(xOnArc - 0.1, y)) == 1);
+    CHECK(arc.horizontalRayCrossings(Point(xOnArc + 0.1, y)) == 0);
+
+    // A curve that bends back on itself in y is crossed twice from a point
+    // beside its bulge.
+    const Curve bulge = Curve::cubic(Point(0.0, 0.0), Point(50.0, -40.0), Point(50.0, 40.0), Point(0.0, 0.0));
+    CHECK(bulge.horizontalRayCrossings(Point(-10.0, 5.0)) == 2);
+    CHECK(bulge.horizontalRayCrossings(Point(-10.0, 40.0)) == 0);
+}
+
+TEST(flatness_measures_distance_to_the_chord_segment)
+{
+    using fla::Curve;
+    using fla::Point;
+
+    // Controls on the chord's line but beyond its ends: the curve overshoots,
+    // which a distance to the infinite line would call flat.
+    const Curve overshoot = Curve::cubic(Point(0.0, 0.0), Point(-30.0, 0.0), Point(130.0, 0.0), Point(100.0, 0.0));
+    CHECK(overshoot.flatness() > 29.0);
+
+    const Curve straight = Curve::cubic(Point(0.0, 0.0), Point(30.0, 0.0), Point(70.0, 0.0), Point(100.0, 0.0));
+    CHECK_NEAR(straight.flatness(), 0.0);
 }

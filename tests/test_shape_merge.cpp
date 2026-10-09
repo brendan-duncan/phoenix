@@ -847,3 +847,156 @@ TEST(a_zero_length_line_merges_harmlessly)
     CHECK(colourAt(*target, Point(95.0, 60.0)) == kRed);
     CHECK(colourAt(*target, Point(50.0, 50.0)) == -1);
 }
+
+namespace {
+
+/// A filled oval of four cubics, clockwise on screen so the fill sits on
+/// fillStyle1, in pixels.
+std::unique_ptr<Shape> filledOval(double cx, double cy, double rx, double ry,
+    uint8_t red, uint8_t green, uint8_t blue)
+{
+    std::unique_ptr<Shape> shape(new Shape(nullptr));
+
+    fla::SolidColor* fill = new fla::SolidColor(shape.get());
+    fill->color[0] = red;
+    fill->color[1] = green;
+    fill->color[2] = blue;
+    fill->color[3] = 255;
+    shape->fills.push_back(fill);
+    shape->fillsMap[1] = fill;
+
+    const double k = 0.5522847498;
+    fla::Edge* edge = new fla::Edge(shape.get());
+    edge->fillStyle1 = 1;
+    fla::Path* path = new fla::Path(edge);
+    using Cmd = fla::PathSegment::Command;
+    path->segments.push_back(new fla::PathSegment(Cmd::Move, {Point(cx, cy - ry)}, path));
+    path->segments.push_back(new fla::PathSegment(Cmd::Cubic,
+        {Point(cx + k * rx, cy - ry), Point(cx + rx, cy - k * ry), Point(cx + rx, cy)}, path));
+    path->segments.push_back(new fla::PathSegment(Cmd::Cubic,
+        {Point(cx + rx, cy + k * ry), Point(cx + k * rx, cy + ry), Point(cx, cy + ry)}, path));
+    path->segments.push_back(new fla::PathSegment(Cmd::Cubic,
+        {Point(cx - k * rx, cy + ry), Point(cx - rx, cy + k * ry), Point(cx - rx, cy)}, path));
+    path->segments.push_back(new fla::PathSegment(Cmd::Cubic,
+        {Point(cx - rx, cy - k * ry), Point(cx - k * rx, cy - ry), Point(cx, cy - ry)}, path));
+    edge->paths.push_back(path);
+    shape->edges.push_back(edge);
+    return shape;
+}
+
+} // namespace
+
+/// An oval drawn over a rectangle: the oval keeps its own colour inside, the
+/// rectangle keeps its colour outside, right up to the curve.
+TEST(an_oval_drawn_over_a_rectangle_keeps_its_fill)
+{
+    std::unique_ptr<Shape> target = filledRectangle(0, 0, 2000, 2000, 255, 0, 0);
+    std::unique_ptr<Shape> oval = filledOval(50.0, 50.0, 40.0, 40.0, 0, 0, 255);
+
+    CHECK(ShapeMerger::merge(*target, *oval));
+
+    CHECK(colourAt(*target, Point(50.0, 50.0)) == kBlue);
+    CHECK(colourAt(*target, Point(50.0, 10.5)) == kBlue);
+    CHECK(colourAt(*target, Point(5.0, 5.0)) == kRed);
+    CHECK(colourAt(*target, Point(50.0, 8.0)) == kRed);
+    CHECK(colourAt(*target, Point(95.0, 50.0)) == kRed);
+}
+
+/// The same with the oval cut out: a hole, exactly the oval's shape.
+TEST(an_oval_cut_out_of_a_rectangle_leaves_a_round_hole)
+{
+    std::unique_ptr<Shape> target = filledRectangle(0, 0, 2000, 2000, 255, 0, 0);
+    std::unique_ptr<Shape> oval = filledOval(50.0, 50.0, 40.0, 40.0, 0, 0, 255);
+
+    CHECK(ShapeMerger::subtract(*target, *oval));
+
+    CHECK(colourAt(*target, Point(50.0, 50.0)) == -1);
+    CHECK(colourAt(*target, Point(50.0, 10.5)) == -1);
+    CHECK(colourAt(*target, Point(5.0, 5.0)) == kRed);
+    CHECK(colourAt(*target, Point(50.0, 8.0)) == kRed);
+}
+
+/// A small oval, where the sampled outline's sag is larger than the step a
+/// face's interior point takes off its boundary.
+TEST(a_small_oval_drawn_over_a_rectangle_keeps_its_fill)
+{
+    std::unique_ptr<Shape> target = filledRectangle(0, 0, 2000, 2000, 255, 0, 0);
+    std::unique_ptr<Shape> oval = filledOval(50.0, 50.0, 6.0, 6.0, 0, 0, 255);
+
+    CHECK(ShapeMerger::merge(*target, *oval));
+
+    CHECK(colourAt(*target, Point(50.0, 50.0)) == kBlue);
+    CHECK(colourAt(*target, Point(50.0, 45.0)) == kBlue);
+    CHECK(colourAt(*target, Point(50.0, 43.0)) == kRed);
+}
+
+/// An oval straddling the rectangle's edge, so the arrangement cuts the
+/// oval's curves where they cross it. Every piece keeps the right fill, right
+/// up to the curve on both sides of the crossing.
+TEST(an_oval_across_a_rectangle_edge_keeps_its_fill_on_both_sides)
+{
+    std::unique_ptr<Shape> target = filledRectangle(0, 0, 2000, 2000, 255, 0, 0);
+    std::unique_ptr<Shape> oval = filledOval(100.0, 50.0, 40.0, 40.0, 0, 0, 255);
+
+    CHECK(ShapeMerger::merge(*target, *oval));
+
+    CHECK(colourAt(*target, Point(80.0, 50.0)) == kBlue);
+    CHECK(colourAt(*target, Point(120.0, 50.0)) == kBlue);
+    CHECK(colourAt(*target, Point(61.0, 50.0)) == kBlue);
+    CHECK(colourAt(*target, Point(59.0, 50.0)) == kRed);
+    CHECK(colourAt(*target, Point(99.0, 11.0)) == kBlue);
+    CHECK(colourAt(*target, Point(99.0, 9.0)) == kRed);
+    CHECK(colourAt(*target, Point(101.0, 9.0)) == -1);
+    CHECK(colourAt(*target, Point(5.0, 5.0)) == kRed);
+
+    // Cut out instead: the hole follows the curve on both sides too.
+    std::unique_ptr<Shape> again = filledRectangle(0, 0, 2000, 2000, 255, 0, 0);
+    CHECK(ShapeMerger::subtract(*again, *oval));
+    CHECK(colourAt(*again, Point(80.0, 50.0)) == -1);
+    CHECK(colourAt(*again, Point(61.0, 50.0)) == -1);
+    CHECK(colourAt(*again, Point(59.0, 50.0)) == kRed);
+    CHECK(colourAt(*again, Point(99.0, 9.0)) == kRed);
+}
+
+/// Many ovals of many sizes over a rectangle, each checked at its centre and
+/// just inside its top: the sampled outline's sag must never flip a face.
+TEST(ovals_of_every_size_keep_their_fill_over_a_rectangle)
+{
+    for (double r = 3.0; r <= 60.0; r += 4.5)
+    {
+        std::unique_ptr<Shape> target = filledRectangle(0, 0, 4000, 4000, 255, 0, 0);
+        std::unique_ptr<Shape> oval = filledOval(100.0, 100.0, r, r * 0.7, 0, 0, 255);
+        CHECK(ShapeMerger::merge(*target, *oval));
+        CHECK(colourAt(*target, Point(100.0, 100.0)) == kBlue);
+        CHECK(colourAt(*target, Point(100.0, 100.0 - r * 0.7 + 0.3)) == kBlue);
+        CHECK(colourAt(*target, Point(100.0, 100.0 - r * 0.7 - 0.3)) == kRed);
+
+        // Straddling the edge at x = 200.
+        std::unique_ptr<Shape> edge = filledRectangle(0, 0, 4000, 4000, 255, 0, 0);
+        std::unique_ptr<Shape> across = filledOval(200.0, 100.0, r, r * 0.7, 0, 0, 255);
+        CHECK(ShapeMerger::merge(*edge, *across));
+        CHECK(colourAt(*edge, Point(200.0 - r * 0.5, 100.0)) == kBlue);
+        CHECK(colourAt(*edge, Point(200.0 + r * 0.5, 100.0)) == kBlue);
+        CHECK(colourAt(*edge, Point(200.0 - r - 0.3, 100.0)) == kRed);
+    }
+}
+
+/// A stroked rectangle drawn with one edge exactly along an unstroked fill's
+/// edge: the shared edge keeps the newer drawing's stroke.
+TEST(a_stroke_drawn_along_a_fill_edge_keeps_its_stroke)
+{
+    std::unique_ptr<Shape> target = filledRectangle(0, 0, 2000, 2000, 255, 0, 0);
+    std::unique_ptr<Shape> addition = strokedRectangle(2000, 0, 4000, 2000, 0, 0, 255);
+
+    CHECK(ShapeMerger::merge(*target, *addition));
+
+    bool sharedEdgeStroked = false;
+    for (const Point& point : strokedMidpoints(*target))
+    {
+        if (std::fabs(point.x - 100.0) < 0.5 && point.y > 0.0 && point.y < 100.0)
+            sharedEdgeStroked = true;
+    }
+    CHECK(sharedEdgeStroked);
+    CHECK(colourAt(*target, Point(50.0, 50.0)) == kRed);
+    CHECK(colourAt(*target, Point(150.0, 50.0)) == kBlue);
+}

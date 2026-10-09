@@ -142,6 +142,23 @@ void attributeFillsFromSource(PlanarMap& map, const std::vector<ShapeCurve>& sou
     }
 }
 
+bool faceFillFromSources(const PlanarMap& map, int face, const std::vector<ShapeCurve>& sources,
+    size_t first, size_t last, int& fill)
+{
+    for (const HalfEdge& edge : map.halfEdges())
+    {
+        if (edge.face != face || edge.source < 0)
+            continue;
+        const size_t source = static_cast<size_t>(edge.source);
+        if (source < first || source >= last || source >= sources.size())
+            continue;
+        const ShapeCurve& shapeCurve = sources[source];
+        fill = edge.forward ? shapeCurve.fillStyle1 : shapeCurve.fillStyle0;
+        return true;
+    }
+    return false;
+}
+
 void rebuildShapeEdges(Shape& shape, const PlanarMap& map,
     const std::vector<ShapeCurve>& sources, const StrokeFilter& keepStroke,
     const StrokeOverride& strokeFor)

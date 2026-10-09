@@ -167,6 +167,11 @@ private:
 
     static QPointF centerOf(const QPolygonF& box);
 
+    /// The box's own frame: a transform taking page vectors to coordinates
+    /// along the box's sides. Scaling and skewing happen in this frame so a
+    /// rotated box behaves like an upright one.
+    static QTransform boxFrame(const QPolygonF& box);
+
     /// Applies \a adjust, a document-space matrix, on top of each selected
     /// element's starting transform.
     void applyAdjust(PhoenixView& view, const QTransform& adjust);

@@ -49,6 +49,15 @@ std::vector<ShapeCurve> shapeCurves(const Shape& shape);
 /// for checking that an arrangement agrees with the file it came from.
 void attributeFillsFromSource(PlanarMap& map, const std::vector<ShapeCurve>& sources);
 
+/// What one shape paints on a face of an arrangement that holds several
+/// shapes' curves, read from that shape's own edges round the face: a
+/// half-edge with the face on its left carries the fill its source recorded on
+/// that side. Only sources in [\a first, \a last) count as the shape's.
+/// Returns false when none of the shape's edges border the face, in which
+/// case the caller has to ask geometrically.
+bool faceFillFromSources(const PlanarMap& map, int face, const std::vector<ShapeCurve>& sources,
+    size_t first, size_t last, int& fill);
+
 /// Decides whether a rebuilt piece keeps the stroke its source carried.
 ///
 /// A merge uses this to drop the older artwork's strokes where the newer

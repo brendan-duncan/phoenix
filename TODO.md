@@ -618,8 +618,9 @@ select.
       and one that has merged is a single shape, so clicking it selects the
       whole thing rather than the face that was drawn
   - Ctrl-drag on an unselected edge now adds a corner, as in Animate; cutting a region out still waits on region selection
-- [ ] While ctrl is held the cursor should change to the selection arrow, and
+- [x] While ctrl is held the cursor should change to the selection arrow, and
       the selection bounds should draw even under a tool that hides them
+  - The cursor part is done (the view shows the arrow tool's cursor while ctrl is down, except under the free transform tool, where ctrl is Distort). The bounds under a tool that hides them are still not drawn
 
 ---
 
@@ -656,22 +657,26 @@ should be reproduced before fixing.
       overridden, so `QWidget::mouseDoubleClickEvent` re-sends a press. Override
       it to finish the path
   - Done
-- [ ] **(confirmed) Curved shapes merge with the wrong fills.** See step 10
-- [ ] **(confirmed) Partially overlapping collinear segments are never split.**
+- [x] **(confirmed) Curved shapes merge with the wrong fills.** See step 10
+  - Not reproducible any more on 2026-10-09: ovals of radius 3 to 60 drawn over and cut out of a rectangle, whole and straddling its edge, all keep their fills (tests in `test_shape_merge.cpp`). The sampling it came from is gone anyway: see step 10
+- [x] **(confirmed) Partially overlapping collinear segments are never split.**
       See step 10
-- [ ] Free transform skews the wrong way on the top and left edges.
+  - Done, see step 10
+- [x] Free transform skews the wrong way on the top and left edges.
       `free_transform_tool.cpp:234-240` shears by `delta/depth`, but the grabbed
       edge sits at a *signed* offset of `-depth` from the opposite midpoint.
       Divide by the signed lever, `k = dx / (handle.y - origin.y)`, and conjugate
       `[1, 0, k, 1]` by the origin (alt: the centre). VectorCraft
       `tools/src/xform/free.rs:91-107`
-- [ ] Scaling a rotated object shears it: `adjustForDrag` (`:168-240`) builds
+  - Done 2026-10-09: the shear is divided by the signed lever from the still edge to the grabbed one, in the box's own frame, so every edge slides the way it is dragged, on a rotated box too. Verified on screen
+- [x] Scaling a rotated object shears it: `adjustForDrag` (`:168-240`) builds
       scale and shear in page axes while the box it carries is rotated. Keep an
       oriented box (angle + rect in the turned frame), map the pointer into it,
       scale there and map back (VectorCraft `doc/src/orient.rs:15-85`,
       `tools/src/bbox.rs:232-254`, `tools/src/select.rs:304-314`). Shift should
       take the larger axis rather than averaging `|sx|` and `|sy|` (`:191`); alt
       scales from the centre
+  - Done 2026-10-09: the pointer is measured in the box's frame (`boxFrame`), scaled there and turned back, so a rotated box scales along its sides; shift takes the larger axis; alt scales about the centre. Verified on screen
 - [x] The free transform box goes stale: `_boxValid` is only cleared when the
       selection empties or the tool is deactivated (`:482-489`), so after undo,
       Select All or a tree selection the old box is drawn and used. Rebuild it
@@ -715,7 +720,7 @@ should be reproduced before fixing.
 
 The merge model sits on this, so these come before the tools in step 12.
 
-- [ ] **(confirmed) Fill attribution samples curves at 8 points.**
+- [x] **(confirmed) Fill attribution samples curves at 8 points.**
       `cycleContains` (`planar_map.cpp:268`) and `outlineContains`
       (`fill_attribution.cpp:10-43`) test against an 8-point polyline per curve,
       while `interiorPoint` (`:471`) steps only a quarter twip off the boundary.
@@ -728,10 +733,12 @@ The merge model sits on this, so these come before the tools in step 12.
       and walk across face adjacencies adding +-1 for each addition edge crossed.
       No sampling at all. This also fixes hole assignment (`:373-405`), which uses
       the same inexact test. Add an oval-over-rectangle merge test
+  - Done 2026-10-09: containment is exact now (`Curve::horizontalRayCrossings` splits a curve where its y turns and bisects each monotone run to the ray), used by the map's cycles, the attribution outlines and so every face and hole decision; a merge reads each face's fill off the bordering edge's own side where the shape has one there (`faceFillFromSources`), and only asks geometrically for a face bordered by the other shape alone; interior points try larger steps when a quarter twip lands outside. Oval-over-rectangle tests added, including a sweep of sizes and an oval straddling an edge
 - [ ] Where a point test is still needed, use exact ray-curve roots, and pick
       interior points the robust way: flatten finely, scan about 9 horizontal
       lines offset off the grid, and return the middle of the widest span with
       non-zero winding (VectorCraft `pathops/src/planar.rs:721`)
+  - Exact roots done 2026-10-09; the interior point still steps off an edge midpoint, now trying a quarter twip, a twip and four twips in turn
 - [x] **(confirmed) Collinear overlap is not split.** `intersectSegments`
       (`intersect.cpp:51`) returns false for parallel segments, though
       `intersect.h:32-34` promises the ends of an overlapping stretch. With
@@ -754,9 +761,10 @@ The merge model sits on this, so these come before the tools in step 12.
       `pathops/src/planar.rs:500-517`). Snapping also moves vertices up to half a
       twip without re-checking for new crossings
   - Done: every cut carries the point it was made at and both pieces are pinned to it. Also found and fixed: the duplicate-piece key rounded midpoints to the twip grid separately, so a midpoint on a half-twip let both copies through and collapsed the faces round it -- which is what turned a brush stroke merged back over its own cut the colour of the artwork under it
-- [ ] The parallel test is an absolute 1e-12 (`intersect.cpp:51`). After a
+- [x] The parallel test is an absolute 1e-12 (`intersect.cpp:51`). After a
       rotation in `bakeTransform`, collinear lines then produce arbitrary
       crossings. Make it relative to the segments' lengths
+  - Done 2026-10-09: relative to the product of the segments' lengths
 - [ ] Edges round a vertex are sorted by `atan2(tangentAt(0))`
       (`planar_map.cpp:218-220`), which is (0,0) for every retracted pen handle,
       and ties between tangent curves fall in arbitrary order, so `next` links
@@ -770,15 +778,18 @@ The merge model sits on this, so these come before the tools in step 12.
       by `planar_map.cpp:161`, which measures the chord, which is zero for a
       loop. Measure the control polygon instead, and find self-intersections by
       splitting at inflections and extrema first
-- [ ] `flatness()` (`curve.cpp:148`) measures distance to the infinite chord
+- [x] `flatness()` (`curve.cpp:148`) measures distance to the infinite chord
       line, so a cubic whose controls lie on that line beyond the ends counts as
       flat and its overshoot is lost. Measure distance to the chord segment
-- [ ] Intersection results are capped at 64 (`intersect.cpp:102`) silently;
+  - Done 2026-10-09, with a test
+- [x] Intersection results are capped at 64 (`intersect.cpp:102`) silently;
       raise it or fail loudly
-- [ ] When two edges coincide the first source wins (`planar_map.cpp:171`), and
+  - Raised to 1024 on 2026-10-09; a real pair crosses at most nine times, so more is an overlap being chased
+- [x] When two edges coincide the first source wins (`planar_map.cpp:171`), and
       target curves come first, so a new stroked shape sharing an edge with an
       unstroked fill loses its stroke there (affects `keepStroke`,
       `shape_merge.cpp:358`). Keep the newer source's stroke
+  - Done 2026-10-09: the later source claims a coincident edge, direction flags following its own direction; a stroked rectangle drawn along an unstroked fill's edge keeps its stroke there (test)
 - [ ] Chain the output (replaces the "chain neighbouring pieces" item in step 6).
       Each piece knows its source curve and parameter range, so walk through
       degree-2 vertices whose pieces share (left fill, right fill, stroke) and
@@ -882,8 +893,9 @@ All in `phoenix_view.cpp` unless noted.
       needs an isolated group; Alpha and Erase are `DestinationIn` /
       `DestinationOut` against the parent layer
 - [ ] 9-slice scaling and cacheAsBitmap are not implemented
-- [ ] Text uses guessed font-name munging, `size*0.75`, one baseline and no line
+- [x] Text uses guessed font-name munging, `size*0.75`, one baseline and no line
       layout (`:812-887`)
+  - Done 2026-10-09 in `text_layout.cpp`: PostScript names taken apart for family, bold and italic; size in pixels at the screen's dpi; lines, wrapping and per-run styles. See step 14
 
 ## 12. Improving the existing tools
 
@@ -899,8 +911,9 @@ All in `phoenix_view.cpp` unless noted.
   - Done; the shift toggle waits for a release without a drag
 - [x] Alt-drag duplicates
   - Done for shapes
-- [ ] Cursor follows what is under the pointer (move, corner, curve, handle
+- [x] Cursor follows what is under the pointer (move, corner, curve, handle
       directions rotated by the box angle, `select.rs:381-453`)
+  - Done 2026-10-09 for the free transform tool: move, scale (turned to the handle's axis), skew, rotate and distort cursors; see step 14
 - [x] Draw snap feedback: `SnapResult.kind/target` (`snapping.cpp:23-63`) is
       never drawn
   - Done as the snap ring
@@ -978,12 +991,14 @@ All in `phoenix_view.cpp` unless noted.
 - [ ] Straighten mode tests only point i against the line to i+1 (`:327-345`), so
       gentle arcs drift. Use Ramer-Douglas-Peucker (VectorCraft
       `pathops/src/edit.rs:107-133`)
-- [ ] Ink mode keeps every mouse sample as a corner (`pencil_tool.cpp:90-96`);
+- [x] Ink mode keeps every mouse sample as a corner (`pencil_tool.cpp:90-96`);
       fit with a small tolerance (about 0.5 px) instead
+  - Done: ink mode fits at half a screen pixel
 - [ ] Close the stroke when its ends finish within about 15 px (or alt on
       release); extend a selected open path when a stroke starts at one of its
       ends; preview the fit live
-- [ ] Shape recognition for Straighten mode (VectorCraft
+  - Closing within 15 px done 2026-10-09 (Connect lines, Straighten mode only). Extending a selected open path and the live fit preview are still to do
+- [x] Shape recognition for Straighten mode (VectorCraft
       `geom/src/recognize.rs:239-312`): resample to 256 points by arc length; two
       or more sharp reversals is a scribble; a line if the largest deviation from
       the chord is under 8% and the length under 1.3x the chord; closed if the
@@ -1054,6 +1069,14 @@ addition maps, plus a rule for which strokes survive.
       join the sides with caps, and fill the ring non-zero (VectorCraft
       `effects/src/stroke/width.rs:158-217`)
   - Done 2026-10-09 (`brush_tools.cpp`, B): the fitted centreline is stroked with round caps and joins, resolved with `simplified()`, and each loop written with the fill on the side its direction implies. The modes done 2026-10-09 as a Brush mode field in Properties: Paint Fills merges with `MergeOptions::keepStrokes`, so lines survive under the paint (the pending drop carries the flag through to the merge on deselect); Paint Behind, Paint Selection and Paint Inside cut the stroke down first by arranging it with the outlines of the shapes under it (`RegionSplitter` with cutters) and keeping the regions where nothing is painted, where a selected fill is, or where the face the stroke began in is; verified on screen. Pressure done 2026-10-09: with Use pressure on, a tablet's pressure (read from Qt's tablet events, which still arrive as mouse moves) sets the width along the stroke, the outline built by offsetting the fitted centreline to either side and joining the sides with round caps; a mouse paints at full width. Not verifiable here without a tablet. The resolved outline is refitted with the curve fitter before it becomes edges (2026-10-09), so a stroke lands as a few cubics per loop rather than the hundreds of straight pieces the stroker and `simplified()` leave; a wavy stroke with ten corners saved as one edge of 47 cubics
+- [ ] **Pen input still missing.** Confirm on real hardware that Qt delivers
+      tablet events to the stage (a driver that reports as a mouse gives a
+      constant width). Tilt: Animate's Use Tilt rotates a non-round tip, so it
+      needs brush tip shapes first (round only today). Pressure does not reach
+      the pencil, eraser or paint brush, and nothing varies with pressure but
+      width -- which matches Animate's classic brush. Pressure is sampled per
+      mouse move, so a fast stroke gets few samples; interpolation between them
+      is linear along the raw polyline
 - [x] **Eraser.** Normal = `ShapeMerger::subtract` with the brush outline; Fills =
       keep all target strokes; Lines = keep fills, drop strokes inside;
       Selected Fills / Inside restrict as for the brush; Faucet clears the
@@ -1188,7 +1211,7 @@ in the code or against a real XFL document.
       document-unit tolerance. Straighten mode depends on the "connect lines"
       and "recognize shapes" drawing settings
   - Done: 0-100 in screen pixels; ink mode fits at half a pixel. Connect lines and Recognize shapes done 2026-10-09 as checkboxes, for Straighten mode (`shape_recognition.cpp`): a stroke whose ends come within 10 screen pixels is closed, the seam anchor dropped; a closed stroke with four square corners near the axes becomes the exact rectangle, and a roundish one (many short sides, every raw point about as far from the middle) becomes the oval through its extent. Verified on screen
-- [ ] **Free transform** has Distort (ctrl-drag a corner) and Envelope modes for
+- [x] **Free transform** has Distort (ctrl-drag a corner) and Envelope modes for
       merge shapes. Handles are hollow white squares, the transform point a
       white circle, and the cursor changes to rotate, skew and scale arrows by
       region
@@ -1277,7 +1300,9 @@ dragging, at a maximised window on a 3856x1568 display:
 
 
 Bones/IK, motion editor, asset warp, variable-width strokes, art/pattern brushes,
-pressure/tilt input, text authoring. Each is a project in itself.
+tilt input and brush tip shapes. Each is a project in itself. (Pressure for the
+brush and static, dynamic and input text authoring were done on 2026-10-09; see
+step 13 and step 14.)
 
 ---
 

@@ -325,7 +325,16 @@ bool ShapeMerger::combine(Shape& target, const Shape& addition, Operation operat
         merged.addCurve(combined[i].curve, static_cast<int>(i));
     merged.build();
 
-    for (size_t face = 0; face < merged.faces().size(); ++face)
+    // What each shape paints on each face. A face bordered by one of the
+    // shape's own edges reads the fill straight off that edge's side, which
+    // is exact; only a face lying wholly inside a region of the shape, cut
+    // out by the other shape's curves alone, has to be asked geometrically.
+    const size_t targetCurveCount = targetCurves.size();
+    const size_t faceCount = merged.faces().size();
+    std::vector<int> additionFillOfFace(faceCount, -1);
+    std::vector<int> targetFillOfFace(faceCount, -1);
+
+    for (size_t face = 0; face < faceCount; ++face)
     {
         const int index = static_cast<int>(face);
 
@@ -335,24 +344,38 @@ bool ShapeMerger::combine(Shape& target, const Shape& addition, Operation operat
             continue;
         }
 
-        Point inside;
-        if (!merged.interiorPoint(index, inside))
+        int additionFill = -1;
+        int targetFill = -1;
+        const bool additionKnown = faceFillFromSources(merged, index, combined,
+            targetCurveCount, combined.size(), additionFill);
+        const bool targetKnown = faceFillFromSources(merged, index, combined,
+            0, targetCurveCount, targetFill);
+
+        if (!additionKnown || !targetKnown)
         {
-            merged.setFaceFill(index, -1);
-            continue;
+            Point inside;
+            if (!merged.interiorPoint(index, inside))
+            {
+                merged.setFaceFill(index, -1);
+                continue;
+            }
+            if (!additionKnown)
+                additionFill = additionMap.fillAt(inside);
+            if (!targetKnown)
+                targetFill = targetMap.fillAt(inside);
         }
+        additionFillOfFace[face] = additionFill;
+        targetFillOfFace[face] = targetFill;
 
         // The newer drawing wins where it paints. Where it paints nothing --
         // outside it, or inside an unfilled part of it -- whatever was already
         // there shows through, which is how an outline drawn over a fill cuts
         // without erasing.
-        const int additionFill = additionMap.fillAt(inside);
-
         int fill;
         if (additionFill == -1 || operation == Operation::EraseStrokes)
         {
             // Erasing strokes alone leaves every fill as it was.
-            fill = targetMap.fillAt(inside);
+            fill = targetFill;
         }
         else
         {
@@ -364,13 +387,21 @@ bool ShapeMerger::combine(Shape& target, const Shape& addition, Operation operat
         merged.setFaceFill(index, fill);
     }
 
+    // Whether the addition paints a face, by index.
+    const auto additionCovers = [&](int face) {
+        if (face < 0 || face >= static_cast<int>(faceCount))
+            return false;
+        if (merged.faces()[face].unbounded)
+            return false;
+        return additionFillOfFace[face] != -1;
+    };
+
     // Drawing a filled shape over something covers what was there, outlines
     // included. A stroke that belonged to the target and has the addition's
     // fill on both sides of it is buried, and goes.
     //
     // The addition's own outline stays whatever it lies over: it is the thing
     // that was just drawn.
-    const size_t targetCurveCount = targetCurves.size();
     const auto keepStroke = [&](const HalfEdge& half) {
         const bool fromAddition = half.source < 0 ||
             static_cast<size_t>(half.source) >= targetCurveCount;
@@ -380,14 +411,6 @@ bool ShapeMerger::combine(Shape& target, const Shape& addition, Operation operat
         if (fromAddition)
             return operation == Operation::Paint;
 
-        // Erasing strokes takes every piece lying inside the cutter's area.
-        if (operation == Operation::EraseStrokes)
-            return additionMap.fillAt(half.curve.pointAt(0.5)) == -1;
-
-        // The fills-only modes paint or cut under the strokes and leave them.
-        if (options.keepStrokes)
-            return true;
-
         // Both sides, because a stroke along the edge of the addition's fill is
         // still visible from the outside and has to stay.
         const int sides[2] = {
@@ -396,17 +419,18 @@ bool ShapeMerger::combine(Shape& target, const Shape& addition, Operation operat
                 ? merged.halfEdges()[half.twin].face : -1
         };
 
+        // Erasing strokes takes every piece lying inside the cutter's area,
+        // which is a piece with the cutter on both sides of it.
+        if (operation == Operation::EraseStrokes)
+            return !(additionCovers(sides[0]) && additionCovers(sides[1]));
+
+        // The fills-only modes paint or cut under the strokes and leave them.
+        if (options.keepStrokes)
+            return true;
+
         for (const int face : sides)
         {
-            if (face < 0 || face >= static_cast<int>(merged.faces().size()))
-                return true;
-            if (merged.faces()[face].unbounded)
-                return true;
-
-            Point inside;
-            if (!merged.interiorPoint(face, inside))
-                return true;
-            if (additionMap.fillAt(inside) == -1)
+            if (!additionCovers(face))
                 return true;
         }
 

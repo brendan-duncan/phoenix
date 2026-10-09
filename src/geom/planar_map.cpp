@@ -290,7 +290,13 @@ void PlanarMap::buildHalfEdges(const std::vector<Input>& pieces)
     // the same way, which the midpoint captures. The comparison is tolerant: a
     // midpoint can sit on a half-twip, where the two copies' rounding noise
     // would send it to different grid points and let both copies through.
-    std::map<std::pair<int, int>, std::vector<Point>> seen;
+    struct Seen
+    {
+        Point middle;
+        /// The forward half-edge the piece became.
+        int halfEdge;
+    };
+    std::map<std::pair<int, int>, std::vector<Seen>> seen;
 
     for (const Input& piece : pieces)
     {
@@ -305,19 +311,33 @@ void PlanarMap::buildHalfEdges(const std::vector<Input>& pieces)
             continue;
 
         const Point middle = piece.curve.pointAt(0.5);
-        std::vector<Point>& middles = seen[{std::min(from, to), std::max(from, to)}];
+        std::vector<Seen>& middles = seen[{std::min(from, to), std::max(from, to)}];
         bool duplicate = false;
-        for (const Point& other : middles)
+        for (const Seen& other : middles)
         {
-            if (std::hypot(other.x - middle.x, other.y - middle.y) <= kTwip)
+            if (std::hypot(other.middle.x - middle.x, other.middle.y - middle.y) > kTwip)
+                continue;
+            duplicate = true;
+
+            // The edge is kept once, but the later source claims it: a shape
+            // drawn over another along a shared edge is the one whose stroke
+            // shows there. The direction flags follow the new source's own
+            // direction.
+            HalfEdge& forward = _halfEdges[other.halfEdge];
+            HalfEdge& backward = _halfEdges[forward.twin];
+            if (piece.source > forward.source)
             {
-                duplicate = true;
-                break;
+                const bool sameWay = forward.from == from;
+                forward.source = piece.source;
+                backward.source = piece.source;
+                forward.forward = sameWay;
+                backward.forward = !sameWay;
             }
+            break;
         }
         if (duplicate)
             continue;
-        middles.push_back(middle);
+        middles.push_back({middle, static_cast<int>(_halfEdges.size())});
 
         // Rebuild the geometry on the welded endpoints. The shift is under half
         // a twip, which is below what the format can store anyway.
@@ -407,34 +427,14 @@ std::vector<PlanarMap::Cycle> PlanarMap::collectCycles() const
 
 bool PlanarMap::cycleContains(const Cycle& cycle, const Point& point) const
 {
-    // Flatten the boundary and cast a ray. Faces here are small and this runs
-    // once per nesting question, so the sampling cost does not matter.
-    std::vector<Point> outline;
+    // Cast a ray and count exactly where the boundary curves cross it. A
+    // sampled outline sags inside a curve by more than the quarter twip an
+    // interior point steps off the boundary, which put faces on the wrong
+    // side of their own edges.
+    int crossings = 0;
     for (int edge : cycle.edges)
-    {
-        const Curve& curve = _halfEdges[edge].curve;
-        for (int i = 0; i < kAreaSamples; ++i)
-            outline.push_back(curve.pointAt(static_cast<double>(i) / kAreaSamples));
-    }
-
-    if (outline.size() < 3)
-        return false;
-
-    bool inside = false;
-    for (size_t i = 0, j = outline.size() - 1; i < outline.size(); j = i++)
-    {
-        const Point& a = outline[i];
-        const Point& b = outline[j];
-
-        if ((a.y > point.y) == (b.y > point.y))
-            continue;
-
-        const double x = (b.x - a.x) * (point.y - a.y) / (b.y - a.y) + a.x;
-        if (point.x < x)
-            inside = !inside;
-    }
-
-    return inside;
+        crossings += _halfEdges[edge].curve.horizontalRayCrossings(point);
+    return (crossings % 2) == 1;
 }
 
 Point PlanarMap::sampleOutside(const Cycle& cycle) const
@@ -626,33 +626,37 @@ bool PlanarMap::interiorPoint(int face, Point& result) const
         return false;
 
     // Step off each boundary edge in turn until a point lands inside. One edge
-    // is usually enough; a sliver of a face may need another.
+    // is usually enough; a sliver of a face may need another, or a bigger
+    // step. Every candidate is checked against the face, so a larger step
+    // that lands in a neighbour is simply passed over.
     const std::vector<int> outer = cycleFrom(target.halfEdge);
-    const double step = kTwip * 0.25;
 
-    for (int edge : outer)
+    for (const double step : {kTwip * 0.25, kTwip, kTwip * 4.0})
     {
-        const Curve& curve = _halfEdges[edge].curve;
-        const Point middle = curve.pointAt(0.5);
-        const Point tangent = curve.tangentAt(0.5);
-
-        const double length = std::hypot(tangent.x, tangent.y);
-        if (length <= 1.0e-12)
-            continue;
-
-        const Point offset(-tangent.y / length * step, tangent.x / length * step);
-
-        const Point candidates[2] = {
-            Point(middle.x + offset.x, middle.y + offset.y),
-            Point(middle.x - offset.x, middle.y - offset.y)
-        };
-
-        for (const Point& candidate : candidates)
+        for (int edge : outer)
         {
-            if (faceContains(face, candidate))
+            const Curve& curve = _halfEdges[edge].curve;
+            const Point middle = curve.pointAt(0.5);
+            const Point tangent = curve.tangentAt(0.5);
+
+            const double length = std::hypot(tangent.x, tangent.y);
+            if (length <= 1.0e-12)
+                continue;
+
+            const Point offset(-tangent.y / length * step, tangent.x / length * step);
+
+            const Point candidates[2] = {
+                Point(middle.x + offset.x, middle.y + offset.y),
+                Point(middle.x - offset.x, middle.y - offset.y)
+            };
+
+            for (const Point& candidate : candidates)
             {
-                result = candidate;
-                return true;
+                if (faceContains(face, candidate))
+                {
+                    result = candidate;
+                    return true;
+                }
             }
         }
     }

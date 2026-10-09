@@ -47,8 +47,12 @@ bool intersectSegments(const Point& p0, const Point& p1, const Point& q0, const 
     const double sx = q1.x - q0.x;
     const double sy = q1.y - q0.y;
 
+    // Parallel when the cross product is negligible against the segments'
+    // lengths, not against an absolute figure: a pair of long collinear
+    // lines turned through an angle still has to count as parallel.
     const double denominator = rx * sy - ry * sx;
-    if (std::fabs(denominator) <= kEpsilon)
+    const double scale = std::hypot(rx, ry) * std::hypot(sx, sy);
+    if (std::fabs(denominator) <= std::max(kEpsilon, scale * 1.0e-10))
         return false;
 
     const double dx = q0.x - p0.x;
@@ -99,7 +103,10 @@ void searchMapped(const Curve& wholeA, const Curve& wholeB,
     if (!boxesOverlap(a, b, tolerance))
         return;
 
-    if (hits.size() > 64)
+    // A pair of real curves crosses at most nine times; far more means the
+    // subdivision is chasing noise along an overlap, and the ends of that
+    // are reported by the caller anyway.
+    if (hits.size() > 1024)
         return;
 
     const bool aStraight = a.flatness() <= tolerance;

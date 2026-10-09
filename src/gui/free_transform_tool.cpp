@@ -357,6 +357,26 @@ void FreeTransformTool::drawEnvelope(QPainter& painter, double scale) const
     }
 }
 
+QTransform FreeTransformTool::boxFrame(const QPolygonF& box)
+{
+    // Axes along the box's first side and the side after it, each a unit
+    // vector; mapping a page vector gives its coordinates in that frame.
+    if (box.size() != 4)
+        return QTransform();
+
+    QPointF ex = box[1] - box[0];
+    QPointF ey = box[3] - box[0];
+    const double lx = std::hypot(ex.x(), ex.y());
+    const double ly = std::hypot(ey.x(), ey.y());
+    if (lx <= 1.0e-9 || ly <= 1.0e-9)
+        return QTransform();
+    ex /= lx;
+    ey /= ly;
+
+    // Qt maps (x, y) to (m11 x + m21 y, m12 x + m22 y).
+    return QTransform(ex.x(), ey.x(), ex.y(), ey.y(), 0.0, 0.0);
+}
+
 QPointF FreeTransformTool::centerOf(const QPolygonF& box)
 {
     if (box.size() != 4)
@@ -492,9 +512,17 @@ QTransform FreeTransformTool::adjustForDrag(const QPointF& documentPos,
 
     case Grip::Handle:
     {
-        const QPointF anchor = anchorFor(_boxAtDragStart, _gripIndex);
-        const QPointF start = _dragStart - anchor;
-        const QPointF now = documentPos - anchor;
+        // Alt scales about the centre instead of the opposite handle.
+        const QPointF anchor = (modifiers & Qt::AltModifier)
+            ? centerOf(_boxAtDragStart) : anchorFor(_boxAtDragStart, _gripIndex);
+
+        // A rotated box scales along its own sides, not the page's axes, or
+        // pulling a corner would shear it. So the pointer is measured in the
+        // box's frame, scaled there, and the result turned back.
+        const QTransform toBox = boxFrame(_boxAtDragStart);
+        const QTransform fromBox = toBox.inverted();
+        const QPointF start = toBox.map(_dragStart - anchor);
+        const QPointF now = toBox.map(documentPos - anchor);
 
         // Scale along each axis by how much further the cursor is from the
         // anchor than the handle started. A near-zero starting offset would
@@ -511,17 +539,18 @@ QTransform FreeTransformTool::adjustForDrag(const QPointF& documentPos,
                 sy = 1.0;
         }
 
-        // Shift keeps the aspect ratio, as everywhere else in Animate.
+        // Shift keeps the aspect ratio, as everywhere else in Animate: the
+        // axis pulled further sets the scale for both.
         if (modifiers & Qt::ShiftModifier)
         {
-            const double uniform = (std::fabs(sx) + std::fabs(sy)) * 0.5;
+            const double uniform = std::max(std::fabs(sx), std::fabs(sy));
             sx = sx < 0.0 ? -uniform : uniform;
             sy = sy < 0.0 ? -uniform : uniform;
         }
 
         QTransform scale;
         scale.scale(sx, sy);
-        return aroundAnchor(anchor, scale);
+        return aroundAnchor(anchor, toBox * scale * fromBox);
     }
 
     case Grip::Rotate:
@@ -551,19 +580,33 @@ QTransform FreeTransformTool::adjustForDrag(const QPointF& documentPos,
         const QPointF a = _boxAtDragStart.size() == 4 ? _boxAtDragStart[_gripIndex] : QPointF();
         const QPointF b = _boxAtDragStart.size() == 4
             ? _boxAtDragStart[(_gripIndex + 1) % 4] : QPointF();
-        const QPointF edge = b - a;
 
-        // Slide along the edge direction, measured against the box's depth.
-        const double depth = qMax(1.0e-6, distance(anchor, (a + b) / 2.0));
+        // In the box's own frame, so a rotated box skews along its sides.
+        const QTransform toBox = boxFrame(_boxAtDragStart);
+        const QTransform fromBox = toBox.inverted();
+        const QPointF edge = toBox.map(b - a);
+        const QPointF lever = toBox.map((a + b) / 2.0 - anchor);
+        const QPointF slide = toBox.map(delta);
+
+        // The grabbed edge slides by the drag; everything in between slides
+        // in proportion to its distance from the still edge. The lever is
+        // signed: the top edge sits above the anchor, the bottom below, and
+        // dividing by the signed distance is what sends each the right way.
         const bool horizontal = std::fabs(edge.x()) >= std::fabs(edge.y());
 
         QTransform shear;
         if (horizontal)
-            shear.shear(delta.x() / depth, 0.0);
+        {
+            if (std::fabs(lever.y()) > 1.0e-6)
+                shear.shear(slide.x() / lever.y(), 0.0);
+        }
         else
-            shear.shear(0.0, delta.y() / depth);
+        {
+            if (std::fabs(lever.x()) > 1.0e-6)
+                shear.shear(0.0, slide.y() / lever.x());
+        }
 
-        return aroundAnchor(anchor, shear);
+        return aroundAnchor(anchor, toBox * shear * fromBox);
     }
 
     case Grip::None:

@@ -4,42 +4,13 @@
 
 namespace fla {
 
-namespace {
-
-/// Points sampled per curve when flattening an outline for a containment test.
-constexpr int kOutlineSamples = 8;
-
-} // namespace
-
 bool outlineContains(const std::vector<Curve>& outline, const Point& point)
 {
-    std::vector<Point> flattened;
-    flattened.reserve(outline.size() * kOutlineSamples);
-
+    // Exact: each curve counts where it crosses a ray from the point.
+    int crossings = 0;
     for (const Curve& curve : outline)
-    {
-        for (int i = 0; i < kOutlineSamples; ++i)
-            flattened.push_back(curve.pointAt(static_cast<double>(i) / kOutlineSamples));
-    }
-
-    if (flattened.size() < 3)
-        return false;
-
-    bool inside = false;
-    for (size_t i = 0, j = flattened.size() - 1; i < flattened.size(); j = i++)
-    {
-        const Point& a = flattened[i];
-        const Point& b = flattened[j];
-
-        if ((a.y > point.y) == (b.y > point.y))
-            continue;
-
-        const double x = (b.x - a.x) * (point.y - a.y) / (b.y - a.y) + a.x;
-        if (point.x < x)
-            inside = !inside;
-    }
-
-    return inside;
+        crossings += curve.horizontalRayCrossings(point);
+    return (crossings % 2) == 1;
 }
 
 void attributeFills(PlanarMap& map, const std::vector<FillRegion>& regions)

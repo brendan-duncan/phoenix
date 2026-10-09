@@ -56,6 +56,15 @@ public:
     /// piece, which is the test for "close enough to treat as a segment".
     double flatness() const;
 
+    /// How many times a horizontal ray from \a point towards +x crosses this
+    /// curve, found exactly: the curve is split where its y turns, and each
+    /// monotone run is searched for where it reaches the ray's height. A run
+    /// counts when the ray's height falls in (low, high], so a ray through a
+    /// vertex is counted once between the two pieces meeting there, never
+    /// twice or not at all. Summed round a closed outline, an odd total means
+    /// the point is inside.
+    int horizontalRayCrossings(const Point& point) const;
+
     /// Length of the chord from start to end.
     double chordLength() const;
 
