@@ -1,14 +1,26 @@
 #include "element_commands.h"
 
+#include "../data/document.h"
 #include "../data/edge.h"
 #include "../data/element.h"
 #include "../data/frame.h"
+#include "../data/group.h"
+#include "../data/layer.h"
+#include "../data/symbol.h"
+#include "../data/symbol_instance.h"
+#include "../data/symbol_list.h"
+#include "../data/timeline.h"
+#include "element_clone.h"
 #include "selection.h"
 #include "shape_merge.h"
 
 #include "../data/shape.h"
+#include "../data/static_text.h"
 
 #include <algorithm>
+#include <cstdint>
+#include <cstdio>
+#include <ctime>
 
 namespace fla {
 
@@ -233,6 +245,7 @@ void SplitRegionCommand::redo()
         elements.push_back(_piece);
     else
         elements.insert(at + 1, _piece);
+    _piece->parent = _frame;
     _owned = false;
 }
 
@@ -245,6 +258,7 @@ void SplitRegionCommand::undo()
     const auto it = std::find(elements.begin(), elements.end(), static_cast<Element*>(_piece));
     if (it != elements.end())
         elements.erase(it);
+    _piece->parent = nullptr;
     _owned = true;
 
     if (_selection)
@@ -312,6 +326,565 @@ RemoveElementCommand::RemoveElementCommand(Frame* frame, Element* element,
     , _name(name)
     , _selection(selection)
 {}
+
+GroupElementsCommand::GroupElementsCommand(Frame* frame, const std::vector<Element*>& elements,
+    const std::string& name, Selection* selection)
+    : _frame(frame)
+    , _group(new Group(frame))
+    , _name(name)
+    , _selection(selection)
+{
+    // In z-order, so the group's members draw in the order they did before.
+    if (!_frame)
+        return;
+
+    for (size_t i = 0; i < _frame->elements.size(); ++i)
+    {
+        Element* candidate = _frame->elements[i];
+        if (std::find(elements.begin(), elements.end(), candidate) != elements.end())
+        {
+            _elements.push_back(candidate);
+            _indices.push_back(static_cast<int>(i));
+        }
+    }
+}
+
+GroupElementsCommand::~GroupElementsCommand()
+{
+    if (!_applied)
+    {
+        _group->members.clear();
+        delete _group;
+    }
+}
+
+void GroupElementsCommand::redo()
+{
+    if (!_frame || _applied || _elements.empty())
+        return;
+
+    std::vector<Element*>& frameElements = _frame->elements;
+    for (Element* element : _elements)
+    {
+        const auto it = std::find(frameElements.begin(), frameElements.end(), element);
+        if (it != frameElements.end())
+            frameElements.erase(it);
+        element->parent = _group;
+        _group->members.push_back(element);
+        if (_selection)
+            _selection->remove(element);
+    }
+
+    // Where the topmost member was, less the members taken out below it.
+    int at = _indices.back() - static_cast<int>(_indices.size() - 1);
+    at = std::max(0, std::min(at, static_cast<int>(frameElements.size())));
+    frameElements.insert(frameElements.begin() + at, _group);
+    _applied = true;
+
+    if (_selection)
+        _selection->select(_group);
+}
+
+void GroupElementsCommand::undo()
+{
+    if (!_frame || !_applied)
+        return;
+
+    std::vector<Element*>& frameElements = _frame->elements;
+    const auto it = std::find(frameElements.begin(), frameElements.end(), static_cast<Element*>(_group));
+    if (it != frameElements.end())
+        frameElements.erase(it);
+    if (_selection)
+        _selection->remove(_group);
+
+    _group->members.clear();
+    for (size_t i = 0; i < _elements.size(); ++i)
+    {
+        Element* element = _elements[i];
+        element->parent = _frame;
+        const int at = std::max(0, std::min(_indices[i], static_cast<int>(frameElements.size())));
+        frameElements.insert(frameElements.begin() + at, element);
+    }
+    _applied = false;
+
+    if (_selection)
+    {
+        std::vector<DOMElement*> picked(_elements.begin(), _elements.end());
+        _selection->select(picked);
+    }
+}
+
+UngroupCommand::UngroupCommand(Frame* frame, Group* group, const std::string& name,
+    Selection* selection)
+    : _frame(frame)
+    , _group(group)
+    , _name(name)
+    , _selection(selection)
+{}
+
+UngroupCommand::~UngroupCommand()
+{
+    if (_held)
+    {
+        _group->members.clear();
+        delete _group;
+    }
+}
+
+void UngroupCommand::redo()
+{
+    if (!_frame || !_group || _held)
+        return;
+
+    std::vector<Element*>& frameElements = _frame->elements;
+    const auto it = std::find(frameElements.begin(), frameElements.end(), static_cast<Element*>(_group));
+    if (it == frameElements.end())
+        return;
+
+    _index = static_cast<int>(it - frameElements.begin());
+    frameElements.erase(it);
+    if (_selection)
+        _selection->remove(_group);
+
+    _members = _group->members;
+    _group->members.clear();
+    _held = true;
+
+    int at = _index;
+    for (Element* member : _members)
+    {
+        member->parent = _frame;
+        frameElements.insert(frameElements.begin() + at, member);
+        ++at;
+    }
+
+    if (_selection)
+    {
+        std::vector<DOMElement*> picked(_members.begin(), _members.end());
+        _selection->select(picked);
+    }
+}
+
+void UngroupCommand::undo()
+{
+    if (!_frame || !_group || !_held)
+        return;
+
+    std::vector<Element*>& frameElements = _frame->elements;
+    for (Element* member : _members)
+    {
+        const auto it = std::find(frameElements.begin(), frameElements.end(), member);
+        if (it != frameElements.end())
+            frameElements.erase(it);
+        member->parent = _group;
+        if (_selection)
+            _selection->remove(member);
+    }
+    _group->members = _members;
+
+    const int at = std::max(0, std::min(_index, static_cast<int>(frameElements.size())));
+    frameElements.insert(frameElements.begin() + at, _group);
+    _held = false;
+
+    if (_selection)
+        _selection->select(_group);
+}
+
+ReorderElementCommand::ReorderElementCommand(Frame* frame, Element* element, int newIndex,
+    const std::string& name)
+    : _frame(frame)
+    , _element(element)
+    , _after(newIndex)
+    , _name(name)
+{}
+
+void ReorderElementCommand::moveTo(int index)
+{
+    std::vector<Element*>& elements = _frame->elements;
+    const auto it = std::find(elements.begin(), elements.end(), _element);
+    if (it == elements.end())
+        return;
+    elements.erase(it);
+
+    index = std::max(0, std::min(index, static_cast<int>(elements.size())));
+    elements.insert(elements.begin() + index, _element);
+}
+
+void ReorderElementCommand::redo()
+{
+    if (!_frame || !_element)
+        return;
+
+    const auto it = std::find(_frame->elements.begin(), _frame->elements.end(), _element);
+    if (it == _frame->elements.end())
+        return;
+    _before = static_cast<int>(it - _frame->elements.begin());
+    moveTo(_after);
+}
+
+void ReorderElementCommand::undo()
+{
+    if (!_frame || !_element || _before < 0)
+        return;
+    moveTo(_before);
+}
+
+SetDrawingObjectCommand::SetDrawingObjectCommand(Shape* shape, bool drawingObject,
+    const std::string& name)
+    : _shape(shape)
+    , _before(shape ? shape->isDrawingObject : false)
+    , _after(drawingObject)
+    , _name(name)
+{}
+
+void SetDrawingObjectCommand::redo()
+{
+    if (_shape)
+        _shape->isDrawingObject = _after;
+}
+
+void SetDrawingObjectCommand::undo()
+{
+    if (_shape)
+        _shape->isDrawingObject = _before;
+}
+
+SetTextContentsCommand::SetTextContentsCommand(StaticText* target, const StaticText& before,
+    const StaticText& after, const std::string& name)
+    : _target(target)
+    , _before(static_cast<StaticText*>(cloneElement(before, nullptr)))
+    , _after(static_cast<StaticText*>(cloneElement(after, nullptr)))
+    , _name(name)
+{
+}
+
+SetTextContentsCommand::~SetTextContentsCommand()
+{
+    delete _before;
+    delete _after;
+}
+
+void SetTextContentsCommand::redo()
+{
+    if (_target && _after)
+        setTextContents(*_target, *_after);
+}
+
+void SetTextContentsCommand::undo()
+{
+    if (_target && _before)
+        setTextContents(*_target, *_before);
+}
+
+int BreakApartInstanceCommand::shownFrameIndex(const SymbolInstance& instance)
+{
+    if (instance.symbolType == SymbolType::Graphic)
+        return std::max(0, instance.firstFrame);
+    return 0;
+}
+
+BreakApartInstanceCommand::BreakApartInstanceCommand(Frame* frame, SymbolInstance* instance,
+    const std::string& name, Selection* selection)
+    : _frame(frame)
+    , _instance(instance)
+    , _name(name)
+    , _selection(selection)
+{
+    if (!_frame || !_instance || !_instance->symbol || _instance->symbol->timelines.empty())
+        return;
+
+    const Timeline* timeline = _instance->symbol->timelines.front();
+    const int shown = shownFrameIndex(*_instance);
+
+    // Layers are listed top first; the stage draws the bottom one first, so
+    // the copies are gathered from the last layer back to keep that order.
+    for (auto layerIt = timeline->layers.rbegin(); layerIt != timeline->layers.rend(); ++layerIt)
+    {
+        const Layer* layer = *layerIt;
+        if (!layer || layer->layerType == Layer::Type::Folder || layer->layerType == Layer::Type::Guide)
+            continue;
+
+        // The keyframe in effect at the shown frame.
+        const Frame* source = nullptr;
+        for (const Frame* candidate : layer->frames)
+        {
+            if (candidate && candidate->index <= layer->firstFrame + shown)
+                source = candidate;
+        }
+        if (!source)
+            continue;
+
+        for (const Element* element : source->elements)
+        {
+            if (!element)
+                continue;
+            Element* piece = cloneElement(*element, _frame);
+            if (!piece)
+                continue;
+
+            // Where the symbol put it, then where the instance put the symbol.
+            Transform placed = _instance->transform;
+            placed.concatenate(element->transform);
+            piece->transform = placed;
+            piece->isSelected = false;
+            piece->isFloating = false;
+            _pieces.push_back(piece);
+        }
+    }
+}
+
+BreakApartInstanceCommand::~BreakApartInstanceCommand()
+{
+    if (_applied)
+    {
+        // The frame holds the pieces; the instance is the command's.
+        delete _instance;
+    }
+    else
+    {
+        for (Element* piece : _pieces)
+            delete piece;
+    }
+}
+
+void BreakApartInstanceCommand::redo()
+{
+    if (!_frame || !_instance || _applied || _pieces.empty())
+        return;
+
+    std::vector<Element*>& frameElements = _frame->elements;
+    const auto it = std::find(frameElements.begin(), frameElements.end(),
+        static_cast<Element*>(_instance));
+    if (it == frameElements.end())
+        return;
+
+    _index = static_cast<int>(it - frameElements.begin());
+    frameElements.erase(it);
+    if (_selection)
+        _selection->remove(_instance);
+    _instance->parent = nullptr;
+
+    int at = _index;
+    for (Element* piece : _pieces)
+    {
+        piece->parent = _frame;
+        frameElements.insert(frameElements.begin() + at, piece);
+        ++at;
+    }
+    _applied = true;
+
+    if (_selection)
+    {
+        std::vector<DOMElement*> picked(_pieces.begin(), _pieces.end());
+        _selection->select(picked);
+    }
+}
+
+void BreakApartInstanceCommand::undo()
+{
+    if (!_frame || !_instance || !_applied)
+        return;
+
+    std::vector<Element*>& frameElements = _frame->elements;
+    for (Element* piece : _pieces)
+    {
+        const auto it = std::find(frameElements.begin(), frameElements.end(), piece);
+        if (it != frameElements.end())
+            frameElements.erase(it);
+        piece->parent = nullptr;
+        if (_selection)
+            _selection->remove(piece);
+    }
+
+    const int at = std::max(0, std::min(_index, static_cast<int>(frameElements.size())));
+    _instance->parent = _frame;
+    frameElements.insert(frameElements.begin() + at, _instance);
+    _applied = false;
+
+    if (_selection)
+        _selection->select(_instance);
+}
+
+ConvertToSymbolCommand::ConvertToSymbolCommand(Document* document, Frame* frame,
+    const std::vector<Element*>& elements, const std::string& symbolName,
+    double registrationX, double registrationY, const std::string& name, Selection* selection,
+    SymbolType symbolType)
+    : _document(document)
+    , _frame(frame)
+    , _registrationX(registrationX)
+    , _registrationY(registrationY)
+    , _symbol(nullptr)
+    , _instance(nullptr)
+    , _name(name)
+    , _selection(selection)
+{
+    if (!_document || !_frame)
+        return;
+
+    // In z-order, so the symbol draws its contents in the order they had.
+    for (size_t i = 0; i < _frame->elements.size(); ++i)
+    {
+        Element* candidate = _frame->elements[i];
+        if (std::find(elements.begin(), elements.end(), candidate) != elements.end())
+        {
+            _elements.push_back(candidate);
+            _indices.push_back(static_cast<int>(i));
+        }
+    }
+
+    // The symbol: one timeline, one layer, one keyframe, as Animate makes it.
+    if (!_document->symbolList)
+        _document->symbolList = new SymbolList(_document);
+
+    _symbol = new Symbol(_document->symbolList);
+    _symbol->name = symbolName;
+
+    // Animate stamps each item with an id and a modification time; the
+    // writer carries both through, so a converted symbol gets its own.
+    const std::time_t now = std::time(nullptr);
+    char id[40];
+    std::snprintf(id, sizeof(id), "%08lx-%08lx", static_cast<unsigned long>(now),
+        static_cast<unsigned long>(reinterpret_cast<std::uintptr_t>(this) & 0xffffffffu));
+    _symbol->itemId = id;
+    _symbol->lastModified = std::to_string(static_cast<long long>(now));
+
+    Timeline* timeline = new Timeline(_symbol);
+    timeline->name = symbolName;
+    _symbol->timelines.push_back(timeline);
+
+    Layer* layer = new Layer(timeline);
+    layer->name = "Layer_1";
+    layer->color[0] = 0;
+    layer->color[1] = 255;
+    layer->color[2] = 255;
+    layer->color[3] = 255;
+    layer->current = "true";
+    layer->selected = true;
+    timeline->layers.push_back(layer);
+
+    _symbolFrame = new Frame(layer);
+    _symbolFrame->index = 0;
+    _symbolFrame->duration = 1;
+    _symbolFrame->keyMode = "9728";
+    layer->frames.push_back(_symbolFrame);
+    layer->firstFrame = 0;
+    layer->lastFrame = 1;
+
+    _instance = new SymbolInstance(_frame);
+    _instance->libraryItemName = symbolName;
+    _instance->symbol = _symbol;
+    _instance->symbolType = symbolType;
+    _instance->transform.tx = registrationX;
+    _instance->transform.ty = registrationY;
+
+    for (Element* element : _elements)
+        collectMovable(element, _moved);
+    for (Element* element : _moved)
+        _movedTransforms.push_back(element->transform);
+}
+
+ConvertToSymbolCommand::~ConvertToSymbolCommand()
+{
+    if (!_applied)
+    {
+        // Nothing of the document's is inside: the symbol's frame is empty
+        // and the instance was never placed.
+        delete _instance;
+        delete _symbol;
+    }
+}
+
+void ConvertToSymbolCommand::collectMovable(Element* element, std::vector<Element*>& out) const
+{
+    if (!element)
+        return;
+
+    if (element->elementType() == Element::Type::Group)
+    {
+        for (Element* member : static_cast<Group*>(element)->members)
+            collectMovable(member, out);
+        return;
+    }
+
+    out.push_back(element);
+}
+
+void ConvertToSymbolCommand::redo()
+{
+    if (!_document || !_frame || !_symbol || !_instance || _applied || _elements.empty())
+        return;
+
+    SymbolList* library = _document->symbolList;
+    library->symbols.push_back(_symbol);
+    library->symbolMap[_symbol->name] = _symbol;
+
+    std::vector<Element*>& frameElements = _frame->elements;
+    for (Element* element : _elements)
+    {
+        const auto it = std::find(frameElements.begin(), frameElements.end(), element);
+        if (it != frameElements.end())
+            frameElements.erase(it);
+        element->parent = _symbolFrame;
+        _symbolFrame->elements.push_back(element);
+        if (_selection)
+            _selection->remove(element);
+    }
+
+    // Shifted so the registration point is the symbol's origin; the instance
+    // puts them back where they were.
+    for (Element* element : _moved)
+    {
+        element->transform.tx -= _registrationX;
+        element->transform.ty -= _registrationY;
+    }
+
+    int at = _indices.back() - static_cast<int>(_indices.size() - 1);
+    at = std::max(0, std::min(at, static_cast<int>(frameElements.size())));
+    frameElements.insert(frameElements.begin() + at, _instance);
+    _instance->parent = _frame;
+    _applied = true;
+
+    if (_selection)
+        _selection->select(_instance);
+}
+
+void ConvertToSymbolCommand::undo()
+{
+    if (!_applied)
+        return;
+
+    std::vector<Element*>& frameElements = _frame->elements;
+    const auto it = std::find(frameElements.begin(), frameElements.end(), static_cast<Element*>(_instance));
+    if (it != frameElements.end())
+        frameElements.erase(it);
+    if (_selection)
+        _selection->remove(_instance);
+
+    for (size_t i = 0; i < _moved.size(); ++i)
+        _moved[i]->transform = _movedTransforms[i];
+
+    _symbolFrame->elements.clear();
+    for (size_t i = 0; i < _elements.size(); ++i)
+    {
+        Element* element = _elements[i];
+        element->parent = _frame;
+        const int at = std::max(0, std::min(_indices[i], static_cast<int>(frameElements.size())));
+        frameElements.insert(frameElements.begin() + at, element);
+    }
+
+    SymbolList* library = _document->symbolList;
+    const auto found = std::find(library->symbols.begin(), library->symbols.end(), _symbol);
+    if (found != library->symbols.end())
+        library->symbols.erase(found);
+    library->symbolMap.erase(_symbol->name);
+    _applied = false;
+
+    if (_selection)
+    {
+        std::vector<DOMElement*> picked(_elements.begin(), _elements.end());
+        _selection->select(picked);
+    }
+}
 
 RemoveElementCommand::~RemoveElementCommand()
 {

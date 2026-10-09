@@ -43,9 +43,20 @@ public:
         /// The ink bottle, pouring from its hotspot.
         InkBottle,
         /// The eyedropper, with its tip at the hotspot.
-        Eyedropper
+        Eyedropper,
+        /// A double-headed arrow through the hotspot: the free transform
+        /// tool's scale cursor, turned to point along the handle's axis.
+        Scale,
+        /// Two half arrows pulling opposite ways: skew, turned along the edge.
+        Skew,
+        /// An arrow curling round the hotspot: rotate.
+        Rotate
     };
 
     /// The cursor for \a kind, built once and shared.
     static QCursor cursor(Kind kind);
+
+    /// The cursor for \a kind turned by \a eighthTurns steps of 45 degrees
+    /// about its hotspot, for the transform cursors that follow the box.
+    static QCursor cursor(Kind kind, int eighthTurns);
 };

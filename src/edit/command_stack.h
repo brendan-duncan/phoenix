@@ -96,6 +96,11 @@ public:
 
     bool isInMacro() const { return !_macroStack.empty(); }
 
+    /// Whether a command is being applied or reversed right now. Observers
+    /// that react to a command's side effects, such as a selection change,
+    /// can tell a change made by the command from one made by the user.
+    bool isExecuting() const { return _executing > 0; }
+
     /// Marks the current position as saved. isClean() reports true whenever the
     /// stack returns here, including by undoing back to it.
     void setClean();
@@ -143,6 +148,8 @@ private:
     int _cleanIndex = 0;
 
     bool _mergeAllowed = true;
+
+    int _executing = 0;
 
     /// Open macros, outermost first. Each owns its children until it closes, at
     /// which point it is handed to its parent macro or to the history. Holding

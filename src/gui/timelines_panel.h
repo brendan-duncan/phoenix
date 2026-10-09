@@ -4,6 +4,8 @@
 
 #include <QWidget>
 #include <QScrollArea>
+
+#include <vector>
 #include <QPushButton>
 #include <QTimer>
 
@@ -21,6 +23,10 @@ public:
     }
 
     void setPlayer(Player* player) { _player = player; }
+
+    /// Shows one timeline only, as when a symbol is being edited; null shows
+    /// the document's.
+    void setTimeline(const fla::Timeline* timeline) { _timeline = timeline; }
 
     void updateSize();
 
@@ -40,6 +46,9 @@ private:
     const fla::FLADocument* _flaDocument;
     Player* _player;
     bool _isDragging = false;
+    const fla::Timeline* _timeline = nullptr;
+
+    std::vector<const fla::Timeline*> shownTimelines() const;
 
     void updatePlayerFromMouse(int x);
 };
@@ -51,6 +60,8 @@ public:
     explicit TimelinesPanel(Player* player, QWidget *parent = nullptr);
 
     void setDocument(const fla::FLADocument* document);
+
+    void setTimeline(const fla::Timeline* timeline);
 
 private slots:
     void onGotoFirstFrame();

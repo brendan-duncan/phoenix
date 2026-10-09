@@ -162,7 +162,30 @@ QIcon LayersPanel::createOpenFolderIcon()
 void LayersPanel::setDocument(const fla::FLADocument* document)
 {
     _flaDocument = document;
+    _timeline = nullptr;
     refreshLayers();
+}
+
+void LayersPanel::setTimeline(fla::Timeline* timeline)
+{
+    _timeline = timeline;
+    refreshLayers();
+}
+
+std::vector<fla::Timeline*> LayersPanel::shownTimelines() const
+{
+    std::vector<fla::Timeline*> timelines;
+    if (_timeline)
+    {
+        timelines.push_back(_timeline);
+        return timelines;
+    }
+    if (_flaDocument && _flaDocument->document)
+    {
+        for (fla::Timeline* timeline : _flaDocument->document->timelines)
+            timelines.push_back(timeline);
+    }
+    return timelines;
 }
 
 fla::Layer* LayersPanel::layerFor(const QTreeWidgetItem* item) const
@@ -173,7 +196,7 @@ fla::Layer* LayersPanel::layerFor(const QTreeWidgetItem* item) const
     const int timelineIndex = item->data(NameColumn, Qt::UserRole + 1).toInt();
     const int layerIndex = item->data(NameColumn, Qt::UserRole).toInt();
 
-    const auto& timelines = _flaDocument->document->timelines;
+    const auto& timelines = shownTimelines();
     if (timelineIndex < 0 || timelineIndex >= static_cast<int>(timelines.size()))
         return nullptr;
 
@@ -192,7 +215,7 @@ void LayersPanel::refreshLayers()
         return;
 
     int timelineIndex = 0;
-    for (const fla::Timeline* timeline : _flaDocument->document->timelines)
+    for (const fla::Timeline* timeline : shownTimelines())
     {
         QList<QTreeWidgetItem*> layerIndexMap;
         QTreeWidgetItem* currentItem = nullptr;
@@ -294,7 +317,7 @@ void LayersPanel::onItemClicked(QTreeWidgetItem* item, int column)
 
     const int timelineIndex = item->data(NameColumn, Qt::UserRole + 1).toInt();
     const int layerIndex = item->data(NameColumn, Qt::UserRole).toInt();
-    fla::Timeline* timeline = _flaDocument->document->timelines[timelineIndex];
+    fla::Timeline* timeline = shownTimelines()[timelineIndex];
     const QString timelineName = QString::fromStdString(timeline->name);
 
     switch (column)

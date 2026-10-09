@@ -79,6 +79,48 @@ RegionSplitter::RegionSplitter(const Shape& shape)
     attributeFillsFromSource(_map, _curves);
 }
 
+RegionSplitter::RegionSplitter(const Shape& shape, const std::vector<Curve>& cutters)
+    : _shape(shape)
+    , _curves(shapeCurves(shape))
+{
+    if (_curves.empty())
+        return;
+
+    // What the shape paints, on its own, to ask about each divided face.
+    PlanarMap painted;
+    for (size_t i = 0; i < _curves.size(); ++i)
+        painted.addCurve(_curves[i].curve, static_cast<int>(i));
+    painted.build();
+    attributeFillsFromSource(painted, _curves);
+
+    // The cutters join the arrangement as curves with no styles of their own.
+    for (const Curve& curve : cutters)
+    {
+        ShapeCurve cutter;
+        cutter.curve = curve;
+        _curves.push_back(cutter);
+    }
+
+    for (size_t i = 0; i < _curves.size(); ++i)
+        _map.addCurve(_curves[i].curve, static_cast<int>(i));
+    _map.build();
+
+    // Every face, cut or not, is painted with whatever the shape painted
+    // where it lies. Sampling rather than reading the cutters' sides is what
+    // keeps a face bordered only by cutter pieces correct.
+    for (size_t face = 0; face < _map.faces().size(); ++face)
+    {
+        const int index = static_cast<int>(face);
+        Point inside;
+        if (_map.faces()[face].unbounded || !_map.interiorPoint(index, inside))
+        {
+            _map.setFaceFill(index, -1);
+            continue;
+        }
+        _map.setFaceFill(index, painted.fillAt(inside));
+    }
+}
+
 int RegionSplitter::strokeOf(const HalfEdge& half) const
 {
     if (half.source < 0 || half.source >= static_cast<int>(_curves.size()))
@@ -216,6 +258,89 @@ RegionPick RegionSplitter::pickAt(const Point& localPos, double tolerance, bool 
     }
 
     return pick;
+}
+
+std::vector<int> RegionSplitter::facesWhere(const std::function<bool(const Point&)>& inside) const
+{
+    std::vector<int> faces;
+    if (!valid())
+        return faces;
+
+    for (size_t face = 0; face < _map.faces().size(); ++face)
+    {
+        const int index = static_cast<int>(face);
+        if (_map.faces()[face].unbounded || _map.faceFill(index) == -1)
+            continue;
+
+        Point point;
+        if (_map.interiorPoint(index, point) && inside(point))
+            faces.push_back(index);
+    }
+    return faces;
+}
+
+std::vector<int> RegionSplitter::strokesWhere(const std::function<bool(const Point&)>& inside) const
+{
+    std::vector<int> strokes;
+    if (!valid())
+        return strokes;
+
+    const std::vector<HalfEdge>& halves = _map.halfEdges();
+    for (size_t i = 0; i < halves.size(); ++i)
+    {
+        const HalfEdge& half = halves[i];
+        if (!half.forward || strokeOf(half) == -1)
+            continue;
+
+        // Ends and middle all inside: a piece the area's outline cut has its
+        // ends on that outline, and the middle decides which side it is on.
+        if (inside(half.curve.pointAt(0.5)) &&
+            inside(half.curve.pointAt(0.25)) && inside(half.curve.pointAt(0.75)))
+        {
+            strokes.push_back(static_cast<int>(i));
+        }
+    }
+    return strokes;
+}
+
+bool RegionSplitter::splitSet(const std::vector<int>& faces, const std::vector<int>& strokes,
+    Shape*& piece, Shape*& remainder) const
+{
+    piece = nullptr;
+    remainder = nullptr;
+    if (!valid() || (faces.empty() && strokes.empty()))
+        return false;
+
+    const std::set<int> chosen(faces.begin(), faces.end());
+    const std::set<int> lifted(strokes.begin(), strokes.end());
+
+    const auto isLifted = [&](const HalfEdge& half, const std::vector<HalfEdge>& halves) {
+        const int index = static_cast<int>(&half - &halves[0]);
+        return lifted.count(index) > 0 || (half.twin >= 0 && lifted.count(half.twin) > 0);
+    };
+
+    // The piece: the chosen fills and strokes, nothing else.
+    PlanarMap pieceMap = _map;
+    for (size_t face = 0; face < pieceMap.faces().size(); ++face)
+    {
+        if (chosen.count(static_cast<int>(face)) == 0)
+            pieceMap.setFaceFill(static_cast<int>(face), -1);
+    }
+    piece = cloneShape(_shape, nullptr);
+    const std::vector<HalfEdge>& pieceHalves = pieceMap.halfEdges();
+    rebuildShapeEdges(*piece, pieceMap, _curves,
+        [&](const HalfEdge& half) { return isLifted(half, pieceHalves); });
+
+    // The remainder: everything but.
+    PlanarMap restMap = _map;
+    for (const int face : chosen)
+        restMap.setFaceFill(face, -1);
+    remainder = cloneShape(_shape, nullptr);
+    const std::vector<HalfEdge>& restHalves = restMap.halfEdges();
+    rebuildShapeEdges(*remainder, restMap, _curves,
+        [&](const HalfEdge& half) { return !isLifted(half, restHalves); });
+
+    return true;
 }
 
 int RegionSplitter::faceAt(const Point& localPos) const

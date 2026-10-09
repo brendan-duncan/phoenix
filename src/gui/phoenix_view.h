@@ -107,6 +107,33 @@ public:
     /// Removes everything selected from the document as one undo step.
     void deleteSelection();
 
+    /// Symbol editing, Animate's edit-in-place. Entering an instance makes
+    /// its symbol's timeline the one the tools work on: the view's coordinate
+    /// space becomes the symbol's, the rest of the document draws dimmed
+    /// behind it, and the timeline panel follows. Editing a symbol changes
+    /// every instance of it, since they all draw the same timeline.
+    bool enterSymbol(fla::SymbolInstance* instance);
+
+    /// Steps out one level, selecting the instance that was being edited.
+    bool exitScope();
+
+    /// Steps out until \p depth levels remain; 0 is the scene.
+    void exitToDepth(int depth);
+
+    int scopeDepth() const { return static_cast<int>(_scope.size()); }
+
+    /// The timeline being edited, or null for the scene.
+    fla::Timeline* scopeTimeline() const;
+
+    /// The name of a level of the scope, for a breadcrumb: the scene at 0,
+    /// then each symbol entered.
+    QString scopeName(int depth) const;
+
+signals:
+    void scopeChanged();
+
+public:
+
     /// Selects a region of merge-drawn artwork the way Animate's arrow does:
     /// the fill or the stroke under the cursor, not the whole shape. The
     /// region is lifted out as a shape of its own, which floats selected
@@ -119,6 +146,13 @@ public:
 
     /// Whether \p element is a region lifted out of another shape.
     bool isFloatingRegion(const fla::Element* element) const;
+
+    /// Selects what a marquee or a lasso sweeps out, the way Animate's do: an
+    /// object the area touches is selected whole, while merge-drawn artwork
+    /// the area only partly covers is divided along the area's outline and
+    /// the fills and strokes inside it are lifted out as the selection.
+    /// Returns false when the area reached nothing.
+    bool selectRegionsIn(const QPainterPath& area, bool additive);
 
     /// Document-space bounds of an element, cached. Tools use this to place
     /// handles around what is selected.
@@ -227,6 +261,8 @@ protected:
 
     void wheelEvent(QWheelEvent *event) override;
 
+    bool event(QEvent* event) override;
+
     void keyPressEvent(QKeyEvent *event) override;
 
     void keyReleaseEvent(QKeyEvent *event) override;
@@ -271,6 +307,30 @@ private:
 
     /// Document-space bounds of everything on stage, united with the stage.
     QRectF contentBounds();
+
+    /// A level of symbol editing: the instance entered and the timeline it
+    /// draws.
+    struct EditScope
+    {
+        fla::SymbolInstance* instance = nullptr;
+        fla::Timeline* timeline = nullptr;
+    };
+    std::vector<EditScope> _scope;
+
+    /// Maps the scope's own space to the document: the instance transforms
+    /// of every level, innermost first.
+    QTransform scopeToDocument() const;
+
+    /// The pan, zoom and centring alone, without the scope.
+    QTransform rootToWidget() const;
+
+    /// The timelines the tools act on: the scoped one, or the scene's.
+    std::vector<const fla::Timeline*> editableTimelines() const;
+
+    /// Draws the stage: background, grid, the document, and over it the
+    /// symbol being edited at full strength when there is one. The painter
+    /// arrives mapped for document space.
+    void drawStageContents(QPainter& painter, const fla::Document* document);
     QTransform viewTransform;
 
     // Visible rect in document coordinates (for culling)
@@ -353,7 +413,6 @@ private:
 
     QMap<QString, QPixmap> _bitmapCache;
 
-    QMap<QString, QFont> _fontCache;
 
     // Bounds cache for culling
     QMap<const fla::Element*, QRectF> _boundsCache;

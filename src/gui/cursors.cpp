@@ -111,7 +111,41 @@ void drawMark(QPainter& painter, Cursors::Kind kind)
     }
 }
 
-QCursor build(Cursors::Kind kind)
+/// A double-headed arrow along the x axis, centred on the origin.
+QPainterPath doubleArrowPath()
+{
+    QPainterPath path;
+    path.addPolygon(QPolygonF({
+        QPointF(-11.0, 0.0), QPointF(-5.0, -5.0), QPointF(-5.0, -2.0),
+        QPointF(5.0, -2.0), QPointF(5.0, -5.0), QPointF(11.0, 0.0),
+        QPointF(5.0, 5.0), QPointF(5.0, 2.0), QPointF(-5.0, 2.0),
+        QPointF(-5.0, 5.0)
+    }));
+    path.closeSubpath();
+    return path;
+}
+
+/// Two half arrows, one above the axis pulling right and one below pulling
+/// left: what a skew does to the two sides of a box.
+QPainterPath skewArrowsPath()
+{
+    QPainterPath path;
+    path.addPolygon(QPolygonF({
+        QPointF(-9.0, -5.0), QPointF(3.0, -5.0), QPointF(3.0, -8.0),
+        QPointF(9.0, -3.5), QPointF(3.0, -1.0), QPointF(3.0, -3.0),
+        QPointF(-9.0, -3.0)
+    }));
+    path.closeSubpath();
+    path.addPolygon(QPolygonF({
+        QPointF(9.0, 5.0), QPointF(-3.0, 5.0), QPointF(-3.0, 8.0),
+        QPointF(-9.0, 3.5), QPointF(-3.0, 1.0), QPointF(-3.0, 3.0),
+        QPointF(9.0, 3.0)
+    }));
+    path.closeSubpath();
+    return path;
+}
+
+QCursor build(Cursors::Kind kind, int eighthTurns)
 {
     QPixmap pixmap(kSize, kSize);
     pixmap.fill(Qt::transparent);
@@ -123,6 +157,48 @@ QCursor build(Cursors::Kind kind)
 
     switch (kind)
     {
+    case Cursors::Kind::Scale:
+    case Cursors::Kind::Skew:
+    {
+        painter.translate(kSize / 2.0, kSize / 2.0);
+        painter.rotate(45.0 * eighthTurns);
+        outlined(painter, kind == Cursors::Kind::Scale ? doubleArrowPath() : skewArrowsPath());
+        hotspot = QPoint(kSize / 2, kSize / 2);
+        break;
+    }
+
+    case Cursors::Kind::Rotate:
+    {
+        // An arc most of the way round the hotspot, ending in an arrowhead.
+        painter.translate(kSize / 2.0, kSize / 2.0);
+        QPainterPath arc;
+        arc.arcMoveTo(QRectF(-8.0, -8.0, 16.0, 16.0), 300.0);
+        arc.arcTo(QRectF(-8.0, -8.0, 16.0, 16.0), 300.0, -270.0);
+        QPen under(Qt::white, 4.5);
+        under.setCapStyle(Qt::RoundCap);
+        painter.setPen(under);
+        painter.setBrush(Qt::NoBrush);
+        painter.drawPath(arc);
+        QPen over(Qt::black, 2.0);
+        over.setCapStyle(Qt::RoundCap);
+        painter.setPen(over);
+        painter.drawPath(arc);
+
+        // The head sits at the arc's end, 30 degrees past the top on the right.
+        const QPointF end = arc.currentPosition();
+        QPainterPath head;
+        head.addPolygon(QPolygonF({
+            end + QPointF(-4.5, -3.5), end + QPointF(3.5, -4.5), end + QPointF(1.0, 4.0)
+        }));
+        head.closeSubpath();
+        outlined(painter, head);
+        painter.setBrush(Qt::black);
+        painter.setPen(Qt::NoPen);
+        painter.drawPath(head);
+        hotspot = QPoint(kSize / 2, kSize / 2);
+        break;
+    }
+
     case Cursors::Kind::Arrow:
     case Cursors::Kind::ArrowMove:
     case Cursors::Kind::ArrowCorner:
@@ -226,11 +302,17 @@ QCursor build(Cursors::Kind kind)
 
 QCursor Cursors::cursor(Kind kind)
 {
+    return cursor(kind, 0);
+}
+
+QCursor Cursors::cursor(Kind kind, int eighthTurns)
+{
     static QMap<int, QCursor> cache;
 
-    const int key = static_cast<int>(kind);
+    const int turns = ((eighthTurns % 8) + 8) % 8;
+    const int key = static_cast<int>(kind) * 8 + turns;
     auto it = cache.find(key);
     if (it == cache.end())
-        it = cache.insert(key, build(kind));
+        it = cache.insert(key, build(kind, turns));
     return it.value();
 }

@@ -169,6 +169,17 @@ std::vector<PlanarMap::Input> PlanarMap::splitAtCrossings(double tolerance) cons
 
     const auto addTouch = [&](size_t onto, const Point& point) {
         const Curve& curve = _inputs[onto].curve;
+
+        // A point clear of the curve's control box cannot touch it; this is
+        // what keeps the pair loop cheap, since nearly every pair misses.
+        double left, top, right, bottom;
+        curve.controlBounds(left, top, right, bottom);
+        if (point.x < left - touch || point.x > right + touch ||
+            point.y < top - touch || point.y > bottom + touch)
+        {
+            return;
+        }
+
         for (const Point& end : {curve.start(), curve.end()})
         {
             if (std::hypot(end.x - point.x, end.y - point.y) <= touch)
@@ -191,10 +202,20 @@ std::vector<PlanarMap::Input> PlanarMap::splitAtCrossings(double tolerance) cons
             cuts[i].push_back({hit.t2, true, hit.position});
         }
 
+        double il, it, ir, ib;
+        _inputs[i].curve.controlBounds(il, it, ir, ib);
+
         for (size_t j = i + 1; j < _inputs.size(); ++j)
         {
-            // Every pair is tested. A sweep line would avoid the quadratic cost,
-            // but shapes here hold tens of curves, not thousands.
+            // Every pair is tested, but a pair whose control boxes miss each
+            // other is dismissed here before any curve work. A sweep line would
+            // avoid the quadratic count altogether; a brush stroke's outline
+            // runs to a few hundred pieces, which this handles.
+            double jl, jt, jr, jb;
+            _inputs[j].curve.controlBounds(jl, jt, jr, jb);
+            if (ir < jl - touch || jr < il - touch || ib < jt - touch || jb < it - touch)
+                continue;
+
             const std::vector<CurveIntersection> hits =
                 intersectCurves(_inputs[i].curve, _inputs[j].curve, tolerance);
 

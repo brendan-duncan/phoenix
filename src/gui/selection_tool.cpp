@@ -1,10 +1,12 @@
 #include "selection_tool.h"
 
 #include "phoenix_view.h"
+#include "selection_targets.h"
 
 #include "../data/element.h"
 #include "../data/frame.h"
 #include "../data/shape.h"
+#include "../data/symbol_instance.h"
 #include "../edit/command_stack.h"
 #include "../edit/element_commands.h"
 #include "../edit/selection.h"
@@ -13,6 +15,7 @@
 
 #include <QKeyEvent>
 #include <QMouseEvent>
+#include <QPainterPath>
 
 #include <cmath>
 
@@ -238,22 +241,11 @@ bool SelectionTool::mouseRelease(PhoenixView& view, QMouseEvent* event, const QP
     }
     else
     {
-        std::vector<fla::Element*> swept = view.elementsIn(rect);
-
-        std::vector<fla::DOMElement*> picked;
-        picked.reserve(swept.size());
-        for (fla::Element* element : swept)
-            picked.push_back(element);
-
-        if (_additive)
-        {
-            for (fla::DOMElement* element : picked)
-                _selection.add(element);
-        }
-        else
-        {
-            _selection.select(picked);
-        }
+        // A marquee cuts merge artwork along its edge and takes what is
+        // inside, and picks objects it touches whole.
+        QPainterPath area;
+        area.addRect(rect);
+        view.selectRegionsIn(area, _additive);
     }
 
     view.update();
@@ -272,7 +264,20 @@ bool SelectionTool::mouseDoubleClick(PhoenixView& view, QMouseEvent* event, cons
 
     const HitResult hit = view.hitTest(documentPos, view.pickTolerance());
     if (!hit)
+    {
+        // Double-clicking empty stage steps back out of the symbol being
+        // edited, as in Animate.
+        if (view.scopeDepth() > 0)
+        {
+            view.exitScope();
+            return true;
+        }
         return false;
+    }
+
+    // Double-clicking a symbol instance edits the symbol in place.
+    if (hit.element->elementType() == fla::Element::Type::SymbolInstance)
+        return view.enterSymbol(static_cast<fla::SymbolInstance*>(hit.element));
 
     return view.selectRegionAt(hit, documentPos, true, false);
 }
@@ -281,6 +286,7 @@ bool SelectionTool::keyPress(PhoenixView& view, QKeyEvent* event)
 {
     const int key = event->key();
     if ((key == Qt::Key_Left || key == Qt::Key_Right || key == Qt::Key_Up || key == Qt::Key_Down) &&
+        !(event->modifiers() & Qt::ControlModifier) &&
         !_moveActive && !_marqueeActive && !_bender.active() && !_selection.isEmpty())
     {
         // One pixel, or ten with shift, as in Animate.
@@ -349,12 +355,8 @@ void SelectionTool::nudge(PhoenixView& view, double dx, double dy)
 {
     std::vector<fla::CommandPtr> commands;
 
-    for (fla::DOMElement* selected : _selection.elements())
+    for (fla::Element* element : transformLeaves(_selection))
     {
-        fla::Element* element = dynamic_cast<fla::Element*>(selected);
-        if (!element)
-            continue;
-
         fla::Transform after = element->transform;
         after.tx += dx;
         after.ty += dy;
@@ -427,14 +429,13 @@ void SelectionTool::beginMove(PhoenixView& view, const QPointF& documentPos)
     QRectF bounds;
     bool first = true;
 
-    for (fla::DOMElement* selected : _selection.elements())
-    {
-        fla::Element* element = dynamic_cast<fla::Element*>(selected);
-        if (!element)
-            continue;
-
+    // A group moves by its members; the box and the snapping cover the lot.
+    for (fla::Element* element : transformLeaves(_selection))
         _targets.push_back({element, element->transform});
 
+    const std::vector<fla::Element*> topLevel = topLevelElements(_selection);
+    for (fla::Element* element : topLevel)
+    {
         const QRectF elementBounds = view.elementBounds(element);
         if (elementBounds.isValid())
         {
@@ -454,13 +455,7 @@ void SelectionTool::beginMove(PhoenixView& view, const QPointF& documentPos)
     // Gather the things this drag can line up with once, at the start: they do
     // not move while it runs.
     if (fla::Snapper* snapper = view.snapper())
-    {
-        std::vector<fla::Element*> moving;
-        moving.reserve(_targets.size());
-        for (const Target& target : _targets)
-            moving.push_back(target.element);
-        view.gatherSnapCandidates(*snapper, moving);
-    }
+        view.gatherSnapCandidates(*snapper, topLevel);
 }
 
 QPointF SelectionTool::snapMove(PhoenixView& view, const QPointF& delta)
@@ -488,11 +483,13 @@ QPointF SelectionTool::snapMove(PhoenixView& view, const QPointF& delta)
 
 void SelectionTool::duplicateTargets(PhoenixView& view)
 {
-    // Only shapes can be copied so far; a mixed selection moves as it is.
+    // Only shapes sitting directly in the frame can be copied so far; a mixed
+    // selection, or a group, moves as it is.
     for (const Target& target : _targets)
     {
         if (!target.element || target.element->elementType() != fla::Element::Type::Shape ||
-            !frameOf(target.element))
+            !target.element->parent ||
+            target.element->parent->domType() != fla::DOMElement::DOMType::Frame)
         {
             return;
         }

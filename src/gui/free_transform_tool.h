@@ -1,5 +1,6 @@
 #pragma once
 
+#include "cursors.h"
 #include "tool.h"
 
 #include "../data/transform.h"
@@ -13,6 +14,7 @@ namespace fla {
 class CommandStack;
 class Element;
 class Selection;
+class Shape;
 }
 
 /// Animate's free transform tool: move, scale, rotate and skew whatever is
@@ -32,9 +34,14 @@ public:
         , _commandStack(commandStack)
     {}
 
+    ~FreeTransformTool() override;
+
     QString name() const override { return "Free Transform"; }
 
-    QCursor cursor() const override { return Qt::ArrowCursor; }
+    /// Follows the pointer: a move box inside, a double arrow on a handle
+    /// turned to its axis, skew arrows along an edge, a curling arrow just
+    /// outside a corner.
+    QCursor cursor() const override { return Cursors::cursor(_hoverKind, _hoverTurns); }
 
     bool mousePress(PhoenixView& view, QMouseEvent* event, const QPointF& documentPos) override;
 
@@ -48,6 +55,9 @@ public:
 
     /// The transform box stands in for the plain selection box.
     bool showsSelectionBounds() const override { return false; }
+
+    /// Ctrl on a corner is Distort, so ctrl is not the temporary arrow here.
+    bool usesControlKey() const override { return true; }
 
     void deactivate(PhoenixView& view) override;
 
@@ -67,13 +77,28 @@ private:
         /// Just outside a corner: rotate.
         Rotate,
         /// An edge between two handles: skew.
-        Skew
+        Skew,
+        /// Ctrl on a corner handle, with only shapes selected: the corner
+        /// moves on its own and the geometry is warped to follow, Animate's
+        /// Distort. Shift moves the neighbouring corner the opposite way
+        /// along their edge, which tapers.
+        Distort
     };
 
     /// Corner and edge-midpoint handles, in the order they sit around the box.
     static constexpr int kHandleCount = 8;
 
     void rebuildBox(PhoenixView& view);
+
+    /// What a press or a hover at \a documentPos would grab on the current
+    /// box, with the handle or edge index when there is one.
+    Grip gripAt(PhoenixView& view, const QPointF& documentPos, int& index) const;
+
+    /// Sets the cursor for a grip, turned to suit its handle or edge.
+    void showCursorFor(PhoenixView& view, Grip grip, int index);
+
+    /// The nearest 45 degree step to a direction, for turning a cursor.
+    static int eighthTurnsFor(const QPointF& direction);
 
     /// Index of the handle within \a tolerance of \a documentPos, or -1.
     int handleAt(const QPointF& documentPos, double tolerance) const;
@@ -97,6 +122,20 @@ private:
 
     /// Pushes the gesture as one undo step and clears the drag state.
     void commit(PhoenixView& view);
+
+    /// The box a Distort drag has pulled the starting box into.
+    QPolygonF distortedBox(const QPointF& documentPos, Qt::KeyboardModifiers modifiers) const;
+
+    /// Rewrites each shape's geometry so the starting box maps onto \a box.
+    void applyDistort(PhoenixView& view, const QPolygonF& box);
+
+    /// Records the distortion as one undo step per shape.
+    void commitDistort(PhoenixView& view);
+
+    /// Puts the shapes back as they were before the Distort drag.
+    void restoreDistortTargets();
+
+    void clearDistortTargets();
 
     QTransform adjustForDrag(const QPointF& documentPos, Qt::KeyboardModifiers modifiers) const;
 
@@ -127,6 +166,9 @@ private:
 
     Grip _grip = Grip::None;
     int _gripIndex = -1;
+
+    Cursors::Kind _hoverKind = Cursors::Kind::Arrow;
+    int _hoverTurns = 0;
     QPointF _dragStart;
     QPolygonF _boxAtDragStart;
 
@@ -139,4 +181,13 @@ private:
         fla::Transform startTransform;
     };
     std::vector<Target> _targets;
+
+    /// The shapes a Distort drag is warping, each with a copy of its geometry
+    /// from before the drag, which every mouse move starts again from.
+    struct DistortTarget
+    {
+        fla::Shape* shape = nullptr;
+        fla::Shape* original = nullptr;
+    };
+    std::vector<DistortTarget> _distortTargets;
 };

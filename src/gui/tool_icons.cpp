@@ -1,5 +1,8 @@
 #include "tool_icons.h"
 
+#include <QFont>
+#include <QPainterPath>
+
 #include <QPainter>
 #include <QPainterPath>
 #include <QPixmap>
@@ -291,6 +294,38 @@ void drawEraser(QPainter& painter)
     painter.restore();
 }
 
+void drawLasso(QPainter& painter)
+{
+    // A loop of rope with its tail hanging down.
+    QPainterPath loop;
+    loop.moveTo(6.0, 13.0);
+    loop.cubicTo(3.0, 7.0, 9.0, 3.5, 13.0, 4.0);
+    loop.cubicTo(19.0, 4.5, 21.5, 10.0, 17.0, 13.0);
+    loop.cubicTo(14.0, 15.0, 9.0, 15.0, 6.0, 13.0);
+    painter.setPen(QPen(strokeColour(), 1.3));
+    painter.setBrush(Qt::NoBrush);
+    painter.drawPath(loop);
+    painter.drawLine(QPointF(6.5, 13.5), QPointF(5.0, 20.5));
+    painter.setPen(Qt::NoPen);
+    painter.setBrush(strokeColour());
+    painter.drawEllipse(QPointF(6.5, 13.5), 1.6, 1.6);
+}
+
+void drawText(QPainter& painter)
+{
+    // A capital T, as on Animate's button.
+    QFont font("Arial");
+    font.setBold(true);
+    font.setPixelSize(20);
+    QPainterPath glyph;
+    glyph.addText(QPointF(0.0, 0.0), font, "T");
+    const QRectF box = glyph.boundingRect();
+    glyph.translate(12.0 - box.center().x(), 12.5 - box.center().y());
+    painter.setPen(Qt::NoPen);
+    painter.setBrush(strokeColour());
+    painter.drawPath(glyph);
+}
+
 void drawObjectDrawing(QPainter& painter)
 {
     // A shape inside its own boundary: what the mode does is keep the two
@@ -335,6 +370,8 @@ QPixmap render(ToolIcons::Tool tool, int size)
     case ToolIcons::Tool::Eyedropper:    drawEyedropper(painter); break;
     case ToolIcons::Tool::Brush:         drawBrush(painter); break;
     case ToolIcons::Tool::Eraser:        drawEraser(painter); break;
+    case ToolIcons::Tool::Lasso:         drawLasso(painter); break;
+    case ToolIcons::Tool::Text:          drawText(painter); break;
     case ToolIcons::Tool::ObjectDrawing: drawObjectDrawing(painter); break;
     }
 

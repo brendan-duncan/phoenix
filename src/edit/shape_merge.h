@@ -3,7 +3,15 @@
 namespace fla {
 
 class DOMElement;
+class FillStyle;
 class Shape;
+class StrokeStyle;
+
+/// Copies a fill style, gradients and all, so it can live in another element.
+FillStyle* cloneFill(const FillStyle* fill, DOMElement* parent);
+
+/// Copies a stroke style together with the fill it paints with.
+StrokeStyle* cloneStroke(const StrokeStyle* stroke, DOMElement* parent);
 
 /// Deep-copies a shape's geometry and styles. The copy owns everything it holds.
 ///

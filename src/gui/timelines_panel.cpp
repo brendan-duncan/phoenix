@@ -182,7 +182,31 @@ void TimelinesPanel::setDocument(const fla::FLADocument* document)
 {
     _flaDocument = document;
     _gridContainer->setDocument(document);
+    _gridContainer->setTimeline(nullptr);
     _gridContainer->updateSize();
+}
+
+void TimelinesPanel::setTimeline(const fla::Timeline* timeline)
+{
+    _gridContainer->setTimeline(timeline);
+    _gridContainer->updateSize();
+    _gridContainer->update();
+}
+
+std::vector<const fla::Timeline*> TimelineGrid::shownTimelines() const
+{
+    std::vector<const fla::Timeline*> timelines;
+    if (_timeline)
+    {
+        timelines.push_back(_timeline);
+        return timelines;
+    }
+    if (_flaDocument && _flaDocument->document)
+    {
+        for (const fla::Timeline* timeline : _flaDocument->document->timelines)
+            timelines.push_back(timeline);
+    }
+    return timelines;
 }
 
 void TimelinesPanel::onGotoFirstFrame()
@@ -261,7 +285,7 @@ void TimelineGrid::updateSize()
     const int headerHeight = 25;
 
     int numRows = 0;
-    for (const fla::Timeline* timeline : _flaDocument->document->timelines)
+    for (const fla::Timeline* timeline : shownTimelines())
     {
         numRows += static_cast<int>(timeline->layers.size());
     }
@@ -289,7 +313,7 @@ void TimelineGrid::updatePlayerFromMouse(int x)
     if (frame < 0)
         frame = 0;
 
-    for (const fla::Timeline* timeline : _flaDocument->document->timelines)
+    for (const fla::Timeline* timeline : shownTimelines())
     {
         for (const fla::Layer* layer : timeline->layers)
         {
@@ -367,7 +391,7 @@ void TimelineGrid::paintEvent(QPaintEvent* event)
 
     painter.setRenderHint(QPainter::Antialiasing, true);
 
-    for (const fla::Timeline* timeline : _flaDocument->document->timelines)
+    for (const fla::Timeline* timeline : shownTimelines())
     {
         for (const fla::Layer* layer : timeline->layers)
         {

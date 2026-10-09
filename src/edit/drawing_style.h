@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstdint>
+#include <string>
 
 namespace fla {
 
@@ -65,6 +66,12 @@ public:
 
     /// How far in the inner points of a star sit, as a fraction of the radius.
     double starInnerRatio = 0.5;
+
+    /// The face and size new text is set in. The face is written the way
+    /// Animate names fonts, the family run together without spaces; the size
+    /// is in pixels. Text takes the fill colour.
+    std::string textFace = "ArialMT";
+    double textSize = 12.0;
 
     /// Builds the fill for a new object. Returns null when fills are switched
     /// off. The caller owns the result.

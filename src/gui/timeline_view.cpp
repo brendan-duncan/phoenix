@@ -38,6 +38,12 @@ TimelineView::TimelineView(Player* player, QWidget *parent)
             this, &TimelineView::currentLayerChanged);
 }
 
+void TimelineView::setTimeline(fla::Timeline* timeline)
+{
+    _layersPanel->setTimeline(timeline);
+    _timelinesPanel->setTimeline(timeline);
+}
+
 void TimelineView::setDocument(const fla::FLADocument* document)
 {
     _flaDocument = document;

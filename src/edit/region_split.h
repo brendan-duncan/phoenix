@@ -4,6 +4,7 @@
 #include "../geom/planar_map.h"
 #include "../geom/shape_geometry.h"
 
+#include <functional>
 #include <vector>
 
 namespace fla {
@@ -50,6 +51,12 @@ class RegionSplitter
 public:
     explicit RegionSplitter(const Shape& shape);
 
+    /// Arranges the shape together with \a cutters, closed outlines that
+    /// divide its regions without painting anything, so that the regions on
+    /// either side of a marquee or a lasso can be told apart and lifted out.
+    /// Each face keeps the fill the shape painted there.
+    RegionSplitter(const Shape& shape, const std::vector<Curve>& cutters);
+
     /// Whether the shape had any geometry to arrange.
     bool valid() const { return !_curves.empty(); }
 
@@ -64,6 +71,21 @@ public:
     /// owns; the remainder carries the source's styles and is meant to replace
     /// the source's contents. Returns false for an empty pick.
     bool split(const RegionPick& pick, Shape*& piece, Shape*& remainder) const;
+
+    /// Every painted face whose interior satisfies \a inside. After the shape
+    /// has been divided along an area's outline, this is the set of regions
+    /// within that area.
+    std::vector<int> facesWhere(const std::function<bool(const Point&)>& inside) const;
+
+    /// Every stroked piece, as a forward half-edge, lying wholly where
+    /// \a inside holds.
+    std::vector<int> strokesWhere(const std::function<bool(const Point&)>& inside) const;
+
+    /// Lifts several fills and strokes out together as one piece, leaving the
+    /// rest, as split does for one. Both results are new shapes the caller
+    /// owns. Returns false when nothing was given.
+    bool splitSet(const std::vector<int>& faces, const std::vector<int>& strokes,
+        Shape*& piece, Shape*& remainder) const;
 
     /// The bounded face under a point, or -1. Unlike pickAt this answers for an
     /// enclosed area holding no fill, which is what the paint bucket fills.

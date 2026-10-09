@@ -2,18 +2,25 @@
 
 #include "command.h"
 
+#include "../data/dom_element.h"
 #include "../data/transform.h"
 #include "editable_path.h"
 
 #include <string>
+#include <vector>
 
 namespace fla {
 
+class Document;
 class Edge;
 class Element;
+class StaticText;
 class Frame;
+class Group;
 class Selection;
 class Shape;
+class Symbol;
+class SymbolInstance;
 
 /// Replaces an element's transform.
 ///
@@ -253,6 +260,227 @@ private:
     std::string _name;
     Selection* _selection;
     bool _owned = true;
+};
+
+/// Gathers elements of a frame into a group, as Modify > Group does. The
+/// group goes where the topmost of them was. The group is owned here while it
+/// is out of the frame; the members always belong to one or the other.
+class GroupElementsCommand : public Command
+{
+public:
+    GroupElementsCommand(Frame* frame, const std::vector<Element*>& elements,
+        const std::string& name, Selection* selection = nullptr);
+
+    ~GroupElementsCommand() override;
+
+    GroupElementsCommand(const GroupElementsCommand&) = delete;
+    GroupElementsCommand& operator=(const GroupElementsCommand&) = delete;
+
+    void redo() override;
+
+    void undo() override;
+
+    std::string name() const override { return _name; }
+
+    Group* group() const { return _group; }
+
+private:
+    Frame* _frame;
+    std::vector<Element*> _elements;
+    std::vector<int> _indices;
+    Group* _group;
+    std::string _name;
+    Selection* _selection;
+    bool _applied = false;
+};
+
+/// Takes a group apart, leaving its members in the frame where the group was.
+/// The mirror of GroupElementsCommand.
+class UngroupCommand : public Command
+{
+public:
+    UngroupCommand(Frame* frame, Group* group, const std::string& name,
+        Selection* selection = nullptr);
+
+    ~UngroupCommand() override;
+
+    UngroupCommand(const UngroupCommand&) = delete;
+    UngroupCommand& operator=(const UngroupCommand&) = delete;
+
+    void redo() override;
+
+    void undo() override;
+
+    std::string name() const override { return _name; }
+
+private:
+    Frame* _frame;
+    Group* _group;
+    std::vector<Element*> _members;
+    int _index = -1;
+    std::string _name;
+    Selection* _selection;
+    bool _held = false;
+};
+
+/// Moves an element to another place in its frame's z-order, for the Arrange
+/// commands.
+class ReorderElementCommand : public Command
+{
+public:
+    ReorderElementCommand(Frame* frame, Element* element, int newIndex, const std::string& name);
+
+    void redo() override;
+
+    void undo() override;
+
+    std::string name() const override { return _name; }
+
+private:
+    void moveTo(int index);
+
+    Frame* _frame;
+    Element* _element;
+    int _before = -1;
+    int _after;
+    std::string _name;
+};
+
+/// Turns a drawing object into merge artwork or back, which is what Break
+/// Apart does to a drawing object.
+class SetDrawingObjectCommand : public Command
+{
+public:
+    SetDrawingObjectCommand(Shape* shape, bool drawingObject, const std::string& name);
+
+    void redo() override;
+
+    void undo() override;
+
+    std::string name() const override { return _name; }
+
+private:
+    Shape* _shape;
+    bool _before;
+    bool _after;
+    std::string _name;
+};
+
+/// Swaps a text's contents for new ones, as the text tool does when editing
+/// is finished. Holds a copy of the text before and after.
+class SetTextContentsCommand : public Command
+{
+public:
+    SetTextContentsCommand(StaticText* target, const StaticText& before,
+        const StaticText& after, const std::string& name);
+
+    ~SetTextContentsCommand() override;
+
+    SetTextContentsCommand(const SetTextContentsCommand&) = delete;
+    SetTextContentsCommand& operator=(const SetTextContentsCommand&) = delete;
+
+    void redo() override;
+
+    void undo() override;
+
+    std::string name() const override { return _name; }
+
+private:
+    StaticText* _target;
+    StaticText* _before;
+    StaticText* _after;
+    std::string _name;
+};
+
+/// Replaces a symbol instance with copies of what its symbol shows at the
+/// instance's frame, as Modify > Break Apart does to an instance. The copies
+/// land where the instance was, in drawing order, each carrying the
+/// instance's transform on top of its own, so nothing moves on the stage. The
+/// library item itself is left alone.
+class BreakApartInstanceCommand : public Command
+{
+public:
+    BreakApartInstanceCommand(Frame* frame, SymbolInstance* instance,
+        const std::string& name, Selection* selection = nullptr);
+
+    ~BreakApartInstanceCommand() override;
+
+    BreakApartInstanceCommand(const BreakApartInstanceCommand&) = delete;
+    BreakApartInstanceCommand& operator=(const BreakApartInstanceCommand&) = delete;
+
+    void redo() override;
+
+    void undo() override;
+
+    std::string name() const override { return _name; }
+
+    /// The copies that stand in for the instance.
+    const std::vector<Element*>& pieces() const { return _pieces; }
+
+    /// The frame of the symbol an instance shows when it is not playing: the
+    /// first frame of the symbol for a movie clip or a button, the instance's
+    /// first frame for a graphic.
+    static int shownFrameIndex(const SymbolInstance& instance);
+
+private:
+    Frame* _frame;
+    SymbolInstance* _instance;
+    std::vector<Element*> _pieces;
+    int _index = -1;
+    std::string _name;
+    Selection* _selection;
+    bool _applied = false;
+};
+
+/// Turns the selection into a library symbol and leaves an instance of it in
+/// its place, as Modify > Convert to Symbol does.
+///
+/// The elements move into the first frame of the new symbol's timeline,
+/// shifted so that the registration point becomes the symbol's origin, and
+/// the instance carries the registration point back as its position. The
+/// symbol joins the document's library, so saving writes it out.
+class ConvertToSymbolCommand : public Command
+{
+public:
+    ConvertToSymbolCommand(Document* document, Frame* frame,
+        const std::vector<Element*>& elements, const std::string& symbolName,
+        double registrationX, double registrationY, const std::string& name,
+        Selection* selection = nullptr, SymbolType symbolType = SymbolType::MovieClip);
+
+    ~ConvertToSymbolCommand() override;
+
+    ConvertToSymbolCommand(const ConvertToSymbolCommand&) = delete;
+    ConvertToSymbolCommand& operator=(const ConvertToSymbolCommand&) = delete;
+
+    void redo() override;
+
+    void undo() override;
+
+    std::string name() const override { return _name; }
+
+    SymbolInstance* instance() const { return _instance; }
+
+    Symbol* symbol() const { return _symbol; }
+
+private:
+    /// Every element whose transform carries position: groups move by their
+    /// members.
+    void collectMovable(Element* element, std::vector<Element*>& out) const;
+
+    Document* _document;
+    Frame* _frame;
+    std::vector<Element*> _elements;
+    std::vector<int> _indices;
+    std::vector<Element*> _moved;
+    std::vector<Transform> _movedTransforms;
+    double _registrationX;
+    double _registrationY;
+    Symbol* _symbol;
+    Frame* _symbolFrame = nullptr;
+    SymbolInstance* _instance;
+    std::string _name;
+    Selection* _selection;
+    bool _applied = false;
 };
 
 /// Removes an element from a frame, and puts it back on undo. The mirror of

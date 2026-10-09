@@ -1,7 +1,10 @@
 #pragma once
 
+#include <functional>
+
 namespace fla {
 
+class Point;
 class Shape;
 
 /// Folds a shape's transform into its geometry, leaving the transform identity.
@@ -17,5 +20,12 @@ class Shape;
 ///
 /// Does nothing when the transform is already the identity.
 void bakeTransform(Shape& shape);
+
+/// Moves every point of a shape's geometry through \a map, which works in the
+/// shape's own space. The free transform tool's Distort mode is built on
+/// this: it is not an affine change, so it has to rewrite the points rather
+/// than the transform. The bounds follow the points and the edge text the
+/// writer prefers is dropped, since it no longer describes the geometry.
+void warpShape(Shape& shape, const std::function<Point(const Point&)>& map);
 
 } // namespace fla

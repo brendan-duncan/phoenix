@@ -208,8 +208,9 @@ Two things to tidy:
       the marquee uses before it moves anything
   - Only showed up on artwork drawn by hand: files authored in Animate tend to
       sit on round coordinates already, where the snap was a no-op
-- [ ] A marquee tests element bounds, not geometry, so it catches a shape whose
+- [x] A marquee tests element bounds, not geometry, so it catches a shape whose
       bounding box overlaps even when no part of the shape does
+  - Done for merge artwork, see step 13
 
 Also fixed along the way: `screenToScene` and `sceneToScreen` were dead code and
 wrong -- they left out the centring that `paintEvent` applies, so any hit-testing
@@ -560,17 +561,24 @@ does nothing.
 The few shapes that do sit on a root timeline select and edit correctly, so this
 is the missing feature rather than a fault in the tools.
 
-- [ ] An edit scope: which timeline the tools act on, as a stack, so entering and
+- [x] An edit scope: which timeline the tools act on, as a stack, so entering and
       leaving nests properly
-- [ ] Enter a symbol by double-clicking an instance, and leave it again
-- [ ] Draw the enclosing scope dimmed behind the symbol being edited, which is
+  - Done 2026-10-09: `PhoenixView::_scope`, a stack of (instance, timeline). The view's coordinate space becomes the scope's, so every tool, hit test and bounds works unchanged inside a symbol
+- [x] Enter a symbol by double-clicking an instance, and leave it again
+  - Done: double-click an instance to enter, empty stage to leave, or click a breadcrumb level
+- [x] Draw the enclosing scope dimmed behind the symbol being edited, which is
       what makes edit-in-place readable
-- [ ] A breadcrumb showing the scope, and a way back to the root
-- [ ] Tools have to work in the symbol's coordinate space, not the stage's
-- [ ] The timeline panel should follow the scope rather than always showing the
+  - Done: the document draws at 30% and the scoped timeline over it at full strength
+- [x] A breadcrumb showing the scope, and a way back to the root
+  - Done, above the stage
+- [x] Tools have to work in the symbol's coordinate space, not the stage's
+  - Done through `documentToWidget`, which now runs through the instance transforms enteredS
+- [x] The timeline panel should follow the scope rather than always showing the
       root
-- [ ] Editing a symbol changes every instance of it. That is correct, but it
+  - Done: both panels show the scoped timeline
+- [x] Editing a symbol changes every instance of it. That is correct, but it
       needs to be visible, and the render cache has to notice
+  - Visible: every instance draws the same timeline and the caches clear on edit
 
 ## 8. Matching Animate's behaviour
 
@@ -595,8 +603,9 @@ select.
 - [x] Double-click a fill to take its enclosing strokes with it; double-click a
       stroke to take every connected segment
   - Done
-- [ ] A marquee should cut geometry, not pick whole elements -- half a fill
+- [x] A marquee should cut geometry, not pick whole elements -- half a fill
       selected is half a fill you can drag away
+  - Done, see step 13
 - [x] Alt draws a rectangle or an oval from its centre. The polystar already
       works from the centre and a line has no centre, so neither takes it
 - [x] Hovering an edge with the selection tool should show the corner/curve
@@ -777,9 +786,10 @@ The merge model sits on this, so these come before the tools in step 12.
       without its nearest-point search; for pieces from different sources fall
       back to a least-squares refit with fixed end tangents, accepted only within
       tolerance (`tidy_segments`, `boolean.rs:410`)
-- [ ] Bounding-box broad phase before curve-pair tests (`intersect.cpp:101`
+- [x] Bounding-box broad phase before curve-pair tests (`intersect.cpp:101`
       tests every pair); `setFaceFill` scans every edge (`:550`). Sort by x first;
       a sweep line only if big pencil shapes need it
+  - Done 2026-10-09 for the pair loop in `splitAtCrossings`
 - [ ] Drop sliver faces whose `2 * area / perimeter` is below about a twip
       (VectorCraft `is_sliver`, `pathops/src/boolean.rs:341`)
 - [ ] Longer term, if the above still leaves robustness problems: the design in
@@ -903,11 +913,12 @@ All in `phoenix_view.cpp` unless noted.
       and the pivot cannot be dragged. Make it draggable, snap it to anchors and
       the centre, and keep it while the selection is unchanged (VectorCraft
       `tools/src/xform/transform.rs:100-110, 190`)
-- [ ] Marquee should test geometry, not bounds (`elementsIn`,
+- [x] Marquee should test geometry, not bounds (`elementsIn`,
       `phoenix_view.cpp:2045-2090`): reject on bounds; hit if any anchor is
       inside; hit if any segment crosses a rect edge; hit if the path is closed
       and the rect's centre is inside it (VectorCraft `geom/src/hit.rs:28-54`).
       Cutting geometry is step 13
+  - Done for merge artwork, which is cut and selected by region; objects are still picked by bounds
 
 ### Subselection
 
@@ -1026,10 +1037,11 @@ addition maps, plus a rule for which strokes survive.
       re-intersection. Float the new shape as a pending drawing so
       commit-on-deselect merges it where it lands
   - Done as the natural consequence: dragging a lifted fill leaves the hole and drops it in where it lands
-- [ ] **Marquee and lasso cutting.** Insert the outline as a stroke-only cutter,
+- [x] **Marquee and lasso cutting.** Insert the outline as a stroke-only cutter,
       which already divides without erasing, then select the faces inside. The
       lasso collects points at least 1 px apart and tests with even-odd
       point-in-polygon (VectorCraft `tools/src/xform/wand.rs:46-130`)
+  - Done 2026-10-09: `RegionSplitter` arranges the shape together with the area's outline as unstyled curves, paints each divided face by sampling the shape alone, and lifts the faces and strokes inside out as one piece (`selectRegionsIn`). Objects the area touches are selected whole
 - [x] **Brush** (paints fills). Fit the centreline as the pencil does, outline it
       with round caps and joins (in Qt, `QPainterPathStroker` then `simplified()`,
       then refit the outline), and merge it. Same-colour seams vanish on their
@@ -1147,8 +1159,9 @@ in the code or against a real XFL document.
       layer highlighted with a pencil icon. Currently one eye column and a
       "(Hidden)" suffix on the name
   - Done: eye, lock and colour columns; clicking a name makes the layer current, which `activeFrame` follows
-- [ ] Text: `size * 0.75` is the right px-to-pt conversion at 96 dpi but
+- [x] Text: `size * 0.75` is the right px-to-pt conversion at 96 dpi but
       `setPixelSize` would be exact at any dpi
+  - Done 2026-10-09 in `text_layout.cpp`: the point size is `size * 72 / dpi` of the screen, so a 12 px run draws 12 px at any dpi. Text is laid out properly now too: a 2 px gutter, lines broken at returns, fixed-width boxes wrapped at spaces, each run in its own font and colour, bounds measured from the layout rather than a fixed 200x50. Face names are taken apart the PostScript way (ArialMT, TimesNewRomanPS-BoldItalicMT) for family, bold and italic
 
 ### Interaction
 
@@ -1178,12 +1191,14 @@ in the code or against a real XFL document.
       merge shapes. Handles are hollow white squares, the transform point a
       white circle, and the cursor changes to rotate, skew and scale arrows by
       region
+  - Handles and transform point done. Cursors done 2026-10-09: a move box inside, a double arrow on a handle turned to the handle's axis (so it follows a rotated box), skew arrows along an edge, a curling arrow in the rotate band outside a corner; shown on hover and held through the drag (`cursors.cpp`, `free_transform_tool.cpp`). Distort done 2026-10-09: ctrl-drag a corner handle with only shapes selected and the corner moves on its own, the box becoming a quadrilateral, and every point of the geometry is warped by the bilinear map from the starting box to the new one (`warpShape` in `shape_transform.cpp`); ctrl+shift tapers by moving the neighbouring corner the opposite way along their edge; one undo step per shape, Escape abandons, verified on screen. Ctrl belongs to the free transform tool now rather than calling up the temporary arrow (`Tool::usesControlKey`). Envelope (a bezier mesh round the box) still to do, and the distort cursor is the scale arrow for now
 - [x] **Rectangle tool** changes the corner radius with Up and Down during the
       drag
   - Done: Up and Down during the drag (shift x10), plus a Corner radius field in Properties. Rectangle primitives carry per-corner radii, which are now parsed, written and drawn
-- [ ] Ctrl-drag on an unselected edge adds a corner; a plain drag of a selected
+- [x] Ctrl-drag on an unselected edge adds a corner; a plain drag of a selected
       region already cuts it out. The step 8 "ctrl-dragging should cut" item is
       really "ctrl is the temporary arrow tool", which exists
+  - Done: the selection tool's ctrl-drag on an outline makes a new corner (`selection_tool.cpp`)
 
 ### Missing basics
 
@@ -1199,14 +1214,14 @@ in the code or against a real XFL document.
       point, alt-click out, drag a marquee to zoom to it
   - Done
 - [x] Lasso (L), Eyedropper (I) and Text (T) tools
-  - Eyedropper done (I): samples a solid fill or stroke and hands over to the bucket or the bottle. Lasso and Text still to do
+  - Eyedropper done (I): samples a solid fill or stroke and hands over to the bucket or the bottle. Lasso done (L): cuts merge artwork along the loop and takes what is inside, shift adds. Text done 2026-10-09 (T): a click opens an auto-expanding box, a drag a fixed-width one that wraps; typing, Return, Backspace, Delete, arrows, Home and End; Escape, a click elsewhere or a change of tool commits as one undo step (Add for a new text, Edit Text for a changed one, Delete Text for one emptied); clicking an existing text with the tool edits it in place with the caret at the click. The box is drawn as Animate draws it, a thin outline with a round handle for a growing box and a square one for a fixed width. Font and size sit in Properties, the colour is the fill colour, and the face is written as a PostScript name (ArialMT). Single-key tool shortcuts are held off while a box is open. Verified on screen and in a saved file (DOMStaticText with &#13; line breaks). Still to do: selecting a range of text, per-character styling, dynamic and input text, resizing the box by its handle
 - [x] Edit menu: Cut, Copy, Paste, Paste in Place (ctrl+shift+V), Duplicate
       (ctrl+D), Group (ctrl+G), Break Apart (ctrl+B), Convert to Symbol (F8),
       Arrange (ctrl+up/down)
-  - Cut, Copy, Paste in Center, Paste in Place and Duplicate done for shapes. Group, Break Apart, Convert to Symbol and Arrange still to do
+  - Cut, Copy, Paste in Center, Paste in Place and Duplicate done for shapes. Group (ctrl+G), Ungroup, Break Apart (ctrl+B, groups and drawing objects) and Arrange (ctrl+up/down, shift for front/back) done 2026-10-09 in a Modify menu; a group is picked as a whole and moves by its members. Convert to Symbol (F8) done 2026-10-09: the selection moves into a new library symbol with its registration at the selection's top left and an instance takes its place, undoable. The Convert to Symbol dialog done 2026-10-09: name (offered the next free "Symbol N"), type (Movie Clip, Button, Graphic) and a three-by-three registration grid like Animate's; type and registration are remembered between uses, a blank or clashing name is refused. Converting a region lifted out of a shape works too (verified on screen 2026-10-09: F8 on a selected fill, edit in place, save, reopen; the saved file carries LIBRARY/Symbol 1.xml and a DOMSymbolInstance). Grouping and converting no longer flush a lifted region back into its source first, and the command stack now reports isExecuting() so selection observers ignore changes a command makes while it runs. Break Apart on a symbol instance done 2026-10-09: the instance is replaced by deep copies of what its symbol shows (the first frame for a movie clip or button, the instance's first frame for a graphic), gathered bottom layer first, each carrying the instance's transform; copied merge artwork floats selected and settles into the artwork underneath on deselect, drawing objects and nested instances keep to themselves; undoable, verified on screen. Colour effects on the instance are not baked into the copies yet
 - [x] Arrow-key nudge (shift x10), shift-drag constrain, alt-drag duplicate --
       also in step 12
-  - Nudge done; shift-drag constrain and alt-drag duplicate still to do
+  - Done: nudge, shift-drag constrains a move to 45 degree steps, alt-drag moves a copy (`selection_tool.cpp`)
 
 ### Suggested order, weighted for authenticity
 

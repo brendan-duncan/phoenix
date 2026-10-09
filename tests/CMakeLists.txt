@@ -37,6 +37,9 @@ set(TEST_CORE_SOURCES
     ${PHOENIX_SRC}/data/rect.cpp
     ${PHOENIX_SRC}/data/rectangle_primitive.cpp
     ${PHOENIX_SRC}/data/shape.cpp
+    ${PHOENIX_SRC}/data/symbol.cpp
+    ${PHOENIX_SRC}/data/symbol_instance.cpp
+    ${PHOENIX_SRC}/data/symbol_list.cpp
     ${PHOENIX_SRC}/data/stroke_style.cpp
     ${PHOENIX_SRC}/data/timeline.cpp
     ${PHOENIX_SRC}/data/transform.cpp
@@ -46,6 +49,7 @@ set(TEST_CORE_SOURCES
     ${PHOENIX_SRC}/edit/editable_path.cpp
     ${PHOENIX_SRC}/edit/edit_context.cpp
     ${PHOENIX_SRC}/edit/element_commands.cpp
+    ${PHOENIX_SRC}/edit/element_clone.cpp
     ${PHOENIX_SRC}/edit/new_document.cpp
     ${PHOENIX_SRC}/edit/selection.cpp
     ${PHOENIX_SRC}/edit/shape_merge.cpp
@@ -84,8 +88,6 @@ set(TEST_SOURCES
 if(TARGET tinyxml2 AND TARGET zlibstatic)
     list(APPEND TEST_CORE_SOURCES
         ${PHOENIX_SRC}/data/swatch_list.cpp
-        ${PHOENIX_SRC}/data/symbol.cpp
-        ${PHOENIX_SRC}/data/symbol_list.cpp
         ${PHOENIX_SRC}/parser/document_parser.cpp
         ${PHOENIX_SRC}/parser/fla_parser.cpp
         ${PHOENIX_SRC}/parser/zip_reader.cpp

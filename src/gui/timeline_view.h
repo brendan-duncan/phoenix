@@ -17,6 +17,10 @@ public:
 
     void setDocument(const fla::FLADocument* document);
 
+    /// Follows the view's edit scope: one symbol's timeline, or null for
+    /// the document's.
+    void setTimeline(fla::Timeline* timeline);
+
 signals:
     void layerVisibilityChanged(const QString& timelineName, int layerIndex, bool visible);
 

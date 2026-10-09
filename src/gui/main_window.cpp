@@ -1,7 +1,11 @@
 #include "main_window.h"
+#include "convert_to_symbol_dialog.h"
 #include "phoenix_view.h"
 #include "timeline_view.h"
 #include "../data/frame.h"
+#include "../data/group.h"
+#include "../data/symbol_instance.h"
+#include "../data/symbol_list.h"
 #include "../edit/element_commands.h"
 #include "../edit/new_document.h"
 #include "../edit/shape_merge.h"
@@ -9,6 +13,8 @@
 #include "../writer/fla_writer.h"
 #include "../writer/xfl_content.h"
 #include "../writer/xfl_folder_writer.h"
+
+#include <algorithm>
 
 #include <QApplication>
 #include <QCloseEvent>
@@ -34,11 +40,15 @@
 #include <QRadialGradient>
 #include <QToolBar>
 #include <QActionGroup>
+#include <QHBoxLayout>
+#include <QLabel>
 #include <QCheckBox>
 #include <QComboBox>
 #include <QColorDialog>
 #include <QDockWidget>
 #include <QDoubleSpinBox>
+#include <QFontComboBox>
+#include <QHash>
 #include <QFormLayout>
 #include <QSpinBox>
 #include <QToolButton>
@@ -113,6 +123,7 @@ MainWindow::MainWindow(QWidget *parent)
         PrimitiveTool::Kind::OvalPrimitive, _selection, stack, _drawingStyle);
     _handTool = std::make_unique<HandTool>();
     _zoomTool = std::make_unique<ZoomTool>();
+    _lassoTool = std::make_unique<LassoTool>(_selection);
     _brushTool = std::make_unique<BrushTool>(_selection, stack, _drawingStyle);
     _eraserTool = std::make_unique<EraserTool>(stack, _drawingStyle);
     _paintBucketTool = std::make_unique<PaintBucketTool>(stack, _drawingStyle);
@@ -126,6 +137,7 @@ MainWindow::MainWindow(QWidget *parent)
     });
     _penTool = std::make_unique<PenTool>(_selection, stack, _drawingStyle);
     _pencilTool = std::make_unique<PencilTool>(_selection, stack, _drawingStyle);
+    _textTool = std::make_unique<TextTool>(_selection, stack, _drawingStyle);
     _subselectionTool = std::make_unique<SubselectionTool>(_selection, stack);
     _phoenixView->setSelection(&_selection);
     _phoenixView->setCommandStack(&_editContext.commandStack());
@@ -254,9 +266,24 @@ void MainWindow::setupUI()
     // Create the phoenix view (right panel)
     _phoenixView = new PhoenixView(_player, this);
 
+    // The stage sits under its breadcrumb, which says what is being edited.
+    _breadcrumb = new QWidget(this);
+    _breadcrumb->setAutoFillBackground(true);
+    QHBoxLayout* breadcrumbLayout = new QHBoxLayout(_breadcrumb);
+    breadcrumbLayout->setContentsMargins(6, 2, 6, 2);
+    breadcrumbLayout->setSpacing(2);
+    breadcrumbLayout->addStretch();
+
+    QWidget* stageColumn = new QWidget(this);
+    QVBoxLayout* stageLayout = new QVBoxLayout(stageColumn);
+    stageLayout->setContentsMargins(0, 0, 0, 0);
+    stageLayout->setSpacing(0);
+    stageLayout->addWidget(_breadcrumb);
+    stageLayout->addWidget(_phoenixView, 1);
+
     // Add widgets to view splitter
     _viewSplitter->addWidget(_documentView);
-    _viewSplitter->addWidget(_phoenixView);
+    _viewSplitter->addWidget(stageColumn);
 
     // Set view splitter properties
     _viewSplitter->setCollapsible(0, false);
@@ -286,6 +313,14 @@ void MainWindow::setupUI()
 
     connect(_timelineView, &TimelineView::layerVisibilityChanged,
             this, &MainWindow::onVisibilityChanged);
+
+    // Entering or leaving a symbol changes what the panels show.
+    connect(_phoenixView, &PhoenixView::scopeChanged, this, [this]() {
+        _timelineView->setTimeline(_phoenixView->scopeTimeline());
+        rebuildBreadcrumb();
+        updateSelectionState();
+    });
+    rebuildBreadcrumb();
 
     // Locking and the current layer change what the stage can pick and where
     // it draws; a repaint is all it needs, since both are read live.
@@ -413,6 +448,60 @@ void MainWindow::setupMenus()
             _phoenixView->deleteSelection();
     });
     editMenu->addAction(clearAction);
+
+    // Modify menu, with Animate's keys.
+    QMenu* modifyMenu = menuBar->addMenu("&Modify");
+
+    _groupAction = new QAction("&Group", this);
+    _groupAction->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_G));
+    connect(_groupAction, &QAction::triggered, this, &MainWindow::groupSelection);
+    modifyMenu->addAction(_groupAction);
+
+    _ungroupAction = new QAction("&Ungroup", this);
+    _ungroupAction->setShortcut(QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_G));
+    connect(_ungroupAction, &QAction::triggered, this, &MainWindow::ungroupSelection);
+    modifyMenu->addAction(_ungroupAction);
+
+    _breakApartAction = new QAction("&Break Apart", this);
+    _breakApartAction->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_B));
+    _breakApartAction->setStatusTip("Take a group or a symbol instance apart, or turn a drawing object into merge artwork");
+    connect(_breakApartAction, &QAction::triggered, this, &MainWindow::breakApartSelection);
+    modifyMenu->addAction(_breakApartAction);
+
+    _convertToSymbolAction = new QAction("Convert to &Symbol...", this);
+    _convertToSymbolAction->setShortcut(QKeySequence(Qt::Key_F8));
+    _convertToSymbolAction->setStatusTip("Turn the selection into a library symbol and leave an instance of it");
+    connect(_convertToSymbolAction, &QAction::triggered, this, &MainWindow::convertToSymbol);
+    modifyMenu->addAction(_convertToSymbolAction);
+
+    modifyMenu->addSeparator();
+
+    QMenu* arrangeMenu = modifyMenu->addMenu("&Arrange");
+    struct ArrangeEntry
+    {
+        const char* label;
+        QKeySequence key;
+        int step;
+        bool toEnd;
+    };
+    const ArrangeEntry arrange[4] = {
+        {"Bring to &Front", QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_Up), 1, true},
+        {"Bring F&orward", QKeySequence(Qt::CTRL | Qt::Key_Up), 1, false},
+        {"Send &Backward", QKeySequence(Qt::CTRL | Qt::Key_Down), -1, false},
+        {"Send to Bac&k", QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_Down), -1, true},
+    };
+    for (int i = 0; i < 4; ++i)
+    {
+        QAction* action = new QAction(arrange[i].label, this);
+        action->setShortcut(arrange[i].key);
+        const int step = arrange[i].step;
+        const bool toEnd = arrange[i].toEnd;
+        connect(action, &QAction::triggered, this, [this, step, toEnd]() {
+            arrangeSelection(step, toEnd);
+        });
+        arrangeMenu->addAction(action);
+        _arrangeActions[i] = action;
+    }
 
     // View menu
     QMenu* viewMenu = menuBar->addMenu("&View");
@@ -863,6 +952,16 @@ void MainWindow::setupToolBar()
     toolGroup->addAction(freeTransformAction);
     toolBar->addAction(freeTransformAction);
 
+    QAction* lassoAction = new QAction(ToolIcons::icon(ToolIcons::Tool::Lasso), "Lasso", this);
+    lassoAction->setCheckable(true);
+    lassoAction->setShortcut(QKeySequence(Qt::Key_L));
+    lassoAction->setStatusTip("Draw a loop round the objects to select. Shift adds to the selection.");
+    connect(lassoAction, &QAction::triggered, this, [this]() {
+        _phoenixView->setActiveTool(_lassoTool.get());
+    });
+    toolGroup->addAction(lassoAction);
+    toolBar->addAction(lassoAction);
+
     toolBar->addSeparator();
 
     // The shape tools all behave the same way, so they are wired from a table
@@ -938,6 +1037,18 @@ void MainWindow::setupToolBar()
     });
     toolGroup->addAction(pencilAction);
     toolBar->addAction(pencilAction);
+
+    QAction* textAction = new QAction(ToolIcons::icon(ToolIcons::Tool::Text), "Text", this);
+    textAction->setCheckable(true);
+    textAction->setShortcut(QKeySequence(Qt::Key_T));
+    textAction->setStatusTip(
+        "Click to start a text box that grows as you type, or drag one out to a fixed width. "
+        "Escape or a click elsewhere finishes it.");
+    connect(textAction, &QAction::triggered, this, [this]() {
+        _phoenixView->setActiveTool(_textTool.get());
+    });
+    toolGroup->addAction(textAction);
+    toolBar->addAction(textAction);
 
     toolBar->addSeparator();
 
@@ -1153,6 +1264,34 @@ void MainWindow::setupPropertiesPanel()
     });
     layout->addRow("Eraser size", eraserSize);
 
+    // Text settings, which only the text tool reads. The face is kept the
+    // way Animate writes it, the family without its spaces.
+    QFontComboBox* textFont = new QFontComboBox(panel);
+    textFont->setCurrentFont(QFont("Arial"));
+    connect(textFont, &QFontComboBox::currentFontChanged, this, [this](const QFont& font) {
+        // Animate names a font by its PostScript name, so the common ones get
+        // the suffix their foundry gave them; the rest just lose their spaces.
+        static const QHash<QString, QString> postScriptNames = {
+            {"Arial", "ArialMT"},
+            {"Times New Roman", "TimesNewRomanPSMT"},
+            {"Courier New", "CourierNewPSMT"},
+        };
+        const QString family = font.family();
+        _drawingStyle.textFace = postScriptNames.value(family, QString(family).remove(' ')).toStdString();
+    });
+    layout->addRow("Font", textFont);
+
+    QDoubleSpinBox* textSize = new QDoubleSpinBox(panel);
+    textSize->setRange(1.0, 500.0);
+    textSize->setSingleStep(1.0);
+    textSize->setDecimals(1);
+    textSize->setValue(_drawingStyle.textSize);
+    textSize->setToolTip("Size of new text, in pixels");
+    connect(textSize, &QDoubleSpinBox::valueChanged, this, [this](double value) {
+        _drawingStyle.textSize = value;
+    });
+    layout->addRow("Size", textSize);
+
     // PolyStar settings, which only the polystar tool reads.
     QSpinBox* sides = new QSpinBox(panel);
     sides->setRange(3, 32);
@@ -1195,6 +1334,41 @@ void MainWindow::setupPropertiesPanel()
     addDockWidget(Qt::RightDockWidgetArea, dock);
 }
 
+void MainWindow::rebuildBreadcrumb()
+{
+    if (!_breadcrumb || !_phoenixView)
+        return;
+
+    QHBoxLayout* layout = static_cast<QHBoxLayout*>(_breadcrumb->layout());
+    while (layout->count() > 0)
+    {
+        QLayoutItem* item = layout->takeAt(0);
+        if (item->widget())
+            item->widget()->deleteLater();
+        delete item;
+    }
+
+    const int depth = _phoenixView->scopeDepth();
+    for (int level = 0; level <= depth; ++level)
+    {
+        if (level > 0)
+        {
+            QLabel* arrow = new QLabel(QString::fromUtf8("\u203a"), _breadcrumb);
+            layout->addWidget(arrow);
+        }
+
+        QToolButton* button = new QToolButton(_breadcrumb);
+        button->setText(_phoenixView->scopeName(level));
+        button->setAutoRaise(true);
+        button->setEnabled(level < depth);
+        connect(button, &QToolButton::clicked, this, [this, level]() {
+            _phoenixView->exitToDepth(level);
+        });
+        layout->addWidget(button);
+    }
+    layout->addStretch();
+}
+
 void MainWindow::refreshStyleSwatches()
 {
     if (_fillColorButton)
@@ -1227,6 +1401,291 @@ void MainWindow::deselectAll()
     _selection.clear();
     if (_phoenixView)
         _phoenixView->update();
+}
+
+namespace {
+
+fla::Frame* frameOfElement(const fla::Element* element)
+{
+    for (fla::DOMElement* p = element ? element->parent : nullptr; p; p = p->parent)
+    {
+        if (p->domType() == fla::DOMElement::DOMType::Frame)
+            return static_cast<fla::Frame*>(p);
+    }
+    return nullptr;
+}
+
+} // namespace
+
+void MainWindow::groupSelection()
+{
+    if (!_phoenixView)
+        return;
+
+    // Only things sitting directly in one frame can be grouped together.
+    std::vector<fla::Element*> elements;
+    fla::Frame* frame = nullptr;
+    for (fla::DOMElement* selected : _selection.elements())
+    {
+        fla::Element* element = dynamic_cast<fla::Element*>(selected);
+        if (!element || !element->parent ||
+            element->parent->domType() != fla::DOMElement::DOMType::Frame)
+        {
+            continue;
+        }
+        fla::Frame* owner = static_cast<fla::Frame*>(element->parent);
+        if (frame && owner != frame)
+            continue;
+        frame = owner;
+        elements.push_back(element);
+    }
+
+    if (!frame || elements.empty())
+        return;
+
+    // A region lifted out of a shape is grouped as it is: flushing it would
+    // merge it straight back into its source first.
+    fla::CommandStack& stack = _editContext.commandStack();
+    stack.push(fla::CommandPtr(new fla::GroupElementsCommand(frame, elements, "Group", &_selection)));
+    stack.breakMergeChain();
+    _phoenixView->clearCaches();
+    _phoenixView->update();
+}
+
+void MainWindow::ungroupSelection()
+{
+    if (!_phoenixView)
+        return;
+
+    std::vector<fla::Group*> groups;
+    for (fla::DOMElement* selected : _selection.elements())
+    {
+        fla::Element* element = dynamic_cast<fla::Element*>(selected);
+        if (element && element->elementType() == fla::Element::Type::Group && frameOfElement(element))
+            groups.push_back(static_cast<fla::Group*>(element));
+    }
+    if (groups.empty())
+        return;
+
+    fla::CommandStack& stack = _editContext.commandStack();
+    if (groups.size() > 1)
+        stack.beginMacro("Ungroup");
+    for (fla::Group* group : groups)
+    {
+        stack.push(fla::CommandPtr(new fla::UngroupCommand(
+            frameOfElement(group), group, "Ungroup", &_selection)));
+    }
+    if (groups.size() > 1)
+        stack.endMacro();
+    stack.breakMergeChain();
+    _phoenixView->clearCaches();
+    _phoenixView->update();
+}
+
+void MainWindow::breakApartSelection()
+{
+    if (!_phoenixView)
+        return;
+
+    // Groups come apart; drawing objects become merge artwork, which floats
+    // selected until let go, like a fresh drawing; a symbol instance is
+    // replaced by a copy of what it shows, whose merge artwork floats the
+    // same way.
+    std::vector<fla::Group*> groups;
+    std::vector<fla::Shape*> drawingObjects;
+    std::vector<fla::SymbolInstance*> instances;
+    for (fla::DOMElement* selected : _selection.elements())
+    {
+        fla::Element* element = dynamic_cast<fla::Element*>(selected);
+        if (!element || !frameOfElement(element))
+            continue;
+        if (element->elementType() == fla::Element::Type::Group)
+            groups.push_back(static_cast<fla::Group*>(element));
+        else if (element->elementType() == fla::Element::Type::Shape &&
+            static_cast<fla::Shape*>(element)->isDrawingObject)
+            drawingObjects.push_back(static_cast<fla::Shape*>(element));
+        else if (element->elementType() == fla::Element::Type::SymbolInstance)
+            instances.push_back(static_cast<fla::SymbolInstance*>(element));
+    }
+    if (groups.empty() && drawingObjects.empty() && instances.empty())
+        return;
+
+    fla::CommandStack& stack = _editContext.commandStack();
+    stack.beginMacro("Break Apart");
+    for (fla::Group* group : groups)
+    {
+        stack.push(fla::CommandPtr(new fla::UngroupCommand(
+            frameOfElement(group), group, "Break Apart", &_selection)));
+    }
+    for (fla::SymbolInstance* instance : instances)
+    {
+        fla::Frame* frame = frameOfElement(instance);
+        fla::BreakApartInstanceCommand* command =
+            new fla::BreakApartInstanceCommand(frame, instance, "Break Apart", &_selection);
+        const std::vector<fla::Element*> pieces = command->pieces();
+        stack.push(fla::CommandPtr(command));
+        for (fla::Element* piece : pieces)
+        {
+            if (piece->elementType() == fla::Element::Type::Shape &&
+                !static_cast<fla::Shape*>(piece)->isDrawingObject)
+            {
+                _phoenixView->setPendingMerge(static_cast<fla::Shape*>(piece), frame);
+            }
+        }
+    }
+    for (fla::Shape* shape : drawingObjects)
+    {
+        stack.push(fla::CommandPtr(new fla::SetDrawingObjectCommand(shape, false, "Break Apart")));
+        _phoenixView->setPendingMerge(shape, frameOfElement(shape));
+    }
+    stack.endMacro();
+    stack.breakMergeChain();
+    _phoenixView->clearCaches();
+    _phoenixView->update();
+}
+
+void MainWindow::convertToSymbol()
+{
+    if (!_phoenixView || !_flaDocument || !_flaDocument->document)
+        return;
+
+    // Everything selected that sits directly in one frame.
+    std::vector<fla::Element*> elements;
+    fla::Frame* frame = nullptr;
+    QRectF bounds;
+    for (fla::DOMElement* selected : _selection.elements())
+    {
+        fla::Element* element = dynamic_cast<fla::Element*>(selected);
+        if (!element || !element->parent ||
+            element->parent->domType() != fla::DOMElement::DOMType::Frame)
+        {
+            continue;
+        }
+        fla::Frame* owner = static_cast<fla::Frame*>(element->parent);
+        if (frame && owner != frame)
+            continue;
+        frame = owner;
+        elements.push_back(element);
+
+        const QRectF elementBounds = _phoenixView->elementBounds(element);
+        if (elementBounds.isValid())
+            bounds = bounds.isValid() ? bounds.united(elementBounds) : elementBounds;
+    }
+    if (!frame || elements.empty())
+        return;
+
+    // A region lifted out of a shape is converted as it is, like a selected
+    // fill in Animate; flushing it would merge it back into its source first.
+
+    // The first name not already in the library, as Animate numbers them,
+    // offered in the dialog.
+    fla::Document* document = _flaDocument->document;
+    std::string symbolName;
+    for (int n = 1; ; ++n)
+    {
+        symbolName = "Symbol " + std::to_string(n);
+        if (!document->symbolList || document->symbolList->symbolMap.count(symbolName) == 0)
+            break;
+    }
+
+    ConvertToSymbolDialog dialog(QString::fromStdString(symbolName), this);
+    for (;;)
+    {
+        if (dialog.exec() != QDialog::Accepted)
+            return;
+
+        // The name has to be one the library does not have; Animate refuses
+        // a clash rather than renaming behind the user's back.
+        symbolName = dialog.symbolName().toStdString();
+        if (symbolName.empty())
+        {
+            QMessageBox::warning(this, "Convert to Symbol", "Please enter a name for the symbol.");
+            continue;
+        }
+        if (document->symbolList && document->symbolList->symbolMap.count(symbolName) != 0)
+        {
+            QMessageBox::warning(this, "Convert to Symbol",
+                QString("A symbol named \"%1\" already exists in the library.")
+                    .arg(QString::fromStdString(symbolName)));
+            continue;
+        }
+        break;
+    }
+
+    // The registration point is the corner, edge or centre of the selection
+    // the dialog's grid picked.
+    QPointF registration;
+    if (bounds.isValid())
+    {
+        const QPointF fraction = dialog.registrationFraction();
+        registration = QPointF(bounds.left() + bounds.width() * fraction.x(),
+            bounds.top() + bounds.height() * fraction.y());
+    }
+
+    fla::CommandStack& stack = _editContext.commandStack();
+    stack.push(fla::CommandPtr(new fla::ConvertToSymbolCommand(document, frame, elements,
+        symbolName, registration.x(), registration.y(), "Convert to Symbol", &_selection,
+        dialog.symbolType())));
+    stack.breakMergeChain();
+
+    // The library gained an item, which the document tree lists.
+    _documentView->setDocument(_flaDocument);
+    _phoenixView->clearCaches();
+    _phoenixView->update();
+}
+
+void MainWindow::arrangeSelection(int step, bool toEnd)
+{
+    if (!_phoenixView)
+        return;
+
+    // Each selected element in its own frame, ordered so that moving one does
+    // not shuffle the next out of place: towards the front from the top down,
+    // towards the back from the bottom up.
+    struct Entry
+    {
+        fla::Frame* frame;
+        fla::Element* element;
+        int index;
+    };
+    std::vector<Entry> entries;
+    for (fla::DOMElement* selected : _selection.elements())
+    {
+        fla::Element* element = dynamic_cast<fla::Element*>(selected);
+        if (!element || !element->parent ||
+            element->parent->domType() != fla::DOMElement::DOMType::Frame)
+        {
+            continue;
+        }
+        fla::Frame* frame = static_cast<fla::Frame*>(element->parent);
+        const auto it = std::find(frame->elements.begin(), frame->elements.end(), element);
+        if (it == frame->elements.end())
+            continue;
+        entries.push_back({frame, element, static_cast<int>(it - frame->elements.begin())});
+    }
+    if (entries.empty())
+        return;
+
+    std::sort(entries.begin(), entries.end(), [step](const Entry& a, const Entry& b) {
+        return step > 0 ? a.index > b.index : a.index < b.index;
+    });
+
+    fla::CommandStack& stack = _editContext.commandStack();
+    stack.beginMacro(step > 0 ? (toEnd ? "Bring to Front" : "Bring Forward")
+                              : (toEnd ? "Send to Back" : "Send Backward"));
+    for (const Entry& entry : entries)
+    {
+        const int count = static_cast<int>(entry.frame->elements.size());
+        const int target = toEnd ? (step > 0 ? count - 1 : 0) : entry.index + step;
+        if (target == entry.index || target < 0 || target >= count)
+            continue;
+        stack.push(fla::CommandPtr(new fla::ReorderElementCommand(
+            entry.frame, entry.element, target, "Arrange")));
+    }
+    stack.endMacro();
+    stack.breakMergeChain();
+    _phoenixView->clearCaches();
+    _phoenixView->update();
 }
 
 std::vector<fla::Shape*> MainWindow::selectedShapes() const
@@ -1371,6 +1830,36 @@ void MainWindow::updateSelectionState()
         _deselectAllAction->setEnabled(!_selection.isEmpty());
 
     const bool hasShapes = !selectedShapes().empty();
+    const bool hasElements = !_selection.isEmpty();
+    if (_groupAction)
+        _groupAction->setEnabled(_selection.count() >= 1);
+    bool hasGroup = false;
+    bool hasDrawingObject = false;
+    bool hasInstance = false;
+    for (fla::DOMElement* selected : _selection.elements())
+    {
+        fla::Element* element = dynamic_cast<fla::Element*>(selected);
+        if (!element)
+            continue;
+        if (element->elementType() == fla::Element::Type::Group)
+            hasGroup = true;
+        if (element->elementType() == fla::Element::Type::Shape &&
+            static_cast<fla::Shape*>(element)->isDrawingObject)
+            hasDrawingObject = true;
+        if (element->elementType() == fla::Element::Type::SymbolInstance)
+            hasInstance = true;
+    }
+    if (_ungroupAction)
+        _ungroupAction->setEnabled(hasGroup);
+    if (_breakApartAction)
+        _breakApartAction->setEnabled(hasGroup || hasDrawingObject || hasInstance);
+    for (QAction* action : _arrangeActions)
+    {
+        if (action)
+            action->setEnabled(hasElements);
+    }
+    if (_convertToSymbolAction)
+        _convertToSymbolAction->setEnabled(hasElements);
     if (_cutAction)
         _cutAction->setEnabled(hasShapes);
     if (_copyAction)

@@ -7,6 +7,8 @@
 #include <QTreeWidgetItem>
 #include <QIcon>
 
+#include <vector>
+
 /// The layer list beside the timeline, laid out the way Animate's is: the
 /// layer name, then an eye column, a lock column and the layer's outline
 /// colour. Clicking a name makes that layer the current one, which is where
@@ -18,6 +20,10 @@ public:
     explicit LayersPanel(QWidget *parent = nullptr);
 
     void setDocument(const fla::FLADocument* document);
+
+    /// Shows one timeline's layers only, as when a symbol is being edited;
+    /// null shows the document's.
+    void setTimeline(fla::Timeline* timeline);
 
 signals:
     void layerVisibilityChanged(const QString& timelineName, int layerIndex, bool visible);
@@ -40,7 +46,10 @@ private:
     };
 
     const fla::FLADocument* _flaDocument;
+    fla::Timeline* _timeline = nullptr;
     QTreeWidget* _treeWidget;
+
+    std::vector<fla::Timeline*> shownTimelines() const;
     QIcon _layerIcon;
     QIcon _folderIcon;
     QIcon _openFolderIcon;

@@ -1,0 +1,21 @@
+#pragma once
+
+namespace fla {
+
+class DOMElement;
+class Element;
+class StaticText;
+
+/// Deep-copies any element that can sit in a frame: shapes with their edges
+/// and styles, groups with their members, symbol and bitmap instances with
+/// the library item they point at, text with its runs, and primitives with
+/// their styles. The copy owns everything it holds and has no parent beyond
+/// \a parent. Returns null for an element kind that cannot be copied.
+Element* cloneElement(const Element& element, DOMElement* parent);
+
+/// Replaces a text's box and runs with another's, leaving its transform and
+/// its place in the frame alone. What the text tool's undo swaps.
+void setTextContents(StaticText& target, const StaticText& source);
+
+
+} // namespace fla

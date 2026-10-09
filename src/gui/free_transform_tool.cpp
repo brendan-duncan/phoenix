@@ -1,12 +1,15 @@
 #include "free_transform_tool.h"
 
 #include "phoenix_view.h"
+#include "selection_targets.h"
 
 #include "../data/element.h"
 #include "../data/shape.h"
 #include "../edit/command_stack.h"
 #include "../edit/element_commands.h"
 #include "../edit/selection.h"
+#include "../edit/shape_merge.h"
+#include "../edit/shape_transform.h"
 #include "../edit/snapping.h"
 
 #include <QKeyEvent>
@@ -49,6 +52,52 @@ double distance(const QPointF& a, const QPointF& b)
     return std::hypot(a.x() - b.x(), a.y() - b.y());
 }
 
+double dot(const QPointF& a, const QPointF& b)
+{
+    return a.x() * b.x() + a.y() * b.y();
+}
+
+/// Where (u, v) in the unit square lands on a four-cornered box: the corners
+/// blended two ways, which keeps the edges straight.
+QPointF bilinear(const QPolygonF& box, double u, double v)
+{
+    const QPointF top = box[0] * (1.0 - u) + box[1] * u;
+    const QPointF bottom = box[3] * (1.0 - u) + box[2] * u;
+    return top * (1.0 - v) + bottom * v;
+}
+
+/// The (u, v) whose bilinear image on \a box is \a point. A parallelogram
+/// gives this exactly from its two edge vectors; a box already pulled out
+/// of true is refined from that guess with a few Newton steps.
+QPointF inverseBilinear(const QPolygonF& box, const QPointF& point)
+{
+    const QPointF ax = box[1] - box[0];
+    const QPointF ay = box[3] - box[0];
+    const double det = ax.x() * ay.y() - ax.y() * ay.x();
+    if (std::fabs(det) < 1.0e-12)
+        return QPointF(0.0, 0.0);
+
+    const QPointF d = point - box[0];
+    double u = (d.x() * ay.y() - d.y() * ay.x()) / det;
+    double v = (ax.x() * d.y() - ax.y() * d.x()) / det;
+
+    for (int step = 0; step < 6; ++step)
+    {
+        const QPointF residual = bilinear(box, u, v) - point;
+        if (std::fabs(residual.x()) < 1.0e-9 && std::fabs(residual.y()) < 1.0e-9)
+            break;
+        // Partial derivatives of the bilinear map at (u, v).
+        const QPointF du = (box[1] - box[0]) * (1.0 - v) + (box[2] - box[3]) * v;
+        const QPointF dv = (box[3] - box[0]) * (1.0 - u) + (box[2] - box[1]) * u;
+        const double j = du.x() * dv.y() - du.y() * dv.x();
+        if (std::fabs(j) < 1.0e-12)
+            break;
+        u -= (residual.x() * dv.y() - residual.y() * dv.x()) / j;
+        v -= (du.x() * residual.y() - du.y() * residual.x()) / j;
+    }
+    return QPointF(u, v);
+}
+
 /// Shortest distance from \a point to the segment \a a -> \a b.
 double distanceToSegment(const QPointF& point, const QPointF& a, const QPointF& b)
 {
@@ -63,6 +112,11 @@ double distanceToSegment(const QPointF& point, const QPointF& a, const QPointF& 
 }
 
 } // namespace
+
+FreeTransformTool::~FreeTransformTool()
+{
+    clearDistortTargets();
+}
 
 QPointF FreeTransformTool::centerOf(const QPolygonF& box)
 {
@@ -157,23 +211,15 @@ void FreeTransformTool::rebuildBox(PhoenixView& view)
 void FreeTransformTool::rememberBoxOwners()
 {
     _boxOwners.clear();
-    for (fla::DOMElement* selected : _selection.elements())
-    {
-        fla::Element* element = dynamic_cast<fla::Element*>(selected);
-        if (element)
-            _boxOwners.push_back({element, element->transform});
-    }
+    for (fla::Element* element : transformLeaves(_selection))
+        _boxOwners.push_back({element, element->transform});
 }
 
 bool FreeTransformTool::boxMatchesSelection() const
 {
     size_t count = 0;
-    for (fla::DOMElement* selected : _selection.elements())
+    for (fla::Element* element : transformLeaves(_selection))
     {
-        fla::Element* element = dynamic_cast<fla::Element*>(selected);
-        if (!element)
-            continue;
-
         ++count;
         bool found = false;
         for (const BoxOwner& owner : _boxOwners)
@@ -359,41 +405,22 @@ bool FreeTransformTool::mousePress(PhoenixView& view, QMouseEvent* event, const 
             return false;
     }
 
-    const double tolerance = view.pickTolerance();
-    const double handleTolerance = qMax(tolerance, kHandleScreenSize / qMax(view.zoom(), 1.0e-6));
-    const double rotateBand = kRotateBandScreenSize / qMax(view.zoom(), 1.0e-6);
-
-    _grip = Grip::None;
     _gripIndex = -1;
+    _grip = gripAt(view, documentPos, _gripIndex);
 
-    const int handle = handleAt(documentPos, handleTolerance);
-    if (handle >= 0)
+    // Ctrl on a corner is Distort, which only shapes can take: their points
+    // are rewritten, where a symbol or text has only a matrix to change.
+    if (_grip == Grip::Handle && _gripIndex % 2 == 0 && (event->modifiers() & Qt::ControlModifier))
     {
-        _grip = Grip::Handle;
-        _gripIndex = handle;
-    }
-    else
-    {
-        const int edge = edgeAt(documentPos, handleTolerance);
-        if (edge >= 0)
+        const std::vector<fla::Element*> leaves = transformLeaves(_selection);
+        bool allShapes = !leaves.empty();
+        for (fla::Element* leaf : leaves)
         {
-            _grip = Grip::Skew;
-            _gripIndex = edge;
+            if (!leaf || leaf->elementType() != fla::Element::Type::Shape)
+                allShapes = false;
         }
-        else if (_box.containsPoint(documentPos, Qt::OddEvenFill))
-        {
-            _grip = Grip::Body;
-        }
-        else
-        {
-            // Just outside a corner is the rotate band, the way Animate does it.
-            const int nearCorner = handleAt(documentPos, handleTolerance + rotateBand);
-            if (nearCorner >= 0 && nearCorner % 2 == 0)
-            {
-                _grip = Grip::Rotate;
-                _gripIndex = nearCorner;
-            }
-        }
+        if (allShapes)
+            _grip = Grip::Distort;
     }
 
     if (_grip == Grip::None)
@@ -421,12 +448,8 @@ bool FreeTransformTool::mousePress(PhoenixView& view, QMouseEvent* event, const 
     _boxAtDragStart = _box;
 
     _targets.clear();
-    for (fla::DOMElement* selected : _selection.elements())
-    {
-        fla::Element* element = dynamic_cast<fla::Element*>(selected);
-        if (element)
-            _targets.push_back({element, element->transform});
-    }
+    for (fla::Element* element : transformLeaves(_selection))
+        _targets.push_back({element, element->transform});
 
     if (_targets.empty())
     {
@@ -434,24 +457,134 @@ bool FreeTransformTool::mousePress(PhoenixView& view, QMouseEvent* event, const 
         return false;
     }
 
+    if (_grip == Grip::Distort)
+    {
+        clearDistortTargets();
+        for (const Target& target : _targets)
+        {
+            fla::Shape* shape = static_cast<fla::Shape*>(target.element);
+            _distortTargets.push_back({shape, fla::cloneShape(*shape, nullptr)});
+        }
+    }
+
     // What this gesture can line up with, gathered once: it does not change
     // while the drag runs.
     if (fla::Snapper* snapper = view.snapper())
+        view.gatherSnapCandidates(*snapper, topLevelElements(_selection));
+
+    showCursorFor(view, _grip, _gripIndex);
+    return true;
+}
+
+FreeTransformTool::Grip FreeTransformTool::gripAt(PhoenixView& view, const QPointF& documentPos,
+    int& index) const
+{
+    index = -1;
+    if (!_boxValid || _box.size() != 4)
+        return Grip::None;
+
+    const double tolerance = view.pickTolerance();
+    const double handleTolerance = qMax(tolerance, kHandleScreenSize / qMax(view.zoom(), 1.0e-6));
+    const double rotateBand = kRotateBandScreenSize / qMax(view.zoom(), 1.0e-6);
+
+    const int handle = handleAt(documentPos, handleTolerance);
+    if (handle >= 0)
     {
-        std::vector<fla::Element*> moving;
-        moving.reserve(_targets.size());
-        for (const Target& target : _targets)
-            moving.push_back(target.element);
-        view.gatherSnapCandidates(*snapper, moving);
+        index = handle;
+        return Grip::Handle;
     }
 
-    return true;
+    const int edge = edgeAt(documentPos, handleTolerance);
+    if (edge >= 0)
+    {
+        index = edge;
+        return Grip::Skew;
+    }
+
+    if (_box.containsPoint(documentPos, Qt::OddEvenFill))
+        return Grip::Body;
+
+    // Just outside a corner is the rotate band, the way Animate does it.
+    const int nearCorner = handleAt(documentPos, handleTolerance + rotateBand);
+    if (nearCorner >= 0 && nearCorner % 2 == 0)
+    {
+        index = nearCorner;
+        return Grip::Rotate;
+    }
+    return Grip::None;
+}
+
+int FreeTransformTool::eighthTurnsFor(const QPointF& direction)
+{
+    if (std::abs(direction.x()) < 1.0e-9 && std::abs(direction.y()) < 1.0e-9)
+        return 0;
+    const double degrees = std::atan2(direction.y(), direction.x()) * 180.0 / kPi;
+    const int turns = static_cast<int>(std::lround(degrees / 45.0));
+    return ((turns % 8) + 8) % 8;
+}
+
+void FreeTransformTool::showCursorFor(PhoenixView& view, Grip grip, int index)
+{
+    Cursors::Kind kind = Cursors::Kind::Arrow;
+    int turns = 0;
+    switch (grip)
+    {
+    case Grip::Body:
+        kind = Cursors::Kind::ArrowMove;
+        break;
+    case Grip::Handle:
+        // Along the line from the centre out through the handle: diagonal at
+        // a corner, across the edge at its midpoint.
+        kind = Cursors::Kind::Scale;
+        if (index >= 0 && _box.size() == 4)
+            turns = eighthTurnsFor(handlePoint(_box, index) - centerOf(_box));
+        break;
+    case Grip::Skew:
+        // Along the edge being pushed.
+        kind = Cursors::Kind::Skew;
+        if (index >= 0 && _box.size() == 4)
+            turns = eighthTurnsFor(_box[(index + 1) % 4] - _box[index]);
+        break;
+    case Grip::Rotate:
+        kind = Cursors::Kind::Rotate;
+        break;
+    case Grip::Distort:
+        kind = Cursors::Kind::Scale;
+        if (index >= 0 && _box.size() == 4)
+            turns = eighthTurnsFor(handlePoint(_box, index) - centerOf(_box));
+        break;
+    case Grip::None:
+        break;
+    }
+
+    if (kind != _hoverKind || turns != _hoverTurns)
+    {
+        _hoverKind = kind;
+        _hoverTurns = turns;
+        view.setCursor(cursor());
+    }
 }
 
 bool FreeTransformTool::mouseMove(PhoenixView& view, QMouseEvent* event, const QPointF& documentPos)
 {
     if (_grip == Grip::None)
+    {
+        // Hovering: the cursor says what a press here would do.
+        if (!_selection.isEmpty() && (!_boxValid || !boxMatchesSelection()))
+            rebuildBox(view);
+        int index = -1;
+        const Grip grip = _selection.isEmpty() ? Grip::None : gripAt(view, documentPos, index);
+        showCursorFor(view, grip, index);
         return false;
+    }
+
+    if (_grip == Grip::Distort)
+    {
+        const QPolygonF box = distortedBox(snapDragPoint(view, documentPos), event->modifiers());
+        applyDistort(view, box);
+        _box = box;
+        return true;
+    }
 
     const QTransform adjust = adjustForDrag(snapDragPoint(view, documentPos), event->modifiers());
     applyAdjust(view, adjust);
@@ -461,16 +594,162 @@ bool FreeTransformTool::mouseMove(PhoenixView& view, QMouseEvent* event, const Q
     return true;
 }
 
+QPolygonF FreeTransformTool::distortedBox(const QPointF& documentPos,
+    Qt::KeyboardModifiers modifiers) const
+{
+    QPolygonF box = _boxAtDragStart;
+    if (box.size() != 4 || _gripIndex < 0)
+        return box;
+
+    const int corner = _gripIndex / 2;
+    const QPointF delta = documentPos - _dragStart;
+    box[corner] += delta;
+
+    if (modifiers & Qt::ShiftModifier)
+    {
+        // Taper: the neighbour along the edge most in line with the drag
+        // goes the other way along that edge, and the same way across it.
+        const int previous = (corner + 3) % 4;
+        const int next = (corner + 1) % 4;
+        const QPointF toPrevious = _boxAtDragStart[previous] - _boxAtDragStart[corner];
+        const QPointF toNext = _boxAtDragStart[next] - _boxAtDragStart[corner];
+        const double alongPrevious = std::fabs(dot(delta, toPrevious)) /
+            qMax(1.0e-9, std::hypot(toPrevious.x(), toPrevious.y()));
+        const double alongNext = std::fabs(dot(delta, toNext)) /
+            qMax(1.0e-9, std::hypot(toNext.x(), toNext.y()));
+        const int neighbour = alongPrevious >= alongNext ? previous : next;
+        QPointF edge = neighbour == previous ? toPrevious : toNext;
+        const double length = std::hypot(edge.x(), edge.y());
+        if (length > 1.0e-9)
+        {
+            edge /= length;
+            const QPointF along = edge * dot(delta, edge);
+            const QPointF across = delta - along;
+            box[neighbour] += across - along;
+        }
+    }
+    return box;
+}
+
+void FreeTransformTool::applyDistort(PhoenixView& view, const QPolygonF& box)
+{
+    if (_boxAtDragStart.size() != 4 || box.size() != 4)
+        return;
+
+    for (const DistortTarget& target : _distortTargets)
+    {
+        if (!target.shape || !target.original)
+            continue;
+
+        // Every move starts again from the untouched geometry, so the warp
+        // is always the one drag, not a pile of small ones.
+        fla::setShapeContents(*target.shape, *target.original);
+
+        const QTransform toDocument = toQTransform(target.shape->transform);
+        bool invertible = false;
+        const QTransform toShape = toDocument.inverted(&invertible);
+        if (!invertible)
+            continue;
+
+        const QPolygonF& from = _boxAtDragStart;
+        fla::warpShape(*target.shape, [&](const fla::Point& point) {
+            const QPointF inDocument = toDocument.map(QPointF(point.x, point.y));
+            const QPointF uv = inverseBilinear(from, inDocument);
+            const QPointF warped = toShape.map(bilinear(box, uv.x(), uv.y()));
+            return fla::Point(warped.x(), warped.y());
+        });
+    }
+
+    view.clearCaches();
+    view.update();
+}
+
+void FreeTransformTool::restoreDistortTargets()
+{
+    for (const DistortTarget& target : _distortTargets)
+    {
+        if (target.shape && target.original)
+            fla::setShapeContents(*target.shape, *target.original);
+    }
+}
+
+void FreeTransformTool::clearDistortTargets()
+{
+    for (DistortTarget& target : _distortTargets)
+        delete target.original;
+    _distortTargets.clear();
+}
+
+void FreeTransformTool::commitDistort(PhoenixView& view)
+{
+    std::vector<fla::CommandPtr> commands;
+    for (const DistortTarget& target : _distortTargets)
+    {
+        if (!target.shape || !target.original)
+            continue;
+
+        // The command snapshots its target as the "before", so the shape is
+        // put back first and the warped copy handed over as the "after".
+        std::unique_ptr<fla::Shape> after(fla::cloneShape(*target.shape, nullptr));
+        fla::setShapeContents(*target.shape, *target.original);
+        commands.push_back(fla::CommandPtr(
+            new fla::SetShapeContentsCommand(target.shape, *after, "Distort")));
+    }
+
+    if (!commands.empty())
+    {
+        const bool needsMacro = commands.size() > 1;
+        if (needsMacro)
+            _commandStack.beginMacro("Distort");
+        for (fla::CommandPtr& command : commands)
+            _commandStack.push(std::move(command));
+        if (needsMacro)
+            _commandStack.endMacro();
+        _commandStack.breakMergeChain();
+
+        for (const DistortTarget& target : _distortTargets)
+        {
+            if (target.shape)
+                view.markShapeEdited(target.shape);
+        }
+    }
+
+    clearDistortTargets();
+    _grip = Grip::None;
+    _gripIndex = -1;
+    _targets.clear();
+
+    // The box keeps the pulled-out shape until the selection changes, as
+    // Animate's does.
+    rememberBoxOwners();
+    view.clearCaches();
+    view.update();
+}
+
 bool FreeTransformTool::mouseRelease(PhoenixView& view, QMouseEvent* event, const QPointF& documentPos)
 {
     if (event->button() != Qt::LeftButton || _grip == Grip::None)
         return false;
+
+    if (_grip == Grip::Distort)
+    {
+        const QPolygonF box = distortedBox(snapDragPoint(view, documentPos), event->modifiers());
+        applyDistort(view, box);
+        _box = box;
+        commitDistort(view);
+        int index = -1;
+        showCursorFor(view, gripAt(view, documentPos, index), index);
+        return true;
+    }
 
     const QTransform adjust = adjustForDrag(snapDragPoint(view, documentPos), event->modifiers());
     applyAdjust(view, adjust);
     _box = adjust.map(_boxAtDragStart);
 
     commit(view);
+
+    int index = -1;
+    showCursorFor(view, gripAt(view, documentPos, index), index);
     return true;
 }
 
@@ -483,6 +762,7 @@ void FreeTransformTool::commit(PhoenixView& view)
     case Grip::Handle: gestureName = "Scale"; break;
     case Grip::Rotate: gestureName = "Rotate"; break;
     case Grip::Skew:   gestureName = "Skew"; break;
+    case Grip::Distort: gestureName = "Distort"; break;
     case Grip::None:   break;
     }
 
@@ -550,6 +830,12 @@ bool FreeTransformTool::keyPress(PhoenixView& view, QKeyEvent* event)
         if (target.element)
             target.element->transform = target.startTransform;
     }
+    if (_grip == Grip::Distort)
+    {
+        restoreDistortTargets();
+        clearDistortTargets();
+        view.clearCaches();
+    }
 
     _box = _boxAtDragStart;
     _grip = Grip::None;
@@ -607,6 +893,12 @@ void FreeTransformTool::deactivate(PhoenixView& view)
             if (target.element)
                 target.element->transform = target.startTransform;
         }
+        if (_grip == Grip::Distort)
+        {
+            restoreDistortTargets();
+            clearDistortTargets();
+            view.clearCaches();
+        }
         _targets.clear();
         _grip = Grip::None;
         view.invalidateBounds();
@@ -614,4 +906,6 @@ void FreeTransformTool::deactivate(PhoenixView& view)
     }
 
     _boxValid = false;
+    _hoverKind = Cursors::Kind::Arrow;
+    _hoverTurns = 0;
 }

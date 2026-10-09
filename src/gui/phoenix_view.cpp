@@ -6,6 +6,7 @@
 #include "../edit/element_commands.h"
 #include "../edit/region_split.h"
 #include "../edit/selection.h"
+#include "../edit/shape_merge.h"
 
 #include <QTimer>
 
@@ -21,11 +22,14 @@
 #include "../data/rectangle_primitive.h"
 #include "../data/solid_color.h"
 #include "../data/static_text.h"
+#include "text_layout.h"
+#include "../data/symbol.h"
 #include "../data/symbol_instance.h"
 #include "../data/frame.h"
 #include "../data/morph_shape.h"
 #include "../data/morph_curves.h"
 #include <algorithm>
+#include <memory>
 #include <map>
 #include <iostream>
 #include <cmath>
@@ -432,22 +436,8 @@ void PhoenixView::paintEvent(QPaintEvent *event)
         // scaled back down afterwards.
         const double ss = static_cast<double>(supersampleFactor);
         bufferPainter.scale(ss, ss);
-        bufferPainter.setTransform(documentToWidget(), true);
-
-        viewTransform = bufferPainter.transform();
-
-        bufferPainter.fillRect(QRectF(0, 0, docWidth, docHeight),
-            QColor(document->backgroundColor[0], document->backgroundColor[1],
-                document->backgroundColor[2], document->backgroundColor[3]));
-
-        if (_showGrid)
-            drawGrid(bufferPainter, document);
-
-        drawDocument(bufferPainter, document);
-
-        bufferPainter.setPen(QPen(QColor(0, 0, 0, 255), 1.0));
-        bufferPainter.drawRect(0, 0, docWidth, docHeight);
-
+        bufferPainter.setTransform(rootToWidget(), true);
+        drawStageContents(bufferPainter, document);
         bufferPainter.end();
 
         painter.setRenderHint(QPainter::SmoothPixmapTransform, true);
@@ -463,21 +453,9 @@ void PhoenixView::paintEvent(QPaintEvent *event)
     else
     {
         painter.save();
-        painter.setTransform(documentToWidget(), true);
-
-        viewTransform = painter.transform();
-
-        painter.fillRect(0, 0, docWidth, docHeight,
-            QColor(document->backgroundColor[0], document->backgroundColor[1],
-                document->backgroundColor[2], document->backgroundColor[3]));
-
-        if (_showGrid)
-            drawGrid(painter, document);
-
-        drawDocument(painter, document);
-
-        painter.setPen(QPen(QColor(0, 0, 0, 255), 1.0));
-        painter.drawRect(0, 0, docWidth, docHeight);
+        painter.setTransform(rootToWidget(), true);
+        drawStageContents(painter, document);
+        painter.setTransform(documentToWidget(), false);
         drawToolOverlay(painter);
         painter.restore();
     }
@@ -512,6 +490,44 @@ void PhoenixView::paintEvent(QPaintEvent *event)
 
         painter.restore();
     }
+}
+
+void PhoenixView::drawStageContents(QPainter& painter, const fla::Document* document)
+{
+    const QTransform rootFull = painter.transform();
+    viewTransform = rootFull;
+
+    const double docWidth = document->width;
+    const double docHeight = document->height;
+
+    painter.fillRect(QRectF(0, 0, docWidth, docHeight),
+        QColor(document->backgroundColor[0], document->backgroundColor[1],
+            document->backgroundColor[2], document->backgroundColor[3]));
+
+    if (_showGrid)
+        drawGrid(painter, document);
+
+    if (_scope.empty())
+    {
+        drawDocument(painter, document);
+    }
+    else
+    {
+        // Edit in place: everything outside the symbol being edited fades
+        // back, and the symbol draws over it at full strength in its own
+        // space, which is where the tools now work.
+        painter.setOpacity(0.3);
+        drawDocument(painter, document);
+        painter.setOpacity(1.0);
+
+        painter.setTransform(scopeToDocument() * rootFull, false);
+        if (_scope.back().timeline)
+            drawTimeline(painter, _scope.back().timeline, fla::LoopType::PlayOnce, 0);
+        painter.setTransform(rootFull, false);
+    }
+
+    painter.setPen(QPen(QColor(0, 0, 0, 255), 1.0));
+    painter.drawRect(QRectF(0, 0, docWidth, docHeight));
 }
 
 void PhoenixView::drawDocument(QPainter& painter, const fla::Document* document)
@@ -903,73 +919,7 @@ void PhoenixView::drawElement(QPainter& painter, const fla::Element* element, co
             return;
         }
 
-        painter.setBrush(Qt::NoBrush);
-        const fla::StaticText* staticText = static_cast<const fla::StaticText*>(element);
-        for (const fla::TextRun& run : staticText->runs)
-        {
-            painter.setPen(QPen(QColor(run.fillColor[0], run.fillColor[1], run.fillColor[2], run.fillColor[3]), 1.0));
-            QString fontFace = run.face.empty() ? "Arial" : QString::fromStdString(run.face);
-
-            if (!_fontCache.contains(fontFace))
-            {
-                 bool isItalic = false;
-                if (fontFace.endsWith("-Italic"))
-                {
-                    fontFace = fontFace.left(fontFace.length() - 7);
-                    isItalic = true;
-                }
-
-                QString fontFamily;
-                fontFamily = fontFace[0];
-                for (int ci = 1; ci < fontFace.length(); ++ci)
-                {
-                    QChar c = fontFace[ci];
-                    if (c >= 'A' && c <= 'Z')
-                    {
-                        QChar c0 = fontFace[ci - 1];
-                        if (c0 >= 'a' && c0 <= 'z')
-                        {
-                            fontFamily += " ";
-                        }
-                    }
-                    fontFamily += c;
-                }
-
-                if (fontFamily.endsWith(" MT"))
-                {
-                    fontFamily = fontFamily.left(fontFamily.length() - 3);
-                }
-                else if (fontFamily.endsWith(" PS"))
-                {
-                    fontFamily = fontFamily.left(fontFamily.length() - 3);
-                }
-                else if (fontFamily.endsWith(" PSMT"))
-                {
-                    fontFamily = fontFamily.left(fontFamily.length() - 5);
-                }
-
-                QFontDatabase fontDatabase;
-                if (!fontDatabase.families().contains(fontFamily))
-                {
-                    /*for (const QString& availableFamily : fontDatabase.families())
-                    {
-                        qDebug() << "    family:" << availableFamily;
-                    }*/
-                    fontFamily = "Arial";
-                }
-
-                QFont font(fontFamily, (int)run.size, -1, isItalic);
-                _fontCache[fontFace] = font;
-            }
-
-            QFont font = _fontCache[fontFace];
-            font.setWeight(QFont::Normal);
-            double size = run.size == 0.0 ? 12.0 : run.size;
-            font.setPointSizeF(size * 0.75); // Adjust size to better match Flash's rendering
-            painter.setFont(font);
-            // The origin is the top-left, not the bottom-left, so we use the text size as an approximation for line height
-            painter.drawText(staticText->left, staticText->top + run.size, QString::fromStdString(run.text));
-        }
+        TextLayout::draw(painter, *static_cast<const fla::StaticText*>(element));
     }
     else if (type == fla::Element::Type::BitmapInstance)
     {
@@ -1879,13 +1829,17 @@ HitResult PhoenixView::hitTest(const QPointF& documentPos, double tolerance) con
     if (!document->visible)
         return result;
 
-    for (const fla::Timeline* timeline : document->timelines)
+    // Inside a symbol only its own timeline can be picked; the dimmed
+    // document behind it is out of reach, as in Animate.
+    for (const fla::Timeline* timeline : editableTimelines())
     {
         if (!timeline->visible)
             continue;
 
         self->hitTestTimeline(*timeline, fla::LoopType::PlayOnce, 0,
             QTransform(), documentPos, tolerance, result);
+        if (result)
+            break;
     }
 
     return result;
@@ -1961,16 +1915,25 @@ void PhoenixView::hitTestElement(fla::Element& element, fla::Frame* frame,
     {
     case fla::Element::Type::Group:
     {
+        // Clicking anything inside a group picks the group, as in Animate;
+        // editing the contents means entering the group.
         fla::Group& group = static_cast<fla::Group&>(element);
-        for (auto it = group.members.rbegin(); it != group.members.rend(); ++it)
+        HitResult inner;
+        for (auto it = group.members.rbegin(); it != group.members.rend() && !inner; ++it)
         {
             if (*it)
             {
                 hitTestElement(**it, frame, loopType, elementToDocument,
-                    documentPos, tolerance, result);
+                    documentPos, tolerance, inner);
             }
-            if (result)
-                return;
+        }
+
+        if (inner)
+        {
+            result.element = &element;
+            result.frame = frame;
+            result.part = inner.part;
+            result.elementToDocument = elementToDocument;
         }
         return;
     }
@@ -2139,8 +2102,9 @@ void PhoenixView::mousePressEvent(QMouseEvent *event)
     // Ctrl reaches for the selection tool whatever is active, so something can
     // be moved without putting the drawing tool down. The gesture then belongs
     // to that tool until the button comes up, even if ctrl is let go first.
-    _gestureTool = ((event->modifiers() & Qt::ControlModifier) && _modifierTool)
-        ? _modifierTool : _activeTool;
+    const bool ctrlIsArrow = (event->modifiers() & Qt::ControlModifier) && _modifierTool &&
+        !(_activeTool && _activeTool->usesControlKey());
+    _gestureTool = ctrlIsArrow ? _modifierTool : _activeTool;
 
     if (!forcePan && _gestureTool &&
         _gestureTool->mousePress(*this, event, mapToDocument(event->position())))
@@ -2209,6 +2173,25 @@ void PhoenixView::mouseDoubleClickEvent(QMouseEvent* event)
     QWidget::mouseDoubleClickEvent(event);
 }
 
+bool PhoenixView::event(QEvent* event)
+{
+    // While a tool is taking typed text, a plain key is a character for it,
+    // not a tool shortcut; the window's shortcuts only see keys with ctrl.
+    if (event->type() == QEvent::ShortcutOverride && _activeTool && _activeTool->capturesKeyboard())
+    {
+        const QKeyEvent* key = static_cast<const QKeyEvent*>(event);
+        const Qt::KeyboardModifiers modifiers =
+            key->modifiers() & ~(Qt::ShiftModifier | Qt::KeypadModifier);
+        const bool altGr = modifiers == (Qt::ControlModifier | Qt::AltModifier);
+        if (modifiers == Qt::NoModifier || altGr)
+        {
+            event->accept();
+            return true;
+        }
+    }
+    return QWidget::event(event);
+}
+
 void PhoenixView::keyPressEvent(QKeyEvent* event)
 {
     if (_activeTool && _activeTool->keyPress(*this, event))
@@ -2232,7 +2215,8 @@ void PhoenixView::keyPressEvent(QKeyEvent* event)
 
     // Ctrl is the temporary arrow tool, and the cursor says so while it is
     // held, the way Animate does.
-    if (event->key() == Qt::Key_Control && _modifierTool && !_gestureTool && !_isDragging)
+    if (event->key() == Qt::Key_Control && _modifierTool && !_gestureTool && !_isDragging &&
+        !(_activeTool && _activeTool->usesControlKey()))
     {
         setCursor(_modifierTool->cursor());
         return;
@@ -2332,7 +2316,7 @@ std::vector<fla::Element*> PhoenixView::elementsIn(const QRectF& documentRect)
     if (!document->visible)
         return found;
 
-    for (const fla::Timeline* timeline : document->timelines)
+    for (const fla::Timeline* timeline : editableTimelines())
     {
         if (!timeline->visible)
             continue;
@@ -2405,9 +2389,13 @@ void PhoenixView::setPendingMerge(fla::Shape* shape, fla::Frame* frame)
 void PhoenixView::markShapeEdited(fla::Shape* shape)
 {
     // A drawing object keeps to itself: moving it never drops it into the
-    // artwork underneath.
-    if (!shape || shape->isDrawingObject)
+    // artwork underneath. Nor does a shape inside a group: only artwork sitting
+    // directly in the frame is merge artwork.
+    if (!shape || shape->isDrawingObject || !shape->parent ||
+        shape->parent->domType() != fla::DOMElement::DOMType::Frame)
+    {
         return;
+    }
 
     setPendingMerge(shape, const_cast<fla::Frame*>(owningFrame(shape)));
 }
@@ -2416,6 +2404,13 @@ void PhoenixView::clearPendingMerge()
 {
     _pending.clear();
     _floating.clear();
+
+    // The scope points into the document too.
+    if (!_scope.empty())
+    {
+        _scope.clear();
+        emit scopeChanged();
+    }
 }
 
 const PhoenixView::FloatingRegion* PhoenixView::floatingFor(const fla::Element* element) const
@@ -2436,6 +2431,12 @@ bool PhoenixView::isFloatingRegion(const fla::Element* element) const
 void PhoenixView::settleFloating()
 {
     if (_floating.empty() || !_selection || !_commandStack)
+        return;
+
+    // A command changing the selection as it runs -- grouping or converting
+    // what was lifted out -- is not the user letting go of it. Settling waits
+    // for the next change the user makes.
+    if (_commandStack->isExecuting())
         return;
 
     std::vector<FloatingRegion> keep;
@@ -2544,6 +2545,120 @@ bool PhoenixView::selectRegionAt(const HitResult& hit, const QPointF& documentPo
     return true;
 }
 
+namespace {
+
+/// A closed outline as the straight pieces that will cut an arrangement.
+std::vector<fla::Curve> outlineCurves(const QPainterPath& outline)
+{
+    std::vector<fla::Curve> curves;
+    for (const QPolygonF& polygon : outline.toSubpathPolygons())
+    {
+        if (polygon.size() < 3)
+            continue;
+
+        for (int i = 0; i < polygon.size(); ++i)
+        {
+            const QPointF& a = polygon[i];
+            const QPointF& b = polygon[(i + 1) % polygon.size()];
+            if (a == b)
+                continue;
+            curves.push_back(fla::Curve::line(fla::Point(a.x(), a.y()), fla::Point(b.x(), b.y())));
+        }
+    }
+    return curves;
+}
+
+} // namespace
+
+bool PhoenixView::selectRegionsIn(const QPainterPath& area, bool additive)
+{
+    if (!_selection || !_commandStack || _committingMerge)
+        return false;
+
+    std::vector<fla::DOMElement*> picked;
+
+    for (fla::Element* element : elementsIn(area.boundingRect()))
+    {
+        const QRectF bounds = getElementBounds(element);
+        if (!bounds.isValid() || !(area.intersects(bounds) || area.contains(bounds)))
+            continue;
+
+        fla::Shape* shape = element->elementType() == fla::Element::Type::Shape
+            ? static_cast<fla::Shape*>(element) : nullptr;
+        const bool mergeArtwork = shape && !shape->isDrawingObject && !isFloatingRegion(shape);
+
+        // Objects, and merge artwork the area swallows whole, are selected
+        // as they are.
+        if (!mergeArtwork || area.contains(bounds))
+        {
+            picked.push_back(element);
+            continue;
+        }
+
+        // Partly covered merge artwork is divided along the area's outline and
+        // the regions inside are lifted out, which is what lets half a fill be
+        // dragged away.
+        const fla::Transform& t = shape->transform;
+        const QTransform toDocument(t.m11, t.m12, t.m21, t.m22, t.tx, t.ty);
+        bool invertible = false;
+        const QTransform toShape = toDocument.inverted(&invertible);
+        if (!invertible)
+            continue;
+
+        const QPainterPath localArea = toShape.map(area);
+        const std::vector<fla::Curve> cutters = outlineCurves(localArea);
+        if (cutters.empty())
+            continue;
+
+        fla::RegionSplitter regions(*shape, cutters);
+        const auto inside = [&](const fla::Point& point) {
+            return localArea.contains(QPointF(point.x, point.y));
+        };
+        const std::vector<int> faces = regions.facesWhere(inside);
+        const std::vector<int> strokes = regions.strokesWhere(inside);
+        if (faces.empty() && strokes.empty())
+            continue;
+
+        fla::Shape* piece = nullptr;
+        fla::Shape* remainder = nullptr;
+        if (!regions.splitSet(faces, strokes, piece, remainder))
+            continue;
+
+        fla::Frame* frame = const_cast<fla::Frame*>(owningFrame(shape));
+        if (!frame)
+        {
+            delete piece;
+            delete remainder;
+            continue;
+        }
+
+        piece->transform = shape->transform;
+        _commandStack->push(fla::CommandPtr(new fla::SplitRegionCommand(
+            shape, *remainder, frame, piece, "Select", _selection)));
+        _commandStack->breakMergeChain();
+        delete remainder;
+
+        _floating.push_back({shape, piece, frame, _commandStack->topCommand()});
+        setPendingMerge(piece, frame);
+        picked.push_back(piece);
+    }
+
+    clearCaches();
+
+    if (additive)
+    {
+        for (fla::DOMElement* element : picked)
+            _selection->add(element);
+    }
+    else
+    {
+        _selection->select(picked);
+    }
+
+    update();
+    return !picked.empty();
+}
+
 void PhoenixView::flushPendingMerge()
 {
     if (!_selection || !_commandStack || _committingMerge)
@@ -2570,6 +2685,8 @@ void PhoenixView::flushPendingMerge()
 void PhoenixView::selectionChanged()
 {
     if (!_selection || _committingMerge)
+        return;
+    if (_commandStack && _commandStack->isExecuting())
         return;
 
     // Regions let go of untouched go straight back before anything is dropped.
@@ -2614,7 +2731,7 @@ fla::Frame* PhoenixView::activeFrame()
     const fla::Layer* fallback = nullptr;
     const fla::Layer* chosen = nullptr;
 
-    for (const fla::Timeline* timeline : _flaDocument->document->timelines)
+    for (const fla::Timeline* timeline : editableTimelines())
     {
         if (!timeline->visible)
             continue;
@@ -2670,13 +2787,17 @@ void PhoenixView::gatherSnapCandidates(fla::Snapper& snapper,
 
     const fla::Document* document = _flaDocument->document;
 
-    // The stage edges and centre are worth lining up with too.
-    snapper.addCandidateX(0.0);
-    snapper.addCandidateX(document->width / 2.0);
-    snapper.addCandidateX(document->width);
-    snapper.addCandidateY(0.0);
-    snapper.addCandidateY(document->height / 2.0);
-    snapper.addCandidateY(document->height);
+    // The stage edges and centre are worth lining up with too, at the scene;
+    // inside a symbol they are not in its space.
+    if (_scope.empty())
+    {
+        snapper.addCandidateX(0.0);
+        snapper.addCandidateX(document->width / 2.0);
+        snapper.addCandidateX(document->width);
+        snapper.addCandidateY(0.0);
+        snapper.addCandidateY(document->height / 2.0);
+        snapper.addCandidateY(document->height);
+    }
 
     // Everything on stage apart from what is being dragged: an object that
     // snapped to its own edge would simply never move.
@@ -2971,7 +3092,7 @@ void PhoenixView::zoomToFit()
 QRectF PhoenixView::contentBounds()
 {
     QRectF bounds;
-    if (_flaDocument && _flaDocument->document)
+    if (_flaDocument && _flaDocument->document && _scope.empty())
         bounds = QRectF(0.0, 0.0, _flaDocument->document->width, _flaDocument->document->height);
 
     const QRectF everything(-1.0e6, -1.0e6, 2.0e6, 2.0e6);
@@ -3030,6 +3151,110 @@ void PhoenixView::invalidateBounds()
 }
 
 QTransform PhoenixView::documentToWidget() const
+{
+    // Inside a symbol the tools work in the symbol's own space, so the
+    // mapping runs through every instance entered on the way in.
+    return scopeToDocument() * rootToWidget();
+}
+
+QTransform PhoenixView::scopeToDocument() const
+{
+    QTransform transform;
+    for (const EditScope& level : _scope)
+    {
+        const fla::Transform& t = level.instance->transform;
+        transform = QTransform(t.m11, t.m12, t.m21, t.m22, t.tx, t.ty) * transform;
+    }
+    return transform;
+}
+
+std::vector<const fla::Timeline*> PhoenixView::editableTimelines() const
+{
+    std::vector<const fla::Timeline*> timelines;
+    if (!_scope.empty())
+    {
+        if (_scope.back().timeline)
+            timelines.push_back(_scope.back().timeline);
+        return timelines;
+    }
+
+    if (_flaDocument && _flaDocument->document)
+    {
+        for (const fla::Timeline* timeline : _flaDocument->document->timelines)
+            timelines.push_back(timeline);
+    }
+    return timelines;
+}
+
+fla::Timeline* PhoenixView::scopeTimeline() const
+{
+    return _scope.empty() ? nullptr : _scope.back().timeline;
+}
+
+QString PhoenixView::scopeName(int depth) const
+{
+    if (depth <= 0)
+    {
+        if (_flaDocument && _flaDocument->document && !_flaDocument->document->timelines.empty())
+        {
+            const std::string& name = _flaDocument->document->timelines.front()->name;
+            if (!name.empty())
+                return QString::fromStdString(name);
+        }
+        return "Scene 1";
+    }
+
+    if (depth > static_cast<int>(_scope.size()))
+        return QString();
+
+    const fla::SymbolInstance* instance = _scope[depth - 1].instance;
+    if (instance && instance->symbol && !instance->symbol->name.empty())
+        return QString::fromStdString(instance->symbol->name);
+    return QString::fromStdString(instance ? instance->libraryItemName : std::string());
+}
+
+bool PhoenixView::enterSymbol(fla::SymbolInstance* instance)
+{
+    if (!instance || !instance->symbol || instance->symbol->timelines.empty())
+        return false;
+
+    // Whatever was floating in the outer scope goes in before leaving it.
+    flushPendingMerge();
+    if (_selection)
+        _selection->clear();
+
+    _scope.push_back({instance, instance->symbol->timelines.front()});
+    clearCaches();
+    emit scopeChanged();
+    update();
+    return true;
+}
+
+bool PhoenixView::exitScope()
+{
+    if (_scope.empty())
+        return false;
+
+    flushPendingMerge();
+    fla::SymbolInstance* instance = _scope.back().instance;
+    _scope.pop_back();
+    clearCaches();
+
+    if (_selection)
+        _selection->select(instance);
+
+    emit scopeChanged();
+    update();
+    return true;
+}
+
+void PhoenixView::exitToDepth(int depth)
+{
+    while (static_cast<int>(_scope.size()) > std::max(0, depth))
+        exitScope();
+}
+
+QTransform PhoenixView::rootToWidget() const
 {
     double docWidth = 0.0;
     double docHeight = 0.0;
@@ -3157,8 +3382,7 @@ QRectF PhoenixView::calculateElementBounds(const fla::Element* element)
     }
     else if (type == fla::Element::Type::StaticText)
     {
-        // Approximate bounds for text
-        QRectF bounds(0, 0, 200, 50);
+        QRectF bounds = TextLayout::localBounds(*static_cast<const fla::StaticText*>(element));
         QTransform transform(element->transform.m11, element->transform.m12,
                             element->transform.m21, element->transform.m22,
                             element->transform.tx, element->transform.ty);
@@ -3585,7 +3809,7 @@ QRectF PhoenixView::calculateElementLocalBounds(const fla::Element* element)
     }
     else if (type == fla::Element::Type::StaticText)
     {
-        return QRectF(0, 0, 200, 50);
+        return TextLayout::localBounds(*static_cast<const fla::StaticText*>(element));
     }
     else if (type == fla::Element::Type::Rectangle)
     {

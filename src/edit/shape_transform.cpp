@@ -54,4 +54,57 @@ void bakeTransform(Shape& shape)
     shape.transform.reset();
 }
 
+void warpShape(Shape& shape, const std::function<Point(const Point&)>& map)
+{
+    bool any = false;
+    double left = 0.0;
+    double top = 0.0;
+    double right = 0.0;
+    double bottom = 0.0;
+
+    for (Edge* edge : shape.edges)
+    {
+        if (!edge)
+            continue;
+
+        for (Path* path : edge->paths)
+        {
+            if (!path)
+                continue;
+
+            for (PathSegment* segment : path->segments)
+            {
+                if (!segment)
+                    continue;
+
+                for (Point& point : segment->points)
+                {
+                    point = map(point);
+                    if (!any)
+                    {
+                        left = right = point.x;
+                        top = bottom = point.y;
+                        any = true;
+                    }
+                    else
+                    {
+                        left = point.x < left ? point.x : left;
+                        right = point.x > right ? point.x : right;
+                        top = point.y < top ? point.y : top;
+                        bottom = point.y > bottom ? point.y : bottom;
+                    }
+                }
+            }
+        }
+
+        edge->data.clear();
+    }
+
+    if (any)
+    {
+        shape.localBounds = Rect(Point(left, top), Point(right, bottom));
+        shape.bounds = shape.localBounds;
+    }
+}
+
 } // namespace fla

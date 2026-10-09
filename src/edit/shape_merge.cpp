@@ -13,9 +13,6 @@
 
 namespace fla {
 
-namespace {
-
-/// Copies a fill so it can live in another shape's style table.
 FillStyle* cloneFill(const FillStyle* fill, DOMElement* parent)
 {
     if (!fill)
@@ -91,6 +88,8 @@ StrokeStyle* cloneStroke(const StrokeStyle* stroke, DOMElement* parent)
     copy->fill = cloneFill(stroke->fill, copy);
     return copy;
 }
+
+namespace {
 
 int nextIndex(const std::map<int, FillStyle*>& styles)
 {
@@ -248,6 +247,7 @@ bool ShapeMerger::subtract(Shape& target, const Shape& cutter)
 {
     return combine(target, cutter, Operation::Erase);
 }
+
 
 bool ShapeMerger::combine(Shape& target, const Shape& addition, Operation operation)
 {

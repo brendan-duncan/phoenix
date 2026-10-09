@@ -7,12 +7,14 @@
 #include "../data/fla_document.h"
 #include "free_transform_tool.h"
 #include "brush_tools.h"
+#include "lasso_tool.h"
 #include "navigation_tools.h"
 #include "paint_tools.h"
 #include "pen_tool.h"
 #include "pencil_tool.h"
 #include "primitive_tool.h"
 #include "subselection_tool.h"
+#include "text_tool.h"
 #include "selection_tool.h"
 #include "../edit/edit_context.h"
 #include "../edit/selection.h"
@@ -80,6 +82,18 @@ private slots:
     void pasteInPlace();
 
     void duplicateSelection();
+
+    void groupSelection();
+
+    void ungroupSelection();
+
+    void breakApartSelection();
+
+    void convertToSymbol();
+
+    /// Arrange: moves the selection in the z-order by \a step, or to the
+    /// front or back when \a toEnd is set.
+    void arrangeSelection(int step, bool toEnd);
 
 private:
     void setupUI();
@@ -153,6 +167,7 @@ private:
     std::unique_ptr<PrimitiveTool> _ovalPrimitiveTool;
     std::unique_ptr<HandTool> _handTool;
     std::unique_ptr<ZoomTool> _zoomTool;
+    std::unique_ptr<LassoTool> _lassoTool;
     std::unique_ptr<BrushTool> _brushTool;
     std::unique_ptr<EraserTool> _eraserTool;
     std::unique_ptr<PaintBucketTool> _paintBucketTool;
@@ -161,11 +176,18 @@ private:
     QAction* _paintBucketAction = nullptr;
     QAction* _inkBottleAction = nullptr;
 
+    /// The edit-in-place breadcrumb above the stage: the scene, then each
+    /// symbol entered. Clicking a level steps back out to it.
+    QWidget* _breadcrumb = nullptr;
+
+    void rebuildBreadcrumb();
+
     /// Redraws the fill and stroke swatches after the style changed from
     /// somewhere other than the swatch buttons, such as the eyedropper.
     void refreshStyleSwatches();
     std::unique_ptr<PenTool> _penTool;
     std::unique_ptr<PencilTool> _pencilTool;
+    std::unique_ptr<TextTool> _textTool;
     std::unique_ptr<SubselectionTool> _subselectionTool;
     fla::DrawingStyle _drawingStyle;
     QToolButton* _fillColorButton = nullptr;
@@ -178,6 +200,11 @@ private:
     QAction* _pasteAction = nullptr;
     QAction* _pasteInPlaceAction = nullptr;
     QAction* _duplicateAction = nullptr;
+    QAction* _groupAction = nullptr;
+    QAction* _ungroupAction = nullptr;
+    QAction* _breakApartAction = nullptr;
+    QAction* _convertToSymbolAction = nullptr;
+    QAction* _arrangeActions[4] = {nullptr, nullptr, nullptr, nullptr};
 
     /// Copies of the shapes last cut or copied. Only shapes can be copied so
     /// far, since nothing else can be cloned yet.

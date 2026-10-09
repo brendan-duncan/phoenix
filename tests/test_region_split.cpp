@@ -7,6 +7,7 @@
 #include "../src/edit/command_stack.h"
 #include "../src/edit/element_commands.h"
 #include "../src/edit/region_split.h"
+#include "../src/edit/shape_merge.h"
 #include "../src/geom/shape_geometry.h"
 #include "../src/parser/path_parser.h"
 
@@ -283,6 +284,52 @@ TEST(the_ink_bottle_strokes_the_outline_of_one_fill)
     CHECK(usesFill(*inked, 1) && usesFill(*inked, 2));
 }
 
+TEST(a_marquee_divides_a_fill_and_lifts_the_part_inside)
+{
+    // One red square 100 px across, and a marquee covering its left half.
+    std::unique_ptr<Shape> shape(new Shape(nullptr));
+    fla::SolidColor* fill = new fla::SolidColor(shape.get());
+    shape->fills.push_back(fill);
+    shape->fillsMap[1] = fill;
+    PathParser parser;
+    fla::Edge* edge = parser.parse("!0 0|2000 0|2000 2000|0 2000|0 0", shape.get());
+    CHECK(edge != nullptr);
+    if (!edge)
+        return;
+    edge->fillStyle1 = 1;
+    shape->edges.push_back(edge);
+
+    // The marquee: an outline that cuts the arrangement and paints nothing.
+    const std::vector<fla::Curve> marquee = {
+        fla::Curve::line(Point(-10.0, -10.0), Point(50.0, -10.0)),
+        fla::Curve::line(Point(50.0, -10.0), Point(50.0, 110.0)),
+        fla::Curve::line(Point(50.0, 110.0), Point(-10.0, 110.0)),
+        fla::Curve::line(Point(-10.0, 110.0), Point(-10.0, -10.0)),
+    };
+
+    RegionSplitter regions(*shape, marquee);
+    const std::vector<int> inside = regions.facesWhere(
+        [](const Point& p) { return p.x >= -10.0 && p.x <= 50.0 && p.y >= -10.0 && p.y <= 110.0; });
+    CHECK(inside.size() == 1);
+
+    Shape* piece = nullptr;
+    Shape* remainder = nullptr;
+    CHECK(regions.splitSet(inside, {}, piece, remainder));
+    std::unique_ptr<Shape> pieceOwner(piece);
+    std::unique_ptr<Shape> remainderOwner(remainder);
+    if (!piece || !remainder)
+        return;
+
+    // The piece is the left half, the remainder the right half.
+    RegionSplitter pieceRegions(*piece);
+    CHECK(pieceRegions.faceAt(Point(25.0, 50.0)) >= 0);
+    CHECK(pieceRegions.faceAt(Point(75.0, 50.0)) < 0);
+    RegionSplitter restRegions(*remainder);
+    CHECK(restRegions.faceAt(Point(25.0, 50.0)) < 0);
+    CHECK(restRegions.faceAt(Point(75.0, 50.0)) >= 0);
+    CHECK(restRegions.faceFill(restRegions.faceAt(Point(75.0, 50.0))) == 1);
+}
+
 TEST(the_split_command_undoes_back_to_one_shape)
 {
     std::unique_ptr<Shape> shape = twoFills(false);
@@ -304,6 +351,7 @@ TEST(the_split_command_undoes_back_to_one_shape)
 
     CHECK(frame.elements.size() == 2);
     CHECK(frame.elements[1] == piece);
+    CHECK(piece->parent == &frame);
     CHECK(!usesFill(*shape, 1));
 
     // Discarding the split is how an untouched selection is let go: no trace

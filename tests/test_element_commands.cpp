@@ -1,6 +1,15 @@
 #include "test_util.h"
 
+#include "../src/data/document.h"
 #include "../src/data/group.h"
+#include "../src/data/layer.h"
+#include "../src/data/shape.h"
+#include "../src/data/static_text.h"
+#include "../src/edit/element_clone.h"
+#include "../src/data/symbol.h"
+#include "../src/data/symbol_instance.h"
+#include "../src/data/symbol_list.h"
+#include "../src/data/timeline.h"
 #include "../src/edit/command_stack.h"
 #include "../src/data/frame.h"
 #include "../src/edit/element_commands.h"
@@ -35,6 +44,129 @@ CommandPtr move(fla::Element* element, const Transform& before, const Transform&
 }
 
 } // namespace
+
+TEST(grouping_moves_elements_into_a_group_where_the_topmost_was)
+{
+    fla::Frame frame(nullptr);
+    TestElement* a = new TestElement();
+    TestElement* b = new TestElement();
+    TestElement* c = new TestElement();
+    frame.elements = {a, b, c};
+
+    CommandStack stack;
+    stack.push(CommandPtr(new fla::GroupElementsCommand(&frame, {a, c}, "Group")));
+
+    CHECK(frame.elements.size() == 2);
+    CHECK(frame.elements[0] == b);
+    fla::Group* group = frame.elements.size() == 2 ? dynamic_cast<fla::Group*>(frame.elements[1]) : nullptr;
+    CHECK(group != nullptr);
+    if (group)
+    {
+        CHECK(group->members.size() == 2 && group->members[0] == a && group->members[1] == c);
+        CHECK(a->parent == group);
+    }
+
+    stack.undo();
+    CHECK(frame.elements.size() == 3);
+    CHECK(frame.elements[0] == a && frame.elements[1] == b && frame.elements[2] == c);
+    CHECK(a->parent == &frame);
+
+    stack.redo();
+    CHECK(frame.elements.size() == 2);
+
+    // Ungrouping puts the members back where the group was.
+    stack.push(CommandPtr(new fla::UngroupCommand(&frame, group, "Ungroup")));
+    CHECK(frame.elements.size() == 3);
+    CHECK(frame.elements[0] == b && frame.elements[1] == a && frame.elements[2] == c);
+    CHECK(c->parent == &frame);
+
+    stack.undo();
+    CHECK(frame.elements.size() == 2 && frame.elements[1] == group);
+    CHECK(group->members.size() == 2);
+
+    // Leaving everything applied, the frame owns the group and the group its
+    // members; clear it so nothing is freed twice.
+    stack.clear();
+    for (fla::Element* element : frame.elements)
+        delete element;
+    frame.elements.clear();
+}
+
+TEST(converting_to_a_symbol_moves_the_elements_into_a_new_library_item)
+{
+    fla::Document document(nullptr);
+    fla::Frame frame(nullptr);
+    TestElement* a = new TestElement();
+    TestElement* b = new TestElement();
+    TestElement* c = new TestElement();
+    frame.elements = {a, b, c};
+
+    CommandStack stack;
+    stack.push(CommandPtr(new fla::ConvertToSymbolCommand(&document, &frame, {a, c},
+        "Symbol 1", 10.0, 20.0, "Convert to Symbol")));
+
+    // One instance where the topmost element was, the others inside.
+    CHECK(frame.elements.size() == 2);
+    CHECK(frame.elements[0] == b);
+    fla::SymbolInstance* instance = frame.elements.size() == 2
+        ? dynamic_cast<fla::SymbolInstance*>(frame.elements[1]) : nullptr;
+    CHECK(instance != nullptr);
+    CHECK(document.symbolList != nullptr && document.symbolList->symbols.size() == 1);
+    if (instance && document.symbolList && !document.symbolList->symbols.empty())
+    {
+        const fla::Symbol* symbol = document.symbolList->symbols.front();
+        CHECK(instance->symbol == symbol);
+        CHECK(instance->libraryItemName == "Symbol 1");
+        CHECK(instance->transform.tx == 10.0 && instance->transform.ty == 20.0);
+        CHECK(document.symbolList->symbolMap.count("Symbol 1") == 1);
+        CHECK(symbol->timelines.size() == 1 && symbol->timelines[0]->layers.size() == 1);
+        const fla::Frame* inside = symbol->timelines[0]->layers[0]->frames.front();
+        CHECK(inside->elements.size() == 2 && inside->elements[0] == a && inside->elements[1] == c);
+        CHECK(a->parent == inside);
+    }
+
+    stack.undo();
+    CHECK(frame.elements.size() == 3);
+    CHECK(frame.elements[0] == a && frame.elements[1] == b && frame.elements[2] == c);
+    CHECK(a->parent == &frame);
+    CHECK(document.symbolList->symbols.empty());
+
+    // The type asked for is the instance's; it defaults to a movie clip.
+    if (instance)
+        CHECK(instance->symbolType == fla::SymbolType::MovieClip);
+
+    stack.redo();
+    CHECK(frame.elements.size() == 2);
+    CHECK(document.symbolList->symbols.size() == 1);
+
+    // Applied: the document owns the symbol and its contents, the frame the
+    // instance. Take them apart so nothing is freed twice.
+    stack.clear();
+    delete frame.elements[0];
+    delete frame.elements[1];
+    frame.elements.clear();
+}
+
+TEST(reordering_moves_an_element_in_the_z_order_and_back)
+{
+    fla::Frame frame(nullptr);
+    TestElement* a = new TestElement();
+    TestElement* b = new TestElement();
+    TestElement* c = new TestElement();
+    frame.elements = {a, b, c};
+
+    CommandStack stack;
+    stack.push(CommandPtr(new fla::ReorderElementCommand(&frame, a, 2, "Bring to Front")));
+    CHECK(frame.elements[0] == b && frame.elements[1] == c && frame.elements[2] == a);
+
+    stack.undo();
+    CHECK(frame.elements[0] == a && frame.elements[1] == b && frame.elements[2] == c);
+
+    stack.clear();
+    for (fla::Element* element : frame.elements)
+        delete element;
+    frame.elements.clear();
+}
 
 TEST(transform_command_applies_and_reverses)
 {
@@ -318,4 +450,235 @@ TEST(remove_element_command_frees_what_it_holds)
     // The removal was never undone, so the command owned the element when the
     // history was dropped.
     CHECK(CountedElement::liveCount == 0);
+}
+
+namespace
+{
+
+/// A command that records whether the stack said it was executing while the
+/// command ran, the way a selection observer would ask.
+class ExecutionProbe : public fla::Command
+{
+public:
+    explicit ExecutionProbe(const CommandStack& stack) : _stack(stack) {}
+
+    void redo() override { seenOnRedo = _stack.isExecuting(); }
+    void undo() override { seenOnUndo = _stack.isExecuting(); }
+    std::string name() const override { return "Probe"; }
+
+    bool seenOnRedo = false;
+    bool seenOnUndo = false;
+
+private:
+    const CommandStack& _stack;
+};
+
+}
+
+TEST(command_stack_reports_when_a_command_is_executing)
+{
+    CommandStack stack;
+    CHECK(!stack.isExecuting());
+
+    ExecutionProbe* probe = new ExecutionProbe(stack);
+    stack.push(CommandPtr(probe));
+    CHECK(probe->seenOnRedo);
+    CHECK(!stack.isExecuting());
+
+    probe->seenOnRedo = false;
+    stack.undo();
+    CHECK(probe->seenOnUndo);
+    CHECK(!stack.isExecuting());
+
+    stack.redo();
+    CHECK(probe->seenOnRedo);
+    CHECK(!stack.isExecuting());
+}
+
+TEST(breaking_an_instance_apart_puts_copies_of_the_symbol_frame_in_its_place)
+{
+    // A symbol with two layers, a shape on each, the lower layer listed last.
+    fla::Symbol symbol(nullptr);
+    fla::Timeline* timeline = new fla::Timeline(&symbol);
+    symbol.timelines.push_back(timeline);
+
+    fla::Layer* top = new fla::Layer(timeline);
+    fla::Layer* bottom = new fla::Layer(timeline);
+    timeline->layers = {top, bottom};
+
+    fla::Frame* topFrame = new fla::Frame(top);
+    top->frames.push_back(topFrame);
+    fla::Shape* topShape = new fla::Shape(topFrame);
+    topShape->transform = fla::Transform::fromTranslate(5.0, 0.0);
+    topFrame->elements.push_back(topShape);
+
+    fla::Frame* bottomFrame = new fla::Frame(bottom);
+    bottom->frames.push_back(bottomFrame);
+    fla::Shape* bottomShape = new fla::Shape(bottomFrame);
+    bottomShape->isDrawingObject = true;
+    bottomFrame->elements.push_back(bottomShape);
+
+    // The instance, scaled and moved, between two other elements.
+    fla::Frame frame(nullptr);
+    TestElement* below = new TestElement();
+    TestElement* above = new TestElement();
+    fla::SymbolInstance* instance = new fla::SymbolInstance(&frame);
+    instance->symbol = &symbol;
+    instance->symbolType = fla::SymbolType::MovieClip;
+    instance->transform = fla::Transform(2.0, 0.0, 0.0, 2.0, 100.0, 50.0);
+    frame.elements = {below, instance, above};
+
+    fla::Selection selection;
+    selection.select(instance);
+
+    CommandStack stack;
+    fla::BreakApartInstanceCommand* command =
+        new fla::BreakApartInstanceCommand(&frame, instance, "Break Apart", &selection);
+    CHECK(command->pieces().size() == 2);
+    stack.push(CommandPtr(command));
+
+    // Bottom layer first, then the top one, where the instance was.
+    CHECK(frame.elements.size() == 4);
+    CHECK(frame.elements[0] == below);
+    CHECK(frame.elements[3] == above);
+    fla::Shape* lowPiece = dynamic_cast<fla::Shape*>(frame.elements[1]);
+    fla::Shape* highPiece = dynamic_cast<fla::Shape*>(frame.elements[2]);
+    CHECK(lowPiece != nullptr && highPiece != nullptr);
+    if (lowPiece && highPiece)
+    {
+        CHECK(lowPiece != bottomShape && highPiece != topShape);
+        CHECK(lowPiece->isDrawingObject);
+        CHECK(!highPiece->isDrawingObject);
+        CHECK(lowPiece->parent == &frame);
+
+        // The instance's scale and offset on top of the shape's own offset.
+        CHECK_NEAR(highPiece->transform.m11, 2.0);
+        CHECK_NEAR(highPiece->transform.tx, 110.0);
+        CHECK_NEAR(highPiece->transform.ty, 50.0);
+        CHECK_NEAR(lowPiece->transform.tx, 100.0);
+    }
+    CHECK(selection.elements().size() == 2);
+
+    // The symbol keeps its own artwork.
+    CHECK(topFrame->elements.size() == 1 && topFrame->elements[0] == topShape);
+
+    stack.undo();
+    CHECK(frame.elements.size() == 3);
+    CHECK(frame.elements[1] == instance);
+    CHECK(instance->parent == &frame);
+    CHECK(selection.elements().size() == 1 && selection.elements()[0] == instance);
+
+    stack.redo();
+    CHECK(frame.elements.size() == 4);
+
+    // Applied: the frame owns the pieces and the command the instance.
+    stack.clear();
+    for (fla::Element* element : frame.elements)
+        delete element;
+    frame.elements.clear();
+}
+
+TEST(breaking_a_graphic_instance_apart_takes_the_frame_it_shows)
+{
+    fla::Symbol symbol(nullptr);
+    fla::Timeline* timeline = new fla::Timeline(&symbol);
+    symbol.timelines.push_back(timeline);
+    fla::Layer* layer = new fla::Layer(timeline);
+    timeline->layers.push_back(layer);
+
+    // Keyframes at 0 and 3; frame 4 shows the second one.
+    fla::Frame* first = new fla::Frame(layer);
+    first->index = 0;
+    first->duration = 3;
+    first->elements.push_back(new fla::Shape(first));
+    fla::Frame* second = new fla::Frame(layer);
+    second->index = 3;
+    second->duration = 3;
+    second->elements.push_back(new fla::Shape(second));
+    second->elements.push_back(new fla::Shape(second));
+    layer->frames = {first, second};
+
+    fla::Frame frame(nullptr);
+    fla::SymbolInstance* instance = new fla::SymbolInstance(&frame);
+    instance->symbol = &symbol;
+    instance->symbolType = fla::SymbolType::Graphic;
+    instance->firstFrame = 4;
+    frame.elements.push_back(instance);
+
+    CHECK(fla::BreakApartInstanceCommand::shownFrameIndex(*instance) == 4);
+
+    CommandStack stack;
+    stack.push(CommandPtr(new fla::BreakApartInstanceCommand(&frame, instance, "Break Apart")));
+    CHECK(frame.elements.size() == 2);
+
+    stack.clear();
+    for (fla::Element* element : frame.elements)
+        delete element;
+    frame.elements.clear();
+}
+
+TEST(converting_to_a_symbol_takes_the_type_asked_for)
+{
+    fla::Document document(nullptr);
+    fla::Frame frame(nullptr);
+    TestElement* a = new TestElement();
+    frame.elements = {a};
+
+    CommandStack stack;
+    stack.push(CommandPtr(new fla::ConvertToSymbolCommand(&document, &frame, {a},
+        "Face", 0.0, 0.0, "Convert to Symbol", nullptr, fla::SymbolType::Graphic)));
+
+    fla::SymbolInstance* instance = frame.elements.size() == 1
+        ? dynamic_cast<fla::SymbolInstance*>(frame.elements[0]) : nullptr;
+    CHECK(instance != nullptr);
+    if (instance)
+    {
+        CHECK(instance->symbolType == fla::SymbolType::Graphic);
+        CHECK(instance->libraryItemName == "Face");
+    }
+
+    stack.clear();
+    delete frame.elements[0];
+    frame.elements.clear();
+}
+
+TEST(set_text_contents_command_swaps_the_runs_and_box)
+{
+    fla::Frame frame(nullptr);
+    fla::StaticText* text = new fla::StaticText(&frame);
+    text->left = 10.0;
+    text->top = 20.0;
+    text->autoExpand = true;
+    fla::TextRun run;
+    run.text = "Hello";
+    run.size = 12.0;
+    text->runs.push_back(run);
+    frame.elements.push_back(text);
+
+    std::unique_ptr<fla::StaticText> before(
+        static_cast<fla::StaticText*>(fla::cloneElement(*text, nullptr)));
+    CHECK(before->runs.size() == 1 && before->runs[0].text == "Hello");
+
+    // The edit, as the tool makes it in place.
+    text->runs[0].text = "Hello world";
+    text->width = 80.0;
+    text->height = 16.0;
+
+    CommandStack stack;
+    stack.push(CommandPtr(new fla::SetTextContentsCommand(text, *before, *text, "Edit Text")));
+    CHECK(text->runs[0].text == "Hello world");
+    CHECK(text->width == 80.0);
+
+    stack.undo();
+    CHECK(text->runs[0].text == "Hello");
+    CHECK(text->width == 0.0);
+    CHECK(text->left == 10.0 && text->top == 20.0);
+
+    stack.redo();
+    CHECK(text->runs[0].text == "Hello world");
+    CHECK(text->height == 16.0);
+
+    stack.clear();
+    delete text;
+    frame.elements.clear();
 }

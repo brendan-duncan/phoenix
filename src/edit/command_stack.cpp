@@ -17,7 +17,9 @@ void CommandStack::push(CommandPtr command)
     // The stack owns execution, so callers construct a command rather than
     // performing the edit and telling us about it afterwards. This runs whether
     // or not the command ends up merged, so it happens exactly once either way.
+    ++_executing;
     command->redo();
+    --_executing;
 
     if (CompoundCommand* macro = currentMacro())
     {
@@ -76,7 +78,9 @@ void CommandStack::undo()
         return;
 
     --_index;
+    ++_executing;
     _commands[_index]->undo();
+    --_executing;
 
     // A later edit must not fold into a command that is no longer adjacent to
     // the cursor.
@@ -90,7 +94,9 @@ bool CommandStack::discardLast()
         return false;
 
     --_index;
+    ++_executing;
     _commands[_index]->undo();
+    --_executing;
     _commands.erase(_commands.begin() + static_cast<std::ptrdiff_t>(_index));
 
     // A saved position past the cut can no longer be reached.
@@ -107,7 +113,9 @@ void CommandStack::redo()
     if (!canRedo())
         return;
 
+    ++_executing;
     _commands[_index]->redo();
+    --_executing;
     ++_index;
 
     _mergeAllowed = false;

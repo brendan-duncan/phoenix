@@ -82,6 +82,7 @@ add_subdirectory(src/third_party/tinyxml2)
 
 set(HEADERS
     src/gui/main_window.h
+    src/gui/convert_to_symbol_dialog.h
     src/gui/phoenix_view.h
     src/gui/tool.h
     src/gui/tool_icons.h
@@ -89,6 +90,8 @@ set(HEADERS
     src/gui/edge_bend.h
     src/gui/paint_tools.h
     src/gui/brush_tools.h
+    src/gui/lasso_tool.h
+    src/gui/selection_targets.h
     src/gui/navigation_tools.h
     src/gui/draw_placement.h
     src/gui/selection_tool.h
@@ -96,6 +99,8 @@ set(HEADERS
     src/gui/primitive_tool.h
     src/gui/pen_tool.h
     src/gui/pencil_tool.h
+    src/gui/text_tool.h
+    src/gui/text_layout.h
     src/gui/subselection_tool.h
     src/gui/document_view.h
     src/gui/timeline_view.h
@@ -146,6 +151,7 @@ set(HEADERS
     src/edit/new_document.h
     src/edit/shape_transform.h
     src/edit/element_commands.h
+    src/edit/element_clone.h
     src/edit/selection.h
     src/edit/shape_merge.h
     src/edit/snapping.h
@@ -170,6 +176,7 @@ set(HEADERS
 set(SOURCES
     src/main.cpp
     src/gui/main_window.cpp
+    src/gui/convert_to_symbol_dialog.cpp
     src/gui/phoenix_view.cpp
     src/gui/selection_tool.cpp
     src/gui/tool_icons.cpp
@@ -177,12 +184,15 @@ set(SOURCES
     src/gui/edge_bend.cpp
     src/gui/paint_tools.cpp
     src/gui/brush_tools.cpp
+    src/gui/lasso_tool.cpp
     src/gui/navigation_tools.cpp
     src/gui/draw_placement.cpp
     src/gui/free_transform_tool.cpp
     src/gui/primitive_tool.cpp
     src/gui/pen_tool.cpp
     src/gui/pencil_tool.cpp
+    src/gui/text_tool.cpp
+    src/gui/text_layout.cpp
     src/gui/subselection_tool.cpp
     src/gui/document_view.cpp
     src/gui/timeline_view.cpp
@@ -231,6 +241,7 @@ set(SOURCES
     src/edit/new_document.cpp
     src/edit/shape_transform.cpp
     src/edit/element_commands.cpp
+    src/edit/element_clone.cpp
     src/edit/selection.cpp
     src/edit/shape_merge.cpp
     src/edit/snapping.cpp

@@ -106,6 +106,15 @@ public:
         (void)view; (void)painter; (void)scale;
     }
 
+    /// Whether ctrl belongs to the tool's own gestures, as it does for the
+    /// free transform tool's Distort, rather than calling up the temporary
+    /// arrow tool while it is held.
+    virtual bool usesControlKey() const { return false; }
+
+    /// Whether the tool is taking typed text, so that single-key tool
+    /// shortcuts must not fire. The text tool says yes while a box is open.
+    virtual bool capturesKeyboard() const { return false; }
+
     /// Whether the view should draw its selection bounding box while this tool
     /// is active. Tools that show their own handles turn it off, so the box does
     /// not sit on top of what the user is trying to grab.

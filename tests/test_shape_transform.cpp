@@ -190,3 +190,29 @@ TEST(bake_transform_matches_transforming_each_point)
         CHECK_NEAR(after[i].y, expected.y);
     }
 }
+
+TEST(warp_shape_moves_every_point_through_the_map)
+{
+    std::unique_ptr<Shape> shape = rectangle(0, 0, 100, 200);
+    const std::vector<Point> before = points(*shape);
+    CHECK(!shape->edges.empty() && !shape->edges[0]->data.empty());
+
+    fla::warpShape(*shape, [](const Point& p) { return Point(p.x * 2.0, p.y + 10.0); });
+
+    const std::vector<Point> after = points(*shape);
+    CHECK(before.size() == after.size());
+    for (size_t i = 0; i < before.size() && i < after.size(); ++i)
+    {
+        CHECK_NEAR(after[i].x, before[i].x * 2.0);
+        CHECK_NEAR(after[i].y, before[i].y + 10.0);
+    }
+
+    // The edge text would save the old points, so it is gone; the bounds
+    // are measured from the new points, which the parser read in pixels
+    // (the rectangle was given in twips, so 100 by 200 is 5 by 10).
+    CHECK(shape->edges[0]->data.empty());
+    CHECK_NEAR(shape->localBounds.topLeft.x, 0.0);
+    CHECK_NEAR(shape->localBounds.topLeft.y, 10.0);
+    CHECK_NEAR(shape->localBounds.bottomRight.x, 10.0);
+    CHECK_NEAR(shape->localBounds.bottomRight.y, 20.0);
+}
