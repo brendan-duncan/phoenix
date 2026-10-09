@@ -143,7 +143,8 @@ void attributeFillsFromSource(PlanarMap& map, const std::vector<ShapeCurve>& sou
 }
 
 void rebuildShapeEdges(Shape& shape, const PlanarMap& map,
-    const std::vector<ShapeCurve>& sources, const StrokeFilter& keepStroke)
+    const std::vector<ShapeCurve>& sources, const StrokeFilter& keepStroke,
+    const StrokeOverride& strokeFor)
 {
     for (Edge* edge : shape.edges)
         delete edge;
@@ -163,6 +164,13 @@ void rebuildShapeEdges(Shape& shape, const PlanarMap& map,
         int strokeStyle = -1;
         if (half.source >= 0 && half.source < static_cast<int>(sources.size()))
             strokeStyle = sources[half.source].strokeStyle;
+
+        if (strokeFor)
+        {
+            const int chosen = strokeFor(half);
+            if (chosen != kKeepStroke)
+                strokeStyle = chosen;
+        }
 
         if (strokeStyle != -1 && keepStroke && !keepStroke(half))
             strokeStyle = -1;

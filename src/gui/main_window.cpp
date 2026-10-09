@@ -113,6 +113,15 @@ MainWindow::MainWindow(QWidget *parent)
         PrimitiveTool::Kind::OvalPrimitive, _selection, stack, _drawingStyle);
     _handTool = std::make_unique<HandTool>();
     _zoomTool = std::make_unique<ZoomTool>();
+    _paintBucketTool = std::make_unique<PaintBucketTool>(stack, _drawingStyle);
+    _inkBottleTool = std::make_unique<InkBottleTool>(stack, _drawingStyle);
+    // Sampling hands over to the bucket or the bottle, as Animate does.
+    _eyedropperTool = std::make_unique<EyedropperTool>(_drawingStyle, [this](bool stroke) {
+        refreshStyleSwatches();
+        QAction* next = stroke ? _inkBottleAction : _paintBucketAction;
+        if (next)
+            next->trigger();
+    });
     _penTool = std::make_unique<PenTool>(_selection, stack, _drawingStyle);
     _pencilTool = std::make_unique<PencilTool>(_selection, stack, _drawingStyle);
     _subselectionTool = std::make_unique<SubselectionTool>(_selection, stack);
@@ -939,6 +948,38 @@ void MainWindow::setupToolBar()
     toolGroup->addAction(handAction);
     toolBar->addAction(handAction);
 
+    _paintBucketAction = new QAction(ToolIcons::icon(ToolIcons::Tool::PaintBucket), "Paint Bucket", this);
+    _paintBucketAction->setCheckable(true);
+    _paintBucketAction->setShortcut(QKeySequence(Qt::Key_K));
+    _paintBucketAction->setStatusTip("Click inside an area to paint it with the current fill.");
+    connect(_paintBucketAction, &QAction::triggered, this, [this]() {
+        _phoenixView->setActiveTool(_paintBucketTool.get());
+    });
+    toolGroup->addAction(_paintBucketAction);
+    toolBar->addAction(_paintBucketAction);
+
+    _inkBottleAction = new QAction(ToolIcons::icon(ToolIcons::Tool::InkBottle), "Ink Bottle", this);
+    _inkBottleAction->setCheckable(true);
+    _inkBottleAction->setShortcut(QKeySequence(Qt::Key_S));
+    _inkBottleAction->setStatusTip("Click a fill to stroke its outline, or a stroke to restyle it.");
+    connect(_inkBottleAction, &QAction::triggered, this, [this]() {
+        _phoenixView->setActiveTool(_inkBottleTool.get());
+    });
+    toolGroup->addAction(_inkBottleAction);
+    toolBar->addAction(_inkBottleAction);
+
+    QAction* eyedropperAction = new QAction(ToolIcons::icon(ToolIcons::Tool::Eyedropper), "Eyedropper", this);
+    eyedropperAction->setCheckable(true);
+    eyedropperAction->setShortcut(QKeySequence(Qt::Key_I));
+    eyedropperAction->setStatusTip("Click a fill or a stroke to make it the current one.");
+    connect(eyedropperAction, &QAction::triggered, this, [this]() {
+        _phoenixView->setActiveTool(_eyedropperTool.get());
+    });
+    toolGroup->addAction(eyedropperAction);
+    toolBar->addAction(eyedropperAction);
+
+    toolBar->addSeparator();
+
     QAction* zoomAction = new QAction(ToolIcons::icon(ToolIcons::Tool::Zoom), "Zoom", this);
     zoomAction->setCheckable(true);
     zoomAction->setShortcut(QKeySequence(Qt::Key_Z));
@@ -1111,6 +1152,14 @@ void MainWindow::setupPropertiesPanel()
     panel->setLayout(layout);
     dock->setWidget(panel);
     addDockWidget(Qt::RightDockWidgetArea, dock);
+}
+
+void MainWindow::refreshStyleSwatches()
+{
+    if (_fillColorButton)
+        _fillColorButton->setIcon(swatchIcon(_drawingStyle.fillColor));
+    if (_strokeColorButton)
+        _strokeColorButton->setIcon(swatchIcon(_drawingStyle.strokeColor));
 }
 
 void MainWindow::selectAll()

@@ -222,6 +222,44 @@ void drawOvalPrimitive(QPainter& painter)
     }
 }
 
+void drawPaintBucket(QPainter& painter)
+{
+    painter.setPen(QPen(strokeColour(), 1.3));
+    painter.setBrush(Qt::NoBrush);
+    painter.drawPolygon(QPolygonF({
+        QPointF(8.5, 7.0), QPointF(20.0, 10.5), QPointF(17.5, 20.0), QPointF(6.0, 16.5)
+    }));
+    painter.drawLine(QPointF(8.5, 7.0), QPointF(6.0, 16.5));
+    painter.setPen(Qt::NoPen);
+    painter.setBrush(strokeColour());
+    painter.drawPolygon(QPolygonF({
+        QPointF(7.5, 8.0), QPointF(5.0, 4.5), QPointF(3.0, 5.5), QPointF(5.5, 9.5)
+    }));
+}
+
+void drawInkBottle(QPainter& painter)
+{
+    painter.setPen(QPen(strokeColour(), 1.3));
+    painter.setBrush(Qt::NoBrush);
+    painter.drawRoundedRect(QRectF(9.0, 8.0, 10.0, 12.0), 1.5, 1.5);
+    painter.drawRect(QRectF(6.0, 4.5, 6.0, 5.0));
+    painter.setPen(Qt::NoPen);
+    painter.setBrush(strokeColour());
+    painter.drawEllipse(QRectF(3.0, 2.5, 4.0, 4.0));
+}
+
+void drawEyedropper(QPainter& painter)
+{
+    painter.setPen(QPen(strokeColour(), 1.3));
+    painter.setBrush(Qt::NoBrush);
+    painter.drawPolygon(QPolygonF({
+        QPointF(5.5, 19.5), QPointF(4.0, 18.0), QPointF(13.5, 8.5), QPointF(15.0, 10.0)
+    }));
+    painter.setPen(Qt::NoPen);
+    painter.setBrush(strokeColour());
+    painter.drawEllipse(QRectF(14.0, 4.0, 6.0, 6.0));
+}
+
 void drawObjectDrawing(QPainter& painter)
 {
     // A shape inside its own boundary: what the mode does is keep the two
@@ -261,6 +299,9 @@ QPixmap render(ToolIcons::Tool tool, int size)
     case ToolIcons::Tool::Zoom:          drawZoom(painter); break;
     case ToolIcons::Tool::RectanglePrimitive: drawRectanglePrimitive(painter); break;
     case ToolIcons::Tool::OvalPrimitive: drawOvalPrimitive(painter); break;
+    case ToolIcons::Tool::PaintBucket:   drawPaintBucket(painter); break;
+    case ToolIcons::Tool::InkBottle:     drawInkBottle(painter); break;
+    case ToolIcons::Tool::Eyedropper:    drawEyedropper(painter); break;
     case ToolIcons::Tool::ObjectDrawing: drawObjectDrawing(painter); break;
     }
 

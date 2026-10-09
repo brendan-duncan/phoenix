@@ -214,6 +214,75 @@ TEST(a_double_click_on_a_stroke_follows_it_round_corners)
     CHECK(pick.strokeHalfEdges.size() == 3);
 }
 
+TEST(the_paint_bucket_fills_an_enclosed_empty_area)
+{
+    // A stroked square with nothing inside it.
+    std::unique_ptr<Shape> shape(new Shape(nullptr));
+    fla::SolidStroke* stroke = new fla::SolidStroke(shape.get());
+    stroke->weight = 1.0;
+    stroke->fill = new fla::SolidColor(stroke);
+    shape->strokes.push_back(stroke);
+    shape->strokesMap[1] = stroke;
+
+    PathParser parser;
+    fla::Edge* edge = parser.parse("!0 0|100 0|100 100|0 100|0 0", shape.get());
+    CHECK(edge != nullptr);
+    if (!edge)
+        return;
+    edge->strokeStyle = 1;
+    shape->edges.push_back(edge);
+
+    fla::SolidColor* paint = new fla::SolidColor(shape.get());
+    shape->fills.push_back(paint);
+    shape->fillsMap[1] = paint;
+
+    RegionSplitter regions(*shape);
+    CHECK(regions.pickAt(Point(2.5, 2.5), 0.2, false).isEmpty());
+    const int face = regions.faceAt(Point(2.5, 2.5));
+    CHECK(face >= 0);
+    CHECK(regions.faceFill(face) == -1);
+
+    std::unique_ptr<Shape> painted(regions.withFaceFill(face, 1));
+    CHECK(painted != nullptr);
+    if (!painted)
+        return;
+    CHECK(usesFill(*painted, 1));
+    CHECK(usesStroke(*painted));
+
+    // The outside stays empty.
+    RegionSplitter after(*painted);
+    CHECK(after.faceAt(Point(50.0, 50.0)) < 0);
+}
+
+TEST(the_ink_bottle_strokes_the_outline_of_one_fill)
+{
+    std::unique_ptr<Shape> shape = twoFills(false);
+    fla::SolidStroke* stroke = new fla::SolidStroke(shape.get());
+    stroke->weight = 2.0;
+    stroke->fill = new fla::SolidColor(stroke);
+    shape->strokes.push_back(stroke);
+    shape->strokesMap[1] = stroke;
+
+    RegionSplitter regions(*shape);
+    const RegionPick left = regions.pickAt(Point(1.0, 2.0), 0.2, false);
+    CHECK(left.kind == RegionPick::Kind::Fill);
+
+    std::unique_ptr<Shape> inked(regions.withStroke(left, 1));
+    CHECK(inked != nullptr);
+    if (!inked)
+        return;
+
+    // Three outer sides plus the shared edge are stroked; the right square's
+    // other three sides are not.
+    int stroked = 0;
+    int unstroked = 0;
+    for (const fla::ShapeCurve& curve : fla::shapeCurves(*inked))
+        (curve.strokeStyle != -1 ? stroked : unstroked)++;
+    CHECK(stroked == 4);
+    CHECK(unstroked == 3);
+    CHECK(usesFill(*inked, 1) && usesFill(*inked, 2));
+}
+
 TEST(the_split_command_undoes_back_to_one_shape)
 {
     std::unique_ptr<Shape> shape = twoFills(false);

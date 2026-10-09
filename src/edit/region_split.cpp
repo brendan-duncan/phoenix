@@ -218,6 +218,70 @@ RegionPick RegionSplitter::pickAt(const Point& localPos, double tolerance, bool 
     return pick;
 }
 
+int RegionSplitter::faceAt(const Point& localPos) const
+{
+    return valid() ? _map.faceAt(localPos) : -1;
+}
+
+int RegionSplitter::faceFill(int face) const
+{
+    return _map.faceFill(face);
+}
+
+int RegionSplitter::strokeOf(const RegionPick& pick) const
+{
+    if (pick.kind != RegionPick::Kind::Stroke || pick.strokeHalfEdges.empty())
+        return -1;
+    const int index = pick.strokeHalfEdges.front();
+    if (index < 0 || index >= static_cast<int>(_map.halfEdges().size()))
+        return -1;
+    return strokeOf(_map.halfEdges()[index]);
+}
+
+Shape* RegionSplitter::withFaceFill(int face, int fillIndex) const
+{
+    if (!valid() || face < 0 || face >= static_cast<int>(_map.faces().size()))
+        return nullptr;
+
+    PlanarMap painted = _map;
+    painted.setFaceFill(face, fillIndex);
+
+    Shape* result = cloneShape(_shape, nullptr);
+    rebuildShapeEdges(*result, painted, _curves);
+    return result;
+}
+
+Shape* RegionSplitter::withStroke(const RegionPick& pick, int strokeIndex) const
+{
+    if (!valid() || pick.isEmpty())
+        return nullptr;
+
+    std::set<int> affected;
+    if (pick.kind == RegionPick::Kind::Fill)
+    {
+        for (const int half : faceBoundary(pick.face))
+        {
+            const int forward = forwardOf(half);
+            if (forward >= 0)
+                affected.insert(forward);
+        }
+    }
+    else
+    {
+        affected.insert(pick.strokeHalfEdges.begin(), pick.strokeHalfEdges.end());
+    }
+
+    const std::vector<HalfEdge>& halves = _map.halfEdges();
+    Shape* result = cloneShape(_shape, nullptr);
+    rebuildShapeEdges(*result, _map, _curves, nullptr, [&](const HalfEdge& half) {
+        const int index = static_cast<int>(&half - &halves[0]);
+        const bool hit = affected.count(index) > 0 ||
+            (half.twin >= 0 && affected.count(half.twin) > 0);
+        return hit ? strokeIndex : kKeepStroke;
+    });
+    return result;
+}
+
 bool RegionSplitter::split(const RegionPick& pick, Shape*& piece, Shape*& remainder) const
 {
     piece = nullptr;

@@ -56,6 +56,14 @@ void attributeFillsFromSource(PlanarMap& map, const std::vector<ShapeCurve>& sou
 /// what was there, outlines included.
 using StrokeFilter = std::function<bool(const HalfEdge& half)>;
 
+/// Chooses a stroke for a rebuilt piece in place of the one its source
+/// carried. Returning kKeepStroke leaves the source's stroke alone. The ink
+/// bottle uses this to stroke the outline of one fill without touching the
+/// rest of the curve that outline is part of.
+using StrokeOverride = std::function<int(const HalfEdge& half)>;
+
+constexpr int kKeepStroke = -2;
+
 /// Replaces a shape's edges with the arrangement's, keeping its fill and stroke
 /// styles.
 ///
@@ -68,6 +76,7 @@ using StrokeFilter = std::function<bool(const HalfEdge& half)>;
 /// stroke then drops out entirely, as any other such piece does.
 void rebuildShapeEdges(Shape& shape, const PlanarMap& map,
     const std::vector<ShapeCurve>& sources,
-    const StrokeFilter& keepStroke = nullptr);
+    const StrokeFilter& keepStroke = nullptr,
+    const StrokeOverride& strokeFor = nullptr);
 
 } // namespace fla

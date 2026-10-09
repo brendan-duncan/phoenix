@@ -1,0 +1,81 @@
+#pragma once
+
+#include "tool.h"
+
+#include <functional>
+
+namespace fla {
+class CommandStack;
+class DrawingStyle;
+class Selection;
+class Shape;
+}
+
+/// Animate's paint bucket: click inside a region to paint it with the current
+/// fill.
+///
+/// The region is a face of the shape's arrangement, so an area enclosed by
+/// strokes but holding no fill takes paint too -- the classic use. Painting a
+/// face the same colour as its neighbour removes the seam between them, as
+/// the merge model always does.
+class PaintBucketTool : public Tool
+{
+public:
+    PaintBucketTool(fla::CommandStack& commandStack, const fla::DrawingStyle& style)
+        : _commandStack(commandStack)
+        , _style(style)
+    {}
+
+    QString name() const override { return "Paint Bucket"; }
+
+    QCursor cursor() const override;
+
+    bool mousePress(PhoenixView& view, QMouseEvent* event, const QPointF& documentPos) override;
+
+private:
+    fla::CommandStack& _commandStack;
+    const fla::DrawingStyle& _style;
+};
+
+/// Animate's ink bottle: click a fill to stroke its outline with the current
+/// stroke, or click a stroke to restyle it.
+class InkBottleTool : public Tool
+{
+public:
+    InkBottleTool(fla::CommandStack& commandStack, const fla::DrawingStyle& style)
+        : _commandStack(commandStack)
+        , _style(style)
+    {}
+
+    QString name() const override { return "Ink Bottle"; }
+
+    QCursor cursor() const override;
+
+    bool mousePress(PhoenixView& view, QMouseEvent* event, const QPointF& documentPos) override;
+
+private:
+    fla::CommandStack& _commandStack;
+    const fla::DrawingStyle& _style;
+};
+
+/// Animate's eyedropper: click a fill or a stroke to make it the current one.
+/// Sampling a fill hands over to the paint bucket and sampling a stroke to the
+/// ink bottle, as Animate does, through \a onSampled.
+class EyedropperTool : public Tool
+{
+public:
+    EyedropperTool(fla::DrawingStyle& style, std::function<void(bool stroke)> onSampled)
+        : _style(style)
+        , _onSampled(std::move(onSampled))
+    {}
+
+    QString name() const override { return "Eyedropper"; }
+
+    QCursor cursor() const override;
+
+    bool mousePress(PhoenixView& view, QMouseEvent* event, const QPointF& documentPos) override;
+
+private:
+    fla::DrawingStyle& _style;
+    std::function<void(bool stroke)> _onSampled;
+};

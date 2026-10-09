@@ -65,6 +65,25 @@ public:
     /// the source's contents. Returns false for an empty pick.
     bool split(const RegionPick& pick, Shape*& piece, Shape*& remainder) const;
 
+    /// The bounded face under a point, or -1. Unlike pickAt this answers for an
+    /// enclosed area holding no fill, which is what the paint bucket fills.
+    int faceAt(const Point& localPos) const;
+
+    /// What paints a face, or -1.
+    int faceFill(int face) const;
+
+    /// The stroke of a stroke pick, or -1.
+    int strokeOf(const RegionPick& pick) const;
+
+    /// The shape's contents with \a face painted \a fillIndex, as a new shape
+    /// the caller owns. A seam between two faces of one colour disappears.
+    Shape* withFaceFill(int face, int fillIndex) const;
+
+    /// The shape's contents with \a strokeIndex along the pick: round a fill's
+    /// outline, or along the picked strokes. -1 removes the stroke. A new
+    /// shape the caller owns.
+    Shape* withStroke(const RegionPick& pick, int strokeIndex) const;
+
 private:
     int strokeOf(const HalfEdge& half) const;
 

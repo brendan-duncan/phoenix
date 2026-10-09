@@ -141,6 +141,60 @@ QCursor build(Cursors::Kind kind)
         drawMark(painter, kind);
         break;
 
+    case Cursors::Kind::Bucket:
+    {
+        // A tilted bucket with paint running from its lip at the hotspot.
+        QPainterPath bucket;
+        bucket.addPolygon(QPolygonF({
+            QPointF(8.0, 6.0), QPointF(22.0, 10.0), QPointF(19.0, 22.0), QPointF(6.0, 18.0)
+        }));
+        bucket.closeSubpath();
+        outlined(painter, bucket);
+        painter.setPen(QPen(Qt::black, 1.2));
+        painter.drawLine(QPointF(8.0, 6.0), QPointF(6.0, 18.0));
+        painter.setBrush(Qt::black);
+        painter.drawPolygon(QPolygonF({
+            QPointF(7.0, 7.0), QPointF(4.0, 3.0), QPointF(1.0, 2.0), QPointF(5.0, 8.0)
+        }));
+        hotspot = QPoint(1, 2);
+        break;
+    }
+
+    case Cursors::Kind::InkBottle:
+    {
+        // A bottle on its side with ink at the mouth, the hotspot.
+        QPainterPath bottle;
+        bottle.addRoundedRect(QRectF(9.0, 8.0, 13.0, 14.0), 2.0, 2.0);
+        outlined(painter, bottle);
+        QPainterPath neck;
+        neck.addRect(QRectF(5.0, 4.0, 7.0, 6.0));
+        outlined(painter, neck);
+        painter.setPen(Qt::NoPen);
+        painter.setBrush(Qt::black);
+        painter.drawEllipse(QRectF(0.0, 0.0, 6.0, 6.0));
+        hotspot = QPoint(2, 2);
+        break;
+    }
+
+    case Cursors::Kind::Eyedropper:
+    {
+        // A dropper from top right down to its tip at the hotspot.
+        QPainterPath tube;
+        tube.addPolygon(QPolygonF({
+            QPointF(4.0, 22.0), QPointF(2.0, 20.0), QPointF(14.0, 8.0), QPointF(16.0, 10.0)
+        }));
+        tube.closeSubpath();
+        outlined(painter, tube);
+        QPainterPath bulb;
+        bulb.addEllipse(QRectF(14.0, 2.0, 8.0, 8.0));
+        painter.setPen(QPen(Qt::black, 1.0));
+        painter.setBrush(Qt::black);
+        painter.drawPath(bulb);
+        painter.drawLine(QPointF(12.0, 6.0), QPointF(18.0, 12.0));
+        hotspot = QPoint(2, 21);
+        break;
+    }
+
     case Cursors::Kind::ZoomIn:
     case Cursors::Kind::ZoomOut:
     {

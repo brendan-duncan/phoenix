@@ -188,6 +188,32 @@ private:
     bool _owned = true;
 };
 
+/// Replaces a shape's geometry and styles with a prepared result, keeping a
+/// snapshot of what was there. The paint bucket and the ink bottle build
+/// their result from the arrangement and hand it over here.
+class SetShapeContentsCommand : public Command
+{
+public:
+    SetShapeContentsCommand(Shape* target, const Shape& after, const std::string& name);
+
+    ~SetShapeContentsCommand() override;
+
+    SetShapeContentsCommand(const SetShapeContentsCommand&) = delete;
+    SetShapeContentsCommand& operator=(const SetShapeContentsCommand&) = delete;
+
+    void redo() override;
+
+    void undo() override;
+
+    std::string name() const override { return _name; }
+
+private:
+    Shape* _target;
+    Shape* _before = nullptr;
+    Shape* _after = nullptr;
+    std::string _name;
+};
+
 /// Lifts a region out of a merge-drawn shape as a shape of its own.
 ///
 /// Selecting a fill or a stroke of merge artwork is what this serves: the

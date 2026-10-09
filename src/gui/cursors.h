@@ -37,7 +37,13 @@ public:
         /// Magnifier with a +.
         ZoomIn,
         /// Magnifier with a -.
-        ZoomOut
+        ZoomOut,
+        /// The paint bucket, pouring from its hotspot.
+        Bucket,
+        /// The ink bottle, pouring from its hotspot.
+        InkBottle,
+        /// The eyedropper, with its tip at the hotspot.
+        Eyedropper
     };
 
     /// The cursor for \a kind, built once and shared.

@@ -534,7 +534,8 @@ to it, so nothing in the application uses it yet.
       object-drawing by nature and cannot take part in a merge
   - Verified in the running application: two overlapping rectangles come out as
       one object, with the selection box spanning both
-- [ ] Paint bucket (flood fill over the map), ink bottle, eraser
+- [x] Paint bucket (flood fill over the map), ink bottle, eraser
+  - Bucket and ink bottle done; eraser still to do
 - [x] Selection tool edge-dragging (fill follows the edge)
   - Done, see step 13
 - [ ] Stroke-to-outline conversion (needed by the brush tool)
@@ -1042,7 +1043,7 @@ addition maps, plus a rule for which strokes survive.
       24 times against "inside the brush", bisect each in/out change 30 times,
       cut there, and rejoin a closed path's first and last runs (VectorCraft
       `engine/src/cmd/draw2.rs:329-441`)
-- [ ] **Paint bucket.** Arrange the merge shapes under the click with strokes as
+- [x] **Paint bucket.** Arrange the merge shapes under the click with strokes as
       cutting edges, take the face under the click, flood across edges with no
       stroke and the same fill on both sides, set the fill and rebuild. Gap
       closing (VectorCraft has none): find degree-1 vertices (dangling stroke
@@ -1050,11 +1051,13 @@ addition maps, plus a rule for which strokes survive.
       size (about 3 / 8 / 20 screen pixels for small / medium / large), add the
       joins as invisible edges, rebuild, and fill only if the clicked face is now
       bounded. Keep the joins as fill boundaries without a stroke
-- [ ] **Ink bottle.** On a fill: flood its connected same-fill faces and give the
+  - Done 2026-10-09 (`paint_tools.cpp`, K): paints the face under the click, enclosed empty areas included, through `RegionSplitter::withFaceFill`. No gap closing yet
+- [x] **Ink bottle.** On a fill: flood its connected same-fill faces and give the
       new stroke to every boundary half-edge whose twin's face has a different
       fill. On a stroke: restyle the strokes connected through degree-2
       vertices. `rebuildShapeEdges` takes strokes from `sources`
       (`shape_geometry.cpp:162`), so it needs a per-half-edge stroke override
+  - Done (S): strokes the outline of the fill under the click, or restyles the stroke clicked, through a per-piece `StrokeOverride` on `rebuildShapeEdges`. Does not yet flood across same-fill neighbours
 - [ ] **Convert Lines to Fills** (stroke to outline): stroke each chain, then
       union the outlines under non-zero. Offsetting (Expand Fill) arranges the
       fill, a ring stroked at width 2d, and open strokes at 2d: growing keeps
@@ -1189,7 +1192,8 @@ in the code or against a real XFL document.
 - [x] Space held pans; Hand (H) and Zoom (Z) tools. Zoom clicks in by 2x at the
       point, alt-click out, drag a marquee to zoom to it
   - Done
-- [ ] Lasso (L), Eyedropper (I) and Text (T) tools
+- [x] Lasso (L), Eyedropper (I) and Text (T) tools
+  - Eyedropper done (I): samples a solid fill or stroke and hands over to the bucket or the bottle. Lasso and Text still to do
 - [x] Edit menu: Cut, Copy, Paste, Paste in Place (ctrl+shift+V), Duplicate
       (ctrl+D), Group (ctrl+G), Break Apart (ctrl+B), Convert to Symbol (F8),
       Arrange (ctrl+up/down)

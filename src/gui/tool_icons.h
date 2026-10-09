@@ -25,6 +25,9 @@ public:
         Zoom,
         RectanglePrimitive,
         OvalPrimitive,
+        PaintBucket,
+        InkBottle,
+        Eyedropper,
         /// Not a tool: the toggle that keeps a drawing its own object.
         ObjectDrawing
     };

@@ -174,6 +174,32 @@ void SubtractShapeCommand::undo()
         setShapeContents(*_target, *_before);
 }
 
+SetShapeContentsCommand::SetShapeContentsCommand(Shape* target, const Shape& after,
+    const std::string& name)
+    : _target(target)
+    , _before(target ? cloneShape(*target, nullptr) : nullptr)
+    , _after(cloneShape(after, nullptr))
+    , _name(name)
+{}
+
+SetShapeContentsCommand::~SetShapeContentsCommand()
+{
+    delete _before;
+    delete _after;
+}
+
+void SetShapeContentsCommand::redo()
+{
+    if (_target && _after)
+        setShapeContents(*_target, *_after);
+}
+
+void SetShapeContentsCommand::undo()
+{
+    if (_target && _before)
+        setShapeContents(*_target, *_before);
+}
+
 SplitRegionCommand::SplitRegionCommand(Shape* source, const Shape& remainder, Frame* frame,
     Shape* piece, const std::string& name, Selection* selection)
     : _source(source)
