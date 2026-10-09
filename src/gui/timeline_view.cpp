@@ -32,6 +32,10 @@ TimelineView::TimelineView(Player* player, QWidget *parent)
 
     connect(_layersPanel, &LayersPanel::layerVisibilityChanged,
             this, &TimelineView::layerVisibilityChanged);
+    connect(_layersPanel, &LayersPanel::layerLockChanged,
+            this, &TimelineView::layerLockChanged);
+    connect(_layersPanel, &LayersPanel::currentLayerChanged,
+            this, &TimelineView::currentLayerChanged);
 }
 
 void TimelineView::setDocument(const fla::FLADocument* document)

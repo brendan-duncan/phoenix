@@ -72,9 +72,10 @@ public:
     /// to cubics, which describe the same curve.
     static EditablePath fromPath(const Path& path);
 
-    /// Replaces everything on \a edge with a single path built from these
-    /// anchors.
-    void applyTo(Edge& edge) const;
+    /// Writes these anchors back as the path at \a pathIndex on \a edge,
+    /// leaving any other paths the edge holds alone. An index past the end
+    /// appends; an empty anchor list removes the path.
+    void applyTo(Edge& edge, size_t pathIndex = 0) const;
 
     /// Number of segments. A closed path has one more than an open one, since
     /// the last anchor joins back to the first.

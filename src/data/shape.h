@@ -20,6 +20,13 @@ public:
     std::map<int, StrokeStyle*> strokesMap;
     std::map<int, FillStyle*> fillsMap;
 
+    /// A drawing object: a shape drawn with Object Drawing mode on. It keeps
+    /// to itself -- it never merges with the artwork under it and is selected
+    /// as a whole with a bounding box, like a group -- while a plain shape is
+    /// merge artwork that other shapes cut into. Animate writes it as
+    /// `isDrawingObject="true"` on the DOMShape.
+    bool isDrawingObject = false;
+
     Shape(DOMElement* parent)
         : Element(parent)
     {}

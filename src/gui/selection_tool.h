@@ -1,5 +1,6 @@
 #pragma once
 
+#include "cursors.h"
 #include "tool.h"
 
 #include "../data/transform.h"
@@ -34,7 +35,7 @@ public:
 
     QString name() const override { return "Selection"; }
 
-    QCursor cursor() const override { return Qt::ArrowCursor; }
+    QCursor cursor() const override { return Cursors::cursor(_hoverKind); }
 
     bool mousePress(PhoenixView& view, QMouseEvent* event, const QPointF& documentPos) override;
 
@@ -55,8 +56,13 @@ private:
     /// Begins dragging the current selection from documentPos.
     void beginMove(PhoenixView& view, const QPointF& documentPos);
 
-    /// Snaps a proposed move, returning the delta to actually apply.
-    QPointF snapMove(PhoenixView& view, const QPointF& delta) const;
+    /// Snaps a proposed move, returning the delta to actually apply, and
+    /// notes whether anything snapped for the ring.
+    QPointF snapMove(PhoenixView& view, const QPointF& delta);
+
+    /// Moves the selection by a whole number of pixels, as the arrow keys do.
+    /// Repeated nudges fold into one undo step.
+    void nudge(PhoenixView& view, double dx, double dy);
 
     /// Applies the move so far and repaints.
     void updateMove(PhoenixView& view, const QPointF& documentPos);
@@ -98,4 +104,12 @@ private:
     /// Whether the press that started this gesture had shift held, which decides
     /// between replacing the selection and adding to it.
     bool _additive = false;
+
+    /// What the arrow is over, so the cursor can say what a press would do.
+    Cursors::Kind _hoverKind = Cursors::Kind::Arrow;
+
+    /// The snap ring: Animate draws a small ring at the grab point while
+    /// snapping is on, which grows when the drag locks onto something.
+    bool _snapped = false;
+    QPointF _snapRingPos;
 };

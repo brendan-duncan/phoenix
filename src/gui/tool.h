@@ -111,6 +111,10 @@ public:
     /// not sit on top of what the user is trying to grab.
     virtual bool showsSelectionBounds() const { return true; }
 
+    /// Whether the view should draw the dot screen over selected merge-drawn
+    /// shapes. The subselection tool shows anchors instead.
+    virtual bool showsFillHighlight() const { return true; }
+
     /// Called when the tool stops being the active one, so it can abandon any
     /// gesture in progress.
     virtual void deactivate(PhoenixView& view) { (void)view; }

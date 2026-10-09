@@ -20,6 +20,10 @@ public:
 signals:
     void layerVisibilityChanged(const QString& timelineName, int layerIndex, bool visible);
 
+    void layerLockChanged(const QString& timelineName, int layerIndex, bool locked);
+
+    void currentLayerChanged(const QString& timelineName, int layerIndex);
+
 private:
     const fla::FLADocument* _flaDocument;
     QSplitter* _splitter;

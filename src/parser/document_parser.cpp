@@ -310,6 +310,14 @@ bool parseStroke(const tinyxml2::XMLElement* element, fla::StrokeStyle* stroke)
 {
     stroke->scaleMode = getAttribute(element, "scaleMode");
     stroke->weight = getDoubleAttribute(element, "weight", 1.0);
+    stroke->solidStyle = getAttribute(element, "solidStyle");
+    stroke->caps = getAttribute(element, "caps");
+    stroke->joints = getAttribute(element, "joints");
+    stroke->miterLimit = getDoubleAttribute(element, "miterLimit", 3.0);
+    stroke->pixelHinting = getBoolAttribute(element, "pixelHinting", false);
+    stroke->dash1 = getDoubleAttribute(element, "dash1", 6.0);
+    stroke->dash2 = getDoubleAttribute(element, "dash2", 6.0);
+    stroke->dotSpace = getDoubleAttribute(element, "dotSpace", 3.0);
 
     for (const tinyxml2::XMLElement* childElement = element->FirstChildElement();
          childElement != nullptr;
@@ -494,6 +502,8 @@ bool parseShape(const tinyxml2::XMLElement* element, fla::Shape* shape)
     {
         return false;
     }
+
+    shape->isDrawingObject = getBoolAttribute(element, "isDrawingObject", false);
 
     for (const tinyxml2::XMLElement* childElement = element->FirstChildElement();
          childElement != nullptr;

@@ -21,6 +21,10 @@ public:
         PolyStar,
         Pen,
         Pencil,
+        Hand,
+        Zoom,
+        RectanglePrimitive,
+        OvalPrimitive,
         /// Not a tool: the toggle that keeps a drawing its own object.
         ObjectDrawing
     };

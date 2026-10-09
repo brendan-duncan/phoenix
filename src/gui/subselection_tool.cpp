@@ -81,7 +81,11 @@ bool SubselectionTool::mousePress(PhoenixView& view, QMouseEvent* event, const Q
         return false;
 
     const QPointF localPos = toShape.map(documentPos);
-    const double tolerance = view.pickTolerance() * 1.5;
+    const double tolerance = localTolerance(view);
+    const bool alt = (event->modifiers() & Qt::AltModifier) != 0;
+
+    _dragMoved = false;
+    _convertDrag = false;
 
     // Handles are checked before anchors: a handle pulled hard back toward its
     // anchor would otherwise be impossible to grab.
@@ -112,7 +116,30 @@ bool SubselectionTool::mousePress(PhoenixView& view, QMouseEvent* event, const Q
                 continue;
 
             _grabbed.clear();
-            if (grip == Grip::Anchor)
+            if (grip == Grip::Anchor && alt)
+            {
+                // Alt on an anchor is the convert gesture: dragging a corner
+                // point pulls handles out of it, and a click on a curve point
+                // makes it a corner.
+                _grabbed.push_back({edge, i, path, path});
+                if (anchor.smooth || anchor.hasInCurve() || anchor.hasOutCurve())
+                {
+                    fla::EditablePath after = path;
+                    fla::Anchor& corner = after.anchors[i];
+                    corner.smooth = false;
+                    corner.inHandle = corner.position;
+                    corner.outHandle = corner.position;
+                    commitGeometry(view, edge, path, after, "Convert Anchor");
+                    _grabbed.clear();
+                    _selectedEdge = edge;
+                    _selectedAnchor = i;
+                    _hasSelectedAnchor = true;
+                    return true;
+                }
+                grip = Grip::OutHandle;
+                _convertDrag = true;
+            }
+            else if (grip == Grip::Anchor)
             {
                 // Every anchor at this point comes along, or the pieces of
                 // outline meeting here come apart.
@@ -189,6 +216,17 @@ bool SubselectionTool::mouseMove(PhoenixView& view, QMouseEvent* event, const QP
     const QPointF localPos = toShape.map(documentPos);
     const QPointF delta = localPos - _dragStart;
 
+    // A press that has not travelled is still a click, and a click does not
+    // edit anything.
+    if (!_dragMoved)
+    {
+        const double threshold = PhoenixView::toleranceInLocalSpace(
+            shapeToDocument(view), 3.0 / qMax(view.zoom(), 1.0e-6));
+        if (std::hypot(delta.x(), delta.y()) <= threshold)
+            return true;
+        _dragMoved = true;
+    }
+
     for (Grabbed& grabbed : _grabbed)
     {
         if (!grabbed.edge || grabbed.anchorIndex >= grabbed.before.anchors.size())
@@ -213,6 +251,16 @@ bool SubselectionTool::mouseMove(PhoenixView& view, QMouseEvent* event, const QP
             break;
 
         case Grip::OutHandle:
+            if (_convertDrag)
+            {
+                // Pulling handles out of a corner: both grow together as exact
+                // mirrors, the way the pen pulls them out of a fresh point.
+                anchor.smooth = true;
+                anchor.outHandle = toPoint(localPos);
+                anchor.inHandle = fla::Point(2.0 * anchor.position.x - anchor.outHandle.x,
+                                             2.0 * anchor.position.y - anchor.outHandle.y);
+                break;
+            }
             anchor.smooth = (event->modifiers() & Qt::AltModifier) == 0 && anchor.smooth;
             anchor.setOutHandle(toPoint(localPos));
             break;
@@ -237,7 +285,18 @@ bool SubselectionTool::mouseRelease(PhoenixView& view, QMouseEvent* event, const
     if (event->button() != Qt::LeftButton || _grip == Grip::None || _grabbed.empty())
         return false;
 
-    const char* gesture = _grip == Grip::Anchor ? "Move Anchor" : "Move Handle";
+    if (!_dragMoved)
+    {
+        // A click: the anchor is selected and nothing else happens.
+        _grabbed.clear();
+        _grip = Grip::None;
+        _convertDrag = false;
+        view.update();
+        return true;
+    }
+
+    const char* gesture = _convertDrag ? "Convert Anchor"
+        : _grip == Grip::Anchor ? "Move Anchor" : "Move Handle";
 
     // Moving a shared corner rewrites several edges, which is still one thing
     // the user did and so one thing to undo.
@@ -266,8 +325,14 @@ bool SubselectionTool::mouseRelease(PhoenixView& view, QMouseEvent* event, const
 
     _grabbed.clear();
     _grip = Grip::None;
+    _convertDrag = false;
     view.update();
     return true;
+}
+
+double SubselectionTool::localTolerance(PhoenixView& view) const
+{
+    return PhoenixView::toleranceInLocalSpace(shapeToDocument(view), view.pickTolerance() * 1.5);
 }
 
 bool SubselectionTool::keyPress(PhoenixView& view, QKeyEvent* event)
@@ -309,37 +374,6 @@ bool SubselectionTool::keyPress(PhoenixView& view, QKeyEvent* event)
     return false;
 }
 
-bool SubselectionTool::mouseDoubleClick(PhoenixView& view, QMouseEvent* event,
-    const QPointF& documentPos)
-{
-    if (event->button() != Qt::LeftButton)
-        return false;
-
-    fla::Edge* edge = nullptr;
-    fla::EditablePath before;
-    size_t index = 0;
-
-    bool invertible = false;
-    const QTransform toShape = shapeToDocument(view).inverted(&invertible);
-    if (!invertible)
-        return false;
-
-    if (!anchorAt(view, toShape.map(documentPos), edge, before, index))
-        return false;
-
-    // Double-clicking an anchor flips it between smooth and corner, which is the
-    // convert gesture every pen tool has.
-    fla::EditablePath after = before;
-    if (!after.toggleAnchorSmooth(index))
-        return false;
-
-    commitGeometry(view, edge, before, after, "Convert Anchor");
-    _selectedEdge = edge;
-    _selectedAnchor = index;
-    _hasSelectedAnchor = true;
-    return true;
-}
-
 bool SubselectionTool::anchorAt(PhoenixView& view, const QPointF& localPos,
     fla::Edge*& edge, fla::EditablePath& path, size_t& index) const
 {
@@ -347,7 +381,7 @@ bool SubselectionTool::anchorAt(PhoenixView& view, const QPointF& localPos,
     if (!shape)
         return false;
 
-    const double tolerance = view.pickTolerance() * 1.5;
+    const double tolerance = localTolerance(view);
 
     for (fla::Edge* candidate : shape->edges)
     {
@@ -469,18 +503,15 @@ void SubselectionTool::paintOverlay(PhoenixView& view, QPainter& painter, double
                 painter.drawEllipse(toQPointF(anchor.outHandle), handleSize, handleSize);
             }
 
-            // Smooth points are drawn round and corners square, the way every
-            // pen tool distinguishes them.
+            // Every anchor is a small hollow square, filled once it is
+            // selected. Animate does not show smooth against corner by shape.
             const bool picked = _hasSelectedAnchor && edge == _selectedEdge &&
                 &anchor == &path.anchors[qMin(_selectedAnchor, path.anchors.size() - 1)];
 
-            painter.setPen(QPen(QColor(0, 120, 200), 1.0 * scale));
-            painter.setBrush(picked ? QColor(255, 220, 0) : QColor(255, 255, 255));
-            if (anchor.smooth)
-                painter.drawEllipse(position, anchorSize, anchorSize);
-            else
-                painter.drawRect(QRectF(position.x() - anchorSize, position.y() - anchorSize,
-                    anchorSize * 2.0, anchorSize * 2.0));
+            painter.setPen(QPen(QColor(0, 0, 0), 1.0 * scale));
+            painter.setBrush(picked ? QColor(0, 0, 0) : QColor(255, 255, 255));
+            painter.drawRect(QRectF(position.x() - anchorSize, position.y() - anchorSize,
+                anchorSize * 2.0, anchorSize * 2.0));
         }
     }
 

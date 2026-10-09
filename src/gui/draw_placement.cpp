@@ -50,6 +50,10 @@ std::vector<fla::Shape*> shapesUnder(PhoenixView& view, fla::Frame& frame,
 
         fla::Shape* candidate = static_cast<fla::Shape*>(element);
 
+        // A drawing object never takes part in a merge, in either direction.
+        if (candidate->isDrawingObject)
+            continue;
+
         const QRectF candidateBounds = view.elementBounds(candidate);
         if (candidateBounds.isValid() && candidateBounds.intersects(additionBounds))
             found.push_back(candidate);
@@ -80,6 +84,11 @@ void placeDrawnElement(PhoenixView& view, fla::CommandStack& commandStack,
     // Adding the drawing and cutting what it covers are one action to undo, so
     // they go on the history together.
     commandStack.beginMacro(name);
+
+    // Object Drawing mode keeps the shape to itself, and the file records
+    // that on the shape, so loading it back keeps it that way.
+    if (objectDrawing && element->elementType() == fla::Element::Type::Shape)
+        static_cast<fla::Shape*>(element)->isDrawingObject = true;
 
     commandStack.push(fla::CommandPtr(new fla::AddElementCommand(
         frame, element, name, &selection)));
@@ -123,7 +132,7 @@ void placeDrawnElement(PhoenixView& view, fla::CommandStack& commandStack,
 bool commitPendingMerge(PhoenixView& view, fla::CommandStack& commandStack,
     fla::Selection& selection, fla::Shape* addition, fla::Frame* frame)
 {
-    if (!addition || !frame)
+    if (!addition || !frame || addition->isDrawingObject)
         return false;
 
     // The drawing may have been undone, or removed some other way, while it was

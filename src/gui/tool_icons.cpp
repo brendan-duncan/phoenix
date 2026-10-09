@@ -145,6 +145,83 @@ void drawPencil(QPainter& painter)
     painter.restore();
 }
 
+void drawHand(QPainter& painter)
+{
+    // A palm with four fingers up and a thumb out to the side.
+    QPainterPath hand;
+    hand.moveTo(8.0, 20.5);
+    hand.lineTo(6.0, 13.0);
+    hand.lineTo(5.0, 9.0);
+    hand.quadTo(5.0, 7.5, 6.8, 8.0);
+    hand.lineTo(8.5, 11.5);
+    hand.lineTo(8.5, 4.5);
+    hand.quadTo(8.5, 3.0, 10.2, 3.0);
+    hand.quadTo(11.9, 3.0, 11.9, 4.5);
+    hand.lineTo(11.9, 10.0);
+    hand.lineTo(12.4, 4.0);
+    hand.quadTo(12.4, 2.5, 14.1, 2.5);
+    hand.quadTo(15.8, 2.5, 15.8, 4.0);
+    hand.lineTo(15.8, 10.5);
+    hand.lineTo(16.4, 6.0);
+    hand.quadTo(16.4, 4.5, 18.1, 4.5);
+    hand.quadTo(19.8, 4.5, 19.8, 6.0);
+    hand.lineTo(19.8, 12.0);
+    hand.lineTo(19.8, 16.0);
+    hand.quadTo(19.8, 20.5, 15.0, 20.5);
+    hand.closeSubpath();
+
+    painter.setPen(QPen(strokeColour(), 1.2));
+    painter.setBrush(Qt::NoBrush);
+    painter.drawPath(hand);
+}
+
+void drawZoom(QPainter& painter)
+{
+    painter.setPen(QPen(strokeColour(), 1.8));
+    painter.setBrush(Qt::NoBrush);
+    painter.drawEllipse(QRectF(4.0, 4.0, 11.0, 11.0));
+
+    QPen handle(strokeColour(), 2.4);
+    handle.setCapStyle(Qt::RoundCap);
+    painter.setPen(handle);
+    painter.drawLine(QPointF(14.0, 14.0), QPointF(20.0, 20.0));
+
+    painter.setPen(QPen(strokeColour(), 1.4));
+    painter.drawLine(QPointF(7.0, 9.5), QPointF(12.0, 9.5));
+    painter.drawLine(QPointF(9.5, 7.0), QPointF(9.5, 12.0));
+}
+
+void drawRectanglePrimitive(QPainter& painter)
+{
+    // The rectangle with the corner grips a primitive keeps for its radii.
+    painter.setPen(QPen(strokeColour(), 1.4));
+    painter.setBrush(Qt::NoBrush);
+    painter.drawRect(QRectF(5.0, 6.5, 14.0, 11.0));
+
+    painter.setPen(Qt::NoPen);
+    painter.setBrush(strokeColour());
+    for (const QPointF& corner : {QPointF(5.0, 6.5), QPointF(19.0, 6.5),
+                                  QPointF(19.0, 17.5), QPointF(5.0, 17.5)})
+    {
+        painter.drawRect(QRectF(corner.x() - 1.8, corner.y() - 1.8, 3.6, 3.6));
+    }
+}
+
+void drawOvalPrimitive(QPainter& painter)
+{
+    painter.setPen(QPen(strokeColour(), 1.4));
+    painter.setBrush(Qt::NoBrush);
+    painter.drawEllipse(QRectF(4.0, 6.5, 16.0, 11.0));
+
+    painter.setPen(Qt::NoPen);
+    painter.setBrush(strokeColour());
+    for (const QPointF& grip : {QPointF(12.0, 6.5), QPointF(20.0, 12.0),
+                                QPointF(12.0, 17.5), QPointF(4.0, 12.0)})
+    {
+        painter.drawRect(QRectF(grip.x() - 1.8, grip.y() - 1.8, 3.6, 3.6));
+    }
+}
+
 void drawObjectDrawing(QPainter& painter)
 {
     // A shape inside its own boundary: what the mode does is keep the two
@@ -180,6 +257,10 @@ QPixmap render(ToolIcons::Tool tool, int size)
     case ToolIcons::Tool::PolyStar:      drawPolyStar(painter); break;
     case ToolIcons::Tool::Pen:           drawPen(painter); break;
     case ToolIcons::Tool::Pencil:        drawPencil(painter); break;
+    case ToolIcons::Tool::Hand:          drawHand(painter); break;
+    case ToolIcons::Tool::Zoom:          drawZoom(painter); break;
+    case ToolIcons::Tool::RectanglePrimitive: drawRectanglePrimitive(painter); break;
+    case ToolIcons::Tool::OvalPrimitive: drawOvalPrimitive(painter); break;
     case ToolIcons::Tool::ObjectDrawing: drawObjectDrawing(painter); break;
     }
 

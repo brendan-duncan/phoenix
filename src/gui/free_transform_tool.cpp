@@ -151,6 +151,46 @@ void FreeTransformTool::rebuildBox(PhoenixView& view)
     if (_box.size() == 5)
         _box.removeLast(); // QPolygonF(QRectF) closes the ring
     _boxValid = _box.size() == 4;
+    rememberBoxOwners();
+}
+
+void FreeTransformTool::rememberBoxOwners()
+{
+    _boxOwners.clear();
+    for (fla::DOMElement* selected : _selection.elements())
+    {
+        fla::Element* element = dynamic_cast<fla::Element*>(selected);
+        if (element)
+            _boxOwners.push_back({element, element->transform});
+    }
+}
+
+bool FreeTransformTool::boxMatchesSelection() const
+{
+    size_t count = 0;
+    for (fla::DOMElement* selected : _selection.elements())
+    {
+        fla::Element* element = dynamic_cast<fla::Element*>(selected);
+        if (!element)
+            continue;
+
+        ++count;
+        bool found = false;
+        for (const BoxOwner& owner : _boxOwners)
+        {
+            if (owner.element != element)
+                continue;
+
+            const fla::Transform& t = element->transform;
+            found = t.m11 == owner.transform.m11 && t.m12 == owner.transform.m12 &&
+                t.m21 == owner.transform.m21 && t.m22 == owner.transform.m22 &&
+                t.tx == owner.transform.tx && t.ty == owner.transform.ty;
+            break;
+        }
+        if (!found)
+            return false;
+    }
+    return count == _boxOwners.size();
 }
 
 QTransform FreeTransformTool::adjustForDrag(const QPointF& documentPos,
@@ -260,6 +300,16 @@ QPointF FreeTransformTool::snapDragPoint(PhoenixView& view, const QPointF& docum
 
     snapper->setTolerance(view.pickTolerance() * 2.0);
 
+    if (_grip == Grip::Body)
+    {
+        // A move snaps the box, not the cursor, or the object would land
+        // offset by wherever it was grabbed.
+        const QRectF moved = _boxAtDragStart.boundingRect().translated(documentPos - _dragStart);
+        const fla::SnapResult x = snapper->snapX({moved.left(), moved.center().x(), moved.right()});
+        const fla::SnapResult y = snapper->snapY({moved.top(), moved.center().y(), moved.bottom()});
+        return QPointF(documentPos.x() + x.adjustment, documentPos.y() + y.adjustment);
+    }
+
     // For a handle drag it is the handle that should land on a grid line or an
     // edge, and the handle follows the cursor, so snapping the cursor snaps it.
     const fla::SnapResult x = snapper->snapX({documentPos.x()});
@@ -291,11 +341,23 @@ bool FreeTransformTool::mousePress(PhoenixView& view, QMouseEvent* event, const 
     if (event->button() != Qt::LeftButton)
         return false;
 
-    if (!_boxValid)
+    // A box that no longer describes the selection -- after an undo, a nudge,
+    // or an edit with another tool -- is rebuilt rather than trusted.
+    if (!_boxValid || !boxMatchesSelection())
         rebuildBox(view);
 
     if (!_boxValid)
-        return false;
+    {
+        // Nothing selected: pick whatever is under the cursor, as the arrow
+        // would, and carry on with it.
+        const HitResult hit = view.hitTest(documentPos, view.pickTolerance());
+        if (!hit)
+            return false;
+        _selection.select(hit.element);
+        rebuildBox(view);
+        if (!_boxValid)
+            return false;
+    }
 
     const double tolerance = view.pickTolerance();
     const double handleTolerance = qMax(tolerance, kHandleScreenSize / qMax(view.zoom(), 1.0e-6));
@@ -335,7 +397,25 @@ bool FreeTransformTool::mousePress(PhoenixView& view, QMouseEvent* event, const 
     }
 
     if (_grip == Grip::None)
-        return false;
+    {
+        // Outside the box: a click picks whatever is under the cursor and
+        // starts moving it, or clears the selection on empty stage.
+        const HitResult hit = view.hitTest(documentPos, view.pickTolerance());
+        if (!hit)
+        {
+            _selection.clear();
+            _boxValid = false;
+            view.update();
+            return true;
+        }
+
+        if (!_selection.contains(hit.element))
+            _selection.select(hit.element);
+        rebuildBox(view);
+        if (!_boxValid)
+            return false;
+        _grip = Grip::Body;
+    }
 
     _dragStart = documentPos;
     _boxAtDragStart = _box;
@@ -452,6 +532,10 @@ void FreeTransformTool::commit(PhoenixView& view)
     _grip = Grip::None;
     _gripIndex = -1;
     _targets.clear();
+
+    // The box was carried through the gesture, so it still describes the
+    // selection; it just belongs to the new transforms now.
+    rememberBoxOwners();
     view.update();
 }
 
@@ -491,13 +575,15 @@ void FreeTransformTool::paintOverlay(PhoenixView& view, QPainter& painter, doubl
     if (!_boxValid)
         return;
 
+    // Animate's transform box: a thin black outline, hollow white handles with
+    // a black border, and a white circle for the transformation point.
     painter.setBrush(Qt::NoBrush);
-    painter.setPen(QPen(QColor(0, 170, 255), 1.5 * scale));
+    painter.setPen(QPen(QColor(0, 0, 0), 1.0 * scale));
     painter.drawPolygon(_box);
 
     const double half = kHandleScreenSize * scale;
     painter.setBrush(QColor(255, 255, 255));
-    painter.setPen(QPen(QColor(0, 120, 200), 1.0 * scale));
+    painter.setPen(QPen(QColor(0, 0, 0), 1.0 * scale));
 
     for (int i = 0; i < kHandleCount; ++i)
     {
@@ -507,8 +593,8 @@ void FreeTransformTool::paintOverlay(PhoenixView& view, QPainter& painter, doubl
 
     // The transform origin, which rotation turns about.
     const QPointF center = centerOf(_box);
-    painter.setBrush(Qt::NoBrush);
-    painter.setPen(QPen(QColor(0, 120, 200), 1.5 * scale));
+    painter.setBrush(QColor(255, 255, 255));
+    painter.setPen(QPen(QColor(0, 0, 0), 1.0 * scale));
     painter.drawEllipse(center, half, half);
 }
 

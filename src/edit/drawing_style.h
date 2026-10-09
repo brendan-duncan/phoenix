@@ -46,9 +46,10 @@ public:
 
     PencilMode pencilMode = PencilMode::Smooth;
 
-    /// How far, in document units, the fitted stroke may stray from what was
-    /// drawn. Larger means smoother and fewer anchors.
-    double pencilTolerance = 2.0;
+    /// Animate's smoothing amount, 0 to 100. It is applied in screen pixels,
+    /// so a stroke drawn zoomed in is not smoothed any harder than one drawn
+    /// zoomed out.
+    int pencilSmoothing = 50;
 
     /// PolyStar settings. Sides is the point count in star mode.
     int sides = 5;

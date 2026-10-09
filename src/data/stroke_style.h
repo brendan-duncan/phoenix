@@ -22,7 +22,28 @@ public:
     double weight = 1.0;
     std::string scaleMode;
 
+    /// "hairline" for a stroke that is always one device pixel wide whatever
+    /// the zoom or the transform. Animate writes it with no weight attribute.
+    std::string solidStyle;
+
+    /// Cap and join styles as the file spells them: "none", "round" or
+    /// "square" for caps; "miter", "round" or "bevel" for joints. Empty means
+    /// Flash's default, which is round for both.
+    std::string caps;
+    std::string joints;
+    double miterLimit = 3.0;
+    bool pixelHinting = false;
+
+    /// Dash and gap lengths of a DashedStroke, in pixels.
+    double dash1 = 6.0;
+    double dash2 = 6.0;
+
+    /// Gap between the dots of a DottedStroke, in pixels.
+    double dotSpace = 3.0;
+
     FillStyle* fill = nullptr;
+
+    bool isHairline() const { return solidStyle == "hairline"; }
 
     StrokeStyle(DOMElement* parent)
         : DOMElement(parent)

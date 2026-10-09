@@ -1,5 +1,6 @@
 #include "pen_tool.h"
 
+#include "cursors.h"
 #include "draw_placement.h"
 #include "phoenix_view.h"
 
@@ -70,6 +71,23 @@ QPainterPath PenTool::previewPath(bool includeCursor) const
     return painterPath;
 }
 
+QCursor PenTool::cursor() const
+{
+    Cursors::Kind kind = Cursors::Kind::PenStart;
+    if (_active)
+        kind = _overFirstAnchor ? Cursors::Kind::PenClose : Cursors::Kind::Pen;
+    return Cursors::cursor(kind);
+}
+
+void PenTool::refreshCursor(PhoenixView& view)
+{
+    const int kind = !_active ? 0 : (_overFirstAnchor ? 2 : 1);
+    if (kind == _cursorKind)
+        return;
+    _cursorKind = kind;
+    view.setCursor(cursor());
+}
+
 bool PenTool::mousePress(PhoenixView& view, QMouseEvent* event, const QPointF& documentPos)
 {
     if (event->button() != Qt::LeftButton)
@@ -110,7 +128,9 @@ bool PenTool::mousePress(PhoenixView& view, QMouseEvent* event, const QPointF& d
     _path.anchors.push_back(fla::Anchor(toPoint(position)));
     _draggingHandle = true;
     _cursor = position;
+    _overFirstAnchor = false;
 
+    refreshCursor(view);
     view.update();
     return true;
 }
@@ -126,11 +146,22 @@ bool PenTool::mouseMove(PhoenixView& view, QMouseEvent* event, const QPointF& do
     {
         fla::Anchor& anchor = _path.anchors.back();
 
-        // Dragging out of a fresh point makes it smooth; holding alt keeps the
-        // two sides independent, which is how a corner with one curved side is
-        // drawn.
-        anchor.smooth = (event->modifiers() & Qt::AltModifier) == 0;
-        anchor.setOutHandle(toPoint(documentPos));
+        // Dragging out of a fresh point makes it smooth, with the in-handle the
+        // exact mirror of the out-handle so the curve arriving is as round as
+        // the one leaving. Alt freezes the in-handle where it is and lets the
+        // out-handle go its own way, which is how a corner with one curved
+        // side is drawn.
+        anchor.outHandle = toPoint(documentPos);
+        if ((event->modifiers() & Qt::AltModifier) == 0)
+        {
+            anchor.smooth = true;
+            anchor.inHandle = fla::Point(2.0 * anchor.position.x - anchor.outHandle.x,
+                                         2.0 * anchor.position.y - anchor.outHandle.y);
+        }
+        else
+        {
+            anchor.smooth = false;
+        }
     }
     else if (_path.anchors.size() >= 2)
     {
@@ -139,6 +170,7 @@ bool PenTool::mouseMove(PhoenixView& view, QMouseEvent* event, const QPointF& do
             documentPos.y() - first.y()) <= view.pickTolerance() * 2.0;
     }
 
+    refreshCursor(view);
     view.update();
     return true;
 }
@@ -152,6 +184,26 @@ bool PenTool::mouseRelease(PhoenixView& view, QMouseEvent* event, const QPointF&
 
     _draggingHandle = false;
     view.update();
+    return true;
+}
+
+bool PenTool::mouseDoubleClick(PhoenixView& view, QMouseEvent* event, const QPointF& documentPos)
+{
+    (void)documentPos;
+
+    if (event->button() != Qt::LeftButton || !_active)
+        return false;
+
+    if (_path.anchors.size() >= 2)
+    {
+        const fla::Point& last = _path.anchors.back().position;
+        const fla::Point& previous = _path.anchors[_path.anchors.size() - 2].position;
+        if (std::hypot(last.x - previous.x, last.y - previous.y) <= view.pickTolerance())
+            _path.anchors.pop_back();
+    }
+
+    _draggingHandle = false;
+    finish(view, false);
     return true;
 }
 
@@ -204,6 +256,7 @@ void PenTool::finish(PhoenixView& view, bool close)
     _active = false;
     _draggingHandle = false;
     _overFirstAnchor = false;
+    refreshCursor(view);
 
     placeDrawnElement(view, _commandStack, _selection, frame, shape, "Pen",
         _style.objectDrawing);
@@ -215,6 +268,7 @@ void PenTool::cancel(PhoenixView& view)
     _active = false;
     _draggingHandle = false;
     _overFirstAnchor = false;
+    refreshCursor(view);
     view.update();
 }
 
@@ -255,8 +309,24 @@ fla::Element* PenTool::createShape(fla::Frame* frame) const
     }
 
     fla::Edge* edge = new fla::Edge(shape);
-    edge->fillStyle1 = fillIndex;
     edge->strokeStyle = strokeIndex;
+
+    // Which side the fill sits on depends on which way round the outline was
+    // drawn: fillStyle1 is the left of the edge's direction, which is the
+    // inside of a path drawn clockwise on screen. A path drawn the other way
+    // round puts its inside on fillStyle0, as the merge expects.
+    double area = 0.0;
+    for (size_t i = 0; i < _path.anchors.size(); ++i)
+    {
+        const fla::Point& a = _path.anchors[i].position;
+        const fla::Point& b = _path.anchors[(i + 1) % _path.anchors.size()].position;
+        area += a.x * b.y - b.x * a.y;
+    }
+    if (area >= 0.0)
+        edge->fillStyle1 = fillIndex;
+    else
+        edge->fillStyle0 = fillIndex;
+
     _path.applyTo(*edge);
     shape->edges.push_back(edge);
 

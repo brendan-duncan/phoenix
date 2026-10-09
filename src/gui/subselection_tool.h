@@ -39,8 +39,6 @@ public:
 
     bool mousePress(PhoenixView& view, QMouseEvent* event, const QPointF& documentPos) override;
 
-    bool mouseDoubleClick(PhoenixView& view, QMouseEvent* event, const QPointF& documentPos) override;
-
     bool mouseMove(PhoenixView& view, QMouseEvent* event, const QPointF& documentPos) override;
 
     bool mouseRelease(PhoenixView& view, QMouseEvent* event, const QPointF& documentPos) override;
@@ -50,6 +48,8 @@ public:
     void paintOverlay(PhoenixView& view, QPainter& painter, double scale) override;
 
     bool showsSelectionBounds() const override { return false; }
+
+    bool showsFillHighlight() const override { return false; }
 
     void deactivate(PhoenixView& view) override;
 
@@ -109,6 +109,19 @@ private:
     Grip _grip = Grip::None;
     size_t _anchorIndex = 0;
     QPointF _dragStart;
+
+    /// Whether the press has travelled far enough to be a drag. A click on an
+    /// anchor only selects it; it must not write a command or modify the
+    /// document.
+    bool _dragMoved = false;
+
+    /// Alt-dragging a corner point pulls handles out of it, turning it into a
+    /// curve point. That is Animate's convert gesture with this tool.
+    bool _convertDrag = false;
+
+    /// The pick tolerance in the shape's own space, so the grab distance stays
+    /// the same on screen however the shape is scaled.
+    double localTolerance(PhoenixView& view) const;
 
     /// The anchor the last click landed on, which Delete removes.
     fla::Edge* _selectedEdge = nullptr;

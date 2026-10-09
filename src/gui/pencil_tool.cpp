@@ -78,26 +78,20 @@ bool PencilTool::keyPress(PhoenixView& view, QKeyEvent* event)
 void PencilTool::finish(PhoenixView& view)
 {
     fla::CurveFit::Options options;
-    options.tolerance = _style.pencilTolerance;
     options.straighten = _style.pencilMode == fla::DrawingStyle::PencilMode::Straighten;
 
-    // Ink mode keeps every point as drawn, so the fit is skipped and only the
-    // duplicate removal runs.
-    if (_style.pencilMode == fla::DrawingStyle::PencilMode::Ink)
-        options.tolerance = 0.0;
+    // Smoothing is an amount in screen pixels, as in Animate: at 100 the fit may
+    // stray five screen pixels from the stroke, at 0 a quarter of one. Ink mode
+    // follows the stroke closely but still fits curves rather than keeping every
+    // mouse sample as a corner.
+    const double zoom = qMax(view.zoom(), 1.0e-6);
+    const double screenTolerance = _style.pencilMode == fla::DrawingStyle::PencilMode::Ink
+        ? 0.5
+        : 0.25 + 4.75 * (qBound(0, _style.pencilSmoothing, 100) / 100.0);
+    options.tolerance = screenTolerance / zoom;
+    options.minimumSpacing = 0.5 / zoom;
 
-    fla::EditablePath path;
-    if (_style.pencilMode == fla::DrawingStyle::PencilMode::Ink)
-    {
-        const std::vector<fla::Point> cleaned =
-            fla::CurveFit::removeDuplicates(_points, options.minimumSpacing);
-        for (const fla::Point& point : cleaned)
-            path.anchors.push_back(fla::Anchor(point));
-    }
-    else
-    {
-        path = fla::CurveFit::fit(_points, options);
-    }
+    fla::EditablePath path = fla::CurveFit::fit(_points, options);
 
     _points.clear();
 

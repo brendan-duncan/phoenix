@@ -85,6 +85,8 @@ set(HEADERS
     src/gui/phoenix_view.h
     src/gui/tool.h
     src/gui/tool_icons.h
+    src/gui/cursors.h
+    src/gui/navigation_tools.h
     src/gui/draw_placement.h
     src/gui/selection_tool.h
     src/gui/free_transform_tool.h
@@ -167,6 +169,8 @@ set(SOURCES
     src/gui/phoenix_view.cpp
     src/gui/selection_tool.cpp
     src/gui/tool_icons.cpp
+    src/gui/cursors.cpp
+    src/gui/navigation_tools.cpp
     src/gui/draw_placement.cpp
     src/gui/free_transform_tool.cpp
     src/gui/primitive_tool.cpp

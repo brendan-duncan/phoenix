@@ -30,7 +30,11 @@ public:
         Rectangle,
         Oval,
         Line,
-        PolyStar
+        PolyStar,
+        /// Animate's separate primitive tools, which build the editable
+        /// rectangle and oval objects rather than shapes.
+        RectanglePrimitive,
+        OvalPrimitive
     };
 
     PrimitiveTool(Kind kind, fla::Selection& selection, fla::CommandStack& commandStack,
@@ -114,4 +118,14 @@ private:
 
     /// Whether the last move had alt held, drawing from the centre out.
     bool _fromCentre = false;
+
+    /// Whether the last snapped position actually snapped, for the ring.
+    mutable bool _snapped = false;
+
+    /// Rectangles and ovals, primitive or not: the kinds drawn from a box.
+    bool isBoxKind() const
+    {
+        return _kind == Kind::Rectangle || _kind == Kind::Oval ||
+            _kind == Kind::RectanglePrimitive || _kind == Kind::OvalPrimitive;
+    }
 };

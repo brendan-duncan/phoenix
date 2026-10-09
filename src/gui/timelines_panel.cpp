@@ -1,11 +1,13 @@
 #include "timelines_panel.h"
 #include "player.h"
+#include <algorithm>
 #include <map>
 
 #include <QVBoxLayout>
 #include <QHBoxLayout>
 #include <QFont>
 #include <QPainter>
+#include <QPolygonF>
 #include <QPaintEvent>
 #include <QMouseEvent>
 #include <QIcon>
@@ -344,55 +346,91 @@ void TimelineGrid::paintEvent(QPaintEvent* event)
     const int layerRowHeight = 30;
     const int headerHeight = 25;
     const int margin = 1;
+    const int cellStride = frameWidth + margin;
 
-    QColor darkColor(40, 40, 40);
-    QColor lightColor(70, 70, 70);
-    QColor textColor(135, 135, 135);
+    // Animate's frame colours: an empty keyframe span is white, a span with
+    // content grey, a classic tween lilac and a shape tween green.
+    const QColor background(30, 30, 30);
+    const QColor cellDark(40, 40, 40);
+    const QColor cellLight(55, 55, 55);
+    const QColor textColor(170, 170, 170);
+    const QColor emptySpan(236, 236, 236);
+    const QColor staticSpan(196, 196, 196);
+    const QColor motionSpan(197, 183, 232);
+    const QColor shapeSpan(186, 224, 180);
+    const QColor playheadColor(226, 60, 60);
 
-    painter.fillRect(event->rect(), QColor(30, 30, 30));
+    painter.fillRect(event->rect(), background);
 
-    int maxFrames = getMaxFrames(_flaDocument);
+    const int maxFrames = getMaxFrames(_flaDocument);
     int y = headerHeight;
+
+    painter.setRenderHint(QPainter::Antialiasing, true);
 
     for (const fla::Timeline* timeline : _flaDocument->document->timelines)
     {
         for (const fla::Layer* layer : timeline->layers)
         {
-            std::map<int, const fla::Frame*> frameMap;
-            int durationCount = 0;
+            // The empty cells, with every fifth column picked out.
+            for (int i = 0; i < maxFrames; ++i)
+            {
+                const QRect cell(i * cellStride, y, frameWidth, frameHeight);
+                painter.fillRect(cell, (i + 1) % 5 == 0 ? cellLight : cellDark);
+            }
+
+            if (layer->layerType == fla::Layer::Type::Folder)
+            {
+                y += layerRowHeight;
+                continue;
+            }
 
             for (const fla::Frame* frame : layer->frames)
             {
-                frameMap[frame->index] = frame;
-            }
+                if (!frame)
+                    continue;
 
-            for (int i = 0; i < maxFrames; ++i)
-            {
-                int x = i * (frameWidth + margin);
-                int yOffset = y;
+                const int duration = std::max(frame->duration, 1);
+                const int x0 = frame->index * cellStride;
+                const int x1 = (frame->index + duration) * cellStride - margin;
+                const QRect span(x0, y, x1 - x0, frameHeight);
 
-                QRect frameRect(x, yOffset, frameWidth, frameHeight);
+                const bool hasContent = !frame->elements.empty();
+                QColor spanColor = hasContent ? staticSpan : emptySpan;
+                if (frame->tweenType == fla::TweenType::Motion)
+                    spanColor = motionSpan;
+                else if (frame->tweenType == fla::TweenType::Shape)
+                    spanColor = shapeSpan;
+                painter.fillRect(span, spanColor);
 
-                QColor bgColor;
-                if ((i + 1) % 5 == 0)
-                    bgColor = lightColor;
-                else
-                    bgColor = darkColor;
+                const double midY = y + frameHeight / 2.0;
+                const double dotX = x0 + frameWidth / 2.0;
 
-                painter.fillRect(frameRect, bgColor);
+                // The keyframe dot: filled when the frame holds something,
+                // hollow when it is an empty keyframe.
+                painter.setPen(QPen(QColor(20, 20, 20), 1.0));
+                painter.setBrush(hasContent ? QColor(20, 20, 20) : QColor(255, 255, 255));
+                painter.drawEllipse(QPointF(dotX, midY), 3.2, 3.2);
 
-                auto frameIt = frameMap.find(i);
-
-                if (frameIt != frameMap.end())
+                if (duration > 1 && frame->tweenType != fla::TweenType::None)
                 {
-                    const fla::Frame* frame = (*frameIt).second;
-                    durationCount = frame->duration;
-                    painter.fillRect(frameRect, QColor(60, 110, 60));
+                    // A tween runs an arrow from the keyframe to the end of
+                    // its span.
+                    painter.setPen(QPen(QColor(20, 20, 20), 1.0));
+                    const double arrowStart = dotX + 6.0;
+                    const double arrowEnd = x1 - 5.0;
+                    painter.drawLine(QPointF(arrowStart, midY), QPointF(arrowEnd, midY));
+                    painter.setBrush(QColor(20, 20, 20));
+                    painter.drawPolygon(QPolygonF({
+                        QPointF(arrowEnd, midY), QPointF(arrowEnd - 5.0, midY - 3.0),
+                        QPointF(arrowEnd - 5.0, midY + 3.0)
+                    }));
                 }
-                else if (durationCount > 0)
+                else if (duration > 1)
                 {
-                    durationCount--;
-                    painter.fillRect(frameRect, QColor(40, 60, 40));
+                    // A static span ends in a small hollow rectangle.
+                    painter.setPen(QPen(QColor(20, 20, 20), 1.0));
+                    painter.setBrush(Qt::NoBrush);
+                    painter.drawRect(QRectF(x1 - frameWidth / 2.0 - 2.5, midY - 4.0, 5.0, 8.0));
                 }
             }
 
@@ -400,32 +438,45 @@ void TimelineGrid::paintEvent(QPaintEvent* event)
         }
     }
 
-    if (_player)
-    {
-        const int playHeadY = 5;
-        int currentFrame = _player->currentFrame();
-        int playheadX = currentFrame * (frameWidth + margin) + frameWidth / 2;
+    painter.setRenderHint(QPainter::Antialiasing, false);
 
-        painter.setPen(QColor(50, 150, 255));
-        painter.drawLine(playheadX, playHeadY, playheadX, height());
-
-        QPolygon triangle;
-        triangle.append(QPoint(playheadX - 6, playHeadY));
-        triangle.append(QPoint(playheadX + 6, playHeadY));
-        triangle.append(QPoint(playheadX, playHeadY + 10));
-        painter.setBrush(QColor(50, 150, 255));
-        painter.setPen(Qt::NoPen);
-        painter.drawPolygon(triangle);
-    }
-
+    // The ruler: Animate numbers frames from one and labels every fifth.
     painter.setPen(textColor);
     QFont frameFont = painter.font();
     frameFont.setPointSize(8);
     painter.setFont(frameFont);
-    for (int i = 0; i < maxFrames; i += 5)
+    for (int i = 0; i < maxFrames; ++i)
     {
-        int x = i * (frameWidth + margin);
-        QString label = QString::number(i);
-        painter.drawText(x + 2, 20, label);
+        const int number = i + 1;
+        const int x = i * cellStride;
+        if (number == 1 || number % 5 == 0)
+        {
+            painter.setPen(QColor(90, 90, 90));
+            painter.drawLine(x, headerHeight - 6, x, headerHeight - 1);
+            painter.setPen(textColor);
+            painter.drawText(QRect(x, 2, cellStride * 3, headerHeight - 8),
+                Qt::AlignLeft | Qt::AlignVCenter, QString::number(number));
+        }
+    }
+
+    if (_player)
+    {
+        // The playhead: a red marker in the ruler with a red line down the
+        // frames.
+        const int currentFrame = _player->currentFrame();
+        const int x = currentFrame * cellStride;
+
+        painter.fillRect(QRect(x, 0, frameWidth, headerHeight - 1), QColor(226, 60, 60, 110));
+        painter.setPen(QPen(playheadColor, 1.0));
+        painter.drawLine(x + frameWidth / 2, headerHeight - 1, x + frameWidth / 2, height());
+
+        painter.setRenderHint(QPainter::Antialiasing, true);
+        painter.setPen(Qt::NoPen);
+        painter.setBrush(playheadColor);
+        painter.drawRect(QRectF(x + 1, 1, frameWidth - 2, headerHeight - 10));
+        painter.drawPolygon(QPolygonF({
+            QPointF(x + 1, headerHeight - 9), QPointF(x + frameWidth - 1, headerHeight - 9),
+            QPointF(x + frameWidth / 2.0, headerHeight - 2)
+        }));
     }
 }

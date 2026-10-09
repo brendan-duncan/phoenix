@@ -6,6 +6,7 @@
 #include "player.h"
 #include "../data/fla_document.h"
 #include "free_transform_tool.h"
+#include "navigation_tools.h"
 #include "pen_tool.h"
 #include "pencil_tool.h"
 #include "primitive_tool.h"
@@ -133,6 +134,10 @@ private:
     std::unique_ptr<PrimitiveTool> _ovalTool;
     std::unique_ptr<PrimitiveTool> _lineTool;
     std::unique_ptr<PrimitiveTool> _polyStarTool;
+    std::unique_ptr<PrimitiveTool> _rectanglePrimitiveTool;
+    std::unique_ptr<PrimitiveTool> _ovalPrimitiveTool;
+    std::unique_ptr<HandTool> _handTool;
+    std::unique_ptr<ZoomTool> _zoomTool;
     std::unique_ptr<PenTool> _penTool;
     std::unique_ptr<PencilTool> _pencilTool;
     std::unique_ptr<SubselectionTool> _subselectionTool;

@@ -180,11 +180,19 @@ EditablePath EditablePath::fromPath(const Path& path)
     return result;
 }
 
-void EditablePath::applyTo(Edge& edge) const
+void EditablePath::applyTo(Edge& edge, size_t pathIndex) const
 {
-    for (Path* path : edge.paths)
-        delete path;
-    edge.paths.clear();
+    // Only the path being edited is replaced. An edge can carry several, and
+    // rewriting one must not throw the others away.
+    if (pathIndex < edge.paths.size())
+    {
+        delete edge.paths[pathIndex];
+        edge.paths.erase(edge.paths.begin() + static_cast<std::ptrdiff_t>(pathIndex));
+    }
+    else
+    {
+        pathIndex = edge.paths.size();
+    }
 
     if (anchors.empty())
         return;
@@ -204,7 +212,7 @@ void EditablePath::applyTo(Edge& edge) const
         appendSegment(path, anchors.back(), anchors.front());
     }
 
-    edge.paths.push_back(path);
+    edge.paths.insert(edge.paths.begin() + static_cast<std::ptrdiff_t>(pathIndex), path);
 }
 
 namespace {

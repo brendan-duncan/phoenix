@@ -46,6 +46,9 @@ public:
 
     void paintOverlay(PhoenixView& view, QPainter& painter, double scale) override;
 
+    /// The transform box stands in for the plain selection box.
+    bool showsSelectionBounds() const override { return false; }
+
     void deactivate(PhoenixView& view) override;
 
     /// Discards the current transform box, so the next paint rebuilds it from
@@ -107,6 +110,20 @@ private:
     /// The four corners of the transform box, in document space.
     QPolygonF _box;
     bool _boxValid = false;
+
+    /// What the box was built for: each selected element and the transform it
+    /// had. A press checks this first, so a box left over from before an undo
+    /// or an edit by another tool is rebuilt rather than used.
+    struct BoxOwner
+    {
+        fla::Element* element = nullptr;
+        fla::Transform transform;
+    };
+    std::vector<BoxOwner> _boxOwners;
+
+    void rememberBoxOwners();
+
+    bool boxMatchesSelection() const;
 
     Grip _grip = Grip::None;
     int _gripIndex = -1;

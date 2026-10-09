@@ -243,6 +243,28 @@ TEST(a_closed_path_writes_its_final_segment_home)
     CHECK(fla::EdgeWriter::writeEdge(edge) == "!0 0|200 0|200 200|0 0");
 }
 
+TEST(applying_anchors_leaves_the_edges_other_paths_alone)
+{
+    // An edge can hold several paths; editing one must not delete the rest.
+    std::unique_ptr<fla::Edge> edge = parseEdge("!0 0|100 0!200 200|300 200");
+    CHECK(edge != nullptr);
+    if (!edge || edge->paths.size() != 2)
+    {
+        CHECK(edge && edge->paths.size() == 2);
+        return;
+    }
+
+    EditablePath path;
+    path.anchors.push_back(Anchor(Point(1.0, 2.0)));
+    path.anchors.push_back(Anchor(Point(3.0, 4.0)));
+    path.applyTo(*edge, 1);
+
+    CHECK(edge->paths.size() == 2);
+    if (edge->paths.size() != 2)
+        return;
+    CHECK(fla::EdgeWriter::writeEdge(*edge) == "!0 0|100 0!20 40|60 80");
+}
+
 TEST(an_empty_path_clears_the_edge)
 {
     std::unique_ptr<fla::Edge> edge = parseEdge("!0 0|100 0");

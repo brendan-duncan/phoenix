@@ -3,6 +3,7 @@
 #include "draw_placement.h"
 
 #include "../edit/command_stack.h"
+#include "../edit/element_commands.h"
 #include "../edit/selection.h"
 
 #include <QTimer>
@@ -23,6 +24,7 @@
 #include "../data/frame.h"
 #include "../data/morph_shape.h"
 #include "../data/morph_curves.h"
+#include <algorithm>
 #include <map>
 #include <iostream>
 #include <cmath>
@@ -140,15 +142,39 @@ QTransform morphBoundsToShapeBounds(const QRectF& morphBounds, const fla::Rect& 
     return xf;
 }
 
-const fla::Frame* owningFrame(const fla::Shape* shape)
+const fla::Frame* owningFrame(const fla::DOMElement* element)
 {
-    for (const fla::DOMElement* p = shape->parent; p; p = p->parent)
+    for (const fla::DOMElement* p = element ? element->parent : nullptr; p; p = p->parent)
     {
         if (p->domType() == fla::DOMElement::DOMType::Frame)
             return static_cast<const fla::Frame*>(p);
     }
     return nullptr;
 }
+
+const fla::Layer* owningLayer(const fla::DOMElement* element)
+{
+    for (const fla::DOMElement* p = element ? element->parent : nullptr; p; p = p->parent)
+    {
+        if (p->domType() == fla::DOMElement::DOMType::Layer)
+            return static_cast<const fla::Layer*>(p);
+    }
+    return nullptr;
+}
+
+/// The colour a selected element is highlighted in. Animate's default is the
+/// outline colour of the layer the element sits on, so neighbouring layers
+/// read differently and the highlight is the same colour as the layer's
+/// outline view.
+QColor highlightColourFor(const fla::Element* element)
+{
+    if (const fla::Layer* layer = owningLayer(element))
+        return QColor(layer->color[0], layer->color[1], layer->color[2]);
+    return QColor(0, 170, 255);
+}
+
+/// Animate's magnification presets, which Zoom In and Zoom Out step through.
+constexpr double kZoomPresets[] = {0.08, 0.25, 0.5, 1.0, 2.0, 4.0, 8.0, 16.0, 32.0};
 
 } // namespace
 
@@ -167,6 +193,10 @@ PhoenixView::PhoenixView(Player* player, QWidget *parent)
     setMinimumSize(400, 300);
     setBackgroundRole(QPalette::Base);
     setAutoFillBackground(true);
+
+    // Keys reach the stage once it has been clicked, so Delete, Escape and the
+    // nudge keys go to the tools rather than nowhere.
+    setFocusPolicy(Qt::StrongFocus);
 
     // Enable mouse tracking for smooth panning
     setMouseTracking(true);
@@ -453,20 +483,17 @@ void PhoenixView::drawTimeline(QPainter& painter, const fla::Timeline* timeline,
             continue;
         }
 
-        // Use full widget resolution for mask (2x for HQAA)
-        const int supersampleFactor = _highQualityAntiAliasing ? 2 : 1;
-        QRect r = rect();
-        QPixmap maskPixmap(r.width() * supersampleFactor, r.height() * supersampleFactor);
+        // The mask is rendered at the resolution of whatever the painter is
+        // drawing into -- the supersampled buffer or the widget itself -- so it
+        // lines up with the content pixel for pixel whatever the quality mode.
+        const QSize deviceSize(painter.device()->width(), painter.device()->height());
+        QPixmap maskPixmap(deviceSize);
         maskPixmap.fill(Qt::transparent);
 
         QPainter maskPainter(&maskPixmap);
         maskPainter.setRenderHint(QPainter::Antialiasing, true);
         maskPainter.setRenderHint(QPainter::TextAntialiasing, true);
         maskPainter.setRenderHint(QPainter::SmoothPixmapTransform, true);
-        if (supersampleFactor > 1)
-        {
-            maskPainter.scale(supersampleFactor, supersampleFactor);
-        }
         maskPainter.setTransform(painterTransform);
 
         drawLayer(maskPainter, layer, loopType, firstFrame, nullptr);
@@ -492,19 +519,13 @@ void PhoenixView::drawTimeline(QPainter& painter, const fla::Timeline* timeline,
                 const QPixmap& maskPixmap = maskIt.value().maskPixmap;
                 const QPointF& maskOffset = maskIt.value().offset;
 
-                // Use full widget resolution for content (2x for HQAA)
-                QRect r = rect();
-                QPixmap contentPixmap(r.width() * supersampleFactor, r.height() * supersampleFactor);
+                QPixmap contentPixmap(maskPixmap.size());
                 contentPixmap.fill(Qt::transparent);
 
                 QPainter contentPainter(&contentPixmap);
                 contentPainter.setRenderHint(QPainter::Antialiasing, true);
                 contentPainter.setRenderHint(QPainter::TextAntialiasing, true);
                 contentPainter.setRenderHint(QPainter::SmoothPixmapTransform, true);
-                if (supersampleFactor > 1)
-                {
-                    contentPainter.scale(supersampleFactor, supersampleFactor);
-                }
                 contentPainter.setTransform(painterTransform);
 
                 drawLayer(contentPainter, layer, loopType, firstFrame, nullptr);
@@ -930,16 +951,45 @@ QPen PhoenixView::getPen(const fla::StrokeStyle* strokeStyle)
         return QPen(Qt::NoPen);
     }
 
-    double weight = MAX(strokeStyle->weight, 0.5);
+    // A hairline is one device pixel wide whatever the zoom or the transform,
+    // which is what a cosmetic pen of width zero draws.
+    const bool hairline = strokeStyle->isHairline();
+    const double weight = hairline ? 0.0 : std::max(strokeStyle->weight, 0.05);
     QPen pen(QColor(0, 0, 0, 255), weight);
+    pen.setCosmetic(hairline);
 
-    if (strokeStyle->style() == fla::StrokeStyle::Style::Solid)
+    // Flash's defaults are round caps and round joins; the file only records
+    // them when they differ. Qt's own defaults are square and bevel, which is
+    // what every pencil line and rectangle corner used to get.
+    if (strokeStyle->caps == "none")
+        pen.setCapStyle(Qt::FlatCap);
+    else if (strokeStyle->caps == "square")
+        pen.setCapStyle(Qt::SquareCap);
+    else
+        pen.setCapStyle(Qt::RoundCap);
+
+    if (strokeStyle->joints == "miter")
+        pen.setJoinStyle(Qt::MiterJoin);
+    else if (strokeStyle->joints == "bevel")
+        pen.setJoinStyle(Qt::BevelJoin);
+    else
+        pen.setJoinStyle(Qt::RoundJoin);
+    pen.setMiterLimit(strokeStyle->miterLimit);
+
+    // Dash patterns are in units of the pen width.
+    const double unit = weight > 0.0 ? weight : 1.0;
+
+    if (strokeStyle->style() == fla::StrokeStyle::Style::Dashed)
     {
-        pen.setStyle(Qt::SolidLine);
+        pen.setDashPattern({std::max(strokeStyle->dash1, 0.1) / unit,
+                            std::max(strokeStyle->dash2, 0.1) / unit});
     }
-    else if (strokeStyle->style() == fla::StrokeStyle::Style::Dashed)
+    else if (strokeStyle->style() == fla::StrokeStyle::Style::Dotted)
     {
-        pen.setStyle(Qt::DashLine);
+        // A dot is a zero-length dash grown by its round cap, so the gap has to
+        // allow for the half width the cap adds at each end.
+        pen.setCapStyle(Qt::RoundCap);
+        pen.setDashPattern({0.001, (std::max(strokeStyle->dotSpace, 0.0) + unit) / unit});
     }
     else if (strokeStyle->style() == fla::StrokeStyle::Style::Ragged)
     {
@@ -948,12 +998,6 @@ QPen PhoenixView::getPen(const fla::StrokeStyle* strokeStyle)
     else if (strokeStyle->style() == fla::StrokeStyle::Style::Stipple)
     {
         pen.setStyle(Qt::DashDotDotLine);
-    }
-    else if (strokeStyle->style() == fla::StrokeStyle::Style::Dotted)
-    {
-        pen.setStyle(Qt::DotLine);
-        pen.setCapStyle(Qt::RoundCap);
-        pen.setJoinStyle(Qt::RoundJoin);
     }
 
     if (strokeStyle->fill->type() == fla::FillStyle::Type::SolidColor)
@@ -1193,44 +1237,6 @@ void PhoenixView::buildShapePaths(const fla::Shape* shape, PathCacheList& cacheE
             }
         }
     }
-
-    // Helper lambda to build a complete path from a path (for stroke rendering)
-    auto buildPath = [&](const fla::Path* path, const fla::Element* shape) -> QPainterPath
-    {
-        QPainterPath painterPath;
-        painterPath.setFillRule(Qt::WindingFill);
-        for (const fla::PathSegment* segment : path->segments)
-        {
-            if (segment->command == fla::PathSegment::Command::Move)
-            {
-                fla::Point p = segment->points[0];
-                painterPath.moveTo(p.x, p.y);
-            }
-            else if (segment->command == fla::PathSegment::Command::Line)
-            {
-                fla::Point p = segment->points[0];
-                painterPath.lineTo(p.x, p.y);
-            }
-            else if (segment->command == fla::PathSegment::Command::Quad)
-            {
-                fla::Point p1 = segment->points[0];
-                fla::Point p2 = segment->points[1];
-                painterPath.quadTo(p1.x, p1.y, p2.x, p2.y);
-            }
-            else if (segment->command == fla::PathSegment::Command::Cubic)
-            {
-                fla::Point p1 = segment->points[0];
-                fla::Point p2 = segment->points[1];
-                fla::Point p3 = segment->points[2];
-                painterPath.cubicTo(p1.x, p1.y, p2.x, p2.y, p3.x, p3.y);
-            }
-            else if (segment->command == fla::PathSegment::Command::Close)
-            {
-                painterPath.closeSubpath();
-            }
-        }
-        return painterPath;
-    };
 
     // Helper to add path to path in forward or reverse direction
     auto addSegmentToPath = [&](QPainterPath& painterPath, const fla::Path* path, bool reversed, const fla::Element* shape)
@@ -1576,7 +1582,20 @@ void PhoenixView::buildShapePaths(const fla::Shape* shape, PathCacheList& cacheE
         cacheEntries.push_back({ brush, Qt::NoPen, compoundPath });
     }
 
-    // Now render strokes separately (per segment)
+    // Strokes. A merged shape is stored as one edge per piece, so every corner
+    // is where two pieces meet. Stroking each piece on its own puts a cap at
+    // every corner and never a join, so pieces of one style are first chained
+    // end to end into runs, and a run that comes back to its start is closed so
+    // the first corner joins too.
+    struct StrokePiece
+    {
+        const fla::Path* path;
+        fla::Point start;
+        fla::Point end;
+        bool used = false;
+    };
+    std::map<int, std::vector<StrokePiece>> strokePieces;
+
     for (const fla::Edge* edge : shape->edges)
     {
         if (!edge->visible)
@@ -1587,7 +1606,7 @@ void PhoenixView::buildShapePaths(const fla::Shape* shape, PathCacheList& cacheE
             if (!path->visible || path->segments.empty())
                 continue;
 
-            int strokeStyleIdx = path->lineStyleIndex != -1 ? path->lineStyleIndex : edge->strokeStyle;
+            const int strokeStyleIdx = path->lineStyleIndex != -1 ? path->lineStyleIndex : edge->strokeStyle;
             if (strokeStyleIdx == -1)
                 continue;
 
@@ -1595,9 +1614,77 @@ void PhoenixView::buildShapePaths(const fla::Shape* shape, PathCacheList& cacheE
             if (!strokeStyle || !strokeStyle->fill)
                 continue;
 
-            QPainterPath strokePath = buildPath(path, shape);
+            auto [start, end] = getPathEndpoints(path);
+            strokePieces[strokeStyleIdx].push_back({path, start, end, false});
+        }
+    }
 
-            QPen pen = getPen(strokeStyle);
+    for (auto& [strokeIdx, pieces] : strokePieces)
+    {
+        const QPen pen = getPen(shape->getStrokeStyleByIndex(strokeIdx));
+
+        for (size_t first = 0; first < pieces.size(); ++first)
+        {
+            if (pieces[first].used)
+                continue;
+
+            // The run as a list of pieces, each possibly traced backwards.
+            std::vector<std::pair<size_t, bool>> run{{first, false}};
+            pieces[first].used = true;
+            fla::Point runStart = pieces[first].start;
+            fla::Point runEnd = pieces[first].end;
+
+            // Grow forward from the end; when nothing continues it, turn the run
+            // round and grow from what was the start.
+            for (int pass = 0; pass < 2; ++pass)
+            {
+                while (!pointsMatch(runEnd, runStart))
+                {
+                    bool extended = false;
+                    for (size_t next = 0; next < pieces.size() && !extended; ++next)
+                    {
+                        if (pieces[next].used)
+                            continue;
+
+                        if (pointsMatch(runEnd, pieces[next].start))
+                        {
+                            run.push_back({next, false});
+                            runEnd = pieces[next].end;
+                        }
+                        else if (pointsMatch(runEnd, pieces[next].end))
+                        {
+                            run.push_back({next, true});
+                            runEnd = pieces[next].start;
+                        }
+                        else
+                        {
+                            continue;
+                        }
+
+                        pieces[next].used = true;
+                        extended = true;
+                    }
+
+                    if (!extended)
+                        break;
+                }
+
+                if (pointsMatch(runEnd, runStart))
+                    break;
+
+                std::reverse(run.begin(), run.end());
+                for (auto& link : run)
+                    link.second = !link.second;
+                std::swap(runStart, runEnd);
+            }
+
+            QPainterPath strokePath;
+            strokePath.moveTo(runStart.x, runStart.y);
+            for (const auto& [index, reversed] : run)
+                addSegmentToPath(strokePath, pieces[index].path, reversed, shape);
+
+            if (pointsMatch(runEnd, runStart))
+                strokePath.closeSubpath();
 
             cacheEntries.push_back({ QBrush(Qt::NoBrush), pen, strokePath });
         }
@@ -1681,7 +1768,9 @@ void PhoenixView::drawShape(QPainter& painter, const fla::Shape* shape, const fl
         painter.drawPath(entry.painterPath);
     }
 
-    if (isSelected)
+    // Control points on a tree-selected shape are an inspection aid, so they
+    // come with the bounding-box debug view rather than the look of a selection.
+    if (isSelected && _showBounds)
     {
         drawOverlayPoints(painter, shape);
     }
@@ -1758,13 +1847,19 @@ void PhoenixView::hitTestTimeline(const fla::Timeline& timeline, fla::LoopType l
         if (!state.frame)
             continue;
 
-        for (fla::Element* element : state.frame->elements)
+        // Layers draw last to first, so the first layer is on top and this walk
+        // meets the topmost first. Within a frame later elements draw over
+        // earlier ones, so they are walked backwards, and the first hit is the
+        // one the user sees.
+        for (auto it = state.frame->elements.rbegin(); it != state.frame->elements.rend(); ++it)
         {
-            if (element)
+            if (*it)
             {
-                hitTestElement(*element, const_cast<fla::Frame*>(state.frame), loopType,
+                hitTestElement(**it, const_cast<fla::Frame*>(state.frame), loopType,
                     toDocument, documentPos, tolerance, result);
             }
+            if (result)
+                return;
         }
     }
 }
@@ -1802,13 +1897,15 @@ void PhoenixView::hitTestElement(fla::Element& element, fla::Frame* frame,
     case fla::Element::Type::Group:
     {
         fla::Group& group = static_cast<fla::Group&>(element);
-        for (fla::Element* member : group.members)
+        for (auto it = group.members.rbegin(); it != group.members.rend(); ++it)
         {
-            if (member)
+            if (*it)
             {
-                hitTestElement(*member, frame, loopType, elementToDocument,
+                hitTestElement(**it, frame, loopType, elementToDocument,
                     documentPos, tolerance, result);
             }
+            if (result)
+                return;
         }
         return;
     }
@@ -1935,13 +2032,16 @@ bool PhoenixView::isNearAnchor(const fla::Shape& shape, const QPointF& localPos,
                 if (!segment)
                     continue;
 
-                for (const fla::Point& point : segment->points)
-                {
-                    const double dx = point.x - localPos.x();
-                    const double dy = point.y - localPos.y();
-                    if (dx * dx + dy * dy <= limit)
-                        return true;
-                }
+                // Only the on-curve point counts: a segment's last point is
+                // where it ends, the rest are control points.
+                if (segment->points.empty())
+                    continue;
+
+                const fla::Point& point = segment->points.back();
+                const double dx = point.x - localPos.x();
+                const double dy = point.y - localPos.y();
+                if (dx * dx + dy * dy <= limit)
+                    return true;
             }
         }
     }
@@ -1957,7 +2057,7 @@ void PhoenixView::mousePressEvent(QMouseEvent *event)
     // Alt deliberately is not a pan modifier: the drawing tools need it for
     // breaking a tangent and for inserting an anchor, and swallowing it here
     // left those silently doing nothing.
-    const bool forcePan = event->button() == Qt::MiddleButton;
+    const bool forcePan = event->button() == Qt::MiddleButton || _spaceHeld;
 
     beginInteraction();
 
@@ -2039,7 +2139,108 @@ void PhoenixView::keyPressEvent(QKeyEvent* event)
     if (_activeTool && _activeTool->keyPress(*this, event))
         return;
 
+    // Space held is the hand tool for as long as it is down.
+    if (event->key() == Qt::Key_Space && !event->isAutoRepeat())
+    {
+        _spaceHeld = true;
+        if (!_isDragging)
+            setCursor(Qt::OpenHandCursor);
+        return;
+    }
+
+    if ((event->key() == Qt::Key_Delete || event->key() == Qt::Key_Backspace) &&
+        _selection && !_selection->isEmpty())
+    {
+        deleteSelection();
+        return;
+    }
+
+    // Ctrl is the temporary arrow tool, and the cursor says so while it is
+    // held, the way Animate does.
+    if (event->key() == Qt::Key_Control && _modifierTool && !_gestureTool && !_isDragging)
+    {
+        setCursor(_modifierTool->cursor());
+        return;
+    }
+
     QWidget::keyPressEvent(event);
+}
+
+void PhoenixView::keyReleaseEvent(QKeyEvent* event)
+{
+    if (event->isAutoRepeat())
+    {
+        QWidget::keyReleaseEvent(event);
+        return;
+    }
+
+    if (event->key() == Qt::Key_Space)
+    {
+        _spaceHeld = false;
+        if (!_isDragging)
+            setCursor(_activeTool ? _activeTool->cursor() : QCursor(Qt::ArrowCursor));
+        return;
+    }
+
+    if (event->key() == Qt::Key_Control && !_gestureTool && !_isDragging)
+    {
+        setCursor(_activeTool ? _activeTool->cursor() : QCursor(Qt::ArrowCursor));
+        return;
+    }
+
+    QWidget::keyReleaseEvent(event);
+}
+
+void PhoenixView::deleteSelection()
+{
+    if (!_selection || _selection->isEmpty() || !_commandStack)
+        return;
+
+    struct Doomed
+    {
+        fla::Frame* frame;
+        fla::Element* element;
+    };
+    std::vector<Doomed> doomed;
+
+    for (fla::DOMElement* selected : _selection->elements())
+    {
+        fla::Element* element = dynamic_cast<fla::Element*>(selected);
+        if (!element)
+            continue;
+
+        fla::Frame* frame = const_cast<fla::Frame*>(owningFrame(element));
+        if (frame)
+            doomed.push_back({frame, element});
+    }
+
+    if (doomed.empty())
+        return;
+
+    // A drawing that was waiting to merge has nothing left to drop in.
+    for (const Doomed& entry : doomed)
+    {
+        _pending.erase(std::remove_if(_pending.begin(), _pending.end(),
+            [&](const PendingDrop& pending) { return pending.shape == entry.element; }),
+            _pending.end());
+    }
+
+    const bool needsMacro = doomed.size() > 1;
+    if (needsMacro)
+        _commandStack->beginMacro("Delete");
+
+    for (const Doomed& entry : doomed)
+    {
+        _commandStack->push(fla::CommandPtr(new fla::RemoveElementCommand(
+            entry.frame, entry.element, "Delete", _selection)));
+    }
+
+    if (needsMacro)
+        _commandStack->endMacro();
+    _commandStack->breakMergeChain();
+
+    clearCaches();
+    update();
 }
 
 std::vector<fla::Element*> PhoenixView::elementsIn(const QRectF& documentRect)
@@ -2124,7 +2325,9 @@ void PhoenixView::setPendingMerge(fla::Shape* shape, fla::Frame* frame)
 
 void PhoenixView::markShapeEdited(fla::Shape* shape)
 {
-    if (!shape)
+    // A drawing object keeps to itself: moving it never drops it into the
+    // artwork underneath.
+    if (!shape || shape->isDrawingObject)
         return;
 
     setPendingMerge(shape, const_cast<fla::Frame*>(owningFrame(shape)));
@@ -2319,15 +2522,11 @@ void PhoenixView::drawToolOverlay(QPainter& painter)
     const double scale = _zoom > 0.0 ? 1.0 / _zoom : 1.0;
 
     const bool showBounds = !_activeTool || _activeTool->showsSelectionBounds();
+    const bool showFills = !_activeTool || _activeTool->showsFillHighlight();
 
-    if (showBounds && _selection && !_selection->isEmpty())
+    if (_selection && !_selection->isEmpty())
     {
         painter.save();
-        painter.setBrush(Qt::NoBrush);
-
-        QPen outline(QColor(0, 170, 255), 1.5 * scale);
-        outline.setCosmetic(false);
-        painter.setPen(outline);
 
         for (fla::DOMElement* selected : _selection->elements())
         {
@@ -2338,22 +2537,36 @@ void PhoenixView::drawToolOverlay(QPainter& painter)
             if (!element)
                 continue;
 
+            const QColor colour = highlightColourFor(element);
+
+            // Merge-drawn artwork is shown the way Animate shows it: a dot screen
+            // over the selected fills and strokes, not a box round the whole
+            // shape.
+            if (element->elementType() == fla::Element::Type::Shape)
+            {
+                const fla::Shape* shape = static_cast<const fla::Shape*>(element);
+                if (!shape->isDrawingObject)
+                {
+                    if (showFills)
+                        drawShapeHighlight(painter, shape, colour);
+                    continue;
+                }
+            }
+
+            if (!showBounds)
+                continue;
+
             const QRectF bounds = getElementBounds(element);
             if (!bounds.isValid())
                 continue;
 
-            painter.drawRect(bounds);
-
-            // Corner grips, sized in screen pixels.
-            const double grip = 3.0 * scale;
-            painter.setBrush(QColor(0, 170, 255));
-            const QPointF corners[4] = {
-                bounds.topLeft(), bounds.topRight(),
-                bounds.bottomRight(), bounds.bottomLeft()
-            };
-            for (const QPointF& corner : corners)
-                painter.drawRect(QRectF(corner.x() - grip, corner.y() - grip, grip * 2, grip * 2));
+            // Drawing objects, groups, symbols and the rest get a thin box with
+            // no grips: grips belong to the free transform tool.
+            QPen outline(colour, 1.0 * scale);
+            outline.setCosmetic(false);
+            painter.setPen(outline);
             painter.setBrush(Qt::NoBrush);
+            painter.drawRect(bounds);
         }
 
         painter.restore();
@@ -2368,28 +2581,83 @@ void PhoenixView::drawToolOverlay(QPainter& painter)
 }
 
 
+void PhoenixView::drawShapeHighlight(QPainter& painter, const fla::Shape* shape, const QColor& colour)
+{
+    const double scale = _zoom > 0.0 ? 1.0 / _zoom : 1.0;
+
+    painter.save();
+    painter.setRenderHint(QPainter::SmoothPixmapTransform, false);
+
+    const fla::Transform& t = shape->transform;
+    painter.setTransform(QTransform(t.m11, t.m12, t.m21, t.m22, t.tx, t.ty), true);
+
+    // The screen is a texture of device pixels, so the brush is given the
+    // inverse of the painter's mapping and lands on whole pixels whatever the
+    // zoom and the shape's own transform.
+    QPixmap texture(4, 4);
+    texture.fill(Qt::transparent);
+    {
+        QPainter dots(&texture);
+        dots.fillRect(0, 0, 1, 1, colour);
+        dots.fillRect(2, 0, 1, 1, colour);
+        dots.fillRect(0, 2, 1, 1, colour);
+        dots.fillRect(2, 2, 1, 1, colour);
+    }
+    QBrush stipple(texture);
+    bool invertible = false;
+    const QTransform inverse = painter.transform().inverted(&invertible);
+    if (invertible)
+    {
+        const QTransform toDevice = painter.transform();
+        stipple.setTransform(QTransform::fromTranslate(
+            std::round(toDevice.dx()), std::round(toDevice.dy())) * inverse);
+    }
+
+    for (const PathCacheEntry& entry : shapePaths(shape))
+    {
+        if (entry.pen.style() == Qt::NoPen)
+        {
+            painter.setPen(Qt::NoPen);
+            painter.setBrush(stipple);
+            painter.drawPath(entry.painterPath);
+        }
+        else
+        {
+            // The stroke is screened along its own width, with a floor so a
+            // hairline still shows as selected.
+            QPen pen(stipple, std::max(entry.pen.widthF(), 3.0 * scale));
+            pen.setCapStyle(entry.pen.capStyle());
+            pen.setJoinStyle(entry.pen.joinStyle());
+            painter.setPen(pen);
+            painter.setBrush(Qt::NoBrush);
+            painter.drawPath(entry.painterPath);
+        }
+    }
+
+    painter.restore();
+}
+
 void PhoenixView::wheelEvent(QWheelEvent *event)
 {
-    double scaleFactor = 1.15;
-    if (event->angleDelta().y() < 0)
-        scaleFactor = 1.0 / scaleFactor;
+    // As in Animate: the wheel scrolls the stage, shift scrolls it sideways,
+    // and ctrl zooms about the cursor.
+    if (event->modifiers() & Qt::ControlModifier)
+    {
+        const double factor = event->angleDelta().y() < 0 ? 1.0 / 1.15 : 1.15;
+        zoomTo(_zoom * factor, event->position());
+    }
+    else
+    {
+        QPointF delta = event->pixelDelta();
+        if (delta.isNull())
+            delta = QPointF(event->angleDelta()) * (40.0 / 120.0);
 
-    double newZoom = _zoom * scaleFactor;
+        if (event->modifiers() & Qt::ShiftModifier)
+            delta = QPointF(delta.y(), delta.x());
 
-    if (newZoom < _minZoom || newZoom > _maxZoom)
-        return;
-
-    const QPointF mousePos = event->position();
-
-    // Keep whatever is under the cursor under the cursor: note the document
-    // point first, zoom, then pan by however far it moved.
-    const QPointF anchor = mapToDocument(mousePos);
-
-    _zoom = newZoom;
-
-    const QPointF delta = mapToWidget(anchor) - mousePos;
-    _panX -= delta.x();
-    _panY -= delta.y();
+        _panX += delta.x();
+        _panY += delta.y();
+    }
 
     // A wheel gesture has no release to end it, so each notch pushes the
     // settle back and quality returns once the wheel stops.
@@ -2397,6 +2665,107 @@ void PhoenixView::wheelEvent(QWheelEvent *event)
     _settleTimer->start();
 
     update();
+}
+
+void PhoenixView::zoomTo(double zoom, const QPointF& widgetAnchor)
+{
+    zoom = qBound(_minZoom, zoom, _maxZoom);
+    if (zoom == _zoom)
+        return;
+
+    // Keep whatever is under the anchor under the anchor: note the document
+    // point first, zoom, then pan by however far it moved.
+    const QPointF anchor = mapToDocument(widgetAnchor);
+    _zoom = zoom;
+    const QPointF delta = mapToWidget(anchor) - widgetAnchor;
+    _panX -= delta.x();
+    _panY -= delta.y();
+    update();
+}
+
+void PhoenixView::setZoomLevel(double zoom)
+{
+    zoomTo(zoom, QPointF(width() / 2.0, height() / 2.0));
+}
+
+void PhoenixView::zoomIn()
+{
+    for (double preset : kZoomPresets)
+    {
+        if (preset > _zoom * 1.001)
+        {
+            setZoomLevel(preset);
+            return;
+        }
+    }
+}
+
+void PhoenixView::zoomOut()
+{
+    double chosen = _zoom;
+    for (double preset : kZoomPresets)
+    {
+        if (preset < _zoom / 1.001)
+            chosen = preset;
+    }
+    setZoomLevel(chosen);
+}
+
+void PhoenixView::zoomToRect(const QRectF& documentRect)
+{
+    if (!documentRect.isValid() || documentRect.width() <= 0.0 || documentRect.height() <= 0.0)
+        return;
+
+    double docWidth = 0.0;
+    double docHeight = 0.0;
+    if (_flaDocument && _flaDocument->document)
+    {
+        docWidth = _flaDocument->document->width;
+        docHeight = _flaDocument->document->height;
+    }
+
+    const double margin = 20.0;
+    const double zoom = qBound(_minZoom,
+        std::min((width() - 2.0 * margin) / documentRect.width(),
+                 (height() - 2.0 * margin) / documentRect.height()),
+        _maxZoom);
+
+    // With no pan the stage is centred, so the pan is whatever moves the
+    // rectangle's centre to the stage's.
+    _zoom = zoom;
+    _panX = (docWidth / 2.0 - documentRect.center().x()) * zoom;
+    _panY = (docHeight / 2.0 - documentRect.center().y()) * zoom;
+    update();
+}
+
+void PhoenixView::zoomToFit()
+{
+    if (!_flaDocument || !_flaDocument->document)
+        return;
+
+    zoomToRect(QRectF(0.0, 0.0, _flaDocument->document->width,
+        _flaDocument->document->height));
+}
+
+QRectF PhoenixView::contentBounds()
+{
+    QRectF bounds;
+    if (_flaDocument && _flaDocument->document)
+        bounds = QRectF(0.0, 0.0, _flaDocument->document->width, _flaDocument->document->height);
+
+    const QRectF everything(-1.0e6, -1.0e6, 2.0e6, 2.0e6);
+    for (fla::Element* element : elementsIn(everything))
+    {
+        const QRectF elementBounds = getElementBounds(element);
+        if (elementBounds.isValid())
+            bounds = bounds.isValid() ? bounds.united(elementBounds) : elementBounds;
+    }
+    return bounds;
+}
+
+void PhoenixView::zoomToShowAll()
+{
+    zoomToRect(contentBounds());
 }
 
 void PhoenixView::beginInteraction()

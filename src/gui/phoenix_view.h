@@ -75,7 +75,36 @@ public:
     /// feels the same however far in or out the view is.
     double pickTolerance() const;
 
+    /// Converts a document-space tolerance into the element's own space, so the
+    /// grab distance stays constant on screen however the element is scaled.
+    static double toleranceInLocalSpace(const QTransform& elementToDocument, double tolerance);
+
     double zoom() const { return _zoom; }
+
+    /// Zoom steps follow Animate's magnification presets. The view centre
+    /// stays put.
+    void zoomIn();
+
+    void zoomOut();
+
+    /// Sets the zoom about the view centre.
+    void setZoomLevel(double zoom);
+
+    /// Sets the zoom keeping the document point under \p widgetAnchor where
+    /// it is on screen, which is what a wheel or a zoom-tool click wants.
+    void zoomTo(double zoom, const QPointF& widgetAnchor);
+
+    /// Fit in Window: the stage fills the view.
+    void zoomToFit();
+
+    /// Show All: the stage and everything placed on or off it.
+    void zoomToShowAll();
+
+    /// Zooms so that \p documentRect fills the view, centred.
+    void zoomToRect(const QRectF& documentRect);
+
+    /// Removes everything selected from the document as one undo step.
+    void deleteSelection();
 
     /// Document-space bounds of an element, cached. Tools use this to place
     /// handles around what is selected.
@@ -186,6 +215,8 @@ protected:
 
     void keyPressEvent(QKeyEvent *event) override;
 
+    void keyReleaseEvent(QKeyEvent *event) override;
+
     void mouseDoubleClickEvent(QMouseEvent *event) override;
 
 private:
@@ -220,6 +251,12 @@ private:
     double _maxZoom = 100.0;
     bool _isDragging;
     QPoint _lastMousePos;
+
+    /// Space held turns any tool into the hand, as in Animate.
+    bool _spaceHeld = false;
+
+    /// Document-space bounds of everything on stage, united with the stage.
+    QRectF contentBounds();
     QTransform viewTransform;
 
     // Visible rect in document coordinates (for culling)
@@ -338,10 +375,6 @@ private:
         const QTransform& toDocument, const QPointF& documentPos,
         double tolerance, HitResult& result);
 
-    /// Converts a document-space tolerance into the element's own space, so the
-    /// grab distance stays constant on screen however the element is scaled.
-    static double toleranceInLocalSpace(const QTransform& elementToDocument, double tolerance);
-
     static bool isNearAnchor(const fla::Shape& shape, const QPointF& localPos, double tolerance);
 
     // Bounds calculation
@@ -373,6 +406,10 @@ private:
     bool isElementInsideGroup(const fla::DOMElement* element, const fla::Group* group) const;
 
     void drawOverlayPoints(QPainter& painter, const fla::Shape* shape);
+
+    /// Animate's dot screen over a selected merge-drawn shape: the fills and
+    /// the strokes it is made of, screened in the highlight colour.
+    void drawShapeHighlight(QPainter& painter, const fla::Shape* shape, const QColor& colour);
 
     /// Draws the marks that show what is selected, plus whatever the active tool
     /// wants on top. Runs in document coordinates after the stage is drawn.

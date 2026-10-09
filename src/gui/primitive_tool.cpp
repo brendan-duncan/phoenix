@@ -81,10 +81,12 @@ QString PrimitiveTool::name() const
 {
     switch (_kind)
     {
-    case Kind::Rectangle: return "Rectangle";
-    case Kind::Oval:      return "Oval";
-    case Kind::Line:      return "Line";
-    case Kind::PolyStar:  return "PolyStar";
+    case Kind::Rectangle:          return "Rectangle";
+    case Kind::Oval:               return "Oval";
+    case Kind::Line:               return "Line";
+    case Kind::PolyStar:           return "PolyStar";
+    case Kind::RectanglePrimitive: return "Rectangle Primitive";
+    case Kind::OvalPrimitive:      return "Oval Primitive";
     }
     return "Shape";
 }
@@ -98,7 +100,7 @@ QPointF PrimitiveTool::effectiveStart() const
 {
     // A polystar already grows from its centre, and a line has no centre to
     // grow from, so neither takes the modifier.
-    if (!_fromCentre || (_kind != Kind::Rectangle && _kind != Kind::Oval))
+    if (!_fromCentre || !isBoxKind())
         return _start;
 
     // Reflecting the press point across the cursor makes the press the middle
@@ -116,6 +118,7 @@ QPointF PrimitiveTool::snap(PhoenixView& view, const QPointF& documentPos) const
 
     const fla::SnapResult x = snapper->snapX({documentPos.x()});
     const fla::SnapResult y = snapper->snapY({documentPos.y()});
+    _snapped = x.snapped() || y.snapped();
     return QPointF(documentPos.x() + x.adjustment, documentPos.y() + y.adjustment);
 }
 
@@ -226,15 +229,17 @@ void PrimitiveTool::paintOverlay(PhoenixView& view, QPainter& painter, double sc
     if (!_dragging)
         return;
 
-    painter.setPen(QPen(QColor(0, 170, 255), 1.0 * scale, Qt::DashLine));
+    painter.setPen(QPen(QColor(0, 0, 0), 1.0 * scale, Qt::DashLine));
     painter.setBrush(Qt::NoBrush);
 
     switch (_kind)
     {
     case Kind::Rectangle:
+    case Kind::RectanglePrimitive:
         painter.drawRect(dragRect());
         break;
     case Kind::Oval:
+    case Kind::OvalPrimitive:
         painter.drawEllipse(dragRect());
         break;
     case Kind::Line:
@@ -246,6 +251,15 @@ void PrimitiveTool::paintOverlay(PhoenixView& view, QPainter& painter, double sc
         painter.drawEllipse(_start, std::hypot(_end.x() - _start.x(), _end.y() - _start.y()),
             std::hypot(_end.x() - _start.x(), _end.y() - _start.y()));
         break;
+    }
+
+    // The snap ring at the corner being dragged.
+    const fla::Snapper* snapper = view.snapper();
+    if (snapper && snapper->objectSnapEnabled())
+    {
+        const double radius = (_snapped ? 6.0 : 3.5) * scale;
+        painter.setPen(QPen(QColor(0, 0, 0), (_snapped ? 1.5 : 1.0) * scale, Qt::SolidLine));
+        painter.drawEllipse(_end, radius, radius);
     }
 }
 
@@ -265,18 +279,29 @@ fla::Element* PrimitiveTool::createElement(fla::Frame* frame, const QPointF& sta
 
     switch (_kind)
     {
+    // The rectangle and oval tools always draw shapes, as Animate's do. In
+    // Object Drawing mode the shape is flagged as a drawing object when it is
+    // placed; the editable primitive objects come only from the primitive
+    // tools below.
     case Kind::Rectangle:
         if (rect.width() < kMinimumSize || rect.height() < kMinimumSize)
             return nullptr;
-        // A primitive cannot merge, so merge mode gets a plain shape instead.
-        return _style.objectDrawing ? createRectangle(frame, rect)
-                                    : createRectangleShape(frame, rect);
+        return createRectangleShape(frame, rect);
 
     case Kind::Oval:
         if (rect.width() < kMinimumSize || rect.height() < kMinimumSize)
             return nullptr;
-        return _style.objectDrawing ? createOval(frame, rect)
-                                    : createOvalShape(frame, rect);
+        return createOvalShape(frame, rect);
+
+    case Kind::RectanglePrimitive:
+        if (rect.width() < kMinimumSize || rect.height() < kMinimumSize)
+            return nullptr;
+        return createRectangle(frame, rect);
+
+    case Kind::OvalPrimitive:
+        if (rect.width() < kMinimumSize || rect.height() < kMinimumSize)
+            return nullptr;
+        return createOval(frame, rect);
 
     case Kind::Line:
         if (std::hypot(end.x() - start.x(), end.y() - start.y()) < kMinimumSize)

@@ -35,13 +35,19 @@ public:
 
     QString name() const override { return "Pen"; }
 
-    QCursor cursor() const override { return Qt::CrossCursor; }
+    /// The pen with an x before a path starts, an o when a click would close
+    /// it, and plain in between.
+    QCursor cursor() const override;
 
     bool mousePress(PhoenixView& view, QMouseEvent* event, const QPointF& documentPos) override;
 
     bool mouseMove(PhoenixView& view, QMouseEvent* event, const QPointF& documentPos) override;
 
     bool mouseRelease(PhoenixView& view, QMouseEvent* event, const QPointF& documentPos) override;
+
+    /// Finishes the path open. The press that came with the double click has
+    /// already added an anchor on top of the last one, which is dropped.
+    bool mouseDoubleClick(PhoenixView& view, QMouseEvent* event, const QPointF& documentPos) override;
 
     bool keyPress(PhoenixView& view, QKeyEvent* event) override;
 
@@ -84,4 +90,9 @@ private:
     /// Whether the cursor is close enough to the first anchor that clicking
     /// would close the path, so the overlay can say so.
     bool _overFirstAnchor = false;
+
+    /// Pushes the cursor to the view when what it should show has changed.
+    void refreshCursor(PhoenixView& view);
+
+    int _cursorKind = -1;
 };

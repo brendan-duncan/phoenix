@@ -314,6 +314,18 @@ void XFLWriter::writeStrokeStyle(const StrokeStyle& stroke, XMLElement* parent)
     XMLElement* node = doc->NewElement(strokeTagName(stroke.style()));
     setDouble(node, "weight", stroke.weight, 1.0);
     setString(node, "scaleMode", stroke.scaleMode);
+    setString(node, "solidStyle", stroke.solidStyle);
+    setString(node, "caps", stroke.caps);
+    setString(node, "joints", stroke.joints);
+    setDouble(node, "miterLimit", stroke.miterLimit, 3.0);
+    setBool(node, "pixelHinting", stroke.pixelHinting, false);
+    if (stroke.style() == StrokeStyle::Style::Dashed)
+    {
+        setDouble(node, "dash1", stroke.dash1, 6.0);
+        setDouble(node, "dash2", stroke.dash2, 6.0);
+    }
+    if (stroke.style() == StrokeStyle::Style::Dotted)
+        setDouble(node, "dotSpace", stroke.dotSpace, 3.0);
 
     if (stroke.fill)
     {
@@ -341,6 +353,7 @@ void XFLWriter::writeShape(const Shape& shape, XMLElement* parent)
     XMLElement* node = doc->NewElement("DOMShape");
 
     writeElementCommon(shape, node);
+    setBool(node, "isDrawingObject", shape.isDrawingObject, false);
 
     if (!shape.fillsMap.empty())
     {

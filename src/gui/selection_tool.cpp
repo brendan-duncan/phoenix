@@ -73,7 +73,17 @@ bool SelectionTool::mouseMove(PhoenixView& view, QMouseEvent* event, const QPoin
     }
 
     if (!_marqueeActive)
+    {
+        // Hovering: the arrow grows a small box over something it can move.
+        const HitResult hit = view.hitTest(documentPos, view.pickTolerance());
+        const Cursors::Kind kind = hit ? Cursors::Kind::ArrowMove : Cursors::Kind::Arrow;
+        if (kind != _hoverKind)
+        {
+            _hoverKind = kind;
+            view.setCursor(cursor());
+        }
         return false;
+    }
 
     _marqueeEnd = documentPos;
     view.update();
@@ -134,6 +144,18 @@ bool SelectionTool::mouseRelease(PhoenixView& view, QMouseEvent* event, const QP
 
 bool SelectionTool::keyPress(PhoenixView& view, QKeyEvent* event)
 {
+    const int key = event->key();
+    if ((key == Qt::Key_Left || key == Qt::Key_Right || key == Qt::Key_Up || key == Qt::Key_Down) &&
+        !_moveActive && !_marqueeActive && !_selection.isEmpty())
+    {
+        // One pixel, or ten with shift, as in Animate.
+        const double step = (event->modifiers() & Qt::ShiftModifier) ? 10.0 : 1.0;
+        const double dx = key == Qt::Key_Left ? -step : key == Qt::Key_Right ? step : 0.0;
+        const double dy = key == Qt::Key_Up ? -step : key == Qt::Key_Down ? step : 0.0;
+        nudge(view, dx, dy);
+        return true;
+    }
+
     if (event->key() == Qt::Key_Escape)
     {
         if (_moveActive)
@@ -171,19 +193,70 @@ bool SelectionTool::keyPress(PhoenixView& view, QKeyEvent* event)
 
 void SelectionTool::paintOverlay(PhoenixView& view, QPainter& painter, double scale)
 {
-    (void)view;
+    if (_marqueeActive)
+    {
+        QPen pen(QColor(0, 0, 0), 1.0 * scale, Qt::DashLine);
+        painter.setPen(pen);
+        painter.setBrush(Qt::NoBrush);
+        painter.drawRect(marqueeRect());
+    }
 
-    if (!_marqueeActive)
+    const fla::Snapper* snapper = view.snapper();
+    if (_moveActive && _moveDragging && snapper && snapper->objectSnapEnabled())
+    {
+        // The snap ring sits at the grab point and grows when the drag has
+        // locked onto something.
+        const double radius = (_snapped ? 6.0 : 3.5) * scale;
+        painter.setPen(QPen(QColor(0, 0, 0), (_snapped ? 1.5 : 1.0) * scale));
+        painter.setBrush(Qt::NoBrush);
+        painter.drawEllipse(_snapRingPos, radius, radius);
+    }
+}
+
+void SelectionTool::nudge(PhoenixView& view, double dx, double dy)
+{
+    std::vector<fla::CommandPtr> commands;
+
+    for (fla::DOMElement* selected : _selection.elements())
+    {
+        fla::Element* element = dynamic_cast<fla::Element*>(selected);
+        if (!element)
+            continue;
+
+        fla::Transform after = element->transform;
+        after.tx += dx;
+        after.ty += dy;
+
+        commands.push_back(fla::CommandPtr(new fla::SetElementTransformCommand(
+            element, element->transform, after, "Move")));
+
+        if (element->elementType() == fla::Element::Type::Shape)
+            view.markShapeEdited(static_cast<fla::Shape*>(element));
+    }
+
+    if (commands.empty())
         return;
 
-    QPen pen(QColor(0, 170, 255), 1.0 * scale, Qt::DashLine);
-    painter.setPen(pen);
-    painter.setBrush(QColor(0, 170, 255, 40));
-    painter.drawRect(marqueeRect());
+    // Pushing applies the move. The merge chain is left open on purpose, so
+    // tapping an arrow key ten times is one thing to undo.
+    const bool needsMacro = commands.size() > 1;
+    if (needsMacro)
+        _commandStack.beginMacro("Move");
+
+    for (fla::CommandPtr& command : commands)
+        _commandStack.push(std::move(command));
+
+    if (needsMacro)
+        _commandStack.endMacro();
+
+    view.invalidateBounds();
+    view.update();
 }
 
 void SelectionTool::deactivate(PhoenixView& view)
 {
+    _hoverKind = Cursors::Kind::Arrow;
+
     if (_moveActive)
     {
         for (const Target& target : _targets)
@@ -249,8 +322,10 @@ void SelectionTool::beginMove(PhoenixView& view, const QPointF& documentPos)
     }
 }
 
-QPointF SelectionTool::snapMove(PhoenixView& view, const QPointF& delta) const
+QPointF SelectionTool::snapMove(PhoenixView& view, const QPointF& delta)
 {
+    _snapped = false;
+
     fla::Snapper* snapper = view.snapper();
     if (!snapper || !snapper->isEnabled() || !_moveBounds.isValid())
         return delta;
@@ -266,6 +341,7 @@ QPointF SelectionTool::snapMove(PhoenixView& view, const QPointF& delta) const
     const fla::SnapResult y = snapper->snapY(
         {moved.top(), moved.center().y(), moved.bottom()});
 
+    _snapped = x.snapped() || y.snapped();
     return QPointF(delta.x() + x.adjustment, delta.y() + y.adjustment);
 }
 
@@ -286,6 +362,7 @@ void SelectionTool::updateMove(PhoenixView& view, const QPointF& documentPos)
     }
 
     const QPointF delta = snapMove(view, raw);
+    _snapRingPos = documentPos;
 
     for (const Target& target : _targets)
     {

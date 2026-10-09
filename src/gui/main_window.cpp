@@ -104,6 +104,12 @@ MainWindow::MainWindow(QWidget *parent)
         PrimitiveTool::Kind::Line, _selection, stack, _drawingStyle);
     _polyStarTool = std::make_unique<PrimitiveTool>(
         PrimitiveTool::Kind::PolyStar, _selection, stack, _drawingStyle);
+    _rectanglePrimitiveTool = std::make_unique<PrimitiveTool>(
+        PrimitiveTool::Kind::RectanglePrimitive, _selection, stack, _drawingStyle);
+    _ovalPrimitiveTool = std::make_unique<PrimitiveTool>(
+        PrimitiveTool::Kind::OvalPrimitive, _selection, stack, _drawingStyle);
+    _handTool = std::make_unique<HandTool>();
+    _zoomTool = std::make_unique<ZoomTool>();
     _penTool = std::make_unique<PenTool>(_selection, stack, _drawingStyle);
     _pencilTool = std::make_unique<PencilTool>(_selection, stack, _drawingStyle);
     _subselectionTool = std::make_unique<SubselectionTool>(_selection, stack);
@@ -266,6 +272,13 @@ void MainWindow::setupUI()
 
     connect(_timelineView, &TimelineView::layerVisibilityChanged,
             this, &MainWindow::onVisibilityChanged);
+
+    // Locking and the current layer change what the stage can pick and where
+    // it draws; a repaint is all it needs, since both are read live.
+    connect(_timelineView, &TimelineView::layerLockChanged,
+            this, &MainWindow::onVisibilityChanged);
+    connect(_timelineView, &TimelineView::currentLayerChanged,
+            this, &MainWindow::onVisibilityChanged);
 }
 
 void MainWindow::setupMenus()
@@ -347,6 +360,19 @@ void MainWindow::setupMenus()
     connect(_deselectAllAction, &QAction::triggered, this, &MainWindow::deselectAll);
     editMenu->addAction(_deselectAllAction);
 
+    editMenu->addSeparator();
+
+    // Delete and Backspace reach the stage directly, where the subselection
+    // tool may want them for an anchor first, so the menu entry has no
+    // shortcut of its own.
+    QAction* clearAction = new QAction("Cl&ear", this);
+    clearAction->setStatusTip("Delete the selection (Delete or Backspace on the stage)");
+    connect(clearAction, &QAction::triggered, this, [this]() {
+        if (_phoenixView)
+            _phoenixView->deleteSelection();
+    });
+    editMenu->addAction(clearAction);
+
     // View menu
     QMenu* viewMenu = menuBar->addMenu("&View");
 
@@ -354,6 +380,57 @@ void MainWindow::setupMenus()
     viewDocumentAction->setStatusTip("View the current document source");
     connect(viewDocumentAction, &QAction::triggered, this, &MainWindow::viewDocument);
     viewMenu->addAction(viewDocumentAction);
+
+    viewMenu->addSeparator();
+
+    // Animate's View menu: Zoom In and Out step through the magnification
+    // presets, and the presets sit in their own submenu with the same keys.
+    QAction* zoomInAction = new QAction("Zoom &In", this);
+    zoomInAction->setShortcuts({QKeySequence(Qt::CTRL | Qt::Key_Equal),
+        QKeySequence(Qt::CTRL | Qt::Key_Plus), QKeySequence::ZoomIn});
+    connect(zoomInAction, &QAction::triggered, _phoenixView, &PhoenixView::zoomIn);
+    viewMenu->addAction(zoomInAction);
+
+    QAction* zoomOutAction = new QAction("Zoom &Out", this);
+    zoomOutAction->setShortcuts({QKeySequence(Qt::CTRL | Qt::Key_Minus), QKeySequence::ZoomOut});
+    connect(zoomOutAction, &QAction::triggered, _phoenixView, &PhoenixView::zoomOut);
+    viewMenu->addAction(zoomOutAction);
+
+    QMenu* magnificationMenu = viewMenu->addMenu("&Magnification");
+
+    QAction* fitAction = new QAction("&Fit in Window", this);
+    fitAction->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_2));
+    connect(fitAction, &QAction::triggered, _phoenixView, &PhoenixView::zoomToFit);
+    magnificationMenu->addAction(fitAction);
+
+    QAction* showAllAction = new QAction("Show &All", this);
+    showAllAction->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_3));
+    connect(showAllAction, &QAction::triggered, _phoenixView, &PhoenixView::zoomToShowAll);
+    magnificationMenu->addAction(showAllAction);
+
+    magnificationMenu->addSeparator();
+
+    struct ZoomPreset
+    {
+        const char* label;
+        double zoom;
+        int key;
+    };
+    const ZoomPreset presets[] = {
+        {"25%", 0.25, 0}, {"50%", 0.5, 0}, {"100%", 1.0, Qt::Key_1},
+        {"200%", 2.0, 0}, {"400%", 4.0, Qt::Key_4}, {"800%", 8.0, Qt::Key_8},
+    };
+    for (const ZoomPreset& preset : presets)
+    {
+        QAction* action = new QAction(preset.label, this);
+        if (preset.key != 0)
+            action->setShortcut(QKeySequence(Qt::CTRL | preset.key));
+        const double zoom = preset.zoom;
+        connect(action, &QAction::triggered, this, [this, zoom]() {
+            _phoenixView->setZoomLevel(zoom);
+        });
+        magnificationMenu->addAction(action);
+    }
 
     viewMenu->addSeparator();
 
@@ -767,13 +844,20 @@ void MainWindow::setupToolBar()
         {"PolyStar", ToolIcons::Tool::PolyStar, Qt::Key_Y,
             "Drag from the centre outwards. Sides and star mode are in the "
             "Properties panel.", &_polyStarTool},
+        {"Rectangle Primitive", ToolIcons::Tool::RectanglePrimitive, Qt::Key_unknown,
+            "Drag to draw an editable rectangle object with corner radii.",
+            &_rectanglePrimitiveTool},
+        {"Oval Primitive", ToolIcons::Tool::OvalPrimitive, Qt::Key_unknown,
+            "Drag to draw an editable oval object with start and end angles.",
+            &_ovalPrimitiveTool},
     };
 
     for (const ShapeEntry& shape : shapes)
     {
         QAction* action = new QAction(ToolIcons::icon(shape.icon), shape.label, this);
         action->setCheckable(true);
-        action->setShortcut(QKeySequence(shape.shortcut));
+        if (shape.shortcut != Qt::Key_unknown)
+            action->setShortcut(QKeySequence(shape.shortcut));
         action->setStatusTip(shape.tip);
         std::unique_ptr<PrimitiveTool>* tool = shape.tool;
         connect(action, &QAction::triggered, this, [this, tool]() {
@@ -812,6 +896,28 @@ void MainWindow::setupToolBar()
     });
     toolGroup->addAction(pencilAction);
     toolBar->addAction(pencilAction);
+
+    toolBar->addSeparator();
+
+    QAction* handAction = new QAction(ToolIcons::icon(ToolIcons::Tool::Hand), "Hand", this);
+    handAction->setCheckable(true);
+    handAction->setShortcut(QKeySequence(Qt::Key_H));
+    handAction->setStatusTip("Drag to pan the stage. Holding space does the same with any tool.");
+    connect(handAction, &QAction::triggered, this, [this]() {
+        _phoenixView->setActiveTool(_handTool.get());
+    });
+    toolGroup->addAction(handAction);
+    toolBar->addAction(handAction);
+
+    QAction* zoomAction = new QAction(ToolIcons::icon(ToolIcons::Tool::Zoom), "Zoom", this);
+    zoomAction->setCheckable(true);
+    zoomAction->setShortcut(QKeySequence(Qt::Key_Z));
+    zoomAction->setStatusTip("Click to zoom in, alt-click to zoom out, drag to zoom to an area.");
+    connect(zoomAction, &QAction::triggered, this, [this]() {
+        _phoenixView->setActiveTool(_zoomTool.get());
+    });
+    toolGroup->addAction(zoomAction);
+    toolBar->addAction(zoomAction);
 
     toolBar->addSeparator();
 
@@ -944,13 +1050,13 @@ void MainWindow::setupPropertiesPanel()
     });
     layout->addRow("Pencil", pencilMode);
 
-    QDoubleSpinBox* smoothing = new QDoubleSpinBox(panel);
-    smoothing->setRange(0.1, 50.0);
-    smoothing->setSingleStep(0.5);
-    smoothing->setValue(_drawingStyle.pencilTolerance);
-    smoothing->setToolTip("How far a fitted stroke may stray from what was drawn");
-    connect(smoothing, &QDoubleSpinBox::valueChanged, this, [this](double value) {
-        _drawingStyle.pencilTolerance = value;
+    QSpinBox* smoothing = new QSpinBox(panel);
+    smoothing->setRange(0, 100);
+    smoothing->setSingleStep(5);
+    smoothing->setValue(_drawingStyle.pencilSmoothing);
+    smoothing->setToolTip("How much the pencil smooths a stroke, 0 to 100, as in Animate");
+    connect(smoothing, &QSpinBox::valueChanged, this, [this](int value) {
+        _drawingStyle.pencilSmoothing = value;
     });
     layout->addRow("Smoothing", smoothing);
 

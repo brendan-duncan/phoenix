@@ -316,6 +316,7 @@ private:
 
     void compareShapes(const fla::Shape& a, const fla::Shape& b, const std::string& where)
     {
+        check(a.isDrawingObject == b.isDrawingObject, where + " isDrawingObject");
         if (check(a.fillsMap.size() == b.fillsMap.size(), where + " fill count"))
         {
             for (const auto& entry : a.fillsMap)
@@ -341,6 +342,14 @@ private:
                 check(entry.second->style() == it->second->style(), strokeWhere + " style");
                 check(entry.second->weight == it->second->weight, strokeWhere + " weight");
                 check(entry.second->scaleMode == it->second->scaleMode, strokeWhere + " scaleMode");
+                check(entry.second->solidStyle == it->second->solidStyle, strokeWhere + " solidStyle");
+                check(entry.second->caps == it->second->caps, strokeWhere + " caps");
+                check(entry.second->joints == it->second->joints, strokeWhere + " joints");
+                check(entry.second->miterLimit == it->second->miterLimit, strokeWhere + " miterLimit");
+                check(entry.second->pixelHinting == it->second->pixelHinting, strokeWhere + " pixelHinting");
+                check(entry.second->dash1 == it->second->dash1, strokeWhere + " dash1");
+                check(entry.second->dash2 == it->second->dash2, strokeWhere + " dash2");
+                check(entry.second->dotSpace == it->second->dotSpace, strokeWhere + " dotSpace");
                 if (entry.second->fill && it->second->fill)
                     compareFills(*entry.second->fill, *it->second->fill, strokeWhere);
             }
@@ -470,6 +479,35 @@ TEST(xfl_round_trips_shapes)
         "<edges>"
         "<Edge fillStyle1='1' strokeStyle='1' edges='!0 0|1000 0|1000 1000|0 1000|0 0'/>"
         "<Edge fillStyle0='2' edges='!0 0[100 200 300 0'/>"
+        "</edges>"
+        "</DOMShape>"
+        "</elements></DOMFrame></frames></DOMLayer>"
+        "</layers></DOMTimeline></timelines></DOMDocument>");
+}
+
+TEST(xfl_round_trips_stroke_attributes_and_drawing_objects)
+{
+    checkRoundTrip(
+        "<DOMDocument xmlns='http://ns.adobe.com/xfl/2008/'>"
+        "<timelines><DOMTimeline name='Scene 1'><layers>"
+        "<DOMLayer name='Layer 1'><frames><DOMFrame index='0'><elements>"
+        "<DOMShape isDrawingObject='true'>"
+        "<strokes>"
+        "<StrokeStyle index='1'><SolidStroke scaleMode='normal' solidStyle='hairline'>"
+        "<fill><SolidColor color='#00FF00'/></fill></SolidStroke></StrokeStyle>"
+        "<StrokeStyle index='2'><SolidStroke weight='4' caps='none' joints='miter' "
+        "miterLimit='5' pixelHinting='true'>"
+        "<fill><SolidColor/></fill></SolidStroke></StrokeStyle>"
+        "<StrokeStyle index='3'><DashedStroke weight='2' dash1='10' dash2='4'>"
+        "<fill><SolidColor/></fill></DashedStroke></StrokeStyle>"
+        "<StrokeStyle index='4'><DottedStroke weight='3' dotSpace='7'>"
+        "<fill><SolidColor/></fill></DottedStroke></StrokeStyle>"
+        "</strokes>"
+        "<edges>"
+        "<Edge strokeStyle='1' edges='!0 0|1000 0'/>"
+        "<Edge strokeStyle='2' edges='!0 0|0 1000'/>"
+        "<Edge strokeStyle='3' edges='!0 0|1000 1000'/>"
+        "<Edge strokeStyle='4' edges='!1000 0|0 1000'/>"
         "</edges>"
         "</DOMShape>"
         "</elements></DOMFrame></frames></DOMLayer>"

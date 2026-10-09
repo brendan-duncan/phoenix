@@ -248,9 +248,10 @@ happens to render.
 
 ### Rough edges
 
-- [ ] New objects go into the current frame of the first drawable layer, or one
+- [x] New objects go into the current frame of the first drawable layer, or one
       the file marks selected. There is no way to choose a layer yet, so
       `PhoenixView::activeFrame()` guesses. Needs layer selection in the timeline
+  - Done: clicking a layer name in the layers panel makes it current
 - [ ] Drawing on a frame that has no keyframe should create one. Right now the
       object joins whatever frame is showing
 - [ ] Star mode is implemented but only polygon mode was checked on screen
@@ -601,6 +602,596 @@ select.
 - [ ] While ctrl is held the cursor should change to the selection arrow, and
       the selection bounds should draw even under a tool that hides them
 
+---
+
+Steps 9 to 13 come from a code review on 2026-10-08 that compared Phoenix with
+VectorCraft (`D:/src/ref/vectorcraft`, MIT/Apache, a Rust Illustrator-class
+editor). Only algorithms are taken from it, never code; VectorCraft paths are
+relative to its `crates/` folder. Line numbers are as of `b9b78f1`. Items marked
+**(confirmed)** were checked in the code; the rest are from reading it and
+should be reproduced before fixing.
+
+## 9. Bugs found in review -- fix first
+
+- [x] **(confirmed) Clicking overlapping art on two layers picks the lower
+      one.** Layers draw last to first (`phoenix_view.cpp:478`, so `layers[0]` is
+      on top), but `hitTestTimeline` (`:1744`) walks them first to last and
+      `hitTestElement` overwrites `result` on every hit (`:1838`). Walk top-down
+      and return on the first hit, skipping any child whose bounds grown by the
+      tolerance miss the point. Re-running the walk while skipping what was
+      already found gives the whole stack under the cursor, for select-behind and
+      ctrl-click cycling (VectorCraft `doc/src/hit.rs:74-177`)
+  - Done: topmost first, returning on the first hit
+- [x] **(confirmed) Editing an edge with several paths deletes the others.**
+      `EditablePath::applyTo` (`editable_path.cpp:183`) deletes every path in the
+      edge and writes back one. Replace only the path that was edited
+  - Done: `applyTo` takes the path index and leaves the rest alone
+- [x] **(confirmed) Pen handles come out lopsided.** `Anchor::setOutHandle`
+      (`editable_path.cpp:84`) mirrors the in-handle at its *existing* length,
+      which the first few pixels of the drag fix, so the incoming curve stays
+      nearly straight. Recompute `in = anchor - (out - anchor)` on every drag
+      event; alt held mid-drag freezes `in` (VectorCraft `tools/src/pen.rs:235`)
+  - Done: the in-handle is the exact mirror on every drag event; alt freezes it
+- [x] **(confirmed) Double-click with the pen adds a coincident anchor.**
+      `pen_tool.h` promises double-click finishes, but `mouseDoubleClick` is not
+      overridden, so `QWidget::mouseDoubleClickEvent` re-sends a press. Override
+      it to finish the path
+  - Done
+- [ ] **(confirmed) Curved shapes merge with the wrong fills.** See step 10
+- [ ] **(confirmed) Partially overlapping collinear segments are never split.**
+      See step 10
+- [ ] Free transform skews the wrong way on the top and left edges.
+      `free_transform_tool.cpp:234-240` shears by `delta/depth`, but the grabbed
+      edge sits at a *signed* offset of `-depth` from the opposite midpoint.
+      Divide by the signed lever, `k = dx / (handle.y - origin.y)`, and conjugate
+      `[1, 0, k, 1]` by the origin (alt: the centre). VectorCraft
+      `tools/src/xform/free.rs:91-107`
+- [ ] Scaling a rotated object shears it: `adjustForDrag` (`:168-240`) builds
+      scale and shear in page axes while the box it carries is rotated. Keep an
+      oriented box (angle + rect in the turned frame), map the pointer into it,
+      scale there and map back (VectorCraft `doc/src/orient.rs:15-85`,
+      `tools/src/bbox.rs:232-254`, `tools/src/select.rs:304-314`). Shift should
+      take the larger axis rather than averaging `|sx|` and `|sy|` (`:191`); alt
+      scales from the centre
+- [x] The free transform box goes stale: `_boxValid` is only cleared when the
+      selection empties or the tool is deactivated (`:482-489`), so after undo,
+      Select All or a tree selection the old box is drawn and used. Rebuild it
+      from the selection on every press. A press outside the box also falls
+      through to panning (`:337`), so `Q` cannot click-select or marquee
+  - Done: the box remembers which transforms it was built for and is rebuilt when they change; a press outside it picks or clears
+- [x] Free transform's move snaps the raw cursor (`:265-268`), so the object
+      lands offset by where it was grabbed. Snap the box, as `SelectionTool` does
+  - Done
+- [x] A click with the subselection tool that does not drag still pushes "Move
+      Anchor" and calls `markShapeEdited` (`subselection_tool.cpp:237-265`), so a
+      click makes the document modified and queues a re-merge. Start a drag only
+      past a 3 px threshold, as the selection tool does
+  - Done
+- [x] Subselection compares a document-space tolerance against shape-local
+      coordinates (`:84, :100, :350`), so picking is off on scaled shapes. Use the
+      existing `toleranceInLocalSpace`
+  - Done
+- [ ] Subselection takes the first match, not the nearest (`:111`), so an earlier
+      anchor beats a later handle; alt-insert takes the first edge in range, not
+      the closest (`:151`). Pick the nearest anchor within tolerance, and a handle
+      only when it is nearer than its own anchor (VectorCraft
+      `tools/src/direct.rs:206-260`)
+- [x] `isNearAnchor` (`phoenix_view.cpp:1881`) tests quadratic control points as
+      well as on-curve points, so clicking near a control point reports an anchor
+  - Done
+- [x] A closed pen path always puts its fill on `fillStyle1` (`pen_tool.cpp:258`),
+      while merging reads `forward ? fillStyle1 : fillStyle0`
+      (`shape_geometry.cpp:137`). A path drawn the opposite way round to a
+      rectangle, or one lobe of a figure-8, may lose its fill on merge. Choose
+      the side from the sign of the area, or attribute through `attributeFills`
+  - Done: chosen from the sign of the area
+- [x] Masks: the mask pixmap uses the local `supersampleFactor`
+      (`phoenix_view.cpp:457`, 1 with high-quality AA off and during gestures)
+      while the content pixmap uses the file-static 2 (`:497`), so their sizes
+      can disagree; `DestinationIn` only touches the mask's area, so unmasked
+      content leaks into the rest of the pixmap
+  - Done: both pixmaps are sized from the paint device
+
+## 10. Geometry kernel robustness
+
+The merge model sits on this, so these come before the tools in step 12.
+
+- [ ] **(confirmed) Fill attribution samples curves at 8 points.**
+      `cycleContains` (`planar_map.cpp:268`) and `outlineContains`
+      (`fill_attribution.cpp:10-43`) test against an 8-point polyline per curve,
+      while `interiorPoint` (`:471`) steps only a quarter twip off the boundary.
+      On a 50 px oval the chord sag is about 0.06 px, larger than that step, so a
+      face just inside the oval tests as outside and `combine`
+      (`shape_merge.cpp:334/339`) gives it the target's fill. All merge tests use
+      rectangles. Fix by attributing **topologically**: every half-edge knows its
+      source and direction, so read the target's fill on each side straight from
+      its edges, and for the addition start at the unbounded face with winding 0
+      and walk across face adjacencies adding +-1 for each addition edge crossed.
+      No sampling at all. This also fixes hole assignment (`:373-405`), which uses
+      the same inexact test. Add an oval-over-rectangle merge test
+- [ ] Where a point test is still needed, use exact ray-curve roots, and pick
+      interior points the robust way: flatten finely, scan about 9 horizontal
+      lines offset off the grid, and return the middle of the widest span with
+      non-zero winding (VectorCraft `pathops/src/planar.rs:721`)
+- [ ] **(confirmed) Collinear overlap is not split.** `intersectSegments`
+      (`intersect.cpp:51`) returns false for parallel segments, though
+      `intersect.h:32-34` promises the ends of an overlapping stretch. With
+      (0,0)-(10,0) and (5,0)-(15,0) neither is cut, so half-edges run through
+      vertices not on them and the face walk breaks. Common: abutting rectangles
+      of unequal size, a pencil stroke retracing itself. Split each segment at
+      the other's endpoints when they lie on it
+- [ ] T-junctions: the line-line path accepts only `t` in [0,1] with no slack
+      (`intersect.cpp:161`) while the curve path allows 1e-6 (`:115`), and twips
+      are not exact binary fractions, so an endpoint lying on a line can be
+      dropped. Split any curve where another curve's endpoint lies within half a
+      twip of it
+- [ ] One crossing can become two vertices: each piece end is rebuilt as
+      `A.pointAt(t1)` and `B.pointAt(t2)` and rounded separately (`:154-155`).
+      Give each crossing one vertex id that both curves resolve to, and weld
+      vertices with union-find within a radius rather than by rounding into a
+      cell (VectorCraft welds on a 4-epsilon grid checking neighbouring cells,
+      `pathops/src/planar.rs:500-517`). Snapping also moves vertices up to half a
+      twip without re-checking for new crossings
+- [ ] The parallel test is an absolute 1e-12 (`intersect.cpp:51`). After a
+      rotation in `bakeTransform`, collinear lines then produce arbitrary
+      crossings. Make it relative to the segments' lengths
+- [ ] Edges round a vertex are sorted by `atan2(tangentAt(0))`
+      (`planar_map.cpp:218-220`), which is (0,0) for every retracted pen handle,
+      and ties between tangent curves fall in arbitrary order, so `next` links
+      the wrong edges. Sort by where each edge first crosses a small circle
+      round the vertex (radius half the shortest edge chord there), falling back
+      to P2/P3 for a retracted handle (VectorCraft `leaving_angle`,
+      `pathops/src/planar.rs:176`)
+- [ ] Self-intersections: `selfIntersections` (`intersect.cpp:187-194`) only
+      crosses [0,1/2] against [1/2,1], so a loop with both parameters on one side
+      is missed (the one test is symmetric). A loop that is found is then dropped
+      by `planar_map.cpp:161`, which measures the chord, which is zero for a
+      loop. Measure the control polygon instead, and find self-intersections by
+      splitting at inflections and extrema first
+- [ ] `flatness()` (`curve.cpp:148`) measures distance to the infinite chord
+      line, so a cubic whose controls lie on that line beyond the ends counts as
+      flat and its overshoot is lost. Measure distance to the chord segment
+- [ ] Intersection results are capped at 64 (`intersect.cpp:102`) silently;
+      raise it or fail loudly
+- [ ] When two edges coincide the first source wins (`planar_map.cpp:171`), and
+      target curves come first, so a new stroked shape sharing an edge with an
+      unstroked fill loses its stroke there (affects `keepStroke`,
+      `shape_merge.cpp:358`). Keep the newer source's stroke
+- [ ] Chain the output (replaces the "chain neighbouring pieces" item in step 6).
+      Each piece knows its source curve and parameter range, so walk through
+      degree-2 vertices whose pieces share (left fill, right fill, stroke) and
+      the same source, and rebuild each run as `subcurve(t0, t2)` of the original
+      curve. That is VectorCraft's `exact_merge` (`pathops/src/boolean.rs:487`)
+      without its nearest-point search; for pieces from different sources fall
+      back to a least-squares refit with fixed end tangents, accepted only within
+      tolerance (`tidy_segments`, `boolean.rs:410`)
+- [ ] Bounding-box broad phase before curve-pair tests (`intersect.cpp:101`
+      tests every pair); `setFaceFill` scans every edge (`:550`). Sort by x first;
+      a sweep line only if big pencil shapes need it
+- [ ] Drop sliver faces whose `2 * area / perimeter` is below about a twip
+      (VectorCraft `is_sliver`, `pathops/src/boolean.rs:341`)
+- [ ] Longer term, if the above still leaves robustness problems: the design in
+      the `linesweeper` crate (MIT/Apache, `docs/sweep.typ`) is a Bentley-Ottmann
+      sweep whose curves carry error bars; the sweep only stays epsilon-ordered,
+      topology comes from that order and coordinates are computed afterwards, so
+      a missed crossing cannot produce an inconsistent graph. VectorCraft sweeps
+      in a sheared frame (y + x/32) so no common-angle edge is horizontal, and
+      feeds open strokes in traced there and back with per-direction crossing
+      counts so they never cancel (`pathops/src/planar.rs:30-90, 243`)
+- [ ] Then render from the map (the step 6 item): keep a cached `PlanarMap` per
+      shape, fill each face as its outer cycle plus holes, then draw the chained
+      stroke runs. Fall back to the current stitching if the build fails, and
+      check it against the 44/44 corpus agreement
+
+## 11. Rendering fidelity
+
+All in `phoenix_view.cpp` unless noted.
+
+- [ ] **(confirmed) Bitmap fills draw nothing:** `getFillBrush` returns
+      `Qt::NoBrush` for them (`:1068`). Use `QBrush(QPixmap)` with the fill matrix
+      as the brush transform for repeating fills, and clip to the shape for
+      clipped ones. Honour the bitmap's `allowSmoothing` (bitmap instances
+      always smooth, `:888-920`)
+- [x] **(confirmed) Hairlines scale with zoom:** `MAX(weight, 0.5)` (`:933`)
+      turns weight 0 into a 0.5 px document line. Flash hairlines are 1 device
+      pixel: use a cosmetic pen
+  - Done, see step 14
+- [ ] **(confirmed) Gradients are about 0.8% short:** the half-span is 1625 x 0.5
+      (`:1014, :1043`), but the gradient square is +-16384 twips = +-819.2 px
+- [ ] `spreadMethod` (pad/reflect/repeat) is not parsed; map it to
+      `QGradient::setSpread`. `interpolationMethod="linearRGB"` is not parsed;
+      approximate it by expanding the stops into many sRGB stops
+- [ ] Gradient strokes ignore their matrix and use a fixed 0..100 line or a 50 px
+      circle (`:965-994`)
+- [ ] Stroke `scaleMode` is parsed but ignored. Compute the pen width from the
+      current transform's x/y scale for none/horizontal/vertical
+- [x] Caps, joints, miterLimit and pixelHinting are never parsed (`stroke_style.h`
+      has only weight, scaleMode, fill), so Flash's default round caps and joins
+      are lost
+  - Done, see step 14
+- [x] Strokes are drawn one edge at a time (`:1580-1604`), so every edge boundary
+      gets a cap and corners never join. Chain consecutive edges of one style
+      into a path first
+  - Done, see step 14
+- [ ] Stroke styles map to Qt's fixed patterns (`:936-957`); the XFL dash1/dash2
+      lengths, dotted spacing, ragged, stipple and hatched (no class at all) are
+      ignored. A custom dasher walks each subpath by arc length, restarts per
+      subpath, and turns zero-length dashes into dots shaped by the cap
+      (VectorCraft `effects/src/stroke/dash.rs:47, 174, 311`)
+- [ ] Colour transforms (`:723-755, :2772-2884`) render the instance into a
+      stage-sized image with only its own matrix (`:736`), so the parent
+      transform is dropped, content off the stage is clipped, and the result is
+      1x and blurry when zoomed. Use an isolated offscreen sized to the
+      instance's device-pixel bounds plus 2 px, drawn with the full transform
+      shifted to that crop, then composited back (VectorCraft
+      `render/src/group.rs:92-133, 253-262`). An alpha-only transform on a single
+      shape can multiply brush and pen alpha instead of rendering an image
+      (VectorCraft `render/src/lib.rs:762-790`)
+- [ ] Tint also blends alpha (`a = it*a + t*tintA`); Flash tint is per-channel
+      multiply `1-t` plus offset `t*colour` and leaves alpha alone. Brightness is
+      done as an HSL lightness shift; it is also multiply+add (b > 0: multiply
+      `1-b`, add `255b`; b < 0: multiply `1+b`)
+- [ ] Masks use the mask art's alpha; Flash masks use coverage only, so a
+      semi-transparent mask fill should not fade the content. A mask inside a
+      colour-transformed symbol is sized from the widget `rect()` but drawn into
+      the stage-sized image, so it is misaligned
+- [ ] Motion tweens lerp matrix entries (`:662`), so rotation shrinks and skews.
+      Decompose into translate, rotation, scale and shear, take the shortest
+      rotation, and recompose (VectorCraft `doc/src/blend.rs:271-285`). Easing,
+      custom ease, rotate-N-times and colour-transform tweening are not parsed.
+      Elements are paired by index (`:652`)
+- [ ] Shape tweens force-close morph segments (`:101`) and rescale them to the
+      lerped keyframe bounds (`:1626-1674`); only fill index 1 is used, gradients
+      are not interpolated and strokes vanish mid-tween. Interpolate each morph
+      segment and its fill/stroke indices directly; lerp gradients through a
+      shared stop set (VectorCraft `doc/src/blend.rs:89-159`)
+- [ ] Oval primitives ignore start/end angle and inner radius (`:810`); rectangle
+      corner radii are never parsed. See step 12 for the geometry
+- [ ] Filters are not implemented. Flash blur is an iterated box blur with
+      separate blurX/blurY and quality = number of passes: use running-sum box
+      blurs (VectorCraft `render/src/fx.rs:203-263`). Drop shadow and glow are the
+      alpha silhouette blurred, tinted and offset, cached per object and moved,
+      not re-rendered, on pan (`fx.rs:275-330`). Bevel is a shadow plus a
+      highlight at opposite offsets; Adjust Color is a 4x5 colour matrix
+- [ ] Blend modes are not implemented. Formulas for multiply, screen, lighten,
+      darken, difference, overlay and hard light are in VectorCraft
+      `color/src/blend.rs:102-151`; add, subtract and invert are trivial. Layer
+      needs an isolated group; Alpha and Erase are `DestinationIn` /
+      `DestinationOut` against the parent layer
+- [ ] 9-slice scaling and cacheAsBitmap are not implemented
+- [ ] Text uses guessed font-name munging, `size*0.75`, one baseline and no line
+      layout (`:812-887`)
+
+## 12. Improving the existing tools
+
+### Selection and free transform
+
+- [x] Arrow-key nudge (shift x10). `keyPress` handles only Escape
+      (`selection_tool.cpp:236-271`); the merging in `CommandStack` was built for
+      this
+  - Done; repeated nudges merge into one undo step
+- [ ] Shift-drag constrains to 45 degrees. A shift-press currently toggles and
+      never moves (`:146-152`); defer the toggle to release when nothing was
+      dragged (VectorCraft `tools/src/select.rs:251-265, 359-365`)
+- [ ] Alt-drag duplicates
+- [ ] Cursor follows what is under the pointer (move, corner, curve, handle
+      directions rotated by the box angle, `select.rs:381-453`)
+- [x] Draw snap feedback: `SnapResult.kind/target` (`snapping.cpp:23-63`) is
+      never drawn
+  - Done as the snap ring
+- [ ] Snap handle drags properly: write the handle as `scale = c + s*e`, solve
+      `s` for each target line, reject snaps that flip or collapse the box or
+      move the handle more than 2x the tolerance, and prefer point targets
+      (VectorCraft `tools/src/guides.rs:565-674`). Also snap to object vertices
+      and edges, not only bounds (`guides.rs:429-484`)
+- [ ] The transformation point: `Element::transformationPoint` exists
+      (`data/element.h:30`) but rotation always uses the box centre (`:203, :509`)
+      and the pivot cannot be dragged. Make it draggable, snap it to anchors and
+      the centre, and keep it while the selection is unchanged (VectorCraft
+      `tools/src/xform/transform.rs:100-110, 190`)
+- [ ] Marquee should test geometry, not bounds (`elementsIn`,
+      `phoenix_view.cpp:2045-2090`): reject on bounds; hit if any anchor is
+      inside; hit if any segment crosses a rect edge; hit if the path is closed
+      and the rect's centre is inside it (VectorCraft `geom/src/hit.rs:28-54`).
+      Cutting geometry is step 13
+
+### Subselection
+
+- [ ] Anchor marquee, multi-anchor selection, nudge, and snapping the grabbed
+      anchor with the others following (VectorCraft `tools/src/direct.rs:420-440`)
+- [ ] `closestPoint` samples 32 points then bisects (`editable_path.cpp:250-290`).
+      Solve exactly instead: for a quadratic the nearest point is a cubic
+      equation; for a cubic, Newton from the best sample
+- [ ] Deleting an anchor should refit, not just join the neighbours
+      (`editable_path.cpp:383-391`): sample both neighbouring segments 16 times,
+      keep the outer tangents, golden-section search over the parameter the
+      removed point lands on minimising the single-cubic fit error, and write the
+      result into the neighbours' facing handles (VectorCraft
+      `pathops/src/edit.rs:234-275`). Deleting a shared corner still has the
+      problem the drag had (step 5)
+
+### Pen
+
+- [ ] Clicking the first anchor closes on press (`pen_tool.cpp:98-107`); preview
+      the close instead and let the drag shape the closing in-handle as a mirror,
+      alt breaking it (VectorCraft `tools/src/pen.rs:152-155, 226-231`)
+- [ ] Clicking the last anchor adds a duplicate; it should retract that anchor's
+      out-handle, making it a corner (`pen.rs:157-161`)
+- [ ] Resume an open path by pressing on either end of it, reversing first when
+      it is the first anchor (`pen.rs:174-185`; replaces the step 5 item)
+- [ ] Shift constrains anchors and handles to 45 degrees
+- [ ] Snap candidates are gathered at path start only (`:84`), so the path being
+      drawn never attracts the cursor
+
+### Pencil and curve fitting
+
+- [ ] **Corners come out rounded.** Every fitted anchor is smooth
+      (`curve_fit.cpp:266`) and every split gets a centred tangent (`:277`). The
+      VectorCraft pipeline (`engine/src/cmd/draw2.rs:456-491`,
+      `pathops/src/edit.rs:47-104`): drop samples closer than 0.3 x tolerance and
+      pin the last to the release point; mark a corner where the turn exceeds
+      about 100 degrees (`cos < -0.2`); build a Catmull-Rom spline (handles
+      +-(next-prev)/6, none at corners and ends); then simplify: split where
+      adjacent tangents turn more than 60 degrees, rotate a closed path to start
+      on a corner, resample each run densely, fit it with its own end tangents,
+      turn near-straight cubics into lines, and keep the input if the result has
+      more anchors
+- [ ] The two-point base case (`:231-235`) leaves no in-handle and never sets the
+      previous out-handle, putting a straight stub mid-stroke. Give it
+      tangent-aligned handles of chord/3 (VectorCraft `pathops/src/fit.rs:52-55`)
+- [ ] One Newton pass, accepted even when worse (`:246-255`), and the result is
+      not clamped (`:217`). Run up to 6 passes keeping the best, clamp t to
+      [0,1], cap handles at 4x the chord (`fit.rs:77-95, 143, 174`)
+- [ ] End tangents come from the first and last two raw samples (`:353-355`), so
+      jitter hooks the ends. Estimate from points within a few pixels
+- [ ] At the depth cap of 12 an out-of-tolerance fit is accepted silently
+      (`:15, :257`)
+- [ ] Tolerance and minimum spacing are in document units (`curve_fit.h:29,34`,
+      `pencil_tool.cpp:81`), so strokes drawn zoomed in are over-smoothed. Work
+      in screen pixels
+- [ ] Straighten mode tests only point i against the line to i+1 (`:327-345`), so
+      gentle arcs drift. Use Ramer-Douglas-Peucker (VectorCraft
+      `pathops/src/edit.rs:107-133`)
+- [ ] Ink mode keeps every mouse sample as a corner (`pencil_tool.cpp:90-96`);
+      fit with a small tolerance (about 0.5 px) instead
+- [ ] Close the stroke when its ends finish within about 15 px (or alt on
+      release); extend a selected open path when a stroke starts at one of its
+      ends; preview the fit live
+- [ ] Shape recognition for Straighten mode (VectorCraft
+      `geom/src/recognize.rs:239-312`): resample to 256 points by arc length; two
+      or more sharp reversals is a scribble; a line if the largest deviation from
+      the chord is under 8% and the length under 1.3x the chord; closed if the
+      end gap is at most 25% of the size; find corners by splitting at the
+      farthest point and simplifying each half at 12% of the size; 3 corners is a
+      triangle, 4 near-right angles a rectangle (rotation snapped to 45
+      degrees), otherwise an ellipse if its area fills its oriented box (from
+      second moments) by more than 0.6. Snap to square or circle within 10%
+
+### Primitives
+
+- [ ] Rectangle corner radius: the setback at a corner of angle theta is
+      `r(1+cos)/sin` (r at 90 degrees), the arc handle `r * 4/3 * tan(theta/4)`,
+      and the radius is clamped to half the shorter side (VectorCraft
+      `geom/src/corners.rs:65-125`). Replaces the step 4 item
+- [ ] Oval start/end angle and inner radius: split the sweep into arcs of at most
+      90 degrees, each with handle `r * 4/3 * tan(delta/4)`; trace the outer arc,
+      then the inner arc reversed (or a line to the centre), and close
+- [ ] PolyStar with shift scales the radius by up to sqrt(2) and snaps the angle,
+      because it squares the delta (`primitive_tool.cpp:136-140`). Shift should
+      only hold the rotation upright. Arrow keys could change the side count
+
+## 13. New tools
+
+All the merge-mode tools below are variations of `ShapeMerger::combine`
+(`shape_merge.cpp:245-394`): each face's fill comes from the target and
+addition maps, plus a rule for which strokes survive.
+
+- [ ] **Edge bending** (selection tool dragging an edge; pairs with step 6). At
+      press find the nearest parameter t on the edge and clamp it to
+      [0.05, 0.95]. For a quadratic move the control point by
+      `delta / (2t(1-t))`, for a cubic both inner controls by `delta / (3t(1-t))`,
+      which puts the curve exactly under the cursor (VectorCraft
+      `engine/src/cmd/draw2.rs:687-717`). Fills follow because they share the
+      edge. A straight edge first becomes a quadratic with its control at the
+      midpoint. Corner/curve cursor on hover. Ctrl-drag inserting a corner has no
+      VectorCraft counterpart
+- [ ] **Region selection** (step 8). A selection is a set of face and edge ids on
+      a cached map; re-find them after a rebuild by interior point or by source
+      plus parameter. Click: the face containing the point, or the nearest edge
+      within tolerance (VectorCraft's Live Paint Selection,
+      `tools/src/builder.rs:73-100, 715-765`). Double-click: a face plus its
+      boundary edges, or every edge connected through degree-2 vertices with the
+      same stroke
+- [ ] **Drag out and ctrl-drag cut.** Build a new shape from the selected faces'
+      boundary half-edges (an edge between two selected faces keeps both
+      fills). In the source, set those faces to no fill and drop edges left with
+      the same fill on both sides -- `subtract` done topologically, with no
+      re-intersection. Float the new shape as a pending drawing so
+      commit-on-deselect merges it where it lands
+- [ ] **Marquee and lasso cutting.** Insert the outline as a stroke-only cutter,
+      which already divides without erasing, then select the faces inside. The
+      lasso collects points at least 1 px apart and tests with even-odd
+      point-in-polygon (VectorCraft `tools/src/xform/wand.rs:46-130`)
+- [ ] **Brush** (paints fills). Fit the centreline as the pencil does, outline it
+      with round caps and joins (in Qt, `QPainterPathStroker` then `simplified()`,
+      then refit the outline), and merge it. Same-colour seams vanish on their
+      own. Modes are face rules: Normal = merge; Behind = target fill if any,
+      else the addition; Fills = keep every target stroke; Selection = selected
+      faces only; Inside = only faces in the target face under the press point.
+      Variable width / pressure: flatten, offset each sample by
+      `+-(w/2) * profile(t)` along the normal, miter or round the outer joins,
+      join the sides with caps, and fill the ring non-zero (VectorCraft
+      `effects/src/stroke/width.rs:158-217`)
+- [ ] **Eraser.** Normal = `ShapeMerger::subtract` with the brush outline; Fills =
+      keep all target strokes; Lines = keep fills, drop strokes inside;
+      Selected Fills / Inside restrict as for the brush; Faucet clears the
+      connected same-fill faces. For object-drawing strokes: sample each segment
+      24 times against "inside the brush", bisect each in/out change 30 times,
+      cut there, and rejoin a closed path's first and last runs (VectorCraft
+      `engine/src/cmd/draw2.rs:329-441`)
+- [ ] **Paint bucket.** Arrange the merge shapes under the click with strokes as
+      cutting edges, take the face under the click, flood across edges with no
+      stroke and the same fill on both sides, set the fill and rebuild. Gap
+      closing (VectorCraft has none): find degree-1 vertices (dangling stroke
+      ends), join each to the nearest endpoint or curve point within the gap
+      size (about 3 / 8 / 20 screen pixels for small / medium / large), add the
+      joins as invisible edges, rebuild, and fill only if the clicked face is now
+      bounded. Keep the joins as fill boundaries without a stroke
+- [ ] **Ink bottle.** On a fill: flood its connected same-fill faces and give the
+      new stroke to every boundary half-edge whose twin's face has a different
+      fill. On a stroke: restyle the strokes connected through degree-2
+      vertices. `rebuildShapeEdges` takes strokes from `sources`
+      (`shape_geometry.cpp:162`), so it needs a per-half-edge stroke override
+- [ ] **Convert Lines to Fills** (stroke to outline): stroke each chain, then
+      union the outlines under non-zero. Offsetting (Expand Fill) arranges the
+      fill, a ring stroked at width 2d, and open strokes at 2d: growing keeps
+      their union, insetting keeps fill minus ring, and contours closer than d to
+      the source are dropped to remove the stroker's inverted loops (VectorCraft
+      `pathops/src/offset.rs`)
+- [ ] **Modify > Shape > Smooth / Straighten / Optimize.** Smooth pulls handles
+      Catmull-Rom style (`+-(next-prev)/|next-prev| * d/3`) blended by an amount
+      (VectorCraft `pathops/src/edit.rs:137-163`); Straighten is RDP; Optimize is
+      the pencil's simplify. A smooth brush refits only the anchors inside it
+      (`engine/src/cmd/draw2.rs:875-995`)
+- [ ] **Magic wand** for bitmaps broken apart is Animate's; VectorCraft's matches
+      objects by colour distance (default 32), stroke weight and opacity
+      (`engine/src/cmd/wand.rs:104-161`) -- useful only as a "Select Same"
+
+### No VectorCraft counterpart
+
+MorphShape semantics, ragged/stipple/hatched strokes, 9-slice, the stipple
+display for a selected fill, paint bucket gap closing, ctrl-drag to insert a
+corner, and the lasso cutting fills all need designs of their own.
+
+### Suggested order
+
+1. Step 9 -- small fixes that remove the worst "the editor is broken" moments
+2. Step 10 attribution, vertices and edge ordering, then render from the map
+3. Edge bending and region selection
+4. Pencil fitting with corners, then brush, eraser and paint bucket
+5. Rendering fidelity and culling alongside
+
+## 14. Authenticity review -- what still does not look or feel like Animate
+
+From a second review on 2026-10-08, this time measured against Animate itself
+rather than VectorCraft. Several step 9-13 items would push Phoenix toward
+Illustrator; the notes below say where. Items marked **(confirmed)** were checked
+in the code or against a real XFL document.
+
+### Rendering
+
+- [x] **(confirmed) Default caps and joins.** Only dotted strokes set round caps
+      (`phoenix_view.cpp:955`); everything else gets Qt's square caps and bevel
+      joins. Flash defaults to round caps and round joins. `caps`, `joints`,
+      `miterLimit` and `pixelHinting` are never parsed, so explicit settings are
+      lost too
+  - Done 2026-10-08: `caps`, `joints`, `miterLimit` and `pixelHinting` are parsed and written; the pen defaults to round/round
+- [x] **(confirmed) Hairlines.** Animate writes `solidStyle="hairline"` with no
+      weight attribute, so the parser gives hairlines weight 1 and they scale
+      with zoom. Read the attribute and draw a cosmetic 1 device pixel pen
+  - Done: `solidStyle` is parsed and written; a hairline is a cosmetic zero-width pen
+- [x] **(confirmed) Strokes are drawn per edge piece** (`:1580`), so merged
+      artwork gets a cap at every vertex and corners never join. Chain same-style
+      pieces end to end before stroking; independent of the map rewrite
+  - Done: pieces of one style are chained end to end in `buildShapePaths`, and a run that returns to its start is closed
+- [x] **Dashed and dotted strokes** ignore `dash1`/`dash2` and `dotSpace`
+  - Done for dashed and dotted; ragged and stipple still use Qt patterns
+- [x] **Selection highlight colour.** Animate's default highlight colour is the
+      layer's outline colour (Preferences > General > Highlight color > Use
+      layer color). `Layer::color` is parsed and never used by the overlay,
+      which draws a fixed cyan. Drawing objects, groups and symbols get a thin
+      rectangle with no corner grips; the grips in `drawToolOverlay` (`:2349`)
+      read as a transform box
+  - Done: highlights use the layer colour; objects get a thin box with no grips, the free transform tool draws its own box
+- [x] **Selected merge shapes** show a dot stipple over the fill and along the
+      stroke, not a bounding box. Falls out of region selection (step 8), but
+      can be drawn at shape level now
+  - Done at shape level (`drawShapeHighlight`): a 2 px dot screen in device pixels over fills and strokes
+- [x] **(confirmed) Drawing objects do not exist in the model.** Animate writes
+      an object-mode rectangle as `<DOMShape isDrawingObject="true">`, never as
+      `DOMRectangleObject`; the primitive objects come only from the Rectangle
+      Primitive and Oval Primitive tools, which are separate tools with live
+      corner-radius handles. Nothing reads `isDrawingObject`, so a loaded
+      drawing object is treated as merge artwork and will merge when moved
+  - Done: `Shape::isDrawingObject` is read, written and set by Object Drawing mode; drawing objects never merge. Rectangle Primitive and Oval Primitive are separate tools now
+- [x] `drawOverlayPoints` (`:1071`) draws cyan circles on every control point of
+      a tree-selected shape. Useful for inspection; should be a debug toggle
+  - Done: only with Show Bounding Boxes
+- [x] **Timeline panel.** Keyframes are filled dots, empty keyframes hollow dots,
+      spans grey with a hollow rectangle on the last frame, tween spans tinted
+      with an arrow, the playhead red, frame numbers every five on the ruler
+  - Done: dots, spans, tween tints and arrows, red playhead, 1-based ruler
+- [x] **Layers panel.** Eye, lock and outline-colour swatch columns; the current
+      layer highlighted with a pencil icon. Currently one eye column and a
+      "(Hidden)" suffix on the name
+  - Done: eye, lock and colour columns; clicking a name makes the layer current, which `activeFrame` follows
+- [ ] Text: `size * 0.75` is the right px-to-pt conversion at 96 dpi but
+      `setPixelSize` would be exact at any dpi
+
+### Interaction
+
+- [x] **Subselection anchors.** Animate draws every anchor as a small hollow
+      square, filled when selected; it does not show smooth versus corner by
+      shape. There is no double-click-to-convert: Alt-drag an anchor with the
+      subselection tool pulls handles out of a corner point. Alt-click to insert
+      an anchor is not Animate's either -- anchors are added by clicking a
+      segment with the pen or the Add Anchor Point tool, and removed by the
+      Delete Anchor Point tool or by hovering an anchor with the pen
+  - Done: hollow squares, filled when selected; alt-drag a corner pulls out handles, alt-click a curve point makes it a corner; the double-click convert is gone. Alt-click insert stays until the pen gains add/delete anchor
+- [x] **Pen cursors.** x for a new path, o for closing, + and - over segments and
+      anchors, ^ for convert. The plain crosshair cannot show any of this
+  - Partly: x and o are wired; + - and ^ are drawn (`cursors.h`) but the pen does not yet hover existing anchors or segments
+- [x] **Snap ring**, not guide lines: a small circle under the cursor while snap
+      to objects is on, which grows when the drag locks onto a target
+  - Done for the selection and shape tools
+- [x] **Selection cursors.** Arrow with a small box (move), corner (bend a
+      corner) or arc (bend a curve). Belongs with edge bending as a first-class
+      item, since the hover state is how the merge model is discoverable
+  - Partly: the move box on hover is in; corner and arc wait on edge bending
+- [x] **Pencil smoothing** is a 0-100 value applied in screen space, not a
+      document-unit tolerance. Straighten mode depends on the "connect lines"
+      and "recognize shapes" drawing settings
+  - Done: 0-100 in screen pixels; ink mode fits at half a pixel. Connect-lines and recognize-shapes settings are still missing
+- [ ] **Free transform** has Distort (ctrl-drag a corner) and Envelope modes for
+      merge shapes. Handles are hollow white squares, the transform point a
+      white circle, and the cursor changes to rotate, skew and scale arrows by
+      region
+- [ ] **Rectangle tool** changes the corner radius with Up and Down during the
+      drag
+- [ ] Ctrl-drag on an unselected edge adds a corner; a plain drag of a selected
+      region already cuts it out. The step 8 "ctrl-dragging should cut" item is
+      really "ctrl is the temporary arrow tool", which exists
+
+### Missing basics
+
+- [x] **(confirmed) Delete does nothing** with an object selected; only the
+      subselection tool handles the key, for anchors
+  - Done: Delete and Backspace on the stage, Edit > Clear in the menu
+- [x] Plain wheel scrolls the stage, shift-wheel scrolls sideways, ctrl-wheel
+      zooms. Phoenix zooms on the plain wheel by 1.15 and has no keyboard zoom.
+      Animate: ctrl+= / ctrl+- zoom, ctrl+1 100%, ctrl+2 fit frame, ctrl+3 show
+      all, ctrl+4 400%, ctrl+8 800%
+  - Done, with View > Magnification carrying the presets
+- [x] Space held pans; Hand (H) and Zoom (Z) tools. Zoom clicks in by 2x at the
+      point, alt-click out, drag a marquee to zoom to it
+  - Done
+- [ ] Lasso (L), Eyedropper (I) and Text (T) tools
+- [ ] Edit menu: Cut, Copy, Paste, Paste in Place (ctrl+shift+V), Duplicate
+      (ctrl+D), Group (ctrl+G), Break Apart (ctrl+B), Convert to Symbol (F8),
+      Arrange (ctrl+up/down)
+- [x] Arrow-key nudge (shift x10), shift-drag constrain, alt-drag duplicate --
+      also in step 12
+  - Nudge done; shift-drag constrain and alt-drag duplicate still to do
+
+### Suggested order, weighted for authenticity
+
+1. Caps, joins, hairlines, stroke chaining
+2. Highlights in the layer colour, the stipple, the snap ring, cursors
+3. Delete, scroll and zoom keys, Hand and Zoom tools, the drawing-object flag
+4. Step 9 fixes and the attribution rewrite, which region selection needs
+5. Edge bending and region selection -- the one change that makes merge drawing
+   feel like Animate's
+
 ## Performance
 
 Measured on `COM01_034_alvin_and_the_monks_v2.fla` (1260 symbol instances),
@@ -622,10 +1213,22 @@ dragging, at a maximised window on a 3856x1568 display:
       instead
 - [ ] Debug builds are ~7x slower than Release. Worth knowing before reading
       anything into a timing taken from the default build
-- [ ] The whole stage is redrawn on every mouse move. Culling exists
-      (`_visibleRect`), but nothing caches the static part of the scene, so a
-      drag repaints 1260 instances to move one thing. Caching everything except
-      the moving object is the next real win
+- [ ] The whole stage is redrawn on every mouse move, and nothing caches the
+      static part of the scene, so a drag repaints 1260 instances to move one
+      thing. Caching everything except the moving object is the next real win:
+      render the static layers into an image once per (document revision, zoom,
+      centre, size) and draw only the moving object and overlays on top
+- [ ] **There is no culling.** `_visibleRect` is computed (`phoenix_view.cpp:311`)
+      but nothing reads it, so `drawElement` draws everything. Skip an element
+      whose cached bounds, padded by 2 px, miss the view, and skip leaves smaller
+      than a quarter pixel. `getElementBounds` is already cached, so this is cheap
+- [ ] Cache stroke outlines per zoom octave (key on the power of two nearest the
+      scale), so panning and small zooms reuse them
+- [ ] Bitmap instances scan the library linearly on every draw
+      (`phoenix_view.cpp:888`); look them up in a map
+- [ ] Colour-transformed instances and mask layers allocate a stage- or
+      widget-sized image per frame. Size the offscreen to the content's
+      device-pixel bounds instead (see step 11)
 - [ ] `getElementBounds` is cached, but `gatherSnapCandidates` walks every
       element on the stage at the start of each drag to collect snap targets
 
