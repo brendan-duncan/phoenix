@@ -36,6 +36,10 @@ TimelineView::TimelineView(Player* player, QWidget *parent)
             this, &TimelineView::layerLockChanged);
     connect(_layersPanel, &LayersPanel::currentLayerChanged,
             this, &TimelineView::currentLayerChanged);
+    // The grid draws the rows the list shows, so folders fold their lanes.
+    connect(_layersPanel, &LayersPanel::rowsChanged, this, [this]() {
+        _timelinesPanel->setRows(_layersPanel->visibleRows());
+    });
     // A frame pressed in the grid makes its layer current.
     connect(_timelinesPanel, &TimelinesPanel::layerPressed, this,
         [this](const fla::Timeline* timeline, int layerIndex) {

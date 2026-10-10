@@ -1,6 +1,7 @@
 #pragma once
 
 #include "../data/fla_document.h"
+#include "layers_panel.h"
 
 #include <QWidget>
 #include <QScrollArea>
@@ -28,6 +29,9 @@ public:
     /// the document's.
     void setTimeline(const fla::Timeline* timeline) { _timeline = timeline; }
 
+    /// The rows to draw, as the layers list shows them.
+    void setRows(const std::vector<LayerRow>& rows);
+
     void updateSize();
 
 public slots:
@@ -52,6 +56,7 @@ private:
     Player* _player;
     bool _isDragging = false;
     const fla::Timeline* _timeline = nullptr;
+    std::vector<LayerRow> _rows;
 
     std::vector<const fla::Timeline*> shownTimelines() const;
 
@@ -67,6 +72,9 @@ public:
     void setDocument(const fla::FLADocument* document);
 
     void setTimeline(const fla::Timeline* timeline);
+
+    /// The rows the layers list shows, which the grid draws lane for lane.
+    void setRows(const std::vector<LayerRow>& rows);
 
 signals:
     void layerPressed(const fla::Timeline* timeline, int layerIndex);

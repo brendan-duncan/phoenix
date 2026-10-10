@@ -4,6 +4,7 @@
 #include <QHeaderView>
 #include <QTreeWidget>
 #include <QTreeWidgetItemIterator>
+#include <functional>
 #include <QPainter>
 #include <QPainterPath>
 #include <QFont>
@@ -209,6 +210,32 @@ fla::Layer* LayersPanel::layerFor(const QTreeWidgetItem* item) const
     return timeline->layers[layerIndex];
 }
 
+std::vector<LayerRow> LayersPanel::visibleRows() const
+{
+    std::vector<LayerRow> rows;
+    const std::vector<fla::Timeline*> timelines = shownTimelines();
+
+    // Walk the tree in display order, going into a folder only when it is
+    // open, which is what the list shows.
+    std::function<void(QTreeWidgetItem*)> visit = [&](QTreeWidgetItem* item) {
+        const int timelineIndex = item->data(NameColumn, Qt::UserRole + 1).toInt();
+        const int layerIndex = item->data(NameColumn, Qt::UserRole).toInt();
+        if (timelineIndex >= 0 && timelineIndex < static_cast<int>(timelines.size()))
+        {
+            const fla::Timeline* timeline = timelines[timelineIndex];
+            if (layerIndex >= 0 && layerIndex < static_cast<int>(timeline->layers.size()))
+                rows.push_back({timeline, layerIndex, timeline->layers[layerIndex]});
+        }
+        if (!item->isExpanded())
+            return;
+        for (int i = 0; i < item->childCount(); ++i)
+            visit(item->child(i));
+    };
+    for (int i = 0; i < _treeWidget->topLevelItemCount(); ++i)
+        visit(_treeWidget->topLevelItem(i));
+    return rows;
+}
+
 void LayersPanel::setCurrentLayer(const fla::Timeline* timeline, int layerIndex)
 {
     const std::vector<fla::Timeline*> timelines = shownTimelines();
@@ -277,7 +304,8 @@ void LayersPanel::refreshLayers()
             }
 
             QTreeWidgetItem* item = new QTreeWidgetItem();
-            item->setSizeHint(0, QSize(100, 30));
+            // The same row height as the timeline grid's, so the rows line up.
+            item->setSizeHint(0, QSize(100, 22));
 
             layerIndexMap.push_back(item);
 
@@ -338,16 +366,20 @@ void LayersPanel::refreshLayers()
 
         ++timelineIndex;
     }
+
+    emit rowsChanged();
 }
 
 void LayersPanel::onItemExpanded(QTreeWidgetItem* item)
 {
     item->setIcon(NameColumn, _openFolderIcon);
+    emit rowsChanged();
 }
 
 void LayersPanel::onItemCollapsed(QTreeWidgetItem* item)
 {
     item->setIcon(NameColumn, _folderIcon);
+    emit rowsChanged();
 }
 
 void LayersPanel::onItemClicked(QTreeWidgetItem* item, int column)

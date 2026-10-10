@@ -1,5 +1,15 @@
 #include "timelines_panel.h"
 #include "player.h"
+
+namespace {
+
+/// Animate's timeline rows are 22 px tall, the frame cells filling them
+/// but for a one pixel rule. The layers list uses the same height so the
+/// two stay in step.
+constexpr int kLayerRowHeight = 22;
+constexpr int kFrameHeight = 21;
+
+} // namespace
 #include <algorithm>
 #include <map>
 
@@ -187,6 +197,18 @@ void TimelinesPanel::setDocument(const fla::FLADocument* document)
     _gridContainer->updateSize();
 }
 
+void TimelinesPanel::setRows(const std::vector<LayerRow>& rows)
+{
+    _gridContainer->setRows(rows);
+}
+
+void TimelineGrid::setRows(const std::vector<LayerRow>& rows)
+{
+    _rows = rows;
+    updateSize();
+    update();
+}
+
 void TimelinesPanel::setTimeline(const fla::Timeline* timeline)
 {
     _gridContainer->setTimeline(timeline);
@@ -281,15 +303,11 @@ void TimelineGrid::updateSize()
     }
 
     const int frameWidth = 20;
-    const int frameHeight = 20;
-    const int layerRowHeight = 30;
+    const int frameHeight = kFrameHeight;
+    const int layerRowHeight = kLayerRowHeight;
     const int headerHeight = 25;
 
-    int numRows = 0;
-    for (const fla::Timeline* timeline : shownTimelines())
-    {
-        numRows += static_cast<int>(timeline->layers.size());
-    }
+    const int numRows = static_cast<int>(_rows.size());
 
     int maxFrames = getMaxFrames(_flaDocument);
     int totalWidth = headerHeight + maxFrames * (frameWidth + 2);
@@ -339,24 +357,12 @@ void TimelineGrid::mousePressEvent(QMouseEvent* event)
         updatePlayerFromMouse(event->pos().x());
 
         // The row under the press is a layer, which becomes current as it
-        // does in Animate. Rows follow the painted layout: a header, then
-        // one row per layer of each shown timeline, folders included.
+        // does in Animate. Rows are the layers list's, lane for lane.
         const int headerHeight = 25;
-        const int layerRowHeight = 30;
-        int row = (event->pos().y() - headerHeight) / layerRowHeight;
-        if (event->pos().y() >= headerHeight)
-        {
-            for (const fla::Timeline* timeline : shownTimelines())
-            {
-                const int count = static_cast<int>(timeline->layers.size());
-                if (row < count)
-                {
-                    emit layerPressed(timeline, row);
-                    break;
-                }
-                row -= count;
-            }
-        }
+        const int layerRowHeight = kLayerRowHeight;
+        const int row = (event->pos().y() - headerHeight) / layerRowHeight;
+        if (event->pos().y() >= headerHeight && row >= 0 && row < static_cast<int>(_rows.size()))
+            emit layerPressed(_rows[row].timeline, _rows[row].layerIndex);
     }
     QWidget::mousePressEvent(event);
 }
@@ -387,8 +393,8 @@ void TimelineGrid::paintEvent(QPaintEvent* event)
         return;
 
     const int frameWidth = 20;
-    const int frameHeight = 20;
-    const int layerRowHeight = 30;
+    const int frameHeight = kFrameHeight;
+    const int layerRowHeight = kLayerRowHeight;
     const int headerHeight = 25;
     const int margin = 1;
     const int cellStride = frameWidth + margin;
@@ -412,9 +418,9 @@ void TimelineGrid::paintEvent(QPaintEvent* event)
 
     painter.setRenderHint(QPainter::Antialiasing, true);
 
-    for (const fla::Timeline* timeline : shownTimelines())
+    for (const LayerRow& rowEntry : _rows)
     {
-        for (const fla::Layer* layer : timeline->layers)
+        const fla::Layer* layer = rowEntry.layer;
         {
             // The empty cells, with every fifth column picked out.
             for (int i = 0; i < maxFrames; ++i)
