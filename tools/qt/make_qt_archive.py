@@ -307,8 +307,71 @@ def copy_host_tools(host_qtdir, out):
     host.prune_broken_configs()
 
 
+# Qt's download server, laid out as the online installer reads it.
+QT_REPOSITORY = "https://download.qt.io/online/qtsdkrepository"
+HOST_FOLDERS = {"windows": "windows_x86", "linux": "linux_x64", "linux_arm64": "linux_arm64", "mac": "mac_x64"}
+WANTED_ARCHIVES = ["qtbase", "qtsvg", "icu", "qtwayland"]
+
+
+def fetch_kit_direct(version, target, into):
+    """Downloads the kit straight from Qt's server, for the repository layout
+    Qt 6.11 introduced on Windows (one folder per compiler, which aqtinstall
+    3.3 does not know): reads the folder's Updates.xml, takes the base
+    package's qtbase and qtsvg archives, and unpacks them."""
+    import xml.etree.ElementTree as ElementTree
+    import py7zr
+    import requests
+
+    host, arch, _ = TARGETS[target]
+    major, minor, patch = version.split(".")
+    compact = f"{major}{minor}{patch}"
+    suffix = arch
+    for prefix in ("win64_", "linux_"):
+        if suffix.startswith(prefix):
+            suffix = suffix[len(prefix):]
+    folder = f"{QT_REPOSITORY}/{HOST_FOLDERS[host]}/desktop/qt6_{compact}/qt6_{compact}_{suffix}"
+    package = f"qt.qt6.{compact}.{arch}"
+
+    log(f"reading {folder}/Updates.xml")
+    response = requests.get(f"{folder}/Updates.xml", timeout=120)
+    response.raise_for_status()
+    root = ElementTree.fromstring(response.content)
+    entry = None
+    for update in root.iter("PackageUpdate"):
+        if update.findtext("Name", "") == package:
+            entry = update
+            break
+    if entry is None:
+        sys.exit(f"{package} is not in {folder}/Updates.xml")
+
+    package_version = entry.findtext("Version", "")
+    archives = [name.strip() for name in (entry.findtext("DownloadableArchives", "") or "").split(",")]
+    chosen = [name for name in archives if name.split("-")[0] in WANTED_ARCHIVES]
+    if not chosen:
+        sys.exit(f"no qtbase/qtsvg archives listed for {package}: {archives}")
+
+    # These archives unpack straight into a kit root (bin, lib, include...),
+    # so they go under <version>/<kit> as the old layout and aqt lay them.
+    kit = Path(into) / version / suffix
+    kit.mkdir(parents=True, exist_ok=True)
+    for name in chosen:
+        url = f"{folder}/{package}/{package_version}{name}"
+        download = Path(into) / name
+        log(f"downloading {url}")
+        with requests.get(url, stream=True, timeout=300) as stream:
+            stream.raise_for_status()
+            with open(download, "wb") as out:
+                for chunk in stream.iter_content(1 << 20):
+                    out.write(chunk)
+        log(f"unpacking {name}")
+        with py7zr.SevenZipFile(download, "r") as archive:
+            archive.extractall(path=kit)
+        download.unlink()
+
+
 def fetch_kit(version, target, into):
-    """Downloads the kit with aqtinstall; returns the kit directory."""
+    """Downloads the kit with aqtinstall, or straight from Qt's server where
+    aqtinstall does not know the layout; returns the kit directory."""
     host, arch, _ = TARGETS[target]
     # Qt Svg is one of the base archives in Qt 6, not an add-on module. The
     # Linux kits also split ICU and the Wayland plugins into archives of
@@ -317,12 +380,13 @@ def fetch_kit(version, target, into):
     listing = subprocess.run([sys.executable, "-m", "aqt", "list-qt", host, "desktop",
                               "--archives", version, arch], capture_output=True, text=True)
     available = set(listing.stdout.split()) if listing.returncode == 0 else set()
-    wanted = ["qtbase", "qtsvg", "icu", "qtwayland"]
-    archives = [name for name in wanted if name in available] if available else ["qtbase", "qtsvg"]
+    archives = [name for name in WANTED_ARCHIVES if name in available] if available else ["qtbase", "qtsvg"]
     command = [sys.executable, "-m", "aqt", "install-qt", host, "desktop", version, arch,
                "--outputdir", str(into), "--archives"] + archives
     log(" ".join(command))
-    subprocess.run(command, check=True)
+    if subprocess.run(command).returncode != 0:
+        log("aqtinstall could not fetch the kit; trying Qt's server directly")
+        fetch_kit_direct(version, target, into)
     kits = [p for p in (Path(into) / version).iterdir() if p.is_dir()]
     if len(kits) != 1:
         sys.exit(f"expected one kit under {into}/{version}, found {kits}")

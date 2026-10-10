@@ -47,7 +47,7 @@ jobs:
           python-version: "3.12"
 
       - name: Install aqtinstall
-        run: python -m pip install --upgrade pip aqtinstall
+        run: python -m pip install --upgrade pip aqtinstall requests py7zr
 
       - name: Make the archives
         shell: bash
