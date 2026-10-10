@@ -195,6 +195,135 @@ QImage bevel(const QImage& image, const fla::Filter& filter, double scale)
     return out;
 }
 
+/// The gradient's color at  t, 0 to 1, interpolated between its entries
+/// in straight (unpremultiplied) RGBA, as Flash's gradient filters read it.
+QRgb gradientAt(const std::vector<fla::GradientEntry>& entries, double t)
+{
+    if (entries.empty())
+        return qRgba(0, 0, 0, 0);
+    t = std::max(0.0, std::min(1.0, t));
+    const fla::GradientEntry* before = &entries.front();
+    const fla::GradientEntry* after = &entries.back();
+    for (const fla::GradientEntry& entry : entries)
+    {
+        if (entry.ratio <= t && entry.ratio >= before->ratio)
+            before = &entry;
+    }
+    for (auto it = entries.rbegin(); it != entries.rend(); ++it)
+    {
+        if (it->ratio >= t && it->ratio <= after->ratio)
+            after = &*it;
+    }
+    const double span = after->ratio - before->ratio;
+    const double f = span > 1.0e-9 ? (t - before->ratio) / span : 0.0;
+    int rgba[4];
+    for (int i = 0; i < 4; ++i)
+        rgba[i] = static_cast<int>(before->color[i] + (after->color[i] - before->color[i]) * f + 0.5);
+    return qRgba(rgba[0], rgba[1], rgba[2], rgba[3]);
+}
+
+/// Every pixel's coverage (its alpha) mapped through the gradient: the
+/// pixel takes the gradient's color and alpha at that coverage. A glow's
+/// gradient runs from its outer edge (ratio 0) in to the object (ratio 1).
+void mapThroughGradient(QImage& image, const std::vector<fla::GradientEntry>& entries)
+{
+    QRgb table[256];
+    for (int i = 0; i < 256; ++i)
+        table[i] = qPremultiply(gradientAt(entries, i / 255.0));
+    for (int y = 0; y < image.height(); ++y)
+    {
+        QRgb* line = reinterpret_cast<QRgb*>(image.scanLine(y));
+        for (int x = 0; x < image.width(); ++x)
+            line[x] = table[qAlpha(line[x])];
+    }
+}
+
+/// Gradient glow: the glow's blurred coverage colored through the gradient
+/// rather than in one color, placed as a glow is.
+QImage gradientGlow(const QImage& image, const fla::Filter& filter, double scale)
+{
+    const double radians = filter.angle * kPi / 180.0;
+    const int dx = static_cast<int>(std::lround(std::cos(radians) * filter.distance * scale));
+    const int dy = static_cast<int>(std::lround(std::sin(radians) * filter.distance * scale));
+
+    const uint8_t white[3] = {255, 255, 255};
+    QImage glow = silhouette(image, white, 1.0, filter.inner);
+    glow = shifted(glow, dx, dy);
+    blur(glow, filter, scale);
+    strengthen(glow, filter.strength);
+    mapThroughGradient(glow, filter.entries);
+
+    QImage out(image.size(), QImage::Format_ARGB32_Premultiplied);
+    out.fill(Qt::transparent);
+    QPainter painter(&out);
+    if (filter.inner)
+    {
+        maskBy(glow, image, false);
+        if (!filter.knockout && !filter.hideObject)
+            painter.drawImage(0, 0, image);
+        painter.drawImage(0, 0, glow);
+        return out;
+    }
+    if (filter.knockout)
+        maskBy(glow, image, true);
+    painter.drawImage(0, 0, glow);
+    if (!filter.knockout && !filter.hideObject)
+        painter.drawImage(0, 0, image);
+    return out;
+}
+
+/// Gradient bevel: the relief (how much an edge faces the light, -1 to 1)
+/// mapped through the gradient, whose middle is the flat surface. Flash's
+/// default gradient has a transparent middle, so flat areas show nothing.
+QImage gradientBevel(const QImage& image, const fla::Filter& filter, double scale)
+{
+    const double radians = filter.angle * kPi / 180.0;
+    const int dx = static_cast<int>(std::lround(std::cos(radians) * filter.distance * scale));
+    const int dy = static_cast<int>(std::lround(std::sin(radians) * filter.distance * scale));
+
+    const uint8_t white[3] = {255, 255, 255};
+    QImage towards = shifted(silhouette(image, white, 1.0, false), dx, dy);
+    QImage away = shifted(silhouette(image, white, 1.0, false), -dx, -dy);
+    blur(towards, filter, scale);
+    blur(away, filter, scale);
+
+    QRgb table[256];
+    for (int i = 0; i < 256; ++i)
+        table[i] = qPremultiply(gradientAt(filter.entries, i / 255.0));
+
+    QImage relief(image.size(), QImage::Format_ARGB32_Premultiplied);
+    for (int y = 0; y < image.height(); ++y)
+    {
+        const QRgb* t = reinterpret_cast<const QRgb*>(towards.constScanLine(y));
+        const QRgb* a = reinterpret_cast<const QRgb*>(away.constScanLine(y));
+        QRgb* r = reinterpret_cast<QRgb*>(relief.scanLine(y));
+        for (int x = 0; x < image.width(); ++x)
+        {
+            const double difference = (qAlpha(a[x]) - qAlpha(t[x])) / 255.0 * filter.strength;
+            const double position = std::max(0.0, std::min(1.0, 0.5 + difference / 2.0));
+            r[x] = table[static_cast<int>(position * 255.0 + 0.5)];
+        }
+    }
+
+    const bool inner = filter.bevelType.empty() || filter.bevelType == "inner";
+    const bool outer = filter.bevelType == "outer";
+    if (inner)
+        maskBy(relief, image, false);
+    else if (outer)
+        maskBy(relief, image, true);
+
+    QImage out(image.size(), QImage::Format_ARGB32_Premultiplied);
+    out.fill(Qt::transparent);
+    QPainter painter(&out);
+    if (!inner)
+        painter.drawImage(0, 0, relief);
+    if (!filter.knockout)
+        painter.drawImage(0, 0, image);
+    if (!outer)
+        painter.drawImage(0, 0, relief);
+    return out;
+}
+
 /// Brightness, contrast, saturation and hue as a 3x3 matrix plus offset on
 /// straight RGB, the way Flash's Adjust Color builds its color matrix.
 QImage adjustColor(const QImage& image, const fla::Filter& filter)
@@ -296,23 +425,11 @@ QImage apply(const QImage& source, const std::vector<fla::Filter>& filters, doub
             image = bevel(image, filter, scale);
             break;
         case fla::Filter::Type::GradientGlow:
-        case fla::Filter::Type::GradientBevel:
-        {
-            // Drawn with the gradient's last color, which is the outermost
-            // of a glow, until the gradient itself is honored.
-            fla::Filter plain = filter;
-            plain.type = filter.type == fla::Filter::Type::GradientGlow
-                ? fla::Filter::Type::Glow : fla::Filter::Type::Bevel;
-            if (!filter.entries.empty())
-            {
-                const fla::GradientEntry& last = filter.entries.back();
-                for (int i = 0; i < 4; ++i)
-                    plain.color[i] = last.color[i];
-            }
-            image = plain.type == fla::Filter::Type::Glow
-                ? dropShadow(image, plain, scale, true) : bevel(image, plain, scale);
+            image = gradientGlow(image, filter, scale);
             break;
-        }
+        case fla::Filter::Type::GradientBevel:
+            image = gradientBevel(image, filter, scale);
+            break;
         case fla::Filter::Type::AdjustColor:
             image = adjustColor(image, filter);
             break;
@@ -340,6 +457,32 @@ QPainter::CompositionMode blendMode(const std::string& name, bool& supported)
 bool needsIsolation(const std::string& name)
 {
     return !name.empty() && name != "normal";
+}
+
+void composite(QPainter& painter, const QPoint& at, const QImage& image, const std::string& name)
+{
+    if (name == "invert" || name == "subtract")
+    {
+        // White under the instance's coverage, differenced with the
+        // backdrop, inverts it there and leaves the rest alone.
+        const uint8_t white[3] = {255, 255, 255};
+        const QImage cover = silhouette(image, white, 1.0, false);
+        painter.setCompositionMode(QPainter::CompositionMode_Difference);
+        painter.drawImage(at, cover);
+        if (name == "subtract")
+        {
+            // backdrop - source = invert(invert(backdrop) + source), the
+            // sum clamped at white and so the difference at black.
+            painter.setCompositionMode(QPainter::CompositionMode_Plus);
+            painter.drawImage(at, image);
+            painter.setCompositionMode(QPainter::CompositionMode_Difference);
+            painter.drawImage(at, cover);
+        }
+        return;
+    }
+    bool supported = true;
+    painter.setCompositionMode(blendMode(name, supported));
+    painter.drawImage(at, image);
 }
 
 } // namespace Filters

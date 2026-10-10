@@ -105,14 +105,14 @@ The writer records anything it cannot represent rather than dropping it in
 silence (`XFLWriter::unsupported()`), and the GUI warns before a save that would
 lose content. Across the corpus that is:
 
-- [ ] document scripts (`<scripts>`)
-- [ ] publish history
-- [ ] printer settings
-- [ ] swatch lists
+- [x] document scripts (`<scripts>`)
+- [x] publish history
+- [x] printer settings
+- [x] swatch lists
+  - Done 2026-10-10 for all four: the reader keeps each element's text as read (`ScriptList::xml`, `PublishHistory::xml`, `PrinterSettings::xml`, `SwatchList::xml`) and the writer copies it back into the document after the timelines, in Animate's order (PrinterSettings, publishHistory, swatchLists, scripts). Nothing edits them, so verbatim is exact; a document made in code, which has no text, is still reported as unsupported for them. Test in `test_xfl_writer.cpp`
 
-These are all document metadata rather than geometry, and the reader keeps only
-a partial model of each, so writing them faithfully means extending the reader
-first.
+These are all document metadata rather than geometry; they are carried
+through untouched rather than modeled.
 
 ### Also outstanding
 
@@ -928,7 +928,8 @@ All in `phoenix_view.cpp` unless noted.
       not re-rendered, on pan (`fx.rs:275-330`). Bevel is a shadow plus a
       highlight at opposite offsets; Adjust Color is a 4x5 color matrix
   - Done 2026-10-09: `Filter` (`src/data/filter.h`) is parsed and written for all seven filter elements (`enabled` included); `Filters::apply` (`src/gui/filters.cpp`) runs them in order on the instance's isolated offscreen, which is grown by `Filters::margin`. Blur is a running-sum box blur with quality passes (`src/edit/image_blur.cpp`, Qt-free, tests); drop shadow and glow are the silhouette moved, blurred and strengthened, with inner, knockout and hideObject; bevel is the coverage moved towards and away from the light, blurred, their difference lit or shaded, placed inner, outer or full; Adjust Color is brightness, contrast, saturation and hue as a color matrix. Filters are sized in the parent's pixels (zoom and parents, not the instance's own matrix). Gradient glow and bevel draw with the gradient's last color. Nothing is cached yet: a filtered instance is re-rendered on every paint
-- [ ] Gradient glow and gradient bevel should map the blurred coverage through their gradient rather than use its last color
+- [x] Gradient glow and gradient bevel should map the blurred coverage through their gradient rather than use its last color
+  - Done 2026-10-10 (`filters.cpp`): a gradient glow maps its blurred, strengthened coverage through the gradient (ratio 0 at the outer edge, 1 at the object), inner and knockout as a glow; a gradient bevel maps the relief (how much an edge faces the light, -1 to 1) through the gradient with the flat surface at the middle, inner, outer or full as a bevel. Checked on screen with `D:/fla/effects_test2.fla`
 - [x] Cache a filtered instance's image between paints and move it on pan rather than re-rendering it (VectorCraft `fx.rs:275-330`)
   - Done 2026-10-10: `_filterCache` keeps the filtered (or color-transformed) offscreen per instance with the transform it was rendered for; a paint that places the instance the same way apart from a shift, on the same frame and document revision, draws the kept image moved by the whole-pixel shift. Entries clipped by the device edge are not reused (a pan would reveal the cut), images over 4 Mpx are not kept, and the cache goes with `clearCaches`
 - [x] Blend modes are not implemented. Formulas for multiply, screen, lighten,
@@ -937,7 +938,9 @@ All in `phoenix_view.cpp` unless noted.
       needs an isolated group; Alpha and Erase are `DestinationIn` /
       `DestinationOut` against the parent layer
   - Done 2026-10-09 for multiply, screen, lighten, darken, difference, add, overlay and hardlight through Qt's composition modes on the isolated offscreen; `layer` is the isolation alone. `blendMode` is parsed and written
-- [ ] Blend modes subtract and invert (no Qt composition mode: composite by hand), and alpha and erase, which need the parent layer isolated so they can cut into it
+- [x] Blend modes subtract and invert (no Qt composition mode: composite by hand), and alpha and erase, which need the parent layer isolated so they can cut into it
+  - Subtract and invert done 2026-10-10 (`Filters::composite`): invert differences the backdrop with white under the instance's coverage; subtract is invert, add, invert again, so the sum clamps at white and the difference at black. Checked on screen (effects_test2.fla: a blue square over white comes out orange under subtract and black under invert, over the red band dark red and cyan). Alpha and erase still draw plainly: they need the parent layer isolated
+- [ ] Blend modes alpha and erase, which need the parent layer isolated so they can cut into it
 - [ ] 9-slice scaling and cacheAsBitmap are not implemented
 - [x] Text uses guessed font-name munging, `size*0.75`, one baseline and no line
       layout (`:812-887`)

@@ -544,6 +544,38 @@ TEST(xfl_round_trips_frame_labels_and_instance_names)
     CHECK(written.find("name=\"hero\"") != std::string::npos);
 }
 
+TEST(xfl_writes_document_metadata_back_as_read)
+{
+    std::unique_ptr<fla::Document> document = parseDocumentText(
+        "<DOMDocument xmlns='http://ns.adobe.com/xfl/2008/' width='550' height='400'>"
+        "<timelines><DOMTimeline name='Scene 1'><layers>"
+        "<DOMLayer name='Layer 1'><frames><DOMFrame index='0'><elements/></DOMFrame></frames></DOMLayer>"
+        "</layers></DOMTimeline></timelines>"
+        "<PrinterSettings width='612' height='792'/>"
+        "<publishHistory><PublishItem publishSize='1234' publishTime='1'/></publishHistory>"
+        "<swatchLists><swatchList><swatchListInfo name='Swatches'/><swatches>"
+        "<SolidSwatchItem color='#FF0000'/><SolidSwatchItem color='#00FF00' alpha='0.5'/>"
+        "</swatches></swatchList></swatchLists>"
+        "<scripts><Script name='Document'><script>trace(1);</script></Script></scripts>"
+        "</DOMDocument>");
+    CHECK(document != nullptr);
+    if (!document)
+        return;
+
+    XFLWriter writer;
+    const std::string written = writer.writeDocument(*document);
+    CHECK(writer.unsupported().empty());
+    CHECK(written.find("<PrinterSettings width=\"612\"") != std::string::npos);
+    CHECK(written.find("publishSize=\"1234\"") != std::string::npos);
+    CHECK(written.find("<SolidSwatchItem color=\"00FF00\"") != std::string::npos ||
+          written.find("<SolidSwatchItem color=\"#00FF00\"") != std::string::npos);
+    CHECK(written.find("trace(1);") != std::string::npos);
+    // Everything lands in the order Animate writes it.
+    CHECK(written.find("<PrinterSettings") < written.find("<publishHistory"));
+    CHECK(written.find("<publishHistory") < written.find("<swatchLists"));
+    CHECK(written.find("<swatchLists") < written.find("<scripts"));
+}
+
 TEST(xfl_round_trips_shapes)
 {
     checkRoundTrip(
@@ -753,8 +785,9 @@ TEST(xfl_round_trips_layer_structure)
 
 TEST(xfl_reports_unsupported_content)
 {
-    // The writer must not drop things in silence. Swatch lists are read but not
-    // yet written, so saving a document with them has to say so.
+    // The writer must not drop things in silence. A swatch list is written
+    // back from the text it was read with; one that has none (made in code)
+    // cannot be written, and saving a document with it has to say so.
     std::unique_ptr<fla::Document> document = parseDocumentText(
         "<DOMDocument xmlns='http://ns.adobe.com/xfl/2008/'>"
         "<timelines/>"
@@ -762,10 +795,15 @@ TEST(xfl_reports_unsupported_content)
         "<swatches><DOMSwatchItem color='#FF0000'/></swatches></swatchList></swatchLists>"
         "</DOMDocument>");
     CHECK(document != nullptr);
-    if (!document)
+    if (!document || document->swatchLists.empty())
         return;
 
     XFLWriter writer;
+    writer.writeDocument(*document);
+    CHECK(writer.unsupported().empty());
+
+    document->swatchLists[0]->xml.clear();
+    writer.clearUnsupported();
     writer.writeDocument(*document);
     CHECK(!writer.unsupported().empty());
 }

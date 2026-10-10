@@ -1182,8 +1182,6 @@ void PhoenixView::drawElement(QPainter& painter, const fla::Element* element, co
                 // placed the same way, apart from a shift, on the same
                 // document and frame draws from the image it had, moved.
                 const int shownFrame = _player ? _player->currentFrame() : -1;
-                bool supported = true;
-                const QPainter::CompositionMode mode = Filters::blendMode(instance->blendMode, supported);
                 const auto cached = _maskPass ? _filterCache.end() : _filterCache.find(instance);
                 const auto sameLinear = [](const QTransform& a, const QTransform& b) {
                     return std::fabs(a.m11() - b.m11()) < 1.0e-9 && std::fabs(a.m12() - b.m12()) < 1.0e-9 &&
@@ -1196,8 +1194,7 @@ void PhoenixView::drawElement(QPainter& painter, const fla::Element* element, co
                                        static_cast<int>(std::lround(full.dy() - cached->full.dy())));
                     painter.save();
                     painter.resetTransform();
-                    painter.setCompositionMode(mode);
-                    painter.drawImage(cached->origin + shift, cached->image);
+                    Filters::composite(painter, cached->origin + shift, cached->image, instance->blendMode);
                     painter.restore();
                 }
                 else if (!crop.isEmpty())
@@ -1231,8 +1228,7 @@ void PhoenixView::drawElement(QPainter& painter, const fla::Element* element, co
 
                     painter.save();
                     painter.resetTransform();
-                    painter.setCompositionMode(mode);
-                    painter.drawImage(crop.topLeft(), symbolImage);
+                    Filters::composite(painter, crop.topLeft(), symbolImage, instance->blendMode);
                     painter.restore();
 
                     // Kept for the next paint unless it is huge.

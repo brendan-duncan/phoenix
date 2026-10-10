@@ -1750,6 +1750,15 @@ bool parseSwatchList(const tinyxml2::XMLElement* element, fla::SwatchList* swatc
     return true;
 }
 
+/// The element and everything under it, as text, for parts of the file
+/// that are read but not modeled: they are written back as they were.
+std::string elementText(const tinyxml2::XMLElement* element)
+{
+    tinyxml2::XMLPrinter printer(nullptr, true);
+    element->Accept(&printer);
+    return printer.CStr();
+}
+
 bool parseSwatchLists(const tinyxml2::XMLElement* element, fla::Document* document)
 {
     for (const tinyxml2::XMLElement* childElement = element->FirstChildElement();
@@ -1764,6 +1773,7 @@ bool parseSwatchLists(const tinyxml2::XMLElement* element, fla::Document* docume
                 delete swatchList;
                 return false;
             }
+            swatchList->xml = elementText(childElement);
             document->swatchLists.push_back(swatchList);
         }
         else
@@ -1835,31 +1845,19 @@ bool parseDocument(fla::Document* document, const tinyxml2::XMLElement* element,
         else if (std::strcmp(tagName, "publishHistory") == 0)
         {
             fla::PublishHistory* publishHistory = new fla::PublishHistory(document);
-            /*if (!parsePublishHistory(childElement, publishHistory))
-            {
-                delete publishHistory;
-                return false;
-            }*/
+            publishHistory->xml = elementText(childElement);
             document->publishHistory = publishHistory;
         }
         else if (std::strcmp(tagName, "PrinterSettings") == 0)
         {
             fla::PrinterSettings* printerSettings = new fla::PrinterSettings(document);
-            /*if (!parsePrinterSettings(childElement, printerSettings))
-            {
-                delete printerSettings;
-                return false;
-            }*/
+            printerSettings->xml = elementText(childElement);
             document->printerSettings = printerSettings;
         }
         else if (std::strcmp(tagName, "scripts") == 0)
         {
             fla::ScriptList* scripts = new fla::ScriptList(document);
-            /*if (!parseScripts(childElement, scripts))
-            {
-                delete scripts;
-                return false;
-            }*/
+            scripts->xml = elementText(childElement);
             document->scriptList = scripts;
         }
         else if (std::strcmp(tagName, "folders") == 0)

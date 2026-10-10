@@ -12,6 +12,8 @@ class SwatchList : public DOMElement
 public:
     std::string name;
     std::vector<Swatch*> swatches;
+    /// The list as read, written back as it was: nothing edits swatches yet.
+    std::string xml;
 
     SwatchList(DOMElement* parent)
         : DOMElement(parent)

@@ -975,15 +975,41 @@ std::string XFLWriter::writeDocument(const Document& document)
     }
     root->InsertEndChild(timelines);
 
-    // Read but not yet modeled well enough to write back.
-    if (document.scriptList)
-        note("document scripts");
-    if (document.publishHistory)
-        note("publish history");
-    if (document.printerSettings)
+    // Document metadata is read whole and written back as it was, in the
+    // order Animate writes it. Anything that came without its text (a
+    // document made here) is simply left out.
+    const auto appendRaw = [&doc, root](const std::string& xml, XMLElement* under) {
+        if (xml.empty())
+            return false;
+        XMLDocument fragment;
+        if (fragment.Parse(xml.c_str(), xml.size()) != tinyxml2::XML_SUCCESS || !fragment.RootElement())
+            return false;
+        tinyxml2::XMLNode* copy = fragment.RootElement()->DeepClone(&doc);
+        if (!copy)
+            return false;
+        (under ? under : root)->InsertEndChild(copy);
+        return true;
+    };
+    if (document.printerSettings && !appendRaw(document.printerSettings->xml, nullptr))
         note("printer settings");
+    if (document.publishHistory && !appendRaw(document.publishHistory->xml, nullptr))
+        note("publish history");
     if (!document.swatchLists.empty())
-        note("swatch lists");
+    {
+        XMLElement* lists = doc.NewElement("swatchLists");
+        bool any = false;
+        for (const SwatchList* list : document.swatchLists)
+        {
+            if (list && appendRaw(list->xml, lists))
+                any = true;
+            else
+                note("swatch lists");
+        }
+        if (any)
+            root->InsertEndChild(lists);
+    }
+    if (document.scriptList && !appendRaw(document.scriptList->xml, nullptr))
+        note("document scripts");
 
     doc.InsertEndChild(root);
     return toText(doc);
