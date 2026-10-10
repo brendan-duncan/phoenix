@@ -153,6 +153,13 @@ private:
         check(a.duration == b.duration, where + " duration");
         check(a.keyMode == b.keyMode, where + " keyMode");
         check(a.tweenType == b.tweenType, where + " tweenType");
+        check(a.acceleration == b.acceleration, where + " acceleration");
+        check(a.hasCustomEase == b.hasCustomEase, where + " hasCustomEase");
+        check(a.customEase.size() == b.customEase.size(), where + " customEase points");
+        check(a.motionTweenRotate == b.motionTweenRotate, where + " motionTweenRotate");
+        check(a.motionTweenRotateTimes == b.motionTweenRotateTimes, where + " motionTweenRotateTimes");
+        check(a.motionTWeenSnap == b.motionTWeenSnap, where + " motionTweenSnap");
+        check(a.motionTweenSync == b.motionTweenSync, where + " motionTweenSync");
         check((a.morphShape != nullptr) == (b.morphShape != nullptr), where + " morphShape presence");
 
         if (!check(a.elements.size() == b.elements.size(), where + " element count"))
@@ -198,6 +205,30 @@ private:
             check(sa.colorTransform.tintMultiplier == sb.colorTransform.tintMultiplier,
                 where + " tintMultiplier");
             compareColor(sa.colorTransform.tintColor, sb.colorTransform.tintColor, where + " tintColor");
+            check(sa.blendMode == sb.blendMode, where + " blendMode");
+            if (check(sa.filters.size() == sb.filters.size(), where + " filter count"))
+            {
+                for (size_t i = 0; i < sa.filters.size(); ++i)
+                {
+                    const fla::Filter& fa = sa.filters[i];
+                    const fla::Filter& fb = sb.filters[i];
+                    const std::string at = where + " filter " + std::to_string(i);
+                    check(fa.type == fb.type, at + " type");
+                    check(fa.enabled == fb.enabled, at + " enabled");
+                    check(fa.blurX == fb.blurX && fa.blurY == fb.blurY, at + " blur");
+                    check(fa.quality == fb.quality, at + " quality");
+                    check(fa.angle == fb.angle && fa.distance == fb.distance, at + " offset");
+                    check(fa.strength == fb.strength, at + " strength");
+                    compareColor(fa.color, fb.color, at + " color");
+                    compareColor(fa.highlightColor, fb.highlightColor, at + " highlightColor");
+                    compareColor(fa.shadowColor, fb.shadowColor, at + " shadowColor");
+                    check(fa.inner == fb.inner && fa.knockout == fb.knockout && fa.hideObject == fb.hideObject, at + " flags");
+                    check(fa.bevelType == fb.bevelType, at + " bevel type");
+                    check(fa.brightness == fb.brightness && fa.contrast == fb.contrast &&
+                        fa.saturation == fb.saturation && fa.hue == fb.hue, at + " adjust");
+                    check(fa.entries.size() == fb.entries.size(), at + " entries");
+                }
+            }
             break;
         }
 
@@ -632,6 +663,35 @@ TEST(xfl_round_trips_bitmap_fills_and_gradient_spread)
         "<Edge fillStyle1='2' edges='!3000 0|5000 0|5000 2000|3000 2000|3000 0'/>"
         "</edges></DOMShape>"
         "</elements></DOMFrame></frames></DOMLayer>"
+        "</layers></DOMTimeline></timelines></DOMDocument>");
+}
+
+TEST(xfl_round_trips_filters_blend_and_easing)
+{
+    checkRoundTrip(
+        "<DOMDocument xmlns='http://ns.adobe.com/xfl/2008/'>"
+        "<timelines><DOMTimeline name='Scene 1'><layers>"
+        "<DOMLayer name='Layer 1'><frames>"
+        "<DOMFrame index='0' duration='5' tweenType='motion' motionTweenSnap='true' "
+        "motionTweenRotate='clockwise' motionTweenRotateTimes='2' acceleration='-60'>"
+        "<tweens><Ease target='all' intensity='-60'/></tweens>"
+        "<elements>"
+        "<DOMSymbolInstance libraryItemName='Hero' blendMode='multiply'>"
+        "<filters>"
+        "<BlurFilter blurX='8' blurY='2' quality='3'/>"
+        "<DropShadowFilter blurX='4' blurY='4' angle='90' distance='10' color='#FF0000' alpha='0.5' strength='2' knockout='true'/>"
+        "<GlowFilter color='#00FF00' inner='true' enabled='false'/>"
+        "<BevelFilter highlightColor='#FFFF00' shadowColor='#0000FF' shadowAlpha='0.25' type='full'/>"
+        "<AdjustColorFilter brightness='10' contrast='-20' saturation='30' hue='-40'/>"
+        "<GradientGlowFilter blurX='3' blurY='3'><GradientEntry color='#FFFFFF' alpha='0' ratio='0'/><GradientEntry color='#FF00FF' ratio='1'/></GradientGlowFilter>"
+        "</filters>"
+        "</DOMSymbolInstance>"
+        "</elements></DOMFrame>"
+        "<DOMFrame index='5' duration='5' tweenType='motion' hasCustomEase='true'>"
+        "<tweens><CustomEase target='all'><Point/><Point x='0.3889'/><Point x='0.5488' y='1'/><Point x='1' y='1'/></CustomEase></tweens>"
+        "<elements><DOMSymbolInstance libraryItemName='Hero'/></elements></DOMFrame>"
+        "<DOMFrame index='10'><elements><DOMSymbolInstance libraryItemName='Hero'/></elements></DOMFrame>"
+        "</frames></DOMLayer>"
         "</layers></DOMTimeline></timelines></DOMDocument>");
 }
 

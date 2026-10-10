@@ -53,13 +53,29 @@ Transform putTogether(const Parts& parts)
     return m;
 }
 
-double blendAngle(double from, double to, double t)
+double blendAngle(double from, double to, double t, TweenRotation rotation, int extraTurns)
 {
     double delta = std::fmod(to - from, 2.0 * kPi);
-    if (delta > kPi)
-        delta -= 2.0 * kPi;
-    else if (delta < -kPi)
-        delta += 2.0 * kPi;
+    switch (rotation)
+    {
+    case TweenRotation::Auto:
+        if (delta > kPi)
+            delta -= 2.0 * kPi;
+        else if (delta < -kPi)
+            delta += 2.0 * kPi;
+        break;
+    case TweenRotation::Clockwise:
+        // On a stage with y down, clockwise is the increasing angle.
+        if (delta < 0.0)
+            delta += 2.0 * kPi;
+        delta += extraTurns * 2.0 * kPi;
+        break;
+    case TweenRotation::CounterClockwise:
+        if (delta > 0.0)
+            delta -= 2.0 * kPi;
+        delta -= extraTurns * 2.0 * kPi;
+        break;
+    }
     return from + delta * t;
 }
 
@@ -70,7 +86,8 @@ double blend(double from, double to, double t)
 
 } // namespace
 
-Transform blendTransforms(const Transform& from, const Transform& to, double t)
+Transform blendTransforms(const Transform& from, const Transform& to, double t,
+    TweenRotation rotation, int extraTurns)
 {
     const Parts a = takeApart(from);
     const Parts b = takeApart(to);
@@ -78,8 +95,8 @@ Transform blendTransforms(const Transform& from, const Transform& to, double t)
     Parts mixed;
     mixed.scaleX = blend(a.scaleX, b.scaleX, t);
     mixed.scaleY = blend(a.scaleY, b.scaleY, t);
-    mixed.skewX = blendAngle(a.skewX, b.skewX, t);
-    mixed.skewY = blendAngle(a.skewY, b.skewY, t);
+    mixed.skewX = blendAngle(a.skewX, b.skewX, t, rotation, extraTurns);
+    mixed.skewY = blendAngle(a.skewY, b.skewY, t, rotation, extraTurns);
     mixed.tx = blend(a.tx, b.tx, t);
     mixed.ty = blend(a.ty, b.ty, t);
     return putTogether(mixed);

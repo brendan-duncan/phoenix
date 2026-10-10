@@ -10,6 +10,16 @@ namespace fla {
 /// skews equal), those are blended, each angle the short way round, and the
 /// result put back together. Blending the six entries directly shrinks a
 /// turning object and skews it on the way.
-Transform blendTransforms(const Transform& from, const Transform& to, double t);
+/// Which way a classic tween turns: the short way round, or a given way
+/// round with so many extra whole turns.
+enum class TweenRotation
+{
+    Auto,
+    Clockwise,
+    CounterClockwise
+};
+
+Transform blendTransforms(const Transform& from, const Transform& to, double t,
+    TweenRotation rotation = TweenRotation::Auto, int extraTurns = 0);
 
 } // namespace fla

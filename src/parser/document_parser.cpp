@@ -170,7 +170,7 @@ bool parseLinearGradient(const tinyxml2::XMLElement* element, fla::LinearGradien
         entry.ratio = getDoubleAttribute(entryElement, "ratio");
 
         std::string color = getAttribute(entryElement, "color");
-        parseHexColor(color, entry.color);
+        parseHexColor(color, entry.color, getDoubleAttribute(entryElement, "alpha", 1.0));
 
         linearGradient->entries.push_back(entry);
     }
@@ -200,7 +200,7 @@ bool parseRadialGradient(const tinyxml2::XMLElement* element, fla::RadialGradien
         entry.ratio = getDoubleAttribute(entryElement, "ratio");
 
         std::string color = getAttribute(entryElement, "color");
-        parseHexColor(color, entry.color);
+        parseHexColor(color, entry.color, getDoubleAttribute(entryElement, "alpha", 1.0));
 
         radialGradient->entries.push_back(entry);
     }
@@ -582,6 +582,67 @@ bool parseShape(const tinyxml2::XMLElement* element, fla::Shape* shape)
     return true;
 }
 
+/// Reads one filter element. The attributes a type does not have are left
+/// at their defaults. False for an element that is not a filter.
+bool parseFilter(const tinyxml2::XMLElement* element, fla::Filter& filter)
+{
+    const char* name = element->Name();
+    if (std::strcmp(name, "BlurFilter") == 0)
+        filter.type = fla::Filter::Type::Blur;
+    else if (std::strcmp(name, "DropShadowFilter") == 0)
+        filter.type = fla::Filter::Type::DropShadow;
+    else if (std::strcmp(name, "GlowFilter") == 0)
+        filter.type = fla::Filter::Type::Glow;
+    else if (std::strcmp(name, "BevelFilter") == 0)
+        filter.type = fla::Filter::Type::Bevel;
+    else if (std::strcmp(name, "GradientGlowFilter") == 0)
+        filter.type = fla::Filter::Type::GradientGlow;
+    else if (std::strcmp(name, "GradientBevelFilter") == 0)
+        filter.type = fla::Filter::Type::GradientBevel;
+    else if (std::strcmp(name, "AdjustColorFilter") == 0)
+        filter.type = fla::Filter::Type::AdjustColor;
+    else
+        return false;
+
+    filter.enabled = getBoolAttribute(element, "enabled", true);
+    filter.blurX = getDoubleAttribute(element, "blurX", 5.0);
+    filter.blurY = getDoubleAttribute(element, "blurY", 5.0);
+    filter.quality = getIntAttribute(element, "quality", 1);
+    filter.angle = getDoubleAttribute(element, "angle", 45.0);
+    filter.distance = getDoubleAttribute(element, "distance", 5.0);
+    filter.strength = getDoubleAttribute(element, "strength", 1.0);
+    filter.inner = getBoolAttribute(element, "inner", false);
+    filter.knockout = getBoolAttribute(element, "knockout", false);
+    filter.hideObject = getBoolAttribute(element, "hideObject", false);
+    filter.bevelType = getAttribute(element, "type");
+    filter.brightness = getDoubleAttribute(element, "brightness", 0.0);
+    filter.contrast = getDoubleAttribute(element, "contrast", 0.0);
+    filter.saturation = getDoubleAttribute(element, "saturation", 0.0);
+    filter.hue = getDoubleAttribute(element, "hue", 0.0);
+
+    const std::string color = getAttribute(element, "color");
+    if (!color.empty())
+        parseHexColor(color, filter.color, getDoubleAttribute(element, "alpha", 1.0));
+    const std::string highlight = getAttribute(element, "highlightColor");
+    if (!highlight.empty())
+        parseHexColor(highlight, filter.highlightColor, getDoubleAttribute(element, "highlightAlpha", 1.0));
+    const std::string shadow = getAttribute(element, "shadowColor");
+    if (!shadow.empty())
+        parseHexColor(shadow, filter.shadowColor, getDoubleAttribute(element, "shadowAlpha", 1.0));
+
+    for (const tinyxml2::XMLElement* entryElement = element->FirstChildElement("GradientEntry");
+         entryElement != nullptr;
+         entryElement = entryElement->NextSiblingElement("GradientEntry"))
+    {
+        fla::GradientEntry entry;
+        entry.ratio = getDoubleAttribute(entryElement, "ratio");
+        parseHexColor(getAttribute(entryElement, "color"), entry.color,
+            getDoubleAttribute(entryElement, "alpha", 1.0));
+        filter.entries.push_back(entry);
+    }
+    return true;
+}
+
 bool parseSymbolInstance(const tinyxml2::XMLElement* element, fla::SymbolInstance* instance)
 {
     if (!parseElement(element, instance))
@@ -633,6 +694,21 @@ bool parseSymbolInstance(const tinyxml2::XMLElement* element, fla::SymbolInstanc
         {
             // from parseElement
         }
+        else if (std::strcmp(tagName, "filters") == 0)
+        {
+            for (const tinyxml2::XMLElement* filterElement = childElement->FirstChildElement();
+                 filterElement != nullptr;
+                 filterElement = filterElement->NextSiblingElement())
+            {
+                fla::Filter filter;
+                if (!parseFilter(filterElement, filter))
+                {
+                    std::cerr << "!!!! Unhandled filter: " << filterElement->Name() << (_currentFile.empty() ? "" : " from ") << _currentFile << std::endl;
+                    continue;
+                }
+                instance->filters.push_back(filter);
+            }
+        }
         else
         {
             std::cerr << "!!!! Unhandled SymbolInstance element: " << tagName << (_currentFile.empty() ? "" : " from ") << _currentFile << std::endl;
@@ -640,6 +716,7 @@ bool parseSymbolInstance(const tinyxml2::XMLElement* element, fla::SymbolInstanc
     }
 
     instance->libraryItemName = getAttribute(element, "libraryItemName");
+    instance->blendMode = getAttribute(element, "blendMode");
     instance->firstFrame = getIntAttribute(element, "firstFrame", 0);
 
     std::string symbolType = getAttribute(element, "symbolType", "graphic");
@@ -1170,7 +1247,14 @@ bool parseFrame(const tinyxml2::XMLElement* element, fla::Frame* frame)
     frame->index = getIntAttribute(element, "index");
     frame->duration = getIntAttribute(element, "duration", 1);
     frame->keyMode = getAttribute(element, "keyMode");
-    frame->motionTWeenSnap = getBoolAttribute(element, "motionTWeenSnap", false);
+    // Animate spells it motionTweenSnap; the other spelling was ours.
+    frame->motionTWeenSnap = getBoolAttribute(element, "motionTweenSnap",
+        getBoolAttribute(element, "motionTWeenSnap", false));
+    frame->motionTweenSync = getBoolAttribute(element, "motionTweenSync", false);
+    frame->acceleration = getIntAttribute(element, "acceleration", 0);
+    frame->hasCustomEase = getBoolAttribute(element, "hasCustomEase", false);
+    frame->motionTweenRotate = getAttribute(element, "motionTweenRotate");
+    frame->motionTweenRotateTimes = getIntAttribute(element, "motionTweenRotateTimes", 0);
 
     std::string tweenType = getAttribute(element, "tweenType");
     if (tweenType == "motion")
@@ -1211,6 +1295,38 @@ bool parseFrame(const tinyxml2::XMLElement* element, fla::Frame* frame)
                 return false;
             }
             frame->morphShape = morphShape;
+        }
+        else if (std::strcmp(tagName, "tweens") == 0)
+        {
+            // An Ease repeats the acceleration attribute; a CustomEase is
+            // the curve itself. Only the one for all properties is kept.
+            for (const tinyxml2::XMLElement* tween = childElement->FirstChildElement();
+                 tween != nullptr;
+                 tween = tween->NextSiblingElement())
+            {
+                const std::string target = getAttribute(tween, "target", "all");
+                if (target != "all")
+                    continue;
+                if (std::strcmp(tween->Name(), "Ease") == 0)
+                {
+                    if (frame->acceleration == 0)
+                        frame->acceleration = getIntAttribute(tween, "intensity", 0);
+                }
+                else if (std::strcmp(tween->Name(), "CustomEase") == 0)
+                {
+                    frame->hasCustomEase = true;
+                    frame->customEase.clear();
+                    for (const tinyxml2::XMLElement* point = tween->FirstChildElement("Point");
+                         point != nullptr;
+                         point = point->NextSiblingElement("Point"))
+                    {
+                        fla::Point p;
+                        p.x = getDoubleAttribute(point, "x", 0.0);
+                        p.y = getDoubleAttribute(point, "y", 0.0);
+                        frame->customEase.push_back(p);
+                    }
+                }
+            }
         }
         else if (std::strcmp(tagName, "elements") == 0)
         {

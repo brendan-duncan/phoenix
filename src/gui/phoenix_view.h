@@ -24,6 +24,7 @@
 class QTimer;
 
 #include "tool.h"
+#include "../edit/transform_blend.h"
 
 #include <vector>
 
@@ -344,6 +345,16 @@ private:
     /// The transform of the element being drawn, relative to the stage:
     /// the product of its own matrix and its parents', without the zoom.
     QTransform _elementTransform;
+
+    /// True while a mask layer is being rendered: every fill and stroke is
+    /// drawn opaque, since a mask is coverage and its colours and alpha
+    /// mean nothing.
+    bool _maskPass = false;
+
+    /// How the classic tween of the frame being drawn turns, from its
+    /// keyframe, for interpolateTransform.
+    fla::TweenRotation _tweenRotation = fla::TweenRotation::Auto;
+    int _tweenTurns = 0;
 
     /// A stroke weight in the element's own units for its scaleMode, so
     /// that a "none" stroke stays its weight on the stage however the

@@ -850,6 +850,7 @@ All in `phoenix_view.cpp` unless noted.
   - Done 2026-10-09 for `spreadMethod`: parsed, written, cloned and applied with `QGradient::setSpread` (reflect and repeat checked on screen). `interpolationMethod` is parsed and written back but still rendered as sRGB
 - [x] Render `interpolationMethod="linearRGB"` by expanding the stops into many sRGB stops
   - Done 2026-10-09: eight stops per span computed in linear light (`addGradientStops`), fills and strokes alike
+- [x] Gradient entries ignored their `alpha` attribute, so a fade to transparent was opaque; fixed 2026-10-09 in the parser (the writer already wrote it)
 - [x] Gradient strokes ignore their matrix and use a fixed 0..100 line or a 50 px
       circle (`:965-994`)
   - Done 2026-10-09: the pen's brush is the same brush the fill would be (`getFillBrush`), matrix, spread and interpolation included; bitmap strokes come with it
@@ -884,17 +885,20 @@ All in `phoenix_view.cpp` unless noted.
       done as an HSL lightness shift; it is also multiply+add (b > 0: multiply
       `1-b`, add `255b`; b < 0: multiply `1+b`)
   - Done 2026-10-09, and the arithmetic now runs on straight (unpremultiplied) colour so offsets do not brighten translucent edges
-- [ ] Masks use the mask art's alpha; Flash masks use coverage only, so a
+- [x] Masks use the mask art's alpha; Flash masks use coverage only, so a
       semi-transparent mask fill should not fade the content. A mask inside a
       colour-transformed symbol is sized from the widget `rect()` but drawn into
       the stage-sized image, so it is misaligned
+  - Done 2026-10-09: while a mask layer renders (`_maskPass`) every fill and stroke is drawn opaque black and instance alpha is ignored, and the result is thresholded to whole pixels, so a 30% fill masks like a solid one and edges are not anti-aliased, as Flash's are not. The misalignment went with the cropped instance offscreen, whose painter carries the full transform
 - [x] Motion tweens lerp matrix entries (`:662`), so rotation shrinks and skews.
       Decompose into translate, rotation, scale and shear, take the shortest
       rotation, and recompose (VectorCraft `doc/src/blend.rs:271-285`). Easing,
       custom ease, rotate-N-times and colour-transform tweening are not parsed.
       Elements are paired by index (`:652`)
   - Done 2026-10-09 for the matrix: `blendTransforms` (`src/edit/transform_blend.cpp`, Qt-free, 4 tests) takes each matrix apart into translation, x/y scale and Animate's two skew angles, blends the angles the short way round and a flip as a negative scale, and puts it back together. A 0 to 90 degree tween is at 45 degrees and full size half way
-- [ ] Motion tween easing (`acceleration`), custom ease curves, `motionTweenRotate` with `motionTweenRotateTimes`, and colour-transform tweening are not parsed or applied; elements are still paired by index
+- [x] Motion tween easing (`acceleration`), custom ease curves, `motionTweenRotate` with `motionTweenRotateTimes`, and colour-transform tweening are not parsed or applied; elements are still paired by index
+  - Done 2026-10-09 for easing and rotation: `acceleration` (and the `<Ease intensity>` that repeats it), `hasCustomEase` with the `<CustomEase>` bezier chain, `motionTweenRotate`/`motionTweenRotateTimes` and `motionTweenSync` are parsed and written back; `easeProgress` (`src/edit/tween_ease.cpp`, tests) blends straight progress with t squared or its mirror, or reads the custom curve; `blendTransforms` turns the way it is told with the extra turns. Also found: `motionTweenSnap` was read and written as `motionTWeenSnap`, so it was always lost; fixed. Checked on screen: eased in, the instance is a quarter of the way at half time; a clockwise one-turn tween is upside down at half time
+- [ ] Colour-transform tweening (alpha, tint, brightness between keyframes) is not interpolated; elements are still paired by index
 - [ ] Shape tweens force-close morph segments (`:101`) and rescale them to the
       lerped keyframe bounds (`:1626-1674`); only fill index 1 is used, gradients
       are not interpolated and strokes vanish mid-tween. Interpolate each morph
@@ -903,17 +907,22 @@ All in `phoenix_view.cpp` unless noted.
 - [x] Oval primitives ignore start/end angle and inner radius (`:810`); rectangle
       corner radii are never parsed. See step 12 for the geometry
   - Done 2026-10-09: `ovalPrimitivePath` draws the sector from the start angle clockwise to the end angle with a notch to the centre or, with an inner radius, a ring sector; a whole oval with an inner radius is a ring. Rectangle corner radii were already parsed and drawn (`roundedRectanglePath`). The primitive's hit test and bounds still use the whole oval
-- [ ] Filters are not implemented. Flash blur is an iterated box blur with
+- [x] Filters are not implemented. Flash blur is an iterated box blur with
       separate blurX/blurY and quality = number of passes: use running-sum box
       blurs (VectorCraft `render/src/fx.rs:203-263`). Drop shadow and glow are the
       alpha silhouette blurred, tinted and offset, cached per object and moved,
       not re-rendered, on pan (`fx.rs:275-330`). Bevel is a shadow plus a
       highlight at opposite offsets; Adjust Color is a 4x5 colour matrix
-- [ ] Blend modes are not implemented. Formulas for multiply, screen, lighten,
+  - Done 2026-10-09: `Filter` (`src/data/filter.h`) is parsed and written for all seven filter elements (`enabled` included); `Filters::apply` (`src/gui/filters.cpp`) runs them in order on the instance's isolated offscreen, which is grown by `Filters::margin`. Blur is a running-sum box blur with quality passes (`src/edit/image_blur.cpp`, Qt-free, tests); drop shadow and glow are the silhouette moved, blurred and strengthened, with inner, knockout and hideObject; bevel is the coverage moved towards and away from the light, blurred, their difference lit or shaded, placed inner, outer or full; Adjust Color is brightness, contrast, saturation and hue as a colour matrix. Filters are sized in the parent's pixels (zoom and parents, not the instance's own matrix). Gradient glow and bevel draw with the gradient's last colour. Nothing is cached yet: a filtered instance is re-rendered on every paint
+- [ ] Gradient glow and gradient bevel should map the blurred coverage through their gradient rather than use its last colour
+- [ ] Cache a filtered instance's image between paints and move it on pan rather than re-rendering it (VectorCraft `fx.rs:275-330`)
+- [x] Blend modes are not implemented. Formulas for multiply, screen, lighten,
       darken, difference, overlay and hard light are in VectorCraft
       `color/src/blend.rs:102-151`; add, subtract and invert are trivial. Layer
       needs an isolated group; Alpha and Erase are `DestinationIn` /
       `DestinationOut` against the parent layer
+  - Done 2026-10-09 for multiply, screen, lighten, darken, difference, add, overlay and hardlight through Qt's composition modes on the isolated offscreen; `layer` is the isolation alone. `blendMode` is parsed and written
+- [ ] Blend modes subtract and invert (no Qt composition mode: composite by hand), and alpha and erase, which need the parent layer isolated so they can cut into it
 - [ ] 9-slice scaling and cacheAsBitmap are not implemented
 - [x] Text uses guessed font-name munging, `size*0.75`, one baseline and no line
       layout (`:812-887`)

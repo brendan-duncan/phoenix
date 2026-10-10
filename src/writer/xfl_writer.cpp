@@ -5,6 +5,7 @@
 #include "../data/bitmap.h"
 #include "../data/bitmap_fill.h"
 #include "../data/bitmap_instance.h"
+#include "../data/filter.h"
 #include "../data/document.h"
 #include "../data/folder.h"
 #include "../data/group.h"
@@ -429,6 +430,8 @@ void XFLWriter::writeSymbolInstance(const SymbolInstance& instance, XMLElement* 
 
     setString(node, "libraryItemName", instance.libraryItemName);
     setInt(node, "firstFrame", instance.firstFrame, 0);
+    if (instance.blendMode != "normal")
+        setString(node, "blendMode", instance.blendMode);
 
     if (instance.symbolType != SymbolType::Graphic)
         node->SetAttribute("symbolType", symbolTypeName(instance.symbolType));
@@ -460,6 +463,73 @@ void XFLWriter::writeSymbolInstance(const SymbolInstance& instance, XMLElement* 
 
         wrapper->InsertEndChild(colorNode);
         node->InsertEndChild(wrapper);
+    }
+
+    if (!instance.filters.empty())
+    {
+        XMLElement* filters = doc->NewElement("filters");
+        for (const Filter& filter : instance.filters)
+        {
+            XMLElement* filterNode = doc->NewElement(filter.elementName());
+            setBool(filterNode, "enabled", filter.enabled, true);
+            switch (filter.type)
+            {
+            case Filter::Type::Blur:
+                setDouble(filterNode, "blurX", filter.blurX, 5.0);
+                setDouble(filterNode, "blurY", filter.blurY, 5.0);
+                setInt(filterNode, "quality", filter.quality, 1);
+                break;
+            case Filter::Type::DropShadow:
+            case Filter::Type::Glow:
+            case Filter::Type::GradientGlow:
+                setDouble(filterNode, "blurX", filter.blurX, 5.0);
+                setDouble(filterNode, "blurY", filter.blurY, 5.0);
+                setInt(filterNode, "quality", filter.quality, 1);
+                if (filter.type != Filter::Type::Glow)
+                {
+                    setDouble(filterNode, "angle", filter.angle, 45.0);
+                    setDouble(filterNode, "distance", filter.distance, 5.0);
+                }
+                setDouble(filterNode, "strength", filter.strength, 1.0);
+                if (filter.type != Filter::Type::GradientGlow)
+                    setColor(filterNode, "color", "alpha", filter.color, true);
+                setBool(filterNode, "inner", filter.inner, false);
+                setBool(filterNode, "knockout", filter.knockout, false);
+                setBool(filterNode, "hideObject", filter.hideObject, false);
+                break;
+            case Filter::Type::Bevel:
+            case Filter::Type::GradientBevel:
+                setDouble(filterNode, "blurX", filter.blurX, 5.0);
+                setDouble(filterNode, "blurY", filter.blurY, 5.0);
+                setInt(filterNode, "quality", filter.quality, 1);
+                setDouble(filterNode, "angle", filter.angle, 45.0);
+                setDouble(filterNode, "distance", filter.distance, 5.0);
+                setDouble(filterNode, "strength", filter.strength, 1.0);
+                if (filter.type == Filter::Type::Bevel)
+                {
+                    setColor(filterNode, "highlightColor", "highlightAlpha", filter.highlightColor, true);
+                    setColor(filterNode, "shadowColor", "shadowAlpha", filter.shadowColor, true);
+                }
+                setString(filterNode, "type", filter.bevelType);
+                setBool(filterNode, "knockout", filter.knockout, false);
+                break;
+            case Filter::Type::AdjustColor:
+                setDouble(filterNode, "brightness", filter.brightness, 0.0);
+                setDouble(filterNode, "contrast", filter.contrast, 0.0);
+                setDouble(filterNode, "saturation", filter.saturation, 0.0);
+                setDouble(filterNode, "hue", filter.hue, 0.0);
+                break;
+            }
+            for (const GradientEntry& entry : filter.entries)
+            {
+                XMLElement* entryNode = doc->NewElement("GradientEntry");
+                setColor(entryNode, "color", "alpha", entry.color, true);
+                setDouble(entryNode, "ratio", entry.ratio, 0.0);
+                filterNode->InsertEndChild(entryNode);
+            }
+            filters->InsertEndChild(filterNode);
+        }
+        node->InsertEndChild(filters);
     }
 
     parent->InsertEndChild(node);
@@ -688,12 +758,42 @@ void XFLWriter::writeFrame(const Frame& frame, XMLElement* parent)
     node->SetAttribute("index", frame.index);
     setInt(node, "duration", frame.duration, 1);
     setString(node, "keyMode", frame.keyMode);
-    setBool(node, "motionTWeenSnap", frame.motionTWeenSnap, false);
 
     if (frame.tweenType == TweenType::Motion)
         node->SetAttribute("tweenType", "motion");
     else if (frame.tweenType == TweenType::Shape)
         node->SetAttribute("tweenType", "shape");
+    setBool(node, "motionTweenSync", frame.motionTweenSync, false);
+    setBool(node, "motionTweenSnap", frame.motionTWeenSnap, false);
+    setBool(node, "hasCustomEase", frame.hasCustomEase, false);
+    setString(node, "motionTweenRotate", frame.motionTweenRotate);
+    setInt(node, "motionTweenRotateTimes", frame.motionTweenRotateTimes, 0);
+    setInt(node, "acceleration", frame.acceleration, 0);
+
+    if (frame.hasCustomEase && !frame.customEase.empty())
+    {
+        XMLElement* tweens = doc->NewElement("tweens");
+        XMLElement* ease = doc->NewElement("CustomEase");
+        ease->SetAttribute("target", "all");
+        for (const Point& point : frame.customEase)
+        {
+            XMLElement* pointNode = doc->NewElement("Point");
+            setDouble(pointNode, "x", point.x, 0.0);
+            setDouble(pointNode, "y", point.y, 0.0);
+            ease->InsertEndChild(pointNode);
+        }
+        tweens->InsertEndChild(ease);
+        node->InsertEndChild(tweens);
+    }
+    else if (frame.acceleration != 0 && frame.tweenType != TweenType::None)
+    {
+        XMLElement* tweens = doc->NewElement("tweens");
+        XMLElement* ease = doc->NewElement("Ease");
+        ease->SetAttribute("target", "all");
+        ease->SetAttribute("intensity", frame.acceleration);
+        tweens->InsertEndChild(ease);
+        node->InsertEndChild(tweens);
+    }
 
     if (frame.actionScript)
     {

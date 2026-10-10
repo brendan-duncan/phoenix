@@ -3,7 +3,9 @@
 #include "element.h"
 #include "point.h"
 #include "color_transform.h"
+#include "filter.h"
 #include <string>
+#include <vector>
 
 namespace fla {
 
@@ -17,6 +19,15 @@ public:
     SymbolType symbolType = SymbolType::Graphic;
     LoopType loopType = LoopType::PlayOnce;
     ColorTransform colorTransform;
+
+    /// How the instance is composited over what is under it, as the file
+    /// names it: normal, layer, multiply, screen, lighten, darken,
+    /// difference, add, subtract, invert, alpha, erase, overlay, hardlight.
+    /// Empty is normal.
+    std::string blendMode;
+
+    /// The filters applied to the instance, in order.
+    std::vector<Filter> filters;
 
     Symbol* symbol = nullptr; // Resolved symbol reference after parsing
 

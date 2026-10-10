@@ -1,4 +1,5 @@
 #include "phoenix_view.h"
+#include "filters.h"
 
 #include "draw_placement.h"
 
@@ -23,6 +24,7 @@
 #include "../data/solid_color.h"
 #include "../data/bitmap_decoder.h"
 #include "../edit/transform_blend.h"
+#include "../edit/tween_ease.h"
 #include "../data/bitmap_fill.h"
 #include "../data/static_text.h"
 #include "text_layout.h"
@@ -619,7 +621,22 @@ void PhoenixView::drawTimeline(QPainter& painter, const fla::Timeline* timeline,
         maskPainter.setRenderHint(QPainter::SmoothPixmapTransform, true);
         maskPainter.setTransform(painterTransform);
 
+        _maskPass = true;
         drawLayer(maskPainter, layer, loopType, firstFrame, nullptr);
+        _maskPass = false;
+        maskPainter.end();
+
+        // A mask is coverage, not alpha: a half-transparent mask fill shows
+        // what is under it in full, and Flash's mask edges are not
+        // anti-aliased, so every covered pixel is wholly in or out.
+        QImage coverage = maskPixmap.toImage().convertToFormat(QImage::Format_ARGB32);
+        for (int y = 0; y < coverage.height(); ++y)
+        {
+            QRgb* line = reinterpret_cast<QRgb*>(coverage.scanLine(y));
+            for (int x = 0; x < coverage.width(); ++x)
+                line[x] = qAlpha(line[x]) >= 128 ? qRgba(255, 255, 255, 255) : qRgba(0, 0, 0, 0);
+        }
+        maskPixmap = QPixmap::fromImage(coverage);
 
         maskCache[i] = { maskPixmap, QPointF(0, 0) };
     }
@@ -748,6 +765,8 @@ PhoenixView::LayerFrame PhoenixView::resolveLayerFrame(const fla::Layer* layer,
         if (currentFrameIndex > tweenStartIndex && currentFrameIndex < tweenEndIndex)
         {
             tweenProgress = static_cast<double>(currentFrameIndex - tweenStartIndex) / currentFrame->duration;
+            tweenProgress = fla::easeProgress(tweenProgress, currentFrame->acceleration,
+                currentFrame->hasCustomEase ? currentFrame->customEase : std::vector<fla::Point>());
 
             for (const fla::Frame* frame : layer->frames)
             {
@@ -788,6 +807,29 @@ void PhoenixView::drawLayer(QPainter& painter, const fla::Layer* layer, fla::Loo
 
 void PhoenixView::drawFrame(QPainter& painter, const fla::Frame* frame, const fla::Frame* nextTweenFrame, double tweenProgress)
 {
+    // The keyframe says which way its tween turns.
+    const fla::TweenRotation savedRotation = _tweenRotation;
+    const int savedTurns = _tweenTurns;
+    _tweenRotation = fla::TweenRotation::Auto;
+    _tweenTurns = 0;
+    if (frame->motionTweenRotate == "clockwise")
+        _tweenRotation = fla::TweenRotation::Clockwise;
+    else if (frame->motionTweenRotate == "counter-clockwise")
+        _tweenRotation = fla::TweenRotation::CounterClockwise;
+    if (_tweenRotation != fla::TweenRotation::Auto)
+        _tweenTurns = std::max(0, frame->motionTweenRotateTimes);
+    struct Restore
+    {
+        PhoenixView& view;
+        fla::TweenRotation rotation;
+        int turns;
+        ~Restore()
+        {
+            view._tweenRotation = rotation;
+            view._tweenTurns = turns;
+        }
+    } restore{*this, savedRotation, savedTurns};
+
     int nextElementIndex = 0;
     for (const fla::Element* element : frame->elements)
     {
@@ -805,7 +847,7 @@ void PhoenixView::drawFrame(QPainter& painter, const fla::Frame* frame, const fl
 
 fla::Transform PhoenixView::interpolateTransform(const fla::Transform& a, const fla::Transform& b, double t)
 {
-    return fla::blendTransforms(a, b, t);
+    return fla::blendTransforms(a, b, t, _tweenRotation, _tweenTurns);
 }
 
 int PhoenixView::calculateLayerDuration(const fla::Layer* layer)
@@ -874,13 +916,27 @@ void PhoenixView::drawElement(QPainter& painter, const fla::Element* element, co
                 colour.blueMultiplier == 1.0 && colour.redOffset == 0 &&
                 colour.greenOffset == 0 && colour.blueOffset == 0 && colour.alphaOffset == 0;
 
-            if (!colour.isIdentity() && alphaOnly)
+            std::vector<fla::Filter> filters;
+            for (const fla::Filter& filter : instance->filters)
+            {
+                if (filter.enabled)
+                    filters.push_back(filter);
+            }
+
+            // Anything but a plain alpha change needs the instance rendered
+            // on its own first: a colour transform of its pixels, a filter
+            // over them, or a blend mode against what is under it.
+            const bool isolate = (!colour.isIdentity() && !alphaOnly) || !filters.empty() ||
+                Filters::needsIsolation(instance->blendMode);
+
+            if (!isolate)
             {
                 // Flash scales every shape's own alpha, so overlapping
                 // shapes inside the symbol show through each other: the
                 // painter's opacity does exactly that.
                 painter.save();
-                painter.setOpacity(painter.opacity() * std::max(0.0, std::min(1.0, colour.alphaMultiplier)));
+                if (!colour.isIdentity() && !_maskPass)
+                    painter.setOpacity(painter.opacity() * std::max(0.0, std::min(1.0, colour.alphaMultiplier)));
                 for (const fla::Timeline* timeline : symbol->timelines)
                 {
                     if (timeline->visible)
@@ -892,7 +948,7 @@ void PhoenixView::drawElement(QPainter& painter, const fla::Element* element, co
                 }
                 painter.restore();
             }
-            else if (!colour.isIdentity())
+            else
             {
                 // Everything the symbol draws, over all its frames, on the
                 // device, so the offscreen is sized to the instance as seen
@@ -916,8 +972,16 @@ void PhoenixView::drawElement(QPainter& painter, const fla::Element* element, co
                 if (local.isNull())
                     local = QRectF(0, 0, 100, 100);
 
+                // Filters are sized in the parent's pixels, so they scale
+                // with the parent and the zoom but not with the instance's
+                // own matrix.
                 const QTransform full = painter.transform();
-                QRectF device = full.mapRect(local).adjusted(-2.0, -2.0, 2.0, 2.0);
+                const double fullScale = std::sqrt(std::fabs(full.determinant()));
+                const double ownScale = std::sqrt(std::fabs(qTransform.determinant()));
+                const double filterScale = ownScale > 1.0e-9 ? fullScale / ownScale : fullScale;
+                const double reach = Filters::margin(filters, filterScale);
+
+                QRectF device = full.mapRect(local).adjusted(-2.0 - reach, -2.0 - reach, 2.0 + reach, 2.0 + reach);
                 device = device.intersected(QRectF(0, 0, painter.device()->width(), painter.device()->height()));
                 const QRect crop = device.toAlignedRect();
                 if (!crop.isEmpty())
@@ -930,6 +994,8 @@ void PhoenixView::drawElement(QPainter& painter, const fla::Element* element, co
                     symbolPainter.setRenderHint(QPainter::TextAntialiasing, true);
                     symbolPainter.setRenderHint(QPainter::SmoothPixmapTransform, true);
                     symbolPainter.setTransform(full * QTransform::fromTranslate(-crop.x(), -crop.y()), false);
+                    if (!colour.isIdentity() && alphaOnly && !_maskPass)
+                        symbolPainter.setOpacity(std::max(0.0, std::min(1.0, colour.alphaMultiplier)));
 
                     for (const fla::Timeline* timeline : symbol->timelines)
                     {
@@ -942,24 +1008,19 @@ void PhoenixView::drawElement(QPainter& painter, const fla::Element* element, co
                     }
                     symbolPainter.end();
 
-                    applyColorTransform(symbolImage, colour);
+                    if (!colour.isIdentity() && !alphaOnly)
+                        applyColorTransform(symbolImage, colour);
+                    if (!filters.empty())
+                        symbolImage = Filters::apply(symbolImage, filters, filterScale);
+
+                    bool supported = true;
+                    const QPainter::CompositionMode mode = Filters::blendMode(instance->blendMode, supported);
 
                     painter.save();
                     painter.resetTransform();
+                    painter.setCompositionMode(mode);
                     painter.drawImage(crop.topLeft(), symbolImage);
                     painter.restore();
-                }
-            }
-            else
-            {
-                for (const fla::Timeline* timeline : symbol->timelines)
-                {
-                    if (timeline->visible)
-                    {
-                        painter.save();
-                        drawTimeline(painter, timeline, loopType, frameOffset);
-                        painter.restore();
-                    }
                 }
             }
         }
@@ -1118,6 +1179,9 @@ QPen PhoenixView::getPen(const fla::StrokeStyle* strokeStyle, bool scaleForEleme
         pen.setBrush(getFillBrush(strokeStyle->fill, fla::Rect()));
     }
 
+    if (_maskPass)
+        pen.setBrush(QBrush(Qt::black));
+
     return pen;
 }
 
@@ -1216,6 +1280,10 @@ QBrush PhoenixView::getFillBrush(const fla::FillStyle* fillStyle, const fla::Rec
 {
     if (!fillStyle)
         return Qt::NoBrush;
+
+    // In a mask only the area counts.
+    if (_maskPass)
+        return QBrush(Qt::black);
 
     if (fillStyle->type() == fla::FillStyle::Type::SolidColor)
     {

@@ -95,6 +95,7 @@ set(HEADERS
     src/gui/navigation_tools.h
     src/gui/draw_placement.h
     src/gui/selection_tool.h
+    src/gui/filters.h
     src/gui/free_transform_tool.h
     src/gui/primitive_tool.h
     src/gui/pen_tool.h
@@ -122,6 +123,7 @@ set(HEADERS
     src/data/fill_style.h
     src/data/fla_document.h
     src/data/folder.h
+    src/data/filter.h
     src/data/frame.h
     src/data/group.h
     src/data/layer.h
@@ -153,6 +155,8 @@ set(HEADERS
     src/edit/new_document.h
     src/edit/shape_transform.h
     src/edit/transform_blend.h
+    src/edit/tween_ease.h
+    src/edit/image_blur.h
     src/edit/element_commands.h
     src/edit/element_clone.h
     src/edit/selection.h
@@ -191,6 +195,7 @@ set(SOURCES
     src/gui/lasso_tool.cpp
     src/gui/navigation_tools.cpp
     src/gui/draw_placement.cpp
+    src/gui/filters.cpp
     src/gui/free_transform_tool.cpp
     src/gui/primitive_tool.cpp
     src/gui/pen_tool.cpp
@@ -246,6 +251,8 @@ set(SOURCES
     src/edit/new_document.cpp
     src/edit/shape_transform.cpp
     src/edit/transform_blend.cpp
+    src/edit/tween_ease.cpp
+    src/edit/image_blur.cpp
     src/edit/element_commands.cpp
     src/edit/element_clone.cpp
     src/edit/selection.cpp

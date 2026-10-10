@@ -323,3 +323,26 @@ TEST(tween_keeps_a_mirrored_keyframe_mirrored)
     CHECK(near(same.m12, 0.0));
     CHECK(near(same.m21, 0.0));
 }
+
+TEST(tween_turns_the_way_it_is_told)
+{
+    // Told to go counter-clockwise from 0 to 90, the tween goes the long way
+    // round through -135 at the half way point; clockwise with one extra turn
+    // it passes 225.
+    const fla::Transform ccw = fla::blendTransforms(rotation(0.0), rotation(90.0), 0.5,
+        fla::TweenRotation::CounterClockwise);
+    const fla::Transform ccwExpected = rotation(-135.0);
+    CHECK(near(ccw.m11, ccwExpected.m11));
+    CHECK(near(ccw.m12, ccwExpected.m12));
+
+    const fla::Transform cw = fla::blendTransforms(rotation(0.0), rotation(90.0), 0.5,
+        fla::TweenRotation::Clockwise, 1);
+    const fla::Transform cwExpected = rotation(225.0);
+    CHECK(near(cw.m11, cwExpected.m11));
+    CHECK(near(cw.m12, cwExpected.m12));
+
+    // Clockwise with no extra turns between equal angles stays put.
+    const fla::Transform same = fla::blendTransforms(rotation(30.0), rotation(30.0), 0.5,
+        fla::TweenRotation::Clockwise);
+    CHECK(near(same.m12, rotation(30.0).m12));
+}

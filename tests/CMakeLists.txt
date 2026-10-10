@@ -56,6 +56,8 @@ set(TEST_CORE_SOURCES
     ${PHOENIX_SRC}/edit/shape_merge.cpp
     ${PHOENIX_SRC}/edit/shape_transform.cpp
     ${PHOENIX_SRC}/edit/transform_blend.cpp
+    ${PHOENIX_SRC}/edit/tween_ease.cpp
+    ${PHOENIX_SRC}/edit/image_blur.cpp
     ${PHOENIX_SRC}/edit/shape_recognition.cpp
     ${PHOENIX_SRC}/edit/snapping.cpp
     ${PHOENIX_SRC}/edit/region_split.cpp
@@ -86,6 +88,7 @@ set(TEST_SOURCES
     test_region_split.cpp
     test_shape_merge.cpp
     test_shape_transform.cpp
+    test_tween_ease.cpp
     test_shape_recognition.cpp
     test_snapping.cpp
 )
