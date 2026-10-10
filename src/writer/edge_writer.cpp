@@ -1,6 +1,7 @@
 #include "edge_writer.h"
 
 #include <cmath>
+#include <cstdio>
 
 namespace fla {
 
@@ -38,6 +39,28 @@ void appendHex(long long value, int minDigits, std::string& out)
 }
 
 } // namespace
+
+std::string EdgeWriter::formatMorphCoordinate(double pixels)
+{
+    // The whole part is twips over 256, written as a 24-bit two's
+    // complement integer, and the fraction is the remaining twips as two
+    // hex digits (a trailing zero dropped, as the format writes it).
+    const long long twips = static_cast<long long>(std::llround(pixels * 20.0));
+    long long whole = twips / 256;
+    long long fraction = twips % 256;
+    if (fraction < 0)
+    {
+        fraction += 256;
+        whole -= 1;
+    }
+    const long long whole24 = whole < 0 ? whole + (1LL << 24) : whole;
+    char buffer[32];
+    if (fraction % 16 == 0)
+        std::snprintf(buffer, sizeof(buffer), "#%llX.%llX", whole24, fraction / 16);
+    else
+        std::snprintf(buffer, sizeof(buffer), "#%llX.%02llX", whole24, fraction);
+    return buffer;
+}
 
 std::string EdgeWriter::formatCoordinate(double pixels)
 {

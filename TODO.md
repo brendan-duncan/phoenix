@@ -875,6 +875,7 @@ All in `phoenix_view.cpp` unless noted.
       ignored. A custom dasher walks each subpath by arc length, restarts per
       subpath, and turns zero-length dashes into dots shaped by the cap
       (VectorCraft `effects/src/stroke/dash.rs:47, 174, 311`)
+  - Partly stale (noted 2026-10-10): dash1/dash2 and the dotted spacing are honoured through Qt's dash pattern in pen-width units. Still open: ragged, stipple and hatched strokes are stand-ins (Qt's dash-dot patterns) rather than Animate's procedural looks, and hatched has no class
 - [x] Colour transforms (`:723-755, :2772-2884`) render the instance into a
       stage-sized image with only its own matrix (`:736`), so the parent
       transform is dropped, content off the stage is clipped, and the result is
@@ -903,12 +904,14 @@ All in `phoenix_view.cpp` unless noted.
   - Done 2026-10-09 for the matrix: `blendTransforms` (`src/edit/transform_blend.cpp`, Qt-free, 4 tests) takes each matrix apart into translation, x/y scale and Animate's two skew angles, blends the angles the short way round and a flip as a negative scale, and puts it back together. A 0 to 90 degree tween is at 45 degrees and full size half way
 - [x] Motion tween easing (`acceleration`), custom ease curves, `motionTweenRotate` with `motionTweenRotateTimes`, and colour-transform tweening are not parsed or applied; elements are still paired by index
   - Done 2026-10-09 for easing and rotation: `acceleration` (and the `<Ease intensity>` that repeats it), `hasCustomEase` with the `<CustomEase>` bezier chain, `motionTweenRotate`/`motionTweenRotateTimes` and `motionTweenSync` are parsed and written back; `easeProgress` (`src/edit/tween_ease.cpp`, tests) blends straight progress with t squared or its mirror, or reads the custom curve; `blendTransforms` turns the way it is told with the extra turns. Also found: `motionTweenSnap` was read and written as `motionTWeenSnap`, so it was always lost; fixed. Checked on screen: eased in, the instance is a quarter of the way at half time; a clockwise one-turn tween is upside down at half time
-- [ ] Colour-transform tweening (alpha, tint, brightness between keyframes) is not interpolated; elements are still paired by index
-- [ ] Shape tweens force-close morph segments (`:101`) and rescale them to the
+- [x] Colour-transform tweening (alpha, tint, brightness between keyframes) is not interpolated; elements are still paired by index
+  - Done 2026-10-10: `blendColorTransforms` (`transform_blend.cpp`, test) blends every amount, multiplier, offset and the tint colour, and an instance part way through a classic tween draws with the blend. Checked on screen: an alpha 1 to 0 tween is half transparent half way, a tint to red is half red. Elements are still paired by index
+- [x] Shape tweens force-close morph segments (`:101`) and rescale them to the
       lerped keyframe bounds (`:1626-1674`); only fill index 1 is used, gradients
       are not interpolated and strokes vanish mid-tween. Interpolate each morph
       segment and its fill/stroke indices directly; lerp gradients through a
       shared stop set (VectorCraft `doc/src/blend.rs:89-159`)
+  - Done 2026-10-10 (`src/edit/shape_tween.cpp`, Qt-free, tests). The rescaling was there to hide a unit error: a MorphShape coordinate is twips over 256 ("#9.61" is 0x961 twips, one fraction digit weighs 1/16), and the parser read it as twips over 20, so the morph came out 12.8 times too small. The parser and writer are fixed (`formatMorphCoordinate`, round-trip tests). `morphedShape` builds the shape at the tween's progress: every point part way between its A and B positions, each taken through its own keyframe's transform to the stage and back through the drawn transform; one edge per segment with `fillIndex1` on its right, `fillIndex2` on its left and the stroke index (zero is none; a file whose segments carry no indices, as puppy.fla's do, takes the first fill and stroke); fills and strokes blended by index between the keyframes (colours, weights, and gradients stop by stop and matrix and all when alike). It draws through the ordinary path machinery, so strokes and every fill show. Checked on screen with shape_tween.fla at frames 0, 3 and 6
 - [x] Oval primitives ignore start/end angle and inner radius (`:810`); rectangle
       corner radii are never parsed. See step 12 for the geometry
   - Done 2026-10-09: `ovalPrimitivePath` draws the sector from the start angle clockwise to the end angle with a notch to the centre or, with an inner radius, a ring sector; a whole oval with an inner radius is a ring. Rectangle corner radii were already parsed and drawn (`roundedRectanglePath`). The primitive's hit test and bounds still use the whole oval

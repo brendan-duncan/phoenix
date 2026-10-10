@@ -140,6 +140,7 @@ set(HEADERS
     src/edit/curve_fit.h
     src/edit/shape_recognition.h
     src/edit/path_tidy.h
+    src/edit/shape_tween.h
     src/geom/curve.h
     src/geom/intersect.h
     src/geom/fill_attribution.h
@@ -238,6 +239,7 @@ set(SOURCES
     src/edit/curve_fit.cpp
     src/edit/shape_recognition.cpp
     src/edit/path_tidy.cpp
+    src/edit/shape_tween.cpp
     src/geom/curve.cpp
     src/geom/intersect.cpp
     src/geom/fill_attribution.cpp

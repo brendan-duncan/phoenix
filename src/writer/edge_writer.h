@@ -21,6 +21,10 @@ public:
     /// the output is the twip-based text the format uses.
     static std::string formatCoordinate(double pixels);
 
+    /// Formats a MorphShape coordinate, which the format writes as twips
+    /// in hex with a point before the last two digits.
+    static std::string formatMorphCoordinate(double pixels);
+
     /// Serializes every path on \a edge into one `edges` attribute value.
     ///
     /// This regenerates the string from the parsed segments. Callers holding an

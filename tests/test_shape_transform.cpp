@@ -346,3 +346,23 @@ TEST(tween_turns_the_way_it_is_told)
         fla::TweenRotation::Clockwise);
     CHECK(near(same.m12, rotation(30.0).m12));
 }
+
+TEST(tween_blends_colour_transforms)
+{
+    fla::ColorTransform from;
+    fla::ColorTransform to;
+    to.alphaMultiplier = 0.0;
+    to.tintMultiplier = 1.0;
+    to.tintColor[0] = 200;
+    to.brightness = -0.5;
+    to.redOffset = 100;
+
+    const fla::ColorTransform mid = fla::blendColorTransforms(from, to, 0.5);
+    CHECK(near(mid.alphaMultiplier, 0.5));
+    CHECK(near(mid.tintMultiplier, 0.5));
+    CHECK(mid.tintColor[0] == 100);
+    CHECK(near(mid.brightness, -0.25));
+    CHECK(mid.redOffset == 50);
+    CHECK(near(fla::blendColorTransforms(from, to, 0.0).alphaMultiplier, 1.0));
+    CHECK(near(fla::blendColorTransforms(from, to, 1.0).alphaMultiplier, 0.0));
+}

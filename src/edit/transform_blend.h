@@ -1,6 +1,7 @@
 #pragma once
 
 #include "../data/transform.h"
+#include "../data/color_transform.h"
 
 namespace fla {
 
@@ -21,5 +22,9 @@ enum class TweenRotation
 
 Transform blendTransforms(const Transform& from, const Transform& to, double t,
     TweenRotation rotation = TweenRotation::Auto, int extraTurns = 0);
+
+/// The colour transform part way between two keyframes': every amount,
+/// multiplier and offset blends straight, as does the tint colour.
+ColorTransform blendColorTransforms(const ColorTransform& from, const ColorTransform& to, double t);
 
 } // namespace fla

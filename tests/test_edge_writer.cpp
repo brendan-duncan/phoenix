@@ -3,6 +3,7 @@
 #include "../src/parser/path_parser.h"
 #include "../src/writer/edge_writer.h"
 
+#include <cmath>
 #include <memory>
 #include <string>
 
@@ -269,5 +270,33 @@ TEST(cubic_segments_survive_a_round_trip)
     {
         CHECK_NEAR(a->points[i].x, b->points[i].x);
         CHECK_NEAR(a->points[i].y, b->points[i].y);
+    }
+}
+
+TEST(morph_coordinates_are_twips_over_256)
+{
+    // "#9.61" is 0x9 + 0x61/256, times 256: 2401 twips; "#20.1" has one
+    // fraction digit, 0x10/256, so 8208; a decimal "24.25" is 24.25 x 256.
+    const fla::Point a = PathParser::parseMorphPoint("#9.61, #20.1");
+    CHECK(std::fabs(a.x - 2401.0 / 20.0) < 1.0e-9);
+    CHECK(std::fabs(a.y - 8208.0 / 20.0) < 1.0e-9);
+    const fla::Point b = PathParser::parseMorphPoint("24.25, #19.E7");
+    CHECK(std::fabs(b.x - 6208.0 / 20.0) < 1.0e-9);
+    CHECK(std::fabs(b.y - 6631.0 / 20.0) < 1.0e-9);
+    // Negative, as a 24-bit two's complement whole part.
+    const fla::Point c = PathParser::parseMorphPoint("#FFFFF0.11, #14.88");
+    CHECK(std::fabs(c.x - (-4079.0 / 20.0)) < 1.0e-9);
+}
+
+TEST(morph_coordinates_round_trip)
+{
+    CHECK(EdgeWriter::formatMorphCoordinate(2401.0 / 20.0) == "#9.61");
+    CHECK(EdgeWriter::formatMorphCoordinate(8208.0 / 20.0) == "#20.1");
+    CHECK(EdgeWriter::formatMorphCoordinate(-4079.0 / 20.0) == "#FFFFF0.11");
+    for (const double pixels : {0.0, 120.05, -33.3, 409.65, 1234.5})
+    {
+        const std::string text = EdgeWriter::formatMorphCoordinate(pixels);
+        const fla::Point back = PathParser::parseMorphPoint(text + ", 0");
+        CHECK(std::fabs(back.x - pixels) < 0.05);
     }
 }

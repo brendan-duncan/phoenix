@@ -25,6 +25,7 @@
 #include "../data/bitmap_decoder.h"
 #include "../edit/transform_blend.h"
 #include "../edit/tween_ease.h"
+#include "../edit/shape_tween.h"
 #include "../geom/curve.h"
 #include "../data/bitmap_fill.h"
 #include "../data/static_text.h"
@@ -59,101 +60,6 @@
 static const int supersampleFactor = 2;
 
 namespace {
-
-fla::Point lerpMorphPoint(const fla::Point& a, const fla::Point& b, double t)
-{
-    return fla::Point(a.x + (b.x - a.x) * t, a.y + (b.y - a.y) * t);
-}
-
-void expandBounds(QRectF& r, const QPointF& p, bool& first)
-{
-    if (first)
-    {
-        r = QRectF(p, QSizeF(0, 0));
-        first = false;
-    }
-    else
-    {
-        r.setLeft(qMin(r.left(), p.x()));
-        r.setRight(qMax(r.right(), p.x()));
-        r.setTop(qMin(r.top(), p.y()));
-        r.setBottom(qMax(r.bottom(), p.y()));
-    }
-}
-
-/// Build morphed outline from Flash MorphShape (quadratic segments), in morph document space.
-bool buildMorphShapePath(const fla::MorphShape* morph, double t, QPainterPath& outPath, QRectF& outBounds)
-{
-    outPath = QPainterPath();
-    outPath.setFillRule(Qt::WindingFill);
-    bool first = true;
-    QRectF bounds;
-    bool any = false;
-
-    for (const fla::MorphSegment* seg : morph->segments)
-    {
-        if (!seg)
-            continue;
-
-        fla::Point s = lerpMorphPoint(seg->startPointA, seg->startPointB, t);
-        QPointF start(s.x, s.y);
-        outPath.moveTo(start);
-        expandBounds(bounds, start, first);
-        any = true;
-
-        for (const fla::MorphCurves* curve : seg->curves)
-        {
-            if (!curve)
-                continue;
-            fla::Point cp = lerpMorphPoint(curve->controlPointA, curve->controlPointB, t);
-            fla::Point ap = lerpMorphPoint(curve->anchorPointA, curve->anchorPointB, t);
-            QPointF qcp(cp.x, cp.y);
-            QPointF qap(ap.x, ap.y);
-            outPath.quadTo(qcp, qap);
-            expandBounds(bounds, qcp, first);
-            expandBounds(bounds, qap, first);
-        }
-        outPath.closeSubpath();
-    }
-
-    outBounds = bounds;
-    return any && !outPath.isEmpty();
-}
-
-/// Interpolate axis-aligned bounds between two keyframe shapes (position + size).
-fla::Rect lerpLocalBounds(const fla::Rect& a, const fla::Rect& b, double t)
-{
-    fla::Rect r;
-    r.topLeft.x = a.topLeft.x + (b.topLeft.x - a.topLeft.x) * t;
-    r.topLeft.y = a.topLeft.y + (b.topLeft.y - a.topLeft.y) * t;
-    r.bottomRight.x = a.bottomRight.x + (b.bottomRight.x - a.bottomRight.x) * t;
-    r.bottomRight.y = a.bottomRight.y + (b.bottomRight.y - a.bottomRight.y) * t;
-    return r;
-}
-
-QTransform morphBoundsToShapeBounds(const QRectF& morphBounds, const fla::Rect& shapeLocalBounds)
-{
-    QRectF shapeBounds(
-        shapeLocalBounds.topLeft.x,
-        shapeLocalBounds.topLeft.y,
-        qMax(0.0, shapeLocalBounds.width()),
-        qMax(0.0, shapeLocalBounds.height()));
-
-    if (morphBounds.width() < 1e-9 || morphBounds.height() < 1e-9 ||
-        shapeBounds.width() < 1e-9 || shapeBounds.height() < 1e-9)
-        return QTransform();
-
-    const double sx = shapeBounds.width() / morphBounds.width();
-    const double sy = shapeBounds.height() / morphBounds.height();
-    const QPointF mc = morphBounds.center();
-    const QPointF sc = shapeBounds.center();
-
-    QTransform xf;
-    xf.translate(sc.x(), sc.y());
-    xf.scale(sx, sy);
-    xf.translate(-mc.x(), -mc.y());
-    return xf;
-}
 
 const fla::Frame* owningFrame(const fla::DOMElement* element)
 {
@@ -920,7 +826,7 @@ void PhoenixView::drawElement(QPainter& painter, const fla::Element* element, co
         const fla::Shape* shape = static_cast<const fla::Shape*>(element);
         const fla::Shape* tweenShape = (tweenElement && tweenElement->elementType() == fla::Element::Type::Shape) ?
             static_cast<const fla::Shape*>(tweenElement) : nullptr;
-        drawShape(painter, shape, tweenShape, tweenProgress);
+        drawShape(painter, shape, tweenShape, tweenProgress, qTransform);
     }
     else if (type == fla::Element::Type::SymbolInstance)
     {
@@ -931,7 +837,14 @@ void PhoenixView::drawElement(QPainter& painter, const fla::Element* element, co
             int frameOffset = (instance->symbolType == fla::SymbolType::Button) ? 0 : instance->firstFrame;
             fla::LoopType loopType = (instance->symbolType == fla::SymbolType::Button) ? fla::LoopType::SingleFrame : instance->loopType;
 
-            const fla::ColorTransform& colour = instance->colorTransform;
+            // Part way through a classic tween, the colour is between the
+            // two keyframes' colours.
+            fla::ColorTransform colour = instance->colorTransform;
+            if (tweenElement && tweenElement->elementType() == fla::Element::Type::SymbolInstance)
+            {
+                colour = fla::blendColorTransforms(colour,
+                    static_cast<const fla::SymbolInstance*>(tweenElement)->colorTransform, tweenProgress);
+            }
             const bool alphaOnly = colour.tintMultiplier == 0.0 && colour.brightness == 0.0 &&
                 colour.redMultiplier == 1.0 && colour.greenMultiplier == 1.0 &&
                 colour.blueMultiplier == 1.0 && colour.redOffset == 0 &&
@@ -2153,61 +2066,38 @@ const PhoenixView::PathCacheList& PhoenixView::shapePaths(const fla::Shape* shap
     return *_pathCache.insert(shape, entries);
 }
 
-void PhoenixView::drawShape(QPainter& painter, const fla::Shape* shape, const fla::Shape* tweenShape, double tweenProgress)
+void PhoenixView::drawShape(QPainter& painter, const fla::Shape* shape, const fla::Shape* tweenShape,
+    double tweenProgress, const QTransform& ownTransform)
 {
     const bool isSelected = isElementSelected(shape);
 
-    // A shape tween replaces the shape's own geometry for the duration of the
-    // tween, so it is checked before falling back to the cached paths.
-    // Shape tween: use MorphShape quadratic segments (interpolated A/B) mapped to this shape's bounds.
+    // A shape tween replaces the shape's own geometry for the duration of
+    // the tween: the morph the file stores is built at this progress, with
+    // its segments' own fills and strokes blended between the keyframes,
+    // and drawn through the same path machinery as any shape.
     const fla::Frame* frame = owningFrame(shape);
     if (frame && frame->morphShape && frame->tweenType == fla::TweenType::Shape && tweenShape &&
         tweenProgress > 0.0 && tweenProgress < 1.0)
     {
-        QPainterPath morphPath;
-        QRectF morphBounds;
-        if (buildMorphShapePath(frame->morphShape, tweenProgress, morphPath, morphBounds))
+        bool invertible = false;
+        const QTransform toLocal = ownTransform.inverted(&invertible);
+        if (invertible)
         {
-            // Map morph outline into the bounds that interpolate between start and end keyframes
-            // so the tween moves across the stage like Animate (not locked to frame 0 only).
-            const fla::Rect targetBounds = lerpLocalBounds(shape->localBounds, tweenShape->localBounds, tweenProgress);
-            QTransform xf = morphBoundsToShapeBounds(morphBounds, targetBounds);
-            QPainterPath drawnPath = xf.isIdentity() ? morphPath : xf.map(morphPath);
+            const fla::Transform documentToLocal(toLocal.m11(), toLocal.m12(), toLocal.m21(),
+                toLocal.m22(), toLocal.dx(), toLocal.dy());
+            std::unique_ptr<fla::Shape> morphed(fla::morphedShape(*frame->morphShape, *shape, *tweenShape,
+                tweenProgress, shape->transform, tweenShape->transform, documentToLocal));
 
-            QBrush brush = Qt::NoBrush;
-            const fla::FillStyle* fillA = shape->getFillStyleByIndex(1);
-            const fla::FillStyle* fillB = tweenShape->getFillStyleByIndex(1);
-            if (!fillA && !shape->fillsMap.empty())
-                fillA = shape->fillsMap.begin()->second;
-            if (!fillB && !tweenShape->fillsMap.empty())
-                fillB = tweenShape->fillsMap.begin()->second;
-            if (fillA && fillB && fillA->type() == fla::FillStyle::Type::SolidColor &&
-                fillB->type() == fla::FillStyle::Type::SolidColor)
+            PathCacheList entries;
+            buildShapePaths(morphed.get(), entries);
+            for (const PathCacheEntry& entry : entries)
             {
-                const fla::SolidColor* sa = static_cast<const fla::SolidColor*>(fillA);
-                const fla::SolidColor* sb = static_cast<const fla::SolidColor*>(fillB);
-                auto lerpCh = [&](int i) -> int {
-                    return static_cast<int>(sa->color[i] + (sb->color[i] - sa->color[i]) * tweenProgress + 0.5);
-                };
-                QColor c(
-                    qBound(0, lerpCh(0), 255),
-                    qBound(0, lerpCh(1), 255),
-                    qBound(0, lerpCh(2), 255),
-                    qBound(0, lerpCh(3), 255));
-                brush = QBrush(c);
+                painter.setBrush(entry.fillBrush);
+                painter.setPen(penForHere(entry));
+                painter.drawPath(entry.painterPath);
             }
-            else if (fillA)
-            {
-                brush = getFillBrush(fillA, targetBounds);
-            }
-
-            painter.setBrush(brush);
-            painter.setPen(Qt::NoPen);
-            painter.drawPath(drawnPath);
             if (isSelected)
-            {
                 drawOverlayPoints(painter, shape);
-            }
             return;
         }
     }

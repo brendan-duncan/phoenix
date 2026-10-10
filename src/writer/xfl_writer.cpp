@@ -148,8 +148,8 @@ void writeTransformationPoint(const Point& point, XMLElement* parent)
 /// written as a comma-separated pair.
 std::string formatMorphPoint(const Point& point)
 {
-    return EdgeWriter::formatCoordinate(point.x) + ", " +
-           EdgeWriter::formatCoordinate(point.y);
+    return EdgeWriter::formatMorphCoordinate(point.x) + ", " +
+           EdgeWriter::formatMorphCoordinate(point.y);
 }
 
 const char* symbolTypeName(SymbolType type)

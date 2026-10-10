@@ -1,5 +1,6 @@
 #include "transform_blend.h"
 
+#include <algorithm>
 #include <cmath>
 
 namespace fla {
@@ -85,6 +86,27 @@ double blend(double from, double to, double t)
 }
 
 } // namespace
+
+ColorTransform blendColorTransforms(const ColorTransform& from, const ColorTransform& to, double t)
+{
+    ColorTransform mixed;
+    mixed.tintMultiplier = blend(from.tintMultiplier, to.tintMultiplier, t);
+    for (int c = 0; c < 4; ++c)
+    {
+        const double value = blend(from.tintColor[c], to.tintColor[c], t);
+        mixed.tintColor[c] = static_cast<uint8_t>(std::max(0.0, std::min(255.0, std::round(value))));
+    }
+    mixed.brightness = blend(from.brightness, to.brightness, t);
+    mixed.redMultiplier = blend(from.redMultiplier, to.redMultiplier, t);
+    mixed.greenMultiplier = blend(from.greenMultiplier, to.greenMultiplier, t);
+    mixed.blueMultiplier = blend(from.blueMultiplier, to.blueMultiplier, t);
+    mixed.alphaMultiplier = blend(from.alphaMultiplier, to.alphaMultiplier, t);
+    mixed.redOffset = static_cast<int>(std::lround(blend(from.redOffset, to.redOffset, t)));
+    mixed.greenOffset = static_cast<int>(std::lround(blend(from.greenOffset, to.greenOffset, t)));
+    mixed.blueOffset = static_cast<int>(std::lround(blend(from.blueOffset, to.blueOffset, t)));
+    mixed.alphaOffset = static_cast<int>(std::lround(blend(from.alphaOffset, to.alphaOffset, t)));
+    return mixed;
+}
 
 Transform blendTransforms(const Transform& from, const Transform& to, double t,
     TweenRotation rotation, int extraTurns)

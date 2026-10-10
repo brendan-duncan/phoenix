@@ -501,7 +501,12 @@ private:
 
     LayerFrame resolveLayerFrame(const fla::Layer* layer, fla::LoopType loopType, int firstFrame);
 
-    void drawShape(QPainter& painter, const fla::Shape* shape, const fla::Shape* tweenShape, double tweenProgress);
+    /// Draws a shape, or, part way through a shape tween to \a tweenShape,
+    /// the morph between them. \a ownTransform is the element's transform
+    /// as drawn (interpolated during a tween), which the painter already
+    /// carries; the morph is built on the stage and brought back through it.
+    void drawShape(QPainter& painter, const fla::Shape* shape, const fla::Shape* tweenShape,
+        double tweenProgress, const QTransform& ownTransform = QTransform());
 
     /// Builds a shape's fill and stroke paths without a painter, so drawing and
     /// hit-testing work from the same geometry.
