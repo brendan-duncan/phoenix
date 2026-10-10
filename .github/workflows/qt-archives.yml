@@ -118,6 +118,10 @@ jobs:
             libxcb-cursor0 libxcb-icccm4 libxcb-image0 libxcb-keysyms1 libxcb-render-util0 \
             libxcb-shape0 libxcb-xinerama0 libxcb-xkb1 libxkbcommon-x11-0 libdbus-1-3
 
+      - name: Pin the hashes of the archives under test
+        shell: bash
+        run: python tools/qt/pin_qt_hashes.py "${{ inputs.qt_version }}" dist/*.sha256
+
       - name: Configure and build from the archive
         shell: bash
         run: |
@@ -131,7 +135,9 @@ jobs:
 
       - name: Run the tests
         shell: bash
-        run: ctest --test-dir build -C Release --output-on-failure
+        # Only Phoenix's own tests: libas3 registers its tests too, but its
+        # test executable is not among the targets built here.
+        run: ctest --test-dir build -C Release -R phoenix_tests --output-on-failure
 
   publish:
     needs: verify
