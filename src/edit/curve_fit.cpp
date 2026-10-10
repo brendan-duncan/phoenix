@@ -63,7 +63,7 @@ Point evaluate(const Point bezier[4], double t)
         bezier[2].y * bernstein2(t) + bezier[3].y * bernstein3(t));
 }
 
-/// Parameterises a run by how far along it each point sits, which is a much
+/// Parameterizes a run by how far along it each point sits, which is a much
 /// better first guess than spacing them evenly.
 std::vector<double> chordLengthParameters(const std::vector<Point>& points,
     size_t first, size_t last)
@@ -217,7 +217,7 @@ double refineParameter(const Point bezier[4], const Point& point, double t)
     return t - numerator / denominator;
 }
 
-/// Improves a fit by reparameterising and fitting again, up to a few times,
+/// Improves a fit by reparameterizing and fitting again, up to a few times,
 /// keeping the best of them: a pass that makes things worse is thrown away
 /// rather than accepted. Parameters are kept inside [0, 1] and the handles
 /// are capped at four chords, beyond which a fit has gone wild. Returns the
@@ -345,9 +345,9 @@ void fitRun(const std::vector<Point>& points, size_t first, size_t last,
     if (splitAt <= first || splitAt >= last)
         splitAt = (first + last) / 2;
 
-    const Vector centre = normalize(subtract(points[splitAt - 1], points[splitAt + 1]));
-    const Vector leftEnd = centre;
-    const Vector rightStart = Vector{-centre.x, -centre.y};
+    const Vector center = normalize(subtract(points[splitAt - 1], points[splitAt + 1]));
+    const Vector leftEnd = center;
+    const Vector rightStart = Vector{-center.x, -center.y};
 
     fitRun(points, first, splitAt, startTangent, leftEnd, tolerance, depth + 1, anchors);
     fitRun(points, splitAt, last, rightStart, endTangent, tolerance, depth + 1, anchors);
@@ -398,7 +398,7 @@ Vector tangentOver(const std::vector<Point>& points, size_t from, int step,
 
 /// Indices of the points where the stroke turns sharply: the direction it
 /// came from, taken over \a window, and the direction it goes on in differ
-/// by more than \a cornerAngle. Of a cluster of neighbouring candidates the
+/// by more than \a cornerAngle. Of a cluster of neighboring candidates the
 /// sharpest is kept.
 std::vector<size_t> findCorners(const std::vector<Point>& points, double window,
     double cornerAngle)

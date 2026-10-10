@@ -59,7 +59,7 @@ std::vector<Point> samplePath(const EditablePath& path, double spacing)
         const Anchor& b = path.anchors[to];
         const bool straight = !a.hasOutCurve() && !b.hasInCurve();
 
-        // Enough steps that neighbouring samples sit about the spacing
+        // Enough steps that neighboring samples sit about the spacing
         // apart along the control polygon, which bounds the curve's length.
         double length = distance(a.position, b.position);
         if (!straight)

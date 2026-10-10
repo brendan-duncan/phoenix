@@ -347,7 +347,7 @@ TEST(tween_turns_the_way_it_is_told)
     CHECK(near(same.m12, rotation(30.0).m12));
 }
 
-TEST(tween_blends_colour_transforms)
+TEST(tween_blends_color_transforms)
 {
     fla::ColorTransform from;
     fla::ColorTransform to;

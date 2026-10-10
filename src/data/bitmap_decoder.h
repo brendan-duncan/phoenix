@@ -6,7 +6,7 @@
 namespace fla {
 
 /// Pixels of a decoded library bitmap, top row first, each 0xAARRGGBB with
-/// the colour already multiplied by the alpha.
+/// the color already multiplied by the alpha.
 struct DecodedBitmap
 {
     int width = 0;

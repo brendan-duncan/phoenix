@@ -61,7 +61,7 @@ public:
 
     bool active() const { return _grab != Grab::None; }
 
-    /// Whether the gesture has travelled past the click threshold.
+    /// Whether the gesture has traveled past the click threshold.
     bool moved() const { return _moved; }
 
     /// Starts the gesture. With \a insertCorner the segment is split at the

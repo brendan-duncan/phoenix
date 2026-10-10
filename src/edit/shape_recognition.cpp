@@ -123,11 +123,11 @@ void tidyStraightenedStroke(EditablePath& path, const std::vector<Point>& raw,
             sx += p.x;
             sy += p.y;
         }
-        const Point centre(sx / raw.size(), sy / raw.size());
+        const Point center(sx / raw.size(), sy / raw.size());
 
         double mean = 0.0;
         for (const Point& p : raw)
-            mean += distance(p, centre);
+            mean += distance(p, center);
         mean /= raw.size();
         if (mean < 1.0e-9)
             return;
@@ -135,7 +135,7 @@ void tidyStraightenedStroke(EditablePath& path, const std::vector<Point>& raw,
         double variance = 0.0;
         for (const Point& p : raw)
         {
-            const double d = distance(p, centre) - mean;
+            const double d = distance(p, center) - mean;
             variance += d * d;
         }
         const double spread = std::sqrt(variance / raw.size()) / mean;

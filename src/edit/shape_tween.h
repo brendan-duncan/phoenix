@@ -20,7 +20,7 @@ class StrokeStyle;
 /// has every point part way from A to B, and every style part way between
 /// the first keyframe's and the last keyframe's style of the same index.
 
-/// The fill between \a a and \a b at \a t: colours blend, gradients blend
+/// The fill between \a a and \a b at \a t: colors blend, gradients blend
 /// stop by stop and matrix and all when they are alike, anything else is a
 /// copy of \a a. The result is owned by the caller.
 FillStyle* blendFills(const FillStyle* a, const FillStyle* b, double t, DOMElement* parent);

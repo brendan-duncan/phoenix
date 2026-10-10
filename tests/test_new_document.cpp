@@ -33,7 +33,7 @@ TEST(new_document_uses_the_default_stage)
     CHECK_NEAR(fla->document->frameRate, kDefaultDocumentFrameRate);
 }
 
-TEST(new_document_honours_a_requested_stage)
+TEST(new_document_honors_a_requested_stage)
 {
     std::unique_ptr<FLADocument> fla(createEmptyDocument(1280, 720, 30.0));
 
@@ -44,7 +44,7 @@ TEST(new_document_honours_a_requested_stage)
 
 /// Animate puts the vanishing point at the middle of the stage, so it has to
 /// follow the size rather than keep the model's own default.
-TEST(new_document_centres_the_vanishing_point)
+TEST(new_document_centers_the_vanishing_point)
 {
     std::unique_ptr<FLADocument> fla = makeEmpty();
 

@@ -11,7 +11,7 @@
 
 /// The layer list beside the timeline, laid out the way Animate's is: the
 /// layer name, then an eye column, a lock column and the layer's outline
-/// colour. Clicking a name makes that layer the current one, which is where
+/// color. Clicking a name makes that layer the current one, which is where
 /// new drawings go.
 class LayersPanel : public QWidget
 {
@@ -41,7 +41,7 @@ private:
         NameColumn = 0,
         VisibleColumn,
         LockColumn,
-        ColourColumn,
+        ColorColumn,
         ColumnCount
     };
 

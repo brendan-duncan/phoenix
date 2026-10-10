@@ -193,7 +193,7 @@ TEST(stack_does_not_merge_mismatched_ids)
     CHECK(stack.count() == 2);
 }
 
-TEST(stack_honours_a_refused_merge)
+TEST(stack_honors_a_refused_merge)
 {
     std::string log;
     CommandStack stack;

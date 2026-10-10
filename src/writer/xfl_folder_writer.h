@@ -11,7 +11,7 @@ class Document;
 
 /// Writes a document as an uncompressed XFL folder: DOMDocument.xml, one file
 /// per symbol under LIBRARY/, the bitmap media, and the .xfl marker Animate uses
-/// to recognise the folder as a project.
+/// to recognize the folder as a project.
 ///
 /// This is a format Animate opens directly, so it is the simplest useful save
 /// target and the one to get right before packing the same content into a .fla

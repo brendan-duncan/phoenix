@@ -16,7 +16,7 @@ class Shape;
 ///
 /// The region is a face of the shape's arrangement, so an area enclosed by
 /// strokes but holding no fill takes paint too -- the classic use. Painting a
-/// face the same colour as its neighbour removes the seam between them, as
+/// face the same color as its neighbor removes the seam between them, as
 /// the merge model always does.
 class PaintBucketTool : public Tool
 {

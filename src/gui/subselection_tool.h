@@ -154,7 +154,7 @@ private:
     QPointF _marqueeEnd;
     bool _marqueeAdds = false;
 
-    /// Whether the press has travelled far enough to be a drag. A click on an
+    /// Whether the press has traveled far enough to be a drag. A click on an
     /// anchor only selects it; it must not write a command or modify the
     /// document.
     bool _dragMoved = false;

@@ -218,7 +218,7 @@ std::vector<CurveIntersection> selfIntersections(const Curve& curve, double tole
                 const double t1 = splits[i] + hit.t1 * (splits[i + 1] - splits[i]);
                 const double t2 = splits[j] + hit.t2 * (splits[j + 1] - splits[j]);
 
-                // Neighbouring pieces share their join, and the curve's two
+                // Neighboring pieces share their join, and the curve's two
                 // ends may coincide: neither is a crossing.
                 if (j == i + 1)
                 {

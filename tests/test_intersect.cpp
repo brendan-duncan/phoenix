@@ -302,7 +302,7 @@ TEST(a_simple_curve_has_no_self_crossing)
 
 TEST(a_crossing_at_twip_scale_is_still_found)
 {
-    // Flash geometry is quantised to a twentieth of a pixel, so the map has to
+    // Flash geometry is quantized to a twentieth of a pixel, so the map has to
     // resolve crossings at that scale rather than losing them to tolerance.
     const double twip = 1.0 / 20.0;
 

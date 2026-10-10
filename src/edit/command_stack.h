@@ -11,7 +11,7 @@ namespace fla {
 /// Linear undo/redo history.
 ///
 /// Commands are pushed after being applied by the stack. Pushing while undone
-/// commands are pending discards that redo branch, which is the behaviour Animate
+/// commands are pending discards that redo branch, which is the behavior Animate
 /// and essentially every other editor has.
 ///
 /// Kept free of Qt so the editing core does not depend on the GUI layer; the Qt

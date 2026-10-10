@@ -57,7 +57,7 @@ public:
     void deactivate(PhoenixView& view) override;
 
 private:
-    /// The marquee so far, normalised so it is valid whichever way it was drawn.
+    /// The marquee so far, normalized so it is valid whichever way it was drawn.
     QRectF marqueeRect() const;
 
     /// Begins dragging the current selection from documentPos.
@@ -102,7 +102,7 @@ private:
     bool _moveActive = false;
     QPointF _moveStart;
 
-    /// Whether the press has travelled far enough to count as a drag.
+    /// Whether the press has traveled far enough to count as a drag.
     ///
     /// A press alone is a selection click, and must leave the objects where they
     /// are. Snapping asks where the box would land rather than how far the

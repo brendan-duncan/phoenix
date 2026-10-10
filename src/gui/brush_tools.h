@@ -32,7 +32,7 @@ fla::Shape* brushOutlineShape(const std::vector<fla::Point>& points, double widt
 
 /// Animate's brush: paints a fill along the drag, as wide as the brush size.
 /// The stroke is a shape with a fill and no outline, and merges like any other
-/// drawing, so passes of one colour run together without seams.
+/// drawing, so passes of one color run together without seams.
 ///
 /// The brush modes decide where the stroke lands: everywhere (Normal), under
 /// the lines (Fills), only on empty stage (Behind), only within the selected

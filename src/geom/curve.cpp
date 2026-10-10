@@ -135,7 +135,7 @@ Curve Curve::subcurve(double from, double to) const
     if (to >= 1.0 - 1.0e-12)
         return rest;
 
-    // Re-parameterise the cut into what is left after the first split.
+    // Re-parameterize the cut into what is left after the first split.
     const double remaining = 1.0 - from;
     const double t = remaining <= 1.0e-12 ? 0.0 : (to - from) / remaining;
 

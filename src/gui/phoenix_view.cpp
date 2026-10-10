@@ -81,11 +81,11 @@ const fla::Layer* owningLayer(const fla::DOMElement* element)
     return nullptr;
 }
 
-/// The colour a selected element is highlighted in. Animate's default is the
-/// outline colour of the layer the element sits on, so neighbouring layers
-/// read differently and the highlight is the same colour as the layer's
+/// The color a selected element is highlighted in. Animate's default is the
+/// outline color of the layer the element sits on, so neighboring layers
+/// read differently and the highlight is the same color as the layer's
 /// outline view.
-QColor highlightColourFor(const fla::Element* element)
+QColor highlightColorFor(const fla::Element* element)
 {
     if (const fla::Layer* layer = owningLayer(element))
         return QColor(layer->color[0], layer->color[1], layer->color[2]);
@@ -101,8 +101,8 @@ QPainterPath ovalPrimitivePath(const fla::OvalPrimitive& oval)
     const QRectF outer(QPointF(oval.rect.topLeft.x, oval.rect.topLeft.y),
         QPointF(oval.rect.bottomRight.x, oval.rect.bottomRight.y));
     const double inner = std::max(0.0, std::min(99.0, oval.innerRadius)) / 100.0;
-    const QPointF centre = outer.center();
-    const QRectF hole(centre.x() - outer.width() * inner / 2.0, centre.y() - outer.height() * inner / 2.0,
+    const QPointF center = outer.center();
+    const QRectF hole(center.x() - outer.width() * inner / 2.0, center.y() - outer.height() * inner / 2.0,
         outer.width() * inner, outer.height() * inner);
 
     double sweep = std::fmod(oval.endAngle - oval.startAngle, 360.0);
@@ -124,7 +124,7 @@ QPainterPath ovalPrimitivePath(const fla::OvalPrimitive& oval)
     if (inner > 0.0)
         path.arcTo(hole, -oval.endAngle, sweep);
     else
-        path.lineTo(centre);
+        path.lineTo(center);
     path.closeSubpath();
     return path;
 }
@@ -153,8 +153,8 @@ QPainterPath roundedRectanglePath(const fla::RectanglePrimitive& rectangle)
         return path;
     }
 
-    // A positive radius arcs round a centre inside the corner; a negative one
-    // arcs round a centre outside it, which is the inward scoop.
+    // A positive radius arcs round a center inside the corner; a negative one
+    // arcs round a center outside it, which is the inward scoop.
     constexpr double kappa = 0.5522847498;
     const auto corner = [&](double cx, double cy, double r, double sx, double sy,
                             const QPointF& from, const QPointF& to) {
@@ -171,7 +171,7 @@ QPainterPath roundedRectanglePath(const fla::RectanglePrimitive& rectangle)
         }
         else
         {
-            // Scoop inwards: the arc's centre is the corner, so the controls
+            // Scoop inwards: the arc's center is the corner, so the controls
             // run along the tangents into the rectangle.
             const QPointF inner(cx + sx * a, cy + sy * a);
             const QPointF c1 = from + (inner - from) * kappa;
@@ -837,18 +837,18 @@ void PhoenixView::drawElement(QPainter& painter, const fla::Element* element, co
             int frameOffset = (instance->symbolType == fla::SymbolType::Button) ? 0 : instance->firstFrame;
             fla::LoopType loopType = (instance->symbolType == fla::SymbolType::Button) ? fla::LoopType::SingleFrame : instance->loopType;
 
-            // Part way through a classic tween, the colour is between the
-            // two keyframes' colours.
-            fla::ColorTransform colour = instance->colorTransform;
+            // Part way through a classic tween, the color is between the
+            // two keyframes' colors.
+            fla::ColorTransform color = instance->colorTransform;
             if (tweenElement && tweenElement->elementType() == fla::Element::Type::SymbolInstance)
             {
-                colour = fla::blendColorTransforms(colour,
+                color = fla::blendColorTransforms(color,
                     static_cast<const fla::SymbolInstance*>(tweenElement)->colorTransform, tweenProgress);
             }
-            const bool alphaOnly = colour.tintMultiplier == 0.0 && colour.brightness == 0.0 &&
-                colour.redMultiplier == 1.0 && colour.greenMultiplier == 1.0 &&
-                colour.blueMultiplier == 1.0 && colour.redOffset == 0 &&
-                colour.greenOffset == 0 && colour.blueOffset == 0 && colour.alphaOffset == 0;
+            const bool alphaOnly = color.tintMultiplier == 0.0 && color.brightness == 0.0 &&
+                color.redMultiplier == 1.0 && color.greenMultiplier == 1.0 &&
+                color.blueMultiplier == 1.0 && color.redOffset == 0 &&
+                color.greenOffset == 0 && color.blueOffset == 0 && color.alphaOffset == 0;
 
             std::vector<fla::Filter> filters;
             for (const fla::Filter& filter : instance->filters)
@@ -858,9 +858,9 @@ void PhoenixView::drawElement(QPainter& painter, const fla::Element* element, co
             }
 
             // Anything but a plain alpha change needs the instance rendered
-            // on its own first: a colour transform of its pixels, a filter
+            // on its own first: a color transform of its pixels, a filter
             // over them, or a blend mode against what is under it.
-            const bool isolate = (!colour.isIdentity() && !alphaOnly) || !filters.empty() ||
+            const bool isolate = (!color.isIdentity() && !alphaOnly) || !filters.empty() ||
                 Filters::needsIsolation(instance->blendMode);
 
             if (!isolate)
@@ -869,8 +869,8 @@ void PhoenixView::drawElement(QPainter& painter, const fla::Element* element, co
                 // shapes inside the symbol show through each other: the
                 // painter's opacity does exactly that.
                 painter.save();
-                if (!colour.isIdentity() && !_maskPass)
-                    painter.setOpacity(painter.opacity() * std::max(0.0, std::min(1.0, colour.alphaMultiplier)));
+                if (!color.isIdentity() && !_maskPass)
+                    painter.setOpacity(painter.opacity() * std::max(0.0, std::min(1.0, color.alphaMultiplier)));
                 for (const fla::Timeline* timeline : symbol->timelines)
                 {
                     if (timeline->visible)
@@ -928,8 +928,8 @@ void PhoenixView::drawElement(QPainter& painter, const fla::Element* element, co
                     symbolPainter.setRenderHint(QPainter::TextAntialiasing, true);
                     symbolPainter.setRenderHint(QPainter::SmoothPixmapTransform, true);
                     symbolPainter.setTransform(full * QTransform::fromTranslate(-crop.x(), -crop.y()), false);
-                    if (!colour.isIdentity() && alphaOnly && !_maskPass)
-                        symbolPainter.setOpacity(std::max(0.0, std::min(1.0, colour.alphaMultiplier)));
+                    if (!color.isIdentity() && alphaOnly && !_maskPass)
+                        symbolPainter.setOpacity(std::max(0.0, std::min(1.0, color.alphaMultiplier)));
 
                     for (const fla::Timeline* timeline : symbol->timelines)
                     {
@@ -942,8 +942,8 @@ void PhoenixView::drawElement(QPainter& painter, const fla::Element* element, co
                     }
                     symbolPainter.end();
 
-                    if (!colour.isIdentity() && !alphaOnly)
-                        applyColorTransform(symbolImage, colour);
+                    if (!color.isIdentity() && !alphaOnly)
+                        applyColorTransform(symbolImage, color);
                     if (!filters.empty())
                         symbolImage = Filters::apply(symbolImage, filters, filterScale);
 
@@ -1230,7 +1230,7 @@ QBrush PhoenixView::getFillBrush(const fla::FillStyle* fillStyle, const fla::Rec
         const fla::LinearGradient* linearFill = static_cast<const fla::LinearGradient*>(fillStyle);
 
         // Flash's gradient square is 1638.4 twips across before the matrix,
-        // which the half scale below brings to 819.2 either side of centre.
+        // which the half scale below brings to 819.2 either side of center.
         const double halfSpan = 1638.4;
         QLinearGradient gradient(QPointF(-halfSpan, 0.0), QPointF(halfSpan, 0.0));
         gradient.setSpread(gradientSpread(linearFill->spreadMethod));
@@ -1878,7 +1878,7 @@ void PhoenixView::buildShapePaths(const fla::Shape* shape, PathCacheList& cacheE
                 // boundary of one region is traced by keeping right: at a
                 // junction, of the paths that set off from here, take the one
                 // that turns furthest to the right. Taking whichever came
-                // first would wander into the neighbouring region and leave
+                // first would wander into the neighboring region and leave
                 // this one half drawn.
                 bool found = false;
                 double bestTurn = -1e9;
@@ -3128,7 +3128,7 @@ void PhoenixView::gatherSnapCandidates(fla::Snapper& snapper,
 
     const fla::Document* document = _flaDocument->document;
 
-    // The stage edges and centre are worth lining up with too, at the scene;
+    // The stage edges and center are worth lining up with too, at the scene;
     // inside a symbol they are not in its space.
     if (_scope.empty())
     {
@@ -3187,7 +3187,7 @@ void PhoenixView::drawGrid(QPainter& painter, const fla::Document* document)
 
     QColor color(document->gridColor[0], document->gridColor[1],
         document->gridColor[2], document->gridColor[3]);
-    // The stored colour is meant for lines over artwork, so it is dialled well
+    // The stored color is meant for lines over artwork, so it is dialled well
     // back rather than drawn at full strength.
     color.setAlpha(60);
     painter.setPen(QPen(color, 1.0 / qMax(_zoom, 1.0e-6)));
@@ -3232,7 +3232,7 @@ void PhoenixView::drawToolOverlay(QPainter& painter)
             if (!element)
                 continue;
 
-            const QColor colour = highlightColourFor(element);
+            const QColor color = highlightColorFor(element);
 
             // Merge-drawn artwork is shown the way Animate shows it: a dot screen
             // over the selected fills and strokes, not a box round the whole
@@ -3243,7 +3243,7 @@ void PhoenixView::drawToolOverlay(QPainter& painter)
                 if (!shape->isDrawingObject)
                 {
                     if (showFills)
-                        drawShapeHighlight(painter, shape, colour);
+                        drawShapeHighlight(painter, shape, color);
                     continue;
                 }
             }
@@ -3257,7 +3257,7 @@ void PhoenixView::drawToolOverlay(QPainter& painter)
 
             // Drawing objects, groups, symbols and the rest get a thin box with
             // no grips: grips belong to the free transform tool.
-            QPen outline(colour, 1.0 * scale);
+            QPen outline(color, 1.0 * scale);
             outline.setCosmetic(false);
             painter.setPen(outline);
             painter.setBrush(Qt::NoBrush);
@@ -3276,7 +3276,7 @@ void PhoenixView::drawToolOverlay(QPainter& painter)
 }
 
 
-void PhoenixView::drawShapeHighlight(QPainter& painter, const fla::Shape* shape, const QColor& colour)
+void PhoenixView::drawShapeHighlight(QPainter& painter, const fla::Shape* shape, const QColor& color)
 {
     const double scale = _zoom > 0.0 ? 1.0 / _zoom : 1.0;
 
@@ -3293,10 +3293,10 @@ void PhoenixView::drawShapeHighlight(QPainter& painter, const fla::Shape* shape,
     texture.fill(Qt::transparent);
     {
         QPainter dots(&texture);
-        dots.fillRect(0, 0, 1, 1, colour);
-        dots.fillRect(2, 0, 1, 1, colour);
-        dots.fillRect(0, 2, 1, 1, colour);
-        dots.fillRect(2, 2, 1, 1, colour);
+        dots.fillRect(0, 0, 1, 1, color);
+        dots.fillRect(2, 0, 1, 1, color);
+        dots.fillRect(0, 2, 1, 1, color);
+        dots.fillRect(2, 2, 1, 1, color);
     }
     QBrush stipple(texture);
     bool invertible = false;
@@ -3425,8 +3425,8 @@ void PhoenixView::zoomToRect(const QRectF& documentRect)
                  (height() - 2.0 * margin) / documentRect.height()),
         _maxZoom);
 
-    // With no pan the stage is centred, so the pan is whatever moves the
-    // rectangle's centre to the stage's.
+    // With no pan the stage is centered, so the pan is whatever moves the
+    // rectangle's center to the stage's.
     _zoom = zoom;
     _panX = (docWidth / 2.0 - documentRect.center().x()) * zoom;
     _panY = (docHeight / 2.0 - documentRect.center().y()) * zoom;
@@ -3619,7 +3619,7 @@ QTransform PhoenixView::rootToWidget() const
         docHeight = _flaDocument->document->height;
     }
 
-    // The stage sits centred in whatever space the widget has, so the centring
+    // The stage sits centered in whatever space the widget has, so the centering
     // offset is part of the mapping and not just a painting detail.
     const double centerX = (width() - docWidth * _zoom) / 2.0;
     const double centerY = (height() - docHeight * _zoom) / 2.0;
@@ -3978,7 +3978,7 @@ void PhoenixView::applyColorTransform(QImage& image, const fla::ColorTransform& 
         image = image.convertToFormat(QImage::Format_ARGB32_Premultiplied);
     }
 
-    // The arithmetic is on straight colour: offsets added to premultiplied
+    // The arithmetic is on straight color: offsets added to premultiplied
     // channels would brighten the edges of anything translucent.
     const bool premultiplied = image.format() == QImage::Format_ARGB32_Premultiplied;
 
@@ -4000,8 +4000,8 @@ void PhoenixView::applyColorTransform(QImage& image, const fla::ColorTransform& 
 
             if (colorTransform.tintMultiplier != 0.0)
             {
-                // Tint multiplies each colour channel by 1 - t and adds t of
-                // the tint colour; alpha is left alone.
+                // Tint multiplies each color channel by 1 - t and adds t of
+                // the tint color; alpha is left alone.
                 const double t = colorTransform.tintMultiplier;
                 const double it = 1.0 - t;
                 r = static_cast<int>(it * r + t * colorTransform.tintColor[0]);

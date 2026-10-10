@@ -249,7 +249,7 @@ void EdgeBender::update(PhoenixView& view, const QPointF& documentPos)
         a.outHandle = fla::Point(a.outHandle.x + dx, a.outHandle.y + dy);
         b.inHandle = fla::Point(b.inHandle.x + dx, b.inHandle.y + dy);
 
-        // The bend is this segment's alone; the neighbours' handles stay put.
+        // The bend is this segment's alone; the neighbors' handles stay put.
         a.smooth = false;
         b.smooth = false;
     }

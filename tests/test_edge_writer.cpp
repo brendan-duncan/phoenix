@@ -158,7 +158,7 @@ TEST(mid_path_style_changes_are_lost_by_the_reader)
 
 TEST(round_trip_is_stable)
 {
-    // The reader normalises as it goes -- it infers closes, and merges a move
+    // The reader normalizes as it goes -- it infers closes, and merges a move
     // that lands where the previous path ended. So the test is that writing is a
     // fixed point: once a string has been through the reader, writing and
     // re-reading it must not keep changing it.

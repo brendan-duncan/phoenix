@@ -19,7 +19,7 @@ struct MapVertex
     std::vector<int> outgoing;
 };
 
-/// A piece of curve, travelled in one direction.
+/// A piece of curve, traveled in one direction.
 ///
 /// Every piece appears twice, once each way. Which side a fill is on is a
 /// property of the direction, which is exactly what `fillStyle0` and
@@ -29,7 +29,7 @@ struct HalfEdge
     int from = -1;
     int to = -1;
 
-    /// The same piece travelled the other way.
+    /// The same piece traveled the other way.
     int twin = -1;
 
     /// The next half-edge around the same face.
@@ -49,7 +49,7 @@ struct HalfEdge
     bool forward = true;
 
     /// The stretch of the input curve this piece is, as parameters on that
-    /// curve in its own direction (the same for both twins). Neighbouring
+    /// curve in its own direction (the same for both twins). Neighboring
     /// pieces of one curve that end up with nothing between them can be
     /// joined back into one piece of the original by these.
     double t0 = 0.0;

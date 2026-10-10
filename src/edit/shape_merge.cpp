@@ -275,7 +275,7 @@ bool ShapeMerger::combine(Shape& target, const Shape& addition, Operation operat
     const std::vector<ShapeCurve> targetCurves = shapeCurves(target);
 
     // What the target paints today, so regions the addition does not cover keep
-    // their colour.
+    // their color.
     PlanarMap targetMap;
     if (!targetCurves.empty())
         arrange(targetMap, targetCurves);

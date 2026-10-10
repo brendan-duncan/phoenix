@@ -48,7 +48,7 @@ Status legend: `[ ]` todo · `[~]` in progress · `[x]` done
       `Layer`) and its commands -- still waiting on the tools that need it
 - [x] Upgrade the unsaved-changes prompt to offer Save now that step 2 has
       landed. Save / Discard / Cancel, and Save that does not happen -- a
-      cancelled Save As, a declined lossy save, a failed write -- cancels the
+      canceled Save As, a declined lossy save, a failed write -- cancels the
       thing that asked, rather than discarding the changes anyway
 - [x] File > New (`src/edit/new_document.h`, 11 tests). One scene, one layer,
       one empty keyframe, 550x400 at 24fps, shaped like a parsed document rather
@@ -93,7 +93,7 @@ re-parses to an identical tree.
 
 Two bugs this turned up, both fixed:
 
-- Flash uses CR for line breaks inside text runs, and XML normalises a literal
+- Flash uses CR for line breaks inside text runs, and XML normalizes a literal
   CR to LF on read. Those now go out as `&#13;`. Before the fix, 12 of the 74
   corpus documents came back with altered text and layer names
 - `parseActionScript` read `element->GetText()` instead of
@@ -177,12 +177,12 @@ Selecting things on the stage works. Transforming them does not yet.
 - [x] Snapping to the grid and to other objects (`src/edit/snapping.h`, Qt-free,
       14 tests), with View menu toggles and grid rendering
   - A gesture hands over the coordinates that are moving -- for a box, its left,
-    centre and right -- and gets back one adjustment for the whole axis, so a
+    center and right -- and gets back one adjustment for the whole axis, so a
     shape shifts to meet a line rather than distorting because one edge snapped
   - Lining up with another object beats the grid at equal distance; the grid only
     wins when it is strictly closer
-  - Candidates are the edges and centres of everything else on stage, plus the
-    stage edges and centre. The dragged objects are excluded, since something
+  - Candidates are the edges and centers of everything else on stage, plus the
+    stage edges and center. The dragged objects are excluded, since something
     snapped to its own edge would never move
   - Candidates are gathered once at the start of a gesture, not per mouse move
   - Rotation does not snap the cursor: it is an angle, not a position, so
@@ -204,7 +204,7 @@ Two things to tidy:
       inside a shape, while the stage drives `Selection`. They should be the one
       model, with the tree simply selecting finer-grained nodes
 - [x] A click that only selects no longer moves anything. Snapping asks where
-      the box would land rather than how far the cursor travelled, so running it
+      the box would land rather than how far the cursor traveled, so running it
       at zero distance answered "on the nearest grid line" and shifted any
       object not already sitting on one -- a select became an edit, and the
       document came up modified. A press now has to pass the same drag threshold
@@ -216,7 +216,7 @@ Two things to tidy:
   - Done for merge artwork, see step 13
 
 Also fixed along the way: `screenToScene` and `sceneToScreen` were dead code and
-wrong -- they left out the centring that `paintEvent` applies, so any hit-testing
+wrong -- they left out the centering that `paintEvent` applies, so any hit-testing
 built on them would have been off by half the unused widget space. They are now
 one `documentToWidget` transform shared by painting, picking and the zoom anchor.
 
@@ -245,7 +245,7 @@ happens to render.
       differing only in what they build from the two corners
 - [x] Shift constrains -- square, circle, and 45 degree line steps -- and the
       drag snaps to the grid and to other objects like any other gesture
-- [x] Fill/stroke properties panel: colour swatches with alpha, stroke weight,
+- [x] Fill/stroke properties panel: color swatches with alpha, stroke weight,
       and the polystar's sides and star mode. One `DrawingStyle`
       (`src/edit/drawing_style.h`) lives for the session, so the next shape picks
       up the last one's settings
@@ -274,7 +274,7 @@ anchor.
       flag, and compiles down to segments when an edit finishes
   - Quadratics are raised to the cubic that draws the same curve, so one anchor
     model covers both
-  - A path whose last point repeats its first is recognised as closed, however it
+  - A path whose last point repeats its first is recognized as closed, however it
     was recorded, rather than ending up with two anchors on top of each other
   - A smooth anchor keeps one straight tangent through it: moving one handle
     swings the other to stay opposite, at its own length
@@ -301,7 +301,7 @@ anchor.
   - Delete removes the anchor last clicked, refusing to go below two, which is
     the least that still draws something
   - Double-clicking an anchor converts it. A smooth point loses its handles; a
-    corner grows them along the line through its neighbours, a third of the way
+    corner grows them along the line through its neighbors, a third of the way
     to the closer one
   - `EditablePath::closestPoint` sweeps coarsely then refines by bisection, so a
     click lands where the user aimed rather than on the nearest sample
@@ -309,11 +309,11 @@ anchor.
       tests) and smooth / straighten / ink modes, with tolerance in the
       properties panel
   - Fit one cubic to the whole stroke by least squares, improve the
-    parameterisation with Newton-Raphson, and split at the worst point only if
+    parameterization with Newton-Raphson, and split at the worst point only if
     it is still outside tolerance. A sine drawn with sixty cursor points comes
     back as a handful of anchors
   - Straighten mode drops points that already lie near the line between their
-    neighbours, keeping the corners
+    neighbors, keeping the corners
   - The end points are kept exactly: a stroke has to start and finish where the
     user's did
 
@@ -321,7 +321,7 @@ anchor.
 
 - [x] The pen cannot resume an existing open path from one of its endpoints
   - Done 2026-10-09, see the pen items in step 12
-- [x] Deleting an anchor joins its neighbours with whatever handles they already
+- [x] Deleting an anchor joins its neighbors with whatever handles they already
       had, rather than refitting the curve through the gap the way Animate does
   - Done 2026-10-09, see the subselection items in step 12
 - [ ] Picking a one-pixel stroke by clicking it is fiddly. Anchor editing was
@@ -422,7 +422,7 @@ to it, so nothing in the application uses it yet.
       half-edge records the fill of the face it borders -- the fill on its left.
       A half-edge and its twin together are what the format stores as
       `fillStyle0` and `fillStyle1`
-  - Paint order is the whole of the merge behaviour: drawing a shape across
+  - Paint order is the whole of the merge behavior: drawing a shape across
     another does not stack them, it replaces what was underneath inside the new
     outline and leaves the rest
   - An outline carrying no fill still cuts, and an open stroke cuts without
@@ -450,14 +450,14 @@ to it, so nothing in the application uses it yet.
     the seam vanishes where two shapes merged into one region
   - Verified on real data: 36 shapes from six documents went through the
     arrangement and back without changing which fills they use
-- [x] Chain neighbouring pieces that share styles into one path. Correct as it
+- [x] Chain neighboring pieces that share styles into one path. Correct as it
       stands -- one edge per piece, which the renderer stitches back into loops --
       but it writes far more edges than Flash would
   - Done 2026-10-09, see "Chain the output" in step 10
 - [x] `ShapeMerger::merge` (`src/edit/shape_merge.h`, 12 tests): the whole
-      behaviour, at the data-model level. Outlines cut each other, the newer fill
+      behavior, at the data-model level. Outlines cut each other, the newer fill
       replaces the older where they overlap, a stroke across a fill divides it
-      without erasing, and a seam between two regions of the same colour vanishes
+      without erasing, and a seam between two regions of the same color vanishes
   - The two shapes number their styles independently, so the addition's fills
     and strokes are copied in and renumbered before anything looks at them
 - [x] `MergeShapeCommand`: a merge rewrites the target completely, so undo keeps
@@ -590,7 +590,7 @@ is the missing feature rather than a fault in the tools.
       needs to be visible, and the render cache has to notice
   - Visible: every instance draws the same timeline and the caches clear on edit
 
-## 8. Matching Animate's behaviour
+## 8. Matching Animate's behavior
 
 The tools work, but they are not shaped like Animate's. The gap is one decision,
 not a list of small ones: **selection is element-level, and Animate's is
@@ -616,8 +616,8 @@ select.
 - [x] A marquee should cut geometry, not pick whole elements -- half a fill
       selected is half a fill you can drag away
   - Done, see step 13
-- [x] Alt draws a rectangle or an oval from its centre. The polystar already
-      works from the centre and a line has no centre, so neither takes it
+- [x] Alt draws a rectangle or an oval from its center. The polystar already
+      works from the center and a line has no center, so neither takes it
 - [x] Hovering an edge with the selection tool should show the corner/curve
       cursor that says it can be bent (pairs with edge dragging in step 6)
   - Done
@@ -675,7 +675,7 @@ should be reproduced before fixing.
       `free_transform_tool.cpp:234-240` shears by `delta/depth`, but the grabbed
       edge sits at a *signed* offset of `-depth` from the opposite midpoint.
       Divide by the signed lever, `k = dx / (handle.y - origin.y)`, and conjugate
-      `[1, 0, k, 1]` by the origin (alt: the centre). VectorCraft
+      `[1, 0, k, 1]` by the origin (alt: the center). VectorCraft
       `tools/src/xform/free.rs:91-107`
   - Done 2026-10-09: the shear is divided by the signed lever from the still edge to the grabbed one, in the box's own frame, so every edge slides the way it is dragged, on a rotated box too. Verified on screen
 - [x] Scaling a rotated object shears it: `adjustForDrag` (`:168-240`) builds
@@ -684,8 +684,8 @@ should be reproduced before fixing.
       scale there and map back (VectorCraft `doc/src/orient.rs:15-85`,
       `tools/src/bbox.rs:232-254`, `tools/src/select.rs:304-314`). Shift should
       take the larger axis rather than averaging `|sx|` and `|sy|` (`:191`); alt
-      scales from the centre
-  - Done 2026-10-09: the pointer is measured in the box's frame (`boxFrame`), scaled there and turned back, so a rotated box scales along its sides; shift takes the larger axis; alt scales about the centre. Verified on screen
+      scales from the center
+  - Done 2026-10-09: the pointer is measured in the box's frame (`boxFrame`), scaled there and turned back, so a rotated box scales along its sides; shift takes the larger axis; alt scales about the center. Verified on screen
 - [x] The free transform box goes stale: `_boxValid` is only cleared when the
       selection empties or the tool is deactivated (`:482-489`), so after undo,
       Select All or a tree selection the old box is drawn and used. Rebuild it
@@ -767,10 +767,10 @@ The merge model sits on this, so these come before the tools in step 12.
       `A.pointAt(t1)` and `B.pointAt(t2)` and rounded separately (`:154-155`).
       Give each crossing one vertex id that both curves resolve to, and weld
       vertices with union-find within a radius rather than by rounding into a
-      cell (VectorCraft welds on a 4-epsilon grid checking neighbouring cells,
+      cell (VectorCraft welds on a 4-epsilon grid checking neighboring cells,
       `pathops/src/planar.rs:500-517`). Snapping also moves vertices up to half a
       twip without re-checking for new crossings
-  - Done: every cut carries the point it was made at and both pieces are pinned to it. Also found and fixed: the duplicate-piece key rounded midpoints to the twip grid separately, so a midpoint on a half-twip let both copies through and collapsed the faces round it -- which is what turned a brush stroke merged back over its own cut the colour of the artwork under it
+  - Done: every cut carries the point it was made at and both pieces are pinned to it. Also found and fixed: the duplicate-piece key rounded midpoints to the twip grid separately, so a midpoint on a half-twip let both copies through and collapsed the faces round it -- which is what turned a brush stroke merged back over its own cut the color of the artwork under it
 - [x] The parallel test is an absolute 1e-12 (`intersect.cpp:51`). After a
       rotation in `bakeTransform`, collinear lines then produce arbitrary
       crossings. Make it relative to the segments' lengths
@@ -802,7 +802,7 @@ The merge model sits on this, so these come before the tools in step 12.
       unstroked fill loses its stroke there (affects `keepStroke`,
       `shape_merge.cpp:358`). Keep the newer source's stroke
   - Done 2026-10-09: the later source claims a coincident edge, direction flags following its own direction; a stroked rectangle drawn along an unstroked fill's edge keeps its stroke there (test)
-- [x] Chain the output (replaces the "chain neighbouring pieces" item in step 6).
+- [x] Chain the output (replaces the "chain neighboring pieces" item in step 6).
       Each piece knows its source curve and parameter range, so walk through
       degree-2 vertices whose pieces share (left fill, right fill, stroke) and
       the same source, and rebuild each run as `subcurve(t0, t2)` of the original
@@ -838,9 +838,9 @@ All in `phoenix_view.cpp` unless noted.
 - [x] **(confirmed) Bitmap fills draw nothing:** `getFillBrush` returns
       `Qt::NoBrush` for them (`:1068`). Use `QBrush(QPixmap)` with the fill matrix
       as the brush transform for repeating fills, and clip to the shape for
-      clipped ones. Honour the bitmap's `allowSmoothing` (bitmap instances
+      clipped ones. Honor the bitmap's `allowSmoothing` (bitmap instances
       always smooth, `:888-920`)
-  - Done 2026-10-09: `BitmapFill` is parsed, written and cloned (`bitmapPath`, `bitmapIsClipped`, matrix), and drawn as a tiled `QBrush(QPixmap)` with the fill matrix over 20 as the brush transform. Library bitmaps are decoded through one cache (`libraryBitmap`), from the LIBRARY copy when there is one and otherwise from `bin/<bitmapDataHRef>`: JPEG as is, Animate's lossless `.dat` (magic 0x0503, row bytes, width, height, then the zlib stream in u16-length pieces, pixels A,R,G,B premultiplied) through `bitmap_decoder.cpp`. The `.dat` is kept on the bitmap and written back on save; the bitmap item's other attributes round-trip too. Instances honour `allowSmoothing`. Also found: `itemID` was read and written as `itemId`, so every library item lost its id on load and on save; fixed for symbols, folders and bitmaps
+  - Done 2026-10-09: `BitmapFill` is parsed, written and cloned (`bitmapPath`, `bitmapIsClipped`, matrix), and drawn as a tiled `QBrush(QPixmap)` with the fill matrix over 20 as the brush transform. Library bitmaps are decoded through one cache (`libraryBitmap`), from the LIBRARY copy when there is one and otherwise from `bin/<bitmapDataHRef>`: JPEG as is, Animate's lossless `.dat` (magic 0x0503, row bytes, width, height, then the zlib stream in u16-length pieces, pixels A,R,G,B premultiplied) through `bitmap_decoder.cpp`. The `.dat` is kept on the bitmap and written back on save; the bitmap item's other attributes round-trip too. Instances honor `allowSmoothing`. Also found: `itemID` was read and written as `itemId`, so every library item lost its id on load and on save; fixed for symbols, folders and bitmaps
   - Still open: `bitmapIsClipped` fills tile like repeating ones; clip to one copy of the bitmap
 - [x] **(confirmed) Hairlines scale with zoom:** `MAX(weight, 0.5)` (`:933`)
       turns weight 0 into a 0.5 px document line. Flash hairlines are 1 device
@@ -875,8 +875,8 @@ All in `phoenix_view.cpp` unless noted.
       ignored. A custom dasher walks each subpath by arc length, restarts per
       subpath, and turns zero-length dashes into dots shaped by the cap
       (VectorCraft `effects/src/stroke/dash.rs:47, 174, 311`)
-  - Partly stale (noted 2026-10-10): dash1/dash2 and the dotted spacing are honoured through Qt's dash pattern in pen-width units. Still open: ragged, stipple and hatched strokes are stand-ins (Qt's dash-dot patterns) rather than Animate's procedural looks, and hatched has no class
-- [x] Colour transforms (`:723-755, :2772-2884`) render the instance into a
+  - Partly stale (noted 2026-10-10): dash1/dash2 and the dotted spacing are honored through Qt's dash pattern in pen-width units. Still open: ragged, stipple and hatched strokes are stand-ins (Qt's dash-dot patterns) rather than Animate's procedural looks, and hatched has no class
+- [x] Color transforms (`:723-755, :2772-2884`) render the instance into a
       stage-sized image with only its own matrix (`:736`), so the parent
       transform is dropped, content off the stage is clipped, and the result is
       1x and blurry when zoomed. Use an isolated offscreen sized to the
@@ -887,42 +887,42 @@ All in `phoenix_view.cpp` unless noted.
       (VectorCraft `render/src/lib.rs:762-790`)
   - Done 2026-10-09: an alpha-only transform is the painter's opacity, which scales each shape's own alpha as Flash does (overlapping shapes inside the symbol show through each other). Anything else renders into an offscreen cropped to the instance's device bounds (all frames of all layers, plus 2 px) with the full transform shifted to the crop, so it is sharp at any zoom, keeps the parent transform and is not clipped to the stage
 - [x] Tint also blends alpha (`a = it*a + t*tintA`); Flash tint is per-channel
-      multiply `1-t` plus offset `t*colour` and leaves alpha alone. Brightness is
+      multiply `1-t` plus offset `t*color` and leaves alpha alone. Brightness is
       done as an HSL lightness shift; it is also multiply+add (b > 0: multiply
       `1-b`, add `255b`; b < 0: multiply `1+b`)
-  - Done 2026-10-09, and the arithmetic now runs on straight (unpremultiplied) colour so offsets do not brighten translucent edges
+  - Done 2026-10-09, and the arithmetic now runs on straight (unpremultiplied) color so offsets do not brighten translucent edges
 - [x] Masks use the mask art's alpha; Flash masks use coverage only, so a
       semi-transparent mask fill should not fade the content. A mask inside a
-      colour-transformed symbol is sized from the widget `rect()` but drawn into
+      color-transformed symbol is sized from the widget `rect()` but drawn into
       the stage-sized image, so it is misaligned
   - Done 2026-10-09: while a mask layer renders (`_maskPass`) every fill and stroke is drawn opaque black and instance alpha is ignored, and the result is thresholded to whole pixels, so a 30% fill masks like a solid one and edges are not anti-aliased, as Flash's are not. The misalignment went with the cropped instance offscreen, whose painter carries the full transform
 - [x] Motion tweens lerp matrix entries (`:662`), so rotation shrinks and skews.
       Decompose into translate, rotation, scale and shear, take the shortest
       rotation, and recompose (VectorCraft `doc/src/blend.rs:271-285`). Easing,
-      custom ease, rotate-N-times and colour-transform tweening are not parsed.
+      custom ease, rotate-N-times and color-transform tweening are not parsed.
       Elements are paired by index (`:652`)
   - Done 2026-10-09 for the matrix: `blendTransforms` (`src/edit/transform_blend.cpp`, Qt-free, 4 tests) takes each matrix apart into translation, x/y scale and Animate's two skew angles, blends the angles the short way round and a flip as a negative scale, and puts it back together. A 0 to 90 degree tween is at 45 degrees and full size half way
-- [x] Motion tween easing (`acceleration`), custom ease curves, `motionTweenRotate` with `motionTweenRotateTimes`, and colour-transform tweening are not parsed or applied; elements are still paired by index
+- [x] Motion tween easing (`acceleration`), custom ease curves, `motionTweenRotate` with `motionTweenRotateTimes`, and color-transform tweening are not parsed or applied; elements are still paired by index
   - Done 2026-10-09 for easing and rotation: `acceleration` (and the `<Ease intensity>` that repeats it), `hasCustomEase` with the `<CustomEase>` bezier chain, `motionTweenRotate`/`motionTweenRotateTimes` and `motionTweenSync` are parsed and written back; `easeProgress` (`src/edit/tween_ease.cpp`, tests) blends straight progress with t squared or its mirror, or reads the custom curve; `blendTransforms` turns the way it is told with the extra turns. Also found: `motionTweenSnap` was read and written as `motionTWeenSnap`, so it was always lost; fixed. Checked on screen: eased in, the instance is a quarter of the way at half time; a clockwise one-turn tween is upside down at half time
-- [x] Colour-transform tweening (alpha, tint, brightness between keyframes) is not interpolated; elements are still paired by index
-  - Done 2026-10-10: `blendColorTransforms` (`transform_blend.cpp`, test) blends every amount, multiplier, offset and the tint colour, and an instance part way through a classic tween draws with the blend. Checked on screen: an alpha 1 to 0 tween is half transparent half way, a tint to red is half red. Elements are still paired by index
+- [x] Color-transform tweening (alpha, tint, brightness between keyframes) is not interpolated; elements are still paired by index
+  - Done 2026-10-10: `blendColorTransforms` (`transform_blend.cpp`, test) blends every amount, multiplier, offset and the tint color, and an instance part way through a classic tween draws with the blend. Checked on screen: an alpha 1 to 0 tween is half transparent half way, a tint to red is half red. Elements are still paired by index
 - [x] Shape tweens force-close morph segments (`:101`) and rescale them to the
       lerped keyframe bounds (`:1626-1674`); only fill index 1 is used, gradients
       are not interpolated and strokes vanish mid-tween. Interpolate each morph
       segment and its fill/stroke indices directly; lerp gradients through a
       shared stop set (VectorCraft `doc/src/blend.rs:89-159`)
-  - Done 2026-10-10 (`src/edit/shape_tween.cpp`, Qt-free, tests). The rescaling was there to hide a unit error: a MorphShape coordinate is twips over 256 ("#9.61" is 0x961 twips, one fraction digit weighs 1/16), and the parser read it as twips over 20, so the morph came out 12.8 times too small. The parser and writer are fixed (`formatMorphCoordinate`, round-trip tests). `morphedShape` builds the shape at the tween's progress: every point part way between its A and B positions, each taken through its own keyframe's transform to the stage and back through the drawn transform; one edge per segment with `fillIndex1` on its right, `fillIndex2` on its left and the stroke index (zero is none; a file whose segments carry no indices, as puppy.fla's do, takes the first fill and stroke); fills and strokes blended by index between the keyframes (colours, weights, and gradients stop by stop and matrix and all when alike). It draws through the ordinary path machinery, so strokes and every fill show. Checked on screen with shape_tween.fla at frames 0, 3 and 6
+  - Done 2026-10-10 (`src/edit/shape_tween.cpp`, Qt-free, tests). The rescaling was there to hide a unit error: a MorphShape coordinate is twips over 256 ("#9.61" is 0x961 twips, one fraction digit weighs 1/16), and the parser read it as twips over 20, so the morph came out 12.8 times too small. The parser and writer are fixed (`formatMorphCoordinate`, round-trip tests). `morphedShape` builds the shape at the tween's progress: every point part way between its A and B positions, each taken through its own keyframe's transform to the stage and back through the drawn transform; one edge per segment with `fillIndex1` on its right, `fillIndex2` on its left and the stroke index (zero is none; a file whose segments carry no indices, as puppy.fla's do, takes the first fill and stroke); fills and strokes blended by index between the keyframes (colors, weights, and gradients stop by stop and matrix and all when alike). It draws through the ordinary path machinery, so strokes and every fill show. Checked on screen with shape_tween.fla at frames 0, 3 and 6
 - [x] Oval primitives ignore start/end angle and inner radius (`:810`); rectangle
       corner radii are never parsed. See step 12 for the geometry
-  - Done 2026-10-09: `ovalPrimitivePath` draws the sector from the start angle clockwise to the end angle with a notch to the centre or, with an inner radius, a ring sector; a whole oval with an inner radius is a ring. Rectangle corner radii were already parsed and drawn (`roundedRectanglePath`). The primitive's hit test and bounds still use the whole oval
+  - Done 2026-10-09: `ovalPrimitivePath` draws the sector from the start angle clockwise to the end angle with a notch to the center or, with an inner radius, a ring sector; a whole oval with an inner radius is a ring. Rectangle corner radii were already parsed and drawn (`roundedRectanglePath`). The primitive's hit test and bounds still use the whole oval
 - [x] Filters are not implemented. Flash blur is an iterated box blur with
       separate blurX/blurY and quality = number of passes: use running-sum box
       blurs (VectorCraft `render/src/fx.rs:203-263`). Drop shadow and glow are the
       alpha silhouette blurred, tinted and offset, cached per object and moved,
       not re-rendered, on pan (`fx.rs:275-330`). Bevel is a shadow plus a
-      highlight at opposite offsets; Adjust Color is a 4x5 colour matrix
-  - Done 2026-10-09: `Filter` (`src/data/filter.h`) is parsed and written for all seven filter elements (`enabled` included); `Filters::apply` (`src/gui/filters.cpp`) runs them in order on the instance's isolated offscreen, which is grown by `Filters::margin`. Blur is a running-sum box blur with quality passes (`src/edit/image_blur.cpp`, Qt-free, tests); drop shadow and glow are the silhouette moved, blurred and strengthened, with inner, knockout and hideObject; bevel is the coverage moved towards and away from the light, blurred, their difference lit or shaded, placed inner, outer or full; Adjust Color is brightness, contrast, saturation and hue as a colour matrix. Filters are sized in the parent's pixels (zoom and parents, not the instance's own matrix). Gradient glow and bevel draw with the gradient's last colour. Nothing is cached yet: a filtered instance is re-rendered on every paint
-- [ ] Gradient glow and gradient bevel should map the blurred coverage through their gradient rather than use its last colour
+      highlight at opposite offsets; Adjust Color is a 4x5 color matrix
+  - Done 2026-10-09: `Filter` (`src/data/filter.h`) is parsed and written for all seven filter elements (`enabled` included); `Filters::apply` (`src/gui/filters.cpp`) runs them in order on the instance's isolated offscreen, which is grown by `Filters::margin`. Blur is a running-sum box blur with quality passes (`src/edit/image_blur.cpp`, Qt-free, tests); drop shadow and glow are the silhouette moved, blurred and strengthened, with inner, knockout and hideObject; bevel is the coverage moved towards and away from the light, blurred, their difference lit or shaded, placed inner, outer or full; Adjust Color is brightness, contrast, saturation and hue as a color matrix. Filters are sized in the parent's pixels (zoom and parents, not the instance's own matrix). Gradient glow and bevel draw with the gradient's last color. Nothing is cached yet: a filtered instance is re-rendered on every paint
+- [ ] Gradient glow and gradient bevel should map the blurred coverage through their gradient rather than use its last color
 - [ ] Cache a filtered instance's image between paints and move it on pan rather than re-rendering it (VectorCraft `fx.rs:275-330`)
 - [x] Blend modes are not implemented. Formulas for multiply, screen, lighten,
       darken, difference, overlay and hard light are in VectorCraft
@@ -962,15 +962,15 @@ All in `phoenix_view.cpp` unless noted.
       (VectorCraft `tools/src/guides.rs:565-674`). Also snap to object vertices
       and edges, not only bounds (`guides.rs:429-484`)
 - [x] The transformation point: `Element::transformationPoint` exists
-      (`data/element.h:30`) but rotation always uses the box centre (`:203, :509`)
+      (`data/element.h:30`) but rotation always uses the box center (`:203, :509`)
       and the pivot cannot be dragged. Make it draggable, snap it to anchors and
-      the centre, and keep it while the selection is unchanged (VectorCraft
+      the center, and keep it while the selection is unchanged (VectorCraft
       `tools/src/xform/transform.rs:100-110, 190`)
-  - Done 2026-10-09: the pivot comes from a single selected element's own transformation point (the box centre for several, or a shape whose point was never set), is dragged as its own grip snapping to the box centre and handles and then the grid, rides along with every gesture, is written back to the element so the file keeps it, and a double click returns it to the centre. Rotation and alt-scaling turn about it. The box is also rebuilt before drawing when it no longer matches the selection (after an undo). It does not yet snap to anchors
+  - Done 2026-10-09: the pivot comes from a single selected element's own transformation point (the box center for several, or a shape whose point was never set), is dragged as its own grip snapping to the box center and handles and then the grid, rides along with every gesture, is written back to the element so the file keeps it, and a double click returns it to the center. Rotation and alt-scaling turn about it. The box is also rebuilt before drawing when it no longer matches the selection (after an undo). It does not yet snap to anchors
 - [x] Marquee should test geometry, not bounds (`elementsIn`,
       `phoenix_view.cpp:2045-2090`): reject on bounds; hit if any anchor is
       inside; hit if any segment crosses a rect edge; hit if the path is closed
-      and the rect's centre is inside it (VectorCraft `geom/src/hit.rs:28-54`).
+      and the rect's center is inside it (VectorCraft `geom/src/hit.rs:28-54`).
       Cutting geometry is step 13
   - Done for merge artwork, which is cut and selected by region; objects are still picked by bounds
 
@@ -982,14 +982,14 @@ All in `phoenix_view.cpp` unless noted.
 - [ ] `closestPoint` samples 32 points then bisects (`editable_path.cpp:250-290`).
       Solve exactly instead: for a quadratic the nearest point is a cubic
       equation; for a cubic, Newton from the best sample
-- [x] Deleting an anchor should refit, not just join the neighbours
-      (`editable_path.cpp:383-391`): sample both neighbouring segments 16 times,
+- [x] Deleting an anchor should refit, not just join the neighbors
+      (`editable_path.cpp:383-391`): sample both neighboring segments 16 times,
       keep the outer tangents, golden-section search over the parameter the
-      removed point lands on minimising the single-cubic fit error, and write the
-      result into the neighbours' facing handles (VectorCraft
+      removed point lands on minimizing the single-cubic fit error, and write the
+      result into the neighbors' facing handles (VectorCraft
       `pathops/src/edit.rs:234-275`). Deleting a shared corner still has the
       problem the drag had (step 5)
-  - Done 2026-10-09: when either side was curved, both segments are sampled 16 times and `CurveFit::fitSingleCubic` fits one cubic with the outer tangents kept (least squares for the handle lengths, then reparameterising passes), written into the neighbours' facing handles; all-straight sides are joined by a line as before (test). Deleting a shared corner is still the open step 5 item
+  - Done 2026-10-09: when either side was curved, both segments are sampled 16 times and `CurveFit::fitSingleCubic` fits one cubic with the outer tangents kept (least squares for the handle lengths, then reparameterizing passes), written into the neighbors' facing handles; all-straight sides are joined by a line as before (test). Deleting a shared corner is still the open step 5 item
 
 ### Pen
 
@@ -1012,7 +1012,7 @@ All in `phoenix_view.cpp` unless noted.
 ### Pencil and curve fitting
 
 - [x] **Corners come out rounded.** Every fitted anchor is smooth
-      (`curve_fit.cpp:266`) and every split gets a centred tangent (`:277`). The
+      (`curve_fit.cpp:266`) and every split gets a centered tangent (`:277`). The
       VectorCraft pipeline (`engine/src/cmd/draw2.rs:456-491`,
       `pathops/src/edit.rs:47-104`): drop samples closer than 0.3 x tolerance and
       pin the last to the release point; mark a corner where the turn exceeds
@@ -1072,7 +1072,7 @@ All in `phoenix_view.cpp` unless noted.
   - Done for the uniform radius a tool sets; per-corner radii on primitives render too
 - [x] Oval start/end angle and inner radius: split the sweep into arcs of at most
       90 degrees, each with handle `r * 4/3 * tan(delta/4)`; trace the outer arc,
-      then the inner arc reversed (or a line to the centre), and close
+      then the inner arc reversed (or a line to the center), and close
   - Done 2026-10-09 for rendering (`ovalPrimitivePath`, Qt arcs); the oval tool still has no way to set the angles or inner radius
 - [x] PolyStar with shift scales the radius by up to sqrt(2) and snaps the angle,
       because it squares the delta (`primitive_tool.cpp:136-140`). Shift should
@@ -1115,9 +1115,9 @@ addition maps, plus a rule for which strokes survive.
       lasso collects points at least 1 px apart and tests with even-odd
       point-in-polygon (VectorCraft `tools/src/xform/wand.rs:46-130`)
   - Done 2026-10-09: `RegionSplitter` arranges the shape together with the area's outline as unstyled curves, paints each divided face by sampling the shape alone, and lifts the faces and strokes inside out as one piece (`selectRegionsIn`). Objects the area touches are selected whole
-- [x] **Brush** (paints fills). Fit the centreline as the pencil does, outline it
+- [x] **Brush** (paints fills). Fit the centerline as the pencil does, outline it
       with round caps and joins (in Qt, `QPainterPathStroker` then `simplified()`,
-      then refit the outline), and merge it. Same-colour seams vanish on their
+      then refit the outline), and merge it. Same-color seams vanish on their
       own. Modes are face rules: Normal = merge; Behind = target fill if any,
       else the addition; Fills = keep every target stroke; Selection = selected
       faces only; Inside = only faces in the target face under the press point.
@@ -1125,7 +1125,7 @@ addition maps, plus a rule for which strokes survive.
       `+-(w/2) * profile(t)` along the normal, miter or round the outer joins,
       join the sides with caps, and fill the ring non-zero (VectorCraft
       `effects/src/stroke/width.rs:158-217`)
-  - Done 2026-10-09 (`brush_tools.cpp`, B): the fitted centreline is stroked with round caps and joins, resolved with `simplified()`, and each loop written with the fill on the side its direction implies. The modes done 2026-10-09 as a Brush mode field in Properties: Paint Fills merges with `MergeOptions::keepStrokes`, so lines survive under the paint (the pending drop carries the flag through to the merge on deselect); Paint Behind, Paint Selection and Paint Inside cut the stroke down first by arranging it with the outlines of the shapes under it (`RegionSplitter` with cutters) and keeping the regions where nothing is painted, where a selected fill is, or where the face the stroke began in is; verified on screen. Pressure done 2026-10-09: with Use pressure on, a tablet's pressure (read from Qt's tablet events, which still arrive as mouse moves) sets the width along the stroke, the outline built by offsetting the fitted centreline to either side and joining the sides with round caps; a mouse paints at full width. Not verifiable here without a tablet. The resolved outline is refitted with the curve fitter before it becomes edges (2026-10-09), so a stroke lands as a few cubics per loop rather than the hundreds of straight pieces the stroker and `simplified()` leave; a wavy stroke with ten corners saved as one edge of 47 cubics
+  - Done 2026-10-09 (`brush_tools.cpp`, B): the fitted centerline is stroked with round caps and joins, resolved with `simplified()`, and each loop written with the fill on the side its direction implies. The modes done 2026-10-09 as a Brush mode field in Properties: Paint Fills merges with `MergeOptions::keepStrokes`, so lines survive under the paint (the pending drop carries the flag through to the merge on deselect); Paint Behind, Paint Selection and Paint Inside cut the stroke down first by arranging it with the outlines of the shapes under it (`RegionSplitter` with cutters) and keeping the regions where nothing is painted, where a selected fill is, or where the face the stroke began in is; verified on screen. Pressure done 2026-10-09: with Use pressure on, a tablet's pressure (read from Qt's tablet events, which still arrive as mouse moves) sets the width along the stroke, the outline built by offsetting the fitted centerline to either side and joining the sides with round caps; a mouse paints at full width. Not verifiable here without a tablet. The resolved outline is refitted with the curve fitter before it becomes edges (2026-10-09), so a stroke lands as a few cubics per loop rather than the hundreds of straight pieces the stroker and `simplified()` leave; a wavy stroke with ten corners saved as one edge of 47 cubics
 - [ ] **Pen input still missing.** Confirm on real hardware that Qt delivers
       tablet events to the stage (a driver that reports as a mouse gives a
       constant width). Tilt: Animate's Use Tilt rotates a non-round tip, so it
@@ -1156,7 +1156,7 @@ addition maps, plus a rule for which strokes survive.
       fill. On a stroke: restyle the strokes connected through degree-2
       vertices. `rebuildShapeEdges` takes strokes from `sources`
       (`shape_geometry.cpp:162`), so it needs a per-half-edge stroke override
-  - Done (S): strokes the outline of the fill under the click, or restyles the stroke clicked, through a per-piece `StrokeOverride` on `rebuildShapeEdges`. Does not yet flood across same-fill neighbours
+  - Done (S): strokes the outline of the fill under the click, or restyles the stroke clicked, through a per-piece `StrokeOverride` on `rebuildShapeEdges`. Does not yet flood across same-fill neighbors
 - [x] **Convert Lines to Fills** (stroke to outline): stroke each chain, then
       union the outlines under non-zero. Offsetting (Expand Fill) arranges the
       fill, a ring stroked at width 2d, and open strokes at 2d: growing keeps
@@ -1172,7 +1172,7 @@ addition maps, plus a rule for which strokes survive.
       (`engine/src/cmd/draw2.rs:875-995`)
   - Done 2026-10-09 (`src/edit/path_tidy.cpp`, Qt-free, tests): Smooth blends every handle half way to the Catmull-Rom tangent, Straighten samples the path and reduces it with Ramer-Douglas-Peucker at two screen pixels, Optimize asks for a strength and refits the sampled path with the pencil's fitter, keeping the original when the fit would not be leaner. Each is one undo step per selected shape. The smooth brush is not done
 - [ ] **Magic wand** for bitmaps broken apart is Animate's; VectorCraft's matches
-      objects by colour distance (default 32), stroke weight and opacity
+      objects by color distance (default 32), stroke weight and opacity
       (`engine/src/cmd/wand.rs:104-161`) -- useful only as a "Select Same"
 
 ### No VectorCraft counterpart
@@ -1214,13 +1214,13 @@ in the code or against a real XFL document.
   - Done: pieces of one style are chained end to end in `buildShapePaths`, and a run that returns to its start is closed
 - [x] **Dashed and dotted strokes** ignore `dash1`/`dash2` and `dotSpace`
   - Done for dashed and dotted; ragged and stipple still use Qt patterns
-- [x] **Selection highlight colour.** Animate's default highlight colour is the
-      layer's outline colour (Preferences > General > Highlight color > Use
+- [x] **Selection highlight color.** Animate's default highlight color is the
+      layer's outline color (Preferences > General > Highlight color > Use
       layer color). `Layer::color` is parsed and never used by the overlay,
       which draws a fixed cyan. Drawing objects, groups and symbols get a thin
       rectangle with no corner grips; the grips in `drawToolOverlay` (`:2349`)
       read as a transform box
-  - Done: highlights use the layer colour; objects get a thin box with no grips, the free transform tool draws its own box
+  - Done: highlights use the layer color; objects get a thin box with no grips, the free transform tool draws its own box
 - [x] **Selected merge shapes** show a dot stipple over the fill and along the
       stroke, not a bounding box. Falls out of region selection (step 8), but
       can be drawn at shape level now
@@ -1236,16 +1236,16 @@ in the code or against a real XFL document.
       a tree-selected shape. Useful for inspection; should be a debug toggle
   - Done: only with Show Bounding Boxes
 - [x] **Timeline panel.** Keyframes are filled dots, empty keyframes hollow dots,
-      spans grey with a hollow rectangle on the last frame, tween spans tinted
+      spans gray with a hollow rectangle on the last frame, tween spans tinted
       with an arrow, the playhead red, frame numbers every five on the ruler
   - Done: dots, spans, tween tints and arrows, red playhead, 1-based ruler
-- [x] **Layers panel.** Eye, lock and outline-colour swatch columns; the current
+- [x] **Layers panel.** Eye, lock and outline-color swatch columns; the current
       layer highlighted with a pencil icon. Currently one eye column and a
       "(Hidden)" suffix on the name
-  - Done: eye, lock and colour columns; clicking a name makes the layer current, which `activeFrame` follows
+  - Done: eye, lock and color columns; clicking a name makes the layer current, which `activeFrame` follows
 - [x] Text: `size * 0.75` is the right px-to-pt conversion at 96 dpi but
       `setPixelSize` would be exact at any dpi
-  - Done 2026-10-09 in `text_layout.cpp`: the point size is `size * 72 / dpi` of the screen, so a 12 px run draws 12 px at any dpi. Text is laid out properly now too: a 2 px gutter, lines broken at returns, fixed-width boxes wrapped at spaces, each run in its own font and colour, bounds measured from the layout rather than a fixed 200x50. Face names are taken apart the PostScript way (ArialMT, TimesNewRomanPS-BoldItalicMT) for family, bold and italic
+  - Done 2026-10-09 in `text_layout.cpp`: the point size is `size * 72 / dpi` of the screen, so a 12 px run draws 12 px at any dpi. Text is laid out properly now too: a 2 px gutter, lines broken at returns, fixed-width boxes wrapped at spaces, each run in its own font and color, bounds measured from the layout rather than a fixed 200x50. Face names are taken apart the PostScript way (ArialMT, TimesNewRomanPS-BoldItalicMT) for family, bold and italic
 
 ### Interaction
 
@@ -1275,7 +1275,7 @@ in the code or against a real XFL document.
       merge shapes. Handles are hollow white squares, the transform point a
       white circle, and the cursor changes to rotate, skew and scale arrows by
       region
-  - Handles and transform point done. Cursors done 2026-10-09: a move box inside, a double arrow on a handle turned to the handle's axis (so it follows a rotated box), skew arrows along an edge, a curling arrow in the rotate band outside a corner; shown on hover and held through the drag (`cursors.cpp`, `free_transform_tool.cpp`). Distort done 2026-10-09: ctrl-drag a corner handle with only shapes selected and the corner moves on its own, the box becoming a quadrilateral, and every point of the geometry is warped by the bilinear map from the starting box to the new one (`warpShape` in `shape_transform.cpp`); ctrl+shift tapers by moving the neighbouring corner the opposite way along their edge; one undo step per shape, Escape abandons, verified on screen. Ctrl belongs to the free transform tool now rather than calling up the temporary arrow (`Tool::usesControlKey`). Envelope done 2026-10-09: a Transform setting in Properties (Free Transform, Distort, Envelope); Envelope puts eight anchors round the box, a corner and a midpoint on each side, each with a handle towards either neighbour, and the shapes are warped from the straight box the session began with onto the Coons patch those eight cubics make; anchors carry their handles, handles bend the sides, one undo step per drag, and the session lasts until the selection or the box changes. Straight runs are cut into short cubics first (`prepareForWarp`) so they can bend, for Distort too. Distort has its own cursor now, an arrow with a leaning box, shown with ctrl held or the Distort option on
+  - Handles and transform point done. Cursors done 2026-10-09: a move box inside, a double arrow on a handle turned to the handle's axis (so it follows a rotated box), skew arrows along an edge, a curling arrow in the rotate band outside a corner; shown on hover and held through the drag (`cursors.cpp`, `free_transform_tool.cpp`). Distort done 2026-10-09: ctrl-drag a corner handle with only shapes selected and the corner moves on its own, the box becoming a quadrilateral, and every point of the geometry is warped by the bilinear map from the starting box to the new one (`warpShape` in `shape_transform.cpp`); ctrl+shift tapers by moving the neighboring corner the opposite way along their edge; one undo step per shape, Escape abandons, verified on screen. Ctrl belongs to the free transform tool now rather than calling up the temporary arrow (`Tool::usesControlKey`). Envelope done 2026-10-09: a Transform setting in Properties (Free Transform, Distort, Envelope); Envelope puts eight anchors round the box, a corner and a midpoint on each side, each with a handle towards either neighbor, and the shapes are warped from the straight box the session began with onto the Coons patch those eight cubics make; anchors carry their handles, handles bend the sides, one undo step per drag, and the session lasts until the selection or the box changes. Straight runs are cut into short cubics first (`prepareForWarp`) so they can bend, for Distort too. Distort has its own cursor now, an arrow with a leaning box, shown with ctrl held or the Distort option on
 - [x] **Rectangle tool** changes the corner radius with Up and Down during the
       drag
   - Done: Up and Down during the drag (shift x10), plus a Corner radius field in Properties. Rectangle primitives carry per-corner radii, which are now parsed, written and drawn
@@ -1298,11 +1298,11 @@ in the code or against a real XFL document.
       point, alt-click out, drag a marquee to zoom to it
   - Done
 - [x] Lasso (L), Eyedropper (I) and Text (T) tools
-  - Eyedropper done (I): samples a solid fill or stroke and hands over to the bucket or the bottle. Lasso done (L): cuts merge artwork along the loop and takes what is inside, shift adds. Text done 2026-10-09 (T): a click opens an auto-expanding box, a drag a fixed-width one that wraps; typing, Return, Backspace, Delete, arrows, Home and End; Escape, a click elsewhere or a change of tool commits as one undo step (Add for a new text, Edit Text for a changed one, Delete Text for one emptied); clicking an existing text with the tool edits it in place with the caret at the click. The box is drawn as Animate draws it, a thin outline with a round handle for a growing box and a square one for a fixed width. Font and size sit in Properties, the colour is the fill colour, and the face is written as a PostScript name (ArialMT). Single-key tool shortcuts are held off while a box is open. Verified on screen and in a saved file (DOMStaticText with &#13; line breaks). Range selection, per-character styling, the box handle and the three text types done 2026-10-09: drag, shift with the arrow keys, a double-click on a word or ctrl+A select a range, drawn as a translucent band; typing replaces it; the font, size and fill colour in Properties restyle the selection, splitting the runs where needed and joining them again where they match; dragging the box's handle sets a fixed width (and double-clicking it lets the box grow again); a Text type field makes a field static, dynamic or input, which is written as DOMStaticText, DOMDynamicText or DOMInputText with instanceName and lineType carried through, and a dynamic or input field shows a dotted outline on the stage. Verified on screen
+  - Eyedropper done (I): samples a solid fill or stroke and hands over to the bucket or the bottle. Lasso done (L): cuts merge artwork along the loop and takes what is inside, shift adds. Text done 2026-10-09 (T): a click opens an auto-expanding box, a drag a fixed-width one that wraps; typing, Return, Backspace, Delete, arrows, Home and End; Escape, a click elsewhere or a change of tool commits as one undo step (Add for a new text, Edit Text for a changed one, Delete Text for one emptied); clicking an existing text with the tool edits it in place with the caret at the click. The box is drawn as Animate draws it, a thin outline with a round handle for a growing box and a square one for a fixed width. Font and size sit in Properties, the color is the fill color, and the face is written as a PostScript name (ArialMT). Single-key tool shortcuts are held off while a box is open. Verified on screen and in a saved file (DOMStaticText with &#13; line breaks). Range selection, per-character styling, the box handle and the three text types done 2026-10-09: drag, shift with the arrow keys, a double-click on a word or ctrl+A select a range, drawn as a translucent band; typing replaces it; the font, size and fill color in Properties restyle the selection, splitting the runs where needed and joining them again where they match; dragging the box's handle sets a fixed width (and double-clicking it lets the box grow again); a Text type field makes a field static, dynamic or input, which is written as DOMStaticText, DOMDynamicText or DOMInputText with instanceName and lineType carried through, and a dynamic or input field shows a dotted outline on the stage. Verified on screen
 - [x] Edit menu: Cut, Copy, Paste, Paste in Place (ctrl+shift+V), Duplicate
       (ctrl+D), Group (ctrl+G), Break Apart (ctrl+B), Convert to Symbol (F8),
       Arrange (ctrl+up/down)
-  - Cut, Copy, Paste in Center, Paste in Place and Duplicate done for shapes. Group (ctrl+G), Ungroup, Break Apart (ctrl+B, groups and drawing objects) and Arrange (ctrl+up/down, shift for front/back) done 2026-10-09 in a Modify menu; a group is picked as a whole and moves by its members. Convert to Symbol (F8) done 2026-10-09: the selection moves into a new library symbol with its registration at the selection's top left and an instance takes its place, undoable. The Convert to Symbol dialog done 2026-10-09: name (offered the next free "Symbol N"), type (Movie Clip, Button, Graphic) and a three-by-three registration grid like Animate's; type and registration are remembered between uses, a blank or clashing name is refused. Converting a region lifted out of a shape works too (verified on screen 2026-10-09: F8 on a selected fill, edit in place, save, reopen; the saved file carries LIBRARY/Symbol 1.xml and a DOMSymbolInstance). Grouping and converting no longer flush a lifted region back into its source first, and the command stack now reports isExecuting() so selection observers ignore changes a command makes while it runs. Break Apart on a symbol instance done 2026-10-09: the instance is replaced by deep copies of what its symbol shows (the first frame for a movie clip or button, the instance's first frame for a graphic), gathered bottom layer first, each carrying the instance's transform; copied merge artwork floats selected and settles into the artwork underneath on deselect, drawing objects and nested instances keep to themselves; undoable, verified on screen. The instance's colour effect is baked into the copies' colours on 2026-10-09 (tint, brightness, the advanced multipliers and offsets, on solid fills, gradient stops, strokes and text)
+  - Cut, Copy, Paste in Center, Paste in Place and Duplicate done for shapes. Group (ctrl+G), Ungroup, Break Apart (ctrl+B, groups and drawing objects) and Arrange (ctrl+up/down, shift for front/back) done 2026-10-09 in a Modify menu; a group is picked as a whole and moves by its members. Convert to Symbol (F8) done 2026-10-09: the selection moves into a new library symbol with its registration at the selection's top left and an instance takes its place, undoable. The Convert to Symbol dialog done 2026-10-09: name (offered the next free "Symbol N"), type (Movie Clip, Button, Graphic) and a three-by-three registration grid like Animate's; type and registration are remembered between uses, a blank or clashing name is refused. Converting a region lifted out of a shape works too (verified on screen 2026-10-09: F8 on a selected fill, edit in place, save, reopen; the saved file carries LIBRARY/Symbol 1.xml and a DOMSymbolInstance). Grouping and converting no longer flush a lifted region back into its source first, and the command stack now reports isExecuting() so selection observers ignore changes a command makes while it runs. Break Apart on a symbol instance done 2026-10-09: the instance is replaced by deep copies of what its symbol shows (the first frame for a movie clip or button, the instance's first frame for a graphic), gathered bottom layer first, each carrying the instance's transform; copied merge artwork floats selected and settles into the artwork underneath on deselect, drawing objects and nested instances keep to themselves; undoable, verified on screen. The instance's color effect is baked into the copies' colors on 2026-10-09 (tint, brightness, the advanced multipliers and offsets, on solid fills, gradient stops, strokes and text)
 - [x] Arrow-key nudge (shift x10), shift-drag constrain, alt-drag duplicate --
       also in step 12
   - Done: nudge, shift-drag constrains a move to 45 degree steps, alt-drag moves a copy (`selection_tool.cpp`)
@@ -1310,7 +1310,7 @@ in the code or against a real XFL document.
 ### Suggested order, weighted for authenticity
 
 1. Caps, joins, hairlines, stroke chaining
-2. Highlights in the layer colour, the stipple, the snap ring, cursors
+2. Highlights in the layer color, the stipple, the snap ring, cursors
 3. Delete, scroll and zoom keys, Hand and Zoom tools, the drawing-object flag
 4. Step 9 fixes and the attribution rewrite, which region selection needs
 5. Edge bending and region selection -- the one change that makes merge drawing
@@ -1319,7 +1319,7 @@ in the code or against a real XFL document.
 ## Performance
 
 Measured on `COM01_034_alvin_and_the_monks_v2.fla` (1260 symbol instances),
-dragging, at a maximised window on a 3856x1568 display:
+dragging, at a maximized window on a 3856x1568 display:
 
 | build | per frame |
 | --- | --- |
@@ -1341,7 +1341,7 @@ dragging, at a maximised window on a 3856x1568 display:
       static part of the scene, so a drag repaints 1260 instances to move one
       thing. Caching everything except the moving object is the next real win:
       render the static layers into an image once per (document revision, zoom,
-      centre, size) and draw only the moving object and overlays on top
+      center, size) and draw only the moving object and overlays on top
 - [x] **There is no culling.** `_visibleRect` is computed (`phoenix_view.cpp:311`)
       but nothing reads it, so `drawElement` draws everything. Skip an element
       whose cached bounds, padded by 2 px, miss the view, and skip leaves smaller
@@ -1352,7 +1352,7 @@ dragging, at a maximised window on a 3856x1568 display:
 - [x] Bitmap instances scan the library linearly on every draw
       (`phoenix_view.cpp:888`); look them up in a map
   - Done 2026-10-09: `libraryBitmap` caches the decoded pixmap by name, so the scan happens once per bitmap per document
-- [x] Colour-transformed instances and mask layers allocate a stage- or
+- [x] Color-transformed instances and mask layers allocate a stage- or
       widget-sized image per frame. Size the offscreen to the content's
       device-pixel bounds instead (see step 11)
   - Done 2026-10-09 for instances (the isolated offscreen is cropped to the instance on the device, see step 11). Mask layers still render into device-sized pixmaps

@@ -36,7 +36,7 @@ void placeDrawnElement(PhoenixView& view, fla::CommandStack& commandStack,
 ///
 /// Outlines cut each other where they cross, the newer fill replaces the older
 /// wherever they overlap, and any seam left between two regions that ended up
-/// the same colour disappears. Afterwards the drawing no longer exists as a
+/// the same color disappears. Afterwards the drawing no longer exists as a
 /// separate object: what it covered has become part of one shape, cut out of
 /// whatever was below.
 ///

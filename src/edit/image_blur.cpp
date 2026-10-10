@@ -10,7 +10,7 @@ namespace fla {
 namespace {
 
 /// One pass of a box of radius r along one line of pixels, one channel at a
-/// time through the running sum. \a stride steps between neighbours, so the
+/// time through the running sum. \a stride steps between neighbors, so the
 /// same code serves rows and columns.
 void blurLine(const uint32_t* in, uint32_t* out, int count, int stride, int radius)
 {
@@ -52,7 +52,7 @@ void boxBlur(uint32_t* pixels, int width, int height, double widthX, double widt
         return;
 
     // A box of width N reaches N/2 either side, rounded down: a width of
-    // five is the five pixels centred on each one.
+    // five is the five pixels centered on each one.
     const int radiusX = static_cast<int>(std::floor(std::max(0.0, widthX) / 2.0));
     const int radiusY = static_cast<int>(std::floor(std::max(0.0, widthY) / 2.0));
     passes = std::max(1, std::min(15, passes));

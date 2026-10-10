@@ -28,7 +28,7 @@ EditablePath circle()
 {
     constexpr double k = 0.5522847498 * 100.0;
     EditablePath path;
-    const Point centre(0.0, 0.0);
+    const Point center(0.0, 0.0);
     for (int i = 0; i < 4; ++i)
     {
         const double a = i * kPi / 2.0;
@@ -53,7 +53,7 @@ TEST(sampling_a_path_walks_its_whole_length)
     CHECK(std::fabs(samples.back().x - 100.0) < 1.0e-9 && std::fabs(samples.back().y - 50.0) < 1.0e-9);
 }
 
-TEST(smoothing_a_corner_grows_handles_through_its_neighbours)
+TEST(smoothing_a_corner_grows_handles_through_its_neighbors)
 {
     EditablePath path = polyline({Point(0, 0), Point(100, 0), Point(100, 100)});
     fla::smoothPath(path, 1.0);

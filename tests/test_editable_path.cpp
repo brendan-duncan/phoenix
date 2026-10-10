@@ -374,7 +374,7 @@ TEST(closest_point_finds_the_nearest_segment)
     CHECK(std::fabs(found.position.x - 10.0) < 0.6);
 }
 
-TEST(removing_an_anchor_joins_its_neighbours)
+TEST(removing_an_anchor_joins_its_neighbors)
 {
     EditablePath path;
     path.anchors.push_back(Anchor(Point(0.0, 0.0)));
@@ -400,7 +400,7 @@ TEST(removing_refuses_to_destroy_the_path)
     CHECK(!path.removeAnchor(9));
 }
 
-TEST(converting_a_corner_grows_handles_through_its_neighbours)
+TEST(converting_a_corner_grows_handles_through_its_neighbors)
 {
     EditablePath path;
     path.anchors.push_back(Anchor(Point(0.0, 0.0)));
@@ -413,7 +413,7 @@ TEST(converting_a_corner_grows_handles_through_its_neighbours)
     CHECK(anchor.smooth);
     CHECK(anchor.hasInCurve());
     CHECK(anchor.hasOutCurve());
-    // Neighbours are level, so the tangent runs along x and the handles sit
+    // Neighbors are level, so the tangent runs along x and the handles sit
     // opposite each other.
     CHECK(near(anchor.inHandle.y, 0.0));
     CHECK(near(anchor.outHandle.y, 0.0));

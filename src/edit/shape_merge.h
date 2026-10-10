@@ -37,7 +37,7 @@ struct MergeOptions
 /// Drawing over an existing shape does not stack a second object on top of it.
 /// The two become one: outlines cut each other where they cross, the newer fill
 /// replaces the older wherever they overlap, and any seam left between two
-/// regions that ended up the same colour disappears.
+/// regions that ended up the same color disappears.
 ///
 /// This is what the planar map was built for. The two shapes are taken apart
 /// into an arrangement, every region is asked what paints it, and the result is

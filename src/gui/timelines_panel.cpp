@@ -372,8 +372,8 @@ void TimelineGrid::paintEvent(QPaintEvent* event)
     const int margin = 1;
     const int cellStride = frameWidth + margin;
 
-    // Animate's frame colours: an empty keyframe span is white, a span with
-    // content grey, a classic tween lilac and a shape tween green.
+    // Animate's frame colors: an empty keyframe span is white, a span with
+    // content gray, a classic tween lilac and a shape tween green.
     const QColor background(30, 30, 30);
     const QColor cellDark(40, 40, 40);
     const QColor cellLight(55, 55, 55);

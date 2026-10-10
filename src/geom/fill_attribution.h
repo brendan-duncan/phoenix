@@ -24,7 +24,7 @@ struct FillRegion
 /// half-edge the fill lying on its left.
 ///
 /// Regions are applied in order, and a later one paints over an earlier one.
-/// That is the whole of Animate's merge behaviour: drawing a shape across
+/// That is the whole of Animate's merge behavior: drawing a shape across
 /// another does not stack them, it replaces what was underneath inside the new
 /// outline and leaves the rest.
 ///

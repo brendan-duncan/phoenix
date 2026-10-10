@@ -41,7 +41,7 @@ public:
 
     Point pointAt(double t) const;
 
-    /// The direction the curve is heading at \a t, not normalised. Zero where
+    /// The direction the curve is heading at \a t, not normalized. Zero where
     /// the curve has a cusp or a degenerate control polygon.
     Point tangentAt(double t) const;
 

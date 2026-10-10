@@ -106,7 +106,7 @@ public:
     int strokeOf(const RegionPick& pick) const;
 
     /// The shape's contents with \a face painted \a fillIndex, as a new shape
-    /// the caller owns. A seam between two faces of one colour disappears.
+    /// the caller owns. A seam between two faces of one color disappears.
     Shape* withFaceFill(int face, int fillIndex) const;
 
     /// The shape's contents with \a strokeIndex along the pick: round a fill's

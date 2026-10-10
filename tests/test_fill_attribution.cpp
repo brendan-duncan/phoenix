@@ -151,7 +151,7 @@ TEST(an_open_stroke_divides_a_fill_without_repainting_it)
     map.build();
     fla::attributeFills(map, regions);
 
-    // One fill became two, both still the original colour.
+    // One fill became two, both still the original color.
     CHECK(fillAt(map, Point(25.0, 50.0)) == 1);
     CHECK(fillAt(map, Point(75.0, 50.0)) == 1);
 
@@ -225,7 +225,7 @@ TEST(each_half_edge_carries_the_fill_on_its_left)
 
 TEST(a_shared_edge_between_two_fills_carries_both)
 {
-    // Two colours meeting along one edge. That edge has to know about both, and
+    // Two colors meeting along one edge. That edge has to know about both, and
     // it is stored once rather than twice.
     PlanarMap map;
     mergeInto(map, {

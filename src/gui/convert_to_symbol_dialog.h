@@ -33,7 +33,7 @@ private:
 };
 
 /// Nine small boxes, the chosen one filled, for picking which corner, edge
-/// or centre of the selection becomes the symbol's origin.
+/// or center of the selection becomes the symbol's origin.
 class RegistrationGrid : public QWidget
 {
     Q_OBJECT

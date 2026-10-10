@@ -11,7 +11,7 @@ namespace fla {
 /// Animate's Modify > Shape commands on one path, free of Qt.
 
 /// Smooth: every anchor's handles are pulled towards the Catmull-Rom
-/// tangent through its neighbours (a third of the way to each neighbour,
+/// tangent through its neighbors (a third of the way to each neighbor,
 /// along the line from the previous to the next), by \a amount from 0 (no
 /// change) to 1 (all the way), and the anchor is made smooth. The ends of an
 /// open path keep their place but gain a handle along the chord.

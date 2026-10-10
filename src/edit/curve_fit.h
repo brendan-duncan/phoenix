@@ -11,7 +11,7 @@ namespace fla {
 /// Fits a smooth bezier path through the points a freehand drag left behind.
 ///
 /// This is Schneider's algorithm (Graphics Gems, 1990): fit one cubic to the
-/// whole run by least squares, improve the parameterisation with a couple of
+/// whole run by least squares, improve the parameterization with a couple of
 /// Newton-Raphson passes, and if the worst point is still too far off, split
 /// there and fit each half. The result is far fewer anchors than raw input
 /// points, placed where the stroke actually changes direction.

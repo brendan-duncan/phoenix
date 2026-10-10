@@ -496,7 +496,7 @@ bool EditablePath::toggleAnchorSmooth(size_t index)
     }
 
     // Becoming smooth means growing handles along the line through the
-    // neighbours, which is the direction that makes the curve pass through
+    // neighbors, which is the direction that makes the curve pass through
     // without a kink.
     const size_t count = anchors.size();
     if (count < 2)
@@ -519,7 +519,7 @@ bool EditablePath::toggleAnchorSmooth(size_t index)
     dx /= length;
     dy /= length;
 
-    // A third of the way to the closer neighbour is the usual choice: long
+    // A third of the way to the closer neighbor is the usual choice: long
     // enough to round the corner, short enough not to overshoot.
     const double reach = std::min(distanceBetween(anchor.position, previous),
         distanceBetween(anchor.position, next)) / 3.0;

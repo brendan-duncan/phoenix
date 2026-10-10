@@ -65,7 +65,7 @@ public:
     virtual QCursor cursor() const { return Qt::ArrowCursor; }
 
     /// Handles a press at \a documentPos. Returning false lets the view fall
-    /// back to its own behaviour, which is how panning stays available.
+    /// back to its own behavior, which is how panning stays available.
     virtual bool mousePress(PhoenixView& view, QMouseEvent* event, const QPointF& documentPos)
     {
         (void)view; (void)event; (void)documentPos;

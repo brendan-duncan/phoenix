@@ -87,7 +87,7 @@ python tools/qt/make_qt_archive.py --target linux-x64 --version 6.11.2 --fetch -
 `--fetch` downloads the kit with [aqtinstall](https://github.com/miurahr/aqtinstall)
 (`pip install aqtinstall`), or straight from Qt's download server where
 aqtinstall does not know the repository layout (Qt 6.11 moved its Windows
-kits into one folder per compiler). Every archive carries the Qt licence texts, taken
+kits into one folder per compiler). Every archive carries the Qt license texts, taken
 from the installer's `Licenses` folder when there is one and otherwise from
 `tools/qt/licenses`. Build the macOS and Linux archives on that OS,
 since the kits use symbolic links. The Windows arm64 kit is a cross kit whose

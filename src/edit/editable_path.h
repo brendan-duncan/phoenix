@@ -107,7 +107,7 @@ public:
     int splitSegment(size_t segment, double t);
 
     /// Removes an anchor. Where either side was curved, one cubic is fitted
-    /// through the two segments that met there, keeping the neighbours'
+    /// through the two segments that met there, keeping the neighbors'
     /// outer tangents, and written into their facing handles, so the curve
     /// keeps its shape as well as it can; straight sides are simply joined.
     /// Refuses to leave fewer than two anchors, since that is no longer a
@@ -115,7 +115,7 @@ public:
     bool removeAnchor(size_t index);
 
     /// Flips an anchor between smooth and corner: a smooth point loses its
-    /// handles, a corner grows them along the line through its neighbours.
+    /// handles, a corner grows them along the line through its neighbors.
     bool toggleAnchorSmooth(size_t index);
 
     /// The same curve traced from the other end: the anchors in reverse

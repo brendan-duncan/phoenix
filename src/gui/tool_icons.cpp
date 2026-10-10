@@ -18,7 +18,7 @@ constexpr double kGrid = 24.0;
 
 constexpr double kPi = 3.14159265358979323846;
 
-QColor strokeColour()
+QColor strokeColor()
 {
     // Light enough to read on the dark toolbar, short of pure white so the
     // icons do not shout over the artwork.
@@ -38,7 +38,7 @@ QPolygonF arrowShape()
 void drawSelection(QPainter& painter)
 {
     painter.setPen(Qt::NoPen);
-    painter.setBrush(strokeColour());
+    painter.setBrush(strokeColor());
     painter.drawPolygon(arrowShape());
 }
 
@@ -46,7 +46,7 @@ void drawSubselection(QPainter& painter)
 {
     // The same arrow hollowed out, which is how every editor distinguishes the
     // two.
-    painter.setPen(QPen(strokeColour(), 1.4));
+    painter.setPen(QPen(strokeColor(), 1.4));
     painter.setBrush(Qt::NoBrush);
     painter.drawPolygon(arrowShape());
 }
@@ -55,14 +55,14 @@ void drawFreeTransform(QPainter& painter)
 {
     const QRectF box(5.0, 5.0, 14.0, 14.0);
 
-    painter.setPen(QPen(strokeColour(), 1.2, Qt::DashLine));
+    painter.setPen(QPen(strokeColor(), 1.2, Qt::DashLine));
     painter.setBrush(Qt::NoBrush);
     painter.drawRect(box);
 
     // The corner grips are what make it read as a transform box rather than a
     // rectangle.
     painter.setPen(Qt::NoPen);
-    painter.setBrush(strokeColour());
+    painter.setBrush(strokeColor());
     const QPointF corners[4] = {
         box.topLeft(), box.topRight(), box.bottomRight(), box.bottomLeft()
     };
@@ -72,27 +72,27 @@ void drawFreeTransform(QPainter& painter)
 
 void drawRectangle(QPainter& painter)
 {
-    painter.setPen(QPen(strokeColour(), 1.8));
+    painter.setPen(QPen(strokeColor(), 1.8));
     painter.setBrush(Qt::NoBrush);
     painter.drawRect(QRectF(4.0, 6.0, 16.0, 12.0));
 }
 
 void drawOval(QPainter& painter)
 {
-    painter.setPen(QPen(strokeColour(), 1.8));
+    painter.setPen(QPen(strokeColor(), 1.8));
     painter.setBrush(Qt::NoBrush);
     painter.drawEllipse(QRectF(3.5, 6.0, 17.0, 12.0));
 }
 
 void drawLine(QPainter& painter)
 {
-    painter.setPen(QPen(strokeColour(), 1.8, Qt::SolidLine, Qt::RoundCap));
+    painter.setPen(QPen(strokeColor(), 1.8, Qt::SolidLine, Qt::RoundCap));
     painter.drawLine(QPointF(4.5, 19.0), QPointF(19.5, 5.0));
 }
 
 void drawPolyStar(QPainter& painter)
 {
-    const QPointF centre(12.0, 12.5);
+    const QPointF center(12.0, 12.5);
     const double outer = 8.5;
     const double inner = 3.6;
 
@@ -102,11 +102,11 @@ void drawPolyStar(QPainter& painter)
         // Start at the top so the star points upward.
         const double angle = -kPi / 2.0 + (kPi * i) / 5.0;
         const double radius = (i % 2 == 0) ? outer : inner;
-        star << QPointF(centre.x() + radius * std::cos(angle),
-                        centre.y() + radius * std::sin(angle));
+        star << QPointF(center.x() + radius * std::cos(angle),
+                        center.y() + radius * std::sin(angle));
     }
 
-    painter.setPen(QPen(strokeColour(), 1.2));
+    painter.setPen(QPen(strokeColor(), 1.2));
     painter.setBrush(Qt::NoBrush);
     painter.drawPolygon(star);
 }
@@ -119,12 +119,12 @@ void drawPen(QPainter& painter)
         QPointF(12.0, 20.5), QPointF(10.0, 15.0)
     });
 
-    painter.setPen(QPen(strokeColour(), 1.2));
+    painter.setPen(QPen(strokeColor(), 1.2));
     painter.setBrush(Qt::NoBrush);
     painter.drawPolygon(body);
 
     painter.drawLine(QPointF(12.0, 8.0), QPointF(12.0, 15.0));
-    painter.setBrush(strokeColour());
+    painter.setBrush(strokeColor());
     painter.drawEllipse(QPointF(12.0, 15.5), 1.3, 1.3);
 }
 
@@ -135,7 +135,7 @@ void drawPencil(QPainter& painter)
     painter.rotate(45.0);
     painter.translate(-12.0, -12.0);
 
-    painter.setPen(QPen(strokeColour(), 1.2));
+    painter.setPen(QPen(strokeColor(), 1.2));
     painter.setBrush(Qt::NoBrush);
 
     // The barrel, the collar, and the sharpened tip.
@@ -173,23 +173,23 @@ void drawHand(QPainter& painter)
     hand.quadTo(19.8, 20.5, 15.0, 20.5);
     hand.closeSubpath();
 
-    painter.setPen(QPen(strokeColour(), 1.2));
+    painter.setPen(QPen(strokeColor(), 1.2));
     painter.setBrush(Qt::NoBrush);
     painter.drawPath(hand);
 }
 
 void drawZoom(QPainter& painter)
 {
-    painter.setPen(QPen(strokeColour(), 1.8));
+    painter.setPen(QPen(strokeColor(), 1.8));
     painter.setBrush(Qt::NoBrush);
     painter.drawEllipse(QRectF(4.0, 4.0, 11.0, 11.0));
 
-    QPen handle(strokeColour(), 2.4);
+    QPen handle(strokeColor(), 2.4);
     handle.setCapStyle(Qt::RoundCap);
     painter.setPen(handle);
     painter.drawLine(QPointF(14.0, 14.0), QPointF(20.0, 20.0));
 
-    painter.setPen(QPen(strokeColour(), 1.4));
+    painter.setPen(QPen(strokeColor(), 1.4));
     painter.drawLine(QPointF(7.0, 9.5), QPointF(12.0, 9.5));
     painter.drawLine(QPointF(9.5, 7.0), QPointF(9.5, 12.0));
 }
@@ -197,12 +197,12 @@ void drawZoom(QPainter& painter)
 void drawRectanglePrimitive(QPainter& painter)
 {
     // The rectangle with the corner grips a primitive keeps for its radii.
-    painter.setPen(QPen(strokeColour(), 1.4));
+    painter.setPen(QPen(strokeColor(), 1.4));
     painter.setBrush(Qt::NoBrush);
     painter.drawRect(QRectF(5.0, 6.5, 14.0, 11.0));
 
     painter.setPen(Qt::NoPen);
-    painter.setBrush(strokeColour());
+    painter.setBrush(strokeColor());
     for (const QPointF& corner : {QPointF(5.0, 6.5), QPointF(19.0, 6.5),
                                   QPointF(19.0, 17.5), QPointF(5.0, 17.5)})
     {
@@ -212,12 +212,12 @@ void drawRectanglePrimitive(QPainter& painter)
 
 void drawOvalPrimitive(QPainter& painter)
 {
-    painter.setPen(QPen(strokeColour(), 1.4));
+    painter.setPen(QPen(strokeColor(), 1.4));
     painter.setBrush(Qt::NoBrush);
     painter.drawEllipse(QRectF(4.0, 6.5, 16.0, 11.0));
 
     painter.setPen(Qt::NoPen);
-    painter.setBrush(strokeColour());
+    painter.setBrush(strokeColor());
     for (const QPointF& grip : {QPointF(12.0, 6.5), QPointF(20.0, 12.0),
                                 QPointF(12.0, 17.5), QPointF(4.0, 12.0)})
     {
@@ -227,14 +227,14 @@ void drawOvalPrimitive(QPainter& painter)
 
 void drawPaintBucket(QPainter& painter)
 {
-    painter.setPen(QPen(strokeColour(), 1.3));
+    painter.setPen(QPen(strokeColor(), 1.3));
     painter.setBrush(Qt::NoBrush);
     painter.drawPolygon(QPolygonF({
         QPointF(8.5, 7.0), QPointF(20.0, 10.5), QPointF(17.5, 20.0), QPointF(6.0, 16.5)
     }));
     painter.drawLine(QPointF(8.5, 7.0), QPointF(6.0, 16.5));
     painter.setPen(Qt::NoPen);
-    painter.setBrush(strokeColour());
+    painter.setBrush(strokeColor());
     painter.drawPolygon(QPolygonF({
         QPointF(7.5, 8.0), QPointF(5.0, 4.5), QPointF(3.0, 5.5), QPointF(5.5, 9.5)
     }));
@@ -242,35 +242,35 @@ void drawPaintBucket(QPainter& painter)
 
 void drawInkBottle(QPainter& painter)
 {
-    painter.setPen(QPen(strokeColour(), 1.3));
+    painter.setPen(QPen(strokeColor(), 1.3));
     painter.setBrush(Qt::NoBrush);
     painter.drawRoundedRect(QRectF(9.0, 8.0, 10.0, 12.0), 1.5, 1.5);
     painter.drawRect(QRectF(6.0, 4.5, 6.0, 5.0));
     painter.setPen(Qt::NoPen);
-    painter.setBrush(strokeColour());
+    painter.setBrush(strokeColor());
     painter.drawEllipse(QRectF(3.0, 2.5, 4.0, 4.0));
 }
 
 void drawEyedropper(QPainter& painter)
 {
-    painter.setPen(QPen(strokeColour(), 1.3));
+    painter.setPen(QPen(strokeColor(), 1.3));
     painter.setBrush(Qt::NoBrush);
     painter.drawPolygon(QPolygonF({
         QPointF(5.5, 19.5), QPointF(4.0, 18.0), QPointF(13.5, 8.5), QPointF(15.0, 10.0)
     }));
     painter.setPen(Qt::NoPen);
-    painter.setBrush(strokeColour());
+    painter.setBrush(strokeColor());
     painter.drawEllipse(QRectF(14.0, 4.0, 6.0, 6.0));
 }
 
 void drawBrush(QPainter& painter)
 {
     // A handle running down to a rounded tip.
-    painter.setPen(QPen(strokeColour(), 1.3));
+    painter.setPen(QPen(strokeColor(), 1.3));
     painter.setBrush(Qt::NoBrush);
     painter.drawLine(QPointF(19.5, 4.5), QPointF(11.0, 13.0));
     painter.setPen(Qt::NoPen);
-    painter.setBrush(strokeColour());
+    painter.setBrush(strokeColor());
     QPainterPath tip;
     tip.moveTo(11.5, 12.0);
     tip.quadTo(6.0, 12.0, 5.0, 19.5);
@@ -285,11 +285,11 @@ void drawEraser(QPainter& painter)
     painter.save();
     painter.translate(12.0, 12.0);
     painter.rotate(-45.0);
-    painter.setPen(QPen(strokeColour(), 1.3));
+    painter.setPen(QPen(strokeColor(), 1.3));
     painter.setBrush(Qt::NoBrush);
     painter.drawRoundedRect(QRectF(-8.0, -4.0, 16.0, 8.0), 1.5, 1.5);
     painter.setPen(Qt::NoPen);
-    painter.setBrush(strokeColour());
+    painter.setBrush(strokeColor());
     painter.drawRect(QRectF(-8.0, -4.0, 5.0, 8.0));
     painter.restore();
 }
@@ -302,12 +302,12 @@ void drawLasso(QPainter& painter)
     loop.cubicTo(3.0, 7.0, 9.0, 3.5, 13.0, 4.0);
     loop.cubicTo(19.0, 4.5, 21.5, 10.0, 17.0, 13.0);
     loop.cubicTo(14.0, 15.0, 9.0, 15.0, 6.0, 13.0);
-    painter.setPen(QPen(strokeColour(), 1.3));
+    painter.setPen(QPen(strokeColor(), 1.3));
     painter.setBrush(Qt::NoBrush);
     painter.drawPath(loop);
     painter.drawLine(QPointF(6.5, 13.5), QPointF(5.0, 20.5));
     painter.setPen(Qt::NoPen);
-    painter.setBrush(strokeColour());
+    painter.setBrush(strokeColor());
     painter.drawEllipse(QPointF(6.5, 13.5), 1.6, 1.6);
 }
 
@@ -322,7 +322,7 @@ void drawText(QPainter& painter)
     const QRectF box = glyph.boundingRect();
     glyph.translate(12.0 - box.center().x(), 12.5 - box.center().y());
     painter.setPen(Qt::NoPen);
-    painter.setBrush(strokeColour());
+    painter.setBrush(strokeColor());
     painter.drawPath(glyph);
 }
 
@@ -330,12 +330,12 @@ void drawObjectDrawing(QPainter& painter)
 {
     // A shape inside its own boundary: what the mode does is keep the two
     // separate rather than letting them merge.
-    painter.setPen(QPen(strokeColour(), 1.1, Qt::DashLine));
+    painter.setPen(QPen(strokeColor(), 1.1, Qt::DashLine));
     painter.setBrush(Qt::NoBrush);
     painter.drawRect(QRectF(3.5, 5.5, 17.0, 13.0));
 
     painter.setPen(Qt::NoPen);
-    painter.setBrush(strokeColour());
+    painter.setBrush(strokeColor());
     painter.drawEllipse(QRectF(7.0, 8.0, 10.0, 8.0));
 }
 

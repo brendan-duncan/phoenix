@@ -372,7 +372,7 @@ bool SubselectionTool::mouseMove(PhoenixView& view, QMouseEvent* event, const QP
     const QPointF localPos = toShape.map(documentPos);
     const QPointF delta = localPos - _dragStart;
 
-    // A press that has not travelled is still a click, and a click does not
+    // A press that has not traveled is still a click, and a click does not
     // edit anything.
     if (!_dragMoved)
     {

@@ -25,7 +25,7 @@ class Selection;
 /// new line, and clicking an existing text with the tool puts the caret in
 /// it. Dragging across the text, shift with the arrow keys, a double-click on
 /// a word or ctrl+A select a range, which typing replaces and which the font,
-/// size and fill colour in Properties restyle. Dragging the box's handle sets
+/// size and fill color in Properties restyle. Dragging the box's handle sets
 /// a fixed width; double-clicking it lets the box grow again. Escape,
 /// clicking elsewhere or changing tool finishes the edit: a new box with
 /// nothing typed vanishes, otherwise it becomes a text element in the current
@@ -108,7 +108,7 @@ private:
     template <typename Change>
     bool restyleSelection(Change change);
 
-    /// Joins neighbouring runs that have come to share one style.
+    /// Joins neighboring runs that have come to share one style.
     void mergeRuns();
 
     /// Where the box's handle sits, in the text's own coordinates.

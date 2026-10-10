@@ -34,7 +34,7 @@ StrokeStyle* DrawingStyle::createStroke(DOMElement* parent) const
     SolidStroke* stroke = new SolidStroke(parent);
     stroke->weight = strokeWeight;
 
-    // A stroke is coloured by a fill of its own, the same way the format stores
+    // A stroke is colored by a fill of its own, the same way the format stores
     // it, which is what lets a stroke carry a gradient later on.
     SolidColor* color = new SolidColor(stroke);
     copyColor(strokeColor, color->color);

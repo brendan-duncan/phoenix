@@ -17,7 +17,7 @@ struct TextRun;
 /// Lays out and draws static text the way Flash does: a box with a two pixel
 /// gutter, lines broken at returns and, for a fixed-width box, wrapped at
 /// spaces; an auto-expanding box grows to fit. Every run keeps its own font
-/// and colour, and the caret the text tool shows is placed from the same
+/// and color, and the caret the text tool shows is placed from the same
 /// layout the stage draws from, so what is typed lands where it is seen.
 namespace TextLayout
 {

@@ -20,7 +20,7 @@ public:
 
     Transform transform;
 
-    /// For gradients: how the colours continue past the ends (pad, reflect,
+    /// For gradients: how the colors continue past the ends (pad, reflect,
     /// repeat) and how they are blended, carried through as the file names
     /// them. Empty means the default, pad and RGB.
     std::string spreadMethod;

@@ -660,8 +660,8 @@ BreakApartInstanceCommand::BreakApartInstanceCommand(Frame* frame, SymbolInstanc
             piece->isSelected = false;
             piece->isFloating = false;
 
-            // The instance's colour effect has nowhere to live once the
-            // instance is gone, so it is baked into the copies' colours.
+            // The instance's color effect has nowhere to live once the
+            // instance is gone, so it is baked into the copies' colors.
             applyColorTransform(*piece, _instance->colorTransform);
             _pieces.push_back(piece);
         }

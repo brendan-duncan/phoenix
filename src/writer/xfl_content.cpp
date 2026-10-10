@@ -46,7 +46,7 @@ bool XFLContent::build(const Document& document, const std::string& projectName,
     documentEntry.text = writer.writeDocument(document);
     entries.push_back(std::move(documentEntry));
 
-    // Animate recognises a folder as a project by this marker. A zipped .fla
+    // Animate recognizes a folder as a project by this marker. A zipped .fla
     // does not need one, so callers can leave the name empty to skip it.
     if (!projectName.empty())
     {

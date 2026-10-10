@@ -17,8 +17,8 @@ int passesOf(const fla::Filter& filter)
     return std::max(1, std::min(15, filter.quality));
 }
 
-/// The silhouette of \a image in one colour: every pixel's alpha, scaled by
-/// \a alpha, carrying the colour premultiplied. With \a inverted, the
+/// The silhouette of \a image in one color: every pixel's alpha, scaled by
+/// \a alpha, carrying the color premultiplied. With \a inverted, the
 /// silhouette of what is not covered.
 QImage silhouette(const QImage& image, const uint8_t rgb[3], double alpha, bool inverted)
 {
@@ -196,7 +196,7 @@ QImage bevel(const QImage& image, const fla::Filter& filter, double scale)
 }
 
 /// Brightness, contrast, saturation and hue as a 3x3 matrix plus offset on
-/// straight RGB, the way Flash's Adjust Color builds its colour matrix.
+/// straight RGB, the way Flash's Adjust Color builds its color matrix.
 QImage adjustColor(const QImage& image, const fla::Filter& filter)
 {
     const double brightness = std::max(-100.0, std::min(100.0, filter.brightness)) * 2.55;
@@ -298,8 +298,8 @@ QImage apply(const QImage& source, const std::vector<fla::Filter>& filters, doub
         case fla::Filter::Type::GradientGlow:
         case fla::Filter::Type::GradientBevel:
         {
-            // Drawn with the gradient's last colour, which is the outermost
-            // of a glow, until the gradient itself is honoured.
+            // Drawn with the gradient's last color, which is the outermost
+            // of a glow, until the gradient itself is honored.
             fla::Filter plain = filter;
             plain.type = filter.type == fla::Filter::Type::GradientGlow
                 ? fla::Filter::Type::Glow : fla::Filter::Type::Bevel;

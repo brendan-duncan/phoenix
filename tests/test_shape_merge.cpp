@@ -92,8 +92,8 @@ int fillAt(const Shape& shape, const Point& point)
     return map.fillAt(point);
 }
 
-/// The colour a shape paints at a point, as a packed value, or -1 for nothing.
-int colourAt(const Shape& shape, const Point& point)
+/// The color a shape paints at a point, as a packed value, or -1 for nothing.
+int colorAt(const Shape& shape, const Point& point)
 {
     const int fill = fillAt(shape, point);
     if (fill == -1)
@@ -105,8 +105,8 @@ int colourAt(const Shape& shape, const Point& point)
     if (it->second->type() != fla::FillStyle::Type::SolidColor)
         return -1;
 
-    const fla::SolidColor* colour = static_cast<const fla::SolidColor*>(it->second);
-    return (colour->color[0] << 16) | (colour->color[1] << 8) | colour->color[2];
+    const fla::SolidColor* color = static_cast<const fla::SolidColor*>(it->second);
+    return (color->color[0] << 16) | (color->color[1] << 8) | color->color[2];
 }
 
 constexpr int kRed = 0xFF0000;
@@ -163,34 +163,34 @@ TEST(merging_nothing_leaves_the_target_alone)
 TEST(a_shape_drawn_over_another_replaces_it_where_they_overlap)
 {
     // Red square, then a blue one across its corner. The overlap becomes blue,
-    // and the rest of each keeps its own colour: one shape, three regions.
+    // and the rest of each keeps its own color: one shape, three regions.
     std::unique_ptr<Shape> target = filledRectangle(0, 0, 2000, 2000, 255, 0, 0);
     std::unique_ptr<Shape> addition = filledRectangle(1000, 1000, 3000, 3000, 0, 0, 255);
 
     CHECK(ShapeMerger::merge(*target, *addition));
 
-    CHECK(colourAt(*target, Point(25.0, 25.0)) == kRed);
-    CHECK(colourAt(*target, Point(75.0, 75.0)) == kBlue);
-    CHECK(colourAt(*target, Point(125.0, 125.0)) == kBlue);
+    CHECK(colorAt(*target, Point(25.0, 25.0)) == kRed);
+    CHECK(colorAt(*target, Point(75.0, 75.0)) == kBlue);
+    CHECK(colorAt(*target, Point(125.0, 125.0)) == kBlue);
     // Outside both, still nothing.
-    CHECK(colourAt(*target, Point(-25.0, -25.0)) == -1);
+    CHECK(colorAt(*target, Point(-25.0, -25.0)) == -1);
 }
 
-TEST(a_drawing_cut_out_and_merged_back_keeps_its_own_colour)
+TEST(a_drawing_cut_out_and_merged_back_keeps_its_own_color)
 {
     // What placing a drawing does: cut its area out of what is under it, then
-    // later merge it in where it sits. The drawing's colour must survive both.
+    // later merge it in where it sits. The drawing's color must survive both.
     std::unique_ptr<Shape> target = filledRectangle(0, 0, 2000, 2000, 255, 0, 0);
     std::unique_ptr<Shape> band = filledRectangle(1000, 800, 3000, 1200, 0, 0, 255);
 
     CHECK(ShapeMerger::subtract(*target, *band));
-    CHECK(colourAt(*target, Point(75.0, 50.0)) == -1);
-    CHECK(colourAt(*target, Point(25.0, 25.0)) == kRed);
+    CHECK(colorAt(*target, Point(75.0, 50.0)) == -1);
+    CHECK(colorAt(*target, Point(25.0, 25.0)) == kRed);
 
     CHECK(ShapeMerger::merge(*target, *band));
-    CHECK(colourAt(*target, Point(75.0, 50.0)) == kBlue);
-    CHECK(colourAt(*target, Point(125.0, 50.0)) == kBlue);
-    CHECK(colourAt(*target, Point(25.0, 25.0)) == kRed);
+    CHECK(colorAt(*target, Point(75.0, 50.0)) == kBlue);
+    CHECK(colorAt(*target, Point(125.0, 50.0)) == kBlue);
+    CHECK(colorAt(*target, Point(25.0, 25.0)) == kRed);
 }
 
 /// A closed polygon, in twips, with the fill on the side its direction implies.
@@ -270,7 +270,7 @@ std::unique_ptr<Shape> brushBand(double x0, double y0, double x1, double y1, dou
     return filledPolygon(points, 0, 0, 255);
 }
 
-TEST(a_brush_band_cut_out_and_merged_back_keeps_its_own_colour)
+TEST(a_brush_band_cut_out_and_merged_back_keeps_its_own_color)
 {
     // The square is 0..100 px; the band runs from well left of it to well
     // right, across its top-left corner, as a brush stroke did on screen.
@@ -278,15 +278,15 @@ TEST(a_brush_band_cut_out_and_merged_back_keeps_its_own_colour)
     std::unique_ptr<Shape> band = brushBand(-60.0, 30.0, 160.0, 5.0, 12.0, 16);
 
     CHECK(ShapeMerger::subtract(*target, *band));
-    CHECK(colourAt(*target, Point(50.0, 17.5)) == -1);
-    CHECK(colourAt(*target, Point(50.0, 60.0)) == kRed);
+    CHECK(colorAt(*target, Point(50.0, 17.5)) == -1);
+    CHECK(colorAt(*target, Point(50.0, 60.0)) == kRed);
 
     CHECK(ShapeMerger::merge(*target, *band));
-    CHECK(colourAt(*target, Point(50.0, 17.5)) == kBlue);
-    CHECK(colourAt(*target, Point(-40.0, 27.7)) == kBlue);
-    CHECK(colourAt(*target, Point(140.0, 7.3)) == kBlue);
-    CHECK(colourAt(*target, Point(50.0, 60.0)) == kRed);
-    CHECK(colourAt(*target, Point(150.0, 60.0)) == -1);
+    CHECK(colorAt(*target, Point(50.0, 17.5)) == kBlue);
+    CHECK(colorAt(*target, Point(-40.0, 27.7)) == kBlue);
+    CHECK(colorAt(*target, Point(140.0, 7.3)) == kBlue);
+    CHECK(colorAt(*target, Point(50.0, 60.0)) == kRed);
+    CHECK(colorAt(*target, Point(150.0, 60.0)) == -1);
 }
 
 TEST(merging_renumbers_the_addition_styles)
@@ -297,12 +297,12 @@ TEST(merging_renumbers_the_addition_styles)
     CHECK(ShapeMerger::merge(*target, *addition));
 
     // Both shapes called their fill 1, so the addition's has to be given a
-    // number of its own or the two colours would collide.
+    // number of its own or the two colors would collide.
     CHECK(target->fillsMap.size() == 2);
     CHECK(target->fills.size() == 2);
 }
 
-TEST(the_seam_between_two_regions_of_one_colour_disappears)
+TEST(the_seam_between_two_regions_of_one_color_disappears)
 {
     // Two red squares overlapping. Everything ends up red, so there is no
     // boundary left inside: the result is a single region.
@@ -323,15 +323,15 @@ TEST(the_seam_between_two_regions_of_one_colour_disappears)
 
 TEST(a_line_drawn_across_a_fill_divides_it_without_erasing)
 {
-    // The behaviour that makes merge drawing what it is: a stroke across a fill
-    // cuts it in two, and both halves keep their colour.
+    // The behavior that makes merge drawing what it is: a stroke across a fill
+    // cuts it in two, and both halves keep their color.
     std::unique_ptr<Shape> target = filledRectangle(0, 0, 2000, 2000, 255, 0, 0);
     std::unique_ptr<Shape> line = strokedLine(1000, -400, 1000, 2400);
 
     CHECK(ShapeMerger::merge(*target, *line));
 
-    CHECK(colourAt(*target, Point(25.0, 50.0)) == kRed);
-    CHECK(colourAt(*target, Point(75.0, 50.0)) == kRed);
+    CHECK(colorAt(*target, Point(25.0, 50.0)) == kRed);
+    CHECK(colorAt(*target, Point(75.0, 50.0)) == kRed);
 
     // The two halves are separate regions now, which is what lets them be
     // dragged apart.
@@ -370,8 +370,8 @@ TEST(merging_into_an_empty_shape_just_adopts_it)
 
     CHECK(ShapeMerger::merge(target, *addition));
 
-    CHECK(colourAt(target, Point(50.0, 50.0)) == kBlue);
-    CHECK(colourAt(target, Point(-10.0, -10.0)) == -1);
+    CHECK(colorAt(target, Point(50.0, 50.0)) == kBlue);
+    CHECK(colorAt(target, Point(-10.0, -10.0)) == -1);
 }
 
 TEST(order_decides_the_overlap)
@@ -384,9 +384,9 @@ TEST(order_decides_the_overlap)
     std::unique_ptr<Shape> red = filledRectangle(0, 0, 2000, 2000, 255, 0, 0);
     CHECK(ShapeMerger::merge(*blueFirst, *red));
 
-    // Same two squares, opposite drawing order, opposite colour in the overlap.
-    CHECK(colourAt(*redFirst, Point(75.0, 75.0)) == kBlue);
-    CHECK(colourAt(*blueFirst, Point(75.0, 75.0)) == kRed);
+    // Same two squares, opposite drawing order, opposite color in the overlap.
+    CHECK(colorAt(*redFirst, Point(75.0, 75.0)) == kBlue);
+    CHECK(colorAt(*blueFirst, Point(75.0, 75.0)) == kRed);
 }
 
 TEST(a_shape_drawn_clear_of_another_keeps_both)
@@ -397,9 +397,9 @@ TEST(a_shape_drawn_clear_of_another_keeps_both)
     CHECK(ShapeMerger::merge(*target, *addition));
 
     // Nothing crosses, so both survive untouched in one shape.
-    CHECK(colourAt(*target, Point(25.0, 25.0)) == kRed);
-    CHECK(colourAt(*target, Point(225.0, 225.0)) == kBlue);
-    CHECK(colourAt(*target, Point(125.0, 125.0)) == -1);
+    CHECK(colorAt(*target, Point(25.0, 25.0)) == kRed);
+    CHECK(colorAt(*target, Point(225.0, 225.0)) == kBlue);
+    CHECK(colorAt(*target, Point(125.0, 125.0)) == -1);
 }
 
 TEST(the_merge_command_can_be_undone)
@@ -415,7 +415,7 @@ TEST(the_merge_command_can_be_undone)
         target.get(), *addition, "Merge")));
 
     // The merge happened.
-    CHECK(colourAt(*target, Point(75.0, 75.0)) == kBlue);
+    CHECK(colorAt(*target, Point(75.0, 75.0)) == kBlue);
     CHECK(target->fillsMap.size() == 2);
 
     stack.undo();
@@ -423,13 +423,13 @@ TEST(the_merge_command_can_be_undone)
     // And it went away completely: edges, fills and all.
     CHECK(target->edges.size() == edgesBefore);
     CHECK(target->fillsMap.size() == fillsBefore);
-    CHECK(colourAt(*target, Point(75.0, 75.0)) == kRed);
-    CHECK(colourAt(*target, Point(125.0, 125.0)) == -1);
+    CHECK(colorAt(*target, Point(75.0, 75.0)) == kRed);
+    CHECK(colorAt(*target, Point(125.0, 125.0)) == -1);
 
     stack.redo();
 
-    CHECK(colourAt(*target, Point(75.0, 75.0)) == kBlue);
-    CHECK(colourAt(*target, Point(125.0, 125.0)) == kBlue);
+    CHECK(colorAt(*target, Point(75.0, 75.0)) == kBlue);
+    CHECK(colorAt(*target, Point(125.0, 125.0)) == kBlue);
 }
 
 TEST(undo_and_redo_of_a_merge_are_repeatable)
@@ -445,11 +445,11 @@ TEST(undo_and_redo_of_a_merge_are_repeatable)
     for (int i = 0; i < 3; ++i)
     {
         stack.undo();
-        CHECK(colourAt(*target, Point(75.0, 75.0)) == kRed);
+        CHECK(colorAt(*target, Point(75.0, 75.0)) == kRed);
         CHECK(target->fillsMap.size() == 1);
 
         stack.redo();
-        CHECK(colourAt(*target, Point(75.0, 75.0)) == kBlue);
+        CHECK(colorAt(*target, Point(75.0, 75.0)) == kBlue);
         CHECK(target->fillsMap.size() == 2);
     }
 }
@@ -461,7 +461,7 @@ TEST(cloning_a_shape_copies_rather_than_shares)
 
     CHECK(copy->edges.size() == original->edges.size());
     CHECK(copy->fillsMap.size() == original->fillsMap.size());
-    CHECK(colourAt(*copy, Point(50.0, 50.0)) == kRed);
+    CHECK(colorAt(*copy, Point(50.0, 50.0)) == kRed);
 
     // Nothing is shared: the copy owns its own edges and styles, so freeing one
     // must not touch the other.
@@ -478,7 +478,7 @@ TEST(cloning_a_shape_copies_rather_than_shares)
 
     original.reset();
     // Still readable after the original has gone.
-    CHECK(colourAt(*copy, Point(50.0, 50.0)) == kRed);
+    CHECK(colorAt(*copy, Point(50.0, 50.0)) == kRed);
 }
 
 /// A drawing can be dragged before it is let go, and letting go is what merges
@@ -499,12 +499,12 @@ TEST(a_dragged_drawing_merges_where_it_was_left)
     CHECK(ShapeMerger::merge(*target, *addition));
 
     // The blue now covers 50..150 pixels.
-    CHECK(colourAt(*target, Point(25.0, 25.0)) == kRed);
-    CHECK(colourAt(*target, Point(75.0, 75.0)) == kBlue);
-    CHECK(colourAt(*target, Point(125.0, 125.0)) == kBlue);
+    CHECK(colorAt(*target, Point(25.0, 25.0)) == kRed);
+    CHECK(colorAt(*target, Point(75.0, 75.0)) == kBlue);
+    CHECK(colorAt(*target, Point(125.0, 125.0)) == kBlue);
 
     // Where it was drawn, before the drag, there is nothing at all.
-    CHECK(colourAt(*target, Point(250.0, 250.0)) == -1);
+    CHECK(colorAt(*target, Point(250.0, 250.0)) == -1);
 }
 
 /// Without the bake the merge would use the drawn coordinates and land in the
@@ -518,8 +518,8 @@ TEST(merging_ignores_a_transform_that_was_not_baked)
     CHECK(ShapeMerger::merge(*target, *addition));
 
     // The transform was never consulted, so the blue stayed where it was drawn.
-    CHECK(colourAt(*target, Point(75.0, 75.0)) == kRed);
-    CHECK(colourAt(*target, Point(250.0, 250.0)) == kBlue);
+    CHECK(colorAt(*target, Point(75.0, 75.0)) == kRed);
+    CHECK(colorAt(*target, Point(250.0, 250.0)) == kBlue);
 }
 
 namespace {
@@ -642,14 +642,14 @@ TEST(subtracting_cuts_a_hole)
     CHECK(ShapeMerger::subtract(*target, *cutter));
 
     // Outside the cutter the red survives; inside it there is nothing at all.
-    CHECK(colourAt(*target, Point(25.0, 25.0)) == kRed);
-    CHECK(colourAt(*target, Point(75.0, 75.0)) == -1);
+    CHECK(colorAt(*target, Point(25.0, 25.0)) == kRed);
+    CHECK(colorAt(*target, Point(75.0, 75.0)) == -1);
     // Beyond the target entirely, still nothing.
-    CHECK(colourAt(*target, Point(125.0, 125.0)) == -1);
+    CHECK(colorAt(*target, Point(125.0, 125.0)) == -1);
 }
 
-/// The hole takes the cutter's colour with it: a hole is an absence, not a
-/// differently coloured patch.
+/// The hole takes the cutter's color with it: a hole is an absence, not a
+/// differently colored patch.
 TEST(a_hole_is_not_painted_with_the_cutter)
 {
     std::unique_ptr<Shape> target = filledRectangle(0, 0, 2000, 2000, 255, 0, 0);
@@ -659,7 +659,7 @@ TEST(a_hole_is_not_painted_with_the_cutter)
 
     for (const ShapeCurve& curve : fla::shapeCurves(*target))
     {
-        CHECK(colourAt(*target, curve.curve.start()) != kBlue);
+        CHECK(colorAt(*target, curve.curve.start()) != kBlue);
     }
 }
 
@@ -690,8 +690,8 @@ TEST(a_stroke_only_cutter_removes_nothing)
     ShapeMerger::subtract(*target, *cutter);
 
     // Both halves the line divided are still red.
-    CHECK(colourAt(*target, Point(50.0, 25.0)) == kRed);
-    CHECK(colourAt(*target, Point(50.0, 75.0)) == kRed);
+    CHECK(colorAt(*target, Point(50.0, 25.0)) == kRed);
+    CHECK(colorAt(*target, Point(50.0, 75.0)) == kRed);
 }
 
 /// Cutting with something that misses entirely changes nothing.
@@ -702,7 +702,7 @@ TEST(subtracting_something_clear_of_the_target_changes_nothing)
 
     ShapeMerger::subtract(*target, *cutter);
 
-    CHECK(colourAt(*target, Point(50.0, 50.0)) == kRed);
+    CHECK(colorAt(*target, Point(50.0, 50.0)) == kRed);
 }
 
 /// The brush's fills-only modes paint under the lines: a stroke the new fill
@@ -726,8 +726,8 @@ TEST(merging_with_strokes_kept_spares_what_it_covers)
     CHECK(keptBuriedEdge);
 
     // The fill underneath still changed hands.
-    CHECK(colourAt(*target, Point(75.0, 75.0)) == kBlue);
-    CHECK(colourAt(*target, Point(25.0, 25.0)) == kRed);
+    CHECK(colorAt(*target, Point(75.0, 75.0)) == kBlue);
+    CHECK(colorAt(*target, Point(25.0, 25.0)) == kRed);
 }
 
 /// Erase Fills takes the fill out and leaves the lines through the hole.
@@ -740,8 +740,8 @@ TEST(subtracting_with_strokes_kept_cuts_the_fill_only)
     options.keepStrokes = true;
     CHECK(ShapeMerger::subtract(*target, *cutter, options));
 
-    CHECK(colourAt(*target, Point(75.0, 75.0)) == -1);
-    CHECK(colourAt(*target, Point(25.0, 25.0)) == kRed);
+    CHECK(colorAt(*target, Point(75.0, 75.0)) == -1);
+    CHECK(colorAt(*target, Point(25.0, 25.0)) == kRed);
 
     bool keptEdgeInHole = false;
     for (const Point& point : strokedMidpoints(*target))
@@ -760,8 +760,8 @@ TEST(erasing_strokes_leaves_the_fills)
 
     CHECK(ShapeMerger::eraseStrokes(*target, *cutter));
 
-    CHECK(colourAt(*target, Point(75.0, 75.0)) == kRed);
-    CHECK(colourAt(*target, Point(25.0, 25.0)) == kRed);
+    CHECK(colorAt(*target, Point(75.0, 75.0)) == kRed);
+    CHECK(colorAt(*target, Point(25.0, 25.0)) == kRed);
 
     bool keptTopEdge = false;
     bool keptEdgeInCutter = false;
@@ -802,13 +802,13 @@ TEST(cutting_across_a_dividing_line_keeps_the_fill_on_both_sides)
     CHECK(ShapeMerger::subtract(*target, *band));
 
     // Above the line, clear of the band on either side.
-    CHECK(colourAt(*target, Point(5.0, 40.0)) == kRed);
-    CHECK(colourAt(*target, Point(90.0, 20.0)) == kRed);
+    CHECK(colorAt(*target, Point(5.0, 40.0)) == kRed);
+    CHECK(colorAt(*target, Point(90.0, 20.0)) == kRed);
     // Below the line, both sides.
-    CHECK(colourAt(*target, Point(10.0, 90.0)) == kRed);
-    CHECK(colourAt(*target, Point(95.0, 60.0)) == kRed);
+    CHECK(colorAt(*target, Point(10.0, 90.0)) == kRed);
+    CHECK(colorAt(*target, Point(95.0, 60.0)) == kRed);
     // In the band: gone.
-    CHECK(colourAt(*target, Point(50.0, 50.0)) == -1);
+    CHECK(colorAt(*target, Point(50.0, 50.0)) == -1);
 }
 
 /// A click with the line tool that never moved makes a line of no length.
@@ -823,8 +823,8 @@ TEST(a_zero_length_line_merges_harmlessly)
     std::unique_ptr<Shape> dot = strokedLine(3000, 3000, 3000, 3000);
     ShapeMerger::merge(*target, *dot);
 
-    CHECK(colourAt(*target, Point(25.0, 25.0)) == kRed);
-    CHECK(colourAt(*target, Point(75.0, 75.0)) == kRed);
+    CHECK(colorAt(*target, Point(25.0, 25.0)) == kRed);
+    CHECK(colorAt(*target, Point(75.0, 75.0)) == kRed);
 
     std::unique_ptr<Shape> band(new Shape(nullptr));
     fla::SolidColor* fill = new fla::SolidColor(band.get());
@@ -841,11 +841,11 @@ TEST(a_zero_length_line_merges_harmlessly)
     band->edges.push_back(edge);
 
     CHECK(ShapeMerger::subtract(*target, *band));
-    CHECK(colourAt(*target, Point(5.0, 40.0)) == kRed);
-    CHECK(colourAt(*target, Point(90.0, 20.0)) == kRed);
-    CHECK(colourAt(*target, Point(10.0, 90.0)) == kRed);
-    CHECK(colourAt(*target, Point(95.0, 60.0)) == kRed);
-    CHECK(colourAt(*target, Point(50.0, 50.0)) == -1);
+    CHECK(colorAt(*target, Point(5.0, 40.0)) == kRed);
+    CHECK(colorAt(*target, Point(90.0, 20.0)) == kRed);
+    CHECK(colorAt(*target, Point(10.0, 90.0)) == kRed);
+    CHECK(colorAt(*target, Point(95.0, 60.0)) == kRed);
+    CHECK(colorAt(*target, Point(50.0, 50.0)) == -1);
 }
 
 namespace {
@@ -886,8 +886,8 @@ std::unique_ptr<Shape> filledOval(double cx, double cy, double rx, double ry,
 
 } // namespace
 
-/// An oval drawn over a rectangle: the oval keeps its own colour inside, the
-/// rectangle keeps its colour outside, right up to the curve.
+/// An oval drawn over a rectangle: the oval keeps its own color inside, the
+/// rectangle keeps its color outside, right up to the curve.
 TEST(an_oval_drawn_over_a_rectangle_keeps_its_fill)
 {
     std::unique_ptr<Shape> target = filledRectangle(0, 0, 2000, 2000, 255, 0, 0);
@@ -895,11 +895,11 @@ TEST(an_oval_drawn_over_a_rectangle_keeps_its_fill)
 
     CHECK(ShapeMerger::merge(*target, *oval));
 
-    CHECK(colourAt(*target, Point(50.0, 50.0)) == kBlue);
-    CHECK(colourAt(*target, Point(50.0, 10.5)) == kBlue);
-    CHECK(colourAt(*target, Point(5.0, 5.0)) == kRed);
-    CHECK(colourAt(*target, Point(50.0, 8.0)) == kRed);
-    CHECK(colourAt(*target, Point(95.0, 50.0)) == kRed);
+    CHECK(colorAt(*target, Point(50.0, 50.0)) == kBlue);
+    CHECK(colorAt(*target, Point(50.0, 10.5)) == kBlue);
+    CHECK(colorAt(*target, Point(5.0, 5.0)) == kRed);
+    CHECK(colorAt(*target, Point(50.0, 8.0)) == kRed);
+    CHECK(colorAt(*target, Point(95.0, 50.0)) == kRed);
 }
 
 /// The same with the oval cut out: a hole, exactly the oval's shape.
@@ -910,10 +910,10 @@ TEST(an_oval_cut_out_of_a_rectangle_leaves_a_round_hole)
 
     CHECK(ShapeMerger::subtract(*target, *oval));
 
-    CHECK(colourAt(*target, Point(50.0, 50.0)) == -1);
-    CHECK(colourAt(*target, Point(50.0, 10.5)) == -1);
-    CHECK(colourAt(*target, Point(5.0, 5.0)) == kRed);
-    CHECK(colourAt(*target, Point(50.0, 8.0)) == kRed);
+    CHECK(colorAt(*target, Point(50.0, 50.0)) == -1);
+    CHECK(colorAt(*target, Point(50.0, 10.5)) == -1);
+    CHECK(colorAt(*target, Point(5.0, 5.0)) == kRed);
+    CHECK(colorAt(*target, Point(50.0, 8.0)) == kRed);
 }
 
 /// A small oval, where the sampled outline's sag is larger than the step a
@@ -925,9 +925,9 @@ TEST(a_small_oval_drawn_over_a_rectangle_keeps_its_fill)
 
     CHECK(ShapeMerger::merge(*target, *oval));
 
-    CHECK(colourAt(*target, Point(50.0, 50.0)) == kBlue);
-    CHECK(colourAt(*target, Point(50.0, 45.0)) == kBlue);
-    CHECK(colourAt(*target, Point(50.0, 43.0)) == kRed);
+    CHECK(colorAt(*target, Point(50.0, 50.0)) == kBlue);
+    CHECK(colorAt(*target, Point(50.0, 45.0)) == kBlue);
+    CHECK(colorAt(*target, Point(50.0, 43.0)) == kRed);
 }
 
 /// An oval straddling the rectangle's edge, so the arrangement cuts the
@@ -940,25 +940,25 @@ TEST(an_oval_across_a_rectangle_edge_keeps_its_fill_on_both_sides)
 
     CHECK(ShapeMerger::merge(*target, *oval));
 
-    CHECK(colourAt(*target, Point(80.0, 50.0)) == kBlue);
-    CHECK(colourAt(*target, Point(120.0, 50.0)) == kBlue);
-    CHECK(colourAt(*target, Point(61.0, 50.0)) == kBlue);
-    CHECK(colourAt(*target, Point(59.0, 50.0)) == kRed);
-    CHECK(colourAt(*target, Point(99.0, 11.0)) == kBlue);
-    CHECK(colourAt(*target, Point(99.0, 9.0)) == kRed);
-    CHECK(colourAt(*target, Point(101.0, 9.0)) == -1);
-    CHECK(colourAt(*target, Point(5.0, 5.0)) == kRed);
+    CHECK(colorAt(*target, Point(80.0, 50.0)) == kBlue);
+    CHECK(colorAt(*target, Point(120.0, 50.0)) == kBlue);
+    CHECK(colorAt(*target, Point(61.0, 50.0)) == kBlue);
+    CHECK(colorAt(*target, Point(59.0, 50.0)) == kRed);
+    CHECK(colorAt(*target, Point(99.0, 11.0)) == kBlue);
+    CHECK(colorAt(*target, Point(99.0, 9.0)) == kRed);
+    CHECK(colorAt(*target, Point(101.0, 9.0)) == -1);
+    CHECK(colorAt(*target, Point(5.0, 5.0)) == kRed);
 
     // Cut out instead: the hole follows the curve on both sides too.
     std::unique_ptr<Shape> again = filledRectangle(0, 0, 2000, 2000, 255, 0, 0);
     CHECK(ShapeMerger::subtract(*again, *oval));
-    CHECK(colourAt(*again, Point(80.0, 50.0)) == -1);
-    CHECK(colourAt(*again, Point(61.0, 50.0)) == -1);
-    CHECK(colourAt(*again, Point(59.0, 50.0)) == kRed);
-    CHECK(colourAt(*again, Point(99.0, 9.0)) == kRed);
+    CHECK(colorAt(*again, Point(80.0, 50.0)) == -1);
+    CHECK(colorAt(*again, Point(61.0, 50.0)) == -1);
+    CHECK(colorAt(*again, Point(59.0, 50.0)) == kRed);
+    CHECK(colorAt(*again, Point(99.0, 9.0)) == kRed);
 }
 
-/// Many ovals of many sizes over a rectangle, each checked at its centre and
+/// Many ovals of many sizes over a rectangle, each checked at its center and
 /// just inside its top: the sampled outline's sag must never flip a face.
 TEST(ovals_of_every_size_keep_their_fill_over_a_rectangle)
 {
@@ -967,17 +967,17 @@ TEST(ovals_of_every_size_keep_their_fill_over_a_rectangle)
         std::unique_ptr<Shape> target = filledRectangle(0, 0, 4000, 4000, 255, 0, 0);
         std::unique_ptr<Shape> oval = filledOval(100.0, 100.0, r, r * 0.7, 0, 0, 255);
         CHECK(ShapeMerger::merge(*target, *oval));
-        CHECK(colourAt(*target, Point(100.0, 100.0)) == kBlue);
-        CHECK(colourAt(*target, Point(100.0, 100.0 - r * 0.7 + 0.3)) == kBlue);
-        CHECK(colourAt(*target, Point(100.0, 100.0 - r * 0.7 - 0.3)) == kRed);
+        CHECK(colorAt(*target, Point(100.0, 100.0)) == kBlue);
+        CHECK(colorAt(*target, Point(100.0, 100.0 - r * 0.7 + 0.3)) == kBlue);
+        CHECK(colorAt(*target, Point(100.0, 100.0 - r * 0.7 - 0.3)) == kRed);
 
         // Straddling the edge at x = 200.
         std::unique_ptr<Shape> edge = filledRectangle(0, 0, 4000, 4000, 255, 0, 0);
         std::unique_ptr<Shape> across = filledOval(200.0, 100.0, r, r * 0.7, 0, 0, 255);
         CHECK(ShapeMerger::merge(*edge, *across));
-        CHECK(colourAt(*edge, Point(200.0 - r * 0.5, 100.0)) == kBlue);
-        CHECK(colourAt(*edge, Point(200.0 + r * 0.5, 100.0)) == kBlue);
-        CHECK(colourAt(*edge, Point(200.0 - r - 0.3, 100.0)) == kRed);
+        CHECK(colorAt(*edge, Point(200.0 - r * 0.5, 100.0)) == kBlue);
+        CHECK(colorAt(*edge, Point(200.0 + r * 0.5, 100.0)) == kBlue);
+        CHECK(colorAt(*edge, Point(200.0 - r - 0.3, 100.0)) == kRed);
     }
 }
 
@@ -997,8 +997,8 @@ TEST(a_stroke_drawn_along_a_fill_edge_keeps_its_stroke)
             sharedEdgeStroked = true;
     }
     CHECK(sharedEdgeStroked);
-    CHECK(colourAt(*target, Point(50.0, 50.0)) == kRed);
-    CHECK(colourAt(*target, Point(150.0, 50.0)) == kBlue);
+    CHECK(colorAt(*target, Point(50.0, 50.0)) == kRed);
+    CHECK(colorAt(*target, Point(150.0, 50.0)) == kBlue);
 }
 
 /// A line drawn across a fill and then taken away again: the outline it cut
@@ -1020,6 +1020,6 @@ TEST(pieces_of_one_edge_are_joined_back_when_the_cut_between_them_goes)
     CHECK(stroked == 0);
     // Four sides again.
     CHECK(target->edges.size() == 4);
-    CHECK(colourAt(*target, Point(25.0, 50.0)) == kRed);
-    CHECK(colourAt(*target, Point(75.0, 50.0)) == kRed);
+    CHECK(colorAt(*target, Point(25.0, 50.0)) == kRed);
+    CHECK(colorAt(*target, Point(75.0, 50.0)) == kRed);
 }

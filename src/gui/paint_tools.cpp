@@ -26,12 +26,12 @@ QTransform toQTransform(const fla::Transform& t)
     return QTransform(t.m11, t.m12, t.m21, t.m22, t.tx, t.ty);
 }
 
-bool sameColour(const uint8_t a[4], const uint8_t b[4])
+bool sameColor(const uint8_t a[4], const uint8_t b[4])
 {
     return a[0] == b[0] && a[1] == b[1] && a[2] == b[2] && a[3] == b[3];
 }
 
-/// The index of a fill in \a shape matching the current fill colour, adding
+/// The index of a fill in \a shape matching the current fill color, adding
 /// one when there is none. Returns -1 when fills are switched off.
 int ensureFill(fla::Shape& shape, const fla::DrawingStyle& style)
 {
@@ -42,7 +42,7 @@ int ensureFill(fla::Shape& shape, const fla::DrawingStyle& style)
     {
         const fla::FillStyle* fill = entry.second;
         if (fill && fill->type() == fla::FillStyle::Type::SolidColor &&
-            sameColour(static_cast<const fla::SolidColor*>(fill)->color, style.fillColor))
+            sameColor(static_cast<const fla::SolidColor*>(fill)->color, style.fillColor))
         {
             return entry.first;
         }
@@ -71,7 +71,7 @@ int ensureStroke(fla::Shape& shape, const fla::DrawingStyle& style)
         if (stroke && stroke->style() == fla::StrokeStyle::Style::Solid &&
             stroke->weight == style.strokeWeight && stroke->fill &&
             stroke->fill->type() == fla::FillStyle::Type::SolidColor &&
-            sameColour(static_cast<const fla::SolidColor*>(stroke->fill)->color, style.strokeColor) &&
+            sameColor(static_cast<const fla::SolidColor*>(stroke->fill)->color, style.strokeColor) &&
             stroke->caps.empty() && stroke->joints.empty() && !stroke->isHairline())
         {
             return entry.first;
@@ -313,9 +313,9 @@ bool EyedropperTool::mousePress(PhoenixView& view, QMouseEvent* event, const QPo
 
     if (stroke && stroke->fill && stroke->fill->type() == fla::FillStyle::Type::SolidColor)
     {
-        const fla::SolidColor* colour = static_cast<const fla::SolidColor*>(stroke->fill);
+        const fla::SolidColor* color = static_cast<const fla::SolidColor*>(stroke->fill);
         for (int i = 0; i < 4; ++i)
-            _style.strokeColor[i] = colour->color[i];
+            _style.strokeColor[i] = color->color[i];
         _style.strokeWeight = stroke->isHairline() ? 0.25 : stroke->weight;
         _style.hasStroke = true;
         if (_onSampled)
@@ -325,9 +325,9 @@ bool EyedropperTool::mousePress(PhoenixView& view, QMouseEvent* event, const QPo
 
     if (fill && fill->type() == fla::FillStyle::Type::SolidColor)
     {
-        const fla::SolidColor* colour = static_cast<const fla::SolidColor*>(fill);
+        const fla::SolidColor* color = static_cast<const fla::SolidColor*>(fill);
         for (int i = 0; i < 4; ++i)
-            _style.fillColor[i] = colour->color[i];
+            _style.fillColor[i] = color->color[i];
         _style.hasFill = true;
         if (_onSampled)
             _onSampled(false);

@@ -258,7 +258,7 @@ bool SelectionTool::mouseDoubleClick(PhoenixView& view, QMouseEvent* event, cons
         return false;
 
     // The press of the double-click already selected the region and may have
-    // begun a move; that move is abandoned in favour of the wider selection.
+    // begun a move; that move is abandoned in favor of the wider selection.
     if (_moveActive)
         cancelMove(view);
 
@@ -467,7 +467,7 @@ QPointF SelectionTool::snapMove(PhoenixView& view, const QPointF& delta)
         return delta;
 
     // Snapping is about where the box lands, so the candidates are its edges and
-    // centre at the proposed position.
+    // center at the proposed position.
     const QRectF moved = _moveBounds.translated(delta);
 
     snapper->setTolerance(view.pickTolerance() * 2.0);
@@ -529,7 +529,7 @@ void SelectionTool::updateMove(PhoenixView& view, const QPointF& documentPos, Qt
 {
     QPointF raw = documentPos - _moveStart;
 
-    // Until the press has travelled, it is still just a selection click, and
+    // Until the press has traveled, it is still just a selection click, and
     // clicking something must not move it. The same threshold the marquee uses
     // decides when a press becomes a drag.
     if (!_moveDragging)

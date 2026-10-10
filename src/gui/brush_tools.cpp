@@ -29,9 +29,9 @@ namespace {
 
 constexpr int kStyleIndex = 1;
 
-/// The centreline of a drag as a path: the raw samples joined up, or a smooth
+/// The centerline of a drag as a path: the raw samples joined up, or a smooth
 /// fit through them as the pencil would make.
-QPainterPath centreline(const std::vector<fla::Point>& points, bool smooth, double zoom)
+QPainterPath centerline(const std::vector<fla::Point>& points, bool smooth, double zoom)
 {
     QPainterPath path;
     if (points.empty())
@@ -85,14 +85,14 @@ QPainterPath centreline(const std::vector<fla::Point>& points, bool smooth, doub
 }
 
 /// The outline of a stroke whose width follows the pen's pressure: the
-/// centreline is walked at a steady pace, each step offset to either side by
+/// centerline is walked at a steady pace, each step offset to either side by
 /// half the width the pressure there allows, the two sides joined by round
 /// caps, and the ring resolved so that where it overlaps itself it is still
 /// one region.
-QPainterPath pressureOutline(const QPainterPath& centre, double width,
+QPainterPath pressureOutline(const QPainterPath& center, double width,
     const std::vector<fla::Point>& raw, const std::vector<double>& pressures)
 {
-    const double length = centre.length();
+    const double length = center.length();
     if (length < 1.0e-6 || raw.size() != pressures.size() || raw.empty())
         return QPainterPath();
 
@@ -120,13 +120,13 @@ QPainterPath pressureOutline(const QPainterPath& centre, double width,
     const int steps = std::max(8, static_cast<int>(length / 1.5));
     std::vector<QPointF> left;
     std::vector<QPointF> right;
-    std::vector<QPointF> centres;
+    std::vector<QPointF> centers;
     std::vector<QPointF> directions;
     for (int s = 0; s <= steps; ++s)
     {
         const double t = static_cast<double>(s) / steps;
-        const QPointF p = centre.pointAtPercent(t);
-        const double degrees = centre.angleAtPercent(t);
+        const QPointF p = center.pointAtPercent(t);
+        const double degrees = center.angleAtPercent(t);
         const double radians = degrees * 3.14159265358979323846 / 180.0;
         // Qt measures the angle with y up; the stage has y down.
         const QPointF d(std::cos(radians), -std::sin(radians));
@@ -134,15 +134,15 @@ QPainterPath pressureOutline(const QPainterPath& centre, double width,
         const double half = std::max(0.05, std::min(1.0, pressureAt(t))) * width * 0.5;
         left.push_back(p + n * half);
         right.push_back(p - n * half);
-        centres.push_back(p);
+        centers.push_back(p);
         directions.push_back(d);
     }
 
     // A half circle from one side to the other round an end, bulging the way
     // the stroke travels there.
-    const auto cap = [](std::vector<QPointF>& out, const QPointF& centre, const QPointF& from,
+    const auto cap = [](std::vector<QPointF>& out, const QPointF& center, const QPointF& from,
         const QPointF& travel) {
-        const QPointF v = from - centre;
+        const QPointF v = from - center;
         QPointF turned(-v.y(), v.x());
         double sign = 1.0;
         if (turned.x() * travel.x() + turned.y() * travel.y() < 0.0)
@@ -153,15 +153,15 @@ QPainterPath pressureOutline(const QPainterPath& centre, double width,
             const double theta = sign * 3.14159265358979323846 * k / pieces;
             const double c = std::cos(theta);
             const double sn = std::sin(theta);
-            out.push_back(centre + QPointF(v.x() * c - v.y() * sn, v.x() * sn + v.y() * c));
+            out.push_back(center + QPointF(v.x() * c - v.y() * sn, v.x() * sn + v.y() * c));
         }
     };
 
     std::vector<QPointF> ring(left.begin(), left.end());
-    cap(ring, centres.back(), left.back(), directions.back());
+    cap(ring, centers.back(), left.back(), directions.back());
     for (auto it = right.rbegin(); it != right.rend(); ++it)
         ring.push_back(*it);
-    cap(ring, centres.front(), right.front(), -directions.front());
+    cap(ring, centers.front(), right.front(), -directions.front());
 
     QPainterPath outline;
     outline.setFillRule(Qt::WindingFill);
@@ -183,7 +183,7 @@ QPainterPath brushOutline(const std::vector<fla::Point>& points, double width, b
     if (varied && points.size() >= 2)
     {
         const QPainterPath outline = pressureOutline(
-            centreline(points, smooth, zoom), std::max(width, 0.5), points, *pressures);
+            centerline(points, smooth, zoom), std::max(width, 0.5), points, *pressures);
         if (!outline.isEmpty())
             return outline;
     }
@@ -193,7 +193,7 @@ QPainterPath brushOutline(const std::vector<fla::Point>& points, double width, b
     stroker.setCapStyle(Qt::RoundCap);
     stroker.setJoinStyle(Qt::RoundJoin);
     // No self-crossings: a stroke that loops back over itself is one region.
-    return stroker.createStroke(centreline(points, smooth, zoom)).simplified();
+    return stroker.createStroke(centerline(points, smooth, zoom)).simplified();
 }
 
 /// Signed area of a closed subpath, from its flattened outline. Positive is
@@ -347,7 +347,7 @@ fla::Shape* brushOutlineShape(const std::vector<fla::Point>& points, double widt
     fla::Shape* shape = new fla::Shape(parent);
 
     // The eraser's cutter needs a fill too: only a filled area takes anything
-    // away. Its colour never shows.
+    // away. Its color never shows.
     fla::FillStyle* fill = asFill ? style.createFill(shape) : new fla::SolidColor(shape);
     if (!fill)
     {
@@ -635,7 +635,7 @@ void BrushTool::paintOverlay(PhoenixView& view, QPainter& painter, double scale)
 
     if (_drawing && !_points.empty())
     {
-        // The stroke as it will land: the fill colour along the drag.
+        // The stroke as it will land: the fill color along the drag.
         painter.setBrush(QColor(_style.fillColor[0], _style.fillColor[1],
             _style.fillColor[2], _style.fillColor[3]));
         painter.drawPath(brushOutline(_points, _style.brushSize, false, 1.0, &_pressures));
@@ -869,7 +869,7 @@ void EraserTool::paintOverlay(PhoenixView& view, QPainter& painter, double scale
 
     if (_erasing && !_points.empty())
     {
-        // What will be taken away, shown as the stage colour so it reads as
+        // What will be taken away, shown as the stage color so it reads as
         // already gone.
         painter.setBrush(QColor(255, 255, 255, 200));
         painter.drawPath(brushOutline(_points, _style.eraserSize, false, 1.0));

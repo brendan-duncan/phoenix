@@ -44,10 +44,10 @@ struct Filter
     /// How strongly the effect is applied; 1 is plain.
     double strength = 1.0;
 
-    /// Shadow and glow colour, alpha in the fourth byte.
+    /// Shadow and glow color, alpha in the fourth byte.
     uint8_t color[4] = {0, 0, 0, 255};
 
-    /// Bevel colours.
+    /// Bevel colors.
     uint8_t highlightColor[4] = {255, 255, 255, 255};
     uint8_t shadowColor[4] = {0, 0, 0, 255};
 
@@ -64,7 +64,7 @@ struct Filter
     double saturation = 0.0;
     double hue = 0.0;
 
-    /// Gradient glow and bevel colours.
+    /// Gradient glow and bevel colors.
     std::vector<GradientEntry> entries;
 
     /// The element name the file uses for this type.

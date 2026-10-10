@@ -89,7 +89,7 @@ double logicalDpi()
     return screen ? screen->logicalDotsPerInch() : 96.0;
 }
 
-QColor colourOf(const fla::TextRun& run)
+QColor colorOf(const fla::TextRun& run)
 {
     return QColor(run.fillColor[0], run.fillColor[1], run.fillColor[2], run.fillColor[3]);
 }
@@ -327,7 +327,7 @@ void draw(QPainter& painter, const fla::StaticText& text)
         {
             const fla::TextRun& run = text.runs[segment.run];
             painter.setFont(fontFor(run));
-            painter.setPen(QPen(colourOf(run), 1.0));
+            painter.setPen(QPen(colorOf(run), 1.0));
             painter.drawText(QPointF(segment.x, line.top + line.ascent),
                 joined.mid(segment.start, segment.length));
         }

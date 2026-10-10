@@ -69,7 +69,7 @@ std::unique_ptr<fla::MorphShape> squareMorph(double x, double y, double dx, doub
 
 } // namespace
 
-TEST(morphed_shape_is_half_way_in_position_colour_and_weight)
+TEST(morphed_shape_is_half_way_in_position_color_and_weight)
 {
     std::unique_ptr<fla::Shape> a = filled(255, 0, 0, 2.0);
     std::unique_ptr<fla::Shape> b = filled(0, 0, 255, 6.0);

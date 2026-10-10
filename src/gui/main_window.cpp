@@ -926,7 +926,7 @@ bool MainWindow::confirmDiscardChanges()
     {
         saveFile();
 
-        // Saving can still not happen: Save As can be cancelled, a lossy save
+        // Saving can still not happen: Save As can be canceled, a lossy save
         // can be declined, and a write can fail. The changes are then still
         // there, and carrying on would throw away what the user asked to keep.
         return !_editContext.isModified();
@@ -1019,7 +1019,7 @@ void MainWindow::setupToolBar()
         {"Line", ToolIcons::Tool::Line, Qt::Key_N,
             "Drag to draw a line. Shift for 45 degree steps.", &_lineTool},
         {"PolyStar", ToolIcons::Tool::PolyStar, Qt::Key_Y,
-            "Drag from the centre outwards. Sides and star mode are in the "
+            "Drag from the center outwards. Sides and star mode are in the "
             "Properties panel.", &_polyStarTool},
         {"Rectangle Primitive", ToolIcons::Tool::RectanglePrimitive, Qt::Key_unknown,
             "Drag to draw an editable rectangle object with corner radii.",
@@ -1180,7 +1180,7 @@ void MainWindow::setupToolBar()
 
 namespace {
 
-/// Renders a colour swatch for the fill and stroke buttons.
+/// Renders a color swatch for the fill and stroke buttons.
 QIcon swatchIcon(const uint8_t rgba[4])
 {
     QPixmap pixmap(20, 20);
@@ -1188,7 +1188,7 @@ QIcon swatchIcon(const uint8_t rgba[4])
 
     QPainter painter(&pixmap);
     painter.setRenderHint(QPainter::Antialiasing, false);
-    // A checker behind the swatch so a transparent colour reads as transparent
+    // A checker behind the swatch so a transparent color reads as transparent
     // rather than as black.
     painter.fillRect(0, 0, 20, 20, QColor(120, 120, 120));
     painter.fillRect(0, 0, 10, 10, QColor(160, 160, 160));
@@ -1222,17 +1222,17 @@ void MainWindow::setupPropertiesPanel()
     // Fill.
     _fillColorButton = new QToolButton(panel);
     _fillColorButton->setIcon(swatchIcon(_drawingStyle.fillColor));
-    _fillColorButton->setToolTip("Fill colour for new shapes");
+    _fillColorButton->setToolTip("Fill color for new shapes");
     connect(_fillColorButton, &QToolButton::clicked, this, [this]() {
         const QColor current(_drawingStyle.fillColor[0], _drawingStyle.fillColor[1],
             _drawingStyle.fillColor[2], _drawingStyle.fillColor[3]);
-        const QColor chosen = QColorDialog::getColor(current, this, "Fill Colour",
+        const QColor chosen = QColorDialog::getColor(current, this, "Fill Color",
             QColorDialog::ShowAlphaChannel);
         if (!chosen.isValid())
             return;
         applyColor(chosen, _drawingStyle.fillColor);
         _fillColorButton->setIcon(swatchIcon(_drawingStyle.fillColor));
-        // Text being typed takes the colour on its selection too.
+        // Text being typed takes the color on its selection too.
         if (_textTool)
             _textTool->applyColor(_drawingStyle.fillColor);
     });
@@ -1247,11 +1247,11 @@ void MainWindow::setupPropertiesPanel()
     // Stroke.
     _strokeColorButton = new QToolButton(panel);
     _strokeColorButton->setIcon(swatchIcon(_drawingStyle.strokeColor));
-    _strokeColorButton->setToolTip("Stroke colour for new shapes");
+    _strokeColorButton->setToolTip("Stroke color for new shapes");
     connect(_strokeColorButton, &QToolButton::clicked, this, [this]() {
         const QColor current(_drawingStyle.strokeColor[0], _drawingStyle.strokeColor[1],
             _drawingStyle.strokeColor[2], _drawingStyle.strokeColor[3]);
-        const QColor chosen = QColorDialog::getColor(current, this, "Stroke Colour",
+        const QColor chosen = QColorDialog::getColor(current, this, "Stroke Color",
             QColorDialog::ShowAlphaChannel);
         if (!chosen.isValid())
             return;
@@ -1882,7 +1882,7 @@ void MainWindow::convertToSymbol()
         break;
     }
 
-    // The registration point is the corner, edge or centre of the selection
+    // The registration point is the corner, edge or center of the selection
     // the dialog's grid picked.
     QPointF registration;
     if (bounds.isValid())
@@ -1994,7 +1994,7 @@ void MainWindow::cut()
 }
 
 void MainWindow::placeCopies(const std::vector<const fla::Shape*>& sources, const char* name,
-    bool centreInView)
+    bool centerInView)
 {
     if (!_phoenixView || sources.empty())
         return;
@@ -2022,7 +2022,7 @@ void MainWindow::placeCopies(const std::vector<const fla::Shape*>& sources, cons
     stack.breakMergeChain();
     _phoenixView->clearCaches();
 
-    if (centreInView)
+    if (centerInView)
     {
         QRectF bounds;
         for (fla::Shape* copy : copies)
@@ -2034,9 +2034,9 @@ void MainWindow::placeCopies(const std::vector<const fla::Shape*>& sources, cons
 
         if (bounds.isValid())
         {
-            const QPointF centre = _phoenixView->mapToDocument(
+            const QPointF center = _phoenixView->mapToDocument(
                 QPointF(_phoenixView->width() / 2.0, _phoenixView->height() / 2.0));
-            const QPointF delta = centre - bounds.center();
+            const QPointF delta = center - bounds.center();
             for (fla::Shape* copy : copies)
             {
                 copy->transform.tx += delta.x();

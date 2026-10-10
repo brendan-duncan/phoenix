@@ -151,7 +151,7 @@ void FreeTransformTool::setUpEnvelope()
         _envelope.push_back(anchor);
     }
     // Straight sides to begin with: each handle a third of the way to the
-    // neighbour it faces.
+    // neighbor it faces.
     for (int i = 0; i < kHandleCount; ++i)
     {
         const QPointF& a = _envelope[i].point;
@@ -476,7 +476,7 @@ void FreeTransformTool::placePivot()
 
     // One element keeps its own transformation point, in its own space. A
     // shape whose point was never set reads as the origin, which is not a
-    // place anyone chose, so that one stays at the centre.
+    // place anyone chose, so that one stays at the center.
     const std::vector<fla::Element*> leaves = transformLeaves(_selection);
     if (leaves.size() != 1 || !leaves.front())
         return;
@@ -505,12 +505,12 @@ QPointF FreeTransformTool::snapPivot(PhoenixView& view, const QPointF& documentP
 {
     const double tolerance = qMax(view.pickTolerance(), kHandleScreenSize / qMax(view.zoom(), 1.0e-6)) * 1.5;
 
-    // The centre and the handles are where a pivot most often belongs.
+    // The center and the handles are where a pivot most often belongs.
     if (_box.size() == 4)
     {
-        const QPointF centre = centerOf(_box);
-        if (distance(documentPos, centre) <= tolerance)
-            return centre;
+        const QPointF center = centerOf(_box);
+        if (distance(documentPos, center) <= tolerance)
+            return center;
         for (int i = 0; i < kHandleCount; ++i)
         {
             const QPointF handle = handlePoint(_box, i);
@@ -861,7 +861,7 @@ FreeTransformTool::Grip FreeTransformTool::gripAt(PhoenixView& view, const QPoin
     const double rotateBand = kRotateBandScreenSize / qMax(view.zoom(), 1.0e-6);
 
     // The transformation point sits inside the box, often on a handle or
-    // the centre, and a press on it moves it rather than the box.
+    // the center, and a press on it moves it rather than the box.
     if (distance(documentPos, _pivot) <= handleTolerance)
         return Grip::Pivot;
 
@@ -924,7 +924,7 @@ void FreeTransformTool::showCursorFor(PhoenixView& view, Grip grip, int index)
         kind = Cursors::Kind::ArrowMove;
         break;
     case Grip::Handle:
-        // Along the line from the centre out through the handle: diagonal at
+        // Along the line from the center out through the handle: diagonal at
         // a corner, across the edge at its midpoint.
         kind = Cursors::Kind::Scale;
         if (index >= 0 && _box.size() == 4)
@@ -1044,7 +1044,7 @@ QPolygonF FreeTransformTool::distortedBox(const QPointF& documentPos,
 
     if (modifiers & Qt::ShiftModifier)
     {
-        // Taper: the neighbour along the edge most in line with the drag
+        // Taper: the neighbor along the edge most in line with the drag
         // goes the other way along that edge, and the same way across it.
         const int previous = (corner + 3) % 4;
         const int next = (corner + 1) % 4;
@@ -1054,15 +1054,15 @@ QPolygonF FreeTransformTool::distortedBox(const QPointF& documentPos,
             qMax(1.0e-9, std::hypot(toPrevious.x(), toPrevious.y()));
         const double alongNext = std::fabs(dot(delta, toNext)) /
             qMax(1.0e-9, std::hypot(toNext.x(), toNext.y()));
-        const int neighbour = alongPrevious >= alongNext ? previous : next;
-        QPointF edge = neighbour == previous ? toPrevious : toNext;
+        const int neighbor = alongPrevious >= alongNext ? previous : next;
+        QPointF edge = neighbor == previous ? toPrevious : toNext;
         const double length = std::hypot(edge.x(), edge.y());
         if (length > 1.0e-9)
         {
             edge /= length;
             const QPointF along = edge * dot(delta, edge);
             const QPointF across = delta - along;
-            box[neighbour] += across - along;
+            box[neighbor] += across - along;
         }
     }
     return box;

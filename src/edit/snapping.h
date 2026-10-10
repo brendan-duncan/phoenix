@@ -31,7 +31,7 @@ struct SnapResult
 /// another object.
 ///
 /// A gesture hands over the coordinates that are moving -- for a box, its left,
-/// centre and right on the x axis -- and gets back one adjustment for the whole
+/// center and right on the x axis -- and gets back one adjustment for the whole
 /// axis, so the shape does not distort just because one edge snapped.
 ///
 /// Free of Qt, so it can be tested on its own.

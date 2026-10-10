@@ -99,9 +99,9 @@ QRectF PrimitiveTool::dragRect() const
 
 QPointF PrimitiveTool::effectiveStart() const
 {
-    // A polystar already grows from its centre, and a line has no centre to
+    // A polystar already grows from its center, and a line has no center to
     // grow from, so neither takes the modifier.
-    if (!_fromCentre || !isBoxKind())
+    if (!_fromCenter || !isBoxKind())
         return _start;
 
     // Reflecting the press point across the cursor makes the press the middle
@@ -160,7 +160,7 @@ bool PrimitiveTool::mousePress(PhoenixView& view, QMouseEvent* event, const QPoi
 
     _dragging = true;
     _constrained = false;
-    _fromCentre = false;
+    _fromCenter = false;
     _cornerRadius = _style.cornerRadius;
     _start = snap(view, documentPos);
     _end = _start;
@@ -174,7 +174,7 @@ bool PrimitiveTool::mouseMove(PhoenixView& view, QMouseEvent* event, const QPoin
         return false;
 
     _constrained = (event->modifiers() & Qt::ShiftModifier) != 0;
-    _fromCentre = (event->modifiers() & Qt::AltModifier) != 0;
+    _fromCenter = (event->modifiers() & Qt::AltModifier) != 0;
     _end = snap(view, documentPos);
     if (_constrained)
         _end = constrain(_end);
@@ -190,7 +190,7 @@ bool PrimitiveTool::mouseRelease(PhoenixView& view, QMouseEvent* event, const QP
 
     _dragging = false;
     _constrained = (event->modifiers() & Qt::ShiftModifier) != 0;
-    _fromCentre = (event->modifiers() & Qt::AltModifier) != 0;
+    _fromCenter = (event->modifiers() & Qt::AltModifier) != 0;
     _end = snap(view, documentPos);
     if (_constrained)
         _end = constrain(_end);
@@ -271,7 +271,7 @@ void PrimitiveTool::paintOverlay(PhoenixView& view, QPainter& painter, double sc
         painter.drawLine(_start, _end);
         break;
     case Kind::PolyStar:
-        // The drag runs from the centre outwards, so the preview is the circle
+        // The drag runs from the center outwards, so the preview is the circle
         // the points sit on.
         painter.drawEllipse(_start, std::hypot(_end.x() - _start.x(), _end.y() - _start.y()),
             std::hypot(_end.x() - _start.x(), _end.y() - _start.y()));
@@ -554,15 +554,15 @@ fla::Element* PrimitiveTool::createLine(fla::Frame* frame, const QPointF& start,
     return shape;
 }
 
-fla::Element* PrimitiveTool::createPolyStar(fla::Frame* frame, const QPointF& centre,
+fla::Element* PrimitiveTool::createPolyStar(fla::Frame* frame, const QPointF& center,
     const QPointF& edge) const
 {
     const int sides = std::max(3, _style.sides);
-    const double radius = std::hypot(edge.x() - centre.x(), edge.y() - centre.y());
+    const double radius = std::hypot(edge.x() - center.x(), edge.y() - center.y());
 
     // The drag direction decides which way the shape points, so dragging
     // upwards gives the usual point-up star.
-    const double startAngle = std::atan2(edge.y() - centre.y(), edge.x() - centre.x());
+    const double startAngle = std::atan2(edge.y() - center.y(), edge.x() - center.x());
 
     std::vector<QPointF> points;
     if (_style.star)
@@ -573,8 +573,8 @@ fla::Element* PrimitiveTool::createPolyStar(fla::Frame* frame, const QPointF& ce
         {
             const double angle = startAngle + (kPi * i) / sides;
             const double r = (i % 2 == 0) ? radius : inner;
-            points.push_back(QPointF(centre.x() + r * std::cos(angle),
-                                     centre.y() + r * std::sin(angle)));
+            points.push_back(QPointF(center.x() + r * std::cos(angle),
+                                     center.y() + r * std::sin(angle)));
         }
     }
     else
@@ -583,8 +583,8 @@ fla::Element* PrimitiveTool::createPolyStar(fla::Frame* frame, const QPointF& ce
         for (int i = 0; i < sides; ++i)
         {
             const double angle = startAngle + (2.0 * kPi * i) / sides;
-            points.push_back(QPointF(centre.x() + radius * std::cos(angle),
-                                     centre.y() + radius * std::sin(angle)));
+            points.push_back(QPointF(center.x() + radius * std::cos(angle),
+                                     center.y() + radius * std::sin(angle)));
         }
     }
 

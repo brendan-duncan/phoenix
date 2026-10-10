@@ -684,7 +684,7 @@ TEST(set_text_contents_command_swaps_the_runs_and_box)
     frame.elements.clear();
 }
 
-TEST(breaking_an_instance_apart_bakes_its_colour_effect)
+TEST(breaking_an_instance_apart_bakes_its_color_effect)
 {
     fla::Symbol symbol(nullptr);
     fla::Timeline* timeline = new fla::Timeline(&symbol);
@@ -720,12 +720,12 @@ TEST(breaking_an_instance_apart_bakes_its_colour_effect)
     CHECK(copy != nullptr);
     if (copy && !copy->fills.empty())
     {
-        const fla::SolidColor* colour = static_cast<const fla::SolidColor*>(copy->fills[0]);
-        CHECK(colour->color[0] == 177);
-        CHECK(colour->color[3] == 127);
+        const fla::SolidColor* color = static_cast<const fla::SolidColor*>(copy->fills[0]);
+        CHECK(color->color[0] == 177);
+        CHECK(color->color[3] == 127);
     }
 
-    // The symbol's own colours are untouched.
+    // The symbol's own colors are untouched.
     CHECK(fill->color[0] == 100 && fill->color[3] == 255);
 
     stack.clear();

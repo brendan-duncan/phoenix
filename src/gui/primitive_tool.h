@@ -62,12 +62,12 @@ public:
     void deactivate(PhoenixView& view) override;
 
 private:
-    /// The rectangle the drag has swept out, normalised.
+    /// The rectangle the drag has swept out, normalized.
     QRectF dragRect() const;
 
     /// Where the drag counts as having started.
     ///
-    /// Normally the press point, but alt grows the shape from its centre the
+    /// Normally the press point, but alt grows the shape from its center the
     /// way Animate does, which mirrors the press point across the cursor. Going
     /// through one accessor keeps the preview and the finished object agreeing
     /// about it.
@@ -100,7 +100,7 @@ private:
     fla::Element* createLine(fla::Frame* frame, const QPointF& start,
         const QPointF& end) const;
 
-    fla::Element* createPolyStar(fla::Frame* frame, const QPointF& centre,
+    fla::Element* createPolyStar(fla::Frame* frame, const QPointF& center,
         const QPointF& edge) const;
 
     Kind _kind;
@@ -116,8 +116,8 @@ private:
     /// object agree.
     bool _constrained = false;
 
-    /// Whether the last move had alt held, drawing from the centre out.
-    bool _fromCentre = false;
+    /// Whether the last move had alt held, drawing from the center out.
+    bool _fromCenter = false;
 
     /// Whether the last snapped position actually snapped, for the ring.
     mutable bool _snapped = false;

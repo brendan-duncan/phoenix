@@ -15,7 +15,7 @@ class StrokeStyle;
 /// One instance lives for the session and is what the properties panel edits, so
 /// the next rectangle picks up whatever the last one was given.
 ///
-/// Free of Qt: it holds document colours, not GUI ones.
+/// Free of Qt: it holds document colors, not GUI ones.
 class DrawingStyle
 {
 public:
@@ -136,7 +136,7 @@ public:
 
     /// The face and size new text is set in. The face is written the way
     /// Animate names fonts, the family run together without spaces; the size
-    /// is in pixels. Text takes the fill colour.
+    /// is in pixels. Text takes the fill color.
     std::string textFace = "ArialMT";
     double textSize = 12.0;
 

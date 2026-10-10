@@ -58,7 +58,7 @@ public:
     void setHighQualityAntiAliasing(bool on);
 
     /// Maps document coordinates to widget coordinates: the pan, the zoom, and
-    /// the centring that keeps the stage in the middle of the view.
+    /// the centering that keeps the stage in the middle of the view.
     ///
     /// The single source of truth for painting, hit-testing and the zoom anchor,
     /// so they cannot drift apart.
@@ -89,13 +89,13 @@ public:
     /// The brush reads it to vary its width.
     double pressure() const { return _pressure; }
 
-    /// Zoom steps follow Animate's magnification presets. The view centre
+    /// Zoom steps follow Animate's magnification presets. The view center
     /// stays put.
     void zoomIn();
 
     void zoomOut();
 
-    /// Sets the zoom about the view centre.
+    /// Sets the zoom about the view center.
     void setZoomLevel(double zoom);
 
     /// Sets the zoom keeping the document point under \p widgetAnchor where
@@ -108,7 +108,7 @@ public:
     /// Show All: the stage and everything placed on or off it.
     void zoomToShowAll();
 
-    /// Zooms so that \p documentRect fills the view, centred.
+    /// Zooms so that \p documentRect fills the view, centered.
     void zoomToRect(const QRectF& documentRect);
 
     /// Removes everything selected from the document as one undo step.
@@ -225,8 +225,8 @@ public:
 
     fla::Snapper* snapper() const { return _snapper; }
 
-    /// Loads \p snapper with the edges and centres of everything on stage apart
-    /// from \p exclude, so a drag can line up with its neighbours but not with
+    /// Loads \p snapper with the edges and centers of everything on stage apart
+    /// from \p exclude, so a drag can line up with its neighbors but not with
     /// itself.
     void gatherSnapCandidates(fla::Snapper& snapper,
         const std::vector<fla::Element*>& exclude);
@@ -330,7 +330,7 @@ private:
     /// of every level, innermost first.
     QTransform scopeToDocument() const;
 
-    /// The pan, zoom and centring alone, without the scope.
+    /// The pan, zoom and centering alone, without the scope.
     QTransform rootToWidget() const;
 
     /// The timelines the tools act on: the scoped one, or the scene's.
@@ -347,7 +347,7 @@ private:
     QTransform _elementTransform;
 
     /// True while a mask layer is being rendered: every fill and stroke is
-    /// drawn opaque, since a mask is coverage and its colours and alpha
+    /// drawn opaque, since a mask is coverage and its colors and alpha
     /// mean nothing.
     bool _maskPass = false;
 
@@ -559,14 +559,14 @@ private:
     void drawOverlayPoints(QPainter& painter, const fla::Shape* shape);
 
     /// Animate's dot screen over a selected merge-drawn shape: the fills and
-    /// the strokes it is made of, screened in the highlight colour.
-    void drawShapeHighlight(QPainter& painter, const fla::Shape* shape, const QColor& colour);
+    /// the strokes it is made of, screened in the highlight color.
+    void drawShapeHighlight(QPainter& painter, const fla::Shape* shape, const QColor& color);
 
     /// Draws the marks that show what is selected, plus whatever the active tool
     /// wants on top. Runs in document coordinates after the stage is drawn.
     void drawToolOverlay(QPainter& painter);
 
-    /// Draws the document's grid under the artwork, using the spacing and colour
+    /// Draws the document's grid under the artwork, using the spacing and color
     /// the file specifies.
     void drawGrid(QPainter& painter, const fla::Document* document);
 };

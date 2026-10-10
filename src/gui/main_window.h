@@ -237,10 +237,10 @@ private:
     std::vector<fla::Shape*> selectedShapes() const;
 
     /// Adds copies of \a sources to the current frame as one undo step and
-    /// selects them. With \a centreInView the copies are moved so that they
+    /// selects them. With \a centerInView the copies are moved so that they
     /// sit in the middle of the view, which is where Animate pastes.
     void placeCopies(const std::vector<const fla::Shape*>& sources, const char* name,
-        bool centreInView);
+        bool centerInView);
     QAction* _undoAction = nullptr;
     QAction* _redoAction = nullptr;
     /// Display name of the open file, without the modified marker.

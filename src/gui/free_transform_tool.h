@@ -55,7 +55,7 @@ public:
     bool keyPress(PhoenixView& view, QKeyEvent* event) override;
 
     /// A double click on the transformation point puts it back at the
-    /// centre of the box.
+    /// center of the box.
     bool mouseDoubleClick(PhoenixView& view, QMouseEvent* event, const QPointF& documentPos) override;
 
     void paintOverlay(PhoenixView& view, QPainter& painter, double scale) override;
@@ -91,19 +91,19 @@ private:
         Skew,
         /// Ctrl on a corner handle, with only shapes selected: the corner
         /// moves on its own and the geometry is warped to follow, Animate's
-        /// Distort. Shift moves the neighbouring corner the opposite way
+        /// Distort. Shift moves the neighboring corner the opposite way
         /// along their edge, which tapers.
         Distort,
         /// An anchor or a handle of the envelope: the box's sides bend and
         /// the geometry follows.
         Envelope,
         /// The transformation point: a drag moves it, snapping to the box's
-        /// centre and handles.
+        /// center and handles.
         Pivot
     };
 
     /// Envelope mode's mesh: eight anchors round the box, a corner and a
-    /// midpoint on each side, each with a handle towards either neighbour.
+    /// midpoint on each side, each with a handle towards either neighbor.
     /// The eight cubics they make are the sides of a Coons patch, and the
     /// shapes are warped from the straight box the session began with onto
     /// that patch. The session lasts until the selection or the box changes.
@@ -202,7 +202,7 @@ private:
 
     QTransform adjustForDrag(const QPointF& documentPos, Qt::KeyboardModifiers modifiers) const;
 
-    /// Nudges the cursor position onto the grid or a neighbouring edge before
+    /// Nudges the cursor position onto the grid or a neighboring edge before
     /// the gesture is computed from it.
     QPointF snapDragPoint(PhoenixView& view, const QPointF& documentPos) const;
 
@@ -216,7 +216,7 @@ private:
 
     /// The transformation point, in document space: what rotation turns
     /// about and alt-scaling scales about. It comes from a single selected
-    /// element's own transformation point, otherwise the box centre, and it
+    /// element's own transformation point, otherwise the box center, and it
     /// rides along with every gesture.
     QPointF _pivot;
     QPointF _pivotAtDragStart;
@@ -228,8 +228,8 @@ private:
     /// space, so the file keeps it.
     void storePivot();
 
-    /// The pivot drag snapped to the box's centre or a handle within
-    /// tolerance, else to the grid and neighbours.
+    /// The pivot drag snapped to the box's center or a handle within
+    /// tolerance, else to the grid and neighbors.
     QPointF snapPivot(PhoenixView& view, const QPointF& documentPos) const;
 
     /// What the box was built for: each selected element and the transform it

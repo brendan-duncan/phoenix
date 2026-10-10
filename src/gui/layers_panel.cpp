@@ -69,7 +69,7 @@ void drawPadlock(QPainter& painter)
     painter.drawRoundedRect(QRectF(3.5, 7.5, 9.0, 6.5), 1.0, 1.0);
 }
 
-/// The layer's outline colour as a small swatch.
+/// The layer's outline color as a small swatch.
 QIcon swatchIcon(const uint8_t rgba[4])
 {
     QPixmap pixmap(16, 16);
@@ -264,10 +264,10 @@ void LayersPanel::refreshLayers()
 
             item->setIcon(VisibleColumn, layer->visible ? _visibleIcon : _hiddenIcon);
             item->setIcon(LockColumn, layer->locked ? _lockedIcon : _unlockedIcon);
-            item->setIcon(ColourColumn, swatchIcon(layer->color));
+            item->setIcon(ColorColumn, swatchIcon(layer->color));
             item->setToolTip(VisibleColumn, "Show or hide the layer");
             item->setToolTip(LockColumn, "Lock or unlock the layer");
-            item->setToolTip(ColourColumn, "Outline colour; selections on this layer are highlighted in it");
+            item->setToolTip(ColorColumn, "Outline color; selections on this layer are highlighted in it");
 
             item->setData(NameColumn, Qt::UserRole, QVariant::fromValue(layerIndexMap.size() - 1));
             item->setData(NameColumn, Qt::UserRole + 1, timelineIndex);

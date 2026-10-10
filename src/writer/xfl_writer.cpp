@@ -59,7 +59,7 @@ std::string formatDouble(double value)
     return std::string(buffer);
 }
 
-/// Writes a colour as #RRGGBB, with alpha split out the way the format stores
+/// Writes a color as #RRGGBB, with alpha split out the way the format stores
 /// it. Both are omitted when they match the reader's default of opaque black.
 void setColor(XMLElement* node, const char* colorName, const char* alphaName,
     const uint8_t rgba[4], bool forceWrite = false)
@@ -262,7 +262,7 @@ void XFLWriter::writeFillStyle(const FillStyle& fill, XMLElement* parent)
     {
         const SolidColor& solid = static_cast<const SolidColor&>(fill);
         XMLElement* node = doc->NewElement("SolidColor");
-        // A solid fill always states its colour: black is a real choice here,
+        // A solid fill always states its color: black is a real choice here,
         // not an absent one.
         setColor(node, "color", "alpha", solid.color, true);
         parent->InsertEndChild(node);
@@ -409,7 +409,7 @@ void XFLWriter::writeShape(const Shape& shape, XMLElement* parent)
             setInt(edgeNode, "strokeStyle", edge->strokeStyle, -1);
 
             // Prefer the text the file was read with: it round-trips exactly,
-            // including anything the reader normalised away. Regenerating is for
+            // including anything the reader normalized away. Regenerating is for
             // edges that have actually been edited.
             const std::string data = edge->data.empty()
                 ? EdgeWriter::writeEdge(*edge)
@@ -971,7 +971,7 @@ std::string XFLWriter::writeDocument(const Document& document)
     }
     root->InsertEndChild(timelines);
 
-    // Read but not yet modelled well enough to write back.
+    // Read but not yet modeled well enough to write back.
     if (document.scriptList)
         note("document scripts");
     if (document.publishHistory)

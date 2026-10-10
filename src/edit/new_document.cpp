@@ -46,7 +46,7 @@ FLADocument* createEmptyDocument(int width, int height, double frameRate)
 
     Layer* layer = new Layer(timeline);
     layer->name = "Layer_1";
-    // Cyan, which is the colour Animate gives a document's first layer.
+    // Cyan, which is the color Animate gives a document's first layer.
     layer->color[0] = 0;
     layer->color[1] = 255;
     layer->color[2] = 255;

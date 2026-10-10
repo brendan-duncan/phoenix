@@ -16,7 +16,7 @@ namespace {
 /// report a rough size, so this does not need to be exact.
 constexpr int kAreaSamples = 8;
 
-/// A piece shorter than this in twips is a rounding artefact rather than
+/// A piece shorter than this in twips is a rounding artifact rather than
 /// geometry, and welding has already pulled its ends together.
 constexpr double kMinimumPieceLength = PlanarMap::kTwip * 0.5;
 
@@ -150,7 +150,7 @@ double nearestParameter(const Curve& curve, const Point& point, double& distance
 /// Where a curve has to be cut, and the exact point the cut lands on when one
 /// is known. Every crossing is given to both curves as the same point, and a
 /// curve cut where another's endpoint touches it takes that endpoint, so the
-/// pieces weld to one vertex instead of two neighbouring ones.
+/// pieces weld to one vertex instead of two neighboring ones.
 struct Cut
 {
     double t = 0.0;
@@ -406,12 +406,12 @@ void PlanarMap::sortOutgoingEdges()
             radius = std::min(radius, _halfEdges[edge].curve.chordLength());
         radius = std::max(radius * 0.5, kTwip * 0.5);
 
-        const Point& centre = vertex.position;
+        const Point& center = vertex.position;
         const auto departure = [&](int edge) {
             const Curve& curve = _halfEdges[edge].curve;
             const auto distanceAt = [&](double t) {
                 const Point p = curve.pointAt(t);
-                return std::hypot(p.x - centre.x, p.y - centre.y);
+                return std::hypot(p.x - center.x, p.y - center.y);
             };
 
             double low = 0.0;
@@ -443,11 +443,11 @@ void PlanarMap::sortOutgoingEdges()
                         low = mid;
                 }
                 const Point p = curve.pointAt(high);
-                direction = Point(p.x - centre.x, p.y - centre.y);
+                direction = Point(p.x - center.x, p.y - center.y);
             }
             else
             {
-                direction = Point(curve.end().x - centre.x, curve.end().y - centre.y);
+                direction = Point(curve.end().x - center.x, curve.end().y - center.y);
             }
             if (std::hypot(direction.x, direction.y) <= 1.0e-12)
                 direction = curve.tangentAt(0.0);
@@ -524,7 +524,7 @@ Point PlanarMap::sampleOutside(const Cycle& cycle) const
         return middle;
 
     // A quarter twip off the edge is clear of the boundary but far closer than
-    // anything else in the drawing, so it cannot stray into a neighbour.
+    // anything else in the drawing, so it cannot stray into a neighbor.
     const double step = kTwip * 0.25;
     const Point offset(-tangent.y / length * step, tangent.x / length * step);
 
@@ -701,7 +701,7 @@ bool PlanarMap::interiorPoint(int face, Point& result) const
     // Step off each boundary edge in turn until a point lands inside. One edge
     // is usually enough; a sliver of a face may need another, or a bigger
     // step. Every candidate is checked against the face, so a larger step
-    // that lands in a neighbour is simply passed over.
+    // that lands in a neighbor is simply passed over.
     const std::vector<int> outer = cycleFrom(target.halfEdge);
 
     for (const double step : {kTwip * 0.25, kTwip, kTwip * 4.0})

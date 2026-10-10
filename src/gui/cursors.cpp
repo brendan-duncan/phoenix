@@ -119,7 +119,7 @@ void drawMark(QPainter& painter, Cursors::Kind kind)
     }
 }
 
-/// A double-headed arrow along the x axis, centred on the origin.
+/// A double-headed arrow along the x axis, centered on the origin.
 QPainterPath doubleArrowPath()
 {
     QPainterPath path;

@@ -14,7 +14,7 @@ can download (see cmake/PhoenixQt.cmake):
     styles, icon engines, platform themes and input contexts, and the
     modules those plugins pull in)
   * the build tools (moc, uic, rcc, qmake, windeployqt...)
-  * mkspecs, and the Qt licence texts
+  * mkspecs, and the Qt license texts
 
 Qt's package files check that every file an imported target points at
 exists, so the trim is driven by those same files: whatever they reference
@@ -280,7 +280,7 @@ class Trim:
                 targets.unlink()
 
     def copy_licenses(self):
-        # The online installer keeps the licences two levels up, beside the
+        # The online installer keeps the licenses two levels up, beside the
         # version folders; a kit from aqt keeps them one level up.
         # A kit from aqt has none, so the texts kept in the repository
         # (copied from an installer's Licenses folder) stand in.
@@ -289,7 +289,7 @@ class Trim:
             if candidate.exists():
                 shutil.copytree(candidate, self.out / "licenses", dirs_exist_ok=True)
                 return
-        log("warning: no Qt licence texts found; add them to the archive by hand")
+        log("warning: no Qt license texts found; add them to the archive by hand")
 
 
 def copy_host_tools(host_qtdir, out):
@@ -419,7 +419,7 @@ def write_readme(out, version, target, qtdir):
         "A subset of the Qt distribution, trimmed to what Phoenix compiles and\n"
         "links against, made by tools/qt/make_qt_archive.py from\n"
         f"`{qtdir}`.\n\n"
-        "Qt is used under the LGPL v3: see the licences folder. Phoenix links\n"
+        "Qt is used under the LGPL v3: see the licenses folder. Phoenix links\n"
         "it dynamically, so it can be replaced with any compatible build of the\n"
         "same version.\n",
         encoding="utf-8")
