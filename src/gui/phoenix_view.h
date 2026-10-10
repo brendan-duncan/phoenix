@@ -358,6 +358,77 @@ private:
     /// mean nothing.
     bool _maskPass = false;
 
+    /// Counts every edit that changes what the stage shows, so cached
+    /// renderings can tell when they are stale.
+    unsigned _revision = 0;
+
+    /// While a gesture moves part of the stage, everything else is rendered
+    /// once and reused for every frame of the gesture: what stacks below
+    /// the moving elements in one image, what stacks above them in another,
+    /// and only the moving elements (and anything stacked between them)
+    /// drawn each time. The key says what the images were rendered for.
+    struct StaticKey
+    {
+        double zoom = 0.0;
+        double panX = 0.0;
+        double panY = 0.0;
+        QSize size;
+        int frame = -1;
+        unsigned revision = 0;
+        size_t scopeDepth = 0;
+        bool grid = false;
+        std::vector<const fla::Element*> moving;
+
+        bool operator==(const StaticKey& other) const
+        {
+            return zoom == other.zoom && panX == other.panX && panY == other.panY &&
+                size == other.size && frame == other.frame && revision == other.revision &&
+                scopeDepth == other.scopeDepth && grid == other.grid && moving == other.moving;
+        }
+    };
+    QImage _belowImage;
+    QImage _aboveImage;
+    StaticKey _staticKey;
+    bool _staticValid = false;
+
+    /// The top-level elements a gesture is moving: the selection's, and any
+    /// drawing still floating.
+    std::vector<const fla::Element*> movingElements() const;
+
+    /// Which top-level elements drawFrame draws. Every visible element of
+    /// the edited timeline's own frames is numbered in drawing order; a
+    /// Scan pass draws nothing and notes where the moving elements fall,
+    /// then Below draws what comes before the first of them, Live the
+    /// first through the last, and Above what follows. The insides of
+    /// symbols and mask coverage always draw whole.
+    enum class DrawPhase { All, Scan, Below, Live, Above };
+    DrawPhase _drawPhase = DrawPhase::All;
+    const std::vector<const fla::Element*>* _moving = nullptr;
+    int _drawOrdinal = 0;
+    int _firstMoving = -1;
+    int _lastMoving = -1;
+    int _frameDepth = 0;
+
+    /// Whether an element, or anything inside it, blends with what is
+    /// drawn beneath it. Such an element cannot be rendered ahead into the
+    /// image above the moving elements, since what it blends with moves.
+    bool needsBackdrop(const fla::Element* element, int depth = 0);
+    QMap<const fla::Element*, bool> _backdropCache;
+
+    /// A filtered or color-transformed instance's rendering, kept between
+    /// paints: reused while the instance's placement, apart from a shift,
+    /// and the document are unchanged, and moved with a pan.
+    struct FilteredImage
+    {
+        QTransform full;
+        int frame = -1;
+        unsigned revision = 0;
+        bool clipped = false;
+        QImage image;
+        QPoint origin;
+    };
+    QMap<const fla::SymbolInstance*, FilteredImage> _filterCache;
+
     /// How the classic tween of the frame being drawn turns, from its
     /// keyframe, for interpolateTransform.
     fla::TweenRotation _tweenRotation = fla::TweenRotation::Auto;

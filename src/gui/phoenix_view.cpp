@@ -257,9 +257,7 @@ void PhoenixView::onElementSelected(const fla::DOMElement* element)
 void PhoenixView::setDocument(const fla::FLADocument* document)
 {
     _bitmapCache.clear(); // Clear bitmap cache when loading new document
-    _boundsCache.clear();
-    _snapBoundsValid = false; // Clear bounds cache for new document
-    _pathCache.clear(); // Clear path cache for new document
+    clearCaches();
     _flaDocument = document;
     _panX = 0;
     _panY = 0;
@@ -412,9 +410,81 @@ void PhoenixView::paintEvent(QPaintEvent *event)
     }
     else
     {
+        // While something is being dragged, the rest of the stage is drawn
+        // once into an image and reused for every frame of the drag, and
+        // only what moves is drawn each time.
+        const std::vector<const fla::Element*> moving = _interacting
+            ? movingElements() : std::vector<const fla::Element*>();
+
         painter.save();
-        painter.setTransform(rootToWidget(), true);
-        drawStageContents(painter, document);
+        bool split = false;
+        if (!moving.empty())
+        {
+            // Where the moving elements fall in the drawing order decides
+            // what goes below and above them.
+            _moving = &moving;
+            _drawPhase = DrawPhase::Scan;
+            _drawOrdinal = 0;
+            _firstMoving = _lastMoving = -1;
+            painter.save();
+            painter.setTransform(rootToWidget(), true);
+            drawStageContents(painter, document);
+            painter.restore();
+            split = _firstMoving >= 0;
+            _drawPhase = DrawPhase::All;
+        }
+
+        if (split)
+        {
+            StaticKey key;
+            key.zoom = _zoom;
+            key.panX = _panX;
+            key.panY = _panY;
+            key.size = size();
+            key.frame = _player ? _player->currentFrame() : -1;
+            key.revision = _revision;
+            key.scopeDepth = _scope.size();
+            key.grid = _showGrid;
+            key.moving = moving;
+
+            if (!_staticValid || !(_staticKey == key))
+            {
+                const qreal ratio = devicePixelRatioF();
+                const auto render = [&](QImage& image, DrawPhase phase, const QColor& fill) {
+                    image = QImage(size() * ratio, QImage::Format_ARGB32_Premultiplied);
+                    image.setDevicePixelRatio(ratio);
+                    image.fill(fill);
+                    QPainter imagePainter(&image);
+                    imagePainter.setRenderHint(QPainter::Antialiasing, true);
+                    imagePainter.setRenderHint(QPainter::TextAntialiasing, true);
+                    imagePainter.setRenderHint(QPainter::SmoothPixmapTransform, true);
+                    imagePainter.setTransform(rootToWidget(), true);
+                    _drawPhase = phase;
+                    _drawOrdinal = 0;
+                    drawStageContents(imagePainter, document);
+                    _drawPhase = DrawPhase::All;
+                };
+                render(_belowImage, DrawPhase::Below, backgroundColor);
+                render(_aboveImage, DrawPhase::Above, Qt::transparent);
+                _staticKey = key;
+                _staticValid = true;
+            }
+
+            painter.drawImage(0, 0, _belowImage);
+            painter.setTransform(rootToWidget(), true);
+            _drawPhase = DrawPhase::Live;
+            _drawOrdinal = 0;
+            drawStageContents(painter, document);
+            _drawPhase = DrawPhase::All;
+            painter.resetTransform();
+            painter.drawImage(0, 0, _aboveImage);
+        }
+        else
+        {
+            painter.setTransform(rootToWidget(), true);
+            drawStageContents(painter, document);
+        }
+        _moving = nullptr;
         painter.setTransform(documentToWidget(), false);
         drawToolOverlay(painter);
         painter.restore();
@@ -460,12 +530,18 @@ void PhoenixView::drawStageContents(QPainter& painter, const fla::Document* docu
     const double docWidth = document->width;
     const double docHeight = document->height;
 
-    painter.fillRect(QRectF(0, 0, docWidth, docHeight),
-        QColor(document->backgroundColor[0], document->backgroundColor[1],
-            document->backgroundColor[2], document->backgroundColor[3]));
+    // The stage background sits under everything and the border over it, so
+    // when the stage is split around moving elements they belong to the
+    // bottom and top layers.
+    if (_drawPhase == DrawPhase::All || _drawPhase == DrawPhase::Below)
+    {
+        painter.fillRect(QRectF(0, 0, docWidth, docHeight),
+            QColor(document->backgroundColor[0], document->backgroundColor[1],
+                document->backgroundColor[2], document->backgroundColor[3]));
 
-    if (_showGrid)
-        drawGrid(painter, document);
+        if (_showGrid)
+            drawGrid(painter, document);
+    }
 
     if (_scope.empty())
     {
@@ -486,8 +562,91 @@ void PhoenixView::drawStageContents(QPainter& painter, const fla::Document* docu
         painter.setTransform(rootFull, false);
     }
 
-    painter.setPen(QPen(QColor(0, 0, 0, 255), 1.0));
-    painter.drawRect(QRectF(0, 0, docWidth, docHeight));
+    if (_drawPhase == DrawPhase::All || _drawPhase == DrawPhase::Above)
+    {
+        painter.setPen(QPen(QColor(0, 0, 0, 255), 1.0));
+        painter.drawRect(QRectF(0, 0, docWidth, docHeight));
+    }
+}
+
+bool PhoenixView::needsBackdrop(const fla::Element* element, int depth)
+{
+    if (!element || depth > 16)
+        return false;
+    const auto cached = _backdropCache.constFind(element);
+    if (cached != _backdropCache.constEnd())
+        return cached.value();
+
+    bool needs = false;
+    if (const auto* instance = dynamic_cast<const fla::SymbolInstance*>(element))
+    {
+        bool supported = true;
+        needs = Filters::blendMode(instance->blendMode, supported) != QPainter::CompositionMode_SourceOver;
+        if (!needs && instance->symbol)
+        {
+            for (const fla::Timeline* timeline : instance->symbol->timelines)
+            {
+                for (const fla::Layer* layer : timeline ? timeline->layers : std::vector<fla::Layer*>())
+                {
+                    for (const fla::Frame* frame : layer ? layer->frames : std::vector<fla::Frame*>())
+                    {
+                        for (const fla::Element* inner : frame ? frame->elements : std::vector<fla::Element*>())
+                        {
+                            if (needsBackdrop(inner, depth + 1))
+                            {
+                                needs = true;
+                                break;
+                            }
+                        }
+                        if (needs)
+                            break;
+                    }
+                    if (needs)
+                        break;
+                }
+                if (needs)
+                    break;
+            }
+        }
+    }
+    else if (const auto* group = dynamic_cast<const fla::Group*>(element))
+    {
+        for (const fla::Element* member : group->members)
+        {
+            if (needsBackdrop(member, depth + 1))
+            {
+                needs = true;
+                break;
+            }
+        }
+    }
+    _backdropCache.insert(element, needs);
+    return needs;
+}
+
+std::vector<const fla::Element*> PhoenixView::movingElements() const
+{
+    std::vector<const fla::Element*> moving;
+    const auto add = [&](const fla::DOMElement* node) {
+        // Up to the element that sits directly in a frame: a group moves as
+        // a whole when something inside it is selected.
+        const fla::DOMElement* top = node;
+        while (top && top->parent && top->parent->domType() != fla::DOMElement::DOMType::Frame)
+            top = top->parent;
+        const fla::Element* element = top ? dynamic_cast<const fla::Element*>(top) : nullptr;
+        if (!element || !top->parent)
+            return;
+        if (std::find(moving.begin(), moving.end(), element) == moving.end())
+            moving.push_back(element);
+    };
+    if (_selection)
+    {
+        for (const fla::DOMElement* selected : _selection->elements())
+            add(selected);
+    }
+    for (const PendingDrop& pending : _pending)
+        add(pending.shape);
+    return moving;
 }
 
 void PhoenixView::drawDocument(QPainter& painter, const fla::Document* document)
@@ -510,10 +669,13 @@ void PhoenixView::drawTimeline(QPainter& painter, const fla::Timeline* timeline,
     struct MaskData
     {
         QPixmap maskPixmap;
-        QPointF offset;
+        /// Where on the device the mask's pixels sit; empty when the mask
+        /// covers nothing, in which case the masked layers show nothing.
+        QRect crop;
     };
     QMap<int, MaskData> maskCache;
     QTransform painterTransform = painter.transform();
+    const QRect deviceRect(0, 0, painter.device()->width(), painter.device()->height());
 
     // First pass: render mask layers to pixmaps
     for (int i = 0; i < timeline->layers.size(); ++i)
@@ -526,16 +688,38 @@ void PhoenixView::drawTimeline(QPainter& painter, const fla::Timeline* timeline,
 
         // The mask is rendered at the resolution of whatever the painter is
         // drawing into -- the supersampled buffer or the widget itself -- so it
-        // lines up with the content pixel for pixel whatever the quality mode.
-        const QSize deviceSize(painter.device()->width(), painter.device()->height());
-        QPixmap maskPixmap(deviceSize);
+        // lines up with the content pixel for pixel whatever the quality mode,
+        // and only over the part of the device the mask's art reaches, since
+        // nothing outside it can show.
+        QRectF reach;
+        const LayerFrame shown = resolveLayerFrame(layer, loopType, firstFrame);
+        if (shown.frame)
+        {
+            for (const fla::Element* element : shown.frame->elements)
+            {
+                if (!element || !element->visible)
+                    continue;
+                const QRectF bounds = getElementBounds(element);
+                if (bounds.isValid())
+                    reach = reach.isNull() ? bounds : reach.united(bounds);
+            }
+        }
+        const QRect crop = reach.isNull() ? QRect()
+            : painterTransform.mapRect(reach).adjusted(-2.0, -2.0, 2.0, 2.0).toAlignedRect().intersected(deviceRect);
+        if (crop.isEmpty())
+        {
+            maskCache[i] = { QPixmap(), QRect() };
+            continue;
+        }
+
+        QPixmap maskPixmap(crop.size());
         maskPixmap.fill(Qt::transparent);
 
         QPainter maskPainter(&maskPixmap);
         maskPainter.setRenderHint(QPainter::Antialiasing, true);
         maskPainter.setRenderHint(QPainter::TextAntialiasing, true);
         maskPainter.setRenderHint(QPainter::SmoothPixmapTransform, true);
-        maskPainter.setTransform(painterTransform);
+        maskPainter.setTransform(painterTransform * QTransform::fromTranslate(-crop.x(), -crop.y()));
 
         _maskPass = true;
         drawLayer(maskPainter, layer, loopType, firstFrame, nullptr);
@@ -554,7 +738,7 @@ void PhoenixView::drawTimeline(QPainter& painter, const fla::Timeline* timeline,
         }
         maskPixmap = QPixmap::fromImage(coverage);
 
-        maskCache[i] = { maskPixmap, QPointF(0, 0) };
+        maskCache[i] = { maskPixmap, crop };
     }
 
     // Second pass: draw layers with masks applied
@@ -573,7 +757,9 @@ void PhoenixView::drawTimeline(QPainter& painter, const fla::Timeline* timeline,
             if (maskIt != maskCache.end())
             {
                 const QPixmap& maskPixmap = maskIt.value().maskPixmap;
-                const QPointF& maskOffset = maskIt.value().offset;
+                const QRect& crop = maskIt.value().crop;
+                if (crop.isEmpty())
+                    continue;
 
                 QPixmap contentPixmap(maskPixmap.size());
                 contentPixmap.fill(Qt::transparent);
@@ -582,7 +768,7 @@ void PhoenixView::drawTimeline(QPainter& painter, const fla::Timeline* timeline,
                 contentPainter.setRenderHint(QPainter::Antialiasing, true);
                 contentPainter.setRenderHint(QPainter::TextAntialiasing, true);
                 contentPainter.setRenderHint(QPainter::SmoothPixmapTransform, true);
-                contentPainter.setTransform(painterTransform);
+                contentPainter.setTransform(painterTransform * QTransform::fromTranslate(-crop.x(), -crop.y()));
 
                 drawLayer(contentPainter, layer, loopType, firstFrame, nullptr);
 
@@ -601,7 +787,7 @@ void PhoenixView::drawTimeline(QPainter& painter, const fla::Timeline* timeline,
                 painter.save();
                 painter.resetTransform();
                 painter.setCompositionMode(QPainter::CompositionMode_SourceOver);
-                painter.drawPixmap(0, 0, maskedResult);
+                painter.drawPixmap(crop.topLeft(), maskedResult);
                 painter.restore();
 
                 continue;
@@ -753,6 +939,14 @@ void PhoenixView::drawFrame(QPainter& painter, const fla::Frame* frame, const fl
     const QRectF deviceRect(0, 0, painter.device()->width(), painter.device()->height());
     const bool culling = !nextTweenFrame && painter.device()->width() > 0;
 
+    struct Depth
+    {
+        int& counter;
+        ~Depth() { --counter; }
+    } depth{_frameDepth};
+    ++_frameDepth;
+    const bool filtered = _frameDepth == 1 && !_maskPass && _drawPhase != DrawPhase::All;
+
     int nextElementIndex = 0;
     for (const fla::Element* element : frame->elements)
     {
@@ -762,7 +956,40 @@ void PhoenixView::drawFrame(QPainter& painter, const fla::Frame* frame, const fl
                 nextTweenFrame->elements[nextElementIndex] : nullptr;
 
             bool skip = false;
-            if (culling)
+            if (filtered)
+            {
+                const int ordinal = _drawOrdinal++;
+                switch (_drawPhase)
+                {
+                case DrawPhase::Scan:
+                    if (_moving && std::find(_moving->begin(), _moving->end(), element) != _moving->end())
+                    {
+                        if (_firstMoving < 0)
+                            _firstMoving = ordinal;
+                        _lastMoving = ordinal;
+                    }
+                    else if (_firstMoving >= 0 && needsBackdrop(element))
+                    {
+                        // Blends with what moves beneath it, so it is drawn
+                        // live along with the moving elements.
+                        _lastMoving = ordinal;
+                    }
+                    skip = true;
+                    break;
+                case DrawPhase::Below:
+                    skip = ordinal >= _firstMoving;
+                    break;
+                case DrawPhase::Live:
+                    skip = ordinal < _firstMoving || ordinal > _lastMoving;
+                    break;
+                case DrawPhase::Above:
+                    skip = ordinal <= _lastMoving;
+                    break;
+                case DrawPhase::All:
+                    break;
+                }
+            }
+            if (!skip && culling)
             {
                 const QRectF bounds = getElementBounds(element);
                 if (bounds.isValid())
@@ -923,10 +1150,34 @@ void PhoenixView::drawElement(QPainter& painter, const fla::Element* element, co
                 const double filterScale = ownScale > 1.0e-9 ? fullScale / ownScale : fullScale;
                 const double reach = Filters::margin(filters, filterScale);
 
-                QRectF device = full.mapRect(local).adjusted(-2.0 - reach, -2.0 - reach, 2.0 + reach, 2.0 + reach);
-                device = device.intersected(QRectF(0, 0, painter.device()->width(), painter.device()->height()));
-                const QRect crop = device.toAlignedRect();
-                if (!crop.isEmpty())
+                const QRectF wanted = full.mapRect(local).adjusted(-2.0 - reach, -2.0 - reach, 2.0 + reach, 2.0 + reach);
+                const QRectF deviceArea(0, 0, painter.device()->width(), painter.device()->height());
+                const QRect crop = wanted.intersected(deviceArea).toAlignedRect();
+                const bool clipped = !deviceArea.contains(wanted);
+
+                // The rendering is kept between paints: the same instance
+                // placed the same way, apart from a shift, on the same
+                // document and frame draws from the image it had, moved.
+                const int shownFrame = _player ? _player->currentFrame() : -1;
+                bool supported = true;
+                const QPainter::CompositionMode mode = Filters::blendMode(instance->blendMode, supported);
+                const auto cached = _maskPass ? _filterCache.end() : _filterCache.find(instance);
+                const auto sameLinear = [](const QTransform& a, const QTransform& b) {
+                    return std::fabs(a.m11() - b.m11()) < 1.0e-9 && std::fabs(a.m12() - b.m12()) < 1.0e-9 &&
+                        std::fabs(a.m21() - b.m21()) < 1.0e-9 && std::fabs(a.m22() - b.m22()) < 1.0e-9;
+                };
+                if (cached != _filterCache.end() && !cached->clipped && cached->frame == shownFrame &&
+                    cached->revision == _revision && sameLinear(cached->full, full))
+                {
+                    const QPoint shift(static_cast<int>(std::lround(full.dx() - cached->full.dx())),
+                                       static_cast<int>(std::lround(full.dy() - cached->full.dy())));
+                    painter.save();
+                    painter.resetTransform();
+                    painter.setCompositionMode(mode);
+                    painter.drawImage(cached->origin + shift, cached->image);
+                    painter.restore();
+                }
+                else if (!crop.isEmpty())
                 {
                     QImage symbolImage(crop.size(), QImage::Format_ARGB32_Premultiplied);
                     symbolImage.fill(Qt::transparent);
@@ -955,14 +1206,24 @@ void PhoenixView::drawElement(QPainter& painter, const fla::Element* element, co
                     if (!filters.empty())
                         symbolImage = Filters::apply(symbolImage, filters, filterScale);
 
-                    bool supported = true;
-                    const QPainter::CompositionMode mode = Filters::blendMode(instance->blendMode, supported);
-
                     painter.save();
                     painter.resetTransform();
                     painter.setCompositionMode(mode);
                     painter.drawImage(crop.topLeft(), symbolImage);
                     painter.restore();
+
+                    // Kept for the next paint unless it is huge.
+                    if (!_maskPass && symbolImage.width() * symbolImage.height() <= 4 * 1024 * 1024)
+                    {
+                        FilteredImage entry;
+                        entry.full = full;
+                        entry.frame = shownFrame;
+                        entry.revision = _revision;
+                        entry.clipped = clipped;
+                        entry.image = symbolImage;
+                        entry.origin = crop.topLeft();
+                        _filterCache.insert(instance, entry);
+                    }
                 }
             }
         }
@@ -3525,6 +3786,10 @@ void PhoenixView::clearCaches()
     _pathCache.clear();
     _boundsCache.clear();
     _snapBoundsValid = false;
+    _filterCache.clear();
+    _backdropCache.clear();
+    _staticValid = false;
+    ++_revision;
 }
 
 void PhoenixView::invalidateBounds()

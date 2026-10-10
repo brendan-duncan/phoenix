@@ -929,7 +929,8 @@ All in `phoenix_view.cpp` unless noted.
       highlight at opposite offsets; Adjust Color is a 4x5 color matrix
   - Done 2026-10-09: `Filter` (`src/data/filter.h`) is parsed and written for all seven filter elements (`enabled` included); `Filters::apply` (`src/gui/filters.cpp`) runs them in order on the instance's isolated offscreen, which is grown by `Filters::margin`. Blur is a running-sum box blur with quality passes (`src/edit/image_blur.cpp`, Qt-free, tests); drop shadow and glow are the silhouette moved, blurred and strengthened, with inner, knockout and hideObject; bevel is the coverage moved towards and away from the light, blurred, their difference lit or shaded, placed inner, outer or full; Adjust Color is brightness, contrast, saturation and hue as a color matrix. Filters are sized in the parent's pixels (zoom and parents, not the instance's own matrix). Gradient glow and bevel draw with the gradient's last color. Nothing is cached yet: a filtered instance is re-rendered on every paint
 - [ ] Gradient glow and gradient bevel should map the blurred coverage through their gradient rather than use its last color
-- [ ] Cache a filtered instance's image between paints and move it on pan rather than re-rendering it (VectorCraft `fx.rs:275-330`)
+- [x] Cache a filtered instance's image between paints and move it on pan rather than re-rendering it (VectorCraft `fx.rs:275-330`)
+  - Done 2026-10-10: `_filterCache` keeps the filtered (or color-transformed) offscreen per instance with the transform it was rendered for; a paint that places the instance the same way apart from a shift, on the same frame and document revision, draws the kept image moved by the whole-pixel shift. Entries clipped by the device edge are not reused (a pan would reveal the cut), images over 4 Mpx are not kept, and the cache goes with `clearCaches`
 - [x] Blend modes are not implemented. Formulas for multiply, screen, lighten,
       darken, difference, overlay and hard light are in VectorCraft
       `color/src/blend.rs:102-151`; add, subtract and invert are trivial. Layer
@@ -1343,11 +1344,12 @@ dragging, at a maximized window on a 3856x1568 display:
       instead
 - [ ] Debug builds are ~7x slower than Release. Worth knowing before reading
       anything into a timing taken from the default build
-- [ ] The whole stage is redrawn on every mouse move, and nothing caches the
+- [x] The whole stage is redrawn on every mouse move, and nothing caches the
       static part of the scene, so a drag repaints 1260 instances to move one
       thing. Caching everything except the moving object is the next real win:
       render the static layers into an image once per (document revision, zoom,
       center, size) and draw only the moving object and overlays on top
+  - Done 2026-10-10: while a gesture is on and something is selected (or a drawing is still floating), `paintEvent` splits the stage around the moving elements. Every visible element of the edited timeline's own frames is numbered in drawing order (`DrawPhase` in `drawFrame`; symbol insides and mask coverage are never split); a Scan pass finds where the moving ones fall, then what stacks below them is rendered into `_belowImage` (with the stage background) and what stacks above into `_aboveImage` (with the border), keyed on zoom, pan, size, frame, scope depth, grid and `_revision` (bumped by `clearCaches`). Each drag frame draws the below image, the moving elements and anything stacked between them live, the above image, then the overlay. An element above the moving ones whose blend mode (or one inside its symbol or group) needs the backdrop is drawn live too, since what it blends with moves (`needsBackdrop`). Checked on the Alvin corpus file at frame 40: drag frames took ~10 ms against ~17 ms for a full non-supersampled paint and 70-100 ms for the supersampled settle (Debug build); stacking matches mid-drag and after release, and the effects file keeps its blend modes and masks mid-drag. A move only calls `invalidateBounds`, so the images survive the drag; free-transform's envelope warp calls `clearCaches` per move and so rebuilds them each time
 - [x] **There is no culling.** `_visibleRect` is computed (`phoenix_view.cpp:311`)
       but nothing reads it, so `drawElement` draws everything. Skip an element
       whose cached bounds, padded by 2 px, miss the view, and skip leaves smaller
@@ -1362,7 +1364,8 @@ dragging, at a maximized window on a 3856x1568 display:
       widget-sized image per frame. Size the offscreen to the content's
       device-pixel bounds instead (see step 11)
   - Done 2026-10-09 for instances (the isolated offscreen is cropped to the instance on the device, see step 11). Mask layers still render into device-sized pixmaps
-- [ ] Mask layers render into device-sized pixmaps; crop them to the mask's device bounds
+- [x] Mask layers render into device-sized pixmaps; crop them to the mask's device bounds
+  - Done 2026-10-10: the mask's coverage and each masked layer's content are rendered into pixmaps the size of the mask art's device bounds (padded 2 px, clipped to the device) and composited back at that offset; a mask that reaches nothing on the device hides its layers without any pixmap
 - [x] `getElementBounds` is cached, but `gatherSnapCandidates` walks every
       element on the stage at the start of each drag to collect snap targets
   - Done 2026-10-09: the walk's result (element, bounds) is kept in `_snapBounds` and thrown away with the bounds cache, so a drag only filters it
