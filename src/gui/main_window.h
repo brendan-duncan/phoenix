@@ -111,6 +111,22 @@ private slots:
 
     /// The timeline being edited: the symbol entered, else the document's.
     fla::Timeline* editedTimeline() const;
+
+    /// The frames a timeline command works on: the frames selected in the
+    /// grid, else the current layer at the playhead.
+    FrameSelection framesToEdit() const;
+
+    /// Runs \a edit on each layer of the frames to edit as one undo step
+    /// named \a name, and redraws what it changed.
+    void editFrames(const char* name, const std::function<void(fla::Layer&, int first, int last,
+        std::vector<fla::Frame*>& removed)>& edit);
+    void insertFrame();
+    void insertKeyframe(bool blank);
+    void removeFrames();
+    void clearKeyframe();
+    void setClassicTween(bool on);
+    void moveKeyframe(const fla::Layer* layer, int from, int to);
+    void showFramesMenu(const QPoint& globalPos);
     void addLayer(bool folder);
     void deleteCurrentLayer();
     void renameLayer(const fla::Timeline* timeline, int layerIndex, const QString& name);
@@ -261,6 +277,8 @@ private:
     QAction* _linesToFillsAction = nullptr;
     QAction* _expandFillAction = nullptr;
     QAction* _softenFillAction = nullptr;
+    /// Timeline commands on a right-click in the frames.
+    QMenu* _framesMenu = nullptr;
     QAction* _ungroupAction = nullptr;
     QAction* _breakApartAction = nullptr;
     QAction* _convertToSymbolAction = nullptr;

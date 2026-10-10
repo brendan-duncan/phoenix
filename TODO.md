@@ -1358,6 +1358,26 @@ laid out for convenience rather than to match Animate.
       number, the frame rate and the elapsed time beside the transport and
       onion skin buttons; Phoenix shows only the transport buttons
 
+### Timeline editing, onion skin, library
+
+Added 2026-10-10: the panels looked like Animate's but the timeline could
+not be edited, frames were only made as a side effect of drawing, and there
+was no library or onion skin.
+
+- [x] **Frame commands.** Insert Frame (F5), Insert Keyframe (F6), Insert
+      Blank Keyframe (F7), Remove Frames (shift+F5), Clear Keyframe
+      (shift+F6), Create Classic Tween and Remove Tween; frame selection in
+      the grid (click, drag a block across layers, shift-click to extend);
+      dragging a keyframe; a right-click menu on the frames
+  - Done 2026-10-10: the operations are Qt-free in `src/edit/timeline_edit.cpp` (tests in `test_timeline_edit.cpp`) and run through `EditFramesCommand`, which records each layer's frames before and after and owns the frames taken off, so any edit is one undo step. The Insert menu holds Timeline > Frame/Keyframe/Blank Keyframe and Classic Tween; Edit > Timeline holds Remove Frames, Clear Keyframe and Remove Tween; the same actions sit on the frames' right-click menu. A command works on the selected block of frames, else the current layer at the playhead. A selected keyframe is dragged to move it, staying between its neighbors; the last keyframe keeps its length. Checked on screen on rect_2.fla: F5 at frame 10, F6 at 5, a classic tween, the keyframe dragged to 7, two undos, and frames 3 to 7 removed
+  - Not done: Create Shape Tween, since a shape tween needs the MorphShape Animate computes and Phoenix only reads; dragging a block of several frames; copy and paste of frames
+- [ ] **Onion skin.** The onion skin buttons beside the transport and the
+      range markers in the ruler; the frames either side of the playhead
+      drawn faded (Animate tints before and after differently)
+- [ ] **Library panel.** A panel listing the symbols and bitmaps in their
+      folders; dragging an item to the stage places an instance, and
+      double-clicking a symbol edits it
+
 ### Suggested order, weighted for authenticity
 
 1. Caps, joins, hairlines, stroke chaining

@@ -3,6 +3,7 @@
 #include "lines_to_fills.h"
 #include "fill_offset.h"
 #include "../edit/layer_commands.h"
+#include "../edit/timeline_edit.h"
 #include "../edit/property_command.h"
 #include "phoenix_view.h"
 #include "timeline_view.h"
@@ -444,6 +445,10 @@ void MainWindow::setupUI()
     connect(_timelineView, &TimelineView::layersChanged,
             this, &MainWindow::onVisibilityChanged);
 
+    // Frame edits from the grid itself: dragging a keyframe, the menu.
+    connect(_timelineView, &TimelineView::keyframeMoveRequested, this, &MainWindow::moveKeyframe);
+    connect(_timelineView, &TimelineView::framesContextMenuRequested, this, &MainWindow::showFramesMenu);
+
     // Adding, deleting and renaming layers go through the undo history.
     connect(_timelineView, &TimelineView::addLayerRequested, this, &MainWindow::addLayer);
     connect(_timelineView, &TimelineView::deleteLayerRequested, this, &MainWindow::deleteCurrentLayer);
@@ -457,6 +462,139 @@ fla::Timeline* MainWindow::editedTimeline() const
     if (_flaDocument && _flaDocument->document && !_flaDocument->document->timelines.empty())
         return _flaDocument->document->timelines.front();
     return nullptr;
+}
+
+FrameSelection MainWindow::framesToEdit() const
+{
+    FrameSelection selection = _timelineView ? _timelineView->frameSelection() : FrameSelection();
+    if (!selection.isEmpty())
+        return selection;
+    fla::Timeline* timeline = nullptr;
+    int index = 0;
+    if (_timelineView && _timelineView->currentLayer(timeline, index) && timeline &&
+        index >= 0 && index < static_cast<int>(timeline->layers.size()))
+    {
+        selection.layers.push_back(timeline->layers[index]);
+        selection.first = selection.last = _player ? _player->currentFrame() : 0;
+    }
+    return selection;
+}
+
+void MainWindow::editFrames(const char* name, const std::function<void(fla::Layer&, int, int,
+    std::vector<fla::Frame*>&)>& edit)
+{
+    const FrameSelection selection = framesToEdit();
+    if (selection.isEmpty())
+        return;
+
+    std::vector<fla::Layer*> layers;
+    for (const fla::Layer* layer : selection.layers)
+        layers.push_back(const_cast<fla::Layer*>(layer));
+    const int first = selection.first;
+    const int last = selection.last;
+
+    // What is selected on the stage may be on a frame that goes.
+    _selection.clear();
+    auto* command = new fla::EditFramesCommand(layers, name,
+        [layers, first, last, edit](std::vector<fla::Frame*>& removed) {
+            for (fla::Layer* layer : layers)
+                edit(*layer, first, last, removed);
+        });
+    command->redo();
+    if (!command->changedAnything())
+    {
+        command->undo();
+        delete command;
+        return;
+    }
+    command->undo();
+    _editContext.commandStack().push(fla::CommandPtr(command));
+    _editContext.commandStack().breakMergeChain();
+    if (_phoenixView)
+    {
+        _phoenixView->clearCaches();
+        _phoenixView->update();
+    }
+    if (_timelineView)
+        _timelineView->refreshFrames();
+}
+
+void MainWindow::insertFrame()
+{
+    // As many frames as are selected, at the start of the selection.
+    editFrames("Insert Frame", [](fla::Layer& layer, int first, int last, std::vector<fla::Frame*>&) {
+        fla::timeline::insertFrames(layer, first, last - first + 1);
+    });
+}
+
+void MainWindow::insertKeyframe(bool blank)
+{
+    editFrames(blank ? "Insert Blank Keyframe" : "Insert Keyframe",
+        [blank](fla::Layer& layer, int first, int last, std::vector<fla::Frame*>&) {
+            // One keyframe at each selected frame, as Animate makes them.
+            for (int index = first; index <= last; ++index)
+                fla::timeline::insertKeyframe(layer, index, blank);
+        });
+}
+
+void MainWindow::removeFrames()
+{
+    editFrames("Remove Frames", [](fla::Layer& layer, int first, int last, std::vector<fla::Frame*>& removed) {
+        fla::timeline::removeFrames(layer, first, last - first + 1, removed);
+    });
+}
+
+void MainWindow::clearKeyframe()
+{
+    editFrames("Clear Keyframe", [](fla::Layer& layer, int first, int last, std::vector<fla::Frame*>& removed) {
+        for (int index = last; index >= first; --index)
+            fla::timeline::clearKeyframe(layer, index, removed);
+    });
+}
+
+void MainWindow::setClassicTween(bool on)
+{
+    editFrames(on ? "Create Classic Tween" : "Remove Tween",
+        [on](fla::Layer& layer, int first, int last, std::vector<fla::Frame*>&) {
+            // Every span the selection touches.
+            for (int index = first; index <= last; ++index)
+                fla::timeline::setTween(layer, index, on);
+        });
+}
+
+void MainWindow::moveKeyframe(const fla::Layer* constLayer, int from, int to)
+{
+    if (!constLayer)
+        return;
+    fla::Layer* layer = const_cast<fla::Layer*>(constLayer);
+    _selection.clear();
+    auto* command = new fla::EditFramesCommand({layer}, "Move Keyframe",
+        [layer, from, to](std::vector<fla::Frame*>&) { fla::timeline::moveKeyframe(*layer, from, to); });
+    command->redo();
+    if (!command->changedAnything())
+    {
+        command->undo();
+        delete command;
+        return;
+    }
+    command->undo();
+    _editContext.commandStack().push(fla::CommandPtr(command));
+    _editContext.commandStack().breakMergeChain();
+    if (_player)
+        _player->setCurrentFrame(to);
+    if (_phoenixView)
+    {
+        _phoenixView->clearCaches();
+        _phoenixView->update();
+    }
+    if (_timelineView)
+        _timelineView->refreshFrames();
+}
+
+void MainWindow::showFramesMenu(const QPoint& globalPos)
+{
+    if (_framesMenu)
+        _framesMenu->popup(globalPos);
 }
 
 void MainWindow::addLayer(bool folder)
@@ -653,6 +791,51 @@ void MainWindow::setupMenus()
     editMenu->addAction(clearAction);
 
     // Modify menu, with Animate's keys.
+    // Insert: Animate's timeline commands, which also live on the frames'
+    // right-click menu.
+    QMenu* insertMenu = menuBar->addMenu("&Insert");
+    QMenu* timelineMenu = insertMenu->addMenu("&Timeline");
+    QAction* insertFrameAction = timelineMenu->addAction("&Frame");
+    insertFrameAction->setShortcut(QKeySequence(Qt::Key_F5));
+    insertFrameAction->setStatusTip("Lengthen the span at the playhead by a frame (or by the frames selected)");
+    connect(insertFrameAction, &QAction::triggered, this, &MainWindow::insertFrame);
+    QAction* insertKeyframeAction = timelineMenu->addAction("&Keyframe");
+    insertKeyframeAction->setShortcut(QKeySequence(Qt::Key_F6));
+    insertKeyframeAction->setStatusTip("Start a keyframe here with a copy of what the span shows");
+    connect(insertKeyframeAction, &QAction::triggered, this, [this]() { insertKeyframe(false); });
+    QAction* insertBlankAction = timelineMenu->addAction("&Blank Keyframe");
+    insertBlankAction->setShortcut(QKeySequence(Qt::Key_F7));
+    insertBlankAction->setStatusTip("Start an empty keyframe here");
+    connect(insertBlankAction, &QAction::triggered, this, [this]() { insertKeyframe(true); });
+    insertMenu->addSeparator();
+    QAction* classicTweenAction = insertMenu->addAction("&Classic Tween");
+    classicTweenAction->setStatusTip("Tween the span to the next keyframe");
+    connect(classicTweenAction, &QAction::triggered, this, [this]() { setClassicTween(true); });
+
+    QMenu* editTimelineMenu = new QMenu("Ti&meline", this);
+    QAction* removeFramesAction = editTimelineMenu->addAction("&Remove Frames");
+    removeFramesAction->setShortcut(QKeySequence(Qt::SHIFT | Qt::Key_F5));
+    connect(removeFramesAction, &QAction::triggered, this, &MainWindow::removeFrames);
+    QAction* clearKeyframeAction = editTimelineMenu->addAction("&Clear Keyframe");
+    clearKeyframeAction->setShortcut(QKeySequence(Qt::SHIFT | Qt::Key_F6));
+    connect(clearKeyframeAction, &QAction::triggered, this, &MainWindow::clearKeyframe);
+    QAction* removeTweenAction = editTimelineMenu->addAction("Remove &Tween");
+    connect(removeTweenAction, &QAction::triggered, this, [this]() { setClassicTween(false); });
+    editMenu->addSeparator();
+    editMenu->addMenu(editTimelineMenu);
+
+    // The same commands on a right-click in the frames.
+    _framesMenu = new QMenu(this);
+    _framesMenu->addAction(classicTweenAction);
+    _framesMenu->addAction(removeTweenAction);
+    _framesMenu->addSeparator();
+    _framesMenu->addAction(insertFrameAction);
+    _framesMenu->addAction(removeFramesAction);
+    _framesMenu->addSeparator();
+    _framesMenu->addAction(insertKeyframeAction);
+    _framesMenu->addAction(insertBlankAction);
+    _framesMenu->addAction(clearKeyframeAction);
+
     QMenu* modifyMenu = menuBar->addMenu("&Modify");
 
     _groupAction = new QAction("&Group", this);
@@ -1106,7 +1289,7 @@ void MainWindow::updateEditState()
     if (_timelineView)
     {
         _timelineView->refreshIfStale();
-        _timelineView->update();
+        _timelineView->refreshFrames();
     }
     if (_propertiesPanel)
         _propertiesPanel->refresh();

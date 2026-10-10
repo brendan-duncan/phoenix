@@ -63,6 +63,7 @@ set(TEST_CORE_SOURCES
     ${PHOENIX_SRC}/edit/shape_tween.cpp
     ${PHOENIX_SRC}/edit/frame_commands.cpp
     ${PHOENIX_SRC}/edit/layer_commands.cpp
+    ${PHOENIX_SRC}/edit/timeline_edit.cpp
     ${PHOENIX_SRC}/edit/snapping.cpp
     ${PHOENIX_SRC}/edit/region_split.cpp
     ${PHOENIX_SRC}/geom/curve.cpp
@@ -95,6 +96,7 @@ set(TEST_SOURCES
     test_shape_tween.cpp
     test_frame_commands.cpp
     test_layer_commands.cpp
+    test_timeline_edit.cpp
     test_property_command.cpp
     test_tween_ease.cpp
     test_shape_recognition.cpp

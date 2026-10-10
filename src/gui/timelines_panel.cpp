@@ -22,6 +22,7 @@ constexpr int kFrameHeight = 21;
 #include <QPolygonF>
 #include <QPaintEvent>
 #include <QMouseEvent>
+#include <QContextMenuEvent>
 #include <QIcon>
 #include <QPixmap>
 #include <QImage>
@@ -208,6 +209,8 @@ TimelinesPanel::TimelinesPanel(Player* player, QWidget *parent)
     connect(_player, &Player::currentFrameChanged, _gridContainer, &TimelineGrid::onPlayerFrameChanged);
     connect(_player, &Player::currentFrameChanged, this, &TimelinesPanel::onPlayerFrameChanged);
     connect(_gridContainer, &TimelineGrid::layerPressed, this, &TimelinesPanel::layerPressed);
+    connect(_gridContainer, &TimelineGrid::keyframeMoveRequested, this, &TimelinesPanel::keyframeMoveRequested);
+    connect(_gridContainer, &TimelineGrid::contextMenuRequested, this, &TimelinesPanel::contextMenuRequested);
     connect(_playTimer, &QTimer::timeout, this, &TimelinesPanel::onTimerTick);
 }
 
@@ -236,6 +239,13 @@ void TimelinesPanel::updateStatus()
 void TimelinesPanel::setRows(const std::vector<LayerRow>& rows)
 {
     _gridContainer->setRows(rows);
+}
+
+void TimelinesPanel::refreshFrames()
+{
+    _gridContainer->updateSize();
+    _gridContainer->update();
+    updateStatus();
 }
 
 void TimelineGrid::setRows(const std::vector<LayerRow>& rows)
@@ -386,22 +396,115 @@ void TimelineGrid::updatePlayerFromMouse(int x)
     _player->setCurrentFrame(frame);
 }
 
+int TimelineGrid::rowAt(int y) const
+{
+    const int headerHeight = 25;
+    if (y < headerHeight)
+        return -1;
+    const int row = (y - headerHeight) / kLayerRowHeight;
+    return row < static_cast<int>(_rows.size()) ? row : -1;
+}
+
+int TimelineGrid::frameAt(int x) const
+{
+    return std::max(0, x / (20 + 1));
+}
+
+FrameSelection TimelineGrid::selection() const
+{
+    FrameSelection selection;
+    if (!_hasSelection)
+        return selection;
+    const int top = std::min(_anchorRow, _focusRow);
+    const int bottom = std::max(_anchorRow, _focusRow);
+    for (int row = top; row <= bottom && row < static_cast<int>(_rows.size()); ++row)
+    {
+        const fla::Layer* layer = _rows[row].layer;
+        if (layer && layer->layerType != fla::Layer::Type::Folder)
+            selection.layers.push_back(layer);
+    }
+    selection.first = std::min(_anchorFrame, _focusFrame);
+    selection.last = std::max(_anchorFrame, _focusFrame);
+    return selection;
+}
+
+void TimelineGrid::clearSelection()
+{
+    _hasSelection = false;
+    update();
+}
+
 void TimelineGrid::mousePressEvent(QMouseEvent* event)
 {
-    if (event->button() == Qt::LeftButton)
+    if (event->button() != Qt::LeftButton && event->button() != Qt::RightButton)
     {
-        _isDragging = true;
-        updatePlayerFromMouse(event->pos().x());
-
-        // The row under the press is a layer, which becomes current as it
-        // does in Animate. Rows are the layers list's, lane for lane.
-        const int headerHeight = 25;
-        const int layerRowHeight = kLayerRowHeight;
-        const int row = (event->pos().y() - headerHeight) / layerRowHeight;
-        if (event->pos().y() >= headerHeight && row >= 0 && row < static_cast<int>(_rows.size()))
-            emit layerPressed(_rows[row].timeline, _rows[row].layerIndex);
+        QWidget::mousePressEvent(event);
+        return;
     }
-    QWidget::mousePressEvent(event);
+
+    const int row = rowAt(event->pos().y());
+    const int frame = frameAt(event->pos().x());
+
+    if (row < 0)
+    {
+        // The ruler scrubs the playhead.
+        if (event->button() == Qt::LeftButton)
+        {
+            _isDragging = true;
+            updatePlayerFromMouse(event->pos().x());
+        }
+        QWidget::mousePressEvent(event);
+        return;
+    }
+
+    // The row under the press is a layer, which becomes current as it
+    // does in Animate. Rows are the layers list's, lane for lane.
+    emit layerPressed(_rows[row].timeline, _rows[row].layerIndex);
+
+    // A right-click inside the selection keeps it for the menu.
+    const FrameSelection current = selection();
+    const bool insideSelection = _hasSelection &&
+        row >= std::min(_anchorRow, _focusRow) && row <= std::max(_anchorRow, _focusRow) &&
+        frame >= current.first && frame <= current.last;
+    if (event->button() == Qt::RightButton && insideSelection)
+        return;
+
+    // Pressing a keyframe that is already selected on its own picks it up
+    // to drag, as Animate does.
+    const fla::Layer* layer = _rows[row].layer;
+    bool onKeyframe = false;
+    if (layer && event->button() == Qt::LeftButton)
+    {
+        for (const fla::Frame* candidate : layer->frames)
+            onKeyframe = onKeyframe || (candidate && candidate->index == frame);
+    }
+    const bool singleSelected = _hasSelection && _anchorRow == row && _focusRow == row &&
+        _anchorFrame == frame && _focusFrame == frame;
+    if (onKeyframe && singleSelected)
+    {
+        _movingKeyframe = true;
+        _moveRow = row;
+        _moveFrom = frame;
+        _moveTo = frame;
+        update();
+        return;
+    }
+
+    if ((event->modifiers() & Qt::ShiftModifier) && _hasSelection)
+    {
+        _focusRow = row;
+        _focusFrame = frame;
+    }
+    else
+    {
+        _hasSelection = true;
+        _anchorRow = _focusRow = row;
+        _anchorFrame = _focusFrame = frame;
+    }
+    _selecting = event->button() == Qt::LeftButton;
+    if (_player)
+        _player->setCurrentFrame(frame);
+    update();
 }
 
 void TimelineGrid::mouseMoveEvent(QMouseEvent* event)
@@ -409,6 +512,26 @@ void TimelineGrid::mouseMoveEvent(QMouseEvent* event)
     if (_isDragging)
     {
         updatePlayerFromMouse(event->pos().x());
+    }
+    else if (_movingKeyframe)
+    {
+        const int to = frameAt(event->pos().x());
+        if (to != _moveTo)
+        {
+            _moveTo = to;
+            update();
+        }
+    }
+    else if (_selecting)
+    {
+        const int row = rowAt(std::max(event->pos().y(), 25));
+        const int frame = frameAt(event->pos().x());
+        if (row >= 0 && (row != _focusRow || frame != _focusFrame))
+        {
+            _focusRow = row;
+            _focusFrame = frame;
+            update();
+        }
     }
     QWidget::mouseMoveEvent(event);
 }
@@ -418,8 +541,26 @@ void TimelineGrid::mouseReleaseEvent(QMouseEvent* event)
     if (event->button() == Qt::LeftButton)
     {
         _isDragging = false;
+        _selecting = false;
+        if (_movingKeyframe)
+        {
+            _movingKeyframe = false;
+            if (_moveTo != _moveFrom && _moveRow < static_cast<int>(_rows.size()))
+            {
+                // The selection follows the keyframe to where it lands.
+                _anchorFrame = _focusFrame = _moveTo;
+                emit keyframeMoveRequested(_rows[_moveRow].layer, _moveFrom, _moveTo);
+            }
+            update();
+        }
     }
     QWidget::mouseReleaseEvent(event);
+}
+
+void TimelineGrid::contextMenuEvent(QContextMenuEvent* event)
+{
+    if (rowAt(event->pos().y()) >= 0)
+        emit contextMenuRequested(event->globalPos());
 }
 
 void TimelineGrid::paintEvent(QPaintEvent* event)
@@ -546,6 +687,32 @@ void TimelineGrid::paintEvent(QPaintEvent* event)
             painter.drawText(QRect(x, 2, cellStride * 3, headerHeight - 8),
                 Qt::AlignLeft | Qt::AlignVCenter, QString::number(number));
         }
+    }
+
+    // The selected frames, tinted as Animate tints them.
+    if (_hasSelection && !_rows.empty())
+    {
+        const int top = std::min(_anchorRow, _focusRow);
+        const int bottom = std::min(std::max(_anchorRow, _focusRow), static_cast<int>(_rows.size()) - 1);
+        const int first = std::min(_anchorFrame, _focusFrame);
+        const int last = std::max(_anchorFrame, _focusFrame);
+        const QRect block(first * cellStride, headerHeight + top * layerRowHeight,
+            (last - first + 1) * cellStride - margin, (bottom - top) * layerRowHeight + frameHeight);
+        painter.setRenderHint(QPainter::Antialiasing, false);
+        painter.fillRect(block, QColor(41, 128, 238, 110));
+        painter.setPen(QPen(QColor(41, 128, 238), 1.0));
+        painter.setBrush(Qt::NoBrush);
+        painter.drawRect(block.adjusted(0, 0, -1, -1));
+    }
+
+    // A keyframe being dragged shows where it would land.
+    if (_movingKeyframe && _moveTo != _moveFrom)
+    {
+        const QRect ghost(_moveTo * cellStride, headerHeight + _moveRow * layerRowHeight, frameWidth, frameHeight);
+        painter.setRenderHint(QPainter::Antialiasing, false);
+        painter.setPen(QPen(QColor(41, 128, 238), 2.0));
+        painter.setBrush(Qt::NoBrush);
+        painter.drawRect(ghost.adjusted(1, 1, -1, -1));
     }
 
     if (_player)

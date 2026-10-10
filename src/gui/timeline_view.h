@@ -1,6 +1,7 @@
 #pragma once
 
 #include "../data/fla_document.h"
+#include "timelines_panel.h"
 
 #include <QWidget>
 #include <QSplitter>
@@ -30,6 +31,13 @@ public:
     /// The current layer of the shown timeline. False when there is none.
     bool currentLayer(fla::Timeline*& timeline, int& layerIndex) const;
 
+    /// The frames selected in the grid, or an empty selection.
+    FrameSelection frameSelection() const;
+    void clearFrameSelection();
+
+    /// Redraws the grid after frames were edited.
+    void refreshFrames();
+
 signals:
     void layerVisibilityChanged(const QString& timelineName, int layerIndex, bool visible);
 
@@ -42,6 +50,8 @@ signals:
     void addLayerRequested(bool folder);
     void deleteLayerRequested();
     void layerRenamed(const fla::Timeline* timeline, int layerIndex, const QString& name);
+    void keyframeMoveRequested(const fla::Layer* layer, int from, int to);
+    void framesContextMenuRequested(const QPoint& globalPos);
 
 private:
     const fla::FLADocument* _flaDocument;
