@@ -18,6 +18,7 @@ constexpr int kFrameHeight = 21;
 #include <QHBoxLayout>
 #include <QFont>
 #include <QPainter>
+#include <QPainterPath>
 #include <QPolygonF>
 #include <QPaintEvent>
 #include <QMouseEvent>
@@ -445,7 +446,8 @@ void TimelineGrid::paintEvent(QPaintEvent* event)
     const QColor staticSpan(196, 196, 196);
     const QColor motionSpan(197, 183, 232);
     const QColor shapeSpan(186, 224, 180);
-    const QColor playheadColor(226, 60, 60);
+    // Animate's time head is blue.
+    const QColor playheadColor(41, 128, 238);
 
     painter.fillRect(event->rect(), background);
 
@@ -548,22 +550,28 @@ void TimelineGrid::paintEvent(QPaintEvent* event)
 
     if (_player)
     {
-        // The playhead: a red marker in the ruler with a red line down the
+        // The playhead: a blue marker in the ruler with a blue line down the
         // frames.
         const int currentFrame = _player->currentFrame();
         const int x = currentFrame * cellStride;
 
-        painter.fillRect(QRect(x, 0, frameWidth, headerHeight - 1), QColor(226, 60, 60, 110));
+        // A narrow rounded head in the ruler, tapering to a point, over a
+        // hairline down through the frames.
+        const double center = x + frameWidth / 2.0;
+        const double halfWidth = 4.5;
         painter.setPen(QPen(playheadColor, 1.0));
-        painter.drawLine(x + frameWidth / 2, headerHeight - 1, x + frameWidth / 2, height());
+        painter.drawLine(QPointF(center, headerHeight - 1), QPointF(center, height()));
 
         painter.setRenderHint(QPainter::Antialiasing, true);
         painter.setPen(Qt::NoPen);
         painter.setBrush(playheadColor);
-        painter.drawRect(QRectF(x + 1, 1, frameWidth - 2, headerHeight - 10));
-        painter.drawPolygon(QPolygonF({
-            QPointF(x + 1, headerHeight - 9), QPointF(x + frameWidth - 1, headerHeight - 9),
-            QPointF(x + frameWidth / 2.0, headerHeight - 2)
-        }));
+        QPainterPath head;
+        head.addRoundedRect(QRectF(center - halfWidth, 2, 2 * halfWidth, headerHeight - 10), 2.0, 2.0);
+        head.moveTo(center - halfWidth, headerHeight - 9);
+        head.lineTo(center + halfWidth, headerHeight - 9);
+        head.lineTo(center, headerHeight - 3);
+        head.closeSubpath();
+        head.setFillRule(Qt::WindingFill);
+        painter.drawPath(head);
     }
 }
