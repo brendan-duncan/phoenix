@@ -80,6 +80,7 @@ StrokeStyle* cloneStroke(const StrokeStyle* stroke, DOMElement* parent)
     case StrokeStyle::Style::Ragged:  copy = new RaggedStroke(parent); break;
     case StrokeStyle::Style::Stipple: copy = new StippleStroke(parent); break;
     case StrokeStyle::Style::Dotted:  copy = new DottedStroke(parent); break;
+    case StrokeStyle::Style::Hatched: copy = new HatchedStroke(parent); break;
     case StrokeStyle::Style::Solid:   copy = new SolidStroke(parent); break;
     }
 
@@ -96,6 +97,7 @@ StrokeStyle* cloneStroke(const StrokeStyle* stroke, DOMElement* parent)
     copy->dash1 = stroke->dash1;
     copy->dash2 = stroke->dash2;
     copy->dotSpace = stroke->dotSpace;
+    copy->styleAttributes = stroke->styleAttributes;
     copy->fill = cloneFill(stroke->fill, copy);
     return copy;
 }

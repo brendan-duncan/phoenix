@@ -1,5 +1,6 @@
 #include "phoenix_view.h"
 #include "filters.h"
+#include "stroke_effects.h"
 #include "library_panel.h"
 #include <QMimeData>
 #include <QDropEvent>
@@ -1564,6 +1565,29 @@ QPen PhoenixView::getPen(const fla::StrokeStyle* strokeStyle, bool scaleForEleme
     return pen;
 }
 
+void PhoenixView::paintEntry(QPainter& painter, const PathCacheEntry& entry)
+{
+    if (_outlineColor.isValid())
+    {
+        // Outline view: the fill's boundary and the stroke's center line,
+        // both as a hairline in the layer color.
+        painter.setBrush(Qt::NoBrush);
+        painter.setPen(QPen(_outlineColor, 0.0));
+        painter.drawPath(entry.painterPath);
+        return;
+    }
+    if (!entry.effectPath.isEmpty())
+    {
+        painter.setPen(Qt::NoPen);
+        painter.setBrush(entry.pen.brush());
+        painter.drawPath(entry.effectPath);
+        return;
+    }
+    painter.setBrush(entry.fillBrush);
+    painter.setPen(penForHere(entry));
+    painter.drawPath(entry.painterPath);
+}
+
 QPen PhoenixView::penForHere(const PathCacheEntry& entry) const
 {
     const fla::StrokeStyle* stroke = entry.strokeStyle;
@@ -2515,7 +2539,10 @@ void PhoenixView::buildShapePaths(const fla::Shape* shape, PathCacheList& cacheE
             if (pointsMatch(runEnd, runStart))
                 strokePath.closeSubpath();
 
-            cacheEntries.push_back({ QBrush(Qt::NoBrush), pen, strokePath, strokeStyle });
+            PathCacheEntry entry{ QBrush(Qt::NoBrush), pen, strokePath, strokeStyle };
+            if (StrokeEffects::isProcedural(*strokeStyle))
+                entry.effectPath = StrokeEffects::outline(strokePath, *strokeStyle);
+            cacheEntries.push_back(entry);
         }
     }
 }
@@ -2556,19 +2583,7 @@ void PhoenixView::drawShape(QPainter& painter, const fla::Shape* shape, const fl
             PathCacheList entries;
             buildShapePaths(morphed.get(), entries);
             for (const PathCacheEntry& entry : entries)
-            {
-                if (_outlineColor.isValid())
-                {
-                    painter.setBrush(Qt::NoBrush);
-                    painter.setPen(QPen(_outlineColor, 0.0));
-                }
-                else
-                {
-                    painter.setBrush(entry.fillBrush);
-                    painter.setPen(penForHere(entry));
-                }
-                painter.drawPath(entry.painterPath);
-            }
+                paintEntry(painter, entry);
             if (isSelected)
                 drawOverlayPoints(painter, shape);
             return;
@@ -2576,21 +2591,7 @@ void PhoenixView::drawShape(QPainter& painter, const fla::Shape* shape, const fl
     }
 
     for (const PathCacheEntry& entry : shapePaths(shape))
-    {
-        if (_outlineColor.isValid())
-        {
-            // Outline view: the fill's boundary and the stroke's center line,
-            // both as a hairline in the layer color.
-            painter.setBrush(Qt::NoBrush);
-            painter.setPen(QPen(_outlineColor, 0.0));
-        }
-        else
-        {
-            painter.setBrush(entry.fillBrush);
-            painter.setPen(penForHere(entry));
-        }
-        painter.drawPath(entry.painterPath);
-    }
+        paintEntry(painter, entry);
 
     // Control points on a tree-selected shape are an inspection aid, so they
     // come with the bounding-box debug view rather than the look of a selection.

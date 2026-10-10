@@ -577,7 +577,15 @@ private:
 
         /// The fill style index a fill entry paints, or -1 for a stroke.
         int fillIndex = -1;
+
+        /// For a ragged, stipple or hatched stroke, the area its marks
+        /// cover, filled with the pen's color in place of stroking.
+        QPainterPath effectPath;
     };
+
+    /// Paints one cached entry: its fill and stroke, or its procedural
+    /// marks, or in outline view its outline.
+    void paintEntry(QPainter& painter, const PathCacheEntry& entry);
     typedef QList<PathCacheEntry> PathCacheList;
 
     /// A cached stroke entry's pen with its width set for the element being drawn.

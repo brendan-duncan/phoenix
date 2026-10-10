@@ -63,6 +63,7 @@ public:
         DashedStroke,
         RaggedStroke,
         StippleStroke,
+        HatchedStroke,
         DottedStroke,
         SwatchList,
         SolidSwatch,
@@ -119,7 +120,7 @@ public:
     {
         DOMType type = domType();
         return type == DOMType::SolidStroke || type == DOMType::DashedStroke || type == DOMType::RaggedStroke ||
-            type == DOMType::StippleStroke || type == DOMType::DottedStroke;
+            type == DOMType::StippleStroke || type == DOMType::DottedStroke || type == DOMType::HatchedStroke;
     }
 
     bool isSwatchType() const

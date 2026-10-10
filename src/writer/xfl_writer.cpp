@@ -207,6 +207,7 @@ const char* strokeTagName(StrokeStyle::Style style)
     case StrokeStyle::Style::Ragged: return "RaggedStroke";
     case StrokeStyle::Style::Stipple: return "StippleStroke";
     case StrokeStyle::Style::Dotted: return "DottedStroke";
+    case StrokeStyle::Style::Hatched: return "HatchedStroke";
     case StrokeStyle::Style::Solid: break;
     }
     return "SolidStroke";
@@ -338,6 +339,8 @@ void XFLWriter::writeStrokeStyle(const StrokeStyle& stroke, XMLElement* parent)
     }
     if (stroke.style() == StrokeStyle::Style::Dotted)
         setDouble(node, "dotSpace", stroke.dotSpace, 3.0);
+    for (const auto& entry : stroke.styleAttributes)
+        node->SetAttribute(entry.first.c_str(), entry.second.c_str());
 
     if (stroke.fill)
     {

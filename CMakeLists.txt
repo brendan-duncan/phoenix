@@ -181,6 +181,7 @@ set(SOURCES
     src/gui/navigation_tools.cpp
     src/gui/draw_placement.cpp
     src/gui/filters.cpp
+    src/gui/stroke_effects.cpp
     src/gui/lines_to_fills.cpp
     src/gui/shape_outline.cpp
     src/gui/fill_offset.cpp

@@ -1,6 +1,9 @@
 #pragma once
 
 #include "dom_element.h"
+
+#include <map>
+#include <string>
 #include "solid_color.h"
 #include "fill_style.h"
 #include <string>
@@ -16,7 +19,8 @@ public:
         Dashed,
         Ragged,
         Stipple,
-        Dotted
+        Dotted,
+        Hatched
     };
 
     double weight = 1.0;
@@ -40,6 +44,12 @@ public:
 
     /// Gap between the dots of a DottedStroke, in pixels.
     double dotSpace = 3.0;
+
+    /// The settings of a ragged, stipple or hatched stroke, by attribute
+    /// name as the file spells them ("waveHeight" = "wavy", "dotSize" =
+    /// "small", "hatchThickness" = "thick"...), kept so they draw and are
+    /// written back as read.
+    std::map<std::string, std::string> styleAttributes;
 
     FillStyle* fill = nullptr;
 
@@ -116,6 +126,22 @@ public:
     static DOMType staticDomType() { return DOMType::StippleStroke; }
 
     Style style() const override { return Style::Stipple; }
+};
+
+class HatchedStroke : public StrokeStyle
+{
+public:
+    HatchedStroke(DOMElement* parent)
+        : StrokeStyle(parent)
+    {}
+
+    std::string domTypeName() const override { return "HatchedStroke"; }
+
+    DOMType domType() const override { return DOMType::HatchedStroke; }
+
+    static DOMType staticDomType() { return DOMType::HatchedStroke; }
+
+    Style style() const override { return Style::Hatched; }
 };
 
 class DottedStroke : public StrokeStyle

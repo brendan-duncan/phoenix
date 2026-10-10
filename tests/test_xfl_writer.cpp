@@ -576,6 +576,31 @@ TEST(xfl_writes_document_metadata_back_as_read)
     CHECK(written.find("<swatchLists") < written.find("<scripts"));
 }
 
+TEST(xfl_round_trips_procedural_stroke_settings)
+{
+    std::unique_ptr<fla::Document> document = parseDocumentText(
+        "<DOMDocument xmlns='http://ns.adobe.com/xfl/2008/' width='550' height='400'>"
+        "<timelines><DOMTimeline name='Scene 1'><layers>"
+        "<DOMLayer name='Layer 1'><frames><DOMFrame index='0'><elements>"
+        "<DOMShape><strokes>"
+        "<StrokeStyle index='1'><HatchedStroke weight='8' hatchThickness='thick' space='close'>"
+        "<fill><SolidColor color='#000000'/></fill></HatchedStroke></StrokeStyle>"
+        "<StrokeStyle index='2'><RaggedStroke weight='3' waveHeight='wild'>"
+        "<fill><SolidColor color='#000000'/></fill></RaggedStroke></StrokeStyle>"
+        "</strokes><edges><Edge strokeStyle='1' edges='!0 0|1000 0'/><Edge strokeStyle='2' edges='!0 200|1000 200'/></edges>"
+        "</DOMShape></elements></DOMFrame></frames></DOMLayer>"
+        "</layers></DOMTimeline></timelines></DOMDocument>");
+    CHECK(document != nullptr);
+    if (!document)
+        return;
+    XFLWriter writer;
+    const std::string written = writer.writeDocument(*document);
+    CHECK(written.find("<HatchedStroke") != std::string::npos);
+    CHECK(written.find("hatchThickness=\"thick\"") != std::string::npos);
+    CHECK(written.find("space=\"close\"") != std::string::npos);
+    CHECK(written.find("waveHeight=\"wild\"") != std::string::npos);
+}
+
 TEST(xfl_round_trips_shapes)
 {
     checkRoundTrip(

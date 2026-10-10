@@ -877,12 +877,13 @@ All in `phoenix_view.cpp` unless noted.
       gets a cap and corners never join. Chain consecutive edges of one style
       into a path first
   - Done, see step 14
-- [ ] Stroke styles map to Qt's fixed patterns (`:936-957`); the XFL dash1/dash2
+- [x] Stroke styles map to Qt's fixed patterns (`:936-957`); the XFL dash1/dash2
       lengths, dotted spacing, ragged, stipple and hatched (no class at all) are
       ignored. A custom dasher walks each subpath by arc length, restarts per
       subpath, and turns zero-length dashes into dots shaped by the cap
       (VectorCraft `effects/src/stroke/dash.rs:47, 174, 311`)
   - Partly stale (noted 2026-10-10): dash1/dash2 and the dotted spacing are honored through Qt's dash pattern in pen-width units. Still open: ragged, stipple and hatched strokes are stand-ins (Qt's dash-dot patterns) rather than Animate's procedural looks, and hatched has no class
+  - Done 2026-10-10 (`src/gui/stroke_effects.cpp`): ragged, stipple and hatched strokes are drawn from the stroke's centerline as filled marks, seeded from the geometry so they look the same on every paint: ragged wavers by its wave height and length (random patterns jitter, dotted ones break into dots), stipple scatters dots of its size, variation and density across the stroke's width, hatched lays marks across the line with its thickness, spacing, jiggle, rotation and length variation. Their settings are kept in `StrokeStyle::styleAttributes` and written back. `HatchedStroke` was not recognized at all, which made a shape using one fail to parse: MAD2_80Punkbed_characters_05.fla reported seven unhandled strokes and now loads them (its brows are hatched). Test file `D:/fla/stroke_styles_test.fla`; round-trip test in `test_xfl_writer.cpp`
 - [x] Color transforms (`:723-755, :2772-2884`) render the instance into a
       stage-sized image with only its own matrix (`:736`), so the parent
       transform is dropped, content off the stage is clipped, and the result is
