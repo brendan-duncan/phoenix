@@ -84,7 +84,9 @@ python tools/qt/make_qt_archive.py --target linux-x64 --version 6.11.2 --fetch -
 ```
 
 `--fetch` downloads the kit with [aqtinstall](https://github.com/miurahr/aqtinstall)
-(`pip install aqtinstall`). Build the macOS and Linux archives on that OS,
+(`pip install aqtinstall`). Every archive carries the Qt licence texts, taken
+from the installer's `Licenses` folder when there is one and otherwise from
+`tools/qt/licenses`. Build the macOS and Linux archives on that OS,
 since the kits use symbolic links. The Windows arm64 kit is a cross kit whose
 tools are x64 programs, run under emulation on Windows on ARM; they are taken
 from an x64 kit (`--host-qtdir`, or fetched with `--fetch`) into a `host/`

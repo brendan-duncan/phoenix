@@ -275,12 +275,14 @@ class Trim:
     def copy_licenses(self):
         # The online installer keeps the licences two levels up, beside the
         # version folders; a kit from aqt keeps them one level up.
+        # A kit from aqt has none, so the texts kept in the repository
+        # (copied from an installer's Licenses folder) stand in.
         for candidate in (self.qtdir.parent.parent / "Licenses", self.qtdir.parent / "Licenses",
-                          self.qtdir / "Licenses"):
+                          self.qtdir / "Licenses", Path(__file__).resolve().parent / "licenses"):
             if candidate.exists():
                 shutil.copytree(candidate, self.out / "licenses", dirs_exist_ok=True)
                 return
-        log("warning: no Licenses folder found next to the kit; add the Qt licence texts by hand")
+        log("warning: no Qt licence texts found; add them to the archive by hand")
 
 
 def copy_host_tools(host_qtdir, out):
@@ -308,14 +310,19 @@ def copy_host_tools(host_qtdir, out):
 def fetch_kit(version, target, into):
     """Downloads the kit with aqtinstall; returns the kit directory."""
     host, arch, _ = TARGETS[target]
+    # Qt Svg is one of the base archives in Qt 6, not an add-on module. The
+    # Linux kits also split ICU and the Wayland plugins into archives of
+    # their own; asking for an archive a kit does not have is refused, so
+    # the list is read from aqt first.
+    listing = subprocess.run([sys.executable, "-m", "aqt", "list-qt", host, "desktop",
+                              "--archives", version, arch], capture_output=True, text=True)
+    available = set(listing.stdout.split()) if listing.returncode == 0 else set()
+    wanted = ["qtbase", "qtsvg", "icu", "qtwayland"]
+    archives = [name for name in wanted if name in available] if available else ["qtbase", "qtsvg"]
     command = [sys.executable, "-m", "aqt", "install-qt", host, "desktop", version, arch,
-               "--outputdir", str(into), "-m", "qtsvg", "--archives", "qtbase", "icu"]
+               "--outputdir", str(into), "--archives"] + archives
     log(" ".join(command))
-    result = subprocess.run(command)
-    if result.returncode != 0:
-        # Kits without a separate icu archive refuse the name.
-        command.remove("icu")
-        subprocess.run(command, check=True)
+    subprocess.run(command, check=True)
     kits = [p for p in (Path(into) / version).iterdir() if p.is_dir()]
     if len(kits) != 1:
         sys.exit(f"expected one kit under {into}/{version}, found {kits}")

@@ -3,3 +3,4 @@ third_party/qt/
 dist/
 build-*/
 __pycache__/
+aqtinstall.log
