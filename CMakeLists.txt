@@ -269,14 +269,21 @@ add_subdirectory(tests)
 
 # Copy Qt DLLs to build directory
 if(WIN32)
-    # Get Qt installation path
+    # windeployqt lives with the build tools, which for a cross kit (arm64
+    # built on x64) is the host kit; told where the target kit's qtpaths is,
+    # it deploys that kit's libraries and plugins rather than its own.
     get_target_property(QT_QMAKE_EXECUTABLE Qt6::qmake IMPORTED_LOCATION)
     get_filename_component(QT_WINDEPLOYQT_EXECUTABLE ${QT_QMAKE_EXECUTABLE} PATH)
     set(QT_WINDEPLOYQT_EXECUTABLE "${QT_WINDEPLOYQT_EXECUTABLE}/windeployqt.exe")
 
+    set(PHOENIX_WINDEPLOYQT_ARGS --no-translations)
+    if(QT6_INSTALL_PREFIX AND EXISTS "${QT6_INSTALL_PREFIX}/bin/qtpaths.exe")
+        list(APPEND PHOENIX_WINDEPLOYQT_ARGS --qtpaths "${QT6_INSTALL_PREFIX}/bin/qtpaths.exe")
+    endif()
+
     # Add custom target to deploy Qt DLLs
     add_custom_command(TARGET Phoenix POST_BUILD
-        COMMAND ${QT_WINDEPLOYQT_EXECUTABLE} --no-translations $<TARGET_FILE:Phoenix>
+        COMMAND ${QT_WINDEPLOYQT_EXECUTABLE} ${PHOENIX_WINDEPLOYQT_ARGS} $<TARGET_FILE:Phoenix>
         COMMENT "Deploying Qt libraries"
     )
 endif()

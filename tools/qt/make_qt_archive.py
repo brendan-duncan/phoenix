@@ -313,6 +313,19 @@ def copy_host_tools(host_qtdir, out):
                         host.copy_ref(ref)
     host.prune_broken_configs()
 
+    # windeployqt asks qtpaths where the target kit's libraries are, and a
+    # qtpaths answers with its own location, so the target kit gets one of
+    # its own: the host's copy, which Windows on ARM runs under emulation,
+    # unless the kit already carries a native one.
+    target_qtpaths = out / "bin" / "qtpaths.exe"
+    host_qtpaths = out / "host" / "bin" / "qtpaths.exe"
+    if not target_qtpaths.exists() and host_qtpaths.exists():
+        target_qtpaths.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(host_qtpaths, target_qtpaths)
+        for dll in (out / "host" / "bin").glob("Qt6Core*.dll"):
+            if not (out / "bin" / dll.name).exists():
+                shutil.copy2(dll, out / "bin" / dll.name)
+
 
 # Qt's download server, laid out as the online installer reads it.
 QT_REPOSITORY = "https://download.qt.io/online/qtsdkrepository"
