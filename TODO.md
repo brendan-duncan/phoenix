@@ -19,7 +19,8 @@ Status legend: `[ ]` todo · `[~]` in progress · `[x]` done
       so the app and the tests share one source list
 - [x] Restore a buildable Qt environment (see "Build environment" below)
   - Done 2026-10-10: the build no longer depends on an installed Qt. `cmake/PhoenixQt.cmake` downloads a trimmed Qt (made by `tools/qt/make_qt_archive.py`, about 40 MB for Windows x64) into `third_party/qt/` when none is found, with the version and hashes pinned in `cmake/QtArchives.cmake`. Checked by configuring and building from the archive alone with the installed Qt ignored. Archives for windows-arm64, macos, linux-x64 and linux-arm64 still have to be built on those machines and uploaded
-- [ ] Run the Qt archives workflow (`.github/workflows/qt-archives.yml`, added 2026-10-10) for 6.11.2 and merge its pin PR: it makes the archives for all five targets, builds Phoenix from each on the matching runner, publishes them to the `qt-6.11.2` release and pins the hashes. The macOS and Linux builds of Phoenix have never been tried, so the verify jobs there may surface portability work unrelated to Qt
+- [x] Run the Qt archives workflow (`.github/workflows/qt-archives.yml`, added 2026-10-10) for 6.11.2 and merge its pin PR: it makes the archives for all five targets, builds Phoenix from each on the matching runner, publishes them to the `qt-6.11.2` release and pins the hashes. The macOS and Linux builds of Phoenix have never been tried, so the verify jobs there may surface portability work unrelated to Qt
+  - Done 2026-10-10: the workflow made, verified and published all five archives on the `qt-6.11.2` release, and their hashes are pinned in `cmake/QtArchives.cmake`
 
 ## 1. Editing infrastructure
 
