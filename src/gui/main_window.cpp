@@ -1068,228 +1068,165 @@ bool MainWindow::confirmDiscardChanges()
 
 void MainWindow::setupToolBar()
 {
-    QToolBar* toolBar = addToolBar("Tools");
+    // Animate's toolbox: one column down the left of the stage, the tools in
+    // groups, a slot with hidden siblings opening them on a long press.
+    QToolBar* toolBar = new QToolBar("Tools", this);
     toolBar->setObjectName("toolsToolBar");
     toolBar->setMovable(false);
-    // Icons only: nine tools named in full make a very wide bar, and the name
-    // stays available as a tooltip.
+    toolBar->setOrientation(Qt::Vertical);
     toolBar->setToolButtonStyle(Qt::ToolButtonIconOnly);
     toolBar->setIconSize(QSize(22, 22));
+    addToolBar(Qt::LeftToolBarArea, toolBar);
 
     // One action group so the tools behave like a radio button set, the way a
     // toolbox does.
     QActionGroup* toolGroup = new QActionGroup(this);
     toolGroup->setExclusive(true);
 
-    QAction* selectionAction = new QAction(
-        ToolIcons::icon(ToolIcons::Tool::Selection), "Selection", this);
-    selectionAction->setCheckable(true);
-    selectionAction->setChecked(true);
-    selectionAction->setShortcut(QKeySequence(Qt::Key_V));
-    selectionAction->setStatusTip(
-        "Select objects. Shift-click to add, drag to sweep a marquee.");
-    connect(selectionAction, &QAction::triggered, this, [this]() {
-        _phoenixView->setActiveTool(_selectionTool.get());
-    });
-    toolGroup->addAction(selectionAction);
-    toolBar->addAction(selectionAction);
-
-    QAction* subselectionAction = new QAction(
-        ToolIcons::icon(ToolIcons::Tool::Subselection), "Subselection", this);
-    subselectionAction->setCheckable(true);
-    subselectionAction->setShortcut(QKeySequence(Qt::Key_A));
-    subselectionAction->setStatusTip(
-        "Show a shape's anchors and drag them. Alt breaks a smooth point's tangent.");
-    connect(subselectionAction, &QAction::triggered, this, [this]() {
-        _phoenixView->setActiveTool(_subselectionTool.get());
-    });
-    toolGroup->addAction(subselectionAction);
-    toolBar->addAction(subselectionAction);
-
-    QAction* freeTransformAction = new QAction(
-        ToolIcons::icon(ToolIcons::Tool::FreeTransform), "Free Transform", this);
-    freeTransformAction->setCheckable(true);
-    freeTransformAction->setShortcut(QKeySequence(Qt::Key_Q));
-    freeTransformAction->setStatusTip(
-        "Move, scale, rotate and skew the selection. Shift constrains, Escape cancels.");
-    connect(freeTransformAction, &QAction::triggered, this, [this]() {
-        _freeTransformTool->resetBox();
-        _phoenixView->setActiveTool(_freeTransformTool.get());
-    });
-    toolGroup->addAction(freeTransformAction);
-    toolBar->addAction(freeTransformAction);
-
-    QAction* lassoAction = new QAction(ToolIcons::icon(ToolIcons::Tool::Lasso), "Lasso", this);
-    lassoAction->setCheckable(true);
-    lassoAction->setShortcut(QKeySequence(Qt::Key_L));
-    lassoAction->setStatusTip("Draw a loop round the objects to select. Shift adds to the selection.");
-    connect(lassoAction, &QAction::triggered, this, [this]() {
-        _phoenixView->setActiveTool(_lassoTool.get());
-    });
-    toolGroup->addAction(lassoAction);
-    toolBar->addAction(lassoAction);
-
-    toolBar->addSeparator();
-
-    // The shape tools all behave the same way, so they are wired from a table
-    // rather than four near-identical blocks.
-    struct ShapeEntry
-    {
-        const char* label;
-        ToolIcons::Tool icon;
-        Qt::Key shortcut;
-        const char* tip;
-        std::unique_ptr<PrimitiveTool>* tool;
-    };
-
-    const ShapeEntry shapes[] = {
-        {"Rectangle", ToolIcons::Tool::Rectangle, Qt::Key_R,
-            "Drag to draw a rectangle. Shift for a square.", &_rectangleTool},
-        {"Oval", ToolIcons::Tool::Oval, Qt::Key_O,
-            "Drag to draw an oval. Shift for a circle.", &_ovalTool},
-        {"Line", ToolIcons::Tool::Line, Qt::Key_N,
-            "Drag to draw a line. Shift for 45 degree steps.", &_lineTool},
-        {"PolyStar", ToolIcons::Tool::PolyStar, Qt::Key_Y,
-            "Drag from the center outwards. Sides and star mode are in the "
-            "Properties panel.", &_polyStarTool},
-        {"Rectangle Primitive", ToolIcons::Tool::RectanglePrimitive, Qt::Key_unknown,
-            "Drag to draw an editable rectangle object with corner radii.",
-            &_rectanglePrimitiveTool},
-        {"Oval Primitive", ToolIcons::Tool::OvalPrimitive, Qt::Key_unknown,
-            "Drag to draw an editable oval object with start and end angles.",
-            &_ovalPrimitiveTool},
-    };
-
-    for (const ShapeEntry& shape : shapes)
-    {
-        QAction* action = new QAction(ToolIcons::icon(shape.icon), shape.label, this);
+    // A tool's action: checkable, in the group, with its key, and known to
+    // the window so the key works even when the action sits in a flyout.
+    const auto makeTool = [this, toolGroup](ToolIcons::Tool icon, const char* name, Qt::Key key,
+                              const char* tip, std::function<Tool*()> tool) {
+        QAction* action = new QAction(ToolIcons::icon(icon), name, this);
         action->setCheckable(true);
-        if (shape.shortcut != Qt::Key_unknown)
-            action->setShortcut(QKeySequence(shape.shortcut));
-        action->setStatusTip(shape.tip);
-        std::unique_ptr<PrimitiveTool>* tool = shape.tool;
+        if (key != Qt::Key_unknown)
+        {
+            action->setShortcut(QKeySequence(key));
+            action->setToolTip(QString("%1 (%2)").arg(name).arg(QKeySequence(key).toString()));
+        }
+        else
+        {
+            action->setToolTip(name);
+        }
+        action->setStatusTip(tip);
         connect(action, &QAction::triggered, this, [this, tool]() {
-            _phoenixView->setActiveTool(tool->get());
+            _phoenixView->setActiveTool(tool());
         });
         toolGroup->addAction(action);
-        toolBar->addAction(action);
-    }
+        addAction(action);
+        return action;
+    };
+
+    // A slot in the column: one tool, or a group whose first tool shows and
+    // whose others open on a long press, the chosen one taking the slot.
+    const auto addSlot = [this, toolBar](const std::vector<QAction*>& actions) {
+        if (actions.size() == 1)
+        {
+            toolBar->addAction(actions.front());
+            return;
+        }
+        QToolButton* button = new QToolButton(toolBar);
+        button->setPopupMode(QToolButton::DelayedPopup);
+        button->setDefaultAction(actions.front());
+        QMenu* flyout = new QMenu(button);
+        for (QAction* action : actions)
+        {
+            flyout->addAction(action);
+            connect(action, &QAction::triggered, button, [button, action]() {
+                button->setDefaultAction(action);
+            });
+        }
+        button->setMenu(flyout);
+        toolBar->addWidget(button);
+    };
+
+    QAction* selectionAction = makeTool(ToolIcons::Tool::Selection, "Selection", Qt::Key_V,
+        "Select objects. Shift-click to add, drag to sweep a marquee.",
+        [this]() -> Tool* { return _selectionTool.get(); });
+    selectionAction->setChecked(true);
+    addSlot({selectionAction});
+    addSlot({makeTool(ToolIcons::Tool::Subselection, "Subselection", Qt::Key_A,
+        "Click a path to show its anchors, then drag anchors and handles. Shift-click adds.",
+        [this]() -> Tool* { return _subselectionTool.get(); })});
+    addSlot({makeTool(ToolIcons::Tool::FreeTransform, "Free Transform", Qt::Key_Q,
+        "Scale, rotate and skew the selection by its handles.",
+        [this]() -> Tool* { return _freeTransformTool.get(); })});
+    addSlot({makeTool(ToolIcons::Tool::Lasso, "Lasso", Qt::Key_L,
+        "Draw a loop round the objects to select. Shift adds to the selection.",
+        [this]() -> Tool* { return _lassoTool.get(); })});
 
     toolBar->addSeparator();
 
-    QAction* penAction = new QAction(
-        ToolIcons::icon(ToolIcons::Tool::Pen), "Pen", this);
-    penAction->setCheckable(true);
     // P for the pen, as in Animate. B is already the bounding-box toggle, and a
     // clash leaves Qt firing neither.
-    penAction->setShortcut(QKeySequence(Qt::Key_P));
-    penAction->setStatusTip(
+    addSlot({makeTool(ToolIcons::Tool::Pen, "Pen", Qt::Key_P,
         "Click for a corner point, drag for a smooth one. Alt-drag breaks the tangent, "
-        "clicking the first point closes the path, Enter finishes it open.");
-    connect(penAction, &QAction::triggered, this, [this]() {
-        _phoenixView->setActiveTool(_penTool.get());
-    });
-    toolGroup->addAction(penAction);
-    toolBar->addAction(penAction);
-
-    QAction* pencilAction = new QAction(
-        ToolIcons::icon(ToolIcons::Tool::Pencil), "Pencil", this);
-    pencilAction->setCheckable(true);
-    pencilAction->setShortcut(QKeySequence(Qt::Key_D));
-    pencilAction->setStatusTip(
-        "Draw freehand. The stroke is fitted on release; the mode is in the "
-        "Properties panel.");
-    connect(pencilAction, &QAction::triggered, this, [this]() {
-        _phoenixView->setActiveTool(_pencilTool.get());
-    });
-    toolGroup->addAction(pencilAction);
-    toolBar->addAction(pencilAction);
-
-    QAction* textAction = new QAction(ToolIcons::icon(ToolIcons::Tool::Text), "Text", this);
-    textAction->setCheckable(true);
-    textAction->setShortcut(QKeySequence(Qt::Key_T));
-    textAction->setStatusTip(
+        "clicking the first point closes the path, Enter finishes it open.",
+        [this]() -> Tool* { return _penTool.get(); })});
+    addSlot({makeTool(ToolIcons::Tool::Text, "Text", Qt::Key_T,
         "Click to start a text box that grows as you type, or drag one out to a fixed width. "
-        "Escape or a click elsewhere finishes it.");
-    connect(textAction, &QAction::triggered, this, [this]() {
-        _phoenixView->setActiveTool(_textTool.get());
+        "Escape or a click elsewhere finishes it.",
+        [this]() -> Tool* { return _textTool.get(); })});
+    addSlot({makeTool(ToolIcons::Tool::Line, "Line", Qt::Key_N,
+        "Drag to draw a line. Shift for 45 degree steps.",
+        [this]() -> Tool* { return _lineTool.get(); })});
+    addSlot({
+        makeTool(ToolIcons::Tool::Rectangle, "Rectangle", Qt::Key_R,
+            "Drag to draw a rectangle. Shift for a square.",
+            [this]() -> Tool* { return _rectangleTool.get(); }),
+        makeTool(ToolIcons::Tool::Oval, "Oval", Qt::Key_O,
+            "Drag to draw an oval. Shift for a circle.",
+            [this]() -> Tool* { return _ovalTool.get(); }),
+        makeTool(ToolIcons::Tool::RectanglePrimitive, "Rectangle Primitive", Qt::Key_unknown,
+            "Drag to draw an editable rectangle object with corner radii.",
+            [this]() -> Tool* { return _rectanglePrimitiveTool.get(); }),
+        makeTool(ToolIcons::Tool::OvalPrimitive, "Oval Primitive", Qt::Key_unknown,
+            "Drag to draw an editable oval object with start and end angles.",
+            [this]() -> Tool* { return _ovalPrimitiveTool.get(); }),
+        makeTool(ToolIcons::Tool::PolyStar, "PolyStar", Qt::Key_Y,
+            "Drag from the center outwards. Sides and star mode are in the Properties panel.",
+            [this]() -> Tool* { return _polyStarTool.get(); }),
     });
-    toolGroup->addAction(textAction);
-    toolBar->addAction(textAction);
+    addSlot({makeTool(ToolIcons::Tool::Pencil, "Pencil", Qt::Key_D,
+        "Draw freehand. The stroke is fitted on release; the mode is in the Properties panel.",
+        [this]() -> Tool* { return _pencilTool.get(); })});
+    addSlot({makeTool(ToolIcons::Tool::Brush, "Brush", Qt::Key_B,
+        "Paint a fill along the drag. The size is in the Properties panel.",
+        [this]() -> Tool* { return _brushTool.get(); })});
 
     toolBar->addSeparator();
 
-    QAction* handAction = new QAction(ToolIcons::icon(ToolIcons::Tool::Hand), "Hand", this);
-    handAction->setCheckable(true);
-    handAction->setShortcut(QKeySequence(Qt::Key_H));
-    handAction->setStatusTip("Drag to pan the stage. Holding space does the same with any tool.");
-    connect(handAction, &QAction::triggered, this, [this]() {
-        _phoenixView->setActiveTool(_handTool.get());
-    });
-    toolGroup->addAction(handAction);
-    toolBar->addAction(handAction);
-
-    QAction* brushAction = new QAction(ToolIcons::icon(ToolIcons::Tool::Brush), "Brush", this);
-    brushAction->setCheckable(true);
-    brushAction->setShortcut(QKeySequence(Qt::Key_B));
-    brushAction->setStatusTip("Paint a fill along the drag. The size is in the Properties panel.");
-    connect(brushAction, &QAction::triggered, this, [this]() {
-        _phoenixView->setActiveTool(_brushTool.get());
-    });
-    toolGroup->addAction(brushAction);
-    toolBar->addAction(brushAction);
-
-    QAction* eraserAction = new QAction(ToolIcons::icon(ToolIcons::Tool::Eraser), "Eraser", this);
-    eraserAction->setCheckable(true);
-    eraserAction->setShortcut(QKeySequence(Qt::Key_E));
-    eraserAction->setStatusTip("Erase fills and strokes along the drag from merge-drawn artwork.");
-    connect(eraserAction, &QAction::triggered, this, [this]() {
-        _phoenixView->setActiveTool(_eraserTool.get());
-    });
-    toolGroup->addAction(eraserAction);
-    toolBar->addAction(eraserAction);
-
-    _paintBucketAction = new QAction(ToolIcons::icon(ToolIcons::Tool::PaintBucket), "Paint Bucket", this);
-    _paintBucketAction->setCheckable(true);
-    _paintBucketAction->setShortcut(QKeySequence(Qt::Key_K));
-    _paintBucketAction->setStatusTip("Click inside an area to paint it with the current fill.");
-    connect(_paintBucketAction, &QAction::triggered, this, [this]() {
-        _phoenixView->setActiveTool(_paintBucketTool.get());
-    });
-    toolGroup->addAction(_paintBucketAction);
-    toolBar->addAction(_paintBucketAction);
-
-    _inkBottleAction = new QAction(ToolIcons::icon(ToolIcons::Tool::InkBottle), "Ink Bottle", this);
-    _inkBottleAction->setCheckable(true);
-    _inkBottleAction->setShortcut(QKeySequence(Qt::Key_S));
-    _inkBottleAction->setStatusTip("Click a fill to stroke its outline, or a stroke to restyle it.");
-    connect(_inkBottleAction, &QAction::triggered, this, [this]() {
-        _phoenixView->setActiveTool(_inkBottleTool.get());
-    });
-    toolGroup->addAction(_inkBottleAction);
-    toolBar->addAction(_inkBottleAction);
-
-    QAction* eyedropperAction = new QAction(ToolIcons::icon(ToolIcons::Tool::Eyedropper), "Eyedropper", this);
-    eyedropperAction->setCheckable(true);
-    eyedropperAction->setShortcut(QKeySequence(Qt::Key_I));
-    eyedropperAction->setStatusTip("Click a fill or a stroke to make it the current one.");
-    connect(eyedropperAction, &QAction::triggered, this, [this]() {
-        _phoenixView->setActiveTool(_eyedropperTool.get());
-    });
-    toolGroup->addAction(eyedropperAction);
-    toolBar->addAction(eyedropperAction);
+    _paintBucketAction = makeTool(ToolIcons::Tool::PaintBucket, "Paint Bucket", Qt::Key_K,
+        "Click inside an area to paint it with the current fill.",
+        [this]() -> Tool* { return _paintBucketTool.get(); });
+    _inkBottleAction = makeTool(ToolIcons::Tool::InkBottle, "Ink Bottle", Qt::Key_S,
+        "Click a fill to stroke its outline, or a stroke to restyle it.",
+        [this]() -> Tool* { return _inkBottleTool.get(); });
+    addSlot({_paintBucketAction, _inkBottleAction});
+    addSlot({makeTool(ToolIcons::Tool::Eyedropper, "Eyedropper", Qt::Key_I,
+        "Click a fill or a stroke to make it the current one.",
+        [this]() -> Tool* { return _eyedropperTool.get(); })});
+    addSlot({makeTool(ToolIcons::Tool::Eraser, "Eraser", Qt::Key_E,
+        "Erase fills and strokes along the drag from merge-drawn artwork.",
+        [this]() -> Tool* { return _eraserTool.get(); })});
 
     toolBar->addSeparator();
 
-    QAction* zoomAction = new QAction(ToolIcons::icon(ToolIcons::Tool::Zoom), "Zoom", this);
-    zoomAction->setCheckable(true);
-    zoomAction->setShortcut(QKeySequence(Qt::Key_Z));
-    zoomAction->setStatusTip("Click to zoom in, alt-click to zoom out, drag to zoom to an area.");
-    connect(zoomAction, &QAction::triggered, this, [this]() {
-        _phoenixView->setActiveTool(_zoomTool.get());
-    });
-    toolGroup->addAction(zoomAction);
-    toolBar->addAction(zoomAction);
+    addSlot({makeTool(ToolIcons::Tool::Hand, "Hand", Qt::Key_H,
+        "Drag to pan the stage. Holding space does the same with any tool.",
+        [this]() -> Tool* { return _handTool.get(); })});
+    addSlot({makeTool(ToolIcons::Tool::Zoom, "Zoom", Qt::Key_Z,
+        "Click to zoom in, alt-click to zoom out, drag to zoom to an area.",
+        [this]() -> Tool* { return _zoomTool.get(); })});
+
+    toolBar->addSeparator();
+
+    // The stroke and fill colors, under the tools as in Animate's toolbox.
+    _toolboxStrokeSwatch = new QToolButton(toolBar);
+    _toolboxStrokeSwatch->setIcon(PropertiesPanel::swatchIcon(_drawingStyle.strokeColor));
+    _toolboxStrokeSwatch->setIconSize(QSize(20, 20));
+    _toolboxStrokeSwatch->setAutoRaise(true);
+    _toolboxStrokeSwatch->setToolTip("Stroke color");
+    connect(_toolboxStrokeSwatch, &QToolButton::clicked, this, [this]() { chooseStyleColor(true); });
+    toolBar->addWidget(_toolboxStrokeSwatch);
+
+    _toolboxFillSwatch = new QToolButton(toolBar);
+    _toolboxFillSwatch->setIcon(PropertiesPanel::swatchIcon(_drawingStyle.fillColor));
+    _toolboxFillSwatch->setIconSize(QSize(20, 20));
+    _toolboxFillSwatch->setAutoRaise(true);
+    _toolboxFillSwatch->setToolTip("Fill color");
+    connect(_toolboxFillSwatch, &QToolButton::clicked, this, [this]() { chooseStyleColor(false); });
+    toolBar->addWidget(_toolboxFillSwatch);
 
     toolBar->addSeparator();
 
@@ -1300,13 +1237,32 @@ void MainWindow::setupToolBar()
     objectDrawingAction->setCheckable(true);
     objectDrawingAction->setChecked(_drawingStyle.objectDrawing);
     objectDrawingAction->setShortcut(QKeySequence(Qt::Key_J));
+    objectDrawingAction->setToolTip("Object Drawing (J)");
     objectDrawingAction->setStatusTip(
-        "Keep each new drawing as its own object. With this off, drawings merge: "
+        "Keep each new shape its own object. Off, shapes merge with the artwork beneath: "
         "outlines cut each other and the newer fill replaces the older.");
     connect(objectDrawingAction, &QAction::toggled, this, [this](bool on) {
         _drawingStyle.objectDrawing = on;
     });
     toolBar->addAction(objectDrawingAction);
+}
+
+void MainWindow::chooseStyleColor(bool stroke)
+{
+    uint8_t* target = stroke ? _drawingStyle.strokeColor : _drawingStyle.fillColor;
+    const QColor current(target[0], target[1], target[2], target[3]);
+    const QColor chosen = QColorDialog::getColor(current, this, stroke ? "Stroke Color" : "Fill Color",
+        QColorDialog::ShowAlphaChannel);
+    if (!chosen.isValid())
+        return;
+    target[0] = static_cast<uint8_t>(chosen.red());
+    target[1] = static_cast<uint8_t>(chosen.green());
+    target[2] = static_cast<uint8_t>(chosen.blue());
+    target[3] = static_cast<uint8_t>(chosen.alpha());
+    refreshStyleSwatches();
+    // Text being typed takes the fill color on its selection too.
+    if (!stroke && _textTool)
+        _textTool->applyColor(_drawingStyle.fillColor);
 }
 
 void MainWindow::setupPropertiesPanel()
@@ -1331,10 +1287,11 @@ void MainWindow::setupPropertiesPanel()
     // The Tool tab writes into the drawing style itself; these are the side
     // effects the window has to carry out.
     connect(_propertiesPanel, &PropertiesPanel::toolSettingChanged, this, [this](const QString& key) {
-        if (key == "fillColor")
+        if (key == "fillColor" || key == "strokeColor")
         {
+            refreshStyleSwatches();
             // Text being typed takes the color on its selection too.
-            if (_textTool)
+            if (key == "fillColor" && _textTool)
                 _textTool->applyColor(_drawingStyle.fillColor);
         }
         else if (key == "textFace")
@@ -1468,6 +1425,10 @@ void MainWindow::refreshStyleSwatches()
 {
     if (_propertiesPanel)
         _propertiesPanel->refreshStyleSwatches();
+    if (_toolboxStrokeSwatch)
+        _toolboxStrokeSwatch->setIcon(PropertiesPanel::swatchIcon(_drawingStyle.strokeColor));
+    if (_toolboxFillSwatch)
+        _toolboxFillSwatch->setIcon(PropertiesPanel::swatchIcon(_drawingStyle.fillColor));
 }
 
 void MainWindow::selectAll()

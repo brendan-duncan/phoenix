@@ -218,6 +218,15 @@ private:
     /// Redraws the fill and stroke swatches after the style changed from
     /// somewhere other than the swatch buttons, such as the eyedropper.
     void refreshStyleSwatches();
+
+    /// The toolbox's own stroke and fill swatches, under the tools as
+    /// Animate places them.
+    QToolButton* _toolboxStrokeSwatch = nullptr;
+    QToolButton* _toolboxFillSwatch = nullptr;
+
+    /// Opens the color dialog for the stroke or the fill and applies the
+    /// choice everywhere the color shows.
+    void chooseStyleColor(bool stroke);
     std::unique_ptr<PenTool> _penTool;
     std::unique_ptr<PencilTool> _pencilTool;
     std::unique_ptr<TextTool> _textTool;

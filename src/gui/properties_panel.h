@@ -2,8 +2,11 @@
 
 #include "tool_icons.h"
 
+#include <QIcon>
 #include <QMap>
 #include <QWidget>
+
+#include <cstdint>
 
 #include <functional>
 #include <memory>
@@ -101,6 +104,10 @@ public:
     };
 
     explicit PropertiesPanel(const Links& links, QWidget* parent = nullptr);
+
+    /// A color swatch over a checker, as the fill and stroke buttons show
+    /// it here and in the toolbox.
+    static QIcon swatchIcon(const uint8_t rgba[4]);
 
     /// The tool that has the stage, and the icon it is shown with.
     void setActiveTool(Tool* tool, ToolIcons::Tool icon);

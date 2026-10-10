@@ -63,8 +63,14 @@ fla::Transform fromQTransform(const QTransform& q)
     return fla::Transform(q.m11(), q.m12(), q.m21(), q.m22(), q.dx(), q.dy());
 }
 
-/// Renders a color swatch for the fill and stroke buttons.
 QIcon swatchIcon(const uint8_t rgba[4])
+{
+    return PropertiesPanel::swatchIcon(rgba);
+}
+
+} // namespace
+
+QIcon PropertiesPanel::swatchIcon(const uint8_t rgba[4])
 {
     QPixmap pixmap(20, 20);
     pixmap.fill(Qt::transparent);
@@ -82,6 +88,8 @@ QIcon swatchIcon(const uint8_t rgba[4])
 
     return QIcon(pixmap);
 }
+
+namespace {
 
 void applyColor(const QColor& color, uint8_t rgba[4])
 {

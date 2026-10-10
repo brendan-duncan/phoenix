@@ -1321,6 +1321,34 @@ in the code or against a real XFL document.
       hot-text fields that scrub when dragged and open for typing when clicked
   - Done 2026-10-10 (`src/gui/properties_panel.cpp`, `src/gui/hot_text.cpp`). Tabs: Tool shows the active tool's icon and name with only its own rows (Color and Style for the drawing tools, Tool Options for the rest); Object shows the selection (Shape, Drawing Object, Rectangle or Oval Primitive, Graphic, Movie Clip or Button with an instance name field, Text, Group, Bitmap, or a mixed selection) with Position and Size (W, H with a lock-aspect chain, X, Y, applied live and recorded as one Move or Resize step), a shape's first solid fill and stroke (color, alpha, weight; applied as a Fill Color, Fill Alpha, Stroke Color or Stroke Size step), Smoothen and Straighten buttons, an instance's Color Effect (None, Brightness, Tint, Alpha, Advanced), Blending, Looping (options and first frame) and its filter list, a text's face, size, color and type; Frame shows the span under the playhead on the current layer with Label (name, type), Tweening (tween, ease, rotate and times, snap, sync) and the span's facts; Doc shows stage size, frame rate and stage color. Every Object, Frame and Doc edit is an undo step (`SetPropertyCommand` and `SetColorCommand` in `src/edit/property_command.h`, tests). The panel follows the selection as Animate's does: an object shows Object, nothing selected shows Doc with the arrow or Tool with another tool, a tool change shows Tool, a frame click shows Frame. Frame labels (`name`, `labelType`) and instance names are now parsed and written. Clicking a frame cell in the timeline makes its layer current. Hot text: drag to scrub (shift x10, ctrl x0.1), click to type, Return commits, Escape cancels. Checked on screen on effects_test.fla: dragging X moved the instance, typing W resized it with the aspect kept, Undo named "Resize", the Frame tab showed a classic tween's ease and rotation, and the tool tabs for the rectangle, brush and oval primitive showed their rows
 
+### Panels and toolbar
+
+Added 2026-10-10: the toolbox, the layers list and the timeline strip were
+laid out for convenience rather than to match Animate.
+
+- [ ] **Toolbox.** Animate docks its tools in one vertical column at the left
+      of the stage, in groups: selection and subselection, free transform,
+      lasso; pen, text, line, the shape tools together (rectangle, oval, the
+      two primitives, polystar), pencil, brush; paint bucket with the ink
+      bottle, eyedropper, eraser; hand, zoom. A slot whose siblings are hidden
+      shows a small triangle, a long press opens them and the chosen sibling
+      takes the slot. Under the tools sit the stroke and fill swatches and the
+      options of the active tool. Phoenix has a horizontal bar across the top
+      with every tool in a row and the swatches only in Properties
+- [ ] **Layers list header and buttons.** Animate's list has a header strip
+      whose eye, padlock and outline square toggle every layer at once, a
+      column for each under it, a pencil marker on the current layer, and
+      under the list New Layer, New Folder and Delete buttons. Names are
+      edited by double-click. Phoenix's header is empty and layers can only
+      be hidden, locked and made current
+- [ ] **Outline mode.** The color square on a layer toggles outline view: the
+      layer's artwork draws as thin lines in the layer color with no fills,
+      and the square goes hollow. DOMLayer's `outline` attribute is neither
+      parsed nor written
+- [ ] **Timeline footer.** Under Animate's frames sit the current frame
+      number, the frame rate and the elapsed time beside the transport and
+      onion skin buttons; Phoenix shows only the transport buttons
+
 ### Suggested order, weighted for authenticity
 
 1. Caps, joins, hairlines, stroke chaining
