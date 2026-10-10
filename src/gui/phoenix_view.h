@@ -139,6 +139,9 @@ public:
 signals:
     void scopeChanged();
 
+    /// The tool that now has the stage.
+    void activeToolChanged(Tool* tool);
+
 public:
 
     /// Selects a region of merge-drawn artwork the way Animate's arrow does:

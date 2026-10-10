@@ -2972,6 +2972,7 @@ void PhoenixView::setActiveTool(Tool* tool)
     _activeTool = tool;
     setCursor(_activeTool ? _activeTool->cursor() : QCursor(Qt::ArrowCursor));
     update();
+    emit activeToolChanged(_activeTool);
 }
 
 void PhoenixView::setSelection(fla::Selection* selection)

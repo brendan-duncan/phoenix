@@ -33,6 +33,11 @@ public:
 public slots:
     void onPlayerFrameChanged(int frame) { update(); }
 
+signals:
+    /// A frame cell was pressed on this layer, which makes the layer
+    /// current as well as moving the playhead.
+    void layerPressed(const fla::Timeline* timeline, int layerIndex);
+
 protected:
     void paintEvent(QPaintEvent* event) override;
 
@@ -62,6 +67,9 @@ public:
     void setDocument(const fla::FLADocument* document);
 
     void setTimeline(const fla::Timeline* timeline);
+
+signals:
+    void layerPressed(const fla::Timeline* timeline, int layerIndex);
 
 private slots:
     void onGotoFirstFrame();

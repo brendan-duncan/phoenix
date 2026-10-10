@@ -15,6 +15,8 @@ class SymbolInstance : public Element
 {
 public:
     std::string libraryItemName;
+    /// The instance name scripts address it by; movie clips and buttons.
+    std::string name;
     int firstFrame = 0;
     SymbolType symbolType = SymbolType::Graphic;
     LoopType loopType = LoopType::PlayOnce;

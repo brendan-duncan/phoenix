@@ -3,6 +3,7 @@
 #include <cstdint>
 #include <QHeaderView>
 #include <QTreeWidget>
+#include <QTreeWidgetItemIterator>
 #include <QPainter>
 #include <QPainterPath>
 #include <QFont>
@@ -206,6 +207,45 @@ fla::Layer* LayersPanel::layerFor(const QTreeWidgetItem* item) const
         return nullptr;
 
     return timeline->layers[layerIndex];
+}
+
+void LayersPanel::setCurrentLayer(const fla::Timeline* timeline, int layerIndex)
+{
+    const std::vector<fla::Timeline*> timelines = shownTimelines();
+    int timelineIndex = -1;
+    for (size_t i = 0; i < timelines.size(); ++i)
+    {
+        if (timelines[i] == timeline)
+            timelineIndex = static_cast<int>(i);
+    }
+    if (timelineIndex < 0 || layerIndex < 0 || layerIndex >= static_cast<int>(timeline->layers.size()))
+        return;
+
+    fla::Timeline* target = timelines[timelineIndex];
+    fla::Layer* layer = target->layers[layerIndex];
+    if (!layer || layer->layerType == fla::Layer::Type::Folder)
+        return;
+    if (layer->selected)
+        return;
+
+    for (fla::Layer* other : target->layers)
+    {
+        if (other)
+            other->selected = other == layer;
+    }
+
+    for (QTreeWidgetItemIterator it(_treeWidget); *it; ++it)
+    {
+        QTreeWidgetItem* item = *it;
+        if (item->data(NameColumn, Qt::UserRole).toInt() == layerIndex &&
+            item->data(NameColumn, Qt::UserRole + 1).toInt() == timelineIndex)
+        {
+            _treeWidget->setCurrentItem(item);
+            break;
+        }
+    }
+
+    emit currentLayerChanged(QString::fromStdString(target->name), layerIndex);
 }
 
 void LayersPanel::refreshLayers()

@@ -66,6 +66,7 @@
 #include <QFormLayout>
 #include <QSpinBox>
 #include <QToolButton>
+#include <QTimer>
 
 #include "tool_icons.h"
 
@@ -105,6 +106,19 @@ MainWindow::MainWindow(const QString& initialFile, QWidget* parent)
 
     _selection.setChangedCallback([this]() {
         updateSelectionState();
+        // The Properties panel follows the selection the way Animate's does:
+        // an object shows its Object tab; nothing selected shows the tool, or
+        // the document when the arrow is the tool.
+        if (_propertiesPanel)
+        {
+            _propertiesPanel->refresh();
+            if (!_selection.isEmpty())
+                _propertiesPanel->setTab(PropertiesPanel::Tab::Object);
+            else if (_phoenixView && _phoenixView->activeTool() == _selectionTool.get())
+                _propertiesPanel->setTab(PropertiesPanel::Tab::Doc);
+            else
+                _propertiesPanel->setTab(PropertiesPanel::Tab::Tool);
+        }
         // The tree follows the stage.
         if (_documentView && !_syncingSelection)
         {
@@ -258,6 +272,11 @@ void MainWindow::adoptDocument(fla::FLADocument* document, const QString& filePa
     _documentName = displayName;
     _documentPath = filePath;
     updateWindowTitle();
+    if (_propertiesPanel)
+    {
+        _propertiesPanel->refresh();
+        _propertiesPanel->setTab(PropertiesPanel::Tab::Doc);
+    }
 
     if (_flaDocument)
         _player->setCurrentFrame(0);
@@ -969,9 +988,12 @@ void MainWindow::updateEditState()
 {
     const fla::CommandStack& stack = _editContext.commandStack();
 
-    // Frames come and go with edits too.
+    // Frames come and go with edits too, and the Properties panel shows
+    // whatever an edit or an undo just changed.
     if (_timelineView)
         _timelineView->update();
+    if (_propertiesPanel)
+        _propertiesPanel->refresh();
 
     if (_undoAction)
     {
@@ -1274,331 +1296,124 @@ void MainWindow::setupToolBar()
     toolBar->addAction(objectDrawingAction);
 }
 
-namespace {
-
-/// Renders a color swatch for the fill and stroke buttons.
-QIcon swatchIcon(const uint8_t rgba[4])
-{
-    QPixmap pixmap(20, 20);
-    pixmap.fill(Qt::transparent);
-
-    QPainter painter(&pixmap);
-    painter.setRenderHint(QPainter::Antialiasing, false);
-    // A checker behind the swatch so a transparent color reads as transparent
-    // rather than as black.
-    painter.fillRect(0, 0, 20, 20, QColor(120, 120, 120));
-    painter.fillRect(0, 0, 10, 10, QColor(160, 160, 160));
-    painter.fillRect(10, 10, 10, 10, QColor(160, 160, 160));
-    painter.fillRect(1, 1, 18, 18, QColor(rgba[0], rgba[1], rgba[2], rgba[3]));
-    painter.setPen(QColor(30, 30, 30));
-    painter.drawRect(0, 0, 19, 19);
-
-    return QIcon(pixmap);
-}
-
-void applyColor(const QColor& color, uint8_t rgba[4])
-{
-    rgba[0] = static_cast<uint8_t>(color.red());
-    rgba[1] = static_cast<uint8_t>(color.green());
-    rgba[2] = static_cast<uint8_t>(color.blue());
-    rgba[3] = static_cast<uint8_t>(color.alpha());
-}
-
-} // namespace
-
 void MainWindow::setupPropertiesPanel()
 {
     QDockWidget* dock = new QDockWidget("Properties", this);
     dock->setObjectName("propertiesDock");
     dock->setAllowedAreas(Qt::RightDockWidgetArea | Qt::LeftDockWidgetArea);
 
-    QWidget* panel = new QWidget(dock);
-    QFormLayout* layout = new QFormLayout(panel);
-
-    // Fill.
-    _fillColorButton = new QToolButton(panel);
-    _fillColorButton->setIcon(swatchIcon(_drawingStyle.fillColor));
-    _fillColorButton->setToolTip("Fill color for new shapes");
-    connect(_fillColorButton, &QToolButton::clicked, this, [this]() {
-        const QColor current(_drawingStyle.fillColor[0], _drawingStyle.fillColor[1],
-            _drawingStyle.fillColor[2], _drawingStyle.fillColor[3]);
-        const QColor chosen = QColorDialog::getColor(current, this, "Fill Color",
-            QColorDialog::ShowAlphaChannel);
-        if (!chosen.isValid())
-            return;
-        applyColor(chosen, _drawingStyle.fillColor);
-        _fillColorButton->setIcon(swatchIcon(_drawingStyle.fillColor));
-        // Text being typed takes the color on its selection too.
-        if (_textTool)
-            _textTool->applyColor(_drawingStyle.fillColor);
-    });
-
-    QCheckBox* fillEnabled = new QCheckBox("Fill", panel);
-    fillEnabled->setChecked(_drawingStyle.hasFill);
-    connect(fillEnabled, &QCheckBox::toggled, this, [this](bool on) {
-        _drawingStyle.hasFill = on;
-    });
-    layout->addRow(fillEnabled, _fillColorButton);
-
-    // Stroke.
-    _strokeColorButton = new QToolButton(panel);
-    _strokeColorButton->setIcon(swatchIcon(_drawingStyle.strokeColor));
-    _strokeColorButton->setToolTip("Stroke color for new shapes");
-    connect(_strokeColorButton, &QToolButton::clicked, this, [this]() {
-        const QColor current(_drawingStyle.strokeColor[0], _drawingStyle.strokeColor[1],
-            _drawingStyle.strokeColor[2], _drawingStyle.strokeColor[3]);
-        const QColor chosen = QColorDialog::getColor(current, this, "Stroke Color",
-            QColorDialog::ShowAlphaChannel);
-        if (!chosen.isValid())
-            return;
-        applyColor(chosen, _drawingStyle.strokeColor);
-        _strokeColorButton->setIcon(swatchIcon(_drawingStyle.strokeColor));
-    });
-
-    QCheckBox* strokeEnabled = new QCheckBox("Stroke", panel);
-    strokeEnabled->setChecked(_drawingStyle.hasStroke);
-    connect(strokeEnabled, &QCheckBox::toggled, this, [this](bool on) {
-        _drawingStyle.hasStroke = on;
-    });
-    layout->addRow(strokeEnabled, _strokeColorButton);
-
-    QDoubleSpinBox* weight = new QDoubleSpinBox(panel);
-    weight->setRange(0.1, 200.0);
-    weight->setSingleStep(0.5);
-    weight->setValue(_drawingStyle.strokeWeight);
-    connect(weight, &QDoubleSpinBox::valueChanged, this, [this](double value) {
-        _drawingStyle.strokeWeight = value;
-    });
-    layout->addRow("Weight", weight);
-
-    _cornerRadiusBox = new QDoubleSpinBox(panel);
-    _cornerRadiusBox->setRange(-500.0, 500.0);
-    _cornerRadiusBox->setSingleStep(1.0);
-    _cornerRadiusBox->setValue(_drawingStyle.cornerRadius);
-    _cornerRadiusBox->setToolTip("Corner radius for rectangles; Up and Down change it while dragging");
-    connect(_cornerRadiusBox, &QDoubleSpinBox::valueChanged, this, [this](double value) {
-        _drawingStyle.cornerRadius = value;
-    });
-    layout->addRow("Corner radius", _cornerRadiusBox);
-
-    // The oval primitive's arc and hole, as Animate's Properties panel has
-    // them.
-    QDoubleSpinBox* startAngle = new QDoubleSpinBox(panel);
-    startAngle->setRange(0.0, 360.0);
-    startAngle->setValue(_drawingStyle.ovalStartAngle);
-    startAngle->setToolTip("Where the oval primitive's arc starts, in degrees clockwise from three o'clock");
-    connect(startAngle, &QDoubleSpinBox::valueChanged, this, [this](double value) {
-        _drawingStyle.ovalStartAngle = value;
-    });
-    layout->addRow("Start angle", startAngle);
-
-    QDoubleSpinBox* endAngle = new QDoubleSpinBox(panel);
-    endAngle->setRange(0.0, 360.0);
-    endAngle->setValue(_drawingStyle.ovalEndAngle);
-    endAngle->setToolTip("Where the oval primitive's arc ends; the same as the start draws the whole oval");
-    connect(endAngle, &QDoubleSpinBox::valueChanged, this, [this](double value) {
-        _drawingStyle.ovalEndAngle = value;
-    });
-    layout->addRow("End angle", endAngle);
-
-    QDoubleSpinBox* innerRadius = new QDoubleSpinBox(panel);
-    innerRadius->setRange(0.0, 99.0);
-    innerRadius->setValue(_drawingStyle.ovalInnerRadius);
-    innerRadius->setToolTip("The oval primitive's hole, as a percentage of its size");
-    connect(innerRadius, &QDoubleSpinBox::valueChanged, this, [this](double value) {
-        _drawingStyle.ovalInnerRadius = value;
-    });
-    layout->addRow("Inner radius", innerRadius);
-
-    QDoubleSpinBox* brushSize = new QDoubleSpinBox(panel);
-    brushSize->setRange(1.0, 200.0);
-    brushSize->setSingleStep(1.0);
-    brushSize->setValue(_drawingStyle.brushSize);
-    connect(brushSize, &QDoubleSpinBox::valueChanged, this, [this](double value) {
-        _drawingStyle.brushSize = value;
-    });
-    layout->addRow("Brush size", brushSize);
-
-    QDoubleSpinBox* eraserSize = new QDoubleSpinBox(panel);
-    eraserSize->setRange(1.0, 200.0);
-    eraserSize->setSingleStep(1.0);
-    eraserSize->setValue(_drawingStyle.eraserSize);
-    connect(eraserSize, &QDoubleSpinBox::valueChanged, this, [this](double value) {
-        _drawingStyle.eraserSize = value;
-    });
-    layout->addRow("Eraser size", eraserSize);
-
-    QComboBox* transformMode = new QComboBox(panel);
-    transformMode->addItem("Free Transform");
-    transformMode->addItem("Distort");
-    transformMode->addItem("Envelope");
-    transformMode->setToolTip("The free transform tool's mode; Distort and Envelope work on shapes");
-    connect(transformMode, &QComboBox::currentIndexChanged, this, [this](int index) {
-        _drawingStyle.transformMode = static_cast<fla::DrawingStyle::TransformMode>(index);
-        if (_freeTransformTool)
-            _freeTransformTool->resetBox();
-        if (_phoenixView)
-            _phoenixView->update();
-    });
-    layout->addRow("Transform", transformMode);
-
-    QCheckBox* usePressure = new QCheckBox("Use pressure", panel);
-    usePressure->setChecked(_drawingStyle.brushPressure);
-    usePressure->setToolTip("Let a pen's pressure vary the brush width");
-    connect(usePressure, &QCheckBox::toggled, this, [this](bool on) {
-        _drawingStyle.brushPressure = on;
-    });
-    layout->addRow(QString(), usePressure);
-
-    QComboBox* brushMode = new QComboBox(panel);
-    brushMode->addItem("Paint Normal");
-    brushMode->addItem("Paint Fills");
-    brushMode->addItem("Paint Behind");
-    brushMode->addItem("Paint Selection");
-    brushMode->addItem("Paint Inside");
-    brushMode->setToolTip("Where a brush stroke lands, as in Animate");
-    connect(brushMode, &QComboBox::currentIndexChanged, this, [this](int index) {
-        _drawingStyle.brushMode = static_cast<fla::DrawingStyle::BrushMode>(index);
-    });
-    layout->addRow("Brush mode", brushMode);
-
-    QComboBox* eraserMode = new QComboBox(panel);
-    eraserMode->addItem("Erase Normal");
-    eraserMode->addItem("Erase Fills");
-    eraserMode->addItem("Erase Lines");
-    eraserMode->addItem("Erase Selected Fills");
-    eraserMode->addItem("Erase Inside");
-    eraserMode->setToolTip("What a pass of the eraser takes away, as in Animate");
-    connect(eraserMode, &QComboBox::currentIndexChanged, this, [this](int index) {
-        _drawingStyle.eraserMode = static_cast<fla::DrawingStyle::EraserMode>(index);
-    });
-    layout->addRow("Eraser mode", eraserMode);
-
-    QCheckBox* faucet = new QCheckBox("Faucet", panel);
-    faucet->setChecked(_drawingStyle.faucet);
-    faucet->setToolTip("Click a fill or a stroke with the eraser to remove it whole");
-    connect(faucet, &QCheckBox::toggled, this, [this](bool on) {
-        _drawingStyle.faucet = on;
-        if (_phoenixView && _phoenixView->activeTool() == _eraserTool.get())
-            _phoenixView->setCursor(_eraserTool->cursor());
-    });
-    layout->addRow(QString(), faucet);
-
-    QComboBox* gapSize = new QComboBox(panel);
-    gapSize->addItem("Don't Close Gaps");
-    gapSize->addItem("Close Small Gaps");
-    gapSize->addItem("Close Medium Gaps");
-    gapSize->addItem("Close Large Gaps");
-    gapSize->setCurrentIndex(static_cast<int>(_drawingStyle.gapSize));
-    gapSize->setToolTip("How far apart an outline's ends may be for the paint bucket to fill it");
-    connect(gapSize, &QComboBox::currentIndexChanged, this, [this](int index) {
-        _drawingStyle.gapSize = static_cast<fla::DrawingStyle::GapSize>(index);
-    });
-    layout->addRow("Gap size", gapSize);
-
-    // Text settings, which only the text tool reads. The face is kept the
-    // way Animate writes it, the family without its spaces.
-    QFontComboBox* textFont = new QFontComboBox(panel);
-    textFont->setCurrentFont(QFont("Arial"));
-    connect(textFont, &QFontComboBox::currentFontChanged, this, [this](const QFont& font) {
-        // Animate names a font by its PostScript name, so the common ones get
-        // the suffix their foundry gave them; the rest just lose their spaces.
-        static const QHash<QString, QString> postScriptNames = {
-            {"Arial", "ArialMT"},
-            {"Times New Roman", "TimesNewRomanPSMT"},
-            {"Courier New", "CourierNewPSMT"},
-        };
-        const QString family = font.family();
-        const std::string face = postScriptNames.value(family, QString(family).remove(' ')).toStdString();
-        // A selection in an open text box takes the font; otherwise it is the
-        // font for the next text.
-        if (!_textTool || !_textTool->applyFace(face))
-            _drawingStyle.textFace = face;
-    });
-    layout->addRow("Font", textFont);
-
-    QDoubleSpinBox* textSize = new QDoubleSpinBox(panel);
-    textSize->setRange(1.0, 500.0);
-    textSize->setSingleStep(1.0);
-    textSize->setDecimals(1);
-    textSize->setValue(_drawingStyle.textSize);
-    textSize->setToolTip("Size of new text, in pixels");
-    connect(textSize, &QDoubleSpinBox::valueChanged, this, [this](double value) {
-        if (!_textTool || !_textTool->applySize(value))
-            _drawingStyle.textSize = value;
-    });
-    layout->addRow("Size", textSize);
-
-    QComboBox* textType = new QComboBox(panel);
-    textType->addItem("Static Text");
-    textType->addItem("Dynamic Text");
-    textType->addItem("Input Text");
-    textType->setToolTip("What kind of field the text is: artwork, scriptable, or typed into");
-    connect(textType, &QComboBox::currentIndexChanged, this, [this](int index) {
-        _drawingStyle.textType = index;
-        const fla::StaticText::TextType type = static_cast<fla::StaticText::TextType>(index);
-        if (_textTool && _textTool->applyTextType(type))
-            return;
-        setSelectedTextType(type);
-    });
-    layout->addRow("Text type", textType);
-
-    // PolyStar settings, which only the polystar tool reads.
-    QSpinBox* sides = new QSpinBox(panel);
-    sides->setRange(3, 32);
-    sides->setValue(_drawingStyle.sides);
-    connect(sides, &QSpinBox::valueChanged, this, [this](int value) {
-        _drawingStyle.sides = value;
-    });
-    layout->addRow("Sides", sides);
-
-    QComboBox* pencilMode = new QComboBox(panel);
-    pencilMode->addItem("Smooth");
-    pencilMode->addItem("Straighten");
-    pencilMode->addItem("Ink");
-    pencilMode->setToolTip("How the pencil tidies a freehand stroke");
-    connect(pencilMode, &QComboBox::currentIndexChanged, this, [this](int index) {
-        _drawingStyle.pencilMode = static_cast<fla::DrawingStyle::PencilMode>(index);
-    });
-    layout->addRow("Pencil", pencilMode);
-
-    QSpinBox* smoothing = new QSpinBox(panel);
-    smoothing->setRange(0, 100);
-    smoothing->setSingleStep(5);
-    smoothing->setValue(_drawingStyle.pencilSmoothing);
-    smoothing->setToolTip("How much the pencil smooths a stroke, 0 to 100, as in Animate");
-    connect(smoothing, &QSpinBox::valueChanged, this, [this](int value) {
-        _drawingStyle.pencilSmoothing = value;
-    });
-    layout->addRow("Smoothing", smoothing);
-
-    QCheckBox* connectLines = new QCheckBox("Connect lines", panel);
-    connectLines->setChecked(_drawingStyle.connectLines);
-    connectLines->setToolTip("In Straighten mode, close a pencil stroke whose ends nearly meet");
-    connect(connectLines, &QCheckBox::toggled, this, [this](bool on) {
-        _drawingStyle.connectLines = on;
-    });
-    layout->addRow(QString(), connectLines);
-
-    QCheckBox* recognizeShapes = new QCheckBox("Recognize shapes", panel);
-    recognizeShapes->setChecked(_drawingStyle.recognizeShapes);
-    recognizeShapes->setToolTip("In Straighten mode, turn a roughly drawn rectangle or oval into the real thing");
-    connect(recognizeShapes, &QCheckBox::toggled, this, [this](bool on) {
-        _drawingStyle.recognizeShapes = on;
-    });
-    layout->addRow(QString(), recognizeShapes);
-
-    QCheckBox* star = new QCheckBox("Star", panel);
-    star->setChecked(_drawingStyle.star);
-    star->setToolTip("Draw a star rather than a regular polygon");
-    connect(star, &QCheckBox::toggled, this, [this](bool on) {
-        _drawingStyle.star = on;
-    });
-    layout->addRow(QString(), star);
-
-    panel->setLayout(layout);
-    dock->setWidget(panel);
+    PropertiesPanel::Links links;
+    links.style = &_drawingStyle;
+    links.selection = &_selection;
+    links.editContext = &_editContext;
+    links.view = _phoenixView;
+    links.player = _player;
+    links.smoothAction = _smoothAction;
+    links.straightenAction = _straightenAction;
+    _propertiesPanel = new PropertiesPanel(links, dock);
+    dock->setWidget(_propertiesPanel);
+    dock->setMinimumWidth(300);
     addDockWidget(Qt::RightDockWidgetArea, dock);
+
+    // The Tool tab writes into the drawing style itself; these are the side
+    // effects the window has to carry out.
+    connect(_propertiesPanel, &PropertiesPanel::toolSettingChanged, this, [this](const QString& key) {
+        if (key == "fillColor")
+        {
+            // Text being typed takes the color on its selection too.
+            if (_textTool)
+                _textTool->applyColor(_drawingStyle.fillColor);
+        }
+        else if (key == "textFace")
+        {
+            // A selection in an open text box takes the font; otherwise it is
+            // the font for the next text.
+            const std::string face = _propertiesPanel->pendingTextFace();
+            if (!_textTool || !_textTool->applyFace(face))
+                _drawingStyle.textFace = face;
+        }
+        else if (key == "textSize")
+        {
+            const double size = _propertiesPanel->pendingTextSize();
+            if (!_textTool || !_textTool->applySize(size))
+                _drawingStyle.textSize = size;
+        }
+        else if (key == "textType")
+        {
+            const fla::StaticText::TextType type = static_cast<fla::StaticText::TextType>(_drawingStyle.textType);
+            if (_textTool && _textTool->applyTextType(type))
+                return;
+            setSelectedTextType(type);
+        }
+        else if (key == "transformMode")
+        {
+            if (_freeTransformTool)
+                _freeTransformTool->resetBox();
+            if (_phoenixView)
+                _phoenixView->update();
+        }
+        else if (key == "faucet")
+        {
+            if (_phoenixView && _eraserTool && _phoenixView->activeTool() == _eraserTool.get())
+                _phoenixView->setCursor(_eraserTool->cursor());
+        }
+    });
+
+    // The other tabs edit the document through the undo stack; the stage
+    // and the timeline redraw from it.
+    connect(_propertiesPanel, &PropertiesPanel::documentEdited, this, [this]() {
+        if (_phoenixView)
+        {
+            _phoenixView->clearCaches();
+            _phoenixView->update();
+        }
+        if (_timelineView)
+            _timelineView->update();
+    });
+
+    // Picking a tool shows its options, as Animate does.
+    connect(_phoenixView, &PhoenixView::activeToolChanged, this, [this](Tool* tool) {
+        _propertiesPanel->setActiveTool(tool, iconForTool(tool));
+        _propertiesPanel->setTab(PropertiesPanel::Tab::Tool);
+    });
+
+    // The frame shown and the current layer decide what the Frame tab shows.
+    // The stage lets go of the selection when the playhead moves (it hears
+    // the signal first), so with nothing left selected the frame is what
+    // the panel shows, as Animate does when a frame is clicked.
+    connect(_player, &Player::currentFrameChanged, this, [this](int) {
+        _propertiesPanel->refresh();
+        if (_selection.isEmpty())
+            _propertiesPanel->setTab(PropertiesPanel::Tab::Frame);
+    });
+    connect(_timelineView, &TimelineView::currentLayerChanged, this, [this]() {
+        _propertiesPanel->refresh();
+    });
+}
+
+ToolIcons::Tool MainWindow::iconForTool(const Tool* tool) const
+{
+    using IconTool = ToolIcons::Tool;
+    if (tool == _subselectionTool.get()) return IconTool::Subselection;
+    if (tool == _freeTransformTool.get()) return IconTool::FreeTransform;
+    if (tool == _rectangleTool.get()) return IconTool::Rectangle;
+    if (tool == _ovalTool.get()) return IconTool::Oval;
+    if (tool == _lineTool.get()) return IconTool::Line;
+    if (tool == _polyStarTool.get()) return IconTool::PolyStar;
+    if (tool == _rectanglePrimitiveTool.get()) return IconTool::RectanglePrimitive;
+    if (tool == _ovalPrimitiveTool.get()) return IconTool::OvalPrimitive;
+    if (tool == _penTool.get()) return IconTool::Pen;
+    if (tool == _pencilTool.get()) return IconTool::Pencil;
+    if (tool == _handTool.get()) return IconTool::Hand;
+    if (tool == _zoomTool.get()) return IconTool::Zoom;
+    if (tool == _paintBucketTool.get()) return IconTool::PaintBucket;
+    if (tool == _inkBottleTool.get()) return IconTool::InkBottle;
+    if (tool == _eyedropperTool.get()) return IconTool::Eyedropper;
+    if (tool == _brushTool.get()) return IconTool::Brush;
+    if (tool == _eraserTool.get()) return IconTool::Eraser;
+    if (tool == _lassoTool.get()) return IconTool::Lasso;
+    if (tool == _textTool.get()) return IconTool::Text;
+    return IconTool::Selection;
 }
 
 void MainWindow::rebuildBreadcrumb()
@@ -1638,10 +1453,8 @@ void MainWindow::rebuildBreadcrumb()
 
 void MainWindow::refreshStyleSwatches()
 {
-    if (_fillColorButton)
-        _fillColorButton->setIcon(swatchIcon(_drawingStyle.fillColor));
-    if (_strokeColorButton)
-        _strokeColorButton->setIcon(swatchIcon(_drawingStyle.strokeColor));
+    if (_propertiesPanel)
+        _propertiesPanel->refreshStyleSwatches();
 }
 
 void MainWindow::selectAll()

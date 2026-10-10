@@ -430,6 +430,7 @@ void XFLWriter::writeSymbolInstance(const SymbolInstance& instance, XMLElement* 
     XMLElement* node = doc->NewElement("DOMSymbolInstance");
 
     setString(node, "libraryItemName", instance.libraryItemName);
+    setString(node, "name", instance.name);
     setInt(node, "firstFrame", instance.firstFrame, 0);
     if (instance.blendMode != "normal")
         setString(node, "blendMode", instance.blendMode);
@@ -759,6 +760,8 @@ void XFLWriter::writeFrame(const Frame& frame, XMLElement* parent)
     node->SetAttribute("index", frame.index);
     setInt(node, "duration", frame.duration, 1);
     setString(node, "keyMode", frame.keyMode);
+    setString(node, "name", frame.name);
+    setString(node, "labelType", frame.labelType);
 
     if (frame.tweenType == TweenType::Motion)
         node->SetAttribute("tweenType", "motion");

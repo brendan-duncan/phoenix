@@ -11,6 +11,10 @@
 #include "../src/data/rectangle_primitive.h"
 #include "../src/data/shape.h"
 #include "../src/data/solid_color.h"
+#include "../src/data/symbol_instance.h"
+#include "../src/data/frame.h"
+#include "../src/data/layer.h"
+#include "../src/data/timeline.h"
 #include "../src/data/static_text.h"
 #include "../src/data/symbol.h"
 #include "../src/data/symbol_list.h"
@@ -152,6 +156,8 @@ private:
         check(a.index == b.index, where + " index");
         check(a.duration == b.duration, where + " duration");
         check(a.keyMode == b.keyMode, where + " keyMode");
+        check(a.name == b.name, where + " name");
+        check(a.labelType == b.labelType, where + " labelType");
         check(a.tweenType == b.tweenType, where + " tweenType");
         check(a.acceleration == b.acceleration, where + " acceleration");
         check(a.hasCustomEase == b.hasCustomEase, where + " hasCustomEase");
@@ -196,6 +202,7 @@ private:
             const auto& sa = static_cast<const fla::SymbolInstance&>(a);
             const auto& sb = static_cast<const fla::SymbolInstance&>(b);
             check(sa.libraryItemName == sb.libraryItemName, where + " libraryItemName");
+            check(sa.name == sb.name, where + " name");
             check(sa.firstFrame == sb.firstFrame, where + " firstFrame");
             check(sa.symbolType == sb.symbolType, where + " symbolType");
             check(sa.loopType == sb.loopType, where + " loopType");
@@ -502,6 +509,38 @@ const char* kMinimalDocument =
 TEST(xfl_round_trips_a_minimal_document)
 {
     checkRoundTrip(kMinimalDocument);
+}
+
+TEST(xfl_round_trips_frame_labels_and_instance_names)
+{
+    std::unique_ptr<fla::Document> document = parseDocumentText(
+        "<DOMDocument xmlns='http://ns.adobe.com/xfl/2008/' width='550' height='400'>"
+        "<timelines><DOMTimeline name='Scene 1'><layers>"
+        "<DOMLayer name='Layer 1'><frames>"
+        "<DOMFrame index='0' duration='3' name='start' labelType='anchor'><elements>"
+        "<DOMSymbolInstance libraryItemName='Sym' name='hero' symbolType='movie clip'>"
+        "<matrix><Matrix tx='5' ty='6'/></matrix></DOMSymbolInstance>"
+        "</elements></DOMFrame>"
+        "</frames></DOMLayer>"
+        "</layers></DOMTimeline></timelines></DOMDocument>");
+    CHECK(document != nullptr);
+    if (!document || document->timelines.empty() || document->timelines[0]->layers.empty())
+        return;
+    const fla::Frame* frame = document->timelines[0]->layers[0]->frames[0];
+    CHECK(frame->name == "start");
+    CHECK(frame->labelType == "anchor");
+    CHECK(frame->elements.size() == 1);
+    if (frame->elements.size() == 1)
+    {
+        const auto* instance = dynamic_cast<const fla::SymbolInstance*>(frame->elements[0]);
+        CHECK(instance && instance->name == "hero");
+    }
+
+    XFLWriter writer;
+    const std::string written = writer.writeDocument(*document);
+    CHECK(written.find("name=\"start\"") != std::string::npos);
+    CHECK(written.find("labelType=\"anchor\"") != std::string::npos);
+    CHECK(written.find("name=\"hero\"") != std::string::npos);
 }
 
 TEST(xfl_round_trips_shapes)

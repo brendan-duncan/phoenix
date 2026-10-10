@@ -64,10 +64,13 @@ Element* cloneElement(const Element& element, DOMElement* parent)
         SymbolInstance* copy = new SymbolInstance(parent);
         copyElementFields(instance, *copy);
         copy->libraryItemName = instance.libraryItemName;
+        copy->name = instance.name;
         copy->firstFrame = instance.firstFrame;
         copy->symbolType = instance.symbolType;
         copy->loopType = instance.loopType;
         copy->colorTransform = instance.colorTransform;
+        copy->blendMode = instance.blendMode;
+        copy->filters = instance.filters;
         copy->symbol = instance.symbol;
         return copy;
     }

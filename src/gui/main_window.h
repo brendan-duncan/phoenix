@@ -17,6 +17,8 @@
 #include "subselection_tool.h"
 #include "text_tool.h"
 #include "selection_tool.h"
+#include "properties_panel.h"
+#include "tool_icons.h"
 #include "../edit/edit_context.h"
 #include "../edit/selection.h"
 #include "../edit/drawing_style.h"
@@ -214,9 +216,11 @@ private:
     std::unique_ptr<TextTool> _textTool;
     std::unique_ptr<SubselectionTool> _subselectionTool;
     fla::DrawingStyle _drawingStyle;
-    QToolButton* _fillColorButton = nullptr;
-    QToolButton* _strokeColorButton = nullptr;
-    QDoubleSpinBox* _cornerRadiusBox = nullptr;
+    PropertiesPanel* _propertiesPanel = nullptr;
+
+    /// Which toolbox icon stands for \a tool, for the Properties panel's
+    /// Tool tab.
+    ToolIcons::Tool iconForTool(const Tool* tool) const;
 
     /// True while one of the tree and the stage is being brought in line
     /// with the other, so the change does not bounce back.

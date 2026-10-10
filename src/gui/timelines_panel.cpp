@@ -175,6 +175,7 @@ TimelinesPanel::TimelinesPanel(Player* player, QWidget *parent)
 
     connect(_player, &Player::currentFrameChanged, _gridContainer, &TimelineGrid::onPlayerFrameChanged);
     connect(_player, &Player::currentFrameChanged, this, &TimelinesPanel::onPlayerFrameChanged);
+    connect(_gridContainer, &TimelineGrid::layerPressed, this, &TimelinesPanel::layerPressed);
     connect(_playTimer, &QTimer::timeout, this, &TimelinesPanel::onTimerTick);
 }
 
@@ -336,6 +337,26 @@ void TimelineGrid::mousePressEvent(QMouseEvent* event)
     {
         _isDragging = true;
         updatePlayerFromMouse(event->pos().x());
+
+        // The row under the press is a layer, which becomes current as it
+        // does in Animate. Rows follow the painted layout: a header, then
+        // one row per layer of each shown timeline, folders included.
+        const int headerHeight = 25;
+        const int layerRowHeight = 30;
+        int row = (event->pos().y() - headerHeight) / layerRowHeight;
+        if (event->pos().y() >= headerHeight)
+        {
+            for (const fla::Timeline* timeline : shownTimelines())
+            {
+                const int count = static_cast<int>(timeline->layers.size());
+                if (row < count)
+                {
+                    emit layerPressed(timeline, row);
+                    break;
+                }
+                row -= count;
+            }
+        }
     }
     QWidget::mousePressEvent(event);
 }

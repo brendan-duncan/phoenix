@@ -25,6 +25,10 @@ public:
     /// null shows the document's.
     void setTimeline(fla::Timeline* timeline);
 
+    /// Makes \a layerIndex of \a timeline the current layer, as a click on
+    /// its name would, and says so.
+    void setCurrentLayer(const fla::Timeline* timeline, int layerIndex);
+
 signals:
     void layerVisibilityChanged(const QString& timelineName, int layerIndex, bool visible);
 

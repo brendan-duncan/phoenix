@@ -36,6 +36,11 @@ TimelineView::TimelineView(Player* player, QWidget *parent)
             this, &TimelineView::layerLockChanged);
     connect(_layersPanel, &LayersPanel::currentLayerChanged,
             this, &TimelineView::currentLayerChanged);
+    // A frame pressed in the grid makes its layer current.
+    connect(_timelinesPanel, &TimelinesPanel::layerPressed, this,
+        [this](const fla::Timeline* timeline, int layerIndex) {
+            _layersPanel->setCurrentLayer(timeline, layerIndex);
+        });
 }
 
 void TimelineView::setTimeline(fla::Timeline* timeline)

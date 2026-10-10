@@ -717,6 +717,7 @@ bool parseSymbolInstance(const tinyxml2::XMLElement* element, fla::SymbolInstanc
     }
 
     instance->libraryItemName = getAttribute(element, "libraryItemName");
+    instance->name = getAttribute(element, "name");
     instance->blendMode = getAttribute(element, "blendMode");
     instance->firstFrame = getIntAttribute(element, "firstFrame", 0);
 
@@ -1248,6 +1249,8 @@ bool parseFrame(const tinyxml2::XMLElement* element, fla::Frame* frame)
     frame->index = getIntAttribute(element, "index");
     frame->duration = getIntAttribute(element, "duration", 1);
     frame->keyMode = getAttribute(element, "keyMode");
+    frame->name = getAttribute(element, "name");
+    frame->labelType = getAttribute(element, "labelType");
     // Animate spells it motionTweenSnap; the other spelling was ours.
     frame->motionTWeenSnap = getBoolAttribute(element, "motionTweenSnap",
         getBoolAttribute(element, "motionTWeenSnap", false));

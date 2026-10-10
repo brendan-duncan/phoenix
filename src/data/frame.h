@@ -16,6 +16,11 @@ public:
     int index = 0;
     int duration = 1;
     std::string keyMode;
+
+    /// The frame label and its kind: "name" (the default when a name is
+    /// set), "comment" or "anchor".
+    std::string name;
+    std::string labelType;
     TweenType tweenType = TweenType::None;
     bool motionTWeenSnap = false;
     bool motionTweenSync = false;
