@@ -215,7 +215,8 @@ void TimelinesPanel::setDocument(const fla::FLADocument* document)
     _flaDocument = document;
     _gridContainer->setDocument(document);
     _gridContainer->setTimeline(nullptr);
-    _gridContainer->updateSize();
+    // The rows belonged to the document before; the list sends new ones.
+    _gridContainer->setRows({});
     updateStatus();
 }
 

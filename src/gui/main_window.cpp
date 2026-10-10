@@ -244,6 +244,13 @@ void MainWindow::releaseDocument()
     if (_phoenixView)
         _phoenixView->clearPendingMerge();
 
+    // The panels point into the document too, and dropping the undo history
+    // below makes them refresh, so they let go first.
+    if (_timelineView)
+        _timelineView->setDocument(nullptr);
+    if (_documentView)
+        _documentView->setDocument(nullptr);
+
     // The selection and the undo history both point into the document, so both
     // have to let go before it is deleted.
     _selection.clear();

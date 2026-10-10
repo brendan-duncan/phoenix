@@ -76,6 +76,8 @@ void TimelineView::setTimeline(fla::Timeline* timeline)
 void TimelineView::setDocument(const fla::FLADocument* document)
 {
     _flaDocument = document;
-    _layersPanel->setDocument(document);
+    // The grid first: the list's rebuild hands it rows of the new document,
+    // which it must size against the new document, not the old.
     _timelinesPanel->setDocument(document);
+    _layersPanel->setDocument(document);
 }
