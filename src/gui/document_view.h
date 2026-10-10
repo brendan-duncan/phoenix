@@ -16,6 +16,11 @@ public:
 
     void setDocument(const fla::FLADocument* document);
 
+    /// Shows \a element as the selected item, when the tree has an item
+    /// for it, without reporting it back as a selection of its own. Null
+    /// clears the selection.
+    void selectElement(const fla::DOMElement* element);
+
     void refreshTree();
 
 signals:

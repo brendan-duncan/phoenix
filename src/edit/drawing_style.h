@@ -127,6 +127,13 @@ public:
     /// arrows change it while a rectangle is being dragged out, as in Animate.
     double cornerRadius = 0.0;
 
+    /// Oval primitive settings: the arc from the start angle clockwise to
+    /// the end angle (equal angles mean the whole oval), in degrees, and the
+    /// inner radius as a percentage of the outer.
+    double ovalStartAngle = 0.0;
+    double ovalEndAngle = 0.0;
+    double ovalInnerRadius = 0.0;
+
     /// PolyStar settings. Sides is the point count in star mode.
     int sides = 5;
     bool star = false;

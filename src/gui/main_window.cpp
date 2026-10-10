@@ -23,15 +23,21 @@
 
 #include <QApplication>
 #include <QCloseEvent>
+#include <QDragEnterEvent>
+#include <QDropEvent>
+#include <QMimeData>
+#include <QUrl>
 #include <QFileDialog>
 #include <QMessageBox>
 #include <QFileInfo>
+#include <QFile>
 #include <QDebug>
 #include <QMenuBar>
 #include <QMenu>
 #include <QInputDialog>
 
 #include <memory>
+#include <filesystem>
 #include <QAction>
 #include <QStatusBar>
 #include <QTextEdit>
@@ -63,7 +69,11 @@
 
 #include "tool_icons.h"
 
-MainWindow::MainWindow(QWidget *parent)
+namespace {
+fla::Frame* frameOfElement(const fla::Element* element);
+}
+
+MainWindow::MainWindow(const QString& initialFile, QWidget* parent)
     : QMainWindow(parent)
     , _phoenixView(nullptr)
     , _documentView(nullptr)
@@ -95,6 +105,13 @@ MainWindow::MainWindow(QWidget *parent)
 
     _selection.setChangedCallback([this]() {
         updateSelectionState();
+        // The tree follows the stage.
+        if (_documentView && !_syncingSelection)
+        {
+            _syncingSelection = true;
+            _documentView->selectElement(_selection.single());
+            _syncingSelection = false;
+        }
         // The transform box belongs to the old selection, so drop it.
         if (_freeTransformTool)
             _freeTransformTool->resetBox();
@@ -153,10 +170,50 @@ MainWindow::MainWindow(QWidget *parent)
     _phoenixView->setActiveTool(_selectionTool.get());
     updateSelectionState();
 
-    // Auto-open last file if available
-    if (!_recentFiles.isEmpty())
-    {
+    setAcceptDrops(true);
+
+    // The file asked for, else the one worked on last.
+    if (!initialFile.isEmpty())
+        loadFLAFile(initialFile);
+    else if (!_recentFiles.isEmpty())
         loadFLAFile(_recentFiles.first());
+}
+
+namespace {
+
+/// Whether a dropped or passed path is a document Phoenix opens.
+bool isDocumentPath(const QString& path)
+{
+    const QString lower = path.toLower();
+    return lower.endsWith(".fla") || lower.endsWith(".xfl");
+}
+
+} // namespace
+
+void MainWindow::dragEnterEvent(QDragEnterEvent* event)
+{
+    if (!event->mimeData()->hasUrls())
+        return;
+    for (const QUrl& url : event->mimeData()->urls())
+    {
+        if (url.isLocalFile() && isDocumentPath(url.toLocalFile()))
+        {
+            event->acceptProposedAction();
+            return;
+        }
+    }
+}
+
+void MainWindow::dropEvent(QDropEvent* event)
+{
+    for (const QUrl& url : event->mimeData()->urls())
+    {
+        if (url.isLocalFile() && isDocumentPath(url.toLocalFile()))
+        {
+            event->acceptProposedAction();
+            loadFLAFile(url.toLocalFile());
+            return;
+        }
     }
 }
 
@@ -316,8 +373,25 @@ void MainWindow::setupUI()
     connect(_documentView, &DocumentView::visibilityChanged,
             this, &MainWindow::onVisibilityChanged);
 
-    connect(_documentView, &DocumentView::elementSelected,
-            _phoenixView, &PhoenixView::onElementSelected);
+    // The tree and the stage share one selection: an element picked in the
+    // tree becomes the stage selection; a finer node (an edge, a path) picks
+    // its shape and is shown inside it for inspection.
+    connect(_documentView, &DocumentView::elementSelected, this,
+        [this](const fla::DOMElement* element) {
+            _phoenixView->onElementSelected(element);
+            const fla::DOMElement* owner = element;
+            while (owner && !dynamic_cast<const fla::Element*>(owner))
+                owner = owner->parent;
+            const fla::Element* picked = owner ? dynamic_cast<const fla::Element*>(owner) : nullptr;
+            if (_syncingSelection)
+                return;
+            _syncingSelection = true;
+            if (picked && frameOfElement(picked))
+                _selection.select(const_cast<fla::Element*>(picked));
+            else if (!element)
+                _selection.clear();
+            _syncingSelection = false;
+        });
 
     connect(_timelineView, &TimelineView::layerVisibilityChanged,
             this, &MainWindow::onVisibilityChanged);
@@ -718,9 +792,27 @@ bool MainWindow::saveToPath(const QString& filePath)
 
     if (filePath.endsWith(".fla", Qt::CaseInsensitive))
     {
+        // Written beside the original and moved into place once complete,
+        // so a save that fails part way leaves the original untouched.
+        const QString temporary = filePath + ".saving";
         fla::FLAWriter writer;
-        if (!writer.write(*_flaDocument->document, filePath.toStdString()))
+        if (!writer.write(*_flaDocument->document, temporary.toStdString()))
+        {
             error = QString::fromStdString(writer.errorString());
+            QFile::remove(temporary);
+        }
+        else
+        {
+            std::error_code moveError;
+            std::filesystem::rename(std::filesystem::path(temporary.toStdWString()),
+                std::filesystem::path(filePath.toStdWString()), moveError);
+            if (moveError)
+            {
+                error = QString("could not replace the file: %1")
+                    .arg(QString::fromStdString(moveError.message()));
+                QFile::remove(temporary);
+            }
+        }
     }
     else
     {
@@ -876,6 +968,10 @@ void MainWindow::redo()
 void MainWindow::updateEditState()
 {
     const fla::CommandStack& stack = _editContext.commandStack();
+
+    // Frames come and go with edits too.
+    if (_timelineView)
+        _timelineView->update();
 
     if (_undoAction)
     {
@@ -1284,6 +1380,35 @@ void MainWindow::setupPropertiesPanel()
         _drawingStyle.cornerRadius = value;
     });
     layout->addRow("Corner radius", _cornerRadiusBox);
+
+    // The oval primitive's arc and hole, as Animate's Properties panel has
+    // them.
+    QDoubleSpinBox* startAngle = new QDoubleSpinBox(panel);
+    startAngle->setRange(0.0, 360.0);
+    startAngle->setValue(_drawingStyle.ovalStartAngle);
+    startAngle->setToolTip("Where the oval primitive's arc starts, in degrees clockwise from three o'clock");
+    connect(startAngle, &QDoubleSpinBox::valueChanged, this, [this](double value) {
+        _drawingStyle.ovalStartAngle = value;
+    });
+    layout->addRow("Start angle", startAngle);
+
+    QDoubleSpinBox* endAngle = new QDoubleSpinBox(panel);
+    endAngle->setRange(0.0, 360.0);
+    endAngle->setValue(_drawingStyle.ovalEndAngle);
+    endAngle->setToolTip("Where the oval primitive's arc ends; the same as the start draws the whole oval");
+    connect(endAngle, &QDoubleSpinBox::valueChanged, this, [this](double value) {
+        _drawingStyle.ovalEndAngle = value;
+    });
+    layout->addRow("End angle", endAngle);
+
+    QDoubleSpinBox* innerRadius = new QDoubleSpinBox(panel);
+    innerRadius->setRange(0.0, 99.0);
+    innerRadius->setValue(_drawingStyle.ovalInnerRadius);
+    innerRadius->setToolTip("The oval primitive's hole, as a percentage of its size");
+    connect(innerRadius, &QDoubleSpinBox::valueChanged, this, [this](double value) {
+        _drawingStyle.ovalInnerRadius = value;
+    });
+    layout->addRow("Inner radius", innerRadius);
 
     QDoubleSpinBox* brushSize = new QDoubleSpinBox(panel);
     brushSize->setRange(1.0, 200.0);

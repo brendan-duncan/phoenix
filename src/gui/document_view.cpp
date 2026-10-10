@@ -1,4 +1,6 @@
 #include "document_view.h"
+#include <QSignalBlocker>
+#include <QTreeWidgetItemIterator>
 #include "../data/bitmap_instance.h"
 #include "../data/edge.h"
 #include "../data/group.h"
@@ -616,6 +618,33 @@ void DocumentView::mousePressEvent(QMouseEvent *event)
 
     // For other clicks, use default behavior
     QTreeWidget::mousePressEvent(event);
+}
+
+void DocumentView::selectElement(const fla::DOMElement* element)
+{
+    QTreeWidgetItem* found = nullptr;
+    if (element)
+    {
+        // Only items already built: the tree fills in lazily, and the stage
+        // selection must not unfold the whole document.
+        QTreeWidgetItemIterator it(this);
+        for (; *it; ++it)
+        {
+            if (getItemData(*it) == element)
+            {
+                found = *it;
+                break;
+            }
+        }
+    }
+
+    const QSignalBlocker blocker(this);
+    clearSelection();
+    if (found)
+    {
+        found->setSelected(true);
+        scrollToItem(found);
+    }
 }
 
 void DocumentView::onSelectionChanged()

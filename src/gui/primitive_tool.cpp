@@ -511,6 +511,9 @@ fla::Element* PrimitiveTool::createOval(fla::Frame* frame, const QRectF& rect) c
         fla::Point(rect.right(), rect.bottom()));
     oval->fillStyle = _style.createFill(oval);
     oval->strokeStyle = _style.createStroke(oval);
+    oval->startAngle = _style.ovalStartAngle;
+    oval->endAngle = _style.ovalEndAngle;
+    oval->innerRadius = std::max(0.0, std::min(99.0, _style.ovalInnerRadius));
     oval->localBounds = oval->rect;
     oval->bounds = oval->rect;
     return oval;

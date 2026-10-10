@@ -120,8 +120,9 @@ first.
       reader proves self-consistency, not compatibility. The cubic `(...)` form
       is the likeliest sticking point: Flash stores a `q`/`p` quadratic
       approximation inside the parens that our reader skips and our writer omits
-- [ ] Save to a temporary file and move it into place, so an interrupted save
+- [x] Save to a temporary file and move it into place, so an interrupted save
       cannot destroy the original
+  - Done 2026-10-10 for .fla: written to `<name>.fla.saving` beside the original and moved over it once complete (a failed write or move leaves the original and removes the temporary). An XFL folder is still written in place
 
 ## 3. Tool framework + selection
 
@@ -190,19 +191,21 @@ Selecting things on the stage works. Transforming them does not yet.
   - Grid spacing, `objectsSnapTo` and `snapAlignBorderSpacing` were declared on
     `Document` but never read, so the grid silently always used the built-in
     default of 18. They are now parsed and written
-- [ ] `main.cpp` ignores `argv`, so opening a file from the shell or by dropping
+- [x] `main.cpp` ignores `argv`, so opening a file from the shell or by dropping
       one on the executable does nothing -- it always reopens the most recent
       file instead
+  - Done 2026-10-10: a path on the command line (which a drop on the executable is) opens instead of the most recent file, and a .fla or .xfl dropped on the window opens too. Checked: `Phoenix.exe D:/fla/bitmap_fill_test.fla` opens that file
 - [ ] Ruler guides. Animate snaps to these too, but nothing models them yet --
       no rulers, no guide objects in the document. Needs that feature first, and
       is not the same thing as the guide *layers* the parser already knows about
 
 Two things to tidy:
 
-- [ ] The stage selection and the document tree still track separately: the tree
+- [x] The stage selection and the document tree still track separately: the tree
       drives `PhoenixView::_selectedElement` for inspecting edges and paths
       inside a shape, while the stage drives `Selection`. They should be the one
       model, with the tree simply selecting finer-grained nodes
+  - Done 2026-10-10: an element picked in the tree becomes the stage selection (a finer node, an edge or a path, selects its shape and is still shown inside it for inspection), and the stage selection is shown in the tree when the tree has built an item for it; the tree fills in lazily and is not unfolded for it. A guard stops the two from bouncing off each other
 - [x] A click that only selects no longer moves anything. Snapping asks where
       the box would land rather than how far the cursor traveled, so running it
       at zero distance answered "on the nearest grid line" and shifted any
@@ -256,11 +259,14 @@ happens to render.
       the file marks selected. There is no way to choose a layer yet, so
       `PhoenixView::activeFrame()` guesses. Needs layer selection in the timeline
   - Done: clicking a layer name in the layers panel makes it current
-- [ ] Drawing on a frame that has no keyframe should create one. Right now the
+- [x] Drawing on a frame that has no keyframe should create one. Right now the
       object joins whatever frame is showing
-- [ ] Star mode is implemented but only polygon mode was checked on screen
-- [ ] Rectangle corner radius and the oval's start/end angle and inner radius are
+  - Done 2026-10-10: `InsertKeyframeCommand` (`src/edit/frame_commands.cpp`, tests) cuts the span at the playhead and gives the new keyframe a copy of the span's contents, or stretches the last span up to a playhead past the end, undoably; `placeDrawnElement` inserts it inside the drawing's own undo step through `PhoenixView::keyframeForDrawing`, so every drawing tool gets it. The timeline repaints with every edit, and moving the playhead clears the selection as Animate does (which also drops a floating drawing into its frame). Checked on screen: drawing on frame 5 of a one-frame layer stretches the span and adds the keyframe, frame 1 shows no rectangle, and the saved file carries both frames. Text placed with the text tool still goes to the shown span's keyframe
+- [x] Star mode is implemented but only polygon mode was checked on screen
+  - Checked 2026-10-10: a five-point star
+- [x] Rectangle corner radius and the oval's start/end angle and inner radius are
       in the data model and get written, but no tool sets them
+  - Done 2026-10-10: the corner radius had its Properties row already; Start angle, End angle and Inner radius rows now set the oval primitive's arc and hole (checked on screen with a 270 degree arc and a 40% hole). The plain oval tool still draws whole ovals
 
 ## 5. Pen + subselection (object drawing mode)
 

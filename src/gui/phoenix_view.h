@@ -235,6 +235,13 @@ public:
     /// of the layer being edited. Null when there is nowhere to draw.
     fla::Frame* activeFrame();
 
+    /// The keyframe at the frame being shown on \a frame's layer, which a
+    /// drawing goes into. When the playhead sits inside \a frame's span
+    /// rather than on its keyframe, a keyframe is inserted there first,
+    /// through the command stack, as Animate does when drawing on a plain
+    /// frame. Returns \a frame itself when it already is that keyframe.
+    fla::Frame* keyframeForDrawing(fla::Frame* frame);
+
     void setShowGrid(bool show) { _showGrid = show; update(); }
 
     bool showGrid() const { return _showGrid; }

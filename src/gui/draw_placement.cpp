@@ -85,8 +85,16 @@ void placeDrawnElement(PhoenixView& view, fla::CommandStack& commandStack,
     const std::string name = gestureName.toStdString();
 
     // Adding the drawing and cutting what it covers are one action to undo, so
-    // they go on the history together.
+    // they go on the history together, along with the keyframe the drawing
+    // creates when the playhead is on a plain frame of the span.
     commandStack.beginMacro(name);
+    frame = view.keyframeForDrawing(frame);
+    if (!frame)
+    {
+        commandStack.endMacro();
+        delete element;
+        return;
+    }
 
     // Object Drawing mode keeps the shape to itself, and the file records
     // that on the shape, so loading it back keeps it that way.

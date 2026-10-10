@@ -46,7 +46,8 @@ class MainWindow : public QMainWindow
     Q_OBJECT
 
 public:
-    MainWindow(QWidget *parent = nullptr);
+    /// Opens \a initialFile when given, else the most recent file.
+    explicit MainWindow(const QString& initialFile = QString(), QWidget* parent = nullptr);
    
     void loadFLAFile(const QString& filePath);
 
@@ -168,6 +169,10 @@ private:
 
     void closeEvent(QCloseEvent* event) override;
 
+    /// A .fla or .xfl dropped on the window is opened.
+    void dragEnterEvent(QDragEnterEvent* event) override;
+    void dropEvent(QDropEvent* event) override;
+
     QIcon createPhoenixIcon();
 
     static const int MAX_RECENT_FILES = 10;
@@ -212,6 +217,10 @@ private:
     QToolButton* _fillColorButton = nullptr;
     QToolButton* _strokeColorButton = nullptr;
     QDoubleSpinBox* _cornerRadiusBox = nullptr;
+
+    /// True while one of the tree and the stage is being brought in line
+    /// with the other, so the change does not bounce back.
+    bool _syncingSelection = false;
     QAction* _selectAllAction = nullptr;
     QAction* _deselectAllAction = nullptr;
     QAction* _cutAction = nullptr;

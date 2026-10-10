@@ -26,6 +26,7 @@
 #include "../edit/transform_blend.h"
 #include "../edit/tween_ease.h"
 #include "../edit/shape_tween.h"
+#include "../edit/frame_commands.h"
 #include "../geom/curve.h"
 #include "../data/bitmap_fill.h"
 #include "../data/static_text.h"
@@ -237,7 +238,14 @@ PhoenixView::~PhoenixView()
 
 void PhoenixView::onPlayerFrameChanged(int frame)
 {
-    update(); // Trigger repaint when player frame changes
+    (void)frame;
+
+    // What was selected lives on the frame just left, so the selection
+    // goes with it, as in Animate; letting go also drops a drawing that
+    // was still floating into the artwork of its own frame.
+    if (_selection && !_selection->isEmpty() && !(_commandStack && _commandStack->isExecuting()))
+        _selection->clear();
+    update();
 }
 
 void PhoenixView::onElementSelected(const fla::DOMElement* element)
@@ -3110,6 +3118,26 @@ fla::Frame* PhoenixView::activeFrame()
 
     const LayerFrame state = resolveLayerFrame(layer, fla::LoopType::PlayOnce, 0);
     return const_cast<fla::Frame*>(state.frame);
+}
+
+fla::Frame* PhoenixView::keyframeForDrawing(fla::Frame* frame)
+{
+    if (!frame || !_player || !_commandStack)
+        return frame;
+
+    const fla::Layer* layer = owningLayer(frame);
+    if (!layer)
+        return frame;
+
+    const int shown = _player->currentFrame();
+    if (shown == frame->index || shown < frame->index)
+        return frame;
+
+    fla::InsertKeyframeCommand* insert = new fla::InsertKeyframeCommand(
+        const_cast<fla::Layer*>(layer), shown, "Insert Keyframe");
+    _commandStack->push(fla::CommandPtr(insert));
+    clearCaches();
+    return insert->frame() ? insert->frame() : frame;
 }
 
 void PhoenixView::setSnapper(fla::Snapper* snapper)
