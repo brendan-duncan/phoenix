@@ -12,10 +12,14 @@ Performance has not been a focus yet over accuracy.
 
 - CMake 3.16 or newer
 - A C++17 compiler
-- Qt 6, with the Widgets and Svg modules
 - Git and a network connection for the first configure: the ActionScript parser
   ([libas3](https://github.com/brendan-duncan/libas3)) is fetched at configure
-  time. zlib and tinyxml2 are vendored under `src/third_party` and need nothing.
+  time, and so is Qt unless one is already installed (see "Finding Qt"). zlib
+  and tinyxml2 are vendored under `src/third_party` and need nothing.
+
+Qt does not need to be installed: the configure step downloads a trimmed Qt 6
+(Core, Gui, Widgets, Svg, their plugins and tools, about 40 MB) into
+`third_party/qt/` the first time, if it finds none.
 
 ### Configure and build
 
@@ -37,17 +41,59 @@ which means a Developer Command Prompt, or a shell that has run `vcvars64.bat`.
 
 ### Finding Qt
 
-The build looks for Qt in this order, and stops at the first that works:
+The build looks for Qt in this order, and stops at the first that works
+(`cmake/PhoenixQt.cmake`):
 
 1. `-DQt6_ROOT=...` or `-DCMAKE_PREFIX_PATH=...` on the command line
 2. the `Qt6_ROOT` or `QTDIR` environment variables
-3. on Windows, the newest `C:/Qt/6.*/msvc*_64` it can find
+3. a trimmed Qt already unpacked under `third_party/qt/<target>`
+4. on Windows, the newest `C:/Qt/6.*/msvc*_64` it can find
+5. downloading the trimmed Qt for this machine into `third_party/qt/`
 
-If none of those turn up Qt, configuring fails with a message saying how to
-point it at one. To be explicit:
+The trimmed archives are release assets of this repository, one per target:
+`windows-x64`, `windows-arm64`, `macos` (universal), `linux-x64` and
+`linux-arm64`. `cmake/QtArchives.cmake` pins the Qt version and each archive's
+SHA-256, and the download is refused if the hash does not match. Options:
+
+- `-DPHOENIX_FETCH_QT=OFF` never downloads
+- `-DPHOENIX_USE_SYSTEM_QT=OFF` skips the `C:/Qt` guess, so the vendored copy
+  is used even on a machine with Qt installed
+- `-DPHOENIX_QT_BASE_URL=...` fetches the archives from elsewhere; a `file://`
+  URL to a local folder works
+
+To be explicit about an installed Qt:
 
 ```
 cmake -S . -B build -DQt6_ROOT=C:/Qt/6.11.2/msvc2022_64
+```
+
+The Windows archives carry Release and Debug builds of Qt (a Debug build of
+Phoenix links the debug CRT, so it needs the debug Qt). The macOS and Linux
+archives are release builds, which either configuration of Phoenix links.
+Linux still needs the usual system libraries Qt loads at run time (xcb or
+Wayland, fontconfig, OpenGL, dbus); the archive cannot carry those.
+
+#### Making the archives
+
+`tools/qt/make_qt_archive.py` cuts an installed kit down to what Phoenix
+needs, driven by Qt's own CMake package files, and packs it:
+
+```
+python tools/qt/make_qt_archive.py --target windows-x64 --qtdir C:/Qt/6.11.2/msvc2022_64 --out dist
+python tools/qt/make_qt_archive.py --target linux-x64 --version 6.11.2 --fetch --out dist
+```
+
+`--fetch` downloads the kit with [aqtinstall](https://github.com/miurahr/aqtinstall)
+(`pip install aqtinstall`). Build the macOS and Linux archives on that OS,
+since the kits use symbolic links. The Windows arm64 kit is a cross kit whose
+tools are x64 programs, run under emulation on Windows on ARM; they are taken
+from an x64 kit (`--host-qtdir`, or fetched with `--fetch`) into a `host/`
+folder that `QT_HOST_PATH` points at. The script writes each archive's hash
+into `cmake/QtArchives.cmake`; publish the archives as assets of a release
+tagged `qt-<version>`:
+
+```
+gh release create qt-6.11.2 dist/qt-6.11.2-*.zip dist/qt-6.11.2-*.tar.gz dist/*.sha256
 ```
 
 ## Tests

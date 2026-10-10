@@ -17,7 +17,9 @@ Status legend: `[ ]` todo · `[~]` in progress · `[x]` done
 - [x] Qt-free test harness (`tests/`), buildable standalone without Qt
 - [ ] Extract a `phoenix_core` CMake static library (data + parser + edit, no Qt)
       so the app and the tests share one source list
-- [ ] Restore a buildable Qt environment (see "Build environment" below)
+- [x] Restore a buildable Qt environment (see "Build environment" below)
+  - Done 2026-10-10: the build no longer depends on an installed Qt. `cmake/PhoenixQt.cmake` downloads a trimmed Qt (made by `tools/qt/make_qt_archive.py`, about 40 MB for Windows x64) into `third_party/qt/` when none is found, with the version and hashes pinned in `cmake/QtArchives.cmake`. Checked by configuring and building from the archive alone with the installed Qt ignored. Archives for windows-arm64, macos, linux-x64 and linux-arm64 still have to be built on those machines and uploaded
+- [ ] Build and publish the trimmed Qt archives for windows-arm64 (untested cross kit with x64 host tools), macos, linux-x64 and linux-arm64 as assets of the `qt-6.11.2` release, and fill their hashes in `cmake/QtArchives.cmake`
 
 ## 1. Editing infrastructure
 

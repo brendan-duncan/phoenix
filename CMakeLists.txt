@@ -20,38 +20,10 @@ set(CMAKE_AUTORCC ON)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-# Where to find Qt. In order of preference: an explicit -DQt6_ROOT or
-# -DCMAKE_PREFIX_PATH on the command line, then the Qt6_ROOT or QTDIR
-# environment variables, and only then a guess at a default Windows install.
-# Nothing here is pinned to one Qt version or one compiler.
-if(NOT DEFINED Qt6_ROOT AND NOT DEFINED CMAKE_PREFIX_PATH)
-    if(DEFINED ENV{Qt6_ROOT})
-        set(Qt6_ROOT "$ENV{Qt6_ROOT}")
-    elseif(DEFINED ENV{QTDIR})
-        set(Qt6_ROOT "$ENV{QTDIR}")
-    elseif(WIN32)
-        file(GLOB PHOENIX_QT_CANDIDATES "C:/Qt/6.*/msvc*_64" "C:/Qt/6.*/mingw*_64")
-        # Newest first, so a machine with several Qt versions picks the latest.
-        list(SORT PHOENIX_QT_CANDIDATES COMPARE NATURAL ORDER DESCENDING)
-        if(PHOENIX_QT_CANDIDATES)
-            list(GET PHOENIX_QT_CANDIDATES 0 Qt6_ROOT)
-            message(STATUS "Qt location not specified, using ${Qt6_ROOT}")
-        endif()
-        unset(PHOENIX_QT_CANDIDATES)
-    endif()
-endif()
-
-find_package(Qt6 COMPONENTS Widgets Svg)
-
-if(NOT Qt6_FOUND)
-    message(FATAL_ERROR
-        "Qt 6 (Widgets and Svg) was not found.\n"
-        "Point the build at your Qt installation in one of these ways:\n"
-        "  cmake -DQt6_ROOT=C:/Qt/<version>/msvc2022_64 ...\n"
-        "  set QTDIR=C:/Qt/<version>/msvc2022_64\n\n"
-        "The non-Qt core and its tests build without Qt:\n"
-        "  cmake -S tests -B build-tests && cmake --build build-tests\n")
-endif()
+# Where to find Qt, and how to fetch a trimmed one when there is none: see
+# cmake/PhoenixQt.cmake.
+include(cmake/PhoenixQt.cmake)
+phoenix_find_qt()
 
 # Add zlib from third_party
 set(ZLIB_BUILD_EXAMPLES OFF CACHE BOOL "Don't build zlib examples")
@@ -304,7 +276,7 @@ if(WIN32)
 
     # Add custom target to deploy Qt DLLs
     add_custom_command(TARGET Phoenix POST_BUILD
-        COMMAND ${QT_WINDEPLOYQT_EXECUTABLE} $<TARGET_FILE:Phoenix>
+        COMMAND ${QT_WINDEPLOYQT_EXECUTABLE} --no-translations $<TARGET_FILE:Phoenix>
         COMMENT "Deploying Qt libraries"
     )
 endif()
