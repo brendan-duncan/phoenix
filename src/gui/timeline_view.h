@@ -38,6 +38,8 @@ public:
     /// Redraws the grid after frames were edited.
     void refreshFrames();
 
+    void setOnionSkin(bool on, int before, int after);
+
 signals:
     void layerVisibilityChanged(const QString& timelineName, int layerIndex, bool visible);
 
@@ -52,6 +54,7 @@ signals:
     void layerRenamed(const fla::Timeline* timeline, int layerIndex, const QString& name);
     void keyframeMoveRequested(const fla::Layer* layer, int from, int to);
     void framesContextMenuRequested(const QPoint& globalPos);
+    void onionSkinToggled(bool on);
 
 private:
     const fla::FLADocument* _flaDocument;

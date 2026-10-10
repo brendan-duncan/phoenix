@@ -543,6 +543,24 @@ void PhoenixView::drawStageContents(QPainter& painter, const fla::Document* docu
             drawGrid(painter, document);
     }
 
+    // Onion skin: the frames either side of the playhead, furthest first so
+    // the nearest sit on top, under the frame itself. They belong with the
+    // background when the stage is split around moving elements.
+    if (_onionSkin && _player && (_drawPhase == DrawPhase::All || _drawPhase == DrawPhase::Below))
+    {
+        const int current = _player->currentFrame();
+        const DrawPhase phase = _drawPhase;
+        _drawPhase = DrawPhase::All;
+        for (int k = _onionBefore; k >= 1; --k)
+        {
+            if (current - k >= 0)
+                drawOnionFrame(painter, document, current - k, QColor(0, 102, 255), 0.45 * (1.0 - (k - 1.0) / (_onionBefore + 1.0)));
+        }
+        for (int k = _onionAfter; k >= 1; --k)
+            drawOnionFrame(painter, document, current + k, QColor(0, 170, 60), 0.45 * (1.0 - (k - 1.0) / (_onionAfter + 1.0)));
+        _drawPhase = phase;
+    }
+
     if (_scope.empty())
     {
         drawDocument(painter, document);
@@ -622,6 +640,62 @@ bool PhoenixView::needsBackdrop(const fla::Element* element, int depth)
     }
     _backdropCache.insert(element, needs);
     return needs;
+}
+
+int PhoenixView::shownFrame() const
+{
+    if (_frameOverride >= 0)
+        return _frameOverride;
+    return _player ? _player->currentFrame() : 0;
+}
+
+void PhoenixView::setOnionSkin(bool on, int before, int after)
+{
+    _onionSkin = on;
+    _onionBefore = std::max(0, before);
+    _onionAfter = std::max(0, after);
+    clearCaches();
+    update();
+}
+
+void PhoenixView::drawOnionFrame(QPainter& painter, const fla::Document* document, int frame,
+    const QColor& tint, double opacity)
+{
+    // Drawn on its own into a device-sized image, tinted there and laid on
+    // the stage faded, so overlapping shapes in one frame do not darken
+    // each other.
+    QPaintDevice* device = painter.device();
+    if (!device || device->width() <= 0 || device->height() <= 0)
+        return;
+    QImage image(device->width(), device->height(), QImage::Format_ARGB32_Premultiplied);
+    image.fill(Qt::transparent);
+    {
+        QPainter onion(&image);
+        onion.setRenderHint(QPainter::Antialiasing, true);
+        onion.setRenderHint(QPainter::SmoothPixmapTransform, true);
+        onion.setTransform(painter.transform());
+        _frameOverride = frame;
+        if (_scope.empty())
+        {
+            drawDocument(onion, document);
+        }
+        else if (_scope.back().timeline)
+        {
+            onion.setTransform(scopeToDocument() * painter.transform(), false);
+            drawTimeline(onion, _scope.back().timeline, fla::LoopType::PlayOnce, 0);
+        }
+        _frameOverride = -1;
+        // Half the frame's own colors, half the tint.
+        onion.setCompositionMode(QPainter::CompositionMode_SourceAtop);
+        QColor wash = tint;
+        wash.setAlphaF(0.55);
+        onion.fillRect(image.rect(), wash);
+    }
+    painter.save();
+    painter.resetTransform();
+    painter.setOpacity(painter.opacity() * opacity);
+    painter.drawImage(0, 0, image);
+    painter.restore();
 }
 
 std::vector<const fla::Element*> PhoenixView::movingElements() const
@@ -832,13 +906,13 @@ PhoenixView::LayerFrame PhoenixView::resolveLayerFrame(const fla::Layer* layer,
     }
     else if (loopType == fla::LoopType::Loop)
     {
-        int relativeFrame = _player->currentFrame() % layerDuration;
+        int relativeFrame = shownFrame() % layerDuration;
         currentFrameIndex = layer->firstFrame + firstFrame + relativeFrame;
     }
     else if (loopType == fla::LoopType::PingPong)
     {
         int pingPongDuration = layerDuration * 2;
-        int t = _player->currentFrame() % pingPongDuration;
+        int t = shownFrame() % pingPongDuration;
         if (t >= layerDuration)
         {
             t = pingPongDuration - t;
@@ -848,7 +922,7 @@ PhoenixView::LayerFrame PhoenixView::resolveLayerFrame(const fla::Layer* layer,
     }
     else // PlayOnce
     {
-        currentFrameIndex = layer->firstFrame + firstFrame + _player->currentFrame();
+        currentFrameIndex = layer->firstFrame + firstFrame + shownFrame();
     }
 
     for (const fla::Frame* frame : layer->frames)
@@ -895,6 +969,11 @@ PhoenixView::LayerFrame PhoenixView::resolveLayerFrame(const fla::Layer* layer,
 
 void PhoenixView::drawLayer(QPainter& painter, const fla::Layer* layer, fla::LoopType loopType, int firstFrame, const QPixmap* maskPixmap)
 {
+    // Onion skin leaves locked layers out, as Animate does, so a locked
+    // background is not drawn again faded under every frame.
+    if (_frameOverride >= 0 && layer->locked && _scope.empty())
+        return;
+
     QColor color;
     color.setRgb(layer->color[0], layer->color[1], layer->color[2], layer->color[3]);
     painter.setPen(QPen(color, 1.0));
@@ -1240,8 +1319,11 @@ void PhoenixView::drawElement(QPainter& painter, const fla::Element* element, co
                 // The rendering is kept between paints: the same instance
                 // placed the same way, apart from a shift, on the same
                 // document and frame draws from the image it had, moved.
-                const int shownFrame = _player ? _player->currentFrame() : -1;
-                const auto cached = _maskPass ? _filterCache.end() : _filterCache.find(instance);
+                const int shownFrame = this->shownFrame();
+                // Onion frames are drawn once and passed over, so they are
+                // neither looked up nor kept.
+                const bool cacheable = !_maskPass && _frameOverride < 0;
+                const auto cached = cacheable ? _filterCache.find(instance) : _filterCache.end();
                 const auto sameLinear = [](const QTransform& a, const QTransform& b) {
                     return std::fabs(a.m11() - b.m11()) < 1.0e-9 && std::fabs(a.m12() - b.m12()) < 1.0e-9 &&
                         std::fabs(a.m21() - b.m21()) < 1.0e-9 && std::fabs(a.m22() - b.m22()) < 1.0e-9;
@@ -1291,7 +1373,7 @@ void PhoenixView::drawElement(QPainter& painter, const fla::Element* element, co
                     painter.restore();
 
                     // Kept for the next paint unless it is huge.
-                    if (!_maskPass && symbolImage.width() * symbolImage.height() <= 4 * 1024 * 1024)
+                    if (cacheable && symbolImage.width() * symbolImage.height() <= 4 * 1024 * 1024)
                     {
                         FilteredImage entry;
                         entry.full = full;

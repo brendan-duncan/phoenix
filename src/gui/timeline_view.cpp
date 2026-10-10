@@ -42,6 +42,7 @@ TimelineView::TimelineView(Player* player, QWidget *parent)
     connect(_layersPanel, &LayersPanel::layerRenamed, this, &TimelineView::layerRenamed);
     connect(_timelinesPanel, &TimelinesPanel::keyframeMoveRequested, this, &TimelineView::keyframeMoveRequested);
     connect(_timelinesPanel, &TimelinesPanel::contextMenuRequested, this, &TimelineView::framesContextMenuRequested);
+    connect(_timelinesPanel, &TimelinesPanel::onionSkinToggled, this, &TimelineView::onionSkinToggled);
     // The grid draws the rows the list shows, so folders fold their lanes.
     connect(_layersPanel, &LayersPanel::rowsChanged, this, [this]() {
         _timelinesPanel->setRows(_layersPanel->visibleRows());
@@ -77,6 +78,11 @@ FrameSelection TimelineView::frameSelection() const
 void TimelineView::clearFrameSelection()
 {
     _timelinesPanel->clearSelection();
+}
+
+void TimelineView::setOnionSkin(bool on, int before, int after)
+{
+    _timelinesPanel->setOnionSkin(on, before, after);
 }
 
 void TimelineView::refreshFrames()

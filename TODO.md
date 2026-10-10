@@ -1371,9 +1371,11 @@ was no library or onion skin.
       dragging a keyframe; a right-click menu on the frames
   - Done 2026-10-10: the operations are Qt-free in `src/edit/timeline_edit.cpp` (tests in `test_timeline_edit.cpp`) and run through `EditFramesCommand`, which records each layer's frames before and after and owns the frames taken off, so any edit is one undo step. The Insert menu holds Timeline > Frame/Keyframe/Blank Keyframe and Classic Tween; Edit > Timeline holds Remove Frames, Clear Keyframe and Remove Tween; the same actions sit on the frames' right-click menu. A command works on the selected block of frames, else the current layer at the playhead. A selected keyframe is dragged to move it, staying between its neighbors; the last keyframe keeps its length. Checked on screen on rect_2.fla: F5 at frame 10, F6 at 5, a classic tween, the keyframe dragged to 7, two undos, and frames 3 to 7 removed
   - Not done: Create Shape Tween, since a shape tween needs the MorphShape Animate computes and Phoenix only reads; dragging a block of several frames; copy and paste of frames
-- [ ] **Onion skin.** The onion skin buttons beside the transport and the
+- [x] **Onion skin.** The onion skin buttons beside the transport and the
       range markers in the ruler; the frames either side of the playhead
       drawn faded (Animate tints before and after differently)
+  - Done 2026-10-10: a toggle beside the transport and View > Onion Skin (alt+shift+O), kept in step; two frames before and two after are drawn under the playhead's frame, each rendered alone into an image (so its own shapes do not darken each other), washed blue before and green after, and faded more the further away it is. The renderer draws them through a frame override (`PhoenixView::shownFrame`), which also keeps them out of the filtered-instance cache. Locked layers are left out, as in Animate. The ruler brackets the range. Checked on screen on effects_test.fla (the spin, linear and eased tweens at frame 4) and the Alvin file at frame 36
+  - Not done: dragging the range markers, and Animate's outline onion mode
 - [ ] **Library panel.** A panel listing the symbols and bitmaps in their
       folders; dragging an item to the stage places an instance, and
       double-clicking a symbol edits it

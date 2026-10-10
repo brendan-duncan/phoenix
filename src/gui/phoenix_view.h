@@ -145,6 +145,13 @@ signals:
     void activeToolChanged(Tool* tool);
 
 public:
+    /// Onion skinning: \a before and \a after frames either side of the
+    /// playhead drawn faded under it, those before tinted blue and those
+    /// after green, as Animate draws them.
+    void setOnionSkin(bool on, int before, int after);
+    bool onionSkin() const { return _onionSkin; }
+
+public:
 
     /// Selects a region of merge-drawn artwork the way Animate's arrow does:
     /// the fill or the stroke under the cursor, not the whole shape. The
@@ -366,6 +373,19 @@ private:
     /// drawn opaque, since a mask is coverage and its colors and alpha
     /// mean nothing.
     bool _maskPass = false;
+
+    /// The frame to draw instead of the playhead's, while an onion frame is
+    /// drawn; -1 otherwise.
+    int _frameOverride = -1;
+    int shownFrame() const;
+
+    bool _onionSkin = false;
+    int _onionBefore = 2;
+    int _onionAfter = 2;
+
+    /// Draws the edited timeline (or the document) at frame \a frame,
+    /// faded and tinted, for onion skinning.
+    void drawOnionFrame(QPainter& painter, const fla::Document* document, int frame, const QColor& tint, double opacity);
 
     /// While a layer in outline view is being drawn, its color: every fill
     /// and stroke is drawn as a thin line in it and nothing is filled.

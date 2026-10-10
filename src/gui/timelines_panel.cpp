@@ -22,6 +22,7 @@ constexpr int kFrameHeight = 21;
 #include <QPolygonF>
 #include <QPaintEvent>
 #include <QMouseEvent>
+#include <QSignalBlocker>
 #include <QContextMenuEvent>
 #include <QIcon>
 #include <QPixmap>
@@ -197,6 +198,33 @@ TimelinesPanel::TimelinesPanel(Player* player, QWidget *parent)
     connect(stepForwardBtn, &QPushButton::clicked, this, &TimelinesPanel::onStepForward);
     headerLayout->addWidget(stepForwardBtn);
 
+    // Onion skin, beside the transport as in Animate's timeline.
+    headerLayout->addSpacing(16);
+    _onionButton = new QPushButton(_header);
+    _onionButton->setFixedSize(btnSize, btnSize);
+    _onionButton->setCheckable(true);
+    _onionButton->setToolTip("Onion skin (Alt+Shift+O)");
+    {
+        QPixmap pixmap(iconSize, iconSize);
+        pixmap.fill(Qt::transparent);
+        QPainter icon(&pixmap);
+        icon.setRenderHint(QPainter::Antialiasing, true);
+        icon.setPen(QPen(QColor(220, 220, 220), 1.4));
+        icon.setBrush(QColor(220, 220, 220, 60));
+        icon.drawRoundedRect(QRectF(3.5, 5.5, 9, 11), 1.5, 1.5);
+        icon.setBrush(QColor(220, 220, 220, 140));
+        icon.drawRoundedRect(QRectF(9.5, 5.5, 9, 11), 1.5, 1.5);
+        _onionButton->setIcon(QIcon(pixmap));
+    }
+    _onionButton->setIconSize(QSize(iconSize, iconSize));
+    _onionButton->setStyleSheet(styleTransport +
+        "QPushButton:checked { background-color: rgba(41,128,238,0.45); border-radius: 4px; }");
+    connect(_onionButton, &QPushButton::toggled, this, [this](bool on) {
+        _gridContainer->setOnionSkin(on, 2, 2);
+        emit onionSkinToggled(on);
+    });
+    headerLayout->addWidget(_onionButton);
+
     headerLayout->addStretch();
     // Balance the status labels so the transport stays centered.
     QWidget* balance = new QWidget(_header);
@@ -239,6 +267,16 @@ void TimelinesPanel::updateStatus()
 void TimelinesPanel::setRows(const std::vector<LayerRow>& rows)
 {
     _gridContainer->setRows(rows);
+}
+
+void TimelinesPanel::setOnionSkin(bool on, int before, int after)
+{
+    if (_onionButton && _onionButton->isChecked() != on)
+    {
+        const QSignalBlocker blocker(_onionButton);
+        _onionButton->setChecked(on);
+    }
+    _gridContainer->setOnionSkin(on, before, after);
 }
 
 void TimelinesPanel::refreshFrames()
@@ -426,6 +464,14 @@ FrameSelection TimelineGrid::selection() const
     selection.first = std::min(_anchorFrame, _focusFrame);
     selection.last = std::max(_anchorFrame, _focusFrame);
     return selection;
+}
+
+void TimelineGrid::setOnionSkin(bool on, int before, int after)
+{
+    _onionSkin = on;
+    _onionBefore = before;
+    _onionAfter = after;
+    update();
 }
 
 void TimelineGrid::clearSelection()
@@ -713,6 +759,25 @@ void TimelineGrid::paintEvent(QPaintEvent* event)
         painter.setPen(QPen(QColor(41, 128, 238), 2.0));
         painter.setBrush(Qt::NoBrush);
         painter.drawRect(ghost.adjusted(1, 1, -1, -1));
+    }
+
+    // Onion skin markers: brackets in the ruler at either end of the range,
+    // with the range shaded between them.
+    if (_onionSkin && _player)
+    {
+        const int current = _player->currentFrame();
+        const int first = std::max(0, current - _onionBefore);
+        const int last = current + _onionAfter;
+        painter.setRenderHint(QPainter::Antialiasing, false);
+        const QRect range(first * cellStride, 2, (last - first + 1) * cellStride - margin, headerHeight - 12);
+        painter.fillRect(range, QColor(41, 128, 238, 45));
+        painter.setPen(QPen(QColor(41, 128, 238), 2.0));
+        const int left = first * cellStride + 1;
+        const int right = (last + 1) * cellStride - margin - 1;
+        painter.drawLine(left, 2, left, headerHeight - 10);
+        painter.drawLine(left, 2, left + 4, 2);
+        painter.drawLine(right, 2, right, headerHeight - 10);
+        painter.drawLine(right, 2, right - 4, 2);
     }
 
     if (_player)

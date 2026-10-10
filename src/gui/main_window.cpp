@@ -445,6 +445,14 @@ void MainWindow::setupUI()
     connect(_timelineView, &TimelineView::layersChanged,
             this, &MainWindow::onVisibilityChanged);
 
+    // The onion skin button and the View menu item are one setting.
+    connect(_timelineView, &TimelineView::onionSkinToggled, this, [this](bool on) {
+        if (_onionSkinAction && _onionSkinAction->isChecked() != on)
+            _onionSkinAction->setChecked(on);
+        else if (_phoenixView)
+            _phoenixView->setOnionSkin(on, 2, 2);
+    });
+
     // Frame edits from the grid itself: dragging a keyframe, the menu.
     connect(_timelineView, &TimelineView::keyframeMoveRequested, this, &MainWindow::moveKeyframe);
     connect(_timelineView, &TimelineView::framesContextMenuRequested, this, &MainWindow::showFramesMenu);
@@ -929,6 +937,19 @@ void MainWindow::setupMenus()
 
     // View menu
     QMenu* viewMenu = menuBar->addMenu("&View");
+
+    _onionSkinAction = new QAction("&Onion Skin", this);
+    _onionSkinAction->setCheckable(true);
+    _onionSkinAction->setShortcut(QKeySequence(Qt::ALT | Qt::SHIFT | Qt::Key_O));
+    _onionSkinAction->setStatusTip("Show the frames either side of the playhead faded under it");
+    connect(_onionSkinAction, &QAction::toggled, this, [this](bool on) {
+        if (_phoenixView)
+            _phoenixView->setOnionSkin(on, 2, 2);
+        if (_timelineView)
+            _timelineView->setOnionSkin(on, 2, 2);
+    });
+    viewMenu->addAction(_onionSkinAction);
+    viewMenu->addSeparator();
 
     QAction* viewDocumentAction = new QAction("View Document...", this);
     viewDocumentAction->setStatusTip("View the current document source");

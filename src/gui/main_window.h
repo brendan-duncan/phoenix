@@ -279,6 +279,7 @@ private:
     QAction* _softenFillAction = nullptr;
     /// Timeline commands on a right-click in the frames.
     QMenu* _framesMenu = nullptr;
+    QAction* _onionSkinAction = nullptr;
     QAction* _ungroupAction = nullptr;
     QAction* _breakApartAction = nullptr;
     QAction* _convertToSymbolAction = nullptr;

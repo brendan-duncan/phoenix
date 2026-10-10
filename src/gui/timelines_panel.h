@@ -48,6 +48,9 @@ public:
     FrameSelection selection() const;
     void clearSelection();
 
+    /// Shows the onion skin range in the ruler.
+    void setOnionSkin(bool on, int before, int after);
+
 public slots:
     void onPlayerFrameChanged(int frame) { update(); }
 
@@ -78,6 +81,10 @@ private:
     bool _isDragging = false;
     const fla::Timeline* _timeline = nullptr;
     std::vector<LayerRow> _rows;
+
+    bool _onionSkin = false;
+    int _onionBefore = 2;
+    int _onionAfter = 2;
 
     /// The selected block, in rows and frames, while there is one.
     bool _hasSelection = false;
@@ -120,7 +127,13 @@ public:
     /// Redraws the grid after frames were edited.
     void refreshFrames();
 
+    /// Reflects the onion skin state set from elsewhere (the View menu).
+    void setOnionSkin(bool on, int before, int after);
+
 signals:
+    /// The onion skin button was toggled.
+    void onionSkinToggled(bool on);
+
     void layerPressed(const fla::Timeline* timeline, int layerIndex);
     void keyframeMoveRequested(const fla::Layer* layer, int from, int to);
     void contextMenuRequested(const QPoint& globalPos);
@@ -145,6 +158,7 @@ private:
     TimelineGrid* _gridContainer;
     Player* _player;
     QPushButton* _playButton;
+    QPushButton* _onionButton = nullptr;
     /// Animate's timeline status: the frame shown, the frame rate and the
     /// time into the animation.
     class QLabel* _frameLabel = nullptr;
