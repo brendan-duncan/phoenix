@@ -19,6 +19,10 @@ public:
     /// is kept rather than derived.
     std::string href;
 
+    /// How new instances behave by default: the symbol's own type as the
+    /// library shows it.
+    SymbolType symbolType = SymbolType::Graphic;
+
     /// 9-slice scaling guides, in the symbol's own space: the two vertical
     /// and two horizontal lines that split it into corners that never
     /// scale, edges that scale one way and a middle that scales both.

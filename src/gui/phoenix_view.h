@@ -123,6 +123,10 @@ public:
     /// every instance of it, since they all draw the same timeline.
     bool enterSymbol(fla::SymbolInstance* instance);
 
+    /// Edits \a symbol on its own, as a double-click in the library does:
+    /// the document is put away and the symbol shown at the stage's center.
+    bool editSymbol(const fla::Symbol* symbol);
+
     /// Steps out one level, selecting the instance that was being edited.
     bool exitScope();
 
@@ -143,6 +147,10 @@ signals:
 
     /// The tool that now has the stage.
     void activeToolChanged(Tool* tool);
+
+    /// A library item was dropped at \a position, in the space the tools
+    /// work in. \a kind is "symbol" or "bitmap".
+    void libraryItemDropped(const QString& kind, const QString& name, const QPointF& position);
 
 public:
     /// Onion skinning: \a before and \a after frames either side of the
@@ -282,6 +290,9 @@ public slots:
 
 protected:
     void paintEvent(QPaintEvent *event) override;
+    void dragEnterEvent(QDragEnterEvent* event) override;
+    void dragMoveEvent(QDragMoveEvent* event) override;
+    void dropEvent(QDropEvent* event) override;
 
     void mousePressEvent(QMouseEvent *event) override;
 
@@ -344,8 +355,11 @@ private:
     /// draws.
     struct EditScope
     {
+        /// The instance entered, or null when the symbol is edited on its
+        /// own (from the library), centered on the stage with nothing else.
         fla::SymbolInstance* instance = nullptr;
         fla::Timeline* timeline = nullptr;
+        const fla::Symbol* symbol = nullptr;
     };
     std::vector<EditScope> _scope;
 

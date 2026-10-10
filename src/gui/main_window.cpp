@@ -2,6 +2,9 @@
 #include "convert_to_symbol_dialog.h"
 #include "lines_to_fills.h"
 #include "fill_offset.h"
+#include "../data/bitmap_instance.h"
+#include "draw_placement.h"
+#include "library_panel.h"
 #include "../edit/layer_commands.h"
 #include "../edit/timeline_edit.h"
 #include "../edit/property_command.h"
@@ -46,6 +49,7 @@
 #include <QStatusBar>
 #include <QTextEdit>
 #include <QDialog>
+#include <QTabWidget>
 #include <QDialogButtonBox>
 #include <QRadioButton>
 #include <QVBoxLayout>
@@ -251,6 +255,8 @@ void MainWindow::releaseDocument()
         _timelineView->setDocument(nullptr);
     if (_documentView)
         _documentView->setDocument(nullptr);
+    if (_libraryPanel)
+        _libraryPanel->setDocument(nullptr);
 
     // The selection and the undo history both point into the document, so both
     // have to let go before it is deleted.
@@ -290,6 +296,8 @@ void MainWindow::adoptDocument(fla::FLADocument* document, const QString& filePa
         _propertiesPanel->refresh();
         _propertiesPanel->setTab(PropertiesPanel::Tab::Doc);
     }
+    if (_libraryPanel)
+        _libraryPanel->setDocument(_flaDocument);
 
     if (_flaDocument)
         _player->setCurrentFrame(0);
@@ -1307,6 +1315,8 @@ void MainWindow::updateEditState()
     // Frames come and go with edits too, and the Properties panel shows
     // whatever an edit or an undo just changed. Layers do as well (an undone
     // New Layer, say), so the list is rebuilt when it no longer matches.
+    if (_libraryPanel)
+        _libraryPanel->refreshIfStale();
     if (_timelineView)
     {
         _timelineView->refreshIfStale();
@@ -1591,6 +1601,27 @@ void MainWindow::setupPropertiesPanel()
     dock->setMinimumWidth(300);
     addDockWidget(Qt::RightDockWidgetArea, dock);
 
+    // The Library sits in a tab beside Properties, as in Animate.
+    QDockWidget* libraryDock = new QDockWidget("Library", this);
+    libraryDock->setObjectName("libraryDock");
+    libraryDock->setAllowedAreas(Qt::RightDockWidgetArea | Qt::LeftDockWidgetArea);
+    _libraryPanel = new LibraryPanel(libraryDock);
+    libraryDock->setWidget(_libraryPanel);
+    addDockWidget(Qt::RightDockWidgetArea, libraryDock);
+    setTabPosition(Qt::RightDockWidgetArea, QTabWidget::North);
+    tabifyDockWidget(dock, libraryDock);
+    dock->raise();
+    _libraryPanel->setDocument(_flaDocument);
+    connect(_libraryPanel, &LibraryPanel::editSymbolRequested, this, [this](const QString& name) {
+        if (!_phoenixView || !_flaDocument || !_flaDocument->document || !_flaDocument->document->symbolList)
+            return;
+        const auto& symbols = _flaDocument->document->symbolList->symbolMap;
+        const auto found = symbols.find(name.toStdString());
+        if (found != symbols.end())
+            _phoenixView->editSymbol(found->second);
+    });
+    connect(_phoenixView, &PhoenixView::libraryItemDropped, this, &MainWindow::placeLibraryItem);
+
     // The Tool tab writes into the drawing style itself; these are the side
     // effects the window has to carry out.
     connect(_propertiesPanel, &PropertiesPanel::toolSettingChanged, this, [this](const QString& key) {
@@ -1666,6 +1697,54 @@ void MainWindow::setupPropertiesPanel()
     connect(_timelineView, &TimelineView::currentLayerChanged, this, [this]() {
         _propertiesPanel->refresh();
     });
+}
+
+void MainWindow::placeLibraryItem(const QString& kind, const QString& name, const QPointF& position)
+{
+    if (!_phoenixView || !_flaDocument || !_flaDocument->document)
+        return;
+    fla::Frame* frame = _phoenixView->activeFrame();
+    if (!frame)
+    {
+        statusBar()->showMessage("The current layer is locked or hidden.", 3000);
+        return;
+    }
+
+    fla::Element* element = nullptr;
+    const std::string itemName = name.toStdString();
+    if (kind == "symbol")
+    {
+        fla::SymbolList* list = _flaDocument->document->symbolList;
+        const auto found = list ? list->symbolMap.find(itemName) : decltype(list->symbolMap)::iterator();
+        if (!list || found == list->symbolMap.end())
+            return;
+        fla::SymbolInstance* instance = new fla::SymbolInstance(frame);
+        instance->libraryItemName = itemName;
+        instance->symbol = found->second;
+        instance->symbolType = found->second->symbolType;
+        instance->loopType = fla::LoopType::Loop;
+        element = instance;
+    }
+    else if (kind == "bitmap")
+    {
+        fla::BitmapInstance* bitmap = new fla::BitmapInstance(frame);
+        bitmap->libraryItemName = itemName;
+        element = bitmap;
+    }
+    if (!element)
+        return;
+
+    // Centered on the drop, as Animate places a dragged item.
+    const QRectF bounds = _phoenixView->elementBounds(element);
+    const QPointF center = bounds.isValid() ? bounds.center() : QPointF();
+    element->transform.tx = position.x() - center.x();
+    element->transform.ty = position.y() - center.y();
+    _phoenixView->invalidateBounds();
+
+    placeDrawnElement(*_phoenixView, _editContext.commandStack(), _selection, frame, element,
+        "Add Instance", true);
+    _phoenixView->clearCaches();
+    _phoenixView->update();
 }
 
 ToolIcons::Tool MainWindow::iconForTool(const Tool* tool) const

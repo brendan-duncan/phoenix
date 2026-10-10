@@ -255,6 +255,11 @@ private:
     std::unique_ptr<SubselectionTool> _subselectionTool;
     fla::DrawingStyle _drawingStyle;
     PropertiesPanel* _propertiesPanel = nullptr;
+    class LibraryPanel* _libraryPanel = nullptr;
+
+    /// Places an instance of a library item where it was dropped, centered
+    /// there, as Animate does.
+    void placeLibraryItem(const QString& kind, const QString& name, const QPointF& position);
 
     /// Which toolbox icon stands for \a tool, for the Properties panel's
     /// Tool tab.

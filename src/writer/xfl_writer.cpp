@@ -1027,6 +1027,8 @@ std::string XFLWriter::writeSymbol(const Symbol& symbol)
     setString(root, "name", symbol.name);
     setString(root, "itemID", symbol.itemId);
     setString(root, "lastModified", symbol.lastModified);
+    if (symbol.symbolType != SymbolType::Graphic)
+        root->SetAttribute("symbolType", symbolTypeName(symbol.symbolType));
     if (symbol.scale9)
     {
         root->SetAttribute("scaleGridLeft", symbol.scaleGridLeft);

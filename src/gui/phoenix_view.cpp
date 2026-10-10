@@ -1,5 +1,9 @@
 #include "phoenix_view.h"
 #include "filters.h"
+#include "library_panel.h"
+#include <QMimeData>
+#include <QDropEvent>
+#include <QDragEnterEvent>
 
 #include "draw_placement.h"
 
@@ -221,6 +225,8 @@ PhoenixView::PhoenixView(Player* player, QWidget *parent)
 
     // Enable mouse tracking for smooth panning
     setMouseTracking(true);
+    // Library items are dragged onto the stage to place them.
+    setAcceptDrops(true);
 
     // Long enough that a continuous wheel gesture never refines mid-scroll,
     // short enough that the sharp frame feels immediate once it stops.
@@ -569,10 +575,14 @@ void PhoenixView::drawStageContents(QPainter& painter, const fla::Document* docu
     {
         // Edit in place: everything outside the symbol being edited fades
         // back, and the symbol draws over it at full strength in its own
-        // space, which is where the tools now work.
-        painter.setOpacity(0.3);
-        drawDocument(painter, document);
-        painter.setOpacity(1.0);
+        // space, which is where the tools now work. A symbol edited from the
+        // library is shown on its own.
+        if (_scope.front().instance)
+        {
+            painter.setOpacity(0.3);
+            drawDocument(painter, document);
+            painter.setOpacity(1.0);
+        }
 
         painter.setTransform(scopeToDocument() * rootFull, false);
         if (_scope.back().timeline)
@@ -4009,6 +4019,15 @@ QTransform PhoenixView::scopeToDocument() const
     QTransform transform;
     for (const EditScope& level : _scope)
     {
+        if (!level.instance)
+        {
+            // A symbol edited on its own sits with its registration point at
+            // the stage's center.
+            const fla::Document* document = _flaDocument ? _flaDocument->document : nullptr;
+            transform = document ? QTransform::fromTranslate(document->width / 2.0, document->height / 2.0) * transform
+                : transform;
+            continue;
+        }
         const fla::Transform& t = level.instance->transform;
         transform = QTransform(t.m11, t.m12, t.m21, t.m22, t.tx, t.ty) * transform;
     }
@@ -4055,6 +4074,8 @@ QString PhoenixView::scopeName(int depth) const
         return QString();
 
     const fla::SymbolInstance* instance = _scope[depth - 1].instance;
+    if (!instance && _scope[depth - 1].symbol)
+        return QString::fromStdString(_scope[depth - 1].symbol->name);
     if (instance && instance->symbol && !instance->symbol->name.empty())
         return QString::fromStdString(instance->symbol->name);
     return QString::fromStdString(instance ? instance->libraryItemName : std::string());
@@ -4070,11 +4091,61 @@ bool PhoenixView::enterSymbol(fla::SymbolInstance* instance)
     if (_selection)
         _selection->clear();
 
-    _scope.push_back({instance, instance->symbol->timelines.front()});
+    _scope.push_back({instance, instance->symbol->timelines.front(), instance->symbol});
     clearCaches();
     emit scopeChanged();
     update();
     return true;
+}
+
+bool PhoenixView::editSymbol(const fla::Symbol* symbol)
+{
+    if (!symbol || symbol->timelines.empty())
+        return false;
+    exitToDepth(0);
+    flushPendingMerge();
+    if (_selection)
+        _selection->clear();
+    _scope.push_back({nullptr, symbol->timelines.front(), symbol});
+    clearCaches();
+    emit scopeChanged();
+    update();
+    return true;
+}
+
+void PhoenixView::dragEnterEvent(QDragEnterEvent* event)
+{
+    if (event->mimeData()->hasFormat(LibraryTree::mimeType()))
+        event->acceptProposedAction();
+    else
+        QWidget::dragEnterEvent(event);
+}
+
+void PhoenixView::dragMoveEvent(QDragMoveEvent* event)
+{
+    if (event->mimeData()->hasFormat(LibraryTree::mimeType()))
+        event->acceptProposedAction();
+    else
+        QWidget::dragMoveEvent(event);
+}
+
+void PhoenixView::dropEvent(QDropEvent* event)
+{
+    if (!event->mimeData()->hasFormat(LibraryTree::mimeType()))
+    {
+        QWidget::dropEvent(event);
+        return;
+    }
+    const QString text = QString::fromUtf8(event->mimeData()->data(LibraryTree::mimeType()));
+    const int colon = text.indexOf(':');
+    if (colon < 0)
+        return;
+    bool invertible = false;
+    const QTransform toScope = documentToWidget().inverted(&invertible);
+    if (!invertible)
+        return;
+    event->acceptProposedAction();
+    emit libraryItemDropped(text.left(colon), text.mid(colon + 1), toScope.map(event->position()));
 }
 
 bool PhoenixView::exitScope()

@@ -1572,6 +1572,11 @@ bool parseSymbolInclude(const tinyxml2::XMLElement* element, fla::SymbolList* sy
     symbol->itemId = getAttribute(root, "itemID");
     symbol->lastModified = getAttribute(root, "lastModified");
     symbol->href = href;
+    {
+        const std::string type = getAttribute(root, "symbolType", "graphic");
+        symbol->symbolType = type == "movie clip" ? fla::SymbolType::MovieClip
+            : type == "button" ? fla::SymbolType::Button : fla::SymbolType::Graphic;
+    }
     if (hasAttribute(root, "scaleGridLeft"))
     {
         symbol->scale9 = true;

@@ -809,6 +809,7 @@ ConvertToSymbolCommand::ConvertToSymbolCommand(Document* document, Frame* frame,
     _instance->libraryItemName = symbolName;
     _instance->symbol = _symbol;
     _instance->symbolType = symbolType;
+    _symbol->symbolType = symbolType;
     _instance->transform.tx = registrationX;
     _instance->transform.ty = registrationY;
 
