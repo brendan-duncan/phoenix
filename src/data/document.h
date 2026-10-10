@@ -10,6 +10,7 @@
 #include "symbol.h"
 #include "symbol_instance.h"
 #include "symbol_list.h"
+#include <cstdint>
 #include <map>
 #include <string>
 #include <vector>

@@ -14,6 +14,7 @@
 #include "../edit/region_split.h"
 #include "../edit/shape_merge.h"
 
+#include <cstdint>
 #include <QMouseEvent>
 
 #include <memory>

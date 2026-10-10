@@ -18,6 +18,7 @@
 #include "../writer/xfl_content.h"
 #include "../writer/xfl_folder_writer.h"
 
+#include <cstdint>
 #include <algorithm>
 
 #include <QApplication>

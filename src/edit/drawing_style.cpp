@@ -2,6 +2,7 @@
 
 #include "../data/solid_color.h"
 #include "../data/stroke_style.h"
+#include <cstdint>
 
 namespace fla {
 

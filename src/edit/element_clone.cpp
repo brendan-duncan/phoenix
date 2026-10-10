@@ -14,6 +14,7 @@
 #include "../data/static_text.h"
 #include "../data/symbol_instance.h"
 #include "shape_merge.h"
+#include <cstdint>
 
 namespace fla {
 

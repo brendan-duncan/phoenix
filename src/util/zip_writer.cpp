@@ -2,6 +2,7 @@
 
 #include "zlib.h"
 
+#include <cstdint>
 #include <cstring>
 #include <limits>
 

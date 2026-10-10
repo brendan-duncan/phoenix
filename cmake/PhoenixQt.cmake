@@ -10,7 +10,8 @@
 # The trimmed archives are made by tools/qt/make_qt_archive.py and published
 # as release assets; cmake/QtArchives.cmake pins the version and the
 # archives' hashes. -DPHOENIX_FETCH_QT=OFF turns the download off, and
-# -DPHOENIX_QT_BASE_URL=... points it somewhere else (a file:// URL works).
+# -DPHOENIX_QT_BASE_URL=... points it somewhere else, and
+# -DPHOENIX_QT_ARCHIVE_DIR=... uses archives already on disk.
 
 include("${CMAKE_CURRENT_LIST_DIR}/QtArchives.cmake")
 
@@ -19,6 +20,8 @@ option(PHOENIX_USE_SYSTEM_QT "Look for an installed Qt before the vendored one" 
 set(PHOENIX_QT_BASE_URL
     "https://github.com/brendan-duncan/phoenix/releases/download/qt-${PHOENIX_QT_VERSION}"
     CACHE STRING "Where the trimmed Qt archives are downloaded from")
+set(PHOENIX_QT_ARCHIVE_DIR "" CACHE PATH
+    "A folder already holding the trimmed Qt archives, used instead of downloading")
 
 # The archive name for this machine: windows-x64, windows-arm64, macos,
 # linux-x64 or linux-arm64. On Windows the generator's platform decides,
@@ -64,30 +67,54 @@ function(phoenix_fetch_qt)
 
         string(REPLACE "-" "_" key "${target}")
         set(hash "${PHOENIX_QT_SHA256_${key}}")
-        set(hash_args "")
-        if(hash)
-            set(hash_args EXPECTED_HASH "SHA256=${hash}")
-        else()
-            message(WARNING "No pinned hash for ${name}; the download is not verified")
+
+        # An archive already on disk is used as it is; otherwise it is
+        # downloaded. Either way a pinned hash has to match.
+        set(local "")
+        if(PHOENIX_QT_ARCHIVE_DIR)
+            file(TO_CMAKE_PATH "${PHOENIX_QT_ARCHIVE_DIR}" archive_dir)
+            if(EXISTS "${archive_dir}/${name}")
+                set(local "${archive_dir}/${name}")
+            endif()
         endif()
 
-        message(STATUS "Qt not found; downloading ${url}")
-        file(DOWNLOAD "${url}" "${archive}" ${hash_args} SHOW_PROGRESS STATUS status TLS_VERIFY ON)
-        list(GET status 0 code)
-        if(NOT code EQUAL 0)
-            list(GET status 1 reason)
-            file(REMOVE "${archive}")
-            message(FATAL_ERROR
-                "Downloading Qt failed: ${reason}\n"
-                "Either install Qt and point the build at it (-DQt6_ROOT=...), or\n"
-                "make the archive with tools/qt/make_qt_archive.py and pass\n"
-                "-DPHOENIX_QT_BASE_URL=file:///path/to/its/folder")
+        if(local)
+            message(STATUS "Qt not found; using the archive ${local}")
+            set(archive "${local}")
+            if(hash)
+                file(SHA256 "${archive}" actual)
+                if(NOT actual STREQUAL hash)
+                    message(FATAL_ERROR "${local} does not match the hash pinned in cmake/QtArchives.cmake")
+                endif()
+            endif()
+        else()
+            set(hash_args "")
+            if(hash)
+                set(hash_args EXPECTED_HASH "SHA256=${hash}")
+            else()
+                message(WARNING "No pinned hash for ${name}; the download is not verified")
+            endif()
+
+            message(STATUS "Qt not found; downloading ${url}")
+            file(DOWNLOAD "${url}" "${archive}" ${hash_args} SHOW_PROGRESS STATUS status TLS_VERIFY ON)
+            list(GET status 0 code)
+            if(NOT code EQUAL 0)
+                list(GET status 1 reason)
+                file(REMOVE "${archive}")
+                message(FATAL_ERROR
+                    "Downloading Qt failed: ${reason}\n"
+                    "Either install Qt and point the build at it (-DQt6_ROOT=...), or\n"
+                    "make the archive with tools/qt/make_qt_archive.py and pass\n"
+                    "-DPHOENIX_QT_ARCHIVE_DIR=/path/to/its/folder")
+            endif()
         endif()
 
         message(STATUS "Unpacking ${name} into ${vendored}")
         file(MAKE_DIRECTORY "${vendored}")
         file(ARCHIVE_EXTRACT INPUT "${archive}" DESTINATION "${vendored}")
-        file(REMOVE "${archive}")
+        if(NOT local)
+            file(REMOVE "${archive}")
+        endif()
     endif()
 
     message(STATUS "Using the vendored Qt in ${vendored}")

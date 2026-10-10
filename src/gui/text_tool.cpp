@@ -10,6 +10,7 @@
 #include "../edit/element_commands.h"
 #include "../edit/selection.h"
 
+#include <cstdint>
 #include <QKeyEvent>
 #include <QMouseEvent>
 #include <QPainter>

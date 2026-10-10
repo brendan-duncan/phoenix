@@ -1,5 +1,6 @@
 #include "zip_reader.h"
 #include "../util/zip_archive.h"
+#include <cstdint>
 #include <filesystem>
 #include <fstream>
 #include <iostream>

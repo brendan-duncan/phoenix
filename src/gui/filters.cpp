@@ -2,6 +2,7 @@
 
 #include "../edit/image_blur.h"
 
+#include <cstdint>
 #include <algorithm>
 #include <cmath>
 

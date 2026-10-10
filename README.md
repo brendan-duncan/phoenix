@@ -58,8 +58,9 @@ SHA-256, and the download is refused if the hash does not match. Options:
 - `-DPHOENIX_FETCH_QT=OFF` never downloads
 - `-DPHOENIX_USE_SYSTEM_QT=OFF` skips the `C:/Qt` guess, so the vendored copy
   is used even on a machine with Qt installed
-- `-DPHOENIX_QT_BASE_URL=...` fetches the archives from elsewhere; a `file://`
-  URL to a local folder works
+- `-DPHOENIX_QT_BASE_URL=...` fetches the archives from elsewhere
+- `-DPHOENIX_QT_ARCHIVE_DIR=...` uses archives already in a local folder, as
+  the script leaves them in `dist/`, instead of downloading
 
 To be explicit about an installed Qt:
 

@@ -246,6 +246,13 @@ class Trim:
         for icu in (self.qtdir / "lib").glob("libicu*"):
             self.copy(icu.relative_to(self.qtdir))
 
+        # Qt's packages list the include root itself as an include folder.
+        # On macOS the headers live in the frameworks, so nothing else
+        # creates it, and CMake refuses an imported target whose include
+        # folder is missing.
+        for folder in ("include", "lib", "bin"):
+            (self.out / folder).mkdir(parents=True, exist_ok=True)
+
         self.prune_plugin_packages(kept_plugins)
         self.prune_broken_configs()
         self.copy_licenses()

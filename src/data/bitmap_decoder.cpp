@@ -1,5 +1,6 @@
 #include "bitmap_decoder.h"
 
+#include <cstdint>
 #include <zlib.h>
 
 #include <cstring>

@@ -1,5 +1,6 @@
 #include "zip_archive.h"
 #include "../third_party/zlib/zlib.h"
+#include <cstdint>
 #include <fstream>
 #include <cstring>
 #include <filesystem>

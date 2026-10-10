@@ -2,6 +2,7 @@
 
 #include "intersect.h"
 
+#include <cstdint>
 #include <algorithm>
 #include <cmath>
 #include <tuple>

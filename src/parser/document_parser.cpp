@@ -15,6 +15,7 @@
 #include "../data/swatch.h"
 #include "../data/symbol_instance.h"
 #include "../third_party/tinyxml2/tinyxml2.h"
+#include <cstdint>
 #include <algorithm>
 #include <iostream>
 #include <cstring>

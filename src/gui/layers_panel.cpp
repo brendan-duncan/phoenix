@@ -1,5 +1,6 @@
 #include "layers_panel.h"
 
+#include <cstdint>
 #include <QHeaderView>
 #include <QTreeWidget>
 #include <QPainter>

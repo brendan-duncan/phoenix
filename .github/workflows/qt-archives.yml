@@ -121,9 +121,11 @@ jobs:
       - name: Configure and build from the archive
         shell: bash
         run: |
+          # The workspace with forward slashes: on Windows that is D:/a/...,
+          # where bash's own $(pwd) would say /d/a/...
           cmake -S . -B build ${{ matrix.generator }} \
             -DPHOENIX_USE_SYSTEM_QT=OFF \
-            -DPHOENIX_QT_BASE_URL="file://$(pwd)/dist" \
+            -DPHOENIX_QT_ARCHIVE_DIR="${GITHUB_WORKSPACE//\\//}/dist" \
             -DCMAKE_BUILD_TYPE=Release
           cmake --build build --config Release --target Phoenix phoenix_tests --parallel
 

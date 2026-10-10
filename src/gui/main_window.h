@@ -26,6 +26,7 @@
 #include <vector>
 
 #include <QMainWindow>
+#include <QToolButton>
 
 #include "../edit/editable_path.h"
 

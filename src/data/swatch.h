@@ -1,6 +1,7 @@
 #pragma once
 
-#include "dom_element.h"
+#include "dom_element.h"
+#include <cstdint>
 
 namespace fla {
 

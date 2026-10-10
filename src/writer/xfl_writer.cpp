@@ -22,6 +22,7 @@
 
 #include "../third_party/tinyxml2/tinyxml2.h"
 
+#include <cstdint>
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
