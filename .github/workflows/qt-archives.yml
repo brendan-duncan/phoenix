@@ -68,7 +68,9 @@ jobs:
           if-no-files-found: error
 
   # Each archive is proved by configuring and building Phoenix from it on
-  # the platform it is for, with any installed Qt ignored.
+  # the platform it is for, with any installed Qt ignored. On Windows the
+  # generator is left to CMake, which takes the newest Visual Studio on the
+  # runner; only the target platform is named.
   verify:
     needs: make
     strategy:
@@ -78,11 +80,14 @@ jobs:
           - os: windows-latest
             target: windows-x64
             artifact: qt-windows-latest
-            generator: -G "Visual Studio 17 2022" -A x64
+            generator: -A x64
           - os: windows-11-arm
             target: windows-arm64
             artifact: qt-windows-latest
-            generator: -G "Visual Studio 17 2022" -A ARM64
+            generator: -A ARM64
+            # The cross kit has not been tried yet; its failure must not
+            # hold back the other archives.
+            experimental: true
           - os: macos-latest
             target: macos
             artifact: qt-macos-latest
@@ -96,6 +101,7 @@ jobs:
             artifact: qt-ubuntu-latest
             generator: ""
     runs-on: ${{ matrix.os }}
+    continue-on-error: ${{ matrix.experimental || false }}
     steps:
       - uses: actions/checkout@v4
 

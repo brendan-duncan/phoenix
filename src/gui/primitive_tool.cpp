@@ -17,6 +17,7 @@
 #include <QKeyEvent>
 #include <QMouseEvent>
 
+#include <algorithm>
 #include <cmath>
 
 namespace {

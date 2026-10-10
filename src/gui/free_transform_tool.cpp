@@ -17,6 +17,7 @@
 #include <QMouseEvent>
 #include <QPainterPath>
 
+#include <algorithm>
 #include <cmath>
 
 namespace {

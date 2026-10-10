@@ -21,6 +21,7 @@
 #include <QPainterPathStroker>
 #include <QPolygonF>
 
+#include <algorithm>
 #include <cmath>
 #include <memory>
 

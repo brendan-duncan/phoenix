@@ -11,6 +11,7 @@
 #include <QPushButton>
 #include <QSettings>
 #include <QVBoxLayout>
+#include <algorithm>
 
 namespace
 {
