@@ -59,6 +59,7 @@ set(TEST_CORE_SOURCES
     ${PHOENIX_SRC}/edit/tween_ease.cpp
     ${PHOENIX_SRC}/edit/image_blur.cpp
     ${PHOENIX_SRC}/edit/shape_recognition.cpp
+    ${PHOENIX_SRC}/edit/path_tidy.cpp
     ${PHOENIX_SRC}/edit/snapping.cpp
     ${PHOENIX_SRC}/edit/region_split.cpp
     ${PHOENIX_SRC}/geom/curve.cpp
@@ -90,6 +91,7 @@ set(TEST_SOURCES
     test_shape_transform.cpp
     test_tween_ease.cpp
     test_shape_recognition.cpp
+    test_path_tidy.cpp
     test_snapping.cpp
 )
 

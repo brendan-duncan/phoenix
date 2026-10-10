@@ -343,7 +343,8 @@ void PhoenixView::onElementSelected(const fla::DOMElement* element)
 void PhoenixView::setDocument(const fla::FLADocument* document)
 {
     _bitmapCache.clear(); // Clear bitmap cache when loading new document
-    _boundsCache.clear(); // Clear bounds cache for new document
+    _boundsCache.clear();
+    _snapBoundsValid = false; // Clear bounds cache for new document
     _pathCache.clear(); // Clear path cache for new document
     _flaDocument = document;
     _panX = 0;
@@ -831,6 +832,13 @@ void PhoenixView::drawFrame(QPainter& painter, const fla::Frame* frame, const fl
         }
     } restore{*this, savedRotation, savedTurns};
 
+    // Culling: an element whose bounds, taken to the device through the
+    // painter, miss what is being painted is not drawn, and neither is one
+    // too small to show. Bounds are cached, so this is cheap, and the test
+    // is skipped while a tween runs since the bounds move with it.
+    const QRectF deviceRect(0, 0, painter.device()->width(), painter.device()->height());
+    const bool culling = !nextTweenFrame && painter.device()->width() > 0;
+
     int nextElementIndex = 0;
     for (const fla::Element* element : frame->elements)
     {
@@ -839,7 +847,19 @@ void PhoenixView::drawFrame(QPainter& painter, const fla::Frame* frame, const fl
             const fla::Element* nextElement = nextTweenFrame && nextTweenFrame->elements.size() > nextElementIndex ?
                 nextTweenFrame->elements[nextElementIndex] : nullptr;
 
-            drawElement(painter, element, nextElement, tweenProgress);
+            bool skip = false;
+            if (culling)
+            {
+                const QRectF bounds = getElementBounds(element);
+                if (bounds.isValid())
+                {
+                    const QRectF onDevice = painter.transform().mapRect(bounds).adjusted(-2.0, -2.0, 2.0, 2.0);
+                    skip = !onDevice.intersects(deviceRect) ||
+                        (onDevice.width() < 0.25 && onDevice.height() < 0.25);
+                }
+            }
+            if (!skip)
+                drawElement(painter, element, nextElement, tweenProgress);
         }
 
         nextElementIndex++;
@@ -3231,19 +3251,31 @@ void PhoenixView::gatherSnapCandidates(fla::Snapper& snapper,
     }
 
     // Everything on stage apart from what is being dragged: an object that
-    // snapped to its own edge would simply never move.
-    const QRectF everything(-1.0e6, -1.0e6, 2.0e6, 2.0e6);
-    for (fla::Element* element : elementsIn(everything))
+    // snapped to its own edge would simply never move. The walk over the
+    // stage is kept between drags and thrown away with the bounds cache.
+    if (!_snapBoundsValid)
     {
+        _snapBounds.clear();
+        const QRectF everything(-1.0e6, -1.0e6, 2.0e6, 2.0e6);
+        for (fla::Element* element : elementsIn(everything))
+        {
+            const QRectF bounds = getElementBounds(element);
+            if (bounds.isValid())
+                _snapBounds.push_back({element, bounds});
+        }
+        _snapBoundsValid = true;
+    }
+
+    for (const auto& entry : _snapBounds)
+    {
+        fla::Element* element = entry.first;
         bool skip = false;
         for (const fla::Element* excluded : exclude)
             skip = skip || excluded == element;
         if (skip)
             continue;
 
-        const QRectF bounds = getElementBounds(element);
-        if (!bounds.isValid())
-            continue;
+        const QRectF bounds = entry.second;
 
         snapper.addCandidateX(bounds.left());
         snapper.addCandidateX(bounds.center().x());
@@ -3574,11 +3606,13 @@ void PhoenixView::clearCaches()
 {
     _pathCache.clear();
     _boundsCache.clear();
+    _snapBoundsValid = false;
 }
 
 void PhoenixView::invalidateBounds()
 {
     _boundsCache.clear();
+    _snapBoundsValid = false;
 }
 
 QTransform PhoenixView::documentToWidget() const
@@ -4126,20 +4160,32 @@ QRectF PhoenixView::calculateSymbolLocalBounds(const fla::Symbol* symbol)
     if (!symbol || symbol->timelines.empty())
         return QRectF(0, 0, 100, 100);
 
-    const fla::Timeline* timeline = symbol->timelines[0];
-    for (const fla::Layer* layer : timeline->layers)
+    // Over every frame of every layer: an animated symbol reaches wherever
+    // any of its frames does, and culling by a first-frame box would drop
+    // the rest.
+    for (const fla::Timeline* timeline : symbol->timelines)
     {
-        if (!layer->visible || layer->frames.empty())
+        if (!timeline)
             continue;
-
-        const fla::Frame* frame = layer->frames[0];
-        for (const fla::Element* elem : frame->elements)
+        for (const fla::Layer* layer : timeline->layers)
         {
-            QRectF elemBounds = calculateElementLocalBounds(elem);
-            if (bounds.isNull())
-                bounds = elemBounds;
-            else
-                bounds = bounds.united(elemBounds);
+            if (!layer || !layer->visible)
+                continue;
+            for (const fla::Frame* frame : layer->frames)
+            {
+                if (!frame)
+                    continue;
+                for (const fla::Element* elem : frame->elements)
+                {
+                    if (!elem)
+                        continue;
+                    QRectF elemBounds = calculateElementLocalBounds(elem);
+                    if (bounds.isNull())
+                        bounds = elemBounds;
+                    else
+                        bounds = bounds.united(elemBounds);
+                }
+            }
         }
     }
 

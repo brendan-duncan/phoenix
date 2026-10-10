@@ -1,5 +1,6 @@
 #include "main_window.h"
 #include "convert_to_symbol_dialog.h"
+#include "lines_to_fills.h"
 #include "phoenix_view.h"
 #include "timeline_view.h"
 #include "../data/frame.h"
@@ -7,6 +8,8 @@
 #include "../data/symbol_instance.h"
 #include "../data/symbol_list.h"
 #include "../edit/element_commands.h"
+#include "../data/edge.h"
+#include "../edit/path_tidy.h"
 #include "../edit/element_clone.h"
 #include "../edit/new_document.h"
 #include "../edit/shape_merge.h"
@@ -25,6 +28,9 @@
 #include <QDebug>
 #include <QMenuBar>
 #include <QMenu>
+#include <QInputDialog>
+
+#include <memory>
 #include <QAction>
 #include <QStatusBar>
 #include <QTextEdit>
@@ -474,6 +480,34 @@ void MainWindow::setupMenus()
     _convertToSymbolAction->setStatusTip("Turn the selection into a library symbol and leave an instance of it");
     connect(_convertToSymbolAction, &QAction::triggered, this, &MainWindow::convertToSymbol);
     modifyMenu->addAction(_convertToSymbolAction);
+
+    modifyMenu->addSeparator();
+
+    // Modify > Shape, as Animate groups them.
+    QMenu* shapeMenu = modifyMenu->addMenu("S&hape");
+
+    _smoothAction = new QAction("&Smooth", this);
+    _smoothAction->setStatusTip("Soften the selected shapes' curves");
+    connect(_smoothAction, &QAction::triggered, this, &MainWindow::smoothSelection);
+    shapeMenu->addAction(_smoothAction);
+
+    _straightenAction = new QAction("S&traighten", this);
+    _straightenAction->setStatusTip("Replace the selected shapes' curves with straight segments");
+    connect(_straightenAction, &QAction::triggered, this, &MainWindow::straightenSelection);
+    shapeMenu->addAction(_straightenAction);
+
+    _optimizeAction = new QAction("&Optimize...", this);
+    _optimizeAction->setShortcut(QKeySequence(Qt::CTRL | Qt::ALT | Qt::SHIFT | Qt::Key_C));
+    _optimizeAction->setStatusTip("Refit the selected shapes' curves with fewer anchors");
+    connect(_optimizeAction, &QAction::triggered, this, &MainWindow::optimizeSelection);
+    shapeMenu->addAction(_optimizeAction);
+
+    shapeMenu->addSeparator();
+
+    _linesToFillsAction = new QAction("Convert &Lines to Fills", this);
+    _linesToFillsAction->setStatusTip("Turn the selected shapes' strokes into filled regions");
+    connect(_linesToFillsAction, &QAction::triggered, this, &MainWindow::convertLinesToFillsSelection);
+    shapeMenu->addAction(_linesToFillsAction);
 
     modifyMenu->addSeparator();
 
@@ -1651,6 +1685,134 @@ void MainWindow::breakApartSelection()
     _phoenixView->update();
 }
 
+void MainWindow::tidySelectedShapes(const char* name,
+    const std::function<void(fla::EditablePath&)>& tidy)
+{
+    if (!_phoenixView)
+        return;
+
+    const std::vector<fla::Shape*> shapes = selectedShapes();
+    if (shapes.empty())
+        return;
+
+    fla::CommandStack& stack = _editContext.commandStack();
+    std::vector<fla::CommandPtr> commands;
+    for (fla::Shape* shape : shapes)
+    {
+        // The command snapshots the shape as its "before", so the change is
+        // made on a copy that becomes the "after".
+        std::unique_ptr<fla::Shape> after(fla::cloneShape(*shape, nullptr));
+        bool changed = false;
+        for (fla::Edge* edge : after->edges)
+        {
+            if (!edge)
+                continue;
+            for (size_t pathIndex = 0; pathIndex < edge->paths.size(); ++pathIndex)
+            {
+                if (!edge->paths[pathIndex])
+                    continue;
+                fla::EditablePath path = fla::EditablePath::fromPath(*edge->paths[pathIndex]);
+                if (path.anchors.size() < 2)
+                    continue;
+                tidy(path);
+                if (path.anchors.size() < 2)
+                    continue;
+                path.applyTo(*edge, pathIndex);
+                changed = true;
+            }
+        }
+        if (!changed)
+            continue;
+        commands.push_back(fla::CommandPtr(new fla::SetShapeContentsCommand(shape, *after, name)));
+    }
+
+    if (commands.empty())
+        return;
+
+    const bool needsMacro = commands.size() > 1;
+    if (needsMacro)
+        stack.beginMacro(name);
+    for (fla::CommandPtr& command : commands)
+        stack.push(std::move(command));
+    if (needsMacro)
+        stack.endMacro();
+    stack.breakMergeChain();
+
+    for (fla::Shape* shape : shapes)
+        _phoenixView->markShapeEdited(shape);
+    _phoenixView->clearCaches();
+    _phoenixView->update();
+}
+
+void MainWindow::smoothSelection()
+{
+    // Animate's Smooth is a fixed, gentle amount each time it is applied.
+    tidySelectedShapes("Smooth", [](fla::EditablePath& path) {
+        fla::smoothPath(path, 0.5);
+    });
+}
+
+void MainWindow::straightenSelection()
+{
+    const double tolerance = 2.0 / qMax(_phoenixView ? _phoenixView->zoom() : 1.0, 1.0e-6);
+    tidySelectedShapes("Straighten", [tolerance](fla::EditablePath& path) {
+        fla::straightenPath(path, tolerance);
+    });
+}
+
+void MainWindow::optimizeSelection()
+{
+    bool ok = false;
+    const int amount = QInputDialog::getInt(this, "Optimize Curves",
+        "Optimization strength (0 keeps the shape, 100 simplifies most):", 50, 0, 100, 1, &ok);
+    if (!ok)
+        return;
+
+    // The strength is a tolerance in screen pixels, like the pencil's smoothing.
+    const double screenTolerance = 0.25 + 4.75 * (amount / 100.0);
+    const double tolerance = screenTolerance / qMax(_phoenixView ? _phoenixView->zoom() : 1.0, 1.0e-6);
+    tidySelectedShapes("Optimize", [tolerance](fla::EditablePath& path) {
+        fla::optimizePath(path, tolerance);
+    });
+}
+
+void MainWindow::convertLinesToFillsSelection()
+{
+    if (!_phoenixView)
+        return;
+
+    const std::vector<fla::Shape*> shapes = selectedShapes();
+    if (shapes.empty())
+        return;
+
+    fla::CommandStack& stack = _editContext.commandStack();
+    std::vector<fla::CommandPtr> commands;
+    for (fla::Shape* shape : shapes)
+    {
+        std::unique_ptr<fla::Shape> after(fla::cloneShape(*shape, nullptr));
+        if (!convertLinesToFills(*after))
+            continue;
+        commands.push_back(fla::CommandPtr(
+            new fla::SetShapeContentsCommand(shape, *after, "Convert Lines to Fills")));
+    }
+    if (commands.empty())
+        return;
+
+    const bool needsMacro = commands.size() > 1;
+    if (needsMacro)
+        stack.beginMacro("Convert Lines to Fills");
+    for (fla::CommandPtr& command : commands)
+        stack.push(std::move(command));
+    if (needsMacro)
+        stack.endMacro();
+    stack.breakMergeChain();
+
+    for (fla::Shape* shape : shapes)
+        _phoenixView->markShapeEdited(shape);
+    _phoenixView->clearCaches();
+    _phoenixView->update();
+}
+
 void MainWindow::convertToSymbol()
 {
     if (!_phoenixView || !_flaDocument || !_flaDocument->document)
@@ -2000,6 +2162,11 @@ void MainWindow::updateSelectionState()
     }
     if (_convertToSymbolAction)
         _convertToSymbolAction->setEnabled(hasElements);
+    for (QAction* action : {_smoothAction, _straightenAction, _optimizeAction, _linesToFillsAction})
+    {
+        if (action)
+            action->setEnabled(hasShapes);
+    }
     if (_cutAction)
         _cutAction->setEnabled(hasShapes);
     if (_copyAction)

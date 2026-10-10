@@ -26,6 +26,10 @@
 #include <vector>
 
 #include <QMainWindow>
+
+#include "../edit/editable_path.h"
+
+#include <functional>
 #include <QMenuBar>
 #include <QMenu>
 #include <QAction>
@@ -91,6 +95,16 @@ private slots:
     void breakApartSelection();
 
     void convertToSymbol();
+
+    /// Modify > Shape: each rewrites every selected shape's paths as one
+    /// undo step per shape.
+    void smoothSelection();
+    void straightenSelection();
+    void optimizeSelection();
+    void convertLinesToFillsSelection();
+
+    /// Applies \a tidy to every path of every selected shape.
+    void tidySelectedShapes(const char* name, const std::function<void(fla::EditablePath&)>& tidy);
 
     /// Makes every selected text field static, dynamic or input.
     void setSelectedTextType(fla::StaticText::TextType type);
@@ -205,6 +219,10 @@ private:
     QAction* _pasteInPlaceAction = nullptr;
     QAction* _duplicateAction = nullptr;
     QAction* _groupAction = nullptr;
+    QAction* _smoothAction = nullptr;
+    QAction* _straightenAction = nullptr;
+    QAction* _optimizeAction = nullptr;
+    QAction* _linesToFillsAction = nullptr;
     QAction* _ungroupAction = nullptr;
     QAction* _breakApartAction = nullptr;
     QAction* _convertToSymbolAction = nullptr;

@@ -8,7 +8,7 @@
 namespace fla {
 
 class Edge;
-class Path;
+struct Path;
 
 /// One point on a path being edited, with its bezier handles.
 ///

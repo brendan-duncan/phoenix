@@ -463,6 +463,11 @@ private:
     // Bounds cache for culling
     QMap<const fla::Element*, QRectF> _boundsCache;
 
+    /// The stage's elements and bounds for snapping, kept between drags
+    /// and dropped with the bounds cache.
+    std::vector<std::pair<fla::Element*, QRectF>> _snapBounds;
+    bool _snapBoundsValid = false;
+
     /// The pen for a stroke. The width follows the stroke's scaleMode for
     /// the element being drawn unless told not to, which a cached pen is,
     /// since it is drawn under many transforms.

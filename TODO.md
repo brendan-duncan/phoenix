@@ -1151,17 +1151,20 @@ addition maps, plus a rule for which strokes survive.
       vertices. `rebuildShapeEdges` takes strokes from `sources`
       (`shape_geometry.cpp:162`), so it needs a per-half-edge stroke override
   - Done (S): strokes the outline of the fill under the click, or restyles the stroke clicked, through a per-piece `StrokeOverride` on `rebuildShapeEdges`. Does not yet flood across same-fill neighbours
-- [ ] **Convert Lines to Fills** (stroke to outline): stroke each chain, then
+- [x] **Convert Lines to Fills** (stroke to outline): stroke each chain, then
       union the outlines under non-zero. Offsetting (Expand Fill) arranges the
       fill, a ring stroked at width 2d, and open strokes at 2d: growing keeps
       their union, insetting keeps fill minus ring, and contours closer than d to
       the source are dropped to remove the stroker's inverted loops (VectorCraft
       `pathops/src/offset.rs`)
-- [ ] **Modify > Shape > Smooth / Straighten / Optimize.** Smooth pulls handles
+  - Done 2026-10-09 for Convert Lines to Fills (Modify > Shape, `lines_to_fills.cpp`): the stroked pieces of each stroke style are stroked together with the style's width, caps and joins, the outline is unioned under non-zero and each loop refitted into cubics, the strokes are dropped and the new fills merged over the shape, one undo step per shape. Expand Fill / Soften Fill Edges are not done
+- [ ] **Expand Fill / Soften Fill Edges**: offset the fill by arranging it with a ring stroked at width 2d (growing keeps the union, insetting keeps fill minus ring), dropping contours closer than d to the source (VectorCraft `pathops/src/offset.rs`)
+- [x] **Modify > Shape > Smooth / Straighten / Optimize.** Smooth pulls handles
       Catmull-Rom style (`+-(next-prev)/|next-prev| * d/3`) blended by an amount
       (VectorCraft `pathops/src/edit.rs:137-163`); Straighten is RDP; Optimize is
       the pencil's simplify. A smooth brush refits only the anchors inside it
       (`engine/src/cmd/draw2.rs:875-995`)
+  - Done 2026-10-09 (`src/edit/path_tidy.cpp`, Qt-free, tests): Smooth blends every handle half way to the Catmull-Rom tangent, Straighten samples the path and reduces it with Ramer-Douglas-Peucker at two screen pixels, Optimize asks for a strength and refits the sampled path with the pencil's fitter, keeping the original when the fit would not be leaner. Each is one undo step per selected shape. The smooth brush is not done
 - [ ] **Magic wand** for bitmaps broken apart is Animate's; VectorCraft's matches
       objects by colour distance (default 32), stroke weight and opacity
       (`engine/src/cmd/wand.rs:104-161`) -- useful only as a "Select Same"
@@ -1333,20 +1336,24 @@ dragging, at a maximised window on a 3856x1568 display:
       thing. Caching everything except the moving object is the next real win:
       render the static layers into an image once per (document revision, zoom,
       centre, size) and draw only the moving object and overlays on top
-- [ ] **There is no culling.** `_visibleRect` is computed (`phoenix_view.cpp:311`)
+- [x] **There is no culling.** `_visibleRect` is computed (`phoenix_view.cpp:311`)
       but nothing reads it, so `drawElement` draws everything. Skip an element
       whose cached bounds, padded by 2 px, miss the view, and skip leaves smaller
       than a quarter pixel. `getElementBounds` is already cached, so this is cheap
+  - Done 2026-10-09 in `drawFrame`: an element's cached bounds are taken through the painter's transform to the device (so it works inside symbols and offscreens too), and it is skipped when, padded by 2 px, they miss the device or are under a quarter pixel. Tweened frames are not culled since their bounds move. Symbol bounds now cover every frame of every layer so an animated instance is not culled by its first frame
 - [ ] Cache stroke outlines per zoom octave (key on the power of two nearest the
       scale), so panning and small zooms reuse them
 - [x] Bitmap instances scan the library linearly on every draw
       (`phoenix_view.cpp:888`); look them up in a map
   - Done 2026-10-09: `libraryBitmap` caches the decoded pixmap by name, so the scan happens once per bitmap per document
-- [ ] Colour-transformed instances and mask layers allocate a stage- or
+- [x] Colour-transformed instances and mask layers allocate a stage- or
       widget-sized image per frame. Size the offscreen to the content's
       device-pixel bounds instead (see step 11)
-- [ ] `getElementBounds` is cached, but `gatherSnapCandidates` walks every
+  - Done 2026-10-09 for instances (the isolated offscreen is cropped to the instance on the device, see step 11). Mask layers still render into device-sized pixmaps
+- [ ] Mask layers render into device-sized pixmaps; crop them to the mask's device bounds
+- [x] `getElementBounds` is cached, but `gatherSnapCandidates` walks every
       element on the stage at the start of each drag to collect snap targets
+  - Done 2026-10-09: the walk's result (element, bounds) is kept in `_snapBounds` and thrown away with the bounds cache, so a drag only filters it
 
 ## Explicitly out of scope
 

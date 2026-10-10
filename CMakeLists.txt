@@ -96,6 +96,7 @@ set(HEADERS
     src/gui/draw_placement.h
     src/gui/selection_tool.h
     src/gui/filters.h
+    src/gui/lines_to_fills.h
     src/gui/free_transform_tool.h
     src/gui/primitive_tool.h
     src/gui/pen_tool.h
@@ -166,6 +167,7 @@ set(HEADERS
     src/edit/drawing_style.h
     src/edit/curve_fit.h
     src/edit/shape_recognition.h
+    src/edit/path_tidy.h
     src/geom/curve.h
     src/geom/intersect.h
     src/geom/fill_attribution.h
@@ -196,6 +198,7 @@ set(SOURCES
     src/gui/navigation_tools.cpp
     src/gui/draw_placement.cpp
     src/gui/filters.cpp
+    src/gui/lines_to_fills.cpp
     src/gui/free_transform_tool.cpp
     src/gui/primitive_tool.cpp
     src/gui/pen_tool.cpp
@@ -262,6 +265,7 @@ set(SOURCES
     src/edit/drawing_style.cpp
     src/edit/curve_fit.cpp
     src/edit/shape_recognition.cpp
+    src/edit/path_tidy.cpp
     src/geom/curve.cpp
     src/geom/intersect.cpp
     src/geom/fill_attribution.cpp
