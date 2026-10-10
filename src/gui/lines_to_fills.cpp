@@ -1,16 +1,15 @@
 #include "lines_to_fills.h"
 
+#include "shape_outline.h"
+
 #include "../data/edge.h"
 #include "../data/shape.h"
 #include "../data/solid_color.h"
 #include "../data/stroke_style.h"
-#include "../edit/curve_fit.h"
-#include "../edit/editable_path.h"
 #include "../edit/shape_merge.h"
 
 #include <QPainterPath>
 #include <QPainterPathStroker>
-#include <QPolygonF>
 
 #include <algorithm>
 #include <cmath>
@@ -18,128 +17,8 @@
 #include <memory>
 #include <vector>
 
-namespace {
-
-constexpr int kStyleIndex = 1;
-
-/// The path's geometry as Qt draws it.
-QPainterPath painterPathOf(const fla::Path& path)
-{
-    QPainterPath result;
-    QPointF current;
-    for (const fla::PathSegment* segment : path.segments)
-    {
-        if (!segment || segment->points.empty())
-            continue;
-        const std::vector<fla::Point>& pts = segment->points;
-        switch (segment->command)
-        {
-        case fla::PathSegment::Command::Move:
-            current = QPointF(pts[0].x, pts[0].y);
-            result.moveTo(current);
-            break;
-        case fla::PathSegment::Command::Line:
-            current = QPointF(pts[0].x, pts[0].y);
-            result.lineTo(current);
-            break;
-        case fla::PathSegment::Command::Quad:
-            if (pts.size() >= 2)
-            {
-                current = QPointF(pts[1].x, pts[1].y);
-                result.quadTo(QPointF(pts[0].x, pts[0].y), current);
-            }
-            break;
-        case fla::PathSegment::Command::Cubic:
-            if (pts.size() >= 3)
-            {
-                current = QPointF(pts[2].x, pts[2].y);
-                result.cubicTo(QPointF(pts[0].x, pts[0].y), QPointF(pts[1].x, pts[1].y), current);
-            }
-            break;
-        case fla::PathSegment::Command::Close:
-            result.closeSubpath();
-            break;
-        }
-    }
-    return result;
-}
-
-double signedArea(const QPolygonF& polygon)
-{
-    double area = 0.0;
-    for (int i = 0; i < polygon.size(); ++i)
-    {
-        const QPointF& a = polygon[i];
-        const QPointF& b = polygon[(i + 1) % polygon.size()];
-        area += a.x() * b.y() - b.x() * a.y();
-    }
-    return area;
-}
-
-/// A merge shape filled with \a fill wherever \a outline covers, each loop
-/// of the outline refitted into a few cubics as the brush's outline is.
-fla::Shape* shapeFromOutline(const QPainterPath& outline, fla::FillStyle* fill)
-{
-    fla::Shape* shape = new fla::Shape(nullptr);
-    fill->parent = shape;
-    shape->fills.push_back(fill);
-    shape->fillsMap[kStyleIndex] = fill;
-
-    const QList<QPolygonF> loops = outline.toSubpathPolygons();
-    for (const QPolygonF& polygon : loops)
-    {
-        if (polygon.size() < 3)
-            continue;
-
-        fla::Edge* edge = new fla::Edge(shape);
-        if (signedArea(polygon) >= 0.0)
-            edge->fillStyle1 = kStyleIndex;
-        else
-            edge->fillStyle0 = kStyleIndex;
-
-        std::vector<fla::Point> ring;
-        for (const QPointF& point : polygon)
-            ring.push_back(fla::Point(point.x(), point.y()));
-        if (std::hypot(ring.back().x - ring.front().x, ring.back().y - ring.front().y) > 1.0e-6)
-            ring.push_back(ring.front());
-
-        fla::CurveFit::Options options;
-        options.tolerance = 0.3;
-        options.minimumSpacing = 0.2;
-        fla::EditablePath fitted = fla::CurveFit::fit(ring, options);
-        if (fitted.anchors.size() >= 2)
-        {
-            const fla::Point& first = fitted.anchors.front().position;
-            const fla::Point& last = fitted.anchors.back().position;
-            if (fitted.anchors.size() > 2 && std::hypot(last.x - first.x, last.y - first.y) < 1.0e-6)
-                fitted.anchors.pop_back();
-            fitted.closed = true;
-            fitted.applyTo(*edge);
-        }
-        else
-        {
-            fla::Path* path = new fla::Path(edge);
-            path->segments.push_back(new fla::PathSegment(
-                fla::PathSegment::Command::Move, {ring.front()}, path));
-            for (size_t i = 1; i < ring.size(); ++i)
-            {
-                path->segments.push_back(new fla::PathSegment(
-                    fla::PathSegment::Command::Line, {ring[i]}, path));
-            }
-            edge->paths.push_back(path);
-        }
-        shape->edges.push_back(edge);
-    }
-
-    if (shape->edges.empty())
-    {
-        delete shape;
-        return nullptr;
-    }
-    return shape;
-}
-
-} // namespace
+using fla::outline::painterPathOf;
+using fla::outline::shapeFromOutline;
 
 bool convertLinesToFills(fla::Shape& shape)
 {

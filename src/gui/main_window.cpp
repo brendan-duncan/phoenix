@@ -1,6 +1,7 @@
 #include "main_window.h"
 #include "convert_to_symbol_dialog.h"
 #include "lines_to_fills.h"
+#include "fill_offset.h"
 #include "phoenix_view.h"
 #include "timeline_view.h"
 #include "../data/frame.h"
@@ -42,6 +43,8 @@
 #include <QStatusBar>
 #include <QTextEdit>
 #include <QDialog>
+#include <QDialogButtonBox>
+#include <QRadioButton>
 #include <QVBoxLayout>
 #include <QKeySequence>
 #include <QSettings>
@@ -602,6 +605,16 @@ void MainWindow::setupMenus()
     _linesToFillsAction->setStatusTip("Turn the selected shapes' strokes into filled regions");
     connect(_linesToFillsAction, &QAction::triggered, this, &MainWindow::convertLinesToFillsSelection);
     shapeMenu->addAction(_linesToFillsAction);
+
+    _expandFillAction = new QAction("E&xpand Fill...", this);
+    _expandFillAction->setStatusTip("Grow or shrink the selected shapes' fills by a distance");
+    connect(_expandFillAction, &QAction::triggered, this, &MainWindow::expandFillSelection);
+    shapeMenu->addAction(_expandFillAction);
+
+    _softenFillAction = new QAction("So&ften Fill Edges...", this);
+    _softenFillAction->setStatusTip("Fade the selected shapes' fills out at their edges in steps");
+    connect(_softenFillAction, &QAction::triggered, this, &MainWindow::softenFillEdgesSelection);
+    shapeMenu->addAction(_softenFillAction);
 
     modifyMenu->addSeparator();
 
@@ -1715,7 +1728,8 @@ void MainWindow::optimizeSelection()
     });
 }
 
-void MainWindow::convertLinesToFillsSelection()
+void MainWindow::reshapeSelectedShapes(const char* name,
+    const std::function<bool(fla::Shape&, fla::Shape&)>& change)
 {
     if (!_phoenixView)
         return;
@@ -1729,17 +1743,16 @@ void MainWindow::convertLinesToFillsSelection()
     for (fla::Shape* shape : shapes)
     {
         std::unique_ptr<fla::Shape> after(fla::cloneShape(*shape, nullptr));
-        if (!convertLinesToFills(*after))
+        if (!change(*shape, *after))
             continue;
-        commands.push_back(fla::CommandPtr(
-            new fla::SetShapeContentsCommand(shape, *after, "Convert Lines to Fills")));
+        commands.push_back(fla::CommandPtr(new fla::SetShapeContentsCommand(shape, *after, name)));
     }
     if (commands.empty())
         return;
 
     const bool needsMacro = commands.size() > 1;
     if (needsMacro)
-        stack.beginMacro("Convert Lines to Fills");
+        stack.beginMacro(name);
     for (fla::CommandPtr& command : commands)
         stack.push(std::move(command));
     if (needsMacro)
@@ -1750,6 +1763,97 @@ void MainWindow::convertLinesToFillsSelection()
         _phoenixView->markShapeEdited(shape);
     _phoenixView->clearCaches();
     _phoenixView->update();
+}
+
+void MainWindow::convertLinesToFillsSelection()
+{
+    reshapeSelectedShapes("Convert Lines to Fills", [](fla::Shape&, fla::Shape& after) {
+        return convertLinesToFills(after);
+    });
+}
+
+namespace {
+
+/// Animate's Expand Fill and Soften Fill Edges dialogs: a distance, for
+/// softening a number of steps, and whether to go outward or inward.
+bool askFillOffset(QWidget* parent, const QString& title, bool withSteps,
+    double& distance, int& steps, bool& inset)
+{
+    QDialog dialog(parent);
+    dialog.setWindowTitle(title);
+    QFormLayout* form = new QFormLayout(&dialog);
+
+    QDoubleSpinBox* distanceBox = new QDoubleSpinBox(&dialog);
+    distanceBox->setRange(0.1, 1000.0);
+    distanceBox->setDecimals(1);
+    distanceBox->setSuffix(" px");
+    distanceBox->setValue(distance);
+    form->addRow("Distance:", distanceBox);
+
+    QSpinBox* stepsBox = nullptr;
+    if (withSteps)
+    {
+        stepsBox = new QSpinBox(&dialog);
+        stepsBox->setRange(1, 50);
+        stepsBox->setValue(steps);
+        form->addRow("Number of steps:", stepsBox);
+    }
+
+    QWidget* direction = new QWidget(&dialog);
+    QHBoxLayout* directionLayout = new QHBoxLayout(direction);
+    directionLayout->setContentsMargins(0, 0, 0, 0);
+    QRadioButton* expand = new QRadioButton("Expand", direction);
+    QRadioButton* insetButton = new QRadioButton("Inset", direction);
+    (inset ? insetButton : expand)->setChecked(true);
+    directionLayout->addWidget(expand);
+    directionLayout->addWidget(insetButton);
+    directionLayout->addStretch();
+    form->addRow("Direction:", direction);
+
+    QDialogButtonBox* buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, &dialog);
+    QObject::connect(buttons, &QDialogButtonBox::accepted, &dialog, &QDialog::accept);
+    QObject::connect(buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
+    form->addRow(buttons);
+
+    // The distance is what is usually retyped, so it comes selected.
+    distanceBox->setFocus();
+    distanceBox->selectAll();
+    if (dialog.exec() != QDialog::Accepted)
+        return false;
+    distance = distanceBox->value();
+    if (stepsBox)
+        steps = stepsBox->value();
+    inset = insetButton->isChecked();
+    return true;
+}
+
+} // namespace
+
+void MainWindow::expandFillSelection()
+{
+    // The last settings are offered again, as Animate does.
+    static double distance = 4.0;
+    static bool inset = false;
+    int steps = 1;
+    if (!askFillOffset(this, "Expand Fill", false, distance, steps, inset))
+        return;
+
+    reshapeSelectedShapes("Expand Fill", [this](fla::Shape& shape, fla::Shape& after) {
+        return fla::filloffset::expandFill(after, _phoenixView->fillRegions(shape), distance, inset);
+    });
+}
+
+void MainWindow::softenFillEdgesSelection()
+{
+    static double distance = 8.0;
+    static int steps = 4;
+    static bool inset = false;
+    if (!askFillOffset(this, "Soften Fill Edges", true, distance, steps, inset))
+        return;
+
+    reshapeSelectedShapes("Soften Fill Edges", [this](fla::Shape& shape, fla::Shape& after) {
+        return fla::filloffset::softenFillEdges(after, _phoenixView->fillRegions(shape), distance, steps, inset);
+    });
 }
 
 void MainWindow::convertToSymbol()
@@ -2101,7 +2205,8 @@ void MainWindow::updateSelectionState()
     }
     if (_convertToSymbolAction)
         _convertToSymbolAction->setEnabled(hasElements);
-    for (QAction* action : {_smoothAction, _straightenAction, _optimizeAction, _linesToFillsAction})
+    for (QAction* action : {_smoothAction, _straightenAction, _optimizeAction, _linesToFillsAction,
+             _expandFillAction, _softenFillAction})
     {
         if (action)
             action->setEnabled(hasShapes);

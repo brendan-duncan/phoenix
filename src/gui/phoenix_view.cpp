@@ -1677,6 +1677,26 @@ void PhoenixView::drawOverlayPoints(QPainter& painter, const fla::Shape* shape)
 
 /// Builds the fill and stroke paths for a shape without touching a painter, so
 /// hit-testing can ask for the same geometry the renderer draws.
+std::map<int, QPainterPath> PhoenixView::fillRegions(const fla::Shape& shape)
+{
+    PathCacheList entries;
+    buildShapePaths(&shape, entries);
+    std::map<int, QPainterPath> regions;
+    for (const PathCacheEntry& entry : entries)
+    {
+        if (entry.fillIndex < 0)
+            continue;
+        QPainterPath area = entry.painterPath;
+        area.setFillRule(Qt::WindingFill);
+        auto it = regions.find(entry.fillIndex);
+        if (it == regions.end())
+            regions[entry.fillIndex] = area;
+        else
+            it->second = it->second.united(area);
+    }
+    return regions;
+}
+
 void PhoenixView::buildShapePaths(const fla::Shape* shape, PathCacheList& cacheEntries)
 {
     // Helper struct to represent an edge path with direction
@@ -2087,7 +2107,7 @@ void PhoenixView::buildShapePaths(const fla::Shape* shape, PathCacheList& cacheE
             QRectF bounds = compoundPath.boundingRect();
             fla::Rect rect({bounds.left(), bounds.top()}, {bounds.left() + bounds.width(), bounds.top() + bounds.height()});
             QBrush brush = getFillBrush(fillStyle, rect);
-            cacheEntries.push_back({ brush, Qt::NoPen, compoundPath });
+            cacheEntries.push_back({ brush, Qt::NoPen, compoundPath, nullptr, fillIdx });
             continue;
         }
 
@@ -2211,7 +2231,7 @@ void PhoenixView::buildShapePaths(const fla::Shape* shape, PathCacheList& cacheE
         QRectF bounds = compoundPath.boundingRect();
         fla::Rect rect({bounds.left(), bounds.top()}, {bounds.left() + bounds.width(), bounds.top() + bounds.height()});
         QBrush brush = getFillBrush(fillStyle, rect);
-        cacheEntries.push_back({ brush, Qt::NoPen, compoundPath });
+        cacheEntries.push_back({ brush, Qt::NoPen, compoundPath, nullptr, fillIdx });
     }
 
     // Strokes. A merged shape is stored as one edge per piece, so every corner

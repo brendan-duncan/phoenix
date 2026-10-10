@@ -177,6 +177,8 @@ set(SOURCES
     src/gui/draw_placement.cpp
     src/gui/filters.cpp
     src/gui/lines_to_fills.cpp
+    src/gui/shape_outline.cpp
+    src/gui/fill_offset.cpp
     src/gui/free_transform_tool.cpp
     src/gui/primitive_tool.cpp
     src/gui/pen_tool.cpp

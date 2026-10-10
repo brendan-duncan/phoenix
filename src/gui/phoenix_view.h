@@ -13,6 +13,8 @@
 #include <QRectF>
 #include <QGradient>
 #include <QPixmap>
+
+#include <map>
 #include <QWidget>
 #include <QPainter>
 #include <QPainterPath>
@@ -167,6 +169,10 @@ public:
     /// Document-space bounds of an element, cached. Tools use this to place
     /// handles around what is selected.
     QRectF elementBounds(const fla::Element* element) { return getElementBounds(element); }
+
+    /// The shape's filled regions as the stage stitches them, one path per
+    /// fill style index, in the shape's own space.
+    std::map<int, QPainterPath> fillRegions(const fla::Shape& shape);
 
     /// Top-level elements of the visible frames whose bounds meet
     /// \p documentRect. Does not descend into groups or symbols: a marquee
@@ -525,6 +531,9 @@ private:
         /// The stroke the pen came from, for widths that depend on where
         /// the shape is drawn (scaleMode); null for a fill entry.
         const fla::StrokeStyle* strokeStyle = nullptr;
+
+        /// The fill style index a fill entry paints, or -1 for a stroke.
+        int fillIndex = -1;
     };
     typedef QList<PathCacheEntry> PathCacheList;
 

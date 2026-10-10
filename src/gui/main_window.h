@@ -106,6 +106,13 @@ private slots:
     void straightenSelection();
     void optimizeSelection();
     void convertLinesToFillsSelection();
+    void expandFillSelection();
+    void softenFillEdgesSelection();
+
+    /// Replaces each selected shape's contents with \a change applied to a
+    /// copy, one undo step named \a name. A change that returns false
+    /// leaves that shape alone.
+    void reshapeSelectedShapes(const char* name, const std::function<bool(fla::Shape&, fla::Shape&)>& change);
 
     /// Applies \a tidy to every path of every selected shape.
     void tidySelectedShapes(const char* name, const std::function<void(fla::EditablePath&)>& tidy);
@@ -237,6 +244,8 @@ private:
     QAction* _straightenAction = nullptr;
     QAction* _optimizeAction = nullptr;
     QAction* _linesToFillsAction = nullptr;
+    QAction* _expandFillAction = nullptr;
+    QAction* _softenFillAction = nullptr;
     QAction* _ungroupAction = nullptr;
     QAction* _breakApartAction = nullptr;
     QAction* _convertToSymbolAction = nullptr;
