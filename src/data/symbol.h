@@ -19,6 +19,16 @@ public:
     /// is kept rather than derived.
     std::string href;
 
+    /// 9-slice scaling guides, in the symbol's own space: the two vertical
+    /// and two horizontal lines that split it into corners that never
+    /// scale, edges that scale one way and a middle that scales both.
+    /// Present only when the symbol has them switched on.
+    bool scale9 = false;
+    double scaleGridLeft = 0.0;
+    double scaleGridTop = 0.0;
+    double scaleGridRight = 0.0;
+    double scaleGridBottom = 0.0;
+
     std::vector<Timeline*> timelines;
 
     Symbol(DOMElement* parent)

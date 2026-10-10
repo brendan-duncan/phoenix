@@ -1129,13 +1129,72 @@ void PhoenixView::drawElement(QPainter& painter, const fla::Element* element, co
                 painter.save();
                 if (!color.isIdentity() && !_maskPass)
                     painter.setOpacity(painter.opacity() * std::max(0.0, std::min(1.0, color.alphaMultiplier)));
-                for (const fla::Timeline* timeline : symbol->timelines)
+
+                // 9-slice scaling: a movie clip with scale guides, scaled
+                // but not turned, draws as nine cells, the corners at their
+                // own size, the edges stretched one way and the middle
+                // both. Each cell is the symbol drawn again under a clip
+                // with the cell's own stretch.
+                const bool sliced = symbol->scale9 && instance->symbolType == fla::SymbolType::MovieClip &&
+                    std::fabs(qTransform.m12()) < 1.0e-9 && std::fabs(qTransform.m21()) < 1.0e-9 &&
+                    (std::fabs(qTransform.m11() - 1.0) > 1.0e-6 || std::fabs(qTransform.m22() - 1.0) > 1.0e-6) &&
+                    std::fabs(qTransform.m11()) > 1.0e-6 && std::fabs(qTransform.m22()) > 1.0e-6;
+                if (sliced)
                 {
-                    if (timeline->visible)
+                    const QRectF local = calculateSymbolLocalBounds(symbol);
+                    const double sx = std::fabs(qTransform.m11());
+                    const double sy = std::fabs(qTransform.m22());
+                    // The cut lines in symbol space, and where they land
+                    // once the corners are kept at their own size: a
+                    // corner that is w wide in the symbol must be w / sx
+                    // wide here so that the instance's scale brings it
+                    // back to w.
+                    const double srcX[4] = {local.left(), symbol->scaleGridLeft, symbol->scaleGridRight, local.right()};
+                    const double srcY[4] = {local.top(), symbol->scaleGridTop, symbol->scaleGridBottom, local.bottom()};
+                    const double dstX[4] = {local.left(), local.left() + (srcX[1] - srcX[0]) / sx,
+                        local.right() - (srcX[3] - srcX[2]) / sx, local.right()};
+                    const double dstY[4] = {local.top(), local.top() + (srcY[1] - srcY[0]) / sy,
+                        local.bottom() - (srcY[3] - srcY[2]) / sy, local.bottom()};
+                    for (int row = 0; row < 3; ++row)
                     {
-                        painter.save();
-                        drawTimeline(painter, timeline, loopType, frameOffset);
-                        painter.restore();
+                        for (int column = 0; column < 3; ++column)
+                        {
+                            const QRectF source(QPointF(srcX[column], srcY[row]), QPointF(srcX[column + 1], srcY[row + 1]));
+                            const QRectF target(QPointF(dstX[column], dstY[row]), QPointF(dstX[column + 1], dstY[row + 1]));
+                            if (source.width() <= 1.0e-6 || source.height() <= 1.0e-6 ||
+                                target.width() <= 1.0e-6 || target.height() <= 1.0e-6)
+                                continue;
+                            const double cellSx = target.width() / source.width();
+                            const double cellSy = target.height() / source.height();
+                            const QTransform cell = QTransform::fromTranslate(-source.x(), -source.y()) *
+                                QTransform::fromScale(cellSx, cellSy) *
+                                QTransform::fromTranslate(target.x(), target.y());
+                            painter.save();
+                            painter.setClipRect(target, Qt::IntersectClip);
+                            painter.setTransform(cell, true);
+                            for (const fla::Timeline* timeline : symbol->timelines)
+                            {
+                                if (timeline->visible)
+                                {
+                                    painter.save();
+                                    drawTimeline(painter, timeline, loopType, frameOffset);
+                                    painter.restore();
+                                }
+                            }
+                            painter.restore();
+                        }
+                    }
+                }
+                else
+                {
+                    for (const fla::Timeline* timeline : symbol->timelines)
+                    {
+                        if (timeline->visible)
+                        {
+                            painter.save();
+                            drawTimeline(painter, timeline, loopType, frameOffset);
+                            painter.restore();
+                        }
                     }
                 }
                 painter.restore();

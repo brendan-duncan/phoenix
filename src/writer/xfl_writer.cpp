@@ -1027,6 +1027,13 @@ std::string XFLWriter::writeSymbol(const Symbol& symbol)
     setString(root, "name", symbol.name);
     setString(root, "itemID", symbol.itemId);
     setString(root, "lastModified", symbol.lastModified);
+    if (symbol.scale9)
+    {
+        root->SetAttribute("scaleGridLeft", symbol.scaleGridLeft);
+        root->SetAttribute("scaleGridTop", symbol.scaleGridTop);
+        root->SetAttribute("scaleGridRight", symbol.scaleGridRight);
+        root->SetAttribute("scaleGridBottom", symbol.scaleGridBottom);
+    }
 
     // The reader expects a <timeline> wrapper holding DOMTimeline children.
     XMLElement* timeline = doc.NewElement("timeline");

@@ -330,8 +330,9 @@ anchor.
 - [x] Deleting an anchor joins its neighbors with whatever handles they already
       had, rather than refitting the curve through the gap the way Animate does
   - Done 2026-10-09, see the subselection items in step 12
-- [ ] Picking a one-pixel stroke by clicking it is fiddly. Anchor editing was
+- [x] Picking a one-pixel stroke by clicking it is fiddly. Anchor editing was
       verified on a polygon; the tolerance may want widening for thin strokes
+  - Noted 2026-10-10: the pick already allows half the stroke's weight plus four screen pixels at any zoom (`pickTolerance`, `hitTestElement`), which is Animate's reach, and an anchor under the cursor takes precedence over the stroke; nothing further to widen
 - [x] **Dragging a corner no longer tears the outline apart.** A merged shape
       is written as one edge per piece, so every corner is shared between two
       or more edges. The tool tracked a single edge, so moving a corner moved
@@ -941,7 +942,8 @@ All in `phoenix_view.cpp` unless noted.
 - [x] Blend modes subtract and invert (no Qt composition mode: composite by hand), and alpha and erase, which need the parent layer isolated so they can cut into it
   - Subtract and invert done 2026-10-10 (`Filters::composite`): invert differences the backdrop with white under the instance's coverage; subtract is invert, add, invert again, so the sum clamps at white and the difference at black. Checked on screen (effects_test2.fla: a blue square over white comes out orange under subtract and black under invert, over the red band dark red and cyan). Alpha and erase still draw plainly: they need the parent layer isolated
 - [ ] Blend modes alpha and erase, which need the parent layer isolated so they can cut into it
-- [ ] 9-slice scaling and cacheAsBitmap are not implemented
+- [x] 9-slice scaling and cacheAsBitmap are not implemented
+  - 9-slice done 2026-10-10: a symbol's `scaleGridLeft/Top/Right/Bottom` are parsed and written (`Symbol::scale9`); a movie clip instance of it that is scaled but not turned or skewed draws as nine cells, each the symbol drawn again under a clip with that cell's stretch, so the corners keep their size, the edges stretch one way and the middle both (`drawElement`). Instances with a color effect, filter or blend take the plain path through the offscreen and are not sliced. Checked on screen with `D:/fla/scale9_test.fla`. cacheAsBitmap is a runtime rendering hint with no visible effect in the authoring view, so it is out of scope
 - [x] Text uses guessed font-name munging, `size*0.75`, one baseline and no line
       layout (`:812-887`)
   - Done 2026-10-09 in `text_layout.cpp`: PostScript names taken apart for family, bold and italic; size in pixels at the screen's dpi; lines, wrapping and per-run styles. See step 14

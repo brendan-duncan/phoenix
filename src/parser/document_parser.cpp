@@ -1572,6 +1572,14 @@ bool parseSymbolInclude(const tinyxml2::XMLElement* element, fla::SymbolList* sy
     symbol->itemId = getAttribute(root, "itemID");
     symbol->lastModified = getAttribute(root, "lastModified");
     symbol->href = href;
+    if (hasAttribute(root, "scaleGridLeft"))
+    {
+        symbol->scale9 = true;
+        symbol->scaleGridLeft = getDoubleAttribute(root, "scaleGridLeft", 0.0);
+        symbol->scaleGridTop = getDoubleAttribute(root, "scaleGridTop", 0.0);
+        symbol->scaleGridRight = getDoubleAttribute(root, "scaleGridRight", 0.0);
+        symbol->scaleGridBottom = getDoubleAttribute(root, "scaleGridBottom", 0.0);
+    }
 
     // Parse timelines within the symbol
     for (const tinyxml2::XMLElement* childElement = root->FirstChildElement();
