@@ -1345,7 +1345,7 @@ void PhoenixView::drawElement(QPainter& painter, const fla::Element* element, co
                                        static_cast<int>(std::lround(full.dy() - cached->full.dy())));
                     painter.save();
                     painter.resetTransform();
-                    Filters::composite(painter, cached->origin + shift, cached->image, instance->blendMode);
+                    Filters::composite(painter, cached->origin + shift, cached->image, instance->blendMode, _layerGroupDepth > 0);
                     painter.restore();
                 }
                 else if (!crop.isEmpty())
@@ -1365,9 +1365,15 @@ void PhoenixView::drawElement(QPainter& painter, const fla::Element* element, co
                     {
                         if (timeline->visible)
                         {
+                            // A Layer group's offscreen is what alpha and
+                            // erase instances inside it cut into; an inner
+                            // isolated instance starts a group of its own.
+                            const int outerDepth = _layerGroupDepth;
+                            _layerGroupDepth = instance->blendMode == "layer" ? outerDepth + 1 : 0;
                             symbolPainter.save();
                             drawTimeline(symbolPainter, timeline, loopType, frameOffset);
                             symbolPainter.restore();
+                            _layerGroupDepth = outerDepth;
                         }
                     }
                     symbolPainter.end();
@@ -1379,7 +1385,7 @@ void PhoenixView::drawElement(QPainter& painter, const fla::Element* element, co
 
                     painter.save();
                     painter.resetTransform();
-                    Filters::composite(painter, crop.topLeft(), symbolImage, instance->blendMode);
+                    Filters::composite(painter, crop.topLeft(), symbolImage, instance->blendMode, _layerGroupDepth > 0);
                     painter.restore();
 
                     // Kept for the next paint unless it is huge.

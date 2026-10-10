@@ -388,6 +388,10 @@ private:
     /// mean nothing.
     bool _maskPass = false;
 
+    /// How deep the drawing is inside instances with the Layer blend mode,
+    /// whose offscreen is what alpha and erase instances cut into.
+    int _layerGroupDepth = 0;
+
     /// The frame to draw instead of the playhead's, while an onion frame is
     /// drawn; -1 otherwise.
     int _frameOverride = -1;

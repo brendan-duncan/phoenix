@@ -2,6 +2,8 @@
 
 #include "../edit/image_blur.h"
 
+#include <QRegion>
+
 #include <cstdint>
 #include <algorithm>
 #include <cmath>
@@ -459,8 +461,32 @@ bool needsIsolation(const std::string& name)
     return !name.empty() && name != "normal";
 }
 
-void composite(QPainter& painter, const QPoint& at, const QImage& image, const std::string& name)
+void composite(QPainter& painter, const QPoint& at, const QImage& image, const std::string& name,
+    bool insideLayerGroup)
 {
+    if (name == "alpha" || name == "erase")
+    {
+        if (!insideLayerGroup)
+            return;
+        if (name == "erase")
+        {
+            painter.setCompositionMode(QPainter::CompositionMode_DestinationOut);
+            painter.drawImage(at, image);
+            return;
+        }
+        // Alpha keeps the group only where the instance covers it, which
+        // clears everything outside the instance's image as well.
+        painter.setCompositionMode(QPainter::CompositionMode_DestinationIn);
+        painter.drawImage(at, image);
+        QRegion outside(QRect(0, 0, painter.device()->width(), painter.device()->height()));
+        outside -= QRegion(QRect(at, image.size()));
+        painter.save();
+        painter.setClipRegion(outside);
+        painter.setCompositionMode(QPainter::CompositionMode_Clear);
+        painter.fillRect(QRect(0, 0, painter.device()->width(), painter.device()->height()), Qt::transparent);
+        painter.restore();
+        return;
+    }
     if (name == "invert" || name == "subtract")
     {
         // White under the instance's coverage, differenced with the
