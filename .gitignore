@@ -2,3 +2,4 @@
 third_party/qt/
 dist/
 build-*/
+__pycache__/

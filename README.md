@@ -96,6 +96,14 @@ tagged `qt-<version>`:
 gh release create qt-6.11.2 dist/qt-6.11.2-*.zip dist/qt-6.11.2-*.tar.gz dist/*.sha256
 ```
 
+The **Qt archives** workflow (`.github/workflows/qt-archives.yml`, run by hand
+from the Actions tab with the Qt version) does all of this: it makes the five
+archives on Windows, macOS and Ubuntu runners, proves each one by configuring
+and building Phoenix from it on the matching platform (Windows on ARM and
+Linux arm64 runners included), uploads them to the `qt-<version>` release, and
+opens a pull request that pins their hashes in `cmake/QtArchives.cmake`
+(`tools/qt/pin_qt_hashes.py`). Merge that PR to switch the build over.
+
 ## Tests
 
 Building the top-level project builds the tests too, as the `phoenix_tests`

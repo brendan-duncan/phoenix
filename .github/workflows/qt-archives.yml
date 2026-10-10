@@ -1,0 +1,172 @@
+# Builds the trimmed Qt archives for every platform Phoenix supports, checks
+# each one by building Phoenix against it, and publishes them as assets of
+# the release tagged qt-<version>, with a pull request that pins their
+# hashes in cmake/QtArchives.cmake.
+#
+# Run it by hand from the Actions tab when moving to a new Qt version.
+
+name: Qt archives
+
+on:
+  workflow_dispatch:
+    inputs:
+      qt_version:
+        description: "Qt version to package, e.g. 6.11.2"
+        required: true
+        default: "6.11.2"
+      publish:
+        description: "Publish to the qt-<version> release and open the pin PR"
+        type: boolean
+        default: true
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  # One job per runner OS; each makes the archives that OS can make. The
+  # script only downloads and copies, so the Windows arm64 cross kit and the
+  # Linux arm64 kit are made on x64 runners.
+  make:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            targets: "windows-x64 windows-arm64"
+          - os: macos-latest
+            targets: "macos"
+          - os: ubuntu-latest
+            targets: "linux-x64 linux-arm64"
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install aqtinstall
+        run: python -m pip install --upgrade pip aqtinstall
+
+      - name: Make the archives
+        shell: bash
+        run: |
+          for target in ${{ matrix.targets }}; do
+            python tools/qt/make_qt_archive.py --target "$target" \
+              --version "${{ inputs.qt_version }}" --fetch --out dist --update-cmake ""
+          done
+          ls -la dist
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: qt-${{ matrix.os }}
+          path: |
+            dist/qt-*.zip
+            dist/qt-*.tar.gz
+            dist/*.sha256
+          if-no-files-found: error
+
+  # Each archive is proved by configuring and building Phoenix from it on
+  # the platform it is for, with any installed Qt ignored.
+  verify:
+    needs: make
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            target: windows-x64
+            artifact: qt-windows-latest
+            generator: -G "Visual Studio 17 2022" -A x64
+          - os: windows-11-arm
+            target: windows-arm64
+            artifact: qt-windows-latest
+            generator: -G "Visual Studio 17 2022" -A ARM64
+          - os: macos-latest
+            target: macos
+            artifact: qt-macos-latest
+            generator: ""
+          - os: ubuntu-latest
+            target: linux-x64
+            artifact: qt-ubuntu-latest
+            generator: ""
+          - os: ubuntu-24.04-arm
+            target: linux-arm64
+            artifact: qt-ubuntu-latest
+            generator: ""
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}
+          path: dist
+
+      - name: Linux build dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgl1-mesa-dev libxkbcommon-dev libfontconfig1-dev \
+            libxcb-cursor0 libxcb-icccm4 libxcb-image0 libxcb-keysyms1 libxcb-render-util0 \
+            libxcb-shape0 libxcb-xinerama0 libxcb-xkb1 libxkbcommon-x11-0 libdbus-1-3
+
+      - name: Configure and build from the archive
+        shell: bash
+        run: |
+          cmake -S . -B build ${{ matrix.generator }} \
+            -DPHOENIX_USE_SYSTEM_QT=OFF \
+            -DPHOENIX_QT_BASE_URL="file://$(pwd)/dist" \
+            -DCMAKE_BUILD_TYPE=Release
+          cmake --build build --config Release --target Phoenix phoenix_tests --parallel
+
+      - name: Run the tests
+        shell: bash
+        run: ctest --test-dir build -C Release --output-on-failure
+
+  publish:
+    needs: verify
+    if: inputs.publish
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: qt-*
+          path: dist
+          merge-multiple: true
+
+      - name: Pin the hashes
+        run: python tools/qt/pin_qt_hashes.py "${{ inputs.qt_version }}" dist/*.sha256
+
+      - name: Publish the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          tag="qt-${{ inputs.qt_version }}"
+          gh release view "$tag" >/dev/null 2>&1 || \
+            gh release create "$tag" --title "Qt ${{ inputs.qt_version }} for Phoenix" \
+              --notes "Trimmed Qt ${{ inputs.qt_version }} archives, made by tools/qt/make_qt_archive.py. The build downloads these when it finds no Qt."
+          gh release upload "$tag" --clobber dist/qt-*.zip dist/qt-*.tar.gz dist/*.sha256
+
+      - name: Open the pin pull request
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          branch="qt-archives-${{ inputs.qt_version }}"
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git checkout -B "$branch"
+          git add cmake/QtArchives.cmake
+          if git diff --cached --quiet; then
+            echo "hashes already pinned"
+            exit 0
+          fi
+          git commit -m "Pin Qt ${{ inputs.qt_version }} archive hashes"
+          git push --force origin "$branch"
+          gh pr create --head "$branch" --base "${{ github.ref_name }}" \
+            --title "Pin Qt ${{ inputs.qt_version }} archive hashes" \
+            --body "Hashes of the archives published on the qt-${{ inputs.qt_version }} release, written by the Qt archives workflow." \
+            || gh pr edit "$branch" --title "Pin Qt ${{ inputs.qt_version }} archive hashes"
