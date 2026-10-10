@@ -448,7 +448,14 @@ def update_cmake_hashes(cmake_file, target, version, digest):
     """Writes the archive's hash into cmake/QtArchives.cmake."""
     key = target.replace("-", "_")
     line = f'set(PHOENIX_QT_SHA256_{key} "{digest}")'
-    text = read(cmake_file) if Path(cmake_file).exists() else ""
+    # Read and written with the file's own line endings, so a pin made on
+    # one platform does not rewrite every line for another.
+    text = ""
+    if Path(cmake_file).exists():
+        with open(cmake_file, encoding="utf-8", newline="") as source:
+            text = source.read()
+    newline = "\r\n" if "\r\n" in text else "\n"
+    text = text.replace("\r\n", "\n")
     pattern = re.compile(rf'^set\(PHOENIX_QT_SHA256_{key} "[^"]*"\)$', re.M)
     if pattern.search(text):
         text = pattern.sub(line, text)
@@ -457,7 +464,8 @@ def update_cmake_hashes(cmake_file, target, version, digest):
     version_pattern = re.compile(r'^set\(PHOENIX_QT_VERSION "[^"]*"', re.M)
     if version_pattern.search(text):
         text = version_pattern.sub(f'set(PHOENIX_QT_VERSION "{version}"', text)
-    Path(cmake_file).write_text(text, encoding="utf-8")
+    with open(cmake_file, "w", encoding="utf-8", newline="") as out:
+        out.write(text.replace("\n", newline))
 
 
 def main():

@@ -180,7 +180,13 @@ jobs:
           fi
           git commit -m "Pin Qt ${{ inputs.qt_version }} archive hashes"
           git push --force origin "$branch"
-          gh pr create --head "$branch" --base "${{ github.ref_name }}" \
+          # Opening the pull request needs "Allow GitHub Actions to create and
+          # approve pull requests" under Settings > Actions > General. Without
+          # it the branch is still pushed, and the link below opens the PR.
+          if gh pr view "$branch" >/dev/null 2>&1; then
+            echo "pull request for $branch already open"
+          elif ! gh pr create --head "$branch" --base "${{ github.ref_name }}" \
             --title "Pin Qt ${{ inputs.qt_version }} archive hashes" \
-            --body "Hashes of the archives published on the qt-${{ inputs.qt_version }} release, written by the Qt archives workflow." \
-            || gh pr edit "$branch" --title "Pin Qt ${{ inputs.qt_version }} archive hashes"
+            --body "Hashes of the archives published on the qt-${{ inputs.qt_version }} release, written by the Qt archives workflow."; then
+            echo "::warning::Could not open the pull request (allow Actions to create pull requests in Settings > Actions > General). Open it here: ${{ github.server_url }}/${{ github.repository }}/pull/new/$branch"
+          fi
