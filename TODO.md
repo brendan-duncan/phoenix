@@ -1326,7 +1326,7 @@ in the code or against a real XFL document.
 Added 2026-10-10: the toolbox, the layers list and the timeline strip were
 laid out for convenience rather than to match Animate.
 
-- [ ] **Toolbox.** Animate docks its tools in one vertical column at the left
+- [x] **Toolbox.** Animate docks its tools in one vertical column at the left
       of the stage, in groups: selection and subselection, free transform,
       lasso; pen, text, line, the shape tools together (rectangle, oval, the
       two primitives, polystar), pencil, brush; paint bucket with the ink
@@ -1335,17 +1335,20 @@ laid out for convenience rather than to match Animate.
       takes the slot. Under the tools sit the stroke and fill swatches and the
       options of the active tool. Phoenix has a horizontal bar across the top
       with every tool in a row and the swatches only in Properties
-- [ ] **Layers list header and buttons.** Animate's list has a header strip
+  - Done 2026-10-10: a vertical toolbar at the left (`setupToolBar`), one slot per tool or group; a group slot is a QToolButton with a delayed flyout (rectangle, oval, rectangle primitive, oval primitive, polystar; paint bucket with ink bottle) and the chosen tool takes the slot, as a long press does in Animate. Every tool keeps its key through the window's action list. The stroke and fill swatches sit under the tools and share the style with the Properties panel; Object Drawing (J) sits last. Checked on screen: the flyout opens on a long press and picking Oval puts it in the slot
+- [x] **Layers list header and buttons.** Animate's list has a header strip
       whose eye, padlock and outline square toggle every layer at once, a
       column for each under it, a pencil marker on the current layer, and
       under the list New Layer, New Folder and Delete buttons. Names are
       edited by double-click. Phoenix's header is empty and layers can only
       be hidden, locked and made current
-- [ ] **Outline mode.** The color square on a layer toggles outline view: the
+  - Done 2026-10-10 (`layers_panel.cpp`, rewritten with drawn glyphs): the header's eye, padlock and outline square toggle every layer, a pencil marks the current layer, the color square toggles outline view, double-click edits a name, and New Layer, New Folder and Delete sit under the list. Adding and deleting go through `AddLayerCommand` and `RemoveLayerCommand` (`src/edit/layer_commands.cpp`, tests): a new layer is named Layer_N with the next of Animate's layer colors, spans the longest layer and goes above the current one; deleting a folder takes its contents and renumbers the folder links; a rename is a Rename Layer step that also clears autoNamed. The list rebuilds only when it no longer matches the document (so an undo shows), keeping which folders are open. A timeline keeps at least one layer. Checked on screen on effects_test.fla: new layer, new folder, rename, delete, two undos
+- [x] **Outline mode.** The color square on a layer toggles outline view: the
       layer's artwork draws as thin lines in the layer color with no fills,
       and the square goes hollow. DOMLayer's `outline` attribute is neither
       parsed nor written
-- [ ] **Timeline footer.** Under Animate's frames sit the current frame
+  - Done 2026-10-10: `Layer::outline` is parsed and written; while such a layer draws, `PhoenixView::_outlineColor` holds its color and every fill and stroke is drawn as a hairline in it, text and bitmaps as their boxes, and instances skip their color effects, filters and blends so the lines stay visible. Masks are never outlined. Checked on screen: the band row drew as red outlines
+- [x] **Timeline footer.** Under Animate's frames sit the current frame
       number, the frame rate and the elapsed time beside the transport and
       onion skin buttons; Phoenix shows only the transport buttons
 
@@ -1369,6 +1372,7 @@ dragging, at a maximized window on a 3856x1568 display:
 | Release, before | 37 ms |
 | Release, after | ~5 ms while dragging |
 
+  - Done 2026-10-10: the transport strip shows the current frame, the frame rate and the time into the animation at its left, as Animate's footer does
 - [x] Stop supersampling while a gesture is running. High quality rendering
       draws the stage into an offscreen image at 2x in each direction, which at
       that window size is a 97 MB buffer allocated, filled and scaled down for

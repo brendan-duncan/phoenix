@@ -1,21 +1,26 @@
 #include "layers_panel.h"
 
-#include <cstdint>
+#include <QColor>
+#include <QFont>
+#include <QHBoxLayout>
 #include <QHeaderView>
-#include <QTreeWidget>
-#include <QTreeWidgetItemIterator>
-#include <functional>
+#include <QIcon>
 #include <QPainter>
 #include <QPainterPath>
-#include <QFont>
-#include <QColor>
-#include <QPixmap>
-#include <QVBoxLayout>
-#include <QIcon>
-#include <QSize>
 #include <QPalette>
+#include <QPixmap>
+#include <QSize>
+#include <QToolButton>
+#include <QTreeWidget>
+#include <QTreeWidgetItemIterator>
+#include <QVBoxLayout>
+
+#include <cstdint>
+#include <functional>
 
 namespace {
+
+const QColor kInk(220, 220, 220);
 
 /// A drawn glyph, so the panel does not depend on an emoji font.
 QIcon glyph(void (*draw)(QPainter&))
@@ -30,14 +35,14 @@ QIcon glyph(void (*draw)(QPainter&))
 
 void drawEye(QPainter& painter)
 {
-    painter.setPen(QPen(QColor(220, 220, 220), 1.2));
+    painter.setPen(QPen(kInk, 1.2));
     painter.setBrush(Qt::NoBrush);
     QPainterPath eye;
     eye.moveTo(2.0, 8.0);
     eye.quadTo(8.0, 1.5, 14.0, 8.0);
     eye.quadTo(8.0, 14.5, 2.0, 8.0);
     painter.drawPath(eye);
-    painter.setBrush(QColor(220, 220, 220));
+    painter.setBrush(kInk);
     painter.drawEllipse(QPointF(8.0, 8.0), 2.2, 2.2);
 }
 
@@ -58,7 +63,7 @@ void drawUnlockedDot(QPainter& painter)
 
 void drawPadlock(QPainter& painter)
 {
-    painter.setPen(QPen(QColor(220, 220, 220), 1.4));
+    painter.setPen(QPen(kInk, 1.4));
     painter.setBrush(Qt::NoBrush);
     QPainterPath shackle;
     shackle.moveTo(5.0, 8.0);
@@ -67,20 +72,131 @@ void drawPadlock(QPainter& painter)
     shackle.quadTo(11.0, 2.5, 11.0, 5.5);
     shackle.lineTo(11.0, 8.0);
     painter.drawPath(shackle);
-    painter.setBrush(QColor(220, 220, 220));
+    painter.setBrush(kInk);
     painter.drawRoundedRect(QRectF(3.5, 7.5, 9.0, 6.5), 1.0, 1.0);
 }
 
-/// The layer's outline color as a small swatch.
-QIcon swatchIcon(const uint8_t rgba[4])
+void drawOutlineSquare(QPainter& painter)
+{
+    painter.setPen(QPen(kInk, 1.2));
+    painter.setBrush(Qt::NoBrush);
+    painter.drawRect(QRectF(3.5, 3.5, 9.0, 9.0));
+}
+
+void drawPencil(QPainter& painter)
+{
+    // Animate's current-layer marker: a pencil leaning to the right.
+    painter.setPen(QPen(kInk, 1.2));
+    painter.setBrush(QColor(kInk.red(), kInk.green(), kInk.blue(), 90));
+    QPainterPath body;
+    body.moveTo(3.0, 13.0);
+    body.lineTo(4.0, 9.5);
+    body.lineTo(10.5, 3.0);
+    body.lineTo(13.0, 5.5);
+    body.lineTo(6.5, 12.0);
+    body.closeSubpath();
+    painter.drawPath(body);
+    painter.drawLine(QPointF(4.0, 9.5), QPointF(6.5, 12.0));
+}
+
+void drawLayerSheet(QPainter& painter)
+{
+    painter.setPen(QPen(kInk, 1.1));
+    painter.setBrush(QColor(kInk.red(), kInk.green(), kInk.blue(), 50));
+    painter.drawRect(QRectF(3.5, 2.5, 9.0, 11.0));
+    painter.setPen(QPen(kInk, 0.9));
+    painter.drawLine(QPointF(5.5, 6.0), QPointF(10.5, 6.0));
+    painter.drawLine(QPointF(5.5, 8.5), QPointF(10.5, 8.5));
+    painter.drawLine(QPointF(5.5, 11.0), QPointF(8.5, 11.0));
+}
+
+void drawFolderClosed(QPainter& painter)
+{
+    painter.setPen(QPen(QColor(230, 200, 100), 1.1));
+    painter.setBrush(QColor(230, 200, 100, 120));
+    QPainterPath folder;
+    folder.moveTo(2.0, 4.5);
+    folder.lineTo(6.0, 4.5);
+    folder.lineTo(7.5, 6.0);
+    folder.lineTo(14.0, 6.0);
+    folder.lineTo(14.0, 13.0);
+    folder.lineTo(2.0, 13.0);
+    folder.closeSubpath();
+    painter.drawPath(folder);
+}
+
+void drawFolderOpen(QPainter& painter)
+{
+    painter.setPen(QPen(QColor(230, 200, 100), 1.1));
+    painter.setBrush(QColor(230, 200, 100, 120));
+    QPainterPath back;
+    back.moveTo(2.0, 4.5);
+    back.lineTo(6.0, 4.5);
+    back.lineTo(7.5, 6.0);
+    back.lineTo(13.0, 6.0);
+    back.lineTo(13.0, 8.0);
+    back.lineTo(2.0, 8.0);
+    back.closeSubpath();
+    painter.drawPath(back);
+    QPainterPath front;
+    front.moveTo(1.0, 8.0);
+    front.lineTo(14.5, 8.0);
+    front.lineTo(13.0, 13.0);
+    front.lineTo(2.0, 13.0);
+    front.closeSubpath();
+    painter.drawPath(front);
+}
+
+void drawNewLayer(QPainter& painter)
+{
+    drawLayerSheet(painter);
+    painter.setPen(QPen(QColor(120, 220, 120), 1.6));
+    painter.drawLine(QPointF(12.0, 10.0), QPointF(12.0, 15.0));
+    painter.drawLine(QPointF(9.5, 12.5), QPointF(14.5, 12.5));
+}
+
+void drawNewFolder(QPainter& painter)
+{
+    drawFolderClosed(painter);
+    painter.setPen(QPen(QColor(120, 220, 120), 1.6));
+    painter.drawLine(QPointF(12.0, 10.0), QPointF(12.0, 15.0));
+    painter.drawLine(QPointF(9.5, 12.5), QPointF(14.5, 12.5));
+}
+
+void drawTrash(QPainter& painter)
+{
+    painter.setPen(QPen(kInk, 1.2));
+    painter.setBrush(Qt::NoBrush);
+    painter.drawLine(QPointF(3.0, 4.5), QPointF(13.0, 4.5));
+    painter.drawLine(QPointF(6.5, 2.5), QPointF(9.5, 2.5));
+    painter.drawRect(QRectF(4.5, 4.5, 7.0, 9.0));
+    painter.drawLine(QPointF(7.0, 7.0), QPointF(7.0, 11.5));
+    painter.drawLine(QPointF(9.0, 7.0), QPointF(9.0, 11.5));
+}
+
+/// The layer's outline color: a filled square in the normal view, a hollow
+/// one when the layer is in outline view, as Animate shows it.
+QIcon swatchIcon(const uint8_t rgba[4], bool outline)
 {
     QPixmap pixmap(16, 16);
     pixmap.fill(Qt::transparent);
     QPainter painter(&pixmap);
-    painter.setPen(QPen(QColor(20, 20, 20), 1.0));
-    painter.setBrush(QColor(rgba[0], rgba[1], rgba[2]));
+    const QColor color(rgba[0], rgba[1], rgba[2]);
+    painter.setPen(QPen(outline ? color : QColor(20, 20, 20), outline ? 1.6 : 1.0));
+    painter.setBrush(outline ? QBrush(Qt::NoBrush) : QBrush(color));
     painter.drawRect(QRectF(3.5, 3.5, 9.0, 9.0));
     return QIcon(pixmap);
+}
+
+QToolButton* smallButton(QWidget* parent, const QIcon& icon, const QString& tip)
+{
+    QToolButton* button = new QToolButton(parent);
+    button->setIcon(icon);
+    button->setIconSize(QSize(16, 16));
+    button->setAutoRaise(true);
+    button->setToolTip(tip);
+    button->setFixedSize(24, 22);
+    return button;
 }
 
 } // namespace
@@ -88,25 +204,80 @@ QIcon swatchIcon(const uint8_t rgba[4])
 LayersPanel::LayersPanel(QWidget *parent)
     : QWidget(parent)
     , _flaDocument(nullptr)
-    , _layerIcon(createLayerIcon())
-    , _folderIcon(createFolderIcon())
-    , _openFolderIcon(createOpenFolderIcon())
+    , _layerIcon(glyph(drawLayerSheet))
+    , _folderIcon(glyph(drawFolderClosed))
+    , _openFolderIcon(glyph(drawFolderOpen))
     , _visibleIcon(glyph(drawEye))
     , _hiddenIcon(glyph(drawHiddenCross))
     , _unlockedIcon(glyph(drawUnlockedDot))
     , _lockedIcon(glyph(drawPadlock))
+    , _pencilIcon(glyph(drawPencil))
 {
     QVBoxLayout* layout = new QVBoxLayout(this);
     layout->setContentsMargins(0, 0, 0, 0);
     layout->setSpacing(0);
 
+    // The header: the three column toggles, over their columns, that act on
+    // every layer at once. Its height matches the timeline's ruler strip.
     QWidget* header = new QWidget(this);
     header->setAutoFillBackground(true);
     header->setFixedHeight(50);
     QPalette headerPalette = header->palette();
     headerPalette.setColor(QPalette::Window, QColor("#2d2d2d"));
     header->setPalette(headerPalette);
+    QHBoxLayout* headerLayout = new QHBoxLayout(header);
+    headerLayout->setContentsMargins(0, 0, 0, 2);
+    headerLayout->setSpacing(0);
+    headerLayout->setAlignment(Qt::AlignBottom);
+    headerLayout->addStretch();
+    _allVisible = smallButton(header, _visibleIcon, "Show or hide all layers");
+    _allLocked = smallButton(header, _lockedIcon, "Lock or unlock all layers");
+    _allOutline = smallButton(header, glyph(drawOutlineSquare), "Show all layers as outlines");
+    headerLayout->addWidget(_allVisible);
+    headerLayout->addWidget(_allLocked);
+    headerLayout->addWidget(_allOutline);
     layout->addWidget(header);
+
+    connect(_allVisible, &QToolButton::clicked, this, [this]() {
+        // Hide everything if anything shows, else show everything.
+        bool anyVisible = false;
+        for (const fla::Timeline* timeline : shownTimelines())
+            for (const fla::Layer* layer : timeline->layers)
+                anyVisible = anyVisible || (layer && layer->visible);
+        for (fla::Timeline* timeline : shownTimelines())
+            for (fla::Layer* layer : timeline->layers)
+                if (layer)
+                    layer->visible = !anyVisible;
+        for (QTreeWidgetItemIterator it(_treeWidget); *it; ++it)
+            refreshRow(*it);
+        emit layersChanged();
+    });
+    connect(_allLocked, &QToolButton::clicked, this, [this]() {
+        bool anyUnlocked = false;
+        for (const fla::Timeline* timeline : shownTimelines())
+            for (const fla::Layer* layer : timeline->layers)
+                anyUnlocked = anyUnlocked || (layer && !layer->locked);
+        for (fla::Timeline* timeline : shownTimelines())
+            for (fla::Layer* layer : timeline->layers)
+                if (layer)
+                    layer->locked = anyUnlocked;
+        for (QTreeWidgetItemIterator it(_treeWidget); *it; ++it)
+            refreshRow(*it);
+        emit layersChanged();
+    });
+    connect(_allOutline, &QToolButton::clicked, this, [this]() {
+        bool anyFilled = false;
+        for (const fla::Timeline* timeline : shownTimelines())
+            for (const fla::Layer* layer : timeline->layers)
+                anyFilled = anyFilled || (layer && !layer->outline);
+        for (fla::Timeline* timeline : shownTimelines())
+            for (fla::Layer* layer : timeline->layers)
+                if (layer)
+                    layer->outline = anyFilled;
+        for (QTreeWidgetItemIterator it(_treeWidget); *it; ++it)
+            refreshRow(*it);
+        emit layersChanged();
+    });
 
     _treeWidget = new QTreeWidget(this);
     _treeWidget->setHeaderHidden(true);
@@ -115,64 +286,55 @@ LayersPanel::LayersPanel(QWidget *parent)
     _treeWidget->setColumnCount(ColumnCount);
     _treeWidget->header()->setStretchLastSection(false);
     _treeWidget->header()->setSectionResizeMode(NameColumn, QHeaderView::Stretch);
-    for (int column = VisibleColumn; column < ColumnCount; ++column)
+    for (int column = CurrentColumn; column < ColumnCount; ++column)
     {
         _treeWidget->header()->setSectionResizeMode(column, QHeaderView::Fixed);
-        _treeWidget->header()->resizeSection(column, 24);
+        _treeWidget->header()->resizeSection(column, column == CurrentColumn ? 20 : 24);
     }
     _treeWidget->header()->setHidden(true);
     _treeWidget->setSelectionMode(QAbstractItemView::SingleSelection);
+    _treeWidget->setEditTriggers(QAbstractItemView::NoEditTriggers);
     layout->addWidget(_treeWidget, 1);
+
+    // Under the list: New Layer, New Folder, Delete.
+    QWidget* buttons = new QWidget(this);
+    buttons->setAutoFillBackground(true);
+    buttons->setPalette(headerPalette);
+    buttons->setFixedHeight(26);
+    QHBoxLayout* buttonLayout = new QHBoxLayout(buttons);
+    buttonLayout->setContentsMargins(4, 2, 4, 2);
+    buttonLayout->setSpacing(2);
+    QToolButton* newLayer = smallButton(buttons, glyph(drawNewLayer), "New Layer");
+    QToolButton* newFolder = smallButton(buttons, glyph(drawNewFolder), "New Folder");
+    QToolButton* remove = smallButton(buttons, glyph(drawTrash), "Delete the current layer");
+    connect(newLayer, &QToolButton::clicked, this, [this]() { emit addLayerRequested(false); });
+    connect(newFolder, &QToolButton::clicked, this, [this]() { emit addLayerRequested(true); });
+    connect(remove, &QToolButton::clicked, this, [this]() { emit deleteLayerRequested(); });
+    buttonLayout->addWidget(newLayer);
+    buttonLayout->addWidget(newFolder);
+    buttonLayout->addStretch();
+    buttonLayout->addWidget(remove);
+    layout->addWidget(buttons);
 
     connect(_treeWidget, &QTreeWidget::itemExpanded, this, &LayersPanel::onItemExpanded);
     connect(_treeWidget, &QTreeWidget::itemCollapsed, this, &LayersPanel::onItemCollapsed);
     connect(_treeWidget, &QTreeWidget::itemClicked, this, &LayersPanel::onItemClicked);
-}
-
-QIcon LayersPanel::createLayerIcon()
-{
-    QPixmap pixmap(16, 16);
-    pixmap.fill(Qt::transparent);
-    QPainter painter(&pixmap);
-    painter.setFont(QFont("Segoe UI Emoji", 10));
-    painter.setPen(QColor(150, 150, 50));
-    painter.drawText(pixmap.rect(), Qt::AlignCenter, "📃");
-    return QIcon(pixmap);
-}
-
-QIcon LayersPanel::createFolderIcon()
-{
-    QPixmap pixmap(10, 10);
-    pixmap.fill(Qt::transparent);
-    QPainter painter(&pixmap);
-    painter.setFont(QFont("Segoe UI Emoji", 10));
-    painter.setPen(QColor(100, 150, 200));
-    painter.drawText(pixmap.rect(), Qt::AlignCenter, "📁");
-    return QIcon(pixmap);
-}
-
-QIcon LayersPanel::createOpenFolderIcon()
-{
-    QPixmap pixmap(10, 10);
-    pixmap.fill(Qt::transparent);
-    QPainter painter(&pixmap);
-    painter.setFont(QFont("Segoe UI Emoji", 10));
-    painter.setPen(QColor(100, 150, 200));
-    painter.drawText(pixmap.rect(), Qt::AlignCenter, "📂");
-    return QIcon(pixmap);
+    connect(_treeWidget, &QTreeWidget::itemDoubleClicked, this, &LayersPanel::onItemDoubleClicked);
+    connect(_treeWidget, &QTreeWidget::itemChanged, this, &LayersPanel::onItemChanged);
 }
 
 void LayersPanel::setDocument(const fla::FLADocument* document)
 {
     _flaDocument = document;
     _timeline = nullptr;
-    refreshLayers();
+    _expanded.clear();
+    refresh();
 }
 
 void LayersPanel::setTimeline(fla::Timeline* timeline)
 {
     _timeline = timeline;
-    refreshLayers();
+    refresh();
 }
 
 std::vector<fla::Timeline*> LayersPanel::shownTimelines() const
@@ -191,22 +353,25 @@ std::vector<fla::Timeline*> LayersPanel::shownTimelines() const
     return timelines;
 }
 
-fla::Layer* LayersPanel::layerFor(const QTreeWidgetItem* item) const
+fla::Timeline* LayersPanel::timelineFor(const QTreeWidgetItem* item) const
 {
     if (!item || !_flaDocument || !_flaDocument->document)
         return nullptr;
-
     const int timelineIndex = item->data(NameColumn, Qt::UserRole + 1).toInt();
-    const int layerIndex = item->data(NameColumn, Qt::UserRole).toInt();
-
-    const auto& timelines = shownTimelines();
+    const std::vector<fla::Timeline*> timelines = shownTimelines();
     if (timelineIndex < 0 || timelineIndex >= static_cast<int>(timelines.size()))
         return nullptr;
+    return timelines[timelineIndex];
+}
 
-    const fla::Timeline* timeline = timelines[timelineIndex];
-    if (!timeline || layerIndex < 0 || layerIndex >= static_cast<int>(timeline->layers.size()))
+fla::Layer* LayersPanel::layerFor(const QTreeWidgetItem* item) const
+{
+    fla::Timeline* timeline = timelineFor(item);
+    if (!timeline)
         return nullptr;
-
+    const int layerIndex = item->data(NameColumn, Qt::UserRole).toInt();
+    if (layerIndex < 0 || layerIndex >= static_cast<int>(timeline->layers.size()))
+        return nullptr;
     return timeline->layers[layerIndex];
 }
 
@@ -234,6 +399,24 @@ std::vector<LayerRow> LayersPanel::visibleRows() const
     for (int i = 0; i < _treeWidget->topLevelItemCount(); ++i)
         visit(_treeWidget->topLevelItem(i));
     return rows;
+}
+
+bool LayersPanel::currentLayer(fla::Timeline*& timeline, int& layerIndex) const
+{
+    for (fla::Timeline* candidate : shownTimelines())
+    {
+        for (size_t i = 0; i < candidate->layers.size(); ++i)
+        {
+            const fla::Layer* layer = candidate->layers[i];
+            if (layer && layer->selected)
+            {
+                timeline = candidate;
+                layerIndex = static_cast<int>(i);
+                return true;
+            }
+        }
+    }
+    return false;
 }
 
 void LayersPanel::setCurrentLayer(const fla::Timeline* timeline, int layerIndex)
@@ -271,16 +454,67 @@ void LayersPanel::setCurrentLayer(const fla::Timeline* timeline, int layerIndex)
             break;
         }
     }
+    markCurrent();
 
     emit currentLayerChanged(QString::fromStdString(target->name), layerIndex);
 }
 
-void LayersPanel::refreshLayers()
+void LayersPanel::markCurrent()
 {
+    for (QTreeWidgetItemIterator it(_treeWidget); *it; ++it)
+    {
+        const fla::Layer* layer = layerFor(*it);
+        (*it)->setIcon(CurrentColumn, layer && layer->selected ? _pencilIcon : QIcon());
+    }
+}
+
+void LayersPanel::refreshRow(QTreeWidgetItem* item)
+{
+    const fla::Layer* layer = layerFor(item);
+    if (!layer)
+        return;
+    item->setIcon(VisibleColumn, layer->visible ? _visibleIcon : _hiddenIcon);
+    item->setIcon(LockColumn, layer->locked ? _lockedIcon : _unlockedIcon);
+    item->setIcon(ColorColumn, swatchIcon(layer->color, layer->outline));
+    item->setIcon(CurrentColumn, layer->selected ? _pencilIcon : QIcon());
+}
+
+std::vector<LayersPanel::Built> LayersPanel::snapshot() const
+{
+    std::vector<Built> built;
+    for (const fla::Timeline* timeline : shownTimelines())
+    {
+        for (const fla::Layer* layer : timeline->layers)
+            built.push_back({layer, layer ? layer->name : std::string(), layer && layer->selected});
+    }
+    return built;
+}
+
+void LayersPanel::refreshIfStale()
+{
+    const std::vector<Built> now = snapshot();
+    bool same = now.size() == _built.size();
+    for (size_t i = 0; same && i < now.size(); ++i)
+    {
+        same = now[i].layer == _built[i].layer && now[i].name == _built[i].name &&
+            now[i].selected == _built[i].selected;
+    }
+    if (!same)
+        refresh();
+}
+
+void LayersPanel::refresh()
+{
+    _refreshing = true;
     _treeWidget->clear();
 
     if (!_flaDocument || !_flaDocument->document)
+    {
+        _built.clear();
+        _refreshing = false;
+        emit rowsChanged();
         return;
+    }
 
     int timelineIndex = 0;
     for (const fla::Timeline* timeline : shownTimelines())
@@ -294,67 +528,44 @@ void LayersPanel::refreshLayers()
             if (layerName.isEmpty())
             {
                 if (layer->layerType == fla::Layer::Type::Folder)
-                {
                     layerName = QString("Folder %1").arg(layerIndexMap.size());
-                }
                 else
-                {
                     layerName = QString("Layer %1").arg(layerIndexMap.size());
-                }
             }
 
             QTreeWidgetItem* item = new QTreeWidgetItem();
             // The same row height as the timeline grid's, so the rows line up.
             item->setSizeHint(0, QSize(100, 22));
+            item->setFlags(item->flags() | Qt::ItemIsEditable);
 
             layerIndexMap.push_back(item);
 
             item->setText(NameColumn, layerName);
-            item->setExpanded(true);
-            switch (layer->layerType)
-            {
-                case fla::Layer::Type::Normal:
-                    item->setIcon(NameColumn, _layerIcon);
-                    break;
-                case fla::Layer::Type::Folder:
-                    item->setIcon(NameColumn, _openFolderIcon);
-                    break;
-                case fla::Layer::Type::Mask:
-                    item->setIcon(NameColumn, _layerIcon);
-                    break;
-                case fla::Layer::Type::Masked:
-                    item->setIcon(NameColumn, _layerIcon);
-                    break;
-                case fla::Layer::Type::Guide:
-                    item->setIcon(NameColumn, _layerIcon);
-                    break;
-            }
-
-            item->setIcon(VisibleColumn, layer->visible ? _visibleIcon : _hiddenIcon);
-            item->setIcon(LockColumn, layer->locked ? _lockedIcon : _unlockedIcon);
-            item->setIcon(ColorColumn, swatchIcon(layer->color));
+            const bool folder = layer->layerType == fla::Layer::Type::Folder;
+            item->setIcon(NameColumn, folder ? _openFolderIcon : _layerIcon);
             item->setToolTip(VisibleColumn, "Show or hide the layer");
             item->setToolTip(LockColumn, "Lock or unlock the layer");
-            item->setToolTip(ColorColumn, "Outline color; selections on this layer are highlighted in it");
+            item->setToolTip(ColorColumn, "Outline color; click to view the layer as outlines");
+            item->setToolTip(CurrentColumn, "The current layer, where new drawings go");
 
             item->setData(NameColumn, Qt::UserRole, QVariant::fromValue(layerIndexMap.size() - 1));
             item->setData(NameColumn, Qt::UserRole + 1, timelineIndex);
 
-            if (layer->parentLayerIndex == -1)
-            {
-                _treeWidget->addTopLevelItem(item);
-            }
+            QTreeWidgetItem* parent = layer->parentLayerIndex == -1 ? nullptr
+                : layerIndexMap.value(layer->parentLayerIndex, nullptr);
+            if (parent)
+                parent->addChild(item);
             else
+                _treeWidget->addTopLevelItem(item);
+
+            refreshRow(item);
+
+            if (folder)
             {
-                QTreeWidgetItem* parent = layerIndexMap.value(layer->parentLayerIndex, nullptr);
-                if (parent)
-                {
-                    parent->addChild(item);
-                }
-                else
-                {
-                    _treeWidget->addTopLevelItem(item);
-                }
+                const auto known = _expanded.find(layer);
+                const bool open = known == _expanded.end() ? true : known->second;
+                item->setExpanded(open);
+                item->setIcon(NameColumn, open ? _openFolderIcon : _folderIcon);
             }
 
             if (layer->selected && !currentItem)
@@ -367,55 +578,97 @@ void LayersPanel::refreshLayers()
         ++timelineIndex;
     }
 
+    _built = snapshot();
+    _refreshing = false;
     emit rowsChanged();
 }
 
 void LayersPanel::onItemExpanded(QTreeWidgetItem* item)
 {
     item->setIcon(NameColumn, _openFolderIcon);
-    emit rowsChanged();
+    if (const fla::Layer* layer = layerFor(item))
+        _expanded[layer] = true;
+    if (!_refreshing)
+        emit rowsChanged();
 }
 
 void LayersPanel::onItemCollapsed(QTreeWidgetItem* item)
 {
     item->setIcon(NameColumn, _folderIcon);
-    emit rowsChanged();
+    if (const fla::Layer* layer = layerFor(item))
+        _expanded[layer] = false;
+    if (!_refreshing)
+        emit rowsChanged();
+}
+
+void LayersPanel::onItemDoubleClicked(QTreeWidgetItem* item, int column)
+{
+    // Only the name is typed into; the other columns are toggles.
+    if (column == NameColumn && layerFor(item))
+        _treeWidget->editItem(item, NameColumn);
+}
+
+void LayersPanel::onItemChanged(QTreeWidgetItem* item, int column)
+{
+    if (_refreshing || column != NameColumn)
+        return;
+    fla::Timeline* timeline = timelineFor(item);
+    const fla::Layer* layer = layerFor(item);
+    if (!timeline || !layer)
+        return;
+    const QString name = item->text(NameColumn).trimmed();
+    if (name.isEmpty() || name == QString::fromStdString(layer->name))
+    {
+        item->setText(NameColumn, QString::fromStdString(layer->name));
+        return;
+    }
+    emit layerRenamed(timeline, item->data(NameColumn, Qt::UserRole).toInt(), name);
 }
 
 void LayersPanel::onItemClicked(QTreeWidgetItem* item, int column)
 {
     fla::Layer* layer = layerFor(item);
-    if (!layer)
+    fla::Timeline* timeline = timelineFor(item);
+    if (!layer || !timeline)
         return;
 
-    const int timelineIndex = item->data(NameColumn, Qt::UserRole + 1).toInt();
     const int layerIndex = item->data(NameColumn, Qt::UserRole).toInt();
-    fla::Timeline* timeline = shownTimelines()[timelineIndex];
     const QString timelineName = QString::fromStdString(timeline->name);
 
     switch (column)
     {
     case VisibleColumn:
         layer->visible = !layer->visible;
-        item->setIcon(VisibleColumn, layer->visible ? _visibleIcon : _hiddenIcon);
+        refreshRow(item);
         emit layerVisibilityChanged(timelineName, layerIndex, layer->visible);
         break;
 
     case LockColumn:
         layer->locked = !layer->locked;
-        item->setIcon(LockColumn, layer->locked ? _lockedIcon : _unlockedIcon);
+        refreshRow(item);
         emit layerLockChanged(timelineName, layerIndex, layer->locked);
+        break;
+
+    case ColorColumn:
+        // The square toggles outline view, as in Animate.
+        layer->outline = !layer->outline;
+        refreshRow(item);
+        emit layersChanged();
         break;
 
     default:
         // Clicking the name makes this the current layer, the one new drawings
         // go into. Only one layer in a timeline is current.
+        if (layer->layerType == fla::Layer::Type::Folder)
+            break;
         for (fla::Layer* other : timeline->layers)
         {
             if (other)
                 other->selected = other == layer;
         }
         _treeWidget->setCurrentItem(item);
+        markCurrent();
+        _built = snapshot();
         emit currentLayerChanged(timelineName, layerIndex);
         break;
     }

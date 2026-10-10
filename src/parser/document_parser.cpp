@@ -1425,6 +1425,7 @@ bool parseLayer(const tinyxml2::XMLElement* element, fla::Layer* layer)
     layer->selected = getBoolAttribute(element, "isSelected", false);
     layer->autoNamed = getBoolAttribute(element, "autoNamed", true);
     layer->locked = getBoolAttribute(element, "locked", false);
+    layer->outline = getBoolAttribute(element, "outline", false);
     layer->visible = getBoolAttribute(element, "visible", true);
 
     for (const tinyxml2::XMLElement* childElement = element->FirstChildElement();

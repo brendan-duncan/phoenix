@@ -140,6 +140,7 @@ private:
         check(a.layerType == b.layerType, where + " layerType");
         check(a.parentLayerIndex == b.parentLayerIndex, where + " parentLayerIndex");
         check(a.locked == b.locked, where + " locked");
+        check(a.outline == b.outline, where + " outline");
         check(a.visible == b.visible, where + " visible");
         check(a.autoNamed == b.autoNamed, where + " autoNamed");
         compareColor(a.color, b.color, where + " color");

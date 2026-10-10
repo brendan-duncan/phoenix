@@ -2,6 +2,8 @@
 #include "convert_to_symbol_dialog.h"
 #include "lines_to_fills.h"
 #include "fill_offset.h"
+#include "../edit/layer_commands.h"
+#include "../edit/property_command.h"
 #include "phoenix_view.h"
 #include "timeline_view.h"
 #include "../data/frame.h"
@@ -432,6 +434,96 @@ void MainWindow::setupUI()
             this, &MainWindow::onVisibilityChanged);
     connect(_timelineView, &TimelineView::currentLayerChanged,
             this, &MainWindow::onVisibilityChanged);
+    connect(_timelineView, &TimelineView::layersChanged,
+            this, &MainWindow::onVisibilityChanged);
+
+    // Adding, deleting and renaming layers go through the undo history.
+    connect(_timelineView, &TimelineView::addLayerRequested, this, &MainWindow::addLayer);
+    connect(_timelineView, &TimelineView::deleteLayerRequested, this, &MainWindow::deleteCurrentLayer);
+    connect(_timelineView, &TimelineView::layerRenamed, this, &MainWindow::renameLayer);
+}
+
+fla::Timeline* MainWindow::editedTimeline() const
+{
+    if (_phoenixView && _phoenixView->scopeTimeline())
+        return _phoenixView->scopeTimeline();
+    if (_flaDocument && _flaDocument->document && !_flaDocument->document->timelines.empty())
+        return _flaDocument->document->timelines.front();
+    return nullptr;
+}
+
+void MainWindow::addLayer(bool folder)
+{
+    fla::Timeline* timeline = editedTimeline();
+    if (!timeline)
+        return;
+
+    // Above the current layer, as Animate puts it; at the top otherwise.
+    int index = 0;
+    fla::Timeline* currentTimeline = nullptr;
+    int currentIndex = 0;
+    if (_timelineView && _timelineView->currentLayer(currentTimeline, currentIndex) && currentTimeline == timeline)
+        index = currentIndex;
+
+    fla::Layer* layer = fla::newLayerFor(*timeline, folder);
+    _editContext.commandStack().push(fla::CommandPtr(
+        new fla::AddLayerCommand(timeline, index, layer, folder ? "New Folder" : "New Layer")));
+    _editContext.commandStack().breakMergeChain();
+    _timelineView->refresh();
+    onVisibilityChanged();
+}
+
+void MainWindow::deleteCurrentLayer()
+{
+    fla::Timeline* timeline = nullptr;
+    int index = 0;
+    if (!_timelineView || !_timelineView->currentLayer(timeline, index) || !timeline)
+        return;
+
+    // Animate keeps at least one layer that can hold frames.
+    const std::vector<int> going = fla::RemoveLayerCommand::affectedIndices(*timeline, index);
+    int remaining = 0;
+    for (size_t i = 0; i < timeline->layers.size(); ++i)
+    {
+        const fla::Layer* layer = timeline->layers[i];
+        if (layer && layer->layerType != fla::Layer::Type::Folder &&
+            std::find(going.begin(), going.end(), static_cast<int>(i)) == going.end())
+            ++remaining;
+    }
+    if (remaining == 0)
+    {
+        statusBar()->showMessage("A timeline keeps at least one layer.", 3000);
+        return;
+    }
+
+    // Whatever was selected on the layer goes with it.
+    _selection.clear();
+    _editContext.commandStack().push(fla::CommandPtr(
+        new fla::RemoveLayerCommand(timeline, index, "Delete Layer")));
+    _editContext.commandStack().breakMergeChain();
+    _timelineView->refresh();
+    onVisibilityChanged();
+}
+
+void MainWindow::renameLayer(const fla::Timeline* timeline, int layerIndex, const QString& name)
+{
+    if (!timeline || layerIndex < 0 || layerIndex >= static_cast<int>(timeline->layers.size()))
+        return;
+    fla::Layer* layer = timeline->layers[layerIndex];
+    if (!layer)
+        return;
+    const std::string after = name.toStdString();
+    if (after == layer->name)
+        return;
+
+    // A typed name stops being automatic, so Animate will not renumber it.
+    fla::CommandStack& stack = _editContext.commandStack();
+    stack.beginMacro("Rename Layer");
+    stack.push(fla::CommandPtr(new fla::SetPropertyCommand<std::string>(layer->name, layer->name, after, "Rename Layer")));
+    stack.push(fla::CommandPtr(new fla::SetPropertyCommand<bool>(layer->autoNamed, layer->autoNamed, false, "Rename Layer")));
+    stack.endMacro();
+    stack.breakMergeChain();
+    _timelineView->refresh();
 }
 
 void MainWindow::setupMenus()
@@ -1002,9 +1094,13 @@ void MainWindow::updateEditState()
     const fla::CommandStack& stack = _editContext.commandStack();
 
     // Frames come and go with edits too, and the Properties panel shows
-    // whatever an edit or an undo just changed.
+    // whatever an edit or an undo just changed. Layers do as well (an undone
+    // New Layer, say), so the list is rebuilt when it no longer matches.
     if (_timelineView)
+    {
+        _timelineView->refreshIfStale();
         _timelineView->update();
+    }
     if (_propertiesPanel)
         _propertiesPanel->refresh();
 

@@ -99,6 +99,12 @@ private:
     TimelineGrid* _gridContainer;
     Player* _player;
     QPushButton* _playButton;
+    /// Animate's timeline status: the frame shown, the frame rate and the
+    /// time into the animation.
+    class QLabel* _frameLabel = nullptr;
+    class QLabel* _fpsLabel = nullptr;
+    class QLabel* _timeLabel = nullptr;
+    void updateStatus();
     QTimer* _playTimer;
     bool _isPlaying = false;
 };

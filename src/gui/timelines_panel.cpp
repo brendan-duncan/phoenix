@@ -13,6 +13,7 @@ constexpr int kFrameHeight = 21;
 #include <algorithm>
 #include <map>
 
+#include <QLabel>
 #include <QVBoxLayout>
 #include <QHBoxLayout>
 #include <QFont>
@@ -140,6 +141,22 @@ TimelinesPanel::TimelinesPanel(Player* player, QWidget *parent)
     const int btnSize = 28;
     const int iconSize = 22;
 
+    // Frame, rate and time at the left, as Animate's timeline footer has.
+    const QString styleStatus = "QLabel { color: rgb(190, 190, 190); padding: 0 6px; }";
+    _frameLabel = new QLabel("1", _header);
+    _fpsLabel = new QLabel("24.00 fps", _header);
+    _timeLabel = new QLabel("0.00 s", _header);
+    for (QLabel* label : {_frameLabel, _fpsLabel, _timeLabel})
+    {
+        label->setStyleSheet(styleStatus);
+        label->setMinimumWidth(60);
+        label->setAlignment(Qt::AlignCenter);
+        headerLayout->addWidget(label);
+    }
+    _frameLabel->setToolTip("Current frame");
+    _fpsLabel->setToolTip("Frame rate");
+    _timeLabel->setToolTip("Time into the animation");
+
     headerLayout->addStretch();
 
     QPushButton* gotoFirstBtn = new QPushButton(_header);
@@ -179,6 +196,10 @@ TimelinesPanel::TimelinesPanel(Player* player, QWidget *parent)
     headerLayout->addWidget(stepForwardBtn);
 
     headerLayout->addStretch();
+    // Balance the status labels so the transport stays centered.
+    QWidget* balance = new QWidget(_header);
+    balance->setFixedWidth(3 * 60 + 2 * 2);
+    headerLayout->addWidget(balance);
 
     _gridContainer = new TimelineGrid(_player, this);
     _scrollArea->setWidget(_gridContainer);
@@ -195,6 +216,19 @@ void TimelinesPanel::setDocument(const fla::FLADocument* document)
     _gridContainer->setDocument(document);
     _gridContainer->setTimeline(nullptr);
     _gridContainer->updateSize();
+    updateStatus();
+}
+
+void TimelinesPanel::updateStatus()
+{
+    if (!_frameLabel)
+        return;
+    const int frame = _player ? _player->currentFrame() : 0;
+    const double fps = _flaDocument && _flaDocument->document && _flaDocument->document->frameRate > 0.0
+        ? _flaDocument->document->frameRate : 24.0;
+    _frameLabel->setText(QString::number(frame + 1));
+    _fpsLabel->setText(QString("%1 fps").arg(fps, 0, 'f', 2));
+    _timeLabel->setText(QString("%1 s").arg(frame / fps, 0, 'f', 2));
 }
 
 void TimelinesPanel::setRows(const std::vector<LayerRow>& rows)
@@ -281,6 +315,7 @@ void TimelinesPanel::onTimerTick()
 
 void TimelinesPanel::onPlayerFrameChanged(int frame)
 {
+    updateStatus();
     const int frameWidth = 20;
     const int margin = 1;
     int playheadX = frame * (frameWidth + margin) + frameWidth / 2;

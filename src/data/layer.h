@@ -28,6 +28,8 @@ public:
     bool autoNamed = false;
     bool selected = false;
     bool locked = false;
+    /// Outline view: the layer draws as thin lines in its color, no fills.
+    bool outline = false;
 
     std::vector<Frame*> frames;
 

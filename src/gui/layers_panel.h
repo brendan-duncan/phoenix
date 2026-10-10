@@ -2,17 +2,17 @@
 
 #include "../data/fla_document.h"
 
-#include <QWidget>
+#include <QIcon>
 #include <QTreeWidget>
 #include <QTreeWidgetItem>
-#include <QIcon>
+#include <QWidget>
 
+#include <map>
+#include <string>
 #include <vector>
 
-/// The layer list beside the timeline, laid out the way Animate's is: the
-/// layer name, then an eye column, a lock column and the layer's outline
-/// color. Clicking a name makes that layer the current one, which is where
-/// new drawings go.
+class QToolButton;
+
 /// One row of the layers list as shown: which layer of which timeline.
 /// The timeline grid draws exactly these rows, so a collapsed folder hides
 /// its layers' lanes and every label lines up with its track.
@@ -23,9 +23,20 @@ struct LayerRow
     const fla::Layer* layer = nullptr;
 };
 
+/// The layer list beside the timeline, laid out as Animate's: a header
+/// whose eye, padlock and outline square toggle every layer at once, a row
+/// per layer with a pencil on the current one and the same three toggles,
+/// folders that open and close, and under the list the New Layer, New
+/// Folder and Delete buttons. Names are edited by double-click.
+///
+/// The panel changes a layer's visibility, lock, outline mode and current
+/// flag itself, since those are view state rather than edits; everything
+/// that belongs in the undo history (adding, deleting, renaming) is asked
+/// for through a signal and carried out by the window.
 class LayersPanel : public QWidget
 {
     Q_OBJECT
+
 public:
     explicit LayersPanel(QWidget *parent = nullptr);
 
@@ -35,9 +46,19 @@ public:
     /// null shows the document's.
     void setTimeline(fla::Timeline* timeline);
 
+    /// Rebuilds the list from the document, keeping which folders are open.
+    void refresh();
+
+    /// Rebuilds the list only if the layers it shows (which, in what order,
+    /// with what names) no longer match the document, as after an undo.
+    void refreshIfStale();
+
     /// Makes \a layerIndex of \a timeline the current layer, as a click on
     /// its name would, and says so.
     void setCurrentLayer(const fla::Timeline* timeline, int layerIndex);
+
+    /// The current layer of the shown timeline. False when there is none.
+    bool currentLayer(fla::Timeline*& timeline, int& layerIndex) const;
 
     /// The rows on show, top to bottom: the layers inside a collapsed
     /// folder are left out.
@@ -53,14 +74,28 @@ signals:
     /// The current layer changed, so the stage draws into a different frame.
     void currentLayerChanged(const QString& timelineName, int layerIndex);
 
+    /// A layer went into or out of outline view, or a header toggle changed
+    /// every layer at once: the stage redraws.
+    void layersChanged();
+
     /// The rows on show changed: a folder opened or closed, or the list was
     /// rebuilt.
     void rowsChanged();
+
+    /// The New Layer or New Folder button.
+    void addLayerRequested(bool folder);
+
+    /// The Delete button, for the current layer.
+    void deleteLayerRequested();
+
+    /// A name was typed for a layer.
+    void layerRenamed(const fla::Timeline* timeline, int layerIndex, const QString& name);
 
 private:
     enum Column
     {
         NameColumn = 0,
+        CurrentColumn,
         VisibleColumn,
         LockColumn,
         ColorColumn,
@@ -70,6 +105,9 @@ private:
     const fla::FLADocument* _flaDocument;
     fla::Timeline* _timeline = nullptr;
     QTreeWidget* _treeWidget;
+    QToolButton* _allVisible = nullptr;
+    QToolButton* _allLocked = nullptr;
+    QToolButton* _allOutline = nullptr;
 
     std::vector<fla::Timeline*> shownTimelines() const;
     QIcon _layerIcon;
@@ -79,20 +117,38 @@ private:
     QIcon _hiddenIcon;
     QIcon _unlockedIcon;
     QIcon _lockedIcon;
+    QIcon _pencilIcon;
 
-    void refreshLayers();
+    /// What the list was last built from, to tell when it is stale.
+    struct Built
+    {
+        const fla::Layer* layer;
+        std::string name;
+        bool selected;
+    };
+    std::vector<Built> _built;
+    std::vector<Built> snapshot() const;
 
-    QIcon createLayerIcon();
+    /// Which folders are open, by layer, so a rebuild keeps them so.
+    std::map<const fla::Layer*, bool> _expanded;
 
-    QIcon createFolderIcon();
+    /// True while the list is being rebuilt, so item changes are not edits.
+    bool _refreshing = false;
 
-    QIcon createOpenFolderIcon();
-
-    /// The layer an item stands for, or null.
+    /// The layer and timeline an item stands for, or null.
     fla::Layer* layerFor(const QTreeWidgetItem* item) const;
+    fla::Timeline* timelineFor(const QTreeWidgetItem* item) const;
+
+    /// Puts the pencil on the current layer's row and nowhere else.
+    void markCurrent();
+
+    /// Redraws one row's toggles from its layer.
+    void refreshRow(QTreeWidgetItem* item);
 
 private slots:
     void onItemExpanded(QTreeWidgetItem* item);
     void onItemCollapsed(QTreeWidgetItem* item);
     void onItemClicked(QTreeWidgetItem* item, int column);
+    void onItemDoubleClicked(QTreeWidgetItem* item, int column);
+    void onItemChanged(QTreeWidgetItem* item, int column);
 };

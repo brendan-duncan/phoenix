@@ -21,12 +21,27 @@ public:
     /// the document's.
     void setTimeline(fla::Timeline* timeline);
 
+    /// Rebuilds the layer list after layers were added, removed or renamed.
+    void refresh();
+
+    /// Rebuilds the layer list only if it no longer matches the document.
+    void refreshIfStale();
+
+    /// The current layer of the shown timeline. False when there is none.
+    bool currentLayer(fla::Timeline*& timeline, int& layerIndex) const;
+
 signals:
     void layerVisibilityChanged(const QString& timelineName, int layerIndex, bool visible);
 
     void layerLockChanged(const QString& timelineName, int layerIndex, bool locked);
 
     void currentLayerChanged(const QString& timelineName, int layerIndex);
+
+    /// Outline view or a header toggle changed what the stage shows.
+    void layersChanged();
+    void addLayerRequested(bool folder);
+    void deleteLayerRequested();
+    void layerRenamed(const fla::Timeline* timeline, int layerIndex, const QString& name);
 
 private:
     const fla::FLADocument* _flaDocument;

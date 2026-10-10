@@ -367,6 +367,11 @@ private:
     /// mean nothing.
     bool _maskPass = false;
 
+    /// While a layer in outline view is being drawn, its color: every fill
+    /// and stroke is drawn as a thin line in it and nothing is filled.
+    /// Invalid when drawing normally.
+    QColor _outlineColor;
+
     /// Counts every edit that changes what the stage shows, so cached
     /// renderings can tell when they are stale.
     unsigned _revision = 0;

@@ -109,6 +109,12 @@ private slots:
     void expandFillSelection();
     void softenFillEdgesSelection();
 
+    /// The timeline being edited: the symbol entered, else the document's.
+    fla::Timeline* editedTimeline() const;
+    void addLayer(bool folder);
+    void deleteCurrentLayer();
+    void renameLayer(const fla::Timeline* timeline, int layerIndex, const QString& name);
+
     /// Replaces each selected shape's contents with \a change applied to a
     /// copy, one undo step named \a name. A change that returns false
     /// leaves that shape alone.

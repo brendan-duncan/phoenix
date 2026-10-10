@@ -838,6 +838,7 @@ void XFLWriter::writeLayer(const Layer& layer, XMLElement* parent)
     setBool(node, "isSelected", layer.selected, false);
     setBool(node, "autoNamed", layer.autoNamed, true);
     setBool(node, "locked", layer.locked, false);
+    setBool(node, "outline", layer.outline, false);
     setBool(node, "visible", layer.visible, true);
 
     XMLElement* frames = doc->NewElement("frames");

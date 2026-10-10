@@ -144,6 +144,8 @@ set(HEADERS
     src/edit/path_tidy.h
     src/edit/shape_tween.h
     src/edit/frame_commands.h
+    src/edit/layer_commands.h
+    src/edit/property_command.h
     src/geom/curve.h
     src/geom/intersect.h
     src/geom/fill_attribution.h
@@ -248,6 +250,7 @@ set(SOURCES
     src/edit/path_tidy.cpp
     src/edit/shape_tween.cpp
     src/edit/frame_commands.cpp
+    src/edit/layer_commands.cpp
     src/geom/curve.cpp
     src/geom/intersect.cpp
     src/geom/fill_attribution.cpp

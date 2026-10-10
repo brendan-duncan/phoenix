@@ -36,6 +36,10 @@ TimelineView::TimelineView(Player* player, QWidget *parent)
             this, &TimelineView::layerLockChanged);
     connect(_layersPanel, &LayersPanel::currentLayerChanged,
             this, &TimelineView::currentLayerChanged);
+    connect(_layersPanel, &LayersPanel::layersChanged, this, &TimelineView::layersChanged);
+    connect(_layersPanel, &LayersPanel::addLayerRequested, this, &TimelineView::addLayerRequested);
+    connect(_layersPanel, &LayersPanel::deleteLayerRequested, this, &TimelineView::deleteLayerRequested);
+    connect(_layersPanel, &LayersPanel::layerRenamed, this, &TimelineView::layerRenamed);
     // The grid draws the rows the list shows, so folders fold their lanes.
     connect(_layersPanel, &LayersPanel::rowsChanged, this, [this]() {
         _timelinesPanel->setRows(_layersPanel->visibleRows());
@@ -45,6 +49,22 @@ TimelineView::TimelineView(Player* player, QWidget *parent)
         [this](const fla::Timeline* timeline, int layerIndex) {
             _layersPanel->setCurrentLayer(timeline, layerIndex);
         });
+}
+
+void TimelineView::refresh()
+{
+    _layersPanel->refresh();
+    _timelinesPanel->update();
+}
+
+void TimelineView::refreshIfStale()
+{
+    _layersPanel->refreshIfStale();
+}
+
+bool TimelineView::currentLayer(fla::Timeline*& timeline, int& layerIndex) const
+{
+    return _layersPanel->currentLayer(timeline, layerIndex);
 }
 
 void TimelineView::setTimeline(fla::Timeline* timeline)

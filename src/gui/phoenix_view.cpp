@@ -899,12 +899,20 @@ void PhoenixView::drawLayer(QPainter& painter, const fla::Layer* layer, fla::Loo
     color.setRgb(layer->color[0], layer->color[1], layer->color[2], layer->color[3]);
     painter.setPen(QPen(color, 1.0));
 
+    // Outline view draws the layer's art as lines in the layer color. A mask
+    // is coverage whatever the view, so it is never outlined.
+    const QColor previousOutline = _outlineColor;
+    if (layer->outline && !_maskPass)
+        _outlineColor = color;
+
     const LayerFrame state = resolveLayerFrame(layer, loopType, firstFrame);
 
     if (state.frame && state.frame->visible)
     {
         drawFrame(painter, state.frame, state.tweenFrame, state.tweenProgress);
     }
+
+    _outlineColor = previousOutline;
 }
 
 void PhoenixView::drawFrame(QPainter& painter, const fla::Frame* frame, const fla::Frame* nextTweenFrame, double tweenProgress)
@@ -1024,6 +1032,18 @@ int PhoenixView::calculateLayerDuration(const fla::Layer* layer)
 
 void PhoenixView::drawElement(QPainter& painter, const fla::Element* element, const fla::Element* tweenElement, double tweenProgress)
 {
+    // In outline view a text or bitmap shows as the box it occupies.
+    if (_outlineColor.isValid() && (element->elementType() == fla::Element::Type::StaticText ||
+                                    element->elementType() == fla::Element::Type::BitmapInstance))
+    {
+        painter.save();
+        painter.setBrush(Qt::NoBrush);
+        painter.setPen(QPen(_outlineColor, 0.0));
+        painter.drawRect(getElementBounds(element));
+        painter.restore();
+        return;
+    }
+
     fla::Transform transform = element->transform;
     if (tweenElement)
     {
@@ -1095,8 +1115,11 @@ void PhoenixView::drawElement(QPainter& painter, const fla::Element* element, co
             // Anything but a plain alpha change needs the instance rendered
             // on its own first: a color transform of its pixels, a filter
             // over them, or a blend mode against what is under it.
-            const bool isolate = (!color.isIdentity() && !alphaOnly) || !filters.empty() ||
-                Filters::needsIsolation(instance->blendMode);
+            // Outline view shows the instance's lines plainly: no color
+            // effect, filter or blend, which would wash the lines out.
+            const bool isolate = !_outlineColor.isValid() &&
+                ((!color.isIdentity() && !alphaOnly) || !filters.empty() ||
+                    Filters::needsIsolation(instance->blendMode));
 
             if (!isolate)
             {
@@ -2381,8 +2404,16 @@ void PhoenixView::drawShape(QPainter& painter, const fla::Shape* shape, const fl
             buildShapePaths(morphed.get(), entries);
             for (const PathCacheEntry& entry : entries)
             {
-                painter.setBrush(entry.fillBrush);
-                painter.setPen(penForHere(entry));
+                if (_outlineColor.isValid())
+                {
+                    painter.setBrush(Qt::NoBrush);
+                    painter.setPen(QPen(_outlineColor, 0.0));
+                }
+                else
+                {
+                    painter.setBrush(entry.fillBrush);
+                    painter.setPen(penForHere(entry));
+                }
                 painter.drawPath(entry.painterPath);
             }
             if (isSelected)
@@ -2393,8 +2424,18 @@ void PhoenixView::drawShape(QPainter& painter, const fla::Shape* shape, const fl
 
     for (const PathCacheEntry& entry : shapePaths(shape))
     {
-        painter.setBrush(entry.fillBrush);
-        painter.setPen(penForHere(entry));
+        if (_outlineColor.isValid())
+        {
+            // Outline view: the fill's boundary and the stroke's center line,
+            // both as a hairline in the layer color.
+            painter.setBrush(Qt::NoBrush);
+            painter.setPen(QPen(_outlineColor, 0.0));
+        }
+        else
+        {
+            painter.setBrush(entry.fillBrush);
+            painter.setPen(penForHere(entry));
+        }
         painter.drawPath(entry.painterPath);
     }
 
