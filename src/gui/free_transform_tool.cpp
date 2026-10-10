@@ -466,6 +466,65 @@ void FreeTransformTool::rebuildBox(PhoenixView& view)
     _boxValid = _box.size() == 4;
     rememberBoxOwners();
     clearEnvelope();
+    placePivot();
+}
+
+void FreeTransformTool::placePivot()
+{
+    _pivot = centerOf(_box);
+
+    // One element keeps its own transformation point, in its own space. A
+    // shape whose point was never set reads as the origin, which is not a
+    // place anyone chose, so that one stays at the centre.
+    const std::vector<fla::Element*> leaves = transformLeaves(_selection);
+    if (leaves.size() != 1 || !leaves.front())
+        return;
+    const fla::Element* element = leaves.front();
+    const fla::Point& point = element->transformationPoint;
+    if (element->elementType() == fla::Element::Type::Shape && point.x == 0.0 && point.y == 0.0)
+        return;
+    _pivot = toQTransform(element->transform).map(QPointF(point.x, point.y));
+}
+
+void FreeTransformTool::storePivot()
+{
+    const std::vector<fla::Element*> leaves = transformLeaves(_selection);
+    if (leaves.size() != 1 || !leaves.front())
+        return;
+    fla::Element* element = leaves.front();
+    bool invertible = false;
+    const QTransform toLocal = toQTransform(element->transform).inverted(&invertible);
+    if (!invertible)
+        return;
+    const QPointF local = toLocal.map(_pivot);
+    element->transformationPoint = fla::Point(local.x(), local.y());
+}
+
+QPointF FreeTransformTool::snapPivot(PhoenixView& view, const QPointF& documentPos) const
+{
+    const double tolerance = qMax(view.pickTolerance(), kHandleScreenSize / qMax(view.zoom(), 1.0e-6)) * 1.5;
+
+    // The centre and the handles are where a pivot most often belongs.
+    if (_box.size() == 4)
+    {
+        const QPointF centre = centerOf(_box);
+        if (distance(documentPos, centre) <= tolerance)
+            return centre;
+        for (int i = 0; i < kHandleCount; ++i)
+        {
+            const QPointF handle = handlePoint(_box, i);
+            if (distance(documentPos, handle) <= tolerance)
+                return handle;
+        }
+    }
+
+    fla::Snapper* snapper = view.snapper();
+    if (!snapper || !snapper->isEnabled())
+        return documentPos;
+    snapper->setTolerance(view.pickTolerance() * 2.0);
+    const fla::SnapResult x = snapper->snapX({documentPos.x()});
+    const fla::SnapResult y = snapper->snapY({documentPos.y()});
+    return QPointF(documentPos.x() + x.adjustment, documentPos.y() + y.adjustment);
 }
 
 void FreeTransformTool::rememberBoxOwners()
@@ -512,9 +571,10 @@ QTransform FreeTransformTool::adjustForDrag(const QPointF& documentPos,
 
     case Grip::Handle:
     {
-        // Alt scales about the centre instead of the opposite handle.
+        // Alt scales about the transformation point instead of the
+        // opposite handle.
         const QPointF anchor = (modifiers & Qt::AltModifier)
-            ? centerOf(_boxAtDragStart) : anchorFor(_boxAtDragStart, _gripIndex);
+            ? _pivotAtDragStart : anchorFor(_boxAtDragStart, _gripIndex);
 
         // A rotated box scales along its own sides, not the page's axes, or
         // pulling a corner would shear it. So the pointer is measured in the
@@ -555,7 +615,8 @@ QTransform FreeTransformTool::adjustForDrag(const QPointF& documentPos,
 
     case Grip::Rotate:
     {
-        const QPointF center = centerOf(_boxAtDragStart);
+        // Rotation turns about the transformation point.
+        const QPointF center = _pivotAtDragStart;
         const double startAngle = std::atan2(_dragStart.y() - center.y(), _dragStart.x() - center.x());
         const double nowAngle = std::atan2(documentPos.y() - center.y(), documentPos.x() - center.x());
         double degrees = (nowAngle - startAngle) * 180.0 / kPi;
@@ -609,6 +670,7 @@ QTransform FreeTransformTool::adjustForDrag(const QPointF& documentPos,
         return aroundAnchor(anchor, toBox * shear * fromBox);
     }
 
+    case Grip::Pivot:
     case Grip::None:
         break;
     }
@@ -749,6 +811,13 @@ bool FreeTransformTool::mousePress(PhoenixView& view, QMouseEvent* event, const 
 
     _dragStart = documentPos;
     _boxAtDragStart = _box;
+    _pivotAtDragStart = _pivot;
+
+    if (_grip == Grip::Pivot)
+    {
+        showCursorFor(view, _grip, -1);
+        return true;
+    }
 
     _targets.clear();
     for (fla::Element* element : transformLeaves(_selection))
@@ -789,6 +858,11 @@ FreeTransformTool::Grip FreeTransformTool::gripAt(PhoenixView& view, const QPoin
     const double tolerance = view.pickTolerance();
     const double handleTolerance = qMax(tolerance, kHandleScreenSize / qMax(view.zoom(), 1.0e-6));
     const double rotateBand = kRotateBandScreenSize / qMax(view.zoom(), 1.0e-6);
+
+    // The transformation point sits inside the box, often on a handle or
+    // the centre, and a press on it moves it rather than the box.
+    if (distance(documentPos, _pivot) <= handleTolerance)
+        return Grip::Pivot;
 
     const int handle = handleAt(documentPos, handleTolerance);
     if (handle >= 0)
@@ -868,6 +942,7 @@ void FreeTransformTool::showCursorFor(PhoenixView& view, Grip grip, int index)
         kind = Cursors::Kind::ArrowDistort;
         break;
     case Grip::Envelope:
+    case Grip::Pivot:
         kind = Cursors::Kind::ArrowMove;
         break;
     case Grip::None:
@@ -906,6 +981,13 @@ bool FreeTransformTool::mouseMove(PhoenixView& view, QMouseEvent* event, const Q
         }
         showCursorFor(view, grip, index);
         return false;
+    }
+
+    if (_grip == Grip::Pivot)
+    {
+        _pivot = snapPivot(view, documentPos);
+        view.update();
+        return true;
     }
 
     if (_grip == Grip::Envelope)
@@ -1087,6 +1169,17 @@ bool FreeTransformTool::mouseRelease(PhoenixView& view, QMouseEvent* event, cons
     if (event->button() != Qt::LeftButton || _grip == Grip::None)
         return false;
 
+    if (_grip == Grip::Pivot)
+    {
+        _pivot = snapPivot(view, documentPos);
+        storePivot();
+        _grip = Grip::None;
+        int index = -1;
+        showCursorFor(view, gripAt(view, documentPos, index), index);
+        view.update();
+        return true;
+    }
+
     if (_grip == Grip::Envelope)
     {
         commitEnvelope(view);
@@ -1107,6 +1200,10 @@ bool FreeTransformTool::mouseRelease(PhoenixView& view, QMouseEvent* event, cons
     const QTransform adjust = adjustForDrag(snapDragPoint(view, documentPos), event->modifiers());
     applyAdjust(view, adjust);
     _box = adjust.map(_boxAtDragStart);
+
+    // The transformation point rides along with the object.
+    _pivot = adjust.map(_pivotAtDragStart);
+    storePivot();
 
     commit(view);
 
@@ -1222,11 +1319,28 @@ bool FreeTransformTool::keyPress(PhoenixView& view, QKeyEvent* event)
     }
 
     _box = _boxAtDragStart;
+    _pivot = _pivotAtDragStart;
     _grip = Grip::None;
     _gripIndex = -1;
     _targets.clear();
 
     view.invalidateBounds();
+    view.update();
+    return true;
+}
+
+bool FreeTransformTool::mouseDoubleClick(PhoenixView& view, QMouseEvent* event, const QPointF& documentPos)
+{
+    if (event->button() != Qt::LeftButton || !_boxValid || _box.size() != 4)
+        return false;
+
+    const double tolerance = qMax(view.pickTolerance(), kHandleScreenSize / qMax(view.zoom(), 1.0e-6));
+    if (distance(documentPos, _pivot) > tolerance)
+        return false;
+
+    _pivot = centerOf(_box);
+    storePivot();
+    _grip = Grip::None;
     view.update();
     return true;
 }
@@ -1239,7 +1353,9 @@ void FreeTransformTool::paintOverlay(PhoenixView& view, QPainter& painter, doubl
         return;
     }
 
-    if (!_boxValid && _grip == Grip::None)
+    // A box left behind by an undo or another tool's edit no longer sits on
+    // the selection, so it is rebuilt before it is drawn.
+    if (_grip == Grip::None && (!_boxValid || !boxMatchesSelection()))
         rebuildBox(view);
 
     if (!_boxValid)
@@ -1272,11 +1388,10 @@ void FreeTransformTool::paintOverlay(PhoenixView& view, QPainter& painter, doubl
         painter.drawRect(QRectF(point.x() - half, point.y() - half, half * 2.0, half * 2.0));
     }
 
-    // The transform origin, which rotation turns about.
-    const QPointF center = centerOf(_box);
+    // The transformation point, which rotation turns about.
     painter.setBrush(QColor(255, 255, 255));
     painter.setPen(QPen(QColor(0, 0, 0), 1.0 * scale));
-    painter.drawEllipse(center, half, half);
+    painter.drawEllipse(_pivot, half, half);
 }
 
 void FreeTransformTool::deactivate(PhoenixView& view)

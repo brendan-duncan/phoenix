@@ -10,6 +10,7 @@
 #include <QKeyEvent>
 #include <QMouseEvent>
 
+#include <algorithm>
 #include <cmath>
 
 namespace {
@@ -22,6 +23,17 @@ QPointF toQPointF(const fla::Point& point)
 fla::Point toPoint(const QPointF& point)
 {
     return fla::Point(point.x(), point.y());
+}
+
+/// The geometry is in pixels and the format stores twips, so anchors that
+/// are meant to be the same point agree to well inside half a twip. Anything
+/// further apart is a different corner, and Flash could not tell them apart
+/// either.
+constexpr double kHalfTwip = 1.0 / 40.0;
+
+bool samePlace(const fla::Point& a, const fla::Point& b)
+{
+    return std::fabs(a.x - b.x) <= kHalfTwip && std::fabs(a.y - b.y) <= kHalfTwip;
 }
 
 } // namespace
@@ -53,6 +65,54 @@ QTransform SubselectionTool::shapeToDocument(PhoenixView& view) const
     return QTransform(t.m11, t.m12, t.m21, t.m22, t.tx, t.ty);
 }
 
+bool SubselectionTool::isSelected(const AnchorRef& ref) const
+{
+    return std::find(_selected.begin(), _selected.end(), ref) != _selected.end();
+}
+
+void SubselectionTool::select(const AnchorRef& ref, bool add)
+{
+    if (!add)
+    {
+        _selected.clear();
+        _selected.push_back(ref);
+        return;
+    }
+
+    // Shift on a selected anchor takes it out again.
+    const auto found = std::find(_selected.begin(), _selected.end(), ref);
+    if (found != _selected.end())
+        _selected.erase(found);
+    else
+        _selected.push_back(ref);
+}
+
+void SubselectionTool::anchorsAt(fla::Shape& shape, const fla::Point& position,
+    std::vector<AnchorRef>& refs) const
+{
+    for (fla::Edge* edge : shape.edges)
+    {
+        if (!edge)
+            continue;
+
+        for (size_t pathIndex = 0; pathIndex < edge->paths.size(); ++pathIndex)
+        {
+            if (!edge->paths[pathIndex])
+                continue;
+
+            const fla::EditablePath path = fla::EditablePath::fromPath(*edge->paths[pathIndex]);
+            for (size_t i = 0; i < path.anchors.size(); ++i)
+            {
+                if (!samePlace(path.anchors[i].position, position))
+                    continue;
+                const AnchorRef ref{edge, pathIndex, i};
+                if (std::find(refs.begin(), refs.end(), ref) == refs.end())
+                    refs.push_back(ref);
+            }
+        }
+    }
+}
+
 bool SubselectionTool::mousePress(PhoenixView& view, QMouseEvent* event, const QPointF& documentPos)
 {
     if (event->button() != Qt::LeftButton)
@@ -66,11 +126,13 @@ bool SubselectionTool::mousePress(PhoenixView& view, QMouseEvent* event, const Q
         if (hit)
         {
             _selection.select(hit.element);
+            _selected.clear();
             view.update();
             return true;
         }
 
         _selection.clear();
+        _selected.clear();
         view.update();
         return true;
     }
@@ -83,6 +145,7 @@ bool SubselectionTool::mousePress(PhoenixView& view, QMouseEvent* event, const Q
     const QPointF localPos = toShape.map(documentPos);
     const double tolerance = localTolerance(view);
     const bool alt = (event->modifiers() & Qt::AltModifier) != 0;
+    const bool shift = (event->modifiers() & Qt::ShiftModifier) != 0;
 
     _dragMoved = false;
     _convertDrag = false;
@@ -93,9 +156,7 @@ bool SubselectionTool::mousePress(PhoenixView& view, QMouseEvent* event, const Q
     // and a handle pulled hard back onto its anchor stays grabbable.
     struct Candidate
     {
-        fla::Edge* edge = nullptr;
-        size_t pathIndex = 0;
-        size_t index = 0;
+        AnchorRef ref;
         fla::EditablePath path;
         Grip grip = Grip::None;
         double distance = 0.0;
@@ -108,64 +169,60 @@ bool SubselectionTool::mousePress(PhoenixView& view, QMouseEvent* event, const Q
         if (!edge)
             continue;
 
-      for (size_t pathIndex = 0; pathIndex < edge->paths.size(); ++pathIndex)
-      {
-        if (!edge->paths[pathIndex])
-            continue;
-
-        const fla::EditablePath path = fla::EditablePath::fromPath(*edge->paths[pathIndex]);
-
-        for (size_t i = 0; i < path.anchors.size(); ++i)
+        for (size_t pathIndex = 0; pathIndex < edge->paths.size(); ++pathIndex)
         {
-            const fla::Anchor& anchor = path.anchors[i];
-            const auto distanceTo = [&](const fla::Point& point) {
-                return std::hypot(point.x - localPos.x(), point.y - localPos.y());
-            };
-
-            const double anchorDistance = distanceTo(anchor.position);
-            double nearest = anchorDistance;
-            Grip grip = anchorDistance <= tolerance ? Grip::Anchor : Grip::None;
-            if (anchor.hasInCurve())
-            {
-                const double d = distanceTo(anchor.inHandle);
-                if (d <= tolerance && d < nearest)
-                {
-                    nearest = d;
-                    grip = Grip::InHandle;
-                }
-            }
-            if (anchor.hasOutCurve())
-            {
-                const double d = distanceTo(anchor.outHandle);
-                if (d <= tolerance && d < nearest)
-                {
-                    nearest = d;
-                    grip = Grip::OutHandle;
-                }
-            }
-            if (grip == Grip::None)
+            if (!edge->paths[pathIndex])
                 continue;
-            if (!haveBest || nearest < best.distance)
+
+            const fla::EditablePath path = fla::EditablePath::fromPath(*edge->paths[pathIndex]);
+
+            for (size_t i = 0; i < path.anchors.size(); ++i)
             {
-                best.edge = edge;
-                best.pathIndex = pathIndex;
-                best.index = i;
-                best.path = path;
-                best.grip = grip;
-                best.distance = nearest;
-                haveBest = true;
+                const fla::Anchor& anchor = path.anchors[i];
+                const auto distanceTo = [&](const fla::Point& point) {
+                    return std::hypot(point.x - localPos.x(), point.y - localPos.y());
+                };
+
+                const double anchorDistance = distanceTo(anchor.position);
+                double nearest = anchorDistance;
+                Grip grip = anchorDistance <= tolerance ? Grip::Anchor : Grip::None;
+                if (anchor.hasInCurve())
+                {
+                    const double d = distanceTo(anchor.inHandle);
+                    if (d <= tolerance && d < nearest)
+                    {
+                        nearest = d;
+                        grip = Grip::InHandle;
+                    }
+                }
+                if (anchor.hasOutCurve())
+                {
+                    const double d = distanceTo(anchor.outHandle);
+                    if (d <= tolerance && d < nearest)
+                    {
+                        nearest = d;
+                        grip = Grip::OutHandle;
+                    }
+                }
+                if (grip == Grip::None)
+                    continue;
+                if (!haveBest || nearest < best.distance)
+                {
+                    best.ref = AnchorRef{edge, pathIndex, i};
+                    best.path = path;
+                    best.grip = grip;
+                    best.distance = nearest;
+                    haveBest = true;
+                }
             }
         }
-      }
     }
 
     if (haveBest)
     {
-        fla::Edge* edge = best.edge;
-        const size_t pathIndex = best.pathIndex;
-        const size_t i = best.index;
+        const AnchorRef ref = best.ref;
         const fla::EditablePath path = best.path;
-        const fla::Anchor& anchor = path.anchors[i];
+        const fla::Anchor& anchor = path.anchors[ref.anchorIndex];
         Grip grip = best.grip;
 
         _grabbed.clear();
@@ -174,65 +231,136 @@ bool SubselectionTool::mousePress(PhoenixView& view, QMouseEvent* event, const Q
             // Alt on an anchor is the convert gesture: dragging a corner
             // point pulls handles out of it, and a click on a curve point
             // makes it a corner.
-            _grabbed.push_back({edge, pathIndex, i, path, path});
+            select(ref, false);
             if (anchor.smooth || anchor.hasInCurve() || anchor.hasOutCurve())
             {
                 fla::EditablePath after = path;
-                fla::Anchor& corner = after.anchors[i];
+                fla::Anchor& corner = after.anchors[ref.anchorIndex];
                 corner.smooth = false;
                 corner.inHandle = corner.position;
                 corner.outHandle = corner.position;
-                commitGeometry(view, edge, path, after, "Convert Anchor", pathIndex);
-                _grabbed.clear();
-                _selectedEdge = edge;
-                _selectedPathIndex = pathIndex;
-                _selectedAnchor = i;
-                _hasSelectedAnchor = true;
+                commitGeometry(view, ref.edge, path, after, "Convert Anchor", ref.pathIndex);
                 return true;
             }
             grip = Grip::OutHandle;
             _convertDrag = true;
+            _grabbed.push_back({ref.edge, ref.pathIndex, {ref.anchorIndex}, path, path});
         }
         else if (grip == Grip::Anchor)
         {
-            // Every anchor at this point comes along, or the pieces of
-            // outline meeting here come apart.
-            grabCoincidentAnchors(*shape, anchor.position);
+            // Shift adds to or takes from the selection; a plain press on an
+            // anchor not yet selected selects just it. A press on one that is
+            // selected keeps the selection, since the drag moves all of it.
+            if (shift)
+                select(ref, true);
+            else if (!isSelected(ref))
+                select(ref, false);
+            grabSelectedAnchors(*shape);
         }
         else
         {
             // A handle belongs to one curve, so only that one moves.
-            _grabbed.push_back({edge, pathIndex, i, path, path});
+            select(ref, false);
+            _grabbed.push_back({ref.edge, ref.pathIndex, {ref.anchorIndex}, path, path});
         }
 
         _grip = grip;
         _dragStart = localPos;
-
-        // Remembered so Delete knows which anchor to remove.
-        _selectedEdge = edge;
-        _selectedPathIndex = pathIndex;
-        _selectedAnchor = i;
-        _hasSelectedAnchor = true;
-
         view.update();
         return true;
     }
 
-    // Clicking off the anchors picks whatever is under the cursor instead.
-    // Adding an anchor is the pen's job, as in Animate.
-    _hasSelectedAnchor = false;
+    // Off the anchors: on something else it is a pick, on empty stage it
+    // starts a marquee. Adding an anchor is the pen's job, as in Animate.
     const HitResult hit = view.hitTest(documentPos, view.pickTolerance());
-    if (hit)
+    if (hit && hit.element != shape)
+    {
         _selection.select(hit.element);
-    else
-        _selection.clear();
+        _selected.clear();
+        view.update();
+        return true;
+    }
 
+    _grip = Grip::Marquee;
+    _marqueeStart = documentPos;
+    _marqueeEnd = documentPos;
+    _marqueeAdds = shift;
+    if (!shift)
+        _selected.clear();
     view.update();
     return true;
 }
 
+void SubselectionTool::grabSelectedAnchors(fla::Shape& shape)
+{
+    _grabbed.clear();
+
+    // Every anchor sitting on a selected one comes along.
+    std::vector<AnchorRef> refs;
+    for (const AnchorRef& ref : _selected)
+    {
+        if (!ref.edge || ref.pathIndex >= ref.edge->paths.size() || !ref.edge->paths[ref.pathIndex])
+            continue;
+        const fla::EditablePath path = fla::EditablePath::fromPath(*ref.edge->paths[ref.pathIndex]);
+        if (ref.anchorIndex >= path.anchors.size())
+            continue;
+        anchorsAt(shape, path.anchors[ref.anchorIndex].position, refs);
+    }
+
+    // Grouped by path, since a path is written as a whole.
+    for (const AnchorRef& ref : refs)
+    {
+        Grabbed* group = nullptr;
+        for (Grabbed& candidate : _grabbed)
+        {
+            if (candidate.edge == ref.edge && candidate.pathIndex == ref.pathIndex)
+            {
+                group = &candidate;
+                break;
+            }
+        }
+        if (!group)
+        {
+            const fla::EditablePath path = fla::EditablePath::fromPath(*ref.edge->paths[ref.pathIndex]);
+            _grabbed.push_back({ref.edge, ref.pathIndex, {}, path, path});
+            group = &_grabbed.back();
+        }
+        group->anchors.push_back(ref.anchorIndex);
+    }
+}
+
+void SubselectionTool::moveGrabbed(PhoenixView& view, const QPointF& delta)
+{
+    for (Grabbed& grabbed : _grabbed)
+    {
+        if (!grabbed.edge)
+            continue;
+
+        // Rebuilt from the geometry the drag started with, so a long drag does
+        // not accumulate rounding error.
+        grabbed.current = grabbed.before;
+        for (const size_t index : grabbed.anchors)
+        {
+            if (index < grabbed.current.anchors.size())
+                grabbed.current.anchors[index].translate(delta.x(), delta.y());
+        }
+        grabbed.current.applyTo(*grabbed.edge, grabbed.pathIndex);
+    }
+
+    view.clearCaches();
+    view.update();
+}
+
 bool SubselectionTool::mouseMove(PhoenixView& view, QMouseEvent* event, const QPointF& documentPos)
 {
+    if (_grip == Grip::Marquee)
+    {
+        _marqueeEnd = documentPos;
+        _dragMoved = true;
+        view.update();
+        return true;
+    }
+
     if (_grip == Grip::None || _grabbed.empty())
         return false;
 
@@ -255,22 +383,25 @@ bool SubselectionTool::mouseMove(PhoenixView& view, QMouseEvent* event, const QP
         _dragMoved = true;
     }
 
+    if (_grip == Grip::Anchor)
+    {
+        moveGrabbed(view, delta);
+        return true;
+    }
+
     for (Grabbed& grabbed : _grabbed)
     {
-        if (!grabbed.edge || grabbed.anchorIndex >= grabbed.before.anchors.size())
+        if (!grabbed.edge || grabbed.anchors.empty() ||
+            grabbed.anchors.front() >= grabbed.before.anchors.size())
+        {
             continue;
+        }
 
-        // Rebuilt from the geometry the drag started with, so a long drag does
-        // not accumulate rounding error.
         grabbed.current = grabbed.before;
-        fla::Anchor& anchor = grabbed.current.anchors[grabbed.anchorIndex];
+        fla::Anchor& anchor = grabbed.current.anchors[grabbed.anchors.front()];
 
         switch (_grip)
         {
-        case Grip::Anchor:
-            anchor.translate(delta.x(), delta.y());
-            break;
-
         case Grip::InHandle:
             // Alt breaks the tangent for this drag, letting the two sides
             // diverge.
@@ -293,6 +424,8 @@ bool SubselectionTool::mouseMove(PhoenixView& view, QMouseEvent* event, const QP
             anchor.setOutHandle(toPoint(localPos));
             break;
 
+        case Grip::Anchor:
+        case Grip::Marquee:
         case Grip::None:
             return false;
         }
@@ -306,26 +439,8 @@ bool SubselectionTool::mouseMove(PhoenixView& view, QMouseEvent* event, const QP
     return true;
 }
 
-bool SubselectionTool::mouseRelease(PhoenixView& view, QMouseEvent* event, const QPointF& documentPos)
+void SubselectionTool::commitGrabbed(PhoenixView& view, const char* gesture)
 {
-    (void)documentPos;
-
-    if (event->button() != Qt::LeftButton || _grip == Grip::None || _grabbed.empty())
-        return false;
-
-    if (!_dragMoved)
-    {
-        // A click: the anchor is selected and nothing else happens.
-        _grabbed.clear();
-        _grip = Grip::None;
-        _convertDrag = false;
-        view.update();
-        return true;
-    }
-
-    const char* gesture = _convertDrag ? "Convert Anchor"
-        : _grip == Grip::Anchor ? "Move Anchor" : "Move Handle";
-
     // Moving a shared corner rewrites several edges, which is still one thing
     // the user did and so one thing to undo.
     const bool needsMacro = _grabbed.size() > 1;
@@ -352,9 +467,70 @@ bool SubselectionTool::mouseRelease(PhoenixView& view, QMouseEvent* event, const
         view.markShapeEdited(shape);
 
     _grabbed.clear();
+    view.clearCaches();
+    view.update();
+}
+
+bool SubselectionTool::mouseRelease(PhoenixView& view, QMouseEvent* event, const QPointF& documentPos)
+{
+    if (event->button() != Qt::LeftButton || _grip == Grip::None)
+        return false;
+
+    if (_grip == Grip::Marquee)
+    {
+        _marqueeEnd = documentPos;
+        _grip = Grip::None;
+
+        fla::Shape* shape = editedShape();
+        if (shape && _dragMoved)
+        {
+            // Every anchor inside the marquee, in document space.
+            const QRectF marquee = QRectF(_marqueeStart, _marqueeEnd).normalized();
+            const QTransform toDocument = shapeToDocument(view);
+            for (fla::Edge* edge : shape->edges)
+            {
+                if (!edge)
+                    continue;
+                for (size_t pathIndex = 0; pathIndex < edge->paths.size(); ++pathIndex)
+                {
+                    if (!edge->paths[pathIndex])
+                        continue;
+                    const fla::EditablePath path = fla::EditablePath::fromPath(*edge->paths[pathIndex]);
+                    for (size_t i = 0; i < path.anchors.size(); ++i)
+                    {
+                        if (!marquee.contains(toDocument.map(toQPointF(path.anchors[i].position))))
+                            continue;
+                        const AnchorRef ref{edge, pathIndex, i};
+                        if (!isSelected(ref))
+                            _selected.push_back(ref);
+                    }
+                }
+            }
+        }
+        _dragMoved = false;
+        view.update();
+        return true;
+    }
+
+    if (_grabbed.empty())
+        return false;
+
+    if (!_dragMoved)
+    {
+        // A click: the anchor is selected and nothing else happens.
+        _grabbed.clear();
+        _grip = Grip::None;
+        _convertDrag = false;
+        view.update();
+        return true;
+    }
+
+    const char* gesture = _convertDrag ? "Convert Anchor"
+        : _grip == Grip::Anchor ? "Move Anchor" : "Move Handle";
+    commitGrabbed(view, gesture);
+
     _grip = Grip::None;
     _convertDrag = false;
-    view.update();
     return true;
 }
 
@@ -363,30 +539,157 @@ double SubselectionTool::localTolerance(PhoenixView& view) const
     return PhoenixView::toleranceInLocalSpace(shapeToDocument(view), view.pickTolerance() * 1.5);
 }
 
+void SubselectionTool::deleteSelected(PhoenixView& view)
+{
+    fla::Shape* shape = editedShape();
+    if (!shape || _selected.empty())
+        return;
+
+    // One anchor at the end of an open piece, meeting the end of another
+    // open piece with the same styles: the two are one outline that was cut
+    // there, so they are joined into one path and the corner refitted away.
+    if (_selected.size() == 1)
+    {
+        const AnchorRef ref = _selected.front();
+        if (ref.edge && ref.pathIndex < ref.edge->paths.size() && ref.edge->paths[ref.pathIndex])
+        {
+            const fla::EditablePath first = fla::EditablePath::fromPath(*ref.edge->paths[ref.pathIndex]);
+            const bool atEnd = !first.closed && first.anchors.size() >= 2 &&
+                (ref.anchorIndex == 0 || ref.anchorIndex + 1 == first.anchors.size());
+            if (atEnd)
+            {
+                std::vector<AnchorRef> meeting;
+                anchorsAt(*shape, first.anchors[ref.anchorIndex].position, meeting);
+                meeting.erase(std::remove(meeting.begin(), meeting.end(), ref), meeting.end());
+
+                if (meeting.size() == 1)
+                {
+                    const AnchorRef other = meeting.front();
+                    const fla::EditablePath second =
+                        fla::EditablePath::fromPath(*other.edge->paths[other.pathIndex]);
+                    const bool otherAtEnd = !second.closed && second.anchors.size() >= 2 &&
+                        (other.anchorIndex == 0 || other.anchorIndex + 1 == second.anchors.size());
+                    const bool sameStyles = other.edge->fillStyle0 == ref.edge->fillStyle0 &&
+                        other.edge->fillStyle1 == ref.edge->fillStyle1 &&
+                        other.edge->strokeStyle == ref.edge->strokeStyle &&
+                        other.edge->paths[other.pathIndex]->fillStyleIndex == -1 &&
+                        other.edge->paths[other.pathIndex]->lineStyleIndex == -1 &&
+                        ref.edge->paths[ref.pathIndex]->fillStyleIndex == -1 &&
+                        ref.edge->paths[ref.pathIndex]->lineStyleIndex == -1;
+
+                    if (otherAtEnd && sameStyles && !(other.edge == ref.edge && other.pathIndex == ref.pathIndex))
+                    {
+                        // The first piece arrives at the corner, the second
+                        // leaves it: turned round as needed, and joined.
+                        fla::EditablePath joined = ref.anchorIndex == 0 ? first.reversed() : first;
+                        const fla::EditablePath tail = other.anchorIndex == 0 ? second : second.reversed();
+                        const size_t corner = joined.anchors.size() - 1;
+                        joined.anchors.back().outHandle = tail.anchors.front().outHandle;
+                        for (size_t i = 1; i < tail.anchors.size(); ++i)
+                            joined.anchors.push_back(tail.anchors[i]);
+                        joined.closed = false;
+                        joined.removeAnchor(corner);
+
+                        _commandStack.beginMacro("Delete Anchor");
+                        joined.applyTo(*ref.edge, ref.pathIndex);
+                        _commandStack.push(fla::CommandPtr(new fla::SetEdgeGeometryCommand(
+                            ref.edge, first, joined, "Delete Anchor", ref.pathIndex)));
+                        fla::EditablePath gone;
+                        gone.applyTo(*other.edge, other.pathIndex);
+                        _commandStack.push(fla::CommandPtr(new fla::SetEdgeGeometryCommand(
+                            other.edge, second, gone, "Delete Anchor", other.pathIndex)));
+                        _commandStack.endMacro();
+                        _commandStack.breakMergeChain();
+
+                        _selected.clear();
+                        view.markShapeEdited(shape);
+                        view.clearCaches();
+                        view.update();
+                        return;
+                    }
+                }
+            }
+        }
+    }
+
+    // Otherwise each path loses its selected anchors, highest index first so
+    // the others keep their places.
+    grabSelectedAnchors(*shape);
+    std::vector<Grabbed> groups = _grabbed;
+    _grabbed.clear();
+
+    std::vector<fla::CommandPtr> commands;
+    for (Grabbed& group : groups)
+    {
+        std::vector<size_t> indices = group.anchors;
+        std::sort(indices.begin(), indices.end(), std::greater<size_t>());
+        indices.erase(std::unique(indices.begin(), indices.end()), indices.end());
+
+        fla::EditablePath after = group.before;
+        bool changed = false;
+        for (const size_t index : indices)
+            changed = after.removeAnchor(index) || changed;
+        if (!changed)
+            continue;
+
+        after.applyTo(*group.edge, group.pathIndex);
+        commands.push_back(fla::CommandPtr(new fla::SetEdgeGeometryCommand(
+            group.edge, group.before, after, "Delete Anchor", group.pathIndex)));
+    }
+
+    if (commands.empty())
+        return;
+
+    const bool needsMacro = commands.size() > 1;
+    if (needsMacro)
+        _commandStack.beginMacro("Delete Anchor");
+    for (fla::CommandPtr& command : commands)
+        _commandStack.push(std::move(command));
+    if (needsMacro)
+        _commandStack.endMacro();
+    _commandStack.breakMergeChain();
+
+    _selected.clear();
+    view.markShapeEdited(shape);
+    view.clearCaches();
+    view.update();
+}
+
 bool SubselectionTool::keyPress(PhoenixView& view, QKeyEvent* event)
 {
-    if ((event->key() == Qt::Key_Delete || event->key() == Qt::Key_Backspace) &&
-        _hasSelectedAnchor && _selectedEdge && _grip == Grip::None)
+    const int key = event->key();
+
+    if ((key == Qt::Key_Delete || key == Qt::Key_Backspace) && !_selected.empty() && _grip == Grip::None)
     {
-        if (_selectedPathIndex >= _selectedEdge->paths.size() ||
-            !_selectedEdge->paths[_selectedPathIndex])
-        {
-            return false;
-        }
-
-        const fla::EditablePath before =
-            fla::EditablePath::fromPath(*_selectedEdge->paths[_selectedPathIndex]);
-
-        fla::EditablePath after = before;
-        if (!after.removeAnchor(_selectedAnchor))
-            return false;
-
-        commitGeometry(view, _selectedEdge, before, after, "Delete Anchor", _selectedPathIndex);
-        _hasSelectedAnchor = false;
+        deleteSelected(view);
         return true;
     }
 
-    if (event->key() != Qt::Key_Escape)
+    if ((key == Qt::Key_Left || key == Qt::Key_Right || key == Qt::Key_Up || key == Qt::Key_Down) &&
+        !_selected.empty() && _grip == Grip::None)
+    {
+        fla::Shape* shape = editedShape();
+        if (!shape)
+            return false;
+
+        // A nudge is a screen pixel, ten with shift, in the shape's space.
+        const double step = ((event->modifiers() & Qt::ShiftModifier) ? 10.0 : 1.0) /
+            qMax(view.zoom(), 1.0e-6);
+        const QPointF documentDelta(key == Qt::Key_Left ? -step : key == Qt::Key_Right ? step : 0.0,
+                                    key == Qt::Key_Up ? -step : key == Qt::Key_Down ? step : 0.0);
+        bool invertible = false;
+        const QTransform toShape = shapeToDocument(view).inverted(&invertible);
+        if (!invertible)
+            return false;
+        const QPointF delta = toShape.map(documentDelta) - toShape.map(QPointF(0.0, 0.0));
+
+        grabSelectedAnchors(*shape);
+        moveGrabbed(view, delta);
+        commitGrabbed(view, "Nudge Anchor");
+        return true;
+    }
+
+    if (key != Qt::Key_Escape)
         return false;
 
     if (_grip != Grip::None)
@@ -395,50 +698,18 @@ bool SubselectionTool::keyPress(PhoenixView& view, QKeyEvent* event)
         return true;
     }
 
+    if (!_selected.empty())
+    {
+        _selected.clear();
+        view.update();
+        return true;
+    }
+
     if (!_selection.isEmpty())
     {
         _selection.clear();
         view.update();
         return true;
-    }
-
-    return false;
-}
-
-bool SubselectionTool::anchorAt(PhoenixView& view, const QPointF& localPos,
-    fla::Edge*& edge, fla::EditablePath& path, size_t& index) const
-{
-    const fla::Shape* shape = editedShape();
-    if (!shape)
-        return false;
-
-    const double tolerance = localTolerance(view);
-
-    for (fla::Edge* candidate : shape->edges)
-    {
-        if (!candidate)
-            continue;
-
-        for (const fla::Path* candidatePathData : candidate->paths)
-        {
-            if (!candidatePathData)
-                continue;
-
-            const fla::EditablePath candidatePath =
-                fla::EditablePath::fromPath(*candidatePathData);
-
-            for (size_t i = 0; i < candidatePath.anchors.size(); ++i)
-            {
-                const fla::Point& position = candidatePath.anchors[i].position;
-                if (std::hypot(position.x - localPos.x(), position.y - localPos.y()) <= tolerance)
-                {
-                    edge = candidate;
-                    path = candidatePath;
-                    index = i;
-                    return true;
-                }
-            }
-        }
     }
 
     return false;
@@ -470,43 +741,9 @@ void SubselectionTool::cancelDrag(PhoenixView& view)
 
     _grabbed.clear();
     _grip = Grip::None;
+    _dragMoved = false;
     view.clearCaches();
     view.update();
-}
-
-void SubselectionTool::grabCoincidentAnchors(fla::Shape& shape, const fla::Point& position)
-{
-    // The geometry is in pixels and the format stores twips, so anchors that
-    // are meant to be the same point agree to well inside half a twip. Anything
-    // further apart is a different corner, and Flash could not tell them apart
-    // either.
-    constexpr double kHalfTwip = 1.0 / 40.0;
-
-    for (fla::Edge* edge : shape.edges)
-    {
-        if (!edge)
-            continue;
-
-        for (size_t pathIndex = 0; pathIndex < edge->paths.size(); ++pathIndex)
-        {
-            if (!edge->paths[pathIndex])
-                continue;
-
-            const fla::EditablePath path = fla::EditablePath::fromPath(*edge->paths[pathIndex]);
-
-            for (size_t i = 0; i < path.anchors.size(); ++i)
-            {
-                const fla::Point& at = path.anchors[i].position;
-                if (std::fabs(at.x - position.x) > kHalfTwip ||
-                    std::fabs(at.y - position.y) > kHalfTwip)
-                {
-                    continue;
-                }
-
-                _grabbed.push_back({edge, pathIndex, i, path, path});
-            }
-        }
-    }
 }
 
 void SubselectionTool::paintOverlay(PhoenixView& view, QPainter& painter, double scale)
@@ -526,50 +763,58 @@ void SubselectionTool::paintOverlay(PhoenixView& view, QPainter& painter, double
         if (!edge)
             continue;
 
-      for (size_t pathIndex = 0; pathIndex < edge->paths.size(); ++pathIndex)
-      {
-        if (!edge->paths[pathIndex])
-            continue;
-
-        const fla::EditablePath path = fla::EditablePath::fromPath(*edge->paths[pathIndex]);
-
-        for (const fla::Anchor& anchor : path.anchors)
+        for (size_t pathIndex = 0; pathIndex < edge->paths.size(); ++pathIndex)
         {
-            const QPointF position = toQPointF(anchor.position);
+            if (!edge->paths[pathIndex])
+                continue;
 
-            painter.setPen(QPen(QColor(120, 200, 255), 1.0 * scale));
-            if (anchor.hasInCurve())
+            const fla::EditablePath path = fla::EditablePath::fromPath(*edge->paths[pathIndex]);
+
+            for (size_t i = 0; i < path.anchors.size(); ++i)
             {
-                painter.drawLine(position, toQPointF(anchor.inHandle));
-                painter.setBrush(QColor(120, 200, 255));
-                painter.drawEllipse(toQPointF(anchor.inHandle), handleSize, handleSize);
-            }
-            if (anchor.hasOutCurve())
-            {
-                painter.drawLine(position, toQPointF(anchor.outHandle));
-                painter.setBrush(QColor(120, 200, 255));
-                painter.drawEllipse(toQPointF(anchor.outHandle), handleSize, handleSize);
-            }
+                const fla::Anchor& anchor = path.anchors[i];
+                const QPointF position = toQPointF(anchor.position);
 
-            // Every anchor is a small hollow square, filled once it is
-            // selected. Animate does not show smooth against corner by shape.
-            const bool picked = _hasSelectedAnchor && edge == _selectedEdge &&
-                pathIndex == _selectedPathIndex &&
-                &anchor == &path.anchors[qMin(_selectedAnchor, path.anchors.size() - 1)];
+                painter.setPen(QPen(QColor(120, 200, 255), 1.0 * scale));
+                if (anchor.hasInCurve())
+                {
+                    painter.drawLine(position, toQPointF(anchor.inHandle));
+                    painter.setBrush(QColor(120, 200, 255));
+                    painter.drawEllipse(toQPointF(anchor.inHandle), handleSize, handleSize);
+                }
+                if (anchor.hasOutCurve())
+                {
+                    painter.drawLine(position, toQPointF(anchor.outHandle));
+                    painter.setBrush(QColor(120, 200, 255));
+                    painter.drawEllipse(toQPointF(anchor.outHandle), handleSize, handleSize);
+                }
 
-            painter.setPen(QPen(QColor(0, 0, 0), 1.0 * scale));
-            painter.setBrush(picked ? QColor(0, 0, 0) : QColor(255, 255, 255));
-            painter.drawRect(QRectF(position.x() - anchorSize, position.y() - anchorSize,
-                anchorSize * 2.0, anchorSize * 2.0));
+                // Every anchor is a small hollow square, filled once it is
+                // selected. Animate does not show smooth against corner by shape.
+                const bool picked = isSelected(AnchorRef{const_cast<fla::Edge*>(edge), pathIndex, i});
+
+                painter.setPen(QPen(QColor(0, 0, 0), 1.0 * scale));
+                painter.setBrush(picked ? QColor(0, 0, 0) : QColor(255, 255, 255));
+                painter.drawRect(QRectF(position.x() - anchorSize, position.y() - anchorSize,
+                    anchorSize * 2.0, anchorSize * 2.0));
+            }
         }
-      }
     }
 
     painter.restore();
+
+    if (_grip == Grip::Marquee && _dragMoved)
+    {
+        painter.setBrush(QColor(0, 120, 255, 30));
+        painter.setPen(QPen(QColor(0, 120, 255), 1.0 * scale, Qt::DashLine));
+        painter.drawRect(QRectF(_marqueeStart, _marqueeEnd).normalized());
+    }
 }
 
 void SubselectionTool::deactivate(PhoenixView& view)
 {
-    if (_grip != Grip::None)
+    if (_grip != Grip::None && _grip != Grip::Marquee)
         cancelDrag(view);
+    _grip = Grip::None;
+    _selected.clear();
 }

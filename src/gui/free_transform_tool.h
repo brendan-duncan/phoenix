@@ -54,6 +54,10 @@ public:
 
     bool keyPress(PhoenixView& view, QKeyEvent* event) override;
 
+    /// A double click on the transformation point puts it back at the
+    /// centre of the box.
+    bool mouseDoubleClick(PhoenixView& view, QMouseEvent* event, const QPointF& documentPos) override;
+
     void paintOverlay(PhoenixView& view, QPainter& painter, double scale) override;
 
     /// The transform box stands in for the plain selection box.
@@ -92,7 +96,10 @@ private:
         Distort,
         /// An anchor or a handle of the envelope: the box's sides bend and
         /// the geometry follows.
-        Envelope
+        Envelope,
+        /// The transformation point: a drag moves it, snapping to the box's
+        /// centre and handles.
+        Pivot
     };
 
     /// Envelope mode's mesh: eight anchors round the box, a corner and a
@@ -206,6 +213,24 @@ private:
     /// The four corners of the transform box, in document space.
     QPolygonF _box;
     bool _boxValid = false;
+
+    /// The transformation point, in document space: what rotation turns
+    /// about and alt-scaling scales about. It comes from a single selected
+    /// element's own transformation point, otherwise the box centre, and it
+    /// rides along with every gesture.
+    QPointF _pivot;
+    QPointF _pivotAtDragStart;
+
+    /// Reads the pivot for the selection.
+    void placePivot();
+
+    /// Writes a moved pivot back to a single selected element, in its own
+    /// space, so the file keeps it.
+    void storePivot();
+
+    /// The pivot drag snapped to the box's centre or a handle within
+    /// tolerance, else to the grid and neighbours.
+    QPointF snapPivot(PhoenixView& view, const QPointF& documentPos) const;
 
     /// What the box was built for: each selected element and the transform it
     /// had. A press checks this first, so a box left over from before an undo

@@ -25,6 +25,7 @@
 #include "../data/bitmap_decoder.h"
 #include "../edit/transform_blend.h"
 #include "../edit/tween_ease.h"
+#include "../geom/curve.h"
 #include "../data/bitmap_fill.h"
 #include "../data/static_text.h"
 #include "text_layout.h"
@@ -3882,33 +3883,65 @@ QRectF PhoenixView::calculateShapeBounds(const fla::Shape* shape)
                 }
             }
 
+            const auto include = [&](const fla::Point& pt) {
+                const QPointF qpt(pt.x, pt.y);
+                if (first)
+                {
+                    first = false;
+                    bounds = QRectF(qpt, QSizeF(0, 0));
+                    return;
+                }
+                if (qpt.x() < bounds.left())
+                    bounds.setLeft(qpt.x());
+                if (qpt.x() > bounds.right())
+                    bounds.setRight(qpt.x());
+                if (qpt.y() < bounds.top())
+                    bounds.setTop(qpt.y());
+                if (qpt.y() > bounds.bottom())
+                    bounds.setBottom(qpt.y());
+            };
+
+            // The curve itself, not its control polygon: a curve's extent is
+            // its ends and wherever it turns back in x or y, which is tight
+            // where control points would be loose.
+            fla::Point current;
+            bool haveCurrent = false;
             for (const fla::PathSegment* segment : path->segments)
             {
-                // Add all points from this segment to bounds
-                for (const fla::Point& pt : segment->points)
+                if (!segment || segment->points.empty())
+                    continue;
+                const std::vector<fla::Point>& pts = segment->points;
+                switch (segment->command)
                 {
-                    QPointF qpt(pt.x, pt.y);
-
-                    if (first)
+                case fla::PathSegment::Command::Move:
+                case fla::PathSegment::Command::Line:
+                    include(pts.back());
+                    current = pts.back();
+                    haveCurrent = true;
+                    break;
+                case fla::PathSegment::Command::Quad:
+                case fla::PathSegment::Command::Cubic:
+                {
+                    if (!haveCurrent)
                     {
-                        first = false;
-                        bounds = QRectF(qpt, QSizeF(0, 0));
+                        for (const fla::Point& pt : pts)
+                            include(pt);
+                        current = pts.back();
+                        haveCurrent = true;
+                        break;
                     }
-                    else
-                    {
-                        if (qpt.x() < bounds.left())
-                            bounds.setLeft(qpt.x());
-                        if (qpt.x() > bounds.right())
-                            bounds.setRight(qpt.x());
-                        if (qpt.y() < bounds.top())
-                            bounds.setTop(qpt.y());
-                        if (qpt.y() > bounds.bottom())
-                            bounds.setBottom(qpt.y());
-                    }
+                    const fla::Curve curve = segment->command == fla::PathSegment::Command::Quad
+                        ? fla::Curve::quadratic(current, pts[0], pts[1])
+                        : fla::Curve::cubic(current, pts[0], pts[1], pts[2]);
+                    include(curve.end());
+                    for (const double t : curve.extremaParameters())
+                        include(curve.pointAt(t));
+                    current = pts.back();
+                    break;
                 }
-
-                // Note: For perfect accuracy with cubic/quad curves, we should
-                // check control points too, but endpoints are sufficient for culling
+                case fla::PathSegment::Command::Close:
+                    break;
+                }
             }
         }
     }

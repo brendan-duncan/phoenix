@@ -336,14 +336,16 @@ anchor.
       tell two closer points apart either
   - Moving a shared corner rewrites several edges, which is one thing the user
       did and so one thing to undo
-- [ ] Deleting an anchor has the same problem the drag had: it only edits the
+- [x] Deleting an anchor has the same problem the drag had: it only edits the
       one edge, so removing a shared corner will still break the outline
+  - Done 2026-10-09: a corner at the end of an open piece that meets the end of exactly one other open piece with the same styles is removed by joining the two pieces into one path (reversed as needed), refitting through the corner, and removing the second piece's path, as one undo step
 - [x] Subselection edits the first path of each edge. A shape whose edge holds
       several paths shows them all but only the first is editable
   - Done 2026-10-09: every path of every edge is shown, grabbed, dragged, converted and deleted by its own index
-- [ ] Shape bounds are computed from anchor and control points, so the selection
+- [x] Shape bounds are computed from anchor and control points, so the selection
       box can sit slightly inside a curve that bulges past its control polygon.
       Fine for culling, loose for a handle box
+  - Done 2026-10-09: `calculateShapeBounds` takes each curve's ends and the points where it turns back in x or y (`Curve::extremaParameters`), so the box is tight on the curve
 
 Two input bugs fixed along the way, both of which made a tool silently do
 nothing rather than fail visibly:
@@ -953,11 +955,12 @@ All in `phoenix_view.cpp` unless noted.
       move the handle more than 2x the tolerance, and prefer point targets
       (VectorCraft `tools/src/guides.rs:565-674`). Also snap to object vertices
       and edges, not only bounds (`guides.rs:429-484`)
-- [ ] The transformation point: `Element::transformationPoint` exists
+- [x] The transformation point: `Element::transformationPoint` exists
       (`data/element.h:30`) but rotation always uses the box centre (`:203, :509`)
       and the pivot cannot be dragged. Make it draggable, snap it to anchors and
       the centre, and keep it while the selection is unchanged (VectorCraft
       `tools/src/xform/transform.rs:100-110, 190`)
+  - Done 2026-10-09: the pivot comes from a single selected element's own transformation point (the box centre for several, or a shape whose point was never set), is dragged as its own grip snapping to the box centre and handles and then the grid, rides along with every gesture, is written back to the element so the file keeps it, and a double click returns it to the centre. Rotation and alt-scaling turn about it. The box is also rebuilt before drawing when it no longer matches the selection (after an undo). It does not yet snap to anchors
 - [x] Marquee should test geometry, not bounds (`elementsIn`,
       `phoenix_view.cpp:2045-2090`): reject on bounds; hit if any anchor is
       inside; hit if any segment crosses a rect edge; hit if the path is closed
@@ -967,8 +970,9 @@ All in `phoenix_view.cpp` unless noted.
 
 ### Subselection
 
-- [ ] Anchor marquee, multi-anchor selection, nudge, and snapping the grabbed
+- [x] Anchor marquee, multi-anchor selection, nudge, and snapping the grabbed
       anchor with the others following (VectorCraft `tools/src/direct.rs:420-440`)
+  - Done 2026-10-09 except snapping: the selection is a set of anchors; shift-click adds or removes, a drag on empty stage draws a marquee (shift adds), a drag on a selected anchor moves them all with every coincident anchor, the arrow keys nudge by one screen pixel (ten with shift) as one undo step, and Delete removes them all. Checked on screen
 - [ ] `closestPoint` samples 32 points then bisects (`editable_path.cpp:250-290`).
       Solve exactly instead: for a quadratic the nearest point is a cubic
       equation; for a cubic, Newton from the best sample
@@ -1064,9 +1068,10 @@ All in `phoenix_view.cpp` unless noted.
       90 degrees, each with handle `r * 4/3 * tan(delta/4)`; trace the outer arc,
       then the inner arc reversed (or a line to the centre), and close
   - Done 2026-10-09 for rendering (`ovalPrimitivePath`, Qt arcs); the oval tool still has no way to set the angles or inner radius
-- [ ] PolyStar with shift scales the radius by up to sqrt(2) and snaps the angle,
+- [x] PolyStar with shift scales the radius by up to sqrt(2) and snaps the angle,
       because it squares the delta (`primitive_tool.cpp:136-140`). Shift should
       only hold the rotation upright. Arrow keys could change the side count
+  - Done 2026-10-09: shift snaps the drag's angle to 45 degree steps and keeps its length as the radius. The arrow keys do not change the side count
 
 ## 13. New tools
 

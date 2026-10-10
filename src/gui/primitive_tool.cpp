@@ -126,9 +126,10 @@ QPointF PrimitiveTool::constrain(const QPointF& documentPos) const
 {
     const QPointF delta = documentPos - _start;
 
-    if (_kind == Kind::Line)
+    if (_kind == Kind::Line || _kind == Kind::PolyStar)
     {
-        // Snap the line's angle to 45 degree steps.
+        // Snap the angle to 45 degree steps: a line's direction, or the way
+        // a polystar points. Its radius is the drag's length either way.
         const double angle = std::atan2(delta.y(), delta.x());
         const double step = kPi / 4.0;
         const double snapped = std::round(angle / step) * step;
