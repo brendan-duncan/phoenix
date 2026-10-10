@@ -74,7 +74,7 @@ private:
     /// Rewrites  edge to  path as one undo step.
     void commitGeometry(PhoenixView& view, fla::Edge* edge,
         const fla::EditablePath& before, const fla::EditablePath& after,
-        const char* gesture);
+        const char* gesture, size_t pathIndex = 0);
 
     /// Finds the anchor under the cursor. Returns false when there is none.
     bool anchorAt(PhoenixView& view, const QPointF& localPos, fla::Edge*& edge,
@@ -85,6 +85,8 @@ private:
     struct Grabbed
     {
         fla::Edge* edge = nullptr;
+        /// Which of the edge's paths the anchor is on.
+        size_t pathIndex = 0;
         size_t anchorIndex = 0;
         fla::EditablePath before;
         fla::EditablePath current;
@@ -125,6 +127,7 @@ private:
 
     /// The anchor the last click landed on, which Delete removes.
     fla::Edge* _selectedEdge = nullptr;
+    size_t _selectedPathIndex = 0;
     size_t _selectedAnchor = 0;
     bool _hasSelectedAnchor = false;
 };

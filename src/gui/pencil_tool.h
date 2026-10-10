@@ -3,6 +3,7 @@
 #include "tool.h"
 
 #include "../data/point.h"
+#include "../edit/curve_fit.h"
 #include "../edit/editable_path.h"
 
 #include <QPointF>
@@ -11,9 +12,11 @@
 namespace fla {
 class CommandStack;
 class DrawingStyle;
+class Edge;
 class Element;
 class Frame;
 class Selection;
+class Shape;
 }
 
 /// Animate's pencil: draw freehand and get a tidy path.
@@ -55,6 +58,13 @@ private:
     /// Fits the collected points and puts the result in the document.
     void finish(PhoenixView& view);
 
+    /// The fitter settings for the pencil mode and smoothing, with the
+    /// tolerance in screen pixels brought to document units at this zoom.
+    fla::CurveFit::Options fitOptions(PhoenixView& view) const;
+
+    /// The fitted stroke as it stands, for the live preview and the finish.
+    fla::EditablePath fitted(PhoenixView& view) const;
+
     /// Builds the shape for a fitted stroke. The caller owns the result.
     fla::Element* createShape(fla::Frame* frame, const fla::EditablePath& path) const;
 
@@ -66,4 +76,18 @@ private:
     std::vector<fla::Point> _points;
 
     bool _drawing = false;
+
+    /// A stroke that began on an end of the selected shape's open path
+    /// carries that path on instead of making a new shape: the path is
+    /// remembered here and the stroke is joined to it on release.
+    bool _extending = false;
+    fla::Shape* _extendShape = nullptr;
+    fla::Edge* _extendEdge = nullptr;
+    size_t _extendPathIndex = 0;
+    bool _extendAtStart = false;
+    fla::EditablePath _extendBefore;
+
+    /// Looks for an end of an open path on the selected shape under the
+    /// press and, finding one, sets up the extension.
+    void beginExtension(PhoenixView& view, const QPointF& documentPos);
 };

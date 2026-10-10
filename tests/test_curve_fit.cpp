@@ -245,3 +245,74 @@ TEST(curve_fit_survives_a_degenerate_drag)
     const EditablePath path = CurveFit::fit(points, options);
     CHECK(path.isEmpty());
 }
+
+TEST(curve_fit_marks_a_sharp_turn_as_a_corner)
+{
+    // An L drawn as two straight runs: the turn is a corner anchor, not a
+    // rounded bend, and each side is one straight piece.
+    std::vector<Point> points;
+    for (int i = 0; i <= 40; ++i)
+        points.push_back(Point(i * 2.5, 0.0));
+    for (int i = 1; i <= 40; ++i)
+        points.push_back(Point(100.0, i * 2.5));
+
+    CurveFit::Options options;
+    options.tolerance = 1.0;
+    const EditablePath path = CurveFit::fit(points, options);
+
+    CHECK(path.anchors.size() == 3);
+    if (path.anchors.size() != 3)
+        return;
+    CHECK(!path.anchors[1].smooth);
+    CHECK(std::fabs(path.anchors[1].position.x - 100.0) < 1.0e-6);
+    CHECK(std::fabs(path.anchors[1].position.y) < 1.0e-6);
+    CHECK(worstDeviation(path, points) < options.tolerance);
+}
+
+TEST(curve_fit_does_not_make_corners_of_a_round_bend)
+{
+    CurveFit::Options options;
+    options.tolerance = 1.0;
+    const EditablePath path = CurveFit::fit(arcSamples(60, 100.0), options);
+    for (const fla::Anchor& anchor : path.anchors)
+        CHECK(anchor.smooth || &anchor == &path.anchors.front());
+}
+
+TEST(curve_fit_end_tangents_ignore_a_hooked_first_sample)
+{
+    // A straight stroke whose first sample jittered off the line: the fit
+    // still leaves the start along the line rather than hooking after it.
+    std::vector<Point> points = {Point(0.0, 0.0), Point(0.4, 1.2), Point(1.5, 0.3)};
+    for (int i = 3; i <= 100; i += 2)
+        points.push_back(Point(static_cast<double>(i), 0.0));
+
+    CurveFit::Options options;
+    options.tolerance = 1.5;
+    const EditablePath path = CurveFit::fit(points, options);
+
+    CHECK(path.anchors.size() == 2);
+    if (path.anchors.size() != 2)
+        return;
+    CHECK(std::fabs(path.anchors[0].outHandle.y) < 1.0);
+    CHECK(std::fabs(path.anchors[1].inHandle.y) < 1.0);
+
+    // And being straight, it is written as a line rather than a cubic with
+    // its handles on the chord.
+    CHECK(!path.anchors[0].hasOutCurve());
+    CHECK(!path.anchors[1].hasInCurve());
+}
+
+TEST(straighten_mode_keeps_a_gentle_arc_within_tolerance)
+{
+    CurveFit::Options options;
+    options.straighten = true;
+    options.tolerance = 2.0;
+
+    const std::vector<Point> points = arcSamples(90, 100.0);
+    const EditablePath path = CurveFit::fit(points, options);
+
+    for (const fla::Anchor& anchor : path.anchors)
+        CHECK(!anchor.hasInCurve() && !anchor.hasOutCurve());
+    CHECK(worstDeviation(path, points) < options.tolerance + 0.05);
+    CHECK(path.anchors.size() < 20);
+}

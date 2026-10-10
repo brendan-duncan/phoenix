@@ -4,6 +4,7 @@
 #include "../src/parser/path_parser.h"
 #include "../src/writer/edge_writer.h"
 
+#include <cmath>
 #include <memory>
 #include <string>
 
@@ -436,4 +437,72 @@ TEST(converting_a_smooth_point_makes_it_a_corner)
     CHECK(!path.anchors[1].smooth);
     CHECK(!path.anchors[1].hasInCurve());
     CHECK(!path.anchors[1].hasOutCurve());
+}
+
+TEST(removing_a_curve_point_refits_through_the_gap)
+{
+    // Two quarter circles of radius 100 meeting at a smooth point on top:
+    // the fit through the gap is close to the half circle they made.
+    constexpr double k = 0.5522847498 * 100.0;
+    EditablePath path;
+    Anchor a(Point(0.0, 0.0));
+    a.outHandle = Point(0.0, -k);
+    Anchor m(Point(100.0, -100.0));
+    m.inHandle = Point(100.0 - k, -100.0);
+    m.outHandle = Point(100.0 + k, -100.0);
+    m.smooth = true;
+    Anchor b(Point(200.0, 0.0));
+    b.inHandle = Point(200.0, -k);
+    path.anchors = {a, m, b};
+
+    CHECK(path.removeAnchor(1));
+    CHECK(path.anchors.size() == 2);
+    if (path.anchors.size() != 2)
+        return;
+
+    // The outer tangents are kept: straight up out of a, straight up into b.
+    CHECK(near(path.anchors[0].outHandle.x, 0.0));
+    CHECK(path.anchors[0].outHandle.y < -50.0);
+    CHECK(near(path.anchors[1].inHandle.x, 200.0));
+    CHECK(path.anchors[1].inHandle.y < -50.0);
+
+    // And the curve still passes near where the removed point was.
+    const EditablePath::PathPoint nearest = path.closestPoint(Point(100.0, -100.0));
+    CHECK(nearest.valid);
+    CHECK(nearest.distance < 6.0);
+}
+
+TEST(reversing_a_path_swaps_its_handles)
+{
+    EditablePath path;
+    Anchor a(Point(0.0, 0.0));
+    a.outHandle = Point(10.0, -10.0);
+    Anchor b(Point(50.0, 0.0));
+    b.inHandle = Point(40.0, -10.0);
+    path.anchors = {a, b};
+
+    const EditablePath back = path.reversed();
+    CHECK(back.anchors.size() == 2);
+    if (back.anchors.size() != 2)
+        return;
+    CHECK(samePoint(back.anchors[0].position, Point(50.0, 0.0)));
+    CHECK(samePoint(back.anchors[0].outHandle, Point(40.0, -10.0)));
+    CHECK(samePoint(back.anchors[1].inHandle, Point(10.0, -10.0)));
+}
+
+TEST(transforming_a_path_maps_handles_too)
+{
+    EditablePath path;
+    Anchor a(Point(1.0, 2.0));
+    a.outHandle = Point(3.0, 4.0);
+    path.anchors = {a};
+
+    fla::Transform t;
+    t.m11 = 2.0;
+    t.m22 = 2.0;
+    t.tx = 10.0;
+    t.ty = 20.0;
+    const EditablePath moved = path.transformed(t);
+    CHECK(samePoint(moved.anchors[0].position, Point(12.0, 24.0)));
+    CHECK(samePoint(moved.anchors[0].outHandle, Point(16.0, 28.0)));
 }

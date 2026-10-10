@@ -316,9 +316,11 @@ anchor.
 
 ### Rough edges
 
-- [ ] The pen cannot resume an existing open path from one of its endpoints
-- [ ] Deleting an anchor joins its neighbours with whatever handles they already
+- [x] The pen cannot resume an existing open path from one of its endpoints
+  - Done 2026-10-09, see the pen items in step 12
+- [x] Deleting an anchor joins its neighbours with whatever handles they already
       had, rather than refitting the curve through the gap the way Animate does
+  - Done 2026-10-09, see the subselection items in step 12
 - [ ] Picking a one-pixel stroke by clicking it is fiddly. Anchor editing was
       verified on a polygon; the tolerance may want widening for thin strokes
 - [x] **Dragging a corner no longer tears the outline apart.** A merged shape
@@ -336,8 +338,9 @@ anchor.
       did and so one thing to undo
 - [ ] Deleting an anchor has the same problem the drag had: it only edits the
       one edge, so removing a shared corner will still break the outline
-- [ ] Subselection edits the first path of each edge. A shape whose edge holds
+- [x] Subselection edits the first path of each edge. A shape whose edge holds
       several paths shows them all but only the first is editable
+  - Done 2026-10-09: every path of every edge is shown, grabbed, dragged, converted and deleted by its own index
 - [ ] Shape bounds are computed from anchor and control points, so the selection
       box can sit slightly inside a curve that bulges past its control polygon.
       Fine for culling, loose for a handle box
@@ -960,30 +963,36 @@ All in `phoenix_view.cpp` unless noted.
 - [ ] `closestPoint` samples 32 points then bisects (`editable_path.cpp:250-290`).
       Solve exactly instead: for a quadratic the nearest point is a cubic
       equation; for a cubic, Newton from the best sample
-- [ ] Deleting an anchor should refit, not just join the neighbours
+- [x] Deleting an anchor should refit, not just join the neighbours
       (`editable_path.cpp:383-391`): sample both neighbouring segments 16 times,
       keep the outer tangents, golden-section search over the parameter the
       removed point lands on minimising the single-cubic fit error, and write the
       result into the neighbours' facing handles (VectorCraft
       `pathops/src/edit.rs:234-275`). Deleting a shared corner still has the
       problem the drag had (step 5)
+  - Done 2026-10-09: when either side was curved, both segments are sampled 16 times and `CurveFit::fitSingleCubic` fits one cubic with the outer tangents kept (least squares for the handle lengths, then reparameterising passes), written into the neighbours' facing handles; all-straight sides are joined by a line as before (test). Deleting a shared corner is still the open step 5 item
 
 ### Pen
 
-- [ ] Clicking the first anchor closes on press (`pen_tool.cpp:98-107`); preview
+- [x] Clicking the first anchor closes on press (`pen_tool.cpp:98-107`); preview
       the close instead and let the drag shape the closing in-handle as a mirror,
       alt breaking it (VectorCraft `tools/src/pen.rs:152-155, 226-231`)
-- [ ] Clicking the last anchor adds a duplicate; it should retract that anchor's
+  - Done 2026-10-09: the press marks the close and the release finishes it; dragging in between sets the first anchor's in-handle to the mirror of the drag, and its out-handle to the drag unless alt is held. The overlay shows the closing segment taking shape
+- [x] Clicking the last anchor adds a duplicate; it should retract that anchor's
       out-handle, making it a corner (`pen.rs:157-161`)
-- [ ] Resume an open path by pressing on either end of it, reversing first when
+  - Done 2026-10-09: the click retracts the out-handle and makes the anchor a corner; dragging on from it pulls a fresh out-handle alone
+- [x] Resume an open path by pressing on either end of it, reversing first when
       it is the first anchor (`pen.rs:174-185`; replaces the step 5 item)
-- [ ] Shift constrains anchors and handles to 45 degrees
-- [ ] Snap candidates are gathered at path start only (`:84`), so the path being
+  - Done 2026-10-09: with the shape selected, the pen hovers either end of an open path with the plain pen cursor and a press picks the path up (mapped to the stage, reversed when picked up by its first anchor); finishing writes it back to the same edge as one `SetEdgeGeometryCommand`, closing it if the first anchor is clicked
+- [x] Shift constrains anchors and handles to 45 degrees
+  - Done 2026-10-09: the point's shadow on the nearest 45-degree ray from the last anchor (or the handle's anchor); the rubber band follows
+- [x] Snap candidates are gathered at path start only (`:84`), so the path being
       drawn never attracts the cursor
+  - Done 2026-10-09: gathered on every press, with the path's own anchors added
 
 ### Pencil and curve fitting
 
-- [ ] **Corners come out rounded.** Every fitted anchor is smooth
+- [x] **Corners come out rounded.** Every fitted anchor is smooth
       (`curve_fit.cpp:266`) and every split gets a centred tangent (`:277`). The
       VectorCraft pipeline (`engine/src/cmd/draw2.rs:456-491`,
       `pathops/src/edit.rs:47-104`): drop samples closer than 0.3 x tolerance and
@@ -994,29 +1003,37 @@ All in `phoenix_view.cpp` unless noted.
       on a corner, resample each run densely, fit it with its own end tangents,
       turn near-straight cubics into lines, and keep the input if the result has
       more anchors
-- [ ] The two-point base case (`:231-235`) leaves no in-handle and never sets the
+  - Done 2026-10-09 the direct way rather than through a Catmull-Rom spline: `findCorners` marks a point a corner where the direction in and the direction out, each judged over a window of three tolerances (so one jittered sample is not a corner, and nothing within a window of the ends is), differ by more than 60 degrees (`Options::cornerAngle`), keeping the sharpest of a cluster; each run between corners is fitted on its own with its own end tangents and the corner anchor is left a corner; afterwards a cubic whose handles lie on its chord is written as a line. An L drawn freehand gives three anchors with a corner (test); a round bend stays smooth (test). Checked on screen with the pencil
+- [x] The two-point base case (`:231-235`) leaves no in-handle and never sets the
       previous out-handle, putting a straight stub mid-stroke. Give it
       tangent-aligned handles of chord/3 (VectorCraft `pathops/src/fit.rs:52-55`)
-- [ ] One Newton pass, accepted even when worse (`:246-255`), and the result is
+  - Done 2026-10-09
+- [x] One Newton pass, accepted even when worse (`:246-255`), and the result is
       not clamped (`:217`). Run up to 6 passes keeping the best, clamp t to
       [0,1], cap handles at 4x the chord (`fit.rs:77-95, 143, 174`)
-- [ ] End tangents come from the first and last two raw samples (`:353-355`), so
+  - Done 2026-10-09 (`refit`): up to six passes, each kept only when it lowers the worst error, parameters clamped and the ends pinned, handles capped at four chords
+- [x] End tangents come from the first and last two raw samples (`:353-355`), so
       jitter hooks the ends. Estimate from points within a few pixels
-- [ ] At the depth cap of 12 an out-of-tolerance fit is accepted silently
+  - Done 2026-10-09 (`tangentOver`): the direction to the first sample at least three tolerances away; a straight stroke with a jittered first sample fits as a straight line (test)
+- [x] At the depth cap of 12 an out-of-tolerance fit is accepted silently
       (`:15, :257`)
-- [ ] Tolerance and minimum spacing are in document units (`curve_fit.h:29,34`,
+  - Done 2026-10-09: at the cap the run's points are kept as corner anchors, which is within any tolerance, rather than a curve that strays
+- [x] Tolerance and minimum spacing are in document units (`curve_fit.h:29,34`,
       `pencil_tool.cpp:81`), so strokes drawn zoomed in are over-smoothed. Work
       in screen pixels
-- [ ] Straighten mode tests only point i against the line to i+1 (`:327-345`), so
+  - Already the case: the pencil and the brush divide their screen-pixel tolerances by the zoom before fitting (`fitOptions`)
+- [x] Straighten mode tests only point i against the line to i+1 (`:327-345`), so
       gentle arcs drift. Use Ramer-Douglas-Peucker (VectorCraft
       `pathops/src/edit.rs:107-133`)
+  - Done 2026-10-09 (`simplifyRun`); a 90-sample half circle straightened at tolerance 2 stays within it (test)
 - [x] Ink mode keeps every mouse sample as a corner (`pencil_tool.cpp:90-96`);
       fit with a small tolerance (about 0.5 px) instead
   - Done: ink mode fits at half a screen pixel
-- [ ] Close the stroke when its ends finish within about 15 px (or alt on
+- [x] Close the stroke when its ends finish within about 15 px (or alt on
       release); extend a selected open path when a stroke starts at one of its
       ends; preview the fit live
-  - Closing within 15 px done 2026-10-09 (Connect lines, Straighten mode only). Extending a selected open path and the live fit preview are still to do
+  - Closing within 15 px done 2026-10-09 (Connect lines, Straighten mode only)
+  - Extending and the live preview done 2026-10-09: a stroke that starts within reach of either end of the selected shape's open path is joined onto it on release (the path reversed when it was the first anchor, a corner at the join) as one `SetEdgeGeometryCommand`; while drawing, the fit as it stands is drawn over the faint raw stroke. Alt on release does not close
 - [x] Shape recognition for Straighten mode (VectorCraft
       `geom/src/recognize.rs:239-312`): resample to 256 points by arc length; two
       or more sharp reversals is a scribble; a line if the largest deviation from

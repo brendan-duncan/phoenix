@@ -217,6 +217,67 @@ double refineParameter(const Point bezier[4], const Point& point, double t)
     return t - numerator / denominator;
 }
 
+/// Improves a fit by reparameterising and fitting again, up to a few times,
+/// keeping the best of them: a pass that makes things worse is thrown away
+/// rather than accepted. Parameters are kept inside [0, 1] and the handles
+/// are capped at four chords, beyond which a fit has gone wild. Returns the
+/// error of the best fit, with \a bezier, \a parameters and \a splitAt set
+/// for it.
+double refit(const std::vector<Point>& points, size_t first, size_t last,
+    const Vector& startTangent, const Vector& endTangent,
+    std::vector<double>& parameters, Point bezier[4], size_t& splitAt)
+{
+    constexpr int kPasses = 6;
+
+    double bestError = maximumError(points, first, last, bezier, parameters, splitAt);
+    std::vector<double> bestParameters = parameters;
+    Point bestBezier[4] = {bezier[0], bezier[1], bezier[2], bezier[3]};
+    size_t bestSplit = splitAt;
+
+    const double chord = std::hypot(bezier[3].x - bezier[0].x, bezier[3].y - bezier[0].y);
+    const double longest = std::max(chord * 4.0, kEpsilon);
+
+    std::vector<double> trial = parameters;
+    Point trialBezier[4] = {bezier[0], bezier[1], bezier[2], bezier[3]};
+    for (int pass = 0; pass < kPasses; ++pass)
+    {
+        for (size_t i = 0; i < trial.size(); ++i)
+        {
+            const double t = refineParameter(trialBezier, points[first + i], trial[i]);
+            trial[i] = std::max(0.0, std::min(1.0, t));
+        }
+        trial.front() = 0.0;
+        trial.back() = 1.0;
+
+        fitCubic(points, first, last, startTangent, endTangent, trial, trialBezier);
+        for (int handle = 1; handle <= 2; ++handle)
+        {
+            const Point& from = handle == 1 ? trialBezier[0] : trialBezier[3];
+            const Vector reach = subtract(trialBezier[handle], from);
+            const double length = std::hypot(reach.x, reach.y);
+            if (length > longest)
+                trialBezier[handle] = offset(from, scale(reach, longest / length));
+        }
+
+        size_t trialSplit = 0;
+        const double error = maximumError(points, first, last, trialBezier, trial, trialSplit);
+        if (error >= bestError)
+            break;
+
+        bestError = error;
+        bestParameters = trial;
+        bestSplit = trialSplit;
+        for (int i = 0; i < 4; ++i)
+            bestBezier[i] = trialBezier[i];
+    }
+
+    parameters = bestParameters;
+    splitAt = bestSplit;
+    for (int i = 0; i < 4; ++i)
+        bezier[i] = bestBezier[i];
+    return bestError;
+}
+
 /// Fits a run and appends the result to \a anchors, splitting where it cannot
 /// keep within tolerance.
 void fitRun(const std::vector<Point>& points, size_t first, size_t last,
@@ -226,11 +287,19 @@ void fitRun(const std::vector<Point>& points, size_t first, size_t last,
     if (last <= first)
         return;
 
-    // Two points can only be a straight line, which is also the base case that
-    // stops the recursion.
+    // Two points are the base case that stops the recursion. They get
+    // handles a third of the chord along the tangents, so a split mid-stroke
+    // does not leave a straight stub between two curves.
     if (last - first == 1)
     {
+        const double chord = std::hypot(points[last].x - points[first].x,
+            points[last].y - points[first].y);
+        if (!anchors.empty())
+            anchors.back().outHandle = offset(points[first], scale(startTangent, chord / 3.0));
+
         Anchor anchor(points[last]);
+        anchor.inHandle = offset(points[last], scale(endTangent, chord / 3.0));
+        anchor.smooth = true;
         anchors.push_back(anchor);
         return;
     }
@@ -244,17 +313,9 @@ void fitRun(const std::vector<Point>& points, size_t first, size_t last,
     double error = maximumError(points, first, last, bezier, parameters, splitAt);
 
     if (error > tolerance && depth < kMaxDepth)
-    {
-        // Reparameterise and try once more before giving up and splitting: a
-        // single pass usually rescues a fit that is only slightly out.
-        for (size_t i = 0; i < parameters.size(); ++i)
-            parameters[i] = refineParameter(bezier, points[first + i], parameters[i]);
+        error = refit(points, first, last, startTangent, endTangent, parameters, bezier, splitAt);
 
-        fitCubic(points, first, last, startTangent, endTangent, parameters, bezier);
-        error = maximumError(points, first, last, bezier, parameters, splitAt);
-    }
-
-    if (error <= tolerance || depth >= kMaxDepth)
+    if (error <= tolerance)
     {
         // Accepted. The previous anchor keeps its out handle and this one gets
         // its in handle, which is how a cubic maps onto two anchors.
@@ -265,6 +326,16 @@ void fitRun(const std::vector<Point>& points, size_t first, size_t last,
         anchor.inHandle = bezier[2];
         anchor.smooth = true;
         anchors.push_back(anchor);
+        return;
+    }
+
+    if (depth >= kMaxDepth)
+    {
+        // The splitting has gone as deep as it may and the run still will
+        // not fit. Rather than quietly keep a curve that strays, keep the
+        // points themselves: a polyline is within any tolerance.
+        for (size_t i = first + 1; i <= last; ++i)
+            anchors.push_back(Anchor(points[i]));
         return;
     }
 
@@ -280,6 +351,141 @@ void fitRun(const std::vector<Point>& points, size_t first, size_t last,
 
     fitRun(points, first, splitAt, startTangent, leftEnd, tolerance, depth + 1, anchors);
     fitRun(points, splitAt, last, rightStart, endTangent, tolerance, depth + 1, anchors);
+}
+
+} // namespace
+
+bool CurveFit::fitSingleCubic(const std::vector<Point>& points,
+    const Point& startTangent, const Point& endTangent, Point bezier[4])
+{
+    if (points.size() < 2)
+        return false;
+
+    const Vector start = normalize(Vector{startTangent.x, startTangent.y});
+    const Vector end = normalize(Vector{endTangent.x, endTangent.y});
+    const size_t last = points.size() - 1;
+
+    std::vector<double> parameters = chordLengthParameters(points, 0, last);
+    fitCubic(points, 0, last, start, end, parameters, bezier);
+    size_t splitAt = 0;
+    refit(points, 0, last, start, end, parameters, bezier, splitAt);
+    return true;
+}
+
+namespace {
+
+/// The direction the stroke leaves \a from in, judged over \a window rather
+/// than from the next sample alone, so the jitter of a single sample does
+/// not hook the end of the fit. \a step is +1 looking forward, -1 back.
+Vector tangentOver(const std::vector<Point>& points, size_t from, int step,
+    size_t stop, double window)
+{
+    size_t at = from;
+    for (;;)
+    {
+        const size_t next = static_cast<size_t>(static_cast<long long>(at) + step);
+        if ((step > 0 && at >= stop) || (step < 0 && at <= stop))
+            break;
+        at = next;
+        const Vector reach = subtract(points[at], points[from]);
+        if (std::hypot(reach.x, reach.y) >= window)
+            break;
+    }
+    if (at == from)
+        return Vector{0.0, 0.0};
+    return normalize(subtract(points[at], points[from]));
+}
+
+/// Indices of the points where the stroke turns sharply: the direction it
+/// came from, taken over \a window, and the direction it goes on in differ
+/// by more than \a cornerAngle. Of a cluster of neighbouring candidates the
+/// sharpest is kept.
+std::vector<size_t> findCorners(const std::vector<Point>& points, double window,
+    double cornerAngle)
+{
+    std::vector<size_t> corners;
+    if (points.size() < 3)
+        return corners;
+
+    const double threshold = std::cos(cornerAngle * 3.14159265358979323846 / 180.0);
+    const size_t last = points.size() - 1;
+
+    size_t bestInCluster = 0;
+    double bestTurn = 2.0;
+    bool inCluster = false;
+
+    for (size_t i = 1; i < last; ++i)
+    {
+        // Too close to either end there is not a window's worth of stroke
+        // to judge the turn by, and a jittered sample there would read as
+        // a corner.
+        const double fromStart = std::hypot(points[i].x - points[0].x, points[i].y - points[0].y);
+        const double fromEnd = std::hypot(points[i].x - points[last].x, points[i].y - points[last].y);
+        const bool nearEnd = fromStart < window || fromEnd < window;
+
+        const Vector in = tangentOver(points, i, -1, 0, window);
+        const Vector out = tangentOver(points, i, +1, last, window);
+        const bool measurable = !nearEnd &&
+            (in.x != 0.0 || in.y != 0.0) && (out.x != 0.0 || out.y != 0.0);
+        // The direction in is from i back, so the turn is between -in and out.
+        const double cosine = measurable ? -dot(in, out) : 1.0;
+        const bool corner = measurable && cosine < threshold;
+
+        if (corner)
+        {
+            if (!inCluster || cosine < bestTurn)
+            {
+                bestInCluster = i;
+                bestTurn = cosine;
+            }
+            inCluster = true;
+        }
+        else if (inCluster)
+        {
+            corners.push_back(bestInCluster);
+            inCluster = false;
+            bestTurn = 2.0;
+        }
+    }
+    if (inCluster)
+        corners.push_back(bestInCluster);
+
+    return corners;
+}
+
+/// Ramer-Douglas-Peucker: keep the end points, and the point furthest from
+/// the line between them if it is too far off, and recurse either side of
+/// it.
+void simplifyRun(const std::vector<Point>& points, size_t first, size_t last,
+    double tolerance, std::vector<size_t>& kept)
+{
+    if (last <= first + 1)
+        return;
+
+    const Vector along = subtract(points[last], points[first]);
+    const double length = std::hypot(along.x, along.y);
+
+    size_t worst = first;
+    double worstDistance = 0.0;
+    for (size_t i = first + 1; i < last; ++i)
+    {
+        const double distance = length <= kEpsilon
+            ? std::hypot(points[i].x - points[first].x, points[i].y - points[first].y)
+            : std::fabs(along.x * (points[first].y - points[i].y) -
+                        (points[first].x - points[i].x) * along.y) / length;
+        if (distance > worstDistance)
+        {
+            worstDistance = distance;
+            worst = i;
+        }
+    }
+
+    if (worstDistance <= tolerance)
+        return;
+
+    simplifyRun(points, first, worst, tolerance, kept);
+    kept.push_back(worst);
+    simplifyRun(points, worst, last, tolerance, kept);
 }
 
 } // namespace
@@ -316,46 +522,83 @@ EditablePath CurveFit::fit(const std::vector<Point>& points, const Options& opti
     if (cleaned.size() < 2)
         return path;
 
+    const double tolerance = std::max(0.01, options.tolerance);
+
     if (options.straighten)
     {
-        // Straighten mode keeps the corners and throws away the curve: fit
-        // straight runs by dropping points that already lie close to the line
-        // between their neighbours.
-        path.anchors.push_back(Anchor(cleaned.front()));
-
-        size_t anchorIndex = 0;
-        for (size_t i = 1; i + 1 < cleaned.size(); ++i)
-        {
-            const Point& start = cleaned[anchorIndex];
-            const Point& end = cleaned[i + 1];
-            const Vector along = subtract(end, start);
-            const double length = std::hypot(along.x, along.y);
-            if (length <= kEpsilon)
-                continue;
-
-            // Distance from the candidate point to the line start-end.
-            const double deviation = std::fabs(
-                along.x * (start.y - cleaned[i].y) - (start.x - cleaned[i].x) * along.y) / length;
-
-            if (deviation > options.tolerance)
-            {
-                path.anchors.push_back(Anchor(cleaned[i]));
-                anchorIndex = i;
-            }
-        }
-
-        path.anchors.push_back(Anchor(cleaned.back()));
+        // Straighten mode keeps the corners and throws away the curve: the
+        // points that matter are the ones furthest from the straight runs
+        // between them, which Ramer-Douglas-Peucker finds, so a gentle arc
+        // becomes a few long segments rather than drifting off.
+        std::vector<size_t> kept;
+        kept.push_back(0);
+        simplifyRun(cleaned, 0, cleaned.size() - 1, tolerance, kept);
+        kept.push_back(cleaned.size() - 1);
+        for (const size_t index : kept)
+            path.anchors.push_back(Anchor(cleaned[index]));
         return path;
     }
 
+    // End tangents, and the turn at a corner, are judged over a short
+    // stretch rather than one sample, so jitter neither hooks the ends nor
+    // makes corners of its own.
+    const double window = std::max(3.0 * tolerance, 2.0 * std::max(0.0, options.minimumSpacing));
+
+    std::vector<size_t> corners;
+    if (options.detectCorners)
+        corners = findCorners(cleaned, window, options.cornerAngle);
+
     path.anchors.push_back(Anchor(cleaned.front()));
 
-    const Vector startTangent = normalize(subtract(cleaned[1], cleaned[0]));
-    const Vector endTangent = normalize(
-        subtract(cleaned[cleaned.size() - 2], cleaned.back()));
+    // Each run between corners is fitted on its own, with its own end
+    // tangents, and the anchor at a corner is left a corner: its two handles
+    // belong to different runs and need not line up.
+    size_t runStart = 0;
+    for (size_t c = 0; c <= corners.size(); ++c)
+    {
+        const size_t runEnd = c < corners.size() ? corners[c] : cleaned.size() - 1;
+        if (runEnd <= runStart)
+            continue;
 
-    fitRun(cleaned, 0, cleaned.size() - 1, startTangent, endTangent,
-        std::max(0.01, options.tolerance), 0, path.anchors);
+        Vector startTangent = tangentOver(cleaned, runStart, +1, runEnd, window);
+        Vector endTangent = tangentOver(cleaned, runEnd, -1, runStart, window);
+        if (startTangent.x == 0.0 && startTangent.y == 0.0)
+            startTangent = normalize(subtract(cleaned[runStart + 1], cleaned[runStart]));
+        if (endTangent.x == 0.0 && endTangent.y == 0.0)
+            endTangent = normalize(subtract(cleaned[runEnd - 1], cleaned[runEnd]));
+
+        fitRun(cleaned, runStart, runEnd, startTangent, endTangent, tolerance, 0, path.anchors);
+
+        if (c < corners.size() && !path.anchors.empty())
+            path.anchors.back().smooth = false;
+
+        runStart = runEnd;
+    }
+
+    // A cubic whose handles sit on its chord, between its ends, is a line
+    // and is written as one, so a straight stretch of a stroke does not
+    // carry handles that do nothing.
+    for (size_t i = 1; i < path.anchors.size(); ++i)
+    {
+        Anchor& from = path.anchors[i - 1];
+        Anchor& to = path.anchors[i];
+        const Vector chord = subtract(to.position, from.position);
+        const double length = std::hypot(chord.x, chord.y);
+        if (length <= kEpsilon)
+            continue;
+
+        const auto onChord = [&](const Point& handle) {
+            const Vector reach = subtract(handle, from.position);
+            const double along = dot(reach, chord) / length;
+            const double off = std::fabs(chord.x * reach.y - chord.y * reach.x) / length;
+            return along >= -kEpsilon && along <= length + kEpsilon && off <= tolerance * 0.5;
+        };
+        if (onChord(from.outHandle) && onChord(to.inHandle))
+        {
+            from.outHandle = from.position;
+            to.inHandle = to.position;
+        }
+    }
 
     return path;
 }

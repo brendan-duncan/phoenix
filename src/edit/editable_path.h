@@ -1,6 +1,7 @@
 #pragma once
 
 #include "../data/point.h"
+#include "../data/transform.h"
 
 #include <vector>
 
@@ -105,13 +106,24 @@ public:
     /// there.
     int splitSegment(size_t segment, double t);
 
-    /// Removes an anchor, joining its neighbours directly. Refuses to leave
-    /// fewer than two anchors, since that is no longer a path.
+    /// Removes an anchor. Where either side was curved, one cubic is fitted
+    /// through the two segments that met there, keeping the neighbours'
+    /// outer tangents, and written into their facing handles, so the curve
+    /// keeps its shape as well as it can; straight sides are simply joined.
+    /// Refuses to leave fewer than two anchors, since that is no longer a
+    /// path.
     bool removeAnchor(size_t index);
 
     /// Flips an anchor between smooth and corner: a smooth point loses its
     /// handles, a corner grows them along the line through its neighbours.
     bool toggleAnchorSmooth(size_t index);
+
+    /// The same curve traced from the other end: the anchors in reverse
+    /// order with each one's handles swapped.
+    EditablePath reversed() const;
+
+    /// Every anchor and handle mapped through \a transform.
+    EditablePath transformed(const Transform& transform) const;
 };
 
 } // namespace fla

@@ -6,21 +6,29 @@
 #include "../edit/editable_path.h"
 
 #include <QPointF>
+#include <QTransform>
 
 namespace fla {
 class CommandStack;
 class DrawingStyle;
+class Edge;
 class Element;
 class Frame;
 class Selection;
+class Shape;
 }
 
 /// Animate's pen tool: build a path a point at a time.
 ///
 /// Click places a corner point. Press and drag pulls out handles, making a
 /// smooth point whose curve runs through it. Holding alt while dragging breaks
-/// the tangent, so the two sides can go their own ways. Clicking the first point
-/// closes the path; Enter or a double click finishes it open; Escape abandons it.
+/// the tangent, so the two sides can go their own ways. Shift holds a new
+/// point or a handle to a multiple of 45 degrees. Clicking the last point
+/// again retracts its outgoing handle, so the next segment leaves it straight.
+/// Pressing on the first point closes the path, and dragging there shapes the
+/// closing curve. Enter or a double click finishes it open; Escape abandons it.
+/// Pressing on either end of a selected open path picks that path up again
+/// and carries on from there.
 ///
 /// Nothing reaches the document until the path is finished, so an abandoned path
 /// leaves no trace and a finished one is a single undo step.
@@ -59,8 +67,9 @@ public:
     void deactivate(PhoenixView& view) override;
 
 private:
-    /// Turns the path so far into a shape in the document. Does nothing when
-    /// there is not enough to be worth keeping.
+    /// Turns the path so far into a shape in the document, or writes it back
+    /// to the path it resumed. Does nothing when there is not enough to be
+    /// worth keeping.
     void finish(PhoenixView& view, bool close);
 
     /// Throws the path away without touching the document.
@@ -72,6 +81,14 @@ private:
     /// The path so far as something a painter can draw.
     QPainterPath previewPath(bool includeCursor) const;
 
+    /// Where a point lands with shift held: on the ray from \a from at the
+    /// nearest multiple of 45 degrees.
+    static QPointF constrained(const QPointF& from, const QPointF& to);
+
+    /// Loads the snapper with the stage and with the path being drawn, and
+    /// snaps a press.
+    QPointF snapped(PhoenixView& view, const QPointF& documentPos) const;
+
     fla::Selection& _selection;
     fla::CommandStack& _commandStack;
     const fla::DrawingStyle& _style;
@@ -81,9 +98,19 @@ private:
     /// True once the first point is down and the path is being built.
     bool _active = false;
 
-    /// True between press and release, while handles are being pulled out of the
-    /// anchor just placed.
+    /// True between press and release, while handles are being pulled out of
+    /// the anchor at _dragIndex.
     bool _draggingHandle = false;
+    size_t _dragIndex = 0;
+
+    /// The drag only pulls the outgoing handle: the anchor was clicked again
+    /// to retract it, and dragging on from there shapes the next segment
+    /// without curving the one that arrived.
+    bool _outOnly = false;
+
+    /// The press landed on the first anchor, so the release closes the path
+    /// and the drag in between shapes the closing curve.
+    bool _closing = false;
 
     /// Where the cursor is, for the rubber band from the last anchor.
     QPointF _cursor;
@@ -106,4 +133,33 @@ private:
     bool editSelectedShape(PhoenixView& view, const QPointF& documentPos);
 
     EdgeBender::Probe _hover;
+
+    /// An end of an open path on the selected shape that a press would pick
+    /// up and continue.
+    struct ResumePoint
+    {
+        bool valid = false;
+        fla::Shape* shape = nullptr;
+        fla::Edge* edge = nullptr;
+        size_t pathIndex = 0;
+        /// True at the path's first anchor, where the path has to be turned
+        /// round before it can be continued.
+        bool atStart = false;
+    };
+
+    ResumePoint resumePointAt(PhoenixView& view, const QPointF& documentPos) const;
+
+    void beginResume(PhoenixView& view, const ResumePoint& point);
+
+    ResumePoint _hoverResume;
+
+    /// The path being continued, if any: the edge to write back to, its
+    /// geometry before, and the shape's transform so the pen can work in
+    /// document space.
+    bool _resuming = false;
+    fla::Shape* _resumeShape = nullptr;
+    fla::Edge* _resumeEdge = nullptr;
+    size_t _resumePathIndex = 0;
+    fla::EditablePath _resumeBefore;
+    QTransform _resumeToDocument;
 };

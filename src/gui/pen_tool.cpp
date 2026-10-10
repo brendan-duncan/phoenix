@@ -17,6 +17,7 @@
 #include <QKeyEvent>
 #include <QMouseEvent>
 
+#include <algorithm>
 #include <cmath>
 
 namespace {
@@ -24,6 +25,8 @@ namespace {
 /// Index used for the single fill and stroke on a generated shape; the format
 /// numbers styles from one.
 constexpr int kStyleIndex = 1;
+
+constexpr double kPi = 3.14159265358979323846;
 
 QPointF toQPointF(const fla::Point& point)
 {
@@ -33,6 +36,33 @@ QPointF toQPointF(const fla::Point& point)
 fla::Point toPoint(const QPointF& point)
 {
     return fla::Point(point.x(), point.y());
+}
+
+/// The anchors in the other order, with each anchor's handles swapped so the
+/// curve reads the same from the other end.
+fla::EditablePath reversed(const fla::EditablePath& path)
+{
+    fla::EditablePath result;
+    result.closed = path.closed;
+    for (auto it = path.anchors.rbegin(); it != path.anchors.rend(); ++it)
+    {
+        fla::Anchor anchor = *it;
+        std::swap(anchor.inHandle, anchor.outHandle);
+        result.anchors.push_back(anchor);
+    }
+    return result;
+}
+
+fla::EditablePath mapped(const fla::EditablePath& path, const QTransform& transform)
+{
+    fla::EditablePath result = path;
+    for (fla::Anchor& anchor : result.anchors)
+    {
+        anchor.position = toPoint(transform.map(toQPointF(anchor.position)));
+        anchor.inHandle = toPoint(transform.map(toQPointF(anchor.inHandle)));
+        anchor.outHandle = toPoint(transform.map(toQPointF(anchor.outHandle)));
+    }
+    return result;
 }
 
 } // namespace
@@ -57,7 +87,19 @@ QPainterPath PenTool::previewPath(bool includeCursor) const
                 toQPointF(to.position));
     }
 
-    if (includeCursor && !_draggingHandle)
+    if (_closing && _path.anchors.size() >= 2)
+    {
+        // The closing segment, taking shape as the first anchor's in-handle
+        // is dragged.
+        const fla::Anchor& last = _path.anchors.back();
+        const fla::Anchor& first = _path.anchors.front();
+        if (!last.hasOutCurve() && !first.hasInCurve())
+            painterPath.lineTo(toQPointF(first.position));
+        else
+            painterPath.cubicTo(toQPointF(last.outHandle), toQPointF(first.inHandle),
+                toQPointF(first.position));
+    }
+    else if (includeCursor && !_draggingHandle)
     {
         // The rubber band shows where the next segment would land, curving if
         // the last anchor has a handle pulled out.
@@ -71,11 +113,51 @@ QPainterPath PenTool::previewPath(bool includeCursor) const
     return painterPath;
 }
 
+QPointF PenTool::constrained(const QPointF& from, const QPointF& to)
+{
+    const QPointF delta = to - from;
+    const double length = std::hypot(delta.x(), delta.y());
+    if (length <= 1.0e-9)
+        return to;
+
+    const double step = kPi / 4.0;
+    const double angle = std::round(std::atan2(delta.y(), delta.x()) / step) * step;
+    const QPointF direction(std::cos(angle), std::sin(angle));
+
+    // The point's shadow on the chosen ray, so it stays under the cursor
+    // along that direction rather than keeping its distance.
+    const double along = delta.x() * direction.x() + delta.y() * direction.y();
+    return from + direction * along;
+}
+
+QPointF PenTool::snapped(PhoenixView& view, const QPointF& documentPos) const
+{
+    fla::Snapper* snapper = view.snapper();
+    if (!snapper || !snapper->isEnabled())
+        return documentPos;
+
+    // The stage, and the path being drawn, which can attract the cursor just
+    // as anything already placed can.
+    view.gatherSnapCandidates(*snapper, {});
+    for (const fla::Anchor& anchor : _path.anchors)
+    {
+        snapper->addCandidateX(anchor.position.x);
+        snapper->addCandidateY(anchor.position.y);
+    }
+
+    snapper->setTolerance(view.pickTolerance() * 2.0);
+    const fla::SnapResult x = snapper->snapX({documentPos.x()});
+    const fla::SnapResult y = snapper->snapY({documentPos.y()});
+    return QPointF(documentPos.x() + x.adjustment, documentPos.y() + y.adjustment);
+}
+
 QCursor PenTool::cursor() const
 {
     Cursors::Kind kind = Cursors::Kind::PenStart;
     if (_active)
         kind = _overFirstAnchor ? Cursors::Kind::PenClose : Cursors::Kind::Pen;
+    else if (_hoverResume.valid)
+        kind = Cursors::Kind::Pen;
     else if (_hover.grab == EdgeBender::Grab::Corner)
         kind = Cursors::Kind::PenRemove;
     else if (_hover.grab == EdgeBender::Grab::Curve)
@@ -88,6 +170,8 @@ void PenTool::refreshCursor(PhoenixView& view)
     int kind = 0;
     if (_active)
         kind = _overFirstAnchor ? 2 : 1;
+    else if (_hoverResume.valid)
+        kind = 5;
     else if (_hover.grab == EdgeBender::Grab::Corner)
         kind = 3;
     else if (_hover.grab == EdgeBender::Grab::Curve)
@@ -112,6 +196,83 @@ EdgeBender::Probe PenTool::probeSelection(PhoenixView& view, const QPointF& docu
     const fla::Transform& t = element->transform;
     hit.elementToDocument = QTransform(t.m11, t.m12, t.m21, t.m22, t.tx, t.ty);
     return EdgeBender::probe(view, hit, documentPos);
+}
+
+PenTool::ResumePoint PenTool::resumePointAt(PhoenixView& view, const QPointF& documentPos) const
+{
+    ResumePoint none;
+
+    fla::DOMElement* single = _selection.single();
+    fla::Element* element = single ? dynamic_cast<fla::Element*>(single) : nullptr;
+    if (!element || element->elementType() != fla::Element::Type::Shape)
+        return none;
+
+    fla::Shape* shape = static_cast<fla::Shape*>(element);
+    const fla::Transform& t = shape->transform;
+    const QTransform toDocument(t.m11, t.m12, t.m21, t.m22, t.tx, t.ty);
+    const double tolerance = view.pickTolerance() * 1.5;
+
+    ResumePoint best;
+    double bestDistance = 0.0;
+    for (fla::Edge* edge : shape->edges)
+    {
+        if (!edge)
+            continue;
+        for (size_t pathIndex = 0; pathIndex < edge->paths.size(); ++pathIndex)
+        {
+            if (!edge->paths[pathIndex])
+                continue;
+            const fla::EditablePath path = fla::EditablePath::fromPath(*edge->paths[pathIndex]);
+            if (path.closed || path.anchors.size() < 2)
+                continue;
+
+            for (int end = 0; end < 2; ++end)
+            {
+                const fla::Anchor& anchor = end == 0 ? path.anchors.front() : path.anchors.back();
+                const QPointF at = toDocument.map(toQPointF(anchor.position));
+                const double distance = std::hypot(at.x() - documentPos.x(), at.y() - documentPos.y());
+                if (distance > tolerance || (best.valid && distance >= bestDistance))
+                    continue;
+                best.valid = true;
+                best.shape = shape;
+                best.edge = edge;
+                best.pathIndex = pathIndex;
+                best.atStart = end == 0;
+                bestDistance = distance;
+            }
+        }
+    }
+    return best;
+}
+
+void PenTool::beginResume(PhoenixView& view, const ResumePoint& point)
+{
+    const fla::Transform& t = point.shape->transform;
+    _resumeToDocument = QTransform(t.m11, t.m12, t.m21, t.m22, t.tx, t.ty);
+    _resumeBefore = fla::EditablePath::fromPath(*point.edge->paths[point.pathIndex]);
+
+    // The pen works in document space and always adds at the end, so the
+    // path is brought to the stage and, when picked up by its first anchor,
+    // turned round.
+    fla::EditablePath path = mapped(_resumeBefore, _resumeToDocument);
+    if (point.atStart)
+        path = reversed(path);
+    path.closed = false;
+
+    _path = path;
+    _resuming = true;
+    _resumeShape = point.shape;
+    _resumeEdge = point.edge;
+    _resumePathIndex = point.pathIndex;
+    _active = true;
+    _draggingHandle = false;
+    _closing = false;
+    _outOnly = false;
+    _overFirstAnchor = false;
+    _hoverResume = ResumePoint();
+    _cursor = toQPointF(_path.anchors.back().position);
+    refreshCursor(view);
+    view.update();
 }
 
 bool PenTool::editSelectedShape(PhoenixView& view, const QPointF& documentPos)
@@ -173,35 +334,64 @@ bool PenTool::mousePress(PhoenixView& view, QMouseEvent* event, const QPointF& d
     if (!view.activeFrame())
         return false;
 
-    // Before a path starts, a click on the selected shape's outline edits it
-    // rather than beginning a new path.
-    if (!_active && editSelectedShape(view, documentPos))
-        return true;
+    const bool shift = (event->modifiers() & Qt::ShiftModifier) != 0;
 
-    QPointF position = documentPos;
-    if (fla::Snapper* snapper = view.snapper())
+    if (!_active)
     {
-        if (!_active)
-            view.gatherSnapCandidates(*snapper, {});
-
-        if (snapper->isEnabled())
+        // Before a path starts, a press on an end of the selected shape's
+        // open path carries that path on, and a press elsewhere on its
+        // outline edits it, rather than beginning a new path.
+        const ResumePoint resume = resumePointAt(view, documentPos);
+        if (resume.valid)
         {
-            snapper->setTolerance(view.pickTolerance() * 2.0);
-            const fla::SnapResult x = snapper->snapX({position.x()});
-            const fla::SnapResult y = snapper->snapY({position.y()});
-            position = QPointF(position.x() + x.adjustment, position.y() + y.adjustment);
+            beginResume(view, resume);
+            return true;
+        }
+        if (editSelectedShape(view, documentPos))
+            return true;
+    }
+
+    QPointF position = snapped(view, documentPos);
+    if (shift && _active && !_path.anchors.empty())
+        position = constrained(toQPointF(_path.anchors.back().position), position);
+
+    if (_active && _path.anchors.size() >= 2)
+    {
+        // Pressing on the first point closes the path on release; the drag
+        // in between shapes the closing curve.
+        const QPointF first = toQPointF(_path.anchors.front().position);
+        if (std::hypot(documentPos.x() - first.x(), documentPos.y() - first.y())
+                <= view.pickTolerance() * 2.0)
+        {
+            _closing = true;
+            _draggingHandle = true;
+            _dragIndex = 0;
+            _outOnly = false;
+            _cursor = first;
+            refreshCursor(view);
+            view.update();
+            return true;
         }
     }
 
-    // Clicking back on the first point closes the path, which is how a pen tool
-    // is told the outline is finished.
-    if (_active && _path.anchors.size() >= 2)
+    if (_active && !_path.anchors.empty())
     {
-        const QPointF first = toQPointF(_path.anchors.front().position);
-        if (std::hypot(position.x() - first.x(), position.y() - first.y())
+        // Pressing on the last point again retracts its outgoing handle, so
+        // the next segment leaves it as a corner; dragging on from there
+        // pulls a fresh outgoing handle alone.
+        fla::Anchor& last = _path.anchors.back();
+        const QPointF at = toQPointF(last.position);
+        if (std::hypot(documentPos.x() - at.x(), documentPos.y() - at.y())
                 <= view.pickTolerance() * 2.0)
         {
-            finish(view, true);
+            last.outHandle = last.position;
+            last.smooth = false;
+            _draggingHandle = true;
+            _dragIndex = _path.anchors.size() - 1;
+            _outOnly = true;
+            _cursor = at;
+            refreshCursor(view);
+            view.update();
             return true;
         }
     }
@@ -209,6 +399,8 @@ bool PenTool::mousePress(PhoenixView& view, QMouseEvent* event, const QPointF& d
     _active = true;
     _path.anchors.push_back(fla::Anchor(toPoint(position)));
     _draggingHandle = true;
+    _dragIndex = _path.anchors.size() - 1;
+    _outOnly = false;
     _cursor = position;
     _overFirstAnchor = false;
 
@@ -221,32 +413,67 @@ bool PenTool::mouseMove(PhoenixView& view, QMouseEvent* event, const QPointF& do
 {
     if (!_active)
     {
-        _hover = probeSelection(view, documentPos);
+        _hoverResume = resumePointAt(view, documentPos);
+        _hover = _hoverResume.valid ? EdgeBender::Probe() : probeSelection(view, documentPos);
         refreshCursor(view);
         return false;
     }
 
+    const bool shift = (event->modifiers() & Qt::ShiftModifier) != 0;
+    const bool alt = (event->modifiers() & Qt::AltModifier) != 0;
+
     _cursor = documentPos;
+    if (shift && !_draggingHandle && !_path.anchors.empty())
+        _cursor = constrained(toQPointF(_path.anchors.back().position), documentPos);
 
-    if (_draggingHandle && !_path.anchors.empty())
+    if (_draggingHandle && _dragIndex < _path.anchors.size())
     {
-        fla::Anchor& anchor = _path.anchors.back();
+        fla::Anchor& anchor = _path.anchors[_dragIndex];
+        QPointF handle = documentPos;
+        if (shift)
+            handle = constrained(toQPointF(anchor.position), documentPos);
 
-        // Dragging out of a fresh point makes it smooth, with the in-handle the
-        // exact mirror of the out-handle so the curve arriving is as round as
-        // the one leaving. Alt freezes the in-handle where it is and lets the
-        // out-handle go its own way, which is how a corner with one curved
-        // side is drawn.
-        anchor.outHandle = toPoint(documentPos);
-        if ((event->modifiers() & Qt::AltModifier) == 0)
+        if (_closing)
         {
-            anchor.smooth = true;
-            anchor.inHandle = fla::Point(2.0 * anchor.position.x - anchor.outHandle.x,
-                                         2.0 * anchor.position.y - anchor.outHandle.y);
+            // Dragging out of the first anchor shapes the curve arriving to
+            // close the path: the in-handle is the mirror of the drag. Without
+            // alt the out-handle follows too, so the path leaves and arrives
+            // smoothly; alt leaves the first segment as it was.
+            anchor.inHandle = fla::Point(2.0 * anchor.position.x - handle.x(),
+                                         2.0 * anchor.position.y - handle.y());
+            if (!alt)
+            {
+                anchor.smooth = true;
+                anchor.outHandle = toPoint(handle);
+            }
+            else
+            {
+                anchor.smooth = false;
+            }
+        }
+        else if (_outOnly)
+        {
+            anchor.outHandle = toPoint(handle);
+            anchor.smooth = false;
         }
         else
         {
-            anchor.smooth = false;
+            // Dragging out of a fresh point makes it smooth, with the in-handle
+            // the exact mirror of the out-handle so the curve arriving is as
+            // round as the one leaving. Alt freezes the in-handle where it is
+            // and lets the out-handle go its own way, which is how a corner
+            // with one curved side is drawn.
+            anchor.outHandle = toPoint(handle);
+            if (!alt)
+            {
+                anchor.smooth = true;
+                anchor.inHandle = fla::Point(2.0 * anchor.position.x - anchor.outHandle.x,
+                                             2.0 * anchor.position.y - anchor.outHandle.y);
+            }
+            else
+            {
+                anchor.smooth = false;
+            }
         }
     }
     else if (_path.anchors.size() >= 2)
@@ -269,6 +496,13 @@ bool PenTool::mouseRelease(PhoenixView& view, QMouseEvent* event, const QPointF&
         return false;
 
     _draggingHandle = false;
+    _outOnly = false;
+    if (_closing)
+    {
+        _closing = false;
+        finish(view, true);
+        return true;
+    }
     view.update();
     return true;
 }
@@ -289,6 +523,7 @@ bool PenTool::mouseDoubleClick(PhoenixView& view, QMouseEvent* event, const QPoi
     }
 
     _draggingHandle = false;
+    _closing = false;
     finish(view, false);
     return true;
 }
@@ -324,6 +559,26 @@ void PenTool::finish(PhoenixView& view, bool close)
 
     _path.closed = close;
 
+    if (_resuming)
+    {
+        // The continued path goes back where it came from, in the shape's
+        // own space, as one edit of that edge.
+        bool invertible = false;
+        const QTransform toShape = _resumeToDocument.inverted(&invertible);
+        if (invertible && _resumeEdge && _resumePathIndex < _resumeEdge->paths.size())
+        {
+            const fla::EditablePath after = mapped(_path, toShape);
+            _commandStack.push(fla::CommandPtr(new fla::SetEdgeGeometryCommand(
+                _resumeEdge, _resumeBefore, after, "Pen", _resumePathIndex)));
+            _commandStack.breakMergeChain();
+            if (_resumeShape)
+                view.markShapeEdited(_resumeShape);
+            view.clearCaches();
+        }
+        cancel(view);
+        return;
+    }
+
     fla::Frame* frame = view.activeFrame();
     if (!frame)
     {
@@ -341,6 +596,8 @@ void PenTool::finish(PhoenixView& view, bool close)
     _path = fla::EditablePath();
     _active = false;
     _draggingHandle = false;
+    _closing = false;
+    _outOnly = false;
     _overFirstAnchor = false;
     refreshCursor(view);
 
@@ -353,7 +610,15 @@ void PenTool::cancel(PhoenixView& view)
     _path = fla::EditablePath();
     _active = false;
     _draggingHandle = false;
+    _closing = false;
+    _outOnly = false;
     _overFirstAnchor = false;
+    _resuming = false;
+    _resumeShape = nullptr;
+    _resumeEdge = nullptr;
+    _resumePathIndex = 0;
+    _resumeBefore = fla::EditablePath();
+    _hoverResume = ResumePoint();
     refreshCursor(view);
     view.update();
 }
@@ -461,7 +726,7 @@ void PenTool::paintOverlay(PhoenixView& view, QPainter& painter, double scale)
         }
 
         // The first anchor is highlighted once clicking it would close the path.
-        const bool closeTarget = (i == 0) && _overFirstAnchor && _path.anchors.size() >= 2;
+        const bool closeTarget = (i == 0) && (_overFirstAnchor || _closing) && _path.anchors.size() >= 2;
         painter.setPen(QPen(QColor(0, 120, 200), 1.0 * scale));
         painter.setBrush(closeTarget ? QColor(255, 220, 0) : QColor(255, 255, 255));
         painter.drawRect(QRectF(position.x() - anchorSize, position.y() - anchorSize,

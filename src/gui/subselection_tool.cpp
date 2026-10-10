@@ -94,6 +94,7 @@ bool SubselectionTool::mousePress(PhoenixView& view, QMouseEvent* event, const Q
     struct Candidate
     {
         fla::Edge* edge = nullptr;
+        size_t pathIndex = 0;
         size_t index = 0;
         fla::EditablePath path;
         Grip grip = Grip::None;
@@ -104,10 +105,15 @@ bool SubselectionTool::mousePress(PhoenixView& view, QMouseEvent* event, const Q
 
     for (fla::Edge* edge : shape->edges)
     {
-        if (!edge || edge->paths.empty() || !edge->paths[0])
+        if (!edge)
             continue;
 
-        const fla::EditablePath path = fla::EditablePath::fromPath(*edge->paths[0]);
+      for (size_t pathIndex = 0; pathIndex < edge->paths.size(); ++pathIndex)
+      {
+        if (!edge->paths[pathIndex])
+            continue;
+
+        const fla::EditablePath path = fla::EditablePath::fromPath(*edge->paths[pathIndex]);
 
         for (size_t i = 0; i < path.anchors.size(); ++i)
         {
@@ -142,6 +148,7 @@ bool SubselectionTool::mousePress(PhoenixView& view, QMouseEvent* event, const Q
             if (!haveBest || nearest < best.distance)
             {
                 best.edge = edge;
+                best.pathIndex = pathIndex;
                 best.index = i;
                 best.path = path;
                 best.grip = grip;
@@ -149,11 +156,13 @@ bool SubselectionTool::mousePress(PhoenixView& view, QMouseEvent* event, const Q
                 haveBest = true;
             }
         }
+      }
     }
 
     if (haveBest)
     {
         fla::Edge* edge = best.edge;
+        const size_t pathIndex = best.pathIndex;
         const size_t i = best.index;
         const fla::EditablePath path = best.path;
         const fla::Anchor& anchor = path.anchors[i];
@@ -165,7 +174,7 @@ bool SubselectionTool::mousePress(PhoenixView& view, QMouseEvent* event, const Q
             // Alt on an anchor is the convert gesture: dragging a corner
             // point pulls handles out of it, and a click on a curve point
             // makes it a corner.
-            _grabbed.push_back({edge, i, path, path});
+            _grabbed.push_back({edge, pathIndex, i, path, path});
             if (anchor.smooth || anchor.hasInCurve() || anchor.hasOutCurve())
             {
                 fla::EditablePath after = path;
@@ -173,9 +182,10 @@ bool SubselectionTool::mousePress(PhoenixView& view, QMouseEvent* event, const Q
                 corner.smooth = false;
                 corner.inHandle = corner.position;
                 corner.outHandle = corner.position;
-                commitGeometry(view, edge, path, after, "Convert Anchor");
+                commitGeometry(view, edge, path, after, "Convert Anchor", pathIndex);
                 _grabbed.clear();
                 _selectedEdge = edge;
+                _selectedPathIndex = pathIndex;
                 _selectedAnchor = i;
                 _hasSelectedAnchor = true;
                 return true;
@@ -192,7 +202,7 @@ bool SubselectionTool::mousePress(PhoenixView& view, QMouseEvent* event, const Q
         else
         {
             // A handle belongs to one curve, so only that one moves.
-            _grabbed.push_back({edge, i, path, path});
+            _grabbed.push_back({edge, pathIndex, i, path, path});
         }
 
         _grip = grip;
@@ -200,6 +210,7 @@ bool SubselectionTool::mousePress(PhoenixView& view, QMouseEvent* event, const Q
 
         // Remembered so Delete knows which anchor to remove.
         _selectedEdge = edge;
+        _selectedPathIndex = pathIndex;
         _selectedAnchor = i;
         _hasSelectedAnchor = true;
 
@@ -286,7 +297,7 @@ bool SubselectionTool::mouseMove(PhoenixView& view, QMouseEvent* event, const QP
             return false;
         }
 
-        grabbed.current.applyTo(*grabbed.edge);
+        grabbed.current.applyTo(*grabbed.edge, grabbed.pathIndex);
     }
 
     // The shape's own path geometry changed, so its cached paths are stale.
@@ -327,7 +338,7 @@ bool SubselectionTool::mouseRelease(PhoenixView& view, QMouseEvent* event, const
             continue;
 
         _commandStack.push(fla::CommandPtr(new fla::SetEdgeGeometryCommand(
-            grabbed.edge, grabbed.before, grabbed.current, gesture)));
+            grabbed.edge, grabbed.before, grabbed.current, gesture, grabbed.pathIndex)));
     }
 
     if (needsMacro)
@@ -357,17 +368,20 @@ bool SubselectionTool::keyPress(PhoenixView& view, QKeyEvent* event)
     if ((event->key() == Qt::Key_Delete || event->key() == Qt::Key_Backspace) &&
         _hasSelectedAnchor && _selectedEdge && _grip == Grip::None)
     {
-        if (_selectedEdge->paths.empty() || !_selectedEdge->paths[0])
+        if (_selectedPathIndex >= _selectedEdge->paths.size() ||
+            !_selectedEdge->paths[_selectedPathIndex])
+        {
             return false;
+        }
 
         const fla::EditablePath before =
-            fla::EditablePath::fromPath(*_selectedEdge->paths[0]);
+            fla::EditablePath::fromPath(*_selectedEdge->paths[_selectedPathIndex]);
 
         fla::EditablePath after = before;
         if (!after.removeAnchor(_selectedAnchor))
             return false;
 
-        commitGeometry(view, _selectedEdge, before, after, "Delete Anchor");
+        commitGeometry(view, _selectedEdge, before, after, "Delete Anchor", _selectedPathIndex);
         _hasSelectedAnchor = false;
         return true;
     }
@@ -402,21 +416,27 @@ bool SubselectionTool::anchorAt(PhoenixView& view, const QPointF& localPos,
 
     for (fla::Edge* candidate : shape->edges)
     {
-        if (!candidate || candidate->paths.empty() || !candidate->paths[0])
+        if (!candidate)
             continue;
 
-        const fla::EditablePath candidatePath =
-            fla::EditablePath::fromPath(*candidate->paths[0]);
-
-        for (size_t i = 0; i < candidatePath.anchors.size(); ++i)
+        for (const fla::Path* candidatePathData : candidate->paths)
         {
-            const fla::Point& position = candidatePath.anchors[i].position;
-            if (std::hypot(position.x - localPos.x(), position.y - localPos.y()) <= tolerance)
+            if (!candidatePathData)
+                continue;
+
+            const fla::EditablePath candidatePath =
+                fla::EditablePath::fromPath(*candidatePathData);
+
+            for (size_t i = 0; i < candidatePath.anchors.size(); ++i)
             {
-                edge = candidate;
-                path = candidatePath;
-                index = i;
-                return true;
+                const fla::Point& position = candidatePath.anchors[i].position;
+                if (std::hypot(position.x - localPos.x(), position.y - localPos.y()) <= tolerance)
+                {
+                    edge = candidate;
+                    path = candidatePath;
+                    index = i;
+                    return true;
+                }
             }
         }
     }
@@ -426,12 +446,12 @@ bool SubselectionTool::anchorAt(PhoenixView& view, const QPointF& localPos,
 
 void SubselectionTool::commitGeometry(PhoenixView& view, fla::Edge* edge,
     const fla::EditablePath& before, const fla::EditablePath& after,
-    const char* gesture)
+    const char* gesture, size_t pathIndex)
 {
-    after.applyTo(*edge);
+    after.applyTo(*edge, pathIndex);
 
     _commandStack.push(fla::CommandPtr(new fla::SetEdgeGeometryCommand(
-        edge, before, after, gesture)));
+        edge, before, after, gesture, pathIndex)));
     _commandStack.breakMergeChain();
 
     // The path geometry changed, so cached paths for this shape are stale.
@@ -445,7 +465,7 @@ void SubselectionTool::cancelDrag(PhoenixView& view)
     for (const Grabbed& grabbed : _grabbed)
     {
         if (grabbed.edge)
-            grabbed.before.applyTo(*grabbed.edge);
+            grabbed.before.applyTo(*grabbed.edge, grabbed.pathIndex);
     }
 
     _grabbed.clear();
@@ -464,21 +484,27 @@ void SubselectionTool::grabCoincidentAnchors(fla::Shape& shape, const fla::Point
 
     for (fla::Edge* edge : shape.edges)
     {
-        if (!edge || edge->paths.empty() || !edge->paths[0])
+        if (!edge)
             continue;
 
-        const fla::EditablePath path = fla::EditablePath::fromPath(*edge->paths[0]);
-
-        for (size_t i = 0; i < path.anchors.size(); ++i)
+        for (size_t pathIndex = 0; pathIndex < edge->paths.size(); ++pathIndex)
         {
-            const fla::Point& at = path.anchors[i].position;
-            if (std::fabs(at.x - position.x) > kHalfTwip ||
-                std::fabs(at.y - position.y) > kHalfTwip)
-            {
+            if (!edge->paths[pathIndex])
                 continue;
-            }
 
-            _grabbed.push_back({edge, i, path, path});
+            const fla::EditablePath path = fla::EditablePath::fromPath(*edge->paths[pathIndex]);
+
+            for (size_t i = 0; i < path.anchors.size(); ++i)
+            {
+                const fla::Point& at = path.anchors[i].position;
+                if (std::fabs(at.x - position.x) > kHalfTwip ||
+                    std::fabs(at.y - position.y) > kHalfTwip)
+                {
+                    continue;
+                }
+
+                _grabbed.push_back({edge, pathIndex, i, path, path});
+            }
         }
     }
 }
@@ -497,10 +523,15 @@ void SubselectionTool::paintOverlay(PhoenixView& view, QPainter& painter, double
 
     for (const fla::Edge* edge : shape->edges)
     {
-        if (!edge || edge->paths.empty() || !edge->paths[0])
+        if (!edge)
             continue;
 
-        const fla::EditablePath path = fla::EditablePath::fromPath(*edge->paths[0]);
+      for (size_t pathIndex = 0; pathIndex < edge->paths.size(); ++pathIndex)
+      {
+        if (!edge->paths[pathIndex])
+            continue;
+
+        const fla::EditablePath path = fla::EditablePath::fromPath(*edge->paths[pathIndex]);
 
         for (const fla::Anchor& anchor : path.anchors)
         {
@@ -523,6 +554,7 @@ void SubselectionTool::paintOverlay(PhoenixView& view, QPainter& painter, double
             // Every anchor is a small hollow square, filled once it is
             // selected. Animate does not show smooth against corner by shape.
             const bool picked = _hasSelectedAnchor && edge == _selectedEdge &&
+                pathIndex == _selectedPathIndex &&
                 &anchor == &path.anchors[qMin(_selectedAnchor, path.anchors.size() - 1)];
 
             painter.setPen(QPen(QColor(0, 0, 0), 1.0 * scale));
@@ -530,6 +562,7 @@ void SubselectionTool::paintOverlay(PhoenixView& view, QPainter& painter, double
             painter.drawRect(QRectF(position.x() - anchorSize, position.y() - anchorSize,
                 anchorSize * 2.0, anchorSize * 2.0));
         }
+      }
     }
 
     painter.restore();

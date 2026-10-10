@@ -36,6 +36,15 @@ public:
         /// Straighten mode: fit straight segments rather than curves, the way
         /// Animate's pencil does.
         bool straighten = false;
+
+        /// Whether a sharp turn in the input becomes a corner anchor, with the
+        /// runs either side fitted on their own. Off, every anchor is smooth
+        /// and a corner comes out rounded.
+        bool detectCorners = true;
+
+        /// How far the stroke has to turn, in degrees, over a short stretch
+        /// either side of a point for that point to be a corner.
+        double cornerAngle = 60.0;
     };
 
     /// Fits \a points, which are expected in the order they were drawn.
@@ -47,6 +56,13 @@ public:
     /// produces whenever the cursor stops moving.
     static std::vector<Point> removeDuplicates(const std::vector<Point>& points,
         double minimumSpacing);
+
+    /// Fits one cubic through \a points with its ends pinned to the first and
+    /// last point and its end tangents fixed to the unit directions given
+    /// (each pointing into the curve from its end). Only the handle lengths
+    /// are fitted. Returns false with fewer than two points.
+    static bool fitSingleCubic(const std::vector<Point>& points,
+        const Point& startTangent, const Point& endTangent, Point bezier[4]);
 };
 
 } // namespace fla

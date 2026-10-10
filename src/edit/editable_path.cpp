@@ -1,9 +1,12 @@
 #include "editable_path.h"
 
+#include "curve_fit.h"
+
 #include "../data/edge.h"
 
 #include <algorithm>
 #include <cmath>
+#include <utility>
 
 namespace fla {
 
@@ -394,8 +397,86 @@ bool EditablePath::removeAnchor(size_t index)
     if (index >= anchors.size() || anchors.size() <= 2)
         return false;
 
+    const size_t count = anchors.size();
+    const bool hasPrevious = closed || index > 0;
+    const bool hasNext = closed || index + 1 < count;
+    if (hasPrevious && hasNext)
+    {
+        Anchor& previous = anchors[(index + count - 1) % count];
+        Anchor& next = anchors[(index + 1) % count];
+        const Anchor& gone = anchors[index];
+
+        const bool curved = previous.hasOutCurve() || gone.hasInCurve() ||
+            gone.hasOutCurve() || next.hasInCurve();
+        if (curved)
+        {
+            // Both segments sampled, then one cubic fitted through the
+            // samples with the outer tangents kept.
+            constexpr int kSamples = 16;
+            std::vector<Point> samples;
+            const auto sampleSegment = [&](const Anchor& a, const Anchor& b, bool includeStart) {
+                const bool straight = !a.hasOutCurve() && !b.hasInCurve();
+                for (int i = includeStart ? 0 : 1; i <= kSamples; ++i)
+                {
+                    const double t = static_cast<double>(i) / kSamples;
+                    samples.push_back(straight
+                        ? lerp(a.position, b.position, t)
+                        : cubicAt(a.position, a.outHandle, b.inHandle, b.position, t));
+                }
+            };
+            sampleSegment(previous, gone, true);
+            sampleSegment(gone, next, false);
+
+            const auto direction = [](const Point& from, const Point& to) {
+                return Point(to.x - from.x, to.y - from.y);
+            };
+            const Point startTangent = previous.hasOutCurve()
+                ? direction(previous.position, previous.outHandle)
+                : direction(samples[0], samples[1]);
+            const Point endTangent = next.hasInCurve()
+                ? direction(next.position, next.inHandle)
+                : direction(samples[samples.size() - 1], samples[samples.size() - 2]);
+
+            Point bezier[4];
+            if (CurveFit::fitSingleCubic(samples, startTangent, endTangent, bezier))
+            {
+                previous.outHandle = bezier[1];
+                next.inHandle = bezier[2];
+            }
+        }
+    }
+
     anchors.erase(anchors.begin() + static_cast<long long>(index));
     return true;
+}
+
+EditablePath EditablePath::reversed() const
+{
+    EditablePath result;
+    result.closed = closed;
+    for (auto it = anchors.rbegin(); it != anchors.rend(); ++it)
+    {
+        Anchor anchor = *it;
+        std::swap(anchor.inHandle, anchor.outHandle);
+        result.anchors.push_back(anchor);
+    }
+    return result;
+}
+
+EditablePath EditablePath::transformed(const Transform& transform) const
+{
+    const auto map = [&](const Point& p) {
+        return Point(transform.m11 * p.x + transform.m21 * p.y + transform.tx,
+                     transform.m12 * p.x + transform.m22 * p.y + transform.ty);
+    };
+    EditablePath result = *this;
+    for (Anchor& anchor : result.anchors)
+    {
+        anchor.position = map(anchor.position);
+        anchor.inHandle = map(anchor.inHandle);
+        anchor.outHandle = map(anchor.outHandle);
+    }
+    return result;
 }
 
 bool EditablePath::toggleAnchorSmooth(size_t index)
