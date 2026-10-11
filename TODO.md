@@ -1363,6 +1363,10 @@ laid out for convenience rather than to match Animate.
       number, the frame rate and the elapsed time beside the transport and
       onion skin buttons; Phoenix shows only the transport buttons
 
+- [x] **Collapsible outliner.** The document tree at the left of the stage
+      takes space Animate does not give it; it should fold away
+  - Done 2026-10-10: a fold arrow at the left of the breadcrumb row, View > Outliner (ctrl+alt+O) and dragging the splitter to the edge all hide it; the arrow or the menu brings it back at the width it had. Whether it is shown and its width are remembered between sessions
+
 ### Timeline editing, onion skin, library
 
 Added 2026-10-10: the panels looked like Animate's but the timeline could

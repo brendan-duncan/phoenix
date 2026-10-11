@@ -78,6 +78,7 @@
 #include <QSpinBox>
 #include <QToolButton>
 #include <QTimer>
+#include <QSignalBlocker>
 
 #include "tool_icons.h"
 
@@ -380,22 +381,49 @@ void MainWindow::setupUI()
     breadcrumbLayout->setSpacing(2);
     breadcrumbLayout->addStretch();
 
+    // The outliner's fold arrow sits at the left of the breadcrumb row; the
+    // breadcrumb itself is rebuilt as scopes change, so it is kept apart.
+    _outlinerButton = new QToolButton(this);
+    _outlinerButton->setAutoRaise(true);
+    _outlinerButton->setArrowType(Qt::LeftArrow);
+    _outlinerButton->setFixedSize(18, 18);
+    _outlinerButton->setToolTip("Hide the outliner");
+    connect(_outlinerButton, &QToolButton::clicked, this, [this]() { setOutlinerVisible(!_outlinerVisible); });
+
+    QWidget* breadcrumbRow = new QWidget(this);
+    breadcrumbRow->setAutoFillBackground(true);
+    QHBoxLayout* breadcrumbRowLayout = new QHBoxLayout(breadcrumbRow);
+    breadcrumbRowLayout->setContentsMargins(2, 0, 0, 0);
+    breadcrumbRowLayout->setSpacing(0);
+    breadcrumbRowLayout->addWidget(_outlinerButton);
+    breadcrumbRowLayout->addWidget(_breadcrumb, 1);
+
     QWidget* stageColumn = new QWidget(this);
     QVBoxLayout* stageLayout = new QVBoxLayout(stageColumn);
     stageLayout->setContentsMargins(0, 0, 0, 0);
     stageLayout->setSpacing(0);
-    stageLayout->addWidget(_breadcrumb);
+    stageLayout->addWidget(breadcrumbRow);
     stageLayout->addWidget(_phoenixView, 1);
 
     // Add widgets to view splitter
     _viewSplitter->addWidget(_documentView);
     _viewSplitter->addWidget(stageColumn);
 
-    // Set view splitter properties
-    _viewSplitter->setCollapsible(0, false);
+    // Set view splitter properties. The outliner folds away; the stage
+    // never does.
+    _viewSplitter->setCollapsible(0, true);
     _viewSplitter->setCollapsible(1, false);
     _viewSplitter->setStretchFactor(0, 0);
     _viewSplitter->setStretchFactor(1, 1);
+    connect(_viewSplitter, &QSplitter::splitterMoved, this, [this]() {
+        const int width = _viewSplitter->sizes().value(0);
+        _outlinerVisible = width > 0;
+        if (width > 0)
+            _outlinerWidth = width;
+        syncOutlinerControls();
+    });
+    // Once the window has its size, show the outliner as it was left.
+    QTimer::singleShot(0, this, [this]() { setOutlinerVisible(_outlinerVisible); });
 
     // Create the timeline view
     _timelineView = new TimelineView(_player, this);
@@ -1043,6 +1071,17 @@ void MainWindow::setupMenus()
 
     // View menu
     QMenu* viewMenu = menuBar->addMenu("&View");
+
+    _outlinerAction = new QAction("Ou&tliner", this);
+    _outlinerAction->setCheckable(true);
+    _outlinerAction->setChecked(_outlinerVisible);
+    _outlinerAction->setShortcut(QKeySequence(Qt::CTRL | Qt::ALT | Qt::Key_O));
+    _outlinerAction->setStatusTip("Show or hide the document outliner at the left of the stage");
+    connect(_outlinerAction, &QAction::toggled, this, [this](bool on) {
+        if (on != _outlinerVisible)
+            setOutlinerVisible(on);
+    });
+    viewMenu->addAction(_outlinerAction);
 
     _onionSkinAction = new QAction("&Onion Skin", this);
     _onionSkinAction->setCheckable(true);
@@ -1985,6 +2024,36 @@ ToolIcons::Tool MainWindow::iconForTool(const Tool* tool) const
     return IconTool::Selection;
 }
 
+void MainWindow::setOutlinerVisible(bool visible)
+{
+    if (!_viewSplitter)
+        return;
+    QList<int> sizes = _viewSplitter->sizes();
+    if (sizes.size() < 2)
+        return;
+    const int total = sizes[0] + sizes[1];
+    if (!visible && sizes[0] > 0)
+        _outlinerWidth = sizes[0];
+    const int width = visible ? std::min(std::max(_outlinerWidth, 150), std::max(total - 200, 150)) : 0;
+    _viewSplitter->setSizes({width, total - width});
+    _outlinerVisible = visible;
+    syncOutlinerControls();
+}
+
+void MainWindow::syncOutlinerControls()
+{
+    if (_outlinerButton)
+    {
+        _outlinerButton->setArrowType(_outlinerVisible ? Qt::LeftArrow : Qt::RightArrow);
+        _outlinerButton->setToolTip(_outlinerVisible ? "Hide the outliner" : "Show the outliner");
+    }
+    if (_outlinerAction && _outlinerAction->isChecked() != _outlinerVisible)
+    {
+        const QSignalBlocker blocker(_outlinerAction);
+        _outlinerAction->setChecked(_outlinerVisible);
+    }
+}
+
 void MainWindow::rebuildBreadcrumb()
 {
     if (!_breadcrumb || !_phoenixView)
@@ -2871,6 +2940,8 @@ void MainWindow::loadSettings()
     _recentFiles = settings.value("recentFiles").toStringList();
     _lastDirectory = settings.value("lastDirectory").toString();
     _highQualityAntiAliasing = settings.value("view/highQualityAntiAliasing", true).toBool();
+    _outlinerVisible = settings.value("view/outlinerVisible", true).toBool();
+    _outlinerWidth = settings.value("view/outlinerWidth", 260).toInt();
 
     QByteArray geometry = settings.value("window/geometry").toByteArray();
     if (!geometry.isEmpty())
@@ -2885,6 +2956,8 @@ void MainWindow::saveSettings()
     settings.setValue("recentFiles", _recentFiles);
     settings.setValue("lastDirectory", _lastDirectory);
     settings.setValue("view/highQualityAntiAliasing", _highQualityAntiAliasing);
+    settings.setValue("view/outlinerVisible", _outlinerVisible);
+    settings.setValue("view/outlinerWidth", _outlinerWidth);
     settings.setValue("window/geometry", saveGeometry());
 }
 

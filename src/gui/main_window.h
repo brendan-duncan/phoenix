@@ -238,6 +238,16 @@ private:
     /// symbol entered. Clicking a level steps back out to it.
     QWidget* _breadcrumb = nullptr;
 
+    /// The outliner (the document tree at the left) folds away: by its
+    /// arrow at the left of the breadcrumb row, View > Outliner, or by
+    /// dragging the splitter to the edge. Its width is kept to unfold to.
+    QToolButton* _outlinerButton = nullptr;
+    QAction* _outlinerAction = nullptr;
+    bool _outlinerVisible = true;
+    int _outlinerWidth = 260;
+    void setOutlinerVisible(bool visible);
+    void syncOutlinerControls();
+
     void rebuildBreadcrumb();
 
     /// Redraws the fill and stroke swatches after the style changed from
