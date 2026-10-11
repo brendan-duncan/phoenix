@@ -115,6 +115,18 @@ bool XFLContent::build(const Document& document, const std::string& projectName,
         }
     }
 
+    // Files the document carried through without modeling: sound data,
+    // the brush definitions file.
+    for (const auto& file : document.extraFiles)
+    {
+        if (!isSafeRelativePath(file.first))
+            continue;
+        XFLEntry entry;
+        entry.path = file.first;
+        entry.binary = &file.second;
+        entries.push_back(std::move(entry));
+    }
+
     for (const std::string& description : writer.unsupported())
         unsupported.push_back(description);
 

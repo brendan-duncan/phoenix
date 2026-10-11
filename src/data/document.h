@@ -14,6 +14,7 @@
 #include <map>
 #include <string>
 #include <vector>
+#include <utility>
 
 namespace fla {
 
@@ -59,6 +60,23 @@ public:
     std::vector<Timeline*> timelines;
     std::vector<Folder*> folders;
     std::vector<SwatchList*> swatchLists;
+
+    /// Parts of the document the reader does not model (sound items in the
+    /// library, extended swatch lists, brush definitions, embedded fonts),
+    /// kept as XML text so a save writes them back as read. A section
+    /// remembers whether it came before the timelines, as Animate orders
+    /// them.
+    struct RawSection
+    {
+        std::string xml;
+        bool beforeTimelines = false;
+    };
+    std::vector<RawSection> extraSections;
+    /// Library items in <media> other than bitmaps (DOMSoundItem...).
+    std::vector<std::string> extraMedia;
+    /// Files of the package those refer to (a sound's data under bin, the
+    /// brush definitions file), by path, carried through byte for byte.
+    std::vector<std::pair<std::string, std::vector<uint8_t>>> extraFiles;
 
     std::vector<fla::SymbolInstance*> symbolInstances; // List of all symbol instances in the document
     std::map<const fla::Symbol*, std::vector<const fla::SymbolInstance*>> symbolInstancesMap; // Map of symbols to their instances

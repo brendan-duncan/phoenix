@@ -4,6 +4,7 @@
 
 #include <map>
 #include <string>
+#include <vector>
 #include "solid_color.h"
 #include "fill_style.h"
 #include <string>
@@ -50,6 +51,10 @@ public:
     /// "small", "hatchThickness" = "thick"...), kept so they draw and are
     /// written back as read.
     std::map<std::string, std::string> styleAttributes;
+
+    /// Child elements other than the fill, kept as XML text and written
+    /// back: a variable-width stroke's VariablePointWidth profile, say.
+    std::vector<std::string> extraChildren;
 
     FillStyle* fill = nullptr;
 

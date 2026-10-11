@@ -125,6 +125,14 @@ through untouched rather than modeled.
 
 ### Also outstanding
 
+- [x] Parts the reader does not model were read past and dropped on save:
+      sound items in the library (DOMSoundItem) and on frames (soundName,
+      soundSync, inPoint44... and SoundEnvelope), extendedSwatchLists,
+      brushdefinitions, fonts, variable-width stroke profiles
+      (VariablePointWidth), and the "puppet" symbol type
+  - Done 2026-10-10: each is kept as read and written back where it was: unmodeled document sections as XML text before or after the timelines as they came (`Document::extraSections`), media items other than bitmaps (`extraMedia`) with the data files they name under bin and any package file an Include names, such as PaintBrushDefinitions.xml (`extraFiles`), a frame's unmodeled attributes and children (`Frame::extraAttributes`, `extraChildren`, copied with the frame), a stroke's unmodeled children, and an unknown symbol type as spelled (drawn as a graphic). A blend mode of "normal" now reads as none, as Animate writes it, and an archive holding a document folder rather than the document (test_1_2.fla) is read from that folder. Test `xfl_keeps_what_it_does_not_model`; with PHOENIX_FLA_CORPUS=D:/fla the corpus round trip covers 84 documents with no differences and prints no unhandled elements (it failed on one before). Checked on disk: the Alvin file's sound item, frame sound settings and its .dat survive a save, and 520_Boogers_1104's brush definitions file is written back byte for byte
+
+
 - [ ] Verify Animate itself opens what we write. Round-tripping through our own
       reader proves self-consistency, not compatibility. The cubic `(...)` form
       is the likeliest sticking point: Flash stores a `q`/`p` quadratic

@@ -165,7 +165,7 @@ std::vector<uint8_t> ZipReader::readFile(const std::string& fileName) const
     }
 
     std::vector<uint8_t> buffer;
-    if (!_zipArchive->extractFile(fileName, buffer))
+    if (!_zipArchive->extractFile(_root + fileName, buffer))
     {
         return std::vector<uint8_t>();
     }
@@ -193,7 +193,7 @@ bool ZipReader::containsFile(const std::string& fileName) const
     // Check if file exists in zip archive
     for (const auto& entry : _zipArchive->getEntries())
     {
-        if (entry.filename == fileName)
+        if (entry.filename == _root + fileName)
         {
             return true;
         }

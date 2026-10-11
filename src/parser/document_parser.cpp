@@ -17,6 +17,7 @@
 #include "../third_party/tinyxml2/tinyxml2.h"
 #include <cstdint>
 #include <algorithm>
+#include <functional>
 #include <iostream>
 #include <cstring>
 
@@ -319,6 +320,8 @@ fla::FillStyle* parseFillStyle(const tinyxml2::XMLElement* element, fla::DOMElem
     return nullptr;
 }
 
+std::string elementText(const tinyxml2::XMLElement* element);
+
 bool parseStroke(const tinyxml2::XMLElement* element, fla::StrokeStyle* stroke)
 {
     stroke->scaleMode = getAttribute(element, "scaleMode");
@@ -357,7 +360,8 @@ bool parseStroke(const tinyxml2::XMLElement* element, fla::StrokeStyle* stroke)
         }
         else
         {
-            std::cerr << "!!!! Unhandled stroke element: " << childElement->Name() << (_currentFile.empty() ? "" : " from ") << _currentFile << std::endl;
+            // A variable-width profile and the like: kept and written back.
+            stroke->extraChildren.push_back(elementText(childElement));
         }
     }
     return true;
@@ -729,6 +733,9 @@ bool parseSymbolInstance(const tinyxml2::XMLElement* element, fla::SymbolInstanc
     instance->libraryItemName = getAttribute(element, "libraryItemName");
     instance->name = getAttribute(element, "name");
     instance->blendMode = getAttribute(element, "blendMode");
+    // "normal" is what no blend mode means; Animate leaves it out.
+    if (instance->blendMode == "normal")
+        instance->blendMode.clear();
     instance->firstFrame = getIntAttribute(element, "firstFrame", 0);
 
     std::string symbolType = getAttribute(element, "symbolType", "graphic");
@@ -746,8 +753,9 @@ bool parseSymbolInstance(const tinyxml2::XMLElement* element, fla::SymbolInstanc
     }
     else
     {
-        std::cerr << "Unknown symbol type: " << symbolType << (_currentFile.empty() ? "" : " from ") << _currentFile << std::endl;
-        instance->symbolType = fla::SymbolType::Graphic; // Default to graphic
+        // Drawn as a graphic, the type kept as spelled for the save.
+        instance->symbolType = fla::SymbolType::Graphic;
+        instance->otherSymbolType = symbolType;
     }
 
     // XFL may use "loop" or "loopType" for the loop mode
@@ -1254,8 +1262,29 @@ bool parseMorphShape(const tinyxml2::XMLElement* element, fla::MorphShape* morph
     return true;
 }
 
+std::string elementText(const tinyxml2::XMLElement* element);
+
+/// The attributes of DOMFrame the reader models; any others are kept.
+bool isModeledFrameAttribute(const char* name)
+{
+    static const char* const known[] = {"index", "duration", "keyMode", "name", "labelType", "tweenType",
+        "motionTweenSnap", "motionTWeenSnap", "motionTweenSync", "acceleration", "hasCustomEase",
+        "motionTweenRotate", "motionTweenRotateTimes"};
+    for (const char* k : known)
+        if (std::strcmp(k, name) == 0)
+            return true;
+    return false;
+}
+
 bool parseFrame(const tinyxml2::XMLElement* element, fla::Frame* frame)
 {
+    for (const tinyxml2::XMLAttribute* attribute = element->FirstAttribute(); attribute;
+         attribute = attribute->Next())
+    {
+        if (!isModeledFrameAttribute(attribute->Name()))
+            frame->extraAttributes.emplace_back(attribute->Name(), attribute->Value());
+    }
+
     frame->index = getIntAttribute(element, "index");
     frame->duration = getIntAttribute(element, "duration", 1);
     frame->keyMode = getAttribute(element, "keyMode");
@@ -1351,7 +1380,8 @@ bool parseFrame(const tinyxml2::XMLElement* element, fla::Frame* frame)
         }
         else
         {
-            std::cerr << "!!!! Unhandled frame element: " << tagName << (_currentFile.empty() ? "" : " from ") << _currentFile << std::endl;
+            // Kept as read (a sound's SoundEnvelope, say) and written back.
+            frame->extraChildren.push_back(elementText(childElement));
         }
     }
     return true;
@@ -1691,7 +1721,21 @@ bool parseMedia(const tinyxml2::XMLElement* element, fla::Document* document, Zi
         }
         else
         {
-            std::cerr << "!!!! Unhandled media element: " << childElement->Name() << std::endl;
+            // A sound or video item: kept as read, with the data files it
+            // names, so a save writes them back.
+            document->extraMedia.push_back(elementText(childElement));
+            for (const tinyxml2::XMLAttribute* attribute = childElement->FirstAttribute(); attribute;
+                 attribute = attribute->Next())
+            {
+                const std::string name = attribute->Name();
+                std::string path;
+                if (name.size() > 8 && name.compare(name.size() - 8, 8, "DataHRef") == 0)
+                    path = std::string("bin/") + attribute->Value();
+                else if (name == "href")
+                    path = std::string("LIBRARY/") + attribute->Value();
+                if (!path.empty() && zipReader && zipReader->containsFile(path))
+                    document->extraFiles.emplace_back(path, zipReader->readFile(path));
+            }
         }
     }
     return true;
@@ -1760,7 +1804,8 @@ bool parseSwatchList(const tinyxml2::XMLElement* element, fla::SwatchList* swatc
                 }
                 else
                 {
-                    std::cout << "!!!! Unhandled swatch element: " << swatchElement->Name() << std::endl;
+                    // Other swatch kinds are not modeled; the whole list is kept
+                    // as read and written back, so nothing is lost.
                 }
             }
         }
@@ -1838,12 +1883,17 @@ bool parseDocument(fla::Document* document, const tinyxml2::XMLElement* element,
     document->playOptionsPlayFrameActions = getBoolAttribute(element, "playOptionsPlayFrameActions", false);
 
     // Parse child elements
+    // Whether the timelines have been read yet, so an unmodeled section
+    // goes back in the same place.
+    bool sawTimelines = false;
     for (const tinyxml2::XMLElement* childElement = element->FirstChildElement();
          childElement != nullptr;
          childElement = childElement->NextSiblingElement())
     {
         const char* tagName = childElement->Name();
 
+        if (std::strcmp(tagName, "timelines") == 0)
+            sawTimelines = true;
         if (std::strcmp(tagName, "timelines") == 0)
         {
             if (!parseTimelines(childElement, document->timelines, document))
@@ -1899,7 +1949,22 @@ bool parseDocument(fla::Document* document, const tinyxml2::XMLElement* element,
         }
         else
         {
-            std::cerr << "!!!! Unhandled document element: " << tagName << std::endl;
+            // Kept as read (extended swatch lists, brush definitions, fonts)
+            // and written back, with any package file an Include in it names.
+            document->extraSections.push_back({elementText(childElement), !sawTimelines});
+            std::function<void(const tinyxml2::XMLElement*)> includes = [&](const tinyxml2::XMLElement* node) {
+                for (const tinyxml2::XMLElement* child = node->FirstChildElement(); child; child = child->NextSiblingElement())
+                {
+                    if (std::strcmp(child->Name(), "Include") == 0)
+                    {
+                        const std::string href = getAttribute(child, "href");
+                        if (!href.empty() && zipReader && zipReader->containsFile(href))
+                            document->extraFiles.emplace_back(href, zipReader->readFile(href));
+                    }
+                    includes(child);
+                }
+            };
+            includes(childElement);
         }
     }
 

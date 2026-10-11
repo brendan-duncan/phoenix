@@ -37,10 +37,15 @@ public:
     // Get error message
     std::string errorString() const;
 
+    /// Reads everything from under \a prefix ("folder/"), for an archive
+    /// that holds a document folder rather than the document itself.
+    void setRoot(const std::string& prefix) { _root = prefix; }
+
 private:
     ZipArchive* _zipArchive;
     std::string _path;
     std::string _errorString;
     bool _isOpen;
     bool _isDirectory;
+    std::string _root;
 };

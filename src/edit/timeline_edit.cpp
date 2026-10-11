@@ -89,6 +89,8 @@ Frame* cloneFrame(const Frame& frame, Layer* parent)
     copy->customEase = frame.customEase;
     copy->motionTweenRotate = frame.motionTweenRotate;
     copy->motionTweenRotateTimes = frame.motionTweenRotateTimes;
+    copy->extraAttributes = frame.extraAttributes;
+    copy->extraChildren = frame.extraChildren;
     if (frame.actionScript)
     {
         copy->actionScript = new ActionScript(copy);

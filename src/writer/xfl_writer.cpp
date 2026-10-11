@@ -348,6 +348,8 @@ void XFLWriter::writeStrokeStyle(const StrokeStyle& stroke, XMLElement* parent)
         writeFillStyle(*stroke.fill, fillNode);
         node->InsertEndChild(fillNode);
     }
+    for (const std::string& xml : stroke.extraChildren)
+        appendRawXml(xml, node);
 
     parent->InsertEndChild(node);
 }
@@ -438,7 +440,9 @@ void XFLWriter::writeSymbolInstance(const SymbolInstance& instance, XMLElement* 
     if (instance.blendMode != "normal")
         setString(node, "blendMode", instance.blendMode);
 
-    if (instance.symbolType != SymbolType::Graphic)
+    if (!instance.otherSymbolType.empty())
+        node->SetAttribute("symbolType", instance.otherSymbolType.c_str());
+    else if (instance.symbolType != SymbolType::Graphic)
         node->SetAttribute("symbolType", symbolTypeName(instance.symbolType));
     if (instance.loopType != LoopType::PlayOnce)
         node->SetAttribute("loopType", loopTypeName(instance.loopType));
@@ -814,6 +818,12 @@ void XFLWriter::writeFrame(const Frame& frame, XMLElement* parent)
     if (frame.morphShape)
         writeMorphShape(*frame.morphShape, node);
 
+    // What the reader kept without modeling, back where it was.
+    for (const auto& attribute : frame.extraAttributes)
+        node->SetAttribute(attribute.first.c_str(), attribute.second.c_str());
+    for (const std::string& xml : frame.extraChildren)
+        appendRawXml(xml, node);
+
     XMLElement* elements = doc->NewElement("elements");
     for (const Element* element : frame.elements)
     {
@@ -823,6 +833,20 @@ void XFLWriter::writeFrame(const Frame& frame, XMLElement* parent)
     node->InsertEndChild(elements);
 
     parent->InsertEndChild(node);
+}
+
+bool XFLWriter::appendRawXml(const std::string& xml, XMLElement* parent)
+{
+    if (xml.empty() || !parent)
+        return false;
+    XMLDocument fragment;
+    if (fragment.Parse(xml.c_str(), xml.size()) != tinyxml2::XML_SUCCESS || !fragment.RootElement())
+        return false;
+    tinyxml2::XMLNode* copy = fragment.RootElement()->DeepClone(parent->GetDocument());
+    if (!copy)
+        return false;
+    parent->InsertEndChild(copy);
+    return true;
 }
 
 void XFLWriter::writeLayer(const Layer& layer, XMLElement* parent)
@@ -926,7 +950,7 @@ std::string XFLWriter::writeDocument(const Document& document)
         root->InsertEndChild(folders);
     }
 
-    if (!document.resources.empty())
+    if (!document.resources.empty() || !document.extraMedia.empty())
     {
         XMLElement* media = doc.NewElement("media");
         for (const Resource* resource : document.resources)
@@ -953,6 +977,8 @@ std::string XFLWriter::writeDocument(const Document& document)
             setInt(node, "frameBottom", bitmap->frameBottom, 0);
             media->InsertEndChild(node);
         }
+        for (const std::string& xml : document.extraMedia)
+            appendRawXml(xml, media);
         root->InsertEndChild(media);
     }
 
@@ -968,6 +994,12 @@ std::string XFLWriter::writeDocument(const Document& document)
             symbols->InsertEndChild(include);
         }
         root->InsertEndChild(symbols);
+    }
+
+    for (const Document::RawSection& section : document.extraSections)
+    {
+        if (section.beforeTimelines)
+            appendRawXml(section.xml, root);
     }
 
     XMLElement* timelines = doc.NewElement("timelines");
@@ -1013,6 +1045,11 @@ std::string XFLWriter::writeDocument(const Document& document)
     }
     if (document.scriptList && !appendRaw(document.scriptList->xml, nullptr))
         note("document scripts");
+    for (const Document::RawSection& section : document.extraSections)
+    {
+        if (!section.beforeTimelines)
+            appendRawXml(section.xml, root);
+    }
 
     doc.InsertEndChild(root);
     return toText(doc);

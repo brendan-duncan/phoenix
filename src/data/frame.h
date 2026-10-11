@@ -1,6 +1,10 @@
 #pragma once
 
 #include "dom_element.h"
+
+#include <string>
+#include <utility>
+#include <vector>
 #include "action_script.h"
 #include "element.h"
 #include "morph_shape.h"
@@ -36,6 +40,12 @@ public:
     /// "counter-clockwise", and how many extra whole turns.
     std::string motionTweenRotate;
     int motionTweenRotateTimes = 0;
+
+    /// What the reader does not model, kept so it is written back as read:
+    /// attributes such as a sound's (soundName, soundSync, inPoint44...) and
+    /// child elements such as its SoundEnvelope, as XML text.
+    std::vector<std::pair<std::string, std::string>> extraAttributes;
+    std::vector<std::string> extraChildren;
 
     ActionScript* actionScript = nullptr;
     MorphShape* morphShape = nullptr;

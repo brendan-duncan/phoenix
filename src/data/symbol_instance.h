@@ -28,6 +28,11 @@ public:
     /// Empty is normal.
     std::string blendMode;
 
+    /// A symbol type the reader does not model ("puppet", for a rigged
+    /// asset), kept as spelled so it is written back; the instance draws as
+    /// a graphic meanwhile.
+    std::string otherSymbolType;
+
     /// The filters applied to the instance, in order.
     std::vector<Filter> filters;
 

@@ -37,6 +37,21 @@ fla::FLADocument* FLAParser::parse(const std::string& filePath)
         return nullptr;
     }
 
+    // An archive of a document folder rather than of the document: the
+    // folder's DOMDocument.xml one level down.
+    if (!zipReader.containsFile("DOMDocument.xml"))
+    {
+        for (const std::string& name : zipReader.getFileList())
+        {
+            const size_t slash = name.find('/');
+            if (slash != std::string::npos && name.compare(slash + 1, std::string::npos, "DOMDocument.xml") == 0)
+            {
+                zipReader.setRoot(name.substr(0, slash + 1));
+                break;
+            }
+        }
+    }
+
     if (!zipReader.containsFile("DOMDocument.xml"))
     {
         // Handle missing XML file in zip

@@ -601,6 +601,42 @@ TEST(xfl_round_trips_procedural_stroke_settings)
     CHECK(written.find("waveHeight=\"wild\"") != std::string::npos);
 }
 
+TEST(xfl_keeps_what_it_does_not_model)
+{
+    // Sound in the library and on a frame, extended swatches and brush
+    // definitions: none of it modeled, all of it written back as read.
+    std::unique_ptr<fla::Document> document = parseDocumentText(
+        "<DOMDocument xmlns='http://ns.adobe.com/xfl/2008/' width='550' height='400'>"
+        "<brushdefinitions><Include href='PaintBrushDefinitions.xml'/></brushdefinitions>"
+        "<media><DOMSoundItem name='beat.mp3' href='beat.mp3' soundDataHRef='Media 2.dat' format='44kHz 16bit Stereo'/></media>"
+        "<timelines><DOMTimeline name='Scene 1'><layers>"
+        "<DOMLayer name='Sound'><frames>"
+        "<DOMFrame index='0' duration='40' keyMode='9728' soundName='beat.mp3' soundSync='stream' inPoint44='100'>"
+        "<SoundEnvelope><SoundEnvelopePoint level0='32768' level1='32768'/></SoundEnvelope>"
+        "<elements/></DOMFrame>"
+        "</frames></DOMLayer>"
+        "</layers></DOMTimeline></timelines>"
+        "<extendedSwatchLists><swatchList><swatchListInfo name='Default Swatches'/></swatchList></extendedSwatchLists>"
+        "</DOMDocument>");
+    CHECK(document != nullptr);
+    if (!document)
+        return;
+    XFLWriter writer;
+    const std::string written = writer.writeDocument(*document);
+    CHECK(written.find("<DOMSoundItem name=\"beat.mp3\"") != std::string::npos);
+    CHECK(written.find("soundName=\"beat.mp3\"") != std::string::npos);
+    CHECK(written.find("soundSync=\"stream\"") != std::string::npos);
+    CHECK(written.find("inPoint44=\"100\"") != std::string::npos);
+    CHECK(written.find("<SoundEnvelopePoint level0=\"32768\"") != std::string::npos);
+    CHECK(written.find("<extendedSwatchLists>") != std::string::npos);
+    CHECK(written.find("<brushdefinitions>") != std::string::npos);
+    // Each where Animate puts it: brushes before the timelines, the
+    // extended swatches after, the envelope before the frame's elements.
+    CHECK(written.find("<brushdefinitions>") < written.find("<timelines>"));
+    CHECK(written.find("<extendedSwatchLists>") > written.find("</timelines>"));
+    CHECK(written.find("<SoundEnvelope>") < written.find("<elements"));
+}
+
 TEST(xfl_round_trips_shapes)
 {
     checkRoundTrip(

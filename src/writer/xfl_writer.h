@@ -52,6 +52,10 @@ public:
     /// Serializes \a document as the text of DOMDocument.xml.
     std::string writeDocument(const Document& document);
 
+    /// Parses \a xml, a whole element as text, and appends a copy of it to
+    /// \a parent. False when it does not parse.
+    static bool appendRawXml(const std::string& xml, tinyxml2::XMLElement* parent);
+
     /// Serializes \a symbol as the text of its file under LIBRARY/.
     std::string writeSymbol(const Symbol& symbol);
 

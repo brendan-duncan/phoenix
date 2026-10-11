@@ -70,6 +70,7 @@ Element* cloneElement(const Element& element, DOMElement* parent)
         copy->loopType = instance.loopType;
         copy->colorTransform = instance.colorTransform;
         copy->blendMode = instance.blendMode;
+        copy->otherSymbolType = instance.otherSymbolType;
         copy->filters = instance.filters;
         copy->symbol = instance.symbol;
         return copy;
