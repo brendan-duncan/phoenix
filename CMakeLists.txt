@@ -56,6 +56,7 @@ set(HEADERS
     src/gui/main_window.h
     src/gui/properties_panel.h
     src/gui/library_panel.h
+    src/gui/new_document_dialog.h
     src/gui/hot_text.h
     src/gui/convert_to_symbol_dialog.h
     src/gui/phoenix_view.h
@@ -169,6 +170,7 @@ set(SOURCES
     src/gui/main_window.cpp
     src/gui/properties_panel.cpp
     src/gui/library_panel.cpp
+    src/gui/new_document_dialog.cpp
     src/gui/hot_text.cpp
     src/gui/convert_to_symbol_dialog.cpp
     src/gui/phoenix_view.cpp

@@ -2,6 +2,7 @@
 #include "convert_to_symbol_dialog.h"
 #include "lines_to_fills.h"
 #include "fill_offset.h"
+#include "new_document_dialog.h"
 #include "../data/bitmap_instance.h"
 #include "draw_placement.h"
 #include "library_panel.h"
@@ -310,9 +311,27 @@ void MainWindow::newFile()
     if (!confirmDiscardChanges())
         return;
 
+    // Animate's New Document dialog: a preset, or a size and frame rate.
+    NewDocumentDialog dialog(this);
+    if (dialog.exec() != QDialog::Accepted)
+        return;
+    fla::FLADocument* document = fla::createEmptyDocument(dialog.documentWidth(), dialog.documentHeight(),
+        dialog.frameRate());
+    if (document && document->document)
+    {
+        const QColor stage = dialog.stageColor();
+        document->document->backgroundColor[0] = static_cast<uint8_t>(stage.red());
+        document->document->backgroundColor[1] = static_cast<uint8_t>(stage.green());
+        document->document->backgroundColor[2] = static_cast<uint8_t>(stage.blue());
+        document->document->backgroundColor[3] = 255;
+    }
+
     // No path: the first Save has to ask where to put it, which saveFile()
     // already does by falling through to Save As.
-    adoptDocument(fla::createEmptyDocument(), QString(), "Untitled");
+    adoptDocument(document, QString(), "Untitled");
+    // The new stage, fitted to the view.
+    if (_phoenixView)
+        QTimer::singleShot(0, this, [this]() { _phoenixView->zoomToFit(); });
 }
 
 void MainWindow::loadFLAFile(const QString& filePath)

@@ -1367,6 +1367,10 @@ laid out for convenience rather than to match Animate.
       takes space Animate does not give it; it should fold away
   - Done 2026-10-10: a fold arrow at the left of the breadcrumb row, View > Outliner (ctrl+alt+O) and dragging the splitter to the edge all hide it; the arrow or the menu brings it back at the width it had. Whether it is shown and its width are remembered between sessions
 
+- [x] **New Document dialog.** File > New made a 1920x1080 document at
+      24 fps with no choice; Animate asks, with presets by purpose
+  - Done 2026-10-10 (`src/gui/new_document_dialog.cpp`): categories down the left (Character Animation, Social, Game, Education, Ads, Web, Advanced) with Animate's presets as tiles drawn in the stage's shape (Full HD, HD, 4K, Standard, Instagram, Story, ad sizes, PAL, NTSC, 23.976 film and more), and details on the right: width, height, a frame rate list that also takes a typed rate, and the stage color. Picking a tile fills in the details; editing them shows Custom; double-clicking a tile creates straight away. The last choice is remembered, and the new stage is fitted to the view. Checked on screen: Social > Instagram Story, then Advanced > 4K UHD created a 3840 x 2160 document at 30 fps
+
 ### Timeline editing, onion skin, library
 
 Added 2026-10-10: the panels looked like Animate's but the timeline could
