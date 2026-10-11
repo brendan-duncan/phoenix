@@ -76,6 +76,9 @@ private slots:
 
     void exportSvg();
     void exportMovie();
+    /// Shows and edits the scene at index (counting from 0) on its first
+    /// frame, leaving any symbol being edited.
+    void goToScene(int index);
 
     void openRecentFile();
     

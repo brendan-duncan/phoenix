@@ -1664,8 +1664,8 @@ fla::Frame* PropertiesPanel::currentFrame(fla::Layer** layerOut) const
     if (!timeline)
     {
         fla::Document* doc = document();
-        if (doc && !doc->timelines.empty())
-            timeline = doc->timelines.front();
+        if (doc)
+            timeline = doc->currentScene();
     }
     if (!timeline)
         return nullptr;

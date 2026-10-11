@@ -38,7 +38,7 @@ static int getMaxFrames(const fla::FLADocument* doc)
     if (!doc || !doc->document)
         return 0;
     int maxFrame = 0;
-    for (const fla::Timeline* timeline : doc->document->timelines)
+    if (const fla::Timeline* timeline = doc->document->currentScene())
     {
         for (const fla::Layer* layer : timeline->layers)
         {
@@ -327,8 +327,8 @@ std::vector<const fla::Timeline*> TimelineGrid::shownTimelines() const
     }
     if (_flaDocument && _flaDocument->document)
     {
-        for (const fla::Timeline* timeline : _flaDocument->document->timelines)
-            timelines.push_back(timeline);
+        if (const fla::Timeline* scene = _flaDocument->document->currentScene())
+            timelines.push_back(scene);
     }
     return timelines;
 }

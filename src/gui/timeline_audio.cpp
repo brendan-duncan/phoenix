@@ -156,7 +156,7 @@ std::vector<float> TimelineAudio::mixdown(int first, int last)
     for (int frame = first; frame <= last; ++frame)
     {
         const size_t here = at(frame);
-        for (const fla::Timeline* timeline : doc->timelines)
+        for (const fla::Timeline* timeline : {static_cast<const fla::Timeline*>(doc->currentScene())})
         {
             for (const fla::Layer* layer : timeline ? timeline->layers : std::vector<fla::Layer*>())
             {
@@ -285,7 +285,7 @@ void TimelineAudio::onFrameChanged(int frame)
     }
 
     std::map<const fla::Frame*, int> stillStreaming;
-    for (const fla::Timeline* timeline : doc->timelines)
+    for (const fla::Timeline* timeline : {static_cast<const fla::Timeline*>(doc->currentScene())})
     {
         if (!timeline)
             continue;

@@ -360,8 +360,8 @@ std::vector<fla::Timeline*> LayersPanel::shownTimelines() const
     }
     if (_flaDocument && _flaDocument->document)
     {
-        for (fla::Timeline* timeline : _flaDocument->document->timelines)
-            timelines.push_back(timeline);
+        if (fla::Timeline* scene = _flaDocument->document->currentScene())
+            timelines.push_back(scene);
     }
     return timelines;
 }

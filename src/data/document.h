@@ -28,6 +28,7 @@ public:
     int width = 550;
     int height = 400;
     double frameRate = 24.0;
+    /// The scene shown and edited, counting from 1, as text.
     std::string currentTimeline;
     std::string xflVersion;
     std::string creatorInfo;
@@ -95,6 +96,17 @@ public:
     Document(DOMElement* parent)
         : DOMElement(parent)
     {}
+
+    /// The index in timelines of the scene shown and edited: the one
+    /// currentTimeline names, else the first. Animate shows one scene at a
+    /// time; the scenes play one after another.
+    int currentSceneIndex() const;
+
+    /// The scene shown and edited; null with no scenes.
+    Timeline* currentScene() const;
+
+    /// Makes the scene at \a index the one shown and edited.
+    void setCurrentScene(int index);
 
     ~Document() override;
 

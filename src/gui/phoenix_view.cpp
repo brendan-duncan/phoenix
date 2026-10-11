@@ -806,13 +806,10 @@ void PhoenixView::drawDocument(QPainter& painter, const fla::Document* document)
     if (!document->visible)
         return;
 
-    for (const fla::Timeline* timeline : document->timelines)
-    {
-        if (timeline->visible)
-        {
-            drawTimeline(painter, timeline);
-        }
-    }
+    // One scene at a time, as Animate shows them.
+    const fla::Timeline* scene = document->currentScene();
+    if (scene && scene->visible)
+        drawTimeline(painter, scene);
 }
 
 void PhoenixView::drawTimeline(QPainter& painter, const fla::Timeline* timeline, fla::LoopType loopType, int firstFrame)
@@ -4327,8 +4324,8 @@ std::vector<const fla::Timeline*> PhoenixView::editableTimelines() const
 
     if (_flaDocument && _flaDocument->document)
     {
-        for (const fla::Timeline* timeline : _flaDocument->document->timelines)
-            timelines.push_back(timeline);
+        if (const fla::Timeline* scene = _flaDocument->document->currentScene())
+            timelines.push_back(scene);
     }
     return timelines;
 }
@@ -4344,7 +4341,7 @@ QString PhoenixView::scopeName(int depth) const
     {
         if (_flaDocument && _flaDocument->document && !_flaDocument->document->timelines.empty())
         {
-            const std::string& name = _flaDocument->document->timelines.front()->name;
+            const std::string& name = _flaDocument->document->currentScene()->name;
             if (!name.empty())
                 return QString::fromStdString(name);
         }
@@ -4490,7 +4487,7 @@ fla::Timeline* PhoenixView::guideTimeline() const
 {
     if (!_flaDocument || !_flaDocument->document || _flaDocument->document->timelines.empty())
         return nullptr;
-    return _flaDocument->document->timelines.front();
+    return _flaDocument->document->currentScene();
 }
 
 std::vector<double>& PhoenixView::guidesX()
@@ -4845,7 +4842,7 @@ int PhoenixView::frameCount() const
 {
     const fla::Timeline* timeline = scopeTimeline();
     if (!timeline && _flaDocument && _flaDocument->document && !_flaDocument->document->timelines.empty())
-        timeline = _flaDocument->document->timelines.front();
+        timeline = _flaDocument->document->currentScene();
     if (!timeline)
         return 0;
     int count = 0;
@@ -5220,10 +5217,8 @@ void PhoenixView::drawTimelineBounds(QPainter& painter, const fla::Timeline* tim
 
 void PhoenixView::drawDocumentBounds(QPainter& painter, const fla::Document* document)
 {
-    for (const fla::Timeline* timeline : document->timelines)
-    {
-        drawTimelineBounds(painter, timeline);
-    }
+    if (const fla::Timeline* scene = document->currentScene())
+        drawTimelineBounds(painter, scene);
 }
 
 void PhoenixView::applyColorTransform(QImage& image, const fla::ColorTransform& colorTransform)

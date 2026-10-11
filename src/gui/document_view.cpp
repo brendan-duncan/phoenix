@@ -359,7 +359,7 @@ void DocumentView::buildDocumentTree()
     // Add main timeline
     if (!_flaDocument->document->timelines.empty())
     {
-        const fla::Timeline* mainTimeline = _flaDocument->document->timelines[0];
+        const fla::Timeline* mainTimeline = _flaDocument->document->currentScene();
         buildTimelineTree(docItem, mainTimeline, true);
     }
 

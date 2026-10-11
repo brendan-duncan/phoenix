@@ -564,7 +564,7 @@ fla::Timeline* MainWindow::editedTimeline() const
     if (_phoenixView && _phoenixView->scopeTimeline())
         return _phoenixView->scopeTimeline();
     if (_flaDocument && _flaDocument->document && !_flaDocument->document->timelines.empty())
-        return _flaDocument->document->timelines.front();
+        return _flaDocument->document->currentScene();
     return nullptr;
 }
 
@@ -1197,6 +1197,49 @@ void MainWindow::setupMenus()
     // View menu
     QMenu* viewMenu = menuBar->addMenu("&View");
 
+    // Animate shows one scene at a time; these pick which.
+    QMenu* sceneMenu = viewMenu->addMenu("&Scene");
+    connect(sceneMenu, &QMenu::aboutToShow, this, [this, sceneMenu]() {
+        sceneMenu->clear();
+        const fla::Document* document = _flaDocument ? _flaDocument->document : nullptr;
+        const int count = document ? static_cast<int>(document->timelines.size()) : 0;
+        const int current = document ? document->currentSceneIndex() : -1;
+        // The shortcuts belong to the window's own actions below; here they
+        // are only shown.
+        QAction* previous = sceneMenu->addAction("&Previous Scene\tShift+PgUp", this,
+            [this, current]() { goToScene(current - 1); });
+        previous->setEnabled(current > 0);
+        QAction* next = sceneMenu->addAction("&Next Scene\tShift+PgDown", this,
+            [this, current]() { goToScene(current + 1); });
+        next->setEnabled(current >= 0 && current + 1 < count);
+        if (count > 0)
+            sceneMenu->addSeparator();
+        for (int i = 0; i < count; ++i)
+        {
+            const std::string& name = document->timelines[static_cast<size_t>(i)]->name;
+            QAction* scene = sceneMenu->addAction(
+                name.empty() ? QString("Scene %1").arg(i + 1) : QString::fromStdString(name), this,
+                [this, i]() { goToScene(i); });
+            scene->setCheckable(true);
+            scene->setChecked(i == current);
+        }
+    });
+    // The shortcuts work with the menu closed too.
+    QAction* previousScene = new QAction(this);
+    previousScene->setShortcut(QKeySequence(Qt::SHIFT | Qt::Key_PageUp));
+    connect(previousScene, &QAction::triggered, this, [this]() {
+        if (_flaDocument && _flaDocument->document)
+            goToScene(_flaDocument->document->currentSceneIndex() - 1);
+    });
+    addAction(previousScene);
+    QAction* nextScene = new QAction(this);
+    nextScene->setShortcut(QKeySequence(Qt::SHIFT | Qt::Key_PageDown));
+    connect(nextScene, &QAction::triggered, this, [this]() {
+        if (_flaDocument && _flaDocument->document)
+            goToScene(_flaDocument->document->currentSceneIndex() + 1);
+    });
+    addAction(nextScene);
+
     _outlinerAction = new QAction("Ou&tliner", this);
     _outlinerAction->setCheckable(true);
     _outlinerAction->setChecked(_outlinerVisible);
@@ -1602,6 +1645,33 @@ void MainWindow::exportSvg()
         QMessageBox::warning(this, "Export Failed",
             QString("Failed to export SVG to:\n%1").arg(fileName));
     }
+}
+
+void MainWindow::goToScene(int index)
+{
+    fla::Document* document = _flaDocument ? _flaDocument->document : nullptr;
+    if (!document || index < 0 || index >= static_cast<int>(document->timelines.size()) ||
+        index == document->currentSceneIndex())
+    {
+        return;
+    }
+    if (_phoenixView)
+        _phoenixView->exitToDepth(0);
+    _selection.clear();
+    document->setCurrentScene(index);
+    if (_player)
+        _player->setCurrentFrame(0);
+    if (_timelineView)
+        _timelineView->setDocument(_flaDocument);
+    if (_documentView)
+        _documentView->setDocument(_flaDocument);
+    if (_phoenixView)
+    {
+        _phoenixView->clearCaches();
+        _phoenixView->update();
+    }
+    rebuildBreadcrumb();
+    updateSelectionState();
 }
 
 int MainWindow::exportFromCommandLine(const QString& source, const QString& output)
