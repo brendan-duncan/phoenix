@@ -99,7 +99,7 @@ MainWindow::MainWindow(const QString& initialFile, QWidget* parent)
     , _updater(new Updater(this))
     , _recentFilesMenu(nullptr)
 {
-    setWindowTitle("Phoenix - FLA Viewer");
+    setWindowTitle(QString("Phoenix %1").arg(QCoreApplication::applicationVersion()));
 
     QCoreApplication::setOrganizationName("Phoenix");
     QCoreApplication::setApplicationName("FLAViewer");
@@ -1591,6 +1591,9 @@ void MainWindow::updateWindowTitle()
 {
     if (_documentName.isEmpty())
     {
+    // "Phoenix 0.2.0 - D:\fla\file.fla", with the full path of a saved
+    // document and the name of one not saved yet, and a * for unsaved changes.
+    const QString app = QString("Phoenix %1").arg(QCoreApplication::applicationVersion());
         setWindowTitle("Phoenix - FLA Viewer");
         return;
     }
