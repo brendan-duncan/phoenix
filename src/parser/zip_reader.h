@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstdint>
+#include <map>
 #include <string>
 #include <vector>
 
@@ -15,6 +16,10 @@ public:
 
     // Open a zip file
     bool open(const std::string& zipFilePath);
+
+    /// Serves the files given, by name, as though read from an archive:
+    /// a document converted in memory, as an old binary FLA is.
+    void openMemory(std::map<std::string, std::vector<uint8_t>> files);
 
     // Close the zip file
     void close();
@@ -47,5 +52,7 @@ private:
     std::string _errorString;
     bool _isOpen;
     bool _isDirectory;
+    bool _isMemory = false;
+    std::map<std::string, std::vector<uint8_t>> _memory;
     std::string _root;
 };

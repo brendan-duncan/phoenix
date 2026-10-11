@@ -36,6 +36,7 @@
 #include <algorithm>
 
 #include <QApplication>
+#include <QPushButton>
 #include <QCloseEvent>
 #include <QDragEnterEvent>
 #include <QDropEvent>
@@ -1502,6 +1503,7 @@ bool MainWindow::saveToPath(const QString& filePath)
     _documentPath = filePath;
     _documentName = QFileInfo(filePath).fileName();
     _editContext.markSaved();
+    _flaDocument->fromBinary = false;
     updateEditState();
     addToRecentFiles(filePath);
     statusBar()->showMessage(QString("Saved %1").arg(filePath), 5000);
@@ -1514,6 +1516,28 @@ void MainWindow::saveFile()
     {
         saveFileAs();
         return;
+    }
+
+    // Saving writes the current format, which Flash CS4 and earlier cannot
+    // open, so an old binary document is not replaced without asking.
+    if (_flaDocument && _flaDocument->fromBinary)
+    {
+        QMessageBox box(QMessageBox::Question, "Save",
+            "This document was opened from the Flash CS4 (or earlier) format. Phoenix saves the current "
+            "format, which Flash CS4 and earlier cannot open.",
+            QMessageBox::NoButton, this);
+        QPushButton* saveAs = box.addButton("Save As...", QMessageBox::AcceptRole);
+        QPushButton* replace = box.addButton("Replace", QMessageBox::DestructiveRole);
+        box.addButton(QMessageBox::Cancel);
+        box.setDefaultButton(saveAs);
+        box.exec();
+        if (box.clickedButton() == saveAs)
+        {
+            saveFileAs();
+            return;
+        }
+        if (box.clickedButton() != replace)
+            return;
     }
 
     saveToPath(_documentPath);

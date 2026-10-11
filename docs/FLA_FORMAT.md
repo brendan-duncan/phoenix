@@ -19,7 +19,7 @@ A document comes in one of three containers:
 | --- | --- |
 | `.fla` (CS5 and later) | A ZIP archive of the XFL package below |
 | XFL folder | The same package as loose files, marked by a `<name>.xfl` file |
-| `.fla` (CS4 and earlier) | A Microsoft compound document (signature `D0 CF 11 E0 A1 B1 1A E1`) holding an undocumented binary format. Phoenix recognizes it and says to resave it in Animate; it cannot read it |
+| `.fla` (CS4 and earlier) | A Microsoft compound document (signature `D0 CF 11 E0 A1 B1 1A E1`) holding an undocumented binary format of MFC-serialized objects. Phoenix converts it to XFL in memory and reads that; see [BINARY_FLA_FORMAT.md](BINARY_FLA_FORMAT.md) |
 
 ### Package contents
 

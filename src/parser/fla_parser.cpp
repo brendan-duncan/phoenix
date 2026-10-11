@@ -1,5 +1,7 @@
 #include "fla_parser.h"
 
+#include "binary_fla.h"
+#include "compound_file.h"
 #include "document_parser.h"
 #include "zip_reader.h"
 #include <algorithm>
@@ -11,26 +13,35 @@ using namespace fla;
 fla::FLADocument* FLAParser::parse(const std::string& filePath)
 {
     // A .fla from Flash CS4 or earlier is not a zip at all but a Microsoft
-    // compound document holding a binary format, which this reader does
-    // not understand. Say so plainly rather than as a broken zip.
+    // compound document holding a binary format: it is converted to the
+    // files of an XFL document, which are then read as any other.
+    ZipReader zipReader;
+    bool fromBinary = false;
     {
         std::ifstream file(filePath, std::ios::binary);
         unsigned char magic[8] = {};
-        if (file.read(reinterpret_cast<char*>(magic), sizeof(magic)))
+        const unsigned char compound[8] = {0xD0, 0xCF, 0x11, 0xE0, 0xA1, 0xB1, 0x1A, 0xE1};
+        if (file.read(reinterpret_cast<char*>(magic), sizeof(magic)) && std::equal(magic, magic + 8, compound))
         {
-            const unsigned char compound[8] = {0xD0, 0xCF, 0x11, 0xE0, 0xA1, 0xB1, 0x1A, 0xE1};
-            if (std::equal(magic, magic + 8, compound))
+            file.seekg(0, std::ios::end);
+            std::vector<uint8_t> data(static_cast<size_t>(file.tellg()));
+            file.seekg(0, std::ios::beg);
+            file.read(reinterpret_cast<char*>(data.data()), static_cast<std::streamsize>(data.size()));
+            CompoundFile compoundFile;
+            if (!compoundFile.read(data))
             {
-                _errorString = "This is a Flash CS4 (or earlier) document, saved in the old binary "
-                    "format, which Phoenix cannot read. Open it in Animate and save it again to "
-                    "convert it to the current format.";
+                _errorString = "This Flash CS4 (or earlier) document is damaged: " + compoundFile.errorString();
                 return nullptr;
             }
+            std::map<std::string, std::vector<uint8_t>> files;
+            if (!BinaryFla::convert(compoundFile.streams(), files, _errorString))
+                return nullptr;
+            zipReader.openMemory(std::move(files));
+            fromBinary = true;
         }
     }
 
-    ZipReader zipReader;
-    if (!zipReader.open(filePath))
+    if (!zipReader.isOpen() && !zipReader.open(filePath))
     {
         // Handle error opening zip file
         _errorString = "Failed to open zip file: " + zipReader.errorString();
@@ -68,6 +79,7 @@ fla::FLADocument* FLAParser::parse(const std::string& filePath)
 
     FLADocument* flaDocument = new FLADocument(nullptr);
     flaDocument->filepath = filePath;
+    flaDocument->fromBinary = fromBinary;
 
     DocumentParser parser(&zipReader);
     flaDocument->document = parser.parse(documentFile, flaDocument);

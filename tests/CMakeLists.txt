@@ -113,6 +113,7 @@ set(TEST_SOURCES
     test_ik_tree.cpp
     test_ik_pose.cpp
     test_fill_tracing.cpp
+    test_binary_fla.cpp
     test_motion_object.cpp
     test_asset_warp.cpp
     test_property_command.cpp
@@ -128,6 +129,8 @@ if(TARGET tinyxml2 AND TARGET zlibstatic)
         ${PHOENIX_SRC}/parser/document_parser.cpp
         ${PHOENIX_SRC}/parser/ik_tree.cpp
         ${PHOENIX_SRC}/parser/fla_parser.cpp
+        ${PHOENIX_SRC}/parser/binary_fla.cpp
+        ${PHOENIX_SRC}/parser/compound_file.cpp
         ${PHOENIX_SRC}/parser/zip_reader.cpp
         ${PHOENIX_SRC}/util/zip_archive.cpp
         ${PHOENIX_SRC}/util/zip_writer.cpp

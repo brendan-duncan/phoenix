@@ -77,6 +77,14 @@ bool ZipReader::open(const std::string& zipFilePath)
     return true;
 }
 
+void ZipReader::openMemory(std::map<std::string, std::vector<uint8_t>> files)
+{
+    close();
+    _memory = std::move(files);
+    _isMemory = true;
+    _isOpen = true;
+}
+
 void ZipReader::close()
 {
     if (_zipArchive)
@@ -86,11 +94,13 @@ void ZipReader::close()
     }
     _isOpen = false;
     _isDirectory = false;
+    _isMemory = false;
+    _memory.clear();
 }
 
 bool ZipReader::isOpen() const
 {
-    return _isOpen && (_zipArchive || _isDirectory);
+    return _isOpen && (_zipArchive || _isDirectory || _isMemory);
 }
 
 std::vector<std::string> ZipReader::getFileList() const
@@ -99,6 +109,13 @@ std::vector<std::string> ZipReader::getFileList() const
 
     if (!isOpen())
     {
+        return fileList;
+    }
+
+    if (_isMemory)
+    {
+        for (const auto& entry : _memory)
+            fileList.push_back(entry.first);
         return fileList;
     }
 
@@ -139,6 +156,12 @@ std::vector<uint8_t> ZipReader::readFile(const std::string& fileName) const
     if (!isOpen())
     {
         return std::vector<uint8_t>();
+    }
+
+    if (_isMemory)
+    {
+        const auto found = _memory.find(fileName);
+        return found != _memory.end() ? found->second : std::vector<uint8_t>();
     }
 
     if (_isDirectory)
@@ -183,6 +206,9 @@ bool ZipReader::containsFile(const std::string& fileName) const
 {
     if (!isOpen())
         return false;
+
+    if (_isMemory)
+        return _memory.count(fileName) != 0;
 
     if (_isDirectory)
     {

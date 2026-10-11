@@ -10,6 +10,9 @@ class FLADocument : public DOMElement
 public:
     std::string filepath;
     Document* document = nullptr;
+    /// Read from a Flash CS4 (or earlier) binary .fla, which saving would
+    /// replace with the current format.
+    bool fromBinary = false;
 
     FLADocument(DOMElement* parent)
         : DOMElement(parent)

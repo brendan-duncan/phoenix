@@ -112,6 +112,8 @@ set(HEADERS
     src/parser/ik_tree.h
     src/parser/zip_reader.h
     src/parser/fla_parser.h
+    src/parser/binary_fla.h
+    src/parser/compound_file.h
     src/parser/path_parser.h
     src/data/action_script.h
     src/data/bitmap.h
@@ -244,6 +246,8 @@ set(SOURCES
     src/parser/ik_tree.cpp
     src/parser/zip_reader.cpp
     src/parser/fla_parser.cpp
+    src/parser/binary_fla.cpp
+    src/parser/compound_file.cpp
     src/parser/path_parser.cpp
     src/data/action_script.cpp
     src/data/bitmap.cpp
