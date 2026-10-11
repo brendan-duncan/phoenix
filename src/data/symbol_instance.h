@@ -39,6 +39,10 @@ public:
     /// center point, cacheAsBitmap, a button's trackAsMenu...
     std::vector<std::pair<std::string, std::string>> extraAttributes;
 
+    /// Child elements read but not modeled, as XML text, written back after
+    /// the rest: a button's or a movie clip's Actionscript...
+    std::vector<std::string> extraChildren;
+
     /// The filters applied to the instance, in order.
     std::vector<Filter> filters;
 

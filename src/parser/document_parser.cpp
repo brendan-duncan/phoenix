@@ -729,7 +729,8 @@ bool parseSymbolInstance(const tinyxml2::XMLElement* element, fla::SymbolInstanc
         }
         else
         {
-            std::cerr << "!!!! Unhandled SymbolInstance element: " << tagName << (_currentFile.empty() ? "" : " from ") << _currentFile << std::endl;
+            // Kept as written, so a save puts it back: a button's script.
+            instance->extraChildren.push_back(elementText(childElement));
         }
     }
 

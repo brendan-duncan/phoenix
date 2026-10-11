@@ -1151,3 +1151,24 @@ TEST(symbol_instances_keep_their_attributes_and_write_loop_as_animate_does)
     CHECK(written.find("loopType") == std::string::npos);
     CHECK(written.find("libraryItemName=\"B\" symbolType=\"button\" loop") == std::string::npos);
 }
+
+TEST(xfl_keeps_an_instance_script)
+{
+    // A button's script lives on its instance; it goes back on save.
+    std::unique_ptr<fla::Document> document = parseDocumentText(
+        "<DOMDocument xmlns='http://ns.adobe.com/xfl/2008/' width='550' height='400'>"
+        "<timelines><DOMTimeline name='Scene 1'><layers>"
+        "<DOMLayer name='Buttons'><frames><DOMFrame index='0' keyMode='9728'><elements>"
+        "<DOMSymbolInstance libraryItemName='play' symbolType='button'>"
+        "<Actionscript><script><![CDATA[on (release) { play(); }]]></script></Actionscript>"
+        "</DOMSymbolInstance>"
+        "</elements></DOMFrame></frames></DOMLayer>"
+        "</layers></DOMTimeline></timelines></DOMDocument>");
+    CHECK(document != nullptr);
+    if (!document)
+        return;
+    XFLWriter writer;
+    const std::string written = writer.writeDocument(*document);
+    CHECK(written.find("on (release) { play(); }") != std::string::npos);
+    CHECK(written.find("<Actionscript>") < written.find("</DOMSymbolInstance>"));
+}

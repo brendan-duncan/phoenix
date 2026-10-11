@@ -547,6 +547,9 @@ void XFLWriter::writeSymbolInstance(const SymbolInstance& instance, XMLElement* 
         node->InsertEndChild(filters);
     }
 
+    for (const std::string& xml : instance.extraChildren)
+        appendRawXml(xml, node);
+
     parent->InsertEndChild(node);
 }
 
