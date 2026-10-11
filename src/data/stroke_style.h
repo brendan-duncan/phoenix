@@ -56,6 +56,21 @@ public:
     /// back: a variable-width stroke's VariablePointWidth profile, say.
     std::vector<std::string> extraChildren;
 
+    /// A variable-width stroke's profile, read from its VariablePointWidth:
+    /// points along the stroke (0 at its start, 1 at its end), each with
+    /// how far the stroke reaches to its left and to its right there, as a
+    /// fraction of the weight (a half and a half is the plain weight). A
+    /// corner point is where the width changes course sharply. Empty for a
+    /// stroke of even width.
+    struct WidthMarker
+    {
+        double position = 0.0;
+        double left = 0.5;
+        double right = 0.5;
+        bool corner = false;
+    };
+    std::vector<WidthMarker> widthProfile;
+
     FillStyle* fill = nullptr;
 
     bool isHairline() const { return solidStyle == "hairline"; }

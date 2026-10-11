@@ -214,15 +214,107 @@ QPainterPath hatched(const QPainterPath& centerline, const fla::StrokeStyle& sty
 
 } // namespace
 
+/// The stroke's reach to the left and the right, in pixels, a fraction \a t
+/// of the way along it: its profile's points joined smoothly, or straight
+/// into and out of a corner point.
+void widthAt(const fla::StrokeStyle& style, double t, double& left, double& right)
+{
+    const std::vector<fla::StrokeStyle::WidthMarker>& profile = style.widthProfile;
+    const double weight = std::max(style.weight, 0.1);
+    if (t <= profile.front().position)
+    {
+        left = profile.front().left * weight;
+        right = profile.front().right * weight;
+        return;
+    }
+    for (size_t i = 1; i < profile.size(); ++i)
+    {
+        const fla::StrokeStyle::WidthMarker& a = profile[i - 1];
+        const fla::StrokeStyle::WidthMarker& b = profile[i];
+        if (t > b.position)
+            continue;
+        double u = b.position > a.position ? (t - a.position) / (b.position - a.position) : 1.0;
+        if (!a.corner || !b.corner)
+            u = u * u * (3.0 - 2.0 * u);
+        left = (a.left + (b.left - a.left) * u) * weight;
+        right = (a.right + (b.right - a.right) * u) * weight;
+        return;
+    }
+    left = profile.back().left * weight;
+    right = profile.back().right * weight;
+}
+
+/// A variable-width stroke as the area it covers: each subpath walked by
+/// its length, the profile setting how far out to either side each point
+/// lies, the left side out and the right side back.
+QPainterPath variableWidth(const QPainterPath& centerline, const fla::StrokeStyle& style)
+{
+    QPainterPath area;
+    area.setFillRule(Qt::WindingFill);
+    const double step = std::max(0.25, std::min(2.0, style.weight / 4.0));
+    const std::vector<Sample> all = samples(centerline, step);
+    size_t begin = 0;
+    while (begin < all.size())
+    {
+        size_t end = begin + 1;
+        while (end < all.size() && !all[end].start)
+            ++end;
+        if (end - begin >= 2)
+        {
+            std::vector<double> along(end - begin, 0.0);
+            for (size_t i = begin + 1; i < end; ++i)
+            {
+                const QPointF d = all[i].point - all[i - 1].point;
+                along[i - begin] = along[i - begin - 1] + std::hypot(d.x(), d.y());
+            }
+            const double length = std::max(along.back(), 1.0e-9);
+            QPolygonF leftSide;
+            QPolygonF rightSide;
+            for (size_t i = begin; i < end; ++i)
+            {
+                double left = 0.0;
+                double right = 0.0;
+                widthAt(style, along[i - begin] / length, left, right);
+                // Left of the way along, on a page whose y runs down.
+                const QPointF normal(all[i].tangent.y(), -all[i].tangent.x());
+                leftSide << all[i].point + normal * left;
+                rightSide << all[i].point - normal * right;
+            }
+            const QPointF first = all[begin].point;
+            const QPointF last = all[end - 1].point;
+            const bool closed = std::hypot(last.x() - first.x(), last.y() - first.y()) < 1.0e-6;
+            if (closed)
+            {
+                // A ring: the two sides as loops the opposite ways round.
+                area.addPolygon(leftSide);
+                area.closeSubpath();
+                std::reverse(rightSide.begin(), rightSide.end());
+                area.addPolygon(rightSide);
+                area.closeSubpath();
+            }
+            else
+            {
+                std::reverse(rightSide.begin(), rightSide.end());
+                area.addPolygon(leftSide + rightSide);
+                area.closeSubpath();
+            }
+        }
+        begin = end;
+    }
+    return area;
+}
+
 bool isProcedural(const fla::StrokeStyle& style)
 {
     const fla::StrokeStyle::Style kind = style.style();
     return kind == fla::StrokeStyle::Style::Ragged || kind == fla::StrokeStyle::Style::Stipple ||
-        kind == fla::StrokeStyle::Style::Hatched;
+        kind == fla::StrokeStyle::Style::Hatched || !style.widthProfile.empty();
 }
 
 QPainterPath outline(const QPainterPath& centerline, const fla::StrokeStyle& style)
 {
+    if (!style.widthProfile.empty() && style.style() == fla::StrokeStyle::Style::Solid)
+        return variableWidth(centerline, style);
     switch (style.style())
     {
     case fla::StrokeStyle::Style::Ragged: return ragged(centerline, style);

@@ -1378,3 +1378,35 @@ TEST(xfl_save_keeps_animates_defaults_and_values_as_meant)
     CHECK(written.find("<DOMTLFText") > written.find("DOMStaticText") &&
           written.find("<DOMTLFText") < written.find("<DOMShape"));
 }
+
+TEST(variable_width_profiles_are_read_and_kept)
+{
+    std::unique_ptr<fla::Document> document = parseDocumentText(
+        "<DOMDocument xmlns='http://ns.adobe.com/xfl/2008/'><timelines><DOMTimeline name='Scene 1'><layers>"
+        "<DOMLayer name='Layer 1'><frames><DOMFrame index='0'><elements><DOMShape><strokes>"
+        "<StrokeStyle index='1'><SolidStroke weight='2'><fill><SolidColor color='#FFFFCC'/></fill>"
+        "<VariablePointWidth><WidthMarker position='1' left='0' right='0' type='corner'/>"
+        "<WidthMarker position='0' left='0' right='0' type='corner'/><WidthMarker position='0.5' left='0.5' right='0.5'/>"
+        "</VariablePointWidth></SolidStroke></StrokeStyle></strokes>"
+        "<edges><Edge strokeStyle='1' edges='!0 0|2000 0'/></edges></DOMShape>"
+        "</elements></DOMFrame></frames></DOMLayer></layers></DOMTimeline></timelines></DOMDocument>");
+    CHECK(document != nullptr);
+    if (!document)
+        return;
+    const fla::Shape* shape = static_cast<const fla::Shape*>(document->timelines[0]->layers[0]->frames[0]->elements[0]);
+    CHECK(shape->strokes.size() == 1);
+    if (shape->strokes.size() != 1)
+        return;
+    const auto& profile = shape->strokes[0]->widthProfile;
+    // In order along the stroke, whatever order the file gave.
+    CHECK(profile.size() == 3);
+    if (profile.size() == 3)
+    {
+        CHECK(profile[0].position == 0.0 && profile[0].corner);
+        CHECK(profile[1].position == 0.5 && profile[1].left == 0.5 && !profile[1].corner);
+        CHECK(profile[2].position == 1.0);
+    }
+    XFLWriter writer;
+    CHECK(writer.writeDocument(*document).find("<WidthMarker position=\"0.5\" left=\"0.5\" right=\"0.5\"/>") !=
+        std::string::npos);
+}

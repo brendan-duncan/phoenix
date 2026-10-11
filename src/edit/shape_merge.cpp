@@ -99,6 +99,7 @@ StrokeStyle* cloneStroke(const StrokeStyle* stroke, DOMElement* parent)
     copy->dotSpace = stroke->dotSpace;
     copy->styleAttributes = stroke->styleAttributes;
     copy->extraChildren = stroke->extraChildren;
+    copy->widthProfile = stroke->widthProfile;
     copy->fill = cloneFill(stroke->fill, copy);
     return copy;
 }

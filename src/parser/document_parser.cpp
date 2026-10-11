@@ -396,6 +396,24 @@ bool parseStroke(const tinyxml2::XMLElement* element, fla::StrokeStyle* stroke)
         {
             // A variable-width profile and the like: kept and written back.
             stroke->extraChildren.push_back(elementText(childElement));
+            if (std::strcmp(childElement->Name(), "VariablePointWidth") == 0)
+            {
+                for (const tinyxml2::XMLElement* marker = childElement->FirstChildElement("WidthMarker");
+                     marker != nullptr;
+                     marker = marker->NextSiblingElement("WidthMarker"))
+                {
+                    fla::StrokeStyle::WidthMarker point;
+                    point.position = getDoubleAttribute(marker, "position", 0.0);
+                    point.left = getDoubleAttribute(marker, "left", 0.5);
+                    point.right = getDoubleAttribute(marker, "right", 0.5);
+                    point.corner = getAttribute(marker, "type") == "corner";
+                    stroke->widthProfile.push_back(point);
+                }
+                std::sort(stroke->widthProfile.begin(), stroke->widthProfile.end(),
+                    [](const fla::StrokeStyle::WidthMarker& a, const fla::StrokeStyle::WidthMarker& b) {
+                        return a.position < b.position;
+                    });
+            }
         }
     }
     return true;
