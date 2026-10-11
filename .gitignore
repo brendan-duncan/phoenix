@@ -5,3 +5,7 @@ build-*/
 __pycache__/
 aqtinstall.log
 releases/
+
+# Local working notes, kept out of the public repository.
+TODO.md
+PARITY.md
