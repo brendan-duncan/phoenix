@@ -54,6 +54,12 @@ bool moveKeyframe(Layer& layer, int from, int to);
 /// to; false when there is none, or nothing changed.
 bool setTween(Layer& layer, int index, bool classic);
 
+/// Makes the span covering  index a shape tween, which needs a shape on
+/// it and on the keyframe after it. The morph is worked out from the two
+/// shapes when it is first needed. False when it cannot be one, or already
+/// is.
+bool setShapeTween(Layer& layer, int index);
+
 /// The keyframe whose span covers \a index, or null past the end.
 Frame* spanAt(Layer& layer, int index);
 

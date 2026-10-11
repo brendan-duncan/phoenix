@@ -19,6 +19,7 @@
 #include "../data/static_text.h"
 #include "../data/symbol.h"
 #include "../data/symbol_list.h"
+#include "../edit/shape_tween.h"
 
 #include "../third_party/tinyxml2/tinyxml2.h"
 
@@ -822,7 +823,7 @@ void XFLWriter::writeFrame(const Frame& frame, XMLElement* parent)
         node->InsertEndChild(actionScript);
     }
 
-    if (frame.morphShape)
+    if (frame.morphShape && frame.tweenType == TweenType::Shape)
         writeMorphShape(*frame.morphShape, node);
 
     // What the reader kept without modeling, back where it was.
@@ -882,8 +883,18 @@ void XFLWriter::writeLayer(const Layer& layer, XMLElement* parent)
     XMLElement* frames = doc->NewElement("frames");
     for (const Frame* frame : layer.frames)
     {
-        if (frame)
-            writeFrame(*frame, frames);
+        if (!frame)
+            continue;
+        // A shape tween saves the morph its keyframes call for now.
+        if (frame->tweenType == TweenType::Shape)
+        {
+            for (const Frame* end : layer.frames)
+            {
+                if (end && end->index == frame->index + frame->duration)
+                    ensureMorph(const_cast<Frame&>(*frame), *end);
+            }
+        }
+        writeFrame(*frame, frames);
     }
     node->InsertEndChild(frames);
 

@@ -386,8 +386,12 @@ is **twips over 256**. `#9.61` is 0x961 = 2401 twips, so one fraction digit
 weighs 1/16 of a unit, not 1/256. Reading these as ordinary twips makes the
 tween 12.8 times too small. `<morphHintsList>` holds shape hints.
 
-New shape tweens need a MorphShape computed for them. Phoenix plays existing
-ones but can't create them yet.
+New shape tweens need a MorphShape computed for them. Animate's own runs one
+segment per closed outline (fill on the left, so `fillIndex2` holds it),
+starting at the outline's leftmost point. Phoenix builds one the same way
+(`buildMorph` in `src/edit/shape_tween.cpp`) for a tween it creates, and
+again whenever either keyframe's shape is edited; a stored morph is kept
+until then.
 
 ### Object motion tweens
 

@@ -16,6 +16,8 @@
 #include "../data/symbol_instance.h"
 #include "../third_party/tinyxml2/tinyxml2.h"
 #include <cstdint>
+#include "../edit/shape_tween.h"
+
 #include <algorithm>
 #include <functional>
 #include <iostream>
@@ -1509,6 +1511,19 @@ bool parseLayer(const tinyxml2::XMLElement* element, fla::Layer* layer)
         else
         {
             std::cerr << "!!!! Unhandled layer element: " << childElement->Name() << (_currentFile.empty() ? "" : " from ") << _currentFile << std::endl;
+        }
+    }
+
+    // The morphs the file stored are taken as they are, until an edit to
+    // either keyframe's shape calls for a new one.
+    for (fla::Frame* frame : layer->frames)
+    {
+        if (!frame || frame->tweenType != fla::TweenType::Shape)
+            continue;
+        for (const fla::Frame* end : layer->frames)
+        {
+            if (end && end->index == frame->index + frame->duration)
+                fla::ensureMorph(*frame, *end);
         }
     }
     return true;

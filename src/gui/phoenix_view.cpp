@@ -2767,6 +2767,11 @@ void PhoenixView::drawShape(QPainter& painter, const fla::Shape* shape, const fl
     // its segments' own fills and strokes blended between the keyframes,
     // and drawn through the same path machinery as any shape.
     const fla::Frame* frame = owningFrame(shape);
+    // A tween Phoenix made, or one whose keyframes have been edited since,
+    // has its morph worked out here.
+    const fla::Frame* endFrame = tweenShape ? owningFrame(tweenShape) : nullptr;
+    if (frame && endFrame && frame->tweenType == fla::TweenType::Shape)
+        fla::ensureMorph(const_cast<fla::Frame&>(*frame), *endFrame);
     if (frame && frame->morphShape && frame->tweenType == fla::TweenType::Shape && tweenShape &&
         tweenProgress > 0.0 && tweenProgress < 1.0)
     {

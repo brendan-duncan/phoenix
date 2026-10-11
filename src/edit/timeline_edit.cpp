@@ -1,6 +1,7 @@
 #include "timeline_edit.h"
 
 #include "element_clone.h"
+#include "shape_tween.h"
 
 #include "../data/action_script.h"
 #include "../data/element.h"
@@ -502,6 +503,18 @@ bool setTween(Layer& layer, int index, bool classic)
     if (span->tweenType == TweenType::None)
         return false;
     span->tweenType = TweenType::None;
+    return true;
+}
+
+bool setShapeTween(Layer& layer, int index)
+{
+    Frame* span = spanAt(layer, index);
+    const Frame* next = span ? nextOf(layer, span) : nullptr;
+    const Shape* from = nullptr;
+    const Shape* to = nullptr;
+    if (!next || span->tweenType == TweenType::Shape || !tweenShapes(*span, *next, from, to))
+        return false;
+    span->tweenType = TweenType::Shape;
     return true;
 }
 

@@ -661,6 +661,14 @@ void MainWindow::setClassicTween(bool on)
         });
 }
 
+void MainWindow::createShapeTween()
+{
+    editFrames("Create Shape Tween", [](fla::Layer& layer, int first, int last, std::vector<fla::Frame*>&) {
+        for (int index = first; index <= last; ++index)
+            fla::timeline::setShapeTween(layer, index);
+    });
+}
+
 void MainWindow::moveKeyframe(const fla::Layer* constLayer, int from, int to)
 {
     if (!constLayer)
@@ -1042,6 +1050,9 @@ void MainWindow::setupMenus()
     QAction* classicTweenAction = insertMenu->addAction("&Classic Tween");
     classicTweenAction->setStatusTip("Tween the span to the next keyframe");
     connect(classicTweenAction, &QAction::triggered, this, [this]() { setClassicTween(true); });
+    QAction* shapeTweenAction = insertMenu->addAction("&Shape Tween");
+    shapeTweenAction->setStatusTip("Morph the span's shape into the next keyframe's");
+    connect(shapeTweenAction, &QAction::triggered, this, &MainWindow::createShapeTween);
 
     QMenu* editTimelineMenu = new QMenu("Ti&meline", this);
     QAction* removeFramesAction = editTimelineMenu->addAction("&Remove Frames");
@@ -1068,6 +1079,7 @@ void MainWindow::setupMenus()
     // The same commands on a right-click in the frames.
     _framesMenu = new QMenu(this);
     _framesMenu->addAction(classicTweenAction);
+    _framesMenu->addAction(shapeTweenAction);
     _framesMenu->addAction(removeTweenAction);
     _framesMenu->addSeparator();
     _framesMenu->addAction(insertFrameAction);

@@ -2,6 +2,7 @@
 
 #include "dom_element.h"
 
+#include <cstdint>
 #include <string>
 #include <utility>
 #include <vector>
@@ -54,6 +55,10 @@ public:
 
     ActionScript* actionScript = nullptr;
     MorphShape* morphShape = nullptr;
+    /// What the morph was built from, as morphSignature fingerprints it, so
+    /// an edit to either keyframe's shape can be seen to have left it stale.
+    /// Zero for a morph as the file stored it, not yet checked. Not saved.
+    uint64_t morphSignature = 0;
     std::vector<Element*> elements;
 
     Frame(DOMElement* parent)

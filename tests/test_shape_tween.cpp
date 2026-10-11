@@ -1,6 +1,7 @@
 #include "test_util.h"
 
 #include "../src/data/edge.h"
+#include "../src/data/frame.h"
 #include "../src/data/linear_gradient.h"
 #include "../src/data/morph_shape.h"
 #include "../src/data/shape.h"
@@ -8,6 +9,7 @@
 #include "../src/data/stroke_style.h"
 #include "../src/edit/shape_tween.h"
 
+#include <algorithm>
 #include <cmath>
 #include <memory>
 
@@ -162,4 +164,112 @@ TEST(blending_gradients_blends_their_stops)
     fla::SolidColor solid(nullptr);
     std::unique_ptr<fla::FillStyle> kept(fla::blendFills(&solid, &a, 0.5, nullptr));
     CHECK(kept->type() == fla::FillStyle::Type::SolidColor);
+}
+
+namespace {
+
+/// A square outline of \a size at (x, y), one edge with the fill on its left
+/// (fillStyle1) or, written the other way round, on its right (fillStyle0).
+void addSquare(fla::Shape& shape, double x, double y, double size, bool fillOnLeft)
+{
+    fla::Edge* edge = new fla::Edge(&shape);
+    if (fillOnLeft)
+        edge->fillStyle1 = 1;
+    else
+        edge->fillStyle0 = 1;
+    fla::Path* path = new fla::Path(edge);
+    std::vector<Point> corners = {Point(x, y), Point(x + size, y), Point(x + size, y + size), Point(x, y + size), Point(x, y)};
+    if (!fillOnLeft)
+        std::reverse(corners.begin(), corners.end());
+    path->segments.push_back(new fla::PathSegment(fla::PathSegment::Command::Move, {corners[0]}, path));
+    for (size_t i = 1; i < corners.size(); ++i)
+        path->segments.push_back(new fla::PathSegment(fla::PathSegment::Command::Line, {corners[i]}, path));
+    edge->paths.push_back(path);
+    shape.edges.push_back(edge);
+}
+
+bool onSquare(const Point& p, double x, double y, double size)
+{
+    const double tolerance = 1.0e-3;
+    const bool inside = p.x > x - tolerance && p.x < x + size + tolerance &&
+        p.y > y - tolerance && p.y < y + size + tolerance;
+    const bool onSide = near(p.x, x, tolerance) || near(p.x, x + size, tolerance) ||
+        near(p.y, y, tolerance) || near(p.y, y + size, tolerance);
+    return inside && onSide;
+}
+
+} // namespace
+
+TEST(built_morph_runs_each_outline_onto_the_other)
+{
+    std::unique_ptr<fla::Shape> a = filled(255, 0, 0, 1.0);
+    std::unique_ptr<fla::Shape> b = filled(0, 0, 255, 1.0);
+    addSquare(*a, 0.0, 0.0, 100.0, true);
+    addSquare(*b, 300.0, 50.0, 200.0, false);
+
+    std::unique_ptr<fla::MorphShape> morph(fla::buildMorph(*a, *b, nullptr));
+    CHECK(morph->segments.size() == size_t(1));
+    const fla::MorphSegment* segment = morph->segments.front();
+    CHECK(segment->fillIndex1 == 0);
+    CHECK(segment->fillIndex2 == 1);
+    CHECK(segment->curves.size() >= 4);
+    // Both start at their leftmost, topmost corner.
+    CHECK(near(segment->startPointA.x, 0.0, 1.0e-6) && near(segment->startPointA.y, 0.0, 1.0e-6));
+    CHECK(near(segment->startPointB.x, 300.0, 1.0e-6) && near(segment->startPointB.y, 50.0, 1.0e-6));
+    for (const fla::MorphCurves* curve : segment->curves)
+    {
+        CHECK(onSquare(curve->anchorPointA, 0.0, 0.0, 100.0));
+        CHECK(onSquare(curve->anchorPointB, 300.0, 50.0, 200.0));
+    }
+    // Closed: each ends where it began.
+    CHECK(near(segment->curves.back()->anchorPointA.x, 0.0, 1.0e-6));
+    CHECK(near(segment->curves.back()->anchorPointB.y, 50.0, 1.0e-6));
+
+    // Half way, the square is half way in place and size.
+    std::unique_ptr<fla::Shape> mid(fla::morphedShape(*morph, *a, *b, 0.5,
+        fla::Transform(), fla::Transform(), fla::Transform()));
+    CHECK(near(mid->localBounds.topLeft.x, 150.0, 1.0e-6));
+    CHECK(near(mid->localBounds.topLeft.y, 25.0, 1.0e-6));
+    CHECK(near(mid->localBounds.bottomRight.x, 300.0, 1.0e-6));
+    CHECK(near(mid->localBounds.bottomRight.y, 175.0, 1.0e-6));
+}
+
+TEST(built_morph_shrinks_an_outline_with_no_partner_to_a_point)
+{
+    std::unique_ptr<fla::Shape> a = filled(255, 0, 0, 1.0);
+    std::unique_ptr<fla::Shape> b = filled(0, 0, 255, 1.0);
+    addSquare(*a, 0.0, 0.0, 100.0, true);
+    addSquare(*a, 200.0, 0.0, 50.0, true);
+    addSquare(*b, 0.0, 0.0, 120.0, true);
+
+    std::unique_ptr<fla::MorphShape> morph(fla::buildMorph(*a, *b, nullptr));
+    CHECK(morph->segments.size() == size_t(2));
+    // The bigger square pairs with B's square; the small one shrinks to its middle.
+    const fla::MorphSegment* small = morph->segments[1];
+    CHECK(onSquare(small->startPointA, 200.0, 0.0, 50.0));
+    for (const fla::MorphCurves* curve : small->curves)
+    {
+        CHECK(near(curve->anchorPointB.x, 225.0, 1.0e-3));
+        CHECK(near(curve->anchorPointB.y, 25.0, 1.0e-3));
+    }
+}
+
+TEST(ensure_morph_rebuilds_only_when_a_keyframe_shape_changes)
+{
+    fla::Frame start(nullptr);
+    fla::Frame end(nullptr);
+    start.tweenType = fla::TweenType::Shape;
+    fla::Shape* a = filled(255, 0, 0, 1.0).release();
+    fla::Shape* b = filled(0, 0, 255, 1.0).release();
+    addSquare(*a, 0.0, 0.0, 100.0, true);
+    addSquare(*b, 50.0, 0.0, 100.0, true);
+    start.elements.push_back(a);
+    end.elements.push_back(b);
+
+    CHECK(fla::ensureMorph(start, end));
+    CHECK(start.morphShape != nullptr);
+    CHECK(!fla::ensureMorph(start, end));
+    addSquare(*b, 400.0, 0.0, 10.0, true);
+    CHECK(fla::ensureMorph(start, end));
+    CHECK(start.morphShape->segments.size() == size_t(2));
 }
