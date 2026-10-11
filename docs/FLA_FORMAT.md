@@ -6,11 +6,6 @@ and writer agree with them. Adobe has never published a specification, so
 everything here is observation. Where a point rests on one sample, or was
 written from memory and not yet checked against a file, it says so.
 
-The corpus these notes come from is the folder named by `PHOENIX_FLA_CORPUS`
-(D:/fla on the main development machine): about 80 documents from Flash CS5
-to Animate 24, including TV production files. Counts quoted below are from
-that corpus as of 2026-10-11.
-
 Units throughout: a **twip** is 1/20 of a pixel. Phoenix's model holds pixels
 and converts on read and write.
 
