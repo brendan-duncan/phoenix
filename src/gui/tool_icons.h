@@ -34,6 +34,10 @@ public:
         InkBrush,
         Eraser,
         Lasso,
+        PolygonLasso,
+        MagicWand,
+        Rotation,
+        TimeScrub,
         Text,
         /// Not a tool: the toggle that keeps a drawing its own object.
         ObjectDrawing

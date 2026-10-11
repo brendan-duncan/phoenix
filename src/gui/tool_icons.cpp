@@ -343,6 +343,67 @@ void drawEraser(QPainter& painter)
     painter.restore();
 }
 
+void drawPolygonLasso(QPainter& painter)
+{
+    // A straight-sided loop with its corners marked, and a tail.
+    const QPolygonF loop({QPointF(5.0, 7.0), QPointF(13.0, 3.5), QPointF(19.5, 8.5), QPointF(15.5, 15.0),
+        QPointF(7.0, 14.0)});
+    painter.setPen(QPen(strokeColor(), 1.3));
+    painter.setBrush(Qt::NoBrush);
+    painter.drawPolygon(loop);
+    painter.drawLine(QPointF(7.0, 14.0), QPointF(6.0, 20.5));
+    painter.setPen(Qt::NoPen);
+    painter.setBrush(strokeColor());
+    for (const QPointF& corner : loop)
+        painter.drawRect(QRectF(corner.x() - 1.3, corner.y() - 1.3, 2.6, 2.6));
+}
+
+void drawMagicWand(QPainter& painter)
+{
+    // A wand with a sparkle at its tip.
+    painter.setPen(QPen(strokeColor(), 2.2, Qt::SolidLine, Qt::RoundCap));
+    painter.drawLine(QPointF(4.0, 20.0), QPointF(14.0, 10.0));
+    painter.setPen(QPen(strokeColor(), 1.2, Qt::SolidLine, Qt::RoundCap));
+    const QPointF star(17.0, 7.0);
+    painter.drawLine(star + QPointF(-3.5, 0.0), star + QPointF(3.5, 0.0));
+    painter.drawLine(star + QPointF(0.0, -3.5), star + QPointF(0.0, 3.5));
+    painter.drawLine(star + QPointF(-2.2, -2.2), star + QPointF(2.2, 2.2));
+    painter.drawLine(star + QPointF(-2.2, 2.2), star + QPointF(2.2, -2.2));
+}
+
+void drawRotation(QPainter& painter)
+{
+    // A stage turned a little, with an arrow curling round it.
+    painter.save();
+    painter.translate(12.0, 12.5);
+    painter.rotate(-18.0);
+    painter.setPen(QPen(strokeColor(), 1.2));
+    painter.setBrush(Qt::NoBrush);
+    painter.drawRect(QRectF(-5.0, -3.5, 10.0, 7.0));
+    painter.restore();
+    painter.setPen(QPen(strokeColor(), 1.3));
+    painter.drawArc(QRectF(3.0, 3.5, 18.0, 18.0), 30 * 16, 220 * 16);
+    painter.setPen(Qt::NoPen);
+    painter.setBrush(strokeColor());
+    painter.drawPolygon(QPolygonF({QPointF(19.8, 6.0), QPointF(21.5, 11.0), QPointF(16.2, 9.6)}));
+}
+
+void drawTimeScrub(QPainter& painter)
+{
+    // The playhead between two arrows: the hand moving it back and forth.
+    painter.setPen(Qt::NoPen);
+    painter.setBrush(strokeColor());
+    painter.drawRoundedRect(QRectF(10.0, 3.5, 4.0, 5.0), 1.0, 1.0);
+    painter.drawPolygon(QPolygonF({QPointF(10.0, 8.0), QPointF(14.0, 8.0), QPointF(12.0, 10.5)}));
+    painter.setPen(QPen(strokeColor(), 1.2));
+    painter.drawLine(QPointF(12.0, 10.0), QPointF(12.0, 20.5));
+    painter.drawLine(QPointF(3.5, 15.0), QPointF(8.5, 15.0));
+    painter.drawLine(QPointF(15.5, 15.0), QPointF(20.5, 15.0));
+    painter.setPen(Qt::NoPen);
+    painter.drawPolygon(QPolygonF({QPointF(2.5, 15.0), QPointF(5.5, 12.5), QPointF(5.5, 17.5)}));
+    painter.drawPolygon(QPolygonF({QPointF(21.5, 15.0), QPointF(18.5, 12.5), QPointF(18.5, 17.5)}));
+}
+
 void drawLasso(QPainter& painter)
 {
     // A loop of rope with its tail hanging down.
@@ -422,6 +483,10 @@ QPixmap render(ToolIcons::Tool tool, int size)
     case ToolIcons::Tool::InkBrush:      drawInkBrush(painter); break;
     case ToolIcons::Tool::Eraser:        drawEraser(painter); break;
     case ToolIcons::Tool::Lasso:         drawLasso(painter); break;
+    case ToolIcons::Tool::PolygonLasso:  drawPolygonLasso(painter); break;
+    case ToolIcons::Tool::MagicWand:     drawMagicWand(painter); break;
+    case ToolIcons::Tool::Rotation:      drawRotation(painter); break;
+    case ToolIcons::Tool::TimeScrub:     drawTimeScrub(painter); break;
     case ToolIcons::Tool::Text:          drawText(painter); break;
     case ToolIcons::Tool::ObjectDrawing: drawObjectDrawing(painter); break;
     }

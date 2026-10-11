@@ -118,6 +118,26 @@ public:
     /// Fit in Window: the stage fills the view.
     void zoomToFit();
 
+    /// The stage's rotation on screen, in degrees clockwise, as Animate's
+    /// Rotation tool sets it: a view setting, not an edit. It turns about a
+    /// pivot in the stage's coordinates. Changing the pivot leaves the view
+    /// where it is.
+    double rotation() const { return _rotation; }
+    void setRotation(double degrees);
+    QPointF rotationPivot() const { return _rotationPivot; }
+    void setRotationPivot(const QPointF& stagePos);
+
+    /// Between the widget and the stage's own coordinates (the scene's,
+    /// whatever symbol is being edited).
+    QPointF widgetToStage(const QPointF& widgetPos) const;
+    QPointF stageToWidget(const QPointF& stagePos) const;
+
+    /// The playhead's player, for tools that move it.
+    Player* player() const { return _player; }
+
+    /// How many frames the timeline being edited runs to.
+    int frameCount() const;
+
     /// Show All: the stage and everything placed on or off it.
     void zoomToShowAll();
 
@@ -171,12 +191,19 @@ public:
 signals:
     void scopeChanged();
 
+    /// The stage was turned with the Rotation tool or set straight.
+    void rotationChanged(double degrees);
+
     /// The tool that now has the stage.
     void activeToolChanged(Tool* tool);
 
     /// A library item was dropped at \a position, in the space the tools
     /// work in. \a kind is "symbol" or "bitmap".
     void libraryItemDropped(const QString& kind, const QString& name, const QPointF& position);
+
+    /// The pen was turned over: its eraser end (\a eraser) or its tip is
+    /// now the one near the tablet. As in Animate, the eraser end erases.
+    void penEndChanged(bool eraser);
 
 public:
     /// Onion skinning: \a before and \a after frames either side of the
@@ -205,7 +232,8 @@ public:
     /// the area only partly covers is divided along the area's outline and
     /// the fills and strokes inside it are lifted out as the selection.
     /// Returns false when the area reached nothing.
-    bool selectRegionsIn(const QPainterPath& area, bool additive);
+    /// With \a only, nothing but that element is considered.
+    bool selectRegionsIn(const QPainterPath& area, bool additive, const fla::Element* only = nullptr);
 
     /// Document-space bounds of an element, cached. Tools use this to place
     /// handles around what is selected.
@@ -362,9 +390,12 @@ private:
     /// no natural end the way a press and release do.
     QTimer* _settleTimer = nullptr;
 
+public:
     /// Marks the start of a gesture, and returns to quality rendering after it.
     void beginInteraction();
     void endInteraction();
+
+private:
 
     // Pan and zoom state
     double _zoom;
@@ -484,11 +515,14 @@ private:
         unsigned revision = 0;
         size_t scopeDepth = 0;
         bool grid = false;
+        double rotation = 0.0;
+        QPointF pivot;
         std::vector<const fla::Element*> moving;
 
         bool operator==(const StaticKey& other) const
         {
             return zoom == other.zoom && panX == other.panX && panY == other.panY &&
+                rotation == other.rotation && pivot == other.pivot &&
                 size == other.size && frame == other.frame && revision == other.revision &&
                 scopeDepth == other.scopeDepth && grid == other.grid && moving == other.moving;
         }
@@ -571,6 +605,10 @@ private:
     Tool* _modifierTool = nullptr;
 
     double _pressure = 1.0;
+    double _rotation = 0.0;
+    QPointF _rotationPivot;
+    /// Whether the pen's eraser end is the one in use.
+    bool _penEraser = false;
     bool _penDown = false;
     std::vector<fla::BrushSample> _tabletSamples;
 
@@ -651,8 +689,11 @@ private:
 
     QMap<QString, QPixmap> _bitmapCache;
 
+public:
     /// The library bitmap of that name, decoded once and kept.
     QPixmap libraryBitmap(const QString& name);
+
+private:
 
     /// Qt's spread for a gradient's spreadMethod attribute.
     static QGradient::Spread gradientSpread(const std::string& method);

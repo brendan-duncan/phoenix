@@ -179,6 +179,10 @@ MainWindow::MainWindow(const QString& initialFile, QWidget* parent)
     _handTool = std::make_unique<HandTool>();
     _zoomTool = std::make_unique<ZoomTool>();
     _lassoTool = std::make_unique<LassoTool>(_selection);
+    _polygonTool = std::make_unique<LassoTool>(_selection, true);
+    _magicWandTool = std::make_unique<MagicWandTool>(_drawingStyle);
+    _rotationTool = std::make_unique<RotationTool>();
+    _timeScrubTool = std::make_unique<TimeScrubTool>();
     _brushTool = std::make_unique<BrushTool>(BrushTool::Kind::Fluid, _selection, stack, _drawingStyle);
     _classicBrushTool = std::make_unique<BrushTool>(BrushTool::Kind::Classic, _selection, stack, _drawingStyle);
     _inkBrushTool = std::make_unique<BrushTool>(BrushTool::Kind::Ink, _selection, stack, _drawingStyle);
@@ -1259,6 +1263,15 @@ void MainWindow::setupMenus()
     connect(fitAction, &QAction::triggered, _phoenixView, &PhoenixView::zoomToFit);
     magnificationMenu->addAction(fitAction);
 
+    // The Rotation tool's turn, undone.
+    QAction* straightenAction = new QAction("&Reset Rotation", this);
+    straightenAction->setStatusTip("Set the stage square to the screen again");
+    connect(straightenAction, &QAction::triggered, this, [this]() {
+        if (_phoenixView)
+            _phoenixView->setRotation(0.0);
+    });
+    viewMenu->addAction(straightenAction);
+
     QAction* showAllAction = new QAction("Show &All", this);
     showAllAction->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_3));
     connect(showAllAction, &QAction::triggered, _phoenixView, &PhoenixView::zoomToShowAll);
@@ -1703,11 +1716,11 @@ void MainWindow::setupToolBar()
 
     // A tool's action: checkable, in the group, with its key, and known to
     // the window so the key works even when the action sits in a flyout.
-    const auto makeTool = [this, toolGroup](ToolIcons::Tool icon, const char* name, Qt::Key key,
+    const auto makeTool = [this, toolGroup](ToolIcons::Tool icon, const char* name, QKeyCombination key,
                               const char* tip, std::function<Tool*()> tool) {
         QAction* action = new QAction(ToolIcons::icon(icon), name, this);
         action->setCheckable(true);
-        if (key != Qt::Key_unknown)
+        if (key.key() != Qt::Key_unknown)
         {
             action->setShortcut(QKeySequence(key));
             action->setToolTip(QString("%1 (%2)").arg(name).arg(QKeySequence(key).toString()));
@@ -1720,6 +1733,7 @@ void MainWindow::setupToolBar()
         connect(action, &QAction::triggered, this, [this, tool]() {
             _phoenixView->setActiveTool(tool());
         });
+        _toolActions[tool()] = action;
         toolGroup->addAction(action);
         addAction(action);
         return action;
@@ -1759,9 +1773,20 @@ void MainWindow::setupToolBar()
     addSlot({makeTool(ToolIcons::Tool::FreeTransform, "Free Transform", Qt::Key_Q,
         "Scale, rotate and skew the selection by its handles.",
         [this]() -> Tool* { return _freeTransformTool.get(); })});
-    addSlot({makeTool(ToolIcons::Tool::Lasso, "Lasso", Qt::Key_L,
-        "Draw a loop round the objects to select. Shift adds to the selection.",
-        [this]() -> Tool* { return _lassoTool.get(); })});
+    // Animate's lasso slot: the Lasso, the Polygon tool and the Magic Wand.
+    addSlot({
+        makeTool(ToolIcons::Tool::Lasso, "Lasso", Qt::Key_L,
+            "Draw a loop round the objects to select. Shift adds to the selection.",
+            [this]() -> Tool* { return _lassoTool.get(); }),
+        makeTool(ToolIcons::Tool::PolygonLasso, "Polygon", Qt::Key_unknown,
+            "Click the corners of a polygon round what to select; double-click, Enter or a click on the "
+            "first corner closes it. Shift adds to the selection.",
+            [this]() -> Tool* { return _polygonTool.get(); }),
+        makeTool(ToolIcons::Tool::MagicWand, "Magic Wand", Qt::Key_unknown,
+            "Click a broken-apart bitmap to select the area of like color. Threshold and smoothing are in "
+            "the Properties panel.",
+            [this]() -> Tool* { return _magicWandTool.get(); }),
+    });
 
     toolBar->addSeparator();
 
@@ -1833,9 +1858,20 @@ void MainWindow::setupToolBar()
 
     toolBar->addSeparator();
 
-    addSlot({makeTool(ToolIcons::Tool::Hand, "Hand", Qt::Key_H,
-        "Drag to pan the stage. Holding space does the same with any tool.",
-        [this]() -> Tool* { return _handTool.get(); })});
+    // Animate's hand slot: the Hand, the Rotation tool and the Time Scrub
+    // tool.
+    addSlot({
+        makeTool(ToolIcons::Tool::Hand, "Hand", Qt::Key_H,
+            "Drag to pan the stage. Holding space does the same with any tool.",
+            [this]() -> Tool* { return _handTool.get(); }),
+        makeTool(ToolIcons::Tool::Rotation, "Rotation", Qt::SHIFT | Qt::Key_H,
+            "Turn the view of the stage: click to set the pivot, drag to turn about it (shift for 15 degree "
+            "steps), double-click to set it straight.",
+            [this]() -> Tool* { return _rotationTool.get(); }),
+        makeTool(ToolIcons::Tool::TimeScrub, "Time Scrub", Qt::Key_C,
+            "Drag left or right across the stage to move through the frames.",
+            [this]() -> Tool* { return _timeScrubTool.get(); }),
+    });
     addSlot({makeTool(ToolIcons::Tool::Zoom, "Zoom", Qt::Key_Z,
         "Click to zoom in, alt-click to zoom out, drag to zoom to an area.",
         [this]() -> Tool* { return _zoomTool.get(); })});
@@ -1938,6 +1974,25 @@ void MainWindow::setupPropertiesPanel()
             _phoenixView->editSymbol(found->second);
     });
     connect(_phoenixView, &PhoenixView::libraryItemDropped, this, &MainWindow::placeLibraryItem);
+
+    // The pen's eraser end picks the eraser, and turning the pen back picks
+    // whatever tool was in use before, unless another was chosen meanwhile.
+    connect(_phoenixView, &PhoenixView::penEndChanged, this, [this](bool eraser) {
+        Tool* current = _phoenixView->activeTool();
+        if (eraser)
+        {
+            if (current == _eraserTool.get())
+                return;
+            _toolBeforeEraserPen = current;
+            chooseTool(_eraserTool.get());
+        }
+        else
+        {
+            if (_toolBeforeEraserPen && current == _eraserTool.get())
+                chooseTool(_toolBeforeEraserPen);
+            _toolBeforeEraserPen = nullptr;
+        }
+    });
 
     // The library's item menu, each an undo step.
     const auto symbolNamed = [this](const QString& name) -> fla::Symbol* {
@@ -2159,6 +2214,15 @@ void MainWindow::placeLibraryItem(const QString& kind, const QString& name, cons
     _phoenixView->update();
 }
 
+void MainWindow::chooseTool(Tool* tool)
+{
+    const auto found = _toolActions.find(tool);
+    if (found != _toolActions.end() && found->second)
+        found->second->trigger();
+    else if (_phoenixView && tool)
+        _phoenixView->setActiveTool(tool);
+}
+
 ToolIcons::Tool MainWindow::iconForTool(const Tool* tool) const
 {
     using IconTool = ToolIcons::Tool;
@@ -2182,6 +2246,10 @@ ToolIcons::Tool MainWindow::iconForTool(const Tool* tool) const
     if (tool == _inkBrushTool.get()) return IconTool::InkBrush;
     if (tool == _eraserTool.get()) return IconTool::Eraser;
     if (tool == _lassoTool.get()) return IconTool::Lasso;
+    if (tool == _polygonTool.get()) return IconTool::PolygonLasso;
+    if (tool == _magicWandTool.get()) return IconTool::MagicWand;
+    if (tool == _rotationTool.get()) return IconTool::Rotation;
+    if (tool == _timeScrubTool.get()) return IconTool::TimeScrub;
     if (tool == _textTool.get()) return IconTool::Text;
     return IconTool::Selection;
 }

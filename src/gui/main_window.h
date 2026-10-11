@@ -9,6 +9,7 @@
 #include "free_transform_tool.h"
 #include "brush_tools.h"
 #include "lasso_tool.h"
+#include "magic_wand_tool.h"
 #include "navigation_tools.h"
 #include "paint_tools.h"
 #include "pen_tool.h"
@@ -231,6 +232,10 @@ private:
     std::unique_ptr<HandTool> _handTool;
     std::unique_ptr<ZoomTool> _zoomTool;
     std::unique_ptr<LassoTool> _lassoTool;
+    std::unique_ptr<LassoTool> _polygonTool;
+    std::unique_ptr<MagicWandTool> _magicWandTool;
+    std::unique_ptr<RotationTool> _rotationTool;
+    std::unique_ptr<TimeScrubTool> _timeScrubTool;
     /// Animate's Fluid Brush (the B key's), its Classic Brush, and the Ink
     /// Brush, sharing the toolbox slot.
     std::unique_ptr<BrushTool> _brushTool;
@@ -266,6 +271,14 @@ private:
     /// The toolbox's own stroke and fill swatches, under the tools as
     /// Animate places them.
     QToolButton* _toolboxStrokeSwatch = nullptr;
+
+    /// Each tool's toolbox action, so a tool can be chosen as a click on
+    /// it would: checked, and shown in its slot.
+    std::map<Tool*, QAction*> _toolActions;
+    void chooseTool(Tool* tool);
+    /// The tool to go back to when the pen is turned back from its eraser
+    /// end.
+    Tool* _toolBeforeEraserPen = nullptr;
     QToolButton* _toolboxFillSwatch = nullptr;
 
     /// Opens the color dialog for the stroke or the fill and applies the

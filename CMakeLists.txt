@@ -85,6 +85,7 @@ set(HEADERS
     src/gui/paint_tools.h
     src/gui/brush_tools.h
     src/gui/lasso_tool.h
+    src/gui/magic_wand_tool.h
     src/gui/selection_targets.h
     src/gui/navigation_tools.h
     src/gui/draw_placement.h
@@ -161,6 +162,7 @@ set(HEADERS
     src/edit/region_split.h
     src/edit/drawing_style.h
     src/edit/brush_stroke.h
+    src/edit/magic_wand.h
     src/edit/curve_fit.h
     src/edit/shape_recognition.h
     src/edit/path_tidy.h
@@ -205,6 +207,7 @@ set(SOURCES
     src/gui/paint_tools.cpp
     src/gui/brush_tools.cpp
     src/gui/lasso_tool.cpp
+    src/gui/magic_wand_tool.cpp
     src/gui/navigation_tools.cpp
     src/gui/draw_placement.cpp
     src/gui/filters.cpp
@@ -277,6 +280,7 @@ set(SOURCES
     src/edit/region_split.cpp
     src/edit/drawing_style.cpp
     src/edit/brush_stroke.cpp
+    src/edit/magic_wand.cpp
     src/edit/curve_fit.cpp
     src/edit/shape_recognition.cpp
     src/edit/path_tidy.cpp

@@ -1,6 +1,7 @@
 #include "phoenix_view.h"
 
 #include "../edit/guide_command.h"
+#include "../edit/timeline_edit.h"
 #include "filters.h"
 #include "stroke_effects.h"
 #include "library_panel.h"
@@ -228,6 +229,9 @@ PhoenixView::PhoenixView(Player* player, QWidget *parent)
 
     // Enable mouse tracking for smooth panning
     setMouseTracking(true);
+    // A pen hovering over the stage is followed too, so turning it over to
+    // the eraser end switches tools before it touches.
+    setTabletTracking(true);
     // Library items are dragged onto the stage to place them.
     setAcceptDrops(true);
 
@@ -273,6 +277,11 @@ void PhoenixView::setDocument(const fla::FLADocument* document)
     _panX = 0;
     _panY = 0;
     _zoom = 1.0;
+    // A new document starts square to the screen, turning about its center.
+    _rotation = 0.0;
+    _rotationPivot = document && document->document
+        ? QPointF(document->document->width / 2.0, document->document->height / 2.0) : QPointF();
+    emit rotationChanged(0.0);
     update(); // Trigger repaint
 }
 
@@ -382,6 +391,15 @@ void PhoenixView::paintEvent(QPaintEvent *event)
         widgetRect.width() * invScale,
         widgetRect.height() * invScale
     );
+    if (_rotation != 0.0)
+    {
+        // Turned, the view sees a turned rectangle of the stage; its bounds
+        // are what can show.
+        bool invertible = false;
+        const QTransform toStage = rootToWidget().inverted(&invertible);
+        if (invertible)
+            _visibleRect = toStage.mapRect(widgetRect);
+    }
 
     double penWidth = 1.0 / scale;
     _radius = 2.0 / scale;
@@ -456,6 +474,8 @@ void PhoenixView::paintEvent(QPaintEvent *event)
             key.revision = _revision;
             key.scopeDepth = _scope.size();
             key.grid = _showGrid;
+            key.rotation = _rotation;
+            key.pivot = _rotationPivot;
             key.moving = moving;
 
             if (!_staticValid || !(_staticKey == key))
@@ -504,11 +524,11 @@ void PhoenixView::paintEvent(QPaintEvent *event)
     // Draw dimming overlay outside document area if enabled
     if (_dimOutsideDocument)
     {
-        QRectF docRect(centerX + _panX, centerY + _panY, docWidth * scale, docHeight * scale);
         QPainterPath dimPath;
         dimPath.addRect(rect());
         QPainterPath docPath;
-        docPath.addRect(docRect);
+        docPath.addPolygon(rootToWidget().map(QPolygonF(QRectF(0, 0, docWidth, docHeight))));
+        docPath.closeSubpath();
         QPainterPath maskedPath = dimPath.subtracted(docPath);
 
         painter.save();
@@ -521,8 +541,7 @@ void PhoenixView::paintEvent(QPaintEvent *event)
     if (_showBounds)
     {
         painter.save();
-        painter.translate(_panX + centerX, _panY + centerY);
-        painter.scale(scale, scale);
+        painter.setTransform(rootToWidget(), true);
         painter.setPen(QPen(QColor(255, 0, 0, 100), 2.0, Qt::DashLine));
         painter.setBrush(Qt::NoBrush);
         painter.drawRect(QRectF(0, 0, docWidth, docHeight));
@@ -2958,7 +2977,7 @@ void PhoenixView::mouseMoveEvent(QMouseEvent *event)
         return;
     }
     // The cursor says a guide can be picked up.
-    if (_showGuides && !(event->buttons() & Qt::LeftButton) && _activeTool == _modifierTool)
+    if (_showGuides && _rotation == 0.0 && !(event->buttons() & Qt::LeftButton) && _activeTool == _modifierTool)
     {
         const QTransform toWidget = rootToWidget();
         bool overGuide = false;
@@ -3065,6 +3084,17 @@ void PhoenixView::tabletEvent(QTabletEvent* event)
     // The readings are kept for the brushes, and the event is left alone so
     // that Qt goes on to deliver the same movement as mouse events, which is
     // what the tools handle.
+    // Which end of the pen is in use: the eraser end erases, as in Animate.
+    if (event->type() != QEvent::TabletRelease)
+    {
+        const bool eraser = event->pointerType() == QPointingDevice::PointerType::Eraser;
+        if (eraser != _penEraser)
+        {
+            _penEraser = eraser;
+            emit penEndChanged(eraser);
+        }
+    }
+
     fla::BrushSample sample;
     const QPointF documentPos = mapToDocument(event->position());
     sample.x = documentPos.x();
@@ -3504,7 +3534,7 @@ std::vector<fla::Curve> outlineCurves(const QPainterPath& outline)
 
 } // namespace
 
-bool PhoenixView::selectRegionsIn(const QPainterPath& area, bool additive)
+bool PhoenixView::selectRegionsIn(const QPainterPath& area, bool additive, const fla::Element* only)
 {
     if (!_selection || !_commandStack || _committingMerge)
         return false;
@@ -3513,6 +3543,8 @@ bool PhoenixView::selectRegionsIn(const QPainterPath& area, bool additive)
 
     for (fla::Element* element : elementsIn(area.boundingRect()))
     {
+        if (only && element != only)
+            continue;
         const QRectF bounds = getElementBounds(element);
         if (!bounds.isValid() || !(area.intersects(bounds) || area.contains(bounds)))
             continue;
@@ -4041,11 +4073,24 @@ void PhoenixView::zoomToRect(const QRectF& documentRect)
                  (height() - 2.0 * margin) / documentRect.height()),
         _maxZoom);
 
-    // With no pan the stage is centered, so the pan is whatever moves the
-    // rectangle's center to the stage's.
-    _zoom = zoom;
-    _panX = (docWidth / 2.0 - documentRect.center().x()) * zoom;
-    _panY = (docHeight / 2.0 - documentRect.center().y()) * zoom;
+    // The rectangle as turned on screen sets the zoom; then the pan is
+    // whatever brings its center to the middle of the view.
+    double fitZoom = zoom;
+    if (_rotation != 0.0)
+    {
+        const QRectF turned = QTransform().rotate(_rotation).mapRect(QRectF(QPointF(0, 0), documentRect.size()));
+        fitZoom = qBound(_minZoom,
+            std::min((width() - 2.0 * margin) / turned.width(), (height() - 2.0 * margin) / turned.height()),
+            _maxZoom);
+    }
+    (void)docWidth;
+    (void)docHeight;
+    _zoom = fitZoom;
+    _panX = 0.0;
+    _panY = 0.0;
+    const QPointF center = rootToWidget().map(documentRect.center());
+    _panX = width() / 2.0 - center.x();
+    _panY = height() / 2.0 - center.y();
     update();
 }
 
@@ -4105,6 +4150,7 @@ void PhoenixView::resetView()
     _zoom = 1.0;
     _panX = 0;
     _panY = 0;
+    _rotation = 0.0;
     update();
 }
 
@@ -4398,7 +4444,7 @@ void PhoenixView::pushGuidesToSnapper()
 
 bool PhoenixView::beginGuideDrag(const QPointF& widgetPos)
 {
-    if (!_flaDocument || !_flaDocument->document)
+    if (!_flaDocument || !_flaDocument->document || _rotation != 0.0)
         return false;
     bool invertible = false;
     const QTransform toWidget = rootToWidget();
@@ -4460,6 +4506,13 @@ void PhoenixView::drawRulersAndGuides(QPainter& painter)
         const QColor color(document->guidesColor[0], document->guidesColor[1], document->guidesColor[2]);
         painter.setPen(QPen(color, 1.0));
         const auto drawGuide = [&](int kind, double value) {
+            if (_rotation != 0.0)
+            {
+                const QPointF a = toWidget.map(kind == 1 ? QPointF(value, -1.0e5) : QPointF(-1.0e5, value));
+                const QPointF b = toWidget.map(kind == 1 ? QPointF(value, 1.0e5) : QPointF(1.0e5, value));
+                painter.drawLine(a, b);
+                return;
+            }
             if (kind == 1)
             {
                 const double x = std::round(toWidget.map(QPointF(value, 0)).x()) + 0.5;
@@ -4481,7 +4534,7 @@ void PhoenixView::drawRulersAndGuides(QPainter& painter)
             drawGuide(_guideDrag, std::round(_guideValue));
     }
 
-    if (_showRulers)
+    if (_showRulers && _rotation == 0.0)
     {
         const QColor back(43, 43, 43);
         const QColor ink(170, 170, 170);
@@ -4633,7 +4686,70 @@ QTransform PhoenixView::rootToWidget() const
     QTransform transform;
     transform.translate(_panX + centerX, _panY + centerY);
     transform.scale(_zoom, _zoom);
+    if (_rotation != 0.0)
+    {
+        // Turned about the pivot, inside the pan, so panning stays in
+        // screen directions.
+        transform.translate(_rotationPivot.x(), _rotationPivot.y());
+        transform.rotate(_rotation);
+        transform.translate(-_rotationPivot.x(), -_rotationPivot.y());
+    }
     return transform;
+}
+
+void PhoenixView::setRotation(double degrees)
+{
+    // Kept within a half turn either way.
+    degrees = std::fmod(degrees, 360.0);
+    if (degrees > 180.0)
+        degrees -= 360.0;
+    if (degrees <= -180.0)
+        degrees += 360.0;
+    if (std::fabs(degrees) < 1.0e-9)
+        degrees = 0.0;
+    if (degrees == _rotation)
+        return;
+    _rotation = degrees;
+    emit rotationChanged(_rotation);
+    update();
+}
+
+void PhoenixView::setRotationPivot(const QPointF& stagePos)
+{
+    // A new pivot shifts the picture by the difference in where the turn
+    // takes things; the pan takes that back out.
+    const QPointF before = rootToWidget().map(QPointF(0.0, 0.0));
+    _rotationPivot = stagePos;
+    const QPointF after = rootToWidget().map(QPointF(0.0, 0.0));
+    _panX -= after.x() - before.x();
+    _panY -= after.y() - before.y();
+    update();
+}
+
+int PhoenixView::frameCount() const
+{
+    const fla::Timeline* timeline = scopeTimeline();
+    if (!timeline && _flaDocument && _flaDocument->document && !_flaDocument->document->timelines.empty())
+        timeline = _flaDocument->document->timelines.front();
+    if (!timeline)
+        return 0;
+    int count = 0;
+    for (const fla::Layer* layer : timeline->layers)
+        if (layer)
+            count = std::max(count, fla::timeline::layerEnd(*layer));
+    return count;
+}
+
+QPointF PhoenixView::widgetToStage(const QPointF& widgetPos) const
+{
+    bool invertible = false;
+    const QTransform inverse = rootToWidget().inverted(&invertible);
+    return invertible ? inverse.map(widgetPos) : QPointF();
+}
+
+QPointF PhoenixView::stageToWidget(const QPointF& stagePos) const
+{
+    return rootToWidget().map(stagePos);
 }
 
 QPointF PhoenixView::mapToDocument(const QPointF& widgetPos) const

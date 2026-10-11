@@ -771,6 +771,24 @@ void PropertiesPanel::buildToolTab()
     });
     addOption("Mode", transformMode, {IconTool::FreeTransform});
 
+    // Magic Wand, as Animate's: threshold and smoothing.
+    HotText* wandThreshold = makeHotText(0.0, 200.0, 0);
+    wandThreshold->setValue(style.wandThreshold);
+    wandThreshold->setToolTip("How far a color may be from the clicked one and still be taken, 0 to 200");
+    connect(wandThreshold, &HotText::valueChanged, this, [this](double value, bool) {
+        _links.style->wandThreshold = static_cast<int>(std::lround(value));
+    });
+    addOption("Threshold", wandThreshold, {IconTool::MagicWand});
+    QComboBox* wandSmoothing = new QComboBox(this);
+    wandSmoothing->addItems({"Pixels", "Rough", "Normal", "Smooth"});
+    wandSmoothing->setCurrentIndex(style.wandSmoothing);
+    wandSmoothing->setToolTip("How the outline of the area taken is tidied");
+    connect(wandSmoothing, &QComboBox::currentIndexChanged, this, [this](int index) {
+        if (index >= 0)
+            _links.style->wandSmoothing = index;
+    });
+    addOption("Smoothing", wandSmoothing, {IconTool::MagicWand});
+
     // Brushes. Each has its own settings, shown while it is the tool; the
     // brush mode is shared.
     using BrushMember = fla::BrushSettings fla::DrawingStyle::*;

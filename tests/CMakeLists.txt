@@ -46,6 +46,7 @@ set(TEST_CORE_SOURCES
     ${PHOENIX_SRC}/data/transform.cpp
     ${PHOENIX_SRC}/edit/command_stack.cpp
     ${PHOENIX_SRC}/edit/brush_stroke.cpp
+    ${PHOENIX_SRC}/edit/magic_wand.cpp
     ${PHOENIX_SRC}/edit/curve_fit.cpp
     ${PHOENIX_SRC}/edit/drawing_style.cpp
     ${PHOENIX_SRC}/edit/editable_path.cpp
@@ -104,6 +105,7 @@ set(TEST_SOURCES
     test_library_commands.cpp
     test_audio_decode.cpp
     test_brush_stroke.cpp
+    test_magic_wand.cpp
     test_property_command.cpp
     test_tween_ease.cpp
     test_shape_recognition.cpp

@@ -102,6 +102,12 @@ public:
     };
     EraserMode eraserMode = EraserMode::Normal;
 
+    /// The Magic Wand's settings: how far a color may be from the clicked
+    /// pixel's, 0 to 200 on each channel, and how its area's outline is
+    /// tidied (0 Pixels, 1 Rough, 2 Normal, 3 Smooth), as Animate's are.
+    int wandThreshold = 10;
+    int wandSmoothing = 2;
+
     /// The eraser's faucet: a click removes the fill or the stroke it lands
     /// on, whole, instead of a drag taking a band out of it.
     bool faucet = false;
