@@ -1589,17 +1589,19 @@ void MainWindow::updateEditState()
 
 void MainWindow::updateWindowTitle()
 {
-    if (_documentName.isEmpty())
-    {
     // "Phoenix 0.2.0 - D:\fla\file.fla", with the full path of a saved
     // document and the name of one not saved yet, and a * for unsaved changes.
     const QString app = QString("Phoenix %1").arg(QCoreApplication::applicationVersion());
-        setWindowTitle("Phoenix - FLA Viewer");
+    if (_documentName.isEmpty())
+    {
+        setWindowTitle(app);
         return;
     }
 
-    setWindowTitle(QString("Phoenix - %1%2")
-        .arg(_documentName)
+    const QString shown = _documentPath.isEmpty() ? _documentName : QDir::toNativeSeparators(_documentPath);
+    setWindowTitle(QString("%1 - %2%3")
+        .arg(app)
+        .arg(shown)
         .arg(_editContext.isModified() ? "*" : ""));
 }
 
