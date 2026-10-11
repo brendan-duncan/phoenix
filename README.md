@@ -4,8 +4,6 @@ Phoenix is 2D vector animation software compatible with Adobe Animate and Flash 
 
 ![Phoenix](docs/phoenix.png)
 
-Performance has not been a focus yet over accuracy.
-
 ## Building
 
 ### Requirements
