@@ -1476,6 +1476,16 @@ dragging, at a maximized window on a 3856x1568 display:
       element on the stage at the start of each drag to collect snap targets
   - Done 2026-10-09: the walk's result (element, bounds) is kept in `_snapBounds` and thrown away with the bounds cache, so a drag only filters it
 
+## Installer and updates
+
+- [x] Windows x64 installer and auto-update through Velopack
+  - Done 2026-10-10: `cmake/PhoenixVelopack.cmake` links Velopack's C library (pinned, static); `src/gui/updater.cpp` checks the GitHub releases a few seconds after start-up and from Help > Check for Updates, downloads in the background, and offers to restart, else installs on quit. `cmake --install --component Phoenix` stages the app with the Qt it needs, `tools/release/pack.py` packs it, and `.github/workflows/release.yml` publishes a release for each `v*` tag. Checked locally: Setup installed 0.1.0, which found 0.1.1 in a local feed (`PHOENIX_UPDATE_SOURCE`), downloaded its 21 KB delta and installed it on quit. The "Restart Now" path and the workflow itself have not been run yet
+- [ ] macOS release: pack the .app with `vpk [osx] pack`, signed with the Developer ID certificate and notarized (`--signAppIdentity`, `--signInstallIdentity`, `--notaryProfile`), the certificate and notary credentials as repository secrets. The macOS build of Phoenix itself has only been checked by the Qt archives workflow
+- [ ] Linux release: an AppImage with `vpk [linux] pack`; the deploy script needs checking there, since `qt_generate_deploy_app_script` deploys differently on Linux
+- [ ] Windows arm64 release: the `windows-arm64` target exists in `pack.py`, but the cross kit has not been built in CI
+- [ ] Code signing on Windows (Azure Trusted Signing through `vpk pack --azureTrustedSignFile`), so SmartScreen stops warning about the installer
+- [ ] Pin libas3 to a commit rather than `main`, so a release tag always builds the same thing
+
 ## Explicitly out of scope
 
 

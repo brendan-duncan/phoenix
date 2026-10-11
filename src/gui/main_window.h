@@ -43,6 +43,8 @@
 
 class QDoubleSpinBox;
 
+class Updater;
+
 class MainWindow : public QMainWindow
 {
     Q_OBJECT
@@ -67,6 +69,8 @@ private slots:
     void openRecentFile();
     
     void quit();
+
+    void showAbout();
     
     void viewDocument();
     
@@ -329,6 +333,7 @@ private:
     /// Where the document was last saved or loaded from, for File > Save.
     QString _documentPath;
     Player* _player;
+    Updater* _updater;
     QSplitter* _mainSplitter;
     QSplitter* _viewSplitter;
     DocumentView* _documentView;

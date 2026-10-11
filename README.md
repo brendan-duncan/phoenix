@@ -145,4 +145,43 @@ folder of `.fla` files or extracted XFL directories:
 set PHOENIX_FLA_CORPUS=path/to/fla/files
 ```
 
+## Releases and updates
+
+Phoenix is installed and kept up to date with [Velopack](https://velopack.io).
+Each release on GitHub carries a Windows installer
+(`BrendanDuncan.Phoenix-win-x64-Setup.exe`), which installs for the current
+user without asking for admin rights, and a portable zip. An installed copy
+looks for a newer release a few seconds after it starts (and from Help > Check
+for Updates), downloads it in the background, and offers to restart into it;
+an update put off is installed when Phoenix quits. A copy run from the build
+folder does not update.
+
+To release, push a version tag:
+
+```
+git tag v0.2.0
+git push origin v0.2.0
+```
+
+The **Release** workflow (`.github/workflows/release.yml`) builds that version,
+packs it with `tools/release/pack.py`, and publishes it as the tag's release,
+with a delta package from the previous release. A tag with a suffix
+(`v0.2.0-beta.1`) makes a pre-release, which installed copies do not update
+to. Only Windows x64 is released so far.
+
+To pack a release locally, install the `vpk` tool at the Velopack version
+pinned in `cmake/PhoenixVelopack.cmake`, configure with the version, and pack:
+
+```
+dotnet tool install -g vpk --version 1.2.161
+cmake -S . -B build -DPHOENIX_VERSION=0.2.0
+cmake --build build --config Release --target Phoenix
+python tools/release/pack.py --version 0.2.0 --out releases
+```
+
+To try an update before publishing it, pack two versions into the same
+`releases` folder, install the older one with its Setup.exe, and start it with
+`PHOENIX_UPDATE_SOURCE` set to that folder; it updates from there rather than
+from GitHub. `-DPHOENIX_UPDATER=OFF` builds without the updater.
+
 ## [FLA Format Documentation](docs/FLA_FORMAT.md)

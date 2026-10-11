@@ -4,6 +4,7 @@
 #include "fill_offset.h"
 #include "new_document_dialog.h"
 #include "timeline_audio.h"
+#include "updater.h"
 #include "../data/bitmap_instance.h"
 #include "draw_placement.h"
 #include "library_panel.h"
@@ -95,6 +96,7 @@ MainWindow::MainWindow(const QString& initialFile, QWidget* parent)
     , _timelineView(nullptr)
     , _flaDocument(nullptr)
     , _player(new Player(this))
+    , _updater(new Updater(this))
     , _recentFilesMenu(nullptr)
 {
     setWindowTitle("Phoenix - FLA Viewer");
@@ -207,6 +209,12 @@ MainWindow::MainWindow(const QString& initialFile, QWidget* parent)
         : (_recentFiles.isEmpty() ? QString() : _recentFiles.first());
     if (!startFile.isEmpty())
         QTimer::singleShot(0, this, [this, startFile]() { loadFLAFile(startFile); });
+
+    // Look for an update once the start-up file has had its turn.
+    connect(_updater, &Updater::statusMessage, this, [this](const QString& message) {
+        statusBar()->showMessage(message, message.isEmpty() ? 0 : 8000);
+    });
+    QTimer::singleShot(3000, this, [this]() { _updater->checkForUpdates(false); });
 }
 
 namespace {
@@ -1283,6 +1291,21 @@ void MainWindow::setupMenus()
     dimOutsideDocumentAction->setStatusTip("Dim the area outside the document rectangle");
     connect(dimOutsideDocumentAction, &QAction::toggled, _phoenixView, &PhoenixView::setDimOutsideDocument);
     viewMenu->addAction(dimOutsideDocumentAction);
+
+    // Help menu
+    QMenu* helpMenu = menuBar->addMenu("&Help");
+
+    QAction* checkForUpdatesAction = new QAction("Check for &Updates...", this);
+    checkForUpdatesAction->setStatusTip("Look for a newer version of Phoenix");
+    connect(checkForUpdatesAction, &QAction::triggered, this, [this]() { _updater->checkForUpdates(true); });
+    helpMenu->addAction(checkForUpdatesAction);
+
+    helpMenu->addSeparator();
+
+    QAction* aboutAction = new QAction("&About Phoenix", this);
+    aboutAction->setMenuRole(QAction::AboutRole);
+    connect(aboutAction, &QAction::triggered, this, &MainWindow::showAbout);
+    helpMenu->addAction(aboutAction);
 }
 
 void MainWindow::openFile()
@@ -1472,6 +1495,14 @@ void MainWindow::quit()
     // close() goes through closeEvent(), so File > Exit gets the same
     // unsaved-changes prompt as closing the window.
     close();
+}
+
+void MainWindow::showAbout()
+{
+    QMessageBox::about(this, "About Phoenix",
+        QString("<b>Phoenix</b> %1<br><br>An experimental Flash FLA editor.<br><br>"
+                "<a href=\"https://github.com/brendan-duncan/phoenix\">github.com/brendan-duncan/phoenix</a>")
+            .arg(Updater::currentVersion()));
 }
 
 void MainWindow::viewDocument()
@@ -3017,6 +3048,7 @@ void MainWindow::closeEvent(QCloseEvent* event)
 
     saveSettings();
     event->accept();
+    _updater->applyOnExit();
 }
 
 void MainWindow::onHighQualityAntiAliasingToggled(bool checked)

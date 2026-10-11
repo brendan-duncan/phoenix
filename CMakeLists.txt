@@ -11,7 +11,14 @@ FetchContent_MakeAvailable(libas3)
 add_library(libas3 INTERFACE)
 add_dependencies(libas3 as3_parser)
 
-project(Phoenix VERSION 0.1 LANGUAGES C CXX)
+project(Phoenix VERSION 0.1.0 LANGUAGES C CXX)
+
+# The version shown in the app and given to the installer. A release build
+# passes the tag's version (-DPHOENIX_VERSION=1.2.3).
+set(PHOENIX_VERSION "${PROJECT_VERSION}" CACHE STRING "Phoenix version")
+if(NOT PHOENIX_VERSION MATCHES "^[0-9]+\\.[0-9]+\\.[0-9]+")
+    message(FATAL_ERROR "PHOENIX_VERSION must start with major.minor.patch, not '${PHOENIX_VERSION}'")
+endif()
 
 set(CMAKE_AUTOUIC ON)
 set(CMAKE_AUTOMOC ON)
@@ -24,6 +31,10 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 # cmake/PhoenixQt.cmake.
 include(cmake/PhoenixQt.cmake)
 phoenix_find_qt()
+
+# The auto-updater: see cmake/PhoenixVelopack.cmake.
+include(cmake/PhoenixVelopack.cmake)
+phoenix_add_velopack()
 
 # Add zlib from third_party
 set(ZLIB_BUILD_EXAMPLES OFF CACHE BOOL "Don't build zlib examples")
@@ -59,6 +70,7 @@ set(HEADERS
     src/gui/audio_engine.h
     src/gui/timeline_audio.h
     src/gui/new_document_dialog.h
+    src/gui/updater.h
     src/gui/hot_text.h
     src/gui/convert_to_symbol_dialog.h
     src/gui/phoenix_view.h
@@ -176,6 +188,7 @@ set(SOURCES
     src/gui/timeline_audio.cpp
     src/gui/miniaudio_impl.c
     src/gui/new_document_dialog.cpp
+    src/gui/updater.cpp
     src/gui/hot_text.cpp
     src/gui/convert_to_symbol_dialog.cpp
     src/gui/phoenix_view.cpp
@@ -282,9 +295,24 @@ set(SOURCES
 
 qt6_standard_project_setup()
 
+# The icon and version stamped into Phoenix.exe.
+if(WIN32)
+    string(REGEX MATCH "^([0-9]+)\\.([0-9]+)\\.([0-9]+)" _ "${PHOENIX_VERSION}")
+    set(PHOENIX_VERSION_MAJOR ${CMAKE_MATCH_1})
+    set(PHOENIX_VERSION_MINOR ${CMAKE_MATCH_2})
+    set(PHOENIX_VERSION_PATCH ${CMAKE_MATCH_3})
+    configure_file(src/phoenix.rc.in ${CMAKE_CURRENT_BINARY_DIR}/phoenix.rc @ONLY)
+    list(APPEND SOURCES ${CMAKE_CURRENT_BINARY_DIR}/phoenix.rc)
+endif()
+
 qt6_add_executable(Phoenix MANUAL_FINALIZATION ${SOURCES} ${HEADERS})
 
 target_link_libraries(Phoenix PRIVATE Qt6::Widgets Qt6::Svg zlibstatic tinyxml2 libas3)
+target_compile_definitions(Phoenix PRIVATE PHOENIX_VERSION="${PHOENIX_VERSION}")
+if(PHOENIX_UPDATER)
+    target_link_libraries(Phoenix PRIVATE velopack)
+    target_compile_definitions(Phoenix PRIVATE PHOENIX_UPDATER)
+endif()
 
 # Audio output through miniaudio (vendored in src/third_party/miniaudio):
 # it loads the platform audio libraries at run time on Windows and macOS,
@@ -298,6 +326,37 @@ endif()
 if(TRUE)
     qt_finalize_executable(Phoenix)
 endif()
+
+# What a release ships: `cmake --install build --config Release --component
+# Phoenix --prefix <dir>` puts Phoenix and the Qt it needs in <dir>, which
+# tools/release/pack.py hands to Velopack. The component keeps out what
+# zlib, tinyxml2 and libas3 would install.
+include(GNUInstallDirs)
+set(PHOENIX_INSTALL_BINDIR ${CMAKE_INSTALL_BINDIR})
+if(WIN32)
+    # Flat, as Windows apps are: the exe, its DLLs and plugins/ side by side.
+    set(PHOENIX_INSTALL_BINDIR .)
+    install(CODE "set(QT_DEPLOY_BIN_DIR .)" COMPONENT Phoenix)
+endif()
+install(TARGETS Phoenix
+    RUNTIME DESTINATION ${PHOENIX_INSTALL_BINDIR} COMPONENT Phoenix
+    BUNDLE DESTINATION . COMPONENT Phoenix)
+set(PHOENIX_DEPLOY_OPTIONS)
+if(WIN32)
+    # Phoenix draws with QPainter, so neither the software OpenGL nor the
+    # shader compilers are needed, and it does no networking of Qt's (the
+    # updater has its own).
+    set(PHOENIX_DEPLOY_OPTIONS DEPLOY_TOOL_OPTIONS
+        --no-opengl-sw --no-system-d3d-compiler --no-system-dxc-compiler
+        --no-network)
+endif()
+qt_generate_deploy_app_script(
+    TARGET Phoenix
+    OUTPUT_SCRIPT PHOENIX_DEPLOY_SCRIPT
+    NO_TRANSLATIONS
+    NO_UNSUPPORTED_PLATFORM_ERROR
+    ${PHOENIX_DEPLOY_OPTIONS})
+install(SCRIPT ${PHOENIX_DEPLOY_SCRIPT} COMPONENT Phoenix)
 
 # Tests for the non-Qt core. Also configurable standalone from tests/.
 enable_testing()

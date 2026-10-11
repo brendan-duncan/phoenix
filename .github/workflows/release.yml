@@ -1,0 +1,107 @@
+# Builds Phoenix for each platform, packs it with Velopack and publishes it
+# as the GitHub release for the tag: the installer people download, and the
+# packages and feed installed copies update from (src/gui/updater.cpp).
+#
+# Run by pushing a version tag:
+#   git tag v0.2.0 && git push origin v0.2.0
+# A tag with a suffix (v0.2.0-beta.1) makes a pre-release, which installed
+# copies do not update to.
+#
+# Only Windows x64 is released so far. macOS (signed and notarized) and
+# Linux are still to come, as is Windows arm64; each is a matrix entry once
+# tools/release/pack.py can pack it.
+
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+# One release at a time, so two tags never race to upload.
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            target: windows-x64
+            channel: win-x64
+            generator: -A x64
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "9.0.x"
+
+      - name: Version from the tag
+        id: version
+        shell: bash
+        run: |
+          tag="${GITHUB_REF_NAME}"
+          version="${tag#v}"
+          if ! [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]]; then
+            echo "::error::Tag $tag is not v<major>.<minor>.<patch>[-suffix]"
+            exit 1
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          if [[ "$version" == *-* ]]; then echo "pre=--pre" >> "$GITHUB_OUTPUT"; fi
+
+      # vpk must match the Velopack library the app links (pinned in
+      # cmake/PhoenixVelopack.cmake).
+      - name: Install vpk
+        shell: bash
+        run: |
+          vpk_version=$(sed -n 's/^set(PHOENIX_VELOPACK_VERSION "\(.*\)")$/\1/p' cmake/PhoenixVelopack.cmake)
+          dotnet tool install -g vpk --version "$vpk_version"
+
+      - name: Configure and build
+        shell: bash
+        run: |
+          cmake -S . -B build ${{ matrix.generator }} \
+            -DPHOENIX_USE_SYSTEM_QT=OFF \
+            -DPHOENIX_VERSION=${{ steps.version.outputs.version }} \
+            -DCMAKE_BUILD_TYPE=Release
+          cmake --build build --config Release --target Phoenix phoenix_tests --parallel
+
+      - name: Run the tests
+        shell: bash
+        run: ctest --test-dir build -C Release -R phoenix_tests --output-on-failure
+
+      # The previous release, so that vpk can make a delta package from it.
+      # There is none before the first release.
+      - name: Fetch the previous release
+        shell: bash
+        run: |
+          vpk download github --repoUrl "${{ github.server_url }}/${{ github.repository }}" \
+            --token "${{ github.token }}" --channel ${{ matrix.channel }} --outputDir releases \
+            || echo "No previous release to make a delta from"
+
+      - name: Pack
+        shell: bash
+        run: |
+          python tools/release/pack.py --version ${{ steps.version.outputs.version }} \
+            --build-dir build --out releases --target ${{ matrix.target }}
+
+      - name: Publish
+        shell: bash
+        run: |
+          vpk upload github --repoUrl "${{ github.server_url }}/${{ github.repository }}" \
+            --token "${{ github.token }}" --channel ${{ matrix.channel }} --outputDir releases \
+            --tag ${{ steps.version.outputs.tag }} \
+            --releaseName "Phoenix ${{ steps.version.outputs.version }}" \
+            --publish --merge ${{ steps.version.outputs.pre }}
