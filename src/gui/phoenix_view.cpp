@@ -35,6 +35,7 @@
 #include "../edit/transform_blend.h"
 #include "../edit/tween_ease.h"
 #include "../edit/shape_tween.h"
+#include "../geom/fill_tracing.h"
 #include "../edit/frame_commands.h"
 #include "../geom/curve.h"
 #include "../data/bitmap_fill.h"
@@ -2119,20 +2120,6 @@ std::map<int, QPainterPath> PhoenixView::fillRegions(const fla::Shape& shape)
 
 void PhoenixView::buildShapePaths(const fla::Shape* shape, PathCacheList& cacheEntries)
 {
-    // Helper struct to represent an edge path with direction
-    struct DirectedPath
-    {
-        fla::Point start;
-        fla::Point end;
-        const fla::Path* path;
-        bool reversed; // true if this path should be traced backwards
-        bool used = false;
-    };
-
-    // Collect directed paths for each fill style
-    std::map<int, std::vector<DirectedPath>> fillStylePaths;
-    std::map<int, const fla::FillStyle*> fillStyles;
-
     // Helper to get start/end points of a path
     auto getPathEndpoints = [](const fla::Path* path) -> std::pair<fla::Point, fla::Point>
     {
@@ -2163,50 +2150,6 @@ void PhoenixView::buildShapePaths(const fla::Shape* shape, PathCacheList& cacheE
 
         return {start, end};
     };
-
-    // Process all edges and collect directed paths
-    for (const fla::Edge* edge : shape->edges)
-    {
-        if (!edge->visible)
-            continue;
-
-        for (const fla::Path* path : edge->paths)
-        {
-            if (!path->visible || path->segments.empty())
-                continue;
-
-            auto [start, end] = getPathEndpoints(path);
-
-            int fillStyleIdx1 = path->fillStyleIndex != -1 ? path->fillStyleIndex : edge->fillStyle1;
-            int fillStyleIdx0 = edge->fillStyle0;
-
-            // Add to fillStyle1 (forward direction)
-            if (fillStyleIdx1 != -1)
-            {
-                fillStylePaths[fillStyleIdx1].push_back({start, end, path, false, false});
-                if (fillStyles.find(fillStyleIdx1) == fillStyles.end())
-                {
-                    fillStyles[fillStyleIdx1] = shape->getFillStyleByIndex(fillStyleIdx1);
-                }
-            }
-
-            // Add to fillStyle0 (reverse direction). A piece with the same fill
-            // on both sides -- a stroke running through a fill -- bounds a
-            // region on each side, so it goes in both ways; only a loop closed
-            // on itself with one fill inside and out is taken once.
-            const bool closedOnItself =
-                std::lround(start.x * 20.0) == std::lround(end.x * 20.0) &&
-                std::lround(start.y * 20.0) == std::lround(end.y * 20.0);
-            if (fillStyleIdx0 != -1 && (fillStyleIdx0 != fillStyleIdx1 || !closedOnItself))
-            {
-                fillStylePaths[fillStyleIdx0].push_back({end, start, path, true, false});
-                if (fillStyles.find(fillStyleIdx0) == fillStyles.end())
-                {
-                    fillStyles[fillStyleIdx0] = shape->getFillStyleByIndex(fillStyleIdx0);
-                }
-            }
-        }
-    }
 
     // Helper to add path to path in forward or reverse direction
     auto addSegmentToPath = [&](QPainterPath& painterPath, const fla::Path* path, bool reversed, const fla::Element* shape)
@@ -2318,334 +2261,29 @@ void PhoenixView::buildShapePaths(const fla::Shape* shape, PathCacheList& cacheE
         }
     };
 
-    // The direction a path sets off in, and the direction it arrives with,
-    // read from its first and last legs. A reversed path swaps the two and
-    // turns them round. Junctions are decided by these.
-    auto forwardStartTangent = [](const fla::Path* path) -> fla::Point
+    // Each fill's outlines, traced from the edges (see traceFills), drawn as
+    // one compound path.
+    for (const auto& [fillIdx, loops] : fla::traceFills(*shape))
     {
-        fla::Point at;
-        bool started = false;
-        for (const fla::PathSegment* segment : path->segments)
-        {
-            if (segment->command == fla::PathSegment::Command::Move)
-            {
-                at = segment->points[0];
-                started = true;
-                continue;
-            }
-            if (!started || segment->points.empty())
-                continue;
-            for (const fla::Point& point : segment->points)
-            {
-                const fla::Point d(point.x - at.x, point.y - at.y);
-                if (std::hypot(d.x, d.y) > 1.0e-9)
-                    return d;
-            }
-            at = segment->points.back();
-        }
-        return fla::Point(0.0, 0.0);
-    };
-    auto forwardEndTangent = [](const fla::Path* path) -> fla::Point
-    {
-        fla::Point at;
-        bool started = false;
-        fla::Point tangent(0.0, 0.0);
-        for (const fla::PathSegment* segment : path->segments)
-        {
-            if (segment->command == fla::PathSegment::Command::Move)
-            {
-                at = segment->points[0];
-                started = true;
-                continue;
-            }
-            if (!started || segment->points.empty())
-                continue;
-            // From the last point before the end, back to the segment's start
-            // when the controls sit on the end.
-            const fla::Point& end = segment->points.back();
-            fla::Point from = at;
-            for (size_t i = segment->points.size() - 1; i > 0; --i)
-            {
-                const fla::Point& candidate = segment->points[i - 1];
-                if (std::hypot(end.x - candidate.x, end.y - candidate.y) > 1.0e-9)
-                {
-                    from = candidate;
-                    break;
-                }
-            }
-            const fla::Point d(end.x - from.x, end.y - from.y);
-            if (std::hypot(d.x, d.y) > 1.0e-9)
-                tangent = d;
-            at = end;
-        }
-        return tangent;
-    };
-    auto startTangent = [&](const DirectedPath& directed) -> fla::Point
-    {
-        if (!directed.reversed)
-            return forwardStartTangent(directed.path);
-        const fla::Point t = forwardEndTangent(directed.path);
-        return fla::Point(-t.x, -t.y);
-    };
-    auto endTangent = [&](const DirectedPath& directed) -> fla::Point
-    {
-        if (!directed.reversed)
-            return forwardEndTangent(directed.path);
-        const fla::Point t = forwardStartTangent(directed.path);
-        return fla::Point(-t.x, -t.y);
-    };
-
-    // How far round to the right \a out turns from \a in, on screen (y down):
-    // pi for the sharpest right turn, -pi for the sharpest left, and a
-    // straight reversal counted as the sharpest left, since doubling back
-    // along the edge just walked is never the way round a region.
-    auto rightTurn = [](const fla::Point& in, const fla::Point& out) -> double
-    {
-        const double cross = in.x * out.y - in.y * out.x;
-        const double dot = in.x * out.x + in.y * out.y;
-        double angle = std::atan2(cross, dot);
-        const double pi = 3.14159265358979323846;
-        if (angle > pi - 1.0e-6)
-            angle = -pi;
-        return angle;
-    };
-
-    // Helper to check if two points match
-    // Increased tolerance to account for floating-point accumulation errors
-    // from twips conversion (1/20 pixel) and path transformations
-    auto pointsMatch = [](const fla::Point& p1, const fla::Point& p2) -> bool
-    {
-        int p1x = static_cast<int>(std::round(p1.x * 20.0));
-        int p1y = static_cast<int>(std::round(p1.y * 20.0));
-        int p2x = static_cast<int>(std::round(p2.x * 20.0));
-        int p2y = static_cast<int>(std::round(p2.y * 20.0));
-        return p1x == p2x && p1y == p2y;
-    };
-
-    // For each fill style, connect paths into closed loops
-    for (auto& [fillIdx, directedPaths] : fillStylePaths)
-    {
-        const fla::FillStyle* fillStyle = fillStyles[fillIdx];
+        const fla::FillStyle* fillStyle = shape->getFillStyleByIndex(fillIdx);
         if (!fillStyle)
             continue;
 
         QPainterPath compoundPath;
         compoundPath.setFillRule(Qt::WindingFill);
-
-        // Heuristic: for very simple shapes (few edge paths), avoid the complex
-        // stitching logic and just render each path as-is. This matches how
-        // Flash often stores small symbol shapes (like the eyes) and avoids
-        // over-connecting segments that should remain separate.
-        if (directedPaths.size() <= 2)
+        for (const fla::TracedLoop& loop : loops)
         {
-            // Try to connect paths into closed loops (similar to complex case)
-            for (DirectedPath& directedPath : directedPaths)
-            {
-                if (directedPath.used)
-                    continue;
-
-                // Skip if path is already closed
-                if (pointsMatch(directedPath.start, directedPath.end))
-                    continue;
-
-                QPainterPath loopPath;
-                fla::Point startPoint = directedPath.start;
-                loopPath.moveTo(startPoint.x, startPoint.y);
-                addSegmentToPath(loopPath, directedPath.path, directedPath.reversed, shape);
-                directedPath.used = true;
-
-                fla::Point currentEnd = directedPath.end;
-                fla::Point loopStart = directedPath.start;
-
-                // Try to connect to other paths
-                for (int iter = 0; iter < directedPaths.size(); iter++)
-                {
-                    if (pointsMatch(currentEnd, loopStart))
-                    {
-                        loopPath.closeSubpath();
-                        break;
-                    }
-
-                    bool found = false;
-                    for (DirectedPath& nextDP : directedPaths)
-                    {
-                        if (nextDP.used)
-                            continue;
-
-                        if (pointsMatch(currentEnd, nextDP.start))
-                        {
-                            addSegmentToPath(loopPath, nextDP.path, nextDP.reversed, shape);
-                            nextDP.used = true;
-                            currentEnd = nextDP.end;
-                            found = true;
-                            break;
-                        }
-                    }
-
-                    if (!found)
-                        break;
-                }
-
-                if (pointsMatch(currentEnd, loopStart))
-                    loopPath.closeSubpath();
-
-                compoundPath.addPath(loopPath);
-            }
-
-            // Add any remaining unused paths that don't form loops
-            for (const DirectedPath& directedPath : directedPaths)
-            {
-                if (directedPath.used)
-                    continue;
-
-                QPainterPath simplePath;
-                simplePath.setFillRule(Qt::WindingFill);
-
-                bool hasMove = false;
-                for (const fla::PathSegment* segment : directedPath.path->segments)
-                {
-                    if (segment->command == fla::PathSegment::Command::Move)
-                    {
-                        fla::Point p = segment->points[0];
-                        simplePath.moveTo(p.x, p.y);
-                        hasMove = true;
-                        break;
-                    }
-                }
-
-                if (!hasMove)
-                    continue;
-
-                addSegmentToPath(simplePath, directedPath.path, directedPath.reversed, shape);
-
-                if (pointsMatch(directedPath.start, directedPath.end))
-                    simplePath.closeSubpath();
-
-                compoundPath.addPath(simplePath);
-            }
-
-            QRectF bounds = compoundPath.boundingRect();
-            fla::Rect rect({bounds.left(), bounds.top()}, {bounds.left() + bounds.width(), bounds.top() + bounds.height()});
-            QBrush brush = getFillBrush(fillStyle, rect);
-            cacheEntries.push_back({ brush, Qt::NoPen, compoundPath, nullptr, fillIdx });
-            continue;
-        }
-
-        // First pass: render paths that are already closed
-        int closedCount = 0;
-        for (DirectedPath& directedPath : directedPaths)
-        {
-            if (directedPath.used)
+            if (loop.legs.empty())
                 continue;
-
-            // Check if this path is already closed (start == end)
-            if (pointsMatch(directedPath.start, directedPath.end))
-            {
-                QPainterPath loopPath;
-                fla::Point startPoint = directedPath.start;
-                loopPath.moveTo(startPoint.x, startPoint.y);
-                addSegmentToPath(loopPath, directedPath.path, directedPath.reversed, shape);
-                loopPath.closeSubpath();
-                compoundPath.addPath(loopPath);
-                directedPath.used = true;
-                closedCount++;
-            }
-        }
-
-        // Second pass: connect remaining paths into closed loops
-        int loopNum = 0;
-        for (DirectedPath& directedPath : directedPaths)
-        {
-            if (directedPath.used)
-                continue;
-
-            loopNum++;
-
+            const auto [first, last] = getPathEndpoints(loop.legs.front().path);
+            const fla::Point start = loop.legs.front().reversed ? last : first;
             QPainterPath loopPath;
-            fla::Point startPoint = directedPath.start;
-            loopPath.moveTo(startPoint.x, startPoint.y);
-            addSegmentToPath(loopPath, directedPath.path, directedPath.reversed, shape);
-            directedPath.used = true;
-
-            fla::Point currentEnd = directedPath.end;
-            fla::Point loopStart = directedPath.start;
-            fla::Point arriving = endTangent(directedPath);
-            int maxIterations = directedPaths.size() * 2;
-            int iterations = 0;
-            int connectedCount = 1;
-
-            while (iterations++ < maxIterations)
-            {
-                // Check if we've closed the loop
-                if (pointsMatch(currentEnd, loopStart))
-                {
-                    loopPath.closeSubpath();
-                    break;
-                }
-
-                // Every directed path here has its fill on the right, so the
-                // boundary of one region is traced by keeping right: at a
-                // junction, of the paths that set off from here, take the one
-                // that turns furthest to the right. Taking whichever came
-                // first would wander into the neighboring region and leave
-                // this one half drawn.
-                bool found = false;
-                double bestTurn = -1e9;
-                DirectedPath* bestMatch = nullptr;
-
-                for (DirectedPath& nextDirectedPath : directedPaths)
-                {
-                    if (nextDirectedPath.used)
-                        continue;
-
-                    double dx = currentEnd.x - nextDirectedPath.start.x;
-                    double dy = currentEnd.y - nextDirectedPath.start.y;
-                    double distance = dx * dx + dy * dy;
-                    if (distance >= (0.5 * 0.5))
-                        continue;
-
-                    const double turn = rightTurn(arriving, startTangent(nextDirectedPath));
-                    if (!found || turn > bestTurn)
-                    {
-                        bestTurn = turn;
-                        bestMatch = &nextDirectedPath;
-                        found = true;
-                    }
-                }
-
-                if (found && bestMatch)
-                {
-                    addSegmentToPath(loopPath, bestMatch->path, bestMatch->reversed, shape);
-                    bestMatch->used = true;
-                    currentEnd = bestMatch->end;
-                    arriving = endTangent(*bestMatch);
-                    connectedCount++;
-                }
-                else
-                {
-                    break;
-                }
-            }
-
-            // Close the loop if endpoints match
-            if (pointsMatch(currentEnd, loopStart))
-            {
+            loopPath.moveTo(start.x, start.y);
+            for (const fla::TracedLeg& leg : loop.legs)
+                addSegmentToPath(loopPath, leg.path, leg.reversed, shape);
+            if (loop.closed)
                 loopPath.closeSubpath();
-            }
-
             compoundPath.addPath(loopPath);
-        }
-
-        // Check for unused paths
-        int unusedCount = 0;
-        for (const DirectedPath& directedPath : directedPaths)
-        {
-            if (!directedPath.used)
-                unusedCount++;
-        }
-        if (unusedCount > 0)
-        {
-            std::cout << "  WARNING: " << unusedCount << " unused paths!" << std::endl;
         }
 
         QRectF bounds = compoundPath.boundingRect();
@@ -2653,6 +2291,13 @@ void PhoenixView::buildShapePaths(const fla::Shape* shape, PathCacheList& cacheE
         QBrush brush = getFillBrush(fillStyle, rect);
         cacheEntries.push_back({ brush, Qt::NoPen, compoundPath, nullptr, fillIdx });
     }
+
+    // Whether two points are the same to a twip.
+    auto pointsMatch = [](const fla::Point& p1, const fla::Point& p2) -> bool
+    {
+        return std::lround(p1.x * 20.0) == std::lround(p2.x * 20.0) &&
+            std::lround(p1.y * 20.0) == std::lround(p2.y * 20.0);
+    };
 
     // Strokes. A merged shape is stored as one edge per piece, so every corner
     // is where two pieces meet. Stroking each piece on its own puts a cap at

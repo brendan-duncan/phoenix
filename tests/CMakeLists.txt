@@ -78,6 +78,7 @@ set(TEST_CORE_SOURCES
     ${PHOENIX_SRC}/geom/intersect.cpp
     ${PHOENIX_SRC}/geom/planar_map.cpp
     ${PHOENIX_SRC}/geom/shape_geometry.cpp
+    ${PHOENIX_SRC}/geom/fill_tracing.cpp
     ${PHOENIX_SRC}/parser/path_parser.cpp
     ${PHOENIX_SRC}/writer/edge_writer.cpp
 )
@@ -109,6 +110,7 @@ set(TEST_SOURCES
     test_brush_stroke.cpp
     test_magic_wand.cpp
     test_ik_tree.cpp
+    test_fill_tracing.cpp
     test_motion_object.cpp
     test_asset_warp.cpp
     test_property_command.cpp
