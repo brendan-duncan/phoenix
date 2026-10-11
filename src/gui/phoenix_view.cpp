@@ -1127,10 +1127,13 @@ void PhoenixView::drawLayer(QPainter& painter, const fla::Layer* layer, fla::Loo
     color.setRgb(layer->color[0], layer->color[1], layer->color[2], layer->color[3]);
     painter.setPen(QPen(color, 1.0));
 
-    // Outline view draws the layer's art as lines in the layer color. A mask
-    // is coverage whatever the view, so it is never outlined.
+    // Outline view draws the layer's art as lines in the layer color. It is
+    // a way of looking at the timeline being edited: a layer saved outlined
+    // inside a symbol draws normally where the symbol is placed, and an
+    // exported movie has no outlines. A mask is coverage whatever the view,
+    // so it is never outlined.
     const QColor previousOutline = _outlineColor;
-    if (layer->outline && !_maskPass)
+    if (layer->outline && !_maskPass && !_exporting && _frameDepth == 0)
         _outlineColor = color;
 
     const LayerFrame state = resolveLayerFrame(layer, loopType, firstFrame);
