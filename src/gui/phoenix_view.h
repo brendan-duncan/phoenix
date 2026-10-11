@@ -805,8 +805,20 @@ private:
         double tolerance, HitResult& result);
 
     void hitTestElement(fla::Element& element, fla::Frame* frame, fla::LoopType loopType,
-        const QTransform& toDocument, const QPointF& documentPos,
-        double tolerance, HitResult& result);
+        const QTransform& toDocument, const QPointF& documentPos, double tolerance,
+        HitResult& result, const fla::Transform* shownTransform = nullptr);
+
+    /// Where an element shows at the playhead, in the space of the timeline
+    /// being edited: its content as shown now (a graphic's current frame, not
+    /// its first) through the transform it shows with and its layer's
+    /// parent. Falls back to its cached bounds when it is not on a frame
+    /// that shows.
+    QRectF shownElementBounds(const fla::Element* element);
+    /// The bounds of what a symbol shows, in its own space, playing as
+    /// \a loopType from \a firstFrame.
+    QRectF shownSymbolBounds(const fla::Symbol* symbol, fla::LoopType loopType, int firstFrame, int depth);
+    /// The bounds of an element in its own space, as it shows now.
+    QRectF shownLocalBounds(const fla::Element* element, int depth);
 
     static bool isNearAnchor(const fla::Shape& shape, const QPointF& localPos, double tolerance);
 

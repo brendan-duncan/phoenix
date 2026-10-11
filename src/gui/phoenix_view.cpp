@@ -2905,16 +2905,22 @@ void PhoenixView::hitTestTimeline(const fla::Timeline& timeline, fla::LoopType l
         if (!state.frame)
             continue;
 
+        // What is picked is what shows: the layer placed by its parent, each
+        // element where its tween has it now.
+        const QTransform layerToDocument = parentTransform(layer, state.frame, loopType, firstFrame) * toDocument;
+
         // Layers draw last to first, so the first layer is on top and this walk
         // meets the topmost first. Within a frame later elements draw over
         // earlier ones, so they are walked backwards, and the first hit is the
         // one the user sees.
-        for (auto it = state.frame->elements.rbegin(); it != state.frame->elements.rend(); ++it)
+        for (size_t index = state.frame->elements.size(); index-- > 0;)
         {
-            if (*it)
+            fla::Element* element = state.frame->elements[index];
+            if (element)
             {
-                hitTestElement(**it, const_cast<fla::Frame*>(state.frame), loopType,
-                    toDocument, documentPos, tolerance, result);
+                const fla::Transform shown = shownTransform(state, index);
+                hitTestElement(*element, const_cast<fla::Frame*>(state.frame), loopType,
+                    layerToDocument, documentPos, tolerance, result, &shown);
             }
             if (result)
                 return;
@@ -2924,12 +2930,12 @@ void PhoenixView::hitTestTimeline(const fla::Timeline& timeline, fla::LoopType l
 
 void PhoenixView::hitTestElement(fla::Element& element, fla::Frame* frame,
     fla::LoopType loopType, const QTransform& toDocument, const QPointF& documentPos,
-    double tolerance, HitResult& result)
+    double tolerance, HitResult& result, const fla::Transform* shownTransform)
 {
     if (!element.visible)
         return;
 
-    const fla::Transform& t = element.transform;
+    const fla::Transform& t = shownTransform ? *shownTransform : element.transform;
     const QTransform elementTransform(t.m11, t.m12, t.m21, t.m22, t.tx, t.ty);
 
     // Groups pre-transform their children, so applying the group's own transform
@@ -2989,8 +2995,10 @@ void PhoenixView::hitTestElement(fla::Element& element, fla::Frame* frame,
         // inside it. Editing the contents means entering the symbol.
         HitResult inner;
         const bool synced = instance.symbolType == fla::SymbolType::Graphic;
-        const int frameOffset = synced ? instance.firstFrame : 0;
-        const fla::LoopType instanceLoop = synced ? instance.loopType : fla::LoopType::SingleFrame;
+        // A puppet is picked by its art as placed (its first frame).
+        const bool puppet = instance.otherSymbolType == "puppet";
+        const int frameOffset = synced && !puppet ? instance.firstFrame : 0;
+        const fla::LoopType instanceLoop = synced && !puppet ? instance.loopType : fla::LoopType::SingleFrame;
 
         for (const fla::Timeline* timeline : symbol->timelines)
         {
@@ -4101,7 +4109,7 @@ void PhoenixView::drawToolOverlay(QPainter& painter)
             if (!showBounds)
                 continue;
 
-            const QRectF bounds = getElementBounds(element);
+            const QRectF bounds = shownElementBounds(element);
             if (!bounds.isValid())
                 continue;
 
@@ -5136,8 +5144,8 @@ QRectF PhoenixView::calculateElementBounds(const fla::Element* element)
     }
     else if (type == fla::Element::Type::BitmapInstance)
     {
-        // Approximate bounds for bitmap instances
-        QRectF bounds(0, 0, 100, 100);
+        // The bitmap's own size, placed by the instance.
+        QRectF bounds = calculateElementLocalBounds(element);
         QTransform transform(element->transform.m11, element->transform.m12,
                             element->transform.m21, element->transform.m22,
                             element->transform.tx, element->transform.ty);
@@ -5574,6 +5582,11 @@ QRectF PhoenixView::calculateElementLocalBounds(const fla::Element* element)
     }
     else if (type == fla::Element::Type::BitmapInstance)
     {
+        // The bitmap's own size, in pixels, from its top left corner.
+        const QPixmap pixmap = libraryBitmap(QString::fromStdString(
+            static_cast<const fla::BitmapInstance*>(element)->libraryItemName));
+        if (!pixmap.isNull())
+            return QRectF(0, 0, pixmap.width(), pixmap.height());
         return QRectF(0, 0, 100, 100);
     }
     else if (type == fla::Element::Type::StaticText)
@@ -5592,6 +5605,85 @@ QRectF PhoenixView::calculateElementLocalBounds(const fla::Element* element)
     }
 
     return QRectF(0, 0, 20, 20);
+}
+
+QRectF PhoenixView::shownLocalBounds(const fla::Element* element, int depth)
+{
+    if (!element)
+        return QRectF();
+    if (element->elementType() == fla::Element::Type::SymbolInstance && depth < 16)
+    {
+        const fla::SymbolInstance* instance = static_cast<const fla::SymbolInstance*>(element);
+        const bool synced = instance->symbolType == fla::SymbolType::Graphic && instance->otherSymbolType != "puppet";
+        const QRectF bounds = shownSymbolBounds(instance->symbol, synced ? instance->loopType : fla::LoopType::SingleFrame,
+            synced ? instance->firstFrame : 0, depth + 1);
+        if (bounds.isValid())
+            return bounds;
+    }
+    return calculateElementLocalBounds(element);
+}
+
+QRectF PhoenixView::shownSymbolBounds(const fla::Symbol* symbol, fla::LoopType loopType, int firstFrame, int depth)
+{
+    QRectF bounds;
+    if (!symbol)
+        return bounds;
+    for (const fla::Timeline* timeline : symbol->timelines)
+    {
+        if (!timeline || !timeline->visible)
+            continue;
+        for (const fla::Layer* layer : timeline->layers)
+        {
+            if (!layer || !layer->visible || layer->layerType == fla::Layer::Type::Guide ||
+                layer->layerType == fla::Layer::Type::Folder)
+                continue;
+            const LayerFrame state = resolveLayerFrame(layer, loopType, firstFrame);
+            if (!state.frame)
+                continue;
+            const QTransform parent = parentTransform(layer, state.frame, loopType, firstFrame);
+            for (size_t i = 0; i < state.frame->elements.size(); ++i)
+            {
+                const fla::Element* member = state.frame->elements[i];
+                if (!member || !member->visible)
+                    continue;
+                QRectF local = shownLocalBounds(member, depth);
+                if (!local.isValid())
+                    continue;
+                // Groups place their members themselves.
+                if (member->elementType() != fla::Element::Type::Group)
+                {
+                    const fla::Transform t = shownTransform(state, i);
+                    local = (QTransform(t.m11, t.m12, t.m21, t.m22, t.tx, t.ty) * parent).mapRect(local);
+                }
+                else
+                {
+                    local = parent.mapRect(local);
+                }
+                bounds = bounds.isValid() ? bounds.united(local) : local;
+            }
+        }
+    }
+    return bounds;
+}
+
+QRectF PhoenixView::shownElementBounds(const fla::Element* element)
+{
+    const fla::Frame* frame = owningFrame(element);
+    const fla::Layer* layer = frame ? dynamic_cast<const fla::Layer*>(frame->parent) : nullptr;
+    if (!layer)
+        return getElementBounds(element);
+    const LayerFrame state = resolveLayerFrame(layer, fla::LoopType::PlayOnce, 0);
+    if (state.frame != frame)
+        return getElementBounds(element);
+    const auto found = std::find(frame->elements.begin(), frame->elements.end(), element);
+    if (found == frame->elements.end() || element->elementType() == fla::Element::Type::Group)
+        return getElementBounds(element);
+    const QRectF local = shownLocalBounds(element, 0);
+    if (!local.isValid())
+        return getElementBounds(element);
+    const fla::Transform t = shownTransform(state, static_cast<size_t>(found - frame->elements.begin()));
+    return (QTransform(t.m11, t.m12, t.m21, t.m22, t.tx, t.ty) *
+            parentTransform(layer, frame, fla::LoopType::PlayOnce, 0)).mapRect(local);
 }
 
 bool PhoenixView::isElementSelected(const fla::DOMElement* element) const
