@@ -21,13 +21,30 @@ void Snapper::addCandidateY(double y)
 }
 
 SnapResult Snapper::snap(const std::vector<double>& values, double gridSpacing,
-    const std::vector<double>& candidates) const
+    const std::vector<double>& candidates, const std::vector<double>& guides) const
 {
     SnapResult best;
     double bestDistance = _tolerance;
 
     for (double value : values)
     {
+        // A guide is placed on purpose, so it is considered first and holds
+        // against anything no closer.
+        if (_guideSnapEnabled)
+        {
+            for (double guide : guides)
+            {
+                const double distance = std::fabs(guide - value);
+                if (distance <= bestDistance)
+                {
+                    bestDistance = distance;
+                    best.adjustment = guide - value;
+                    best.kind = SnapKind::Guide;
+                    best.target = guide;
+                }
+            }
+        }
+
         // Lining up with another object beats the grid, so objects are
         // considered first and the grid only wins if it is strictly closer.
         if (_objectSnapEnabled)
@@ -35,7 +52,7 @@ SnapResult Snapper::snap(const std::vector<double>& values, double gridSpacing,
             for (double candidate : candidates)
             {
                 const double distance = std::fabs(candidate - value);
-                if (distance <= bestDistance)
+                if (distance < bestDistance || (distance <= bestDistance && best.kind != SnapKind::Guide))
                 {
                     bestDistance = distance;
                     best.adjustment = candidate - value;
@@ -64,12 +81,12 @@ SnapResult Snapper::snap(const std::vector<double>& values, double gridSpacing,
 
 SnapResult Snapper::snapX(const std::vector<double>& values) const
 {
-    return snap(values, _gridSpacingX, _candidatesX);
+    return snap(values, _gridSpacingX, _candidatesX, _guidesX);
 }
 
 SnapResult Snapper::snapY(const std::vector<double>& values) const
 {
-    return snap(values, _gridSpacingY, _candidatesY);
+    return snap(values, _gridSpacingY, _candidatesY, _guidesY);
 }
 
 } // namespace fla

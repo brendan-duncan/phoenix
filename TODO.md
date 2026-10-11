@@ -195,9 +195,12 @@ Selecting things on the stage works. Transforming them does not yet.
       one on the executable does nothing -- it always reopens the most recent
       file instead
   - Done 2026-10-10: a path on the command line (which a drop on the executable is) opens instead of the most recent file, and a .fla or .xfl dropped on the window opens too. Checked: `Phoenix.exe D:/fla/bitmap_fill_test.fla` opens that file
-- [ ] Ruler guides. Animate snaps to these too, but nothing models them yet --
+- [x] Ruler guides. Animate snaps to these too, but nothing models them yet --
       no rulers, no guide objects in the document. Needs that feature first, and
       is not the same thing as the guide *layers* the parser already knows about
+  - Done 2026-10-10: View > Rulers (ctrl+alt+shift+R) draws rulers in stage pixels along the top and left of the stage, ticks spaced to stay readable at any zoom; a guide is dragged out of a ruler, moved with the selection tool and dragged back into a ruler (or off the view) to remove, drawn in the document's guides color. View > Guides holds Show Guides (ctrl+;), Snap to Guides (ctrl+shift+;) and Clear Guides. The snapper takes guides as a third kind of target (`SnapKind::Guide`, test in `test_snapping.cpp`), ahead of objects at equal distance; inside a symbol they are carried into its space when that is a plain scale and shift
+  - Not saved: no corpus file stores guides, so how Animate writes them is unknown and they live in the view for the session
+  - Found along the way: snapping, the free transform box and the Properties panel's W, H, X and Y all measured bounds padded by 2 pixels for antialiasing, so a snapped object stopped 2 pixels short of the stage edge, a guide or another object, and a 355 pixel rectangle read as 359. `PhoenixView::elementBounds` now gives the art's own edges (a fill's outline, a stroke's outer edge); the padded bounds are kept for culling
 
 Two things to tidy:
 

@@ -123,6 +123,17 @@ public:
     /// every instance of it, since they all draw the same timeline.
     bool enterSymbol(fla::SymbolInstance* instance);
 
+    /// Rulers along the top and left of the stage, in stage pixels.
+    void setRulersVisible(bool on);
+    bool rulersVisible() const { return _showRulers; }
+
+    /// Ruler guides: dragged out of a ruler, moved with the selection tool,
+    /// dragged back into a ruler to remove. They live in the view for the
+    /// session, in the document's coordinates.
+    void setGuidesVisible(bool on);
+    bool guidesVisible() const { return _showGuides; }
+    void clearGuides();
+
     /// Edits \a symbol on its own, as a double-click in the library does:
     /// the document is put away and the symbol shown at the stage's center.
     bool editSymbol(const fla::Symbol* symbol);
@@ -183,7 +194,11 @@ public:
 
     /// Document-space bounds of an element, cached. Tools use this to place
     /// handles around what is selected.
-    QRectF elementBounds(const fla::Element* element) { return getElementBounds(element); }
+    /// The element's art as drawn, edge to edge: a fill's outline, a
+    /// stroke's outer edge. What snapping, the transform box and the
+    /// Properties panel measure. (Culling uses bounds padded a little for
+    /// antialiasing.)
+    QRectF elementBounds(const fla::Element* element);
 
     /// The shape's filled regions as the stage stitches them, one path per
     /// fill style index, in the shape's own space.
@@ -387,6 +402,23 @@ private:
     /// drawn opaque, since a mask is coverage and its colors and alpha
     /// mean nothing.
     bool _maskPass = false;
+
+    static constexpr int kRulerSize = 20;
+    bool _showRulers = false;
+    bool _showGuides = true;
+    std::vector<double> _guidesX;
+    std::vector<double> _guidesY;
+    /// A guide being dragged: 1 vertical, 2 horizontal, 0 none; the index
+    /// of the guide moved, or -1 for one coming out of a ruler.
+    int _guideDrag = 0;
+    int _guideIndex = -1;
+    double _guideValue = 0.0;
+
+    /// Starts dragging a guide if \a widgetPos is on a ruler or a guide.
+    bool beginGuideDrag(const QPointF& widgetPos);
+    void drawRulersAndGuides(QPainter& painter);
+    /// Hands the guides to the snapper in the space the tools work in.
+    void pushGuidesToSnapper();
 
     /// How deep the drawing is inside instances with the Layer blend mode,
     /// whose offscreen is what alpha and erase instances cut into.
@@ -603,6 +635,10 @@ private:
 
     // Bounds cache for culling
     QMap<const fla::Element*, QRectF> _boundsCache;
+    QMap<const fla::Element*, QRectF> _artBoundsCache;
+    /// True while art bounds are being worked out: no antialiasing margin,
+    /// and the padded cache is neither read nor filled.
+    bool _tightBounds = false;
 
     /// The stage's elements and bounds for snapping, kept between drags
     /// and dropped with the bounds cache.

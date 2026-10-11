@@ -957,6 +957,36 @@ void MainWindow::setupMenus()
             _timelineView->setOnionSkin(on, 2, 2);
     });
     viewMenu->addAction(_onionSkinAction);
+
+    QAction* rulersAction = new QAction("&Rulers", this);
+    rulersAction->setCheckable(true);
+    rulersAction->setShortcut(QKeySequence(Qt::CTRL | Qt::ALT | Qt::SHIFT | Qt::Key_R));
+    rulersAction->setStatusTip("Rulers along the stage, from which guides are dragged");
+    connect(rulersAction, &QAction::toggled, this, [this](bool on) {
+        if (_phoenixView)
+            _phoenixView->setRulersVisible(on);
+    });
+    viewMenu->addAction(rulersAction);
+
+    QMenu* guidesMenu = viewMenu->addMenu("&Guides");
+    QAction* showGuidesAction = guidesMenu->addAction("&Show Guides");
+    showGuidesAction->setCheckable(true);
+    showGuidesAction->setChecked(true);
+    showGuidesAction->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_Semicolon));
+    connect(showGuidesAction, &QAction::toggled, this, [this](bool on) {
+        if (_phoenixView)
+            _phoenixView->setGuidesVisible(on);
+    });
+    QAction* snapGuidesAction = guidesMenu->addAction("S&nap to Guides");
+    snapGuidesAction->setCheckable(true);
+    snapGuidesAction->setChecked(true);
+    snapGuidesAction->setShortcut(QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_Semicolon));
+    connect(snapGuidesAction, &QAction::toggled, this, [this](bool on) { _snapper.setGuideSnapEnabled(on); });
+    QAction* clearGuidesAction = guidesMenu->addAction("&Clear Guides");
+    connect(clearGuidesAction, &QAction::triggered, this, [this]() {
+        if (_phoenixView)
+            _phoenixView->clearGuides();
+    });
     viewMenu->addSeparator();
 
     QAction* viewDocumentAction = new QAction("View Document...", this);

@@ -189,3 +189,24 @@ TEST(snapper_handles_negative_coordinates)
     CHECK_NEAR(result.target, -40.0);
     CHECK_NEAR(result.adjustment, -2.0);
 }
+
+TEST(guides_snap_and_hold_against_objects_no_closer)
+{
+    fla::Snapper snapper;
+    snapper.setTolerance(5.0);
+    snapper.setObjectSnapEnabled(true);
+    snapper.addCandidateX(103.0);
+    snapper.setGuides({103.0}, {});
+    fla::SnapResult result = snapper.snapX({100.0});
+    CHECK(result.kind == fla::SnapKind::Guide);
+    CHECK_NEAR(result.adjustment, 3.0);
+    // An object strictly closer still wins.
+    snapper.addCandidateX(101.0);
+    result = snapper.snapX({100.0});
+    CHECK(result.kind == fla::SnapKind::Object);
+    // Switched off, guides are ignored, and with nothing else on nothing snaps.
+    snapper.setGuideSnapEnabled(false);
+    snapper.setObjectSnapEnabled(false);
+    CHECK(!snapper.isEnabled());
+    CHECK(!snapper.snapX({100.0}).snapped());
+}

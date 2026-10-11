@@ -10,7 +10,8 @@ enum class SnapKind
 {
     None,
     Grid,
-    Object
+    Object,
+    Guide
 };
 
 /// The adjustment to apply along one axis.
@@ -60,9 +61,23 @@ public:
 
     bool objectSnapEnabled() const { return _objectSnapEnabled; }
 
+    /// Ruler guides: vertical guides at \a xs, horizontal ones at \a ys.
+    /// They stay until replaced; gathering candidates does not clear them.
+    void setGuides(const std::vector<double>& xs, const std::vector<double>& ys)
+    {
+        _guidesX = xs;
+        _guidesY = ys;
+    }
+    void setGuideSnapEnabled(bool enabled) { _guideSnapEnabled = enabled; }
+    bool guideSnapEnabled() const { return _guideSnapEnabled; }
+
     /// Whether anything at all would snap. Lets a caller skip gathering
-    /// candidates when both kinds are switched off.
-    bool isEnabled() const { return _gridEnabled || _objectSnapEnabled; }
+    /// candidates when every kind is switched off.
+    bool isEnabled() const
+    {
+        return _gridEnabled || _objectSnapEnabled ||
+            (_guideSnapEnabled && (!_guidesX.empty() || !_guidesY.empty()));
+    }
 
     void clearCandidates();
 
@@ -78,7 +93,7 @@ public:
 
 private:
     SnapResult snap(const std::vector<double>& values, double gridSpacing,
-        const std::vector<double>& candidates) const;
+        const std::vector<double>& candidates, const std::vector<double>& guides) const;
 
     double _tolerance = 4.0;
 
@@ -89,6 +104,9 @@ private:
     bool _objectSnapEnabled = false;
     std::vector<double> _candidatesX;
     std::vector<double> _candidatesY;
+    bool _guideSnapEnabled = true;
+    std::vector<double> _guidesX;
+    std::vector<double> _guidesY;
 };
 
 } // namespace fla

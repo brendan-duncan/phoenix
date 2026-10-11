@@ -237,6 +237,8 @@ PhoenixView::PhoenixView(Player* player, QWidget *parent)
     connect(_settleTimer, &QTimer::timeout, this, &PhoenixView::endInteraction);
 
     connect(_player, &Player::currentFrameChanged, this, &PhoenixView::onPlayerFrameChanged);
+    // Inside a symbol the tools snap to the guides in the symbol's space.
+    connect(this, &PhoenixView::scopeChanged, this, [this]() { pushGuidesToSnapper(); });
 }
 
 PhoenixView::~PhoenixView()
@@ -527,6 +529,9 @@ void PhoenixView::paintEvent(QPaintEvent *event)
 
         painter.restore();
     }
+
+    // Guides over the art, rulers over everything.
+    drawRulersAndGuides(painter);
 }
 
 void PhoenixView::drawStageContents(QPainter& painter, const fla::Document* document)
@@ -2907,6 +2912,10 @@ void PhoenixView::mousePressEvent(QMouseEvent *event)
     // left those silently doing nothing.
     const bool forcePan = event->button() == Qt::MiddleButton || _spaceHeld;
 
+    // A ruler or a guide under the cursor takes the press, as in Animate.
+    if (event->button() == Qt::LeftButton && !forcePan && beginGuideDrag(event->position()))
+        return;
+
     beginInteraction();
 
     // Ctrl reaches for the selection tool whatever is active, so something can
@@ -2934,6 +2943,29 @@ void PhoenixView::mousePressEvent(QMouseEvent *event)
 
 void PhoenixView::mouseMoveEvent(QMouseEvent *event)
 {
+    if (_guideDrag)
+    {
+        bool invertible = false;
+        const QPointF root = rootToWidget().inverted(&invertible).map(event->position());
+        _guideValue = _guideDrag == 1 ? root.x() : root.y();
+        update();
+        return;
+    }
+    // The cursor says a guide can be picked up.
+    if (_showGuides && !(event->buttons() & Qt::LeftButton) && _activeTool == _modifierTool)
+    {
+        const QTransform toWidget = rootToWidget();
+        bool overGuide = false;
+        for (double x : _guidesX)
+            overGuide = overGuide || std::fabs(toWidget.map(QPointF(x, 0)).x() - event->position().x()) <= 3.0;
+        for (double y : _guidesY)
+            overGuide = overGuide || std::fabs(toWidget.map(QPointF(0, y)).y() - event->position().y()) <= 3.0;
+        if (overGuide)
+            setCursor(Qt::SizeAllCursor);
+        else if (cursor().shape() == Qt::SizeAllCursor)
+            setCursor(_activeTool ? _activeTool->cursor() : QCursor(Qt::ArrowCursor));
+    }
+
     if (!_isDragging && gestureTool() &&
         gestureTool()->mouseMove(*this, event, mapToDocument(event->position())))
     {
@@ -2952,6 +2984,33 @@ void PhoenixView::mouseMoveEvent(QMouseEvent *event)
 
 void PhoenixView::mouseReleaseEvent(QMouseEvent *event)
 {
+    if (_guideDrag)
+    {
+        const int kind = _guideDrag;
+        _guideDrag = 0;
+        // Let go over a ruler, or off the view, and the guide goes.
+        const QPointF at = event->position();
+        const bool removed = !rect().contains(at.toPoint()) ||
+            (_showRulers && ((kind == 1 && at.x() < kRulerSize) || (kind == 2 && at.y() < kRulerSize)));
+        std::vector<double>& guides = kind == 1 ? _guidesX : _guidesY;
+        if (_guideIndex >= 0 && _guideIndex < static_cast<int>(guides.size()))
+        {
+            if (removed)
+                guides.erase(guides.begin() + _guideIndex);
+            else
+                guides[_guideIndex] = std::round(_guideValue);
+        }
+        else if (!removed)
+        {
+            guides.push_back(std::round(_guideValue));
+        }
+        _guideIndex = -1;
+        pushGuidesToSnapper();
+        setCursor(_activeTool ? _activeTool->cursor() : QCursor(Qt::ArrowCursor));
+        update();
+        return;
+    }
+
     // Whatever handles the release, the gesture is over and the next frame
     // should be the good one.
     endInteraction();
@@ -3620,6 +3679,7 @@ fla::Frame* PhoenixView::keyframeForDrawing(fla::Frame* frame)
 void PhoenixView::setSnapper(fla::Snapper* snapper)
 {
     _snapper = snapper;
+    pushGuidesToSnapper();
     update();
 }
 
@@ -3654,7 +3714,7 @@ void PhoenixView::gatherSnapCandidates(fla::Snapper& snapper,
         const QRectF everything(-1.0e6, -1.0e6, 2.0e6, 2.0e6);
         for (fla::Element* element : elementsIn(everything))
         {
-            const QRectF bounds = getElementBounds(element);
+            const QRectF bounds = elementBounds(element);
             if (bounds.isValid())
                 _snapBounds.push_back({element, bounds});
         }
@@ -4001,6 +4061,7 @@ void PhoenixView::clearCaches()
 {
     _pathCache.clear();
     _boundsCache.clear();
+    _artBoundsCache.clear();
     _snapBoundsValid = false;
     _filterCache.clear();
     _backdropCache.clear();
@@ -4011,6 +4072,7 @@ void PhoenixView::clearCaches()
 void PhoenixView::invalidateBounds()
 {
     _boundsCache.clear();
+    _artBoundsCache.clear();
     _snapBoundsValid = false;
 }
 
@@ -4120,6 +4182,196 @@ bool PhoenixView::editSymbol(const fla::Symbol* symbol)
     return true;
 }
 
+void PhoenixView::setRulersVisible(bool on)
+{
+    _showRulers = on;
+    update();
+}
+
+void PhoenixView::setGuidesVisible(bool on)
+{
+    _showGuides = on;
+    update();
+}
+
+void PhoenixView::clearGuides()
+{
+    _guidesX.clear();
+    _guidesY.clear();
+    pushGuidesToSnapper();
+    update();
+}
+
+void PhoenixView::pushGuidesToSnapper()
+{
+    if (!_snapper)
+        return;
+    // Guides are in the document's space; inside a symbol the tools work in
+    // the symbol's, so each guide is carried over when that is a plain
+    // scale and shift, and left out otherwise.
+    std::vector<double> xs;
+    std::vector<double> ys;
+    if (_showGuides)
+    {
+        bool invertible = false;
+        const QTransform toScope = scopeToDocument().inverted(&invertible);
+        if (invertible && std::fabs(toScope.m12()) < 1.0e-9 && std::fabs(toScope.m21()) < 1.0e-9)
+        {
+            for (double x : _guidesX)
+                xs.push_back(toScope.map(QPointF(x, 0)).x());
+            for (double y : _guidesY)
+                ys.push_back(toScope.map(QPointF(0, y)).y());
+        }
+    }
+    _snapper->setGuides(xs, ys);
+}
+
+bool PhoenixView::beginGuideDrag(const QPointF& widgetPos)
+{
+    if (!_flaDocument || !_flaDocument->document)
+        return false;
+    bool invertible = false;
+    const QTransform toWidget = rootToWidget();
+    const QPointF root = toWidget.inverted(&invertible).map(widgetPos);
+    if (!invertible)
+        return false;
+
+    if (_showRulers && (widgetPos.y() < kRulerSize || widgetPos.x() < kRulerSize))
+    {
+        // Out of the top ruler comes a horizontal guide, out of the left a
+        // vertical one.
+        _guideDrag = widgetPos.y() < kRulerSize ? 2 : 1;
+        _guideIndex = -1;
+        _guideValue = _guideDrag == 1 ? root.x() : root.y();
+        _showGuides = true;
+        setCursor(_guideDrag == 1 ? Qt::SplitHCursor : Qt::SplitVCursor);
+        update();
+        return true;
+    }
+
+    // An existing guide moves with the selection tool.
+    if (!_showGuides || _activeTool != _modifierTool)
+        return false;
+    for (size_t i = 0; i < _guidesX.size(); ++i)
+    {
+        if (std::fabs(toWidget.map(QPointF(_guidesX[i], 0)).x() - widgetPos.x()) <= 3.0)
+        {
+            _guideDrag = 1;
+            _guideIndex = static_cast<int>(i);
+            _guideValue = _guidesX[i];
+            return true;
+        }
+    }
+    for (size_t i = 0; i < _guidesY.size(); ++i)
+    {
+        if (std::fabs(toWidget.map(QPointF(0, _guidesY[i])).y() - widgetPos.y()) <= 3.0)
+        {
+            _guideDrag = 2;
+            _guideIndex = static_cast<int>(i);
+            _guideValue = _guidesY[i];
+            return true;
+        }
+    }
+    return false;
+}
+
+void PhoenixView::drawRulersAndGuides(QPainter& painter)
+{
+    const fla::Document* document = _flaDocument ? _flaDocument->document : nullptr;
+    if (!document)
+        return;
+    const QTransform toWidget = rootToWidget();
+    painter.save();
+    painter.resetTransform();
+    painter.setRenderHint(QPainter::Antialiasing, false);
+
+    if (_showGuides)
+    {
+        const QColor color(document->guidesColor[0], document->guidesColor[1], document->guidesColor[2]);
+        painter.setPen(QPen(color, 1.0));
+        const auto drawGuide = [&](int kind, double value) {
+            if (kind == 1)
+            {
+                const double x = std::round(toWidget.map(QPointF(value, 0)).x()) + 0.5;
+                painter.drawLine(QPointF(x, 0), QPointF(x, height()));
+            }
+            else
+            {
+                const double y = std::round(toWidget.map(QPointF(0, value)).y()) + 0.5;
+                painter.drawLine(QPointF(0, y), QPointF(width(), y));
+            }
+        };
+        for (size_t i = 0; i < _guidesX.size(); ++i)
+            if (!(_guideDrag == 1 && _guideIndex == static_cast<int>(i)))
+                drawGuide(1, _guidesX[i]);
+        for (size_t i = 0; i < _guidesY.size(); ++i)
+            if (!(_guideDrag == 2 && _guideIndex == static_cast<int>(i)))
+                drawGuide(2, _guidesY[i]);
+        if (_guideDrag)
+            drawGuide(_guideDrag, std::round(_guideValue));
+    }
+
+    if (_showRulers)
+    {
+        const QColor back(43, 43, 43);
+        const QColor ink(170, 170, 170);
+        painter.fillRect(QRect(0, 0, width(), kRulerSize), back);
+        painter.fillRect(QRect(0, 0, kRulerSize, height()), back);
+        painter.setPen(QColor(70, 70, 70));
+        painter.drawLine(0, kRulerSize, width(), kRulerSize);
+        painter.drawLine(kRulerSize, 0, kRulerSize, height());
+
+        // A labeled tick every so many stage pixels, chosen so labels sit
+        // at least 50 screen pixels apart, with minor ticks between.
+        const double scale = std::max(std::hypot(toWidget.m11(), toWidget.m12()), 1.0e-6);
+        double step = 1.0;
+        const double steps[] = {1, 2, 5, 10, 20, 25, 50, 100, 200, 250, 500, 1000, 2000, 5000, 10000};
+        for (double candidate : steps)
+        {
+            step = candidate;
+            if (candidate * scale >= 50.0)
+                break;
+        }
+        QFont font = painter.font();
+        font.setPointSizeF(7.5);
+        painter.setFont(font);
+        const QPointF origin = toWidget.map(QPointF(0, 0));
+
+        const double firstX = std::floor((kRulerSize - origin.x()) / scale / step) * step;
+        for (double v = firstX; origin.x() + v * scale < width(); v += step / 5.0)
+        {
+            const double x = std::round(origin.x() + v * scale) + 0.5;
+            if (x < kRulerSize)
+                continue;
+            const bool major = std::fabs(std::fmod(std::fabs(v) + 1.0e-6, step)) < 1.0e-3;
+            painter.setPen(ink);
+            painter.drawLine(QPointF(x, major ? 4 : kRulerSize - 5), QPointF(x, kRulerSize));
+            if (major)
+                painter.drawText(QPointF(x + 2, 10), QString::number(static_cast<long long>(std::lround(v))));
+        }
+        const double firstY = std::floor((kRulerSize - origin.y()) / scale / step) * step;
+        for (double v = firstY; origin.y() + v * scale < height(); v += step / 5.0)
+        {
+            const double y = std::round(origin.y() + v * scale) + 0.5;
+            if (y < kRulerSize)
+                continue;
+            const bool major = std::fabs(std::fmod(std::fabs(v) + 1.0e-6, step)) < 1.0e-3;
+            painter.setPen(ink);
+            painter.drawLine(QPointF(major ? 4 : kRulerSize - 5, y), QPointF(kRulerSize, y));
+            if (major)
+            {
+                painter.save();
+                painter.translate(10, y + 2);
+                painter.rotate(-90);
+                painter.drawText(QPointF(-30, 0), QString::number(static_cast<long long>(std::lround(v))).rightJustified(5, ' '));
+                painter.restore();
+            }
+        }
+        painter.fillRect(QRect(0, 0, kRulerSize, kRulerSize), back);
+    }
+    painter.restore();
+}
+
 void PhoenixView::dragEnterEvent(QDragEnterEvent* event)
 {
     if (event->mimeData()->hasFormat(LibraryTree::mimeType()))
@@ -4214,8 +4466,24 @@ QPointF PhoenixView::mapToWidget(const QPointF& documentPos) const
     return documentToWidget().map(documentPos);
 }
 
+QRectF PhoenixView::elementBounds(const fla::Element* element)
+{
+    auto it = _artBoundsCache.find(element);
+    if (it != _artBoundsCache.end())
+        return it.value();
+    const bool wasTight = _tightBounds;
+    _tightBounds = true;
+    const QRectF bounds = calculateElementBounds(element);
+    _tightBounds = wasTight;
+    _artBoundsCache[element] = bounds;
+    return bounds;
+}
+
 QRectF PhoenixView::getElementBounds(const fla::Element* element)
 {
+    if (_tightBounds)
+        return calculateElementBounds(element);
+
     // Check cache first
     auto it = _boundsCache.find(element);
     if (it != _boundsCache.end())
@@ -4443,13 +4711,16 @@ QRectF PhoenixView::calculateShapeBounds(const fla::Shape* shape)
     // Expand bounds by half the stroke weight (stroke extends on both sides)
     if (!bounds.isNull() && maxStrokeWeight > 0)
     {
-        double expansion = maxStrokeWeight / 2.0 + 2.0; // +2 for safety margin
+        // Half the stroke reaches out on each side; the rest is margin for
+        // antialiasing, which the art's own edges leave out.
+        double expansion = maxStrokeWeight / 2.0 + (_tightBounds ? 0.0 : 2.0);
         bounds = bounds.adjusted(-expansion, -expansion, expansion, expansion);
     }
     else if (!bounds.isNull())
     {
         // Default small margin for anti-aliasing
-        bounds = bounds.adjusted(-2, -2, 2, 2);
+        if (!_tightBounds)
+            bounds = bounds.adjusted(-2, -2, 2, 2);
     }
 
     QTransform transform(shape->transform.m11, shape->transform.m12,
