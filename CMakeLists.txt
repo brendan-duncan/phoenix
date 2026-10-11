@@ -159,6 +159,7 @@ set(HEADERS
     src/edit/snapping.h
     src/edit/region_split.h
     src/edit/drawing_style.h
+    src/edit/brush_stroke.h
     src/edit/curve_fit.h
     src/edit/shape_recognition.h
     src/edit/path_tidy.h
@@ -274,6 +275,7 @@ set(SOURCES
     src/edit/snapping.cpp
     src/edit/region_split.cpp
     src/edit/drawing_style.cpp
+    src/edit/brush_stroke.cpp
     src/edit/curve_fit.cpp
     src/edit/shape_recognition.cpp
     src/edit/path_tidy.cpp

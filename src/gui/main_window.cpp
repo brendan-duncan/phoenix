@@ -179,7 +179,9 @@ MainWindow::MainWindow(const QString& initialFile, QWidget* parent)
     _handTool = std::make_unique<HandTool>();
     _zoomTool = std::make_unique<ZoomTool>();
     _lassoTool = std::make_unique<LassoTool>(_selection);
-    _brushTool = std::make_unique<BrushTool>(_selection, stack, _drawingStyle);
+    _brushTool = std::make_unique<BrushTool>(BrushTool::Kind::Fluid, _selection, stack, _drawingStyle);
+    _classicBrushTool = std::make_unique<BrushTool>(BrushTool::Kind::Classic, _selection, stack, _drawingStyle);
+    _inkBrushTool = std::make_unique<BrushTool>(BrushTool::Kind::Ink, _selection, stack, _drawingStyle);
     _eraserTool = std::make_unique<EraserTool>(_selection, stack, _drawingStyle);
     _paintBucketTool = std::make_unique<PaintBucketTool>(stack, _drawingStyle);
     _inkBottleTool = std::make_unique<InkBottleTool>(stack, _drawingStyle);
@@ -1748,9 +1750,22 @@ void MainWindow::setupToolBar()
     addSlot({makeTool(ToolIcons::Tool::Pencil, "Pencil", Qt::Key_D,
         "Draw freehand. The stroke is fitted on release; the mode is in the Properties panel.",
         [this]() -> Tool* { return _pencilTool.get(); })});
-    addSlot({makeTool(ToolIcons::Tool::Brush, "Brush", Qt::Key_B,
-        "Paint a fill along the drag. The size is in the Properties panel.",
-        [this]() -> Tool* { return _brushTool.get(); })});
+    // Animate's two brushes and Phoenix's own share a slot; B is the Fluid
+    // Brush's, as in Animate.
+    addSlot({
+        makeTool(ToolIcons::Tool::FluidBrush, "Fluid Brush", Qt::Key_B,
+            "Paint a fill whose width follows the pen's pressure and speed, with tapered ends "
+            "and a smoothed line. Settings are in the Properties panel.",
+            [this]() -> Tool* { return _brushTool.get(); }),
+        makeTool(ToolIcons::Tool::Brush, "Classic Brush", Qt::Key_unknown,
+            "Paint a fill with one of Flash's brush shapes. Use Pressure varies the width; "
+            "Use Tilt turns the tip with the pen.",
+            [this]() -> Tool* { return _classicBrushTool.get(); }),
+        makeTool(ToolIcons::Tool::InkBrush, "Ink Brush", Qt::Key_unknown,
+            "Paint steady inked lines: a stabilizer trails the pen, the pressure response is "
+            "adjustable, and tilting the pen broadens the line.",
+            [this]() -> Tool* { return _inkBrushTool.get(); }),
+    });
 
     toolBar->addSeparator();
 
@@ -2101,7 +2116,9 @@ ToolIcons::Tool MainWindow::iconForTool(const Tool* tool) const
     if (tool == _paintBucketTool.get()) return IconTool::PaintBucket;
     if (tool == _inkBottleTool.get()) return IconTool::InkBottle;
     if (tool == _eyedropperTool.get()) return IconTool::Eyedropper;
-    if (tool == _brushTool.get()) return IconTool::Brush;
+    if (tool == _brushTool.get()) return IconTool::FluidBrush;
+    if (tool == _classicBrushTool.get()) return IconTool::Brush;
+    if (tool == _inkBrushTool.get()) return IconTool::InkBrush;
     if (tool == _eraserTool.get()) return IconTool::Eraser;
     if (tool == _lassoTool.get()) return IconTool::Lasso;
     if (tool == _textTool.get()) return IconTool::Text;

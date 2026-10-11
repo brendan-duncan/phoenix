@@ -1164,14 +1164,18 @@ addition maps, plus a rule for which strokes survive.
       join the sides with caps, and fill the ring non-zero (VectorCraft
       `effects/src/stroke/width.rs:158-217`)
   - Done 2026-10-09 (`brush_tools.cpp`, B): the fitted centerline is stroked with round caps and joins, resolved with `simplified()`, and each loop written with the fill on the side its direction implies. The modes done 2026-10-09 as a Brush mode field in Properties: Paint Fills merges with `MergeOptions::keepStrokes`, so lines survive under the paint (the pending drop carries the flag through to the merge on deselect); Paint Behind, Paint Selection and Paint Inside cut the stroke down first by arranging it with the outlines of the shapes under it (`RegionSplitter` with cutters) and keeping the regions where nothing is painted, where a selected fill is, or where the face the stroke began in is; verified on screen. Pressure done 2026-10-09: with Use pressure on, a tablet's pressure (read from Qt's tablet events, which still arrive as mouse moves) sets the width along the stroke, the outline built by offsetting the fitted centerline to either side and joining the sides with round caps; a mouse paints at full width. Not verifiable here without a tablet. The resolved outline is refitted with the curve fitter before it becomes edges (2026-10-09), so a stroke lands as a few cubics per loop rather than the hundreds of straight pieces the stroker and `simplified()` leave; a wavy stroke with ten corners saved as one edge of 47 cubics
-- [ ] **Pen input still missing.** Confirm on real hardware that Qt delivers
-      tablet events to the stage (a driver that reports as a mouse gives a
-      constant width). Tilt: Animate's Use Tilt rotates a non-round tip, so it
-      needs brush tip shapes first (round only today). Pressure does not reach
-      the pencil, eraser or paint brush, and nothing varies with pressure but
-      width -- which matches Animate's classic brush. Pressure is sampled per
-      mouse move, so a fast stroke gets few samples; interpolation between them
-      is linear along the raw polyline
+- [x] **Pen input.** Tested with a Wacom on 2026-10-11: tablet events reach
+      the stage, but pressure made the edge of a stroke noisy and lumpy.
+      Pressure was read from the latest tablet event and paired with the
+      mouse moves Qt makes from the pen, which arrive less often, so the two
+      mismatched; it was not filtered; the centerline kept the hand's wobble;
+      and the outline, offset to either side of a curve tighter than half the
+      width, folded over itself into kinks
+  - Done 2026-10-11 (`src/edit/brush_stroke.cpp`, `brush_tools.cpp`): the stage keeps each tablet reading, position, pressure, tilt and time together, while the pen is down, and the brushes build the stroke from those (a mouse gives its moves at full pressure). The readings are laid out evenly along the line, the line smoothed in screen pixels (Animate's Smoothing, 0 to 100) with its ends kept, pressure and tilt always eased over a few pixels, and the tip placed as dabs a quarter of its width apart; the painted area is the union of the convex hulls of each pair of neighboring dabs, resolved with `simplified()`, which cannot fold over itself. The curves fitted to the outline follow a Precision setting in screen pixels rather than a fixed 0.3 px. The preview is the same sweep, so the stroke lands as drawn. Pressure is on by default. Three brushes share the B slot: **Fluid Brush** (Animate's: size, pressure with a minimum size, velocity thin-to-thick or thick-to-thin, start and end tapers, smoothing, precision, tip roundness and angle), **Classic Brush** (Flash's: the round, oval, square, rectangle, vertical and two diagonal tips, Use Pressure, Use Tilt turning the tip to the pen's lean, smoothing) and **Ink Brush**, Phoenix's own (a stabilizer that pulls the line along on a string of so many screen pixels and catches up when the pen lifts, a soft, linear or firm pressure response, and tilt that broadens the line). Brush modes apply to all three. Tests in `test_brush_stroke.cpp` (flickering pressure, wobble at two zooms, stabilizer, tapers, velocity, tilt, hulls). Checked on screen with mouse strokes and an alternating fake pressure: clean edges, the diagonal tip thick and thin by direction, a shaky line steadied by the Ink Brush; a 1300-pixel stroke takes under a second to place in a Debug build, most of it curve fitting. Not checked here with a real pen: the user's Wacom is the test
+- [ ] **Paint Brush (Y in Animate).** Animate's third brush draws strokes, not
+      fills, with art and pattern brushes and pressure-varied width profiles,
+      which needs variable-width strokes drawn and written (today a stroke's
+      VariablePointWidth profile is only kept as read). Not started
 - [x] **Eraser.** Normal = `ShapeMerger::subtract` with the brush outline; Fills =
       keep all target strokes; Lines = keep fills, drop strokes inside;
       Selected Fills / Inside restrict as for the brush; Faucet clears the
@@ -1492,10 +1496,10 @@ dragging, at a maximized window on a 3856x1568 display:
 ## Explicitly out of scope
 
 
-Bones/IK, motion editor, asset warp, variable-width strokes, art/pattern brushes,
-tilt input and brush tip shapes. Each is a project in itself. (Pressure for the
-brush and static, dynamic and input text authoring were done on 2026-10-09; see
-step 13 and step 14.)
+Bones/IK, motion editor, asset warp, variable-width strokes, art/pattern brushes.
+Each is a project in itself. (Pressure for the brush and static, dynamic and
+input text authoring were done on 2026-10-09, and tilt input and brush tip
+shapes on 2026-10-11; see step 13 and step 14.)
 
 ---
 

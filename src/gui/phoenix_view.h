@@ -7,6 +7,7 @@
 #include "../data/rect.h"
 #include "../data/shape.h"
 #include "../data/symbol.h"
+#include "../edit/brush_stroke.h"
 
 #include <QList>
 #include <QMap>
@@ -90,6 +91,16 @@ public:
     /// A tablet's pen pressure, 0 to 1, while the pen is down; 1 for a mouse.
     /// The brush reads it to vary its width.
     double pressure() const { return _pressure; }
+
+    /// The pen's readings since they were last taken, while a pen is down:
+    /// each with its exact position, pressure, tilt and time together. The
+    /// mouse events Qt makes from a pen arrive less often and carry no
+    /// pressure, so pairing them with the latest pressure mismatches the two.
+    std::vector<fla::BrushSample> takeTabletSamples();
+
+    /// Whether a pen is down on the stage: a press that comes from it has
+    /// its readings waiting in takeTabletSamples().
+    bool penDown() const { return _penDown; }
 
     /// Zoom steps follow Animate's magnification presets. The view center
     /// stays put.
@@ -552,6 +563,8 @@ private:
     Tool* _modifierTool = nullptr;
 
     double _pressure = 1.0;
+    bool _penDown = false;
+    std::vector<fla::BrushSample> _tabletSamples;
 
     /// The tool handling the gesture in progress, which is the active one unless
     /// ctrl took over at the press. A gesture finishes with the tool that began

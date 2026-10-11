@@ -28,7 +28,10 @@ public:
         PaintBucket,
         InkBottle,
         Eyedropper,
+        /// The Classic Brush.
         Brush,
+        FluidBrush,
+        InkBrush,
         Eraser,
         Lasso,
         Text,

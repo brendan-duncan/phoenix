@@ -84,110 +84,8 @@ QPainterPath centerline(const std::vector<fla::Point>& points, bool smooth, doub
     return path;
 }
 
-/// The outline of a stroke whose width follows the pen's pressure: the
-/// centerline is walked at a steady pace, each step offset to either side by
-/// half the width the pressure there allows, the two sides joined by round
-/// caps, and the ring resolved so that where it overlaps itself it is still
-/// one region.
-QPainterPath pressureOutline(const QPainterPath& center, double width,
-    const std::vector<fla::Point>& raw, const std::vector<double>& pressures)
+QPainterPath brushOutline(const std::vector<fla::Point>& points, double width, bool smooth, double zoom)
 {
-    const double length = center.length();
-    if (length < 1.0e-6 || raw.size() != pressures.size() || raw.empty())
-        return QPainterPath();
-
-    std::vector<double> along(raw.size(), 0.0);
-    for (size_t i = 1; i < raw.size(); ++i)
-        along[i] = along[i - 1] + std::hypot(raw[i].x - raw[i - 1].x, raw[i].y - raw[i - 1].y);
-    const double total = along.back();
-
-    const auto pressureAt = [&](double fraction) {
-        if (total <= 1.0e-9)
-            return pressures.front();
-        const double target = fraction * total;
-        for (size_t i = 1; i < raw.size(); ++i)
-        {
-            if (along[i] >= target)
-            {
-                const double span = along[i] - along[i - 1];
-                const double t = span > 1.0e-9 ? (target - along[i - 1]) / span : 1.0;
-                return pressures[i - 1] + (pressures[i] - pressures[i - 1]) * t;
-            }
-        }
-        return pressures.back();
-    };
-
-    const int steps = std::max(8, static_cast<int>(length / 1.5));
-    std::vector<QPointF> left;
-    std::vector<QPointF> right;
-    std::vector<QPointF> centers;
-    std::vector<QPointF> directions;
-    for (int s = 0; s <= steps; ++s)
-    {
-        const double t = static_cast<double>(s) / steps;
-        const QPointF p = center.pointAtPercent(t);
-        const double degrees = center.angleAtPercent(t);
-        const double radians = degrees * 3.14159265358979323846 / 180.0;
-        // Qt measures the angle with y up; the stage has y down.
-        const QPointF d(std::cos(radians), -std::sin(radians));
-        const QPointF n(-d.y(), d.x());
-        const double half = std::max(0.05, std::min(1.0, pressureAt(t))) * width * 0.5;
-        left.push_back(p + n * half);
-        right.push_back(p - n * half);
-        centers.push_back(p);
-        directions.push_back(d);
-    }
-
-    // A half circle from one side to the other round an end, bulging the way
-    // the stroke travels there.
-    const auto cap = [](std::vector<QPointF>& out, const QPointF& center, const QPointF& from,
-        const QPointF& travel) {
-        const QPointF v = from - center;
-        QPointF turned(-v.y(), v.x());
-        double sign = 1.0;
-        if (turned.x() * travel.x() + turned.y() * travel.y() < 0.0)
-            sign = -1.0;
-        const int pieces = 12;
-        for (int k = 1; k < pieces; ++k)
-        {
-            const double theta = sign * 3.14159265358979323846 * k / pieces;
-            const double c = std::cos(theta);
-            const double sn = std::sin(theta);
-            out.push_back(center + QPointF(v.x() * c - v.y() * sn, v.x() * sn + v.y() * c));
-        }
-    };
-
-    std::vector<QPointF> ring(left.begin(), left.end());
-    cap(ring, centers.back(), left.back(), directions.back());
-    for (auto it = right.rbegin(); it != right.rend(); ++it)
-        ring.push_back(*it);
-    cap(ring, centers.front(), right.front(), -directions.front());
-
-    QPainterPath outline;
-    outline.setFillRule(Qt::WindingFill);
-    outline.addPolygon(QPolygonF(ring.begin(), ring.end()));
-    outline.closeSubpath();
-    return outline.simplified();
-}
-
-QPainterPath brushOutline(const std::vector<fla::Point>& points, double width, bool smooth, double zoom,
-    const std::vector<double>* pressures = nullptr)
-{
-    // Pressure only matters when it varied: a mouse reports 1 throughout.
-    bool varied = false;
-    if (pressures && pressures->size() == points.size())
-    {
-        for (const double p : *pressures)
-            varied = varied || std::fabs(p - 1.0) > 0.01;
-    }
-    if (varied && points.size() >= 2)
-    {
-        const QPainterPath outline = pressureOutline(
-            centerline(points, smooth, zoom), std::max(width, 0.5), points, *pressures);
-        if (!outline.isEmpty())
-            return outline;
-    }
-
     QPainterPathStroker stroker;
     stroker.setWidth(std::max(width, 0.5));
     stroker.setCapStyle(Qt::RoundCap);
@@ -336,11 +234,12 @@ QRectF boundsOf(const fla::Shape& shape)
 
 } // namespace
 
-fla::Shape* brushOutlineShape(const std::vector<fla::Point>& points, double width,
-    bool smooth, fla::Frame* parent, const fla::DrawingStyle& style, bool asFill,
-    const std::vector<double>* pressures)
+/// A resolved outline as a merge shape filled with the style's fill (or, for
+/// the eraser's cutter, any fill). Each loop is fitted with curves to within
+/// \a tolerance.
+fla::Shape* outlineShape(const QPainterPath& outline, double tolerance, fla::Frame* parent,
+    const fla::DrawingStyle& style, bool asFill)
 {
-    const QPainterPath outline = brushOutline(points, width, smooth, 1.0, pressures);
     if (outline.isEmpty())
         return nullptr;
 
@@ -389,8 +288,8 @@ fla::Shape* brushOutlineShape(const std::vector<fla::Point>& points, double widt
         }
 
         fla::CurveFit::Options options;
-        options.tolerance = 0.3;
-        options.minimumSpacing = 0.2;
+        options.tolerance = tolerance;
+        options.minimumSpacing = tolerance * 0.4;
         fla::EditablePath fitted = fla::CurveFit::fit(ring, options);
         if (fitted.anchors.size() >= 2)
         {
@@ -459,7 +358,70 @@ fla::Shape* brushOutlineShape(const std::vector<fla::Point>& points, double widt
     return shape;
 }
 
+fla::Shape* brushOutlineShape(const std::vector<fla::Point>& points, double width,
+    bool smooth, fla::Frame* parent, const fla::DrawingStyle& style, bool asFill)
+{
+    return outlineShape(brushOutline(points, width, smooth, 1.0), 0.3, parent, style, asFill);
+}
+
+QPainterPath sweptOutline(const std::vector<fla::BrushDab>& dabs, double zoom, bool resolve)
+{
+    QPainterPath path;
+    path.setFillRule(Qt::WindingFill);
+    for (const std::vector<fla::Point>& polygon : fla::BrushStroke::sweep(dabs, zoom))
+    {
+        if (polygon.size() < 3)
+            continue;
+        QPolygonF ring;
+        ring.reserve(static_cast<int>(polygon.size()));
+        for (const fla::Point& point : polygon)
+            ring << QPointF(point.x, point.y);
+        path.addPolygon(ring);
+        path.closeSubpath();
+    }
+    return resolve ? path.simplified() : path;
+}
+
 // ---------------------------------------------------------------- brush
+
+QString BrushTool::name() const
+{
+    switch (_kind)
+    {
+    case Kind::Fluid: return "Fluid Brush";
+    case Kind::Classic: return "Classic Brush";
+    case Kind::Ink: return "Ink Brush";
+    }
+    return "Brush";
+}
+
+const fla::BrushSettings& BrushTool::settings() const
+{
+    switch (_kind)
+    {
+    case Kind::Classic: return _style.classicBrush;
+    case Kind::Ink: return _style.inkBrush;
+    case Kind::Fluid: break;
+    }
+    return _style.fluidBrush;
+}
+
+void BrushTool::takeSamples(PhoenixView& view, QMouseEvent* event, const QPointF& documentPos)
+{
+    if (_pen)
+    {
+        const std::vector<fla::BrushSample> taken = view.takeTabletSamples();
+        _samples.insert(_samples.end(), taken.begin(), taken.end());
+        if (!_samples.empty())
+            return;
+    }
+    fla::BrushSample sample;
+    sample.x = documentPos.x();
+    sample.y = documentPos.y();
+    sample.pressure = _pen ? view.pressure() : 1.0;
+    sample.time = event ? static_cast<double>(event->timestamp()) : 0.0;
+    _samples.push_back(sample);
+}
 
 bool BrushTool::mousePress(PhoenixView& view, QMouseEvent* event, const QPointF& documentPos)
 {
@@ -484,26 +446,20 @@ bool BrushTool::mousePress(PhoenixView& view, QMouseEvent* event, const QPointF&
     }
 
     _drawing = true;
-    _points.clear();
-    _pressures.clear();
-    _points.push_back(fla::Point(documentPos.x(), documentPos.y()));
-    _pressures.push_back(_style.brushPressure ? view.pressure() : 1.0);
+    _samples.clear();
+    _pen = view.penDown();
+    takeSamples(view, event, documentPos);
     view.update();
     return true;
 }
 
 bool BrushTool::mouseMove(PhoenixView& view, QMouseEvent* event, const QPointF& documentPos)
 {
-    (void)event;
-
     _hover = documentPos;
     _hoverValid = true;
 
     if (_drawing)
-    {
-        _points.push_back(fla::Point(documentPos.x(), documentPos.y()));
-        _pressures.push_back(_style.brushPressure ? view.pressure() : 1.0);
-    }
+        takeSamples(view, event, documentPos);
 
     view.update();
     return _drawing;
@@ -514,8 +470,16 @@ bool BrushTool::mouseRelease(PhoenixView& view, QMouseEvent* event, const QPoint
     if (event->button() != Qt::LeftButton || !_drawing)
         return false;
 
-    _points.push_back(fla::Point(documentPos.x(), documentPos.y()));
-    _pressures.push_back(_style.brushPressure ? view.pressure() : 1.0);
+    if (_pen)
+    {
+        // The pen's last readings; the release itself adds nothing.
+        const std::vector<fla::BrushSample> taken = view.takeTabletSamples();
+        _samples.insert(_samples.end(), taken.begin(), taken.end());
+    }
+    else
+    {
+        takeSamples(view, event, documentPos);
+    }
     _drawing = false;
     finish(view);
     return true;
@@ -527,7 +491,7 @@ bool BrushTool::keyPress(PhoenixView& view, QKeyEvent* event)
         return false;
 
     _drawing = false;
-    _points.clear();
+    _samples.clear();
     view.update();
     return true;
 }
@@ -535,17 +499,22 @@ bool BrushTool::keyPress(PhoenixView& view, QKeyEvent* event)
 void BrushTool::finish(PhoenixView& view)
 {
     fla::Frame* frame = view.activeFrame();
-    if (!frame || _points.empty())
+    if (!frame || _samples.empty())
     {
-        _points.clear();
+        _samples.clear();
         view.update();
         return;
     }
 
-    fla::Shape* shape = brushOutlineShape(_points, _style.brushSize, true, frame, _style, true,
-        &_pressures);
-    _points.clear();
-    _pressures.clear();
+    // Precision sets how closely the curves fitted to the outline follow
+    // it, from a sixth of a screen pixel at 100 to a pixel and a half at 0.
+    const double zoom = std::max(view.zoom(), 1.0e-6);
+    const fla::BrushSettings& brush = settings();
+    const double precision = std::max(0, std::min(100, brush.precision)) / 100.0;
+    const double tolerance = (0.15 + (1.0 - precision) * 1.35) / zoom;
+    const std::vector<fla::BrushDab> dabs = fla::BrushStroke::dabs(_samples, brush, zoom, true);
+    fla::Shape* shape = outlineShape(sweptOutline(dabs, zoom, true), tolerance, frame, _style, true);
+    _samples.clear();
     if (!shape)
     {
         view.update();
@@ -629,31 +598,42 @@ void BrushTool::finish(PhoenixView& view)
 
 void BrushTool::paintOverlay(PhoenixView& view, QPainter& painter, double scale)
 {
-    (void)view;
 
     painter.setPen(Qt::NoPen);
 
-    if (_drawing && !_points.empty())
+    const double zoom = std::max(view.zoom(), 1.0e-6);
+    const fla::BrushSettings& brush = settings();
+    if (_drawing && !_samples.empty())
     {
-        // The stroke as it will land: the fill color along the drag.
+        // The stroke as it will land: the same sweep, in the fill color.
         painter.setBrush(QColor(_style.fillColor[0], _style.fillColor[1],
             _style.fillColor[2], _style.fillColor[3]));
-        painter.drawPath(brushOutline(_points, _style.brushSize, false, 1.0, &_pressures));
+        painter.drawPath(sweptOutline(fla::BrushStroke::dabs(_samples, brush, zoom, false), zoom, false));
     }
 
     if (_hoverValid)
     {
-        // The brush itself: a ring the size of the brush under the cursor.
+        // The brush itself: the tip's outline at full size under the cursor.
+        fla::BrushDab tip;
+        tip.x = _hover.x();
+        tip.y = _hover.y();
+        tip.width = std::max(brush.size, 0.1);
+        tip.height = std::max(brush.size * std::max(1.0, std::min(100.0, brush.roundness)) / 100.0, 0.1);
+        tip.angle = brush.angle * 3.14159265358979323846 / 180.0;
+        tip.rectangular = brush.tip == fla::BrushSettings::Tip::Rectangle;
+        QPolygonF ring;
+        for (const fla::Point& point : fla::BrushStroke::dabOutline(tip, zoom))
+            ring << QPointF(point.x, point.y);
         painter.setBrush(Qt::NoBrush);
         painter.setPen(QPen(QColor(0, 0, 0), 1.0 * scale));
-        painter.drawEllipse(_hover, _style.brushSize / 2.0, _style.brushSize / 2.0);
+        painter.drawPolygon(ring);
     }
 }
 
 void BrushTool::deactivate(PhoenixView& view)
 {
     _drawing = false;
-    _points.clear();
+    _samples.clear();
     _hoverValid = false;
     _insideShape = nullptr;
     _insideFace = -1;

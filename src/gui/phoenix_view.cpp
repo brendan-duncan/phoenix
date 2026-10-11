@@ -3044,14 +3044,47 @@ void PhoenixView::mouseDoubleClickEvent(QMouseEvent* event)
 
 void PhoenixView::tabletEvent(QTabletEvent* event)
 {
-    // Only the pressure is taken; the event is left alone so that Qt goes on
-    // to deliver the same movement as mouse events, which is what the tools
-    // handle.
-    if (event->type() == QEvent::TabletRelease)
+    // The readings are kept for the brushes, and the event is left alone so
+    // that Qt goes on to deliver the same movement as mouse events, which is
+    // what the tools handle.
+    fla::BrushSample sample;
+    const QPointF documentPos = mapToDocument(event->position());
+    sample.x = documentPos.x();
+    sample.y = documentPos.y();
+    sample.pressure = std::max(0.0, std::min(1.0, event->pressure()));
+    sample.tiltX = event->xTilt();
+    sample.tiltY = event->yTilt();
+    sample.time = static_cast<double>(event->timestamp());
+    switch (event->type())
+    {
+    case QEvent::TabletPress:
+        _penDown = true;
+        _tabletSamples.clear();
+        _tabletSamples.push_back(sample);
+        _pressure = sample.pressure;
+        break;
+    case QEvent::TabletMove:
+        if (_penDown)
+            _tabletSamples.push_back(sample);
+        _pressure = _penDown ? sample.pressure : 1.0;
+        break;
+    case QEvent::TabletRelease:
+        // The release reads no pressure where the last move already stood;
+        // the stroke ends on the moves before it.
+        _penDown = false;
         _pressure = 1.0;
-    else
-        _pressure = std::max(0.0, std::min(1.0, event->pressure()));
+        break;
+    default:
+        break;
+    }
     event->ignore();
+}
+
+std::vector<fla::BrushSample> PhoenixView::takeTabletSamples()
+{
+    std::vector<fla::BrushSample> taken;
+    taken.swap(_tabletSamples);
+    return taken;
 }
 
 bool PhoenixView::event(QEvent* event)

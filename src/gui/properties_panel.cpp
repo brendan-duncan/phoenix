@@ -50,6 +50,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <functional>
 
 namespace {
 
@@ -629,7 +630,7 @@ void PropertiesPanel::buildToolTab()
 
     const std::vector<IconTool> fillTools = {IconTool::Rectangle, IconTool::Oval, IconTool::PolyStar,
         IconTool::RectanglePrimitive, IconTool::OvalPrimitive, IconTool::Pen, IconTool::Brush,
-        IconTool::PaintBucket, IconTool::Text};
+        IconTool::FluidBrush, IconTool::InkBrush, IconTool::PaintBucket, IconTool::Text};
     const std::vector<IconTool> strokeTools = {IconTool::Rectangle, IconTool::Oval, IconTool::Line,
         IconTool::PolyStar, IconTool::RectanglePrimitive, IconTool::OvalPrimitive, IconTool::Pen,
         IconTool::Pencil, IconTool::InkBottle};
@@ -770,11 +771,148 @@ void PropertiesPanel::buildToolTab()
     });
     addOption("Mode", transformMode, {IconTool::FreeTransform});
 
-    // Brush.
-    HotText* brushSize = makeHotText(1.0, 200.0, 1, " px");
-    brushSize->setValue(style.brushSize);
-    connect(brushSize, &HotText::valueChanged, this, [this](double value, bool) { _links.style->brushSize = value; });
-    addOption("Size", brushSize, {IconTool::Brush});
+    // Brushes. Each has its own settings, shown while it is the tool; the
+    // brush mode is shared.
+    using BrushMember = fla::BrushSettings fla::DrawingStyle::*;
+    using Brush = fla::BrushSettings;
+    const auto brushNumber = [&](BrushMember member, IconTool icon, const QString& label, double minimum,
+        double maximum, int decimals, const QString& suffix, const QString& tip,
+        std::function<double(const Brush&)> get, std::function<void(Brush&, double)> set) {
+        HotText* field = makeHotText(minimum, maximum, decimals, suffix);
+        field->setValue(get(style.*member));
+        field->setToolTip(tip);
+        connect(field, &HotText::valueChanged, this, [this, member, set](double value, bool) {
+            set(_links.style->*member, value);
+        });
+        addOption(label, field, {icon});
+    };
+    const auto brushCheck = [&](BrushMember member, IconTool icon, const QString& text, const QString& tip,
+        std::function<bool(const Brush&)> get, std::function<void(Brush&, bool)> set) {
+        QCheckBox* box = new QCheckBox(text, this);
+        box->setChecked(get(style.*member));
+        box->setToolTip(tip);
+        connect(box, &QCheckBox::toggled, this, [this, member, set](bool on) { set(_links.style->*member, on); });
+        addOption(QString(), box, {icon});
+    };
+    const auto brushChoice = [&](BrushMember member, IconTool icon, const QString& label, const QStringList& items,
+        const QString& tip, std::function<int(const Brush&)> get, std::function<void(Brush&, int)> set) {
+        QComboBox* box = new QComboBox(this);
+        box->addItems(items);
+        box->setCurrentIndex(get(style.*member));
+        box->setToolTip(tip);
+        connect(box, &QComboBox::currentIndexChanged, this, [this, member, set](int index) {
+            if (index >= 0)
+                set(_links.style->*member, index);
+        });
+        addOption(label, box, {icon});
+    };
+    const auto sizeOf = [](const Brush& b) { return b.size; };
+    const auto setSize = [](Brush& b, double v) { b.size = v; };
+    const auto pressureOf = [](const Brush& b) { return b.usePressure; };
+    const auto setPressure = [](Brush& b, bool on) { b.usePressure = on; };
+    const auto minSizeOf = [](const Brush& b) { return b.minSize; };
+    const auto setMinSize = [](Brush& b, double v) { b.minSize = v; };
+    const auto smoothingOf = [](const Brush& b) { return static_cast<double>(b.smoothing); };
+    const auto setSmoothing = [](Brush& b, double v) { b.smoothing = static_cast<int>(std::lround(v)); };
+    const auto precisionOf = [](const Brush& b) { return static_cast<double>(b.precision); };
+    const auto setPrecision = [](Brush& b, double v) { b.precision = static_cast<int>(std::lround(v)); };
+    const auto taperStartOf = [](const Brush& b) { return b.taperStart; };
+    const auto setTaperStart = [](Brush& b, double v) { b.taperStart = v; };
+    const auto taperEndOf = [](const Brush& b) { return b.taperEnd; };
+    const auto setTaperEnd = [](Brush& b, double v) { b.taperEnd = v; };
+    const QString sizeTip = "The width of the tip at full pressure, in pixels";
+    const QString minSizeTip = "The width at the lightest touch, as a percentage of the size";
+    const QString smoothingTip = "How much of the hand's wobble is taken out of the line";
+    const QString precisionTip = "How closely the finished outline follows the stroke; lower is smoother "
+        "with fewer points";
+
+    // Fluid Brush, as Animate's.
+    const BrushMember fluid = &fla::DrawingStyle::fluidBrush;
+    brushNumber(fluid, IconTool::FluidBrush, "Size", 1.0, 200.0, 1, " px", sizeTip, sizeOf, setSize);
+    brushCheck(fluid, IconTool::FluidBrush, "Pressure", "Let a pen's pressure vary the width", pressureOf,
+        setPressure);
+    brushNumber(fluid, IconTool::FluidBrush, "Min size", 1.0, 100.0, 0, " %", minSizeTip, minSizeOf, setMinSize);
+    brushChoice(fluid, IconTool::FluidBrush, "Velocity", {"None", "Thin to thick", "Thick to thin"},
+        "How the speed of the stroke changes its width",
+        [](const Brush& b) { return static_cast<int>(b.velocity); },
+        [](Brush& b, int i) { b.velocity = static_cast<Brush::Velocity>(i); });
+    brushNumber(fluid, IconTool::FluidBrush, "Taper start", 0.0, 50.0, 0, " %",
+        "How much of the stroke its start tapers over", taperStartOf, setTaperStart);
+    brushNumber(fluid, IconTool::FluidBrush, "Taper end", 0.0, 50.0, 0, " %",
+        "How much of the stroke its end tapers over", taperEndOf, setTaperEnd);
+    brushNumber(fluid, IconTool::FluidBrush, "Smoothing", 0.0, 100.0, 0, QString(), smoothingTip, smoothingOf,
+        setSmoothing);
+    brushNumber(fluid, IconTool::FluidBrush, "Precision", 0.0, 100.0, 0, QString(), precisionTip, precisionOf,
+        setPrecision);
+    brushNumber(fluid, IconTool::FluidBrush, "Roundness", 1.0, 100.0, 0, " %",
+        "The tip's height as a percentage of its width",
+        [](const Brush& b) { return b.roundness; }, [](Brush& b, double v) { b.roundness = v; });
+    brushNumber(fluid, IconTool::FluidBrush, "Angle", -180.0, 180.0, 0, QString::fromUtf8("°"),
+        "The tip's turn, clockwise", [](const Brush& b) { return b.angle; },
+        [](Brush& b, double v) { b.angle = v; });
+
+    // Classic Brush, as Animate's (Flash's): its tip shapes, Use Pressure and
+    // Use Tilt.
+    const BrushMember classic = &fla::DrawingStyle::classicBrush;
+    struct TipShape
+    {
+        Brush::Tip tip;
+        double roundness;
+        double angle;
+    };
+    static const TipShape tipShapes[] = {
+        {Brush::Tip::Ellipse, 100.0, 0.0}, {Brush::Tip::Ellipse, 50.0, 0.0},
+        {Brush::Tip::Rectangle, 100.0, 0.0}, {Brush::Tip::Rectangle, 50.0, 0.0},
+        {Brush::Tip::Rectangle, 20.0, 90.0}, {Brush::Tip::Rectangle, 20.0, -45.0},
+        {Brush::Tip::Rectangle, 20.0, 45.0}};
+    brushNumber(classic, IconTool::Brush, "Size", 1.0, 200.0, 1, " px", sizeTip, sizeOf, setSize);
+    brushChoice(classic, IconTool::Brush, "Brush shape",
+        {"Round", "Oval", "Square", "Rectangle", "Vertical line", "Diagonal /", "Diagonal \\"},
+        "The shape of the tip, as Flash's brush offers them",
+        [](const Brush& b) {
+            for (int i = 0; i < 7; ++i)
+            {
+                if (tipShapes[i].tip == b.tip && tipShapes[i].roundness == b.roundness &&
+                    tipShapes[i].angle == b.angle)
+                {
+                    return i;
+                }
+            }
+            return 0;
+        },
+        [](Brush& b, int i) {
+            b.tip = tipShapes[i].tip;
+            b.roundness = tipShapes[i].roundness;
+            b.angle = tipShapes[i].angle;
+        });
+    brushCheck(classic, IconTool::Brush, "Use pressure", "Let a pen's pressure vary the width", pressureOf,
+        setPressure);
+    brushCheck(classic, IconTool::Brush, "Use tilt", "Turn the tip to the direction the pen leans",
+        [](const Brush& b) { return b.useTilt; }, [](Brush& b, bool on) { b.useTilt = on; });
+    brushNumber(classic, IconTool::Brush, "Smoothing", 0.0, 100.0, 0, QString(), smoothingTip, smoothingOf,
+        setSmoothing);
+
+    // Ink Brush, Phoenix's own. Pressure is always on.
+    const BrushMember ink = &fla::DrawingStyle::inkBrush;
+    brushNumber(ink, IconTool::InkBrush, "Size", 1.0, 200.0, 1, " px", sizeTip, sizeOf, setSize);
+    brushNumber(ink, IconTool::InkBrush, "Min size", 1.0, 100.0, 0, " %", minSizeTip, minSizeOf, setMinSize);
+    brushChoice(ink, IconTool::InkBrush, "Pressure", {"Soft", "Linear", "Firm"},
+        "Soft gives width at a light touch; firm needs a harder press",
+        [](const Brush& b) { return b.pressureCurve < 0.8 ? 0 : (b.pressureCurve > 1.3 ? 2 : 1); },
+        [](Brush& b, int i) {
+            static const double curves[] = {0.6, 1.0, 1.7};
+            b.pressureCurve = curves[i];
+        });
+    brushNumber(ink, IconTool::InkBrush, "Stabilizer", 0.0, 60.0, 0, " px",
+        "How far the pen leads the line, in screen pixels: the line follows on a string, which takes "
+        "out shake. 0 is off",
+        [](const Brush& b) { return b.stabilizer; }, [](Brush& b, double v) { b.stabilizer = v; });
+    brushNumber(ink, IconTool::InkBrush, "Smoothing", 0.0, 100.0, 0, QString(), smoothingTip, smoothingOf,
+        setSmoothing);
+    brushNumber(ink, IconTool::InkBrush, "Precision", 0.0, 100.0, 0, QString(), precisionTip, precisionOf,
+        setPrecision);
+    brushCheck(ink, IconTool::InkBrush, "Tilt shading", "Broaden the line the further the pen leans",
+        [](const Brush& b) { return b.useTilt; }, [](Brush& b, bool on) { b.useTilt = on; });
 
     QComboBox* brushMode = new QComboBox(this);
     brushMode->addItems({"Paint Normal", "Paint Fills", "Paint Behind", "Paint Selection", "Paint Inside"});
@@ -783,13 +921,7 @@ void PropertiesPanel::buildToolTab()
     connect(brushMode, &QComboBox::currentIndexChanged, this, [this](int index) {
         _links.style->brushMode = static_cast<fla::DrawingStyle::BrushMode>(index);
     });
-    addOption("Brush mode", brushMode, {IconTool::Brush});
-
-    QCheckBox* usePressure = new QCheckBox("Use pressure", this);
-    usePressure->setChecked(style.brushPressure);
-    usePressure->setToolTip("Let a pen's pressure vary the brush width");
-    connect(usePressure, &QCheckBox::toggled, this, [this](bool on) { _links.style->brushPressure = on; });
-    addOption(QString(), usePressure, {IconTool::Brush});
+    addOption("Brush mode", brushMode, {IconTool::FluidBrush, IconTool::Brush, IconTool::InkBrush});
 
     // Eraser.
     HotText* eraserSize = makeHotText(1.0, 200.0, 1, " px");

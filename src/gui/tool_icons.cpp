@@ -279,6 +279,55 @@ void drawBrush(QPainter& painter)
     painter.drawPath(tip);
 }
 
+void drawFluidBrush(QPainter& painter)
+{
+    // A smaller brush over a tapered swoosh: the line thickening and
+    // thinning as it goes.
+    painter.setPen(QPen(strokeColor(), 1.2));
+    painter.setBrush(Qt::NoBrush);
+    painter.drawLine(QPointF(20.0, 3.5), QPointF(14.0, 9.5));
+    painter.setPen(Qt::NoPen);
+    painter.setBrush(strokeColor());
+    QPainterPath tip;
+    tip.moveTo(14.5, 8.8);
+    tip.quadTo(10.5, 9.0, 10.0, 13.5);
+    tip.quadTo(14.5, 13.0, 15.2, 9.5);
+    tip.closeSubpath();
+    painter.drawPath(tip);
+    QPainterPath swoosh;
+    swoosh.moveTo(3.0, 20.0);
+    swoosh.cubicTo(6.0, 15.0, 10.0, 21.5, 15.0, 17.0);
+    swoosh.cubicTo(11.0, 23.5, 6.5, 18.0, 3.0, 20.0);
+    swoosh.closeSubpath();
+    painter.drawPath(swoosh);
+}
+
+void drawInkBrush(QPainter& painter)
+{
+    // A pen nib, point down and to the left, with its slit and breather
+    // hole, over the start of an inked line.
+    painter.save();
+    painter.translate(13.0, 11.0);
+    painter.rotate(45.0);
+    QPainterPath nib;
+    nib.moveTo(0.0, 9.0);
+    nib.cubicTo(-2.5, 4.0, -5.0, 0.0, -4.5, -5.0);
+    nib.lineTo(4.5, -5.0);
+    nib.cubicTo(5.0, 0.0, 2.5, 4.0, 0.0, 9.0);
+    nib.closeSubpath();
+    painter.setPen(QPen(strokeColor(), 1.2));
+    painter.setBrush(Qt::NoBrush);
+    painter.drawPath(nib);
+    painter.drawLine(QPointF(0.0, 8.0), QPointF(0.0, 0.5));
+    painter.setBrush(strokeColor());
+    painter.drawEllipse(QPointF(0.0, -0.5), 1.0, 1.0);
+    painter.setPen(QPen(strokeColor(), 1.2));
+    painter.drawLine(QPointF(-4.5, -7.5), QPointF(4.5, -7.5));
+    painter.restore();
+    painter.setPen(QPen(strokeColor(), 1.4, Qt::SolidLine, Qt::RoundCap));
+    painter.drawLine(QPointF(3.0, 21.0), QPointF(7.0, 21.0));
+}
+
 void drawEraser(QPainter& painter)
 {
     // A tilted block with a darker end.
@@ -369,6 +418,8 @@ QPixmap render(ToolIcons::Tool tool, int size)
     case ToolIcons::Tool::InkBottle:     drawInkBottle(painter); break;
     case ToolIcons::Tool::Eyedropper:    drawEyedropper(painter); break;
     case ToolIcons::Tool::Brush:         drawBrush(painter); break;
+    case ToolIcons::Tool::FluidBrush:    drawFluidBrush(painter); break;
+    case ToolIcons::Tool::InkBrush:      drawInkBrush(painter); break;
     case ToolIcons::Tool::Eraser:        drawEraser(painter); break;
     case ToolIcons::Tool::Lasso:         drawLasso(painter); break;
     case ToolIcons::Tool::Text:          drawText(painter); break;

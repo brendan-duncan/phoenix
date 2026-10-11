@@ -230,7 +230,11 @@ private:
     std::unique_ptr<HandTool> _handTool;
     std::unique_ptr<ZoomTool> _zoomTool;
     std::unique_ptr<LassoTool> _lassoTool;
+    /// Animate's Fluid Brush (the B key's), its Classic Brush, and the Ink
+    /// Brush, sharing the toolbox slot.
     std::unique_ptr<BrushTool> _brushTool;
+    std::unique_ptr<BrushTool> _classicBrushTool;
+    std::unique_ptr<BrushTool> _inkBrushTool;
     std::unique_ptr<EraserTool> _eraserTool;
     std::unique_ptr<PaintBucketTool> _paintBucketTool;
     std::unique_ptr<InkBottleTool> _inkBottleTool;

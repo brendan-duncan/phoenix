@@ -1,5 +1,7 @@
 #pragma once
 
+#include "brush_stroke.h"
+
 #include <cstdint>
 #include <string>
 
@@ -52,13 +54,15 @@ public:
     /// zoomed out.
     int pencilSmoothing = 50;
 
-    /// Brush and eraser widths, in pixels.
-    double brushSize = 12.0;
+    /// The eraser's width, in pixels.
     double eraserSize = 12.0;
 
-    /// Whether a pen's pressure varies the brush's width, as Animate's Use
-    /// Pressure option does. A mouse always paints at full width.
-    bool brushPressure = false;
+    /// Each brush's own settings: Animate's Fluid Brush and Classic Brush,
+    /// and Phoenix's Ink Brush. Pressure is on in all three; a mouse always
+    /// paints at full width.
+    BrushSettings fluidBrush = BrushSettings::fluidDefaults();
+    BrushSettings classicBrush = BrushSettings::classicDefaults();
+    BrushSettings inkBrush = BrushSettings::inkDefaults();
 
     /// The pencil's Straighten mode settings: join the ends of a stroke that
     /// nearly meet, and replace a stroke that is clearly a rectangle, oval or
@@ -66,7 +70,7 @@ public:
     bool connectLines = true;
     bool recognizeShapes = true;
 
-    /// Animate's brush modes: where a stroke of the brush lands.
+    /// Animate's brush modes: where a stroke of any of the brushes lands.
     enum class BrushMode
     {
         /// Over everything, burying lines and fills it covers.

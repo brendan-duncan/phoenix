@@ -3,6 +3,7 @@
 #include "tool.h"
 
 #include "../data/point.h"
+#include "../edit/brush_stroke.h"
 #include "../edit/region_split.h"
 
 #include <QPainterPath>
@@ -24,15 +25,30 @@ class Shape;
 /// filled with \a fill (which the shape takes ownership of). The outline is
 /// resolved so it has no self-crossings, and each loop is written with the
 /// fill on the correct side for the merge.
-/// With \a pressures, one per point, the width follows the pen's pressure
-/// along the stroke.
 fla::Shape* brushOutlineShape(const std::vector<fla::Point>& points, double width,
-    bool smooth, fla::Frame* parent, const fla::DrawingStyle& style, bool asFill,
-    const std::vector<double>* pressures = nullptr);
+    bool smooth, fla::Frame* parent, const fla::DrawingStyle& style, bool asFill);
 
-/// Animate's brush: paints a fill along the drag, as wide as the brush size.
-/// The stroke is a shape with a fill and no outline, and merges like any other
-/// drawing, so passes of one color run together without seams.
+/// The area a brush stroke paints: its tip swept from dab to dab, the hulls
+/// gathered with the winding rule. \a resolve merges them into one outline
+/// with no overlaps, which a finished stroke needs; a preview can fill them
+/// as they are.
+QPainterPath sweptOutline(const std::vector<fla::BrushDab>& dabs, double zoom, bool resolve);
+
+/// The brushes: paint a fill along the drag. The stroke is a shape with a
+/// fill and no outline, and merges like any other drawing, so passes of one
+/// color run together without seams.
+///
+/// - **Fluid Brush**, Animate's: width from pressure and speed, tapered
+///   ends, smoothing, and an elliptical tip with roundness and angle.
+/// - **Classic Brush**, Animate's (Flash's) brush: one of Flash's tip
+///   shapes, with Use Pressure and Use Tilt, which turns the tip.
+/// - **Ink Brush**, Phoenix's own: a stabilizer for steady lines, a
+///   pressure response curve, and tilt that broadens the line.
+///
+/// With a pen the stroke is built from the pen's own readings, position,
+/// pressure and tilt together, filtered and evenly spaced, and the tip is
+/// swept between them, so the edge stays clean however the readings jitter.
+/// The preview is the stroke that will land.
 ///
 /// The brush modes decide where the stroke lands: everywhere (Normal), under
 /// the lines (Fills), only on empty stage (Behind), only within the selected
@@ -41,14 +57,24 @@ fla::Shape* brushOutlineShape(const std::vector<fla::Point>& points, double widt
 class BrushTool : public Tool
 {
 public:
-    BrushTool(fla::Selection& selection, fla::CommandStack& commandStack,
+    enum class Kind
+    {
+        Fluid,
+        Classic,
+        Ink
+    };
+
+    BrushTool(Kind kind, fla::Selection& selection, fla::CommandStack& commandStack,
         const fla::DrawingStyle& style)
-        : _selection(selection)
+        : _kind(kind)
+        , _selection(selection)
         , _commandStack(commandStack)
         , _style(style)
     {}
 
-    QString name() const override { return "Brush"; }
+    QString name() const override;
+
+    Kind kind() const { return _kind; }
 
     QCursor cursor() const override { return Qt::BlankCursor; }
 
@@ -69,13 +95,21 @@ public:
 private:
     void finish(PhoenixView& view);
 
+    /// The settings of this brush.
+    const fla::BrushSettings& settings() const;
+
+    /// Adds the pen's readings since the last, or, from a mouse, the
+    /// cursor's position at full pressure.
+    void takeSamples(PhoenixView& view, QMouseEvent* event, const QPointF& documentPos);
+
+    Kind _kind;
     fla::Selection& _selection;
     fla::CommandStack& _commandStack;
     const fla::DrawingStyle& _style;
 
-    std::vector<fla::Point> _points;
-    /// The pen pressure at each point, for a stroke that varies its width.
-    std::vector<double> _pressures;
+    std::vector<fla::BrushSample> _samples;
+    /// Whether the stroke under way comes from a pen.
+    bool _pen = false;
     bool _drawing = false;
     QPointF _hover;
     bool _hoverValid = false;
