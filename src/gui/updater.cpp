@@ -17,7 +17,7 @@ namespace {
 
 /// Where releases are published; the release workflow uploads each
 /// version's installer, packages and feed there.
-const char* RepositoryUrl = "https://github.com/brendan-duncan/phoenix_release";
+const char* RepositoryUrl = "https://github.com/brendan-duncan/phoenix";
 
 /// Runs f on the GUI thread, if the updater is still there by then.
 template <typename F>

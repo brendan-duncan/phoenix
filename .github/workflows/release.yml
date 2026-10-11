@@ -2,12 +2,6 @@
 # as the GitHub release for the tag: the installer people download, and the
 # packages and feed installed copies update from (src/gui/updater.cpp).
 #
-# The source stays private; the releases go to the public repository
-# brendan-duncan/phoenix_release, which holds nothing else. Publishing there
-# needs a token this repository's own cannot give: the RELEASE_TOKEN secret,
-# a fine-grained personal access token with Contents read and write on
-# phoenix_release only.
-#
 # Run by pushing a version tag:
 #   git tag v0.2.0 && git push origin v0.2.0
 # A tag with a suffix (v0.2.0-beta.1) makes a pre-release, which installed
@@ -42,9 +36,6 @@ permissions:
 concurrency:
   group: release
   cancel-in-progress: false
-
-env:
-  RELEASE_REPO_URL: https://github.com/brendan-duncan/phoenix_release
 
 jobs:
   release:
@@ -167,11 +158,9 @@ jobs:
       # There is none before the first release.
       - name: Fetch the previous release
         shell: bash
-        env:
-          RELEASE_TOKEN: ${{ secrets.RELEASE_TOKEN }}
         run: |
-          vpk download github --repoUrl "$RELEASE_REPO_URL" \
-            --token "$RELEASE_TOKEN" --channel ${{ matrix.channel }} --outputDir releases \
+          vpk download github --repoUrl "${{ github.server_url }}/${{ github.repository }}" \
+            --token "${{ github.token }}" --channel ${{ matrix.channel }} --outputDir releases \
             || echo "No previous release to make a delta from"
 
       - name: Pack
@@ -190,15 +179,9 @@ jobs:
       - name: Publish
         if: steps.version.outputs.publish == 'true'
         shell: bash
-        env:
-          RELEASE_TOKEN: ${{ secrets.RELEASE_TOKEN }}
         run: |
-          if [[ -z "$RELEASE_TOKEN" ]]; then
-            echo "::error::The RELEASE_TOKEN secret is not set: publishing to phoenix_release needs it"
-            exit 1
-          fi
-          vpk upload github --repoUrl "$RELEASE_REPO_URL" \
-            --token "$RELEASE_TOKEN" --channel ${{ matrix.channel }} --outputDir releases \
+          vpk upload github --repoUrl "${{ github.server_url }}/${{ github.repository }}" \
+            --token "${{ github.token }}" --channel ${{ matrix.channel }} --outputDir releases \
             --tag ${{ steps.version.outputs.tag }} \
             --releaseName "Phoenix ${{ steps.version.outputs.version }}" \
             --publish --merge ${{ steps.version.outputs.pre }}

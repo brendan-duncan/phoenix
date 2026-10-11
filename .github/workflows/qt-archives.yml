@@ -3,10 +3,6 @@
 # the release tagged qt-<version>, with a pull request that pins their
 # hashes in cmake/QtArchives.cmake.
 #
-# The release is made in the public repository brendan-duncan/phoenix_release,
-# where a build can download it without signing in (the source is private).
-# That needs the RELEASE_TOKEN secret, as the Release workflow does.
-#
 # Run it by hand from the Actions tab when moving to a new Qt version.
 
 name: Qt archives
@@ -161,13 +157,12 @@ jobs:
 
       - name: Publish the release
         env:
-          GH_TOKEN: ${{ secrets.RELEASE_TOKEN }}
-          GH_REPO: brendan-duncan/phoenix_release
+          GH_TOKEN: ${{ github.token }}
         run: |
           tag="qt-${{ inputs.qt_version }}"
           gh release view "$tag" >/dev/null 2>&1 || \
             gh release create "$tag" --title "Qt ${{ inputs.qt_version }} for Phoenix" \
-              --notes "Trimmed Qt ${{ inputs.qt_version }} archives for building Phoenix. The build downloads these when it finds no Qt."
+              --notes "Trimmed Qt ${{ inputs.qt_version }} archives, made by tools/qt/make_qt_archive.py. The build downloads these when it finds no Qt."
           gh release upload "$tag" --clobber dist/qt-*.zip dist/qt-*.tar.gz dist/*.sha256
 
       - name: Open the pin pull request

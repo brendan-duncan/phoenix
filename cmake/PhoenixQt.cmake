@@ -18,7 +18,7 @@ include("${CMAKE_CURRENT_LIST_DIR}/QtArchives.cmake")
 option(PHOENIX_FETCH_QT "Download a trimmed Qt into third_party/qt when no Qt is found" ON)
 option(PHOENIX_USE_SYSTEM_QT "Look for an installed Qt before the vendored one" ON)
 set(PHOENIX_QT_BASE_URL
-    "https://github.com/brendan-duncan/phoenix_release/releases/download/qt-${PHOENIX_QT_VERSION}"
+    "https://github.com/brendan-duncan/phoenix/releases/download/qt-${PHOENIX_QT_VERSION}"
     CACHE STRING "Where the trimmed Qt archives are downloaded from")
 set(PHOENIX_QT_ARCHIVE_DIR "" CACHE PATH
     "A folder already holding the trimmed Qt archives, used instead of downloading")
