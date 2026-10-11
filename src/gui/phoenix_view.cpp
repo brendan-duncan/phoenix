@@ -1463,8 +1463,14 @@ void PhoenixView::drawElement(QPainter& painter, const fla::Element* element, co
                 color.blueMultiplier == 1.0 && color.redOffset == 0 &&
                 color.greenOffset == 0 && color.blueOffset == 0 && color.alphaOffset == 0;
 
+            // And its filters are between the two keyframes' filters.
             std::vector<fla::Filter> filters;
-            for (const fla::Filter& filter : instance->filters)
+            const std::vector<fla::Filter> shownFilters =
+                tweenElement && tweenElement->elementType() == fla::Element::Type::SymbolInstance
+                ? fla::blendFilters(instance->filters,
+                      static_cast<const fla::SymbolInstance*>(tweenElement)->filters, tweenProgress)
+                : instance->filters;
+            for (const fla::Filter& filter : shownFilters)
             {
                 if (filter.enabled)
                     filters.push_back(filter);

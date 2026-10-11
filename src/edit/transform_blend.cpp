@@ -108,6 +108,70 @@ ColorTransform blendColorTransforms(const ColorTransform& from, const ColorTrans
     return mixed;
 }
 
+namespace {
+
+/// A filter of the same kind as  filter with no effect, what a keyframe
+/// without it is taken to have.
+Filter withoutEffect(const Filter& filter)
+{
+    Filter none = filter;
+    none.blurX = 0.0;
+    none.blurY = 0.0;
+    none.distance = 0.0;
+    none.strength = 0.0;
+    none.brightness = 0.0;
+    none.contrast = 0.0;
+    none.saturation = 0.0;
+    none.hue = 0.0;
+    return none;
+}
+
+void blendColor(const uint8_t from[4], const uint8_t to[4], double t, uint8_t out[4])
+{
+    for (int c = 0; c < 4; ++c)
+        out[c] = static_cast<uint8_t>(std::max(0.0, std::min(255.0, std::round(blend(from[c], to[c], t)))));
+}
+
+} // namespace
+
+std::vector<Filter> blendFilters(const std::vector<Filter>& from, const std::vector<Filter>& to, double t)
+{
+    std::vector<Filter> mixed;
+    const size_t count = std::max(from.size(), to.size());
+    for (size_t i = 0; i < count; ++i)
+    {
+        const Filter a = i < from.size() ? from[i] : withoutEffect(to[i]);
+        const Filter b = i < to.size() ? to[i] : withoutEffect(from[i]);
+        Filter filter = a;
+        if (a.type == b.type)
+        {
+            filter.blurX = blend(a.blurX, b.blurX, t);
+            filter.blurY = blend(a.blurY, b.blurY, t);
+            filter.quality = static_cast<int>(std::lround(blend(a.quality, b.quality, t)));
+            filter.angle = blend(a.angle, b.angle, t);
+            filter.distance = blend(a.distance, b.distance, t);
+            filter.strength = blend(a.strength, b.strength, t);
+            blendColor(a.color, b.color, t, filter.color);
+            blendColor(a.highlightColor, b.highlightColor, t, filter.highlightColor);
+            blendColor(a.shadowColor, b.shadowColor, t, filter.shadowColor);
+            filter.brightness = blend(a.brightness, b.brightness, t);
+            filter.contrast = blend(a.contrast, b.contrast, t);
+            filter.saturation = blend(a.saturation, b.saturation, t);
+            filter.hue = blend(a.hue, b.hue, t);
+            if (a.entries.size() == b.entries.size())
+            {
+                for (size_t e = 0; e < a.entries.size(); ++e)
+                {
+                    filter.entries[e].ratio = blend(a.entries[e].ratio, b.entries[e].ratio, t);
+                    blendColor(a.entries[e].color, b.entries[e].color, t, filter.entries[e].color);
+                }
+            }
+        }
+        mixed.push_back(filter);
+    }
+    return mixed;
+}
+
 Transform blendTransforms(const Transform& from, const Transform& to, double t,
     TweenRotation rotation, int extraTurns)
 {

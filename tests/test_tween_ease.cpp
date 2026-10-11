@@ -2,6 +2,7 @@
 
 #include "../src/edit/image_blur.h"
 #include "../src/edit/tween_ease.h"
+#include "../src/edit/transform_blend.h"
 
 #include <cmath>
 #include <vector>
@@ -116,4 +117,36 @@ TEST(box_blur_on_one_axis_leaves_the_other_alone)
     fla::boxBlur(pixels.data(), size, size, 3.0, 0.0, 1);
     CHECK((pixels[5 * size + 4] >> 24) > 0);
     CHECK((pixels[4 * size + 5] >> 24) == 0);
+}
+
+TEST(filters_blend_between_keyframes_and_fade_in_where_one_has_none)
+{
+    fla::Filter blur;
+    blur.type = fla::Filter::Type::Blur;
+    blur.blurX = 10.0;
+    blur.blurY = 20.0;
+    fla::Filter shadow;
+    shadow.type = fla::Filter::Type::DropShadow;
+    shadow.strength = 2.0;
+    shadow.distance = 8.0;
+    shadow.color[0] = 200;
+
+    fla::Filter softer = blur;
+    softer.blurX = 2.0;
+    softer.blurY = 4.0;
+
+    // Half way, the blur is half way; the shadow the end keyframe lacks is
+    // met by one with no effect, so it is at half strength and distance.
+    const std::vector<fla::Filter> mixed = fla::blendFilters({blur, shadow}, {softer}, 0.5);
+    CHECK(mixed.size() == 2);
+    if (mixed.size() == 2)
+    {
+        CHECK(near(mixed[0].blurX, 6.0) && near(mixed[0].blurY, 12.0));
+        CHECK(mixed[1].type == fla::Filter::Type::DropShadow);
+        CHECK(near(mixed[1].strength, 1.0) && near(mixed[1].distance, 4.0));
+        CHECK(mixed[1].color[0] == 200);
+    }
+    // A filter only the end has fades in.
+    const std::vector<fla::Filter> fading = fla::blendFilters({}, {shadow}, 0.25);
+    CHECK(fading.size() == 1 && near(fading[0].strength, 0.5));
 }

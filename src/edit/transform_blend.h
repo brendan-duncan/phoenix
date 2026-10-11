@@ -2,6 +2,9 @@
 
 #include "../data/transform.h"
 #include "../data/color_transform.h"
+#include "../data/filter.h"
+
+#include <vector>
 
 namespace fla {
 
@@ -26,5 +29,13 @@ Transform blendTransforms(const Transform& from, const Transform& to, double t,
 /// The color transform part way between two keyframes': every amount,
 /// multiplier and offset blends straight, as does the tint color.
 ColorTransform blendColorTransforms(const ColorTransform& from, const ColorTransform& to, double t);
+
+/// The filters part way between two keyframes', as a classic tween shows
+/// them. Filters pair up by position and kind; one that only one keyframe
+/// has is met by the same kind at no effect (no blur, distance or
+/// strength), as Animate puts in, so it fades in or out. Amounts and colors
+/// blend; switches (inner, knockout, the bevel's placement) and a pair of
+/// different kinds come from the first keyframe.
+std::vector<Filter> blendFilters(const std::vector<Filter>& from, const std::vector<Filter>& to, double t);
 
 } // namespace fla
