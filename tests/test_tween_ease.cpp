@@ -43,6 +43,31 @@ TEST(ease_in_starts_slowly_and_ease_out_finishes_slowly)
     CHECK(near(fla::easeProgress(1.0, 100, {}), 1.0));
 }
 
+TEST(ease_presets_follow_their_curves)
+{
+    // quadInOut is a quarter of the way at a quarter of the time squared
+    // and doubled; its middle is the middle.
+    CHECK(near(fla::easeProgress(0.25, 0, {}, "quadInOut"), 0.125));
+    CHECK(near(fla::easeProgress(0.5, 0, {}, "quadInOut"), 0.5));
+    CHECK(near(fla::easeProgress(0.5, 0, {}, "cubicIn"), 0.125));
+    CHECK(near(fla::easeProgress(0.5, 0, {}, "cubicOut"), 0.875));
+    CHECK(near(fla::easeProgress(0.5, 0, {}, "sineInOut"), 0.5));
+    // Every preset starts and ends where the tween does.
+    for (const char* method : {"quadIn", "quartOut", "quintInOut", "sineIn", "circOut", "backInOut", "bounceOut",
+             "elasticIn", "elasticInOut"})
+    {
+        CHECK(near(fla::easeProgress(0.0, 0, {}, method), 0.0));
+        CHECK(near(fla::easeProgress(1.0, 0, {}, method), 1.0));
+    }
+    // Back pulls back before it goes; bounce never goes past the end.
+    CHECK(fla::easeProgress(0.2, 0, {}, "backIn") < 0.0);
+    CHECK(fla::easeProgress(0.6, 0, {}, "bounceOut") <= 1.0);
+    // The preset takes the place of the Ease value; none leaves it to it.
+    CHECK(near(fla::easeProgress(0.5, 100, {}, "quadIn"), 0.25));
+    CHECK(near(fla::easeProgress(0.5, 100, {}, "none"), 0.75));
+    CHECK(near(fla::easeProgress(0.5, 0, {}, "noSuchEase"), 0.5));
+}
+
 TEST(custom_ease_follows_its_curve)
 {
     // The curve from a real file: flat out of the start, steep through the

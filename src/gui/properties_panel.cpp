@@ -1779,7 +1779,11 @@ void PropertiesPanel::rebuildFrameTab()
         HotText* ease = makeHotText(-100, 100, 0);
         ease->setValue(frame->acceleration);
         ease->setToolTip("Negative eases in (starts slowly), positive eases out");
-        ease->setEnabled(!frame->hasCustomEase);
+        // A custom curve or an ease preset takes the place of the value, so
+        // the value is shown but not edited while one is set.
+        const bool preset = !frame->easeMethod.empty() && frame->easeMethod != "none" &&
+            frame->easeMethod != "classic";
+        ease->setEnabled(!frame->hasCustomEase && !preset);
         std::shared_ptr<int> before = std::make_shared<int>(0);
         bindLive(ease,
             [=]() { *before = frame->acceleration; },
@@ -1791,7 +1795,9 @@ void PropertiesPanel::rebuildFrameTab()
                 push(std::unique_ptr<fla::Command>(new fla::SetPropertyCommand<int>(
                     frame->acceleration, *before, frame->acceleration, "Ease")));
             });
-        tweening->addField(1, 0, frame->hasCustomEase ? "Ease (custom)" : "Ease", ease);
+        const QString label = frame->hasCustomEase ? QString("Ease (custom)")
+            : preset ? QString("Ease (%1)").arg(QString::fromStdString(frame->easeMethod)) : QString("Ease");
+        tweening->addField(1, 0, label, ease);
     }
 
     if (frame->tweenType == fla::TweenType::Motion)

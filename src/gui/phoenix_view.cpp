@@ -1018,7 +1018,8 @@ PhoenixView::LayerFrame PhoenixView::resolveLayerFrame(const fla::Layer* layer,
         {
             tweenProgress = static_cast<double>(currentFrameIndex - tweenStartIndex) / currentFrame->duration;
             tweenProgress = fla::easeProgress(tweenProgress, currentFrame->acceleration,
-                currentFrame->hasCustomEase ? currentFrame->customEase : std::vector<fla::Point>());
+                currentFrame->hasCustomEase ? currentFrame->customEase : std::vector<fla::Point>(),
+                currentFrame->easeMethod);
 
             for (const fla::Frame* frame : layer->frames)
             {
