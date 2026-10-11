@@ -850,7 +850,7 @@ void MainWindow::setupMenus()
     // File menu
     QMenu* fileMenu = menuBar->addMenu("&File");
 
-    QAction* newAction = new QAction("&New", this);
+    QAction* newAction = new QAction("&New...", this);
     newAction->setShortcut(QKeySequence::New);
     newAction->setStatusTip("Start a new, empty document");
     connect(newAction, &QAction::triggered, this, &MainWindow::newFile);
@@ -882,10 +882,12 @@ void MainWindow::setupMenus()
 
     fileMenu->addSeparator();
 
+    QMenu* exportMenu = fileMenu->addMenu("Export");
+
     QAction* exportSvgAction = new QAction("Export to &SVG...", this);
     exportSvgAction->setStatusTip("Export the current frame to an SVG file");
     connect(exportSvgAction, &QAction::triggered, this, &MainWindow::exportSvg);
-    fileMenu->addAction(exportSvgAction);
+    exportMenu->addAction(exportSvgAction);
 
     fileMenu->addSeparator();
 
