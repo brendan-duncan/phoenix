@@ -1442,6 +1442,79 @@ was no library or onion skin.
 5. Edge bending and region selection -- the one change that makes merge drawing
    feel like Animate's
 
+## 15. Animation tools
+
+Added 2026-10-11. Animate's animation tools beyond frames and classic
+tweens. Some are already in files Phoenix opens and so are playback bugs
+today (said for each); the rest are tools. Where no corpus file has the
+feature, the first step is to make one in Animate and read how XFL stores
+it.
+
+### Already in files Phoenix opens
+
+- [ ] **Object motion tweens** (Animate's "Create Motion Tween", tweenType
+      "motion object"): the frame keeps an AnimationCore document in
+      motionObjectXML, property curves (Motion_X, Motion_Y, rotation, scale,
+      skew, color, filters) with keyframes in TimeScale units, a TimeMap ease
+      and a transformation point offset. Phoenix keeps the XML but does not
+      read it, so these tweens do not move. template_robot.fla has 12. First
+      playback (evaluate the curves per frame), then the tool: Create Motion
+      Tween, property keyframes set by changing the object on any frame of
+      the span, and the motion path drawn on stage and editable
+- [ ] **Asset Warp** (symbolType "puppet"): a mesh warped by pins placed on a
+      shape or bitmap, the pins tweenable. template_bike_girl.fla has 24
+      and template_robot.fla 14; Phoenix draws them unwarped, as plain
+      graphics. Read the mesh and pins, render the warp (a triangle mesh,
+      bitmap or vector content mapped through it), then the Asset Warp tool
+- [ ] **Shape hints** for shape tweens: morphHintsList is read
+      (520_Boogers_1104 has 6, template_robot 1); check they steer the
+      in-betweens Phoenix draws, then add, move and remove them on stage
+      (Modify > Shape > Add Shape Hint, ctrl+shift+H)
+- [ ] **Motion guides**: classic tweens following a path on a guide layer
+      above them, with Orient to Path and Snap. Guide layers are in the corpus
+      (520_Boogers_1104 has 15); check whether any guides a tween, and make one
+      in Animate if not
+
+### Tools to add
+
+- [ ] **Create Shape Tween** (step 14's timeline gap): compute the
+      MorphShape Animate writes for a span between two shapes, so new shape
+      tweens play in Animate too
+- [ ] **Motion Editor**: per-property curves for object motion tweens, with
+      ease presets and custom eases per property; needs object motion tweens
+- [ ] **Bone tool and IK** (X): armatures joining symbol instances, on an
+      armature layer whose poses tween; bones inside a shape, with the
+      **Bind tool** (Z) tying shape points to bones; joint limits on rotation
+      and translation, springs, and the ease between poses. Nothing in the
+      corpus has one: make samples in Animate first. Also the Rigging layer
+      of newer Animate versions (rig mapping) once the basics work
+- [ ] **Layer parenting** (Animate 2019): a layer's content follows the
+      transform of its parent layer's, set from the timeline's parenting
+      view. Check how XFL stores the link (it is not the folder link,
+      parentLayerIndex)
+- [ ] **Camera tool and camera layer**: pan, zoom and rotate the view of the
+      scene over time, with color effects on the camera, rendered and
+      exported. Animate gives the Camera tool C, which Phoenix gives the Time
+      Scrub tool; settle the keys when it is added
+- [ ] **3D Rotation (W) and 3D Translation (G)** for movie clips, with
+      perspective angle and vanishing point (the document already keeps
+      vanishingPoint3DX/Y). The corpus has the 3D center points Animate
+      writes for every instance but no actual 3D rotation
+- [ ] **Variable-width strokes, the Width tool (U) and the Paint Brush (Y)**:
+      see step 13
+- [ ] **Graphic symbol playback options and the Frame Picker**: Loop, Play
+      Once, Single Frame, play in reverse, and the first frame, set per
+      keyframe; the Frame Picker panel shows a graphic symbol's frames to
+      pick from, which lip-sync builds on
+- [ ] **Auto Lip-Sync**: for a graphic symbol of mouth poses, analyze a
+      stream sound on the timeline into visemes and set the symbol's frame
+      at each keyframe; needs the Frame Picker and the decoded sound
+      (`src/gui/audio_engine.cpp`)
+- [ ] **Frame commands**: Convert to Frame-by-Frame Animation (tween to
+      keyframes), Reverse Frames, Copy and Paste Motion, motion presets
+- [ ] **Onion skin extras** (see step 14): dragging the range markers and the
+      outline mode
+
 ## Performance
 
 Measured on `COM01_034_alvin_and_the_monks_v2.fla` (1260 symbol instances),
@@ -1505,10 +1578,12 @@ dragging, at a maximized window on a 3856x1568 display:
 ## Explicitly out of scope
 
 
-Bones/IK, motion editor, asset warp, variable-width strokes, art/pattern brushes.
-Each is a project in itself. (Pressure for the brush and static, dynamic and
-input text authoring were done on 2026-10-09, and tilt input and brush tip
-shapes on 2026-10-11; see step 13 and step 14.)
+Nothing for good. Bones and IK, the motion editor, asset warp and
+variable-width strokes were here until 2026-10-11; they are in step 15 now,
+each a project in itself. Art and pattern brushes stay here for the time
+being. (Pressure for the brush and static, dynamic and input text authoring
+were done on 2026-10-09, and tilt input and brush tip shapes on 2026-10-11;
+see step 13 and step 14.)
 
 ---
 
