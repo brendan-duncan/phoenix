@@ -1482,9 +1482,9 @@ it.
       tweens play in Animate too
 - [ ] **Motion Editor**: per-property curves for object motion tweens, with
       ease presets and custom eases per property; needs object motion tweens
-- [ ] **Bone tool and IK** (X): armatures joining symbol instances, on an
+- [ ] **Bone tool and IK**: armatures joining symbol instances, on an
       armature layer whose poses tween; bones inside a shape, with the
-      **Bind tool** (Z) tying shape points to bones; joint limits on rotation
+      **Bind tool** tying shape points to bones; joint limits on rotation
       and translation, springs, and the ease between poses. Nothing in the
       corpus has one: make samples in Animate first. Also the Rigging layer
       of newer Animate versions (rig mapping) once the basics work
@@ -1511,9 +1511,17 @@ it.
     extraAttributes, as Frame had); before, animationType, tweenType="IK pose"
     and "ik container" were dropped, and so was tweenType="motion object" on
     the object motion tweens of template_robot.fla, and any linkage on a
-    symbol. Test `ik_bones_are_kept_on_save` (opt-in, with the corpus). Not
-    drawn yet: Phoenix shows the ik container's shape as stored, not bent by
-    the pose; not checked on screen
+    symbol. Test `ik_bones_are_kept_on_save` (opt-in, with the corpus). The
+    ik container symbol holds the shape as the pose has bent it, so the
+    sample draws right at its one pose
+  - Bones shown 2026-10-11: while the shape (or anything on a pose frame) is
+    selected, its bones are drawn over it as Animate draws them, in the
+    armature layer's color: a slim kite from each joint to each child joint,
+    round joints at the ends, sized in screen pixels (`ikBones` in
+    `src/parser/ik_tree.cpp` reads them from the kept IKTree's worldMatrix
+    joints; `PhoenixView::drawIKBones`). Test
+    `ik_bones_run_from_joint_to_child_joint`; checked on the sample, captured
+    with PrintWindow and a posted click (the window was behind another)
 - [ ] **Layer parenting** (Animate 2019): a layer's content follows the
       transform of its parent layer's, set from the timeline's parenting
       view. Check how XFL stores the link (it is not the folder link,

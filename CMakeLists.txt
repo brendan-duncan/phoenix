@@ -105,6 +105,7 @@ set(HEADERS
     src/gui/timelines_panel.h
     src/gui/player.h
     src/parser/document_parser.h
+    src/parser/ik_tree.h
     src/parser/zip_reader.h
     src/parser/fla_parser.h
     src/parser/path_parser.h
@@ -228,6 +229,7 @@ set(SOURCES
     src/gui/timelines_panel.cpp
     src/gui/player.cpp
     src/parser/document_parser.cpp
+    src/parser/ik_tree.cpp
     src/parser/zip_reader.cpp
     src/parser/fla_parser.cpp
     src/parser/path_parser.cpp

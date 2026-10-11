@@ -2,6 +2,7 @@
 
 #include "../edit/guide_command.h"
 #include "../edit/timeline_edit.h"
+#include "../parser/ik_tree.h"
 #include "filters.h"
 #include "stroke_effects.h"
 #include "library_panel.h"
@@ -3912,6 +3913,18 @@ void PhoenixView::drawToolOverlay(QPainter& painter)
             painter.drawRect(bounds);
         }
 
+        // The bones of an armature whose shape or instances are selected,
+        // as Animate shows them, once for each pose frame.
+        std::vector<const fla::Frame*> armatures;
+        for (fla::DOMElement* selected : _selection->elements())
+        {
+            const fla::Frame* frame = owningFrame(selected);
+            if (frame && std::find(armatures.begin(), armatures.end(), frame) == armatures.end())
+                armatures.push_back(frame);
+        }
+        for (const fla::Frame* frame : armatures)
+            drawIKBones(painter, *frame, scale);
+
         painter.restore();
     }
 
@@ -3923,6 +3936,60 @@ void PhoenixView::drawToolOverlay(QPainter& painter)
     }
 }
 
+
+void PhoenixView::drawIKBones(QPainter& painter, const fla::Frame& frame, double scale)
+{
+    std::vector<fla::IKBone> bones;
+    for (const std::string& child : frame.extraChildren)
+    {
+        const size_t at = child.find('<');
+        if (at != std::string::npos && child.compare(at, 7, "<IKTree") == 0)
+        {
+            const std::vector<fla::IKBone> found = fla::ikBones(child);
+            bones.insert(bones.end(), found.begin(), found.end());
+        }
+    }
+    if (bones.empty())
+        return;
+
+    // In the armature layer's color, as Animate draws them: a slim kite from
+    // the head joint, widest a fifth of the way along, to the tail joint,
+    // with a round joint at each end. Sizes are in screen pixels.
+    const fla::Layer* layer = dynamic_cast<const fla::Layer*>(frame.parent);
+    const QColor ink = layer ? QColor(layer->color[0], layer->color[1], layer->color[2]) : QColor(153, 51, 204);
+    QColor fill = ink;
+    fill.setAlpha(160);
+    const QColor edge = ink.darker(160);
+    const double headRadius = 6.0 * scale;
+    const double tailRadius = 3.5 * scale;
+
+    painter.save();
+    painter.setRenderHint(QPainter::Antialiasing, true);
+    painter.setPen(QPen(edge, 1.0 * scale));
+    for (const fla::IKBone& bone : bones)
+    {
+        const QPointF head(bone.head.x, bone.head.y);
+        const QPointF tail(bone.tail.x, bone.tail.y);
+        const double length = std::hypot(tail.x() - head.x(), tail.y() - head.y());
+        if (length <= 1.0e-9)
+            continue;
+        const QPointF along = (tail - head) / length;
+        const QPointF across(-along.y(), along.x());
+        const QPointF widest = head + along * std::min(length * 0.2, 16.0 * scale);
+        const double width = std::max(headRadius, std::min(length * 0.1, 11.0 * scale));
+        painter.setBrush(fill);
+        painter.drawPolygon(QPolygonF({head + across * headRadius * 0.8, widest + across * width, tail,
+            widest - across * width, head - across * headRadius * 0.8}));
+    }
+    // The joints over the bones, so each shows whole where bones meet.
+    painter.setBrush(QColor(255, 255, 255, 220));
+    for (const fla::IKBone& bone : bones)
+    {
+        painter.drawEllipse(QPointF(bone.head.x, bone.head.y), headRadius, headRadius);
+        painter.drawEllipse(QPointF(bone.tail.x, bone.tail.y), tailRadius, tailRadius);
+    }
+    painter.restore();
+}
 
 void PhoenixView::drawShapeHighlight(QPainter& painter, const fla::Shape* shape, const QColor& color)
 {

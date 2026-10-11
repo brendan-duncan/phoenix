@@ -805,6 +805,10 @@ private:
     /// the strokes it is made of, screened in the highlight color.
     void drawShapeHighlight(QPainter& painter, const fla::Shape* shape, const QColor& color);
 
+    /// The bones of the armature on a pose frame, read from the IKTree the
+    /// frame keeps, drawn as Animate draws them while its art is selected.
+    void drawIKBones(QPainter& painter, const fla::Frame& frame, double scale);
+
     /// Draws the marks that show what is selected, plus whatever the active tool
     /// wants on top. Runs in document coordinates after the stage is drawn.
     void drawToolOverlay(QPainter& painter);

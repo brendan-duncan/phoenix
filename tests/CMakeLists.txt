@@ -106,6 +106,7 @@ set(TEST_SOURCES
     test_audio_decode.cpp
     test_brush_stroke.cpp
     test_magic_wand.cpp
+    test_ik_tree.cpp
     test_property_command.cpp
     test_tween_ease.cpp
     test_shape_recognition.cpp
@@ -117,6 +118,7 @@ if(TARGET tinyxml2 AND TARGET zlibstatic)
     list(APPEND TEST_CORE_SOURCES
         ${PHOENIX_SRC}/data/swatch_list.cpp
         ${PHOENIX_SRC}/parser/document_parser.cpp
+        ${PHOENIX_SRC}/parser/ik_tree.cpp
         ${PHOENIX_SRC}/parser/fla_parser.cpp
         ${PHOENIX_SRC}/parser/zip_reader.cpp
         ${PHOENIX_SRC}/util/zip_archive.cpp
