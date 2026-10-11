@@ -16,6 +16,7 @@
 #include <QTreeWidgetItemIterator>
 #include <QVBoxLayout>
 
+#include <algorithm>
 #include <functional>
 
 namespace {
@@ -146,11 +147,18 @@ void LibraryTree::startDrag(Qt::DropActions)
 LibraryPanel::LibraryPanel(QWidget* parent)
     : QWidget(parent)
     , _tree(new LibraryTree(this))
+    , _preview(new QLabel(this))
     , _count(new QLabel(this))
 {
     QVBoxLayout* layout = new QVBoxLayout(this);
     layout->setContentsMargins(0, 0, 0, 0);
     layout->setSpacing(0);
+
+    // The preview of the selected item, at the top as in Animate.
+    _preview->setFixedHeight(150);
+    _preview->setAlignment(Qt::AlignCenter);
+    _preview->setStyleSheet("QLabel { background: #1e1e1e; border-bottom: 1px solid #3a3a3a; }");
+    layout->addWidget(_preview);
 
     _count->setContentsMargins(10, 6, 10, 6);
     layout->addWidget(_count);
@@ -166,10 +174,34 @@ LibraryPanel::LibraryPanel(QWidget* parent)
     _tree->sortByColumn(0, Qt::AscendingOrder);
     layout->addWidget(_tree, 1);
 
+    connect(_tree, &QTreeWidget::currentItemChanged, this, [this]() { updatePreview(); });
     connect(_tree, &QTreeWidget::itemDoubleClicked, this, [this](QTreeWidgetItem* item, int) {
         if (item && item->data(0, KindRole).toInt() == static_cast<int>(Kind::Symbol))
             emit editSymbolRequested(item->data(0, NameRole).toString());
     });
+}
+
+void LibraryPanel::setPreviewProvider(std::function<QImage(const QString&, const QString&, const QSize&)> provider)
+{
+    _previewProvider = std::move(provider);
+    updatePreview();
+}
+
+void LibraryPanel::updatePreview()
+{
+    QTreeWidgetItem* item = _tree->currentItem();
+    const int kind = item ? item->data(0, KindRole).toInt() : 0;
+    if (!item || kind == static_cast<int>(Kind::Folder) || !_previewProvider || !_document)
+    {
+        _preview->setPixmap(QPixmap());
+        return;
+    }
+    const qreal ratio = devicePixelRatioF();
+    const QSize size(std::max(_preview->width(), 1), _preview->height());
+    QImage image = _previewProvider(kind == static_cast<int>(Kind::Symbol) ? "symbol" : "bitmap",
+        item->data(0, NameRole).toString(), size * ratio);
+    image.setDevicePixelRatio(ratio);
+    _preview->setPixmap(QPixmap::fromImage(image));
 }
 
 void LibraryPanel::setDocument(const fla::FLADocument* document)
@@ -305,4 +337,5 @@ void LibraryPanel::refresh()
 
     _count->setText(QString("%1 item%2").arg(items).arg(items == 1 ? "" : "s"));
     _tree->setSortingEnabled(true);
+    updatePreview();
 }

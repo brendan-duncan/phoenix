@@ -1386,7 +1386,8 @@ was no library or onion skin.
       folders; dragging an item to the stage places an instance, and
       double-clicking a symbol edits it
   - Done 2026-10-10 (`src/gui/library_panel.cpp`): a Library dock in a tab beside Properties (the right dock's tabs now sit on top, as in Animate) lists the document's folders, symbols and bitmaps with their kind and a count, folders kept open across rebuilds and the list rebuilt when an edit changes the library (Convert to Symbol). Dragging an item onto the stage places an instance centered on the drop in the active frame, one Add Instance undo step, through `placeDrawnElement` so it gets a keyframe where needed and is selected. Double-clicking a symbol edits it on its own: a scope with no instance, the document put away and the symbol's registration point at the stage's center (`PhoenixView::editSymbol`). A symbol's own type (`symbolType` on DOMSymbolItem) is now parsed and written, so the library and new instances show it. Checked on screen: scale9_test.fla's two movie clips listed, Panel9 dragged to the stage and double-clicked to edit, and the Alvin file's 96 items in their folders
-  - Not done: the preview pane at the top of Animate's library, renaming, new folders, and deleting or duplicating items
+  - Preview pane done 2026-10-10: the selected symbol's first frame (or the bitmap) drawn at the top of the panel on the stage color, fitted and never enlarged past twice its size (`PhoenixView::libraryPreview`). Checked on the Alvin file's symbols
+  - Not done: renaming, new folders, and deleting or duplicating items
 
 ### Suggested order, weighted for authenticity
 

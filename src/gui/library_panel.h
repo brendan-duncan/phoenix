@@ -3,6 +3,8 @@
 #include <QTreeWidget>
 #include <QWidget>
 
+#include <functional>
+
 class QLabel;
 
 namespace fla {
@@ -36,6 +38,10 @@ public:
 
     void setDocument(const fla::FLADocument* document);
 
+    /// What draws the preview of an item: its kind ("symbol" or "bitmap"),
+    /// its name and the size to fill.
+    void setPreviewProvider(std::function<QImage(const QString&, const QString&, const QSize&)> provider);
+
     /// Rebuilds the list, keeping which folders are open.
     void refresh();
 
@@ -58,8 +64,12 @@ private:
     QStringList snapshot() const;
 
     const fla::FLADocument* _document = nullptr;
+    void updatePreview();
+
     LibraryTree* _tree;
+    QLabel* _preview;
     QLabel* _count;
+    std::function<QImage(const QString&, const QString&, const QSize&)> _previewProvider;
     QStringList _built;
     QStringList _openFolders;
 };

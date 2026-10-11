@@ -134,6 +134,10 @@ public:
     bool guidesVisible() const { return _showGuides; }
     void clearGuides();
 
+    /// A picture of a library item for the library's preview: a symbol's
+    /// first frame or a bitmap, fitted into \a size with a margin.
+    QImage libraryPreview(const QString& kind, const QString& name, const QSize& size);
+
     /// Edits \a symbol on its own, as a double-click in the library does:
     /// the document is put away and the symbol shown at the stage's center.
     bool editSymbol(const fla::Symbol* symbol);

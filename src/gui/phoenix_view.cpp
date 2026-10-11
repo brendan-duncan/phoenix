@@ -4182,6 +4182,79 @@ bool PhoenixView::editSymbol(const fla::Symbol* symbol)
     return true;
 }
 
+QImage PhoenixView::libraryPreview(const QString& kind, const QString& name, const QSize& size)
+{
+    QImage image(size, QImage::Format_ARGB32_Premultiplied);
+    image.fill(Qt::transparent);
+    const fla::Document* document = _flaDocument ? _flaDocument->document : nullptr;
+    if (!document || size.isEmpty())
+        return image;
+    // On the stage color, as Animate's library shows it.
+    image.fill(QColor(document->backgroundColor[0], document->backgroundColor[1], document->backgroundColor[2]));
+
+    QPainter painter(&image);
+    painter.setRenderHint(QPainter::Antialiasing, true);
+    painter.setRenderHint(QPainter::SmoothPixmapTransform, true);
+    const QRectF area = QRectF(QPointF(0, 0), QSizeF(size)).adjusted(8, 8, -8, -8);
+    const auto fit = [&](const QRectF& bounds) {
+        const double scale = std::min(area.width() / std::max(bounds.width(), 1.0),
+            area.height() / std::max(bounds.height(), 1.0));
+        // Never blown up past twice its size, so a tiny symbol stays crisp
+        // rather than filling the pane with a few pixels.
+        const double s = std::min(scale, 2.0);
+        return QTransform::fromTranslate(-bounds.center().x(), -bounds.center().y()) *
+            QTransform::fromScale(s, s) * QTransform::fromTranslate(area.center().x(), area.center().y());
+    };
+
+    if (kind == "bitmap")
+    {
+        const QPixmap pixmap = libraryBitmap(name);
+        if (!pixmap.isNull())
+        {
+            painter.setTransform(fit(QRectF(QPointF(0, 0), QSizeF(pixmap.size()))));
+            painter.drawPixmap(0, 0, pixmap);
+        }
+        return image;
+    }
+
+    if (!document->symbolList)
+        return image;
+    const auto found = document->symbolList->symbolMap.find(name.toStdString());
+    if (found == document->symbolList->symbolMap.end() || !found->second || found->second->timelines.empty())
+        return image;
+    const fla::Symbol* symbol = found->second;
+
+    // The first frame, as the library shows it, whatever the playhead says.
+    const bool wasTight = _tightBounds;
+    _tightBounds = true;
+    QRectF bounds;
+    const fla::Timeline* timeline = symbol->timelines.front();
+    for (const fla::Layer* layer : timeline->layers)
+    {
+        if (!layer || layer->layerType == fla::Layer::Type::Guide || layer->frames.empty())
+            continue;
+        for (const fla::Element* element : layer->frames.front()->elements)
+        {
+            const QRectF each = calculateElementBounds(element);
+            if (each.isValid())
+                bounds = bounds.isNull() ? each : bounds.united(each);
+        }
+    }
+    _tightBounds = wasTight;
+    if (bounds.isNull())
+        return image;
+
+    const int savedOverride = _frameOverride;
+    const QColor savedOutline = _outlineColor;
+    _frameOverride = 0;
+    _outlineColor = QColor();
+    painter.setTransform(fit(bounds));
+    drawTimeline(painter, timeline, fla::LoopType::SingleFrame, 0);
+    _frameOverride = savedOverride;
+    _outlineColor = savedOutline;
+    return image;
+}
+
 void PhoenixView::setRulersVisible(bool on)
 {
     _showRulers = on;

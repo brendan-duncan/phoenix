@@ -1739,6 +1739,9 @@ void MainWindow::setupPropertiesPanel()
     tabifyDockWidget(dock, libraryDock);
     dock->raise();
     _libraryPanel->setDocument(_flaDocument);
+    _libraryPanel->setPreviewProvider([this](const QString& kind, const QString& name, const QSize& size) {
+        return _phoenixView ? _phoenixView->libraryPreview(kind, name, size) : QImage();
+    });
     connect(_libraryPanel, &LibraryPanel::editSymbolRequested, this, [this](const QString& name) {
         if (!_phoenixView || !_flaDocument || !_flaDocument->document || !_flaDocument->document->symbolList)
             return;
