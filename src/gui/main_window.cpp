@@ -181,6 +181,9 @@ MainWindow::MainWindow(const QString& initialFile, QWidget* parent)
     _lassoTool = std::make_unique<LassoTool>(_selection);
     _polygonTool = std::make_unique<LassoTool>(_selection, true);
     _gradientTransformTool = std::make_unique<GradientTransformTool>(stack);
+    _addAnchorTool = std::make_unique<AnchorPointTool>(AnchorPointTool::Mode::Add, stack);
+    _deleteAnchorTool = std::make_unique<AnchorPointTool>(AnchorPointTool::Mode::Delete, stack);
+    _convertAnchorTool = std::make_unique<AnchorPointTool>(AnchorPointTool::Mode::Convert, stack);
     _magicWandTool = std::make_unique<MagicWandTool>(_drawingStyle);
     _rotationTool = std::make_unique<RotationTool>();
     _timeScrubTool = std::make_unique<TimeScrubTool>();
@@ -1799,10 +1802,22 @@ void MainWindow::setupToolBar()
 
     // P for the pen, as in Animate. B is already the bounding-box toggle, and a
     // clash leaves Qt firing neither.
-    addSlot({makeTool(ToolIcons::Tool::Pen, "Pen", Qt::Key_P,
-        "Click for a corner point, drag for a smooth one. Alt-drag breaks the tangent, "
-        "clicking the first point closes the path, Enter finishes it open.",
-        [this]() -> Tool* { return _penTool.get(); })});
+    // Animate's pen slot: the Pen and the anchor point tools.
+    addSlot({
+        makeTool(ToolIcons::Tool::Pen, "Pen", Qt::Key_P,
+            "Click for a corner point, drag for a smooth one. Alt-drag breaks the tangent, "
+            "clicking the first point closes the path, Enter finishes it open.",
+            [this]() -> Tool* { return _penTool.get(); }),
+        makeTool(ToolIcons::Tool::AddAnchor, "Add Anchor Point", Qt::Key_Equal,
+            "Click a path to add an anchor there, leaving the curve as it was.",
+            [this]() -> Tool* { return _addAnchorTool.get(); }),
+        makeTool(ToolIcons::Tool::DeleteAnchor, "Delete Anchor Point", Qt::Key_Minus,
+            "Click an anchor to take it out; the curve is refitted through the gap.",
+            [this]() -> Tool* { return _deleteAnchorTool.get(); }),
+        makeTool(ToolIcons::Tool::ConvertAnchor, "Convert Anchor Point", Qt::SHIFT | Qt::Key_C,
+            "Click a smooth anchor to make it a corner; drag from an anchor to pull out handles.",
+            [this]() -> Tool* { return _convertAnchorTool.get(); }),
+    });
     addSlot({makeTool(ToolIcons::Tool::Text, "Text", Qt::Key_T,
         "Click to start a text box that grows as you type, or drag one out to a fixed width. "
         "Escape or a click elsewhere finishes it.",
@@ -2255,6 +2270,9 @@ ToolIcons::Tool MainWindow::iconForTool(const Tool* tool) const
     if (tool == _lassoTool.get()) return IconTool::Lasso;
     if (tool == _polygonTool.get()) return IconTool::PolygonLasso;
     if (tool == _gradientTransformTool.get()) return IconTool::GradientTransform;
+    if (tool == _addAnchorTool.get()) return IconTool::AddAnchor;
+    if (tool == _deleteAnchorTool.get()) return IconTool::DeleteAnchor;
+    if (tool == _convertAnchorTool.get()) return IconTool::ConvertAnchor;
     if (tool == _magicWandTool.get()) return IconTool::MagicWand;
     if (tool == _rotationTool.get()) return IconTool::Rotation;
     if (tool == _timeScrubTool.get()) return IconTool::TimeScrub;

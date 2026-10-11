@@ -11,6 +11,7 @@
 #include "lasso_tool.h"
 #include "magic_wand_tool.h"
 #include "gradient_transform_tool.h"
+#include "anchor_point_tool.h"
 #include "navigation_tools.h"
 #include "paint_tools.h"
 #include "pen_tool.h"
@@ -235,6 +236,9 @@ private:
     std::unique_ptr<LassoTool> _lassoTool;
     std::unique_ptr<LassoTool> _polygonTool;
     std::unique_ptr<GradientTransformTool> _gradientTransformTool;
+    std::unique_ptr<AnchorPointTool> _addAnchorTool;
+    std::unique_ptr<AnchorPointTool> _deleteAnchorTool;
+    std::unique_ptr<AnchorPointTool> _convertAnchorTool;
     std::unique_ptr<MagicWandTool> _magicWandTool;
     std::unique_ptr<RotationTool> _rotationTool;
     std::unique_ptr<TimeScrubTool> _timeScrubTool;

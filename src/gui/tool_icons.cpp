@@ -343,6 +343,30 @@ void drawEraser(QPainter& painter)
     painter.restore();
 }
 
+void drawAnchorPen(QPainter& painter, int sign)
+{
+    // The pen nib, smaller, with a plus or a minus beside it.
+    painter.save();
+    painter.translate(-2.0, 0.0);
+    drawPen(painter);
+    painter.restore();
+    painter.setPen(QPen(strokeColor(), 1.6, Qt::SolidLine, Qt::RoundCap));
+    painter.drawLine(QPointF(15.5, 18.5), QPointF(21.5, 18.5));
+    if (sign > 0)
+        painter.drawLine(QPointF(18.5, 15.5), QPointF(18.5, 21.5));
+}
+
+void drawConvertAnchor(QPainter& painter)
+{
+    // A caret: two lines meeting at a corner point, as the tool turns a
+    // smooth point into one.
+    painter.setPen(QPen(strokeColor(), 1.4, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin));
+    painter.setBrush(Qt::NoBrush);
+    painter.drawPolyline(QPolygonF({QPointF(4.0, 19.0), QPointF(12.0, 5.0), QPointF(20.0, 19.0)}));
+    painter.setBrush(strokeColor());
+    painter.drawRect(QRectF(10.5, 3.5, 3.0, 3.0));
+}
+
 void drawGradientTransform(QPainter& painter)
 {
     // A square shaded from light to dark, its edge square and turning ring
@@ -500,6 +524,9 @@ QPixmap render(ToolIcons::Tool tool, int size)
     case ToolIcons::Tool::Eraser:        drawEraser(painter); break;
     case ToolIcons::Tool::Lasso:         drawLasso(painter); break;
     case ToolIcons::Tool::GradientTransform: drawGradientTransform(painter); break;
+    case ToolIcons::Tool::AddAnchor:     drawAnchorPen(painter, 1); break;
+    case ToolIcons::Tool::DeleteAnchor:  drawAnchorPen(painter, -1); break;
+    case ToolIcons::Tool::ConvertAnchor: drawConvertAnchor(painter); break;
     case ToolIcons::Tool::PolygonLasso:  drawPolygonLasso(painter); break;
     case ToolIcons::Tool::MagicWand:     drawMagicWand(painter); break;
     case ToolIcons::Tool::Rotation:      drawRotation(painter); break;
