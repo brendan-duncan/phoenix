@@ -52,6 +52,13 @@ signals:
     /// A symbol was double-clicked, to be edited on its own.
     void editSymbolRequested(const QString& name);
 
+    /// The item menu's commands, for the window to carry out undoably.
+    void renameSymbolRequested(const QString& name, const QString& newName);
+    void duplicateSymbolRequested(const QString& name);
+    void deleteSymbolRequested(const QString& name);
+    /// A new folder inside \a parentPath (empty for the top level).
+    void newFolderRequested(const QString& parentPath);
+
 private:
     enum class Kind
     {
@@ -72,4 +79,5 @@ private:
     std::function<QImage(const QString&, const QString&, const QSize&)> _previewProvider;
     QStringList _built;
     QStringList _openFolders;
+    bool _refreshing = false;
 };

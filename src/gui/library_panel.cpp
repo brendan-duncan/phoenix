@@ -10,7 +10,9 @@
 #include <QDrag>
 #include <QHeaderView>
 #include <QLabel>
+#include <QMenu>
 #include <QMimeData>
+#include <QTimer>
 #include <QPainter>
 #include <QPainterPath>
 #include <QTreeWidgetItemIterator>
@@ -175,6 +177,73 @@ LibraryPanel::LibraryPanel(QWidget* parent)
     layout->addWidget(_tree, 1);
 
     connect(_tree, &QTreeWidget::currentItemChanged, this, [this]() { updatePreview(); });
+
+    // The item menu: Rename, Duplicate, Delete, New Folder, as Animate's
+    // library offers them.
+    _tree->setContextMenuPolicy(Qt::CustomContextMenu);
+    _tree->setEditTriggers(QAbstractItemView::EditKeyPressed);
+    connect(_tree, &QTreeWidget::customContextMenuRequested, this, [this](const QPoint& at) {
+        QTreeWidgetItem* item = _tree->itemAt(at);
+        const int kind = item ? item->data(0, KindRole).toInt() : -1;
+        const QString name = item ? item->data(0, NameRole).toString() : QString();
+        QMenu menu(this);
+        QAction* rename = nullptr;
+        QAction* duplicate = nullptr;
+        QAction* remove = nullptr;
+        if (kind == static_cast<int>(Kind::Symbol))
+        {
+            rename = menu.addAction("Rename");
+            duplicate = menu.addAction("Duplicate");
+            remove = menu.addAction("Delete");
+            menu.addSeparator();
+        }
+        QAction* folder = menu.addAction("New Folder");
+        QAction* chosen = menu.exec(_tree->viewport()->mapToGlobal(at));
+        if (!chosen)
+            return;
+        if (chosen == rename)
+        {
+            _tree->editItem(item, 0);
+        }
+        else if (chosen == duplicate)
+        {
+            emit duplicateSymbolRequested(name);
+        }
+        else if (chosen == remove)
+        {
+            emit deleteSymbolRequested(name);
+        }
+        else if (chosen == folder)
+        {
+            // Inside the folder clicked, or the one holding the item.
+            QString parent;
+            if (kind == static_cast<int>(Kind::Folder))
+                parent = name;
+            else if (name.contains('/'))
+                parent = name.left(name.lastIndexOf('/'));
+            emit newFolderRequested(parent);
+        }
+    });
+    connect(_tree, &QTreeWidget::itemChanged, this, [this](QTreeWidgetItem* item, int column) {
+        if (_refreshing || column != 0 || item->data(0, KindRole).toInt() != static_cast<int>(Kind::Symbol))
+            return;
+        const QString name = item->data(0, NameRole).toString();
+        const QString typed = item->text(0).trimmed();
+        const int slash = name.lastIndexOf('/');
+        const QString folder = slash < 0 ? QString() : name.left(slash + 1);
+        const QString leaf = slash < 0 ? name : name.mid(slash + 1);
+        if (typed.isEmpty() || typed == leaf || typed.contains('/'))
+        {
+            _refreshing = true;
+            item->setText(0, leaf);
+            _refreshing = false;
+            return;
+        }
+        // After the edit has closed: the rename rebuilds the list, which
+        // must not delete the item while its editor is still finishing.
+        const QString newName = folder + typed;
+        QTimer::singleShot(0, this, [this, name, newName]() { emit renameSymbolRequested(name, newName); });
+    });
     connect(_tree, &QTreeWidget::itemDoubleClicked, this, [this](QTreeWidgetItem* item, int) {
         if (item && item->data(0, KindRole).toInt() == static_cast<int>(Kind::Symbol))
             emit editSymbolRequested(item->data(0, NameRole).toString());
@@ -275,6 +344,7 @@ QTreeWidgetItem* LibraryPanel::folderItem(const QString& path)
 
 void LibraryPanel::refresh()
 {
+    _refreshing = true;
     // Keep the open folders open across the rebuild.
     for (QTreeWidgetItemIterator it(_tree); *it; ++it)
     {
@@ -296,6 +366,7 @@ void LibraryPanel::refresh()
     {
         _count->setText("No document");
         _tree->setSortingEnabled(true);
+        _refreshing = false;
         return;
     }
 
@@ -312,6 +383,8 @@ void LibraryPanel::refresh()
         item->setData(0, KindRole, static_cast<int>(kind));
         item->setData(0, NameRole, path);
         item->setToolTip(0, path);
+        if (kind == Kind::Symbol)
+            item->setFlags(item->flags() | Qt::ItemIsEditable);
         if (QTreeWidgetItem* parent = folderItem(slash < 0 ? QString() : path.left(slash)))
             parent->addChild(item);
         else
@@ -337,5 +410,6 @@ void LibraryPanel::refresh()
 
     _count->setText(QString("%1 item%2").arg(items).arg(items == 1 ? "" : "s"));
     _tree->setSortingEnabled(true);
+    _refreshing = false;
     updatePreview();
 }

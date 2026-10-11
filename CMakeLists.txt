@@ -147,6 +147,7 @@ set(HEADERS
     src/edit/frame_commands.h
     src/edit/layer_commands.h
     src/edit/timeline_edit.h
+    src/edit/library_commands.h
     src/edit/property_command.h
     src/geom/curve.h
     src/geom/intersect.h
@@ -256,6 +257,7 @@ set(SOURCES
     src/edit/frame_commands.cpp
     src/edit/layer_commands.cpp
     src/edit/timeline_edit.cpp
+    src/edit/library_commands.cpp
     src/geom/curve.cpp
     src/geom/intersect.cpp
     src/geom/fill_attribution.cpp

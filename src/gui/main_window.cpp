@@ -7,6 +7,7 @@
 #include "library_panel.h"
 #include "../edit/layer_commands.h"
 #include "../edit/timeline_edit.h"
+#include "../edit/library_commands.h"
 #include "../edit/property_command.h"
 #include "phoenix_view.h"
 #include "timeline_view.h"
@@ -1751,6 +1752,88 @@ void MainWindow::setupPropertiesPanel()
             _phoenixView->editSymbol(found->second);
     });
     connect(_phoenixView, &PhoenixView::libraryItemDropped, this, &MainWindow::placeLibraryItem);
+
+    // The library's item menu, each an undo step.
+    const auto symbolNamed = [this](const QString& name) -> fla::Symbol* {
+        if (!_flaDocument || !_flaDocument->document || !_flaDocument->document->symbolList)
+            return nullptr;
+        const auto& symbols = _flaDocument->document->symbolList->symbolMap;
+        const auto found = symbols.find(name.toStdString());
+        return found == symbols.end() ? nullptr : found->second;
+    };
+    const auto afterLibraryEdit = [this]() {
+        _editContext.commandStack().breakMergeChain();
+        if (_libraryPanel)
+            _libraryPanel->refreshIfStale();
+        if (_phoenixView)
+        {
+            _phoenixView->clearCaches();
+            _phoenixView->update();
+        }
+        if (_propertiesPanel)
+            _propertiesPanel->refresh();
+    };
+    connect(_libraryPanel, &LibraryPanel::renameSymbolRequested, this,
+        [this, symbolNamed, afterLibraryEdit](const QString& name, const QString& newName) {
+            fla::Symbol* symbol = symbolNamed(name);
+            if (!symbol)
+                return;
+            if (!fla::library::nameIsFree(*_flaDocument->document, newName.toStdString()))
+            {
+                statusBar()->showMessage(QString("The library already has an item named %1.").arg(newName), 4000);
+                _libraryPanel->refresh();
+                return;
+            }
+            _editContext.commandStack().push(fla::CommandPtr(
+                new fla::RenameSymbolCommand(_flaDocument->document, symbol, newName.toStdString())));
+            afterLibraryEdit();
+        });
+    connect(_libraryPanel, &LibraryPanel::duplicateSymbolRequested, this,
+        [this, symbolNamed, afterLibraryEdit](const QString& name) {
+            fla::Symbol* symbol = symbolNamed(name);
+            if (!symbol)
+                return;
+            const std::string copyName = fla::library::freeCopyName(*_flaDocument->document, symbol->name);
+            _editContext.commandStack().push(fla::CommandPtr(new fla::AddSymbolCommand(
+                _flaDocument->document, fla::library::cloneSymbol(*symbol, copyName), "Duplicate Symbol")));
+            afterLibraryEdit();
+        });
+    connect(_libraryPanel, &LibraryPanel::deleteSymbolRequested, this,
+        [this, symbolNamed, afterLibraryEdit](const QString& name) {
+            fla::Symbol* symbol = symbolNamed(name);
+            if (!symbol)
+                return;
+            const size_t uses = fla::library::instancesOf(*_flaDocument->document, symbol).size();
+            if (uses > 0)
+            {
+                QMessageBox::information(this, "Delete Symbol",
+                    QString("%1 is used %2 time%3 in the document, so it cannot be deleted. Delete its instances first.")
+                        .arg(name).arg(uses).arg(uses == 1 ? "" : "s"));
+                return;
+            }
+            // Not while it is open for editing.
+            if (_phoenixView)
+                _phoenixView->exitToDepth(0);
+            _editContext.commandStack().push(fla::CommandPtr(
+                new fla::RemoveSymbolCommand(_flaDocument->document, symbol)));
+            afterLibraryEdit();
+        });
+    connect(_libraryPanel, &LibraryPanel::newFolderRequested, this,
+        [this, afterLibraryEdit](const QString& parentPath) {
+            if (!_flaDocument || !_flaDocument->document)
+                return;
+            const QString prefix = parentPath.isEmpty() ? QString() : parentPath + "/";
+            QString name;
+            for (int n = 1;; ++n)
+            {
+                name = prefix + QString("Untitled Folder %1").arg(n);
+                if (fla::library::nameIsFree(*_flaDocument->document, name.toStdString()))
+                    break;
+            }
+            _editContext.commandStack().push(fla::CommandPtr(
+                new fla::AddFolderCommand(_flaDocument->document, name.toStdString())));
+            afterLibraryEdit();
+        });
 
     // The Tool tab writes into the drawing style itself; these are the side
     // effects the window has to carry out.
