@@ -238,6 +238,52 @@ void pasteFrames(Layer& layer, int at, const std::vector<const Frame*>& copied, 
     updateExtent(layer);
 }
 
+bool moveFrames(const std::vector<Layer*>& sources, const std::vector<Layer*>& targets, int first, int last,
+    int to, bool copy, std::vector<Frame*>& removed)
+{
+    if (sources.empty() || sources.size() != targets.size() || last < first || to < 0)
+        return false;
+    if (!copy && to == first && sources == targets)
+        return false;
+    for (size_t i = 0; i < sources.size(); ++i)
+    {
+        if (!sources[i] || !targets[i])
+            return false;
+    }
+
+    // Everything is copied before anything changes, so a block moved onto
+    // part of itself carries what it held.
+    std::vector<std::vector<Frame*>> blocks;
+    for (Layer* source : sources)
+        blocks.push_back(copyFrames(*source, first, last));
+
+    if (!copy)
+    {
+        // What is left behind is blank, for as long as the block was, but
+        // no further than the layer reached.
+        for (Layer* source : sources)
+        {
+            const int end = std::min(last + 1, layerEnd(*source));
+            if (first >= end)
+                continue;
+            Frame blank(nullptr);
+            blank.index = 0;
+            blank.duration = end - first;
+            blank.keyMode = "9728";
+            pasteFrames(*source, first, {&blank}, removed);
+        }
+    }
+
+    for (size_t i = 0; i < targets.size(); ++i)
+    {
+        std::vector<const Frame*> block(blocks[i].begin(), blocks[i].end());
+        pasteFrames(*targets[i], to, block, removed);
+        for (Frame* frame : blocks[i])
+            delete frame;
+    }
+    return true;
+}
+
 void insertFrames(Layer& layer, int index, int count)
 {
     if (count <= 0 || index < 0)

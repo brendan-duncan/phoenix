@@ -72,6 +72,15 @@ std::vector<Frame*> copyFrames(const Layer& layer, int first, int last);
 /// pasted frames keeps its remaining frames, starting where they end.
 void pasteFrames(Layer& layer, int at, const std::vector<const Frame*>& copied, std::vector<Frame*>& removed);
 
+/// Dragging a block of selected frames, as in Animate: frames \a first to
+/// \a last of each layer in \a sources go to frame \a to of the layer at the
+/// same place in \a targets (the same layers, or as many rows up or down),
+/// replacing what was there. Unless \a copy (an Alt-drag), the frames left
+/// behind become blank; nothing after them moves. False when the lists do
+/// not pair up or the block would not move.
+bool moveFrames(const std::vector<Layer*>& sources, const std::vector<Layer*>& targets, int first, int last,
+    int to, bool copy, std::vector<Frame*>& removed);
+
 /// One past the layer's last frame.
 int layerEnd(const Layer& layer);
 

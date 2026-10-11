@@ -537,6 +537,7 @@ void MainWindow::setupUI()
 
     // Frame edits from the grid itself: dragging a keyframe, the menu.
     connect(_timelineView, &TimelineView::keyframeMoveRequested, this, &MainWindow::moveKeyframe);
+    connect(_timelineView, &TimelineView::framesMoveRequested, this, &MainWindow::moveFrames);
     connect(_timelineView, &TimelineView::framesContextMenuRequested, this, &MainWindow::showFramesMenu);
 
     // Adding, deleting and renaming layers go through the undo history.
@@ -665,6 +666,53 @@ void MainWindow::moveKeyframe(const fla::Layer* constLayer, int from, int to)
     {
         command->undo();
         delete command;
+        return;
+    }
+    command->undo();
+    _editContext.commandStack().push(fla::CommandPtr(command));
+    _editContext.commandStack().breakMergeChain();
+    if (_player)
+        _player->setCurrentFrame(to);
+    if (_phoenixView)
+    {
+        _phoenixView->clearCaches();
+        _phoenixView->update();
+    }
+    if (_timelineView)
+        _timelineView->refreshFrames();
+}
+
+void MainWindow::moveFrames(const std::vector<const fla::Layer*>& sources, const std::vector<const fla::Layer*>& targets, int first, int last, int to, bool copy)
+{
+    std::vector<fla::Layer*> from;
+    std::vector<fla::Layer*> onto;
+    std::vector<fla::Layer*> touched;
+    for (size_t i = 0; i < sources.size() && i < targets.size(); ++i)
+    {
+        from.push_back(const_cast<fla::Layer*>(sources[i]));
+        onto.push_back(const_cast<fla::Layer*>(targets[i]));
+    }
+    for (fla::Layer* layer : from)
+        if (std::find(touched.begin(), touched.end(), layer) == touched.end())
+            touched.push_back(layer);
+    for (fla::Layer* layer : onto)
+        if (std::find(touched.begin(), touched.end(), layer) == touched.end())
+            touched.push_back(layer);
+    if (from.empty())
+        return;
+
+    _selection.clear();
+    auto* command = new fla::EditFramesCommand(touched, copy ? "Copy Frames" : "Move Frames",
+        [from, onto, first, last, to, copy](std::vector<fla::Frame*>& removed) {
+            fla::timeline::moveFrames(from, onto, first, last, to, copy, removed);
+        });
+    command->redo();
+    if (!command->changedAnything())
+    {
+        command->undo();
+        delete command;
+        if (_timelineView)
+            _timelineView->refreshFrames();
         return;
     }
     command->undo();

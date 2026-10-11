@@ -243,6 +243,7 @@ TimelinesPanel::TimelinesPanel(Player* player, QWidget *parent)
     connect(_player, &Player::currentFrameChanged, this, &TimelinesPanel::onPlayerFrameChanged);
     connect(_gridContainer, &TimelineGrid::layerPressed, this, &TimelinesPanel::layerPressed);
     connect(_gridContainer, &TimelineGrid::keyframeMoveRequested, this, &TimelinesPanel::keyframeMoveRequested);
+    connect(_gridContainer, &TimelineGrid::framesMoveRequested, this, &TimelinesPanel::framesMoveRequested);
     connect(_gridContainer, &TimelineGrid::contextMenuRequested, this, &TimelinesPanel::contextMenuRequested);
     connect(_playTimer, &QTimer::timeout, this, &TimelinesPanel::onTimerTick);
 }
@@ -508,6 +509,49 @@ int TimelineGrid::frameAt(int x) const
     return std::max(0, x / (20 + 1));
 }
 
+void TimelineGrid::dropBlock(bool copy)
+{
+    // Each layer of the block goes to the row as far down or up; every one
+    // of those has to be a layer of the same timeline, or the block stays.
+    const int top = std::min(_anchorRow, _focusRow);
+    const int bottom = std::max(_anchorRow, _focusRow);
+    std::vector<const fla::Layer*> sources;
+    std::vector<const fla::Layer*> targets;
+    for (int row = top; row <= bottom; ++row)
+    {
+        const int to = row + _blockRows;
+        if (row < 0 || to < 0 || row >= static_cast<int>(_rows.size()) || to >= static_cast<int>(_rows.size()))
+            return;
+        const LayerRow& source = _rows[row];
+        const LayerRow& target = _rows[to];
+        const bool sourceIsLayer = source.layer && source.layer->layerType != fla::Layer::Type::Folder;
+        const bool targetIsLayer = target.layer && target.layer->layerType != fla::Layer::Type::Folder;
+        if (!sourceIsLayer)
+            continue;
+        if (!targetIsLayer || target.timeline != source.timeline)
+        {
+            update();
+            return;
+        }
+        sources.push_back(source.layer);
+        targets.push_back(target.layer);
+    }
+    if (sources.empty())
+        return;
+    const int first = std::min(_anchorFrame, _focusFrame);
+    const int last = std::max(_anchorFrame, _focusFrame);
+    // The selection goes with the block.
+    _anchorRow += _blockRows;
+    _focusRow += _blockRows;
+    _anchorFrame += _blockFrames;
+    _focusFrame += _blockFrames;
+    const int to = first + _blockFrames;
+    _blockRows = 0;
+    _blockFrames = 0;
+    update();
+    emit framesMoveRequested(sources, targets, first, last, to, copy);
+}
+
 FrameSelection TimelineGrid::selection() const
 {
     FrameSelection selection;
@@ -596,6 +640,18 @@ void TimelineGrid::mousePressEvent(QMouseEvent* event)
         return;
     }
 
+    // Pressing inside the selection picks the block up to drag, as in
+    // Animate. Let go where it was pressed and it was only a click.
+    if (event->button() == Qt::LeftButton && insideSelection && !(event->modifiers() & Qt::ShiftModifier))
+    {
+        _movingBlock = true;
+        _blockRow = row;
+        _blockFrame = frame;
+        _blockRows = 0;
+        _blockFrames = 0;
+        return;
+    }
+
     if ((event->modifiers() & Qt::ShiftModifier) && _hasSelection)
     {
         _focusRow = row;
@@ -618,6 +674,24 @@ void TimelineGrid::mouseMoveEvent(QMouseEvent* event)
     if (_isDragging)
     {
         updatePlayerFromMouse(event->pos().x());
+    }
+    else if (_movingBlock)
+    {
+        // The block keeps to the rows there are and does not go before the
+        // first frame.
+        const int top = std::min(_anchorRow, _focusRow);
+        const int bottom = std::max(_anchorRow, _focusRow);
+        const int first = std::min(_anchorFrame, _focusFrame);
+        const int frames = std::max(frameAt(event->pos().x()) - _blockFrame, -first);
+        const int lastRow = static_cast<int>(_rows.size()) - 1;
+        const int under = std::max(0, std::min(lastRow, (event->pos().y() - 25) / kLayerRowHeight));
+        const int rows = std::max(-top, std::min(lastRow - bottom, under - _blockRow));
+        if (frames != _blockFrames || rows != _blockRows)
+        {
+            _blockFrames = frames;
+            _blockRows = rows;
+            update();
+        }
     }
     else if (_movingKeyframe)
     {
@@ -648,6 +722,23 @@ void TimelineGrid::mouseReleaseEvent(QMouseEvent* event)
     {
         _isDragging = false;
         _selecting = false;
+        if (_movingBlock)
+        {
+            _movingBlock = false;
+            if (_blockRows == 0 && _blockFrames == 0)
+            {
+                // Only a click: the cell pressed becomes the selection.
+                _anchorRow = _focusRow = _blockRow;
+                _anchorFrame = _focusFrame = _blockFrame;
+                if (_player)
+                    _player->setCurrentFrame(_blockFrame);
+                update();
+            }
+            else
+            {
+                dropBlock((event->modifiers() & Qt::AltModifier) != 0);
+            }
+        }
         if (_movingKeyframe)
         {
             _movingKeyframe = false;
@@ -823,6 +914,21 @@ void TimelineGrid::paintEvent(QPaintEvent* event)
         painter.setPen(QPen(QColor(41, 128, 238), 1.0));
         painter.setBrush(Qt::NoBrush);
         painter.drawRect(block.adjusted(0, 0, -1, -1));
+    }
+
+    // A block being dragged shows where it would land.
+    if (_movingBlock && (_blockRows != 0 || _blockFrames != 0) && _hasSelection)
+    {
+        const int top = std::min(_anchorRow, _focusRow) + _blockRows;
+        const int bottom = std::max(_anchorRow, _focusRow) + _blockRows;
+        const int first = std::min(_anchorFrame, _focusFrame) + _blockFrames;
+        const int last = std::max(_anchorFrame, _focusFrame) + _blockFrames;
+        const QRect ghost(first * cellStride, headerHeight + top * layerRowHeight,
+            (last - first + 1) * cellStride - margin, (bottom - top) * layerRowHeight + frameHeight);
+        painter.setRenderHint(QPainter::Antialiasing, false);
+        painter.setPen(QPen(QColor(41, 128, 238), 2.0));
+        painter.setBrush(Qt::NoBrush);
+        painter.drawRect(ghost.adjusted(1, 1, -1, -1));
     }
 
     // A keyframe being dragged shows where it would land.

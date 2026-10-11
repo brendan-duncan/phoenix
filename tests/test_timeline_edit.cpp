@@ -190,3 +190,41 @@ TEST(paste_frames_replaces_what_was_there)
     for (fla::Frame* frame : removed)
         delete frame;
 }
+
+TEST(dragging_a_block_of_frames_moves_or_copies_it)
+{
+    // Moved along its own layer: the block lands at frame 10, and where it
+    // was is blank. Nothing after it moves.
+    std::unique_ptr<fla::Layer> layer = twoSpans();
+    std::vector<fla::Frame*> removed;
+    CHECK(fla::timeline::moveFrames({layer.get()}, {layer.get()}, 0, 4, 10, false, removed));
+    CHECK(spans(*layer, {{0, 5}, {5, 5}, {10, 5}}));
+    CHECK(layer->frames[0]->elements.empty());
+    CHECK(layer->frames[2]->elements.size() == 1);
+
+    // Moved onto part of itself: it carries what it held.
+    layer = twoSpans();
+    CHECK(fla::timeline::moveFrames({layer.get()}, {layer.get()}, 0, 4, 2, false, removed));
+    CHECK(spans(*layer, {{0, 2}, {2, 5}, {7, 3}}));
+    CHECK(layer->frames[0]->elements.empty());
+    CHECK(layer->frames[1]->elements.size() == 1);
+
+    // Alt-dragged to the layer below: copied, the original left as it was.
+    layer = twoSpans();
+    std::unique_ptr<fla::Layer> below(new fla::Layer(nullptr));
+    fla::Frame* empty = new fla::Frame(below.get());
+    empty->index = 0;
+    empty->duration = 10;
+    below->frames = {empty};
+    CHECK(fla::timeline::moveFrames({layer.get()}, {below.get()}, 0, 4, 2, true, removed));
+    CHECK(spans(*layer, {{0, 5}, {5, 5}}));
+    CHECK(layer->frames[0]->elements.size() == 1);
+    CHECK(spans(*below, {{0, 2}, {2, 5}, {7, 3}}));
+    CHECK(below->frames[1]->elements.size() == 1);
+
+    // Nowhere to go, or no layers to pair up: nothing happens.
+    CHECK(!fla::timeline::moveFrames({layer.get()}, {layer.get()}, 0, 4, 0, false, removed));
+    CHECK(!fla::timeline::moveFrames({layer.get()}, {}, 0, 4, 3, false, removed));
+    for (fla::Frame* frame : removed)
+        delete frame;
+}

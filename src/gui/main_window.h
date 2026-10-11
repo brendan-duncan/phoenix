@@ -130,6 +130,7 @@ private slots:
     void clearKeyframe();
     void setClassicTween(bool on);
     void moveKeyframe(const fla::Layer* layer, int from, int to);
+    void moveFrames(const std::vector<const fla::Layer*>& sources, const std::vector<const fla::Layer*>& targets, int first, int last, int to, bool copy);
     void copyFrames();
     void cutFrames();
     void pasteFrames();

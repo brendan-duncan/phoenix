@@ -79,6 +79,11 @@ signals:
     /// A keyframe was dragged from one frame to another.
     void keyframeMoveRequested(const fla::Layer* layer, int from, int to);
 
+    /// The selected block of frames was dragged: frames \a first to \a last
+    /// of each source layer go to frame \a to of its target, copied with
+    /// Alt held.
+    void framesMoveRequested(const std::vector<const fla::Layer*>& sources, const std::vector<const fla::Layer*>& targets, int first, int last, int to, bool copy);
+
     /// The frames were right-clicked; the menu goes at \a globalPos.
     void contextMenuRequested(const QPoint& globalPos);
 
@@ -119,8 +124,18 @@ private:
     int _moveFrom = 0;
     int _moveTo = 0;
 
+    /// The selected block being dragged: the cell it was picked up by and
+    /// how far it has gone, in rows and frames.
+    bool _movingBlock = false;
+    int _blockRow = 0;
+    int _blockFrame = 0;
+    int _blockRows = 0;
+    int _blockFrames = 0;
+
     int rowAt(int y) const;
     int frameAt(int x) const;
+    /// Lets go of the dragged block: asks for the move, or the copy.
+    void dropBlock(bool copy);
     int _bottomPadding = 0;
 
     std::vector<const fla::Timeline*> shownTimelines() const;
@@ -166,6 +181,7 @@ signals:
 
     void layerPressed(const fla::Timeline* timeline, int layerIndex);
     void keyframeMoveRequested(const fla::Layer* layer, int from, int to);
+    void framesMoveRequested(const std::vector<const fla::Layer*>& sources, const std::vector<const fla::Layer*>& targets, int first, int last, int to, bool copy);
     void contextMenuRequested(const QPoint& globalPos);
 
 private slots:

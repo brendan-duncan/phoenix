@@ -56,6 +56,7 @@ signals:
     void deleteLayerRequested();
     void layerRenamed(const fla::Timeline* timeline, int layerIndex, const QString& name);
     void keyframeMoveRequested(const fla::Layer* layer, int from, int to);
+    void framesMoveRequested(const std::vector<const fla::Layer*>& sources, const std::vector<const fla::Layer*>& targets, int first, int last, int to, bool copy);
     void framesContextMenuRequested(const QPoint& globalPos);
     void onionSkinToggled(bool on);
 
