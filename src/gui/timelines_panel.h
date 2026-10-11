@@ -6,6 +6,9 @@
 #include <QWidget>
 #include <QScrollArea>
 
+#include "audio_engine.h"
+
+#include <functional>
 #include <vector>
 #include <QPushButton>
 #include <QTimer>
@@ -51,6 +54,11 @@ public:
     /// Shows the onion skin range in the ruler.
     void setOnionSkin(bool on, int before, int after);
 
+    /// Where the grid finds a frame's sound and the point in it the frame
+    /// starts from, to draw its waveform along the span.
+    using SoundProvider = std::function<std::shared_ptr<const PcmBuffer>(const fla::Frame*, size_t& in)>;
+    void setSoundProvider(SoundProvider provider) { _soundProvider = std::move(provider); update(); }
+
 public slots:
     void onPlayerFrameChanged(int frame) { update(); }
 
@@ -81,6 +89,8 @@ private:
     bool _isDragging = false;
     const fla::Timeline* _timeline = nullptr;
     std::vector<LayerRow> _rows;
+
+    SoundProvider _soundProvider;
 
     bool _onionSkin = false;
     int _onionBefore = 2;
@@ -129,6 +139,8 @@ public:
 
     /// Reflects the onion skin state set from elsewhere (the View menu).
     void setOnionSkin(bool on, int before, int after);
+
+    void setSoundProvider(TimelineGrid::SoundProvider provider) { _gridContainer->setSoundProvider(std::move(provider)); }
 
 signals:
     /// The onion skin button was toggled.

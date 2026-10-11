@@ -11,6 +11,7 @@ constexpr int kFrameHeight = 21;
 
 } // namespace
 #include <algorithm>
+#include <cmath>
 #include <map>
 
 #include <QElapsedTimer>
@@ -714,6 +715,39 @@ void TimelineGrid::paintEvent(QPaintEvent* event)
                 else if (frame->tweenType == fla::TweenType::Shape)
                     spanColor = shapeSpan;
                 painter.fillRect(span, spanColor);
+
+                // A sound draws its waveform along the span, from where the
+                // frame starts it, as Animate does.
+                size_t soundIn = 0;
+                std::shared_ptr<const PcmBuffer> sound = _soundProvider ? _soundProvider(frame, soundIn) : nullptr;
+                if (sound && sound->frames() > soundIn)
+                {
+                    const double fps = _flaDocument->document->frameRate > 0.0 ? _flaDocument->document->frameRate : 24.0;
+                    const double perPixel = PcmBuffer::kRate / fps / cellStride;
+                    const int left = std::max(x0, event->rect().left());
+                    const int right = std::min(x1, event->rect().right() + 1);
+                    const double half = frameHeight / 2.0 - 2.0;
+                    const int centerY = y + frameHeight / 2;
+                    painter.setRenderHint(QPainter::Antialiasing, false);
+                    painter.setPen(QPen(QColor(40, 70, 190), 1.0));
+                    for (int px = left; px < right; ++px)
+                    {
+                        const size_t from = soundIn + static_cast<size_t>((px - x0) * perPixel);
+                        if (from >= sound->frames())
+                            break;
+                        const size_t to = std::min(sound->frames(), soundIn + static_cast<size_t>((px - x0 + 1) * perPixel));
+                        // The loudest sample in the column, looking at no
+                        // more than about 64 of them.
+                        const size_t step = std::max<size_t>(1, (to - from) / 64);
+                        float peak = 0.0f;
+                        for (size_t s = from; s < to; s += step)
+                            peak = std::max({peak, std::fabs(sound->samples[s * 2]), std::fabs(sound->samples[s * 2 + 1])});
+                        const int extent = static_cast<int>(std::lround(std::min(1.0f, peak) * half));
+                        if (extent > 0)
+                            painter.drawLine(px, centerY - extent, px, centerY + extent);
+                    }
+                    painter.setRenderHint(QPainter::Antialiasing, true);
+                }
 
                 const double midY = y + frameHeight / 2.0;
                 const double dotX = x0 + frameWidth / 2.0;

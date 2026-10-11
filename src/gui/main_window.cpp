@@ -460,6 +460,9 @@ void MainWindow::setupUI()
     _timelineAudio = new TimelineAudio(_player, this);
     connect(_player, &Player::playingChanged, _timelineAudio, &TimelineAudio::onPlayingChanged);
     connect(_player, &Player::currentFrameChanged, _timelineAudio, &TimelineAudio::onFrameChanged);
+    _timelineView->setSoundProvider([this](const fla::Frame* frame, size_t& in) {
+        return _timelineAudio->soundOf(frame, &in);
+    });
 
     // Add to main vertical splitter
     _mainSplitter->addWidget(_viewSplitter);

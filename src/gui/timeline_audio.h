@@ -40,8 +40,9 @@ public:
     bool muted() const { return _muted; }
 
     /// The decoded sound a frame plays, for drawing its waveform; null when
-    /// it has none or it cannot be read.
-    std::shared_ptr<const PcmBuffer> soundOf(const fla::Frame* frame);
+    /// it has none or it cannot be read. \a in is where in the sound the
+    /// frame starts it.
+    std::shared_ptr<const PcmBuffer> soundOf(const fla::Frame* frame, size_t* in = nullptr);
 
 public slots:
     void onPlayingChanged(bool playing);
@@ -56,6 +57,7 @@ private:
         size_t out = 0;
         int loops = 1;
         bool hasOut = false;
+        std::shared_ptr<const AudioEnvelope> envelope;
     };
     static bool soundSettings(const fla::Frame& frame, FrameSound& sound);
     std::shared_ptr<const PcmBuffer> buffer(const std::string& name);

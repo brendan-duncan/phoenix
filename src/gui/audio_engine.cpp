@@ -7,8 +7,83 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
 #include <sstream>
+
+void AudioEnvelope::gainAt(size_t position, float& left, float& right) const
+{
+    if (points.empty())
+    {
+        left = right = 1.0f;
+        return;
+    }
+    if (position <= points.front().mark)
+    {
+        left = points.front().left;
+        right = points.front().right;
+        return;
+    }
+    for (size_t i = 1; i < points.size(); ++i)
+    {
+        const Point& a = points[i - 1];
+        const Point& b = points[i];
+        if (position < b.mark)
+        {
+            const float t = b.mark > a.mark ? static_cast<float>(position - a.mark) / (b.mark - a.mark) : 1.0f;
+            left = a.left + (b.left - a.left) * t;
+            right = a.right + (b.right - a.right) * t;
+            return;
+        }
+    }
+    left = points.back().left;
+    right = points.back().right;
+}
+
+namespace {
+
+/// The value of \a name in one element's text, or empty.
+std::string attributeOf(const std::string& tag, const std::string& name)
+{
+    const std::string key = " " + name + "=\"";
+    const size_t at = tag.find(key);
+    if (at == std::string::npos)
+        return {};
+    const size_t from = at + key.size();
+    const size_t to = tag.find('"', from);
+    return to == std::string::npos ? std::string() : tag.substr(from, to - from);
+}
+
+} // namespace
+
+std::shared_ptr<const AudioEnvelope> AudioEnvelope::parse(const std::string& xml)
+{
+    auto envelope = std::make_shared<AudioEnvelope>();
+    bool flat = true;
+    size_t at = 0;
+    while ((at = xml.find("<SoundEnvelopePoint", at)) != std::string::npos)
+    {
+        const size_t end = xml.find('>', at);
+        if (end == std::string::npos)
+            break;
+        const std::string tag = xml.substr(at, end - at);
+        at = end;
+        Point point;
+        const std::string mark = attributeOf(tag, "mark44");
+        const std::string left = attributeOf(tag, "level0");
+        const std::string right = attributeOf(tag, "level1");
+        point.mark = mark.empty() ? 0 : static_cast<size_t>(std::max(0LL, std::atoll(mark.c_str())));
+        point.left = left.empty() ? 0.0f : std::atoi(left.c_str()) / 32768.0f;
+        point.right = right.empty() ? 0.0f : std::atoi(right.c_str()) / 32768.0f;
+        flat = flat && point.left == 1.0f && point.right == 1.0f;
+        envelope->points.push_back(point);
+    }
+    if (envelope->points.empty() || flat)
+        return nullptr;
+    std::stable_sort(envelope->points.begin(), envelope->points.end(),
+        [](const Point& a, const Point& b) { return a.mark < b.mark; });
+    return envelope;
+}
 
 namespace AudioDecode {
 
@@ -214,11 +289,22 @@ void AudioEngine::mix(float* output, unsigned frameCount)
             const size_t take = std::min<size_t>(frameCount - written, voice.end - voice.position);
             for (size_t i = 0; i < take; ++i)
             {
-                output[(written + i) * 2] += samples[(voice.position + i) * 2] * voice.volume;
-                output[(written + i) * 2 + 1] += samples[(voice.position + i) * 2 + 1] * voice.volume;
+                float left = voice.volume;
+                float right = voice.volume;
+                if (voice.envelope)
+                {
+                    float gainLeft = 1.0f;
+                    float gainRight = 1.0f;
+                    voice.envelope->gainAt(voice.start + voice.played + i, gainLeft, gainRight);
+                    left *= gainLeft;
+                    right *= gainRight;
+                }
+                output[(written + i) * 2] += samples[(voice.position + i) * 2] * left;
+                output[(written + i) * 2 + 1] += samples[(voice.position + i) * 2 + 1] * right;
             }
             written += static_cast<unsigned>(take);
             voice.position += take;
+            voice.played += take;
         }
         it = finished ? _voices.erase(it) : std::next(it);
     }
@@ -226,7 +312,8 @@ void AudioEngine::mix(float* output, unsigned frameCount)
         output[i] = std::max(-1.0f, std::min(1.0f, output[i]));
 }
 
-int AudioEngine::play(std::shared_ptr<const PcmBuffer> buffer, size_t start, size_t end, int loops, float volume)
+int AudioEngine::play(std::shared_ptr<const PcmBuffer> buffer, size_t start, size_t end, int loops, float volume,
+    std::shared_ptr<const AudioEnvelope> envelope)
 {
     if (!buffer || buffer->frames() == 0 || !open())
         return -1;
@@ -242,6 +329,7 @@ int AudioEngine::play(std::shared_ptr<const PcmBuffer> buffer, size_t start, siz
     voice.position = start;
     voice.loopsLeft = loops <= 0 ? 0 : loops;
     voice.volume = volume;
+    voice.envelope = std::move(envelope);
     _voices[id] = std::move(voice);
     return id;
 }

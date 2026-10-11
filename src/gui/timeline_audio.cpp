@@ -70,6 +70,11 @@ bool TimelineAudio::soundSettings(const fla::Frame& frame, FrameSound& sound)
     }
     if (loopMode == "loop")
         sound.loops = 0;
+    for (const std::string& child : frame.extraChildren)
+    {
+        if (child.find("<SoundEnvelope") != std::string::npos)
+            sound.envelope = AudioEnvelope::parse(child);
+    }
     // Animate leaves the sync out for an event sound, the default.
     if (sound.sync.empty())
         sound.sync = "event";
@@ -104,11 +109,13 @@ std::shared_ptr<const PcmBuffer> TimelineAudio::buffer(const std::string& name)
     return decoded;
 }
 
-std::shared_ptr<const PcmBuffer> TimelineAudio::soundOf(const fla::Frame* frame)
+std::shared_ptr<const PcmBuffer> TimelineAudio::soundOf(const fla::Frame* frame, size_t* in)
 {
     FrameSound sound;
-    if (!frame || !soundSettings(*frame, sound))
+    if (!frame || !soundSettings(*frame, sound) || sound.sync == "stop")
         return nullptr;
+    if (in)
+        *in = sound.in;
     return buffer(sound.name);
 }
 
@@ -200,7 +207,7 @@ void TimelineAudio::onFrameChanged(int frame)
                     if (!_playing)
                     {
                         // A scrub: a frame's worth, so the sound can be found.
-                        _scrubVoice = engine.play(pcm, offset, std::min(spanEnd, offset + samplesPerFrame));
+                        _scrubVoice = engine.play(pcm, offset, std::min(spanEnd, offset + samplesPerFrame), 1, 1.0f, sound.envelope);
                         continue;
                     }
                     const auto running = _streams.find(key);
@@ -210,7 +217,7 @@ void TimelineAudio::onFrameChanged(int frame)
                     }
                     else
                     {
-                        const int voice = engine.play(pcm, offset, spanEnd);
+                        const int voice = engine.play(pcm, offset, spanEnd, 1, 1.0f, sound.envelope);
                         if (voice >= 0)
                             stillStreaming[key] = voice;
                     }
@@ -230,7 +237,7 @@ void TimelineAudio::onFrameChanged(int frame)
                     if (already)
                         continue;
                 }
-                const int voice = engine.play(pcm, in, out, sound.loops);
+                const int voice = engine.play(pcm, in, out, sound.loops, 1.0f, sound.envelope);
                 if (voice >= 0)
                     _events.emplace(sound.name, voice);
             }

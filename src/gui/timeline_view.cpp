@@ -85,6 +85,11 @@ void TimelineView::setOnionSkin(bool on, int before, int after)
     _timelinesPanel->setOnionSkin(on, before, after);
 }
 
+void TimelineView::setSoundProvider(std::function<std::shared_ptr<const PcmBuffer>(const fla::Frame*, size_t& in)> provider)
+{
+    _timelinesPanel->setSoundProvider(std::move(provider));
+}
+
 void TimelineView::refreshFrames()
 {
     _timelinesPanel->refreshFrames();

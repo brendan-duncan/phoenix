@@ -115,3 +115,38 @@ TEST(real_sounds_decode_to_their_recorded_length)
     }
     std::printf("    decoded %d sounds\n", decoded);
 }
+
+TEST(sound_envelopes_shape_the_volume)
+{
+    // Animate's default envelope, full volume, leaves the sound alone.
+    CHECK(AudioEnvelope::parse("<SoundEnvelope><SoundEnvelopePoint level0=\"32768\" level1=\"32768\"/></SoundEnvelope>") == nullptr);
+    CHECK(AudioEnvelope::parse("") == nullptr);
+
+    // Milo_Kitty_01's fade out: full until 220095, then down to silence at
+    // 292857, where the last point leaves its levels out.
+    auto fade = AudioEnvelope::parse(
+        "<SoundEnvelope><SoundEnvelopePoint level0=\"32768\" level1=\"32768\"/>"
+        "<SoundEnvelopePoint mark44=\"220095\" level0=\"32768\" level1=\"32768\"/>"
+        "<SoundEnvelopePoint mark44=\"292857\"/></SoundEnvelope>");
+    CHECK(fade && fade->points.size() == 3);
+    if (!fade)
+        return;
+    float left = 0.0f;
+    float right = 0.0f;
+    fade->gainAt(1000, left, right);
+    CHECK_NEAR(left, 1.0);
+    fade->gainAt((220095 + 292857) / 2, left, right);
+    CHECK(std::fabs(left - 0.5f) < 0.001f && std::fabs(right - 0.5f) < 0.001f);
+    fade->gainAt(400000, left, right);
+    CHECK_NEAR(left, 0.0);
+
+    // Each channel has its own level, as Yard_Sale_03_2's does.
+    auto pan = AudioEnvelope::parse("<SoundEnvelopePoint level0=\"16384\" level1=\"0\"/>");
+    CHECK(pan != nullptr);
+    if (pan)
+    {
+        pan->gainAt(5000, left, right);
+        CHECK_NEAR(left, 0.5);
+        CHECK_NEAR(right, 0.0);
+    }
+}

@@ -20,6 +20,28 @@ struct PcmBuffer
     size_t frames() const { return samples.size() / 2; }
 };
 
+/// A sound's volume envelope, as a frame's SoundEnvelope gives it: points
+/// at sample positions in the sound (44.1 kHz), with a level for each
+/// channel, joined by straight lines and held flat past either end.
+struct AudioEnvelope
+{
+    struct Point
+    {
+        size_t mark = 0;
+        float left = 0.0f;
+        float right = 0.0f;
+    };
+    std::vector<Point> points;
+
+    /// The gain of each channel at \a position.
+    void gainAt(size_t position, float& left, float& right) const;
+
+    /// Reads the SoundEnvelopePoint elements in \a xml, where 32768 is full
+    /// volume and a level left out is silence. Null when there are none or
+    /// they leave the sound as it is.
+    static std::shared_ptr<const AudioEnvelope> parse(const std::string& xml);
+};
+
 namespace AudioDecode {
 
 /// Turns a sound's data, as an FLA keeps it under bin, into PCM. The data is
@@ -48,7 +70,10 @@ public:
     /// Starts playing \a buffer from frame \a start up to \a end (clamped
     /// to its length), \a loops times in all (0 for forever). Returns the
     /// voice, or -1 when nothing can play.
-    int play(std::shared_ptr<const PcmBuffer> buffer, size_t start, size_t end, int loops = 1, float volume = 1.0f);
+    /// An \a envelope shapes the volume by position in the sound, counting
+    /// on through loops as Animate's does.
+    int play(std::shared_ptr<const PcmBuffer> buffer, size_t start, size_t end, int loops = 1, float volume = 1.0f,
+        std::shared_ptr<const AudioEnvelope> envelope = nullptr);
 
     void stop(int voice);
     void stopAll();
@@ -70,6 +95,9 @@ private:
         size_t position = 0;
         int loopsLeft = 1;
         float volume = 1.0f;
+        std::shared_ptr<const AudioEnvelope> envelope;
+        /// Frames played so far, which is where the envelope is.
+        size_t played = 0;
     };
 
     std::mutex _mutex;

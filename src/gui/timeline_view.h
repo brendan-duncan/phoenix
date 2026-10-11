@@ -40,6 +40,9 @@ public:
 
     void setOnionSkin(bool on, int before, int after);
 
+    /// Lets the frames draw the waveforms of their sounds.
+    void setSoundProvider(std::function<std::shared_ptr<const PcmBuffer>(const fla::Frame*, size_t& in)> provider);
+
 signals:
     void layerVisibilityChanged(const QString& timelineName, int layerIndex, bool visible);
 
