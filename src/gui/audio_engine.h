@@ -71,9 +71,11 @@ public:
     /// to its length), \a loops times in all (0 for forever). Returns the
     /// voice, or -1 when nothing can play.
     /// An \a envelope shapes the volume by position in the sound, counting
-    /// on through loops as Animate's does.
+    /// on through loops as Animate's does. \a elapsed starts the voice that
+    /// many frames into its playing, loops included, as a stream does when
+    /// the playhead starts part way through its span.
     int play(std::shared_ptr<const PcmBuffer> buffer, size_t start, size_t end, int loops = 1, float volume = 1.0f,
-        std::shared_ptr<const AudioEnvelope> envelope = nullptr);
+        std::shared_ptr<const AudioEnvelope> envelope = nullptr, size_t elapsed = 0);
 
     void stop(int voice);
     void stopAll();

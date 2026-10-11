@@ -313,7 +313,7 @@ void AudioEngine::mix(float* output, unsigned frameCount)
 }
 
 int AudioEngine::play(std::shared_ptr<const PcmBuffer> buffer, size_t start, size_t end, int loops, float volume,
-    std::shared_ptr<const AudioEnvelope> envelope)
+    std::shared_ptr<const AudioEnvelope> envelope, size_t elapsed)
 {
     if (!buffer || buffer->frames() == 0 || !open())
         return -1;
@@ -326,8 +326,15 @@ int AudioEngine::play(std::shared_ptr<const PcmBuffer> buffer, size_t start, siz
     voice.buffer = std::move(buffer);
     voice.start = start;
     voice.end = end;
-    voice.position = start;
-    voice.loopsLeft = loops <= 0 ? 0 : loops;
+    // Part way in: the passes already over are spent, and the voice picks up
+    // where the one under way has got to.
+    const size_t length = end - start;
+    const size_t passes = elapsed / length;
+    if (loops > 0 && passes >= static_cast<size_t>(loops))
+        return -1;
+    voice.position = start + elapsed % length;
+    voice.played = elapsed;
+    voice.loopsLeft = loops <= 0 ? 0 : loops - static_cast<int>(passes);
     voice.volume = volume;
     voice.envelope = std::move(envelope);
     _voices[id] = std::move(voice);

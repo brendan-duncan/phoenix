@@ -5,12 +5,16 @@
 #include "../data/document.h"
 #include "../data/fla_document.h"
 #include "../data/frame.h"
+#include "../data/group.h"
+#include "../data/symbol.h"
+#include "../data/symbol_instance.h"
 #include "../data/layer.h"
 #include "../data/timeline.h"
 
 #include <algorithm>
 #include <cmath>
 #include <cstdlib>
+#include <functional>
 
 TimelineAudio::TimelineAudio(Player* player, QObject* parent)
     : QObject(parent)
@@ -132,7 +136,8 @@ std::vector<float> TimelineAudio::mixdown(int first, int last)
     mixed.assign(total * 2, 0.0f);
 
     // Each sound placed on the output: from where, which part of it, how
-    // many times round (0 for until stopped), and where a stop cuts it.
+    // many times round (0 for until stopped), how far into its playing it
+    // starts (a stream picked up part way), and where a stop cuts it.
     struct Placed
     {
         std::string name;
@@ -141,38 +146,100 @@ std::vector<float> TimelineAudio::mixdown(int first, int last)
         size_t in = 0;
         size_t out = 0;
         int loops = 1;
+        size_t skip = 0;
         size_t cut = static_cast<size_t>(-1);
         std::shared_ptr<const AudioEnvelope> envelope;
 
         size_t end() const
         {
             const size_t length = out - in;
-            const size_t natural = loops > 0 ? start + length * static_cast<size_t>(loops) : static_cast<size_t>(-1);
+            const size_t natural = loops > 0 ? start + length * static_cast<size_t>(loops) - skip : static_cast<size_t>(-1);
             return std::min(natural, cut);
         }
     };
     std::vector<Placed> placed;
 
+    // The timelines sounding at a frame: the scene's, and those of the movie
+    // clips on it, which an exported movie plays round and round from when
+    // they appear (as the view draws them), down through groups and nested
+    // clips. A graphic symbol's own sounds stay silent, as in Animate.
+    struct Sounding
+    {
+        const fla::Timeline* timeline;
+        int frame;
+    };
+    std::function<void(const fla::Timeline*, int, std::vector<Sounding>&)> collect;
+    const std::function<void(const fla::Element*, int, std::vector<Sounding>&)> clipsIn =
+        [&](const fla::Element* element, int elapsed, std::vector<Sounding>& out) {
+            if (!element)
+                return;
+            if (element->elementType() == fla::Element::Type::Group)
+            {
+                for (const fla::Element* member : static_cast<const fla::Group*>(element)->members)
+                    clipsIn(member, elapsed, out);
+                return;
+            }
+            if (element->elementType() != fla::Element::Type::SymbolInstance)
+                return;
+            const fla::SymbolInstance* instance = static_cast<const fla::SymbolInstance*>(element);
+            if (instance->symbolType != fla::SymbolType::MovieClip || !instance->symbol)
+                return;
+            int length = 1;
+            for (const fla::Timeline* timeline : instance->symbol->timelines)
+            {
+                for (const fla::Layer* layer : timeline ? timeline->layers : std::vector<fla::Layer*>())
+                {
+                    for (const fla::Frame* frame : layer ? layer->frames : std::vector<fla::Frame*>())
+                    {
+                        if (frame)
+                            length = std::max(length, frame->index + std::max(frame->duration, 1));
+                    }
+                }
+            }
+            for (const fla::Timeline* timeline : instance->symbol->timelines)
+                collect(timeline, elapsed % length, out);
+        };
+    collect = [&](const fla::Timeline* timeline, int frame, std::vector<Sounding>& out) {
+        if (!timeline || out.size() > 256)
+            return;
+        out.push_back({timeline, frame});
+        for (const fla::Layer* layer : timeline->layers)
+        {
+            if (!layer || !layer->visible)
+                continue;
+            for (const fla::Frame* key : layer->frames)
+            {
+                if (!key || key->index > frame || frame >= key->index + std::max(key->duration, 1))
+                    continue;
+                for (const fla::Element* element : key->elements)
+                    clipsIn(element, frame - key->index, out);
+            }
+        }
+    };
+
     for (int frame = first; frame <= last; ++frame)
     {
         const size_t here = at(frame);
-        for (const fla::Timeline* timeline : {static_cast<const fla::Timeline*>(doc->currentScene())})
+        std::vector<Sounding> sounding;
+        collect(doc->currentScene(), frame, sounding);
+        for (const Sounding& where : sounding)
         {
-            for (const fla::Layer* layer : timeline ? timeline->layers : std::vector<fla::Layer*>())
+            const int local = where.frame;
+            for (const fla::Layer* layer : where.timeline->layers)
             {
                 if (!layer || !layer->visible)
                     continue;
                 for (const fla::Frame* key : layer->frames)
                 {
-                    if (!key || key->index > frame || frame >= key->index + std::max(key->duration, 1))
+                    if (!key || key->index > local || local >= key->index + std::max(key->duration, 1))
                         continue;
                     FrameSound sound;
                     if (!soundSettings(*key, sound))
                         continue;
-                    // A stream is placed once, from the first frame of its
-                    // span that is in the range.
-                    const bool streamStart = sound.sync == "stream" && frame == std::max(first, key->index);
-                    if (key->index != frame && !streamStart)
+                    // A stream is placed from the start of its span, or from
+                    // part way in at the first frame of the range.
+                    const bool streamStart = sound.sync == "stream" && (local == key->index || frame == first);
+                    if (key->index != local && !streamStart)
                         continue;
                     if (sound.sync == "stop")
                     {
@@ -198,13 +265,11 @@ std::vector<float> TimelineAudio::mixdown(int first, int last)
                         continue;
                     if (sound.sync == "stream")
                     {
-                        // From where the span is at this frame, for as long
-                        // as the span runs.
-                        voice.in = std::min(voice.out, voice.in +
-                            static_cast<size_t>(std::llround((frame - key->index) * samplesPerFrame)));
-                        voice.loops = 1;
-                        voice.cut = at(key->index + std::max(key->duration, 1));
-                        if (voice.out <= voice.in)
+                        // From where the span is at this frame, repeating as
+                        // told, for as long as the span runs.
+                        voice.skip = static_cast<size_t>(std::llround((local - key->index) * samplesPerFrame));
+                        voice.cut = at(frame + key->index + std::max(key->duration, 1) - local);
+                        if (voice.loops > 0 && voice.skip >= (voice.out - voice.in) * static_cast<size_t>(voice.loops))
                             continue;
                     }
                     else if (sound.sync == "start")
@@ -227,7 +292,7 @@ std::vector<float> TimelineAudio::mixdown(int first, int last)
         const size_t end = std::min(voice.end(), total);
         for (size_t at = voice.start; at < end; ++at)
         {
-            const size_t played = at - voice.start;
+            const size_t played = at - voice.start + voice.skip;
             const size_t source = voice.in + played % length;
             float left = 1.0f;
             float right = 1.0f;
@@ -321,16 +386,18 @@ void TimelineAudio::onFrameChanged(int frame)
 
                 if (sound.sync == "stream")
                 {
-                    // Where the sound is at this frame, and how long the
-                    // span lets it run.
-                    const size_t offset = in + static_cast<size_t>(frame - key->index) * samplesPerFrame;
-                    const size_t spanEnd = std::min(out, in + static_cast<size_t>(std::max(key->duration, 1)) * samplesPerFrame);
-                    if (offset >= spanEnd)
+                    // How far into its playing the sound is at this frame,
+                    // its repeats counted: a stream repeats as told for as
+                    // long as its span lasts.
+                    const size_t length = out - in;
+                    const size_t elapsed = static_cast<size_t>(frame - key->index) * samplesPerFrame;
+                    if (length == 0 || (sound.loops > 0 && elapsed >= length * static_cast<size_t>(sound.loops)))
                         continue;
                     if (!_playing)
                     {
                         // A scrub: a frame's worth, so the sound can be found.
-                        _scrubVoice = engine.play(pcm, offset, std::min(spanEnd, offset + samplesPerFrame), 1, 1.0f, sound.envelope);
+                        const size_t offset = in + elapsed % length;
+                        _scrubVoice = engine.play(pcm, offset, std::min(out, offset + samplesPerFrame), 1, 1.0f, sound.envelope);
                         continue;
                     }
                     const auto running = _streams.find(key);
@@ -340,7 +407,8 @@ void TimelineAudio::onFrameChanged(int frame)
                     }
                     else
                     {
-                        const int voice = engine.play(pcm, offset, spanEnd, 1, 1.0f, sound.envelope);
+                        // It stops when the playhead leaves the span (below).
+                        const int voice = engine.play(pcm, in, out, sound.loops, 1.0f, sound.envelope, elapsed);
                         if (voice >= 0)
                             stillStreaming[key] = voice;
                     }
