@@ -1,6 +1,6 @@
-# Pheonix
+# Phoenix
 
-Phoenix is an experimental Flash FLA parser and renderer. It is being developed out of personal interest as a learning exercise and is not intended to be a supported product.
+Phoenix is 2D vector animation software compatible with Adobe Animate and Flash FLA files.
 
 ![Phoenix](docs/phoenix.png)
 
