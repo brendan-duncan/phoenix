@@ -11,6 +11,7 @@
 #include <QPixmap>
 #include <QSize>
 #include <QToolButton>
+#include <QScrollBar>
 #include <QTreeWidget>
 #include <QTreeWidgetItemIterator>
 #include <QVBoxLayout>
@@ -19,6 +20,16 @@
 #include <functional>
 
 namespace {
+
+/// The layers list, with its viewport margins open to the panel: a bottom
+/// margin lets it scroll as far as the frame grid does.
+class LayerTree : public QTreeWidget
+{
+public:
+    using QTreeWidget::QTreeWidget;
+
+    void setBottomMargin(int margin) { setViewportMargins(0, 0, 0, margin); }
+};
 
 const QColor kInk(220, 220, 220);
 
@@ -279,8 +290,10 @@ LayersPanel::LayersPanel(QWidget *parent)
         emit layersChanged();
     });
 
-    _treeWidget = new QTreeWidget(this);
+    _treeWidget = new LayerTree(this);
     _treeWidget->setHeaderHidden(true);
+    _treeWidget->setVerticalScrollMode(QAbstractItemView::ScrollPerPixel);
+    _treeWidget->setVerticalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
     _treeWidget->setIndentation(15);
     _treeWidget->setUniformRowHeights(true);
     _treeWidget->setColumnCount(ColumnCount);
@@ -373,6 +386,24 @@ fla::Layer* LayersPanel::layerFor(const QTreeWidgetItem* item) const
     if (layerIndex < 0 || layerIndex >= static_cast<int>(timeline->layers.size()))
         return nullptr;
     return timeline->layers[layerIndex];
+}
+
+QScrollBar* LayersPanel::verticalScrollBar() const
+{
+    return _treeWidget->verticalScrollBar();
+}
+
+int LayersPanel::rowsViewportHeight() const
+{
+    return _treeWidget->viewport()->height() + _bottomMargin;
+}
+
+void LayersPanel::setBottomMargin(int margin)
+{
+    if (margin == _bottomMargin)
+        return;
+    _bottomMargin = margin;
+    static_cast<LayerTree*>(_treeWidget)->setBottomMargin(margin);
 }
 
 std::vector<LayerRow> LayersPanel::visibleRows() const

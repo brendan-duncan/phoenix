@@ -121,6 +121,9 @@ Symbol* cloneSymbol(const Symbol& symbol, const std::string& name)
         Timeline* timelineCopy = new Timeline(copy);
         timelineCopy->name = name;
         timelineCopy->layerDepthEnabled = timeline->layerDepthEnabled;
+        timelineCopy->guidesX = timeline->guidesX;
+        timelineCopy->guidesY = timeline->guidesY;
+        timelineCopy->extraAttributes = timeline->extraAttributes;
         for (const Layer* layer : timeline->layers)
         {
             if (!layer)

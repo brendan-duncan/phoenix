@@ -637,6 +637,45 @@ TEST(xfl_keeps_what_it_does_not_model)
     CHECK(written.find("<SoundEnvelope>") < written.find("<elements"));
 }
 
+TEST(xfl_keeps_timeline_guides_and_attributes)
+{
+    // Animate keeps ruler guides as XML inside the DOMTimeline's guides
+    // attribute; other timeline attributes Phoenix does not model come back
+    // as they were.
+    std::unique_ptr<fla::Document> document = parseDocumentText(
+        "<DOMDocument xmlns='http://ns.adobe.com/xfl/2008/' width='550' height='400'>"
+        "<timelines><DOMTimeline name='Scene 1' currentFrame='3' "
+        "guides='&lt;guidelines&gt;&lt;guideline direction=\"v\"&gt;120&lt;/guideline&gt;"
+        "&lt;guideline direction=\"h\"&gt;-40.5&lt;/guideline&gt;&lt;/guidelines&gt;'>"
+        "<layers><DOMLayer name='Layer 1'><frames><DOMFrame index='0'><elements/></DOMFrame></frames>"
+        "</DOMLayer></layers></DOMTimeline></timelines></DOMDocument>");
+    CHECK(document != nullptr);
+    if (!document || document->timelines.empty())
+        return;
+    const fla::Timeline* timeline = document->timelines.front();
+    CHECK(timeline->guidesX.size() == 1 && timeline->guidesX[0] == 120.0);
+    CHECK(timeline->guidesY.size() == 1 && timeline->guidesY[0] == -40.5);
+
+    XFLWriter writer;
+    const std::string written = writer.writeDocument(*document);
+    CHECK(written.find("currentFrame=\"3\"") != std::string::npos);
+    std::unique_ptr<fla::Document> again = parseDocumentText(written);
+    CHECK(again != nullptr);
+    if (!again || again->timelines.empty())
+        return;
+    CHECK(again->timelines.front()->guidesX == timeline->guidesX);
+    CHECK(again->timelines.front()->guidesY == timeline->guidesY);
+
+    // A guides attribute that is not what Phoenix reads is kept as text.
+    document = parseDocumentText(
+        "<DOMDocument xmlns='http://ns.adobe.com/xfl/2008/'>"
+        "<timelines><DOMTimeline name='Scene 1' guides='something else'><layers/></DOMTimeline>"
+        "</timelines></DOMDocument>");
+    CHECK(document != nullptr);
+    if (document)
+        CHECK(writer.writeDocument(*document).find("guides=\"something else\"") != std::string::npos);
+}
+
 TEST(xfl_round_trips_shapes)
 {
     checkRoundTrip(

@@ -64,6 +64,17 @@ public:
     /// folder are left out.
     std::vector<LayerRow> visibleRows() const;
 
+    /// The list scrolls by the pixel and shows no scroll bar of its own: it
+    /// follows the frame grid's, so the names stay level with their lanes.
+    class QScrollBar* verticalScrollBar() const;
+
+    /// The height the rows are shown in, with no bottom margin.
+    int rowsViewportHeight() const;
+
+    /// Empty space under the last row, so the list scrolls exactly as far as
+    /// the frame grid beside it.
+    void setBottomMargin(int margin);
+
 signals:
     void layerVisibilityChanged(const QString& timelineName, int layerIndex, bool visible);
 
@@ -105,6 +116,7 @@ private:
     const fla::FLADocument* _flaDocument;
     fla::Timeline* _timeline = nullptr;
     QTreeWidget* _treeWidget;
+    int _bottomMargin = 0;
     QToolButton* _allVisible = nullptr;
     QToolButton* _allLocked = nullptr;
     QToolButton* _allOutline = nullptr;

@@ -145,6 +145,7 @@ set(HEADERS
     src/data/timeline.h
     src/data/transform.h
     src/edit/command.h
+    src/edit/guide_command.h
     src/edit/command_stack.h
     src/edit/edit_context.h
     src/edit/new_document.h

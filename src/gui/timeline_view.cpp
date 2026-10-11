@@ -3,7 +3,10 @@
 #include "timelines_panel.h"
 #include "player.h"
 
+#include <QScrollBar>
 #include <QVBoxLayout>
+
+#include <algorithm>
 
 TimelineView::TimelineView(Player* player, QWidget *parent)
     : QWidget(parent)
@@ -47,6 +50,33 @@ TimelineView::TimelineView(Player* player, QWidget *parent)
     connect(_layersPanel, &LayersPanel::rowsChanged, this, [this]() {
         _timelinesPanel->setRows(_layersPanel->visibleRows());
     });
+    // The names and their lanes scroll as one: the grid's scroll bar is the
+    // one shown, and a wheel over the names moves the grid too. Each side
+    // gets the space under its last row it needs to scroll as far as the
+    // other, which their different heights would otherwise stop.
+    QScrollBar* namesBar = _layersPanel->verticalScrollBar();
+    QScrollBar* lanesBar = _timelinesPanel->verticalScrollBar();
+    const auto follow = [this, namesBar, lanesBar](int value) {
+        if (_syncingScroll)
+            return;
+        _syncingScroll = true;
+        const int shared = std::min({value, namesBar->maximum(), lanesBar->maximum()});
+        namesBar->setValue(shared);
+        lanesBar->setValue(shared);
+        _syncingScroll = false;
+    };
+    connect(namesBar, &QScrollBar::valueChanged, this, follow);
+    connect(lanesBar, &QScrollBar::valueChanged, this, follow);
+    const auto align = [this, lanesBar, follow]() {
+        const int names = _layersPanel->rowsViewportHeight();
+        const int lanes = _timelinesPanel->rowsViewportHeight();
+        _timelinesPanel->setBottomPadding(std::max(0, lanes - names));
+        _layersPanel->setBottomMargin(std::max(0, names - lanes));
+        follow(lanesBar->value());
+    };
+    connect(namesBar, &QScrollBar::rangeChanged, this, align);
+    connect(lanesBar, &QScrollBar::rangeChanged, this, align);
+
     // A frame pressed in the grid makes its layer current.
     connect(_timelinesPanel, &TimelinesPanel::layerPressed, this,
         [this](const fla::Timeline* timeline, int layerIndex) {

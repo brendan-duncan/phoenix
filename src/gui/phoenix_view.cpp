@@ -1,4 +1,6 @@
 #include "phoenix_view.h"
+
+#include "../edit/guide_command.h"
 #include "filters.h"
 #include "stroke_effects.h"
 #include "library_panel.h"
@@ -2904,6 +2906,10 @@ bool PhoenixView::isNearAnchor(const fla::Shape& shape, const QPointF& localPos,
 
 void PhoenixView::mousePressEvent(QMouseEvent *event)
 {
+    // An undo or redo may have changed the guides since the last gesture;
+    // the snapper takes them afresh before this one.
+    pushGuidesToSnapper();
+
     // The active tool gets first refusal. Middle-drag always pans, so panning
     // stays available whatever tool is selected.
     //
@@ -2956,9 +2962,9 @@ void PhoenixView::mouseMoveEvent(QMouseEvent *event)
     {
         const QTransform toWidget = rootToWidget();
         bool overGuide = false;
-        for (double x : _guidesX)
+        for (double x : guidesX())
             overGuide = overGuide || std::fabs(toWidget.map(QPointF(x, 0)).x() - event->position().x()) <= 3.0;
-        for (double y : _guidesY)
+        for (double y : guidesY())
             overGuide = overGuide || std::fabs(toWidget.map(QPointF(0, y)).y() - event->position().y()) <= 3.0;
         if (overGuide)
             setCursor(Qt::SizeAllCursor);
@@ -2992,18 +2998,30 @@ void PhoenixView::mouseReleaseEvent(QMouseEvent *event)
         const QPointF at = event->position();
         const bool removed = !rect().contains(at.toPoint()) ||
             (_showRulers && ((kind == 1 && at.x() < kRulerSize) || (kind == 2 && at.y() < kRulerSize)));
-        std::vector<double>& guides = kind == 1 ? _guidesX : _guidesY;
+        std::vector<double> xs = guidesX();
+        std::vector<double> ys = guidesY();
+        std::vector<double>& guides = kind == 1 ? xs : ys;
+        const char* name = nullptr;
         if (_guideIndex >= 0 && _guideIndex < static_cast<int>(guides.size()))
         {
             if (removed)
+            {
                 guides.erase(guides.begin() + _guideIndex);
-            else
+                name = "Remove Guide";
+            }
+            else if (guides[_guideIndex] != std::round(_guideValue))
+            {
                 guides[_guideIndex] = std::round(_guideValue);
+                name = "Move Guide";
+            }
         }
         else if (!removed)
         {
             guides.push_back(std::round(_guideValue));
+            name = "Add Guide";
         }
+        if (name)
+            setGuides(std::move(xs), std::move(ys), name);
         _guideIndex = -1;
         pushGuidesToSnapper();
         setCursor(_activeTool ? _activeTool->cursor() : QCursor(Qt::ArrowCursor));
@@ -4302,8 +4320,54 @@ void PhoenixView::setGuidesVisible(bool on)
 
 void PhoenixView::clearGuides()
 {
-    _guidesX.clear();
-    _guidesY.clear();
+    if (guidesX().empty() && guidesY().empty())
+        return;
+    setGuides({}, {}, "Clear Guides");
+}
+
+fla::Timeline* PhoenixView::guideTimeline() const
+{
+    if (!_flaDocument || !_flaDocument->document || _flaDocument->document->timelines.empty())
+        return nullptr;
+    return _flaDocument->document->timelines.front();
+}
+
+std::vector<double>& PhoenixView::guidesX()
+{
+    fla::Timeline* timeline = guideTimeline();
+    if (!timeline)
+    {
+        _noGuidesX.clear();
+        return _noGuidesX;
+    }
+    return timeline->guidesX;
+}
+
+std::vector<double>& PhoenixView::guidesY()
+{
+    fla::Timeline* timeline = guideTimeline();
+    if (!timeline)
+    {
+        _noGuidesY.clear();
+        return _noGuidesY;
+    }
+    return timeline->guidesY;
+}
+
+void PhoenixView::setGuides(std::vector<double> xs, std::vector<double> ys, const char* name)
+{
+    fla::Timeline* timeline = guideTimeline();
+    if (!timeline)
+        return;
+    auto command = std::make_unique<fla::SetGuidesCommand>(timeline, std::move(xs), std::move(ys), name);
+    if (_commandStack)
+    {
+        _commandStack->push(std::move(command));
+    }
+    else
+    {
+        command->redo();
+    }
     pushGuidesToSnapper();
     update();
 }
@@ -4323,9 +4387,9 @@ void PhoenixView::pushGuidesToSnapper()
         const QTransform toScope = scopeToDocument().inverted(&invertible);
         if (invertible && std::fabs(toScope.m12()) < 1.0e-9 && std::fabs(toScope.m21()) < 1.0e-9)
         {
-            for (double x : _guidesX)
+            for (double x : guidesX())
                 xs.push_back(toScope.map(QPointF(x, 0)).x());
-            for (double y : _guidesY)
+            for (double y : guidesY())
                 ys.push_back(toScope.map(QPointF(0, y)).y());
         }
     }
@@ -4358,23 +4422,23 @@ bool PhoenixView::beginGuideDrag(const QPointF& widgetPos)
     // An existing guide moves with the selection tool.
     if (!_showGuides || _activeTool != _modifierTool)
         return false;
-    for (size_t i = 0; i < _guidesX.size(); ++i)
+    for (size_t i = 0; i < guidesX().size(); ++i)
     {
-        if (std::fabs(toWidget.map(QPointF(_guidesX[i], 0)).x() - widgetPos.x()) <= 3.0)
+        if (std::fabs(toWidget.map(QPointF(guidesX()[i], 0)).x() - widgetPos.x()) <= 3.0)
         {
             _guideDrag = 1;
             _guideIndex = static_cast<int>(i);
-            _guideValue = _guidesX[i];
+            _guideValue = guidesX()[i];
             return true;
         }
     }
-    for (size_t i = 0; i < _guidesY.size(); ++i)
+    for (size_t i = 0; i < guidesY().size(); ++i)
     {
-        if (std::fabs(toWidget.map(QPointF(0, _guidesY[i])).y() - widgetPos.y()) <= 3.0)
+        if (std::fabs(toWidget.map(QPointF(0, guidesY()[i])).y() - widgetPos.y()) <= 3.0)
         {
             _guideDrag = 2;
             _guideIndex = static_cast<int>(i);
-            _guideValue = _guidesY[i];
+            _guideValue = guidesY()[i];
             return true;
         }
     }
@@ -4407,12 +4471,12 @@ void PhoenixView::drawRulersAndGuides(QPainter& painter)
                 painter.drawLine(QPointF(0, y), QPointF(width(), y));
             }
         };
-        for (size_t i = 0; i < _guidesX.size(); ++i)
+        for (size_t i = 0; i < guidesX().size(); ++i)
             if (!(_guideDrag == 1 && _guideIndex == static_cast<int>(i)))
-                drawGuide(1, _guidesX[i]);
-        for (size_t i = 0; i < _guidesY.size(); ++i)
+                drawGuide(1, guidesX()[i]);
+        for (size_t i = 0; i < guidesY().size(); ++i)
             if (!(_guideDrag == 2 && _guideIndex == static_cast<int>(i)))
-                drawGuide(2, _guidesY[i]);
+                drawGuide(2, guidesY()[i]);
         if (_guideDrag)
             drawGuide(_guideDrag, std::round(_guideValue));
     }

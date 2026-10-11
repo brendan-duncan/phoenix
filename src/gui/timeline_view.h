@@ -64,5 +64,7 @@ private:
     QSplitter* _splitter;
     LayersPanel* _layersPanel;
     TimelinesPanel* _timelinesPanel;
+    /// Set while one side's scroll is being copied to the other.
+    bool _syncingScroll = false;
     Player* _player;
 };

@@ -3035,9 +3035,64 @@ void MainWindow::addToRecentFiles(const QString& filePath)
     saveSettings();
 }
 
+namespace {
+
+/// A brush's settings under \a group, so each brush comes back as it was
+/// left. What the brush is (its tilt effect) is not a setting and stays.
+void saveBrush(QSettings& settings, const QString& group, const fla::BrushSettings& brush)
+{
+    settings.beginGroup(group);
+    settings.setValue("size", brush.size);
+    settings.setValue("tip", static_cast<int>(brush.tip));
+    settings.setValue("roundness", brush.roundness);
+    settings.setValue("angle", brush.angle);
+    settings.setValue("usePressure", brush.usePressure);
+    settings.setValue("minSize", brush.minSize);
+    settings.setValue("pressureCurve", brush.pressureCurve);
+    settings.setValue("useTilt", brush.useTilt);
+    settings.setValue("velocity", static_cast<int>(brush.velocity));
+    settings.setValue("taperStart", brush.taperStart);
+    settings.setValue("taperEnd", brush.taperEnd);
+    settings.setValue("smoothing", brush.smoothing);
+    settings.setValue("precision", brush.precision);
+    settings.setValue("stabilizer", brush.stabilizer);
+    settings.endGroup();
+}
+
+void loadBrush(QSettings& settings, const QString& group, fla::BrushSettings& brush)
+{
+    settings.beginGroup(group);
+    brush.size = std::max(1.0, settings.value("size", brush.size).toDouble());
+    brush.tip = settings.value("tip", static_cast<int>(brush.tip)).toInt() == 1
+        ? fla::BrushSettings::Tip::Rectangle : fla::BrushSettings::Tip::Ellipse;
+    brush.roundness = std::max(1.0, std::min(100.0, settings.value("roundness", brush.roundness).toDouble()));
+    brush.angle = settings.value("angle", brush.angle).toDouble();
+    brush.usePressure = settings.value("usePressure", brush.usePressure).toBool();
+    brush.minSize = std::max(1.0, std::min(100.0, settings.value("minSize", brush.minSize).toDouble()));
+    brush.pressureCurve = std::max(0.1, settings.value("pressureCurve", brush.pressureCurve).toDouble());
+    brush.useTilt = settings.value("useTilt", brush.useTilt).toBool();
+    const int velocity = settings.value("velocity", static_cast<int>(brush.velocity)).toInt();
+    brush.velocity = velocity >= 0 && velocity <= 2 ? static_cast<fla::BrushSettings::Velocity>(velocity)
+                                                    : fla::BrushSettings::Velocity::None;
+    brush.taperStart = std::max(0.0, std::min(50.0, settings.value("taperStart", brush.taperStart).toDouble()));
+    brush.taperEnd = std::max(0.0, std::min(50.0, settings.value("taperEnd", brush.taperEnd).toDouble()));
+    brush.smoothing = std::max(0, std::min(100, settings.value("smoothing", brush.smoothing).toInt()));
+    brush.precision = std::max(0, std::min(100, settings.value("precision", brush.precision).toInt()));
+    brush.stabilizer = std::max(0.0, std::min(60.0, settings.value("stabilizer", brush.stabilizer).toDouble()));
+    settings.endGroup();
+}
+
+} // namespace
+
 void MainWindow::loadSettings()
 {
     QSettings settings;
+    loadBrush(settings, "brushes/fluid", _drawingStyle.fluidBrush);
+    loadBrush(settings, "brushes/classic", _drawingStyle.classicBrush);
+    loadBrush(settings, "brushes/ink", _drawingStyle.inkBrush);
+    const int brushMode = settings.value("brushes/mode", 0).toInt();
+    _drawingStyle.brushMode = brushMode >= 0 && brushMode <= 4
+        ? static_cast<fla::DrawingStyle::BrushMode>(brushMode) : fla::DrawingStyle::BrushMode::Normal;
     _recentFiles = settings.value("recentFiles").toStringList();
     _lastDirectory = settings.value("lastDirectory").toString();
     _highQualityAntiAliasing = settings.value("view/highQualityAntiAliasing", true).toBool();
@@ -3059,6 +3114,10 @@ void MainWindow::saveSettings()
     settings.setValue("view/highQualityAntiAliasing", _highQualityAntiAliasing);
     settings.setValue("view/outlinerVisible", _outlinerVisible);
     settings.setValue("view/outlinerWidth", _outlinerWidth);
+    saveBrush(settings, "brushes/fluid", _drawingStyle.fluidBrush);
+    saveBrush(settings, "brushes/classic", _drawingStyle.classicBrush);
+    saveBrush(settings, "brushes/ink", _drawingStyle.inkBrush);
+    settings.setValue("brushes/mode", static_cast<int>(_drawingStyle.brushMode));
     settings.setValue("window/geometry", saveGeometry());
 }
 

@@ -8,6 +8,7 @@
 
 #include "audio_engine.h"
 
+#include <algorithm>
 #include <functional>
 #include <vector>
 #include <QPushButton>
@@ -46,6 +47,14 @@ public:
     void setRows(const std::vector<LayerRow>& rows);
 
     void updateSize();
+
+    /// Empty space under the last row, so the grid scrolls exactly as far as
+    /// the layers list beside it.
+    void setBottomPadding(int padding);
+
+    /// Where the ruler sits: at the top of the visible part of the grid, so
+    /// it stays in view however far down the rows are scrolled.
+    int rulerTop() const { return std::max(0, -y()); }
 
     /// The selected frames, or an empty selection.
     FrameSelection selection() const;
@@ -112,6 +121,7 @@ private:
 
     int rowAt(int y) const;
     int frameAt(int x) const;
+    int _bottomPadding = 0;
 
     std::vector<const fla::Timeline*> shownTimelines() const;
 
@@ -136,6 +146,14 @@ public:
 
     /// Redraws the grid after frames were edited.
     void refreshFrames();
+
+    /// The scroll bar the rows scroll by, which the layers list follows.
+    class QScrollBar* verticalScrollBar() const;
+
+    /// The height the rows are shown in, under the ruler.
+    int rowsViewportHeight() const;
+
+    void setBottomPadding(int padding) { _gridContainer->setBottomPadding(padding); }
 
     /// Reflects the onion skin state set from elsewhere (the View menu).
     void setOnionSkin(bool on, int before, int after);

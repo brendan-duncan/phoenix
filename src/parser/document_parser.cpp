@@ -19,6 +19,7 @@
 #include <algorithm>
 #include <functional>
 #include <iostream>
+#include <cstdlib>
 #include <cstring>
 
 namespace {
@@ -1522,10 +1523,59 @@ bool parseLayers(const tinyxml2::XMLElement* element, fla::Timeline* timeline)
     return true;
 }
 
+/// Reads Animate's ruler guides from a DOMTimeline's guides attribute, which
+/// holds XML of its own: <guidelines><guideline direction="v">x</guideline>
+/// ... </guidelines>, a vertical guide by its x and a horizontal one ("h")
+/// by its y. False when the text is not that.
+bool parseGuides(const std::string& text, fla::Timeline* timeline)
+{
+    tinyxml2::XMLDocument guides;
+    if (guides.Parse(text.c_str()) != tinyxml2::XML_SUCCESS)
+        return false;
+    const tinyxml2::XMLElement* root = guides.FirstChildElement("guidelines");
+    if (!root)
+        return false;
+    std::vector<double> xs;
+    std::vector<double> ys;
+    for (const tinyxml2::XMLElement* guide = root->FirstChildElement("guideline"); guide;
+         guide = guide->NextSiblingElement("guideline"))
+    {
+        const char* direction = guide->Attribute("direction");
+        const char* value = guide->GetText();
+        if (!direction || !value)
+            return false;
+        char* end = nullptr;
+        const double position = std::strtod(value, &end);
+        if (end == value)
+            return false;
+        if (std::strcmp(direction, "v") == 0)
+            xs.push_back(position);
+        else if (std::strcmp(direction, "h") == 0)
+            ys.push_back(position);
+        else
+            return false;
+    }
+    timeline->guidesX = std::move(xs);
+    timeline->guidesY = std::move(ys);
+    return true;
+}
+
 bool parseTimeline(const tinyxml2::XMLElement* element, fla::Timeline* timeline)
 {
     timeline->name = getAttribute(element, "name");
     timeline->layerDepthEnabled = getBoolAttribute(element, "layerDepthEnabled");
+    // The rest are kept as they came; guides are read when they can be, and
+    // kept as text when they cannot.
+    for (const tinyxml2::XMLAttribute* attribute = element->FirstAttribute(); attribute;
+         attribute = attribute->Next())
+    {
+        const std::string name = attribute->Name();
+        if (name == "name" || name == "layerDepthEnabled")
+            continue;
+        if (name == "guides" && parseGuides(attribute->Value(), timeline))
+            continue;
+        timeline->extraAttributes.emplace_back(name, attribute->Value());
+    }
 
     for (const tinyxml2::XMLElement* childElement = element->FirstChildElement();
          childElement != nullptr;

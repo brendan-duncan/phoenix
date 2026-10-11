@@ -24,6 +24,7 @@ constexpr int kFrameHeight = 21;
 #include <QPolygonF>
 #include <QPaintEvent>
 #include <QMouseEvent>
+#include <QScrollBar>
 #include <QSignalBlocker>
 #include <QContextMenuEvent>
 #include <QIcon>
@@ -235,6 +236,8 @@ TimelinesPanel::TimelinesPanel(Player* player, QWidget *parent)
 
     _gridContainer = new TimelineGrid(_player, this);
     _scrollArea->setWidget(_gridContainer);
+    connect(_scrollArea->verticalScrollBar(), &QScrollBar::valueChanged, _gridContainer,
+        [this]() { _gridContainer->update(); });
 
     connect(_player, &Player::currentFrameChanged, _gridContainer, &TimelineGrid::onPlayerFrameChanged);
     connect(_player, &Player::currentFrameChanged, this, &TimelinesPanel::onPlayerFrameChanged);
@@ -280,6 +283,16 @@ void TimelinesPanel::setOnionSkin(bool on, int before, int after)
         _onionButton->setChecked(on);
     }
     _gridContainer->setOnionSkin(on, before, after);
+}
+
+QScrollBar* TimelinesPanel::verticalScrollBar() const
+{
+    return _scrollArea->verticalScrollBar();
+}
+
+int TimelinesPanel::rowsViewportHeight() const
+{
+    return std::max(0, _scrollArea->viewport()->height() - 25);
 }
 
 void TimelinesPanel::refreshFrames()
@@ -434,9 +447,17 @@ void TimelineGrid::updateSize()
 
     int maxFrames = getMaxFrames(_flaDocument);
     int totalWidth = headerHeight + maxFrames * (frameWidth + 2);
-    int totalHeight = headerHeight + numRows * layerRowHeight;
+    int totalHeight = headerHeight + numRows * layerRowHeight + _bottomPadding;
 
     setMinimumSize(totalWidth, totalHeight);
+}
+
+void TimelineGrid::setBottomPadding(int padding)
+{
+    if (padding == _bottomPadding)
+        return;
+    _bottomPadding = padding;
+    updateSize();
 }
 
 void TimelineGrid::updatePlayerFromMouse(int x)
@@ -475,7 +496,8 @@ void TimelineGrid::updatePlayerFromMouse(int x)
 int TimelineGrid::rowAt(int y) const
 {
     const int headerHeight = 25;
-    if (y < headerHeight)
+    // The pinned ruler covers the rows scrolled under it.
+    if (y < rulerTop() + headerHeight)
         return -1;
     const int row = (y - headerHeight) / kLayerRowHeight;
     return row < static_cast<int>(_rows.size()) ? row : -1;
@@ -608,7 +630,7 @@ void TimelineGrid::mouseMoveEvent(QMouseEvent* event)
     }
     else if (_selecting)
     {
-        const int row = rowAt(std::max(event->pos().y(), 25));
+        const int row = rowAt(std::max(event->pos().y(), rulerTop() + 25));
         const int frame = frameAt(event->pos().x());
         if (row >= 0 && (row != _focusRow || frame != _focusFrame))
         {
@@ -787,25 +809,6 @@ void TimelineGrid::paintEvent(QPaintEvent* event)
 
     painter.setRenderHint(QPainter::Antialiasing, false);
 
-    // The ruler: Animate numbers frames from one and labels every fifth.
-    painter.setPen(textColor);
-    QFont frameFont = painter.font();
-    frameFont.setPointSize(8);
-    painter.setFont(frameFont);
-    for (int i = 0; i < maxFrames; ++i)
-    {
-        const int number = i + 1;
-        const int x = i * cellStride;
-        if (number == 1 || number % 5 == 0)
-        {
-            painter.setPen(QColor(90, 90, 90));
-            painter.drawLine(x, headerHeight - 6, x, headerHeight - 1);
-            painter.setPen(textColor);
-            painter.drawText(QRect(x, 2, cellStride * 3, headerHeight - 8),
-                Qt::AlignLeft | Qt::AlignVCenter, QString::number(number));
-        }
-    }
-
     // The selected frames, tinted as Animate tints them.
     if (_hasSelection && !_rows.empty())
     {
@@ -830,6 +833,31 @@ void TimelineGrid::paintEvent(QPaintEvent* event)
         painter.setPen(QPen(QColor(41, 128, 238), 2.0));
         painter.setBrush(Qt::NoBrush);
         painter.drawRect(ghost.adjusted(1, 1, -1, -1));
+    }
+
+    // The ruler, pinned to the top of what shows: Animate numbers frames
+    // from one and labels every fifth.
+    const int rulerY = rulerTop();
+    painter.save();
+    painter.translate(0, rulerY);
+    painter.setRenderHint(QPainter::Antialiasing, false);
+    painter.fillRect(QRect(0, 0, width(), headerHeight), background);
+    painter.setPen(textColor);
+    QFont frameFont = painter.font();
+    frameFont.setPointSize(8);
+    painter.setFont(frameFont);
+    for (int i = 0; i < maxFrames; ++i)
+    {
+        const int number = i + 1;
+        const int x = i * cellStride;
+        if (number == 1 || number % 5 == 0)
+        {
+            painter.setPen(QColor(90, 90, 90));
+            painter.drawLine(x, headerHeight - 6, x, headerHeight - 1);
+            painter.setPen(textColor);
+            painter.drawText(QRect(x, 2, cellStride * 3, headerHeight - 8),
+                Qt::AlignLeft | Qt::AlignVCenter, QString::number(number));
+        }
     }
 
     // Onion skin markers: brackets in the ruler at either end of the range,
@@ -863,7 +891,7 @@ void TimelineGrid::paintEvent(QPaintEvent* event)
         const double center = x + frameWidth / 2.0;
         const double halfWidth = 4.5;
         painter.setPen(QPen(playheadColor, 1.0));
-        painter.drawLine(QPointF(center, headerHeight - 1), QPointF(center, height()));
+        painter.drawLine(QPointF(center, headerHeight - 1), QPointF(center, height() - rulerY));
 
         painter.setRenderHint(QPainter::Antialiasing, true);
         painter.setPen(Qt::NoPen);
@@ -877,4 +905,5 @@ void TimelineGrid::paintEvent(QPaintEvent* event)
         head.setFillRule(Qt::WindingFill);
         painter.drawPath(head);
     }
+    painter.restore();
 }

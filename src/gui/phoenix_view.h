@@ -139,8 +139,8 @@ public:
     bool rulersVisible() const { return _showRulers; }
 
     /// Ruler guides: dragged out of a ruler, moved with the selection tool,
-    /// dragged back into a ruler to remove. They live in the view for the
-    /// session, in the document's coordinates.
+    /// dragged back into a ruler to remove. They are the scene's, in stage
+    /// coordinates, saved with the document; each change can be undone.
     void setGuidesVisible(bool on);
     bool guidesVisible() const { return _showGuides; }
     void clearGuides();
@@ -421,8 +421,16 @@ private:
     static constexpr int kRulerSize = 20;
     bool _showRulers = false;
     bool _showGuides = true;
-    std::vector<double> _guidesX;
-    std::vector<double> _guidesY;
+    /// The guides are the scene's, kept on its timeline in stage
+    /// coordinates and saved with it; with no document there are none.
+    fla::Timeline* guideTimeline() const;
+    std::vector<double>& guidesX();
+    std::vector<double>& guidesY();
+    std::vector<double> _noGuidesX;
+    std::vector<double> _noGuidesY;
+
+    /// Sets the scene's guides as one undoable step named \a name.
+    void setGuides(std::vector<double> xs, std::vector<double> ys, const char* name);
     /// A guide being dragged: 1 vertical, 2 horizontal, 0 none; the index
     /// of the guide moved, or -1 for one coming out of a ruler.
     int _guideDrag = 0;

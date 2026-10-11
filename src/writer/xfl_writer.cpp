@@ -886,6 +886,33 @@ void XFLWriter::writeTimeline(const Timeline& timeline, XMLElement* parent)
 
     setString(node, "name", timeline.name);
     setBool(node, "layerDepthEnabled", timeline.layerDepthEnabled, false);
+    for (const auto& attribute : timeline.extraAttributes)
+        node->SetAttribute(attribute.first.c_str(), attribute.second.c_str());
+    if (!timeline.guidesX.empty() || !timeline.guidesY.empty())
+    {
+        // Animate's own form: XML held in the attribute, a guideline per
+        // guide, "v" for a vertical one at its x and "h" for a horizontal
+        // one at its y.
+        std::string guides = "<guidelines>";
+        const auto add = [&guides](const char* direction, double position) {
+            char number[64];
+            std::snprintf(number, sizeof(number), "%.2f", position);
+            std::string text = number;
+            while (!text.empty() && text.back() == '0')
+                text.pop_back();
+            if (!text.empty() && text.back() == '.')
+                text.pop_back();
+            if (text == "-0")
+                text = "0";
+            guides += std::string("<guideline direction=\"") + direction + "\">" + text + "</guideline>";
+        };
+        for (double x : timeline.guidesX)
+            add("v", x);
+        for (double y : timeline.guidesY)
+            add("h", y);
+        guides += "</guidelines>";
+        node->SetAttribute("guides", guides.c_str());
+    }
 
     XMLElement* layers = doc->NewElement("layers");
     for (const Layer* layer : timeline.layers)
