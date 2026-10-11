@@ -1,6 +1,8 @@
 #pragma once
 
 #include <string>
+#include <utility>
+#include <vector>
 
 namespace fla {
 
@@ -76,10 +78,21 @@ public:
         MorphShape,
         MorphSegment,
         MorphCurves,
+        RawElement,
     };
 
     bool visible = true;
     DOMElement* parent = nullptr;
+
+    /// The element's attributes as read that Phoenix does not model (a
+    /// symbol's linkage, a sound on a frame, a text field's isSelectable,
+    /// whether a shape is selected...), written back as they came.
+    std::vector<std::pair<std::string, std::string>> extraAttributes;
+
+    /// The modeled attributes the file wrote. They are written back even at
+    /// what Phoenix takes as their default, since Animate leaves out only its
+    /// own defaults and writes some attributes always.
+    std::vector<std::string> presentAttributes;
 
     DOMElement(DOMElement* parent)
         : parent(parent)
@@ -105,7 +118,7 @@ public:
         DOMType type = domType();
         return type == DOMType::BitmapInstance || type == DOMType::Shape || type == DOMType::Group ||
             type == DOMType::SymbolInstance || type == DOMType::OvalPrimitive ||
-            type == DOMType::RectanglePrimitive || type == DOMType::StaticText;
+            type == DOMType::RectanglePrimitive || type == DOMType::StaticText || type == DOMType::RawElement;
     }
 
     const Element* findParentElement() const;

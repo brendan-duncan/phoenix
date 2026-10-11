@@ -4,6 +4,8 @@
 #include "point.h"
 #include "rect.h"
 #include "transform.h"
+#include <string>
+#include <vector>
 
 namespace fla {
 
@@ -18,7 +20,8 @@ public:
         StaticText,
         BitmapInstance,
         Rectangle,
-        Oval
+        Oval,
+        Raw
     };
 
     bool isLocked = false;
@@ -30,6 +33,17 @@ public:
     Point transformationPoint;
     fla::Rect localBounds;
     fla::Rect bounds;
+
+    /// Whether the file wrote a matrix, or a transformation point, that
+    /// Phoenix would leave out as the identity or the origin: they are
+    /// written back as they came.
+    bool keepMatrix = false;
+    bool keepTransformationPoint = false;
+
+    /// Child elements read but not modeled, as XML text, written back after
+    /// the rest: a button's or a movie clip's Actionscript, a text field's
+    /// filters...
+    std::vector<std::string> extraChildren;
 
     Element(DOMElement* parent)
         : DOMElement(parent)

@@ -138,6 +138,7 @@ set(HEADERS
     src/data/publish_history.h
     src/data/radial_gradient.h
     src/data/rect.h
+    src/data/raw_element.h
     src/data/rectangle_primitive.h
     src/data/resource.h
     src/data/script_list.h

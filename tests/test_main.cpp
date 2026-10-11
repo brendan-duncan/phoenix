@@ -3,6 +3,7 @@
 #include "test_util.h"
 
 #include <cstdio>
+#include <cstring>
 #include <vector>
 
 namespace {
@@ -21,11 +22,17 @@ void TestRegistrar::add(const char* name, void (*fn)())
     registry().push_back({name, fn});
 }
 
-int main()
+int main(int argc, char** argv)
 {
+    // An argument runs only the tests whose names contain it.
+    const char* filter = argc > 1 ? argv[1] : nullptr;
     int failed = 0;
+    int run = 0;
     for (const TestCase& test : registry())
     {
+        if (filter && !std::strstr(test.name, filter))
+            continue;
+        ++run;
         const int before = TestRegistrar::failures;
         test.fn();
         const bool ok = TestRegistrar::failures == before;
@@ -34,10 +41,7 @@ int main()
             ++failed;
     }
 
-    std::printf("\n%d/%d tests passed, %d checks\n",
-        static_cast<int>(registry().size()) - failed,
-        static_cast<int>(registry().size()),
-        TestRegistrar::checks);
+    std::printf("\n%d/%d tests passed, %d checks\n", run - failed, run, TestRegistrar::checks);
 
     return failed == 0 ? 0 : 1;
 }

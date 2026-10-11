@@ -1,4 +1,5 @@
 #include "xfl_writer.h"
+#include "../data/raw_element.h"
 
 #include "edge_writer.h"
 
@@ -60,44 +61,96 @@ std::string formatDouble(double value)
     return std::string(buffer);
 }
 
+/// The node being written and the modeled attributes its file wrote: those
+/// are written even at Phoenix's default (see DOMElement::presentAttributes).
+const XMLElement* g_presentNode = nullptr;
+const std::vector<std::string>* g_present = nullptr;
+
+bool wasPresent(const XMLElement* node, const char* name)
+{
+    if (node != g_presentNode || !g_present)
+        return false;
+    for (const std::string& present : *g_present)
+    {
+        if (present == name)
+            return true;
+    }
+    return false;
+}
+
+/// Makes the attributes the file wrote on \a node be written back, for as
+/// long as it lives.
+class PresentScope
+{
+public:
+    PresentScope(const XMLElement* node, const std::vector<std::string>& present)
+        : _node(g_presentNode)
+        , _present(g_present)
+    {
+        g_presentNode = node;
+        g_present = &present;
+    }
+
+    ~PresentScope()
+    {
+        g_presentNode = _node;
+        g_present = _present;
+    }
+
+private:
+    const XMLElement* _node;
+    const std::vector<std::string>* _present;
+};
+
+/// Writes back the attributes kept as read, after the modeled ones: one the
+/// writer has set already stays as set.
+void writeKept(XMLElement* node, const std::vector<std::pair<std::string, std::string>>& kept)
+{
+    for (const auto& attribute : kept)
+    {
+        if (!node->Attribute(attribute.first.c_str()))
+            node->SetAttribute(attribute.first.c_str(), attribute.second.c_str());
+    }
+}
+
 /// Writes a color as #RRGGBB, with alpha split out the way the format stores
 /// it. Both are omitted when they match the reader's default of opaque black.
 void setColor(XMLElement* node, const char* colorName, const char* alphaName,
     const uint8_t rgba[4], bool forceWrite = false)
 {
     const bool defaultColor = rgba[0] == 0 && rgba[1] == 0 && rgba[2] == 0;
-    if (forceWrite || !defaultColor)
+    if (forceWrite || !defaultColor || wasPresent(node, colorName))
     {
         char buffer[16];
         std::snprintf(buffer, sizeof(buffer), "#%02X%02X%02X", rgba[0], rgba[1], rgba[2]);
         node->SetAttribute(colorName, buffer);
     }
 
-    if (alphaName && rgba[3] != 255)
+    if (alphaName && (rgba[3] != 255 || wasPresent(node, alphaName)))
         node->SetAttribute(alphaName, formatDouble(rgba[3] / 255.0).c_str());
 }
 
 void setString(XMLElement* node, const char* name, const std::string& value)
 {
-    if (!value.empty())
+    if (!value.empty() || wasPresent(node, name))
         node->SetAttribute(name, value.c_str());
 }
 
 void setInt(XMLElement* node, const char* name, int value, int defaultValue)
 {
-    if (value != defaultValue)
+    if (value != defaultValue || wasPresent(node, name))
         node->SetAttribute(name, value);
 }
 
 void setDouble(XMLElement* node, const char* name, double value, double defaultValue)
 {
-    if (value != defaultValue)
+    if (value != defaultValue || wasPresent(node, name))
         node->SetAttribute(name, formatDouble(value).c_str());
 }
 
 void setBool(XMLElement* node, const char* name, bool value, bool defaultValue)
 {
-    if (value != defaultValue)
+    if (value != defaultValue || wasPresent(node, name))
         node->SetAttribute(name, value);
 }
 
@@ -109,9 +162,10 @@ bool isIdentity(const Transform& t)
 
 /// Writes <matrix><Matrix .../></matrix>, skipping it entirely for an identity
 /// transform since the reader defaults to identity anyway.
-void writeMatrix(const Transform& transform, XMLElement* parent, const char* wrapperName = "matrix")
+void writeMatrix(const Transform& transform, XMLElement* parent, const char* wrapperName = "matrix",
+    bool keep = false)
 {
-    if (isIdentity(transform))
+    if (isIdentity(transform) && !keep)
         return;
 
     XMLDocument* doc = parent->GetDocument();
@@ -129,9 +183,9 @@ void writeMatrix(const Transform& transform, XMLElement* parent, const char* wra
     parent->InsertEndChild(wrapper);
 }
 
-void writeTransformationPoint(const Point& point, XMLElement* parent)
+void writeTransformationPoint(const Point& point, XMLElement* parent, bool keep = false)
 {
-    if (point.x == 0.0 && point.y == 0.0)
+    if (point.x == 0.0 && point.y == 0.0 && !keep)
         return;
 
     XMLDocument* doc = parent->GetDocument();
@@ -195,6 +249,7 @@ const char* alignmentName(TextRun::Alignment alignment)
     {
     case TextRun::Alignment::Center: return "center";
     case TextRun::Alignment::Right: return "right";
+    case TextRun::Alignment::Justify: return "justify";
     case TextRun::Alignment::Left: break;
     }
     return "left";
@@ -281,7 +336,7 @@ void XFLWriter::writeFillStyle(const FillStyle& fill, XMLElement* parent)
         for (const GradientEntry& entry : gradient.entries)
         {
             XMLElement* entryNode = doc->NewElement("GradientEntry");
-            setDouble(entryNode, "ratio", entry.ratio, 0.0);
+            entryNode->SetAttribute("ratio", formatDouble(entry.ratio).c_str());
             setColor(entryNode, "color", "alpha", entry.color, true);
             node->InsertEndChild(entryNode);
         }
@@ -300,7 +355,7 @@ void XFLWriter::writeFillStyle(const FillStyle& fill, XMLElement* parent)
         for (const RadialEntry& entry : gradient.entries)
         {
             XMLElement* entryNode = doc->NewElement("GradientEntry");
-            setDouble(entryNode, "ratio", entry.ratio, 0.0);
+            entryNode->SetAttribute("ratio", formatDouble(entry.ratio).c_str());
             setColor(entryNode, "color", "alpha", entry.color, true);
             node->InsertEndChild(entryNode);
         }
@@ -339,7 +394,7 @@ void XFLWriter::writeStrokeStyle(const StrokeStyle& stroke, XMLElement* parent)
         setDouble(node, "dash2", stroke.dash2, 6.0);
     }
     if (stroke.style() == StrokeStyle::Style::Dotted)
-        setDouble(node, "dotSpace", stroke.dotSpace, 3.0);
+        node->SetAttribute("dotSpace", formatDouble(stroke.dotSpace).c_str());
     for (const auto& entry : stroke.styleAttributes)
         node->SetAttribute(entry.first.c_str(), entry.second.c_str());
 
@@ -361,14 +416,22 @@ void XFLWriter::writeElementCommon(const Element& element, XMLElement* node)
     setBool(node, "isFloating", element.isFloating, false);
     setBool(node, "lockFlag", element.isLocked, false);
 
-    writeMatrix(element.transform, node);
-    writeTransformationPoint(element.transformationPoint, node);
+    writeMatrix(element.transform, node, "matrix", element.keepMatrix);
+    writeTransformationPoint(element.transformationPoint, node, element.keepTransformationPoint);
+}
+
+void XFLWriter::writeElementKept(const Element& element, XMLElement* node)
+{
+    writeKept(node, element.extraAttributes);
+    for (const std::string& xml : element.extraChildren)
+        appendRawXml(xml, node);
 }
 
 void XFLWriter::writeShape(const Shape& shape, XMLElement* parent)
 {
     XMLDocument* doc = parent->GetDocument();
     XMLElement* node = doc->NewElement("DOMShape");
+    PresentScope present(node, shape.presentAttributes);
 
     writeElementCommon(shape, node);
     setBool(node, "isDrawingObject", shape.isDrawingObject, false);
@@ -401,11 +464,18 @@ void XFLWriter::writeShape(const Shape& shape, XMLElement* parent)
         node->InsertEndChild(strokes);
     }
 
+    // The cubics kept beside the edges describe them as read; once the
+    // edges change they would describe something else, so they go.
+    const bool cubics = shape.cubicsStillMatch();
     if (!shape.edges.empty())
     {
         XMLElement* edges = doc->NewElement("edges");
-        for (const Edge* edge : shape.edges)
+        size_t cubic = 0;
+        for (size_t i = 0; i < shape.edges.size(); ++i)
         {
+            while (cubics && cubic < shape.cubicEdges.size() && shape.cubicEdges[cubic].first == i)
+                appendRawXml(shape.cubicEdges[cubic++].second, edges);
+            const Edge* edge = shape.edges[i];
             if (!edge)
                 continue;
 
@@ -424,9 +494,12 @@ void XFLWriter::writeShape(const Shape& shape, XMLElement* parent)
 
             edges->InsertEndChild(edgeNode);
         }
+        while (cubics && cubic < shape.cubicEdges.size())
+            appendRawXml(shape.cubicEdges[cubic++].second, edges);
         node->InsertEndChild(edges);
     }
 
+    writeElementKept(shape, node);
     parent->InsertEndChild(node);
 }
 
@@ -434,6 +507,7 @@ void XFLWriter::writeSymbolInstance(const SymbolInstance& instance, XMLElement* 
 {
     XMLDocument* doc = parent->GetDocument();
     XMLElement* node = doc->NewElement("DOMSymbolInstance");
+    PresentScope present(node, instance.presentAttributes);
 
     setString(node, "libraryItemName", instance.libraryItemName);
     setString(node, "name", instance.name);
@@ -444,7 +518,7 @@ void XFLWriter::writeSymbolInstance(const SymbolInstance& instance, XMLElement* 
     // A movie clip goes without a type, as Animate writes it.
     if (!instance.otherSymbolType.empty())
         node->SetAttribute("symbolType", instance.otherSymbolType.c_str());
-    else if (instance.symbolType != SymbolType::MovieClip)
+    else if (instance.symbolType != SymbolType::MovieClip || wasPresent(node, "symbolType"))
         node->SetAttribute("symbolType", symbolTypeName(instance.symbolType));
     // Animate's name for it is loop, and it writes it on every graphic
     // instance: an instance without one is not read the same way.
@@ -452,14 +526,13 @@ void XFLWriter::writeSymbolInstance(const SymbolInstance& instance, XMLElement* 
         node->SetAttribute("loop", loopTypeName(instance.loopType));
 
     writeElementCommon(instance, node);
-    for (const auto& attribute : instance.extraAttributes)
-        node->SetAttribute(attribute.first.c_str(), attribute.second.c_str());
+    writeKept(node, instance.extraAttributes);
 
     const ColorTransform& color = instance.colorTransform;
     const bool hasTintColor =
         color.tintColor[0] != 0 || color.tintColor[1] != 0 || color.tintColor[2] != 0;
 
-    if (!color.isIdentity() || hasTintColor)
+    if (!color.isIdentity() || hasTintColor || instance.keepColor)
     {
         XMLElement* wrapper = doc->NewElement("color");
         XMLElement* colorNode = doc->NewElement("Color");
@@ -480,12 +553,13 @@ void XFLWriter::writeSymbolInstance(const SymbolInstance& instance, XMLElement* 
         node->InsertEndChild(wrapper);
     }
 
-    if (!instance.filters.empty())
+    if (!instance.filters.empty() || !instance.extraFilters.empty())
     {
         XMLElement* filters = doc->NewElement("filters");
         for (const Filter& filter : instance.filters)
         {
             XMLElement* filterNode = doc->NewElement(filter.elementName());
+            PresentScope filterPresent(filterNode, filter.presentAttributes);
             setBool(filterNode, "enabled", filter.enabled, true);
             switch (filter.type)
             {
@@ -539,11 +613,14 @@ void XFLWriter::writeSymbolInstance(const SymbolInstance& instance, XMLElement* 
             {
                 XMLElement* entryNode = doc->NewElement("GradientEntry");
                 setColor(entryNode, "color", "alpha", entry.color, true);
-                setDouble(entryNode, "ratio", entry.ratio, 0.0);
+                entryNode->SetAttribute("ratio", formatDouble(entry.ratio).c_str());
                 filterNode->InsertEndChild(entryNode);
             }
+            writeKept(filterNode, filter.extraAttributes);
             filters->InsertEndChild(filterNode);
         }
+        for (const std::string& xml : instance.extraFilters)
+            appendRawXml(xml, filters);
         node->InsertEndChild(filters);
     }
 
@@ -557,6 +634,7 @@ void XFLWriter::writeGroup(const Group& group, XMLElement* parent)
 {
     XMLDocument* doc = parent->GetDocument();
     XMLElement* node = doc->NewElement("DOMGroup");
+    PresentScope present(node, group.presentAttributes);
 
     writeElementCommon(group, node);
 
@@ -568,6 +646,7 @@ void XFLWriter::writeGroup(const Group& group, XMLElement* parent)
     }
     node->InsertEndChild(members);
 
+    writeElementKept(group, node);
     parent->InsertEndChild(node);
 }
 
@@ -575,9 +654,11 @@ void XFLWriter::writeBitmapInstance(const BitmapInstance& instance, XMLElement* 
 {
     XMLDocument* doc = parent->GetDocument();
     XMLElement* node = doc->NewElement("DOMBitmapInstance");
+    PresentScope present(node, instance.presentAttributes);
 
     setString(node, "libraryItemName", instance.libraryItemName);
     writeElementCommon(instance, node);
+    writeElementKept(instance, node);
 
     parent->InsertEndChild(node);
 }
@@ -591,6 +672,7 @@ void XFLWriter::writeStaticText(const StaticText& text, XMLElement* parent)
     else if (text.textType == StaticText::TextType::Input)
         tag = "DOMInputText";
     XMLElement* node = doc->NewElement(tag);
+    PresentScope present(node, text.presentAttributes);
 
     setDouble(node, "left", text.left, 0.0);
     setDouble(node, "top", text.top, 0.0);
@@ -615,16 +697,19 @@ void XFLWriter::writeStaticText(const StaticText& text, XMLElement* parent)
 
             XMLElement* attrs = doc->NewElement("textAttrs");
             XMLElement* attrNode = doc->NewElement("DOMTextAttrs");
-            if (run.alignment != TextRun::Alignment::Left)
+            PresentScope runPresent(attrNode, run.presentAttributes);
+            if (run.alignment != TextRun::Alignment::Left || wasPresent(attrNode, "alignment"))
                 attrNode->SetAttribute("alignment", alignmentName(run.alignment));
-            setBool(attrNode, "aliasText", run.aliasText, false);
-            setBool(attrNode, "autoKern", run.autoKern, false);
+            // Animate writes aliasText on every run.
+            attrNode->SetAttribute("aliasText", run.aliasText ? "true" : "false");
+            setBool(attrNode, "autoKern", run.autoKern, true);
             setDouble(attrNode, "letterSpacing", run.letterSpacing, 0.0);
             setDouble(attrNode, "lineHeight", run.lineHeight, 0.0);
             setDouble(attrNode, "size", run.size, 0.0);
             setDouble(attrNode, "bitmapSize", run.bitmapSize, 0.0);
             setString(attrNode, "face", run.face);
             setColor(attrNode, "fillColor", nullptr, run.fillColor);
+            writeKept(attrNode, run.extraAttributes);
             attrs->InsertEndChild(attrNode);
             runNode->InsertEndChild(attrs);
 
@@ -633,6 +718,7 @@ void XFLWriter::writeStaticText(const StaticText& text, XMLElement* parent)
         node->InsertEndChild(runs);
     }
 
+    writeElementKept(text, node);
     parent->InsertEndChild(node);
 }
 
@@ -640,6 +726,7 @@ void XFLWriter::writeRectanglePrimitive(const RectanglePrimitive& rectangle, XML
 {
     XMLDocument* doc = parent->GetDocument();
     XMLElement* node = doc->NewElement("DOMRectangleObject");
+    PresentScope present(node, rectangle.presentAttributes);
 
     setDouble(node, "x", rectangle.rect.topLeft.x, 0.0);
     setDouble(node, "y", rectangle.rect.topLeft.y, 0.0);
@@ -666,6 +753,7 @@ void XFLWriter::writeRectanglePrimitive(const RectanglePrimitive& rectangle, XML
         node->InsertEndChild(stroke);
     }
 
+    writeElementKept(rectangle, node);
     parent->InsertEndChild(node);
 }
 
@@ -673,6 +761,7 @@ void XFLWriter::writeOvalPrimitive(const OvalPrimitive& oval, XMLElement* parent
 {
     XMLDocument* doc = parent->GetDocument();
     XMLElement* node = doc->NewElement("DOMOvalObject");
+    PresentScope present(node, oval.presentAttributes);
 
     setDouble(node, "x", oval.rect.topLeft.x, 0.0);
     setDouble(node, "y", oval.rect.topLeft.y, 0.0);
@@ -698,6 +787,7 @@ void XFLWriter::writeOvalPrimitive(const OvalPrimitive& oval, XMLElement* parent
         node->InsertEndChild(stroke);
     }
 
+    writeElementKept(oval, node);
     parent->InsertEndChild(node);
 }
 
@@ -726,6 +816,9 @@ void XFLWriter::writeElement(const Element& element, XMLElement* parent)
     case Element::Type::Oval:
         writeOvalPrimitive(static_cast<const OvalPrimitive&>(element), parent);
         break;
+    case Element::Type::Raw:
+        appendRawXml(static_cast<const RawElement&>(element).xml, parent);
+        break;
     }
 }
 
@@ -741,6 +834,7 @@ void XFLWriter::writeMorphShape(const MorphShape& morphShape, XMLElement* parent
             continue;
 
         XMLElement* segmentNode = doc->NewElement("MorphSegment");
+        PresentScope present(segmentNode, segment->presentAttributes);
         segmentNode->SetAttribute("startPointA", formatMorphPoint(segment->startPointA).c_str());
         segmentNode->SetAttribute("startPointB", formatMorphPoint(segment->startPointB).c_str());
         setInt(segmentNode, "strokeIndex1", segment->strokeIndex1, 0);
@@ -758,12 +852,18 @@ void XFLWriter::writeMorphShape(const MorphShape& morphShape, XMLElement* parent
             curvesNode->SetAttribute("anchorPointA", formatMorphPoint(curves->anchorPointA).c_str());
             curvesNode->SetAttribute("controlPointB", formatMorphPoint(curves->controlPointB).c_str());
             curvesNode->SetAttribute("anchorPointB", formatMorphPoint(curves->anchorPointB).c_str());
+            if (curves->isLine)
+                curvesNode->SetAttribute("isLine", "true");
+            writeKept(curvesNode, curves->extraAttributes);
             segmentNode->InsertEndChild(curvesNode);
         }
 
+        writeKept(segmentNode, segment->extraAttributes);
         segments->InsertEndChild(segmentNode);
     }
     node->InsertEndChild(segments);
+    if (!morphShape.hintsXml.empty())
+        appendRawXml(morphShape.hintsXml, node);
 
     parent->InsertEndChild(node);
 }
@@ -772,6 +872,7 @@ void XFLWriter::writeFrame(const Frame& frame, XMLElement* parent)
 {
     XMLDocument* doc = parent->GetDocument();
     XMLElement* node = doc->NewElement("DOMFrame");
+    PresentScope present(node, frame.presentAttributes);
 
     node->SetAttribute("index", frame.index);
     setInt(node, "duration", frame.duration, 1);
@@ -792,28 +893,38 @@ void XFLWriter::writeFrame(const Frame& frame, XMLElement* parent)
     setInt(node, "motionTweenRotateTimes", frame.motionTweenRotateTimes, 0);
     setInt(node, "acceleration", frame.acceleration, 0);
 
-    if (frame.hasCustomEase && !frame.customEase.empty())
+    // The eases: an Ease for all properties (its preset, or the Ease value
+    // it repeats), the custom curve, and any kept for single properties.
+    const bool customEase = frame.hasCustomEase && !frame.customEase.empty();
+    const bool ease = !customEase && (frame.hasEase || !frame.easeMethod.empty() ||
+        (frame.acceleration != 0 && frame.tweenType != TweenType::None));
+    if (ease || customEase || !frame.otherEases.empty())
     {
         XMLElement* tweens = doc->NewElement("tweens");
-        XMLElement* ease = doc->NewElement("CustomEase");
-        ease->SetAttribute("target", "all");
-        for (const Point& point : frame.customEase)
+        if (ease)
         {
-            XMLElement* pointNode = doc->NewElement("Point");
-            setDouble(pointNode, "x", point.x, 0.0);
-            setDouble(pointNode, "y", point.y, 0.0);
-            ease->InsertEndChild(pointNode);
+            XMLElement* node = doc->NewElement("Ease");
+            node->SetAttribute("target", "all");
+            setString(node, "method", frame.easeMethod);
+            setInt(node, "intensity", frame.acceleration, 0);
+            tweens->InsertEndChild(node);
         }
-        tweens->InsertEndChild(ease);
-        node->InsertEndChild(tweens);
-    }
-    else if (frame.acceleration != 0 && frame.tweenType != TweenType::None)
-    {
-        XMLElement* tweens = doc->NewElement("tweens");
-        XMLElement* ease = doc->NewElement("Ease");
-        ease->SetAttribute("target", "all");
-        ease->SetAttribute("intensity", frame.acceleration);
-        tweens->InsertEndChild(ease);
+        if (customEase)
+        {
+            XMLElement* node = doc->NewElement("CustomEase");
+            node->SetAttribute("target", "all");
+            setString(node, "name", frame.customEaseName);
+            for (const Point& point : frame.customEase)
+            {
+                XMLElement* pointNode = doc->NewElement("Point");
+                setDouble(pointNode, "x", point.x, 0.0);
+                setDouble(pointNode, "y", point.y, 0.0);
+                node->InsertEndChild(pointNode);
+            }
+            tweens->InsertEndChild(node);
+        }
+        for (const std::string& xml : frame.otherEases)
+            appendRawXml(xml, tweens);
         node->InsertEndChild(tweens);
     }
 
@@ -830,8 +941,7 @@ void XFLWriter::writeFrame(const Frame& frame, XMLElement* parent)
         writeMorphShape(*frame.morphShape, node);
 
     // What the reader kept without modeling, back where it was.
-    for (const auto& attribute : frame.extraAttributes)
-        node->SetAttribute(attribute.first.c_str(), attribute.second.c_str());
+    writeKept(node, frame.extraAttributes);
     for (const std::string& xml : frame.extraChildren)
         appendRawXml(xml, node);
 
@@ -864,9 +974,11 @@ void XFLWriter::writeLayer(const Layer& layer, XMLElement* parent)
 {
     XMLDocument* doc = parent->GetDocument();
     XMLElement* node = doc->NewElement("DOMLayer");
+    PresentScope present(node, layer.presentAttributes);
 
     setString(node, "name", layer.name);
-    setColor(node, "color", nullptr, layer.color);
+    // Animate writes every layer's color, black included.
+    setColor(node, "color", nullptr, layer.color, true);
     setString(node, "current", layer.current);
 
     if (layer.layerType != Layer::Type::Normal)
@@ -880,8 +992,7 @@ void XFLWriter::writeLayer(const Layer& layer, XMLElement* parent)
     setBool(node, "locked", layer.locked, false);
     setBool(node, "outline", layer.outline, false);
     setBool(node, "visible", layer.visible, true);
-    for (const auto& attribute : layer.extraAttributes)
-        node->SetAttribute(attribute.first.c_str(), attribute.second.c_str());
+    writeKept(node, layer.extraAttributes);
 
     XMLElement* frames = doc->NewElement("frames");
     for (const Frame* frame : layer.frames)
@@ -900,6 +1011,8 @@ void XFLWriter::writeLayer(const Layer& layer, XMLElement* parent)
         writeFrame(*frame, frames);
     }
     node->InsertEndChild(frames);
+    for (const std::string& xml : layer.extraChildren)
+        appendRawXml(xml, node);
 
     parent->InsertEndChild(node);
 }
@@ -911,8 +1024,7 @@ void XFLWriter::writeTimeline(const Timeline& timeline, XMLElement* parent)
 
     setString(node, "name", timeline.name);
     setBool(node, "layerDepthEnabled", timeline.layerDepthEnabled, false);
-    for (const auto& attribute : timeline.extraAttributes)
-        node->SetAttribute(attribute.first.c_str(), attribute.second.c_str());
+    writeKept(node, timeline.extraAttributes);
     if (!timeline.guidesX.empty() || !timeline.guidesY.empty())
     {
         // Animate's own form: XML held in the attribute, a guideline per
@@ -946,6 +1058,8 @@ void XFLWriter::writeTimeline(const Timeline& timeline, XMLElement* parent)
             writeLayer(*layer, layers);
     }
     node->InsertEndChild(layers);
+    for (const std::string& xml : timeline.extraChildren)
+        appendRawXml(xml, node);
 
     parent->InsertEndChild(node);
 }
@@ -958,6 +1072,7 @@ std::string XFLWriter::writeDocument(const Document& document)
     XMLElement* root = doc.NewElement("DOMDocument");
     root->SetAttribute("xmlns", "http://ns.adobe.com/xfl/2008/");
     root->SetAttribute("xmlns:xsi", "http://www.w3.org/2001/XMLSchema-instance");
+    PresentScope present(root, document.presentAttributes);
 
     setString(root, "filetypeGUID", document.filetypeGUID);
     setString(root, "fileGUID", document.fileGUID);
@@ -971,20 +1086,21 @@ std::string XFLWriter::writeDocument(const Document& document)
     setString(root, "versionInfo", document.versionInfo);
     setInt(root, "majorVersion", document.majorVersion, 0);
     setInt(root, "buildNumber", document.buildNumber, 0);
-    setInt(root, "viewAngle3D", document.viewAngle3D, 0);
+    setDouble(root, "viewAngle3D", document.viewAngle3D, 0.0);
     setColor(root, "backgroundColor", nullptr, document.backgroundColor);
     setColor(root, "gridColor", nullptr, document.gridColor);
     setInt(root, "gridSpacingX", document.gridSpacingX, 18);
     setInt(root, "gridSpacingY", document.gridSpacingY, 18);
-    setBool(root, "objectsSnapTo", document.objectsSnapTo, false);
+    setBool(root, "objectsSnapTo", document.objectsSnapTo, true);
     setInt(root, "snapAlignBorderSpacing", document.snapAlignBorderSpacing, 18);
     setColor(root, "guidesColor", nullptr, document.guidesColor);
-    setInt(root, "vanishingPoint3DX", document.vanishingPoint3DX, 0);
-    setInt(root, "vanishingPoint3DY", document.vanishingPoint3DY, 0);
+    setDouble(root, "vanishingPoint3DX", document.vanishingPoint3DX, 0.0);
+    setDouble(root, "vanishingPoint3DY", document.vanishingPoint3DY, 0.0);
     setInt(root, "nextSceneIdentifier", document.nextSceneIdentifier, 0);
-    setBool(root, "playOptionsPlayLoop", document.playOptionsPlayLoop, false);
-    setBool(root, "playOptionsPlayPages", document.playOptionsPlayPages, false);
-    setBool(root, "playOptionsPlayFrameActions", document.playOptionsPlayFrameActions, false);
+    setBool(root, "playOptionsPlayLoop", document.playOptionsPlayLoop, true);
+    setBool(root, "playOptionsPlayPages", document.playOptionsPlayPages, true);
+    setBool(root, "playOptionsPlayFrameActions", document.playOptionsPlayFrameActions, true);
+    writeKept(root, document.extraAttributes);
 
     if (!document.folders.empty())
     {
@@ -994,9 +1110,11 @@ std::string XFLWriter::writeDocument(const Document& document)
             if (!folder)
                 continue;
             XMLElement* node = doc.NewElement("DOMFolderItem");
+            PresentScope folderPresent(node, folder->presentAttributes);
             setString(node, "name", folder->name);
             setString(node, "itemID", folder->itemId);
             setBool(node, "isExpanded", folder->isExpanded, false);
+            writeKept(node, folder->extraAttributes);
             folders->InsertEndChild(node);
         }
         root->InsertEndChild(folders);
@@ -1016,6 +1134,7 @@ std::string XFLWriter::writeDocument(const Document& document)
 
             const Bitmap* bitmap = static_cast<const Bitmap*>(resource);
             XMLElement* node = doc.NewElement("DOMBitmapItem");
+            PresentScope bitmapPresent(node, bitmap->presentAttributes);
             setString(node, "name", bitmap->name);
             setString(node, "itemID", bitmap->itemId);
             setString(node, "sourceExternalFilepath", bitmap->sourceExternalFilepath);
@@ -1027,6 +1146,7 @@ std::string XFLWriter::writeDocument(const Document& document)
             setString(node, "bitmapDataHRef", bitmap->bitmapDataHRef);
             setInt(node, "frameRight", bitmap->frameRight, 0);
             setInt(node, "frameBottom", bitmap->frameBottom, 0);
+            writeKept(node, bitmap->extraAttributes);
             media->InsertEndChild(node);
         }
         for (const std::string& xml : document.extraMedia)
@@ -1043,6 +1163,7 @@ std::string XFLWriter::writeDocument(const Document& document)
                 continue;
             XMLElement* include = doc.NewElement("Include");
             include->SetAttribute("href", symbolHref(*symbol).c_str());
+            writeKept(include, symbol->includeAttributes);
             symbols->InsertEndChild(include);
         }
         root->InsertEndChild(symbols);
@@ -1115,16 +1236,16 @@ std::string XFLWriter::writeSymbol(const Symbol& symbol)
     XMLElement* root = doc.NewElement("DOMSymbolItem");
     root->SetAttribute("xmlns", "http://ns.adobe.com/xfl/2008/");
     root->SetAttribute("xmlns:xsi", "http://www.w3.org/2001/XMLSchema-instance");
+    PresentScope present(root, symbol.presentAttributes);
 
     setString(root, "name", symbol.name);
     setString(root, "itemID", symbol.itemId);
     setString(root, "lastModified", symbol.lastModified);
     if (!symbol.otherSymbolType.empty())
         root->SetAttribute("symbolType", symbol.otherSymbolType.c_str());
-    else if (symbol.symbolType != SymbolType::MovieClip)
+    else if (symbol.symbolType != SymbolType::MovieClip || wasPresent(root, "symbolType"))
         root->SetAttribute("symbolType", symbolTypeName(symbol.symbolType));
-    for (const auto& attribute : symbol.extraAttributes)
-        root->SetAttribute(attribute.first.c_str(), attribute.second.c_str());
+    writeKept(root, symbol.extraAttributes);
     if (symbol.scale9)
     {
         root->SetAttribute("scaleGridLeft", symbol.scaleGridLeft);

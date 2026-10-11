@@ -36,22 +36,23 @@ public:
     std::string versionInfo;
     int majorVersion = 0;
     int buildNumber = 0;
-    int viewAngle3D = 0;
+    double viewAngle3D = 0.0;
     uint8_t backgroundColor[4] = {255, 255, 255, 255};
     uint8_t gridColor[4] = {0, 0, 0, 255};
     uint8_t guidesColor[4] = {0, 255, 0, 255};
     int gridSpacingX = 18;
     int gridSpacingY = 18;
     int snapAlignBorderSpacing = 18;
-    bool objectsSnapTo = false;
+    bool objectsSnapTo = true;
     int timelineHeight = 197;
     int timelineLabelWidth = 256;
-    int vanishingPoint3DX = 400;
-    int vanishingPoint3DY = 275;
+    double vanishingPoint3DX = 400.0;
+    double vanishingPoint3DY = 275.0;
     int nextSceneIdentifier = 2;
-    bool playOptionsPlayLoop = false;
-    bool playOptionsPlayPages = false;
-    bool playOptionsPlayFrameActions = false;
+    // Animate's defaults: it writes these only when they are off.
+    bool playOptionsPlayLoop = true;
+    bool playOptionsPlayPages = true;
+    bool playOptionsPlayFrameActions = true;
 
     SymbolList* symbolList = nullptr;
     ScriptList* scriptList = nullptr;

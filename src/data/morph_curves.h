@@ -12,6 +12,8 @@ public:
     Point anchorPointA;
     Point controlPointB;
     Point anchorPointB;
+    /// The curve is a straight line (its control points lie on it).
+    bool isLine = false;
 
     MorphCurves(fla::DOMElement* parent)
         : DOMElement(parent)

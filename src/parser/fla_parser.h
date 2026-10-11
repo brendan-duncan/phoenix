@@ -2,6 +2,12 @@
 
 #include "../data/fla_document.h"
 
+class ZipReader;
+
+namespace fla {
+class Document;
+}
+
 class FLAParser
 {
 public:
@@ -13,5 +19,7 @@ public:
     }
 
 private:
+    static void keepUnreadFiles(const ZipReader& zipReader, fla::Document& document);
+
     std::string _errorString;
 };

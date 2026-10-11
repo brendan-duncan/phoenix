@@ -20,9 +20,9 @@ public:
     std::vector<double> guidesX;
     std::vector<double> guidesY;
 
-    /// DOMTimeline attributes read but not modeled, written back as they
-    /// came.
-    std::vector<std::pair<std::string, std::string>> extraAttributes;
+    /// Child elements other than the layers, as XML text, written back
+    /// after them.
+    std::vector<std::string> extraChildren;
 
     std::vector<Layer*> layers;
 

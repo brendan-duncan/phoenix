@@ -4,7 +4,10 @@
 #include "compound_file.h"
 #include "document_parser.h"
 #include "zip_reader.h"
+#include "../data/bitmap.h"
+#include "../data/document.h"
 #include <algorithm>
+#include <set>
 #include <fstream>
 #include <iostream>
 
@@ -90,5 +93,43 @@ fla::FLADocument* FLAParser::parse(const std::string& filePath)
         return nullptr;
     }
 
+    if (!fromBinary)
+        keepUnreadFiles(zipReader, *flaDocument->document);
     return flaDocument;
+}
+
+void FLAParser::keepUnreadFiles(const ZipReader& zipReader, fla::Document& document)
+{
+    // The files of the package the document is not built from (publish
+    // settings, mobile settings, metadata, the mimetype) are carried through
+    // byte for byte, so a save writes them back.
+    std::set<std::string> read = {"DOMDocument.xml", "bin/SymDepend.cache"};
+    if (document.symbolList)
+    {
+        for (const fla::Symbol* symbol : document.symbolList->symbols)
+        {
+            if (symbol)
+                read.insert("LIBRARY/" + symbol->href);
+        }
+    }
+    for (const fla::Resource* resource : document.resources)
+    {
+        if (!resource || resource->resourceType() != fla::Resource::Type::Bitmap)
+            continue;
+        const fla::Bitmap* bitmap = static_cast<const fla::Bitmap*>(resource);
+        read.insert("LIBRARY/" + bitmap->href);
+        read.insert("bin/" + bitmap->bitmapDataHRef);
+    }
+    for (const auto& file : document.extraFiles)
+        read.insert(file.first);
+
+    for (const std::string& name : zipReader.getFileList())
+    {
+        if (name.empty() || name.back() == '/' || read.count(name))
+            continue;
+        // The project marker is written afresh, named after the document.
+        if (name.size() > 4 && name.compare(name.size() - 4, 4, ".xfl") == 0 && name.find('/') == std::string::npos)
+            continue;
+        document.extraFiles.emplace_back(name, zipReader.readFile(name));
+    }
 }

@@ -1,4 +1,6 @@
 #include "document_parser.h"
+#include "../data/raw_element.h"
+#include <initializer_list>
 #include "path_parser.h"
 #include "../data/bitmap.h"
 #include "../data/bitmap_fill.h"
@@ -65,6 +67,31 @@ bool getBoolAttribute(const tinyxml2::XMLElement* element, const char* name, boo
     bool value = defaultValue;
     element->QueryBoolAttribute(name, &value);
     return value;
+}
+
+/// Sorts an element's attributes for keeping: the modeled ones (in
+/// \a modeled) the file wrote are noted by name, so a save writes them even
+/// at Phoenix's default, and the rest are kept with their values.
+void keepAttributes(const tinyxml2::XMLElement* element, std::initializer_list<const char*> modeled,
+    std::vector<std::pair<std::string, std::string>>& extra, std::vector<std::string>& present)
+{
+    for (const tinyxml2::XMLAttribute* attribute = element->FirstAttribute(); attribute;
+         attribute = attribute->Next())
+    {
+        bool known = false;
+        for (const char* name : modeled)
+            known = known || std::strcmp(name, attribute->Name()) == 0;
+        if (known)
+            present.emplace_back(attribute->Name());
+        else
+            extra.emplace_back(attribute->Name(), attribute->Value());
+    }
+}
+
+void keepAttributes(const tinyxml2::XMLElement* element, std::initializer_list<const char*> modeled,
+    fla::DOMElement* into)
+{
+    keepAttributes(element, modeled, into->extraAttributes, into->presentAttributes);
 }
 
 void parseHexColor(const std::string& hexColor, uint8_t rgba[4], double alpha = 1.0)
@@ -244,6 +271,8 @@ fla::Edge* parsePath(const tinyxml2::XMLElement* element, fla::DOMElement* paren
     return edge;
 }
 
+std::string elementText(const tinyxml2::XMLElement* element);
+
 bool parseEdges(const tinyxml2::XMLElement* element, fla::Shape* shape)
 {
     for (const tinyxml2::XMLElement* childElement = element->FirstChildElement();
@@ -264,7 +293,9 @@ bool parseEdges(const tinyxml2::XMLElement* element, fla::Shape* shape)
             }
             else if (hasAttribute(childElement, "cubics"))
             {
-                // Skip for now. Cubics are used for the editor only.
+                // The cubic curves a pen or brush drew, which only Animate's
+                // editor uses: kept as read, in their place among the edges.
+                shape->cubicEdges.emplace_back(shape->edges.size(), elementText(childElement));
             }
         }
         else
@@ -490,6 +521,7 @@ bool parseElement(const tinyxml2::XMLElement* element, fla::Element* el)
     const tinyxml2::XMLElement* matrixNode = element->FirstChildElement("matrix");
     if (matrixNode)
     {
+        el->keepMatrix = true;
         const tinyxml2::XMLElement* matrixEl = matrixNode->FirstChildElement("Matrix");
         if (matrixEl)
         {
@@ -510,6 +542,7 @@ bool parseElement(const tinyxml2::XMLElement* element, fla::Element* el)
     const tinyxml2::XMLElement* pointNode = element->FirstChildElement("transformationPoint");
     if (pointNode)
     {
+        el->keepTransformationPoint = true;
         const tinyxml2::XMLElement* pointEl = pointNode->FirstChildElement("Point");
         if (pointEl)
         {
@@ -534,6 +567,7 @@ bool parseShape(const tinyxml2::XMLElement* element, fla::Shape* shape)
     }
 
     shape->isDrawingObject = getBoolAttribute(element, "isDrawingObject", false);
+    keepAttributes(element, {"isSelected", "isFloating", "lockFlag", "isDrawingObject"}, shape);
 
     for (const tinyxml2::XMLElement* childElement = element->FirstChildElement();
          childElement != nullptr;
@@ -572,10 +606,11 @@ bool parseShape(const tinyxml2::XMLElement* element, fla::Shape* shape)
         }
         else
         {
-            std::cerr << "!!!! Unhandled shape element: " << tagName << (_currentFile.empty() ? "" : " from ") << _currentFile << std::endl;
+            shape->extraChildren.push_back(elementText(childElement));
         }
     }
 
+    shape->readEdgeCount = shape->edges.size();
     shape->bounds.reset();
 
     for (fla::Edge* edge : shape->edges)
@@ -637,6 +672,10 @@ bool parseFilter(const tinyxml2::XMLElement* element, fla::Filter& filter)
     filter.contrast = getDoubleAttribute(element, "contrast", 0.0);
     filter.saturation = getDoubleAttribute(element, "saturation", 0.0);
     filter.hue = getDoubleAttribute(element, "hue", 0.0);
+    keepAttributes(element, {"enabled", "blurX", "blurY", "quality", "angle", "distance", "strength", "inner",
+        "knockout", "hideObject", "type", "brightness", "contrast", "saturation", "hue", "color", "alpha",
+        "highlightColor", "highlightAlpha", "shadowColor", "shadowAlpha"}, filter.extraAttributes,
+        filter.presentAttributes);
 
     const std::string color = getAttribute(element, "color");
     if (!color.empty())
@@ -676,6 +715,7 @@ bool parseSymbolInstance(const tinyxml2::XMLElement* element, fla::SymbolInstanc
 
         if (std::strcmp(tagName, "color") == 0)
         {
+            instance->keepColor = true;
             for (const tinyxml2::XMLElement* colorElement = childElement->FirstChildElement();
                  colorElement != nullptr;
                  colorElement = colorElement->NextSiblingElement())
@@ -721,7 +761,8 @@ bool parseSymbolInstance(const tinyxml2::XMLElement* element, fla::SymbolInstanc
                 fla::Filter filter;
                 if (!parseFilter(filterElement, filter))
                 {
-                    std::cerr << "!!!! Unhandled filter: " << filterElement->Name() << (_currentFile.empty() ? "" : " from ") << _currentFile << std::endl;
+                    // A filter Phoenix does not know, kept as read.
+                    instance->extraFilters.push_back(elementText(filterElement));
                     continue;
                 }
                 instance->filters.push_back(filter);
@@ -736,16 +777,8 @@ bool parseSymbolInstance(const tinyxml2::XMLElement* element, fla::SymbolInstanc
 
     instance->libraryItemName = getAttribute(element, "libraryItemName");
     instance->name = getAttribute(element, "name");
-    static const char* const modeledInstance[] = {"libraryItemName", "name", "blendMode", "firstFrame",
-        "symbolType", "loop", "loopType", "isSelected", "isFloating", "lockFlag"};
-    for (const tinyxml2::XMLAttribute* attribute = element->FirstAttribute(); attribute; attribute = attribute->Next())
-    {
-        bool modeled = false;
-        for (const char* known : modeledInstance)
-            modeled = modeled || std::strcmp(known, attribute->Name()) == 0;
-        if (!modeled)
-            instance->extraAttributes.emplace_back(attribute->Name(), attribute->Value());
-    }
+    keepAttributes(element, {"libraryItemName", "name", "blendMode", "firstFrame", "symbolType", "loop",
+        "loopType", "isSelected", "isFloating", "lockFlag"}, instance);
     instance->blendMode = getAttribute(element, "blendMode");
     // "normal" is what no blend mode means; Animate leaves it out.
     if (instance->blendMode == "normal")
@@ -811,6 +844,12 @@ bool parseBitmapInstance(const tinyxml2::XMLElement* element, fla::BitmapInstanc
     }
 
     instance->libraryItemName = getAttribute(element, "libraryItemName");
+    keepAttributes(element, {"libraryItemName", "isSelected", "isFloating", "lockFlag"}, instance);
+    for (const tinyxml2::XMLElement* child = element->FirstChildElement(); child; child = child->NextSiblingElement())
+    {
+        if (std::strcmp(child->Name(), "matrix") != 0 && std::strcmp(child->Name(), "transformationPoint") != 0)
+            instance->extraChildren.push_back(elementText(child));
+    }
 
     return true;
 }
@@ -834,6 +873,8 @@ bool parseRectanglePrimitive(const tinyxml2::XMLElement* element, fla::Rectangle
     rectangle->topRightRadius = getDoubleAttribute(element, "topRightRadius", 0.0);
     rectangle->bottomLeftRadius = getDoubleAttribute(element, "bottomLeftRadius", 0.0);
     rectangle->bottomRightRadius = getDoubleAttribute(element, "bottomRightRadius", 0.0);
+    keepAttributes(element, {"x", "y", "objectWidth", "objectHeight", "topLeftRadius", "topRightRadius",
+        "bottomLeftRadius", "bottomRightRadius", "isSelected", "isFloating", "lockFlag"}, rectangle);
 
     for (const tinyxml2::XMLElement* childElement = element->FirstChildElement();
          childElement != nullptr;
@@ -864,7 +905,7 @@ bool parseRectanglePrimitive(const tinyxml2::XMLElement* element, fla::Rectangle
         }
         else
         {
-            std::cerr << "!!!! Unhandled rectangle primitive child element: " << tagName << (_currentFile.empty() ? "" : " from ") << _currentFile << std::endl;
+            rectangle->extraChildren.push_back(elementText(childElement));
         }
     }
 
@@ -886,6 +927,8 @@ bool parseOvalPrimitive(const tinyxml2::XMLElement* element, fla::OvalPrimitive*
     oval->startAngle = getDoubleAttribute(element, "startAngle", 0.0);
     oval->endAngle = getDoubleAttribute(element, "endAngle", 0.0);
     oval->innerRadius = getDoubleAttribute(element, "innerRadius", 0.0);
+    keepAttributes(element, {"x", "y", "objectWidth", "objectHeight", "startAngle", "endAngle", "innerRadius",
+        "isSelected", "isFloating", "lockFlag"}, oval);
 
     oval->bounds = oval->rect;
     oval->localBounds = oval->rect;
@@ -919,7 +962,7 @@ bool parseOvalPrimitive(const tinyxml2::XMLElement* element, fla::OvalPrimitive*
         }
         else
         {
-            std::cerr << "!!!! Unhandled oval primitive child element: " << tagName << (_currentFile.empty() ? "" : " from ") << _currentFile << std::endl;
+            oval->extraChildren.push_back(elementText(childElement));
         }
     }
 
@@ -940,6 +983,15 @@ bool parseStaticText(const tinyxml2::XMLElement* element, fla::StaticText* stati
     staticText->autoExpand = getBoolAttribute(element, "autoExpand", false);
     staticText->instanceName = getAttribute(element, "instanceName");
     staticText->lineType = getAttribute(element, "lineType");
+    keepAttributes(element, {"left", "top", "width", "height", "autoExpand", "instanceName", "lineType",
+        "isSelected", "isFloating", "lockFlag"}, staticText);
+    for (const tinyxml2::XMLElement* child = element->FirstChildElement(); child; child = child->NextSiblingElement())
+    {
+        const char* name = child->Name();
+        if (std::strcmp(name, "textRuns") != 0 && std::strcmp(name, "matrix") != 0 &&
+            std::strcmp(name, "transformationPoint") != 0)
+            staticText->extraChildren.push_back(elementText(child));
+    }
 
     for (const tinyxml2::XMLElement* textRunsNode = element->FirstChildElement("textRuns");
          textRunsNode != nullptr;
@@ -990,19 +1042,26 @@ bool parseStaticText(const tinyxml2::XMLElement* element, fla::StaticText* stati
                                     {
                                         textRun.alignment = fla::TextRun::Alignment::Right;
                                     }
+                                    else if (alignment == "justify")
+                                    {
+                                        textRun.alignment = fla::TextRun::Alignment::Justify;
+                                    }
                                     else
                                     {
                                         std::cerr << "!!!! Unhandled text alignment value: " << alignment << (_currentFile.empty() ? "" : " from ") << _currentFile << std::endl;
                                     }
                                 }
                                 textRun.aliasText = getBoolAttribute(attrElement, "aliasText", false);
-                                textRun.autoKern = getBoolAttribute(attrElement, "autoKern", false);
+                                textRun.autoKern = getBoolAttribute(attrElement, "autoKern", true);
                                 textRun.letterSpacing = getDoubleAttribute(attrElement, "letterSpacing", 0.0);
                                 textRun.lineHeight = getDoubleAttribute(attrElement, "lineHeight", 0.0);
                                 textRun.size = getDoubleAttribute(attrElement, "size", 0.0);
                                 textRun.bitmapSize = getDoubleAttribute(attrElement, "bitmapSize", 0.0);
                                 textRun.face = getAttribute(attrElement, "face");
                                 getColorAttribute(attrElement, "fillColor", textRun.fillColor);
+                                keepAttributes(attrElement, {"alignment", "aliasText", "autoKern", "letterSpacing",
+                                    "lineHeight", "size", "bitmapSize", "face", "fillColor"},
+                                    textRun.extraAttributes, textRun.presentAttributes);
                             }
                         }
                     }
@@ -1012,8 +1071,9 @@ bool parseStaticText(const tinyxml2::XMLElement* element, fla::StaticText* stati
                     }
                 }
 
-                if (!textRun.text.empty())
-                    staticText->runs.push_back(textRun);
+                // An empty run is kept too: it carries a paragraph's
+                // formatting.
+                staticText->runs.push_back(textRun);
             }
             else
             {
@@ -1041,6 +1101,8 @@ bool parseStaticText(const tinyxml2::XMLElement* element, fla::StaticText* stati
 
     return true;
 }
+
+std::string elementText(const tinyxml2::XMLElement* element);
 
 fla::Element* parseElementByType(const tinyxml2::XMLElement* element, fla::DOMElement* parent)
 {
@@ -1128,8 +1190,11 @@ fla::Element* parseElementByType(const tinyxml2::XMLElement* element, fla::DOMEl
         return oval;
     }
 
-    std::cerr << "!!!! Unhandled element type: " << tagName << (_currentFile.empty() ? "" : " from ") << _currentFile << std::endl;
-    return nullptr;
+    // A kind Phoenix does not model (TLF text, a component, a video): kept
+    // as read, in its place, and written back.
+    fla::RawElement* raw = new fla::RawElement(parent);
+    raw->xml = elementText(element);
+    return raw;
 }
 
 bool parseGroup(const tinyxml2::XMLElement* element, fla::Group* group)
@@ -1137,6 +1202,14 @@ bool parseGroup(const tinyxml2::XMLElement* element, fla::Group* group)
     if (!parseElement(element, group))
     {
         return false;
+    }
+    keepAttributes(element, {"isSelected", "isFloating", "lockFlag"}, group);
+    for (const tinyxml2::XMLElement* child = element->FirstChildElement(); child; child = child->NextSiblingElement())
+    {
+        const char* name = child->Name();
+        if (std::strcmp(name, "members") != 0 && std::strcmp(name, "matrix") != 0 &&
+            std::strcmp(name, "transformationPoint") != 0)
+            group->extraChildren.push_back(elementText(child));
     }
 
     for (const tinyxml2::XMLElement* memberNode = element->FirstChildElement("members");
@@ -1211,6 +1284,8 @@ bool parseMorphCurves(const tinyxml2::XMLElement* element, fla::MorphCurves* cur
     curves->anchorPointA = PathParser::parseMorphPoint(getAttribute(element, "anchorPointA"));
     curves->controlPointB = PathParser::parseMorphPoint(getAttribute(element, "controlPointB"));
     curves->anchorPointB = PathParser::parseMorphPoint(getAttribute(element, "anchorPointB"));
+    curves->isLine = getBoolAttribute(element, "isLine", false);
+    keepAttributes(element, {"controlPointA", "anchorPointA", "controlPointB", "anchorPointB", "isLine"}, curves);
 
     return true;
 }
@@ -1223,6 +1298,8 @@ bool parseMorphSegment(const tinyxml2::XMLElement* element, fla::MorphSegment* s
     segment->strokeIndex2 = getIntAttribute(element, "strokeIndex2", 0);
     segment->fillIndex1 = getIntAttribute(element, "fillIndex1", 0);
     segment->fillIndex2 = getIntAttribute(element, "fillIndex2", 0);
+    keepAttributes(element, {"startPointA", "startPointB", "strokeIndex1", "strokeIndex2", "fillIndex1",
+        "fillIndex2"}, segment);
 
     for (const tinyxml2::XMLElement* childElement = element->FirstChildElement();
          childElement != nullptr;
@@ -1268,6 +1345,8 @@ bool parseMorphShape(const tinyxml2::XMLElement* element, fla::MorphShape* morph
         }
         else if (std::strcmp(tagName, "morphHintsList") == 0)
         {
+            // Shape hints, kept as read until Phoenix uses them.
+            morphShape->hintsXml = elementText(childElement);
         }
         else
         {
@@ -1280,26 +1359,11 @@ bool parseMorphShape(const tinyxml2::XMLElement* element, fla::MorphShape* morph
 
 std::string elementText(const tinyxml2::XMLElement* element);
 
-/// The attributes of DOMFrame the reader models; any others are kept.
-bool isModeledFrameAttribute(const char* name)
-{
-    static const char* const known[] = {"index", "duration", "keyMode", "name", "labelType", "tweenType",
-        "motionTweenSnap", "motionTWeenSnap", "motionTweenSync", "acceleration", "hasCustomEase",
-        "motionTweenRotate", "motionTweenRotateTimes"};
-    for (const char* k : known)
-        if (std::strcmp(k, name) == 0)
-            return true;
-    return false;
-}
-
 bool parseFrame(const tinyxml2::XMLElement* element, fla::Frame* frame)
 {
-    for (const tinyxml2::XMLAttribute* attribute = element->FirstAttribute(); attribute;
-         attribute = attribute->Next())
-    {
-        if (!isModeledFrameAttribute(attribute->Name()))
-            frame->extraAttributes.emplace_back(attribute->Name(), attribute->Value());
-    }
+    keepAttributes(element, {"index", "duration", "keyMode", "name", "labelType", "tweenType",
+        "motionTweenSnap", "motionTWeenSnap", "motionTweenSync", "acceleration", "hasCustomEase",
+        "motionTweenRotate", "motionTweenRotateTimes"}, frame);
 
     frame->index = getIntAttribute(element, "index");
     frame->duration = getIntAttribute(element, "duration", 1);
@@ -1359,22 +1423,32 @@ bool parseFrame(const tinyxml2::XMLElement* element, fla::Frame* frame)
         }
         else if (std::strcmp(tagName, "tweens") == 0)
         {
-            // An Ease repeats the acceleration attribute; a CustomEase is
-            // the curve itself. Only the one for all properties is kept.
+            // An Ease repeats the acceleration attribute, or names one of
+            // Animate's ease presets (method); a CustomEase is the curve
+            // itself. Eases for one property (a target other than all) are
+            // kept as read.
             for (const tinyxml2::XMLElement* tween = childElement->FirstChildElement();
                  tween != nullptr;
                  tween = tween->NextSiblingElement())
             {
                 const std::string target = getAttribute(tween, "target", "all");
-                if (target != "all")
-                    continue;
-                if (std::strcmp(tween->Name(), "Ease") == 0)
+                const bool ease = std::strcmp(tween->Name(), "Ease") == 0;
+                const bool custom = std::strcmp(tween->Name(), "CustomEase") == 0;
+                if (target != "all" || (!ease && !custom))
                 {
+                    frame->otherEases.push_back(elementText(tween));
+                    continue;
+                }
+                if (ease)
+                {
+                    frame->hasEase = true;
+                    frame->easeMethod = getAttribute(tween, "method");
                     if (frame->acceleration == 0)
                         frame->acceleration = getIntAttribute(tween, "intensity", 0);
                 }
-                else if (std::strcmp(tween->Name(), "CustomEase") == 0)
+                else
                 {
+                    frame->customEaseName = getAttribute(tween, "name");
                     frame->hasCustomEase = true;
                     frame->customEase.clear();
                     for (const tinyxml2::XMLElement* point = tween->FirstChildElement("Point");
@@ -1480,16 +1554,8 @@ bool parseLayer(const tinyxml2::XMLElement* element, fla::Layer* layer)
         layer->otherLayerType = layerType;
     }
 
-    static const char* const modeledLayer[] = {"name", "color", "current", "layerType", "parentLayerIndex",
-        "isSelected", "autoNamed", "locked", "outline", "visible"};
-    for (const tinyxml2::XMLAttribute* attribute = element->FirstAttribute(); attribute; attribute = attribute->Next())
-    {
-        bool modeled = false;
-        for (const char* name : modeledLayer)
-            modeled = modeled || std::strcmp(name, attribute->Name()) == 0;
-        if (!modeled)
-            layer->extraAttributes.emplace_back(attribute->Name(), attribute->Value());
-    }
+    keepAttributes(element, {"name", "color", "current", "layerType", "parentLayerIndex", "isSelected",
+        "autoNamed", "locked", "outline", "visible"}, layer);
 
     layer->parentLayerIndex = getIntAttribute(element, "parentLayerIndex", -1);
     layer->selected = getBoolAttribute(element, "isSelected", false);
@@ -1511,7 +1577,7 @@ bool parseLayer(const tinyxml2::XMLElement* element, fla::Layer* layer)
         }
         else
         {
-            std::cerr << "!!!! Unhandled layer element: " << childElement->Name() << (_currentFile.empty() ? "" : " from ") << _currentFile << std::endl;
+            layer->extraChildren.push_back(elementText(childElement));
         }
     }
 
@@ -1632,7 +1698,7 @@ bool parseTimeline(const tinyxml2::XMLElement* element, fla::Timeline* timeline)
         }
         else
         {
-            std::cerr << "!!!! Unhandled timeline element: " << childElement->Name() << (_currentFile.empty() ? "" : " from ") << _currentFile << std::endl;
+            timeline->extraChildren.push_back(elementText(childElement));
         }
     }
     return true;
@@ -1712,15 +1778,12 @@ bool parseSymbolInclude(const tinyxml2::XMLElement* element, fla::SymbolList* sy
         if (type != "movie clip" && type != "button" && type != "graphic")
             symbol->otherSymbolType = type;
     }
-    static const char* const modeledSymbol[] = {"xmlns", "xmlns:xsi", "name", "itemID", "lastModified",
-        "symbolType", "scaleGridLeft", "scaleGridTop", "scaleGridRight", "scaleGridBottom"};
-    for (const tinyxml2::XMLAttribute* attribute = root->FirstAttribute(); attribute; attribute = attribute->Next())
+    keepAttributes(root, {"xmlns", "xmlns:xsi", "name", "itemID", "lastModified", "symbolType", "scaleGridLeft",
+        "scaleGridTop", "scaleGridRight", "scaleGridBottom"}, symbol);
+    for (const tinyxml2::XMLAttribute* attribute = element->FirstAttribute(); attribute; attribute = attribute->Next())
     {
-        bool modeled = false;
-        for (const char* name : modeledSymbol)
-            modeled = modeled || std::strcmp(name, attribute->Name()) == 0;
-        if (!modeled)
-            symbol->extraAttributes.emplace_back(attribute->Name(), attribute->Value());
+        if (std::strcmp(attribute->Name(), "href") != 0)
+            symbol->includeAttributes.emplace_back(attribute->Name(), attribute->Value());
     }
     if (hasAttribute(root, "scaleGridLeft"))
     {
@@ -1803,6 +1866,8 @@ bool parseMedia(const tinyxml2::XMLElement* element, fla::Document* document, Zi
             bitmap->quality = getIntAttribute(childElement, "quality", 0);
             bitmap->frameRight = getIntAttribute(childElement, "frameRight", 0);
             bitmap->frameBottom = getIntAttribute(childElement, "frameBottom", 0);
+            keepAttributes(childElement, {"name", "itemID", "href", "bitmapDataHRef", "sourceExternalFilepath",
+                "sourceLastImported", "allowSmoothing", "quality", "frameRight", "frameBottom"}, bitmap);
 
             // The image as imported sits under LIBRARY when Animate kept a
             // copy; the pixels in its own encoding sit under bin. Either is
@@ -1820,7 +1885,9 @@ bool parseMedia(const tinyxml2::XMLElement* element, fla::Document* document, Zi
             }
             else
             {
+                // Nothing to draw from, but the item is kept as read.
                 std::cerr << "Bitmap media not found: " << bitmap->href << std::endl;
+                document->extraMedia.push_back(elementText(childElement));
                 delete bitmap;
             }
         }
@@ -1861,6 +1928,7 @@ bool parseFolder(const tinyxml2::XMLElement* element, fla::Folder* folder)
     folder->name = getAttribute(element, "name");
     folder->itemId = getAttribute(element, "itemID");
     folder->isExpanded = getBoolAttribute(element, "isExpanded", false);
+    keepAttributes(element, {"name", "itemID", "isExpanded"}, folder);
     return true;
 }
 
@@ -1982,20 +2050,26 @@ bool parseDocument(fla::Document* document, const tinyxml2::XMLElement* element,
     document->versionInfo = getAttribute(element, "versionInfo");
     document->majorVersion = getIntAttribute(element, "majorVersion", 0);
     document->buildNumber = getIntAttribute(element, "buildNumber", 0);
-    document->viewAngle3D = getIntAttribute(element, "viewAngle3D", 0);
+    document->viewAngle3D = getDoubleAttribute(element, "viewAngle3D", 0.0);
     getColorAttribute(element, "backgroundColor", document->backgroundColor);
     getColorAttribute(element, "gridColor", document->gridColor);
     document->gridSpacingX = getIntAttribute(element, "gridSpacingX", 18);
     document->gridSpacingY = getIntAttribute(element, "gridSpacingY", 18);
-    document->objectsSnapTo = getBoolAttribute(element, "objectsSnapTo", false);
+    document->objectsSnapTo = getBoolAttribute(element, "objectsSnapTo", true);
     document->snapAlignBorderSpacing = getIntAttribute(element, "snapAlignBorderSpacing", 18);
     getColorAttribute(element, "guidesColor", document->guidesColor);
-    document->vanishingPoint3DX = getIntAttribute(element, "vanishingPoint3DX", 0);
-    document->vanishingPoint3DY = getIntAttribute(element, "vanishingPoint3DY", 0);
+    document->vanishingPoint3DX = getDoubleAttribute(element, "vanishingPoint3DX", 0.0);
+    document->vanishingPoint3DY = getDoubleAttribute(element, "vanishingPoint3DY", 0.0);
     document->nextSceneIdentifier = getIntAttribute(element, "nextSceneIdentifier", 0);
-    document->playOptionsPlayLoop = getBoolAttribute(element, "playOptionsPlayLoop", false);
-    document->playOptionsPlayPages = getBoolAttribute(element, "playOptionsPlayPages", false);
-    document->playOptionsPlayFrameActions = getBoolAttribute(element, "playOptionsPlayFrameActions", false);
+    // Animate writes these only when they are off.
+    document->playOptionsPlayLoop = getBoolAttribute(element, "playOptionsPlayLoop", true);
+    document->playOptionsPlayPages = getBoolAttribute(element, "playOptionsPlayPages", true);
+    document->playOptionsPlayFrameActions = getBoolAttribute(element, "playOptionsPlayFrameActions", true);
+    keepAttributes(element, {"xmlns", "xmlns:xsi", "filetypeGUID", "fileGUID", "width", "height", "frameRate",
+        "currentTimeline", "xflVersion", "creatorInfo", "platform", "versionInfo", "majorVersion", "buildNumber",
+        "viewAngle3D", "backgroundColor", "gridColor", "gridSpacingX", "gridSpacingY", "objectsSnapTo",
+        "snapAlignBorderSpacing", "guidesColor", "vanishingPoint3DX", "vanishingPoint3DY", "nextSceneIdentifier",
+        "playOptionsPlayLoop", "playOptionsPlayPages", "playOptionsPlayFrameActions"}, document);
 
     // Parse child elements
     // Whether the timelines have been read yet, so an unmodeled section

@@ -9,6 +9,7 @@
 #include "../data/element.h"
 #include "../data/group.h"
 #include "../data/oval_primitive.h"
+#include "../data/raw_element.h"
 #include "../data/rectangle_primitive.h"
 #include "../data/shape.h"
 #include "../data/static_text.h"
@@ -29,6 +30,11 @@ void copyElementFields(const Element& from, Element& to)
     to.transformationPoint = from.transformationPoint;
     to.localBounds = from.localBounds;
     to.bounds = from.bounds;
+    to.keepMatrix = from.keepMatrix;
+    to.keepTransformationPoint = from.keepTransformationPoint;
+    to.extraAttributes = from.extraAttributes;
+    to.presentAttributes = from.presentAttributes;
+    to.extraChildren = from.extraChildren;
 }
 
 } // namespace
@@ -39,9 +45,11 @@ Element* cloneElement(const Element& element, DOMElement* parent)
     {
     case Element::Type::Shape:
     {
-        Shape* copy = cloneShape(static_cast<const Shape&>(element), parent);
-        copy->visible = element.visible;
-        copy->isLocked = element.isLocked;
+        const Shape& shape = static_cast<const Shape&>(element);
+        Shape* copy = cloneShape(shape, parent);
+        copyElementFields(shape, *copy);
+        copy->cubicEdges = shape.cubicEdges;
+        copy->readEdgeCount = shape.readEdgeCount;
         return copy;
     }
     case Element::Type::Group:
@@ -71,8 +79,8 @@ Element* cloneElement(const Element& element, DOMElement* parent)
         copy->colorTransform = instance.colorTransform;
         copy->blendMode = instance.blendMode;
         copy->otherSymbolType = instance.otherSymbolType;
-        copy->extraAttributes = instance.extraAttributes;
-        copy->extraChildren = instance.extraChildren;
+        copy->keepColor = instance.keepColor;
+        copy->extraFilters = instance.extraFilters;
         copy->filters = instance.filters;
         copy->symbol = instance.symbol;
         return copy;
@@ -113,6 +121,14 @@ Element* cloneElement(const Element& element, DOMElement* parent)
         copy->topRightRadius = rectangle.topRightRadius;
         copy->bottomLeftRadius = rectangle.bottomLeftRadius;
         copy->bottomRightRadius = rectangle.bottomRightRadius;
+        return copy;
+    }
+    case Element::Type::Raw:
+    {
+        const RawElement& raw = static_cast<const RawElement&>(element);
+        RawElement* copy = new RawElement(parent);
+        copyElementFields(raw, *copy);
+        copy->xml = raw.xml;
         return copy;
     }
     case Element::Type::Oval:

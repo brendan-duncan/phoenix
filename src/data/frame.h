@@ -36,21 +36,32 @@ public:
     int acceleration = 0;
     bool hasCustomEase = false;
     std::vector<Point> customEase;
+    /// The name a custom ease was saved under, as read.
+    std::string customEaseName;
+
+    /// Whether the frame had an Ease for all properties, and the ease preset
+    /// it names (quadInOut, bounceOut...; "none" or empty for the plain
+    /// Ease value).
+    bool hasEase = false;
+    std::string easeMethod;
+
+    /// Eases for one property (a target other than all), as XML text,
+    /// written back as read.
+    std::vector<std::string> otherEases;
 
     /// Rotation during a classic tween: "auto", "none", "clockwise" or
     /// "counter-clockwise", and how many extra whole turns.
     std::string motionTweenRotate;
     int motionTweenRotateTimes = 0;
 
-    /// What the reader does not model, kept so it is written back as read:
-    /// attributes such as a sound's (soundName, soundSync, inPoint44...) and
-    /// child elements such as its SoundEnvelope, as XML text.
-    std::vector<std::pair<std::string, std::string>> extraAttributes;
-
     /// A tween type Phoenix does not model ("motion object" for an object
     /// motion tween, "IK pose" for an armature's pose), kept as spelled and
     /// written back; tweenType is None for these.
     std::string otherTweenType;
+
+    /// Child elements the reader does not model, such as a sound's
+    /// SoundEnvelope, as XML text, written back as read. (A sound's
+    /// attributes, soundName, soundSync..., are among extraAttributes.)
     std::vector<std::string> extraChildren;
 
     ActionScript* actionScript = nullptr;

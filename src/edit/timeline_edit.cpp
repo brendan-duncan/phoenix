@@ -89,6 +89,11 @@ Frame* cloneFrame(const Frame& frame, Layer* parent)
     copy->acceleration = frame.acceleration;
     copy->hasCustomEase = frame.hasCustomEase;
     copy->customEase = frame.customEase;
+    copy->customEaseName = frame.customEaseName;
+    copy->hasEase = frame.hasEase;
+    copy->easeMethod = frame.easeMethod;
+    copy->otherEases = frame.otherEases;
+    copy->presentAttributes = frame.presentAttributes;
     copy->motionTweenRotate = frame.motionTweenRotate;
     copy->motionTweenRotateTimes = frame.motionTweenRotateTimes;
     copy->extraAttributes = frame.extraAttributes;
@@ -110,6 +115,8 @@ Frame* cloneFrame(const Frame& frame, Layer* parent)
             segmentCopy->strokeIndex2 = segment->strokeIndex2;
             segmentCopy->fillIndex1 = segment->fillIndex1;
             segmentCopy->fillIndex2 = segment->fillIndex2;
+            segmentCopy->extraAttributes = segment->extraAttributes;
+            segmentCopy->presentAttributes = segment->presentAttributes;
             for (const MorphCurves* curve : segment->curves)
             {
                 MorphCurves* curveCopy = new MorphCurves(segmentCopy);
@@ -117,10 +124,14 @@ Frame* cloneFrame(const Frame& frame, Layer* parent)
                 curveCopy->anchorPointA = curve->anchorPointA;
                 curveCopy->controlPointB = curve->controlPointB;
                 curveCopy->anchorPointB = curve->anchorPointB;
+                curveCopy->isLine = curve->isLine;
+                curveCopy->extraAttributes = curve->extraAttributes;
+                curveCopy->presentAttributes = curve->presentAttributes;
                 segmentCopy->curves.push_back(curveCopy);
             }
             morph->segments.push_back(segmentCopy);
         }
+        morph->hintsXml = frame.morphShape->hintsXml;
         copy->morphShape = morph;
     }
     for (const Element* element : frame.elements)

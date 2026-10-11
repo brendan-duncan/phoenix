@@ -7,6 +7,8 @@
 #include "transform.h"
 #include <vector>
 #include <map>
+#include <string>
+#include <utility>
 
 namespace fla {
 
@@ -26,6 +28,28 @@ public:
     /// merge artwork that other shapes cut into. Animate writes it as
     /// `isDrawingObject="true"` on the DOMShape.
     bool isDrawingObject = false;
+
+    /// The Edge elements carrying only cubics, the curves a pen or brush
+    /// drew as Animate's editor keeps them beside the quadratic edges it
+    /// draws, as read: each with the number of edges before it. They stand
+    /// for the edges as read, so they are written back only while those are
+    /// unedited (see cubicsStillMatch).
+    std::vector<std::pair<size_t, std::string>> cubicEdges;
+    size_t readEdgeCount = 0;
+
+    /// Whether the edges are still the ones read, so the cubics kept beside
+    /// them still describe them.
+    bool cubicsStillMatch() const
+    {
+        if (cubicEdges.empty() || edges.size() != readEdgeCount)
+            return false;
+        for (const Edge* edge : edges)
+        {
+            if (!edge || edge->data.empty())
+                return false;
+        }
+        return true;
+    }
 
     Shape(DOMElement* parent)
         : Element(parent)

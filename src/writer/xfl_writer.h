@@ -93,6 +93,10 @@ private:
     /// transformation point.
     void writeElementCommon(const Element& element, tinyxml2::XMLElement* node);
 
+    /// The attributes and children of an element kept as read, written back
+    /// once the modeled ones are.
+    void writeElementKept(const Element& element, tinyxml2::XMLElement* node);
+
     std::vector<std::string> _unsupported;
 };
 

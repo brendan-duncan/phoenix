@@ -36,9 +36,9 @@ public:
     /// Normal for it.
     std::string otherLayerType;
 
-    /// DOMLayer attributes read but not modeled (an armature's
-    /// animationType="IK pose", say), written back as they came.
-    std::vector<std::pair<std::string, std::string>> extraAttributes;
+    /// Child elements other than the frames, as XML text, written back
+    /// after them.
+    std::vector<std::string> extraChildren;
 
     std::vector<Frame*> frames;
 

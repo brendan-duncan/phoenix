@@ -21,12 +21,17 @@
 #include "../src/edit/new_document.h"
 #include "../src/parser/document_parser.h"
 #include "../src/parser/fla_parser.h"
+#include "../src/parser/zip_reader.h"
+
+#include <tinyxml2.h>
 #include "../src/writer/xfl_folder_writer.h"
 #include "../src/writer/xfl_writer.h"
 
 #include <cstdio>
 #include <cstdlib>
 #include <filesystem>
+#include <algorithm>
+#include <map>
 #include <memory>
 #include <string>
 #include <vector>
@@ -1171,4 +1176,205 @@ TEST(xfl_keeps_an_instance_script)
     const std::string written = writer.writeDocument(*document);
     CHECK(written.find("on (release) { play(); }") != std::string::npos);
     CHECK(written.find("<Actionscript>") < written.find("</DOMSymbolInstance>"));
+}
+
+namespace {
+
+/// How often each element, and each attribute on each element, occurs in a
+/// piece of XML: "Edge" and "Edge@fillStyle1". What a save loses shows up as
+/// a count that went down.
+void countXml(const tinyxml2::XMLElement* element, std::map<std::string, int>& counts,
+    std::map<std::string, std::string>& values)
+{
+    for (; element; element = element->NextSiblingElement())
+    {
+        const std::string name = element->Name();
+        // An empty list carries nothing: Animate writes some, Phoenix leaves
+        // them out.
+        const bool emptyList = (name == "media" || name == "symbols" || name == "folders") &&
+            !element->FirstChildElement() && !element->FirstAttribute();
+        if (!emptyList)
+            ++counts[name];
+        for (const tinyxml2::XMLAttribute* attribute = element->FirstAttribute(); attribute;
+             attribute = attribute->Next())
+        {
+            // A matrix entry at its identity value says nothing; Phoenix
+            // leaves those out as Animate does.
+            if (name == "Matrix")
+            {
+                const std::string entry = attribute->Name();
+                const double value = attribute->DoubleValue();
+                if (((entry == "a" || entry == "d") && value == 1.0) ||
+                    ((entry == "b" || entry == "c" || entry == "tx" || entry == "ty") && value == 0.0))
+                    continue;
+            }
+            const std::string key = name + "@" + attribute->Name();
+            ++counts[key];
+            values.emplace(key, attribute->Value());
+        }
+        countXml(element->FirstChildElement(), counts, values);
+    }
+}
+
+std::map<std::string, int> countXml(const std::string& text, std::map<std::string, std::string>& values)
+{
+    std::map<std::string, int> counts;
+    tinyxml2::XMLDocument xml;
+    if (xml.Parse(text.c_str(), text.size()) == tinyxml2::XML_SUCCESS)
+        countXml(xml.FirstChildElement(), counts, values);
+    return counts;
+}
+
+} // namespace
+
+TEST(xfl_save_keeps_every_element_and_attribute_of_real_documents)
+{
+    // Opt-in, with PHOENIX_FLA_CORPUS. The round trip above compares what
+    // Phoenix parses, so it cannot see what the parser never kept. This
+    // compares the files themselves: every file of the package comes back,
+    // and in every XML file each element and attribute occurs as often as it
+    // did. Losses are added up over the corpus and reported together.
+    const char* corpus = std::getenv("PHOENIX_FLA_CORPUS");
+    if (!corpus || !std::filesystem::exists(corpus))
+    {
+        std::printf("    skipped: set PHOENIX_FLA_CORPUS to a folder of FLA files\n");
+        return;
+    }
+    const std::filesystem::path scratch = std::filesystem::temp_directory_path() / "phoenix_keeps";
+    std::error_code ignored;
+    std::filesystem::remove_all(scratch, ignored);
+
+    struct Loss
+    {
+        int count = 0;
+        std::string example;
+    };
+    std::map<std::string, Loss> losses;
+    int checked = 0;
+
+    for (const auto& entry : std::filesystem::directory_iterator(corpus))
+    {
+        const bool folder = entry.is_directory() && std::filesystem::exists(entry.path() / "DOMDocument.xml");
+        if (!folder && !(entry.is_regular_file() && entry.path().extension() == ".fla"))
+            continue;
+        ZipReader source;
+        if (!source.open(entry.path().string()) || !source.containsFile("DOMDocument.xml"))
+            continue; // an old binary FLA, or an archive holding a folder
+        FLAParser parser;
+        std::unique_ptr<fla::FLADocument> fla(parser.parse(entry.path().string()));
+        if (!fla || !fla->document)
+            continue;
+        const std::filesystem::path out = scratch / entry.path().stem();
+        fla::XFLFolderWriter writer;
+        if (!writer.write(*fla->document, out.string()))
+            continue;
+        ZipReader written;
+        CHECK(written.open(out.string()));
+        ++checked;
+        const std::string name = entry.path().filename().string();
+        for (const std::string& file : source.getFileList())
+        {
+            if (file.empty() || file.back() == '/' || file == "bin/SymDepend.cache")
+                continue;
+            if (file.size() > 4 && file.substr(file.size() - 4) == ".xfl")
+                continue; // the marker is named after the document
+            // A folder written on Windows makes a backslash in a library path
+            // a folder of its own, where a zip would keep the name as it is.
+            std::string inFolder = file;
+            std::replace(inFolder.begin(), inFolder.end(), '\\', '/');
+            if (!written.containsFile(file) && !written.containsFile(inFolder))
+            {
+                Loss& loss = losses["file " + file.substr(0, file.find('/') + 1)];
+                ++loss.count;
+                loss.example = name + ": " + file;
+                continue;
+            }
+            if (file.size() < 4 || file.substr(file.size() - 4) != ".xml")
+                continue;
+            std::map<std::string, std::string> values;
+            std::map<std::string, std::string> writtenValues;
+            const std::map<std::string, int> before = countXml(source.readTextFile(file), values);
+            const std::map<std::string, int> after = countXml(written.readTextFile(file), writtenValues);
+            for (const auto& [key, count] : before)
+            {
+                const auto found = after.find(key);
+                const int now = found == after.end() ? 0 : found->second;
+                if (now < count)
+                {
+                    Loss& loss = losses[key];
+                    loss.count += count - now;
+                    loss.example = name + ": " + file;
+                    const auto value = values.find(key);
+                    if (value != values.end())
+                        loss.example += " (" + value->second.substr(0, 40) + ")";
+                }
+            }
+        }
+    }
+
+    std::printf("    checked %d documents\n", checked);
+    for (const auto& [key, loss] : losses)
+        std::printf("    lost on save: %s x%d (e.g. %s)\n", key.c_str(), loss.count, loss.example.c_str());
+    CHECK(checked > 0);
+    CHECK(losses.empty());
+}
+
+TEST(xfl_save_keeps_animates_defaults_and_values_as_meant)
+{
+    // Animate leaves out only its own defaults, which are not always the
+    // ones Phoenix would pick: what comes back has to mean the same to it.
+    std::unique_ptr<fla::Document> document = parseDocumentText(
+        "<DOMDocument xmlns='http://ns.adobe.com/xfl/2008/' width='550' height='400' "
+        "viewAngle3D='92.3090013472118' playOptionsPlayLoop='false' objectsSnapTo='false' gridSpacingX='18' "
+        "rulerUnitType='inches'>"
+        "<timelines><DOMTimeline name='Scene 1'><layers>"
+        "<DOMLayer name='Layer 1' color='#000000'><frames>"
+        "<DOMFrame index='0' duration='10' tweenType='motion' keyMode='22017'>"
+        "<tweens><Ease target='all' method='quadInOut'/><Ease target='position' intensity='50'/></tweens>"
+        "<elements>"
+        "<DOMStaticText selected='true' isSelectable='false'><textRuns>"
+        "<DOMTextRun><characters>kerned</characters><textAttrs><DOMTextAttrs aliasText='false' bold='true'/></textAttrs></DOMTextRun>"
+        "<DOMTextRun><characters>not</characters><textAttrs><DOMTextAttrs autoKern='false' alignment='justify'/></textAttrs></DOMTextRun>"
+        "</textRuns></DOMStaticText>"
+        "<DOMTLFText left='1'><tlfTextObject/></DOMTLFText>"
+        "<DOMShape selected='true'><transformationPoint><Point/></transformationPoint></DOMShape>"
+        "</elements></DOMFrame>"
+        "<DOMFrame index='10' keyMode='9728'><elements/></DOMFrame>"
+        "</frames></DOMLayer></layers></DOMTimeline></timelines></DOMDocument>");
+    CHECK(document != nullptr);
+    if (!document)
+        return;
+    CHECK_NEAR(document->viewAngle3D, 92.3090013472118);
+    CHECK(!document->playOptionsPlayLoop);
+    CHECK(document->playOptionsPlayPages);
+    const fla::Frame* frame = document->timelines[0]->layers[0]->frames[0];
+    CHECK(frame->easeMethod == "quadInOut");
+    CHECK(frame->elements.size() == 3);
+    if (frame->elements.size() == 3)
+    {
+        const fla::StaticText* text = static_cast<const fla::StaticText*>(frame->elements[0]);
+        CHECK(text->runs.size() == 2 && text->runs[0].autoKern && !text->runs[1].autoKern);
+        CHECK(text->runs.size() == 2 && text->runs[1].alignment == fla::TextRun::Alignment::Justify);
+        CHECK(frame->elements[1]->elementType() == fla::Element::Type::Raw);
+    }
+
+    XFLWriter writer;
+    const std::string written = writer.writeDocument(*document);
+    for (const char* kept : {"viewAngle3D=\"92.3090013472118\"", "playOptionsPlayLoop=\"false\"",
+             "objectsSnapTo=\"false\"", "gridSpacingX=\"18\"", "rulerUnitType=\"inches\"", "color=\"#000000\"",
+             "method=\"quadInOut\"", "<Ease target=\"position\" intensity=\"50\"/>", "isSelectable=\"false\"",
+             "bold=\"true\"", "autoKern=\"false\"", "alignment=\"justify\"", "<DOMTLFText left=\"1\">",
+             "<transformationPoint>"})
+    {
+        const bool found = written.find(kept) != std::string::npos;
+        if (!found)
+            std::printf("    lost on save: %s\n", kept);
+        CHECK(found);
+    }
+    // The first run kerns, Animate's default, so it says nothing about it.
+    const size_t first = written.find("kerned");
+    CHECK(first != std::string::npos && written.find("autoKern", first) > written.find("</DOMTextRun>", first));
+    // The unknown element stays between the text and the shape.
+    CHECK(written.find("<DOMTLFText") > written.find("DOMStaticText") &&
+          written.find("<DOMTLFText") < written.find("<DOMShape"));
 }

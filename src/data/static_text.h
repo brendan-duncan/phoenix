@@ -13,20 +13,29 @@ struct TextRun
     {
         Left,
         Center,
-        Right
+        Right,
+        Justify
     };
 
     std::string text;
 
     Alignment alignment = Alignment::Left;
     bool aliasText = false;
-    bool autoKern = false;
+    /// On unless the file says otherwise: Animate writes autoKern only when
+    /// it is off.
+    bool autoKern = true;
     double letterSpacing = 0.0;
     double lineHeight = 0.0;
     double size = 0.0;
     double bitmapSize = 0.0;
     std::string face;
     uint8_t fillColor[4] = {0, 0, 0, 255}; // RGBA
+
+    /// DOMTextAttrs attributes as read that Phoenix does not model (bold,
+    /// italic, lineSpacing, url...), and the names of the modeled ones the
+    /// file wrote, as DOMElement keeps them.
+    std::vector<std::pair<std::string, std::string>> extraAttributes;
+    std::vector<std::string> presentAttributes;
 };
 
 class StaticText : public Element

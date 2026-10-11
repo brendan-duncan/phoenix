@@ -67,6 +67,11 @@ struct Filter
     /// Gradient glow and bevel colors.
     std::vector<GradientEntry> entries;
 
+    /// Attributes as read that Phoenix does not model, and the names of the
+    /// modeled ones the file wrote, as DOMElement keeps them.
+    std::vector<std::pair<std::string, std::string>> extraAttributes;
+    std::vector<std::string> presentAttributes;
+
     /// The element name the file uses for this type.
     const char* elementName() const
     {

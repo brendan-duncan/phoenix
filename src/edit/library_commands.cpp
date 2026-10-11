@@ -373,6 +373,7 @@ Symbol* cloneSymbol(const Symbol& symbol, const std::string& name)
     copy->symbolType = symbol.symbolType;
     copy->otherSymbolType = symbol.otherSymbolType;
     copy->extraAttributes = symbol.extraAttributes;
+    copy->presentAttributes = symbol.presentAttributes;
     copy->scale9 = symbol.scale9;
     copy->scaleGridLeft = symbol.scaleGridLeft;
     copy->scaleGridTop = symbol.scaleGridTop;
@@ -388,6 +389,7 @@ Symbol* cloneSymbol(const Symbol& symbol, const std::string& name)
         timelineCopy->guidesX = timeline->guidesX;
         timelineCopy->guidesY = timeline->guidesY;
         timelineCopy->extraAttributes = timeline->extraAttributes;
+        timelineCopy->extraChildren = timeline->extraChildren;
         for (const Layer* layer : timeline->layers)
         {
             if (!layer)
@@ -400,6 +402,8 @@ Symbol* cloneSymbol(const Symbol& symbol, const std::string& name)
             layerCopy->layerType = layer->layerType;
             layerCopy->otherLayerType = layer->otherLayerType;
             layerCopy->extraAttributes = layer->extraAttributes;
+            layerCopy->presentAttributes = layer->presentAttributes;
+            layerCopy->extraChildren = layer->extraChildren;
             layerCopy->parentLayerIndex = layer->parentLayerIndex;
             layerCopy->autoNamed = layer->autoNamed;
             layerCopy->locked = layer->locked;

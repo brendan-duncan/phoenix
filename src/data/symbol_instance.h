@@ -34,14 +34,13 @@ public:
     /// a graphic meanwhile.
     std::string otherSymbolType;
 
-    /// DOMSymbolInstance attributes read but not modeled, written back as
-    /// they came: the referenceID an IK bone names its instance by, the 3D
-    /// center point, cacheAsBitmap, a button's trackAsMenu...
-    std::vector<std::pair<std::string, std::string>> extraAttributes;
+    /// Whether the file wrote a color element even with no effect in it, so
+    /// a save writes it back.
+    bool keepColor = false;
 
-    /// Child elements read but not modeled, as XML text, written back after
-    /// the rest: a button's or a movie clip's Actionscript...
-    std::vector<std::string> extraChildren;
+    /// Filter elements Phoenix does not know, as XML text, written back
+    /// after the others.
+    std::vector<std::string> extraFilters;
 
     /// The filters applied to the instance, in order.
     std::vector<Filter> filters;

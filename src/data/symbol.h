@@ -29,9 +29,9 @@ public:
     /// Graphic for it.
     std::string otherSymbolType;
 
-    /// DOMSymbolItem attributes read but not modeled (linkage, say),
-    /// written back as they came.
-    std::vector<std::pair<std::string, std::string>> extraAttributes;
+    /// The attributes of the Include that names the symbol in the document
+    /// (itemIcon, loadImmediate, itemID, lastModified), as read.
+    std::vector<std::pair<std::string, std::string>> includeAttributes;
 
     /// 9-slice scaling guides, in the symbol's own space: the two vertical
     /// and two horizontal lines that split it into corners that never
