@@ -33,25 +33,8 @@ constexpr int kFrameHeight = 21;
 
 enum class TransportIcon { First, Prev, Play, Stop, Next };
 
-static int getMaxFrames(const fla::FLADocument* doc)
-{
-    if (!doc || !doc->document)
-        return 0;
-    int maxFrame = 0;
-    if (const fla::Timeline* timeline = doc->document->currentScene())
-    {
-        for (const fla::Layer* layer : timeline->layers)
-        {
-            for (const fla::Frame* frame : layer->frames)
-            {
-                int endFrame = frame->index + frame->duration;
-                if (endFrame > maxFrame)
-                    maxFrame = endFrame;
-            }
-        }
-    }
-    return maxFrame + 10;
-}
+/// Columns drawn past the last frame, room to add frames into.
+static const int kSpareColumns = 10;
 
 static QIcon makeTransportIcon(TransportIcon icon, int size = 24)
 {
@@ -317,6 +300,20 @@ void TimelinesPanel::setTimeline(const fla::Timeline* timeline)
     _gridContainer->update();
 }
 
+int TimelineGrid::frameCount() const
+{
+    int count = 0;
+    for (const fla::Timeline* timeline : shownTimelines())
+    {
+        for (const fla::Layer* layer : timeline->layers)
+        {
+            for (const fla::Frame* frame : layer->frames)
+                count = std::max(count, frame->index + frame->duration);
+        }
+    }
+    return count;
+}
+
 std::vector<const fla::Timeline*> TimelineGrid::shownTimelines() const
 {
     std::vector<const fla::Timeline*> timelines;
@@ -376,7 +373,7 @@ void TimelinesPanel::onPlayStop()
     if (!_player)
         return;
     // From the end, play starts over from the first frame, as in Animate.
-    const int last = getMaxFrames(_flaDocument) - 1;
+    const int last = _gridContainer->frameCount() - 1;
     if (last > 0 && _player->currentFrame() >= last)
         _player->setCurrentFrame(0);
     if (!_playClock)
@@ -404,7 +401,7 @@ void TimelinesPanel::onTimerTick()
     if (!_player || !_playClock)
         return;
     const int due = _playStartFrame + static_cast<int>(_playClock->elapsed() * frameRate() / 1000.0);
-    const int last = std::max(0, getMaxFrames(_flaDocument) - 1);
+    const int last = std::max(0, _gridContainer->frameCount() - 1);
     // Playback stops on the last frame, as Animate's does without looping.
     if (due >= last)
     {
@@ -446,7 +443,7 @@ void TimelineGrid::updateSize()
 
     const int numRows = static_cast<int>(_rows.size());
 
-    int maxFrames = getMaxFrames(_flaDocument);
+    int maxFrames = frameCount() + kSpareColumns;
     int totalWidth = headerHeight + maxFrames * (frameWidth + 2);
     int totalHeight = headerHeight + numRows * layerRowHeight + _bottomPadding;
 
@@ -789,7 +786,7 @@ void TimelineGrid::paintEvent(QPaintEvent* event)
 
     painter.fillRect(event->rect(), background);
 
-    const int maxFrames = getMaxFrames(_flaDocument);
+    const int maxFrames = frameCount() + kSpareColumns;
     int y = headerHeight;
 
     painter.setRenderHint(QPainter::Antialiasing, true);

@@ -58,6 +58,9 @@ public:
 
     /// The selected frames, or an empty selection.
     FrameSelection selection() const;
+
+    /// How many frames the shown timeline has: where its last frame ends.
+    int frameCount() const;
     void clearSelection();
 
     /// Shows the onion skin range in the ruler.
