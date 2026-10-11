@@ -747,6 +747,17 @@ private:
 
     int calculateLayerDuration(const fla::Layer* layer);
 
+    /// The frames a symbol's timeline runs to: the end of its longest layer.
+    static int symbolLength(const fla::Symbol* symbol);
+
+    /// The frame of its symbol an instance shows, _elapsed frames into its
+    /// keyframe. A graphic runs from its first frame by its loop setting,
+    /// wrapping round the symbol (loop), stopping at its end (play once) or
+    /// holding (single frame). On Animate's stage a movie clip or a button
+    /// shows its first frame; an exported movie plays its movie clips round
+    /// and round from when they appear.
+    int symbolFrame(const fla::SymbolInstance& instance) const;
+
     /// Which frame of a layer is showing right now, and how far a tween on it
     /// has progressed. Shared by drawing and hit-testing so the two cannot
     /// disagree about what is on screen.
@@ -784,6 +795,26 @@ private:
     fla::Transform _overrideTransform;
     /// The resolved frame drawFrame is drawing, for its motion.
     const LayerFrame* _drawnState = nullptr;
+
+    /// How many frames the playhead of the timeline being drawn (or picked
+    /// in, or measured) is into the keyframe whose elements are being
+    /// visited: a graphic among them is that many frames on from its first
+    /// frame.
+    int _elapsed = 0;
+
+    /// Sets _elapsed for a frame's elements, and puts it back after.
+    struct ElapsedScope
+    {
+        int& slot;
+        int saved;
+        ElapsedScope(int& elapsed, int now)
+            : slot(elapsed)
+            , saved(elapsed)
+        {
+            slot = now;
+        }
+        ~ElapsedScope() { slot = saved; }
+    };
 
     /// Asset Warp: while a puppet instance draws its art, the pins that warp
     /// it and the painter's mapping of the puppet's own space, so each shape

@@ -978,7 +978,9 @@ PhoenixView::LayerFrame PhoenixView::resolveLayerFrame(const fla::Layer* layer,
 
     if (loopType == fla::LoopType::SingleFrame || layer->frames.empty())
     {
-        currentFrameIndex = layer->firstFrame + firstFrame;
+        // The frame asked for, as a graphic's own playhead (graphicFrame)
+        // gives it: a layer that starts later shows nothing before it does.
+        currentFrameIndex = firstFrame;
     }
     else if (loopType == fla::LoopType::Loop)
     {
@@ -998,7 +1000,7 @@ PhoenixView::LayerFrame PhoenixView::resolveLayerFrame(const fla::Layer* layer,
     }
     else // PlayOnce
     {
-        currentFrameIndex = layer->firstFrame + firstFrame + shownFrame();
+        currentFrameIndex = firstFrame + shownFrame();
     }
 
     for (const fla::Frame* frame : layer->frames)
@@ -1190,6 +1192,8 @@ void PhoenixView::drawFrame(QPainter& painter, const fla::Frame* frame, const fl
     // frame being drawn; their stored bounds are not where they show.
     const bool moving = _drawnState && _drawnState->frame == frame && motionOf(frame);
     const LayerFrame* motionState = moving ? _drawnState : nullptr;
+    // A group's members are drawn by its frame's playhead, as it is.
+    ElapsedScope elapsed(_elapsed, _drawnState && _drawnState->frame == frame ? _drawnState->offset : _elapsed);
     _drawnState = nullptr;
     const bool culling = !nextTweenFrame && !moving && painter.device()->width() > 0;
 
@@ -1275,6 +1279,51 @@ fla::Transform PhoenixView::interpolateTransform(const fla::Transform& a, const 
     return fla::blendTransforms(a, b, t, _tweenRotation, _tweenTurns);
 }
 
+int PhoenixView::symbolLength(const fla::Symbol* symbol)
+{
+    int length = 1;
+    if (!symbol)
+        return length;
+    for (const fla::Timeline* timeline : symbol->timelines)
+    {
+        for (const fla::Layer* layer : timeline ? timeline->layers : std::vector<fla::Layer*>())
+        {
+            for (const fla::Frame* frame : layer ? layer->frames : std::vector<fla::Frame*>())
+            {
+                if (frame)
+                    length = std::max(length, frame->index + std::max(frame->duration, 1));
+            }
+        }
+    }
+    return length;
+}
+
+int PhoenixView::symbolFrame(const fla::SymbolInstance& instance) const
+{
+    const int elapsed = std::max(0, _elapsed);
+    const int length = symbolLength(instance.symbol);
+    if (instance.symbolType != fla::SymbolType::Graphic)
+        return _exporting && instance.symbolType == fla::SymbolType::MovieClip ? elapsed % length : 0;
+    const int first = std::max(0, std::min(instance.firstFrame, length - 1));
+    switch (instance.loopType)
+    {
+    case fla::LoopType::SingleFrame:
+        return first;
+    case fla::LoopType::PlayOnce:
+        return std::min(first + elapsed, length - 1);
+    case fla::LoopType::PingPong:
+    {
+        if (length <= 1)
+            return 0;
+        const int period = 2 * (length - 1);
+        const int t = (first + elapsed) % period;
+        return t < length ? t : period - t;
+    }
+    default:
+        return (first + elapsed) % length;
+    }
+}
+
 int PhoenixView::calculateLayerDuration(const fla::Layer* layer)
 {
     int total = 0;
@@ -1351,12 +1400,8 @@ void PhoenixView::drawElement(QPainter& painter, const fla::Element* element, co
         {
             // A graphic plays along with the timeline it is on; on Animate's
             // stage a movie clip or a button shows its first frame.
-            const bool synced = instance->symbolType == fla::SymbolType::Graphic;
-            int frameOffset = synced ? instance->firstFrame : 0;
-            fla::LoopType loopType = synced ? instance->loopType : fla::LoopType::SingleFrame;
-            // An exported movie plays its movie clips, round and round.
-            if (_exporting && instance->symbolType == fla::SymbolType::MovieClip)
-                loopType = fla::LoopType::Loop;
+            int frameOffset = symbolFrame(*instance);
+            fla::LoopType loopType = fla::LoopType::SingleFrame;
 
             // An Asset Warp puppet shows its first frame, the art as it was
             // placed, warped by the instance's pins (between two keyframes'
@@ -2598,6 +2643,7 @@ void PhoenixView::hitTestTimeline(const fla::Timeline& timeline, fla::LoopType l
         // What is picked is what shows: the layer placed by its parent, each
         // element where its tween has it now.
         const QTransform layerToDocument = parentTransform(layer, state.frame, loopType, firstFrame) * toDocument;
+        ElapsedScope elapsed(_elapsed, state.offset);
 
         // Layers draw last to first, so the first layer is on top and this walk
         // meets the topmost first. Within a frame later elements draw over
@@ -2684,11 +2730,10 @@ void PhoenixView::hitTestElement(fla::Element& element, fla::Frame* frame,
         // clicking a symbol on the stage selects the instance, not the artwork
         // inside it. Editing the contents means entering the symbol.
         HitResult inner;
-        const bool synced = instance.symbolType == fla::SymbolType::Graphic;
         // A puppet is picked by its art as placed (its first frame).
         const bool puppet = instance.otherSymbolType == "puppet";
-        const int frameOffset = synced && !puppet ? instance.firstFrame : 0;
-        const fla::LoopType instanceLoop = synced && !puppet ? instance.loopType : fla::LoopType::SingleFrame;
+        const int frameOffset = puppet ? 0 : symbolFrame(instance);
+        const fla::LoopType instanceLoop = fla::LoopType::SingleFrame;
 
         for (const fla::Timeline* timeline : symbol->timelines)
         {
@@ -5314,9 +5359,9 @@ QRectF PhoenixView::shownLocalBounds(const fla::Element* element, int depth)
     if (element->elementType() == fla::Element::Type::SymbolInstance && depth < 16)
     {
         const fla::SymbolInstance* instance = static_cast<const fla::SymbolInstance*>(element);
-        const bool synced = instance->symbolType == fla::SymbolType::Graphic && instance->otherSymbolType != "puppet";
-        const QRectF bounds = shownSymbolBounds(instance->symbol, synced ? instance->loopType : fla::LoopType::SingleFrame,
-            synced ? instance->firstFrame : 0, depth + 1);
+        const bool puppet = instance->otherSymbolType == "puppet";
+        const QRectF bounds = shownSymbolBounds(instance->symbol, fla::LoopType::SingleFrame,
+            puppet ? 0 : symbolFrame(*instance), depth + 1);
         if (bounds.isValid())
             return bounds;
     }
@@ -5341,6 +5386,7 @@ QRectF PhoenixView::shownSymbolBounds(const fla::Symbol* symbol, fla::LoopType l
             if (!state.frame)
                 continue;
             const QTransform parent = parentTransform(layer, state.frame, loopType, firstFrame);
+            ElapsedScope elapsed(_elapsed, state.offset);
             for (size_t i = 0; i < state.frame->elements.size(); ++i)
             {
                 const fla::Element* member = state.frame->elements[i];
@@ -5378,6 +5424,7 @@ QRectF PhoenixView::shownElementBounds(const fla::Element* element)
     const auto found = std::find(frame->elements.begin(), frame->elements.end(), element);
     if (found == frame->elements.end() || element->elementType() == fla::Element::Type::Group)
         return getElementBounds(element);
+    ElapsedScope elapsed(_elapsed, state.offset);
     const QRectF local = shownLocalBounds(element, 0);
     if (!local.isValid())
         return getElementBounds(element);
