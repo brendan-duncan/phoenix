@@ -440,14 +440,19 @@ void XFLWriter::writeSymbolInstance(const SymbolInstance& instance, XMLElement* 
     if (instance.blendMode != "normal")
         setString(node, "blendMode", instance.blendMode);
 
+    // A movie clip goes without a type, as Animate writes it.
     if (!instance.otherSymbolType.empty())
         node->SetAttribute("symbolType", instance.otherSymbolType.c_str());
-    else if (instance.symbolType != SymbolType::Graphic)
+    else if (instance.symbolType != SymbolType::MovieClip)
         node->SetAttribute("symbolType", symbolTypeName(instance.symbolType));
-    if (instance.loopType != LoopType::PlayOnce)
-        node->SetAttribute("loopType", loopTypeName(instance.loopType));
+    // Animate's name for it is loop, and it writes it on every graphic
+    // instance: an instance without one is not read the same way.
+    if (instance.symbolType == SymbolType::Graphic && instance.otherSymbolType.empty())
+        node->SetAttribute("loop", loopTypeName(instance.loopType));
 
     writeElementCommon(instance, node);
+    for (const auto& attribute : instance.extraAttributes)
+        node->SetAttribute(attribute.first.c_str(), attribute.second.c_str());
 
     const ColorTransform& color = instance.colorTransform;
     const bool hasTintColor =
@@ -1100,10 +1105,10 @@ std::string XFLWriter::writeSymbol(const Symbol& symbol)
     setString(root, "name", symbol.name);
     setString(root, "itemID", symbol.itemId);
     setString(root, "lastModified", symbol.lastModified);
-    if (symbol.symbolType != SymbolType::Graphic)
-        root->SetAttribute("symbolType", symbolTypeName(symbol.symbolType));
-    else if (!symbol.otherSymbolType.empty())
+    if (!symbol.otherSymbolType.empty())
         root->SetAttribute("symbolType", symbol.otherSymbolType.c_str());
+    else if (symbol.symbolType != SymbolType::MovieClip)
+        root->SetAttribute("symbolType", symbolTypeName(symbol.symbolType));
     for (const auto& attribute : symbol.extraAttributes)
         root->SetAttribute(attribute.first.c_str(), attribute.second.c_str());
     if (symbol.scale9)

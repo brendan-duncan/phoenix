@@ -5,6 +5,7 @@
 #include "color_transform.h"
 #include "filter.h"
 #include <string>
+#include <utility>
 #include <vector>
 
 namespace fla {
@@ -32,6 +33,11 @@ public:
     /// asset), kept as spelled so it is written back; the instance draws as
     /// a graphic meanwhile.
     std::string otherSymbolType;
+
+    /// DOMSymbolInstance attributes read but not modeled, written back as
+    /// they came: the referenceID an IK bone names its instance by, the 3D
+    /// center point, cacheAsBitmap, a button's trackAsMenu...
+    std::vector<std::pair<std::string, std::string>> extraAttributes;
 
     /// The filters applied to the instance, in order.
     std::vector<Filter> filters;

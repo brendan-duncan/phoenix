@@ -1206,8 +1206,11 @@ void PhoenixView::drawElement(QPainter& painter, const fla::Element* element, co
         const fla::Symbol* symbol = instance->symbol;
         if (symbol && symbol->visible)
         {
-            int frameOffset = (instance->symbolType == fla::SymbolType::Button) ? 0 : instance->firstFrame;
-            fla::LoopType loopType = (instance->symbolType == fla::SymbolType::Button) ? fla::LoopType::SingleFrame : instance->loopType;
+            // A graphic plays along with the timeline it is on; on Animate's
+            // stage a movie clip or a button shows its first frame.
+            const bool synced = instance->symbolType == fla::SymbolType::Graphic;
+            int frameOffset = synced ? instance->firstFrame : 0;
+            fla::LoopType loopType = synced ? instance->loopType : fla::LoopType::SingleFrame;
 
             // Part way through a classic tween, the color is between the
             // two keyframes' colors.
@@ -2786,10 +2789,9 @@ void PhoenixView::hitTestElement(fla::Element& element, fla::Frame* frame,
         // clicking a symbol on the stage selects the instance, not the artwork
         // inside it. Editing the contents means entering the symbol.
         HitResult inner;
-        const int frameOffset = (instance.symbolType == fla::SymbolType::Button)
-            ? 0 : instance.firstFrame;
-        const fla::LoopType instanceLoop = (instance.symbolType == fla::SymbolType::Button)
-            ? fla::LoopType::SingleFrame : instance.loopType;
+        const bool synced = instance.symbolType == fla::SymbolType::Graphic;
+        const int frameOffset = synced ? instance.firstFrame : 0;
+        const fla::LoopType instanceLoop = synced ? instance.loopType : fla::LoopType::SingleFrame;
 
         for (const fla::Timeline* timeline : symbol->timelines)
         {
@@ -3939,13 +3941,16 @@ void PhoenixView::drawToolOverlay(QPainter& painter)
 
 void PhoenixView::drawIKBones(QPainter& painter, const fla::Frame& frame, double scale)
 {
+    // Where in the pose span the playhead is: the bones move with the poses.
+    const int into = _player ? std::max(0, std::min(_player->currentFrame() - frame.index,
+        std::max(frame.duration, 1) - 1)) : 0;
     std::vector<fla::IKBone> bones;
     for (const std::string& child : frame.extraChildren)
     {
         const size_t at = child.find('<');
         if (at != std::string::npos && child.compare(at, 7, "<IKTree") == 0)
         {
-            const std::vector<fla::IKBone> found = fla::ikBones(child);
+            const std::vector<fla::IKBone> found = fla::ikBones(child, into);
             bones.insert(bones.end(), found.begin(), found.end());
         }
     }

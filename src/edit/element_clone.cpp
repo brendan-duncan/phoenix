@@ -71,6 +71,7 @@ Element* cloneElement(const Element& element, DOMElement* parent)
         copy->colorTransform = instance.colorTransform;
         copy->blendMode = instance.blendMode;
         copy->otherSymbolType = instance.otherSymbolType;
+        copy->extraAttributes = instance.extraAttributes;
         copy->filters = instance.filters;
         copy->symbol = instance.symbol;
         return copy;

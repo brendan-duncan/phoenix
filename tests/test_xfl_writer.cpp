@@ -740,8 +740,8 @@ TEST(xfl_round_trips_symbol_instances_and_groups)
         "<DOMDocument xmlns='http://ns.adobe.com/xfl/2008/'>"
         "<timelines><DOMTimeline name='Scene 1'><layers>"
         "<DOMLayer name='Layer 1'><frames><DOMFrame index='0'><elements>"
-        "<DOMSymbolInstance libraryItemName='Hero' symbolType='movie clip' "
-        "loopType='loop' firstFrame='3'>"
+        "<DOMSymbolInstance libraryItemName='Hero' symbolType='graphic' "
+        "loop='loop' firstFrame='3'>"
         "<matrix><Matrix a='1' b='0' c='0' d='1' tx='100' ty='50'/></matrix>"
         "<transformationPoint><Point x='5' y='7'/></transformationPoint>"
         "<color><Color alphaMultiplier='0.25' brightness='0.5'/></color>"
@@ -1088,4 +1088,66 @@ TEST(ik_bones_are_kept_on_save)
             std::printf("    lost on save: the symbol's ik container type\n");
         CHECK(kind);
     }
+}
+
+TEST(ik_symbol_armatures_and_poses_are_kept_on_save)
+{
+    // Opt-in, with the corpus's ik_symbols.fla (bones joining three movie
+    // clips) and ik_poses.fla (a shape's bones posed twice, eased).
+    const char* corpus = std::getenv("PHOENIX_FLA_CORPUS");
+    if (!corpus)
+    {
+        std::printf("    skipped: set PHOENIX_FLA_CORPUS\n");
+        return;
+    }
+    const auto check = [corpus](const char* file, std::vector<const char*> kept) {
+        const std::filesystem::path source = std::filesystem::path(corpus) / file;
+        if (!std::filesystem::exists(source))
+        {
+            std::printf("    skipped: no %s\n", file);
+            return;
+        }
+        FLAParser parser;
+        std::unique_ptr<fla::FLADocument> fla(parser.parse(source.string()));
+        CHECK(fla && fla->document);
+        if (!fla || !fla->document)
+            return;
+        XFLWriter writer;
+        const std::string document = writer.writeDocument(*fla->document);
+        for (const char* text : kept)
+        {
+            const bool found = document.find(text) != std::string::npos;
+            if (!found)
+                std::printf("    %s lost on save: %s\n", file, text);
+            CHECK(found);
+        }
+    };
+    // The bones name the instances they move by referenceID, which the
+    // instances carry too.
+    check("ik_symbols.fla", {"referenceID=\"5AAD26F1-D8F0-F145-A300-F35454B87A46\" selected",
+        "name=\"ikNode_2\"", "animationSymbolMode=\"2\"", "animationFrameOffset=\"0\"",
+        "<IKTree name=\"Armature_1\"", "<Matrix a=\"0.999954223632812\" d=\"0.999954223632812\" tx=\"0.05\"/>"});
+    check("ik_poses.fla", {"poseLocations=\"0,29\"", "easeType=\"simple quadratic\"", "easeValue=\"50\"",
+        "<State duration=\"29\"", "xArray=\"15212.505720,15317.849479"});
+}
+
+TEST(symbol_instances_keep_their_attributes_and_write_loop_as_animate_does)
+{
+    std::unique_ptr<fla::Document> document = parseDocumentText(
+        "<DOMDocument xmlns='http://ns.adobe.com/xfl/2008/'>"
+        "<timelines><DOMTimeline name='Scene 1'><layers><DOMLayer name='L'><frames><DOMFrame index='0'><elements>"
+        "<DOMSymbolInstance libraryItemName='A' symbolType='graphic' referenceID='ABC-1' centerPoint3DX='12.5' cacheAsBitmap='true' loop='single frame'/>"
+        "<DOMSymbolInstance libraryItemName='B' symbolType='button' trackAsMenu='true'/>"
+        "</elements></DOMFrame></frames></DOMLayer></layers></DOMTimeline></timelines></DOMDocument>");
+    CHECK(document != nullptr);
+    if (!document)
+        return;
+    XFLWriter writer;
+    const std::string written = writer.writeDocument(*document);
+    for (const char* kept : {"referenceID=\"ABC-1\"", "centerPoint3DX=\"12.5\"", "cacheAsBitmap=\"true\"",
+             "trackAsMenu=\"true\"", "loop=\"single frame\""})
+        CHECK(written.find(kept) != std::string::npos);
+    // Animate's attribute is loop; a button has none.
+    CHECK(written.find("loopType") == std::string::npos);
+    CHECK(written.find("libraryItemName=\"B\" symbolType=\"button\" loop") == std::string::npos);
 }

@@ -733,13 +733,25 @@ bool parseSymbolInstance(const tinyxml2::XMLElement* element, fla::SymbolInstanc
 
     instance->libraryItemName = getAttribute(element, "libraryItemName");
     instance->name = getAttribute(element, "name");
+    static const char* const modeledInstance[] = {"libraryItemName", "name", "blendMode", "firstFrame",
+        "symbolType", "loop", "loopType", "isSelected", "isFloating", "lockFlag"};
+    for (const tinyxml2::XMLAttribute* attribute = element->FirstAttribute(); attribute; attribute = attribute->Next())
+    {
+        bool modeled = false;
+        for (const char* known : modeledInstance)
+            modeled = modeled || std::strcmp(known, attribute->Name()) == 0;
+        if (!modeled)
+            instance->extraAttributes.emplace_back(attribute->Name(), attribute->Value());
+    }
     instance->blendMode = getAttribute(element, "blendMode");
     // "normal" is what no blend mode means; Animate leaves it out.
     if (instance->blendMode == "normal")
         instance->blendMode.clear();
     instance->firstFrame = getIntAttribute(element, "firstFrame", 0);
 
-    std::string symbolType = getAttribute(element, "symbolType", "graphic");
+    // Animate leaves the type out for a movie clip and writes it for
+    // everything else, a graphic always with its loop.
+    std::string symbolType = getAttribute(element, "symbolType", "movie clip");
     if (symbolType == "graphic")
     {
         instance->symbolType = fla::SymbolType::Graphic;
@@ -1677,7 +1689,8 @@ bool parseSymbolInclude(const tinyxml2::XMLElement* element, fla::SymbolList* sy
     symbol->lastModified = getAttribute(root, "lastModified");
     symbol->href = href;
     {
-        const std::string type = getAttribute(root, "symbolType", "graphic");
+        // As for instances, no type is a movie clip.
+        const std::string type = getAttribute(root, "symbolType", "movie clip");
         symbol->symbolType = type == "movie clip" ? fla::SymbolType::MovieClip
             : type == "button" ? fla::SymbolType::Button : fla::SymbolType::Graphic;
         if (type != "movie clip" && type != "button" && type != "graphic")
