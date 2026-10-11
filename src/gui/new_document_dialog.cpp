@@ -171,6 +171,9 @@ NewDocumentDialog::NewDocumentDialog(QWidget* parent)
     _width->setSuffix(" px");
     _height->setRange(1, 8192);
     _height->setSuffix(" px");
+    // Typed values, as Animate's fields are: no stepping arrows.
+    _width->setButtonSymbols(QAbstractSpinBox::NoButtons);
+    _height->setButtonSymbols(QAbstractSpinBox::NoButtons);
     form->addRow("Width", _width);
     form->addRow("Height", _height);
     _frameRate->setEditable(true);
