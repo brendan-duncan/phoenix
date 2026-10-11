@@ -1,6 +1,6 @@
 # Phoenix
 
-Phoenix is 2D vector animation software compatible with Adobe Animate and Flash FLA files.
+Phoenix is 2D vector animation software.
 
 ![Phoenix](docs/phoenix.png)
 
