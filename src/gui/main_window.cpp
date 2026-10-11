@@ -180,6 +180,7 @@ MainWindow::MainWindow(const QString& initialFile, QWidget* parent)
     _zoomTool = std::make_unique<ZoomTool>();
     _lassoTool = std::make_unique<LassoTool>(_selection);
     _polygonTool = std::make_unique<LassoTool>(_selection, true);
+    _gradientTransformTool = std::make_unique<GradientTransformTool>(stack);
     _magicWandTool = std::make_unique<MagicWandTool>(_drawingStyle);
     _rotationTool = std::make_unique<RotationTool>();
     _timeScrubTool = std::make_unique<TimeScrubTool>();
@@ -1770,9 +1771,15 @@ void MainWindow::setupToolBar()
     addSlot({makeTool(ToolIcons::Tool::Subselection, "Subselection", Qt::Key_A,
         "Click a path to show its anchors, then drag anchors and handles. Shift-click adds.",
         [this]() -> Tool* { return _subselectionTool.get(); })});
-    addSlot({makeTool(ToolIcons::Tool::FreeTransform, "Free Transform", Qt::Key_Q,
-        "Scale, rotate and skew the selection by its handles.",
-        [this]() -> Tool* { return _freeTransformTool.get(); })});
+    // Animate's free transform slot: Free Transform and Gradient Transform.
+    addSlot({
+        makeTool(ToolIcons::Tool::FreeTransform, "Free Transform", Qt::Key_Q,
+            "Scale, rotate and skew the selection by its handles.",
+            [this]() -> Tool* { return _freeTransformTool.get(); }),
+        makeTool(ToolIcons::Tool::GradientTransform, "Gradient Transform", Qt::Key_F,
+            "Click a gradient or bitmap fill, then drag its handles to move, scale and turn it.",
+            [this]() -> Tool* { return _gradientTransformTool.get(); }),
+    });
     // Animate's lasso slot: the Lasso, the Polygon tool and the Magic Wand.
     addSlot({
         makeTool(ToolIcons::Tool::Lasso, "Lasso", Qt::Key_L,
@@ -2247,6 +2254,7 @@ ToolIcons::Tool MainWindow::iconForTool(const Tool* tool) const
     if (tool == _eraserTool.get()) return IconTool::Eraser;
     if (tool == _lassoTool.get()) return IconTool::Lasso;
     if (tool == _polygonTool.get()) return IconTool::PolygonLasso;
+    if (tool == _gradientTransformTool.get()) return IconTool::GradientTransform;
     if (tool == _magicWandTool.get()) return IconTool::MagicWand;
     if (tool == _rotationTool.get()) return IconTool::Rotation;
     if (tool == _timeScrubTool.get()) return IconTool::TimeScrub;

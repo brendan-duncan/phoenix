@@ -15,6 +15,7 @@ public:
         Selection,
         Subselection,
         FreeTransform,
+        GradientTransform,
         Rectangle,
         Oval,
         Line,

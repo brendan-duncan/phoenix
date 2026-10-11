@@ -343,6 +343,22 @@ void drawEraser(QPainter& painter)
     painter.restore();
 }
 
+void drawGradientTransform(QPainter& painter)
+{
+    // A square shaded from light to dark, its edge square and turning ring
+    // as the tool's handles are.
+    QLinearGradient shade(QPointF(4.0, 0.0), QPointF(17.0, 0.0));
+    shade.setColorAt(0.0, QColor(235, 235, 240));
+    shade.setColorAt(1.0, QColor(90, 90, 95));
+    painter.setPen(QPen(strokeColor(), 1.1));
+    painter.setBrush(shade);
+    painter.drawRect(QRectF(4.0, 6.0, 13.0, 13.0));
+    painter.setBrush(strokeColor());
+    painter.drawRect(QRectF(15.0, 10.5, 4.0, 4.0));
+    painter.setBrush(Qt::NoBrush);
+    painter.drawEllipse(QPointF(18.5, 4.5), 2.3, 2.3);
+}
+
 void drawPolygonLasso(QPainter& painter)
 {
     // A straight-sided loop with its corners marked, and a tail.
@@ -483,6 +499,7 @@ QPixmap render(ToolIcons::Tool tool, int size)
     case ToolIcons::Tool::InkBrush:      drawInkBrush(painter); break;
     case ToolIcons::Tool::Eraser:        drawEraser(painter); break;
     case ToolIcons::Tool::Lasso:         drawLasso(painter); break;
+    case ToolIcons::Tool::GradientTransform: drawGradientTransform(painter); break;
     case ToolIcons::Tool::PolygonLasso:  drawPolygonLasso(painter); break;
     case ToolIcons::Tool::MagicWand:     drawMagicWand(painter); break;
     case ToolIcons::Tool::Rotation:      drawRotation(painter); break;

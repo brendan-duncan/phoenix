@@ -334,6 +334,10 @@ public:
 
     void clearCaches();
 
+    /// Forgets what is cached for one shape (its paths and the brushes in
+    /// them, its bounds), for a tool changing it live.
+    void forgetShape(const fla::Shape* shape);
+
     /// Drops just the cached bounds. Transforming an element changes where it
     /// sits but not its path geometry, so the expensive path cache survives a
     /// drag.

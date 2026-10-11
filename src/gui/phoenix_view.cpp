@@ -4445,6 +4445,16 @@ void PhoenixView::clearCaches()
     ++_revision;
 }
 
+void PhoenixView::forgetShape(const fla::Shape* shape)
+{
+    _pathCache.remove(shape);
+    _boundsCache.remove(shape);
+    _artBoundsCache.remove(shape);
+    _staticValid = false;
+    ++_revision;
+    update();
+}
+
 void PhoenixView::invalidateBounds()
 {
     _boundsCache.clear();
