@@ -42,6 +42,10 @@ struct Line
     double top = 0.0;
     double ascent = 0.0;
     double height = 0.0;
+    /// Where the line starts and how wide its characters run, after the
+    /// paragraph's alignment has placed it in the box.
+    double x = 0.0;
+    double width = 0.0;
 };
 
 struct Layout

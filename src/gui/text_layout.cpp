@@ -11,6 +11,8 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdlib>
+#include <string>
 
 namespace TextLayout
 {
@@ -99,6 +101,18 @@ bool isBreak(QChar c)
     return c == QChar('\r') || c == QChar('\n');
 }
 
+/// A DOMTextAttrs attribute Phoenix keeps as read rather than models
+/// (bold, italic, lineSpacing...); empty when the run has none.
+std::string keptAttribute(const fla::TextRun& run, const char* name)
+{
+    for (const auto& attribute : run.extraAttributes)
+    {
+        if (attribute.first == name)
+            return attribute.second;
+    }
+    return std::string();
+}
+
 /// Builds the lines, remembering the fonts so the caret and drawing agree.
 class Builder
 {
@@ -120,7 +134,7 @@ public:
     {
         const double innerWidth = _text.autoExpand ? 0.0 : std::max(0.0, _text.width - 2.0 * kGutter);
         _y = _text.top + kGutter;
-        startLine(0);
+        startLine(0, 0);
 
         int offset = 0;
         for (size_t runIndex = 0; runIndex < _text.runs.size(); ++runIndex)
@@ -139,7 +153,8 @@ public:
                         consumed = 2;
                     finishLine(offset + i, consumed);
                     i += consumed;
-                    startLine(offset + i);
+                    // A break that ends the run starts a line of the next.
+                    startLine(offset + i, i < runText.length() ? runIndex : runIndex + 1);
                     continue;
                 }
 
@@ -159,16 +174,40 @@ public:
                 if (wraps)
                 {
                     finishLine(offset + i, 0);
-                    startLine(offset + i);
+                    startLine(offset + i, runIndex);
                 }
 
                 append(static_cast<int>(runIndex), offset + i, end - i, width);
                 i = end;
             }
-            noteFont(runIndex);
             offset += runText.length();
         }
         finishLine(offset, 0);
+
+        // Each line placed in the box by its paragraph's alignment: a
+        // growing box is as wide as its widest line.
+        const double room = _text.autoExpand ? _widest : innerWidth;
+        for (size_t i = 0; i < _lines.size(); ++i)
+        {
+            Line& line = _lines[i];
+            double shift = 0.0;
+            switch (_alignments[i])
+            {
+            case fla::TextRun::Alignment::Center:
+                shift = (room - line.width) / 2.0;
+                break;
+            case fla::TextRun::Alignment::Right:
+                shift = room - line.width;
+                break;
+            case fla::TextRun::Alignment::Left:
+            case fla::TextRun::Alignment::Justify:
+                break;
+            }
+            shift = std::max(0.0, shift);
+            line.x += shift;
+            for (Segment& segment : line.segments)
+                segment.x += shift;
+        }
 
         Layout result;
         result.lines = _lines;
@@ -179,11 +218,13 @@ public:
     }
 
 private:
-    void startLine(int start)
+    void startLine(int start, size_t runIndex)
     {
         _line = Line();
         _line.start = start;
         _line.top = _y;
+        _line.x = _text.left + kGutter;
+        _lineRun = runIndex;
         _x = 0.0;
         _ascent = 0.0;
         _spacing = 0.0;
@@ -191,9 +232,20 @@ private:
 
     void noteFont(size_t runIndex)
     {
-        const QFontMetricsF& fm = _metrics[std::min(runIndex, _metrics.size() - 1)];
+        const size_t index = std::min(runIndex, _metrics.size() - 1);
+        const QFontMetricsF& fm = _metrics[index];
         _ascent = std::max(_ascent, fm.ascent());
-        _spacing = std::max(_spacing, fm.lineSpacing());
+        // A run's line spacing is the room Animate leaves between lines, on
+        // top of the font's height; without one the font's own spacing
+        // stands.
+        double spacing = fm.lineSpacing();
+        if (index < _text.runs.size())
+        {
+            const std::string extra = keptAttribute(_text.runs[index], "lineSpacing");
+            if (!extra.empty())
+                spacing = fm.ascent() + fm.descent() + std::atof(extra.c_str());
+        }
+        _spacing = std::max(_spacing, spacing);
     }
 
     void append(int run, int start, int length, double width)
@@ -222,12 +274,30 @@ private:
     void finishLine(int end, int breakLength)
     {
         (void)breakLength;
+        // An empty line is as tall as the run it starts in.
         if (_line.segments.empty())
-            noteFont(_metrics.size() - 1);
+            noteFont(std::min(_lineRun, _metrics.size() - 1));
         _line.length = end - _line.start;
         _line.ascent = _ascent;
         _line.height = _spacing;
+        // Spaces a wrapped line ends on take no part in its alignment.
+        double trailing = 0.0;
+        if (!_line.segments.empty())
+        {
+            const Segment& last = _line.segments.back();
+            const QString characters = _joined.mid(last.start, last.length);
+            int spaces = 0;
+            while (spaces < characters.length() && characters[characters.length() - 1 - spaces].isSpace())
+                ++spaces;
+            if (spaces > 0)
+                trailing = _metrics[static_cast<size_t>(last.run)].horizontalAdvance(characters.right(spaces));
+        }
+        _line.width = _x - trailing;
         _lines.push_back(_line);
+        // A line takes its paragraph's alignment from the run its characters
+        // come from, or the run it starts in when it has none.
+        const size_t run = _line.segments.empty() ? _lineRun : static_cast<size_t>(_line.segments.front().run);
+        _alignments.push_back(run < _text.runs.size() ? _text.runs[run].alignment : fla::TextRun::Alignment::Left);
         _widest = std::max(_widest, _x);
         _y += _spacing;
     }
@@ -236,6 +306,9 @@ private:
     QString _joined;
     std::vector<QFontMetricsF> _metrics;
     std::vector<Line> _lines;
+    /// The alignment of each line's paragraph, from the run it starts in.
+    std::vector<fla::TextRun::Alignment> _alignments;
+    size_t _lineRun = 0;
     Line _line;
     double _x = 0.0;
     double _y = 0.0;
@@ -259,7 +332,8 @@ const Line& lineFor(const Layout& layout, int index)
 
 double xOfIndex(const fla::StaticText& text, const Line& line, int index, const QString& joined)
 {
-    double x = text.left + kGutter;
+    (void)text;
+    double x = line.x;
     for (const Segment& segment : line.segments)
     {
         x = segment.x;
@@ -279,8 +353,12 @@ QFont fontFor(const fla::TextRun& run)
 {
     const Face face = resolveFace(run.face.empty() ? QString("Arial") : QString::fromStdString(run.face));
     QFont font(face.family);
-    font.setBold(face.bold);
-    font.setItalic(face.italic);
+    // The face's own style, or Animate's faux bold and italic.
+    font.setBold(face.bold || keptAttribute(run, "bold") == "true");
+    font.setItalic(face.italic || keptAttribute(run, "italic") == "true");
+    font.setKerning(run.autoKern);
+    if (run.letterSpacing != 0.0)
+        font.setLetterSpacing(QFont::AbsoluteSpacing, run.letterSpacing);
     // Animate's size is in pixels; a point size at the screen's dpi draws
     // exactly that many.
     const double pixels = run.size > 0.0 ? run.size : 12.0;
@@ -349,7 +427,7 @@ int indexAt(const fla::StaticText& text, const QPointF& localPos)
     }
 
     int best = line->start;
-    double bestDistance = std::abs(localPos.x() - (text.left + kGutter));
+    double bestDistance = std::abs(localPos.x() - line->x);
     for (const Segment& segment : line->segments)
     {
         const QFontMetricsF fm(fontFor(text.runs[segment.run]));
