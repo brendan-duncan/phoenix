@@ -5,6 +5,9 @@ pencil/brush) to what is currently a read-only FLA parser and renderer.
 
 Status legend: `[ ]` todo · `[~]` in progress · `[x]` done
 
+Product-level parity with Animate and Harmony, export and Animate extension
+(JSFL, CEP) support are tracked in [PARITY.md](PARITY.md).
+
 ---
 
 ## 0. Groundwork
