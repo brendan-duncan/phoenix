@@ -99,6 +99,15 @@ Two bugs this turned up, both fixed:
 - `parseActionScript` read `element->GetText()` instead of
   `childElement->GetText()`, so frame ActionScript never actually loaded
 
+### Old binary FLA files
+
+- [ ] Flash CS4 and earlier saved .fla as a Microsoft compound document holding
+      an undocumented binary format, not the zip of XML that CS5 and later
+      write. Three corpus files are like that (Freya_Fairy_07.fla,
+      Yard_Sale_03.fla, Pet_Cemetery_04.fla). Reading them would mean
+      reverse-engineering that format; Animate converts them on open
+  - 2026-10-10: the reader now recognizes them by their signature and says so ("a Flash CS4 (or earlier) document ... open it in Animate and save it again") instead of failing as a broken zip, and the file named at startup is opened once the window is up, so the message is not lost behind a window that does not exist yet
+
 ### Not written back yet
 
 The writer records anything it cannot represent rather than dropping it in

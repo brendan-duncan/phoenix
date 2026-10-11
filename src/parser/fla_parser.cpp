@@ -2,12 +2,33 @@
 
 #include "document_parser.h"
 #include "zip_reader.h"
+#include <algorithm>
+#include <fstream>
 #include <iostream>
 
 using namespace fla;
 
 fla::FLADocument* FLAParser::parse(const std::string& filePath)
 {
+    // A .fla from Flash CS4 or earlier is not a zip at all but a Microsoft
+    // compound document holding a binary format, which this reader does
+    // not understand. Say so plainly rather than as a broken zip.
+    {
+        std::ifstream file(filePath, std::ios::binary);
+        unsigned char magic[8] = {};
+        if (file.read(reinterpret_cast<char*>(magic), sizeof(magic)))
+        {
+            const unsigned char compound[8] = {0xD0, 0xCF, 0x11, 0xE0, 0xA1, 0xB1, 0x1A, 0xE1};
+            if (std::equal(magic, magic + 8, compound))
+            {
+                _errorString = "This is a Flash CS4 (or earlier) document, saved in the old binary "
+                    "format, which Phoenix cannot read. Open it in Animate and save it again to "
+                    "convert it to the current format.";
+                return nullptr;
+            }
+        }
+    }
+
     ZipReader zipReader;
     if (!zipReader.open(filePath))
     {

@@ -199,11 +199,13 @@ MainWindow::MainWindow(const QString& initialFile, QWidget* parent)
 
     setAcceptDrops(true);
 
-    // The file asked for, else the one worked on last.
-    if (!initialFile.isEmpty())
-        loadFLAFile(initialFile);
-    else if (!_recentFiles.isEmpty())
-        loadFLAFile(_recentFiles.first());
+    // The file asked for, else the one worked on last. Opened once the
+    // window is up, so a message about a file that cannot be opened has a
+    // window to sit on rather than appearing before there is one.
+    const QString startFile = !initialFile.isEmpty() ? initialFile
+        : (_recentFiles.isEmpty() ? QString() : _recentFiles.first());
+    if (!startFile.isEmpty())
+        QTimer::singleShot(0, this, [this, startFile]() { loadFLAFile(startFile); });
 }
 
 namespace {
@@ -361,10 +363,11 @@ void MainWindow::loadFLAFile(const QString& filePath)
     else
     {
         adoptDocument(nullptr, QString(), QString());
-        QMessageBox::warning(this, "Failed to Load FLA",
-                           QString("Failed to load FLA file:\n%1\n\nError: %2")
-                           .arg(filePath)
-                           .arg(parser.errorString()));
+        QMessageBox::warning(this, "Cannot Open Document",
+                           QString("%1\n\n%2")
+                           .arg(QFileInfo(filePath).fileName())
+                           .arg(parser.errorString().empty() ? QString("The file could not be read.")
+                               : QString::fromStdString(parser.errorString())));
     }
 }
 
