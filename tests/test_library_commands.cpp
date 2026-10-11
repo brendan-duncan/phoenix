@@ -11,6 +11,8 @@
 #include "../src/data/timeline.h"
 #include "../src/edit/command_stack.h"
 #include "../src/edit/library_commands.h"
+#include "../src/edit/element_clone.h"
+#include "../src/data/group.h"
 
 #include <memory>
 
@@ -177,4 +179,36 @@ TEST(renaming_a_folder_takes_its_items_and_their_uses_along)
     // An item moves to the top level, or between folders.
     CHECK(fla::library::pathRenames(*document, "Props/Ball", "Ball").size() == 1);
     CHECK(fla::library::pathRenames(*document, "Props/Inner/wood.png", "Other/wood.png").size() == 1);
+}
+
+TEST(relinking_points_copied_instances_at_another_librarys_symbols)
+{
+    // A frame copied from one document keeps its instances pointing at that
+    // document's symbols; relinking points them at the next one's, or at
+    // nothing when it has no symbol of that name.
+    fla::SymbolList first(nullptr);
+    fla::SymbolList second(nullptr);
+    fla::Symbol* ballInFirst = new fla::Symbol(&first);
+    ballInFirst->name = "Ball";
+    first.symbols.push_back(ballInFirst);
+    first.symbolMap["Ball"] = ballInFirst;
+    fla::Symbol* ballInSecond = new fla::Symbol(&second);
+    ballInSecond->name = "Ball";
+    second.symbols.push_back(ballInSecond);
+    second.symbolMap["Ball"] = ballInSecond;
+
+    fla::Group group(nullptr);
+    fla::SymbolInstance* ball = new fla::SymbolInstance(&group);
+    ball->libraryItemName = "Ball";
+    ball->symbol = ballInFirst;
+    fla::SymbolInstance* box = new fla::SymbolInstance(&group);
+    box->libraryItemName = "Box";
+    box->symbol = ballInFirst;
+    group.members = {ball, box};
+
+    fla::relinkSymbols(group, nullptr);
+    CHECK(ball->symbol == nullptr && box->symbol == nullptr);
+    fla::relinkSymbols(group, &second);
+    CHECK(ball->symbol == ballInSecond);
+    CHECK(box->symbol == nullptr);
 }

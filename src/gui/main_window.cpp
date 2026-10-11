@@ -290,8 +290,10 @@ void MainWindow::releaseDocument()
         _libraryPanel->setDocument(nullptr);
 
     // The selection and the undo history both point into the document, so both
-    // have to let go before it is deleted.
+    // have to let go before it is deleted. So do the copied frames' symbol
+    // instances; a paste points them at the next document's symbols.
     _selection.clear();
+    relinkFrameClipboard(nullptr);
     _editContext.setDocument(nullptr);
 
     if (_flaDocument)
@@ -778,6 +780,21 @@ void MainWindow::cutFrames()
     });
 }
 
+void MainWindow::relinkFrameClipboard(const fla::SymbolList* library)
+{
+    for (const auto& spans : _frameClipboard)
+    {
+        for (const auto& frame : spans)
+        {
+            for (fla::Element* element : frame->elements)
+            {
+                if (element)
+                    fla::relinkSymbols(*element, library);
+            }
+        }
+    }
+}
+
 void MainWindow::pasteFrames()
 {
     if (_frameClipboard.empty())
@@ -805,6 +822,10 @@ void MainWindow::pasteFrames()
     }
     if (targets.empty())
         return;
+
+    // The copies may come from another document: their instances are
+    // pointed at this one's symbols before they are pasted.
+    relinkFrameClipboard(_flaDocument && _flaDocument->document ? _flaDocument->document->symbolList : nullptr);
 
     std::vector<std::vector<const fla::Frame*>> clips;
     for (const auto& spans : _frameClipboard)

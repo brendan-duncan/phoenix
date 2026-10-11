@@ -341,6 +341,10 @@ private:
     /// Frames copied with Copy Frames, one list of spans per layer copied,
     /// top layer first, each numbered from 0.
     std::vector<std::vector<std::unique_ptr<fla::Frame>>> _frameClipboard;
+
+    /// Points the copied frames' symbol instances at \a library's symbols
+    /// (at nothing for null).
+    void relinkFrameClipboard(const fla::SymbolList* library);
     QAction* _onionSkinAction = nullptr;
 
     /// Plays the document's sounds with the timeline.

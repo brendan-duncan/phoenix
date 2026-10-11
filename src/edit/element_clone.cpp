@@ -14,6 +14,7 @@
 #include "../data/shape.h"
 #include "../data/static_text.h"
 #include "../data/symbol_instance.h"
+#include "../data/symbol_list.h"
 #include "shape_merge.h"
 #include <cstdint>
 
@@ -278,6 +279,29 @@ void setTextContents(StaticText& target, const StaticText& source)
     target.runs = source.runs;
     target.localBounds = source.localBounds;
     target.bounds = source.bounds;
+}
+
+void relinkSymbols(Element& element, const SymbolList* library)
+{
+    if (element.elementType() == Element::Type::SymbolInstance)
+    {
+        SymbolInstance& instance = static_cast<SymbolInstance&>(element);
+        instance.symbol = nullptr;
+        if (library)
+        {
+            const auto found = library->symbolMap.find(instance.libraryItemName);
+            if (found != library->symbolMap.end())
+                instance.symbol = found->second;
+        }
+    }
+    else if (element.elementType() == Element::Type::Group)
+    {
+        for (Element* member : static_cast<Group&>(element).members)
+        {
+            if (member)
+                relinkSymbols(*member, library);
+        }
+    }
 }
 
 } // namespace fla
