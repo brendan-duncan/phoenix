@@ -11,14 +11,18 @@ FetchContent_MakeAvailable(libas3)
 add_library(libas3 INTERFACE)
 add_dependencies(libas3 as3_parser)
 
-project(Phoenix VERSION 0.1.0 LANGUAGES C CXX)
+project(Phoenix VERSION 0.2.0 LANGUAGES C CXX)
 
 # The version shown in the app and given to the installer. A release build
 # passes the tag's version (-DPHOENIX_VERSION=1.2.3).
-set(PHOENIX_VERSION "${PROJECT_VERSION}" CACHE STRING "Phoenix version")
+if(NOT PHOENIX_VERSION)
+    set(PHOENIX_VERSION "${PROJECT_VERSION}")
+endif()
 if(NOT PHOENIX_VERSION MATCHES "^[0-9]+\\.[0-9]+\\.[0-9]+")
     message(FATAL_ERROR "PHOENIX_VERSION must start with major.minor.patch, not '${PHOENIX_VERSION}'")
 endif()
+# Read by tools/release/pack.py, to check that it packs the version it says.
+file(WRITE "${CMAKE_BINARY_DIR}/phoenix_version.txt" "${PHOENIX_VERSION}")
 
 set(CMAKE_AUTOUIC ON)
 set(CMAKE_AUTOMOC ON)
@@ -295,17 +299,36 @@ set(SOURCES
 
 qt6_standard_project_setup()
 
+# The version without a pre-release suffix, for the places that only take
+# numbers: the Windows version resource and the macOS bundle version.
+string(REGEX MATCH "^([0-9]+)\\.([0-9]+)\\.([0-9]+)" _ "${PHOENIX_VERSION}")
+set(PHOENIX_VERSION_MAJOR ${CMAKE_MATCH_1})
+set(PHOENIX_VERSION_MINOR ${CMAKE_MATCH_2})
+set(PHOENIX_VERSION_PATCH ${CMAKE_MATCH_3})
+set(PHOENIX_VERSION_NUMERIC "${CMAKE_MATCH_1}.${CMAKE_MATCH_2}.${CMAKE_MATCH_3}")
+
 # The icon and version stamped into Phoenix.exe.
 if(WIN32)
-    string(REGEX MATCH "^([0-9]+)\\.([0-9]+)\\.([0-9]+)" _ "${PHOENIX_VERSION}")
-    set(PHOENIX_VERSION_MAJOR ${CMAKE_MATCH_1})
-    set(PHOENIX_VERSION_MINOR ${CMAKE_MATCH_2})
-    set(PHOENIX_VERSION_PATCH ${CMAKE_MATCH_3})
     configure_file(src/phoenix.rc.in ${CMAKE_CURRENT_BINARY_DIR}/phoenix.rc @ONLY)
     list(APPEND SOURCES ${CMAKE_CURRENT_BINARY_DIR}/phoenix.rc)
 endif()
 
 qt6_add_executable(Phoenix MANUAL_FINALIZATION ${SOURCES} ${HEADERS})
+
+# On macOS, Phoenix.app with its icon. The bundle identifier is how macOS
+# knows the app, so it must not change.
+if(APPLE)
+    set(PHOENIX_ICNS ${CMAKE_CURRENT_SOURCE_DIR}/src/phoenix.icns)
+    target_sources(Phoenix PRIVATE ${PHOENIX_ICNS})
+    set_source_files_properties(${PHOENIX_ICNS} PROPERTIES MACOSX_PACKAGE_LOCATION Resources)
+    set_target_properties(Phoenix PROPERTIES
+        MACOSX_BUNDLE TRUE
+        MACOSX_BUNDLE_BUNDLE_NAME Phoenix
+        MACOSX_BUNDLE_GUI_IDENTIFIER com.brendanduncan.phoenix
+        MACOSX_BUNDLE_ICON_FILE phoenix.icns
+        MACOSX_BUNDLE_BUNDLE_VERSION ${PHOENIX_VERSION_NUMERIC}
+        MACOSX_BUNDLE_SHORT_VERSION_STRING ${PHOENIX_VERSION_NUMERIC})
+endif()
 
 target_link_libraries(Phoenix PRIVATE Qt6::Widgets Qt6::Svg zlibstatic tinyxml2 libas3)
 target_compile_definitions(Phoenix PRIVATE PHOENIX_VERSION="${PHOENIX_VERSION}")
