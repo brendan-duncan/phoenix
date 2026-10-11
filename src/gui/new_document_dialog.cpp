@@ -220,12 +220,12 @@ NewDocumentDialog::NewDocumentDialog(QWidget* parent)
     connect(_height, &QSpinBox::valueChanged, this, edited);
     connect(_frameRate, &QComboBox::currentTextChanged, this, edited);
 
-    // Start where the last document was made.
+    // Start where the last document was made; the first time, at HD 1080p.
     QSettings settings;
-    const QString category = settings.value("newDocument/category", "Character Animation").toString();
+    const QString category = settings.value("newDocument/category", "Advanced").toString();
     const int width = settings.value("newDocument/width", 1920).toInt();
     const int height = settings.value("newDocument/height", 1080).toInt();
-    const double rate = settings.value("newDocument/frameRate", 24.0).toDouble();
+    const double rate = settings.value("newDocument/frameRate", 30.0).toDouble();
     _stageColor = QColor(settings.value("newDocument/stageColor", "#FFFFFF").toString());
     if (!_stageColor.isValid())
         _stageColor = Qt::white;

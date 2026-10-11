@@ -1391,6 +1391,7 @@ laid out for convenience rather than to match Animate.
 - [x] **New Document dialog.** File > New made a 1920x1080 document at
       24 fps with no choice; Animate asks, with presets by purpose
   - Done 2026-10-10 (`src/gui/new_document_dialog.cpp`): categories down the left (Character Animation, Social, Game, Education, Ads, Web, Advanced) with Animate's presets as tiles drawn in the stage's shape (Full HD, HD, 4K, Standard, Instagram, Story, ad sizes, PAL, NTSC, 23.976 film and more), and details on the right: width, height, a frame rate list that also takes a typed rate, and the stage color. Picking a tile fills in the details; editing them shows Custom; double-clicking a tile creates straight away. The last choice is remembered, and the new stage is fitted to the view. Checked on screen: Social > Instagram Story, then Advanced > 4K UHD created a 3840 x 2160 document at 30 fps
+  - Done 2026-10-11: the dialog opens on the last document created (category, size, frame rate and stage color); the first time, it opens on HD 1080p (1920x1080 at 30 fps) under Advanced rather than Character Animation's Full HD at 24 fps. Checked on screen with the saved settings cleared and with them in place
 
 ### Timeline editing, onion skin, library
 
