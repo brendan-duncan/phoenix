@@ -35,6 +35,7 @@
 #include "../edit/transform_blend.h"
 #include "../edit/tween_ease.h"
 #include "../edit/shape_tween.h"
+#include "../edit/ik_pose.h"
 #include "../geom/fill_tracing.h"
 #include "../edit/frame_commands.h"
 #include "../geom/curve.h"
@@ -3857,18 +3858,32 @@ void PhoenixView::drawToolOverlay(QPainter& painter)
             painter.drawRect(bounds);
         }
 
-        // The bones of an armature whose shape or instances are selected,
-        // as Animate shows them, once for each pose frame.
-        std::vector<const fla::Frame*> armatures;
+        painter.restore();
+    }
+
+    // The bones of every armature on show, as Animate shows them on an
+    // armature layer, ready to be dragged into a pose; and of one whose
+    // shape or instances are selected, once for each pose frame.
+    std::vector<const fla::Frame*> armatures;
+    if (!_player || !_player->isPlaying())
+    {
+        for (const auto& entry : armatureFrames())
+            armatures.push_back(entry.first);
+    }
+    if (_selection)
+    {
         for (fla::DOMElement* selected : _selection->elements())
         {
             const fla::Frame* frame = owningFrame(selected);
             if (frame && std::find(armatures.begin(), armatures.end(), frame) == armatures.end())
                 armatures.push_back(frame);
         }
+    }
+    if (!armatures.empty())
+    {
+        painter.save();
         for (const fla::Frame* frame : armatures)
             drawIKBones(painter, *frame, scale);
-
         painter.restore();
     }
 
@@ -3880,6 +3895,82 @@ void PhoenixView::drawToolOverlay(QPainter& painter)
     }
 }
 
+
+std::vector<std::pair<fla::Frame*, int>> PhoenixView::armatureFrames() const
+{
+    std::vector<std::pair<fla::Frame*, int>> found;
+    if (!_flaDocument || !_flaDocument->document)
+        return found;
+    const int current = _player ? _player->currentFrame() : 0;
+    for (const fla::Timeline* timeline : editableTimelines())
+    {
+        if (!timeline || !timeline->visible)
+            continue;
+        for (fla::Layer* layer : timeline->layers)
+        {
+            if (!layer || !layer->isVisible())
+                continue;
+            for (fla::Frame* frame : layer->frames)
+            {
+                if (!frame || current < frame->index || current >= frame->index + std::max(frame->duration, 1))
+                    continue;
+                for (const std::string& child : frame->extraChildren)
+                {
+                    const size_t at = child.find('<');
+                    if (at != std::string::npos && child.compare(at, 7, "<IKTree") == 0)
+                    {
+                        found.emplace_back(frame, current - frame->index);
+                        break;
+                    }
+                }
+            }
+        }
+    }
+    return found;
+}
+
+PhoenixView::IKBoneHit PhoenixView::ikBoneAt(const QPointF& documentPos) const
+{
+    IKBoneHit best;
+    double bestDistance = 8.0 / std::max(_zoom, 1.0e-6);
+    for (const auto& entry : armatureFrames())
+    {
+        fla::Frame* frame = entry.first;
+        for (size_t child = 0; child < frame->extraChildren.size(); ++child)
+        {
+            fla::IKArmature armature;
+            if (!armature.parse(frame->extraChildren[child]))
+                continue;
+            const std::vector<fla::IKJoint> joints = armature.shownAt(entry.second);
+            for (size_t i = 0; i < joints.size(); ++i)
+            {
+                const int parent = joints[i].parent;
+                if (parent < 0)
+                    continue;
+                const QPointF head(joints[parent].position.x, joints[parent].position.y);
+                const QPointF tail(joints[i].position.x, joints[i].position.y);
+                const QPointF along = tail - head;
+                const double length2 = QPointF::dotProduct(along, along);
+                double t = length2 > 0.0 ? QPointF::dotProduct(documentPos - head, along) / length2 : 0.0;
+                t = std::max(0.0, std::min(1.0, t));
+                const QPointF nearest = head + along * t;
+                const double distance = std::hypot(documentPos.x() - nearest.x(), documentPos.y() - nearest.y());
+                if (distance <= bestDistance)
+                {
+                    bestDistance = distance;
+                    best.frame = frame;
+                    best.child = child;
+                    best.joint = static_cast<int>(i);
+                    best.into = entry.second;
+                    best.tail = tail;
+                    const fla::Layer* layer = dynamic_cast<const fla::Layer*>(frame->parent);
+                    best.locked = layer && layer->locked;
+                }
+            }
+        }
+    }
+    return best;
+}
 
 void PhoenixView::drawIKBones(QPainter& painter, const fla::Frame& frame, double scale)
 {

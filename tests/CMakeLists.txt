@@ -65,6 +65,7 @@ set(TEST_CORE_SOURCES
     ${PHOENIX_SRC}/edit/shape_recognition.cpp
     ${PHOENIX_SRC}/edit/path_tidy.cpp
     ${PHOENIX_SRC}/edit/shape_tween.cpp
+    ${PHOENIX_SRC}/edit/ik_pose.cpp
     ${PHOENIX_SRC}/edit/frame_commands.cpp
     ${PHOENIX_SRC}/edit/layer_commands.cpp
     ${PHOENIX_SRC}/edit/timeline_edit.cpp
@@ -110,6 +111,7 @@ set(TEST_SOURCES
     test_brush_stroke.cpp
     test_magic_wand.cpp
     test_ik_tree.cpp
+    test_ik_pose.cpp
     test_fill_tracing.cpp
     test_motion_object.cpp
     test_asset_warp.cpp

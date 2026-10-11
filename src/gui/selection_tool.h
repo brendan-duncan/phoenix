@@ -2,6 +2,7 @@
 
 #include "cursors.h"
 #include "edge_bend.h"
+#include "ik_poser.h"
 #include "tool.h"
 
 #include "../data/transform.h"
@@ -132,6 +133,8 @@ private:
 
     /// Reshaping an unselected shape's outline.
     EdgeBender _bender;
+    /// Dragging a bone of an armature into a pose.
+    IKPoser _poser;
 
     /// Where and on what the bend gesture began, so a press on an outline that
     /// never moves can turn into a click that selects the stroke or fill.

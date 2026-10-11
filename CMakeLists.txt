@@ -88,6 +88,7 @@ set(HEADERS
     src/gui/magic_wand_tool.h
     src/gui/gradient_transform_tool.h
     src/gui/anchor_point_tool.h
+    src/gui/ik_poser.h
     src/gui/movie_export.h
     src/gui/selection_targets.h
     src/gui/navigation_tools.h
@@ -173,6 +174,7 @@ set(HEADERS
     src/edit/shape_recognition.h
     src/edit/path_tidy.h
     src/edit/shape_tween.h
+    src/edit/ik_pose.h
     src/edit/frame_commands.h
     src/edit/layer_commands.h
     src/edit/timeline_edit.h
@@ -217,6 +219,7 @@ set(SOURCES
     src/gui/magic_wand_tool.cpp
     src/gui/gradient_transform_tool.cpp
     src/gui/anchor_point_tool.cpp
+    src/gui/ik_poser.cpp
     src/gui/movie_export.cpp
     src/gui/navigation_tools.cpp
     src/gui/draw_placement.cpp
@@ -298,6 +301,7 @@ set(SOURCES
     src/edit/shape_recognition.cpp
     src/edit/path_tidy.cpp
     src/edit/shape_tween.cpp
+    src/edit/ik_pose.cpp
     src/edit/frame_commands.cpp
     src/edit/layer_commands.cpp
     src/edit/timeline_edit.cpp

@@ -86,6 +86,11 @@ bool SelectionTool::mousePress(PhoenixView& view, QMouseEvent* event, const QPoi
     _removeOnRelease = false;
     _duplicated = false;
 
+    // A bone of an armature on show poses it, as on Animate's armature
+    // layers, rather than picking what is under it.
+    if (!_additive && _poser.begin(view, documentPos))
+        return true;
+
     const HitResult hit = view.hitTest(documentPos, view.pickTolerance());
 
     if (hit)
@@ -155,6 +160,13 @@ bool SelectionTool::mousePress(PhoenixView& view, QMouseEvent* event, const QPoi
 
 bool SelectionTool::mouseMove(PhoenixView& view, QMouseEvent* event, const QPointF& documentPos)
 {
+    if (_poser.active())
+    {
+        if (event->buttons() & Qt::LeftButton)
+            _poser.drag(view, documentPos);
+        return true;
+    }
+
     if (_bender.active())
     {
         _bender.update(view, documentPos);
@@ -188,6 +200,12 @@ bool SelectionTool::mouseRelease(PhoenixView& view, QMouseEvent* event, const QP
 {
     if (event->button() != Qt::LeftButton)
         return false;
+
+    if (_poser.active())
+    {
+        _poser.finish(view, _commandStack);
+        return true;
+    }
 
     if (_bender.active())
     {
@@ -406,6 +424,8 @@ void SelectionTool::deactivate(PhoenixView& view)
 {
     _hoverKind = Cursors::Kind::Arrow;
 
+    if (_poser.active())
+        _poser.cancel(view);
     if (_bender.active())
         _bender.cancel(view);
 

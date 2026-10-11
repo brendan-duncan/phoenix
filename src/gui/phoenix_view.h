@@ -338,6 +338,31 @@ public:
     /// them, its bounds), for a tool changing it live.
     void forgetShape(const fla::Shape* shape);
 
+    /// The pose frames of IK armatures the editable timelines show at the
+    /// playhead, on visible layers, with how far into each pose span it is.
+    std::vector<std::pair<fla::Frame*, int>> armatureFrames() const;
+
+    /// A bone under the cursor, for dragging an armature into a new pose.
+    struct IKBoneHit
+    {
+        fla::Frame* frame = nullptr;
+        /// Which of the frame's extraChildren holds the IKTree.
+        size_t child = 0;
+        /// The joint at the bone's tail, as IKArmature numbers them.
+        int joint = -1;
+        /// Frames into the pose span.
+        int into = 0;
+        /// Where the tail joint is shown.
+        QPointF tail;
+        bool locked = false;
+
+        explicit operator bool() const { return frame != nullptr; }
+    };
+
+    /// The bone of a shown armature nearest \a documentPos, within a few
+    /// screen pixels.
+    IKBoneHit ikBoneAt(const QPointF& documentPos) const;
+
     /// Drops just the cached bounds. Transforming an element changes where it
     /// sits but not its path geometry, so the expensive path cache survives a
     /// drag.
