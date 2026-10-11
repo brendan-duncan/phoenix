@@ -1002,7 +1002,80 @@ PhoenixView::LayerFrame PhoenixView::resolveLayerFrame(const fla::Layer* layer,
     state.frame = currentFrame;
     state.tweenFrame = nextTweenFrame;
     state.tweenProgress = tweenProgress;
+    state.offset = currentFrame ? std::max(0, currentFrameIndex - currentFrame->index) : 0;
     return state;
+}
+
+const fla::MotionObject* PhoenixView::motionOf(const fla::Frame* frame)
+{
+    if (!frame || frame->otherTweenType != "motion object")
+        return nullptr;
+    const std::string* xml = nullptr;
+    for (const std::string& child : frame->extraChildren)
+    {
+        const size_t at = child.find('<');
+        if (at != std::string::npos && child.compare(at, 16, "<motionObjectXML") == 0)
+            xml = &child;
+    }
+    if (!xml)
+        return nullptr;
+    auto& entry = _motionCache[frame];
+    if (!entry.second || entry.first != *xml)
+    {
+        auto motion = std::make_shared<fla::MotionObject>();
+        entry.first = *xml;
+        entry.second = motion->parse(*xml) ? motion : nullptr;
+    }
+    return entry.second.get();
+}
+
+fla::Transform PhoenixView::shownTransform(const LayerFrame& state, size_t elementIndex)
+{
+    if (!state.frame || elementIndex >= state.frame->elements.size() || !state.frame->elements[elementIndex])
+        return fla::Transform();
+    const fla::Element* element = state.frame->elements[elementIndex];
+    if (const fla::MotionObject* motion = motionOf(state.frame))
+    {
+        const double rate = _flaDocument && _flaDocument->document && _flaDocument->document->frameRate > 0.0
+            ? _flaDocument->document->frameRate : 24.0;
+        return fla::applyMotion(element->transform, element->transformationPoint, motion->at(0.0, rate),
+            motion->at(state.offset, rate));
+    }
+    if (state.tweenFrame && elementIndex < state.tweenFrame->elements.size() && state.tweenFrame->elements[elementIndex])
+        return interpolateTransform(element->transform, state.tweenFrame->elements[elementIndex]->transform,
+            state.tweenProgress);
+    return element->transform;
+}
+
+QTransform PhoenixView::parentTransform(const fla::Layer* layer, const fla::Frame* frame, fla::LoopType loopType,
+    int firstFrame, int depth)
+{
+    if (!layer || !frame || depth > 16)
+        return QTransform();
+    int rig = -1;
+    for (const auto& attribute : frame->extraAttributes)
+        if (attribute.first == "parentLayerIndex")
+            rig = std::atoi(attribute.second.c_str());
+    const fla::Timeline* timeline = dynamic_cast<const fla::Timeline*>(layer->parent);
+    if (rig < 0 || !timeline)
+        return QTransform();
+    for (const fla::Layer* candidate : timeline->layers)
+    {
+        if (!candidate || candidate == layer)
+            continue;
+        bool match = false;
+        for (const auto& attribute : candidate->extraAttributes)
+            match = match || (attribute.first == "layerRiggingIndex" && std::atoi(attribute.second.c_str()) == rig);
+        if (!match)
+            continue;
+        const LayerFrame parent = resolveLayerFrame(candidate, loopType, firstFrame);
+        if (!parent.frame || parent.frame->elements.empty())
+            return QTransform();
+        const fla::Transform t = shownTransform(parent, 0);
+        return QTransform(t.m11, t.m12, t.m21, t.m22, t.tx, t.ty) *
+            parentTransform(candidate, parent.frame, loopType, firstFrame, depth + 1);
+    }
+    return QTransform();
 }
 
 void PhoenixView::drawLayer(QPainter& painter, const fla::Layer* layer, fla::LoopType loopType, int firstFrame, const QPixmap* maskPixmap)
@@ -1026,7 +1099,20 @@ void PhoenixView::drawLayer(QPainter& painter, const fla::Layer* layer, fla::Loo
 
     if (state.frame && state.frame->visible)
     {
+        // A parented layer's content sits in its parent's element's space.
+        const QTransform parent = parentTransform(layer, state.frame, loopType, firstFrame);
+        const bool parented = !parent.isIdentity();
+        if (parented)
+        {
+            painter.save();
+            painter.setTransform(parent, true);
+        }
+        const LayerFrame* savedState = _drawnState;
+        _drawnState = &state;
         drawFrame(painter, state.frame, state.tweenFrame, state.tweenProgress);
+        _drawnState = savedState;
+        if (parented)
+            painter.restore();
     }
 
     _outlineColor = previousOutline;
@@ -1062,7 +1148,12 @@ void PhoenixView::drawFrame(QPainter& painter, const fla::Frame* frame, const fl
     // too small to show. Bounds are cached, so this is cheap, and the test
     // is skipped while a tween runs since the bounds move with it.
     const QRectF deviceRect(0, 0, painter.device()->width(), painter.device()->height());
-    const bool culling = !nextTweenFrame && painter.device()->width() > 0;
+    // An object motion tween moves its elements by its curves, from the
+    // frame being drawn; their stored bounds are not where they show.
+    const bool moving = _drawnState && _drawnState->frame == frame && motionOf(frame);
+    const LayerFrame* motionState = moving ? _drawnState : nullptr;
+    _drawnState = nullptr;
+    const bool culling = !nextTweenFrame && !moving && painter.device()->width() > 0;
 
     struct Depth
     {
@@ -1125,7 +1216,16 @@ void PhoenixView::drawFrame(QPainter& painter, const fla::Frame* frame, const fl
                 }
             }
             if (!skip)
+            {
+                if (motionState)
+                {
+                    _overrideElement = element;
+                    _overrideTransform = shownTransform(*motionState, static_cast<size_t>(nextElementIndex));
+                    nextElement = nullptr;
+                }
                 drawElement(painter, element, nextElement, tweenProgress);
+                _overrideElement = nullptr;
+            }
         }
 
         nextElementIndex++;
@@ -1162,7 +1262,12 @@ void PhoenixView::drawElement(QPainter& painter, const fla::Element* element, co
     }
 
     fla::Transform transform = element->transform;
-    if (tweenElement)
+    if (element == _overrideElement)
+    {
+        transform = _overrideTransform;
+        _overrideElement = nullptr;
+    }
+    else if (tweenElement)
     {
         transform = interpolateTransform(element->transform, tweenElement->transform, tweenProgress);
     }

@@ -8,6 +8,7 @@
 #include "../data/shape.h"
 #include "../data/symbol.h"
 #include "../edit/brush_stroke.h"
+#include "../edit/motion_object.h"
 
 #include <QList>
 #include <QMap>
@@ -740,9 +741,35 @@ private:
         const fla::Frame* frame = nullptr;
         const fla::Frame* tweenFrame = nullptr;
         double tweenProgress = 0.0;
+        /// How many frames into the keyframe's span the shown frame is.
+        int offset = 0;
     };
 
     LayerFrame resolveLayerFrame(const fla::Layer* layer, fla::LoopType loopType, int firstFrame);
+
+    /// The transform an element of a resolved frame shows with: an object
+    /// motion tween's (read from the frame's motionObjectXML), a classic
+    /// tween's in-between, or its own.
+    fla::Transform shownTransform(const LayerFrame& state, size_t elementIndex);
+
+    /// The parsed motion of a frame with an object motion tween, kept per
+    /// frame; null when it has none.
+    const fla::MotionObject* motionOf(const fla::Frame* frame);
+    std::map<const fla::Frame*, std::pair<std::string, std::shared_ptr<fla::MotionObject>>> _motionCache;
+
+    /// Layer parenting: the transform a layer's content is placed by, its
+    /// parent layer's element as shown, through its own parent in turn.
+    /// Identity for a layer with no parent. A frame names its parent by the
+    /// parent layer's layerRiggingIndex.
+    QTransform parentTransform(const fla::Layer* layer, const fla::Frame* frame, fla::LoopType loopType,
+        int firstFrame, int depth = 0);
+
+    /// An element drawn with a transform other than its own (an object
+    /// motion tween's), set while that element is drawn.
+    const fla::Element* _overrideElement = nullptr;
+    fla::Transform _overrideTransform;
+    /// The resolved frame drawFrame is drawing, for its motion.
+    const LayerFrame* _drawnState = nullptr;
 
     /// Draws a shape, or, part way through a shape tween to \a tweenShape,
     /// the morph between them. \a ownTransform is the element's transform
