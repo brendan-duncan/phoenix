@@ -145,3 +145,48 @@ TEST(edit_frames_command_undoes_and_redoes_and_keeps_removed_frames)
     stack.redo();
     CHECK(spans(*layer, {{0, 3}, {3, 2}}));
 }
+
+TEST(copy_frames_cuts_spans_to_the_range)
+{
+    std::unique_ptr<fla::Layer> layer = twoSpans();
+    std::vector<fla::Frame*> copies = fla::timeline::copyFrames(*layer, 3, 6);
+    // Frames 3-4 of the first span and 5-6 of the second, numbered from 0.
+    CHECK(copies.size() == 2);
+    if (copies.size() == 2)
+    {
+        CHECK(copies[0]->index == 0 && copies[0]->duration == 2 && copies[0]->elements.size() == 1);
+        CHECK(copies[1]->index == 2 && copies[1]->duration == 2);
+    }
+    for (fla::Frame* frame : copies)
+        delete frame;
+
+    // Past the end of the layer a blank span covers the rest.
+    copies = fla::timeline::copyFrames(*layer, 8, 12);
+    CHECK(copies.size() == 2);
+    if (copies.size() == 2)
+        CHECK(copies[1]->index == 2 && copies[1]->duration == 3 && copies[1]->elements.empty());
+    for (fla::Frame* frame : copies)
+        delete frame;
+}
+
+TEST(paste_frames_replaces_what_was_there)
+{
+    std::unique_ptr<fla::Layer> layer = twoSpans();
+    std::vector<fla::Frame*> copies = fla::timeline::copyFrames(*layer, 0, 1);
+    std::vector<const fla::Frame*> clip(copies.begin(), copies.end());
+    std::vector<fla::Frame*> removed;
+    // Two frames of the first span pasted over frames 6-7 of the second:
+    // the second keeps 5 and 8-9.
+    fla::timeline::pasteFrames(*layer, 6, clip, removed);
+    CHECK(spans(*layer, {{0, 5}, {5, 1}, {6, 2}, {8, 2}}));
+    CHECK(layer->frames[2]->elements.size() == 1);
+    CHECK(removed.empty());
+
+    // Past the end, the last span reaches out to the paste.
+    fla::timeline::pasteFrames(*layer, 14, clip, removed);
+    CHECK(spans(*layer, {{0, 5}, {5, 1}, {6, 2}, {8, 6}, {14, 2}}));
+    for (fla::Frame* frame : copies)
+        delete frame;
+    for (fla::Frame* frame : removed)
+        delete frame;
+}

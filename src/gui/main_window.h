@@ -126,6 +126,9 @@ private slots:
     void clearKeyframe();
     void setClassicTween(bool on);
     void moveKeyframe(const fla::Layer* layer, int from, int to);
+    void copyFrames();
+    void cutFrames();
+    void pasteFrames();
     void showFramesMenu(const QPoint& globalPos);
     void addLayer(bool folder);
     void deleteCurrentLayer();
@@ -284,6 +287,10 @@ private:
     QAction* _softenFillAction = nullptr;
     /// Timeline commands on a right-click in the frames.
     QMenu* _framesMenu = nullptr;
+
+    /// Frames copied with Copy Frames, one list of spans per layer copied,
+    /// top layer first, each numbered from 0.
+    std::vector<std::vector<std::unique_ptr<fla::Frame>>> _frameClipboard;
     QAction* _onionSkinAction = nullptr;
     QAction* _ungroupAction = nullptr;
     QAction* _breakApartAction = nullptr;

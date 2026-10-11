@@ -607,6 +607,89 @@ void MainWindow::moveKeyframe(const fla::Layer* constLayer, int from, int to)
         _timelineView->refreshFrames();
 }
 
+void MainWindow::copyFrames()
+{
+    const FrameSelection selection = framesToEdit();
+    if (selection.isEmpty())
+        return;
+    _frameClipboard.clear();
+    for (const fla::Layer* layer : selection.layers)
+    {
+        std::vector<std::unique_ptr<fla::Frame>> spans;
+        for (fla::Frame* frame : fla::timeline::copyFrames(*layer, selection.first, selection.last))
+            spans.emplace_back(frame);
+        _frameClipboard.push_back(std::move(spans));
+    }
+    statusBar()->showMessage(QString("Copied %1 frame%2 on %3 layer%4")
+        .arg(selection.last - selection.first + 1).arg(selection.last > selection.first ? "s" : "")
+        .arg(selection.layers.size()).arg(selection.layers.size() == 1 ? "" : "s"), 3000);
+}
+
+void MainWindow::cutFrames()
+{
+    copyFrames();
+    if (_frameClipboard.empty())
+        return;
+    editFrames("Cut Frames", [](fla::Layer& layer, int first, int last, std::vector<fla::Frame*>& removed) {
+        fla::timeline::removeFrames(layer, first, last - first + 1, removed);
+    });
+}
+
+void MainWindow::pasteFrames()
+{
+    if (_frameClipboard.empty())
+        return;
+    const FrameSelection selection = framesToEdit();
+    if (selection.isEmpty())
+        return;
+
+    // The first copied layer goes to the first selected one, the rest to the
+    // layers below it in turn, folders passed over.
+    std::vector<fla::Layer*> targets;
+    fla::Timeline* timeline = editedTimeline();
+    if (timeline)
+    {
+        bool started = false;
+        for (fla::Layer* layer : timeline->layers)
+        {
+            if (layer == selection.layers.front())
+                started = true;
+            if (started && layer && layer->layerType != fla::Layer::Type::Folder)
+                targets.push_back(layer);
+            if (targets.size() == _frameClipboard.size())
+                break;
+        }
+    }
+    if (targets.empty())
+        return;
+
+    std::vector<std::vector<const fla::Frame*>> clips;
+    for (const auto& spans : _frameClipboard)
+    {
+        std::vector<const fla::Frame*> clip;
+        for (const auto& frame : spans)
+            clip.push_back(frame.get());
+        clips.push_back(clip);
+    }
+    const int at = selection.first;
+
+    _selection.clear();
+    auto* command = new fla::EditFramesCommand(targets, "Paste Frames",
+        [targets, clips, at](std::vector<fla::Frame*>& removed) {
+            for (size_t i = 0; i < targets.size() && i < clips.size(); ++i)
+                fla::timeline::pasteFrames(*targets[i], at, clips[i], removed);
+        });
+    _editContext.commandStack().push(fla::CommandPtr(command));
+    _editContext.commandStack().breakMergeChain();
+    if (_phoenixView)
+    {
+        _phoenixView->clearCaches();
+        _phoenixView->update();
+    }
+    if (_timelineView)
+        _timelineView->refreshFrames();
+}
+
 void MainWindow::showFramesMenu(const QPoint& globalPos)
 {
     if (_framesMenu)
@@ -837,6 +920,16 @@ void MainWindow::setupMenus()
     connect(clearKeyframeAction, &QAction::triggered, this, &MainWindow::clearKeyframe);
     QAction* removeTweenAction = editTimelineMenu->addAction("Remove &Tween");
     connect(removeTweenAction, &QAction::triggered, this, [this]() { setClassicTween(false); });
+    editTimelineMenu->addSeparator();
+    QAction* cutFramesAction = editTimelineMenu->addAction("Cu&t Frames");
+    cutFramesAction->setShortcut(QKeySequence(Qt::CTRL | Qt::ALT | Qt::Key_X));
+    connect(cutFramesAction, &QAction::triggered, this, &MainWindow::cutFrames);
+    QAction* copyFramesAction = editTimelineMenu->addAction("C&opy Frames");
+    copyFramesAction->setShortcut(QKeySequence(Qt::CTRL | Qt::ALT | Qt::Key_C));
+    connect(copyFramesAction, &QAction::triggered, this, &MainWindow::copyFrames);
+    QAction* pasteFramesAction = editTimelineMenu->addAction("&Paste Frames");
+    pasteFramesAction->setShortcut(QKeySequence(Qt::CTRL | Qt::ALT | Qt::Key_V));
+    connect(pasteFramesAction, &QAction::triggered, this, &MainWindow::pasteFrames);
     editMenu->addSeparator();
     editMenu->addMenu(editTimelineMenu);
 
@@ -851,6 +944,10 @@ void MainWindow::setupMenus()
     _framesMenu->addAction(insertKeyframeAction);
     _framesMenu->addAction(insertBlankAction);
     _framesMenu->addAction(clearKeyframeAction);
+    _framesMenu->addSeparator();
+    _framesMenu->addAction(cutFramesAction);
+    _framesMenu->addAction(copyFramesAction);
+    _framesMenu->addAction(pasteFramesAction);
 
     QMenu* modifyMenu = menuBar->addMenu("&Modify");
 

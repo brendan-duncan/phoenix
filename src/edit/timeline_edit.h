@@ -57,6 +57,21 @@ bool setTween(Layer& layer, int index, bool classic);
 /// The keyframe whose span covers \a index, or null past the end.
 Frame* spanAt(Layer& layer, int index);
 
+/// A deep copy of \a frame: its settings, elements, shape tween and
+/// script. The copy belongs to \a parent but is not added to it.
+Frame* cloneFrame(const Frame& frame, Layer* parent);
+
+/// Copy Frames: frames \a first to \a last of the layer as spans of their
+/// own, cut to the range and numbered from 0, which the caller owns. Every
+/// frame of the range is covered; where the layer has none, a blank span
+/// stands in.
+std::vector<Frame*> copyFrames(const Layer& layer, int first, int last);
+
+/// Paste Frames: the copied spans go in at \a at and replace what was
+/// there for as many frames as they cover; a span running on past the
+/// pasted frames keeps its remaining frames, starting where they end.
+void pasteFrames(Layer& layer, int at, const std::vector<const Frame*>& copied, std::vector<Frame*>& removed);
+
 /// One past the layer's last frame.
 int layerEnd(const Layer& layer);
 

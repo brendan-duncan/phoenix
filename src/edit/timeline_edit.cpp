@@ -2,9 +2,11 @@
 
 #include "element_clone.h"
 
+#include "../data/action_script.h"
 #include "../data/element.h"
 #include "../data/frame.h"
 #include "../data/layer.h"
+#include "../data/morph_shape.h"
 
 #include <algorithm>
 
@@ -69,6 +71,169 @@ Frame* spanAt(Layer& layer, int index)
             return frame;
     }
     return nullptr;
+}
+
+Frame* cloneFrame(const Frame& frame, Layer* parent)
+{
+    Frame* copy = new Frame(parent);
+    copy->index = frame.index;
+    copy->duration = frame.duration;
+    copy->keyMode = frame.keyMode;
+    copy->name = frame.name;
+    copy->labelType = frame.labelType;
+    copy->tweenType = frame.tweenType;
+    copy->motionTWeenSnap = frame.motionTWeenSnap;
+    copy->motionTweenSync = frame.motionTweenSync;
+    copy->acceleration = frame.acceleration;
+    copy->hasCustomEase = frame.hasCustomEase;
+    copy->customEase = frame.customEase;
+    copy->motionTweenRotate = frame.motionTweenRotate;
+    copy->motionTweenRotateTimes = frame.motionTweenRotateTimes;
+    if (frame.actionScript)
+    {
+        copy->actionScript = new ActionScript(copy);
+        copy->actionScript->code = frame.actionScript->code;
+    }
+    if (frame.morphShape)
+    {
+        MorphShape* morph = new MorphShape(copy);
+        for (const MorphSegment* segment : frame.morphShape->segments)
+        {
+            MorphSegment* segmentCopy = new MorphSegment(morph);
+            segmentCopy->startPointA = segment->startPointA;
+            segmentCopy->startPointB = segment->startPointB;
+            segmentCopy->strokeIndex1 = segment->strokeIndex1;
+            segmentCopy->strokeIndex2 = segment->strokeIndex2;
+            segmentCopy->fillIndex1 = segment->fillIndex1;
+            segmentCopy->fillIndex2 = segment->fillIndex2;
+            for (const MorphCurves* curve : segment->curves)
+            {
+                MorphCurves* curveCopy = new MorphCurves(segmentCopy);
+                curveCopy->controlPointA = curve->controlPointA;
+                curveCopy->anchorPointA = curve->anchorPointA;
+                curveCopy->controlPointB = curve->controlPointB;
+                curveCopy->anchorPointB = curve->anchorPointB;
+                segmentCopy->curves.push_back(curveCopy);
+            }
+            morph->segments.push_back(segmentCopy);
+        }
+        copy->morphShape = morph;
+    }
+    for (const Element* element : frame.elements)
+    {
+        if (element)
+            copy->elements.push_back(cloneElement(*element, copy));
+    }
+    return copy;
+}
+
+std::vector<Frame*> copyFrames(const Layer& layer, int first, int last)
+{
+    std::vector<Frame*> copies;
+    if (last < first)
+        return copies;
+    for (const Frame* frame : layer.frames)
+    {
+        if (!frame)
+            continue;
+        const int start = std::max(frame->index, first);
+        const int end = std::min(frame->index + std::max(frame->duration, 1), last + 1);
+        if (start >= end)
+            continue;
+        Frame* copy = cloneFrame(*frame, nullptr);
+        copy->index = start - first;
+        copy->duration = end - start;
+        copies.push_back(copy);
+    }
+    // Where the layer ends inside the range, a blank span fills the rest.
+    const int covered = copies.empty() ? 0 : copies.back()->index + copies.back()->duration;
+    if (covered < last - first + 1)
+    {
+        Frame* blank = new Frame(nullptr);
+        blank->index = covered;
+        blank->duration = last - first + 1 - covered;
+        blank->keyMode = "9728";
+        copies.push_back(blank);
+    }
+    return copies;
+}
+
+void pasteFrames(Layer& layer, int at, const std::vector<const Frame*>& copied, std::vector<Frame*>& removed)
+{
+    if (copied.empty() || at < 0)
+        return;
+    int length = 0;
+    for (const Frame* frame : copied)
+        length = std::max(length, frame->index + std::max(frame->duration, 1));
+    const int end = at + length;
+
+    // Make room: a span running into the range stops at its start, one
+    // running past its end carries on from there as a span of its own.
+    std::vector<Frame*> kept;
+    std::vector<Frame*> tails;
+    for (Frame* frame : layer.frames)
+    {
+        if (!frame)
+            continue;
+        const int start = frame->index;
+        const int stop = start + std::max(frame->duration, 1);
+        if (stop <= at || start >= end)
+        {
+            kept.push_back(frame);
+            continue;
+        }
+        if (stop > end)
+        {
+            // The part after the paste: the frame itself when nothing of it
+            // comes before, else a copy.
+            Frame* tail = start < at ? cloneFrame(*frame, &layer) : frame;
+            tail->index = end;
+            tail->duration = stop - end;
+            tails.push_back(tail);
+            if (tail == frame)
+                continue;
+        }
+        if (start < at)
+        {
+            frame->duration = at - start;
+            kept.push_back(frame);
+        }
+        else
+        {
+            removed.push_back(frame);
+        }
+    }
+
+    // A gap before the paste, past the end of the layer, is filled by the
+    // last span reaching out to it.
+    std::sort(kept.begin(), kept.end(), [](const Frame* a, const Frame* b) { return a->index < b->index; });
+    if (!kept.empty())
+    {
+        Frame* last = kept.back();
+        const int lastEnd = last->index + std::max(last->duration, 1);
+        if (lastEnd < at && last->index < at)
+            last->duration = at - last->index;
+    }
+    else if (at > 0)
+    {
+        Frame* lead = new Frame(&layer);
+        lead->index = 0;
+        lead->duration = at;
+        lead->keyMode = "9728";
+        kept.push_back(lead);
+    }
+
+    for (const Frame* source : copied)
+    {
+        Frame* copy = cloneFrame(*source, &layer);
+        copy->index = at + source->index;
+        kept.push_back(copy);
+    }
+    for (Frame* tail : tails)
+        kept.push_back(tail);
+    layer.frames = kept;
+    sortFrames(layer);
+    updateExtent(layer);
 }
 
 void insertFrames(Layer& layer, int index, int count)
