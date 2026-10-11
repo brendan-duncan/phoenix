@@ -3052,9 +3052,12 @@ void MainWindow::arrangeSelection(int step, bool toEnd)
     if (!_phoenixView)
         return;
 
-    // Each selected element in its own frame, ordered so that moving one does
-    // not shuffle the next out of place: towards the front from the top down,
-    // towards the back from the bottom up.
+    // Each selected element in its own frame. The selected items move as a
+    // block and keep their order among themselves: a step towards the front
+    // goes from the top down, so each moves into room the one above left, and
+    // a selected item never steps past another; all the way to the front goes
+    // from the bottom up, each landing above the one before. Towards the back
+    // is the mirror of both.
     struct Entry
     {
         fla::Frame* frame;
@@ -3079,18 +3082,30 @@ void MainWindow::arrangeSelection(int step, bool toEnd)
     if (entries.empty())
         return;
 
-    std::sort(entries.begin(), entries.end(), [step](const Entry& a, const Entry& b) {
-        return step > 0 ? a.index > b.index : a.index < b.index;
+    const bool topDown = (step > 0) != toEnd;
+    std::sort(entries.begin(), entries.end(), [topDown](const Entry& a, const Entry& b) {
+        return topDown ? a.index > b.index : a.index < b.index;
     });
+    const auto selected = [&entries](const fla::Element* element) {
+        for (const Entry& entry : entries)
+        {
+            if (entry.element == element)
+                return true;
+        }
+        return false;
+    };
 
     fla::CommandStack& stack = _editContext.commandStack();
     stack.beginMacro(step > 0 ? (toEnd ? "Bring to Front" : "Bring Forward")
                               : (toEnd ? "Send to Back" : "Send Backward"));
     for (const Entry& entry : entries)
     {
-        const int count = static_cast<int>(entry.frame->elements.size());
-        const int target = toEnd ? (step > 0 ? count - 1 : 0) : entry.index + step;
-        if (target == entry.index || target < 0 || target >= count)
+        // Where it is now, after the moves before it.
+        std::vector<fla::Element*>& elements = entry.frame->elements;
+        const int index = static_cast<int>(std::find(elements.begin(), elements.end(), entry.element) - elements.begin());
+        const int count = static_cast<int>(elements.size());
+        const int target = toEnd ? (step > 0 ? count - 1 : 0) : index + step;
+        if (target == index || target < 0 || target >= count || (!toEnd && selected(elements[target])))
             continue;
         stack.push(fla::CommandPtr(new fla::ReorderElementCommand(
             entry.frame, entry.element, target, "Arrange")));
