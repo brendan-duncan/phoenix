@@ -45,6 +45,11 @@ public:
     /// attributes such as a sound's (soundName, soundSync, inPoint44...) and
     /// child elements such as its SoundEnvelope, as XML text.
     std::vector<std::pair<std::string, std::string>> extraAttributes;
+
+    /// A tween type Phoenix does not model ("motion object" for an object
+    /// motion tween, "IK pose" for an armature's pose), kept as spelled and
+    /// written back; tweenType is None for these.
+    std::string otherTweenType;
     std::vector<std::string> extraChildren;
 
     ActionScript* actionScript = nullptr;

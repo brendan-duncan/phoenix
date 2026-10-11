@@ -1488,6 +1488,32 @@ it.
       and translation, springs, and the ease between poses. Nothing in the
       corpus has one: make samples in Animate first. Also the Rigging layer
       of newer Animate versions (rig mapping) once the basics work
+  - Sample 2026-10-11: `D:/fla/ik_bones.fla` (Animate 24), a shape with four
+    bones. How XFL keeps it: the armature layer has animationType="IK pose";
+    its pose keyframes have tweenType="IK pose", isIKPose="true",
+    poseLocations and keyMode 9732, an empty betweenFrameMatrixList, and an
+    **IKTree** (name, treeName, physicsEnabled). The tree holds a root
+    **IKNode** whose **ChildNode**s nest one per bone (name, boneName, the
+    joint's location as hex fixed point, xArray/yArray/angleArray, a
+    worldMatrix, and **State** entries per pose: duration, angle in
+    radians, x and y in twips); **IKState** entries give the pose durations;
+    an **IKContour** is the shape's outline (dataPoints in hex fixed point,
+    a matrix, its stroke and fill); and connectionIndices / connectionData
+    bind the outline's points to bones with weights (groups of four floats
+    in connectionData, the last a weight of 1 or 0.5). The boned shape
+    itself becomes a library symbol of symbolType="ik container", placed on
+    the armature layer. persistentData keeps ikBoneCount, ikTreeCount and
+    ikNodeCount. Still needed: a sample with bones between symbol instances,
+    and one with two poses, to see how poses tween
+  - Done 2026-10-11: all of it is kept on save. Layers, frames and symbols
+    now keep an unmodeled type as spelled (otherLayerType, otherTweenType,
+    otherSymbolType) and their unmodeled attributes (Layer and Symbol
+    extraAttributes, as Frame had); before, animationType, tweenType="IK pose"
+    and "ik container" were dropped, and so was tweenType="motion object" on
+    the object motion tweens of template_robot.fla, and any linkage on a
+    symbol. Test `ik_bones_are_kept_on_save` (opt-in, with the corpus). Not
+    drawn yet: Phoenix shows the ik container's shape as stored, not bent by
+    the pose; not checked on screen
 - [ ] **Layer parenting** (Animate 2019): a layer's content follows the
       transform of its parent layer's, set from the timeline's parenting
       view. Check how XFL stores the link (it is not the folder link,

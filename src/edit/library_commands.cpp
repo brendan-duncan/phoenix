@@ -371,6 +371,8 @@ Symbol* cloneSymbol(const Symbol& symbol, const std::string& name)
     // folders under LIBRARY.
     copy->href = name + ".xml";
     copy->symbolType = symbol.symbolType;
+    copy->otherSymbolType = symbol.otherSymbolType;
+    copy->extraAttributes = symbol.extraAttributes;
     copy->scale9 = symbol.scale9;
     copy->scaleGridLeft = symbol.scaleGridLeft;
     copy->scaleGridTop = symbol.scaleGridTop;
@@ -396,6 +398,8 @@ Symbol* cloneSymbol(const Symbol& symbol, const std::string& name)
                 layerCopy->color[i] = layer->color[i];
             layerCopy->current = layer->current;
             layerCopy->layerType = layer->layerType;
+            layerCopy->otherLayerType = layer->otherLayerType;
+            layerCopy->extraAttributes = layer->extraAttributes;
             layerCopy->parentLayerIndex = layer->parentLayerIndex;
             layerCopy->autoNamed = layer->autoNamed;
             layerCopy->locked = layer->locked;

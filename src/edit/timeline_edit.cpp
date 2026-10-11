@@ -82,6 +82,7 @@ Frame* cloneFrame(const Frame& frame, Layer* parent)
     copy->name = frame.name;
     copy->labelType = frame.labelType;
     copy->tweenType = frame.tweenType;
+    copy->otherTweenType = frame.otherTweenType;
     copy->motionTWeenSnap = frame.motionTWeenSnap;
     copy->motionTweenSync = frame.motionTweenSync;
     copy->acceleration = frame.acceleration;

@@ -3,6 +3,7 @@
 #include "dom_element.h"
 #include "resource.h"
 #include "timeline.h"
+#include <utility>
 #include <vector>
 #include <string>
 
@@ -22,6 +23,15 @@ public:
     /// How new instances behave by default: the symbol's own type as the
     /// library shows it.
     SymbolType symbolType = SymbolType::Graphic;
+
+    /// A symbol type Phoenix does not model ("ik container" for a shape
+    /// with bones, "puppet" for Asset Warp), kept as spelled; symbolType is
+    /// Graphic for it.
+    std::string otherSymbolType;
+
+    /// DOMSymbolItem attributes read but not modeled (linkage, say),
+    /// written back as they came.
+    std::vector<std::pair<std::string, std::string>> extraAttributes;
 
     /// 9-slice scaling guides, in the symbol's own space: the two vertical
     /// and two horizontal lines that split it into corners that never

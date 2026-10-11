@@ -1312,6 +1312,8 @@ bool parseFrame(const tinyxml2::XMLElement* element, fla::Frame* frame)
     else
     {
         frame->tweenType = fla::TweenType::None;
+        if (!tweenType.empty() && tweenType != "none")
+            frame->otherTweenType = tweenType;
     }
 
     for (const tinyxml2::XMLElement* childElement = element->FirstChildElement();
@@ -1458,8 +1460,20 @@ bool parseLayer(const tinyxml2::XMLElement* element, fla::Layer* layer)
     }
     else
     {
-        std::cerr << "Unknown layer type: " << layerType << (_currentFile.empty() ? "" : " from ") << _currentFile << std::endl;
+        // Kept as spelled, and drawn as a normal layer.
         layer->layerType = fla::Layer::Type::Normal;
+        layer->otherLayerType = layerType;
+    }
+
+    static const char* const modeledLayer[] = {"name", "color", "current", "layerType", "parentLayerIndex",
+        "isSelected", "autoNamed", "locked", "outline", "visible"};
+    for (const tinyxml2::XMLAttribute* attribute = element->FirstAttribute(); attribute; attribute = attribute->Next())
+    {
+        bool modeled = false;
+        for (const char* name : modeledLayer)
+            modeled = modeled || std::strcmp(name, attribute->Name()) == 0;
+        if (!modeled)
+            layer->extraAttributes.emplace_back(attribute->Name(), attribute->Value());
     }
 
     layer->parentLayerIndex = getIntAttribute(element, "parentLayerIndex", -1);
@@ -1666,6 +1680,18 @@ bool parseSymbolInclude(const tinyxml2::XMLElement* element, fla::SymbolList* sy
         const std::string type = getAttribute(root, "symbolType", "graphic");
         symbol->symbolType = type == "movie clip" ? fla::SymbolType::MovieClip
             : type == "button" ? fla::SymbolType::Button : fla::SymbolType::Graphic;
+        if (type != "movie clip" && type != "button" && type != "graphic")
+            symbol->otherSymbolType = type;
+    }
+    static const char* const modeledSymbol[] = {"xmlns", "xmlns:xsi", "name", "itemID", "lastModified",
+        "symbolType", "scaleGridLeft", "scaleGridTop", "scaleGridRight", "scaleGridBottom"};
+    for (const tinyxml2::XMLAttribute* attribute = root->FirstAttribute(); attribute; attribute = attribute->Next())
+    {
+        bool modeled = false;
+        for (const char* name : modeledSymbol)
+            modeled = modeled || std::strcmp(name, attribute->Name()) == 0;
+        if (!modeled)
+            symbol->extraAttributes.emplace_back(attribute->Name(), attribute->Value());
     }
     if (hasAttribute(root, "scaleGridLeft"))
     {

@@ -4,6 +4,7 @@
 #include "frame.h"
 #include <cstdint>
 #include <string>
+#include <utility>
 #include <vector>
 
 namespace fla {
@@ -30,6 +31,14 @@ public:
     bool locked = false;
     /// Outline view: the layer draws as thin lines in its color, no fills.
     bool outline = false;
+
+    /// A layer type Phoenix does not model, kept as spelled; layerType is
+    /// Normal for it.
+    std::string otherLayerType;
+
+    /// DOMLayer attributes read but not modeled (an armature's
+    /// animationType="IK pose", say), written back as they came.
+    std::vector<std::pair<std::string, std::string>> extraAttributes;
 
     std::vector<Frame*> frames;
 

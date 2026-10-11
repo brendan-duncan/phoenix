@@ -774,6 +774,8 @@ void XFLWriter::writeFrame(const Frame& frame, XMLElement* parent)
         node->SetAttribute("tweenType", "motion");
     else if (frame.tweenType == TweenType::Shape)
         node->SetAttribute("tweenType", "shape");
+    else if (!frame.otherTweenType.empty())
+        node->SetAttribute("tweenType", frame.otherTweenType.c_str());
     setBool(node, "motionTweenSync", frame.motionTweenSync, false);
     setBool(node, "motionTweenSnap", frame.motionTWeenSnap, false);
     setBool(node, "hasCustomEase", frame.hasCustomEase, false);
@@ -860,6 +862,8 @@ void XFLWriter::writeLayer(const Layer& layer, XMLElement* parent)
 
     if (layer.layerType != Layer::Type::Normal)
         node->SetAttribute("layerType", layerTypeName(layer.layerType));
+    else if (!layer.otherLayerType.empty())
+        node->SetAttribute("layerType", layer.otherLayerType.c_str());
 
     setInt(node, "parentLayerIndex", layer.parentLayerIndex, -1);
     setBool(node, "isSelected", layer.selected, false);
@@ -867,6 +871,8 @@ void XFLWriter::writeLayer(const Layer& layer, XMLElement* parent)
     setBool(node, "locked", layer.locked, false);
     setBool(node, "outline", layer.outline, false);
     setBool(node, "visible", layer.visible, true);
+    for (const auto& attribute : layer.extraAttributes)
+        node->SetAttribute(attribute.first.c_str(), attribute.second.c_str());
 
     XMLElement* frames = doc->NewElement("frames");
     for (const Frame* frame : layer.frames)
@@ -1096,6 +1102,10 @@ std::string XFLWriter::writeSymbol(const Symbol& symbol)
     setString(root, "lastModified", symbol.lastModified);
     if (symbol.symbolType != SymbolType::Graphic)
         root->SetAttribute("symbolType", symbolTypeName(symbol.symbolType));
+    else if (!symbol.otherSymbolType.empty())
+        root->SetAttribute("symbolType", symbol.otherSymbolType.c_str());
+    for (const auto& attribute : symbol.extraAttributes)
+        root->SetAttribute(attribute.first.c_str(), attribute.second.c_str());
     if (symbol.scale9)
     {
         root->SetAttribute("scaleGridLeft", symbol.scaleGridLeft);

@@ -24,6 +24,7 @@
 #include "../src/writer/xfl_folder_writer.h"
 #include "../src/writer/xfl_writer.h"
 
+#include <cstdio>
 #include <cstdlib>
 #include <filesystem>
 #include <memory>
@@ -1042,4 +1043,49 @@ TEST(xfl_writes_a_new_document)
         std::printf("    written:\n%s\n", written.c_str());
     }
     CHECK(comparer.equal());
+}
+
+TEST(ik_bones_are_kept_on_save)
+{
+    // Opt-in: the corpus's ik_bones.fla, a shape with four bones saved by
+    // Animate 24. Phoenix does not model IK yet, so everything about the
+    // armature has to come back out as it went in.
+    const char* corpus = std::getenv("PHOENIX_FLA_CORPUS");
+    const std::filesystem::path source = corpus ? std::filesystem::path(corpus) / "ik_bones.fla"
+                                                : std::filesystem::path();
+    if (!corpus || !std::filesystem::exists(source))
+    {
+        std::printf("    skipped: no ik_bones.fla in PHOENIX_FLA_CORPUS\n");
+        return;
+    }
+    FLAParser parser;
+    std::unique_ptr<fla::FLADocument> fla(parser.parse(source.string()));
+    CHECK(fla && fla->document);
+    if (!fla || !fla->document)
+        return;
+
+    XFLWriter writer;
+    const std::string document = writer.writeDocument(*fla->document);
+    for (const char* kept : {"animationType=\"IK pose\"", "tweenType=\"IK pose\"", "isIKPose=\"true\"",
+             "poseLocations=\"0\"", "<betweenFrameMatrixList>", "<IKTree name=\"Armature_11\"",
+             "connectionIndices=\"9.000000,0.000000", "physicsEnabled=\"true\"", "<IKNode name=\"ikNode_11\"",
+             "name=\"ikNode_17\" boneName=\"ikBoneName4\"", "angle=\"-1.6424436004084\"", "<IKState duration=\"1\"",
+             "<IKContour interior=\"true\"", "<DataPoint integerPoint=\"#20.37, #10.A3\"",
+             "<PD n=\"ikBoneCount\" t=\"i\" v=\"4\"/>"})
+    {
+        const bool found = document.find(kept) != std::string::npos;
+        if (!found)
+            std::printf("    lost on save: %s\n", kept);
+        CHECK(found);
+    }
+    // The boned shape's symbol keeps its kind.
+    CHECK(fla->document->symbolList && !fla->document->symbolList->symbols.empty());
+    if (fla->document->symbolList && !fla->document->symbolList->symbols.empty())
+    {
+        const std::string symbol = writer.writeSymbol(*fla->document->symbolList->symbols.front());
+        const bool kind = symbol.find("symbolType=\"ik container\"") != std::string::npos;
+        if (!kind)
+            std::printf("    lost on save: the symbol's ik container type\n");
+        CHECK(kind);
+    }
 }
