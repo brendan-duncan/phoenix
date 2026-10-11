@@ -31,7 +31,7 @@ ROOT = Path(__file__).resolve().parents[2]
 
 # Never change: the installed app is found by its id, and an app installed
 # under one id is not updated by releases made under another.
-PACK_ID = "BrendanDuncan.Phoenix"
+PACK_ID = "Phoenix"
 PACK_TITLE = "Phoenix"
 PACK_AUTHORS = "Brendan Duncan"
 

@@ -149,7 +149,7 @@ set PHOENIX_FLA_CORPUS=path/to/fla/files
 
 Phoenix is installed and kept up to date with [Velopack](https://velopack.io).
 Each release on GitHub carries a Windows installer
-(`BrendanDuncan.Phoenix-win-x64-Setup.exe`), which installs for the current
+(`Phoenix-win-x64-Setup.exe`), which installs for the current
 user without asking for admin rights, and a portable zip. An installed copy
 looks for a newer release a few seconds after it starts (and from Help > Check
 for Updates), downloads it in the background, and offers to restart into it;
