@@ -1547,20 +1547,22 @@ void PropertiesPanel::rebuildObjectTab()
     switch (element->elementType())
     {
     case fla::Element::Type::Shape:
+    {
+        fla::Shape* shape = static_cast<fla::Shape*>(element);
+        page->addWidget(makeHeader(objectGlyph("shape", palette()),
+            shape->isDrawingObject ? "Drawing Object" : "Shape"));
+        addPositionAndSize(page, elements);
+        addShapeSections(page, shape);
+        break;
+    }
     case fla::Element::Type::Rectangle:
     case fla::Element::Type::Oval:
     {
-        fla::Shape* shape = static_cast<fla::Shape*>(element);
-        QString title = "Shape";
-        if (element->elementType() == fla::Element::Type::Rectangle)
-            title = "Rectangle Primitive";
-        else if (element->elementType() == fla::Element::Type::Oval)
-            title = "Oval Primitive";
-        else if (shape->isDrawingObject)
-            title = "Drawing Object";
-        page->addWidget(makeHeader(objectGlyph("shape", palette()), title));
+        // The primitives are elements of their own, not shapes, so the shape
+        // sections (which read a shape's fill and stroke lists) are not theirs.
+        page->addWidget(makeHeader(objectGlyph("shape", palette()),
+            element->elementType() == fla::Element::Type::Rectangle ? "Rectangle Primitive" : "Oval Primitive"));
         addPositionAndSize(page, elements);
-        addShapeSections(page, shape);
         break;
     }
     case fla::Element::Type::SymbolInstance:
