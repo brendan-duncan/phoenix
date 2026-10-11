@@ -13,6 +13,7 @@
 #include "../edit/library_commands.h"
 #include "../edit/property_command.h"
 #include "phoenix_view.h"
+#include "movie_export.h"
 #include "timeline_view.h"
 #include "../data/frame.h"
 #include "../data/group.h"
@@ -29,7 +30,9 @@
 #include "../writer/xfl_content.h"
 #include "../writer/xfl_folder_writer.h"
 
+#include <cmath>
 #include <cstdint>
+#include <cstdio>
 #include <algorithm>
 
 #include <QApplication>
@@ -89,7 +92,7 @@ namespace {
 fla::Frame* frameOfElement(const fla::Element* element);
 }
 
-MainWindow::MainWindow(const QString& initialFile, QWidget* parent)
+MainWindow::MainWindow(const QString& initialFile, QWidget* parent, bool startup)
     : QMainWindow(parent)
     , _phoenixView(nullptr)
     , _documentView(nullptr)
@@ -217,14 +220,15 @@ MainWindow::MainWindow(const QString& initialFile, QWidget* parent)
     // window to sit on rather than appearing before there is one.
     const QString startFile = !initialFile.isEmpty() ? initialFile
         : (_recentFiles.isEmpty() ? QString() : _recentFiles.first());
-    if (!startFile.isEmpty())
+    if (startup && !startFile.isEmpty())
         QTimer::singleShot(0, this, [this, startFile]() { loadFLAFile(startFile); });
 
     // Look for an update once the start-up file has had its turn.
     connect(_updater, &Updater::statusMessage, this, [this](const QString& message) {
         statusBar()->showMessage(message, message.isEmpty() ? 0 : 8000);
     });
-    QTimer::singleShot(3000, this, [this]() { _updater->checkForUpdates(false); });
+    if (startup)
+        QTimer::singleShot(3000, this, [this]() { _updater->checkForUpdates(false); });
 }
 
 namespace {
@@ -954,6 +958,11 @@ void MainWindow::setupMenus()
     exportSvgAction->setStatusTip("Export the current frame to an SVG file");
     connect(exportSvgAction, &QAction::triggered, this, &MainWindow::exportSvg);
     exportMenu->addAction(exportSvgAction);
+    QAction* exportMovieAction = new QAction("Export &Movie...", this);
+    exportMovieAction->setShortcut(QKeySequence(Qt::CTRL | Qt::ALT | Qt::SHIFT | Qt::Key_S));
+    exportMovieAction->setStatusTip("Export the frames as a PNG sequence or a video");
+    connect(exportMovieAction, &QAction::triggered, this, &MainWindow::exportMovie);
+    exportMenu->addAction(exportMovieAction);
 
     fileMenu->addSeparator();
 
@@ -1568,6 +1577,86 @@ void MainWindow::exportSvg()
     {
         QMessageBox::warning(this, "Export Failed",
             QString("Failed to export SVG to:\n%1").arg(fileName));
+    }
+}
+
+int MainWindow::exportFromCommandLine(const QString& source, const QString& output)
+{
+    if (!QFileInfo::exists(source))
+    {
+        std::fprintf(stderr, "No such file: %s\n", qPrintable(source));
+        return 1;
+    }
+    loadFLAFile(source);
+    if (!_flaDocument || !_flaDocument->document || !_phoenixView)
+    {
+        std::fprintf(stderr, "Could not open %s\n", qPrintable(source));
+        return 1;
+    }
+    const fla::Document* document = _flaDocument->document;
+    MovieExportSettings settings;
+    settings.format = output.endsWith(".png", Qt::CaseInsensitive) ? MovieExportSettings::Format::PngSequence
+                                                                  : MovieExportSettings::Format::Video;
+    settings.path = QFileInfo(output).absoluteFilePath();
+    settings.size = QSize(static_cast<int>(std::lround(document->width)), static_cast<int>(std::lround(document->height)));
+    settings.first = 0;
+    settings.last = std::max(1, _phoenixView->frameCount()) - 1;
+    QString error;
+    if (!MovieExport::run(settings, *_phoenixView, _timelineAudio, document->frameRate, nullptr, error))
+    {
+        std::fprintf(stderr, "%s\n", qPrintable(error.isEmpty() ? QString("Export cancelled.") : error));
+        return 1;
+    }
+    std::printf("Exported %d frames to %s\n", settings.last + 1, qPrintable(settings.path));
+    return 0;
+}
+
+void MainWindow::exportMovie()
+{
+    if (!_flaDocument || !_flaDocument->document || !_phoenixView)
+    {
+        QMessageBox::information(this, "No Document", "No FLA document is currently loaded.");
+        return;
+    }
+    const fla::Document* document = _flaDocument->document;
+    const QString base = _documentPath.isEmpty() ? QString("movie") : QFileInfo(_documentPath).completeBaseName();
+    const QString folder = _lastDirectory.isEmpty() ? QFileInfo(_documentPath).absolutePath() : _lastDirectory;
+    MovieExportDialog dialog(QSize(static_cast<int>(std::lround(document->width)),
+                                 static_cast<int>(std::lround(document->height))),
+        std::max(1, _phoenixView->frameCount()), QDir(folder).filePath(base + ".mp4"), this);
+    if (dialog.exec() != QDialog::Accepted)
+        return;
+    const MovieExportSettings settings = dialog.settings();
+
+    if (settings.format == MovieExportSettings::Format::Video && MovieExport::ffmpegPath().isEmpty())
+    {
+        QMessageBox::information(this, "Export Movie",
+            "Phoenix encodes video with ffmpeg, which it could not find on the PATH. "
+            "Choose ffmpeg's program file to use it; Phoenix will remember it.\n\n"
+            "ffmpeg is free from ffmpeg.org.");
+        const QString chosen = QFileDialog::getOpenFileName(this, "Where is ffmpeg?", QString(),
+#ifdef Q_OS_WIN
+            "ffmpeg (ffmpeg.exe);;Programs (*.exe)");
+#else
+            "ffmpeg (ffmpeg);;All Files (*)");
+#endif
+        if (chosen.isEmpty())
+            return;
+        MovieExport::setFfmpegPath(chosen);
+    }
+
+    QString error;
+    const bool written = MovieExport::run(settings, *_phoenixView, _timelineAudio, document->frameRate, this, error);
+    _phoenixView->update();
+    if (written)
+    {
+        _lastDirectory = QFileInfo(settings.path).absolutePath();
+        saveSettings();
+        statusBar()->showMessage(QString("Exported %1").arg(QDir::toNativeSeparators(settings.path)), 5000);
+    }
+    else if (!error.isEmpty())
+    {
+        QMessageBox::warning(this, "Export Failed", error);
     }
 }
 

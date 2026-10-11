@@ -88,6 +88,7 @@ set(HEADERS
     src/gui/magic_wand_tool.h
     src/gui/gradient_transform_tool.h
     src/gui/anchor_point_tool.h
+    src/gui/movie_export.h
     src/gui/selection_targets.h
     src/gui/navigation_tools.h
     src/gui/draw_placement.h
@@ -215,6 +216,7 @@ set(SOURCES
     src/gui/magic_wand_tool.cpp
     src/gui/gradient_transform_tool.cpp
     src/gui/anchor_point_tool.cpp
+    src/gui/movie_export.cpp
     src/gui/navigation_tools.cpp
     src/gui/draw_placement.cpp
     src/gui/filters.cpp

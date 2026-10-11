@@ -347,6 +347,12 @@ public:
     // Renders in document space using the same traversal as on-screen drawing.
     bool exportToSvg(const QString& filePath);
 
+    /// The document at frame \a frame, drawn into an image of \a size as a
+    /// published movie shows it: every layer but guides, locked ones too,
+    /// and movie clips playing their own timelines. The stage color fills
+    /// it unless \a transparent.
+    QImage renderFrame(int frame, const QSize& size, bool transparent);
+
 public slots:
     void onPlayerFrameChanged(int frame);
 
@@ -487,6 +493,9 @@ private:
     /// The frame to draw instead of the playhead's, while an onion frame is
     /// drawn; -1 otherwise.
     int _frameOverride = -1;
+    /// Drawing for export (renderFrame): locked layers show and movie clips
+    /// play.
+    bool _exporting = false;
     int shownFrame() const;
 
     bool _onionSkin = false;

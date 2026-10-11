@@ -15,6 +15,15 @@ int main(int argc, char *argv[])
     // A file named on the command line, or dropped on the executable, which
     // Windows passes the same way, opens instead of the most recent one.
     const QStringList arguments = a.arguments();
+
+    // Phoenix --export-movie <document> <output.png|output.mp4>: writes
+    // every frame and exits, without showing a window.
+    if (arguments.size() == 4 && arguments.at(1) == "--export-movie")
+    {
+        MainWindow window(QString(), nullptr, false);
+        return window.exportFromCommandLine(arguments.at(2), arguments.at(3));
+    }
+
     const QString initialFile = arguments.size() > 1 ? arguments.at(1) : QString();
 
     MainWindow window(initialFile);

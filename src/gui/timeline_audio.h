@@ -44,6 +44,12 @@ public:
     /// frame starts it.
     std::shared_ptr<const PcmBuffer> soundOf(const fla::Frame* frame, size_t* in = nullptr);
 
+    /// The sound of frames \a first to \a last played through, mixed to
+    /// interleaved stereo at 44.1 kHz, for a video's soundtrack: event and
+    /// start sounds from their keyframes (a start sound not again while it
+    /// plays, a stop sound cutting them off), streams for their spans.
+    std::vector<float> mixdown(int first, int last);
+
 public slots:
     void onPlayingChanged(bool playing);
     void onFrameChanged(int frame);

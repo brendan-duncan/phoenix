@@ -338,6 +338,43 @@ bool PhoenixView::exportToSvg(const QString& filePath)
     return true;
 }
 
+QImage PhoenixView::renderFrame(int frame, const QSize& size, bool transparent)
+{
+    QImage image(size, QImage::Format_ARGB32_Premultiplied);
+    image.fill(Qt::transparent);
+    if (!_flaDocument || !_flaDocument->document || size.isEmpty())
+        return image;
+    fla::Document* document = _flaDocument->document;
+    if (document->width <= 0 || document->height <= 0)
+        return image;
+
+    QPainter painter(&image);
+    painter.setRenderHint(QPainter::Antialiasing, true);
+    painter.setRenderHint(QPainter::TextAntialiasing, true);
+    painter.setRenderHint(QPainter::SmoothPixmapTransform, true);
+    if (!transparent)
+    {
+        painter.fillRect(image.rect(), QColor(document->backgroundColor[0], document->backgroundColor[1],
+            document->backgroundColor[2], document->backgroundColor[3]));
+    }
+    painter.scale(size.width() / document->width, size.height() / document->height);
+
+    const QTransform savedView = viewTransform;
+    const QRectF savedVisible = _visibleRect;
+    const int savedOverride = _frameOverride;
+    viewTransform = painter.transform();
+    _visibleRect = QRectF(0, 0, document->width, document->height);
+    _frameOverride = std::max(0, frame);
+    _exporting = true;
+    drawDocument(painter, document);
+    _exporting = false;
+    _frameOverride = savedOverride;
+    viewTransform = savedView;
+    _visibleRect = savedVisible;
+    painter.end();
+    return image;
+}
+
 void PhoenixView::paintEvent(QPaintEvent *event)
 {
     QPainter painter(this);
@@ -1082,7 +1119,7 @@ void PhoenixView::drawLayer(QPainter& painter, const fla::Layer* layer, fla::Loo
 {
     // Onion skin leaves locked layers out, as Animate does, so a locked
     // background is not drawn again faded under every frame.
-    if (_frameOverride >= 0 && layer->locked && _scope.empty())
+    if (_frameOverride >= 0 && !_exporting && layer->locked && _scope.empty())
         return;
 
     QColor color;
@@ -1316,6 +1353,9 @@ void PhoenixView::drawElement(QPainter& painter, const fla::Element* element, co
             const bool synced = instance->symbolType == fla::SymbolType::Graphic;
             int frameOffset = synced ? instance->firstFrame : 0;
             fla::LoopType loopType = synced ? instance->loopType : fla::LoopType::SingleFrame;
+            // An exported movie plays its movie clips, round and round.
+            if (_exporting && instance->symbolType == fla::SymbolType::MovieClip)
+                loopType = fla::LoopType::Loop;
 
             // An Asset Warp puppet shows its first frame, the art as it was
             // placed, warped by the instance's pins (between two keyframes'

@@ -54,7 +54,14 @@ class MainWindow : public QMainWindow
 
 public:
     /// Opens \a initialFile when given, else the most recent file.
-    explicit MainWindow(const QString& initialFile = QString(), QWidget* parent = nullptr);
+    /// With \a startup false, nothing opens by itself and no update check
+    /// runs, as for exporting from the command line.
+    explicit MainWindow(const QString& initialFile = QString(), QWidget* parent = nullptr, bool startup = true);
+
+    /// Opens \a source and exports all its frames to \a output: a PNG
+    /// sequence for a .png name, a video otherwise. Returns the process exit
+    /// code, writing any error to stderr.
+    int exportFromCommandLine(const QString& source, const QString& output);
    
     void loadFLAFile(const QString& filePath);
 
@@ -68,6 +75,7 @@ private slots:
     void saveFileAs();
 
     void exportSvg();
+    void exportMovie();
 
     void openRecentFile();
     

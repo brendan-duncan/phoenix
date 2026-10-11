@@ -9,6 +9,7 @@
 #include "../data/timeline.h"
 
 #include <algorithm>
+#include <cmath>
 #include <cstdlib>
 
 TimelineAudio::TimelineAudio(Player* player, QObject* parent)
@@ -117,6 +118,128 @@ std::shared_ptr<const PcmBuffer> TimelineAudio::soundOf(const fla::Frame* frame,
     if (in)
         *in = sound.in;
     return buffer(sound.name);
+}
+
+std::vector<float> TimelineAudio::mixdown(int first, int last)
+{
+    std::vector<float> mixed;
+    const fla::Document* doc = _document ? _document->document : nullptr;
+    if (!doc || last < first)
+        return mixed;
+    const double samplesPerFrame = PcmBuffer::kRate / frameRate();
+    const auto at = [&](int frame) { return static_cast<size_t>(std::llround((frame - first) * samplesPerFrame)); };
+    const size_t total = at(last + 1);
+    mixed.assign(total * 2, 0.0f);
+
+    // Each sound placed on the output: from where, which part of it, how
+    // many times round (0 for until stopped), and where a stop cuts it.
+    struct Placed
+    {
+        std::string name;
+        std::shared_ptr<const PcmBuffer> pcm;
+        size_t start = 0;
+        size_t in = 0;
+        size_t out = 0;
+        int loops = 1;
+        size_t cut = static_cast<size_t>(-1);
+        std::shared_ptr<const AudioEnvelope> envelope;
+
+        size_t end() const
+        {
+            const size_t length = out - in;
+            const size_t natural = loops > 0 ? start + length * static_cast<size_t>(loops) : static_cast<size_t>(-1);
+            return std::min(natural, cut);
+        }
+    };
+    std::vector<Placed> placed;
+
+    for (int frame = first; frame <= last; ++frame)
+    {
+        const size_t here = at(frame);
+        for (const fla::Timeline* timeline : doc->timelines)
+        {
+            for (const fla::Layer* layer : timeline ? timeline->layers : std::vector<fla::Layer*>())
+            {
+                if (!layer || !layer->visible)
+                    continue;
+                for (const fla::Frame* key : layer->frames)
+                {
+                    if (!key || key->index > frame || frame >= key->index + std::max(key->duration, 1))
+                        continue;
+                    FrameSound sound;
+                    if (!soundSettings(*key, sound))
+                        continue;
+                    // A stream is placed once, from the first frame of its
+                    // span that is in the range.
+                    const bool streamStart = sound.sync == "stream" && frame == std::max(first, key->index);
+                    if (key->index != frame && !streamStart)
+                        continue;
+                    if (sound.sync == "stop")
+                    {
+                        for (Placed& voice : placed)
+                        {
+                            if (voice.name == sound.name && voice.start <= here && here < voice.end())
+                                voice.cut = here;
+                        }
+                        continue;
+                    }
+                    std::shared_ptr<const PcmBuffer> pcm = buffer(sound.name);
+                    if (!pcm)
+                        continue;
+                    Placed voice;
+                    voice.name = sound.name;
+                    voice.pcm = pcm;
+                    voice.start = here;
+                    voice.in = std::min(sound.in, pcm->frames());
+                    voice.out = sound.hasOut && sound.out > voice.in ? std::min(sound.out, pcm->frames()) : pcm->frames();
+                    voice.loops = sound.loops;
+                    voice.envelope = sound.envelope;
+                    if (voice.out <= voice.in)
+                        continue;
+                    if (sound.sync == "stream")
+                    {
+                        // From where the span is at this frame, for as long
+                        // as the span runs.
+                        voice.in = std::min(voice.out, voice.in +
+                            static_cast<size_t>(std::llround((frame - key->index) * samplesPerFrame)));
+                        voice.loops = 1;
+                        voice.cut = at(key->index + std::max(key->duration, 1));
+                        if (voice.out <= voice.in)
+                            continue;
+                    }
+                    else if (sound.sync == "start")
+                    {
+                        bool already = false;
+                        for (const Placed& other : placed)
+                            already = already || (other.name == sound.name && other.start <= here && here < other.end());
+                        if (already)
+                            continue;
+                    }
+                    placed.push_back(voice);
+                }
+            }
+        }
+    }
+
+    for (const Placed& voice : placed)
+    {
+        const size_t length = voice.out - voice.in;
+        const size_t end = std::min(voice.end(), total);
+        for (size_t at = voice.start; at < end; ++at)
+        {
+            const size_t played = at - voice.start;
+            const size_t source = voice.in + played % length;
+            float left = 1.0f;
+            float right = 1.0f;
+            if (voice.envelope)
+                voice.envelope->gainAt(voice.in + played, left, right);
+            mixed[at * 2] += voice.pcm->samples[source * 2] * left;
+            mixed[at * 2 + 1] += voice.pcm->samples[source * 2 + 1] * right;
+        }
+    }
+    for (float& sample : mixed)
+        sample = std::max(-1.0f, std::min(1.0f, sample));
+    return mixed;
 }
 
 void TimelineAudio::stopStreams()
