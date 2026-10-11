@@ -9,6 +9,7 @@
 #include "../data/symbol.h"
 #include "../edit/brush_stroke.h"
 #include "../edit/motion_object.h"
+#include "../edit/asset_warp.h"
 
 #include <QList>
 #include <QMap>
@@ -770,6 +771,17 @@ private:
     fla::Transform _overrideTransform;
     /// The resolved frame drawFrame is drawing, for its motion.
     const LayerFrame* _drawnState = nullptr;
+
+    /// Asset Warp: while a puppet instance draws its art, the pins that warp
+    /// it and the painter's mapping of the puppet's own space, so each shape
+    /// drawn inside can be taken there, warped and drawn.
+    bool _warping = false;
+    std::vector<fla::WarpPin> _warpPins;
+    QTransform _warpBase;
+    QTransform _warpBaseInverse;
+    /// \a path, in a shape's space, taken by \a toPuppet into the puppet's
+    /// space, flattened finely and warped by the pins.
+    QPainterPath warpedPath(const QPainterPath& path, const QTransform& toPuppet) const;
 
     /// Draws a shape, or, part way through a shape tween to \a tweenShape,
     /// the morph between them. \a ownTransform is the element's transform

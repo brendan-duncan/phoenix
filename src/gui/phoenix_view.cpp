@@ -1317,6 +1317,51 @@ void PhoenixView::drawElement(QPainter& painter, const fla::Element* element, co
             int frameOffset = synced ? instance->firstFrame : 0;
             fla::LoopType loopType = synced ? instance->loopType : fla::LoopType::SingleFrame;
 
+            // An Asset Warp puppet shows its first frame, the art as it was
+            // placed, warped by the instance's pins (between two keyframes'
+            // pins in a classic tween).
+            struct WarpScope
+            {
+                PhoenixView& view;
+                bool was;
+                std::vector<fla::WarpPin> pins;
+                QTransform base;
+                QTransform inverse;
+                ~WarpScope()
+                {
+                    view._warping = was;
+                    view._warpPins = pins;
+                    view._warpBase = base;
+                    view._warpBaseInverse = inverse;
+                }
+            } warpScope{*this, _warping, _warpPins, _warpBase, _warpBaseInverse};
+            if (instance->otherSymbolType == "puppet")
+            {
+                frameOffset = 0;
+                loopType = fla::LoopType::SingleFrame;
+                const auto handlesOf = [](const fla::Element* element) {
+                    const fla::SymbolInstance* puppet = dynamic_cast<const fla::SymbolInstance*>(element);
+                    if (puppet)
+                        for (const auto& attribute : puppet->extraAttributes)
+                            if (attribute.first == "puppetHandles")
+                                return fla::AssetWarp::pins(attribute.second);
+                    return std::vector<fla::WarpPin>();
+                };
+                std::vector<fla::WarpPin> pins = handlesOf(instance);
+                if (tweenElement)
+                    pins = fla::AssetWarp::blend(pins, handlesOf(tweenElement), tweenProgress);
+                bool invertible = false;
+                const QTransform base = painter.transform();
+                const QTransform inverse = base.inverted(&invertible);
+                if (!pins.empty() && invertible)
+                {
+                    _warping = true;
+                    _warpPins = std::move(pins);
+                    _warpBase = base;
+                    _warpBaseInverse = inverse;
+                }
+            }
+
             // Part way through a classic tween, the color is between the
             // two keyframes' colors.
             fla::ColorTransform color = instance->colorTransform;
@@ -2698,6 +2743,25 @@ void PhoenixView::drawShape(QPainter& painter, const fla::Shape* shape, const fl
 {
     const bool isSelected = isElementSelected(shape);
 
+    // Inside a warped puppet the shape is drawn through the warp, in the
+    // puppet's own space.
+    if (_warping)
+    {
+        const QTransform toPuppet = painter.transform() * _warpBaseInverse;
+        painter.save();
+        painter.setTransform(_warpBase);
+        for (const PathCacheEntry& entry : shapePaths(shape))
+        {
+            PathCacheEntry warped = entry;
+            warped.painterPath = warpedPath(entry.painterPath, toPuppet);
+            if (!entry.effectPath.isEmpty())
+                warped.effectPath = warpedPath(entry.effectPath, toPuppet);
+            paintEntry(painter, warped);
+        }
+        painter.restore();
+        return;
+    }
+
     // A shape tween replaces the shape's own geometry for the duration of
     // the tween: the morph the file stores is built at this progress, with
     // its segments' own fills and strokes blended between the keyframes,
@@ -2734,6 +2798,36 @@ void PhoenixView::drawShape(QPainter& painter, const fla::Shape* shape, const fl
     {
         drawOverlayPoints(painter, shape);
     }
+}
+
+QPainterPath PhoenixView::warpedPath(const QPainterPath& path, const QTransform& toPuppet) const
+{
+    QPainterPath out;
+    out.setFillRule(path.fillRule());
+    // Straight runs are cut into pieces of a pixel or so, so the warp bends
+    // them too.
+    const double step = 1.0;
+    for (const QPolygonF& polygon : path.toSubpathPolygons(toPuppet))
+    {
+        if (polygon.isEmpty())
+            continue;
+        const auto place = [this](const QPointF& point) {
+            const fla::Point moved = fla::AssetWarp::warp(_warpPins, fla::Point(point.x(), point.y()));
+            return QPointF(moved.x, moved.y);
+        };
+        out.moveTo(place(polygon.first()));
+        for (int i = 1; i < polygon.size(); ++i)
+        {
+            const QPointF a = polygon[i - 1];
+            const QPointF b = polygon[i];
+            const int pieces = std::max(1, static_cast<int>(std::ceil(std::hypot(b.x() - a.x(), b.y() - a.y()) / step)));
+            for (int k = 1; k <= pieces; ++k)
+                out.lineTo(place(a + (b - a) * (static_cast<double>(k) / pieces)));
+        }
+        if (polygon.size() > 2 && polygon.first() == polygon.last())
+            out.closeSubpath();
+    }
+    return out;
 }
 
 double PhoenixView::pickTolerance() const

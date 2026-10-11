@@ -164,6 +164,7 @@ set(HEADERS
     src/edit/drawing_style.h
     src/edit/brush_stroke.h
     src/edit/motion_object.h
+    src/edit/asset_warp.h
     src/edit/magic_wand.h
     src/edit/curve_fit.h
     src/edit/shape_recognition.h
@@ -284,6 +285,7 @@ set(SOURCES
     src/edit/drawing_style.cpp
     src/edit/brush_stroke.cpp
     src/edit/motion_object.cpp
+    src/edit/asset_warp.cpp
     src/edit/magic_wand.cpp
     src/edit/curve_fit.cpp
     src/edit/shape_recognition.cpp
