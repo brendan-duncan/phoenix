@@ -1959,20 +1959,33 @@ void MainWindow::setupPropertiesPanel()
         if (_propertiesPanel)
             _propertiesPanel->refresh();
     };
-    connect(_libraryPanel, &LibraryPanel::renameSymbolRequested, this,
-        [this, symbolNamed, afterLibraryEdit](const QString& name, const QString& newName) {
-            fla::Symbol* symbol = symbolNamed(name);
-            if (!symbol)
-                return;
-            if (!fla::library::nameIsFree(*_flaDocument->document, newName.toStdString()))
-            {
-                statusBar()->showMessage(QString("The library already has an item named %1.").arg(newName), 4000);
-                _libraryPanel->refresh();
-                return;
-            }
-            _editContext.commandStack().push(fla::CommandPtr(
-                new fla::RenameSymbolCommand(_flaDocument->document, symbol, newName.toStdString())));
-            afterLibraryEdit();
+    // Renaming and moving are both changes of path: a folder takes what is
+    // in it along, and everything that names an item follows it.
+    const auto changePath = [this, afterLibraryEdit](const QString& from, const QString& to, const char* what) {
+        if (!_flaDocument || !_flaDocument->document)
+            return;
+        std::string problem;
+        fla::library::Renames renames =
+            fla::library::pathRenames(*_flaDocument->document, from.toStdString(), to.toStdString(), &problem);
+        if (renames.empty())
+        {
+            if (!problem.empty())
+                statusBar()->showMessage(QString::fromStdString(problem), 4000);
+            _libraryPanel->refresh();
+            return;
+        }
+        _editContext.commandStack().push(fla::CommandPtr(
+            new fla::RenameLibraryCommand(_flaDocument->document, std::move(renames), what)));
+        afterLibraryEdit();
+    };
+    connect(_libraryPanel, &LibraryPanel::renameRequested, this,
+        [changePath](const QString& name, const QString& newName) { changePath(name, newName, "Rename"); });
+    connect(_libraryPanel, &LibraryPanel::moveRequested, this,
+        [changePath](const QString& name, const QString& folder) {
+            const QString leaf = name.mid(name.lastIndexOf('/') + 1);
+            const QString to = folder.isEmpty() ? leaf : folder + "/" + leaf;
+            if (to != name)
+                changePath(name, to, "Move to Folder");
         });
     connect(_libraryPanel, &LibraryPanel::duplicateSymbolRequested, this,
         [this, symbolNamed, afterLibraryEdit](const QString& name) {

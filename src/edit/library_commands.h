@@ -29,7 +29,45 @@ std::string freeCopyName(const Document& document, const std::string& base);
 /// and everything on them. The caller owns it.
 Symbol* cloneSymbol(const Symbol& symbol, const std::string& name);
 
+/// Library names are paths: "Characters/Head/eye" is the item "eye" in the
+/// folder "Head" in the folder "Characters". Renaming an item or a folder,
+/// or moving it into another folder, is a change of path; these are the
+/// changes, each from a full name to a full name.
+using Renames = std::vector<std::pair<std::string, std::string>>;
+
+/// Whether \a name is one of the library's folders.
+bool isFolder(const Document& document, const std::string& name);
+
+/// The changes that rename or move \a from, an item or a folder, to the
+/// full name \a to. A folder takes its folders and items along. Empty, with
+/// \a problem saying why, when \a from names nothing, \a to is taken, the
+/// folder \a to would be in does not exist, or a folder would go inside
+/// itself.
+Renames pathRenames(const Document& document, const std::string& from, const std::string& to,
+    std::string* problem = nullptr);
+
+/// Makes the changes: the folders, symbols, bitmaps and sounds named, and
+/// everything that refers to them by name: symbol and bitmap instances,
+/// bitmap fills, and the frames that play a sound.
+void applyRenames(Document& document, const Renames& renames);
+
 } // namespace library
+
+/// Renames or moves library items and folders, as one undoable step.
+class RenameLibraryCommand : public Command
+{
+public:
+    RenameLibraryCommand(Document* document, library::Renames renames, const std::string& name);
+    void redo() override;
+    void undo() override;
+    std::string name() const override { return _name; }
+
+private:
+    Document* _document;
+    library::Renames _renames;
+    library::Renames _inverse;
+    std::string _name;
+};
 
 /// Renames a symbol, and every instance of it with it.
 class RenameSymbolCommand : public Command

@@ -3,6 +3,10 @@
 #include "timeline_edit.h"
 
 #include "../data/bitmap.h"
+#include "../data/bitmap_fill.h"
+#include "../data/bitmap_instance.h"
+#include "../data/shape.h"
+#include "../data/stroke_style.h"
 #include "../data/document.h"
 #include "../data/folder.h"
 #include "../data/frame.h"
@@ -15,6 +19,8 @@
 
 #include <algorithm>
 #include <functional>
+#include <map>
+#include <string>
 
 namespace fla {
 
@@ -90,7 +96,263 @@ bool nameIsFree(const Document& document, const std::string& name)
         if (resource && resource->resourceType() == Resource::Type::Bitmap &&
             static_cast<const Bitmap*>(resource)->name == name)
             return false;
+    for (const Document::SoundInfo& sound : document.sounds)
+        if (sound.name == name)
+            return false;
     return true;
+}
+
+bool isFolder(const Document& document, const std::string& name)
+{
+    for (const Folder* folder : document.folders)
+        if (folder && folder->name == name)
+            return true;
+    return false;
+}
+
+namespace {
+
+/// Every name in the library: folders, symbols, bitmaps and sounds.
+std::vector<std::string> libraryNames(const Document& document)
+{
+    std::vector<std::string> names;
+    for (const Folder* folder : document.folders)
+        if (folder)
+            names.push_back(folder->name);
+    if (document.symbolList)
+        for (const Symbol* symbol : document.symbolList->symbols)
+            if (symbol)
+                names.push_back(symbol->name);
+    for (const Resource* resource : document.resources)
+        if (resource && resource->resourceType() == Resource::Type::Bitmap)
+            names.push_back(static_cast<const Bitmap*>(resource)->name);
+    for (const Document::SoundInfo& sound : document.sounds)
+        names.push_back(sound.name);
+    return names;
+}
+
+bool startsWith(const std::string& text, const std::string& prefix)
+{
+    return text.size() >= prefix.size() && text.compare(0, prefix.size(), prefix) == 0;
+}
+
+std::string xmlEscaped(const std::string& text)
+{
+    std::string out;
+    for (const char c : text)
+    {
+        switch (c)
+        {
+        case '&': out += "&amp;"; break;
+        case '<': out += "&lt;"; break;
+        case '>': out += "&gt;"; break;
+        case '"': out += "&quot;"; break;
+        case '\'': out += "&apos;"; break;
+        default: out += c; break;
+        }
+    }
+    return out;
+}
+
+std::string xmlUnescaped(const std::string& text)
+{
+    static const std::pair<const char*, char> entities[] = {
+        {"&amp;", '&'}, {"&lt;", '<'}, {"&gt;", '>'}, {"&quot;", '"'}, {"&apos;", '\''}};
+    std::string out;
+    for (size_t i = 0; i < text.size();)
+    {
+        bool matched = false;
+        if (text[i] == '&')
+        {
+            for (const auto& entity : entities)
+            {
+                const size_t length = std::char_traits<char>::length(entity.first);
+                if (text.compare(i, length, entity.first) == 0)
+                {
+                    out += entity.second;
+                    i += length;
+                    matched = true;
+                    break;
+                }
+            }
+        }
+        if (!matched)
+            out += text[i++];
+    }
+    return out;
+}
+
+/// Calls \a visit for every element, inside groups too, on every frame of
+/// the document's timelines and its symbols' timelines, and \a frameVisit
+/// for every frame.
+void forEverything(Document& document, const std::function<void(Element*)>& visit,
+    const std::function<void(Frame*)>& frameVisit)
+{
+    std::function<void(Element*)> walk = [&](Element* element) {
+        if (!element)
+            return;
+        visit(element);
+        if (element->elementType() == Element::Type::Group)
+            for (Element* member : static_cast<Group*>(element)->members)
+                walk(member);
+    };
+    const auto timeline = [&](Timeline* timeline) {
+        if (!timeline)
+            return;
+        for (Layer* layer : timeline->layers)
+        {
+            if (!layer)
+                continue;
+            for (Frame* frame : layer->frames)
+            {
+                if (!frame)
+                    continue;
+                frameVisit(frame);
+                for (Element* element : frame->elements)
+                    walk(element);
+            }
+        }
+    };
+    for (Timeline* t : document.timelines)
+        timeline(t);
+    if (document.symbolList)
+        for (Symbol* symbol : document.symbolList->symbols)
+            if (symbol)
+                for (Timeline* t : symbol->timelines)
+                    timeline(t);
+}
+
+} // namespace
+
+Renames pathRenames(const Document& document, const std::string& from, const std::string& to,
+    std::string* problem)
+{
+    const auto fail = [problem](const std::string& why) {
+        if (problem)
+            *problem = why;
+        return Renames();
+    };
+    const std::vector<std::string> names = libraryNames(document);
+    if (std::find(names.begin(), names.end(), from) == names.end())
+        return fail("There is no library item named " + from + ".");
+    if (to.empty() || to.front() == '/' || to.back() == '/' || to.find("//") != std::string::npos)
+        return fail("That is not a library name.");
+    if (to == from)
+        return Renames();
+    const bool folder = isFolder(document, from);
+    if (folder && startsWith(to, from + "/"))
+        return fail("A folder cannot go inside itself.");
+    const size_t slash = to.rfind('/');
+    if (slash != std::string::npos && !isFolder(document, to.substr(0, slash)))
+        return fail("There is no folder named " + to.substr(0, slash) + ".");
+
+    Renames renames;
+    renames.emplace_back(from, to);
+    if (folder)
+    {
+        for (const std::string& name : names)
+            if (startsWith(name, from + "/"))
+                renames.emplace_back(name, to + name.substr(from.size()));
+    }
+
+    // Each new name has to be free, unless what has it is moving out of
+    // the way in the same change.
+    for (const auto& rename : renames)
+    {
+        const bool taken = std::find(names.begin(), names.end(), rename.second) != names.end();
+        const bool vacated = std::find_if(renames.begin(), renames.end(),
+            [&rename](const std::pair<std::string, std::string>& other) {
+                return other.first == rename.second;
+            }) != renames.end();
+        if (taken && !vacated)
+            return fail("The library already has an item named " + rename.second + ".");
+    }
+    return renames;
+}
+
+void applyRenames(Document& document, const Renames& renames)
+{
+    if (renames.empty())
+        return;
+    std::map<std::string, std::string> changed(renames.begin(), renames.end());
+    const auto renamed = [&changed](std::string& name) {
+        const auto it = changed.find(name);
+        if (it == changed.end())
+            return false;
+        name = it->second;
+        return true;
+    };
+
+    for (Folder* folder : document.folders)
+        if (folder)
+            renamed(folder->name);
+
+    if (document.symbolList)
+    {
+        SymbolList* list = document.symbolList;
+        for (Symbol* symbol : list->symbols)
+        {
+            if (!symbol)
+                continue;
+            const std::string before = symbol->name;
+            if (renamed(symbol->name) && list->symbolMap.count(before) && list->symbolMap[before] == symbol)
+                list->symbolMap.erase(before);
+        }
+        for (Symbol* symbol : list->symbols)
+            if (symbol)
+                list->symbolMap[symbol->name] = symbol;
+    }
+
+    for (Resource* resource : document.resources)
+        if (resource && resource->resourceType() == Resource::Type::Bitmap)
+            renamed(static_cast<Bitmap*>(resource)->name);
+
+    for (Document::SoundInfo& sound : document.sounds)
+        renamed(sound.name);
+
+    // A sound's library item is kept as XML text; its name is the first
+    // name attribute of the element.
+    for (std::string& xml : document.extraMedia)
+    {
+        const size_t tagEnd = xml.find('>');
+        const size_t at = xml.find(" name=\"");
+        if (at == std::string::npos || at > tagEnd)
+            continue;
+        const size_t valueStart = at + 7;
+        const size_t valueEnd = xml.find('"', valueStart);
+        if (valueEnd == std::string::npos)
+            continue;
+        std::string name = xmlUnescaped(xml.substr(valueStart, valueEnd - valueStart));
+        if (renamed(name))
+            xml.replace(valueStart, valueEnd - valueStart, xmlEscaped(name));
+    }
+
+    forEverything(document,
+        [&](Element* element) {
+            if (element->elementType() == Element::Type::SymbolInstance)
+            {
+                renamed(static_cast<SymbolInstance*>(element)->libraryItemName);
+            }
+            else if (element->elementType() == Element::Type::BitmapInstance)
+            {
+                renamed(static_cast<BitmapInstance*>(element)->libraryItemName);
+            }
+            else if (element->elementType() == Element::Type::Shape)
+            {
+                Shape* shape = static_cast<Shape*>(element);
+                for (FillStyle* fill : shape->fills)
+                    if (fill && fill->type() == FillStyle::Type::BitmapFill)
+                        renamed(static_cast<BitmapFill*>(fill)->bitmapPath);
+                for (StrokeStyle* stroke : shape->strokes)
+                    if (stroke && stroke->fill && stroke->fill->type() == FillStyle::Type::BitmapFill)
+                        renamed(static_cast<BitmapFill*>(stroke->fill)->bitmapPath);
+            }
+        },
+        [&](Frame* frame) {
+            for (auto& attribute : frame->extraAttributes)
+                if (attribute.first == "soundName")
+                    renamed(attribute.second);
+        });
 }
 
 std::string freeCopyName(const Document& document, const std::string& base)
@@ -263,6 +525,27 @@ void RemoveSymbolCommand::undo()
     symbols.insert(symbols.begin() + static_cast<long>(std::min(_index, symbols.size())), _symbol);
     _document->symbolList->symbolMap[_symbol->name] = _symbol;
     _owned = false;
+}
+
+RenameLibraryCommand::RenameLibraryCommand(Document* document, library::Renames renames, const std::string& name)
+    : _document(document)
+    , _renames(std::move(renames))
+    , _name(name)
+{
+    for (const auto& rename : _renames)
+        _inverse.emplace_back(rename.second, rename.first);
+}
+
+void RenameLibraryCommand::redo()
+{
+    if (_document)
+        library::applyRenames(*_document, _renames);
+}
+
+void RenameLibraryCommand::undo()
+{
+    if (_document)
+        library::applyRenames(*_document, _inverse);
 }
 
 AddFolderCommand::AddFolderCommand(Document* document, const std::string& name)

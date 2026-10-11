@@ -8,6 +8,9 @@
 #include "../data/symbol_list.h"
 
 #include <QDrag>
+#include <QDragEnterEvent>
+#include <QDragMoveEvent>
+#include <QDropEvent>
 #include <QHeaderView>
 #include <QLabel>
 #include <QMenu>
@@ -104,6 +107,28 @@ QIcon bitmapIcon()
     });
 }
 
+QIcon soundIcon()
+{
+    // A speaker with two waves, as Animate marks a sound.
+    return glyph([](QPainter& painter) {
+        painter.setPen(Qt::NoPen);
+        painter.setBrush(kInk);
+        QPainterPath speaker;
+        speaker.moveTo(2.5, 6.0);
+        speaker.lineTo(5.0, 6.0);
+        speaker.lineTo(8.5, 3.0);
+        speaker.lineTo(8.5, 13.0);
+        speaker.lineTo(5.0, 10.0);
+        speaker.lineTo(2.5, 10.0);
+        speaker.closeSubpath();
+        painter.drawPath(speaker);
+        painter.setBrush(Qt::NoBrush);
+        painter.setPen(QPen(kInk, 1.2));
+        painter.drawArc(QRectF(7.0, 5.0, 5.0, 6.0), -60 * 16, 120 * 16);
+        painter.drawArc(QRectF(7.0, 2.5, 8.0, 11.0), -60 * 16, 120 * 16);
+    });
+}
+
 QString typeName(fla::SymbolType type)
 {
     switch (type)
@@ -121,7 +146,56 @@ LibraryTree::LibraryTree(QWidget* parent)
     : QTreeWidget(parent)
 {
     setDragEnabled(true);
-    setDragDropMode(QAbstractItemView::DragOnly);
+    setAcceptDrops(true);
+    viewport()->setAcceptDrops(true);
+    setDropIndicatorShown(true);
+    setDragDropMode(QAbstractItemView::DragDrop);
+}
+
+QString LibraryTree::folderAt(const QPoint& position) const
+{
+    const QTreeWidgetItem* item = itemAt(position);
+    if (!item)
+        return QString();
+    const QString name = item->data(0, NameRole).toString();
+    if (item->data(0, KindRole).toInt() == 0)
+        return name;
+    const int slash = name.lastIndexOf('/');
+    return slash < 0 ? QString() : name.left(slash);
+}
+
+void LibraryTree::dragEnterEvent(QDragEnterEvent* event)
+{
+    if (event->source() == this && event->mimeData()->hasFormat(mimeType()))
+        event->acceptProposedAction();
+    else
+        event->ignore();
+}
+
+void LibraryTree::dragMoveEvent(QDragMoveEvent* event)
+{
+    if (event->source() == this && event->mimeData()->hasFormat(mimeType()))
+        event->acceptProposedAction();
+    else
+        event->ignore();
+}
+
+void LibraryTree::dropEvent(QDropEvent* event)
+{
+    if (event->source() != this || !event->mimeData()->hasFormat(mimeType()))
+    {
+        event->ignore();
+        return;
+    }
+    const QString text = QString::fromUtf8(event->mimeData()->data(mimeType()));
+    const int colon = text.indexOf(':');
+    if (colon < 0)
+        return;
+    const QString name = text.mid(colon + 1);
+    const QString folder = folderAt(event->position().toPoint());
+    event->acceptProposedAction();
+    // After the drag has finished: the move rebuilds the list.
+    QTimer::singleShot(0, this, [this, name, folder]() { emit moveRequested(name, folder); });
 }
 
 const char* LibraryTree::mimeType()
@@ -135,15 +209,16 @@ void LibraryTree::startDrag(Qt::DropActions)
     if (!item)
         return;
     const int kind = item->data(0, KindRole).toInt();
-    if (kind == 0)
+    static const char* const prefixes[] = {"folder:", "symbol:", "bitmap:", "sound:"};
+    if (kind < 0 || kind > 3)
         return;
     const QString name = item->data(0, NameRole).toString();
     QMimeData* data = new QMimeData;
-    data->setData(mimeType(), (QString(kind == 1 ? "symbol:" : "bitmap:") + name).toUtf8());
+    data->setData(mimeType(), (QString(prefixes[kind]) + name).toUtf8());
     QDrag* drag = new QDrag(this);
     drag->setMimeData(data);
     drag->setPixmap(item->icon(0).pixmap(16, 16));
-    drag->exec(Qt::CopyAction);
+    drag->exec(Qt::CopyAction | Qt::MoveAction, Qt::CopyAction);
 }
 
 LibraryPanel::LibraryPanel(QWidget* parent)
@@ -190,13 +265,15 @@ LibraryPanel::LibraryPanel(QWidget* parent)
         QAction* rename = nullptr;
         QAction* duplicate = nullptr;
         QAction* remove = nullptr;
+        if (item)
+            rename = menu.addAction("Rename");
         if (kind == static_cast<int>(Kind::Symbol))
         {
-            rename = menu.addAction("Rename");
             duplicate = menu.addAction("Duplicate");
             remove = menu.addAction("Delete");
-            menu.addSeparator();
         }
+        if (item)
+            menu.addSeparator();
         QAction* folder = menu.addAction("New Folder");
         QAction* chosen = menu.exec(_tree->viewport()->mapToGlobal(at));
         if (!chosen)
@@ -225,7 +302,7 @@ LibraryPanel::LibraryPanel(QWidget* parent)
         }
     });
     connect(_tree, &QTreeWidget::itemChanged, this, [this](QTreeWidgetItem* item, int column) {
-        if (_refreshing || column != 0 || item->data(0, KindRole).toInt() != static_cast<int>(Kind::Symbol))
+        if (_refreshing || column != 0)
             return;
         const QString name = item->data(0, NameRole).toString();
         const QString typed = item->text(0).trimmed();
@@ -242,12 +319,13 @@ LibraryPanel::LibraryPanel(QWidget* parent)
         // After the edit has closed: the rename rebuilds the list, which
         // must not delete the item while its editor is still finishing.
         const QString newName = folder + typed;
-        QTimer::singleShot(0, this, [this, name, newName]() { emit renameSymbolRequested(name, newName); });
+        QTimer::singleShot(0, this, [this, name, newName]() { emit renameRequested(name, newName); });
     });
     connect(_tree, &QTreeWidget::itemDoubleClicked, this, [this](QTreeWidgetItem* item, int) {
         if (item && item->data(0, KindRole).toInt() == static_cast<int>(Kind::Symbol))
             emit editSymbolRequested(item->data(0, NameRole).toString());
     });
+    connect(_tree, &LibraryTree::moveRequested, this, &LibraryPanel::moveRequested);
 }
 
 void LibraryPanel::setPreviewProvider(std::function<QImage(const QString&, const QString&, const QSize&)> provider)
@@ -260,7 +338,8 @@ void LibraryPanel::updatePreview()
 {
     QTreeWidgetItem* item = _tree->currentItem();
     const int kind = item ? item->data(0, KindRole).toInt() : 0;
-    if (!item || kind == static_cast<int>(Kind::Folder) || !_previewProvider || !_document)
+    if (!item || kind == static_cast<int>(Kind::Folder) || kind == static_cast<int>(Kind::Sound) ||
+        !_previewProvider || !_document)
     {
         _preview->setPixmap(QPixmap());
         return;
@@ -294,6 +373,8 @@ QStringList LibraryPanel::snapshot() const
     for (const fla::Resource* resource : doc->resources)
         if (resource && resource->resourceType() == fla::Resource::Type::Bitmap)
             names << "b:" + QString::fromStdString(static_cast<const fla::Bitmap*>(resource)->name);
+    for (const fla::Document::SoundInfo& sound : doc->sounds)
+        names << "a:" + QString::fromStdString(sound.name);
     return names;
 }
 
@@ -330,7 +411,7 @@ QTreeWidgetItem* LibraryPanel::folderItem(const QString& path)
             found->setText(1, "Folder");
             found->setData(0, KindRole, static_cast<int>(Kind::Folder));
             found->setData(0, NameRole, sofar);
-            found->setFlags(found->flags() & ~Qt::ItemIsDragEnabled);
+            found->setFlags(found->flags() | Qt::ItemIsEditable | Qt::ItemIsDropEnabled);
             if (parent)
                 parent->addChild(found);
             else
@@ -383,8 +464,7 @@ void LibraryPanel::refresh()
         item->setData(0, KindRole, static_cast<int>(kind));
         item->setData(0, NameRole, path);
         item->setToolTip(0, path);
-        if (kind == Kind::Symbol)
-            item->setFlags(item->flags() | Qt::ItemIsEditable);
+        item->setFlags((item->flags() | Qt::ItemIsEditable) & ~Qt::ItemIsDropEnabled);
         if (QTreeWidgetItem* parent = folderItem(slash < 0 ? QString() : path.left(slash)))
             parent->addChild(item);
         else
@@ -407,6 +487,8 @@ void LibraryPanel::refresh()
             add(QString::fromStdString(static_cast<const fla::Bitmap*>(resource)->name), bitmapIcon(),
                 "Bitmap", Kind::Bitmap);
     }
+    for (const fla::Document::SoundInfo& sound : doc->sounds)
+        add(QString::fromStdString(sound.name), soundIcon(), "Sound", Kind::Sound);
 
     _count->setText(QString("%1 item%2").arg(items).arg(items == 1 ? "" : "s"));
     _tree->setSortingEnabled(true);

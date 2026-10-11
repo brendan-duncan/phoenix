@@ -4542,9 +4542,23 @@ void PhoenixView::drawRulersAndGuides(QPainter& painter)
     painter.restore();
 }
 
+namespace {
+
+/// Whether a library drag is of something the stage can place: a symbol or
+/// a bitmap. Folders and sounds are dragged only within the library.
+bool placeable(const QMimeData* data)
+{
+    if (!data->hasFormat(LibraryTree::mimeType()))
+        return false;
+    const QString text = QString::fromUtf8(data->data(LibraryTree::mimeType()));
+    return text.startsWith("symbol:") || text.startsWith("bitmap:");
+}
+
+} // namespace
+
 void PhoenixView::dragEnterEvent(QDragEnterEvent* event)
 {
-    if (event->mimeData()->hasFormat(LibraryTree::mimeType()))
+    if (placeable(event->mimeData()))
         event->acceptProposedAction();
     else
         QWidget::dragEnterEvent(event);
@@ -4552,7 +4566,7 @@ void PhoenixView::dragEnterEvent(QDragEnterEvent* event)
 
 void PhoenixView::dragMoveEvent(QDragMoveEvent* event)
 {
-    if (event->mimeData()->hasFormat(LibraryTree::mimeType()))
+    if (placeable(event->mimeData()))
         event->acceptProposedAction();
     else
         QWidget::dragMoveEvent(event);
@@ -4560,7 +4574,7 @@ void PhoenixView::dragMoveEvent(QDragMoveEvent* event)
 
 void PhoenixView::dropEvent(QDropEvent* event)
 {
-    if (!event->mimeData()->hasFormat(LibraryTree::mimeType()))
+    if (!placeable(event->mimeData()))
     {
         QWidget::dropEvent(event);
         return;

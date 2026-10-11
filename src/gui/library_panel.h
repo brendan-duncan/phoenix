@@ -12,23 +12,42 @@ class FLADocument;
 }
 
 /// The tree under the Library panel, which starts a drag of the item under
-/// the cursor with what the stage needs to place it.
+/// the cursor with what the stage needs to place it, and takes drops of its
+/// own items onto folders to move them there.
 class LibraryTree : public QTreeWidget
 {
+    Q_OBJECT
+
 public:
     explicit LibraryTree(QWidget* parent = nullptr);
 
-    /// The MIME type a library drag carries; its data is "symbol:Name" or
-    /// "bitmap:Name".
+    /// The MIME type a library drag carries; its data is "symbol:Name",
+    /// "bitmap:Name", "sound:Name" or "folder:Name". The stage places the
+    /// first two.
     static const char* mimeType();
+
+signals:
+    /// An item or folder was dropped into the folder \a folder (empty for
+    /// the top level).
+    void moveRequested(const QString& name, const QString& folder);
 
 protected:
     void startDrag(Qt::DropActions supportedActions) override;
+    void dragEnterEvent(QDragEnterEvent* event) override;
+    void dragMoveEvent(QDragMoveEvent* event) override;
+    void dropEvent(QDropEvent* event) override;
+
+private:
+    /// The folder a drop at \a position goes into: the folder under it, the
+    /// folder holding the item under it, or the top level.
+    QString folderAt(const QPoint& position) const;
 };
 
-/// Animate's Library panel: the document's symbols and bitmaps in their
-/// folders, with a count and the kind of each. Dragging an item to the
-/// stage places an instance of it there; double-clicking a symbol edits it.
+/// Animate's Library panel: the document's symbols, bitmaps and sounds in
+/// their folders, with a count and the kind of each. Dragging an item to
+/// the stage places an instance of it there; dragging it onto a folder in
+/// the list moves it there; double-clicking a symbol edits it, and
+/// double-clicking a name (or Rename) renames it.
 class LibraryPanel : public QWidget
 {
     Q_OBJECT
@@ -53,7 +72,11 @@ signals:
     void editSymbolRequested(const QString& name);
 
     /// The item menu's commands, for the window to carry out undoably.
-    void renameSymbolRequested(const QString& name, const QString& newName);
+    /// Any item or folder, by its full name, to a new full name in the
+    /// same folder.
+    void renameRequested(const QString& name, const QString& newName);
+    /// An item or folder dropped into another folder.
+    void moveRequested(const QString& name, const QString& folder);
     void duplicateSymbolRequested(const QString& name);
     void deleteSymbolRequested(const QString& name);
     /// A new folder inside \a parentPath (empty for the top level).
@@ -64,7 +87,8 @@ private:
     {
         Folder,
         Symbol,
-        Bitmap
+        Bitmap,
+        Sound
     };
 
     QTreeWidgetItem* folderItem(const QString& path);
