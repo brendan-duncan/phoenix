@@ -150,7 +150,9 @@ set PHOENIX_FLA_CORPUS=path/to/fla/files
 Phoenix is installed and kept up to date with [Velopack](https://velopack.io).
 Each release on GitHub carries a Windows installer
 (`Phoenix-win-x64-Setup.exe`), which installs for the current
-user without asking for admin rights, and a portable zip. An installed copy
+user without asking for admin rights, a macOS installer for Apple silicon
+(`Phoenix-osx-arm64-Setup.pkg`, signed and notarized), which installs
+`Phoenix.app` into Applications, and a portable zip of each. An installed copy
 looks for a newer release a few seconds after it starts (and from Help > Check
 for Updates), downloads it in the background, and offers to restart into it;
 an update put off is installed when Phoenix quits. A copy run from the build
@@ -167,7 +169,16 @@ The **Release** workflow (`.github/workflows/release.yml`) builds that version,
 packs it with `tools/release/pack.py`, and publishes it as the tag's release,
 with a delta package from the previous release. A tag with a suffix
 (`v0.2.0-beta.1`) makes a pre-release, which installed copies do not update
-to. Only Windows x64 is released so far.
+to. Running the workflow by hand from the Actions tab, with a version and
+**publish** left off, builds and packs without releasing anything; the packed
+release is kept as an artifact of the run.
+
+The macOS job signs with the Developer ID certificates and notarizes with an
+app-specific password, all kept as repository secrets: `MACOS_APP_CERT_P12`
+and `MACOS_INSTALLER_CERT_P12` (the Developer ID Application and Installer
+certificates with their keys, as base64 `.p12`), `MACOS_CERT_PASSWORD`,
+`APPLE_ID`, `APPLE_TEAM_ID` and `APPLE_APP_PASSWORD`. The certificates expire
+after five years and are made again at developer.apple.com.
 
 To pack a release locally, install the `vpk` tool at the Velopack version
 pinned in `cmake/PhoenixVelopack.cmake`, configure with the version, and pack:
