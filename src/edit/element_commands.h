@@ -70,7 +70,7 @@ private:
 class SetEdgeGeometryCommand : public Command
 {
 public:
-    ///  pathIndex is which of the edge's paths the anchors describe; the
+    /// \a pathIndex is which of the edge's paths the anchors describe; the
     /// others are left alone.
     SetEdgeGeometryCommand(Edge* edge, const EditablePath& before,
         const EditablePath& after, const std::string& name, size_t pathIndex = 0);
@@ -103,7 +103,7 @@ private:
 class MergeShapeCommand : public Command
 {
 public:
-    /// Merges  addition into  target straight away, keeping snapshots of
+    /// Merges \a addition into \a target straight away, keeping snapshots of
     /// both sides of the edit. The addition is left untouched.
     MergeShapeCommand(Shape* target, const Shape& addition, const std::string& name,
         const MergeOptions& options = MergeOptions());

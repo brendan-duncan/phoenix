@@ -57,7 +57,7 @@ public:
     static bool merge(Shape& target, const Shape& addition,
         const MergeOptions& options = MergeOptions());
 
-    /// Takes  cutter's filled area out of  target, leaving a hole.
+    /// Takes \a cutter's filled area out of \a target, leaving a hole.
     ///
     /// The inverse of merging, and what lifting a drawing back out of the
     /// artwork leaves behind. Drawing over something destroys what was under it,

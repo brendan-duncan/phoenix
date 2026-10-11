@@ -197,7 +197,7 @@ QImage bevel(const QImage& image, const fla::Filter& filter, double scale)
     return out;
 }
 
-/// The gradient's color at  t, 0 to 1, interpolated between its entries
+/// The gradient's color at \a t, 0 to 1, interpolated between its entries
 /// in straight (unpremultiplied) RGBA, as Flash's gradient filters read it.
 QRgb gradientAt(const std::vector<fla::GradientEntry>& entries, double t)
 {

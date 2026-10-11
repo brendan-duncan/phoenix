@@ -89,7 +89,7 @@ std::vector<Point> simplifyLoop(const std::vector<Point>& loop, double tolerance
     return out.size() >= 3 ? out : loop;
 }
 
-/// Each corner cut off along both its sides by  reach, or half the side
+/// Each corner cut off along both its sides by \a reach, or half the side
 /// when that is shorter: a pixel step becomes a diagonal across its middle,
 /// while a long side loses only its ends.
 std::vector<Point> cutCorners(const std::vector<Point>& loop, double reach)

@@ -193,7 +193,7 @@ private:
     void adoptDocument(fla::FLADocument* document, const QString& filePath,
         const QString& displayName);
 
-    /// Writes the document to  filePath, as a .fla when the name ends in
+    /// Writes the document to \a filePath, as a .fla when the name ends in
     /// .fla and as an uncompressed XFL folder otherwise. Reports failures and
     /// updates the saved state.
     bool saveToPath(const QString& filePath);

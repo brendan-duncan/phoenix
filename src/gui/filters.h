@@ -30,12 +30,12 @@ QPainter::CompositionMode blendMode(const std::string& name, bool& supported);
 /// Whether an instance needs rendering on its own before it is composited.
 bool needsIsolation(const std::string& blendModeName);
 
-/// Draws  image at  at with the instance's blend mode. Subtract and
+/// Draws \a image at \a at with the instance's blend mode. Subtract and
 /// invert, which Qt has no mode for, are composed from the ones it has:
 /// invert is the backdrop differenced with white under the instance's
 /// coverage, and subtract inverts, adds and inverts again. Alpha and erase
 /// cut into what is under them, which only means something inside a parent
-/// with the Layer blend mode ( insideLayerGroup): alpha keeps what is
+/// with the Layer blend mode (\a insideLayerGroup): alpha keeps what is
 /// under its coverage, erase removes it. Elsewhere Flash shows nothing of
 /// them, so nothing is drawn.
 void composite(QPainter& painter, const QPoint& at, const QImage& image, const std::string& blendModeName,

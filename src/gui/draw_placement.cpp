@@ -13,7 +13,7 @@
 
 namespace {
 
-/// Every shape below  addition that it overlaps, nearest first.
+/// Every shape below \a addition that it overlaps, nearest first.
 ///
 /// Only shapes below count. A drawing joins the artwork it was laid over, never
 /// something stacked on top of it, so the search starts at the addition's own

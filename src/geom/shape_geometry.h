@@ -80,7 +80,7 @@ constexpr int kKeepStroke = -2;
 /// each of its sides. A piece with no fill on either side and no stroke draws
 /// nothing and is left out, which is how the seams inside a merged shape
 /// disappear.
-///  keepStroke, when given, is asked about each piece; a piece it rejects is
+/// \a keepStroke, when given, is asked about each piece; a piece it rejects is
 /// rebuilt without its stroke. A piece left with nothing on either side and no
 /// stroke then drops out entirely, as any other such piece does.
 void rebuildShapeEdges(Shape& shape, const PlanarMap& map,
