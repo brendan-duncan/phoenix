@@ -11,7 +11,7 @@ FetchContent_MakeAvailable(libas3)
 add_library(libas3 INTERFACE)
 add_dependencies(libas3 as3_parser)
 
-project(Phoenix VERSION 0.1 LANGUAGES CXX)
+project(Phoenix VERSION 0.1 LANGUAGES C CXX)
 
 set(CMAKE_AUTOUIC ON)
 set(CMAKE_AUTOMOC ON)
@@ -56,6 +56,8 @@ set(HEADERS
     src/gui/main_window.h
     src/gui/properties_panel.h
     src/gui/library_panel.h
+    src/gui/audio_engine.h
+    src/gui/timeline_audio.h
     src/gui/new_document_dialog.h
     src/gui/hot_text.h
     src/gui/convert_to_symbol_dialog.h
@@ -170,6 +172,9 @@ set(SOURCES
     src/gui/main_window.cpp
     src/gui/properties_panel.cpp
     src/gui/library_panel.cpp
+    src/gui/audio_engine.cpp
+    src/gui/timeline_audio.cpp
+    src/gui/miniaudio_impl.c
     src/gui/new_document_dialog.cpp
     src/gui/hot_text.cpp
     src/gui/convert_to_symbol_dialog.cpp
@@ -280,6 +285,15 @@ qt6_standard_project_setup()
 qt6_add_executable(Phoenix MANUAL_FINALIZATION ${SOURCES} ${HEADERS})
 
 target_link_libraries(Phoenix PRIVATE Qt6::Widgets Qt6::Svg zlibstatic tinyxml2 libas3)
+
+# Audio output through miniaudio (vendored in src/third_party/miniaudio):
+# it loads the platform audio libraries at run time on Windows and macOS,
+# and needs dl, pthread and libm on Linux.
+if(APPLE)
+    target_link_libraries(Phoenix PRIVATE "-framework CoreFoundation" "-framework CoreAudio" "-framework AudioToolbox")
+elseif(UNIX)
+    target_link_libraries(Phoenix PRIVATE ${CMAKE_DL_LIBS} pthread m)
+endif()
 
 if(TRUE)
     qt_finalize_executable(Phoenix)

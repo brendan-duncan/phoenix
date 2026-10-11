@@ -167,4 +167,11 @@ private:
     void updateStatus();
     QTimer* _playTimer;
     bool _isPlaying = false;
+    /// Playback runs by the clock, so the frame shown is the one that is
+    /// due even when a frame takes longer to draw than it lasts, and sound
+    /// stays in step: the frame and time it started from.
+    class QElapsedTimer* _playClock = nullptr;
+    int _playStartFrame = 0;
+    double frameRate() const;
+    void stopPlaying();
 };

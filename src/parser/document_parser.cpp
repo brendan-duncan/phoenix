@@ -1724,6 +1724,16 @@ bool parseMedia(const tinyxml2::XMLElement* element, fla::Document* document, Zi
             // A sound or video item: kept as read, with the data files it
             // names, so a save writes them back.
             document->extraMedia.push_back(elementText(childElement));
+            if (std::strcmp(childElement->Name(), "DOMSoundItem") == 0)
+            {
+                fla::Document::SoundInfo sound;
+                sound.name = getAttribute(childElement, "name");
+                sound.format = getAttribute(childElement, "format");
+                const std::string data = getAttribute(childElement, "soundDataHRef");
+                if (!data.empty())
+                    sound.dataPath = "bin/" + data;
+                document->sounds.push_back(sound);
+            }
             for (const tinyxml2::XMLAttribute* attribute = childElement->FirstAttribute(); attribute;
                  attribute = attribute->Next())
             {

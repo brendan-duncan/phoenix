@@ -13,6 +13,7 @@ constexpr int kFrameHeight = 21;
 #include <algorithm>
 #include <map>
 
+#include <QElapsedTimer>
 #include <QLabel>
 #include <QVBoxLayout>
 #include <QHBoxLayout>
@@ -244,6 +245,7 @@ TimelinesPanel::TimelinesPanel(Player* player, QWidget *parent)
 
 void TimelinesPanel::setDocument(const fla::FLADocument* document)
 {
+    stopPlaying();
     _flaDocument = document;
     _gridContainer->setDocument(document);
     _gridContainer->setTimeline(nullptr);
@@ -332,19 +334,46 @@ void TimelinesPanel::onStepBack()
     }
 }
 
+double TimelinesPanel::frameRate() const
+{
+    return _flaDocument && _flaDocument->document && _flaDocument->document->frameRate > 0.0
+        ? _flaDocument->document->frameRate : 24.0;
+}
+
+void TimelinesPanel::stopPlaying()
+{
+    if (!_isPlaying)
+        return;
+    _playTimer->stop();
+    _playButton->setIcon(makeTransportIcon(TransportIcon::Play, 22));
+    _isPlaying = false;
+    if (_player)
+        _player->setPlaying(false);
+}
+
 void TimelinesPanel::onPlayStop()
 {
     if (_isPlaying)
     {
-        _playTimer->stop();
-        _playButton->setIcon(makeTransportIcon(TransportIcon::Play, 22));
+        stopPlaying();
+        return;
     }
-    else
-    {
-        _playTimer->start(1000 / 24); // Assuming 24 FPS
-        _playButton->setIcon(makeTransportIcon(TransportIcon::Stop, 22));
-    }
-    _isPlaying = !_isPlaying;
+    if (!_player)
+        return;
+    // From the end, play starts over from the first frame, as in Animate.
+    const int last = getMaxFrames(_flaDocument) - 1;
+    if (last > 0 && _player->currentFrame() >= last)
+        _player->setCurrentFrame(0);
+    if (!_playClock)
+        _playClock = new QElapsedTimer();
+    _playClock->start();
+    _playStartFrame = _player->currentFrame();
+    // Ticks a few times a frame; which frame shows is worked out from the
+    // clock.
+    _playTimer->start(std::max(1, static_cast<int>(1000.0 / frameRate() / 2.0)));
+    _playButton->setIcon(makeTransportIcon(TransportIcon::Stop, 22));
+    _isPlaying = true;
+    _player->setPlaying(true);
 }
 
 void TimelinesPanel::onStepForward()
@@ -357,10 +386,18 @@ void TimelinesPanel::onStepForward()
 
 void TimelinesPanel::onTimerTick()
 {
-    if (_player)
+    if (!_player || !_playClock)
+        return;
+    const int due = _playStartFrame + static_cast<int>(_playClock->elapsed() * frameRate() / 1000.0);
+    const int last = std::max(0, getMaxFrames(_flaDocument) - 1);
+    // Playback stops on the last frame, as Animate's does without looping.
+    if (due >= last)
     {
-        _player->setCurrentFrame(_player->currentFrame() + 1);
+        _player->setCurrentFrame(last);
+        stopPlaying();
+        return;
     }
+    _player->setCurrentFrame(due);
 }
 
 void TimelinesPanel::onPlayerFrameChanged(int frame)

@@ -5,6 +5,14 @@ Player::Player(QObject *parent)
 {
 }
 
+void Player::setPlaying(bool playing)
+{
+    if (_playing == playing)
+        return;
+    _playing = playing;
+    emit playingChanged(playing);
+}
+
 void Player::setCurrentFrame(int frame)
 {
     if (_currentFrame != frame && frame >= 0)

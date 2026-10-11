@@ -1,0 +1,77 @@
+#pragma once
+
+#include "audio_engine.h"
+
+#include <QObject>
+
+#include <map>
+#include <memory>
+#include <string>
+
+class Player;
+
+namespace fla {
+class FLADocument;
+class Frame;
+}
+
+/// Plays a document's sounds along with its timeline, as Animate does:
+///
+/// - **Stream** sounds are tied to their frames. They play from the point
+///   matching the frame shown, for as long as their span lasts, and a
+///   scrub plays a frame's worth of them so the sound can be found.
+/// - **Event** sounds start when the playhead reaches their keyframe and
+///   play to the end whatever the timeline does.
+/// - **Start** sounds are event sounds that do not start again while
+///   already playing.
+/// - **Stop** silences the sound named.
+///
+/// A frame's in and out points (inPoint44, outPoint44) trim the sound, and
+/// its loop settings repeat it.
+class TimelineAudio : public QObject
+{
+    Q_OBJECT
+
+public:
+    TimelineAudio(Player* player, QObject* parent = nullptr);
+
+    void setDocument(const fla::FLADocument* document);
+    void setMuted(bool muted);
+    bool muted() const { return _muted; }
+
+    /// The decoded sound a frame plays, for drawing its waveform; null when
+    /// it has none or it cannot be read.
+    std::shared_ptr<const PcmBuffer> soundOf(const fla::Frame* frame);
+
+public slots:
+    void onPlayingChanged(bool playing);
+    void onFrameChanged(int frame);
+
+private:
+    struct FrameSound
+    {
+        std::string name;
+        std::string sync;
+        size_t in = 0;
+        size_t out = 0;
+        int loops = 1;
+        bool hasOut = false;
+    };
+    static bool soundSettings(const fla::Frame& frame, FrameSound& sound);
+    std::shared_ptr<const PcmBuffer> buffer(const std::string& name);
+    double frameRate() const;
+    void stopStreams();
+
+    Player* _player;
+    const fla::FLADocument* _document = nullptr;
+    bool _playing = false;
+    bool _muted = false;
+    int _lastFrame = -1;
+    /// Decoded sounds by name.
+    std::map<std::string, std::shared_ptr<const PcmBuffer>> _decoded;
+    /// The stream voice playing for each keyframe.
+    std::map<const fla::Frame*, int> _streams;
+    /// Event and start voices by sound name, so Start and Stop can find them.
+    std::multimap<std::string, int> _events;
+    int _scrubVoice = -1;
+};

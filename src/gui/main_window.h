@@ -302,6 +302,9 @@ private:
     /// top layer first, each numbered from 0.
     std::vector<std::vector<std::unique_ptr<fla::Frame>>> _frameClipboard;
     QAction* _onionSkinAction = nullptr;
+
+    /// Plays the document's sounds with the timeline.
+    class TimelineAudio* _timelineAudio = nullptr;
     QAction* _ungroupAction = nullptr;
     QAction* _breakApartAction = nullptr;
     QAction* _convertToSymbolAction = nullptr;

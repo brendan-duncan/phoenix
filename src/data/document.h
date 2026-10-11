@@ -78,6 +78,17 @@ public:
     /// brush definitions file), by path, carried through byte for byte.
     std::vector<std::pair<std::string, std::vector<uint8_t>>> extraFiles;
 
+    /// The library's sounds, as much as playing them needs: the name frames
+    /// refer to them by, how the data is laid out, and where under the
+    /// package the data is (its bytes are among extraFiles).
+    struct SoundInfo
+    {
+        std::string name;
+        std::string format;
+        std::string dataPath;
+    };
+    std::vector<SoundInfo> sounds;
+
     std::vector<fla::SymbolInstance*> symbolInstances; // List of all symbol instances in the document
     std::map<const fla::Symbol*, std::vector<const fla::SymbolInstance*>> symbolInstancesMap; // Map of symbols to their instances
 

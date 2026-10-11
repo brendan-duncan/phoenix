@@ -3,6 +3,7 @@
 #include "lines_to_fills.h"
 #include "fill_offset.h"
 #include "new_document_dialog.h"
+#include "timeline_audio.h"
 #include "../data/bitmap_instance.h"
 #include "draw_placement.h"
 #include "library_panel.h"
@@ -260,6 +261,8 @@ void MainWindow::releaseDocument()
         _timelineView->setDocument(nullptr);
     if (_documentView)
         _documentView->setDocument(nullptr);
+    if (_timelineAudio)
+        _timelineAudio->setDocument(nullptr);
     if (_libraryPanel)
         _libraryPanel->setDocument(nullptr);
 
@@ -291,6 +294,8 @@ void MainWindow::adoptDocument(fla::FLADocument* document, const QString& filePa
     }
     _phoenixView->setDocument(_flaDocument);
     _documentView->setDocument(_flaDocument);
+    if (_timelineAudio)
+        _timelineAudio->setDocument(_flaDocument);
     _timelineView->setDocument(_flaDocument);
 
     _documentName = displayName;
@@ -450,6 +455,11 @@ void MainWindow::setupUI()
     // Create the timeline view
     _timelineView = new TimelineView(_player, this);
     _timelineView->setMinimumHeight(150);
+
+    // Sound follows the playhead and the transport.
+    _timelineAudio = new TimelineAudio(_player, this);
+    connect(_player, &Player::playingChanged, _timelineAudio, &TimelineAudio::onPlayingChanged);
+    connect(_player, &Player::currentFrameChanged, _timelineAudio, &TimelineAudio::onFrameChanged);
 
     // Add to main vertical splitter
     _mainSplitter->addWidget(_viewSplitter);
@@ -1116,6 +1126,17 @@ void MainWindow::setupMenus()
             _timelineView->setOnionSkin(on, 2, 2);
     });
     viewMenu->addAction(_onionSkinAction);
+
+    // Sound plays with the timeline; Animate's Control > Mute Sounds.
+    QAction* muteAction = new QAction("&Mute Sounds", this);
+    muteAction->setCheckable(true);
+    muteAction->setShortcut(QKeySequence(Qt::CTRL | Qt::ALT | Qt::Key_M));
+    muteAction->setStatusTip("Play the timeline without its sounds");
+    connect(muteAction, &QAction::toggled, this, [this](bool on) {
+        if (_timelineAudio)
+            _timelineAudio->setMuted(on);
+    });
+    viewMenu->addAction(muteAction);
 
     QAction* rulersAction = new QAction("&Rulers", this);
     rulersAction->setCheckable(true);

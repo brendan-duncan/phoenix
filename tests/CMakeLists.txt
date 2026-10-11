@@ -12,7 +12,7 @@
 cmake_minimum_required(VERSION 3.16)
 
 if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
-    project(PhoenixTests LANGUAGES CXX)
+    project(PhoenixTests LANGUAGES C CXX)
 endif()
 
 set(CMAKE_CXX_STANDARD 17)
@@ -65,6 +65,8 @@ set(TEST_CORE_SOURCES
     ${PHOENIX_SRC}/edit/layer_commands.cpp
     ${PHOENIX_SRC}/edit/timeline_edit.cpp
     ${PHOENIX_SRC}/edit/library_commands.cpp
+    ${PHOENIX_SRC}/gui/audio_engine.cpp
+    ${PHOENIX_SRC}/gui/miniaudio_impl.c
     ${PHOENIX_SRC}/edit/snapping.cpp
     ${PHOENIX_SRC}/edit/region_split.cpp
     ${PHOENIX_SRC}/geom/curve.cpp
@@ -99,6 +101,7 @@ set(TEST_SOURCES
     test_layer_commands.cpp
     test_timeline_edit.cpp
     test_library_commands.cpp
+    test_audio_decode.cpp
     test_property_command.cpp
     test_tween_ease.cpp
     test_shape_recognition.cpp
@@ -136,6 +139,11 @@ add_executable(phoenix_tests ${TEST_SOURCES} ${TEST_CORE_SOURCES})
 
 if(PHOENIX_TESTS_HAVE_PARSER)
     target_link_libraries(phoenix_tests PRIVATE tinyxml2 zlibstatic)
+    if(UNIX AND NOT APPLE)
+        target_link_libraries(phoenix_tests PRIVATE ${CMAKE_DL_LIBS} pthread m)
+    elseif(APPLE)
+        target_link_libraries(phoenix_tests PRIVATE "-framework CoreFoundation" "-framework CoreAudio" "-framework AudioToolbox")
+    endif()
     target_include_directories(phoenix_tests PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}/../src/third_party/zlib
         ${CMAKE_BINARY_DIR}/src/third_party/zlib
