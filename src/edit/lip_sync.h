@@ -2,6 +2,7 @@
 
 #include "command.h"
 
+#include <cstdint>
 #include <map>
 #include <string>
 #include <vector>
@@ -28,6 +29,17 @@ struct Cue
 /// switch file ("MohoSwitch1", then frame and phoneme a line, frames from
 /// 1 at \a frameRate). Empty when it is neither.
 std::vector<Cue> parse(const std::string& text, double frameRate);
+
+/// Mouth shapes heard in a recording without Rhubarb: Phoenix's own guess
+/// from how loud and how hissy each moment is, in Rhubarb's letters: X at
+/// rest in the quiet, A closed for the short dips between syllables, B for
+/// hissing and other teeth-together sounds, C, D and E opening wider as the
+/// voice gets louder. Each shape is held at least two frames at
+/// \a frameRate. \a samples are 16-bit, \a channels interleaved.
+std::vector<Cue> listen(const std::vector<int16_t>& samples, int channels, int sampleRate, double frameRate);
+
+/// Cues as Rhubarb writes them (time, tab, shape a line).
+std::string tsvOf(const std::vector<Cue>& cues);
 
 /// The shapes \a cues use, in the order a mouth chart lists them: Rhubarb's
 /// A to H and X, Papagayo's phonemes, then any others.

@@ -1,5 +1,7 @@
 #include "test_util.h"
 
+#include <cmath>
+
 #include "../src/data/frame.h"
 #include "../src/data/layer.h"
 #include "../src/data/symbol_instance.h"
@@ -49,4 +51,41 @@ TEST(lip_sync_reads_rhubarb_and_papagayo_and_keys_the_mouth)
     CHECK(keys[4] == std::make_pair(34, 9));
     stack.undo();
     CHECK(layer.frames.size() == 1 && layer.frames[0]->duration == 60);
+}
+
+TEST(lip_sync_listens_to_loudness_without_rhubarb)
+{
+    // Half a second of quiet, a loud low vowel, a quieter hiss, quiet.
+    const int rate = 24000;
+    std::vector<int16_t> samples;
+    const auto add = [&](double seconds, double amplitude, double hertz) {
+        const int count = static_cast<int>(seconds * rate);
+        for (int i = 0; i < count; ++i)
+            samples.push_back(static_cast<int16_t>(amplitude * 32000.0 * std::sin(2.0 * 3.14159265358979 * hertz * i / rate)));
+    };
+    add(0.5, 0.0, 0.0);
+    add(0.5, 0.9, 220.0);
+    add(0.5, 0.3, 6000.0);
+    add(0.5, 0.0, 0.0);
+    const std::vector<fla::lipsync::Cue> cues = fla::lipsync::listen(samples, 1, rate, 24.0);
+    CHECK(cues.size() >= 4);
+    if (cues.size() < 4)
+        return;
+    CHECK(cues.front().shape == "X" && cues.front().time == 0.0);
+    // Open wide for the vowel, teeth together for the hiss, at rest after.
+    const auto shapeAt = [&cues](double time) {
+        std::string shape = cues.front().shape;
+        for (const fla::lipsync::Cue& cue : cues)
+            if (cue.time <= time)
+                shape = cue.shape;
+        return shape;
+    };
+    CHECK(shapeAt(0.75) == "D");
+    CHECK(shapeAt(1.25) == "B");
+    CHECK(shapeAt(1.9) == "X");
+    CHECK(cues.back().shape == "X");
+
+    // As Rhubarb writes it, and read back the same.
+    const std::vector<fla::lipsync::Cue> again = fla::lipsync::parse(fla::lipsync::tsvOf(cues), 24.0);
+    CHECK(again.size() == cues.size() && again[1].shape == cues[1].shape);
 }

@@ -29,6 +29,91 @@ std::string trimmed(const std::string& text)
 
 } // namespace
 
+std::vector<Cue> listen(const std::vector<int16_t>& samples, int channels, int sampleRate, double frameRate)
+{
+    std::vector<Cue> cues;
+    channels = std::max(channels, 1);
+    if (samples.empty() || sampleRate <= 0 || frameRate <= 0.0)
+        return cues;
+    // One window a frame: its loudness (RMS, 0 to 1) and how often the
+    // wave crosses zero (high for hissing, low for voiced vowels).
+    const size_t frames = samples.size() / static_cast<size_t>(channels);
+    const size_t window = std::max<size_t>(1, static_cast<size_t>(sampleRate / frameRate));
+    std::vector<double> loudness;
+    std::vector<double> crossings;
+    for (size_t start = 0; start < frames; start += window)
+    {
+        const size_t end = std::min(frames, start + window);
+        double sum = 0.0;
+        int crossed = 0;
+        double previous = 0.0;
+        for (size_t i = start; i < end; ++i)
+        {
+            double value = 0.0;
+            for (int c = 0; c < channels; ++c)
+                value += samples[i * static_cast<size_t>(channels) + static_cast<size_t>(c)];
+            value /= channels * 32768.0;
+            sum += value * value;
+            if (i > start && ((value >= 0.0) != (previous >= 0.0)))
+                ++crossed;
+            previous = value;
+        }
+        loudness.push_back(std::sqrt(sum / static_cast<double>(end - start)));
+        crossings.push_back(static_cast<double>(crossed) / static_cast<double>(end - start));
+    }
+    // Measured against the loud parts of this recording, so a quiet one
+    // still opens the mouth.
+    std::vector<double> sorted = loudness;
+    std::sort(sorted.begin(), sorted.end());
+    const double peak = std::max(sorted[static_cast<size_t>((sorted.size() - 1) * 0.95)], 1.0e-4);
+    std::vector<std::string> shapes;
+    for (size_t i = 0; i < loudness.size(); ++i)
+    {
+        const double level = loudness[i] / peak;
+        std::string shape;
+        if (level < 0.08)
+            shape = "X";
+        else if (crossings[i] > 0.25 && level < 0.6)
+            shape = "B";
+        else if (level < 0.25)
+            shape = "A";
+        else if (level < 0.5)
+            shape = "C";
+        else if (level < 0.8)
+            shape = "E";
+        else
+            shape = "D";
+        shapes.push_back(shape);
+    }
+    // A dip to closed between two open shapes reads as a syllable break;
+    // anything else held under two frames takes the shape before it.
+    for (size_t i = 1; i < shapes.size(); ++i)
+    {
+        const bool lone = shapes[i] != shapes[i - 1] && (i + 1 >= shapes.size() || shapes[i + 1] != shapes[i]);
+        if (lone && shapes[i] != "A")
+            shapes[i] = shapes[i - 1];
+    }
+    for (size_t i = 0; i < shapes.size(); ++i)
+    {
+        if (cues.empty() || cues.back().shape != shapes[i])
+            cues.push_back({static_cast<double>(i) / frameRate, shapes[i]});
+    }
+    // Rhubarb ends on the rest shape.
+    if (!cues.empty() && cues.back().shape != "X")
+        cues.push_back({static_cast<double>(shapes.size()) / frameRate, "X"});
+    return cues;
+}
+
+std::string tsvOf(const std::vector<Cue>& cues)
+{
+    std::ostringstream text;
+    text.setf(std::ios::fixed);
+    text.precision(2);
+    for (const Cue& cue : cues)
+        text << cue.time << '\t' << cue.shape << '\n';
+    return text.str();
+}
+
 std::vector<Cue> parse(const std::string& text, double frameRate)
 {
     std::vector<Cue> cues;

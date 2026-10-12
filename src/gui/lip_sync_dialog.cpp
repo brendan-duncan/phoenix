@@ -1,5 +1,7 @@
 #include "lip_sync_dialog.h"
 
+#include "media_import.h"
+
 #include <QApplication>
 #include <QDialogButtonBox>
 #include <QDir>
@@ -59,7 +61,7 @@ LipSyncDialog::LipSyncDialog(const QString& mouthName, const std::map<std::strin
     layout->addWidget(new QLabel(QString("Mouth: <b>%1</b>, keyed on its layer from the frame below.").arg(mouthName.toHtmlEscaped()), this));
 
     // From a recording, through Rhubarb.
-    _fromAudio = new QRadioButton("Work out the mouth shapes from a voice recording, with Rhubarb Lip Sync", this);
+    _fromAudio = new QRadioButton("Work out the mouth shapes from a voice recording", this);
     _fromAudio->setChecked(true);
     layout->addWidget(_fromAudio);
     QFormLayout* audioForm = new QFormLayout();
@@ -70,6 +72,7 @@ LipSyncDialog::LipSyncDialog(const QString& mouthName, const std::map<std::strin
     _rhubarb = new QLineEdit(findRhubarb(), this);
     _rhubarb->setPlaceholderText("rhubarb.exe (github.com/DanielSWolf/rhubarb-lip-sync)");
     QPushButton* rhubarbBrowse = new QPushButton("Browse...", this);
+    _rhubarb->setPlaceholderText("Optional: Rhubarb Lip Sync gives better shapes than Phoenix's own listening");
     audioForm->addRow("Rhubarb:", fileRow(_rhubarb, rhubarbBrowse));
     _script = new QPlainTextEdit(this);
     _script->setPlaceholderText("The words spoken (optional): helps Rhubarb get them right");
@@ -149,17 +152,23 @@ bool LipSyncDialog::runRhubarb(std::string& text)
 {
     const QString rhubarb = _rhubarb->text().trimmed();
     const QString audio = _audio->text().trimmed();
-    if (rhubarb.isEmpty() || !QFileInfo::exists(rhubarb))
-    {
-        QMessageBox::information(this, "Lip Sync",
-            "Rhubarb Lip Sync was not found. Download it (free, MIT licensed) from "
-            "github.com/DanielSWolf/rhubarb-lip-sync and choose rhubarb.exe here, or load a cue file instead.");
-        return false;
-    }
     if (audio.isEmpty() || !QFileInfo::exists(audio))
     {
         QMessageBox::information(this, "Lip Sync", "Choose the recording of the line.");
         return false;
+    }
+    if (rhubarb.isEmpty() || !QFileInfo::exists(rhubarb))
+    {
+        // No Rhubarb: Phoenix listens itself, by loudness.
+        fla::media::Sound sound;
+        QString error;
+        if (!MediaImport::loadSound(audio, sound, error))
+        {
+            QMessageBox::warning(this, "Lip Sync", error);
+            return false;
+        }
+        text = fla::lipsync::tsvOf(fla::lipsync::listen(sound.samples, sound.channels, sound.rate, _frameRate));
+        return true;
     }
     QSettings().setValue("lipsync/rhubarb", rhubarb);
     QTemporaryDir folder;
