@@ -197,3 +197,25 @@ jobs:
         if: always() && runner.os == 'macOS' && steps.signing.outputs.keychain != ''
         shell: bash
         run: security delete-keychain "${{ steps.signing.outputs.keychain }}"
+
+  # Once every platform has uploaded: the release notes' Downloads section,
+  # linking each platform's installer and portable archive.
+  notes:
+    needs: release
+    if: always() && (github.event_name == 'push' || inputs.publish)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Link the installers in the release notes
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            version="${{ inputs.version }}"
+            tag="v${version#v}"
+          else
+            tag="${GITHUB_REF_NAME}"
+          fi
+          python3 tools/release/release_notes.py --tag "$tag" --repo "${{ github.repository }}"
