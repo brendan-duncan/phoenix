@@ -324,6 +324,7 @@ void XFLWriter::writeFillStyle(const FillStyle& fill, XMLElement* parent)
         // A solid fill always states its color: black is a real choice here,
         // not an absent one.
         setColor(node, "color", "alpha", solid.color, true);
+        writeKept(node, solid.extraAttributes);
         parent->InsertEndChild(node);
         break;
     }

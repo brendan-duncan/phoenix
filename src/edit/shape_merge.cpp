@@ -14,7 +14,24 @@
 
 namespace fla {
 
+namespace {
+
+FillStyle* cloneFillContents(const FillStyle* fill, DOMElement* parent);
+
+} // namespace
+
 FillStyle* cloneFill(const FillStyle* fill, DOMElement* parent)
+{
+    // What the fill carries besides (a palette link) goes with it.
+    FillStyle* copy = cloneFillContents(fill, parent);
+    if (copy)
+        copy->extraAttributes = fill->extraAttributes;
+    return copy;
+}
+
+namespace {
+
+FillStyle* cloneFillContents(const FillStyle* fill, DOMElement* parent)
 {
     if (!fill)
         return nullptr;
@@ -67,6 +84,8 @@ FillStyle* cloneFill(const FillStyle* fill, DOMElement* parent)
 
     return nullptr;
 }
+
+} // namespace
 
 StrokeStyle* cloneStroke(const StrokeStyle* stroke, DOMElement* parent)
 {

@@ -459,6 +459,9 @@ private:
     /// Controllers: Harmony's master controllers.
     class ControllersPanel* _controllers = nullptr;
     QDockWidget* _controllersDock = nullptr;
+    /// Palettes: Harmony's linked palettes.
+    class PalettesPanel* _palettes = nullptr;
+    QDockWidget* _palettesDock = nullptr;
     /// Edit > Find and Replace, made when first asked for.
     class FindReplaceDialog* _findReplace = nullptr;
     void showFindReplace();

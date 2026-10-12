@@ -79,6 +79,7 @@ set(HEADERS
     src/gui/command_line.h
     src/gui/notes_panel.h
     src/gui/controllers_panel.h
+    src/gui/palettes_panel.h
     src/gui/audio_engine.h
     src/gui/frame_picker_panel.h
     src/gui/swap_symbol_dialog.h
@@ -221,6 +222,7 @@ set(HEADERS
     src/edit/review_notes.h
     src/edit/pegs.h
     src/edit/controllers.h
+    src/edit/palettes.h
     src/edit/combine_objects.h
     src/edit/transform_parts.h
     src/edit/swatches.h
@@ -261,6 +263,7 @@ set(SOURCES
     src/gui/command_line.cpp
     src/gui/notes_panel.cpp
     src/gui/controllers_panel.cpp
+    src/gui/palettes_panel.cpp
     src/gui/audio_engine.cpp
     src/gui/frame_picker_panel.cpp
     src/gui/swap_symbol_dialog.cpp
@@ -398,6 +401,7 @@ set(SOURCES
     src/edit/review_notes.cpp
     src/edit/pegs.cpp
     src/edit/controllers.cpp
+    src/edit/palettes.cpp
     src/edit/combine_objects.cpp
     src/edit/swatches.cpp
     src/geom/curve.cpp

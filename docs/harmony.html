@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Coming from Harmony · Phoenix User Guide</title>
 <meta name="description" content="Harmony's ways of working in Phoenix: the X-sheet, pegs, the light table, the multiplane camera and more, all saved in files Animate opens.">
-<meta name="keywords" content="harmony toon boom x-sheet exposure sheet peg pivot light table multiplane camera rig master controller slider">
+<meta name="keywords" content="harmony toon boom x-sheet exposure sheet peg pivot light table multiplane camera rig master controller slider palette linked colors day night">
 <link rel="icon" href="assets/img/logo.png">
 <link rel="stylesheet" href="assets/site.css">
 <script>try { const t = localStorage.getItem("phoenix-docs-theme"); if (t) document.documentElement.dataset.theme = t; } catch (e) {}</script>
@@ -28,6 +28,12 @@
 <p>A peg is a layer that holds only a transform. Pick a layer and choose <b>Insert &gt; Peg</b>: a <em>Peg</em> layer appears above it and the layer is parented to it. Move, turn or scale the peg (with the Free Transform tool, or tween it) and everything parented to it follows, about the peg's pivot. Parent more layers to the same peg from the layer menu's <b>Parent Layer</b>, or parent pegs to pegs to build a hierarchy.</p>
 
 <p>On the stage a peg shows as a crosshair in a circle, in its layer's color, with a tick for the way it faces. In the file it is an instance of an empty graphic symbol on a layer Animate's own layer parenting follows, so Animate plays the animation the same and draws nothing for the peg.</p>
+
+<h2>Linked palettes</h2>
+
+<p>Open <b>Window &gt; Palettes</b>. A palette is a set of named colors (skin, hair, outline, shadow). <b>Add</b> makes a color from the current fill color. Select art and choose <b>Fill</b> or <b>Stroke</b> to color it with the palette color and link it; <b>Link Matching</b> links every fill, stroke and text in the document that already has that color, which is the quick way to bring existing art into a palette. The number beside each color is how many uses are linked to it.</p>
+
+<p><b>Edit</b> (or double-click a color) changes it everywhere it is linked, as one undo step. From the <b>...</b> menu, <b>New Palette</b> makes a copy of the palette in use under a new name, such as <em>Night</em>: recolor its colors, and switching palettes in the list recolors the whole document. The colors are written into the art itself, so Animate shows it as last colored; the palettes and the links are kept where Animate ignores them.</p>
 
 <h2>Master controllers</h2>
 

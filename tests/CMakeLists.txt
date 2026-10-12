@@ -83,6 +83,7 @@ set(TEST_CORE_SOURCES
     ${PHOENIX_SRC}/edit/review_notes.cpp
     ${PHOENIX_SRC}/edit/pegs.cpp
     ${PHOENIX_SRC}/edit/controllers.cpp
+    ${PHOENIX_SRC}/edit/palettes.cpp
     ${PHOENIX_SRC}/edit/combine_objects.cpp
     ${PHOENIX_SRC}/edit/swatches.cpp
     ${PHOENIX_SRC}/gui/audio_engine.cpp
@@ -127,6 +128,7 @@ set(TEST_SOURCES
     test_review_notes.cpp
     test_pegs.cpp
     test_controllers.cpp
+    test_palettes.cpp
     test_find_replace.cpp
     test_audio_decode.cpp
     test_brush_stroke.cpp

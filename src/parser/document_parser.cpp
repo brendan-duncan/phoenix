@@ -186,6 +186,8 @@ bool parseSolidColor(const tinyxml2::XMLElement* element, fla::SolidColor* solid
 
     // Parse CSS hex color if it starts with '#'
     parseHexColor(color, solidColor->color, alpha);
+    // What else it carries (a Phoenix palette link) is kept for the save.
+    keepAttributes(element, {"color", "alpha"}, solidColor);
 
     return true;
 }

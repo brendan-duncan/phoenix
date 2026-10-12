@@ -29,6 +29,7 @@
 #include "toolbox.h"
 #include "notes_panel.h"
 #include "controllers_panel.h"
+#include "palettes_panel.h"
 #include "../edit/pegs.h"
 #include "theme.h"
 #include "theme_editor.h"
@@ -769,6 +770,36 @@ void MainWindow::createPanels()
         _controllersDock->hide();
     }
 
+    // Palettes, closed until asked.
+    if (!_palettesDock)
+    {
+        PalettesLinks links;
+        links.commands = [this]() { return &_editContext.commandStack(); };
+        links.document = [this]() -> fla::Document* { return _flaDocument ? _flaDocument->document : nullptr; };
+        links.selection = [this]() { return selectedElements(); };
+        links.fillColor = [this]() {
+            return QColor(_drawingStyle.fillColor[0], _drawingStyle.fillColor[1], _drawingStyle.fillColor[2],
+                _drawingStyle.fillColor[3]);
+        };
+        links.changed = [this]() {
+            if (_phoenixView)
+            {
+                _phoenixView->clearCaches();
+                _phoenixView->update();
+            }
+            if (_propertiesPanel)
+                _propertiesPanel->refresh();
+        };
+        _palettes = new PalettesPanel(links);
+        _palettesDock = new QDockWidget("Palettes", this);
+        _palettesDock->setObjectName("palettesDock");
+        _palettesDock->setAllowedAreas(Qt::AllDockWidgetAreas);
+        _palettes->setParent(_palettesDock);
+        _palettesDock->setWidget(_palettes);
+        addDockWidget(Qt::RightDockWidgetArea, _palettesDock);
+        _palettesDock->hide();
+    }
+
     // The X-sheet, Harmony's view of the exposures, closed until asked.
     if (!_xsheetDock)
     {
@@ -859,6 +890,7 @@ void MainWindow::setupWindowMenu()
             {"&History", _historyDock, QKeySequence(Qt::CTRL | Qt::Key_F10), "Every step that can be undone; click one to go back or forward to it"},
             {"&Review Notes", _notesDock, QKeySequence(), "Notes on frames from whoever reviews the shot; they never export"},
             {"Co&ntrollers", _controllersDock, QKeySequence(), "Master controllers: one slider driving properties on several layers"},
+            {"Pale&ttes", _palettesDock, QKeySequence(), "Linked palettes: named colors that recolor everything linked to them, swapped whole"},
         },
     };
     std::vector<std::pair<QAction*, QDockWidget*>> entries;
@@ -916,6 +948,10 @@ void MainWindow::setupWindowMenu()
     });
 
     // What a panel shows is brought up to date when it comes into view.
+    connect(_palettesDock, &QDockWidget::visibilityChanged, this, [this](bool shown) {
+        if (shown)
+            _palettes->refresh();
+    });
     connect(_controllersDock, &QDockWidget::visibilityChanged, this, [this](bool shown) {
         if (shown)
             _controllers->refresh();
@@ -4390,6 +4426,8 @@ void MainWindow::updateEditState()
         _notes->refresh();
     if (_controllers && _controllersDock && _controllersDock->isVisible() && !_editContext.commandStack().isInMacro())
         _controllers->refresh();
+    if (_palettes && _palettesDock && _palettesDock->isVisible() && !_editContext.commandStack().isInMacro())
+        _palettes->refresh();
     if (_colorPanel)
         _colorPanel->refresh();
     updateFramePicker();
