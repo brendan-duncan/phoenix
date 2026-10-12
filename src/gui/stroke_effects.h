@@ -18,4 +18,8 @@ bool isProcedural(const fla::StrokeStyle& style);
 
 QPainterPath outline(const QPainterPath& centerline, const fla::StrokeStyle& style);
 
+/// How far a variable-width stroke reaches to its left and right, in
+/// pixels, a fraction t of the way along it.
+void widthAt(const fla::StrokeStyle& style, double t, double& left, double& right);
+
 } // namespace StrokeEffects

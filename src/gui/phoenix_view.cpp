@@ -3833,6 +3833,19 @@ void PhoenixView::drawShape(QPainter& painter, const fla::Shape* shape, const fl
     }
 }
 
+std::vector<std::pair<QPainterPath, const fla::StrokeStyle*>> PhoenixView::strokeRuns(const fla::Shape* shape)
+{
+    std::vector<std::pair<QPainterPath, const fla::StrokeStyle*>> runs;
+    if (!shape)
+        return runs;
+    for (const PathCacheEntry& entry : shapePaths(shape))
+    {
+        if (entry.strokeStyle)
+            runs.emplace_back(entry.painterPath, entry.strokeStyle);
+    }
+    return runs;
+}
+
 QTransform PhoenixView::threeDTransform(const fla::Element* element, const QTransform& placed,
     const fla::Element* tweenElement, double progress) const
 {

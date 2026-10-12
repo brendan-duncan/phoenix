@@ -30,6 +30,7 @@
   <dt>Cap</dt><dd>How open line ends look: Round, None (flat at the end point) or Square.</dd>
   <dt>Join</dt><dd>How corners look: Round, Bevel or Miter. A miter limit stops very sharp corners from spiking.</dd>
   <dt>Scale</dt><dd>Whether the stroke thickens when the artwork is scaled: Normal (it does), Horizontal, Vertical, or None (it stays the same width).</dd>
+  <dt>Width</dt><dd>How the width varies along the stroke: Even, Taper Both Ends, Taper Start, Taper End, Swell or Pinch. A stroke shaped with the Width tool shows Custom.</dd>
 </dl>
 
 <figure class="narrow">
@@ -76,6 +77,18 @@
 <h2>Line</h2>
 
 <p>Press <kbd>N</kbd> and drag to draw a straight line. Hold <kbd>Shift</kbd> to keep it at a multiple of 45&deg;, or <kbd>Alt</kbd> to draw outward from the middle.</p>
+
+<h2>Width tool</h2>
+
+<p>Press <kbd>U</kbd> to shape a stroke's width by hand:</p>
+
+<ul>
+  <li>Drag out from a stroke to make it wider there, or in toward its middle to make it thinner. This places a <strong>width point</strong>, and the width eases smoothly between points.</li>
+  <li>Drag a width point's handles to change it. Hold <kbd>Alt</kbd> to change only the side you drag.</li>
+  <li>Click a width point and press <kbd>Delete</kbd> to take it away.</li>
+</ul>
+
+<p>The width belongs to the stroke's style, so strokes of the same style in one shape change together. Each drag is a single step to undo.</p>
 
 <h2>Shapes and primitives</h2>
 

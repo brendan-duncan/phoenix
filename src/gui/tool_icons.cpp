@@ -504,6 +504,22 @@ void drawTranslate3D(QPainter& painter)
     painter.drawEllipse(origin, 1.8, 1.8);
 }
 
+void drawWidth(QPainter& painter)
+{
+    // A stroke swelling in the middle, with a width point across it.
+    QPainterPath swell;
+    swell.moveTo(3.0, 17.0);
+    swell.cubicTo(8.0, 6.0, 16.0, 6.0, 21.0, 17.0);
+    swell.cubicTo(16.0, 13.0, 8.0, 13.0, 3.0, 17.0);
+    painter.setPen(QPen(strokeColor(), 1.1));
+    painter.setBrush(Qt::NoBrush);
+    painter.drawPath(swell);
+    painter.drawLine(QPointF(12.0, 6.5), QPointF(12.0, 13.5));
+    painter.setBrush(Qt::white);
+    painter.drawEllipse(QPointF(12.0, 6.5), 1.8, 1.8);
+    painter.drawEllipse(QPointF(12.0, 13.5), 1.8, 1.8);
+}
+
 void drawLasso(QPainter& painter)
 {
     // A loop of rope with its tail hanging down.
@@ -597,6 +613,7 @@ QPixmap render(ToolIcons::Tool tool, int size)
     case ToolIcons::Tool::AssetWarp:     drawAssetWarp(painter); break;
     case ToolIcons::Tool::Rotate3D:      drawRotate3D(painter); break;
     case ToolIcons::Tool::Translate3D:   drawTranslate3D(painter); break;
+    case ToolIcons::Tool::Width:         drawWidth(painter); break;
     case ToolIcons::Tool::ObjectDrawing: drawObjectDrawing(painter); break;
     }
 

@@ -48,6 +48,7 @@ public:
         AssetWarp,
         Rotate3D,
         Translate3D,
+        Width,
         /// Not a tool: the toggle that keeps a drawing its own object.
         ObjectDrawing
     };

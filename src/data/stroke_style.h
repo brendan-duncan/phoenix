@@ -68,6 +68,12 @@ public:
         double left = 0.5;
         double right = 0.5;
         bool corner = false;
+
+        bool operator==(const WidthMarker& other) const
+        {
+            return position == other.position && left == other.left && right == other.right && corner == other.corner;
+        }
+        bool operator!=(const WidthMarker& other) const { return !(*this == other); }
     };
     std::vector<WidthMarker> widthProfile;
 

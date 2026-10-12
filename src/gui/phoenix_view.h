@@ -1150,6 +1150,10 @@ public:
     QTransform threeDTransform(const fla::Element* element, const QTransform& placed,
         const fla::Element* tweenElement = nullptr, double progress = 0.0) const;
 
+    /// A shape's strokes as drawn: each run of joined edges of one stroke
+    /// style, its centerline in the shape's own space, from its start.
+    std::vector<std::pair<QPainterPath, const fla::StrokeStyle*>> strokeRuns(const fla::Shape* shape);
+
 private:
 
     /// Draws a shape, or, part way through a shape tween to \a tweenShape,

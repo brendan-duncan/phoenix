@@ -28,6 +28,8 @@ struct StrokeLook
     std::string joints;
     std::string scaleMode;
     double miterLimit = 3.0;
+    /// How the width varies along the stroke; empty for even.
+    std::vector<StrokeStyle::WidthMarker> widthProfile;
 
     static StrokeLook of(const StrokeStyle& stroke);
     bool operator==(const StrokeLook& other) const;
@@ -38,6 +40,16 @@ struct StrokeLook
     /// caller owns it.
     StrokeStyle* applyTo(const StrokeStyle& stroke, DOMElement* parent) const;
 };
+
+/// A named width profile for the stroke settings' Width menu.
+struct WidthPreset
+{
+    const char* name;
+    std::vector<StrokeStyle::WidthMarker> markers;
+};
+
+/// Even first, then the tapers and swells; the Width tool makes others.
+const std::vector<WidthPreset>& widthPresets();
 
 /// The fill and stroke a new object is drawn with, plus the settings the shape
 /// tools need.

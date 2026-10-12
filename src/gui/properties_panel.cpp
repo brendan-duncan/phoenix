@@ -1361,6 +1361,32 @@ std::vector<std::pair<QWidget*, QWidget*>> PropertiesPanel::addStrokeLookFields(
         apply(*current);
     });
     add("Scale", scale);
+
+    // The width along the stroke: a preset, or the profile the Width tool
+    // made, shown as Custom.
+    QComboBox* width = new QComboBox(this);
+    width->setToolTip("How the stroke's width varies along it. Shape it further with the Width tool (U).");
+    const std::vector<fla::WidthPreset>& presets = fla::widthPresets();
+    int widthIndex = -1;
+    for (size_t i = 0; i < presets.size(); ++i)
+    {
+        width->addItem(presets[i].name);
+        if (presets[i].markers == look.widthProfile)
+            widthIndex = static_cast<int>(i);
+    }
+    if (widthIndex < 0)
+    {
+        width->addItem("Custom");
+        widthIndex = width->count() - 1;
+    }
+    width->setCurrentIndex(widthIndex);
+    connect(width, &QComboBox::currentIndexChanged, this, [=](int index) {
+        if (index < 0 || static_cast<size_t>(index) >= fla::widthPresets().size())
+            return;
+        current->widthProfile = fla::widthPresets()[static_cast<size_t>(index)].markers;
+        apply(*current);
+    });
+    add("Width", width);
     return rows;
 }
 

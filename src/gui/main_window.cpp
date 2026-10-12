@@ -326,6 +326,7 @@ MainWindow::MainWindow(const QString& initialFile, QWidget* parent, bool startup
     _assetWarpTool = std::make_unique<AssetWarpTool>(stack, showStatus);
     _rotate3DTool = std::make_unique<ThreeDTool>(ThreeDTool::Mode::Rotate, stack, showStatus);
     _translate3DTool = std::make_unique<ThreeDTool>(ThreeDTool::Mode::Translate, stack, showStatus);
+    _widthTool = std::make_unique<WidthTool>(stack);
     _boneTool = std::make_unique<BoneTool>(
         [this](PhoenixView&, const BoneTool::Link& link) { addBone(link); },
         [this](PhoenixView&, fla::Frame* frame, size_t child, int joint) { editJointLimits(frame, child, joint); });
@@ -6061,6 +6062,10 @@ void MainWindow::setupToolBar()
             "Drag from the center outwards. Sides and star mode are in the Properties panel.",
             [this]() -> Tool* { return _polyStarTool.get(); }),
     });
+    addSlot({makeTool(ToolIcons::Tool::Width, "Width", Qt::Key_U,
+        "Drag out from a stroke to widen it there, in to thin it; drag a width point to change it, select one "
+        "and press Delete to take it away. Alt changes one side only.",
+        [this]() -> Tool* { return _widthTool.get(); })});
     addSlot({makeTool(ToolIcons::Tool::Pencil, "Pencil", Qt::SHIFT | Qt::Key_Y,
         "Draw freehand. The stroke is fitted on release; the mode is in the Properties panel.",
         [this]() -> Tool* { return _pencilTool.get(); })});
@@ -7566,6 +7571,7 @@ ToolIcons::Tool MainWindow::iconForTool(const Tool* tool) const
     if (tool == _assetWarpTool.get()) return IconTool::AssetWarp;
     if (tool == _rotate3DTool.get()) return IconTool::Rotate3D;
     if (tool == _translate3DTool.get()) return IconTool::Translate3D;
+    if (tool == _widthTool.get()) return IconTool::Width;
     if (tool == _textTool.get()) return IconTool::Text;
     return IconTool::Selection;
 }

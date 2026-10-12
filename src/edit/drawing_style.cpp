@@ -196,13 +196,34 @@ StrokeLook StrokeLook::of(const StrokeStyle& stroke)
     look.joints = stroke.joints;
     look.scaleMode = stroke.scaleMode;
     look.miterLimit = stroke.miterLimit;
+    look.widthProfile = stroke.widthProfile;
     return look;
+}
+
+const std::vector<WidthPreset>& widthPresets()
+{
+    const auto marker = [](double position, double reach) {
+        StrokeStyle::WidthMarker m;
+        m.position = position;
+        m.left = reach;
+        m.right = reach;
+        return m;
+    };
+    static const std::vector<WidthPreset> presets = {
+        {"Even", {}},
+        {"Taper Both Ends", {marker(0.0, 0.0), marker(0.5, 0.5), marker(1.0, 0.0)}},
+        {"Taper Start", {marker(0.0, 0.0), marker(1.0, 0.5)}},
+        {"Taper End", {marker(0.0, 0.5), marker(1.0, 0.0)}},
+        {"Swell", {marker(0.0, 0.2), marker(0.5, 1.0), marker(1.0, 0.2)}},
+        {"Pinch", {marker(0.0, 0.75), marker(0.5, 0.15), marker(1.0, 0.75)}},
+    };
+    return presets;
 }
 
 bool StrokeLook::operator==(const StrokeLook& other) const
 {
     return kind == other.kind && hairline == other.hairline && caps == other.caps && joints == other.joints &&
-        scaleMode == other.scaleMode && miterLimit == other.miterLimit;
+        scaleMode == other.scaleMode && miterLimit == other.miterLimit && widthProfile == other.widthProfile;
 }
 
 StrokeStyle* StrokeLook::applyTo(const StrokeStyle& stroke, DOMElement* parent) const
@@ -223,7 +244,7 @@ StrokeStyle* StrokeLook::applyTo(const StrokeStyle& stroke, DOMElement* parent) 
     copy->dash2 = stroke.dash2;
     copy->dotSpace = stroke.dotSpace;
     copy->extraChildren = stroke.extraChildren;
-    copy->widthProfile = stroke.widthProfile;
+    copy->widthProfile = widthProfile;
     copy->extraAttributes = stroke.extraAttributes;
     // A kind's own settings only mean something to that kind.
     if (kind == stroke.style())

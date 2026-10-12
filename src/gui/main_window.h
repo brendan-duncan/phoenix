@@ -16,6 +16,7 @@
 #include "bone_tool.h"
 #include "asset_warp_tool.h"
 #include "three_d_tool.h"
+#include "width_tool.h"
 #include "navigation_tools.h"
 #include "paint_tools.h"
 #include "pen_tool.h"
@@ -457,6 +458,7 @@ private:
     std::unique_ptr<AssetWarpTool> _assetWarpTool;
     std::unique_ptr<ThreeDTool> _rotate3DTool;
     std::unique_ptr<ThreeDTool> _translate3DTool;
+    std::unique_ptr<WidthTool> _widthTool;
     /// The Flow Brush (the B key's), the Nib Brush and the Ink Brush,
     /// sharing the toolbox slot.
     std::unique_ptr<BrushTool> _brushTool;

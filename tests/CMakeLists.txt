@@ -149,6 +149,7 @@ set(TEST_SOURCES
     test_text_style.cpp
     test_psd_import.cpp
     test_three_d.cpp
+    test_stroke_width.cpp
     test_swatches.cpp
     test_find_replace.cpp
     test_audio_decode.cpp
