@@ -81,6 +81,7 @@
 #include <QUrl>
 #include <QFileDialog>
 #include <QMessageBox>
+#include <QListWidget>
 #include <QFileInfo>
 #include <QFile>
 #include <QDebug>
@@ -650,46 +651,106 @@ void MainWindow::newFile()
 
 bool MainWindow::offerRecovery()
 {
-    const QList<AutoSave::Orphan> orphans = AutoSave::orphans();
-    for (const AutoSave::Orphan& orphan : orphans)
-    {
-        const QString name = orphan.name.isEmpty() ? QString("Untitled") : orphan.name;
-        QMessageBox box(QMessageBox::Question, "Recover Unsaved Work",
-            QString("Phoenix closed unexpectedly while %1 had unsaved changes. A copy from %2 was kept.")
-                .arg(name, QLocale().toString(orphan.saved, QLocale::ShortFormat)),
-            QMessageBox::NoButton, this);
-        QPushButton* recover = box.addButton("Recover", QMessageBox::AcceptRole);
-        QPushButton* discard = box.addButton("Discard", QMessageBox::DestructiveRole);
-        box.addButton("Later", QMessageBox::RejectRole);
-        box.setDefaultButton(recover);
-        box.exec();
-        if (box.clickedButton() == discard)
-        {
-            AutoSave::remove(orphan);
-            continue;
-        }
-        if (box.clickedButton() != recover)
-            continue;
+    QList<AutoSave::Orphan> orphans = AutoSave::orphans();
+    if (orphans.isEmpty())
+        return false;
+    std::sort(orphans.begin(), orphans.end(),
+        [](const AutoSave::Orphan& a, const AutoSave::Orphan& b) { return a.saved > b.saved; });
 
-        std::string error;
-        std::string warning;
-        bool readOnly = false;
-        fla::FLADocument* document = phx::load(orphan.file.toStdString(), error, warning, readOnly);
-        if (!document)
+    // One dialog for every copy left behind, newest first: recover one,
+    // discard any or all, or keep them for next time.
+    QDialog dialog(this);
+    dialog.setWindowTitle("Recover Unsaved Work");
+    QVBoxLayout* layout = new QVBoxLayout(&dialog);
+    QLabel* intro = new QLabel(&dialog);
+    intro->setWordWrap(true);
+    layout->addWidget(intro);
+    QListWidget* list = new QListWidget(&dialog);
+    list->setSelectionMode(QAbstractItemView::ExtendedSelection);
+    const auto fill = [list, intro, &orphans]() {
+        intro->setText(orphans.size() == 1
+                ? QString("Phoenix closed unexpectedly while a document had unsaved changes. A copy was kept.")
+                : QString("Phoenix closed unexpectedly while documents had unsaved changes. %1 copies were kept.")
+                      .arg(orphans.size()));
+        list->clear();
+        for (const AutoSave::Orphan& orphan : orphans)
         {
-            QMessageBox::warning(this, "Recover Unsaved Work",
-                QString("The copy could not be read: %1").arg(QString::fromStdString(error)));
-            continue;
+            const QString name = orphan.name.isEmpty() ? QString("Untitled") : orphan.name;
+            QListWidgetItem* item = new QListWidgetItem(
+                QString("%1    %2").arg(name, QLocale().toString(orphan.saved, QLocale::ShortFormat)), list);
+            item->setToolTip(orphan.originalPath.isEmpty() ? QString("Never saved")
+                                                          : QDir::toNativeSeparators(orphan.originalPath));
         }
-        // Back where it came from, and unsaved until it is saved.
-        adoptDocument(document, orphan.originalPath, name);
-        _editContext.markUnsaved();
-        updateEditState();
-        AutoSave::remove(orphan);
-        statusBar()->showMessage(QString("Recovered %1. Save it to keep it.").arg(name), 8000);
-        return true;
+        if (list->count() > 0)
+            list->setCurrentRow(0);
+    };
+    fill();
+    layout->addWidget(list, 1);
+
+    QDialogButtonBox* buttons = new QDialogButtonBox(&dialog);
+    QPushButton* recover = buttons->addButton("Recover", QDialogButtonBox::AcceptRole);
+    QPushButton* discard = buttons->addButton("Discard", QDialogButtonBox::DestructiveRole);
+    QPushButton* discardAll = buttons->addButton("Discard All", QDialogButtonBox::DestructiveRole);
+    buttons->addButton("Later", QDialogButtonBox::RejectRole);
+    recover->setDefault(true);
+    layout->addWidget(buttons);
+    const auto update = [&]() {
+        recover->setEnabled(list->selectedItems().size() == 1);
+        discard->setEnabled(!list->selectedItems().isEmpty());
+    };
+    connect(list, &QListWidget::itemSelectionChanged, &dialog, update);
+    connect(list, &QListWidget::itemDoubleClicked, &dialog, [recover]() { recover->click(); });
+    connect(discard, &QPushButton::clicked, &dialog, [&]() {
+        QList<AutoSave::Orphan> kept;
+        for (int row = 0; row < orphans.size(); ++row)
+        {
+            if (list->item(row)->isSelected())
+                AutoSave::remove(orphans[row]);
+            else
+                kept.push_back(orphans[row]);
+        }
+        orphans = kept;
+        if (orphans.isEmpty())
+            dialog.reject();
+        fill();
+        update();
+    });
+    connect(discardAll, &QPushButton::clicked, &dialog, [&]() {
+        const QMessageBox::StandardButton answer = QMessageBox::question(&dialog, "Discard All",
+            QString("Discard all %1 copies? They cannot be recovered afterward.").arg(orphans.size()));
+        if (answer != QMessageBox::Yes)
+            return;
+        for (const AutoSave::Orphan& orphan : orphans)
+            AutoSave::remove(orphan);
+        orphans.clear();
+        dialog.reject();
+    });
+    connect(buttons, &QDialogButtonBox::accepted, &dialog, &QDialog::accept);
+    connect(buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
+    update();
+    if (dialog.exec() != QDialog::Accepted || list->currentRow() < 0 || list->currentRow() >= orphans.size())
+        return false;
+
+    const AutoSave::Orphan orphan = orphans[list->currentRow()];
+    const QString name = orphan.name.isEmpty() ? QString("Untitled") : orphan.name;
+    std::string error;
+    std::string warning;
+    bool readOnly = false;
+    fla::FLADocument* document = phx::load(orphan.file.toStdString(), error, warning, readOnly);
+    if (!document)
+    {
+        QMessageBox::warning(this, "Recover Unsaved Work",
+            QString("The copy could not be read: %1").arg(QString::fromStdString(error)));
+        return false;
     }
-    return false;
+    // Back where it came from, and unsaved until it is saved. The other
+    // copies are offered again next time.
+    adoptDocument(document, orphan.originalPath, name);
+    _editContext.markUnsaved();
+    updateEditState();
+    AutoSave::remove(orphan);
+    statusBar()->showMessage(QString("Recovered %1. Save it to keep it.").arg(name), 8000);
+    return true;
 }
 
 void MainWindow::showStartDialog()
