@@ -303,6 +303,9 @@ void PhoenixView::onElementSelected(const fla::DOMElement* element)
 void PhoenixView::setDocument(const fla::FLADocument* document)
 {
     _bitmapCache.clear(); // Clear bitmap cache when loading new document
+    _bitmapSource.clear();
+    _textureTiles.clear();
+    _motionCache.clear();
     clearCaches();
     _flaDocument = document;
     _panX = 0;

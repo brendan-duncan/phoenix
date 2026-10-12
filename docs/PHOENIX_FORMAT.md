@@ -288,6 +288,10 @@ figure above is a read after that.
   decodes a chunk's content (after removing the chunk header and inflating).
 - `PHOENIX_PHX_PROFILE=1` makes Phoenix print how long each part of a read
   takes.
+- `Phoenix --roundtrip file folder [samples]` saves a document as `.fla` and
+  `.phx`, opens each again and compares sample frames with the original's;
+  `python tools/roundtrip_check.py <corpus>` runs it over a folder of files
+  and reports any that draw differently, with images of the differences.
 
 ## Planned features
 

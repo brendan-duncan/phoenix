@@ -431,6 +431,10 @@ void MainWindow::releaseDocument()
         _swatchesPanel->setDocument(nullptr);
     if (_framePicker)
         _framePicker->setInstance(nullptr, 0);
+    // The stage too: panels that refresh as the history goes ask it about
+    // the document (the Motion Editor its motion paths).
+    if (_phoenixView)
+        _phoenixView->setDocument(nullptr);
 
     // The selection and the undo history both point into the document, so both
     // have to let go before it is deleted. So do the copied frames' symbol
@@ -2880,6 +2884,35 @@ int MainWindow::exportFromCommandLine(const QString& source, const QString& outp
     }
     std::printf("Exported %d frames to %s\n", settings.last + 1, qPrintable(settings.path));
     return 0;
+}
+
+std::vector<QImage> MainWindow::renderSamples(const QString& path, std::vector<int>& frames, QSize& size, int samples)
+{
+    std::vector<QImage> images;
+    loadFLAFile(path);
+    if (!_flaDocument || !_flaDocument->document || !_phoenixView)
+        return images;
+    const fla::Document* document = _flaDocument->document;
+    if (size.isEmpty())
+    {
+        size = QSize(std::max(1, document->width), std::max(1, document->height));
+        if (size.width() > 960)
+            size = QSize(960, std::max(1, size.height() * 960 / size.width()));
+    }
+    if (frames.empty())
+    {
+        const int count = std::max(1, _phoenixView->frameCount());
+        const int wanted = std::max(1, std::min(samples, count));
+        for (int i = 0; i < wanted; ++i)
+        {
+            const int frame = wanted == 1 ? 0 : static_cast<int>(std::lround(i * (count - 1.0) / (wanted - 1.0)));
+            if (frames.empty() || frames.back() != frame)
+                frames.push_back(frame);
+        }
+    }
+    for (int frame : frames)
+        images.push_back(_phoenixView->renderFrame(frame, size, false).convertToFormat(QImage::Format_ARGB32));
+    return images;
 }
 
 int MainWindow::exportImageFromCommandLine(const QString& source, const QString& output, const QStringList& options)

@@ -63,6 +63,12 @@ public:
     /// sequence for a .png name, a video otherwise. Returns the process exit
     /// code, writing any error to stderr.
     int exportFromCommandLine(const QString& source, const QString& output, bool perLayer = false);
+
+    /// For the round-trip check: opens \a path and renders \a frames (when
+    /// empty, \a samples frames spread over the document, chosen and
+    /// returned there) at \a size (when empty, the stage's, no wider than
+    /// 960). Empty when the file does not open.
+    std::vector<QImage> renderSamples(const QString& path, std::vector<int>& frames, QSize& size, int samples);
     /// Phoenix --export-image in out [--frame N] [--size WxH]
     /// [--matte stage|transparent|#rrggbb] [--quality Q]: one frame, no
     /// window. Returns the exit code.
