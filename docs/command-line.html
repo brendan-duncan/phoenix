@@ -31,19 +31,28 @@
 
 <pre><code>Phoenix render shot.fla --range 1-240 --out frames/
 Phoenix render shot.fla --out shot.mp4 --size 1920x1080
-Phoenix render shot.fla --range 12 --out still/ --transparent</code></pre>
+Phoenix render shot.fla --range 12 --out still/ --transparent
+Phoenix render shot.fla --out comp/shot.mov --prores4444 --transparent
+Phoenix render shot.fla --out vector/shot.svg --link-images</code></pre>
 
-<p>Renders without a window, for render nodes and pipelines. A folder gets a numbered PNG sequence named after the document; a name ending in <code>.mp4</code>, <code>.mov</code> or <code>.gif</code> makes that instead. Without <code>--out</code>, frames go to a folder next to the document called <code><em>name</em>_frames</code>.</p>
+<p>Renders without a window, for render nodes and pipelines. A folder gets a numbered PNG sequence named after the document; a name ending in <code>.mp4</code>, <code>.mov</code> or <code>.gif</code> makes that instead, and one ending in <code>.svg</code> a numbered SVG sequence. Without <code>--out</code>, frames go to a folder next to the document called <code><em>name</em>_frames</code>.</p>
 
 <table>
   <thead><tr><th>Option</th><th>Meaning</th></tr></thead>
   <tbody>
     <tr><td><code>--range A-B</code></td><td class="wrap">The frames to render, counting from 1, both ends included. One number renders one frame.</td></tr>
     <tr><td><code>--size WxH</code></td><td class="wrap">The output size in pixels.</td></tr>
-    <tr><td><code>--transparent</code></td><td class="wrap">No stage color behind the art (PNG only).</td></tr>
+    <tr><td><code>--transparent</code></td><td class="wrap">No stage color behind the art (PNG, GIF, SVG and ProRes 4444).</td></tr>
     <tr><td><code>--no-camera</code></td><td class="wrap">Render the stage as drawn rather than through the scene's camera.</td></tr>
     <tr><td><code>--no-audio</code></td><td class="wrap">A video without its soundtrack.</td></tr>
     <tr><td><code>--per-layer</code></td><td class="wrap">A PNG sequence for each layer.</td></tr>
+    <tr><td><code>--layers A,B</code></td><td class="wrap">With <code>--per-layer</code>, only the layers named.</td></tr>
+    <tr><td><code>--prores</code>, <code>--prores4444</code></td><td class="wrap">A <code>.mov</code> in ProRes 422 HQ, or ProRes 4444 which keeps transparency, rather than H.264.</td></tr>
+    <tr><td><code>--everything</code></td><td class="wrap">All the artwork on the frames, the pasteboard too, rather than the stage.</td></tr>
+    <tr><td><code>--all-scenes</code></td><td class="wrap">Every scene, one after another, into one output.</td></tr>
+    <tr><td><code>--each-scene</code></td><td class="wrap">Every scene to its own output, named after the scene.</td></tr>
+    <tr><td><code>--colors N</code>, <code>--dither</code></td><td class="wrap">For a GIF: at most N colors a frame, and dithered.</td></tr>
+    <tr><td><code>--link-images</code></td><td class="wrap">For SVG: each bitmap written once beside the SVGs rather than inside each.</td></tr>
     <tr><td><code>--passes</code></td><td class="wrap">Line, color and matte PNG sequences for compositing.</td></tr>
     <tr><td><code>--exr</code></td><td class="wrap">One multi-layer OpenEXR a frame: the picture, with the line, color and matte passes as layers.</td></tr>
   </tbody>

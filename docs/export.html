@@ -28,13 +28,18 @@
 <p>Choose <span class="menu-path">File &rsaquo; Export &rsaquo; Export Movie...</span> (<kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>S</kbd>) to render a range of frames.</p>
 
 <div class="split">
-  <figure style="margin:0"><img src="assets/shots/export-movie.webp" alt="Export Movie dialog with format, file, size, frame range, transparent background, include sound and loop forever options" width="338" height="343"></figure>
+  <figure style="margin:0"><img src="assets/shots/export-movie.webp" alt="Export Movie dialog with format, codec, file, size, frame range, options, area, GIF colors, SVG options, layers and scenes" width="341" height="554"></figure>
   <dl class="defs" style="grid-template-columns:1fr">
     <dt>Format</dt><dd>What to make. See the table below.</dd>
     <dt>File</dt><dd>Where to save it. <strong>Browse...</strong> picks a location.</dd>
     <dt>Size</dt><dd>The output size in pixels. Keep proportions to match the stage's shape.</dd>
     <dt>Frames</dt><dd>The first and last frame to export.</dd>
     <dt>Options</dt><dd>Transparent background, Include sound, and Loop forever, where the format supports them.</dd>
+    <dt>Codec</dt><dd>For video: <strong>H.264</strong> (MP4) to watch and share; <strong>ProRes 422 HQ</strong> (MOV) for editing; <strong>ProRes 4444</strong> (MOV), which keeps a transparent background, for compositing. ProRes carries the sound as uncompressed PCM.</dd>
+    <dt>Area</dt><dd><strong>Stage</strong>, or <strong>Everything</strong>: all the artwork on the frames, wherever it is, the pasteboard too. The size is then the stage's scale applied to that larger area.</dd>
+    <dt>Colors</dt><dd>For a GIF, how many colors each frame may use (2 to 256), and <strong>Dither</strong> to mix them so gradients stay smooth in few colors.</dd>
+    <dt>Layers</dt><dd>For a sequence per layer, which layers get one. All visible layers until you choose.</dd>
+    <dt>Scenes</dt><dd>In a document with more than one scene: <strong>This scene</strong>; <strong>All scenes, one after another</strong> into one file, the frame range being every frame of every scene; or <strong>Each scene to its own file</strong>, named after the file and the scene (<code>movie_Intro.mp4</code>).</dd>
   </dl>
 </div>
 
@@ -46,6 +51,7 @@
     <tr><td>Animated GIF</td><td class="wrap">A GIF, looping forever or playing once, with its own color palette for each frame.</td></tr>
     <tr><td>PNG Sequence per Layer</td><td class="wrap">A separate PNG sequence for every visible layer, with masks applied, for compositing layers separately.</td></tr>
     <tr><td>Sound (WAV)</td><td class="wrap">The mixed soundtrack on its own.</td></tr>
+    <tr><td>SVG Sequence</td><td class="wrap">One numbered SVG per frame, its shapes, strokes, gradients and text kept as vectors. <strong>Include hidden layers</strong> draws layers you have hidden; <strong>Link images</strong> writes each bitmap once as a file beside the SVGs (<code>name_image_….png</code>) rather than inside every frame.</td></tr>
   </tbody>
 </table>
 
@@ -81,7 +87,7 @@
 
 <div class="callout planned">
   <span class="label">Planned</span>
-  <p>ProRes video, GIF dithering and color count, sprite sheets, exporting chosen layers or every scene, a render queue, and export settings saved with the document.</p>
+  <p>Sprite sheets, a render queue, and export settings saved with the document.</p>
 </div>
 
 <h2>Compositing passes</h2>

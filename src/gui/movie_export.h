@@ -1,8 +1,13 @@
 #pragma once
 
 #include <QDialog>
+#include <QRectF>
 #include <QSize>
 #include <QString>
+#include <QStringList>
+
+#include <functional>
+#include <vector>
 
 class PhoenixView;
 class QCheckBox;
@@ -26,7 +31,25 @@ struct MovieExportSettings
         /// PNG sequences of the line, color and matte passes.
         Passes,
         /// One multi-layer OpenEXR a frame: the picture and the passes.
-        Exr
+        Exr,
+        /// One SVG a frame, numbered as a PNG sequence is.
+        SvgSequence
+    };
+    /// The video's encoding.
+    enum class Codec
+    {
+        H264,
+        ProRes422,
+        /// With an alpha channel, for a transparent background.
+        ProRes4444
+    };
+    /// Which scenes: the one shown, all one after another, or each to a
+    /// file of its own named after it.
+    enum class Scenes
+    {
+        Current,
+        All,
+        Each
     };
 
     Format format = Format::Video;
@@ -43,6 +66,26 @@ struct MovieExportSettings
     bool loop = true;
     /// Seen through the scene's camera, when it has one.
     bool camera = true;
+    Codec codec = Codec::H264;
+    /// An animated GIF's colors, 2 to 256, and whether they are dithered.
+    int gifColors = 256;
+    bool gifDither = false;
+    /// For a sequence per layer, the layers by name; empty for every
+    /// visible one.
+    QStringList layers;
+    /// Everything on the frames, the pasteboard too, rather than the stage.
+    bool everything = false;
+    /// SVG: hidden layers drawn too, and images linked rather than
+    /// embedded.
+    bool svgHidden = true;
+    bool svgLinked = false;
+    Scenes scenes = Scenes::Current;
+    /// Shows scene \a index for drawing and gives its frame count; set by
+    /// whoever runs the export when there is more than one scene.
+    std::function<int(int)> showScene;
+    int sceneCount = 1;
+    int currentScene = 0;
+    QStringList sceneNames;
 };
 
 /// Asks how to export the movie: as a numbered PNG sequence or as an MP4
@@ -53,6 +96,11 @@ class MovieExportDialog : public QDialog
 
 public:
     MovieExportDialog(const QSize& documentSize, int frameCount, const QString& suggestedPath, QWidget* parent);
+
+    /// The document's scenes, to offer exporting them all or each; and the
+    /// current scene's layers, to choose among for a sequence per layer.
+    void setScenes(const QStringList& names, int current);
+    void setLayers(const QStringList& names);
 
     MovieExportSettings settings() const;
 
@@ -74,6 +122,18 @@ private:
     QCheckBox* _audio = nullptr;
     QCheckBox* _loop = nullptr;
     QCheckBox* _camera = nullptr;
+    QComboBox* _codec = nullptr;
+    QSpinBox* _gifColors = nullptr;
+    QCheckBox* _gifDither = nullptr;
+    QComboBox* _area = nullptr;
+    QComboBox* _scenes = nullptr;
+    class QPushButton* _chooseLayers = nullptr;
+    QCheckBox* _svgHidden = nullptr;
+    QCheckBox* _svgLinked = nullptr;
+    QStringList _layerNames;
+    QStringList _chosenLayers;
+    QStringList _sceneNames;
+    int _currentScene = 0;
     QLabel* _encoderNote = nullptr;
     bool _syncing = false;
 };

@@ -241,7 +241,7 @@ struct Indexed
     int bits = 1;
 };
 
-Indexed quantize(size_t pixels, const std::vector<uint8_t>& rgba, bool transparent)
+Indexed quantize(size_t pixels, const std::vector<uint8_t>& rgba, bool transparent, int width, const Options& options)
 {
     Indexed result;
     // The distinct colors, counted; transparent pixels set aside.
@@ -262,7 +262,8 @@ Indexed quantize(size_t pixels, const std::vector<uint8_t>& rgba, bool transpare
     for (const auto& entry : counts)
         entries.push_back({{static_cast<uint8_t>(entry.first >> 16), static_cast<uint8_t>(entry.first >> 8),
                               static_cast<uint8_t>(entry.first)}, entry.second});
-    const size_t slots = anyClear ? 255 : 256;
+    const size_t wanted = static_cast<size_t>(std::clamp(options.colors, 2, 256));
+    const size_t slots = anyClear ? std::min<size_t>(wanted, 255) : wanted;
     result.colors = entries.empty() ? std::vector<Color>{{0, 0, 0}} : palette(entries, slots);
     result.clearIndex = anyClear ? static_cast<int>(result.colors.size()) : -1;
     const size_t used = result.colors.size();
@@ -272,9 +273,66 @@ Indexed quantize(size_t pixels, const std::vector<uint8_t>& rgba, bool transpare
         ++result.bits;
     result.colors.resize(static_cast<size_t>(1) << result.bits, {0, 0, 0});
 
+    const auto closest = [&](int r, int g, int b) {
+        int best = 0;
+        int bestDistance = 1 << 30;
+        for (size_t c = 0; c < used; ++c)
+        {
+            const int dr = r - result.colors[c].r, dg = g - result.colors[c].g, db = b - result.colors[c].b;
+            const int distance = 2 * dr * dr + 4 * dg * dg + 3 * db * db;
+            if (distance < bestDistance)
+            {
+                bestDistance = distance;
+                best = static_cast<int>(c);
+            }
+        }
+        return best;
+    };
+    result.indices.resize(pixels);
+    if (options.dither && width > 0)
+    {
+        // Floyd and Steinberg: the error to the right and the row below.
+        const size_t w = static_cast<size_t>(width);
+        std::vector<float> error((w + 2) * 2 * 3, 0.0f);
+        for (size_t i = 0; i < pixels; ++i)
+        {
+            const size_t x = i % w;
+            if (x == 0 && i > 0)
+            {
+                // The row below becomes this row.
+                std::copy(error.begin() + static_cast<long long>((w + 2) * 3), error.end(), error.begin());
+                std::fill(error.begin() + static_cast<long long>((w + 2) * 3), error.end(), 0.0f);
+            }
+            const uint8_t* p = &rgba[i * 4];
+            if (anyClear && p[3] < 128)
+            {
+                result.indices[i] = static_cast<uint8_t>(result.clearIndex);
+                continue;
+            }
+            float* here = &error[(x + 1) * 3];
+            const int r = std::clamp(static_cast<int>(std::lround(p[0] + here[0])), 0, 255);
+            const int g = std::clamp(static_cast<int>(std::lround(p[1] + here[1])), 0, 255);
+            const int b = std::clamp(static_cast<int>(std::lround(p[2] + here[2])), 0, 255);
+            const int index = closest(r, g, b);
+            result.indices[i] = static_cast<uint8_t>(index);
+            const float er = static_cast<float>(r - result.colors[static_cast<size_t>(index)].r);
+            const float eg = static_cast<float>(g - result.colors[static_cast<size_t>(index)].g);
+            const float eb = static_cast<float>(b - result.colors[static_cast<size_t>(index)].b);
+            const auto spread = [&](size_t row, long dx, float share) {
+                float* cell = &error[(row * (w + 2) + static_cast<size_t>(static_cast<long>(x) + 1 + dx)) * 3];
+                cell[0] += er * share;
+                cell[1] += eg * share;
+                cell[2] += eb * share;
+            };
+            spread(0, 1, 7.0f / 16.0f);
+            spread(1, -1, 3.0f / 16.0f);
+            spread(1, 0, 5.0f / 16.0f);
+            spread(1, 1, 1.0f / 16.0f);
+        }
+        return result;
+    }
     // Each pixel's nearest palette color, remembered by color.
     std::unordered_map<uint32_t, uint8_t> nearest;
-    result.indices.resize(pixels);
     for (size_t i = 0; i < pixels; ++i)
     {
         const uint8_t* p = &rgba[i * 4];
@@ -290,18 +348,7 @@ Indexed quantize(size_t pixels, const std::vector<uint8_t>& rgba, bool transpare
             result.indices[i] = found->second;
             continue;
         }
-        int best = 0;
-        int bestDistance = 1 << 30;
-        for (size_t c = 0; c < used; ++c)
-        {
-            const int dr = p[0] - result.colors[c].r, dg = p[1] - result.colors[c].g, db = p[2] - result.colors[c].b;
-            const int distance = 2 * dr * dr + 4 * dg * dg + 3 * db * db;
-            if (distance < bestDistance)
-            {
-                bestDistance = distance;
-                best = static_cast<int>(c);
-            }
-        }
+        const int best = closest(p[0], p[1], p[2]);
         nearest[key] = static_cast<uint8_t>(best);
         result.indices[i] = static_cast<uint8_t>(best);
     }
@@ -320,13 +367,31 @@ void putPalette(std::vector<uint8_t>& out, const std::vector<Color>& colors)
 
 } // namespace
 
-std::vector<uint8_t> encode(int width, int height, const std::vector<uint8_t>& rgba, bool transparent)
+Reduced reduce(int width, int height, const std::vector<uint8_t>& rgba, bool transparent, const Options& options)
+{
+    Reduced reduced;
+    if (width <= 0 || height <= 0 || rgba.size() < static_cast<size_t>(width) * static_cast<size_t>(height) * 4)
+        return reduced;
+    const Indexed image = quantize(static_cast<size_t>(width) * static_cast<size_t>(height), rgba, transparent, width, options);
+    for (const Color& color : image.colors)
+    {
+        reduced.palette.push_back(color.r);
+        reduced.palette.push_back(color.g);
+        reduced.palette.push_back(color.b);
+    }
+    reduced.indices = image.indices;
+    reduced.clearIndex = image.clearIndex;
+    return reduced;
+}
+
+std::vector<uint8_t> encode(int width, int height, const std::vector<uint8_t>& rgba, bool transparent,
+    const Options& options)
 {
     std::vector<uint8_t> out;
     if (width <= 0 || height <= 0 || width > 65535 || height > 65535 ||
         rgba.size() < static_cast<size_t>(width) * static_cast<size_t>(height) * 4)
         return out;
-    const Indexed image = quantize(static_cast<size_t>(width) * static_cast<size_t>(height), rgba, transparent);
+    const Indexed image = quantize(static_cast<size_t>(width) * static_cast<size_t>(height), rgba, transparent, width, options);
 
     // Header, screen with the global palette, the transparency, the image.
     const char* signature = "GIF89a";
@@ -353,9 +418,10 @@ std::vector<uint8_t> encode(int width, int height, const std::vector<uint8_t>& r
     return out;
 }
 
-AnimationWriter::AnimationWriter(int width, int height, bool loop)
+AnimationWriter::AnimationWriter(int width, int height, bool loop, const Options& options)
     : _width(width)
     , _height(height)
+    , _options(options)
 {
     const char* signature = "GIF89a";
     _out.insert(_out.end(), signature, signature + 6);
@@ -377,7 +443,7 @@ bool AnimationWriter::addFrame(const std::vector<uint8_t>& rgba, int delay, bool
     const size_t pixels = static_cast<size_t>(_width) * static_cast<size_t>(_height);
     if (rgba.size() < pixels * 4)
         return false;
-    const Indexed image = quantize(pixels, rgba, transparent);
+    const Indexed image = quantize(pixels, rgba, transparent, _width, _options);
     // How long it shows, and, with transparency, that it is cleared before
     // the next frame rather than showing through it.
     const uint8_t disposal = image.clearIndex >= 0 ? 2 : 1;

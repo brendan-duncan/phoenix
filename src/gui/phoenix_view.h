@@ -531,11 +531,28 @@ public:
     // Renders in document space using the same traversal as on-screen drawing.
     bool exportToSvg(const QString& filePath);
 
+    /// SVG of one frame: the stage, or \a area of the document when it is
+    /// valid; hidden layers drawn when \a hidden; images linked as files
+    /// beside it rather than embedded when \a linked, each written once
+    /// whatever frames use it (\a written keeps which, across a sequence).
+    bool exportFrameSvg(const QString& filePath, int frame, bool transparent, bool hidden, bool linked,
+        const QRectF& area, QStringList* written = nullptr);
+
+    /// The frames' artwork's bounds, stage included: what Everything
+    /// exports.
+    QRectF framesBounds(int first, int last);
+
+    /// While on, hidden layers are drawn too, as an export that includes
+    /// them asks.
+    void setDrawHidden(bool hidden) { _drawHidden = hidden; }
+
     /// The document at frame \a frame, drawn into an image of \a size as a
     /// published movie shows it: every layer but guides, locked ones too,
     /// and movie clips playing their own timelines. The stage color fills
     /// it unless \a transparent.
     QImage renderFrame(int frame, const QSize& size, bool transparent);
+    /// The same of \a area of the document, rather than the stage.
+    QImage renderFrame(int frame, const QSize& size, bool transparent, const QRectF& area);
 
     /// While set, renderFrame draws nothing of the scene but \a layer (its
     /// mask still masking it), for exporting a sequence per layer.
@@ -923,6 +940,7 @@ private:
     bool _committingMerge = false;
     fla::Snapper* _snapper = nullptr;
     bool _showGrid = false;
+    bool _drawHidden = false;
     bool _gridOver = false;
     bool _clipOutsideStage = false;
     bool _showPasteboard = true;

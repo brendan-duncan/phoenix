@@ -179,3 +179,37 @@ TEST(gif_animation_writer_writes_frames_with_their_timing)
         stream.write(reinterpret_cast<const char*>(file.data()), static_cast<std::streamsize>(file.size()));
     }
 }
+
+TEST(gif_palettes_keep_to_their_color_count_and_dither)
+{
+    // A grey ramp, 64 wide: cut to 4 colors, with and without dither.
+    const int width = 64, height = 4;
+    std::vector<uint8_t> rgba(static_cast<size_t>(width * height * 4));
+    for (int y = 0; y < height; ++y)
+        for (int x = 0; x < width; ++x)
+        {
+            uint8_t* p = &rgba[static_cast<size_t>((y * width + x) * 4)];
+            p[0] = p[1] = p[2] = static_cast<uint8_t>(x * 4);
+            p[3] = 255;
+        }
+    gif::Options four;
+    four.colors = 4;
+    const gif::Reduced plain = gif::reduce(width, height, rgba, false, four);
+    CHECK(plain.palette.size() == 4 * 3 && plain.indices.size() == static_cast<size_t>(width * height));
+    four.dither = true;
+    const gif::Reduced dithered = gif::reduce(width, height, rgba, false, four);
+    // Without dither each row is the same runs; with it the colors mix, so
+    // neighbors in a row change more often.
+    const auto changes = [&](const gif::Reduced& r) {
+        int count = 0;
+        for (int x = 1; x < width; ++x)
+            count += r.indices[static_cast<size_t>(x)] != r.indices[static_cast<size_t>(x - 1)];
+        return count;
+    };
+    CHECK(changes(plain) <= 3);
+    CHECK(changes(dithered) > changes(plain));
+    // Transparency keeps a slot of its own.
+    rgba[3] = 0;
+    const gif::Reduced clear = gif::reduce(width, height, rgba, true, four);
+    CHECK(clear.clearIndex >= 0 && clear.indices[0] == clear.clearIndex);
+}

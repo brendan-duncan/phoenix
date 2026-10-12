@@ -5015,6 +5015,7 @@ int MainWindow::exportFromCommandLine(const QString& source, const QString& outp
     settings.format = output.endsWith(".png", Qt::CaseInsensitive) ? MovieExportSettings::Format::PngSequence
         : output.endsWith(".gif", Qt::CaseInsensitive)               ? MovieExportSettings::Format::Gif
         : output.endsWith(".wav", Qt::CaseInsensitive)               ? MovieExportSettings::Format::Wav
+        : output.endsWith(".svg", Qt::CaseInsensitive)               ? MovieExportSettings::Format::SvgSequence
                                                                      : MovieExportSettings::Format::Video;
     if (perLayer)
         settings.format = MovieExportSettings::Format::LayerSequences;
@@ -5390,6 +5391,30 @@ int MainWindow::renderCommand(const QString& source, const QStringList& options)
             settings.format = MovieExportSettings::Format::Passes;
         else if (name == "--exr")
             settings.format = MovieExportSettings::Format::Exr;
+        else if (name == "--prores")
+            settings.codec = MovieExportSettings::Codec::ProRes422;
+        else if (name == "--prores4444")
+            settings.codec = MovieExportSettings::Codec::ProRes4444;
+        else if (name == "--everything")
+            settings.everything = true;
+        else if (name == "--all-scenes")
+            settings.scenes = MovieExportSettings::Scenes::All;
+        else if (name == "--each-scene")
+            settings.scenes = MovieExportSettings::Scenes::Each;
+        else if (name == "--dither")
+            settings.gifDither = true;
+        else if (name == "--link-images")
+            settings.svgLinked = true;
+        else if (name == "--colors" && !value.isEmpty())
+        {
+            settings.gifColors = std::clamp(value.toInt(), 2, 256);
+            ++i;
+        }
+        else if (name == "--layers" && !value.isEmpty())
+        {
+            settings.layers = value.split(',', Qt::SkipEmptyParts);
+            ++i;
+        }
         else
         {
             std::fprintf(stderr, "Unknown option %s\n", qPrintable(name));
@@ -5403,10 +5428,16 @@ int MainWindow::renderCommand(const QString& source, const QStringList& options)
         QDir().mkpath(out);
         out = QDir(out).filePath(base + ".png");
     }
-    else if (suffix == "mp4" || suffix == "mov")
-        settings.format = MovieExportSettings::Format::Video;
-    else if (suffix == "gif")
-        settings.format = MovieExportSettings::Format::Gif;
+    else if (suffix == "mp4" || suffix == "mov" || suffix == "gif")
+    {
+        settings.format = suffix == "gif" ? MovieExportSettings::Format::Gif : MovieExportSettings::Format::Video;
+        QDir().mkpath(QFileInfo(out).absolutePath());
+    }
+    else if (suffix == "svg")
+    {
+        settings.format = MovieExportSettings::Format::SvgSequence;
+        QDir().mkpath(QFileInfo(out).absolutePath());
+    }
     else if (suffix != "png")
     {
         QDir().mkpath(out);
@@ -5417,6 +5448,14 @@ int MainWindow::renderCommand(const QString& source, const QStringList& options)
         QDir().mkpath(QFileInfo(out).absolutePath());
     }
     settings.path = QFileInfo(out).absoluteFilePath();
+    for (const fla::Timeline* timeline : document->timelines)
+        settings.sceneNames << (timeline ? QString::fromStdString(timeline->name) : QString());
+    settings.sceneCount = std::max(1, static_cast<int>(settings.sceneNames.size()));
+    settings.currentScene = document->currentSceneIndex();
+    settings.showScene = [this](int index) {
+        goToScene(index);
+        return std::max(1, _phoenixView->frameCount());
+    };
     QString error;
     if (!MovieExport::run(settings, *_phoenixView, _timelineAudio, document->frameRate, nullptr, error))
     {
@@ -5566,9 +5605,23 @@ void MainWindow::exportMovie()
     MovieExportDialog dialog(QSize(static_cast<int>(std::lround(document->width)),
                                  static_cast<int>(std::lround(document->height))),
         std::max(1, _phoenixView->frameCount()), QDir(folder).filePath(base + ".mp4"), this);
+    QStringList scenes;
+    for (const fla::Timeline* timeline : document->timelines)
+        scenes << (timeline ? QString::fromStdString(timeline->name) : QString());
+    dialog.setScenes(scenes, document->currentSceneIndex());
+    QStringList layers;
+    if (const fla::Timeline* scene = document->currentScene())
+        for (const fla::Layer* layer : scene->layers)
+            if (layer && (layer->layerType == fla::Layer::Type::Normal || layer->layerType == fla::Layer::Type::Masked))
+                layers << QString::fromStdString(layer->name);
+    dialog.setLayers(layers);
     if (dialog.exec() != QDialog::Accepted)
         return;
-    const MovieExportSettings settings = dialog.settings();
+    MovieExportSettings settings = dialog.settings();
+    settings.showScene = [this](int index) {
+        goToScene(index);
+        return std::max(1, _phoenixView->frameCount());
+    };
 
     if (settings.format == MovieExportSettings::Format::Video &&
         findFfmpeg("Export Movie", "Phoenix encodes video with ffmpeg").isEmpty())

@@ -80,6 +80,11 @@
 #include <cstring>
 #include <QBitmap>
 #include <QSvgGenerator>
+#include <QFileInfo>
+#include <QDir>
+#include <QRegularExpression>
+#include <QCryptographicHash>
+#include <QBuffer>
 #include <QtMath>
 
 #define MAX(a, b) ((a) > (b) ? (a) : (b))
@@ -352,6 +357,86 @@ void PhoenixView::setHighQualityAntiAliasing(bool on)
     update();
 }
 
+bool PhoenixView::exportFrameSvg(const QString& filePath, int frame, bool transparent, bool hidden, bool linked,
+    const QRectF& wanted, QStringList* written)
+{
+    if (!_flaDocument || !_flaDocument->document)
+        return false;
+    fla::Document* document = _flaDocument->document;
+    if (document->width <= 0 || document->height <= 0)
+        return false;
+    const QRectF area = wanted.isValid() && !wanted.isEmpty() ? wanted : QRectF(0, 0, document->width, document->height);
+    QBuffer buffer;
+    buffer.open(QIODevice::WriteOnly);
+    {
+        QSvgGenerator generator;
+        generator.setOutputDevice(&buffer);
+        generator.setSize(QSize(qCeil(area.width()), qCeil(area.height())));
+        // CSS pixels, so the drawing is as wide as the stage.
+        generator.setResolution(96);
+        generator.setViewBox(area);
+        generator.setTitle(QFileInfo(filePath).completeBaseName());
+        QPainter painter(&generator);
+        painter.setRenderHint(QPainter::Antialiasing, true);
+        painter.setRenderHint(QPainter::TextAntialiasing, true);
+        painter.setRenderHint(QPainter::SmoothPixmapTransform, true);
+        const QTransform savedView = viewTransform;
+        const QRectF savedVisible = _visibleRect;
+        const int savedOverride = _frameOverride;
+        viewTransform = painter.transform();
+        _visibleRect = area;
+        _frameOverride = std::max(0, frame);
+        _drawHidden = hidden;
+        _exporting = true;
+        if (!transparent)
+            painter.fillRect(area, QColor(document->backgroundColor[0], document->backgroundColor[1],
+                                       document->backgroundColor[2], document->backgroundColor[3]));
+        drawDocument(painter, document);
+        _exporting = false;
+        _drawHidden = false;
+        _frameOverride = savedOverride;
+        viewTransform = savedView;
+        _visibleRect = savedVisible;
+        painter.end();
+    }
+    QString svg = QString::fromUtf8(buffer.data());
+    if (linked)
+    {
+        // Each embedded image as a file beside the SVG, named for what it
+        // holds, so one used on every frame is written once.
+        static const QRegularExpression embedded("xlink:href=\"data:image/(png|jpeg|jpg);base64,([^\"]+)\"");
+        const QDir folder = QFileInfo(filePath).absoluteDir();
+        const QString stem = QFileInfo(filePath).completeBaseName().remove(QRegularExpression("\\d+$"));
+        QString out;
+        qsizetype last = 0;
+        for (auto it = embedded.globalMatch(svg); it.hasNext();)
+        {
+            const QRegularExpressionMatch match = it.next();
+            const QByteArray bytes = QByteArray::fromBase64(match.captured(2).toLatin1());
+            const QString hash = QString::fromLatin1(QCryptographicHash::hash(bytes, QCryptographicHash::Sha1).toHex().left(10));
+            const QString name = QString("%1_image_%2.%3").arg(stem.isEmpty() ? QString("svg") : stem, hash,
+                match.captured(1) == "png" ? QString("png") : QString("jpg"));
+            if (!written || !written->contains(name))
+            {
+                QFile image(folder.filePath(name));
+                if (image.open(QIODevice::WriteOnly))
+                    image.write(bytes);
+                if (written)
+                    written->append(name);
+            }
+            out += svg.mid(last, match.capturedStart() - last) + "xlink:href=\"" + name + "\"";
+            last = match.capturedEnd();
+        }
+        out += svg.mid(last);
+        svg = out;
+    }
+    QFile file(filePath);
+    if (!file.open(QIODevice::WriteOnly))
+        return false;
+    file.write(svg.toUtf8());
+    return true;
+}
+
 bool PhoenixView::exportToSvg(const QString& filePath)
 {
     if (!_flaDocument || !_flaDocument->document)
@@ -367,6 +452,7 @@ bool PhoenixView::exportToSvg(const QString& filePath)
     QSvgGenerator generator;
     generator.setFileName(filePath);
     generator.setSize(QSize(qCeil(docWidth), qCeil(docHeight)));
+    generator.setResolution(96);
     generator.setViewBox(QRectF(0, 0, docWidth, docHeight));
     generator.setTitle("Phoenix SVG Export");
     generator.setDescription("Single frame exported from Phoenix.");
@@ -397,6 +483,34 @@ bool PhoenixView::exportToSvg(const QString& filePath)
 
 QImage PhoenixView::renderFrame(int frame, const QSize& size, bool transparent)
 {
+    return renderFrame(frame, size, transparent, QRectF());
+}
+
+QRectF PhoenixView::framesBounds(int first, int last)
+{
+    if (!_flaDocument || !_flaDocument->document)
+        return QRectF();
+    const int was = _player ? _player->currentFrame() : 0;
+    QRectF bounds;
+    // At most a few hundred frames looked at, spread over the range.
+    const int count = std::max(1, last - first + 1);
+    const int step = std::max(1, count / 200);
+    for (int frame = first; frame <= last; frame += step)
+    {
+        if (_player)
+            _player->setCurrentFrame(frame);
+        invalidateBounds();
+        const QRectF here = contentBounds();
+        bounds = bounds.isValid() ? bounds.united(here) : here;
+    }
+    if (_player)
+        _player->setCurrentFrame(was);
+    invalidateBounds();
+    return bounds;
+}
+
+QImage PhoenixView::renderFrame(int frame, const QSize& size, bool transparent, const QRectF& wanted)
+{
     QImage image(size, QImage::Format_ARGB32_Premultiplied);
     image.fill(Qt::transparent);
     if (!_flaDocument || !_flaDocument->document || size.isEmpty())
@@ -414,13 +528,15 @@ QImage PhoenixView::renderFrame(int frame, const QSize& size, bool transparent)
         painter.fillRect(image.rect(), QColor(document->backgroundColor[0], document->backgroundColor[1],
             document->backgroundColor[2], document->backgroundColor[3]));
     }
-    painter.scale(static_cast<double>(size.width()) / document->width, static_cast<double>(size.height()) / document->height);
+    const QRectF area = wanted.isValid() && !wanted.isEmpty() ? wanted : QRectF(0, 0, document->width, document->height);
+    painter.scale(static_cast<double>(size.width()) / area.width(), static_cast<double>(size.height()) / area.height());
+    painter.translate(-area.left(), -area.top());
 
     const QTransform savedView = viewTransform;
     const QRectF savedVisible = _visibleRect;
     const int savedOverride = _frameOverride;
     viewTransform = painter.transform();
-    _visibleRect = QRectF(0, 0, document->width, document->height);
+    _visibleRect = area;
     _frameOverride = std::max(0, frame);
     _exporting = true;
     drawDocument(painter, document);
@@ -1367,7 +1483,7 @@ void PhoenixView::drawTimeline(QPainter& painter, const fla::Timeline* timeline,
     for (int i = 0; i < timeline->layers.size(); ++i)
     {
         const fla::Layer* layer = timeline->layers[i];
-        if (layer->layerType != fla::Layer::Type::Mask || !layer->isVisible() || !masking(layer))
+        if (layer->layerType != fla::Layer::Type::Mask || !(layer->isVisible() || _drawHidden) || !masking(layer))
         {
             continue;
         }
@@ -1447,7 +1563,7 @@ void PhoenixView::drawTimeline(QPainter& painter, const fla::Timeline* timeline,
     {
         const fla::Layer* layer = timeline->layers[i];
 
-        if (!layer->isVisible())
+        if (!layer->isVisible() && !_drawHidden)
             continue;
         // One layer of the scene on its own, for a sequence per layer.
         if (_onlyLayer && layer != _onlyLayer &&
