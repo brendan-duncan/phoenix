@@ -8,6 +8,7 @@
 #include "../data/symbol.h"
 #include "../data/symbol_list.h"
 #include "../edit/library_commands.h"
+#include "../edit/linked_assets.h"
 
 #include <QDrag>
 #include <QDragEnterEvent>
@@ -310,13 +311,32 @@ LibraryPanel::LibraryPanel(QWidget* parent)
         QAction* duplicate = nullptr;
         QAction* remove = nullptr;
         QAction* linkage = nullptr;
+        QAction* linkMaster = nullptr;
+        QAction* updateLinked = nullptr;
+        QAction* unlink = nullptr;
         const QStringList chosenItems = selectedItems();
+        bool linked = false;
+        bool anyLinked = false;
+        if (_document && _document->document)
+        {
+            const std::vector<std::string> names = fla::links::linkedSymbols(*_document->document);
+            anyLinked = !names.empty();
+            linked = std::find(names.begin(), names.end(), name.toStdString()) != names.end();
+        }
         if (item)
             rename = menu.addAction("Rename");
         if (kind == static_cast<int>(Kind::Symbol))
         {
             duplicate = menu.addAction("Duplicate");
             linkage = menu.addAction("Linkage...");
+            menu.addSeparator();
+            linkMaster = menu.addAction(linked ? "Change Master File..." : "Link to Master File...");
+            if (linked)
+            {
+                updateLinked = menu.addAction("Update from Master");
+                unlink = menu.addAction("Unlink from Master");
+            }
+            menu.addSeparator();
         }
         if (!chosenItems.isEmpty())
             remove = menu.addAction(chosenItems.size() == 1 ? QString("Delete") : QString("Delete %1 Items").arg(chosenItems.size()));
@@ -324,6 +344,9 @@ LibraryPanel::LibraryPanel(QWidget* parent)
             menu.addSeparator();
         QAction* folder = menu.addAction("New Folder");
         QAction* unused = menu.addAction("Select Unused Items");
+        QAction* updateAll = nullptr;
+        if (anyLinked)
+            updateAll = menu.addAction("Update All Linked Items");
         QAction* chosen = menu.exec(_tree->viewport()->mapToGlobal(at));
         if (!chosen)
             return;
@@ -346,6 +369,22 @@ LibraryPanel::LibraryPanel(QWidget* parent)
         else if (chosen == unused)
         {
             selectUnused();
+        }
+        else if (chosen == linkMaster)
+        {
+            emit linkToMasterRequested(name);
+        }
+        else if (chosen == updateLinked)
+        {
+            emit updateLinkedRequested({name});
+        }
+        else if (chosen == unlink)
+        {
+            emit unlinkRequested(name);
+        }
+        else if (chosen == updateAll)
+        {
+            emit updateLinkedRequested({});
         }
         else if (chosen == folder)
         {
@@ -528,8 +567,12 @@ QStringList LibraryPanel::snapshot() const
         names << "f:" + QString::fromStdString(folder->name);
     if (doc->symbolList)
         for (const fla::Symbol* symbol : doc->symbolList->symbols)
+        {
+            fla::links::Link link;
             names << "s:" + QString::fromStdString(symbol->name) + ":" +
-                         QString::fromStdString(fla::library::linkageOf(*symbol));
+                         QString::fromStdString(fla::library::linkageOf(*symbol)) +
+                         (fla::links::linkOf(*symbol, link) ? QString(":linked") : QString());
+        }
     for (const fla::Resource* resource : doc->resources)
         if (resource && resource->resourceType() == fla::Resource::Type::Bitmap)
             names << "b:" + QString::fromStdString(static_cast<const fla::Bitmap*>(resource)->name);
@@ -641,9 +684,14 @@ void LibraryPanel::refresh()
         for (const fla::Symbol* symbol : doc->symbolList->symbols)
         {
             if (symbol)
+            {
+                // A symbol kept in step with a master file says so.
+                fla::links::Link link;
+                const bool linked = fla::links::linkOf(*symbol, link);
                 add(QString::fromStdString(symbol->name), symbolIcon(symbol->symbolType),
-                    typeName(symbol->symbolType), Kind::Symbol,
+                    typeName(symbol->symbolType) + (linked ? QString(" (linked)") : QString()), Kind::Symbol,
                     QString::fromStdString(fla::library::linkageOf(*symbol)));
+            }
         }
     }
     for (const fla::Resource* resource : doc->resources)

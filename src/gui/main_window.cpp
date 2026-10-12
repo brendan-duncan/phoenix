@@ -30,6 +30,8 @@
 #include "theme.h"
 #include "theme_editor.h"
 #include "../parser/fla_doctor.h"
+#include "../edit/linked_assets.h"
+#include "command_line.h"
 #include "swatches_panel.h"
 #include "../edit/swatches.h"
 #include "swap_symbol_dialog.h"
@@ -3327,6 +3329,116 @@ void MainWindow::checkDocument()
     dialog.exec();
 }
 
+void MainWindow::linkToMaster(const QString& name)
+{
+    if (!_flaDocument || !_flaDocument->document || !_flaDocument->document->symbolList)
+        return;
+    fla::Symbol* symbol = _flaDocument->document->symbolList->symbolMap.count(name.toStdString())
+        ? _flaDocument->document->symbolList->symbolMap[name.toStdString()] : nullptr;
+    if (!symbol)
+        return;
+    const QString start = _documentPath.isEmpty() ? _lastDirectory : QFileInfo(_documentPath).absolutePath();
+    const QString path = QFileDialog::getOpenFileName(this, "Master File", start, "Documents (*.fla *.phx *.xfl);;All files (*)");
+    if (path.isEmpty())
+        return;
+    std::string error;
+    std::unique_ptr<fla::FLADocument> master = commands::load(QFileInfo(path).suffix() == "xfl" ? QFileInfo(path).absolutePath().toStdString() : path.toStdString(), error);
+    if (!master || !master->document->symbolList)
+    {
+        QMessageBox::warning(this, "Link to Master File", QString("Could not read %1.\n\n%2").arg(path, QString::fromStdString(error)));
+        return;
+    }
+    // Which of the master's symbols: the one of the same name, by default.
+    QStringList names;
+    for (const fla::Symbol* item : master->document->symbolList->symbols)
+        if (item)
+            names << QString::fromStdString(item->name);
+    names.sort(Qt::CaseInsensitive);
+    bool ok = false;
+    const QString item = QInputDialog::getItem(this, "Link to Master File", "Master symbol:", names,
+        std::max(0, static_cast<int>(names.indexOf(name))), false, &ok);
+    if (!ok || item.isEmpty())
+        return;
+    // Kept relative to this file when it has been saved, so a show folder
+    // can move as a whole.
+    fla::links::Link link;
+    link.master = _documentPath.isEmpty() ? QDir::fromNativeSeparators(path).toStdString()
+                                          : QDir(QFileInfo(_documentPath).absolutePath()).relativeFilePath(path).toStdString();
+    link.item = item.toStdString();
+    fla::Symbol probe(nullptr);
+    probe.extraAttributes = symbol->extraAttributes;
+    fla::links::setLink(probe, link);
+    _editContext.commandStack().push(fla::CommandPtr(
+        new fla::SetPropertyCommand<std::vector<std::pair<std::string, std::string>>>(
+            symbol->extraAttributes, symbol->extraAttributes, probe.extraAttributes, "Link to Master")));
+    if (_libraryPanel)
+        _libraryPanel->refresh();
+    if (QMessageBox::question(this, "Link to Master File", QString("Update %1 from the master now?").arg(name)) == QMessageBox::Yes)
+        updateLinked({name});
+}
+
+void MainWindow::updateLinked(const QStringList& requested)
+{
+    if (!_flaDocument || !_flaDocument->document)
+        return;
+    fla::Document& target = *_flaDocument->document;
+    QStringList names = requested;
+    if (names.isEmpty())
+        for (const std::string& name : fla::links::linkedSymbols(target))
+            names << QString::fromStdString(name);
+    if (names.isEmpty())
+        return;
+    if (QMessageBox::question(this, "Update from Master",
+            QString("Replace %1 with the master's version? This cannot be undone.")
+                .arg(names.size() == 1 ? names.front() : QString("%1 linked symbols").arg(names.size()))) != QMessageBox::Yes)
+        return;
+    if (_phoenixView)
+        _phoenixView->exitToDepth(0);
+    _selection.clear();
+    std::map<std::string, std::unique_ptr<fla::FLADocument>> masters;
+    QStringList report;
+
+    for (const QString& name : names)
+    {
+        fla::Symbol* symbol = target.symbolList ? target.symbolList->symbolMap[name.toStdString()] : nullptr;
+        fla::links::Link link;
+        if (!symbol || !fla::links::linkOf(*symbol, link))
+            continue;
+        const std::string masterPath = fla::links::resolve(link.master, _documentPath.toStdString());
+        std::string error;
+        std::unique_ptr<fla::FLADocument>& master = masters[masterPath];
+        if (!master)
+            master = commands::load(masterPath, error);
+        if (!master)
+        {
+            report << QString("%1: could not read %2").arg(name, QString::fromStdString(masterPath));
+            continue;
+        }
+        const std::vector<std::string> changed = fla::links::update(target, name.toStdString(), *master->document, link.item, error);
+        if (changed.empty())
+            report << QString("%1: %2").arg(name, QString::fromStdString(error));
+        else
+        {
+
+            report << QString("%1: updated, with %2 library items").arg(name).arg(changed.size());
+        }
+    }
+    // The library changed under the history, which is let go.
+    _editContext.commandStack().clear();
+    _editContext.commandStack().setDirty();
+    if (_libraryPanel)
+        _libraryPanel->refresh();
+    if (_timelineView)
+        _timelineView->setDocument(_flaDocument);
+    if (_phoenixView)
+    {
+        _phoenixView->clearCaches();
+        _phoenixView->update();
+    }
+    updateEditState();
+    QMessageBox::information(this, "Update from Master", report.join("\n"));
+}
+
 void MainWindow::exportShots()
 {
     if (!_flaDocument || _documentPath.isEmpty() || !QFileInfo::exists(_documentPath))
@@ -4867,6 +4979,21 @@ void MainWindow::setupPropertiesPanel()
             if (_timelineView)
                 _timelineView->refreshFrames();
         });
+    connect(_libraryPanel, &LibraryPanel::linkToMasterRequested, this, &MainWindow::linkToMaster);
+    connect(_libraryPanel, &LibraryPanel::updateLinkedRequested, this, &MainWindow::updateLinked);
+    connect(_libraryPanel, &LibraryPanel::unlinkRequested, this, [this, symbolNamed, afterLibraryEdit](const QString& name) {
+        fla::Symbol* symbol = symbolNamed(name);
+        if (!symbol)
+            return;
+        auto after = symbol->extraAttributes;
+        fla::Symbol probe(nullptr);
+        probe.extraAttributes = after;
+        fla::links::clearLink(probe);
+        _editContext.commandStack().push(fla::CommandPtr(
+            new fla::SetPropertyCommand<std::vector<std::pair<std::string, std::string>>>(
+                symbol->extraAttributes, symbol->extraAttributes, probe.extraAttributes, "Unlink from Master")));
+        afterLibraryEdit();
+    });
     connect(_libraryPanel, &LibraryPanel::linkageRequested, this,
         [this, symbolNamed, afterLibraryEdit](const QString& name) {
             fla::Symbol* symbol = symbolNamed(name);

@@ -11,6 +11,9 @@
 #include "../phx/phx_document.h"
 #include "../writer/document_diff.h"
 #include "../edit/shot_breakdown.h"
+#include "../edit/linked_assets.h"
+#include "../data/symbol.h"
+#include "../data/symbol_list.h"
 #include "../writer/fla_writer.h"
 #include "../writer/xfl_content.h"
 #include "../writer/xfl_folder_writer.h"
@@ -26,6 +29,7 @@
 #include <cctype>
 #include <cstdio>
 #include <cstring>
+#include <map>
 
 namespace commands {
 
@@ -58,6 +62,11 @@ const char* const kHelp =
     "      Splits an episode into shot files: one per scene, per frame label, or\n"
     "      per camera cut. Tweens across a cut are baked so each shot plays as it\n"
     "      did; what a shot does not use is left out of its library.\n"
+    "\n"
+    "  links <file> [--update] [--save]\n"
+    "      Lists the symbols linked to a master file; --update brings them up to\n"
+    "      date from their masters (what they use comes too), --save writes the\n"
+    "      file back. batch <folder> --update-links --save does every shot.\n"
     "\n"
     "  --convert <in> <out>, --export-image, --export-movie and --roundtrip\n"
     "      work as before.\n";
@@ -341,6 +350,54 @@ int splitShots(const QStringList& args)
     return failed ? 1 : 0;
 }
 
+int updateLinks(const QString& file, bool update, bool saveBack)
+{
+    std::string error;
+    std::unique_ptr<fla::FLADocument> document = load(file.toStdString(), error);
+    if (!document)
+    {
+        std::fprintf(stderr, "Could not read %s: %s\n", qPrintable(file), error.c_str());
+        return 1;
+    }
+    fla::Document& target = *document->document;
+    std::map<std::string, std::unique_ptr<fla::FLADocument>> masters;
+    int failed = 0;
+    int updated = 0;
+    for (const std::string& name : fla::links::linkedSymbols(target))
+    {
+        fla::links::Link link;
+        fla::links::linkOf(*target.symbolList->symbolMap[name], link);
+        const std::string masterPath = fla::links::resolve(link.master, file.toStdString());
+        std::printf("%s <- %s : %s\n", name.c_str(), masterPath.c_str(), link.item.c_str());
+        if (!update)
+            continue;
+        std::unique_ptr<fla::FLADocument>& master = masters[masterPath];
+        if (!master)
+            master = load(masterPath, error);
+        if (!master)
+        {
+            std::fprintf(stderr, "  could not read the master: %s\n", error.c_str());
+            ++failed;
+            continue;
+        }
+        const std::vector<std::string> changed = fla::links::update(target, name, *master->document, link.item, error);
+        if (changed.empty())
+        {
+            std::fprintf(stderr, "  %s\n", error.c_str());
+            ++failed;
+            continue;
+        }
+        ++updated;
+        std::printf("  updated %zu library items\n", changed.size());
+    }
+    if (update && saveBack && updated > 0 && !save(target, file.toStdString(), error))
+    {
+        std::fprintf(stderr, "Could not write %s: %s\n", qPrintable(file), error.c_str());
+        return 1;
+    }
+    return failed ? 2 : 0;
+}
+
 int batch(const QStringList& args)
 {
     if (args.isEmpty() || !QFileInfo(args.at(0)).isDir())
@@ -383,6 +440,10 @@ int batch(const QStringList& args)
                 std::fprintf(stderr, "%s\n", error.empty() ? "would overwrite itself" : error.c_str());
                 result = 1;
             }
+        }
+        else if (args.contains("--update-links"))
+        {
+            result = updateLinks(file, true, saveBack);
         }
         else if (args.contains("--render"))
         {
@@ -444,7 +505,7 @@ int batch(const QStringList& args)
 
 bool isCommand(const QString& name)
 {
-    return name == "render" || name == "doctor" || name == "diff" || name == "batch" || name == "shots" || name == "help" ||
+    return name == "render" || name == "doctor" || name == "diff" || name == "batch" || name == "shots" || name == "links" || name == "help" ||
            name == "--help";
 }
 
@@ -502,6 +563,15 @@ int run(const QStringList& arguments)
         return batch(args);
     if (name == "shots")
         return splitShots(args);
+    if (name == "links")
+    {
+        if (args.isEmpty())
+        {
+            std::fprintf(stderr, "links: which file?\n");
+            return 1;
+        }
+        return updateLinks(args.at(0), args.contains("--update"), args.contains("--save"));
+    }
     std::fputs(kHelp, stdout);
     return 0;
 }

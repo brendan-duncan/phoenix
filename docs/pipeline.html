@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Shots and shared assets · Phoenix User Guide</title>
+<meta name="description" content="Split an episode into shot files, keep character rigs in master files linked into every shot, and update them all at once.">
+<meta name="keywords" content="shots shot breakdown episode linked assets master file rig shared library update pipeline studio">
+<link rel="icon" href="assets/img/logo.png">
+<link rel="stylesheet" href="assets/site.css">
+<script>try { const t = localStorage.getItem("phoenix-docs-theme"); if (t) document.documentElement.dataset.theme = t; } catch (e) {}</script>
+<script src="assets/site.js" defer></script>
+</head>
+<body>
+<main>
+<article class="content">
+
+<p class="eyebrow">Studio pipeline</p>
+<h1>Shots and shared assets</h1>
+<p class="lead">Phoenix helps a show move from one long episode file to shot files, and keeps the characters and props in those shots in step with their master files.</p>
+
+<h2>Split an episode into shots</h2>
+
+<p>Choose <b>File &gt; Export &gt; Export Shots</b>. Pick where to cut:</p>
+
+<ul>
+  <li><b>Frame labels</b>: each named frame label starts a shot and names it, the way many boards mark <code>sh010</code>, <code>sh020</code> and so on.</li>
+  <li><b>Scenes</b>: one file per scene.</li>
+  <li><b>Camera cuts</b>: a cut wherever the scene's camera jumps, at each camera keyframe that is not tweened into.</li>
+</ul>
+
+<p>Every shot starts at frame 1. A tween that runs across a cut is turned into a keyframe per frame on the shot's side of the cut, so the shot plays exactly as the episode did there, and the camera is keyed where it stood at the cut. Library items a shot does not use are left out of its file. The same is available on the command line as <code>Phoenix shots</code> (see <a href="command-line.html">Command line</a>).</p>
+
+<h2>Linked shared assets</h2>
+
+<p>A character rig or a prop can live in a master file and be linked into each shot that uses it. In the shot file it is an ordinary symbol, so the shot opens anywhere, including in Animate, but it remembers where it came from.</p>
+
+<ol>
+  <li>In the Library, right-click the symbol and choose <b>Link to Master File</b>.</li>
+  <li>Choose the master file, then the symbol in it (the one of the same name is picked for you).</li>
+  <li>Phoenix offers to update it from the master right away.</li>
+</ol>
+
+<p>A linked symbol shows <em>(linked)</em> in the Library's Type column. When the master changes, right-click it and choose <b>Update from Master</b>, or <b>Update All Linked Items</b> anywhere in the Library. The symbol is replaced by the master's version, and what it uses (the symbols inside a rig, its bitmaps) comes along, so the rig arrives whole. Instances of it on the stage stay where they are. An update cannot be undone; the document is marked unsaved so you can close without saving if it was a mistake.</p>
+
+<p>The link is stored the way Animate stores its shared library links (<code>sourceFlashFilepath</code> and <code>sourceLibraryItemHRef</code> on the symbol), so links made in either program work in both. The master's path is kept relative to the shot file when the shot has been saved, so a whole show folder can move.</p>
+
+<h3>Update every shot</h3>
+
+<pre><code>Phoenix links shots/sh010.fla
+Phoenix links shots/sh010.fla --update --save
+Phoenix batch shots/ --update-links --save</code></pre>
+
+<p>The first lists a file's links; the second updates them and saves; the third does every shot in a folder, which is how a rig change reaches a whole episode.</p>
+
+</article>
+</main>
+</body>
+</html>

@@ -460,6 +460,10 @@ private:
     void compareWith();
     /// File > Export > Shots: the shots command on the saved episode.
     void exportShots();
+    /// The library's master-file links: set one, or bring linked symbols
+    /// up to date (all of them when \a names is empty).
+    void linkToMaster(const QString& name);
+    void updateLinked(const QStringList& names);
     void refreshHistory();
     /// Edit > Repeat: the last Insert, Modify or Timeline command run, to
     /// run again on what is selected now.

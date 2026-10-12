@@ -90,6 +90,11 @@ signals:
     void deleteItemsRequested(const QStringList& names);
     /// A symbol's linkage, to be set.
     void linkageRequested(const QString& name);
+    /// A symbol to link to a master file, to unlink, or the linked
+    /// symbols (all of them when empty) to update from their masters.
+    void linkToMasterRequested(const QString& name);
+    void unlinkRequested(const QString& name);
+    void updateLinkedRequested(const QStringList& names);
     /// A new folder inside \a parentPath (empty for the top level).
     void newFolderRequested(const QString& parentPath);
 

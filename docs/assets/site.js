@@ -37,6 +37,7 @@ const NAV = [
     { href: "command-line.html", title: "Command line" },
   ] },
   { group: "Studio pipeline", pages: [
+    { href: "pipeline.html", title: "Shots and shared assets" },
     { href: "version-control.html", title: "Version control" },
   ] },
   { group: "Reference", pages: [
