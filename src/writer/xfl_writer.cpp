@@ -1116,7 +1116,7 @@ std::string XFLWriter::writeDocument(const Document& document)
     setInt(root, "majorVersion", document.majorVersion, 0);
     setInt(root, "buildNumber", document.buildNumber, 0);
     setDouble(root, "viewAngle3D", document.viewAngle3D, 0.0);
-    setColor(root, "backgroundColor", nullptr, document.backgroundColor);
+    setColor(root, "backgroundColor", "phoenixStageAlpha", document.backgroundColor);
     setColor(root, "gridColor", nullptr, document.gridColor);
     setInt(root, "gridSpacingX", document.gridSpacingX, 18);
     setInt(root, "gridSpacingY", document.gridSpacingY, 18);

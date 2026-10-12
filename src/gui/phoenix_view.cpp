@@ -1163,6 +1163,23 @@ void PhoenixView::drawStageContents(QPainter& painter, const fla::Document* docu
     // bottom and top layers.
     if (_drawPhase == DrawPhase::All || _drawPhase == DrawPhase::Below)
     {
+        // A see-through stage shows a checkerboard under its color, eight
+        // screen pixels a square, as image editors show clear pixels.
+        if (document->backgroundColor[3] < 255 && !_exporting)
+        {
+            QImage checks(16, 16, QImage::Format_RGB32);
+            checks.fill(QColor(255, 255, 255));
+            QPainter cells(&checks);
+            cells.fillRect(0, 0, 8, 8, QColor(204, 204, 204));
+            cells.fillRect(8, 8, 8, 8, QColor(204, 204, 204));
+            cells.end();
+            QBrush brush(checks);
+            bool invertible = false;
+            const QTransform toStage = painter.transform().inverted(&invertible);
+            if (invertible)
+                brush.setTransform(toStage);
+            painter.fillRect(QRectF(0, 0, docWidth, docHeight), brush);
+        }
         painter.fillRect(QRectF(0, 0, docWidth, docHeight),
             QColor(document->backgroundColor[0], document->backgroundColor[1],
                 document->backgroundColor[2], document->backgroundColor[3]));

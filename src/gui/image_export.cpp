@@ -1,6 +1,8 @@
 #include "image_export.h"
 
 #include "phoenix_view.h"
+#include "../data/document.h"
+#include "../data/fla_document.h"
 #include "../util/gif_writer.h"
 
 #include <QCheckBox>
@@ -275,7 +277,11 @@ bool run(const ImageExportSettings& settings, PhoenixView& view, QString& error)
         painter.end();
         picture = matted;
     }
-    const bool transparent = settings.matte == ImageExportSettings::Matte::Transparent;
+    // A see-through stage color keeps its alpha in the image too.
+    const fla::Document* document = view.flaDocument() ? view.flaDocument()->document : nullptr;
+    const bool clearStage = settings.matte == ImageExportSettings::Matte::Stage && document &&
+        document->backgroundColor[3] < 255;
+    const bool transparent = settings.matte == ImageExportSettings::Matte::Transparent || clearStage;
 
     switch (settings.format)
     {

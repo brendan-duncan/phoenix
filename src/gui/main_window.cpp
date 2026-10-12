@@ -40,6 +40,7 @@
 #include "function_curves_panel.h"
 #include "../edit/palettes.h"
 #include "../edit/shape_recognition.h"
+#include <QButtonGroup>
 #include <QGridLayout>
 #include "spell_checker.h"
 #include "../edit/text_style.h"
@@ -9075,6 +9076,29 @@ void MainWindow::documentSettings()
     QCheckBox* scaleContent = new QCheckBox("Scale content with stage", &dialog);
     scaleContent->setToolTip("Everything on the stage grows or shrinks with it");
     form->addRow("", scaleContent);
+    // Anchor: which part of the stage the art keeps to when the stage grows
+    // or shrinks around it unscaled.
+    QWidget* anchorGrid = new QWidget(&dialog);
+    QGridLayout* anchorLayout = new QGridLayout(anchorGrid);
+    anchorLayout->setContentsMargins(0, 0, 0, 0);
+    anchorLayout->setSpacing(2);
+    QButtonGroup* anchors = new QButtonGroup(&dialog);
+    for (int row = 0; row < 3; ++row)
+        for (int column = 0; column < 3; ++column)
+        {
+            QToolButton* cell = new QToolButton(anchorGrid);
+            cell->setCheckable(true);
+            cell->setFixedSize(22, 22);
+            cell->setToolTip(QString("Keep the art to the %1%2")
+                                 .arg(row == 0 ? "top" : row == 1 ? "middle" : "bottom")
+                                 .arg(column == 0 ? " left" : column == 1 ? (row == 1 ? "" : " middle") : " right"));
+            anchors->addButton(cell, row * 3 + column);
+            anchorLayout->addWidget(cell, row, column);
+        }
+    anchors->button(0)->setChecked(true);
+    anchorLayout->setColumnStretch(3, 1);
+    form->addRow("Anchor:", anchorGrid);
+    connect(scaleContent, &QCheckBox::toggled, anchorGrid, [anchorGrid](bool on) { anchorGrid->setEnabled(!on); });
     form->addRow("", new QLabel("Stage color and frame rate are in the Properties panel's Doc tab.", &dialog));
     QDialogButtonBox* box = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, &dialog);
     box->button(QDialogButtonBox::Ok)->setDefault(true);
@@ -9087,6 +9111,14 @@ void MainWindow::documentSettings()
     const int newWidth = static_cast<int>(std::lround(pixelWidth));
     const int newHeight = static_cast<int>(std::lround(pixelHeight));
     const Unit unit = static_cast<Unit>(units->currentData().toInt());
+    // The anchor moves the art with the side it keeps to; Match Contents
+    // has already placed it.
+    if (!scaleContent->isChecked() && moveX == 0.0 && moveY == 0.0)
+    {
+        const int cell = std::max(0, anchors->checkedId());
+        moveX = (newWidth - document->width) * (cell % 3) / 2.0;
+        moveY = (newHeight - document->height) * (cell / 3) / 2.0;
+    }
     fla::CommandStack& stack = _editContext.commandStack();
     stack.beginMacro("Document Settings");
     if (newWidth != document->width || newHeight != document->height || moveX != 0.0 || moveY != 0.0)

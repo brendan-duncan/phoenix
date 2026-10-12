@@ -50,7 +50,7 @@
 <dl class="defs">
   <dt>W and H</dt><dd>The stage size in pixels.</dd>
   <dt>FPS</dt><dd>Frames per second, from 0.01 to 120.</dd>
-  <dt>Stage</dt><dd>The background color of the stage, which also becomes the background of exported video.</dd>
+  <dt>Stage</dt><dd>The background color of the stage, which also becomes the background of exported images and video. Give it less than full alpha to make the stage see-through: a checkerboard shows under it, and images and PNG sequences exported on the stage color keep that transparency. Animate keeps only the color; the alpha is saved as a Phoenix setting.</dd>
   <dt>Scale spans</dt><dd>When this is on, changing the frame rate stretches or squeezes every span so animation keeps its timing in seconds. When it is off, each frame keeps its place and the animation plays faster or slower.</dd>
 </dl>
 
@@ -63,6 +63,7 @@
   <dt>Stage size</dt><dd>The width and height of the stage.</dd>
   <dt>Match Contents</dt><dd>Sizes the stage to fit everything on it, in every frame of every scene, and moves the artwork so it starts at the stage's top-left corner.</dd>
   <dt>Scale content with stage</dt><dd>When the size changes, everything on the stage grows or shrinks with it, so a scene made for one size fits another.</dd>
+  <dt>Anchor</dt><dd>When the size changes and the content does not scale, which part of the stage the artwork keeps to: a corner, an edge's middle or the center. The stage grows or shrinks away from it.</dd>
 </dl>
 
 <h2>Scenes</h2>

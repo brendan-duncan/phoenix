@@ -2133,6 +2133,9 @@ bool parseDocument(fla::Document* document, const tinyxml2::XMLElement* element,
     document->buildNumber = getIntAttribute(element, "buildNumber", 0);
     document->viewAngle3D = getDoubleAttribute(element, "viewAngle3D", 0.0);
     getColorAttribute(element, "backgroundColor", document->backgroundColor);
+    // A see-through stage is Phoenix's: Animate keeps only the color.
+    if (const char* alpha = element->Attribute("phoenixStageAlpha"))
+        document->backgroundColor[3] = static_cast<uint8_t>(std::clamp(std::lround(std::atof(alpha) * 255.0), 0L, 255L));
     getColorAttribute(element, "gridColor", document->gridColor);
     document->gridSpacingX = getIntAttribute(element, "gridSpacingX", 18);
     document->gridSpacingY = getIntAttribute(element, "gridSpacingY", 18);
@@ -2149,7 +2152,7 @@ bool parseDocument(fla::Document* document, const tinyxml2::XMLElement* element,
     document->playOptionsPlayFrameActions = getBoolAttribute(element, "playOptionsPlayFrameActions", true);
     keepAttributes(element, {"xmlns", "xmlns:xsi", "filetypeGUID", "fileGUID", "width", "height", "frameRate",
         "currentTimeline", "xflVersion", "creatorInfo", "platform", "versionInfo", "majorVersion", "buildNumber",
-        "viewAngle3D", "backgroundColor", "gridColor", "gridSpacingX", "gridSpacingY", "objectsSnapTo", "guidesSnapTo",
+        "viewAngle3D", "backgroundColor", "phoenixStageAlpha", "gridColor", "gridSpacingX", "gridSpacingY", "objectsSnapTo", "guidesSnapTo",
         "snapAlignBorderSpacing", "guidesColor", "vanishingPoint3DX", "vanishingPoint3DY", "nextSceneIdentifier",
         "playOptionsPlayLoop", "playOptionsPlayPages", "playOptionsPlayFrameActions"}, document);
 

@@ -3455,12 +3455,14 @@ void PropertiesPanel::rebuildDocTab()
 
     QToolButton* stage = makeSwatch(doc->backgroundColor, "Stage color");
     connect(stage, &QToolButton::clicked, this, [this, doc]() {
-        const QColor chosen = QColorDialog::getColor(toQColor(doc->backgroundColor), this, "Stage Color");
+        // Its alpha makes the stage see-through: exports keep it, as an image
+        // or movie with a part-clear background.
+        const QColor chosen = QColorDialog::getColor(toQColor(doc->backgroundColor), this, "Stage Color",
+            QColorDialog::ShowAlphaChannel);
         if (!chosen.isValid())
             return;
         uint8_t after[4];
         applyColor(chosen, after);
-        after[3] = 255;
         push(std::unique_ptr<fla::Command>(new fla::SetColorCommand(
             doc->backgroundColor, doc->backgroundColor, after, "Stage Color")));
         emit documentEdited();
