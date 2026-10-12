@@ -84,6 +84,17 @@
   <p>ProRes video, GIF dithering and color count, sprite sheets, exporting chosen layers or every scene, a render queue, and export settings saved with the document.</p>
 </div>
 
+<h2>Compositing passes</h2>
+
+<p>For compositing in another program, choose a passes format in <b>File &gt; Export &gt; Export Movie</b>:</p>
+
+<ul>
+  <li><b>Compositing Passes (PNG)</b> writes three numbered sequences: <em>line</em> (the strokes alone), <em>color</em> (the fills, text and bitmaps alone) and <em>matte</em> (the coverage of everything, white on black). The line and color passes have no background.</li>
+  <li><b>Multi-layer EXR</b> writes one OpenEXR file a frame holding the whole picture as its main layer and the passes as layers named <code>line</code>, <code>color</code> and <code>matte</code>, in linear light with premultiplied alpha, as Nuke, After Effects, Fusion and Blender expect.</li>
+</ul>
+
+<p>From the command line, add <code>--passes</code> or <code>--exr</code> to <code>Phoenix render</code> (see <a href="command-line.html">Command line</a>).</p>
+
 </article>
 </main>
 </body>

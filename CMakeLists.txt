@@ -248,6 +248,7 @@ set(HEADERS
     src/phx/phx_schema.h
     src/phx/wire.h
     src/util/zip_archive.h
+    src/util/exr_writer.h
     src/util/zip_writer.h
     src/util/gif_writer.h
 )
@@ -426,6 +427,7 @@ set(SOURCES
     src/phx/phx_read.cpp
     src/phx/phx_write.cpp
     src/util/zip_archive.cpp
+    src/util/exr_writer.cpp
     src/util/zip_writer.cpp
     src/util/gif_writer.cpp
 )

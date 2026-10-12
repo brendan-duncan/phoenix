@@ -267,6 +267,16 @@ public:
     /// Light Table: while drawing, every layer but the one drawn on shows
     /// faded behind it, as on Harmony's light table.
     void setLightTable(bool on);
+
+    /// What renders for a compositing pass: everything, only the lines
+    /// (strokes), or only the color (fills, text, bitmaps).
+    enum class RenderPass
+    {
+        All,
+        Lines,
+        Color
+    };
+    void setRenderPass(RenderPass pass);
     bool lightTable() const { return _lightTable; }
 
     /// How the onion skin draws: frames as outlines, only keyframes, how
@@ -679,6 +689,7 @@ private:
     const fla::Layer* _onlyLayer = nullptr;
     bool _onionSkin = false;
     bool _lightTable = false;
+    RenderPass _renderPass = RenderPass::All;
     /// Pegs (instances of a peg symbol) drawn as their crosshairs.
     void drawPegs(QPainter& painter);
     /// An effect layer (tone, highlight, glow): its art blurred, colored and

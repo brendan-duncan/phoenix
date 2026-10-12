@@ -754,6 +754,14 @@ void PhoenixView::drawEffectLayer(QPainter& painter, const fla::Layer* layer, co
     }
 }
 
+void PhoenixView::setRenderPass(RenderPass pass)
+{
+    if (pass == _renderPass)
+        return;
+    _renderPass = pass;
+    clearCaches();
+}
+
 void PhoenixView::setLightTable(bool on)
 {
     _lightTable = on;
@@ -2326,6 +2334,10 @@ int PhoenixView::calculateLayerDuration(const fla::Layer* layer)
 
 void PhoenixView::drawElement(QPainter& painter, const fla::Element* element, const fla::Element* tweenElement, double tweenProgress)
 {
+    // Text and bitmaps are color, not line.
+    if (_renderPass == RenderPass::Lines && (element->elementType() == fla::Element::Type::StaticText ||
+                                                element->elementType() == fla::Element::Type::BitmapInstance))
+        return;
     // In outline view a text or bitmap shows as the box it occupies.
     if (_outlineColor.isValid() && (element->elementType() == fla::Element::Type::StaticText ||
                                     element->elementType() == fla::Element::Type::BitmapInstance))
@@ -2831,6 +2843,9 @@ QPen PhoenixView::getPen(const fla::StrokeStyle* strokeStyle, bool scaleForEleme
 
 void PhoenixView::paintEntry(QPainter& painter, const PathCacheEntry& entry)
 {
+    // A compositing pass: the lines alone, or the color alone.
+    if ((_renderPass == RenderPass::Lines && !entry.strokeStyle) || (_renderPass == RenderPass::Color && entry.strokeStyle))
+        return;
     // Lines take no part in a mask.
     if (_maskPass && entry.strokeStyle)
         return;

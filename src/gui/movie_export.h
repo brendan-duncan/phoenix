@@ -22,7 +22,11 @@ struct MovieExportSettings
         Video,
         Gif,
         LayerSequences,
-        Wav
+        Wav,
+        /// PNG sequences of the line, color and matte passes.
+        Passes,
+        /// One multi-layer OpenEXR a frame: the picture and the passes.
+        Exr
     };
 
     Format format = Format::Video;

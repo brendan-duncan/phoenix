@@ -3961,6 +3961,10 @@ int MainWindow::renderCommand(const QString& source, const QStringList& options)
             settings.audio = false;
         else if (name == "--per-layer")
             settings.format = MovieExportSettings::Format::LayerSequences;
+        else if (name == "--passes")
+            settings.format = MovieExportSettings::Format::Passes;
+        else if (name == "--exr")
+            settings.format = MovieExportSettings::Format::Exr;
         else
         {
             std::fprintf(stderr, "Unknown option %s\n", qPrintable(name));
@@ -3969,7 +3973,12 @@ int MainWindow::renderCommand(const QString& source, const QStringList& options)
     }
     // A folder gets a numbered PNG sequence; a file name says its format.
     const QString suffix = QFileInfo(out).suffix().toLower();
-    if (suffix == "mp4" || suffix == "mov")
+    if (settings.format == MovieExportSettings::Format::Passes || settings.format == MovieExportSettings::Format::Exr)
+    {
+        QDir().mkpath(out);
+        out = QDir(out).filePath(base + ".png");
+    }
+    else if (suffix == "mp4" || suffix == "mov")
         settings.format = MovieExportSettings::Format::Video;
     else if (suffix == "gif")
         settings.format = MovieExportSettings::Format::Gif;

@@ -1,4 +1,6 @@
 #include "movie_export.h"
+
+#include "../util/exr_writer.h"
 #include "../data/timeline.h"
 #include "../data/layer.h"
 #include "../data/document.h"
@@ -43,9 +45,12 @@ constexpr int kVideoIndex = 1;
 constexpr int kGifIndex = 2;
 constexpr int kLayersIndex = 3;
 constexpr int kWavIndex = 4;
+constexpr int kPassesIndex = 5;
+constexpr int kExrIndex = 6;
+constexpr int kLastIndex = kExrIndex;
 
 /// Each format's file extension.
-const char* const kSuffixes[5] = {"png", "mp4", "gif", "png", "wav"};
+const char* const kSuffixes[7] = {"png", "mp4", "gif", "png", "wav", "png", "exr"};
 
 QSpinBox* plainSpin(int low, int high, int value, QWidget* parent)
 {
@@ -97,7 +102,8 @@ MovieExportDialog::MovieExportDialog(const QSize& documentSize, int frameCount, 
     layout->addLayout(form);
 
     _format = new QComboBox(this);
-    _format->addItems({"PNG Sequence", "Video (MP4, H.264)", "Animated GIF", "PNG Sequence per Layer", "Sound (WAV)"});
+    _format->addItems({"PNG Sequence", "Video (MP4, H.264)", "Animated GIF", "PNG Sequence per Layer", "Sound (WAV)",
+        "Compositing Passes (PNG)", "Multi-layer EXR"});
     form->addRow("Format", _format);
 
     QHBoxLayout* pathRow = new QHBoxLayout;
@@ -157,7 +163,7 @@ MovieExportDialog::MovieExportDialog(const QSize& documentSize, int frameCount, 
     connect(_height, &QSpinBox::valueChanged, this, &MovieExportDialog::heightChanged);
 
     QSettings settings;
-    _format->setCurrentIndex(std::clamp(settings.value("export/movieFormat", kVideoIndex).toInt(), 0, kWavIndex));
+    _format->setCurrentIndex(std::clamp(settings.value("export/movieFormat", kVideoIndex).toInt(), 0, kLastIndex));
     formatChanged();
 }
 
@@ -173,7 +179,7 @@ void MovieExportDialog::formatChanged()
     _height->setEnabled(!sound);
     _keepAspect->setEnabled(!sound);
     const QFileInfo info(_path->text());
-    const QString wanted = kSuffixes[std::clamp(index, 0, kWavIndex)];
+    const QString wanted = kSuffixes[std::clamp(index, 0, kLastIndex)];
     if (!_path->text().isEmpty() && info.suffix().toLower() != wanted && !(video && info.suffix().toLower() == "mov"))
         _path->setText(info.dir().filePath(info.completeBaseName() + "." + wanted));
     if (index == kGifIndex)
@@ -182,6 +188,10 @@ void MovieExportDialog::formatChanged()
         _encoderNote->setText("A numbered sequence for each visible layer, named after it.");
     else if (sound)
         _encoderNote->setText("The sound of the frames, mixed as it plays.");
+    else if (index == kPassesIndex)
+        _encoderNote->setText("Line, color and matte sequences, each numbered from 0001, for compositing.");
+    else if (index == kExrIndex)
+        _encoderNote->setText("One OpenEXR a frame: the picture, and the line, color and matte passes as layers.");
     else if (video)
     {
         const QString ffmpeg = MovieExport::ffmpegPath();
@@ -198,10 +208,10 @@ void MovieExportDialog::formatChanged()
 void MovieExportDialog::browse()
 {
     const int index = _format->currentIndex();
-    const char* filters[5] = {"PNG Images (*.png)", "MP4 Video (*.mp4);;QuickTime Movie (*.mov)", "GIF Animation (*.gif)",
-        "PNG Images (*.png)", "WAV Sound (*.wav)"};
+    const char* filters[7] = {"PNG Images (*.png)", "MP4 Video (*.mp4);;QuickTime Movie (*.mov)", "GIF Animation (*.gif)",
+        "PNG Images (*.png)", "WAV Sound (*.wav)", "PNG Images (*.png)", "OpenEXR Images (*.exr)"};
     const QString file = QFileDialog::getSaveFileName(this, "Export Movie", _path->text(),
-        filters[std::clamp(index, 0, kWavIndex)]);
+        filters[std::clamp(index, 0, kLastIndex)]);
     if (!file.isEmpty())
         _path->setText(file);
 }
@@ -227,7 +237,7 @@ void MovieExportDialog::heightChanged(int height)
 MovieExportSettings MovieExportDialog::settings() const
 {
     MovieExportSettings settings;
-    settings.format = static_cast<MovieExportSettings::Format>(std::clamp(_format->currentIndex(), 0, kWavIndex));
+    settings.format = static_cast<MovieExportSettings::Format>(std::clamp(_format->currentIndex(), 0, kLastIndex));
     settings.loop = _loop->isChecked();
     settings.camera = _camera->isChecked();
     settings.path = _path->text();
@@ -378,6 +388,109 @@ bool run(const MovieExportSettings& settings, PhoenixView& view, TimelineAudio* 
         }
         view.setOnlyLayer(nullptr);
         progress.setValue(progress.maximum());
+        return true;
+    }
+
+    if (settings.format == MovieExportSettings::Format::Passes || settings.format == MovieExportSettings::Format::Exr)
+    {
+        // Each frame drawn as a whole, then its lines alone and its color
+        // alone, all with no stage behind them; the matte is the whole's
+        // coverage.
+        const bool exrOut = settings.format == MovieExportSettings::Format::Exr;
+        const int digits = std::max(4, static_cast<int>(QString::number(count).size()));
+        const QFileInfo info(settings.path);
+        const auto named = [&](const QString& pass, int number) {
+            return sequenceName(info.dir().filePath(info.completeBaseName() + (pass.isEmpty() ? QString() : "_" + pass) +
+                                    (exrOut ? ".exr" : ".png")),
+                number, digits);
+        };
+        const auto linear = [](int value) {
+            const double c = value / 255.0;
+            return static_cast<float>(c <= 0.04045 ? c / 12.92 : std::pow((c + 0.055) / 1.055, 2.4));
+        };
+        for (int i = 0; i < count; ++i)
+        {
+            progress.setValue(i);
+            if (progress.wasCanceled())
+            {
+                view.setRenderPass(PhoenixView::RenderPass::All);
+                return false;
+            }
+            const int frame = settings.first + i;
+            view.setRenderPass(PhoenixView::RenderPass::All);
+            const QImage whole = view.renderFrame(frame, settings.size, true).convertToFormat(QImage::Format_ARGB32);
+            view.setRenderPass(PhoenixView::RenderPass::Lines);
+            const QImage lines = view.renderFrame(frame, settings.size, true).convertToFormat(QImage::Format_ARGB32);
+            view.setRenderPass(PhoenixView::RenderPass::Color);
+            const QImage color = view.renderFrame(frame, settings.size, true).convertToFormat(QImage::Format_ARGB32);
+            view.setRenderPass(PhoenixView::RenderPass::All);
+            QImage matte(whole.size(), QImage::Format_Grayscale8);
+            for (int y = 0; y < whole.height(); ++y)
+            {
+                const QRgb* in = reinterpret_cast<const QRgb*>(whole.constScanLine(y));
+                uchar* out = matte.scanLine(y);
+                for (int x = 0; x < whole.width(); ++x)
+                    out[x] = static_cast<uchar>(qAlpha(in[x]));
+            }
+            if (!exrOut)
+            {
+                const std::pair<QString, const QImage*> passes[] = {{"line", &lines}, {"color", &color}, {"matte", &matte}};
+                for (const auto& [pass, image] : passes)
+                {
+                    const QString file = named(pass, i + 1);
+                    if (!image->save(file, "PNG"))
+                    {
+                        error = QString("Could not write %1.").arg(QDir::toNativeSeparators(file));
+                        return false;
+                    }
+                }
+                continue;
+            }
+            // The picture in the default layer (R, G, B, A), the passes as
+            // layers of their own: linear light, premultiplied, as
+            // compositors expect.
+            const int w = whole.width();
+            const int h = whole.height();
+            std::vector<exr::Channel> channels;
+            const auto addLayer = [&](const QString& prefix, const QImage& image) {
+                exr::Channel r{(prefix + "R").toStdString(), {}}, g{(prefix + "G").toStdString(), {}},
+                    b{(prefix + "B").toStdString(), {}}, a{(prefix + "A").toStdString(), {}};
+                for (exr::Channel* c : {&r, &g, &b, &a})
+                    c->values.resize(static_cast<size_t>(w) * static_cast<size_t>(h));
+                for (int y = 0; y < h; ++y)
+                {
+                    const QRgb* in = reinterpret_cast<const QRgb*>(image.constScanLine(y));
+                    for (int x = 0; x < w; ++x)
+                    {
+                        const size_t at = static_cast<size_t>(y) * static_cast<size_t>(w) + static_cast<size_t>(x);
+                        const float alpha = qAlpha(in[x]) / 255.0f;
+                        r.values[at] = linear(qRed(in[x])) * alpha;
+                        g.values[at] = linear(qGreen(in[x])) * alpha;
+                        b.values[at] = linear(qBlue(in[x])) * alpha;
+                        a.values[at] = alpha;
+                    }
+                }
+                for (exr::Channel* c : {&r, &g, &b, &a})
+                    channels.push_back(std::move(*c));
+            };
+            addLayer(QString(), whole);
+            addLayer("line.", lines);
+            addLayer("color.", color);
+            exr::Channel matteChannel{"matte.Y", std::vector<float>(static_cast<size_t>(w) * static_cast<size_t>(h))};
+            for (int y = 0; y < h; ++y)
+                for (int x = 0; x < w; ++x)
+                    matteChannel.values[static_cast<size_t>(y) * static_cast<size_t>(w) + static_cast<size_t>(x)] =
+                        matte.constScanLine(y)[x] / 255.0f;
+            channels.push_back(std::move(matteChannel));
+            std::string exrError;
+            const QString file = named(QString(), i + 1);
+            if (!exr::write(QDir::toNativeSeparators(file).toStdString(), w, h, std::move(channels), exrError))
+            {
+                error = QString::fromStdString(exrError);
+                return false;
+            }
+        }
+        progress.setValue(count);
         return true;
     }
 
