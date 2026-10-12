@@ -1402,6 +1402,11 @@ int PhoenixView::symbolFrame(const fla::SymbolInstance& instance) const
     if (instance.symbolType != fla::SymbolType::Graphic)
         return _exporting && instance.symbolType == fla::SymbolType::MovieClip ? elapsed % length : 0;
     const int first = std::max(0, std::min(instance.firstFrame, length - 1));
+    // A looping graphic's first frame can be past its end: a synced tween
+    // (Animate's Sync) counts it on from keyframe to keyframe without
+    // wrapping, and Animate plays it round the loop from there rather than
+    // holding the last frame.
+    const int unclamped = std::max(0, instance.firstFrame);
     switch (instance.loopType)
     {
     case fla::LoopType::SingleFrame:
@@ -1413,11 +1418,11 @@ int PhoenixView::symbolFrame(const fla::SymbolInstance& instance) const
         if (length <= 1)
             return 0;
         const int period = 2 * (length - 1);
-        const int t = (first + elapsed) % period;
+        const int t = (unclamped + elapsed) % period;
         return t < length ? t : period - t;
     }
     default:
-        return (first + elapsed) % length;
+        return (unclamped + elapsed) % length;
     }
 }
 
