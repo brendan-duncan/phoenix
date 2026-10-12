@@ -76,6 +76,9 @@ public:
     /// Number of commands retained, including those currently undone.
     size_t count() const { return _commands.size(); }
 
+    /// The name of the \a i-th command of the history, oldest first.
+    std::string nameAt(size_t i) const { return i < _commands.size() ? _commands[i]->name() : std::string(); }
+
     /// Position in the history: the number of commands currently applied.
     size_t index() const { return _index; }
 

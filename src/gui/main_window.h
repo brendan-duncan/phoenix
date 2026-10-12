@@ -32,6 +32,7 @@
 #include <vector>
 
 #include <QMainWindow>
+#include <QPointer>
 #include <QToolButton>
 
 #include "../edit/editable_path.h"
@@ -433,6 +434,21 @@ private:
     QDockWidget* _xsheetDock = nullptr;
     class LayerDepthPanel* _layerDepth = nullptr;
     QDockWidget* _layerDepthDock = nullptr;
+    /// The History panel: every step of the undo history, clicked to go
+    /// back or forward to it.
+    class QListWidget* _history = nullptr;
+    QDockWidget* _historyDock = nullptr;
+    void refreshHistory();
+    /// Edit > Repeat: the last Insert, Modify or Timeline command run, to
+    /// run again on what is selected now.
+    QAction* _repeatAction = nullptr;
+    QPointer<QAction> _lastRepeatable;
+    /// Workspaces: the dock layout as Phoenix first set it up, and the
+    /// layouts saved by name.
+    QByteArray _defaultLayout;
+    bool _layoutRestored = false;
+    void restoreLayout();
+    void fillWorkspaceMenu(QMenu* menu);
     /// What Copy Motion copied, a motionObjectXML.
     std::string _copiedMotion;
     QDockWidget* _framePickerDock = nullptr;

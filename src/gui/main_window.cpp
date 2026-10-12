@@ -608,6 +608,28 @@ void MainWindow::adoptDocument(fla::FLADocument* document, const QString& filePa
         _layerDepthDock->hide();
     }
 
+    // History, closed until asked.
+    if (!_historyDock)
+    {
+        _historyDock = new QDockWidget("History", this);
+        _historyDock->setObjectName("historyDock");
+        _historyDock->setAllowedAreas(Qt::AllDockWidgetAreas);
+        _history = new QListWidget(_historyDock);
+        _history->setToolTip("Click a step to go back or forward to it");
+        _historyDock->setWidget(_history);
+        addDockWidget(Qt::RightDockWidgetArea, _historyDock);
+        _historyDock->hide();
+        connect(_history, &QListWidget::itemClicked, this, [this](QListWidgetItem* item) {
+            // Row 0 is the document as opened; row n is after the n-th step.
+            const size_t target = static_cast<size_t>(_history->row(item));
+            fla::CommandStack& stack = _editContext.commandStack();
+            while (stack.index() > target && stack.canUndo())
+                undo();
+            while (stack.index() < target && stack.canRedo())
+                redo();
+        });
+    }
+
     // The X-sheet, Harmony's view of the exposures, closed until asked.
     if (!_xsheetDock)
     {
@@ -647,6 +669,7 @@ void MainWindow::adoptDocument(fla::FLADocument* document, const QString& filePa
         connect(_player, &Player::currentFrameChanged, _xsheet, [this](int) { _xsheet->refresh(); });
         connect(_phoenixView, &PhoenixView::scopeChanged, _xsheet, [this]() { _xsheet->refresh(); });
     }
+    restoreLayout();
 
     if (_flaDocument)
         _player->setCurrentFrame(0);
@@ -1943,6 +1966,16 @@ void MainWindow::setupMenus()
     connect(_redoAction, &QAction::triggered, this, &MainWindow::redo);
     editMenu->addAction(_redoAction);
 
+    _repeatAction = new QAction("Re&peat", this);
+    _repeatAction->setShortcut(QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_Y));
+    _repeatAction->setStatusTip("Run the last Insert, Modify or Timeline command again on what is selected now");
+    _repeatAction->setEnabled(false);
+    connect(_repeatAction, &QAction::triggered, this, [this]() {
+        if (_lastRepeatable && _lastRepeatable->isEnabled())
+            _lastRepeatable->trigger();
+    });
+    editMenu->addAction(_repeatAction);
+
     editMenu->addSeparator();
 
     _selectAllAction = new QAction("Select &All", this);
@@ -2299,6 +2332,29 @@ void MainWindow::setupMenus()
     arrangeMenu->addAction(unlockAction);
 
     // View menu
+    // What Repeat runs again: the last command chosen from these menus, by
+    // menu or by key.
+    const auto repeatable = [this](QMenu* menu) {
+        const auto remember = [this](QAction* action) {
+            if (!action || action->isCheckable() || action->menu() || action == _repeatAction)
+                return;
+            _lastRepeatable = action;
+            _repeatAction->setText(QString("Re&peat %1").arg(action->text().remove('&').remove(QString::fromUtf8("\u2026")).remove("...")));
+            _repeatAction->setEnabled(true);
+        };
+        connect(menu, &QMenu::triggered, this, remember);
+        for (QAction* action : menu->actions())
+            if (!action->menu() && !action->isSeparator())
+                connect(action, &QAction::triggered, this, [remember, action]() { remember(action); });
+        for (QMenu* sub : menu->findChildren<QMenu*>())
+            for (QAction* action : sub->actions())
+                if (!action->menu() && !action->isSeparator())
+                    connect(action, &QAction::triggered, this, [remember, action]() { remember(action); });
+    };
+    repeatable(insertMenu);
+    repeatable(modifyMenu);
+    repeatable(editTimelineMenu);
+
     QMenu* viewMenu = menuBar->addMenu("&View");
 
     QAction* framePickerAction = new QAction("&Frame Picker", this);
@@ -2351,6 +2407,18 @@ void MainWindow::setupMenus()
     QAction* infoAction = viewMenu->addAction("&Info");
     infoAction->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_I));
     connect(infoAction, &QAction::triggered, this, showDock(&_infoDock));
+    QAction* historyAction = viewMenu->addAction("&History");
+    historyAction->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_F10));
+    historyAction->setStatusTip("Every step that can be undone; click one to go back or forward to it");
+    connect(historyAction, &QAction::triggered, this, [this]() {
+        if (!_historyDock)
+            return;
+        _historyDock->show();
+        _historyDock->raise();
+        refreshHistory();
+    });
+    QMenu* workspaceMenu = viewMenu->addMenu("&Workspace");
+    connect(workspaceMenu, &QMenu::aboutToShow, this, [this, workspaceMenu]() { fillWorkspaceMenu(workspaceMenu); });
     QAction* layerDepthAction = viewMenu->addAction("&Layer Depth");
     layerDepthAction->setStatusTip("How far each layer sits from the multiplane camera");
     connect(layerDepthAction, &QAction::triggered, this, [this]() {
@@ -3232,6 +3300,80 @@ void MainWindow::viewDocument()
     dialog->exec();
 }
 
+void MainWindow::refreshHistory()
+{
+    if (!_history || !_historyDock || !_historyDock->isVisible())
+        return;
+    const fla::CommandStack& stack = _editContext.commandStack();
+    _history->clear();
+    _history->addItem(_documentName.isEmpty() ? QString("Opened") : QString("Opened %1").arg(_documentName));
+    for (size_t i = 0; i < stack.count(); ++i)
+        _history->addItem(QString::fromStdString(stack.nameAt(i)));
+    // Steps undone are grey until they are done again or replaced.
+    for (int row = 0; row < _history->count(); ++row)
+    {
+        QListWidgetItem* item = _history->item(row);
+        if (static_cast<size_t>(row) > stack.index())
+            item->setForeground(palette().color(QPalette::Disabled, QPalette::Text));
+    }
+    _history->setCurrentRow(static_cast<int>(stack.index()));
+    _history->scrollToItem(_history->currentItem());
+}
+
+void MainWindow::restoreLayout()
+{
+    // The docks exist now: the layout as made is the default, and the one
+    // kept from last time comes back.
+    if (_layoutRestored)
+        return;
+    _layoutRestored = true;
+    _defaultLayout = saveState();
+    const QByteArray kept = QSettings().value("window/state").toByteArray();
+    if (!kept.isEmpty())
+        restoreState(kept);
+}
+
+void MainWindow::fillWorkspaceMenu(QMenu* menu)
+{
+    menu->clear();
+    QSettings settings;
+    settings.beginGroup("workspaces");
+    QStringList names = settings.childKeys();
+    settings.endGroup();
+    names.sort(Qt::CaseInsensitive);
+    for (const QString& key : names)
+    {
+        const QString name = QUrl::fromPercentEncoding(key.toUtf8());
+        menu->addAction(name, this, [this, key]() {
+            const QByteArray state = QSettings().value("workspaces/" + key).toByteArray();
+            if (!state.isEmpty())
+                restoreState(state);
+        });
+    }
+    if (!names.isEmpty())
+        menu->addSeparator();
+    menu->addAction("Save Workspace...", this, [this]() {
+        bool ok = false;
+        const QString name = QInputDialog::getText(this, "Save Workspace", "Workspace name:", QLineEdit::Normal,
+            QString(), &ok).trimmed();
+        if (!ok || name.isEmpty())
+            return;
+        QSettings().setValue("workspaces/" + QString::fromUtf8(QUrl::toPercentEncoding(name)), saveState());
+        statusBar()->showMessage(QString("Saved the workspace %1.").arg(name), 3000);
+    });
+    if (!names.isEmpty())
+    {
+        QMenu* remove = menu->addMenu("Delete Workspace");
+        for (const QString& key : names)
+            remove->addAction(QUrl::fromPercentEncoding(key.toUtf8()), this,
+                [key]() { QSettings().remove("workspaces/" + key); });
+    }
+    menu->addAction("Reset Workspace", this, [this]() {
+        if (!_defaultLayout.isEmpty())
+            restoreState(_defaultLayout);
+    });
+}
+
 void MainWindow::undo()
 {
     _editContext.commandStack().undo();
@@ -3275,6 +3417,7 @@ void MainWindow::updateEditState()
         _xsheet->refresh();
     if (_layerDepth)
         _layerDepth->refresh();
+    refreshHistory();
     if (_colorPanel)
         _colorPanel->refresh();
     updateFramePicker();
@@ -6671,6 +6814,8 @@ void MainWindow::saveSettings()
     saveBrush(settings, "brushes/ink", _drawingStyle.inkBrush);
     settings.setValue("brushes/mode", static_cast<int>(_drawingStyle.brushMode));
     settings.setValue("window/geometry", saveGeometry());
+    if (_layoutRestored)
+        settings.setValue("window/state", saveState());
 }
 
 void MainWindow::closeEvent(QCloseEvent* event)
