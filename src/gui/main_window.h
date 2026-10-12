@@ -232,6 +232,9 @@ private slots:
     /// Modify > Lip Sync: mouth shapes from a voice track onto the selected
     /// mouth graphic's layer.
     void lipSync();
+    /// Modify > Document: stage size, Match Contents, scaling the content
+    /// with the stage, and ruler units.
+    void documentSettings();
     /// Modify > Bitmap > Swap Bitmap: the selected bitmaps show another
     /// library bitmap, keeping their place and size.
     void swapBitmap();
@@ -273,6 +276,27 @@ private slots:
     void showFramesMenu(const QPoint& globalPos);
     void addLayer(bool folder);
     void deleteCurrentLayer();
+
+    /// Document tabs: every open document has a tab over the stage. The one
+    /// shown is the window's document; the others wait with their undo
+    /// history, file and frame, and come back as they were.
+    void openInTab(const QString& path);
+    /// Puts the document shown aside so a new one can open in a tab of its
+    /// own; a blank, unsaved, unchanged one is just replaced.
+    void makeRoomForDocument();
+    void activateTab(int index);
+    /// Closes the tab, asking about unsaved changes first; false when the
+    /// person cancels.
+    bool closeTab(int index);
+    void refreshTabs();
+    /// File > Revert: the saved file again, its changes dropped.
+    void revertDocument();
+    /// Templates: documents kept in Phoenix's templates folder, each the
+    /// start of new documents. Save as Template keeps the one shown; New
+    /// from Template opens a copy of one, untitled, in a tab.
+    static QString templatesFolder();
+    void saveAsTemplate();
+    void newFromTemplate();
     /// Cut (0), Copy (1), Paste (2) or Duplicate (3) the layers picked.
     void layerClipboard(int action);
     /// Deletes the layers at \a indices with what they hold, as one step;
@@ -488,6 +512,22 @@ private:
     /// Controllers: Harmony's master controllers.
     class ControllersPanel* _controllers = nullptr;
     QDockWidget* _controllersDock = nullptr;
+    struct DocumentTab
+    {
+        /// Null while it is the document shown.
+        fla::FLADocument* document = nullptr;
+        fla::CommandStack history;
+        QString path;
+        QString name;
+        int frame = 0;
+    };
+    std::vector<std::unique_ptr<DocumentTab>> _tabs;
+    int _activeTab = -1;
+    class QTabBar* _tabBar = nullptr;
+    bool _switchingTabs = false;
+    /// Takes the document shown off the window, keeping it whole.
+    void parkActiveDocument();
+
     /// Copy Layers: copies of the layers, for the document they came from.
     std::vector<std::unique_ptr<fla::Layer>> _copiedLayers;
     const fla::Document* _copiedLayersFrom = nullptr;

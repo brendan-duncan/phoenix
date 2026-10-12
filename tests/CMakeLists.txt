@@ -90,6 +90,7 @@ set(TEST_CORE_SOURCES
     ${PHOENIX_SRC}/edit/function_curves.cpp
     ${PHOENIX_SRC}/edit/deformers.cpp
     ${PHOENIX_SRC}/edit/scene_commands.cpp
+    ${PHOENIX_SRC}/edit/document_settings.cpp
     ${PHOENIX_SRC}/edit/combine_objects.cpp
     ${PHOENIX_SRC}/edit/swatches.cpp
     ${PHOENIX_SRC}/gui/audio_engine.cpp
@@ -141,6 +142,7 @@ set(TEST_SOURCES
     test_function_curves.cpp
     test_deformers.cpp
     test_scene_commands.cpp
+    test_document_settings.cpp
     test_find_replace.cpp
     test_audio_decode.cpp
     test_brush_stroke.cpp

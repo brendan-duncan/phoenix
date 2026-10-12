@@ -232,6 +232,7 @@ set(HEADERS
     src/edit/function_curves.h
     src/edit/deformers.h
     src/edit/scene_commands.h
+    src/edit/document_settings.h
     src/edit/edit_list.h
     src/edit/combine_objects.h
     src/edit/transform_parts.h
@@ -422,6 +423,7 @@ set(SOURCES
     src/edit/function_curves.cpp
     src/edit/deformers.cpp
     src/edit/scene_commands.cpp
+    src/edit/document_settings.cpp
     src/edit/edit_list.cpp
     src/edit/combine_objects.cpp
     src/edit/swatches.cpp

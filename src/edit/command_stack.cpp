@@ -132,6 +132,17 @@ void CommandStack::clear()
     notifyChanged();
 }
 
+void CommandStack::swapHistory(CommandStack& other)
+{
+    std::swap(_commands, other._commands);
+    std::swap(_index, other._index);
+    std::swap(_cleanIndex, other._cleanIndex);
+    _mergeAllowed = false;
+    other._mergeAllowed = false;
+    notifyChanged();
+    other.notifyChanged();
+}
+
 void CommandStack::beginMacro(const std::string& name)
 {
     _macroStack.push_back(CommandPtr(new CompoundCommand(name)));

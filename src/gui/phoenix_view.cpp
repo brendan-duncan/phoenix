@@ -25,6 +25,7 @@
 #include "../edit/element_commands.h"
 #include "../edit/property_command.h"
 #include "../edit/layer_commands.h"
+#include "../edit/document_settings.h"
 #include "../edit/region_split.h"
 #include "../edit/selection.h"
 #include "../edit/shape_merge.h"
@@ -6144,15 +6145,23 @@ void PhoenixView::drawRulersAndGuides(QPainter& painter)
 
         // A labeled tick every so many stage pixels, chosen so labels sit
         // at least 50 screen pixels apart, with minor ticks between.
-        const double scale = std::max(std::hypot(toWidget.m11(), toWidget.m12()), 1.0e-6);
+        // In the document's units: v counts units, a unit being so many
+        // stage pixels.
+        const double perUnit = _flaDocument && _flaDocument->document
+            ? fla::docsettings::pixelsPer(fla::docsettings::unitOf(*_flaDocument->document)) : 1.0;
+        const double scale = std::max(std::hypot(toWidget.m11(), toWidget.m12()), 1.0e-6) * perUnit;
         double step = 1.0;
-        const double steps[] = {1, 2, 5, 10, 20, 25, 50, 100, 200, 250, 500, 1000, 2000, 5000, 10000};
+        const double steps[] = {0.1, 0.25, 0.5, 1, 2, 5, 10, 20, 25, 50, 100, 200, 250, 500, 1000, 2000, 5000, 10000};
         for (double candidate : steps)
         {
             step = candidate;
-            if (candidate * scale >= 50.0)
+            if ((perUnit > 1.0 || candidate >= 1.0) && candidate * scale >= 50.0)
                 break;
         }
+        const auto rulerLabel = [](double v) {
+            return std::fabs(v - std::round(v)) < 1.0e-6 ? QString::number(static_cast<long long>(std::lround(v)))
+                                                         : QString::number(v, 'g', 4);
+        };
         QFont font = painter.font();
         font.setPointSizeF(7.5);
         painter.setFont(font);
@@ -6164,11 +6173,12 @@ void PhoenixView::drawRulersAndGuides(QPainter& painter)
             const double x = std::round(origin.x() + v * scale) + 0.5;
             if (x < kRulerSize)
                 continue;
-            const bool major = std::fabs(std::fmod(std::fabs(v) + 1.0e-6, step)) < 1.0e-3;
+            const double phase = std::fmod(std::fabs(v) + step * 1.0e-4, step);
+            const bool major = phase < step * 1.0e-3 || phase > step * (1.0 - 1.0e-3);
             painter.setPen(ink);
             painter.drawLine(QPointF(x, major ? 4 : kRulerSize - 5), QPointF(x, kRulerSize));
             if (major)
-                painter.drawText(QPointF(x + 2, 10), QString::number(static_cast<long long>(std::lround(v))));
+                painter.drawText(QPointF(x + 2, 10), rulerLabel(v));
         }
         const double firstY = std::floor((kRulerSize - origin.y()) / scale / step) * step;
         for (double v = firstY; origin.y() + v * scale < height(); v += step / 5.0)
@@ -6176,7 +6186,8 @@ void PhoenixView::drawRulersAndGuides(QPainter& painter)
             const double y = std::round(origin.y() + v * scale) + 0.5;
             if (y < kRulerSize)
                 continue;
-            const bool major = std::fabs(std::fmod(std::fabs(v) + 1.0e-6, step)) < 1.0e-3;
+            const double phase = std::fmod(std::fabs(v) + step * 1.0e-4, step);
+            const bool major = phase < step * 1.0e-3 || phase > step * (1.0 - 1.0e-3);
             painter.setPen(ink);
             painter.drawLine(QPointF(major ? 4 : kRulerSize - 5, y), QPointF(kRulerSize, y));
             if (major)
@@ -6184,7 +6195,7 @@ void PhoenixView::drawRulersAndGuides(QPainter& painter)
                 painter.save();
                 painter.translate(10, y + 2);
                 painter.rotate(-90);
-                painter.drawText(QPointF(-30, 0), QString::number(static_cast<long long>(std::lround(v))).rightJustified(5, ' '));
+                painter.drawText(QPointF(-30, 0), rulerLabel(v).rightJustified(5, ' '));
                 painter.restore();
             }
         }

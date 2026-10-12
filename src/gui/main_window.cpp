@@ -30,6 +30,7 @@
 #include "notes_panel.h"
 #include "controllers_panel.h"
 #include "function_curves_panel.h"
+#include "../edit/document_settings.h"
 #include "scene_panel.h"
 #include "../edit/deformers.h"
 #include "palettes_panel.h"
@@ -157,6 +158,9 @@
 #include <QFormLayout>
 #include <QSpinBox>
 #include <QToolButton>
+#include <QTabBar>
+#include <QRegularExpression>
+#include <QStandardPaths>
 #include <QTimer>
 #include <QSignalBlocker>
 
@@ -446,7 +450,7 @@ void MainWindow::dropEvent(QDropEvent* event)
         if (isDocumentPath(path))
         {
             event->acceptProposedAction();
-            loadFLAFile(path);
+            openInTab(path);
             return;
         }
         if (MediaImport::isImage(path) || MediaImport::isSound(path))
@@ -568,6 +572,235 @@ void MainWindow::adoptDocument(fla::FLADocument* document, const QString& filePa
 
     if (_flaDocument)
         _player->setCurrentFrame(0);
+    // A document shown that has no tab yet (the first one, a recovered one)
+    // gets one; a tab whose document failed to open goes.
+    if (!_switchingTabs)
+    {
+        if (_flaDocument && (_activeTab < 0 || _activeTab >= static_cast<int>(_tabs.size())))
+        {
+            _tabs.push_back(std::make_unique<DocumentTab>());
+            _activeTab = static_cast<int>(_tabs.size()) - 1;
+        }
+        else if (!_flaDocument && _activeTab >= 0 && _activeTab < static_cast<int>(_tabs.size()) && _tabs.size() > 1)
+        {
+            _tabs.erase(_tabs.begin() + _activeTab);
+            _activeTab = -1;
+            activateTab(static_cast<int>(_tabs.size()) - 1);
+            return;
+        }
+        else if (!_flaDocument && _activeTab >= 0 && _activeTab < static_cast<int>(_tabs.size()))
+        {
+            _tabs.erase(_tabs.begin() + _activeTab);
+            _activeTab = -1;
+        }
+        refreshTabs();
+    }
+}
+
+void MainWindow::parkActiveDocument()
+{
+    if (!_flaDocument || _activeTab < 0 || _activeTab >= static_cast<int>(_tabs.size()))
+        return;
+    DocumentTab& tab = *_tabs[static_cast<size_t>(_activeTab)];
+    if (_phoenixView)
+        _phoenixView->exitToDepth(0);
+    tab.path = _documentPath;
+    tab.name = _documentName;
+    tab.frame = _player ? _player->currentFrame() : 0;
+    _editContext.commandStack().swapHistory(tab.history);
+    tab.document = _flaDocument;
+    // Off the window without deleting it: the panels and the history let
+    // go of it as releaseDocument has them do.
+    _flaDocument = nullptr;
+    releaseDocument();
+}
+
+void MainWindow::activateTab(int index)
+{
+    if (index < 0 || index >= static_cast<int>(_tabs.size()) || index == _activeTab)
+        return;
+    _switchingTabs = true;
+    parkActiveDocument();
+    DocumentTab& tab = *_tabs[static_cast<size_t>(index)];
+    fla::FLADocument* document = tab.document;
+    tab.document = nullptr;
+    _activeTab = index;
+    adoptDocument(document, tab.path, tab.name);
+    _editContext.commandStack().swapHistory(tab.history);
+    if (_player)
+        _player->setCurrentFrame(tab.frame);
+    _switchingTabs = false;
+    updateEditState();
+    updateWindowTitle();
+    refreshTabs();
+}
+
+void MainWindow::makeRoomForDocument()
+{
+    if (!_flaDocument)
+        return;
+    // A blank document nobody has touched is simply replaced.
+    if (_documentPath.isEmpty() && !_editContext.isModified())
+        return;
+    _switchingTabs = true;
+    parkActiveDocument();
+    _tabs.push_back(std::make_unique<DocumentTab>());
+    _activeTab = static_cast<int>(_tabs.size()) - 1;
+    _switchingTabs = false;
+}
+
+void MainWindow::openInTab(const QString& path)
+{
+    if (path.isEmpty())
+        return;
+    // Open already: its tab.
+    const QString wanted = QFileInfo(path).absoluteFilePath();
+    for (size_t i = 0; i < _tabs.size(); ++i)
+    {
+        const QString tabPath = static_cast<int>(i) == _activeTab ? _documentPath : _tabs[i]->path;
+        if (!tabPath.isEmpty() && QFileInfo(tabPath).absoluteFilePath() == wanted)
+        {
+            activateTab(static_cast<int>(i));
+            return;
+        }
+    }
+    makeRoomForDocument();
+    loadFLAFile(path);
+}
+
+bool MainWindow::closeTab(int index)
+{
+    if (index < 0 || index >= static_cast<int>(_tabs.size()))
+        return true;
+    if (index != _activeTab)
+        activateTab(index);
+    if (!confirmDiscardChanges())
+        return false;
+    _switchingTabs = true;
+    releaseDocument();
+    _tabs.erase(_tabs.begin() + index);
+    _activeTab = -1;
+    _switchingTabs = false;
+    if (!_tabs.empty())
+        activateTab(std::min(index, static_cast<int>(_tabs.size()) - 1));
+    else
+    {
+        adoptDocument(nullptr, QString(), QString());
+        updateEditState();
+    }
+    refreshTabs();
+    return true;
+}
+
+void MainWindow::refreshTabs()
+{
+    if (!_tabBar)
+        return;
+    _switchingTabs = true;
+    while (_tabBar->count() > static_cast<int>(_tabs.size()))
+        _tabBar->removeTab(_tabBar->count() - 1);
+    while (_tabBar->count() < static_cast<int>(_tabs.size()))
+        _tabBar->addTab(QString());
+    for (size_t i = 0; i < _tabs.size(); ++i)
+    {
+        const bool active = static_cast<int>(i) == _activeTab;
+        const DocumentTab& tab = *_tabs[i];
+        const QString name = active ? _documentName : tab.name;
+        const bool modified = active ? _editContext.isModified() : !tab.history.isClean();
+        _tabBar->setTabText(static_cast<int>(i), (name.isEmpty() ? QString("Untitled") : name) + (modified ? "*" : ""));
+        _tabBar->setTabToolTip(static_cast<int>(i), QDir::toNativeSeparators(active ? _documentPath : tab.path));
+    }
+    if (_activeTab >= 0)
+        _tabBar->setCurrentIndex(_activeTab);
+    // One document needs no tabs.
+    _tabBar->setVisible(_tabs.size() > 1);
+    _switchingTabs = false;
+}
+
+QString MainWindow::templatesFolder()
+{
+    return QDir(QStandardPaths::writableLocation(QStandardPaths::AppDataLocation)).filePath("Templates");
+}
+
+void MainWindow::saveAsTemplate()
+{
+    if (!_flaDocument || !_flaDocument->document)
+        return;
+    bool ok = false;
+    const QString suggested = QFileInfo(_documentName).completeBaseName();
+    const QString name = QInputDialog::getText(this, "Save as Template", "Template name:", QLineEdit::Normal,
+        suggested.isEmpty() ? QString("My Template") : suggested, &ok).trimmed();
+    if (!ok || name.isEmpty())
+        return;
+    QString safe = name;
+    safe.replace(QRegularExpression("[\\\\/:*?\"<>|]"), "_");
+    QDir().mkpath(templatesFolder());
+    const QString path = QDir(templatesFolder()).filePath(safe + ".phx");
+    if (QFileInfo::exists(path) &&
+        QMessageBox::question(this, "Save as Template", QString("Replace the template %1?").arg(name)) != QMessageBox::Yes)
+        return;
+    phx::SaveOptions options;
+    options.application = QString("Phoenix %1").arg(QCoreApplication::applicationVersion()).toStdString();
+    std::string error;
+    if (!phx::save(*_flaDocument->document, path.toStdString(), options, error))
+        QMessageBox::warning(this, "Save as Template", QString::fromStdString(error));
+    else
+        statusBar()->showMessage(QString("Saved the template %1.").arg(name), 3000);
+}
+
+void MainWindow::newFromTemplate()
+{
+    QStringList names;
+    const QFileInfoList files = QDir(templatesFolder()).entryInfoList({"*.phx", "*.fla"}, QDir::Files, QDir::Name);
+    for (const QFileInfo& file : files)
+        names << file.completeBaseName();
+    if (names.isEmpty())
+    {
+        QMessageBox::information(this, "New from Template",
+            "There are no templates yet. Open or make a document and choose File > Save as Template.");
+        return;
+    }
+    bool ok = false;
+    const QString chosen = QInputDialog::getItem(this, "New from Template", "Template:", names, 0, false, &ok);
+    const int index = static_cast<int>(names.indexOf(chosen));
+    if (!ok || index < 0)
+        return;
+    makeRoomForDocument();
+    // A copy of the template, not the template itself: an untitled document
+    // whose first Save asks where to put it.
+    loadFLAFile(files[index].absoluteFilePath());
+    // A template is not a recent file.
+    _recentFiles.removeAll(files[index].absoluteFilePath());
+    updateRecentFilesMenu();
+    saveSettings();
+    if (_flaDocument)
+    {
+        _documentPath.clear();
+        _documentName = "Untitled";
+        _editContext.markUnsaved();
+        updateWindowTitle();
+        updateEditState();
+    }
+}
+
+void MainWindow::revertDocument()
+{
+    if (_documentPath.isEmpty() || !_flaDocument)
+        return;
+    if (_editContext.isModified() &&
+        QMessageBox::question(this, "Revert",
+            QString("Go back to the saved %1? The changes since it was saved will be lost.").arg(_documentName)) !=
+            QMessageBox::Yes)
+        return;
+    const QString path = _documentPath;
+    const int frame = _player ? _player->currentFrame() : 0;
+    // In the same tab: the document reloads in place.
+    _switchingTabs = true;
+    loadFLAFile(path);
+    _switchingTabs = false;
+    if (_player && _flaDocument)
+        _player->setCurrentFrame(frame);
+    refreshTabs();
 }
 
 void MainWindow::createPanels()
@@ -1120,13 +1353,11 @@ void MainWindow::togglePanels()
 
 void MainWindow::newFile()
 {
-    if (!confirmDiscardChanges())
-        return;
-
     // Animate's New Document dialog: a preset, or a size and frame rate.
     NewDocumentDialog dialog(this);
     if (dialog.exec() != QDialog::Accepted)
         return;
+    makeRoomForDocument();
     createNewDocument(dialog.documentWidth(), dialog.documentHeight(), dialog.frameRate(), dialog.stageColor());
 }
 
@@ -1259,8 +1490,7 @@ void MainWindow::showStartDialog()
         openFile();
         break;
     case StartDialog::Choice::OpenRecent:
-        if (confirmDiscardChanges())
-            loadFLAFile(dialog.path());
+        openInTab(dialog.path());
         break;
     case StartDialog::Choice::None:
         break;
@@ -1288,9 +1518,7 @@ void MainWindow::createNewDocument(int width, int height, double frameRate, cons
 
 void MainWindow::openDocumentPath(const QString& filePath)
 {
-    if (filePath.isEmpty() || !confirmDiscardChanges())
-        return;
-    loadFLAFile(filePath);
+    openInTab(filePath);
 }
 
 void MainWindow::loadFLAFile(const QString& filePath)
@@ -1415,6 +1643,27 @@ void MainWindow::setupUI()
     QVBoxLayout* stageLayout = new QVBoxLayout(stageColumn);
     stageLayout->setContentsMargins(0, 0, 0, 0);
     stageLayout->setSpacing(0);
+    _tabBar = new QTabBar(this);
+    _tabBar->setTabsClosable(true);
+    _tabBar->setMovable(true);
+    _tabBar->setDocumentMode(true);
+    _tabBar->setExpanding(false);
+    _tabBar->setDrawBase(false);
+    _tabBar->hide();
+    connect(_tabBar, &QTabBar::currentChanged, this, [this](int index) {
+        if (!_switchingTabs && index >= 0)
+            activateTab(index);
+    });
+    connect(_tabBar, &QTabBar::tabCloseRequested, this, [this](int index) { closeTab(index); });
+    connect(_tabBar, &QTabBar::tabMoved, this, [this](int from, int to) {
+        if (from < 0 || to < 0 || from >= static_cast<int>(_tabs.size()) || to >= static_cast<int>(_tabs.size()))
+            return;
+        std::unique_ptr<DocumentTab> moved = std::move(_tabs[static_cast<size_t>(from)]);
+        _tabs.erase(_tabs.begin() + from);
+        _tabs.insert(_tabs.begin() + to, std::move(moved));
+        _activeTab = _tabBar->currentIndex();
+    });
+    stageLayout->addWidget(_tabBar);
     stageLayout->addWidget(breadcrumbRow);
     stageLayout->addWidget(_phoenixView, 1);
 
@@ -2953,6 +3202,31 @@ void MainWindow::setupMenus()
     connect(saveAsAction, &QAction::triggered, this, &MainWindow::saveFileAs);
     fileMenu->addAction(saveAsAction);
 
+    QAction* fromTemplateAction = new QAction("New from &Template...", this);
+    fromTemplateAction->setStatusTip("Start a document from one saved as a template");
+    connect(fromTemplateAction, &QAction::triggered, this, &MainWindow::newFromTemplate);
+    fileMenu->insertAction(fileMenu->actions().value(1), fromTemplateAction);
+    QAction* saveTemplateAction = fileMenu->addAction("Save as Te&mplate...");
+    saveTemplateAction->setStatusTip("Keep this document as a template to start new ones from");
+    connect(saveTemplateAction, &QAction::triggered, this, &MainWindow::saveAsTemplate);
+    QAction* revertAction = fileMenu->addAction("Re&vert");
+    revertAction->setStatusTip("Go back to the saved file, dropping the changes since");
+    connect(revertAction, &QAction::triggered, this, &MainWindow::revertDocument);
+    QAction* closeAction = fileMenu->addAction("&Close");
+    closeAction->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_W));
+    closeAction->setStatusTip("Close this document's tab");
+    connect(closeAction, &QAction::triggered, this, [this]() {
+        if (_activeTab >= 0)
+            closeTab(_activeTab);
+    });
+    QAction* nextTabAction = new QAction(this);
+    nextTabAction->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_Tab));
+    connect(nextTabAction, &QAction::triggered, this, [this]() {
+        if (_tabs.size() > 1)
+            activateTab((_activeTab + 1) % static_cast<int>(_tabs.size()));
+    });
+    addAction(nextTabAction);
+
     fileMenu->addSeparator();
 
     QMenu* importMenu = fileMenu->addMenu("&Import");
@@ -3291,6 +3565,10 @@ void MainWindow::setupMenus()
 
     QMenu* modifyMenu = menuBar->addMenu("&Modify");
 
+    QAction* documentAction = modifyMenu->addAction("&Document...");
+    documentAction->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_J));
+    documentAction->setStatusTip("Stage size, Match Contents, scaling the content with the stage, ruler units");
+    connect(documentAction, &QAction::triggered, this, &MainWindow::documentSettings);
     QAction* lipSyncAction = modifyMenu->addAction("&Lip Sync...");
     lipSyncAction->setStatusTip("Key the selected mouth graphic to a voice track, its mouth shapes from Rhubarb Lip Sync or a cue file");
     connect(lipSyncAction, &QAction::triggered, this, &MainWindow::lipSync);
@@ -3873,12 +4151,9 @@ void MainWindow::openFile()
 
     if (!fileName.isEmpty())
     {
-        if (!confirmDiscardChanges())
-            return;
-
         _lastDirectory = QFileInfo(fileName).absolutePath();
         saveSettings();
-        loadFLAFile(fileName);
+        openInTab(fileName);
     }
 }
 
@@ -5251,6 +5526,8 @@ void MainWindow::updateWindowTitle()
         .arg(app)
         .arg(shown)
         .arg(_editContext.isModified() ? "*" : ""));
+    if (!_switchingTabs)
+        refreshTabs();
 }
 
 bool MainWindow::confirmDiscardChanges()
@@ -7273,6 +7550,111 @@ void MainWindow::convertToSymbol()
     _phoenixView->update();
 }
 
+void MainWindow::documentSettings()
+{
+    fla::Document* document = _flaDocument ? _flaDocument->document : nullptr;
+    if (!document || !_phoenixView)
+        return;
+    using fla::docsettings::Unit;
+    QDialog dialog(this);
+    dialog.setWindowTitle("Document Settings");
+    QFormLayout* form = new QFormLayout(&dialog);
+    QComboBox* units = new QComboBox(&dialog);
+    const std::pair<Unit, const char*> unitNames[] = {{Unit::Pixels, "Pixels"}, {Unit::Inches, "Inches"},
+        {Unit::Points, "Points"}, {Unit::Centimeters, "Centimeters"}, {Unit::Millimeters, "Millimeters"}};
+    for (const auto& [unit, name] : unitNames)
+        units->addItem(name, static_cast<int>(unit));
+    units->setCurrentIndex(units->findData(static_cast<int>(fla::docsettings::unitOf(*document))));
+    form->addRow("Units:", units);
+    QDoubleSpinBox* width = new QDoubleSpinBox(&dialog);
+    QDoubleSpinBox* height = new QDoubleSpinBox(&dialog);
+    // The size in pixels, shown in the units chosen.
+    double pixelWidth = document->width;
+    double pixelHeight = document->height;
+    const auto showSize = [&]() {
+        const Unit unit = static_cast<Unit>(units->currentData().toInt());
+        const double per = fla::docsettings::pixelsPer(unit);
+        for (QDoubleSpinBox* box : {width, height})
+        {
+            const QSignalBlocker blocker(box);
+            box->setDecimals(unit == Unit::Pixels || unit == Unit::Points ? 0 : 2);
+            box->setRange(1.0 / per, 8192.0 / per);
+            box->setSuffix(QString(" ") + fla::docsettings::label(unit));
+        }
+        const QSignalBlocker blockWidth(width);
+        const QSignalBlocker blockHeight(height);
+        width->setValue(pixelWidth / per);
+        height->setValue(pixelHeight / per);
+    };
+    showSize();
+    connect(units, &QComboBox::currentIndexChanged, &dialog, [&]() { showSize(); });
+    const auto perUnit = [&]() { return fla::docsettings::pixelsPer(static_cast<Unit>(units->currentData().toInt())); };
+    connect(width, &QDoubleSpinBox::valueChanged, &dialog, [&](double value) { pixelWidth = value * perUnit(); });
+    connect(height, &QDoubleSpinBox::valueChanged, &dialog, [&](double value) { pixelHeight = value * perUnit(); });
+    QHBoxLayout* size = new QHBoxLayout();
+    size->addWidget(width);
+    size->addWidget(new QLabel("x", &dialog));
+    size->addWidget(height);
+    form->addRow("Stage size:", size);
+
+    // Match Contents: the stage around everything on it, the art moved to
+    // its corner.
+    double moveX = 0.0;
+    double moveY = 0.0;
+    QPushButton* match = new QPushButton("Match Contents", &dialog);
+    match->setToolTip("Size the stage to what is on it, in every frame of every scene");
+    match->setAutoDefault(false);
+    connect(match, &QPushButton::clicked, &dialog, [&]() {
+        QRectF bounds;
+        for (fla::Element* element : fla::docsettings::sceneElements(*document))
+        {
+            const QRectF box = _phoenixView->elementBounds(element);
+            if (box.isValid() && !box.isEmpty())
+                bounds = bounds.isValid() ? bounds.united(box) : box;
+        }
+        if (!bounds.isValid())
+            return;
+        pixelWidth = std::max(1.0, std::ceil(bounds.width()));
+        pixelHeight = std::max(1.0, std::ceil(bounds.height()));
+        moveX = -bounds.left();
+        moveY = -bounds.top();
+        showSize();
+    });
+    form->addRow("", match);
+    QCheckBox* scaleContent = new QCheckBox("Scale content with stage", &dialog);
+    scaleContent->setToolTip("Everything on the stage grows or shrinks with it");
+    form->addRow("", scaleContent);
+    form->addRow("", new QLabel("Stage color and frame rate are in the Properties panel's Doc tab.", &dialog));
+    QDialogButtonBox* box = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, &dialog);
+    box->button(QDialogButtonBox::Ok)->setDefault(true);
+    connect(box, &QDialogButtonBox::accepted, &dialog, &QDialog::accept);
+    connect(box, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
+    form->addRow(box);
+    if (dialog.exec() != QDialog::Accepted)
+        return;
+
+    const int newWidth = static_cast<int>(std::lround(pixelWidth));
+    const int newHeight = static_cast<int>(std::lround(pixelHeight));
+    const Unit unit = static_cast<Unit>(units->currentData().toInt());
+    fla::CommandStack& stack = _editContext.commandStack();
+    stack.beginMacro("Document Settings");
+    if (newWidth != document->width || newHeight != document->height || moveX != 0.0 || moveY != 0.0)
+        stack.push(fla::docsettings::resize(*document, newWidth, newHeight, scaleContent->isChecked(), moveX, moveY));
+    if (unit != fla::docsettings::unitOf(*document))
+    {
+        using Attributes = std::vector<std::pair<std::string, std::string>>;
+        stack.push(fla::CommandPtr(new fla::SetPropertyCommand<Attributes>(document->extraAttributes,
+            document->extraAttributes, fla::docsettings::withUnit(*document, unit), "Document Settings")));
+    }
+    stack.endMacro();
+    stack.breakMergeChain();
+    _phoenixView->invalidateBounds();
+    _phoenixView->clearCaches();
+    _phoenixView->update();
+    if (_propertiesPanel)
+        _propertiesPanel->refresh();
+}
+
 void MainWindow::swapBitmap()
 {
     if (!_flaDocument || !_flaDocument->document)
@@ -8598,13 +8980,7 @@ void MainWindow::openRecentFile()
 {
     QAction* action = qobject_cast<QAction*>(sender());
     if (action)
-    {
-        if (!confirmDiscardChanges())
-            return;
-
-        QString filePath = action->data().toString();
-        loadFLAFile(filePath);
-    }
+        openInTab(action->data().toString());
 }
 
 void MainWindow::updateRecentFilesMenu()
@@ -8741,6 +9117,19 @@ void MainWindow::saveSettings()
 
 void MainWindow::closeEvent(QCloseEvent* event)
 {
+    // Every tab with unsaved changes is shown in turn and asked about.
+    for (size_t i = 0; i < _tabs.size(); ++i)
+    {
+        const bool modified = static_cast<int>(i) == _activeTab ? _editContext.isModified() : !_tabs[i]->history.isClean();
+        if (!modified)
+            continue;
+        activateTab(static_cast<int>(i));
+        if (!confirmDiscardChanges())
+        {
+            event->ignore();
+            return;
+        }
+    }
     if (!confirmDiscardChanges())
     {
         event->ignore();

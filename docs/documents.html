@@ -56,6 +56,15 @@
 
 <p>The tab also shows which application and file version last saved the document.</p>
 
+<p><span class="menu-path">Modify &rsaquo; Document...</span> (<kbd>Ctrl</kbd>+<kbd>J</kbd>) has more:</p>
+
+<dl class="defs">
+  <dt>Units</dt><dd>What the rulers count in: pixels, inches, points, centimeters or millimeters. The stage size is shown in the same units.</dd>
+  <dt>Stage size</dt><dd>The width and height of the stage.</dd>
+  <dt>Match Contents</dt><dd>Sizes the stage to fit everything on it, in every frame of every scene, and moves the artwork so it starts at the stage's top-left corner.</dd>
+  <dt>Scale content with stage</dt><dd>When the size changes, everything on the stage grows or shrinks with it, so a scene made for one size fits another.</dd>
+</dl>
+
 <h2>Scenes</h2>
 
 <p>A document can hold several scenes, which play one after another. The stage and timeline show one scene at a time; its name is in the edit bar above the stage.</p>
@@ -80,11 +89,21 @@
     <tr><td><span class="menu-path">File &rsaquo; Open Recent</span></td><td>The last ten files</td></tr>
     <tr><td><span class="menu-path">File &rsaquo; Save</span></td><td><kbd>Ctrl</kbd>+<kbd>S</kbd></td></tr>
     <tr><td><span class="menu-path">File &rsaquo; Save As...</span></td><td><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>S</kbd></td></tr>
+    <tr><td><span class="menu-path">File &rsaquo; Revert</span></td><td>Goes back to the saved file, dropping the changes since</td></tr>
+    <tr><td><span class="menu-path">File &rsaquo; Close</span></td><td><kbd>Ctrl</kbd>+<kbd>W</kbd></td></tr>
     <tr><td><span class="menu-path">File &rsaquo; Exit</span></td><td><kbd>Ctrl</kbd>+<kbd>Q</kbd></td></tr>
   </tbody>
 </table>
 
 <p>The window title shows the document's full path, with a <code>*</code> after it when there are unsaved changes. Before closing a changed document, Phoenix asks whether to <strong>Save</strong>, <strong>Discard</strong> the changes, or <strong>Cancel</strong>.</p>
+
+<h3>Several documents</h3>
+
+<p>Each document you open or create gets a tab over the stage, so you can keep several open and copy between them. Click a tab to switch; <kbd>Ctrl</kbd>+<kbd>Tab</kbd> goes to the next. Each tab keeps its own undo history, playhead and unsaved changes, marked with a <code>*</code>. Drag tabs to reorder them, and click a tab's <strong>&times;</strong> or press <kbd>Ctrl</kbd>+<kbd>W</kbd> to close it. Opening a file that is already open switches to its tab. A blank new document you have not changed is replaced by the next file you open. When you quit, Phoenix asks about each document with unsaved changes.</p>
+
+<h3>Templates</h3>
+
+<p>To start new documents from one you have set up (a stage size, a layer structure, a character), choose <span class="menu-path">File &rsaquo; Save as Template...</span> and give it a name. <span class="menu-path">File &rsaquo; New from Template...</span> then opens an untitled copy of it, so the template itself is never changed.</p>
 
 <p>Saves are safe: Phoenix writes to a temporary file and only replaces the original once the new file is complete, so a crash or full disk in the middle of a save cannot damage your file.</p>
 

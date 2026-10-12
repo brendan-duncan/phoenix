@@ -73,6 +73,12 @@ public:
     /// as saved -- which is what loading a file wants.
     void clear();
 
+    /// Trades histories with \a other: the commands, the position in them
+    /// and the saved point. Each stack keeps its own changed callback. A
+    /// document put aside in a tab keeps its undo history this way until it
+    /// comes back. Neither may be in a macro.
+    void swapHistory(CommandStack& other);
+
     /// Number of commands retained, including those currently undone.
     size_t count() const { return _commands.size(); }
 
