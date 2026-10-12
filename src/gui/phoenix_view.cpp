@@ -2042,14 +2042,51 @@ QBrush PhoenixView::getFillBrush(const fla::FillStyle* fillStyle, const fla::Rec
 
         // The fill's matrix maps bitmap pixels to twips: an unscaled bitmap
         // carries a scale of 20, so a twentieth of it maps pixels to pixels.
-        // A clipped fill shows the bitmap once; a tiled brush is the nearest
-        // Qt comes, so the clipping is still to do.
-        QBrush brush(pixmap);
         const double s = 1.0 / 20.0;
-        brush.setTransform(QTransform(
+        const QTransform placed(
             bitmapFill->transform.m11 * s, bitmapFill->transform.m12 * s,
             bitmapFill->transform.m21 * s, bitmapFill->transform.m22 * s,
-            bitmapFill->transform.tx, bitmapFill->transform.ty));
+            bitmapFill->transform.tx, bitmapFill->transform.ty);
+        if (!bitmapFill->bitmapIsClipped)
+        {
+            QBrush brush(pixmap);
+            brush.setTransform(placed);
+            return brush;
+        }
+
+        // A clipped fill shows the bitmap once, its edge pixels running on
+        // past it, as Flash draws it. The brush still tiles, so the image is
+        // grown by its own edges to cover the area filled, in the bitmap's
+        // own pixels, and the tiling never shows.
+        bool invertible = false;
+        const QTransform toBitmap = placed.inverted(&invertible);
+        const int w = pixmap.width();
+        const int h = pixmap.height();
+        QRectF need(0.0, 0.0, w, h);
+        if (invertible && bounds.width() > 0.0 && bounds.height() > 0.0 && bounds.width() < 1.0e29)
+        {
+            need = need.united(toBitmap.mapRect(QRectF(bounds.topLeft.x, bounds.topLeft.y,
+                bounds.width(), bounds.height())));
+        }
+        const auto grow = [](double amount) {
+            return std::min(4096, std::max(0, static_cast<int>(std::ceil(amount))) + 1);
+        };
+        const int left = grow(-need.left());
+        const int top = grow(-need.top());
+        const int right = grow(need.right() - w);
+        const int bottom = grow(need.bottom() - h);
+        const QImage source = pixmap.toImage().convertToFormat(QImage::Format_ARGB32_Premultiplied);
+        QImage padded(w + left + right, h + top + bottom, QImage::Format_ARGB32_Premultiplied);
+        for (int y = 0; y < padded.height(); ++y)
+        {
+            const QRgb* from = reinterpret_cast<const QRgb*>(source.constScanLine(std::clamp(y - top, 0, h - 1)));
+            QRgb* to = reinterpret_cast<QRgb*>(padded.scanLine(y));
+            std::fill(to, to + left, from[0]);
+            std::copy(from, from + w, to + left);
+            std::fill(to + left + w, to + padded.width(), from[w - 1]);
+        }
+        QBrush brush(QPixmap::fromImage(padded));
+        brush.setTransform(QTransform::fromTranslate(-left, -top) * placed);
         return brush;
     }
 
