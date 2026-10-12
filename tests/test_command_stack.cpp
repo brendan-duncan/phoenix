@@ -526,3 +526,26 @@ TEST(compound_undoes_children_in_reverse)
     compound.redo();
     CHECK(log == "ab");
 }
+
+TEST(the_history_keeps_no_more_than_its_limit)
+{
+    std::string log;
+    fla::CommandStack stack;
+    stack.setLimit(3);
+    for (char c : std::string("abcde"))
+        stack.push(append(&log, c));
+    CHECK(log == "abcde" && stack.count() == 3 && stack.index() == 3);
+    stack.undo();
+    stack.undo();
+    stack.undo();
+    CHECK(log == "ab" && !stack.canUndo());
+    stack.redo();
+    stack.setClean();
+    stack.redo();
+    stack.redo();
+    // Two more drop the oldest, the saved one with them.
+    stack.push(append(&log, 'f'));
+    CHECK(stack.count() == 3 && !stack.isClean());
+    stack.setLimit(1);
+    CHECK(stack.count() == 1 && stack.index() == 1);
+}

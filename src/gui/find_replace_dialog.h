@@ -61,6 +61,10 @@ private:
     QColor _findColor = Qt::black;
     QColor _replaceColor = Qt::white;
     QComboBox* _findSymbol;
+    QComboBox* _findSound = nullptr;
+    QComboBox* _replaceSound = nullptr;
+    QComboBox* _findBitmap = nullptr;
+    QComboBox* _replaceBitmap = nullptr;
     QComboBox* _replaceSymbol;
     QTreeWidget* _results;
     QLabel* _status;

@@ -17,7 +17,27 @@
 
 <p class="eyebrow">Reference</p>
 <h1>Settings and preferences</h1>
-<p class="lead">Phoenix has no separate preferences window yet. Instead, it remembers the choices you make as you work, and you change a setting where you use it.</p>
+<p class="lead">Phoenix remembers the choices you make as you work, and you change most settings where you use them. A few general ones are in the Preferences dialog, and every key can be changed in Keyboard Shortcuts.</p>
+
+<h2>Preferences</h2>
+
+<p>Choose <span class="menu-path">Edit &rsaquo; Preferences</span> (<kbd>Ctrl</kbd>+<kbd>U</kbd>):</p>
+
+<dl class="defs">
+  <dt>Undo levels</dt><dd>How many steps Edit &rsaquo; Undo can go back, 200 unless you change it. The oldest steps are let go as new ones come; <strong>No limit</strong> keeps them all, at the cost of memory.</dd>
+  <dt>Auto-recovery</dt><dd>How often a recovery copy of unsaved work is written, or Off. The same setting as <span class="menu-path">File &rsaquo; Auto-Save</span>.</dd>
+  <dt>At startup</dt><dd>Whether the start screen appears.</dd>
+  <dt>Highlight</dt><dd>A selection is outlined in its layer's color, or in one color you choose.</dd>
+  <dt>Click accuracy</dt><dd>How near a click must be to a line or a point to pick it: Strict, Normal or Tolerant.</dd>
+  <dt>Connect lines</dt><dd>How near the ends of a Straighten pencil line must be to be joined into a closed shape.</dd>
+  <dt>Pen</dt><dd><strong>Show pen preview</strong> draws the next segment to the cursor before you click; <strong>Show solid points</strong> draws the pen's anchors filled.</dd>
+</dl>
+
+<h2>Keyboard shortcuts</h2>
+
+<p>Choose <span class="menu-path">Edit &rsaquo; Keyboard Shortcuts</span> (<kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>K</kbd>) to see every menu command and tool with its key. Type in the search box to find a command by name or by key. Select a command, click in the <strong>Shortcut</strong> box and press the keys; a key another command had is taken from it, and the dialog says which. Keys given to two commands show in red, and keys you have changed in bold. <strong>Default</strong> gives one command its own key back, and <strong>Reset All</strong> gives every command its own.</p>
+
+<p>Save your keys as a named set with <strong>Save As</strong> and switch between sets from the <strong>Set</strong> list. <strong>Export</strong> and <strong>Import</strong> pass a set to another machine as a JSON file.</p>
 
 <h2>What Phoenix remembers</h2>
 
@@ -26,7 +46,8 @@
   <tbody>
     <tr><td>Recent files (the last ten)</td><td class="wrap"><span class="menu-path">File &rsaquo; Open Recent</span> and the start screen</td></tr>
     <tr><td>Whether the start screen appears</td><td class="wrap"><strong>Show at startup</strong> on the start screen</td></tr>
-    <tr><td>Auto-save interval</td><td class="wrap"><span class="menu-path">File &rsaquo; Auto-Save</span></td></tr>
+    <tr><td>Auto-save interval</td><td class="wrap"><span class="menu-path">File &rsaquo; Auto-Save</span> or Preferences</td></tr>
+    <tr><td>Grid shown over the art, Clip Content Outside Stage, Pasteboard, Lock Guides</td><td class="wrap">The View menu</td></tr>
     <tr><td>Window size and panel layout</td><td class="wrap">Arrange the window and panels; they are restored next time</td></tr>
     <tr><td>Outliner shown or hidden, and its width</td><td class="wrap"><span class="menu-path">View &rsaquo; Outliner</span>, or drag its edge</td></tr>
     <tr><td>Each tool's settings, including each brush's</td><td class="wrap">The Tool tab of the Properties panel</td></tr>
@@ -50,7 +71,7 @@
 
 <div class="callout planned">
   <span class="label">Planned</span>
-  <p>A Preferences dialog for the number of undo levels, auto-recovery, selection highlight color and drawing tolerances, plus settings a studio can configure for every machine.</p>
+  <p>Settings a studio can configure for every machine at once.</p>
 </div>
 
 </article>

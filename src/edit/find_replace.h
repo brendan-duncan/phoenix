@@ -22,7 +22,11 @@ enum class Kind
     Text,
     Font,
     Color,
-    Symbol
+    Symbol,
+    /// A library sound, on the keyframes that play it.
+    Sound,
+    /// A library bitmap: its instances, and fills that paint with it.
+    Bitmap
 };
 
 struct Query
@@ -53,7 +57,7 @@ struct Match
     int layer = 0;
     int frame = 0;
     /// The object on the frame (a group, when it is inside one) and the
-    /// object itself.
+    /// object itself; both null for a sound, which is on the frame.
     Element* topElement = nullptr;
     Element* element = nullptr;
     /// How many times it has what was looked for.

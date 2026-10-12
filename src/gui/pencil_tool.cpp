@@ -1,5 +1,7 @@
 #include "pencil_tool.h"
 
+#include "preferences.h"
+
 #include "draw_placement.h"
 #include "phoenix_view.h"
 
@@ -186,8 +188,8 @@ void PencilTool::finish(PhoenixView& view)
         fla::StrokeTidyOptions tidy;
         tidy.connectLines = _style.connectLines;
         tidy.recognizeShapes = _style.recognizeShapes;
-        // Animate's normal Connect Lines reach, in screen pixels.
-        tidy.closeTolerance = 15.0 / zoom;
+        // The Connect Lines reach the preferences set, in screen pixels.
+        tidy.closeTolerance = Preferences::connectPixels() / zoom;
         fla::tidyStraightenedStroke(path, _points, tidy);
     }
 

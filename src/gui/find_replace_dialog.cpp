@@ -1,5 +1,8 @@
 #include "find_replace_dialog.h"
 
+#include "../data/bitmap.h"
+#include "../data/document.h"
+
 #include "../data/document.h"
 #include "../data/symbol.h"
 #include "../data/symbol_list.h"
@@ -29,7 +32,7 @@ FindReplaceDialog::FindReplaceDialog(std::function<fla::Document*()> document, Q
 
     QFormLayout* top = new QFormLayout();
     _kind = new QComboBox(this);
-    _kind->addItems({"Text", "Font", "Color", "Symbol"});
+    _kind->addItems({"Text", "Font", "Color", "Symbol", "Sound", "Bitmap"});
     top->addRow("Search for:", _kind);
     layout->addLayout(top);
 
@@ -92,6 +95,22 @@ FindReplaceDialog::FindReplaceDialog(std::function<fla::Document*()> document, Q
     symbolForm->addRow("Replace with:", _replaceSymbol);
     _pages->addWidget(symbolPage);
 
+    // Sound and bitmap: what keyframes play, and what instances and fills
+    // show, swapped for another library item.
+    const auto namePage = [this](QComboBox*& find, QComboBox*& replace, const QString& note) {
+        QWidget* page = new QWidget(_pages);
+        QFormLayout* form = new QFormLayout(page);
+        form->setContentsMargins(0, 0, 0, 0);
+        find = new QComboBox(page);
+        replace = new QComboBox(page);
+        form->addRow("Find:", find);
+        form->addRow("Replace with:", replace);
+        form->addRow("", new QLabel(note, page));
+        _pages->addWidget(page);
+    };
+    namePage(_findSound, _replaceSound, "The keyframes that play it.");
+    namePage(_findBitmap, _replaceBitmap, "Its instances, and fills that paint with it.");
+
     connect(_kind, &QComboBox::currentIndexChanged, this, [this](int index) {
         _pages->setCurrentIndex(index);
         _results->clear();
@@ -146,8 +165,23 @@ void FindReplaceDialog::refresh()
     _replaceFont->clear();
     _findSymbol->clear();
     _replaceSymbol->clear();
+    for (QComboBox* box : {_findSound, _replaceSound, _findBitmap, _replaceBitmap})
+        box->clear();
     if (document)
     {
+        QStringList sounds;
+        for (const fla::Document::SoundInfo& sound : document->sounds)
+            sounds << QString::fromStdString(sound.name);
+        sounds.sort(Qt::CaseInsensitive);
+        _findSound->addItems(sounds);
+        _replaceSound->addItems(sounds);
+        QStringList bitmaps;
+        for (const fla::Resource* resource : document->resources)
+            if (resource && resource->resourceType() == fla::Resource::Type::Bitmap)
+                bitmaps << QString::fromStdString(static_cast<const fla::Bitmap*>(resource)->name);
+        bitmaps.sort(Qt::CaseInsensitive);
+        _findBitmap->addItems(bitmaps);
+        _replaceBitmap->addItems(bitmaps);
         for (const std::string& face : fla::find::fontsUsed(*document))
         {
             _findFont->addItem(QString::fromStdString(face));
@@ -214,6 +248,14 @@ fla::find::Query FindReplaceDialog::query() const
     case fla::find::Kind::Symbol:
         query.find = _findSymbol->currentText().toStdString();
         query.replace = _replaceSymbol->currentText().toStdString();
+        break;
+    case fla::find::Kind::Sound:
+        query.find = _findSound->currentText().toStdString();
+        query.replace = _replaceSound->currentText().toStdString();
+        break;
+    case fla::find::Kind::Bitmap:
+        query.find = _findBitmap->currentText().toStdString();
+        query.replace = _replaceBitmap->currentText().toStdString();
         break;
     }
     return query;

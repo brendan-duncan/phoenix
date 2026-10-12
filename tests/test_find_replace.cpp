@@ -1,5 +1,8 @@
 #include "test_util.h"
 
+#include "../src/data/bitmap.h"
+#include "../src/data/bitmap_fill.h"
+#include "../src/data/bitmap_instance.h"
 #include "../src/data/document.h"
 #include "../src/data/frame.h"
 #include "../src/data/group.h"
@@ -154,4 +157,54 @@ TEST(find_and_replace_fonts_colors_and_symbols_with_undo)
     CHECK(scene.instance->libraryItemName == "Ball");
     CHECK(scene.fill->color[0] == 255 && scene.fill->color[1] == 0);
     CHECK(scene.text->runs[0].face == "ArialMT");
+}
+
+TEST(find_and_replace_sounds_and_bitmaps)
+{
+    Scene scene = makeScene();
+    fla::Document& document = *scene.document;
+    document.sounds.push_back({"beat.wav", "", ""});
+    document.sounds.push_back({"drum.wav", "", ""});
+    for (const char* name : {"sky.png", "sea.png"})
+    {
+        fla::Bitmap* bitmap = new fla::Bitmap(&document);
+        bitmap->name = name;
+        document.resources.push_back(bitmap);
+    }
+    fla::Frame* frame = document.timelines[0]->layers[0]->frames[0];
+    frame->extraAttributes.emplace_back("soundName", "beat.wav");
+    fla::BitmapInstance* picture = new fla::BitmapInstance(frame);
+    picture->libraryItemName = "sky.png";
+    frame->elements.push_back(picture);
+    fla::Shape* shape = new fla::Shape(frame);
+    fla::BitmapFill* fill = new fla::BitmapFill(shape);
+    fill->bitmapPath = "sky.png";
+    shape->fills.push_back(fill);
+    frame->elements.push_back(shape);
+
+    fla::find::Query sound;
+    sound.kind = fla::find::Kind::Sound;
+    sound.find = "beat.wav";
+    sound.replace = "drum.wav";
+    const std::vector<fla::find::Match> heard = fla::find::findAll(document, sound);
+    CHECK(heard.size() == 1 && heard[0].frame == 4 && heard[0].element == nullptr);
+
+    fla::find::Query bitmap;
+    bitmap.kind = fla::find::Kind::Bitmap;
+    bitmap.find = "sky.png";
+    bitmap.replace = "sea.png";
+    CHECK(fla::find::findAll(document, bitmap).size() == 2);
+
+    fla::CommandStack stack;
+    stack.push(fla::find::replaceAll(document, sound));
+    stack.push(fla::find::replaceAll(document, bitmap));
+    CHECK(frame->extraAttributes.back().second == "drum.wav");
+    CHECK(picture->libraryItemName == "sea.png" && fill->bitmapPath == "sea.png");
+    stack.undo();
+    stack.undo();
+    CHECK(frame->extraAttributes.back().second == "beat.wav" && picture->libraryItemName == "sky.png");
+
+    // Only to an item the library has.
+    bitmap.replace = "missing.png";
+    CHECK(fla::find::replaceAll(document, bitmap) == nullptr);
 }

@@ -100,6 +100,8 @@ set(HEADERS
     src/gui/asset_warp_tool.h
     src/gui/three_d_tool.h
     src/gui/width_tool.h
+    src/gui/preferences.h
+    src/gui/shortcuts_dialog.h
     src/gui/ease_curve_dialog.h
     src/gui/file_association.h
     src/gui/color_panel.h
@@ -306,6 +308,8 @@ set(SOURCES
     src/gui/asset_warp_tool.cpp
     src/gui/three_d_tool.cpp
     src/gui/width_tool.cpp
+    src/gui/preferences.cpp
+    src/gui/shortcuts_dialog.cpp
     src/gui/ease_curve_dialog.cpp
     src/gui/file_association.cpp
     src/gui/color_panel.cpp

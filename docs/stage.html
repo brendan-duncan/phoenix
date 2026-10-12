@@ -76,6 +76,8 @@
 <dl class="defs">
   <dt>Show Guides</dt><dd><kbd>Ctrl</kbd>+<kbd>;</kbd>. Hides guides without deleting them.</dd>
   <dt>Snap to Guides</dt><dd><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>;</kbd>. Artwork snaps to guides as you drag it.</dd>
+  <dt>Lock Guides</dt><dd><kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>;</kbd>. Guides stay where they are while you work near them.</dd>
+  <dt>Edit Guides...</dt><dd><kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>G</kbd>. The guides' color, whether they show, snap and are locked, and <strong>Clear All</strong>. The color is saved with the document.</dd>
   <dt>Clear Guides</dt><dd>Removes every guide. This can be undone too.</dd>
 </dl>
 
@@ -88,19 +90,19 @@
   <tbody>
     <tr><td>Snap to Objects</td><td>On</td><td class="wrap">The corners, edges and centers of other artwork</td></tr>
     <tr><td>Snap to Guides</td><td>On</td><td class="wrap">Ruler guides</td></tr>
-    <tr><td>Snap to Grid</td><td>Off</td><td class="wrap">The document grid. Use <strong>Show Grid</strong> to see it.</td></tr>
+    <tr><td>Snap to Grid</td><td>Off</td><td class="wrap">The document grid (<kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>'</kbd>). Use <strong>Show Grid</strong> (<kbd>Ctrl</kbd>+<kbd>'</kbd>) to see it.</td></tr>
     <tr><td>Snap to Pixels</td><td>Off</td><td class="wrap">Whole pixels, for crisp artwork at 100%</td></tr>
   </tbody>
 </table>
 
-<div class="callout planned">
-  <span class="label">Planned</span>
-  <p>Grid and guide settings (spacing, color, locking guides), ruler units, and an option to clip artwork outside the stage.</p>
-</div>
+<p><span class="menu-path">View &rsaquo; Edit Grid</span> (<kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>G</kbd>) sets the grid's color and its spacing across and down, saved with the document, and whether it shows, shows over the artwork instead of under it, and snaps. Ruler units are in <span class="menu-path">Modify &rsaquo; Document</span>.</p>
 
 <h2>Display options</h2>
 
 <dl class="defs">
+  <dt>Clip Content Outside Stage</dt><dd>Hides whatever lies off the stage, so you see what will be exported.</dd>
+  <dt>Pasteboard</dt><dd>On by default. Turn it off to show only the stage, with nothing around it.</dd>
+  <dt>Center Stage</dt><dd>Brings the stage to the middle of the view, keeping the zoom.</dd>
   <dt>Dim Outside Document</dt><dd>Darkens the pasteboard so you can judge what is on the stage. Artwork off the stage still draws, so you can grab it.</dd>
   <dt>High Quality Anti-Aliasing</dt><dd>On by default. Turn it off to draw faster in very heavy scenes.</dd>
   <dt>Show Bounding Boxes</dt><dd><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>B</kbd>. Outlines each element's bounds, which helps track down a stray point far from the artwork.</dd>

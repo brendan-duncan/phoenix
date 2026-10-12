@@ -1,5 +1,8 @@
 #include "find_replace.h"
 
+#include "../data/bitmap.h"
+#include "../data/bitmap_fill.h"
+#include "../data/bitmap_instance.h"
 #include "../data/document.h"
 #include "../data/fill_style.h"
 #include "../data/frame.h"
@@ -96,9 +99,44 @@ public:
             if (it != document.symbolList->symbolMap.end())
                 _replacement = it->second;
         }
+        if (query.kind == Kind::Bitmap)
+            for (const Resource* resource : document.resources)
+                if (resource && resource->resourceType() == Resource::Type::Bitmap &&
+                    static_cast<const Bitmap*>(resource)->name == query.replace)
+                    _replacementBitmap = true;
+        if (query.kind == Kind::Sound)
+            for (const Document::SoundInfo& sound : document.sounds)
+                if (sound.name == query.replace)
+                    _replacementSound = true;
     }
 
-    bool canReplace() const { return _query.kind != Kind::Symbol || _replacement; }
+    bool canReplace() const
+    {
+        switch (_query.kind)
+        {
+        case Kind::Symbol: return _replacement != nullptr;
+        case Kind::Bitmap: return _replacementBitmap;
+        case Kind::Sound: return _replacementSound;
+        default: return true;
+        }
+    }
+
+    /// How many times \a frame plays the sound looked for.
+    int visitFrame(Frame* frame)
+    {
+        if (_query.kind != Kind::Sound || !frame)
+            return 0;
+        int count = 0;
+        for (auto& attribute : frame->extraAttributes)
+        {
+            if (attribute.first != "soundName" || attribute.second != _query.find)
+                continue;
+            ++count;
+            if (_changes)
+                set(attribute.second, _query.replace);
+        }
+        return count;
+    }
 
     /// How many times \a element has it, inside groups too.
     int visit(Element* element)
@@ -113,13 +151,25 @@ public:
                 count += visitRun(run);
             break;
         case Element::Type::Shape:
-            if (_query.kind == Kind::Color)
+            if (_query.kind == Kind::Color || _query.kind == Kind::Bitmap)
             {
                 Shape* shape = static_cast<Shape*>(element);
                 for (FillStyle* fill : shape->fills)
                     count += visitFill(fill);
                 for (StrokeStyle* stroke : shape->strokes)
                     count += stroke ? visitFill(stroke->fill) : 0;
+            }
+            break;
+        case Element::Type::BitmapInstance:
+            if (_query.kind == Kind::Bitmap)
+            {
+                BitmapInstance* instance = static_cast<BitmapInstance*>(element);
+                if (instance->libraryItemName == _query.find)
+                {
+                    ++count;
+                    if (_changes)
+                        set(instance->libraryItemName, _query.replace);
+                }
             }
             break;
         case Element::Type::Rectangle:
@@ -195,6 +245,8 @@ private:
         case Kind::Color:
             return visitColor(run.fillColor);
         case Kind::Symbol:
+        case Kind::Sound:
+        case Kind::Bitmap:
             break;
         }
         return 0;
@@ -204,6 +256,15 @@ private:
     {
         if (!fill)
             return 0;
+        if (_query.kind == Kind::Bitmap)
+        {
+            auto* bitmap = dynamic_cast<BitmapFill*>(fill);
+            if (!bitmap || bitmap->bitmapPath != _query.find)
+                return 0;
+            if (_changes)
+                set(bitmap->bitmapPath, _query.replace);
+            return 1;
+        }
         int count = 0;
         switch (fill->type())
         {
@@ -248,7 +309,42 @@ private:
     const Query& _query;
     std::vector<Change>* _changes;
     Symbol* _replacement = nullptr;
+    bool _replacementBitmap = false;
+    bool _replacementSound = false;
 };
+
+/// Calls \a visit for every keyframe of the document, with where it is.
+void forEachFrame(Document& document, const std::function<void(Match&, Frame*)>& visit)
+{
+    const auto timeline = [&](Timeline* timeline, Symbol* symbol, int scene, const std::string& prefix) {
+        if (!timeline)
+            return;
+        for (size_t l = 0; l < timeline->layers.size(); ++l)
+        {
+            Layer* layer = timeline->layers[l];
+            for (Frame* frame : layer ? layer->frames : std::vector<Frame*>())
+            {
+                if (!frame)
+                    continue;
+                Match match;
+                match.where = prefix + " > " + layer->name + " > Frame " + std::to_string(frame->index + 1);
+                match.symbol = symbol;
+                match.scene = scene;
+                match.layer = static_cast<int>(l);
+                match.frame = frame->index;
+                visit(match, frame);
+            }
+        }
+    };
+    for (size_t i = 0; i < document.timelines.size(); ++i)
+        timeline(document.timelines[i], nullptr, static_cast<int>(i),
+            document.timelines[i] ? document.timelines[i]->name : std::string());
+    if (document.symbolList)
+        for (Symbol* symbol : document.symbolList->symbols)
+            if (symbol)
+                for (Timeline* t : symbol->timelines)
+                    timeline(t, symbol, -1, symbol->name);
+}
 
 /// Calls \a visit for every object on every keyframe of the document,
 /// with where it is.
@@ -298,6 +394,8 @@ bool searchable(const Query& query)
     case Kind::Text:
     case Kind::Font:
     case Kind::Symbol:
+    case Kind::Sound:
+    case Kind::Bitmap:
         return !query.find.empty();
     case Kind::Color:
         return true;
@@ -346,6 +444,15 @@ std::vector<Match> findAll(Document& document, const Query& query)
     if (!searchable(query))
         return matches;
     Searcher searcher(document, query, nullptr);
+    if (query.kind == Kind::Sound)
+    {
+        forEachFrame(document, [&](Match& match, Frame* frame) {
+            match.count = searcher.visitFrame(frame);
+            if (match.count > 0)
+                matches.push_back(match);
+        });
+        return matches;
+    }
     forEachObject(document, [&](Match& match, Element* element) {
         // An object inside a group is listed on its own, at the group.
         std::function<void(Element*)> look = [&](Element* object) {
@@ -380,12 +487,16 @@ CommandPtr replaceAll(Document& document, const Query& query, int* replaced)
     if (!searcher.canReplace())
         return nullptr;
     int count = 0;
-    forEachObject(document, [&](Match&, Element* element) { count += searcher.visit(element); });
+    if (query.kind == Kind::Sound)
+        forEachFrame(document, [&](Match&, Frame* frame) { count += searcher.visitFrame(frame); });
+    else
+        forEachObject(document, [&](Match&, Element* element) { count += searcher.visit(element); });
     if (changes.empty())
         return nullptr;
     if (replaced)
         *replaced = count;
-    static const char* const names[] = {"Replace Text", "Replace Font", "Replace Color", "Replace Symbol"};
+    static const char* const names[] = {"Replace Text", "Replace Font", "Replace Color", "Replace Symbol",
+        "Replace Sound", "Replace Bitmap"};
     return CommandPtr(new ReplaceCommand(std::move(changes), names[static_cast<int>(query.kind)]));
 }
 

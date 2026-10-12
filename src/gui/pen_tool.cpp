@@ -1,5 +1,7 @@
 #include "pen_tool.h"
 
+#include "preferences.h"
+
 #include "cursors.h"
 #include "draw_placement.h"
 #include "phoenix_view.h"
@@ -781,7 +783,7 @@ void PenTool::paintOverlay(PhoenixView& view, QPainter& painter, double scale)
     // The path so far, including the rubber band to the cursor.
     painter.setBrush(Qt::NoBrush);
     painter.setPen(QPen(QColor(0, 170, 255), 1.0 * scale));
-    painter.drawPath(previewPath(true));
+    painter.drawPath(previewPath(Preferences::penPreview()));
 
     const double anchorSize = 3.0 * scale;
     const double handleSize = 2.5 * scale;
@@ -809,7 +811,7 @@ void PenTool::paintOverlay(PhoenixView& view, QPainter& painter, double scale)
         // The first anchor is highlighted once clicking it would close the path.
         const bool closeTarget = (i == 0) && (_overFirstAnchor || _closing) && _path.anchors.size() >= 2;
         painter.setPen(QPen(QColor(0, 120, 200), 1.0 * scale));
-        painter.setBrush(closeTarget ? QColor(255, 220, 0) : QColor(255, 255, 255));
+        painter.setBrush(closeTarget ? QColor(255, 220, 0) : Preferences::solidPoints() ? QColor(0, 120, 200) : QColor(255, 255, 255));
         painter.drawRect(QRectF(position.x() - anchorSize, position.y() - anchorSize,
             anchorSize * 2.0, anchorSize * 2.0));
     }

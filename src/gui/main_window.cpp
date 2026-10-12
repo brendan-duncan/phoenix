@@ -25,6 +25,7 @@
 #include "layer_depth_panel.h"
 #include "camera_tool.h"
 #include "bone_tool.h"
+#include "preferences.h"
 #include "../edit/ik_pose.h"
 #include "find_replace_dialog.h"
 #include "toolbar_editor.h"
@@ -230,8 +231,20 @@ MainWindow::MainWindow(const QString& initialFile, QWidget* parent, bool startup
     // one kept from last time comes back.
     restoreLayout();
 
+    // Every command exists too: its key as made is the default, and the
+    // set chosen goes on.
+    {
+        std::vector<QAction*> tools;
+        for (const auto& entry : _toolActions)
+            tools.push_back(entry.second);
+        std::sort(tools.begin(), tools.end(), [](QAction* a, QAction* b) { return a->text() < b->text(); });
+        _shortcuts = Shortcuts::collect(menuBar(), tools);
+        Shortcuts::apply(_shortcuts);
+    }
+
     // Keep the Edit menu and the title bar in step with the undo history.
     _editContext.commandStack().setChangedCallback([this]() { updateEditState(); });
+    _editContext.commandStack().setLimit(static_cast<size_t>(Preferences::undoLevels()));
     updateEditState();
 
     _selection.setChangedCallback([this]() {
@@ -3729,6 +3742,30 @@ void MainWindow::setupMenus()
     QAction* spellingAction = editMenu->addAction("Check &Spelling...");
     spellingAction->setStatusTip("Check the spelling of every text field in the document");
     connect(spellingAction, &QAction::triggered, this, &MainWindow::checkSpelling);
+    editMenu->addSeparator();
+    QAction* shortcutsAction = editMenu->addAction("&Keyboard Shortcuts...");
+    shortcutsAction->setShortcut(QKeySequence(Qt::CTRL | Qt::ALT | Qt::SHIFT | Qt::Key_K));
+    shortcutsAction->setStatusTip("See and change the key for any command or tool");
+    connect(shortcutsAction, &QAction::triggered, this, [this]() {
+        ShortcutsDialog dialog(_shortcuts, this);
+        if (dialog.exec() != QDialog::Accepted)
+            return;
+        Shortcuts::setCurrentSet(dialog.chosen());
+        Shortcuts::apply(_shortcuts);
+    });
+    QAction* preferencesAction = editMenu->addAction("Pre&ferences...");
+    preferencesAction->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_U));
+    preferencesAction->setMenuRole(QAction::PreferencesRole);
+    preferencesAction->setStatusTip("Undo levels, auto-recovery, highlight color, click accuracy and pen display");
+    connect(preferencesAction, &QAction::triggered, this, [this]() {
+        PreferencesDialog dialog(this);
+        if (dialog.exec() != QDialog::Accepted)
+            return;
+        dialog.save();
+        _editContext.commandStack().setLimit(static_cast<size_t>(Preferences::undoLevels()));
+        if (_phoenixView)
+            _phoenixView->update();
+    });
 
     // Modify menu, with Animate's keys.
     // Insert: Animate's timeline commands, which also live on the frames'
@@ -4237,6 +4274,67 @@ void MainWindow::setupMenus()
         if (_flaDocument && _flaDocument->document)
             _flaDocument->document->guidesSnapTo = on;
     });
+    QAction* lockGuidesAction = guidesMenu->addAction("&Lock Guides");
+    lockGuidesAction->setCheckable(true);
+    lockGuidesAction->setShortcut(QKeySequence(Qt::CTRL | Qt::ALT | Qt::Key_Semicolon));
+    lockGuidesAction->setChecked(QSettings().value("view/guidesLocked", false).toBool());
+    _phoenixView->setGuidesLocked(lockGuidesAction->isChecked());
+    connect(lockGuidesAction, &QAction::toggled, this, [this](bool on) {
+        _phoenixView->setGuidesLocked(on);
+        QSettings().setValue("view/guidesLocked", on);
+    });
+    QAction* editGuidesAction = guidesMenu->addAction("&Edit Guides...");
+    editGuidesAction->setShortcut(QKeySequence(Qt::CTRL | Qt::ALT | Qt::SHIFT | Qt::Key_G));
+    connect(editGuidesAction, &QAction::triggered, this,
+        [this, showGuidesAction, snapGuidesAction, lockGuidesAction]() {
+            if (!_flaDocument || !_flaDocument->document || !_phoenixView)
+                return;
+            fla::Document* document = _flaDocument->document;
+            QDialog dialog(this);
+            dialog.setWindowTitle("Guides");
+            QFormLayout* form = new QFormLayout(&dialog);
+            QColor color(document->guidesColor[0], document->guidesColor[1], document->guidesColor[2]);
+            QPushButton* colorButton = new QPushButton(color.name(), &dialog);
+            connect(colorButton, &QPushButton::clicked, &dialog, [&]() {
+                const QColor chosen = QColorDialog::getColor(color, &dialog, "Guide Color");
+                if (chosen.isValid())
+                {
+                    color = chosen;
+                    colorButton->setText(color.name());
+                }
+            });
+            form->addRow("Color", colorButton);
+            QCheckBox* show = new QCheckBox("Show guides", &dialog);
+            show->setChecked(showGuidesAction->isChecked());
+            QCheckBox* snap = new QCheckBox("Snap to guides", &dialog);
+            snap->setChecked(snapGuidesAction->isChecked());
+            QCheckBox* lock = new QCheckBox("Lock guides", &dialog);
+            lock->setChecked(lockGuidesAction->isChecked());
+            form->addRow(QString(), show);
+            form->addRow(QString(), snap);
+            form->addRow(QString(), lock);
+            QPushButton* clearAll = new QPushButton("Clear All", &dialog);
+            bool cleared = false;
+            connect(clearAll, &QPushButton::clicked, &dialog, [&]() { cleared = true; });
+            QDialogButtonBox* buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, &dialog);
+            buttons->addButton(clearAll, QDialogButtonBox::ResetRole);
+            connect(buttons, &QDialogButtonBox::accepted, &dialog, &QDialog::accept);
+            connect(buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
+            form->addRow(buttons);
+            if (dialog.exec() != QDialog::Accepted)
+                return;
+            document->guidesColor[0] = static_cast<uint8_t>(color.red());
+            document->guidesColor[1] = static_cast<uint8_t>(color.green());
+            document->guidesColor[2] = static_cast<uint8_t>(color.blue());
+            _editContext.commandStack().setDirty();
+            updateEditState();
+            showGuidesAction->setChecked(show->isChecked());
+            snapGuidesAction->setChecked(snap->isChecked());
+            lockGuidesAction->setChecked(lock->isChecked());
+            if (cleared)
+                _phoenixView->clearGuides();
+            _phoenixView->update();
+        });
     QAction* clearGuidesAction = guidesMenu->addAction("&Clear Guides");
     connect(clearGuidesAction, &QAction::triggered, this, [this]() {
         if (_phoenixView)
@@ -4332,12 +4430,14 @@ void MainWindow::setupMenus()
     viewMenu->addSeparator();
 
     QAction* showGridAction = new QAction("Show &Grid", this);
+    showGridAction->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_Apostrophe));
     showGridAction->setCheckable(true);
     showGridAction->setStatusTip("Show the document grid");
     connect(showGridAction, &QAction::toggled, _phoenixView, &PhoenixView::setShowGrid);
     viewMenu->addAction(showGridAction);
 
     QAction* snapToGridAction = new QAction("Snap to Grid", this);
+    snapToGridAction->setShortcut(QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_Apostrophe));
     snapToGridAction->setCheckable(true);
     snapToGridAction->setStatusTip("Snap dragged objects to the document grid");
     connect(snapToGridAction, &QAction::toggled, this, [this](bool on) {
@@ -4345,6 +4445,91 @@ void MainWindow::setupMenus()
         saveSettings();
     });
     viewMenu->addAction(snapToGridAction);
+
+    QAction* editGridAction = viewMenu->addAction("&Edit Grid...");
+    editGridAction->setShortcut(QKeySequence(Qt::CTRL | Qt::ALT | Qt::Key_G));
+    editGridAction->setStatusTip("The grid's color and spacing, and whether it shows over the art");
+    connect(editGridAction, &QAction::triggered, this, [this, showGridAction, snapToGridAction]() {
+        if (!_flaDocument || !_flaDocument->document || !_phoenixView)
+            return;
+        fla::Document* document = _flaDocument->document;
+        QDialog dialog(this);
+        dialog.setWindowTitle("Grid");
+        QFormLayout* form = new QFormLayout(&dialog);
+        QColor color(document->gridColor[0], document->gridColor[1], document->gridColor[2], document->gridColor[3]);
+        QPushButton* colorButton = new QPushButton(color.name(), &dialog);
+        connect(colorButton, &QPushButton::clicked, &dialog, [&]() {
+            const QColor chosen = QColorDialog::getColor(color, &dialog, "Grid Color");
+            if (chosen.isValid())
+            {
+                color = chosen;
+                colorButton->setText(color.name());
+            }
+        });
+        form->addRow("Color", colorButton);
+        QCheckBox* show = new QCheckBox("Show grid", &dialog);
+        show->setChecked(showGridAction->isChecked());
+        QCheckBox* over = new QCheckBox("Show over objects", &dialog);
+        over->setChecked(_phoenixView->gridOver());
+        QCheckBox* snap = new QCheckBox("Snap to grid", &dialog);
+        snap->setChecked(snapToGridAction->isChecked());
+        form->addRow(QString(), show);
+        form->addRow(QString(), over);
+        form->addRow(QString(), snap);
+        QSpinBox* across = new QSpinBox(&dialog);
+        QSpinBox* down = new QSpinBox(&dialog);
+        for (QSpinBox* box : {across, down})
+        {
+            box->setRange(1, 2000);
+            box->setSuffix(" px");
+        }
+        across->setValue(document->gridSpacingX);
+        down->setValue(document->gridSpacingY);
+        form->addRow("Spacing across", across);
+        form->addRow("Spacing down", down);
+        QDialogButtonBox* buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, &dialog);
+        connect(buttons, &QDialogButtonBox::accepted, &dialog, &QDialog::accept);
+        connect(buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
+        form->addRow(buttons);
+        if (dialog.exec() != QDialog::Accepted)
+            return;
+        // The grid is the document's, saved with it.
+        document->gridColor[0] = static_cast<uint8_t>(color.red());
+        document->gridColor[1] = static_cast<uint8_t>(color.green());
+        document->gridColor[2] = static_cast<uint8_t>(color.blue());
+        document->gridSpacingX = across->value();
+        document->gridSpacingY = down->value();
+        _editContext.commandStack().setDirty();
+        updateEditState();
+        showGridAction->setChecked(show->isChecked());
+        snapToGridAction->setChecked(snap->isChecked());
+        _phoenixView->setGridOver(over->isChecked());
+        QSettings().setValue("view/gridOver", over->isChecked());
+        _phoenixView->update();
+    });
+    _phoenixView->setGridOver(QSettings().value("view/gridOver", false).toBool());
+
+    QAction* clipAction = viewMenu->addAction("&Clip Content Outside Stage");
+    clipAction->setCheckable(true);
+    clipAction->setChecked(QSettings().value("view/clipOutsideStage", false).toBool());
+    clipAction->setStatusTip("Hide what lies off the stage");
+    _phoenixView->setClipOutsideStage(clipAction->isChecked());
+    connect(clipAction, &QAction::toggled, this, [this](bool on) {
+        _phoenixView->setClipOutsideStage(on);
+        QSettings().setValue("view/clipOutsideStage", on);
+    });
+    QAction* pasteboardAction = viewMenu->addAction("&Pasteboard");
+    pasteboardAction->setCheckable(true);
+    pasteboardAction->setChecked(QSettings().value("view/pasteboard", true).toBool());
+    pasteboardAction->setStatusTip("Show the area round the stage and what is on it");
+    _phoenixView->setShowPasteboard(pasteboardAction->isChecked());
+    connect(pasteboardAction, &QAction::toggled, this, [this](bool on) {
+        _phoenixView->setShowPasteboard(on);
+        QSettings().setValue("view/pasteboard", on);
+    });
+    QAction* centerAction = viewMenu->addAction("Center &Stage");
+    centerAction->setStatusTip("Bring the stage to the middle of the view");
+    connect(centerAction, &QAction::triggered, _phoenixView, &PhoenixView::centerStage);
 
     QAction* snapToObjectsAction = new QAction("Snap to &Objects", this);
     _snapToObjectsAction = snapToObjectsAction;
@@ -5440,7 +5625,8 @@ void MainWindow::showFindReplace()
             if (_player)
                 _player->setCurrentFrame(match.frame);
             _selection.clear();
-            _selection.select(match.topElement);
+            if (match.topElement)
+                _selection.select(match.topElement);
             _phoenixView->clearCaches();
             _phoenixView->update();
             updateSelectionState();

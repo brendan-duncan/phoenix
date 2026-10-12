@@ -1,6 +1,7 @@
 #include "phoenix_view.h"
 #include "theme.h"
 #include "../edit/pegs.h"
+#include "preferences.h"
 #include "../edit/three_d.h"
 #include "../edit/layer_effects.h"
 #include "../edit/image_blur.h"
@@ -113,6 +114,8 @@ const fla::Layer* owningLayer(const fla::DOMElement* element)
 /// outline view.
 QColor highlightColorFor(const fla::Element* element)
 {
+    if (!Preferences::layerHighlight())
+        return Preferences::highlightColor();
     if (const fla::Layer* layer = owningLayer(element))
         return QColor(layer->color[0], layer->color[1], layer->color[2]);
     return QColor(0, 170, 255);
@@ -657,6 +660,29 @@ void PhoenixView::paintEvent(QPaintEvent *event)
         painter.restore();
     }
 
+    // The grid over the art.
+    if (_showGrid && _gridOver)
+    {
+        painter.save();
+        painter.setTransform(rootToWidget(), true);
+        drawGrid(painter, document);
+        painter.restore();
+    }
+
+    // Off the stage hidden: by the pasteboard's color when content is
+    // clipped, by the window's when there is no pasteboard.
+    if ((_clipOutsideStage || !_showPasteboard) && !inSymbol())
+    {
+        QPainterPath outside;
+        outside.addRect(rect());
+        QPainterPath stage;
+        stage.addPolygon(rootToWidget().map(QPolygonF(QRectF(0, 0, docWidth, docHeight))));
+        stage.closeSubpath();
+        painter.save();
+        painter.fillPath(outside.subtracted(stage), _showPasteboard ? backgroundColor : palette().color(QPalette::Window));
+        painter.restore();
+    }
+
     // Draw dimming overlay outside document area if enabled
     if (_dimOutsideDocument)
     {
@@ -982,7 +1008,7 @@ void PhoenixView::drawStageContents(QPainter& painter, const fla::Document* docu
             QColor(document->backgroundColor[0], document->backgroundColor[1],
                 document->backgroundColor[2], document->backgroundColor[3]));
 
-        if (_showGrid)
+        if (_showGrid && !_gridOver)
             drawGrid(painter, document);
     }
 
@@ -4053,7 +4079,7 @@ double PhoenixView::pickTolerance() const
 {
     // A few screen pixels, expressed in document units, so picking feels the
     // same at every zoom level.
-    const double screenPixels = 4.0;
+    const double screenPixels = Preferences::clickPixels();
     return _zoom > 0.0 ? screenPixels / _zoom : screenPixels;
 }
 
@@ -5877,6 +5903,17 @@ void PhoenixView::zoomToRect(const QRectF& documentRect)
     update();
 }
 
+void PhoenixView::centerStage()
+{
+    if (!_flaDocument || !_flaDocument->document)
+        return;
+    const QRectF stage(0.0, 0.0, _flaDocument->document->width, _flaDocument->document->height);
+    const QPointF center = rootToWidget().map(stage.center());
+    _panX += width() / 2.0 - center.x();
+    _panY += height() / 2.0 - center.y();
+    update();
+}
+
 void PhoenixView::zoomToFit()
 {
     if (!_flaDocument || !_flaDocument->document)
@@ -6278,8 +6315,9 @@ bool PhoenixView::beginGuideDrag(const QPointF& widgetPos)
         return true;
     }
 
-    // An existing guide moves with the selection tool.
-    if (!_showGuides || _activeTool != _modifierTool)
+    // An existing guide moves with the selection tool, unless guides are
+    // locked.
+    if (!_showGuides || _guidesLocked || _activeTool != _modifierTool)
         return false;
     for (size_t i = 0; i < guidesX().size(); ++i)
     {

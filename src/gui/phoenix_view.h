@@ -471,6 +471,21 @@ public:
     fla::Frame* keyframeForDrawing(fla::Frame* frame);
 
     void setShowGrid(bool show) { _showGrid = show; update(); }
+    /// The grid over the art rather than under it.
+    void setGridOver(bool over) { _gridOver = over; update(); }
+    bool gridOver() const { return _gridOver; }
+    /// Clip Content Outside Stage: what lies off the stage is not shown.
+    void setClipOutsideStage(bool clip) { _clipOutsideStage = clip; update(); }
+    bool clipOutsideStage() const { return _clipOutsideStage; }
+    /// The pasteboard round the stage, and what is on it; off, only the
+    /// stage shows.
+    void setShowPasteboard(bool show) { _showPasteboard = show; update(); }
+    bool showPasteboard() const { return _showPasteboard; }
+    /// Guides that cannot be dragged.
+    void setGuidesLocked(bool locked) { _guidesLocked = locked; }
+    bool guidesLocked() const { return _guidesLocked; }
+    /// Brings the stage to the middle of the view at the zoom it has.
+    void centerStage();
 
     bool showGrid() const { return _showGrid; }
 
@@ -908,6 +923,10 @@ private:
     bool _committingMerge = false;
     fla::Snapper* _snapper = nullptr;
     bool _showGrid = false;
+    bool _gridOver = false;
+    bool _clipOutsideStage = false;
+    bool _showPasteboard = true;
+    bool _guidesLocked = false;
 
     struct PathCacheEntry
     {

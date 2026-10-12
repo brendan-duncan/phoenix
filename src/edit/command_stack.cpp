@@ -57,6 +57,21 @@ void CommandStack::addToHistory(CommandPtr command)
     clearRedoBranch();
     _commands.push_back(std::move(command));
     ++_index;
+    setLimit(_limit);
+}
+
+void CommandStack::setLimit(size_t limit)
+{
+    _limit = limit;
+    if (_limit == 0 || _commands.size() <= _limit || !_macroStack.empty())
+        return;
+    // The oldest steps go; the saved point moves with what is left, and is
+    // lost when it went with them.
+    const size_t drop = _commands.size() - _limit;
+    _commands.erase(_commands.begin(), _commands.begin() + static_cast<long long>(drop));
+    _index = _index >= drop ? _index - drop : 0;
+    if (_cleanIndex >= 0)
+        _cleanIndex = _cleanIndex >= static_cast<int>(drop) ? _cleanIndex - static_cast<int>(drop) : -1;
 }
 
 void CommandStack::clearRedoBranch()

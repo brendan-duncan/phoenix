@@ -132,6 +132,11 @@ public:
         _changedCallback = std::move(callback);
     }
 
+    /// The most steps of history kept (0 for no limit): past it, the
+    /// oldest go as new ones come.
+    void setLimit(size_t limit);
+    size_t limit() const { return _limit; }
+
 private:
     void notifyChanged() const
     {
@@ -149,6 +154,7 @@ private:
     CompoundCommand* currentMacro() const;
 
     std::vector<CommandPtr> _commands;
+    size_t _limit = 0;
 
     /// Number of commands currently applied. Commands at or past this index
     /// have been undone and are available to redo.

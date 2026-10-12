@@ -14,6 +14,7 @@
 #include "anchor_point_tool.h"
 #include "camera_tool.h"
 #include "bone_tool.h"
+#include "shortcuts_dialog.h"
 #include "asset_warp_tool.h"
 #include "three_d_tool.h"
 #include "width_tool.h"
@@ -517,6 +518,9 @@ private:
     /// Each tool's toolbox action, so a tool can be chosen as a click on
     /// it would: checked, and shown in its slot.
     std::map<Tool*, QAction*> _toolActions;
+    /// Every command with a key, with Phoenix's own keys, for Edit >
+    /// Keyboard Shortcuts.
+    std::vector<ShortcutEntry> _shortcuts;
     void chooseTool(Tool* tool);
     /// The tool to go back to when the pen is turned back from its eraser
     /// end.
