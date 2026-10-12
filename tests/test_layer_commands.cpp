@@ -266,3 +266,40 @@ TEST(multiplane_camera_pans_near_layers_more_than_far)
     fla::camera::setDepth(layer.extraAttributes, 0.0);
     CHECK(layer.extraAttributes.empty());
 }
+
+TEST(layers_copy_with_their_folders_and_rigs_and_fade)
+{
+    std::unique_ptr<fla::Timeline> timeline = timelineWithFolder();
+    // The folder picked takes its layer along.
+    CHECK((fla::layers::withContents(*timeline, {0}) == std::vector<int>{0, 1}));
+    CHECK((fla::layers::withContents(*timeline, {2, 1}) == std::vector<int>{1, 2}));
+
+    // A parenting rig: Layer_2 follows Layer_1.
+    timeline->layers[1]->extraAttributes.emplace_back("layerRiggingIndex", "0");
+    timeline->layers[2]->extraAttributes.emplace_back("layerRiggingIndex", "1");
+    timeline->layers[2]->frames[0]->extraAttributes.emplace_back("parentLayerIndex", "0");
+
+    std::vector<fla::Layer*> copies = fla::layers::cloneLayers(
+        {timeline->layers[0], timeline->layers[1], timeline->layers[2]}, *timeline);
+    CHECK(copies.size() == 3);
+    CHECK(copies[1]->parentLayer == copies[0] && copies[2]->parentLayer == nullptr);
+    CHECK(copies[1]->frames.size() == 1 && copies[1]->frames[0] != timeline->layers[1]->frames[0]);
+    CHECK(copies[1]->frames[0]->duration == 12 && copies[1]->frames[0]->parent == copies[1]);
+    // New rigs, after the timeline's, and the child follows the copied parent.
+    CHECK(copies[1]->extraAttributes.back().second == "2" && copies[2]->extraAttributes.back().second == "3");
+    CHECK(copies[2]->frames[0]->extraAttributes.back().second == "2");
+    for (fla::Layer* copy : copies)
+        delete copy;
+
+    // Copied alone, the child still follows the original parent.
+    std::vector<fla::Layer*> alone = fla::layers::cloneLayers({timeline->layers[2]}, *timeline);
+    CHECK(alone[0]->frames[0]->extraAttributes.back().second == "0");
+    delete alone[0];
+
+    fla::Layer& layer = *timeline->layers[2];
+    CHECK(fla::layers::transparencyOf(layer) == 0);
+    layer.extraAttributes = fla::layers::withTransparency(layer, 40);
+    CHECK(fla::layers::transparencyOf(layer) == 40);
+    layer.extraAttributes = fla::layers::withTransparency(layer, 0);
+    CHECK(fla::layers::transparencyOf(layer) == 0 && layer.extraAttributes.size() == 1);
+}

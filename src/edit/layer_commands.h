@@ -152,6 +152,24 @@ bool moveLayer(LayerSnapshot& snapshot, Layer* layer, Layer* before, Layer* pare
 /// mask or guide above, or a change to or from a folder.
 bool setKind(LayerSnapshot& snapshot, Layer* layer, Kind kind);
 
+/// Layer transparency: a visible layer shown faded while editing, as see
+/// through as \a percent of it is shown (100 or 0 when it is not faded).
+/// Kept on the layer for Phoenix; exports draw the layer in full.
+int transparencyOf(const Layer& layer);
+std::vector<std::pair<std::string, std::string>> withTransparency(const Layer& layer, int percent);
+
+/// The layers at \a indices with everything inside them, in timeline order:
+/// a selection of layers grown to whole folders, masks and guides.
+std::vector<int> withContents(const Timeline& timeline, std::vector<int> indices);
+
+/// Deep copies of \a layers (top first, as withContents gives them): their
+/// frames, settings and folder links among them; a link to a layer not
+/// copied is dropped. Layer parenting rigs are renumbered after the ones
+/// \a into already has, so a copied child follows its copied parent and
+/// one copied alone still follows the original. The caller owns them; they
+/// belong to no timeline yet.
+std::vector<Layer*> cloneLayers(const std::vector<const Layer*>& layers, const Timeline& into);
+
 } // namespace layers
 
 } // namespace fla

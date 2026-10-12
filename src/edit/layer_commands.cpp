@@ -3,9 +3,15 @@
 #include "../data/frame.h"
 #include "../data/layer.h"
 #include "../data/timeline.h"
+#include "timeline_edit.h"
+
+#include <map>
+#include <set>
+#include <string>
 
 #include <algorithm>
 #include <cstdio>
+#include <cstdlib>
 
 namespace fla {
 
@@ -531,6 +537,85 @@ bool setKind(LayerSnapshot& snapshot, Layer* layer, Kind kind)
     state->type = kind == Kind::Mask ? Layer::Type::Mask
         : kind == Kind::Guide ? Layer::Type::Guide : Layer::Type::Normal;
     return true;
+}
+
+int transparencyOf(const Layer& layer)
+{
+    for (const auto& [key, value] : layer.extraAttributes)
+        if (key == "phoenixTransparency")
+            return std::clamp(std::atoi(value.c_str()), 0, 100);
+    return 0;
+}
+
+std::vector<std::pair<std::string, std::string>> withTransparency(const Layer& layer, int percent)
+{
+    std::vector<std::pair<std::string, std::string>> attributes;
+    for (const auto& attribute : layer.extraAttributes)
+        if (attribute.first != "phoenixTransparency")
+            attributes.push_back(attribute);
+    if (percent > 0 && percent < 100)
+        attributes.emplace_back("phoenixTransparency", std::to_string(percent));
+    return attributes;
+}
+
+std::vector<int> withContents(const Timeline& timeline, std::vector<int> indices)
+{
+    std::set<int> all;
+    for (int index : indices)
+        for (int inside : RemoveLayerCommand::affectedIndices(timeline, index))
+            all.insert(inside);
+    return std::vector<int>(all.begin(), all.end());
+}
+
+std::vector<Layer*> cloneLayers(const std::vector<const Layer*>& layers, const Timeline& into)
+{
+    // New rig numbers start past every one the timeline has.
+    int nextRig = 0;
+    for (const Layer* layer : into.layers)
+        if (layer)
+            for (const auto& [key, value] : layer->extraAttributes)
+                if (key == "layerRiggingIndex")
+                    nextRig = std::max(nextRig, std::atoi(value.c_str()) + 1);
+    std::map<std::string, std::string> rigs;
+    for (const Layer* layer : layers)
+        for (const auto& [key, value] : layer->extraAttributes)
+            if (key == "layerRiggingIndex")
+                rigs[value] = std::to_string(nextRig++);
+
+    std::map<const Layer*, Layer*> copies;
+    std::vector<Layer*> made;
+    for (const Layer* layer : layers)
+    {
+        Layer* copy = new Layer(nullptr);
+        copy->name = layer->name;
+        std::copy(std::begin(layer->color), std::end(layer->color), std::begin(copy->color));
+        copy->layerType = layer->layerType;
+        copy->otherLayerType = layer->otherLayerType;
+        copy->autoNamed = layer->autoNamed;
+        copy->locked = layer->locked;
+        copy->outline = layer->outline;
+        copy->visible = layer->visible;
+        copy->extraChildren = layer->extraChildren;
+        copy->presentAttributes = layer->presentAttributes;
+        for (const auto& [key, value] : layer->extraAttributes)
+            copy->extraAttributes.emplace_back(key, key == "layerRiggingIndex" ? rigs[value] : value);
+        for (const Frame* frame : layer->frames)
+        {
+            if (!frame)
+                continue;
+            Frame* frameCopy = timeline::cloneFrame(*frame, copy);
+            // A child whose parent came along follows the copy.
+            for (auto& [key, value] : frameCopy->extraAttributes)
+                if (key == "parentLayerIndex" && rigs.count(value))
+                    value = rigs[value];
+            copy->frames.push_back(frameCopy);
+        }
+        const auto parent = copies.find(layer->parentLayer);
+        copy->parentLayer = parent == copies.end() ? nullptr : parent->second;
+        copies[layer] = copy;
+        made.push_back(copy);
+    }
+    return made;
 }
 
 } // namespace layers

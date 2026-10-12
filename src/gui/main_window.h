@@ -270,6 +270,11 @@ private slots:
     void showFramesMenu(const QPoint& globalPos);
     void addLayer(bool folder);
     void deleteCurrentLayer();
+    /// Cut (0), Copy (1), Paste (2) or Duplicate (3) the layers picked.
+    void layerClipboard(int action);
+    /// Deletes the layers at \a indices with what they hold, as one step;
+    /// false (and nothing done) when no layer would be left to draw on.
+    bool removeLayers(fla::Timeline* timeline, const std::vector<int>& indices, const char* name);
     void editLayers(fla::Timeline* timeline, const fla::LayerSnapshot& after, const QString& name);
     void renameLayer(const fla::Timeline* timeline, int layerIndex, const QString& name);
 
@@ -480,6 +485,9 @@ private:
     /// Controllers: Harmony's master controllers.
     class ControllersPanel* _controllers = nullptr;
     QDockWidget* _controllersDock = nullptr;
+    /// Copy Layers: copies of the layers, for the document they came from.
+    std::vector<std::unique_ptr<fla::Layer>> _copiedLayers;
+    const fla::Document* _copiedLayersFrom = nullptr;
     /// Function Curves: any property of the current layer over time.
     class FunctionCurvesPanel* _functionCurves = nullptr;
     QDockWidget* _functionCurvesDock = nullptr;

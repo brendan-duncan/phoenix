@@ -35,6 +35,9 @@ public:
     /// The current layer of the shown timeline. False when there is none.
     bool currentLayer(fla::Timeline*& timeline, int& layerIndex) const;
 
+    /// The layers picked in the list, or the current one, in timeline order.
+    std::vector<int> selectedLayers(fla::Timeline*& timeline) const;
+
     /// The frames selected in the grid, or an empty selection.
     FrameSelection frameSelection() const;
 
@@ -71,6 +74,8 @@ signals:
     void layerEditRequested(fla::Timeline* timeline, const fla::LayerSnapshot& after, const QString& name);
     void parentLayerRequested(fla::Timeline* timeline, fla::Layer* layer, fla::Layer* parent);
     void effectSettingsRequested(fla::Layer* layer);
+    /// Cut (0), Copy (1), Paste (2) or Duplicate (3) Layers.
+    void layerClipboardRequested(int action);
     void keyframeMoveRequested(const fla::Layer* layer, int from, int to);
     void framePicked(const fla::Layer* layer, int frame);
     void framesMoveRequested(const std::vector<const fla::Layer*>& sources, const std::vector<const fla::Layer*>& targets, int first, int last, int to, bool copy);

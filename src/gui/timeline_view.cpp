@@ -60,6 +60,7 @@ TimelineView::TimelineView(Player* player, QWidget *parent)
     connect(_layersPanel, &LayersPanel::layerEditRequested, this, &TimelineView::layerEditRequested);
     connect(_layersPanel, &LayersPanel::parentLayerRequested, this, &TimelineView::parentLayerRequested);
     connect(_layersPanel, &LayersPanel::effectSettingsRequested, this, &TimelineView::effectSettingsRequested);
+    connect(_layersPanel, &LayersPanel::layerClipboardRequested, this, &TimelineView::layerClipboardRequested);
     connect(_timelinesPanel, &TimelinesPanel::keyframeMoveRequested, this, &TimelineView::keyframeMoveRequested);
     connect(_timelinesPanel, &TimelinesPanel::framePicked, this, &TimelineView::framePicked);
     connect(_timelinesPanel, &TimelinesPanel::framesMoveRequested, this, &TimelineView::framesMoveRequested);
@@ -200,4 +201,9 @@ void TimelineView::resizeEvent(QResizeEvent* event)
 {
     QWidget::resizeEvent(event);
     setLayersWidth(_layersWidth);
+}
+
+std::vector<int> TimelineView::selectedLayers(fla::Timeline*& timeline) const
+{
+    return _layersPanel->selectedLayers(timeline);
 }

@@ -12,6 +12,8 @@
 #include <QFormLayout>
 #include <QLineEdit>
 #include <QMenu>
+#include <QMouseEvent>
+#include <QSpinBox>
 #include <cstdlib>
 #include <QMessageBox>
 #include <QPushButton>
@@ -31,6 +33,7 @@
 #include <QTreeWidgetItemIterator>
 #include <QVBoxLayout>
 
+#include <algorithm>
 #include <cstdint>
 #include <functional>
 
@@ -136,6 +139,14 @@ void drawEye(QPainter& painter)
     painter.drawPath(eye);
     painter.setBrush(ink());
     painter.drawEllipse(QPointF(8.0, 8.0), 2.2, 2.2);
+}
+
+void drawFadedEye(QPainter& painter)
+{
+    // A transparent layer: the eye, half there.
+    painter.setOpacity(0.45);
+    drawEye(painter);
+    painter.setOpacity(1.0);
 }
 
 void drawHiddenCross(QPainter& painter)
@@ -301,6 +312,7 @@ LayersPanel::LayersPanel(QWidget *parent)
     , _openFolderIcon(glyph(drawFolderOpen))
     , _visibleIcon(glyph(drawEye))
     , _hiddenIcon(glyph(drawHiddenCross))
+    , _fadedIcon(glyph(drawFadedEye))
     , _unlockedIcon(glyph(drawUnlockedDot))
     , _lockedIcon(glyph(drawPadlock))
     , _pencilIcon(glyph(drawPencil))
@@ -387,7 +399,8 @@ LayersPanel::LayersPanel(QWidget *parent)
         _treeWidget->header()->resizeSection(column, column == CurrentColumn ? 20 : 24);
     }
     _treeWidget->header()->setHidden(true);
-    _treeWidget->setSelectionMode(QAbstractItemView::SingleSelection);
+    _treeWidget->setSelectionMode(QAbstractItemView::ExtendedSelection);
+    _treeWidget->viewport()->installEventFilter(this);
     _treeWidget->setEditTriggers(QAbstractItemView::NoEditTriggers);
     // Rows are dragged to reorder layers and to move them into and out of
     // folders, masks and guides; a right-click offers the layer commands.
@@ -452,6 +465,7 @@ void LayersPanel::applyTheme()
     _openFolderIcon = glyph(drawFolderOpen);
     _visibleIcon = glyph(drawEye);
     _hiddenIcon = glyph(drawHiddenCross);
+    _fadedIcon = glyph(drawFadedEye);
     _unlockedIcon = glyph(drawUnlockedDot);
     _lockedIcon = glyph(drawPadlock);
     _pencilIcon = glyph(drawPencil);
@@ -620,12 +634,138 @@ void LayersPanel::markCurrent()
     }
 }
 
+std::vector<int> LayersPanel::selectedLayers(fla::Timeline*& timeline) const
+{
+    std::vector<int> indices;
+    timeline = nullptr;
+    for (QTreeWidgetItem* item : _treeWidget->selectedItems())
+    {
+        fla::Timeline* of = timelineFor(item);
+        if (!of || !layerFor(item) || (timeline && of != timeline))
+            continue;
+        timeline = of;
+        indices.push_back(item->data(NameColumn, Qt::UserRole).toInt());
+    }
+    int current = 0;
+    fla::Timeline* currentTimeline = nullptr;
+    if (indices.empty() && currentLayer(currentTimeline, current))
+    {
+        timeline = currentTimeline;
+        indices.push_back(current);
+    }
+    std::sort(indices.begin(), indices.end());
+    return indices;
+}
+
+bool LayersPanel::toggleOf(const fla::Layer& layer, int column)
+{
+    return column == VisibleColumn ? layer.visible : column == LockColumn ? layer.locked : layer.outline;
+}
+
+void LayersPanel::setToggle(QTreeWidgetItem* item, int column, bool value)
+{
+    fla::Layer* layer = layerFor(item);
+    fla::Timeline* timeline = timelineFor(item);
+    if (!layer || !timeline || toggleOf(*layer, column) == value)
+        return;
+    const int layerIndex = item->data(NameColumn, Qt::UserRole).toInt();
+    const QString timelineName = QString::fromStdString(timeline->name);
+    if (column == VisibleColumn)
+    {
+        layer->visible = value;
+        refreshRow(item);
+        emit layerVisibilityChanged(timelineName, layerIndex, value);
+    }
+    else if (column == LockColumn)
+    {
+        layer->locked = value;
+        refreshRow(item);
+        emit layerLockChanged(timelineName, layerIndex, value);
+    }
+    else
+    {
+        layer->outline = value;
+        refreshRow(item);
+        emit layersChanged();
+    }
+}
+
+bool LayersPanel::eventFilter(QObject* watched, QEvent* event)
+{
+    if (watched != _treeWidget->viewport())
+        return QWidget::eventFilter(watched, event);
+    const auto* mouse = dynamic_cast<QMouseEvent*>(event);
+    if (!mouse)
+        return QWidget::eventFilter(watched, event);
+    const QPoint at = mouse->position().toPoint();
+    if (event->type() == QEvent::MouseButtonPress && mouse->button() == Qt::LeftButton)
+    {
+        QTreeWidgetItem* item = _treeWidget->itemAt(at);
+        const int column = _treeWidget->columnAt(at.x());
+        fla::Layer* layer = layerFor(item);
+        if (!layer || (column != VisibleColumn && column != LockColumn && column != ColorColumn))
+            return false;
+        _pressTaken = true;
+        fla::Timeline* timeline = timelineFor(item);
+        if (column == VisibleColumn && (mouse->modifiers() & Qt::ShiftModifier))
+        {
+            // Shift on the eye: the layer shows faded, or in full again.
+            layer->extraAttributes = fla::layers::withTransparency(*layer, fla::layers::transparencyOf(*layer) > 0 ? 0 : 50);
+            layer->visible = true;
+            refreshRow(item);
+            emit layersChanged();
+            return true;
+        }
+        if (mouse->modifiers() & Qt::AltModifier)
+        {
+            // Alt: every other layer, all one way. If any other is still
+            // on, they all go off; otherwise they all come back.
+            bool anyOn = false;
+            for (const fla::Layer* other : timeline->layers)
+                if (other && other != layer)
+                    anyOn = anyOn || toggleOf(*other, column) == (column == VisibleColumn);
+            const bool value = column == VisibleColumn ? !anyOn : anyOn;
+            for (QTreeWidgetItemIterator it(_treeWidget); *it; ++it)
+                if (layerFor(*it) && layerFor(*it) != layer && timelineFor(*it) == timeline)
+                    setToggle(*it, column, value);
+            emit layersChanged();
+            return true;
+        }
+        _dragColumn = column;
+        _dragValue = !toggleOf(*layer, column);
+        setToggle(item, column, _dragValue);
+        return true;
+    }
+    if (event->type() == QEvent::MouseMove && _dragColumn >= 0)
+    {
+        if (QTreeWidgetItem* item = _treeWidget->itemAt(QPoint(_treeWidget->columnViewportPosition(_dragColumn) + 4, at.y())))
+            setToggle(item, _dragColumn, _dragValue);
+        return true;
+    }
+    if (event->type() == QEvent::MouseButtonRelease && _pressTaken)
+    {
+        _pressTaken = false;
+        _dragColumn = -1;
+        return true;
+    }
+    if (event->type() == QEvent::MouseButtonDblClick)
+    {
+        const int column = _treeWidget->columnAt(at.x());
+        if (column == VisibleColumn || column == LockColumn || column == ColorColumn)
+            return true;
+    }
+    return false;
+}
+
 void LayersPanel::refreshRow(QTreeWidgetItem* item)
 {
     const fla::Layer* layer = layerFor(item);
     if (!layer)
         return;
-    item->setIcon(VisibleColumn, layer->visible ? _visibleIcon : _hiddenIcon);
+    if (layer->visible && fla::layers::transparencyOf(*layer) > 0)
+        item->setIcon(VisibleColumn, _fadedIcon);
+    else
+        item->setIcon(VisibleColumn, layer->visible ? _visibleIcon : _hiddenIcon);
     item->setIcon(LockColumn, layer->locked ? _lockedIcon : _unlockedIcon);
     item->setIcon(ColorColumn, swatchIcon(layer->color, layer->outline));
     item->setIcon(CurrentColumn, layer->selected ? _pencilIcon : QIcon());
@@ -794,22 +934,9 @@ void LayersPanel::onItemClicked(QTreeWidgetItem* item, int column)
     switch (column)
     {
     case VisibleColumn:
-        layer->visible = !layer->visible;
-        refreshRow(item);
-        emit layerVisibilityChanged(timelineName, layerIndex, layer->visible);
-        break;
-
     case LockColumn:
-        layer->locked = !layer->locked;
-        refreshRow(item);
-        emit layerLockChanged(timelineName, layerIndex, layer->locked);
-        break;
-
     case ColorColumn:
-        // The square toggles outline view, as in Animate.
-        layer->outline = !layer->outline;
-        refreshRow(item);
-        emit layersChanged();
+        // The toggles act on the press (see eventFilter).
         break;
 
     default:
@@ -926,6 +1053,20 @@ void LayersPanel::showLayerMenu(QTreeWidgetItem* item, const QPoint& globalPos)
     menu.addAction("Insert Folder", this, [=]() { atRow(); emit addLayerRequested(true); });
     QAction* remove = menu.addAction("Delete Layer", this, [=]() { atRow(); emit deleteLayerRequested(); });
     remove->setEnabled(!folder || timeline->layers.size() > 1);
+    menu.addSeparator();
+    // On the layers picked, or this one.
+    const auto onPicked = [this, item](int action) {
+        if (!item->isSelected())
+        {
+            _treeWidget->clearSelection();
+            item->setSelected(true);
+        }
+        emit layerClipboardRequested(action);
+    };
+    menu.addAction("Cut Layers", this, [=]() { onPicked(0); });
+    menu.addAction("Copy Layers", this, [=]() { onPicked(1); });
+    menu.addAction("Paste Layers", this, [=]() { atRow(); emit layerClipboardRequested(2); });
+    menu.addAction("Duplicate Layers", this, [=]() { onPicked(3); });
     menu.addSeparator();
 
     if (!folder)
@@ -1048,6 +1189,19 @@ void LayersPanel::showLayerProperties(QTreeWidgetItem* item)
     flags->addWidget(lock);
     flags->addStretch();
     form->addRow("", flags);
+    // Transparent: shown faded while editing, so what is under shows.
+    QHBoxLayout* fadeRow = new QHBoxLayout();
+    QCheckBox* fade = new QCheckBox("Transparent, shown at", &dialog);
+    QSpinBox* fadePercent = new QSpinBox(&dialog);
+    fadePercent->setRange(5, 95);
+    fadePercent->setSuffix("%");
+    const int transparency = fla::layers::transparencyOf(*layer);
+    fade->setChecked(transparency > 0);
+    fadePercent->setValue(transparency > 0 ? transparency : 50);
+    fadeRow->addWidget(fade);
+    fadeRow->addWidget(fadePercent);
+    fadeRow->addStretch();
+    form->addRow("", fadeRow);
 
     // The kinds, those a folder cannot become (or a layer become a folder)
     // offered but not chosen.
@@ -1126,5 +1280,6 @@ void LayersPanel::showLayerProperties(QTreeWidgetItem* item)
         state.color[1] = static_cast<uint8_t>(color.green());
         state.color[2] = static_cast<uint8_t>(color.blue());
     }
+    layer->extraAttributes = fla::layers::withTransparency(*layer, fade->isChecked() ? fadePercent->value() : 0);
     emit layerEditRequested(timeline, after, "Layer Properties");
 }

@@ -24,6 +24,7 @@
 #include "../edit/command_stack.h"
 #include "../edit/element_commands.h"
 #include "../edit/property_command.h"
+#include "../edit/layer_commands.h"
 #include "../edit/region_split.h"
 #include "../edit/selection.h"
 #include "../edit/shape_merge.h"
@@ -2266,6 +2267,19 @@ void PhoenixView::drawLayer(QPainter& painter, const fla::Layer* layer, fla::Loo
         _outlineColor = _forcedOutline;
 
     const LayerFrame state = resolveLayerFrame(layer, loopType, firstFrame);
+
+    // A transparent layer shows faded while editing, so what is under it
+    // shows through; exports draw it in full.
+    const int transparency = _exporting || _frameDepth != 0 || _maskPass ? 0 : fla::layers::transparencyOf(*layer);
+    const double opacityBefore = painter.opacity();
+    if (transparency > 0)
+        painter.setOpacity(opacityBefore * transparency / 100.0);
+    struct OpacityScope
+    {
+        QPainter& painter;
+        double opacity;
+        ~OpacityScope() { painter.setOpacity(opacity); }
+    } opacityScope{painter, opacityBefore};
 
     if (state.frame && state.frame->visible)
     {

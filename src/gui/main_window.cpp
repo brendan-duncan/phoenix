@@ -1489,6 +1489,7 @@ void MainWindow::setupUI()
     connect(_timelineView, &TimelineView::layerEditRequested, this, &MainWindow::editLayers);
     connect(_timelineView, &TimelineView::parentLayerRequested, this, &MainWindow::setParentLayer);
     connect(_timelineView, &TimelineView::effectSettingsRequested, this, &MainWindow::editEffect);
+    connect(_timelineView, &TimelineView::layerClipboardRequested, this, &MainWindow::layerClipboard);
 }
 
 fla::Timeline* MainWindow::editedTimeline() const
@@ -2682,12 +2683,15 @@ void MainWindow::addLayer(bool folder)
 void MainWindow::deleteCurrentLayer()
 {
     fla::Timeline* timeline = nullptr;
-    int index = 0;
-    if (!_timelineView || !_timelineView->currentLayer(timeline, index) || !timeline)
-        return;
+    const std::vector<int> picked = _timelineView ? _timelineView->selectedLayers(timeline) : std::vector<int>();
+    if (timeline && !picked.empty())
+        removeLayers(timeline, picked, picked.size() > 1 ? "Delete Layers" : "Delete Layer");
+}
 
+bool MainWindow::removeLayers(fla::Timeline* timeline, const std::vector<int>& indices, const char* name)
+{
     // Animate keeps at least one layer that can hold frames.
-    const std::vector<int> going = fla::RemoveLayerCommand::affectedIndices(*timeline, index);
+    const std::vector<int> going = fla::layers::withContents(*timeline, indices);
     int remaining = 0;
     for (size_t i = 0; i < timeline->layers.size(); ++i)
     {
@@ -2699,16 +2703,121 @@ void MainWindow::deleteCurrentLayer()
     if (remaining == 0)
     {
         statusBar()->showMessage("A timeline keeps at least one layer.", 3000);
-        return;
+        return false;
     }
 
-    // Whatever was selected on the layer goes with it.
+    // Whatever was selected on the layers goes with them. Each layer whose
+    // folder is not going too is removed with what it holds, from the
+    // bottom up so the indices above stay put.
     _selection.clear();
-    _editContext.commandStack().push(fla::CommandPtr(
-        new fla::RemoveLayerCommand(timeline, index, "Delete Layer")));
-    _editContext.commandStack().breakMergeChain();
+    std::vector<int> roots;
+    for (int index : going)
+    {
+        const fla::Layer* layer = timeline->layers[static_cast<size_t>(index)];
+        const auto parent = std::find(timeline->layers.begin(), timeline->layers.end(), layer->parentLayer);
+        const int parentIndex = parent == timeline->layers.end() ? -1 : static_cast<int>(parent - timeline->layers.begin());
+        if (std::find(going.begin(), going.end(), parentIndex) == going.end())
+            roots.push_back(index);
+    }
+    fla::CommandStack& stack = _editContext.commandStack();
+    stack.beginMacro(name);
+    for (auto it = roots.rbegin(); it != roots.rend(); ++it)
+        stack.push(fla::CommandPtr(new fla::RemoveLayerCommand(timeline, *it, name)));
+    stack.endMacro();
+    stack.breakMergeChain();
     _timelineView->refresh();
     onVisibilityChanged();
+    return true;
+}
+
+void MainWindow::layerClipboard(int action)
+{
+    fla::Timeline* timeline = nullptr;
+    std::vector<int> picked = _timelineView ? _timelineView->selectedLayers(timeline) : std::vector<int>();
+    if (!timeline)
+        timeline = editedTimeline();
+    const fla::Document* document = _flaDocument ? _flaDocument->document : nullptr;
+    if (!timeline || !document)
+        return;
+    picked = fla::layers::withContents(*timeline, picked);
+
+    // Copies of the layers go in above layer index, in its folder.
+    const auto insert = [&](const std::vector<const fla::Layer*>& source, int index, const char* name, bool renamed) {
+        std::vector<fla::Layer*> copies = fla::layers::cloneLayers(source, *timeline);
+        fla::Layer* folder = nullptr;
+        if (index >= 0 && index < static_cast<int>(timeline->layers.size()))
+        {
+            fla::Layer* at = timeline->layers[static_cast<size_t>(index)];
+            if (at && at->parentLayer && at->parentLayer->layerType == fla::Layer::Type::Folder)
+                folder = at->parentLayer;
+        }
+        fla::CommandStack& stack = _editContext.commandStack();
+        stack.beginMacro(name);
+        for (size_t i = 0; i < copies.size(); ++i)
+        {
+            const bool top = !copies[i]->parentLayer;
+            if (top)
+                copies[i]->parentLayer = folder;
+            if (renamed && top)
+            {
+                copies[i]->name += " copy";
+                copies[i]->autoNamed = false;
+            }
+            stack.push(fla::CommandPtr(new fla::AddLayerCommand(timeline, std::max(0, index) + static_cast<int>(i), copies[i], name)));
+        }
+        stack.endMacro();
+        stack.breakMergeChain();
+        _timelineView->refresh();
+        onVisibilityChanged();
+    };
+
+    std::vector<const fla::Layer*> source;
+    for (int index : picked)
+        source.push_back(timeline->layers[static_cast<size_t>(index)]);
+    switch (action)
+    {
+    case 0:
+    case 1:
+    {
+        if (source.empty())
+            return;
+        std::vector<fla::Layer*> copies = fla::layers::cloneLayers(source, *timeline);
+        _copiedLayers.clear();
+        for (fla::Layer* copy : copies)
+            _copiedLayers.emplace_back(copy);
+        _copiedLayersFrom = document;
+        if (action == 0)
+            removeLayers(timeline, picked, "Cut Layers");
+        break;
+    }
+    case 2:
+    {
+        if (_copiedLayers.empty())
+        {
+            statusBar()->showMessage("Copy or cut layers first.", 3000);
+            return;
+        }
+        if (_copiedLayersFrom != document)
+        {
+            statusBar()->showMessage("Layers paste into the document they were copied from.", 4000);
+            return;
+        }
+        std::vector<const fla::Layer*> copied;
+        for (const auto& layer : _copiedLayers)
+            copied.push_back(layer.get());
+        fla::Timeline* currentTimeline = nullptr;
+        int current = 0;
+        const int at = _timelineView->currentLayer(currentTimeline, current) && currentTimeline == timeline ? current : 0;
+        insert(copied, at, "Paste Layers", false);
+        break;
+    }
+    case 3:
+        if (!source.empty())
+            insert(source, picked.front(), "Duplicate Layers", true);
+        break;
+    default:
+        break;
+    }
 }
 
 void MainWindow::editLayers(fla::Timeline* timeline, const fla::LayerSnapshot& after, const QString& name)
@@ -2995,6 +3104,13 @@ void MainWindow::setupMenus()
     insertBlankAction->setShortcut(QKeySequence(Qt::Key_F7));
     insertBlankAction->setStatusTip("Start an empty keyframe here");
     connect(insertBlankAction, &QAction::triggered, this, [this]() { insertKeyframe(true); });
+    timelineMenu->addSeparator();
+    QAction* insertLayerAction = timelineMenu->addAction("&Layer");
+    insertLayerAction->setStatusTip("A new layer above the current one");
+    connect(insertLayerAction, &QAction::triggered, this, [this]() { addLayer(false); });
+    QAction* insertFolderAction = timelineMenu->addAction("Layer F&older");
+    insertFolderAction->setStatusTip("A new layer folder above the current layer");
+    connect(insertFolderAction, &QAction::triggered, this, [this]() { addLayer(true); });
     insertMenu->addSeparator();
     QAction* classicTweenAction = insertMenu->addAction("&Classic Tween");
     classicTweenAction->setStatusTip("Tween the span to the next keyframe");
@@ -3058,6 +3174,11 @@ void MainWindow::setupMenus()
     connect(pasteFramesAction, &QAction::triggered, this, &MainWindow::pasteFrames);
     QAction* pasteOverwriteAction = editTimelineMenu->addAction("Paste and &Overwrite Frames");
     connect(pasteOverwriteAction, &QAction::triggered, this, &MainWindow::pasteFramesOverwrite);
+    editTimelineMenu->addSeparator();
+    editTimelineMenu->addAction("Cut La&yers", this, [this]() { layerClipboard(0); });
+    editTimelineMenu->addAction("Cop&y Layers", this, [this]() { layerClipboard(1); });
+    editTimelineMenu->addAction("Paste &Layers", this, [this]() { layerClipboard(2); });
+    editTimelineMenu->addAction("&Duplicate Layers", this, [this]() { layerClipboard(3); });
     editTimelineMenu->addSeparator();
     QAction* copyMotionAction = editTimelineMenu->addAction("Copy &Motion");
     copyMotionAction->setStatusTip("Copy the motion of the selected motion tween");

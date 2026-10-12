@@ -54,6 +54,11 @@ public:
     /// with what names) no longer match the document, as after an undo.
     void refreshIfStale();
 
+    /// The layers picked in the list (Ctrl and Shift pick several), in
+    /// timeline order; the current layer when none are. Empty with no
+    /// timeline.
+    std::vector<int> selectedLayers(fla::Timeline*& timeline) const;
+
     /// Makes \a layerIndex of \a timeline the current layer, as a click on
     /// its name would, and says so.
     void setCurrentLayer(const fla::Timeline* timeline, int layerIndex);
@@ -111,6 +116,14 @@ signals:
     void parentLayerRequested(fla::Timeline* timeline, fla::Layer* layer, fla::Layer* parent);
     /// An effect layer's settings, to be edited.
     void effectSettingsRequested(fla::Layer* layer);
+    /// Cut (0), Copy (1), Paste (2) or Duplicate (3) Layers, from the menu.
+    void layerClipboardRequested(int action);
+
+protected:
+    /// Presses in the eye, lock and outline columns: a click toggles,
+    /// Alt toggles every other layer, Shift on the eye fades the layer, and
+    /// a drag down the column sets each row passed the same way.
+    bool eventFilter(QObject* watched, QEvent* event) override;
 
 private:
     enum Column
@@ -141,6 +154,7 @@ private:
     QIcon _openFolderIcon;
     QIcon _visibleIcon;
     QIcon _hiddenIcon;
+    QIcon _fadedIcon;
     QIcon _unlockedIcon;
     QIcon _lockedIcon;
     QIcon _pencilIcon;
@@ -159,6 +173,15 @@ private:
 
     /// Which folders are open, by layer, so a rebuild keeps them so.
     std::map<const fla::Layer*, bool> _expanded;
+
+    /// A drag down a toggle column: which column, and the state it sets.
+    int _dragColumn = -1;
+    bool _dragValue = false;
+    bool _pressTaken = false;
+    /// Sets a toggle column of \a layer, and says so.
+    void setToggle(QTreeWidgetItem* item, int column, bool value);
+    /// The state a toggle column shows for \a layer.
+    static bool toggleOf(const fla::Layer& layer, int column);
 
     /// True while the list is being rebuilt, so item changes are not edits.
     bool _refreshing = false;
