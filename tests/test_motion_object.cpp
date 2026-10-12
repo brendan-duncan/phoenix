@@ -231,3 +231,26 @@ TEST(a_keyframe_added_on_a_curve_keeps_its_shape)
         CHECK(std::fabs(before.at(frame, 10.0).y - after.at(frame, 10.0).y) < 1.0e-4);
     }
 }
+
+TEST(motion_property_keys_are_read_written_and_eased)
+{
+    std::string xml = fla::motion::create(fla::MotionState(), 10, 10.0);
+    std::vector<fla::motion::PropertyKey> keys = fla::motion::keysOf(xml, "Rotation_Z");
+    CHECK(keys.size() == 1 && keys[0].time == 0.0 && keys[0].value == 0.0);
+    keys.push_back(fla::motion::PropertyKey::at(27000.0, 90.0));
+    // Ease in: slow to start, so a third of the way in it has turned less.
+    fla::motion::easeSegment(keys, 0, 0.42, 0.0, 1.0, 1.0);
+    CHECK(fla::motion::setKeysOf(xml, "Rotation_Z", keys));
+    fla::MotionObject motion;
+    CHECK(motion.parse(xml));
+    CHECK(motion.at(3.0, 10.0).rotation < 30.0 * 0.5);
+    CHECK(std::fabs(motion.at(9.0, 10.0).rotation - 90.0) < 1.0e-6);
+    CHECK(fla::motion::keysOf(xml, "Rotation_Z").size() == 2);
+
+    // A property the tween did not have is added.
+    CHECK(fla::motion::setKeysOf(xml, "Skew_Y", {fla::motion::PropertyKey::at(0.0, 5.0)}));
+    CHECK(motion.parse(xml) && std::fabs(motion.at(4.0, 10.0).skewY - 5.0) < 1.0e-9);
+
+    CHECK(fla::motion::spanEase(xml) == 0.0);
+    CHECK(fla::motion::setSpanEase(xml, -50.0) && fla::motion::spanEase(xml) == -50.0);
+}

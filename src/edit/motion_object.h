@@ -133,6 +133,53 @@ bool moveStart(std::string& xml, double dx, double dy);
 /// \a time gets one at \a end, the tween's end, holding where it was.
 bool bend(std::string& xml, double time, double end, double x, double y);
 
+/// One keyframe of a property's curve, as the Motion Editor edits it: a
+/// value at a time (TimeScale units) and its handles, each a time offset
+/// from the keyframe and a value.
+struct PropertyKey
+{
+    double time = 0.0;
+    double value = 0.0;
+    double nextTime = 0.0;
+    double nextValue = 0.0;
+    double previousTime = 0.0;
+    double previousValue = 0.0;
+
+    /// A keyframe with its handles on it, a straight line either side.
+    static PropertyKey at(double time, double value)
+    {
+        PropertyKey key;
+        key.time = time;
+        key.value = key.nextValue = key.previousValue = value;
+        return key;
+    }
+};
+
+/// The keyframes of property \a id, in time order; none when the tween
+/// does not animate it.
+std::vector<PropertyKey> keysOf(const std::string& xml, const std::string& id);
+
+/// Puts \a keys in place of property \a id's keyframes, adding the property
+/// in Animate's container for it when the tween has none.
+bool setKeysOf(std::string& xml, const std::string& id, const std::vector<PropertyKey>& keys);
+
+/// Shapes the stretch from keys[\a segment] to the next by an ease given as
+/// a cubic Bezier from (0,0) to (1,1) with handles (x1, y1) and (x2, y2),
+/// as CSS writes one; (1/3, 1/3, 2/3, 2/3) is straight.
+void easeSegment(std::vector<PropertyKey>& keys, size_t segment, double x1, double y1, double x2, double y2);
+
+/// The value of the curve \a keys make at \a time.
+double valueOf(const std::vector<PropertyKey>& keys, double time);
+
+/// A keyframe added to \a keys at \a time, the curve split there so that
+/// it keeps its shape. Returns its index; one already there is left be.
+size_t splitAt(std::vector<PropertyKey>& keys, double time);
+
+/// The tween's ease for the whole span, -100 (in) to 100 (out), and
+/// setting it.
+double spanEase(const std::string& xml);
+bool setSpanEase(std::string& xml, double strength);
+
 /// The state that shows an element as \a wanted, where \a stored is its
 /// transform as the span keeps it (showing \a start) and \a pivot its
 /// transformation point: what applyMotion(stored, pivot, start, state)

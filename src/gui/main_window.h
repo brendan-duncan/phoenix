@@ -400,6 +400,8 @@ private:
     QDockWidget* _alignDock = nullptr;
     QDockWidget* _transformDock = nullptr;
     QDockWidget* _infoDock = nullptr;
+    class MotionEditorPanel* _motionEditor = nullptr;
+    QDockWidget* _motionEditorDock = nullptr;
     QDockWidget* _framePickerDock = nullptr;
     class ColorPanel* _colorPanel = nullptr;
     QDockWidget* _colorDock = nullptr;

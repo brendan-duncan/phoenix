@@ -19,6 +19,7 @@
 #include "frame_picker_panel.h"
 #include "color_panel.h"
 #include "arrange_panels.h"
+#include "motion_editor.h"
 #include "swatches_panel.h"
 #include "../edit/swatches.h"
 #include "swap_symbol_dialog.h"
@@ -162,6 +163,8 @@ MainWindow::MainWindow(const QString& initialFile, QWidget* parent, bool startup
             _transformPanel->refresh();
         if (_infoPanel)
             _infoPanel->refresh();
+        if (_motionEditor)
+            _motionEditor->refresh();
         updateFramePicker();
         // The Properties panel follows the selection the way Animate's does:
         // an object shows its Object tab; nothing selected shows the tool, or
@@ -498,17 +501,64 @@ void MainWindow::adoptDocument(fla::FLADocument* document, const QString& filePa
         addDockWidget(Qt::RightDockWidgetArea, dock);
         return dock;
     };
-    _alignPanel = new AlignPanel(arrange);
-    _alignDock = arrangeDock("Align", "alignDock", _alignPanel);
-    _transformPanel = new TransformPanel(arrange);
-    _transformDock = arrangeDock("Transform", "transformDock", _transformPanel);
-    _infoPanel = new InfoPanel(arrange);
-    _infoDock = arrangeDock("Info", "infoDock", _infoPanel);
-    tabifyDockWidget(_alignDock, _transformDock);
-    tabifyDockWidget(_transformDock, _infoDock);
-    for (QDockWidget* dock : {_alignDock, _transformDock, _infoDock})
-        dock->hide();
-    connect(_phoenixView, &PhoenixView::cursorMoved, _infoPanel, &InfoPanel::cursorMoved);
+    // Made once; a document opened later uses the same ones.
+    if (!_alignDock)
+    {
+        _alignPanel = new AlignPanel(arrange);
+        _alignDock = arrangeDock("Align", "alignDock", _alignPanel);
+        _transformPanel = new TransformPanel(arrange);
+        _transformDock = arrangeDock("Transform", "transformDock", _transformPanel);
+        _infoPanel = new InfoPanel(arrange);
+        _infoDock = arrangeDock("Info", "infoDock", _infoPanel);
+        tabifyDockWidget(_alignDock, _transformDock);
+        tabifyDockWidget(_transformDock, _infoDock);
+        for (QDockWidget* dock : {_alignDock, _transformDock, _infoDock})
+            dock->hide();
+        connect(_phoenixView, &PhoenixView::cursorMoved, _infoPanel, &InfoPanel::cursorMoved);
+    }
+
+    // The Motion Editor, below the stage as in Animate, closed until asked.
+    MotionEditorLinks motionLinks;
+    motionLinks.commands = [this]() { return &_editContext.commandStack(); };
+    motionLinks.span = [this]() -> fla::Frame* {
+        // The selected object's tween, or the current layer's at the playhead.
+        if (!_phoenixView)
+            return nullptr;
+        const std::vector<PhoenixView::MotionPath> paths = _phoenixView->motionPaths();
+        if (!paths.empty())
+            return paths.front().frame;
+        fla::Timeline* timeline = nullptr;
+        int index = 0;
+        if (!_timelineView || !_timelineView->currentLayer(timeline, index) || !timeline || index < 0 ||
+            index >= static_cast<int>(timeline->layers.size()))
+            return nullptr;
+        fla::Frame* frame = fla::timeline::spanAt(*timeline->layers[index], _player ? _player->currentFrame() : 0);
+        return frame && fla::timeline::motionOf(*frame) ? frame : nullptr;
+    };
+    motionLinks.currentFrame = [this]() { return _player ? _player->currentFrame() : 0; };
+    motionLinks.frameRate = [this]() {
+        return _flaDocument && _flaDocument->document && _flaDocument->document->frameRate > 0.0
+            ? _flaDocument->document->frameRate : 24.0;
+    };
+    motionLinks.changed = [this]() {
+        if (_phoenixView)
+        {
+            _phoenixView->invalidateBounds();
+            _phoenixView->update();
+        }
+    };
+    if (!_motionEditorDock)
+    {
+        _motionEditor = new MotionEditorPanel(motionLinks);
+        _motionEditorDock = new QDockWidget("Motion Editor", this);
+        _motionEditorDock->setObjectName("motionEditorDock");
+        _motionEditorDock->setAllowedAreas(Qt::AllDockWidgetAreas);
+        _motionEditor->setParent(_motionEditorDock);
+        _motionEditorDock->setWidget(_motionEditor);
+        addDockWidget(Qt::BottomDockWidgetArea, _motionEditorDock);
+        _motionEditorDock->hide();
+        connect(_player, &Player::currentFrameChanged, _motionEditor, [this](int) { _motionEditor->refresh(); });
+    }
 
     if (_flaDocument)
         _player->setCurrentFrame(0);
@@ -1808,6 +1858,15 @@ void MainWindow::setupMenus()
     QAction* infoAction = viewMenu->addAction("&Info");
     infoAction->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_I));
     connect(infoAction, &QAction::triggered, this, showDock(&_infoDock));
+    QAction* motionEditorAction = viewMenu->addAction("&Motion Editor");
+    motionEditorAction->setStatusTip("The property curves of a motion tween, with their keyframes and eases");
+    connect(motionEditorAction, &QAction::triggered, this, [this]() {
+        if (!_motionEditorDock)
+            return;
+        _motionEditorDock->show();
+        _motionEditorDock->raise();
+        _motionEditor->refresh();
+    });
     viewMenu->addSeparator();
 
     // Animate shows one scene at a time; these pick which.
@@ -2644,6 +2703,8 @@ void MainWindow::updateEditState()
         _transformPanel->refresh();
     if (_infoPanel)
         _infoPanel->refresh();
+    if (_motionEditor)
+        _motionEditor->refresh();
     if (_colorPanel)
         _colorPanel->refresh();
     updateFramePicker();

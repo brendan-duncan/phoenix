@@ -78,6 +78,7 @@ set(HEADERS
     src/gui/autosave.h
     src/gui/image_export.h
     src/gui/arrange_panels.h
+    src/gui/motion_editor.h
     src/gui/ease_curve_dialog.h
     src/gui/file_association.h
     src/gui/color_panel.h
@@ -237,6 +238,7 @@ set(SOURCES
     src/gui/autosave.cpp
     src/gui/image_export.cpp
     src/gui/arrange_panels.cpp
+    src/gui/motion_editor.cpp
     src/gui/ease_curve_dialog.cpp
     src/gui/file_association.cpp
     src/gui/color_panel.cpp

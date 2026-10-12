@@ -827,6 +827,226 @@ bool bend(std::string& xml, double time, double end, double x, double y)
     return true;
 }
 
+std::vector<PropertyKey> keysOf(const std::string& xml, const std::string& id)
+{
+    std::vector<PropertyKey> keys;
+    tinyxml2::XMLDocument document;
+    if (document.Parse(xml.c_str()) != tinyxml2::XML_SUCCESS)
+        return keys;
+    tinyxml2::XMLElement* core = coreOf(document);
+    if (!core)
+        return keys;
+    std::vector<tinyxml2::XMLElement*> found;
+    properties(core, found);
+    for (tinyxml2::XMLElement* property : found)
+    {
+        const char* name = property->Attribute("id");
+        if (!name || id != name || property->IntAttribute("enabled", 1) == 0)
+            continue;
+        for (tinyxml2::XMLElement* element = property->FirstChildElement("Keyframe"); element;
+             element = element->NextSiblingElement("Keyframe"))
+        {
+            PropertyKey key;
+            double ignored = 0.0;
+            key.time = element->DoubleAttribute("timevalue", 0.0);
+            if (!pair(element->Attribute("anchor"), ignored, key.value))
+                continue;
+            if (!pair(element->Attribute("next"), key.nextTime, key.nextValue))
+                key.nextValue = key.value;
+            if (!pair(element->Attribute("previous"), key.previousTime, key.previousValue))
+                key.previousValue = key.value;
+            keys.push_back(key);
+        }
+    }
+    std::sort(keys.begin(), keys.end(), [](const PropertyKey& a, const PropertyKey& b) { return a.time < b.time; });
+    return keys;
+}
+
+bool setKeysOf(std::string& xml, const std::string& id, const std::vector<PropertyKey>& keys)
+{
+    tinyxml2::XMLDocument document;
+    if (document.Parse(xml.c_str()) != tinyxml2::XML_SUCCESS)
+        return false;
+    tinyxml2::XMLElement* core = coreOf(document);
+    if (!core)
+        return false;
+    std::vector<tinyxml2::XMLElement*> found;
+    properties(core, found);
+    tinyxml2::XMLElement* property = nullptr;
+    for (tinyxml2::XMLElement* candidate : found)
+    {
+        const char* name = candidate->Attribute("id");
+        if (name && id == name)
+            property = candidate;
+    }
+    if (!property)
+    {
+        const char* containerId = "Transformation";
+        for (const PropertySlot& slot : kSlots)
+        {
+            if (id == slot.id)
+                containerId = slot.container;
+        }
+        tinyxml2::XMLElement* container = containerOf(core, containerId);
+        if (!container)
+        {
+            tinyxml2::XMLElement* head = containerOf(core, "headContainer");
+            if (!head)
+            {
+                head = document.NewElement("PropertyContainer");
+                head->SetAttribute("id", "headContainer");
+                core->InsertEndChild(head);
+            }
+            container = document.NewElement("PropertyContainer");
+            container->SetAttribute("id", containerId);
+            head->InsertEndChild(container);
+        }
+        property = newProperty(document, id.c_str());
+        container->InsertEndChild(property);
+    }
+    property->DeleteChildren();
+    property->SetAttribute("enabled", "1");
+    std::vector<PropertyKey> sorted = keys;
+    std::sort(sorted.begin(), sorted.end(), [](const PropertyKey& a, const PropertyKey& b) { return a.time < b.time; });
+    for (const PropertyKey& key : sorted)
+    {
+        tinyxml2::XMLElement* element = document.NewElement("Keyframe");
+        element->SetAttribute("anchor", ("0," + number(key.value)).c_str());
+        element->SetAttribute("next", (number(key.nextTime) + "," + number(key.nextValue)).c_str());
+        element->SetAttribute("previous", (number(key.previousTime) + "," + number(key.previousValue)).c_str());
+        element->SetAttribute("roving", "0");
+        element->SetAttribute("timevalue", number(key.time).c_str());
+        property->InsertEndChild(element);
+    }
+    xml = print(document);
+    return true;
+}
+
+void easeSegment(std::vector<PropertyKey>& keys, size_t segment, double x1, double y1, double x2, double y2)
+{
+    if (segment + 1 >= keys.size())
+        return;
+    PropertyKey& from = keys[segment];
+    PropertyKey& to = keys[segment + 1];
+    const double span = to.time - from.time;
+    const double change = to.value - from.value;
+    from.nextTime = x1 * span;
+    from.nextValue = from.value + y1 * change;
+    to.previousTime = (x2 - 1.0) * span;
+    to.previousValue = from.value + y2 * change;
+}
+
+namespace {
+
+/// Where on the stretch from \a from to \a to the curve's time is \a time,
+/// 0 to 1.
+double curveAt(const PropertyKey& from, const PropertyKey& to, double time)
+{
+    double low = 0.0;
+    double high = 1.0;
+    for (int step = 0; step < 60; ++step)
+    {
+        const double mid = (low + high) * 0.5;
+        if (cubic(from.time, from.time + from.nextTime, to.time + to.previousTime, to.time, mid) < time)
+            low = mid;
+        else
+            high = mid;
+    }
+    return (low + high) * 0.5;
+}
+
+} // namespace
+
+double valueOf(const std::vector<PropertyKey>& keys, double time)
+{
+    if (keys.empty())
+        return 0.0;
+    if (time <= keys.front().time)
+        return keys.front().value;
+    for (size_t i = 0; i + 1 < keys.size(); ++i)
+    {
+        const PropertyKey& from = keys[i];
+        const PropertyKey& to = keys[i + 1];
+        if (time > to.time)
+            continue;
+        return cubic(from.value, from.nextValue, to.previousValue, to.value, curveAt(from, to, time));
+    }
+    return keys.back().value;
+}
+
+size_t splitAt(std::vector<PropertyKey>& keys, double time)
+{
+    for (size_t i = 0; i < keys.size(); ++i)
+    {
+        if (std::fabs(keys[i].time - time) < 1.0e-6)
+            return i;
+    }
+    size_t after = 0;
+    while (after < keys.size() && keys[after].time < time)
+        ++after;
+    if (after == 0 || after == keys.size())
+    {
+        // Before the first or past the last: holding the value there.
+        const PropertyKey key = PropertyKey::at(time, valueOf(keys, time));
+        keys.insert(keys.begin() + static_cast<std::ptrdiff_t>(after), key);
+        return after;
+    }
+    PropertyKey& from = keys[after - 1];
+    PropertyKey& to = keys[after];
+    const double s = curveAt(from, to, time);
+    const auto lerp = [s](double a, double b) { return a + (b - a) * s; };
+    const double t1 = from.time + from.nextTime, t2 = to.time + to.previousTime;
+    const double at01 = lerp(from.time, t1), av01 = lerp(from.value, from.nextValue);
+    const double at12 = lerp(t1, t2), av12 = lerp(from.nextValue, to.previousValue);
+    const double at23 = lerp(t2, to.time), av23 = lerp(to.previousValue, to.value);
+    const double bt0 = lerp(at01, at12), bv0 = lerp(av01, av12);
+    const double bt1 = lerp(at12, at23), bv1 = lerp(av12, av23);
+    PropertyKey key;
+    key.time = time;
+    key.value = lerp(bv0, bv1);
+    const double mt = lerp(bt0, bt1);
+    key.previousTime = bt0 - mt;
+    key.previousValue = bv0;
+    key.nextTime = bt1 - mt;
+    key.nextValue = bv1;
+    from.nextTime = at01 - from.time;
+    from.nextValue = av01;
+    to.previousTime = at23 - to.time;
+    to.previousValue = av23;
+    keys.insert(keys.begin() + static_cast<std::ptrdiff_t>(after), key);
+    return after;
+}
+
+double spanEase(const std::string& xml)
+{
+    tinyxml2::XMLDocument document;
+    if (document.Parse(xml.c_str()) != tinyxml2::XML_SUCCESS)
+        return 0.0;
+    tinyxml2::XMLElement* core = coreOf(document);
+    const tinyxml2::XMLElement* timeMap = core ? core->FirstChildElement("TimeMap") : nullptr;
+    return timeMap ? timeMap->DoubleAttribute("strength", 0.0) : 0.0;
+}
+
+bool setSpanEase(std::string& xml, double strength)
+{
+    tinyxml2::XMLDocument document;
+    if (document.Parse(xml.c_str()) != tinyxml2::XML_SUCCESS)
+        return false;
+    tinyxml2::XMLElement* core = coreOf(document);
+    if (!core)
+        return false;
+    tinyxml2::XMLElement* timeMap = core->FirstChildElement("TimeMap");
+    if (!timeMap)
+    {
+        timeMap = document.NewElement("TimeMap");
+        timeMap->SetAttribute("type", "Quadratic");
+        core->InsertFirstChild(timeMap);
+    }
+    timeMap->SetAttribute("strength", number(std::max(-100.0, std::min(100.0, strength))).c_str());
+    xml = print(document);
+    return true;
+}
+
 MotionState solve(const Transform& stored, const Point& pivot, const MotionState& start, const Transform& wanted,
     const MotionState& near)
 {
