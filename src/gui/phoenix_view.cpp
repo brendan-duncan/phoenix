@@ -1866,6 +1866,15 @@ QTransform PhoenixView::cameraTransform(const fla::Layer* layer)
     return QTransform(t.m11, t.m12, t.m21, t.m22, t.tx, t.ty);
 }
 
+QTransform PhoenixView::parentingAt(const fla::Layer* layer, const fla::Frame* frame, int index)
+{
+    const int saved = _frameOverride;
+    _frameOverride = std::max(0, index);
+    const QTransform result = rigTransform(layer, frame, fla::LoopType::PlayOnce, 0, 0);
+    _frameOverride = saved;
+    return result;
+}
+
 void PhoenixView::setCameraView(bool on)
 {
     _cameraView = on;

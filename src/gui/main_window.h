@@ -205,6 +205,9 @@ private slots:
     void createMotionTween();
     /// Insert > Camera: the scene's multiplane camera layer.
     void addCamera();
+    /// Layer parenting: \a layer follows \a parent (null for none) from
+    /// now on, its objects staying where they are on every keyframe.
+    void setParentLayer(fla::Timeline* timeline, fla::Layer* layer, fla::Layer* parent);
     /// Adds a shape hint to the shape tween at the playhead, or removes all.
     void editShapeHints(bool add);
     void clearFrames();

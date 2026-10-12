@@ -107,6 +107,8 @@ signals:
     /// undo step named \a name: a move, a change of kind, the Layer
     /// Properties dialog.
     void layerEditRequested(fla::Timeline* timeline, const fla::LayerSnapshot& after, const QString& name);
+    /// Layer parenting: \a layer to follow \a parent (null for none).
+    void parentLayerRequested(fla::Timeline* timeline, fla::Layer* layer, fla::Layer* parent);
 
 private:
     enum Column

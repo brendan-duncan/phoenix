@@ -186,6 +186,10 @@ public:
     /// drawn in full and can be picked and edited with the current one.
     void setEditMultipleFrames(bool on);
 
+    /// What layer parenting places \a layer's \a frame by on frame \a index:
+    /// its parent's object there, and that one's parent's.
+    QTransform parentingAt(const fla::Layer* layer, const fla::Frame* frame, int index);
+
     /// Camera View: the scene seen through its multiplane camera, when it
     /// has one. On by default; off shows the stage as drawn.
     void setCameraView(bool on);

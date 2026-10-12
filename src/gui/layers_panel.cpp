@@ -9,6 +9,7 @@
 #include <QFormLayout>
 #include <QLineEdit>
 #include <QMenu>
+#include <cstdlib>
 #include <QMessageBox>
 #include <QPushButton>
 #include <QRadioButton>
@@ -29,6 +30,34 @@
 
 #include <cstdint>
 #include <functional>
+
+namespace {
+
+/// The layer a layer follows by layer parenting, from its first keyframe:
+/// the frame names the parent by its rigging index.
+const fla::Layer* parentLayerOf(const fla::Layer& layer)
+{
+    const fla::Timeline* timeline = dynamic_cast<const fla::Timeline*>(layer.parent);
+    if (!timeline || layer.frames.empty() || !layer.frames.front())
+        return nullptr;
+    int rig = -1;
+    for (const auto& attribute : layer.frames.front()->extraAttributes)
+        if (attribute.first == "parentLayerIndex")
+            rig = std::atoi(attribute.second.c_str());
+    if (rig < 0)
+        return nullptr;
+    for (const fla::Layer* candidate : timeline->layers)
+    {
+        if (!candidate || candidate == &layer)
+            continue;
+        for (const auto& attribute : candidate->extraAttributes)
+            if (attribute.first == "layerRiggingIndex" && std::atoi(attribute.second.c_str()) == rig)
+                return candidate;
+    }
+    return nullptr;
+}
+
+} // namespace
 
 namespace {
 
@@ -633,6 +662,8 @@ void LayersPanel::refresh()
             layerIndexMap.push_back(item);
 
             item->setText(NameColumn, layerName);
+            if (const fla::Layer* parent = parentLayerOf(*layer))
+                item->setToolTip(NameColumn, QString("Follows %1").arg(QString::fromStdString(parent->name)));
             const bool folder = layer->layerType == fla::Layer::Type::Folder;
             item->setIcon(NameColumn, folder ? _openFolderIcon : _layerIcon);
             item->setToolTip(VisibleColumn, "Show or hide the layer");
@@ -912,6 +943,30 @@ void LayersPanel::showLayerMenu(QTreeWidgetItem* item, const QPoint& globalPos)
         });
         mask->setCheckable(true);
         mask->setChecked(kind == fla::layers::Kind::Mask);
+
+        // Layer parenting: the layer follows another's object, as a forearm
+        // its arm.
+        QMenu* parentMenu = menu.addMenu("Parent Layer");
+        const fla::Layer* current = parentLayerOf(*layer);
+        QAction* none = parentMenu->addAction("None", this, [=]() { emit parentLayerRequested(timeline, layer, nullptr); });
+        none->setCheckable(true);
+        none->setChecked(!current);
+        parentMenu->addSeparator();
+        for (fla::Layer* other : timeline->layers)
+        {
+            if (!other || other == layer || other->layerType == fla::Layer::Type::Folder ||
+                other->layerType == fla::Layer::Type::Guide)
+                continue;
+            // Not one that follows this one, which would go round in a circle.
+            bool loops = false;
+            for (const fla::Layer* up = other; up && !loops; up = parentLayerOf(*up))
+                loops = up == layer;
+            QAction* choice = parentMenu->addAction(QString::fromStdString(other->name), this,
+                [=]() { emit parentLayerRequested(timeline, layer, other); });
+            choice->setCheckable(true);
+            choice->setChecked(other == current);
+            choice->setEnabled(!loops);
+        }
         menu.addSeparator();
     }
 

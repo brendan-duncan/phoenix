@@ -46,6 +46,7 @@ TimelineView::TimelineView(Player* player, QWidget *parent)
     connect(_layersPanel, &LayersPanel::deleteLayerRequested, this, &TimelineView::deleteLayerRequested);
     connect(_layersPanel, &LayersPanel::layerRenamed, this, &TimelineView::layerRenamed);
     connect(_layersPanel, &LayersPanel::layerEditRequested, this, &TimelineView::layerEditRequested);
+    connect(_layersPanel, &LayersPanel::parentLayerRequested, this, &TimelineView::parentLayerRequested);
     connect(_timelinesPanel, &TimelinesPanel::keyframeMoveRequested, this, &TimelineView::keyframeMoveRequested);
     connect(_timelinesPanel, &TimelinesPanel::framePicked, this, &TimelineView::framePicked);
     connect(_timelinesPanel, &TimelinesPanel::framesMoveRequested, this, &TimelineView::framesMoveRequested);

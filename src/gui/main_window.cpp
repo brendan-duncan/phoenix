@@ -1052,6 +1052,7 @@ void MainWindow::setupUI()
     connect(_timelineView, &TimelineView::deleteLayerRequested, this, &MainWindow::deleteCurrentLayer);
     connect(_timelineView, &TimelineView::layerRenamed, this, &MainWindow::renameLayer);
     connect(_timelineView, &TimelineView::layerEditRequested, this, &MainWindow::editLayers);
+    connect(_timelineView, &TimelineView::parentLayerRequested, this, &MainWindow::setParentLayer);
 }
 
 fla::Timeline* MainWindow::editedTimeline() const
@@ -1276,6 +1277,103 @@ void MainWindow::editShapeHints(bool add)
     _editContext.commandStack().breakMergeChain();
     _phoenixView->clearCaches();
     _phoenixView->update();
+}
+
+void MainWindow::setParentLayer(fla::Timeline* timeline, fla::Layer* layer, fla::Layer* parent)
+{
+    if (!timeline || !layer || !_phoenixView || layer->isLocked())
+        return;
+    using Attributes = std::vector<std::pair<std::string, std::string>>;
+    const auto valueOf = [](const Attributes& attributes, const char* name) {
+        for (const auto& attribute : attributes)
+            if (attribute.first == name)
+                return std::atoi(attribute.second.c_str());
+        return -1;
+    };
+    const auto withValue = [](Attributes attributes, const char* name, int value) {
+        attributes.erase(std::remove_if(attributes.begin(), attributes.end(),
+                             [name](const auto& a) { return a.first == name; }),
+            attributes.end());
+        if (value >= 0)
+            attributes.emplace_back(name, std::to_string(value));
+        return attributes;
+    };
+
+    // The parent's rigging index, a new one when it has none.
+    int rig = -1;
+    Attributes parentAfter;
+    if (parent)
+    {
+        rig = valueOf(parent->extraAttributes, "layerRiggingIndex");
+        if (rig < 0)
+        {
+            for (const fla::Layer* other : timeline->layers)
+                if (other)
+                    rig = std::max(rig, valueOf(other->extraAttributes, "layerRiggingIndex"));
+            ++rig;
+        }
+        parentAfter = withValue(parent->extraAttributes, "layerRiggingIndex", rig);
+    }
+
+    // Each keyframe's objects, where they show now and where they must be
+    // stored to show there under the new parent.
+    struct Move
+    {
+        fla::Element* element;
+        fla::Transform before;
+        fla::Transform after;
+    };
+    std::vector<Move> moves;
+    std::vector<std::pair<fla::Frame*, Attributes>> frames;
+    Attributes parentBefore = parent ? parent->extraAttributes : Attributes();
+    if (parent)
+        parent->extraAttributes = parentAfter;
+    for (fla::Frame* frame : layer->frames)
+    {
+        if (!frame)
+            continue;
+        const QTransform old = _phoenixView->parentingAt(layer, frame, frame->index);
+        const Attributes was = frame->extraAttributes;
+        frame->extraAttributes = withValue(was, "parentLayerIndex", parent ? rig : -1);
+        const QTransform now = _phoenixView->parentingAt(layer, frame, frame->index);
+        frames.push_back({frame, frame->extraAttributes});
+        frame->extraAttributes = was;
+        bool invertible = false;
+        const QTransform undo = now.inverted(&invertible);
+        if (!invertible)
+            continue;
+        for (fla::Element* element : frame->elements)
+        {
+            if (!element)
+                continue;
+            const fla::Transform& t = element->transform;
+            const QTransform world = QTransform(t.m11, t.m12, t.m21, t.m22, t.tx, t.ty) * old;
+            const QTransform stored = world * undo;
+            moves.push_back({element, t,
+                fla::Transform(stored.m11(), stored.m12(), stored.m21(), stored.m22(), stored.dx(), stored.dy())});
+        }
+    }
+    if (parent)
+        parent->extraAttributes = parentBefore;
+
+    fla::CommandStack& stack = _editContext.commandStack();
+    const char* name = parent ? "Parent Layer" : "Remove Parent";
+    stack.beginMacro(name);
+    if (parent && parentAfter != parent->extraAttributes)
+        stack.push(fla::CommandPtr(new fla::SetPropertyCommand<Attributes>(
+            parent->extraAttributes, parent->extraAttributes, parentAfter, name)));
+    for (const auto& entry : frames)
+        if (entry.second != entry.first->extraAttributes)
+            stack.push(fla::CommandPtr(new fla::SetPropertyCommand<Attributes>(
+                entry.first->extraAttributes, entry.first->extraAttributes, entry.second, name)));
+    for (const Move& move : moves)
+        stack.push(fla::CommandPtr(new fla::SetElementTransformCommand(move.element, move.before, move.after, name)));
+    stack.endMacro();
+    stack.breakMergeChain();
+    _phoenixView->clearCaches();
+    _phoenixView->update();
+    if (_timelineView)
+        _timelineView->refresh();
 }
 
 void MainWindow::addCamera()
