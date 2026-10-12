@@ -1,6 +1,7 @@
 #pragma once
 
 #include "folder.h"
+#include "lazy_bytes.h"
 #include "resource.h"
 #include "timeline.h"
 #include "printer_settings.h"
@@ -81,7 +82,7 @@ public:
     std::vector<std::string> extraMedia;
     /// Files of the package those refer to (a sound's data under bin, the
     /// brush definitions file), by path, carried through byte for byte.
-    std::vector<std::pair<std::string, std::vector<uint8_t>>> extraFiles;
+    std::vector<std::pair<std::string, LazyBytes>> extraFiles;
 
     /// The library's sounds, as much as playing them needs: the name frames
     /// refer to them by, how the data is laid out, and where under the

@@ -234,17 +234,22 @@ content hash) followed by the bytes.
   JPEG as the JPEG; an MP3 as the MP3. A bitmap that came from an FLA keeps
   Animate's `.dat` encoding so that an export to FLA can copy it byte for
   byte. Nothing is decoded or re-encoded to save.
-- **Found through the index.** A reader can load a media item when it is
-  first shown rather than when the file opens. Phoenix today reads all media
-  on opening, on several threads, straight from the mapped file; loading on
-  first use waits on the document model holding media by reference.
+- **Loaded when needed.** Opening a file reads only each media chunk's
+  header (from its stored bytes, or the first few hundred bytes inflated):
+  its id, size and hash. The bytes are read, checked and inflated the first
+  time something shows them. A file with hours of reference video opens as
+  fast as one without. Phoenix keeps no handle on the file between reads,
+  so it can be replaced by a save.
 - **Deduplication.** Media with the same content hash and bytes are stored
   once, and every item using them points at the same media id.
-- **Cheap to save.** Media already compressed is stored as it is, so saving
-  it costs a checksum and a write. Chunks are compressed and checksummed on
-  several threads and written in order. (Copying the stored bytes of
-  unchanged chunks from the previous file, skipping even that, is a later
-  step the index makes possible.)
+- **Cheap to save.** Media still as they were read from a Phoenix file are
+  copied into the new one as stored, keeping their media id: never read
+  into memory, inflated or compressed again. Other media already compressed
+  are stored as they are, so saving them costs a checksum and a write. Chunks
+  are prepared on several threads and written in order. After a save the
+  document reads its media from the new file, so the next save copies all
+  of them. If a file media were to be copied from has gone or changed (its
+  checksum says so), the save stops rather than leave the media out.
 - **Kinds** today: bitmap, sound, video, font, brush texture, other. A new
   kind is a minor version change.
 
@@ -256,18 +261,20 @@ mid-save leaves the previous file untouched.
 
 ## Performance
 
-Measured on the 84 FLA files of the test corpus (174 MB), Release build,
+Measured on the FLA files of the test corpus, Release build,
 one run after another on the same machine:
 
 | | FLA | PHX |
 | --- | --- | --- |
-| size | 173.9 MB | 165.5 MB |
-| read | 1.42 s | 0.43 s |
-| save | | 1.65 s |
+| size | 177.6 MB | 169.0 MB |
+| read | 1.49 s | 0.24 s |
+| save, from FLA | | 1.49 s |
+| save again, from PHX | | 0.96 s |
 
-Most of the size is media, which both formats store compressed. The first
-read of a file just written takes about twice as long, the system scanning
-the new file; the figure above is a read after that.
+(88 files.) Most of the size is media, which both formats store
+compressed; a read leaves media on disk until shown. The first read of a
+file just written takes longer, the system scanning the new file; the
+figure above is a read after that.
 
 ## Tools
 

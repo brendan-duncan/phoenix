@@ -101,7 +101,7 @@ bool XFLContent::build(const Document& document, const std::string& projectName,
         {
             XFLEntry entry;
             entry.path = "LIBRARY/" + bitmap->href;
-            entry.binary = &bitmap->imageData;
+            entry.binary = &bitmap->imageData.get();
             entries.push_back(std::move(entry));
         }
 
@@ -110,7 +110,7 @@ bool XFLContent::build(const Document& document, const std::string& projectName,
         {
             XFLEntry entry;
             entry.path = "bin/" + bitmap->bitmapDataHRef;
-            entry.binary = &bitmap->datData;
+            entry.binary = &bitmap->datData.get();
             entries.push_back(std::move(entry));
         }
     }
@@ -123,7 +123,7 @@ bool XFLContent::build(const Document& document, const std::string& projectName,
             continue;
         XFLEntry entry;
         entry.path = file.first;
-        entry.binary = &file.second;
+        entry.binary = &file.second.get();
         entries.push_back(std::move(entry));
     }
 

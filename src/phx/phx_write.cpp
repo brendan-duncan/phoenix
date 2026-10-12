@@ -35,6 +35,9 @@
 #include "../data/timeline.h"
 
 #include <ctime>
+#include <filesystem>
+#include <fstream>
+#include <set>
 #include <map>
 
 namespace phx {
@@ -726,40 +729,89 @@ std::string formatOf(const std::vector<uint8_t>& d)
     return std::string();
 }
 
-/// A media item to write: the data stays in the document until its chunk
-/// is prepared.
+/// A media item to write. Its bytes stay in the document until its chunk is
+/// prepared, and one already in a Phoenix file, as it was, is copied from
+/// there as stored: never decompressed, checked or compressed again.
 struct MediaJob
 {
     uint32_t id = 0;
     uint32_t kind = 0;
-    const std::vector<uint8_t>* data = nullptr;
     std::string packagePath;
     uint64_t hash = 0;
+    uint64_t size = 0;
+    /// Everything in the document holding these bytes, to point at the new
+    /// file once it is written.
+    std::vector<const fla::LazyBytes*> holders;
+    /// Where the bytes lie as stored, when they are copied from there.
+    std::shared_ptr<fla::ByteLocation> copyFrom;
 };
 
-/// Media met so far, by content, so the same bytes go in once.
+/// Media met so far, by where they lie or by content, so the same bytes go
+/// in once.
 class MediaTable
 {
 public:
-    /// The media id for \a data, new or the one the same bytes already
-    /// have; 0 for no data.
-    uint32_t add(const std::vector<uint8_t>& data, uint32_t kind, const std::string& packagePath = std::string())
+    /// The ids media in a Phoenix file have, kept by their copies, which new
+    /// media must not take.
+    void reserve(uint32_t id) { _reserved.insert(id); }
+
+    /// The media id for \a bytes, new or the one the same bytes already
+    /// have; 0 for none.
+    uint32_t add(const fla::LazyBytes& bytes, uint32_t kind, const std::string& packagePath = std::string())
     {
+        if (bytes.empty())
+            return 0;
+        const std::shared_ptr<fla::ByteLocation>& location = bytes.location();
+        if (location)
+        {
+            const auto seen = _byLocation.find(location.get());
+            if (seen != _byLocation.end())
+            {
+                _jobs[seen->second].holders.push_back(&bytes);
+                return _jobs[seen->second].id;
+            }
+            // Copied with the id it had, unless another copy already has it.
+            if (location->mediaId != 0 && !_used.count(location->mediaId))
+            {
+                MediaJob job;
+                job.id = location->mediaId;
+                job.kind = kind;
+                job.packagePath = packagePath;
+                job.hash = location->hash;
+                job.size = location->size;
+                job.holders.push_back(&bytes);
+                job.copyFrom = location;
+                _used.insert(job.id);
+                _byLocation.emplace(location.get(), _jobs.size());
+                _jobs.push_back(std::move(job));
+                return _jobs.back().id;
+            }
+        }
+        // Bytes in memory: by content.
+        const std::vector<uint8_t>& data = bytes.get();
         if (data.empty())
             return 0;
         const uint64_t hash = fnv1a64(data.data(), data.size());
         const auto range = _byHash.equal_range(hash);
         for (auto it = range.first; it != range.second; ++it)
         {
-            if (*_jobs[it->second].data == data)
-                return _jobs[it->second].id;
+            MediaJob& other = _jobs[it->second];
+            if (!other.copyFrom && other.holders.front()->get() == data)
+            {
+                other.holders.push_back(&bytes);
+                return other.id;
+            }
         }
         MediaJob job;
-        job.id = static_cast<uint32_t>(_jobs.size()) + 1;
+        while (_used.count(_next) || _reserved.count(_next))
+            ++_next;
+        job.id = _next++;
         job.kind = kind;
-        job.data = &data;
         job.packagePath = packagePath;
         job.hash = hash;
+        job.size = data.size();
+        job.holders.push_back(&bytes);
+        _used.insert(job.id);
         _byHash.emplace(hash, _jobs.size());
         _jobs.push_back(std::move(job));
         return _jobs.back().id;
@@ -770,24 +822,66 @@ public:
 private:
     std::vector<MediaJob> _jobs;
     std::multimap<uint64_t, size_t> _byHash;
+    std::map<const fla::ByteLocation*, size_t> _byLocation;
+    std::set<uint32_t> _used;
+    std::set<uint32_t> _reserved;
+    uint32_t _next = 1;
 };
 
-/// An MDIA chunk: a length-prefixed MediaHeader, then the bytes.
-PreparedChunk prepareMedia(const MediaJob& job)
+/// The stored bytes of a chunk where they lie, checked against its
+/// checksum; false when the file is gone or changed.
+bool readStored(const fla::ByteLocation& location, std::string& out)
 {
+    std::ifstream file(std::filesystem::u8path(location.path), std::ios::binary);
+    if (!file)
+        return false;
+    out.resize(static_cast<size_t>(location.storedLength));
+    file.seekg(static_cast<std::streamoff>(location.offset + 32));
+    if (!file.read(out.data(), static_cast<std::streamsize>(out.size())))
+        return false;
+    return crc32(out.data(), out.size()) == location.crc;
+}
+
+/// An MDIA chunk: a length-prefixed MediaHeader, then the bytes. False when
+/// media to be copied could no longer be read.
+bool prepareMedia(const MediaJob& job, PreparedChunk& chunk)
+{
+    if (job.copyFrom)
+    {
+        // As stored: the header inside it already has this id.
+        const fla::ByteLocation& from = *job.copyFrom;
+        if (readStored(from, chunk.stored))
+        {
+            chunk.info = ChunkInfo();
+            chunk.info.type = kMedia;
+            chunk.info.flags = from.flags;
+            chunk.info.length = from.length;
+            chunk.info.storedLength = from.storedLength;
+            chunk.info.crc = from.crc;
+            chunk.info.mediaId = job.id;
+            return true;
+        }
+        // Gone from there: the bytes the document has read, if it has.
+        if (!job.holders.front()->loaded())
+            return false;
+    }
+    const std::vector<uint8_t>& data = job.holders.front()->get();
+    if (data.empty())
+        return false;
     Writer header;
     header.uint(s::MediaHeader::Id, job.id);
     if (job.kind)
         header.uint(s::MediaHeader::Kind, job.kind);
-    writeString(header, s::MediaHeader::Format, formatOf(*job.data));
+    writeString(header, s::MediaHeader::Format, formatOf(data));
     header.fixed64(s::MediaHeader::ContentHash, job.hash);
     writeString(header, s::MediaHeader::PackagePath, job.packagePath);
     Writer content;
     content.varint(header.buffer().size());
     content.rawFields(header.buffer());
-    content.buffer().reserve(content.buffer().size() + job.data->size());
-    content.buffer().append(reinterpret_cast<const char*>(job.data->data()), job.data->size());
-    return prepare(kMedia, std::move(content.buffer()), !alreadyCompressed(*job.data), true, job.id);
+    content.buffer().reserve(content.buffer().size() + data.size());
+    content.buffer().append(reinterpret_cast<const char*>(data.data()), data.size());
+    chunk = prepare(kMedia, std::move(content.buffer()), !alreadyCompressed(data), true, job.id);
+    return true;
 }
 
 std::string isoNow()
@@ -815,6 +909,24 @@ bool save(const fla::Document& document, const std::string& path, const SaveOpti
     if (!out.open(path, error))
         return false;
     MediaTable media;
+    // Media copied from a Phoenix file keep their ids; new ones go round them.
+    for (const fla::Resource* resource : document.resources)
+    {
+        if (resource && resource->resourceType() == fla::Resource::Type::Bitmap)
+        {
+            for (const fla::LazyBytes* bytes : {&static_cast<const fla::Bitmap*>(resource)->datData,
+                     &static_cast<const fla::Bitmap*>(resource)->imageData})
+            {
+                if (bytes->location())
+                    media.reserve(bytes->location()->mediaId);
+            }
+        }
+    }
+    for (const auto& file : document.extraFiles)
+    {
+        if (file.second.location())
+            media.reserve(file.second.location()->mediaId);
+    }
 
     Writer w;
     writeInt(w, s::Document::Width, document.width, 550);
@@ -970,17 +1082,33 @@ bool save(const fla::Document& document, const std::string& path, const SaveOpti
     }
     const std::vector<MediaJob>& jobs = media.jobs();
     std::vector<PreparedChunk> prepared(symbols.size() + jobs.size());
+    std::vector<char> missing(jobs.size(), 0);
     parallelFor(prepared.size(), [&](size_t i) {
         if (i < symbols.size())
             prepared[i] = prepare(kSymbol, std::move(encodeSymbol(*symbols[i]).buffer()), true, true, 0, symbols[i]->name);
-        else
-            prepared[i] = prepareMedia(jobs[i - symbols.size()]);
+        else if (!prepareMedia(jobs[i - symbols.size()], prepared[i]))
+            missing[i - symbols.size()] = 1;
     });
-    for (PreparedChunk& chunk : prepared)
+    // Media that could not be read would be lost: the save stops instead.
+    for (size_t j = 0; j < jobs.size(); ++j)
     {
-        out.add(chunk);
-        chunk.stored.clear();
-        chunk.stored.shrink_to_fit();
+        if (missing[j])
+        {
+            const fla::ByteLocation* from = jobs[j].copyFrom.get();
+            error = "Some of the document's media could not be read" +
+                (from ? " from " + from->path + " (was it moved or changed?)" : std::string()) +
+                ". Nothing was saved.";
+            return false;
+        }
+    }
+    std::vector<ChunkInfo> written(jobs.size());
+    for (size_t i = 0; i < prepared.size(); ++i)
+    {
+        out.add(prepared[i]);
+        if (i >= symbols.size() && !out.chunks().empty())
+            written[i - symbols.size()] = out.chunks().back();
+        prepared[i].stored.clear();
+        prepared[i].stored.shrink_to_fit();
     }
 
     for (const fla::Document::UnknownChunk& chunk : document.phxUnknownChunks)
@@ -993,7 +1121,39 @@ bool save(const fla::Document& document, const std::string& path, const SaveOpti
     meta.string(s::Metadata::Modified, isoNow());
     out.add(kMetadata, meta.buffer(), true, false);
 
-    return out.finish(error);
+    if (!out.finish(error))
+        return false;
+
+    // The media now lie in the new file: everything holding them reads them,
+    // and the next save copies them, from there.
+    if (options.relocateMedia)
+    {
+        std::string absolute = path;
+        std::error_code ignored;
+        const std::filesystem::path full = std::filesystem::absolute(std::filesystem::u8path(path), ignored);
+        if (!ignored)
+            absolute = full.u8string();
+        for (size_t j = 0; j < jobs.size(); ++j)
+        {
+            const MediaJob& job = jobs[j];
+            const ChunkInfo& chunk = written[j];
+            auto location = job.copyFrom ? job.copyFrom : std::make_shared<fla::ByteLocation>();
+            location->load = &loadMedia;
+            location->path = absolute;
+            location->offset = chunk.offset;
+            location->storedLength = chunk.storedLength;
+            location->length = chunk.length;
+            location->flags = chunk.flags;
+            location->crc = chunk.crc;
+            location->type = kMedia;
+            location->mediaId = job.id;
+            location->size = job.size;
+            location->hash = job.hash;
+            for (const fla::LazyBytes* holder : job.holders)
+                holder->relocate(location);
+        }
+    }
+    return true;
 }
 
 } // namespace phx

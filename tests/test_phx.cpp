@@ -1,6 +1,7 @@
 #include "test_util.h"
 
 #include "../src/data/document.h"
+#include "../src/data/bitmap.h"
 #include "../src/data/edge.h"
 #include "../src/data/fla_document.h"
 #include "../src/data/frame.h"
@@ -350,6 +351,7 @@ TEST(phx_round_trips_real_documents_as_their_fla_would)
     double phxSaveSeconds = 0.0;
     double phxLoadSeconds = 0.0;
     double phxReloadSeconds = 0.0;
+    double phxResaveSeconds = 0.0;
     uint64_t flaBytes = 0;
     uint64_t phxBytes = 0;
     int checked = 0;
@@ -407,12 +409,89 @@ TEST(phx_round_trips_real_documents_as_their_fla_would)
             const auto again = Clock::now();
             std::unique_ptr<fla::FLADocument> reread(phx::load(phxPath, error, warning, readOnly));
             phxReloadSeconds += std::chrono::duration<double>(Clock::now() - again).count();
+            // Saved again as a Phoenix document: its media copied as stored.
+            if (reread && reread->document)
+            {
+                const auto resave = Clock::now();
+                CHECK(phx::save(*reread->document, scratchPath("corpus_resaved.phx"), phx::SaveOptions(), error));
+                phxResaveSeconds += std::chrono::duration<double>(Clock::now() - resave).count();
+            }
         }
         flaBytes += std::filesystem::file_size(entry.path());
         phxBytes += std::filesystem::file_size(phxPath);
     }
     std::printf("    %d documents: FLA %.1f MB read in %.2f s; PHX %.1f MB, saved in %.2f s, read in %.2f s "
-                "(again: %.2f s)\n",
+                "(again: %.2f s), saved again in %.2f s\n",
         checked, flaBytes / 1048576.0, flaSeconds, phxBytes / 1048576.0, phxSaveSeconds, phxLoadSeconds,
-        phxReloadSeconds);
+        phxReloadSeconds, phxResaveSeconds);
+}
+
+TEST(phx_media_load_when_needed_and_are_copied_as_stored)
+{
+    std::unique_ptr<fla::FLADocument> document(fla::createEmptyDocument(320, 240, 24.0));
+    if (!document || !document->document)
+        return;
+    // A bitmap and a package file, of bytes that do not compress (stored as
+    // they are) and bytes that do (deflated).
+    std::vector<uint8_t> noise(5000);
+    uint32_t state = 12345;
+    for (uint8_t& byte : noise)
+    {
+        state = state * 1103515245u + 12345u;
+        byte = static_cast<uint8_t>(state >> 16);
+    }
+    noise[0] = 0x89;
+    noise[1] = 'P';
+    noise[2] = 'N';
+    noise[3] = 'G';
+    auto* bitmap = new fla::Bitmap(document->document);
+    bitmap->name = "noise.png";
+    bitmap->href = "noise.png";
+    bitmap->imageData = noise;
+    document->document->resources.push_back(bitmap);
+    document->document->extraFiles.emplace_back("bin/sound.dat", std::vector<uint8_t>(40000, 7));
+
+    const std::string first = scratchPath("lazy_a.phx");
+    std::string error;
+    CHECK(phx::save(*document->document, first, phx::SaveOptions(), error));
+
+    std::string warning;
+    bool readOnly = false;
+    std::unique_ptr<fla::FLADocument> loaded(phx::load(first, error, warning, readOnly));
+    CHECK(loaded && loaded->document && warning.empty());
+    if (!loaded || !loaded->document)
+        return;
+    const auto* back = static_cast<const fla::Bitmap*>(loaded->document->resources.front());
+    const fla::LazyBytes& file = loaded->document->extraFiles.front().second;
+    // Known without reading: there, and how big.
+    CHECK(!back->imageData.loaded() && back->imageData.size() == noise.size());
+    CHECK(!file.loaded() && file.size() == 40000);
+
+    // Saved elsewhere: copied as stored, still not read.
+    const std::string second = scratchPath("lazy_b.phx");
+    CHECK(phx::save(*loaded->document, second, phx::SaveOptions(), error));
+    CHECK(!back->imageData.loaded() && !file.loaded());
+    CHECK(back->imageData.location() && back->imageData.location()->path.find("lazy_b.phx") != std::string::npos);
+
+    // Saved over the file it reads from: still readable, and right.
+    CHECK(phx::save(*loaded->document, second, phx::SaveOptions(), error));
+    CHECK(back->imageData.get() == noise);
+    CHECK(file.get() == std::vector<uint8_t>(40000, 7));
+
+    // A copy read back holds the same bytes.
+    std::unique_ptr<fla::FLADocument> again(phx::load(second, error, warning, readOnly));
+    CHECK(again && again->document);
+    if (again && again->document)
+        CHECK(static_cast<const fla::Bitmap*>(again->document->resources.front())->imageData.get() == noise);
+
+    // The file media were to come from is gone, unread: the save refuses
+    // rather than lose them.
+    std::unique_ptr<fla::FLADocument> orphan(phx::load(first, error, warning, readOnly));
+    CHECK(orphan && orphan->document);
+    if (!orphan || !orphan->document)
+        return;
+    std::filesystem::remove(first);
+    std::string lost;
+    CHECK(!phx::save(*orphan->document, scratchPath("lazy_c.phx"), phx::SaveOptions(), lost));
+    CHECK(lost.find("could not be read") != std::string::npos);
 }

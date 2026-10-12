@@ -140,6 +140,7 @@ set(HEADERS
     src/data/frame.h
     src/data/group.h
     src/data/layer.h
+    src/data/lazy_bytes.h
     src/data/linear_gradient.h
     src/data/bitmap_fill.h
     src/data/oval_primitive.h

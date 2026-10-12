@@ -1,5 +1,6 @@
 #pragma once
 
+#include "lazy_bytes.h"
 #include "resource.h"
 #include <string>
 #include <vector>
@@ -24,13 +25,15 @@ public:
     int frameBottom = 0;
     bool isJPEG = false;
 
-    std::vector<uint8_t> imageData; // Raw image data (e.g., JPEG or PNG bytes)
+    /// The imported file as the library keeps it (a PNG, a JPEG), when
+    /// there is one; read from a Phoenix document only when first needed.
+    LazyBytes imageData;
 
     /// The bin/<bitmapDataHRef> entry as stored: Animate's own encoding of
     /// the pixels (see bitmap_decoder.h), kept so a save carries it through
     /// and so files whose LIBRARY folder holds no copy of the image still
     /// have something to draw.
-    std::vector<uint8_t> datData;
+    LazyBytes datData;
 
     Bitmap(DOMElement* parent)
         : Resource(parent)

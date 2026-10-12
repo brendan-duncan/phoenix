@@ -102,6 +102,9 @@ void AutoSave::saveNow()
     const QString file = QDir(folder()).filePath(_id + ".phx");
     phx::SaveOptions options;
     options.application = QString("Phoenix %1 (recovery)").arg(QCoreApplication::applicationVersion()).toStdString();
+    // The recovery copy goes once the work is saved: the document keeps
+    // reading its media from where they are.
+    options.relocateMedia = false;
     std::string error;
     if (!phx::save(*document, file.toStdString(), options, error))
         return;

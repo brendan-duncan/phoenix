@@ -101,7 +101,7 @@ TEST(real_sounds_decode_to_their_recorded_length)
             const std::vector<uint8_t>* data = nullptr;
             for (const auto& file : fla->document->extraFiles)
                 if (file.first == sound.dataPath)
-                    data = &file.second;
+                    data = &file.second.get();
             CHECK(data != nullptr);
             if (!data)
                 continue;

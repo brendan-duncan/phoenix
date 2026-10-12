@@ -39,6 +39,9 @@
 #include "../data/timeline.h"
 
 #include <algorithm>
+#include <filesystem>
+#include <fstream>
+#include <zlib.h>
 #include <chrono>
 #include <cstdio>
 #include <cstdlib>
@@ -1052,110 +1055,152 @@ fla::Symbol* readSymbol(const Reader& field, fla::SymbolList* list, Context& con
 // ---------------------------------------------------------------------------
 // Media
 
-/// The media of a file, read on several threads; each item's bytes are
-/// handed to the first object that asks for them and copied for any other.
+/// The length-prefixed MediaHeader at the start of a media chunk's
+/// content: its id and content hash, and how many bytes it takes.
+bool readMediaHeader(const uint8_t* p, size_t size, uint32_t& id, uint64_t& hash, size_t& prefix)
+{
+    uint64_t headerSize = 0;
+    size_t at = 0;
+    for (int shift = 0; at < size && shift < 64; shift += 7)
+    {
+        const uint8_t byte = p[at++];
+        headerSize |= static_cast<uint64_t>(byte & 0x7F) << shift;
+        if (!(byte & 0x80))
+            break;
+    }
+    if (at + headerSize > size)
+        return false;
+    Reader header(p + at, static_cast<size_t>(headerSize));
+    while (header.next())
+    {
+        if (header.field() == s::MediaHeader::Id)
+            id = static_cast<uint32_t>(header.uint());
+        else if (header.field() == s::MediaHeader::ContentHash)
+            hash = header.fixed64();
+    }
+    prefix = at + static_cast<size_t>(headerSize);
+    return !header.failed();
+}
+
+/// The first bytes of a deflated chunk, for its header, without inflating
+/// the rest.
+std::vector<uint8_t> inflateStart(const uint8_t* stored, size_t storedSize, size_t wanted)
+{
+    std::vector<uint8_t> out(wanted);
+    z_stream stream{};
+    stream.next_in = const_cast<Bytef*>(stored);
+    stream.avail_in = static_cast<uInt>(std::min<size_t>(storedSize, 1u << 30));
+    stream.next_out = out.data();
+    stream.avail_out = static_cast<uInt>(wanted);
+    if (inflateInit(&stream) != Z_OK)
+        return {};
+    inflate(&stream, Z_SYNC_FLUSH);
+    out.resize(wanted - stream.avail_out);
+    inflateEnd(&stream);
+    return out;
+}
+
+} // namespace
+
+bool loadMedia(const fla::ByteLocation& location, std::vector<uint8_t>& out)
+{
+    // The chunk read where it lies, checked, inflated, its header dropped.
+    std::ifstream file(std::filesystem::u8path(location.path), std::ios::binary);
+    if (!file)
+        return false;
+    std::vector<uint8_t> stored(static_cast<size_t>(location.storedLength));
+    file.seekg(static_cast<std::streamoff>(location.offset + 32));
+    if (!file.read(reinterpret_cast<char*>(stored.data()), static_cast<std::streamsize>(stored.size())))
+        return false;
+    if (crc32(stored.data(), stored.size()) != location.crc)
+        return false;
+    std::vector<uint8_t> content;
+    if ((location.flags & kCompressionMask) == kDeflate)
+    {
+        content.resize(static_cast<size_t>(location.length));
+        uLongf length = static_cast<uLongf>(location.length);
+        if (uncompress(content.data(), &length, stored.data(), static_cast<uLong>(stored.size())) != Z_OK ||
+            length != location.length)
+            return false;
+    }
+    else
+    {
+        content = std::move(stored);
+    }
+    uint32_t id = 0;
+    uint64_t hash = 0;
+    size_t prefix = 0;
+    if (!readMediaHeader(content.data(), content.size(), id, hash, prefix))
+        return false;
+    content.erase(content.begin(), content.begin() + static_cast<std::ptrdiff_t>(prefix));
+    out = std::move(content);
+    return true;
+}
+
+namespace {
+
+/// The media of a file, left where they are: each becomes a location that
+/// reads its bytes the first time something needs them.
 class MediaStore
 {
 public:
-    void read(const ContainerReader& file, std::string& warning)
+    void read(const ContainerReader& file, const std::string& path, std::string& warning)
     {
-        std::vector<const ChunkInfo*> chunks;
+        std::string absolute = path;
+        std::error_code ignored;
+        const std::filesystem::path full = std::filesystem::absolute(std::filesystem::u8path(path), ignored);
+        if (!ignored)
+            absolute = full.u8string();
         for (const ChunkInfo& chunk : file.chunks())
         {
-            if (chunk.type == kMedia)
-                chunks.push_back(&chunk);
-        }
-        struct Item
-        {
-            uint32_t id = 0;
-            std::vector<uint8_t> data;
-            std::string error;
-        };
-        std::vector<Item> items(chunks.size());
-        parallelFor(chunks.size(), [&](size_t i) {
-            Item& item = items[i];
-            std::vector<uint8_t> content;
-            if (!file.content(*chunks[i], content, item.error))
-                return;
-            // A length-prefixed header, then the bytes.
-            uint64_t headerSize = 0;
-            size_t at = 0;
-            for (int shift = 0; at < content.size() && shift < 64; shift += 7)
-            {
-                const uint8_t byte = content[at++];
-                headerSize |= static_cast<uint64_t>(byte & 0x7F) << shift;
-                if (!(byte & 0x80))
-                    break;
-            }
-            if (at + headerSize > content.size())
-            {
-                item.error = "A media part is damaged (header).";
-                return;
-            }
-            Reader header(content.data() + at, static_cast<size_t>(headerSize));
-            while (header.next())
-            {
-                if (header.field() == s::MediaHeader::Id)
-                    item.id = static_cast<uint32_t>(header.uint());
-            }
-            content.erase(content.begin(), content.begin() + static_cast<std::ptrdiff_t>(at + headerSize));
-            item.data = std::move(content);
-        });
-        for (Item& item : items)
-        {
-            if (!item.error.empty())
-                warning += item.error + "\n";
-            else
-                _items[item.id] = Entry{std::move(item.data)};
-        }
-    }
-
-    /// Counts how many objects \a document will ask for each media item, so
-    /// the last of them can have the bytes moved rather than copied.
-    void countUses(const std::string& document)
-    {
-        Reader r(document);
-        while (r.next())
-        {
-            if (r.field() != s::Document::Bitmaps && r.field() != s::Document::PackageFiles)
+            if (chunk.type != kMedia)
                 continue;
-            const bool bitmap = r.field() == s::Document::Bitmaps;
-            Reader item = r.message();
-            while (item.next())
+            // The header, from the stored bytes where they lie: as they are,
+            // or the start of them inflated.
+            const uint8_t* stored = file.stored(chunk);
+            std::vector<uint8_t> start;
+            const uint8_t* head = stored;
+            size_t headSize = static_cast<size_t>(chunk.storedLength);
+            if ((chunk.flags & kCompressionMask) == kDeflate)
             {
-                const bool media = bitmap
-                    ? (item.field() == s::BitmapItem::DataMedia || item.field() == s::BitmapItem::ImageMedia)
-                    : item.field() == s::PackageFile::Media;
-                if (media)
-                    ++_uses[static_cast<uint32_t>(item.uint())];
+                start = inflateStart(stored, static_cast<size_t>(chunk.storedLength), 512);
+                head = start.data();
+                headSize = start.size();
             }
+            uint32_t id = 0;
+            uint64_t hash = 0;
+            size_t prefix = 0;
+            if (!readMediaHeader(head, headSize, id, hash, prefix))
+            {
+                warning += "A media part is damaged (header).\n";
+                continue;
+            }
+            auto location = std::make_shared<fla::ByteLocation>();
+            location->load = &loadMedia;
+            location->path = absolute;
+            location->offset = chunk.offset;
+            location->storedLength = chunk.storedLength;
+            location->length = chunk.length;
+            location->flags = chunk.flags;
+            location->crc = chunk.crc;
+            location->type = chunk.type;
+            location->mediaId = id;
+            location->size = chunk.length - prefix;
+            location->hash = hash;
+            _items[id] = location;
         }
     }
 
-    /// The bytes of media \a id, for \a into; nothing for an unknown id.
-    void give(uint32_t id, std::vector<uint8_t>& into)
+    /// Media \a id, for \a into; nothing for an unknown id.
+    void give(uint32_t id, fla::LazyBytes& into)
     {
         const auto found = _items.find(id);
-        if (found == _items.end())
-            return;
-        int& uses = _uses[id];
-        if (uses > 1)
-        {
-            into = found->second.data;
-            --uses;
-            return;
-        }
-        into = std::move(found->second.data);
-        uses = 0;
+        if (found != _items.end())
+            into = fla::LazyBytes(found->second);
     }
 
 private:
-    struct Entry
-    {
-        std::vector<uint8_t> data;
-    };
-    std::map<uint32_t, int> _uses;
-    std::map<uint32_t, Entry> _items;
+    std::map<uint32_t, std::shared_ptr<fla::ByteLocation>> _items;
 };
 
 } // namespace
@@ -1201,9 +1246,8 @@ fla::FLADocument* load(const std::string& path, std::string& error, std::string&
     }
 
     MediaStore media;
-    media.read(file, warning);
+    media.read(file, path, warning);
     phase("media");
-    media.countUses(documentContent);
 
     auto* flaDocument = new fla::FLADocument(nullptr);
     flaDocument->filepath = path;
@@ -1332,7 +1376,7 @@ fla::FLADocument* load(const std::string& path, std::string& error, std::string&
         }
         case s::Document::PackageFiles:
         {
-            std::pair<std::string, std::vector<uint8_t>> file;
+            std::pair<std::string, fla::LazyBytes> file;
             Reader p = r.message();
             while (p.next())
             {
