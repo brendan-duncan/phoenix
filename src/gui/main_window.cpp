@@ -47,6 +47,7 @@
 #include "../edit/path_tidy.h"
 #include "../edit/element_clone.h"
 #include "../edit/camera.h"
+#include "../edit/shape_tween.h"
 #include "../edit/new_document.h"
 #include "../edit/shape_merge.h"
 #include "../parser/fla_parser.h"
@@ -1229,6 +1230,54 @@ void MainWindow::createMotionTween()
     });
 }
 
+void MainWindow::editShapeHints(bool add)
+{
+    bool start = true;
+    fla::Frame* tween = _phoenixView ? _phoenixView->shapeHintTween(start) : nullptr;
+    if (!tween)
+    {
+        statusBar()->showMessage("Shape hints go on the first keyframe of a shape tween.", 4000);
+        return;
+    }
+    std::vector<fla::ShapeHint> hints = fla::hintsOf(*tween);
+    if (add)
+    {
+        if (hints.size() >= 26)
+            return;
+        // At the middle of each keyframe's shape, ready to be dragged into
+        // place on both.
+        const fla::Layer* layer = dynamic_cast<const fla::Layer*>(tween->parent);
+        const fla::Frame* end = nullptr;
+        for (const fla::Frame* frame : layer ? layer->frames : std::vector<fla::Frame*>())
+            if (frame && frame->index == tween->index + std::max(1, tween->duration))
+                end = frame;
+        const fla::Shape* from = nullptr;
+        const fla::Shape* to = nullptr;
+        if (!end || !fla::tweenShapes(*tween, *end, from, to))
+            return;
+        const QPointF a = _phoenixView->elementBounds(from).center();
+        const QPointF b = _phoenixView->elementBounds(to).center();
+        fla::ShapeHint hint;
+        hint.start = fla::Point(a.x(), a.y());
+        hint.end = fla::Point(b.x(), b.y());
+        hints.push_back(hint);
+    }
+    else
+    {
+        if (hints.empty())
+            return;
+        hints.clear();
+    }
+    auto attributes = tween->extraAttributes;
+    fla::setHints(attributes, hints);
+    _editContext.commandStack().push(fla::CommandPtr(
+        new fla::SetPropertyCommand<std::vector<std::pair<std::string, std::string>>>(
+            tween->extraAttributes, tween->extraAttributes, attributes, add ? "Add Shape Hint" : "Remove All Hints")));
+    _editContext.commandStack().breakMergeChain();
+    _phoenixView->clearCaches();
+    _phoenixView->update();
+}
+
 void MainWindow::addCamera()
 {
     fla::Document* document = _flaDocument ? _flaDocument->document : nullptr;
@@ -2059,6 +2108,15 @@ void MainWindow::setupMenus()
 
     // Modify > Shape, as Animate groups them.
     QMenu* shapeMenu = modifyMenu->addMenu("S&hape");
+
+    // Shape hints, on the first keyframe of a shape tween.
+    QAction* addHintAction = shapeMenu->addAction("Add Shape &Hint");
+    addHintAction->setShortcut(QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_H));
+    addHintAction->setStatusTip("A lettered hint to pin a point of a shape tween to where it should go");
+    connect(addHintAction, &QAction::triggered, this, [this]() { editShapeHints(true); });
+    QAction* removeHintsAction = shapeMenu->addAction("Remove All Hints");
+    connect(removeHintsAction, &QAction::triggered, this, [this]() { editShapeHints(false); });
+    shapeMenu->addSeparator();
 
     _smoothAction = new QAction("&Smooth", this);
     _smoothAction->setStatusTip("Soften the selected shapes' curves");

@@ -1586,6 +1586,108 @@ fla::CommandPtr PhoenixView::filtersCommand(fla::SymbolInstance* instance, const
     return fla::CommandPtr(command);
 }
 
+fla::Frame* PhoenixView::shapeHintTween(bool& start)
+{
+    fla::Frame* frame = activeFrame();
+    const fla::Layer* layer = frame ? dynamic_cast<const fla::Layer*>(frame->parent) : nullptr;
+    const int shown = shownFrame();
+    if (!layer || frame->index != shown)
+        return nullptr;
+    const auto keyAt = [layer](int index) -> fla::Frame* {
+        for (fla::Frame* candidate : layer->frames)
+            if (candidate && candidate->index == index)
+                return candidate;
+        return nullptr;
+    };
+    if (frame->tweenType == fla::TweenType::Shape && keyAt(frame->index + std::max(1, frame->duration)))
+    {
+        start = true;
+        return frame;
+    }
+    for (fla::Frame* previous : layer->frames)
+    {
+        if (previous && previous->tweenType == fla::TweenType::Shape &&
+            previous->index + std::max(1, previous->duration) == shown)
+        {
+            start = false;
+            return previous;
+        }
+    }
+    return nullptr;
+}
+
+bool PhoenixView::beginHintDrag(const QPointF& documentPos)
+{
+    bool start = true;
+    fla::Frame* tween = shapeHintTween(start);
+    if (!tween)
+        return false;
+    const std::vector<fla::ShapeHint> hints = fla::hintsOf(*tween);
+    const double reach = 9.0 / std::max(_zoom, 1.0e-6);
+    for (size_t i = hints.size(); i-- > 0;)
+    {
+        const fla::Point& p = start ? hints[i].start : hints[i].end;
+        if (QLineF(QPointF(p.x, p.y), documentPos).length() <= reach)
+        {
+            _hintDrag = HintDrag();
+            _hintDrag.tween = tween;
+            _hintDrag.start = start;
+            _hintDrag.index = static_cast<int>(i);
+            _hintDrag.before = tween->extraAttributes;
+            return true;
+        }
+    }
+    return false;
+}
+
+void PhoenixView::dragHint(const QPointF& documentPos)
+{
+    if (!_hintDrag.tween)
+        return;
+    std::vector<fla::ShapeHint> hints = fla::hintsOf(*_hintDrag.tween);
+    if (_hintDrag.index < 0 || _hintDrag.index >= static_cast<int>(hints.size()))
+        return;
+    fla::Point& p = _hintDrag.start ? hints[static_cast<size_t>(_hintDrag.index)].start
+                                    : hints[static_cast<size_t>(_hintDrag.index)].end;
+    p = fla::Point(documentPos.x(), documentPos.y());
+    fla::setHints(_hintDrag.tween->extraAttributes, hints);
+    clearCaches();
+    update();
+}
+
+void PhoenixView::endHintDrag(bool commit)
+{
+    if (!_hintDrag.tween)
+        return;
+    fla::Frame* tween = _hintDrag.tween;
+    std::vector<fla::ShapeHint> hints = fla::hintsOf(*tween);
+    const auto before = _hintDrag.before;
+    const int index = _hintDrag.index;
+    const bool start = _hintDrag.start;
+    _hintDrag = HintDrag();
+    // Dropped off the stage, the hint goes, as in Animate.
+    const fla::Document* document = _flaDocument ? _flaDocument->document : nullptr;
+    if (commit && document && index >= 0 && index < static_cast<int>(hints.size()) && !inSymbol())
+    {
+        const fla::Point& p = start ? hints[static_cast<size_t>(index)].start : hints[static_cast<size_t>(index)].end;
+        if (p.x < 0.0 || p.y < 0.0 || p.x > document->width || p.y > document->height)
+        {
+            hints.erase(hints.begin() + index);
+            fla::setHints(tween->extraAttributes, hints);
+        }
+    }
+    const auto after = tween->extraAttributes;
+    tween->extraAttributes = before;
+    if (commit && after != before && _commandStack)
+    {
+        _commandStack->push(fla::CommandPtr(new fla::SetPropertyCommand<std::vector<std::pair<std::string, std::string>>>(
+            tween->extraAttributes, before, after, "Move Shape Hint")));
+        _commandStack->breakMergeChain();
+    }
+    clearCaches();
+    update();
+}
+
 std::vector<PhoenixView::MotionPath> PhoenixView::motionPaths()
 {
     std::vector<MotionPath> paths;
@@ -4700,6 +4802,34 @@ void PhoenixView::drawToolOverlay(QPainter& painter)
         }
     }
     painter.restore();
+
+    // Shape hints on the keyframe shown: lettered circles, yellow at a tween's
+    // start and green at its end, as in Animate.
+    {
+        bool start = true;
+        if (fla::Frame* tween = shapeHintTween(start))
+        {
+            const std::vector<fla::ShapeHint> hints = fla::hintsOf(*tween);
+            const double r = 8.0 * scale;
+            QFont font = painter.font();
+            font.setPixelSize(std::max(1, static_cast<int>(std::lround(11.0 * scale))));
+            font.setBold(true);
+            painter.save();
+            painter.setFont(font);
+            for (size_t i = 0; i < hints.size() && i < 26; ++i)
+            {
+                const fla::Point& p = start ? hints[i].start : hints[i].end;
+                const QPointF at(p.x, p.y);
+                painter.setPen(QPen(QColor(0, 0, 0), 1.0 * scale));
+                painter.setBrush(start ? QColor(255, 220, 0) : QColor(60, 200, 60));
+                painter.drawEllipse(at, r, r);
+                painter.setPen(QColor(0, 0, 0));
+                painter.drawText(QRectF(at.x() - r, at.y() - r, 2 * r, 2 * r), Qt::AlignCenter,
+                    QString(QChar('a' + static_cast<int>(i))));
+            }
+            painter.restore();
+        }
+    }
 
     // The motion path of each selected object motion tween: a line through
     // where its transformation point is on each frame, a dot a frame, a

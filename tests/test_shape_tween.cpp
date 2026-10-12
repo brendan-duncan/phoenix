@@ -1,4 +1,5 @@
 #include "test_util.h"
+#include <cstdio>
 
 #include "../src/data/edge.h"
 #include "../src/data/frame.h"
@@ -272,4 +273,52 @@ TEST(ensure_morph_rebuilds_only_when_a_keyframe_shape_changes)
     addSquare(*b, 400.0, 0.0, 10.0, true);
     CHECK(fla::ensureMorph(start, end));
     CHECK(start.morphShape->segments.size() == size_t(2));
+}
+
+TEST(shape_hints_pin_points_of_the_morph)
+{
+    // Two like squares; a hint takes the first one's top left corner to the
+    // second one's bottom right, so the morph turns half round.
+    std::unique_ptr<fla::Shape> a = filled(255, 0, 0, 1.0);
+    std::unique_ptr<fla::Shape> b = filled(0, 0, 255, 1.0);
+    addSquare(*a, 0.0, 0.0, 100.0, true);
+    addSquare(*b, 0.0, 0.0, 100.0, true);
+    std::unique_ptr<fla::MorphShape> plain(fla::buildMorph(*a, *b, nullptr));
+    CHECK(near(plain->segments.front()->startPointB.x, 0.0, 1.0e-6));
+
+    fla::ShapeHint hint;
+    hint.start = Point(0.0, 0.0);
+    hint.end = Point(100.0, 100.0);
+    std::unique_ptr<fla::MorphShape> hinted(fla::buildMorph(*a, *b, nullptr, {hint}));
+    CHECK(hinted->segments.size() == size_t(1));
+    const fla::MorphSegment* segment = hinted->segments.front();
+    CHECK(near(segment->startPointA.x, 0.0, 1.0e-3) && near(segment->startPointA.y, 0.0, 1.0e-3));
+    CHECK(near(segment->startPointB.x, 100.0, 1.0e-3) && near(segment->startPointB.y, 100.0, 1.0e-3));
+    // Pinned a quarter turn round instead, half way the square is turning:
+    // a filled shape, not collapsed to its middle.
+    fla::ShapeHint quarter;
+    quarter.start = Point(0.0, 0.0);
+    quarter.end = Point(100.0, 0.0);
+    std::unique_ptr<fla::MorphShape> turning(fla::buildMorph(*a, *b, nullptr, {quarter}));
+    std::unique_ptr<fla::Shape> mid(fla::morphedShape(*turning, *a, *b, 0.5,
+        fla::Transform(), fla::Transform(), fla::Transform()));
+    CHECK(mid->localBounds.width() > 40.0 && mid->localBounds.height() > 40.0);
+
+    // A second hint, a quarter of the way round each: the part between them
+    // runs onto the part between theirs.
+    fla::ShapeHint second;
+    second.start = Point(100.0, 0.0);
+    second.end = Point(0.0, 100.0);
+    std::unique_ptr<fla::MorphShape> twice(fla::buildMorph(*a, *b, nullptr, {hint, second}));
+    bool pinned = false;
+    for (const fla::MorphCurves* curve : twice->segments.front()->curves)
+        pinned = pinned || (near(curve->anchorPointA.x, 100.0, 1.0e-3) && near(curve->anchorPointA.y, 0.0, 1.0e-3) &&
+                               near(curve->anchorPointB.x, 0.0, 1.0e-3) && near(curve->anchorPointB.y, 100.0, 1.0e-3));
+    CHECK(pinned);
+
+    // Kept on the frame.
+    fla::Frame frame(nullptr);
+    fla::setHints(frame.extraAttributes, {hint, second});
+    const std::vector<fla::ShapeHint> read = fla::hintsOf(frame);
+    CHECK(read.size() == 2 && near(read[1].end.y, 100.0, 1.0e-6));
 }

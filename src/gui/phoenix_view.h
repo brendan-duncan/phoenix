@@ -352,6 +352,18 @@ public:
     void endMotionPathDrag(bool commit);
     bool motionPathDragging() const { return _pathDrag.element != nullptr; }
 
+    /// The shape tween whose hints show on the frame shown: its first
+    /// keyframe, and whether that is the frame shown (its hints' starts) or
+    /// its end is (their ends). Null when the playhead is on neither.
+    fla::Frame* shapeHintTween(bool& start);
+
+    /// Dragging a shape hint with the Selection tool; dropped off the stage
+    /// it goes. Begin is false when no hint is under \a documentPos.
+    bool beginHintDrag(const QPointF& documentPos);
+    void dragHint(const QPointF& documentPos);
+    void endHintDrag(bool commit);
+    bool hintDragging() const { return _hintDrag.tween != nullptr; }
+
     /// The shape's filled regions as the stage stitches them, one path per
     /// fill style index, in the shape's own space.
     std::map<int, QPainterPath> fillRegions(const fla::Shape& shape);
@@ -991,6 +1003,15 @@ private:
         fla::Transform transform;
     };
     PathDrag _pathDrag;
+
+    struct HintDrag
+    {
+        fla::Frame* tween = nullptr;
+        bool start = true;
+        int index = -1;
+        std::vector<std::pair<std::string, std::string>> before;
+    };
+    HintDrag _hintDrag;
 
     QHash<QString, QImage> _textureTiles;
 

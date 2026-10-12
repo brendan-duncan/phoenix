@@ -15,6 +15,7 @@
 #include "../geom/shape_geometry.h"
 
 #include <algorithm>
+#include <cstdio>
 #include <cmath>
 #include <map>
 #include <memory>
@@ -312,6 +313,42 @@ public:
         return at;
     }
 
+    /// The fraction of the way round of the point nearest \a p.
+    double nearest(const Point& p) const
+    {
+        if (isPoint() || _outline.pieces.empty())
+            return 0.0;
+        constexpr int kCoarse = 256;
+        double best = 0.0;
+        double bestDistance = -1.0;
+        for (int i = 0; i <= kCoarse; ++i)
+        {
+            const double u = static_cast<double>(i) / kCoarse;
+            const double d = distance(at(u), p);
+            if (bestDistance < 0.0 || d < bestDistance)
+            {
+                bestDistance = d;
+                best = u;
+            }
+        }
+        // Closer, a step either side at a time.
+        double step = 1.0 / kCoarse;
+        for (int round = 0; round < 20; ++round)
+        {
+            step *= 0.5;
+            for (double u : {best - step, best + step})
+            {
+                const double d = distance(at(u), p);
+                if (d < bestDistance)
+                {
+                    bestDistance = d;
+                    best = u;
+                }
+            }
+        }
+        return _outline.closed ? best - std::floor(best) : std::max(0.0, std::min(1.0, best));
+    }
+
     /// The point a fraction \a u of the way round, wrapping for a closed one.
     Point at(double u) const
     {
@@ -564,8 +601,17 @@ void toQuadratic(const Curve& curve, Point& control)
     control = times(minus(inner, plus(curve.start(), curve.end())), 0.25);
 }
 
+/// A hint as fractions of the way round its two outlines.
+struct Knot
+{
+    double a;
+    double b;
+};
+
 /// One segment of the morph: \a a and \a b cut to match, as quadratics.
-MorphSegment* pairSegment(const Outline& a, const Outline& b, MorphShape* morph)
+/// \a hints pin fractions of \a a to fractions of \a b.
+MorphSegment* pairSegment(const Outline& a, const Outline& b, MorphShape* morph,
+    std::vector<Knot> hints = {})
 {
     const Measured ma(a);
     const Measured mb(b);
@@ -576,7 +622,61 @@ MorphSegment* pairSegment(const Outline& a, const Outline& b, MorphShape* morph)
     Outline flippedB;
     const Measured* measuredB = &mb;
 
-    if (a.closed && b.closed)
+    // Where the fractions of A (from its start) fall on B: straight across
+    // unless hints pin them, piece by piece between the hints.
+    std::vector<Knot> knots;
+    const bool hinted = !hints.empty() && !ma.isPoint() && !mb.isPoint() && a.closed == b.closed;
+    if (hinted)
+    {
+        std::sort(hints.begin(), hints.end(), [](const Knot& l, const Knot& r) { return l.a < r.a; });
+        if (a.closed)
+        {
+            offsetA = hints.front().a;
+            offsetB = hints.front().b;
+        }
+        knots.push_back({0.0, 0.0});
+        for (const Knot& hint : hints)
+        {
+            double x = hint.a - offsetA;
+            double y = hint.b - offsetB;
+            x -= std::floor(x);
+            y -= std::floor(y);
+            // Hints that would fold the outline back on itself are left out.
+            if (x > knots.back().a + 1.0e-6 && y > knots.back().b + 1.0e-6 && x < 1.0 - 1.0e-6 && y < 1.0 - 1.0e-6)
+                knots.push_back({x, y});
+        }
+        knots.push_back({1.0, 1.0});
+    }
+    const auto toB = [&knots](double x) {
+        if (knots.size() < 2)
+            return x;
+        for (size_t i = 0; i + 1 < knots.size(); ++i)
+        {
+            if (x <= knots[i + 1].a || i + 2 == knots.size())
+            {
+                const double span = knots[i + 1].a - knots[i].a;
+                const double t = span > 0.0 ? (x - knots[i].a) / span : 0.0;
+                return knots[i].b + t * (knots[i + 1].b - knots[i].b);
+            }
+        }
+        return x;
+    };
+    const auto toA = [&knots](double y) {
+        if (knots.size() < 2)
+            return y;
+        for (size_t i = 0; i + 1 < knots.size(); ++i)
+        {
+            if (y <= knots[i + 1].b || i + 2 == knots.size())
+            {
+                const double span = knots[i + 1].b - knots[i].b;
+                const double t = span > 0.0 ? (y - knots[i].b) / span : 0.0;
+                return knots[i].a + t * (knots[i + 1].a - knots[i].a);
+            }
+        }
+        return y;
+    };
+
+    if (a.closed && b.closed && !hinted)
     {
         // A starts at its leftmost anchor (then topmost), as Animate starts
         // its outlines; B where it lines up best with that.
@@ -618,7 +718,7 @@ MorphSegment* pairSegment(const Outline& a, const Outline& b, MorphShape* morph)
             }
         }
     }
-    else if (!a.closed && !b.closed)
+    else if (!a.closed && !b.closed && !hinted)
     {
         // Open runs: B the way round that keeps the ends nearest.
         const double straight = distance(a.pieces.front().start(), b.pieces.front().start()) +
@@ -641,18 +741,24 @@ MorphSegment* pairSegment(const Outline& a, const Outline& b, MorphShape* morph)
         measuredB = flippedMeasure.get();
     }
 
-    // Both cut at every anchor either has, by fraction of the way round.
+    // Both cut at every anchor either has, and at the hints, by fraction of
+    // the way round A.
     std::vector<double> cuts{0.0};
-    const auto addCuts = [&](const Measured& measured, double offset) {
-        for (double at : measured.anchors())
-        {
-            double u = at - offset;
-            u -= std::floor(u);
-            cuts.push_back(u);
-        }
-    };
-    addCuts(ma, offsetA);
-    addCuts(*measuredB, offsetB);
+    for (double at : ma.anchors())
+    {
+        double u = at - offsetA;
+        u -= std::floor(u);
+        cuts.push_back(u);
+    }
+    for (double at : measuredB->anchors())
+    {
+        double u = at - offsetB;
+        u -= std::floor(u);
+        cuts.push_back(toA(u));
+    }
+    for (const Knot& knot : knots)
+        if (knot.a < 1.0)
+            cuts.push_back(knot.a);
     std::sort(cuts.begin(), cuts.end());
     std::vector<double> unique;
     for (double cut : cuts)
@@ -674,7 +780,7 @@ MorphSegment* pairSegment(const Outline& a, const Outline& b, MorphShape* morph)
         const double from = unique[k];
         const double to = k + 1 < unique.size() ? unique[k + 1] : 1.0;
         const Curve pa = ma.part(offsetA + from, offsetA + to);
-        const Curve pb = measuredB->part(offsetB + from, offsetB + to);
+        const Curve pb = measuredB->part(offsetB + toB(from), offsetB + toB(to));
         if (first)
         {
             segment->startPointA = pa.start();
@@ -813,7 +919,7 @@ const Shape* firstShape(const Frame& frame)
 
 } // namespace
 
-MorphShape* buildMorph(const Shape& from, const Shape& to, DOMElement* parent)
+MorphShape* buildMorph(const Shape& from, const Shape& to, DOMElement* parent, const std::vector<ShapeHint>& hints)
 {
     MorphShape* morph = new MorphShape(parent);
     std::vector<Outline> fillsA;
@@ -822,6 +928,71 @@ MorphShape* buildMorph(const Shape& from, const Shape& to, DOMElement* parent)
     std::vector<Outline> strokesB;
     outlinesOf(from, fillsA, strokesA);
     outlinesOf(to, fillsB, strokesB);
+
+    // Hinted outlines first: each hint pairs the fill outline its start lies
+    // on with the one its end lies on, and pins the two points together.
+    if (!hints.empty() && !fillsA.empty() && !fillsB.empty())
+    {
+        const auto nearestOutline = [](const std::vector<Outline>& outlines, const Point& p, double& fraction) {
+            size_t best = 0;
+            double bestDistance = -1.0;
+            for (size_t i = 0; i < outlines.size(); ++i)
+            {
+                const Measured measured(outlines[i]);
+                const double u = measured.nearest(p);
+                const double d = distance(measured.at(u), p);
+                if (bestDistance < 0.0 || d < bestDistance)
+                {
+                    bestDistance = d;
+                    best = i;
+                    fraction = u;
+                }
+            }
+            return best;
+        };
+        const auto local = [](const Shape& shape, const Point& p) {
+            const Transform& m = shape.transform;
+            const double det = m.m11 * m.m22 - m.m12 * m.m21;
+            if (std::abs(det) < 1.0e-12)
+                return p;
+            const double x = p.x - m.tx;
+            const double y = p.y - m.ty;
+            return Point((m.m22 * x - m.m21 * y) / det, (-m.m12 * x + m.m11 * y) / det);
+        };
+        std::map<std::pair<size_t, size_t>, std::vector<Knot>> pairs;
+        for (const ShapeHint& hint : hints)
+        {
+            double ua = 0.0;
+            double ub = 0.0;
+            const size_t ia = nearestOutline(fillsA, local(from, hint.start), ua);
+            const size_t ib = nearestOutline(fillsB, local(to, hint.end), ub);
+            pairs[{ia, ib}].push_back({ua, ub});
+        }
+        std::set<size_t> usedA;
+        std::set<size_t> usedB;
+        for (const auto& entry : pairs)
+        {
+            const size_t ia = entry.first.first;
+            const size_t ib = entry.first.second;
+            if (usedA.count(ia) || usedB.count(ib))
+                continue;
+            usedA.insert(ia);
+            usedB.insert(ib);
+            Outline b = fillsB[ib];
+            b.fill = fillsA[ia].fill;
+            b.stroke = fillsA[ia].stroke;
+            morph->segments.push_back(pairSegment(fillsA[ia], b, morph, entry.second));
+        }
+        const auto without = [](std::vector<Outline>& outlines, const std::set<size_t>& used) {
+            std::vector<Outline> kept;
+            for (size_t i = 0; i < outlines.size(); ++i)
+                if (!used.count(i))
+                    kept.push_back(outlines[i]);
+            outlines = std::move(kept);
+        };
+        without(fillsA, usedA);
+        without(fillsB, usedB);
+    }
 
     // Fills group by fill and by which way they run, so holes pair with
     // holes. A fill only the last keyframe has takes the first one's first
@@ -869,13 +1040,71 @@ bool tweenShapes(const Frame& start, const Frame& end, const Shape*& from, const
     return from && to;
 }
 
+namespace {
+
+const char* const kHints = "phoenixShapeHints";
+
+} // namespace
+
+std::vector<ShapeHint> hintsOf(const Frame& start)
+{
+    std::vector<ShapeHint> hints;
+    for (const auto& attribute : start.extraAttributes)
+    {
+        if (attribute.first != kHints)
+            continue;
+        // "ax ay bx by;ax ay bx by..."
+        size_t at = 0;
+        const std::string& text = attribute.second;
+        while (at < text.size())
+        {
+            const size_t end = text.find(';', at);
+            const std::string item = text.substr(at, end == std::string::npos ? std::string::npos : end - at);
+            ShapeHint hint;
+            if (std::sscanf(item.c_str(), "%lf %lf %lf %lf", &hint.start.x, &hint.start.y, &hint.end.x, &hint.end.y) == 4)
+                hints.push_back(hint);
+            if (end == std::string::npos)
+                break;
+            at = end + 1;
+        }
+    }
+    return hints;
+}
+
+void setHints(std::vector<std::pair<std::string, std::string>>& attributes, const std::vector<ShapeHint>& hints)
+{
+    attributes.erase(std::remove_if(attributes.begin(), attributes.end(),
+                         [](const std::pair<std::string, std::string>& a) { return a.first == kHints; }),
+        attributes.end());
+    if (hints.empty())
+        return;
+    std::string text;
+    char buffer[128];
+    for (const ShapeHint& hint : hints)
+    {
+        std::snprintf(buffer, sizeof(buffer), "%s%.4f %.4f %.4f %.4f", text.empty() ? "" : ";", hint.start.x,
+            hint.start.y, hint.end.x, hint.end.y);
+        text += buffer;
+    }
+    attributes.emplace_back(kHints, text);
+}
+
 bool ensureMorph(Frame& start, const Frame& end)
 {
     const Shape* from = nullptr;
     const Shape* to = nullptr;
     if (start.tweenType != TweenType::Shape || !tweenShapes(start, end, from, to))
         return false;
-    const uint64_t signature = morphSignature(*from, *to);
+    // The hints are part of what the morph is made from.
+    const std::vector<ShapeHint> hints = hintsOf(start);
+    uint64_t signature = morphSignature(*from, *to);
+    for (const ShapeHint& hint : hints)
+    {
+        const double values[4] = {hint.start.x, hint.start.y, hint.end.x, hint.end.y};
+        hashBytes(signature, values, sizeof(values));
+    }
+    if (signature == 0)
+        signature = 1;
     if (start.morphShape && start.morphSignature == 0)
     {
         start.morphSignature = signature;
@@ -884,7 +1113,7 @@ bool ensureMorph(Frame& start, const Frame& end)
     if (start.morphShape && start.morphSignature == signature)
         return false;
     delete start.morphShape;
-    start.morphShape = buildMorph(*from, *to, &start);
+    start.morphShape = buildMorph(*from, *to, &start, hints);
     start.morphSignature = signature;
     return true;
 }

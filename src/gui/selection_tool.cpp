@@ -87,7 +87,10 @@ bool SelectionTool::mousePress(PhoenixView& view, QMouseEvent* event, const QPoi
     _removeOnRelease = false;
     _duplicated = false;
 
-    // A selected motion tween's path is dragged where it is grabbed.
+    // A shape hint, or a selected motion tween's path, is dragged where it
+    // is grabbed.
+    if (!_additive && view.beginHintDrag(documentPos))
+        return true;
     if (!_additive && view.beginMotionPathDrag(documentPos))
         return true;
 
@@ -171,6 +174,12 @@ bool SelectionTool::mouseMove(PhoenixView& view, QMouseEvent* event, const QPoin
             view.dragMotionPath(documentPos);
         return true;
     }
+    if (view.hintDragging())
+    {
+        if (event->buttons() & Qt::LeftButton)
+            view.dragHint(documentPos);
+        return true;
+    }
     if (_poser.active())
     {
         if (event->buttons() & Qt::LeftButton)
@@ -216,6 +225,12 @@ bool SelectionTool::mouseRelease(PhoenixView& view, QMouseEvent* event, const QP
     {
         view.dragMotionPath(documentPos);
         view.endMotionPathDrag(true);
+        return true;
+    }
+    if (view.hintDragging())
+    {
+        view.dragHint(documentPos);
+        view.endHintDrag(true);
         return true;
     }
 
@@ -327,6 +342,12 @@ bool SelectionTool::keyPress(PhoenixView& view, QKeyEvent* event)
     if (key == Qt::Key_Escape && view.motionPathDragging())
     {
         view.endMotionPathDrag(false);
+    view.endHintDrag(false);
+        return true;
+    }
+    if (key == Qt::Key_Escape && view.hintDragging())
+    {
+        view.endHintDrag(false);
         return true;
     }
     if ((key == Qt::Key_Left || key == Qt::Key_Right || key == Qt::Key_Up || key == Qt::Key_Down) &&

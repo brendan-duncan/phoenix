@@ -1,8 +1,12 @@
 #pragma once
 
+#include "../data/point.h"
 #include "../data/transform.h"
 
 #include <cstdint>
+#include <string>
+#include <utility>
+#include <vector>
 
 namespace fla {
 
@@ -53,7 +57,24 @@ Shape* morphedShape(const MorphShape& morph, const Shape& from, const Shape& to,
 /// their pieces at the same fractions of their length, a closed pair turned
 /// so its start points match best, and each piece becomes quadratics, one
 /// per pair of straight pieces and two otherwise. The caller owns the result.
-MorphShape* buildMorph(const Shape& from, const Shape& to, DOMElement* parent);
+///
+/// Shape hints steer it: each hint is a point on the first keyframe's shape
+/// and the point on the last keyframe's that it becomes. The outlines the
+/// two points lie on pair with each other, and between consecutive hints
+/// along them each part of one becomes the matching part of the other.
+struct ShapeHint
+{
+    Point start;
+    Point end;
+};
+MorphShape* buildMorph(const Shape& from, const Shape& to, DOMElement* parent,
+    const std::vector<ShapeHint>& hints = {});
+
+/// A shape tween's hints, kept on its first keyframe as a Phoenix
+/// attribute (Animate's own list of hints is not written: the morph Phoenix
+/// stores carries their effect), and setting them.
+std::vector<ShapeHint> hintsOf(const Frame& start);
+void setHints(std::vector<std::pair<std::string, std::string>>& attributes, const std::vector<ShapeHint>& hints);
 
 /// A fingerprint of everything buildMorph reads from \a from and \a to;
 /// never zero.

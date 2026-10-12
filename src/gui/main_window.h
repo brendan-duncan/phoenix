@@ -205,6 +205,8 @@ private slots:
     void createMotionTween();
     /// Insert > Camera: the scene's multiplane camera layer.
     void addCamera();
+    /// Adds a shape hint to the shape tween at the playhead, or removes all.
+    void editShapeHints(bool add);
     void clearFrames();
     void distributeToKeyframes();
     /// Selects what is on \a layer at \a frame, as clicking the frame does.
