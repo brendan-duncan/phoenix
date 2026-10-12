@@ -4,6 +4,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdio>
 #include <string>
 
 namespace {
@@ -297,7 +298,36 @@ TEST(brush_textures_are_made_alike_and_kept_on_shapes)
         const auto range = std::minmax_element(tile.coverage.begin(), tile.coverage.end());
         CHECK(*range.second - *range.first > 100);
         CHECK(fla::texture::builtInTile(name).coverage == tile.coverage);
+        // Seamless: the columns (and rows) either side of the edge where the
+        // tile repeats differ no more than any neighboring pair inside it.
+        const auto at = [&tile](int x, int y) { return static_cast<int>(tile.coverage[y * 256 + x]); };
+        const auto columns = [&at](int a, int b) {
+            double sum = 0.0;
+            for (int i = 0; i < 256; ++i)
+                sum += std::abs(at(a, i) - at(b, i));
+            return sum / 256.0;
+        };
+        const auto rows = [&at](int a, int b) {
+            double sum = 0.0;
+            for (int i = 0; i < 256; ++i)
+                sum += std::abs(at(i, a) - at(i, b));
+            return sum / 256.0;
+        };
+        double mostX = 0.0;
+        double mostY = 0.0;
+        for (int j = 0; j < 255; ++j)
+        {
+            mostX = std::max(mostX, columns(j, j + 1));
+            mostY = std::max(mostY, rows(j, j + 1));
+        }
+        const double wrapX = columns(255, 0);
+        const double wrapY = rows(255, 0);
+        if (wrapX > mostX + 1.0 || wrapY > mostY + 1.0)
+            std::printf("    seam in %s: %.1f/%.1f across, %.1f/%.1f down\n", name.c_str(), wrapX, mostX, wrapY, mostY);
+        CHECK(wrapX <= mostX + 1.0);
+        CHECK(wrapY <= mostY + 1.0);
     }
+    CHECK(fla::texture::builtIn().size() >= 19);
     CHECK(fla::texture::builtInTile("Nothing").size == 0);
 
     fla::Shape shape(nullptr);

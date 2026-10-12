@@ -35,8 +35,10 @@ struct Spec
     bool valid() const { return !name.empty(); }
 };
 
-/// The textures Phoenix makes itself: Paper, Chalk, Charcoal, Canvas,
-/// Sponge and Grain.
+/// The textures Phoenix makes itself, by family: papers (Paper, Rough
+/// Paper, Watercolor Paper, Newsprint), dry media (Pencil, Chalk, Charcoal,
+/// Pastel, Crayon), paint (Dry Brush, Watercolor, Sponge, Splatter,
+/// Stipple) and patterns (Canvas, Linen, Crosshatch, Halftone, Grain).
 const std::vector<std::string>& builtIn();
 
 /// A built-in texture's tile, made the same way every time; empty for a
