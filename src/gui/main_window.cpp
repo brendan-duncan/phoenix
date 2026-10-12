@@ -3586,6 +3586,7 @@ void MainWindow::applyBuiltInWorkspace(const QString& name)
         resizeDocks({_timelineDock}, {220}, Qt::Vertical);
     }
     _toolbox->setLayout(tools);
+    resizeDocks({_toolsDock}, {_toolbox->widthFor(tools.columns)}, Qt::Horizontal);
     _timelineView->setLayersWidth(250);
     restoreGeometry(window);
 }
@@ -3891,8 +3892,22 @@ void MainWindow::setupToolBar()
     _toolbox = new Toolbox(this);
     _toolsDock = new QDockWidget("Tools", this);
     _toolsDock->setObjectName("toolsDock");
-    _toolsDock->setAllowedAreas(Qt::LeftDockWidgetArea | Qt::RightDockWidgetArea);
+    _toolsDock->setAllowedAreas(Qt::AllDockWidgetAreas);
     _toolsDock->setWidget(_toolbox);
+    // A slim grip for a title, so the panel is no wider than its tools;
+    // along the top or bottom the grip stands at its left end.
+    _toolsDock->setTitleBarWidget(new DockGrip(_toolsDock));
+    connect(_toolsDock, &QDockWidget::dockLocationChanged, this, [this](Qt::DockWidgetArea area) {
+        const bool across = area == Qt::TopDockWidgetArea || area == Qt::BottomDockWidgetArea;
+        _toolsDock->setFeatures(across ? _toolsDock->features() | QDockWidget::DockWidgetVerticalTitleBar
+                                       : _toolsDock->features() & ~QDockWidget::DockWidgetVerticalTitleBar);
+        _toolbox->setOrientation(across ? Qt::Horizontal : Qt::Vertical);
+    });
+    connect(_toolsDock, &QDockWidget::topLevelChanged, this, [this](bool floating) {
+        if (floating)
+            _toolsDock->setFeatures(_toolsDock->features() & ~QDockWidget::DockWidgetVerticalTitleBar);
+        _toolbox->setFloating(floating);
+    });
     addDockWidget(Qt::LeftDockWidgetArea, _toolsDock);
     splitDockWidget(_toolsDock, _outlinerDock, Qt::Horizontal);
     Toolbox::Layout defaultTools;
@@ -4086,20 +4101,11 @@ void MainWindow::setupToolBar()
 
     // Under the tools: the stroke and fill colors, black and white, swap,
     // and Object Drawing.
-    QWidget* toolBar = new QWidget(_toolbox);
-    QVBoxLayout* extras = new QVBoxLayout(toolBar);
-    extras->setContentsMargins(0, 4, 0, 0);
-    extras->setSpacing(1);
-    extras->setAlignment(Qt::AlignHCenter | Qt::AlignTop);
-    const auto addExtra = [extras](QWidget* widget) { extras->addWidget(widget, 0, Qt::AlignHCenter); };
-    const auto addExtraLine = [extras, toolBar]() {
-        QFrame* line = new QFrame(toolBar);
-        line->setFrameShape(QFrame::HLine);
-        line->setFrameShadow(QFrame::Plain);
-        line->setEnabled(false);
-        extras->addWidget(line);
-    };
-    addExtraLine();
+    // They flow with the tools; a null entry is a line.
+    QWidget* toolBar = _toolbox;
+    QList<QWidget*> extras;
+    const auto addExtra = [&extras](QWidget* widget) { extras << widget; };
+    const auto addExtraLine = [&extras]() { extras << nullptr; };
 
     // The stroke and fill colors, under the tools as in Animate's toolbox.
     _toolboxStrokeSwatch = new QToolButton(toolBar);
@@ -4202,7 +4208,7 @@ void MainWindow::setupToolBar()
     objectDrawingButton->setIconSize(QSize(22, 22));
     objectDrawingButton->setDefaultAction(objectDrawingAction);
     addExtra(objectDrawingButton);
-    _toolbox->setExtras(toolBar);
+    _toolbox->setExtras(extras);
 }
 
 void MainWindow::chooseStyleColor(bool stroke)

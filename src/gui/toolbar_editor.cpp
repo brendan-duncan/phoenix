@@ -1,7 +1,6 @@
 #include "toolbar_editor.h"
 
 #include <QAction>
-#include <QCheckBox>
 #include <QDialogButtonBox>
 #include <QHBoxLayout>
 #include <QHeaderView>
@@ -68,23 +67,21 @@ ToolbarEditor::ToolbarEditor(Toolbox* toolbox, QWidget* parent)
     line->setToolTip("A line between sections; drag it where it goes");
     QPushButton* reset = new QPushButton("Reset", this);
     reset->setToolTip("Phoenix's own layout");
-    QCheckBox* two = new QCheckBox("Two columns", this);
     row->addWidget(line);
     row->addWidget(reset);
     row->addStretch(1);
-    row->addWidget(two);
     layout->addLayout(row);
     connect(line, &QPushButton::clicked, this, [this]() {
         QTreeWidgetItem* item = slotItem(Toolbox::Slot{"|"});
         _tree->insertTopLevelItem(_tree->indexOfTopLevelItem(_hidden), item);
         _tree->setCurrentItem(item);
     });
-    connect(reset, &QPushButton::clicked, this, [this, two]() {
+    connect(reset, &QPushButton::clicked, this, [this]() {
+        // The panel keeps its width.
         Toolbox::Layout layout = _toolbox->defaultLayout();
-        layout.columns = two->isChecked() ? 2 : 1;
+        layout.columns = _columns;
         load(layout);
     });
-    connect(two, &QCheckBox::toggled, this, [this](bool on) { _columns = on ? 2 : 1; });
 
     QDialogButtonBox* buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, this);
     layout->addWidget(buttons);
@@ -92,7 +89,6 @@ ToolbarEditor::ToolbarEditor(Toolbox* toolbox, QWidget* parent)
     connect(buttons, &QDialogButtonBox::rejected, this, &QDialog::reject);
 
     load(_toolbox->layout());
-    two->setChecked(_columns == 2);
     resize(380, 560);
 }
 

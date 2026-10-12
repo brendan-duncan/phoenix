@@ -3,11 +3,10 @@
 #include <QAction>
 #include <QContextMenuEvent>
 #include <QFrame>
-#include <QGridLayout>
 #include <QJsonArray>
 #include <QMenu>
+#include <QPainter>
 #include <QToolButton>
-#include <QVBoxLayout>
 
 #include <algorithm>
 
@@ -27,7 +26,7 @@ QJsonObject Toolbox::Layout::toJson() const
 Toolbox::Layout Toolbox::Layout::fromJson(const QJsonObject& json)
 {
     Layout layout;
-    layout.columns = std::clamp(json["columns"].toInt(1), 1, 2);
+    layout.columns = std::clamp(json["columns"].toInt(1), 1, 8);
     for (const QJsonValue& value : json["slots"].toArray())
     {
         Slot slot;
@@ -46,13 +45,7 @@ Toolbox::Layout Toolbox::Layout::fromJson(const QJsonObject& json)
 Toolbox::Toolbox(QWidget* parent)
     : QWidget(parent)
 {
-    _outer = new QVBoxLayout(this);
-    _outer->setContentsMargins(3, 3, 3, 3);
-    _outer->setSpacing(2);
-    _grid = new QWidget(this);
-    _outer->addWidget(_grid);
-    _outer->addStretch(1);
-    setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Preferred);
+    setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Preferred);
 }
 
 void Toolbox::addTool(const QString& id, QAction* action)
@@ -65,7 +58,7 @@ void Toolbox::addTool(const QString& id, QAction* action)
 Toolbox::Layout Toolbox::completed(const Layout& layout) const
 {
     Layout out;
-    out.columns = std::clamp(layout.columns, 1, 2);
+    out.columns = std::clamp(layout.columns, 1, 8);
     QStringList placed;
     for (const Slot& slot : layout.entries)
     {
@@ -134,58 +127,179 @@ void Toolbox::setLayout(const Layout& layout)
     emit layoutChanged();
 }
 
-void Toolbox::setColumns(int columns)
+void Toolbox::setExtras(const QList<QWidget*>& extras)
 {
-    columns = std::clamp(columns, 1, 2);
-    if (columns == _layout.columns)
-        return;
-    _layout.columns = columns;
+    for (QWidget* extra : _extras)
+        if (extra)
+            extra->hide();
+    _extras = extras;
+    for (QWidget* extra : _extras)
+        if (extra)
+            extra->setParent(this);
     rebuild();
-    emit layoutChanged();
 }
 
-void Toolbox::setExtras(QWidget* extras)
+void Toolbox::setOrientation(Qt::Orientation orientation)
 {
-    if (_extras)
-        _outer->removeWidget(_extras);
-    _extras = extras;
-    if (_extras)
+    if (orientation == _orientation)
+        return;
+    _orientation = orientation;
+    for (const Item& item : _items)
+        if (item.line)
+            item.line->setFrameShape(_orientation == Qt::Vertical ? QFrame::HLine : QFrame::VLine);
+    updateGeometry();
+    place(0, true);
+}
+
+void Toolbox::setFloating(bool floating)
+{
+    _floating = floating;
+    if (!floating)
+        return;
+    setOrientation(width() > height() * 2 ? Qt::Horizontal : Qt::Vertical);
+}
+
+QFrame* Toolbox::makeLine()
+{
+    QFrame* line = new QFrame(this);
+    line->setFrameShape(_orientation == Qt::Vertical ? QFrame::HLine : QFrame::VLine);
+    line->setFrameShadow(QFrame::Plain);
+    line->setEnabled(false);
+    line->show();
+    return line;
+}
+
+int Toolbox::cell() const
+{
+    // Every item sits in a square cell the size of the largest.
+    int size = 24;
+    for (const Item& item : _items)
+        if (item.widget)
+            size = std::max({size, item.widget->sizeHint().width(), item.widget->sizeHint().height()});
+    return size;
+}
+
+namespace {
+
+constexpr int kMargin = 3;
+/// The room a line between sections takes along the flow.
+constexpr int kLineRoom = 7;
+
+} // namespace
+
+int Toolbox::place(int across, bool move)
+{
+    // Down a side, items fill rows as wide as the panel; along the top or
+    // bottom, columns as tall as it. A line ends the row or column and
+    // runs across the panel.
+    const bool vertical = _orientation == Qt::Vertical;
+    const int c = cell();
+    const int room = (vertical ? width() : height()) - 2 * kMargin;
+    if (across <= 0)
+        across = std::max(1, room / c);
+    // The cells sit in the middle of the panel's breadth.
+    const int start = kMargin + std::max(0, (room - across * c) / 2);
+    int along = kMargin;
+    int index = 0;
+    for (const Item& item : _items)
     {
-        _extras->setParent(this);
-        _outer->insertWidget(1, _extras);
+        if (item.line)
+        {
+            if (index > 0)
+            {
+                along += c;
+                index = 0;
+            }
+            if (move)
+            {
+                const int breadth = std::max(c, across * c);
+                if (vertical)
+                    item.line->setGeometry(start, along + kLineRoom / 2, breadth, 1);
+                else
+                    item.line->setGeometry(along + kLineRoom / 2, start, 1, breadth);
+            }
+            along += kLineRoom;
+            continue;
+        }
+        if (move)
+        {
+            const QSize size = item.widget->sizeHint().boundedTo(QSize(c, c));
+            const int x = vertical ? start + index * c : along;
+            const int y = vertical ? along : start + index * c;
+            item.widget->setGeometry(x + (c - size.width()) / 2, y + (c - size.height()) / 2, size.width(),
+                size.height());
+        }
+        if (++index == across)
+        {
+            index = 0;
+            along += c;
+        }
+    }
+    if (index > 0)
+        along += c;
+    return along + kMargin;
+}
+
+int Toolbox::widthFor(int columns) const
+{
+    return std::max(columns, 1) * cell() + 2 * kMargin;
+}
+
+QSize Toolbox::sizeHint() const
+{
+    Toolbox* self = const_cast<Toolbox*>(this);
+    if (_orientation == Qt::Vertical)
+        return QSize(widthFor(_layout.columns), self->place(_layout.columns, false));
+    return QSize(self->place(1, false), cell() + 2 * kMargin);
+}
+
+QSize Toolbox::minimumSizeHint() const
+{
+    // One cell across; along the flow, it can be cut short.
+    const int c = cell();
+    if (_orientation == Qt::Vertical)
+        return QSize(c + 2 * kMargin, 3 * c);
+    return QSize(3 * c, c + 2 * kMargin);
+}
+
+void Toolbox::resizeEvent(QResizeEvent* event)
+{
+    QWidget::resizeEvent(event);
+    if (_floating)
+        setOrientation(width() > height() * 2 ? Qt::Horizontal : Qt::Vertical);
+    place(0, true);
+    // The columns it was given down a side are kept, for next time and in
+    // workspaces.
+    if (_orientation == Qt::Vertical && !_floating && isVisible())
+    {
+        const int columns = std::clamp((width() - 2 * kMargin) / cell(), 1, 8);
+        if (columns != _layout.columns)
+        {
+            _layout.columns = columns;
+            emit layoutChanged();
+        }
     }
 }
 
 void Toolbox::rebuild()
 {
-    // The buttons are made again; the actions stay, so keys and checked
-    // states carry on.
-    delete _grid;
-    _grid = new QWidget(this);
-    _outer->insertWidget(0, _grid);
-    QGridLayout* grid = new QGridLayout(_grid);
-    grid->setContentsMargins(0, 0, 0, 0);
-    grid->setSpacing(1);
-    const int columns = _layout.columns;
-    int row = 0;
-    int column = 0;
+    // The buttons and lines are made again; the actions stay, so keys and
+    // checked states carry on. The extras are kept.
+    for (QWidget* button : _buttons)
+        delete button;
+    _buttons.clear();
+    for (const Item& item : _items)
+        delete item.line;
+    _items.clear();
+
     for (const Slot& slot : _layout.entries)
     {
         if (slot == Slot{"|"})
         {
-            if (column > 0)
-            {
-                ++row;
-                column = 0;
-            }
-            QFrame* line = new QFrame(_grid);
-            line->setFrameShape(QFrame::HLine);
-            line->setFrameShadow(QFrame::Plain);
-            line->setEnabled(false);
-            grid->addWidget(line, row++, 0, 1, columns);
+            _items.push_back({nullptr, makeLine()});
             continue;
         }
-        QToolButton* button = new QToolButton(_grid);
+        QToolButton* button = new QToolButton(this);
         button->setAutoRaise(true);
         button->setIconSize(QSize(22, 22));
         QAction* first = _tools.value(slot.front());
@@ -206,34 +320,57 @@ void Toolbox::rebuild()
             }
             button->setMenu(flyout);
         }
-        grid->addWidget(button, row, column);
-        if (++column == columns)
+        button->show();
+        _buttons << button;
+        _items.push_back({button, nullptr});
+    }
+    if (!_extras.isEmpty())
+    {
+        _items.push_back({nullptr, makeLine()});
+        for (QWidget* extra : _extras)
         {
-            column = 0;
-            ++row;
+            if (extra)
+            {
+                extra->show();
+                _items.push_back({extra, nullptr});
+            }
+            else
+            {
+                _items.push_back({nullptr, makeLine()});
+            }
         }
     }
-    _grid->show();
-    adjustSize();
     updateGeometry();
+    place(0, true);
 }
 
 void Toolbox::contextMenuEvent(QContextMenuEvent* event)
 {
     QMenu menu(this);
-    QAction* one = menu.addAction("One Column");
-    one->setCheckable(true);
-    one->setChecked(_layout.columns == 1);
-    QAction* two = menu.addAction("Two Columns");
-    two->setCheckable(true);
-    two->setChecked(_layout.columns == 2);
-    menu.addSeparator();
     QAction* edit = menu.addAction("Edit Toolbar...");
-    QAction* chosen = menu.exec(event->globalPos());
-    if (chosen == one)
-        setColumns(1);
-    else if (chosen == two)
-        setColumns(2);
-    else if (chosen == edit)
+    if (menu.exec(event->globalPos()) == edit)
         emit editRequested();
+}
+
+DockGrip::DockGrip(QWidget* parent)
+    : QWidget(parent)
+{
+    setToolTip("Drag to move the panel; double-click to float or dock it");
+    setCursor(Qt::SizeAllCursor);
+}
+
+void DockGrip::paintEvent(QPaintEvent*)
+{
+    QPainter painter(this);
+    painter.setRenderHint(QPainter::Antialiasing, true);
+    painter.setPen(Qt::NoPen);
+    QColor dot = palette().color(QPalette::WindowText);
+    dot.setAlpha(110);
+    painter.setBrush(dot);
+    const bool wide = width() >= height();
+    const int length = wide ? width() : height();
+    const int span = std::min(length - 8, 28);
+    const double middle = (wide ? height() : width()) / 2.0;
+    for (int at = (length - span) / 2; at <= (length + span) / 2; at += 4)
+        painter.drawEllipse(wide ? QPointF(at, middle) : QPointF(middle, at), 1.0, 1.0);
 }
