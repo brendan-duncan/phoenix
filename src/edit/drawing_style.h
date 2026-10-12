@@ -143,6 +143,13 @@ public:
     };
     BrushMode brushMode = BrushMode::Normal;
 
+    /// Textured brushes: the grain a brush stroke takes on (empty for none,
+    /// a built-in texture's name, or "bitmap:" and a library bitmap's), its
+    /// scale and its strength, in percent.
+    std::string brushTexture;
+    double brushTextureScale = 100.0;
+    double brushTextureStrength = 100.0;
+
     /// Animate's eraser modes: what a pass of the eraser takes away.
     enum class EraserMode
     {

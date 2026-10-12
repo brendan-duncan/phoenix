@@ -1,4 +1,5 @@
 #include "brush_tools.h"
+#include "../edit/brush_texture.h"
 
 #include "cursors.h"
 #include "draw_placement.h"
@@ -522,13 +523,28 @@ void BrushTool::finish(PhoenixView& view)
         return;
     }
 
+    // A textured stroke keeps its grain as its own object, so merging never
+    // spreads the grain to other paint or takes it away.
+    const bool textured = !_style.brushTexture.empty();
+    const auto texture = [this](fla::Shape* painted) {
+        if (!painted || _style.brushTexture.empty())
+            return;
+        fla::texture::Spec spec;
+        spec.name = _style.brushTexture;
+        spec.scale = std::max(0.01, _style.brushTextureScale / 100.0);
+        spec.strength = std::clamp(_style.brushTextureStrength / 100.0, 0.0, 1.0);
+        fla::texture::set(painted->extraAttributes, spec);
+        painted->isDrawingObject = true;
+    };
+    texture(shape);
+
     using BrushMode = fla::DrawingStyle::BrushMode;
     const BrushMode mode = _style.brushMode;
 
     if (mode == BrushMode::Normal || mode == BrushMode::Fills)
     {
         placeDrawnElement(view, _commandStack, _selection, frame, shape, "Brush",
-            _style.objectDrawing, mode == BrushMode::Fills);
+            _style.objectDrawing || textured, mode == BrushMode::Fills);
         return;
     }
 
@@ -593,8 +609,9 @@ void BrushTool::finish(PhoenixView& view)
     }
 
     piece->parent = frame;
+    texture(piece);
     placeDrawnElement(view, _commandStack, _selection, frame, piece, "Brush",
-        _style.objectDrawing, true);
+        _style.objectDrawing || textured, true);
 }
 
 void BrushTool::paintOverlay(PhoenixView& view, QPainter& painter, double scale)

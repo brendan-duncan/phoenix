@@ -9,10 +9,12 @@
 #include "../data/symbol.h"
 #include "../edit/brush_stroke.h"
 #include "../edit/command.h"
+#include "../edit/brush_texture.h"
 #include "../edit/guide_path.h"
 #include "../edit/motion_object.h"
 #include "../edit/asset_warp.h"
 
+#include <QHash>
 #include <QList>
 #include <QMap>
 #include <QRectF>
@@ -864,6 +866,11 @@ public:
     /// The library bitmap of that name, decoded once and kept.
     QPixmap libraryBitmap(const QString& name);
 
+    /// A texture's tile of coverage, built in or from the library, and a
+    /// brush of \a color taking on its grain.
+    QImage textureTile(const std::string& name);
+    QBrush texturedBrush(const QColor& color, const fla::texture::Spec& spec);
+
 private:
 
     /// Qt's spread for a gradient's spreadMethod attribute.
@@ -974,6 +981,8 @@ private:
         fla::Transform transform;
     };
     PathDrag _pathDrag;
+
+    QHash<QString, QImage> _textureTiles;
 
     bool _editMultiple = false;
     /// While the other keyframes of Edit Multiple Frames draw: only layers

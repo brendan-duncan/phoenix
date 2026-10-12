@@ -1,4 +1,6 @@
 #include "properties_panel.h"
+#include "../data/bitmap.h"
+#include "../edit/brush_texture.h"
 #include "../data/symbol_list.h"
 #include "../edit/timeline_edit.h"
 
@@ -956,6 +958,29 @@ void PropertiesPanel::buildToolTab()
     });
     addOption("Brush mode", brushMode, {IconTool::FluidBrush, IconTool::Brush, IconTool::InkBrush});
 
+    // Textured brushes: the grain the paint takes on.
+    QComboBox* texture = textureChoice(style.brushTexture);
+    texture->setToolTip("The grain a stroke takes on, as chalk takes the tooth of the paper");
+    connect(texture, &QComboBox::currentIndexChanged, this, [this, texture](int) {
+        _links.style->brushTexture = texture->currentData().toString().toStdString();
+    });
+    const std::vector<IconTool> brushes = {IconTool::FluidBrush, IconTool::Brush, IconTool::InkBrush};
+    addOption("Texture", texture, brushes);
+    HotText* textureScale = makeHotText(10.0, 1000.0, 0, " %");
+    textureScale->setValue(style.brushTextureScale);
+    textureScale->setToolTip("How large the grain is");
+    connect(textureScale, &HotText::valueChanged, this, [this](double value, bool) {
+        _links.style->brushTextureScale = value;
+    });
+    addOption("Grain size", textureScale, brushes);
+    HotText* textureStrength = makeHotText(0.0, 100.0, 0, " %");
+    textureStrength->setValue(style.brushTextureStrength);
+    textureStrength->setToolTip("How much of the paint the grain takes away where it is lightest");
+    connect(textureStrength, &HotText::valueChanged, this, [this](double value, bool) {
+        _links.style->brushTextureStrength = value;
+    });
+    addOption("Grain strength", textureStrength, brushes);
+
     // Eraser.
     HotText* eraserSize = makeHotText(1.0, 200.0, 1, " px");
     eraserSize->setValue(style.eraserSize);
@@ -1618,6 +1643,44 @@ void PropertiesPanel::addShapeSections(QVBoxLayout* layout, fla::Shape* shape)
 
     if (row == 0)
         section->addWide(row++, fieldLabel("No fill or stroke", this));
+
+    // A texture on any shape, as a textured brush leaves.
+    {
+        PropertySection* grain = addSection(layout, "Texture");
+        const fla::texture::Spec spec = fla::texture::of(*shape);
+        QComboBox* choice = textureChoice(spec.name);
+        HotText* scale = makeHotText(10.0, 1000.0, 0, " %");
+        scale->setValue(spec.scale * 100.0);
+        HotText* strength = makeHotText(0.0, 100.0, 0, " %");
+        strength->setValue(spec.strength * 100.0);
+        const auto apply = [this, shape, choice, scale, strength](const char* name) {
+            fla::texture::Spec after;
+            after.name = choice->currentData().toString().toStdString();
+            after.scale = std::max(0.01, scale->value() / 100.0);
+            after.strength = std::clamp(strength->value() / 100.0, 0.0, 1.0);
+            std::vector<std::pair<std::string, std::string>> attributes = shape->extraAttributes;
+            fla::texture::set(attributes, after);
+            if (attributes == shape->extraAttributes)
+                return;
+            push(fla::CommandPtr(new fla::SetPropertyCommand<std::vector<std::pair<std::string, std::string>>>(
+                shape->extraAttributes, shape->extraAttributes, attributes, name)));
+            if (_links.view)
+                _links.view->clearCaches();
+            emit documentEdited();
+        };
+        connect(choice, &QComboBox::currentIndexChanged, this, [apply](int) { apply("Texture"); });
+        connect(scale, &HotText::valueChanged, this, [apply](double, bool done) {
+            if (done)
+                apply("Grain Size");
+        });
+        connect(strength, &HotText::valueChanged, this, [apply](double, bool done) {
+            if (done)
+                apply("Grain Strength");
+        });
+        grain->addLong(0, "Texture", choice);
+        grain->addField(1, 0, "Size", scale);
+        grain->addField(1, 1, "Strength", strength);
+    }
 
     PropertySection* options = addSection(layout, "Shape Options");
     QWidget* buttons = new QWidget(this);
@@ -2775,4 +2838,27 @@ void PropertiesPanel::rebuildDocTab()
     PropertySection* about = addSection(page, "Document Info");
     about->addLong(0, "Version", fieldLabel(QString::fromStdString(doc->xflVersion), this));
     about->addLong(1, "Made with", fieldLabel(QString::fromStdString(doc->creatorInfo), this));
+}
+
+QComboBox* PropertiesPanel::textureChoice(const std::string& current)
+{
+    // None, Phoenix's own textures, then the library's bitmaps.
+    QComboBox* box = new QComboBox(this);
+    box->addItem("None", QString());
+    for (const std::string& name : fla::texture::builtIn())
+        box->addItem(QString::fromStdString(name), QString::fromStdString(name));
+    if (const fla::Document* doc = document())
+    {
+        for (const fla::Resource* resource : doc->resources)
+        {
+            if (!resource || resource->resourceType() != fla::Resource::Type::Bitmap)
+                continue;
+            const std::string name = static_cast<const fla::Bitmap*>(resource)->name;
+            box->addItem("Bitmap: " + QString::fromStdString(name),
+                QString::fromStdString(std::string(fla::texture::kBitmapPrefix) + name));
+        }
+    }
+    const int found = box->findData(QString::fromStdString(current));
+    box->setCurrentIndex(found >= 0 ? found : 0);
+    return box;
 }

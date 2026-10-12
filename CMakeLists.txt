@@ -186,6 +186,7 @@ set(HEADERS
     src/edit/region_split.h
     src/edit/drawing_style.h
     src/edit/brush_stroke.h
+    src/edit/brush_texture.h
     src/edit/motion_object.h
     src/edit/asset_warp.h
     src/edit/magic_wand.h
@@ -341,6 +342,7 @@ set(SOURCES
     src/edit/region_split.cpp
     src/edit/drawing_style.cpp
     src/edit/brush_stroke.cpp
+    src/edit/brush_texture.cpp
     src/edit/motion_object.cpp
     src/edit/guide_path.cpp
     src/edit/asset_warp.cpp

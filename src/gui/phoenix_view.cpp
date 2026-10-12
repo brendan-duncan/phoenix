@@ -2,6 +2,7 @@
 
 #include "../edit/guide_command.h"
 #include "../edit/timeline_edit.h"
+#include "../edit/brush_texture.h"
 #include "../parser/ik_tree.h"
 #include "filters.h"
 #include "stroke_effects.h"
@@ -2646,6 +2647,58 @@ void addGradientStops(QGradient& gradient, const std::vector<GradientStop>& stop
 
 } // namespace
 
+QImage PhoenixView::textureTile(const std::string& name)
+{
+    const auto cached = _textureTiles.constFind(QString::fromStdString(name));
+    if (cached != _textureTiles.constEnd())
+        return cached.value();
+    QImage tile;
+    const std::string prefix = fla::texture::kBitmapPrefix;
+    if (name.compare(0, prefix.size(), prefix) == 0)
+    {
+        // A library bitmap: its lightness is the coverage.
+        const QImage image = libraryBitmap(QString::fromStdString(name.substr(prefix.size()))).toImage();
+        if (!image.isNull())
+            tile = image.convertToFormat(QImage::Format_Grayscale8);
+    }
+    else
+    {
+        const fla::texture::Tile made = fla::texture::builtInTile(name);
+        if (made.size > 0)
+        {
+            tile = QImage(made.size, made.size, QImage::Format_Grayscale8);
+            for (int y = 0; y < made.size; ++y)
+                std::copy(made.coverage.begin() + static_cast<std::ptrdiff_t>(y) * made.size,
+                    made.coverage.begin() + static_cast<std::ptrdiff_t>(y + 1) * made.size, tile.scanLine(y));
+        }
+    }
+    _textureTiles.insert(QString::fromStdString(name), tile);
+    return tile;
+}
+
+QBrush PhoenixView::texturedBrush(const QColor& color, const fla::texture::Spec& spec)
+{
+    const QImage tile = textureTile(spec.name);
+    if (tile.isNull())
+        return QBrush(color);
+    // The color, its alpha taken down where the grain is light.
+    QImage paint(tile.size(), QImage::Format_ARGB32_Premultiplied);
+    for (int y = 0; y < tile.height(); ++y)
+    {
+        const uchar* from = tile.constScanLine(y);
+        QRgb* to = reinterpret_cast<QRgb*>(paint.scanLine(y));
+        for (int x = 0; x < tile.width(); ++x)
+        {
+            const double cover = 1.0 - spec.strength + spec.strength * from[x] / 255.0;
+            const int a = static_cast<int>(std::lround(color.alpha() * cover));
+            to[x] = qPremultiply(qRgba(color.red(), color.green(), color.blue(), a));
+        }
+    }
+    QBrush brush(paint);
+    brush.setTransform(QTransform::fromScale(spec.scale, spec.scale));
+    return brush;
+}
+
 QBrush PhoenixView::getFillBrush(const fla::FillStyle* fillStyle, const fla::Rect& bounds)
 {
     if (!fillStyle)
@@ -3072,6 +3125,13 @@ void PhoenixView::buildShapePaths(const fla::Shape* shape, PathCacheList& cacheE
         QRectF bounds = compoundPath.boundingRect();
         fla::Rect rect({bounds.left(), bounds.top()}, {bounds.left() + bounds.width(), bounds.top() + bounds.height()});
         QBrush brush = getFillBrush(fillStyle, rect);
+        // A textured brush's paint takes on its texture's grain.
+        if (!_maskPass && fillStyle && fillStyle->type() == fla::FillStyle::Type::SolidColor)
+        {
+            const fla::texture::Spec spec = fla::texture::of(*shape);
+            if (spec.valid())
+                brush = texturedBrush(brush.color(), spec);
+        }
         cacheEntries.push_back({ brush, Qt::NoPen, compoundPath, nullptr, fillIdx });
     }
 

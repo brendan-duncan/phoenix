@@ -242,4 +242,8 @@ private:
 
     /// What Copy Filters copied, for Paste Filters.
     std::vector<fla::Filter> _copiedFilters;
+
+    /// A choice of brush texture: none, the built-in ones and the library's
+    /// bitmaps, each item's data its texture name.
+    class QComboBox* textureChoice(const std::string& current);
 };

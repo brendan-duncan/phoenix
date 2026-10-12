@@ -2,6 +2,7 @@
 
 #include "../src/edit/motion_object.h"
 
+#include <algorithm>
 #include <cmath>
 #include <string>
 
@@ -281,4 +282,32 @@ TEST(motion_color_and_filter_curves_play)
     const std::vector<fla::Filter> filters = motion.filtersAt(9.0, 10.0, {shadow});
     CHECK(filters.size() == 1 && std::fabs(filters[0].blurX - 20.0) < 1.0e-6 && filters[0].blurY == 5.0);
     CHECK(fla::motion::colorValue(half, "Alpha_Amount") > 49.0);
+}
+
+#include "../src/edit/brush_texture.h"
+#include "../src/data/shape.h"
+
+TEST(brush_textures_are_made_alike_and_kept_on_shapes)
+{
+    for (const std::string& name : fla::texture::builtIn())
+    {
+        const fla::texture::Tile tile = fla::texture::builtInTile(name);
+        CHECK(tile.size == 256 && tile.coverage.size() == 256u * 256u);
+        // A grain, not a flat tone.
+        const auto range = std::minmax_element(tile.coverage.begin(), tile.coverage.end());
+        CHECK(*range.second - *range.first > 100);
+        CHECK(fla::texture::builtInTile(name).coverage == tile.coverage);
+    }
+    CHECK(fla::texture::builtInTile("Nothing").size == 0);
+
+    fla::Shape shape(nullptr);
+    fla::texture::Spec spec;
+    spec.name = "Chalk";
+    spec.scale = 2.0;
+    spec.strength = 0.5;
+    fla::texture::set(shape.extraAttributes, spec);
+    const fla::texture::Spec read = fla::texture::of(shape);
+    CHECK(read.name == "Chalk" && read.scale == 2.0 && read.strength == 0.5);
+    fla::texture::set(shape.extraAttributes, fla::texture::Spec());
+    CHECK(!fla::texture::of(shape).valid() && shape.extraAttributes.empty());
 }
