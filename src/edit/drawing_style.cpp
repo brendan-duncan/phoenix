@@ -1,8 +1,18 @@
 #include "drawing_style.h"
 
+#include "../data/bitmap_fill.h"
+#include "../data/edge.h"
+#include "../data/linear_gradient.h"
+#include "../data/oval_primitive.h"
+#include "../data/radial_gradient.h"
+#include "../data/rectangle_primitive.h"
+#include "../data/shape.h"
 #include "../data/solid_color.h"
 #include "../data/stroke_style.h"
+
+#include <algorithm>
 #include <cstdint>
+#include <limits>
 
 namespace fla {
 
@@ -14,16 +24,157 @@ void copyColor(const uint8_t source[4], uint8_t target[4])
         target[i] = source[i];
 }
 
+/// Flash's gradient square is 1638.4 pixels across before its matrix.
+constexpr double kGradientSpan = 1638.4;
+
+/// A new gradient or bitmap fill is made with the identity matrix, which no
+/// placed one has, so that is how fitFills knows which to place.
+bool unplaced(const FillStyle& fill)
+{
+    if (fill.type() == FillStyle::Type::SolidColor)
+        return false;
+    const Transform& t = fill.transform;
+    return t.m11 == 1.0 && t.m12 == 0.0 && t.m21 == 0.0 && t.m22 == 1.0 && t.tx == 0.0 && t.ty == 0.0;
+}
+
 } // namespace
+
+std::vector<DrawingStyle::Stop> DrawingStyle::defaultGradient()
+{
+    Stop white;
+    white.ratio = 0.0;
+    white.color[0] = white.color[1] = white.color[2] = 255;
+    Stop black;
+    black.ratio = 1.0;
+    return {white, black};
+}
 
 FillStyle* DrawingStyle::createFill(DOMElement* parent) const
 {
     if (!hasFill)
         return nullptr;
 
+    if ((fillKind == FillKind::Linear || fillKind == FillKind::Radial) && gradient.size() >= 2)
+    {
+        FillStyle* fill = nullptr;
+        if (fillKind == FillKind::Linear)
+        {
+            LinearGradient* linear = new LinearGradient(parent);
+            for (const Stop& stop : gradient)
+            {
+                GradientEntry entry{stop.ratio, {}};
+                copyColor(stop.color, entry.color);
+                linear->entries.push_back(entry);
+            }
+            fill = linear;
+        }
+        else
+        {
+            RadialGradient* radial = new RadialGradient(parent);
+            for (const Stop& stop : gradient)
+            {
+                RadialEntry entry{stop.ratio, {}};
+                copyColor(stop.color, entry.color);
+                radial->entries.push_back(entry);
+            }
+            fill = radial;
+        }
+        fill->spreadMethod = gradientSpread;
+        if (gradientLinearRGB)
+            fill->interpolationMethod = "linearRGB";
+        return fill;
+    }
+    if (fillKind == FillKind::Bitmap && !fillBitmap.empty())
+    {
+        BitmapFill* fill = new BitmapFill(parent);
+        fill->bitmapPath = fillBitmap;
+        return fill;
+    }
+
     SolidColor* fill = new SolidColor(parent);
     copyColor(fillColor, fill->color);
     return fill;
+}
+
+void DrawingStyle::fitFill(FillStyle& fill, double left, double top, double right, double bottom)
+{
+    const double width = std::max(right - left, 1.0);
+    const double height = std::max(bottom - top, 1.0);
+    Transform& t = fill.transform;
+    switch (fill.type())
+    {
+    case FillStyle::Type::LinearGradient:
+        t = Transform(width / kGradientSpan, 0.0, 0.0, height / kGradientSpan, (left + right) / 2.0, (top + bottom) / 2.0);
+        break;
+    case FillStyle::Type::RadialGradient:
+    {
+        const double reach = std::max(width, height) / kGradientSpan;
+        t = Transform(reach, 0.0, 0.0, reach, (left + right) / 2.0, (top + bottom) / 2.0);
+        break;
+    }
+    case FillStyle::Type::BitmapFill:
+        // The matrix takes the bitmap's pixels to twips.
+        t = Transform(20.0, 0.0, 0.0, 20.0, left, top);
+        break;
+    case FillStyle::Type::SolidColor:
+        break;
+    }
+}
+
+void DrawingStyle::fitFills(Element& element)
+{
+    if (element.elementType() == Element::Type::Rectangle)
+    {
+        RectanglePrimitive& rectangle = static_cast<RectanglePrimitive&>(element);
+        if (rectangle.fillStyle && unplaced(*rectangle.fillStyle))
+            fitFill(*rectangle.fillStyle, rectangle.rect.topLeft.x, rectangle.rect.topLeft.y,
+                rectangle.rect.bottomRight.x, rectangle.rect.bottomRight.y);
+        return;
+    }
+    if (element.elementType() == Element::Type::Oval)
+    {
+        OvalPrimitive& oval = static_cast<OvalPrimitive&>(element);
+        if (oval.fillStyle && unplaced(*oval.fillStyle))
+            fitFill(*oval.fillStyle, oval.rect.topLeft.x, oval.rect.topLeft.y,
+                oval.rect.bottomRight.x, oval.rect.bottomRight.y);
+        return;
+    }
+    if (element.elementType() != Element::Type::Shape)
+        return;
+
+    // Each unplaced fill goes over the edges that border it.
+    Shape& shape = static_cast<Shape&>(element);
+    for (const auto& entry : shape.fillsMap)
+    {
+        if (!entry.second || !unplaced(*entry.second))
+            continue;
+        double left = std::numeric_limits<double>::max(), top = left;
+        double right = -left, bottom = -left;
+        for (const Edge* edge : shape.edges)
+        {
+            if (!edge || (edge->fillStyle0 != entry.first && edge->fillStyle1 != entry.first))
+                continue;
+            for (const Path* path : edge->paths)
+            {
+                if (!path)
+                    continue;
+                for (const PathSegment* segment : path->segments)
+                {
+                    if (!segment)
+                        continue;
+                    for (const Point& point : segment->points)
+                    {
+                        left = std::min(left, point.x);
+                        top = std::min(top, point.y);
+                        right = std::max(right, point.x);
+                        bottom = std::max(bottom, point.y);
+                    }
+                }
+            }
+        }
+        if (left <= right && top <= bottom)
+            fitFill(*entry.second, left, top, right, bottom);
+    }
 }
 
 StrokeStyle* DrawingStyle::createStroke(DOMElement* parent) const

@@ -12,6 +12,9 @@
 #include "library_panel.h"
 #include "media_import.h"
 #include "frame_picker_panel.h"
+#include "color_panel.h"
+#include "swatches_panel.h"
+#include "../edit/swatches.h"
 #include "swap_symbol_dialog.h"
 #include "../edit/layer_commands.h"
 #include "../edit/library_media.h"
@@ -337,6 +340,12 @@ void MainWindow::releaseDocument()
         _timelineAudio->setDocument(nullptr);
     if (_libraryPanel)
         _libraryPanel->setDocument(nullptr);
+    if (_colorPanel)
+        _colorPanel->setDocument(nullptr);
+    if (_swatchesPanel)
+        _swatchesPanel->setDocument(nullptr);
+    if (_framePicker)
+        _framePicker->setInstance(nullptr, 0);
 
     // The selection and the undo history both point into the document, so both
     // have to let go before it is deleted. So do the copied frames' symbol
@@ -393,6 +402,10 @@ void MainWindow::adoptDocument(fla::FLADocument* document, const QString& filePa
     }
     if (_libraryPanel)
         _libraryPanel->setDocument(_flaDocument);
+    if (_colorPanel)
+        _colorPanel->setDocument(_flaDocument);
+    if (_swatchesPanel)
+        _swatchesPanel->setDocument(_flaDocument);
 
     if (_flaDocument)
         _player->setCurrentFrame(0);
@@ -1359,6 +1372,28 @@ void MainWindow::setupMenus()
         updateFramePicker();
     });
     viewMenu->addAction(framePickerAction);
+    QAction* colorAction = new QAction("&Color", this);
+    colorAction->setShortcut(QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_F9));
+    colorAction->setStatusTip("Solid colors, gradients and bitmap fills for new art");
+    connect(colorAction, &QAction::triggered, this, [this]() {
+        if (_colorDock)
+        {
+            _colorDock->show();
+            _colorDock->raise();
+        }
+    });
+    viewMenu->addAction(colorAction);
+    QAction* swatchesAction = new QAction("S&watches", this);
+    swatchesAction->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_F9));
+    swatchesAction->setStatusTip("The document's saved colors");
+    connect(swatchesAction, &QAction::triggered, this, [this]() {
+        if (_swatchesDock)
+        {
+            _swatchesDock->show();
+            _swatchesDock->raise();
+        }
+    });
+    viewMenu->addAction(swatchesAction);
     viewMenu->addSeparator();
 
     // Animate shows one scene at a time; these pick which.
@@ -2087,6 +2122,10 @@ void MainWindow::updateEditState()
     // New Layer, say), so the list is rebuilt when it no longer matches.
     if (_libraryPanel)
         _libraryPanel->refreshIfStale();
+    if (_swatchesPanel)
+        _swatchesPanel->refreshIfStale();
+    if (_colorPanel)
+        _colorPanel->refresh();
     updateFramePicker();
     if (_timelineView)
     {
@@ -2465,6 +2504,68 @@ void MainWindow::setupPropertiesPanel()
             _phoenixView->update();
     });
     connect(_framePickerDock, &QDockWidget::visibilityChanged, this, [this](bool) { updateFramePicker(); });
+
+    // Color and Swatches, in the same group, as Animate's workspace has them.
+    _colorDock = new QDockWidget("Color", this);
+    _colorDock->setObjectName("colorDock");
+    _colorDock->setAllowedAreas(Qt::AllDockWidgetAreas);
+    _colorPanel = new ColorPanel(&_drawingStyle, _colorDock);
+    _colorDock->setWidget(_colorPanel);
+    addDockWidget(Qt::RightDockWidgetArea, _colorDock);
+    tabifyDockWidget(libraryDock, _colorDock);
+    _colorPanel->setDocument(_flaDocument);
+    connect(_colorPanel, &ColorPanel::styleChanged, this, [this]() { refreshStyleSwatches(); });
+    connect(_colorPanel, &ColorPanel::applyToSelectionRequested, this, &MainWindow::applyFillToSelection);
+    connect(_colorPanel, &ColorPanel::importBitmapRequested, this, &MainWindow::importToLibrary);
+
+    _swatchesDock = new QDockWidget("Swatches", this);
+    _swatchesDock->setObjectName("swatchesDock");
+    _swatchesDock->setAllowedAreas(Qt::AllDockWidgetAreas);
+    _swatchesPanel = new SwatchesPanel(_swatchesDock);
+    _swatchesDock->setWidget(_swatchesPanel);
+    addDockWidget(Qt::RightDockWidgetArea, _swatchesDock);
+    tabifyDockWidget(_colorDock, _swatchesDock);
+    _swatchesPanel->setDocument(_flaDocument);
+    connect(_swatchesPanel, &SwatchesPanel::colorPicked, this, [this](const QColor& color, bool stroke) {
+        uint8_t* target = stroke ? _drawingStyle.strokeColor : _drawingStyle.fillColor;
+        target[0] = static_cast<uint8_t>(color.red());
+        target[1] = static_cast<uint8_t>(color.green());
+        target[2] = static_cast<uint8_t>(color.blue());
+        target[3] = static_cast<uint8_t>(color.alpha());
+        if (!stroke)
+        {
+            // A swatch is a solid color: new art takes it.
+            _drawingStyle.hasFill = true;
+            _drawingStyle.fillKind = fla::DrawingStyle::FillKind::Solid;
+            if (_textTool)
+                _textTool->applyColor(_drawingStyle.fillColor);
+        }
+        else
+        {
+            _drawingStyle.hasStroke = true;
+        }
+        refreshStyleSwatches();
+        if (_colorPanel)
+            _colorPanel->refresh();
+    });
+    connect(_swatchesPanel, &SwatchesPanel::addRequested, this, [this]() {
+        if (!_flaDocument || !_flaDocument->document)
+            return;
+        fla::Document* document = _flaDocument->document;
+        const fla::swatches::State before = fla::swatches::stateOf(*document);
+        const fla::swatches::Color color = {_drawingStyle.fillColor[0], _drawingStyle.fillColor[1],
+            _drawingStyle.fillColor[2], _drawingStyle.fillColor[3]};
+        _editContext.commandStack().push(fla::CommandPtr(new fla::SetSwatchesCommand(
+            document, before, fla::swatches::withAdded(before, color), "Add Swatch")));
+    });
+    connect(_swatchesPanel, &SwatchesPanel::removeRequested, this, [this](int index) {
+        if (!_flaDocument || !_flaDocument->document || index < 0)
+            return;
+        fla::Document* document = _flaDocument->document;
+        const fla::swatches::State before = fla::swatches::stateOf(*document);
+        _editContext.commandStack().push(fla::CommandPtr(new fla::SetSwatchesCommand(
+            document, before, fla::swatches::withRemoved(before, static_cast<size_t>(index)), "Delete Swatch")));
+    });
     dock->raise();
     _libraryPanel->setDocument(_flaDocument);
     _libraryPanel->setPreviewProvider([this](const QString& kind, const QString& name, const QSize& size) {
@@ -3654,6 +3755,50 @@ void MainWindow::swapSymbol()
     if (_propertiesPanel)
         _propertiesPanel->refresh();
     updateFramePicker();
+}
+
+void MainWindow::applyFillToSelection()
+{
+    if (!_phoenixView || !_drawingStyle.hasFill)
+        return;
+    std::vector<fla::Shape*> shapes;
+    for (fla::Element* element : selectedElements())
+    {
+        if (element && element->elementType() == fla::Element::Type::Shape)
+            shapes.push_back(static_cast<fla::Shape*>(element));
+    }
+    if (shapes.empty())
+    {
+        statusBar()->showMessage("Select shapes to fill.", 3000);
+        return;
+    }
+    _phoenixView->flushPendingMerge();
+    fla::CommandStack& stack = _editContext.commandStack();
+    stack.beginMacro("Apply Fill");
+    for (fla::Shape* shape : shapes)
+    {
+        std::unique_ptr<fla::Element> copy(fla::cloneElement(*shape, shape->parent));
+        fla::Shape* after = dynamic_cast<fla::Shape*>(copy.get());
+        if (!after || after->fillsMap.empty())
+            continue;
+        // Every fill of the shape becomes a new one, each fitted to the
+        // art it fills.
+        for (auto& entry : after->fillsMap)
+        {
+            fla::FillStyle* fill = _drawingStyle.createFill(after);
+            if (!fill)
+                continue;
+            std::replace(after->fills.begin(), after->fills.end(), entry.second, fill);
+            delete entry.second;
+            entry.second = fill;
+        }
+        fla::DrawingStyle::fitFills(*after);
+        stack.push(fla::CommandPtr(new fla::SetShapeContentsCommand(shape, *after, "Apply Fill")));
+    }
+    stack.endMacro();
+    stack.breakMergeChain();
+    _phoenixView->clearCaches();
+    _phoenixView->update();
 }
 
 void MainWindow::updateFramePicker()

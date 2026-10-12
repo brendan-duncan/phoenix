@@ -41,7 +41,7 @@ int ensureFill(fla::Shape& shape, const fla::DrawingStyle& style)
     for (const auto& entry : shape.fillsMap)
     {
         const fla::FillStyle* fill = entry.second;
-        if (fill && fill->type() == fla::FillStyle::Type::SolidColor &&
+        if (fill && style.fillKind == fla::DrawingStyle::FillKind::Solid && fill->type() == fla::FillStyle::Type::SolidColor &&
             sameColor(static_cast<const fla::SolidColor*>(fill)->color, style.fillColor))
         {
             return entry.first;
@@ -183,6 +183,7 @@ bool PaintBucketTool::mousePress(PhoenixView& view, QMouseEvent* event, const QP
         std::unique_ptr<fla::Shape> after(regions.withFaceFill(face, fill));
         if (!after)
             return true;
+        fla::DrawingStyle::fitFills(*after);
 
         // The arrangement was built before the fill was added, which is fine:
         // styles do not change the geometry, and the result is cloned from

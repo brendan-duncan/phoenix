@@ -75,6 +75,8 @@ set(HEADERS
     src/gui/frame_picker_panel.h
     src/gui/swap_symbol_dialog.h
     src/gui/start_dialog.h
+    src/gui/color_panel.h
+    src/gui/swatches_panel.h
     src/gui/media_import.h
     src/gui/timeline_audio.h
     src/gui/new_document_dialog.h
@@ -188,6 +190,7 @@ set(HEADERS
     src/edit/library_commands.h
     src/edit/library_media.h
     src/edit/frame_sound.h
+    src/edit/swatches.h
     src/edit/property_command.h
     src/geom/curve.h
     src/geom/intersect.h
@@ -214,6 +217,8 @@ set(SOURCES
     src/gui/frame_picker_panel.cpp
     src/gui/swap_symbol_dialog.cpp
     src/gui/start_dialog.cpp
+    src/gui/color_panel.cpp
+    src/gui/swatches_panel.cpp
     src/gui/media_import.cpp
     src/gui/timeline_audio.cpp
     src/gui/miniaudio_impl.c
@@ -323,6 +328,7 @@ set(SOURCES
     src/edit/library_commands.cpp
     src/edit/library_media.cpp
     src/edit/frame_sound.cpp
+    src/edit/swatches.cpp
     src/geom/curve.cpp
     src/geom/intersect.cpp
     src/geom/fill_attribution.cpp

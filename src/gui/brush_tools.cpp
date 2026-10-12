@@ -355,6 +355,7 @@ fla::Shape* outlineShape(const QPainterPath& outline, double tolerance, fla::Fra
     shape->localBounds = fla::Rect(fla::Point(bounds.left(), bounds.top()),
         fla::Point(bounds.right(), bounds.bottom()));
     shape->bounds = shape->localBounds;
+    fla::DrawingStyle::fitFills(*shape);
     return shape;
 }
 

@@ -11,6 +11,11 @@
 #include "../src/data/timeline.h"
 #include "../src/edit/command_stack.h"
 #include "../src/edit/library_commands.h"
+#include "../src/edit/swatches.h"
+#include "../src/edit/drawing_style.h"
+#include "../src/data/fill_style.h"
+#include "../src/data/swatch_list.h"
+#include <cmath>
 #include "../src/edit/element_clone.h"
 #include "../src/data/group.h"
 
@@ -211,4 +216,47 @@ TEST(relinking_points_copied_instances_at_another_librarys_symbols)
     fla::relinkSymbols(group, &second);
     CHECK(ball->symbol == ballInSecond);
     CHECK(box->symbol == nullptr);
+}
+
+TEST(swatches_are_added_and_removed_keeping_what_is_not_modeled)
+{
+    fla::Document document(nullptr);
+    const fla::swatches::State empty = fla::swatches::stateOf(document);
+    CHECK(!empty.exists);
+
+    const fla::swatches::State one = fla::swatches::withAdded(empty, {255, 0, 0, 255});
+    fla::CommandStack stack;
+    stack.push(fla::CommandPtr(new fla::SetSwatchesCommand(&document, empty, one, "Add Swatch")));
+    CHECK(document.swatchLists.size() == 1);
+    CHECK(fla::swatches::of(document).size() == 1);
+    CHECK(document.swatchLists.front()->xml.find("<SolidSwatchItem color=\"#FF0000\"/>") != std::string::npos);
+
+    // A gradient swatch it does not model stays put.
+    fla::swatches::State mixed = fla::swatches::stateOf(document);
+    mixed.xml.insert(mixed.xml.find("</swatches>"), "<LinearGradientSwatchItem/>");
+    const fla::swatches::State two = fla::swatches::withAdded(mixed, {0, 0, 255, 128});
+    CHECK(two.colors.size() == 2 && two.colors[1][3] == 128);
+    const fla::swatches::State removed = fla::swatches::withRemoved(two, 0);
+    CHECK(removed.colors.size() == 1 && removed.colors[0][2] == 255);
+    CHECK(removed.xml.find("<LinearGradientSwatchItem/>") != std::string::npos);
+
+    stack.undo();
+    CHECK(document.swatchLists.empty());
+}
+
+TEST(new_gradient_and_bitmap_fills_are_fitted_to_the_art)
+{
+    fla::DrawingStyle style;
+    style.fillKind = fla::DrawingStyle::FillKind::Linear;
+    std::unique_ptr<fla::FillStyle> linear(style.createFill(nullptr));
+    CHECK(linear && linear->type() == fla::FillStyle::Type::LinearGradient);
+    fla::DrawingStyle::fitFill(*linear, 10, 20, 173.84, 120);
+    CHECK(std::fabs(linear->transform.m11 - 0.1) < 1e-6 && std::fabs(linear->transform.tx - 91.92) < 1e-6);
+
+    style.fillKind = fla::DrawingStyle::FillKind::Bitmap;
+    style.fillBitmap = "pic.png";
+    std::unique_ptr<fla::FillStyle> bitmap(style.createFill(nullptr));
+    CHECK(bitmap && bitmap->type() == fla::FillStyle::Type::BitmapFill);
+    fla::DrawingStyle::fitFill(*bitmap, 10, 20, 50, 60);
+    CHECK(bitmap->transform.m11 == 20.0 && bitmap->transform.tx == 10.0 && bitmap->transform.ty == 20.0);
 }

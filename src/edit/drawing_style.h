@@ -4,11 +4,14 @@
 
 #include <cstdint>
 #include <string>
+#include <vector>
 
 namespace fla {
 
 class DOMElement;
+class Element;
 class FillStyle;
+class Shape;
 class StrokeStyle;
 
 /// The fill and stroke a new object is drawn with, plus the settings the shape
@@ -23,6 +26,34 @@ class DrawingStyle
 public:
     bool hasFill = true;
     uint8_t fillColor[4] = {0, 153, 255, 255};
+
+    /// What new art is filled with, as the Color panel sets it: the fill
+    /// color, a gradient or a library bitmap.
+    enum class FillKind
+    {
+        Solid,
+        Linear,
+        Radial,
+        Bitmap
+    };
+    FillKind fillKind = FillKind::Solid;
+
+    /// A gradient stop: where along the gradient, 0 to 1, and its color.
+    struct Stop
+    {
+        double ratio = 0.0;
+        uint8_t color[4] = {0, 0, 0, 255};
+    };
+    /// The gradient's stops, in order; Animate starts one at white to black.
+    std::vector<Stop> gradient = defaultGradient();
+    /// How the colors go on past the ends: "" (extend), "reflect" or
+    /// "repeat", and whether they blend in linear RGB.
+    std::string gradientSpread;
+    bool gradientLinearRGB = false;
+    /// The library bitmap a bitmap fill tiles.
+    std::string fillBitmap;
+
+    static std::vector<Stop> defaultGradient();
 
     bool hasStroke = true;
     uint8_t strokeColor[4] = {0, 0, 0, 255};
@@ -162,8 +193,19 @@ public:
     int textType = 0;
 
     /// Builds the fill for a new object. Returns null when fills are switched
-    /// off. The caller owns the result.
+    /// off. The caller owns the result. A gradient or a bitmap fill comes
+    /// unplaced; fitFills puts it over the art once that has its shape.
     FillStyle* createFill(DOMElement* parent) const;
+
+    /// Places a gradient or bitmap fill over the box \a left, \a top,
+    /// \a right, \a bottom as Animate places a new one: a linear gradient
+    /// across the width, a radial one centered and reaching the farther
+    /// side, a bitmap at the top-left corner at its own size.
+    static void fitFill(FillStyle& fill, double left, double top, double right, double bottom);
+
+    /// Fits every unplaced gradient and bitmap fill of \a element (a shape,
+    /// or a rectangle or oval primitive) to the art it fills.
+    static void fitFills(Element& element);
 
     /// Builds the stroke for a new object, or null when strokes are switched
     /// off. The caller owns the result.

@@ -5,6 +5,7 @@
 #include "../data/frame.h"
 #include "../data/shape.h"
 #include "../edit/command_stack.h"
+#include "../edit/drawing_style.h"
 #include "../edit/element_commands.h"
 #include "../edit/selection.h"
 #include "../edit/shape_transform.h"
@@ -76,6 +77,9 @@ void placeDrawnElement(PhoenixView& view, fla::CommandStack& commandStack,
         delete element;
         return;
     }
+
+    // A gradient or bitmap fill goes over the drawing now it has its shape.
+    fla::DrawingStyle::fitFills(*element);
 
     // Anything still waiting from a previous drawing is committed first, so it
     // merges into the artwork that was under it rather than into the drawing

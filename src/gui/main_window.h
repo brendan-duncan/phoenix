@@ -322,6 +322,14 @@ private:
     class LibraryPanel* _libraryPanel = nullptr;
     class FramePickerPanel* _framePicker = nullptr;
     QDockWidget* _framePickerDock = nullptr;
+    class ColorPanel* _colorPanel = nullptr;
+    QDockWidget* _colorDock = nullptr;
+    class SwatchesPanel* _swatchesPanel = nullptr;
+    QDockWidget* _swatchesDock = nullptr;
+
+    /// The Color panel's Apply to Selection: the selected shapes' fills
+    /// become what new art is filled with, fitted to each.
+    void applyFillToSelection();
 
     /// Shows the selected graphic instance's frames in the Frame Picker.
     void updateFramePicker();
