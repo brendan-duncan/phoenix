@@ -81,6 +81,9 @@ public:
     /// the frame grid beside it.
     void setBottomMargin(int margin);
 
+    /// How tall a row is, matching the frames beside it.
+    void setRowHeight(int height);
+
 signals:
     void layerVisibilityChanged(const QString& timelineName, int layerIndex, bool visible);
 
@@ -140,6 +143,7 @@ private:
     fla::Timeline* _timeline = nullptr;
     QTreeWidget* _treeWidget;
     int _bottomMargin = 0;
+    int _rowHeight = 22;
     /// The header and glyphs in the current theme's colors.
     void applyTheme();
     QWidget* _header = nullptr;

@@ -56,6 +56,9 @@ public:
     /// Lets the frames draw the waveforms of their sounds.
     void setSoundProvider(std::function<std::shared_ptr<const PcmBuffer>(const fla::Frame*, size_t& in)> provider);
 
+    /// Draws a layer's keyframe for the frame view's thumbnails.
+    void setThumbnailProvider(TimelineGrid::ThumbnailProvider provider);
+
     /// The frames side, for playback and the loop range.
     TimelinesPanel* timelines() const { return _timelinesPanel; }
 

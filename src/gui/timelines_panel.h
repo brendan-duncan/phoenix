@@ -14,6 +14,7 @@
 #include <vector>
 #include <QPushButton>
 #include <QTimer>
+#include <QImage>
 
 class Player;
 
@@ -79,6 +80,28 @@ public:
     int loopFirst() const { return _loopFirst; }
     int loopLast() const { return _loopLast; }
 
+    /// Frame view: how wide a frame's cell is (zoom), how tall a row, the
+    /// ruler counting seconds rather than frames, and keyframe thumbnails
+    /// (0 none, 1 each keyframe's art, 2 the whole stage).
+    struct View
+    {
+        int frameWidth = 20;
+        int rowHeight = 22;
+        bool seconds = false;
+        int preview = 0;
+    };
+    void setView(const View& view);
+    const View& view() const { return _view; }
+    /// A frame's left edge.
+    int cellStride() const { return _view.frameWidth + 1; }
+
+    /// Draws a layer's keyframe for the thumbnails: the art alone or in
+    /// context, at a size.
+    using ThumbnailProvider = std::function<QImage(const fla::Layer*, int frame, QSize size, bool inContext)>;
+    void setThumbnailProvider(ThumbnailProvider provider) { _thumbnails = std::move(provider); }
+    /// Forgets the thumbnails drawn, after an edit.
+    void clearThumbnails() { _thumbnailCache.clear(); }
+
     /// Where the grid finds a frame's sound and the point in it the frame
     /// starts from, to draw its waveform along the span.
     using SoundProvider = std::function<std::shared_ptr<const PcmBuffer>(const fla::Frame*, size_t& in)>;
@@ -88,6 +111,8 @@ public slots:
     void onPlayerFrameChanged(int frame) { update(); }
 
 signals:
+    /// Ctrl+wheel zoomed the frames.
+    void viewChanged();
     /// A frame cell was pressed on this layer, which makes the layer
     /// current as well as moving the playhead.
     void layerPressed(const fla::Timeline* timeline, int layerIndex);
@@ -119,8 +144,14 @@ protected:
     void mouseMoveEvent(QMouseEvent* event) override;
 
     void mouseReleaseEvent(QMouseEvent* event) override;
+    void wheelEvent(QWheelEvent* event) override;
 
 private:
+    View _view;
+    ThumbnailProvider _thumbnails;
+    mutable std::map<std::pair<const fla::Frame*, int>, QImage> _thumbnailCache;
+    /// A keyframe's thumbnail, drawn once and kept.
+    QImage thumbnailOf(const fla::Layer* layer, const fla::Frame* frame, QSize size) const;
     const fla::FLADocument* _flaDocument;
     Player* _player;
     bool _isDragging = false;
@@ -237,6 +268,15 @@ public:
     int rowsViewportHeight() const;
 
     void setBottomPadding(int padding) { _gridContainer->setBottomPadding(padding); }
+
+    /// The frame view, kept between sessions.
+    TimelineGrid* grid() const { return _gridContainer; }
+
+signals:
+    /// The frame view was changed from its menu or by zooming.
+    void frameViewChanged();
+
+public:
 
     /// Reflects the onion skin state set from elsewhere (the View menu).
     void setOnionSkin(bool on, int before, int after);

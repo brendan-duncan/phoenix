@@ -69,6 +69,26 @@ TimelineView::TimelineView(Player* player, QWidget *parent)
     connect(_timelinesPanel, &TimelinesPanel::onionRangeChanged, this, &TimelineView::onionRangeChanged);
     connect(_timelinesPanel, &TimelinesPanel::onionMenuRequested, this, &TimelineView::onionMenuRequested);
     connect(_timelinesPanel, &TimelinesPanel::onionSkinToggled, this, &TimelineView::onionSkinToggled);
+    // The frame view, from last time; the layers list keeps to its rows.
+    {
+        QSettings settings;
+        TimelineGrid::View view;
+        view.frameWidth = settings.value("timeline/frameWidth", 20).toInt();
+        view.rowHeight = settings.value("timeline/rowHeight", 22).toInt();
+        view.seconds = settings.value("timeline/seconds", false).toBool();
+        view.preview = settings.value("timeline/preview", 0).toInt();
+        _timelinesPanel->grid()->setView(view);
+        _layersPanel->setRowHeight(_timelinesPanel->grid()->view().rowHeight);
+    }
+    connect(_timelinesPanel, &TimelinesPanel::frameViewChanged, this, [this]() {
+        const TimelineGrid::View& view = _timelinesPanel->grid()->view();
+        QSettings settings;
+        settings.setValue("timeline/frameWidth", view.frameWidth);
+        settings.setValue("timeline/rowHeight", view.rowHeight);
+        settings.setValue("timeline/seconds", view.seconds);
+        settings.setValue("timeline/preview", view.preview);
+        _layersPanel->setRowHeight(view.rowHeight);
+    });
     // The grid draws the rows the list shows, so folders fold their lanes.
     connect(_layersPanel, &LayersPanel::rowsChanged, this, [this]() {
         _timelinesPanel->setRows(_layersPanel->visibleRows());
@@ -206,4 +226,9 @@ void TimelineView::resizeEvent(QResizeEvent* event)
 std::vector<int> TimelineView::selectedLayers(fla::Timeline*& timeline) const
 {
     return _layersPanel->selectedLayers(timeline);
+}
+
+void TimelineView::setThumbnailProvider(TimelineGrid::ThumbnailProvider provider)
+{
+    _timelinesPanel->grid()->setThumbnailProvider(std::move(provider));
 }

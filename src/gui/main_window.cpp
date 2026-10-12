@@ -1490,6 +1490,41 @@ void MainWindow::setupUI()
     connect(_timelineView, &TimelineView::parentLayerRequested, this, &MainWindow::setParentLayer);
     connect(_timelineView, &TimelineView::effectSettingsRequested, this, &MainWindow::editEffect);
     connect(_timelineView, &TimelineView::layerClipboardRequested, this, &MainWindow::layerClipboard);
+    // The frame view's thumbnails: a keyframe's art alone, cropped to it,
+    // or the whole stage around it.
+    _timelineView->setThumbnailProvider([this](const fla::Layer* layer, int frame, QSize size, bool inContext) {
+        if (!_phoenixView || !_flaDocument || !_flaDocument->document)
+            return QImage();
+        const fla::Document* document = _flaDocument->document;
+        const QSize stage(std::max(1, document->width), std::max(1, document->height));
+        const QSize drawn = stage.scaled(QSize(size.height() * 8, size.height() * 2), Qt::KeepAspectRatio);
+        if (!inContext)
+            _phoenixView->setOnlyLayer(layer);
+        QImage image = _phoenixView->renderFrame(frame, drawn.isEmpty() ? QSize(1, 1) : drawn, !inContext);
+        _phoenixView->setOnlyLayer(nullptr);
+        if (!inContext)
+        {
+            // Cropped to the art, with a little room.
+            int left = image.width(), top = image.height(), right = -1, bottom = -1;
+            const QImage argb = image.convertToFormat(QImage::Format_ARGB32);
+            for (int y = 0; y < argb.height(); ++y)
+            {
+                const QRgb* line = reinterpret_cast<const QRgb*>(argb.constScanLine(y));
+                for (int x = 0; x < argb.width(); ++x)
+                    if (qAlpha(line[x]) > 8)
+                    {
+                        left = std::min(left, x);
+                        right = std::max(right, x);
+                        top = std::min(top, y);
+                        bottom = std::max(bottom, y);
+                    }
+            }
+            if (right < 0)
+                return QImage();
+            image = argb.copy(QRect(QPoint(left, top), QPoint(right, bottom)).adjusted(-1, -1, 1, 1));
+        }
+        return image.scaled(size, Qt::KeepAspectRatio, Qt::SmoothTransformation);
+    });
 }
 
 fla::Timeline* MainWindow::editedTimeline() const

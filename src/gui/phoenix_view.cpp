@@ -406,7 +406,7 @@ QImage PhoenixView::renderFrame(int frame, const QSize& size, bool transparent)
         painter.fillRect(image.rect(), QColor(document->backgroundColor[0], document->backgroundColor[1],
             document->backgroundColor[2], document->backgroundColor[3]));
     }
-    painter.scale(size.width() / document->width, size.height() / document->height);
+    painter.scale(static_cast<double>(size.width()) / document->width, static_cast<double>(size.height()) / document->height);
 
     const QTransform savedView = viewTransform;
     const QRectF savedVisible = _visibleRect;

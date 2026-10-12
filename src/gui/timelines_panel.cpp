@@ -5,11 +5,8 @@
 
 namespace {
 
-/// Animate's timeline rows are 22 px tall, the frame cells filling them
-/// but for a one pixel rule. The layers list uses the same height so the
-/// two stay in step.
-constexpr int kLayerRowHeight = 22;
-constexpr int kFrameHeight = 21;
+/// The ruler's height over the frames.
+constexpr int kRulerHeight = 25;
 
 } // namespace
 #include <algorithm>
@@ -18,6 +15,7 @@ constexpr int kFrameHeight = 21;
 
 #include <QElapsedTimer>
 #include <QLabel>
+#include <QMenu>
 #include <QVBoxLayout>
 #include <QHBoxLayout>
 #include <QFont>
@@ -32,6 +30,7 @@ constexpr int kFrameHeight = 21;
 #include <QIcon>
 #include <QPixmap>
 #include <QImage>
+#include <QWheelEvent>
 
 #include "theme.h"
 
@@ -248,10 +247,54 @@ TimelinesPanel::TimelinesPanel(Player* player, QWidget *parent)
     connect(_loopButton, &QPushButton::toggled, this, [this](bool on) { setLoopPlayback(on); });
     headerLayout->addWidget(_loopButton);
 
+    // The frame view: frame widths, row heights, thumbnails and seconds.
+    QPushButton* viewButton = new QPushButton(_header);
+    viewButton->setFixedSize(btnSize, btnSize);
+    viewButton->setText(QString::fromUtf8("\u2630"));
+    viewButton->setToolTip("Frame view: frame size, row height, thumbnails, time in seconds (Ctrl+wheel zooms)");
+    viewButton->setStyleSheet(styleTransport);
+    connect(viewButton, &QPushButton::clicked, this, [this, viewButton]() {
+        QMenu menu(this);
+        const TimelineGrid::View now = _gridContainer->view();
+        const auto choose = [&](const QString& label, bool checked, std::function<void(TimelineGrid::View&)> change) {
+            QAction* action = menu.addAction(label);
+            action->setCheckable(true);
+            action->setChecked(checked);
+            connect(action, &QAction::triggered, this, [this, change]() {
+                TimelineGrid::View view = _gridContainer->view();
+                change(view);
+                _gridContainer->setView(view);
+                emit frameViewChanged();
+            });
+        };
+        const std::pair<const char*, int> widths[] = {{"Tiny", 5}, {"Small", 10}, {"Normal", 20}, {"Medium", 30}, {"Large", 44}};
+        for (const auto& [label, width] : widths)
+            choose(label, now.frameWidth == width, [width = width](TimelineGrid::View& view) { view.frameWidth = width; });
+        menu.addSeparator();
+        const std::pair<const char*, int> heights[] = {{"Short Rows", 15}, {"Normal Rows", 22}, {"Tall Rows", 44}};
+        for (const auto& [label, height] : heights)
+            choose(label, now.rowHeight == height, [height = height](TimelineGrid::View& view) { view.rowHeight = height; });
+        menu.addSeparator();
+        choose("Preview", now.preview == 1, [](TimelineGrid::View& view) {
+            view.preview = view.preview == 1 ? 0 : 1;
+            if (view.preview)
+                view.rowHeight = std::max(view.rowHeight, 44);
+        });
+        choose("Preview in Context", now.preview == 2, [](TimelineGrid::View& view) {
+            view.preview = view.preview == 2 ? 0 : 2;
+            if (view.preview)
+                view.rowHeight = std::max(view.rowHeight, 44);
+        });
+        menu.addSeparator();
+        choose("Time in Seconds", now.seconds, [](TimelineGrid::View& view) { view.seconds = !view.seconds; });
+        menu.exec(viewButton->mapToGlobal(QPoint(0, viewButton->height())));
+    });
+    headerLayout->addWidget(viewButton);
+
     headerLayout->addStretch();
     // Balance the status labels so the transport stays centered.
     QWidget* balance = new QWidget(_header);
-    balance->setFixedWidth(3 * 60 + 2 * 2 - btnSize - 2);
+    balance->setFixedWidth(3 * 60 + 2 * 2 - 2 * btnSize - 4);
     headerLayout->addWidget(balance);
 
     _gridContainer = new TimelineGrid(_player, this);
@@ -268,6 +311,7 @@ TimelinesPanel::TimelinesPanel(Player* player, QWidget *parent)
     connect(_gridContainer, &TimelineGrid::contextMenuRequested, this, &TimelinesPanel::contextMenuRequested);
     connect(_gridContainer, &TimelineGrid::spanResizeRequested, this, &TimelinesPanel::spanResizeRequested);
     connect(_gridContainer, &TimelineGrid::onionRangeChanged, this, &TimelinesPanel::onionRangeChanged);
+    connect(_gridContainer, &TimelineGrid::viewChanged, this, &TimelinesPanel::frameViewChanged);
     connect(_playTimer, &QTimer::timeout, this, &TimelinesPanel::onTimerTick);
 
     applyTheme();
@@ -346,6 +390,7 @@ int TimelinesPanel::rowsViewportHeight() const
 
 void TimelinesPanel::refreshFrames()
 {
+    _gridContainer->clearThumbnails();
     _gridContainer->updateSize();
     _gridContainer->update();
     updateStatus();
@@ -562,9 +607,7 @@ void TimelinesPanel::onTimerTick()
 void TimelinesPanel::onPlayerFrameChanged(int frame)
 {
     updateStatus();
-    const int frameWidth = 20;
-    const int margin = 1;
-    int playheadX = frame * (frameWidth + margin) + frameWidth / 2;
+    const int playheadX = frame * _gridContainer->cellStride() + _gridContainer->view().frameWidth / 2;
     _scrollArea->ensureVisible(playheadX, 0, 50, 0);
 }
 
@@ -583,15 +626,13 @@ void TimelineGrid::updateSize()
         return;
     }
 
-    const int frameWidth = 20;
-    const int frameHeight = kFrameHeight;
-    const int layerRowHeight = kLayerRowHeight;
-    const int headerHeight = 25;
+    const int layerRowHeight = _view.rowHeight;
+    const int headerHeight = kRulerHeight;
 
     const int numRows = static_cast<int>(_rows.size());
 
     int maxFrames = frameCount() + kSpareColumns;
-    int totalWidth = headerHeight + maxFrames * (frameWidth + 2);
+    int totalWidth = headerHeight + maxFrames * (cellStride() + 1);
     int totalHeight = headerHeight + numRows * layerRowHeight + _bottomPadding;
 
     setMinimumSize(totalWidth, totalHeight);
@@ -610,14 +651,11 @@ void TimelineGrid::updatePlayerFromMouse(int x)
     if (!_player || !_flaDocument || !_flaDocument->document)
         return;
 
-    const int frameWidth = 20;
-    const int margin = 1;
-
     int frameX = x;
     if (frameX < 0)
         frameX = 0;
 
-    int frame = frameX / (frameWidth + margin);
+    int frame = frameX / cellStride();
     if (frame < 0)
         frame = 0;
 
@@ -640,17 +678,17 @@ void TimelineGrid::updatePlayerFromMouse(int x)
 
 int TimelineGrid::rowAt(int y) const
 {
-    const int headerHeight = 25;
+    const int headerHeight = kRulerHeight;
     // The pinned ruler covers the rows scrolled under it.
     if (y < rulerTop() + headerHeight)
         return -1;
-    const int row = (y - headerHeight) / kLayerRowHeight;
+    const int row = (y - headerHeight) / _view.rowHeight;
     return row < static_cast<int>(_rows.size()) ? row : -1;
 }
 
 int TimelineGrid::frameAt(int x) const
 {
-    return std::max(0, x / (20 + 1));
+    return std::max(0, x / cellStride());
 }
 
 void TimelineGrid::dropBlock(bool copy)
@@ -792,7 +830,7 @@ void TimelineGrid::mousePressEvent(QMouseEvent* event)
         // The onion skin's markers drag its range.
         if (event->button() == Qt::LeftButton && _onionSkin && _player && !_loopOn)
         {
-            const int stride = 21;
+            const int stride = cellStride();
             const int current = _player->currentFrame();
             const int x = event->pos().x();
             const int left = std::max(0, current - _onionBefore) * stride + 1;
@@ -806,7 +844,7 @@ void TimelineGrid::mousePressEvent(QMouseEvent* event)
         }
         if (event->button() == Qt::LeftButton && _loopOn)
         {
-            const int stride = 21;
+            const int stride = cellStride();
             const int x = event->pos().x();
             if (std::abs(x - _loopFirst * stride) <= 4)
                 _draggingLoop = 1;
@@ -953,7 +991,7 @@ void TimelineGrid::mouseMoveEvent(QMouseEvent* event)
         const int first = std::min(_anchorFrame, _focusFrame);
         const int frames = std::max(frameAt(event->pos().x()) - _blockFrame, -first);
         const int lastRow = static_cast<int>(_rows.size()) - 1;
-        const int under = std::max(0, std::min(lastRow, (event->pos().y() - 25) / kLayerRowHeight));
+        const int under = std::max(0, std::min(lastRow, (event->pos().y() - kRulerHeight) / _view.rowHeight));
         const int rows = std::max(-top, std::min(lastRow - bottom, under - _blockRow));
         if (frames != _blockFrames || rows != _blockRows)
         {
@@ -1072,10 +1110,10 @@ void TimelineGrid::paintEvent(QPaintEvent* event)
     if (!_flaDocument || !_flaDocument->document)
         return;
 
-    const int frameWidth = 20;
-    const int frameHeight = kFrameHeight;
-    const int layerRowHeight = kLayerRowHeight;
-    const int headerHeight = 25;
+    const int frameWidth = _view.frameWidth;
+    const int frameHeight = _view.rowHeight - 1;
+    const int layerRowHeight = _view.rowHeight;
+    const int headerHeight = kRulerHeight;
     const int margin = 1;
     const int cellStride = frameWidth + margin;
 
@@ -1113,7 +1151,7 @@ void TimelineGrid::paintEvent(QPaintEvent* event)
             for (int i = 0; i < maxFrames; ++i)
             {
                 const QRect cell(i * cellStride, y, frameWidth, frameHeight);
-                painter.fillRect(cell, (i + 1) % 5 == 0 ? cellLight : cellDark);
+                painter.fillRect(cell, (i + 1) % 5 == 0 && frameWidth >= 8 ? cellLight : cellDark);
             }
 
             if (layer->layerType == fla::Layer::Type::Folder)
@@ -1182,11 +1220,28 @@ void TimelineGrid::paintEvent(QPaintEvent* event)
                 const double midY = y + frameHeight / 2.0;
                 const double dotX = x0 + frameWidth / 2.0;
 
+                // Frame view thumbnails: the keyframe's art along its span.
+                if (_view.preview && hasContent && x1 - x0 > 8)
+                {
+                    const QRect room(x0 + 1, y + 1, x1 - x0 - 2, frameHeight - 2);
+                    const QImage thumbnail = thumbnailOf(layer, frame, room.size());
+                    if (!thumbnail.isNull())
+                    {
+                        painter.save();
+                        painter.setClipRect(room);
+                        painter.drawImage(QPoint(room.left(), room.top() + (room.height() - thumbnail.height()) / 2), thumbnail);
+                        painter.restore();
+                    }
+                }
+
                 // The keyframe dot: filled when the frame holds something,
-                // hollow when it is an empty keyframe.
+                // hollow when it is an empty keyframe. Narrow frames get a
+                // smaller one, at the bottom when thumbnails fill the row.
+                const double dotRadius = std::min(3.2, frameWidth / 2.0 - 0.5);
+                const double dotY = _view.preview ? y + frameHeight - dotRadius - 2.0 : midY;
                 painter.setPen(QPen(mark, 1.0));
                 painter.setBrush(hasContent ? mark : QColor(255, 255, 255));
-                painter.drawEllipse(QPointF(dotX, midY), 3.2, 3.2);
+                painter.drawEllipse(QPointF(dotX, dotY), dotRadius, dotRadius);
 
                 // A script on the keyframe is marked with an "a" over its dot.
                 if (frame->actionScript && !frame->actionScript->code.empty())
@@ -1377,17 +1432,53 @@ void TimelineGrid::paintEvent(QPaintEvent* event)
     QFont frameFont = painter.font();
     frameFont.setPointSize(8);
     painter.setFont(frameFont);
-    for (int i = 0; i < maxFrames; ++i)
+    if (_view.seconds)
     {
-        const int number = i + 1;
-        const int x = i * cellStride;
-        if (number == 1 || number % 5 == 0)
+        // Seconds, as far apart as there is room for.
+        const double fps = _flaDocument->document->frameRate > 0.0 ? _flaDocument->document->frameRate : 24.0;
+        double step = 1.0;
+        for (const double candidate : {0.5, 1.0, 2.0, 5.0, 10.0, 30.0, 60.0})
         {
+            step = candidate;
+            if (candidate * fps * cellStride >= 34.0)
+                break;
+        }
+        for (int tick = 0;; ++tick)
+        {
+            const double seconds = tick * step;
+            const int x = static_cast<int>(std::lround(seconds * fps * cellStride));
+            if (x > maxFrames * cellStride)
+                break;
             painter.setPen(cellLight.lighter(130));
             painter.drawLine(x, headerHeight - 6, x, headerHeight - 1);
             painter.setPen(textColor);
-            painter.drawText(QRect(x, 2, cellStride * 3, headerHeight - 8),
-                Qt::AlignLeft | Qt::AlignVCenter, QString::number(number));
+            painter.drawText(QRect(x + 2, 2, 60, headerHeight - 8), Qt::AlignLeft | Qt::AlignVCenter,
+                QString::number(seconds) + "s");
+        }
+    }
+    else
+    {
+        // Frame numbers from one, every fifth or as far apart as there is
+        // room for.
+        int step = 5;
+        for (const int candidate : {5, 10, 20, 50, 100, 200, 500})
+        {
+            step = candidate;
+            if (candidate * cellStride >= 28)
+                break;
+        }
+        for (int i = 0; i < maxFrames; ++i)
+        {
+            const int number = i + 1;
+            const int x = i * cellStride;
+            if (number == 1 || number % step == 0)
+            {
+                painter.setPen(cellLight.lighter(130));
+                painter.drawLine(x, headerHeight - 6, x, headerHeight - 1);
+                painter.setPen(textColor);
+                painter.drawText(QRect(x, 2, std::max(cellStride * 3, 40), headerHeight - 8),
+                    Qt::AlignLeft | Qt::AlignVCenter, QString::number(number));
+            }
         }
     }
 
@@ -1449,4 +1540,47 @@ void TimelineGrid::paintEvent(QPaintEvent* event)
         painter.drawPath(head);
     }
     painter.restore();
+}
+
+void TimelineGrid::setView(const View& view)
+{
+    _view = view;
+    _view.frameWidth = std::clamp(_view.frameWidth, 3, 80);
+    _view.rowHeight = std::clamp(_view.rowHeight, 12, 120);
+    _thumbnailCache.clear();
+    updateSize();
+    update();
+}
+
+void TimelineGrid::wheelEvent(QWheelEvent* event)
+{
+    // Ctrl+wheel zooms the frames about the pointer.
+    if (!(event->modifiers() & Qt::ControlModifier))
+    {
+        QWidget::wheelEvent(event);
+        return;
+    }
+    const int steps = event->angleDelta().y() / 120;
+    if (steps == 0)
+        return;
+    View view = _view;
+    view.frameWidth = std::clamp(_view.frameWidth + steps * (_view.frameWidth >= 20 ? 4 : _view.frameWidth >= 8 ? 2 : 1), 3, 80);
+    if (view.frameWidth == _view.frameWidth)
+        return;
+    setView(view);
+    emit viewChanged();
+    event->accept();
+}
+
+QImage TimelineGrid::thumbnailOf(const fla::Layer* layer, const fla::Frame* frame, QSize size) const
+{
+    if (!_thumbnails || size.isEmpty())
+        return QImage();
+    const auto key = std::make_pair(frame, size.height() * 4 + _view.preview);
+    const auto found = _thumbnailCache.find(key);
+    if (found != _thumbnailCache.end())
+        return found->second;
+    QImage image = _thumbnails(layer, frame->index, size, _view.preview == 2);
+    _thumbnailCache[key] = image;
+    return image;
 }

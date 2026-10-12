@@ -63,15 +63,26 @@
   <dt>Color square</dt><dd>Click to view the layer's artwork as outlines in that color. The color is also used for the layer's selection highlights.</dd>
 </dl>
 
-<p>The eye, lock and square buttons at the top of the list apply to every layer at once.</p>
+<p>The eye, lock and square buttons at the top of the list apply to every layer at once. In the rows:</p>
+
+<ul>
+  <li><kbd>Alt</kbd>-click an eye, lock or square to do the same to <strong>every other layer</strong>: hide all the others, say, and <kbd>Alt</kbd>-click again to bring them back.</li>
+  <li>Drag down a column to set each layer you pass the same way, hiding or locking several in one stroke.</li>
+  <li><kbd>Shift</kbd>-click an eye to make the layer <strong>transparent</strong>: it shows faded, so you can see what is under it while you work. A faded eye marks it; <kbd>Shift</kbd>-click again for the layer in full. Exports always draw it in full. Layer Properties sets how faded it is.</li>
+</ul>
 
 <h3>Add, delete and reorder</h3>
 
 <ul>
-  <li>The buttons below the layer list add a <strong>new layer</strong> or a <strong>new folder</strong>, and <strong>delete</strong> the current layer.</li>
+  <li>The buttons below the layer list add a <strong>new layer</strong> or a <strong>new folder</strong>, and <strong>delete</strong> the layers selected. <span class="menu-path">Insert &rsaquo; Timeline &rsaquo; Layer</span> and <span class="menu-path">Layer Folder</span> add them too.</li>
+  <li><kbd>Ctrl</kbd>-click or <kbd>Shift</kbd>-click layer names to select several layers at once.</li>
   <li>Drag a layer up or down to change the stacking order. Drop it onto a folder to move it inside.</li>
   <li>Right-click a layer for <strong>Insert Layer</strong>, <strong>Insert Folder</strong>, <strong>Delete Layer</strong>, <strong>Show All</strong>, <strong>Hide Others</strong> and <strong>Lock Others</strong>.</li>
 </ul>
+
+<h3>Copy, paste and duplicate layers</h3>
+
+<p>Right-click a layer, or use <span class="menu-path">Edit &rsaquo; Timeline</span>, for <strong>Cut Layers</strong>, <strong>Copy Layers</strong>, <strong>Paste Layers</strong> and <strong>Duplicate Layers</strong>. They act on the layers selected, with everything inside a folder, mask or guide among them, and keep every frame and setting. Pasted layers go in above the current layer; a duplicate goes above the original, named with <em>copy</em>. Copied layers paste into the document they came from. When a parent and the layers that follow it are copied together, the copies follow the copied parent.</p>
 
 <h3>Folders</h3>
 
@@ -88,6 +99,7 @@
     <dt>Type</dt><dd><strong>Normal</strong>, <strong>Guide</strong>, <strong>Guided</strong>, <strong>Mask</strong>, <strong>Masked</strong> or <strong>Folder</strong>. See <a href="masks-guides.html">Masks and guides</a>.</dd>
     <dt>Outline color</dt><dd>The layer's color for outlines and highlights.</dd>
     <dt>View layer as outlines</dt><dd>Draws the layer's artwork as outlines.</dd>
+    <dt>Transparent</dt><dd>Shows the layer faded, at the percentage you set, while you edit.</dd>
   </dl>
 </div>
 
@@ -95,10 +107,21 @@
 
 <p>Layer parenting, where one layer's artwork follows another's, plays back correctly in Phoenix.</p>
 
-<div class="callout planned">
-  <span class="label">Planned</span>
-  <p>Copying, pasting and duplicating layers, selecting several layers at once, <kbd>Alt</kbd>-clicking a column to toggle all other layers, setting up layer parenting, and layer depth for multiplane camera moves.</p>
-</div>
+<p>To make a layer follow another, right-click it and choose the layer from <strong>Parent Layer</strong>. For multiplane camera moves, see <a href="rigging.html#multiplane-camera">Rigs and motion</a>.</p>
+
+<h2>Frame view</h2>
+
+<p>The <strong>&#9776;</strong> button at the right of the header sets how the frames look:</p>
+
+<dl class="defs">
+  <dt>Tiny to Large</dt><dd>How wide each frame is. Narrow frames fit a long scene on screen; wide ones are easier to click. <kbd>Ctrl</kbd>+scroll over the frames zooms in and out.</dd>
+  <dt>Short, Normal and Tall Rows</dt><dd>How tall each layer's row is. The layer list keeps in step.</dd>
+  <dt>Preview</dt><dd>Shows each keyframe's artwork as a thumbnail along its span, cropped to the art.</dd>
+  <dt>Preview in Context</dt><dd>Shows the whole stage at each keyframe, so you can see where the art sits.</dd>
+  <dt>Time in Seconds</dt><dd>Marks the ruler in seconds instead of frame numbers.</dd>
+</dl>
+
+<p>Phoenix remembers the frame view between sessions.</p>
 
 </article>
 </main>

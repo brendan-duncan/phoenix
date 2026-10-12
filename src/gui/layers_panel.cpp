@@ -533,6 +533,14 @@ int LayersPanel::rowsViewportHeight() const
     return _treeWidget->viewport()->height() + _bottomMargin;
 }
 
+void LayersPanel::setRowHeight(int height)
+{
+    if (height == _rowHeight)
+        return;
+    _rowHeight = height;
+    refresh();
+}
+
 void LayersPanel::setBottomMargin(int margin)
 {
     if (margin == _bottomMargin)
@@ -829,7 +837,7 @@ void LayersPanel::refresh()
 
             QTreeWidgetItem* item = new QTreeWidgetItem();
             // The same row height as the timeline grid's, so the rows line up.
-            item->setSizeHint(0, QSize(100, 22));
+            item->setSizeHint(0, QSize(100, _rowHeight));
             item->setFlags(item->flags() | Qt::ItemIsEditable);
 
             layerIndexMap.push_back(item);
