@@ -380,8 +380,7 @@ void SelectionTool::nudge(PhoenixView& view, double dx, double dy)
         after.tx += dx;
         after.ty += dy;
 
-        commands.push_back(fla::CommandPtr(new fla::SetElementTransformCommand(
-            element, element->transform, after, "Move")));
+        commands.push_back(view.transformCommand(element, element->transform, after, "Move"));
 
         if (element->elementType() == fla::Element::Type::Shape)
             view.markShapeEdited(static_cast<fla::Shape*>(element));
@@ -602,8 +601,7 @@ void SelectionTool::commitMove(PhoenixView& view)
         if (now.tx == target.startTransform.tx && now.ty == target.startTransform.ty)
             continue;
 
-        commands.push_back(fla::CommandPtr(new fla::SetElementTransformCommand(
-            target.element, target.startTransform, now, "Move")));
+        commands.push_back(view.transformCommand(target.element, target.startTransform, now, "Move"));
 
         // A shape put down somewhere else belongs to the artwork it now sits
         // on, so letting go of it drops it in as a drawn one would be.

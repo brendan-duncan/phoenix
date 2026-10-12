@@ -412,3 +412,32 @@ TEST(paste_frames_inserts_and_moves_the_rest_along)
     for (fla::Frame* frame : removed)
         delete frame;
 }
+
+TEST(create_motion_tween_on_a_symbol_instance)
+{
+    std::unique_ptr<fla::Layer> layer(new fla::Layer(nullptr));
+    fla::Layer* l = layer.get();
+    fla::Frame* frame = new fla::Frame(l);
+    frame->index = 0;
+    frame->duration = 1;
+    l->frames = {frame};
+    auto* instance = new fla::SymbolInstance(frame);
+    instance->transform = fla::Transform(2.0, 0.0, 0.0, 2.0, 30.0, 40.0);
+    frame->elements.push_back(instance);
+
+    fla::EditFramesCommand create({l}, "Create Motion Tween", [l](std::vector<fla::Frame*>&) {
+        fla::timeline::createMotionTween(*l, 0, 24.0);
+    });
+    create.redo();
+    // A lone frame grows to a second, the object held as it was.
+    CHECK(l->frames.size() == 1 && l->frames[0]->duration == 24);
+    CHECK(l->frames[0]->otherTweenType == "motion object" && l->frames[0]->keyMode == "8195");
+    fla::MotionObject motion;
+    CHECK(fla::timeline::motionOf(*l->frames[0]) && motion.parse(*fla::timeline::motionOf(*l->frames[0])));
+    CHECK_NEAR(motion.at(12.0, 24.0).scaleX, 200.0);
+    CHECK(!fla::timeline::createMotionTween(*l, 0, 24.0));
+
+    create.undo();
+    CHECK(l->frames[0]->duration == 1 && l->frames[0]->otherTweenType.empty() && l->frames[0]->keyMode.empty());
+    CHECK(fla::timeline::motionOf(*l->frames[0]) == nullptr);
+}

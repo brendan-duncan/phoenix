@@ -14,6 +14,7 @@
 
 #include "../edit/command_stack.h"
 #include "../edit/element_commands.h"
+#include "../edit/property_command.h"
 #include "../edit/region_split.h"
 #include "../edit/selection.h"
 #include "../edit/shape_merge.h"
@@ -1235,6 +1236,89 @@ fla::Transform PhoenixView::shownTransform(const LayerFrame& state, size_t eleme
         return interpolateTransform(element->transform, state.tweenFrame->elements[elementIndex]->transform,
             state.tweenProgress);
     return element->transform;
+}
+
+bool PhoenixView::motionHere(const fla::Element* element, MotionHere& here)
+{
+    fla::Frame* frame = element ? dynamic_cast<fla::Frame*>(element->parent) : nullptr;
+    const fla::Layer* layer = frame ? dynamic_cast<const fla::Layer*>(frame->parent) : nullptr;
+    const fla::MotionObject* motion = motionOf(frame);
+    if (!layer || !motion)
+        return false;
+    const LayerFrame state = resolveLayerFrame(layer, fla::LoopType::PlayOnce, 0);
+    if (state.frame != frame)
+        return false;
+    const double rate = _flaDocument && _flaDocument->document && _flaDocument->document->frameRate > 0.0
+        ? _flaDocument->document->frameRate : 24.0;
+    const double frames = motion->frames(rate);
+    here.frame = frame;
+    here.offset = state.offset;
+    here.time = frames > 0.0 ? motion->duration() * state.offset / frames : 0.0;
+    here.start = motion->at(0.0, rate);
+    here.now = motion->at(state.offset, rate);
+    return true;
+}
+
+fla::Transform PhoenixView::shownTransformOf(const fla::Element* element)
+{
+    MotionHere here;
+    if (!element)
+        return fla::Transform();
+    if (!motionHere(element, here))
+        return element->transform;
+    return fla::applyMotion(element->transform, element->transformationPoint, here.start, here.now);
+}
+
+fla::Transform PhoenixView::storedTransformFor(const fla::Element* element, const fla::Transform& shown)
+{
+    MotionHere here;
+    if (!element || !motionHere(element, here))
+        return shown;
+    return fla::unapplyMotion(shown, element->transformationPoint, here.start, here.now);
+}
+
+fla::CommandPtr PhoenixView::transformCommand(fla::Element* element, const fla::Transform& before,
+    const fla::Transform& after, const std::string& name)
+{
+    MotionHere here;
+    std::string* xml = element && motionHere(element, here) ? fla::timeline::motionOf(*here.frame) : nullptr;
+    if (!xml)
+        return fla::CommandPtr(new fla::SetElementTransformCommand(element, before, after, name));
+
+    std::vector<std::string> children = here.frame->extraChildren;
+    std::string* edited = nullptr;
+    for (std::string& child : children)
+    {
+        if (child.compare(0, 16, "<motionObjectXML") == 0)
+            edited = &child;
+    }
+    const fla::Point& pivot = element->transformationPoint;
+    fla::Transform stored = before;
+    if (here.offset > 0)
+    {
+        // A property keyframe here holding what the edit shows.
+        const fla::Transform wanted = fla::applyMotion(after, pivot, here.start, here.now);
+        fla::motion::setKeys(*edited, here.time, fla::motion::solve(before, pivot, here.start, wanted, here.now));
+    }
+    else
+    {
+        // The start itself: its keyframes take the new turn, skew and scale,
+        // and the later positions stay where they were.
+        fla::MotionState start = fla::motion::stateOf(after);
+        start.rotation = here.start.rotation + std::remainder(start.rotation - here.start.rotation, 360.0);
+        fla::motion::setKeys(*edited, 0.0, start);
+        const double dx = (after.m11 * pivot.x + after.m21 * pivot.y + after.tx) -
+                          (before.m11 * pivot.x + before.m21 * pivot.y + before.tx);
+        const double dy = (after.m12 * pivot.x + after.m22 * pivot.y + after.ty) -
+                          (before.m12 * pivot.x + before.m22 * pivot.y + before.ty);
+        fla::motion::moveStart(*edited, dx, dy);
+        stored = after;
+    }
+    auto* command = new fla::CompoundCommand(name);
+    command->addCommand(fla::CommandPtr(new fla::SetElementTransformCommand(element, before, stored, name)));
+    command->addCommand(fla::CommandPtr(new fla::SetPropertyCommand<std::vector<std::string>>(
+        here.frame->extraChildren, here.frame->extraChildren, children, name)));
+    return fla::CommandPtr(command);
 }
 
 QTransform PhoenixView::parentTransform(const fla::Layer* layer, const fla::Frame* frame, fla::LoopType loopType,

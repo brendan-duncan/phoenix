@@ -222,11 +222,11 @@ private:
     QPointF _pivotAtDragStart;
 
     /// Reads the pivot for the selection.
-    void placePivot();
+    void placePivot(PhoenixView& view);
 
     /// Writes a moved pivot back to a single selected element, in its own
     /// space, so the file keeps it.
-    void storePivot();
+    void storePivot(PhoenixView& view);
 
     /// The pivot drag snapped to the box's center or a handle within
     /// tolerance, else to the grid and neighbors.
@@ -260,7 +260,10 @@ private:
     struct Target
     {
         fla::Element* element = nullptr;
+        /// As shown, where a motion tween may have moved it.
         fla::Transform startTransform;
+        /// As stored.
+        fla::Transform storedStart;
     };
     std::vector<Target> _targets;
 

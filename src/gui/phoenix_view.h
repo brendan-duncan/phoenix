@@ -8,6 +8,7 @@
 #include "../data/shape.h"
 #include "../data/symbol.h"
 #include "../edit/brush_stroke.h"
+#include "../edit/command.h"
 #include "../edit/motion_object.h"
 #include "../edit/asset_warp.h"
 
@@ -265,6 +266,25 @@ public:
     /// Properties panel measure. (Culling uses bounds padded a little for
     /// antialiasing.)
     QRectF elementBounds(const fla::Element* element);
+
+    /// The transform \a element shows with now: past the start of an object
+    /// motion tween, where the motion has it; otherwise its own. Tools
+    /// measure and drag this.
+    fla::Transform shownTransformOf(const fla::Element* element);
+
+    /// The element's bounds where it shows now, in document space.
+    QRectF shownBoundsOf(const fla::Element* element) { return shownElementBounds(element); }
+
+    /// The transform to store on \a element for it to show as \a shown now,
+    /// the inverse of shownTransformOf.
+    fla::Transform storedTransformFor(const fla::Element* element, const fla::Transform& shown);
+
+    /// The command for changing \a element's stored transform from \a before
+    /// to \a after. Past the start of an object motion tween, a property
+    /// keyframe here holding what \a after shows instead, as Animate does;
+    /// at its start, the start moves and the tween's later positions stay.
+    fla::CommandPtr transformCommand(fla::Element* element, const fla::Transform& before,
+        const fla::Transform& after, const std::string& name);
 
     /// The shape's filled regions as the stage stitches them, one path per
     /// fill style index, in the shape's own space.
@@ -849,6 +869,20 @@ private:
     /// frame; null when it has none.
     const fla::MotionObject* motionOf(const fla::Frame* frame);
     std::map<const fla::Frame*, std::pair<std::string, std::shared_ptr<fla::MotionObject>>> _motionCache;
+
+    /// Where an element of an object motion tween is now: its span, how
+    /// far in (frames, and TimeScale units), and the motion's state at the
+    /// start and now.
+    struct MotionHere
+    {
+        fla::Frame* frame = nullptr;
+        int offset = 0;
+        double time = 0.0;
+        fla::MotionState start;
+        fla::MotionState now;
+    };
+    /// False when \a element is not the object of a motion tween shown now.
+    bool motionHere(const fla::Element* element, MotionHere& here);
 
     /// Layer parenting: the transform a layer's content is placed by, its
     /// parent layer's element as shown, through its own parent in turn.

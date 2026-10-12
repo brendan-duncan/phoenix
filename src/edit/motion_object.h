@@ -82,6 +82,10 @@ private:
 Transform applyMotion(const Transform& stored, const Point& pivot, const MotionState& start,
     const MotionState& now);
 
+/// The stored transform that applyMotion turns into \a shown: its inverse.
+Transform unapplyMotion(const Transform& shown, const Point& pivot, const MotionState& start,
+    const MotionState& now);
+
 /// Edits of an object motion tween as its frame keeps it, the text of the
 /// motionObjectXML element. Each returns false, leaving it alone, when the
 /// text is not one.
@@ -100,6 +104,35 @@ bool truncate(std::string& xml, double time);
 /// has there, so the motion is unchanged: Insert Keyframe in a motion
 /// tween span.
 bool addKeys(std::string& xml, double time);
+
+/// The turn, skew and scale of \a transform as a tween's state keeps them,
+/// as Animate does: the rotation is the x axis's angle, Skew_X the y axis's
+/// angle past it, Skew_Y zero. The offset is zero.
+MotionState stateOf(const Transform& transform);
+
+/// The text of a new motion tween \a frames long at \a frameRate, holding
+/// its object as \a start has it, a keyframe for every property at its
+/// start. \a pivotX and \a pivotY place the transformation point in the
+/// object's bounds (0 to 1), which Animate keeps with the tween.
+std::string create(const MotionState& start, int frames, double frameRate, double pivotX = 0.5,
+    double pivotY = 0.5);
+
+/// Keys \a state at \a time: for each property whose value there differs
+/// from the state's, a keyframe at \a time holding the new value (one there
+/// already is moved, its handles with it). A property the tween lacks is
+/// added, with a keyframe at its start keeping what it had.
+bool setKeys(std::string& xml, double time, const MotionState& state);
+
+/// The object's start moved by \a dx, \a dy with the rest of its path
+/// where it was: every later position keyframe's offset less the move.
+bool moveStart(std::string& xml, double dx, double dy);
+
+/// The state that shows an element as \a wanted, where \a stored is its
+/// transform as the span keeps it (showing \a start) and \a pivot its
+/// transformation point: what applyMotion(stored, pivot, start, state)
+/// gives back \a wanted. Its rotation is the one nearest \a near's.
+MotionState solve(const Transform& stored, const Point& pivot, const MotionState& start, const Transform& wanted,
+    const MotionState& near);
 
 } // namespace motion
 

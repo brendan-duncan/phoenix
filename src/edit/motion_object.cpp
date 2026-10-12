@@ -1,5 +1,6 @@
 #include "motion_object.h"
 
+#include "transform_parts.h"
 #include "tween_ease.h"
 
 #include "../third_party/tinyxml2/tinyxml2.h"
@@ -257,6 +258,29 @@ Transform applyMotion(const Transform& stored, const Point& pivot, const MotionS
     return Transform(moved.a, moved.b, moved.c, moved.d, moved.tx, moved.ty);
 }
 
+Transform unapplyMotion(const Transform& shown, const Point& pivot, const MotionState& start,
+    const MotionState& now)
+{
+    // applyMotion's linear part is the stored one, then the start's undone,
+    // then now's; its pivot is the stored one moved by the change in offset.
+    Affine undoStart;
+    Affine undoChange;
+    if (!linearPart(start).inverse(undoStart) || !undoStart.then(linearPart(now)).inverse(undoChange))
+        return shown;
+    Affine linear;
+    linear.a = shown.m11;
+    linear.b = shown.m12;
+    linear.c = shown.m21;
+    linear.d = shown.m22;
+    const Affine stored = linear.then(undoChange);
+    const double shownX = shown.m11 * pivot.x + shown.m21 * pivot.y + shown.tx;
+    const double shownY = shown.m12 * pivot.x + shown.m22 * pivot.y + shown.ty;
+    const double px = shownX - (now.x - start.x);
+    const double py = shownY - (now.y - start.y);
+    return Transform(stored.a, stored.b, stored.c, stored.d, px - (stored.a * pivot.x + stored.c * pivot.y),
+        py - (stored.b * pivot.x + stored.d * pivot.y));
+}
+
 namespace motion {
 
 namespace {
@@ -434,6 +458,299 @@ bool addKeys(std::string& xml, double time)
     }
     xml = print(document);
     return true;
+}
+
+namespace {
+
+/// The tween's properties, the container Animate files each under, and the
+/// state's value of each.
+struct PropertySlot
+{
+    const char* id;
+    const char* container;
+    double MotionState::*field;
+};
+
+const PropertySlot kSlots[] = {
+    {"Motion_X", "Basic_Motion", &MotionState::x},
+    {"Motion_Y", "Basic_Motion", &MotionState::y},
+    {"Rotation_Z", "Basic_Motion", &MotionState::rotation},
+    {"Skew_X", "Transformation", &MotionState::skewX},
+    {"Skew_Y", "Transformation", &MotionState::skewY},
+    {"Scale_X", "Transformation", &MotionState::scaleX},
+    {"Scale_Y", "Transformation", &MotionState::scaleY},
+};
+
+tinyxml2::XMLElement* newProperty(tinyxml2::XMLDocument& document, const char* id)
+{
+    tinyxml2::XMLElement* property = document.NewElement("Property");
+    property->SetAttribute("enabled", "1");
+    property->SetAttribute("id", id);
+    property->SetAttribute("ignoreTimeMap", "0");
+    property->SetAttribute("readonly", "0");
+    property->SetAttribute("visible", "1");
+    return property;
+}
+
+/// The container element called \a id, however deep, or null.
+tinyxml2::XMLElement* containerOf(tinyxml2::XMLElement* parent, const char* id)
+{
+    for (tinyxml2::XMLElement* child = parent->FirstChildElement("PropertyContainer"); child;
+         child = child->NextSiblingElement("PropertyContainer"))
+    {
+        const char* name = child->Attribute("id");
+        if (name && std::strcmp(name, id) == 0)
+            return child;
+        if (tinyxml2::XMLElement* found = containerOf(child, id))
+            return found;
+    }
+    return nullptr;
+}
+
+/// An angle moved by whole turns to within half a turn of \a near.
+double nearest(double angle, double near)
+{
+    return angle - 360.0 * std::round((angle - near) / 360.0);
+}
+
+Affine affineOf(const Transform& t)
+{
+    Affine m;
+    m.a = t.m11;
+    m.b = t.m12;
+    m.c = t.m21;
+    m.d = t.m22;
+    m.tx = t.tx;
+    m.ty = t.ty;
+    return m;
+}
+
+} // namespace
+
+MotionState stateOf(const Transform& transform)
+{
+    const TransformParts parts = TransformParts::of(transform);
+    MotionState state;
+    state.rotation = parts.skewY;
+    state.skewX = nearest(parts.skewX - parts.skewY, 0.0);
+    if (std::fabs(state.skewX) < 1.0e-4)
+        state.skewX = 0.0;
+    state.skewY = 0.0;
+    state.scaleX = parts.scaleX;
+    state.scaleY = parts.scaleY;
+    return state;
+}
+
+std::string create(const MotionState& start, int frames, double frameRate, double pivotX, double pivotY)
+{
+    constexpr double kTimeScale = 30000.0;
+    tinyxml2::XMLDocument document;
+    tinyxml2::XMLElement* root = document.NewElement("motionObjectXML");
+    document.InsertEndChild(root);
+    tinyxml2::XMLElement* core = document.NewElement("AnimationCore");
+    root->InsertEndChild(core);
+    core->SetAttribute("TimeScale", number(kTimeScale).c_str());
+    core->SetAttribute("Version", "1");
+    core->SetAttribute("duration", number(std::max(1, frames) * kTimeScale / std::max(frameRate, 1.0e-6)).c_str());
+    tinyxml2::XMLElement* timeMap = document.NewElement("TimeMap");
+    timeMap->SetAttribute("strength", "0");
+    timeMap->SetAttribute("type", "Quadratic");
+    core->InsertEndChild(timeMap);
+    tinyxml2::XMLElement* metadata = document.NewElement("metadata");
+    core->InsertEndChild(metadata);
+    tinyxml2::XMLElement* names = document.NewElement("names");
+    metadata->InsertEndChild(names);
+    tinyxml2::XMLElement* name = document.NewElement("name");
+    name->SetAttribute("langID", "en_US");
+    name->SetAttribute("value", "");
+    names->InsertEndChild(name);
+    tinyxml2::XMLElement* settings = document.NewElement("Settings");
+    settings->SetAttribute("orientToPath", "0");
+    settings->SetAttribute("xformPtXOffsetPct", number(pivotX).c_str());
+    settings->SetAttribute("xformPtYOffsetPct", number(pivotY).c_str());
+    settings->SetAttribute("xformPtZOffsetPixels", "0");
+    metadata->InsertEndChild(settings);
+
+    tinyxml2::XMLElement* head = document.NewElement("PropertyContainer");
+    head->SetAttribute("id", "headContainer");
+    core->InsertEndChild(head);
+    for (const char* id : {"Basic_Motion", "Transformation", "Colors", "Filters"})
+    {
+        tinyxml2::XMLElement* container = document.NewElement("PropertyContainer");
+        container->SetAttribute("id", id);
+        head->InsertEndChild(container);
+    }
+    for (const PropertySlot& slot : kSlots)
+    {
+        tinyxml2::XMLElement* property = newProperty(document, slot.id);
+        property->InsertEndChild(plainKey(document, 0.0, start.*slot.field));
+        containerOf(head, slot.container)->InsertEndChild(property);
+        // Animate keeps the depth among the basic motion, after the turn.
+        if (std::strcmp(slot.id, "Rotation_Z") == 0)
+        {
+            tinyxml2::XMLElement* depth = newProperty(document, "Depth");
+            depth->InsertEndChild(plainKey(document, 0.0, 0.0));
+            containerOf(head, slot.container)->InsertEndChild(depth);
+        }
+    }
+    return print(document);
+}
+
+bool setKeys(std::string& xml, double time, const MotionState& state)
+{
+    MotionObject motion;
+    tinyxml2::XMLDocument document;
+    if (!motion.parse(xml) || document.Parse(xml.c_str()) != tinyxml2::XML_SUCCESS)
+        return false;
+    tinyxml2::XMLElement* core = coreOf(document);
+    if (!core)
+        return false;
+    std::vector<tinyxml2::XMLElement*> found;
+    properties(core, found);
+    for (const PropertySlot& slot : kSlots)
+    {
+        const double fallback = std::strncmp(slot.id, "Scale_", 6) == 0 ? 100.0 : 0.0;
+        const double wanted = state.*slot.field;
+        if (std::fabs(motion.valueAt(slot.id, time, fallback) - wanted) < 1.0e-6)
+            continue;
+        tinyxml2::XMLElement* property = nullptr;
+        for (tinyxml2::XMLElement* candidate : found)
+        {
+            const char* id = candidate->Attribute("id");
+            if (id && std::strcmp(id, slot.id) == 0)
+                property = candidate;
+        }
+        if (property && property->IntAttribute("enabled", 1) == 0)
+        {
+            // A switched-off property is replaced: it held nothing.
+            property->DeleteChildren();
+            property->SetAttribute("enabled", "1");
+        }
+        if (!property)
+        {
+            tinyxml2::XMLElement* head = containerOf(core, "headContainer");
+            if (!head)
+            {
+                head = document.NewElement("PropertyContainer");
+                head->SetAttribute("id", "headContainer");
+                core->InsertEndChild(head);
+            }
+            tinyxml2::XMLElement* container = containerOf(core, slot.container);
+            if (!container)
+            {
+                container = document.NewElement("PropertyContainer");
+                container->SetAttribute("id", slot.container);
+                head->InsertEndChild(container);
+            }
+            property = newProperty(document, slot.id);
+            container->InsertEndChild(property);
+        }
+        if (!property->FirstChildElement("Keyframe") && time > 1.0e-6)
+            property->InsertEndChild(plainKey(document, 0.0, motion.valueAt(slot.id, 0.0, fallback)));
+
+        tinyxml2::XMLElement* after = nullptr;
+        tinyxml2::XMLElement* there = nullptr;
+        for (tinyxml2::XMLElement* key = property->FirstChildElement("Keyframe"); key;
+             key = key->NextSiblingElement("Keyframe"))
+        {
+            const double at = key->DoubleAttribute("timevalue", 0.0);
+            if (std::fabs(at - time) < 1.0e-6)
+                there = key;
+            else if (at > time && !after)
+                after = key;
+        }
+        if (there)
+        {
+            // The keyframe moves, its handles keeping their shape.
+            double offset = 0.0;
+            double old = 0.0;
+            pair(there->Attribute("anchor"), offset, old);
+            const double delta = wanted - old;
+            there->SetAttribute("anchor", (number(offset) + "," + number(wanted)).c_str());
+            for (const char* handle : {"next", "previous"})
+            {
+                double handleTime = 0.0;
+                double handleValue = 0.0;
+                if (pair(there->Attribute(handle), handleTime, handleValue))
+                    there->SetAttribute(handle, (number(handleTime) + "," + number(handleValue + delta)).c_str());
+            }
+            continue;
+        }
+        tinyxml2::XMLElement* key = plainKey(document, time, wanted);
+        tinyxml2::XMLElement* before = after ? after->PreviousSiblingElement("Keyframe") : nullptr;
+        if (before)
+            property->InsertAfterChild(before, key);
+        else if (after)
+            property->InsertFirstChild(key);
+        else
+            property->InsertEndChild(key);
+    }
+    xml = print(document);
+    return true;
+}
+
+bool moveStart(std::string& xml, double dx, double dy)
+{
+    tinyxml2::XMLDocument document;
+    if (document.Parse(xml.c_str()) != tinyxml2::XML_SUCCESS)
+        return false;
+    tinyxml2::XMLElement* core = coreOf(document);
+    if (!core)
+        return false;
+    std::vector<tinyxml2::XMLElement*> found;
+    properties(core, found);
+    for (tinyxml2::XMLElement* property : found)
+    {
+        const char* id = property->Attribute("id");
+        const double move = !id ? 0.0 : std::strcmp(id, "Motion_X") == 0 ? dx : std::strcmp(id, "Motion_Y") == 0 ? dy : 0.0;
+        if (move == 0.0)
+            continue;
+        for (tinyxml2::XMLElement* key = property->FirstChildElement("Keyframe"); key;
+             key = key->NextSiblingElement("Keyframe"))
+        {
+            if (key->DoubleAttribute("timevalue", 0.0) <= 1.0e-6)
+                continue;
+            for (const char* name : {"anchor", "next", "previous"})
+            {
+                double a = 0.0;
+                double b = 0.0;
+                if (pair(key->Attribute(name), a, b))
+                    key->SetAttribute(name, (number(a) + "," + number(b - move)).c_str());
+            }
+        }
+    }
+    xml = print(document);
+    return true;
+}
+
+MotionState solve(const Transform& stored, const Point& pivot, const MotionState& start, const Transform& wanted,
+    const MotionState& near)
+{
+    Affine linearStored = affineOf(stored);
+    linearStored.tx = linearStored.ty = 0.0;
+    Affine linearWanted = affineOf(wanted);
+    linearWanted.tx = linearWanted.ty = 0.0;
+    Affine undoStored;
+    MotionState state = near;
+    if (!linearStored.inverse(undoStored))
+        return state;
+    // applyMotion's turn, skew and scale are the stored ones, undone back
+    // to the start's, then the state's: the state's is what is left.
+    const Affine now = linearPart(start).then(undoStored).then(linearWanted);
+    state = stateOf(Transform(now.a, now.b, now.c, now.d, 0.0, 0.0));
+    // Whole turns change nothing shown; the nearest keeps a tween from
+    // spinning the long way round.
+    state.rotation = nearest(state.rotation, near.rotation);
+    state.skewX = nearest(state.skewX, near.skewX);
+
+    // The offset moves the transformation point.
+    const Affine base = affineOf(stored);
+    const Affine target = affineOf(wanted);
+    state.x = start.x + (target.a * pivot.x + target.c * pivot.y + target.tx) -
+              (base.a * pivot.x + base.c * pivot.y + base.tx);
+    state.y = start.y + (target.b * pivot.x + target.d * pivot.y + target.ty) -
+              (base.b * pivot.x + base.d * pivot.y + base.ty);
+    return state;
 }
 
 } // namespace motion

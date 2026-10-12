@@ -12,6 +12,7 @@
 #include "../data/morph_shape.h"
 
 #include <algorithm>
+#include <cmath>
 
 namespace fla {
 
@@ -593,6 +594,32 @@ bool setTween(Layer& layer, int index, bool classic)
     return true;
 }
 
+bool createMotionTween(Layer& layer, int index, double frameRate,
+    const std::function<std::pair<double, double>(const Element&)>& pivotOf)
+{
+    Frame* span = spanAt(layer, index);
+    if (!span || motionOf(*span) || span->elements.size() != 1 || !span->elements.front())
+        return false;
+    const Element& element = *span->elements.front();
+    if (element.elementType() != Element::Type::SymbolInstance && element.elementType() != Element::Type::StaticText)
+        return false;
+    const double fps = frameRate > 0.0 ? frameRate : 24.0;
+    if (span->duration <= 1 && !nextOf(layer, span))
+        insertFrames(layer, span->index, std::max(1, static_cast<int>(std::lround(fps))) - 1);
+
+    const std::pair<double, double> pivot = pivotOf ? pivotOf(element) : std::make_pair(0.5, 0.5);
+    removeMotion(*span);
+    span->tweenType = TweenType::None;
+    span->otherTweenType = "motion object";
+    span->motionTweenRotate = "none";
+    span->keyMode = "8195";
+    span->extraAttributes.push_back({"isMotionObject", "true"});
+    span->extraAttributes.push_back({"visibleAnimationKeyframes", "4194303"});
+    span->extraChildren.push_back(
+        motion::create(motion::stateOf(element.transform), span->duration, fps, pivot.first, pivot.second));
+    return true;
+}
+
 bool setShapeTween(Layer& layer, int index)
 {
     Frame* span = spanAt(layer, index);
@@ -633,7 +660,8 @@ EditFramesCommand::LayerState EditFramesCommand::capture(const Layer& layer)
     {
         if (frame)
             state.frames.push_back({frame, frame->index, frame->duration, static_cast<int>(frame->tweenType),
-                frame->otherTweenType, frame->extraChildren, frame->extraAttributes});
+                frame->otherTweenType, frame->extraChildren, frame->extraAttributes, frame->keyMode,
+                frame->motionTweenRotate});
     }
     state.firstFrame = layer.firstFrame;
     state.lastFrame = layer.lastFrame;
@@ -651,6 +679,8 @@ void EditFramesCommand::restore(Layer& layer, const LayerState& state)
         entry.frame->otherTweenType = entry.otherTweenType;
         entry.frame->extraChildren = entry.extraChildren;
         entry.frame->extraAttributes = entry.extraAttributes;
+        entry.frame->keyMode = entry.keyMode;
+        entry.frame->motionTweenRotate = entry.motionTweenRotate;
         layer.frames.push_back(entry.frame);
     }
     layer.firstFrame = state.firstFrame;

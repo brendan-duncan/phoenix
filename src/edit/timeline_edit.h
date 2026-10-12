@@ -10,6 +10,7 @@
 
 namespace fla {
 
+class Element;
 class Frame;
 class Layer;
 
@@ -105,6 +106,15 @@ void removeMotion(Frame& frame);
 /// shorter.
 void fitMotionSpans(Layer& layer);
 
+/// Create Motion Tween on the span at \a index, as Animate makes one: the
+/// span's one symbol instance or text block moves by an object motion tween
+/// over the span (a span of one frame at the layer's end first grows to a
+/// second's worth at \a frameRate). \a pivotOf places an element's
+/// transformation point in its bounds, 0 to 1 each way, when given. False
+/// when the span holds anything else or is a motion tween already.
+bool createMotionTween(Layer& layer, int index, double frameRate,
+    const std::function<std::pair<double, double>(const Element&)>& pivotOf = {});
+
 } // namespace timeline
 
 /// An undoable edit of some layers' frames. The edit runs on the first
@@ -144,6 +154,8 @@ private:
         std::string otherTweenType;
         std::vector<std::string> extraChildren;
         std::vector<std::pair<std::string, std::string>> extraAttributes;
+        std::string keyMode;
+        std::string motionTweenRotate;
     };
     struct LayerState
     {

@@ -196,6 +196,7 @@ private slots:
     void clearKeyframe();
     void setClassicTween(bool on);
     void createShapeTween();
+    void createMotionTween();
     void moveKeyframe(const fla::Layer* layer, int from, int to);
     /// A span Ctrl-dragged to \a duration frames: frames go in or come out
     /// at its end, and what follows moves along.

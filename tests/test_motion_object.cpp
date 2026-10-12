@@ -89,3 +89,87 @@ TEST(motion_is_applied_about_the_pivot)
     const double py = turned.m12 * 20.0 + turned.ty;
     CHECK(std::fabs(px - 20.0) < 1.0e-9 && std::fabs(py) < 1.0e-9);
 }
+
+namespace {
+
+bool near(const fla::Transform& a, const fla::Transform& b, double tolerance = 1.0e-6)
+{
+    return std::fabs(a.m11 - b.m11) < tolerance && std::fabs(a.m12 - b.m12) < tolerance &&
+           std::fabs(a.m21 - b.m21) < tolerance && std::fabs(a.m22 - b.m22) < tolerance &&
+           std::fabs(a.tx - b.tx) < tolerance && std::fabs(a.ty - b.ty) < tolerance;
+}
+
+} // namespace
+
+TEST(motion_tween_is_created_holding_its_object)
+{
+    // Turned 30 degrees and scaled 2 by 1.5, as the matrix has it.
+    const double r = 30.0 * kPi / 180.0;
+    const fla::Transform stored(2.0 * std::cos(r), 2.0 * std::sin(r), -1.5 * std::sin(r), 1.5 * std::cos(r), 40.0, 60.0);
+    const fla::MotionState start = fla::motion::stateOf(stored);
+    CHECK(std::fabs(start.rotation - 30.0) < 1.0e-9 && std::fabs(start.skewX) < 1.0e-9);
+    CHECK(std::fabs(start.scaleX - 200.0) < 1.0e-9 && std::fabs(start.scaleY - 150.0) < 1.0e-9);
+
+    const std::string xml = fla::motion::create(start, 24, 24.0, 0.25, 0.75);
+    CHECK(xml.compare(0, 16, "<motionObjectXML") == 0);
+    CHECK(xml.find("xformPtXOffsetPct=\"0.25\"") != std::string::npos);
+    fla::MotionObject motion;
+    CHECK(motion.parse(xml));
+    CHECK(std::fabs(motion.frames(24.0) - 24.0) < 1.0e-9);
+    const fla::MotionState read = motion.at(10.0, 24.0);
+    CHECK(std::fabs(read.rotation - 30.0) < 1.0e-9 && std::fabs(read.scaleX - 200.0) < 1.0e-9);
+    CHECK(near(fla::applyMotion(stored, fla::Point(5.0, 5.0), motion.at(0.0, 24.0), read), stored));
+}
+
+TEST(motion_keys_record_what_an_edit_shows)
+{
+    const fla::Transform stored(1.0, 0.0, 0.0, 1.0, 100.0, 50.0);
+    const fla::Point pivot(10.0, 20.0);
+    std::string xml = fla::motion::create(fla::motion::stateOf(stored), 20, 20.0);
+    fla::MotionObject motion;
+    CHECK(motion.parse(xml));
+    const fla::MotionState start = motion.at(0.0, 20.0);
+
+    // Halfway, the object is turned, scaled and moved on the stage.
+    const double r = 45.0 * kPi / 180.0;
+    const fla::Transform wanted(1.5 * std::cos(r), 1.5 * std::sin(r), -std::sin(r), std::cos(r), 300.0, 10.0);
+    const fla::MotionState state = fla::motion::solve(stored, pivot, start, wanted, motion.at(10.0, 20.0));
+    CHECK(near(fla::applyMotion(stored, pivot, start, state), wanted));
+    CHECK(fla::motion::setKeys(xml, 15000.0, state));
+    CHECK(motion.parse(xml));
+    CHECK(near(fla::applyMotion(stored, pivot, start, motion.at(10.0, 20.0)), wanted));
+    // The start is as it was, and the way there is in between.
+    CHECK(near(fla::applyMotion(stored, pivot, start, motion.at(0.0, 20.0)), stored));
+    CHECK(std::fabs(motion.at(5.0, 20.0).rotation - 22.5) < 1.0e-6);
+
+    // Keying it again where it is moves that keyframe.
+    fla::MotionState again = state;
+    again.x += 10.0;
+    CHECK(fla::motion::setKeys(xml, 15000.0, again));
+    CHECK(motion.parse(xml));
+    CHECK(motion.keyTimes().size() == 2);
+    CHECK(std::fabs(motion.at(10.0, 20.0).x - again.x) < 1.0e-6);
+
+    // The start moved, the later positions stay.
+    CHECK(fla::motion::moveStart(xml, 5.0, 0.0));
+    CHECK(motion.parse(xml));
+    CHECK(std::fabs(motion.at(10.0, 20.0).x - (again.x - 5.0)) < 1.0e-6);
+    CHECK(std::fabs(motion.at(0.0, 20.0).x) < 1.0e-9);
+}
+
+TEST(motion_unapplied_is_the_stored_transform)
+{
+    const fla::Transform stored(1.2, 0.3, -0.2, 0.9, 15.0, -7.0);
+    const fla::Point pivot(3.0, 4.0);
+    fla::MotionState start;
+    start.rotation = 10.0;
+    start.scaleX = 120.0;
+    fla::MotionState now;
+    now.rotation = 70.0;
+    now.skewX = 5.0;
+    now.scaleY = 80.0;
+    now.x = 12.0;
+    now.y = -30.0;
+    const fla::Transform shown = fla::applyMotion(stored, pivot, start, now);
+    CHECK(near(fla::unapplyMotion(shown, pivot, start, now), stored));
+}

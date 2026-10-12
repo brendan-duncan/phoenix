@@ -448,7 +448,8 @@ void FreeTransformTool::rebuildBox(PhoenixView& view)
         if (!element)
             continue;
 
-        const QRectF elementBounds = view.elementBounds(element);
+        // Where a motion tween has it now.
+        const QRectF elementBounds = view.shownBoundsOf(element);
         if (!elementBounds.isValid())
             continue;
 
@@ -467,10 +468,10 @@ void FreeTransformTool::rebuildBox(PhoenixView& view)
     _boxValid = _box.size() == 4;
     rememberBoxOwners();
     clearEnvelope();
-    placePivot();
+    placePivot(view);
 }
 
-void FreeTransformTool::placePivot()
+void FreeTransformTool::placePivot(PhoenixView& view)
 {
     _pivot = centerOf(_box);
 
@@ -484,17 +485,17 @@ void FreeTransformTool::placePivot()
     const fla::Point& point = element->transformationPoint;
     if (element->elementType() == fla::Element::Type::Shape && point.x == 0.0 && point.y == 0.0)
         return;
-    _pivot = toQTransform(element->transform).map(QPointF(point.x, point.y));
+    _pivot = toQTransform(view.shownTransformOf(element)).map(QPointF(point.x, point.y));
 }
 
-void FreeTransformTool::storePivot()
+void FreeTransformTool::storePivot(PhoenixView& view)
 {
     const std::vector<fla::Element*> leaves = transformLeaves(_selection);
     if (leaves.size() != 1 || !leaves.front())
         return;
     fla::Element* element = leaves.front();
     bool invertible = false;
-    const QTransform toLocal = toQTransform(element->transform).inverted(&invertible);
+    const QTransform toLocal = toQTransform(view.shownTransformOf(element)).inverted(&invertible);
     if (!invertible)
         return;
     const QPointF local = toLocal.map(_pivot);
@@ -720,7 +721,7 @@ void FreeTransformTool::applyAdjust(PhoenixView& view, const QTransform& adjust)
         // Always recompute from the starting transform: accumulating each mouse
         // move's delta would drift over a long drag.
         const QTransform start = toQTransform(target.startTransform);
-        target.element->transform = fromQTransform(start * adjust);
+        target.element->transform = view.storedTransformFor(target.element, fromQTransform(start * adjust));
     }
 
     // Only where things sit has changed, so the path cache stays warm.
@@ -822,7 +823,7 @@ bool FreeTransformTool::mousePress(PhoenixView& view, QMouseEvent* event, const 
 
     _targets.clear();
     for (fla::Element* element : transformLeaves(_selection))
-        _targets.push_back({element, element->transform});
+        _targets.push_back({element, view.shownTransformOf(element), element->transform});
 
     if (_targets.empty())
     {
@@ -1173,7 +1174,7 @@ bool FreeTransformTool::mouseRelease(PhoenixView& view, QMouseEvent* event, cons
     if (_grip == Grip::Pivot)
     {
         _pivot = snapPivot(view, documentPos);
-        storePivot();
+        storePivot(view);
         _grip = Grip::None;
         int index = -1;
         showCursorFor(view, gripAt(view, documentPos, index), index);
@@ -1204,7 +1205,7 @@ bool FreeTransformTool::mouseRelease(PhoenixView& view, QMouseEvent* event, cons
 
     // The transformation point rides along with the object.
     _pivot = adjust.map(_pivotAtDragStart);
-    storePivot();
+    storePivot(view);
 
     commit(view);
 
@@ -1241,15 +1242,14 @@ void FreeTransformTool::commit(PhoenixView& view)
             continue;
 
         const fla::Transform& now = target.element->transform;
-        if (now.m11 == target.startTransform.m11 && now.m12 == target.startTransform.m12 &&
-            now.m21 == target.startTransform.m21 && now.m22 == target.startTransform.m22 &&
-            now.tx == target.startTransform.tx && now.ty == target.startTransform.ty)
+        const fla::Transform& was = target.storedStart;
+        if (now.m11 == was.m11 && now.m12 == was.m12 && now.m21 == was.m21 && now.m22 == was.m22 &&
+            now.tx == was.tx && now.ty == was.ty)
         {
             continue;
         }
 
-        commands.push_back(fla::CommandPtr(new fla::SetElementTransformCommand(
-            target.element, target.startTransform, now, gestureName)));
+        commands.push_back(view.transformCommand(target.element, target.storedStart, now, gestureName));
 
         // A shape that has been moved or reshaped belongs to the artwork it now
         // sits on, so letting go of it drops it in as a drawn one would be.
@@ -1293,7 +1293,7 @@ bool FreeTransformTool::keyPress(PhoenixView& view, QKeyEvent* event)
     for (const Target& target : _targets)
     {
         if (target.element)
-            target.element->transform = target.startTransform;
+            target.element->transform = target.storedStart;
     }
     if (_grip == Grip::Distort)
     {
@@ -1340,7 +1340,7 @@ bool FreeTransformTool::mouseDoubleClick(PhoenixView& view, QMouseEvent* event, 
         return false;
 
     _pivot = centerOf(_box);
-    storePivot();
+    storePivot(view);
     _grip = Grip::None;
     view.update();
     return true;
@@ -1402,7 +1402,7 @@ void FreeTransformTool::deactivate(PhoenixView& view)
         for (const Target& target : _targets)
         {
             if (target.element)
-                target.element->transform = target.startTransform;
+                target.element->transform = target.storedStart;
         }
         if (_grip == Grip::Distort)
         {

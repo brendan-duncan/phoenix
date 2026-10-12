@@ -74,7 +74,7 @@ void transformAll(const ArrangeLinks& links, const std::vector<fla::Element*>& e
         if (after.m11 == before.m11 && after.m12 == before.m12 && after.m21 == before.m21 && after.m22 == before.m22 &&
             after.tx == before.tx && after.ty == before.ty)
             continue;
-        stack->push(fla::CommandPtr(new fla::SetElementTransformCommand(element, before, after, name)));
+        stack->push(links.view->transformCommand(element, before, after, name));
         if (element->elementType() == fla::Element::Type::Shape)
             links.view->markShapeEdited(static_cast<fla::Shape*>(element));
     }

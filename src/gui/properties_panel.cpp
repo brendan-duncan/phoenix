@@ -1130,8 +1130,7 @@ void PropertiesPanel::addPositionAndSize(QVBoxLayout* layout, const std::vector<
             stack.beginMacro(name);
         for (size_t i = 0; i < elements.size() && i < snapshot->before.size(); ++i)
         {
-            stack.push(fla::CommandPtr(new fla::SetElementTransformCommand(
-                elements[i], snapshot->before[i], elements[i]->transform, name)));
+            stack.push(_links.view->transformCommand(elements[i], snapshot->before[i], elements[i]->transform, name));
         }
         if (several)
             stack.endMacro();

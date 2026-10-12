@@ -980,6 +980,29 @@ void MainWindow::createShapeTween()
     });
 }
 
+void MainWindow::createMotionTween()
+{
+    const double rate = _flaDocument && _flaDocument->document && _flaDocument->document->frameRate > 0.0
+        ? _flaDocument->document->frameRate : 24.0;
+    PhoenixView* view = _phoenixView;
+    editFrames("Create Motion Tween", [rate, view](fla::Layer& layer, int first, int last, std::vector<fla::Frame*>&) {
+        // Where the transformation point sits in the object, which the
+        // tween keeps.
+        const auto pivotOf = [view](const fla::Element& element) {
+            const QRectF bounds = view ? view->elementBounds(&element) : QRectF();
+            if (!bounds.isValid() || bounds.width() <= 0.0 || bounds.height() <= 0.0)
+                return std::make_pair(0.5, 0.5);
+            const fla::Transform& t = element.transform;
+            const fla::Point& p = element.transformationPoint;
+            const double x = t.m11 * p.x + t.m21 * p.y + t.tx;
+            const double y = t.m12 * p.x + t.m22 * p.y + t.ty;
+            return std::make_pair((x - bounds.left()) / bounds.width(), (y - bounds.top()) / bounds.height());
+        };
+        for (int index = first; index <= last; ++index)
+            fla::timeline::createMotionTween(layer, index, rate, pivotOf);
+    });
+}
+
 void MainWindow::resizeSpan(const fla::Layer* constLayer, int keyframe, int duration)
 {
     fla::Layer* layer = const_cast<fla::Layer*>(constLayer);
@@ -1519,6 +1542,9 @@ void MainWindow::setupMenus()
     QAction* classicTweenAction = insertMenu->addAction("&Classic Tween");
     classicTweenAction->setStatusTip("Tween the span to the next keyframe");
     connect(classicTweenAction, &QAction::triggered, this, [this]() { setClassicTween(true); });
+    QAction* motionTweenAction = insertMenu->addAction("&Motion Tween");
+    motionTweenAction->setStatusTip("Move the span's symbol by a motion tween; changing it later in the span keys it");
+    connect(motionTweenAction, &QAction::triggered, this, &MainWindow::createMotionTween);
     QAction* shapeTweenAction = insertMenu->addAction("&Shape Tween");
     shapeTweenAction->setStatusTip("Morph the span's shape into the next keyframe's");
     connect(shapeTweenAction, &QAction::triggered, this, &MainWindow::createShapeTween);
@@ -1556,6 +1582,7 @@ void MainWindow::setupMenus()
 
     // The same commands on a right-click in the frames.
     _framesMenu = new QMenu(this);
+    _framesMenu->addAction(motionTweenAction);
     _framesMenu->addAction(classicTweenAction);
     _framesMenu->addAction(shapeTweenAction);
     _framesMenu->addAction(removeTweenAction);
@@ -4564,8 +4591,7 @@ void MainWindow::transformSelection(const char* name, const QTransform& change)
     for (fla::Element* element : elements)
     {
         const fla::Transform before = element->transform;
-        stack.push(fla::CommandPtr(new fla::SetElementTransformCommand(element, before,
-            fromQ(toQ(before) * about), name)));
+        stack.push(_phoenixView->transformCommand(element, before, fromQ(toQ(before) * about), name));
         if (element->elementType() == fla::Element::Type::Shape)
             _phoenixView->markShapeEdited(static_cast<fla::Shape*>(element));
     }
@@ -4635,7 +4661,7 @@ void MainWindow::removeTransform()
         const QPointF localCenter = inverse.map(bounds.center());
         const fla::Transform after(1.0, 0.0, 0.0, 1.0, bounds.center().x() - localCenter.x(),
             bounds.center().y() - localCenter.y());
-        stack.push(fla::CommandPtr(new fla::SetElementTransformCommand(element, before, after, "Remove Transform")));
+        stack.push(_phoenixView->transformCommand(element, before, after, "Remove Transform"));
         if (element->elementType() == fla::Element::Type::Shape)
             _phoenixView->markShapeEdited(static_cast<fla::Shape*>(element));
     }
