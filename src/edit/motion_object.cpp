@@ -6,6 +6,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdio>
 #include <cstdlib>
 #include <cstring>
 
@@ -242,5 +243,186 @@ Transform applyMotion(const Transform& stored, const Point& pivot, const MotionS
                              .then(Affine::translation(px + now.x - start.x, py + now.y - start.y));
     return Transform(moved.a, moved.b, moved.c, moved.d, moved.tx, moved.ty);
 }
+
+namespace motion {
+
+namespace {
+
+/// The AnimationCore inside a motionObjectXML document.
+tinyxml2::XMLElement* coreOf(tinyxml2::XMLDocument& document)
+{
+    tinyxml2::XMLElement* root = document.RootElement();
+    if (root && std::strcmp(root->Name(), "motionObjectXML") == 0)
+        root = root->FirstChildElement("AnimationCore");
+    return root && std::strcmp(root->Name(), "AnimationCore") == 0 ? root : nullptr;
+}
+
+/// Every Property element, however deep its containers.
+void properties(tinyxml2::XMLElement* container, std::vector<tinyxml2::XMLElement*>& out)
+{
+    for (tinyxml2::XMLElement* child = container->FirstChildElement(); child; child = child->NextSiblingElement())
+    {
+        if (std::strcmp(child->Name(), "Property") == 0)
+            out.push_back(child);
+        else
+            properties(child, out);
+    }
+}
+
+std::string number(double value)
+{
+    char buffer[64];
+    std::snprintf(buffer, sizeof(buffer), "%.10g", value);
+    return buffer;
+}
+
+/// "time,value" with its time multiplied by \a factor.
+std::string scaledPair(const char* text, double factor)
+{
+    double a = 0.0;
+    double b = 0.0;
+    if (!pair(text, a, b))
+        return text ? text : "";
+    return number(a * factor) + "," + number(b);
+}
+
+std::string print(const tinyxml2::XMLDocument& document)
+{
+    tinyxml2::XMLPrinter printer(nullptr, true);
+    document.Print(&printer);
+    return printer.CStr();
+}
+
+/// A keyframe holding \a value at \a time, straight on either side.
+tinyxml2::XMLElement* plainKey(tinyxml2::XMLDocument& document, double time, double value)
+{
+    tinyxml2::XMLElement* key = document.NewElement("Keyframe");
+    const std::string anchor = "0," + number(value);
+    key->SetAttribute("anchor", anchor.c_str());
+    key->SetAttribute("next", anchor.c_str());
+    key->SetAttribute("previous", anchor.c_str());
+    key->SetAttribute("roving", "0");
+    key->SetAttribute("timevalue", number(time).c_str());
+    return key;
+}
+
+} // namespace
+
+bool rescale(std::string& xml, double factor)
+{
+    tinyxml2::XMLDocument document;
+    if (document.Parse(xml.c_str()) != tinyxml2::XML_SUCCESS || factor <= 0.0)
+        return false;
+    tinyxml2::XMLElement* core = coreOf(document);
+    if (!core)
+        return false;
+    core->SetAttribute("duration", number(core->DoubleAttribute("duration", 0.0) * factor).c_str());
+    std::vector<tinyxml2::XMLElement*> found;
+    properties(core, found);
+    for (tinyxml2::XMLElement* property : found)
+    {
+        for (tinyxml2::XMLElement* key = property->FirstChildElement("Keyframe"); key;
+             key = key->NextSiblingElement("Keyframe"))
+        {
+            key->SetAttribute("timevalue", number(key->DoubleAttribute("timevalue", 0.0) * factor).c_str());
+            for (const char* handle : {"next", "previous"})
+            {
+                if (key->Attribute(handle))
+                    key->SetAttribute(handle, scaledPair(key->Attribute(handle), factor).c_str());
+            }
+        }
+    }
+    xml = print(document);
+    return true;
+}
+
+bool truncate(std::string& xml, double time)
+{
+    MotionObject motion;
+    tinyxml2::XMLDocument document;
+    if (!motion.parse(xml) || document.Parse(xml.c_str()) != tinyxml2::XML_SUCCESS)
+        return false;
+    tinyxml2::XMLElement* core = coreOf(document);
+    if (!core)
+        return false;
+    core->SetAttribute("duration", number(time).c_str());
+    std::vector<tinyxml2::XMLElement*> found;
+    properties(core, found);
+    for (tinyxml2::XMLElement* property : found)
+    {
+        const char* id = property->Attribute("id");
+        if (!id)
+            continue;
+        bool past = false;
+        bool atEnd = false;
+        for (tinyxml2::XMLElement* key = property->FirstChildElement("Keyframe"); key;)
+        {
+            tinyxml2::XMLElement* next = key->NextSiblingElement("Keyframe");
+            const double at = key->DoubleAttribute("timevalue", 0.0);
+            if (at > time + 1.0e-6)
+            {
+                past = true;
+                property->DeleteChild(key);
+            }
+            else if (at > time - 1.0e-6)
+            {
+                atEnd = true;
+            }
+            key = next;
+        }
+        // Where it was cut, the value it had there, so the motion up to the
+        // cut is as it was.
+        if (past && !atEnd)
+            property->InsertEndChild(plainKey(document, time, motion.valueAt(id, time, 0.0)));
+    }
+    xml = print(document);
+    return true;
+}
+
+bool addKeys(std::string& xml, double time)
+{
+    MotionObject motion;
+    tinyxml2::XMLDocument document;
+    if (!motion.parse(xml) || document.Parse(xml.c_str()) != tinyxml2::XML_SUCCESS)
+        return false;
+    tinyxml2::XMLElement* core = coreOf(document);
+    if (!core)
+        return false;
+    std::vector<tinyxml2::XMLElement*> found;
+    properties(core, found);
+    for (tinyxml2::XMLElement* property : found)
+    {
+        const char* id = property->Attribute("id");
+        if (!id)
+            continue;
+        // In time order, before the first keyframe later than it.
+        tinyxml2::XMLElement* after = nullptr;
+        bool there = false;
+        for (tinyxml2::XMLElement* key = property->FirstChildElement("Keyframe"); key;
+             key = key->NextSiblingElement("Keyframe"))
+        {
+            const double at = key->DoubleAttribute("timevalue", 0.0);
+            if (std::fabs(at - time) < 1.0e-6)
+                there = true;
+            if (at > time && !after)
+                after = key;
+        }
+        if (there)
+            continue;
+        const double fallback = std::strncmp(id, "Scale_", 6) == 0 ? 100.0 : 0.0;
+        tinyxml2::XMLElement* key = plainKey(document, time, motion.valueAt(id, time, fallback));
+        tinyxml2::XMLElement* before = after ? after->PreviousSiblingElement("Keyframe") : nullptr;
+        if (before)
+            property->InsertAfterChild(before, key);
+        else if (after)
+            property->InsertFirstChild(key);
+        else
+            property->InsertEndChild(key);
+    }
+    xml = print(document);
+    return true;
+}
+
+} // namespace motion
 
 } // namespace fla

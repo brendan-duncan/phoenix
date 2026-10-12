@@ -43,6 +43,16 @@ public:
     /// The span's length in frames.
     double frames(double frameRate) const;
 
+    /// A property's value at \a time (TimeScale units, before the TimeMap's
+    /// ease), or \a fallback when the tween does not animate it.
+    double valueAt(const std::string& property, double time, double fallback) const
+    {
+        return value(property, time, fallback);
+    }
+
+    /// The span's length in TimeScale units.
+    double duration() const { return _duration; }
+
 private:
     struct Key
     {
@@ -67,5 +77,26 @@ private:
 /// point) and the position moved by the change in offset.
 Transform applyMotion(const Transform& stored, const Point& pivot, const MotionState& start,
     const MotionState& now);
+
+/// Edits of an object motion tween as its frame keeps it, the text of the
+/// motionObjectXML element. Each returns false, leaving it alone, when the
+/// text is not one.
+namespace motion {
+
+/// Stretches (or squeezes) the tween in time by \a factor: its length,
+/// every property keyframe's time and the time of its handles. What a span
+/// made longer or shorter does to the keyframes on it.
+bool rescale(std::string& xml, double factor);
+
+/// Keeps the tween up to \a time (TimeScale units) and drops the rest, a
+/// keyframe at \a time holding each property where it was there.
+bool truncate(std::string& xml, double time);
+
+/// A property keyframe at \a time for every property, holding the value it
+/// has there, so the motion is unchanged: Insert Keyframe in a motion
+/// tween span.
+bool addKeys(std::string& xml, double time);
+
+} // namespace motion
 
 } // namespace fla

@@ -1,4 +1,6 @@
 #include "timeline_edit.h"
+#include "../data/document.h"
+#include "motion_object.h"
 
 #include "element_clone.h"
 #include "shape_tween.h"
@@ -330,6 +332,57 @@ void insertFrames(Layer& layer, int index, int count)
     updateExtent(layer);
 }
 
+std::string* motionOf(Frame& frame)
+{
+    if (frame.otherTweenType != "motion object")
+        return nullptr;
+    for (std::string& child : frame.extraChildren)
+    {
+        if (child.compare(0, 16, "<motionObjectXML") == 0)
+            return &child;
+    }
+    return nullptr;
+}
+
+double motionTimeAt(const Frame& span, const std::string& xml, int framesIn)
+{
+    MotionObject motion;
+    if (!motion.parse(xml) || span.duration <= 0)
+        return 0.0;
+    return motion.duration() * framesIn / span.duration;
+}
+
+void removeMotion(Frame& frame)
+{
+    frame.otherTweenType.clear();
+    frame.extraChildren.erase(std::remove_if(frame.extraChildren.begin(), frame.extraChildren.end(),
+        [](const std::string& child) { return child.compare(0, 16, "<motionObjectXML") == 0; }),
+        frame.extraChildren.end());
+    frame.extraAttributes.erase(std::remove_if(frame.extraAttributes.begin(), frame.extraAttributes.end(),
+        [](const std::pair<std::string, std::string>& attribute) {
+            return attribute.first == "isMotionObject" || attribute.first == "visibleAnimationKeyframes";
+        }),
+        frame.extraAttributes.end());
+}
+
+void fitMotionSpans(Layer& layer)
+{
+    const Document* document = layer.findAncestorOfType<Document>();
+    const double fps = document && document->frameRate > 0.0 ? document->frameRate : 24.0;
+    for (Frame* frame : layer.frames)
+    {
+        std::string* xml = frame ? motionOf(*frame) : nullptr;
+        if (!xml)
+            continue;
+        MotionObject motion;
+        if (!motion.parse(*xml))
+            continue;
+        const double frames = motion.frames(fps);
+        if (frames > 0.0 && std::fabs(frames - frame->duration) > 0.5)
+            motion::rescale(*xml, frame->duration / frames);
+    }
+}
+
 Frame* insertKeyframe(Layer& layer, int index, bool blank)
 {
     if (index < 0)
@@ -341,6 +394,22 @@ Frame* insertKeyframe(Layer& layer, int index, bool blank)
     }
 
     Frame* span = spanAt(layer, index);
+    if (span)
+    {
+        if (std::string* motionXml = motionOf(*span))
+        {
+            const double time = motionTimeAt(*span, *motionXml, index - span->index);
+            if (!blank)
+            {
+                // In a motion tween span a keyframe is one for every property,
+                // which leaves the motion as it was; the span stays whole.
+                motion::addKeys(*motionXml, time);
+                return span;
+            }
+            // A blank keyframe ends the tween there: the motion up to it stays.
+            motion::truncate(*motionXml, time);
+        }
+    }
     if (!span && !layer.frames.empty())
     {
         Frame* last = lastOf(layer);
@@ -504,6 +573,13 @@ bool setTween(Layer& layer, int index, bool classic)
     Frame* span = spanAt(layer, index);
     if (!span)
         return false;
+    if (!classic && motionOf(*span))
+    {
+        // Remove Tween on a motion tween: the span holds its object where
+        // the motion starts, which is how the frame stores it.
+        removeMotion(*span);
+        return true;
+    }
     if (classic)
     {
         if (!nextOf(layer, span) || span->tweenType == TweenType::Motion)
@@ -556,7 +632,8 @@ EditFramesCommand::LayerState EditFramesCommand::capture(const Layer& layer)
     for (Frame* frame : layer.frames)
     {
         if (frame)
-            state.frames.push_back({frame, frame->index, frame->duration, static_cast<int>(frame->tweenType)});
+            state.frames.push_back({frame, frame->index, frame->duration, static_cast<int>(frame->tweenType),
+                frame->otherTweenType, frame->extraChildren, frame->extraAttributes});
     }
     state.firstFrame = layer.firstFrame;
     state.lastFrame = layer.lastFrame;
@@ -571,6 +648,9 @@ void EditFramesCommand::restore(Layer& layer, const LayerState& state)
         entry.frame->index = entry.index;
         entry.frame->duration = entry.duration;
         entry.frame->tweenType = static_cast<TweenType>(entry.tweenType);
+        entry.frame->otherTweenType = entry.otherTweenType;
+        entry.frame->extraChildren = entry.extraChildren;
+        entry.frame->extraAttributes = entry.extraAttributes;
         layer.frames.push_back(entry.frame);
     }
     layer.firstFrame = state.firstFrame;
@@ -585,6 +665,10 @@ void EditFramesCommand::redo()
             _before.push_back(capture(*layer));
         std::vector<Frame*> removed;
         _edit(removed);
+        // A motion tween span made longer or shorter takes its keyframes
+        // with it, in proportion.
+        for (Layer* layer : _layers)
+            timeline::fitMotionSpans(*layer);
         for (Layer* layer : _layers)
             _after.push_back(capture(*layer));
         _ran = true;
@@ -620,7 +704,9 @@ void EditFramesCommand::redo()
             for (size_t k = 0; k < a.frames.size(); ++k)
             {
                 if (a.frames[k].frame != b.frames[k].frame || a.frames[k].index != b.frames[k].index ||
-                    a.frames[k].duration != b.frames[k].duration || a.frames[k].tweenType != b.frames[k].tweenType)
+                    a.frames[k].duration != b.frames[k].duration || a.frames[k].tweenType != b.frames[k].tweenType ||
+                    a.frames[k].otherTweenType != b.frames[k].otherTweenType ||
+                    a.frames[k].extraChildren != b.frames[k].extraChildren)
                 {
                     _changed = true;
                     break;

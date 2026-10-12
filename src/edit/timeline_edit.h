@@ -5,6 +5,7 @@
 #include <functional>
 #include <set>
 #include <string>
+#include <utility>
 #include <vector>
 
 namespace fla {
@@ -90,6 +91,20 @@ bool moveFrames(const std::vector<Layer*>& sources, const std::vector<Layer*>& t
 /// One past the layer's last frame.
 int layerEnd(const Layer& layer);
 
+/// The motionObjectXML of an object motion tween span, or null.
+std::string* motionOf(Frame& frame);
+
+/// The time (TimeScale units) \a framesIn frames into a motion span.
+double motionTimeAt(const Frame& span, const std::string& xml, int framesIn);
+
+/// Makes a motion tween span static: the motion and its markers go.
+void removeMotion(Frame& frame);
+
+/// Fits each object motion tween on the layer to its span, stretching or
+/// squeezing its keyframes in proportion where the span was made longer or
+/// shorter.
+void fitMotionSpans(Layer& layer);
+
 } // namespace timeline
 
 /// An undoable edit of some layers' frames. The edit runs on the first
@@ -123,6 +138,12 @@ private:
         int index;
         int duration;
         int tweenType;
+        /// What an edit may change of an object motion tween: its kind
+        /// and the motion it keeps among the frame's kept children and
+        /// attributes.
+        std::string otherTweenType;
+        std::vector<std::string> extraChildren;
+        std::vector<std::pair<std::string, std::string>> extraAttributes;
     };
     struct LayerState
     {

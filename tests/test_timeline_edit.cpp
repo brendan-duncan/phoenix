@@ -5,6 +5,8 @@
 #include "../src/data/shape.h"
 #include "../src/edit/command_stack.h"
 #include "../src/edit/timeline_edit.h"
+#include "../src/edit/motion_object.h"
+#include <memory>
 
 #include <memory>
 #include <vector>
@@ -227,4 +229,80 @@ TEST(dragging_a_block_of_frames_moves_or_copies_it)
     CHECK(!fla::timeline::moveFrames({layer.get()}, {}, 0, 4, 3, false, removed));
     for (fla::Frame* frame : removed)
         delete frame;
+}
+
+namespace {
+
+/// A layer with one ten-frame object motion tween moving x from 0 to 100,
+/// at 24 frames a second (1000 TimeScale units a frame), then a keyframe.
+std::unique_ptr<fla::Layer> motionLayer()
+{
+    std::unique_ptr<fla::Layer> layer(new fla::Layer(nullptr));
+    fla::Frame* span = new fla::Frame(layer.get());
+    span->index = 0;
+    span->duration = 10;
+    span->otherTweenType = "motion object";
+    span->extraAttributes.emplace_back("isMotionObject", "true");
+    span->extraChildren.push_back(
+        "<motionObjectXML><AnimationCore TimeScale=\"24000\" Version=\"1\" duration=\"10000\">"
+        "<TimeMap strength=\"0\" type=\"Quadratic\"/><PropertyContainer id=\"headContainer\">"
+        "<PropertyContainer id=\"Basic_Motion\"><Property enabled=\"1\" id=\"Motion_X\">"
+        "<Keyframe anchor=\"0,0\" next=\"0,0\" previous=\"0,0\" roving=\"0\" timevalue=\"0\"/>"
+        "<Keyframe anchor=\"0,100\" next=\"0,100\" previous=\"0,100\" roving=\"0\" timevalue=\"10000\"/>"
+        "</Property></PropertyContainer></PropertyContainer></AnimationCore></motionObjectXML>");
+    fla::Frame* end = new fla::Frame(layer.get());
+    end->index = 10;
+    end->duration = 1;
+    layer->frames = {span, end};
+    return layer;
+}
+
+double motionX(fla::Frame& span, double frame)
+{
+    fla::MotionObject motion;
+    std::string* xml = fla::timeline::motionOf(span);
+    if (!xml || !motion.parse(*xml))
+        return -1.0;
+    return motion.at(frame, 24.0).x;
+}
+
+} // namespace
+
+TEST(frame_commands_keep_an_object_motion_tween_whole)
+{
+    // F5 in the span: twice as long, the motion stretched over it.
+    std::unique_ptr<fla::Layer> layer = motionLayer();
+    fla::Layer* l = layer.get();
+    {
+        fla::EditFramesCommand stretch({l}, "Insert Frame", [l](std::vector<fla::Frame*>&) {
+            fla::timeline::insertFrames(*l, 3, 10);
+        });
+        stretch.redo();
+        CHECK(l->frames[0]->duration == 20);
+        CHECK_NEAR(motionX(*l->frames[0], 10.0), 50.0);
+        CHECK_NEAR(motionX(*l->frames[0], 20.0), 100.0);
+        // Undo puts the motion back as it was, keys and all.
+        stretch.undo();
+        CHECK(l->frames[0]->duration == 10);
+        CHECK_NEAR(motionX(*l->frames[0], 10.0), 100.0);
+    }
+
+    // F6 in the span: keyframes for the properties, the span and the motion
+    // as they were.
+    fla::timeline::insertKeyframe(*l, 4, false);
+    CHECK(l->frames.size() == 2 && l->frames[0]->duration == 10);
+    CHECK(fla::timeline::motionOf(*l->frames[0])->find("timevalue=\"4000\"") != std::string::npos);
+    CHECK_NEAR(motionX(*l->frames[0], 4.0), 40.0);
+    CHECK_NEAR(motionX(*l->frames[0], 10.0), 100.0);
+
+    // F7 in the span: the motion stops where the blank keyframe starts.
+    fla::timeline::insertKeyframe(*l, 5, true);
+    fla::timeline::fitMotionSpans(*l);
+    CHECK(l->frames[0]->duration == 5);
+    CHECK_NEAR(motionX(*l->frames[0], 5.0), 50.0);
+
+    // Remove Tween: static frames, the motion gone.
+    CHECK(fla::timeline::setTween(*l, 0, false));
+    CHECK(l->frames[0]->otherTweenType.empty());
+    CHECK(fla::timeline::motionOf(*l->frames[0]) == nullptr);
 }
