@@ -472,6 +472,9 @@ private:
     /// Controllers: Harmony's master controllers.
     class ControllersPanel* _controllers = nullptr;
     QDockWidget* _controllersDock = nullptr;
+    /// Function Curves: any property of the current layer over time.
+    class FunctionCurvesPanel* _functionCurves = nullptr;
+    QDockWidget* _functionCurvesDock = nullptr;
     /// Palettes: Harmony's linked palettes.
     class PalettesPanel* _palettes = nullptr;
     QDockWidget* _palettesDock = nullptr;

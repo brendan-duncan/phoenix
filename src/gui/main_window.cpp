@@ -29,6 +29,7 @@
 #include "toolbox.h"
 #include "notes_panel.h"
 #include "controllers_panel.h"
+#include "function_curves_panel.h"
 #include "palettes_panel.h"
 #include "../edit/pegs.h"
 #include "../edit/color_art.h"
@@ -775,6 +776,62 @@ void MainWindow::createPanels()
         _controllersDock->hide();
     }
 
+    // Function curves, closed until asked.
+    if (!_functionCurvesDock)
+    {
+        FunctionCurvesLinks links;
+        links.commands = [this]() { return &_editContext.commandStack(); };
+        links.currentLayer = [this](fla::Timeline*& timeline) -> fla::Layer* {
+            int index = 0;
+            if (!_timelineView || !_timelineView->currentLayer(timeline, index) || !timeline || index < 0 ||
+                index >= static_cast<int>(timeline->layers.size()))
+                return nullptr;
+            return timeline->layers[static_cast<size_t>(index)];
+        };
+        links.context = [this]() {
+            fla::curves::Context context;
+            if (_flaDocument && _flaDocument->document)
+            {
+                const fla::Document* document = _flaDocument->document;
+                context.timeline = document->currentScene();
+                context.frameRate = document->frameRate;
+                context.width = document->width;
+                context.height = document->height;
+            }
+            return context;
+        };
+        links.currentFrame = [this]() { return _player ? _player->currentFrame() : 0; };
+        links.setCurrentFrame = [this](int frame) {
+            if (_player)
+                _player->setCurrentFrame(frame);
+        };
+        links.changed = [this]() {
+            if (_timelineView)
+                _timelineView->refreshFrames();
+            if (_phoenixView)
+            {
+                _phoenixView->clearCaches();
+                _phoenixView->update();
+            }
+            if (_propertiesPanel)
+                _propertiesPanel->refresh();
+        };
+        _functionCurves = new FunctionCurvesPanel(links);
+        _functionCurvesDock = new QDockWidget("Function Curves", this);
+        _functionCurvesDock->setObjectName("functionCurvesDock");
+        _functionCurvesDock->setAllowedAreas(Qt::AllDockWidgetAreas);
+        _functionCurves->setParent(_functionCurvesDock);
+        _functionCurvesDock->setWidget(_functionCurves);
+        addDockWidget(Qt::BottomDockWidgetArea, _functionCurvesDock);
+        _functionCurvesDock->hide();
+        const auto refreshShown = [this]() {
+            if (_functionCurvesDock->isVisible())
+                _functionCurves->refresh();
+        };
+        connect(_player, &Player::currentFrameChanged, _functionCurves, refreshShown);
+        connect(_timelineView, &TimelineView::currentLayerChanged, _functionCurves, refreshShown);
+    }
+
     // Palettes, closed until asked.
     if (!_palettesDock)
     {
@@ -895,6 +952,7 @@ void MainWindow::setupWindowMenu()
             {"&History", _historyDock, QKeySequence(Qt::CTRL | Qt::Key_F10), "Every step that can be undone; click one to go back or forward to it"},
             {"&Review Notes", _notesDock, QKeySequence(), "Notes on frames from whoever reviews the shot; they never export"},
             {"Co&ntrollers", _controllersDock, QKeySequence(), "Master controllers: one slider driving properties on several layers"},
+            {"F&unction Curves", _functionCurvesDock, QKeySequence(), "Any property of the current layer as a curve over time, its keyframes dragged up or down"},
             {"Pale&ttes", _palettesDock, QKeySequence(), "Linked palettes: named colors that recolor everything linked to them, swapped whole"},
         },
     };
@@ -960,6 +1018,10 @@ void MainWindow::setupWindowMenu()
     connect(_controllersDock, &QDockWidget::visibilityChanged, this, [this](bool shown) {
         if (shown)
             _controllers->refresh();
+    });
+    connect(_functionCurvesDock, &QDockWidget::visibilityChanged, this, [this](bool shown) {
+        if (shown)
+            _functionCurves->refresh();
     });
     connect(_notesDock, &QDockWidget::visibilityChanged, this, [this](bool shown) {
         if (shown)
@@ -4850,6 +4912,8 @@ void MainWindow::updateEditState()
         _controllers->refresh();
     if (_palettes && _palettesDock && _palettesDock->isVisible() && !_editContext.commandStack().isInMacro())
         _palettes->refresh();
+    if (_functionCurves && _functionCurvesDock && _functionCurvesDock->isVisible() && !_editContext.commandStack().isInMacro())
+        _functionCurves->refresh();
     if (_colorPanel)
         _colorPanel->refresh();
     updateFramePicker();
