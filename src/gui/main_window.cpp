@@ -30,6 +30,8 @@
 #include "notes_panel.h"
 #include "controllers_panel.h"
 #include "function_curves_panel.h"
+#include <QGridLayout>
+#include "spell_checker.h"
 #include "../edit/text_style.h"
 #include "../edit/document_settings.h"
 #include "scene_panel.h"
@@ -3417,8 +3419,12 @@ void MainWindow::setupMenus()
     findAction->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_F));
     findAction->setStatusTip("Find text, a font, a color or a symbol anywhere in the document, and replace it");
     connect(findAction, &QAction::triggered, this, &MainWindow::showFindReplace);
-    if (_fontMappingAction)
-        editMenu->addAction(_fontMappingAction);
+    _fontMappingAction = editMenu->addAction("&Font Mapping...");
+    _fontMappingAction->setStatusTip("Choose the installed fonts missing ones are shown in");
+    connect(_fontMappingAction, &QAction::triggered, this, [this]() { fontMappingDialog(false); });
+    QAction* spellingAction = editMenu->addAction("Check &Spelling...");
+    spellingAction->setStatusTip("Check the spelling of every text field in the document");
+    connect(spellingAction, &QAction::triggered, this, &MainWindow::checkSpelling);
 
     // Modify menu, with Animate's keys.
     // Insert: Animate's timeline commands, which also live on the frames'
@@ -3498,10 +3504,6 @@ void MainWindow::setupMenus()
     shapeTweenAction->setStatusTip("Morph the span's shape into the next keyframe's");
     connect(shapeTweenAction, &QAction::triggered, this, &MainWindow::createShapeTween);
 
-    QAction* fontMappingAction = new QAction("&Font Mapping...", this);
-    fontMappingAction->setStatusTip("Choose the installed fonts missing ones are shown in");
-    connect(fontMappingAction, &QAction::triggered, this, [this]() { fontMappingDialog(false); });
-    _fontMappingAction = fontMappingAction;
     QMenu* editTimelineMenu = new QMenu("Ti&meline", this);
     QAction* removeFramesAction = editTimelineMenu->addAction("&Remove Frames");
     removeFramesAction->setShortcut(QKeySequence(Qt::SHIFT | Qt::Key_F5));
@@ -7877,6 +7879,210 @@ void MainWindow::fontMappingDialog(bool onlyMissing)
         _phoenixView->clearCaches();
         _phoenixView->update();
     }
+}
+
+std::vector<fla::StaticText*> MainWindow::allTexts() const
+{
+    std::vector<fla::StaticText*> texts;
+    fla::Document* document = _flaDocument ? _flaDocument->document : nullptr;
+    if (!document)
+        return texts;
+    std::vector<fla::Timeline*> timelines(document->timelines.begin(), document->timelines.end());
+    if (document->symbolList)
+        for (fla::Symbol* symbol : document->symbolList->symbols)
+            if (symbol)
+                timelines.insert(timelines.end(), symbol->timelines.begin(), symbol->timelines.end());
+    std::function<void(fla::Element*)> visit = [&](fla::Element* element) {
+        if (auto* text = dynamic_cast<fla::StaticText*>(element))
+            texts.push_back(text);
+        if (auto* group = dynamic_cast<fla::Group*>(element))
+            for (fla::Element* member : group->members)
+                visit(member);
+    };
+    for (fla::Timeline* timeline : timelines)
+        for (fla::Layer* layer : timeline ? timeline->layers : std::vector<fla::Layer*>())
+            for (fla::Frame* frame : layer ? layer->frames : std::vector<fla::Frame*>())
+                for (fla::Element* element : frame ? frame->elements : std::vector<fla::Element*>())
+                    visit(element);
+    return texts;
+}
+
+void MainWindow::checkSpelling()
+{
+    if (!_flaDocument || !_flaDocument->document)
+        return;
+    SpellChecker checker;
+    if (!checker.available())
+    {
+        QMessageBox::information(this, "Check Spelling", "No spell checker is available on this computer.");
+        return;
+    }
+    if (_textTool && _textTool->isEditing() && _phoenixView)
+        _textTool->deactivate(*_phoenixView);
+    const std::vector<fla::StaticText*> texts = allTexts();
+
+    // Replaces characters of a field's text, inside one run, undoably; the
+    // box is measured again.
+    const auto replace = [this](fla::StaticText* text, int start, int length, const QString& with) {
+        std::vector<fla::TextRun> runs = text->runs;
+        int at = 0;
+        for (fla::TextRun& run : runs)
+        {
+            QString characters = QString::fromStdString(run.text);
+            if (start >= at && start + length <= at + characters.length())
+            {
+                characters.replace(start - at, length, with);
+                run.text = characters.toStdString();
+                fla::StaticText measured(nullptr);
+                measured.runs = runs;
+                measured.left = text->left;
+                measured.top = text->top;
+                measured.width = text->width;
+                measured.height = text->height;
+                measured.autoExpand = text->autoExpand;
+                measured.extraAttributes = text->extraAttributes;
+                const QRectF bounds = TextLayout::localBounds(measured);
+                const fla::Rect box(fla::Point(bounds.left(), bounds.top()), fla::Point(bounds.right(), bounds.bottom()));
+                fla::CommandStack& stack = _editContext.commandStack();
+                stack.beginMacro("Check Spelling");
+                stack.push(fla::CommandPtr(new fla::SetPropertyCommand<std::vector<fla::TextRun>>(text->runs, text->runs, runs, "Check Spelling")));
+                if (text->autoExpand)
+                    stack.push(fla::CommandPtr(new fla::SetPropertyCommand<double>(text->width, text->width, bounds.width(), "Check Spelling")));
+                stack.push(fla::CommandPtr(new fla::SetPropertyCommand<double>(text->height, text->height, bounds.height(), "Check Spelling")));
+                stack.push(fla::CommandPtr(new fla::SetPropertyCommand<fla::Rect>(text->localBounds, text->localBounds, box, "Check Spelling")));
+                stack.push(fla::CommandPtr(new fla::SetPropertyCommand<fla::Rect>(text->bounds, text->bounds, box, "Check Spelling")));
+                stack.endMacro();
+                return true;
+            }
+            at += characters.length();
+        }
+        return false;
+    };
+
+    QDialog dialog(this);
+    dialog.setWindowTitle("Check Spelling");
+    QVBoxLayout* layout = new QVBoxLayout(&dialog);
+    QLabel* context = new QLabel(&dialog);
+    context->setWordWrap(true);
+    context->setTextFormat(Qt::RichText);
+    context->setMinimumWidth(360);
+    layout->addWidget(context);
+    QHBoxLayout* changeRow = new QHBoxLayout();
+    changeRow->addWidget(new QLabel("Change to:", &dialog));
+    QLineEdit* changeTo = new QLineEdit(&dialog);
+    changeRow->addWidget(changeTo, 1);
+    layout->addLayout(changeRow);
+    QListWidget* suggestions = new QListWidget(&dialog);
+    suggestions->setMaximumHeight(140);
+    layout->addWidget(suggestions);
+    connect(suggestions, &QListWidget::currentTextChanged, changeTo, &QLineEdit::setText);
+    QGridLayout* buttons = new QGridLayout();
+    QPushButton* change = new QPushButton("Change", &dialog);
+    QPushButton* changeAll = new QPushButton("Change All", &dialog);
+    QPushButton* ignore = new QPushButton("Ignore", &dialog);
+    QPushButton* ignoreAll = new QPushButton("Ignore All", &dialog);
+    QPushButton* addWord = new QPushButton("Add to Dictionary", &dialog);
+    QPushButton* close = new QPushButton("Close", &dialog);
+    buttons->addWidget(change, 0, 0);
+    buttons->addWidget(changeAll, 0, 1);
+    buttons->addWidget(ignore, 1, 0);
+    buttons->addWidget(ignoreAll, 1, 1);
+    buttons->addWidget(addWord, 2, 0);
+    buttons->addWidget(close, 2, 1);
+    layout->addLayout(buttons);
+    connect(close, &QPushButton::clicked, &dialog, &QDialog::reject);
+
+    // Where the search stands: the field and how far into it.
+    size_t field = 0;
+    int position = 0;
+    int start = 0;
+    int length = 0;
+    QString word;
+    int changes = 0;
+    QStringList ignored;
+    std::function<void()> next = [&]() {
+        while (field < texts.size())
+        {
+            const QString joined = TextLayout::joinedText(*texts[field]);
+            for (const SpellChecker::Misspelling& miss : checker.check(joined))
+            {
+                const QString candidate = joined.mid(miss.start, miss.length);
+                if (miss.start < position || ignored.contains(candidate))
+                    continue;
+                start = miss.start;
+                length = miss.length;
+                word = candidate;
+                const QString before = joined.mid(std::max(0, start - 30), std::min(start, 30)).toHtmlEscaped();
+                const QString after = joined.mid(start + length, 30).toHtmlEscaped();
+                context->setText(QString("Not in the dictionary: <b>%1</b><br><br>%2<u><b>%1</b></u>%3")
+                                     .arg(word.toHtmlEscaped(), before, after));
+                suggestions->clear();
+                const QStringList offered = checker.suggestions(word);
+                suggestions->addItems(offered);
+                changeTo->setText(offered.isEmpty() ? word : offered.front());
+                return;
+            }
+            ++field;
+            position = 0;
+        }
+        dialog.accept();
+    };
+    connect(change, &QPushButton::clicked, &dialog, [&]() {
+        if (field < texts.size() && replace(texts[field], start, length, changeTo->text()))
+            ++changes;
+        position = start + static_cast<int>(changeTo->text().length());
+        next();
+    });
+    connect(changeAll, &QPushButton::clicked, &dialog, [&]() {
+        // The word everywhere, as a whole word.
+        const QString from = word;
+        const QString with = changeTo->text();
+        const QRegularExpression whole("\\b" + QRegularExpression::escape(from) + "\\b");
+        for (fla::StaticText* text : texts)
+        {
+            int offset = 0;
+            for (;;)
+            {
+                const QRegularExpressionMatch match = whole.match(TextLayout::joinedText(*text), offset);
+                if (!match.hasMatch())
+                    break;
+                if (replace(text, static_cast<int>(match.capturedStart()), static_cast<int>(match.capturedLength()), with))
+                    ++changes;
+                offset = static_cast<int>(match.capturedStart() + with.length());
+            }
+        }
+        position = start + static_cast<int>(with.length());
+        next();
+    });
+    connect(ignore, &QPushButton::clicked, &dialog, [&]() {
+        position = start + length;
+        next();
+    });
+    connect(ignoreAll, &QPushButton::clicked, &dialog, [&]() {
+        ignored << word;
+        checker.ignore(word);
+        next();
+    });
+    connect(addWord, &QPushButton::clicked, &dialog, [&]() {
+        checker.add(word);
+        ignored << word;
+        next();
+    });
+    next();
+    const bool finished = field >= texts.size();
+    if (!finished)
+        dialog.exec();
+    _editContext.commandStack().breakMergeChain();
+    if (_phoenixView)
+    {
+        _phoenixView->invalidateBounds();
+        _phoenixView->clearCaches();
+        _phoenixView->update();
+    }
+    if (field >= texts.size())
+        QMessageBox::information(this, "Check Spelling",
+            changes > 0 ? QString("Spelling checked; %1 change%2 made.").arg(changes).arg(changes == 1 ? "" : "s")
+                        : QString("Spelling checked; nothing to change."));
 }
 
 void MainWindow::syncFontSymbols()

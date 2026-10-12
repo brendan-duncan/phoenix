@@ -253,6 +253,11 @@ private slots:
     /// in a dialog; then the text layout learns the document's symbols.
     void fontItemDialog(const QString& name);
     void syncFontSymbols();
+    /// Edit > Check Spelling: every text field of every scene and symbol,
+    /// a misspelled word at a time.
+    void checkSpelling();
+    /// Every text field of the document, scenes first, then the symbols.
+    std::vector<fla::StaticText*> allTexts() const;
     /// Text set in one face is set in another, as when a font symbol is
     /// renamed.
     void renameFontFaces(const std::string& from, const std::string& to);

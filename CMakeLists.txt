@@ -83,6 +83,7 @@ set(HEADERS
     src/gui/lip_sync_dialog.h
     src/gui/function_curves_panel.h
     src/gui/scene_panel.h
+    src/gui/spell_checker.h
     src/gui/audio_engine.h
     src/gui/frame_picker_panel.h
     src/gui/swap_symbol_dialog.h
@@ -281,6 +282,7 @@ set(SOURCES
     src/gui/lip_sync_dialog.cpp
     src/gui/function_curves_panel.cpp
     src/gui/scene_panel.cpp
+    src/gui/spell_checker.cpp
     src/gui/audio_engine.cpp
     src/gui/frame_picker_panel.cpp
     src/gui/swap_symbol_dialog.cpp
