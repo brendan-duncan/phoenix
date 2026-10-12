@@ -30,6 +30,7 @@
 #include "notes_panel.h"
 #include "controllers_panel.h"
 #include "function_curves_panel.h"
+#include "../edit/deformers.h"
 #include "palettes_panel.h"
 #include "../edit/pegs.h"
 #include "../edit/color_art.h"
@@ -2149,6 +2150,56 @@ void MainWindow::importAnimatic()
     QMessageBox::information(this, "Import Animatic", report);
 }
 
+void MainWindow::deformSelection(int what)
+{
+    std::vector<fla::SymbolInstance*> instances;
+    for (fla::Element* element : selectedElements())
+        if (auto* instance = dynamic_cast<fla::SymbolInstance*>(element))
+        {
+            fla::Frame* frame = frameOfElement(instance);
+            auto* layer = frame ? dynamic_cast<fla::Layer*>(frame->parent) : nullptr;
+            if (!layer || !layer->isLocked())
+                instances.push_back(instance);
+        }
+    if (instances.empty() || !_phoenixView)
+    {
+        QMessageBox::information(this, "Deformer", "Select one or more symbol instances.");
+        return;
+    }
+    static const char* const names[] = {"Remove Deformer", "Curve Deformer", "Envelope Deformer", "Reset Pose"};
+    fla::CommandStack& stack = _editContext.commandStack();
+    stack.beginMacro(names[what]);
+    for (fla::SymbolInstance* instance : instances)
+    {
+        std::optional<fla::deform::Deformer> deformer;
+        if (what == 1 || what == 2)
+        {
+            // Around the art as drawn.
+            QRectF bounds = _phoenixView->symbolBounds(instance->symbol);
+            if (!bounds.isValid() || bounds.isEmpty())
+                bounds = QRectF(-50.0, -50.0, 100.0, 100.0);
+            deformer = what == 1 ? fla::deform::curveAround(bounds.left(), bounds.top(), bounds.right(), bounds.bottom())
+                                 : fla::deform::envelopeAround(bounds.left(), bounds.top(), bounds.right(), bounds.bottom());
+        }
+        else if (what == 3)
+        {
+            deformer = fla::deform::of(*instance);
+            if (!deformer)
+                continue;
+            deformer->posed = deformer->rest;
+        }
+        stack.push(fla::deform::setDeformer(*instance, deformer, names[what]));
+    }
+    stack.endMacro();
+    stack.breakMergeChain();
+    // The handles are dragged with the Selection tool.
+    if ((what == 1 || what == 2) && _toolbox)
+        if (QAction* selection = _toolbox->tool("Selection"))
+            selection->trigger();
+    _phoenixView->clearCaches();
+    _phoenixView->update();
+}
+
 void MainWindow::lipSync()
 {
     auto* mouth = dynamic_cast<fla::SymbolInstance*>(_selection.single());
@@ -3057,6 +3108,19 @@ void MainWindow::setupMenus()
     QAction* lipSyncAction = modifyMenu->addAction("&Lip Sync...");
     lipSyncAction->setStatusTip("Key the selected mouth graphic to a voice track, its mouth shapes from Rhubarb Lip Sync or a cue file");
     connect(lipSyncAction, &QAction::triggered, this, &MainWindow::lipSync);
+    QMenu* deformMenu = modifyMenu->addMenu("Defo&rmer");
+    QAction* curveDeformer = deformMenu->addAction("&Curve Deformer");
+    curveDeformer->setStatusTip("Bend the selected symbols along a spine; drag its handles with the Selection tool");
+    connect(curveDeformer, &QAction::triggered, this, [this]() { deformSelection(1); });
+    QAction* envelopeDeformer = deformMenu->addAction("&Envelope Deformer");
+    envelopeDeformer->setStatusTip("Pull the selected symbols by a grid of handles around them");
+    connect(envelopeDeformer, &QAction::triggered, this, [this]() { deformSelection(2); });
+    deformMenu->addSeparator();
+    QAction* resetDeformer = deformMenu->addAction("&Reset Pose");
+    resetDeformer->setStatusTip("Put the selected deformers' handles back where they were set");
+    connect(resetDeformer, &QAction::triggered, this, [this]() { deformSelection(3); });
+    QAction* removeDeformer = deformMenu->addAction("Re&move Deformer");
+    connect(removeDeformer, &QAction::triggered, this, [this]() { deformSelection(0); });
     modifyMenu->addSeparator();
 
     _groupAction = new QAction("&Group", this);

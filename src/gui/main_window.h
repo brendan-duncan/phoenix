@@ -226,6 +226,8 @@ private slots:
     /// Modify > Lip Sync: mouth shapes from a voice track onto the selected
     /// mouth graphic's layer.
     void lipSync();
+    /// Modify > Deformer: 0 removes, 1 adds a curve, 2 an envelope, 3 resets the pose.
+    void deformSelection(int what);
     /// File > Import > Import Animatic: an EDL or Final Cut XML's cut as
     /// labeled shots, boards and placed audio.
     void importAnimatic();

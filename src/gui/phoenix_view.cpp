@@ -682,7 +682,10 @@ void PhoenixView::paintEvent(QPaintEvent *event)
     }
 
     if (!_exporting)
+    {
         drawPegs(painter);
+        drawDeformers(painter);
+    }
 
     // Guides over the art, rulers over everything.
     drawRulersAndGuides(painter);
@@ -814,6 +817,146 @@ void PhoenixView::drawPegs(QPainter& painter)
         }
     }
     painter.restore();
+}
+
+std::vector<PhoenixView::DeformerTarget> PhoenixView::deformerTargets()
+{
+    std::vector<DeformerTarget> targets;
+    if (!_flaDocument || !_flaDocument->document || _exporting || !_activeTool || _activeTool != _modifierTool)
+        return targets;
+    const fla::Timeline* timeline = scopeTimeline() ? scopeTimeline() : _flaDocument->document->currentScene();
+    if (!timeline)
+        return targets;
+    const int frame = shownFrame();
+    for (const fla::Layer* layer : timeline->layers)
+    {
+        if (!layer || !layer->isVisible())
+            continue;
+        // On its keyframe only: in between, what shows is the tween's.
+        const LayerFrame state = resolveLayerFrame(layer, fla::LoopType::PlayOnce, 0);
+        if (!state.frame || state.offset != 0)
+            continue;
+        for (size_t i = 0; i < state.frame->elements.size(); ++i)
+        {
+            auto* instance = dynamic_cast<fla::SymbolInstance*>(state.frame->elements[i]);
+            if (!instance || !_selection || !_selection->contains(instance))
+                continue;
+            std::optional<fla::deform::Deformer> deformer = fla::deform::of(*instance);
+            if (!deformer)
+                continue;
+            const fla::Transform shown = shownTransform(state, i);
+            DeformerTarget target;
+            target.instance = instance;
+            target.placed = QTransform(shown.m11, shown.m12, shown.m21, shown.m22, shown.tx, shown.ty) *
+                            parentingAt(layer, state.frame, frame);
+            target.deformer = std::move(*deformer);
+            target.locked = layer->isLocked();
+            targets.push_back(std::move(target));
+        }
+    }
+    return targets;
+}
+
+void PhoenixView::drawDeformers(QPainter& painter)
+{
+    const std::vector<DeformerTarget> targets = deformerTargets();
+    if (targets.empty())
+        return;
+    painter.save();
+    painter.setTransform(QTransform());
+    painter.setRenderHint(QPainter::Antialiasing, true);
+    const QColor ink = theme::color("accent");
+    for (const DeformerTarget& target : targets)
+    {
+        const std::vector<fla::Point>& posed = target.deformer.posed;
+        const auto at = [&](size_t i) { return stageToWidget(target.placed.map(QPointF(posed[i].x, posed[i].y))); };
+        QPainterPath path;
+        if (target.deformer.kind == fla::deform::Kind::Curve)
+        {
+            // The spine, and each anchor's arms out to its handles.
+            path.moveTo(at(0));
+            for (size_t i = 1; i + 2 < posed.size(); i += 3)
+                path.cubicTo(at(i), at(i + 1), at(i + 2));
+            painter.setPen(QPen(ink, 1.0));
+            for (size_t i = 1; i < posed.size(); i += 3)
+            {
+                painter.drawLine(at(i - 1), at(i));
+                painter.drawLine(at(i + 1), at(i + 2));
+            }
+        }
+        else
+        {
+            // The envelope's edges, exactly, and its inner rows and columns.
+            const auto edge = [&](size_t a, size_t step) {
+                path.moveTo(at(a));
+                path.cubicTo(at(a + step), at(a + 2 * step), at(a + 3 * step));
+            };
+            edge(0, 1);
+            edge(12, 1);
+            edge(0, 4);
+            edge(3, 4);
+            painter.setPen(QPen(ink, 1.0, Qt::DotLine));
+            for (size_t k = 1; k <= 2; ++k)
+            {
+                painter.drawPolyline(QPolygonF({at(4 * k), at(4 * k + 1), at(4 * k + 2), at(4 * k + 3)}));
+                painter.drawPolyline(QPolygonF({at(k), at(k + 4), at(k + 8), at(k + 12)}));
+            }
+        }
+        painter.setBrush(Qt::NoBrush);
+        painter.setPen(QPen(QColor(0, 0, 0, 120), 3.5));
+        painter.drawPath(path);
+        painter.setPen(QPen(ink, 1.8));
+        painter.drawPath(path);
+        for (size_t i = 0; i < posed.size(); ++i)
+        {
+            const bool anchor = target.deformer.kind == fla::deform::Kind::Curve
+                ? i % 3 == 0 : (i == 0 || i == 3 || i == 12 || i == 15);
+            painter.setPen(QPen(ink, 1.5));
+            painter.setBrush(target.locked ? QColor(128, 128, 128) : QColor(255, 255, 255));
+            if (anchor)
+                painter.drawRect(QRectF(at(i) - QPointF(4.0, 4.0), QSizeF(8.0, 8.0)));
+            else
+                painter.drawEllipse(at(i), 3.5, 3.5);
+        }
+    }
+    painter.restore();
+}
+
+bool PhoenixView::beginDeformerDrag(const QPointF& widgetPos)
+{
+    for (const DeformerTarget& target : deformerTargets())
+    {
+        if (target.locked)
+            continue;
+        bool invertible = false;
+        const QTransform toLocal = target.placed.inverted(&invertible);
+        if (!invertible)
+            continue;
+        const std::vector<fla::Point>& posed = target.deformer.posed;
+        // The handle nearest the press, within reach.
+        double nearest = 7.0;
+        int found = -1;
+        for (size_t i = 0; i < posed.size(); ++i)
+        {
+            const QPointF at = stageToWidget(target.placed.map(QPointF(posed[i].x, posed[i].y)));
+            const double distance = std::hypot(at.x() - widgetPos.x(), at.y() - widgetPos.y());
+            if (distance <= nearest)
+            {
+                nearest = distance;
+                found = static_cast<int>(i);
+            }
+        }
+        if (found < 0)
+            continue;
+        _deformerDrag.instance = target.instance;
+        _deformerDrag.toLocal = toLocal;
+        _deformerDrag.index = static_cast<size_t>(found);
+        _deformerDrag.grab = toLocal.map(widgetToStage(widgetPos));
+        _deformerDrag.start = target.deformer;
+        _deformerDrag.before = target.instance->extraAttributes;
+        return true;
+    }
+    return false;
 }
 
 void PhoenixView::drawStageContents(QPainter& painter, const fla::Document* document)
@@ -2412,17 +2555,28 @@ void PhoenixView::drawElement(QPainter& painter, const fla::Element* element, co
             {
                 PhoenixView& view;
                 bool was;
-                std::vector<fla::WarpPin> pins;
+                std::function<fla::Point(const fla::Point&)> map;
                 QTransform base;
                 QTransform inverse;
                 ~WarpScope()
                 {
                     view._warping = was;
-                    view._warpPins = pins;
+                    view._warpMap = std::move(map);
                     view._warpBase = base;
                     view._warpBaseInverse = inverse;
                 }
-            } warpScope{*this, _warping, _warpPins, _warpBase, _warpBaseInverse};
+            } warpScope{*this, _warping, _warpMap, _warpBase, _warpBaseInverse};
+            const auto warpWith = [&](std::function<fla::Point(const fla::Point&)> map) {
+                bool invertible = false;
+                const QTransform base = painter.transform();
+                const QTransform inverse = base.inverted(&invertible);
+                if (!invertible)
+                    return;
+                _warping = true;
+                _warpMap = std::move(map);
+                _warpBase = base;
+                _warpBaseInverse = inverse;
+            };
             if (instance->otherSymbolType == "puppet")
             {
                 frameOffset = 0;
@@ -2438,16 +2592,19 @@ void PhoenixView::drawElement(QPainter& painter, const fla::Element* element, co
                 std::vector<fla::WarpPin> pins = handlesOf(instance);
                 if (tweenElement)
                     pins = fla::AssetWarp::blend(pins, handlesOf(tweenElement), tweenProgress);
-                bool invertible = false;
-                const QTransform base = painter.transform();
-                const QTransform inverse = base.inverted(&invertible);
-                if (!pins.empty() && invertible)
-                {
-                    _warping = true;
-                    _warpPins = std::move(pins);
-                    _warpBase = base;
-                    _warpBaseInverse = inverse;
-                }
+                if (!pins.empty())
+                    warpWith([pins = std::move(pins)](const fla::Point& point) { return fla::AssetWarp::warp(pins, point); });
+            }
+            // A deformer bends the art by its handles, between two
+            // keyframes' poses in a classic tween.
+            else if (std::optional<fla::deform::Deformer> deformer = fla::deform::of(*instance))
+            {
+                const auto* other = dynamic_cast<const fla::SymbolInstance*>(tweenElement);
+                if (other)
+                    if (std::optional<fla::deform::Deformer> to = fla::deform::of(*other))
+                        deformer = fla::deform::blend(*deformer, *to, tweenProgress);
+                if (!fla::deform::atRest(*deformer))
+                    warpWith([deformer = *deformer](const fla::Point& point) { return fla::deform::apply(deformer, point); });
             }
 
             // Part way through a classic tween, the color is between the
@@ -3665,7 +3822,7 @@ QPainterPath PhoenixView::warpedPath(const QPainterPath& path, const QTransform&
         if (polygon.isEmpty())
             continue;
         const auto place = [this](const QPointF& point) {
-            const fla::Point moved = fla::AssetWarp::warp(_warpPins, fla::Point(point.x(), point.y()));
+            const fla::Point moved = _warpMap(fla::Point(point.x(), point.y()));
             return QPointF(moved.x, moved.y);
         };
         out.moveTo(place(polygon.first()));
@@ -4018,6 +4175,9 @@ void PhoenixView::mousePressEvent(QMouseEvent *event)
     // A ruler or a guide under the cursor takes the press, as in Animate.
     if (event->button() == Qt::LeftButton && !forcePan && beginGuideDrag(event->position()))
         return;
+    // So does a deformer's handle.
+    if (event->button() == Qt::LeftButton && !forcePan && beginDeformerDrag(event->position()))
+        return;
 
     beginInteraction();
 
@@ -4055,6 +4215,31 @@ void PhoenixView::mouseMoveEvent(QMouseEvent *event)
         update();
         return;
     }
+    if (_deformerDrag.instance)
+    {
+        // The handle follows the pointer; a curve's anchor takes its two
+        // arms along.
+        const QPointF moved = _deformerDrag.toLocal.map(widgetToStage(event->position())) - _deformerDrag.grab;
+        fla::deform::Deformer deformer = _deformerDrag.start;
+        const size_t index = _deformerDrag.index;
+        std::vector<size_t> moving{index};
+        if (deformer.kind == fla::deform::Kind::Curve && index % 3 == 0)
+        {
+            if (index > 0)
+                moving.push_back(index - 1);
+            if (index + 1 < deformer.posed.size())
+                moving.push_back(index + 1);
+        }
+        for (size_t i : moving)
+        {
+            deformer.posed[i].x += moved.x();
+            deformer.posed[i].y += moved.y();
+        }
+        _deformerDrag.instance->extraAttributes = fla::deform::withDeformer(*_deformerDrag.instance, deformer);
+        clearCaches();
+        update();
+        return;
+    }
     // The cursor says a guide can be picked up.
     if (_showGuides && _rotation == 0.0 && !(event->buttons() & Qt::LeftButton) && _activeTool == _modifierTool)
     {
@@ -4088,6 +4273,28 @@ void PhoenixView::mouseMoveEvent(QMouseEvent *event)
 
 void PhoenixView::mouseReleaseEvent(QMouseEvent *event)
 {
+    if (_deformerDrag.instance)
+    {
+        // One undo step for the whole drag.
+        fla::SymbolInstance* instance = _deformerDrag.instance;
+        _deformerDrag.instance = nullptr;
+        using Attributes = std::vector<std::pair<std::string, std::string>>;
+        const Attributes after = instance->extraAttributes;
+        if (after != _deformerDrag.before)
+        {
+            instance->extraAttributes = _deformerDrag.before;
+            auto command = std::make_unique<fla::SetPropertyCommand<Attributes>>(instance->extraAttributes,
+                _deformerDrag.before, after, "Deform");
+            if (_commandStack)
+                _commandStack->push(std::move(command));
+            else
+                command->redo();
+        }
+        clearCaches();
+        update();
+        return;
+    }
+
     if (_guideDrag)
     {
         const int kind = _guideDrag;

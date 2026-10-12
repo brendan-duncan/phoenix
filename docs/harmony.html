@@ -53,6 +53,19 @@
 
 <p>Dragging the slider sets every property it drives on the frame shown, as one undo step. A layer with no keyframe there gets one; cut into a tween, the new keyframe takes the in-between and both halves keep tweening. What is saved is ordinary keyframes, so Animate plays it as you see it; the controllers themselves are kept in the document where Animate ignores them.</p>
 
+<h2>Deformers</h2>
+
+<p>A deformer bends a symbol's art by handles instead of redrawing it. Select one or more instances and choose <b>Modify &gt; Deformer</b>:</p>
+
+<ul>
+<li><b>Curve Deformer</b> lays a spine along the art. Drag its square anchors and round handles with the Selection tool and the art bends along it, keeping its thickness: an arm at the elbow, a tail, a sway.</li>
+<li><b>Envelope Deformer</b> puts a four by four grid of handles around the art. Drag any of them and the art is pulled with it, smoothly, most near the handle: a squash, a stretch, a lean.</li>
+</ul>
+
+<p>The handles show on a selected instance's keyframe. Each keyframe keeps its own pose, and a classic tween goes from one pose to the next. <b>Reset Pose</b> puts the handles back where they started; <b>Remove Deformer</b> takes the deformer off. Shapes are bent; bitmaps and text inside the symbol are not.</p>
+
+<p>The deformer is kept on the instance where Animate ignores it, so Animate shows the art as drawn. Phoenix's own exports (movies, image sequences, passes) show it bent.</p>
+
 <h2>Function curves</h2>
 
 <p><b>Window &gt; Function Curves</b> shows one property of the layer picked in the timeline as a curve over its frames: X, Y, rotation, scale, skew, alpha, brightness, tint or a graphic's frame, or the camera's pan, zoom and turn on a camera layer. The curve runs through the tweens between keyframes, as they play, and each keyframe is a dot.</p>

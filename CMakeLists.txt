@@ -229,6 +229,7 @@ set(HEADERS
     src/edit/layer_effects.h
     src/edit/lip_sync.h
     src/edit/function_curves.h
+    src/edit/deformers.h
     src/edit/edit_list.h
     src/edit/combine_objects.h
     src/edit/transform_parts.h
@@ -416,6 +417,7 @@ set(SOURCES
     src/edit/layer_effects.cpp
     src/edit/lip_sync.cpp
     src/edit/function_curves.cpp
+    src/edit/deformers.cpp
     src/edit/edit_list.cpp
     src/edit/combine_objects.cpp
     src/edit/swatches.cpp

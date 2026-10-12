@@ -13,6 +13,7 @@
 #include "../edit/guide_path.h"
 #include "../edit/motion_object.h"
 #include "../edit/asset_warp.h"
+#include "../edit/deformers.h"
 
 #include <QHash>
 #include <QList>
@@ -327,6 +328,8 @@ public:
 
     /// The element's bounds where it shows now, in document space.
     QRectF shownBoundsOf(const fla::Element* element) { return shownElementBounds(element); }
+    /// A symbol's art's bounds in its own space.
+    QRectF symbolBounds(const fla::Symbol* symbol) { return calculateSymbolLocalBounds(symbol); }
 
     /// The transform to store on \a element for it to show as \a shown now,
     /// the inverse of shownTransformOf.
@@ -692,6 +695,30 @@ private:
     RenderPass _renderPass = RenderPass::All;
     /// Pegs (instances of a peg symbol) drawn as their crosshairs.
     void drawPegs(QPainter& painter);
+
+    /// Deformers: the handles of each selected instance with one, on its
+    /// keyframe, while the Selection tool is out; dragged to bend the art.
+    struct DeformerTarget
+    {
+        fla::SymbolInstance* instance = nullptr;
+        /// The instance's own space to the stage's.
+        QTransform placed;
+        fla::deform::Deformer deformer;
+        bool locked = false;
+    };
+    std::vector<DeformerTarget> deformerTargets();
+    void drawDeformers(QPainter& painter);
+    bool beginDeformerDrag(const QPointF& widgetPos);
+    struct DeformerDrag
+    {
+        fla::SymbolInstance* instance = nullptr;
+        QTransform toLocal;
+        size_t index = 0;
+        QPointF grab;
+        fla::deform::Deformer start;
+        std::vector<std::pair<std::string, std::string>> before;
+    };
+    DeformerDrag _deformerDrag;
     /// An effect layer (tone, highlight, glow): its art blurred, colored and
     /// composited over \a target, clipped to it unless it glows outside.
     void drawEffectLayer(QPainter& painter, const fla::Layer* layer, const fla::Layer* target,
@@ -1099,11 +1126,12 @@ private:
         ~ElapsedScope() { slot = saved; }
     };
 
-    /// Asset Warp: while a puppet instance draws its art, the pins that warp
-    /// it and the painter's mapping of the puppet's own space, so each shape
-    /// drawn inside can be taken there, warped and drawn.
+    /// Asset Warp and deformers: while a puppet or a deformed instance draws
+    /// its art, where the warp takes each point of its own space, and the
+    /// painter's mapping of that space, so each shape drawn inside can be
+    /// taken there, warped and drawn.
     bool _warping = false;
-    std::vector<fla::WarpPin> _warpPins;
+    std::function<fla::Point(const fla::Point&)> _warpMap;
     QTransform _warpBase;
     QTransform _warpBaseInverse;
     /// \a path, in a shape's space, taken by \a toPuppet into the puppet's
