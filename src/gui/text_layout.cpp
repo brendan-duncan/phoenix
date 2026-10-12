@@ -113,6 +113,25 @@ std::string keptAttribute(const fla::TextRun& run, const char* name)
     return std::string();
 }
 
+double keptNumber(const fla::TextRun& run, const char* name)
+{
+    const std::string value = keptAttribute(run, name);
+    return value.empty() ? 0.0 : std::atof(value.c_str());
+}
+
+/// How far a superscript or subscript run sits above or below the line's
+/// baseline, as a share of its full size.
+double baselineShift(const fla::TextRun& run)
+{
+    const std::string position = keptAttribute(run, "characterPosition");
+    const double size = run.size > 0.0 ? run.size : 12.0;
+    if (position == "superscript")
+        return -0.35 * size;
+    if (position == "subscript")
+        return 0.15 * size;
+    return 0.0;
+}
+
 /// Builds the lines, remembering the fonts so the caret and drawing agree.
 class Builder
 {
@@ -133,7 +152,9 @@ public:
     Layout build()
     {
         const double innerWidth = _text.autoExpand ? 0.0 : std::max(0.0, _text.width - 2.0 * kGutter);
+        _innerWidth = innerWidth;
         _y = _text.top + kGutter;
+        _paragraphStart = true;
         startLine(0, 0);
 
         int offset = 0;
@@ -152,6 +173,7 @@ public:
                     if (c == QChar('\r') && i + 1 < runText.length() && runText[i + 1] == QChar('\n'))
                         consumed = 2;
                     finishLine(offset + i, consumed);
+                    _paragraphStart = true;
                     i += consumed;
                     // A break that ends the run starts a line of the next.
                     startLine(offset + i, i < runText.length() ? runIndex : runIndex + 1);
@@ -169,11 +191,12 @@ public:
                 const double width = fm.horizontalAdvance(word);
 
                 const bool wraps = !_text.autoExpand && innerWidth > 0.0 &&
-                    _line.length > 0 && _x + width > innerWidth + 1.0e-6 &&
+                    _line.length > 0 && _x + width > lineRoom() + 1.0e-6 &&
                     !word.trimmed().isEmpty();
                 if (wraps)
                 {
                     finishLine(offset + i, 0);
+                    _paragraphStart = false;
                     startLine(offset + i, runIndex);
                 }
 
@@ -183,13 +206,15 @@ public:
             offset += runText.length();
         }
         finishLine(offset, 0);
+        if (!_wrapped.empty())
+            _wrapped.back() = false;
 
-        // Each line placed in the box by its paragraph's alignment: a
-        // growing box is as wide as its widest line.
-        const double room = _text.autoExpand ? _widest : innerWidth;
+        // Each line placed in the box by its paragraph's alignment, within
+        // its margins: a growing box is as wide as its widest line.
         for (size_t i = 0; i < _lines.size(); ++i)
         {
             Line& line = _lines[i];
+            const double room = (_text.autoExpand ? _widest : innerWidth) - _lineInsets[i].first - _lineInsets[i].second;
             double shift = 0.0;
             switch (_alignments[i])
             {
@@ -199,8 +224,35 @@ public:
             case fla::TextRun::Alignment::Right:
                 shift = room - line.width;
                 break;
-            case fla::TextRun::Alignment::Left:
             case fla::TextRun::Alignment::Justify:
+                // A wrapped line of a justified paragraph reaches both
+                // margins, its spaces sharing the room left; the
+                // paragraph's last line stays to the left.
+                if (_wrapped[i] && !_text.autoExpand)
+                {
+                    int spaces = 0;
+                    for (const Segment& segment : line.segments)
+                        for (const QChar c : _joined.mid(segment.start, segment.length).trimmed())
+                            spaces += c.isSpace() ? 1 : 0;
+                    if (spaces > 0 && room > line.width)
+                    {
+                        line.wordSpacing = (room - line.width) / spaces;
+                        double carried = 0.0;
+                        for (Segment& segment : line.segments)
+                        {
+                            segment.x += carried;
+                            int inside = 0;
+                            for (const QChar c : _joined.mid(segment.start, segment.length))
+                                inside += c.isSpace() ? 1 : 0;
+                            const double grow = inside * line.wordSpacing;
+                            segment.width += grow;
+                            carried += grow;
+                        }
+                        line.width = room;
+                    }
+                }
+                break;
+            case fla::TextRun::Alignment::Left:
                 break;
             }
             shift = std::max(0.0, shift);
@@ -212,19 +264,39 @@ public:
         Layout result;
         result.lines = _lines;
         const double width = _text.autoExpand ? _widest + 2.0 * kGutter : _text.width;
+        (void)width;
         const double height = (_y - _text.top) + kGutter;
-        result.bounds = QRectF(_text.left, _text.top, std::max(width, 2.0 * kGutter), height);
+        result.bounds = QRectF(_text.left, _text.top, std::max(_text.autoExpand ? _widest + 2.0 * kGutter : _text.width, 2.0 * kGutter), height);
         return result;
     }
 
 private:
+    /// The paragraph a line belongs to takes its margins and first-line
+    /// indent from the run the line starts in.
+    const fla::TextRun* paragraphRun() const
+    {
+        return _text.runs.empty() ? nullptr : &_text.runs[std::min(_lineRun, _text.runs.size() - 1)];
+    }
+
+    /// How wide the line may run before it wraps, inside its margins.
+    double lineRoom() const
+    {
+        return _innerWidth - _inset.first - _inset.second;
+    }
+
     void startLine(int start, size_t runIndex)
     {
         _line = Line();
         _line.start = start;
         _line.top = _y;
-        _line.x = _text.left + kGutter;
         _lineRun = runIndex;
+        _inset = {0.0, 0.0};
+        if (const fla::TextRun* run = paragraphRun())
+        {
+            _inset.first = keptNumber(*run, "leftMargin") + (_paragraphStart ? keptNumber(*run, "indent") : 0.0);
+            _inset.second = keptNumber(*run, "rightMargin");
+        }
+        _line.x = _text.left + kGutter + _inset.first;
         _x = 0.0;
         _ascent = 0.0;
         _spacing = 0.0;
@@ -263,7 +335,7 @@ private:
             segment.run = run;
             segment.start = start;
             segment.length = length;
-            segment.x = _text.left + kGutter + _x;
+            segment.x = _text.left + kGutter + _inset.first + _x;
             segment.width = width;
             _line.segments.push_back(segment);
         }
@@ -273,7 +345,6 @@ private:
 
     void finishLine(int end, int breakLength)
     {
-        (void)breakLength;
         // An empty line is as tall as the run it starts in.
         if (_line.segments.empty())
             noteFont(std::min(_lineRun, _metrics.size() - 1));
@@ -298,7 +369,9 @@ private:
         // come from, or the run it starts in when it has none.
         const size_t run = _line.segments.empty() ? _lineRun : static_cast<size_t>(_line.segments.front().run);
         _alignments.push_back(run < _text.runs.size() ? _text.runs[run].alignment : fla::TextRun::Alignment::Left);
-        _widest = std::max(_widest, _x);
+        _lineInsets.push_back(_inset);
+        _wrapped.push_back(breakLength == 0);
+        _widest = std::max(_widest, _x + _inset.first + _inset.second);
         _y += _spacing;
     }
 
@@ -308,6 +381,14 @@ private:
     std::vector<Line> _lines;
     /// The alignment of each line's paragraph, from the run it starts in.
     std::vector<fla::TextRun::Alignment> _alignments;
+    /// Each line's left and right insets (margins, and the indent of a
+    /// paragraph's first line), and whether it was wrapped rather than
+    /// ended by a return.
+    std::vector<std::pair<double, double>> _lineInsets;
+    std::vector<bool> _wrapped;
+    std::pair<double, double> _inset{0.0, 0.0};
+    double _innerWidth = 0.0;
+    bool _paragraphStart = true;
     size_t _lineRun = 0;
     Line _line;
     double _x = 0.0;
@@ -360,8 +441,11 @@ QFont fontFor(const fla::TextRun& run)
     if (run.letterSpacing != 0.0)
         font.setLetterSpacing(QFont::AbsoluteSpacing, run.letterSpacing);
     // Animate's size is in pixels; a point size at the screen's dpi draws
-    // exactly that many.
-    const double pixels = run.size > 0.0 ? run.size : 12.0;
+    // exactly that many. Super- and subscripts are set smaller.
+    double pixels = run.size > 0.0 ? run.size : 12.0;
+    const std::string position = keptAttribute(run, "characterPosition");
+    if (position == "superscript" || position == "subscript")
+        pixels *= 0.6;
     font.setPointSizeF(pixels * 72.0 / logicalDpi());
     return font;
 }
@@ -404,9 +488,12 @@ void draw(QPainter& painter, const fla::StaticText& text)
         for (const Segment& segment : line.segments)
         {
             const fla::TextRun& run = text.runs[segment.run];
-            painter.setFont(fontFor(run));
+            QFont font = fontFor(run);
+            if (line.wordSpacing > 0.0)
+                font.setWordSpacing(line.wordSpacing);
+            painter.setFont(font);
             painter.setPen(QPen(colorOf(run), 1.0));
-            painter.drawText(QPointF(segment.x, line.top + line.ascent),
+            painter.drawText(QPointF(segment.x, line.top + line.ascent + baselineShift(run)),
                 joined.mid(segment.start, segment.length));
         }
     }

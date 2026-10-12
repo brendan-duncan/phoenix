@@ -36,6 +36,8 @@ class Frame;
 class Layer;
 class Selection;
 class SymbolInstance;
+class StaticText;
+struct TextRun;
 class Shape;
 class Document;
 }
@@ -105,6 +107,9 @@ public:
         Player* player = nullptr;
         QAction* smoothAction = nullptr;
         QAction* straightenAction = nullptr;
+        /// The text box open in the text tool, and the run its caret is
+        /// in, which the Object tab shows while typing; null when none.
+        std::function<const fla::StaticText*(int& run)> editedText;
     };
 
     explicit PropertiesPanel(const Links& links, QWidget* parent = nullptr);
@@ -135,6 +140,9 @@ public:
     double pendingTextSize() const { return _pendingTextSize; }
 
 signals:
+    /// A text setting by name (see fla::textstyle), for the text being
+    /// typed or the text fields selected.
+    void textStyleRequested(const QString& key, const QString& value);
     /// A Tool tab setting was changed; \a key names it ("fillColor",
     /// "textFace", "textSize", "textType", "transformMode", "faucet").
     void toolSettingChanged(const QString& key);
@@ -168,6 +176,9 @@ private:
     /// A header line: an icon, a title and, if given, a field beside it.
     QWidget* makeHeader(const QPixmap& icon, const QString& title, QWidget* field = nullptr);
     PropertySection* addSection(QVBoxLayout* layout, const QString& title);
+    /// Character, Paragraph and Options sections for a text field, showing
+    /// \a run's settings.
+    void addTextSections(QVBoxLayout* page, const fla::StaticText& text, const fla::TextRun& run);
     HotText* makeHotText(double minimum, double maximum, int decimals, const QString& suffix = QString());
     QToolButton* makeSwatch(const uint8_t rgba[4], const QString& tip);
 

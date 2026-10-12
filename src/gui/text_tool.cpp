@@ -1,5 +1,7 @@
 #include "text_tool.h"
 
+#include "../edit/text_style.h"
+
 #include "phoenix_view.h"
 #include "text_layout.h"
 
@@ -584,6 +586,67 @@ bool TextTool::applyTextType(fla::StaticText::TextType type)
     if (!_text)
         return false;
     _text->textType = type;
+    if (_view)
+        refresh(*_view);
+    return true;
+}
+
+int TextTool::caretIndex() const
+{
+    int from = 0;
+    int to = 0;
+    return selectedRange(from, to) ? from : _caret;
+}
+
+bool TextTool::applyStyle(const std::string& key, const std::string& value)
+{
+    if (!_text)
+        return false;
+    switch (fla::textstyle::scopeOf(key))
+    {
+    case fla::textstyle::Scope::Character:
+        return restyleSelection([&](fla::TextRun& run) { fla::textstyle::set(run, key, value); });
+    case fla::textstyle::Scope::Field:
+        fla::textstyle::set(*_text, key, value);
+        break;
+    case fla::textstyle::Scope::Paragraph:
+    {
+        // From the start of the first paragraph touched to the end of the
+        // last, the breaks between them included.
+        const QString joined = TextLayout::joinedText(*_text);
+        int from = 0;
+        int to = 0;
+        if (!selectedRange(from, to))
+            from = to = _caret;
+        const auto isBreak = [](QChar c) { return c == QChar(13) || c == QChar(10); };
+        while (from > 0 && !isBreak(joined[from - 1]))
+            --from;
+        while (to < joined.length() && !isBreak(joined[to]))
+            ++to;
+        if (to < joined.length())
+            ++to;
+        splitRunAt(from);
+        splitRunAt(to);
+        int at = 0;
+        bool any = false;
+        for (fla::TextRun& run : _text->runs)
+        {
+            const int length = runLength(run);
+            // An empty paragraph still takes the setting, through the run
+            // it starts in.
+            if ((at >= from && at + length <= to && length > 0) || (from == to && at == from))
+            {
+                fla::textstyle::set(run, key, value);
+                any = true;
+            }
+            at += length;
+        }
+        if (!any && !_text->runs.empty())
+            fla::textstyle::set(_text->runs.back(), key, value);
+        mergeRuns();
+        break;
+    }
+    }
     if (_view)
         refresh(*_view);
     return true;

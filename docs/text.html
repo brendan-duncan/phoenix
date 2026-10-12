@@ -57,6 +57,21 @@
 
 <p>While you edit, a text box shows a small handle: round on a growing box, square on a fixed-width one. Drag the handle to set a width. Double-click a square handle to let the box grow again.</p>
 
+<h2>Character and paragraph settings</h2>
+
+<p>Select a text box with the Selection tool, or click into one with the Text tool, and the Object tab of the Properties panel shows its settings. With the Selection tool a change applies to the whole box, or to every text box selected. While typing, character settings apply to the selected characters and paragraph settings to the paragraphs the selection or caret is in.</p>
+
+<dl class="defs">
+  <dt>Family, Size, Color</dt><dd>The font, its size in pixels and the text color.</dd>
+  <dt>Style</dt><dd><strong>B</strong> and <strong>I</strong> for bold and italic (drawn bolder or slanted when the font has no bold or italic face), and <strong>Superscript</strong> or <strong>Subscript</strong>, set smaller above or below the line.</dd>
+  <dt>Letter spacing, Auto kern</dt><dd>Room added between letters, and whether the font's own kerning pairs are used.</dd>
+  <dt>Anti-alias</dt><dd>How the text is smoothed where it plays: device fonts, bitmap text, or anti-aliasing for animation or for readability.</dd>
+  <dt>Link, Target</dt><dd>A web address the characters open when clicked, and the window it opens in.</dd>
+  <dt>Align</dt><dd>Left, center, right or justified. A justified paragraph spreads each wrapped line to both edges; its last line stays to the left.</dd>
+  <dt>Line spacing</dt><dd>Room between lines, on top of the font's height.</dd>
+  <dt>Indent, Left and Right margin</dt><dd>How far a paragraph's first line starts in, and the room kept clear at either side of the box.</dd>
+</dl>
+
 <h2>Text types</h2>
 
 <p>The <strong>Text type</strong> setting matters if your document will be used in a player or game engine that plays FLA or SWF content:</p>
@@ -67,7 +82,15 @@
   <dt>Input Text</dt><dd>A field the viewer can type into.</dd>
 </dl>
 
-<p>Dynamic and input text show a dotted outline on the stage, and can be given an instance name on the Object tab so scripts can find them.</p>
+<p>Dynamic and input text show a dotted outline on the stage. Their <strong>Options</strong> on the Object tab set what they do where they play:</p>
+
+<dl class="defs">
+  <dt>Instance</dt><dd>The name scripts reach the field by.</dd>
+  <dt>Behavior</dt><dd>Single line, multiline, multiline without wrapping, or (for input text) password, which shows dots.</dd>
+  <dt>Selectable, Show border, Render as HTML, Scrollable</dt><dd>Whether the viewer can select the text, a box drawn around the field, text set from a script read as HTML, and a field that keeps its size while its text scrolls.</dd>
+  <dt>Variable</dt><dd>A variable an older script shows in the field.</dd>
+  <dt>Max characters</dt><dd>For input text, how much the viewer can type.</dd>
+</dl>
 
 <h2>How text is drawn</h2>
 
@@ -75,7 +98,7 @@
 
 <div class="callout planned">
   <span class="label">Planned</span>
-  <p>Paragraph settings (alignment, margins, indents and spacing) and character settings on the Properties panel, restyling whole text boxes selected with the Selection tool, breaking text apart into shapes, typing in Chinese, Japanese and Korean, and a warning when a document uses fonts you don't have.</p>
+  <p>Typing in Chinese, Japanese and Korean, vertical text on the stage, and a warning when a document uses fonts you don't have.</p>
 </div>
 
 </article>

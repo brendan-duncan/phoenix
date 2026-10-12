@@ -1,4 +1,7 @@
 #include "properties_panel.h"
+#include <QSpinBox>
+#include "text_layout.h"
+#include "../edit/text_style.h"
 #include "theme.h"
 #include "../edit/camera.h"
 #include "../data/bitmap.h"
@@ -2236,6 +2239,32 @@ void PropertiesPanel::rebuildObjectTab()
         }
     }
 
+    // Text being typed: its settings where the caret is, which the
+    // settings change for the selected characters.
+    int caretRun = 0;
+    if (const fla::StaticText* edited = _links.editedText ? _links.editedText(caretRun) : nullptr)
+    {
+        const char* kinds[3] = {"Static Text", "Dynamic Text", "Input Text"};
+        page->addWidget(makeHeader(objectGlyph("text", palette()), QString(kinds[static_cast<int>(edited->textType)]) + " (typing)"));
+        const fla::TextRun fallback;
+        addTextSections(page, *edited,
+            caretRun >= 0 && caretRun < static_cast<int>(edited->runs.size()) ? edited->runs[static_cast<size_t>(caretRun)] : fallback);
+        return;
+    }
+
+    // Several text fields: restyled together.
+    const bool allText = elements.size() > 1 && std::all_of(elements.begin(), elements.end(),
+        [](const fla::Element* e) { return e->elementType() == fla::Element::Type::StaticText; });
+    if (allText)
+    {
+        page->addWidget(makeHeader(objectGlyph("text", palette()), QString("%1 text fields").arg(elements.size())));
+        addPositionAndSize(page, elements);
+        const fla::StaticText* first = static_cast<const fla::StaticText*>(elements.front());
+        const fla::TextRun fallback;
+        addTextSections(page, *first, first->runs.empty() ? fallback : first->runs.front());
+        return;
+    }
+
     if (elements.empty())
     {
         page->addWidget(makeHeader(objectGlyph("none", palette()), "Nothing selected"));
@@ -2337,24 +2366,8 @@ void PropertiesPanel::rebuildObjectTab()
         page->addWidget(makeHeader(objectGlyph("text", palette()), kinds[static_cast<int>(text->textType)]));
         addPositionAndSize(page, elements);
 
-        PropertySection* character = addSection(page, "Character");
-        const fla::TextRun* run = text->runs.empty() ? nullptr : &text->runs.front();
-        character->addField(0, 0, "Family", fieldLabel(run ? QString::fromStdString(run->face) : QString("-"), this));
-        character->addField(1, 0, "Size", fieldLabel(run ? QString::number(run->size, 'f', 1) + " pt" : QString("-"), this));
-        if (run)
-        {
-            QToolButton* swatch = makeSwatch(run->fillColor, "Text color");
-            swatch->setEnabled(false);
-            character->addField(2, 0, "Color", swatch);
-        }
-        QComboBox* type = new QComboBox(this);
-        type->addItems({"Static Text", "Dynamic Text", "Input Text"});
-        type->setCurrentIndex(static_cast<int>(text->textType));
-        connect(type, &QComboBox::currentIndexChanged, this, [this](int index) {
-            _links.style->textType = index;
-            emit toolSettingChanged("textType");
-        });
-        character->addLong(3, "Type", type);
+        const fla::TextRun fallback;
+        addTextSections(page, *text, text->runs.empty() ? fallback : text->runs.front());
         break;
     }
     case fla::Element::Type::Group:
@@ -2374,6 +2387,221 @@ void PropertiesPanel::rebuildObjectTab()
         addPositionAndSize(page, elements);
         break;
     }
+    }
+}
+
+void PropertiesPanel::addTextSections(QVBoxLayout* page, const fla::StaticText& text, const fla::TextRun& run)
+{
+    const auto request = [this](const char* key, const QString& value) {
+        emit textStyleRequested(QString(key), value);
+    };
+    const auto runSetting = [&run](const char* key) { return QString::fromStdString(fla::textstyle::get(run, key)); };
+    const auto fieldSetting = [&text](const char* key) { return QString::fromStdString(fla::textstyle::get(text, key)); };
+    const auto number = [this, request](const char* key, double value, double minimum, double maximum,
+                            const QString& suffix, const QString& tip) {
+        HotText* field = makeHotText(minimum, maximum, 1, suffix);
+        field->setValue(value);
+        field->setToolTip(tip);
+        connect(field, &HotText::valueChanged, this, [request, key](double v, bool live) {
+            if (!live)
+                request(key, QString::number(v));
+        });
+        return field;
+    };
+    const auto check = [this, request](const QString& label, bool on, const char* key, const QString& tip) {
+        QCheckBox* box = new QCheckBox(label, this);
+        box->setChecked(on);
+        box->setToolTip(tip);
+        connect(box, &QCheckBox::toggled, this, [request, key](bool value) { request(key, value ? "true" : "false"); });
+        return box;
+    };
+
+    // Character: the characters selected, or the whole field.
+    PropertySection* character = addSection(page, "Character");
+    QFontComboBox* family = new QFontComboBox(this);
+    family->setCurrentFont(TextLayout::fontFor(run));
+    family->setSizeAdjustPolicy(QComboBox::AdjustToMinimumContentsLengthWithIcon);
+    family->setMinimumContentsLength(8);
+    connect(family, &QFontComboBox::currentFontChanged, this, [request](const QFont& font) {
+        static const QHash<QString, QString> postScriptNames = {
+            {"Arial", "ArialMT"}, {"Times New Roman", "TimesNewRomanPSMT"}, {"Courier New", "CourierNewPSMT"}};
+        request("face", postScriptNames.value(font.family(), QString(font.family()).remove(' ')));
+    });
+    character->addLong(0, "Family", family);
+    character->addField(1, 0, "Size", number("size", run.size > 0.0 ? run.size : 12.0, 1.0, 500.0, " pt", "Size in pixels"));
+    QToolButton* color = makeSwatch(run.fillColor, "Text color");
+    const QColor current(run.fillColor[0], run.fillColor[1], run.fillColor[2], run.fillColor[3]);
+    connect(color, &QToolButton::clicked, this, [this, request, current, color]() {
+        const QColor chosen = QColorDialog::getColor(current, this, "Text Color", QColorDialog::ShowAlphaChannel);
+        if (chosen.isValid())
+            request("fillColor", QString("#%1%2%3%4").arg(chosen.red(), 2, 16, QChar('0')).arg(chosen.green(), 2, 16, QChar('0'))
+                                     .arg(chosen.blue(), 2, 16, QChar('0')).arg(chosen.alpha(), 2, 16, QChar('0')));
+        (void)color;
+    });
+    character->addField(1, 1, "Color", color);
+    QWidget* styleRow = new QWidget(this);
+    QHBoxLayout* styleLayout = new QHBoxLayout(styleRow);
+    styleLayout->setContentsMargins(0, 0, 0, 0);
+    QToolButton* bold = new QToolButton(this);
+    bold->setText("B");
+    bold->setCheckable(true);
+    bold->setChecked(runSetting("bold") == "true");
+    bold->setToolTip("Bold (faux bold when the font has no bold face)");
+    QFont boldFont = bold->font();
+    boldFont.setBold(true);
+    bold->setFont(boldFont);
+    connect(bold, &QToolButton::toggled, this, [request](bool on) { request("bold", on ? "true" : "false"); });
+    QToolButton* italic = new QToolButton(this);
+    italic->setText("I");
+    italic->setCheckable(true);
+    italic->setChecked(runSetting("italic") == "true");
+    italic->setToolTip("Italic (faux italic when the font has no italic face)");
+    QFont italicFont = italic->font();
+    italicFont.setItalic(true);
+    italic->setFont(italicFont);
+    connect(italic, &QToolButton::toggled, this, [request](bool on) { request("italic", on ? "true" : "false"); });
+    QComboBox* position = new QComboBox(this);
+    position->setSizeAdjustPolicy(QComboBox::AdjustToMinimumContentsLengthWithIcon);
+    position->setMinimumContentsLength(6);
+    position->addItem("Normal", "normal");
+    position->addItem("Superscript", "superscript");
+    position->addItem("Subscript", "subscript");
+    position->setCurrentIndex(std::max(0, position->findData(runSetting("characterPosition"))));
+    position->setToolTip("Raise or lower the characters, set smaller");
+    connect(position, &QComboBox::currentIndexChanged, this, [request, position]() {
+        request("characterPosition", position->currentData().toString());
+    });
+    styleLayout->addWidget(bold);
+    styleLayout->addWidget(italic);
+    styleLayout->addWidget(position, 1);
+    character->addLong(2, "Style", styleRow);
+    character->addField(3, 0, "Letter spacing", number("letterSpacing", run.letterSpacing, -60.0, 60.0, " px",
+        "Room added between letters"));
+    character->addField(3, 1, "", check("Auto kern", run.autoKern, "autoKern", "Use the font's kerning pairs"));
+    QComboBox* antialias = new QComboBox(this);
+    antialias->setSizeAdjustPolicy(QComboBox::AdjustToMinimumContentsLengthWithIcon);
+    antialias->setMinimumContentsLength(6);
+    const std::pair<const char*, const char*> modes[] = {{"Use device fonts", "device"}, {"Bitmap text (no anti-alias)", "bitmap"},
+        {"Anti-alias for animation", "standard"}, {"Anti-alias for readability", "advanced"}, {"Custom anti-alias", "customThicknessSharpness"}};
+    for (const auto& [label, value] : modes)
+        antialias->addItem(label, value);
+    const QString mode = fieldSetting("fontRenderingMode");
+    antialias->setCurrentIndex(mode.isEmpty() ? 3 : std::max(0, antialias->findData(mode)));
+    antialias->setToolTip("How the text is smoothed where it plays");
+    connect(antialias, &QComboBox::currentIndexChanged, this, [request, antialias]() {
+        request("fontRenderingMode", antialias->currentData().toString());
+    });
+    character->addLong(4, "Anti-alias", antialias);
+    QComboBox* orientation = new QComboBox(this);
+    orientation->setSizeAdjustPolicy(QComboBox::AdjustToMinimumContentsLengthWithIcon);
+    orientation->setMinimumContentsLength(6);
+    orientation->addItem("Horizontal", "");
+    orientation->addItem("Vertical", "vertical right to left");
+    orientation->addItem("Vertical, left to right", "vertical left to right");
+    orientation->setCurrentIndex(std::max(0, orientation->findData(fieldSetting("orientation"))));
+    orientation->setToolTip("Lines across, or columns down the page");
+    connect(orientation, &QComboBox::currentIndexChanged, this, [request, orientation]() {
+        request("orientation", orientation->currentData().toString());
+    });
+    character->addLong(5, "Direction", orientation);
+    if (text.textType != fla::StaticText::TextType::Input)
+    {
+        QLineEdit* link = new QLineEdit(runSetting("url"), this);
+        link->setPlaceholderText("https://");
+        link->setToolTip("A link the characters open when clicked where the movie plays");
+        connect(link, &QLineEdit::editingFinished, this, [request, link]() { request("url", link->text().trimmed()); });
+        character->addLong(6, "Link", link);
+        QComboBox* target = new QComboBox(this);
+    target->setSizeAdjustPolicy(QComboBox::AdjustToMinimumContentsLengthWithIcon);
+    target->setMinimumContentsLength(6);
+        target->setEditable(true);
+        target->addItems({"", "_blank", "_parent", "_self", "_top"});
+        target->setCurrentText(runSetting("target"));
+        connect(target, &QComboBox::currentTextChanged, this, [request](const QString& value) { request("target", value); });
+        character->addLong(7, "Target", target);
+    }
+
+    // Paragraph: the paragraphs the selection is in, or every paragraph.
+    PropertySection* paragraph = addSection(page, "Paragraph");
+    QWidget* alignRow = new QWidget(this);
+    QHBoxLayout* alignLayout = new QHBoxLayout(alignRow);
+    alignLayout->setContentsMargins(0, 0, 0, 0);
+    const std::pair<const char*, const char*> aligns[] = {{"Left", "left"}, {"Center", "center"}, {"Right", "right"}, {"Justify", "justify"}};
+    alignLayout->setSpacing(2);
+    const QString aligned = runSetting("alignment");
+    for (const auto& [label, value] : aligns)
+    {
+        QToolButton* button = new QToolButton(this);
+        button->setText(QString(label).left(1));
+        button->setToolTip(QString("Align ") + label);
+        button->setCheckable(true);
+        button->setAutoExclusive(true);
+        button->setChecked(aligned == value);
+        connect(button, &QToolButton::clicked, this, [request, value = value]() { request("alignment", value); });
+        alignLayout->addWidget(button);
+    }
+    paragraph->addLong(0, "Align", alignRow);
+    paragraph->addField(1, 0, "Line spacing", number("lineSpacing", runSetting("lineSpacing").toDouble(), -60.0, 360.0, " px",
+        "Room between lines, on top of the font's height"));
+    paragraph->addField(1, 1, "Indent", number("indent", runSetting("indent").toDouble(), -720.0, 720.0, " px",
+        "How far the first line of a paragraph starts in"));
+    paragraph->addField(2, 0, "Left margin", number("leftMargin", runSetting("leftMargin").toDouble(), 0.0, 720.0, " px",
+        "Room kept clear at the left of the box"));
+    paragraph->addField(2, 1, "Right margin", number("rightMargin", runSetting("rightMargin").toDouble(), 0.0, 720.0, " px",
+        "Room kept clear at the right of the box"));
+
+    // Options: what a dynamic or input field does where the movie plays.
+    PropertySection* options = addSection(page, "Options");
+    QComboBox* kind = new QComboBox(this);
+    kind->setSizeAdjustPolicy(QComboBox::AdjustToMinimumContentsLengthWithIcon);
+    kind->setMinimumContentsLength(6);
+    kind->addItem("Static Text", "static");
+    kind->addItem("Dynamic Text", "dynamic");
+    kind->addItem("Input Text", "input");
+    kind->setCurrentIndex(static_cast<int>(text.textType));
+    kind->setToolTip("Artwork, a field scripts can set, or a field the viewer types into");
+    connect(kind, &QComboBox::currentIndexChanged, this, [request, kind]() { request("textType", kind->currentData().toString()); });
+    options->addLong(0, "Type", kind);
+    if (text.textType != fla::StaticText::TextType::Static)
+    {
+        QLineEdit* name = new QLineEdit(QString::fromStdString(text.instanceName), this);
+        name->setPlaceholderText("<Instance Name>");
+        connect(name, &QLineEdit::editingFinished, this, [request, name]() { request("instanceName", name->text().trimmed()); });
+        options->addLong(1, "Instance", name);
+        QComboBox* lines = new QComboBox(this);
+    lines->setSizeAdjustPolicy(QComboBox::AdjustToMinimumContentsLengthWithIcon);
+    lines->setMinimumContentsLength(6);
+        lines->addItem("Single line", "single line");
+        lines->addItem("Multiline", "multiline");
+        lines->addItem("Multiline no wrap", "multiline no wrap");
+        if (text.textType == fla::StaticText::TextType::Input)
+            lines->addItem("Password", "password");
+        lines->setCurrentIndex(std::max(0, lines->findData(fieldSetting("lineType"))));
+        connect(lines, &QComboBox::currentIndexChanged, this, [request, lines]() { request("lineType", lines->currentData().toString()); });
+        options->addLong(2, "Behavior", lines);
+        options->addField(3, 0, "", check("Selectable", fieldSetting("isSelectable") != "false", "isSelectable",
+            "The viewer can select and copy the text"));
+        options->addField(3, 1, "", check("Show border", fieldSetting("border") == "true", "border",
+            "A box drawn around the field where it plays"));
+        options->addField(4, 0, "", check("Render as HTML", fieldSetting("renderAsHTML") == "true", "renderAsHTML",
+            "Text set from a script may carry HTML tags"));
+        options->addField(4, 1, "", check("Scrollable", fieldSetting("scrollable") == "true", "scrollable",
+            "The field keeps its size and its text scrolls"));
+        QLineEdit* variable = new QLineEdit(fieldSetting("variableName"), this);
+        variable->setToolTip("An ActionScript 1 or 2 variable the field shows");
+        connect(variable, &QLineEdit::editingFinished, this, [request, variable]() { request("variableName", variable->text().trimmed()); });
+        options->addLong(5, "Variable", variable);
+        if (text.textType == fla::StaticText::TextType::Input)
+        {
+            QSpinBox* maximum = new QSpinBox(this);
+            maximum->setRange(0, 100000);
+            maximum->setSpecialValueText("No limit");
+            maximum->setValue(fieldSetting("maxCharacters").toInt());
+            connect(maximum, &QSpinBox::editingFinished, this, [request, maximum]() {
+                request("maxCharacters", QString::number(maximum->value()));
+            });
+            options->addLong(6, "Max characters", maximum);
+        }
     }
 }
 

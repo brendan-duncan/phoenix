@@ -75,6 +75,17 @@ public:
     /// Changes the open box's kind: static, dynamic or input text.
     bool applyTextType(fla::StaticText::TextType type);
 
+    /// Any text setting by name (see fla::textstyle): a character setting
+    /// on the selected characters, a paragraph setting on the paragraphs
+    /// the selection or caret is in, a field setting on the box. False when
+    /// no box is open, or a character setting finds nothing selected.
+    bool applyStyle(const std::string& key, const std::string& value);
+
+    /// The open box, for Properties to show its settings; null when none.
+    const fla::StaticText* editedText() const { return _text; }
+    /// Where the caret is, or the selection starts, in the joined text.
+    int caretIndex() const;
+
 private:
     /// Opens a new box at a point, fixed to a width when one is given.
     void beginNew(PhoenixView& view, const QPointF& documentPos, double width);

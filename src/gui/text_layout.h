@@ -46,6 +46,8 @@ struct Line
     /// paragraph's alignment has placed it in the box.
     double x = 0.0;
     double width = 0.0;
+    /// Extra room after each space, spreading a justified line to the box.
+    double wordSpacing = 0.0;
 };
 
 struct Layout

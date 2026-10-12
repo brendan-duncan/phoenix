@@ -30,6 +30,7 @@
 #include "notes_panel.h"
 #include "controllers_panel.h"
 #include "function_curves_panel.h"
+#include "../edit/text_style.h"
 #include "../edit/document_settings.h"
 #include "scene_panel.h"
 #include "../edit/deformers.h"
@@ -5916,6 +5917,23 @@ void MainWindow::setupPropertiesPanel()
     links.player = _player;
     links.smoothAction = _smoothAction;
     links.straightenAction = _straightenAction;
+    links.editedText = [this](int& run) -> const fla::StaticText* {
+        const fla::StaticText* text = _textTool && _textTool->isEditing() ? _textTool->editedText() : nullptr;
+        if (!text)
+            return nullptr;
+        // The run the caret is in.
+        int at = _textTool->caretIndex();
+        run = 0;
+        for (size_t i = 0; i < text->runs.size(); ++i)
+        {
+            const int length = QString::fromStdString(text->runs[i].text).length();
+            run = static_cast<int>(i);
+            if (at < length || (at == length && i + 1 == text->runs.size()))
+                break;
+            at -= length;
+        }
+        return text;
+    };
     _propertiesPanel = new PropertiesPanel(links, dock);
     dock->setWidget(_propertiesPanel);
     dock->setMinimumWidth(300);
@@ -5946,6 +5964,7 @@ void MainWindow::setupPropertiesPanel()
     connect(_framePicker, &FramePickerPanel::frameChosen, this, &MainWindow::pickInstanceFrame);
     connect(_propertiesPanel, &PropertiesPanel::swapSymbolRequested, this, &MainWindow::swapSymbol);
     connect(_propertiesPanel, &PropertiesPanel::swapBitmapRequested, this, &MainWindow::swapBitmap);
+    connect(_propertiesPanel, &PropertiesPanel::textStyleRequested, this, &MainWindow::applyTextStyle);
     connect(_framePicker, &FramePickerPanel::loopChosen, this, [this](int loopType) {
         auto* instance = dynamic_cast<fla::SymbolInstance*>(_selection.single());
         if (!instance || instance->loopType == static_cast<fla::LoopType>(loopType))
@@ -7652,6 +7671,57 @@ void MainWindow::documentSettings()
     _phoenixView->update();
     if (_propertiesPanel)
         _propertiesPanel->refresh();
+}
+
+void MainWindow::applyTextStyle(const QString& keyName, const QString& valueText)
+{
+    const std::string key = keyName.toStdString();
+    const std::string value = valueText.toStdString();
+    // The text being typed: its selection, its paragraphs or its field.
+    if (_textTool && _textTool->isEditing() && _textTool->applyStyle(key, value))
+    {
+        if (_propertiesPanel)
+            QTimer::singleShot(0, _propertiesPanel, [this]() { _propertiesPanel->refresh(); });
+        return;
+    }
+    // Text fields picked with the Selection tool, restyled whole.
+    std::vector<fla::StaticText*> texts;
+    for (fla::DOMElement* selected : _selection.elements())
+        if (auto* text = dynamic_cast<fla::StaticText*>(selected))
+        {
+            fla::Frame* frame = frameOfElement(text);
+            auto* layer = frame ? dynamic_cast<fla::Layer*>(frame->parent) : nullptr;
+            if (!layer || !layer->isLocked())
+                texts.push_back(text);
+        }
+    if (!texts.empty())
+    {
+        _editContext.commandStack().push(fla::textstyle::restyle(texts, key, value, "Text Settings", [](fla::StaticText& text) {
+            const QRectF bounds = TextLayout::localBounds(text);
+            if (text.autoExpand)
+                text.width = bounds.width();
+            text.height = bounds.height();
+            text.localBounds = fla::Rect(fla::Point(bounds.left(), bounds.top()), fla::Point(bounds.right(), bounds.bottom()));
+            text.bounds = text.localBounds;
+        }));
+        _editContext.commandStack().breakMergeChain();
+        if (_phoenixView)
+        {
+            _phoenixView->invalidateBounds();
+            _phoenixView->clearCaches();
+            _phoenixView->update();
+        }
+        if (_propertiesPanel)
+            QTimer::singleShot(0, _propertiesPanel, [this]() { _propertiesPanel->refresh(); });
+        return;
+    }
+    // Nothing to restyle: the settings new text is set in.
+    if (key == "face")
+        _drawingStyle.textFace = value;
+    else if (key == "size")
+        _drawingStyle.textSize = std::max(1.0, valueText.toDouble());
+    else if (key == "textType")
+        _drawingStyle.textType = value == "dynamic" ? 1 : value == "input" ? 2 : 0;
 }
 
 void MainWindow::swapBitmap()

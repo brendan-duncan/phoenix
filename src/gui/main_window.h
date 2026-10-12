@@ -238,6 +238,9 @@ private slots:
     /// Modify > Bitmap > Swap Bitmap: the selected bitmaps show another
     /// library bitmap, keeping their place and size.
     void swapBitmap();
+    /// A text setting from Properties, for the text being typed, the text
+    /// fields selected, or else new text.
+    void applyTextStyle(const QString& key, const QString& value);
     /// Modify > Deformer: 0 removes, 1 adds a curve, 2 an envelope, 3 resets the pose.
     void deformSelection(int what);
     /// File > Import > Import Animatic: an EDL or Final Cut XML's cut as
