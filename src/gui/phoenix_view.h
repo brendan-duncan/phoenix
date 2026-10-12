@@ -311,6 +311,12 @@ public:
     fla::CommandPtr colorCommand(fla::SymbolInstance* instance, const fla::ColorTransform& before,
         const fla::ColorTransform& after, const std::string& name);
 
+    /// The same for \a instance's filters: past the start of an object motion
+    /// tween, a change of a filter's numbers keys them there. Adding,
+    /// removing or reordering filters changes them for the whole span.
+    fla::CommandPtr filtersCommand(fla::SymbolInstance* instance, const std::vector<fla::Filter>& before,
+        const std::vector<fla::Filter>& after, const std::string& name);
+
     /// The motion paths of the selected object motion tweens, as drawn.
     struct MotionPath
     {

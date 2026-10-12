@@ -1853,9 +1853,8 @@ void PropertiesPanel::addFilterSection(QVBoxLayout* layout, fla::SymbolInstance*
     // Every change replaces the list as one undo step; a drag edits it live
     // and records where it started.
     auto before = std::make_shared<std::vector<fla::Filter>>();
-    const auto change = [this, filters](const std::vector<fla::Filter>& after, const char* name, bool rebuild) {
-        push(std::unique_ptr<fla::Command>(new fla::SetPropertyCommand<std::vector<fla::Filter>>(
-            *filters, *filters, after, name)));
+    const auto change = [this, filters, instance](const std::vector<fla::Filter>& after, const char* name, bool rebuild) {
+        push(_links.view->filtersCommand(instance, *filters, after, name));
         emit documentEdited();
         if (rebuild)
             QTimer::singleShot(0, this, [this]() { refresh(); });
@@ -2060,6 +2059,24 @@ void PropertiesPanel::addFilterSection(QVBoxLayout* layout, fla::SymbolInstance*
         optionsLayout->addStretch();
         section->addWide(row++, options);
     }
+
+    // Copy all the filters, and paste them onto another instance in place
+    // of its own, as Animate's filter menu does.
+    QToolButton* copy = new QToolButton(this);
+    copy->setText("Copy Filters");
+    copy->setEnabled(!filters->empty());
+    connect(copy, &QToolButton::clicked, this, [this, filters]() { _copiedFilters = *filters; });
+    QToolButton* paste = new QToolButton(this);
+    paste->setText("Paste Filters");
+    paste->setEnabled(!_copiedFilters.empty());
+    connect(paste, &QToolButton::clicked, this, [this, change]() { change(_copiedFilters, "Paste Filters", true); });
+    QWidget* clipboardRow = new QWidget(this);
+    QHBoxLayout* clipboardLayout = new QHBoxLayout(clipboardRow);
+    clipboardLayout->setContentsMargins(0, 0, 0, 0);
+    clipboardLayout->addWidget(copy);
+    clipboardLayout->addWidget(paste);
+    clipboardLayout->addStretch();
+    section->addWide(row++, clipboardRow);
 
     // Add: each kind with Animate's starting settings.
     QToolButton* add = new QToolButton(this);

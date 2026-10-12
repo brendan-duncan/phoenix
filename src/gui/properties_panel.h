@@ -1,5 +1,7 @@
 #pragma once
 
+#include "../data/filter.h"
+
 #include "tool_icons.h"
 
 #include <QIcon>
@@ -237,4 +239,7 @@ private:
     /// fields rather than falling back to None. Keys are compared, never
     /// followed.
     QMap<const fla::SymbolInstance*, int> _colorStyleChoice;
+
+    /// What Copy Filters copied, for Paste Filters.
+    std::vector<fla::Filter> _copiedFilters;
 };

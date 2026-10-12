@@ -1458,6 +1458,73 @@ fla::CommandPtr PhoenixView::colorCommand(fla::SymbolInstance* instance, const f
     return fla::CommandPtr(command);
 }
 
+fla::CommandPtr PhoenixView::filtersCommand(fla::SymbolInstance* instance, const std::vector<fla::Filter>& before,
+    const std::vector<fla::Filter>& after, const std::string& name)
+{
+    MotionHere here;
+    bool sameKinds = before.size() == after.size();
+    for (size_t i = 0; sameKinds && i < before.size(); ++i)
+        sameKinds = before[i].type == after[i].type;
+    if (!instance || !sameKinds || !motionHere(instance, here) || here.offset <= 0)
+        return fla::CommandPtr(new fla::SetPropertyCommand<std::vector<fla::Filter>>(
+            instance->filters, before, after, name));
+
+    // The numbers a tween animates are keyed here; anything else (a color,
+    // a switch) is the filter's own, for the whole span.
+    std::vector<fla::Filter> kept = after;
+    std::vector<std::string> children = here.frame->extraChildren;
+    for (std::string& child : children)
+    {
+        if (child.compare(0, 16, "<motionObjectXML") != 0)
+            continue;
+        fla::MotionObject motion;
+        if (!motion.parse(child))
+            continue;
+        const double rate = _flaDocument && _flaDocument->document && _flaDocument->document->frameRate > 0.0
+            ? _flaDocument->document->frameRate : 24.0;
+        const std::vector<fla::Filter> shown = motion.filtersAt(here.offset, rate, before);
+        for (size_t i = 0; i < before.size(); ++i)
+        {
+            for (const std::string& field : fla::motion::filterFields(before[i]))
+            {
+                const double was = fla::motion::filterValue(before[i], field);
+                const double now = fla::motion::filterValue(after[i], field);
+                if (std::fabs(was - now) < 1.0e-9)
+                    continue;
+                const std::string id = fla::motion::filterPropertyId(before[i], i, field);
+                std::vector<fla::motion::PropertyKey> keys = fla::motion::keysOf(child, id);
+                if (keys.empty())
+                    keys.push_back(fla::motion::PropertyKey::at(0.0, was));
+                const size_t index = fla::motion::splitAt(keys, here.time);
+                const double value = fla::motion::filterValue(shown[i], field) + (now - was);
+                const double change = value - keys[index].value;
+                keys[index].value = value;
+                keys[index].nextValue += change;
+                keys[index].previousValue += change;
+                fla::motion::setKeysOf(child, id, keys);
+                // The filter keeps its own value; the curve has the new one.
+                fla::Filter& filter = kept[i];
+                const fla::Filter& original = before[i];
+                if (field == "blurX") filter.blurX = original.blurX;
+                else if (field == "blurY") filter.blurY = original.blurY;
+                else if (field == "strength") filter.strength = original.strength;
+                else if (field == "distance") filter.distance = original.distance;
+                else if (field == "angle") filter.angle = original.angle;
+                else if (field == "brightness") filter.brightness = original.brightness;
+                else if (field == "contrast") filter.contrast = original.contrast;
+                else if (field == "saturation") filter.saturation = original.saturation;
+                else if (field == "hue") filter.hue = original.hue;
+            }
+        }
+    }
+    auto* command = new fla::CompoundCommand(name);
+    command->addCommand(fla::CommandPtr(new fla::SetPropertyCommand<std::vector<fla::Filter>>(
+        instance->filters, before, kept, name)));
+    command->addCommand(fla::CommandPtr(new fla::SetPropertyCommand<std::vector<std::string>>(
+        here.frame->extraChildren, here.frame->extraChildren, children, name)));
+    return fla::CommandPtr(command);
+}
+
 std::vector<PhoenixView::MotionPath> PhoenixView::motionPaths()
 {
     std::vector<MotionPath> paths;
