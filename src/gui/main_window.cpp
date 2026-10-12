@@ -1769,7 +1769,25 @@ void MainWindow::setupUI()
     connect(_timelineView, &TimelineView::onionRangeChanged, this, [this](int before, int after) {
         _onion.before = before;
         _onion.after = after;
+        // Anchored, the markers dragged set the frames it stays on.
+        if (_onion.anchored && _player)
+        {
+            _onion.anchorFirst = std::max(0, _player->currentFrame() - before);
+            _onion.anchorLast = _player->currentFrame() + after;
+        }
         applyOnion();
+    });
+    // Anchored, the range is the same frames wherever the playhead goes.
+    connect(_player, &Player::currentFrameChanged, this, [this](int frame) {
+        if (!_onion.anchored)
+            return;
+        _onion.before = std::max(0, frame - _onion.anchorFirst);
+        _onion.after = std::max(0, _onion.anchorLast - frame);
+        const bool on = _onionSkinAction && _onionSkinAction->isChecked();
+        if (_phoenixView)
+            _phoenixView->setOnionSkin(on, _onion.before, _onion.after);
+        if (_timelineView)
+            _timelineView->setOnionSkin(on, _onion.before, _onion.after);
     });
     connect(_timelineView, &TimelineView::onionMenuRequested, this, &MainWindow::showOnionMenu);
 
@@ -8843,6 +8861,17 @@ void MainWindow::fillOnionMenu(QMenu* menu)
     outline->setStatusTip("Show the other frames as outlines");
     connect(outline, &QAction::toggled, this, [this](bool on) {
         _onion.outline = on;
+        applyOnion();
+    });
+    QAction* anchor = menu->addAction("Anchor Onion");
+    anchor->setCheckable(true);
+    anchor->setChecked(_onion.anchored);
+    anchor->setStatusTip("Keep the onion skin on the frames it covers now as the playhead moves");
+    connect(anchor, &QAction::toggled, this, [this](bool on) {
+        _onion.anchored = on;
+        const int current = _player ? _player->currentFrame() : 0;
+        _onion.anchorFirst = std::max(0, current - _onion.before);
+        _onion.anchorLast = current + _onion.after;
         applyOnion();
     });
     QAction* keyframes = menu->addAction("Keyframes Only");
