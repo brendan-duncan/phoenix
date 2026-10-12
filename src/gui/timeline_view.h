@@ -81,6 +81,7 @@ signals:
     void layerClipboardRequested(int action);
     void keyframeMoveRequested(const fla::Layer* layer, int from, int to);
     void framePicked(const fla::Layer* layer, int frame);
+    void soundDropped(const fla::Layer* layer, int frame, const QString& name);
     void framesMoveRequested(const std::vector<const fla::Layer*>& sources, const std::vector<const fla::Layer*>& targets, int first, int last, int to, bool copy);
     void framesContextMenuRequested(const QPoint& globalPos);
     void spanResizeRequested(const fla::Layer* layer, int keyframe, int duration);

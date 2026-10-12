@@ -63,6 +63,7 @@ TimelineView::TimelineView(Player* player, QWidget *parent)
     connect(_layersPanel, &LayersPanel::layerClipboardRequested, this, &TimelineView::layerClipboardRequested);
     connect(_timelinesPanel, &TimelinesPanel::keyframeMoveRequested, this, &TimelineView::keyframeMoveRequested);
     connect(_timelinesPanel, &TimelinesPanel::framePicked, this, &TimelineView::framePicked);
+    connect(_timelinesPanel, &TimelinesPanel::soundDropped, this, &TimelineView::soundDropped);
     connect(_timelinesPanel, &TimelinesPanel::framesMoveRequested, this, &TimelineView::framesMoveRequested);
     connect(_timelinesPanel, &TimelinesPanel::contextMenuRequested, this, &TimelineView::framesContextMenuRequested);
     connect(_timelinesPanel, &TimelinesPanel::spanResizeRequested, this, &TimelineView::spanResizeRequested);

@@ -123,6 +123,8 @@ signals:
     /// A single frame was clicked: what is on it is the stage's selection.
     void framePicked(const fla::Layer* layer, int frame);
     void keyframeMoveRequested(const fla::Layer* layer, int from, int to);
+    /// A library sound was dropped on a frame.
+    void soundDropped(const fla::Layer* layer, int frame, const QString& name);
 
     /// The selected block of frames was dragged: frames \a first to \a last
     /// of each source layer go to frame \a to of its target, copied with
@@ -147,6 +149,9 @@ protected:
 
     void mouseReleaseEvent(QMouseEvent* event) override;
     void wheelEvent(QWheelEvent* event) override;
+    void dragEnterEvent(QDragEnterEvent* event) override;
+    void dragMoveEvent(QDragMoveEvent* event) override;
+    void dropEvent(QDropEvent* event) override;
 
 private:
     View _view;
@@ -291,6 +296,7 @@ signals:
 
     void layerPressed(const fla::Timeline* timeline, int layerIndex);
     void framePicked(const fla::Layer* layer, int frame);
+    void soundDropped(const fla::Layer* layer, int frame, const QString& name);
     void keyframeMoveRequested(const fla::Layer* layer, int from, int to);
     void framesMoveRequested(const std::vector<const fla::Layer*>& sources, const std::vector<const fla::Layer*>& targets, int first, int last, int to, bool copy);
     void contextMenuRequested(const QPoint& globalPos);

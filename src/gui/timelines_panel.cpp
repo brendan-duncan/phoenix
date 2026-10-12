@@ -1,4 +1,8 @@
 #include "timelines_panel.h"
+#include <QTimer>
+#include <QDragEnterEvent>
+#include <QMimeData>
+#include "library_panel.h"
 #include "player.h"
 #include "../edit/motion_object.h"
 #include "../edit/timeline_edit.h"
@@ -308,6 +312,7 @@ TimelinesPanel::TimelinesPanel(Player* player, QWidget *parent)
     connect(_gridContainer, &TimelineGrid::layerPressed, this, &TimelinesPanel::layerPressed);
     connect(_gridContainer, &TimelineGrid::keyframeMoveRequested, this, &TimelinesPanel::keyframeMoveRequested);
     connect(_gridContainer, &TimelineGrid::framePicked, this, &TimelinesPanel::framePicked);
+    connect(_gridContainer, &TimelineGrid::soundDropped, this, &TimelinesPanel::soundDropped);
     connect(_gridContainer, &TimelineGrid::framesMoveRequested, this, &TimelinesPanel::framesMoveRequested);
     connect(_gridContainer, &TimelineGrid::contextMenuRequested, this, &TimelinesPanel::contextMenuRequested);
     connect(_gridContainer, &TimelineGrid::spanResizeRequested, this, &TimelinesPanel::spanResizeRequested);
@@ -617,6 +622,49 @@ TimelineGrid::TimelineGrid(Player* player, QWidget* parent)
     , _flaDocument(nullptr)
     , _player(player)
 {
+    // Sounds dragged from the library land on frames.
+    setAcceptDrops(true);
+}
+
+namespace {
+
+/// The library sound a drag carries, or empty.
+QString draggedSound(const QMimeData* data)
+{
+    if (!data->hasFormat(LibraryTree::mimeType()))
+        return QString();
+    const QString text = QString::fromUtf8(data->data(LibraryTree::mimeType()));
+    return text.startsWith("sound:") ? text.mid(6) : QString();
+}
+
+} // namespace
+
+void TimelineGrid::dragEnterEvent(QDragEnterEvent* event)
+{
+    if (!draggedSound(event->mimeData()).isEmpty())
+        event->acceptProposedAction();
+}
+
+void TimelineGrid::dragMoveEvent(QDragMoveEvent* event)
+{
+    const int row = rowAt(event->position().toPoint().y());
+    if (!draggedSound(event->mimeData()).isEmpty() && row >= 0 && row < static_cast<int>(_rows.size()))
+        event->acceptProposedAction();
+    else
+        event->ignore();
+}
+
+void TimelineGrid::dropEvent(QDropEvent* event)
+{
+    const QString name = draggedSound(event->mimeData());
+    const int row = rowAt(event->position().toPoint().y());
+    const int frame = frameAt(event->position().toPoint().x());
+    if (name.isEmpty() || row < 0 || row >= static_cast<int>(_rows.size()) || frame < 0)
+        return;
+    event->acceptProposedAction();
+    const fla::Layer* layer = _rows[static_cast<size_t>(row)].layer;
+    // After the drag has finished.
+    QTimer::singleShot(0, this, [this, layer, frame, name]() { emit soundDropped(layer, frame, name); });
 }
 
 void TimelineGrid::updateSize()

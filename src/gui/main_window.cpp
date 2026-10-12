@@ -1863,6 +1863,9 @@ void MainWindow::setupUI()
     // Frame edits from the grid itself: dragging a keyframe, the menu.
     connect(_timelineView, &TimelineView::keyframeMoveRequested, this, &MainWindow::moveKeyframe);
     connect(_timelineView, &TimelineView::framePicked, this, &MainWindow::pickFrameContents);
+    connect(_timelineView, &TimelineView::soundDropped, this, [this](const fla::Layer* layer, int frame, const QString& name) {
+        attachSoundTo(const_cast<fla::Layer*>(layer), frame, name);
+    });
     connect(_timelineView, &TimelineView::spanResizeRequested, this, &MainWindow::resizeSpan);
     connect(_timelineView, &TimelineView::framesMoveRequested, this, &MainWindow::moveFrames);
     connect(_timelineView, &TimelineView::framesContextMenuRequested, this, &MainWindow::showFramesMenu);
@@ -7815,13 +7818,20 @@ void MainWindow::attachSound(const QString& name)
     if (!_timelineView->currentLayer(timeline, index) || !timeline ||
         index < 0 || index >= static_cast<int>(timeline->layers.size()))
         return;
-    fla::Layer* layer = timeline->layers[index];
+    attachSoundTo(timeline->layers[index], _player ? _player->currentFrame() : 0, name);
+}
+
+void MainWindow::attachSoundTo(fla::Layer* layer, int at, const QString& name)
+{
+    if (!layer || !_flaDocument || !_flaDocument->document)
+        return;
     if (layer->isLocked())
     {
-        statusBar()->showMessage("The current layer is locked.", 3000);
+        statusBar()->showMessage("The layer is locked.", 3000);
         return;
     }
-    const int at = _player ? _player->currentFrame() : 0;
+    if (layer->layerType == fla::Layer::Type::Folder)
+        return;
     const std::string soundName = name.toStdString();
     _selection.clear();
     auto* command = new fla::EditFramesCommand({layer}, "Add Sound",

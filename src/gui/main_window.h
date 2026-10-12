@@ -754,6 +754,9 @@ private:
     /// Puts a library sound on the keyframe the playhead is in on the
     /// current layer, as dragging one onto the stage does in Animate.
     void attachSound(const QString& name);
+    /// The same on \a layer at \a frame: where a sound dropped on the
+    /// timeline goes.
+    void attachSoundTo(fla::Layer* layer, int frame, const QString& name);
 
     /// ffmpeg's path, asking for it when it is not on the PATH; empty when
     /// the person did not say.
