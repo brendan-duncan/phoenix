@@ -75,6 +75,7 @@ set(HEADERS
     src/gui/frame_picker_panel.h
     src/gui/swap_symbol_dialog.h
     src/gui/start_dialog.h
+    src/gui/autosave.h
     src/gui/file_association.h
     src/gui/color_panel.h
     src/gui/video_import.h
@@ -225,6 +226,7 @@ set(SOURCES
     src/gui/frame_picker_panel.cpp
     src/gui/swap_symbol_dialog.cpp
     src/gui/start_dialog.cpp
+    src/gui/autosave.cpp
     src/gui/file_association.cpp
     src/gui/color_panel.cpp
     src/gui/video_import.cpp

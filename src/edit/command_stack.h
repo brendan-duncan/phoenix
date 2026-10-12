@@ -107,6 +107,10 @@ public:
 
     bool isClean() const { return _cleanIndex >= 0 && static_cast<size_t>(_cleanIndex) == _index; }
 
+    /// Marks the document as unsaved wherever the history stands, as a
+    /// document recovered after a crash is until it is saved.
+    void setDirty() { _cleanIndex = -1; }
+
     /// Whether the next push() may merge into the previous command. Merging is
     /// enabled by default; call breakMergeChain() to force the next edit to
     /// start a new undo step (on mouse release, for instance).

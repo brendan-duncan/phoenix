@@ -4,6 +4,7 @@
 #include "fill_offset.h"
 #include "new_document_dialog.h"
 #include "start_dialog.h"
+#include "autosave.h"
 #include "timeline_audio.h"
 #include "updater.h"
 #include "../data/bitmap.h"
@@ -254,10 +255,33 @@ MainWindow::MainWindow(const QString& initialFile, QWidget* parent, bool startup
     const bool startScreen = initialFile.isEmpty() && QSettings().value("showStartDialog", true).toBool();
     const QString startFile = !initialFile.isEmpty() ? initialFile
         : (_recentFiles.isEmpty() || startScreen ? QString() : _recentFiles.first());
+    // Work a crash left behind comes first, unless a file was asked for.
     if (startup && !startFile.isEmpty())
-        QTimer::singleShot(0, this, [this, startFile]() { loadFLAFile(startFile); });
-    else if (startup && startScreen)
-        QTimer::singleShot(0, this, [this]() { showStartDialog(); });
+    {
+        QTimer::singleShot(0, this, [this, startFile, initialFile]() {
+            if (!initialFile.isEmpty() || !offerRecovery())
+                loadFLAFile(startFile);
+        });
+    }
+    else if (startup)
+    {
+        QTimer::singleShot(0, this, [this, startScreen]() {
+            if (!offerRecovery() && startScreen)
+                showStartDialog();
+        });
+    }
+
+    // A copy of unsaved work every few minutes, for after a crash.
+    if (startup)
+    {
+        AutoSave::Links links;
+        links.document = [this]() { return _flaDocument ? _flaDocument->document : nullptr; };
+        links.modified = [this]() { return _editContext.isModified(); };
+        links.path = [this]() { return _documentPath; };
+        links.name = [this]() { return _documentName; };
+        links.busy = []() { return QApplication::mouseButtons() != Qt::NoButton; };
+        _autoSave = new AutoSave(links, this);
+    }
 
     // Look for an update once the start-up file has had its turn.
     connect(_updater, &Updater::statusMessage, this, [this](const QString& message) {
@@ -338,6 +362,9 @@ void MainWindow::dropEvent(QDropEvent* event)
 
 void MainWindow::releaseDocument()
 {
+    // The document is going; so is the copy kept of it for recovery.
+    if (_autoSave)
+        _autoSave->discard();
     // A drawing still waiting to merge points into the document too, and must
     // not outlive it. It is dropped rather than committed: the document is on
     // its way out either way.
@@ -435,6 +462,50 @@ void MainWindow::newFile()
     if (dialog.exec() != QDialog::Accepted)
         return;
     createNewDocument(dialog.documentWidth(), dialog.documentHeight(), dialog.frameRate(), dialog.stageColor());
+}
+
+bool MainWindow::offerRecovery()
+{
+    const QList<AutoSave::Orphan> orphans = AutoSave::orphans();
+    for (const AutoSave::Orphan& orphan : orphans)
+    {
+        const QString name = orphan.name.isEmpty() ? QString("Untitled") : orphan.name;
+        QMessageBox box(QMessageBox::Question, "Recover Unsaved Work",
+            QString("Phoenix closed unexpectedly while %1 had unsaved changes. A copy from %2 was kept.")
+                .arg(name, QLocale().toString(orphan.saved, QLocale::ShortFormat)),
+            QMessageBox::NoButton, this);
+        QPushButton* recover = box.addButton("Recover", QMessageBox::AcceptRole);
+        QPushButton* discard = box.addButton("Discard", QMessageBox::DestructiveRole);
+        box.addButton("Later", QMessageBox::RejectRole);
+        box.setDefaultButton(recover);
+        box.exec();
+        if (box.clickedButton() == discard)
+        {
+            AutoSave::remove(orphan);
+            continue;
+        }
+        if (box.clickedButton() != recover)
+            continue;
+
+        std::string error;
+        std::string warning;
+        bool readOnly = false;
+        fla::FLADocument* document = phx::load(orphan.file.toStdString(), error, warning, readOnly);
+        if (!document)
+        {
+            QMessageBox::warning(this, "Recover Unsaved Work",
+                QString("The copy could not be read: %1").arg(QString::fromStdString(error)));
+            continue;
+        }
+        // Back where it came from, and unsaved until it is saved.
+        adoptDocument(document, orphan.originalPath, name);
+        _editContext.markUnsaved();
+        updateEditState();
+        AutoSave::remove(orphan);
+        statusBar()->showMessage(QString("Recovered %1. Save it to keep it.").arg(name), 8000);
+        return true;
+    }
+    return false;
 }
 
 void MainWindow::showStartDialog()
@@ -1247,6 +1318,19 @@ void MainWindow::setupMenus()
     connect(exportMovieAction, &QAction::triggered, this, &MainWindow::exportMovie);
     exportMenu->addAction(exportMovieAction);
 
+    // How often unsaved work is copied aside for after a crash.
+    QMenu* autoSaveMenu = fileMenu->addMenu("A&uto-Save");
+    QActionGroup* autoSaveGroup = new QActionGroup(this);
+    for (const int minutes : {0, 1, 2, 5, 10})
+    {
+        QAction* choice = autoSaveMenu->addAction(minutes == 0 ? QString("Off")
+            : minutes == 1 ? QString("Every Minute") : QString("Every %1 Minutes").arg(minutes));
+        choice->setCheckable(true);
+        choice->setChecked(AutoSave::interval() == minutes);
+        autoSaveGroup->addAction(choice);
+        connect(choice, &QAction::triggered, this, [minutes]() { AutoSave::setInterval(minutes); });
+    }
+
     fileMenu->addSeparator();
 
     QAction* exitAction = new QAction("&Exit", this);
@@ -2033,6 +2117,8 @@ bool MainWindow::saveToPath(const QString& filePath)
     _documentPath = filePath;
     _documentName = QFileInfo(filePath).fileName();
     _editContext.markSaved();
+    if (_autoSave)
+        _autoSave->discard();
     _flaDocument->fromBinary = false;
     updateEditState();
     addToRecentFiles(filePath);
@@ -2304,6 +2390,8 @@ void MainWindow::redo()
 void MainWindow::updateEditState()
 {
     const fla::CommandStack& stack = _editContext.commandStack();
+    if (_autoSave)
+        _autoSave->noteChanged();
 
     // Frames come and go with edits too, and the Properties panel shows
     // whatever an edit or an undo just changed. Layers do as well (an undone

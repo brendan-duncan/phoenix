@@ -46,6 +46,10 @@ public:
     /// history position counts as saved.
     void markSaved() { _commandStack.setClean(); }
 
+    /// Records that the document is not saved anywhere yet, whatever the
+    /// history says: a document recovered after a crash.
+    void markUnsaved() { _commandStack.setDirty(); }
+
 private:
     /// Borrowed, not owned.
     FLADocument* _document = nullptr;

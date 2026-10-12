@@ -74,6 +74,9 @@ private slots:
     void newFile();
     /// The start screen: new from a preset, Open, or a recent file.
     void showStartDialog();
+    /// Offers back work a crash left in the recovery folder. True when it
+    /// opened some.
+    bool offerRecovery();
 
     void openFile();
 
@@ -353,6 +356,7 @@ private:
     PropertiesPanel* _propertiesPanel = nullptr;
     class LibraryPanel* _libraryPanel = nullptr;
     class FramePickerPanel* _framePicker = nullptr;
+    class AutoSave* _autoSave = nullptr;
     QDockWidget* _framePickerDock = nullptr;
     class ColorPanel* _colorPanel = nullptr;
     QDockWidget* _colorDock = nullptr;
