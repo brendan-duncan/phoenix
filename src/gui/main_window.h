@@ -83,6 +83,9 @@ private slots:
     /// Import to Stage, images onto the current frame.
     void importToStage();
     void importToLibrary();
+    /// File > Import > Import Video: a video as a reference to animate
+    /// over, a still per frame on a guide layer with its sound.
+    void importVideo();
     /// Shows and edits the scene at index (counting from 0) on its first
     /// frame, leaving any symbol being edited.
     void goToScene(int index);
@@ -354,6 +357,10 @@ private:
     /// Puts a library sound on the keyframe the playhead is in on the
     /// current layer, as dragging one onto the stage does in Animate.
     void attachSound(const QString& name);
+
+    /// ffmpeg's path, asking for it when it is not on the PATH; empty when
+    /// the person did not say.
+    QString findFfmpeg(const QString& title, const QString& why);
 
     /// Which toolbox icon stands for \a tool, for the Properties panel's
     /// Tool tab.

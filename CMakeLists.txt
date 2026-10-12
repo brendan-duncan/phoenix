@@ -76,6 +76,7 @@ set(HEADERS
     src/gui/swap_symbol_dialog.h
     src/gui/start_dialog.h
     src/gui/color_panel.h
+    src/gui/video_import.h
     src/gui/swatches_panel.h
     src/gui/media_import.h
     src/gui/timeline_audio.h
@@ -218,6 +219,7 @@ set(SOURCES
     src/gui/swap_symbol_dialog.cpp
     src/gui/start_dialog.cpp
     src/gui/color_panel.cpp
+    src/gui/video_import.cpp
     src/gui/swatches_panel.cpp
     src/gui/media_import.cpp
     src/gui/timeline_audio.cpp

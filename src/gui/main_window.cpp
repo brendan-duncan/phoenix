@@ -11,6 +11,7 @@
 #include "draw_placement.h"
 #include "library_panel.h"
 #include "media_import.h"
+#include "video_import.h"
 #include "frame_picker_panel.h"
 #include "color_panel.h"
 #include "swatches_panel.h"
@@ -94,6 +95,7 @@
 #include <QHBoxLayout>
 #include <QLabel>
 #include <QCheckBox>
+#include <QTemporaryDir>
 #include <QComboBox>
 #include <QColorDialog>
 #include <QDockWidget>
@@ -1111,6 +1113,10 @@ void MainWindow::setupMenus()
     importLibraryAction->setStatusTip("Import images and sounds into the library");
     connect(importLibraryAction, &QAction::triggered, this, &MainWindow::importToLibrary);
     importMenu->addAction(importLibraryAction);
+    QAction* importVideoAction = new QAction("Import &Video...", this);
+    importVideoAction->setStatusTip("Bring in a video to animate over, on a guide layer");
+    connect(importVideoAction, &QAction::triggered, this, &MainWindow::importVideo);
+    importMenu->addAction(importVideoAction);
 
     QMenu* exportMenu = fileMenu->addMenu("Export");
 
@@ -2019,22 +2025,9 @@ void MainWindow::exportMovie()
         return;
     const MovieExportSettings settings = dialog.settings();
 
-    if (settings.format == MovieExportSettings::Format::Video && MovieExport::ffmpegPath().isEmpty())
-    {
-        QMessageBox::information(this, "Export Movie",
-            "Phoenix encodes video with ffmpeg, which it could not find on the PATH. "
-            "Choose ffmpeg's program file to use it; Phoenix will remember it.\n\n"
-            "ffmpeg is free from ffmpeg.org.");
-        const QString chosen = QFileDialog::getOpenFileName(this, "Where is ffmpeg?", QString(),
-#ifdef Q_OS_WIN
-            "ffmpeg (ffmpeg.exe);;Programs (*.exe)");
-#else
-            "ffmpeg (ffmpeg);;All Files (*)");
-#endif
-        if (chosen.isEmpty())
-            return;
-        MovieExport::setFfmpegPath(chosen);
-    }
+    if (settings.format == MovieExportSettings::Format::Video &&
+        findFfmpeg("Export Movie", "Phoenix encodes video with ffmpeg").isEmpty())
+        return;
 
     QString error;
     const bool written = MovieExport::run(settings, *_phoenixView, _timelineAudio, document->frameRate, this, error);
@@ -2879,6 +2872,178 @@ void MainWindow::importToLibrary()
         return;
     settings.setValue("importFolder", QFileInfo(paths.front()).absolutePath());
     importMedia(paths, false);
+}
+
+QString MainWindow::findFfmpeg(const QString& title, const QString& why)
+{
+    const QString found = MovieExport::ffmpegPath();
+    if (!found.isEmpty())
+        return found;
+    QMessageBox::information(this, title,
+        why + ", which it could not find on the PATH. "
+        "Choose ffmpeg's program file to use it; Phoenix will remember it.\n\n"
+        "ffmpeg is free from ffmpeg.org.");
+    const QString chosen = QFileDialog::getOpenFileName(this, "Where is ffmpeg?", QString(),
+#ifdef Q_OS_WIN
+        "ffmpeg (ffmpeg.exe);;Programs (*.exe)");
+#else
+        "ffmpeg (ffmpeg);;All Files (*)");
+#endif
+    if (!chosen.isEmpty())
+        MovieExport::setFfmpegPath(chosen);
+    return chosen;
+}
+
+void MainWindow::importVideo()
+{
+    if (!_phoenixView || !_flaDocument || !_flaDocument->document)
+        return;
+    fla::Timeline* timeline = editedTimeline();
+    if (!timeline)
+        return;
+    QSettings settings;
+    const QString video = QFileDialog::getOpenFileName(this, "Import Video",
+        settings.value("importFolder").toString(), VideoImport::fileFilter());
+    if (video.isEmpty())
+        return;
+    settings.setValue("importFolder", QFileInfo(video).absolutePath());
+    const QString ffmpeg = findFfmpeg("Import Video", "Phoenix reads video with ffmpeg");
+    if (ffmpeg.isEmpty())
+        return;
+
+    // The choices Animate's wizard offers that matter for a reference.
+    QDialog options(this);
+    options.setWindowTitle("Import Video");
+    QLabel* about = new QLabel(QString("%1 goes on a guide layer of its own, a still for each frame at %2 fps, "
+        "to animate over. Guide layers are left out of what is published and exported.")
+        .arg(QFileInfo(video).fileName()).arg(_flaDocument->document->frameRate, 0, 'f', 2), &options);
+    about->setWordWrap(true);
+    QCheckBox* fit = new QCheckBox("Shrink to the stage width", &options);
+    fit->setChecked(true);
+    QCheckBox* sound = new QCheckBox("Import its sound, as a stream", &options);
+    sound->setChecked(true);
+    QDialogButtonBox* buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, &options);
+    connect(buttons, &QDialogButtonBox::accepted, &options, &QDialog::accept);
+    connect(buttons, &QDialogButtonBox::rejected, &options, &QDialog::reject);
+    QVBoxLayout* optionsLayout = new QVBoxLayout(&options);
+    optionsLayout->addWidget(about);
+    optionsLayout->addWidget(fit);
+    optionsLayout->addWidget(sound);
+    optionsLayout->addWidget(buttons);
+    options.setMinimumWidth(420);
+    if (options.exec() != QDialog::Accepted)
+        return;
+
+    fla::Document* document = _flaDocument->document;
+    QTemporaryDir folder;
+    if (!folder.isValid())
+    {
+        QMessageBox::warning(this, "Import Video", "There is no room for the video's frames in the temporary folder.");
+        return;
+    }
+    VideoImport::Result extracted;
+    QString error;
+    const double rate = document->frameRate > 0.0 ? document->frameRate : 24.0;
+    if (!VideoImport::extract(ffmpeg, video, folder.path(), rate, fit->isChecked() ? document->width : 0,
+            sound->isChecked(), this, extracted, error))
+    {
+        if (!error.isEmpty())
+            QMessageBox::warning(this, "Import Video", error);
+        return;
+    }
+
+    // The stills go in a library folder of their own.
+    const QString baseName = QFileInfo(video).completeBaseName();
+    const std::string folderName = fla::media::freeName(*document, baseName.toStdString() + " frames");
+    QStringList problems;
+    std::vector<fla::Bitmap*> bitmaps;
+    for (const QString& still : extracted.frames)
+    {
+        QString stillError;
+        fla::Bitmap* bitmap = MediaImport::loadImage(*document, still, stillError);
+        if (!bitmap)
+        {
+            problems << stillError;
+            continue;
+        }
+        bitmap->name = folderName + "/" + bitmap->name;
+        bitmap->href = bitmap->name;
+        bitmap->sourceExternalFilepath = video.toStdString();
+        bitmaps.push_back(bitmap);
+    }
+    if (bitmaps.empty())
+    {
+        QMessageBox::warning(this, "Import Video", problems.join("\n"));
+        return;
+    }
+
+    // A locked guide layer at the bottom, a keyframe per still.
+    fla::Layer* layer = fla::newLayerFor(*timeline, false);
+    for (fla::Frame* frame : layer->frames)
+        delete frame;
+    layer->frames.clear();
+    layer->name = baseName.toStdString();
+    layer->autoNamed = false;
+    layer->layerType = fla::Layer::Type::Guide;
+    layer->locked = true;
+    for (size_t i = 0; i < bitmaps.size(); ++i)
+    {
+        fla::Frame* frame = new fla::Frame(layer);
+        frame->index = static_cast<int>(i);
+        frame->duration = 1;
+        frame->keyMode = "9728";
+        fla::BitmapInstance* instance = new fla::BitmapInstance(frame);
+        instance->libraryItemName = bitmaps[i]->name;
+        frame->elements.push_back(instance);
+        layer->frames.push_back(frame);
+    }
+    layer->firstFrame = 0;
+    layer->lastFrame = static_cast<int>(bitmaps.size());
+
+    fla::CommandStack& stack = _editContext.commandStack();
+    stack.beginMacro("Import Video");
+    stack.push(fla::CommandPtr(new fla::AddFolderCommand(document, folderName)));
+    for (fla::Bitmap* bitmap : bitmaps)
+        stack.push(fla::CommandPtr(new fla::AddBitmapCommand(document, bitmap, "Import Video")));
+    if (!extracted.audio.isEmpty())
+    {
+        fla::media::Sound soundData;
+        QString soundError;
+        if (MediaImport::loadSound(extracted.audio, soundData, soundError))
+        {
+            soundData.name = baseName.toStdString() + ".wav";
+            soundData.sourcePath = video.toStdString();
+            auto* addSound = new fla::AddSoundCommand(document, soundData, "Import Video");
+            const std::string soundName = addSound->soundName();
+            stack.push(fla::CommandPtr(addSound));
+            fla::Frame* first = layer->frames.front();
+            first->extraAttributes.emplace_back("soundName", soundName);
+            first->extraAttributes.emplace_back("soundSync", "stream");
+        }
+        else
+        {
+            problems << soundError;
+        }
+    }
+    stack.push(fla::CommandPtr(new fla::AddLayerCommand(timeline, static_cast<int>(timeline->layers.size()), layer,
+        "Import Video")));
+    stack.endMacro();
+    stack.breakMergeChain();
+
+    if (_libraryPanel)
+        _libraryPanel->refreshIfStale();
+    if (_timelineView)
+    {
+        _timelineView->refresh();
+        _timelineView->refreshFrames();
+    }
+    onVisibilityChanged();
+    _phoenixView->invalidateBounds();
+    _phoenixView->clearCaches();
+    _phoenixView->update();
+    statusBar()->showMessage(QString("Imported %1 frames of %2.").arg(bitmaps.size()).arg(QFileInfo(video).fileName()), 5000);
+    if (!problems.isEmpty())
+        QMessageBox::warning(this, "Import Video", problems.join("\n"));
 }
 
 void MainWindow::importMedia(const QStringList& paths, bool toStage, const QPointF* at)
