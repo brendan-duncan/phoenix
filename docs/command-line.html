@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Command line · Phoenix User Guide</title>
+<meta name="description" content="Open files, export movies and images, and convert between PHX, FLA and XFL from the command line, without opening a window.">
+<meta name="keywords" content="command line terminal batch script headless render export-movie export-image convert phx-dump per-layer offscreen server automation">
+<link rel="icon" href="assets/img/logo.png">
+<link rel="stylesheet" href="assets/site.css">
+<script>try { const t = localStorage.getItem("phoenix-docs-theme"); if (t) document.documentElement.dataset.theme = t; } catch (e) {}</script>
+<script src="assets/site.js" defer></script>
+</head>
+<body>
+<main>
+<article class="content">
+
+<p class="eyebrow">Output</p>
+<h1>Command line</h1>
+<p class="lead">Phoenix can render and convert documents without showing a window, so you can script batch exports and render on a build machine.</p>
+
+<p>On Windows, the program is <code>Phoenix.exe</code> in the folder Phoenix was installed to. On macOS, it is <code>/Applications/Phoenix.app/Contents/MacOS/Phoenix</code>. The examples below just say <code>Phoenix</code>.</p>
+
+<h2>Open a file</h2>
+
+<pre><code>Phoenix drawing.fla</code></pre>
+
+<p>Starts Phoenix with the file open, the same as dropping it on the program.</p>
+
+<h2>Export a movie</h2>
+
+<pre><code>Phoenix --export-movie scene.fla out.mp4
+Phoenix --export-movie scene.fla frames.png
+Phoenix --export-movie scene.fla loop.gif
+Phoenix --export-movie scene.fla soundtrack.wav</code></pre>
+
+<p>Renders every frame and exits. The output name decides the format:</p>
+
+<table>
+  <thead><tr><th>Output ends in</th><th>Makes</th></tr></thead>
+  <tbody>
+    <tr><td><code>.png</code></td><td class="wrap">A PNG sequence: <code>frames0001.png</code>, <code>frames0002.png</code> and so on</td></tr>
+    <tr><td><code>.gif</code></td><td class="wrap">An animated GIF</td></tr>
+    <tr><td><code>.wav</code></td><td class="wrap">The soundtrack</td></tr>
+    <tr><td>anything else</td><td class="wrap">H.264 video, for example <code>.mp4</code> or <code>.mov</code>, with sound</td></tr>
+  </tbody>
+</table>
+
+<p>Add <code>--per-layer</code> after the output name to write a separate PNG sequence for each layer:</p>
+
+<pre><code>Phoenix --export-movie scene.fla layers.png --per-layer</code></pre>
+
+<h2>Export an image</h2>
+
+<pre><code>Phoenix --export-image scene.fla poster.png --frame 48 --size 1920x1080 --matte transparent</code></pre>
+
+<table>
+  <thead><tr><th>Option</th><th>Meaning</th></tr></thead>
+  <tbody>
+    <tr><td><code>--frame N</code></td><td class="wrap">The frame to render, counting from 1. The default is the first frame.</td></tr>
+    <tr><td><code>--size WxH</code></td><td class="wrap">The output size in pixels.</td></tr>
+    <tr><td><code>--matte transparent</code> or <code>--matte COLOR</code></td><td class="wrap">The background. A color can be a name or a hex value such as <code>#202020</code>.</td></tr>
+    <tr><td><code>--quality 0-100</code></td><td class="wrap">JPEG quality.</td></tr>
+  </tbody>
+</table>
+
+<p>The format comes from the output name: <code>.png</code>, <code>.jpg</code> or <code>.gif</code>.</p>
+
+<h2>Convert between formats</h2>
+
+<pre><code>Phoenix --convert scene.fla scene.phx
+Phoenix --convert scene.phx scene.fla
+Phoenix --convert scene.fla scene_xfl</code></pre>
+
+<p>Converts between Phoenix documents, FLA files and XFL folders. A name ending in <code>.phx</code> or <code>.fla</code> chooses that format; any other name makes an XFL folder. If something in the document cannot be written to the chosen format, Phoenix lists it after <em>Not written:</em>.</p>
+
+<h2>Inspect a Phoenix document</h2>
+
+<pre><code>Phoenix --phx-dump scene.phx</code></pre>
+
+<p>Prints the parts of a <code>.phx</code> file as text, which is useful when reporting a problem with a file.</p>
+
+<h2>Running on a machine without a display</h2>
+
+<p>Exports never show a window. On a server or build agent with no display at all, set the environment variable <code>QT_QPA_PLATFORM=offscreen</code> so Phoenix doesn't look for one:</p>
+
+<pre><code>QT_QPA_PLATFORM=offscreen Phoenix --export-movie scene.fla out.mp4</code></pre>
+
+<p>On Windows, Phoenix finds the system fonts by itself in this mode, so text renders normally.</p>
+
+<p>Exit codes are 0 on success and non-zero on failure, with the reason printed, so scripts can stop on errors.</p>
+
+</article>
+</main>
+</body>
+</html>

@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Exporting · Phoenix User Guide</title>
+<meta name="description" content="Export your animation as MP4 or MOV video, animated GIF, PNG sequences, per-layer PNG sequences, single images, SVG or WAV.">
+<meta name="keywords" content="export movie video mp4 mov h.264 ffmpeg gif animated png sequence per layer transparent background image jpeg svg wav audio size frame range matte render">
+<link rel="icon" href="assets/img/logo.png">
+<link rel="stylesheet" href="assets/site.css">
+<script>try { const t = localStorage.getItem("phoenix-docs-theme"); if (t) document.documentElement.dataset.theme = t; } catch (e) {}</script>
+<script src="assets/site.js" defer></script>
+</head>
+<body>
+<main>
+<article class="content">
+
+<p class="eyebrow">Output</p>
+<h1>Exporting</h1>
+<p class="lead">Exports render through the same drawing code as the stage, so what you see is what you get. All export commands are under <span class="menu-path">File &rsaquo; Export</span>.</p>
+
+<figure class="narrow">
+  <img src="assets/shots/menu-file-export.webp" alt="File, Export submenu: Export to SVG, Export Image, Export Movie" width="195" height="78">
+</figure>
+
+<h2>Export Movie</h2>
+
+<p>Choose <span class="menu-path">File &rsaquo; Export &rsaquo; Export Movie...</span> (<kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>S</kbd>) to render a range of frames.</p>
+
+<div class="split">
+  <figure style="margin:0"><img src="assets/shots/export-movie.webp" alt="Export Movie dialog with format, file, size, frame range, transparent background, include sound and loop forever options" width="338" height="343"></figure>
+  <dl class="defs" style="grid-template-columns:1fr">
+    <dt>Format</dt><dd>What to make. See the table below.</dd>
+    <dt>File</dt><dd>Where to save it. <strong>Browse...</strong> picks a location.</dd>
+    <dt>Size</dt><dd>The output size in pixels. Keep proportions to match the stage's shape.</dd>
+    <dt>Frames</dt><dd>The first and last frame to export.</dd>
+    <dt>Options</dt><dd>Transparent background, Include sound, and Loop forever, where the format supports them.</dd>
+  </dl>
+</div>
+
+<table>
+  <thead><tr><th>Format</th><th>Produces</th></tr></thead>
+  <tbody>
+    <tr><td>Video (MP4, H.264)</td><td class="wrap">An MP4, or MOV if you name the file <code>.mov</code>, with the soundtrack mixed in as AAC audio. Good quality, plays everywhere.</td></tr>
+    <tr><td>PNG Sequence</td><td class="wrap">One numbered image per frame (<code>name0001.png</code>, <code>name0002.png</code>...), optionally with a transparent background. Ideal for compositing and editing software.</td></tr>
+    <tr><td>Animated GIF</td><td class="wrap">A GIF, looping forever or playing once, with its own color palette for each frame.</td></tr>
+    <tr><td>PNG Sequence per Layer</td><td class="wrap">A separate PNG sequence for every visible layer, with masks applied, for compositing layers separately.</td></tr>
+    <tr><td>Sound (WAV)</td><td class="wrap">The mixed soundtrack on its own.</td></tr>
+  </tbody>
+</table>
+
+<p>In every export, movie clips play their own animation, guide layers are left out, and locked layers are included.</p>
+
+<h3>About ffmpeg</h3>
+
+<p>Video export uses <a href="https://ffmpeg.org/">ffmpeg</a>, a free video encoder. If it is installed and on your path, Phoenix finds it. If not, Phoenix asks you to locate it the first time you export video, and remembers where it is. Other formats do not need it.</p>
+
+<h2>Export Image</h2>
+
+<p><span class="menu-path">File &rsaquo; Export &rsaquo; Export Image...</span> renders a single frame.</p>
+
+<figure>
+  <img src="assets/shots/export-image.webp" alt="Export Image dialog with file, format, size, frame, matte and quality" width="496" height="279">
+</figure>
+
+<dl class="defs">
+  <dt>Format</dt><dd>PNG, JPEG or GIF.</dd>
+  <dt>Size</dt><dd>Any size, with proportions kept if you like.</dd>
+  <dt>Frame</dt><dd>Which frame to render.</dd>
+  <dt>Matte</dt><dd>The background: the stage color, transparent (not for JPEG), or any color.</dd>
+  <dt>Quality</dt><dd>For JPEG, from 0 to 100. The default is 90.</dd>
+</dl>
+
+<h2>Export to SVG</h2>
+
+<p><span class="menu-path">File &rsaquo; Export &rsaquo; Export to SVG...</span> writes the current frame as an SVG file, which scales cleanly for print and the web. Hidden layers are left out and images are embedded. Filters and masks, which SVG cannot express the same way, are included as images.</p>
+
+<h2>Exporting without opening Phoenix</h2>
+
+<p>Every movie and image export can also run from the command line, for batch jobs and render scripts. See <a href="command-line.html">Command line</a>.</p>
+
+<div class="callout planned">
+  <span class="label">Planned</span>
+  <p>ProRes video, GIF dithering and color count, sprite sheets, exporting chosen layers or every scene, a render queue, and export settings saved with the document.</p>
+</div>
+
+</article>
+</main>
+</body>
+</html>

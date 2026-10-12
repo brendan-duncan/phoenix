@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Color, fills and strokes · Phoenix User Guide</title>
+<meta name="description" content="Choose colors, build linear and radial gradients, use bitmap fills, adjust them with the Gradient Transform tool, and keep colors in swatches.">
+<meta name="keywords" content="color panel fill stroke solid linear radial gradient stops flow extend reflect repeat linear rgb bitmap fill gradient transform tool swatches alpha transparency hex stroke style dashed dotted ragged stipple hatched">
+<link rel="icon" href="assets/img/logo.png">
+<link rel="stylesheet" href="assets/site.css">
+<script>try { const t = localStorage.getItem("phoenix-docs-theme"); if (t) document.documentElement.dataset.theme = t; } catch (e) {}</script>
+<script src="assets/site.js" defer></script>
+</head>
+<body>
+<main>
+<article class="content">
+
+<p class="eyebrow">Drawing</p>
+<h1>Color, fills and strokes</h1>
+<p class="lead">Every shape has a fill, a stroke, or both. Fills can be solid colors, gradients or bitmaps; strokes have a color, a width and a style.</p>
+
+<h2>Picking colors</h2>
+
+<p>The quickest way to set colors is the pair of swatches near the bottom of the toolbox: the upper one is the stroke, the lower one the fill. Click either one to open a color picker, where you can also set transparency (alpha). The buttons beneath reset to black and white, or swap the two colors.</p>
+
+<p>The Tool tab shows the same two colors under <strong>Color and Style</strong>, each with a checkbox to turn it off. To change the colors of artwork that is already drawn, select it and use the swatches on the Object tab.</p>
+
+<p>To take a color from existing artwork, use the <a href="drawing-tools.html#eyedropper">Eyedropper</a>.</p>
+
+<h2>The Color panel</h2>
+
+<p>Open it from the Color tab in the panel dock, or <span class="menu-path">View &rsaquo; Color</span> (<kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>F9</kbd>). The <strong>Fill</strong> list chooses the type of fill new artwork gets:</p>
+
+<dl class="defs">
+  <dt>None</dt><dd>No fill.</dd>
+  <dt>Solid Color</dt><dd>A single color, with its hex value.</dd>
+  <dt>Linear Gradient</dt><dd>Colors blending along a straight line.</dd>
+  <dt>Radial Gradient</dt><dd>Colors blending outward from a center.</dd>
+  <dt>Bitmap Fill</dt><dd>An image from the library, tiled across the shape.</dd>
+</dl>
+
+<p>To apply the panel's fill to artwork that is already drawn, select it and click <strong>Apply to Selection</strong>.</p>
+
+<h3>Editing a gradient</h3>
+
+<figure class="narrow">
+  <img src="assets/shots/color-panel.webp" alt="Color panel set to Linear Gradient, with Flow and Linear RGB options, a white to black gradient bar and a selected color stop" width="304" height="215">
+</figure>
+
+<ul>
+  <li><strong>Click the gradient bar</strong> to add a color stop. A gradient can have up to 15 stops.</li>
+  <li><strong>Click a stop</strong> to select it, then set its color with the swatch or hex field below the bar.</li>
+  <li><strong>Drag a stop</strong> sideways to move it, or drag it down off the bar to remove it.</li>
+</ul>
+
+<dl class="defs">
+  <dt>Flow</dt><dd>What happens past the ends of the gradient: <strong>Extend</strong> continues the end colors, <strong>Reflect</strong> mirrors the gradient back and forth, and <strong>Repeat</strong> starts it over.</dd>
+  <dt>Linear RGB</dt><dd>Blends in linear light, which gives brighter, more natural mid-tones between saturated colors.</dd>
+</dl>
+
+<h3>Bitmap fills</h3>
+
+<p>Choose <strong>Bitmap Fill</strong>, then pick an image from the list of library bitmaps, or click <strong>Import...</strong> to bring one in. New shapes are filled with the image, tiled.</p>
+
+<h2>The Gradient Transform tool</h2>
+
+<p>Gradients and bitmap fills are fitted to the shape when you draw it. To change how they sit, press <kbd>F</kbd> for the <strong>Gradient Transform</strong> tool (it shares a slot with Free Transform) and click the fill. Drag its handles to move the center, stretch the gradient or bitmap, and rotate it.</p>
+
+<h2>Swatches</h2>
+
+<figure class="narrow">
+  <img src="assets/shots/swatches-panel.webp" alt="The Swatches panel showing a grid of color swatches" width="304" height="270">
+</figure>
+
+<p>The Swatches panel (<kbd>Ctrl</kbd>+<kbd>F9</kbd>) shows the document's saved colors. Click a swatch to make it the fill color, or the stroke color when the panel's <strong>Stroke</strong> option is checked. <strong>Add Swatch</strong> saves the current fill color, and right-clicking a swatch lets you delete it. Swatches are saved with the document, including FLA files.</p>
+
+<h2>Stroke styles</h2>
+
+<p>Besides solid lines, strokes can be <strong>Hairline</strong>, which stays one screen pixel wide at any zoom, <strong>Dashed</strong>, <strong>Dotted</strong>, and three hand-drawn styles: <strong>Ragged</strong>, <strong>Stipple</strong> and <strong>Hatched</strong>. Set the style on the Tool tab before drawing, or on the Object tab for selected strokes. The <a href="drawing-tools.html#paint-bucket-and-ink-bottle">Ink Bottle</a> applies the whole current stroke style to a stroke you click.</p>
+
+<p>Phoenix also draws the variable-width strokes made in Animate with their original width profile.</p>
+
+<div class="callout planned">
+  <span class="label">Planned</span>
+  <p>HSB and RGB fields in the Color panel, Lock Fill, gradient skew handles, sampling gradients and bitmaps with the Eyedropper, color palettes that import and export standard palette files, and palettes linked across documents.</p>
+</div>
+
+</article>
+</main>
+</body>
+</html>

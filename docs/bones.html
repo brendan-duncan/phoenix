@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Bones and inverse kinematics · Phoenix User Guide</title>
+<meta name="description" content="Pose and play armatures made with Animate's Bone tool, and play Asset Warp puppets.">
+<meta name="keywords" content="bones ik inverse kinematics armature pose layer bone tool asset warp puppet pins rig">
+<link rel="icon" href="assets/img/logo.png">
+<link rel="stylesheet" href="assets/site.css">
+<script>try { const t = localStorage.getItem("phoenix-docs-theme"); if (t) document.documentElement.dataset.theme = t; } catch (e) {}</script>
+<script src="assets/site.js" defer></script>
+</head>
+<body>
+<main>
+<article class="content">
+
+<p class="eyebrow">Animation</p>
+<h1>Bones and inverse kinematics</h1>
+<p class="lead">An <strong>armature</strong> is a chain of bones inside a shape or between symbols. Drag the end of the chain and the joints bend to follow, which is called inverse kinematics (IK). Phoenix plays and poses armatures made in Animate.</p>
+
+<figure>
+  <img src="assets/shots/bones.webp" alt="A green curved shape with three bones drawn inside it as slim blue kites joined by round joints, and a pose span in the timeline" width="1100" height="830">
+  <figcaption>A shape armature. Its layer's timeline shows a pose span.</figcaption>
+</figure>
+
+<h2>Armature layers</h2>
+
+<p>Armatures live on their own layers, and their timeline spans are drawn in a distinct color with a marker at each <strong>pose</strong>. A pose is a keyframe for the whole armature: Phoenix fills in the frames between poses, easing them the way the file says.</p>
+
+<h2>Posing</h2>
+
+<p>Select the shape to show its bones, drawn in the layer's color as slim shapes with round joints. Then, with the Selection tool:</p>
+
+<ol class="steps">
+  <li>Move the playhead to the frame you want to pose.</li>
+  <li>Drag a bone. Its tip follows the cursor and the bones above it in the chain bend to reach.</li>
+</ol>
+
+<p>The frame becomes a pose if it wasn't one already. Each pose change is a single step to undo.</p>
+
+<h2>Symbol armatures and Asset Warp</h2>
+
+<ul>
+  <li><strong>Armatures between symbols</strong> show their bones and carry the instances with them.</li>
+  <li><strong>Asset Warp</strong> puppets, where artwork bends around pins, are drawn deformed by their pins.</li>
+</ul>
+
+<p>All armature and warp data is kept when you save, so files go back to Animate intact.</p>
+
+<div class="callout planned">
+  <span class="label">Planned</span>
+  <p>A Bone tool and Bind tool for building armatures in Phoenix, joint limits and springs, pose commands (insert, copy and paste poses), poses that play between keyframes on symbol armatures, an Asset Warp tool, and a rigging layer.</p>
+</div>
+
+</article>
+</main>
+</body>
+</html>

@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Text · Phoenix User Guide</title>
+<meta name="description" content="Add and edit text with the Text tool: growing and fixed-width boxes, fonts, sizes and colors, and static, dynamic and input text.">
+<meta name="keywords" content="text tool type font family size color static dynamic input text box fixed width wrap caret selection">
+<link rel="icon" href="assets/img/logo.png">
+<link rel="stylesheet" href="assets/site.css">
+<script>try { const t = localStorage.getItem("phoenix-docs-theme"); if (t) document.documentElement.dataset.theme = t; } catch (e) {}</script>
+<script src="assets/site.js" defer></script>
+</head>
+<body>
+<main>
+<article class="content">
+
+<p class="eyebrow">Drawing</p>
+<h1>Text</h1>
+<p class="lead">Text in Phoenix stays editable: you can retype it, restyle parts of it, and resize its box at any time.</p>
+
+<h2>Add text</h2>
+
+<p>Press <kbd>T</kbd> for the <strong>Text</strong> tool, then:</p>
+
+<ul>
+  <li><strong>Click</strong> to start a box that grows as you type. Press <kbd>Enter</kbd> for a new line.</li>
+  <li><strong>Drag</strong> to make a box of a fixed width. Text wraps onto new lines at its right edge.</li>
+</ul>
+
+<p>To finish, press <kbd>Esc</kbd>, click elsewhere, or pick another tool. Each editing session is one step to undo. If you delete all the text in a box, the box is removed.</p>
+
+<figure class="narrow">
+  <img src="assets/shots/tool-text.webp" alt="Text tool settings: fill color, font family, size and text type" width="304" height="335">
+  <figcaption>Set the font, size, color and text type before you type, or while text is selected.</figcaption>
+</figure>
+
+<h2>Edit text</h2>
+
+<p>Click existing text with the Text tool to place the caret in it.</p>
+
+<table>
+  <thead><tr><th>Key or action</th><th>Does</th></tr></thead>
+  <tbody>
+    <tr><td><kbd>&larr;</kbd> <kbd>&rarr;</kbd> <kbd>Home</kbd> <kbd>End</kbd></td><td class="wrap">Move the caret</td></tr>
+    <tr><td><kbd>Shift</kbd> with those keys</td><td class="wrap">Extend the selection</td></tr>
+    <tr><td>Drag across text</td><td class="wrap">Select a range</td></tr>
+    <tr><td>Double-click a word</td><td class="wrap">Select the word</td></tr>
+    <tr><td><kbd>Ctrl</kbd>+<kbd>A</kbd></td><td class="wrap">Select all the text in the box</td></tr>
+    <tr><td><kbd>Backspace</kbd> <kbd>Delete</kbd></td><td class="wrap">Delete characters or the selection</td></tr>
+  </tbody>
+</table>
+
+<p>Typing replaces the selected text. Changing the font, size or fill color while text is selected restyles just that part.</p>
+
+<h3>Box width</h3>
+
+<p>While you edit, a text box shows a small handle: round on a growing box, square on a fixed-width one. Drag the handle to set a width. Double-click a square handle to let the box grow again.</p>
+
+<h2>Text types</h2>
+
+<p>The <strong>Text type</strong> setting matters if your document will be used in a player or game engine that runs Animate content:</p>
+
+<dl class="defs">
+  <dt>Static Text</dt><dd>Fixed text that is part of the artwork. Use this for anything that is just meant to be seen.</dd>
+  <dt>Dynamic Text</dt><dd>Text a script can change while the content runs, such as a score.</dd>
+  <dt>Input Text</dt><dd>A field the viewer can type into.</dd>
+</dl>
+
+<p>Dynamic and input text show a dotted outline on the stage, and can be given an instance name on the Object tab so scripts can find them.</p>
+
+<h2>How text is drawn</h2>
+
+<p>Phoenix draws the text settings saved in FLA files, including alignment, letter and line spacing, kerning, and bold and italic. All text settings are kept when you save, even those that cannot yet be changed in Phoenix.</p>
+
+<div class="callout planned">
+  <span class="label">Planned</span>
+  <p>Paragraph settings (alignment, margins, indents and spacing) and character settings on the Properties panel, restyling whole text boxes selected with the Selection tool, breaking text apart into shapes, typing in Chinese, Japanese and Korean, and a warning when a document uses fonts you don't have.</p>
+</div>
+
+</article>
+</main>
+</body>
+</html>

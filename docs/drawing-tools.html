@@ -1,0 +1,219 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Drawing tools · Phoenix User Guide</title>
+<meta name="description" content="Every drawing and painting tool in Phoenix: pen, line, shapes, primitives, PolyStar, pencil, the three brushes, eraser, paint bucket, ink bottle and eyedropper.">
+<meta name="keywords" content="pen anchor point bezier line rectangle oval primitive polystar star pencil smooth straighten ink recognize shapes fluid brush classic brush ink brush pressure tilt stabilizer taper eraser faucet paint bucket gap ink bottle eyedropper stroke style cap join">
+<link rel="icon" href="assets/img/logo.png">
+<link rel="stylesheet" href="assets/site.css">
+<script>try { const t = localStorage.getItem("phoenix-docs-theme"); if (t) document.documentElement.dataset.theme = t; } catch (e) {}</script>
+<script src="assets/site.js" defer></script>
+</head>
+<body>
+<main>
+<article class="content">
+
+<p class="eyebrow">Drawing</p>
+<h1>Drawing tools</h1>
+<p class="lead">Every tool's settings live on the Properties panel's <strong>Tool</strong> tab, which appears when you pick the tool. Phoenix remembers each tool's settings between sessions.</p>
+
+<h2>Color and style</h2>
+
+<p>Tools that draw show a <strong>Color and Style</strong> section at the top of the Tool tab:</p>
+
+<dl class="defs">
+  <dt>Fill and Stroke</dt><dd>The colors to draw with. Uncheck either one to draw without it, for example a rectangle with no outline.</dd>
+  <dt>Stroke size</dt><dd>Line thickness, from 0.1 to 200 pixels.</dd>
+  <dt>Style</dt><dd>Solid, Hairline (always one screen pixel wide), Dashed, Dotted, Ragged, Stipple or Hatched.</dd>
+  <dt>Cap</dt><dd>How open line ends look: Round, None (flat at the end point) or Square.</dd>
+  <dt>Join</dt><dd>How corners look: Round, Bevel or Miter. A miter limit stops very sharp corners from spiking.</dd>
+  <dt>Scale</dt><dd>Whether the stroke thickens when the artwork is scaled: Normal (it does), Horizontal, Vertical, or None (it stays the same width).</dd>
+</dl>
+
+<figure class="narrow">
+  <img src="assets/shots/tool-rect.webp" alt="Tool tab for the Rectangle tool with fill, stroke, stroke size, style, cap, join, scale and corner radius" width="304" height="461">
+  <figcaption>The Rectangle tool's settings.</figcaption>
+</figure>
+
+<h2>Pen tools</h2>
+
+<p>The Pen tool slot holds four tools for drawing and editing precise paths.</p>
+
+<h3>Pen</h3>
+
+<p>Press <kbd>P</kbd>. The Pen draws a path one point at a time.</p>
+
+<table>
+  <thead><tr><th>Do this</th><th>To</th></tr></thead>
+  <tbody>
+    <tr><td>Click</td><td class="wrap">Place a corner point</td></tr>
+    <tr><td>Drag</td><td class="wrap">Place a smooth point and pull out its curve handles</td></tr>
+    <tr><td><kbd>Alt</kbd>-drag</td><td class="wrap">Break the handles so the curve can change direction sharply</td></tr>
+    <tr><td><kbd>Shift</kbd></td><td class="wrap">Keep the segment or handle at a multiple of 45&deg;</td></tr>
+    <tr><td>Click the first point</td><td class="wrap">Close the path; a closed path gets a fill</td></tr>
+    <tr><td><kbd>Enter</kbd> or double-click</td><td class="wrap">Finish an open path, drawn as a stroke only</td></tr>
+    <tr><td><kbd>Esc</kbd></td><td class="wrap">Abandon the path</td></tr>
+    <tr><td>Press on the end of an open path</td><td class="wrap">Carry on drawing from there</td></tr>
+  </tbody>
+</table>
+
+<p>The cursor shows what the next click will do: start a new path, close the path, or add or remove a point. If you switch tools in the middle of a path, Phoenix keeps what you have drawn as an open path.</p>
+
+<h3>Add, Delete and Convert Anchor Point</h3>
+
+<dl class="defs">
+  <dt>Add Anchor Point (<kbd>=</kbd>)</dt><dd>Click a path to add a point without changing its shape.</dd>
+  <dt>Delete Anchor Point (<kbd>-</kbd>)</dt><dd>Click a point to remove it. The curve is refitted so it keeps its shape as closely as it can.</dd>
+  <dt>Convert Anchor Point (<kbd>Shift</kbd>+<kbd>C</kbd>)</dt><dd>Click a smooth point to make it a corner, or drag from a corner to pull out curve handles.</dd>
+</dl>
+
+<p>To move points and handles, use the <a href="selecting.html#subselection">Subselection tool</a>.</p>
+
+<h2>Line</h2>
+
+<p>Press <kbd>N</kbd> and drag to draw a straight line. Hold <kbd>Shift</kbd> to keep it at a multiple of 45&deg;, or <kbd>Alt</kbd> to draw outward from the middle.</p>
+
+<h2>Shapes and primitives</h2>
+
+<p>One toolbox slot holds the shape tools. Press and hold it to choose.</p>
+
+<figure class="narrow">
+  <img src="assets/shots/flyout-shapes.webp" alt="Flyout listing Rectangle (R), Oval (O), Rectangle Primitive, Oval Primitive and PolyStar (Y)" width="182" height="126">
+</figure>
+
+<table>
+  <thead><tr><th>Tool</th><th>Key</th><th>Notes</th></tr></thead>
+  <tbody>
+    <tr><td>Rectangle</td><td><kbd>R</kbd></td><td class="wrap"><kbd>Shift</kbd> draws a square, <kbd>Alt</kbd> draws from the center. While dragging, press <kbd>&uarr;</kbd> and <kbd>&darr;</kbd> to round the corners (with <kbd>Shift</kbd> for bigger steps). <strong>Corner radius</strong> sets the rounding before you draw.</td></tr>
+    <tr><td>Oval</td><td><kbd>O</kbd></td><td class="wrap"><kbd>Shift</kbd> draws a circle, <kbd>Alt</kbd> draws from the center.</td></tr>
+    <tr><td>Rectangle Primitive</td><td></td><td class="wrap">A rectangle whose four corner radii stay editable.</td></tr>
+    <tr><td>Oval Primitive</td><td></td><td class="wrap">An oval with an editable start angle, end angle and inner radius, for pie slices and rings.</td></tr>
+    <tr><td>PolyStar</td><td><kbd>Y</kbd></td><td class="wrap">Drag out from the center. Set the number of <strong>Sides</strong>, and check <strong>Star</strong> to draw a star. <kbd>Shift</kbd> snaps the angle.</td></tr>
+  </tbody>
+</table>
+
+<h3>Editing primitives</h3>
+
+<p>Select a primitive and the Object tab shows its options:</p>
+
+<ul>
+  <li><strong>Rectangle Options</strong>: the radius of each corner, with <strong>Lock corners together</strong> to change all four at once.</li>
+  <li><strong>Oval Options</strong>: <strong>Start</strong> and <strong>End</strong> angle, <strong>Inner</strong> radius as a percentage, and <strong>Close path</strong>.</li>
+  <li><strong>Reset</strong> returns the options to a plain rectangle or full oval.</li>
+</ul>
+
+<p>To edit a primitive's points freely, break it apart first (<kbd>Ctrl</kbd>+<kbd>B</kbd>).</p>
+
+<h2>Pencil</h2>
+
+<p>Press <kbd>D</kbd> and draw freehand. Phoenix shows how your line will be fitted as you draw, and fits it when you release.</p>
+
+<div class="split">
+  <figure style="margin:0"><img src="assets/shots/tool-pencil.webp" alt="Pencil tool settings: pencil mode, smoothing, connect lines and recognize shapes" width="304" height="519"></figure>
+  <div>
+    <dl class="defs" style="grid-template-columns:1fr">
+      <dt>Pencil mode</dt>
+      <dd><strong>Smooth</strong> rounds your line into flowing curves. <strong>Straighten</strong> turns it into straight segments and clean arcs. <strong>Ink</strong> keeps it close to exactly what you drew.</dd>
+      <dt>Smoothing</dt>
+      <dd>0 to 100. Higher values remove more wobble.</dd>
+      <dt>Connect lines</dt>
+      <dd>In Straighten mode, closes a stroke whose ends nearly meet.</dd>
+      <dt>Recognize shapes</dt>
+      <dd>In Straighten mode, turns a rough rectangle or oval into a true one.</dd>
+    </dl>
+    <p>Start a stroke on the end of a selected open path to extend it.</p>
+  </div>
+</div>
+
+<h2>Brushes</h2>
+
+<p>The brush slot (<kbd>B</kbd>) holds three brushes. All three paint filled shapes, use your tablet's pen pressure, and remember their settings.</p>
+
+<figure class="narrow">
+  <img src="assets/shots/flyout-brushes.webp" alt="Flyout listing Fluid Brush (B), Classic Brush and Ink Brush" width="147" height="78">
+</figure>
+
+<h3>Fluid Brush</h3>
+
+<p>A brush whose width responds to pressure and speed, with tapered ends.</p>
+
+<dl class="defs">
+  <dt>Size</dt><dd>1 to 200 pixels.</dd>
+  <dt>Pressure</dt><dd>Lets pen pressure vary the width, down to <strong>Min size</strong> as a percentage of the full size.</dd>
+  <dt>Velocity</dt><dd>None, Thin to thick, or Thick to thin: how drawing speed changes the width.</dd>
+  <dt>Taper start / end</dt><dd>How far each end narrows to a point, 0 to 50%.</dd>
+  <dt>Smoothing</dt><dd>How much hand wobble is removed.</dd>
+  <dt>Precision</dt><dd>How closely the final shape follows the stroke, against how many points it uses.</dd>
+  <dt>Roundness and Angle</dt><dd>The shape of the tip: lower roundness gives a flat, calligraphic nib turned to the angle.</dd>
+</dl>
+
+<h3>Classic Brush</h3>
+
+<p>A brush with a fixed tip shape: Round, Oval, Square, Rectangle, Vertical line, or one of two diagonals. It can use pen pressure for size and tilt for shape, and has its own smoothing.</p>
+
+<h3>Ink Brush</h3>
+
+<p>A brush for confident inked lines, unique to Phoenix.</p>
+
+<dl class="defs">
+  <dt>Stabilizer</dt><dd>0 to 60 pixels. The line trails behind the cursor as if pulled on a string, which irons out shaky strokes. Higher values give smoother, slower lines.</dd>
+  <dt>Pressure</dt><dd>Soft, Linear or Firm: how quickly the line reaches full width as you press harder.</dd>
+  <dt>Min size</dt><dd>The width at the lightest pressure.</dd>
+  <dt>Tilt shading</dt><dd>Tilting the pen broadens the line, like the side of a brush.</dd>
+</dl>
+
+<h3>Brush modes</h3>
+
+<p>Every brush has a <strong>Brush mode</strong> that limits where paint lands:</p>
+
+<table>
+  <thead><tr><th>Mode</th><th>Paints</th></tr></thead>
+  <tbody>
+    <tr><td>Paint Normal</td><td class="wrap">Over everything on the layer</td></tr>
+    <tr><td>Paint Fills</td><td class="wrap">Over fills and empty areas, leaving strokes on top</td></tr>
+    <tr><td>Paint Behind</td><td class="wrap">Only on empty areas, behind existing artwork</td></tr>
+    <tr><td>Paint Selection</td><td class="wrap">Only inside the selected fill</td></tr>
+    <tr><td>Paint Inside</td><td class="wrap">Only inside the fill where the stroke starts</td></tr>
+  </tbody>
+</table>
+
+<p>Press <kbd>Esc</kbd> during a stroke to cancel it.</p>
+
+<div class="callout planned">
+  <span class="label">Planned</span>
+  <p>A Paint Brush with art and pattern brushes and a brush library, textured brushes, and a Width tool for shaping variable-width strokes.</p>
+</div>
+
+<h2>Eraser</h2>
+
+<p>Press <kbd>E</kbd> and drag to erase merge artwork. Set its <strong>Size</strong>, and choose an <strong>Eraser mode</strong>:</p>
+
+<table>
+  <thead><tr><th>Mode</th><th>Erases</th></tr></thead>
+  <tbody>
+    <tr><td>Erase Normal</td><td class="wrap">Fills and strokes</td></tr>
+    <tr><td>Erase Fills</td><td class="wrap">Fills only</td></tr>
+    <tr><td>Erase Lines</td><td class="wrap">Strokes only</td></tr>
+    <tr><td>Erase Selected Fills</td><td class="wrap">Only the selected fills</td></tr>
+    <tr><td>Erase Inside</td><td class="wrap">Only inside the fill where you start</td></tr>
+  </tbody>
+</table>
+
+<p>Check <strong>Faucet</strong> to delete a whole fill or stroke with one click. Turning a tablet pen over to its eraser end switches to the Eraser, and turning it back returns to your previous tool.</p>
+
+<h2>Paint Bucket and Ink Bottle</h2>
+
+<p>The <strong>Paint Bucket</strong> (<kbd>K</kbd>) fills an enclosed area with the fill color, or recolors an existing fill. If your outline has small gaps, choose a <strong>Gap size</strong>: Don't Close Gaps, or close small, medium or large gaps.</p>
+
+<p>The <strong>Ink Bottle</strong> (<kbd>S</kbd>), in the same slot, works on strokes. Click a fill to add an outline around it, or click a stroke to give it the current stroke color, size and style.</p>
+
+<h2>Eyedropper</h2>
+
+<p>Press <kbd>I</kbd> and click a fill or stroke to take its color. After you pick up a fill, Phoenix switches to the Paint Bucket so you can apply it straight away; after a stroke, to the Ink Bottle.</p>
+
+</article>
+</main>
+</body>
+</html>

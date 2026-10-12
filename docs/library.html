@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>The library · Phoenix User Guide</title>
+<meta name="description" content="Use the Library panel to preview, place, rename, duplicate, delete and organize symbols, bitmaps and sounds.">
+<meta name="keywords" content="library panel folders symbols bitmaps sounds preview rename duplicate delete new folder drag to stage organize items">
+<link rel="icon" href="assets/img/logo.png">
+<link rel="stylesheet" href="assets/site.css">
+<script>try { const t = localStorage.getItem("phoenix-docs-theme"); if (t) document.documentElement.dataset.theme = t; } catch (e) {}</script>
+<script src="assets/site.js" defer></script>
+</head>
+<body>
+<main>
+<article class="content">
+
+<p class="eyebrow">Symbols</p>
+<h1>The library</h1>
+<p class="lead">Every symbol, image and sound in a document lives in its library. The stage holds instances; the library holds the originals.</p>
+
+<div class="split">
+  <figure style="margin:0"><img src="assets/shots/library-panel.webp" alt="The Library panel with a preview of a selected hair symbol above a list of 90 items with their types" width="304" height="610"></figure>
+  <div>
+    <p>The Library is a tab beside Properties in the panel dock. From top to bottom it shows:</p>
+    <ul>
+      <li>A <strong>preview</strong> of the selected item: a symbol's first frame, or the image.</li>
+      <li>The number of items in the library.</li>
+      <li>The <strong>item list</strong>, with each item's name and type. Click a column heading to sort by it.</li>
+    </ul>
+    <p>Item types are folders, graphics, movie clips, buttons, bitmaps and sounds, each with its own icon.</p>
+  </div>
+</div>
+
+<h2>Use library items</h2>
+
+<ul>
+  <li><strong>Drag a symbol or bitmap onto the stage</strong> to place an instance of it, centered where you drop it.</li>
+  <li><strong>Drag a sound onto the stage</strong> to attach it to the current frame. See <a href="sound.html">Sound</a>.</li>
+  <li><strong>Double-click a symbol</strong> to open it for editing.</li>
+</ul>
+
+<h2>Organize the library</h2>
+
+<p>Right-click an item for:</p>
+
+<dl class="defs">
+  <dt>Rename</dt><dd>Also <kbd>F2</kbd>, or double-click the name. Every instance follows the new name automatically.</dd>
+  <dt>Duplicate</dt><dd>Makes a full copy of a symbol, named after the original with <em>copy</em> added.</dd>
+  <dt>Delete</dt><dd>Removes a symbol that no longer has instances. If it is still in use, Phoenix tells you how many times instead of deleting it.</dd>
+  <dt>New Folder</dt><dd>Adds a folder inside the folder you clicked.</dd>
+</dl>
+
+<p>Drag items or folders onto a folder to move them into it, or onto empty space to move them to the top level. Moving or renaming a folder takes everything inside it along, and every symbol instance, bitmap fill and sound that uses those items is updated to match. If a name is already taken, Phoenix refuses the change and explains why in the status bar.</p>
+
+<p>All library changes can be undone.</p>
+
+<div class="callout tip">
+  <span class="label">Tip</span>
+  <p>Keep a folder per character or prop, and name symbols by part (<em>head</em>, <em>arm_L</em>, <em>mouth_O</em>). A tidy library makes swapping symbols and finding parts in the Edit Symbols list much quicker.</p>
+</div>
+
+<div class="callout planned">
+  <span class="label">Planned</span>
+  <p>A search field, use counts, selecting unused items, deleting a symbol together with its instances, properties dialogs for bitmaps and sounds, and shared libraries across documents.</p>
+</div>
+
+</article>
+</main>
+</body>
+</html>

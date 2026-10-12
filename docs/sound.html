@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Sound · Phoenix User Guide</title>
+<meta name="description" content="Import sounds, place them on frames, choose how they sync and loop, and bring in reference video to animate over.">
+<meta name="keywords" content="sound audio import wav mp3 aiff flac ogg stream event start stop sync loop repeat effect fade envelope waveform mute scrub lip sync reference video ffmpeg">
+<link rel="icon" href="assets/img/logo.png">
+<link rel="stylesheet" href="assets/site.css">
+<script>try { const t = localStorage.getItem("phoenix-docs-theme"); if (t) document.documentElement.dataset.theme = t; } catch (e) {}</script>
+<script src="assets/site.js" defer></script>
+</head>
+<body>
+<main>
+<article class="content">
+
+<p class="eyebrow">Animation</p>
+<h1>Sound</h1>
+<p class="lead">Dialogue, music and effects play with your timeline in Phoenix, and are mixed into exported video.</p>
+
+<h2>Bring in sound</h2>
+
+<p>Import sounds with <span class="menu-path">File &rsaquo; Import &rsaquo; Import to Library...</span>, or drag sound files onto the window. Phoenix reads WAV, AIFF, MP3, FLAC and Ogg files. Each sound becomes a library item.</p>
+
+<h2>Put a sound on the timeline</h2>
+
+<ol class="steps">
+  <li>Make a keyframe where the sound should start, ideally on a layer of its own.</li>
+  <li>On the Frame tab, under <strong>Sound</strong>, choose the sound from the <strong>Name</strong> list. You can also drag the sound from the library onto the stage to attach it to the current frame.</li>
+</ol>
+
+<p>The sound's waveform is drawn across the frames it plays over, which makes it easy to time animation to beats and syllables.</p>
+
+<h2>Sound settings</h2>
+
+<dl class="defs">
+  <dt>Sync</dt>
+  <dd>
+    <strong>Stream</strong> locks the sound to the timeline: it plays only while the playhead moves through its frames, and scrubbing plays the bit under the playhead. Use it for dialogue and anything that has to stay in sync with the picture.<br>
+    <strong>Event</strong> plays the whole sound from start to finish once triggered, independent of the timeline.<br>
+    <strong>Start</strong> is like Event, but doesn't start the sound again if it is already playing.<br>
+    <strong>Stop</strong> silences the chosen sound.
+  </dd>
+  <dt>Repeat / Loop</dt><dd>Plays the sound a set number of times, or loops it.</dd>
+  <dt>Effect</dt><dd>Left Channel, Right Channel, Fade Left to Right, Fade Right to Left, Fade In and Fade Out. Volume envelopes made in Animate are played as <strong>Custom</strong>.</dd>
+</dl>
+
+<p>Sounds inside movie clips play too when you export. As in Animate, sounds inside graphic symbols and buttons stay silent.</p>
+
+<p>To work in silence, choose <span class="menu-path">View &rsaquo; Mute Sounds</span> (<kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>M</kbd>).</p>
+
+<h2>Exporting sound</h2>
+
+<p>Video exports include the mixed soundtrack as AAC audio. You can also export the mix on its own as a WAV file. See <a href="export.html">Exporting</a>.</p>
+
+<h2>Reference video</h2>
+
+<p><span class="menu-path">File &rsaquo; Import &rsaquo; Import Video...</span> brings in live action or an animatic to animate over. Phoenix decodes the video into one still per frame on a locked <a href="masks-guides.html#guide-layers">guide layer</a>, with the stills in a library folder, so it shows while you work but is never exported. You can choose to shrink the video to the stage width and to import its sound as a stream sound.</p>
+
+<p>Most common video formats work, including MP4, MOV, AVI, MKV and WebM. Importing video needs <a href="https://ffmpeg.org/">ffmpeg</a>; Phoenix asks where it is the first time if it cannot find it.</p>
+
+<div class="callout planned">
+  <span class="label">Planned</span>
+  <p>Dragging sounds straight onto timeline frames, an envelope editor, sound properties and compression settings, and automatic lip sync from a dialogue track.</p>
+</div>
+
+</article>
+</main>
+</body>
+</html>

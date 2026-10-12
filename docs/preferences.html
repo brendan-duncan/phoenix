@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Settings and preferences · Phoenix User Guide</title>
+<meta name="description" content="What Phoenix remembers between sessions, the settings you can change, and where they are kept.">
+<meta name="keywords" content="preferences settings remembered auto-save recent files window layout brush settings ffmpeg path reset">
+<link rel="icon" href="assets/img/logo.png">
+<link rel="stylesheet" href="assets/site.css">
+<script>try { const t = localStorage.getItem("phoenix-docs-theme"); if (t) document.documentElement.dataset.theme = t; } catch (e) {}</script>
+<script src="assets/site.js" defer></script>
+</head>
+<body>
+<main>
+<article class="content">
+
+<p class="eyebrow">Reference</p>
+<h1>Settings and preferences</h1>
+<p class="lead">Phoenix has no separate preferences window yet. Instead, it remembers the choices you make as you work, and you change a setting where you use it.</p>
+
+<h2>What Phoenix remembers</h2>
+
+<table>
+  <thead><tr><th>Setting</th><th>Where you change it</th></tr></thead>
+  <tbody>
+    <tr><td>Recent files (the last ten)</td><td class="wrap"><span class="menu-path">File &rsaquo; Open Recent</span> and the start screen</td></tr>
+    <tr><td>Whether the start screen appears</td><td class="wrap"><strong>Show at startup</strong> on the start screen</td></tr>
+    <tr><td>Auto-save interval</td><td class="wrap"><span class="menu-path">File &rsaquo; Auto-Save</span></td></tr>
+    <tr><td>Window size and panel layout</td><td class="wrap">Arrange the window and panels; they are restored next time</td></tr>
+    <tr><td>Outliner shown or hidden, and its width</td><td class="wrap"><span class="menu-path">View &rsaquo; Outliner</span>, or drag its edge</td></tr>
+    <tr><td>Each tool's settings, including each brush's</td><td class="wrap">The Tool tab of the Properties panel</td></tr>
+    <tr><td>Onion skin range, mode, opacity and colors</td><td class="wrap"><span class="menu-path">View &rsaquo; Onion Skin Settings</span></td></tr>
+    <tr><td>High-quality anti-aliasing, Snap to Pixels</td><td class="wrap">The View menu</td></tr>
+    <tr><td>Last New Document size and frame rate</td><td class="wrap">The New Document dialog</td></tr>
+    <tr><td>Symbol type and registration</td><td class="wrap">The Convert to Symbol dialog</td></tr>
+    <tr><td>Last export format and the ffmpeg location</td><td class="wrap">The Export Movie dialog</td></tr>
+    <tr><td>Saved custom eases and motion presets</td><td class="wrap">The Custom Ease dialog and Motion Presets panel</td></tr>
+    <tr><td>Last folders used to open and import</td><td class="wrap">The file dialogs</td></tr>
+  </tbody>
+</table>
+
+<h2>Settings saved in the document</h2>
+
+<p>Some settings belong to a document rather than to Phoenix, so they travel with the file: the stage size, frame rate and color, ruler guides, Snap to Guides, Snap to Objects, and the swatches.</p>
+
+<h2>Where settings are stored</h2>
+
+<p>On Windows, Phoenix keeps its settings in the registry under <code>HKEY_CURRENT_USER\Software\Phoenix</code>. On macOS, they are in Phoenix's preferences file in <code>~/Library/Preferences</code>. Auto-save recovery copies are kept in Phoenix's local application data folder. Removing these resets Phoenix to its first-run state.</p>
+
+<div class="callout planned">
+  <span class="label">Planned</span>
+  <p>A Preferences dialog for the number of undo levels, auto-recovery, selection highlight color and drawing tolerances, plus settings a studio can configure for every machine.</p>
+</div>
+
+</article>
+</main>
+</body>
+</html>

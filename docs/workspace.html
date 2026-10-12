@@ -1,0 +1,153 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>The workspace · Phoenix User Guide</title>
+<meta name="description" content="A tour of the Phoenix window: menus, toolbox, outliner, stage, timeline and the panels docked on the right.">
+<meta name="keywords" content="panels dock toolbox outliner properties library color swatches align transform info frame picker motion editor menu bar status bar edit bar breadcrumb hot text">
+<link rel="icon" href="assets/img/logo.png">
+<link rel="stylesheet" href="assets/site.css">
+<script>try { const t = localStorage.getItem("phoenix-docs-theme"); if (t) document.documentElement.dataset.theme = t; } catch (e) {}</script>
+<script src="assets/site.js" defer></script>
+</head>
+<body>
+<main>
+<article class="content">
+
+<p class="eyebrow">Workspace</p>
+<h1>The workspace</h1>
+<p class="lead">Phoenix keeps the stage in the middle and everything that acts on it around the edges. This page names each area and the panels you can open.</p>
+
+<figure>
+  <img src="assets/shots/workspace-annotated.webp" alt="The Phoenix window with numbered markers on the menu bar, toolbox, outliner, edit bar, stage, timeline header, layers list, frame grid and panel dock" width="1704" height="1061">
+  <figcaption>The default layout. The numbers match the list below.</figcaption>
+</figure>
+
+<ol>
+  <li><strong>Menu bar</strong>: File, Edit, Insert, Modify, View, Control and Help.</li>
+  <li><strong>Toolbox</strong>: drawing and editing tools, the stroke and fill colors, and the Object Drawing switch.</li>
+  <li><strong>Outliner</strong>: the document as a tree, from scenes and layers down to individual shapes.</li>
+  <li><strong>Edit bar</strong>: where you are in the document (the scene, and any symbol you have opened), with a Back button and the <strong>Edit Symbols</strong> list.</li>
+  <li><strong>Stage</strong>: the visible area of your animation, on a gray pasteboard where you can park artwork off screen.</li>
+  <li><strong>Timeline header</strong>: the current frame, frame rate and time, the playback controls, onion skinning and looping.</li>
+  <li><strong>Layers</strong>: the layer stack, with visibility, lock and outline controls.</li>
+  <li><strong>Frame grid</strong>: the frames of every layer over time.</li>
+  <li><strong>Panel dock</strong>: Properties, Library, Color and Swatches as tabs, with room for more panels.</li>
+</ol>
+
+<h2>The toolbox</h2>
+
+<p>The toolbox is a single column on the left. Related tools share a slot: a small corner mark on a button means there is more than one tool in it. <strong>Press and hold</strong> the button to see the others, and the one you pick takes over the slot. Every tool's shortcut key works even while its tool is hidden in a slot.</p>
+
+<div class="split">
+  <figure class="inline" style="margin:0"><img src="assets/shots/toolbox.webp" alt="The toolbox column with the shape slot's flyout open, listing Rectangle, Oval, Rectangle Primitive, Oval Primitive and PolyStar" width="236" height="632"></figure>
+  <div>
+    <p>Below the tools are:</p>
+    <ul>
+      <li>The <strong>stroke</strong> and <strong>fill</strong> color swatches. Click one to choose a color, including its transparency.</li>
+      <li><strong>Black and white</strong>, which resets to a black stroke and white fill.</li>
+      <li><strong>Swap colors</strong>, which exchanges the stroke and fill colors.</li>
+      <li><strong>Object Drawing</strong> (<kbd>J</kbd>), which decides whether new shapes merge with what is under them. See <a href="drawing-models.html">Merge and object drawing</a>.</li>
+    </ul>
+    <p>Hold <kbd>Ctrl</kbd> with any tool to use the Selection tool for a moment. See <a href="drawing-tools.html">Drawing tools</a> for every tool and its options.</p>
+  </div>
+</div>
+
+<h2>The Properties panel</h2>
+
+<p>The Properties panel shows settings for whatever you are working on. It has four tabs, and Phoenix switches between them for you:</p>
+
+<dl class="defs">
+  <dt>Tool</dt><dd>Options for the current tool, plus the fill and stroke it will draw with. Shown when you pick a tool.</dd>
+  <dt>Object</dt><dd>Position, size, color and effects of the selection. Shown when you select something on the stage.</dd>
+  <dt>Frame</dt><dd>The label, tween, ease and sound of the frame under the playhead. Shown when you click in the frame grid.</dd>
+  <dt>Doc</dt><dd>Stage size, frame rate and stage color. Shown when nothing is selected with the Selection tool.</dd>
+</dl>
+
+<div class="tool-grid">
+  <figure style="margin:0"><img src="assets/shots/object-instance.webp" alt="Object tab for a graphic symbol instance, showing Instance, Position and Size, Color Effect, Display and Looping sections" width="304" height="555"><figcaption>Object tab for a symbol instance</figcaption></figure>
+  <figure style="margin:0"><img src="assets/shots/tool-brush.webp" alt="Tool tab for the Fluid Brush, with size, pressure, velocity, taper, smoothing and brush mode options" width="304" height="530"><figcaption>Tool tab for the Fluid Brush</figcaption></figure>
+</div>
+
+<h3>Hot text</h3>
+
+<p>Underlined numbers in the panels are <em>hot text</em>. Drag across one to scrub its value, or click it to type a new value.</p>
+
+<table>
+  <thead><tr><th>Do this</th><th>To</th></tr></thead>
+  <tbody>
+    <tr><td>Drag left or right</td><td class="wrap">Scrub the value</td></tr>
+    <tr><td><kbd>Shift</kbd> while dragging</td><td class="wrap">Change it ten times faster</td></tr>
+    <tr><td><kbd>Ctrl</kbd> while dragging</td><td class="wrap">Change it in tenths, for fine adjustment</td></tr>
+    <tr><td>Click, type, <kbd>Enter</kbd></td><td class="wrap">Enter an exact value</td></tr>
+    <tr><td><kbd>Esc</kbd> while typing</td><td class="wrap">Cancel and keep the old value</td></tr>
+  </tbody>
+</table>
+
+<p>Every change made in the Properties panel is a single step you can undo.</p>
+
+<h2>Other panels</h2>
+
+<p>Phoenix has no Window menu; panels open from the <strong>View</strong> menu.</p>
+
+<table>
+  <thead><tr><th>Panel</th><th>Opens with</th><th>Use it to</th></tr></thead>
+  <tbody>
+    <tr><td><a href="library.html">Library</a></td><td>Tab beside Properties</td><td class="wrap">Browse and organize symbols, bitmaps and sounds</td></tr>
+    <tr><td><a href="color.html#the-color-panel">Color</a></td><td><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>F9</kbd></td><td class="wrap">Choose solid, gradient and bitmap fills</td></tr>
+    <tr><td><a href="color.html#swatches">Swatches</a></td><td><kbd>Ctrl</kbd>+<kbd>F9</kbd></td><td class="wrap">Pick from the document's saved colors</td></tr>
+    <tr><td><a href="selecting.html#align">Align</a></td><td><kbd>Ctrl</kbd>+<kbd>K</kbd></td><td class="wrap">Line up, distribute, match sizes and space objects</td></tr>
+    <tr><td><a href="selecting.html#the-transform-panel">Transform</a></td><td><kbd>Ctrl</kbd>+<kbd>T</kbd></td><td class="wrap">Scale, rotate and skew by exact amounts</td></tr>
+    <tr><td><a href="selecting.html#the-info-panel">Info</a></td><td><kbd>Ctrl</kbd>+<kbd>I</kbd></td><td class="wrap">Read the size, position, cursor position and color under the cursor</td></tr>
+    <tr><td><a href="symbols.html#the-frame-picker">Frame Picker</a></td><td>View menu</td><td class="wrap">Choose which frame a graphic symbol shows, from thumbnails</td></tr>
+    <tr><td><a href="tweens.html#the-motion-editor">Motion Editor</a></td><td>View menu</td><td class="wrap">Edit a motion tween's property curves</td></tr>
+    <tr><td><a href="tweens.html#motion-presets">Motion Presets</a></td><td>View menu</td><td class="wrap">Save and apply reusable motion</td></tr>
+    <tr><td>Outliner</td><td><kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>O</kbd></td><td class="wrap">Show or hide the document tree</td></tr>
+  </tbody>
+</table>
+
+<figure class="narrow">
+  <img src="assets/shots/menu-view.webp" alt="The View menu, listing panels, scene and onion skin options, rulers, guides, zoom and snapping" width="275" height="672">
+  <figcaption>The View menu opens panels and controls what the stage shows.</figcaption>
+</figure>
+
+<h2>Arranging panels</h2>
+
+<p>Panels are docked windows. Drag a panel by its title bar to move it to another edge or onto another panel to make a tab group, or click the float button in its title bar to give it a window of its own. Phoenix remembers the layout between sessions.</p>
+
+<p>The outliner can be hidden to give the stage more room: use the fold arrow at the left of the edit bar, <span class="menu-path">View &rsaquo; Outliner</span>, or drag its edge. Its visibility and width are remembered too.</p>
+
+<div class="callout planned">
+  <span class="label">Planned</span>
+  <p>Named workspaces you can save and switch between, a Window menu with Animate's panel shortcuts, and a History panel.</p>
+</div>
+
+<h2>The outliner</h2>
+
+<p>The outliner shows the whole document as a tree: scenes, layers, frames, and the elements on them, down to individual paths and edges in a shape. Select something in the outliner and it is selected on the stage too. It is a quick way to find a small or hidden element in a crowded scene.</p>
+
+<h2>The status bar</h2>
+
+<p>The bar along the bottom of the window shows how many objects are selected, confirms saves and exports, and shows the progress of an update download.</p>
+
+<h2>Context menus</h2>
+
+<p>Right-click almost anywhere for the commands that apply there:</p>
+
+<ul>
+  <li><strong>On the stage</strong>: cut, copy and paste; arrange; transform; distribute to layers; convert to symbol; edit, edit in place or swap a symbol; break apart; group and ungroup.</li>
+  <li><strong>On a layer</strong>: insert and delete layers and folders, guide and mask types, show and lock others, and layer properties.</li>
+  <li><strong>On frames</strong>: tweens, frames and keyframes, cut, copy and paste frames, reverse frames, and copy and paste motion.</li>
+  <li><strong>In the Library</strong>: rename, duplicate, delete and new folder.</li>
+</ul>
+
+<div class="tool-grid">
+  <figure style="margin:0"><img src="assets/shots/menu-layer.webp" alt="Layer context menu" width="112" height="231"><figcaption>Layer menu</figcaption></figure>
+  <figure style="margin:0"><img src="assets/shots/menu-frames.webp" alt="Frames context menu" width="288" height="426"><figcaption>Frames menu</figcaption></figure>
+</div>
+
+</article>
+</main>
+</body>
+</html>

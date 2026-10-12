@@ -1,0 +1,130 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Tweens and easing · Phoenix User Guide</title>
+<meta name="description" content="Animate with classic, shape and motion tweens, edit motion paths and curves in the Motion Editor, ease with presets or custom curves, and reuse motion with presets.">
+<meta name="keywords" content="tween classic tween shape tween motion tween morph ease easing in out custom ease curve rotate clockwise snap sync motion path property keyframe motion editor motion presets copy motion">
+<link rel="icon" href="assets/img/logo.png">
+<link rel="stylesheet" href="assets/site.css">
+<script>try { const t = localStorage.getItem("phoenix-docs-theme"); if (t) document.documentElement.dataset.theme = t; } catch (e) {}</script>
+<script src="assets/site.js" defer></script>
+</head>
+<body>
+<main>
+<article class="content">
+
+<p class="eyebrow">Animation</p>
+<h1>Tweens and easing</h1>
+<p class="lead">A tween fills in the frames between two poses. Phoenix has the three kinds of tween animators know from Animate, each suited to a different job.</p>
+
+<table>
+  <thead><tr><th>Tween</th><th>Animates</th><th>Use it for</th></tr></thead>
+  <tbody>
+    <tr><td>Classic</td><td class="wrap">An instance between two keyframes: position, size, rotation, skew, color effect and filters</td><td class="wrap">Most character and prop animation, and anything on a motion guide</td></tr>
+    <tr><td>Shape</td><td class="wrap">A merge shape or drawing object morphing into another shape</td><td class="wrap">Blobs, liquids, smoke, simple transformations</td></tr>
+    <tr><td>Motion</td><td class="wrap">An object along an editable path, with each property on its own curve</td><td class="wrap">Moves you want to shape with curves rather than keyframes</td></tr>
+  </tbody>
+</table>
+
+<h2>Classic tweens</h2>
+
+<ol class="steps">
+  <li>Put an instance of a symbol on a keyframe.</li>
+  <li>Add a second keyframe later on the same layer (<kbd>F6</kbd>) and change the instance there: move it, scale it, rotate it, or change its color effect.</li>
+  <li>Right-click a frame between them and choose <strong>Classic Tween</strong>, or choose <span class="menu-path">Insert &rsaquo; Classic Tween</span>.</li>
+</ol>
+
+<p>The span turns lilac with an arrow. Click any frame in it to set its options on the Frame tab's <strong>Tweening</strong> section:</p>
+
+<dl class="defs">
+  <dt>Ease</dt><dd>How the motion speeds up and slows down. See <a href="#easing">Easing</a>.</dd>
+  <dt>Rotate</dt><dd><strong>Auto</strong> turns the shortest way; <strong>Clockwise</strong> and <strong>Counter Clockwise</strong> add whole extra turns, as many as you enter; <strong>None</strong> stops it rotating.</dd>
+  <dt>Snap</dt><dd>Snaps the instance's registration point onto a motion guide.</dd>
+  <dt>Sync</dt><dd>Keeps a graphic symbol's own animation in step with the tween.</dd>
+</dl>
+
+<p>To move an object along a curved path, draw the path on a guide layer above it. See <a href="masks-guides.html#motion-guides">Motion guides</a>.</p>
+
+<h2>Shape tweens</h2>
+
+<ol class="steps">
+  <li>Draw a shape on a keyframe.</li>
+  <li>Add a keyframe later on the same layer and draw, or reshape, the shape it should become. Colors and strokes can change too.</li>
+  <li>Right-click a frame between them and choose <strong>Shape Tween</strong>, or <span class="menu-path">Insert &rsaquo; Shape Tween</span>.</li>
+</ol>
+
+<p>The span turns green. Shape tweens work on shapes, not on symbol instances or groups; break those apart first. Gradients and stroke widths tween along with the outline.</p>
+
+<div class="callout tip">
+  <span class="label">Tip</span>
+  <p>Shape tweens are smoothest between similar shapes. If a morph twists or flips, add an in-between keyframe that guides it.</p>
+</div>
+
+<h2>Motion tweens</h2>
+
+<p>Select an instance and choose <span class="menu-path">Insert &rsaquo; Motion Tween</span>. A motion tween span is created, and from then on you animate by changing the object rather than by adding keyframes:</p>
+
+<ul>
+  <li>Move the playhead to any frame in the span, then move, rotate or scale the object. Phoenix adds a <strong>property keyframe</strong> there.</li>
+  <li>The object's <strong>motion path</strong> is drawn on the stage with its property keyframes. Drag a property keyframe on the path to move it, or drag the path between keyframes to bend it.</li>
+  <li>Press <kbd>F6</kbd> inside the span to add a property keyframe without changing anything, or <kbd>F7</kbd> to end the motion there.</li>
+  <li>Lengthen or shorten the span and the motion stretches to fit.</li>
+</ul>
+
+<h3>The Motion Editor</h3>
+
+<p>Open <span class="menu-path">View &rsaquo; Motion Editor</span> and select a motion tween to see each property as a curve over time: X and Y position, rotation, skew and scale. Pick a property from the list to edit its curve:</p>
+
+<ul>
+  <li>Drag a point to change the value or the frame; drag its handles to shape the curve.</li>
+  <li>Double-click the curve, or use <strong>Add Keyframe</strong>, to add a point. Select one and press <kbd>Delete</kbd>, or use <strong>Remove</strong>, to delete it.</li>
+  <li>Type exact numbers in the <strong>Frame</strong> and <strong>Value</strong> fields.</li>
+  <li>Apply an ease to one property with <strong>Property ease</strong>, or to the whole tween with <strong>Tween ease</strong> (from -100 to 100).</li>
+</ul>
+
+<h2>Easing</h2>
+
+<p>Easing makes motion feel natural: real objects take time to get going and to stop. Set the <strong>Ease</strong> on the Frame tab for any classic or shape tween.</p>
+
+<ul>
+  <li><strong>Classic</strong> eases with a single amount: negative values ease in (start slowly), positive values ease out (end slowly).</li>
+  <li><strong>Presets</strong> come in families such as Quad, Cubic, Sine, Back, Bounce and Elastic, each in <strong>In</strong>, <strong>Out</strong> and <strong>In Out</strong> forms. Phoenix has all of Animate's ease presets.</li>
+  <li><strong>Custom</strong> lets you draw your own curve.</li>
+</ul>
+
+<h3>Custom ease curves</h3>
+
+<p>Click <strong>Edit...</strong> under Ease to open the curve editor. The horizontal axis is time across the tween; the vertical axis is how far the change has got.</p>
+
+<div class="split">
+  <figure style="margin:0"><img src="assets/shots/custom-ease.webp" alt="Custom Ease dialog with a curve graph, preset list, save, delete, linear, import and export buttons" width="436" height="559"></figure>
+  <ul>
+    <li>Drag the points and their handles to shape the curve.</li>
+    <li><strong>Linear</strong> resets it to a straight line.</li>
+    <li><strong>Save...</strong> stores the curve under a name in the <strong>Preset</strong> list, for use in any document; <strong>Delete</strong> removes one.</li>
+    <li><strong>Export...</strong> and <strong>Import...</strong> share curves with other people as JSON files.</li>
+  </ul>
+</div>
+
+<h2>Motion presets</h2>
+
+<p><span class="menu-path">View &rsaquo; Motion Presets...</span> keeps a collection of reusable motions.</p>
+
+<dl class="defs">
+  <dt>Save Current...</dt><dd>Saves the selected motion tween as a preset.</dd>
+  <dt>Apply</dt><dd>Applies the chosen preset to the selected object.</dd>
+  <dt>Import..., Import Folder...</dt><dd>Brings in preset files, including those exported from Animate.</dd>
+  <dt>Export..., Delete</dt><dd>Shares or removes presets.</dd>
+</dl>
+
+<div class="callout planned">
+  <span class="label">Planned</span>
+  <p>Shape hints to control how shape tweens match points, color and filter curves in the Motion Editor, Orient to Path for motion tweens, and 3D rotation in motion tweens.</p>
+</div>
+
+</article>
+</main>
+</body>
+</html>

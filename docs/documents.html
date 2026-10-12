@@ -1,0 +1,156 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Documents and files · Phoenix User Guide</title>
+<meta name="description" content="Create documents, set the stage size and frame rate, open and save PHX, FLA and XFL files, import media, and recover unsaved work.">
+<meta name="keywords" content="new document presets stage size frame rate fps stage color save save as phx fla xfl binary flash cs4 import images sounds video sequence auto-save recovery file formats">
+<link rel="icon" href="assets/img/logo.png">
+<link rel="stylesheet" href="assets/site.css">
+<script>try { const t = localStorage.getItem("phoenix-docs-theme"); if (t) document.documentElement.dataset.theme = t; } catch (e) {}</script>
+<script src="assets/site.js" defer></script>
+</head>
+<body>
+<main>
+<article class="content">
+
+<p class="eyebrow">Workspace</p>
+<h1>Documents and files</h1>
+<p class="lead">A document holds your stage settings, timelines, library and media. This page covers creating one, the file formats Phoenix reads and writes, bringing in images, sound and video, and getting work back after a crash.</p>
+
+<h2>Create a document</h2>
+
+<p>Choose <span class="menu-path">File &rsaquo; New...</span> (<kbd>Ctrl</kbd>+<kbd>N</kbd>). Pick a category on the left, then a preset. The details on the right fill in from the preset, and you can change any of them.</p>
+
+<figure>
+  <img src="assets/shots/new-document.webp" alt="The New Document dialog with categories on the left, preset tiles in the middle, and width, height, frame rate and stage color on the right" width="876" height="519">
+  <figcaption>The New Document dialog. Double-click a preset to create the document straight away.</figcaption>
+</figure>
+
+<table>
+  <thead><tr><th>Category</th><th>Presets for</th></tr></thead>
+  <tbody>
+    <tr><td>Character Animation</td><td class="wrap">Full HD, HD, 4K, standard and widescreen video at 24 fps</td></tr>
+    <tr><td>Social</td><td class="wrap">Instagram post and story, Twitter, Facebook, YouTube and TikTok, at 30 fps</td></tr>
+    <tr><td>Game</td><td class="wrap">Full HD and HD at 30 fps; phone (landscape and portrait) and tablet at 60 fps</td></tr>
+    <tr><td>Education</td><td class="wrap">Full HD, HD, 1024&times;768 and tablet, at 30 fps</td></tr>
+    <tr><td>Ads</td><td class="wrap">Standard banner sizes, from a 320&times;50 mobile banner to a 970&times;250 billboard, at 24 fps</td></tr>
+    <tr><td>Web</td><td class="wrap">Full screen, desktop, laptop, tablet and phone, at 30 fps</td></tr>
+    <tr><td>Advanced</td><td class="wrap">Broadcast and film formats: HD, 4K UHD, DCI 4K, PAL, NTSC, 23.976 fps film, and Animate's 550&times;400 default</td></tr>
+  </tbody>
+</table>
+
+<p>Width and height can be from 1 to 8192 pixels. The frame rate list runs from 8 to 120 fps and includes the broadcast rates 23.976, 29.97 and 59.94; you can also type any rate. Phoenix remembers your last choice and opens on it next time.</p>
+
+<h2>Document settings</h2>
+
+<p>To change the settings of an open document, click an empty part of the stage with the Selection tool so the Properties panel shows the <strong>Doc</strong> tab.</p>
+
+<dl class="defs">
+  <dt>W and H</dt><dd>The stage size in pixels.</dd>
+  <dt>FPS</dt><dd>Frames per second, from 0.01 to 120.</dd>
+  <dt>Stage</dt><dd>The background color of the stage, which also becomes the background of exported video.</dd>
+  <dt>Scale spans</dt><dd>When this is on, changing the frame rate stretches or squeezes every span so animation keeps its timing in seconds. When it is off, each frame keeps its place and the animation plays faster or slower.</dd>
+</dl>
+
+<p>The tab also shows which application and file version last saved the document.</p>
+
+<h2>Open and save</h2>
+
+<table>
+  <thead><tr><th>Command</th><th>Shortcut</th></tr></thead>
+  <tbody>
+    <tr><td><span class="menu-path">File &rsaquo; Open...</span></td><td><kbd>Ctrl</kbd>+<kbd>O</kbd></td></tr>
+    <tr><td><span class="menu-path">File &rsaquo; Open Recent</span></td><td>The last ten files</td></tr>
+    <tr><td><span class="menu-path">File &rsaquo; Save</span></td><td><kbd>Ctrl</kbd>+<kbd>S</kbd></td></tr>
+    <tr><td><span class="menu-path">File &rsaquo; Save As...</span></td><td><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>S</kbd></td></tr>
+    <tr><td><span class="menu-path">File &rsaquo; Exit</span></td><td><kbd>Ctrl</kbd>+<kbd>Q</kbd></td></tr>
+  </tbody>
+</table>
+
+<p>The window title shows the document's full path, with a <code>*</code> after it when there are unsaved changes. Before closing a changed document, Phoenix asks whether to <strong>Save</strong>, <strong>Discard</strong> the changes, or <strong>Cancel</strong>.</p>
+
+<p>Saves are safe: Phoenix writes to a temporary file and only replaces the original once the new file is complete, so a crash or full disk in the middle of a save cannot damage your file.</p>
+
+<h2>File formats</h2>
+
+<table>
+  <thead><tr><th>Format</th><th>Open</th><th>Save</th><th>Notes</th></tr></thead>
+  <tbody>
+    <tr><td>Phoenix document (<code>.phx</code>)</td><td>Yes</td><td>Yes</td><td class="wrap">The default for new documents. See below.</td></tr>
+    <tr><td>Animate document (<code>.fla</code>)</td><td>Yes</td><td>Yes</td><td class="wrap">Files from Flash Professional CS5 through current Animate.</td></tr>
+    <tr><td>XFL folder</td><td>Yes</td><td>Yes</td><td class="wrap">The uncompressed form of an FLA. Open its <code>DOMDocument.xml</code>.</td></tr>
+    <tr><td>Older Flash files</td><td>Yes</td><td>As FLA or PHX</td><td class="wrap">Files from Flash 5 to Flash CS4 are converted when opened.</td></tr>
+  </tbody>
+</table>
+
+<h3>Working with FLA files</h3>
+
+<p>Phoenix is built to round-trip Animate files. When you open an FLA and save it again, Phoenix keeps everything it found, including settings and data it does not use itself, such as publish settings, scripts and shape hints. The saved file opens in Animate as before.</p>
+
+<p>Some things Phoenix can do have no place in an FLA. If saving as FLA or XFL would leave something out, Phoenix tells you what before it writes, so nothing is lost silently.</p>
+
+<div class="callout">
+  <span class="label">Older Flash files</span>
+  <p>Files from Flash CS4 and earlier use a binary format that Phoenix converts on open. When you save one, Phoenix asks whether to save under a new name or replace the original. A few of these files, such as those with a bitmap placed on the stage or a video, cannot be converted yet; Phoenix says so instead of opening part of the file.</p>
+</div>
+
+<h3>The Phoenix format</h3>
+
+<p>Phoenix documents (<code>.phx</code>) are Phoenix's own format. They hold everything an FLA can, so you can always export a <code>.phx</code> back to the same FLA, and they leave room for features FLA cannot store.</p>
+
+<ul>
+  <li><strong>Fast.</strong> A <code>.phx</code> typically opens several times faster than the same FLA.</li>
+  <li><strong>Media kept as is.</strong> Images, sounds, video and fonts are stored in their original formats, each stored once even if used many times, and loaded only when needed.</li>
+  <li><strong>Robust.</strong> Each part of the file is checksummed, so damage to one part does not take the whole file with it.</li>
+  <li><strong>Compatible.</strong> An older Phoenix opens files from a newer one and keeps any data it does not understand. If a newer feature would change how something looks, the older version opens the file read-only and tells you what is missing.</li>
+  <li><strong>Previewable.</strong> Each file carries a thumbnail of its first frame.</li>
+</ul>
+
+<p>To convert files without opening them, see <a href="command-line.html#convert-between-formats">the <code>--convert</code> option</a>.</p>
+
+<h2>Import</h2>
+
+<p>Use <span class="menu-path">File &rsaquo; Import</span>:</p>
+
+<dl class="defs">
+  <dt>Import to Stage...</dt><dd><kbd>Ctrl</kbd>+<kbd>R</kbd>. Adds the file to the library and places it on the current frame.</dd>
+  <dt>Import to Library...</dt><dd>Adds the file to the library only.</dd>
+  <dt>Import Video...</dt><dd>Brings in a video as a reference to animate over. See <a href="sound.html#reference-video">Reference video</a>.</dd>
+</dl>
+
+<table>
+  <thead><tr><th>Kind</th><th>Formats</th></tr></thead>
+  <tbody>
+    <tr><td>Images</td><td>PNG, JPEG, GIF, BMP</td></tr>
+    <tr><td>Sound</td><td>WAV, AIFF, MP3, FLAC, Ogg</td></tr>
+    <tr><td>Video (reference)</td><td>MP4, MOV, M4V, AVI, MKV, WebM, FLV, WMV, MPEG</td></tr>
+  </tbody>
+</table>
+
+<p>If you import one image from a numbered sequence, such as <code>walk_0001.png</code>, Phoenix offers to import the whole sequence as consecutive keyframes.</p>
+
+<p>You can also drag images and sounds from your desktop. Dropped on the stage, they are placed where you drop them; dropped elsewhere, they go into the library. An image copied in another app can be pasted straight onto the stage.</p>
+
+<div class="callout planned">
+  <span class="label">Planned</span>
+  <p>Importing SVG, Photoshop and Illustrator files, and tracing bitmaps into vector shapes.</p>
+</div>
+
+<h2>Auto-save and recovery</h2>
+
+<p>While a document has unsaved changes, Phoenix writes a recovery copy in the background. It never touches your own file. Choose how often under <span class="menu-path">File &rsaquo; Auto-Save</span>: every minute, every 2 (the default), 5 or 10 minutes, or off.</p>
+
+<p>If Phoenix closes without saving, for example after a crash or power cut, it offers the recovery copy the next time it starts:</p>
+
+<dl class="defs">
+  <dt>Recover</dt><dd>Opens the recovered work. Save it to keep it.</dd>
+  <dt>Discard</dt><dd>Deletes the recovery copy.</dd>
+  <dt>Later</dt><dd>Keeps the copy and asks again next time.</dd>
+</dl>
+
+</article>
+</main>
+</body>
+</html>

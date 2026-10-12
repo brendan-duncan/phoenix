@@ -1,0 +1,179 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Selecting and transforming · Phoenix User Guide</title>
+<meta name="description" content="Select, move, copy, transform, align, arrange and reshape artwork in Phoenix.">
+<meta name="keywords" content="selection tool subselection lasso polygon magic wand marquee nudge duplicate paste in place free transform distort envelope rotate scale skew flip align distribute arrange bring to front lock transform panel info panel smooth straighten optimize expand fill soften edges convert lines to fills distribute to layers">
+<link rel="icon" href="assets/img/logo.png">
+<link rel="stylesheet" href="assets/site.css">
+<script>try { const t = localStorage.getItem("phoenix-docs-theme"); if (t) document.documentElement.dataset.theme = t; } catch (e) {}</script>
+<script src="assets/site.js" defer></script>
+</head>
+<body>
+<main>
+<article class="content">
+
+<p class="eyebrow">Drawing</p>
+<h1>Selecting and transforming</h1>
+<p class="lead">Select what you want to change, then move it, copy it, reshape it, or line it up with everything else.</p>
+
+<h2>The Selection tool</h2>
+
+<p>Press <kbd>V</kbd>. The Selection tool is the one you will use most.</p>
+
+<table>
+  <thead><tr><th>Do this</th><th>To</th></tr></thead>
+  <tbody>
+    <tr><td>Click</td><td class="wrap">Select an object, or one area of merge artwork</td></tr>
+    <tr><td><kbd>Shift</kbd>-click</td><td class="wrap">Add to or remove from the selection</td></tr>
+    <tr><td>Drag on empty stage</td><td class="wrap">Select everything inside a rectangle</td></tr>
+    <tr><td>Drag a selection</td><td class="wrap">Move it; hold <kbd>Shift</kbd> to keep to straight lines</td></tr>
+    <tr><td><kbd>Alt</kbd>-drag</td><td class="wrap">Move a copy, leaving the original in place</td></tr>
+    <tr><td>Arrow keys</td><td class="wrap">Nudge one pixel; ten with <kbd>Shift</kbd></td></tr>
+    <tr><td>Double-click</td><td class="wrap">Enter a symbol or group to edit it; on merge artwork, widen the selection</td></tr>
+    <tr><td><kbd>Esc</kbd></td><td class="wrap">Clear the selection</td></tr>
+  </tbody>
+</table>
+
+<p><span class="menu-path">Edit &rsaquo; Select All</span> (<kbd>Ctrl</kbd>+<kbd>A</kbd>) and <span class="menu-path">Deselect All</span> (<kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>A</kbd>) work too. To bend and reshape merge artwork with this tool, see <a href="drawing-models.html#reshaping-merge-artwork">Reshaping merge artwork</a>.</p>
+
+<h2>Subselection</h2>
+
+<p>Press <kbd>A</kbd>. The Subselection tool edits the points of a path directly. Click a path to show its points, drawn as small hollow squares; a selected point is filled.</p>
+
+<ul>
+  <li>Drag a point, or drag a rectangle to select several and drag them together.</li>
+  <li>Drag a handle to change the curve; <kbd>Alt</kbd>-drag to move one handle independently of its partner.</li>
+  <li><kbd>Alt</kbd>-drag from a corner point to pull out handles, or <kbd>Alt</kbd>-click a smooth point to make it a corner.</li>
+  <li>Nudge selected points with the arrow keys, and press <kbd>Delete</kbd> to remove them.</li>
+</ul>
+
+<h2>Lasso tools</h2>
+
+<p>The lasso slot (<kbd>L</kbd>) holds three ways to select an irregular area. Hold <kbd>Shift</kbd> with any of them to add to the selection.</p>
+
+<dl class="defs">
+  <dt>Lasso</dt><dd>Draw a loop freehand. Merge artwork is cut along the loop.</dd>
+  <dt>Polygon</dt><dd>Click corner after corner. Close the shape by clicking the first corner, double-clicking or pressing <kbd>Enter</kbd>. <kbd>Esc</kbd> cancels.</dd>
+  <dt>Magic Wand</dt><dd>Selects an area of similar color in a broken-apart bitmap. <strong>Threshold</strong> (0 to 200) sets how similar a color must be; <strong>Smoothing</strong> (Pixels, Rough, Normal or Smooth) sets how the edge of the selection is traced.</dd>
+</dl>
+
+<h2>Free Transform</h2>
+
+<p>Press <kbd>Q</kbd>. Handles appear around the selection.</p>
+
+<table>
+  <thead><tr><th>Drag</th><th>To</th></tr></thead>
+  <tbody>
+    <tr><td>A corner or side handle</td><td class="wrap">Scale. <kbd>Shift</kbd> keeps the proportions; <kbd>Alt</kbd> scales around the transformation point.</td></tr>
+    <tr><td>Just outside a corner</td><td class="wrap">Rotate. <kbd>Shift</kbd> rotates in 45&deg; steps.</td></tr>
+    <tr><td>Along an edge between handles</td><td class="wrap">Skew</td></tr>
+    <tr><td>The transformation point</td><td class="wrap">Move the point that scaling and rotation work around. Double-click it to center it again.</td></tr>
+    <tr><td>A corner with <kbd>Ctrl</kbd></td><td class="wrap">Distort a shape freely. Add <kbd>Shift</kbd> to taper both sides together.</td></tr>
+  </tbody>
+</table>
+
+<figure class="narrow">
+  <img src="assets/shots/tool-freetransform.webp" alt="Free Transform tool settings with a Mode option" width="304" height="207">
+  <figcaption>The Free Transform tool's <strong>Mode</strong> chooses Free Transform, Distort or Envelope.</figcaption>
+</figure>
+
+<p>In <strong>Envelope</strong> mode, a mesh of points and handles surrounds the shape, and dragging them warps the artwork inside. <kbd>Esc</kbd> cancels a transform in progress.</p>
+
+<h3>Transform commands</h3>
+
+<p><span class="menu-path">Modify &rsaquo; Transform</span> has exact transforms:</p>
+
+<table>
+  <thead><tr><th>Command</th><th>Shortcut</th></tr></thead>
+  <tbody>
+    <tr><td>Scale and Rotate...</td><td><kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>S</kbd></td></tr>
+    <tr><td>Rotate 90&deg; CW</td><td><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>9</kbd></td></tr>
+    <tr><td>Rotate 90&deg; CCW</td><td><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>7</kbd></td></tr>
+    <tr><td>Flip Vertical, Flip Horizontal</td><td></td></tr>
+    <tr><td>Remove Transform</td><td class="wrap">Returns an instance, group or object to its original size and angle</td></tr>
+  </tbody>
+</table>
+
+<h3>The Transform panel</h3>
+
+<p><span class="menu-path">View &rsaquo; Transform</span> (<kbd>Ctrl</kbd>+<kbd>T</kbd>) scales the selection by a percentage (with <strong>Constrain</strong> to keep proportions), rotates it by an angle, or skews it. <strong>Duplicate and Transform</strong> applies the values to a copy, which is a quick way to make a ring of evenly turned copies.</p>
+
+<h2>Cut, copy and paste</h2>
+
+<table>
+  <thead><tr><th>Command</th><th>Shortcut</th><th>Notes</th></tr></thead>
+  <tbody>
+    <tr><td>Cut</td><td><kbd>Ctrl</kbd>+<kbd>X</kbd></td><td></td></tr>
+    <tr><td>Copy</td><td><kbd>Ctrl</kbd>+<kbd>C</kbd></td><td></td></tr>
+    <tr><td>Paste in Center</td><td><kbd>Ctrl</kbd>+<kbd>V</kbd></td><td class="wrap">Pastes in the middle of the view</td></tr>
+    <tr><td>Paste in Place</td><td><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>V</kbd></td><td class="wrap">Pastes at the original position, for example on another frame or layer</td></tr>
+    <tr><td>Duplicate</td><td><kbd>Ctrl</kbd>+<kbd>D</kbd></td><td class="wrap">Copies and pastes in one step</td></tr>
+    <tr><td>Clear</td><td><kbd>Delete</kbd></td><td class="wrap">Removes the selection</td></tr>
+  </tbody>
+</table>
+
+<p>Copies go to the system clipboard. You can paste artwork between two Phoenix windows, paste a picture of your artwork into other apps, and paste images and text from other apps into Phoenix.</p>
+
+<h2>Arrange and lock</h2>
+
+<p>Objects on a layer are stacked. Use <span class="menu-path">Modify &rsaquo; Arrange</span> to change their order:</p>
+
+<table>
+  <thead><tr><th>Command</th><th>Shortcut</th></tr></thead>
+  <tbody>
+    <tr><td>Bring to Front</td><td><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>&uarr;</kbd></td></tr>
+    <tr><td>Bring Forward</td><td><kbd>Ctrl</kbd>+<kbd>&uarr;</kbd></td></tr>
+    <tr><td>Send Backward</td><td><kbd>Ctrl</kbd>+<kbd>&darr;</kbd></td></tr>
+    <tr><td>Send to Back</td><td><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>&darr;</kbd></td></tr>
+    <tr><td>Lock</td><td><kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>L</kbd></td></tr>
+    <tr><td>Unlock All</td><td><kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>L</kbd></td></tr>
+  </tbody>
+</table>
+
+<p>When several objects are selected, they move through the stack together. A locked object can't be selected until you unlock it.</p>
+
+<h2>Align</h2>
+
+<p><span class="menu-path">View &rsaquo; Align</span> (<kbd>Ctrl</kbd>+<kbd>K</kbd>) lines up the selected objects:</p>
+
+<ul>
+  <li><strong>Align</strong> their left edges, centers or right edges, or their tops, middles or bottoms.</li>
+  <li><strong>Distribute</strong> them so their edges or centers are evenly spaced.</li>
+  <li><strong>Match size</strong> to make them the same width, height or both.</li>
+  <li><strong>Space evenly</strong> to put equal gaps between them, across or down.</li>
+</ul>
+
+<p>Check <strong>Align to stage</strong> to align to the stage instead of to each other, for example to center an object on the stage.</p>
+
+<h2>The Info panel</h2>
+
+<p><span class="menu-path">View &rsaquo; Info</span> (<kbd>Ctrl</kbd>+<kbd>I</kbd>) shows the size and position of the selection, the position of the cursor, and the color under the cursor.</p>
+
+<h2>Position and size</h2>
+
+<p>For exact numbers, use the <strong>Position and Size</strong> section of the Object tab: <strong>X</strong> and <strong>Y</strong> set the position, and <strong>W</strong> and <strong>H</strong> the size. Click the chain button to keep the width and height in proportion.</p>
+
+<h2>Shape commands</h2>
+
+<p><span class="menu-path">Modify &rsaquo; Shape</span> cleans up and reshapes merge artwork and drawing objects:</p>
+
+<dl class="defs">
+  <dt>Smooth</dt><dd>Softens curves and removes small bumps. Repeat to smooth further. Also on the Object tab as <strong>Smoothen</strong>.</dd>
+  <dt>Straighten</dt><dd>Flattens nearly straight curves into lines. Also on the Object tab.</dd>
+  <dt>Optimize...</dt><dd><kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>C</kbd>. Reduces the number of points in curves, at a strength you choose.</dd>
+  <dt>Convert Lines to Fills</dt><dd>Turns strokes into filled shapes, so you can reshape their edges or fill them with a gradient.</dd>
+  <dt>Expand Fill...</dt><dd>Grows or shrinks (insets) a fill by a distance in pixels.</dd>
+  <dt>Soften Fill Edges...</dt><dd>Adds a set of fading bands around a fill, outward or inward, for a soft edge.</dd>
+</dl>
+
+<h2>Distribute to layers</h2>
+
+<p><span class="menu-path">Modify &rsaquo; Timeline &rsaquo; Distribute to Layers</span> (<kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>D</kbd>) moves each selected object onto a new layer of its own, ready to animate separately.</p>
+
+</article>
+</main>
+</body>
+</html>

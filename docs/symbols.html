@@ -1,0 +1,129 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Symbols and instances · Phoenix User Guide</title>
+<meta name="description" content="Make reusable symbols, place and edit their instances, swap symbols, and control which frames a graphic plays.">
+<meta name="keywords" content="symbol instance graphic movie clip button convert to symbol F8 new symbol registration edit in place edit symbols breadcrumb swap symbol duplicate looping play once single frame ping pong first frame frame picker 9-slice scale instance name">
+<link rel="icon" href="assets/img/logo.png">
+<link rel="stylesheet" href="assets/site.css">
+<script>try { const t = localStorage.getItem("phoenix-docs-theme"); if (t) document.documentElement.dataset.theme = t; } catch (e) {}</script>
+<script src="assets/site.js" defer></script>
+</head>
+<body>
+<main>
+<article class="content">
+
+<p class="eyebrow">Symbols</p>
+<h1>Symbols and instances</h1>
+<p class="lead">A symbol is artwork you make once and use as often as you like. Each use is an <strong>instance</strong>. Change the symbol and every instance changes with it; move, scale, tint or animate an instance and the symbol stays the same.</p>
+
+<h2>Symbol types</h2>
+
+<table>
+  <thead><tr><th>Type</th><th>Best for</th><th>Timeline</th></tr></thead>
+  <tbody>
+    <tr><td>Graphic</td><td class="wrap">Character parts, props, lip-sync mouths: anything animated in step with the main timeline</td><td class="wrap">Plays in sync with the timeline it is placed on, so you see its animation as you scrub</td></tr>
+    <tr><td>Movie Clip</td><td class="wrap">Self-contained loops, and anything that needs filters or blend modes</td><td class="wrap">Plays on its own clock, independent of the timeline it is placed on</td></tr>
+    <tr><td>Button</td><td class="wrap">Interactive content for players that support it</td><td class="wrap">Four frames: Up, Over, Down and Hit</td></tr>
+  </tbody>
+</table>
+
+<div class="callout">
+  <span class="label">Note</span>
+  <p>On the stage, a movie clip shows its first frame while you edit and scrub. Its animation plays when you <a href="export.html">export</a>. Use graphic symbols when you want to see the animation in the editor.</p>
+</div>
+
+<h2>Create a symbol</h2>
+
+<h3>From artwork on the stage</h3>
+
+<ol class="steps">
+  <li>Select the artwork.</li>
+  <li>Choose <span class="menu-path">Modify &rsaquo; Convert to Symbol...</span> (<kbd>F8</kbd>), or right-click it and choose <strong>Convert to Symbol</strong>.</li>
+  <li>Give the symbol a name, choose its type, and click a square in the <strong>Registration</strong> grid to set where its origin will be. The origin is the point the instance rotates and scales around by default.</li>
+</ol>
+
+<figure class="narrow">
+  <img src="assets/shots/convert-to-symbol.webp" alt="Convert to Symbol dialog with a name field, a type list and a 3 by 3 registration grid" width="216" height="194">
+</figure>
+
+<p>The selected artwork is replaced by an instance of the new symbol. Phoenix remembers the type and registration you chose for next time. Names must be unique in the library.</p>
+
+<h3>From scratch</h3>
+
+<p>Choose <span class="menu-path">Insert &rsaquo; New Symbol...</span> (<kbd>Ctrl</kbd>+<kbd>F8</kbd>), name it and pick its type. Phoenix opens the empty symbol so you can draw in it. It is added to the library; drag it onto the stage to use it.</p>
+
+<h2>Edit a symbol</h2>
+
+<p>There are two ways to open a symbol:</p>
+
+<dl class="defs">
+  <dt>Edit in place</dt><dd>Double-click an instance on the stage, or choose <span class="menu-path">Edit &rsaquo; Edit in Place</span>. The rest of the stage stays visible but dims, so you can draw the symbol in context.</dd>
+  <dt>Edit on its own</dt><dd>Choose <span class="menu-path">Edit &rsaquo; Edit Symbols</span> (<kbd>Ctrl</kbd>+<kbd>E</kbd>), double-click the symbol in the library, or pick it from the <strong>Edit Symbols</strong> list at the right of the edit bar.</dd>
+</dl>
+
+<figure>
+  <img src="assets/shots/edit-in-place.webp" alt="A flower character symbol open for editing in place, with the other characters dimmed and the edit bar reading Scene 1 then fLOWER_01" width="1100" height="740">
+  <figcaption>Editing a symbol in place. The edit bar shows the path from the scene into the symbol.</figcaption>
+</figure>
+
+<p>Inside a symbol you have its own timeline and layers, and all the tools work as usual. A crosshair marks the symbol's origin.</p>
+
+<p>To go back, double-click an empty part of the stage, click the Back arrow or a name in the edit bar, or press <kbd>Ctrl</kbd>+<kbd>E</kbd> (which reads <strong>Edit Document</strong> while you are inside a symbol). Symbols can contain other symbols, and the edit bar shows each level you have opened.</p>
+
+<h2>Instance properties</h2>
+
+<p>Select an instance to see its settings on the Object tab:</p>
+
+<dl class="defs">
+  <dt>Instance name</dt><dd>For movie clips and buttons, a name that scripts can use to find the instance.</dd>
+  <dt>Behavior</dt><dd>Whether this instance acts as a graphic, movie clip or button, independent of the symbol's own type.</dd>
+  <dt>Swap...</dt><dd>Replaces the symbol this instance shows, keeping its position, transform and effects.</dd>
+  <dt>Position and Size</dt><dd>X, Y, width and height.</dd>
+  <dt>Color Effect and Display</dt><dd>Brightness, tint, alpha and blend modes. See <a href="effects.html">Filters, blends and color effects</a>.</dd>
+  <dt>Filters</dt><dd>Drop shadows, blurs, glows and more, for movie clips and buttons.</dd>
+</dl>
+
+<h3>Looping for graphics</h3>
+
+<p>A graphic instance plays its symbol's frames in step with the timeline it is on. The <strong>Looping</strong> section controls how:</p>
+
+<table>
+  <thead><tr><th>Option</th><th>Plays</th></tr></thead>
+  <tbody>
+    <tr><td>Loop</td><td class="wrap">From the first frame to the end, then starts again</td></tr>
+    <tr><td>Play Once</td><td class="wrap">To the end, then holds the last frame</td></tr>
+    <tr><td>Single Frame</td><td class="wrap">Holds one frame, which is how you switch mouth shapes or hand poses</td></tr>
+    <tr><td>Ping Pong</td><td class="wrap">Forward to the end, then backward, and again</td></tr>
+  </tbody>
+</table>
+
+<p><strong>First</strong> sets the frame of the symbol to start from.</p>
+
+<h2>The Frame Picker</h2>
+
+<p>When a symbol holds a set of poses, such as mouth shapes, the Frame Picker is the fastest way to choose between them. Open it from <span class="menu-path">View &rsaquo; Frame Picker</span>, select a graphic instance, and click a thumbnail to show that frame. Check <strong>Create Keyframe</strong> to put each choice on a new keyframe at the playhead, which makes lip sync a matter of stepping through the timeline and clicking.</p>
+
+<h2>Swap Symbol</h2>
+
+<p><span class="menu-path">Modify &rsaquo; Symbol &rsaquo; Swap Symbol...</span> lists every symbol with a preview. The current one is shown in bold. Pick another and click <strong>OK</strong>, or double-click it. <strong>Duplicate Symbol...</strong> makes a copy of the selected symbol to swap to, which is handy when one instance needs a variation.</p>
+
+<h2>Break apart an instance</h2>
+
+<p><span class="menu-path">Modify &rsaquo; Break Apart</span> (<kbd>Ctrl</kbd>+<kbd>B</kbd>) replaces an instance with a copy of the artwork from the frame it shows, with its color effect applied. The symbol itself is not changed.</p>
+
+<h2>9-slice scaling</h2>
+
+<p>Symbols that use 9-slice scaling, such as panels and buttons from Animate, keep their corners crisp when stretched: only the middle sections scale. Phoenix draws 9-slice symbols correctly on the stage and in exports.</p>
+
+<div class="callout planned">
+  <span class="label">Planned</span>
+  <p>Setting up 9-slice guides in Phoenix, a Visible toggle and registration point coordinates on the Object tab, and movie clips that animate on the stage during playback.</p>
+</div>
+
+</article>
+</main>
+</body>
+</html>

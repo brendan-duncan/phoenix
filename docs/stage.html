@@ -1,0 +1,123 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Stage, zoom and view · Phoenix User Guide</title>
+<meta name="description" content="Zoom, pan and rotate the view, use rulers, guides and grids, snap artwork, and switch scenes.">
+<meta name="keywords" content="zoom magnification fit in window pan hand space rotate view rotation tool time scrub rulers guides grid snap snapping pixels objects pasteboard dim outside anti-aliasing scenes">
+<link rel="icon" href="assets/img/logo.png">
+<link rel="stylesheet" href="assets/site.css">
+<script>try { const t = localStorage.getItem("phoenix-docs-theme"); if (t) document.documentElement.dataset.theme = t; } catch (e) {}</script>
+<script src="assets/site.js" defer></script>
+</head>
+<body>
+<main>
+<article class="content">
+
+<p class="eyebrow">Workspace</p>
+<h1>Stage, zoom and view</h1>
+<p class="lead">How to move around your artwork, line things up precisely, and control what the stage shows. None of these change your document except guides, which are saved with it.</p>
+
+<h2>Zoom</h2>
+
+<table>
+  <thead><tr><th>Action</th><th>How</th></tr></thead>
+  <tbody>
+    <tr><td>Zoom in or out</td><td class="wrap"><kbd>Ctrl</kbd>+<kbd>=</kbd> and <kbd>Ctrl</kbd>+<kbd>-</kbd>, or <kbd>Ctrl</kbd> with the mouse wheel, which zooms around the cursor</td></tr>
+    <tr><td>Fit the stage in the window</td><td class="wrap"><kbd>Ctrl</kbd>+<kbd>2</kbd></td></tr>
+    <tr><td>Show all artwork, including off stage</td><td class="wrap"><kbd>Ctrl</kbd>+<kbd>3</kbd></td></tr>
+    <tr><td>Actual size</td><td class="wrap"><kbd>Ctrl</kbd>+<kbd>1</kbd></td></tr>
+    <tr><td>400% and 800%</td><td class="wrap"><kbd>Ctrl</kbd>+<kbd>4</kbd> and <kbd>Ctrl</kbd>+<kbd>8</kbd></td></tr>
+    <tr><td>Other set sizes</td><td class="wrap"><span class="menu-path">View &rsaquo; Magnification</span>: 25%, 50%, 100%, 200%, 400%, 800%</td></tr>
+  </tbody>
+</table>
+
+<h3>The Zoom tool</h3>
+
+<p>Press <kbd>Z</kbd> for the <strong>Zoom</strong> tool. Click to zoom in two times at that point, <kbd>Alt</kbd>-click to zoom out, or drag a rectangle to zoom to exactly that area.</p>
+
+<h2>Pan</h2>
+
+<ul>
+  <li>The mouse wheel scrolls up and down; <kbd>Shift</kbd> with the wheel scrolls sideways.</li>
+  <li>Hold <kbd>Space</kbd> and drag with any tool, or drag with the middle mouse button.</li>
+  <li>Use the <strong>Hand</strong> tool (<kbd>H</kbd>) and drag.</li>
+</ul>
+
+<h2>Rotate the view</h2>
+
+<p>Turning the canvas makes it easier to draw natural strokes at any angle. The <strong>Rotation</strong> tool (<kbd>Shift</kbd>+<kbd>H</kbd>) shares a slot with the Hand tool.</p>
+
+<ul>
+  <li>Click to set the point to turn around, then drag to turn the view.</li>
+  <li>Hold <kbd>Shift</kbd> to turn in 15&deg; steps.</li>
+  <li>Double-click with the tool, or choose <span class="menu-path">View &rsaquo; Reset Rotation</span>, to straighten the view again.</li>
+</ul>
+
+<p>Rotating the view never rotates your artwork. Rulers are hidden while the view is turned.</p>
+
+<h2>Scrub through time on the stage</h2>
+
+<p>The <strong>Time Scrub</strong> tool (<kbd>C</kbd>), also in the Hand tool's slot, moves the playhead as you drag left and right across the stage, one frame for every few pixels. It is a quick way to check motion without reaching for the timeline.</p>
+
+<h2>Rulers and guides</h2>
+
+<p>Turn on rulers with <span class="menu-path">View &rsaquo; Rulers</span> (<kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>R</kbd>). Rulers measure in pixels from the stage's top-left corner.</p>
+
+<ol class="steps">
+  <li>Drag from the top ruler to create a horizontal guide, or from the left ruler for a vertical one.</li>
+  <li>Drag a guide with the Selection tool to move it.</li>
+  <li>Drag it back onto a ruler, or out of the view, to remove it.</li>
+</ol>
+
+<p>Guides are saved with the document, and creating, moving or removing one can be undone. The <span class="menu-path">View &rsaquo; Guides</span> menu has:</p>
+
+<dl class="defs">
+  <dt>Show Guides</dt><dd><kbd>Ctrl</kbd>+<kbd>;</kbd>. Hides guides without deleting them.</dd>
+  <dt>Snap to Guides</dt><dd><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>;</kbd>. Artwork snaps to guides as you drag it.</dd>
+  <dt>Clear Guides</dt><dd>Removes every guide. This can be undone too.</dd>
+</dl>
+
+<h2>Grid and snapping</h2>
+
+<p>Snapping helps you place artwork exactly. While snapping is happening, a small ring appears under the cursor at the point it snapped to. Each kind can be turned on and off in the View menu:</p>
+
+<table>
+  <thead><tr><th>Option</th><th>Default</th><th>Snaps to</th></tr></thead>
+  <tbody>
+    <tr><td>Snap to Objects</td><td>On</td><td class="wrap">The corners, edges and centers of other artwork</td></tr>
+    <tr><td>Snap to Guides</td><td>On</td><td class="wrap">Ruler guides</td></tr>
+    <tr><td>Snap to Grid</td><td>Off</td><td class="wrap">The document grid. Use <strong>Show Grid</strong> to see it.</td></tr>
+    <tr><td>Snap to Pixels</td><td>Off</td><td class="wrap">Whole pixels, for crisp artwork at 100%</td></tr>
+  </tbody>
+</table>
+
+<div class="callout planned">
+  <span class="label">Planned</span>
+  <p>Grid and guide settings (spacing, color, locking guides), ruler units, and an option to clip artwork outside the stage.</p>
+</div>
+
+<h2>Display options</h2>
+
+<dl class="defs">
+  <dt>Dim Outside Document</dt><dd>Darkens the pasteboard so you can judge what is on the stage. Artwork off the stage still draws, so you can grab it.</dd>
+  <dt>High Quality Anti-Aliasing</dt><dd>On by default. Turn it off to draw faster in very heavy scenes.</dd>
+  <dt>Show Bounding Boxes</dt><dd><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>B</kbd>. Outlines each element's bounds, which helps track down a stray point far from the artwork.</dd>
+  <dt>Onion Skin</dt><dd>See <a href="frames.html#onion-skinning">Onion skinning</a>.</dd>
+  <dt>View Document...</dt><dd>Opens a read-only window with the document's underlying XML, for the curious and for troubleshooting.</dd>
+</dl>
+
+<h2>Scenes</h2>
+
+<p>A document can be split into scenes, which play one after another. Phoenix shows one scene at a time. Switch scenes from <span class="menu-path">View &rsaquo; Scene</span>, or press <kbd>Shift</kbd>+<kbd>Page Up</kbd> and <kbd>Shift</kbd>+<kbd>Page Down</kbd> for the previous and next scene. The current scene's name appears in the edit bar above the stage.</p>
+
+<div class="callout planned">
+  <span class="label">Planned</span>
+  <p>A Scene panel to add, rename, reorder and delete scenes, playing through scenes in order, and exporting every scene at once.</p>
+</div>
+
+</article>
+</main>
+</body>
+</html>

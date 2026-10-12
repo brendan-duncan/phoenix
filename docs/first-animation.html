@@ -1,0 +1,103 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Your first animation · Phoenix User Guide</title>
+<meta name="description" content="A short tutorial: create a document, draw a ball, turn it into a symbol, tween it across the stage, and export a video.">
+<meta name="keywords" content="tutorial beginner bouncing ball keyframe classic tween export mp4 quick start">
+<link rel="icon" href="assets/img/logo.png">
+<link rel="stylesheet" href="assets/site.css">
+<script>try { const t = localStorage.getItem("phoenix-docs-theme"); if (t) document.documentElement.dataset.theme = t; } catch (e) {}</script>
+<script src="assets/site.js" defer></script>
+</head>
+<body>
+<main>
+<article class="content">
+
+<p class="eyebrow">Get started</p>
+<h1>Your first animation</h1>
+<p class="lead">In about ten minutes you will draw a ball, send it across the stage with a tween, ease its motion, and export a video. Each step links to the page that covers it in depth.</p>
+
+<h2>1. Create a document</h2>
+
+<ol class="steps">
+  <li>Choose <span class="menu-path">File &rsaquo; New...</span> (<kbd>Ctrl</kbd>+<kbd>N</kbd>), or pick a size on the start screen.</li>
+  <li>Under <strong>Character Animation</strong>, click <strong>HD</strong> (1280&times;720 at 24 frames per second), then <strong>Create</strong>.</li>
+</ol>
+
+<p>The white rectangle in the middle of the window is the <strong>stage</strong>: whatever is on it ends up in your video. Everything else is the <a href="workspace.html">workspace</a>.</p>
+
+<h2>2. Draw a ball</h2>
+
+<ol class="steps">
+  <li>Press <kbd>O</kbd> to pick the <strong>Oval</strong> tool.</li>
+  <li>In the toolbox, click the fill swatch and choose a bright color. To draw the ball without an outline, uncheck <strong>Stroke</strong> under <strong>Color and Style</strong> on the Properties panel's Tool tab.</li>
+  <li>Hold <kbd>Shift</kbd> and drag near the left edge of the stage to draw a circle.</li>
+</ol>
+
+<div class="callout tip">
+  <span class="label">Tip</span>
+  <p>Hold <kbd>Alt</kbd> as well to draw the circle outward from where you first pressed.</p>
+</div>
+
+<h2>3. Turn the ball into a symbol</h2>
+
+<p>Tweens move whole objects, so the ball needs to become a <a href="symbols.html">symbol</a>.</p>
+
+<ol class="steps">
+  <li>Press <kbd>V</kbd> for the <strong>Selection</strong> tool and double-click the ball, which selects its fill and its outline together.</li>
+  <li>Press <kbd>F8</kbd>. In <strong>Convert to Symbol</strong>, name it <em>Ball</em>, leave the type as <strong>Graphic</strong>, and click <strong>OK</strong>.</li>
+</ol>
+
+<p>The ball is now an <em>instance</em> of the Ball symbol, and the symbol is listed in the <a href="library.html">Library</a>.</p>
+
+<h2>4. Add a second keyframe</h2>
+
+<ol class="steps">
+  <li>In the timeline, click the cell under frame 24 on the ball's layer.</li>
+  <li>Press <kbd>F6</kbd> to insert a keyframe. The frames between 1 and 24 fill in gray, showing that the ball is held across them.</li>
+  <li>With the playhead still on frame 24, drag the ball to the right side of the stage.</li>
+</ol>
+
+<h2>5. Tween between the keyframes</h2>
+
+<ol class="steps">
+  <li>Right-click any frame between 1 and 24 and choose <strong>Classic Tween</strong>. The span turns lilac with an arrow, which means Phoenix is calculating the in-between frames for you.</li>
+  <li>Press <kbd>Enter</kbd> to play. Press it again to stop.</li>
+</ol>
+
+<figure>
+  <img src="assets/shots/timeline-tweens.webp" alt="Timeline rows with lilac classic tween spans, each ending in a keyframe" width="1362" height="178">
+  <figcaption>Classic tween spans in the timeline: a keyframe at each end and an arrow between.</figcaption>
+</figure>
+
+<h2>6. Ease the motion</h2>
+
+<p>Real objects speed up and slow down. Click a frame inside the tween, then on the Properties panel's <strong>Frame</strong> tab, open the <strong>Ease</strong> list and choose an <em>In Out</em> preset. Play again and the ball now starts gently and settles into place. See <a href="tweens.html#easing">Easing</a> for all the presets and the custom curve editor.</p>
+
+<h2>7. Check it with onion skinning</h2>
+
+<p>Turn on onion skinning with the button next to the transport controls in the timeline header, or <kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>O</kbd>. The frames before the playhead show in blue and the frames after it in green, so you can see the spacing of the ball's motion at a glance.</p>
+
+<h2>8. Save and export</h2>
+
+<ol class="steps">
+  <li>Choose <span class="menu-path">File &rsaquo; Save</span> (<kbd>Ctrl</kbd>+<kbd>S</kbd>). New documents save as Phoenix documents (<code>.phx</code>). To share the file with Animate, use <span class="menu-path">File &rsaquo; Save As...</span> and choose FLA.</li>
+  <li>Choose <span class="menu-path">File &rsaquo; Export &rsaquo; Export Movie...</span>, set <strong>Format</strong> to <strong>Video (MP4, H.264)</strong>, and click <strong>Export</strong>.</li>
+</ol>
+
+<p>Video export uses <a href="https://ffmpeg.org/">ffmpeg</a>. If Phoenix cannot find it, it asks where it is once and remembers. See <a href="export.html">Exporting</a> for GIF, PNG sequences and the other formats.</p>
+
+<h2>Where to go next</h2>
+
+<div class="cards">
+  <a class="card" href="drawing-models.html"><h3>Merge and object drawing</h3><p>Why shapes cut each other, and how to keep them apart.</p></a>
+  <a class="card" href="frames.html"><h3>Frames and keyframes</h3><p>Move, copy, stretch and reverse frames.</p></a>
+  <a class="card" href="tweens.html"><h3>Tweens and easing</h3><p>Shape tweens, motion tweens, paths and the Motion Editor.</p></a>
+</div>
+
+</article>
+</main>
+</body>
+</html>

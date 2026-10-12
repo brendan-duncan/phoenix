@@ -1,0 +1,115 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Merge and object drawing · Phoenix User Guide</title>
+<meta name="description" content="How shapes combine in Phoenix: merge drawing, where shapes cut and join, and object drawing, where each shape stays separate.">
+<meta name="keywords" content="merge drawing object drawing mode J drawing object shapes cut overlap fill stroke region selection stipple break apart group combine objects union intersect punch crop primitives">
+<link rel="icon" href="assets/img/logo.png">
+<link rel="stylesheet" href="assets/site.css">
+<script>try { const t = localStorage.getItem("phoenix-docs-theme"); if (t) document.documentElement.dataset.theme = t; } catch (e) {}</script>
+<script src="assets/site.js" defer></script>
+</head>
+<body>
+<main>
+<article class="content">
+
+<p class="eyebrow">Drawing</p>
+<h1>Merge and object drawing</h1>
+<p class="lead">Phoenix draws in two ways. In <strong>merge drawing</strong>, shapes on the same layer behave like wet paint: they cut into and join each other. In <strong>object drawing</strong>, each shape keeps to itself. Knowing which one you are in explains almost everything about how your drawing reacts.</p>
+
+<h2>Switching between them</h2>
+
+<p>The <strong>Object Drawing</strong> button at the bottom of the toolbox, or <kbd>J</kbd>, switches the mode for new shapes. Merge drawing is the default. The setting applies to the shape tools, Pen, Pencil and brushes; existing shapes keep whatever kind they already are.</p>
+
+<h2>Merge drawing</h2>
+
+<p>A merge shape is made of fills and strokes that are cut wherever they cross. When shapes on the same layer overlap:</p>
+
+<ul>
+  <li><strong>A new fill replaces what it covers.</strong> Draw a pink square over a teal one and the pink area cuts away the teal underneath it.</li>
+  <li><strong>Same colors join.</strong> Two touching fills of the same color become one area with no seam.</li>
+  <li><strong>A stroke divides a fill.</strong> Drawing a line across a fill splits it into two pieces you can select and color separately, without erasing anything.</li>
+  <li><strong>A fill covers a stroke.</strong> Painting a fill over a line buries the part it covers.</li>
+</ul>
+
+<figure>
+  <img src="assets/shots/merge-drawing.webp" alt="Left: a pink square selected on top of a teal square. Right: after dragging the pink square away, the teal square has a notch cut out of it" width="1716" height="520">
+  <figcaption>Left: the pink square is selected; the dot pattern shows the selected area. Right: after moving it away, the teal shape keeps the cut.</figcaption>
+</figure>
+
+<h3>When the cut happens</h3>
+
+<p>A shape you have just drawn floats above the artwork, still selected. It cuts what is under it when you draw it, so moving it straight away reveals the hole it made. When you click elsewhere, the floating shape drops into the artwork and merges with it.</p>
+
+<p>The same happens when you move, transform or reshape part of a merge drawing: the edited part floats while it is selected, and settles back into the artwork when you deselect it.</p>
+
+<div class="callout tip">
+  <span class="label">Tip</span>
+  <p>Keep artwork that should not cut each other on separate layers, or group it (<kbd>Ctrl</kbd>+<kbd>G</kbd>). Merging only happens between shapes on the same layer and at the same level.</p>
+</div>
+
+<h3>Selecting merge artwork</h3>
+
+<p>With the Selection tool:</p>
+
+<ul>
+  <li><strong>Click</strong> a fill to select that one area, or a stroke to select one segment of it. Selected areas show a fine dot pattern in the layer's color.</li>
+  <li><strong>Double-click</strong> a fill to select it with its outline, or a stroke to select every connected segment.</li>
+  <li><strong>Drag a rectangle</strong>, or use the <a href="selecting.html#lasso-tools">Lasso</a>, to select part of a shape. The shape is cut along the edge of your selection, so you can drag out exactly the piece you enclosed.</li>
+  <li>Press <kbd>Delete</kbd> to remove the selected part.</li>
+</ul>
+
+<h3>Reshaping merge artwork</h3>
+
+<p>With the Selection tool and nothing selected, point at an edge of a shape:</p>
+
+<ul>
+  <li>When the cursor shows a curve, drag to bend the edge.</li>
+  <li>When the cursor shows a corner, drag to move the corner point.</li>
+  <li>Hold <kbd>Ctrl</kbd> while dragging an edge to pull a new corner out of it.</li>
+</ul>
+
+<h2>Object drawing</h2>
+
+<p>With Object Drawing on, each shape you draw becomes a <strong>drawing object</strong>: a self-contained shape that never cuts or joins anything else. When selected, it shows a thin box rather than the dot pattern. You can stack drawing objects freely and change their order with <span class="menu-path">Modify &rsaquo; Arrange</span>.</p>
+
+<figure>
+  <img src="assets/shots/drawing-oval.webp" alt="A blue oval just drawn over the teal shape, with the Properties panel showing the shape's position, size, fill and stroke" width="1100" height="740">
+  <figcaption>A newly drawn oval floats above the artwork until you deselect it.</figcaption>
+</figure>
+
+<h3>Primitives</h3>
+
+<p>The <strong>Rectangle Primitive</strong> and <strong>Oval Primitive</strong> tools always make objects, in either mode. Unlike plain shapes, primitives stay editable: you can change a rectangle's corner radii, or an oval's start and end angles and inner radius, on the Properties panel at any time. See <a href="drawing-tools.html#shapes-and-primitives">Shapes and primitives</a>.</p>
+
+<h2>Converting between the two</h2>
+
+<dl class="defs">
+  <dt>Break Apart</dt><dd><kbd>Ctrl</kbd>+<kbd>B</kbd>. Turns a drawing object or primitive into merge artwork. It also breaks a group into its contents, and a symbol instance into the artwork of the frame it shows.</dd>
+  <dt>Union</dt><dd><span class="menu-path">Modify &rsaquo; Combine Objects &rsaquo; Union</span>. Turns the selected shapes, of either kind, into a single drawing object.</dd>
+</dl>
+
+<h2>Combining objects</h2>
+
+<p>With two or more shapes selected, <span class="menu-path">Modify &rsaquo; Combine Objects</span> offers:</p>
+
+<table>
+  <thead><tr><th>Command</th><th>Result</th></tr></thead>
+  <tbody>
+    <tr><td>Union</td><td class="wrap">One drawing object made of all the selected shapes.</td></tr>
+    <tr><td>Intersect</td><td class="wrap">Only the area where the shapes overlap, in the colors of the top one.</td></tr>
+    <tr><td>Punch</td><td class="wrap">The top shape's area is cut out of the shapes beneath it.</td></tr>
+    <tr><td>Crop</td><td class="wrap">The top shape keeps only the parts of the shapes beneath it that fall inside it.</td></tr>
+  </tbody>
+</table>
+
+<h2>Groups</h2>
+
+<p>A group (<kbd>Ctrl</kbd>+<kbd>G</kbd>) holds any mix of shapes, objects, text and instances so they move together and are protected from merging. <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>G</kbd> ungroups. Double-click a group to edit inside it while the rest of the stage dims; double-click empty stage to leave.</p>
+
+</article>
+</main>
+</body>
+</html>

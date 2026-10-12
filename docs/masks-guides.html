@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Masks and guides · Phoenix User Guide</title>
+<meta name="description" content="Reveal artwork through mask layers, keep reference artwork on guide layers, and move objects along a path with motion guides.">
+<meta name="keywords" content="mask layer masked layer guide layer guided layer motion guide path orient to path snap reference">
+<link rel="icon" href="assets/img/logo.png">
+<link rel="stylesheet" href="assets/site.css">
+<script>try { const t = localStorage.getItem("phoenix-docs-theme"); if (t) document.documentElement.dataset.theme = t; } catch (e) {}</script>
+<script src="assets/site.js" defer></script>
+</head>
+<body>
+<main>
+<article class="content">
+
+<p class="eyebrow">Animation</p>
+<h1>Masks and guides</h1>
+<p class="lead">Two special kinds of layer change how other layers are drawn: a <strong>mask</strong> shows the layers beneath it only through its shapes, and a <strong>guide</strong> holds artwork that helps you work but never appears in the finished animation.</p>
+
+<h2>Masks</h2>
+
+<p>A mask layer acts like a window. Wherever it has artwork, the layers masked by it show through; everywhere else, they are hidden.</p>
+
+<h3>Make a mask</h3>
+
+<ol class="steps">
+  <li>Put the artwork to be revealed on a layer.</li>
+  <li>Add a layer directly above it and draw the window shape on it. Its color doesn't matter.</li>
+  <li>Right-click the upper layer and choose <strong>Mask</strong>. The layer below becomes masked by it, and both are locked so you see the result.</li>
+</ol>
+
+<p>To mask more layers with the same mask, drag them into place directly under the mask layer, or set their type to <strong>Masked</strong> in <a href="timeline.html#layer-properties">Layer Properties</a>.</p>
+
+<h3>How masks behave</h3>
+
+<ul>
+  <li>Only fills count. Strokes on a mask layer are ignored.</li>
+  <li>Transparency in the mask is ignored: a half-transparent fill masks just like a solid one, with a hard edge.</li>
+  <li>Masks can be animated. Tween or draw the mask frame by frame for wipes, spotlights and reveals.</li>
+  <li>While you are editing the mask layer, its own artwork is drawn so you can see what you are changing.</li>
+</ul>
+
+<h2>Guide layers</h2>
+
+<p>Right-click a layer and choose <strong>Guide</strong> to turn it into a guide layer. Use guide layers for sketches, layout drawings, reference images and notes. They are drawn while you work but left out of every export.</p>
+
+<div class="callout tip">
+  <span class="label">Tip</span>
+  <p>Imported <a href="sound.html#reference-video">reference video</a> goes onto a locked guide layer automatically, so it is there to animate over but never ends up in your render.</p>
+</div>
+
+<h2>Motion guides</h2>
+
+<p>A motion guide moves an object along a path you draw.</p>
+
+<ol class="steps">
+  <li>Make a classic tween of an instance.</li>
+  <li>Add a guide layer above it and draw the path with the Pen, Pencil or Line tool.</li>
+  <li>Drag the tweened layer under the guide layer so it becomes <strong>guided</strong>, or set its type to <strong>Guided</strong> in Layer Properties.</li>
+  <li>At the first and last keyframes, place the instance on the path's ends. With <strong>Snap</strong> on in the Frame tab, it snaps onto the path.</li>
+</ol>
+
+<p>The instance now follows the stroke between the keyframes. Tweens set in Animate to orient to the path also turn the instance to face along the path as it goes.</p>
+
+<div class="callout planned">
+  <span class="label">Planned</span>
+  <p>An Orient to Path option on the Frame tab.</p>
+</div>
+
+</article>
+</main>
+</body>
+</html>

@@ -1,0 +1,106 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Timeline and layers · Phoenix User Guide</title>
+<meta name="description" content="Read the timeline, and create, order, hide, lock, outline, group and configure layers.">
+<meta name="keywords" content="timeline layers layer folder new layer delete layer rename reorder hide show lock outline view layer color current layer layer properties guide mask parenting frame grid ruler playhead">
+<link rel="icon" href="assets/img/logo.png">
+<link rel="stylesheet" href="assets/site.css">
+<script>try { const t = localStorage.getItem("phoenix-docs-theme"); if (t) document.documentElement.dataset.theme = t; } catch (e) {}</script>
+<script src="assets/site.js" defer></script>
+</head>
+<body>
+<main>
+<article class="content">
+
+<p class="eyebrow">Animation</p>
+<h1>Timeline and layers</h1>
+<p class="lead">The timeline lays out your animation in two directions: layers stacked from top to bottom, and frames running from left to right.</p>
+
+<figure>
+  <img src="assets/shots/timeline-folders.webp" alt="The timeline with a list of layers on the left, including an open HATS folder with four hat layers, and the frame grid on the right" width="1362" height="268">
+  <figcaption>Layers on the left, the frame grid on the right. The HATS folder is open, showing the layers inside it.</figcaption>
+</figure>
+
+<h2>Reading the timeline</h2>
+
+<p>Along the top is the <strong>header</strong>, with the current frame number, the frame rate, the elapsed time and the playback controls. Below it, the <strong>ruler</strong> numbers the frames, and the <strong>playhead</strong> marks the frame shown on the stage. Click or drag in the ruler to move the playhead.</p>
+
+<p>Each row of the frame grid belongs to the layer beside it. The cells show what is on each frame:</p>
+
+<table>
+  <thead><tr><th>You see</th><th>It means</th></tr></thead>
+  <tbody>
+    <tr><td>Filled dot</td><td class="wrap">A keyframe with content</td></tr>
+    <tr><td>Hollow dot</td><td class="wrap">An empty (blank) keyframe</td></tr>
+    <tr><td>Gray frames</td><td class="wrap">The keyframe's content held over time, ending in a small hollow rectangle</td></tr>
+    <tr><td>White frames</td><td class="wrap">Empty frames</td></tr>
+    <tr><td>Lilac span with an arrow</td><td class="wrap">A classic tween</td></tr>
+    <tr><td>Green span with an arrow</td><td class="wrap">A shape tween</td></tr>
+    <tr><td>Motion tween span</td><td class="wrap">A motion tween, with its property keyframes marked along it</td></tr>
+    <tr><td>Yellow-green span</td><td class="wrap">An armature pose span (see <a href="bones.html">Bones</a>)</td></tr>
+    <tr><td>Flag or label text</td><td class="wrap">A frame label, comment or anchor</td></tr>
+    <tr><td>Small <em>a</em></td><td class="wrap">A frame with a script</td></tr>
+    <tr><td>Waveform</td><td class="wrap">A sound playing over those frames</td></tr>
+  </tbody>
+</table>
+
+<h2>Layers</h2>
+
+<p>Layers keep parts of your scene separate, so you can draw and animate each one without disturbing the rest. Layers higher in the list draw in front.</p>
+
+<h3>Layer controls</h3>
+
+<p>Each layer row has, from left to right:</p>
+
+<dl class="defs">
+  <dt>Name</dt><dd>Double-click to rename. Click to make it the current layer.</dd>
+  <dt>Pencil</dt><dd>Marks the current layer, where new artwork goes.</dd>
+  <dt>Eye</dt><dd>Shows or hides the layer on the stage. Hidden layers show a red cross.</dd>
+  <dt>Lock</dt><dd>Protects the layer from changes.</dd>
+  <dt>Color square</dt><dd>Click to view the layer's artwork as outlines in that color. The color is also used for the layer's selection highlights.</dd>
+</dl>
+
+<p>The eye, lock and square buttons at the top of the list apply to every layer at once.</p>
+
+<h3>Add, delete and reorder</h3>
+
+<ul>
+  <li>The buttons below the layer list add a <strong>new layer</strong> or a <strong>new folder</strong>, and <strong>delete</strong> the current layer.</li>
+  <li>Drag a layer up or down to change the stacking order. Drop it onto a folder to move it inside.</li>
+  <li>Right-click a layer for <strong>Insert Layer</strong>, <strong>Insert Folder</strong>, <strong>Delete Layer</strong>, <strong>Show All</strong>, <strong>Hide Others</strong> and <strong>Lock Others</strong>.</li>
+</ul>
+
+<h3>Folders</h3>
+
+<p>Folders group layers, for example all the parts of one character. Click the arrow beside a folder to open or close it; a closed folder hides its layers' rows in the frame grid too. Hiding or locking a folder hides or locks everything inside it.</p>
+
+<h3>Layer properties</h3>
+
+<p>Right-click a layer and choose <strong>Properties...</strong> to set several things at once:</p>
+
+<div class="split">
+  <figure style="margin:0"><img src="assets/shots/layer-properties.webp" alt="Layer Properties dialog with name, show and lock, layer type, outline color and view as outlines" width="260" height="391"></figure>
+  <dl class="defs" style="grid-template-columns:1fr">
+    <dt>Name, Show and Lock</dt><dd>The same as the controls in the layer row.</dd>
+    <dt>Type</dt><dd><strong>Normal</strong>, <strong>Guide</strong>, <strong>Guided</strong>, <strong>Mask</strong>, <strong>Masked</strong> or <strong>Folder</strong>. See <a href="masks-guides.html">Masks and guides</a>.</dd>
+    <dt>Outline color</dt><dd>The layer's color for outlines and highlights.</dd>
+    <dt>View layer as outlines</dt><dd>Draws the layer's artwork as outlines.</dd>
+  </dl>
+</div>
+
+<h3>Layer parenting</h3>
+
+<p>Files from Animate that use layer parenting, where one layer's artwork follows another's, play back correctly in Phoenix.</p>
+
+<div class="callout planned">
+  <span class="label">Planned</span>
+  <p>Copying, pasting and duplicating layers, selecting several layers at once, <kbd>Alt</kbd>-clicking a column to toggle all other layers, setting up layer parenting, and layer depth for multiplane camera moves.</p>
+</div>
+
+</article>
+</main>
+</body>
+</html>

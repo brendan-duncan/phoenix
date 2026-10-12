@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Filters, blends and color effects · Phoenix User Guide</title>
+<meta name="description" content="Tint, brighten and fade instances, apply blend modes, and add filters such as drop shadow, blur, glow and bevel.">
+<meta name="keywords" content="color effect brightness tint alpha advanced blend mode multiply screen overlay layer erase filters blur drop shadow glow bevel gradient glow gradient bevel adjust color copy paste filters">
+<link rel="icon" href="assets/img/logo.png">
+<link rel="stylesheet" href="assets/site.css">
+<script>try { const t = localStorage.getItem("phoenix-docs-theme"); if (t) document.documentElement.dataset.theme = t; } catch (e) {}</script>
+<script src="assets/site.js" defer></script>
+</head>
+<body>
+<main>
+<article class="content">
+
+<p class="eyebrow">Symbols</p>
+<h1>Filters, blends and color effects</h1>
+<p class="lead">Symbol instances can be recolored, blended with what is behind them, and given filters, all without touching the symbol itself. Every one of these settings can change from keyframe to keyframe and be tweened.</p>
+
+<figure>
+  <img src="assets/shots/effects-stage.webp" alt="Two rows of overlapping squares: the top row with blur, drop shadow, glow, bevel and adjust color filters, the bottom row with different blend modes over a red and green band" width="825" height="320">
+  <figcaption>Top: filters. Bottom: blend modes over a two-color band.</figcaption>
+</figure>
+
+<h2>Color effects</h2>
+
+<p>Select an instance, then choose a <strong>Style</strong> under <strong>Color Effect</strong> on the Object tab:</p>
+
+<dl class="defs">
+  <dt>None</dt><dd>The symbol's own colors.</dd>
+  <dt>Brightness</dt><dd>Toward black or white, from -100% to 100%.</dd>
+  <dt>Tint</dt><dd>Toward a color you choose, by a percentage.</dd>
+  <dt>Alpha</dt><dd>Transparency, from 0% (invisible) to 100% (solid).</dd>
+  <dt>Advanced</dt><dd>Separate multipliers and offsets for red, green, blue and alpha, for any color change the others cannot make.</dd>
+</dl>
+
+<p>Color effects tween smoothly in classic tweens, so a character can fade in or flush red over a few frames.</p>
+
+<h2>Blend modes</h2>
+
+<p>Under <strong>Display</strong>, <strong>Blending</strong> sets how an instance mixes with what is beneath it:</p>
+
+<table>
+  <thead><tr><th>Mode</th><th>Effect</th></tr></thead>
+  <tbody>
+    <tr><td>Normal</td><td class="wrap">Covers what is beneath</td></tr>
+    <tr><td>Multiply</td><td class="wrap">Darkens, like layers of ink; good for shadows</td></tr>
+    <tr><td>Screen</td><td class="wrap">Lightens, like projected light; good for glows</td></tr>
+    <tr><td>Lighten, Darken</td><td class="wrap">Keeps the lighter or darker of the two colors</td></tr>
+    <tr><td>Overlay, Hard Light</td><td class="wrap">Adds contrast, multiplying darks and screening lights</td></tr>
+    <tr><td>Add, Subtract</td><td class="wrap">Adds or subtracts the colors</td></tr>
+    <tr><td>Difference</td><td class="wrap">The difference between the colors</td></tr>
+    <tr><td>Invert</td><td class="wrap">Inverts what is beneath, in the instance's shape</td></tr>
+    <tr><td>Layer</td><td class="wrap">Composites the instance's contents as one image first, so transparency and the two modes below apply to the whole</td></tr>
+    <tr><td>Alpha, Erase</td><td class="wrap">Used inside a Layer instance: Alpha keeps only what the artwork covers, Erase cuts the artwork's shape out</td></tr>
+  </tbody>
+</table>
+
+<h2>Filters</h2>
+
+<p>Filters add effects such as shadows and glows to movie clips and buttons. They appear in the <strong>Filters</strong> section of the Object tab.</p>
+
+<div class="split">
+  <figure style="margin:0"><img src="assets/shots/object-filters.webp" alt="Object tab for an instance with a Drop Shadow filter: blur, quality, strength, angle, distance, color and knockout options" width="304" height="810"></figure>
+  <div>
+    <ul>
+      <li>Click <strong>Add Filter</strong> and choose one. An instance can have several, applied top to bottom.</li>
+      <li>Use the checkbox to turn a filter off without losing its settings, the arrows to change the order, and <strong>&times;</strong> to remove it.</li>
+      <li><strong>Copy Filters</strong> and <strong>Paste Filters</strong> move a whole set of filters from one instance to another.</li>
+    </ul>
+    <p>Quality can be Low, Medium or High. Higher quality looks smoother and takes longer to draw.</p>
+  </div>
+</div>
+
+<table>
+  <thead><tr><th>Filter</th><th>Settings</th></tr></thead>
+  <tbody>
+    <tr><td>Blur</td><td class="wrap">Blur X and Y, quality</td></tr>
+    <tr><td>Drop Shadow</td><td class="wrap">Blur, strength, angle, distance, color, knockout, inner shadow, hide object</td></tr>
+    <tr><td>Glow</td><td class="wrap">Blur, strength, color, knockout, inner glow</td></tr>
+    <tr><td>Bevel</td><td class="wrap">Blur, strength, angle, distance, shadow and highlight colors, inner, outer or full</td></tr>
+    <tr><td>Gradient Glow</td><td class="wrap">Like Glow, colored by a gradient you edit on a bar</td></tr>
+    <tr><td>Gradient Bevel</td><td class="wrap">Like Bevel, colored by a gradient</td></tr>
+    <tr><td>Adjust Color</td><td class="wrap">Brightness, contrast, saturation and hue</td></tr>
+  </tbody>
+</table>
+
+<p>Filters tween between classic tween keyframes. Graphic symbols only show the Filters section if they already have filters, for example in a file from elsewhere.</p>
+
+<div class="callout planned">
+  <span class="label">Planned</span>
+  <p>Saved filter presets, and tweening color effects and filters in motion tweens.</p>
+</div>
+
+</article>
+</main>
+</body>
+</html>

@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Install and update · Phoenix User Guide</title>
+<meta name="description" content="Install Phoenix on Windows or macOS, keep it up to date, and open your first file.">
+<meta name="keywords" content="download installer setup pkg zip portable update upgrade macos windows smartscreen start screen welcome">
+<link rel="icon" href="assets/img/logo.png">
+<link rel="stylesheet" href="assets/site.css">
+<script>try { const t = localStorage.getItem("phoenix-docs-theme"); if (t) document.documentElement.dataset.theme = t; } catch (e) {}</script>
+<script src="assets/site.js" defer></script>
+</head>
+<body>
+<main>
+<article class="content">
+
+<p class="eyebrow">Get started</p>
+<h1>Install and update</h1>
+<p class="lead">Phoenix installs per user, needs no administrator rights, and keeps itself up to date.</p>
+
+<h2>System requirements</h2>
+
+<table>
+  <thead><tr><th>Platform</th><th>Supported</th><th>Download</th></tr></thead>
+  <tbody>
+    <tr><td>Windows 10 and 11 (64-bit)</td><td>Yes</td><td><code>Phoenix-win-x64-Setup.exe</code>, or a portable zip</td></tr>
+    <tr><td>macOS on Apple silicon</td><td>Yes</td><td><code>Phoenix-osx-arm64-Setup.pkg</code>, or a portable zip</td></tr>
+    <tr><td>macOS on Intel</td><td><span class="badge">Planned</span></td><td>&mdash;</td></tr>
+    <tr><td>Linux</td><td><span class="badge">Planned</span></td><td>&mdash;</td></tr>
+  </tbody>
+</table>
+
+<p>A graphics tablet is optional. When one is connected, the brushes respond to pen pressure and tilt, and turning the pen over to its eraser end switches to the Eraser.</p>
+
+<h2>Install on Windows</h2>
+
+<ol class="steps">
+  <li>Open the <a href="https://github.com/brendan-duncan/phoenix/releases/latest">latest release</a> on GitHub and download <code>Phoenix-win-x64-Setup.exe</code>.</li>
+  <li>Run the installer. Phoenix installs into your user account, so it does not ask for administrator rights, and it starts when the installer finishes.</li>
+  <li>Phoenix adds itself to the Start menu. It also registers the <code>.phx</code> file type and adds itself to the <strong>Open with</strong> list for <code>.fla</code> files, without replacing Animate as the default for them.</li>
+</ol>
+
+<div class="callout warn">
+  <span class="label">Windows SmartScreen</span>
+  <p>The Windows installer is not code-signed yet, so SmartScreen may warn that the publisher is unknown. Choose <strong>More info</strong>, then <strong>Run anyway</strong>. Signing is <span class="badge">Planned</span>.</p>
+</div>
+
+<p>To use Phoenix without installing it, download the portable zip instead, unpack it anywhere, and run <code>Phoenix.exe</code>. A portable copy does not update itself.</p>
+
+<h2>Install on macOS</h2>
+
+<ol class="steps">
+  <li>Download <code>Phoenix-osx-arm64-Setup.pkg</code> from the <a href="https://github.com/brendan-duncan/phoenix/releases/latest">latest release</a>.</li>
+  <li>Open the package and follow the installer. It puts <strong>Phoenix.app</strong> in your Applications folder. The package is signed and notarized by Apple, so Gatekeeper opens it without a warning.</li>
+  <li>Start Phoenix from Launchpad or Applications. You can also drag a <code>.fla</code> or <code>.phx</code> file onto the Dock icon to open it.</li>
+</ol>
+
+<h2>Updates</h2>
+
+<p>An installed copy of Phoenix checks for a new version a few seconds after it starts. You can also check at any time with <span class="menu-path">Help &rsaquo; Check for Updates...</span></p>
+
+<ul>
+  <li>When an update is found, Phoenix downloads it in the background and shows the progress in the status bar. Usually only the changed parts are downloaded, so updates are small.</li>
+  <li>When the download finishes, Phoenix offers <strong>Restart Now</strong> or <strong>Later</strong>. If you choose Later, the update installs when you quit.</li>
+  <li>Pre-release builds are not offered as updates. To try one, download it from the releases page.</li>
+</ul>
+
+<div class="callout">
+  <span class="label">Note</span>
+  <p>Only copies installed by the installer can update themselves. A portable copy or a build from source tells you so when you choose Check for Updates.</p>
+</div>
+
+<h2>The start screen</h2>
+
+<p>When you start Phoenix without a file, it opens the <strong>Welcome to Phoenix</strong> window. Pick a size under <strong>Create New</strong> to start a document, choose a file under <strong>Recent Files</strong>, or click <strong>Open...</strong> to browse. <strong>More Presets...</strong> opens the full <a href="documents.html#create-a-document">New Document</a> dialog.</p>
+
+<figure>
+  <img src="assets/shots/start-screen.webp" alt="The Welcome to Phoenix window, with document presets on the left and recent files on the right" width="876" height="559">
+  <figcaption>The start screen. Turn off <strong>Show at startup</strong> to reopen your most recent file instead.</figcaption>
+</figure>
+
+<p>You can bring the start screen back at any time from <span class="menu-path">Help &rsaquo; Start Screen...</span></p>
+
+<h2>Open a file</h2>
+
+<p>Phoenix opens Phoenix documents (<code>.phx</code>), Animate files (<code>.fla</code>), uncompressed XFL folders, and files saved by older versions of Flash. You can open a file in several ways:</p>
+
+<ul>
+  <li><span class="menu-path">File &rsaquo; Open...</span> (<kbd>Ctrl</kbd>+<kbd>O</kbd>), or <span class="menu-path">File &rsaquo; Open Recent</span>.</li>
+  <li>Drag the file onto the Phoenix window.</li>
+  <li>Double-click a <code>.phx</code> file, or right-click a <code>.fla</code> file and choose <strong>Open with &rsaquo; Phoenix</strong>.</li>
+  <li>Name the file on the <a href="command-line.html">command line</a>.</li>
+</ul>
+
+<p>Phoenix shows one document at a time. Opening another document closes the current one, and asks first if it has unsaved changes.</p>
+
+<h2>Recovering after a crash</h2>
+
+<p>Phoenix saves a recovery copy of your work every two minutes while it has unsaved changes. If Phoenix closes unexpectedly, the next time it starts it offers to <strong>Recover</strong> that work, <strong>Discard</strong> it, or decide <strong>Later</strong>. See <a href="documents.html#auto-save-and-recovery">Auto-save and recovery</a> to change how often it saves.</p>
+
+</article>
+</main>
+</body>
+</html>

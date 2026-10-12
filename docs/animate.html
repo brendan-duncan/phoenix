@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Coming from Animate · Phoenix User Guide</title>
+<meta name="description" content="A guide for Adobe Animate users: what carries over, the keys that differ, what Phoenix adds, and what is still to come.">
+<meta name="keywords" content="adobe animate flash migrate switch differences compatibility fla round trip shortcuts window menu camera actionscript jsfl">
+<link rel="icon" href="assets/img/logo.png">
+<link rel="stylesheet" href="assets/site.css">
+<script>try { const t = localStorage.getItem("phoenix-docs-theme"); if (t) document.documentElement.dataset.theme = t; } catch (e) {}</script>
+<script src="assets/site.js" defer></script>
+</head>
+<body>
+<main>
+<article class="content">
+
+<p class="eyebrow">Reference</p>
+<h1>Coming from Animate</h1>
+<p class="lead">If you know Adobe Animate or Flash, you already know most of Phoenix. This page covers the differences, so you can get straight to work.</p>
+
+<h2>What carries over</h2>
+
+<ul>
+  <li><strong>Your files.</strong> Phoenix opens FLA and XFL files, and older Flash files, and saves FLA files that Animate opens again. Data Phoenix does not use itself, such as ActionScript and publish settings, is kept as it was.</li>
+  <li><strong>The drawing model.</strong> Merge and object drawing, primitives, groups, and how strokes and fills interact all behave as you expect.</li>
+  <li><strong>The timeline.</strong> Layers, folders, keyframes, classic, shape and motion tweens, eases, masks, guides and motion guides.</li>
+  <li><strong>Symbols.</strong> Graphics, movie clips and buttons, editing in place, looping options, color effects, blend modes and filters.</li>
+  <li><strong>Your muscle memory.</strong> Tool keys, F5 to F8, the frame and arrange shortcuts, and the modifier keys while drawing are the same.</li>
+</ul>
+
+<h2>Keys that differ</h2>
+
+<table>
+  <thead><tr><th>Key</th><th>In Phoenix</th><th>In Animate</th></tr></thead>
+  <tbody>
+    <tr><td><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>Z</kbd></td><td class="wrap">Redo (as well as <kbd>Ctrl</kbd>+<kbd>Y</kbd>)</td><td class="wrap">Remove Transform</td></tr>
+    <tr><td><kbd>Y</kbd></td><td class="wrap">PolyStar</td><td class="wrap">Paint Brush</td></tr>
+    <tr><td><kbd>D</kbd></td><td class="wrap">Pencil</td><td class="wrap">Pencil is <kbd>Shift</kbd>+<kbd>Y</kbd></td></tr>
+    <tr><td><kbd>C</kbd></td><td class="wrap">Time Scrub</td><td class="wrap">Camera</td></tr>
+    <tr><td><kbd>Ctrl</kbd>+<kbd>2</kbd></td><td class="wrap">Fit in Window</td><td class="wrap">Show Frame</td></tr>
+    <tr><td><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>B</kbd></td><td class="wrap">Show Bounding Boxes</td><td class="wrap">&mdash;</td></tr>
+  </tbody>
+</table>
+
+<p>Remove Transform is still in <span class="menu-path">Modify &rsaquo; Transform</span>, without a key.</p>
+
+<h2>Where things are</h2>
+
+<table>
+  <thead><tr><th>Looking for</th><th>In Phoenix</th></tr></thead>
+  <tbody>
+    <tr><td>The Window menu</td><td class="wrap">Panels open from the <strong>View</strong> menu</td></tr>
+    <tr><td>Document Settings</td><td class="wrap">The <strong>Doc</strong> tab of the Properties panel</td></tr>
+    <tr><td>Properties panel tabs</td><td class="wrap">Tool, Object, Frame and Doc, as in recent Animate</td></tr>
+    <tr><td>Library</td><td class="wrap">A tab beside Properties</td></tr>
+    <tr><td>Preferences</td><td class="wrap">Settings are remembered as you use them; see <a href="preferences.html">Settings and preferences</a></td></tr>
+    <tr><td>Publish</td><td class="wrap"><span class="menu-path">File &rsaquo; Export</span>: video, GIF, PNG sequences, images and SVG</td></tr>
+    <tr><td>Test Movie</td><td class="wrap">Play on the stage with <kbd>Enter</kbd>, or export</td></tr>
+  </tbody>
+</table>
+
+<h2>What works differently</h2>
+
+<ul>
+  <li><strong>One document at a time.</strong> Phoenix shows one document per window. Opening another replaces it, after asking about unsaved changes.</li>
+  <li><strong>Native format.</strong> New documents save as <code>.phx</code>, which opens much faster. Use <span class="menu-path">Save As</span> to write an FLA whenever you need one.</li>
+  <li><strong>Movie clips on the stage</strong> show their first frame while you edit; their animation plays in exports.</li>
+  <li><strong>Scripts are kept, not run.</strong> ActionScript and frame scripts are saved with the file, but Phoenix does not run them.</li>
+</ul>
+
+<h2>What Phoenix adds</h2>
+
+<dl class="defs">
+  <dt>Ink Brush</dt><dd>A brush with a string stabilizer and adjustable pressure response, for clean inking.</dd>
+  <dt>Time Scrub tool</dt><dd>Drag across the stage to move through time.</dd>
+  <dt>Outliner</dt><dd>The whole document as a tree, down to individual paths.</dd>
+  <dt>Phoenix documents</dt><dd>A faster, more robust file format with room to grow. See <a href="documents.html#the-phoenix-format">The Phoenix format</a>.</dd>
+  <dt>Crash recovery</dt><dd>Regular recovery copies, offered back after a crash.</dd>
+  <dt>Reference video</dt><dd>Import video straight onto a guide layer to animate over.</dd>
+  <dt>Shareable eases and presets</dt><dd>Export custom eases as JSON, and import Animate's motion presets.</dd>
+  <dt>Command-line rendering</dt><dd>Export and convert without opening a window. See <a href="command-line.html">Command line</a>.</dd>
+  <dt>Free and open source</dt><dd>On Windows and macOS, with Linux on the way.</dd>
+</dl>
+
+<h2>Not in Phoenix yet</h2>
+
+<p>These Animate features are not available yet. Files that use them still open, and the data is kept when you save.</p>
+
+<ul>
+  <li>The Camera tool and camera layers (camera layers draw as ordinary layers), and 3D rotation and translation.</li>
+  <li>Building bones with the Bone tool, and the Asset Warp tool. Existing armatures and warps play.</li>
+  <li>The Paint Brush with art and pattern brushes, and the Width tool.</li>
+  <li>Running ActionScript or JavaScript, and JSFL commands and extensions.</li>
+  <li>HTML5 Canvas, SWF and other publish targets.</li>
+</ul>
+
+</article>
+</main>
+</body>
+</html>

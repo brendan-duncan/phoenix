@@ -1,0 +1,135 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Frames and keyframes · Phoenix User Guide</title>
+<meta name="description" content="Insert frames and keyframes, select, move, copy and stretch frames, label them, play your animation, and use onion skinning.">
+<meta name="keywords" content="frame keyframe blank keyframe F5 F6 F7 insert remove clear frames select move copy paste overwrite reverse convert to frame-by-frame label comment anchor playback play loop step onion skin frame by frame">
+<link rel="icon" href="assets/img/logo.png">
+<link rel="stylesheet" href="assets/site.css">
+<script>try { const t = localStorage.getItem("phoenix-docs-theme"); if (t) document.documentElement.dataset.theme = t; } catch (e) {}</script>
+<script src="assets/site.js" defer></script>
+</head>
+<body>
+<main>
+<article class="content">
+
+<p class="eyebrow">Animation</p>
+<h1>Frames and keyframes</h1>
+<p class="lead">A <strong>keyframe</strong> is a frame where the artwork changes. Ordinary <strong>frames</strong> after it hold that artwork on screen. Frame-by-frame animation is a keyframe on every frame or two; tweened animation is keyframes further apart with Phoenix filling in between.</p>
+
+<h2>Insert and remove frames</h2>
+
+<table>
+  <thead><tr><th>Command</th><th>Shortcut</th><th>Does</th></tr></thead>
+  <tbody>
+    <tr><td>Frame</td><td><kbd>F5</kbd></td><td class="wrap">Adds frames, extending how long the current artwork holds</td></tr>
+    <tr><td>Keyframe</td><td><kbd>F6</kbd></td><td class="wrap">Makes a keyframe that starts as a copy of the previous one</td></tr>
+    <tr><td>Blank Keyframe</td><td><kbd>F7</kbd></td><td class="wrap">Makes an empty keyframe, to draw the next drawing from scratch</td></tr>
+    <tr><td>Remove Frames</td><td><kbd>Shift</kbd>+<kbd>F5</kbd></td><td class="wrap">Deletes the selected frames, closing the gap</td></tr>
+    <tr><td>Clear Keyframe</td><td><kbd>Shift</kbd>+<kbd>F6</kbd></td><td class="wrap">Turns a keyframe back into an ordinary frame</td></tr>
+  </tbody>
+</table>
+
+<p>These are in <span class="menu-path">Insert &rsaquo; Timeline</span> and <span class="menu-path">Edit &rsaquo; Timeline</span>, and on the menu you get by right-clicking frames.</p>
+
+<div class="callout tip">
+  <span class="label">Tip</span>
+  <p>You don't always need <kbd>F6</kbd>. If you draw on a frame of a layer that is only holding an earlier keyframe, Phoenix makes the keyframe for you.</p>
+</div>
+
+<h2>Select frames</h2>
+
+<ul>
+  <li><strong>Click</strong> a cell to select it. This also moves the playhead there and makes that layer current.</li>
+  <li><strong>Drag</strong> across cells, including across several layers, to select a block.</li>
+  <li><strong>Shift-click</strong> to extend the selection.</li>
+</ul>
+
+<h2>Move, copy and stretch frames</h2>
+
+<table>
+  <thead><tr><th>Do this</th><th>To</th></tr></thead>
+  <tbody>
+    <tr><td>Drag a selected block</td><td class="wrap">Move it to another frame or layer</td></tr>
+    <tr><td><kbd>Alt</kbd> when you drop</td><td class="wrap">Copy the block instead of moving it</td></tr>
+    <tr><td>Drag a keyframe</td><td class="wrap">Move just that keyframe</td></tr>
+    <tr><td><kbd>Ctrl</kbd>-drag the end of a span</td><td class="wrap">Lengthen or shorten the span</td></tr>
+  </tbody>
+</table>
+
+<h3>Frame commands</h3>
+
+<dl class="defs">
+  <dt>Cut, Copy, Paste Frames</dt><dd><kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>X</kbd>, <kbd>C</kbd> and <kbd>V</kbd>. Paste Frames inserts, pushing later frames along.</dd>
+  <dt>Paste and Overwrite Frames</dt><dd>Pastes over the frames already there instead of inserting.</dd>
+  <dt>Reverse Frames</dt><dd>Plays the selected frames backward.</dd>
+  <dt>Convert to Frame-by-Frame Animation</dt><dd>Turns a tween into a keyframe on every frame, ready to adjust by hand.</dd>
+  <dt>Copy Motion, Paste Motion</dt><dd>Copies the movement of a tween and applies it to another object.</dd>
+  <dt>Remove Tween</dt><dd>Removes a tween, leaving its keyframes.</dd>
+</dl>
+
+<h2>Frame labels</h2>
+
+<p>Click a keyframe and use the <strong>Label</strong> section of the Frame tab to name it. The <strong>Type</strong> list makes it a <strong>Name</strong> (a marker scripts can jump to), a <strong>Comment</strong> (a note for yourself), or an <strong>Anchor</strong>. Labels show in the timeline, which makes long scenes easier to find your way around.</p>
+
+<figure class="narrow">
+  <img src="assets/shots/frame-tab.webp" alt="Frame tab for frame 4 of layer EaseIn: label name and type, tweening with classic tween, ease, rotate, snap and sync, and span information" width="304" height="530">
+  <figcaption>The Frame tab for a frame in the middle of a classic tween.</figcaption>
+</figure>
+
+<h2>Playback</h2>
+
+<table>
+  <thead><tr><th>Command</th><th>Shortcut</th></tr></thead>
+  <tbody>
+    <tr><td>Play / Stop</td><td><kbd>Enter</kbd></td></tr>
+    <tr><td>Step forward one frame</td><td><kbd>.</kbd></td></tr>
+    <tr><td>Step backward one frame</td><td><kbd>,</kbd></td></tr>
+    <tr><td>Next keyframe</td><td><kbd>Alt</kbd>+<kbd>.</kbd></td></tr>
+    <tr><td>Previous keyframe</td><td><kbd>Alt</kbd>+<kbd>,</kbd></td></tr>
+    <tr><td>Rewind to the first frame</td><td><kbd>Shift</kbd>+<kbd>,</kbd></td></tr>
+    <tr><td>Go to the last frame</td><td><kbd>Shift</kbd>+<kbd>.</kbd></td></tr>
+    <tr><td>Loop playback</td><td><kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>L</kbd></td></tr>
+  </tbody>
+</table>
+
+<p>These are also in the <strong>Control</strong> menu and as buttons in the timeline header. They work when the stage or timeline has focus, so they never interfere with typing in a text box or panel.</p>
+
+<p>Playback runs at the document's frame rate. If a frame takes too long to draw, Phoenix skips ahead to stay in time, so what you see matches the real speed. Sounds play along, unless you turn on <span class="menu-path">View &rsaquo; Mute Sounds</span>.</p>
+
+<h3>Looping a range</h3>
+
+<p>Turn on <strong>Loop Playback</strong> and drag the ends of the loop range in the ruler to play just part of the timeline over and over, which is ideal for polishing a cycle.</p>
+
+<h2>Onion skinning</h2>
+
+<p>Onion skinning shows nearby frames faintly behind the current one, so you can draw each new drawing in relation to the last. Turn it on with the onion skin button in the timeline header, or <span class="menu-path">View &rsaquo; Onion Skin</span> (<kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>O</kbd>).</p>
+
+<figure>
+  <img src="assets/shots/onion-skin-stage.webp" alt="A spinning square shown with faint copies of earlier frames in blue and later frames in green" width="820" height="330">
+  <figcaption>Frames before the playhead are tinted blue, frames after it green, fading with distance.</figcaption>
+</figure>
+
+<p>Drag the markers in the ruler to set how many frames are shown, or choose a preset and other options from <span class="menu-path">View &rsaquo; Onion Skin Settings</span> (also by right-clicking the onion skin button):</p>
+
+<dl class="defs">
+  <dt>Onion 1, 2, 5, All</dt><dd>How many frames to show on each side.</dd>
+  <dt>Outline</dt><dd>Shows the other frames as outlines only.</dd>
+  <dt>Keyframes Only</dt><dd>Skips held frames and shows only drawings.</dd>
+  <dt>Opacity</dt><dd>25, 45, 65 or 85%.</dd>
+  <dt>Color Before, Color After</dt><dd>The tints for earlier and later frames.</dd>
+</dl>
+
+<p>Locked layers are left out of onion skinning, so lock the background to keep it from cluttering the view.</p>
+
+<div class="callout planned">
+  <span class="label">Planned</span>
+  <p>Selecting scattered frames with <kbd>Ctrl</kbd>, Edit Multiple Frames, adjustable frame width and thumbnails in the timeline, time shown in seconds on the ruler, and scripts such as <code>stop()</code> honored during playback.</p>
+</div>
+
+</article>
+</main>
+</body>
+</html>
