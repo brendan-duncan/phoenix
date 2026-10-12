@@ -271,7 +271,9 @@ void LibraryTree::startDrag(Qt::DropActions)
     QDrag* drag = new QDrag(this);
     drag->setMimeData(data);
     drag->setPixmap(item->icon(0).pixmap(16, 16));
+    emit dragStarting(QString(prefixes[kind]).chopped(1), name);
     drag->exec(Qt::CopyAction | Qt::MoveAction, Qt::CopyAction);
+    emit dragEnded();
 }
 
 LibraryPanel::LibraryPanel(QWidget* parent)
@@ -394,6 +396,14 @@ LibraryPanel::LibraryPanel(QWidget* parent)
             emit soundPropertiesRequested(name);
     });
     connect(_tree, &LibraryTree::moveRequested, this, &LibraryPanel::moveRequested);
+    connect(_tree, &LibraryTree::dragStarting, this, [this](const QString& kind, const QString& name) {
+        if (_external)
+            emit externalDragStarted(kind, name);
+    });
+    connect(_tree, &LibraryTree::dragEnded, this, [this]() {
+        if (_external)
+            emit externalDragEnded();
+    });
     // The icons are drawn in the theme's colors.
     connect(theme::notifier(), &theme::Notifier::changed, this, &LibraryPanel::refresh);
 
@@ -406,6 +416,20 @@ void LibraryPanel::setAllExpanded(bool open)
     for (QTreeWidgetItemIterator it(_tree); *it; ++it)
         if ((*it)->data(0, KindRole).toInt() == static_cast<int>(Kind::Folder))
             (*it)->setExpanded(open);
+}
+
+void LibraryPanel::selectItem(const QString& name)
+{
+    for (QTreeWidgetItemIterator it(_tree); *it; ++it)
+    {
+        if ((*it)->data(0, NameRole).toString() != name || (*it)->data(0, KindRole).toInt() == static_cast<int>(Kind::Folder))
+            continue;
+        for (QTreeWidgetItem* parent = (*it)->parent(); parent; parent = parent->parent())
+            parent->setExpanded(true);
+        _tree->setCurrentItem(*it);
+        _tree->scrollToItem(*it);
+        return;
+    }
 }
 
 QString LibraryPanel::currentFolder() const
@@ -439,8 +463,37 @@ void LibraryPanel::playPreview(bool play)
     }
 }
 
+void LibraryPanel::setExternal(bool external)
+{
+    _external = external;
+    // Nothing in another file's library is renamed or moved here.
+    _tree->setEditTriggers(external ? QAbstractItemView::NoEditTriggers : QAbstractItemView::EditKeyPressed);
+    _tree->setAcceptDrops(!external);
+    _tree->viewport()->setAcceptDrops(!external);
+}
+
 void LibraryPanel::showItemMenu(QTreeWidgetItem* item, const QPoint& globalPos)
 {
+    const QStringList chosenNames = selectedItems();
+    if (_external)
+    {
+        QMenu menu(this);
+        QAction* copyTo = menu.addAction("Copy to Document");
+        copyTo->setEnabled(!chosenNames.isEmpty());
+        QAction* copy = menu.addAction("Copy");
+        copy->setEnabled(!chosenNames.isEmpty());
+        menu.addSeparator();
+        QAction* expandAll = menu.addAction("Expand All Folders");
+        QAction* collapseAll = menu.addAction("Collapse All Folders");
+        QAction* chosen = menu.exec(globalPos);
+        if (chosen == copyTo)
+            emit copyToDocumentRequested(chosenNames);
+        else if (chosen == copy)
+            emit copyItemsRequested(chosenNames);
+        else if (chosen == expandAll || chosen == collapseAll)
+            setAllExpanded(chosen == expandAll);
+        return;
+    }
     {
         const int kind = item ? item->data(0, KindRole).toInt() : -1;
         const QString name = item ? item->data(0, NameRole).toString() : QString();
@@ -504,6 +557,11 @@ void LibraryPanel::showItemMenu(QTreeWidgetItem* item, const QPoint& globalPos)
             soundProperties = menu.addAction("Properties...");
             menu.addSeparator();
         }
+        QAction* copyItems = menu.addAction("Copy");
+        copyItems->setEnabled(!chosenNames.isEmpty());
+        QAction* pasteItems = menu.addAction("Paste");
+        pasteItems->setEnabled(_canPaste && _canPaste());
+        menu.addSeparator();
         QAction* newSymbol = menu.addAction("New Symbol...");
         QAction* folder = menu.addAction("New Folder");
         QAction* newFont = menu.addAction("New Font...");
@@ -520,6 +578,14 @@ void LibraryPanel::showItemMenu(QTreeWidgetItem* item, const QPoint& globalPos)
         if (chosen == expandAll || chosen == collapseAll)
         {
             setAllExpanded(chosen == expandAll);
+        }
+        else if (chosen == copyItems)
+        {
+            emit copyItemsRequested(chosenNames);
+        }
+        else if (chosen == pasteItems)
+        {
+            emit pasteItemsRequested();
         }
         else if (chosen == newSymbol)
         {
@@ -613,7 +679,7 @@ bool LibraryPanel::eventFilter(QObject* watched, QEvent* event)
     if (watched == _tree && event->type() == QEvent::KeyPress)
     {
         const int key = static_cast<QKeyEvent*>(event)->key();
-        if ((key == Qt::Key_Delete || key == Qt::Key_Backspace))
+        if ((key == Qt::Key_Delete || key == Qt::Key_Backspace) && !_external)
         {
             const QStringList items = selectedItems();
             if (!items.isEmpty())

@@ -81,10 +81,26 @@
 
 <p>To set text in a font symbol, select the text and choose <strong>Use for Selected Text</strong> from the symbol's right-click menu. <strong>Font Properties...</strong> changes it later; renaming it keeps the text set in it.</p>
 
-<div class="callout planned">
-  <span class="label">Planned</span>
-  <p>Shared libraries across documents.</p>
-</div>
+<h2>Libraries of other documents</h2>
+
+<p>To use items from another document, choose <span class="menu-path">File &rsaquo; Import &rsaquo; Open External Library</span> (<kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>O</kbd>) and pick an FLA, XFL or PHX file. Its library opens in a panel of its own, read-only. Then:</p>
+
+<ul>
+  <li><strong>Drag an item onto the stage</strong> to copy it into your document's library and place it.</li>
+  <li>Right-click items and choose <strong>Copy to Document</strong> to bring them into your library without placing them.</li>
+</ul>
+
+<p>Between two open documents, right-click items in one library and choose <strong>Copy</strong>, switch to the other document's tab, and choose <strong>Paste</strong> from its library's menu.</p>
+
+<p>However they come, items arrive whole: a symbol brings the symbols, bitmaps and sounds it uses, and the folders they are in. When your library already has items of the same names, Phoenix asks how to resolve the conflict:</p>
+
+<dl class="defs">
+  <dt>Don't replace existing items</dt><dd>Your items stay as they are, and what comes in uses them.</dd>
+  <dt>Replace existing items</dt><dd>Your items take the incoming contents, and everything that uses them shows the new ones.</dd>
+  <dt>Keep both</dt><dd>The incoming items get new names (<em>Head copy</em>), and what came with them uses those names.</dd>
+</dl>
+
+<p>Copying is a single step you can undo. To keep a symbol in step with the file it came from, link it to that file instead; see <a href="pipeline.html">Pipeline</a>.</p>
 
 </article>
 </main>

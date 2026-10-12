@@ -31,6 +31,9 @@ signals:
     /// An item or folder was dropped into the folder \a folder (empty for
     /// the top level).
     void moveRequested(const QString& name, const QString& folder);
+    /// A drag of an item is starting, and has ended.
+    void dragStarting(const QString& kind, const QString& name);
+    void dragEnded();
 
 protected:
     void startDrag(Qt::DropActions supportedActions) override;
@@ -60,6 +63,14 @@ public:
 
     void setDocument(const fla::FLADocument* document);
 
+    /// An external library: another file's, read-only, its items copied
+    /// into the document rather than changed.
+    void setExternal(bool external);
+    bool isExternal() const { return _external; }
+
+    /// Whether library items copied (from any library) can be pasted.
+    void setCanPaste(std::function<bool()> canPaste) { _canPaste = std::move(canPaste); }
+
     /// What draws the preview of an item: its kind ("symbol" or "bitmap"),
     /// its name and the size to fill.
     void setPreviewProvider(std::function<QImage(const QString&, const QString&, const QSize&)> provider);
@@ -78,6 +89,9 @@ public:
     /// The folder new symbols go into: the folder selected, or the one
     /// holding the item selected; empty for the top level.
     QString currentFolder() const;
+
+    /// Selects the item \a name, opening the folders it is in.
+    void selectItem(const QString& name);
 
     /// What plays a symbol in the preview: how many frames it has, and one
     /// of them drawn at a size.
@@ -119,6 +133,14 @@ signals:
     /// A bitmap opened in another program, and read back when it is saved.
     void editBitmapWithRequested(const QString& name);
     void newSymbolRequested();
+    /// Library items to copy, to paste into another document's library.
+    void copyItemsRequested(const QStringList& names);
+    void pasteItemsRequested();
+    /// From an external library: items to copy into the open document.
+    void copyToDocumentRequested(const QStringList& names);
+    /// From an external library: a drag of an item has started or ended.
+    void externalDragStarted(const QString& kind, const QString& name);
+    void externalDragEnded();
 
 protected:
     bool eventFilter(QObject* watched, QEvent* event) override;
@@ -156,6 +178,8 @@ private:
     QLineEdit* _search;
     std::function<QImage(const QString&, const QString&, const QSize&)> _previewProvider;
     QStringList _built;
+    bool _external = false;
+    std::function<bool()> _canPaste;
     std::function<int(const QString&)> _frameCount;
     std::function<QImage(const QString&, int, const QSize&)> _framePreview;
     class QToolButton* _play = nullptr;

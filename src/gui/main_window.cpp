@@ -25,6 +25,8 @@
 #include "layer_depth_panel.h"
 #include "camera_tool.h"
 #include "bone_tool.h"
+#include "movie_explorer.h"
+#include "../edit/library_transfer.h"
 #include "preferences.h"
 #include "../edit/ik_pose.h"
 #include "find_replace_dialog.h"
@@ -1067,6 +1069,37 @@ void MainWindow::createPanels()
         _controllersDock->hide();
     }
 
+    // The Movie Explorer, closed until asked; filled when shown.
+    if (!_movieExplorerDock)
+    {
+        _movieExplorer = new MovieExplorer([this]() -> fla::Document* { return _flaDocument ? _flaDocument->document : nullptr; });
+        _movieExplorerDock = new QDockWidget("Movie Explorer", this);
+        _movieExplorerDock->setObjectName("movieExplorerDock");
+        _movieExplorerDock->setAllowedAreas(Qt::AllDockWidgetAreas);
+        _movieExplorer->setParent(_movieExplorerDock);
+        _movieExplorerDock->setWidget(_movieExplorer);
+        addDockWidget(Qt::RightDockWidgetArea, _movieExplorerDock);
+        _movieExplorerDock->hide();
+        connect(_movieExplorerDock, &QDockWidget::visibilityChanged, this, [this](bool visible) {
+            if (visible)
+                _movieExplorer->refresh();
+        });
+        connect(_movieExplorer, &MovieExplorer::goToRequested, this, &MainWindow::goToMatch);
+        connect(_movieExplorer, &MovieExplorer::showInLibraryRequested, this, [this](const QString& name) {
+            if (!_libraryPanel)
+                return;
+            for (QWidget* parent = _libraryPanel->parentWidget(); parent; parent = parent->parentWidget())
+                if (auto* dock = qobject_cast<QDockWidget*>(parent))
+                {
+                    dock->show();
+                    dock->raise();
+                    break;
+                }
+            _libraryPanel->refreshIfStale();
+            _libraryPanel->selectItem(name);
+        });
+    }
+
     // Scenes, closed until asked.
     if (!_scenesDock)
     {
@@ -1261,6 +1294,7 @@ void MainWindow::setupWindowMenu()
             {"&Review Notes", _notesDock, QKeySequence(), "Notes on frames from whoever reviews the shot; they never export"},
             {"Co&ntrollers", _controllersDock, QKeySequence(), "Master controllers: one slider driving properties on several layers"},
             {"Sc&ene", _scenesDock, QKeySequence(Qt::SHIFT | Qt::Key_F2), "The document's scenes: switch, add, duplicate, delete, rename and reorder them"},
+            {"Mo&vie Explorer", _movieExplorerDock, QKeySequence(Qt::ALT | Qt::Key_F3), "The whole document as a tree: scenes, layers, frames, objects and symbols"},
             {"F&unction Curves", _functionCurvesDock, QKeySequence(), "Any property of the current layer as a curve over time, its keyframes dragged up or down"},
             {"Pale&ttes", _palettesDock, QKeySequence(), "Linked palettes: named colors that recolor everything linked to them, swapped whole"},
         },
@@ -3583,6 +3617,10 @@ void MainWindow::setupMenus()
     importLibraryAction->setStatusTip("Import images and sounds into the library");
     connect(importLibraryAction, &QAction::triggered, this, &MainWindow::importToLibrary);
     importMenu->addAction(importLibraryAction);
+    QAction* externalLibraryAction = importMenu->addAction("Open &External Library...");
+    externalLibraryAction->setShortcut(QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_O));
+    externalLibraryAction->setStatusTip("Another file's library beside this one, to copy items from");
+    connect(externalLibraryAction, &QAction::triggered, this, &MainWindow::openExternalLibrary);
     QAction* importAnimaticAction = importMenu->addAction("Import &Animatic...");
     importAnimaticAction->setStatusTip("An animatic's cut from Storyboard Pro or an editor (EDL, Final Cut XML): its shots as labels, boards and audio");
     connect(importAnimaticAction, &QAction::triggered, this, &MainWindow::importAnimatic);
@@ -5614,25 +5652,7 @@ void MainWindow::showFindReplace()
             if (_propertiesPanel)
                 _propertiesPanel->refresh();
         });
-        connect(_findReplace, &FindReplaceDialog::goToRequested, this, [this](const fla::find::Match& match) {
-            fla::Document* document = _flaDocument ? _flaDocument->document : nullptr;
-            if (!document || !_phoenixView)
-                return;
-            // On its scene, or inside its symbol, at its frame, selected.
-            _phoenixView->exitToDepth(0);
-            if (match.symbol)
-                _phoenixView->editSymbol(match.symbol);
-            else
-                goToScene(match.scene);
-            if (_player)
-                _player->setCurrentFrame(match.frame);
-            _selection.clear();
-            if (match.topElement)
-                _selection.select(match.topElement);
-            _phoenixView->clearCaches();
-            _phoenixView->update();
-            updateSelectionState();
-        });
+        connect(_findReplace, &FindReplaceDialog::goToRequested, this, &MainWindow::goToMatch);
     }
     _findReplace->refresh();
     _findReplace->show();
@@ -6785,6 +6805,19 @@ void MainWindow::setupPropertiesPanel()
     connect(_libraryPanel, &LibraryPanel::editBitmapWithRequested, this, &MainWindow::editBitmapWith);
     connect(_libraryPanel, &LibraryPanel::soundPropertiesRequested, this, &MainWindow::soundProperties);
     connect(_libraryPanel, &LibraryPanel::newSymbolRequested, this, &MainWindow::newSymbol);
+    _libraryPanel->setCanPaste([this]() {
+        return !_libraryClipboard.isEmpty() && documentAlive(_libraryClipboardSource) &&
+            (!_flaDocument || _libraryClipboardSource != _flaDocument->document);
+    });
+    connect(_libraryPanel, &LibraryPanel::copyItemsRequested, this, [this](const QStringList& names) {
+        _libraryClipboardSource = _flaDocument ? _flaDocument->document : nullptr;
+        _libraryClipboard = names;
+        statusBar()->showMessage("Paste them into another document's library.", 4000);
+    });
+    connect(_libraryPanel, &LibraryPanel::pasteItemsRequested, this, [this]() {
+        if (_libraryClipboardSource && documentAlive(_libraryClipboardSource))
+            copyLibraryItems(*_libraryClipboardSource, _libraryClipboard);
+    });
     connect(_libraryPanel, &LibraryPanel::editSymbolRequested, this, [this](const QString& name) {
         if (!_phoenixView || !_flaDocument || !_flaDocument->document || !_flaDocument->document->symbolList)
             return;
@@ -7120,10 +7153,21 @@ void MainWindow::setupPropertiesPanel()
     });
 }
 
-void MainWindow::placeLibraryItem(const QString& kind, const QString& name, const QPointF& position)
+void MainWindow::placeLibraryItem(const QString& kind, const QString& droppedName, const QPointF& position)
 {
     if (!_phoenixView || !_flaDocument || !_flaDocument->document)
         return;
+    QString name = droppedName;
+    // From an external library: copied in first, with what it uses.
+    if (_externalDragSource && _externalDragName == droppedName && documentAlive(_externalDragSource))
+    {
+        const fla::Document* source = _externalDragSource;
+        _externalDragSource = nullptr;
+        const std::vector<std::string> added = copyLibraryItems(*source, {droppedName});
+        if (added.empty())
+            return;
+        name = QString::fromStdString(added.front());
+    }
     if (kind == "sound")
     {
         attachSound(name);
@@ -9262,6 +9306,164 @@ void MainWindow::soundProperties(const QString& name)
     dialog.exec();
     if (*voice >= 0)
         AudioEngine::instance().stop(*voice);
+}
+
+bool MainWindow::documentAlive(const fla::Document* document) const
+{
+    if (!document)
+        return false;
+    if (_flaDocument && _flaDocument->document == document)
+        return true;
+    for (const auto& tab : _tabs)
+        if (tab && tab->document && tab->document->document == document)
+            return true;
+    for (const auto& library : _externalLibraries)
+        if (library->document && library->document->document == document)
+            return true;
+    return false;
+}
+
+std::vector<std::string> MainWindow::copyLibraryItems(const fla::Document& source, const QStringList& names)
+{
+    std::vector<std::string> added;
+    fla::Document* document = _flaDocument ? _flaDocument->document : nullptr;
+    if (!document || names.isEmpty())
+        return added;
+    std::vector<std::string> items;
+    for (const QString& name : names)
+        items.push_back(name.toStdString());
+    fla::transfer::Resolution resolution = fla::transfer::Resolution::Skip;
+    const std::vector<std::string> clashes = fla::transfer::conflicts(*document, source, items);
+    if (!clashes.empty())
+    {
+        // Resolve Library Conflicts.
+        QDialog dialog(this);
+        dialog.setWindowTitle("Resolve Library Conflicts");
+        QVBoxLayout* layout = new QVBoxLayout(&dialog);
+        QLabel* intro = new QLabel(QString("The library already has %1 of the items being copied:")
+                                       .arg(clashes.size() == 1 ? QString("one") : QString::number(clashes.size())),
+            &dialog);
+        layout->addWidget(intro);
+        QListWidget* list = new QListWidget(&dialog);
+        for (const std::string& clash : clashes)
+            list->addItem(QString::fromStdString(clash));
+        list->setMaximumHeight(140);
+        layout->addWidget(list);
+        QRadioButton* skip = new QRadioButton("Don't replace existing items: the copies use the library's own", &dialog);
+        QRadioButton* replace = new QRadioButton("Replace existing items: everything that uses them shows the copies", &dialog);
+        QRadioButton* both = new QRadioButton("Keep both: the copies come in under new names", &dialog);
+        skip->setChecked(true);
+        layout->addWidget(skip);
+        layout->addWidget(replace);
+        layout->addWidget(both);
+        QDialogButtonBox* buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, &dialog);
+        connect(buttons, &QDialogButtonBox::accepted, &dialog, &QDialog::accept);
+        connect(buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
+        layout->addWidget(buttons);
+        if (dialog.exec() != QDialog::Accepted)
+            return added;
+        resolution = replace->isChecked() ? fla::transfer::Resolution::Replace
+            : both->isChecked()           ? fla::transfer::Resolution::KeepBoth
+                                          : fla::transfer::Resolution::Skip;
+    }
+    fla::CommandPtr command = fla::transfer::copyItems(*document, source, items, resolution, &added);
+    if (!command)
+    {
+        // Nothing new: what is wanted is the library's own.
+        if (resolution == fla::transfer::Resolution::Skip)
+            return items;
+        return {};
+    }
+    _phoenixView->flushPendingMerge();
+    _editContext.commandStack().push(std::move(command));
+    _editContext.commandStack().breakMergeChain();
+    if (_libraryPanel)
+        _libraryPanel->refreshIfStale();
+    _phoenixView->clearCaches();
+    _phoenixView->update();
+    statusBar()->showMessage(QString("Copied %1 into the library.").arg(names.join(", ")), 4000);
+    return added;
+}
+
+void MainWindow::openExternalLibrary()
+{
+    QSettings settings;
+    const QString path = QFileDialog::getOpenFileName(this, "Open External Library",
+        settings.value("importFolder").toString(), "Documents (*.fla *.xfl *.phx);;All files (*)");
+    if (path.isEmpty())
+        return;
+    std::string error;
+    std::unique_ptr<fla::FLADocument> loaded = commands::load(
+        QFileInfo(path).suffix() == "xfl" ? QFileInfo(path).absolutePath().toStdString() : path.toStdString(), error);
+    if (!loaded || !loaded->document)
+    {
+        QMessageBox::warning(this, "Open External Library",
+            QString("%1 could not be opened.\n\n%2").arg(QFileInfo(path).fileName(), QString::fromStdString(error)));
+        return;
+    }
+    auto library = std::make_unique<ExternalLibrary>();
+    library->document = std::move(loaded);
+    QDockWidget* dock = new QDockWidget("Library - " + QFileInfo(path).fileName(), this);
+    dock->setObjectName("externalLibrary" + QString::number(_externalLibraries.size()));
+    dock->setAttribute(Qt::WA_DeleteOnClose);
+    LibraryPanel* panel = new LibraryPanel(dock);
+    panel->setExternal(true);
+    panel->setDocument(library->document.get());
+    dock->setWidget(panel);
+    addDockWidget(Qt::RightDockWidgetArea, dock);
+    dock->setFloating(true);
+    dock->resize(320, 520);
+    dock->show();
+    library->dock = dock;
+    library->panel = panel;
+    const fla::Document* source = library->document->document;
+    connect(panel, &LibraryPanel::copyToDocumentRequested, this, [this, source](const QStringList& names) {
+        if (documentAlive(source))
+            copyLibraryItems(*source, names);
+    });
+    connect(panel, &LibraryPanel::copyItemsRequested, this, [this, source](const QStringList& names) {
+        _libraryClipboardSource = source;
+        _libraryClipboard = names;
+    });
+    connect(panel, &LibraryPanel::externalDragStarted, this, [this, source](const QString&, const QString& name) {
+        _externalDragSource = source;
+        _externalDragName = name;
+    });
+    connect(panel, &LibraryPanel::externalDragEnded, this, [this]() {
+        // After the drop has been handled.
+        QTimer::singleShot(0, this, [this]() { _externalDragSource = nullptr; });
+    });
+    // Closing the panel lets the file go.
+    ExternalLibrary* raw = library.get();
+    connect(dock, &QObject::destroyed, this, [this, raw]() {
+        if (_libraryClipboardSource && raw->document && _libraryClipboardSource == raw->document->document)
+            _libraryClipboard.clear();
+        _externalLibraries.erase(std::remove_if(_externalLibraries.begin(), _externalLibraries.end(),
+                                     [raw](const std::unique_ptr<ExternalLibrary>& entry) { return entry.get() == raw; }),
+            _externalLibraries.end());
+    });
+    _externalLibraries.push_back(std::move(library));
+}
+
+void MainWindow::goToMatch(const fla::find::Match& match)
+{
+    fla::Document* document = _flaDocument ? _flaDocument->document : nullptr;
+    if (!document || !_phoenixView)
+        return;
+    // On its scene, or inside its symbol, at its frame, selected.
+    _phoenixView->exitToDepth(0);
+    if (match.symbol)
+        _phoenixView->editSymbol(match.symbol);
+    else
+        goToScene(match.scene);
+    if (_player)
+        _player->setCurrentFrame(match.frame);
+    _selection.clear();
+    if (match.topElement)
+        _selection.select(match.topElement);
+    _phoenixView->clearCaches();
+    _phoenixView->update();
+    updateSelectionState();
 }
 
 void MainWindow::checkSpelling()

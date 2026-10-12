@@ -102,6 +102,7 @@ set(HEADERS
     src/gui/width_tool.h
     src/gui/preferences.h
     src/gui/shortcuts_dialog.h
+    src/gui/movie_explorer.h
     src/gui/ease_curve_dialog.h
     src/gui/file_association.h
     src/gui/color_panel.h
@@ -246,6 +247,7 @@ set(HEADERS
     src/edit/psd_import.h
     src/edit/three_d.h
     src/edit/filter_presets.h
+    src/edit/library_transfer.h
     src/edit/edit_list.h
     src/edit/combine_objects.h
     src/edit/transform_parts.h
@@ -311,6 +313,7 @@ set(SOURCES
     src/gui/width_tool.cpp
     src/gui/preferences.cpp
     src/gui/shortcuts_dialog.cpp
+    src/gui/movie_explorer.cpp
     src/gui/ease_curve_dialog.cpp
     src/gui/file_association.cpp
     src/gui/color_panel.cpp
@@ -450,6 +453,7 @@ set(SOURCES
     src/edit/psd_import.cpp
     src/edit/three_d.cpp
     src/edit/filter_presets.cpp
+    src/edit/library_transfer.cpp
     src/edit/edit_list.cpp
     src/edit/combine_objects.cpp
     src/edit/swatches.cpp

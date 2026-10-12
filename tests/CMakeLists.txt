@@ -80,6 +80,7 @@ set(TEST_CORE_SOURCES
     ${PHOENIX_SRC}/edit/frame_bake.cpp
     ${PHOENIX_SRC}/edit/shot_breakdown.cpp
     ${PHOENIX_SRC}/edit/linked_assets.cpp
+    ${PHOENIX_SRC}/edit/library_transfer.cpp
     ${PHOENIX_SRC}/edit/review_notes.cpp
     ${PHOENIX_SRC}/edit/pegs.cpp
     ${PHOENIX_SRC}/edit/controllers.cpp
@@ -136,6 +137,7 @@ set(TEST_SOURCES
     test_library_commands.cpp
     test_shot_breakdown.cpp
     test_linked_assets.cpp
+    test_library_transfer.cpp
     test_review_notes.cpp
     test_pegs.cpp
     test_controllers.cpp

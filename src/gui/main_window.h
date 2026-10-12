@@ -6,6 +6,7 @@
 #include "player.h"
 #include "../data/fla_document.h"
 #include "../data/bitmap.h"
+#include "../edit/find_replace.h"
 #include "../data/static_text.h"
 #include "free_transform_tool.h"
 #include "brush_tools.h"
@@ -253,6 +254,18 @@ private slots:
     bool reimportBitmap(fla::Bitmap* bitmap, const QString& path, const char* name);
     void editBitmapWith(const QString& name);
     void soundProperties(const QString& name);
+
+    /// File > Import > Open External Library: another file's library,
+    /// read-only, in a panel of its own, its items copied in by dragging
+    /// them to the stage or with Copy to Document.
+    void openExternalLibrary();
+    /// Copies \a names and what they use from \a source into the open
+    /// document, asking what to do with items it already has (Resolve
+    /// Library Conflicts). The names they have here, empty when nothing
+    /// was copied.
+    std::vector<std::string> copyLibraryItems(const fla::Document& source, const QStringList& names);
+    /// Whether \a document is still open, in a tab or an external library.
+    bool documentAlive(const fla::Document* document) const;
     /// Layer parenting: \a layer follows \a parent (null for none) from
     /// now on, its objects staying where they are on every keyframe.
     void setParentLayer(fla::Timeline* timeline, fla::Layer* layer, fla::Layer* parent);
@@ -537,6 +550,20 @@ private:
     /// bitmap name, watched for saves.
     class QFileSystemWatcher* _editedBitmaps = nullptr;
     std::map<QString, QString> _editedBitmapFiles;
+    /// Libraries of other files opened beside the document.
+    struct ExternalLibrary
+    {
+        std::unique_ptr<fla::FLADocument> document;
+        QDockWidget* dock = nullptr;
+        class LibraryPanel* panel = nullptr;
+    };
+    std::vector<std::unique_ptr<ExternalLibrary>> _externalLibraries;
+    /// Library items copied, to paste into another document's library.
+    const fla::Document* _libraryClipboardSource = nullptr;
+    QStringList _libraryClipboard;
+    /// An item being dragged from an external library onto the stage.
+    const fla::Document* _externalDragSource = nullptr;
+    QString _externalDragName;
     void chooseTool(Tool* tool);
     /// The tool to go back to when the pen is turned back from its eraser
     /// end.
@@ -622,6 +649,9 @@ private:
     /// Scene: the document's scenes.
     class ScenePanel* _scenes = nullptr;
     QDockWidget* _scenesDock = nullptr;
+    /// Movie Explorer: the document as a tree, by scene and symbol.
+    class MovieExplorer* _movieExplorer = nullptr;
+    QDockWidget* _movieExplorerDock = nullptr;
     /// The scene the editor was last set up for.
     const fla::Timeline* _shownScene = nullptr;
     /// Function Curves: any property of the current layer over time.
@@ -633,6 +663,9 @@ private:
     /// Edit > Find and Replace, made when first asked for.
     class FindReplaceDialog* _findReplace = nullptr;
     void showFindReplace();
+    /// Shows where \a match is: its scene or symbol, its frame, the object
+    /// selected.
+    void goToMatch(const fla::find::Match& match);
     /// File > Check Document: the FLA doctor on the open document.
     void checkDocument();
     /// File > Compare With: the diff command against another version.
