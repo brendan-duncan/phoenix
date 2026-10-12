@@ -102,3 +102,16 @@ TEST(damaged_dat_is_refused)
     CHECK(!fla::isLosslessBitmapData(std::vector<uint8_t>{0x03, 0x05}));
     CHECK(fla::isJpegData(std::vector<uint8_t>{0xff, 0xd8, 0xff, 0xe0}));
 }
+
+TEST(lossless_bitmaps_encode_as_animate_reads_them)
+{
+    const std::vector<uint32_t> pixels = {0xff112233u, 0x80402010u, 0x00000000u, 0xffffffffu, 0xff000000u, 0x7f7f7f7fu};
+    const std::vector<uint8_t> data = fla::encodeLosslessBitmap(3, 2, pixels);
+    CHECK(fla::isLosslessBitmapData(data));
+    // The header as Animate writes it: size in pixels, frame in twips.
+    CHECK(data[4] == 3 && data[6] == 2 && data[12] == 60 && data[20] == 40 && data[25] == 1);
+    fla::DecodedBitmap decoded;
+    CHECK(fla::decodeLosslessBitmap(data, decoded));
+    CHECK(decoded.width == 3 && decoded.height == 2);
+    CHECK(decoded.pixels == pixels);
+}

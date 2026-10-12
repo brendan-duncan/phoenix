@@ -72,6 +72,7 @@ set(HEADERS
     src/gui/properties_panel.h
     src/gui/library_panel.h
     src/gui/audio_engine.h
+    src/gui/media_import.h
     src/gui/timeline_audio.h
     src/gui/new_document_dialog.h
     src/gui/updater.h
@@ -182,6 +183,7 @@ set(HEADERS
     src/edit/layer_commands.h
     src/edit/timeline_edit.h
     src/edit/library_commands.h
+    src/edit/library_media.h
     src/edit/property_command.h
     src/geom/curve.h
     src/geom/intersect.h
@@ -205,6 +207,7 @@ set(SOURCES
     src/gui/properties_panel.cpp
     src/gui/library_panel.cpp
     src/gui/audio_engine.cpp
+    src/gui/media_import.cpp
     src/gui/timeline_audio.cpp
     src/gui/miniaudio_impl.c
     src/gui/new_document_dialog.cpp
@@ -311,6 +314,7 @@ set(SOURCES
     src/edit/layer_commands.cpp
     src/edit/timeline_edit.cpp
     src/edit/library_commands.cpp
+    src/edit/library_media.cpp
     src/geom/curve.cpp
     src/geom/intersect.cpp
     src/geom/fill_attribution.cpp

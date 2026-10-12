@@ -76,6 +76,10 @@ private slots:
 
     void exportSvg();
     void exportMovie();
+    /// File > Import: image and sound files into the library and, for
+    /// Import to Stage, images onto the current frame.
+    void importToStage();
+    void importToLibrary();
     /// Shows and edits the scene at index (counting from 0) on its first
     /// frame, leaving any symbol being edited.
     void goToScene(int index);
@@ -314,6 +318,20 @@ private:
     /// Places an instance of a library item where it was dropped, centered
     /// there, as Animate does.
     void placeLibraryItem(const QString& kind, const QString& name, const QPointF& position);
+
+    /// Brings image and sound files into the library as one undo step,
+    /// placing the images on the current frame with \a toStage: their
+    /// top-left at the stage's, or centered on \a at when given. Sounds go on
+    /// the current keyframe when dropped on the stage.
+    void importMedia(const QStringList& paths, bool toStage, const QPointF* at = nullptr);
+
+    /// Import to Stage of a numbered sequence: each image in its own blank
+    /// keyframe on the current layer, from the playhead on.
+    void importSequence(const QStringList& paths);
+
+    /// Puts a library sound on the keyframe the playhead is in on the
+    /// current layer, as dragging one onto the stage does in Animate.
+    void attachSound(const QString& name);
 
     /// Which toolbox icon stands for \a tool, for the Properties panel's
     /// Tool tab.

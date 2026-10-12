@@ -28,4 +28,9 @@ bool isLosslessBitmapData(const std::vector<uint8_t>& data);
 /// the stream is damaged.
 bool decodeLosslessBitmap(const std::vector<uint8_t>& data, DecodedBitmap& out);
 
+/// Encodes pixels (0xAARRGGBB, premultiplied, top row first) as Animate's
+/// lossless .dat: the header, then the rows deflated and stored in pieces
+/// of 2048 bytes, as Animate writes them.
+std::vector<uint8_t> encodeLosslessBitmap(int width, int height, const std::vector<uint32_t>& pixels);
+
 } // namespace fla

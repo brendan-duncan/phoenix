@@ -70,6 +70,7 @@ set(TEST_CORE_SOURCES
     ${PHOENIX_SRC}/edit/layer_commands.cpp
     ${PHOENIX_SRC}/edit/timeline_edit.cpp
     ${PHOENIX_SRC}/edit/library_commands.cpp
+    ${PHOENIX_SRC}/edit/library_media.cpp
     ${PHOENIX_SRC}/gui/audio_engine.cpp
     ${PHOENIX_SRC}/gui/miniaudio_impl.c
     ${PHOENIX_SRC}/edit/snapping.cpp

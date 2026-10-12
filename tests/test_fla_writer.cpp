@@ -4,6 +4,10 @@
 #include "../src/data/fla_document.h"
 #include "../src/data/symbol_list.h"
 #include "../src/edit/new_document.h"
+#include "../src/edit/library_media.h"
+#include "../src/edit/command_stack.h"
+#include "../src/data/bitmap.h"
+#include "../src/data/bitmap_decoder.h"
 #include "../src/parser/fla_parser.h"
 #include "../src/parser/zip_reader.h"
 #include "../src/util/zip_writer.h"
@@ -216,4 +220,52 @@ TEST(fla_writer_packs_a_new_document_as_animate_does)
     CHECK(reader.readTextFile("mimetype") == "application/vnd.adobe.xfl");
     CHECK(reader.containsFile("META-INF/metadata.xml"));
     CHECK(reader.containsFile("DOMDocument.xml"));
+}
+
+TEST(imported_bitmaps_and_sounds_are_saved_and_read_back)
+{
+    std::unique_ptr<fla::FLADocument> created(fla::createEmptyDocument());
+    CHECK(created && created->document);
+    if (!created || !created->document)
+        return;
+    fla::Document* document = created->document;
+    const std::vector<uint32_t> pixels(4, 0xff336699u);
+    fla::Bitmap* bitmap = fla::media::newBitmap(*document, "photo.png", "C:/art/photo.png", 2, 2,
+        fla::encodeLosslessBitmap(2, 2, pixels), false);
+    fla::CommandStack stack;
+    stack.push(fla::CommandPtr(new fla::AddBitmapCommand(document, bitmap, "Import")));
+    fla::media::Sound sound;
+    sound.name = "line.wav";
+    sound.channels = 1;
+    sound.samples = {0, 1000, -1000, 32767};
+    auto* addSound = new fla::AddSoundCommand(document, sound, "Import");
+    stack.push(fla::CommandPtr(addSound));
+    // A second import of the same name gets a name of its own.
+    CHECK(fla::media::freeName(*document, "photo.png") == "photo 2.png");
+
+    ScratchDirectory scratch("fla_import");
+    const std::string written = scratch.file("imported.fla");
+    fla::FLAWriter writer;
+    CHECK(writer.write(*document, written));
+    FLAParser parser;
+    std::unique_ptr<fla::FLADocument> read(parser.parse(written));
+    CHECK(read && read->document);
+    if (!read || !read->document)
+        return;
+    CHECK(read->document->resources.size() == 1);
+    if (read->document->resources.size() == 1)
+    {
+        const fla::Bitmap* back = static_cast<const fla::Bitmap*>(read->document->resources.front());
+        fla::DecodedBitmap decoded;
+        CHECK(back->name == "photo.png" && fla::decodeLosslessBitmap(back->datData, decoded));
+        CHECK(decoded.pixels == pixels);
+    }
+    CHECK(read->document->sounds.size() == 1);
+    if (read->document->sounds.size() == 1)
+        CHECK(read->document->sounds.front().format == "44kHz 16bit Mono");
+
+    // Undone, both leave the library.
+    stack.undo();
+    stack.undo();
+    CHECK(document->resources.empty() && document->sounds.empty() && document->extraMedia.empty());
 }

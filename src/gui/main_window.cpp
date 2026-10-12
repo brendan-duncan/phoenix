@@ -5,10 +5,13 @@
 #include "new_document_dialog.h"
 #include "timeline_audio.h"
 #include "updater.h"
+#include "../data/bitmap.h"
 #include "../data/bitmap_instance.h"
 #include "draw_placement.h"
 #include "library_panel.h"
+#include "media_import.h"
 #include "../edit/layer_commands.h"
+#include "../edit/library_media.h"
 #include "../edit/timeline_edit.h"
 #include "../edit/library_commands.h"
 #include "../edit/property_command.h"
@@ -257,9 +260,12 @@ void MainWindow::dragEnterEvent(QDragEnterEvent* event)
 {
     if (!event->mimeData()->hasUrls())
         return;
+    const bool open = _flaDocument && _flaDocument->document;
     for (const QUrl& url : event->mimeData()->urls())
     {
-        if (url.isLocalFile() && isDocumentPath(url.toLocalFile()))
+        const QString path = url.toLocalFile();
+        if (url.isLocalFile() && (isDocumentPath(path) ||
+            (open && (MediaImport::isImage(path) || MediaImport::isSound(path)))))
         {
             event->acceptProposedAction();
             return;
@@ -269,15 +275,38 @@ void MainWindow::dragEnterEvent(QDragEnterEvent* event)
 
 void MainWindow::dropEvent(QDropEvent* event)
 {
+    QStringList media;
     for (const QUrl& url : event->mimeData()->urls())
     {
-        if (url.isLocalFile() && isDocumentPath(url.toLocalFile()))
+        if (!url.isLocalFile())
+            continue;
+        const QString path = url.toLocalFile();
+        if (isDocumentPath(path))
         {
             event->acceptProposedAction();
-            loadFLAFile(url.toLocalFile());
+            loadFLAFile(path);
+            return;
+        }
+        if (MediaImport::isImage(path) || MediaImport::isSound(path))
+            media << path;
+    }
+    if (media.isEmpty() || !_flaDocument || !_flaDocument->document)
+        return;
+    event->acceptProposedAction();
+
+    // Files dropped on the stage land where they were dropped; anywhere else
+    // in the window they go into the library, as Animate takes them.
+    if (_phoenixView)
+    {
+        const QPoint local = _phoenixView->mapFrom(this, event->position().toPoint());
+        if (_phoenixView->rect().contains(local))
+        {
+            const QPointF at = _phoenixView->mapToDocument(QPointF(local));
+            importMedia(media, true, &at);
             return;
         }
     }
+    importMedia(media, false);
 }
 
 void MainWindow::releaseDocument()
@@ -1011,6 +1040,18 @@ void MainWindow::setupMenus()
     fileMenu->addAction(saveAsAction);
 
     fileMenu->addSeparator();
+
+    QMenu* importMenu = fileMenu->addMenu("&Import");
+
+    QAction* importStageAction = new QAction("Import to &Stage...", this);
+    importStageAction->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_R));
+    importStageAction->setStatusTip("Import images onto the current frame and sounds into the library");
+    connect(importStageAction, &QAction::triggered, this, &MainWindow::importToStage);
+    importMenu->addAction(importStageAction);
+    QAction* importLibraryAction = new QAction("Import to &Library...", this);
+    importLibraryAction->setStatusTip("Import images and sounds into the library");
+    connect(importLibraryAction, &QAction::triggered, this, &MainWindow::importToLibrary);
+    importMenu->addAction(importLibraryAction);
 
     QMenu* exportMenu = fileMenu->addMenu("Export");
 
@@ -2455,6 +2496,11 @@ void MainWindow::placeLibraryItem(const QString& kind, const QString& name, cons
 {
     if (!_phoenixView || !_flaDocument || !_flaDocument->document)
         return;
+    if (kind == "sound")
+    {
+        attachSound(name);
+        return;
+    }
     fla::Frame* frame = _phoenixView->activeFrame();
     if (!frame)
     {
@@ -2497,6 +2543,258 @@ void MainWindow::placeLibraryItem(const QString& kind, const QString& name, cons
         "Add Instance", true);
     _phoenixView->clearCaches();
     _phoenixView->update();
+}
+
+namespace {
+
+const char* const kImportFilter =
+    "All importable files (*.png *.jpg *.jpeg *.gif *.bmp *.wav *.aif *.aiff *.mp3 *.flac *.ogg);;"
+    "Images (*.png *.jpg *.jpeg *.gif *.bmp);;"
+    "Sounds (*.wav *.aif *.aiff *.mp3 *.flac *.ogg);;"
+    "All files (*)";
+
+} // namespace
+
+void MainWindow::importToStage()
+{
+    if (!_flaDocument || !_flaDocument->document)
+        return;
+    QSettings settings;
+    const QStringList paths = QFileDialog::getOpenFileNames(this, "Import to Stage",
+        settings.value("importFolder").toString(), kImportFilter);
+    if (paths.isEmpty())
+        return;
+    settings.setValue("importFolder", QFileInfo(paths.front()).absolutePath());
+
+    // One numbered image of a sequence offers the rest, as Animate asks.
+    if (paths.size() == 1 && MediaImport::isImage(paths.front()))
+    {
+        const QStringList sequence = MediaImport::sequenceOf(paths.front());
+        if (!sequence.isEmpty())
+        {
+            const QMessageBox::StandardButton answer = QMessageBox::question(this, "Import to Stage",
+                QString("%1 appears to be one of a sequence of %2 images. Import them all?")
+                    .arg(QFileInfo(paths.front()).fileName()).arg(sequence.size()),
+                QMessageBox::Yes | QMessageBox::No | QMessageBox::Cancel, QMessageBox::Yes);
+            if (answer == QMessageBox::Cancel)
+                return;
+            if (answer == QMessageBox::Yes)
+            {
+                importSequence(sequence);
+                return;
+            }
+        }
+    }
+    importMedia(paths, true);
+}
+
+void MainWindow::importToLibrary()
+{
+    if (!_flaDocument || !_flaDocument->document)
+        return;
+    QSettings settings;
+    const QStringList paths = QFileDialog::getOpenFileNames(this, "Import to Library",
+        settings.value("importFolder").toString(), kImportFilter);
+    if (paths.isEmpty())
+        return;
+    settings.setValue("importFolder", QFileInfo(paths.front()).absolutePath());
+    importMedia(paths, false);
+}
+
+void MainWindow::importMedia(const QStringList& paths, bool toStage, const QPointF* at)
+{
+    if (!_phoenixView || !_flaDocument || !_flaDocument->document)
+        return;
+    fla::Document* document = _flaDocument->document;
+    _phoenixView->flushPendingMerge();
+    fla::Frame* frame = toStage ? _phoenixView->activeFrame() : nullptr;
+    if (toStage && !frame && std::any_of(paths.begin(), paths.end(), MediaImport::isImage))
+        statusBar()->showMessage("The current layer is locked or hidden; the images went into the library.", 4000);
+
+    fla::CommandStack& stack = _editContext.commandStack();
+    const char* name = toStage ? "Import to Stage" : "Import to Library";
+    QStringList problems;
+    std::vector<fla::DOMElement*> placed;
+    QString soundOnStage;
+    stack.beginMacro(name);
+    for (const QString& path : paths)
+    {
+        QString error;
+        if (MediaImport::isImage(path))
+        {
+            fla::Bitmap* bitmap = MediaImport::loadImage(*document, path, error);
+            if (!bitmap)
+            {
+                problems << error;
+                continue;
+            }
+            const std::string itemName = bitmap->name;
+            const double width = bitmap->frameRight / 20.0;
+            const double height = bitmap->frameBottom / 20.0;
+            stack.push(fla::CommandPtr(new fla::AddBitmapCommand(document, bitmap, name)));
+            if (!frame)
+                continue;
+            // At the top-left of the stage, or centered where it was dropped.
+            fla::BitmapInstance* instance = new fla::BitmapInstance(frame);
+            instance->libraryItemName = itemName;
+            instance->transform.tx = at ? at->x() - width / 2.0 : 0.0;
+            instance->transform.ty = at ? at->y() - height / 2.0 : 0.0;
+            stack.push(fla::CommandPtr(new fla::AddElementCommand(frame, instance, name, &_selection)));
+            placed.push_back(instance);
+        }
+        else if (MediaImport::isSound(path))
+        {
+            fla::media::Sound sound;
+            if (!MediaImport::loadSound(path, sound, error))
+            {
+                problems << error;
+                continue;
+            }
+            auto* command = new fla::AddSoundCommand(document, sound, name);
+            const QString soundName = QString::fromStdString(command->soundName());
+            stack.push(fla::CommandPtr(command));
+            if (at)
+                soundOnStage = soundName;
+        }
+        else
+        {
+            problems << QString("%1 is not a file Phoenix imports.").arg(QFileInfo(path).fileName());
+        }
+    }
+    stack.endMacro();
+    stack.breakMergeChain();
+
+    if (!placed.empty())
+        _selection.select(placed);
+    if (_libraryPanel)
+        _libraryPanel->refreshIfStale();
+    _phoenixView->invalidateBounds();
+    _phoenixView->clearCaches();
+    _phoenixView->update();
+    if (!soundOnStage.isEmpty())
+        attachSound(soundOnStage);
+    if (!problems.isEmpty())
+        QMessageBox::warning(this, name, problems.join("\n"));
+}
+
+void MainWindow::importSequence(const QStringList& paths)
+{
+    if (!_phoenixView || !_flaDocument || !_flaDocument->document || !_timelineView)
+        return;
+    fla::Timeline* timeline = nullptr;
+    int index = 0;
+    if (!_timelineView->currentLayer(timeline, index) || !timeline ||
+        index < 0 || index >= static_cast<int>(timeline->layers.size()))
+        return;
+    fla::Layer* layer = timeline->layers[index];
+    if (layer->isLocked())
+    {
+        statusBar()->showMessage("The current layer is locked.", 3000);
+        return;
+    }
+    fla::Document* document = _flaDocument->document;
+    _phoenixView->flushPendingMerge();
+    _selection.clear();
+
+    // Read them all first, so a file that cannot be read leaves no gap.
+    QStringList problems;
+    std::vector<fla::Bitmap*> bitmaps;
+    for (const QString& path : paths)
+    {
+        QString error;
+        fla::Bitmap* bitmap = MediaImport::loadImage(*document, path, error);
+        if (bitmap)
+            bitmaps.push_back(bitmap);
+        else
+            problems << error;
+    }
+    if (bitmaps.empty())
+    {
+        QMessageBox::warning(this, "Import to Stage", problems.join("\n"));
+        return;
+    }
+
+    const char* name = "Import to Stage";
+    fla::CommandStack& stack = _editContext.commandStack();
+    const int start = _player ? _player->currentFrame() : 0;
+    const int count = static_cast<int>(bitmaps.size());
+    auto frames = std::make_shared<std::vector<fla::Frame*>>();
+    stack.beginMacro(name);
+    stack.push(fla::CommandPtr(new fla::EditFramesCommand({layer}, name,
+        [layer, start, count, frames](std::vector<fla::Frame*>&) {
+            for (int i = 0; i < count; ++i)
+                frames->push_back(fla::timeline::insertKeyframe(*layer, start + i, true));
+        })));
+    for (int i = 0; i < count; ++i)
+    {
+        fla::Bitmap* bitmap = bitmaps[static_cast<size_t>(i)];
+        const std::string itemName = bitmap->name;
+        stack.push(fla::CommandPtr(new fla::AddBitmapCommand(document, bitmap, name)));
+        fla::Frame* frame = i < static_cast<int>(frames->size()) ? (*frames)[static_cast<size_t>(i)] : nullptr;
+        if (!frame)
+            continue;
+        fla::BitmapInstance* instance = new fla::BitmapInstance(frame);
+        instance->libraryItemName = itemName;
+        stack.push(fla::CommandPtr(new fla::AddElementCommand(frame, instance, name, &_selection)));
+    }
+    stack.endMacro();
+    stack.breakMergeChain();
+
+    if (_libraryPanel)
+        _libraryPanel->refreshIfStale();
+    if (_timelineView)
+        _timelineView->refreshFrames();
+    _phoenixView->invalidateBounds();
+    _phoenixView->clearCaches();
+    _phoenixView->update();
+    if (!problems.isEmpty())
+        QMessageBox::warning(this, name, problems.join("\n"));
+}
+
+void MainWindow::attachSound(const QString& name)
+{
+    if (!_flaDocument || !_flaDocument->document || !_timelineView)
+        return;
+    fla::Timeline* timeline = nullptr;
+    int index = 0;
+    if (!_timelineView->currentLayer(timeline, index) || !timeline ||
+        index < 0 || index >= static_cast<int>(timeline->layers.size()))
+        return;
+    fla::Layer* layer = timeline->layers[index];
+    if (layer->isLocked())
+    {
+        statusBar()->showMessage("The current layer is locked.", 3000);
+        return;
+    }
+    const int at = _player ? _player->currentFrame() : 0;
+    const std::string soundName = name.toStdString();
+    _selection.clear();
+    auto* command = new fla::EditFramesCommand({layer}, "Add Sound",
+        [layer, at, soundName](std::vector<fla::Frame*>&) {
+            // The keyframe the playhead is in, or a new one past the end.
+            fla::Frame* frame = fla::timeline::spanAt(*layer, at);
+            if (!frame)
+                frame = fla::timeline::insertKeyframe(*layer, at, true);
+            if (!frame)
+                return;
+            // A sound replaces whatever the keyframe played, with Animate's
+            // defaults: an event sound, played once.
+            static const char* const settings[] = {"soundName", "soundSync", "inPoint44", "outPoint44",
+                "soundLoop", "soundLoopMode", "soundZoomLevel", "soundEffect"};
+            auto& attributes = frame->extraAttributes;
+            attributes.erase(std::remove_if(attributes.begin(), attributes.end(),
+                [](const std::pair<std::string, std::string>& attribute) {
+                    return std::find_if(std::begin(settings), std::end(settings),
+                        [&attribute](const char* setting) { return attribute.first == setting; }) != std::end(settings);
+                }), attributes.end());
+            attributes.emplace_back("soundName", soundName);
+        });
+    _editContext.commandStack().push(fla::CommandPtr(command));
+    _editContext.commandStack().breakMergeChain();
+    if (_timelineView)
+        _timelineView->refreshFrames();
+    if (_propertiesPanel)
+        _propertiesPanel->refresh();
 }
 
 void MainWindow::chooseTool(Tool* tool)
@@ -3234,7 +3532,7 @@ bool MainWindow::canPaste() const
     if (!_clipboard.empty())
         return true;
     const QMimeData* data = QApplication::clipboard()->mimeData();
-    return data && (data->hasFormat(kElementsMime) || (data->hasText() && !data->text().isEmpty()));
+    return data && (data->hasFormat(kElementsMime) || data->hasImage() || (data->hasText() && !data->text().isEmpty()));
 }
 
 void MainWindow::putOnSystemClipboard()
@@ -3307,6 +3605,40 @@ bool MainWindow::pasteFromSystemClipboard(const char* name, bool centerInView)
             }
             frame->elements.clear();
         }
+    }
+    else if (data->hasImage() && _flaDocument && _flaDocument->document && _phoenixView)
+    {
+        // A picture from another application goes into the library as a
+        // bitmap, and an instance of it onto the stage.
+        const QImage image = qvariant_cast<QImage>(data->imageData());
+        fla::Frame* frame = _phoenixView->activeFrame();
+        if (image.isNull() || !frame)
+            return false;
+        fla::Document* document = _flaDocument->document;
+        fla::Bitmap* bitmap = MediaImport::bitmapFromImage(*document, image, "Bitmap 1");
+        if (!bitmap)
+            return false;
+        _phoenixView->flushPendingMerge();
+        fla::CommandStack& stack = _editContext.commandStack();
+        stack.beginMacro(name);
+        fla::BitmapInstance* instance = new fla::BitmapInstance(frame);
+        instance->libraryItemName = bitmap->name;
+        const QPointF center = centerInView
+            ? _phoenixView->mapToDocument(QPointF(_phoenixView->width() / 2.0, _phoenixView->height() / 2.0))
+            : QPointF(image.width() / 2.0, image.height() / 2.0);
+        instance->transform.tx = center.x() - image.width() / 2.0;
+        instance->transform.ty = center.y() - image.height() / 2.0;
+        stack.push(fla::CommandPtr(new fla::AddBitmapCommand(document, bitmap, name)));
+        stack.push(fla::CommandPtr(new fla::AddElementCommand(frame, instance, name, &_selection)));
+        stack.endMacro();
+        stack.breakMergeChain();
+        _selection.select(std::vector<fla::DOMElement*>{instance});
+        if (_libraryPanel)
+            _libraryPanel->refreshIfStale();
+        _phoenixView->invalidateBounds();
+        _phoenixView->clearCaches();
+        _phoenixView->update();
+        return true;
     }
     else if (data->hasText() && !data->text().isEmpty())
     {
