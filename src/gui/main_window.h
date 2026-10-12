@@ -414,6 +414,8 @@ private:
     QDockWidget* _infoDock = nullptr;
     class MotionEditorPanel* _motionEditor = nullptr;
     QDockWidget* _motionEditorDock = nullptr;
+    class XSheetPanel* _xsheet = nullptr;
+    QDockWidget* _xsheetDock = nullptr;
     /// What Copy Motion copied, a motionObjectXML.
     std::string _copiedMotion;
     QDockWidget* _framePickerDock = nullptr;

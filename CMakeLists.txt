@@ -80,6 +80,7 @@ set(HEADERS
     src/gui/arrange_panels.h
     src/gui/motion_editor.h
     src/gui/motion_presets.h
+    src/gui/xsheet_panel.h
     src/gui/ease_curve_dialog.h
     src/gui/file_association.h
     src/gui/color_panel.h
@@ -242,6 +243,7 @@ set(SOURCES
     src/gui/arrange_panels.cpp
     src/gui/motion_editor.cpp
     src/gui/motion_presets.cpp
+    src/gui/xsheet_panel.cpp
     src/gui/ease_curve_dialog.cpp
     src/gui/file_association.cpp
     src/gui/color_panel.cpp

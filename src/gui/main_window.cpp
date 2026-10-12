@@ -21,6 +21,7 @@
 #include "arrange_panels.h"
 #include "motion_editor.h"
 #include "motion_presets.h"
+#include "xsheet_panel.h"
 #include "swatches_panel.h"
 #include "../edit/swatches.h"
 #include "swap_symbol_dialog.h"
@@ -559,6 +560,46 @@ void MainWindow::adoptDocument(fla::FLADocument* document, const QString& filePa
         addDockWidget(Qt::BottomDockWidgetArea, _motionEditorDock);
         _motionEditorDock->hide();
         connect(_player, &Player::currentFrameChanged, _motionEditor, [this](int) { _motionEditor->refresh(); });
+    }
+
+    // The X-sheet, Harmony's view of the exposures, closed until asked.
+    if (!_xsheetDock)
+    {
+        XSheetLinks sheet;
+        sheet.commands = [this]() { return &_editContext.commandStack(); };
+        sheet.timeline = [this]() -> fla::Timeline* {
+            if (_phoenixView && _phoenixView->scopeTimeline())
+                return _phoenixView->scopeTimeline();
+            return _flaDocument && _flaDocument->document ? _flaDocument->document->currentScene() : nullptr;
+        };
+        sheet.currentFrame = [this]() { return _player ? _player->currentFrame() : 0; };
+        sheet.setCurrentFrame = [this](int frame) {
+            if (_player)
+                _player->setCurrentFrame(frame);
+        };
+        sheet.setCurrentLayer = [this](const fla::Layer* layer) {
+            if (_timelineView)
+                _timelineView->setCurrentLayer(layer);
+        };
+        sheet.changed = [this]() {
+            if (_phoenixView)
+            {
+                _phoenixView->clearCaches();
+                _phoenixView->update();
+            }
+            if (_timelineView)
+                _timelineView->refreshFrames();
+        };
+        _xsheet = new XSheetPanel(sheet);
+        _xsheetDock = new QDockWidget("X-Sheet", this);
+        _xsheetDock->setObjectName("xsheetDock");
+        _xsheetDock->setAllowedAreas(Qt::AllDockWidgetAreas);
+        _xsheet->setParent(_xsheetDock);
+        _xsheetDock->setWidget(_xsheet);
+        addDockWidget(Qt::RightDockWidgetArea, _xsheetDock);
+        _xsheetDock->hide();
+        connect(_player, &Player::currentFrameChanged, _xsheet, [this](int) { _xsheet->refresh(); });
+        connect(_phoenixView, &PhoenixView::scopeChanged, _xsheet, [this]() { _xsheet->refresh(); });
     }
 
     if (_flaDocument)
@@ -2019,6 +2060,15 @@ void MainWindow::setupMenus()
     QAction* infoAction = viewMenu->addAction("&Info");
     infoAction->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_I));
     connect(infoAction, &QAction::triggered, this, showDock(&_infoDock));
+    QAction* xsheetAction = viewMenu->addAction("&X-Sheet");
+    xsheetAction->setStatusTip("The exposures of each layer, frame by frame, typed in by drawing number");
+    connect(xsheetAction, &QAction::triggered, this, [this]() {
+        if (!_xsheetDock)
+            return;
+        _xsheetDock->show();
+        _xsheetDock->raise();
+        _xsheet->refresh();
+    });
     QAction* motionPresetsAction = viewMenu->addAction("Motion &Presets…");
     motionPresetsAction->setStatusTip("Saved motions to put on an object, Animate's among them");
     connect(motionPresetsAction, &QAction::triggered, this, &MainWindow::showMotionPresets);
@@ -2884,6 +2934,8 @@ void MainWindow::updateEditState()
         _infoPanel->refresh();
     if (_motionEditor)
         _motionEditor->refresh();
+    if (_xsheet)
+        _xsheet->refresh();
     if (_colorPanel)
         _colorPanel->refresh();
     updateFramePicker();
