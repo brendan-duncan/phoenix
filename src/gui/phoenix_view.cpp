@@ -1754,6 +1754,10 @@ PhoenixView::LayerFrame PhoenixView::resolveLayerFrame(const fla::Layer* layer,
             currentFrame = frame;
         }
     }
+    // Past a layer's last frame it shows nothing, though the timeline it is
+    // in runs on: a symbol whose layers take turns shows one at a time.
+    if (currentFrame && currentFrameIndex >= currentFrame->index + std::max(currentFrame->duration, 1))
+        currentFrame = nullptr;
 
     if (currentFrame && currentFrame->tweenType != fla::TweenType::None)
     {
