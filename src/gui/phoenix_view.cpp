@@ -903,7 +903,11 @@ void PhoenixView::drawTimeline(QPainter& painter, const fla::Timeline* timeline,
     // and a mask masks only once it is locked; until then its own art shows
     // and the layers under it show whole. Anywhere else, and in an exported
     // movie, guides are left out and masks always mask.
-    const bool editing = !_exporting && !_maskPass && timeline == scopeTimeline();
+    // At the top, with no symbol open, the scene shown is the one edited.
+    const fla::Timeline* edited = scopeTimeline();
+    if (!edited && _flaDocument && _flaDocument->document)
+        edited = _flaDocument->document->currentScene();
+    const bool editing = !_exporting && !_maskPass && timeline == edited;
     const auto masking = [editing](const fla::Layer* mask) { return !editing || mask->isLocked(); };
 
     // First pass: render mask layers to pixmaps
