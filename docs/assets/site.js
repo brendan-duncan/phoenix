@@ -17,6 +17,7 @@ const NAV = [
     { href: "drawing-tools.html", title: "Drawing tools" },
     { href: "selecting.html", title: "Selecting and transforming" },
     { href: "color.html", title: "Color, fills and strokes" },
+    { href: "ink-and-paint.html", title: "Ink, paint and palettes" },
     { href: "text.html", title: "Text" },
   ] },
   { group: "Symbols", pages: [
@@ -30,6 +31,7 @@ const NAV = [
     { href: "tweens.html", title: "Tweens and easing" },
     { href: "masks-guides.html", title: "Masks and guides" },
     { href: "bones.html", title: "Bones and inverse kinematics" },
+    { href: "rigging.html", title: "Rigs and motion" },
     { href: "sound.html", title: "Sound" },
   ] },
   { group: "Output", pages: [
