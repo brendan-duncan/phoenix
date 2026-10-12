@@ -197,6 +197,8 @@ private slots:
     void setClassicTween(bool on);
     void createShapeTween();
     void createMotionTween();
+    /// Insert > Camera: the scene's multiplane camera layer.
+    void addCamera();
     void clearFrames();
     void distributeToKeyframes();
     /// Selects what is on \a layer at \a frame, as clicking the frame does.
@@ -416,6 +418,8 @@ private:
     QDockWidget* _motionEditorDock = nullptr;
     class XSheetPanel* _xsheet = nullptr;
     QDockWidget* _xsheetDock = nullptr;
+    class LayerDepthPanel* _layerDepth = nullptr;
+    QDockWidget* _layerDepthDock = nullptr;
     /// What Copy Motion copied, a motionObjectXML.
     std::string _copiedMotion;
     QDockWidget* _framePickerDock = nullptr;

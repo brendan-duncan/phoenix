@@ -3,6 +3,7 @@
 #include "../edit/guide_command.h"
 #include "../edit/timeline_edit.h"
 #include "../edit/brush_texture.h"
+#include "../edit/camera.h"
 #include "../parser/ik_tree.h"
 #include "filters.h"
 #include "stroke_effects.h"
@@ -1737,6 +1738,38 @@ void PhoenixView::endMotionPathDrag(bool commit)
 QTransform PhoenixView::parentTransform(const fla::Layer* layer, const fla::Frame* frame, fla::LoopType loopType,
     int firstFrame, int depth)
 {
+    // The scene's layers are seen through its camera, once, outermost.
+    if (depth == 0)
+        return rigTransform(layer, frame, loopType, firstFrame, 0) * cameraTransform(layer);
+    return rigTransform(layer, frame, loopType, firstFrame, depth);
+}
+
+QTransform PhoenixView::cameraTransform(const fla::Layer* layer)
+{
+    const fla::Document* document = _flaDocument ? _flaDocument->document : nullptr;
+    const fla::Timeline* scene = document ? document->currentScene() : nullptr;
+    if (!_cameraView || !layer || !scene || layer->parent != scene || fla::camera::isCamera(*layer))
+        return QTransform();
+    if (!fla::camera::cameraOf(*scene))
+        return QTransform();
+    const int frame = _frameDepth <= 1 ? shownFrame() : (_player ? _player->currentFrame() : 0);
+    const fla::camera::State state = fla::camera::stateAt(*scene, frame, document->width, document->height);
+    fla::Transform t;
+    if (!fla::camera::view(state, fla::camera::depthOf(*layer), document->width, document->height, t))
+        return QTransform(0.0, 0.0, 0.0, 0.0, 0.0, 0.0);
+    return QTransform(t.m11, t.m12, t.m21, t.m22, t.tx, t.ty);
+}
+
+void PhoenixView::setCameraView(bool on)
+{
+    _cameraView = on;
+    clearCaches();
+    update();
+}
+
+QTransform PhoenixView::rigTransform(const fla::Layer* layer, const fla::Frame* frame, fla::LoopType loopType,
+    int firstFrame, int depth)
+{
     if (!layer || !frame || depth > 16)
         return QTransform();
     int rig = -1;
@@ -1760,7 +1793,7 @@ QTransform PhoenixView::parentTransform(const fla::Layer* layer, const fla::Fram
             return QTransform();
         const fla::Transform t = shownTransform(parent, 0);
         return QTransform(t.m11, t.m12, t.m21, t.m22, t.tx, t.ty) *
-            parentTransform(candidate, parent.frame, loopType, firstFrame, depth + 1);
+            rigTransform(candidate, parent.frame, loopType, firstFrame, depth + 1);
     }
     return QTransform();
 }

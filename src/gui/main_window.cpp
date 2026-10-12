@@ -22,6 +22,7 @@
 #include "motion_editor.h"
 #include "motion_presets.h"
 #include "xsheet_panel.h"
+#include "layer_depth_panel.h"
 #include "swatches_panel.h"
 #include "../edit/swatches.h"
 #include "swap_symbol_dialog.h"
@@ -45,6 +46,7 @@
 #include "../data/edge.h"
 #include "../edit/path_tidy.h"
 #include "../edit/element_clone.h"
+#include "../edit/camera.h"
 #include "../edit/new_document.h"
 #include "../edit/shape_merge.h"
 #include "../parser/fla_parser.h"
@@ -560,6 +562,34 @@ void MainWindow::adoptDocument(fla::FLADocument* document, const QString& filePa
         addDockWidget(Qt::BottomDockWidgetArea, _motionEditorDock);
         _motionEditorDock->hide();
         connect(_player, &Player::currentFrameChanged, _motionEditor, [this](int) { _motionEditor->refresh(); });
+    }
+
+    // Layer Depth, for the multiplane camera, closed until asked.
+    if (!_layerDepthDock)
+    {
+        LayerDepthLinks depth;
+        depth.commands = [this]() { return &_editContext.commandStack(); };
+        depth.scene = [this]() -> fla::Timeline* {
+            return _flaDocument && _flaDocument->document ? _flaDocument->document->currentScene() : nullptr;
+        };
+        depth.stageWidth = [this]() {
+            return _flaDocument && _flaDocument->document ? static_cast<double>(_flaDocument->document->width) : 550.0;
+        };
+        depth.changed = [this]() {
+            if (_phoenixView)
+            {
+                _phoenixView->clearCaches();
+                _phoenixView->update();
+            }
+        };
+        _layerDepth = new LayerDepthPanel(depth);
+        _layerDepthDock = new QDockWidget("Layer Depth", this);
+        _layerDepthDock->setObjectName("layerDepthDock");
+        _layerDepthDock->setAllowedAreas(Qt::AllDockWidgetAreas);
+        _layerDepth->setParent(_layerDepthDock);
+        _layerDepthDock->setWidget(_layerDepth);
+        addDockWidget(Qt::BottomDockWidgetArea, _layerDepthDock);
+        _layerDepthDock->hide();
     }
 
     // The X-sheet, Harmony's view of the exposures, closed until asked.
@@ -1132,6 +1162,33 @@ void MainWindow::createMotionTween()
         for (int index = first; index <= last; ++index)
             fla::timeline::createMotionTween(layer, index, rate, pivotOf);
     });
+}
+
+void MainWindow::addCamera()
+{
+    fla::Document* document = _flaDocument ? _flaDocument->document : nullptr;
+    fla::Timeline* scene = document ? document->currentScene() : nullptr;
+    if (!scene)
+        return;
+    if (fla::camera::cameraOf(*scene))
+    {
+        statusBar()->showMessage("The scene has its camera already.", 3000);
+        return;
+    }
+    int frames = 1;
+    for (const fla::Layer* layer : scene->layers)
+        if (layer)
+            frames = std::max(frames, fla::timeline::layerEnd(*layer));
+    fla::Layer* layer = fla::camera::newCameraLayer(*scene, frames, document->width, document->height);
+    _editContext.commandStack().push(fla::CommandPtr(new fla::AddLayerCommand(scene, 0, layer, "Add Camera")));
+    _editContext.commandStack().breakMergeChain();
+    if (_timelineView)
+        _timelineView->refresh();
+    if (_phoenixView)
+    {
+        _phoenixView->clearCaches();
+        _phoenixView->update();
+    }
 }
 
 fla::Frame* MainWindow::currentMotionSpan()
@@ -1760,6 +1817,9 @@ void MainWindow::setupMenus()
     QAction* classicTweenAction = insertMenu->addAction("&Classic Tween");
     classicTweenAction->setStatusTip("Tween the span to the next keyframe");
     connect(classicTweenAction, &QAction::triggered, this, [this]() { setClassicTween(true); });
+    QAction* cameraAction = insertMenu->addAction("Ca&mera");
+    cameraAction->setStatusTip("A multiplane camera for the scene: pan, zoom and turn it, with layers at depths");
+    connect(cameraAction, &QAction::triggered, this, &MainWindow::addCamera);
     QAction* motionTweenAction = insertMenu->addAction("&Motion Tween");
     motionTweenAction->setStatusTip("Move the span's symbol by a motion tween; changing it later in the span keys it");
     connect(motionTweenAction, &QAction::triggered, this, &MainWindow::createMotionTween);
@@ -2060,6 +2120,23 @@ void MainWindow::setupMenus()
     QAction* infoAction = viewMenu->addAction("&Info");
     infoAction->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_I));
     connect(infoAction, &QAction::triggered, this, showDock(&_infoDock));
+    QAction* layerDepthAction = viewMenu->addAction("&Layer Depth");
+    layerDepthAction->setStatusTip("How far each layer sits from the multiplane camera");
+    connect(layerDepthAction, &QAction::triggered, this, [this]() {
+        if (!_layerDepthDock)
+            return;
+        _layerDepthDock->show();
+        _layerDepthDock->raise();
+        _layerDepth->refresh();
+    });
+    QAction* cameraViewAction = viewMenu->addAction("&Camera View");
+    cameraViewAction->setCheckable(true);
+    cameraViewAction->setChecked(true);
+    cameraViewAction->setStatusTip("See the scene through its camera, when it has one");
+    connect(cameraViewAction, &QAction::toggled, this, [this](bool on) {
+        if (_phoenixView)
+            _phoenixView->setCameraView(on);
+    });
     QAction* xsheetAction = viewMenu->addAction("&X-Sheet");
     xsheetAction->setStatusTip("The exposures of each layer, frame by frame, typed in by drawing number");
     connect(xsheetAction, &QAction::triggered, this, [this]() {
@@ -2936,6 +3013,8 @@ void MainWindow::updateEditState()
         _motionEditor->refresh();
     if (_xsheet)
         _xsheet->refresh();
+    if (_layerDepth)
+        _layerDepth->refresh();
     if (_colorPanel)
         _colorPanel->refresh();
     updateFramePicker();

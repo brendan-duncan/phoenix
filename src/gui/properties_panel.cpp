@@ -1,4 +1,5 @@
 #include "properties_panel.h"
+#include "../edit/camera.h"
 #include "../data/bitmap.h"
 #include "../edit/brush_texture.h"
 #include "../data/symbol_list.h"
@@ -2423,6 +2424,70 @@ void PropertiesPanel::rebuildFrameTab()
     where->setContentsMargins(12, 0, 12, 4);
     where->setEnabled(false);
     page->addWidget(where);
+
+    // The multiplane camera's keyframe: where it looks, its zoom and turn.
+    const fla::Document* doc = document();
+    if (layer && fla::camera::isCamera(*layer) && doc)
+    {
+        PropertySection* cameraSection = addSection(page, "Camera");
+        const double w = doc->width;
+        const double h = doc->height;
+        const fla::camera::State state = fla::camera::stateOf(*frame, w, h);
+        auto before = std::make_shared<std::vector<std::pair<std::string, std::string>>>();
+        const auto field = [&](double fla::camera::State::*member, double minimum, double maximum, const QString& suffix,
+                               const char* name) {
+            HotText* hot = makeHotText(minimum, maximum, 1, suffix);
+            hot->setValue(state.*member);
+            bindLive(hot,
+                [=]() { *before = frame->extraAttributes; },
+                [=](double value) {
+                    fla::camera::State now = fla::camera::stateOf(*frame, w, h);
+                    now.*member = value;
+                    fla::camera::set(frame->extraAttributes, now);
+                    if (_links.view)
+                        _links.view->clearCaches();
+                    emit documentEdited();
+                },
+                [=]() {
+                    const auto after = frame->extraAttributes;
+                    frame->extraAttributes = *before;
+                    push(std::unique_ptr<fla::Command>(
+                        new fla::SetPropertyCommand<std::vector<std::pair<std::string, std::string>>>(
+                            frame->extraAttributes, *before, after, name)));
+                });
+            return hot;
+        };
+        cameraSection->addField(0, 0, "X", field(&fla::camera::State::x, -100000.0, 100000.0, " px", "Camera Position"));
+        cameraSection->addField(0, 1, "Y", field(&fla::camera::State::y, -100000.0, 100000.0, " px", "Camera Position"));
+        cameraSection->addField(1, 0, "Zoom", field(&fla::camera::State::zoom, 1.0, 10000.0, " %", "Camera Zoom"));
+        cameraSection->addField(1, 1, "Turn", field(&fla::camera::State::rotation, -3600.0, 3600.0,
+            QString::fromUtf8("\u00b0"), "Camera Rotation"));
+    }
+    else if (layer && doc && fla::camera::cameraOf(*doc->currentScene()))
+    {
+        // A layer's depth, when the scene has a camera to see it from.
+        PropertySection* depthSection = addSection(page, "Layer Depth");
+        HotText* depth = makeHotText(-900.0, 100000.0, 0, " px");
+        depth->setValue(fla::camera::depthOf(*layer));
+        depth->setToolTip("How far behind the stage the layer sits; near layers move more as the camera pans");
+        auto before = std::make_shared<std::vector<std::pair<std::string, std::string>>>();
+        bindLive(depth,
+            [=]() { *before = layer->extraAttributes; },
+            [=](double value) {
+                fla::camera::setDepth(layer->extraAttributes, value);
+                if (_links.view)
+                    _links.view->clearCaches();
+                emit documentEdited();
+            },
+            [=]() {
+                const auto after = layer->extraAttributes;
+                layer->extraAttributes = *before;
+                push(std::unique_ptr<fla::Command>(
+                    new fla::SetPropertyCommand<std::vector<std::pair<std::string, std::string>>>(
+                        layer->extraAttributes, *before, after, "Layer Depth")));
+            });
+        depthSection->addField(0, 0, "Depth", depth);
+    }
 
     // Edits of a frame's fields: one command per change, named for the Edit
     // menu, and the stage told the frame changed.

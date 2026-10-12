@@ -211,3 +211,58 @@ TEST(a_layer_becomes_masked_under_the_mask_above_and_a_mask_lets_go)
     CHECK(named(*timeline, 'Y')->parentLayer == nullptr);
     CHECK(named(*timeline, 'Y')->layerType == fla::Layer::Type::Normal);
 }
+
+#include "../src/edit/camera.h"
+
+TEST(multiplane_camera_pans_near_layers_more_than_far)
+{
+    fla::Timeline timeline(nullptr);
+    fla::Layer* camera = fla::camera::newCameraLayer(timeline, 10, 400.0, 300.0);
+    timeline.layers.push_back(camera);
+    CHECK(fla::camera::isCamera(*camera) && fla::camera::cameraOf(timeline) == camera);
+    CHECK(camera->layerType == fla::Layer::Type::Guide);
+
+    // At rest every depth shows as drawn.
+    fla::camera::State state = fla::camera::stateAt(timeline, 3, 400.0, 300.0);
+    CHECK(state.x == 200.0 && state.y == 150.0 && state.zoom == 100.0);
+    fla::Transform t;
+    CHECK(fla::camera::view(state, 3000.0, 400.0, 300.0, t));
+    CHECK(std::fabs(t.m11 - 1.0) < 1e-9 && std::fabs(t.tx) < 1e-9 && std::fabs(t.ty) < 1e-9);
+
+    // Panning 100 px right moves the stage plane 100 px left, a layer a
+    // focal length behind half that.
+    state.x += 100.0;
+    CHECK(fla::camera::view(state, 0.0, 400.0, 300.0, t) && std::fabs(t.tx + 100.0) < 1e-9);
+    CHECK(fla::camera::view(state, fla::camera::kFocal, 400.0, 300.0, t) && std::fabs(t.tx + 50.0) < 1e-9);
+
+    // At 200% the stage plane doubles; a far layer grows less.
+    state.x = 200.0;
+    state.zoom = 200.0;
+    CHECK(fla::camera::view(state, 0.0, 400.0, 300.0, t) && std::fabs(t.m11 - 2.0) < 1e-9);
+    CHECK(fla::camera::view(state, fla::camera::kFocal, 400.0, 300.0, t) && t.m11 > 1.0 && t.m11 < 2.0);
+    // A layer the camera has moved past is not seen.
+    CHECK(!fla::camera::view(state, -600.0, 400.0, 300.0, t));
+
+    // Keyframes tween.
+    fla::Frame* first = camera->frames.front();
+    first->duration = 5;
+    first->tweenType = fla::TweenType::Motion;
+    fla::Frame* second = new fla::Frame(camera);
+    second->index = 5;
+    second->duration = 5;
+    fla::camera::State moved;
+    moved.x = 300.0;
+    moved.y = 150.0;
+    moved.zoom = 400.0;
+    fla::camera::set(second->extraAttributes, moved);
+    camera->frames.push_back(second);
+    const fla::camera::State half = fla::camera::stateAt(timeline, 2, 400.0, 300.0);
+    CHECK(half.x > 200.0 && half.x < 300.0);
+    CHECK(std::fabs(fla::camera::stateAt(timeline, 7, 400.0, 300.0).zoom - 400.0) < 1e-9);
+
+    fla::Layer layer(nullptr);
+    fla::camera::setDepth(layer.extraAttributes, 250.0);
+    CHECK(fla::camera::depthOf(layer) == 250.0);
+    fla::camera::setDepth(layer.extraAttributes, 0.0);
+    CHECK(layer.extraAttributes.empty());
+}

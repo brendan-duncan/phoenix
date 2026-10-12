@@ -49,6 +49,7 @@ set(TEST_CORE_SOURCES
     ${PHOENIX_SRC}/edit/brush_stroke.cpp
     ${PHOENIX_SRC}/edit/motion_object.cpp
     ${PHOENIX_SRC}/edit/brush_texture.cpp
+    ${PHOENIX_SRC}/edit/camera.cpp
     ${PHOENIX_SRC}/edit/guide_path.cpp
     ${PHOENIX_SRC}/edit/asset_warp.cpp
     ${PHOENIX_SRC}/edit/magic_wand.cpp

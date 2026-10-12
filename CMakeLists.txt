@@ -81,6 +81,7 @@ set(HEADERS
     src/gui/motion_editor.h
     src/gui/motion_presets.h
     src/gui/xsheet_panel.h
+    src/gui/layer_depth_panel.h
     src/gui/ease_curve_dialog.h
     src/gui/file_association.h
     src/gui/color_panel.h
@@ -188,6 +189,7 @@ set(HEADERS
     src/edit/drawing_style.h
     src/edit/brush_stroke.h
     src/edit/brush_texture.h
+    src/edit/camera.h
     src/edit/motion_object.h
     src/edit/asset_warp.h
     src/edit/magic_wand.h
@@ -244,6 +246,7 @@ set(SOURCES
     src/gui/motion_editor.cpp
     src/gui/motion_presets.cpp
     src/gui/xsheet_panel.cpp
+    src/gui/layer_depth_panel.cpp
     src/gui/ease_curve_dialog.cpp
     src/gui/file_association.cpp
     src/gui/color_panel.cpp
@@ -345,6 +348,7 @@ set(SOURCES
     src/edit/drawing_style.cpp
     src/edit/brush_stroke.cpp
     src/edit/brush_texture.cpp
+    src/edit/camera.cpp
     src/edit/motion_object.cpp
     src/edit/guide_path.cpp
     src/edit/asset_warp.cpp

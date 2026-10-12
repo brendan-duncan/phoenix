@@ -185,6 +185,11 @@ public:
     /// Edit Multiple Frames: every keyframe within the onion skin's range is
     /// drawn in full and can be picked and edited with the current one.
     void setEditMultipleFrames(bool on);
+
+    /// Camera View: the scene seen through its multiplane camera, when it
+    /// has one. On by default; off shows the stage as drawn.
+    void setCameraView(bool on);
+    bool cameraView() const { return _cameraView; }
     bool editMultipleFrames() const { return _editMultiple; }
 
     /// Rulers along the top and left of the stage, in stage pixels.
@@ -1008,6 +1013,13 @@ private:
     /// parent layer's layerRiggingIndex.
     QTransform parentTransform(const fla::Layer* layer, const fla::Frame* frame, fla::LoopType loopType,
         int firstFrame, int depth = 0);
+    /// The parenting chain alone, without the camera.
+    QTransform rigTransform(const fla::Layer* layer, const fla::Frame* frame, fla::LoopType loopType,
+        int firstFrame, int depth);
+    /// How the scene's multiplane camera shows a layer of the scene, for its
+    /// depth, on the frame shown; identity with no camera or the view off.
+    QTransform cameraTransform(const fla::Layer* layer);
+    bool _cameraView = true;
 
     /// An element drawn with a transform other than its own (an object
     /// motion tween's), set while that element is drawn.
