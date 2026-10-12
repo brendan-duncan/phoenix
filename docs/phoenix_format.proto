@@ -426,6 +426,7 @@ message SymbolInstance {
   optional bool keep_color = 9;
   repeated string extra_filters = 10;
   repeated Filter filters = 11;
+  optional int32 last_frame = 12 [default = -1];
 }
 
 enum LoopType {
@@ -434,6 +435,8 @@ enum LoopType {
   LOOP_LOOP = 2;
   LOOP_PLAY_ONCE = 3;
   LOOP_PING_PONG = 4;
+  LOOP_REVERSE = 5;
+  LOOP_PLAY_ONCE_REVERSE = 6;
 }
 
 message ColorTransform {

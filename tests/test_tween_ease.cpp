@@ -150,3 +150,27 @@ TEST(filters_blend_between_keyframes_and_fade_in_where_one_has_none)
     const std::vector<fla::Filter> fading = fla::blendFilters({}, {shadow}, 0.25);
     CHECK(fading.size() == 1 && near(fading[0].strength, 0.5));
 }
+
+#include "../src/edit/graphic_loop.h"
+
+TEST(graphic_looping_options_play_as_animate_plays_them)
+{
+    using L = fla::LoopType;
+    // A ten-frame symbol from frame 3 (index 2).
+    CHECK(fla::graphicFrame(L::Loop, 2, -1, 10, 9) == 1);
+    CHECK(fla::graphicFrame(L::PlayOnce, 2, -1, 10, 20) == 9);
+    CHECK(fla::graphicFrame(L::SingleFrame, 2, -1, 10, 20) == 2);
+    CHECK(fla::graphicFrame(L::PlayOnceReverse, 2, -1, 10, 1) == 1);
+    CHECK(fla::graphicFrame(L::PlayOnceReverse, 2, -1, 10, 9) == 0);
+    // Loop Reverse runs back and round from the end.
+    CHECK(fla::graphicFrame(L::LoopReverse, 2, -1, 10, 3) == 9);
+    // With a last frame: Loop between first and last, Play Once stops there,
+    // Play Once Reverse runs back to it.
+    CHECK(fla::graphicFrame(L::Loop, 2, 4, 10, 3) == 2);
+    CHECK(fla::graphicFrame(L::Loop, 2, 4, 10, 2) == 4);
+    CHECK(fla::graphicFrame(L::PlayOnce, 2, 4, 10, 8) == 4);
+    CHECK(fla::graphicFrame(L::PlayOnceReverse, 6, 3, 10, 8) == 3);
+    CHECK(fla::graphicFrame(L::LoopReverse, 6, 3, 10, 4) == 6);
+    // A synced first frame past the end loops round.
+    CHECK(fla::graphicFrame(L::Loop, 24, -1, 20, 0) == 4);
+}

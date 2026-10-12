@@ -225,6 +225,8 @@ const char* loopTypeName(LoopType type)
     case LoopType::SingleFrame: return "single frame";
     case LoopType::Loop: return "loop";
     case LoopType::PingPong: return "ping pong";
+    case LoopType::LoopReverse: return "loop reverse";
+    case LoopType::PlayOnceReverse: return "play once reverse";
     case LoopType::PlayOnce: break;
     }
     return "play once";
@@ -520,6 +522,7 @@ void XFLWriter::writeSymbolInstance(const SymbolInstance& instance, XMLElement* 
     setString(node, "libraryItemName", instance.libraryItemName);
     setString(node, "name", instance.name);
     setInt(node, "firstFrame", instance.firstFrame, 0);
+    setInt(node, "lastFrame", instance.lastFrame, -1);
     if (instance.blendMode != "normal")
         setString(node, "blendMode", instance.blendMode);
 

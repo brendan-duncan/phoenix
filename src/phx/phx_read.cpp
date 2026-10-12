@@ -617,7 +617,7 @@ fla::Element* readKind(const Reader& kind, fla::DOMElement* parent, Context& con
                 instance->symbolType = readEnum(r, 3, fla::SymbolType::Graphic, instance->phxUnknown);
                 break;
             case s::SymbolInstance::LoopType:
-                instance->loopType = readEnum(r, 5, fla::LoopType::PlayOnce, instance->phxUnknown);
+                instance->loopType = readEnum(r, 7, fla::LoopType::PlayOnce, instance->phxUnknown);
                 break;
             case s::SymbolInstance::ColorTransform: readColorTransform(r, instance->colorTransform); break;
             case s::SymbolInstance::BlendMode: instance->blendMode = r.string(); break;
@@ -625,6 +625,7 @@ fla::Element* readKind(const Reader& kind, fla::DOMElement* parent, Context& con
             case s::SymbolInstance::KeepColor: instance->keepColor = r.boolean(); break;
             case s::SymbolInstance::ExtraFilters: instance->extraFilters.push_back(r.string()); break;
             case s::SymbolInstance::Filters: instance->filters.push_back(readFilter(r, context)); break;
+            case s::SymbolInstance::LastFrame: instance->lastFrame = r.int32(); break;
             default: r.keep(instance->phxUnknown); break;
             }
         }

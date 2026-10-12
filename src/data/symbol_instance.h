@@ -19,6 +19,9 @@ public:
     /// The instance name scripts address it by; movie clips and buttons.
     std::string name;
     int firstFrame = 0;
+    /// The last frame a graphic plays to (Animate's Last), or -1 for the
+    /// symbol's end.
+    int lastFrame = -1;
     SymbolType symbolType = SymbolType::Graphic;
     LoopType loopType = LoopType::PlayOnce;
     ColorTransform colorTransform;

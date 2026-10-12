@@ -94,7 +94,7 @@ namespace Group { enum : uint32_t { Members = 1 }; }
 
 namespace SymbolInstance { enum : uint32_t {
     LibraryItemName = 1, Name = 2, FirstFrame = 3, SymbolType = 4, LoopType = 5, ColorTransform = 6, BlendMode = 7,
-    OtherSymbolType = 8, KeepColor = 9, ExtraFilters = 10, Filters = 11,
+    OtherSymbolType = 8, KeepColor = 9, ExtraFilters = 10, Filters = 11, LastFrame = 12,
 }; }
 
 namespace ColorTransform { enum : uint32_t {

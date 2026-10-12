@@ -1,4 +1,7 @@
 #include "frame_bake.h"
+#include "../data/timeline.h"
+#include "../data/symbol.h"
+#include "graphic_loop.h"
 
 #include "element_clone.h"
 #include "motion_object.h"
@@ -16,6 +19,26 @@
 #include <memory>
 
 namespace fla {
+
+namespace {
+
+/// The symbol frame a graphic shows  framesIn frames on, as it plays:
+/// on, back or round its loop. Forward loops keep counting past the end, as
+/// Animate's synced tweens leave them.
+int playedOn(const SymbolInstance& instance, int framesIn)
+{
+    if (instance.loopType != LoopType::LoopReverse && instance.loopType != LoopType::PlayOnceReverse &&
+        instance.lastFrame < 0)
+        return instance.firstFrame + framesIn;
+    int length = 1;
+    if (instance.symbol && !instance.symbol->timelines.empty() && instance.symbol->timelines.front())
+        for (const Layer* layer : instance.symbol->timelines.front()->layers)
+            if (layer)
+                length = std::max(length, timeline::layerEnd(*layer));
+    return graphicFrame(instance.loopType, instance.firstFrame, instance.lastFrame, length, framesIn);
+}
+
+} // namespace
 
 namespace frames {
 
@@ -156,7 +179,7 @@ std::vector<Element*> elementsAt(const Frame& span, const Frame* next, int frame
                 instance->filters = blendFilters(from->filters, to->filters, t);
                 // A graphic plays on through the tween.
                 if (from->symbolType == SymbolType::Graphic && from->loopType != LoopType::SingleFrame)
-                    instance->firstFrame = from->firstFrame + framesIn;
+                    instance->firstFrame = playedOn(*from, framesIn);
             }
         }
         else if (element->elementType() == Element::Type::SymbolInstance)
@@ -164,7 +187,7 @@ std::vector<Element*> elementsAt(const Frame& span, const Frame* next, int frame
             auto* instance = static_cast<SymbolInstance*>(copy);
             const auto* from = static_cast<const SymbolInstance*>(element);
             if (from->symbolType == SymbolType::Graphic && from->loopType != LoopType::SingleFrame)
-                instance->firstFrame = from->firstFrame + framesIn;
+                instance->firstFrame = playedOn(*from, framesIn);
         }
         copies.push_back(copy);
     }

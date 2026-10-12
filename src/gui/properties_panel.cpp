@@ -1890,10 +1890,11 @@ void PropertiesPanel::addInstanceSections(QVBoxLayout* layout, fla::SymbolInstan
     {
         PropertySection* looping = addSection(layout, "Looping");
         QComboBox* options = new QComboBox(this);
-        options->addItems({"Loop", "Play Once", "Single Frame", "Ping Pong"});
-        const fla::LoopType loopTypes[4] = {fla::LoopType::Loop, fla::LoopType::PlayOnce,
-            fla::LoopType::SingleFrame, fla::LoopType::PingPong};
-        for (int i = 0; i < 4; ++i)
+        options->addItems({"Loop", "Play Once", "Single Frame", "Loop Reverse", "Play Once Reverse", "Ping Pong"});
+        const fla::LoopType loopTypes[6] = {fla::LoopType::Loop, fla::LoopType::PlayOnce,
+            fla::LoopType::SingleFrame, fla::LoopType::LoopReverse, fla::LoopType::PlayOnceReverse,
+            fla::LoopType::PingPong};
+        for (int i = 0; i < 6; ++i)
         {
             if (loopTypes[i] == instance->loopType)
                 options->setCurrentIndex(i);
@@ -1921,6 +1922,25 @@ void PropertiesPanel::addInstanceSections(QVBoxLayout* layout, fla::SymbolInstan
                     instance->firstFrame, *before, instance->firstFrame, "First Frame")));
             });
         looping->addField(1, 0, "First", first);
+
+        // Animate's Last: where the playing stops or turns round; empty (0)
+        // for the symbol's end.
+        HotText* last = makeHotText(0, 1.0e6, 0);
+        last->setValue(instance->lastFrame + 1);
+        last->setStep(0.2);
+        last->setToolTip("The symbol's last frame played (0 for its end)");
+        std::shared_ptr<int> beforeLast = std::make_shared<int>(0);
+        bindLive(last,
+            [=]() { *beforeLast = instance->lastFrame; },
+            [=](double value) {
+                instance->lastFrame = static_cast<int>(value) - 1;
+                emit documentEdited();
+            },
+            [=]() {
+                push(std::unique_ptr<fla::Command>(new fla::SetPropertyCommand<int>(
+                    instance->lastFrame, *beforeLast, instance->lastFrame, "Last Frame")));
+            });
+        looping->addField(1, 1, "Last", last);
     }
 
     // --- Filters ---

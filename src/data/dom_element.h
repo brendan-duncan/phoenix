@@ -21,7 +21,10 @@ enum class LoopType
     SingleFrame,
     Loop,
     PlayOnce,
-    PingPong
+    PingPong,
+    /// Animate's "loop reverse" and "play once reverse".
+    LoopReverse,
+    PlayOnceReverse
 };
 
 enum class TweenType

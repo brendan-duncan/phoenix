@@ -798,13 +798,14 @@ bool parseSymbolInstance(const tinyxml2::XMLElement* element, fla::SymbolInstanc
 
     instance->libraryItemName = getAttribute(element, "libraryItemName");
     instance->name = getAttribute(element, "name");
-    keepAttributes(element, {"libraryItemName", "name", "blendMode", "firstFrame", "symbolType", "loop",
+    keepAttributes(element, {"libraryItemName", "name", "blendMode", "firstFrame", "lastFrame", "symbolType", "loop",
         "loopType", "isSelected", "isFloating", "lockFlag"}, instance);
     instance->blendMode = getAttribute(element, "blendMode");
     // "normal" is what no blend mode means; Animate leaves it out.
     if (instance->blendMode == "normal")
         instance->blendMode.clear();
     instance->firstFrame = getIntAttribute(element, "firstFrame", 0);
+    instance->lastFrame = getIntAttribute(element, "lastFrame", -1);
 
     // Animate leaves the type out for a movie clip and writes it for
     // everything else, a graphic always with its loop.
@@ -847,6 +848,14 @@ bool parseSymbolInstance(const tinyxml2::XMLElement* element, fla::SymbolInstanc
     else if (loopType == "ping pong")
     {
         instance->loopType = fla::LoopType::PingPong;
+    }
+    else if (loopType == "loop reverse")
+    {
+        instance->loopType = fla::LoopType::LoopReverse;
+    }
+    else if (loopType == "play once reverse")
+    {
+        instance->loopType = fla::LoopType::PlayOnceReverse;
     }
     else
     {

@@ -4,6 +4,7 @@
 #include "../edit/timeline_edit.h"
 #include "../edit/brush_texture.h"
 #include "../edit/camera.h"
+#include "../edit/graphic_loop.h"
 #include "../parser/ik_tree.h"
 #include "filters.h"
 #include "stroke_effects.h"
@@ -2026,29 +2027,11 @@ int PhoenixView::symbolFrame(const fla::SymbolInstance& instance) const
     const int length = symbolLength(instance.symbol);
     if (instance.symbolType != fla::SymbolType::Graphic)
         return _exporting && instance.symbolType == fla::SymbolType::MovieClip ? elapsed % length : 0;
-    const int first = std::max(0, std::min(instance.firstFrame, length - 1));
     // A looping graphic's first frame can be past its end: a synced tween
     // (Animate's Sync) counts it on from keyframe to keyframe without
     // wrapping, and Animate plays it round the loop from there rather than
     // holding the last frame.
-    const int unclamped = std::max(0, instance.firstFrame);
-    switch (instance.loopType)
-    {
-    case fla::LoopType::SingleFrame:
-        return first;
-    case fla::LoopType::PlayOnce:
-        return std::min(first + elapsed, length - 1);
-    case fla::LoopType::PingPong:
-    {
-        if (length <= 1)
-            return 0;
-        const int period = 2 * (length - 1);
-        const int t = (unclamped + elapsed) % period;
-        return t < length ? t : period - t;
-    }
-    default:
-        return (unclamped + elapsed) % length;
-    }
+    return fla::graphicFrame(instance.loopType, instance.firstFrame, instance.lastFrame, length, elapsed);
 }
 
 int PhoenixView::calculateLayerDuration(const fla::Layer* layer)

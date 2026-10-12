@@ -420,6 +420,7 @@ Writer encodeKind(const fla::Element& element, uint32_t& field)
         writeString(w, s::SymbolInstance::LibraryItemName, instance.libraryItemName);
         writeString(w, s::SymbolInstance::Name, instance.name);
         writeInt(w, s::SymbolInstance::FirstFrame, instance.firstFrame);
+        writeInt(w, s::SymbolInstance::LastFrame, instance.lastFrame, -1);
         writeInt(w, s::SymbolInstance::SymbolType, static_cast<int>(instance.symbolType), static_cast<int>(fla::SymbolType::Graphic));
         writeInt(w, s::SymbolInstance::LoopType, static_cast<int>(instance.loopType), static_cast<int>(fla::LoopType::PlayOnce));
         const Writer color = encodeColorTransform(instance.colorTransform);

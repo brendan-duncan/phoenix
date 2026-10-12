@@ -17,8 +17,8 @@ namespace {
 const QSize kThumbnail(72, 72);
 
 /// The looping choices, as the Properties panel lists them.
-const fla::LoopType kLoops[4] = {fla::LoopType::Loop, fla::LoopType::PlayOnce, fla::LoopType::SingleFrame,
-    fla::LoopType::PingPong};
+const fla::LoopType kLoops[6] = {fla::LoopType::Loop, fla::LoopType::PlayOnce, fla::LoopType::SingleFrame,
+    fla::LoopType::LoopReverse, fla::LoopType::PlayOnceReverse, fla::LoopType::PingPong};
 
 } // namespace
 
@@ -29,10 +29,10 @@ FramePickerPanel::FramePickerPanel(QWidget* parent)
     _title->setContentsMargins(4, 4, 4, 0);
 
     _loop = new QComboBox(this);
-    _loop->addItems({"Loop", "Play Once", "Single Frame", "Ping Pong"});
+    _loop->addItems({"Loop", "Play Once", "Single Frame", "Loop Reverse", "Play Once Reverse", "Ping Pong"});
     _loop->setToolTip("How the instance plays from the frame picked");
     connect(_loop, &QComboBox::currentIndexChanged, this, [this](int index) {
-        if (!_updating && index >= 0 && index < 4)
+        if (!_updating && index >= 0 && index < 6)
             emit loopChosen(static_cast<int>(kLoops[index]));
     });
 
@@ -105,7 +105,7 @@ void FramePickerPanel::refresh()
     if (!_instance)
         return;
     _updating = true;
-    for (int i = 0; i < 4; ++i)
+    for (int i = 0; i < 6; ++i)
     {
         if (kLoops[i] == _instance->loopType)
             _loop->setCurrentIndex(i);
