@@ -34,6 +34,7 @@
 #include "../edit/color_art.h"
 #include "../edit/layer_effects.h"
 #include "../edit/lip_sync.h"
+#include "../edit/edit_list.h"
 #include "lip_sync_dialog.h"
 #include "theme.h"
 #include "theme_editor.h"
@@ -1900,6 +1901,192 @@ void MainWindow::editEffect(fla::Layer* layer)
     }
 }
 
+void MainWindow::importAnimatic()
+{
+    fla::Document* document = _flaDocument ? _flaDocument->document : nullptr;
+    fla::Timeline* timeline = _phoenixView && _phoenixView->scopeTimeline() ? _phoenixView->scopeTimeline()
+                                                                           : document ? document->currentScene() : nullptr;
+    if (!document || !timeline)
+        return;
+    const QString path = QFileDialog::getOpenFileName(this, "Import Animatic", _lastDirectory,
+        "Edit lists (*.edl *.xml);;All files (*)");
+    if (path.isEmpty())
+        return;
+    QFile file(path);
+    if (!file.open(QIODevice::ReadOnly))
+        return;
+    const double fps = document->frameRate > 0.0 ? document->frameRate : 24.0;
+    std::string error;
+    fla::editlist::EditList list = fla::editlist::parse(file.readAll().toStdString(), fps, &error);
+    std::vector<fla::editlist::Event> shots;
+    std::vector<fla::editlist::Event> sounds;
+    // A list counted at another rate is brought to the document's.
+    const double scale = list.frameRate > 0.0 ? fps / list.frameRate : 1.0;
+    for (fla::editlist::Event event : list.events)
+    {
+        event.start = static_cast<int>(std::lround(event.start * scale));
+        event.end = std::max(event.start + 1, static_cast<int>(std::lround(event.end * scale)));
+        event.sourceIn = static_cast<int>(std::lround(event.sourceIn * scale));
+        if (event.audio)
+            sounds.push_back(event);
+        else if (event.track == 1)
+            shots.push_back(event);
+    }
+    if (shots.empty() && sounds.empty())
+    {
+        QMessageBox::warning(this, "Import Animatic", QString("Nothing to import from %1.\n\n%2")
+                                                         .arg(QFileInfo(path).fileName(), QString::fromStdString(error)));
+        return;
+    }
+    std::sort(shots.begin(), shots.end(), [](const auto& a, const auto& b) { return a.start < b.start; });
+    _lastDirectory = QFileInfo(path).absolutePath();
+
+    // A clip's file: as the list names it, or by its name beside the list.
+    const QDir beside = QFileInfo(path).absoluteDir();
+    const auto fileOf = [&beside](const fla::editlist::Event& event, const QStringList& extensions) {
+        QStringList tries;
+        if (!event.file.empty())
+            tries << QString::fromStdString(event.file) << beside.filePath(QFileInfo(QString::fromStdString(event.file)).fileName());
+        const QString name = QString::fromStdString(event.name);
+        tries << beside.filePath(name);
+        for (const QString& extension : extensions)
+            tries << beside.filePath(QString::fromStdString(fla::editlist::shotName(event)) + "." + extension);
+        for (const QString& candidate : tries)
+            if (!candidate.isEmpty() && QFileInfo(candidate).isFile())
+                return candidate;
+        return QString();
+    };
+
+    // Builds a layer of keyframes at the events, blank between them.
+    const auto spanned = [](const std::string& name, const std::vector<std::pair<int, int>>& spans,
+                             const std::function<void(fla::Frame*, size_t)>& fill) {
+        fla::Layer* layer = new fla::Layer(nullptr);
+        layer->name = name;
+        int at = 0;
+        for (size_t i = 0; i < spans.size(); ++i)
+        {
+            if (spans[i].first > at)
+            {
+                fla::Frame* gap = new fla::Frame(layer);
+                gap->index = at;
+                gap->duration = spans[i].first - at;
+                layer->frames.push_back(gap);
+            }
+            fla::Frame* frame = new fla::Frame(layer);
+            frame->index = std::max(at, spans[i].first);
+            frame->duration = std::max(1, spans[i].second - frame->index);
+            fill(frame, i);
+            layer->frames.push_back(frame);
+            at = frame->index + frame->duration;
+        }
+        return layer;
+    };
+
+    fla::CommandStack& stack = _editContext.commandStack();
+    QStringList missing;
+    int boards = 0;
+    int placed = 0;
+    stack.beginMacro("Import Animatic");
+
+    if (!shots.empty())
+    {
+        std::vector<std::pair<int, int>> spans;
+        for (const auto& shot : shots)
+            spans.emplace_back(shot.start, shot.end);
+        // The shots, labeled, for Export Shots by label.
+        fla::Layer* labels = spanned("Shots", spans, [&shots](fla::Frame* frame, size_t i) {
+            frame->name = fla::editlist::shotName(shots[i]);
+            frame->labelType = "name";
+        });
+        // The boards, fitted to the stage.
+        fla::Layer* board = spanned("Board", spans, [&](fla::Frame* frame, size_t i) {
+            const QString image = fileOf(shots[i], {"png", "jpg", "jpeg"});
+            if (image.isEmpty() || !MediaImport::isImage(image))
+            {
+                missing << QString("board for %1").arg(QString::fromStdString(fla::editlist::shotName(shots[i])));
+                return;
+            }
+            QString imageError;
+            fla::Bitmap* bitmap = MediaImport::loadImage(*document, image, imageError);
+            if (!bitmap)
+            {
+                missing << imageError;
+                return;
+            }
+            stack.push(fla::CommandPtr(new fla::AddBitmapCommand(document, bitmap, "Import Animatic")));
+            fla::BitmapInstance* instance = new fla::BitmapInstance(frame);
+            instance->libraryItemName = bitmap->name;
+            const double fit = std::min(document->width / std::max(1, bitmap->frameRight / 20),
+                document->height / std::max(1, bitmap->frameBottom / 20));
+            instance->transform.m11 = instance->transform.m22 = fit;
+            instance->transform.tx = (document->width - bitmap->frameRight / 20.0 * fit) / 2.0;
+            instance->transform.ty = (document->height - bitmap->frameBottom / 20.0 * fit) / 2.0;
+            frame->elements.push_back(instance);
+            ++boards;
+        });
+        stack.push(fla::CommandPtr(new fla::AddLayerCommand(timeline, 0, labels, "Import Animatic")));
+        stack.push(fla::CommandPtr(new fla::AddLayerCommand(timeline, static_cast<int>(timeline->layers.size()), board,
+            "Import Animatic")));
+    }
+
+    // Each audio track's clips, where the cut has them, from where they
+    // start in their files.
+    std::map<int, std::vector<fla::editlist::Event>> tracks;
+    for (const auto& sound : sounds)
+        tracks[sound.track].push_back(sound);
+    for (auto& [track, events] : tracks)
+    {
+        std::sort(events.begin(), events.end(), [](const auto& a, const auto& b) { return a.start < b.start; });
+        std::vector<std::pair<int, int>> spans;
+        for (const auto& event : events)
+            spans.emplace_back(event.start, event.end);
+        fla::Layer* audio = spanned("Audio " + std::to_string(track), spans, [&](fla::Frame* frame, size_t i) {
+            const QString sound = fileOf(events[i], {"wav", "mp3", "aif", "aiff", "ogg", "flac"});
+            fla::media::Sound data;
+            QString soundError;
+            if (sound.isEmpty() || !MediaImport::loadSound(sound, data, soundError))
+            {
+                missing << QString("sound %1").arg(QString::fromStdString(events[i].name));
+                return;
+            }
+            data.name = QFileInfo(sound).fileName().toStdString();
+            data.sourcePath = sound.toStdString();
+            auto* add = new fla::AddSoundCommand(document, data, "Import Animatic");
+            const std::string name = add->soundName();
+            stack.push(fla::CommandPtr(add));
+            frame->extraAttributes.emplace_back("soundName", name);
+            frame->extraAttributes.emplace_back("soundSync", "stream");
+            if (events[i].sourceIn > 0)
+                frame->extraAttributes.emplace_back("inPoint44",
+                    std::to_string(static_cast<long long>(std::lround(events[i].sourceIn / fps * 44100.0))));
+            ++placed;
+        });
+        stack.push(fla::CommandPtr(new fla::AddLayerCommand(timeline, static_cast<int>(timeline->layers.size()), audio,
+            "Import Animatic")));
+    }
+    stack.endMacro();
+    stack.breakMergeChain();
+    if (_timelineView)
+        _timelineView->refresh();
+    if (_libraryPanel)
+        _libraryPanel->refreshIfStale();
+    if (_phoenixView)
+    {
+        _phoenixView->clearCaches();
+        _phoenixView->update();
+    }
+    const auto count = [](size_t n, const char* one, const char* many) { return QString("%1 %2").arg(n).arg(n == 1 ? one : many); };
+    QString report = QString("%1 labeled, %2 placed, %3 placed.")
+                         .arg(count(shots.size(), "shot", "shots"), count(static_cast<size_t>(boards), "board", "boards"),
+                             count(static_cast<size_t>(placed), "sound", "sounds"));
+    if (list.frameRate > 0.0 && std::abs(list.frameRate - fps) > 0.01)
+        report += QString("\n\nThe cut was at %1 fps and was brought to the document's %2.").arg(list.frameRate, 0, 'f', 3).arg(fps, 0, 'f', 3);
+    if (!missing.isEmpty())
+        report += "\n\nNot found:\n" + missing.mid(0, 12).join("\n") + (missing.size() > 12 ? "\n..." : "");
+    report += "\n\nFile > Export > Export Shots, by frame labels, splits it into shot files.";
+    QMessageBox::information(this, "Import Animatic", report);
+}
+
 void MainWindow::lipSync()
 {
     auto* mouth = dynamic_cast<fla::SymbolInstance*>(_selection.single());
@@ -2498,6 +2685,9 @@ void MainWindow::setupMenus()
     importLibraryAction->setStatusTip("Import images and sounds into the library");
     connect(importLibraryAction, &QAction::triggered, this, &MainWindow::importToLibrary);
     importMenu->addAction(importLibraryAction);
+    QAction* importAnimaticAction = importMenu->addAction("Import &Animatic...");
+    importAnimaticAction->setStatusTip("An animatic's cut from Storyboard Pro or an editor (EDL, Final Cut XML): its shots as labels, boards and audio");
+    connect(importAnimaticAction, &QAction::triggered, this, &MainWindow::importAnimatic);
     QAction* importVideoAction = new QAction("Import &Video...", this);
     importVideoAction->setStatusTip("Bring in a video to animate over, on a guide layer");
     connect(importVideoAction, &QAction::triggered, this, &MainWindow::importVideo);

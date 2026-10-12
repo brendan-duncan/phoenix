@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Shots, assets and review · Phoenix User Guide</title>
 <meta name="description" content="Split an episode into shot files, keep character rigs in master files linked into every shot, and leave review notes on frames.">
-<meta name="keywords" content="review notes comments feedback shots shot breakdown episode linked assets master file rig shared library update pipeline studio">
+<meta name="keywords" content="animatic storyboard edl final cut xml import review notes comments feedback shots shot breakdown episode linked assets master file rig shared library update pipeline studio">
 <link rel="icon" href="assets/img/logo.png">
 <link rel="stylesheet" href="assets/site.css">
 <script>try { const t = localStorage.getItem("phoenix-docs-theme"); if (t) document.documentElement.dataset.theme = t; } catch (e) {}</script>
@@ -18,6 +18,18 @@
 <p class="eyebrow">Studio pipeline</p>
 <h1>Shots, assets and review</h1>
 <p class="lead">Phoenix helps a show move from one long episode file to shot files, and keeps the characters and props in those shots in step with their master files.</p>
+
+<h2>Start from the animatic</h2>
+
+<p>Choose <b>File &gt; Import &gt; Import Animatic</b> and pick the cut exported from Storyboard Pro or an editor: a CMX 3600 EDL or a Final Cut Pro 7 XML. Phoenix adds to the timeline:</p>
+
+<ul>
+  <li>a <em>Shots</em> layer with a frame label where each shot starts, named after its clip;</li>
+  <li>a <em>Board</em> layer under the art with each shot's board image, fitted to the stage, when the image is found (by the path the cut gives, or by name beside the cut file);</li>
+  <li>an <em>Audio</em> layer for each audio track, each clip placed where the cut has it and starting from where the cut uses it.</li>
+</ul>
+
+<p>A cut counted at another frame rate is brought to the document's. Then <b>Export Shots</b> by frame labels splits it into shot files.</p>
 
 <h2>Split an episode into shots</h2>
 

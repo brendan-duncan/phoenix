@@ -165,6 +165,7 @@ if(TARGET tinyxml2 AND TARGET zlibstatic)
         ${PHOENIX_SRC}/writer/document_diff.cpp
         ${PHOENIX_SRC}/util/zip_archive.cpp
         ${PHOENIX_SRC}/util/exr_writer.cpp
+        ${PHOENIX_SRC}/edit/edit_list.cpp
         ${PHOENIX_SRC}/util/zip_writer.cpp
         ${PHOENIX_SRC}/writer/fla_writer.cpp
         ${PHOENIX_SRC}/writer/xfl_content.cpp
@@ -179,6 +180,7 @@ if(TARGET tinyxml2 AND TARGET zlibstatic)
         test_fla_writer.cpp
         test_fla_doctor.cpp
         test_exr_writer.cpp
+        test_edit_list.cpp
         test_phx.cpp
         test_shape_geometry.cpp
         test_xfl_writer.cpp
