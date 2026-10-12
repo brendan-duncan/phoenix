@@ -657,6 +657,10 @@ private:
     /// become what new art is filled with, fitted to each.
     void applyFillToSelection();
 
+    /// A color picked for drawing goes onto the selected shapes too: their
+    /// fills, or their strokes.
+    void recolorSelection(bool stroke);
+
     /// Shows the selected graphic instance's frames in the Frame Picker.
     void updateFramePicker();
     /// The Frame Picker's choice of first frame, on a new keyframe with

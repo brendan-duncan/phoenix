@@ -196,6 +196,7 @@ StrokeLook StrokeLook::of(const StrokeStyle& stroke)
     look.joints = stroke.joints;
     look.scaleMode = stroke.scaleMode;
     look.miterLimit = stroke.miterLimit;
+    look.hinting = stroke.pixelHinting;
     look.widthProfile = stroke.widthProfile;
     for (const auto& attribute : stroke.extraAttributes)
     {
@@ -230,7 +231,8 @@ const std::vector<WidthPreset>& widthPresets()
 bool StrokeLook::operator==(const StrokeLook& other) const
 {
     return kind == other.kind && hairline == other.hairline && caps == other.caps && joints == other.joints &&
-        scaleMode == other.scaleMode && miterLimit == other.miterLimit && widthProfile == other.widthProfile &&
+        scaleMode == other.scaleMode && miterLimit == other.miterLimit && hinting == other.hinting &&
+        widthProfile == other.widthProfile &&
         brush == other.brush && brushPattern == other.brushPattern;
 }
 
@@ -247,7 +249,7 @@ StrokeStyle* StrokeLook::applyTo(const StrokeStyle& stroke, DOMElement* parent) 
     case StrokeStyle::Style::Solid: copy = new SolidStroke(parent); break;
     }
     copy->weight = stroke.weight;
-    copy->pixelHinting = stroke.pixelHinting;
+    copy->pixelHinting = hinting;
     copy->dash1 = stroke.dash1;
     copy->dash2 = stroke.dash2;
     copy->dotSpace = stroke.dotSpace;

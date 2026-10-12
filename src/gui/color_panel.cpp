@@ -7,6 +7,7 @@
 #include <QCheckBox>
 #include <QColorDialog>
 #include <QComboBox>
+#include <QSpinBox>
 #include <QHBoxLayout>
 #include <QLabel>
 #include <QLineEdit>
@@ -299,7 +300,54 @@ ColorPanel::ColorPanel(fla::DrawingStyle* style, QWidget* parent)
     solidLayout->addWidget(_solidHex);
     solidLayout->addStretch();
     solidPage->addLayout(solidLayout);
+
+    // The color by its channels: RGB or HSB, and alpha.
+    QHBoxLayout* channelRow = new QHBoxLayout();
+    _channelMode = new QComboBox(solid);
+    _channelMode->addItems({"RGB", "HSB"});
+    _channelMode->setToolTip("Edit the color as red, green and blue, or as hue, saturation and brightness");
+    channelRow->addWidget(_channelMode);
+    for (int i = 0; i < 3; ++i)
+    {
+        _channelLabels[i] = new QLabel(solid);
+        _channels[i] = new QSpinBox(solid);
+        channelRow->addWidget(_channelLabels[i]);
+        channelRow->addWidget(_channels[i]);
+    }
+    channelRow->addStretch();
+    solidPage->addLayout(channelRow);
+    QHBoxLayout* alphaRow = new QHBoxLayout();
+    alphaRow->addWidget(new QLabel("Alpha", solid));
+    _alpha = new QSpinBox(solid);
+    _alpha->setRange(0, 100);
+    _alpha->setSuffix("%");
+    alphaRow->addWidget(_alpha);
+    alphaRow->addStretch();
+    solidPage->addLayout(alphaRow);
     solidPage->addStretch();
+    const auto fromChannels = [this]() {
+        if (_updating)
+            return;
+        QColor color;
+        if (_channelMode->currentIndex() == 0)
+            color = QColor(_channels[0]->value(), _channels[1]->value(), _channels[2]->value());
+        else
+            color = QColor::fromHsv(_channels[0]->value() % 360, _channels[1]->value() * 255 / 100,
+                _channels[2]->value() * 255 / 100);
+        color.setAlpha(_alpha->value() * 255 / 100);
+        fromQColor(color, _style->fillColor);
+        refresh();
+        emit styleChanged();
+    };
+    for (QSpinBox* box : _channels)
+        connect(box, &QSpinBox::valueChanged, this, fromChannels);
+    connect(_alpha, &QSpinBox::valueChanged, this, fromChannels);
+    connect(_channelMode, &QComboBox::currentIndexChanged, this, [this]() {
+        const bool was = _updating;
+        _updating = true;
+        updateChannels();
+        _updating = was;
+    });
     _pages->addWidget(solid);
     connect(_solidSwatch, &QToolButton::clicked, this, [this]() {
         const QColor chosen = QColorDialog::getColor(toQColor(_style->fillColor), this, "Fill Color",
@@ -467,6 +515,7 @@ void ColorPanel::refresh()
     const QColor fill = toQColor(_style->fillColor);
     _solidSwatch->setIcon(swatchIcon(fill));
     _solidHex->setText(hexOf(fill));
+    updateChannels();
 
     if (_style->gradient.size() < 2)
         _style->gradient = fla::DrawingStyle::defaultGradient();
@@ -477,6 +526,25 @@ void ColorPanel::refresh()
 
     refreshBitmaps();
     _updating = false;
+}
+
+void ColorPanel::updateChannels()
+{
+    const QColor fill = toQColor(_style->fillColor);
+    const bool rgb = _channelMode->currentIndex() == 0;
+    const char* names[2][3] = {{"R", "G", "B"}, {"H", "S", "B"}};
+    const int tops[2][3] = {{255, 255, 255}, {359, 100, 100}};
+    const int values[2][3] = {{fill.red(), fill.green(), fill.blue()},
+        {std::max(0, fill.hsvHue()), fill.hsvSaturation() * 100 / 255, fill.value() * 100 / 255}};
+    const int mode = rgb ? 0 : 1;
+    for (int i = 0; i < 3; ++i)
+    {
+        _channelLabels[i]->setText(names[mode][i]);
+        _channels[i]->setRange(0, tops[mode][i]);
+        _channels[i]->setSuffix(!rgb && i == 0 ? QString(QChar(0x00B0)) : (!rgb ? QString("%") : QString()));
+        _channels[i]->setValue(values[mode][i]);
+    }
+    _alpha->setValue(static_cast<int>(std::lround(fill.alpha() * 100.0 / 255.0)));
 }
 
 void ColorPanel::refreshBitmaps()

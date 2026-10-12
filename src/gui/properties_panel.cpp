@@ -1362,6 +1362,15 @@ std::vector<std::pair<QWidget*, QWidget*>> PropertiesPanel::addStrokeLookFields(
     });
     add("Scale", scale);
 
+    QCheckBox* hinting = new QCheckBox("Hinting", this);
+    hinting->setToolTip("Mark the stroke for pixel hinting, saved with it for players that snap thin lines to whole pixels");
+    hinting->setChecked(look.hinting);
+    connect(hinting, &QCheckBox::toggled, this, [=](bool on) {
+        current->hinting = on;
+        apply(*current);
+    });
+    add(QString(), hinting);
+
     // The width along the stroke: a preset, or the profile the Width tool
     // made, shown as Custom.
     QComboBox* width = new QComboBox(this);

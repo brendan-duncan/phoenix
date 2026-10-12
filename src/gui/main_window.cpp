@@ -6273,6 +6273,56 @@ void MainWindow::chooseStyleColor(bool stroke)
     // Text being typed takes the fill color on its selection too.
     if (!stroke && _textTool)
         _textTool->applyColor(_drawingStyle.fillColor);
+    if (!_textTool || !_textTool->isEditing())
+        recolorSelection(stroke);
+}
+
+void MainWindow::recolorSelection(bool stroke)
+{
+    if (!_phoenixView)
+        return;
+    std::vector<fla::Shape*> shapes;
+    for (fla::Element* element : selectedElements())
+    {
+        if (element && element->elementType() == fla::Element::Type::Shape)
+            shapes.push_back(static_cast<fla::Shape*>(element));
+    }
+    if (shapes.empty())
+        return;
+    if (!stroke)
+    {
+        if (_drawingStyle.fillKind == fla::DrawingStyle::FillKind::Solid)
+            applyFillToSelection();
+        return;
+    }
+    _phoenixView->flushPendingMerge();
+    fla::CommandStack& stack = _editContext.commandStack();
+    stack.beginMacro("Stroke Color");
+    for (fla::Shape* shape : shapes)
+    {
+        if (shape->strokes.empty())
+            continue;
+        std::unique_ptr<fla::Element> copy(fla::cloneElement(*shape, shape->parent));
+        fla::Shape* after = dynamic_cast<fla::Shape*>(copy.get());
+        if (!after)
+            continue;
+        for (fla::StrokeStyle* line : after->strokes)
+        {
+            auto* solid = dynamic_cast<fla::SolidColor*>(line->fill);
+            if (!solid)
+            {
+                delete line->fill;
+                solid = new fla::SolidColor(line);
+                line->fill = solid;
+            }
+            std::copy(_drawingStyle.strokeColor, _drawingStyle.strokeColor + 4, solid->color);
+        }
+        stack.push(fla::CommandPtr(new fla::SetShapeContentsCommand(shape, *after, "Stroke Color")));
+    }
+    stack.endMacro();
+    stack.breakMergeChain();
+    _phoenixView->clearCaches();
+    _phoenixView->update();
 }
 
 void MainWindow::setupPropertiesPanel()
@@ -6432,6 +6482,8 @@ void MainWindow::setupPropertiesPanel()
         refreshStyleSwatches();
         if (_colorPanel)
             _colorPanel->refresh();
+        if (!_textTool || !_textTool->isEditing())
+            recolorSelection(stroke);
     });
     connect(_swatchesPanel, &SwatchesPanel::addRequested, this, [this]() {
         if (!_flaDocument || !_flaDocument->document)

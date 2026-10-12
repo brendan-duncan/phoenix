@@ -6,6 +6,8 @@
 
 class QCheckBox;
 class QComboBox;
+class QLabel;
+class QSpinBox;
 class QLineEdit;
 class QListWidget;
 class QPushButton;
@@ -86,6 +88,9 @@ private:
     void updateStopColor();
     void setStopColor(const QColor& color);
     void refreshBitmaps();
+    /// The channel fields shown as the solid color is: red, green and blue,
+    /// or hue, saturation and brightness, and alpha.
+    void updateChannels();
 
     fla::DrawingStyle* _style;
     const fla::FLADocument* _document = nullptr;
@@ -95,6 +100,10 @@ private:
     QStackedWidget* _pages = nullptr;
     QToolButton* _solidSwatch = nullptr;
     QLineEdit* _solidHex = nullptr;
+    QComboBox* _channelMode = nullptr;
+    QLabel* _channelLabels[3] = {nullptr, nullptr, nullptr};
+    QSpinBox* _channels[3] = {nullptr, nullptr, nullptr};
+    QSpinBox* _alpha = nullptr;
     GradientBar* _bar = nullptr;
     QToolButton* _stopSwatch = nullptr;
     QLineEdit* _stopHex = nullptr;

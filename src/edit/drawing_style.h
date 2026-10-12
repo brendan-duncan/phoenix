@@ -28,6 +28,8 @@ struct StrokeLook
     std::string joints;
     std::string scaleMode;
     double miterLimit = 3.0;
+    /// Pixel hinting, kept with the stroke for players that snap it.
+    bool hinting = false;
     /// How the width varies along the stroke; empty for even.
     std::vector<StrokeStyle::WidthMarker> widthProfile;
     /// A graphic symbol drawn along the stroke instead of a line: stretched
