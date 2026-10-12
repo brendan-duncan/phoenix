@@ -40,7 +40,37 @@ QIcon colorIcon(const QColor& color)
     return QIcon(pixmap);
 }
 
+/// \a picture's pixels as red, green, blue and alpha bytes.
+std::vector<uint8_t> rgbaBytes(const QImage& picture)
+{
+    const QImage rgba = picture.convertToFormat(QImage::Format_RGBA8888);
+    std::vector<uint8_t> pixels(static_cast<size_t>(rgba.width()) * rgba.height() * 4);
+    for (int y = 0; y < rgba.height(); ++y)
+        std::memcpy(pixels.data() + static_cast<size_t>(y) * rgba.width() * 4, rgba.constScanLine(y),
+            static_cast<size_t>(rgba.width()) * 4);
+    return pixels;
+}
+
 } // namespace
+
+QImage toIndexed(const QImage& picture, bool transparent, int colors, bool dither)
+{
+    gif::Options options;
+    options.colors = colors;
+    options.dither = dither;
+    const gif::Reduced reduced = gif::reduce(picture.width(), picture.height(), rgbaBytes(picture), transparent, options);
+    QImage indexed(picture.size(), QImage::Format_Indexed8);
+    QList<QRgb> table;
+    for (size_t i = 0; i + 2 < reduced.palette.size(); i += 3)
+        table << qRgb(reduced.palette[i], reduced.palette[i + 1], reduced.palette[i + 2]);
+    if (reduced.clearIndex >= 0 && reduced.clearIndex < table.size())
+        table[reduced.clearIndex] = qRgba(0, 0, 0, 0);
+    indexed.setColorTable(table);
+    for (int y = 0; y < indexed.height(); ++y)
+        std::memcpy(indexed.scanLine(y), reduced.indices.data() + static_cast<size_t>(y) * indexed.width(),
+            static_cast<size_t>(indexed.width()));
+    return indexed;
+}
 
 ImageExportSettings::Format ImageExportDialog::formatOf(const QString& path)
 {
@@ -138,6 +168,21 @@ ImageExportDialog::ImageExportDialog(const QSize& documentSize, int frameCount, 
     _quality->setValue(90);
     _quality->setToolTip("JPEG quality: higher is better and larger");
 
+    _depth = new QComboBox(this);
+    _depth->addItems({"Full color (24/32-bit)", "8-bit (a palette)"});
+    _depth->setToolTip("An 8-bit PNG is smaller, with at most 256 colors");
+    connect(_depth, &QComboBox::currentIndexChanged, this, &ImageExportDialog::formatChanged);
+    _colors = new QSpinBox(this);
+    _colors->setRange(2, 256);
+    _colors->setValue(256);
+    _colors->setToolTip("How many colors the palette has");
+    _dither = new QCheckBox("Dither", this);
+    _dither->setToolTip("Mix the palette's colors to stand in for the rest, for smoother gradients");
+    QHBoxLayout* colorsRow = new QHBoxLayout();
+    colorsRow->addWidget(_colors);
+    colorsRow->addWidget(_dither);
+    colorsRow->addStretch();
+
     QFormLayout* form = new QFormLayout();
     form->addRow("File:", pathRow);
     form->addRow("Format:", _format);
@@ -145,6 +190,8 @@ ImageExportDialog::ImageExportDialog(const QSize& documentSize, int frameCount, 
     form->addRow("Frame:", _frame);
     form->addRow("Matte:", matteRow);
     form->addRow("Quality:", _quality);
+    form->addRow("PNG:", _depth);
+    form->addRow("Colors:", colorsRow);
 
     QDialogButtonBox* buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, this);
     buttons->button(QDialogButtonBox::Ok)->setText("Export");
@@ -163,6 +210,11 @@ void ImageExportDialog::formatChanged()
     const auto format = static_cast<ImageExportSettings::Format>(_format->currentIndex());
     // JPEG has no transparency and is the one with a quality.
     _quality->setEnabled(format == ImageExportSettings::Format::Jpeg);
+    _depth->setEnabled(format == ImageExportSettings::Format::Png);
+    const bool palette = format == ImageExportSettings::Format::Gif ||
+        (format == ImageExportSettings::Format::Png && _depth->currentIndex() == 1);
+    _colors->setEnabled(palette);
+    _dither->setEnabled(palette);
     auto* model = qobject_cast<QStandardItemModel*>(_matte->model());
     if (model && model->item(1))
         model->item(1)->setEnabled(format != ImageExportSettings::Format::Jpeg);
@@ -195,6 +247,9 @@ ImageExportSettings ImageExportDialog::settings() const
     settings.matte = static_cast<ImageExportSettings::Matte>(_matte->currentIndex());
     settings.matteColor = _matteColor;
     settings.quality = _quality->value();
+    settings.png8 = _depth->currentIndex() == 1;
+    settings.colors = _colors->value();
+    settings.dither = _dither->isChecked();
     return settings;
 }
 
@@ -227,7 +282,9 @@ bool run(const ImageExportSettings& settings, PhoenixView& view, QString& error)
     case ImageExportSettings::Format::Png:
     {
         QImageWriter writer(settings.path, "png");
-        if (!writer.write(picture.convertToFormat(transparent ? QImage::Format_ARGB32 : QImage::Format_RGB32)))
+        const QImage out = settings.png8 ? toIndexed(picture, transparent, settings.colors, settings.dither)
+                                         : picture.convertToFormat(transparent ? QImage::Format_ARGB32 : QImage::Format_RGB32);
+        if (!writer.write(out))
         {
             error = writer.errorString();
             return false;
@@ -247,12 +304,11 @@ bool run(const ImageExportSettings& settings, PhoenixView& view, QString& error)
     }
     case ImageExportSettings::Format::Gif:
     {
-        const QImage rgba = picture.convertToFormat(QImage::Format_RGBA8888);
-        std::vector<uint8_t> pixels(static_cast<size_t>(rgba.width()) * rgba.height() * 4);
-        for (int y = 0; y < rgba.height(); ++y)
-            std::memcpy(pixels.data() + static_cast<size_t>(y) * rgba.width() * 4, rgba.constScanLine(y),
-                static_cast<size_t>(rgba.width()) * 4);
-        const std::vector<uint8_t> file = gif::encode(rgba.width(), rgba.height(), pixels, transparent);
+        gif::Options options;
+        options.colors = settings.colors;
+        options.dither = settings.dither;
+        const std::vector<uint8_t> file =
+            gif::encode(picture.width(), picture.height(), rgbaBytes(picture), transparent, options);
         QFile out(settings.path);
         if (file.empty() || !out.open(QIODevice::WriteOnly) ||
             out.write(reinterpret_cast<const char*>(file.data()), static_cast<qint64>(file.size())) !=

@@ -5532,10 +5532,13 @@ int MainWindow::exportImageFromCommandLine(const QString& source, const QString&
     settings.path = QFileInfo(output).absoluteFilePath();
     settings.format = ImageExportDialog::formatOf(output);
     settings.size = QSize(document->width, document->height);
-    for (int i = 0; i + 1 < options.size(); i += 2)
+    // Options and their values, in pairs; flags have none.
+    QStringList pairs = options;
+    pairs.removeAll("--dither");
+    for (int i = 0; i + 1 < pairs.size(); i += 2)
     {
-        const QString& name = options.at(i);
-        const QString& value = options.at(i + 1);
+        const QString& name = pairs.at(i);
+        const QString& value = pairs.at(i + 1);
         if (name == "--frame")
             settings.frame = std::max(0, value.toInt() - 1);
         else if (name == "--size")
@@ -5556,7 +5559,15 @@ int MainWindow::exportImageFromCommandLine(const QString& source, const QString&
         }
         else if (name == "--quality")
             settings.quality = std::clamp(value.toInt(), 0, 100);
+        else if (name == "--colors")
+        {
+            // A palette: an 8-bit PNG, or a GIF's color count.
+            settings.colors = std::clamp(value.toInt(), 2, 256);
+            settings.png8 = true;
+        }
     }
+    // A flag, with no value after it.
+    settings.dither = options.contains("--dither");
     QString error;
     if (!ImageExport::run(settings, *_phoenixView, error))
     {

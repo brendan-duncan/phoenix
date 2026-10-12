@@ -2,6 +2,7 @@
 
 #include <QColor>
 #include <QDialog>
+#include <QImage>
 #include <QSize>
 #include <QString>
 
@@ -37,7 +38,17 @@ struct ImageExportSettings
     QColor matteColor = Qt::white;
     /// JPEG quality, 0 to 100.
     int quality = 90;
+    /// PNG: 8-bit, a palette of \a colors, rather than full color.
+    bool png8 = false;
+    /// For an 8-bit PNG or a GIF: the palette's size, 2 to 256, and whether
+    /// its colors are dithered.
+    int colors = 256;
+    bool dither = false;
 };
+
+/// \a picture cut down to a palette of \a colors as an 8-bit image, its
+/// clear pixels one transparent entry when \a transparent.
+QImage toIndexed(const QImage& picture, bool transparent, int colors, bool dither);
 
 class ImageExportDialog : public QDialog
 {
@@ -67,6 +78,9 @@ private:
     QToolButton* _matteSwatch = nullptr;
     QColor _matteColor = Qt::white;
     QSpinBox* _quality = nullptr;
+    QComboBox* _depth = nullptr;
+    QSpinBox* _colors = nullptr;
+    QCheckBox* _dither = nullptr;
     bool _syncing = false;
 };
 
