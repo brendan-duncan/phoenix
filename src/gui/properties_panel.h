@@ -148,6 +148,7 @@ signals:
 
     /// The Object tab's Swap button was pressed.
     void swapSymbolRequested();
+    void swapBitmapRequested();
 
 private:
     struct ToolRow

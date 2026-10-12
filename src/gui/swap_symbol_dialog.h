@@ -23,8 +23,10 @@ public:
     /// string when it could not.
     using Duplicate = std::function<QString(const QString& name)>;
 
+    /// With no \a duplicate the Duplicate button is left out, as for
+    /// Modify > Bitmap > Swap Bitmap, which shares the dialog.
     SwapSymbolDialog(const QStringList& symbols, const QString& current, Preview preview,
-        Duplicate duplicate, QWidget* parent = nullptr);
+        Duplicate duplicate, QWidget* parent = nullptr, const QString& title = "Swap Symbol");
 
     /// The symbol chosen.
     QString chosen() const;

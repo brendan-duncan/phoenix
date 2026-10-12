@@ -2367,6 +2367,10 @@ void PropertiesPanel::rebuildObjectTab()
         page->addWidget(makeHeader(objectGlyph("bitmap", palette()), "Bitmap"));
         PropertySection* source = addSection(page, "Bitmap");
         source->addField(0, 0, "Item", fieldLabel(QString::fromStdString(bitmap->libraryItemName), this));
+        QPushButton* swapBitmap = new QPushButton("Swap...", this);
+        swapBitmap->setToolTip("Show another library bitmap in its place");
+        connect(swapBitmap, &QPushButton::clicked, this, &PropertiesPanel::swapBitmapRequested);
+        source->addField(0, 1, "", swapBitmap);
         addPositionAndSize(page, elements);
         break;
     }

@@ -3336,6 +3336,10 @@ void MainWindow::setupMenus()
     _swapSymbolAction->setStatusTip("Show another library symbol in the selected instances");
     connect(_swapSymbolAction, &QAction::triggered, this, &MainWindow::swapSymbol);
     symbolMenu->addAction(_swapSymbolAction);
+    QMenu* bitmapMenu = modifyMenu->addMenu("&Bitmap");
+    QAction* swapBitmapAction = bitmapMenu->addAction("&Swap Bitmap...");
+    swapBitmapAction->setStatusTip("Show another library bitmap in the selected bitmaps");
+    connect(swapBitmapAction, &QAction::triggered, this, &MainWindow::swapBitmap);
 
     modifyMenu->addSeparator();
 
@@ -5665,6 +5669,7 @@ void MainWindow::setupPropertiesPanel()
     });
     connect(_framePicker, &FramePickerPanel::frameChosen, this, &MainWindow::pickInstanceFrame);
     connect(_propertiesPanel, &PropertiesPanel::swapSymbolRequested, this, &MainWindow::swapSymbol);
+    connect(_propertiesPanel, &PropertiesPanel::swapBitmapRequested, this, &MainWindow::swapBitmap);
     connect(_framePicker, &FramePickerPanel::loopChosen, this, [this](int loopType) {
         auto* instance = dynamic_cast<fla::SymbolInstance*>(_selection.single());
         if (!instance || instance->loopType == static_cast<fla::LoopType>(loopType))
@@ -7266,6 +7271,50 @@ void MainWindow::convertToSymbol()
     _documentView->setDocument(_flaDocument);
     _phoenixView->clearCaches();
     _phoenixView->update();
+}
+
+void MainWindow::swapBitmap()
+{
+    if (!_flaDocument || !_flaDocument->document)
+        return;
+    std::vector<fla::BitmapInstance*> bitmaps;
+    for (fla::DOMElement* selected : _selection.elements())
+        if (auto* bitmap = dynamic_cast<fla::BitmapInstance*>(selected))
+            bitmaps.push_back(bitmap);
+    if (bitmaps.empty())
+    {
+        statusBar()->showMessage("Select a bitmap on the stage first.", 3000);
+        return;
+    }
+    QStringList names;
+    for (const fla::Resource* resource : _flaDocument->document->resources)
+        if (const auto* bitmap = dynamic_cast<const fla::Bitmap*>(resource))
+            names << QString::fromStdString(bitmap->name);
+    names.sort(Qt::CaseInsensitive);
+    SwapSymbolDialog dialog(names, QString::fromStdString(bitmaps.front()->libraryItemName),
+        [this](const QString& name, const QSize& size) {
+            return _phoenixView ? _phoenixView->libraryPreview("bitmap", name, size) : QImage();
+        },
+        nullptr, this, "Swap Bitmap");
+    if (dialog.exec() != QDialog::Accepted)
+        return;
+    const std::string chosen = dialog.chosen().toStdString();
+    fla::CommandStack& stack = _editContext.commandStack();
+    stack.beginMacro("Swap Bitmap");
+    for (fla::BitmapInstance* bitmap : bitmaps)
+        if (bitmap->libraryItemName != chosen)
+            stack.push(fla::CommandPtr(new fla::SetPropertyCommand<std::string>(
+                bitmap->libraryItemName, bitmap->libraryItemName, chosen, "Swap Bitmap")));
+    stack.endMacro();
+    stack.breakMergeChain();
+    if (_phoenixView)
+    {
+        _phoenixView->invalidateBounds();
+        _phoenixView->clearCaches();
+        _phoenixView->update();
+    }
+    if (_propertiesPanel)
+        _propertiesPanel->refresh();
 }
 
 void MainWindow::swapSymbol()

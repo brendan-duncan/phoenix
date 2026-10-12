@@ -9,12 +9,12 @@
 #include <QVBoxLayout>
 
 SwapSymbolDialog::SwapSymbolDialog(const QStringList& symbols, const QString& current, Preview preview,
-    Duplicate duplicate, QWidget* parent)
+    Duplicate duplicate, QWidget* parent, const QString& title)
     : QDialog(parent)
     , _previewOf(std::move(preview))
     , _duplicate(std::move(duplicate))
 {
-    setWindowTitle("Swap Symbol");
+    setWindowTitle(title);
 
     _preview = new QLabel(this);
     _preview->setFixedSize(140, 140);
@@ -41,7 +41,7 @@ SwapSymbolDialog::SwapSymbolDialog(const QStringList& symbols, const QString& cu
     connect(_list, &QListWidget::itemDoubleClicked, this, &QDialog::accept);
 
     QPushButton* duplicateButton = new QPushButton("Duplicate Symbol...", this);
-    duplicateButton->setEnabled(static_cast<bool>(_duplicate));
+    duplicateButton->setVisible(static_cast<bool>(_duplicate));
     connect(duplicateButton, &QPushButton::clicked, this, [this]() {
         QListWidgetItem* item = _list->currentItem();
         if (!item || !_duplicate)
