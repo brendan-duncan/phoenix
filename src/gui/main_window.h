@@ -488,6 +488,11 @@ private:
     /// Copy Layers: copies of the layers, for the document they came from.
     std::vector<std::unique_ptr<fla::Layer>> _copiedLayers;
     const fla::Document* _copiedLayersFrom = nullptr;
+    /// Scene: the document's scenes.
+    class ScenePanel* _scenes = nullptr;
+    QDockWidget* _scenesDock = nullptr;
+    /// The scene the editor was last set up for.
+    const fla::Timeline* _shownScene = nullptr;
     /// Function Curves: any property of the current layer over time.
     class FunctionCurvesPanel* _functionCurves = nullptr;
     QDockWidget* _functionCurvesDock = nullptr;

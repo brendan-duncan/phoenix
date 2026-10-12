@@ -82,6 +82,7 @@ set(HEADERS
     src/gui/palettes_panel.h
     src/gui/lip_sync_dialog.h
     src/gui/function_curves_panel.h
+    src/gui/scene_panel.h
     src/gui/audio_engine.h
     src/gui/frame_picker_panel.h
     src/gui/swap_symbol_dialog.h
@@ -230,6 +231,7 @@ set(HEADERS
     src/edit/lip_sync.h
     src/edit/function_curves.h
     src/edit/deformers.h
+    src/edit/scene_commands.h
     src/edit/edit_list.h
     src/edit/combine_objects.h
     src/edit/transform_parts.h
@@ -275,6 +277,7 @@ set(SOURCES
     src/gui/palettes_panel.cpp
     src/gui/lip_sync_dialog.cpp
     src/gui/function_curves_panel.cpp
+    src/gui/scene_panel.cpp
     src/gui/audio_engine.cpp
     src/gui/frame_picker_panel.cpp
     src/gui/swap_symbol_dialog.cpp
@@ -418,6 +421,7 @@ set(SOURCES
     src/edit/lip_sync.cpp
     src/edit/function_curves.cpp
     src/edit/deformers.cpp
+    src/edit/scene_commands.cpp
     src/edit/edit_list.cpp
     src/edit/combine_objects.cpp
     src/edit/swatches.cpp

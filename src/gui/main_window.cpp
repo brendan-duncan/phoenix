@@ -30,6 +30,7 @@
 #include "notes_panel.h"
 #include "controllers_panel.h"
 #include "function_curves_panel.h"
+#include "scene_panel.h"
 #include "../edit/deformers.h"
 #include "palettes_panel.h"
 #include "../edit/pegs.h"
@@ -778,6 +779,23 @@ void MainWindow::createPanels()
         _controllersDock->hide();
     }
 
+    // Scenes, closed until asked.
+    if (!_scenesDock)
+    {
+        SceneLinks links;
+        links.document = [this]() -> fla::Document* { return _flaDocument ? _flaDocument->document : nullptr; };
+        links.commands = [this]() { return &_editContext.commandStack(); };
+        links.showScene = [this](int index) { goToScene(index); };
+        _scenes = new ScenePanel(links);
+        _scenesDock = new QDockWidget("Scene", this);
+        _scenesDock->setObjectName("sceneDock");
+        _scenesDock->setAllowedAreas(Qt::AllDockWidgetAreas);
+        _scenes->setParent(_scenesDock);
+        _scenesDock->setWidget(_scenes);
+        addDockWidget(Qt::RightDockWidgetArea, _scenesDock);
+        _scenesDock->hide();
+    }
+
     // Function curves, closed until asked.
     if (!_functionCurvesDock)
     {
@@ -954,6 +972,7 @@ void MainWindow::setupWindowMenu()
             {"&History", _historyDock, QKeySequence(Qt::CTRL | Qt::Key_F10), "Every step that can be undone; click one to go back or forward to it"},
             {"&Review Notes", _notesDock, QKeySequence(), "Notes on frames from whoever reviews the shot; they never export"},
             {"Co&ntrollers", _controllersDock, QKeySequence(), "Master controllers: one slider driving properties on several layers"},
+            {"Sc&ene", _scenesDock, QKeySequence(Qt::SHIFT | Qt::Key_F2), "The document's scenes: switch, add, duplicate, delete, rename and reorder them"},
             {"F&unction Curves", _functionCurvesDock, QKeySequence(), "Any property of the current layer as a curve over time, its keyframes dragged up or down"},
             {"Pale&ttes", _palettesDock, QKeySequence(), "Linked palettes: named colors that recolor everything linked to them, swapped whole"},
         },
@@ -1020,6 +1039,10 @@ void MainWindow::setupWindowMenu()
     connect(_controllersDock, &QDockWidget::visibilityChanged, this, [this](bool shown) {
         if (shown)
             _controllers->refresh();
+    });
+    connect(_scenesDock, &QDockWidget::visibilityChanged, this, [this](bool shown) {
+        if (shown)
+            _scenes->refresh();
     });
     connect(_functionCurvesDock, &QDockWidget::visibilityChanged, this, [this](bool shown) {
         if (shown)
@@ -3124,6 +3147,12 @@ void MainWindow::setupMenus()
     newSymbolAction->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_F8));
     newSymbolAction->setStatusTip("Make an empty symbol in the library and open it to draw in");
     connect(newSymbolAction, &QAction::triggered, this, &MainWindow::newSymbol);
+    QAction* sceneAction = insertMenu->addAction("Sce&ne");
+    sceneAction->setStatusTip("A new, empty scene after this one");
+    connect(sceneAction, &QAction::triggered, this, [this]() {
+        if (_scenes)
+            _scenes->addScene(false);
+    });
     insertMenu->addSeparator();
 
     QMenu* timelineMenu = insertMenu->addMenu("&Timeline");
@@ -4080,8 +4109,12 @@ void MainWindow::exportSvg()
 void MainWindow::goToScene(int index)
 {
     fla::Document* document = _flaDocument ? _flaDocument->document : nullptr;
+    // -1 shows the current scene again, after the scenes themselves changed.
+    const bool again = index < 0 && document && !document->timelines.empty();
+    if (again)
+        index = document->currentSceneIndex();
     if (!document || index < 0 || index >= static_cast<int>(document->timelines.size()) ||
-        index == document->currentSceneIndex())
+        (index == document->currentSceneIndex() && !again))
     {
         return;
     }
@@ -4089,6 +4122,7 @@ void MainWindow::goToScene(int index)
         _phoenixView->exitToDepth(0);
     _selection.clear();
     document->setCurrentScene(index);
+    _shownScene = document->currentScene();
     if (_player)
         _player->setCurrentFrame(0);
     if (_timelineView)
@@ -4102,6 +4136,8 @@ void MainWindow::goToScene(int index)
     }
     rebuildBreadcrumb();
     updateSelectionState();
+    if (_scenes && !again)
+        _scenes->refresh();
 }
 
 int MainWindow::exportFromCommandLine(const QString& source, const QString& output, bool perLayer)
@@ -5158,6 +5194,14 @@ void MainWindow::updateEditState()
         _palettes->refresh();
     if (_functionCurves && _functionCurvesDock && _functionCurvesDock->isVisible() && !_editContext.commandStack().isInMacro())
         _functionCurves->refresh();
+    if (_scenes && _scenesDock && _scenesDock->isVisible() && !_editContext.commandStack().isInMacro())
+    {
+        // An undo may have put back a scene, or taken the shown one away.
+        fla::Document* document = _flaDocument ? _flaDocument->document : nullptr;
+        if (document && _shownScene != document->currentScene())
+            goToScene(-1);
+        _scenes->refresh();
+    }
     if (_colorPanel)
         _colorPanel->refresh();
     updateFramePicker();
