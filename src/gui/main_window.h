@@ -375,6 +375,24 @@ private:
     class LibraryPanel* _libraryPanel = nullptr;
     class FramePickerPanel* _framePicker = nullptr;
     class AutoSave* _autoSave = nullptr;
+
+    /// The onion skin's settings, kept between sessions.
+    struct OnionSettings
+    {
+        int before = 2;
+        int after = 2;
+        bool outline = false;
+        bool keyframesOnly = false;
+        double opacity = 0.45;
+        QColor beforeColor = QColor(0, 102, 255);
+        QColor afterColor = QColor(0, 170, 60);
+    };
+    OnionSettings _onion;
+    /// Hands the settings to the stage and the timeline, and keeps them.
+    void applyOnion();
+    /// The onion skin's settings menu, at \a globalPos.
+    void showOnionMenu(const QPoint& globalPos);
+    void fillOnionMenu(class QMenu* menu);
     class AlignPanel* _alignPanel = nullptr;
     class TransformPanel* _transformPanel = nullptr;
     class InfoPanel* _infoPanel = nullptr;

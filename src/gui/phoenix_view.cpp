@@ -48,6 +48,7 @@
 #include "../data/morph_shape.h"
 #include "../data/morph_curves.h"
 #include <algorithm>
+#include <set>
 #include <memory>
 #include <map>
 #include <iostream>
@@ -692,13 +693,49 @@ void PhoenixView::drawStageContents(QPainter& painter, const fla::Document* docu
         const int current = _player->currentFrame();
         const DrawPhase phase = _drawPhase;
         _drawPhase = DrawPhase::All;
-        for (int k = _onionBefore; k >= 1; --k)
+        // The frames to show: so many either side, or so many keyframes
+        // either side when only keyframes are wanted.
+        std::vector<int> before;
+        std::vector<int> after;
+        if (_onionKeyframesOnly)
         {
-            if (current - k >= 0)
-                drawOnionFrame(painter, document, current - k, QColor(0, 102, 255), 0.45 * (1.0 - (k - 1.0) / (_onionBefore + 1.0)));
+            std::set<int> keys;
+            const fla::Timeline* timeline = scopeTimeline() ? scopeTimeline() : document->currentScene();
+            if (timeline)
+            {
+                for (const fla::Layer* layer : timeline->layers)
+                {
+                    if (!layer || !layer->isVisible() || layer->layerType == fla::Layer::Type::Guide)
+                        continue;
+                    for (const fla::Frame* frame : layer->frames)
+                        keys.insert(frame->index);
+                }
+            }
+            for (auto it = keys.rbegin(); it != keys.rend() && static_cast<int>(before.size()) < _onionBefore; ++it)
+            {
+                if (*it < current)
+                    before.push_back(*it);
+            }
+            for (auto it = keys.begin(); it != keys.end() && static_cast<int>(after.size()) < _onionAfter; ++it)
+            {
+                if (*it > current)
+                    after.push_back(*it);
+            }
         }
-        for (int k = _onionAfter; k >= 1; --k)
-            drawOnionFrame(painter, document, current + k, QColor(0, 170, 60), 0.45 * (1.0 - (k - 1.0) / (_onionAfter + 1.0)));
+        else
+        {
+            for (int k = 1; k <= _onionBefore && current - k >= 0; ++k)
+                before.push_back(current - k);
+            for (int k = 1; k <= _onionAfter; ++k)
+                after.push_back(current + k);
+        }
+        // Furthest first, fading with the distance.
+        for (int k = static_cast<int>(before.size()); k >= 1; --k)
+            drawOnionFrame(painter, document, before[static_cast<size_t>(k - 1)], _onionBeforeColor,
+                _onionOpacity * (1.0 - (k - 1.0) / (before.size() + 1.0)));
+        for (int k = static_cast<int>(after.size()); k >= 1; --k)
+            drawOnionFrame(painter, document, after[static_cast<size_t>(k - 1)], _onionAfterColor,
+                _onionOpacity * (1.0 - (k - 1.0) / (after.size() + 1.0)));
         _drawPhase = phase;
     }
 
@@ -809,6 +846,18 @@ void PhoenixView::setOnionSkin(bool on, int before, int after)
     update();
 }
 
+void PhoenixView::setOnionStyle(bool outline, bool keyframesOnly, double opacity, const QColor& before,
+    const QColor& after)
+{
+    _onionOutline = outline;
+    _onionKeyframesOnly = keyframesOnly;
+    _onionOpacity = std::clamp(opacity, 0.05, 1.0);
+    _onionBeforeColor = before;
+    _onionAfterColor = after;
+    clearCaches();
+    update();
+}
+
 void PhoenixView::drawOnionFrame(QPainter& painter, const fla::Document* document, int frame,
     const QColor& tint, double opacity)
 {
@@ -826,6 +875,10 @@ void PhoenixView::drawOnionFrame(QPainter& painter, const fla::Document* documen
         onion.setRenderHint(QPainter::SmoothPixmapTransform, true);
         onion.setTransform(painter.transform());
         _frameOverride = frame;
+        // In outline mode the frame's art is drawn as lines in the tint.
+        const QColor savedForced = _forcedOutline;
+        if (_onionOutline)
+            _forcedOutline = tint;
         if (_scope.empty())
         {
             drawDocument(onion, document);
@@ -836,6 +889,7 @@ void PhoenixView::drawOnionFrame(QPainter& painter, const fla::Document* documen
             drawTimeline(onion, _scope.back().timeline, fla::LoopType::PlayOnce, 0);
         }
         _frameOverride = -1;
+        _forcedOutline = savedForced;
         // Half the frame's own colors, half the tint.
         onion.setCompositionMode(QPainter::CompositionMode_SourceAtop);
         QColor wash = tint;
@@ -1229,6 +1283,8 @@ void PhoenixView::drawLayer(QPainter& painter, const fla::Layer* layer, fla::Loo
     const QColor previousOutline = _outlineColor;
     if (layer->outline && !_maskPass && !_exporting && _frameDepth == 0)
         _outlineColor = color;
+    if (_forcedOutline.isValid() && !_maskPass)
+        _outlineColor = _forcedOutline;
 
     const LayerFrame state = resolveLayerFrame(layer, loopType, firstFrame);
 

@@ -100,6 +100,8 @@ signals:
     /// The span starting at \a keyframe was stretched or shortened to
     /// \a duration frames by Ctrl-dragging its end.
     void spanResizeRequested(const fla::Layer* layer, int keyframe, int duration);
+    /// The onion skin's range was dragged by its markers in the ruler.
+    void onionRangeChanged(int before, int after);
 
 protected:
     void paintEvent(QPaintEvent* event) override;
@@ -129,6 +131,8 @@ private:
     int _loopLast = 0;
     /// The end of the loop range being dragged: 1 its start, 2 its end.
     int _draggingLoop = 0;
+    /// The onion skin marker being dragged: 1 the one before, 2 after.
+    int _draggingOnion = 0;
 
     /// The frames a motion tween span keys, from its motion, kept by the
     /// span and the motion they were read from.
@@ -235,6 +239,9 @@ signals:
     void framesMoveRequested(const std::vector<const fla::Layer*>& sources, const std::vector<const fla::Layer*>& targets, int first, int last, int to, bool copy);
     void contextMenuRequested(const QPoint& globalPos);
     void spanResizeRequested(const fla::Layer* layer, int keyframe, int duration);
+    void onionRangeChanged(int before, int after);
+    /// The onion skin button was right-clicked: its settings menu goes here.
+    void onionMenuRequested(const QPoint& globalPos);
 
 private slots:
     void onGotoFirstFrame();

@@ -225,6 +225,10 @@ public:
     /// after green, as Animate draws them.
     void setOnionSkin(bool on, int before, int after);
 
+    /// How the onion skin draws: frames as outlines, only keyframes, how
+    /// strongly, and the colors of the frames before and after.
+    void setOnionStyle(bool outline, bool keyframesOnly, double opacity, const QColor& before, const QColor& after);
+
     /// The frame of its symbol an instance in \a frame shows at the playhead,
     /// as the stage draws it: a graphic by its loop setting, counted from
     /// its keyframe; a movie clip or a button at its first frame.
@@ -549,6 +553,14 @@ private:
     bool _onionSkin = false;
     int _onionBefore = 2;
     int _onionAfter = 2;
+    bool _onionOutline = false;
+    bool _onionKeyframesOnly = false;
+    double _onionOpacity = 0.45;
+    QColor _onionBeforeColor = QColor(0, 102, 255);
+    QColor _onionAfterColor = QColor(0, 170, 60);
+    /// While an onion frame draws in outline mode, the color its art is
+    /// outlined in.
+    QColor _forcedOutline;
 
     /// Draws the edited timeline (or the document) at frame \a frame,
     /// faded and tinted, for onion skinning.

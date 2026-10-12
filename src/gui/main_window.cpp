@@ -278,6 +278,21 @@ MainWindow::MainWindow(const QString& initialFile, QWidget* parent, bool startup
         });
     }
 
+    // The onion skin as it was left.
+    {
+        QSettings settings;
+        _onion.before = settings.value("onion/before", 2).toInt();
+        _onion.after = settings.value("onion/after", 2).toInt();
+        _onion.outline = settings.value("onion/outline", false).toBool();
+        _onion.keyframesOnly = settings.value("onion/keyframesOnly", false).toBool();
+        _onion.opacity = settings.value("onion/opacity", 0.45).toDouble();
+        _onion.beforeColor = QColor(settings.value("onion/beforeColor", "#0066ff").toString());
+        _onion.afterColor = QColor(settings.value("onion/afterColor", "#00aa3c").toString());
+        if (_phoenixView)
+            _phoenixView->setOnionStyle(_onion.outline, _onion.keyframesOnly, _onion.opacity, _onion.beforeColor,
+                _onion.afterColor);
+    }
+
     // A copy of unsaved work every few minutes, for after a crash.
     if (startup)
     {
@@ -828,8 +843,14 @@ void MainWindow::setupUI()
         if (_onionSkinAction && _onionSkinAction->isChecked() != on)
             _onionSkinAction->setChecked(on);
         else if (_phoenixView)
-            _phoenixView->setOnionSkin(on, 2, 2);
+            _phoenixView->setOnionSkin(on, _onion.before, _onion.after);
     });
+    connect(_timelineView, &TimelineView::onionRangeChanged, this, [this](int before, int after) {
+        _onion.before = before;
+        _onion.after = after;
+        applyOnion();
+    });
+    connect(_timelineView, &TimelineView::onionMenuRequested, this, &MainWindow::showOnionMenu);
 
     // Frame edits from the grid itself: dragging a keyframe, the menu.
     connect(_timelineView, &TimelineView::keyframeMoveRequested, this, &MainWindow::moveKeyframe);
@@ -1822,11 +1843,13 @@ void MainWindow::setupMenus()
     _onionSkinAction->setStatusTip("Show the frames either side of the playhead faded under it");
     connect(_onionSkinAction, &QAction::toggled, this, [this](bool on) {
         if (_phoenixView)
-            _phoenixView->setOnionSkin(on, 2, 2);
+            _phoenixView->setOnionSkin(on, _onion.before, _onion.after);
         if (_timelineView)
-            _timelineView->setOnionSkin(on, 2, 2);
+            _timelineView->setOnionSkin(on, _onion.before, _onion.after);
     });
     viewMenu->addAction(_onionSkinAction);
+    QMenu* onionMenu = viewMenu->addMenu("Onion Skin &Settings");
+    connect(onionMenu, &QMenu::aboutToShow, this, [this, onionMenu]() { fillOnionMenu(onionMenu); });
 
     // Sound plays with the timeline; Animate's Control > Mute Sounds.
     QAction* muteAction = new QAction("&Mute Sounds", this);
@@ -4725,6 +4748,101 @@ void MainWindow::unlockAll()
     stack.breakMergeChain();
     _selection.select(std::vector<fla::DOMElement*>(locked.begin(), locked.end()));
     _phoenixView->update();
+}
+
+void MainWindow::applyOnion()
+{
+    const bool on = _onionSkinAction && _onionSkinAction->isChecked();
+    if (_phoenixView)
+    {
+        _phoenixView->setOnionStyle(_onion.outline, _onion.keyframesOnly, _onion.opacity, _onion.beforeColor,
+            _onion.afterColor);
+        _phoenixView->setOnionSkin(on, _onion.before, _onion.after);
+    }
+    if (_timelineView)
+        _timelineView->setOnionSkin(on, _onion.before, _onion.after);
+    QSettings settings;
+    settings.setValue("onion/before", _onion.before);
+    settings.setValue("onion/after", _onion.after);
+    settings.setValue("onion/outline", _onion.outline);
+    settings.setValue("onion/keyframesOnly", _onion.keyframesOnly);
+    settings.setValue("onion/opacity", _onion.opacity);
+    settings.setValue("onion/beforeColor", _onion.beforeColor.name());
+    settings.setValue("onion/afterColor", _onion.afterColor.name());
+}
+
+void MainWindow::showOnionMenu(const QPoint& globalPos)
+{
+    QMenu menu(this);
+    fillOnionMenu(&menu);
+    menu.exec(globalPos);
+}
+
+void MainWindow::fillOnionMenu(QMenu* menu)
+{
+    menu->clear();
+    // The range, as Animate's presets give it, or as dragged.
+    for (const int span : {1, 2, 5})
+    {
+        QAction* action = menu->addAction(QString("Onion %1").arg(span));
+        action->setCheckable(true);
+        action->setChecked(_onion.before == span && _onion.after == span);
+        connect(action, &QAction::triggered, this, [this, span]() {
+            _onion.before = _onion.after = span;
+            applyOnion();
+        });
+    }
+    QAction* all = menu->addAction("Onion All");
+    connect(all, &QAction::triggered, this, [this]() {
+        const int frames = _phoenixView ? _phoenixView->frameCount() : 99;
+        _onion.before = _onion.after = std::clamp(frames, 1, 99);
+        applyOnion();
+    });
+    menu->addSeparator();
+    QAction* outline = menu->addAction("Outline");
+    outline->setCheckable(true);
+    outline->setChecked(_onion.outline);
+    outline->setStatusTip("Show the other frames as outlines");
+    connect(outline, &QAction::toggled, this, [this](bool on) {
+        _onion.outline = on;
+        applyOnion();
+    });
+    QAction* keyframes = menu->addAction("Keyframes Only");
+    keyframes->setCheckable(true);
+    keyframes->setChecked(_onion.keyframesOnly);
+    keyframes->setStatusTip("Show the keyframes either side rather than every frame");
+    connect(keyframes, &QAction::toggled, this, [this](bool on) {
+        _onion.keyframesOnly = on;
+        applyOnion();
+    });
+    QMenu* opacity = menu->addMenu("Opacity");
+    for (const int percent : {25, 45, 65, 85})
+    {
+        QAction* action = opacity->addAction(QString("%1%").arg(percent));
+        action->setCheckable(true);
+        action->setChecked(std::lround(_onion.opacity * 100.0) == percent);
+        connect(action, &QAction::triggered, this, [this, percent]() {
+            _onion.opacity = percent / 100.0;
+            applyOnion();
+        });
+    }
+    menu->addSeparator();
+    menu->addAction("Color Before...", this, [this]() {
+        const QColor chosen = QColorDialog::getColor(_onion.beforeColor, this, "Onion Skin: Frames Before");
+        if (chosen.isValid())
+        {
+            _onion.beforeColor = chosen;
+            applyOnion();
+        }
+    });
+    menu->addAction("Color After...", this, [this]() {
+        const QColor chosen = QColorDialog::getColor(_onion.afterColor, this, "Onion Skin: Frames After");
+        if (chosen.isValid())
+        {
+            _onion.afterColor = chosen;
+            applyOnion();
+        }
+    });
 }
 
 void MainWindow::combineObjects(int operation)

@@ -63,6 +63,8 @@ signals:
     void framesMoveRequested(const std::vector<const fla::Layer*>& sources, const std::vector<const fla::Layer*>& targets, int first, int last, int to, bool copy);
     void framesContextMenuRequested(const QPoint& globalPos);
     void spanResizeRequested(const fla::Layer* layer, int keyframe, int duration);
+    void onionRangeChanged(int before, int after);
+    void onionMenuRequested(const QPoint& globalPos);
     void onionSkinToggled(bool on);
 
 private:

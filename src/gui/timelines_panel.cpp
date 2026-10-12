@@ -191,7 +191,7 @@ TimelinesPanel::TimelinesPanel(Player* player, QWidget *parent)
     _onionButton = new QPushButton(_header);
     _onionButton->setFixedSize(btnSize, btnSize);
     _onionButton->setCheckable(true);
-    _onionButton->setToolTip("Onion skin (Alt+Shift+O)");
+    _onionButton->setToolTip("Onion skin (Alt+Shift+O); right-click for its settings, drag its markers in the ruler");
     {
         QPixmap pixmap(iconSize, iconSize);
         pixmap.fill(Qt::transparent);
@@ -207,6 +207,9 @@ TimelinesPanel::TimelinesPanel(Player* player, QWidget *parent)
     _onionButton->setIconSize(QSize(iconSize, iconSize));
     _onionButton->setStyleSheet(styleTransport +
         "QPushButton:checked { background-color: rgba(41,128,238,0.45); border-radius: 4px; }");
+    _onionButton->setContextMenuPolicy(Qt::CustomContextMenu);
+    connect(_onionButton, &QPushButton::customContextMenuRequested, this,
+        [this](const QPoint& at) { emit onionMenuRequested(_onionButton->mapToGlobal(at)); });
     connect(_onionButton, &QPushButton::toggled, this, [this](bool on) {
         _gridContainer->setOnionSkin(on, 2, 2);
         emit onionSkinToggled(on);
@@ -258,6 +261,7 @@ TimelinesPanel::TimelinesPanel(Player* player, QWidget *parent)
     connect(_gridContainer, &TimelineGrid::framesMoveRequested, this, &TimelinesPanel::framesMoveRequested);
     connect(_gridContainer, &TimelineGrid::contextMenuRequested, this, &TimelinesPanel::contextMenuRequested);
     connect(_gridContainer, &TimelineGrid::spanResizeRequested, this, &TimelinesPanel::spanResizeRequested);
+    connect(_gridContainer, &TimelineGrid::onionRangeChanged, this, &TimelinesPanel::onionRangeChanged);
     connect(_playTimer, &QTimer::timeout, this, &TimelinesPanel::onTimerTick);
 }
 
@@ -708,6 +712,21 @@ void TimelineGrid::mousePressEvent(QMouseEvent* event)
     {
         // The loop range's ends are dragged by their handles; elsewhere the
         // ruler scrubs the playhead.
+        // The onion skin's markers drag its range.
+        if (event->button() == Qt::LeftButton && _onionSkin && _player && !_loopOn)
+        {
+            const int stride = 21;
+            const int current = _player->currentFrame();
+            const int x = event->pos().x();
+            const int left = std::max(0, current - _onionBefore) * stride + 1;
+            const int right = (current + _onionAfter + 1) * stride - 2;
+            if (std::abs(x - left) <= 4 && _onionBefore > 0)
+                _draggingOnion = 1;
+            else if (std::abs(x - right) <= 4)
+                _draggingOnion = 2;
+            if (_draggingOnion)
+                return;
+        }
         if (event->button() == Qt::LeftButton && _loopOn)
         {
             const int stride = 21;
@@ -811,7 +830,17 @@ void TimelineGrid::mousePressEvent(QMouseEvent* event)
 
 void TimelineGrid::mouseMoveEvent(QMouseEvent* event)
 {
-    if (_resizingSpan)
+    if (_draggingOnion && _player)
+    {
+        const int at = std::max(0, frameAt(event->pos().x()));
+        const int current = _player->currentFrame();
+        if (_draggingOnion == 1)
+            _onionBefore = std::clamp(current - at, 0, 99);
+        else
+            _onionAfter = std::clamp(at - current, 0, 99);
+        update();
+    }
+    else if (_resizingSpan)
     {
         const int duration = std::max(1, frameAt(event->pos().x()) - _resizeKeyframe + 1);
         if (duration != _resizeDuration)
@@ -880,6 +909,11 @@ void TimelineGrid::mouseReleaseEvent(QMouseEvent* event)
     {
         _isDragging = false;
         _draggingLoop = 0;
+        if (_draggingOnion)
+        {
+            _draggingOnion = 0;
+            emit onionRangeChanged(_onionBefore, _onionAfter);
+        }
         if (_resizingSpan)
         {
             _resizingSpan = false;
