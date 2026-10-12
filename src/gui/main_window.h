@@ -33,6 +33,8 @@
 
 #include <QJsonObject>
 #include <QMainWindow>
+
+#include "../edit/font_items.h"
 #include <QPointer>
 #include <QToolButton>
 
@@ -247,6 +249,15 @@ private slots:
     /// \a onlyMissing, the fonts this document is missing, as a warning on
     /// opening it.
     void fontMappingDialog(bool onlyMissing);
+    /// Library font symbols: a new one (an empty name) or one's settings,
+    /// in a dialog; then the text layout learns the document's symbols.
+    void fontItemDialog(const QString& name);
+    void syncFontSymbols();
+    /// Text set in one face is set in another, as when a font symbol is
+    /// renamed.
+    void renameFontFaces(const std::string& from, const std::string& to);
+    /// Replaces the document's font symbols, undoably.
+    void setFontItems(const std::vector<fla::fonts::FontItem>& items, const char* what);
     /// Shows the Missing Fonts dialog when the document just opened names
     /// fonts that are neither installed nor mapped.
     void warnAboutFonts();

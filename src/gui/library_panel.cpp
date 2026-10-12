@@ -1,4 +1,5 @@
 #include "library_panel.h"
+#include "../edit/font_items.h"
 #include "theme.h"
 
 #include "../data/bitmap.h"
@@ -137,6 +138,22 @@ QIcon bitmapIcon()
         painter.setBrush(QColor(240, 210, 90));
         painter.drawEllipse(QRectF(9.5, 4.5, 2.5, 2.5));
     });
+}
+
+QIcon fontIcon()
+{
+    // A capital A, as the library marks a font.
+    QPixmap pixmap(16, 16);
+    pixmap.fill(Qt::transparent);
+    QPainter painter(&pixmap);
+    painter.setRenderHint(QPainter::Antialiasing, true);
+    QFont font("Times New Roman");
+    font.setPixelSize(14);
+    font.setBold(true);
+    painter.setFont(font);
+    painter.setPen(theme::color("icon"));
+    painter.drawText(QRectF(0, 0, 16, 16), Qt::AlignCenter, "A");
+    return QIcon(pixmap);
 }
 
 QIcon soundIcon()
@@ -325,6 +342,14 @@ LibraryPanel::LibraryPanel(QWidget* parent)
         }
         if (item)
             rename = menu.addAction("Rename");
+        QAction* fontProperties = nullptr;
+        QAction* useFont = nullptr;
+        if (kind == static_cast<int>(Kind::Font))
+        {
+            fontProperties = menu.addAction("Font Properties...");
+            useFont = menu.addAction("Use for Selected Text");
+            menu.addSeparator();
+        }
         if (kind == static_cast<int>(Kind::Symbol))
         {
             duplicate = menu.addAction("Duplicate");
@@ -343,6 +368,7 @@ LibraryPanel::LibraryPanel(QWidget* parent)
         if (item)
             menu.addSeparator();
         QAction* folder = menu.addAction("New Folder");
+        QAction* newFont = menu.addAction("New Font...");
         QAction* unused = menu.addAction("Select Unused Items");
         QAction* updateAll = nullptr;
         if (anyLinked)
@@ -353,6 +379,18 @@ LibraryPanel::LibraryPanel(QWidget* parent)
         if (chosen == rename)
         {
             _tree->editItem(item, 0);
+        }
+        else if (chosen == newFont)
+        {
+            emit newFontRequested();
+        }
+        else if (fontProperties && chosen == fontProperties)
+        {
+            emit fontPropertiesRequested(name);
+        }
+        else if (useFont && chosen == useFont)
+        {
+            emit useFontRequested(name);
         }
         else if (chosen == duplicate)
         {
@@ -578,6 +616,8 @@ QStringList LibraryPanel::snapshot() const
             names << "b:" + QString::fromStdString(static_cast<const fla::Bitmap*>(resource)->name);
     for (const fla::Document::SoundInfo& sound : doc->sounds)
         names << "a:" + QString::fromStdString(sound.name);
+    for (const fla::fonts::FontItem& font : fla::fonts::itemsOf(*doc))
+        names << "t:" + QString::fromStdString(font.name) + ":" + QString::fromStdString(font.font);
     return names;
 }
 
@@ -702,6 +742,8 @@ void LibraryPanel::refresh()
     }
     for (const fla::Document::SoundInfo& sound : doc->sounds)
         add(QString::fromStdString(sound.name), soundIcon(), "Sound", Kind::Sound);
+    for (const fla::fonts::FontItem& font : fla::fonts::itemsOf(*doc))
+        add(QString::fromStdString(font.name), fontIcon(), "Font", Kind::Font);
 
     _count->setText(QString("%1 item%2").arg(items).arg(items == 1 ? "" : "s"));
     _tree->setSortingEnabled(true);

@@ -40,6 +40,12 @@ QHash<QString, Face>& faceCache()
     return cache;
 }
 
+QHash<QString, QString>& symbolFonts()
+{
+    static QHash<QString, QString> fonts;
+    return fonts;
+}
+
 QHash<QString, QString>& mapping()
 {
     static QHash<QString, QString> map = []() {
@@ -63,6 +69,18 @@ Face resolveFace(const QString& face)
     const auto cached = cache.find(face);
     if (cached != cache.end())
         return cached.value();
+
+    // A font symbol: its font, by name.
+    if (face.endsWith('*'))
+    {
+        const QString font = symbolFonts().value(face.left(face.length() - 1));
+        if (!font.isEmpty() && !font.endsWith('*'))
+        {
+            const Face resolved = resolveFace(font);
+            cache.insert(face, resolved);
+            return resolved;
+        }
+    }
 
     Face result;
     QString family = face;
@@ -582,6 +600,14 @@ void setFontMapping(const QHash<QString, QString>& newMapping)
     for (auto it = newMapping.begin(); it != newMapping.end(); ++it)
         settings.setValue(QString(it.key()).replace("/", "%2F"), it.value());
     settings.endGroup();
+}
+
+void setFontSymbols(const QHash<QString, QString>& fonts)
+{
+    if (fonts == symbolFonts())
+        return;
+    symbolFonts() = fonts;
+    faceCache().clear();
 }
 
 bool isInstalled(const QString& face)

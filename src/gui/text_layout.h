@@ -69,6 +69,10 @@ QFont fontFor(const fla::TextRun& run);
 QHash<QString, QString> fontMapping();
 void setFontMapping(const QHash<QString, QString>& mapping);
 
+/// The document's font symbols, by name, and the font each stands for:
+/// text whose face is a symbol's name and a star draws in its font.
+void setFontSymbols(const QHash<QString, QString>& fonts);
+
 /// Whether a face (as Animate names it) resolves to an installed family,
 /// mapped or not.
 bool isInstalled(const QString& face);

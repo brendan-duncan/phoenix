@@ -574,6 +574,7 @@ void MainWindow::adoptDocument(fla::FLADocument* document, const QString& filePa
 
     if (_flaDocument)
         _player->setCurrentFrame(0);
+    syncFontSymbols();
     warnAboutFonts();
     // A document shown that has no tab yet (the first one, a recovered one)
     // gets one; a tab whose document failed to open goes.
@@ -6165,6 +6166,28 @@ void MainWindow::setupPropertiesPanel()
     const auto changePath = [this, afterLibraryEdit](const QString& from, const QString& to, const char* what) {
         if (!_flaDocument || !_flaDocument->document)
             return;
+        // A font symbol: renamed in place, with the text set in it.
+        std::vector<fla::fonts::FontItem> fonts = fla::fonts::itemsOf(*_flaDocument->document);
+        for (fla::fonts::FontItem& font : fonts)
+        {
+            if (QString::fromStdString(font.name) != from)
+                continue;
+            const std::string newName = to.mid(to.lastIndexOf('/') + 1).toStdString();
+            if (newName.empty() || !fla::library::nameIsFree(*_flaDocument->document, newName))
+            {
+                _libraryPanel->refresh();
+                return;
+            }
+            const std::string oldName = font.name;
+            font.name = newName;
+            fla::CommandStack& stack = _editContext.commandStack();
+            stack.beginMacro("Rename Font");
+            setFontItems(fonts, "Rename Font");
+            renameFontFaces(oldName + "*", newName + "*");
+            stack.endMacro();
+            afterLibraryEdit();
+            return;
+        }
         std::string problem;
         fla::library::Renames renames =
             fla::library::pathRenames(*_flaDocument->document, from.toStdString(), to.toStdString(), &problem);
@@ -6198,11 +6221,35 @@ void MainWindow::setupPropertiesPanel()
                 _flaDocument->document, fla::library::cloneSymbol(*symbol, copyName), "Duplicate Symbol")));
             afterLibraryEdit();
         });
+    connect(_libraryPanel, &LibraryPanel::newFontRequested, this, [this]() { fontItemDialog(QString()); });
+    connect(_libraryPanel, &LibraryPanel::fontPropertiesRequested, this, [this](const QString& name) { fontItemDialog(name); });
+    connect(_libraryPanel, &LibraryPanel::useFontRequested, this, [this](const QString& name) {
+        applyTextStyle("face", name + "*");
+    });
     connect(_libraryPanel, &LibraryPanel::deleteItemsRequested, this,
-        [this, symbolNamed, afterLibraryEdit](const QStringList& names) {
+        [this, symbolNamed, afterLibraryEdit](const QStringList& chosen) {
             if (!_flaDocument || !_flaDocument->document)
                 return;
             fla::Document& document = *_flaDocument->document;
+            // Font symbols go first; text set in one draws in its font's
+            // name, as Animate leaves it.
+            QStringList names = chosen;
+            std::vector<fla::fonts::FontItem> fonts = fla::fonts::itemsOf(document);
+            const size_t before = fonts.size();
+            fonts.erase(std::remove_if(fonts.begin(), fonts.end(), [&names](const auto& font) {
+                return names.contains(QString::fromStdString(font.name));
+            }), fonts.end());
+            if (fonts.size() != before)
+            {
+                for (const fla::fonts::FontItem& font : fla::fonts::itemsOf(document))
+                    names.removeAll(QString::fromStdString(font.name));
+                setFontItems(fonts, "Delete Font");
+                if (names.isEmpty())
+                {
+                    afterLibraryEdit();
+                    return;
+                }
+            }
             std::vector<fla::Symbol*> symbols;
             std::vector<fla::Bitmap*> bitmaps;
             QStringList kept;
@@ -7830,6 +7877,181 @@ void MainWindow::fontMappingDialog(bool onlyMissing)
         _phoenixView->clearCaches();
         _phoenixView->update();
     }
+}
+
+void MainWindow::syncFontSymbols()
+{
+    QHash<QString, QString> fonts;
+    if (_flaDocument && _flaDocument->document)
+        for (const fla::fonts::FontItem& item : fla::fonts::itemsOf(*_flaDocument->document))
+            fonts.insert(QString::fromStdString(item.name), QString::fromStdString(item.font));
+    TextLayout::setFontSymbols(fonts);
+}
+
+void MainWindow::setFontItems(const std::vector<fla::fonts::FontItem>& items, const char* what)
+{
+    fla::Document* document = _flaDocument ? _flaDocument->document : nullptr;
+    if (!document)
+        return;
+    using Sections = std::vector<fla::Document::RawSection>;
+    _editContext.commandStack().push(fla::CommandPtr(new fla::SetPropertyCommand<Sections>(
+        document->extraSections, document->extraSections, fla::fonts::withItems(*document, items), what)));
+    _editContext.commandStack().breakMergeChain();
+    syncFontSymbols();
+    if (_libraryPanel)
+        _libraryPanel->refreshIfStale();
+    if (_phoenixView)
+    {
+        _phoenixView->invalidateBounds();
+        _phoenixView->clearCaches();
+        _phoenixView->update();
+    }
+}
+
+void MainWindow::fontItemDialog(const QString& name)
+{
+    fla::Document* document = _flaDocument ? _flaDocument->document : nullptr;
+    if (!document)
+        return;
+    std::vector<fla::fonts::FontItem> items = fla::fonts::itemsOf(*document);
+    int editing = -1;
+    for (size_t i = 0; i < items.size(); ++i)
+        if (QString::fromStdString(items[i].name) == name)
+            editing = static_cast<int>(i);
+    fla::fonts::FontItem item;
+    if (editing >= 0)
+        item = items[static_cast<size_t>(editing)];
+    else
+    {
+        // "Font 1", "Font 2"... and the font new text is set in.
+        for (int n = 1;; ++n)
+        {
+            const std::string candidate = "Font " + std::to_string(n);
+            if (std::none_of(items.begin(), items.end(), [&](const auto& i) { return i.name == candidate; }) &&
+                fla::library::nameIsFree(*document, candidate))
+            {
+                item.name = candidate;
+                break;
+            }
+        }
+        item.font = _drawingStyle.textFace;
+        item.ranges = {1, 2, 3, 4};
+    }
+
+    QDialog dialog(this);
+    dialog.setWindowTitle(editing >= 0 ? "Font Properties" : "New Font");
+    QFormLayout* form = new QFormLayout(&dialog);
+    QLineEdit* nameEdit = new QLineEdit(QString::fromStdString(item.name), &dialog);
+    form->addRow("Name:", nameEdit);
+    QFontComboBox* family = new QFontComboBox(&dialog);
+    family->setCurrentFont(QFont(TextLayout::familyOf(QString::fromStdString(item.font))));
+    form->addRow("Font:", family);
+    const QString font = QString::fromStdString(item.font);
+    QCheckBox* bold = new QCheckBox("Bold", &dialog);
+    bold->setChecked(font.contains("Bold", Qt::CaseInsensitive));
+    QCheckBox* italic = new QCheckBox("Italic", &dialog);
+    italic->setChecked(font.contains("Italic", Qt::CaseInsensitive) || font.contains("Oblique", Qt::CaseInsensitive));
+    QHBoxLayout* style = new QHBoxLayout();
+    style->addWidget(bold);
+    style->addWidget(italic);
+    style->addStretch();
+    form->addRow("Style:", style);
+    // The characters carried with the movie, so text set in the symbol shows
+    // where the font is not installed.
+    const std::pair<int, const char*> ranges[] = {{1, "Uppercase (A-Z)"}, {2, "Lowercase (a-z)"}, {3, "Numerals (0-9)"},
+        {4, "Punctuation"}, {5, "Basic Latin"}};
+    std::vector<std::pair<int, QCheckBox*>> rangeBoxes;
+    QVBoxLayout* embed = new QVBoxLayout();
+    for (const auto& [id, label] : ranges)
+    {
+        QCheckBox* box = new QCheckBox(label, &dialog);
+        box->setChecked(std::find(item.ranges.begin(), item.ranges.end(), id) != item.ranges.end());
+        embed->addWidget(box);
+        rangeBoxes.emplace_back(id, box);
+    }
+    form->addRow("Embed:", embed);
+    QLineEdit* characters = new QLineEdit(QString::fromStdString(item.characters), &dialog);
+    characters->setPlaceholderText("Other characters to embed");
+    form->addRow("Also:", characters);
+    QDialogButtonBox* buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, &dialog);
+    connect(buttons, &QDialogButtonBox::accepted, &dialog, &QDialog::accept);
+    connect(buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
+    form->addRow(buttons);
+    if (dialog.exec() != QDialog::Accepted)
+        return;
+
+    const std::string newName = nameEdit->text().trimmed().toStdString();
+    const bool nameTaken = std::any_of(items.begin(), items.end(), [&](const auto& other) {
+        return other.name == newName && &other != (editing >= 0 ? &items[static_cast<size_t>(editing)] : nullptr);
+    }) || (newName != item.name && !fla::library::nameIsFree(*document, newName));
+    if (newName.empty() || nameTaken)
+    {
+        QMessageBox::information(this, dialog.windowTitle(), "Choose a name no other library item has.");
+        return;
+    }
+    // The font as text names it: the family run together, then its style.
+    QString face = family->currentFont().family().remove(' ');
+    if (bold->isChecked() || italic->isChecked())
+        face += QString("-") + (bold->isChecked() ? "Bold" : "") + (italic->isChecked() ? "Italic" : "");
+    item.name = newName;
+    item.font = face.toStdString();
+    item.ranges.clear();
+    for (const auto& [id, box] : rangeBoxes)
+        if (box->isChecked())
+            item.ranges.push_back(id);
+    item.characters = characters->text().toStdString();
+    if (item.itemId.empty())
+        item.itemId = fla::media::newItemId();
+    const std::string oldName = editing >= 0 ? items[static_cast<size_t>(editing)].name : std::string();
+    if (editing >= 0)
+        items[static_cast<size_t>(editing)] = item;
+    else
+        items.push_back(item);
+
+    fla::CommandStack& stack = _editContext.commandStack();
+    stack.beginMacro(editing >= 0 ? "Font Properties" : "New Font");
+    setFontItems(items, editing >= 0 ? "Font Properties" : "New Font");
+    // Renamed: the text set in it follows.
+    if (!oldName.empty() && oldName != newName)
+        renameFontFaces(oldName + "*", newName + "*");
+    stack.endMacro();
+    stack.breakMergeChain();
+}
+
+void MainWindow::renameFontFaces(const std::string& from, const std::string& to)
+{
+    fla::Document* document = _flaDocument ? _flaDocument->document : nullptr;
+    if (!document)
+        return;
+    std::vector<fla::Timeline*> timelines(document->timelines.begin(), document->timelines.end());
+    if (document->symbolList)
+        for (fla::Symbol* symbol : document->symbolList->symbols)
+            if (symbol)
+                timelines.insert(timelines.end(), symbol->timelines.begin(), symbol->timelines.end());
+    std::function<void(fla::Element*)> visit = [&](fla::Element* element) {
+        if (auto* text = dynamic_cast<fla::StaticText*>(element))
+        {
+            std::vector<fla::TextRun> runs = text->runs;
+            bool changed = false;
+            for (fla::TextRun& run : runs)
+                if (run.face == from)
+                {
+                    run.face = to;
+                    changed = true;
+                }
+            if (changed)
+                _editContext.commandStack().push(fla::CommandPtr(new fla::SetPropertyCommand<std::vector<fla::TextRun>>(
+                    text->runs, text->runs, runs, "Rename Font")));
+        }
+        if (auto* group = dynamic_cast<fla::Group*>(element))
+            for (fla::Element* member : group->members)
+                visit(member);
+    };
+    for (fla::Timeline* timeline : timelines)
+        for (fla::Layer* layer : timeline ? timeline->layers : std::vector<fla::Layer*>())
+            for (fla::Frame* frame : layer ? layer->frames : std::vector<fla::Frame*>())
+                for (fla::Element* element : frame ? frame->elements : std::vector<fla::Element*>())
+                    visit(element);
 }
 
 void MainWindow::swapBitmap()

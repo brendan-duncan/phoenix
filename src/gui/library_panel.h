@@ -78,6 +78,11 @@ public:
 signals:
     /// A symbol was double-clicked, to be edited on its own.
     void editSymbolRequested(const QString& name);
+    /// Font symbols: a new one, one's settings, and setting the selected
+    /// text in one.
+    void newFontRequested();
+    void fontPropertiesRequested(const QString& name);
+    void useFontRequested(const QString& name);
 
     /// The item menu's commands, for the window to carry out undoably.
     /// Any item or folder, by its full name, to a new full name in the
@@ -107,7 +112,8 @@ private:
         Folder,
         Symbol,
         Bitmap,
-        Sound
+        Sound,
+        Font
     };
 
     QTreeWidgetItem* folderItem(const QString& path);

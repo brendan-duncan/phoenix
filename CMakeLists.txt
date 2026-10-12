@@ -234,6 +234,7 @@ set(HEADERS
     src/edit/scene_commands.h
     src/edit/document_settings.h
     src/edit/text_style.h
+    src/edit/font_items.h
     src/edit/edit_list.h
     src/edit/combine_objects.h
     src/edit/transform_parts.h
@@ -426,6 +427,7 @@ set(SOURCES
     src/edit/scene_commands.cpp
     src/edit/document_settings.cpp
     src/edit/text_style.cpp
+    src/edit/font_items.cpp
     src/edit/edit_list.cpp
     src/edit/combine_objects.cpp
     src/edit/swatches.cpp

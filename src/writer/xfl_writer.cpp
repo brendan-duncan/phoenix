@@ -1133,6 +1133,18 @@ std::string XFLWriter::writeDocument(const Document& document)
         root->InsertEndChild(folders);
     }
 
+    // Font items go between the folders and the media, where Animate puts
+    // them.
+    const auto isFonts = [](const std::string& xml) {
+        const size_t start = xml.find_first_not_of(" \t\r\n");
+        return start != std::string::npos && xml.compare(start, 6, "<fonts") == 0;
+    };
+    for (const Document::RawSection& section : document.extraSections)
+    {
+        if (isFonts(section.xml))
+            appendRawXml(section.xml, root);
+    }
+
     if (!document.resources.empty() || !document.extraMedia.empty())
     {
         XMLElement* media = doc.NewElement("media");
@@ -1184,7 +1196,7 @@ std::string XFLWriter::writeDocument(const Document& document)
 
     for (const Document::RawSection& section : document.extraSections)
     {
-        if (section.beforeTimelines)
+        if (section.beforeTimelines && !isFonts(section.xml))
             appendRawXml(section.xml, root);
     }
 
