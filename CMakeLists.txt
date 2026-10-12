@@ -214,6 +214,7 @@ set(HEADERS
     src/edit/library_media.h
     src/edit/frame_sound.h
     src/edit/frame_bake.h
+    src/edit/shot_breakdown.h
     src/edit/combine_objects.h
     src/edit/transform_parts.h
     src/edit/swatches.h
@@ -384,6 +385,7 @@ set(SOURCES
     src/edit/library_media.cpp
     src/edit/frame_sound.cpp
     src/edit/frame_bake.cpp
+    src/edit/shot_breakdown.cpp
     src/edit/combine_objects.cpp
     src/edit/swatches.cpp
     src/geom/curve.cpp

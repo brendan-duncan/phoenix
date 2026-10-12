@@ -63,6 +63,16 @@ Phoenix doctor shot.fla --json</code></pre>
 
 <p>Lists what changed, part by part (the scenes, each symbol, each bitmap and sound, compared as they would be saved), then renders sample frames of both and compares them pixel by pixel. With <code>--out</code>, each frame that draws differently is saved as an image of before, after and the changes in red. <code>--samples N</code> sets how many frames are compared (12 by default). The exit code is 2 when the versions differ. In Phoenix, <b>File &gt; Compare With</b> shows the same report.</p>
 
+<h2>Split an episode into shots</h2>
+
+<pre><code>Phoenix shots episode.fla --by label --out shots/
+Phoenix shots episode.fla --by scene --format xfl
+Phoenix shots episode.fla --by camera</code></pre>
+
+<p>Writes a file per shot. With <code>--by label</code> (the default), each frame label starts a shot and gives it its name; frames before the first label become a shot of their own. <code>--by scene</code> makes one file per scene, named after it. <code>--by camera</code> cuts where the scene's camera jumps: at each camera keyframe that is not tweened into.</p>
+
+<p>Each shot starts at frame 1. A tween that runs across a cut is baked into a keyframe per frame on the shot's side, so the shot plays exactly as it did in the episode, and the camera is keyed where it stood at each cut. Library items a shot does not use are left out of its file. <code>--format</code> chooses <code>fla</code> (the default), <code>phx</code> or <code>xfl</code>. In Phoenix, <b>File &gt; Export &gt; Export Shots</b> does the same for the saved episode.</p>
+
 <h2>Run something over a folder</h2>
 
 <pre><code>Phoenix batch episode/ --doctor

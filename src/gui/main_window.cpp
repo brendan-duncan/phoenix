@@ -2130,6 +2130,10 @@ void MainWindow::setupMenus()
     exportMovieAction->setStatusTip("Export the frames as a PNG sequence or a video");
     connect(exportMovieAction, &QAction::triggered, this, &MainWindow::exportMovie);
     exportMenu->addAction(exportMovieAction);
+    QAction* exportShotsAction = new QAction("Export S&hots...", this);
+    exportShotsAction->setStatusTip("Split the episode into shot files, by scene, frame label or camera cut");
+    connect(exportShotsAction, &QAction::triggered, this, &MainWindow::exportShots);
+    exportMenu->addAction(exportShotsAction);
 
     // The format Save As starts in for a new document: XFL folders suit a
     // studio keeping its files in version control.
@@ -3321,6 +3325,65 @@ void MainWindow::checkDocument()
         updateEditState();
     });
     dialog.exec();
+}
+
+void MainWindow::exportShots()
+{
+    if (!_flaDocument || _documentPath.isEmpty() || !QFileInfo::exists(_documentPath))
+    {
+        QMessageBox::information(this, "Export Shots", "Save the episode first; the shots are cut from its file.");
+        return;
+    }
+    if (_editContext.isModified() &&
+        QMessageBox::question(this, "Export Shots",
+            "The episode has unsaved changes; the file as last saved is split. Go on?") != QMessageBox::Yes)
+        return;
+
+    QDialog dialog(this);
+    dialog.setWindowTitle("Export Shots");
+    QFormLayout* form = new QFormLayout(&dialog);
+    QComboBox* by = new QComboBox(&dialog);
+    by->addItem("Frame labels", "label");
+    by->addItem("Scenes", "scene");
+    by->addItem("Camera cuts", "camera");
+    by->setToolTip("Labels: each named frame label starts a shot. Camera cuts: each camera keyframe it jumps to.");
+    form->addRow("Cut at:", by);
+    QComboBox* format = new QComboBox(&dialog);
+    format->addItem("FLA files", "fla");
+    format->addItem("Phoenix documents", "phx");
+    format->addItem("XFL folders", "xfl");
+    form->addRow("Save as:", format);
+    QHBoxLayout* folderRow = new QHBoxLayout();
+    QLineEdit* folder = new QLineEdit(QFileInfo(_documentPath).absoluteDir().filePath(QFileInfo(_documentPath).completeBaseName() + "_shots"), &dialog);
+    QPushButton* browse = new QPushButton("Browse...", &dialog);
+    folderRow->addWidget(folder, 1);
+    folderRow->addWidget(browse);
+    form->addRow("Folder:", folderRow);
+    connect(browse, &QPushButton::clicked, &dialog, [&dialog, folder]() {
+        const QString chosen = QFileDialog::getExistingDirectory(&dialog, "Shots Folder", folder->text());
+        if (!chosen.isEmpty())
+            folder->setText(chosen);
+    });
+    QDialogButtonBox* buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, &dialog);
+    form->addRow(buttons);
+    connect(buttons, &QDialogButtonBox::accepted, &dialog, &QDialog::accept);
+    connect(buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
+    dialog.resize(520, dialog.sizeHint().height());
+    if (dialog.exec() != QDialog::Accepted)
+        return;
+
+    QProcess process;
+    QApplication::setOverrideCursor(Qt::WaitCursor);
+    process.start(QCoreApplication::applicationFilePath(), {"shots", _documentPath, "--by", by->currentData().toString(),
+        "--format", format->currentData().toString(), "--out", folder->text()});
+    process.waitForFinished(-1);
+    QApplication::restoreOverrideCursor();
+    const QString output = QString::fromLocal8Bit(process.readAllStandardOutput()) +
+                           QString::fromLocal8Bit(process.readAllStandardError());
+    if (process.exitCode() != 0)
+        QMessageBox::warning(this, "Export Shots", output);
+    else
+        QMessageBox::information(this, "Export Shots", output);
 }
 
 void MainWindow::compareWith()

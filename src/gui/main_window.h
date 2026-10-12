@@ -458,6 +458,8 @@ private:
     void checkDocument();
     /// File > Compare With: the diff command against another version.
     void compareWith();
+    /// File > Export > Shots: the shots command on the saved episode.
+    void exportShots();
     void refreshHistory();
     /// Edit > Repeat: the last Insert, Modify or Timeline command run, to
     /// run again on what is selected now.

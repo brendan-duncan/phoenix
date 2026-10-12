@@ -10,6 +10,7 @@
 #include "../phx/container.h"
 #include "../phx/phx_document.h"
 #include "../writer/document_diff.h"
+#include "../edit/shot_breakdown.h"
 #include "../writer/fla_writer.h"
 #include "../writer/xfl_content.h"
 #include "../writer/xfl_folder_writer.h"
@@ -52,6 +53,11 @@ const char* const kHelp =
     "      runs the script on each document opened out as an XFL folder\n"
     "      (python script.py <xfl folder> <document>); with --save, what the\n"
     "      script changed is written back.\n"
+    "\n"
+    "  shots <episode> [--by scene|label|camera] [--out <folder>] [--format fla|phx|xfl]\n"
+    "      Splits an episode into shot files: one per scene, per frame label, or\n"
+    "      per camera cut. Tweens across a cut are baked so each shot plays as it\n"
+    "      did; what a shot does not use is left out of its library.\n"
     "\n"
     "  --convert <in> <out>, --export-image, --export-movie and --roundtrip\n"
     "      work as before.\n";
@@ -286,6 +292,55 @@ int diff(const QStringList& args)
     return differs ? 2 : 0;
 }
 
+int splitShots(const QStringList& args)
+{
+    if (args.isEmpty())
+    {
+        std::fprintf(stderr, "shots: which episode?\n");
+        return 1;
+    }
+    const QString episode = args.at(0);
+    const QString by = option(args, "--by").isEmpty() ? QString("label") : option(args, "--by");
+    const fla::shots::CutBy cut = by == "scene" ? fla::shots::CutBy::Scene
+        : by == "camera"                        ? fla::shots::CutBy::Camera
+                                                : fla::shots::CutBy::Label;
+    const QString format = option(args, "--format").isEmpty() ? QString("fla") : option(args, "--format").toLower();
+    const QString out = option(args, "--out").isEmpty()
+        ? QFileInfo(episode).absoluteDir().filePath(QFileInfo(episode).completeBaseName() + "_shots")
+        : option(args, "--out");
+    QDir().mkpath(out);
+
+    std::string error;
+    std::unique_ptr<fla::FLADocument> document = load(episode.toStdString(), error);
+    if (!document)
+    {
+        std::fprintf(stderr, "Could not read %s: %s\n", qPrintable(episode), error.c_str());
+        return 1;
+    }
+    const std::vector<fla::shots::Shot> shots = fla::shots::find(*document->document, cut);
+    document.reset();
+    int failed = 0;
+    for (const fla::shots::Shot& shot : shots)
+    {
+        // Each shot from a fresh copy of the episode.
+        std::unique_ptr<fla::FLADocument> copy = load(episode.toStdString(), error);
+        if (!copy)
+            return 1;
+        fla::shots::keepOnly(*copy->document, shot);
+        const QString name = QString::fromStdString(fla::shots::fileName(shot.name));
+        const QString target = QDir(out).filePath(format == "xfl" ? name : name + "." + format);
+        if (!save(*copy->document, target.toStdString(), error))
+        {
+            std::fprintf(stderr, "Could not write %s: %s\n", qPrintable(target), error.c_str());
+            ++failed;
+            continue;
+        }
+        std::printf("%s: frames %d-%d -> %s\n", shot.name.c_str(), shot.first + 1, shot.last + 1, qPrintable(target));
+    }
+    std::printf("%zu shots\n", shots.size());
+    return failed ? 1 : 0;
+}
+
 int batch(const QStringList& args)
 {
     if (args.isEmpty() || !QFileInfo(args.at(0)).isDir())
@@ -389,7 +444,7 @@ int batch(const QStringList& args)
 
 bool isCommand(const QString& name)
 {
-    return name == "render" || name == "doctor" || name == "diff" || name == "batch" || name == "help" ||
+    return name == "render" || name == "doctor" || name == "diff" || name == "batch" || name == "shots" || name == "help" ||
            name == "--help";
 }
 
@@ -445,6 +500,8 @@ int run(const QStringList& arguments)
         return diff(args);
     if (name == "batch")
         return batch(args);
+    if (name == "shots")
+        return splitShots(args);
     std::fputs(kHelp, stdout);
     return 0;
 }
