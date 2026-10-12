@@ -177,6 +177,15 @@ private:
     void addPositionAndSize(QVBoxLayout* layout, const std::vector<fla::Element*>& elements);
     void addShapeSections(QVBoxLayout* layout, fla::Shape* shape);
 
+    /// A rectangle or oval primitive's own settings (corner radii; angles,
+    /// inner radius and Close Path) and its fill and stroke.
+    void addPrimitiveSections(QVBoxLayout* layout, fla::Element* element);
+
+    /// A HotText editing one double of the document: live while dragged, one
+    /// undo step named \a name when let go.
+    HotText* bindDouble(double& field, double minimum, double maximum, int decimals, const QString& suffix,
+        const char* name);
+
     /// The stroke controls Animate shows (style, cap, join, miter, scale),
     /// in \a section from \a row on, set from \a look; \a apply gets the
     /// new look on any change. Returns the label and field of each row.

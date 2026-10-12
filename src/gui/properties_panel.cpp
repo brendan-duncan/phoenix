@@ -11,6 +11,8 @@
 #include "../data/fla_document.h"
 #include "../data/frame.h"
 #include "../data/group.h"
+#include "../data/rectangle_primitive.h"
+#include "../data/oval_primitive.h"
 #include "../data/layer.h"
 #include "../data/shape.h"
 #include "../data/solid_color.h"
@@ -51,6 +53,7 @@
 #include <QVBoxLayout>
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <functional>
 
@@ -1257,6 +1260,196 @@ std::vector<std::pair<QWidget*, QWidget*>> PropertiesPanel::addStrokeLookFields(
     return rows;
 }
 
+HotText* PropertiesPanel::bindDouble(double& field, double minimum, double maximum, int decimals, const QString& suffix,
+    const char* name)
+{
+    HotText* hot = makeHotText(minimum, maximum, decimals, suffix);
+    hot->setValue(field);
+    double* target = &field;
+    auto before = std::make_shared<double>(field);
+    bindLive(hot,
+        [=]() { *before = *target; },
+        [=](double value) {
+            *target = value;
+            emit documentEdited();
+        },
+        [=]() {
+            if (*target != *before)
+                push(std::unique_ptr<fla::Command>(new fla::SetPropertyCommand<double>(*target, *before, *target, name)));
+        });
+    return hot;
+}
+
+void PropertiesPanel::addPrimitiveSections(QVBoxLayout* layout, fla::Element* element)
+{
+    fla::FillStyle** fillSlot = nullptr;
+    fla::StrokeStyle** strokeSlot = nullptr;
+
+    if (element->elementType() == fla::Element::Type::Rectangle)
+    {
+        auto* rect = static_cast<fla::RectanglePrimitive*>(element);
+        fillSlot = &rect->fillStyle;
+        strokeSlot = &rect->strokeStyle;
+
+        PropertySection* corners = addSection(layout, "Rectangle Options");
+        double* radii[4] = {&rect->topLeftRadius, &rect->topRightRadius, &rect->bottomLeftRadius, &rect->bottomRightRadius};
+        // Locked, one value sets all four corners, as Animate's lock does;
+        // it starts locked when they are all alike.
+        auto locked = std::make_shared<bool>(rect->topLeftRadius == rect->topRightRadius &&
+            rect->topLeftRadius == rect->bottomLeftRadius && rect->topLeftRadius == rect->bottomRightRadius);
+        auto before = std::make_shared<std::array<double, 4>>();
+        const char* labels[4] = {"Top left", "Top right", "Bottom left", "Bottom right"};
+        std::vector<HotText*> fields;
+        for (int i = 0; i < 4; ++i)
+            fields.push_back(makeHotText(-999, 999, 1));
+        for (int i = 0; i < 4; ++i)
+        {
+            HotText* hot = fields[static_cast<size_t>(i)];
+            hot->setValue(*radii[i]);
+            hot->setToolTip("Corner radius, in pixels; negative curves the corner inward");
+            bindLive(hot,
+                [=]() {
+                    for (int k = 0; k < 4; ++k)
+                        (*before)[static_cast<size_t>(k)] = *radii[k];
+                },
+                [=](double value) {
+                    for (int k = 0; k < 4; ++k)
+                    {
+                        if (*locked || k == i)
+                        {
+                            *radii[k] = value;
+                            if (k != i)
+                                fields[static_cast<size_t>(k)]->setValue(value);
+                        }
+                    }
+                    emit documentEdited();
+                },
+                [=]() {
+                    auto* command = new fla::CompoundCommand("Corner Radius");
+                    for (int k = 0; k < 4; ++k)
+                    {
+                        command->addCommand(fla::CommandPtr(new fla::SetPropertyCommand<double>(
+                            *radii[k], (*before)[static_cast<size_t>(k)], *radii[k], "Corner Radius")));
+                    }
+                    push(std::unique_ptr<fla::Command>(command));
+                });
+            corners->addField(i / 2, i % 2, labels[i], hot);
+        }
+        QCheckBox* lock = new QCheckBox("Lock corners together", this);
+        lock->setChecked(*locked);
+        connect(lock, &QCheckBox::toggled, this, [locked](bool on) { *locked = on; });
+        corners->addWide(2, lock);
+        QPushButton* reset = new QPushButton("Reset", this);
+        reset->setToolTip("Square corners");
+        connect(reset, &QPushButton::clicked, this, [=]() {
+            auto* command = new fla::CompoundCommand("Reset Corners");
+            for (int k = 0; k < 4; ++k)
+                command->addCommand(fla::CommandPtr(new fla::SetPropertyCommand<double>(*radii[k], *radii[k], 0.0, "Reset Corners")));
+            push(std::unique_ptr<fla::Command>(command));
+            emit documentEdited();
+            QTimer::singleShot(0, this, [this]() { refresh(); });
+        });
+        corners->addWide(3, reset);
+    }
+    else if (element->elementType() == fla::Element::Type::Oval)
+    {
+        auto* oval = static_cast<fla::OvalPrimitive*>(element);
+        fillSlot = &oval->fillStyle;
+        strokeSlot = &oval->strokeStyle;
+
+        PropertySection* options = addSection(layout, "Oval Options");
+        options->addField(0, 0, "Start", bindDouble(oval->startAngle, 0, 360, 1, QString::fromUtf8("°"), "Start Angle"));
+        options->addField(0, 1, "End", bindDouble(oval->endAngle, 0, 360, 1, QString::fromUtf8("°"), "End Angle"));
+        options->addField(1, 0, "Inner", bindDouble(oval->innerRadius, 0, 99, 0, "%", "Inner Radius"));
+
+        // Close Path is an attribute Phoenix keeps rather than models: on
+        // unless the file says false.
+        bool closed = true;
+        for (const auto& attribute : oval->extraAttributes)
+        {
+            if (attribute.first == "closePath")
+                closed = attribute.second != "false";
+        }
+        QCheckBox* closePath = new QCheckBox("Close path", this);
+        closePath->setChecked(closed);
+        closePath->setToolTip("With part of the oval cut away: a closed, filled wedge, or just the open arc");
+        connect(closePath, &QCheckBox::toggled, this, [this, oval](bool on) {
+            auto after = oval->extraAttributes;
+            after.erase(std::remove_if(after.begin(), after.end(),
+                [](const std::pair<std::string, std::string>& a) { return a.first == "closePath"; }), after.end());
+            if (!on)
+                after.emplace_back("closePath", "false");
+            push(std::unique_ptr<fla::Command>(new fla::SetPropertyCommand<std::vector<std::pair<std::string, std::string>>>(
+                oval->extraAttributes, oval->extraAttributes, after, "Close Path")));
+            emit documentEdited();
+        });
+        options->addField(1, 1, QString(), closePath);
+        QPushButton* reset = new QPushButton("Reset", this);
+        reset->setToolTip("A whole oval with no hole");
+        connect(reset, &QPushButton::clicked, this, [this, oval]() {
+            auto* command = new fla::CompoundCommand("Reset Oval");
+            command->addCommand(fla::CommandPtr(new fla::SetPropertyCommand<double>(oval->startAngle, oval->startAngle, 0.0, "Reset Oval")));
+            command->addCommand(fla::CommandPtr(new fla::SetPropertyCommand<double>(oval->endAngle, oval->endAngle, 0.0, "Reset Oval")));
+            command->addCommand(fla::CommandPtr(new fla::SetPropertyCommand<double>(oval->innerRadius, oval->innerRadius, 0.0, "Reset Oval")));
+            push(std::unique_ptr<fla::Command>(command));
+            emit documentEdited();
+            QTimer::singleShot(0, this, [this]() { refresh(); });
+        });
+        options->addWide(2, reset);
+    }
+    if (!fillSlot || !strokeSlot)
+        return;
+
+    // Fill and stroke, edited where they are.
+    PropertySection* section = addSection(layout, "Color and Style");
+    int row = 0;
+    fla::FillStyle* fill = *fillSlot;
+    if (fill && fill->type() == fla::FillStyle::Type::SolidColor)
+    {
+        uint8_t* color = static_cast<fla::SolidColor*>(fill)->color;
+        QToolButton* swatch = makeSwatch(color, "Fill color");
+        connect(swatch, &QToolButton::clicked, this, [=]() {
+            const QColor chosen = QColorDialog::getColor(toQColor(color), this, "Fill Color", QColorDialog::ShowAlphaChannel);
+            if (!chosen.isValid())
+                return;
+            uint8_t after[4];
+            applyColor(chosen, after);
+            push(std::unique_ptr<fla::Command>(new fla::SetColorCommand(color, color, after, "Fill Color")));
+            emit documentEdited();
+            QTimer::singleShot(0, this, [this]() { refresh(); });
+        });
+        section->addField(row++, 0, "Fill", swatch);
+    }
+    fla::StrokeStyle* stroke = *strokeSlot;
+    if (stroke)
+    {
+        if (stroke->fill && stroke->fill->type() == fla::FillStyle::Type::SolidColor)
+        {
+            uint8_t* color = static_cast<fla::SolidColor*>(stroke->fill)->color;
+            QToolButton* swatch = makeSwatch(color, "Stroke color");
+            connect(swatch, &QToolButton::clicked, this, [=]() {
+                const QColor chosen = QColorDialog::getColor(toQColor(color), this, "Stroke Color", QColorDialog::ShowAlphaChannel);
+                if (!chosen.isValid())
+                    return;
+                uint8_t after[4];
+                applyColor(chosen, after);
+                push(std::unique_ptr<fla::Command>(new fla::SetColorCommand(color, color, after, "Stroke Color")));
+                emit documentEdited();
+                QTimer::singleShot(0, this, [this]() { refresh(); });
+            });
+            section->addField(row, 0, "Stroke", swatch);
+        }
+        section->addField(row++, 1, "Size", bindDouble(stroke->weight, 0.1, 200.0, 2, QString(), "Stroke Size"));
+        addStrokeLookFields(section, row, fla::StrokeLook::of(*stroke), [=](const fla::StrokeLook& look) {
+            push(std::unique_ptr<fla::Command>(new fla::ReplaceOwnedCommand<fla::StrokeStyle>(
+                *strokeSlot, look.applyTo(**strokeSlot, element), "Stroke Style")));
+            emit documentEdited();
+        });
+    }
+    if (row == 0)
+        section->addWide(row++, fieldLabel("No fill or stroke", this));
+}
+
 void PropertiesPanel::addShapeSections(QVBoxLayout* layout, fla::Shape* shape)
 {
     // The first solid fill and stroke stand for the shape, as Animate shows
@@ -1709,6 +1902,7 @@ void PropertiesPanel::rebuildObjectTab()
         page->addWidget(makeHeader(objectGlyph("shape", palette()),
             element->elementType() == fla::Element::Type::Rectangle ? "Rectangle Primitive" : "Oval Primitive"));
         addPositionAndSize(page, elements);
+        addPrimitiveSections(page, element);
         break;
     }
     case fla::Element::Type::SymbolInstance:

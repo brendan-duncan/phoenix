@@ -4,6 +4,7 @@
 
 #include <cstdint>
 #include <string>
+#include <utility>
 
 namespace fla {
 
@@ -51,6 +52,37 @@ private:
     T _after;
     std::string _name;
     int _mergeId;
+};
+
+/// Puts a new object in a slot that owns its object (a primitive's fill or
+/// stroke), keeping the one taken out for undo. Whichever is out of the
+/// document belongs to the command and goes with it.
+template <typename T>
+class ReplaceOwnedCommand : public Command
+{
+public:
+    ReplaceOwnedCommand(T*& slot, T* after, const std::string& name)
+        : _slot(&slot)
+        , _other(after)
+        , _name(name)
+    {
+    }
+
+    ~ReplaceOwnedCommand() override { delete _other; }
+
+    ReplaceOwnedCommand(const ReplaceOwnedCommand&) = delete;
+    ReplaceOwnedCommand& operator=(const ReplaceOwnedCommand&) = delete;
+
+    void redo() override { std::swap(*_slot, _other); }
+
+    void undo() override { std::swap(*_slot, _other); }
+
+    std::string name() const override { return _name; }
+
+private:
+    T** _slot;
+    T* _other;
+    std::string _name;
 };
 
 /// Sets an RGBA color stored as four bytes, which the document and the fills

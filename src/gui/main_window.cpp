@@ -2957,6 +2957,7 @@ void MainWindow::setupPropertiesPanel()
     connect(_propertiesPanel, &PropertiesPanel::documentEdited, this, [this]() {
         if (_phoenixView)
         {
+            _phoenixView->invalidateBounds();
             _phoenixView->clearCaches();
             _phoenixView->update();
         }
