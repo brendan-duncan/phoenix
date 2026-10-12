@@ -1,4 +1,5 @@
 #include "selection_tool.h"
+#include "../edit/element_clone.h"
 
 #include "phoenix_view.h"
 #include "selection_targets.h"
@@ -503,12 +504,10 @@ QPointF SelectionTool::snapMove(PhoenixView& view, const QPointF& delta)
 
 void SelectionTool::duplicateTargets(PhoenixView& view)
 {
-    // Only shapes sitting directly in the frame can be copied so far; a mixed
-    // selection, or a group, moves as it is.
+    // Whatever sits directly in the frame is copied, of any kind.
     for (const Target& target : _targets)
     {
-        if (!target.element || target.element->elementType() != fla::Element::Type::Shape ||
-            !target.element->parent ||
+        if (!target.element || !target.element->parent ||
             target.element->parent->domType() != fla::DOMElement::DOMType::Frame)
         {
             return;
@@ -521,12 +520,14 @@ void SelectionTool::duplicateTargets(PhoenixView& view)
     for (const Target& target : _targets)
     {
         fla::Frame* frame = const_cast<fla::Frame*>(frameOf(target.element));
-        fla::Shape* original = static_cast<fla::Shape*>(target.element);
+        fla::Element* original = target.element;
 
         // The original goes back where it was; the copy takes over the drag.
         original->transform = target.startTransform;
 
-        fla::Shape* copy = fla::cloneShape(*original, frame);
+        fla::Element* copy = fla::cloneElement(*original, frame);
+        if (!copy)
+            continue;
         _commandStack.push(fla::CommandPtr(new fla::AddElementCommand(
             frame, copy, "Duplicate", &_selection)));
         copies.push_back({copy, target.startTransform});

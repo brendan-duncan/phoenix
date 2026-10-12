@@ -401,6 +401,50 @@ QImage PhoenixView::renderFrame(int frame, const QSize& size, bool transparent)
     return image;
 }
 
+QImage PhoenixView::renderElements(const std::vector<const fla::Element*>& elements, double scale)
+{
+    QRectF bounds;
+    for (const fla::Element* element : elements)
+    {
+        const QRectF box = element ? elementBounds(element) : QRectF();
+        if (box.isValid())
+            bounds = bounds.isValid() ? bounds.united(box) : box;
+    }
+    if (!bounds.isValid() || bounds.isEmpty())
+        return QImage();
+    // A pixel of room for the edges' antialiasing, and a sane limit.
+    bounds.adjust(-1.0, -1.0, 1.0, 1.0);
+    scale = std::min(scale, 4096.0 / std::max(bounds.width(), bounds.height()));
+    const QSize size(std::max(1, static_cast<int>(std::ceil(bounds.width() * scale))),
+        std::max(1, static_cast<int>(std::ceil(bounds.height() * scale))));
+    QImage image(size, QImage::Format_ARGB32_Premultiplied);
+    image.fill(Qt::transparent);
+
+    QPainter painter(&image);
+    painter.setRenderHint(QPainter::Antialiasing, true);
+    painter.setRenderHint(QPainter::TextAntialiasing, true);
+    painter.setRenderHint(QPainter::SmoothPixmapTransform, true);
+    painter.scale(scale, scale);
+    painter.translate(-bounds.topLeft());
+
+    const QTransform savedView = viewTransform;
+    const QRectF savedVisible = _visibleRect;
+    viewTransform = painter.transform();
+    _visibleRect = bounds;
+    for (const fla::Element* element : elements)
+    {
+        if (!element)
+            continue;
+        painter.save();
+        drawElement(painter, element, nullptr, 0.0);
+        painter.restore();
+    }
+    viewTransform = savedView;
+    _visibleRect = savedVisible;
+    painter.end();
+    return image;
+}
+
 void PhoenixView::paintEvent(QPaintEvent *event)
 {
     QPainter painter(this);

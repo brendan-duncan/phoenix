@@ -27,6 +27,12 @@
 #include "../edit/shape_merge.h"
 #include "../parser/fla_parser.h"
 #include "../writer/fla_writer.h"
+#include "../writer/xfl_writer.h"
+#include "../parser/document_parser.h"
+#include "text_layout.h"
+#include "../data/static_text.h"
+#include "../data/layer.h"
+#include "../data/timeline.h"
 #include "../writer/xfl_content.h"
 #include "../writer/xfl_folder_writer.h"
 
@@ -36,6 +42,8 @@
 #include <algorithm>
 
 #include <QApplication>
+#include <QClipboard>
+#include <QImage>
 #include <QPushButton>
 #include <QCloseEvent>
 #include <QDragEnterEvent>
@@ -162,6 +170,8 @@ MainWindow::MainWindow(const QString& initialFile, QWidget* parent, bool startup
     // Object snapping on by default, grid snapping off, matching Animate.
     _snapper.setObjectSnapEnabled(true);
     _phoenixView->setSnapper(&_snapper);
+    // Paste follows what other windows and applications put on the clipboard.
+    connect(QApplication::clipboard(), &QClipboard::dataChanged, this, [this]() { updateSelectionState(); });
 
     _selectionTool = std::make_unique<SelectionTool>(_selection, _editContext.commandStack());
     _freeTransformTool = std::make_unique<FreeTransformTool>(
@@ -294,6 +304,8 @@ void MainWindow::releaseDocument()
     // instances; a paste points them at the next document's symbols.
     _selection.clear();
     relinkFrameClipboard(nullptr);
+    for (const std::unique_ptr<fla::Element>& element : _clipboard)
+        fla::relinkSymbols(*element, nullptr);
     _editContext.setDocument(nullptr);
 
     if (_flaDocument)
@@ -3148,22 +3160,51 @@ std::vector<fla::Shape*> MainWindow::selectedShapes() const
     return shapes;
 }
 
+std::vector<fla::Element*> MainWindow::selectedElements() const
+{
+    // In the order they stack, bottom first, so copies stack the same way.
+    std::vector<std::pair<int, fla::Element*>> ordered;
+    for (fla::DOMElement* selected : _selection.elements())
+    {
+        fla::Element* element = dynamic_cast<fla::Element*>(selected);
+        if (!element)
+            continue;
+        int index = 0;
+        if (element->parent && element->parent->domType() == fla::DOMElement::DOMType::Frame)
+        {
+            const auto& elements = static_cast<fla::Frame*>(element->parent)->elements;
+            index = static_cast<int>(std::find(elements.begin(), elements.end(), element) - elements.begin());
+        }
+        ordered.emplace_back(index, element);
+    }
+    std::stable_sort(ordered.begin(), ordered.end(),
+        [](const auto& a, const auto& b) { return a.first < b.first; });
+    std::vector<fla::Element*> elements;
+    for (const auto& entry : ordered)
+        elements.push_back(entry.second);
+    return elements;
+}
+
 void MainWindow::copy()
 {
-    const std::vector<fla::Shape*> shapes = selectedShapes();
-    if (shapes.empty())
+    const std::vector<fla::Element*> elements = selectedElements();
+    if (elements.empty())
         return;
 
     _clipboard.clear();
-    for (const fla::Shape* shape : shapes)
-        _clipboard.emplace_back(fla::cloneShape(*shape, nullptr));
+    for (const fla::Element* element : elements)
+    {
+        if (fla::Element* copy = fla::cloneElement(*element, nullptr))
+            _clipboard.emplace_back(copy);
+    }
+    putOnSystemClipboard();
 
     updateSelectionState();
 }
 
 void MainWindow::cut()
 {
-    if (selectedShapes().empty())
+    if (selectedElements().empty())
         return;
 
     copy();
@@ -3171,7 +3212,109 @@ void MainWindow::cut()
         _phoenixView->deleteSelection();
 }
 
-void MainWindow::placeCopies(const std::vector<const fla::Shape*>& sources, const char* name,
+bool MainWindow::canPaste() const
+{
+    if (!_clipboard.empty())
+        return true;
+    const QMimeData* data = QApplication::clipboard()->mimeData();
+    return data && (data->hasFormat(kElementsMime) || (data->hasText() && !data->text().isEmpty()));
+}
+
+void MainWindow::putOnSystemClipboard()
+{
+    // Three forms: the elements as XFL, which another Phoenix window pastes
+    // whole; a picture of them for other applications; and a lone text
+    // field's characters as plain text.
+    QMimeData* data = new QMimeData();
+    {
+        fla::Document holder(nullptr);
+        fla::Timeline* timeline = new fla::Timeline(&holder);
+        fla::Layer* layer = new fla::Layer(timeline);
+        fla::Frame* frame = new fla::Frame(layer);
+        holder.timelines.push_back(timeline);
+        timeline->layers.push_back(layer);
+        layer->frames.push_back(frame);
+        for (const std::unique_ptr<fla::Element>& element : _clipboard)
+        {
+            if (fla::Element* copy = fla::cloneElement(*element, frame))
+                frame->elements.push_back(copy);
+        }
+        fla::XFLWriter writer;
+        data->setData(kElementsMime, QByteArray::fromStdString(writer.writeDocument(holder)));
+    }
+    if (_phoenixView)
+    {
+        std::vector<const fla::Element*> shown;
+        for (fla::DOMElement* selected : _selection.elements())
+        {
+            if (const fla::Element* element = dynamic_cast<const fla::Element*>(selected))
+                shown.push_back(element);
+        }
+        const QImage picture = _phoenixView->renderElements(shown, 2.0);
+        if (!picture.isNull())
+            data->setImageData(picture);
+    }
+    if (_clipboard.size() == 1 && _clipboard.front()->elementType() == fla::Element::Type::StaticText)
+    {
+        const QString text = TextLayout::joinedText(static_cast<const fla::StaticText&>(*_clipboard.front()));
+        data->setText(QString(text).replace(QChar('\r'), QChar('\n')));
+    }
+    QApplication::clipboard()->setMimeData(data);
+}
+
+bool MainWindow::pasteFromSystemClipboard(const char* name, bool centerInView)
+{
+    // What this window copied is pasted from its own copies; what another
+    // window or application put there is read from the clipboard.
+    const QClipboard* clipboard = QApplication::clipboard();
+    if (clipboard->ownsClipboard())
+        return false;
+    const QMimeData* data = clipboard->mimeData();
+    if (!data)
+        return false;
+
+    std::vector<std::unique_ptr<fla::Element>> elements;
+    if (data->hasFormat(kElementsMime))
+    {
+        const QByteArray xml = data->data(kElementsMime);
+        DocumentParser parser(nullptr);
+        std::unique_ptr<fla::Document> holder(parser.parse(xml.toStdString(), nullptr));
+        if (holder && !holder->timelines.empty() && !holder->timelines.front()->layers.empty() &&
+            !holder->timelines.front()->layers.front()->frames.empty())
+        {
+            fla::Frame* frame = holder->timelines.front()->layers.front()->frames.front();
+            for (fla::Element* element : frame->elements)
+            {
+                element->parent = nullptr;
+                elements.emplace_back(element);
+            }
+            frame->elements.clear();
+        }
+    }
+    else if (data->hasText() && !data->text().isEmpty())
+    {
+        // Text from another application becomes a text field that grows to
+        // fit it.
+        fla::StaticText* text = new fla::StaticText(nullptr);
+        text->autoExpand = true;
+        fla::TextRun run;
+        run.text = QString(data->text()).replace(QChar('\n'), QChar('\r')).toStdString();
+        run.face = "ArialMT";
+        run.size = 20.0;
+        text->runs.push_back(run);
+        elements.emplace_back(text);
+    }
+    if (elements.empty())
+        return false;
+
+    std::vector<const fla::Element*> sources;
+    for (const std::unique_ptr<fla::Element>& element : elements)
+        sources.push_back(element.get());
+    placeCopies(sources, name, centerInView);
+    return true;
+}
+
+void MainWindow::placeCopies(const std::vector<const fla::Element*>& sources, const char* name,
     bool centerInView)
 {
     if (!_phoenixView || sources.empty())
@@ -3188,10 +3331,17 @@ void MainWindow::placeCopies(const std::vector<const fla::Shape*>& sources, cons
     fla::CommandStack& stack = _editContext.commandStack();
     stack.beginMacro(name);
 
-    std::vector<fla::Shape*> copies;
-    for (const fla::Shape* source : sources)
+    // A copy's instances point at this document's symbols, whichever
+    // document the copy came from.
+    const fla::SymbolList* library = _flaDocument && _flaDocument->document
+        ? _flaDocument->document->symbolList : nullptr;
+    std::vector<fla::Element*> copies;
+    for (const fla::Element* source : sources)
     {
-        fla::Shape* copy = fla::cloneShape(*source, frame);
+        fla::Element* copy = fla::cloneElement(*source, frame);
+        if (!copy)
+            continue;
+        fla::relinkSymbols(*copy, library);
         stack.push(fla::CommandPtr(new fla::AddElementCommand(frame, copy, name, &_selection)));
         copies.push_back(copy);
     }
@@ -3203,7 +3353,7 @@ void MainWindow::placeCopies(const std::vector<const fla::Shape*>& sources, cons
     if (centerInView)
     {
         QRectF bounds;
-        for (fla::Shape* copy : copies)
+        for (fla::Element* copy : copies)
         {
             const QRectF copyBounds = _phoenixView->elementBounds(copy);
             if (copyBounds.isValid())
@@ -3215,7 +3365,7 @@ void MainWindow::placeCopies(const std::vector<const fla::Shape*>& sources, cons
             const QPointF center = _phoenixView->mapToDocument(
                 QPointF(_phoenixView->width() / 2.0, _phoenixView->height() / 2.0));
             const QPointF delta = center - bounds.center();
-            for (fla::Shape* copy : copies)
+            for (fla::Element* copy : copies)
             {
                 copy->transform.tx += delta.x();
                 copy->transform.ty += delta.y();
@@ -3227,10 +3377,13 @@ void MainWindow::placeCopies(const std::vector<const fla::Shape*>& sources, cons
     // Pasted merge artwork floats, selected, until it is let go, just like a
     // fresh drawing; drawing objects keep to themselves.
     std::vector<fla::DOMElement*> picked;
-    for (fla::Shape* copy : copies)
+    for (fla::Element* copy : copies)
     {
-        if (!copy->isDrawingObject)
-            _phoenixView->setPendingMerge(copy, frame);
+        if (copy->elementType() == fla::Element::Type::Shape &&
+            !static_cast<fla::Shape*>(copy)->isDrawingObject)
+        {
+            _phoenixView->setPendingMerge(static_cast<fla::Shape*>(copy), frame);
+        }
         picked.push_back(copy);
     }
     _selection.select(picked);
@@ -3239,17 +3392,21 @@ void MainWindow::placeCopies(const std::vector<const fla::Shape*>& sources, cons
 
 void MainWindow::paste()
 {
-    std::vector<const fla::Shape*> sources;
-    for (const std::unique_ptr<fla::Shape>& shape : _clipboard)
-        sources.push_back(shape.get());
+    if (pasteFromSystemClipboard("Paste", true))
+        return;
+    std::vector<const fla::Element*> sources;
+    for (const std::unique_ptr<fla::Element>& element : _clipboard)
+        sources.push_back(element.get());
     placeCopies(sources, "Paste", true);
 }
 
 void MainWindow::pasteInPlace()
 {
-    std::vector<const fla::Shape*> sources;
-    for (const std::unique_ptr<fla::Shape>& shape : _clipboard)
-        sources.push_back(shape.get());
+    if (pasteFromSystemClipboard("Paste in Place", false))
+        return;
+    std::vector<const fla::Element*> sources;
+    for (const std::unique_ptr<fla::Element>& element : _clipboard)
+        sources.push_back(element.get());
     placeCopies(sources, "Paste in Place", false);
 }
 
@@ -3257,13 +3414,16 @@ void MainWindow::duplicateSelection()
 {
     // Copies are taken before anything is added, since adding changes the
     // selection the sources came from.
-    std::vector<std::unique_ptr<fla::Shape>> snapshots;
-    for (const fla::Shape* shape : selectedShapes())
-        snapshots.emplace_back(fla::cloneShape(*shape, nullptr));
+    std::vector<std::unique_ptr<fla::Element>> snapshots;
+    for (const fla::Element* element : selectedElements())
+    {
+        if (fla::Element* copy = fla::cloneElement(*element, nullptr))
+            snapshots.emplace_back(copy);
+    }
 
-    std::vector<const fla::Shape*> sources;
-    for (const std::unique_ptr<fla::Shape>& shape : snapshots)
-        sources.push_back(shape.get());
+    std::vector<const fla::Element*> sources;
+    for (const std::unique_ptr<fla::Element>& element : snapshots)
+        sources.push_back(element.get());
     placeCopies(sources, "Duplicate", false);
 }
 
@@ -3312,6 +3472,7 @@ void MainWindow::updateSelectionState()
 
     const bool hasShapes = !selectedShapes().empty();
     const bool hasElements = !_selection.isEmpty();
+    const bool hasCopyable = !selectedElements().empty();
     if (_groupAction)
         _groupAction->setEnabled(_selection.count() >= 1);
     bool hasGroup = false;
@@ -3348,15 +3509,15 @@ void MainWindow::updateSelectionState()
             action->setEnabled(hasShapes);
     }
     if (_cutAction)
-        _cutAction->setEnabled(hasShapes);
+        _cutAction->setEnabled(hasCopyable);
     if (_copyAction)
-        _copyAction->setEnabled(hasShapes);
+        _copyAction->setEnabled(hasCopyable);
     if (_duplicateAction)
-        _duplicateAction->setEnabled(hasShapes);
+        _duplicateAction->setEnabled(hasCopyable);
     if (_pasteAction)
-        _pasteAction->setEnabled(hasDocument && !_clipboard.empty());
+        _pasteAction->setEnabled(hasDocument && canPaste());
     if (_pasteInPlaceAction)
-        _pasteInPlaceAction->setEnabled(hasDocument && !_clipboard.empty());
+        _pasteInPlaceAction->setEnabled(hasDocument && canPaste());
 
     if (_selection.isEmpty())
     {

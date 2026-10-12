@@ -383,6 +383,11 @@ public:
     /// it unless \a transparent.
     QImage renderFrame(int frame, const QSize& size, bool transparent);
 
+    /// Elements of the timeline being edited drawn on their own, on a
+    /// transparent image fitted to them at \a scale pixels per pixel: what
+    /// Copy offers other applications.
+    QImage renderElements(const std::vector<const fla::Element*>& elements, double scale);
+
 public slots:
     void onPlayerFrameChanged(int frame);
 

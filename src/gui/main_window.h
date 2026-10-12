@@ -359,16 +359,36 @@ private:
 
     /// Copies of the shapes last cut or copied. Only shapes can be copied so
     /// far, since nothing else can be cloned yet.
-    std::vector<std::unique_ptr<fla::Shape>> _clipboard;
+    /// What Copy took: copies of the elements, of any kind, in stacking
+    /// order. The system clipboard carries them too (see copy()).
+    std::vector<std::unique_ptr<fla::Element>> _clipboard;
 
     /// The shapes currently selected, in selection order.
     std::vector<fla::Shape*> selectedShapes() const;
 
+    /// The elements currently selected, of any kind, in stacking order.
+    std::vector<fla::Element*> selectedElements() const;
+
     /// Adds copies of \a sources to the current frame as one undo step and
     /// selects them. With \a centerInView the copies are moved so that they
     /// sit in the middle of the view, which is where Animate pastes.
-    void placeCopies(const std::vector<const fla::Shape*>& sources, const char* name,
+    void placeCopies(const std::vector<const fla::Element*>& sources, const char* name,
         bool centerInView);
+
+    /// The media type the system clipboard carries copied elements under,
+    /// as an XFL document, between Phoenix windows.
+    static constexpr const char* kElementsMime = "application/x-phoenix-xfl-elements";
+
+    /// Puts what Copy took on the system clipboard as well.
+    void putOnSystemClipboard();
+
+    /// Pastes what another window or application put on the system
+    /// clipboard: copied elements, or text as a text field. False when the
+    /// clipboard holds this window's own copy, or nothing it can paste.
+    bool pasteFromSystemClipboard(const char* name, bool centerInView);
+
+    /// Whether Paste has something to paste.
+    bool canPaste() const;
     QAction* _undoAction = nullptr;
     QAction* _redoAction = nullptr;
     /// Display name of the open file, without the modified marker.
