@@ -1,4 +1,5 @@
 #include "gui/main_window.h"
+#include "gui/theme.h"
 #include "gui/updater.h"
 #include "phx/container.h"
 #include "phx/phx_document.h"
@@ -8,6 +9,7 @@
 #include "writer/xfl_content.h"
 #include "writer/xfl_folder_writer.h"
 #include <QApplication>
+#include <QSettings>
 #include <cmath>
 #include <algorithm>
 #include <QFileInfo>
@@ -152,6 +154,13 @@ int main(int argc, char *argv[])
     }
 #endif
 
+    // The theme's UI scale, which Qt takes only before it starts.
+    {
+        const double scale = QSettings("Phoenix", "FLAViewer").value("theme/uiScale", 1.0).toDouble();
+        if (scale >= 0.75 && scale <= 2.5 && scale != 1.0 && qEnvironmentVariableIsEmpty("QT_SCALE_FACTOR"))
+            qputenv("QT_SCALE_FACTOR", QByteArray::number(scale));
+    }
+
     QApplication a(argc, argv);
     QApplication::setApplicationVersion(Updater::currentVersion());
 
@@ -288,6 +297,10 @@ int main(int argc, char *argv[])
 
     const QString initialFile = arguments.size() > 1 ? arguments.at(1) : QString();
 
+    // The theme last chosen, before any window is made.
+    QCoreApplication::setOrganizationName("Phoenix");
+    QCoreApplication::setApplicationName("FLAViewer");
+    theme::applySaved();
     MainWindow window(initialFile);
     window.show();
 

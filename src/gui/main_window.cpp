@@ -27,6 +27,8 @@
 #include "find_replace_dialog.h"
 #include "toolbar_editor.h"
 #include "toolbox.h"
+#include "theme.h"
+#include "theme_editor.h"
 #include "swatches_panel.h"
 #include "../edit/swatches.h"
 #include "swap_symbol_dialog.h"
@@ -175,6 +177,19 @@ MainWindow::MainWindow(const QString& initialFile, QWidget* parent, bool startup
     setupPropertiesPanel();
     createPanels();
     setupWindowMenu();
+    connect(theme::notifier(), &theme::Notifier::changed, this, [this]() {
+        QSettings settings;
+        if (!settings.contains("onion/beforeColor"))
+            _onion.beforeColor = theme::color("stage.onionBefore");
+        if (!settings.contains("onion/afterColor"))
+            _onion.afterColor = theme::color("stage.onionAfter");
+        if (_phoenixView)
+            _phoenixView->setOnionStyle(_onion.outline, _onion.keyframesOnly, _onion.opacity, _onion.beforeColor,
+                _onion.afterColor);
+        refreshStyleSwatches();
+        if (_propertiesPanel)
+            _propertiesPanel->refresh();
+    });
     // Every dock exists now: the layout as made is the default, and the
     // one kept from last time comes back.
     restoreLayout();
@@ -336,8 +351,11 @@ MainWindow::MainWindow(const QString& initialFile, QWidget* parent, bool startup
         _onion.outline = settings.value("onion/outline", false).toBool();
         _onion.keyframesOnly = settings.value("onion/keyframesOnly", false).toBool();
         _onion.opacity = settings.value("onion/opacity", 0.45).toDouble();
-        _onion.beforeColor = QColor(settings.value("onion/beforeColor", "#0066ff").toString());
-        _onion.afterColor = QColor(settings.value("onion/afterColor", "#00aa3c").toString());
+        // The theme's colors, unless others were chosen from the onion menu.
+        _onion.beforeColor = settings.contains("onion/beforeColor")
+            ? QColor(settings.value("onion/beforeColor").toString()) : theme::color("stage.onionBefore");
+        _onion.afterColor = settings.contains("onion/afterColor")
+            ? QColor(settings.value("onion/afterColor").toString()) : theme::color("stage.onionAfter");
         if (_phoenixView)
             _phoenixView->setOnionStyle(_onion.outline, _onion.keyframesOnly, _onion.opacity, _onion.beforeColor,
                 _onion.afterColor);
@@ -791,6 +809,8 @@ void MainWindow::setupWindowMenu()
     hidePanels->setStatusTip("Hide every panel to see the stage alone; again brings them back");
     addAction(hidePanels);
     connect(hidePanels, &QAction::triggered, this, &MainWindow::togglePanels);
+    QMenu* themeMenu = windowMenu->addMenu("T&heme");
+    connect(themeMenu, &QMenu::aboutToShow, this, [this, themeMenu]() { fillThemeMenu(themeMenu); });
     QAction* editTools = windowMenu->addAction("&Edit Toolbar…");
     editTools->setStatusTip("Arrange, group and hide the tools in the Tools panel");
     connect(editTools, &QAction::triggered, this, &MainWindow::editToolbar);
@@ -824,6 +844,26 @@ void MainWindow::editToolbar()
     ToolbarEditor editor(_toolbox, this);
     if (editor.exec() == QDialog::Accepted)
         _toolbox->setLayout(editor.layout());
+}
+
+void MainWindow::fillThemeMenu(QMenu* menu)
+{
+    menu->clear();
+    const QString current = theme::currentName();
+    const QStringList names = theme::names();
+    for (const QString& name : names)
+    {
+        if (name == names.value(theme::builtInNames().size()))
+            menu->addSeparator();
+        QAction* use = menu->addAction(name, this, [name]() { theme::use(name); });
+        use->setCheckable(true);
+        use->setChecked(name == current);
+    }
+    menu->addSeparator();
+    menu->addAction("&Edit Theme\u2026", this, [this]() {
+        ThemeEditor editor(this);
+        editor.exec();
+    });
 }
 
 void MainWindow::togglePanels()
@@ -3866,7 +3906,8 @@ void MainWindow::setupToolBar()
     // the window so the key works even when the action sits in a flyout.
     const auto makeTool = [this, toolGroup](ToolIcons::Tool icon, const char* name, QKeyCombination key,
                               const char* tip, std::function<Tool*()> tool) {
-        QAction* action = new QAction(ToolIcons::icon(icon), name, this);
+        QAction* action = new QAction(name, this);
+        theme::themedIcon(action, [icon]() { return ToolIcons::icon(icon); });
         action->setCheckable(true);
         if (key.key() != Qt::Key_unknown)
         {
@@ -4080,14 +4121,16 @@ void MainWindow::setupToolBar()
     // Black and White, and Swap Colors, under the swatches as in Animate's
     // toolbar.
     const auto smallButton = [toolBar](const QString& tip, const std::function<void(QPainter&)>& draw) {
-        QPixmap pixmap(16, 16);
-        pixmap.fill(Qt::transparent);
-        QPainter painter(&pixmap);
-        painter.setRenderHint(QPainter::Antialiasing, true);
-        draw(painter);
-        painter.end();
         QToolButton* button = new QToolButton(toolBar);
-        button->setIcon(QIcon(pixmap));
+        theme::themedIcon(button, [draw]() {
+            QPixmap pixmap(16, 16);
+            pixmap.fill(Qt::transparent);
+            QPainter painter(&pixmap);
+            painter.setRenderHint(QPainter::Antialiasing, true);
+            draw(painter);
+            painter.end();
+            return QIcon(pixmap);
+        });
         button->setIconSize(QSize(16, 16));
         button->setAutoRaise(true);
         button->setToolTip(tip);
@@ -4115,10 +4158,10 @@ void MainWindow::setupToolBar()
     });
     addExtra(blackWhite);
     QToolButton* swap = smallButton("Swap stroke and fill colors", [](QPainter& p) {
-        p.setPen(QPen(QColor(210, 210, 210), 1.4));
+        p.setPen(QPen(theme::color("icon"), 1.4));
         p.setBrush(Qt::NoBrush);
         p.drawArc(QRectF(2.5, 2.5, 11, 11), 0, 90 * 16);
-        p.setBrush(QColor(210, 210, 210));
+        p.setBrush(theme::color("icon"));
         p.setPen(Qt::NoPen);
         p.drawPolygon(QPolygonF({QPointF(8, 0.5), QPointF(8, 5.5), QPointF(5, 3)}));
         p.drawPolygon(QPolygonF({QPointF(15.5, 8), QPointF(10.5, 8), QPointF(13, 11)}));
@@ -4141,8 +4184,8 @@ void MainWindow::setupToolBar()
 
     // Not a tool, so it stands outside the exclusive group: it changes what
     // every drawing tool does rather than replacing them.
-    QAction* objectDrawingAction = new QAction(
-        ToolIcons::icon(ToolIcons::Tool::ObjectDrawing), "Object Drawing", this);
+    QAction* objectDrawingAction = new QAction("Object Drawing", this);
+    theme::themedIcon(objectDrawingAction, []() { return ToolIcons::icon(ToolIcons::Tool::ObjectDrawing); });
     objectDrawingAction->setCheckable(true);
     objectDrawingAction->setChecked(_drawingStyle.objectDrawing);
     objectDrawingAction->setShortcut(QKeySequence(Qt::Key_J));
@@ -6139,8 +6182,15 @@ void MainWindow::applyOnion()
     settings.setValue("onion/outline", _onion.outline);
     settings.setValue("onion/keyframesOnly", _onion.keyframesOnly);
     settings.setValue("onion/opacity", _onion.opacity);
-    settings.setValue("onion/beforeColor", _onion.beforeColor.name());
-    settings.setValue("onion/afterColor", _onion.afterColor.name());
+    // Kept only when they are not the theme's.
+    if (_onion.beforeColor == theme::color("stage.onionBefore"))
+        settings.remove("onion/beforeColor");
+    else
+        settings.setValue("onion/beforeColor", _onion.beforeColor.name());
+    if (_onion.afterColor == theme::color("stage.onionAfter"))
+        settings.remove("onion/afterColor");
+    else
+        settings.setValue("onion/afterColor", _onion.afterColor.name());
 }
 
 void MainWindow::showOnionMenu(const QPoint& globalPos)

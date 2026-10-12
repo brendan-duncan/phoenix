@@ -125,6 +125,10 @@ private:
     fla::Timeline* _timeline = nullptr;
     QTreeWidget* _treeWidget;
     int _bottomMargin = 0;
+    /// The header and glyphs in the current theme's colors.
+    void applyTheme();
+    QWidget* _header = nullptr;
+    QWidget* _buttonRow = nullptr;
     QToolButton* _allVisible = nullptr;
     QToolButton* _allLocked = nullptr;
     QToolButton* _allOutline = nullptr;

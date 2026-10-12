@@ -33,10 +33,46 @@ constexpr int kFrameHeight = 21;
 #include <QPixmap>
 #include <QImage>
 
+#include "theme.h"
+
 enum class TransportIcon { First, Prev, Play, Stop, Next };
 
 /// Columns drawn past the last frame, room to add frames into.
 static const int kSpareColumns = 10;
+
+static QIcon onionIcon(int size)
+{
+    QPixmap pixmap(size, size);
+    pixmap.fill(Qt::transparent);
+    QPainter icon(&pixmap);
+    icon.setRenderHint(QPainter::Antialiasing, true);
+    const QColor ink = theme::color("icon");
+    icon.setPen(QPen(ink, 1.4));
+    icon.setBrush(QColor(ink.red(), ink.green(), ink.blue(), 60));
+    icon.drawRoundedRect(QRectF(3.5, 5.5, 9, 11), 1.5, 1.5);
+    icon.setBrush(QColor(ink.red(), ink.green(), ink.blue(), 140));
+    icon.drawRoundedRect(QRectF(9.5, 5.5, 9, 11), 1.5, 1.5);
+    return QIcon(pixmap);
+}
+
+static QIcon loopIcon(int size)
+{
+    QPixmap pixmap(size, size);
+    pixmap.fill(Qt::transparent);
+    QPainter icon(&pixmap);
+    icon.setRenderHint(QPainter::Antialiasing, true);
+    const QColor ink = theme::color("icon");
+    icon.setPen(QPen(ink, 1.6));
+    icon.setBrush(Qt::NoBrush);
+    // Two arrows chasing each other round a loop.
+    icon.drawArc(QRectF(4.5, 6.5, 13, 9), 30 * 16, 150 * 16);
+    icon.drawArc(QRectF(4.5, 6.5, 13, 9), 210 * 16, 150 * 16);
+    icon.setBrush(ink);
+    icon.setPen(Qt::NoPen);
+    icon.drawPolygon(QPolygonF({QPointF(17.5, 6.0), QPointF(17.5, 11.0), QPointF(13.5, 8.5)}));
+    icon.drawPolygon(QPolygonF({QPointF(4.5, 16.0), QPointF(4.5, 11.0), QPointF(8.5, 13.5)}));
+    return QIcon(pixmap);
+}
 
 static QIcon makeTransportIcon(TransportIcon icon, int size = 24)
 {
@@ -46,7 +82,7 @@ static QIcon makeTransportIcon(TransportIcon icon, int size = 24)
     p.setRenderHint(QPainter::Antialiasing);
     p.setRenderHint(QPainter::SmoothPixmapTransform);
     p.setPen(Qt::NoPen);
-    p.setBrush(Qt::white);
+    p.setBrush(theme::color("icon"));
 
     const float pad = size * 0.2f;
     const float h = size - 2 * pad;
@@ -110,9 +146,6 @@ TimelinesPanel::TimelinesPanel(Player* player, QWidget *parent)
     _header = new QWidget(this);
     _header->setAutoFillBackground(true);
     _header->setFixedHeight(50);
-    QPalette headerPalette = _header->palette();
-    headerPalette.setColor(QPalette::Window, QColor("#2d2d2d"));
-    _header->setPalette(headerPalette);
     _header->setFixedHeight(25);
     QHBoxLayout* headerLayout = new QHBoxLayout(_header);
     headerLayout->setContentsMargins(0, 0, 0, 0);
@@ -127,13 +160,14 @@ TimelinesPanel::TimelinesPanel(Player* player, QWidget *parent)
     // Transport icons: drawn white on transparent (no font/symbol coloring)
     const QString styleTransport =
         "QPushButton { background-color: transparent; border: none; }"
-        "QPushButton:hover { background-color: rgba(255,255,255,0.08); border-radius: 4px; }"
-        "QPushButton:pressed { background-color: rgba(255,255,255,0.15); border-radius: 4px; }";
+        "QPushButton:hover { background-color: rgba(128,128,128,0.2); border-radius: 4px; }"
+        "QPushButton:pressed { background-color: rgba(128,128,128,0.35); border-radius: 4px; }";
+    _transportStyle = styleTransport;
     const int btnSize = 28;
     const int iconSize = 22;
 
     // Frame, rate and time at the left, as Animate's timeline footer has.
-    const QString styleStatus = "QLabel { color: rgb(190, 190, 190); padding: 0 6px; }";
+    const QString styleStatus = "QLabel { padding: 0 6px; }";
     _frameLabel = new QLabel("1", _header);
     _fpsLabel = new QLabel("24.00 fps", _header);
     _timeLabel = new QLabel("0.00 s", _header);
@@ -152,7 +186,7 @@ TimelinesPanel::TimelinesPanel(Player* player, QWidget *parent)
 
     QPushButton* gotoFirstBtn = new QPushButton(_header);
     gotoFirstBtn->setFixedSize(btnSize, btnSize);
-    gotoFirstBtn->setIcon(makeTransportIcon(TransportIcon::First, iconSize));
+    gotoFirstBtn->setProperty("transport", static_cast<int>(TransportIcon::First));
     gotoFirstBtn->setIconSize(QSize(iconSize, iconSize));
     gotoFirstBtn->setToolTip("Go to first frame");
     gotoFirstBtn->setStyleSheet(styleTransport);
@@ -161,7 +195,7 @@ TimelinesPanel::TimelinesPanel(Player* player, QWidget *parent)
 
     QPushButton* stepBackBtn = new QPushButton(_header);
     stepBackBtn->setFixedSize(btnSize, btnSize);
-    stepBackBtn->setIcon(makeTransportIcon(TransportIcon::Prev, iconSize));
+    stepBackBtn->setProperty("transport", static_cast<int>(TransportIcon::Prev));
     stepBackBtn->setIconSize(QSize(iconSize, iconSize));
     stepBackBtn->setToolTip("Step back");
     stepBackBtn->setStyleSheet(styleTransport);
@@ -170,7 +204,6 @@ TimelinesPanel::TimelinesPanel(Player* player, QWidget *parent)
 
     _playButton = new QPushButton(_header);
     _playButton->setFixedSize(btnSize, btnSize);
-    _playButton->setIcon(makeTransportIcon(TransportIcon::Play, iconSize));
     _playButton->setIconSize(QSize(iconSize, iconSize));
     _playButton->setToolTip("Play/Stop");
     _playButton->setStyleSheet(styleTransport);
@@ -179,7 +212,7 @@ TimelinesPanel::TimelinesPanel(Player* player, QWidget *parent)
 
     QPushButton* stepForwardBtn = new QPushButton(_header);
     stepForwardBtn->setFixedSize(btnSize, btnSize);
-    stepForwardBtn->setIcon(makeTransportIcon(TransportIcon::Next, iconSize));
+    stepForwardBtn->setProperty("transport", static_cast<int>(TransportIcon::Next));
     stepForwardBtn->setIconSize(QSize(iconSize, iconSize));
     stepForwardBtn->setToolTip("Step forward");
     stepForwardBtn->setStyleSheet(styleTransport);
@@ -192,18 +225,6 @@ TimelinesPanel::TimelinesPanel(Player* player, QWidget *parent)
     _onionButton->setFixedSize(btnSize, btnSize);
     _onionButton->setCheckable(true);
     _onionButton->setToolTip("Onion skin (Alt+Shift+O); right-click for its settings, drag its markers in the ruler");
-    {
-        QPixmap pixmap(iconSize, iconSize);
-        pixmap.fill(Qt::transparent);
-        QPainter icon(&pixmap);
-        icon.setRenderHint(QPainter::Antialiasing, true);
-        icon.setPen(QPen(QColor(220, 220, 220), 1.4));
-        icon.setBrush(QColor(220, 220, 220, 60));
-        icon.drawRoundedRect(QRectF(3.5, 5.5, 9, 11), 1.5, 1.5);
-        icon.setBrush(QColor(220, 220, 220, 140));
-        icon.drawRoundedRect(QRectF(9.5, 5.5, 9, 11), 1.5, 1.5);
-        _onionButton->setIcon(QIcon(pixmap));
-    }
     _onionButton->setIconSize(QSize(iconSize, iconSize));
     _onionButton->setStyleSheet(styleTransport +
         "QPushButton:checked { background-color: rgba(41,128,238,0.45); border-radius: 4px; }");
@@ -221,22 +242,6 @@ TimelinesPanel::TimelinesPanel(Player* player, QWidget *parent)
     _loopButton->setFixedSize(btnSize, btnSize);
     _loopButton->setCheckable(true);
     _loopButton->setToolTip("Loop playback (Alt+Shift+L)");
-    {
-        QPixmap pixmap(iconSize, iconSize);
-        pixmap.fill(Qt::transparent);
-        QPainter icon(&pixmap);
-        icon.setRenderHint(QPainter::Antialiasing, true);
-        icon.setPen(QPen(QColor(220, 220, 220), 1.6));
-        icon.setBrush(Qt::NoBrush);
-        // Two arrows chasing each other round a loop.
-        icon.drawArc(QRectF(4.5, 6.5, 13, 9), 30 * 16, 150 * 16);
-        icon.drawArc(QRectF(4.5, 6.5, 13, 9), 210 * 16, 150 * 16);
-        icon.setBrush(QColor(220, 220, 220));
-        icon.setPen(Qt::NoPen);
-        icon.drawPolygon(QPolygonF({QPointF(17.5, 6.0), QPointF(17.5, 11.0), QPointF(13.5, 8.5)}));
-        icon.drawPolygon(QPolygonF({QPointF(4.5, 16.0), QPointF(4.5, 11.0), QPointF(8.5, 13.5)}));
-        _loopButton->setIcon(QIcon(pixmap));
-    }
     _loopButton->setIconSize(QSize(iconSize, iconSize));
     _loopButton->setStyleSheet(styleTransport +
         "QPushButton:checked { background-color: rgba(41,128,238,0.45); border-radius: 4px; }");
@@ -264,6 +269,31 @@ TimelinesPanel::TimelinesPanel(Player* player, QWidget *parent)
     connect(_gridContainer, &TimelineGrid::spanResizeRequested, this, &TimelinesPanel::spanResizeRequested);
     connect(_gridContainer, &TimelineGrid::onionRangeChanged, this, &TimelinesPanel::onionRangeChanged);
     connect(_playTimer, &QTimer::timeout, this, &TimelinesPanel::onTimerTick);
+
+    applyTheme();
+    connect(theme::notifier(), &theme::Notifier::changed, this, &TimelinesPanel::applyTheme);
+}
+
+void TimelinesPanel::applyTheme()
+{
+    QPalette headerPalette = _header->palette();
+    headerPalette.setColor(QPalette::Window, theme::color("panelHeader"));
+    _header->setPalette(headerPalette);
+    for (QPushButton* button : _header->findChildren<QPushButton*>())
+    {
+        const QVariant kind = button->property("transport");
+        if (kind.isValid())
+            button->setIcon(makeTransportIcon(static_cast<TransportIcon>(kind.toInt()), 22));
+    }
+    _playButton->setIcon(makeTransportIcon(_playTimer->isActive() ? TransportIcon::Stop : TransportIcon::Play, 22));
+    _onionButton->setIcon(onionIcon(22));
+    _loopButton->setIcon(loopIcon(22));
+    const QColor accent = theme::color("playhead");
+    const QString checked = QString("QPushButton:checked { background-color: rgba(%1,%2,%3,0.45); border-radius: 4px; }")
+                                .arg(accent.red()).arg(accent.green()).arg(accent.blue());
+    _onionButton->setStyleSheet(_transportStyle + checked);
+    _loopButton->setStyleSheet(_transportStyle + checked);
+    _gridContainer->update();
 }
 
 void TimelinesPanel::setDocument(const fla::FLADocument* document)
@@ -1051,18 +1081,22 @@ void TimelineGrid::paintEvent(QPaintEvent* event)
 
     // Animate's frame colors: an empty keyframe span is white, a span with
     // content gray, a classic tween lilac and a shape tween green.
-    const QColor background(30, 30, 30);
-    const QColor cellDark(40, 40, 40);
-    const QColor cellLight(55, 55, 55);
-    const QColor textColor(170, 170, 170);
-    const QColor emptySpan(236, 236, 236);
-    const QColor staticSpan(196, 196, 196);
-    const QColor motionSpan(197, 183, 232);
-    const QColor shapeSpan(186, 224, 180);
-    const QColor motionObjectSpan(156, 196, 238);
-    const QColor poseSpan(214, 228, 168);
+    const QColor background = theme::color("timeline.background");
+    const QColor cellDark = theme::color("timeline.cell");
+    const QColor cellLight = theme::color("timeline.cellFifth");
+    const QColor textColor = theme::color("timeline.text");
+    const QColor emptySpan = theme::color("frame.empty");
+    const QColor staticSpan = theme::color("frame.static");
+    const QColor motionSpan = theme::color("frame.classicTween");
+    const QColor shapeSpan = theme::color("frame.shapeTween");
+    const QColor motionObjectSpan = theme::color("frame.motionTween");
+    const QColor poseSpan = theme::color("frame.pose");
+    const QColor mark = theme::color("frame.mark");
     // Animate's time head is blue.
-    const QColor playheadColor(41, 128, 238);
+    const QColor playheadColor = theme::color("playhead");
+    const auto faded = [&playheadColor](int alpha) {
+        return QColor(playheadColor.red(), playheadColor.green(), playheadColor.blue(), alpha);
+    };
 
     painter.fillRect(event->rect(), background);
 
@@ -1125,7 +1159,7 @@ void TimelineGrid::paintEvent(QPaintEvent* event)
                     const double half = frameHeight / 2.0 - 2.0;
                     const int centerY = y + frameHeight / 2;
                     painter.setRenderHint(QPainter::Antialiasing, false);
-                    painter.setPen(QPen(QColor(40, 70, 190), 1.0));
+                    painter.setPen(QPen(theme::color("frame.waveform"), 1.0));
                     for (int px = left; px < right; ++px)
                     {
                         const size_t from = soundIn + static_cast<size_t>((px - x0) * perPixel);
@@ -1150,8 +1184,8 @@ void TimelineGrid::paintEvent(QPaintEvent* event)
 
                 // The keyframe dot: filled when the frame holds something,
                 // hollow when it is an empty keyframe.
-                painter.setPen(QPen(QColor(20, 20, 20), 1.0));
-                painter.setBrush(hasContent ? QColor(20, 20, 20) : QColor(255, 255, 255));
+                painter.setPen(QPen(mark, 1.0));
+                painter.setBrush(hasContent ? mark : QColor(255, 255, 255));
                 painter.drawEllipse(QPointF(dotX, midY), 3.2, 3.2);
 
                 // A script on the keyframe is marked with an "a" over its dot.
@@ -1162,7 +1196,7 @@ void TimelineGrid::paintEvent(QPaintEvent* event)
                     small.setPointSize(7);
                     small.setBold(true);
                     painter.setFont(small);
-                    painter.setPen(QColor(20, 20, 20));
+                    painter.setPen(mark);
                     painter.drawText(QRectF(x0, y - 1, frameWidth, frameHeight / 2.0), Qt::AlignCenter, "a");
                     painter.restore();
                 }
@@ -1196,7 +1230,7 @@ void TimelineGrid::paintEvent(QPaintEvent* event)
                     }
                     else
                     {
-                        painter.setPen(QPen(QColor(20, 20, 20), 1.0));
+                        painter.setPen(QPen(mark, 1.0));
                         painter.drawLine(QPointF(gx + 0.5, top), QPointF(gx + 0.5, top + 10.0));
                         painter.setPen(Qt::NoPen);
                         painter.setBrush(glyphColor);
@@ -1209,7 +1243,7 @@ void TimelineGrid::paintEvent(QPaintEvent* event)
                         labelFont.setPointSize(8);
                         labelFont.setBold(false);
                         painter.setFont(labelFont);
-                        painter.setPen(QColor(20, 20, 20));
+                        painter.setPen(mark);
                         painter.drawText(QRectF(gx + 9.0, y, x1 - gx - 9.0, frameHeight),
                             Qt::AlignLeft | Qt::AlignVCenter, text);
                     }
@@ -1221,10 +1255,10 @@ void TimelineGrid::paintEvent(QPaintEvent* event)
                     // A motion tween or a pose span has no arrow; its property
                     // keyframes are small diamonds along it, as Animate marks
                     // them, and its last frame a hollow one.
-                    painter.setPen(QPen(QColor(20, 20, 20), 1.0));
-                    painter.setBrush(QColor(20, 20, 20));
+                    painter.setPen(QPen(mark, 1.0));
+                    painter.setBrush(mark);
                     const auto diamond = [&](double cx, bool filled) {
-                        painter.setBrush(filled ? QColor(20, 20, 20) : QColor(Qt::transparent));
+                        painter.setBrush(filled ? mark : QColor(Qt::transparent));
                         painter.drawPolygon(QPolygonF({QPointF(cx, midY - 3.5), QPointF(cx + 3.5, midY),
                             QPointF(cx, midY + 3.5), QPointF(cx - 3.5, midY)}));
                     };
@@ -1243,11 +1277,11 @@ void TimelineGrid::paintEvent(QPaintEvent* event)
                 {
                     // A tween runs an arrow from the keyframe to the end of
                     // its span.
-                    painter.setPen(QPen(QColor(20, 20, 20), 1.0));
+                    painter.setPen(QPen(mark, 1.0));
                     const double arrowStart = dotX + 6.0;
                     const double arrowEnd = x1 - 5.0;
                     painter.drawLine(QPointF(arrowStart, midY), QPointF(arrowEnd, midY));
-                    painter.setBrush(QColor(20, 20, 20));
+                    painter.setBrush(mark);
                     painter.drawPolygon(QPolygonF({
                         QPointF(arrowEnd, midY), QPointF(arrowEnd - 5.0, midY - 3.0),
                         QPointF(arrowEnd - 5.0, midY + 3.0)
@@ -1256,7 +1290,7 @@ void TimelineGrid::paintEvent(QPaintEvent* event)
                 else if (duration > 1)
                 {
                     // A static span ends in a small hollow rectangle.
-                    painter.setPen(QPen(QColor(20, 20, 20), 1.0));
+                    painter.setPen(QPen(mark, 1.0));
                     painter.setBrush(Qt::NoBrush);
                     painter.drawRect(QRectF(x1 - frameWidth / 2.0 - 2.5, midY - 4.0, 5.0, 8.0));
                 }
@@ -1278,8 +1312,8 @@ void TimelineGrid::paintEvent(QPaintEvent* event)
         const QRect block(first * cellStride, headerHeight + top * layerRowHeight,
             (last - first + 1) * cellStride - margin, (bottom - top) * layerRowHeight + frameHeight);
         painter.setRenderHint(QPainter::Antialiasing, false);
-        painter.fillRect(block, QColor(41, 128, 238, 110));
-        painter.setPen(QPen(QColor(41, 128, 238), 1.0));
+        painter.fillRect(block, faded(110));
+        painter.setPen(QPen(playheadColor, 1.0));
         painter.setBrush(Qt::NoBrush);
         painter.drawRect(block.adjusted(0, 0, -1, -1));
     }
@@ -1290,8 +1324,8 @@ void TimelineGrid::paintEvent(QPaintEvent* event)
         if (cell.first >= static_cast<int>(_rows.size()))
             continue;
         const QRect box(cell.second * cellStride, headerHeight + cell.first * layerRowHeight, frameWidth, frameHeight);
-        painter.fillRect(box, QColor(41, 128, 238, 110));
-        painter.setPen(QPen(QColor(41, 128, 238), 1.0));
+        painter.fillRect(box, faded(110));
+        painter.setPen(QPen(playheadColor, 1.0));
         painter.setBrush(Qt::NoBrush);
         painter.drawRect(box.adjusted(0, 0, -1, -1));
     }
@@ -1306,7 +1340,7 @@ void TimelineGrid::paintEvent(QPaintEvent* event)
         const QRect ghost(first * cellStride, headerHeight + top * layerRowHeight,
             (last - first + 1) * cellStride - margin, (bottom - top) * layerRowHeight + frameHeight);
         painter.setRenderHint(QPainter::Antialiasing, false);
-        painter.setPen(QPen(QColor(41, 128, 238), 2.0));
+        painter.setPen(QPen(playheadColor, 2.0));
         painter.setBrush(Qt::NoBrush);
         painter.drawRect(ghost.adjusted(1, 1, -1, -1));
     }
@@ -1317,7 +1351,7 @@ void TimelineGrid::paintEvent(QPaintEvent* event)
         const QRect ghost(_resizeKeyframe * cellStride, headerHeight + _resizeRow * layerRowHeight,
             _resizeDuration * cellStride - margin, frameHeight);
         painter.setRenderHint(QPainter::Antialiasing, false);
-        painter.setPen(QPen(QColor(41, 128, 238), 2.0));
+        painter.setPen(QPen(playheadColor, 2.0));
         painter.setBrush(Qt::NoBrush);
         painter.drawRect(ghost.adjusted(1, 1, -1, -1));
     }
@@ -1327,7 +1361,7 @@ void TimelineGrid::paintEvent(QPaintEvent* event)
     {
         const QRect ghost(_moveTo * cellStride, headerHeight + _moveRow * layerRowHeight, frameWidth, frameHeight);
         painter.setRenderHint(QPainter::Antialiasing, false);
-        painter.setPen(QPen(QColor(41, 128, 238), 2.0));
+        painter.setPen(QPen(playheadColor, 2.0));
         painter.setBrush(Qt::NoBrush);
         painter.drawRect(ghost.adjusted(1, 1, -1, -1));
     }
@@ -1349,7 +1383,7 @@ void TimelineGrid::paintEvent(QPaintEvent* event)
         const int x = i * cellStride;
         if (number == 1 || number % 5 == 0)
         {
-            painter.setPen(QColor(90, 90, 90));
+            painter.setPen(cellLight.lighter(130));
             painter.drawLine(x, headerHeight - 6, x, headerHeight - 1);
             painter.setPen(textColor);
             painter.drawText(QRect(x, 2, cellStride * 3, headerHeight - 8),
@@ -1366,8 +1400,8 @@ void TimelineGrid::paintEvent(QPaintEvent* event)
         const int last = current + _onionAfter;
         painter.setRenderHint(QPainter::Antialiasing, false);
         const QRect range(first * cellStride, 2, (last - first + 1) * cellStride - margin, headerHeight - 12);
-        painter.fillRect(range, QColor(41, 128, 238, 45));
-        painter.setPen(QPen(QColor(41, 128, 238), 2.0));
+        painter.fillRect(range, faded(45));
+        painter.setPen(QPen(playheadColor, 2.0));
         const int left = first * cellStride + 1;
         const int right = (last + 1) * cellStride - margin - 1;
         painter.drawLine(left, 2, left, headerHeight - 10);

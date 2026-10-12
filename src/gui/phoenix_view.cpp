@@ -1,4 +1,5 @@
 #include "phoenix_view.h"
+#include "theme.h"
 
 #include "../edit/guide_command.h"
 #include "../edit/timeline_edit.h"
@@ -254,6 +255,14 @@ PhoenixView::PhoenixView(Player* player, QWidget *parent)
     setMinimumSize(400, 300);
     setBackgroundRole(QPalette::Base);
     setAutoFillBackground(true);
+    // The pasteboard is the theme's.
+    const auto pasteboard = [this]() {
+        QPalette colors = palette();
+        colors.setColor(QPalette::Base, theme::color("stage.pasteboard"));
+        setPalette(colors);
+    };
+    pasteboard();
+    connect(theme::notifier(), &theme::Notifier::changed, this, pasteboard);
 
     // Keys reach the stage once it has been clicked, so Delete, Escape and the
     // nudge keys go to the tools rather than nowhere.
@@ -5729,11 +5738,11 @@ void PhoenixView::drawRulersAndGuides(QPainter& painter)
 
     if (_showRulers && _rotation == 0.0)
     {
-        const QColor back(43, 43, 43);
-        const QColor ink(170, 170, 170);
+        const QColor back = theme::color("stage.ruler");
+        const QColor ink = theme::color("stage.rulerText");
         painter.fillRect(QRect(0, 0, width(), kRulerSize), back);
         painter.fillRect(QRect(0, 0, kRulerSize, height()), back);
-        painter.setPen(QColor(70, 70, 70));
+        painter.setPen(theme::color("stage.rulerLine"));
         painter.drawLine(0, kRulerSize, width(), kRulerSize);
         painter.drawLine(kRulerSize, 0, kRulerSize, height());
 

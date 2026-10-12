@@ -1,4 +1,5 @@
 #include "hot_text.h"
+#include "theme.h"
 
 #include <QFontMetrics>
 #include <QKeyEvent>
@@ -12,7 +13,7 @@
 namespace {
 
 /// Animate's hot-text blue, legible on the dark and the light theme.
-const QColor kHotColor(86, 156, 255);
+
 
 } // namespace
 
@@ -119,7 +120,7 @@ void HotText::paintEvent(QPaintEvent* event)
 
     QPainter painter(this);
     painter.setRenderHint(QPainter::TextAntialiasing, true);
-    const QColor color = isEnabled() ? kHotColor : palette().color(QPalette::Disabled, QPalette::Text);
+    const QColor color = isEnabled() ? theme::color("hotText") : palette().color(QPalette::Disabled, QPalette::Text);
     painter.setPen(color);
 
     const QString shown = text();

@@ -378,6 +378,7 @@ private:
     /// The panels that open from the Window menu, made at the start.
     void createPanels();
     void setupWindowMenu();
+    void fillThemeMenu(QMenu* menu);
     /// F4: hides every panel, or brings back the ones it hid.
     void togglePanels();
     QList<QDockWidget*> _hiddenByF4;

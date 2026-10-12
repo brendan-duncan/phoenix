@@ -1,4 +1,5 @@
 #include "tool_icons.h"
+#include "theme.h"
 
 #include <QFont>
 #include <QPainterPath>
@@ -20,9 +21,9 @@ constexpr double kPi = 3.14159265358979323846;
 
 QColor strokeColor()
 {
-    // Light enough to read on the dark toolbar, short of pure white so the
-    // icons do not shout over the artwork.
-    return QColor(220, 220, 225);
+    // The theme's icon ink: on the dark theme light enough to read, short
+    // of pure white so the icons do not shout over the artwork.
+    return theme::color("icon");
 }
 
 /// The arrow shared by the selection and subselection tools.

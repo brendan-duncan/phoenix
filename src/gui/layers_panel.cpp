@@ -1,5 +1,7 @@
 #include "layers_panel.h"
 
+#include "theme.h"
+
 #include <QCheckBox>
 #include <QColor>
 #include <QColorDialog>
@@ -105,7 +107,11 @@ protected:
     }
 };
 
-const QColor kInk(220, 220, 220);
+/// The glyphs' ink, from the theme.
+QColor ink()
+{
+    return theme::color("icon");
+}
 
 /// A drawn glyph, so the panel does not depend on an emoji font.
 QIcon glyph(void (*draw)(QPainter&))
@@ -120,14 +126,14 @@ QIcon glyph(void (*draw)(QPainter&))
 
 void drawEye(QPainter& painter)
 {
-    painter.setPen(QPen(kInk, 1.2));
+    painter.setPen(QPen(ink(), 1.2));
     painter.setBrush(Qt::NoBrush);
     QPainterPath eye;
     eye.moveTo(2.0, 8.0);
     eye.quadTo(8.0, 1.5, 14.0, 8.0);
     eye.quadTo(8.0, 14.5, 2.0, 8.0);
     painter.drawPath(eye);
-    painter.setBrush(kInk);
+    painter.setBrush(ink());
     painter.drawEllipse(QPointF(8.0, 8.0), 2.2, 2.2);
 }
 
@@ -148,7 +154,7 @@ void drawUnlockedDot(QPainter& painter)
 
 void drawPadlock(QPainter& painter)
 {
-    painter.setPen(QPen(kInk, 1.4));
+    painter.setPen(QPen(ink(), 1.4));
     painter.setBrush(Qt::NoBrush);
     QPainterPath shackle;
     shackle.moveTo(5.0, 8.0);
@@ -157,13 +163,13 @@ void drawPadlock(QPainter& painter)
     shackle.quadTo(11.0, 2.5, 11.0, 5.5);
     shackle.lineTo(11.0, 8.0);
     painter.drawPath(shackle);
-    painter.setBrush(kInk);
+    painter.setBrush(ink());
     painter.drawRoundedRect(QRectF(3.5, 7.5, 9.0, 6.5), 1.0, 1.0);
 }
 
 void drawOutlineSquare(QPainter& painter)
 {
-    painter.setPen(QPen(kInk, 1.2));
+    painter.setPen(QPen(ink(), 1.2));
     painter.setBrush(Qt::NoBrush);
     painter.drawRect(QRectF(3.5, 3.5, 9.0, 9.0));
 }
@@ -171,8 +177,8 @@ void drawOutlineSquare(QPainter& painter)
 void drawPencil(QPainter& painter)
 {
     // Animate's current-layer marker: a pencil leaning to the right.
-    painter.setPen(QPen(kInk, 1.2));
-    painter.setBrush(QColor(kInk.red(), kInk.green(), kInk.blue(), 90));
+    painter.setPen(QPen(ink(), 1.2));
+    painter.setBrush(theme::withAlpha(ink(), 90));
     QPainterPath body;
     body.moveTo(3.0, 13.0);
     body.lineTo(4.0, 9.5);
@@ -186,10 +192,10 @@ void drawPencil(QPainter& painter)
 
 void drawLayerSheet(QPainter& painter)
 {
-    painter.setPen(QPen(kInk, 1.1));
-    painter.setBrush(QColor(kInk.red(), kInk.green(), kInk.blue(), 50));
+    painter.setPen(QPen(ink(), 1.1));
+    painter.setBrush(theme::withAlpha(ink(), 50));
     painter.drawRect(QRectF(3.5, 2.5, 9.0, 11.0));
-    painter.setPen(QPen(kInk, 0.9));
+    painter.setPen(QPen(ink(), 0.9));
     painter.drawLine(QPointF(5.5, 6.0), QPointF(10.5, 6.0));
     painter.drawLine(QPointF(5.5, 8.5), QPointF(10.5, 8.5));
     painter.drawLine(QPointF(5.5, 11.0), QPointF(8.5, 11.0));
@@ -197,8 +203,8 @@ void drawLayerSheet(QPainter& painter)
 
 void drawFolderClosed(QPainter& painter)
 {
-    painter.setPen(QPen(QColor(230, 200, 100), 1.1));
-    painter.setBrush(QColor(230, 200, 100, 120));
+    painter.setPen(QPen(theme::color("folder"), 1.1));
+    painter.setBrush(theme::withAlpha(theme::color("folder"), 120));
     QPainterPath folder;
     folder.moveTo(2.0, 4.5);
     folder.lineTo(6.0, 4.5);
@@ -212,8 +218,8 @@ void drawFolderClosed(QPainter& painter)
 
 void drawFolderOpen(QPainter& painter)
 {
-    painter.setPen(QPen(QColor(230, 200, 100), 1.1));
-    painter.setBrush(QColor(230, 200, 100, 120));
+    painter.setPen(QPen(theme::color("folder"), 1.1));
+    painter.setBrush(theme::withAlpha(theme::color("folder"), 120));
     QPainterPath back;
     back.moveTo(2.0, 4.5);
     back.lineTo(6.0, 4.5);
@@ -250,7 +256,7 @@ void drawNewFolder(QPainter& painter)
 
 void drawTrash(QPainter& painter)
 {
-    painter.setPen(QPen(kInk, 1.2));
+    painter.setPen(QPen(ink(), 1.2));
     painter.setBrush(Qt::NoBrush);
     painter.drawLine(QPointF(3.0, 4.5), QPointF(13.0, 4.5));
     painter.drawLine(QPointF(6.5, 2.5), QPointF(9.5, 2.5));
@@ -267,7 +273,7 @@ QIcon swatchIcon(const uint8_t rgba[4], bool outline)
     pixmap.fill(Qt::transparent);
     QPainter painter(&pixmap);
     const QColor color(rgba[0], rgba[1], rgba[2]);
-    painter.setPen(QPen(outline ? color : QColor(20, 20, 20), outline ? 1.6 : 1.0));
+    painter.setPen(QPen(outline ? color : theme::withAlpha(ink(), 140), outline ? 1.6 : 1.0));
     painter.setBrush(outline ? QBrush(Qt::NoBrush) : QBrush(color));
     painter.drawRect(QRectF(3.5, 3.5, 9.0, 9.0));
     return QIcon(pixmap);
@@ -307,9 +313,7 @@ LayersPanel::LayersPanel(QWidget *parent)
     QWidget* header = new QWidget(this);
     header->setAutoFillBackground(true);
     header->setFixedHeight(50);
-    QPalette headerPalette = header->palette();
-    headerPalette.setColor(QPalette::Window, QColor("#2d2d2d"));
-    header->setPalette(headerPalette);
+    _header = header;
     QHBoxLayout* headerLayout = new QHBoxLayout(header);
     headerLayout->setContentsMargins(0, 0, 0, 2);
     headerLayout->setSpacing(0);
@@ -318,6 +322,9 @@ LayersPanel::LayersPanel(QWidget *parent)
     _allVisible = smallButton(header, _visibleIcon, "Show or hide all layers");
     _allLocked = smallButton(header, _lockedIcon, "Lock or unlock all layers");
     _allOutline = smallButton(header, glyph(drawOutlineSquare), "Show all layers as outlines");
+    theme::themedIcon(_allVisible, []() { return glyph(drawEye); });
+    theme::themedIcon(_allLocked, []() { return glyph(drawPadlock); });
+    theme::themedIcon(_allOutline, []() { return glyph(drawOutlineSquare); });
     headerLayout->addWidget(_allVisible);
     headerLayout->addWidget(_allLocked);
     headerLayout->addWidget(_allOutline);
@@ -400,7 +407,7 @@ LayersPanel::LayersPanel(QWidget *parent)
     // Under the list: New Layer, New Folder, Delete.
     QWidget* buttons = new QWidget(this);
     buttons->setAutoFillBackground(true);
-    buttons->setPalette(headerPalette);
+    _buttonRow = buttons;
     buttons->setFixedHeight(26);
     QHBoxLayout* buttonLayout = new QHBoxLayout(buttons);
     buttonLayout->setContentsMargins(4, 2, 4, 2);
@@ -408,6 +415,9 @@ LayersPanel::LayersPanel(QWidget *parent)
     QToolButton* newLayer = smallButton(buttons, glyph(drawNewLayer), "New Layer");
     QToolButton* newFolder = smallButton(buttons, glyph(drawNewFolder), "New Folder");
     QToolButton* remove = smallButton(buttons, glyph(drawTrash), "Delete the current layer");
+    theme::themedIcon(newLayer, []() { return glyph(drawNewLayer); });
+    theme::themedIcon(newFolder, []() { return glyph(drawNewFolder); });
+    theme::themedIcon(remove, []() { return glyph(drawTrash); });
     connect(newLayer, &QToolButton::clicked, this, [this]() { emit addLayerRequested(false); });
     connect(newFolder, &QToolButton::clicked, this, [this]() { emit addLayerRequested(true); });
     connect(remove, &QToolButton::clicked, this, [this]() { emit deleteLayerRequested(); });
@@ -422,6 +432,28 @@ LayersPanel::LayersPanel(QWidget *parent)
     connect(_treeWidget, &QTreeWidget::itemClicked, this, &LayersPanel::onItemClicked);
     connect(_treeWidget, &QTreeWidget::itemDoubleClicked, this, &LayersPanel::onItemDoubleClicked);
     connect(_treeWidget, &QTreeWidget::itemChanged, this, &LayersPanel::onItemChanged);
+
+    applyTheme();
+    connect(theme::notifier(), &theme::Notifier::changed, this, [this]() {
+        applyTheme();
+        refresh();
+    });
+}
+
+void LayersPanel::applyTheme()
+{
+    QPalette headerPalette = _header->palette();
+    headerPalette.setColor(QPalette::Window, theme::color("panelHeader"));
+    _header->setPalette(headerPalette);
+    _buttonRow->setPalette(headerPalette);
+    _layerIcon = glyph(drawLayerSheet);
+    _folderIcon = glyph(drawFolderClosed);
+    _openFolderIcon = glyph(drawFolderOpen);
+    _visibleIcon = glyph(drawEye);
+    _hiddenIcon = glyph(drawHiddenCross);
+    _unlockedIcon = glyph(drawUnlockedDot);
+    _lockedIcon = glyph(drawPadlock);
+    _pencilIcon = glyph(drawPencil);
 }
 
 void LayersPanel::setDocument(const fla::FLADocument* document)

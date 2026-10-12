@@ -1,4 +1,5 @@
 #include "library_panel.h"
+#include "theme.h"
 
 #include "../data/bitmap.h"
 #include "../data/document.h"
@@ -55,7 +56,11 @@ public:
     }
 };
 
-const QColor kInk(220, 220, 220);
+/// The glyphs' ink, from the theme.
+QColor ink()
+{
+    return theme::color("icon");
+}
 
 QIcon glyph(const std::function<void(QPainter&)>& draw)
 {
@@ -70,8 +75,8 @@ QIcon glyph(const std::function<void(QPainter&)>& draw)
 QIcon folderIcon()
 {
     return glyph([](QPainter& painter) {
-        painter.setPen(QPen(QColor(230, 200, 100), 1.1));
-        painter.setBrush(QColor(230, 200, 100, 120));
+        painter.setPen(QPen(theme::color("folder"), 1.1));
+        painter.setBrush(theme::withAlpha(theme::color("folder"), 120));
         QPainterPath folder;
         folder.moveTo(2.0, 4.5);
         folder.lineTo(6.0, 4.5);
@@ -89,22 +94,22 @@ QIcon symbolIcon(fla::SymbolType type)
     return glyph([type](QPainter& painter) {
         // Animate marks a movie clip with a reel, a graphic with shapes and a
         // button with a pointer; a simple glyph for each.
-        painter.setPen(QPen(kInk, 1.2));
+        painter.setPen(QPen(ink(), 1.2));
         painter.setBrush(Qt::NoBrush);
         switch (type)
         {
         case fla::SymbolType::MovieClip:
             painter.drawEllipse(QRectF(2.5, 2.5, 11, 11));
-            painter.setBrush(kInk);
+            painter.setBrush(ink());
             painter.drawEllipse(QRectF(6.5, 6.5, 3, 3));
             break;
         case fla::SymbolType::Button:
             painter.drawRoundedRect(QRectF(2.5, 4.5, 11, 7), 2, 2);
-            painter.setBrush(kInk);
+            painter.setBrush(ink());
             painter.drawEllipse(QRectF(6.5, 6.5, 3, 3));
             break;
         case fla::SymbolType::Graphic:
-            painter.setBrush(QColor(kInk.red(), kInk.green(), kInk.blue(), 70));
+            painter.setBrush(theme::withAlpha(ink(), 70));
             painter.drawEllipse(QRectF(2.5, 2.5, 7, 7));
             painter.drawRect(QRectF(6.5, 6.5, 7, 7));
             break;
@@ -115,7 +120,7 @@ QIcon symbolIcon(fla::SymbolType type)
 QIcon bitmapIcon()
 {
     return glyph([](QPainter& painter) {
-        painter.setPen(QPen(kInk, 1.1));
+        painter.setPen(QPen(ink(), 1.1));
         painter.setBrush(Qt::NoBrush);
         painter.drawRect(QRectF(2.5, 3.5, 11, 9));
         painter.setPen(Qt::NoPen);
@@ -138,7 +143,7 @@ QIcon soundIcon()
     // A speaker with two waves, as Animate marks a sound.
     return glyph([](QPainter& painter) {
         painter.setPen(Qt::NoPen);
-        painter.setBrush(kInk);
+        painter.setBrush(ink());
         QPainterPath speaker;
         speaker.moveTo(2.5, 6.0);
         speaker.lineTo(5.0, 6.0);
@@ -149,7 +154,7 @@ QIcon soundIcon()
         speaker.closeSubpath();
         painter.drawPath(speaker);
         painter.setBrush(Qt::NoBrush);
-        painter.setPen(QPen(kInk, 1.2));
+        painter.setPen(QPen(ink(), 1.2));
         painter.drawArc(QRectF(7.0, 5.0, 5.0, 6.0), -60 * 16, 120 * 16);
         painter.drawArc(QRectF(7.0, 2.5, 8.0, 11.0), -60 * 16, 120 * 16);
     });
@@ -261,7 +266,7 @@ LibraryPanel::LibraryPanel(QWidget* parent)
     // The preview of the selected item, at the top as in Animate.
     _preview->setFixedHeight(150);
     _preview->setAlignment(Qt::AlignCenter);
-    _preview->setStyleSheet("QLabel { background: #1e1e1e; border-bottom: 1px solid #3a3a3a; }");
+    _preview->setStyleSheet("QLabel { background: palette(base); border-bottom: 1px solid palette(mid); }");
     layout->addWidget(_preview);
 
     _count->setContentsMargins(10, 6, 10, 6);
@@ -378,6 +383,8 @@ LibraryPanel::LibraryPanel(QWidget* parent)
             emit editSymbolRequested(item->data(0, NameRole).toString());
     });
     connect(_tree, &LibraryTree::moveRequested, this, &LibraryPanel::moveRequested);
+    // The icons are drawn in the theme's colors.
+    connect(theme::notifier(), &theme::Notifier::changed, this, &LibraryPanel::refresh);
 
     // Delete in the list deletes what is selected there.
     _tree->installEventFilter(this);

@@ -1,4 +1,5 @@
 #include "new_document_dialog.h"
+#include "theme.h"
 
 #include <QColorDialog>
 #include <QComboBox>
@@ -35,8 +36,8 @@ QIcon aspectIcon(int width, int height)
     const double scale = std::min(56.0 / std::max(width, 1), 40.0 / std::max(height, 1));
     const QSizeF size(width * scale, height * scale);
     const QRectF frame(QPointF((64 - size.width()) / 2.0, (48 - size.height()) / 2.0), size);
-    painter.setPen(QPen(QColor(200, 200, 200), 1.2));
-    painter.setBrush(QColor(255, 255, 255, 30));
+    painter.setPen(QPen(theme::color("icon"), 1.2));
+    painter.setBrush(theme::withAlpha(theme::color("icon"), 30));
     painter.drawRoundedRect(frame.adjusted(0.5, 0.5, -0.5, -0.5), 2, 2);
     return QIcon(pixmap);
 }

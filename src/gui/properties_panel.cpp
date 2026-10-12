@@ -1,4 +1,5 @@
 #include "properties_panel.h"
+#include "theme.h"
 #include "../edit/camera.h"
 #include "../data/bitmap.h"
 #include "../edit/brush_texture.h"
@@ -413,15 +414,21 @@ void PropertiesPanel::buildTabBar()
         button->setAutoRaise(true);
         button->setChecked(i == 0);
         button->setMinimumWidth(52);
-        // Inactive tabs sit halfway between the text and the background.
-        const QColor text = palette().color(QPalette::Text);
-        const QColor back = palette().color(QPalette::Window);
-        const QColor dim((text.red() + back.red()) / 2, (text.green() + back.green()) / 2, (text.blue() + back.blue()) / 2);
-        button->setStyleSheet(QString(
-            "QToolButton { padding: 5px 8px; border: none; border-bottom: 2px solid transparent; color: %1; }"
-            "QToolButton:hover { color: palette(text); }"
-            "QToolButton:checked { color: palette(text); font-weight: bold; border-bottom: 2px solid rgb(86, 156, 255); }")
-            .arg(dim.name()));
+        // Inactive tabs sit halfway between the text and the background,
+        // in the theme's colors as they change.
+        const auto style = [button]() {
+            const QColor text = qApp->palette().color(QPalette::Text);
+            const QColor back = qApp->palette().color(QPalette::Window);
+            const QColor dim((text.red() + back.red()) / 2, (text.green() + back.green()) / 2,
+                (text.blue() + back.blue()) / 2);
+            button->setStyleSheet(QString(
+                "QToolButton { padding: 5px 8px; border: none; border-bottom: 2px solid transparent; color: %1; }"
+                "QToolButton:hover { color: palette(text); }"
+                "QToolButton:checked { color: palette(text); font-weight: bold; border-bottom: 2px solid %2; }")
+                .arg(dim.name(), theme::color("hotText").name()));
+        };
+        style();
+        connect(theme::notifier(), &theme::Notifier::changed, button, style);
         connect(button, &QToolButton::clicked, this, [this, i]() { setTab(static_cast<Tab>(i)); });
         group->addButton(button);
         layout->addWidget(button);

@@ -1,4 +1,5 @@
 #include "ease_curve_dialog.h"
+#include "theme.h"
 
 #include <QComboBox>
 #include <QDialogButtonBox>
@@ -131,10 +132,10 @@ void EaseCurveEditor::paintEvent(QPaintEvent*)
 {
     QPainter painter(this);
     painter.setRenderHint(QPainter::Antialiasing, true);
-    painter.fillRect(rect(), QColor(36, 36, 36));
+    painter.fillRect(rect(), theme::color("graph.background"));
     const QRectF unit(toWidget(QPointF(0, 1)), toWidget(QPointF(1, 0)));
-    painter.fillRect(unit, QColor(48, 48, 48));
-    painter.setPen(QPen(QColor(70, 70, 70), 1.0));
+    painter.fillRect(unit, theme::color("graph.area"));
+    painter.setPen(QPen(theme::color("graph.grid"), 1.0));
     for (int i = 1; i < 4; ++i)
     {
         const double f = i / 4.0;
@@ -144,7 +145,7 @@ void EaseCurveEditor::paintEvent(QPaintEvent*)
     painter.setPen(QPen(QColor(110, 110, 110), 1.0));
     painter.setBrush(Qt::NoBrush);
     painter.drawRect(unit);
-    painter.setPen(QColor(150, 150, 150));
+    painter.setPen(theme::color("graph.text"));
     painter.drawText(QRectF(unit.left(), unit.bottom() + 2, 80, 14), Qt::AlignLeft, "Frames");
     painter.save();
     painter.translate(unit.left() - 4, unit.bottom());
@@ -156,7 +157,7 @@ void EaseCurveEditor::paintEvent(QPaintEvent*)
     QPainterPath curve(toWidget(_points.front()));
     for (size_t i = 0; i + 3 < _points.size(); i += 3)
         curve.cubicTo(toWidget(_points[i + 1]), toWidget(_points[i + 2]), toWidget(_points[i + 3]));
-    painter.setPen(QPen(QColor(41, 128, 238), 2.0));
+    painter.setPen(QPen(theme::color("playhead"), 2.0));
     painter.drawPath(curve);
 
     // Handles, then anchors.
@@ -170,7 +171,7 @@ void EaseCurveEditor::paintEvent(QPaintEvent*)
     {
         const bool anchor = i % 3 == 0;
         const bool picked = static_cast<int>(i) == _picked;
-        painter.setPen(QPen(picked ? QColor(41, 128, 238) : QColor(20, 20, 20), 1.2));
+        painter.setPen(QPen(picked ? theme::color("playhead") : QColor(20, 20, 20), 1.2));
         painter.setBrush(anchor ? QColor(240, 240, 240) : QColor(160, 160, 160));
         const QPointF at = toWidget(_points[i]);
         if (anchor)

@@ -271,6 +271,9 @@ private slots:
     void onPlayerFrameChanged(int frame);
 
 private:
+    /// The header and its icons in the current theme's colors.
+    void applyTheme();
+    QString _transportStyle;
     const fla::FLADocument* _flaDocument;
     QScrollArea* _scrollArea;
     QWidget* _header;

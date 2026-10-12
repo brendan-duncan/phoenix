@@ -1,4 +1,5 @@
 #include "arrange_panels.h"
+#include "theme.h"
 
 #include "phoenix_view.h"
 #include "../data/element.h"
@@ -41,15 +42,19 @@ fla::Transform fromQ(const QTransform& q)
 /// A small button with a drawn icon: \a draw paints into 20 x 20.
 QToolButton* iconButton(QWidget* parent, const QString& tip, const std::function<void(QPainter&)>& draw)
 {
-    QPixmap pixmap(20, 20);
-    pixmap.fill(Qt::transparent);
-    QPainter painter(&pixmap);
-    painter.setPen(Qt::NoPen);
-    painter.setBrush(QColor(210, 210, 210));
-    draw(painter);
-    painter.end();
+    // Drawn again in the theme's colors when the theme changes.
+    const auto make = [draw]() {
+        QPixmap pixmap(20, 20);
+        pixmap.fill(Qt::transparent);
+        QPainter painter(&pixmap);
+        painter.setPen(Qt::NoPen);
+        painter.setBrush(theme::color("icon"));
+        draw(painter);
+        painter.end();
+        return QIcon(pixmap);
+    };
     QToolButton* button = new QToolButton(parent);
-    button->setIcon(QIcon(pixmap));
+    theme::themedIcon(button, make);
     button->setIconSize(QSize(20, 20));
     button->setAutoRaise(true);
     button->setToolTip(tip);
@@ -105,19 +110,19 @@ AlignPanel::AlignPanel(ArrangeLinks links, QWidget* parent)
     // The icons: bars standing for the objects, a line for the edge.
     const auto bars = [](bool horizontal, int line) {
         return [horizontal, line](QPainter& p) {
-            p.setBrush(QColor(210, 210, 210));
+            p.setBrush(theme::color("icon"));
             if (horizontal)
             {
                 p.drawRect(QRectF(line == 0 ? 3 : line == 1 ? 6 : 9, 4, 8, 4));
                 p.drawRect(QRectF(line == 0 ? 3 : line == 1 ? 4 : 5, 12, 12, 4));
-                p.setBrush(QColor(41, 128, 238));
+                p.setBrush(theme::color("playhead"));
                 p.drawRect(QRectF(line == 0 ? 2 : line == 1 ? 9.5 : 17, 1, 1.2, 18));
             }
             else
             {
                 p.drawRect(QRectF(4, line == 0 ? 3 : line == 1 ? 6 : 9, 4, 8));
                 p.drawRect(QRectF(12, line == 0 ? 3 : line == 1 ? 4 : 5, 4, 12));
-                p.setBrush(QColor(41, 128, 238));
+                p.setBrush(theme::color("playhead"));
                 p.drawRect(QRectF(1, line == 0 ? 2 : line == 1 ? 9.5 : 17, 18, 1.2));
             }
         };
