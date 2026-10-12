@@ -58,6 +58,11 @@ public:
 
     bool capturesKeyboard() const override { return _text != nullptr; }
 
+    /// Composed text from an input method shows underlined at the caret
+    /// until it is committed, and is typed in when it is.
+    bool inputMethod(PhoenixView& view, QInputMethodEvent* event) override;
+    QVariant inputMethodQuery(const PhoenixView& view, Qt::InputMethodQuery query) const override;
+
     void paintOverlay(PhoenixView& view, QPainter& painter, double scale) override;
 
     void deactivate(PhoenixView& view) override;
@@ -149,6 +154,9 @@ private:
     int _anchor = -1;
     bool _selecting = false;
     bool _resizing = false;
+
+    /// What an input method is composing, not yet typed in.
+    QString _preedit;
 
     bool _pressed = false;
     QPointF _pressPos;

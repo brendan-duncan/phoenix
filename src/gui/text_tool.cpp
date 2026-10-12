@@ -2,6 +2,12 @@
 
 #include "../edit/text_style.h"
 
+#include <QGuiApplication>
+#include <QFontMetricsF>
+#include <QInputMethod>
+
+#include <QClipboard>
+
 #include "phoenix_view.h"
 #include "text_layout.h"
 
@@ -355,6 +361,7 @@ void TextTool::beginExisting(PhoenixView& view, fla::StaticText* text, fla::Fram
 
 void TextTool::commit(PhoenixView& view)
 {
+    _preedit.clear();
     if (!_text)
         return;
 
@@ -666,6 +673,9 @@ void TextTool::measure()
 
 void TextTool::refresh(PhoenixView& view)
 {
+    // The input method follows the caret.
+    if (QInputMethod* method = QGuiApplication::inputMethod())
+        method->update(Qt::ImQueryAll);
     view.invalidateBounds();
     view.clearCaches();
     view.update();
@@ -711,23 +721,87 @@ bool TextTool::keyPress(PhoenixView& view, QKeyEvent* event)
         deleteForward();
         break;
     case Qt::Key_Left:
-        if (!shift && _anchor >= 0 && _anchor != _caret)
+        if (control)
+        {
+            // To the start of the word, or of the one before.
+            const QString joined = TextLayout::joinedText(*_text);
+            int at = _caret;
+            while (at > 0 && joined[at - 1].isSpace())
+                --at;
+            while (at > 0 && !joined[at - 1].isSpace())
+                --at;
+            moveTo(at);
+        }
+        else if (!shift && _anchor >= 0 && _anchor != _caret)
             moveTo(std::min(_anchor, _caret));
         else
             moveTo(_caret - 1);
         break;
     case Qt::Key_Right:
-        if (!shift && _anchor >= 0 && _anchor != _caret)
+        if (control)
+        {
+            // Past the word and the spaces after it.
+            const QString joined = TextLayout::joinedText(*_text);
+            int at = _caret;
+            while (at < total && !joined[at].isSpace())
+                ++at;
+            while (at < total && joined[at].isSpace())
+                ++at;
+            moveTo(at);
+        }
+        else if (!shift && _anchor >= 0 && _anchor != _caret)
             moveTo(std::max(_anchor, _caret));
         else
             moveTo(_caret + 1);
         break;
+    case Qt::Key_Up:
+    case Qt::Key_Down:
+    {
+        // The line above or below, as near the caret's x as it goes.
+        const QRectF caret = TextLayout::caretRect(*_text, _caret);
+        const bool up = event->key() == Qt::Key_Up;
+        const QRectF box = TextLayout::localBounds(*_text);
+        const double y = up ? caret.top() - 1.0 : caret.bottom() + 1.0;
+        if (up && y < box.top() + 2.0)
+            moveTo(0);
+        else if (!up && y > box.bottom() - 2.0)
+            moveTo(total);
+        else
+            moveTo(TextLayout::indexAt(*_text, QPointF(caret.left(), y)));
+        break;
+    }
     case Qt::Key_Home:
         moveTo(0);
         break;
     case Qt::Key_End:
         moveTo(total);
         break;
+    case Qt::Key_C:
+    case Qt::Key_X:
+    case Qt::Key_V:
+        if (control)
+        {
+            // The characters themselves, through the system clipboard.
+            int from = 0;
+            int to = 0;
+            if (event->key() == Qt::Key_V)
+            {
+                QString pasted = QGuiApplication::clipboard()->text();
+                pasted.replace("\r\n", "\r").replace('\n', '\r');
+                if (!pasted.isEmpty())
+                    insertText(pasted);
+            }
+            else if (selectedRange(from, to))
+            {
+                QString copied = TextLayout::joinedText(*_text).mid(from, to - from);
+                copied.replace('\r', '\n');
+                QGuiApplication::clipboard()->setText(copied);
+                if (event->key() == Qt::Key_X)
+                    deleteSelection();
+            }
+            break;
+        }
+        [[fallthrough]];
     case Qt::Key_Tab:
         return true;
     case Qt::Key_A:
@@ -752,6 +826,43 @@ bool TextTool::keyPress(PhoenixView& view, QKeyEvent* event)
 
     refresh(view);
     return true;
+}
+
+bool TextTool::inputMethod(PhoenixView& view, QInputMethodEvent* event)
+{
+    if (!_text)
+        return false;
+    if (!event->commitString().isEmpty())
+        insertText(event->commitString());
+    _preedit = event->preeditString();
+    refresh(view);
+    return true;
+}
+
+QVariant TextTool::inputMethodQuery(const PhoenixView& view, Qt::InputMethodQuery query) const
+{
+    if (!_text)
+        return QVariant();
+    switch (query)
+    {
+    case Qt::ImCursorRectangle:
+    {
+        // The caret, on the view, where the candidate window goes.
+        const QRectF caret = TextLayout::caretRect(*_text, _caret);
+        return (_toDocument * view.documentToWidget()).mapRect(caret.adjusted(0.0, 0.0, 1.0, 0.0)).toAlignedRect();
+    }
+    case Qt::ImCursorPosition:
+        return _caret;
+    case Qt::ImSurroundingText:
+        return TextLayout::joinedText(*_text);
+    case Qt::ImFont:
+    {
+        const fla::TextRun fallback;
+        return TextLayout::fontFor(_text->runs.empty() ? fallback : _text->runs.front());
+    }
+    default:
+        return QVariant();
+    }
 }
 
 void TextTool::paintOverlay(PhoenixView& view, QPainter& painter, double scale)
@@ -805,6 +916,20 @@ void TextTool::paintOverlay(PhoenixView& view, QPainter& painter, double scale)
     const QRectF caret = TextLayout::caretRect(*_text, _caret);
     painter.setPen(QPen(QColor(0, 0, 0), 1.0 * scale));
     painter.drawLine(QPointF(caret.left(), caret.top()), QPointF(caret.left(), caret.bottom()));
+
+    // Text an input method is composing, underlined at the caret over a
+    // white band until it is committed.
+    if (!_preedit.isEmpty())
+    {
+        const fla::TextRun fallback;
+        const QFont font = TextLayout::fontFor(_text->runs.empty() ? fallback : _text->runs.front());
+        const QFontMetricsF metrics(font);
+        const QRectF band(caret.left(), caret.top(), metrics.horizontalAdvance(_preedit), caret.height());
+        painter.fillRect(band, QColor(255, 255, 255));
+        painter.setFont(font);
+        painter.drawText(QPointF(band.left(), band.top() + metrics.ascent()), _preedit);
+        painter.drawLine(QPointF(band.left(), band.bottom() - 1.0), QPointF(band.right(), band.bottom() - 1.0));
+    }
 
     painter.restore();
 }

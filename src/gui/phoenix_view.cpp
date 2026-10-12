@@ -274,6 +274,9 @@ PhoenixView::PhoenixView(Player* player, QWidget *parent)
     // Keys reach the stage once it has been clicked, so Delete, Escape and the
     // nudge keys go to the tools rather than nowhere.
     setFocusPolicy(Qt::StrongFocus);
+    // Input methods type into text; the view asks the tool when (see
+    // inputMethodQuery).
+    setAttribute(Qt::WA_InputMethodEnabled, true);
 
     // Enable mouse tracking for smooth panning
     setMouseTracking(true);
@@ -4469,6 +4472,25 @@ bool PhoenixView::event(QEvent* event)
         }
     }
     return QWidget::event(event);
+}
+
+void PhoenixView::inputMethodEvent(QInputMethodEvent* event)
+{
+    if (_activeTool && _activeTool->inputMethod(*this, event))
+    {
+        event->accept();
+        return;
+    }
+    QWidget::inputMethodEvent(event);
+}
+
+QVariant PhoenixView::inputMethodQuery(Qt::InputMethodQuery query) const
+{
+    // Only a tool taking text wants the input method at all.
+    if (query == Qt::ImEnabled)
+        return _activeTool && _activeTool->capturesKeyboard();
+    const QVariant answer = _activeTool ? _activeTool->inputMethodQuery(*this, query) : QVariant();
+    return answer.isValid() ? answer : QWidget::inputMethodQuery(query);
 }
 
 void PhoenixView::keyPressEvent(QKeyEvent* event)

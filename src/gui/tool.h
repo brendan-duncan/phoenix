@@ -1,5 +1,9 @@
 #pragma once
 
+#include <QVariant>
+
+#include <QInputMethodEvent>
+
 #include <QCursor>
 #include <QPainter>
 #include <QString>
@@ -114,6 +118,25 @@ public:
     /// Whether the tool is taking typed text, so that single-key tool
     /// shortcuts must not fire. The text tool says yes while a box is open.
     virtual bool capturesKeyboard() const { return false; }
+
+    /// Text from an input method (Chinese, Japanese, Korean...): the text
+    /// being composed and the text committed. False when the tool takes no
+    /// text.
+    virtual bool inputMethod(PhoenixView& view, QInputMethodEvent* event)
+    {
+        (void)view;
+        (void)event;
+        return false;
+    }
+
+    /// What an input method asks of the tool, such as where the caret is in
+    /// the view's coordinates; empty when the tool takes no text.
+    virtual QVariant inputMethodQuery(const PhoenixView& view, Qt::InputMethodQuery query) const
+    {
+        (void)view;
+        (void)query;
+        return QVariant();
+    }
 
     /// Whether Enter finishes something the tool has under way (a pen path,
     /// a polygon lasso), so that it does not play the timeline.
