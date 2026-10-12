@@ -5,6 +5,7 @@
 #include "../src/data/shape.h"
 #include "../src/edit/command_stack.h"
 #include "../src/edit/frame_commands.h"
+#include "../src/edit/frame_sound.h"
 
 #include <memory>
 
@@ -85,4 +86,36 @@ TEST(inserting_where_a_keyframe_already_is_changes_nothing)
     CHECK(command->frame() == layer->frames[0]);
     stack.undo();
     CHECK(layer->frames.size() == 1 && layer->frames[0]->duration == 10);
+}
+
+TEST(a_frame_sound_is_written_as_animate_keeps_it)
+{
+    fla::Frame frame(nullptr);
+    frame.extraAttributes.emplace_back("keepMe", "1");
+    fla::frame_sound::Settings settings;
+    settings.name = "beat.wav";
+    settings.sync = "stream";
+    settings.effect = "fade in";
+    settings.loops = 3;
+    fla::frame_sound::write(settings, 4000, frame.extraAttributes, frame.extraChildren);
+
+    const fla::frame_sound::Settings read = fla::frame_sound::read(frame);
+    CHECK(read.name == "beat.wav" && read.sync == "stream" && read.effect == "fade in");
+    CHECK(read.loops == 3 && !read.loop);
+    CHECK(frame.extraAttributes.front().first == "keepMe");
+    CHECK(frame.extraChildren.size() == 1);
+    CHECK(frame.extraChildren.front().find("mark44=\"1000\"") != std::string::npos);
+
+    // An event sound played once writes nothing but its name.
+    settings.sync = "event";
+    settings.effect = "none";
+    settings.loops = 1;
+    fla::frame_sound::write(settings, 4000, frame.extraAttributes, frame.extraChildren);
+    CHECK(frame.extraAttributes.size() == 2);
+    CHECK(frame.extraChildren.empty());
+
+    // No name takes the sound off.
+    settings.name.clear();
+    fla::frame_sound::write(settings, 4000, frame.extraAttributes, frame.extraChildren);
+    CHECK(frame.extraAttributes.size() == 1);
 }

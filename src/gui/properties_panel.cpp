@@ -25,6 +25,7 @@
 #include "../edit/element_clone.h"
 #include "../edit/element_commands.h"
 #include "../edit/frame_commands.h"
+#include "../edit/frame_sound.h"
 #include "../edit/property_command.h"
 #include "../edit/selection.h"
 
@@ -44,6 +45,7 @@
 #include <QPainterPath>
 #include <QPushButton>
 #include <QScrollArea>
+#include <QStandardItemModel>
 #include <QTimer>
 #include <QToolButton>
 #include <QVBoxLayout>
@@ -1843,6 +1845,111 @@ void PropertiesPanel::rebuildFrameTab()
         sync->setToolTip("Keep a graphic instance's frames in step with the timeline");
         connect(sync, &QCheckBox::toggled, this, [=](bool on) { setField(frame->motionTweenSync, on, "Sync"); });
         tweening->addField(3, 1, QString(), sync);
+    }
+
+    // --- Sound ---
+    if (keyframe)
+    {
+        PropertySection* soundSection = addSection(page, "Sound");
+        const fla::frame_sound::Settings sound = fla::frame_sound::read(*frame);
+        const auto setSound = [this, frame](const fla::frame_sound::Settings& settings, const char* name) {
+            const fla::Document* doc = document();
+            auto attributes = frame->extraAttributes;
+            auto children = frame->extraChildren;
+            fla::frame_sound::write(settings, doc ? fla::frame_sound::sampleCount(*doc, settings.name) : 0,
+                attributes, children);
+            if (attributes == frame->extraAttributes && children == frame->extraChildren)
+                return;
+            auto* command = new fla::CompoundCommand(name);
+            command->addCommand(fla::CommandPtr(new fla::SetPropertyCommand<std::vector<std::pair<std::string, std::string>>>(
+                frame->extraAttributes, frame->extraAttributes, attributes, name)));
+            command->addCommand(fla::CommandPtr(new fla::SetPropertyCommand<std::vector<std::string>>(
+                frame->extraChildren, frame->extraChildren, children, name)));
+            push(std::unique_ptr<fla::Command>(command));
+            emit documentEdited();
+            // What the section shows depends on whether there is a sound.
+            QTimer::singleShot(0, this, [this]() { refresh(); });
+        };
+
+        QComboBox* soundName = new QComboBox(this);
+        soundName->addItem("None");
+        if (const fla::Document* doc = document())
+        {
+            for (const fla::Document::SoundInfo& info : doc->sounds)
+                soundName->addItem(QString::fromStdString(info.name));
+        }
+        if (!sound.name.empty())
+        {
+            const int found = soundName->findText(QString::fromStdString(sound.name));
+            if (found < 0)
+                soundName->addItem(QString::fromStdString(sound.name));
+            soundName->setCurrentIndex(found < 0 ? soundName->count() - 1 : found);
+        }
+        connect(soundName, &QComboBox::currentIndexChanged, this, [=](int index) {
+            fla::frame_sound::Settings settings = sound;
+            settings.name = index <= 0 ? std::string() : soundName->itemText(index).toStdString();
+            setSound(settings, "Sound");
+        });
+        soundSection->addLong(0, "Name", soundName);
+
+        if (!sound.name.empty())
+        {
+            QComboBox* effect = new QComboBox(this);
+            effect->addItems({"None", "Left Channel", "Right Channel", "Fade Left to Right", "Fade Right to Left",
+                "Fade In", "Fade Out", "Custom"});
+            for (int i = 0; i < 8; ++i)
+            {
+                if (sound.effect == fla::frame_sound::kEffects[i])
+                    effect->setCurrentIndex(i);
+            }
+            // A custom envelope is drawn in Animate's Edit Envelope; here it
+            // is only kept.
+            if (sound.effect != "custom")
+                qobject_cast<QStandardItemModel*>(effect->model())->item(7)->setEnabled(false);
+            connect(effect, &QComboBox::currentIndexChanged, this, [=](int index) {
+                fla::frame_sound::Settings settings = sound;
+                settings.effect = fla::frame_sound::kEffects[std::clamp(index, 0, 7)];
+                setSound(settings, "Sound Effect");
+            });
+            soundSection->addLong(1, "Effect", effect);
+
+            QComboBox* sync = new QComboBox(this);
+            sync->addItems({"Event", "Start", "Stop", "Stream"});
+            for (int i = 0; i < 4; ++i)
+            {
+                if (sound.sync == fla::frame_sound::kSyncs[i])
+                    sync->setCurrentIndex(i);
+            }
+            connect(sync, &QComboBox::currentIndexChanged, this, [=](int index) {
+                fla::frame_sound::Settings settings = sound;
+                settings.sync = fla::frame_sound::kSyncs[std::clamp(index, 0, 3)];
+                setSound(settings, "Sound Sync");
+            });
+            soundSection->addLong(2, "Sync", sync);
+
+            QComboBox* repeat = new QComboBox(this);
+            repeat->addItems({"Repeat", "Loop"});
+            repeat->setCurrentIndex(sound.loop ? 1 : 0);
+            connect(repeat, &QComboBox::currentIndexChanged, this, [=](int index) {
+                fla::frame_sound::Settings settings = sound;
+                settings.loop = index == 1;
+                setSound(settings, "Sound Loop");
+            });
+            soundSection->addField(3, 0, QString(), repeat);
+
+            if (!sound.loop)
+            {
+                HotText* times = makeHotText(1, 65535, 0);
+                times->setValue(sound.loops);
+                times->setToolTip("How many times the sound plays");
+                connect(times, &HotText::editFinished, this, [=]() {
+                    fla::frame_sound::Settings settings = sound;
+                    settings.loops = static_cast<int>(times->value());
+                    setSound(settings, "Sound Repeat");
+                });
+                soundSection->addField(3, 1, "x", times);
+            }
+        }
     }
 
     // --- Span ---
