@@ -534,6 +534,9 @@ bool parseElement(const tinyxml2::XMLElement* element, fla::Element* el)
     el->isSelected = getBoolAttribute(element, "isSelected", false);
     el->isFloating = getBoolAttribute(element, "isFloating", false);
     el->isLocked = getBoolAttribute(element, "lockFlag", false);
+    // Display > Visible switched off: Animate leaves the instance out of what
+    // it shows. The attribute itself is kept as read for the save.
+    el->visible = getBoolAttribute(element, "isVisible", true);
 
     // Parse transformation matrix
     const tinyxml2::XMLElement* matrixNode = element->FirstChildElement("matrix");

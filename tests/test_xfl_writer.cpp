@@ -1410,3 +1410,19 @@ TEST(variable_width_profiles_are_read_and_kept)
     CHECK(writer.writeDocument(*document).find("<WidthMarker position=\"0.5\" left=\"0.5\" right=\"0.5\"/>") !=
         std::string::npos);
 }
+
+TEST(an_instance_with_visible_off_is_hidden_and_kept_so)
+{
+    std::unique_ptr<fla::Document> document = parseDocumentText(
+        "<DOMDocument xmlns='http://ns.adobe.com/xfl/2008/'><timelines><DOMTimeline name='Scene 1'><layers>"
+        "<DOMLayer name='Layer 1'><frames><DOMFrame index='0'><elements>"
+        "<DOMSymbolInstance libraryItemName='Ball' isVisible='false'/><DOMSymbolInstance libraryItemName='Ball'/>"
+        "</elements></DOMFrame></frames></DOMLayer></layers></DOMTimeline></timelines></DOMDocument>");
+    CHECK(document != nullptr);
+    if (!document)
+        return;
+    const auto& elements = document->timelines[0]->layers[0]->frames[0]->elements;
+    CHECK(elements.size() == 2 && !elements[0]->visible && elements[1]->visible);
+    XFLWriter writer;
+    CHECK(writer.writeDocument(*document).find("isVisible=\"false\"") != std::string::npos);
+}
