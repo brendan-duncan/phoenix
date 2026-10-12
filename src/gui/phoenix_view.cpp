@@ -749,8 +749,16 @@ void PhoenixView::drawStageContents(QPainter& painter, const fla::Document* docu
         // Edit in place: everything outside the symbol being edited fades
         // back, and the symbol draws over it at full strength in its own
         // space, which is where the tools now work. A symbol edited from the
-        // library is shown on its own.
-        if (_scope.front().instance)
+        // library is shown on its own. A group being edited fades the rest
+        // of its timeline too, and draws over it.
+        const bool inGroup = _scope.back().group != nullptr;
+        int symbolLevel = -1;
+        for (size_t i = 0; i < _scope.size(); ++i)
+        {
+            if (!_scope[i].group)
+                symbolLevel = static_cast<int>(i);
+        }
+        if (symbolLevel < 0 || _scope.front().instance)
         {
             painter.setOpacity(0.3);
             drawDocument(painter, document);
@@ -758,8 +766,20 @@ void PhoenixView::drawStageContents(QPainter& painter, const fla::Document* docu
         }
 
         painter.setTransform(scopeToDocument() * rootFull, false);
-        if (_scope.back().timeline)
-            drawTimeline(painter, _scope.back().timeline, fla::LoopType::PlayOnce, 0);
+        if (symbolLevel >= 0 && _scope[static_cast<size_t>(symbolLevel)].timeline)
+        {
+            painter.setOpacity(inGroup ? 0.3 : 1.0);
+            drawTimeline(painter, _scope[static_cast<size_t>(symbolLevel)].timeline, fla::LoopType::PlayOnce, 0);
+            painter.setOpacity(1.0);
+        }
+        if (inGroup && _scope.back().frame)
+        {
+            for (const fla::Element* element : _scope.back().frame->elements)
+            {
+                if (element && element->visible && !_scope.back().outside.count(element))
+                    drawElement(painter, element, nullptr, 0.0);
+            }
+        }
         painter.setTransform(rootFull, false);
     }
 
@@ -1579,7 +1599,7 @@ void PhoenixView::drawLayer(QPainter& painter, const fla::Layer* layer, fla::Loo
 {
     // Onion skin leaves locked layers out, as Animate does, so a locked
     // background is not drawn again faded under every frame.
-    if (_frameOverride >= 0 && !_exporting && layer->isLocked() && _scope.empty())
+    if (_frameOverride >= 0 && !_exporting && layer->isLocked() && !inSymbol())
         return;
 
     QColor color;
@@ -3184,8 +3204,9 @@ void PhoenixView::hitTestElement(fla::Element& element, fla::Frame* frame,
     fla::LoopType loopType, const QTransform& toDocument, const QPointF& documentPos,
     double tolerance, HitResult& result, const fla::Transform* shownTransform)
 {
-    // A locked object (Modify > Arrange > Lock) stays where it is, unpicked.
-    if (!element.visible || element.isLocked)
+    // A locked object (Modify > Arrange > Lock) stays where it is, unpicked,
+    // as does all but a group being edited.
+    if (!element.visible || element.isLocked || outsideGroup(&element))
         return;
 
     const fla::Transform& t = shownTransform ? *shownTransform : element.transform;
@@ -3776,7 +3797,7 @@ std::vector<fla::Element*> PhoenixView::elementsIn(const QRectF& documentRect)
 
             for (fla::Element* element : state.frame->elements)
             {
-                if (!element || !element->visible || element->isLocked)
+                if (!element || !element->visible || element->isLocked || outsideGroup(element))
                     continue;
 
                 // Top-level elements carry their own transform into the bounds,
@@ -4252,7 +4273,7 @@ void PhoenixView::gatherSnapCandidates(fla::Snapper& snapper,
 
     // The stage edges and center are worth lining up with too, at the scene;
     // inside a symbol they are not in its space.
-    if (_scope.empty())
+    if (!inSymbol())
     {
         snapper.addCandidateX(0.0);
         snapper.addCandidateX(document->width / 2.0);
@@ -4353,7 +4374,7 @@ void PhoenixView::drawToolOverlay(QPainter& painter)
         painter.drawLine(QPointF(at.x(), at.y() - r), QPointF(at.x(), at.y() + r));
     };
     painter.save();
-    if (!_scope.empty())
+    if (inSymbol())
         crosshair(QPointF(0.0, 0.0), 9.0);
     if (_selection && showBounds)
     {
@@ -4798,7 +4819,7 @@ void PhoenixView::zoomToFit()
 QRectF PhoenixView::contentBounds()
 {
     QRectF bounds;
-    if (_flaDocument && _flaDocument->document && _scope.empty())
+    if (_flaDocument && _flaDocument->document && !inSymbol())
         bounds = QRectF(0.0, 0.0, _flaDocument->document->width, _flaDocument->document->height);
 
     const QRectF everything(-1.0e6, -1.0e6, 2.0e6, 2.0e6);
@@ -4888,6 +4909,9 @@ QTransform PhoenixView::scopeToDocument() const
     QTransform transform;
     for (const EditScope& level : _scope)
     {
+        // A group's members are in the space it is in.
+        if (level.group)
+            continue;
         if (!level.instance)
         {
             // A symbol edited on its own sits with its registration point at
@@ -4906,7 +4930,7 @@ QTransform PhoenixView::scopeToDocument() const
 std::vector<const fla::Timeline*> PhoenixView::editableTimelines() const
 {
     std::vector<const fla::Timeline*> timelines;
-    if (!_scope.empty())
+    if (!_scope.empty() && (_scope.back().timeline || inSymbol()))
     {
         if (_scope.back().timeline)
             timelines.push_back(_scope.back().timeline);
@@ -4942,6 +4966,8 @@ QString PhoenixView::scopeName(int depth) const
     if (depth > static_cast<int>(_scope.size()))
         return QString();
 
+    if (_scope[depth - 1].group)
+        return "Group";
     const fla::SymbolInstance* instance = _scope[depth - 1].instance;
     if (!instance && _scope[depth - 1].symbol)
         return QString::fromStdString(_scope[depth - 1].symbol->name);
@@ -5352,12 +5378,115 @@ void PhoenixView::dropEvent(QDropEvent* event)
     emit libraryItemDropped(text.left(colon), text.mid(colon + 1), toScope.map(event->position()));
 }
 
+bool PhoenixView::enterGroup(fla::Group* group)
+{
+    fla::Frame* frame = group ? dynamic_cast<fla::Frame*>(group->parent) : nullptr;
+    if (!frame || !_commandStack || _commandStack->isInMacro() ||
+        std::find(frame->elements.begin(), frame->elements.end(), group) == frame->elements.end())
+        return false;
+
+    flushPendingMerge();
+    if (_selection)
+        _selection->clear();
+
+    EditScope level;
+    level.group = group;
+    level.frame = frame;
+    level.timeline = _scope.empty() ? nullptr : _scope.back().timeline;
+    level.symbol = _scope.empty() ? nullptr : _scope.back().symbol;
+    level.groupAttributes = group->extraAttributes;
+    for (const fla::Element* element : frame->elements)
+    {
+        if (element != group)
+            level.outside.insert(element);
+    }
+    // The members go out into the frame, where the tools work.
+    _commandStack->push(fla::CommandPtr(new fla::UngroupCommand(frame, group, "Edit Group", _selection)));
+    _commandStack->breakMergeChain();
+    if (_selection)
+        _selection->clear();
+    level.entered = _commandStack->topCommand();
+    _scope.push_back(std::move(level));
+    clearCaches();
+    emit scopeChanged();
+    update();
+    return true;
+}
+
+void PhoenixView::exitGroups()
+{
+    while (!_scope.empty() && _scope.back().group)
+        exitScope();
+}
+
+bool PhoenixView::outsideGroup(const fla::Element* element) const
+{
+    if (_scope.empty() || !_scope.back().group || !element)
+        return false;
+    // The element itself, or the one in a frame it is part of.
+    const fla::DOMElement* top = element;
+    while (top->parent && top->parent->domType() != fla::DOMElement::DOMType::Frame)
+        top = top->parent;
+    const EditScope& level = _scope.back();
+    return top->parent != level.frame || level.outside.count(static_cast<const fla::Element*>(top)) > 0;
+}
+
+bool PhoenixView::inSymbol() const
+{
+    return std::any_of(_scope.begin(), _scope.end(), [](const EditScope& level) { return !level.group; });
+}
+
 bool PhoenixView::exitScope()
 {
     if (_scope.empty())
         return false;
 
     flushPendingMerge();
+    if (_scope.back().group)
+    {
+        // What the frame holds that was not there before goes back into a
+        // group, in place of the one taken apart.
+        const EditScope level = _scope.back();
+        _scope.pop_back();
+        fla::Frame* frame = level.frame;
+        const bool restored = std::find(frame->elements.begin(), frame->elements.end(), level.group) !=
+                              frame->elements.end();
+        fla::Element* result = restored ? level.group : nullptr;
+        if (!restored && _commandStack && _commandStack->topCommand() == level.entered)
+        {
+            // Nothing changed: no trace of having been in it.
+            _commandStack->discardLast();
+            result = level.group;
+        }
+        else if (!restored && _commandStack)
+        {
+            std::vector<fla::Element*> members;
+            for (fla::Element* element : frame->elements)
+            {
+                if (element && !level.outside.count(element))
+                    members.push_back(element);
+            }
+            if (!members.empty())
+            {
+                auto* command = new fla::GroupElementsCommand(frame, members, "Edit Group", _selection);
+                fla::Group* regrouped = command->group();
+                regrouped->extraAttributes = level.groupAttributes;
+                _commandStack->push(fla::CommandPtr(command));
+                _commandStack->breakMergeChain();
+                result = regrouped;
+            }
+        }
+        clearCaches();
+        if (_selection)
+        {
+            _selection->clear();
+            if (result)
+                _selection->select(result);
+        }
+        emit scopeChanged();
+        update();
+        return true;
+    }
     fla::SymbolInstance* instance = _scope.back().instance;
     _scope.pop_back();
     clearCaches();

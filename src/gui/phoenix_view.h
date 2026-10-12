@@ -20,6 +20,7 @@
 #include <QPixmap>
 
 #include <map>
+#include <set>
 #include <QWidget>
 #include <QPainter>
 #include <QPainterPath>
@@ -161,6 +162,23 @@ public:
     /// behind it, and the timeline panel follows. Editing a symbol changes
     /// every instance of it, since they all draw the same timeline.
     bool enterSymbol(fla::SymbolInstance* instance);
+
+    /// Edits a group in place, as double-clicking it does in Animate: its
+    /// members are drawn on and picked as artwork of their own, everything
+    /// else stays as it is, dimmed. Leaving gathers what is there back into
+    /// the group. Entering and leaving are one undo step, or none when nothing
+    /// changed in between.
+    bool enterGroup(fla::Group* group);
+
+    /// Leaves every group being edited, innermost first (before saving).
+    void exitGroups();
+
+    /// Whether \a element is out of reach while a group is edited: anything
+    /// but the group's own content.
+    bool outsideGroup(const fla::Element* element) const;
+
+    /// Whether a symbol is being edited (and not only groups at the scene).
+    bool inSymbol() const;
 
     /// Rulers along the top and left of the stage, in stage pixels.
     void setRulersVisible(bool on);
@@ -536,6 +554,15 @@ private:
         fla::SymbolInstance* instance = nullptr;
         fla::Timeline* timeline = nullptr;
         const fla::Symbol* symbol = nullptr;
+        /// A group edited in place: its frame, where its members are while it
+        /// is; what else the frame held, out of reach; the command that took
+        /// the group apart; and the group's own attributes, for the group it
+        /// becomes again. Null for a symbol.
+        fla::Group* group = nullptr;
+        fla::Frame* frame = nullptr;
+        std::set<const fla::Element*> outside;
+        const fla::Command* entered = nullptr;
+        std::vector<std::pair<std::string, std::string>> groupAttributes;
     };
     std::vector<EditScope> _scope;
 

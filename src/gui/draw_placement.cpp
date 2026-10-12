@@ -51,8 +51,9 @@ std::vector<fla::Shape*> shapesUnder(PhoenixView& view, fla::Frame& frame,
 
         fla::Shape* candidate = static_cast<fla::Shape*>(element);
 
-        // A drawing object never takes part in a merge, in either direction.
-        if (candidate->isDrawingObject)
+        // A drawing object never takes part in a merge, in either direction;
+        // nor does artwork outside a group being edited.
+        if (candidate->isDrawingObject || view.outsideGroup(candidate))
             continue;
 
         const QRectF candidateBounds = view.elementBounds(candidate);

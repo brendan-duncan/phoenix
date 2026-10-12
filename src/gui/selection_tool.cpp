@@ -311,9 +311,12 @@ bool SelectionTool::mouseDoubleClick(PhoenixView& view, QMouseEvent* event, cons
         return false;
     }
 
-    // Double-clicking a symbol instance edits the symbol in place.
+    // Double-clicking a symbol instance edits the symbol in place; a group,
+    // the group.
     if (hit.element->elementType() == fla::Element::Type::SymbolInstance)
         return view.enterSymbol(static_cast<fla::SymbolInstance*>(hit.element));
+    if (hit.element->elementType() == fla::Element::Type::Group)
+        return view.enterGroup(static_cast<fla::Group*>(hit.element));
 
     return view.selectRegionAt(hit, documentPos, true, false);
 }

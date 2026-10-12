@@ -1638,6 +1638,8 @@ void MainWindow::setupMenus()
     connect(editInPlaceAction, &QAction::triggered, this, [this]() {
         if (auto* instance = dynamic_cast<fla::SymbolInstance*>(_selection.single()))
             _phoenixView->enterSymbol(instance);
+        else if (auto* group = dynamic_cast<fla::Group*>(_selection.single()))
+            _phoenixView->enterGroup(group);
     });
 
     QMenu* insertMenu = menuBar->addMenu("&Insert");
@@ -2353,6 +2355,10 @@ bool MainWindow::saveToPath(const QString& filePath)
         QMessageBox::information(this, "No Document", "No FLA document is currently loaded.");
         return false;
     }
+
+    // A group being edited is a group again in the file.
+    if (_phoenixView)
+        _phoenixView->exitGroups();
 
     // A drawing still floating is committed before anything is written, so that
     // saving with one selected and saving just after letting it go produce the
@@ -5205,6 +5211,8 @@ void MainWindow::showStageMenu(const QPoint& globalPos, const QPointF& documentP
             if (_swapSymbolAction)
                 menu.addAction(_swapSymbolAction);
         }
+        if (auto* group = dynamic_cast<fla::Group*>(_selection.single()))
+            menu.addAction("Edit in Place", this, [this, group]() { _phoenixView->enterGroup(group); });
         for (QAction* action : {_breakApartAction, _groupAction, _ungroupAction})
         {
             if (action && action->isEnabled())
