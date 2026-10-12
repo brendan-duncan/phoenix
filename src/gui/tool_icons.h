@@ -44,6 +44,7 @@ public:
         TimeScrub,
         Camera,
         Text,
+        Bone,
         /// Not a tool: the toggle that keeps a drawing its own object.
         ObjectDrawing
     };

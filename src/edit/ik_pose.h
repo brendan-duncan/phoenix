@@ -34,6 +34,31 @@ struct IKJoint
     int parent = -1;
 };
 
+/// How far a joint may turn from its parent bone, in radians, when it is
+/// constrained. Kept on the joint's node for Phoenix (phoenixMinRotation,
+/// phoenixMaxRotation); the files Animate writes carry no limits there.
+struct JointLimit
+{
+    bool constrained = false;
+    double min = 0.0;
+    double max = 0.0;
+};
+
+/// One joint of an armature of symbol instances, as the Bone tool builds it.
+struct ArmatureJoint
+{
+    /// Where the joint is: the instance's transformation point.
+    Point position;
+    int parent = -1;
+    /// The node's name ("ikNode_3"), which its instance takes as its name.
+    std::string node;
+    /// The referenceID of the instance the joint moves.
+    std::string reference;
+    /// The instance's registration point (its tx, ty).
+    Point registration;
+    JointLimit limit;
+};
+
 /// An IK armature's pose span, read from and written back to the IKTree
 /// Animate keeps on a pose frame (as XML text).
 ///
@@ -92,11 +117,28 @@ public:
     /// angles do not fit the joints or the frame is outside the span.
     bool setPose(int frame, const std::vector<double>& angles);
 
+    /// Each joint's rotation limits.
+    std::vector<JointLimit> limits() const;
+    void setLimit(int joint, const JointLimit& limit);
+
+    /// The armature's name ("Armature_2") and tree name, as the IKTree
+    /// gives them.
+    std::string name() const;
+    std::string treeName() const;
+
+    /// An armature of symbols' joints as its first frame has them, for
+    /// building it again with a bone more (see symbolArmatureXml).
+    std::vector<ArmatureJoint> symbolJoints() const;
+
 private:
     struct Node
     {
         tinyxml2::XMLElement* element = nullptr;
         int parent = -1;
+        /// In an armature of symbols, where the instance's registration
+        /// point sits from the joint, in the joint's frame: xArray holds the
+        /// registration point there, not the joint.
+        Point registration;
     };
 
     struct Pose
@@ -120,8 +162,16 @@ private:
 
 /// Turns the joints above \a effector so it reaches for \a target, by cyclic
 /// coordinate descent from the effector's parent up to the root, as Animate's
-/// selection tool drags a bone's end. Returns the joints posed.
-std::vector<IKJoint> solveIK(std::vector<IKJoint> joints, int effector, const Point& target, int iterations = 16);
+/// selection tool drags a bone's end. A joint with a limit in \a limits
+/// turns no further than it allows. Returns the joints posed.
+std::vector<IKJoint> solveIK(std::vector<IKJoint> joints, int effector, const Point& target, int iterations = 16,
+    const std::vector<JointLimit>& limits = {});
+
+/// The IKTree text of a new armature of symbol instances, one pose \a
+/// frames long, posed as \a joints are (parents before children), as
+/// Animate writes one: each joint turned toward its first child joint.
+std::string symbolArmatureXml(const std::string& name, const std::string& treeName,
+    const std::vector<ArmatureJoint>& joints, int frames = 1);
 
 /// Where \a point (in the armature's space) goes when the joints move from
 /// \a before to \a after: each bone carries it rigidly with its parent

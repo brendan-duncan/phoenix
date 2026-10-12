@@ -11,6 +11,7 @@
 #include <cmath>
 #include <cstdio>
 #include <cstring>
+#include <functional>
 #include <sstream>
 
 namespace fla {
@@ -72,6 +73,57 @@ double wrapAngle(double angle)
     while (angle <= -kPi)
         angle += 2.0 * kPi;
     return angle;
+}
+
+/// One coordinate of a node's location, in pixels: "#1F.8F" (hex fixed
+/// point, a 24-bit signed whole part) or plain, in units of 256 twips.
+bool locationCoordinate(std::string text, double& pixels)
+{
+    text.erase(0, text.find_first_not_of(" \t"));
+    text.erase(text.find_last_not_of(" \t") + 1);
+    if (text.empty())
+        return false;
+    double units = 0.0;
+    char* end = nullptr;
+    if (text[0] == '#')
+    {
+        const size_t dot = text.find('.');
+        long whole = std::strtol(text.substr(1, dot == std::string::npos ? std::string::npos : dot - 1).c_str(), &end, 16);
+        if (whole >= 0x800000)
+            whole -= 0x1000000;
+        double part = 0.0;
+        if (dot != std::string::npos && dot + 1 < text.size())
+        {
+            const std::string fraction = text.substr(dot + 1);
+            part = std::strtol(fraction.c_str(), &end, 16) / std::pow(16.0, static_cast<double>(fraction.size()));
+        }
+        units = static_cast<double>(whole) + part;
+    }
+    else
+    {
+        units = std::strtod(text.c_str(), &end);
+        if (end == text.c_str())
+            return false;
+    }
+    pixels = units * 256.0 / 20.0;
+    return true;
+}
+
+bool parseLocation(const char* text, Point& at)
+{
+    if (!text)
+        return false;
+    const std::string value = text;
+    const size_t comma = value.find(',');
+    return comma != std::string::npos && locationCoordinate(value.substr(0, comma), at.x) &&
+        locationCoordinate(value.substr(comma + 1), at.y);
+}
+
+std::string locationText(const Point& at)
+{
+    char buffer[96];
+    std::snprintf(buffer, sizeof(buffer), "%.6f, %.6f", at.x * 20.0 / 256.0, at.y * 20.0 / 256.0);
+    return buffer;
 }
 
 double distanceToSegment(const Point& p, const Point& a, const Point& b)
@@ -158,6 +210,22 @@ void IKArmature::index()
     {
         walk.children(root, -1);
     }
+
+    // An armature of symbols keeps each instance's registration point in
+    // xArray and the joint, as saved, in location: how far apart they are
+    // turns with the joint.
+    if (_bendsShape)
+        return;
+    for (Node& node : _nodes)
+    {
+        const std::vector<double> xs = numbers(node.element->Attribute("xArray"));
+        const std::vector<double> ys = numbers(node.element->Attribute("yArray"));
+        const std::vector<double> angles = numbers(node.element->Attribute("angleArray"));
+        Point joint;
+        if (xs.empty() || ys.empty() || !parseLocation(node.element->Attribute("location"), joint))
+            continue;
+        node.registration = rotated(Point(xs[0] / 20.0 - joint.x, ys[0] / 20.0 - joint.y), angles.empty() ? 0.0 : -angles[0]);
+    }
 }
 
 std::vector<tinyxml2::XMLElement*> IKArmature::states(const tinyxml2::XMLElement* owner, const char* name) const
@@ -214,6 +282,11 @@ std::vector<IKJoint> IKArmature::jointsAt(int frame) const
             joint.position = Point(xs[frame] / 20.0, ys[frame] / 20.0);
         if (frame >= 0 && static_cast<size_t>(frame) < angles.size())
             joint.angle = angles[frame];
+        if (!_bendsShape)
+        {
+            const Point offset = rotated(node.registration, joint.angle);
+            joint.position = Point(joint.position.x - offset.x, joint.position.y - offset.y);
+        }
         joints.push_back(joint);
     }
     return joints;
@@ -336,8 +409,17 @@ void IKArmature::storeJoints()
         const std::vector<IKJoint> joints = posedAt(frame);
         for (size_t i = 0; i < joints.size(); ++i)
         {
-            xs[i].push_back(joints[i].position.x * 20.0);
-            ys[i].push_back(joints[i].position.y * 20.0);
+            Point at = joints[i].position;
+            if (!_bendsShape)
+            {
+                // The instance's registration point, which turns with it.
+                const Point offset = rotated(_nodes[i].registration, joints[i].angle);
+                at = Point(at.x + offset.x, at.y + offset.y);
+                if (frame == 0)
+                    _nodes[i].element->SetAttribute("location", locationText(joints[i].position).c_str());
+            }
+            xs[i].push_back(at.x * 20.0);
+            ys[i].push_back(at.y * 20.0);
             angles[i].push_back(joints[i].angle);
         }
     }
@@ -415,7 +497,189 @@ bool IKArmature::setPose(int frame, const std::vector<double>& angles)
 
 // ---------------------------------------------------------------------------
 
-std::vector<IKJoint> solveIK(std::vector<IKJoint> joints, int effector, const Point& target, int iterations)
+std::vector<JointLimit> IKArmature::limits() const
+{
+    std::vector<JointLimit> found;
+    for (const Node& node : _nodes)
+    {
+        JointLimit limit;
+        limit.constrained = node.element->Attribute("phoenixMinRotation") && node.element->Attribute("phoenixMaxRotation");
+        limit.min = node.element->DoubleAttribute("phoenixMinRotation", 0.0);
+        limit.max = node.element->DoubleAttribute("phoenixMaxRotation", 0.0);
+        found.push_back(limit);
+    }
+    return found;
+}
+
+void IKArmature::setLimit(int joint, const JointLimit& limit)
+{
+    if (joint < 0 || static_cast<size_t>(joint) >= _nodes.size())
+        return;
+    tinyxml2::XMLElement* element = _nodes[joint].element;
+    if (!limit.constrained)
+    {
+        element->DeleteAttribute("phoenixMinRotation");
+        element->DeleteAttribute("phoenixMaxRotation");
+        return;
+    }
+    setNumber(element, "phoenixMinRotation", std::min(limit.min, limit.max));
+    setNumber(element, "phoenixMaxRotation", std::max(limit.min, limit.max));
+}
+
+std::string IKArmature::name() const
+{
+    const tinyxml2::XMLElement* tree = _document->FirstChildElement("IKTree");
+    const char* text = tree ? tree->Attribute("name") : nullptr;
+    return text ? text : std::string();
+}
+
+std::string IKArmature::treeName() const
+{
+    const tinyxml2::XMLElement* tree = _document->FirstChildElement("IKTree");
+    const char* text = tree ? tree->Attribute("treeName") : nullptr;
+    return text ? text : std::string();
+}
+
+std::vector<ArmatureJoint> IKArmature::symbolJoints() const
+{
+    std::vector<ArmatureJoint> found;
+    const std::vector<IKJoint> joints = jointsAt(0);
+    const std::vector<JointLimit> limited = limits();
+    for (size_t i = 0; i < _nodes.size() && i < joints.size(); ++i)
+    {
+        ArmatureJoint joint;
+        joint.position = joints[i].position;
+        joint.parent = _nodes[i].parent;
+        const char* name = _nodes[i].element->Attribute("name");
+        joint.node = name ? name : std::string();
+        joint.reference = referenceOf(static_cast<int>(i));
+        const Point offset = rotated(_nodes[i].registration, joints[i].angle);
+        joint.registration = Point(joints[i].position.x + offset.x, joints[i].position.y + offset.y);
+        joint.limit = limited[i];
+        found.push_back(joint);
+    }
+    return found;
+}
+
+std::string symbolArmatureXml(const std::string& name, const std::string& treeName,
+    const std::vector<ArmatureJoint>& joints, int frames)
+{
+    frames = std::max(1, frames);
+    // Each joint turned toward its first child; one with none keeps its
+    // parent's angle.
+    const size_t count = joints.size();
+    std::vector<double> angles(count, 0.0);
+    std::vector<std::vector<size_t>> children(count);
+    for (size_t i = 0; i < count; ++i)
+    {
+        const int parent = joints[i].parent;
+        if (parent >= 0 && static_cast<size_t>(parent) < count)
+            children[static_cast<size_t>(parent)].push_back(i);
+    }
+    for (size_t i = 0; i < count; ++i)
+    {
+        if (!children[i].empty())
+        {
+            const Point& to = joints[children[i].front()].position;
+            angles[i] = std::atan2(to.y - joints[i].position.y, to.x - joints[i].position.x);
+        }
+        else if (joints[i].parent >= 0)
+            angles[i] = angles[static_cast<size_t>(joints[i].parent)];
+    }
+
+    tinyxml2::XMLDocument document;
+    tinyxml2::XMLElement* tree = document.NewElement("IKTree");
+    document.InsertEndChild(tree);
+    tree->SetAttribute("name", name.c_str());
+    tree->SetAttribute("treeName", treeName.c_str());
+    tree->SetAttribute("physicsEnabled", "true");
+
+    int bones = 0;
+    std::vector<std::string> boneNames(count);
+    for (size_t i = 0; i < count; ++i)
+    {
+        if (!children[i].empty())
+            boneNames[i] = "ikBoneName" + std::to_string(++bones);
+    }
+    const auto describe = [&](tinyxml2::XMLElement* element, size_t i) {
+        element->SetAttribute("name", joints[i].node.c_str());
+        if (!boneNames[i].empty())
+            element->SetAttribute("boneName", boneNames[i].c_str());
+        element->SetAttribute("location", locationText(joints[i].position).c_str());
+    };
+    std::function<void(tinyxml2::XMLElement*, size_t)> node = [&](tinyxml2::XMLElement* list, size_t i) {
+        tinyxml2::XMLElement* element = document.NewElement("ChildNode");
+        list->InsertEndChild(element);
+        describe(element, i);
+        const size_t span = static_cast<size_t>(frames);
+        element->SetAttribute("xArray", listOf(std::vector<double>(span, joints[i].registration.x * 20.0)).c_str());
+        element->SetAttribute("yArray", listOf(std::vector<double>(span, joints[i].registration.y * 20.0)).c_str());
+        element->SetAttribute("angleArray", listOf(std::vector<double>(span, angles[i])).c_str());
+        if (!joints[i].reference.empty())
+            element->SetAttribute("referenceID", joints[i].reference.c_str());
+        element->SetAttribute("speed", "1");
+        if (joints[i].limit.constrained)
+        {
+            setNumber(element, "phoenixMinRotation", std::min(joints[i].limit.min, joints[i].limit.max));
+            setNumber(element, "phoenixMaxRotation", std::max(joints[i].limit.min, joints[i].limit.max));
+        }
+        // The pose: the angle from the parent's, and the place in the
+        // parent's frame (on the stage for the root), in twips.
+        const int parent = joints[i].parent;
+        Point offset = joints[i].position;
+        double angle = angles[i];
+        if (parent >= 0)
+        {
+            const ArmatureJoint& above = joints[static_cast<size_t>(parent)];
+            offset = rotated(Point(offset.x - above.position.x, offset.y - above.position.y), -angles[static_cast<size_t>(parent)]);
+            angle -= angles[static_cast<size_t>(parent)];
+        }
+        tinyxml2::XMLElement* states = document.NewElement("states");
+        element->InsertEndChild(states);
+        tinyxml2::XMLElement* state = document.NewElement("State");
+        states->InsertEndChild(state);
+        state->SetAttribute("duration", frames);
+        setNumber(state, "angle", angle);
+        setNumber(state, "x", offset.x * 20.0);
+        setNumber(state, "y", offset.y * 20.0);
+        state->SetAttribute("blendMode", 1);
+        if (!children[i].empty())
+        {
+            tinyxml2::XMLElement* below = document.NewElement("childNodes");
+            element->InsertEndChild(below);
+            for (size_t child : children[i])
+                node(below, child);
+        }
+    };
+    for (size_t i = 0; i < count; ++i)
+    {
+        if (joints[i].parent >= 0)
+            continue;
+        // The root's IKNode, with no pose of its own, over the root joint.
+        tinyxml2::XMLElement* root = document.NewElement("IKNode");
+        tree->InsertEndChild(root);
+        describe(root, i);
+        if (!joints[i].reference.empty())
+            root->SetAttribute("referenceID", joints[i].reference.c_str());
+        root->SetAttribute("speed", "1");
+        tinyxml2::XMLElement* list = document.NewElement("childNodes");
+        root->InsertEndChild(list);
+        node(list, i);
+    }
+    tinyxml2::XMLElement* treeStates = document.NewElement("states");
+    tree->InsertEndChild(treeStates);
+    tinyxml2::XMLElement* pose = document.NewElement("IKState");
+    treeStates->InsertEndChild(pose);
+    pose->SetAttribute("duration", frames);
+    pose->SetAttribute("blendMode", 1);
+
+    tinyxml2::XMLPrinter printer(nullptr, true);
+    document.Print(&printer);
+    return printer.CStr();
+}
+
+std::vector<IKJoint> solveIK(std::vector<IKJoint> joints, int effector, const Point& target, int iterations,
+    const std::vector<JointLimit>& limits)
 {
     if (effector < 0 || static_cast<size_t>(effector) >= joints.size())
         return joints;
@@ -438,8 +702,17 @@ std::vector<IKJoint> solveIK(std::vector<IKJoint> joints, int effector, const Po
             {
                 continue;
             }
-            const double turn = wrapAngle(std::atan2(target.y - centre.y, target.x - centre.x) -
+            double turn = wrapAngle(std::atan2(target.y - centre.y, target.x - centre.x) -
                 std::atan2(end.y - centre.y, end.x - centre.x));
+            // No further than the joint's limits from its parent bone.
+            if (static_cast<size_t>(pivot) < limits.size() && limits[pivot].constrained)
+            {
+                const int above = joints[pivot].parent;
+                const double relative = joints[pivot].angle - (above >= 0 ? joints[above].angle : 0.0);
+                const double low = std::min(limits[pivot].min, limits[pivot].max);
+                const double high = std::max(limits[pivot].min, limits[pivot].max);
+                turn = std::max(low, std::min(high, relative + turn)) - relative;
+            }
             for (size_t i = 0; i < joints.size(); ++i)
             {
                 if (!below(i, pivot))

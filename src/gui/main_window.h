@@ -13,6 +13,7 @@
 #include "gradient_transform_tool.h"
 #include "anchor_point_tool.h"
 #include "camera_tool.h"
+#include "bone_tool.h"
 #include "navigation_tools.h"
 #include "paint_tools.h"
 #include "pen_tool.h"
@@ -219,6 +220,14 @@ private slots:
     void createMotionTween();
     /// Insert > Camera: the scene's multiplane camera layer.
     void addCamera();
+
+    /// The Bone tool's bone: a new armature of the two instances on a pose
+    /// layer above the first one's layer, or a bone more on the armature the
+    /// first one is in, as one undo step.
+    void addBone(const BoneTool::Link& link);
+
+    /// How far a joint of the armature on \a frame may turn, in a dialog.
+    void editJointLimits(fla::Frame* frame, size_t child, int joint);
     /// Layer parenting: \a layer follows \a parent (null for none) from
     /// now on, its objects staying where they are on every keyframe.
     void setParentLayer(fla::Timeline* timeline, fla::Layer* layer, fla::Layer* parent);
@@ -442,6 +451,7 @@ private:
     std::unique_ptr<RotationTool> _rotationTool;
     std::unique_ptr<TimeScrubTool> _timeScrubTool;
     std::unique_ptr<CameraTool> _cameraTool;
+    std::unique_ptr<BoneTool> _boneTool;
     /// The Flow Brush (the B key's), the Nib Brush and the Ink Brush,
     /// sharing the toolbox slot.
     std::unique_ptr<BrushTool> _brushTool;

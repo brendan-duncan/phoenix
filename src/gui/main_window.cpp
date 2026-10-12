@@ -24,6 +24,8 @@
 #include "xsheet_panel.h"
 #include "layer_depth_panel.h"
 #include "camera_tool.h"
+#include "bone_tool.h"
+#include "../edit/ik_pose.h"
 #include "find_replace_dialog.h"
 #include "toolbar_editor.h"
 #include "toolbox.h"
@@ -167,6 +169,7 @@
 #include <QToolButton>
 #include <QTabBar>
 #include <QRegularExpression>
+#include <QUuid>
 #include <QStandardPaths>
 #include <QTimer>
 #include <QSignalBlocker>
@@ -319,6 +322,9 @@ MainWindow::MainWindow(const QString& initialFile, QWidget* parent, bool startup
     _magicWandTool = std::make_unique<MagicWandTool>(_drawingStyle);
     _rotationTool = std::make_unique<RotationTool>();
     _timeScrubTool = std::make_unique<TimeScrubTool>();
+    _boneTool = std::make_unique<BoneTool>(
+        [this](PhoenixView&, const BoneTool::Link& link) { addBone(link); },
+        [this](PhoenixView&, fla::Frame* frame, size_t child, int joint) { editJointLimits(frame, child, joint); });
     _cameraTool = std::make_unique<CameraTool>(stack, [this]() -> fla::Layer* {
         fla::Document* document = _flaDocument ? _flaDocument->document : nullptr;
         fla::Timeline* scene = document ? document->currentScene() : nullptr;
@@ -2650,6 +2656,273 @@ void MainWindow::addPeg()
         _phoenixView->clearCaches();
         _phoenixView->update();
     }
+}
+
+namespace {
+
+/// Which of a frame's kept children is an armature, or -1.
+int armatureChild(const fla::Frame* frame)
+{
+    for (size_t i = 0; frame && i < frame->extraChildren.size(); ++i)
+    {
+        if (frame->extraChildren[i].find("<IKTree") != std::string::npos)
+            return static_cast<int>(i);
+    }
+    return -1;
+}
+
+std::string poseLocationsOf(const fla::Frame& frame)
+{
+    for (const auto& attribute : frame.extraAttributes)
+    {
+        if (attribute.first == "poseLocations")
+            return attribute.second;
+    }
+    return "0";
+}
+
+} // namespace
+
+void MainWindow::addBone(const BoneTool::Link& link)
+{
+    fla::Document* document = _flaDocument ? _flaDocument->document : nullptr;
+    if (!document || !_phoenixView || !link.from || !link.to || !link.fromFrame || !link.toFrame)
+        return;
+    fla::Layer* fromLayer = dynamic_cast<fla::Layer*>(link.fromFrame->parent);
+    fla::Layer* toLayer = dynamic_cast<fla::Layer*>(link.toFrame->parent);
+    fla::Timeline* timeline = fromLayer ? dynamic_cast<fla::Timeline*>(fromLayer->parent) : nullptr;
+    if (!timeline || !toLayer || fromLayer->isLocked() || toLayer->isLocked())
+    {
+        statusBar()->showMessage("Bones join symbol instances on unlocked layers.", 4000);
+        return;
+    }
+    if (armatureChild(link.toFrame) >= 0)
+    {
+        statusBar()->showMessage("That instance is already in an armature.", 4000);
+        return;
+    }
+
+    // Numbers for new nodes, trees and armature layers, past those in use.
+    int nodes = 0;
+    int trees = 0;
+    int armatures = 0;
+    const QRegularExpression nodePattern("ikNode_(\\d+)");
+    const QRegularExpression treePattern("ikTreeName(\\d+)");
+    for (const fla::Layer* layer : timeline->layers)
+    {
+        const QRegularExpressionMatch named = QRegularExpression("^Armature_(\\d+)$").match(QString::fromStdString(layer->name));
+        if (named.hasMatch())
+            armatures = std::max(armatures, named.captured(1).toInt());
+        for (const fla::Frame* frame : layer->frames)
+        {
+            for (const std::string& child : frame->extraChildren)
+            {
+                const QString text = QString::fromStdString(child);
+                for (auto it = nodePattern.globalMatch(text); it.hasNext();)
+                    nodes = std::max(nodes, it.next().captured(1).toInt());
+                for (auto it = treePattern.globalMatch(text); it.hasNext();)
+                    trees = std::max(trees, it.next().captured(1).toInt());
+            }
+        }
+    }
+    const auto guid = []() { return QUuid::createUuid().toString(QUuid::WithoutBraces).toUpper().toStdString(); };
+
+    _phoenixView->flushPendingMerge();
+    _selection.clear();
+    fla::CommandStack& stack = _editContext.commandStack();
+    const char* name = "Add Bone";
+
+    // Moves an instance onto the pose frame, turning about its joint (its
+    // transformation point), named and referenced as its node.
+    const auto enlist = [&](fla::Frame* from, fla::SymbolInstance* instance, fla::Frame* pose, const QPointF& joint,
+                            const std::string& node, const std::string& reference) {
+        const fla::Transform& m = instance->transform;
+        bool invertible = false;
+        const QPointF local = QTransform(m.m11, m.m12, m.m21, m.m22, m.tx, m.ty).inverted(&invertible).map(joint);
+        auto attributes = instance->extraAttributes;
+        attributes.erase(std::remove_if(attributes.begin(), attributes.end(),
+                             [](const std::pair<std::string, std::string>& attribute) {
+                                 return attribute.first == "referenceID" || attribute.first == "animationSymbolMode" ||
+                                     attribute.first == "animationFrameOffset";
+                             }),
+            attributes.end());
+        attributes.emplace_back("referenceID", reference);
+        attributes.emplace_back("animationSymbolMode", "2");
+        attributes.emplace_back("animationFrameOffset", "0");
+        if (from != pose)
+            stack.push(fla::CommandPtr(new fla::RemoveElementCommand(from, instance, name, &_selection)));
+        if (invertible)
+        {
+            stack.push(fla::CommandPtr(new fla::SetPropertyCommand<fla::Point>(instance->transformationPoint,
+                instance->transformationPoint, fla::Point(local.x(), local.y()), name)));
+        }
+        stack.push(fla::CommandPtr(new fla::SetPropertyCommand<std::vector<std::pair<std::string, std::string>>>(
+            instance->extraAttributes, instance->extraAttributes, attributes, name)));
+        stack.push(fla::CommandPtr(new fla::SetPropertyCommand<std::string>(instance->name, instance->name, node, name)));
+        if (from != pose)
+        {
+            stack.push(fla::CommandPtr(new fla::SetPropertyCommand<fla::DOMElement*>(instance->parent, instance->parent, pose, name)));
+            stack.push(fla::CommandPtr(new fla::AddElementCommand(pose, instance, name, &_selection)));
+        }
+    };
+    const auto jointFor = [](fla::SymbolInstance* instance, const QPointF& at, int parent, const std::string& node,
+                              const std::string& reference) {
+        fla::ArmatureJoint joint;
+        joint.position = fla::Point(at.x(), at.y());
+        joint.parent = parent;
+        joint.node = node;
+        joint.reference = reference;
+        joint.registration = fla::Point(instance->transform.tx, instance->transform.ty);
+        return joint;
+    };
+
+    const int child = armatureChild(link.fromFrame);
+    if (child < 0)
+    {
+        // A new armature: a pose layer above the first instance's layer,
+        // posed over the frames that instance was on.
+        const std::string armatureName = "Armature_" + std::to_string(armatures + 1);
+        fla::Layer* layer = fla::newLayerFor(*timeline, false);
+        layer->name = armatureName;
+        layer->autoNamed = false;
+        layer->extraAttributes.emplace_back("animationType", "IK pose");
+        if (layer->frames.empty())
+            layer->frames.push_back(new fla::Frame(layer));
+        fla::Frame* pose = layer->frames.front();
+        const int start = link.fromFrame->index;
+        const int length = std::max(1, link.fromFrame->duration);
+        pose->index = start;
+        pose->duration = length;
+        if (start > 0)
+        {
+            fla::Frame* empty = new fla::Frame(layer);
+            empty->index = 0;
+            empty->duration = start;
+            layer->frames.insert(layer->frames.begin(), empty);
+        }
+        pose->otherTweenType = "IK pose";
+        pose->keyMode = "9732";
+        pose->extraAttributes.emplace_back("isIKPose", "true");
+        pose->extraAttributes.emplace_back("poseLocations", "0");
+        std::vector<fla::ArmatureJoint> joints;
+        joints.push_back(jointFor(link.from, link.head, -1, "ikNode_" + std::to_string(nodes + 1), guid()));
+        joints.push_back(jointFor(link.to, link.tail, 0, "ikNode_" + std::to_string(nodes + 2), guid()));
+        pose->extraChildren.push_back(fla::symbolArmatureXml(armatureName,
+            "ikTreeName" + std::to_string(trees + 1), joints, length));
+
+        int at = 0;
+        for (size_t i = 0; i < timeline->layers.size(); ++i)
+        {
+            if (timeline->layers[i] == fromLayer)
+                at = static_cast<int>(i);
+        }
+        layer->parentLayer = fromLayer->parentLayer && fromLayer->parentLayer->layerType == fla::Layer::Type::Folder
+            ? fromLayer->parentLayer : nullptr;
+        stack.beginMacro(name);
+        stack.push(fla::CommandPtr(new fla::AddLayerCommand(timeline, at, layer, name)));
+        enlist(link.fromFrame, link.from, pose, link.head, joints[0].node, joints[0].reference);
+        enlist(link.toFrame, link.to, pose, link.tail, joints[1].node, joints[1].reference);
+        stack.endMacro();
+    }
+    else
+    {
+        // A bone more, from the joint of the instance dragged from.
+        fla::IKArmature armature;
+        if (!armature.parse(link.fromFrame->extraChildren[static_cast<size_t>(child)]) || armature.bendsShape() ||
+            armature.poses().size() != 1)
+        {
+            statusBar()->showMessage("Bones can be added to an armature of symbols with one pose.", 4000);
+            return;
+        }
+        std::string reference;
+        for (const auto& attribute : link.from->extraAttributes)
+        {
+            if (attribute.first == "referenceID")
+                reference = attribute.second;
+        }
+        std::vector<fla::ArmatureJoint> joints = armature.symbolJoints();
+        int parent = -1;
+        for (size_t i = 0; i < joints.size(); ++i)
+        {
+            if (!reference.empty() && joints[i].reference == reference)
+                parent = static_cast<int>(i);
+        }
+        if (parent < 0)
+            return;
+        joints.push_back(jointFor(link.to, link.tail, parent, "ikNode_" + std::to_string(nodes + 1), guid()));
+        const std::string before = link.fromFrame->extraChildren[static_cast<size_t>(child)];
+        const std::string after = fla::symbolArmatureXml(armature.name(), armature.treeName(), joints, armature.frames());
+        const std::string poses = poseLocationsOf(*link.fromFrame);
+        stack.beginMacro(name);
+        stack.push(fla::CommandPtr(new fla::PoseArmatureCommand(link.fromFrame, static_cast<size_t>(child), before, after, poses, poses)));
+        enlist(link.toFrame, link.to, link.fromFrame, link.tail, joints.back().node, joints.back().reference);
+        stack.endMacro();
+    }
+    stack.breakMergeChain();
+    if (_timelineView)
+        _timelineView->refresh();
+    _phoenixView->invalidateBounds();
+    _phoenixView->clearCaches();
+    _phoenixView->update();
+    statusBar()->showMessage("Bone added. Drag a bone with the Selection tool to pose the armature.", 4000);
+}
+
+void MainWindow::editJointLimits(fla::Frame* frame, size_t child, int joint)
+{
+    if (!frame || child >= frame->extraChildren.size())
+        return;
+    fla::IKArmature armature;
+    if (!armature.parse(frame->extraChildren[child]))
+        return;
+    const std::vector<fla::JointLimit> limits = armature.limits();
+    if (joint < 0 || static_cast<size_t>(joint) >= limits.size())
+        return;
+    constexpr double kDegrees = 180.0 / 3.14159265358979323846;
+    const fla::JointLimit limit = limits[static_cast<size_t>(joint)];
+
+    QDialog dialog(this);
+    dialog.setWindowTitle("Joint Rotation");
+    QFormLayout* form = new QFormLayout(&dialog);
+    QCheckBox* constrain = new QCheckBox("Constrain", &dialog);
+    constrain->setChecked(limit.constrained);
+    QDoubleSpinBox* minimum = new QDoubleSpinBox(&dialog);
+    QDoubleSpinBox* maximum = new QDoubleSpinBox(&dialog);
+    for (QDoubleSpinBox* box : {minimum, maximum})
+    {
+        box->setRange(-180.0, 180.0);
+        box->setDecimals(1);
+        box->setSuffix(QString(QChar(0x00B0)));
+    }
+    minimum->setValue(limit.constrained ? limit.min * kDegrees : -45.0);
+    maximum->setValue(limit.constrained ? limit.max * kDegrees : 45.0);
+    const auto enable = [=](bool on) {
+        minimum->setEnabled(on);
+        maximum->setEnabled(on);
+    };
+    enable(limit.constrained);
+    connect(constrain, &QCheckBox::toggled, &dialog, enable);
+    form->addRow("Rotation", constrain);
+    form->addRow("Min", minimum);
+    form->addRow("Max", maximum);
+    QDialogButtonBox* buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, &dialog);
+    connect(buttons, &QDialogButtonBox::accepted, &dialog, &QDialog::accept);
+    connect(buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
+    form->addRow(buttons);
+    if (dialog.exec() != QDialog::Accepted)
+        return;
+
+    fla::JointLimit chosen;
+    chosen.constrained = constrain->isChecked();
+    chosen.min = minimum->value() / kDegrees;
+    chosen.max = maximum->value() / kDegrees;
+    armature.setLimit(joint, chosen);
+    const std::string before = frame->extraChildren[child];
+    const std::string after = armature.xml();
+    if (before == after)
+        return;
+    const std::string poses = poseLocationsOf(*frame);
+    _editContext.commandStack().push(fla::CommandPtr(new fla::PoseArmatureCommand(frame, child, before, after, poses, poses)));
+    _editContext.commandStack().breakMergeChain();
 }
 
 void MainWindow::addCamera()
@@ -5718,6 +5991,10 @@ void MainWindow::setupToolBar()
             "the Properties panel.",
             [this]() -> Tool* { return _magicWandTool.get(); }),
     });
+    addSlot({makeTool(ToolIcons::Tool::Bone, "Bone", Qt::Key_M,
+        "Drag from one symbol instance to another to join them with a bone; drag from an instance in an "
+        "armature to add a bone to it. Click a bone to limit how far its joint turns.",
+        [this]() -> Tool* { return _boneTool.get(); })});
 
     addLine();
 
@@ -7264,6 +7541,7 @@ ToolIcons::Tool MainWindow::iconForTool(const Tool* tool) const
     if (tool == _rotationTool.get()) return IconTool::Rotation;
     if (tool == _timeScrubTool.get()) return IconTool::TimeScrub;
     if (tool == _cameraTool.get()) return IconTool::Camera;
+    if (tool == _boneTool.get()) return IconTool::Bone;
     if (tool == _textTool.get()) return IconTool::Text;
     return IconTool::Selection;
 }

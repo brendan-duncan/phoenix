@@ -456,6 +456,16 @@ void drawCamera(QPainter& painter)
     painter.drawEllipse(QPointF(12.5, 7.0), 3.0, 3.0);
 }
 
+void drawBone(QPainter& painter)
+{
+    // A bone: a slim kite between a round joint at each end.
+    painter.setPen(QPen(strokeColor(), 1.2));
+    painter.setBrush(Qt::NoBrush);
+    painter.drawPolygon(QPolygonF({QPointF(7.0, 17.0), QPointF(11.5, 10.0), QPointF(17.0, 7.0), QPointF(13.0, 12.5)}));
+    painter.drawEllipse(QPointF(5.5, 18.5), 2.8, 2.8);
+    painter.drawEllipse(QPointF(18.5, 5.5), 2.0, 2.0);
+}
+
 void drawLasso(QPainter& painter)
 {
     // A loop of rope with its tail hanging down.
@@ -545,6 +555,7 @@ QPixmap render(ToolIcons::Tool tool, int size)
     case ToolIcons::Tool::TimeScrub:     drawTimeScrub(painter); break;
     case ToolIcons::Tool::Camera:        drawCamera(painter); break;
     case ToolIcons::Tool::Text:          drawText(painter); break;
+    case ToolIcons::Tool::Bone:          drawBone(painter); break;
     case ToolIcons::Tool::ObjectDrawing: drawObjectDrawing(painter); break;
     }
 

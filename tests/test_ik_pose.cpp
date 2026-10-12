@@ -210,3 +210,72 @@ TEST(ik_armature_works_out_the_joints_animate_stored)
     for (int frame = 0; frame < 30; ++frame)
         CHECK(close(again.jointsAt(frame), armature.jointsAt(frame)));
 }
+
+TEST(symbol_armatures_keep_joints_apart_from_registration_points)
+{
+    // As Animate saves ik_symbols.fla's root: the instance's registration
+    // point in xArray, the joint (its transformation point) in location.
+    const std::string xml = "<IKTree name=\"Armature_1\" treeName=\"ikTreeName2\">"
+        "<IKNode name=\"ikNode_1\" location=\"#1D.D8, #20.EE\"><childNodes>"
+        "<ChildNode name=\"ikNode_1\" location=\"#1D.D8, #20.EE\" xArray=\"7467.289080\" yArray=\"6087.284405\" "
+        "angleArray=\"-0.073165\" referenceID=\"A\"><states><State duration=\"1\" angle=\"-0.0731648417420849\" "
+        "x=\"7639\" y=\"8430\"/></states></ChildNode></childNodes></IKNode>"
+        "<states><IKState duration=\"1\"/></states></IKTree>";
+    fla::IKArmature armature;
+    CHECK(armature.parse(xml) && !armature.bendsShape());
+    CHECK(near(armature.jointsAt(0)[0].position, 381.95, 421.5, 0.1));
+    CHECK(armature.name() == "Armature_1" && armature.treeName() == "ikTreeName2");
+
+    // Turned a quarter, the registration point swings round the joint.
+    CHECK(armature.setPose(0, {-0.073165 + kPi / 2.0}));
+    const fla::IKJoint turned = armature.jointsAt(0)[0];
+    CHECK(near(turned.position, 381.95, 421.5, 0.1));
+    const std::vector<fla::ArmatureJoint> joints = armature.symbolJoints();
+    CHECK(joints.size() == 1 && joints[0].reference == "A" && joints[0].node == "ikNode_1");
+    // Before: (-8.59, -117.11) from the joint; a quarter turn makes it (117.11, -8.59).
+    CHECK(near(joints[0].registration, 381.95 + 117.11, 421.5 - 8.59, 0.1));
+}
+
+TEST(the_bone_tool_builds_armatures_of_symbols)
+{
+    std::vector<fla::ArmatureJoint> joints(3);
+    joints[0].position = fla::Point(100.0, 100.0);
+    joints[0].node = "ikNode_1";
+    joints[0].reference = "R1";
+    joints[0].registration = fla::Point(90.0, 90.0);
+    joints[1].position = fla::Point(200.0, 100.0);
+    joints[1].parent = 0;
+    joints[1].node = "ikNode_2";
+    joints[1].reference = "R2";
+    joints[1].registration = fla::Point(200.0, 80.0);
+    joints[1].limit = {true, -0.5, 0.5};
+    joints[2].position = fla::Point(200.0, 200.0);
+    joints[2].parent = 1;
+    joints[2].node = "ikNode_3";
+    joints[2].reference = "R3";
+    joints[2].registration = fla::Point(210.0, 200.0);
+
+    fla::IKArmature armature;
+    CHECK(armature.parse(fla::symbolArmatureXml("Armature_1", "ikTreeName1", joints)));
+    CHECK(!armature.bendsShape() && armature.frames() == 1);
+    const std::vector<fla::IKJoint> stored = armature.jointsAt(0);
+    const std::vector<fla::IKJoint> posed = armature.posedAt(0);
+    CHECK(stored.size() == 3 && posed.size() == 3);
+    for (size_t i = 0; i < 3; ++i)
+    {
+        CHECK(near(stored[i].position, joints[i].position.x, joints[i].position.y));
+        CHECK(near(posed[i].position, joints[i].position.x, joints[i].position.y));
+        CHECK(armature.referenceOf(static_cast<int>(i)) == joints[i].reference);
+    }
+    // The root turned toward its child, the middle joint down, the leaf as its parent.
+    CHECK(std::fabs(posed[0].angle) < 1.0e-9 && std::fabs(posed[1].angle - kPi / 2.0) < 1.0e-9);
+    CHECK(std::fabs(posed[2].angle - kPi / 2.0) < 1.0e-9);
+    const std::vector<fla::ArmatureJoint> back = armature.symbolJoints();
+    CHECK(near(back[1].registration, 200.0, 80.0) && back[1].limit.constrained);
+    CHECK(std::fabs(back[1].limit.max - 0.5) < 1.0e-9);
+
+    // The middle joint turns no more than its limit to reach.
+    const std::vector<fla::IKJoint> solved = fla::solveIK(posed, 2, fla::Point(400.0, 100.0), 32, armature.limits());
+    const double relative = solved[1].angle - solved[0].angle;
+    CHECK(relative >= -0.5 - 1.0e-9 && relative <= 0.5 + 1.0e-9);
+}

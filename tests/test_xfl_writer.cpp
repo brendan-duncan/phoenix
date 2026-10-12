@@ -643,6 +643,30 @@ TEST(xfl_keeps_what_it_does_not_model)
     CHECK(written.find("<SoundEnvelope>") < written.find("<elements"));
 }
 
+TEST(xfl_writes_an_armature_pose_after_the_frame_elements)
+{
+    std::unique_ptr<fla::Document> document = parseDocumentText(
+        "<DOMDocument xmlns='http://ns.adobe.com/xfl/2008/' width='550' height='400'>"
+        "<timelines><DOMTimeline name='Scene 1'><layers>"
+        "<DOMLayer name='Armature_1' animationType='IK pose'><frames>"
+        "<DOMFrame index='0' tweenType='IK pose' isIKPose='true' poseLocations='0'>"
+        "<elements><DOMShape/></elements>"
+        "<betweenFrameMatrixList><Matrix/></betweenFrameMatrixList>"
+        "<IKTree name='Armature_1'><states><IKState duration='1'/></states></IKTree>"
+        "</DOMFrame>"
+        "</frames></DOMLayer>"
+        "</layers></DOMTimeline></timelines>"
+        "</DOMDocument>");
+    CHECK(document != nullptr);
+    if (!document)
+        return;
+    XFLWriter writer;
+    const std::string written = writer.writeDocument(*document);
+    CHECK(written.find("<elements") != std::string::npos);
+    CHECK(written.find("<elements") < written.find("<betweenFrameMatrixList"));
+    CHECK(written.find("<betweenFrameMatrixList") < written.find("<IKTree"));
+}
+
 TEST(xfl_keeps_timeline_guides_and_attributes)
 {
     // Animate keeps ruler guides as XML inside the DOMTimeline's guides

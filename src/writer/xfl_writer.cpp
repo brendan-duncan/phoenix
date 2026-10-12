@@ -953,9 +953,19 @@ void XFLWriter::writeFrame(const Frame& frame, XMLElement* parent)
         writeMorphShape(*frame.morphShape, node);
 
     // What the reader kept without modeling, back where it was.
+    // An armature's pose (its IKTree and the matrices kept between frames)
+    // follows the elements, as Animate writes it; the rest goes before.
     writeKept(node, frame.extraAttributes);
+    const auto afterElements = [](const std::string& xml) {
+        const size_t at = xml.find('<');
+        return at != std::string::npos &&
+            (xml.compare(at, 7, "<IKTree") == 0 || xml.compare(at, 23, "<betweenFrameMatrixList") == 0);
+    };
     for (const std::string& xml : frame.extraChildren)
-        appendRawXml(xml, node);
+    {
+        if (!afterElements(xml))
+            appendRawXml(xml, node);
+    }
 
     XMLElement* elements = doc->NewElement("elements");
     for (const Element* element : frame.elements)
@@ -964,6 +974,11 @@ void XFLWriter::writeFrame(const Frame& frame, XMLElement* parent)
             writeElement(*element, elements);
     }
     node->InsertEndChild(elements);
+    for (const std::string& xml : frame.extraChildren)
+    {
+        if (afterElements(xml))
+            appendRawXml(xml, node);
+    }
 
     parent->InsertEndChild(node);
 }

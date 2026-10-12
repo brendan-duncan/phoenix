@@ -119,14 +119,15 @@ bool IKPoser::begin(PhoenixView& view, const QPointF& documentPos)
     _posed = _original;
 
     // An armature of symbols carries its instances, which only a single
-    // frame's pose leaves where they are drawn.
+    // pose leaves where they are drawn; that pose is the span's first frame.
     if (!_original.bendsShape())
     {
-        if (_original.frames() != 1)
+        if (_original.poses().size() != 1)
         {
             reset();
             return false;
         }
+        _into = 0;
         for (int joint = 0; joint < static_cast<int>(_original.jointsAt(0).size()); ++joint)
         {
             const std::string reference = _original.referenceOf(joint);
@@ -198,7 +199,7 @@ void IKPoser::drag(PhoenixView& view, const QPointF& documentPos)
         return;
     const QPointF target = documentPos + _offset;
     const std::vector<fla::IKJoint> start = _original.shownAt(_into);
-    const std::vector<fla::IKJoint> solved = fla::solveIK(start, _joint, fla::Point(target.x(), target.y()));
+    const std::vector<fla::IKJoint> solved = fla::solveIK(start, _joint, fla::Point(target.x(), target.y()), 16, _original.limits());
     std::vector<double> angles;
     for (const fla::IKJoint& joint : solved)
         angles.push_back(joint.angle);
