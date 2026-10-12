@@ -1,4 +1,9 @@
 #include "movie_export.h"
+#include "../data/timeline.h"
+#include "../data/layer.h"
+#include "../data/document.h"
+#include "../data/fla_document.h"
+#include "../util/gif_writer.h"
 
 #include "phoenix_view.h"
 #include "timeline_audio.h"
@@ -9,6 +14,8 @@
 #include <QDataStream>
 #include <QDialogButtonBox>
 #include <QDir>
+#include <cstring>
+#include <QRegularExpression>
 #include <QFileDialog>
 #include <QFileInfo>
 #include <QFormLayout>
@@ -33,6 +40,12 @@ namespace {
 
 constexpr int kPngIndex = 0;
 constexpr int kVideoIndex = 1;
+constexpr int kGifIndex = 2;
+constexpr int kLayersIndex = 3;
+constexpr int kWavIndex = 4;
+
+/// Each format's file extension.
+const char* const kSuffixes[5] = {"png", "mp4", "gif", "png", "wav"};
 
 QSpinBox* plainSpin(int low, int high, int value, QWidget* parent)
 {
@@ -84,7 +97,7 @@ MovieExportDialog::MovieExportDialog(const QSize& documentSize, int frameCount, 
     layout->addLayout(form);
 
     _format = new QComboBox(this);
-    _format->addItems({"PNG Sequence", "Video (MP4, H.264)"});
+    _format->addItems({"PNG Sequence", "Video (MP4, H.264)", "Animated GIF", "PNG Sequence per Layer", "Sound (WAV)"});
     form->addRow("Format", _format);
 
     QHBoxLayout* pathRow = new QHBoxLayout;
@@ -120,6 +133,9 @@ MovieExportDialog::MovieExportDialog(const QSize& documentSize, int frameCount, 
     _audio = new QCheckBox("Include sound", this);
     _audio->setChecked(true);
     form->addRow("", _audio);
+    _loop = new QCheckBox("Loop forever", this);
+    _loop->setChecked(true);
+    form->addRow("", _loop);
 
     _encoderNote = new QLabel(this);
     _encoderNote->setWordWrap(true);
@@ -137,20 +153,32 @@ MovieExportDialog::MovieExportDialog(const QSize& documentSize, int frameCount, 
     connect(_height, &QSpinBox::valueChanged, this, &MovieExportDialog::heightChanged);
 
     QSettings settings;
-    _format->setCurrentIndex(settings.value("export/movieFormat", kVideoIndex).toInt() == kPngIndex ? kPngIndex : kVideoIndex);
+    _format->setCurrentIndex(std::clamp(settings.value("export/movieFormat", kVideoIndex).toInt(), 0, kWavIndex));
     formatChanged();
 }
 
 void MovieExportDialog::formatChanged()
 {
-    const bool video = _format->currentIndex() == kVideoIndex;
-    _transparent->setEnabled(!video);
+    const int index = _format->currentIndex();
+    const bool video = index == kVideoIndex;
+    const bool sound = index == kWavIndex;
+    _transparent->setEnabled(!video && !sound);
     _audio->setEnabled(video);
+    _loop->setEnabled(index == kGifIndex);
+    _width->setEnabled(!sound);
+    _height->setEnabled(!sound);
+    _keepAspect->setEnabled(!sound);
     const QFileInfo info(_path->text());
-    const QString wanted = video ? "mp4" : "png";
-    if (!_path->text().isEmpty() && info.suffix().toLower() != wanted)
+    const QString wanted = kSuffixes[std::clamp(index, 0, kWavIndex)];
+    if (!_path->text().isEmpty() && info.suffix().toLower() != wanted && !(video && info.suffix().toLower() == "mov"))
         _path->setText(info.dir().filePath(info.completeBaseName() + "." + wanted));
-    if (video)
+    if (index == kGifIndex)
+        _encoderNote->setText("Each frame with its own 256 colors, timed to the frame rate.");
+    else if (index == kLayersIndex)
+        _encoderNote->setText("A numbered sequence for each visible layer, named after it.");
+    else if (sound)
+        _encoderNote->setText("The sound of the frames, mixed as it plays.");
+    else if (video)
     {
         const QString ffmpeg = MovieExport::ffmpegPath();
         _encoderNote->setText(ffmpeg.isEmpty()
@@ -165,9 +193,11 @@ void MovieExportDialog::formatChanged()
 
 void MovieExportDialog::browse()
 {
-    const bool video = _format->currentIndex() == kVideoIndex;
+    const int index = _format->currentIndex();
+    const char* filters[5] = {"PNG Images (*.png)", "MP4 Video (*.mp4);;QuickTime Movie (*.mov)", "GIF Animation (*.gif)",
+        "PNG Images (*.png)", "WAV Sound (*.wav)"};
     const QString file = QFileDialog::getSaveFileName(this, "Export Movie", _path->text(),
-        video ? "MP4 Video (*.mp4);;QuickTime Movie (*.mov)" : "PNG Images (*.png)");
+        filters[std::clamp(index, 0, kWavIndex)]);
     if (!file.isEmpty())
         _path->setText(file);
 }
@@ -193,8 +223,8 @@ void MovieExportDialog::heightChanged(int height)
 MovieExportSettings MovieExportDialog::settings() const
 {
     MovieExportSettings settings;
-    settings.format = _format->currentIndex() == kPngIndex ? MovieExportSettings::Format::PngSequence
-                                                           : MovieExportSettings::Format::Video;
+    settings.format = static_cast<MovieExportSettings::Format>(std::clamp(_format->currentIndex(), 0, kWavIndex));
+    settings.loop = _loop->isChecked();
     settings.path = _path->text();
     settings.size = QSize(_width->value(), _height->value());
     settings.first = std::min(_first->value(), _last->value()) - 1;
@@ -235,6 +265,107 @@ bool run(const MovieExportSettings& settings, PhoenixView& view, TimelineAudio* 
     QProgressDialog progress("Exporting...", "Cancel", 0, count, parent);
     progress.setWindowModality(Qt::WindowModal);
     progress.setMinimumDuration(300);
+
+    if (settings.format == MovieExportSettings::Format::Wav)
+    {
+        // The sound of the frames, mixed as playback mixes it.
+        const std::vector<float> samples = audio ? audio->mixdown(settings.first, settings.last) : std::vector<float>();
+        bool audible = false;
+        for (float sample : samples)
+            audible = audible || sample != 0.0f;
+        if (!audible)
+        {
+            error = "These frames have no sound.";
+            return false;
+        }
+        QFile file(settings.path);
+        if (!file.open(QIODevice::WriteOnly) || !writeWav(file, samples, PcmBuffer::kRate))
+        {
+            error = QString("Could not write %1.").arg(QDir::toNativeSeparators(settings.path));
+            return false;
+        }
+        return true;
+    }
+
+    if (settings.format == MovieExportSettings::Format::Gif)
+    {
+        gif::AnimationWriter writer(settings.size.width(), settings.size.height(), settings.loop);
+        for (int i = 0; i < count; ++i)
+        {
+            progress.setValue(i);
+            if (progress.wasCanceled())
+                return false;
+            const QImage image = view.renderFrame(settings.first + i, settings.size, settings.transparent)
+                                     .convertToFormat(QImage::Format_RGBA8888);
+            std::vector<uint8_t> rgba(static_cast<size_t>(image.width()) * image.height() * 4);
+            for (int y = 0; y < image.height(); ++y)
+                std::memcpy(rgba.data() + static_cast<size_t>(y) * image.width() * 4, image.constScanLine(y),
+                    static_cast<size_t>(image.width()) * 4);
+            writer.addFrame(rgba, gif::AnimationWriter::delayOf(i, frameRate), settings.transparent);
+        }
+        const std::vector<uint8_t> bytes = writer.finish();
+        QFile file(settings.path);
+        if (!file.open(QIODevice::WriteOnly) ||
+            file.write(reinterpret_cast<const char*>(bytes.data()), static_cast<qint64>(bytes.size())) !=
+                static_cast<qint64>(bytes.size()))
+        {
+            error = QString("Could not write %1.").arg(QDir::toNativeSeparators(settings.path));
+            return false;
+        }
+        progress.setValue(count);
+        return true;
+    }
+
+    if (settings.format == MovieExportSettings::Format::LayerSequences)
+    {
+        // Each visible layer of the scene that draws, on its own.
+        const fla::FLADocument* document = view.flaDocument();
+        const fla::Timeline* scene = document && document->document ? document->document->currentScene() : nullptr;
+        if (!scene)
+        {
+            error = "Nothing to export.";
+            return false;
+        }
+        std::vector<const fla::Layer*> layers;
+        for (const fla::Layer* layer : scene->layers)
+        {
+            if (layer && layer->isVisible() &&
+                (layer->layerType == fla::Layer::Type::Normal || layer->layerType == fla::Layer::Type::Masked))
+                layers.push_back(layer);
+        }
+        progress.setMaximum(count * static_cast<int>(std::max<size_t>(1, layers.size())));
+        const int digits = std::max(4, static_cast<int>(QString::number(count).size()));
+        const QFileInfo info(settings.path);
+        int done = 0;
+        for (const fla::Layer* layer : layers)
+        {
+            // Named for the layer, with what a file name cannot hold changed.
+            QString name = QString::fromStdString(layer->name);
+            name.replace(QRegularExpression("[\\\\/:*?\"<>|]"), "_");
+            const QString base = info.dir().filePath(info.completeBaseName() + "_" + name + ".png");
+            view.setOnlyLayer(layer);
+            for (int i = 0; i < count; ++i, ++done)
+            {
+                progress.setValue(done);
+                if (progress.wasCanceled())
+                {
+                    view.setOnlyLayer(nullptr);
+                    return false;
+                }
+                const QImage image = view.renderFrame(settings.first + i, settings.size, settings.transparent);
+                const QString file = sequenceName(base, i + 1, digits);
+                if (!image.save(file, "PNG"))
+                {
+                    view.setOnlyLayer(nullptr);
+                    error = QString("Could not write %1.").arg(QDir::toNativeSeparators(file));
+                    return false;
+                }
+            }
+        }
+        view.setOnlyLayer(nullptr);
+        progress.setValue(progress.maximum());
+        return true;
+    }
 
     if (settings.format == MovieExportSettings::Format::PngSequence)
     {

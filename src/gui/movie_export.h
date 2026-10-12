@@ -15,10 +15,14 @@ class TimelineAudio;
 /// What File > Export > Export Movie writes.
 struct MovieExportSettings
 {
+    /// In the order the dialog lists them.
     enum class Format
     {
         PngSequence,
-        Video
+        Video,
+        Gif,
+        LayerSequences,
+        Wav
     };
 
     Format format = Format::Video;
@@ -31,6 +35,8 @@ struct MovieExportSettings
     int last = 0;
     bool transparent = false;
     bool audio = true;
+    /// An animated GIF plays over and over.
+    bool loop = true;
 };
 
 /// Asks how to export the movie: as a numbered PNG sequence or as an MP4
@@ -60,6 +66,7 @@ private:
     QSpinBox* _last = nullptr;
     QCheckBox* _transparent = nullptr;
     QCheckBox* _audio = nullptr;
+    QCheckBox* _loop = nullptr;
     QLabel* _encoderNote = nullptr;
     bool _syncing = false;
 };

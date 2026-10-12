@@ -1035,6 +1035,10 @@ void PhoenixView::drawTimeline(QPainter& painter, const fla::Timeline* timeline,
 
         if (!layer->isVisible())
             continue;
+        // One layer of the scene on its own, for a sequence per layer.
+        if (_onlyLayer && layer != _onlyLayer &&
+            std::find(timeline->layers.begin(), timeline->layers.end(), _onlyLayer) != timeline->layers.end())
+            continue;
         if (layer->layerType == fla::Layer::Type::Mask)
         {
             // An unlocked mask, while editing, is art like any other.

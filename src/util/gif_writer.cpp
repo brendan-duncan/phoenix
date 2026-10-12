@@ -1,6 +1,7 @@
 #include "gif_writer.h"
 
 #include <algorithm>
+#include <cmath>
 #include <array>
 #include <map>
 #include <unordered_map>
@@ -228,14 +229,21 @@ void put16(std::vector<uint8_t>& out, int value)
 
 } // namespace
 
-std::vector<uint8_t> encode(int width, int height, const std::vector<uint8_t>& rgba, bool transparent)
-{
-    std::vector<uint8_t> out;
-    if (width <= 0 || height <= 0 || width > 65535 || height > 65535 ||
-        rgba.size() < static_cast<size_t>(width) * static_cast<size_t>(height) * 4)
-        return out;
-    const size_t pixels = static_cast<size_t>(width) * static_cast<size_t>(height);
+namespace {
 
+/// A picture cut down to a palette: the colors (a power of two of them), an
+/// index for each pixel, and the index left for transparency, if any.
+struct Indexed
+{
+    std::vector<Color> colors;
+    std::vector<uint8_t> indices;
+    int clearIndex = -1;
+    int bits = 1;
+};
+
+Indexed quantize(size_t pixels, const std::vector<uint8_t>& rgba, bool transparent)
+{
+    Indexed result;
     // The distinct colors, counted; transparent pixels set aside.
     std::map<uint32_t, uint32_t> counts;
     bool anyClear = false;
@@ -255,39 +263,38 @@ std::vector<uint8_t> encode(int width, int height, const std::vector<uint8_t>& r
         entries.push_back({{static_cast<uint8_t>(entry.first >> 16), static_cast<uint8_t>(entry.first >> 8),
                               static_cast<uint8_t>(entry.first)}, entry.second});
     const size_t slots = anyClear ? 255 : 256;
-    std::vector<Color> colors = entries.empty() ? std::vector<Color>{{0, 0, 0}} : palette(entries, slots);
-    const int clearIndex = anyClear ? static_cast<int>(colors.size()) : -1;
+    result.colors = entries.empty() ? std::vector<Color>{{0, 0, 0}} : palette(entries, slots);
+    result.clearIndex = anyClear ? static_cast<int>(result.colors.size()) : -1;
+    const size_t used = result.colors.size();
     if (anyClear)
-        colors.push_back({0, 0, 0});
-    int bitsPerColor = 1;
-    while ((1 << bitsPerColor) < static_cast<int>(colors.size()))
-        ++bitsPerColor;
-    colors.resize(static_cast<size_t>(1) << bitsPerColor, {0, 0, 0});
+        result.colors.push_back({0, 0, 0});
+    while ((1 << result.bits) < static_cast<int>(result.colors.size()))
+        ++result.bits;
+    result.colors.resize(static_cast<size_t>(1) << result.bits, {0, 0, 0});
 
     // Each pixel's nearest palette color, remembered by color.
     std::unordered_map<uint32_t, uint8_t> nearest;
-    std::vector<uint8_t> indices(pixels);
-    const size_t used = anyClear ? static_cast<size_t>(clearIndex) : colors.size();
+    result.indices.resize(pixels);
     for (size_t i = 0; i < pixels; ++i)
     {
         const uint8_t* p = &rgba[i * 4];
         if (anyClear && p[3] < 128)
         {
-            indices[i] = static_cast<uint8_t>(clearIndex);
+            result.indices[i] = static_cast<uint8_t>(result.clearIndex);
             continue;
         }
         const uint32_t key = (static_cast<uint32_t>(p[0]) << 16) | (static_cast<uint32_t>(p[1]) << 8) | p[2];
         const auto found = nearest.find(key);
         if (found != nearest.end())
         {
-            indices[i] = found->second;
+            result.indices[i] = found->second;
             continue;
         }
         int best = 0;
         int bestDistance = 1 << 30;
         for (size_t c = 0; c < used; ++c)
         {
-            const int dr = p[0] - colors[c].r, dg = p[1] - colors[c].g, db = p[2] - colors[c].b;
+            const int dr = p[0] - result.colors[c].r, dg = p[1] - result.colors[c].g, db = p[2] - result.colors[c].b;
             const int distance = 2 * dr * dr + 4 * dg * dg + 3 * db * db;
             if (distance < bestDistance)
             {
@@ -296,26 +303,43 @@ std::vector<uint8_t> encode(int width, int height, const std::vector<uint8_t>& r
             }
         }
         nearest[key] = static_cast<uint8_t>(best);
-        indices[i] = static_cast<uint8_t>(best);
+        result.indices[i] = static_cast<uint8_t>(best);
     }
+    return result;
+}
 
-    // Header, screen with the global palette, the transparency, the image.
-    const char* signature = "GIF89a";
-    out.insert(out.end(), signature, signature + 6);
-    put16(out, width);
-    put16(out, height);
-    out.push_back(static_cast<uint8_t>(0x80 | ((bitsPerColor - 1) << 4) | (bitsPerColor - 1)));
-    out.push_back(0); // background color index
-    out.push_back(0); // pixel aspect
+void putPalette(std::vector<uint8_t>& out, const std::vector<Color>& colors)
+{
     for (const Color& color : colors)
     {
         out.push_back(color.r);
         out.push_back(color.g);
         out.push_back(color.b);
     }
-    if (anyClear)
+}
+
+} // namespace
+
+std::vector<uint8_t> encode(int width, int height, const std::vector<uint8_t>& rgba, bool transparent)
+{
+    std::vector<uint8_t> out;
+    if (width <= 0 || height <= 0 || width > 65535 || height > 65535 ||
+        rgba.size() < static_cast<size_t>(width) * static_cast<size_t>(height) * 4)
+        return out;
+    const Indexed image = quantize(static_cast<size_t>(width) * static_cast<size_t>(height), rgba, transparent);
+
+    // Header, screen with the global palette, the transparency, the image.
+    const char* signature = "GIF89a";
+    out.insert(out.end(), signature, signature + 6);
+    put16(out, width);
+    put16(out, height);
+    out.push_back(static_cast<uint8_t>(0x80 | ((image.bits - 1) << 4) | (image.bits - 1)));
+    out.push_back(0); // background color index
+    out.push_back(0); // pixel aspect
+    putPalette(out, image.colors);
+    if (image.clearIndex >= 0)
     {
-        const uint8_t control[] = {0x21, 0xF9, 4, 0x01, 0, 0, static_cast<uint8_t>(clearIndex), 0};
+        const uint8_t control[] = {0x21, 0xF9, 4, 0x01, 0, 0, static_cast<uint8_t>(image.clearIndex), 0};
         out.insert(out.end(), control, control + sizeof(control));
     }
     out.push_back(0x2C);
@@ -324,9 +348,66 @@ std::vector<uint8_t> encode(int width, int height, const std::vector<uint8_t>& r
     put16(out, width);
     put16(out, height);
     out.push_back(0); // no local palette, not interlaced
-    lzw(indices, std::max(2, bitsPerColor), out);
+    lzw(image.indices, std::max(2, image.bits), out);
     out.push_back(0x3B);
     return out;
+}
+
+AnimationWriter::AnimationWriter(int width, int height, bool loop)
+    : _width(width)
+    , _height(height)
+{
+    const char* signature = "GIF89a";
+    _out.insert(_out.end(), signature, signature + 6);
+    put16(_out, width);
+    put16(_out, height);
+    _out.push_back(0); // no global palette: each frame brings its own
+    _out.push_back(0);
+    _out.push_back(0);
+    if (loop)
+    {
+        // The Netscape extension: play over and over.
+        const uint8_t netscape[] = {0x21, 0xFF, 11, 'N', 'E', 'T', 'S', 'C', 'A', 'P', 'E', '2', '.', '0', 3, 1, 0, 0, 0};
+        _out.insert(_out.end(), netscape, netscape + sizeof(netscape));
+    }
+}
+
+bool AnimationWriter::addFrame(const std::vector<uint8_t>& rgba, int delay, bool transparent)
+{
+    const size_t pixels = static_cast<size_t>(_width) * static_cast<size_t>(_height);
+    if (rgba.size() < pixels * 4)
+        return false;
+    const Indexed image = quantize(pixels, rgba, transparent);
+    // How long it shows, and, with transparency, that it is cleared before
+    // the next frame rather than showing through it.
+    const uint8_t disposal = image.clearIndex >= 0 ? 2 : 1;
+    const uint8_t control[] = {0x21, 0xF9, 4, static_cast<uint8_t>((disposal << 2) | (image.clearIndex >= 0 ? 1 : 0)),
+        static_cast<uint8_t>(delay & 0xFF), static_cast<uint8_t>((delay >> 8) & 0xFF),
+        static_cast<uint8_t>(image.clearIndex >= 0 ? image.clearIndex : 0), 0};
+    _out.insert(_out.end(), control, control + sizeof(control));
+    _out.push_back(0x2C);
+    put16(_out, 0);
+    put16(_out, 0);
+    put16(_out, _width);
+    put16(_out, _height);
+    _out.push_back(static_cast<uint8_t>(0x80 | (image.bits - 1))); // its own palette
+    putPalette(_out, image.colors);
+    lzw(image.indices, std::max(2, image.bits), _out);
+    return true;
+}
+
+std::vector<uint8_t> AnimationWriter::finish()
+{
+    _out.push_back(0x3B);
+    return std::move(_out);
+}
+
+int AnimationWriter::delayOf(int index, double frameRate)
+{
+    const double rate = frameRate > 0.0 ? frameRate : 24.0;
+    const long long start = std::llround(index * 100.0 / rate);
+    const long long end = std::llround((index + 1) * 100.0 / rate);
+    return static_cast<int>(std::max(1LL, end - start));
 }
 
 } // namespace gif

@@ -2394,7 +2394,7 @@ void MainWindow::goToScene(int index)
     updateSelectionState();
 }
 
-int MainWindow::exportFromCommandLine(const QString& source, const QString& output)
+int MainWindow::exportFromCommandLine(const QString& source, const QString& output, bool perLayer)
 {
     if (!QFileInfo::exists(source))
     {
@@ -2410,7 +2410,11 @@ int MainWindow::exportFromCommandLine(const QString& source, const QString& outp
     const fla::Document* document = _flaDocument->document;
     MovieExportSettings settings;
     settings.format = output.endsWith(".png", Qt::CaseInsensitive) ? MovieExportSettings::Format::PngSequence
-                                                                  : MovieExportSettings::Format::Video;
+        : output.endsWith(".gif", Qt::CaseInsensitive)               ? MovieExportSettings::Format::Gif
+        : output.endsWith(".wav", Qt::CaseInsensitive)               ? MovieExportSettings::Format::Wav
+                                                                     : MovieExportSettings::Format::Video;
+    if (perLayer)
+        settings.format = MovieExportSettings::Format::LayerSequences;
     settings.path = QFileInfo(output).absoluteFilePath();
     settings.size = QSize(static_cast<int>(std::lround(document->width)), static_cast<int>(std::lround(document->height)));
     settings.first = 0;

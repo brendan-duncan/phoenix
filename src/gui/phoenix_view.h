@@ -399,6 +399,13 @@ public:
     /// it unless \a transparent.
     QImage renderFrame(int frame, const QSize& size, bool transparent);
 
+    /// While set, renderFrame draws nothing of the scene but \a layer (its
+    /// mask still masking it), for exporting a sequence per layer.
+    void setOnlyLayer(const fla::Layer* layer) { _onlyLayer = layer; }
+
+    /// The document shown, or null.
+    const fla::FLADocument* flaDocument() const { return _flaDocument; }
+
     /// Elements of the timeline being edited drawn on their own, on a
     /// transparent image fitted to them at \a scale pixels per pixel: what
     /// Copy offers other applications.
@@ -550,6 +557,7 @@ private:
     bool _exporting = false;
     int shownFrame() const;
 
+    const fla::Layer* _onlyLayer = nullptr;
     bool _onionSkin = false;
     int _onionBefore = 2;
     int _onionAfter = 2;

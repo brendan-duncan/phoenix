@@ -161,6 +161,13 @@ int main(int argc, char *argv[])
         return window.exportImageFromCommandLine(arguments.at(2), arguments.at(3), arguments.mid(4));
     }
 
+    // With --per-layer, a PNG sequence for each layer.
+    if (arguments.size() == 5 && arguments.at(1) == "--export-movie" && arguments.at(4) == "--per-layer")
+    {
+        MainWindow window(QString(), nullptr, false);
+        return window.exportFromCommandLine(arguments.at(2), arguments.at(3), true);
+    }
+
     if (arguments.size() == 4 && arguments.at(1) == "--export-movie")
     {
         MainWindow window(QString(), nullptr, false);

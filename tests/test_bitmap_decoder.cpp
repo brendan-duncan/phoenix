@@ -147,3 +147,35 @@ TEST(gif_writer_writes_a_gif_with_its_colors_exact)
         stream.write(reinterpret_cast<const char*>(file.data()), static_cast<std::streamsize>(file.size()));
     }
 }
+
+TEST(gif_animation_writer_writes_frames_with_their_timing)
+{
+    // Three 16 x 16 frames of one color each, at 24 frames a second.
+    gif::AnimationWriter writer(16, 16, true);
+    const uint8_t colors[3][3] = {{255, 0, 0}, {0, 255, 0}, {0, 0, 255}};
+    for (int i = 0; i < 3; ++i)
+    {
+        std::vector<uint8_t> rgba(16 * 16 * 4);
+        for (size_t p = 0; p < 16 * 16; ++p)
+        {
+            rgba[p * 4] = colors[i][0];
+            rgba[p * 4 + 1] = colors[i][1];
+            rgba[p * 4 + 2] = colors[i][2];
+            rgba[p * 4 + 3] = 255;
+        }
+        CHECK(writer.addFrame(rgba, gif::AnimationWriter::delayOf(i, 24.0), false));
+    }
+    const std::vector<uint8_t> file = writer.finish();
+    CHECK(file.size() > 13 && file.back() == 0x3B);
+    // A second's worth of frames adds up to a second.
+    int total = 0;
+    for (int i = 0; i < 24; ++i)
+        total += gif::AnimationWriter::delayOf(i, 24.0);
+    CHECK(total == 100);
+    const char* out = std::getenv("PHOENIX_GIF_ANIM_OUT");
+    if (out)
+    {
+        std::ofstream stream(out, std::ios::binary);
+        stream.write(reinterpret_cast<const char*>(file.data()), static_cast<std::streamsize>(file.size()));
+    }
+}

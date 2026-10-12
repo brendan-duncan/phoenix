@@ -62,7 +62,7 @@ public:
     /// Opens \a source and exports all its frames to \a output: a PNG
     /// sequence for a .png name, a video otherwise. Returns the process exit
     /// code, writing any error to stderr.
-    int exportFromCommandLine(const QString& source, const QString& output);
+    int exportFromCommandLine(const QString& source, const QString& output, bool perLayer = false);
     /// Phoenix --export-image in out [--frame N] [--size WxH]
     /// [--matte stage|transparent|#rrggbb] [--quality Q]: one frame, no
     /// window. Returns the exit code.
