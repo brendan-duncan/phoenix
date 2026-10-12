@@ -3324,7 +3324,7 @@ void MainWindow::setupMenus()
     _redoAction = new QAction("&Redo", this);
     // QKeySequence::Redo is Ctrl+Y on Windows; Ctrl+Shift+Z is what anyone
     // coming from Animate will reach for, so accept both.
-    _redoAction->setShortcuts({QKeySequence::Redo, QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_Z)});
+    _redoAction->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_Y));
     connect(_redoAction, &QAction::triggered, this, &MainWindow::redo);
     editMenu->addAction(_redoAction);
 
@@ -3621,8 +3621,7 @@ void MainWindow::setupMenus()
 
     modifyMenu->addSeparator();
 
-    // Modify > Transform, with Animate's keys (its Remove Transform key is
-    // Redo's here).
+    // Modify > Transform, with Animate's keys.
     _transformMenu = modifyMenu->addMenu("&Transform");
     const auto addTransform = [this](const QString& text, const QKeySequence& key, std::function<void()> act) {
         QAction* action = new QAction(text, this);
@@ -3645,7 +3644,7 @@ void MainWindow::setupMenus()
     addTransform("Flip &Horizontal", QKeySequence(),
         [this]() { transformSelection("Flip Horizontal", QTransform::fromScale(-1.0, 1.0)); });
     _transformMenu->addSeparator();
-    addTransform("Remove &Transform", QKeySequence(), [this]() { removeTransform(); });
+    addTransform("Remove &Transform", QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_Z), [this]() { removeTransform(); });
 
     QMenu* combineMenu = modifyMenu->addMenu("&Combine Objects");
     const char* combineNames[4] = {"&Union", "&Intersect", "&Punch", "&Crop"};
@@ -5694,27 +5693,27 @@ void MainWindow::setupToolBar()
         makeTool(ToolIcons::Tool::Oval, "Oval", Qt::Key_O,
             "Drag to draw an oval. Shift for a circle.",
             [this]() -> Tool* { return _ovalTool.get(); }),
-        makeTool(ToolIcons::Tool::RectanglePrimitive, "Rectangle Primitive", Qt::Key_unknown,
+        makeTool(ToolIcons::Tool::RectanglePrimitive, "Rectangle Primitive", Qt::SHIFT | Qt::Key_R,
             "Drag to draw an editable rectangle object with corner radii.",
             [this]() -> Tool* { return _rectanglePrimitiveTool.get(); }),
-        makeTool(ToolIcons::Tool::OvalPrimitive, "Oval Primitive", Qt::Key_unknown,
+        makeTool(ToolIcons::Tool::OvalPrimitive, "Oval Primitive", Qt::SHIFT | Qt::Key_O,
             "Drag to draw an editable oval object with start and end angles.",
             [this]() -> Tool* { return _ovalPrimitiveTool.get(); }),
-        makeTool(ToolIcons::Tool::PolyStar, "PolyStar", Qt::Key_Y,
+        makeTool(ToolIcons::Tool::PolyStar, "PolyStar", Qt::Key_unknown,
             "Drag from the center outwards. Sides and star mode are in the Properties panel.",
             [this]() -> Tool* { return _polyStarTool.get(); }),
     });
-    addSlot({makeTool(ToolIcons::Tool::Pencil, "Pencil", Qt::Key_D,
+    addSlot({makeTool(ToolIcons::Tool::Pencil, "Pencil", Qt::SHIFT | Qt::Key_Y,
         "Draw freehand. The stroke is fitted on release; the mode is in the Properties panel.",
         [this]() -> Tool* { return _pencilTool.get(); })});
     // The Flow, Nib and Ink brushes share a slot; B is the Flow Brush's, as
     // it is the brush Animate gives B.
     addSlot({
-        makeTool(ToolIcons::Tool::FluidBrush, "Flow Brush", Qt::Key_B,
+        makeTool(ToolIcons::Tool::FluidBrush, "Flow Brush", Qt::SHIFT | Qt::Key_B,
             "Paint a fill whose width follows the pen's pressure and speed, with tapered ends "
             "and a smoothed line. Settings are in the Properties panel.",
             [this]() -> Tool* { return _brushTool.get(); }),
-        makeTool(ToolIcons::Tool::Brush, "Nib Brush", Qt::Key_unknown,
+        makeTool(ToolIcons::Tool::Brush, "Nib Brush", Qt::Key_B,
             "Paint a fill with a shaped nib: round, oval, square or slanted. Use Pressure varies "
             "the width; Use Tilt turns the nib with the pen.",
             [this]() -> Tool* { return _classicBrushTool.get(); }),
