@@ -18,6 +18,8 @@ namespace MediaImport {
 /// Whether a file is one Import takes, by its extension.
 bool isImage(const QString& path);
 bool isSound(const QString& path);
+/// Vector artwork (SVG, Illustrator, PDF) or a layered Photoshop document.
+bool isArtwork(const QString& path);
 
 /// A library bitmap for an image file: a JPEG kept as it is, anything else
 /// encoded losslessly. Null, with \a error saying why, when it cannot be

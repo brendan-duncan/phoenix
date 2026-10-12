@@ -646,6 +646,13 @@ private:
     /// the current keyframe when dropped on the stage.
     void importMedia(const QStringList& paths, bool toStage, const QPointF* at = nullptr);
 
+    /// One SVG, Illustrator or PDF file, as drawing objects grouped on the
+    /// stage (or a graphic symbol in the library), or a Photoshop document,
+    /// as a layer for each of its layers and a folder for each group (or
+    /// its layers' bitmaps in the library). Part of importMedia's step.
+    void importArtwork(const QString& path, bool toStage, const QPointF* at, fla::Frame* frame,
+        QStringList& problems, std::vector<fla::DOMElement*>& placed);
+
     /// Import to Stage of a numbered sequence: each image in its own blank
     /// keyframe on the current layer, from the playhead on.
     void importSequence(const QStringList& paths);

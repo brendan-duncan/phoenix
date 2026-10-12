@@ -92,6 +92,7 @@ set(TEST_CORE_SOURCES
     ${PHOENIX_SRC}/edit/scene_commands.cpp
     ${PHOENIX_SRC}/edit/document_settings.cpp
     ${PHOENIX_SRC}/edit/text_style.cpp
+    ${PHOENIX_SRC}/edit/psd_import.cpp
     ${PHOENIX_SRC}/edit/combine_objects.cpp
     ${PHOENIX_SRC}/edit/swatches.cpp
     ${PHOENIX_SRC}/gui/audio_engine.cpp
@@ -145,6 +146,7 @@ set(TEST_SOURCES
     test_scene_commands.cpp
     test_document_settings.cpp
     test_text_style.cpp
+    test_psd_import.cpp
     test_swatches.cpp
     test_find_replace.cpp
     test_audio_decode.cpp
@@ -178,6 +180,7 @@ if(TARGET tinyxml2 AND TARGET zlibstatic)
         ${PHOENIX_SRC}/util/exr_writer.cpp
         ${PHOENIX_SRC}/edit/edit_list.cpp
         ${PHOENIX_SRC}/edit/font_items.cpp
+        ${PHOENIX_SRC}/edit/vector_import.cpp
         ${PHOENIX_SRC}/util/zip_writer.cpp
         ${PHOENIX_SRC}/writer/fla_writer.cpp
         ${PHOENIX_SRC}/writer/xfl_content.cpp
@@ -191,6 +194,7 @@ if(TARGET tinyxml2 AND TARGET zlibstatic)
     list(APPEND TEST_SOURCES
         test_fla_writer.cpp
         test_font_items.cpp
+        test_vector_import.cpp
         test_fla_doctor.cpp
         test_exr_writer.cpp
         test_edit_list.cpp

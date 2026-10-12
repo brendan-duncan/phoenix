@@ -35,6 +35,8 @@
 #include <QGridLayout>
 #include "spell_checker.h"
 #include "../edit/text_style.h"
+#include "../edit/vector_import.h"
+#include "../edit/psd_import.h"
 #include "../edit/document_settings.h"
 #include "scene_panel.h"
 #include "../edit/deformers.h"
@@ -437,7 +439,7 @@ void MainWindow::dragEnterEvent(QDragEnterEvent* event)
     {
         const QString path = url.toLocalFile();
         if (url.isLocalFile() && (isDocumentPath(path) ||
-            (open && (MediaImport::isImage(path) || MediaImport::isSound(path)))))
+            (open && (MediaImport::isImage(path) || MediaImport::isSound(path) || MediaImport::isArtwork(path)))))
         {
             event->acceptProposedAction();
             return;
@@ -459,7 +461,7 @@ void MainWindow::dropEvent(QDropEvent* event)
             openInTab(path);
             return;
         }
-        if (MediaImport::isImage(path) || MediaImport::isSound(path))
+        if (MediaImport::isImage(path) || MediaImport::isSound(path) || MediaImport::isArtwork(path))
             media << path;
     }
     if (media.isEmpty() || !_flaDocument || !_flaDocument->document)
@@ -6599,8 +6601,10 @@ void MainWindow::placeLibraryItem(const QString& kind, const QString& name, cons
 namespace {
 
 const char* const kImportFilter =
-    "All importable files (*.png *.jpg *.jpeg *.gif *.bmp *.wav *.aif *.aiff *.mp3 *.flac *.ogg);;"
+    "All importable files (*.png *.jpg *.jpeg *.gif *.bmp *.psd *.svg *.ai *.pdf *.wav *.aif *.aiff *.mp3 *.flac *.ogg);;"
     "Images (*.png *.jpg *.jpeg *.gif *.bmp);;"
+    "Photoshop documents (*.psd);;"
+    "Vector artwork (*.svg *.ai *.pdf);;"
     "Sounds (*.wav *.aif *.aiff *.mp3 *.flac *.ogg);;"
     "All files (*)";
 
@@ -6879,6 +6883,8 @@ void MainWindow::importMedia(const QStringList& paths, bool toStage, const QPoin
             if (at)
                 soundOnStage = soundName;
         }
+        else if (MediaImport::isArtwork(path))
+            importArtwork(path, toStage, at, frame, problems, placed);
         else
         {
             problems << QString("%1 is not a file Phoenix imports.").arg(QFileInfo(path).fileName());
@@ -6898,6 +6904,203 @@ void MainWindow::importMedia(const QStringList& paths, bool toStage, const QPoin
         attachSound(soundOnStage);
     if (!problems.isEmpty())
         QMessageBox::warning(this, name, problems.join("\n"));
+}
+
+void MainWindow::importArtwork(const QString& path, bool toStage, const QPointF* at, fla::Frame* frame,
+    QStringList& problems, std::vector<fla::DOMElement*>& placed)
+{
+    fla::Document* document = _flaDocument->document;
+    fla::CommandStack& stack = _editContext.commandStack();
+    const char* name = toStage ? "Import to Stage" : "Import to Library";
+    const QString fileName = QFileInfo(path).fileName();
+    QFile file(path);
+    if (!file.open(QIODevice::ReadOnly))
+    {
+        problems << QString("%1 could not be read.").arg(fileName);
+        return;
+    }
+    const QByteArray data = file.readAll();
+    const std::vector<uint8_t> bytes(data.begin(), data.end());
+    const auto note = [&](const std::vector<std::string>& notes) {
+        for (const std::string& text : notes)
+            problems << QString("%1: %2").arg(fileName, QString::fromStdString(text));
+    };
+
+    if (QFileInfo(path).suffix().toLower() == "psd")
+    {
+        const fla::psd::Image image = fla::psd::read(bytes);
+        note(image.notes);
+        if (!image.ok)
+            return;
+        // A pixel layer's bitmap, its opacity in its pixels.
+        const auto bitmapFor = [&](const fla::psd::Layer& layer) -> std::string {
+            QImage pixels(layer.width, layer.height, QImage::Format_RGBA8888);
+            for (int y = 0; y < layer.height; ++y)
+            {
+                uchar* line = pixels.scanLine(y);
+                std::memcpy(line, layer.rgba.data() + static_cast<size_t>(y) * layer.width * 4, static_cast<size_t>(layer.width) * 4);
+                if (layer.opacity < 255)
+                    for (int x = 0; x < layer.width; ++x)
+                        line[x * 4 + 3] = static_cast<uchar>(line[x * 4 + 3] * layer.opacity / 255);
+            }
+            fla::Bitmap* bitmap = MediaImport::bitmapFromImage(*document, pixels,
+                QString::fromStdString(layer.name.empty() ? std::string("Layer") : layer.name));
+            if (!bitmap)
+            {
+                problems << QString("%1: the layer %2 is too large.").arg(fileName, QString::fromStdString(layer.name));
+                return std::string();
+            }
+            const std::string itemName = bitmap->name;
+            stack.push(fla::CommandPtr(new fla::AddBitmapCommand(document, bitmap, name)));
+            return itemName;
+        };
+
+        fla::Timeline* timeline = nullptr;
+        int index = 0;
+        if (!toStage || !_timelineView || !_timelineView->currentLayer(timeline, index) || !timeline)
+        {
+            std::function<void(const std::vector<fla::psd::Layer>&)> addBitmaps = [&](const std::vector<fla::psd::Layer>& layers) {
+                for (const fla::psd::Layer& layer : layers)
+                {
+                    if (layer.group)
+                        addBitmaps(layer.children);
+                    else
+                        bitmapFor(layer);
+                }
+            };
+            addBitmaps(image.layers);
+            return;
+        }
+
+        // A layer for each, above the current layer and in its folder, the
+        // document's top-left at the stage's or centered where dropped.
+        fla::Layer* folder = nullptr;
+        if (index >= 0 && index < static_cast<int>(timeline->layers.size()))
+        {
+            fla::Layer* current = timeline->layers[static_cast<size_t>(index)];
+            if (current && current->parentLayer && current->parentLayer->layerType == fla::Layer::Type::Folder)
+                folder = current->parentLayer;
+        }
+        int insertAt = std::max(0, index);
+        const double dx = at ? at->x() - image.width / 2.0 : 0.0;
+        const double dy = at ? at->y() - image.height / 2.0 : 0.0;
+        std::function<void(const std::vector<fla::psd::Layer>&, fla::Layer*)> addLayers =
+            [&](const std::vector<fla::psd::Layer>& layers, fla::Layer* parent) {
+                for (const fla::psd::Layer& source : layers)
+                {
+                    std::string itemName;
+                    if (!source.group)
+                    {
+                        itemName = bitmapFor(source);
+                        if (itemName.empty())
+                            continue;
+                    }
+                    fla::Layer* layer = fla::newLayerFor(*timeline, source.group);
+                    if (!source.name.empty())
+                        layer->name = source.name;
+                    layer->autoNamed = false;
+                    layer->parentLayer = parent;
+                    layer->visible = !source.hidden;
+                    if (!source.group && !layer->frames.empty())
+                    {
+                        fla::Frame* first = layer->frames.front();
+                        fla::BitmapInstance* instance = new fla::BitmapInstance(first);
+                        instance->libraryItemName = itemName;
+                        instance->transform.tx = dx + source.left;
+                        instance->transform.ty = dy + source.top;
+                        first->elements.push_back(instance);
+                    }
+                    stack.push(fla::CommandPtr(new fla::AddLayerCommand(timeline, insertAt++, layer, name)));
+                    if (source.group)
+                        addLayers(source.children, layer);
+                }
+            };
+        addLayers(image.layers, folder);
+        if (_timelineView)
+            _timelineView->refresh();
+        return;
+    }
+
+    const bool svg = QFileInfo(path).suffix().toLower() == "svg";
+    const fla::vectors::Artwork art = svg ? fla::vectors::readSvg(std::string(data.constData(), static_cast<size_t>(data.size())))
+                                          : fla::vectors::readPdf(bytes);
+    note(art.notes);
+    const double dx = at ? at->x() - art.width / 2.0 : 0.0;
+    const double dy = at ? at->y() - art.height / 2.0 : 0.0;
+    std::vector<fla::Shape*> shapes;
+    for (fla::vectors::Painted painted : art.paths)
+    {
+        for (fla::vectors::Subpath& subpath : painted.subpaths)
+            for (fla::vectors::Segment& segment : subpath.segments)
+                for (fla::Point& point : segment.points)
+                {
+                    point.x += dx;
+                    point.y += dy;
+                }
+        if (fla::Shape* shape = fla::vectors::toShape(painted))
+            shapes.push_back(shape);
+    }
+    if (shapes.empty())
+    {
+        if (art.notes.empty())
+            problems << QString("%1 has no paths to import.").arg(fileName);
+        return;
+    }
+
+    if (toStage && frame)
+    {
+        // Each path a drawing object, grouped as one piece of artwork.
+        std::vector<fla::Element*> added;
+        for (fla::Shape* shape : shapes)
+        {
+            shape->parent = frame;
+            stack.push(fla::CommandPtr(new fla::AddElementCommand(frame, shape, name, &_selection)));
+            added.push_back(shape);
+        }
+        if (added.size() > 1)
+        {
+            auto* group = new fla::GroupElementsCommand(frame, added, name, &_selection);
+            fla::Group* made = group->group();
+            stack.push(fla::CommandPtr(group));
+            placed.push_back(made);
+        }
+        else
+            placed.push_back(added.front());
+        return;
+    }
+
+    // In the library, a graphic symbol named for the file.
+    if (!document->symbolList)
+        document->symbolList = new fla::SymbolList(document);
+    const std::string base = QFileInfo(path).completeBaseName().toStdString();
+    std::string symbolName = base;
+    for (int n = 2; !fla::library::nameIsFree(*document, symbolName); ++n)
+        symbolName = base + " " + std::to_string(n);
+    auto* symbol = new fla::Symbol(document->symbolList);
+    symbol->name = symbolName;
+    symbol->href = symbolName + ".xml";
+    symbol->symbolType = fla::SymbolType::Graphic;
+    symbol->itemId = fla::media::newItemId();
+    auto* timeline = new fla::Timeline(symbol);
+    timeline->name = symbolName;
+    fla::Layer* layer = fla::newLayerFor(*timeline, false);
+    timeline->layers.push_back(layer);
+    symbol->timelines.push_back(timeline);
+    if (!layer->frames.empty())
+    {
+        fla::Frame* first = layer->frames.front();
+        for (fla::Shape* shape : shapes)
+        {
+            shape->parent = first;
+            first->elements.push_back(shape);
+        }
+    }
+    else
+    {
+        for (fla::Shape* shape : shapes)
+            delete shape;
+    }
+    stack.push(fla::CommandPtr(new fla::AddSymbolCommand(document, symbol, name)));
 }
 
 void MainWindow::importSequence(const QStringList& paths)

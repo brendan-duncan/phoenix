@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Documents and files · Phoenix User Guide</title>
 <meta name="description" content="Create documents, set the stage size and frame rate, open and save PHX, FLA and XFL files, import media, and recover unsaved work.">
-<meta name="keywords" content="new document presets stage size frame rate fps stage color save save as phx fla xfl binary flash cs4 import images sounds video sequence auto-save recovery file formats">
+<meta name="keywords" content="new document presets stage size frame rate fps stage color save save as phx fla xfl binary flash cs4 import images sounds video sequence svg psd photoshop illustrator ai pdf layers auto-save recovery file formats">
 <link rel="icon" href="assets/img/logo.png">
 <link rel="stylesheet" href="assets/site.css">
 <script>try { const t = localStorage.getItem("phoenix-docs-theme"); if (t) document.documentElement.dataset.theme = t; } catch (e) {}</script>
@@ -158,6 +158,8 @@
   <thead><tr><th>Kind</th><th>Formats</th></tr></thead>
   <tbody>
     <tr><td>Images</td><td>PNG, JPEG, GIF, BMP</td></tr>
+    <tr><td>Layered images</td><td>Photoshop (PSD), 8-bit RGB or grayscale</td></tr>
+    <tr><td>Vector artwork</td><td>SVG, Illustrator (AI), PDF</td></tr>
     <tr><td>Sound</td><td>WAV, AIFF, MP3, FLAC, Ogg</td></tr>
     <tr><td>Video (reference)</td><td>MP4, MOV, M4V, AVI, MKV, WebM, FLV, WMV, MPEG</td></tr>
   </tbody>
@@ -165,11 +167,19 @@
 
 <p>If you import one image from a numbered sequence, such as <code>walk_0001.png</code>, Phoenix offers to import the whole sequence as consecutive keyframes.</p>
 
-<p>You can also drag images and sounds from your desktop. Dropped on the stage, they are placed where you drop them; dropped elsewhere, they go into the library. An image copied in another app can be pasted straight onto the stage.</p>
+<h3>Photoshop files</h3>
+
+<p>Import to Stage turns each layer of a PSD into a layer of its own, named as it was, above the current layer, with the layer's pixels as a bitmap in the library and placed where they were on the canvas. Groups become layer folders, hidden layers stay hidden, and a layer's opacity and layer mask are kept in its pixels. Import to Library adds just the bitmaps.</p>
+
+<h3>SVG, Illustrator and PDF files</h3>
+
+<p>Each filled or stroked path becomes a drawing object with its fill and stroke color and stroke width, and on the stage they are grouped as one piece of artwork. Import to Library makes a graphic symbol named after the file instead. Phoenix reads paths, rectangles, circles, ellipses, lines, polylines and polygons, with their groups, transforms and opacity. An Illustrator file is read through the PDF copy it carries, which Illustrator saves by default; for a PDF, the first page is read. Text, gradients and embedded images are left out: convert text to outlines before you save.</p>
+
+<p>You can also drag images, sounds, PSD, SVG and Illustrator files from your desktop. Dropped on the stage, they are placed where you drop them; dropped elsewhere, they go into the library. An image copied in another app can be pasted straight onto the stage.</p>
 
 <div class="callout planned">
   <span class="label">Planned</span>
-  <p>Importing SVG, Photoshop and Illustrator files, and tracing bitmaps into vector shapes.</p>
+  <p>Tracing bitmaps into vector shapes.</p>
 </div>
 
 <h2>Auto-save and recovery</h2>
