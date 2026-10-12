@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Coming from Harmony · Phoenix User Guide</title>
 <meta name="description" content="Harmony's ways of working in Phoenix: the X-sheet, pegs, the light table, the multiplane camera and more, all saved in files Animate opens.">
-<meta name="keywords" content="harmony toon boom x-sheet exposure sheet peg pivot light table multiplane camera rig">
+<meta name="keywords" content="harmony toon boom x-sheet exposure sheet peg pivot light table multiplane camera rig master controller slider">
 <link rel="icon" href="assets/img/logo.png">
 <link rel="stylesheet" href="assets/site.css">
 <script>try { const t = localStorage.getItem("phoenix-docs-theme"); if (t) document.documentElement.dataset.theme = t; } catch (e) {}</script>
@@ -28,6 +28,12 @@
 <p>A peg is a layer that holds only a transform. Pick a layer and choose <b>Insert &gt; Peg</b>: a <em>Peg</em> layer appears above it and the layer is parented to it. Move, turn or scale the peg (with the Free Transform tool, or tween it) and everything parented to it follows, about the peg's pivot. Parent more layers to the same peg from the layer menu's <b>Parent Layer</b>, or parent pegs to pegs to build a hierarchy.</p>
 
 <p>On the stage a peg shows as a crosshair in a circle, in its layer's color, with a tick for the way it faces. In the file it is an instance of an empty graphic symbol on a layer Animate's own layer parenting follows, so Animate plays the animation the same and draws nothing for the peg.</p>
+
+<h2>Master controllers</h2>
+
+<p>A controller is one slider that drives several properties at once: a head turn that moves the head, swaps the eyes' drawing and turns the nose. Open <b>Window &gt; Controllers</b> and choose <b>New</b>. Then, for each thing it should drive, pick the layer in the timeline, select the controller and choose <b>Bind</b>: choose the property (X, Y, rotation, scale, alpha, or a graphic's frame) and the values it should have with the slider at 0 and at 1. Both start at the value the layer has now.</p>
+
+<p>Dragging the slider sets every property it drives on the frame shown, as one undo step. A layer with no keyframe there gets one; cut into a tween, the new keyframe takes the in-between and both halves keep tweening. What is saved is ordinary keyframes, so Animate plays it as you see it; the controllers themselves are kept in the document where Animate ignores them.</p>
 
 <h2>Light table</h2>
 

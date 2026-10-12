@@ -28,6 +28,7 @@
 #include "toolbar_editor.h"
 #include "toolbox.h"
 #include "notes_panel.h"
+#include "controllers_panel.h"
 #include "../edit/pegs.h"
 #include "theme.h"
 #include "theme_editor.h"
@@ -735,6 +736,39 @@ void MainWindow::createPanels()
         connect(_phoenixView, &PhoenixView::scopeChanged, _notes, [this]() { _notes->refresh(); });
     }
 
+    // Controllers, closed until asked.
+    if (!_controllersDock)
+    {
+        ControllersLinks links;
+        links.commands = [this]() { return &_editContext.commandStack(); };
+        links.document = [this]() -> fla::Document* { return _flaDocument ? _flaDocument->document : nullptr; };
+        links.currentFrame = [this]() { return _player ? _player->currentFrame() : 0; };
+        links.currentLayer = [this](fla::Timeline*& timeline) -> fla::Layer* {
+            int index = 0;
+            if (!_timelineView || !_timelineView->currentLayer(timeline, index) || !timeline || index < 0 ||
+                index >= static_cast<int>(timeline->layers.size()))
+                return nullptr;
+            return timeline->layers[static_cast<size_t>(index)];
+        };
+        links.changed = [this]() {
+            if (_timelineView)
+                _timelineView->refreshFrames();
+            if (_phoenixView)
+            {
+                _phoenixView->clearCaches();
+                _phoenixView->update();
+            }
+        };
+        _controllers = new ControllersPanel(links);
+        _controllersDock = new QDockWidget("Controllers", this);
+        _controllersDock->setObjectName("controllersDock");
+        _controllersDock->setAllowedAreas(Qt::AllDockWidgetAreas);
+        _controllers->setParent(_controllersDock);
+        _controllersDock->setWidget(_controllers);
+        addDockWidget(Qt::RightDockWidgetArea, _controllersDock);
+        _controllersDock->hide();
+    }
+
     // The X-sheet, Harmony's view of the exposures, closed until asked.
     if (!_xsheetDock)
     {
@@ -824,6 +858,7 @@ void MainWindow::setupWindowMenu()
             {"&X-Sheet", _xsheetDock, QKeySequence(), "The exposures of each layer, frame by frame, typed in by drawing number"},
             {"&History", _historyDock, QKeySequence(Qt::CTRL | Qt::Key_F10), "Every step that can be undone; click one to go back or forward to it"},
             {"&Review Notes", _notesDock, QKeySequence(), "Notes on frames from whoever reviews the shot; they never export"},
+            {"Co&ntrollers", _controllersDock, QKeySequence(), "Master controllers: one slider driving properties on several layers"},
         },
     };
     std::vector<std::pair<QAction*, QDockWidget*>> entries;
@@ -881,6 +916,10 @@ void MainWindow::setupWindowMenu()
     });
 
     // What a panel shows is brought up to date when it comes into view.
+    connect(_controllersDock, &QDockWidget::visibilityChanged, this, [this](bool shown) {
+        if (shown)
+            _controllers->refresh();
+    });
     connect(_notesDock, &QDockWidget::visibilityChanged, this, [this](bool shown) {
         if (shown)
             _notes->refresh();
@@ -4349,6 +4388,8 @@ void MainWindow::updateEditState()
     refreshHistory();
     if (_notes && _notesDock && _notesDock->isVisible())
         _notes->refresh();
+    if (_controllers && _controllersDock && _controllersDock->isVisible() && !_editContext.commandStack().isInMacro())
+        _controllers->refresh();
     if (_colorPanel)
         _colorPanel->refresh();
     updateFramePicker();
