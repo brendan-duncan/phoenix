@@ -78,6 +78,8 @@ public:
     /// Phoenix render: frames of a document to a PNG sequence, a video or
     /// a GIF, with no window. See the command line help.
     int renderCommand(const QString& source, const QStringList& options);
+    /// Every command a key can call, with its default key.
+    const std::vector<ShortcutEntry>& shortcutEntries() const { return _shortcuts; }
 
     /// For the round-trip check: opens \a path and renders \a frames (when
     /// empty, \a samples frames spread over the document, chosen and
@@ -559,6 +561,10 @@ private:
     /// Each tool's toolbox action, so a tool can be chosen as a click on
     /// it would: checked, and shown in its slot.
     std::map<Tool*, QAction*> _toolActions;
+    /// Every tool's action, as the toolbox made it, with how to reach its
+    /// tool: the toolbox is made before the tools, so _toolActions is filled
+    /// from these once they exist.
+    std::vector<std::pair<std::function<Tool*()>, QAction*>> _toolActionList;
     /// Every command with a key, with Phoenix's own keys, for Edit >
     /// Keyboard Shortcuts.
     std::vector<ShortcutEntry> _shortcuts;

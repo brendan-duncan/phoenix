@@ -214,6 +214,7 @@ set(HEADERS
     src/edit/drawing_style.h
     src/edit/brush_stroke.h
     src/edit/brush_presets.h
+    src/edit/shortcut_sets.h
     src/edit/brush_texture.h
     src/edit/camera.h
     src/edit/motion_object.h
@@ -425,6 +426,7 @@ set(SOURCES
     src/edit/drawing_style.cpp
     src/edit/brush_stroke.cpp
     src/edit/brush_presets.cpp
+    src/edit/shortcut_sets.cpp
     src/edit/brush_texture.cpp
     src/edit/camera.cpp
     src/edit/motion_object.cpp

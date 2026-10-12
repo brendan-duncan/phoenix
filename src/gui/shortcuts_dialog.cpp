@@ -5,6 +5,7 @@
 #include <QDialogButtonBox>
 #include <QFile>
 #include <QFileDialog>
+#include <QFileInfo>
 #include <QHBoxLayout>
 #include <QHeaderView>
 #include <QInputDialog>
@@ -21,7 +22,10 @@
 #include <QTreeWidget>
 #include <QVBoxLayout>
 
+#include "../edit/shortcut_sets.h"
+
 #include <functional>
+#include <set>
 
 namespace Shortcuts {
 
@@ -227,6 +231,16 @@ ShortcutsDialog::ShortcutsDialog(const std::vector<ShortcutEntry>& entries, QWid
         {
             _keys.clear();
         }
+        else if (index == 1)
+        {
+            // Animate's own keys, on the commands Phoenix has.
+            std::vector<std::pair<std::string, std::string>> bindings;
+            for (const fla::shortcutsets::Binding& binding : fla::shortcutsets::animateStandard())
+                bindings.emplace_back(binding.command, binding.key);
+            _keys.clear();
+            takeBindings(bindings, QString());
+            return;
+        }
         else
         {
             QSettings settings;
@@ -237,7 +251,7 @@ ShortcutsDialog::ShortcutsDialog(const std::vector<ShortcutEntry>& entries, QWid
     connect(saveAs, &QPushButton::clicked, this, [this]() {
         bool ok = false;
         const QString name = QInputDialog::getText(this, "Save Shortcut Set", "Name:", QLineEdit::Normal,
-            _sets->currentIndex() > 0 ? _sets->currentText() : QString(), &ok).trimmed();
+            _sets->currentIndex() > 1 ? _sets->currentText() : QString(), &ok).trimmed();
         if (!ok || name.isEmpty())
             return;
         QSettings().setValue("shortcuts/sets/" + name, Shortcuts::toJson(chosen()));
@@ -245,7 +259,7 @@ ShortcutsDialog::ShortcutsDialog(const std::vector<ShortcutEntry>& entries, QWid
         _sets->setCurrentText(name);
     });
     connect(remove, &QPushButton::clicked, this, [this]() {
-        if (_sets->currentIndex() <= 0)
+        if (_sets->currentIndex() <= 1)
             return;
         QSettings().remove("shortcuts/sets/" + _sets->currentText());
         refreshSets();
@@ -259,20 +273,32 @@ ShortcutsDialog::ShortcutsDialog(const std::vector<ShortcutEntry>& entries, QWid
             file.write(Shortcuts::toJson(chosen()));
     });
     connect(importSet, &QPushButton::clicked, this, [this]() {
-        const QString path = QFileDialog::getOpenFileName(this, "Import Shortcuts", QString(), "Shortcuts (*.json)");
+        const QString path = QFileDialog::getOpenFileName(this, "Import Shortcuts", QString(),
+            "Shortcut sets (*.json *.xml *.txt);;Phoenix sets (*.json);;Animate shortcut files (*.xml *.txt);;All files (*)");
         if (path.isEmpty())
             return;
         QFile file(path);
         if (!file.open(QIODevice::ReadOnly))
             return;
-        const std::map<QString, QKeySequence> keys = Shortcuts::fromJson(file.readAll());
-        if (keys.empty())
+        const QByteArray data = file.readAll();
+        // A set Phoenix exported, or one from Animate.
+        const std::map<QString, QKeySequence> keys = Shortcuts::fromJson(data);
+        if (!keys.empty())
+        {
+            _keys = keys;
+            fill();
+            return;
+        }
+        std::vector<std::pair<std::string, std::string>> bindings;
+        for (const fla::shortcutsets::Binding& binding : fla::shortcutsets::read(data.toStdString()))
+            bindings.emplace_back(binding.command, binding.key);
+        if (bindings.empty())
         {
             QMessageBox::information(this, "Import Shortcuts", "No shortcuts were found in that file.");
             return;
         }
-        _keys = keys;
-        fill();
+        _keys.clear();
+        takeBindings(bindings, QFileInfo(path).fileName());
     });
 
     refreshSets();
@@ -280,10 +306,50 @@ ShortcutsDialog::ShortcutsDialog(const std::vector<ShortcutEntry>& entries, QWid
     resize(620, 560);
 }
 
+void ShortcutsDialog::takeBindings(const std::vector<std::pair<std::string, std::string>>& given, const QString& from)
+{
+    std::vector<fla::shortcutsets::Binding> bindings;
+    for (const auto& [command, key] : given)
+        bindings.push_back({command, key});
+    std::vector<std::string> ids;
+    for (const ShortcutEntry& entry : _entries)
+        ids.push_back(entry.id.toStdString());
+    std::vector<std::string> unmatched;
+    const std::map<std::string, std::string> matched = fla::shortcutsets::match(bindings, ids, &unmatched);
+    std::set<QKeySequence> taken;
+    for (const auto& [id, key] : matched)
+    {
+        const QKeySequence sequence(QString::fromStdString(key), QKeySequence::PortableText);
+        _keys[QString::fromStdString(id)] = sequence;
+        taken.insert(sequence);
+    }
+    // A key the set gives one command leaves the command that had it.
+    for (const ShortcutEntry& entry : _entries)
+        if (!matched.count(entry.id.toStdString()) && taken.count(entry.defaultKey))
+            _keys[entry.id] = QKeySequence();
+    _conflict->clear();
+    fill();
+    if (from.isEmpty())
+        return;
+    QString message = QString("%1 shortcuts from %2 were matched to Phoenix's commands.").arg(matched.size()).arg(from);
+    if (!unmatched.empty())
+    {
+        QStringList names;
+        for (size_t i = 0; i < unmatched.size() && i < 12; ++i)
+            names << QString::fromStdString(unmatched[i]);
+        message += QString("\n\n%1 are for commands Phoenix does not have or could not match:\n%2%3")
+                       .arg(unmatched.size())
+                       .arg(names.join("\n"))
+                       .arg(unmatched.size() > 12 ? QString("\n...") : QString());
+    }
+    QMessageBox::information(this, "Import Shortcuts", message);
+}
+
 void ShortcutsDialog::refreshSets()
 {
     _sets->clear();
     _sets->addItem("Phoenix Defaults");
+    _sets->addItem("Animate Standard");
     QSettings settings;
     settings.beginGroup("shortcuts/sets");
     _sets->addItems(settings.childKeys());

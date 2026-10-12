@@ -246,7 +246,7 @@ MainWindow::MainWindow(const QString& initialFile, QWidget* parent, bool startup
     // set chosen goes on.
     {
         std::vector<QAction*> tools;
-        for (const auto& entry : _toolActions)
+        for (const auto& entry : _toolActionList)
             tools.push_back(entry.second);
         std::sort(tools.begin(), tools.end(), [](QAction* a, QAction* b) { return a->text() < b->text(); });
         _shortcuts = Shortcuts::collect(menuBar(), tools);
@@ -6355,7 +6355,7 @@ void MainWindow::setupToolBar()
         connect(action, &QAction::triggered, this, [this, tool]() {
             _phoenixView->setActiveTool(tool());
         });
-        _toolActions[tool()] = action;
+        _toolActionList.emplace_back(tool, action);
         toolGroup->addAction(action);
         addAction(action);
         _toolbox->addTool(name, action);
@@ -8191,6 +8191,11 @@ void MainWindow::attachSoundTo(fla::Layer* layer, int at, const QString& name)
 
 void MainWindow::chooseTool(Tool* tool)
 {
+    // The tools exist by now: each action is matched to its tool.
+    if (_toolActions.empty())
+        for (const auto& [reach, action] : _toolActionList)
+            if (Tool* made = reach())
+                _toolActions[made] = action;
     const auto found = _toolActions.find(tool);
     if (found != _toolActions.end() && found->second)
         found->second->trigger();

@@ -67,6 +67,10 @@ private:
     QKeySequence keyOf(const QString& id) const;
     QString holderOf(const QKeySequence& key, const QString& except) const;
     void refreshSets();
+    /// Takes \a bindings, another application's commands and keys, as the
+    /// keys: each matched to a Phoenix command, and a key it takes removed
+    /// from a command that had it by default. Says what matched none.
+    void takeBindings(const std::vector<std::pair<std::string, std::string>>& bindings, const QString& from);
 
     std::vector<ShortcutEntry> _entries;
     std::map<QString, QKeySequence> _keys;

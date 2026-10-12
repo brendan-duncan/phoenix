@@ -1,6 +1,7 @@
 #include "command_line.h"
 
 #include "main_window.h"
+#include "shortcuts_dialog.h"
 #include "updater.h"
 
 #include "../data/document.h"
@@ -61,6 +62,9 @@ const char* const kHelp =
     "      --prores writes ProRes 422 HQ (.mov), --prores4444 keeps alpha.\n"
     "      --everything draws the pasteboard too. --colors and --dither are for GIFs.\n"
     "      --link-images writes an SVG's images once beside it, not inside it.\n"
+    "\n"
+    "  shortcuts [--defaults]\n"
+    "      Lists every command and its key: the set in use, or Phoenix's defaults.\n"
     "\n"
     "  doctor <file> [--repair <out.fla|out.phx>] [--json]\n"
     "      Checks a document for damage and repairs what it can; a file that\n"
@@ -675,7 +679,7 @@ int benchmark(const QStringList& args)
 
 bool isCommand(const QString& name)
 {
-    return name == "benchmark" || name == "render" || name == "doctor" || name == "diff" || name == "batch" || name == "shots" || name == "links" || name == "help" ||
+    return name == "benchmark" || name == "render" || name == "doctor" || name == "diff" || name == "batch" || name == "shots" || name == "links" || name == "shortcuts" || name == "help" ||
            name == "--help";
 }
 
@@ -724,6 +728,20 @@ int run(const QStringList& arguments)
         }
         MainWindow window(QString(), nullptr, false);
         return window.renderCommand(args.at(0), args.mid(1));
+    }
+    if (name == "shortcuts")
+    {
+        // Every command and its key: the set in use, or Phoenix's defaults.
+        MainWindow window(QString(), nullptr, false);
+        const std::map<QString, QKeySequence> current = Shortcuts::currentSet();
+        for (const ShortcutEntry& entry : window.shortcutEntries())
+        {
+            const auto chosen = current.find(entry.id);
+            const QKeySequence key =
+                args.contains("--defaults") || chosen == current.end() ? entry.defaultKey : chosen->second;
+            std::printf("%s\t%s\n", entry.id.toUtf8().constData(), key.toString(QKeySequence::PortableText).toUtf8().constData());
+        }
+        return 0;
     }
     if (name == "doctor")
         return doctor(args);
