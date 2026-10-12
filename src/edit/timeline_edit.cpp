@@ -384,6 +384,39 @@ void fitMotionSpans(Layer& layer)
     }
 }
 
+void clearFrames(Layer& layer, int first, int last, std::vector<Frame*>& removed)
+{
+    if (first < 0 || last < first || first >= layerEnd(layer))
+        return;
+    const auto keyframeAt = [&layer](int index) -> Frame* {
+        for (Frame* frame : layer.frames)
+            if (frame && frame->index == index)
+                return frame;
+        return nullptr;
+    };
+    // What follows keeps its content in a keyframe of its own.
+    if (last + 1 < layerEnd(layer) && !keyframeAt(last + 1))
+        insertKeyframe(layer, last + 1, false);
+    for (int index = last; index > first; --index)
+        if (keyframeAt(index))
+            clearKeyframe(layer, index, removed);
+    if (Frame* existing = keyframeAt(first))
+    {
+        // A keyframe there is replaced by a blank one of its length.
+        Frame* blank = new Frame(&layer);
+        blank->index = existing->index;
+        blank->duration = existing->duration;
+        blank->keyMode = existing->keyMode.empty() ? std::string("9728") : existing->keyMode;
+        std::replace(layer.frames.begin(), layer.frames.end(), existing, blank);
+        removed.push_back(existing);
+    }
+    else
+    {
+        insertKeyframe(layer, first, true);
+    }
+    updateExtent(layer);
+}
+
 void scaleSpans(Layer& layer, double factor)
 {
     if (factor <= 0.0 || layer.frames.empty())

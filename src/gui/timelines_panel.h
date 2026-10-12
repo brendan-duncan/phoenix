@@ -24,7 +24,9 @@ struct FrameSelection
     std::vector<const fla::Layer*> layers;
     int first = 0;
     int last = 0;
-    bool isEmpty() const { return layers.empty(); }
+    /// Frames added one at a time with Ctrl-click, beside the block.
+    std::vector<std::pair<const fla::Layer*, int>> cells;
+    bool isEmpty() const { return layers.empty() && cells.empty(); }
 };
 
 class TimelineGrid : public QWidget
@@ -60,6 +62,9 @@ public:
     /// The selected frames, or an empty selection.
     FrameSelection selection() const;
 
+    /// Every frame of every layer shown (Select All Frames).
+    void selectAll();
+
     /// How many frames the shown timeline has: where its last frame ends.
     int frameCount() const;
     void clearSelection();
@@ -88,6 +93,8 @@ signals:
     void layerPressed(const fla::Timeline* timeline, int layerIndex);
 
     /// A keyframe was dragged from one frame to another.
+    /// A single frame was clicked: what is on it is the stage's selection.
+    void framePicked(const fla::Layer* layer, int frame);
     void keyframeMoveRequested(const fla::Layer* layer, int from, int to);
 
     /// The selected block of frames was dragged: frames \a first to \a last
@@ -147,11 +154,16 @@ private:
 
     /// The selected block, in rows and frames, while there is one.
     bool _hasSelection = false;
+    /// Single frames Ctrl-clicked into the selection, as rows and frames.
+    std::vector<std::pair<int, int>> _cells;
+    void toggleCell(int row, int frame);
     int _anchorRow = 0;
     int _anchorFrame = 0;
     int _focusRow = 0;
     int _focusFrame = 0;
     bool _selecting = false;
+    /// The press was a plain click that may pick a frame's contents.
+    bool _picked = false;
 
     /// A span's end being dragged: its row, its keyframe and its length.
     bool _resizingSpan = false;
@@ -213,6 +225,7 @@ public:
 
     FrameSelection selection() const { return _gridContainer->selection(); }
     void clearSelection() { _gridContainer->clearSelection(); }
+    void selectAll() { _gridContainer->selectAll(); }
 
     /// Redraws the grid after frames were edited.
     void refreshFrames();
@@ -235,6 +248,7 @@ signals:
     void onionSkinToggled(bool on);
 
     void layerPressed(const fla::Timeline* timeline, int layerIndex);
+    void framePicked(const fla::Layer* layer, int frame);
     void keyframeMoveRequested(const fla::Layer* layer, int from, int to);
     void framesMoveRequested(const std::vector<const fla::Layer*>& sources, const std::vector<const fla::Layer*>& targets, int first, int last, int to, bool copy);
     void contextMenuRequested(const QPoint& globalPos);

@@ -1,4 +1,6 @@
 #include "timeline_view.h"
+#include "../data/layer.h"
+#include "../data/timeline.h"
 #include "layers_panel.h"
 #include "timelines_panel.h"
 #include "player.h"
@@ -45,6 +47,7 @@ TimelineView::TimelineView(Player* player, QWidget *parent)
     connect(_layersPanel, &LayersPanel::layerRenamed, this, &TimelineView::layerRenamed);
     connect(_layersPanel, &LayersPanel::layerEditRequested, this, &TimelineView::layerEditRequested);
     connect(_timelinesPanel, &TimelinesPanel::keyframeMoveRequested, this, &TimelineView::keyframeMoveRequested);
+    connect(_timelinesPanel, &TimelinesPanel::framePicked, this, &TimelineView::framePicked);
     connect(_timelinesPanel, &TimelinesPanel::framesMoveRequested, this, &TimelineView::framesMoveRequested);
     connect(_timelinesPanel, &TimelinesPanel::contextMenuRequested, this, &TimelineView::framesContextMenuRequested);
     connect(_timelinesPanel, &TimelinesPanel::spanResizeRequested, this, &TimelineView::spanResizeRequested);
@@ -108,6 +111,27 @@ bool TimelineView::currentLayer(fla::Timeline*& timeline, int& layerIndex) const
 FrameSelection TimelineView::frameSelection() const
 {
     return _timelinesPanel->selection();
+}
+
+void TimelineView::selectAllFrames()
+{
+    _timelinesPanel->selectAll();
+}
+
+void TimelineView::setCurrentLayer(const fla::Layer* layer)
+{
+    const auto* timeline = layer ? dynamic_cast<const fla::Timeline*>(layer->parent) : nullptr;
+    if (!timeline)
+        return;
+    const auto found = std::find(timeline->layers.begin(), timeline->layers.end(), layer);
+    if (found == timeline->layers.end())
+        return;
+    fla::Timeline* current = nullptr;
+    int index = -1;
+    const int wanted = static_cast<int>(found - timeline->layers.begin());
+    if (_layersPanel->currentLayer(current, index) && current == timeline && index == wanted)
+        return;
+    _layersPanel->setCurrentLayer(timeline, wanted);
 }
 
 void TimelineView::clearFrameSelection()

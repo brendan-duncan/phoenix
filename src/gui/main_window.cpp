@@ -160,6 +160,18 @@ MainWindow::MainWindow(const QString& initialFile, QWidget* parent, bool startup
 
     _selection.setChangedCallback([this]() {
         updateSelectionState();
+        // Selecting something on the stage makes its layer current.
+        if (_timelineView && !_selection.isEmpty())
+        {
+            for (const fla::DOMElement* p = _selection.elements().front(); p; p = p->parent)
+            {
+                if (p->domType() == fla::DOMElement::DOMType::Layer)
+                {
+                    _timelineView->setCurrentLayer(static_cast<const fla::Layer*>(p));
+                    break;
+                }
+            }
+        }
         if (_transformPanel)
             _transformPanel->refresh();
         if (_infoPanel)
@@ -891,6 +903,7 @@ void MainWindow::setupUI()
 
     // Frame edits from the grid itself: dragging a keyframe, the menu.
     connect(_timelineView, &TimelineView::keyframeMoveRequested, this, &MainWindow::moveKeyframe);
+    connect(_timelineView, &TimelineView::framePicked, this, &MainWindow::pickFrameContents);
     connect(_timelineView, &TimelineView::spanResizeRequested, this, &MainWindow::resizeSpan);
     connect(_timelineView, &TimelineView::framesMoveRequested, this, &MainWindow::moveFrames);
     connect(_timelineView, &TimelineView::framesContextMenuRequested, this, &MainWindow::showFramesMenu);
@@ -939,13 +952,25 @@ void MainWindow::editFrames(const char* name, const std::function<void(fla::Laye
         layers.push_back(const_cast<fla::Layer*>(layer));
     const int first = selection.first;
     const int last = selection.last;
+    // Frames Ctrl-clicked in are edited one at a time too.
+    std::vector<std::pair<fla::Layer*, int>> cells;
+    std::vector<fla::Layer*> touched = layers;
+    for (const auto& cell : selection.cells)
+    {
+        fla::Layer* layer = const_cast<fla::Layer*>(cell.first);
+        cells.push_back({layer, cell.second});
+        if (std::find(touched.begin(), touched.end(), layer) == touched.end())
+            touched.push_back(layer);
+    }
 
     // What is selected on the stage may be on a frame that goes.
     _selection.clear();
-    auto* command = new fla::EditFramesCommand(layers, name,
-        [layers, first, last, edit](std::vector<fla::Frame*>& removed) {
+    auto* command = new fla::EditFramesCommand(touched, name,
+        [layers, cells, first, last, edit](std::vector<fla::Frame*>& removed) {
             for (fla::Layer* layer : layers)
                 edit(*layer, first, last, removed);
+            for (const auto& cell : cells)
+                edit(*cell.first, cell.second, cell.second, removed);
         });
     command->redo();
     if (!command->changedAnything())
@@ -988,6 +1013,32 @@ void MainWindow::removeFrames()
 {
     editFrames("Remove Frames", [](fla::Layer& layer, int first, int last, std::vector<fla::Frame*>& removed) {
         fla::timeline::removeFrames(layer, first, last - first + 1, removed);
+    });
+}
+
+void MainWindow::clearFrames()
+{
+    editFrames("Clear Frames", [](fla::Layer& layer, int first, int last, std::vector<fla::Frame*>& removed) {
+        fla::timeline::clearFrames(layer, first, last, removed);
+    });
+}
+
+void MainWindow::pickFrameContents(const fla::Layer* layer, int frame)
+{
+    // After the playhead has moved there, which lets go of the selection.
+    QTimer::singleShot(0, this, [this, layer, frame]() {
+        if (!layer || !layer->isVisible() || layer->isLocked() || !_phoenixView)
+            return;
+        fla::Frame* span = fla::timeline::spanAt(*const_cast<fla::Layer*>(layer), frame);
+        if (!span)
+            return;
+        std::vector<fla::DOMElement*> picked;
+        for (fla::Element* element : span->elements)
+            if (element && element->visible && !element->isLocked)
+                picked.push_back(element);
+        if (!picked.empty())
+            _selection.select(picked);
+        _phoenixView->update();
     });
 }
 
@@ -1677,6 +1728,16 @@ void MainWindow::setupMenus()
     QAction* removeFramesAction = editTimelineMenu->addAction("&Remove Frames");
     removeFramesAction->setShortcut(QKeySequence(Qt::SHIFT | Qt::Key_F5));
     connect(removeFramesAction, &QAction::triggered, this, &MainWindow::removeFrames);
+    QAction* clearFramesAction = editTimelineMenu->addAction("Clear &Frames");
+    clearFramesAction->setShortcut(QKeySequence(Qt::ALT | Qt::Key_Backspace));
+    clearFramesAction->setStatusTip("Empty the selected frames, keeping what follows");
+    connect(clearFramesAction, &QAction::triggered, this, &MainWindow::clearFrames);
+    QAction* selectAllFramesAction = editTimelineMenu->addAction("Select &All Frames");
+    selectAllFramesAction->setShortcut(QKeySequence(Qt::CTRL | Qt::ALT | Qt::Key_A));
+    connect(selectAllFramesAction, &QAction::triggered, this, [this]() {
+        if (_timelineView)
+            _timelineView->selectAllFrames();
+    });
     QAction* clearKeyframeAction = editTimelineMenu->addAction("&Clear Keyframe");
     clearKeyframeAction->setShortcut(QKeySequence(Qt::SHIFT | Qt::Key_F6));
     connect(clearKeyframeAction, &QAction::triggered, this, &MainWindow::clearKeyframe);

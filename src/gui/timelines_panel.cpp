@@ -258,6 +258,7 @@ TimelinesPanel::TimelinesPanel(Player* player, QWidget *parent)
     connect(_player, &Player::currentFrameChanged, this, &TimelinesPanel::onPlayerFrameChanged);
     connect(_gridContainer, &TimelineGrid::layerPressed, this, &TimelinesPanel::layerPressed);
     connect(_gridContainer, &TimelineGrid::keyframeMoveRequested, this, &TimelinesPanel::keyframeMoveRequested);
+    connect(_gridContainer, &TimelineGrid::framePicked, this, &TimelinesPanel::framePicked);
     connect(_gridContainer, &TimelineGrid::framesMoveRequested, this, &TimelinesPanel::framesMoveRequested);
     connect(_gridContainer, &TimelineGrid::contextMenuRequested, this, &TimelinesPanel::contextMenuRequested);
     connect(_gridContainer, &TimelineGrid::spanResizeRequested, this, &TimelinesPanel::spanResizeRequested);
@@ -680,7 +681,52 @@ FrameSelection TimelineGrid::selection() const
     }
     selection.first = std::min(_anchorFrame, _focusFrame);
     selection.last = std::max(_anchorFrame, _focusFrame);
+    for (const auto& cell : _cells)
+    {
+        const fla::Layer* layer = cell.first < static_cast<int>(_rows.size()) ? _rows[cell.first].layer : nullptr;
+        if (layer && layer->layerType != fla::Layer::Type::Folder)
+            selection.cells.push_back({layer, cell.second});
+    }
     return selection;
+}
+
+void TimelineGrid::selectAll()
+{
+    if (_rows.empty())
+        return;
+    int end = 1;
+    for (const LayerRow& row : _rows)
+    {
+        if (!row.layer)
+            continue;
+        for (const fla::Frame* frame : row.layer->frames)
+            if (frame)
+                end = std::max(end, frame->index + frame->duration);
+    }
+    _hasSelection = true;
+    _cells.clear();
+    _anchorRow = 0;
+    _focusRow = static_cast<int>(_rows.size()) - 1;
+    _anchorFrame = 0;
+    _focusFrame = end - 1;
+    update();
+}
+
+void TimelineGrid::toggleCell(int row, int frame)
+{
+    const std::pair<int, int> cell(row, frame);
+    const auto found = std::find(_cells.begin(), _cells.end(), cell);
+    if (found != _cells.end())
+        _cells.erase(found);
+    else if (!_hasSelection)
+    {
+        _hasSelection = true;
+        _anchorRow = _focusRow = row;
+        _anchorFrame = _focusFrame = frame;
+    }
+    else
+        _cells.push_back(cell);
+    update();
 }
 
 void TimelineGrid::setOnionSkin(bool on, int before, int after)
@@ -694,6 +740,7 @@ void TimelineGrid::setOnionSkin(bool on, int before, int after)
 void TimelineGrid::clearSelection()
 {
     _hasSelection = false;
+    _cells.clear();
     update();
 }
 
@@ -777,6 +824,9 @@ void TimelineGrid::mousePressEvent(QMouseEvent* event)
                 return;
             }
         }
+        // Anywhere else Ctrl adds the frame to the selection, or takes it out.
+        toggleCell(row, frame);
+        return;
     }
 
     // Pressing a keyframe that is already selected on its own picks it up
@@ -819,10 +869,12 @@ void TimelineGrid::mousePressEvent(QMouseEvent* event)
     else
     {
         _hasSelection = true;
+        _cells.clear();
         _anchorRow = _focusRow = row;
         _anchorFrame = _focusFrame = frame;
     }
     _selecting = event->button() == Qt::LeftButton;
+    _picked = event->button() == Qt::LeftButton && !(event->modifiers() & Qt::ShiftModifier);
     if (_player)
         _player->setCurrentFrame(frame);
     update();
@@ -917,10 +969,23 @@ void TimelineGrid::mouseReleaseEvent(QMouseEvent* event)
         if (_resizingSpan)
         {
             _resizingSpan = false;
-            if (_resizeRow < static_cast<int>(_rows.size()))
-                emit spanResizeRequested(_rows[_resizeRow].layer, _resizeKeyframe, _resizeDuration);
+            const fla::Layer* layer = _resizeRow < static_cast<int>(_rows.size()) ? _rows[_resizeRow].layer : nullptr;
+            const fla::Frame* span = nullptr;
+            for (const fla::Frame* candidate : layer ? layer->frames : std::vector<fla::Frame*>())
+                if (candidate && candidate->index == _resizeKeyframe)
+                    span = candidate;
+            // A Ctrl-click that stretched nothing adds the frame instead.
+            if (span && span->duration == _resizeDuration)
+                toggleCell(_resizeRow, _resizeKeyframe + _resizeDuration - 1);
+            else if (layer)
+                emit spanResizeRequested(layer, _resizeKeyframe, _resizeDuration);
             update();
         }
+        // A click on one frame picks what is on it.
+        if (_selecting && _picked && _hasSelection && _anchorRow == _focusRow && _anchorFrame == _focusFrame &&
+            _anchorRow < static_cast<int>(_rows.size()) && _rows[_anchorRow].layer)
+            emit framePicked(_rows[_anchorRow].layer, _anchorFrame);
+        _picked = false;
         _selecting = false;
         if (_movingBlock)
         {
@@ -930,9 +995,12 @@ void TimelineGrid::mouseReleaseEvent(QMouseEvent* event)
                 // Only a click: the cell pressed becomes the selection.
                 _anchorRow = _focusRow = _blockRow;
                 _anchorFrame = _focusFrame = _blockFrame;
+                _cells.clear();
                 if (_player)
                     _player->setCurrentFrame(_blockFrame);
                 update();
+                if (_blockRow < static_cast<int>(_rows.size()) && _rows[_blockRow].layer)
+                    emit framePicked(_rows[_blockRow].layer, _blockFrame);
             }
             else
             {
@@ -944,9 +1012,16 @@ void TimelineGrid::mouseReleaseEvent(QMouseEvent* event)
             _movingKeyframe = false;
             if (_moveTo != _moveFrom && _moveRow < static_cast<int>(_rows.size()))
             {
-                // The selection follows the keyframe to where it lands.
+                // The selection follows the keyframe to where it lands; with
+                // Alt the keyframe is copied there, as in Animate.
                 _anchorFrame = _focusFrame = _moveTo;
-                emit keyframeMoveRequested(_rows[_moveRow].layer, _moveFrom, _moveTo);
+                if (event->modifiers() & Qt::AltModifier)
+                {
+                    const fla::Layer* layer = _rows[_moveRow].layer;
+                    emit framesMoveRequested({layer}, {layer}, _moveFrom, _moveFrom, _moveTo, true);
+                }
+                else
+                    emit keyframeMoveRequested(_rows[_moveRow].layer, _moveFrom, _moveTo);
             }
             update();
         }
@@ -1207,6 +1282,18 @@ void TimelineGrid::paintEvent(QPaintEvent* event)
         painter.setPen(QPen(QColor(41, 128, 238), 1.0));
         painter.setBrush(Qt::NoBrush);
         painter.drawRect(block.adjusted(0, 0, -1, -1));
+    }
+
+    // Frames Ctrl-clicked in, one by one.
+    for (const auto& cell : _cells)
+    {
+        if (cell.first >= static_cast<int>(_rows.size()))
+            continue;
+        const QRect box(cell.second * cellStride, headerHeight + cell.first * layerRowHeight, frameWidth, frameHeight);
+        painter.fillRect(box, QColor(41, 128, 238, 110));
+        painter.setPen(QPen(QColor(41, 128, 238), 1.0));
+        painter.setBrush(Qt::NoBrush);
+        painter.drawRect(box.adjusted(0, 0, -1, -1));
     }
 
     // A block being dragged shows where it would land.

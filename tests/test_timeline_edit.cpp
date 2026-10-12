@@ -508,3 +508,37 @@ TEST(scale_spans_keeps_their_length_in_seconds)
     for (const fla::Frame* frame : l->frames)
         CHECK(frame->duration >= 1);
 }
+
+TEST(clear_frames_leaves_blank_frames_and_keeps_what_follows)
+{
+    // One 10-frame keyframe holding a shape; frames 3 to 5 cleared.
+    std::unique_ptr<fla::Layer> layer(new fla::Layer(nullptr));
+    fla::Layer* l = layer.get();
+    fla::Frame* frame = new fla::Frame(l);
+    frame->duration = 10;
+    frame->elements.push_back(new fla::Shape(frame));
+    l->frames = {frame};
+    fla::EditFramesCommand clear({l}, "Clear Frames", [l](std::vector<fla::Frame*>& removed) {
+        fla::timeline::clearFrames(*l, 3, 5, removed);
+    });
+    clear.redo();
+    CHECK(l->frames.size() == 3);
+    CHECK(l->frames[0]->index == 0 && l->frames[0]->duration == 3 && l->frames[0]->elements.size() == 1);
+    CHECK(l->frames[1]->index == 3 && l->frames[1]->duration == 3 && l->frames[1]->elements.empty());
+    CHECK(l->frames[2]->index == 6 && l->frames[2]->duration == 4 && l->frames[2]->elements.size() == 1);
+    clear.undo();
+    CHECK(l->frames.size() == 1 && l->frames[0]->duration == 10);
+
+
+    // Clearing from a keyframe replaces it with a blank one.
+    std::unique_ptr<fla::Layer> other(new fla::Layer(nullptr));
+    fla::Frame* keyed = new fla::Frame(other.get());
+    keyed->duration = 4;
+    keyed->elements.push_back(new fla::Shape(keyed));
+    other->frames = {keyed};
+    std::vector<fla::Frame*> removed;
+    fla::timeline::clearFrames(*other, 0, 3, removed);
+    CHECK(other->frames.size() == 1 && other->frames[0]->elements.empty() && other->frames[0]->duration == 4);
+    CHECK(removed.size() == 1 && removed[0] == keyed);
+    delete keyed;
+}

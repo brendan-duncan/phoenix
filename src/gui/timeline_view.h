@@ -33,6 +33,12 @@ public:
 
     /// The frames selected in the grid, or an empty selection.
     FrameSelection frameSelection() const;
+
+    /// Select All Frames.
+    void selectAllFrames();
+
+    /// Makes \a layer the current one, as selecting something on it does.
+    void setCurrentLayer(const fla::Layer* layer);
     void clearFrameSelection();
 
     /// Redraws the grid after frames were edited.
@@ -60,6 +66,7 @@ signals:
     void layerRenamed(const fla::Timeline* timeline, int layerIndex, const QString& name);
     void layerEditRequested(fla::Timeline* timeline, const fla::LayerSnapshot& after, const QString& name);
     void keyframeMoveRequested(const fla::Layer* layer, int from, int to);
+    void framePicked(const fla::Layer* layer, int frame);
     void framesMoveRequested(const std::vector<const fla::Layer*>& sources, const std::vector<const fla::Layer*>& targets, int first, int last, int to, bool copy);
     void framesContextMenuRequested(const QPoint& globalPos);
     void spanResizeRequested(const fla::Layer* layer, int keyframe, int duration);

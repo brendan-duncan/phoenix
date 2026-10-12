@@ -111,6 +111,10 @@ void fitMotionSpans(Layer& layer);
 /// moves to its index times \a factor, rounded, each span at least a frame.
 void scaleSpans(Layer& layer, double factor);
 
+/// Clear Frames: frames \a first to \a last become blank, a blank keyframe
+/// at \a first, and what came after them keeps its own keyframe.
+void clearFrames(Layer& layer, int first, int last, std::vector<Frame*>& removed);
+
 /// Create Motion Tween on the span at \a index, as Animate makes one: the
 /// span's one symbol instance or text block moves by an object motion tween
 /// over the span (a span of one frame at the layer's end first grows to a
