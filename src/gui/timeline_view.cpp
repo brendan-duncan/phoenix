@@ -6,6 +6,7 @@
 #include "player.h"
 
 #include <QScrollBar>
+#include <QSettings>
 #include <QVBoxLayout>
 
 #include <algorithm>
@@ -24,6 +25,9 @@ TimelineView::TimelineView(Player* player, QWidget *parent)
     _layersPanel->setMinimumWidth(150);
 
     _timelinesPanel = new TimelinesPanel(_player, this);
+    // The transport row would otherwise hold the frames as wide as itself
+    // and squeeze the layers list in a narrow dock.
+    _timelinesPanel->setMinimumWidth(200);
 
     _splitter->addWidget(_layersPanel);
     _splitter->addWidget(_timelinesPanel);
@@ -34,6 +38,14 @@ TimelineView::TimelineView(Player* player, QWidget *parent)
     _splitter->setStretchFactor(1, 1);
 
     mainLayout->addWidget(_splitter);
+
+    // The layers list keeps the width it was given as the timeline is
+    // resized, and from run to run; the frames take the rest.
+    _layersWidth = std::max(QSettings().value("timeline/layersWidth", 250).toInt(), 150);
+    connect(_splitter, &QSplitter::splitterMoved, this, [this]() {
+        _layersWidth = layersWidth();
+        QSettings().setValue("timeline/layersWidth", _layersWidth);
+    });
 
     connect(_layersPanel, &LayersPanel::layerVisibilityChanged,
             this, &TimelineView::layerVisibilityChanged);
@@ -168,4 +180,23 @@ void TimelineView::setDocument(const fla::FLADocument* document)
     // which it must size against the new document, not the old.
     _timelinesPanel->setDocument(document);
     _layersPanel->setDocument(document);
+}
+
+int TimelineView::layersWidth() const
+{
+    return _splitter->sizes().value(0);
+}
+
+void TimelineView::setLayersWidth(int width)
+{
+    _layersWidth = std::max(width, 150);
+    const int total = _splitter->width();
+    if (total > _layersWidth)
+        _splitter->setSizes({_layersWidth, total - _layersWidth});
+}
+
+void TimelineView::resizeEvent(QResizeEvent* event)
+{
+    QWidget::resizeEvent(event);
+    setLayersWidth(_layersWidth);
 }

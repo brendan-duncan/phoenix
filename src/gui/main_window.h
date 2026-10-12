@@ -366,12 +366,20 @@ private:
     /// The outliner (the document tree at the left) folds away: by its
     /// arrow at the left of the breadcrumb row, View > Outliner, or by
     /// dragging the splitter to the edge. Its width is kept to unfold to.
-    QToolButton* _outlinerButton = nullptr;
-    QAction* _outlinerAction = nullptr;
-    bool _outlinerVisible = true;
-    int _outlinerWidth = 260;
-    void setOutlinerVisible(bool visible);
-    void syncOutlinerControls();
+    /// The docks that were fixed parts of the window: the outliner, the
+    /// timeline and the tools.
+    QDockWidget* _outlinerDock = nullptr;
+    QDockWidget* _timelineDock = nullptr;
+    QDockWidget* _toolsDock = nullptr;
+    class Toolbox* _toolbox = nullptr;
+    /// Edit Toolbar: the tools' slots rearranged.
+    void editToolbar();
+    /// The panels that open from the Window menu, made at the start.
+    void createPanels();
+    void setupWindowMenu();
+    /// F4: hides every panel, or brings back the ones it hid.
+    void togglePanels();
+    QList<QDockWidget*> _hiddenByF4;
 
     void rebuildBreadcrumb();
 
@@ -580,8 +588,6 @@ private:
     QString _documentPath;
     Player* _player;
     Updater* _updater;
-    QSplitter* _mainSplitter;
-    QSplitter* _viewSplitter;
     DocumentView* _documentView;
     PhoenixView* _phoenixView;
     TimelineView* _timelineView;

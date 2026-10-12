@@ -72,6 +72,8 @@ set(HEADERS
     src/gui/properties_panel.h
     src/gui/library_panel.h
     src/gui/find_replace_dialog.h
+    src/gui/toolbox.h
+    src/gui/toolbar_editor.h
     src/gui/audio_engine.h
     src/gui/frame_picker_panel.h
     src/gui/swap_symbol_dialog.h
@@ -240,6 +242,8 @@ set(SOURCES
     src/gui/properties_panel.cpp
     src/gui/library_panel.cpp
     src/gui/find_replace_dialog.cpp
+    src/gui/toolbox.cpp
+    src/gui/toolbar_editor.cpp
     src/gui/audio_engine.cpp
     src/gui/frame_picker_panel.cpp
     src/gui/swap_symbol_dialog.cpp

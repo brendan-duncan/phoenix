@@ -25,6 +25,8 @@
 #include "layer_depth_panel.h"
 #include "camera_tool.h"
 #include "find_replace_dialog.h"
+#include "toolbar_editor.h"
+#include "toolbox.h"
 #include "swatches_panel.h"
 #include "../edit/swatches.h"
 #include "swap_symbol_dialog.h"
@@ -84,6 +86,8 @@
 #include <QUrl>
 #include <QFileDialog>
 #include <QMessageBox>
+#include <QFrame>
+#include <QJsonDocument>
 #include <QListWidget>
 #include <QFileInfo>
 #include <QFile>
@@ -133,6 +137,10 @@
 #include "tool_icons.h"
 
 namespace {
+
+/// The version of the dock layout kept between runs and in workspaces: a
+/// layout from before the timeline, tools and outliner docked is not used.
+constexpr int kLayoutVersion = 2;
 fla::Frame* frameOfElement(const fla::Element* element);
 }
 
@@ -162,6 +170,11 @@ MainWindow::MainWindow(const QString& initialFile, QWidget* parent, bool startup
     setupMenus();
     setupToolBar();
     setupPropertiesPanel();
+    createPanels();
+    setupWindowMenu();
+    // Every dock exists now: the layout as made is the default, and the
+    // one kept from last time comes back.
+    restoreLayout();
 
     // Keep the Edit menu and the title bar in step with the undo history.
     _editContext.commandStack().setChangedCallback([this]() { updateEditState(); });
@@ -508,6 +521,15 @@ void MainWindow::adoptDocument(fla::FLADocument* document, const QString& filePa
     if (_swatchesPanel)
         _swatchesPanel->setDocument(_flaDocument);
 
+    if (_findReplace)
+        _findReplace->refresh();
+
+    if (_flaDocument)
+        _player->setCurrentFrame(0);
+}
+
+void MainWindow::createPanels()
+{
     // Align, Transform and Info, closed until asked for (Ctrl+K, Ctrl+T,
     // Ctrl+I), in a group of their own as in Animate.
     ArrangeLinks arrange;
@@ -577,6 +599,7 @@ void MainWindow::adoptDocument(fla::FLADocument* document, const QString& filePa
         _motionEditor->setParent(_motionEditorDock);
         _motionEditorDock->setWidget(_motionEditor);
         addDockWidget(Qt::BottomDockWidgetArea, _motionEditorDock);
+        tabifyDockWidget(_timelineDock, _motionEditorDock);
         _motionEditorDock->hide();
         connect(_player, &Player::currentFrameChanged, _motionEditor, [this](int) { _motionEditor->refresh(); });
     }
@@ -606,6 +629,7 @@ void MainWindow::adoptDocument(fla::FLADocument* document, const QString& filePa
         _layerDepth->setParent(_layerDepthDock);
         _layerDepthDock->setWidget(_layerDepth);
         addDockWidget(Qt::BottomDockWidgetArea, _layerDepthDock);
+        tabifyDockWidget(_timelineDock, _layerDepthDock);
         _layerDepthDock->hide();
     }
 
@@ -670,12 +694,154 @@ void MainWindow::adoptDocument(fla::FLADocument* document, const QString& filePa
         connect(_player, &Player::currentFrameChanged, _xsheet, [this](int) { _xsheet->refresh(); });
         connect(_phoenixView, &PhoenixView::scopeChanged, _xsheet, [this]() { _xsheet->refresh(); });
     }
-    restoreLayout();
-    if (_findReplace)
-        _findReplace->refresh();
+    _timelineDock->raise();
+}
 
-    if (_flaDocument)
-        _player->setCurrentFrame(0);
+void MainWindow::setupWindowMenu()
+{
+    // Animate's Window menu: every panel, ticked when open. Choosing an
+    // open panel that is in view closes it; one that is closed, or behind
+    // another tab, comes to the front.
+    QMenu* windowMenu = new QMenu("&Window", this);
+    QAction* help = nullptr;
+    for (QAction* action : menuBar()->actions())
+        if (action->text() == "&Help")
+            help = action;
+    menuBar()->insertMenu(help, windowMenu);
+
+    QMenu* workspaceMenu = windowMenu->addMenu("&Workspaces");
+    connect(workspaceMenu, &QMenu::aboutToShow, this, [this, workspaceMenu]() { fillWorkspaceMenu(workspaceMenu); });
+    windowMenu->addSeparator();
+
+    struct Panel
+    {
+        const char* text;
+        QDockWidget* dock;
+        QKeySequence key;
+        const char* tip;
+    };
+    QDockWidget* properties = findChild<QDockWidget*>("propertiesDock");
+    QDockWidget* library = findChild<QDockWidget*>("libraryDock");
+    const std::vector<std::vector<Panel>> groups = {
+        {
+            {"&Timeline", _timelineDock, QKeySequence(Qt::CTRL | Qt::ALT | Qt::Key_T), "Layers and frames"},
+            {"T&ools", _toolsDock, QKeySequence(Qt::CTRL | Qt::Key_F2), "The drawing and selection tools"},
+            {"&Properties", properties, QKeySequence(Qt::CTRL | Qt::Key_F3), "What is selected, the tool, the frame or the document"},
+            {"&Library", library, QKeySequence(Qt::CTRL | Qt::Key_L), "The document's symbols, bitmaps and sounds"},
+            {"Ou&tliner", _outlinerDock, QKeySequence(Qt::CTRL | Qt::ALT | Qt::Key_O), "The document as a tree"},
+        },
+        {
+            {"&Color", _colorDock, QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_F9), "Solid colors, gradients and bitmap fills for new art"},
+            {"S&watches", _swatchesDock, QKeySequence(Qt::CTRL | Qt::Key_F9), "The document's saved colors"},
+            {"&Align", _alignDock, QKeySequence(Qt::CTRL | Qt::Key_K), "Line objects up and space them out"},
+            {"Tra&nsform", _transformDock, QKeySequence(Qt::CTRL | Qt::Key_T), "Scale, turn and skew by numbers"},
+            {"&Info", _infoDock, QKeySequence(Qt::CTRL | Qt::Key_I), "The selection's size and place, and the color under the pointer"},
+        },
+        {
+            {"&Frame Picker", _framePickerDock, QKeySequence(), "Pick the frame a graphic instance shows from pictures of its frames"},
+            {"&Motion Editor", _motionEditorDock, QKeySequence(), "The property curves of a motion tween, with their keyframes and eases"},
+            {"Layer &Depth", _layerDepthDock, QKeySequence(), "How far each layer sits from the multiplane camera"},
+            {"&X-Sheet", _xsheetDock, QKeySequence(), "The exposures of each layer, frame by frame, typed in by drawing number"},
+            {"&History", _historyDock, QKeySequence(Qt::CTRL | Qt::Key_F10), "Every step that can be undone; click one to go back or forward to it"},
+        },
+    };
+    std::vector<std::pair<QAction*, QDockWidget*>> entries;
+    for (const std::vector<Panel>& group : groups)
+    {
+        for (const Panel& panel : group)
+        {
+            if (!panel.dock)
+                continue;
+            QAction* action = windowMenu->addAction(panel.text);
+            action->setCheckable(true);
+            action->setShortcut(panel.key);
+            action->setStatusTip(panel.tip);
+            // The keys work with the menu closed too.
+            addAction(action);
+            QDockWidget* dock = panel.dock;
+            connect(action, &QAction::triggered, this, [dock, action]() {
+                const bool open = dock->toggleViewAction()->isChecked();
+                if (open && !dock->visibleRegion().isEmpty())
+                {
+                    dock->close();
+                }
+                else
+                {
+                    dock->show();
+                    dock->raise();
+                    if (dock->isFloating())
+                        dock->activateWindow();
+                }
+                action->setChecked(dock->toggleViewAction()->isChecked());
+            });
+            entries.emplace_back(action, dock);
+        }
+        windowMenu->addSeparator();
+    }
+    QAction* motionPresetsAction = windowMenu->addAction("Motion &Presets…");
+    motionPresetsAction->setStatusTip("Saved motions to put on an object, Animate's among them");
+    connect(motionPresetsAction, &QAction::triggered, this, &MainWindow::showMotionPresets);
+    windowMenu->addSeparator();
+
+    QAction* hidePanels = windowMenu->addAction("&Hide Panels");
+    hidePanels->setShortcut(QKeySequence(Qt::Key_F4));
+    hidePanels->setStatusTip("Hide every panel to see the stage alone; again brings them back");
+    addAction(hidePanels);
+    connect(hidePanels, &QAction::triggered, this, &MainWindow::togglePanels);
+    QAction* editTools = windowMenu->addAction("&Edit Toolbar…");
+    editTools->setStatusTip("Arrange, group and hide the tools in the Tools panel");
+    connect(editTools, &QAction::triggered, this, &MainWindow::editToolbar);
+
+    connect(windowMenu, &QMenu::aboutToShow, this, [entries]() {
+        for (const auto& [action, dock] : entries)
+            action->setChecked(dock->toggleViewAction()->isChecked());
+    });
+
+    // What a panel shows is brought up to date when it comes into view.
+    connect(_historyDock, &QDockWidget::visibilityChanged, this, [this](bool shown) {
+        if (shown)
+            refreshHistory();
+    });
+    connect(_layerDepthDock, &QDockWidget::visibilityChanged, this, [this](bool shown) {
+        if (shown)
+            _layerDepth->refresh();
+    });
+    connect(_xsheetDock, &QDockWidget::visibilityChanged, this, [this](bool shown) {
+        if (shown)
+            _xsheet->refresh();
+    });
+    connect(_motionEditorDock, &QDockWidget::visibilityChanged, this, [this](bool shown) {
+        if (shown)
+            _motionEditor->refresh();
+    });
+}
+
+void MainWindow::editToolbar()
+{
+    ToolbarEditor editor(_toolbox, this);
+    if (editor.exec() == QDialog::Accepted)
+        _toolbox->setLayout(editor.layout());
+}
+
+void MainWindow::togglePanels()
+{
+    // Again after hiding brings back what was hidden.
+    if (!_hiddenByF4.isEmpty())
+    {
+        for (QDockWidget* dock : _hiddenByF4)
+            if (dock)
+                dock->show();
+        _hiddenByF4.clear();
+        return;
+    }
+    for (QDockWidget* dock : findChildren<QDockWidget*>())
+    {
+        if (dock->toggleViewAction()->isChecked())
+        {
+            _hiddenByF4 << dock;
+            dock->hide();
+        }
+    }
 }
 
 void MainWindow::newFile()
@@ -931,16 +1097,26 @@ void MainWindow::setupUI()
     centralWidget->setLayout(mainLayout);
     setCentralWidget(centralWidget);
 
-    // Create the main vertical splitter
-    _mainSplitter = new QSplitter(Qt::Vertical, this);
-    mainLayout->addWidget(_mainSplitter);
+    // As in Animate, every panel docks: the panels down the right take the
+    // full height, the tools down the left, and the timeline sits under the
+    // stage. A group of tabs drags as one by its title; a tab drags out on
+    // its own.
+    setDockOptions(QMainWindow::AnimatedDocks | QMainWindow::AllowNestedDocks | QMainWindow::AllowTabbedDocks |
+        QMainWindow::GroupedDragging);
+    setCorner(Qt::TopLeftCorner, Qt::LeftDockWidgetArea);
+    setCorner(Qt::BottomLeftCorner, Qt::LeftDockWidgetArea);
+    setCorner(Qt::TopRightCorner, Qt::RightDockWidgetArea);
+    setCorner(Qt::BottomRightCorner, Qt::RightDockWidgetArea);
+    setTabPosition(Qt::BottomDockWidgetArea, QTabWidget::North);
+    setTabPosition(Qt::LeftDockWidgetArea, QTabWidget::North);
 
-    // Create the horizontal splitter for document and phoenix views
-    _viewSplitter = new QSplitter(Qt::Horizontal, this);
-
-    // Create the document view (left panel)
+    // The outliner: the document as a tree, closed until asked for.
     _documentView = new DocumentView(this);
     _documentView->setMinimumWidth(150);
+    _outlinerDock = new QDockWidget("Outliner", this);
+    _outlinerDock->setObjectName("outlinerDock");
+    _outlinerDock->setAllowedAreas(Qt::AllDockWidgetAreas);
+    _outlinerDock->setWidget(_documentView);
 
     // Create the phoenix view (right panel)
     _phoenixView = new PhoenixView(_player, this);
@@ -953,21 +1129,12 @@ void MainWindow::setupUI()
     breadcrumbLayout->setSpacing(2);
     breadcrumbLayout->addStretch();
 
-    // The outliner's fold arrow sits at the left of the breadcrumb row; the
-    // breadcrumb itself is rebuilt as scopes change, so it is kept apart.
-    _outlinerButton = new QToolButton(this);
-    _outlinerButton->setAutoRaise(true);
-    _outlinerButton->setArrowType(Qt::LeftArrow);
-    _outlinerButton->setFixedSize(18, 18);
-    _outlinerButton->setToolTip("Hide the outliner");
-    connect(_outlinerButton, &QToolButton::clicked, this, [this]() { setOutlinerVisible(!_outlinerVisible); });
-
+    // The breadcrumb is rebuilt as scopes change, so it has a row of its own.
     QWidget* breadcrumbRow = new QWidget(this);
     breadcrumbRow->setAutoFillBackground(true);
     QHBoxLayout* breadcrumbRowLayout = new QHBoxLayout(breadcrumbRow);
     breadcrumbRowLayout->setContentsMargins(2, 0, 0, 0);
     breadcrumbRowLayout->setSpacing(0);
-    breadcrumbRowLayout->addWidget(_outlinerButton);
     breadcrumbRowLayout->addWidget(_breadcrumb, 1);
 
     QWidget* stageColumn = new QWidget(this);
@@ -977,29 +1144,17 @@ void MainWindow::setupUI()
     stageLayout->addWidget(breadcrumbRow);
     stageLayout->addWidget(_phoenixView, 1);
 
-    // Add widgets to view splitter
-    _viewSplitter->addWidget(_documentView);
-    _viewSplitter->addWidget(stageColumn);
+    mainLayout->addWidget(stageColumn);
 
-    // Set view splitter properties. The outliner folds away; the stage
-    // never does.
-    _viewSplitter->setCollapsible(0, true);
-    _viewSplitter->setCollapsible(1, false);
-    _viewSplitter->setStretchFactor(0, 0);
-    _viewSplitter->setStretchFactor(1, 1);
-    connect(_viewSplitter, &QSplitter::splitterMoved, this, [this]() {
-        const int width = _viewSplitter->sizes().value(0);
-        _outlinerVisible = width > 0;
-        if (width > 0)
-            _outlinerWidth = width;
-        syncOutlinerControls();
-    });
-    // Once the window has its size, show the outliner as it was left.
-    QTimer::singleShot(0, this, [this]() { setOutlinerVisible(_outlinerVisible); });
-
-    // Create the timeline view
+    // The timeline, under the stage.
     _timelineView = new TimelineView(_player, this);
     _timelineView->setMinimumHeight(150);
+    _timelineDock = new QDockWidget("Timeline", this);
+    _timelineDock->setObjectName("timelineDock");
+    _timelineDock->setAllowedAreas(Qt::AllDockWidgetAreas);
+    _timelineDock->setWidget(_timelineView);
+    addDockWidget(Qt::BottomDockWidgetArea, _timelineDock);
+    resizeDocks({_timelineDock}, {300}, Qt::Vertical);
 
     // Sound follows the playhead and the transport.
     _timelineAudio = new TimelineAudio(_player, this);
@@ -1009,15 +1164,8 @@ void MainWindow::setupUI()
         return _timelineAudio->soundOf(frame, &in);
     });
 
-    // Add to main vertical splitter
-    _mainSplitter->addWidget(_viewSplitter);
-    _mainSplitter->addWidget(_timelineView);
-
-    // Set main splitter properties
-    _mainSplitter->setCollapsible(0, false);
-    _mainSplitter->setCollapsible(1, true);
-    _mainSplitter->setStretchFactor(0, 1);
-    _mainSplitter->setStretchFactor(1, 0);
+    addDockWidget(Qt::LeftDockWidgetArea, _outlinerDock);
+    _outlinerDock->hide();
 
     connect(_documentView, &DocumentView::visibilityChanged,
             this, &MainWindow::onVisibilityChanged);
@@ -2366,77 +2514,6 @@ void MainWindow::setupMenus()
 
     QMenu* viewMenu = menuBar->addMenu("&View");
 
-    QAction* framePickerAction = new QAction("&Frame Picker", this);
-    framePickerAction->setStatusTip("Pick the frame a graphic instance shows from pictures of its frames");
-    connect(framePickerAction, &QAction::triggered, this, [this]() {
-        if (!_framePickerDock)
-            return;
-        _framePickerDock->show();
-        _framePickerDock->raise();
-        updateFramePicker();
-    });
-    viewMenu->addAction(framePickerAction);
-    QAction* colorAction = new QAction("&Color", this);
-    colorAction->setShortcut(QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_F9));
-    colorAction->setStatusTip("Solid colors, gradients and bitmap fills for new art");
-    connect(colorAction, &QAction::triggered, this, [this]() {
-        if (_colorDock)
-        {
-            _colorDock->show();
-            _colorDock->raise();
-        }
-    });
-    viewMenu->addAction(colorAction);
-    QAction* swatchesAction = new QAction("S&watches", this);
-    swatchesAction->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_F9));
-    swatchesAction->setStatusTip("The document's saved colors");
-    connect(swatchesAction, &QAction::triggered, this, [this]() {
-        if (_swatchesDock)
-        {
-            _swatchesDock->show();
-            _swatchesDock->raise();
-        }
-    });
-    viewMenu->addAction(swatchesAction);
-    const auto showDock = [this](QDockWidget* const* dock) {
-        return [this, dock]() {
-            if (*dock)
-            {
-                (*dock)->show();
-                (*dock)->raise();
-            }
-        };
-    };
-    QAction* alignAction = viewMenu->addAction("&Align");
-    alignAction->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_K));
-    connect(alignAction, &QAction::triggered, this, showDock(&_alignDock));
-    QAction* transformAction = viewMenu->addAction("&Transform");
-    transformAction->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_T));
-    connect(transformAction, &QAction::triggered, this, showDock(&_transformDock));
-    QAction* infoAction = viewMenu->addAction("&Info");
-    infoAction->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_I));
-    connect(infoAction, &QAction::triggered, this, showDock(&_infoDock));
-    QAction* historyAction = viewMenu->addAction("&History");
-    historyAction->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_F10));
-    historyAction->setStatusTip("Every step that can be undone; click one to go back or forward to it");
-    connect(historyAction, &QAction::triggered, this, [this]() {
-        if (!_historyDock)
-            return;
-        _historyDock->show();
-        _historyDock->raise();
-        refreshHistory();
-    });
-    QMenu* workspaceMenu = viewMenu->addMenu("&Workspace");
-    connect(workspaceMenu, &QMenu::aboutToShow, this, [this, workspaceMenu]() { fillWorkspaceMenu(workspaceMenu); });
-    QAction* layerDepthAction = viewMenu->addAction("&Layer Depth");
-    layerDepthAction->setStatusTip("How far each layer sits from the multiplane camera");
-    connect(layerDepthAction, &QAction::triggered, this, [this]() {
-        if (!_layerDepthDock)
-            return;
-        _layerDepthDock->show();
-        _layerDepthDock->raise();
-        _layerDepth->refresh();
-    });
     QAction* cameraViewAction = viewMenu->addAction("&Camera View");
     cameraViewAction->setCheckable(true);
     cameraViewAction->setChecked(true);
@@ -2444,27 +2521,6 @@ void MainWindow::setupMenus()
     connect(cameraViewAction, &QAction::toggled, this, [this](bool on) {
         if (_phoenixView)
             _phoenixView->setCameraView(on);
-    });
-    QAction* xsheetAction = viewMenu->addAction("&X-Sheet");
-    xsheetAction->setStatusTip("The exposures of each layer, frame by frame, typed in by drawing number");
-    connect(xsheetAction, &QAction::triggered, this, [this]() {
-        if (!_xsheetDock)
-            return;
-        _xsheetDock->show();
-        _xsheetDock->raise();
-        _xsheet->refresh();
-    });
-    QAction* motionPresetsAction = viewMenu->addAction("Motion &Presets…");
-    motionPresetsAction->setStatusTip("Saved motions to put on an object, Animate's among them");
-    connect(motionPresetsAction, &QAction::triggered, this, &MainWindow::showMotionPresets);
-    QAction* motionEditorAction = viewMenu->addAction("&Motion Editor");
-    motionEditorAction->setStatusTip("The property curves of a motion tween, with their keyframes and eases");
-    connect(motionEditorAction, &QAction::triggered, this, [this]() {
-        if (!_motionEditorDock)
-            return;
-        _motionEditorDock->show();
-        _motionEditorDock->raise();
-        _motionEditor->refresh();
     });
     viewMenu->addSeparator();
 
@@ -2510,17 +2566,6 @@ void MainWindow::setupMenus()
             goToScene(_flaDocument->document->currentSceneIndex() + 1);
     });
     addAction(nextScene);
-
-    _outlinerAction = new QAction("Ou&tliner", this);
-    _outlinerAction->setCheckable(true);
-    _outlinerAction->setChecked(_outlinerVisible);
-    _outlinerAction->setShortcut(QKeySequence(Qt::CTRL | Qt::ALT | Qt::Key_O));
-    _outlinerAction->setStatusTip("Show or hide the document outliner at the left of the stage");
-    connect(_outlinerAction, &QAction::toggled, this, [this](bool on) {
-        if (on != _outlinerVisible)
-            setOutlinerVisible(on);
-    });
-    viewMenu->addAction(_outlinerAction);
 
     _onionSkinAction = new QAction("&Onion Skin", this);
     _onionSkinAction->setCheckable(true);
@@ -3394,10 +3439,10 @@ void MainWindow::restoreLayout()
     if (_layoutRestored)
         return;
     _layoutRestored = true;
-    _defaultLayout = saveState();
+    _defaultLayout = saveState(kLayoutVersion);
     const QByteArray kept = QSettings().value("window/state").toByteArray();
     if (!kept.isEmpty())
-        restoreState(kept);
+        restoreState(kept, kLayoutVersion);
 }
 
 void MainWindow::fillWorkspaceMenu(QMenu* menu)
@@ -3414,7 +3459,7 @@ void MainWindow::fillWorkspaceMenu(QMenu* menu)
         menu->addAction(name, this, [this, key]() {
             const QByteArray state = QSettings().value("workspaces/" + key).toByteArray();
             if (!state.isEmpty())
-                restoreState(state);
+                restoreState(state, kLayoutVersion);
         });
     }
     if (!names.isEmpty())
@@ -3425,7 +3470,7 @@ void MainWindow::fillWorkspaceMenu(QMenu* menu)
             QString(), &ok).trimmed();
         if (!ok || name.isEmpty())
             return;
-        QSettings().setValue("workspaces/" + QString::fromUtf8(QUrl::toPercentEncoding(name)), saveState());
+        QSettings().setValue("workspaces/" + QString::fromUtf8(QUrl::toPercentEncoding(name)), saveState(kLayoutVersion));
         statusBar()->showMessage(QString("Saved the workspace %1.").arg(name), 3000);
     });
     if (!names.isEmpty())
@@ -3437,7 +3482,7 @@ void MainWindow::fillWorkspaceMenu(QMenu* menu)
     }
     menu->addAction("Reset Workspace", this, [this]() {
         if (!_defaultLayout.isEmpty())
-            restoreState(_defaultLayout);
+            restoreState(_defaultLayout, kLayoutVersion);
     });
 }
 
@@ -3561,15 +3606,18 @@ bool MainWindow::confirmDiscardChanges()
 
 void MainWindow::setupToolBar()
 {
-    // Animate's toolbox: one column down the left of the stage, the tools in
-    // groups, a slot with hidden siblings opening them on a long press.
-    QToolBar* toolBar = new QToolBar("Tools", this);
-    toolBar->setObjectName("toolsToolBar");
-    toolBar->setMovable(false);
-    toolBar->setOrientation(Qt::Vertical);
-    toolBar->setToolButtonStyle(Qt::ToolButtonIconOnly);
-    toolBar->setIconSize(QSize(22, 22));
-    addToolBar(Qt::LeftToolBarArea, toolBar);
+    // Animate's Tools panel: a dock down the left of the stage, the tools
+    // in slots, a slot with hidden siblings opening them on a long press.
+    // It docks to either side or floats, in one column or two, and its
+    // slots can be rearranged (Edit Toolbar).
+    _toolbox = new Toolbox(this);
+    _toolsDock = new QDockWidget("Tools", this);
+    _toolsDock->setObjectName("toolsDock");
+    _toolsDock->setAllowedAreas(Qt::LeftDockWidgetArea | Qt::RightDockWidgetArea);
+    _toolsDock->setWidget(_toolbox);
+    addDockWidget(Qt::LeftDockWidgetArea, _toolsDock);
+    splitDockWidget(_toolsDock, _outlinerDock, Qt::Horizontal);
+    Toolbox::Layout defaultTools;
 
     // One action group so the tools behave like a radio button set, the way a
     // toolbox does.
@@ -3598,31 +3646,19 @@ void MainWindow::setupToolBar()
         _toolActions[tool()] = action;
         toolGroup->addAction(action);
         addAction(action);
+        _toolbox->addTool(name, action);
         return action;
     };
 
-    // A slot in the column: one tool, or a group whose first tool shows and
-    // whose others open on a long press, the chosen one taking the slot.
-    const auto addSlot = [this, toolBar](const std::vector<QAction*>& actions) {
-        if (actions.size() == 1)
-        {
-            toolBar->addAction(actions.front());
-            return;
-        }
-        QToolButton* button = new QToolButton(toolBar);
-        button->setPopupMode(QToolButton::DelayedPopup);
-        button->setDefaultAction(actions.front());
-        QMenu* flyout = new QMenu(button);
+    // A slot in the default layout: one tool, or a group whose first tool
+    // shows and whose others open on a long press.
+    const auto addSlot = [&defaultTools](const std::vector<QAction*>& actions) {
+        Toolbox::Slot slot;
         for (QAction* action : actions)
-        {
-            flyout->addAction(action);
-            connect(action, &QAction::triggered, button, [button, action]() {
-                button->setDefaultAction(action);
-            });
-        }
-        button->setMenu(flyout);
-        toolBar->addWidget(button);
+            slot << action->text();
+        defaultTools.entries.push_back(slot);
     };
+    const auto addLine = [&defaultTools]() { defaultTools.entries.push_back(Toolbox::Slot{"|"}); };
 
     QAction* selectionAction = makeTool(ToolIcons::Tool::Selection, "Selection", Qt::Key_V,
         "Select objects. Shift-click to add, drag to sweep a marquee.",
@@ -3656,7 +3692,7 @@ void MainWindow::setupToolBar()
             [this]() -> Tool* { return _magicWandTool.get(); }),
     });
 
-    toolBar->addSeparator();
+    addLine();
 
     // P for the pen, as in Animate. B is already the bounding-box toggle, and a
     // clash leaves Qt firing neither.
@@ -3720,7 +3756,7 @@ void MainWindow::setupToolBar()
             [this]() -> Tool* { return _inkBrushTool.get(); }),
     });
 
-    toolBar->addSeparator();
+    addLine();
 
     _paintBucketAction = makeTool(ToolIcons::Tool::PaintBucket, "Paint Bucket", Qt::Key_K,
         "Click inside an area to paint it with the current fill.",
@@ -3736,7 +3772,7 @@ void MainWindow::setupToolBar()
         "Erase fills and strokes along the drag from merge-drawn artwork.",
         [this]() -> Tool* { return _eraserTool.get(); })});
 
-    toolBar->addSeparator();
+    addLine();
 
     // Animate's hand slot: the Hand, the Rotation tool and the Time Scrub
     // tool.
@@ -3760,7 +3796,31 @@ void MainWindow::setupToolBar()
         "Click to zoom in, alt-click to zoom out, drag to zoom to an area.",
         [this]() -> Tool* { return _zoomTool.get(); })});
 
-    toolBar->addSeparator();
+    // The tools are all known: the default layout, then the one kept.
+    _toolbox->setDefaultLayout(defaultTools);
+    _toolbox->setLayout(Toolbox::Layout::fromJson(
+        QJsonDocument::fromJson(QSettings().value("toolbox/layout").toByteArray()).object()));
+    connect(_toolbox, &Toolbox::layoutChanged, this, [this]() {
+        QSettings().setValue("toolbox/layout", QJsonDocument(_toolbox->layout().toJson()).toJson(QJsonDocument::Compact));
+    });
+    connect(_toolbox, &Toolbox::editRequested, this, &MainWindow::editToolbar);
+
+    // Under the tools: the stroke and fill colors, black and white, swap,
+    // and Object Drawing.
+    QWidget* toolBar = new QWidget(_toolbox);
+    QVBoxLayout* extras = new QVBoxLayout(toolBar);
+    extras->setContentsMargins(0, 4, 0, 0);
+    extras->setSpacing(1);
+    extras->setAlignment(Qt::AlignHCenter | Qt::AlignTop);
+    const auto addExtra = [extras](QWidget* widget) { extras->addWidget(widget, 0, Qt::AlignHCenter); };
+    const auto addExtraLine = [extras, toolBar]() {
+        QFrame* line = new QFrame(toolBar);
+        line->setFrameShape(QFrame::HLine);
+        line->setFrameShadow(QFrame::Plain);
+        line->setEnabled(false);
+        extras->addWidget(line);
+    };
+    addExtraLine();
 
     // The stroke and fill colors, under the tools as in Animate's toolbox.
     _toolboxStrokeSwatch = new QToolButton(toolBar);
@@ -3769,7 +3829,7 @@ void MainWindow::setupToolBar()
     _toolboxStrokeSwatch->setAutoRaise(true);
     _toolboxStrokeSwatch->setToolTip("Stroke color");
     connect(_toolboxStrokeSwatch, &QToolButton::clicked, this, [this]() { chooseStyleColor(true); });
-    toolBar->addWidget(_toolboxStrokeSwatch);
+    addExtra(_toolboxStrokeSwatch);
 
     _toolboxFillSwatch = new QToolButton(toolBar);
     _toolboxFillSwatch->setIcon(PropertiesPanel::swatchIcon(_drawingStyle.fillColor));
@@ -3777,7 +3837,7 @@ void MainWindow::setupToolBar()
     _toolboxFillSwatch->setAutoRaise(true);
     _toolboxFillSwatch->setToolTip("Fill color");
     connect(_toolboxFillSwatch, &QToolButton::clicked, this, [this]() { chooseStyleColor(false); });
-    toolBar->addWidget(_toolboxFillSwatch);
+    addExtra(_toolboxFillSwatch);
 
     // Black and White, and Swap Colors, under the swatches as in Animate's
     // toolbar.
@@ -3815,7 +3875,7 @@ void MainWindow::setupToolBar()
         if (_propertiesPanel)
             _propertiesPanel->refresh();
     });
-    toolBar->addWidget(blackWhite);
+    addExtra(blackWhite);
     QToolButton* swap = smallButton("Swap stroke and fill colors", [](QPainter& p) {
         p.setPen(QPen(QColor(210, 210, 210), 1.4));
         p.setBrush(Qt::NoBrush);
@@ -3837,9 +3897,9 @@ void MainWindow::setupToolBar()
         if (_propertiesPanel)
             _propertiesPanel->refresh();
     });
-    toolBar->addWidget(swap);
+    addExtra(swap);
 
-    toolBar->addSeparator();
+    addExtraLine();
 
     // Not a tool, so it stands outside the exclusive group: it changes what
     // every drawing tool does rather than replacing them.
@@ -3855,7 +3915,13 @@ void MainWindow::setupToolBar()
     connect(objectDrawingAction, &QAction::toggled, this, [this](bool on) {
         _drawingStyle.objectDrawing = on;
     });
-    toolBar->addAction(objectDrawingAction);
+    addAction(objectDrawingAction);
+    QToolButton* objectDrawingButton = new QToolButton(toolBar);
+    objectDrawingButton->setAutoRaise(true);
+    objectDrawingButton->setIconSize(QSize(22, 22));
+    objectDrawingButton->setDefaultAction(objectDrawingAction);
+    addExtra(objectDrawingButton);
+    _toolbox->setExtras(toolBar);
 }
 
 void MainWindow::chooseStyleColor(bool stroke)
@@ -4832,36 +4898,6 @@ ToolIcons::Tool MainWindow::iconForTool(const Tool* tool) const
     if (tool == _cameraTool.get()) return IconTool::Camera;
     if (tool == _textTool.get()) return IconTool::Text;
     return IconTool::Selection;
-}
-
-void MainWindow::setOutlinerVisible(bool visible)
-{
-    if (!_viewSplitter)
-        return;
-    QList<int> sizes = _viewSplitter->sizes();
-    if (sizes.size() < 2)
-        return;
-    const int total = sizes[0] + sizes[1];
-    if (!visible && sizes[0] > 0)
-        _outlinerWidth = sizes[0];
-    const int width = visible ? std::min(std::max(_outlinerWidth, 150), std::max(total - 200, 150)) : 0;
-    _viewSplitter->setSizes({width, total - width});
-    _outlinerVisible = visible;
-    syncOutlinerControls();
-}
-
-void MainWindow::syncOutlinerControls()
-{
-    if (_outlinerButton)
-    {
-        _outlinerButton->setArrowType(_outlinerVisible ? Qt::LeftArrow : Qt::RightArrow);
-        _outlinerButton->setToolTip(_outlinerVisible ? "Hide the outliner" : "Show the outliner");
-    }
-    if (_outlinerAction && _outlinerAction->isChecked() != _outlinerVisible)
-    {
-        const QSignalBlocker blocker(_outlinerAction);
-        _outlinerAction->setChecked(_outlinerVisible);
-    }
 }
 
 void MainWindow::rebuildBreadcrumb()
@@ -6929,8 +6965,6 @@ void MainWindow::loadSettings()
     _recentFiles = settings.value("recentFiles").toStringList();
     _lastDirectory = settings.value("lastDirectory").toString();
     _highQualityAntiAliasing = settings.value("view/highQualityAntiAliasing", true).toBool();
-    _outlinerVisible = settings.value("view/outlinerVisible", true).toBool();
-    _outlinerWidth = settings.value("view/outlinerWidth", 260).toInt();
 
     QByteArray geometry = settings.value("window/geometry").toByteArray();
     if (!geometry.isEmpty())
@@ -6945,15 +6979,13 @@ void MainWindow::saveSettings()
     settings.setValue("recentFiles", _recentFiles);
     settings.setValue("lastDirectory", _lastDirectory);
     settings.setValue("view/highQualityAntiAliasing", _highQualityAntiAliasing);
-    settings.setValue("view/outlinerVisible", _outlinerVisible);
-    settings.setValue("view/outlinerWidth", _outlinerWidth);
     saveBrush(settings, "brushes/fluid", _drawingStyle.fluidBrush);
     saveBrush(settings, "brushes/classic", _drawingStyle.classicBrush);
     saveBrush(settings, "brushes/ink", _drawingStyle.inkBrush);
     settings.setValue("brushes/mode", static_cast<int>(_drawingStyle.brushMode));
     settings.setValue("window/geometry", saveGeometry());
     if (_layoutRestored)
-        settings.setValue("window/state", saveState());
+        settings.setValue("window/state", saveState(kLayoutVersion));
 }
 
 void MainWindow::closeEvent(QCloseEvent* event)

@@ -16,6 +16,10 @@ class TimelineView : public QWidget
 public:
     explicit TimelineView(Player* player, QWidget *parent = nullptr);
 
+    /// The width of the layers list beside the frames.
+    int layersWidth() const;
+    void setLayersWidth(int width);
+
     void setDocument(const fla::FLADocument* document);
 
     /// Follows the view's edit scope: one symbol's timeline, or null for
@@ -75,7 +79,11 @@ signals:
     void onionMenuRequested(const QPoint& globalPos);
     void onionSkinToggled(bool on);
 
+protected:
+    void resizeEvent(QResizeEvent* event) override;
+
 private:
+    int _layersWidth = 250;
     const fla::FLADocument* _flaDocument;
     QSplitter* _splitter;
     LayersPanel* _layersPanel;
