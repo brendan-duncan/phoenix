@@ -27,6 +27,8 @@
 #include <QPalette>
 #include <QPixmap>
 #include <QSize>
+#include <QStyle>
+#include <QTimer>
 #include <QToolButton>
 #include <QScrollBar>
 #include <QTreeWidget>
@@ -85,6 +87,9 @@ public:
 
     void setBottomMargin(int margin) { setViewportMargins(0, 0, 0, margin); }
 
+    /// Drawn over the rows once they are painted.
+    std::function<void(QPainter&)> overlay;
+
     /// Called with the row dragged, the row it was dropped at (null for
     /// empty space) and where on it (a DropAt). The list does
     /// not move the rows itself: the drop becomes an edit of the document,
@@ -92,6 +97,16 @@ public:
     std::function<void(QTreeWidgetItem*, QTreeWidgetItem*, int)> dropped;
 
 protected:
+    void paintEvent(QPaintEvent* event) override
+    {
+        QTreeWidget::paintEvent(event);
+        if (overlay)
+        {
+            QPainter painter(viewport());
+            overlay(painter);
+        }
+    }
+
     void dropEvent(QDropEvent* event) override
     {
         QTreeWidgetItem* dragged = currentItem();
@@ -266,6 +281,17 @@ void drawNewFolder(QPainter& painter)
     painter.drawLine(QPointF(9.5, 12.5), QPointF(14.5, 12.5));
 }
 
+void drawParentLink(QPainter& painter)
+{
+    // Two nodes joined: a parent and the layer that follows it.
+    painter.setPen(QPen(ink(), 1.3));
+    painter.setBrush(Qt::NoBrush);
+    painter.drawEllipse(QPointF(4.5, 4.5), 2.5, 2.5);
+    painter.drawEllipse(QPointF(11.5, 11.5), 2.5, 2.5);
+    painter.drawLine(QPointF(4.5, 7.0), QPointF(4.5, 11.5));
+    painter.drawLine(QPointF(4.5, 11.5), QPointF(9.0, 11.5));
+}
+
 void drawTrash(QPainter& painter)
 {
     painter.setPen(QPen(ink(), 1.2));
@@ -327,21 +353,22 @@ LayersPanel::LayersPanel(QWidget *parent)
     header->setAutoFillBackground(true);
     header->setFixedHeight(50);
     _header = header;
-    QHBoxLayout* headerLayout = new QHBoxLayout(header);
-    headerLayout->setContentsMargins(0, 0, 0, 2);
-    headerLayout->setSpacing(0);
-    headerLayout->setAlignment(Qt::AlignBottom);
-    headerLayout->addStretch();
+    // The buttons sit over their columns (see alignHeader).
     _allVisible = smallButton(header, _visibleIcon, "Show or hide all layers");
     _allLocked = smallButton(header, _lockedIcon, "Lock or unlock all layers");
     _allOutline = smallButton(header, glyph(drawOutlineSquare), "Show all layers as outlines");
     theme::themedIcon(_allVisible, []() { return glyph(drawEye); });
     theme::themedIcon(_allLocked, []() { return glyph(drawPadlock); });
     theme::themedIcon(_allOutline, []() { return glyph(drawOutlineSquare); });
-    headerLayout->addWidget(_allVisible);
-    headerLayout->addWidget(_allLocked);
-    headerLayout->addWidget(_allOutline);
+    _parenting = smallButton(header, glyph(drawParentLink), "Show the parenting view: drag from a layer's handle to the layer it should follow");
+    _parenting->setCheckable(true);
+    theme::themedIcon(_parenting, []() { return glyph(drawParentLink); });
     layout->addWidget(header);
+    connect(_parenting, &QToolButton::toggled, this, [this](bool on) {
+        _treeWidget->setColumnHidden(ParentColumn, !on);
+        _treeWidget->viewport()->update();
+        QTimer::singleShot(0, this, [this]() { alignHeader(); });
+    });
 
     connect(_allVisible, &QToolButton::clicked, this, [this]() {
         // Hide everything if anything shows, else show everything.
@@ -396,7 +423,7 @@ LayersPanel::LayersPanel(QWidget *parent)
     for (int column = CurrentColumn; column < ColumnCount; ++column)
     {
         _treeWidget->header()->setSectionResizeMode(column, QHeaderView::Fixed);
-        _treeWidget->header()->resizeSection(column, column == CurrentColumn ? 20 : 24);
+        _treeWidget->header()->resizeSection(column, column == CurrentColumn ? 20 : column == ParentColumn ? 32 : 24);
     }
     _treeWidget->header()->setHidden(true);
     _treeWidget->setSelectionMode(QAbstractItemView::ExtendedSelection);
@@ -408,6 +435,8 @@ LayersPanel::LayersPanel(QWidget *parent)
     _treeWidget->setAcceptDrops(true);
     _treeWidget->setDropIndicatorShown(true);
     _treeWidget->setDragDropMode(QAbstractItemView::InternalMove);
+    _treeWidget->setColumnHidden(ParentColumn, true);
+    static_cast<LayerTree*>(_treeWidget)->overlay = [this](QPainter& painter) { drawParenting(painter); };
     static_cast<LayerTree*>(_treeWidget)->dropped = [this](QTreeWidgetItem* dragged, QTreeWidgetItem* target, int position) {
         dropLayer(dragged, target, position);
     };
@@ -452,6 +481,40 @@ LayersPanel::LayersPanel(QWidget *parent)
         applyTheme();
         refresh();
     });
+}
+
+void LayersPanel::alignHeader()
+{
+    // Each header button over its column of toggles; the parenting button
+    // over its column when shown, at the right edge when not.
+    const int top = _header->height() - 24;
+    // A row's icon sits at the left of its cell, past the item margin.
+    const int iconCenter = _treeWidget->style()->pixelMetric(QStyle::PM_FocusFrameHMargin, nullptr, _treeWidget) + 1 + 8;
+    const auto place = [this, top, iconCenter](QToolButton* button, int column) {
+        const int x = _treeWidget->viewport()->mapTo(this, QPoint(_treeWidget->columnViewportPosition(column), 0)).x() - _header->x();
+        const int center = column == ParentColumn ? _treeWidget->columnWidth(column) / 2 : iconCenter;
+        button->move(x + center - button->width() / 2, top);
+    };
+    place(_allVisible, VisibleColumn);
+    place(_allLocked, LockColumn);
+    place(_allOutline, ColorColumn);
+    if (_parenting->isChecked())
+        place(_parenting, ParentColumn);
+    else
+        _parenting->move(_header->width() - _parenting->width() - 2, 2);
+}
+
+void LayersPanel::resizeEvent(QResizeEvent* event)
+{
+    QWidget::resizeEvent(event);
+    // Once the list has its new width.
+    QTimer::singleShot(0, this, [this]() { alignHeader(); });
+}
+
+void LayersPanel::showEvent(QShowEvent* event)
+{
+    QWidget::showEvent(event);
+    QTimer::singleShot(0, this, [this]() { alignHeader(); });
 }
 
 void LayersPanel::applyTheme()
@@ -711,6 +774,15 @@ bool LayersPanel::eventFilter(QObject* watched, QEvent* event)
         QTreeWidgetItem* item = _treeWidget->itemAt(at);
         const int column = _treeWidget->columnAt(at.x());
         fla::Layer* layer = layerFor(item);
+        if (layer && column == ParentColumn && layer->layerType != fla::Layer::Type::Folder)
+        {
+            // A drag from the handle to the layer to follow.
+            _pressTaken = true;
+            _parentDrag = item;
+            _parentDragAt = at;
+            _treeWidget->viewport()->update();
+            return true;
+        }
         if (!layer || (column != VisibleColumn && column != LockColumn && column != ColorColumn))
             return false;
         _pressTaken = true;
@@ -744,6 +816,42 @@ bool LayersPanel::eventFilter(QObject* watched, QEvent* event)
         setToggle(item, column, _dragValue);
         return true;
     }
+    if (event->type() == QEvent::MouseMove && _parentDrag)
+    {
+        _parentDragAt = at;
+        _treeWidget->viewport()->update();
+        return true;
+    }
+    if (event->type() == QEvent::MouseButtonRelease && _parentDrag)
+    {
+        QTreeWidgetItem* dragged = _parentDrag;
+        _parentDrag = nullptr;
+        _pressTaken = false;
+        _treeWidget->viewport()->update();
+        fla::Layer* layer = layerFor(dragged);
+        fla::Timeline* timeline = timelineFor(dragged);
+        QTreeWidgetItem* target = _treeWidget->itemAt(at);
+        fla::Layer* parent = layerFor(target);
+        if (!layer || !timeline || target == dragged)
+            return true;
+        if (!target)
+        {
+            // Let go below the rows: it follows nothing.
+            if (parentLayerOf(*layer))
+                emit parentLayerRequested(timeline, layer, nullptr);
+            return true;
+        }
+        if (!parent || timelineFor(target) != timeline || parent->layerType == fla::Layer::Type::Folder ||
+            parent->layerType == fla::Layer::Type::Guide)
+            return true;
+        // Not onto one that follows this one, which would go round in a circle.
+        for (const fla::Layer* up = parent; up; up = parentLayerOf(*up))
+            if (up == layer)
+                return true;
+        if (parentLayerOf(*layer) != parent)
+            emit parentLayerRequested(timeline, layer, parent);
+        return true;
+    }
     if (event->type() == QEvent::MouseMove && _dragColumn >= 0)
     {
         if (QTreeWidgetItem* item = _treeWidget->itemAt(QPoint(_treeWidget->columnViewportPosition(_dragColumn) + 4, at.y())))
@@ -759,10 +867,63 @@ bool LayersPanel::eventFilter(QObject* watched, QEvent* event)
     if (event->type() == QEvent::MouseButtonDblClick)
     {
         const int column = _treeWidget->columnAt(at.x());
-        if (column == VisibleColumn || column == LockColumn || column == ColorColumn)
+        if (column == VisibleColumn || column == LockColumn || column == ColorColumn || column == ParentColumn)
             return true;
     }
     return false;
+}
+
+void LayersPanel::drawParenting(QPainter& painter)
+{
+    if (!_parenting || !_parenting->isChecked())
+        return;
+    painter.setRenderHint(QPainter::Antialiasing, true);
+    const int columnX = _treeWidget->columnViewportPosition(ParentColumn);
+    const int columnWidth = _treeWidget->columnWidth(ParentColumn);
+    std::map<const fla::Layer*, QPoint> handles;
+    for (QTreeWidgetItemIterator it(_treeWidget); *it; ++it)
+    {
+        const fla::Layer* layer = layerFor(*it);
+        const QRect row = _treeWidget->visualItemRect(*it);
+        if (!layer || row.isEmpty() || layer->layerType == fla::Layer::Type::Folder)
+            continue;
+        handles[layer] = QPoint(columnX + columnWidth / 2, row.center().y());
+    }
+    // A line from each layer round to the layer it follows, in the
+    // parent's color, then the handles over them.
+    int lane = 0;
+    for (const auto& [layer, at] : handles)
+    {
+        const fla::Layer* parent = parentLayerOf(*layer);
+        const auto to = parent ? handles.find(parent) : handles.end();
+        if (to == handles.end())
+            continue;
+        const QColor color(parent->color[0], parent->color[1], parent->color[2]);
+        const int out = at.x() + 5 + (lane++ % 3) * 3;
+        painter.setPen(QPen(color, 1.6));
+        painter.setBrush(Qt::NoBrush);
+        QPainterPath path(at);
+        path.lineTo(out, at.y());
+        path.lineTo(out, to->second.y());
+        path.lineTo(to->second);
+        painter.drawPath(path);
+    }
+    for (const auto& [layer, at] : handles)
+    {
+        const QColor color(layer->color[0], layer->color[1], layer->color[2]);
+        painter.setPen(QPen(theme::color("text"), 1.0));
+        painter.setBrush(color);
+        painter.drawEllipse(QPointF(at), 4.0, 4.0);
+    }
+    if (_parentDrag)
+    {
+        const auto from = handles.find(layerFor(_parentDrag));
+        if (from != handles.end())
+        {
+            painter.setPen(QPen(theme::color("playhead"), 1.6, Qt::DashLine));
+            painter.drawLine(from->second, _parentDragAt);
+        }
+    }
 }
 
 void LayersPanel::refreshRow(QTreeWidgetItem* item)
@@ -851,6 +1012,7 @@ void LayersPanel::refresh()
             item->setToolTip(LockColumn, "Lock or unlock the layer");
             item->setToolTip(ColorColumn, "Outline color; click to view the layer as outlines");
             item->setToolTip(CurrentColumn, "The current layer, where new drawings go");
+            item->setToolTip(ParentColumn, "Drag to the layer this one should follow; let go below the layers for none");
 
             item->setData(NameColumn, Qt::UserRole, QVariant::fromValue(layerIndexMap.size() - 1));
             item->setData(NameColumn, Qt::UserRole + 1, timelineIndex);
@@ -944,6 +1106,7 @@ void LayersPanel::onItemClicked(QTreeWidgetItem* item, int column)
     case VisibleColumn:
     case LockColumn:
     case ColorColumn:
+    case ParentColumn:
         // The toggles act on the press (see eventFilter).
         break;
 

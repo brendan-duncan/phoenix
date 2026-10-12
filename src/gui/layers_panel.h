@@ -127,6 +127,8 @@ protected:
     /// Alt toggles every other layer, Shift on the eye fades the layer, and
     /// a drag down the column sets each row passed the same way.
     bool eventFilter(QObject* watched, QEvent* event) override;
+    void resizeEvent(QResizeEvent* event) override;
+    void showEvent(QShowEvent* event) override;
 
 private:
     enum Column
@@ -136,6 +138,7 @@ private:
         VisibleColumn,
         LockColumn,
         ColorColumn,
+        ParentColumn,
         ColumnCount
     };
 
@@ -151,6 +154,14 @@ private:
     QToolButton* _allVisible = nullptr;
     QToolButton* _allLocked = nullptr;
     QToolButton* _allOutline = nullptr;
+    /// The parenting view: a column of handles, dragged from a layer to the
+    /// layer it should follow, with lines from each layer to its parent.
+    QToolButton* _parenting = nullptr;
+    QTreeWidgetItem* _parentDrag = nullptr;
+    QPoint _parentDragAt;
+    void drawParenting(QPainter& painter);
+    /// Puts the header's buttons over their columns.
+    void alignHeader();
 
     std::vector<fla::Timeline*> shownTimelines() const;
     QIcon _layerIcon;
