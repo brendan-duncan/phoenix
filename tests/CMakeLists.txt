@@ -145,6 +145,7 @@ set(TEST_SOURCES
     test_scene_commands.cpp
     test_document_settings.cpp
     test_text_style.cpp
+    test_swatches.cpp
     test_find_replace.cpp
     test_audio_decode.cpp
     test_brush_stroke.cpp

@@ -43,6 +43,21 @@ State withAdded(const State& state, const Color& color);
 /// (gradients) stay as they were.
 State withRemoved(const State& state, size_t index);
 
+/// \a state with its solid swatches replaced by \a colors, in order;
+/// gradients stay. An empty list still exists.
+State withColors(const State& state, const std::vector<Color>& colors);
+
+/// The colors in hue order, grays first by lightness, as Sort by Color
+/// lays them out.
+std::vector<Color> sortedByColor(std::vector<Color> colors);
+
+/// Color tables: an Adobe color table (.act, 256 RGB triplets and an
+/// optional count) and a GIMP palette (.gpl, lines of red, green, blue).
+std::vector<Color> readAct(const std::vector<uint8_t>& bytes);
+std::vector<uint8_t> writeAct(const std::vector<Color>& colors);
+std::vector<Color> readGpl(const std::string& text);
+std::string writeGpl(const std::vector<Color>& colors, const std::string& name);
+
 } // namespace swatches
 
 /// Puts the document's swatch list in one state or the other.

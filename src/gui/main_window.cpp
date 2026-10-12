@@ -30,6 +30,7 @@
 #include "notes_panel.h"
 #include "controllers_panel.h"
 #include "function_curves_panel.h"
+#include "../edit/palettes.h"
 #include "../edit/shape_recognition.h"
 #include <QGridLayout>
 #include "spell_checker.h"
@@ -6108,6 +6109,73 @@ void MainWindow::setupPropertiesPanel()
             _drawingStyle.fillColor[2], _drawingStyle.fillColor[3]};
         _editContext.commandStack().push(fla::CommandPtr(new fla::SetSwatchesCommand(
             document, before, fla::swatches::withAdded(before, color), "Add Swatch")));
+    });
+    connect(_swatchesPanel, &SwatchesPanel::colorsEditRequested, this,
+        [this](const std::vector<fla::swatches::Color>& colors, const QString& name) {
+            if (!_flaDocument || !_flaDocument->document)
+                return;
+            fla::Document* document = _flaDocument->document;
+            const fla::swatches::State before = fla::swatches::stateOf(*document);
+            _editContext.commandStack().push(fla::CommandPtr(new fla::SetSwatchesCommand(
+                document, before, fla::swatches::withColors(before, colors), name.toStdString())));
+            _editContext.commandStack().breakMergeChain();
+        });
+    connect(_swatchesPanel, &SwatchesPanel::palettesRequested, this, [this]() {
+        if (_palettesDock)
+        {
+            _palettesDock->show();
+            _palettesDock->raise();
+        }
+    });
+    connect(_swatchesPanel, &SwatchesPanel::tagRequested, this, [this](int index) {
+        fla::Document* document = _flaDocument ? _flaDocument->document : nullptr;
+        if (!document)
+            return;
+        const std::vector<fla::swatches::Color> own = fla::swatches::of(*document);
+        const std::vector<fla::swatches::Color> shown = own.empty() ? fla::swatches::defaults() : own;
+        if (index < 0 || index >= static_cast<int>(shown.size()))
+            return;
+        fla::palettes::Palettes palettes = fla::palettes::load(*document);
+        if (!palettes.activePalette())
+        {
+            palettes.list.push_back(fla::palettes::Palette{"Palette", {}});
+            palettes.active = "Palette";
+        }
+        fla::palettes::Palette* active = palettes.activePalette();
+        bool ok = false;
+        const QString name = QInputDialog::getText(this, "Convert to Tagged Swatch", "Name:", QLineEdit::Normal,
+            QString("Swatch %1").arg(active->colors.size() + 1), &ok).trimmed();
+        if (!ok || name.isEmpty())
+            return;
+        for (const fla::palettes::Color& color : active->colors)
+            if (color.name == name.toStdString())
+            {
+                QMessageBox::information(this, "Convert to Tagged Swatch", "The palette has a color of that name already.");
+                return;
+            }
+        fla::palettes::Color color;
+        color.name = name.toStdString();
+        for (int i = 0; i < 4; ++i)
+            color.rgba[i] = shown[static_cast<size_t>(index)][static_cast<size_t>(i)];
+        active->colors.push_back(color);
+        using Attributes = std::vector<std::pair<std::string, std::string>>;
+        fla::CommandStack& stack = _editContext.commandStack();
+        stack.beginMacro("Tag Swatch");
+        // A default palette color becomes one of the document's swatches.
+        if (own.empty())
+        {
+            const fla::swatches::State before = fla::swatches::stateOf(*document);
+            stack.push(fla::CommandPtr(new fla::SetSwatchesCommand(document, before, fla::swatches::withColors(before, shown), "Tag Swatch")));
+        }
+        stack.push(fla::CommandPtr(new fla::SetPropertyCommand<Attributes>(document->extraAttributes,
+            document->extraAttributes, fla::palettes::saved(*document, palettes), "Tag Swatch")));
+        if (fla::CommandPtr link = fla::palettes::linkMatching(*document, color))
+            stack.push(std::move(link));
+        stack.endMacro();
+        stack.breakMergeChain();
+        if (_palettes)
+            _palettes->refresh();
+        _swatchesPanel->refreshIfStale();
     });
     connect(_swatchesPanel, &SwatchesPanel::removeRequested, this, [this](int index) {
         if (!_flaDocument || !_flaDocument->document || index < 0)
