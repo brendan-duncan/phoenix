@@ -98,6 +98,7 @@ set(HEADERS
     src/gui/camera_tool.h
     src/gui/bone_tool.h
     src/gui/asset_warp_tool.h
+    src/gui/three_d_tool.h
     src/gui/ease_curve_dialog.h
     src/gui/file_association.h
     src/gui/color_panel.h
@@ -240,6 +241,7 @@ set(HEADERS
     src/edit/font_items.h
     src/edit/vector_import.h
     src/edit/psd_import.h
+    src/edit/three_d.h
     src/edit/edit_list.h
     src/edit/combine_objects.h
     src/edit/transform_parts.h
@@ -301,6 +303,7 @@ set(SOURCES
     src/gui/camera_tool.cpp
     src/gui/bone_tool.cpp
     src/gui/asset_warp_tool.cpp
+    src/gui/three_d_tool.cpp
     src/gui/ease_curve_dialog.cpp
     src/gui/file_association.cpp
     src/gui/color_panel.cpp
@@ -438,6 +441,7 @@ set(SOURCES
     src/edit/font_items.cpp
     src/edit/vector_import.cpp
     src/edit/psd_import.cpp
+    src/edit/three_d.cpp
     src/edit/edit_list.cpp
     src/edit/combine_objects.cpp
     src/edit/swatches.cpp

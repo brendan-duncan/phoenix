@@ -46,6 +46,8 @@ public:
         Text,
         Bone,
         AssetWarp,
+        Rotate3D,
+        Translate3D,
         /// Not a tool: the toggle that keeps a drawing its own object.
         ObjectDrawing
     };

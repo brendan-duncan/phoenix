@@ -82,6 +82,17 @@
 
 <p>In <strong>Envelope</strong> mode, a mesh of points and handles surrounds the shape, and dragging them warps the artwork inside. <kbd>Esc</kbd> cancels a transform in progress.</p>
 
+<h2>3D rotation and translation</h2>
+
+<p>Movie clips can be turned and moved in 3D, drawn in perspective. The two 3D tools share a slot in the toolbox:</p>
+
+<dl class="defs">
+  <dt>3D Rotation (<kbd>W</kbd>)</dt><dd>Drag a movie clip left or right to turn it about its vertical axis, up or down to tip it about its horizontal axis. It turns about its transformation point. <kbd>Alt</kbd>-click sets it flat again.</dd>
+  <dt>3D Translation (<kbd>G</kbd>)</dt><dd>Drag a movie clip up to push it into the stage, down to bring it nearer. A clip further in draws smaller and closer to the vanishing point in the middle of the stage. Move it across the stage with the Selection tool as usual.</dd>
+</dl>
+
+<p>The view has a perspective angle of 55&deg;. The 3D turn and depth are keyed on keyframes like any other property, and a classic tween between two keyframes turns and moves the clip smoothly from one to the other. Each drag is a single step to undo.</p>
+
 <h3>Transform commands</h3>
 
 <p><span class="menu-path">Modify &rsaquo; Transform</span> has exact transforms:</p>

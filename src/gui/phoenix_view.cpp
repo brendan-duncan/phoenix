@@ -1,6 +1,7 @@
 #include "phoenix_view.h"
 #include "theme.h"
 #include "../edit/pegs.h"
+#include "../edit/three_d.h"
 #include "../edit/layer_effects.h"
 #include "../edit/image_blur.h"
 
@@ -2525,6 +2526,7 @@ void PhoenixView::drawElement(QPainter& painter, const fla::Element* element, co
     QTransform qTransform(transform.m11, transform.m12,
                        transform.m21, transform.m22,
                        transform.tx, transform.ty);
+    qTransform = qTransform * threeDTransform(element, qTransform, tweenElement, tweenProgress);
 
     painter.save();
 
@@ -3831,6 +3833,27 @@ void PhoenixView::drawShape(QPainter& painter, const fla::Shape* shape, const fl
     }
 }
 
+QTransform PhoenixView::threeDTransform(const fla::Element* element, const QTransform& placed,
+    const fla::Element* tweenElement, double progress) const
+{
+    const auto* instance = dynamic_cast<const fla::SymbolInstance*>(element);
+    const fla::Document* document = _flaDocument ? _flaDocument->document : nullptr;
+    if (!instance || !document || instance->symbolType != fla::SymbolType::MovieClip)
+        return QTransform();
+    fla::threed::Pose pose = fla::threed::of(*instance);
+    if (const auto* other = dynamic_cast<const fla::SymbolInstance*>(tweenElement))
+        pose = fla::threed::blend(pose, fla::threed::of(*other), progress);
+    if (pose.flat())
+        return QTransform();
+    // Turned about its transformation point, seen from in front of the
+    // stage's middle.
+    const QPointF center = placed.map(QPointF(instance->transformationPoint.x, instance->transformationPoint.y));
+    const double focal = fla::threed::focalLength(fla::threed::perspectiveAngle(*document), document->width);
+    const std::array<double, 9> m = fla::threed::projection(pose, fla::Point(center.x(), center.y()),
+        fla::Point(document->width / 2.0, document->height / 2.0), focal);
+    return QTransform(m[0], m[3], m[6], m[1], m[4], m[7], m[2], m[5], m[8]);
+}
+
 void PhoenixView::drawWarpedPixmap(QPainter& painter, const QPixmap& pixmap) const
 {
     // A grid over the bitmap, each cell two triangles, each triangle drawn
@@ -4054,7 +4077,8 @@ void PhoenixView::hitTestElement(fla::Element& element, fla::Frame* frame,
         return;
 
     const fla::Transform& t = shownTransform ? *shownTransform : element.transform;
-    const QTransform elementTransform(t.m11, t.m12, t.m21, t.m22, t.tx, t.ty);
+    QTransform elementTransform(t.m11, t.m12, t.m21, t.m22, t.tx, t.ty);
+    elementTransform = elementTransform * threeDTransform(&element, elementTransform);
 
     // Groups pre-transform their children, so applying the group's own transform
     // as well would move them twice. drawElement skips it for the same reason.

@@ -322,9 +322,10 @@ MainWindow::MainWindow(const QString& initialFile, QWidget* parent, bool startup
     _magicWandTool = std::make_unique<MagicWandTool>(_drawingStyle);
     _rotationTool = std::make_unique<RotationTool>();
     _timeScrubTool = std::make_unique<TimeScrubTool>();
-    _assetWarpTool = std::make_unique<AssetWarpTool>(stack, [this](const QString& message) {
-        statusBar()->showMessage(message, 5000);
-    });
+    const auto showStatus = [this](const QString& message) { statusBar()->showMessage(message, 5000); };
+    _assetWarpTool = std::make_unique<AssetWarpTool>(stack, showStatus);
+    _rotate3DTool = std::make_unique<ThreeDTool>(ThreeDTool::Mode::Rotate, stack, showStatus);
+    _translate3DTool = std::make_unique<ThreeDTool>(ThreeDTool::Mode::Translate, stack, showStatus);
     _boneTool = std::make_unique<BoneTool>(
         [this](PhoenixView&, const BoneTool::Link& link) { addBone(link); },
         [this](PhoenixView&, fla::Frame* frame, size_t child, int joint) { editJointLimits(frame, child, joint); });
@@ -5999,10 +6000,21 @@ void MainWindow::setupToolBar()
             "Drag from one symbol instance to another to join them with a bone; drag from an instance in an "
             "armature to add a bone to it. Click a bone to limit how far its joint turns.",
             [this]() -> Tool* { return _boneTool.get(); }),
-        makeTool(ToolIcons::Tool::AssetWarp, "Asset Warp", Qt::Key_W,
+        makeTool(ToolIcons::Tool::AssetWarp, "Asset Warp", Qt::SHIFT | Qt::Key_W,
             "Click a puppet to pin it, drag a pin to bend the art round the others. Alt-click a pin, or "
             "select it and press Delete, to take it away.",
             [this]() -> Tool* { return _assetWarpTool.get(); }),
+    });
+    // The 3D tools share a slot, as in Animate.
+    addSlot({
+        makeTool(ToolIcons::Tool::Rotate3D, "3D Rotation", Qt::Key_W,
+            "Drag a movie clip across to turn it about its vertical axis, up and down to tip it back or "
+            "forward. Alt-click sets it flat again.",
+            [this]() -> Tool* { return _rotate3DTool.get(); }),
+        makeTool(ToolIcons::Tool::Translate3D, "3D Translation", Qt::Key_G,
+            "Drag a movie clip up to push it into the stage, down to bring it nearer; it shrinks and grows "
+            "toward the vanishing point.",
+            [this]() -> Tool* { return _translate3DTool.get(); }),
     });
 
     addLine();
@@ -7552,6 +7564,8 @@ ToolIcons::Tool MainWindow::iconForTool(const Tool* tool) const
     if (tool == _cameraTool.get()) return IconTool::Camera;
     if (tool == _boneTool.get()) return IconTool::Bone;
     if (tool == _assetWarpTool.get()) return IconTool::AssetWarp;
+    if (tool == _rotate3DTool.get()) return IconTool::Rotate3D;
+    if (tool == _translate3DTool.get()) return IconTool::Translate3D;
     if (tool == _textTool.get()) return IconTool::Text;
     return IconTool::Selection;
 }

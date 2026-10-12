@@ -481,6 +481,29 @@ void drawAssetWarp(QPainter& painter)
     painter.drawEllipse(QPointF(17.0, 13.5), 2.4, 2.4);
 }
 
+void drawRotate3D(QPainter& painter)
+{
+    // A globe: its rim, and a meridian and the equator seen at a slant.
+    painter.setPen(QPen(strokeColor(), 1.2));
+    painter.setBrush(Qt::NoBrush);
+    painter.drawEllipse(QPointF(12.0, 12.0), 8.5, 8.5);
+    painter.drawEllipse(QPointF(12.0, 12.0), 3.5, 8.5);
+    painter.drawEllipse(QPointF(12.0, 12.0), 8.5, 3.0);
+}
+
+void drawTranslate3D(QPainter& painter)
+{
+    // Three axes from a corner: across, up, and into the stage.
+    painter.setPen(QPen(strokeColor(), 1.3));
+    painter.setBrush(Qt::NoBrush);
+    const QPointF origin(9.0, 15.0);
+    painter.drawLine(origin, QPointF(20.0, 15.0));
+    painter.drawLine(origin, QPointF(9.0, 4.0));
+    painter.drawLine(origin, QPointF(3.5, 20.5));
+    painter.setBrush(strokeColor());
+    painter.drawEllipse(origin, 1.8, 1.8);
+}
+
 void drawLasso(QPainter& painter)
 {
     // A loop of rope with its tail hanging down.
@@ -572,6 +595,8 @@ QPixmap render(ToolIcons::Tool tool, int size)
     case ToolIcons::Tool::Text:          drawText(painter); break;
     case ToolIcons::Tool::Bone:          drawBone(painter); break;
     case ToolIcons::Tool::AssetWarp:     drawAssetWarp(painter); break;
+    case ToolIcons::Tool::Rotate3D:      drawRotate3D(painter); break;
+    case ToolIcons::Tool::Translate3D:   drawTranslate3D(painter); break;
     case ToolIcons::Tool::ObjectDrawing: drawObjectDrawing(painter); break;
     }
 

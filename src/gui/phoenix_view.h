@@ -1142,6 +1142,16 @@ private:
     /// Draws a bitmap through the warp, a piece of mesh at a time.
     void drawWarpedPixmap(QPainter& painter, const QPixmap& pixmap) const;
 
+public:
+    /// A movie clip's 3D turn and depth, in perspective, as a map in the
+    /// space it is placed in, to follow its 2D transform \a placed; the
+    /// identity for a flat clip. Part way to \a tweenElement's at
+    /// \a progress.
+    QTransform threeDTransform(const fla::Element* element, const QTransform& placed,
+        const fla::Element* tweenElement = nullptr, double progress = 0.0) const;
+
+private:
+
     /// Draws a shape, or, part way through a shape tween to \a tweenShape,
     /// the morph between them. \a ownTransform is the element's transform
     /// as drawn (interpolated during a tween), which the painter already
