@@ -37,6 +37,8 @@ struct MovieExportSettings
     bool audio = true;
     /// An animated GIF plays over and over.
     bool loop = true;
+    /// Seen through the scene's camera, when it has one.
+    bool camera = true;
 };
 
 /// Asks how to export the movie: as a numbered PNG sequence or as an MP4
@@ -67,6 +69,7 @@ private:
     QCheckBox* _transparent = nullptr;
     QCheckBox* _audio = nullptr;
     QCheckBox* _loop = nullptr;
+    QCheckBox* _camera = nullptr;
     QLabel* _encoderNote = nullptr;
     bool _syncing = false;
 };

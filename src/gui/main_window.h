@@ -12,6 +12,7 @@
 #include "magic_wand_tool.h"
 #include "gradient_transform_tool.h"
 #include "anchor_point_tool.h"
+#include "camera_tool.h"
 #include "navigation_tools.h"
 #include "paint_tools.h"
 #include "pen_tool.h"
@@ -344,6 +345,7 @@ private:
     std::unique_ptr<MagicWandTool> _magicWandTool;
     std::unique_ptr<RotationTool> _rotationTool;
     std::unique_ptr<TimeScrubTool> _timeScrubTool;
+    std::unique_ptr<CameraTool> _cameraTool;
     /// The Flow Brush (the B key's), the Nib Brush and the Ink Brush,
     /// sharing the toolbox slot.
     std::unique_ptr<BrushTool> _brushTool;

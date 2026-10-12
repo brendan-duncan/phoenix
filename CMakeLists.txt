@@ -82,6 +82,7 @@ set(HEADERS
     src/gui/motion_presets.h
     src/gui/xsheet_panel.h
     src/gui/layer_depth_panel.h
+    src/gui/camera_tool.h
     src/gui/ease_curve_dialog.h
     src/gui/file_association.h
     src/gui/color_panel.h
@@ -247,6 +248,7 @@ set(SOURCES
     src/gui/motion_presets.cpp
     src/gui/xsheet_panel.cpp
     src/gui/layer_depth_panel.cpp
+    src/gui/camera_tool.cpp
     src/gui/ease_curve_dialog.cpp
     src/gui/file_association.cpp
     src/gui/color_panel.cpp

@@ -190,6 +190,9 @@ public:
     /// its parent's object there, and that one's parent's.
     QTransform parentingAt(const fla::Layer* layer, const fla::Frame* frame, int index);
 
+    /// The frame the stage shows.
+    int playheadFrame() const { return shownFrame(); }
+
     /// Camera View: the scene seen through its multiplane camera, when it
     /// has one. On by default; off shows the stage as drawn.
     void setCameraView(bool on);

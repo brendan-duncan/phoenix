@@ -23,6 +23,7 @@
 #include "motion_presets.h"
 #include "xsheet_panel.h"
 #include "layer_depth_panel.h"
+#include "camera_tool.h"
 #include "swatches_panel.h"
 #include "../edit/swatches.h"
 #include "swap_symbol_dialog.h"
@@ -253,6 +254,15 @@ MainWindow::MainWindow(const QString& initialFile, QWidget* parent, bool startup
     _magicWandTool = std::make_unique<MagicWandTool>(_drawingStyle);
     _rotationTool = std::make_unique<RotationTool>();
     _timeScrubTool = std::make_unique<TimeScrubTool>();
+    _cameraTool = std::make_unique<CameraTool>(stack, [this]() -> fla::Layer* {
+        fla::Document* document = _flaDocument ? _flaDocument->document : nullptr;
+        fla::Timeline* scene = document ? document->currentScene() : nullptr;
+        if (!scene)
+            return nullptr;
+        if (!fla::camera::cameraOf(*scene))
+            addCamera();
+        return fla::camera::cameraOf(*scene);
+    });
     _brushTool = std::make_unique<BrushTool>(BrushTool::Kind::Fluid, _selection, stack, _drawingStyle);
     _classicBrushTool = std::make_unique<BrushTool>(BrushTool::Kind::Classic, _selection, stack, _drawingStyle);
     _inkBrushTool = std::make_unique<BrushTool>(BrushTool::Kind::Ink, _selection, stack, _drawingStyle);
@@ -3528,9 +3538,13 @@ void MainWindow::setupToolBar()
             "Turn the view of the stage: click to set the pivot, drag to turn about it (shift for 15 degree "
             "steps), double-click to set it straight.",
             [this]() -> Tool* { return _rotationTool.get(); }),
-        makeTool(ToolIcons::Tool::TimeScrub, "Time Scrub", Qt::Key_C,
+        makeTool(ToolIcons::Tool::TimeScrub, "Time Scrub", Qt::Key_unknown,
             "Drag left or right across the stage to move through the frames.",
             [this]() -> Tool* { return _timeScrubTool.get(); }),
+        makeTool(ToolIcons::Tool::Camera, "Camera", Qt::Key_C,
+            "Move the scene's camera on this frame: drag to pan, Shift-drag to zoom, Alt-drag to turn. "
+            "Adds the camera if the scene has none.",
+            [this]() -> Tool* { return _cameraTool.get(); }),
     });
     addSlot({makeTool(ToolIcons::Tool::Zoom, "Zoom", Qt::Key_Z,
         "Click to zoom in, alt-click to zoom out, drag to zoom to an area.",
@@ -4534,6 +4548,7 @@ ToolIcons::Tool MainWindow::iconForTool(const Tool* tool) const
     if (tool == _magicWandTool.get()) return IconTool::MagicWand;
     if (tool == _rotationTool.get()) return IconTool::Rotation;
     if (tool == _timeScrubTool.get()) return IconTool::TimeScrub;
+    if (tool == _cameraTool.get()) return IconTool::Camera;
     if (tool == _textTool.get()) return IconTool::Text;
     return IconTool::Selection;
 }

@@ -136,6 +136,10 @@ MovieExportDialog::MovieExportDialog(const QSize& documentSize, int frameCount, 
     _loop = new QCheckBox("Loop forever", this);
     _loop->setChecked(true);
     form->addRow("", _loop);
+    _camera = new QCheckBox("Through the camera", this);
+    _camera->setChecked(true);
+    _camera->setToolTip("Render the scene as its camera sees it; off, the stage as drawn");
+    form->addRow("", _camera);
 
     _encoderNote = new QLabel(this);
     _encoderNote->setWordWrap(true);
@@ -225,6 +229,7 @@ MovieExportSettings MovieExportDialog::settings() const
     MovieExportSettings settings;
     settings.format = static_cast<MovieExportSettings::Format>(std::clamp(_format->currentIndex(), 0, kWavIndex));
     settings.loop = _loop->isChecked();
+    settings.camera = _camera->isChecked();
     settings.path = _path->text();
     settings.size = QSize(_width->value(), _height->value());
     settings.first = std::min(_first->value(), _last->value()) - 1;
@@ -261,6 +266,15 @@ bool run(const MovieExportSettings& settings, PhoenixView& view, TimelineAudio* 
         error = "Nothing to export.";
         return false;
     }
+
+    // With or without the camera, as asked; the view as it was afterwards.
+    struct CameraView
+    {
+        PhoenixView& view;
+        bool was;
+        ~CameraView() { view.setCameraView(was); }
+    } cameraView{view, view.cameraView()};
+    view.setCameraView(settings.camera);
 
     QProgressDialog progress("Exporting...", "Cancel", 0, count, parent);
     progress.setWindowModality(Qt::WindowModal);

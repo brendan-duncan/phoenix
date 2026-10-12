@@ -444,6 +444,17 @@ void drawTimeScrub(QPainter& painter)
     painter.drawPolygon(QPolygonF({QPointF(21.5, 15.0), QPointF(18.5, 12.5), QPointF(18.5, 17.5)}));
 }
 
+void drawCamera(QPainter& painter)
+{
+    // A film camera: its body, the lens and two reels on top.
+    painter.setPen(QPen(strokeColor(), 1.2));
+    painter.setBrush(Qt::NoBrush);
+    painter.drawRoundedRect(QRectF(3.5, 10.5, 12.0, 9.0), 1.5, 1.5);
+    painter.drawPolygon(QPolygonF({QPointF(15.5, 13.0), QPointF(20.5, 10.5), QPointF(20.5, 19.5), QPointF(15.5, 17.0)}));
+    painter.drawEllipse(QPointF(6.5, 7.0), 3.0, 3.0);
+    painter.drawEllipse(QPointF(12.5, 7.0), 3.0, 3.0);
+}
+
 void drawLasso(QPainter& painter)
 {
     // A loop of rope with its tail hanging down.
@@ -531,6 +542,7 @@ QPixmap render(ToolIcons::Tool tool, int size)
     case ToolIcons::Tool::MagicWand:     drawMagicWand(painter); break;
     case ToolIcons::Tool::Rotation:      drawRotation(painter); break;
     case ToolIcons::Tool::TimeScrub:     drawTimeScrub(painter); break;
+    case ToolIcons::Tool::Camera:        drawCamera(painter); break;
     case ToolIcons::Tool::Text:          drawText(painter); break;
     case ToolIcons::Tool::ObjectDrawing: drawObjectDrawing(painter); break;
     }

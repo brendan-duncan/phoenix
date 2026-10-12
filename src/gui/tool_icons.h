@@ -42,6 +42,7 @@ public:
         MagicWand,
         Rotation,
         TimeScrub,
+        Camera,
         Text,
         /// Not a tool: the toggle that keeps a drawing its own object.
         ObjectDrawing
