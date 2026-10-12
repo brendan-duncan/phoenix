@@ -181,6 +181,10 @@ private:
     /// inner radius and Close Path) and its fill and stroke.
     void addPrimitiveSections(QVBoxLayout* layout, fla::Element* element);
 
+    /// An instance's filters, each with its settings: added, removed,
+    /// switched on and off, reordered and edited, as in Animate.
+    void addFilterSection(QVBoxLayout* layout, fla::SymbolInstance* instance);
+
     /// A HotText editing one double of the document: live while dragged, one
     /// undo step named \a name when let go.
     HotText* bindDouble(double& field, double minimum, double maximum, int decimals, const QString& suffix,

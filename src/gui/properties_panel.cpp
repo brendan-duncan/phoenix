@@ -1,5 +1,6 @@
 #include "properties_panel.h"
 
+#include "color_panel.h"
 #include "hot_text.h"
 #include "phoenix_view.h"
 #include "player.h"
@@ -43,6 +44,7 @@
 #include <QHash>
 #include <QLabel>
 #include <QLineEdit>
+#include <QMenu>
 #include <QPainter>
 #include <QPainterPath>
 #include <QPushButton>
@@ -1836,16 +1838,257 @@ void PropertiesPanel::addInstanceSections(QVBoxLayout* layout, fla::SymbolInstan
     }
 
     // --- Filters ---
-    if (!instance->filters.empty())
+    // Animate gives filters to movie clips and buttons; a graphic shows any
+    // it has.
+    if (instance->symbolType != fla::SymbolType::Graphic || !instance->filters.empty())
+        addFilterSection(layout, instance);
+}
+
+void PropertiesPanel::addFilterSection(QVBoxLayout* layout, fla::SymbolInstance* instance)
+{
+    PropertySection* section = addSection(layout, "Filters");
+    int row = 0;
+    std::vector<fla::Filter>* filters = &instance->filters;
+
+    // Every change replaces the list as one undo step; a drag edits it live
+    // and records where it started.
+    auto before = std::make_shared<std::vector<fla::Filter>>();
+    const auto change = [this, filters](const std::vector<fla::Filter>& after, const char* name, bool rebuild) {
+        push(std::unique_ptr<fla::Command>(new fla::SetPropertyCommand<std::vector<fla::Filter>>(
+            *filters, *filters, after, name)));
+        emit documentEdited();
+        if (rebuild)
+            QTimer::singleShot(0, this, [this]() { refresh(); });
+    };
+    const auto hot = [&](size_t index, double fla::Filter::*member, double minimum, double maximum, int decimals,
+                         const QString& suffix, double scale) {
+        HotText* field = makeHotText(minimum, maximum, decimals, suffix);
+        field->setValue((*filters)[index].*member * scale);
+        bindLive(field,
+            [=]() { *before = *filters; },
+            [=](double value) {
+                (*filters)[index].*member = value / scale;
+                emit documentEdited();
+            },
+            [=]() {
+                const std::vector<fla::Filter> after = *filters;
+                *filters = *before;
+                change(after, "Filter", false);
+            });
+        return field;
+    };
+    const auto colorButton = [&](size_t index, uint8_t (fla::Filter::*member)[4], const char* title) {
+        QToolButton* swatch = makeSwatch((*filters)[index].*member, title);
+        connect(swatch, &QToolButton::clicked, this, [=]() {
+            const QColor chosen = QColorDialog::getColor(toQColor((*filters)[index].*member), this, title,
+                QColorDialog::ShowAlphaChannel);
+            if (!chosen.isValid())
+                return;
+            std::vector<fla::Filter> after = *filters;
+            applyColor(chosen, after[index].*member);
+            change(after, "Filter Color", true);
+        });
+        return swatch;
+    };
+    const auto checkBox = [&](size_t index, bool fla::Filter::*member, const char* text) {
+        QCheckBox* box = new QCheckBox(text, this);
+        box->setChecked((*filters)[index].*member);
+        connect(box, &QCheckBox::toggled, this, [=](bool on) {
+            std::vector<fla::Filter> after = *filters;
+            after[index].*member = on;
+            change(after, "Filter", false);
+        });
+        return box;
+    };
+
+    for (size_t i = 0; i < filters->size(); ++i)
     {
-        PropertySection* filters = addSection(layout, "Filters");
-        int filterRow = 0;
-        for (const fla::Filter& filter : instance->filters)
+        const fla::Filter& filter = (*filters)[i];
+
+        // The filter's own row: on or off, its name, order, and remove.
+        QWidget* head = new QWidget(this);
+        QHBoxLayout* headLayout = new QHBoxLayout(head);
+        headLayout->setContentsMargins(0, 6, 0, 0);
+        QCheckBox* enabled = new QCheckBox(filterName(filter.type), head);
+        QFont bold = enabled->font();
+        bold.setBold(true);
+        enabled->setFont(bold);
+        enabled->setChecked(filter.enabled);
+        connect(enabled, &QCheckBox::toggled, this, [=](bool on) {
+            std::vector<fla::Filter> after = *filters;
+            after[i].enabled = on;
+            change(after, on ? "Enable Filter" : "Disable Filter", false);
+        });
+        headLayout->addWidget(enabled, 1);
+        const auto small = [&](const QString& text, const QString& tip) {
+            QToolButton* button = new QToolButton(head);
+            button->setText(text);
+            button->setToolTip(tip);
+            button->setAutoRaise(true);
+            headLayout->addWidget(button);
+            return button;
+        };
+        QToolButton* up = small(QString::fromUtf8("\u25b2"), "Move up (drawn earlier)");
+        up->setEnabled(i > 0);
+        connect(up, &QToolButton::clicked, this, [=]() {
+            std::vector<fla::Filter> after = *filters;
+            std::swap(after[i], after[i - 1]);
+            change(after, "Reorder Filters", true);
+        });
+        QToolButton* down = small(QString::fromUtf8("\u25bc"), "Move down (drawn later)");
+        down->setEnabled(i + 1 < filters->size());
+        connect(down, &QToolButton::clicked, this, [=]() {
+            std::vector<fla::Filter> after = *filters;
+            std::swap(after[i], after[i + 1]);
+            change(after, "Reorder Filters", true);
+        });
+        QToolButton* remove = small(QString::fromUtf8("\u2715"), "Remove the filter");
+        connect(remove, &QToolButton::clicked, this, [=]() {
+            std::vector<fla::Filter> after = *filters;
+            after.erase(after.begin() + static_cast<std::ptrdiff_t>(i));
+            change(after, "Remove Filter", true);
+        });
+        section->addWide(row++, head);
+
+        using T = fla::Filter::Type;
+        if (filter.type == T::AdjustColor)
         {
-            QLabel* label = fieldLabel(QString(filterName(filter.type)) + (filter.enabled ? "" : " (off)"), this);
-            filters->addWide(filterRow++, label);
+            section->addField(row, 0, "Brightness", hot(i, &fla::Filter::brightness, -100, 100, 0, QString(), 1.0));
+            section->addField(row++, 1, "Contrast", hot(i, &fla::Filter::contrast, -100, 100, 0, QString(), 1.0));
+            section->addField(row, 0, "Saturation", hot(i, &fla::Filter::saturation, -100, 100, 0, QString(), 1.0));
+            section->addField(row++, 1, "Hue", hot(i, &fla::Filter::hue, -180, 180, 0, QString(), 1.0));
+            continue;
         }
+
+        // Every other filter blurs.
+        section->addField(row, 0, "Blur X", hot(i, &fla::Filter::blurX, 0, 255, 1, " px", 1.0));
+        section->addField(row++, 1, "Blur Y", hot(i, &fla::Filter::blurY, 0, 255, 1, " px", 1.0));
+        QComboBox* quality = new QComboBox(this);
+        quality->addItems({"Low", "Medium", "High"});
+        quality->setCurrentIndex(std::clamp(filter.quality, 1, 3) - 1);
+        connect(quality, &QComboBox::currentIndexChanged, this, [=](int index) {
+            std::vector<fla::Filter> after = *filters;
+            after[i].quality = index + 1;
+            change(after, "Filter Quality", false);
+        });
+        section->addField(row, 0, "Quality", quality);
+        if (filter.type == T::Blur)
+        {
+            ++row;
+            continue;
+        }
+        section->addField(row++, 1, "Strength", hot(i, &fla::Filter::strength, 0, 1000, 0, "%", 100.0));
+
+        const bool shadowed = filter.type == T::DropShadow || filter.type == T::Bevel ||
+            filter.type == T::GradientGlow || filter.type == T::GradientBevel;
+        if (shadowed)
+        {
+            section->addField(row, 0, "Angle", hot(i, &fla::Filter::angle, -360, 360, 0, QString::fromUtf8("\u00b0"), 1.0));
+            section->addField(row++, 1, "Distance", hot(i, &fla::Filter::distance, -255, 255, 1, " px", 1.0));
+        }
+        if (filter.type == T::DropShadow || filter.type == T::Glow)
+            section->addField(row++, 0, "Color", colorButton(i, &fla::Filter::color, "Filter Color"));
+        if (filter.type == T::Bevel)
+        {
+            section->addField(row, 0, "Shadow", colorButton(i, &fla::Filter::shadowColor, "Shadow Color"));
+            section->addField(row++, 1, "Highlight", colorButton(i, &fla::Filter::highlightColor, "Highlight Color"));
+        }
+        if (filter.type == T::Bevel || filter.type == T::GradientGlow || filter.type == T::GradientBevel)
+        {
+            QComboBox* type = new QComboBox(this);
+            type->addItems({"Inner", "Outer", "Full"});
+            const char* types[3] = {"inner", "outer", "full"};
+            for (int k = 0; k < 3; ++k)
+            {
+                if (filter.bevelType == types[k])
+                    type->setCurrentIndex(k);
+            }
+            connect(type, &QComboBox::currentIndexChanged, this, [=](int index) {
+                std::vector<fla::Filter> after = *filters;
+                after[i].bevelType = index == 0 ? std::string() : types[std::clamp(index, 0, 2)];
+                change(after, "Filter Type", false);
+            });
+            section->addField(row++, 0, "Type", type);
+        }
+        if (filter.type == T::GradientGlow || filter.type == T::GradientBevel)
+        {
+            // The gradient, on the Color panel's bar.
+            GradientBar* bar = new GradientBar(this);
+            std::vector<fla::DrawingStyle::Stop> stops;
+            for (const fla::GradientEntry& entry : filter.entries)
+            {
+                fla::DrawingStyle::Stop stop;
+                stop.ratio = entry.ratio;
+                std::copy(entry.color, entry.color + 4, stop.color);
+                stops.push_back(stop);
+            }
+            if (stops.size() < 2)
+                stops = fla::DrawingStyle::defaultGradient();
+            bar->setStops(stops);
+            connect(bar, &GradientBar::stopsChanged, this, [=](bool done) {
+                if (!done)
+                    return;
+                std::vector<fla::Filter> after = *filters;
+                after[i].entries.clear();
+                for (const fla::DrawingStyle::Stop& stop : bar->stops())
+                {
+                    fla::GradientEntry entry{stop.ratio, {}};
+                    std::copy(stop.color, stop.color + 4, entry.color);
+                    after[i].entries.push_back(entry);
+                }
+                change(after, "Filter Gradient", false);
+            });
+            connect(bar, &GradientBar::colorRequested, this, [=](int index) {
+                const auto& current = bar->stops();
+                if (index < 0 || index >= static_cast<int>(current.size()))
+                    return;
+                const QColor chosen = QColorDialog::getColor(toQColor(current[static_cast<size_t>(index)].color), this,
+                    "Gradient Color", QColorDialog::ShowAlphaChannel);
+                if (chosen.isValid())
+                    bar->setCurrentColor(chosen);
+            });
+            section->addWide(row++, bar);
+        }
+        QWidget* options = new QWidget(this);
+        QHBoxLayout* optionsLayout = new QHBoxLayout(options);
+        optionsLayout->setContentsMargins(0, 0, 0, 0);
+        optionsLayout->addWidget(checkBox(i, &fla::Filter::knockout, "Knockout"));
+        if (filter.type == T::DropShadow || filter.type == T::Glow)
+            optionsLayout->addWidget(checkBox(i, &fla::Filter::inner, filter.type == T::Glow ? "Inner glow" : "Inner shadow"));
+        if (filter.type == T::DropShadow)
+            optionsLayout->addWidget(checkBox(i, &fla::Filter::hideObject, "Hide object"));
+        optionsLayout->addStretch();
+        section->addWide(row++, options);
     }
+
+    // Add: each kind with Animate's starting settings.
+    QToolButton* add = new QToolButton(this);
+    add->setText("Add Filter");
+    add->setPopupMode(QToolButton::InstantPopup);
+    QMenu* menu = new QMenu(add);
+    using T = fla::Filter::Type;
+    for (const T type : {T::DropShadow, T::Blur, T::Glow, T::Bevel, T::GradientGlow, T::GradientBevel, T::AdjustColor})
+    {
+        menu->addAction(filterName(type), this, [=]() {
+            fla::Filter filter;
+            filter.type = type;
+            if (type == T::Glow)
+            {
+                const uint8_t red[4] = {255, 0, 0, 255};
+                std::copy(red, red + 4, filter.color);
+            }
+            if (type == T::GradientGlow || type == T::GradientBevel)
+            {
+                // Animate starts these white to black, the white clear.
+                filter.entries = {fla::GradientEntry{0.0, {255, 255, 255, 0}}, fla::GradientEntry{1.0, {0, 0, 0, 255}}};
+            }
+            std::vector<fla::Filter> after = *filters;
+            after.push_back(filter);
+            change(after, "Add Filter", true);
+        });
+    }
+    add->setMenu(menu);
+    section->addWide(row++, add);
 }
 
 void PropertiesPanel::rebuildObjectTab()
