@@ -1,6 +1,7 @@
 #include "properties_panel.h"
 
 #include "color_panel.h"
+#include "ease_curve_dialog.h"
 #include "hot_text.h"
 #include "phoenix_view.h"
 #include "player.h"
@@ -2367,14 +2368,83 @@ void PropertiesPanel::rebuildFrameTab()
 
     if (frame->tweenType != fla::TweenType::None)
     {
+        // The ease: the Ease value (Classic), one of Animate's presets, or a
+        // custom curve, which Classic takes away again.
+        static const char* const curves[] = {"quad", "cubic", "quart", "quint", "sine", "back", "circ", "bounce", "elastic"};
+        static const char* const kinds[] = {"In", "Out", "InOut"};
+        QComboBox* easeKind = new QComboBox(this);
+        easeKind->addItem("Classic");
+        easeKind->addItem("Custom");
+        std::vector<std::string> methods = {"", ""};
+        for (const char* curve : curves)
+        {
+            for (const char* kind : kinds)
+            {
+                const std::string method = std::string(curve) + kind;
+                QString label = QString(curve);
+                label[0] = label[0].toUpper();
+                easeKind->addItem(label + " " + (std::string(kind) == "InOut" ? QString("In Out") : QString(kind)));
+                methods.push_back(method);
+            }
+        }
+        const bool preset = !frame->easeMethod.empty() && frame->easeMethod != "none" && frame->easeMethod != "classic";
+        int current = frame->hasCustomEase ? 1 : 0;
+        if (!frame->hasCustomEase && preset)
+        {
+            const auto found = std::find(methods.begin() + 2, methods.end(), frame->easeMethod);
+            current = found == methods.end() ? 0 : static_cast<int>(found - methods.begin());
+        }
+        easeKind->setCurrentIndex(current);
+
+        // One undo step for the ease's fields, and Animate's attribute for a
+        // preset kept in step.
+        const auto setEase = [this, frame](bool custom, const std::string& method, const std::vector<fla::Point>& points,
+                                 const std::string& customName, const char* name) {
+            auto* command = new fla::CompoundCommand(name);
+            command->addCommand(fla::CommandPtr(new fla::SetPropertyCommand<bool>(frame->hasCustomEase, frame->hasCustomEase, custom, name)));
+            command->addCommand(fla::CommandPtr(new fla::SetPropertyCommand<std::vector<fla::Point>>(
+                frame->customEase, frame->customEase, custom ? points : std::vector<fla::Point>(), name)));
+            command->addCommand(fla::CommandPtr(new fla::SetPropertyCommand<std::string>(
+                frame->customEaseName, frame->customEaseName, custom ? customName : std::string(), name)));
+            command->addCommand(fla::CommandPtr(new fla::SetPropertyCommand<std::string>(frame->easeMethod, frame->easeMethod, method, name)));
+            command->addCommand(fla::CommandPtr(new fla::SetPropertyCommand<bool>(frame->hasEase, frame->hasEase, !method.empty() || frame->hasEase, name)));
+            auto attributes = frame->extraAttributes;
+            attributes.erase(std::remove_if(attributes.begin(), attributes.end(),
+                [](const std::pair<std::string, std::string>& a) { return a.first == "easeMethodName"; }), attributes.end());
+            if (!method.empty())
+                attributes.emplace_back("easeMethodName", method);
+            command->addCommand(fla::CommandPtr(new fla::SetPropertyCommand<std::vector<std::pair<std::string, std::string>>>(
+                frame->extraAttributes, frame->extraAttributes, attributes, name)));
+            push(std::unique_ptr<fla::Command>(command));
+            emit documentEdited();
+            QTimer::singleShot(0, this, [this]() { refresh(); });
+        };
+        const auto editCurve = [this, frame, setEase]() {
+            std::vector<QPointF> points;
+            for (const fla::Point& p : frame->customEase)
+                points.emplace_back(p.x, p.y);
+            EaseCurveDialog dialog(points, this);
+            if (dialog.exec() != QDialog::Accepted)
+            {
+                QTimer::singleShot(0, this, [this]() { refresh(); });
+                return;
+            }
+            std::vector<fla::Point> curve;
+            for (const QPointF& p : dialog.points())
+                curve.emplace_back(p.x(), p.y());
+            setEase(true, std::string(), curve, dialog.presetName().toStdString(), "Custom Ease");
+        };
+        connect(easeKind, &QComboBox::activated, this, [=](int index) {
+            if (index == 1)
+                editCurve();
+            else
+                setEase(false, methods[static_cast<size_t>(index)], {}, std::string(), "Ease");
+        });
+
         HotText* ease = makeHotText(-100, 100, 0);
         ease->setValue(frame->acceleration);
         ease->setToolTip("Negative eases in (starts slowly), positive eases out");
-        // A custom curve or an ease preset takes the place of the value, so
-        // the value is shown but not edited while one is set.
-        const bool preset = !frame->easeMethod.empty() && frame->easeMethod != "none" &&
-            frame->easeMethod != "classic";
-        ease->setEnabled(!frame->hasCustomEase && !preset);
+        ease->setEnabled(current == 0);
         std::shared_ptr<int> before = std::make_shared<int>(0);
         bindLive(ease,
             [=]() { *before = frame->acceleration; },
@@ -2386,9 +2456,12 @@ void PropertiesPanel::rebuildFrameTab()
                 push(std::unique_ptr<fla::Command>(new fla::SetPropertyCommand<int>(
                     frame->acceleration, *before, frame->acceleration, "Ease")));
             });
-        const QString label = frame->hasCustomEase ? QString("Ease (custom)")
-            : preset ? QString("Ease (%1)").arg(QString::fromStdString(frame->easeMethod)) : QString("Ease");
-        tweening->addField(1, 0, label, ease);
+        QPushButton* editEase = new QPushButton("Edit...", this);
+        editEase->setToolTip("Draw the ease as a curve");
+        connect(editEase, &QPushButton::clicked, this, editCurve);
+        tweening->addField(1, 0, "Ease", easeKind);
+        tweening->addField(1, 1, QString(), ease);
+        tweening->addField(4, 0, QString(), editEase);
     }
 
     if (frame->tweenType == fla::TweenType::Motion)
