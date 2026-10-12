@@ -138,6 +138,12 @@ private:
 
     /// An end of an open path on the selected shape that a press would pick
     /// up and continue.
+public:
+    /// While a path is being drawn, Ctrl-click ends it, so the key is the
+    /// pen's rather than the Selection tool's.
+    bool usesControlKey() const override { return _active; }
+
+private:
     struct ResumePoint
     {
         bool valid = false;
@@ -149,7 +155,13 @@ private:
         bool atStart = false;
     };
 
+    /// An end of an open path near a point: of the selected shape when
+    /// there is one, else of any shape on the frame being drawn on.
     ResumePoint resumePointAt(PhoenixView& view, const QPointF& documentPos) const;
+
+    /// Join Paths: the path being drawn ends on an end of another open
+    /// path, and the two become one, written into that path's edge.
+    bool joinAt(PhoenixView& view, const ResumePoint& target);
 
     void beginResume(PhoenixView& view, const ResumePoint& point);
 

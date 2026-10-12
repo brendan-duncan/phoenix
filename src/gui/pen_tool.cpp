@@ -200,20 +200,49 @@ EdgeBender::Probe PenTool::probeSelection(PhoenixView& view, const QPointF& docu
 
 PenTool::ResumePoint PenTool::resumePointAt(PhoenixView& view, const QPointF& documentPos) const
 {
-    ResumePoint none;
-
+    // The selected shape, or every shape on the frame being drawn on.
+    std::vector<fla::Shape*> shapes;
     fla::DOMElement* single = _selection.single();
     fla::Element* element = single ? dynamic_cast<fla::Element*>(single) : nullptr;
-    if (!element || element->elementType() != fla::Element::Type::Shape)
-        return none;
+    if (element && element->elementType() == fla::Element::Type::Shape)
+        shapes.push_back(static_cast<fla::Shape*>(element));
+    else if (fla::Frame* frame = view.activeFrame())
+        for (fla::Element* candidate : frame->elements)
+            if (candidate && candidate->elementType() == fla::Element::Type::Shape)
+                shapes.push_back(static_cast<fla::Shape*>(candidate));
 
-    fla::Shape* shape = static_cast<fla::Shape*>(element);
-    const fla::Transform& t = shape->transform;
-    const QTransform toDocument(t.m11, t.m12, t.m21, t.m22, t.tx, t.ty);
+    const bool selectedOnly = !shapes.empty() && element == shapes.front();
     const double tolerance = view.pickTolerance() * 1.5;
-
     ResumePoint best;
     double bestDistance = 0.0;
+    for (fla::Shape* shape : shapes)
+    {
+    const fla::Transform& t = shape->transform;
+    const QTransform toDocument(t.m11, t.m12, t.m21, t.m22, t.tx, t.ty);
+    // In a shape not selected, only a loose end counts: in merge drawing
+    // the edges meet one another at every corner, and those ends are not
+    // where a line stops.
+    std::vector<fla::Point> ends;
+    if (!selectedOnly)
+        for (fla::Edge* edge : shape->edges)
+            for (fla::Path* path : edge ? edge->paths : std::vector<fla::Path*>())
+                if (path)
+                {
+                    const fla::EditablePath editable = fla::EditablePath::fromPath(*path);
+                    if (!editable.closed && !editable.anchors.empty())
+                    {
+                        ends.push_back(editable.anchors.front().position);
+                        ends.push_back(editable.anchors.back().position);
+                    }
+                }
+    const auto loose = [&ends, selectedOnly](const fla::Point& at) {
+        if (selectedOnly)
+            return true;
+        int meeting = 0;
+        for (const fla::Point& end : ends)
+            meeting += std::hypot(end.x - at.x, end.y - at.y) < 0.05 ? 1 : 0;
+        return meeting <= 1;
+    };
     for (fla::Edge* edge : shape->edges)
     {
         if (!edge)
@@ -229,6 +258,8 @@ PenTool::ResumePoint PenTool::resumePointAt(PhoenixView& view, const QPointF& do
             for (int end = 0; end < 2; ++end)
             {
                 const fla::Anchor& anchor = end == 0 ? path.anchors.front() : path.anchors.back();
+                if (!loose(anchor.position))
+                    continue;
                 const QPointF at = toDocument.map(toQPointF(anchor.position));
                 const double distance = std::hypot(at.x() - documentPos.x(), at.y() - documentPos.y());
                 if (distance > tolerance || (best.valid && distance >= bestDistance))
@@ -242,7 +273,42 @@ PenTool::ResumePoint PenTool::resumePointAt(PhoenixView& view, const QPointF& do
             }
         }
     }
+    }
     return best;
+}
+
+bool PenTool::joinAt(PhoenixView& view, const ResumePoint& target)
+{
+    if (!target.valid || _resuming || _path.anchors.empty() || target.pathIndex >= target.edge->paths.size())
+        return false;
+    // The other path, on the stage, starting from the end clicked.
+    const fla::Transform& t = target.shape->transform;
+    const QTransform toDocument(t.m11, t.m12, t.m21, t.m22, t.tx, t.ty);
+    const fla::EditablePath before = fla::EditablePath::fromPath(*target.edge->paths[target.pathIndex]);
+    fla::EditablePath other = mapped(before, toDocument);
+    if (!target.atStart)
+        other = reversed(other);
+    // The path drawn, then on into the other: the click is the other's end,
+    // which takes the curve the drawn path arrives with.
+    fla::EditablePath joined = _path;
+    fla::Anchor meeting = other.anchors.front();
+    meeting.inHandle = meeting.position;
+    joined.anchors.push_back(meeting);
+    for (size_t i = 1; i < other.anchors.size(); ++i)
+        joined.anchors.push_back(other.anchors[i]);
+    joined.closed = false;
+
+    bool invertible = false;
+    const QTransform toShape = toDocument.inverted(&invertible);
+    if (!invertible)
+        return false;
+    _commandStack.push(fla::CommandPtr(new fla::SetEdgeGeometryCommand(
+        target.edge, before, mapped(joined, toShape), "Join Paths", target.pathIndex)));
+    _commandStack.breakMergeChain();
+    view.markShapeEdited(target.shape);
+    view.clearCaches();
+    cancel(view);
+    return true;
 }
 
 void PenTool::beginResume(PhoenixView& view, const ResumePoint& point)
@@ -348,6 +414,21 @@ bool PenTool::mousePress(PhoenixView& view, QMouseEvent* event, const QPointF& d
             return true;
         }
         if (editSelectedShape(view, documentPos))
+            return true;
+    }
+
+    // Ctrl-click ends the open path being drawn, as Animate's pen does.
+    if (_active && (event->modifiers() & Qt::ControlModifier))
+    {
+        finish(view, false);
+        return true;
+    }
+
+    // Ending on an end of another open path joins the two.
+    if (_active && !_resuming && _path.anchors.size() >= 1)
+    {
+        const ResumePoint target = resumePointAt(view, documentPos);
+        if (target.valid && joinAt(view, target))
             return true;
     }
 
