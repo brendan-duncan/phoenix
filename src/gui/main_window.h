@@ -451,6 +451,9 @@ private:
     /// back or forward to it.
     class QListWidget* _history = nullptr;
     QDockWidget* _historyDock = nullptr;
+    /// Review Notes: notes on frames, kept on a guide layer.
+    class NotesPanel* _notes = nullptr;
+    QDockWidget* _notesDock = nullptr;
     /// Edit > Find and Replace, made when first asked for.
     class FindReplaceDialog* _findReplace = nullptr;
     void showFindReplace();

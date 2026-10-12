@@ -27,6 +27,7 @@
 #include "find_replace_dialog.h"
 #include "toolbar_editor.h"
 #include "toolbox.h"
+#include "notes_panel.h"
 #include "theme.h"
 #include "theme_editor.h"
 #include "../parser/fla_doctor.h"
@@ -684,6 +685,55 @@ void MainWindow::createPanels()
         });
     }
 
+    // Review Notes, closed until asked.
+    if (!_notesDock)
+    {
+        NotesLinks notes;
+        notes.commands = [this]() { return &_editContext.commandStack(); };
+        notes.timeline = [this]() -> fla::Timeline* {
+            if (_phoenixView && _phoenixView->scopeTimeline())
+                return _phoenixView->scopeTimeline();
+            return _flaDocument && _flaDocument->document ? _flaDocument->document->currentScene() : nullptr;
+        };
+        notes.currentFrame = [this]() { return _player ? _player->currentFrame() : 0; };
+        notes.setCurrentFrame = [this](int frame) {
+            if (_player)
+                _player->setCurrentFrame(frame);
+        };
+        notes.setCurrentLayer = [this](const fla::Layer* layer) {
+            if (_timelineView)
+                _timelineView->setCurrentLayer(layer);
+        };
+        notes.selection = [this]() { return &_selection; };
+        notes.corner = [this]() {
+            // The top left of the stage, or of the view when the stage runs
+            // past it.
+            if (!_phoenixView)
+                return QPointF(20.0, 20.0);
+            const QPointF inView = _phoenixView->widgetToStage(QPointF(40.0, 40.0));
+            const QRectF stage = _phoenixView->stageInScope();
+            return QPointF(std::max(inView.x(), stage.left() + 20.0), std::max(inView.y(), stage.top() + 20.0));
+        };
+        notes.changed = [this]() {
+            if (_timelineView)
+                _timelineView->refresh();
+            if (_phoenixView)
+            {
+                _phoenixView->clearCaches();
+                _phoenixView->update();
+            }
+        };
+        _notes = new NotesPanel(notes);
+        _notesDock = new QDockWidget("Review Notes", this);
+        _notesDock->setObjectName("reviewNotesDock");
+        _notesDock->setAllowedAreas(Qt::AllDockWidgetAreas);
+        _notes->setParent(_notesDock);
+        _notesDock->setWidget(_notes);
+        addDockWidget(Qt::RightDockWidgetArea, _notesDock);
+        _notesDock->hide();
+        connect(_phoenixView, &PhoenixView::scopeChanged, _notes, [this]() { _notes->refresh(); });
+    }
+
     // The X-sheet, Harmony's view of the exposures, closed until asked.
     if (!_xsheetDock)
     {
@@ -772,6 +822,7 @@ void MainWindow::setupWindowMenu()
             {"Layer &Depth", _layerDepthDock, QKeySequence(), "How far each layer sits from the multiplane camera"},
             {"&X-Sheet", _xsheetDock, QKeySequence(), "The exposures of each layer, frame by frame, typed in by drawing number"},
             {"&History", _historyDock, QKeySequence(Qt::CTRL | Qt::Key_F10), "Every step that can be undone; click one to go back or forward to it"},
+            {"&Review Notes", _notesDock, QKeySequence(), "Notes on frames from whoever reviews the shot; they never export"},
         },
     };
     std::vector<std::pair<QAction*, QDockWidget*>> entries;
@@ -829,6 +880,10 @@ void MainWindow::setupWindowMenu()
     });
 
     // What a panel shows is brought up to date when it comes into view.
+    connect(_notesDock, &QDockWidget::visibilityChanged, this, [this](bool shown) {
+        if (shown)
+            _notes->refresh();
+    });
     connect(_historyDock, &QDockWidget::visibilityChanged, this, [this](bool shown) {
         if (shown)
             refreshHistory();
@@ -4235,6 +4290,8 @@ void MainWindow::updateEditState()
     if (_layerDepth)
         _layerDepth->refresh();
     refreshHistory();
+    if (_notes && _notesDock && _notesDock->isVisible())
+        _notes->refresh();
     if (_colorPanel)
         _colorPanel->refresh();
     updateFramePicker();

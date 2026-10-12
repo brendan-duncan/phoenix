@@ -80,6 +80,7 @@ set(TEST_CORE_SOURCES
     ${PHOENIX_SRC}/edit/frame_bake.cpp
     ${PHOENIX_SRC}/edit/shot_breakdown.cpp
     ${PHOENIX_SRC}/edit/linked_assets.cpp
+    ${PHOENIX_SRC}/edit/review_notes.cpp
     ${PHOENIX_SRC}/edit/combine_objects.cpp
     ${PHOENIX_SRC}/edit/swatches.cpp
     ${PHOENIX_SRC}/gui/audio_engine.cpp
@@ -121,6 +122,7 @@ set(TEST_SOURCES
     test_library_commands.cpp
     test_shot_breakdown.cpp
     test_linked_assets.cpp
+    test_review_notes.cpp
     test_find_replace.cpp
     test_audio_decode.cpp
     test_brush_stroke.cpp

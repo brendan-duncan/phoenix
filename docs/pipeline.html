@@ -3,9 +3,9 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Shots and shared assets · Phoenix User Guide</title>
-<meta name="description" content="Split an episode into shot files, keep character rigs in master files linked into every shot, and update them all at once.">
-<meta name="keywords" content="shots shot breakdown episode linked assets master file rig shared library update pipeline studio">
+<title>Shots, assets and review · Phoenix User Guide</title>
+<meta name="description" content="Split an episode into shot files, keep character rigs in master files linked into every shot, and leave review notes on frames.">
+<meta name="keywords" content="review notes comments feedback shots shot breakdown episode linked assets master file rig shared library update pipeline studio">
 <link rel="icon" href="assets/img/logo.png">
 <link rel="stylesheet" href="assets/site.css">
 <script>try { const t = localStorage.getItem("phoenix-docs-theme"); if (t) document.documentElement.dataset.theme = t; } catch (e) {}</script>
@@ -16,7 +16,7 @@
 <article class="content">
 
 <p class="eyebrow">Studio pipeline</p>
-<h1>Shots and shared assets</h1>
+<h1>Shots, assets and review</h1>
 <p class="lead">Phoenix helps a show move from one long episode file to shot files, and keeps the characters and props in those shots in step with their master files.</p>
 
 <h2>Split an episode into shots</h2>
@@ -52,6 +52,12 @@ Phoenix links shots/sh010.fla --update --save
 Phoenix batch shots/ --update-links --save</code></pre>
 
 <p>The first lists a file's links; the second updates them and saves; the third does every shot in a folder, which is how a rig change reaches a whole episode.</p>
+
+<h2>Review notes</h2>
+
+<p>Open <b>Window &gt; Review Notes</b>. <b>Add Note</b> writes a note on the frame shown, signed with your name; it appears on the stage in the corner of the view and stays until the next note. The list shows every note by frame: click one to go to its frame, <b>Done</b> ticks it off (it is struck through), and <b>Delete</b> takes it out. <b>Draw</b> makes the notes layer the one you draw on, for circling a hand or sketching a correction over the art with any drawing tool.</p>
+
+<p>Notes are kept on a guide layer called <em>Review Notes</em> at the top of the timeline. Guide layers never export, from Phoenix or from Animate, so notes travel with the file to whoever fixes the shot and never reach the picture. Delete the layer when the shot is approved.</p>
 
 </article>
 </main>
