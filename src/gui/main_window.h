@@ -525,6 +525,8 @@ private:
     std::unique_ptr<BrushTool> _inkBrushTool;
     /// Brush Properties, open beside the stage while it is shown.
     QPointer<class BrushPropertiesDialog> _brushProperties;
+    /// Window > Render Queue, made when first asked for and kept.
+    QPointer<class RenderQueue> _renderQueue;
     void openBrushProperties();
     std::unique_ptr<EraserTool> _eraserTool;
     std::unique_ptr<PaintBucketTool> _paintBucketTool;

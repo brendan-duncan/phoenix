@@ -55,7 +55,7 @@ const char* const kHelp =
     "  render <file> [--range 1-240] [--out frames/|movie.mp4|anim.gif|frame.svg|movie.swf]\n"
     "         [--size WxH] [--transparent] [--no-camera] [--no-audio] [--per-layer]\n"
     "         [--layers A,B] [--passes] [--exr] [--prores|--prores4444] [--everything]\n"
-    "         [--all-scenes|--each-scene] [--colors N] [--dither] [--link-images]\n"
+    "         [--scene NAME|--all-scenes|--each-scene] [--colors N] [--dither] [--link-images]\n"
     "      Renders frames: a folder gets a numbered PNG sequence, an .svg name an\n"
     "      SVG sequence. --passes adds line, color and matte sequences; --exr\n"
     "      writes one multi-layer EXR a frame holding the picture and the passes.\n"

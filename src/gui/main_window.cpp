@@ -79,6 +79,7 @@
 #include "sprite_sheet_dialog.h"
 #include "brush_properties_dialog.h"
 #include "publish_dialog.h"
+#include "render_queue.h"
 #include "paint_recorder.h"
 #include "../util/swf_writer.h"
 #include "../edit/publish_settings.h"
@@ -1351,6 +1352,32 @@ void MainWindow::setupWindowMenu()
     QAction* brushesAction = windowMenu->addAction("Document &Brushes…");
     brushesAction->setStatusTip("The art and pattern brushes the document's strokes are drawn with");
     connect(brushesAction, &QAction::triggered, this, &MainWindow::manageBrushes);
+    QAction* renderQueueAction = windowMenu->addAction("&Render Queue…");
+    renderQueueAction->setStatusTip("Renders lined up and run one after another while you work");
+    connect(renderQueueAction, &QAction::triggered, this, [this]() {
+        if (!_renderQueue)
+        {
+            // Add Current renders the saved file: unsaved changes are saved
+            // first, or the document is left out.
+            _renderQueue = new RenderQueue([this]() -> QString {
+                if (!_flaDocument || !_flaDocument->document)
+                    return QString();
+                if (_documentPath.isEmpty() || _editContext.isModified())
+                {
+                    if (QMessageBox::question(this, "Render Queue", "Save the document before queueing it?") != QMessageBox::Yes)
+                        return QString();
+                    saveFile();
+                    if (_documentPath.isEmpty() || _editContext.isModified())
+                        return QString();
+                }
+                return _documentPath;
+            }, this);
+            _renderQueue->setAttribute(Qt::WA_DeleteOnClose, false);
+        }
+        _renderQueue->show();
+        _renderQueue->raise();
+        _renderQueue->activateWindow();
+    });
     windowMenu->addSeparator();
 
     QAction* hidePanels = windowMenu->addAction("&Hide Panels");
@@ -5392,6 +5419,23 @@ int MainWindow::renderCommand(const QString& source, const QStringList& options)
         return 1;
     }
     const fla::Document* document = _flaDocument->document;
+    // --scene NAME: that scene, before anything is counted.
+    const int sceneOption = static_cast<int>(options.indexOf("--scene"));
+    if (sceneOption >= 0)
+    {
+        const QString wanted = options.value(sceneOption + 1);
+        int found = -1;
+        for (int i = 0; i < static_cast<int>(document->timelines.size()); ++i)
+            if (document->timelines[static_cast<size_t>(i)] &&
+                QString::fromStdString(document->timelines[static_cast<size_t>(i)]->name) == wanted)
+                found = i;
+        if (found < 0)
+        {
+            std::fprintf(stderr, "No scene named %s\n", qPrintable(wanted));
+            return 1;
+        }
+        goToScene(found);
+    }
     const int count = std::max(1, _phoenixView->frameCount());
     MovieExportSettings settings;
     settings.format = MovieExportSettings::Format::PngSequence;
@@ -5442,6 +5486,8 @@ int MainWindow::renderCommand(const QString& source, const QStringList& options)
             settings.codec = MovieExportSettings::Codec::ProRes4444;
         else if (name == "--everything")
             settings.everything = true;
+        else if (name == "--scene" && !value.isEmpty())
+            ++i;
         else if (name == "--all-scenes")
             settings.scenes = MovieExportSettings::Scenes::All;
         else if (name == "--each-scene")

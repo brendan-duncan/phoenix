@@ -108,14 +108,19 @@
   <dt>Data</dt><dd>A JSON file beside the image with the same name, describing each frame's place, trim and size, in the hash or array layout most engines and texture tools read; or none.</dd>
 </dl>
 
+<h2 id="render-queue">Render queue</h2>
+
+<p><span class="menu-path">Window &rsaquo; Render Queue...</span> lines up renders and runs them one after another, each in a Phoenix of its own with no window, so you can keep working while they run. <strong>Add Current</strong> queues the open document (saving it first if it has changes); <strong>Add Files...</strong> queues others. Each job has an output (a folder for a PNG sequence, or a file ending in <code>.mp4</code>, <code>.mov</code>, <code>.gif</code>, <code>.svg</code> or <code>.swf</code>), a frame range, a size, the scenes to render (the one the document opens on, one by name, all of them into one output, or each to its own), and the options the command line takes: a transparent background, no camera, the pasteboard too, ProRes, a PNG sequence per layer, compositing passes, no sound.</p>
+
+<figure>
+  <img src="assets/shots/render-queue.webp" alt="Render Queue window listing a document, its output, frames and status, with Add Current, Add Files, Edit, Remove, Up, Down, Clear Finished, Render All and Stop" width="760" height="380">
+</figure>
+
+<p><strong>Render All</strong> runs every waiting job in order, and <strong>Stop</strong> ends the one running. A job shows Waiting, Rendering, Done or Failed; hold the pointer over a failed job to see why. The queue is kept when Phoenix closes.</p>
+
 <h2>Exporting without opening Phoenix</h2>
 
 <p>Every movie and image export can also run from the command line, for batch jobs and render scripts. See <a href="command-line.html">Command line</a>.</p>
-
-<div class="callout planned">
-  <span class="label">Planned</span>
-  <p>Sprite sheets, a render queue, and export settings saved with the document.</p>
-</div>
 
 <h2>Compositing passes</h2>
 

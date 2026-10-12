@@ -132,6 +132,7 @@ set(HEADERS
     src/gui/brush_properties_dialog.h
     src/gui/publish_dialog.h
     src/gui/paint_recorder.h
+    src/gui/render_queue.h
     src/gui/selection_targets.h
     src/gui/navigation_tools.h
     src/gui/draw_placement.h
@@ -355,6 +356,7 @@ set(SOURCES
     src/gui/brush_properties_dialog.cpp
     src/gui/publish_dialog.cpp
     src/gui/paint_recorder.cpp
+    src/gui/render_queue.cpp
     src/gui/navigation_tools.cpp
     src/gui/draw_placement.cpp
     src/gui/filters.cpp
