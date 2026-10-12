@@ -580,6 +580,7 @@ void MainWindow::setupUI()
     connect(_timelineView, &TimelineView::addLayerRequested, this, &MainWindow::addLayer);
     connect(_timelineView, &TimelineView::deleteLayerRequested, this, &MainWindow::deleteCurrentLayer);
     connect(_timelineView, &TimelineView::layerRenamed, this, &MainWindow::renameLayer);
+    connect(_timelineView, &TimelineView::layerEditRequested, this, &MainWindow::editLayers);
 }
 
 fla::Timeline* MainWindow::editedTimeline() const
@@ -932,6 +933,22 @@ void MainWindow::deleteCurrentLayer()
     _editContext.commandStack().breakMergeChain();
     _timelineView->refresh();
     onVisibilityChanged();
+}
+
+void MainWindow::editLayers(fla::Timeline* timeline, const fla::LayerSnapshot& after, const QString& name)
+{
+    if (!timeline)
+        return;
+    fla::CommandStack& stack = _editContext.commandStack();
+    stack.push(fla::CommandPtr(new fla::LayerEditCommand(timeline, fla::snapshotLayers(*timeline), after,
+        name.toStdString())));
+    stack.breakMergeChain();
+    _timelineView->refresh();
+    if (_phoenixView)
+    {
+        _phoenixView->clearCaches();
+        _phoenixView->update();
+    }
 }
 
 void MainWindow::renameLayer(const fla::Timeline* timeline, int layerIndex, const QString& name)

@@ -1,6 +1,7 @@
 #pragma once
 
 #include "../data/fla_document.h"
+#include "../edit/layer_commands.h"
 
 #include <QIcon>
 #include <QTreeWidget>
@@ -102,6 +103,11 @@ signals:
     /// A name was typed for a layer.
     void layerRenamed(const fla::Timeline* timeline, int layerIndex, const QString& name);
 
+    /// The layers of \a timeline are to be put as \a after has them, as one
+    /// undo step named \a name: a move, a change of kind, the Layer
+    /// Properties dialog.
+    void layerEditRequested(fla::Timeline* timeline, const fla::LayerSnapshot& after, const QString& name);
+
 private:
     enum Column
     {
@@ -137,6 +143,8 @@ private:
         const fla::Layer* layer;
         std::string name;
         bool selected;
+        const fla::Layer* parent;
+        fla::Layer::Type type;
     };
     std::vector<Built> _built;
     std::vector<Built> snapshot() const;
@@ -156,6 +164,19 @@ private:
 
     /// Redraws one row's toggles from its layer.
     void refreshRow(QTreeWidgetItem* item);
+
+    /// The right-click menu of a row.
+    void showLayerMenu(QTreeWidgetItem* item, const QPoint& globalPos);
+
+    /// The Layer Properties dialog for a row.
+    void showLayerProperties(QTreeWidgetItem* item);
+
+    /// A row dropped on, above or below another (or on empty space, with no
+    /// target).
+    void dropLayer(QTreeWidgetItem* dragged, QTreeWidgetItem* target, int position);
+
+    /// The layer just below everything \a item holds, or null at the bottom.
+    fla::Layer* layerAfterBlock(QTreeWidgetItem* item) const;
 
 private slots:
     void onItemExpanded(QTreeWidgetItem* item);

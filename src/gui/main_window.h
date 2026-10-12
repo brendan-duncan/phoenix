@@ -152,6 +152,7 @@ private slots:
     void showFramesMenu(const QPoint& globalPos);
     void addLayer(bool folder);
     void deleteCurrentLayer();
+    void editLayers(fla::Timeline* timeline, const fla::LayerSnapshot& after, const QString& name);
     void renameLayer(const fla::Timeline* timeline, int layerIndex, const QString& name);
 
     /// Replaces each selected shape's contents with \a change applied to a

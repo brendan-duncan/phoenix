@@ -282,4 +282,257 @@ void RemoveLayerCommand::undo()
     _owned = false;
 }
 
+// ---------------------------------------------------------------------------
+
+LayerSnapshot snapshotLayers(const Timeline& timeline)
+{
+    LayerSnapshot snapshot;
+    for (Layer* layer : timeline.layers)
+    {
+        if (!layer)
+            continue;
+        LayerState state;
+        state.layer = layer;
+        state.parent = layer->parentLayer;
+        state.type = layer->layerType;
+        state.otherType = layer->otherLayerType;
+        state.name = layer->name;
+        state.autoNamed = layer->autoNamed;
+        for (int i = 0; i < 4; ++i)
+            state.color[i] = layer->color[i];
+        state.visible = layer->visible;
+        state.locked = layer->locked;
+        state.outline = layer->outline;
+        snapshot.push_back(state);
+    }
+    return snapshot;
+}
+
+LayerEditCommand::LayerEditCommand(Timeline* timeline, LayerSnapshot before, LayerSnapshot after,
+    const std::string& name)
+    : _timeline(timeline)
+    , _before(std::move(before))
+    , _after(std::move(after))
+    , _name(name)
+{
+}
+
+void LayerEditCommand::apply(Timeline& timeline, const LayerSnapshot& snapshot)
+{
+    timeline.layers.clear();
+    for (const LayerState& state : snapshot)
+    {
+        Layer* layer = state.layer;
+        timeline.layers.push_back(layer);
+        layer->parentLayer = state.parent;
+        layer->layerType = state.type;
+        layer->otherLayerType = state.otherType;
+        layer->name = state.name;
+        layer->autoNamed = state.autoNamed;
+        for (int i = 0; i < 4; ++i)
+            layer->color[i] = state.color[i];
+        layer->visible = state.visible;
+        layer->locked = state.locked;
+        layer->outline = state.outline;
+    }
+    renumberParents(timeline);
+}
+
+void LayerEditCommand::redo()
+{
+    if (_timeline)
+        apply(*_timeline, _after);
+}
+
+void LayerEditCommand::undo()
+{
+    if (_timeline)
+        apply(*_timeline, _before);
+}
+
+namespace layers {
+
+namespace {
+
+int indexIn(const LayerSnapshot& snapshot, const Layer* layer)
+{
+    for (size_t i = 0; i < snapshot.size(); ++i)
+    {
+        if (snapshot[i].layer == layer)
+            return static_cast<int>(i);
+    }
+    return -1;
+}
+
+LayerState* stateOf(LayerSnapshot& snapshot, const Layer* layer)
+{
+    const int index = indexIn(snapshot, layer);
+    return index < 0 ? nullptr : &snapshot[static_cast<size_t>(index)];
+}
+
+/// Whether \a layer is \a ancestor or sits inside it, however deep.
+bool within(const LayerSnapshot& snapshot, const Layer* layer, const Layer* ancestor)
+{
+    for (int guard = 0; layer && guard < 256; ++guard)
+    {
+        if (layer == ancestor)
+            return true;
+        const int index = indexIn(snapshot, layer);
+        layer = index < 0 ? nullptr : snapshot[static_cast<size_t>(index)].parent;
+    }
+    return false;
+}
+
+Layer::Type typeIn(const LayerSnapshot& snapshot, const Layer* layer)
+{
+    const int index = indexIn(snapshot, layer);
+    return index < 0 ? Layer::Type::Normal : snapshot[static_cast<size_t>(index)].type;
+}
+
+/// The folder a layer is in, looking through the mask or guide it is under.
+Layer* folderOf(const LayerSnapshot& snapshot, const Layer* layer)
+{
+    const int index = indexIn(snapshot, layer);
+    Layer* parent = index < 0 ? nullptr : snapshot[static_cast<size_t>(index)].parent;
+    if (parent && typeIn(snapshot, parent) != Layer::Type::Folder)
+        return folderOf(snapshot, parent);
+    return parent;
+}
+
+/// The layer just below everything \a layer holds: where a layer goes to be
+/// the last one inside it. Null at the bottom.
+Layer* afterBlock(const LayerSnapshot& snapshot, const Layer* layer)
+{
+    const int index = indexIn(snapshot, layer);
+    for (size_t i = static_cast<size_t>(index) + 1; i < snapshot.size(); ++i)
+    {
+        if (!within(snapshot, snapshot[i].layer, layer))
+            return snapshot[i].layer;
+    }
+    return nullptr;
+}
+
+/// The layers a mask or guide holds go back to its folder as plain layers.
+void release(LayerSnapshot& snapshot, const Layer* layer)
+{
+    Layer* folder = folderOf(snapshot, layer);
+    for (LayerState& state : snapshot)
+    {
+        if (state.parent != layer)
+            continue;
+        state.parent = folder;
+        if (state.type == Layer::Type::Masked)
+            state.type = Layer::Type::Normal;
+    }
+}
+
+} // namespace
+
+Kind kindOf(const LayerSnapshot& snapshot, const Layer* layer)
+{
+    const int index = indexIn(snapshot, layer);
+    if (index < 0)
+        return Kind::Normal;
+    const LayerState& state = snapshot[static_cast<size_t>(index)];
+    switch (state.type)
+    {
+    case Layer::Type::Folder: return Kind::Folder;
+    case Layer::Type::Mask: return Kind::Mask;
+    case Layer::Type::Guide: return Kind::Guide;
+    case Layer::Type::Masked: return Kind::Masked;
+    case Layer::Type::Normal: break;
+    }
+    if (state.parent && typeIn(snapshot, state.parent) == Layer::Type::Mask)
+        return Kind::Masked;
+    if (state.parent && typeIn(snapshot, state.parent) == Layer::Type::Guide)
+        return Kind::Guided;
+    return Kind::Normal;
+}
+
+bool moveLayer(LayerSnapshot& snapshot, Layer* layer, Layer* before, Layer* parent)
+{
+    const int from = indexIn(snapshot, layer);
+    if (from < 0 || (before && indexIn(snapshot, before) < 0) || (parent && indexIn(snapshot, parent) < 0))
+        return false;
+    if (parent && within(snapshot, parent, layer))
+        return false;
+    if (before && within(snapshot, before, layer))
+        return false;
+    const Layer::Type parentType = parent ? typeIn(snapshot, parent) : Layer::Type::Folder;
+    if (parentType == Layer::Type::Normal || parentType == Layer::Type::Masked)
+        return false;
+    // A folder, mask or guide does not go under a mask or guide.
+    const Layer::Type type = snapshot[static_cast<size_t>(from)].type;
+    if (parent && parentType != Layer::Type::Folder &&
+        (type == Layer::Type::Folder || type == Layer::Type::Mask || type == Layer::Type::Guide))
+        return false;
+
+    // The layer and everything in it, taken out in order.
+    LayerSnapshot block;
+    LayerSnapshot rest;
+    for (const LayerState& state : snapshot)
+        (within(snapshot, state.layer, layer) ? block : rest).push_back(state);
+    LayerState& moved = block.front().layer == layer ? block.front() : *stateOf(block, layer);
+    moved.parent = parent;
+    if (parentType == Layer::Type::Mask)
+        moved.type = Layer::Type::Masked;
+    else if (moved.type == Layer::Type::Masked)
+        moved.type = Layer::Type::Normal;
+
+    const int at = before ? indexIn(rest, before) : static_cast<int>(rest.size());
+    rest.insert(rest.begin() + at, block.begin(), block.end());
+    snapshot = rest;
+    return true;
+}
+
+bool setKind(LayerSnapshot& snapshot, Layer* layer, Kind kind)
+{
+    LayerState* state = stateOf(snapshot, layer);
+    if (!state)
+        return false;
+    const Kind now = kindOf(snapshot, layer);
+    if (now == kind)
+        return true;
+    if (now == Kind::Folder || kind == Kind::Folder)
+        return false;
+
+    if (kind == Kind::Masked || kind == Kind::Guided)
+    {
+        // Under the nearest mask (or guide) above, in the same folder.
+        const Layer::Type wanted = kind == Kind::Masked ? Layer::Type::Mask : Layer::Type::Guide;
+        Layer* folder = folderOf(snapshot, layer);
+        Layer* owner = nullptr;
+        for (int i = indexIn(snapshot, layer) - 1; i >= 0 && !owner; --i)
+        {
+            const LayerState& above = snapshot[static_cast<size_t>(i)];
+            if (above.type == wanted && above.parent == folder && above.layer != layer)
+                owner = above.layer;
+        }
+        if (!owner)
+            return false;
+        if (now == Kind::Mask || now == Kind::Guide)
+        {
+            release(snapshot, layer);
+            stateOf(snapshot, layer)->type = Layer::Type::Normal;
+        }
+        Layer* before = afterBlock(snapshot, owner);
+        if (before == layer)
+            before = afterBlock(snapshot, layer);
+        return moveLayer(snapshot, layer, before, owner);
+    }
+
+    // A mask or guide stops holding its layers once it is something else.
+    if (now == Kind::Mask || now == Kind::Guide)
+        release(snapshot, layer);
+    state = stateOf(snapshot, layer);
+    // Out from under a mask or guide, into its folder.
+    if (now == Kind::Masked || now == Kind::Guided)
+        state->parent = folderOf(snapshot, layer);
+    state->type = kind == Kind::Mask ? Layer::Type::Mask
+        : kind == Kind::Guide ? Layer::Type::Guide : Layer::Type::Normal;
+    return true;
+}
+
+} // namespace layers
+
 } // namespace fla

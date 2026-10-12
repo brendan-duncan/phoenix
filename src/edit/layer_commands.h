@@ -1,6 +1,9 @@
 #pragma once
 
 #include "command.h"
+#include "../data/layer.h"
+
+#include <cstdint>
 
 #include <string>
 #include <utility>
@@ -8,7 +11,6 @@
 
 namespace fla {
 
-class Layer;
 class Timeline;
 
 /// A new, empty layer or folder for \a timeline, named "Layer N" (or
@@ -76,5 +78,80 @@ private:
     std::vector<int> _parentsBefore;
     std::vector<bool> _selectedBefore;
 };
+
+/// What a layer is in a timeline's structure, and how it looks: its place
+/// is its place in the snapshot's list.
+struct LayerState
+{
+    Layer* layer = nullptr;
+    /// The folder it sits in, or the mask or guide it is under.
+    Layer* parent = nullptr;
+    Layer::Type type = Layer::Type::Normal;
+    std::string otherType;
+    std::string name;
+    bool autoNamed = false;
+    uint8_t color[4] = {0, 0, 0, 255};
+    bool visible = true;
+    bool locked = false;
+    bool outline = false;
+};
+
+/// A timeline's layers, top first, as an edit leaves them.
+using LayerSnapshot = std::vector<LayerState>;
+
+LayerSnapshot snapshotLayers(const Timeline& timeline);
+
+/// Puts a timeline's layers into the order, links and settings of a
+/// snapshot: moving layers, changing their kind, renaming them, all as one
+/// undo step. The snapshots hold the same layers, in any order.
+class LayerEditCommand : public Command
+{
+public:
+    LayerEditCommand(Timeline* timeline, LayerSnapshot before, LayerSnapshot after, const std::string& name);
+
+    void redo() override;
+    void undo() override;
+    std::string name() const override { return _name; }
+
+    /// Applies a snapshot to its timeline.
+    static void apply(Timeline& timeline, const LayerSnapshot& snapshot);
+
+private:
+    Timeline* _timeline;
+    LayerSnapshot _before;
+    LayerSnapshot _after;
+    std::string _name;
+};
+
+namespace layers {
+
+/// What a layer is, as Animate's Layer Properties offers it: a guided layer
+/// is a normal one under a guide; a masked one, one under a mask.
+enum class Kind
+{
+    Normal,
+    Guide,
+    Guided,
+    Mask,
+    Masked,
+    Folder
+};
+
+Kind kindOf(const LayerSnapshot& snapshot, const Layer* layer);
+
+/// Moves \a layer, with the layers inside it, to just above \a before (to
+/// the bottom for null), into \a parent: a folder, a mask (making it
+/// masked), a guide (making it guided), or null for the top level. False
+/// when that cannot be: a layer into itself, or under a plain layer.
+bool moveLayer(LayerSnapshot& snapshot, Layer* layer, Layer* before, Layer* parent);
+
+/// Makes \a layer the kind asked for. A masked or guided layer goes under
+/// the nearest mask or guide above it in the same folder, and is moved to
+/// sit just below what that mask or guide already holds; a mask or guide
+/// that stops being one lets its layers go. False when that cannot be: no
+/// mask or guide above, or a change to or from a folder.
+bool setKind(LayerSnapshot& snapshot, Layer* layer, Kind kind);
+
+} // namespace layers
 
 } // namespace fla

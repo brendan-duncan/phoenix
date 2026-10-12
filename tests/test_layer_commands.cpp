@@ -4,6 +4,8 @@
 #include "../src/data/layer.h"
 #include "../src/data/timeline.h"
 #include "../src/edit/command_stack.h"
+#include <memory>
+#include <string>
 #include "../src/edit/layer_commands.h"
 
 #include <memory>
@@ -122,4 +124,90 @@ TEST(a_locked_folder_locks_the_layers_in_it)
     CHECK(!deeper.isLocked());
     inner.layerType = fla::Layer::Type::Folder;
     CHECK(deeper.isLocked());
+}
+
+namespace {
+
+/// A timeline of layers named by the letters given, top first, none linked.
+std::unique_ptr<fla::Timeline> lettered(const char* names)
+{
+    std::unique_ptr<fla::Timeline> timeline(new fla::Timeline(nullptr));
+    for (const char* c = names; *c; ++c)
+    {
+        fla::Layer* layer = new fla::Layer(timeline.get());
+        layer->name = std::string(1, *c);
+        timeline->layers.push_back(layer);
+    }
+    return timeline;
+}
+
+std::string order(const fla::Timeline& timeline)
+{
+    std::string names;
+    for (const fla::Layer* layer : timeline.layers)
+        names += layer->name;
+    return names;
+}
+
+fla::Layer* named(const fla::Timeline& timeline, char name)
+{
+    for (fla::Layer* layer : timeline.layers)
+    {
+        if (layer->name[0] == name)
+            return layer;
+    }
+    return nullptr;
+}
+
+} // namespace
+
+TEST(moving_a_folder_takes_its_layers_and_undoes_in_one_step)
+{
+    std::unique_ptr<fla::Timeline> timeline = lettered("FabC");
+    fla::Layer* folder = named(*timeline, 'F');
+    folder->layerType = fla::Layer::Type::Folder;
+    named(*timeline, 'a')->parentLayer = folder;
+    named(*timeline, 'b')->parentLayer = folder;
+
+    fla::LayerSnapshot after = fla::snapshotLayers(*timeline);
+    // To the bottom, under nothing: its layers go with it.
+    CHECK(fla::layers::moveLayer(after, folder, nullptr, nullptr));
+    fla::CommandStack stack;
+    stack.push(fla::CommandPtr(new fla::LayerEditCommand(timeline.get(), fla::snapshotLayers(*timeline), after, "Move Layer")));
+    CHECK(order(*timeline) == "CFab");
+    CHECK(named(*timeline, 'a')->parentLayerIndex == 1);
+    stack.undo();
+    CHECK(order(*timeline) == "FabC");
+    CHECK(named(*timeline, 'b')->parentLayerIndex == 0);
+
+    // A layer into a folder, and a folder never into itself.
+    after = fla::snapshotLayers(*timeline);
+    CHECK(fla::layers::moveLayer(after, named(*timeline, 'C'), named(*timeline, 'a'), folder));
+    CHECK(!fla::layers::moveLayer(after, folder, nullptr, named(*timeline, 'a')));
+    fla::LayerEditCommand::apply(*timeline, after);
+    CHECK(order(*timeline) == "FCab" && named(*timeline, 'C')->parentLayer == folder);
+}
+
+TEST(a_layer_becomes_masked_under_the_mask_above_and_a_mask_lets_go)
+{
+    std::unique_ptr<fla::Timeline> timeline = lettered("MxY");
+    fla::Layer* mask = named(*timeline, 'M');
+    fla::LayerSnapshot after = fla::snapshotLayers(*timeline);
+    // No mask above yet.
+    CHECK(!fla::layers::setKind(after, named(*timeline, 'Y'), fla::layers::Kind::Masked));
+    CHECK(fla::layers::setKind(after, mask, fla::layers::Kind::Mask));
+    CHECK(fla::layers::setKind(after, named(*timeline, 'Y'), fla::layers::Kind::Masked));
+    fla::LayerEditCommand::apply(*timeline, after);
+    // Y moves up to sit right under the mask, ahead of the plain layer x.
+    CHECK(order(*timeline) == "MYx");
+    CHECK(named(*timeline, 'Y')->layerType == fla::Layer::Type::Masked);
+    CHECK(named(*timeline, 'Y')->parentLayer == mask);
+    CHECK(fla::layers::kindOf(after, named(*timeline, 'Y')) == fla::layers::Kind::Masked);
+
+    // The mask goes back to normal and its layer with it.
+    after = fla::snapshotLayers(*timeline);
+    CHECK(fla::layers::setKind(after, mask, fla::layers::Kind::Normal));
+    fla::LayerEditCommand::apply(*timeline, after);
+    CHECK(named(*timeline, 'Y')->parentLayer == nullptr);
+    CHECK(named(*timeline, 'Y')->layerType == fla::Layer::Type::Normal);
 }
