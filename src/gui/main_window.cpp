@@ -311,11 +311,20 @@ void MainWindow::adoptDocument(fla::FLADocument* document, const QString& filePa
     _flaDocument = document;
     _editContext.setDocument(_flaDocument);
 
-    // Grid spacing comes from the document, so it has to be picked up per file.
+    // Grid spacing and the snapping switches come from the document, so they
+    // have to be picked up per file.
     if (_flaDocument && _flaDocument->document)
     {
-        _snapper.setGridSpacing(_flaDocument->document->gridSpacingX,
-            _flaDocument->document->gridSpacingY);
+        const fla::Document* document = _flaDocument->document;
+        _snapper.setGridSpacing(document->gridSpacingX, document->gridSpacingY);
+        const bool objects = document->objectsSnapTo;
+        const bool guides = document->guidesSnapTo;
+        if (_snapToObjectsAction)
+            _snapToObjectsAction->setChecked(objects);
+        if (_snapGuidesAction)
+            _snapGuidesAction->setChecked(guides);
+        _snapper.setObjectSnapEnabled(objects);
+        _snapper.setGuideSnapEnabled(guides);
     }
     _phoenixView->setDocument(_flaDocument);
     _documentView->setDocument(_flaDocument);
@@ -1315,10 +1324,16 @@ void MainWindow::setupMenus()
             _phoenixView->setGuidesVisible(on);
     });
     QAction* snapGuidesAction = guidesMenu->addAction("S&nap to Guides");
+    _snapGuidesAction = snapGuidesAction;
     snapGuidesAction->setCheckable(true);
     snapGuidesAction->setChecked(true);
     snapGuidesAction->setShortcut(QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_Semicolon));
-    connect(snapGuidesAction, &QAction::toggled, this, [this](bool on) { _snapper.setGuideSnapEnabled(on); });
+    connect(snapGuidesAction, &QAction::toggled, this, [this](bool on) {
+        _snapper.setGuideSnapEnabled(on);
+        // A setting of the document, as in Animate, saved with it.
+        if (_flaDocument && _flaDocument->document)
+            _flaDocument->document->guidesSnapTo = on;
+    });
     QAction* clearGuidesAction = guidesMenu->addAction("&Clear Guides");
     connect(clearGuidesAction, &QAction::triggered, this, [this]() {
         if (_phoenixView)
@@ -1429,11 +1444,14 @@ void MainWindow::setupMenus()
     viewMenu->addAction(snapToGridAction);
 
     QAction* snapToObjectsAction = new QAction("Snap to &Objects", this);
+    _snapToObjectsAction = snapToObjectsAction;
     snapToObjectsAction->setCheckable(true);
     snapToObjectsAction->setChecked(true);
     snapToObjectsAction->setStatusTip("Line dragged objects up with other objects and the stage");
     connect(snapToObjectsAction, &QAction::toggled, this, [this](bool on) {
         _snapper.setObjectSnapEnabled(on);
+        if (_flaDocument && _flaDocument->document)
+            _flaDocument->document->objectsSnapTo = on;
         saveSettings();
     });
     viewMenu->addAction(snapToObjectsAction);

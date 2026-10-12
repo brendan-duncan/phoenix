@@ -322,6 +322,9 @@ private:
     /// with the other, so the change does not bounce back.
     bool _syncingSelection = false;
     QAction* _selectAllAction = nullptr;
+    /// The snapping switches the document keeps.
+    QAction* _snapToObjectsAction = nullptr;
+    QAction* _snapGuidesAction = nullptr;
     QAction* _deselectAllAction = nullptr;
     QAction* _cutAction = nullptr;
     QAction* _copyAction = nullptr;

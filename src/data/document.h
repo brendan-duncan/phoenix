@@ -43,7 +43,10 @@ public:
     int gridSpacingX = 18;
     int gridSpacingY = 18;
     int snapAlignBorderSpacing = 18;
+    /// Snap to Objects and Snap to Guides, which Animate keeps in the
+    /// document; both on unless the file says otherwise.
     bool objectsSnapTo = true;
+    bool guidesSnapTo = true;
     int timelineHeight = 197;
     int timelineLabelWidth = 256;
     double vanishingPoint3DX = 400.0;
