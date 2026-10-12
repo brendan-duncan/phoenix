@@ -463,6 +463,15 @@ public:
     /// of the layer being edited. Null when there is nowhere to draw.
     fla::Frame* activeFrame();
 
+    /// How much the camera enlarges art drawn on \a frame's layer: 1 with
+    /// no camera, or with the camera view off.
+    double cameraScaleFor(const fla::Frame* frame);
+
+    /// The ruler guides in the space the tools work in: the vertical ones'
+    /// x and the horizontal ones' y; none while they are hidden, or inside
+    /// a symbol turned on the stage.
+    void toolGuides(std::vector<double>& xs, std::vector<double>& ys);
+
     /// The keyframe at the frame being shown on \a frame's layer, which a
     /// drawing goes into. When the playhead sits inside \a frame's span
     /// rather than on its keyframe, a keyframe is inserted there first,
@@ -969,6 +978,10 @@ private:
         /// For a ragged, stipple or hatched stroke, the area its marks
         /// cover, filled with the pen's color in place of stroking.
         QPainterPath effectPath;
+
+        /// A textured fill whose grain keeps its size in the frame: the
+        /// art's own scale is taken out of it when it is painted.
+        bool fixedGrain = false;
     };
 
     /// Paints one cached entry: its fill and stroke, or its procedural

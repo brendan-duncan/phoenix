@@ -18,6 +18,9 @@ constexpr double kPi = 3.14159265358979323846;
 const char* const kName = "phoenixTexture";
 const char* const kScale = "phoenixTextureScale";
 const char* const kStrength = "phoenixTextureStrength";
+const char* const kOffset = "phoenixTextureOffset";
+const char* const kRotation = "phoenixTextureRotation";
+const char* const kFixed = "phoenixTextureFixed";
 
 /// A hash of lattice coordinates to [0, 1), the same on every run.
 double hash(int x, int y, int seed)
@@ -343,6 +346,17 @@ Spec of(const DOMElement& element)
             spec.scale = std::max(0.01, std::atof(attribute.second.c_str()));
         else if (attribute.first == kStrength)
             spec.strength = std::clamp(std::atof(attribute.second.c_str()), 0.0, 1.0);
+        else if (attribute.first == kOffset)
+        {
+            // "x,y"
+            const size_t comma = attribute.second.find(',');
+            spec.offsetX = std::atof(attribute.second.c_str());
+            spec.offsetY = comma == std::string::npos ? 0.0 : std::atof(attribute.second.c_str() + comma + 1);
+        }
+        else if (attribute.first == kRotation)
+            spec.rotation = std::atof(attribute.second.c_str());
+        else if (attribute.first == kFixed)
+            spec.fixed = attribute.second == "true";
     }
     return spec;
 }
@@ -351,7 +365,8 @@ void set(std::vector<std::pair<std::string, std::string>>& attributes, const Spe
 {
     attributes.erase(std::remove_if(attributes.begin(), attributes.end(),
                          [](const std::pair<std::string, std::string>& a) {
-                             return a.first == kName || a.first == kScale || a.first == kStrength;
+                             return a.first == kName || a.first == kScale || a.first == kStrength ||
+                                 a.first == kOffset || a.first == kRotation || a.first == kFixed;
                          }),
         attributes.end());
     if (!spec.valid())
@@ -359,6 +374,12 @@ void set(std::vector<std::pair<std::string, std::string>>& attributes, const Spe
     attributes.emplace_back(kName, spec.name);
     attributes.emplace_back(kScale, number(spec.scale));
     attributes.emplace_back(kStrength, number(spec.strength));
+    if (spec.offsetX != 0.0 || spec.offsetY != 0.0)
+        attributes.emplace_back(kOffset, number(spec.offsetX) + "," + number(spec.offsetY));
+    if (spec.rotation != 0.0)
+        attributes.emplace_back(kRotation, number(spec.rotation));
+    if (spec.fixed)
+        attributes.emplace_back(kFixed, "true");
 }
 
 } // namespace fla::texture

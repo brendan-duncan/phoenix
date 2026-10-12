@@ -32,6 +32,14 @@ struct Spec
     std::string name;
     double scale = 1.0;
     double strength = 1.0;
+    /// Where the grain's tile starts, in pixels, and its turn in degrees,
+    /// so two strokes need not show the same grain.
+    double offsetX = 0.0;
+    double offsetY = 0.0;
+    double rotation = 0.0;
+    /// The grain keeps its size in the rendered frame rather than scaling
+    /// with the art, as a camera zooms or a symbol is scaled.
+    bool fixed = false;
     bool valid() const { return !name.empty(); }
 };
 

@@ -513,6 +513,9 @@ private:
     std::unique_ptr<BrushTool> _brushTool;
     std::unique_ptr<BrushTool> _classicBrushTool;
     std::unique_ptr<BrushTool> _inkBrushTool;
+    /// Brush Properties, open beside the stage while it is shown.
+    QPointer<class BrushPropertiesDialog> _brushProperties;
+    void openBrushProperties();
     std::unique_ptr<EraserTool> _eraserTool;
     std::unique_ptr<PaintBucketTool> _paintBucketTool;
     std::unique_ptr<InkBottleTool> _inkBottleTool;

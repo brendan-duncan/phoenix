@@ -121,6 +121,10 @@ public:
     /// The tool that has the stage, and the icon it is shown with.
     void setActiveTool(Tool* tool, ToolIcons::Tool icon);
 
+    /// The Tool tab's fields show the drawing style again, after it was
+    /// changed elsewhere (Brush Properties, a preset).
+    void refreshToolOptions();
+
     void setTab(Tab tab);
     Tab tab() const { return _tab; }
 
@@ -146,6 +150,9 @@ signals:
     /// A Tool tab setting was changed; \a key names it ("fillColor",
     /// "textFace", "textSize", "textType", "transformMode", "faucet").
     void toolSettingChanged(const QString& key);
+
+    /// Brush Properties was asked for, from a brush's Tool tab.
+    void brushPropertiesRequested();
 
     /// Something drawn was edited through the Object, Frame or Doc tab.
     void documentEdited();
@@ -240,6 +247,8 @@ private:
     PropertySection* _colorSection = nullptr;
     PropertySection* _optionsSection = nullptr;
     std::vector<ToolRow> _toolRows;
+    /// Each brush field re-reads its setting, for refreshToolOptions.
+    std::vector<std::function<void()>> _toolRefreshers;
     QToolButton* _fillSwatch = nullptr;
     QToolButton* _strokeSwatch = nullptr;
     HotText* _cornerRadius = nullptr;

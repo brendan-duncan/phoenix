@@ -176,7 +176,10 @@ public:
         /// Only within the selected fills.
         Selection,
         /// Only within the fill the stroke began in.
-        Inside
+        Inside,
+        /// Only over fills already there, recoloring them; nothing lands on
+        /// empty stage (Harmony's Repaint Brush).
+        Repaint
     };
     BrushMode brushMode = BrushMode::Normal;
 
@@ -186,6 +189,21 @@ public:
     std::string brushTexture;
     double brushTextureScale = 100.0;
     double brushTextureStrength = 100.0;
+    /// Where the grain starts and its turn, so strokes need not share one
+    /// grain; the strength following the pen's pressure (a light touch
+    /// shows more grain, as chalk does); and the grain fixed to the frame
+    /// rather than scaling with the art under a camera.
+    double brushTextureOffsetX = 0.0;
+    double brushTextureOffsetY = 0.0;
+    double brushTextureRotation = 0.0;
+    bool brushTexturePressure = false;
+    bool brushTextureFixed = false;
+
+    /// Harmony's painting options: a stroke that closes on itself is
+    /// filled in (Auto Fill), and a stroke begun on a ruler guide keeps to
+    /// it.
+    bool brushAutoFill = false;
+    bool brushSnapGuides = false;
 
     /// The bitmap brush: strokes paint pixels into the frame's paint canvas,
     /// a bitmap in the library, rather than vector shapes. Softness feathers
@@ -195,6 +213,32 @@ public:
     double bitmapSoftness = 50.0;
     double bitmapOpacity = 100.0;
     bool bitmapErase = false;
+    /// How much paint each dab lays down, so overlapping dabs build up (100
+    /// lays it all and nothing builds); the dabs' spacing as a percentage
+    /// of the tip; and how firmly the soft edge holds before it falls away.
+    double bitmapFlow = 100.0;
+    double bitmapSpacing = 10.0;
+    double bitmapHardness = 50.0;
+    /// The pen's pressure taking the opacity, and the flow, down with it.
+    bool bitmapOpacityPressure = false;
+    bool bitmapFlowPressure = false;
+    /// How a stroke's paint mixes with the paint already on the canvas.
+    enum class BitmapBlend
+    {
+        Normal,
+        Multiply,
+        Screen,
+        Overlay,
+        Darken,
+        Lighten,
+        Add
+    };
+    BitmapBlend bitmapBlend = BitmapBlend::Normal;
+    /// A library bitmap stamped as the tip, its brightness and alpha the
+    /// paint's coverage; empty for the round soft tip. And a texture on the
+    /// tip itself, turning with it, rather than on the paper.
+    std::string bitmapTip;
+    std::string bitmapTipTexture;
 
     /// Animate's eraser modes: what a pass of the eraser takes away.
     enum class EraserMode

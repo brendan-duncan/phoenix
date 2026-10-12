@@ -2,6 +2,8 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdio>
+#include <cstdlib>
 
 namespace fla {
 
@@ -30,6 +32,7 @@ BrushSample lerp(const BrushSample& a, const BrushSample& b, double t)
     out.tiltX = a.tiltX + (b.tiltX - a.tiltX) * t;
     out.tiltY = a.tiltY + (b.tiltY - a.tiltY) * t;
     out.time = a.time + (b.time - a.time) * t;
+    out.rotation = a.rotation + (b.rotation - a.rotation) * t;
     return out;
 }
 
@@ -131,7 +134,7 @@ void smoothAlong(std::vector<BrushSample>& samples, double sigma, Get get, Set s
 
 /// The tip's width factor for the speed at each sample, from 0.35 to 1.
 std::vector<double> velocityFactors(const std::vector<BrushSample>& samples, double step, double zoom,
-    BrushSettings::Velocity velocity)
+    BrushSettings::Velocity velocity, double sensitivity)
 {
     const size_t n = samples.size();
     std::vector<double> factors(n, 1.0);
@@ -148,7 +151,10 @@ std::vector<double> velocityFactors(const std::vector<BrushSample>& samples, dou
         if (elapsed <= 0.0)
             continue;
         const double speed = (b - a) * step * zoom / elapsed;
-        const double fast = clamp01(speed / 2.5);
+        // At a sensitivity of 50 a speed of 2.5 has the full effect; higher
+        // reaches it sooner.
+        const double full = std::max(0.25, 5.0 * (1.0 - std::clamp(sensitivity, 1.0, 100.0) / 100.0));
+        const double fast = clamp01(speed / full);
         factors[i] = velocity == BrushSettings::Velocity::ThinToThick ? 0.35 + 0.65 * fast : 1.0 - 0.65 * fast;
     }
     return factors;
@@ -198,6 +204,369 @@ BrushSettings BrushSettings::inkDefaults()
     settings.precision = 40;
     settings.stabilizer = 10.0;
     return settings;
+}
+
+BrushSettings::AngleFunction BrushSettings::effectiveAngleFunction() const
+{
+    if (angleFunction == AngleFunction::Constant && useTilt && tiltEffect == TiltEffect::Angle)
+        return AngleFunction::Azimuth;
+    return angleFunction;
+}
+
+std::vector<Point> tipPolygon(const BrushSettings& settings)
+{
+    std::vector<Point> polygon;
+    switch (settings.tip)
+    {
+    case BrushSettings::Tip::Ellipse:
+    case BrushSettings::Tip::Rectangle:
+        break;
+    case BrushSettings::Tip::Triangle:
+        // Pointing along the width, so Heading leads with the point.
+        polygon = {Point(0.5, 0.0), Point(-0.5, 0.5), Point(-0.5, -0.5)};
+        break;
+    case BrushSettings::Tip::Diamond:
+        polygon = {Point(0.5, 0.0), Point(0.0, 0.5), Point(-0.5, 0.0), Point(0.0, -0.5)};
+        break;
+    case BrushSettings::Tip::Hexagon:
+        for (int k = 0; k < 6; ++k)
+        {
+            const double theta = 2.0 * kPi * k / 6.0;
+            polygon.push_back(Point(0.5 * std::cos(theta), 0.5 * std::sin(theta)));
+        }
+        break;
+    case BrushSettings::Tip::Star:
+        for (int k = 0; k < 10; ++k)
+        {
+            const double theta = 2.0 * kPi * k / 10.0 - kPi / 2.0;
+            const double radius = k % 2 == 0 ? 0.5 : 0.2;
+            polygon.push_back(Point(radius * std::cos(theta), radius * std::sin(theta)));
+        }
+        break;
+    case BrushSettings::Tip::Custom:
+        polygon = settings.customTip;
+        break;
+    }
+    return polygon;
+}
+
+bool isConvex(const std::vector<Point>& polygon)
+{
+    const size_t n = polygon.size();
+    if (n < 4)
+        return true;
+    int sign = 0;
+    for (size_t i = 0; i < n; ++i)
+    {
+        const Point& a = polygon[i];
+        const Point& b = polygon[(i + 1) % n];
+        const Point& c = polygon[(i + 2) % n];
+        const double cross = (b.x - a.x) * (c.y - b.y) - (b.y - a.y) * (c.x - b.x);
+        if (std::fabs(cross) < 1.0e-12)
+            continue;
+        const int here = cross > 0.0 ? 1 : -1;
+        if (sign != 0 && here != sign)
+            return false;
+        sign = here;
+    }
+    return true;
+}
+
+namespace {
+
+/// Douglas and Peucker: the points of \a ring that keep it within \a
+/// tolerance, as a closed ring.
+std::vector<Point> simplifyRing(const std::vector<Point>& ring, double tolerance)
+{
+    if (ring.size() < 4)
+        return ring;
+    std::vector<bool> keep(ring.size(), false);
+    keep.front() = keep.back() = true;
+    // The point furthest from the first, so the ring is split in two.
+    size_t far = 0;
+    double best = -1.0;
+    for (size_t i = 1; i < ring.size(); ++i)
+    {
+        const double d = std::hypot(ring[i].x - ring[0].x, ring[i].y - ring[0].y);
+        if (d > best)
+        {
+            best = d;
+            far = i;
+        }
+    }
+    keep[far] = true;
+    std::vector<std::pair<size_t, size_t>> spans = {{0, far}, {far, ring.size() - 1}};
+    while (!spans.empty())
+    {
+        const auto [a, b] = spans.back();
+        spans.pop_back();
+        if (b <= a + 1)
+            continue;
+        const Point& p = ring[a];
+        const Point& q = ring[b];
+        const double length = std::max(std::hypot(q.x - p.x, q.y - p.y), 1.0e-12);
+        size_t worst = a;
+        double most = 0.0;
+        for (size_t i = a + 1; i < b; ++i)
+        {
+            const double d = std::fabs((q.x - p.x) * (p.y - ring[i].y) - (p.x - ring[i].x) * (q.y - p.y)) / length;
+            if (d > most)
+            {
+                most = d;
+                worst = i;
+            }
+        }
+        if (most > tolerance)
+        {
+            keep[worst] = true;
+            spans.push_back({a, worst});
+            spans.push_back({worst, b});
+        }
+    }
+    std::vector<Point> out;
+    for (size_t i = 0; i + 1 < ring.size(); ++i)
+        if (keep[i])
+            out.push_back(ring[i]);
+    return out;
+}
+
+} // namespace
+
+std::vector<Point> traceTip(const std::vector<uint8_t>& alpha, int width, int height)
+{
+    std::vector<Point> polygon;
+    if (width <= 0 || height <= 0 || alpha.size() < static_cast<size_t>(width) * height)
+        return polygon;
+    const auto covered = [&](int x, int y) {
+        return x >= 0 && y >= 0 && x < width && y < height && alpha[static_cast<size_t>(y) * width + x] >= 128;
+    };
+    // The largest covered area, found by flooding each in turn.
+    std::vector<int> label(static_cast<size_t>(width) * height, 0);
+    int bestLabel = 0;
+    size_t bestSize = 0;
+    int next = 0;
+    std::vector<std::pair<int, int>> stack;
+    for (int y = 0; y < height; ++y)
+    {
+        for (int x = 0; x < width; ++x)
+        {
+            if (!covered(x, y) || label[static_cast<size_t>(y) * width + x])
+                continue;
+            ++next;
+            size_t size = 0;
+            stack.push_back({x, y});
+            label[static_cast<size_t>(y) * width + x] = next;
+            while (!stack.empty())
+            {
+                const auto [cx, cy] = stack.back();
+                stack.pop_back();
+                ++size;
+                const int around[4][2] = {{1, 0}, {-1, 0}, {0, 1}, {0, -1}};
+                for (const auto& step : around)
+                {
+                    const int nx = cx + step[0];
+                    const int ny = cy + step[1];
+                    if (covered(nx, ny) && !label[static_cast<size_t>(ny) * width + nx])
+                    {
+                        label[static_cast<size_t>(ny) * width + nx] = next;
+                        stack.push_back({nx, ny});
+                    }
+                }
+            }
+            if (size > bestSize)
+            {
+                bestSize = size;
+                bestLabel = next;
+            }
+        }
+    }
+    if (bestLabel == 0)
+        return polygon;
+    const auto inside = [&](int x, int y) {
+        return x >= 0 && y >= 0 && x < width && y < height && label[static_cast<size_t>(y) * width + x] == bestLabel;
+    };
+    // Its outer boundary, walked along pixel corners with the area on the
+    // right: start at the top-left corner of its topmost, leftmost pixel.
+    int sx = -1, sy = -1;
+    for (int y = 0; y < height && sx < 0; ++y)
+        for (int x = 0; x < width && sx < 0; ++x)
+            if (inside(x, y))
+            {
+                sx = x;
+                sy = y;
+            }
+    // Directions: 0 right, 1 down, 2 left, 3 up, along corner points.
+    const int dx[4] = {1, 0, -1, 0};
+    const int dy[4] = {0, 1, 0, -1};
+    // The pixel to the right of a move from corner (x, y) in direction d,
+    // and the one to its left.
+    const auto rightOf = [&](int x, int y, int d) {
+        switch (d)
+        {
+        case 0: return inside(x, y);
+        case 1: return inside(x - 1, y);
+        case 2: return inside(x - 1, y - 1);
+        default: return inside(x, y - 1);
+        }
+    };
+    const auto leftOf = [&](int x, int y, int d) {
+        switch (d)
+        {
+        case 0: return inside(x, y - 1);
+        case 1: return inside(x, y);
+        case 2: return inside(x - 1, y);
+        default: return inside(x - 1, y - 1);
+        }
+    };
+    std::vector<Point> ring;
+    int x = sx, y = sy, d = 0;
+    const size_t limit = static_cast<size_t>(width + 1) * (height + 1) * 4;
+    do
+    {
+        ring.push_back(Point(x, y));
+        x += dx[d];
+        y += dy[d];
+        // Keep the area on the right: turn left if the way ahead's left is
+        // covered, right if its right is not, else straight on.
+        const int left = (d + 3) % 4;
+        const int right = (d + 1) % 4;
+        if (leftOf(x, y, d))
+            d = left;
+        else if (!rightOf(x, y, d))
+            d = right;
+    } while ((x != sx || y != sy || d != 0) && ring.size() < limit);
+    ring.push_back(ring.front());
+    std::vector<Point> simple = simplifyRing(ring, 0.75);
+    if (simple.size() < 3)
+        return polygon;
+    double left = simple[0].x, right = simple[0].x, top = simple[0].y, bottom = simple[0].y;
+    for (const Point& p : simple)
+    {
+        left = std::min(left, p.x);
+        right = std::max(right, p.x);
+        top = std::min(top, p.y);
+        bottom = std::max(bottom, p.y);
+    }
+    const double span = std::max(right - left, 1.0e-9);
+    const double cx = (left + right) / 2.0;
+    const double cy = (top + bottom) / 2.0;
+    for (const Point& p : simple)
+        polygon.push_back(Point((p.x - cx) / span, (p.y - cy) / span));
+    return polygon;
+}
+
+std::string toText(const BrushSettings& settings)
+{
+    std::string out;
+    const auto put = [&](const char* key, double value) {
+        char buffer[64];
+        std::snprintf(buffer, sizeof(buffer), "%s=%.6g\n", key, value);
+        out += buffer;
+    };
+    put("size", settings.size);
+    put("tip", static_cast<int>(settings.tip));
+    put("roundness", settings.roundness);
+    put("angle", settings.angle);
+    put("usePressure", settings.usePressure);
+    put("minSize", settings.minSize);
+    put("pressureCurve", settings.pressureCurve);
+    put("useTilt", settings.useTilt);
+    put("tiltEffect", static_cast<int>(settings.tiltEffect));
+    put("velocity", static_cast<int>(settings.velocity));
+    put("taperStart", settings.taperStart);
+    put("taperEnd", settings.taperEnd);
+    put("smoothing", settings.smoothing);
+    put("precision", settings.precision);
+    put("stabilizer", settings.stabilizer);
+    put("invertPressure", settings.invertPressure);
+    put("invertTilt", settings.invertTilt);
+    put("velocitySensitivity", settings.velocitySensitivity);
+    put("taperUnits", static_cast<int>(settings.taperUnits));
+    put("fadeStart", settings.fadeStart);
+    put("fadeEnd", settings.fadeEnd);
+    put("sizeFollowsCamera", settings.sizeFollowsCamera);
+    put("angleFunction", static_cast<int>(settings.angleFunction));
+    put("tiltStretch", settings.tiltStretch);
+    if (!settings.customTip.empty())
+    {
+        out += "customTip=";
+        char buffer[64];
+        for (size_t i = 0; i < settings.customTip.size(); ++i)
+        {
+            std::snprintf(buffer, sizeof(buffer), "%s%.5g,%.5g", i ? ";" : "", settings.customTip[i].x,
+                settings.customTip[i].y);
+            out += buffer;
+        }
+        out += "\n";
+    }
+    if (!settings.tipSource.empty())
+        out += "tipSource=" + settings.tipSource + "\n";
+    return out;
+}
+
+void fromText(const std::string& text, BrushSettings& into)
+{
+    size_t start = 0;
+    while (start < text.size())
+    {
+        size_t end = text.find('\n', start);
+        if (end == std::string::npos)
+            end = text.size();
+        std::string line = text.substr(start, end - start);
+        start = end + 1;
+        if (!line.empty() && line.back() == '\r')
+            line.pop_back();
+        const size_t equals = line.find('=');
+        if (equals == std::string::npos)
+            continue;
+        const std::string key = line.substr(0, equals);
+        const std::string value = line.substr(equals + 1);
+        const double number = std::atof(value.c_str());
+        const int whole = static_cast<int>(std::lround(number));
+        if (key == "size") into.size = std::clamp(number, 0.1, 1000.0);
+        else if (key == "tip") into.tip = static_cast<BrushSettings::Tip>(std::clamp(whole, 0, 6));
+        else if (key == "roundness") into.roundness = std::clamp(number, 1.0, 100.0);
+        else if (key == "angle") into.angle = number;
+        else if (key == "usePressure") into.usePressure = whole != 0;
+        else if (key == "minSize") into.minSize = std::clamp(number, 1.0, 100.0);
+        else if (key == "pressureCurve") into.pressureCurve = std::max(0.1, number);
+        else if (key == "useTilt") into.useTilt = whole != 0;
+        else if (key == "tiltEffect") into.tiltEffect = static_cast<BrushSettings::TiltEffect>(std::clamp(whole, 0, 1));
+        else if (key == "velocity") into.velocity = static_cast<BrushSettings::Velocity>(std::clamp(whole, 0, 2));
+        else if (key == "taperStart") into.taperStart = std::max(0.0, number);
+        else if (key == "taperEnd") into.taperEnd = std::max(0.0, number);
+        else if (key == "smoothing") into.smoothing = std::clamp(whole, 0, 100);
+        else if (key == "precision") into.precision = std::clamp(whole, 0, 100);
+        else if (key == "stabilizer") into.stabilizer = std::clamp(number, 0.0, 60.0);
+        else if (key == "invertPressure") into.invertPressure = whole != 0;
+        else if (key == "invertTilt") into.invertTilt = whole != 0;
+        else if (key == "velocitySensitivity") into.velocitySensitivity = std::clamp(number, 1.0, 100.0);
+        else if (key == "taperUnits") into.taperUnits = static_cast<BrushSettings::TaperUnits>(std::clamp(whole, 0, 1));
+        else if (key == "fadeStart") into.fadeStart = std::max(0.0, number);
+        else if (key == "fadeEnd") into.fadeEnd = std::max(0.0, number);
+        else if (key == "sizeFollowsCamera") into.sizeFollowsCamera = whole != 0;
+        else if (key == "angleFunction")
+            into.angleFunction = static_cast<BrushSettings::AngleFunction>(std::clamp(whole, 0, 3));
+        else if (key == "tiltStretch") into.tiltStretch = std::clamp(number, 0.0, 500.0);
+        else if (key == "tipSource") into.tipSource = value;
+        else if (key == "customTip")
+        {
+            into.customTip.clear();
+            size_t at = 0;
+            while (at < value.size())
+            {
+                size_t stop = value.find(';', at);
+                if (stop == std::string::npos)
+                    stop = value.size();
+                const std::string pair = value.substr(at, stop - at);
+                const size_t comma = pair.find(',');
+                if (comma != std::string::npos)
+                    into.customTip.push_back(
+                        Point(std::atof(pair.substr(0, comma).c_str()), std::atof(pair.substr(comma + 1).c_str())));
+                at = stop + 1;
+            }
+        }
+    }
 }
 
 namespace BrushStroke {
@@ -270,7 +639,8 @@ std::vector<BrushDab> dabs(const std::vector<BrushSample>& input, const BrushSet
         along[i] = along[i - 1] + distance(line[i - 1], line[i]);
     const double total = along.back();
 
-    std::vector<double> speedFactors = velocityFactors(line, step, zoom, settings.velocity);
+    std::vector<double> speedFactors =
+        velocityFactors(line, step, zoom, settings.velocity, settings.velocitySensitivity);
     if (settings.velocity != BrushSettings::Velocity::None)
     {
         // Speed is eased too, so a hitch in the hand is not a lump.
@@ -283,8 +653,23 @@ std::vector<BrushDab> dabs(const std::vector<BrushSample>& input, const BrushSet
             speedFactors[i] = carrier[i].pressure;
     }
 
-    const double startTaper = std::min(0.5, std::max(0.0, settings.taperStart) / 100.0) * total;
-    const double endTaper = std::min(0.5, std::max(0.0, settings.taperEnd) / 100.0) * total;
+    const bool pixels = settings.taperUnits == BrushSettings::TaperUnits::Pixels;
+    const double startTaper = pixels ? std::min(total * 0.5, std::max(0.0, settings.taperStart))
+                                     : std::min(0.5, std::max(0.0, settings.taperStart) / 100.0) * total;
+    const double endTaper = pixels ? std::min(total * 0.5, std::max(0.0, settings.taperEnd))
+                                   : std::min(0.5, std::max(0.0, settings.taperEnd) / 100.0) * total;
+    const double fadeIn = std::max(0.0, settings.fadeStart);
+    const double fadeOut = std::max(0.0, settings.fadeEnd);
+    const BrushSettings::AngleFunction angleFunction = settings.effectiveAngleFunction();
+    // The library's shapes and custom tips, shared by every dab.
+    std::shared_ptr<const std::vector<Point>> shape;
+    {
+        std::vector<Point> polygon = tipPolygon(settings);
+        if (polygon.size() >= 3)
+            shape = std::make_shared<const std::vector<Point>>(std::move(polygon));
+    }
+    // The direction of travel, over about two screen pixels either side.
+    const int headingReach = std::max(1, static_cast<int>(std::lround(2.0 / std::max(stepPixels, 1.0e-9))));
     const double minimum = clamp01(settings.minSize / 100.0);
     const double curve = std::max(0.1, settings.pressureCurve);
     const double roundness = std::max(1.0, std::min(100.0, settings.roundness)) / 100.0;
@@ -294,25 +679,58 @@ std::vector<BrushDab> dabs(const std::vector<BrushSample>& input, const BrushSet
     const auto dabAt = [&](size_t i) {
         const BrushSample& s = line[i];
         double width = std::max(settings.size, 0.1);
+        const double pressure = settings.invertPressure ? 1.0 - clamp01(s.pressure) : clamp01(s.pressure);
         if (usePressure)
-            width *= minimum + (1.0 - minimum) * std::pow(clamp01(s.pressure), curve);
+            width *= minimum + (1.0 - minimum) * std::pow(pressure, curve);
         width *= speedFactors[i];
         width *= taper(along[i], startTaper);
         width *= taper(total - along[i], endTaper);
         double angle = baseAngle;
-        const double lean = clamp01(std::hypot(s.tiltX, s.tiltY) / 60.0);
+        const double rawLean = clamp01(std::hypot(s.tiltX, s.tiltY) / 60.0);
+        const double lean = settings.invertTilt ? 1.0 - rawLean : rawLean;
         if (settings.useTilt && settings.tiltEffect == BrushSettings::TiltEffect::Width)
             width *= 1.0 + 1.5 * lean;
-        else if (settings.useTilt && lean > 0.08)
-            angle += std::atan2(s.tiltY, s.tiltX);
+        switch (angleFunction)
+        {
+        case BrushSettings::AngleFunction::Azimuth:
+            if (rawLean > 0.08)
+                angle += std::atan2(s.tiltY, s.tiltX);
+            break;
+        case BrushSettings::AngleFunction::Heading:
+        {
+            const size_t a = i >= static_cast<size_t>(headingReach) ? i - headingReach : 0;
+            const size_t b = std::min(line.size() - 1, i + headingReach);
+            if (b > a)
+                angle += std::atan2(line[b].y - line[a].y, line[b].x - line[a].x);
+            break;
+        }
+        case BrushSettings::AngleFunction::Twist:
+            angle += s.rotation * kPi / 180.0;
+            break;
+        case BrushSettings::AngleFunction::Constant:
+            break;
+        }
+        const double height = std::max(width * roundness, 0.1 * pixel);
+        // A lean stretches the tip along its width, as a tilted marker's
+        // footprint lengthens.
+        if (settings.tiltStretch > 0.0)
+            width *= 1.0 + settings.tiltStretch / 100.0 * rawLean;
         width = std::max(width, 0.1 * pixel);
         BrushDab dab;
         dab.x = s.x;
         dab.y = s.y;
         dab.width = width;
-        dab.height = std::max(width * roundness, 0.1 * pixel);
+        dab.height = height;
         dab.angle = angle;
         dab.rectangular = rectangular;
+        dab.shape = shape;
+        dab.pressure = clamp01(s.pressure);
+        double opacity = 1.0;
+        if (fadeIn > 0.0 && along[i] < fadeIn)
+            opacity *= along[i] / fadeIn;
+        if (fadeOut > 0.0 && total - along[i] < fadeOut)
+            opacity *= (total - along[i]) / fadeOut;
+        dab.opacity = clamp01(opacity);
         return dab;
     };
 
@@ -326,8 +744,7 @@ std::vector<BrushDab> dabs(const std::vector<BrushSample>& input, const BrushSet
     {
         since += along[i] - along[i - 1];
         const BrushDab& last = result.back();
-        const double spacing = std::max(0.5 * pixel, std::min(3.0 * pixel,
-            0.25 * std::max(last.width, last.height)));
+        const double spacing = std::max(0.5 * pixel, std::min(3.0 * pixel, 0.25 * std::max(last.width, last.height)));
         if (since >= spacing || i + 1 == line.size())
         {
             result.push_back(dabAt(i));
@@ -347,6 +764,12 @@ std::vector<Point> dabOutline(const BrushDab& dab, double zoom)
     };
     const double a = dab.width / 2.0;
     const double b = dab.height / 2.0;
+    if (dab.shape && dab.shape->size() >= 3)
+    {
+        for (const Point& point : *dab.shape)
+            place(point.x * dab.width, point.y * dab.height);
+        return points;
+    }
     if (dab.rectangular)
     {
         place(-a, -b);
@@ -393,11 +816,82 @@ std::vector<Point> convexHull(std::vector<Point> points)
     return hull;
 }
 
+std::vector<std::vector<Point>> triangulate(const std::vector<Point>& given)
+{
+    // Ear clipping: a corner whose triangle turns the polygon's way and
+    // holds no other corner is cut off, until three are left.
+    std::vector<std::vector<Point>> triangles;
+    std::vector<Point> polygon = given;
+    if (polygon.size() < 3)
+        return triangles;
+    double area = 0.0;
+    for (size_t i = 0; i < polygon.size(); ++i)
+    {
+        const Point& a = polygon[i];
+        const Point& b = polygon[(i + 1) % polygon.size()];
+        area += a.x * b.y - b.x * a.y;
+    }
+    const double turn = area >= 0.0 ? 1.0 : -1.0;
+    const auto cross = [](const Point& o, const Point& a, const Point& b) {
+        return (a.x - o.x) * (b.y - o.y) - (a.y - o.y) * (b.x - o.x);
+    };
+    size_t guard = polygon.size() * polygon.size() + 8;
+    while (polygon.size() > 3 && guard-- > 0)
+    {
+        bool cut = false;
+        const size_t n = polygon.size();
+        for (size_t i = 0; i < n; ++i)
+        {
+            const Point& a = polygon[(i + n - 1) % n];
+            const Point& b = polygon[i];
+            const Point& c = polygon[(i + 1) % n];
+            if (cross(a, b, c) * turn <= 1.0e-12)
+                continue;
+            bool holds = false;
+            for (size_t k = 0; k < n && !holds; ++k)
+            {
+                if (k == i || k == (i + n - 1) % n || k == (i + 1) % n)
+                    continue;
+                const Point& p = polygon[k];
+                holds = cross(a, b, p) * turn >= 0.0 && cross(b, c, p) * turn >= 0.0 && cross(c, a, p) * turn >= 0.0;
+            }
+            if (holds)
+                continue;
+            triangles.push_back({a, b, c});
+            polygon.erase(polygon.begin() + static_cast<long long>(i));
+            cut = true;
+            break;
+        }
+        if (!cut)
+            break;
+    }
+    if (polygon.size() == 3)
+        triangles.push_back(polygon);
+    return triangles;
+}
+
 std::vector<std::vector<Point>> sweep(const std::vector<BrushDab>& dabs, double zoom)
 {
     std::vector<std::vector<Point>> polygons;
     if (dabs.empty())
         return polygons;
+    // A tip that is not convex would be filled in by the hulls. It is cut
+    // into triangles, each swept on its own: the area a union sweeps is the
+    // union of what its parts sweep.
+    if (dabs.front().shape && !isConvex(*dabs.front().shape))
+    {
+        const std::vector<std::vector<Point>> parts = triangulate(*dabs.front().shape);
+        for (const std::vector<Point>& part : parts)
+        {
+            std::vector<BrushDab> pieces = dabs;
+            const auto piece = std::make_shared<const std::vector<Point>>(part);
+            for (BrushDab& dab : pieces)
+                dab.shape = piece;
+            const std::vector<std::vector<Point>> swept = sweep(pieces, zoom);
+            polygons.insert(polygons.end(), swept.begin(), swept.end());
+        }
+        return polygons;
+    }
     std::vector<Point> previous = dabOutline(dabs.front(), zoom);
     if (dabs.size() == 1)
     {

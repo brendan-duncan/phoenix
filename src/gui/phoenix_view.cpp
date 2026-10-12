@@ -3257,7 +3257,20 @@ void PhoenixView::paintEntry(QPainter& painter, const PathCacheEntry& entry)
         painter.drawPath(entry.painterPath);
         return;
     }
-    painter.setBrush(entry.fillBrush);
+    if (entry.fixedGrain)
+    {
+        // The art's scale against the frame's, taken out of the grain.
+        const double art = std::sqrt(std::fabs(painter.worldTransform().determinant()));
+        const double frame = std::sqrt(std::fabs(viewTransform.determinant()));
+        const double scale = art > 1.0e-9 && frame > 1.0e-9 ? art / frame : 1.0;
+        QBrush brush = entry.fillBrush;
+        brush.setTransform(brush.transform() * QTransform::fromScale(1.0 / scale, 1.0 / scale));
+        painter.setBrush(brush);
+    }
+    else
+    {
+        painter.setBrush(entry.fillBrush);
+    }
     painter.setPen(penForHere(entry));
     painter.drawPath(entry.painterPath);
 }
@@ -3401,7 +3414,11 @@ QBrush PhoenixView::texturedBrush(const QColor& color, const fla::texture::Spec&
         }
     }
     QBrush brush(paint);
-    brush.setTransform(QTransform::fromScale(spec.scale, spec.scale));
+    QTransform placed;
+    placed.translate(spec.offsetX, spec.offsetY);
+    placed.rotate(spec.rotation);
+    placed.scale(spec.scale, spec.scale);
+    brush.setTransform(placed);
     return brush;
 }
 
@@ -3843,6 +3860,10 @@ void PhoenixView::buildShapePaths(const fla::Shape* shape, PathCacheList& cacheE
             const fla::texture::Spec spec = fla::texture::of(*shape);
             if (spec.valid())
                 brush = texturedBrush(brush.color(), spec);
+            PathCacheEntry entry{ brush, Qt::NoPen, compoundPath, nullptr, fillIdx };
+            entry.fixedGrain = spec.valid() && spec.fixed;
+            cacheEntries.push_back(entry);
+            continue;
         }
         cacheEntries.push_back({ brush, Qt::NoPen, compoundPath, nullptr, fillIdx });
     }
@@ -4813,6 +4834,7 @@ void PhoenixView::tabletEvent(QTabletEvent* event)
     sample.pressure = std::max(0.0, std::min(1.0, event->pressure()));
     sample.tiltX = event->xTilt();
     sample.tiltY = event->yTilt();
+    sample.rotation = event->rotation();
     sample.time = static_cast<double>(event->timestamp());
     switch (event->type())
     {
@@ -6455,12 +6477,28 @@ void PhoenixView::pushGuidesToSnapper()
 {
     if (!_snapper)
         return;
+    std::vector<double> xs;
+    std::vector<double> ys;
+    toolGuides(xs, ys);
+    _snapper->setGuides(xs, ys);
+}
+
+double PhoenixView::cameraScaleFor(const fla::Frame* frame)
+{
+    const fla::Layer* layer = frame ? dynamic_cast<const fla::Layer*>(frame->parent) : nullptr;
+    const QTransform camera = cameraTransform(layer);
+    const double scale = std::sqrt(std::fabs(camera.determinant()));
+    return scale > 1.0e-9 ? scale : 1.0;
+}
+
+void PhoenixView::toolGuides(std::vector<double>& xs, std::vector<double>& ys)
+{
     // Guides are in the document's space; inside a symbol the tools work in
     // the symbol's, so each guide is carried over when that is a plain
     // scale and shift, and left out otherwise.
-    std::vector<double> xs;
-    std::vector<double> ys;
-    if (_showGuides)
+    xs.clear();
+    ys.clear();
+    if (_showGuides && _flaDocument && _flaDocument->document)
     {
         bool invertible = false;
         const QTransform toScope = scopeToDocument().inverted(&invertible);
@@ -6472,7 +6510,6 @@ void PhoenixView::pushGuidesToSnapper()
                 ys.push_back(toScope.map(QPointF(0, y)).y());
         }
     }
-    _snapper->setGuides(xs, ys);
 }
 
 bool PhoenixView::beginGuideDrag(const QPointF& widgetPos)

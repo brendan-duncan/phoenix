@@ -61,6 +61,7 @@
 #include <QPainter>
 #include <QPainterPath>
 #include <QPushButton>
+#include <QSignalBlocker>
 #include <QScrollArea>
 #include <QStandardItemModel>
 #include <QTimer>
@@ -607,6 +608,12 @@ void PropertiesPanel::setActiveTool(Tool* tool, ToolIcons::Tool icon)
     applyToolVisibility();
 }
 
+void PropertiesPanel::refreshToolOptions()
+{
+    for (const auto& refresher : _toolRefreshers)
+        refresher();
+}
+
 void PropertiesPanel::applyToolVisibility()
 {
     bool anyColor = false;
@@ -841,6 +848,10 @@ void PropertiesPanel::buildToolTab()
         connect(field, &HotText::valueChanged, this, [this, member, set](double value, bool) {
             set(_links.style->*member, value);
         });
+        _toolRefreshers.push_back([this, field, member, get]() {
+            QSignalBlocker block(field);
+            field->setValue(get(_links.style->*member));
+        });
         addOption(label, field, {icon});
     };
     const auto brushCheck = [&](BrushMember member, IconTool icon, const QString& text, const QString& tip,
@@ -849,6 +860,10 @@ void PropertiesPanel::buildToolTab()
         box->setChecked(get(style.*member));
         box->setToolTip(tip);
         connect(box, &QCheckBox::toggled, this, [this, member, set](bool on) { set(_links.style->*member, on); });
+        _toolRefreshers.push_back([this, box, member, get]() {
+            QSignalBlocker block(box);
+            box->setChecked(get(_links.style->*member));
+        });
         addOption(QString(), box, {icon});
     };
     const auto brushChoice = [&](BrushMember member, IconTool icon, const QString& label, const QStringList& items,
@@ -860,6 +875,10 @@ void PropertiesPanel::buildToolTab()
         connect(box, &QComboBox::currentIndexChanged, this, [this, member, set](int index) {
             if (index >= 0)
                 set(_links.style->*member, index);
+        });
+        _toolRefreshers.push_back([this, box, member, get]() {
+            QSignalBlocker block(box);
+            box->setCurrentIndex(get(_links.style->*member));
         });
         addOption(label, box, {icon});
     };
@@ -972,19 +991,33 @@ void PropertiesPanel::buildToolTab()
         [](const Brush& b) { return b.useTilt; }, [](Brush& b, bool on) { b.useTilt = on; });
 
     QComboBox* brushMode = new QComboBox(this);
-    brushMode->addItems({"Paint Normal", "Paint Fills", "Paint Behind", "Paint Selection", "Paint Inside"});
+    brushMode->addItems({"Paint Normal", "Paint Fills", "Paint Behind", "Paint Selection", "Paint Inside", "Repaint"});
     brushMode->setCurrentIndex(static_cast<int>(style.brushMode));
-    brushMode->setToolTip("Where a brush stroke lands, as in Animate");
+    brushMode->setToolTip("Where a brush stroke lands; Repaint recolors only paint already there");
     connect(brushMode, &QComboBox::currentIndexChanged, this, [this](int index) {
-        _links.style->brushMode = static_cast<fla::DrawingStyle::BrushMode>(index);
+        if (index >= 0)
+            _links.style->brushMode = static_cast<fla::DrawingStyle::BrushMode>(index);
+    });
+    _toolRefreshers.push_back([this, brushMode]() {
+        QSignalBlocker block(brushMode);
+        brushMode->setCurrentIndex(static_cast<int>(_links.style->brushMode));
     });
     addOption("Brush mode", brushMode, {IconTool::FluidBrush, IconTool::Brush, IconTool::InkBrush});
+    QPushButton* brushProperties = new QPushButton("Brush Properties and Presets...", this);
+    brushProperties->setToolTip("Presets, tip shapes, dynamics, the bitmap brush and textures");
+    connect(brushProperties, &QPushButton::clicked, this, &PropertiesPanel::brushPropertiesRequested);
+    addOption(QString(), brushProperties, {IconTool::FluidBrush, IconTool::Brush, IconTool::InkBrush});
 
     // Textured brushes: the grain the paint takes on.
     QComboBox* texture = textureChoice(style.brushTexture);
     texture->setToolTip("The grain a stroke takes on, as chalk takes the tooth of the paper");
     connect(texture, &QComboBox::currentIndexChanged, this, [this, texture](int) {
         _links.style->brushTexture = texture->currentData().toString().toStdString();
+    });
+    _toolRefreshers.push_back([this, texture]() {
+        QSignalBlocker block(texture);
+        const int found = texture->findData(QString::fromStdString(_links.style->brushTexture));
+        texture->setCurrentIndex(found >= 0 ? found : 0);
     });
     const std::vector<IconTool> brushes = {IconTool::FluidBrush, IconTool::Brush, IconTool::InkBrush};
     addOption("Texture", texture, brushes);
@@ -994,12 +1027,20 @@ void PropertiesPanel::buildToolTab()
     connect(textureScale, &HotText::valueChanged, this, [this](double value, bool) {
         _links.style->brushTextureScale = value;
     });
+    _toolRefreshers.push_back([this, textureScale]() {
+        QSignalBlocker block(textureScale);
+        textureScale->setValue(_links.style->brushTextureScale);
+    });
     addOption("Grain size", textureScale, brushes);
     HotText* textureStrength = makeHotText(0.0, 100.0, 0, " %");
     textureStrength->setValue(style.brushTextureStrength);
     textureStrength->setToolTip("How much of the paint the grain takes away where it is lightest");
     connect(textureStrength, &HotText::valueChanged, this, [this](double value, bool) {
         _links.style->brushTextureStrength = value;
+    });
+    _toolRefreshers.push_back([this, textureStrength]() {
+        QSignalBlocker block(textureStrength);
+        textureStrength->setValue(_links.style->brushTextureStrength);
     });
     addOption("Grain strength", textureStrength, brushes);
 
@@ -1008,21 +1049,37 @@ void PropertiesPanel::buildToolTab()
     bitmapBrush->setChecked(style.bitmapBrush);
     bitmapBrush->setToolTip("Paint pixels into the frame's paint canvas rather than vector shapes");
     connect(bitmapBrush, &QCheckBox::toggled, this, [this](bool on) { _links.style->bitmapBrush = on; });
+    _toolRefreshers.push_back([this, bitmapBrush]() {
+        QSignalBlocker block(bitmapBrush);
+        bitmapBrush->setChecked(_links.style->bitmapBrush);
+    });
     addOption(QString(), bitmapBrush, brushes);
     HotText* softness = makeHotText(0.0, 100.0, 0, " %");
     softness->setValue(style.bitmapSoftness);
     softness->setToolTip("How soft the bitmap brush's edge is");
     connect(softness, &HotText::valueChanged, this, [this](double value, bool) { _links.style->bitmapSoftness = value; });
+    _toolRefreshers.push_back([this, softness]() {
+        QSignalBlocker block(softness);
+        softness->setValue(_links.style->bitmapSoftness);
+    });
     addOption("Softness", softness, brushes);
     HotText* opacity = makeHotText(1.0, 100.0, 0, " %");
     opacity->setValue(style.bitmapOpacity);
     opacity->setToolTip("How strong each bitmap stroke is");
     connect(opacity, &HotText::valueChanged, this, [this](double value, bool) { _links.style->bitmapOpacity = value; });
+    _toolRefreshers.push_back([this, opacity]() {
+        QSignalBlocker block(opacity);
+        opacity->setValue(_links.style->bitmapOpacity);
+    });
     addOption("Opacity", opacity, brushes);
     QCheckBox* erase = new QCheckBox("Erase pixels", this);
     erase->setChecked(style.bitmapErase);
     erase->setToolTip("The bitmap brush takes paint away instead");
     connect(erase, &QCheckBox::toggled, this, [this](bool on) { _links.style->bitmapErase = on; });
+    _toolRefreshers.push_back([this, erase]() {
+        QSignalBlocker block(erase);
+        erase->setChecked(_links.style->bitmapErase);
+    });
     addOption(QString(), erase, brushes);
 
     // Eraser.

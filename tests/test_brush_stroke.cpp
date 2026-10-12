@@ -1,6 +1,8 @@
 #include "test_util.h"
 
+#include "../src/edit/brush_presets.h"
 #include "../src/edit/brush_stroke.h"
+#include "../src/edit/drawing_style.h"
 
 #include <algorithm>
 #include <cmath>
@@ -307,4 +309,198 @@ TEST(the_sweep_joins_each_pair_of_dabs_with_their_hull)
     CHECK(corners.size() == 4);
     for (const fla::Point& corner : corners)
         CHECK(std::fabs(std::hypot(corner.x, corner.y) - std::sqrt(2.0)) < 1.0e-9);
+}
+
+TEST(brush_dynamics_invert_pressure_and_taper_in_pixels)
+{
+    // A drag pressing harder as it goes: inverted, the line thins instead.
+    std::vector<BrushSample> samples = straightDrag(200.0, 2.0);
+    for (size_t i = 0; i < samples.size(); ++i)
+        samples[i].pressure = 0.1 + 0.9 * i / (samples.size() - 1.0);
+    BrushSettings settings = plain();
+    std::vector<BrushDab> dabs = fla::BrushStroke::dabs(samples, settings, 1.0, true);
+    CHECK(dabs.back().width > dabs.front().width * 2.0);
+    settings.invertPressure = true;
+    dabs = fla::BrushStroke::dabs(samples, settings, 1.0, true);
+    CHECK(dabs.front().width > dabs.back().width * 2.0);
+
+    // A 20 pixel taper reaches full width 20 pixels in, however long the
+    // stroke.
+    settings = plain();
+    settings.taperUnits = BrushSettings::TaperUnits::Pixels;
+    settings.taperStart = 20.0;
+    dabs = fla::BrushStroke::dabs(straightDrag(300.0, 2.0), settings, 1.0, true);
+    for (const BrushDab& dab : dabs)
+    {
+        if (dab.x > 25.0 && dab.x < 280.0)
+            CHECK(std::fabs(dab.width - 10.0) < 0.2);
+        if (dab.x < 3.0)
+            CHECK(dab.width < 5.0);
+    }
+
+    // Fades take the paint's opacity in and out over their distances.
+    settings = plain();
+    settings.fadeStart = 50.0;
+    settings.fadeEnd = 50.0;
+    dabs = fla::BrushStroke::dabs(straightDrag(200.0, 2.0), settings, 1.0, true);
+    CHECK(dabs.front().opacity < 0.05);
+    CHECK(dabs.back().opacity < 0.05);
+    for (const BrushDab& dab : dabs)
+        if (dab.x > 60.0 && dab.x < 140.0)
+            CHECK(dab.opacity > 0.99);
+}
+
+TEST(brush_tip_angle_follows_heading_and_twist)
+{
+    BrushSettings settings = plain();
+    settings.angleFunction = BrushSettings::AngleFunction::Heading;
+    // A drag straight down: the tip turns a quarter turn to follow it.
+    std::vector<BrushSample> down;
+    for (int y = 0; y <= 100; y += 2)
+    {
+        BrushSample sample;
+        sample.y = y;
+        sample.time = y * 8.0;
+        down.push_back(sample);
+    }
+    std::vector<BrushDab> dabs = fla::BrushStroke::dabs(down, settings, 1.0, true);
+    CHECK(std::fabs(dabs[dabs.size() / 2].angle - 3.14159265358979323846 / 2.0) < 0.05);
+
+    settings.angleFunction = BrushSettings::AngleFunction::Twist;
+    std::vector<BrushSample> across = straightDrag(100.0, 2.0);
+    for (BrushSample& sample : across)
+        sample.rotation = 30.0;
+    dabs = fla::BrushStroke::dabs(across, settings, 1.0, true);
+    CHECK(std::fabs(dabs[dabs.size() / 2].angle - 3.14159265358979323846 / 6.0) < 0.01);
+
+    // Use Tilt with the angle effect is the azimuth function.
+    BrushSettings nib = BrushSettings::classicDefaults();
+    nib.useTilt = true;
+    CHECK(nib.effectiveAngleFunction() == BrushSettings::AngleFunction::Azimuth);
+
+    // Tilt stretch lengthens the tip with the lean.
+    settings = plain();
+    settings.tiltStretch = 100.0;
+    for (BrushSample& sample : across)
+        sample.tiltX = 60.0;
+    dabs = fla::BrushStroke::dabs(across, settings, 1.0, true);
+    CHECK(std::fabs(dabs[dabs.size() / 2].width - 20.0) < 0.5);
+    CHECK(std::fabs(dabs[dabs.size() / 2].height - 10.0) < 0.5);
+}
+
+TEST(brush_tip_library_shapes_and_traced_tips)
+{
+    BrushSettings settings = plain();
+    settings.tip = BrushSettings::Tip::Diamond;
+    std::vector<fla::Point> diamond = fla::tipPolygon(settings);
+    CHECK(diamond.size() == 4 && fla::isConvex(diamond));
+    settings.tip = BrushSettings::Tip::Star;
+    const std::vector<fla::Point> star = fla::tipPolygon(settings);
+    CHECK(star.size() == 10 && !fla::isConvex(star));
+
+    // A star is cut into eight triangles covering it, each swept on its own.
+    const std::vector<std::vector<fla::Point>> triangles = fla::BrushStroke::triangulate(star);
+    CHECK(triangles.size() == 8);
+    double covered = 0.0;
+    for (const std::vector<fla::Point>& triangle : triangles)
+        covered += std::fabs(signedArea(triangle));
+    CHECK(std::fabs(covered - std::fabs(signedArea(star))) < 1.0e-9);
+    std::vector<BrushDab> dabs = fla::BrushStroke::dabs(straightDrag(40.0, 2.0), settings, 1.0, true);
+    CHECK(dabs.front().shape && dabs.front().shape->size() == 10);
+    const std::vector<std::vector<fla::Point>> swept = fla::BrushStroke::sweep(dabs, 1.0);
+    CHECK(swept.size() == 8 * (dabs.size() - 1));
+    for (const std::vector<fla::Point>& polygon : swept)
+        CHECK(signedArea(polygon) > 0.0);
+
+    // An L traced from an image: a concave outline one unit wide.
+    const int size = 40;
+    std::vector<uint8_t> alpha(size * size, 0);
+    for (int y = 5; y < 35; ++y)
+        for (int x = 5; x < 35; ++x)
+            if (x < 15 || y >= 25)
+                alpha[y * size + x] = 255;
+    const std::vector<fla::Point> traced = fla::traceTip(alpha, size, size);
+    CHECK(traced.size() >= 6 && traced.size() <= 10);
+    CHECK(!fla::isConvex(traced));
+    double left = 1.0, right = -1.0;
+    for (const fla::Point& p : traced)
+    {
+        left = std::min(left, p.x);
+        right = std::max(right, p.x);
+    }
+    CHECK(std::fabs(right - left - 1.0) < 1.0e-6);
+    CHECK(fla::traceTip(std::vector<uint8_t>(16, 0), 4, 4).empty());
+}
+
+TEST(brush_settings_round_trip_as_text)
+{
+    BrushSettings settings = BrushSettings::inkDefaults();
+    settings.size = 23.5;
+    settings.tip = BrushSettings::Tip::Custom;
+    settings.customTip = {fla::Point(0.5, 0.0), fla::Point(-0.5, 0.25), fla::Point(-0.5, -0.25)};
+    settings.tipSource = "leaf";
+    settings.angleFunction = BrushSettings::AngleFunction::Heading;
+    settings.invertPressure = true;
+    settings.taperUnits = BrushSettings::TaperUnits::Pixels;
+    settings.taperStart = 40.0;
+    settings.fadeEnd = 12.0;
+    settings.velocity = BrushSettings::Velocity::ThickToThin;
+    BrushSettings back;
+    fla::fromText(fla::toText(settings), back);
+    CHECK(back.size == 23.5);
+    CHECK(back.tip == BrushSettings::Tip::Custom && back.customTip.size() == 3);
+    CHECK(std::fabs(back.customTip[1].y - 0.25) < 1.0e-6);
+    CHECK(back.tipSource == "leaf");
+    CHECK(back.angleFunction == BrushSettings::AngleFunction::Heading);
+    CHECK(back.invertPressure && back.taperUnits == BrushSettings::TaperUnits::Pixels);
+    CHECK(back.taperStart == 40.0 && back.fadeEnd == 12.0);
+    CHECK(back.velocity == BrushSettings::Velocity::ThickToThin);
+    CHECK(back.stabilizer == settings.stabilizer && back.useTilt == settings.useTilt);
+    // Unknown keys are skipped; missing ones keep what was there.
+    BrushSettings kept = BrushSettings::classicDefaults();
+    fla::fromText("someday=1\nsize=7\n", kept);
+    CHECK(kept.size == 7.0 && kept.smoothing == BrushSettings::classicDefaults().smoothing);
+}
+
+TEST(brush_presets_carry_the_brush_and_its_painting_options)
+{
+    fla::DrawingStyle style;
+    style.brushTexture = "Chalk";
+    style.brushTextureRotation = 30.0;
+    style.bitmapFlow = 25.0;
+    style.bitmapBlend = fla::DrawingStyle::BitmapBlend::Multiply;
+    style.brushAutoFill = true;
+    BrushSettings brush = BrushSettings::fluidDefaults();
+    brush.size = 33.0;
+    const std::string text = fla::brushpresets::presetText(brush, style);
+
+    fla::DrawingStyle other;
+    BrushSettings into = BrushSettings::inkDefaults();
+    fla::brushpresets::apply(text, into, other);
+    CHECK(into.size == 33.0 && into.stabilizer == brush.stabilizer);
+    CHECK(other.brushTexture == "Chalk" && other.brushTextureRotation == 30.0);
+    CHECK(other.bitmapFlow == 25.0 && other.brushAutoFill);
+    CHECK(other.bitmapBlend == fla::DrawingStyle::BitmapBlend::Multiply);
+
+    // A list as one text and back, names and all.
+    std::vector<fla::brushpresets::Preset> set = {{"Wet [ink]", text}, {"Plain", fla::toText(brush)}};
+    const std::vector<fla::brushpresets::Preset> back =
+        fla::brushpresets::fromSetText(fla::brushpresets::toSetText(set));
+    CHECK(back.size() == 2);
+    CHECK(back[0].name == "Wet [ink]" && back[0].text == text);
+    CHECK(back[1].name == "Plain");
+
+    // Every list starts with presets that apply; the airbrush builds up.
+    for (const char* list : {fla::brushpresets::kFlow, fla::brushpresets::kNib, fla::brushpresets::kInk,
+             fla::brushpresets::kBitmap})
+        CHECK(!fla::brushpresets::builtIns(list).empty());
+    for (const auto& preset : fla::brushpresets::builtIns(fla::brushpresets::kBitmap))
+    {
+        if (preset.name != "Airbrush")
+            continue;
+        fla::DrawingStyle air;
+        BrushSettings tip;
+        fla::brushpresets::apply(preset.text, tip, air);
+        CHECK(air.bitmapFlow == 12.0 && air.bitmapFlowPressure && tip.size == 60.0);
+    }
 }

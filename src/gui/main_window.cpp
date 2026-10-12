@@ -74,6 +74,8 @@
 #include "phoenix_view.h"
 #include "movie_export.h"
 #include "sprite_sheet_dialog.h"
+#include "brush_properties_dialog.h"
+#include "../edit/brush_presets.h"
 #include "image_export.h"
 #include "timeline_view.h"
 #include "../data/frame.h"
@@ -5658,6 +5660,41 @@ void MainWindow::exportMovie()
     }
 }
 
+void MainWindow::openBrushProperties()
+{
+    // The brush in hand decides whose settings and presets show.
+    const Tool* tool = _phoenixView ? _phoenixView->activeTool() : nullptr;
+    std::string list = fla::brushpresets::kFlow;
+    if (tool && tool == _classicBrushTool.get())
+        list = fla::brushpresets::kNib;
+    else if (tool && tool == _inkBrushTool.get())
+        list = fla::brushpresets::kInk;
+    if (_brushProperties)
+        _brushProperties->close();
+    BrushPropertiesDialog::Library library;
+    library.bitmapNames = [this]() {
+        QStringList names;
+        const fla::Document* document = _flaDocument ? _flaDocument->document : nullptr;
+        if (document)
+            for (const fla::Resource* resource : document->resources)
+                if (resource && resource->resourceType() == fla::Resource::Type::Bitmap)
+                    names << QString::fromStdString(static_cast<const fla::Bitmap*>(resource)->name);
+        return names;
+    };
+    library.bitmapImage = [this](const QString& name) {
+        return _phoenixView ? _phoenixView->libraryBitmap(name).toImage() : QImage();
+    };
+    _brushProperties = new BrushPropertiesDialog(_drawingStyle, list, library, this);
+    _brushProperties->setAttribute(Qt::WA_DeleteOnClose);
+    connect(_brushProperties, &BrushPropertiesDialog::changed, this, [this]() {
+        if (_propertiesPanel)
+            _propertiesPanel->refreshToolOptions();
+        if (_phoenixView)
+            _phoenixView->update();
+    });
+    _brushProperties->show();
+}
+
 void MainWindow::exportSpriteSheet(const QString& symbolName)
 {
     if (!_flaDocument || !_flaDocument->document || !_phoenixView)
@@ -7236,6 +7273,7 @@ void MainWindow::setupPropertiesPanel()
 
     // The Tool tab writes into the drawing style itself; these are the side
     // effects the window has to carry out.
+    connect(_propertiesPanel, &PropertiesPanel::brushPropertiesRequested, this, &MainWindow::openBrushProperties);
     connect(_propertiesPanel, &PropertiesPanel::toolSettingChanged, this, [this](const QString& key) {
         if (key == "fillColor" || key == "strokeColor")
         {
@@ -11559,6 +11597,8 @@ void saveBrush(QSettings& settings, const QString& group, const fla::BrushSettin
     settings.setValue("smoothing", brush.smoothing);
     settings.setValue("precision", brush.precision);
     settings.setValue("stabilizer", brush.stabilizer);
+    // Every setting, the newer ones too, as the presets write them.
+    settings.setValue("text", QString::fromStdString(fla::toText(brush)));
     settings.endGroup();
 }
 
@@ -11582,6 +11622,9 @@ void loadBrush(QSettings& settings, const QString& group, fla::BrushSettings& br
     brush.smoothing = std::max(0, std::min(100, settings.value("smoothing", brush.smoothing).toInt()));
     brush.precision = std::max(0, std::min(100, settings.value("precision", brush.precision).toInt()));
     brush.stabilizer = std::max(0.0, std::min(60.0, settings.value("stabilizer", brush.stabilizer).toDouble()));
+    const QString text = settings.value("text").toString();
+    if (!text.isEmpty())
+        fla::fromText(text.toStdString(), brush);
     settings.endGroup();
 }
 
@@ -11595,8 +11638,16 @@ void MainWindow::loadSettings()
     loadBrush(settings, "brushes/ink", _drawingStyle.inkBrush);
     loadBrush(settings, "brushes/eraser", _drawingStyle.eraserBrush);
     _drawingStyle.eraserSyncWithBrush = settings.value("brushes/eraserSync", false).toBool();
+    const QString brushStyle = settings.value("brushes/style").toString();
+    if (!brushStyle.isEmpty())
+    {
+        // The painting options alone: the brush they come with is ignored.
+        fla::BrushSettings ignored;
+        fla::brushpresets::apply(brushStyle.toStdString(), ignored, _drawingStyle);
+    }
+    _drawingStyle.bitmapBrush = settings.value("brushes/bitmap", false).toBool();
     const int brushMode = settings.value("brushes/mode", 0).toInt();
-    _drawingStyle.brushMode = brushMode >= 0 && brushMode <= 4
+    _drawingStyle.brushMode = brushMode >= 0 && brushMode <= 5
         ? static_cast<fla::DrawingStyle::BrushMode>(brushMode) : fla::DrawingStyle::BrushMode::Normal;
     _recentFiles = settings.value("recentFiles").toStringList();
     _lastDirectory = settings.value("lastDirectory").toString();
@@ -11621,6 +11672,8 @@ void MainWindow::saveSettings()
     saveBrush(settings, "brushes/eraser", _drawingStyle.eraserBrush);
     settings.setValue("brushes/eraserSync", _drawingStyle.eraserSyncWithBrush);
     settings.setValue("brushes/mode", static_cast<int>(_drawingStyle.brushMode));
+    settings.setValue("brushes/style", QString::fromStdString(fla::brushpresets::styleText(_drawingStyle)));
+    settings.setValue("brushes/bitmap", _drawingStyle.bitmapBrush);
     settings.setValue("window/geometry", saveGeometry());
     if (_layoutRestored)
         settings.setValue("window/state", saveState(kLayoutVersion));

@@ -129,6 +129,7 @@ set(HEADERS
     src/gui/ik_poser.h
     src/gui/movie_export.h
     src/gui/sprite_sheet_dialog.h
+    src/gui/brush_properties_dialog.h
     src/gui/selection_targets.h
     src/gui/navigation_tools.h
     src/gui/draw_placement.h
@@ -212,6 +213,7 @@ set(HEADERS
     src/edit/region_split.h
     src/edit/drawing_style.h
     src/edit/brush_stroke.h
+    src/edit/brush_presets.h
     src/edit/brush_texture.h
     src/edit/camera.h
     src/edit/motion_object.h
@@ -345,6 +347,7 @@ set(SOURCES
     src/gui/ik_poser.cpp
     src/gui/movie_export.cpp
     src/gui/sprite_sheet_dialog.cpp
+    src/gui/brush_properties_dialog.cpp
     src/gui/navigation_tools.cpp
     src/gui/draw_placement.cpp
     src/gui/filters.cpp
@@ -421,6 +424,7 @@ set(SOURCES
     src/edit/region_split.cpp
     src/edit/drawing_style.cpp
     src/edit/brush_stroke.cpp
+    src/edit/brush_presets.cpp
     src/edit/brush_texture.cpp
     src/edit/camera.cpp
     src/edit/motion_object.cpp

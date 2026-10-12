@@ -48,6 +48,7 @@ set(TEST_CORE_SOURCES
     ${PHOENIX_SRC}/data/transform.cpp
     ${PHOENIX_SRC}/edit/command_stack.cpp
     ${PHOENIX_SRC}/edit/brush_stroke.cpp
+    ${PHOENIX_SRC}/edit/brush_presets.cpp
     ${PHOENIX_SRC}/edit/motion_object.cpp
     ${PHOENIX_SRC}/edit/brush_texture.cpp
     ${PHOENIX_SRC}/edit/camera.cpp

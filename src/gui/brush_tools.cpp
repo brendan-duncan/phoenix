@@ -265,9 +265,51 @@ fla::Shape* outlineShape(const QPainterPath& outline, double tolerance, fla::Fra
     shape->fills.push_back(fill);
     shape->fillsMap[kStyleIndex] = fill;
 
-    // Each closed loop of the outline becomes one edge. Which side the fill
-    // goes on follows the loop's direction, so an outer loop and the hole a
-    // self-crossing left both come out right.
+    // Each closed loop of the outline becomes one edge. A loop inside an odd
+    // number of the others is a hole, filled on its outside, whichever way
+    // the outline happens to wind it: a ring stroke keeps its middle empty.
+    std::vector<QPolygonF> loops;
+    {
+        QPainterPath loop;
+        for (int i = 0; i < outline.elementCount(); ++i)
+        {
+            const QPainterPath::Element& element = outline.elementAt(i);
+            if (element.type == QPainterPath::MoveToElement && !loop.isEmpty())
+            {
+                loops.push_back(loop.toFillPolygon());
+                loop = QPainterPath();
+            }
+            if (element.type == QPainterPath::MoveToElement)
+                loop.moveTo(element.x, element.y);
+            else if (element.type == QPainterPath::LineToElement)
+                loop.lineTo(element.x, element.y);
+            else if (element.type == QPainterPath::CurveToElement && i + 2 < outline.elementCount())
+            {
+                const QPainterPath::Element& c2 = outline.elementAt(i + 1);
+                const QPainterPath::Element& end = outline.elementAt(i + 2);
+                loop.cubicTo(element.x, element.y, c2.x, c2.y, end.x, end.y);
+                i += 2;
+            }
+        }
+        if (!loop.isEmpty())
+            loops.push_back(loop.toFillPolygon());
+    }
+    const auto isHole = [&](const QPolygonF& ring) {
+        if (ring.isEmpty())
+            return false;
+        // A point of the loop itself: the resolved loops do not cross.
+        const QPointF probe = ring.front();
+        int around = 0;
+        for (const QPolygonF& other : loops)
+        {
+            if (&other == &ring || other.size() < 3)
+                continue;
+            if (other.containsPoint(probe, Qt::OddEvenFill))
+                ++around;
+        }
+        return around % 2 == 1;
+    };
+    size_t loopIndex = 0;
     QPainterPath subpath;
     const auto flush = [&]() {
         if (subpath.elementCount() < 2)
@@ -277,7 +319,9 @@ fla::Shape* outlineShape(const QPainterPath& outline, double tolerance, fla::Fra
         }
 
         fla::Edge* edge = new fla::Edge(shape);
-        if (signedArea(subpath) >= 0.0)
+        const bool hole = loopIndex < loops.size() && isHole(loops[loopIndex]);
+        ++loopIndex;
+        if ((signedArea(subpath) >= 0.0) != hole)
             edge->fillStyle1 = kStyleIndex;
         else
             edge->fillStyle0 = kStyleIndex;
@@ -420,7 +464,9 @@ void BrushTool::takeSamples(PhoenixView& view, QMouseEvent* event, const QPointF
 {
     if (_pen)
     {
-        const std::vector<fla::BrushSample> taken = view.takeTabletSamples();
+        std::vector<fla::BrushSample> taken = view.takeTabletSamples();
+        for (fla::BrushSample& sample : taken)
+            snapToGuide(sample);
         _samples.insert(_samples.end(), taken.begin(), taken.end());
         if (!_samples.empty())
             return;
@@ -449,7 +495,24 @@ void BrushTool::takeSamples(PhoenixView& view, QMouseEvent* event, const QPointF
         else
             return;
     }
+    snapToGuide(sample);
     _samples.push_back(sample);
+}
+
+void BrushTool::snapToGuide(fla::BrushSample& sample) const
+{
+    if (_guideAxis == 1)
+        sample.x = _guideAt;
+    else if (_guideAxis == 2)
+        sample.y = _guideAt;
+}
+
+fla::BrushSettings BrushTool::effective(PhoenixView& view) const
+{
+    fla::BrushSettings brush = settings();
+    if (brush.sizeFollowsCamera)
+        brush.size /= view.cameraScaleFor(view.activeFrame());
+    return brush;
 }
 
 bool BrushTool::mousePress(PhoenixView& view, QMouseEvent* event, const QPointF& documentPos)
@@ -477,6 +540,33 @@ bool BrushTool::mousePress(PhoenixView& view, QMouseEvent* event, const QPointF&
     _drawing = true;
     _samples.clear();
     _axis = 0;
+    // Snap to Guides: a stroke begun on a ruler guide keeps to it.
+    _guideAxis = 0;
+    if (_style.brushSnapGuides)
+    {
+        std::vector<double> xs;
+        std::vector<double> ys;
+        view.toolGuides(xs, ys);
+        double nearest = 8.0 / std::max(view.zoom(), 1.0e-6);
+        for (double x : xs)
+        {
+            if (std::fabs(documentPos.x() - x) < nearest)
+            {
+                nearest = std::fabs(documentPos.x() - x);
+                _guideAxis = 1;
+                _guideAt = x;
+            }
+        }
+        for (double y : ys)
+        {
+            if (std::fabs(documentPos.y() - y) < nearest)
+            {
+                nearest = std::fabs(documentPos.y() - y);
+                _guideAxis = 2;
+                _guideAt = y;
+            }
+        }
+    }
     _pen = view.penDown();
     takeSamples(view, event, documentPos);
     view.update();
@@ -503,7 +593,9 @@ bool BrushTool::mouseRelease(PhoenixView& view, QMouseEvent* event, const QPoint
     if (_pen)
     {
         // The pen's last readings; the release itself adds nothing.
-        const std::vector<fla::BrushSample> taken = view.takeTabletSamples();
+        std::vector<fla::BrushSample> taken = view.takeTabletSamples();
+        for (fla::BrushSample& sample : taken)
+            snapToGuide(sample);
         _samples.insert(_samples.end(), taken.begin(), taken.end());
     }
     else
@@ -539,17 +631,38 @@ void BrushTool::finish(PhoenixView& view)
     // Precision sets how closely the curves fitted to the outline follow
     // it, from a sixth of a screen pixel at 100 to a pixel and a half at 0.
     const double zoom = std::max(view.zoom(), 1.0e-6);
-    const fla::BrushSettings& brush = settings();
+    const fla::BrushSettings brush = effective(view);
     const double precision = std::max(0, std::min(100, brush.precision)) / 100.0;
     const double tolerance = (0.15 + (1.0 - precision) * 1.35) / zoom;
     const std::vector<fla::BrushDab> dabs = fla::BrushStroke::dabs(_samples, brush, zoom, true);
+    // The pen's touch over the stroke, for a texture whose strength
+    // follows it.
+    double meanPressure = 1.0;
+    if (_pen && !_samples.empty())
+    {
+        double sum = 0.0;
+        for (const fla::BrushSample& sample : _samples)
+            sum += sample.pressure;
+        meanPressure = sum / static_cast<double>(_samples.size());
+    }
     if (_style.bitmapBrush)
     {
         _samples.clear();
         paintBitmap(view, frame, dabs);
         return;
     }
-    fla::Shape* shape = outlineShape(sweptOutline(dabs, zoom, true), tolerance, frame, _style, true);
+    QPainterPath swept = sweptOutline(dabs, zoom, false);
+    // Auto Fill: a stroke that closes on itself is filled in.
+    const std::vector<fla::Point> loop = closedLoop(dabs, brush.size, zoom);
+    if (loop.size() >= 3)
+    {
+        QPolygonF ring;
+        for (const fla::Point& point : loop)
+            ring << QPointF(point.x, point.y);
+        swept.addPolygon(ring);
+        swept.closeSubpath();
+    }
+    fla::Shape* shape = outlineShape(swept.simplified(), tolerance, frame, _style, true);
     _samples.clear();
     // Lock Fill: a gradient or bitmap over the whole stage, not the stroke.
     if (shape && _style.lockFill)
@@ -566,13 +679,13 @@ void BrushTool::finish(PhoenixView& view)
     // A textured stroke keeps its grain as its own object, so merging never
     // spreads the grain to other paint or takes it away.
     const bool textured = !_style.brushTexture.empty();
-    const auto texture = [this](fla::Shape* painted) {
+    const auto texture = [this, meanPressure](fla::Shape* painted) {
         if (!painted || _style.brushTexture.empty())
             return;
-        fla::texture::Spec spec;
-        spec.name = _style.brushTexture;
-        spec.scale = std::max(0.01, _style.brushTextureScale / 100.0);
-        spec.strength = std::clamp(_style.brushTextureStrength / 100.0, 0.0, 1.0);
+        fla::texture::Spec spec = textureSpec();
+        // A light touch shows more of the grain, as chalk does.
+        if (_style.brushTexturePressure)
+            spec.strength = std::clamp(spec.strength * (1.75 - 1.5 * meanPressure), 0.0, 1.0);
         fla::texture::set(painted->extraAttributes, spec);
         painted->isDrawingObject = true;
     };
@@ -631,6 +744,14 @@ void BrushTool::finish(PhoenixView& view)
                 return !paintedAt(arranged, point);
             });
         }
+        break;
+
+    case BrushMode::Repaint:
+        // Only over paint already there, which it recolors.
+        arranged = arrangeShapesIn(view, boundsOf(*whole));
+        piece = restrictTo(*whole, arranged, [&](const fla::Point& point) {
+            return paintedAt(arranged, point);
+        });
         break;
 
     case BrushMode::Normal:
@@ -728,52 +849,89 @@ void BrushTool::paintBitmap(PhoenixView& view, fla::Frame* frame, const std::vec
             old.convertToFormat(QImage::Format_ARGB32_Premultiplied));
     }
 
-    // The stroke on its own first, so dabs that overlap do not build up and
-    // the texture and opacity apply to it as a whole.
+    // The stroke on its own first, so its opacity, blend and the paper's
+    // grain apply to it as a whole. At full flow the dabs do not build up
+    // where they overlap (each pixel keeps the strongest), so a stroke is
+    // even; below it they do, as an airbrush's.
     QImage layer(width, height, QImage::Format_ARGB32_Premultiplied);
     layer.fill(Qt::transparent);
     {
         QPainter paint(&layer);
         paint.setRenderHint(QPainter::Antialiasing);
+        paint.setRenderHint(QPainter::SmoothPixmapTransform);
         paint.scale(kDensity, kDensity);
         paint.translate(-area.topLeft());
         paint.setPen(Qt::NoPen);
-        paint.setCompositionMode(QPainter::CompositionMode_Lighten);
         const QColor color(_style.fillColor[0], _style.fillColor[1], _style.fillColor[2], _style.fillColor[3]);
-        const double softness = std::clamp(_style.bitmapSoftness / 100.0, 0.0, 0.99);
+        const double flow = std::clamp(_style.bitmapFlow / 100.0, 0.01, 1.0);
+        const bool buildsUp = flow < 0.999 || _style.bitmapFlowPressure;
+        paint.setCompositionMode(buildsUp ? QPainter::CompositionMode_SourceOver : QPainter::CompositionMode_Lighten);
+        // Auto Fill: the loop the stroke closes, painted solid under it.
+        const std::vector<fla::Point> loop = closedLoop(dabs, settings().size, view.zoom());
+        if (loop.size() >= 3)
+        {
+            QPolygonF ring;
+            for (const fla::Point& point : loop)
+                ring << QPointF(point.x, point.y);
+            paint.setBrush(color);
+            paint.drawPolygon(ring);
+        }
+        const QImage tip = bitmapTip(view, color, dabs.front());
+        // Dabs the spacing apart, as a percentage of the tip.
+        const double spacing = std::max(0.01, _style.bitmapSpacing / 100.0);
+        double since = 1.0e9;
+        const fla::BrushDab* last = nullptr;
         for (const fla::BrushDab& dab : dabs)
         {
-            const double radius = std::max(0.5, dab.width * 0.5);
-            QRadialGradient gradient(QPointF(0.0, 0.0), radius);
-            gradient.setColorAt(0.0, color);
-            gradient.setColorAt(1.0 - softness, color);
-            QColor edge = color;
-            edge.setAlpha(0);
-            gradient.setColorAt(1.0, edge);
+            if (last)
+                since += std::hypot(dab.x - last->x, dab.y - last->y);
+            last = &dab;
+            const double gap = std::max(0.25, spacing * std::max(dab.width, dab.height));
+            if (since < gap && &dab != &dabs.back())
+                continue;
+            since = 0.0;
+            double alpha = dab.opacity;
+            if (_style.bitmapOpacityPressure)
+                alpha *= dab.pressure;
+            if (buildsUp)
+                alpha *= flow * (_style.bitmapFlowPressure ? dab.pressure : 1.0);
+            if (alpha <= 0.001)
+                continue;
             paint.save();
             paint.translate(dab.x, dab.y);
-            paint.rotate(dab.angle);
-            paint.scale(1.0, dab.width > 0.0 ? dab.height / dab.width : 1.0);
-            paint.setBrush(gradient);
-            paint.drawEllipse(QPointF(0.0, 0.0), radius, radius);
+            // The dab's turn is in radians.
+            paint.rotate(dab.angle * 180.0 / 3.14159265358979323846);
+            paint.scale(std::max(dab.width, 0.25) / tip.width(), std::max(dab.height, 0.25) / tip.height());
+            paint.setOpacity(std::clamp(alpha, 0.0, 1.0));
+            paint.drawImage(QPointF(-tip.width() / 2.0, -tip.height() / 2.0), tip);
             paint.restore();
         }
-        // The grain, when the brush has one.
+        // The paper's grain, when the brush has one.
         if (!_style.brushTexture.empty())
         {
-            fla::texture::Spec spec;
-            spec.name = _style.brushTexture;
-            spec.scale = std::max(0.01, _style.brushTextureScale / 100.0);
-            spec.strength = std::clamp(_style.brushTextureStrength / 100.0, 0.0, 1.0);
+            paint.setOpacity(1.0);
             paint.setCompositionMode(QPainter::CompositionMode_DestinationIn);
-            paint.fillRect(area, view.texturedBrush(Qt::black, spec));
+            paint.fillRect(area, view.texturedBrush(Qt::black, textureSpec()));
         }
     }
     {
         QPainter merge(&image);
         merge.setOpacity(std::clamp(_style.bitmapOpacity / 100.0, 0.0, 1.0));
-        merge.setCompositionMode(_style.bitmapErase ? QPainter::CompositionMode_DestinationOut
-                                                    : QPainter::CompositionMode_SourceOver);
+        using Blend = fla::DrawingStyle::BitmapBlend;
+        QPainter::CompositionMode mode = QPainter::CompositionMode_SourceOver;
+        switch (_style.bitmapBlend)
+        {
+        case Blend::Normal: mode = QPainter::CompositionMode_SourceOver; break;
+        case Blend::Multiply: mode = QPainter::CompositionMode_Multiply; break;
+        case Blend::Screen: mode = QPainter::CompositionMode_Screen; break;
+        case Blend::Overlay: mode = QPainter::CompositionMode_Overlay; break;
+        case Blend::Darken: mode = QPainter::CompositionMode_Darken; break;
+        case Blend::Lighten: mode = QPainter::CompositionMode_Lighten; break;
+        case Blend::Add: mode = QPainter::CompositionMode_Plus; break;
+        }
+        if (_style.bitmapErase)
+            mode = QPainter::CompositionMode_DestinationOut;
+        merge.setCompositionMode(mode);
         merge.drawImage(0, 0, layer);
     }
 
@@ -808,13 +966,135 @@ void BrushTool::paintBitmap(PhoenixView& view, fla::Frame* frame, const std::vec
     view.update();
 }
 
+std::vector<fla::Point> BrushTool::closedLoop(const std::vector<fla::BrushDab>& dabs, double size, double zoom) const
+{
+    std::vector<fla::Point> loop;
+    if (!_style.brushAutoFill || dabs.size() < 3)
+        return loop;
+    double length = 0.0;
+    for (size_t i = 1; i < dabs.size(); ++i)
+        length += std::hypot(dabs[i].x - dabs[i - 1].x, dabs[i].y - dabs[i - 1].y);
+    // Closed when it ends near where it began, having gone round.
+    const double reach = std::max(size, 8.0 / std::max(zoom, 1.0e-6));
+    const double gap = std::hypot(dabs.back().x - dabs.front().x, dabs.back().y - dabs.front().y);
+    if (gap > reach || length < reach * 4.0)
+        return loop;
+    loop.reserve(dabs.size());
+    for (const fla::BrushDab& dab : dabs)
+        loop.push_back(fla::Point(dab.x, dab.y));
+    return loop;
+}
+
+fla::texture::Spec BrushTool::textureSpec() const
+{
+    fla::texture::Spec spec;
+    spec.name = _style.brushTexture;
+    spec.scale = std::max(0.01, _style.brushTextureScale / 100.0);
+    spec.strength = std::clamp(_style.brushTextureStrength / 100.0, 0.0, 1.0);
+    spec.offsetX = _style.brushTextureOffsetX;
+    spec.offsetY = _style.brushTextureOffsetY;
+    spec.rotation = _style.brushTextureRotation;
+    spec.fixed = _style.brushTextureFixed;
+    return spec;
+}
+
+QImage BrushTool::bitmapTip(PhoenixView& view, const QColor& color, const fla::BrushDab& dab) const
+{
+    constexpr int kSize = 128;
+    // Coverage first, white on clear.
+    QImage coverage(kSize, kSize, QImage::Format_ARGB32_Premultiplied);
+    coverage.fill(Qt::transparent);
+    {
+        QPainter paint(&coverage);
+        paint.setRenderHint(QPainter::Antialiasing);
+        paint.setRenderHint(QPainter::SmoothPixmapTransform);
+        const QImage stamp = _style.bitmapTip.empty()
+            ? QImage() : view.libraryBitmap(QString::fromStdString(_style.bitmapTip)).toImage();
+        if (!stamp.isNull())
+        {
+            // A library bitmap: its alpha where it has one, else dark is
+            // paint, as ink on paper.
+            QImage source = stamp.convertToFormat(QImage::Format_ARGB32).scaled(kSize, kSize,
+                Qt::KeepAspectRatio, Qt::SmoothTransformation);
+            bool transparent = false;
+            for (int y = 0; y < source.height() && !transparent; ++y)
+            {
+                const QRgb* line = reinterpret_cast<const QRgb*>(source.constScanLine(y));
+                for (int x = 0; x < source.width(); ++x)
+                    transparent = transparent || qAlpha(line[x]) < 250;
+            }
+            for (int y = 0; y < source.height(); ++y)
+            {
+                QRgb* line = reinterpret_cast<QRgb*>(source.scanLine(y));
+                for (int x = 0; x < source.width(); ++x)
+                {
+                    const int a = transparent ? qAlpha(line[x]) : 255 - qGray(line[x]);
+                    line[x] = qPremultiply(qRgba(255, 255, 255, a));
+                }
+            }
+            paint.drawImage(QPointF((kSize - source.width()) / 2.0, (kSize - source.height()) / 2.0), source);
+        }
+        else if (dab.shape && dab.shape->size() >= 3)
+        {
+            // The tip's outline, filled.
+            QPolygonF ring;
+            for (const fla::Point& point : *dab.shape)
+                ring << QPointF((point.x + 0.5) * kSize, (point.y + 0.5) * kSize);
+            paint.setPen(Qt::NoPen);
+            paint.setBrush(Qt::white);
+            paint.drawPolygon(ring);
+        }
+        else if (dab.rectangular)
+        {
+            paint.fillRect(QRectF(0, 0, kSize, kSize), Qt::white);
+        }
+        else
+        {
+            // The round tip: solid to where the softness begins, then falling
+            // away, slowly when hard and quickly when not.
+            const double softness = std::clamp(_style.bitmapSoftness / 100.0, 0.0, 0.99);
+            const double hardness = std::clamp(_style.bitmapHardness / 100.0, 0.0, 1.0);
+            const double exponent = 3.0 - 2.7 * hardness;
+            QRadialGradient gradient(QPointF(kSize / 2.0, kSize / 2.0), kSize / 2.0);
+            gradient.setColorAt(0.0, Qt::white);
+            gradient.setColorAt(1.0 - softness, Qt::white);
+            for (int k = 1; k <= 6; ++k)
+            {
+                const double u = k / 7.0;
+                QColor shade(255, 255, 255, static_cast<int>(std::lround(255.0 * std::pow(1.0 - u, exponent))));
+                gradient.setColorAt(1.0 - softness + softness * u, shade);
+            }
+            gradient.setColorAt(1.0, QColor(255, 255, 255, 0));
+            paint.setPen(Qt::NoPen);
+            paint.setBrush(gradient);
+            paint.drawEllipse(QRectF(0, 0, kSize, kSize));
+        }
+        // The tip's own texture, turning with it.
+        if (!_style.bitmapTipTexture.empty())
+        {
+            fla::texture::Spec spec;
+            spec.name = _style.bitmapTipTexture;
+            spec.scale = 0.5;
+            paint.setCompositionMode(QPainter::CompositionMode_DestinationIn);
+            paint.fillRect(QRectF(0, 0, kSize, kSize), view.texturedBrush(Qt::black, spec));
+        }
+    }
+    // Then the color, through the coverage.
+    QImage tip(kSize, kSize, QImage::Format_ARGB32_Premultiplied);
+    tip.fill(color);
+    QPainter tint(&tip);
+    tint.setCompositionMode(QPainter::CompositionMode_DestinationIn);
+    tint.drawImage(0, 0, coverage);
+    return tip;
+}
+
 void BrushTool::paintOverlay(PhoenixView& view, QPainter& painter, double scale)
 {
 
     painter.setPen(Qt::NoPen);
 
     const double zoom = std::max(view.zoom(), 1.0e-6);
-    const fla::BrushSettings& brush = settings();
+    const fla::BrushSettings brush = effective(view);
     if (_drawing && !_samples.empty())
     {
         // The stroke as it will land: the same sweep, in the fill color.
@@ -833,6 +1113,9 @@ void BrushTool::paintOverlay(PhoenixView& view, QPainter& painter, double scale)
         tip.height = std::max(brush.size * std::max(1.0, std::min(100.0, brush.roundness)) / 100.0, 0.1);
         tip.angle = brush.angle * 3.14159265358979323846 / 180.0;
         tip.rectangular = brush.tip == fla::BrushSettings::Tip::Rectangle;
+        const std::vector<fla::Point> shape = fla::tipPolygon(brush);
+        if (shape.size() >= 3)
+            tip.shape = std::make_shared<const std::vector<fla::Point>>(shape);
         QPolygonF ring;
         for (const fla::Point& point : fla::BrushStroke::dabOutline(tip, zoom))
             ring << QPointF(point.x, point.y);

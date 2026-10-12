@@ -4,6 +4,7 @@
 
 #include "../data/point.h"
 #include "../edit/brush_stroke.h"
+#include "../edit/brush_texture.h"
 #include "../edit/region_split.h"
 
 #include <QPainterPath>
@@ -103,6 +104,25 @@ private:
     /// The settings of this brush.
     const fla::BrushSettings& settings() const;
 
+    /// The settings as a stroke on \a view uses them: with the size taken
+    /// down under a camera zoom when the brush keeps its size on screen.
+    fla::BrushSettings effective(PhoenixView& view) const;
+
+    /// Keeps a sample to the ruler guide the stroke began on, if any.
+    void snapToGuide(fla::BrushSample& sample) const;
+
+    /// With Auto Fill on, the loop a stroke closes, as its dabs' centers,
+    /// to be filled in; empty when it is off or the stroke stays open.
+    std::vector<fla::Point> closedLoop(const std::vector<fla::BrushDab>& dabs, double size, double zoom) const;
+
+    /// The texture the style gives a stroke.
+    fla::texture::Spec textureSpec() const;
+
+    /// The bitmap brush's tip: its coverage of \a color, 128 pixels
+    /// square, from the soft round tip, a library bitmap or the tip's
+    /// outline, with the tip texture on it.
+    QImage bitmapTip(PhoenixView& view, const QColor& color, const fla::BrushDab& dab) const;
+
     /// Adds the pen's readings since the last, or, from a mouse, the
     /// cursor's position at full pressure.
     void takeSamples(PhoenixView& view, QMouseEvent* event, const QPointF& documentPos);
@@ -115,6 +135,10 @@ private:
     std::vector<fla::BrushSample> _samples;
     /// With shift held, the stroke keeps to one direction: 1 across, 2 down.
     int _axis = 0;
+    /// The ruler guide the stroke began on: 1 a vertical one at _guideAt,
+    /// 2 a horizontal one, 0 none.
+    int _guideAxis = 0;
+    double _guideAt = 0.0;
     /// Whether the stroke under way comes from a pen.
     bool _pen = false;
     bool _drawing = false;

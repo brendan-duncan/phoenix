@@ -199,15 +199,46 @@
     <tr><td>Paint Behind</td><td class="wrap">Only on empty areas, behind existing artwork</td></tr>
     <tr><td>Paint Selection</td><td class="wrap">Only inside the selected fill</td></tr>
     <tr><td>Paint Inside</td><td class="wrap">Only inside the fill where the stroke starts</td></tr>
+    <tr><td>Repaint</td><td class="wrap">Only over fills already there, recoloring them; nothing lands on empty areas</td></tr>
   </tbody>
 </table>
 
 <p>Press <kbd>Esc</kbd> during a stroke to cancel it.</p>
 
-<div class="callout planned">
-  <span class="label">Planned</span>
-  <p>A Paint Brush with art and pattern brushes and a brush library, textured brushes, and a Width tool for shaping variable-width strokes.</p>
-</div>
+<h3>Brush Properties and presets</h3>
+
+<p>Click <strong>Brush Properties and Presets...</strong> on the Tool tab of the Properties panel to open every setting of the brush in hand. Changes apply as you make them, and the window can stay open while you paint.</p>
+
+<p><strong>Presets</strong> are named brushes. Each brush keeps its own list, and the bitmap brush keeps another. Each preset shows the stroke it paints: choose <strong>Small Thumbnails</strong>, <strong>Large Thumbnails</strong> or <strong>Stroke View</strong> above the list. Click a preset to use it. <strong>New...</strong> keeps the brush as it is now as a preset; <strong>Rename...</strong> and <strong>Delete</strong> do what they say. <strong>Export...</strong> writes the list to a <code>.phxbrushes</code> file to share, and <strong>Import...</strong> adds the presets in one. A preset holds the tip and its dynamics, and also the texture, the bitmap brush's settings and the painting options.</p>
+
+<dl class="defs">
+  <dt>Tip</dt><dd><strong>Shape</strong>: Ellipse, Rectangle, Triangle, Diamond, Hexagon, Star, or Custom. <strong>Tip from Library Bitmap...</strong> traces a library bitmap's outline as a custom tip; the bitmap brush stamps the image itself. <strong>Angle follows</strong>: nothing; the stroke's direction (heading), as a calligraphy pen held to the line; the way the pen leans (azimuth); or the turn of an art pen's barrel (twist). <strong>Tilt stretch</strong> lengthens the tip as the pen leans. <strong>Size follows the camera</strong> keeps the tip's size on screen while a camera zooms, so the line looks the same width in the shot.</dd>
+  <dt>Dynamics</dt><dd>Pressure, with <strong>Invert pressure</strong> to make pressing harder paint thinner, a minimum size and a response curve. Tilt that broadens the line, with <strong>Invert tilt</strong>. <strong>Speed</strong>, with a sensitivity for how quickly speed has its full effect. <strong>Taper by</strong> a percentage of each stroke or a distance in pixels, so short and long strokes taper alike. Smoothing, precision and the stabilizer.</dd>
+  <dt>Painting</dt><dd>The brush mode, as on the Tool tab. <strong>Auto fill</strong> fills a stroke that closes on itself, so an outline drawn round a shape comes out solid. <strong>Snap to guides</strong>: a stroke begun on a ruler guide keeps to it, which gives straight inked edges.</dd>
+  <dt>Bitmap</dt><dd>The bitmap brush; see below.</dd>
+  <dt>Texture</dt><dd>See below.</dd>
+</dl>
+
+<h3>Textured brushes</h3>
+
+<p>A brush can paint with a grain, as chalk takes the tooth of the paper. Choose the <strong>Texture</strong> on the Tool tab: one of Phoenix's own (papers, dry media, paint and patterns) or a library bitmap. <strong>Grain size</strong> and <strong>Grain strength</strong> set how large it is and how much paint it takes away where it is lightest. In Brush Properties you can also move the grain (<strong>Offset X</strong>, <strong>Offset Y</strong>) and turn it (<strong>Rotation</strong>) so neighboring strokes don't share it. <strong>Pressure sets the strength</strong> shows more grain at a light touch. <strong>Fixed to the frame</strong> keeps the grain the same size in the rendered frame as a camera zooms or the art is scaled. Without it, the grain scales with the art.</p>
+
+<p>A textured stroke stays an object of its own, so merging never spreads its grain. Animate opens it as plain paint.</p>
+
+<h3>Bitmap brush</h3>
+
+<p>Turn on <strong>Bitmap brush</strong> to paint pixels into the frame's paint canvas, a bitmap in the library, rather than vector shapes. Any of the three brushes can paint this way, with its own tip and dynamics.</p>
+
+<dl class="defs">
+  <dt>Flow</dt><dd>How much paint each dab lays down. At 100% the paint does not build up where a stroke overlaps itself; below that it does, as an airbrush's.</dd>
+  <dt>Spacing</dt><dd>How far apart the dabs are, as a percentage of the tip. Wide spacing leaves a trail of separate stamps.</dd>
+  <dt>Hardness and Softness</dt><dd>Softness is how wide the soft edge is; hardness is how firmly it holds before it falls away.</dd>
+  <dt>Opacity</dt><dd>How strong each stroke is. <strong>Pressure sets the opacity</strong> and <strong>Pressure sets the flow</strong> let a light touch lay less paint.</dd>
+  <dt>Fade in and Fade out</dt><dd>The paint fades in over the start of a stroke and out over its end, by a distance in pixels.</dd>
+  <dt>Blend</dt><dd>How a stroke mixes with the paint already there: Normal, Multiply, Screen, Overlay, Darken, Lighten or Add.</dd>
+  <dt>Tip</dt><dd>The round soft tip, the tip's shape, or a library bitmap stamped as the tip (<strong>Tip from Library Bitmap...</strong>; <strong>Plain Bitmap Tip</strong> goes back). <strong>Tip texture</strong> puts a grain on the tip itself, turning with it.</dd>
+  <dt>Erase pixels</dt><dd>Takes paint away instead.</dd>
+</dl>
 
 <h2>Eraser</h2>
 

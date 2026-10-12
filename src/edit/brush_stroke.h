@@ -2,6 +2,9 @@
 
 #include "../data/point.h"
 
+#include <cstdint>
+#include <memory>
+#include <string>
 #include <vector>
 
 namespace fla {
@@ -17,6 +20,8 @@ struct BrushSample
     double tiltX = 0.0;
     double tiltY = 0.0;
     double time = 0.0;
+    /// The barrel's turn in degrees, from pens that read it (an art pen).
+    double rotation = 0.0;
 };
 
 /// The settings of one brush, as its Properties panel sets them. The three
@@ -38,7 +43,36 @@ struct BrushSettings
         /// An ellipse, round at 100% roundness.
         Ellipse,
         /// A rectangle, square at 100% roundness.
-        Rectangle
+        Rectangle,
+        /// The tip library's other shapes, each squeezed by the roundness.
+        Triangle,
+        Diamond,
+        Hexagon,
+        Star,
+        /// An outline of the user's own (customTip), traced from an image
+        /// or kept from a preset.
+        Custom
+    };
+
+    /// What turns the tip as the stroke goes.
+    enum class AngleFunction
+    {
+        /// It keeps its angle.
+        Constant,
+        /// It follows the stroke's direction, as a calligraphy pen held to
+        /// the line.
+        Heading,
+        /// It follows the way the pen leans.
+        Azimuth,
+        /// It follows the turn of the pen's barrel (an art pen).
+        Twist
+    };
+
+    /// What the start and end tapers are measured in.
+    enum class TaperUnits
+    {
+        Percent,
+        Pixels
     };
 
     /// How the speed of the stroke changes its width (Flow Brush).
@@ -99,6 +133,34 @@ struct BrushSettings
     /// 0 is off.
     double stabilizer = 0.0;
 
+    /// Harder pressure gives a thinner line, and a steeper lean a thinner
+    /// one (for tilt that broadens).
+    bool invertPressure = false;
+    bool invertTilt = false;
+    /// How quickly speed has its full effect on the width, 1 to 100: higher
+    /// reaches it at a slower stroke.
+    double velocitySensitivity = 50.0;
+    TaperUnits taperUnits = TaperUnits::Percent;
+    /// The bitmap brush's paint fades in over this many pixels from the
+    /// start of a stroke, and out over the last ones.
+    double fadeStart = 0.0;
+    double fadeEnd = 0.0;
+    /// The tip keeps its size on screen under a camera zoom: zoomed in, it
+    /// paints a finer line on the art.
+    bool sizeFollowsCamera = false;
+    AngleFunction angleFunction = AngleFunction::Constant;
+    /// How much a lean stretches the tip along its width, as a percentage
+    /// at the steepest lean.
+    double tiltStretch = 0.0;
+    /// The Custom tip's outline, a polygon one unit wide centered on the
+    /// origin; and where it came from (a library bitmap's name), for show.
+    std::vector<Point> customTip;
+    std::string tipSource;
+
+    /// The angle function in effect: Use Tilt with the Angle effect is the
+    /// Azimuth function, as the Nib Brush always had it.
+    AngleFunction effectiveAngleFunction() const;
+
     static BrushSettings fluidDefaults();
     static BrushSettings classicDefaults();
     static BrushSettings inkDefaults();
@@ -114,7 +176,36 @@ struct BrushDab
     double height = 0.0;
     double angle = 0.0;
     bool rectangular = false;
+    /// For the library's shapes and custom tips: the outline, one unit wide
+    /// and centered, which the dab scales to its width and height; empty
+    /// for an ellipse or a rectangle.
+    std::shared_ptr<const std::vector<Point>> shape;
+    /// The pen's pressure there, 0 to 1, and how much of the paint shows
+    /// there for a fade, 0 to 1.
+    double pressure = 1.0;
+    double opacity = 1.0;
 };
+
+/// The outline of one of the tip library's shapes, one unit wide and
+/// centered on the origin; empty for an ellipse or a rectangle, which are
+/// drawn as such, and the settings' own for a custom tip.
+std::vector<Point> tipPolygon(const BrushSettings& settings);
+
+/// Whether a polygon is convex, which lets a stroke be swept from dab to
+/// dab rather than stamped.
+bool isConvex(const std::vector<Point>& polygon);
+
+/// A tip's outline traced from an image's coverage (\a alpha, \a width by
+/// \a height, 0 to 255 a pixel): the largest area covered, as a polygon
+/// one unit wide centered on the origin, simplified. Empty when nothing is
+/// covered.
+std::vector<Point> traceTip(const std::vector<uint8_t>& alpha, int width, int height);
+
+/// The settings as text, one "key=value" a line, and back. Keys not given
+/// keep the value \a into has; ones not known are skipped, so presets from
+/// later versions still load.
+std::string toText(const BrushSettings& settings);
+void fromText(const std::string& text, BrushSettings& into);
 
 namespace BrushStroke {
 
@@ -133,6 +224,10 @@ std::vector<Point> dabOutline(const BrushDab& dab, double zoom);
 /// The convex hull of \a points. Every hull winds the same way: with a
 /// positive signed area in the stage's coordinates, which run y down.
 std::vector<Point> convexHull(std::vector<Point> points);
+
+/// \a polygon cut into triangles that cover it exactly, whichever way it
+/// winds; a polygon that crosses itself is cut as far as it can be.
+std::vector<std::vector<Point>> triangulate(const std::vector<Point>& polygon);
 
 /// The polygons whose union is the painted stroke: the hull of each pair of
 /// neighboring dabs, so the tip is swept between them, or the one dab of a
