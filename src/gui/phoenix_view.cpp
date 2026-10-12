@@ -899,11 +899,18 @@ void PhoenixView::drawTimeline(QPainter& painter, const fla::Timeline* timeline,
     QTransform painterTransform = painter.transform();
     const QRect deviceRect(0, 0, painter.device()->width(), painter.device()->height());
 
+    // On the timeline being edited, as on Animate's stage, guide layers show
+    // and a mask masks only once it is locked; until then its own art shows
+    // and the layers under it show whole. Anywhere else, and in an exported
+    // movie, guides are left out and masks always mask.
+    const bool editing = !_exporting && !_maskPass && timeline == scopeTimeline();
+    const auto masking = [editing](const fla::Layer* mask) { return !editing || mask->isLocked(); };
+
     // First pass: render mask layers to pixmaps
     for (int i = 0; i < timeline->layers.size(); ++i)
     {
         const fla::Layer* layer = timeline->layers[i];
-        if (layer->layerType != fla::Layer::Type::Mask || !layer->isVisible())
+        if (layer->layerType != fla::Layer::Type::Mask || !layer->isVisible() || !masking(layer))
         {
             continue;
         }
@@ -968,8 +975,13 @@ void PhoenixView::drawTimeline(QPainter& painter, const fla::Timeline* timeline,
     {
         const fla::Layer* layer = timeline->layers[i];
 
-        if (layer->layerType == fla::Layer::Type::Mask || !layer->isVisible())
+        if (!layer->isVisible())
+            continue;
+        if (layer->layerType == fla::Layer::Type::Mask)
         {
+            // An unlocked mask, while editing, is art like any other.
+            if (!masking(layer))
+                drawLayer(painter, layer, loopType, firstFrame, nullptr);
             continue;
         }
 
@@ -1030,7 +1042,10 @@ void PhoenixView::drawTimeline(QPainter& painter, const fla::Timeline* timeline,
         }
         else if (layer->layerType == fla::Layer::Type::Guide)
         {
-            // Guide layers not rendered
+            // Guides are for the one editing: shown on its timeline, never
+            // in what is published.
+            if (editing)
+                drawLayer(painter, layer, loopType, firstFrame, nullptr);
         }
     }
 }
@@ -2753,13 +2768,10 @@ void PhoenixView::hitTestTimeline(const fla::Timeline& timeline, fla::LoopType l
         if (!layer || !layer->isVisible() || layer->isLocked())
             continue;
 
-        // Guide layers are authoring aids and never rendered, so they cannot be
-        // picked on the stage either.
-        if (layer->layerType == fla::Layer::Type::Guide ||
-            layer->layerType == fla::Layer::Type::Folder)
-        {
+        // Folders hold no art. Guide layers show on the timeline being
+        // edited, so their art is picked like any other.
+        if (layer->layerType == fla::Layer::Type::Folder)
             continue;
-        }
 
         const LayerFrame state = resolveLayerFrame(layer, loopType, firstFrame);
         if (!state.frame)
@@ -3359,11 +3371,8 @@ std::vector<fla::Element*> PhoenixView::elementsIn(const QRectF& documentRect)
             if (!layer || !layer->isVisible() || layer->isLocked())
                 continue;
 
-            if (layer->layerType == fla::Layer::Type::Guide ||
-                layer->layerType == fla::Layer::Type::Folder)
-            {
+            if (layer->layerType == fla::Layer::Type::Folder)
                 continue;
-            }
 
             const LayerFrame state = resolveLayerFrame(layer, fla::LoopType::PlayOnce, 0);
             if (!state.frame || !state.frame->visible)
@@ -3779,15 +3788,14 @@ fla::Frame* PhoenixView::activeFrame()
             if (!layer || !layer->isVisible() || layer->isLocked())
                 continue;
 
-            // Folders hold no artwork, and guide layers are drawing aids that
-            // never render.
-            if (layer->layerType == fla::Layer::Type::Folder ||
-                layer->layerType == fla::Layer::Type::Guide)
-            {
+            // Folders hold no artwork; a guide layer can be drawn on, as a
+            // motion guide's path is.
+            if (layer->layerType == fla::Layer::Type::Folder)
                 continue;
-            }
 
-            if (!fallback)
+            // A guide is drawn on when it is the current layer, never by
+            // default.
+            if (!fallback && layer->layerType != fla::Layer::Type::Guide)
                 fallback = layer;
 
             if (layer->selected)
