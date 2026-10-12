@@ -31,6 +31,7 @@
 #include <memory>
 #include <vector>
 
+#include <QJsonObject>
 #include <QMainWindow>
 #include <QPointer>
 #include <QToolButton>
@@ -460,6 +461,17 @@ private:
     bool _layoutRestored = false;
     void restoreLayout();
     void fillWorkspaceMenu(QMenu* menu);
+    /// A workspace: the docks' arrangement, the tools' layout and the
+    /// timeline's layers width, as JSON (what Export writes).
+    QJsonObject currentWorkspace() const;
+    /// False when the docks' arrangement could not be used.
+    bool applyWorkspace(const QJsonObject& workspace);
+    void applyBuiltInWorkspace(const QString& name);
+    void useWorkspace(const QString& name);
+    void saveWorkspaceAs(const QString& name);
+    QStringList savedWorkspaces() const;
+    /// Floating panels, and the window, brought back onto a screen.
+    void keepOnScreen();
     /// What Copy Motion copied, a motionObjectXML.
     std::string _copiedMotion;
     QDockWidget* _framePickerDock = nullptr;

@@ -86,6 +86,9 @@
 #include <QUrl>
 #include <QFileDialog>
 #include <QMessageBox>
+#include <QJsonObject>
+#include <QGuiApplication>
+#include <QScreen>
 #include <QFrame>
 #include <QJsonDocument>
 #include <QListWidget>
@@ -3443,46 +3446,281 @@ void MainWindow::restoreLayout()
     const QByteArray kept = QSettings().value("window/state").toByteArray();
     if (!kept.isEmpty())
         restoreState(kept, kLayoutVersion);
+    keepOnScreen();
+}
+
+namespace {
+
+/// The workspaces Phoenix comes with, as Animate's.
+const QStringList kBuiltInWorkspaces = {"Essentials", "Animator", "Designer", "Classic"};
+
+QString workspaceKey(const QString& name)
+{
+    return "workspaces/" + QString::fromUtf8(QUrl::toPercentEncoding(name));
+}
+
+} // namespace
+
+QJsonObject MainWindow::currentWorkspace() const
+{
+    QJsonObject workspace;
+    workspace["phoenixWorkspace"] = 1;
+    workspace["layoutVersion"] = kLayoutVersion;
+    workspace["docks"] = QString::fromLatin1(saveState(kLayoutVersion).toBase64());
+    if (_toolbox)
+        workspace["tools"] = _toolbox->layout().toJson();
+    if (_timelineView)
+        workspace["layersWidth"] = _timelineView->layersWidth();
+    return workspace;
+}
+
+bool MainWindow::applyWorkspace(const QJsonObject& workspace)
+{
+    // A workspace from a newer Phoenix may name panels this one does not
+    // have; Qt passes over those. One whose dock layout cannot be read
+    // keeps the docks as they are and still takes the rest.
+    bool docked = false;
+    const QByteArray window = saveGeometry();
+    if (workspace["layoutVersion"].toInt() == kLayoutVersion)
+        docked = restoreState(QByteArray::fromBase64(workspace["docks"].toString().toLatin1()), kLayoutVersion);
+    if (_toolbox && workspace["tools"].isObject())
+        _toolbox->setLayout(Toolbox::Layout::fromJson(workspace["tools"].toObject()));
+    if (_timelineView && workspace["layersWidth"].toInt() > 0)
+        _timelineView->setLayersWidth(workspace["layersWidth"].toInt());
+    _hiddenByF4.clear();
+    restoreGeometry(window);
+    keepOnScreen();
+    return docked;
+}
+
+void MainWindow::applyBuiltInWorkspace(const QString& name)
+{
+    // Each starts from Phoenix's own layout, in the window as it is.
+    const QByteArray window = saveGeometry();
+    restoreState(_defaultLayout, kLayoutVersion);
+    _hiddenByF4.clear();
+    QDockWidget* properties = findChild<QDockWidget*>("propertiesDock");
+    QDockWidget* library = findChild<QDockWidget*>("libraryDock");
+    Toolbox::Layout tools = _toolbox->defaultLayout();
+    if (name == "Animator")
+    {
+        // A tall timeline with the Motion Editor beside it, the Frame
+        // Picker in the panels and the tools in two columns.
+        tools.columns = 2;
+        _motionEditorDock->show();
+        _layerDepthDock->show();
+        _framePickerDock->show();
+        _timelineDock->raise();
+        properties->raise();
+        resizeDocks({_timelineDock}, {height() / 2}, Qt::Vertical);
+    }
+    else if (name == "Designer")
+    {
+        // Color and the arranging panels in a group under Properties, a
+        // short timeline, the tools in two columns.
+        tools.columns = 2;
+        // Out of the group they start in: added to the right side, a dock
+        // goes under what is there (a split onto a tabbed dock would only
+        // tab it).
+        for (QDockWidget* dock : {_colorDock, _swatchesDock, _alignDock, _transformDock, _infoDock})
+            removeDockWidget(dock);
+        addDockWidget(Qt::RightDockWidgetArea, _colorDock, Qt::Vertical);
+        for (QDockWidget* dock : {_swatchesDock, _alignDock, _transformDock, _infoDock})
+            tabifyDockWidget(_colorDock, dock);
+        for (QDockWidget* dock : {_colorDock, _swatchesDock, _alignDock, _transformDock, _infoDock})
+            dock->show();
+        _colorDock->raise();
+        properties->raise();
+        resizeDocks({_timelineDock}, {170}, Qt::Vertical);
+    }
+    else if (name == "Classic")
+    {
+        // Flash's classic arrangement: the timeline over the stage, the
+        // tools down the right beside Properties and the Library.
+        addDockWidget(Qt::TopDockWidgetArea, _timelineDock);
+        removeDockWidget(_toolsDock);
+        addDockWidget(Qt::RightDockWidgetArea, _toolsDock, Qt::Horizontal);
+        _toolsDock->show();
+        library->raise();
+        properties->raise();
+        resizeDocks({_timelineDock}, {220}, Qt::Vertical);
+    }
+    _toolbox->setLayout(tools);
+    _timelineView->setLayersWidth(250);
+    restoreGeometry(window);
+}
+
+void MainWindow::useWorkspace(const QString& name)
+{
+    const QByteArray saved = QSettings().value(workspaceKey(name)).toByteArray();
+    const QJsonObject workspace = QJsonDocument::fromJson(saved).object();
+    if (!workspace.isEmpty())
+        applyWorkspace(workspace);
+    else if (kBuiltInWorkspaces.contains(name))
+        applyBuiltInWorkspace(name);
+    else
+        return;
+    QSettings().setValue("workspace/current", name);
+}
+
+void MainWindow::saveWorkspaceAs(const QString& name)
+{
+    QSettings().setValue(workspaceKey(name), QJsonDocument(currentWorkspace()).toJson(QJsonDocument::Compact));
+    QSettings().setValue("workspace/current", name);
+    statusBar()->showMessage(QString("Saved the workspace %1.").arg(name), 3000);
+}
+
+QStringList MainWindow::savedWorkspaces() const
+{
+    // The built-in ones, then the user's own, a built-in one kept after
+    // it was changed and saved under its own name counting once.
+    QSettings settings;
+    settings.beginGroup("workspaces");
+    QStringList own;
+    for (const QString& key : settings.childKeys())
+    {
+        const QString name = QUrl::fromPercentEncoding(key.toUtf8());
+        if (!kBuiltInWorkspaces.contains(name))
+            own << name;
+    }
+    settings.endGroup();
+    own.sort(Qt::CaseInsensitive);
+    return kBuiltInWorkspaces + own;
+}
+
+void MainWindow::keepOnScreen()
+{
+    // A panel left floating on a screen that is gone comes back to the
+    // middle of the primary one.
+    const QList<QScreen*> screens = QGuiApplication::screens();
+    const auto visible = [&screens](const QRect& rect) {
+        for (const QScreen* screen : screens)
+            if (screen->availableGeometry().intersected(rect).width() >= 40 &&
+                screen->availableGeometry().intersected(rect).height() >= 20)
+                return true;
+        return false;
+    };
+    const QRect primary = QGuiApplication::primaryScreen() ? QGuiApplication::primaryScreen()->availableGeometry()
+                                                            : QRect(0, 0, 1280, 720);
+    for (QDockWidget* dock : findChildren<QDockWidget*>())
+    {
+        if (!dock->isFloating() || visible(dock->frameGeometry()))
+            continue;
+        QRect rect = dock->frameGeometry();
+        rect.setSize(rect.size().boundedTo(primary.size()));
+        rect.moveCenter(primary.center());
+        dock->setGeometry(rect);
+    }
+    if (!visible(frameGeometry()))
+    {
+        QRect rect = geometry();
+        rect.setSize(rect.size().boundedTo(primary.size()));
+        rect.moveCenter(primary.center());
+        setGeometry(rect);
+    }
 }
 
 void MainWindow::fillWorkspaceMenu(QMenu* menu)
 {
     menu->clear();
-    QSettings settings;
-    settings.beginGroup("workspaces");
-    QStringList names = settings.childKeys();
-    settings.endGroup();
-    names.sort(Qt::CaseInsensitive);
-    for (const QString& key : names)
+    const QString current = QSettings().value("workspace/current", "Essentials").toString();
+    const QStringList names = savedWorkspaces();
+    for (const QString& name : names)
     {
-        const QString name = QUrl::fromPercentEncoding(key.toUtf8());
-        menu->addAction(name, this, [this, key]() {
-            const QByteArray state = QSettings().value("workspaces/" + key).toByteArray();
-            if (!state.isEmpty())
-                restoreState(state, kLayoutVersion);
-        });
+        if (name == names.value(kBuiltInWorkspaces.size()) && names.size() > kBuiltInWorkspaces.size())
+            menu->addSeparator();
+        QAction* use = menu->addAction(name, this, [this, name]() { useWorkspace(name); });
+        use->setCheckable(true);
+        use->setChecked(name == current);
     }
-    if (!names.isEmpty())
-        menu->addSeparator();
-    menu->addAction("Save Workspace...", this, [this]() {
+    menu->addSeparator();
+
+    menu->addAction("&New Workspace...", this, [this]() {
         bool ok = false;
-        const QString name = QInputDialog::getText(this, "Save Workspace", "Workspace name:", QLineEdit::Normal,
-            QString(), &ok).trimmed();
+        const QString name = QInputDialog::getText(this, "New Workspace", "Save the current layout as:",
+            QLineEdit::Normal, QString(), &ok).trimmed();
         if (!ok || name.isEmpty())
             return;
-        QSettings().setValue("workspaces/" + QString::fromUtf8(QUrl::toPercentEncoding(name)), saveState(kLayoutVersion));
-        statusBar()->showMessage(QString("Saved the workspace %1.").arg(name), 3000);
+        if (savedWorkspaces().contains(name) &&
+            QMessageBox::question(this, "New Workspace", QString("Replace the workspace %1?").arg(name)) != QMessageBox::Yes)
+            return;
+        saveWorkspaceAs(name);
     });
-    if (!names.isEmpty())
+    menu->addAction(QString("&Save Workspace \"%1\"").arg(current), this, [this, current]() { saveWorkspaceAs(current); });
+    menu->addAction(QString("&Reset \"%1\"").arg(current), this, [this, current]() {
+        // Back to how it was saved; a built-in one never saved over goes
+        // back to how Phoenix sets it up.
+        useWorkspace(current);
+    });
+
+    QStringList own = savedWorkspaces().mid(kBuiltInWorkspaces.size());
+    QMenu* rename = menu->addMenu("Re&name Workspace");
+    QMenu* remove = menu->addMenu("&Delete Workspace");
+    rename->setEnabled(!own.isEmpty());
+    remove->setEnabled(!own.isEmpty());
+    for (const QString& name : own)
     {
-        QMenu* remove = menu->addMenu("Delete Workspace");
-        for (const QString& key : names)
-            remove->addAction(QUrl::fromPercentEncoding(key.toUtf8()), this,
-                [key]() { QSettings().remove("workspaces/" + key); });
+        rename->addAction(name, this, [this, name]() {
+            bool ok = false;
+            const QString to = QInputDialog::getText(this, "Rename Workspace", "New name:", QLineEdit::Normal, name, &ok).trimmed();
+            if (!ok || to.isEmpty() || to == name)
+                return;
+            if (savedWorkspaces().contains(to))
+            {
+                QMessageBox::information(this, "Rename Workspace", QString("There is already a workspace called %1.").arg(to));
+                return;
+            }
+            QSettings settings;
+            settings.setValue(workspaceKey(to), settings.value(workspaceKey(name)));
+            settings.remove(workspaceKey(name));
+            if (settings.value("workspace/current").toString() == name)
+                settings.setValue("workspace/current", to);
+        });
+        remove->addAction(name, this, [this, name]() {
+            if (QMessageBox::question(this, "Delete Workspace", QString("Delete the workspace %1?").arg(name)) != QMessageBox::Yes)
+                return;
+            QSettings settings;
+            settings.remove(workspaceKey(name));
+            if (settings.value("workspace/current").toString() == name)
+                settings.setValue("workspace/current", "Essentials");
+        });
     }
-    menu->addAction("Reset Workspace", this, [this]() {
-        if (!_defaultLayout.isEmpty())
-            restoreState(_defaultLayout, kLayoutVersion);
+    menu->addSeparator();
+
+    menu->addAction("&Import Workspace...", this, [this]() {
+        const QString path = QFileDialog::getOpenFileName(this, "Import Workspace", _lastDirectory,
+            "Phoenix workspaces (*.phxworkspace);;All files (*)");
+        if (path.isEmpty())
+            return;
+        QFile file(path);
+        const QJsonObject workspace =
+            file.open(QIODevice::ReadOnly) ? QJsonDocument::fromJson(file.readAll()).object() : QJsonObject();
+        if (!workspace.contains("phoenixWorkspace"))
+        {
+            QMessageBox::warning(this, "Import Workspace", "That file is not a Phoenix workspace.");
+            return;
+        }
+        QString name = workspace["name"].toString().trimmed();
+        if (name.isEmpty())
+            name = QFileInfo(path).completeBaseName();
+        // Never over one already here.
+        const QString base = name;
+        for (int n = 2; savedWorkspaces().contains(name); ++n)
+            name = QString("%1 %2").arg(base).arg(n);
+        if (!applyWorkspace(workspace))
+            statusBar()->showMessage("The panels' arrangement in that workspace could not be used; the rest was.", 5000);
+        saveWorkspaceAs(name);
+    });
+    menu->addAction("&Export Workspace...", this, [this, current]() {
+        const QString path = QFileDialog::getSaveFileName(this, "Export Workspace",
+            QDir(_lastDirectory).filePath(current + ".phxworkspace"), "Phoenix workspaces (*.phxworkspace)");
+        if (path.isEmpty())
+            return;
+        QJsonObject workspace = currentWorkspace();
+        workspace["name"] = current;
+        QFile file(path);
+        if (!file.open(QIODevice::WriteOnly) || file.write(QJsonDocument(workspace).toJson()) < 0)
+            QMessageBox::warning(this, "Export Workspace", QString("Could not write %1.").arg(path));
     });
 }
 
