@@ -1520,12 +1520,18 @@ void PhoenixView::drawTimeline(QPainter& painter, const fla::Timeline* timeline,
         edited = _flaDocument->document->currentScene();
     const bool editing = !_exporting && !_maskPass && timeline == edited;
     const auto masking = [editing](const fla::Layer* mask) { return !editing || mask->isLocked(); };
+    // A layer's eye hides it where its timeline is shown for editing: the
+    // scene, or the symbol open. Inside a symbol drawn on the stage, its
+    // hidden layers draw, as the published movie has them.
+    const bool hiding = _drawHidden ? false
+        : timeline == edited || (_flaDocument && _flaDocument->document && timeline == _flaDocument->document->currentScene());
+    const auto shown = [hiding](const fla::Layer* layer) { return !hiding || layer->isVisible(); };
 
     // First pass: render mask layers to pixmaps
     for (int i = 0; i < timeline->layers.size(); ++i)
     {
         const fla::Layer* layer = timeline->layers[i];
-        if (layer->layerType != fla::Layer::Type::Mask || !(layer->isVisible() || _drawHidden) || !masking(layer))
+        if (layer->layerType != fla::Layer::Type::Mask || !shown(layer) || !masking(layer))
         {
             continue;
         }
@@ -1605,7 +1611,7 @@ void PhoenixView::drawTimeline(QPainter& painter, const fla::Timeline* timeline,
     {
         const fla::Layer* layer = timeline->layers[i];
 
-        if (!layer->isVisible() && !_drawHidden)
+        if (!shown(layer))
             continue;
         // One layer of the scene on its own, for a sequence per layer.
         if (_onlyLayer && layer != _onlyLayer &&
@@ -3237,6 +3243,16 @@ void PhoenixView::paintEntry(QPainter& painter, const PathCacheEntry& entry)
         painter.drawPath(entry.effectPath);
         return;
     }
+    // In a mask only the area counts.
+    if (_maskPass)
+    {
+        if (entry.fillBrush.style() == Qt::NoBrush)
+            return;
+        painter.setBrush(Qt::black);
+        painter.setPen(Qt::NoPen);
+        painter.drawPath(entry.painterPath);
+        return;
+    }
     painter.setBrush(entry.fillBrush);
     painter.setPen(penForHere(entry));
     painter.drawPath(entry.painterPath);
@@ -3953,8 +3969,13 @@ const PhoenixView::PathCacheList& PhoenixView::shapePaths(const fla::Shape* shap
     if (it != _pathCache.end())
         return it.value();
 
+    // Kept for every later drawing of the shape, so built in its own colors
+    // even when first drawn as a mask; paintEntry fills a mask's area plain.
     PathCacheList entries;
+    const bool wasMaskPass = _maskPass;
+    _maskPass = false;
     buildShapePaths(shape, entries);
+    _maskPass = wasMaskPass;
     return *_pathCache.insert(shape, entries);
 }
 

@@ -126,6 +126,21 @@ TEST(a_locked_folder_locks_the_layers_in_it)
     CHECK(deeper.isLocked());
 }
 
+TEST(a_hidden_folder_does_not_hide_layers_that_show)
+{
+    // Hiding a folder hides each layer in it; a file whose folder alone is
+    // hidden shows what is inside, as Animate does.
+    fla::Layer folder(nullptr);
+    folder.layerType = fla::Layer::Type::Folder;
+    folder.visible = false;
+    fla::Layer inner(nullptr);
+    inner.parentLayer = &folder;
+    CHECK(!folder.isVisible());
+    CHECK(inner.isVisible());
+    inner.visible = false;
+    CHECK(!inner.isVisible());
+}
+
 namespace {
 
 /// A timeline of layers named by the letters given, top first, none linked.

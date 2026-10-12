@@ -746,6 +746,23 @@ void LayersPanel::setToggle(QTreeWidgetItem* item, int column, bool value)
         layer->visible = value;
         refreshRow(item);
         emit layerVisibilityChanged(timelineName, layerIndex, value);
+        // A folder's eye shows or hides everything in it.
+        if (layer->layerType == fla::Layer::Type::Folder)
+        {
+            for (int i = 0; i < static_cast<int>(timeline->layers.size()); ++i)
+            {
+                fla::Layer* inside = timeline->layers[static_cast<size_t>(i)];
+                bool within = false;
+                for (const fla::Layer* up = inside ? inside->parentLayer : nullptr; up && !within; up = up->parentLayer)
+                    within = up == layer;
+                if (!within || inside->visible == value)
+                    continue;
+                inside->visible = value;
+                emit layerVisibilityChanged(timelineName, i, value);
+            }
+            for (QTreeWidgetItemIterator it(_treeWidget); *it; ++it)
+                refreshRow(*it);
+        }
     }
     else if (column == LockColumn)
     {
