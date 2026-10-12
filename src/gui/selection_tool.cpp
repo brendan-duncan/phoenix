@@ -87,6 +87,10 @@ bool SelectionTool::mousePress(PhoenixView& view, QMouseEvent* event, const QPoi
     _removeOnRelease = false;
     _duplicated = false;
 
+    // A selected motion tween's path is dragged where it is grabbed.
+    if (!_additive && view.beginMotionPathDrag(documentPos))
+        return true;
+
     // A bone of an armature on show poses it, as on Animate's armature
     // layers, rather than picking what is under it.
     if (!_additive && _poser.begin(view, documentPos))
@@ -161,6 +165,12 @@ bool SelectionTool::mousePress(PhoenixView& view, QMouseEvent* event, const QPoi
 
 bool SelectionTool::mouseMove(PhoenixView& view, QMouseEvent* event, const QPointF& documentPos)
 {
+    if (view.motionPathDragging())
+    {
+        if (event->buttons() & Qt::LeftButton)
+            view.dragMotionPath(documentPos);
+        return true;
+    }
     if (_poser.active())
     {
         if (event->buttons() & Qt::LeftButton)
@@ -201,6 +211,13 @@ bool SelectionTool::mouseRelease(PhoenixView& view, QMouseEvent* event, const QP
 {
     if (event->button() != Qt::LeftButton)
         return false;
+
+    if (view.motionPathDragging())
+    {
+        view.dragMotionPath(documentPos);
+        view.endMotionPathDrag(true);
+        return true;
+    }
 
     if (_poser.active())
     {
@@ -304,6 +321,11 @@ bool SelectionTool::mouseDoubleClick(PhoenixView& view, QMouseEvent* event, cons
 bool SelectionTool::keyPress(PhoenixView& view, QKeyEvent* event)
 {
     const int key = event->key();
+    if (key == Qt::Key_Escape && view.motionPathDragging())
+    {
+        view.endMotionPathDrag(false);
+        return true;
+    }
     if ((key == Qt::Key_Left || key == Qt::Key_Right || key == Qt::Key_Up || key == Qt::Key_Down) &&
         !(event->modifiers() & Qt::ControlModifier) &&
         !_moveActive && !_marqueeActive && !_bender.active() && !_selection.isEmpty())
@@ -423,6 +445,7 @@ void SelectionTool::cancelMove(PhoenixView& view)
 void SelectionTool::deactivate(PhoenixView& view)
 {
     _hoverKind = Cursors::Kind::Arrow;
+    view.endMotionPathDrag(false);
 
     if (_poser.active())
         _poser.cancel(view);

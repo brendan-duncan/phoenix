@@ -168,6 +168,7 @@ set(HEADERS
     src/data/transform.h
     src/edit/command.h
     src/edit/guide_command.h
+    src/edit/guide_path.h
     src/edit/command_stack.h
     src/edit/edit_context.h
     src/edit/new_document.h
@@ -337,6 +338,7 @@ set(SOURCES
     src/edit/drawing_style.cpp
     src/edit/brush_stroke.cpp
     src/edit/motion_object.cpp
+    src/edit/guide_path.cpp
     src/edit/asset_warp.cpp
     src/edit/magic_wand.cpp
     src/edit/curve_fit.cpp

@@ -1233,9 +1233,79 @@ fla::Transform PhoenixView::shownTransform(const LayerFrame& state, size_t eleme
             motion->at(state.offset, rate));
     }
     if (state.tweenFrame && elementIndex < state.tweenFrame->elements.size() && state.tweenFrame->elements[elementIndex])
-        return interpolateTransform(element->transform, state.tweenFrame->elements[elementIndex]->transform,
-            state.tweenProgress);
+    {
+        const fla::Element* end = state.tweenFrame->elements[elementIndex];
+        const fla::Transform tweened = interpolateTransform(element->transform, end->transform, state.tweenProgress);
+        return guidedTransform(state, *element, *end, tweened);
+    }
     return element->transform;
+}
+
+const fla::GuidePath* PhoenixView::guidePathOf(const fla::Frame* frame)
+{
+    const fla::Layer* layer = frame ? dynamic_cast<const fla::Layer*>(frame->parent) : nullptr;
+    const fla::Layer* guide = layer ? layer->parentLayer : nullptr;
+    if (!guide || guide->layerType != fla::Layer::Type::Guide)
+        return nullptr;
+    const fla::Frame* guideFrame = resolveLayerFrame(guide, fla::LoopType::PlayOnce, 0).frame;
+    if (!guideFrame)
+        return nullptr;
+    std::vector<const fla::Shape*> shapes;
+    for (const fla::Element* element : guideFrame->elements)
+    {
+        if (element && element->elementType() == fla::Element::Type::Shape)
+            shapes.push_back(static_cast<const fla::Shape*>(element));
+    }
+    if (shapes.empty())
+        return nullptr;
+    // Kept per guide frame while its shapes are the same ones.
+    auto& entry = _guideCache[guideFrame];
+    if (!entry.second || entry.first != shapes)
+    {
+        auto path = std::make_shared<fla::GuidePath>();
+        path->build(shapes);
+        entry.first = shapes;
+        entry.second = path->empty() ? nullptr : path;
+    }
+    return entry.second.get();
+}
+
+fla::Transform PhoenixView::guidedTransform(const LayerFrame& state, const fla::Element& start,
+    const fla::Element& end, const fla::Transform& tweened)
+{
+    if (!state.frame || state.frame->tweenType != fla::TweenType::Motion)
+        return tweened;
+    const fla::GuidePath* path = guidePathOf(state.frame);
+    if (!path)
+        return tweened;
+    // The transformation point rides the guide from the place on it nearest
+    // where it starts to the one nearest where it ends.
+    const fla::Point& pivot = start.transformationPoint;
+    const auto placed = [&pivot](const fla::Transform& t) {
+        return fla::Point(t.m11 * pivot.x + t.m21 * pivot.y + t.tx, t.m12 * pivot.x + t.m22 * pivot.y + t.ty);
+    };
+    const double from = path->nearest(placed(start.transform));
+    const double to = path->nearest(placed(end.transform));
+    const double along = from + (to - from) * state.tweenProgress;
+    const fla::Point on = path->at(along);
+    const fla::Point at = placed(tweened);
+    fla::Transform moved = tweened;
+    moved.tx += on.x - at.x;
+    moved.ty += on.y - at.y;
+
+    bool orient = false;
+    for (const auto& attribute : state.frame->extraAttributes)
+        orient = orient || (attribute.first == "motionTweenOrientToPath" && attribute.second == "true");
+    if (orient)
+    {
+        // Turned as the path turns since the start, about the point.
+        const double turn = (path->angleAt(along) - path->angleAt(from)) * M_PI / 180.0;
+        const QTransform about = QTransform::fromTranslate(-on.x, -on.y) * QTransform().rotateRadians(turn) *
+                                 QTransform::fromTranslate(on.x, on.y);
+        const QTransform result = QTransform(moved.m11, moved.m12, moved.m21, moved.m22, moved.tx, moved.ty) * about;
+        moved = fla::Transform(result.m11(), result.m12(), result.m21(), result.m22(), result.dx(), result.dy());
+    }
+    return moved;
 }
 
 bool PhoenixView::motionHere(const fla::Element* element, MotionHere& here)
@@ -1319,6 +1389,159 @@ fla::CommandPtr PhoenixView::transformCommand(fla::Element* element, const fla::
     command->addCommand(fla::CommandPtr(new fla::SetPropertyCommand<std::vector<std::string>>(
         here.frame->extraChildren, here.frame->extraChildren, children, name)));
     return fla::CommandPtr(command);
+}
+
+std::vector<PhoenixView::MotionPath> PhoenixView::motionPaths()
+{
+    std::vector<MotionPath> paths;
+    if (!_selection)
+        return paths;
+    const double rate = _flaDocument && _flaDocument->document && _flaDocument->document->frameRate > 0.0
+        ? _flaDocument->document->frameRate : 24.0;
+    for (fla::DOMElement* selected : _selection->elements())
+    {
+        auto* element = dynamic_cast<fla::Element*>(selected);
+        MotionHere here;
+        if (!element || !motionHere(element, here))
+            continue;
+        const fla::MotionObject* motion = motionOf(here.frame);
+        const fla::Layer* layer = dynamic_cast<const fla::Layer*>(here.frame->parent);
+        if (!motion || !layer)
+            continue;
+        MotionPath path;
+        path.element = element;
+        path.frame = here.frame;
+        path.current = here.offset;
+        path.color = QColor(layer->color[0], layer->color[1], layer->color[2]);
+        const fla::Transform& t = element->transform;
+        const fla::Point& p = element->transformationPoint;
+        const QPointF pivot(t.m11 * p.x + t.m21 * p.y + t.tx, t.m12 * p.x + t.m22 * p.y + t.ty);
+        for (int k = 0; k < here.frame->duration; ++k)
+        {
+            const fla::MotionState state = motion->at(k, rate);
+            path.points.push_back(pivot + QPointF(state.x - here.start.x, state.y - here.start.y));
+        }
+        // The frames with keyframes.
+        const double frames = motion->frames(rate);
+        for (double time : motion->keyTimes())
+        {
+            const int key = frames > 0.0 && motion->duration() > 0.0
+                ? static_cast<int>(std::lround(time / motion->duration() * frames)) : 0;
+            if (key >= 0 && key < here.frame->duration &&
+                std::find(path.keys.begin(), path.keys.end(), key) == path.keys.end())
+                path.keys.push_back(key);
+        }
+        paths.push_back(std::move(path));
+    }
+    return paths;
+}
+
+bool PhoenixView::beginMotionPathDrag(const QPointF& documentPos)
+{
+    const double reach = 5.0 / std::max(_zoom, 1.0e-6);
+    for (const MotionPath& path : motionPaths())
+    {
+        // The nearest point of the path within reach, keyframes first.
+        int hit = -1;
+        double best = reach;
+        for (int pass = 0; pass < 2 && hit < 0; ++pass)
+        {
+            for (int k = 0; k < static_cast<int>(path.points.size()); ++k)
+            {
+                const bool key = std::find(path.keys.begin(), path.keys.end(), k) != path.keys.end();
+                if ((pass == 0) != key)
+                    continue;
+                const double d = QLineF(path.points[k], documentPos).length();
+                if (d <= best)
+                {
+                    best = d;
+                    hit = k;
+                }
+            }
+        }
+        if (hit < 0)
+            continue;
+        _pathDrag = PathDrag();
+        _pathDrag.element = path.element;
+        _pathDrag.frame = path.frame;
+        _pathDrag.index = hit;
+        _pathDrag.key = std::find(path.keys.begin(), path.keys.end(), hit) != path.keys.end();
+        _pathDrag.grab = documentPos;
+        _pathDrag.children = path.frame->extraChildren;
+        _pathDrag.transform = path.element->transform;
+        return true;
+    }
+    return false;
+}
+
+void PhoenixView::dragMotionPath(const QPointF& documentPos)
+{
+    if (!_pathDrag.element)
+        return;
+    fla::Frame* frame = _pathDrag.frame;
+    fla::Element* element = _pathDrag.element;
+    frame->extraChildren = _pathDrag.children;
+    element->transform = _pathDrag.transform;
+    std::string* xml = fla::timeline::motionOf(*frame);
+    fla::MotionObject motion;
+    if (!xml || !motion.parse(*xml))
+        return;
+    const double rate = _flaDocument && _flaDocument->document && _flaDocument->document->frameRate > 0.0
+        ? _flaDocument->document->frameRate : 24.0;
+    const QPointF delta = documentPos - _pathDrag.grab;
+    const double frames = motion.frames(rate);
+    const double time = frames > 0.0 ? motion.duration() * _pathDrag.index / frames : 0.0;
+    const fla::MotionState state = motion.at(_pathDrag.index, rate);
+    if (_pathDrag.index == 0)
+    {
+        // The start: the object moves, the rest of the path stays.
+        element->transform.tx += delta.x();
+        element->transform.ty += delta.y();
+        fla::motion::moveStart(*xml, delta.x(), delta.y());
+    }
+    else if (_pathDrag.key)
+    {
+        // A keyframe moves where it is.
+        fla::MotionState moved = state;
+        moved.x += delta.x();
+        moved.y += delta.y();
+        fla::motion::setKeys(*xml, time, moved);
+    }
+    else
+    {
+        // Between keyframes the path bends.
+        // A position keyed only before here is keyed on the last frame.
+        const double last = frames > 0.0 ? motion.duration() * (frame->duration - 1) / frames : motion.duration();
+        fla::motion::bend(*xml, time, last, state.x + delta.x(), state.y + delta.y());
+    }
+    invalidateBounds();
+    update();
+}
+
+void PhoenixView::endMotionPathDrag(bool commit)
+{
+    if (!_pathDrag.element)
+        return;
+    fla::Frame* frame = _pathDrag.frame;
+    fla::Element* element = _pathDrag.element;
+    const std::vector<std::string> children = frame->extraChildren;
+    const fla::Transform transform = element->transform;
+    frame->extraChildren = _pathDrag.children;
+    element->transform = _pathDrag.transform;
+    const PathDrag drag = _pathDrag;
+    _pathDrag = PathDrag();
+    if (commit && _commandStack && children != drag.children)
+    {
+        const char* name = drag.index == 0 || drag.key ? "Move Path Keyframe" : "Bend Motion Path";
+        auto* command = new fla::CompoundCommand(name);
+        command->addCommand(fla::CommandPtr(new fla::SetElementTransformCommand(element, drag.transform, transform, name)));
+        command->addCommand(fla::CommandPtr(new fla::SetPropertyCommand<std::vector<std::string>>(
+            frame->extraChildren, drag.children, children, name)));
+        _commandStack->push(fla::CommandPtr(command));
+        _commandStack->breakMergeChain();
+    }
+    invalidateBounds();
+    update();
 }
 
 QTransform PhoenixView::parentTransform(const fla::Layer* layer, const fla::Frame* frame, fla::LoopType loopType,
@@ -1431,7 +1654,10 @@ void PhoenixView::drawFrame(QPainter& painter, const fla::Frame* frame, const fl
     const QRectF deviceRect(0, 0, painter.device()->width(), painter.device()->height());
     // An object motion tween moves its elements by its curves, from the
     // frame being drawn; their stored bounds are not where they show.
-    const bool moving = _drawnState && _drawnState->frame == frame && motionOf(frame);
+    // So does a classic tween along a motion guide.
+    const bool moving = _drawnState && _drawnState->frame == frame &&
+                        (motionOf(frame) || (nextTweenFrame && frame->tweenType == fla::TweenType::Motion &&
+                                                guidePathOf(frame)));
     const LayerFrame* motionState = moving ? _drawnState : nullptr;
     // A group's members are drawn by its frame's playhead, as it is.
     ElapsedScope elapsed(_elapsed, _drawnState && _drawnState->frame == frame ? _drawnState->offset : _elapsed);
@@ -4135,10 +4361,44 @@ void PhoenixView::drawToolOverlay(QPainter& painter)
         {
             const auto* instance = dynamic_cast<const fla::SymbolInstance*>(selected);
             if (instance && owningFrame(instance))
-                crosshair(QPointF(instance->transform.tx, instance->transform.ty), 5.0);
+            {
+                const fla::Transform shown = shownTransformOf(instance);
+                crosshair(QPointF(shown.tx, shown.ty), 5.0);
+            }
         }
     }
     painter.restore();
+
+    // The motion path of each selected object motion tween: a line through
+    // where its transformation point is on each frame, a dot a frame, a
+    // square at each keyframe, the frame shown ringed.
+    for (const MotionPath& path : motionPaths())
+    {
+        painter.save();
+        painter.setPen(QPen(path.color, 1.0 * scale));
+        painter.setBrush(Qt::NoBrush);
+        painter.drawPolyline(QPolygonF(QVector<QPointF>(path.points.begin(), path.points.end())));
+        painter.setPen(Qt::NoPen);
+        painter.setBrush(path.color);
+        for (const QPointF& point : path.points)
+            painter.drawEllipse(point, 1.5 * scale, 1.5 * scale);
+        for (int key : path.keys)
+        {
+            if (key < 0 || key >= static_cast<int>(path.points.size()))
+                continue;
+            const double r = 3.5 * scale;
+            painter.setPen(QPen(path.color, 1.0 * scale));
+            painter.setBrush(QColor(255, 255, 255));
+            painter.drawRect(QRectF(path.points[key].x() - r, path.points[key].y() - r, 2.0 * r, 2.0 * r));
+        }
+        if (path.current >= 0 && path.current < static_cast<int>(path.points.size()))
+        {
+            painter.setPen(QPen(path.color, 1.5 * scale));
+            painter.setBrush(Qt::NoBrush);
+            painter.drawEllipse(path.points[path.current], 5.0 * scale, 5.0 * scale);
+        }
+        painter.restore();
+    }
 
     if (_selection && !_selection->isEmpty())
     {
@@ -4589,6 +4849,7 @@ void PhoenixView::resetView()
 void PhoenixView::clearCaches()
 {
     _pathCache.clear();
+    _guideCache.clear();
     _boundsCache.clear();
     _artBoundsCache.clear();
     _snapBoundsValid = false;

@@ -343,6 +343,66 @@ tinyxml2::XMLElement* plainKey(tinyxml2::XMLDocument& document, double time, dou
     return key;
 }
 
+/// A keyframe at \a time put into \a property before \a after (null: at the
+/// end), holding \a value. Inside a curved stretch the curve is split there
+/// (de Casteljau), so it keeps its shape, and the new keyframe then moves
+/// to \a value with its handles.
+void insertKey(tinyxml2::XMLDocument& document, tinyxml2::XMLElement* property, tinyxml2::XMLElement* after,
+    double time, double value)
+{
+    tinyxml2::XMLElement* key = plainKey(document, time, value);
+    tinyxml2::XMLElement* before = after ? after->PreviousSiblingElement("Keyframe")
+                                         : property->LastChildElement("Keyframe");
+    if (before)
+        property->InsertAfterChild(before, key);
+    else
+        property->InsertFirstChild(key);
+    if (!before || !after)
+        return;
+
+    double ignored = 0.0;
+    double t0 = before->DoubleAttribute("timevalue", 0.0);
+    double t3 = after->DoubleAttribute("timevalue", 0.0);
+    double v0 = 0.0;
+    double v3 = 0.0;
+    pair(before->Attribute("anchor"), ignored, v0);
+    pair(after->Attribute("anchor"), ignored, v3);
+    double n0 = 0.0, nv = v0, p3 = 0.0, pv = v3;
+    if (!pair(before->Attribute("next"), n0, nv))
+        nv = v0;
+    if (!pair(after->Attribute("previous"), p3, pv))
+        pv = v3;
+    // Handles at the keyframes: a straight stretch, nothing to keep.
+    if (n0 == 0.0 && p3 == 0.0 && nv == v0 && pv == v3)
+        return;
+    const double t1 = t0 + n0;
+    const double t2 = t3 + p3;
+    double low = 0.0;
+    double high = 1.0;
+    for (int step = 0; step < 60; ++step)
+    {
+        const double mid = (low + high) * 0.5;
+        if (cubic(t0, t1, t2, t3, mid) < time)
+            low = mid;
+        else
+            high = mid;
+    }
+    const double s = (low + high) * 0.5;
+    const auto lerp = [s](double a, double b) { return a + (b - a) * s; };
+    // The left and right halves' control points, in time and value.
+    const double at01 = lerp(t0, t1), av01 = lerp(v0, nv);
+    const double at12 = lerp(t1, t2), av12 = lerp(nv, pv);
+    const double at23 = lerp(t2, t3), av23 = lerp(pv, v3);
+    const double bt0 = lerp(at01, at12), bv0 = lerp(av01, av12);
+    const double bt1 = lerp(at12, at23), bv1 = lerp(av12, av23);
+    const double mt = lerp(bt0, bt1), mv = lerp(bv0, bv1);
+    const double shift = value - mv;
+    before->SetAttribute("next", (number(at01 - t0) + "," + number(av01)).c_str());
+    after->SetAttribute("previous", (number(at23 - t3) + "," + number(av23)).c_str());
+    key->SetAttribute("previous", (number(bt0 - mt) + "," + number(bv0 + shift)).c_str());
+    key->SetAttribute("next", (number(bt1 - mt) + "," + number(bv1 + shift)).c_str());
+}
+
 } // namespace
 
 bool rescale(std::string& xml, double factor)
@@ -447,14 +507,7 @@ bool addKeys(std::string& xml, double time)
         if (there)
             continue;
         const double fallback = std::strncmp(id, "Scale_", 6) == 0 ? 100.0 : 0.0;
-        tinyxml2::XMLElement* key = plainKey(document, time, motion.valueAt(id, time, fallback));
-        tinyxml2::XMLElement* before = after ? after->PreviousSiblingElement("Keyframe") : nullptr;
-        if (before)
-            property->InsertAfterChild(before, key);
-        else if (after)
-            property->InsertFirstChild(key);
-        else
-            property->InsertEndChild(key);
+        insertKey(document, property, after, time, motion.valueAt(id, time, fallback));
     }
     xml = print(document);
     return true;
@@ -676,14 +729,7 @@ bool setKeys(std::string& xml, double time, const MotionState& state)
             }
             continue;
         }
-        tinyxml2::XMLElement* key = plainKey(document, time, wanted);
-        tinyxml2::XMLElement* before = after ? after->PreviousSiblingElement("Keyframe") : nullptr;
-        if (before)
-            property->InsertAfterChild(before, key);
-        else if (after)
-            property->InsertFirstChild(key);
-        else
-            property->InsertEndChild(key);
+        insertKey(document, property, after, time, wanted);
     }
     xml = print(document);
     return true;
@@ -718,6 +764,64 @@ bool moveStart(std::string& xml, double dx, double dy)
                     key->SetAttribute(name, (number(a) + "," + number(b - move)).c_str());
             }
         }
+    }
+    xml = print(document);
+    return true;
+}
+
+bool bend(std::string& xml, double time, double end, double x, double y)
+{
+    MotionObject motion;
+    tinyxml2::XMLDocument document;
+    if (!motion.parse(xml) || document.Parse(xml.c_str()) != tinyxml2::XML_SUCCESS)
+        return false;
+    tinyxml2::XMLElement* core = coreOf(document);
+    if (!core)
+        return false;
+    std::vector<tinyxml2::XMLElement*> found;
+    properties(core, found);
+    for (tinyxml2::XMLElement* property : found)
+    {
+        const char* id = property->Attribute("id");
+        if (!id || (std::strcmp(id, "Motion_X") != 0 && std::strcmp(id, "Motion_Y") != 0))
+            continue;
+        // A keyframe after \a time to bend toward, at the end if need be.
+        bool after = false;
+        for (tinyxml2::XMLElement* key = property->FirstChildElement("Keyframe"); key;
+             key = key->NextSiblingElement("Keyframe"))
+            after = after || key->DoubleAttribute("timevalue", 0.0) > time + 1.0e-6;
+        if (!after && end > time + 1.0e-6)
+            property->InsertEndChild(plainKey(document, end, motion.valueAt(id, end, 0.0)));
+        const double wanted = std::strcmp(id, "Motion_X") == 0 ? x : y;
+        tinyxml2::XMLElement* from = nullptr;
+        tinyxml2::XMLElement* to = nullptr;
+        for (tinyxml2::XMLElement* key = property->FirstChildElement("Keyframe"); key;
+             key = key->NextSiblingElement("Keyframe"))
+        {
+            const double at = key->DoubleAttribute("timevalue", 0.0);
+            if (at <= time + 1.0e-6)
+                from = key;
+            else if (!to)
+                to = key;
+        }
+        if (!from || !to)
+            continue;
+        const double t0 = from->DoubleAttribute("timevalue", 0.0);
+        const double t1 = to->DoubleAttribute("timevalue", 0.0);
+        double ignored = 0.0;
+        double v0 = 0.0;
+        double v1 = 0.0;
+        pair(from->Attribute("anchor"), ignored, v0);
+        pair(to->Attribute("anchor"), ignored, v1);
+        const double s = (time - t0) / std::max(t1 - t0, 1.0e-9);
+        if (s <= 1.0e-3 || s >= 1.0 - 1.0e-3)
+            continue;
+        // Handles a third of the way in time, so time runs evenly along the
+        // curve, both raised alike so it passes through the value wanted.
+        const double raise = (wanted - (v0 + (v1 - v0) * s)) / (3.0 * s * (1.0 - s));
+        const double third = (t1 - t0) / 3.0;
+        from->SetAttribute("next", (number(third) + "," + number(v0 + (v1 - v0) / 3.0 + raise)).c_str());
+        to->SetAttribute("previous", (number(-third) + "," + number(v0 + 2.0 * (v1 - v0) / 3.0 + raise)).c_str());
     }
     xml = print(document);
     return true;

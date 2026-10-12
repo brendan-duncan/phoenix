@@ -1,4 +1,5 @@
 #include "properties_panel.h"
+#include "../edit/timeline_edit.h"
 
 #include "color_panel.h"
 #include "ease_curve_dialog.h"
@@ -2360,7 +2361,28 @@ void PropertiesPanel::rebuildFrameTab()
     QComboBox* tween = new QComboBox(this);
     tween->addItems({"No Tween", "Classic Tween", "Shape Tween"});
     tween->setCurrentIndex(static_cast<int>(frame->tweenType));
+    fla::Layer* frameLayer = dynamic_cast<fla::Layer*>(frame->parent);
+    const bool motionObject = fla::timeline::motionOf(*frame) != nullptr;
+    if (motionObject)
+    {
+        // An object motion tween is one of its own, which only goes away.
+        tween->addItem("Motion Tween");
+        tween->setCurrentIndex(3);
+        for (int i = 1; i < 3; ++i)
+            qobject_cast<QStandardItemModel*>(tween->model())->item(i)->setEnabled(false);
+    }
     connect(tween, &QComboBox::currentIndexChanged, this, [=](int index) {
+        if (motionObject)
+        {
+            if (index == 0 && frameLayer)
+            {
+                push(fla::CommandPtr(new fla::EditFramesCommand({frameLayer}, "Remove Tween",
+                    [frame](std::vector<fla::Frame*>&) { fla::timeline::removeMotion(*frame); })));
+                emit documentEdited();
+                QTimer::singleShot(0, this, [this]() { refresh(); });
+            }
+            return;
+        }
         setField(frame->tweenType, static_cast<fla::TweenType>(index), "Tween");
     });
     tweening->addLong(0, "Tween", tween);

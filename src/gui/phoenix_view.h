@@ -9,6 +9,7 @@
 #include "../data/symbol.h"
 #include "../edit/brush_stroke.h"
 #include "../edit/command.h"
+#include "../edit/guide_path.h"
 #include "../edit/motion_object.h"
 #include "../edit/asset_warp.h"
 
@@ -285,6 +286,29 @@ public:
     /// at its start, the start moves and the tween's later positions stay.
     fla::CommandPtr transformCommand(fla::Element* element, const fla::Transform& before,
         const fla::Transform& after, const std::string& name);
+
+    /// The motion paths of the selected object motion tweens, as drawn.
+    struct MotionPath
+    {
+        fla::Element* element = nullptr;
+        fla::Frame* frame = nullptr;
+        /// Where the transformation point is on each frame of the span.
+        std::vector<QPointF> points;
+        /// The frames with keyframes, and the one shown.
+        std::vector<int> keys;
+        int current = -1;
+        QColor color;
+    };
+    std::vector<MotionPath> motionPaths();
+
+    /// Dragging a motion path, as the Selection tool does: a keyframe moves,
+    /// the path between keyframes bends, the start moves the object. Begin
+    /// is false when \a documentPos is not on a path; end with \a commit
+    /// false puts it back.
+    bool beginMotionPathDrag(const QPointF& documentPos);
+    void dragMotionPath(const QPointF& documentPos);
+    void endMotionPathDrag(bool commit);
+    bool motionPathDragging() const { return _pathDrag.element != nullptr; }
 
     /// The shape's filled regions as the stage stitches them, one path per
     /// fill style index, in the shape's own space.
@@ -870,6 +894,17 @@ private:
     const fla::MotionObject* motionOf(const fla::Frame* frame);
     std::map<const fla::Frame*, std::pair<std::string, std::shared_ptr<fla::MotionObject>>> _motionCache;
 
+    /// The path of the motion guide a frame's layer is guided by, from the
+    /// guide layer's strokes as shown now; null when it has none.
+    const fla::GuidePath* guidePathOf(const fla::Frame* frame);
+    std::map<const fla::Frame*, std::pair<std::vector<const fla::Shape*>, std::shared_ptr<fla::GuidePath>>> _guideCache;
+
+    /// A classic tween's \a tweened transform, carried along the motion
+    /// guide of its layer, when it has one, from \a start's place to \a end's
+    /// (and turned with it when it orients to the path).
+    fla::Transform guidedTransform(const LayerFrame& state, const fla::Element& start, const fla::Element& end,
+        const fla::Transform& tweened);
+
     /// Where an element of an object motion tween is now: its span, how
     /// far in (frames, and TimeScale units), and the motion's state at the
     /// start and now.
@@ -883,6 +918,18 @@ private:
     };
     /// False when \a element is not the object of a motion tween shown now.
     bool motionHere(const fla::Element* element, MotionHere& here);
+
+    struct PathDrag
+    {
+        fla::Element* element = nullptr;
+        fla::Frame* frame = nullptr;
+        int index = 0;
+        bool key = false;
+        QPointF grab;
+        std::vector<std::string> children;
+        fla::Transform transform;
+    };
+    PathDrag _pathDrag;
 
     /// Layer parenting: the transform a layer's content is placed by, its
     /// parent layer's element as shown, through its own parent in turn.

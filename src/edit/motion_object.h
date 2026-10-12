@@ -127,6 +127,12 @@ bool setKeys(std::string& xml, double time, const MotionState& state);
 /// where it was: every later position keyframe's offset less the move.
 bool moveStart(std::string& xml, double dx, double dy);
 
+/// Bends the object's path between the position keyframes either side of
+/// \a time so that it passes through the offset \a x, \a y there, as
+/// dragging the motion path does. A position with no keyframe after
+/// \a time gets one at \a end, the tween's end, holding where it was.
+bool bend(std::string& xml, double time, double end, double x, double y);
+
 /// The state that shows an element as \a wanted, where \a stored is its
 /// transform as the span keeps it (showing \a start) and \a pivot its
 /// transformation point: what applyMotion(stored, pivot, start, state)

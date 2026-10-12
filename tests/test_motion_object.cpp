@@ -173,3 +173,61 @@ TEST(motion_unapplied_is_the_stored_transform)
     const fla::Transform shown = fla::applyMotion(stored, pivot, start, now);
     CHECK(near(fla::unapplyMotion(shown, pivot, start, now), stored));
 }
+
+#include "../src/edit/guide_path.h"
+
+TEST(guide_path_joins_strokes_and_measures_along_them)
+{
+    // Two strokes meeting end to end, the second drawn backward.
+    fla::GuidePath path;
+    path.build({{fla::Point(0.0, 0.0), fla::Point(100.0, 0.0)}, {fla::Point(100.0, 50.0), fla::Point(100.0, 0.0)}});
+    CHECK(!path.empty());
+    CHECK(std::fabs(path.length() - 150.0) < 1.0e-9);
+    CHECK(std::fabs(path.nearest(fla::Point(40.0, -10.0)) - 40.0) < 1.0e-9);
+    CHECK(std::fabs(path.nearest(fla::Point(120.0, 30.0)) - 130.0) < 1.0e-9);
+    const fla::Point p = path.at(125.0);
+    CHECK(std::fabs(p.x - 100.0) < 1.0e-9 && std::fabs(p.y - 25.0) < 1.0e-9);
+    CHECK(std::fabs(path.angleAt(10.0)) < 1.0e-9);
+    CHECK(std::fabs(path.angleAt(140.0) - 90.0) < 1.0e-9);
+    // Past its ends it holds to them.
+    CHECK(std::fabs(path.at(500.0).y - 50.0) < 1.0e-9);
+}
+
+TEST(motion_path_bends_through_a_dragged_point)
+{
+    // A straight slide of 100 px over 10 frames at 10 fps.
+    std::string xml = fla::motion::create(fla::MotionState(), 10, 10.0);
+    fla::MotionState end;
+    end.x = 100.0;
+    CHECK(fla::motion::setKeys(xml, 30000.0, end));
+    fla::MotionObject motion;
+    CHECK(motion.parse(xml));
+    CHECK(std::fabs(motion.at(5.0, 10.0).y) < 1.0e-9);
+
+    // Pulled 40 px down halfway, it passes through there and keeps its ends.
+    CHECK(fla::motion::bend(xml, 15000.0, 30000.0, 50.0, 40.0));
+    CHECK(motion.parse(xml));
+    const fla::MotionState middle = motion.at(5.0, 10.0);
+    CHECK(std::fabs(middle.x - 50.0) < 1.0e-6 && std::fabs(middle.y - 40.0) < 1.0e-6);
+    CHECK(std::fabs(motion.at(10.0, 10.0).y) < 1.0e-9 && std::fabs(motion.at(10.0, 10.0).x - 100.0) < 1.0e-9);
+    CHECK(motion.at(2.0, 10.0).y > 0.0);
+}
+
+TEST(a_keyframe_added_on_a_curve_keeps_its_shape)
+{
+    std::string xml = fla::motion::create(fla::MotionState(), 10, 10.0);
+    fla::MotionState end;
+    end.x = 100.0;
+    CHECK(fla::motion::setKeys(xml, 30000.0, end));
+    CHECK(fla::motion::bend(xml, 15000.0, 30000.0, 50.0, 40.0));
+    fla::MotionObject before;
+    CHECK(before.parse(xml));
+    CHECK(fla::motion::addKeys(xml, 9000.0));
+    fla::MotionObject after;
+    CHECK(after.parse(xml));
+    for (double frame : {1.0, 2.0, 3.0, 4.5, 7.0, 9.0})
+    {
+        CHECK(std::fabs(before.at(frame, 10.0).x - after.at(frame, 10.0).x) < 1.0e-4);
+        CHECK(std::fabs(before.at(frame, 10.0).y - after.at(frame, 10.0).y) < 1.0e-4);
+    }
+}
