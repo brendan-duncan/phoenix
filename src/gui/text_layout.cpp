@@ -8,6 +8,7 @@
 #include <QHash>
 #include <QPainter>
 #include <QScreen>
+#include <QSettings>
 
 #include <algorithm>
 #include <cmath>
@@ -28,14 +29,37 @@ struct Face
     QString family;
     bool bold = false;
     bool italic = false;
+    /// Whether the family itself is installed, rather than mapped or
+    /// standing in.
+    bool installed = true;
 };
+
+QHash<QString, Face>& faceCache()
+{
+    static QHash<QString, Face> cache;
+    return cache;
+}
+
+QHash<QString, QString>& mapping()
+{
+    static QHash<QString, QString> map = []() {
+        QHash<QString, QString> read;
+        QSettings settings;
+        settings.beginGroup("fontMapping");
+        for (const QString& key : settings.childKeys())
+            read.insert(QString(key).replace("%2F", "/"), settings.value(key).toString());
+        settings.endGroup();
+        return read;
+    }();
+    return map;
+}
 
 /// Animate writes PostScript-style names: the family run together, then a
 /// dash and the style, with MT or PS tacked on by the foundry. Taking that
 /// apart gives a family Qt can find.
 Face resolveFace(const QString& face)
 {
-    static QHash<QString, Face> cache;
+    QHash<QString, Face>& cache = faceCache();
     const auto cached = cache.find(face);
     if (cached != cache.end())
         return cached.value();
@@ -74,12 +98,16 @@ Face resolveFace(const QString& face)
         style.contains("Oblique", Qt::CaseInsensitive);
 
     const QStringList families = QFontDatabase::families();
+    const QString mapped = mapping().value(face);
     if (families.contains(spaced, Qt::CaseInsensitive))
         result.family = spaced;
     else if (families.contains(family, Qt::CaseInsensitive))
         result.family = family;
+    else if (!mapped.isEmpty())
+        result.family = mapped;
     else
         result.family = "Arial";
+    result.installed = families.contains(spaced, Qt::CaseInsensitive) || families.contains(family, Qt::CaseInsensitive);
 
     cache.insert(face, result);
     return result;
@@ -538,6 +566,33 @@ double xOfIndex(const fla::StaticText& text, const Line& line, int index, const 
 }
 
 } // namespace
+
+QHash<QString, QString> fontMapping()
+{
+    return mapping();
+}
+
+void setFontMapping(const QHash<QString, QString>& newMapping)
+{
+    mapping() = newMapping;
+    faceCache().clear();
+    QSettings settings;
+    settings.remove("fontMapping");
+    settings.beginGroup("fontMapping");
+    for (auto it = newMapping.begin(); it != newMapping.end(); ++it)
+        settings.setValue(QString(it.key()).replace("/", "%2F"), it.value());
+    settings.endGroup();
+}
+
+bool isInstalled(const QString& face)
+{
+    return resolveFace(face).installed;
+}
+
+QString familyOf(const QString& face)
+{
+    return resolveFace(face).family;
+}
 
 QFont fontFor(const fla::TextRun& run)
 {

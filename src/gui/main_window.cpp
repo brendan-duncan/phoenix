@@ -185,6 +185,7 @@ MainWindow::MainWindow(const QString& initialFile, QWidget* parent, bool startup
     , _updater(new Updater(this))
     , _recentFilesMenu(nullptr)
 {
+    _interactive = startup;
     setWindowTitle(QString("Phoenix %1").arg(QCoreApplication::applicationVersion()));
 
     QCoreApplication::setOrganizationName("Phoenix");
@@ -573,6 +574,7 @@ void MainWindow::adoptDocument(fla::FLADocument* document, const QString& filePa
 
     if (_flaDocument)
         _player->setCurrentFrame(0);
+    warnAboutFonts();
     // A document shown that has no tab yet (the first one, a recovered one)
     // gets one; a tab whose document failed to open goes.
     if (!_switchingTabs)
@@ -596,6 +598,24 @@ void MainWindow::adoptDocument(fla::FLADocument* document, const QString& filePa
         }
         refreshTabs();
     }
+}
+
+void MainWindow::warnAboutFonts()
+{
+    // Once per document, after it is up on the screen.
+    if (!_interactive || !_flaDocument || _switchingTabs)
+        return;
+    QTimer::singleShot(0, this, [this, document = _flaDocument]() {
+        if (_flaDocument != document)
+            return;
+        const QStringList missing = missingFonts();
+        bool unmapped = false;
+        const QHash<QString, QString> mapping = TextLayout::fontMapping();
+        for (const QString& face : missing)
+            unmapped = unmapped || !mapping.contains(face);
+        if (unmapped)
+            fontMappingDialog(true);
+    });
 }
 
 void MainWindow::parkActiveDocument()
@@ -3396,6 +3416,8 @@ void MainWindow::setupMenus()
     findAction->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_F));
     findAction->setStatusTip("Find text, a font, a color or a symbol anywhere in the document, and replace it");
     connect(findAction, &QAction::triggered, this, &MainWindow::showFindReplace);
+    if (_fontMappingAction)
+        editMenu->addAction(_fontMappingAction);
 
     // Modify menu, with Animate's keys.
     // Insert: Animate's timeline commands, which also live on the frames'
@@ -3475,6 +3497,10 @@ void MainWindow::setupMenus()
     shapeTweenAction->setStatusTip("Morph the span's shape into the next keyframe's");
     connect(shapeTweenAction, &QAction::triggered, this, &MainWindow::createShapeTween);
 
+    QAction* fontMappingAction = new QAction("&Font Mapping...", this);
+    fontMappingAction->setStatusTip("Choose the installed fonts missing ones are shown in");
+    connect(fontMappingAction, &QAction::triggered, this, [this]() { fontMappingDialog(false); });
+    _fontMappingAction = fontMappingAction;
     QMenu* editTimelineMenu = new QMenu("Ti&meline", this);
     QAction* removeFramesAction = editTimelineMenu->addAction("&Remove Frames");
     removeFramesAction->setShortcut(QKeySequence(Qt::SHIFT | Qt::Key_F5));
@@ -7722,6 +7748,88 @@ void MainWindow::applyTextStyle(const QString& keyName, const QString& valueText
         _drawingStyle.textSize = std::max(1.0, valueText.toDouble());
     else if (key == "textType")
         _drawingStyle.textType = value == "dynamic" ? 1 : value == "input" ? 2 : 0;
+}
+
+QStringList MainWindow::missingFonts() const
+{
+    QStringList missing;
+    const fla::Document* document = _flaDocument ? _flaDocument->document : nullptr;
+    if (!document)
+        return missing;
+    std::vector<const fla::Timeline*> timelines(document->timelines.begin(), document->timelines.end());
+    if (document->symbolList)
+        for (const fla::Symbol* symbol : document->symbolList->symbols)
+            if (symbol)
+                timelines.insert(timelines.end(), symbol->timelines.begin(), symbol->timelines.end());
+    std::function<void(const fla::Element*)> visit = [&](const fla::Element* element) {
+        if (const auto* text = dynamic_cast<const fla::StaticText*>(element))
+            for (const fla::TextRun& run : text->runs)
+            {
+                const QString face = QString::fromStdString(run.face);
+                // A font symbol is the library's, not the system's.
+                if (!face.isEmpty() && !face.endsWith('*') && !missing.contains(face) && !TextLayout::isInstalled(face))
+                    missing << face;
+            }
+        if (const auto* group = dynamic_cast<const fla::Group*>(element))
+            for (const fla::Element* member : group->members)
+                visit(member);
+    };
+    for (const fla::Timeline* timeline : timelines)
+        for (const fla::Layer* layer : timeline ? timeline->layers : std::vector<fla::Layer*>())
+            for (const fla::Frame* frame : layer ? layer->frames : std::vector<fla::Frame*>())
+                for (const fla::Element* element : frame ? frame->elements : std::vector<fla::Element*>())
+                    visit(element);
+    missing.sort(Qt::CaseInsensitive);
+    return missing;
+}
+
+void MainWindow::fontMappingDialog(bool onlyMissing)
+{
+    QHash<QString, QString> mapping = TextLayout::fontMapping();
+    QStringList faces = missingFonts();
+    if (!onlyMissing)
+        for (auto it = mapping.begin(); it != mapping.end(); ++it)
+            if (!faces.contains(it.key()))
+                faces << it.key();
+    if (faces.isEmpty())
+    {
+        if (!onlyMissing)
+            QMessageBox::information(this, "Font Mapping", "This document's fonts are all installed, and no fonts are mapped.");
+        return;
+    }
+    QDialog dialog(this);
+    dialog.setWindowTitle(onlyMissing ? "Missing Fonts" : "Font Mapping");
+    QVBoxLayout* layout = new QVBoxLayout(&dialog);
+    QLabel* intro = new QLabel(onlyMissing
+            ? "This document uses fonts that are not installed. Choose a font to show each one in; the document keeps the fonts it names."
+            : "Each missing font is shown in the font chosen for it.", &dialog);
+    intro->setWordWrap(true);
+    layout->addWidget(intro);
+    QFormLayout* form = new QFormLayout();
+    std::vector<std::pair<QString, QFontComboBox*>> choices;
+    for (const QString& face : faces)
+    {
+        QFontComboBox* box = new QFontComboBox(&dialog);
+        box->setCurrentFont(QFont(mapping.value(face, TextLayout::familyOf(face))));
+        form->addRow(face + ":", box);
+        choices.emplace_back(face, box);
+    }
+    layout->addLayout(form);
+    QDialogButtonBox* buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, &dialog);
+    connect(buttons, &QDialogButtonBox::accepted, &dialog, &QDialog::accept);
+    connect(buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
+    layout->addWidget(buttons);
+    if (dialog.exec() != QDialog::Accepted)
+        return;
+    for (const auto& [face, box] : choices)
+        mapping.insert(face, box->currentFont().family());
+    TextLayout::setFontMapping(mapping);
+    if (_phoenixView)
+    {
+        _phoenixView->invalidateBounds();
+        _phoenixView->clearCaches();
+        _phoenixView->update();
+    }
 }
 
 void MainWindow::swapBitmap()

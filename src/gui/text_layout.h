@@ -1,6 +1,7 @@
 #pragma once
 
 #include <QFont>
+#include <QHash>
 #include <QPointF>
 #include <QRectF>
 #include <QString>
@@ -61,6 +62,18 @@ struct Layout
 /// TimesNewRomanPS-BoldItalicMT) to an installed family, at the run's size
 /// in pixels.
 QFont fontFor(const fla::TextRun& run);
+
+/// Font Mapping: a font a document names that is not installed, drawn in
+/// one that is, by face. Read from the settings at first use; setting it
+/// redraws text in the new mapping.
+QHash<QString, QString> fontMapping();
+void setFontMapping(const QHash<QString, QString>& mapping);
+
+/// Whether a face (as Animate names it) resolves to an installed family,
+/// mapped or not.
+bool isInstalled(const QString& face);
+/// The family a face is drawn in.
+QString familyOf(const QString& face);
 
 /// Every run's characters, one after another.
 QString joinedText(const fla::StaticText& text);

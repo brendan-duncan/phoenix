@@ -241,6 +241,15 @@ private slots:
     /// A text setting from Properties, for the text being typed, the text
     /// fields selected, or else new text.
     void applyTextStyle(const QString& key, const QString& value);
+    /// The fonts the document's text names that are not installed.
+    QStringList missingFonts() const;
+    /// Font Mapping: an installed font for each missing one; with
+    /// \a onlyMissing, the fonts this document is missing, as a warning on
+    /// opening it.
+    void fontMappingDialog(bool onlyMissing);
+    /// Shows the Missing Fonts dialog when the document just opened names
+    /// fonts that are neither installed nor mapped.
+    void warnAboutFonts();
     /// Modify > Deformer: 0 removes, 1 adds a curve, 2 an envelope, 3 resets the pose.
     void deformSelection(int what);
     /// File > Import > Import Animatic: an EDL or Final Cut XML's cut as
@@ -324,6 +333,9 @@ private slots:
     void arrangeSelection(int step, bool toEnd);
 
 private:
+    /// A window people use, rather than one a command line runs headless.
+    bool _interactive = true;
+    QAction* _fontMappingAction = nullptr;
     void setupUI();
 
     void setupMenus();
