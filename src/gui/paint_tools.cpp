@@ -68,11 +68,7 @@ int ensureStroke(fla::Shape& shape, const fla::DrawingStyle& style)
     for (const auto& entry : shape.strokesMap)
     {
         const fla::StrokeStyle* stroke = entry.second;
-        if (stroke && stroke->style() == fla::StrokeStyle::Style::Solid &&
-            stroke->weight == style.strokeWeight && stroke->fill &&
-            stroke->fill->type() == fla::FillStyle::Type::SolidColor &&
-            sameColor(static_cast<const fla::SolidColor*>(stroke->fill)->color, style.strokeColor) &&
-            stroke->caps.empty() && stroke->joints.empty() && !stroke->isHairline())
+        if (stroke && style.strokeMatches(*stroke))
         {
             return entry.first;
         }

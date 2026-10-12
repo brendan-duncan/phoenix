@@ -7,6 +7,9 @@
 #include "timeline_audio.h"
 #include "updater.h"
 #include "../data/bitmap.h"
+#include "../data/bitmap_fill.h"
+#include "../data/radial_gradient.h"
+#include "../data/linear_gradient.h"
 #include "../data/bitmap_instance.h"
 #include "draw_placement.h"
 #include "library_panel.h"
@@ -2520,6 +2523,66 @@ void MainWindow::setupToolBar()
     connect(_toolboxFillSwatch, &QToolButton::clicked, this, [this]() { chooseStyleColor(false); });
     toolBar->addWidget(_toolboxFillSwatch);
 
+    // Black and White, and Swap Colors, under the swatches as in Animate's
+    // toolbar.
+    const auto smallButton = [toolBar](const QString& tip, const std::function<void(QPainter&)>& draw) {
+        QPixmap pixmap(16, 16);
+        pixmap.fill(Qt::transparent);
+        QPainter painter(&pixmap);
+        painter.setRenderHint(QPainter::Antialiasing, true);
+        draw(painter);
+        painter.end();
+        QToolButton* button = new QToolButton(toolBar);
+        button->setIcon(QIcon(pixmap));
+        button->setIconSize(QSize(16, 16));
+        button->setAutoRaise(true);
+        button->setToolTip(tip);
+        return button;
+    };
+    QToolButton* blackWhite = smallButton("Black and white", [](QPainter& p) {
+        p.setPen(QColor(150, 150, 150));
+        p.setBrush(Qt::white);
+        p.drawRect(QRectF(5.5, 5.5, 9, 9));
+        p.setBrush(Qt::black);
+        p.drawRect(QRectF(1.5, 1.5, 9, 9));
+    });
+    connect(blackWhite, &QToolButton::clicked, this, [this]() {
+        const uint8_t black[4] = {0, 0, 0, 255};
+        const uint8_t white[4] = {255, 255, 255, 255};
+        std::copy(black, black + 4, _drawingStyle.strokeColor);
+        std::copy(white, white + 4, _drawingStyle.fillColor);
+        _drawingStyle.fillKind = fla::DrawingStyle::FillKind::Solid;
+        _drawingStyle.hasFill = _drawingStyle.hasStroke = true;
+        refreshStyleSwatches();
+        if (_colorPanel)
+            _colorPanel->refresh();
+        if (_propertiesPanel)
+            _propertiesPanel->refresh();
+    });
+    toolBar->addWidget(blackWhite);
+    QToolButton* swap = smallButton("Swap stroke and fill colors", [](QPainter& p) {
+        p.setPen(QPen(QColor(210, 210, 210), 1.4));
+        p.setBrush(Qt::NoBrush);
+        p.drawArc(QRectF(2.5, 2.5, 11, 11), 0, 90 * 16);
+        p.setBrush(QColor(210, 210, 210));
+        p.setPen(Qt::NoPen);
+        p.drawPolygon(QPolygonF({QPointF(8, 0.5), QPointF(8, 5.5), QPointF(5, 3)}));
+        p.drawPolygon(QPolygonF({QPointF(15.5, 8), QPointF(10.5, 8), QPointF(13, 11)}));
+    });
+    connect(swap, &QToolButton::clicked, this, [this]() {
+        uint8_t held[4];
+        std::copy(_drawingStyle.strokeColor, _drawingStyle.strokeColor + 4, held);
+        std::copy(_drawingStyle.fillColor, _drawingStyle.fillColor + 4, _drawingStyle.strokeColor);
+        std::copy(held, held + 4, _drawingStyle.fillColor);
+        std::swap(_drawingStyle.hasFill, _drawingStyle.hasStroke);
+        refreshStyleSwatches();
+        if (_colorPanel)
+            _colorPanel->refresh();
+        if (_propertiesPanel)
+            _propertiesPanel->refresh();
+    });
+    toolBar->addWidget(swap);
+
     toolBar->addSeparator();
 
     // Not a tool, so it stands outside the exclusive group: it changes what
@@ -2623,6 +2686,48 @@ void MainWindow::setupPropertiesPanel()
     connect(_colorPanel, &ColorPanel::styleChanged, this, [this]() { refreshStyleSwatches(); });
     connect(_colorPanel, &ColorPanel::applyToSelectionRequested, this, &MainWindow::applyFillToSelection);
     connect(_colorPanel, &ColorPanel::importBitmapRequested, this, &MainWindow::importToLibrary);
+    // Properties' Edit for a gradient or bitmap fill: the Color panel takes it.
+    connect(_propertiesPanel, &PropertiesPanel::editFillRequested, this, [this](const fla::FillStyle* fill) {
+        if (!fill)
+            return;
+        fla::DrawingStyle& style = _drawingStyle;
+        style.hasFill = true;
+        style.gradientSpread = fill->spreadMethod;
+        style.gradientLinearRGB = fill->interpolationMethod == "linearRGB";
+        const auto stopsOf = [](const auto& entries) {
+            std::vector<fla::DrawingStyle::Stop> stops;
+            for (const auto& entry : entries)
+            {
+                fla::DrawingStyle::Stop stop;
+                stop.ratio = entry.ratio;
+                std::copy(entry.color, entry.color + 4, stop.color);
+                stops.push_back(stop);
+            }
+            return stops;
+        };
+        switch (fill->type())
+        {
+        case fla::FillStyle::Type::LinearGradient:
+            style.fillKind = fla::DrawingStyle::FillKind::Linear;
+            style.gradient = stopsOf(static_cast<const fla::LinearGradient*>(fill)->entries);
+            break;
+        case fla::FillStyle::Type::RadialGradient:
+            style.fillKind = fla::DrawingStyle::FillKind::Radial;
+            style.gradient = stopsOf(static_cast<const fla::RadialGradient*>(fill)->entries);
+            break;
+        case fla::FillStyle::Type::BitmapFill:
+            style.fillKind = fla::DrawingStyle::FillKind::Bitmap;
+            style.fillBitmap = static_cast<const fla::BitmapFill*>(fill)->bitmapPath;
+            break;
+        case fla::FillStyle::Type::SolidColor:
+            style.fillKind = fla::DrawingStyle::FillKind::Solid;
+            break;
+        }
+        _colorPanel->refresh();
+        _colorDock->show();
+        _colorDock->raise();
+        refreshStyleSwatches();
+    });
 
     _swatchesDock = new QDockWidget("Swatches", this);
     _swatchesDock->setObjectName("swatchesDock");

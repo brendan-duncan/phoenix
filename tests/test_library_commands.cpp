@@ -260,3 +260,27 @@ TEST(new_gradient_and_bitmap_fills_are_fitted_to_the_art)
     fla::DrawingStyle::fitFill(*bitmap, 10, 20, 50, 60);
     CHECK(bitmap->transform.m11 == 20.0 && bitmap->transform.tx == 10.0 && bitmap->transform.ty == 20.0);
 }
+
+TEST(a_stroke_look_restyles_a_stroke_and_new_strokes_take_it)
+{
+    fla::DrawingStyle style;
+    style.strokeWeight = 3.0;
+    style.strokeLook.kind = fla::StrokeStyle::Style::Dashed;
+    style.strokeLook.caps = "square";
+    style.strokeLook.joints = "miter";
+    style.strokeLook.miterLimit = 7.0;
+    std::unique_ptr<fla::StrokeStyle> stroke(style.createStroke(nullptr));
+    CHECK(stroke && stroke->style() == fla::StrokeStyle::Style::Dashed);
+    if (!stroke)
+        return;
+    CHECK(stroke->weight == 3.0 && stroke->caps == "square" && stroke->miterLimit == 7.0);
+    CHECK(style.strokeMatches(*stroke));
+
+    // Back to a solid hairline: a new object, keeping the color and weight.
+    fla::StrokeLook hairline;
+    hairline.hairline = true;
+    std::unique_ptr<fla::StrokeStyle> restyled(hairline.applyTo(*stroke, nullptr));
+    CHECK(restyled->style() == fla::StrokeStyle::Style::Solid && restyled->isHairline());
+    CHECK(restyled->weight == 3.0 && restyled->fill && restyled->fill != stroke->fill);
+    CHECK(!style.strokeMatches(*restyled));
+}

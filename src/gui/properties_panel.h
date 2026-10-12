@@ -26,6 +26,8 @@ class QVBoxLayout;
 namespace fla {
 class Command;
 class DrawingStyle;
+class FillStyle;
+struct StrokeLook;
 class Element;
 class EditContext;
 class Frame;
@@ -138,6 +140,10 @@ signals:
     /// Something drawn was edited through the Object, Frame or Doc tab.
     void documentEdited();
 
+    /// The Object tab's Edit for a gradient or bitmap fill: the Color panel
+    /// takes \a fill to edit and apply back.
+    void editFillRequested(const fla::FillStyle* fill);
+
     /// The Object tab's Swap button was pressed.
     void swapSymbolRequested();
 
@@ -170,6 +176,12 @@ private:
 
     void addPositionAndSize(QVBoxLayout* layout, const std::vector<fla::Element*>& elements);
     void addShapeSections(QVBoxLayout* layout, fla::Shape* shape);
+
+    /// The stroke controls Animate shows (style, cap, join, miter, scale),
+    /// in \a section from \a row on, set from \a look; \a apply gets the
+    /// new look on any change. Returns the label and field of each row.
+    std::vector<std::pair<QWidget*, QWidget*>> addStrokeLookFields(PropertySection* section, int& row,
+        const fla::StrokeLook& look, std::function<void(const fla::StrokeLook&)> apply);
     void addInstanceSections(QVBoxLayout* layout, fla::SymbolInstance* instance);
 
     fla::Frame* currentFrame(fla::Layer** layerOut) const;

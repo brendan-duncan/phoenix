@@ -9,6 +9,7 @@
 #include "../data/shape.h"
 #include "../data/solid_color.h"
 #include "../data/stroke_style.h"
+#include "shape_merge.h"
 
 #include <algorithm>
 #include <cstdint>
@@ -177,21 +178,79 @@ void DrawingStyle::fitFills(Element& element)
     }
 }
 
+StrokeLook StrokeLook::of(const StrokeStyle& stroke)
+{
+    StrokeLook look;
+    look.kind = stroke.style();
+    look.hairline = stroke.isHairline();
+    look.caps = stroke.caps;
+    look.joints = stroke.joints;
+    look.scaleMode = stroke.scaleMode;
+    look.miterLimit = stroke.miterLimit;
+    return look;
+}
+
+bool StrokeLook::operator==(const StrokeLook& other) const
+{
+    return kind == other.kind && hairline == other.hairline && caps == other.caps && joints == other.joints &&
+        scaleMode == other.scaleMode && miterLimit == other.miterLimit;
+}
+
+StrokeStyle* StrokeLook::applyTo(const StrokeStyle& stroke, DOMElement* parent) const
+{
+    StrokeStyle* copy = nullptr;
+    switch (kind)
+    {
+    case StrokeStyle::Style::Dashed: copy = new DashedStroke(parent); break;
+    case StrokeStyle::Style::Ragged: copy = new RaggedStroke(parent); break;
+    case StrokeStyle::Style::Stipple: copy = new StippleStroke(parent); break;
+    case StrokeStyle::Style::Dotted: copy = new DottedStroke(parent); break;
+    case StrokeStyle::Style::Hatched: copy = new HatchedStroke(parent); break;
+    case StrokeStyle::Style::Solid: copy = new SolidStroke(parent); break;
+    }
+    copy->weight = stroke.weight;
+    copy->pixelHinting = stroke.pixelHinting;
+    copy->dash1 = stroke.dash1;
+    copy->dash2 = stroke.dash2;
+    copy->dotSpace = stroke.dotSpace;
+    copy->extraChildren = stroke.extraChildren;
+    copy->widthProfile = stroke.widthProfile;
+    copy->extraAttributes = stroke.extraAttributes;
+    // A kind's own settings only mean something to that kind.
+    if (kind == stroke.style())
+        copy->styleAttributes = stroke.styleAttributes;
+    copy->fill = cloneFill(stroke.fill, copy);
+    copy->caps = caps;
+    copy->joints = joints;
+    copy->scaleMode = scaleMode;
+    copy->miterLimit = miterLimit;
+    copy->solidStyle = hairline && kind == StrokeStyle::Style::Solid ? "hairline" : std::string();
+    return copy;
+}
+
 StrokeStyle* DrawingStyle::createStroke(DOMElement* parent) const
 {
     if (!hasStroke)
         return nullptr;
 
-    SolidStroke* stroke = new SolidStroke(parent);
-    stroke->weight = strokeWeight;
-
+    SolidStroke plain(nullptr);
+    plain.weight = strokeWeight;
     // A stroke is colored by a fill of its own, the same way the format stores
     // it, which is what lets a stroke carry a gradient later on.
-    SolidColor* color = new SolidColor(stroke);
+    SolidColor* color = new SolidColor(&plain);
     copyColor(strokeColor, color->color);
-    stroke->fill = color;
+    plain.fill = color;
 
-    return stroke;
+    return strokeLook.applyTo(plain, parent);
+}
+
+bool DrawingStyle::strokeMatches(const StrokeStyle& stroke) const
+{
+    if (StrokeLook::of(stroke) != strokeLook || stroke.weight != strokeWeight || !stroke.fill ||
+        stroke.fill->type() != FillStyle::Type::SolidColor)
+        return false;
+    const uint8_t* color = static_cast<const SolidColor*>(stroke.fill)->color;
+    return std::equal(color, color + 4, strokeColor);
 }
 
 } // namespace fla

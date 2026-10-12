@@ -2,6 +2,8 @@
 
 #include "brush_stroke.h"
 
+#include "../data/stroke_style.h"
+
 #include <cstdint>
 #include <string>
 #include <vector>
@@ -12,7 +14,30 @@ class DOMElement;
 class Element;
 class FillStyle;
 class Shape;
-class StrokeStyle;
+
+/// How a stroke looks apart from its color and weight: its kind (solid,
+/// dashed, dotted, ragged, stipple, hatched), whether it is a hairline, its
+/// caps and joins and how it scales, as Animate's stroke controls set them.
+/// The empty strings are Animate's defaults (round caps and joins, normal
+/// scaling).
+struct StrokeLook
+{
+    StrokeStyle::Style kind = StrokeStyle::Style::Solid;
+    bool hairline = false;
+    std::string caps;
+    std::string joints;
+    std::string scaleMode;
+    double miterLimit = 3.0;
+
+    static StrokeLook of(const StrokeStyle& stroke);
+    bool operator==(const StrokeLook& other) const;
+    bool operator!=(const StrokeLook& other) const { return !(*this == other); }
+
+    /// A copy of \a stroke with this look: a new object when the kind
+    /// changes, keeping its color, weight and anything else it has. The
+    /// caller owns it.
+    StrokeStyle* applyTo(const StrokeStyle& stroke, DOMElement* parent) const;
+};
 
 /// The fill and stroke a new object is drawn with, plus the settings the shape
 /// tools need.
@@ -58,6 +83,7 @@ public:
     bool hasStroke = true;
     uint8_t strokeColor[4] = {0, 0, 0, 255};
     double strokeWeight = 1.0;
+    StrokeLook strokeLook;
 
     /// Whether a new shape stays a separate object instead of merging into what
     /// is already there.
@@ -210,6 +236,11 @@ public:
     /// Builds the stroke for a new object, or null when strokes are switched
     /// off. The caller owns the result.
     StrokeStyle* createStroke(DOMElement* parent) const;
+
+    /// Whether \a stroke is what createStroke would make: the ink bottle and
+    /// the drawing tools reuse a shape's matching stroke rather than adding
+    /// another.
+    bool strokeMatches(const StrokeStyle& stroke) const;
 };
 
 } // namespace fla

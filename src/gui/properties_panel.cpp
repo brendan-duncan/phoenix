@@ -702,6 +702,10 @@ void PropertiesPanel::buildToolTab()
     _toolRows.push_back({weightLabel, weight, strokeTools});
     ++row;
 
+    for (const auto& fields : addStrokeLookFields(_colorSection, row, style.strokeLook,
+             [this](const fla::StrokeLook& look) { _links.style->strokeLook = look; }))
+        _toolRows.push_back({fields.first, fields.second, strokeTools});
+
     // --- Tool Options ---
     _optionsSection = addSection(page, "Tool Options");
     QGridLayout* grid = _optionsSection->grid();
@@ -1159,6 +1163,100 @@ void PropertiesPanel::addPositionAndSize(QVBoxLayout* layout, const std::vector<
         [=]() { commit("Resize"); });
 }
 
+std::vector<std::pair<QWidget*, QWidget*>> PropertiesPanel::addStrokeLookFields(PropertySection* section, int& row,
+    const fla::StrokeLook& look, std::function<void(const fla::StrokeLook&)> apply)
+{
+    std::vector<std::pair<QWidget*, QWidget*>> rows;
+    const auto add = [&](const QString& text, QWidget* field) {
+        QLabel* label = fieldLabel(text, this);
+        section->grid()->addWidget(label, row, 0);
+        section->grid()->addWidget(field, row, 1, 1, 3);
+        rows.emplace_back(label, field);
+        ++row;
+    };
+    auto current = std::make_shared<fla::StrokeLook>(look);
+
+    // Style: the kinds Animate offers, hairline counted as one.
+    QComboBox* style = new QComboBox(this);
+    style->addItems({"Solid", "Hairline", "Dashed", "Dotted", "Ragged", "Stipple", "Hatched"});
+    const fla::StrokeStyle::Style kinds[7] = {fla::StrokeStyle::Style::Solid, fla::StrokeStyle::Style::Solid,
+        fla::StrokeStyle::Style::Dashed, fla::StrokeStyle::Style::Dotted, fla::StrokeStyle::Style::Ragged,
+        fla::StrokeStyle::Style::Stipple, fla::StrokeStyle::Style::Hatched};
+    int styleIndex = 0;
+    for (int i = 0; i < 7; ++i)
+    {
+        if (kinds[i] == look.kind && (i == 1) == look.hairline)
+            styleIndex = i;
+    }
+    style->setCurrentIndex(styleIndex);
+    connect(style, &QComboBox::currentIndexChanged, this, [=](int index) {
+        current->kind = kinds[std::clamp(index, 0, 6)];
+        current->hairline = index == 1;
+        apply(*current);
+    });
+    add("Style", style);
+
+    // Caps and joins as the file spells them; empty is Animate's round.
+    QComboBox* cap = new QComboBox(this);
+    cap->addItems({"Round", "None", "Square"});
+    const char* caps[3] = {"", "none", "square"};
+    for (int i = 0; i < 3; ++i)
+    {
+        if (look.caps == caps[i])
+            cap->setCurrentIndex(i);
+    }
+    connect(cap, &QComboBox::currentIndexChanged, this, [=](int index) {
+        current->caps = caps[std::clamp(index, 0, 2)];
+        apply(*current);
+    });
+    add("Cap", cap);
+
+    QWidget* joinRow = new QWidget(this);
+    QHBoxLayout* joinLayout = new QHBoxLayout(joinRow);
+    joinLayout->setContentsMargins(0, 0, 0, 0);
+    QComboBox* join = new QComboBox(joinRow);
+    join->addItems({"Round", "Miter", "Bevel"});
+    const char* joins[3] = {"", "miter", "bevel"};
+    for (int i = 0; i < 3; ++i)
+    {
+        if (look.joints == joins[i])
+            join->setCurrentIndex(i);
+    }
+    HotText* miter = makeHotText(1, 60, 0);
+    miter->setValue(look.miterLimit);
+    miter->setToolTip("How far a miter join may reach before it is cut off, in stroke widths");
+    miter->setEnabled(look.joints == "miter");
+    connect(join, &QComboBox::currentIndexChanged, this, [=](int index) {
+        current->joints = joins[std::clamp(index, 0, 2)];
+        miter->setEnabled(index == 1);
+        apply(*current);
+    });
+    connect(miter, &HotText::editFinished, this, [=]() {
+        current->miterLimit = miter->value();
+        apply(*current);
+    });
+    joinLayout->addWidget(join, 1);
+    joinLayout->addWidget(fieldLabel("Miter", joinRow));
+    joinLayout->addWidget(miter);
+    add("Join", joinRow);
+
+    QComboBox* scale = new QComboBox(this);
+    scale->addItems({"Normal", "Horizontal", "Vertical", "None"});
+    scale->setToolTip("Which way the stroke's weight follows when its object is scaled");
+    const char* scales[4] = {"", "horizontal", "vertical", "none"};
+    for (int i = 0; i < 4; ++i)
+    {
+        if (look.scaleMode == scales[i] || (i == 0 && look.scaleMode == "normal"))
+            scale->setCurrentIndex(i);
+    }
+    connect(scale, &QComboBox::currentIndexChanged, this, [=](int index) {
+        current->scaleMode = scales[std::clamp(index, 0, 3)];
+        apply(*current);
+    });
+    add("Scale", scale);
+    return rows;
+}
+
 void PropertiesPanel::addShapeSections(QVBoxLayout* layout, fla::Shape* shape)
 {
     // The first solid fill and stroke stand for the shape, as Animate shows
@@ -1272,10 +1370,56 @@ void PropertiesPanel::addShapeSections(QVBoxLayout* layout, fla::Shape* shape)
         });
         strokeLayout->addWidget(weight);
         section->addWide(row++, strokeRow);
+
+        addStrokeLookFields(section, row, fla::StrokeLook::of(*stroke), [=](const fla::StrokeLook& look) {
+            restyle("Stroke Style", [&](fla::Shape& after) {
+                // Each stroke made anew in the look, kept where edges find it.
+                for (fla::StrokeStyle*& style : after.strokes)
+                {
+                    if (!style)
+                        continue;
+                    fla::StrokeStyle* restyled = look.applyTo(*style, &after);
+                    for (auto& entry : after.strokesMap)
+                    {
+                        if (entry.second == style)
+                            entry.second = restyled;
+                    }
+                    delete style;
+                    style = restyled;
+                }
+            });
+        });
+    }
+
+    // A gradient or bitmap fill: what it is, and Edit to take it to the
+    // Color panel, which applies it back to the selection.
+    const fla::FillStyle* other = nullptr;
+    for (const fla::FillStyle* style : shape->fills)
+    {
+        if (style && style->type() != fla::FillStyle::Type::SolidColor)
+        {
+            other = style;
+            break;
+        }
+    }
+    if (other)
+    {
+        QWidget* otherRow = new QWidget(this);
+        QHBoxLayout* otherLayout = new QHBoxLayout(otherRow);
+        otherLayout->setContentsMargins(0, 0, 0, 0);
+        const char* kind = other->type() == fla::FillStyle::Type::LinearGradient ? "Linear gradient"
+            : other->type() == fla::FillStyle::Type::RadialGradient ? "Radial gradient" : "Bitmap fill";
+        otherLayout->addWidget(fieldLabel(kind, otherRow));
+        otherLayout->addStretch();
+        QPushButton* editFill = new QPushButton("Edit...", otherRow);
+        editFill->setToolTip("Open this fill in the Color panel; Apply to Selection puts it back");
+        connect(editFill, &QPushButton::clicked, this, [this, other]() { emit editFillRequested(other); });
+        otherLayout->addWidget(editFill);
+        section->addWide(row++, otherRow);
     }
 
     if (row == 0)
-        section->addWide(row++, fieldLabel("No solid fill or stroke", this));
+        section->addWide(row++, fieldLabel("No fill or stroke", this));
 
     PropertySection* options = addSection(layout, "Shape Options");
     QWidget* buttons = new QWidget(this);
