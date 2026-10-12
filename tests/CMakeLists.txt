@@ -23,6 +23,7 @@ set(PHOENIX_SRC ${CMAKE_CURRENT_SOURCE_DIR}/../src)
 # Free of Qt and of the file readers.
 set(TEST_CORE_SOURCES
     ${PHOENIX_SRC}/data/bitmap_decoder.cpp
+    ${PHOENIX_SRC}/util/gif_writer.cpp
     ${PHOENIX_SRC}/data/dom_element.cpp
     ${PHOENIX_SRC}/data/document.cpp
     ${PHOENIX_SRC}/data/edge.cpp

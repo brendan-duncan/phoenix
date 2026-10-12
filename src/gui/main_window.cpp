@@ -30,6 +30,7 @@
 #include "../edit/property_command.h"
 #include "phoenix_view.h"
 #include "movie_export.h"
+#include "image_export.h"
 #include "timeline_view.h"
 #include "../data/frame.h"
 #include "../data/group.h"
@@ -1312,6 +1313,10 @@ void MainWindow::setupMenus()
     exportSvgAction->setStatusTip("Export the current frame to an SVG file");
     connect(exportSvgAction, &QAction::triggered, this, &MainWindow::exportSvg);
     exportMenu->addAction(exportSvgAction);
+    QAction* exportImageAction = new QAction("Export &Image...", this);
+    exportImageAction->setStatusTip("Export one frame as a PNG, JPEG or GIF image");
+    connect(exportImageAction, &QAction::triggered, this, &MainWindow::exportImage);
+    exportMenu->addAction(exportImageAction);
     QAction* exportMovieAction = new QAction("Export &Movie...", this);
     exportMovieAction->setShortcut(QKeySequence(Qt::CTRL | Qt::ALT | Qt::SHIFT | Qt::Key_S));
     exportMovieAction->setStatusTip("Export the frames as a PNG sequence or a video");
@@ -2287,6 +2292,79 @@ int MainWindow::exportFromCommandLine(const QString& source, const QString& outp
     }
     std::printf("Exported %d frames to %s\n", settings.last + 1, qPrintable(settings.path));
     return 0;
+}
+
+int MainWindow::exportImageFromCommandLine(const QString& source, const QString& output, const QStringList& options)
+{
+    loadFLAFile(source);
+    if (!_flaDocument || !_flaDocument->document || !_phoenixView)
+    {
+        std::fprintf(stderr, "Could not open %s\n", qPrintable(source));
+        return 1;
+    }
+    const fla::Document* document = _flaDocument->document;
+    ImageExportSettings settings;
+    settings.path = QFileInfo(output).absoluteFilePath();
+    settings.format = ImageExportDialog::formatOf(output);
+    settings.size = QSize(document->width, document->height);
+    for (int i = 0; i + 1 < options.size(); i += 2)
+    {
+        const QString& name = options.at(i);
+        const QString& value = options.at(i + 1);
+        if (name == "--frame")
+            settings.frame = std::max(0, value.toInt() - 1);
+        else if (name == "--size")
+        {
+            const QStringList parts = value.split('x');
+            if (parts.size() == 2)
+                settings.size = QSize(std::max(1, parts.at(0).toInt()), std::max(1, parts.at(1).toInt()));
+        }
+        else if (name == "--matte")
+        {
+            if (value == "transparent")
+                settings.matte = ImageExportSettings::Matte::Transparent;
+            else if (QColor(value).isValid())
+            {
+                settings.matte = ImageExportSettings::Matte::Color;
+                settings.matteColor = QColor(value);
+            }
+        }
+        else if (name == "--quality")
+            settings.quality = std::clamp(value.toInt(), 0, 100);
+    }
+    QString error;
+    if (!ImageExport::run(settings, *_phoenixView, error))
+    {
+        std::fprintf(stderr, "%s\n", qPrintable(error));
+        return 1;
+    }
+    std::printf("Exported frame %d to %s\n", settings.frame + 1, qPrintable(settings.path));
+    return 0;
+}
+
+void MainWindow::exportImage()
+{
+    if (!_flaDocument || !_flaDocument->document || !_phoenixView)
+        return;
+    const fla::Document* document = _flaDocument->document;
+    const QString base = _documentPath.isEmpty() ? QString("frame") : QFileInfo(_documentPath).completeBaseName();
+    const QString folder = _lastDirectory.isEmpty() ? QFileInfo(_documentPath).absolutePath() : _lastDirectory;
+    ImageExportDialog dialog(QSize(document->width, document->height), std::max(1, _phoenixView->frameCount()),
+        _player ? _player->currentFrame() : 0, QDir(folder).filePath(base + ".png"), this);
+    if (dialog.exec() != QDialog::Accepted)
+        return;
+    const ImageExportSettings settings = dialog.settings();
+    QString error;
+    const bool written = ImageExport::run(settings, *_phoenixView, error);
+    _phoenixView->update();
+    if (!written)
+    {
+        QMessageBox::warning(this, "Export Image", QString("Could not write %1:\n\n%2").arg(settings.path, error));
+        return;
+    }
+    _lastDirectory = QFileInfo(settings.path).absolutePath();
+    saveSettings();
+    statusBar()->showMessage(QString("Exported %1").arg(settings.path), 5000);
 }
 
 void MainWindow::exportMovie()

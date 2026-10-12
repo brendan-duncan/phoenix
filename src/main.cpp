@@ -135,7 +135,8 @@ int main(int argc, char *argv[])
     // Exporting headless (QT_QPA_PLATFORM=offscreen) reads fonts from a
     // folder rather than from Windows, and Qt's own folder has none: text
     // would come out as empty boxes. Point it at the system's.
-    if (argc > 1 && std::strcmp(argv[1], "--export-movie") == 0 && qEnvironmentVariableIsEmpty("QT_QPA_FONTDIR"))
+    if (argc > 1 && (std::strcmp(argv[1], "--export-movie") == 0 || std::strcmp(argv[1], "--export-image") == 0) &&
+        qEnvironmentVariableIsEmpty("QT_QPA_FONTDIR"))
     {
         const QByteArray windows = qgetenv("WINDIR");
         if (!windows.isEmpty())
@@ -152,6 +153,14 @@ int main(int argc, char *argv[])
 
     // Phoenix --export-movie <document> <output.png|output.mp4>: writes
     // every frame and exits, without showing a window.
+    // Phoenix --export-image <document> <out.png|jpg|gif> [options]: one
+    // frame, without a window.
+    if (arguments.size() >= 4 && arguments.at(1) == "--export-image")
+    {
+        MainWindow window(QString(), nullptr, false);
+        return window.exportImageFromCommandLine(arguments.at(2), arguments.at(3), arguments.mid(4));
+    }
+
     if (arguments.size() == 4 && arguments.at(1) == "--export-movie")
     {
         MainWindow window(QString(), nullptr, false);

@@ -1,10 +1,13 @@
 #include "test_util.h"
 
 #include "../src/data/bitmap_decoder.h"
+#include "../src/util/gif_writer.h"
 
 #include <zlib.h>
 
 #include <algorithm>
+#include <cstdlib>
+#include <fstream>
 #include <cstdint>
 #include <vector>
 
@@ -114,4 +117,33 @@ TEST(lossless_bitmaps_encode_as_animate_reads_them)
     CHECK(fla::decodeLosslessBitmap(data, decoded));
     CHECK(decoded.width == 3 && decoded.height == 2);
     CHECK(decoded.pixels == pixels);
+}
+
+TEST(gif_writer_writes_a_gif_with_its_colors_exact)
+{
+    // 200 colors in a busy pattern: the palette holds them exactly, and the
+    // LZW table fills and starts over several times.
+    const int w = 300, h = 300;
+    std::vector<uint8_t> rgba(static_cast<size_t>(w) * h * 4);
+    for (int y = 0; y < h; ++y)
+    {
+        for (int x = 0; x < w; ++x)
+        {
+            const int c = (x * 7 + y * 13 + (x * y) % 5) % 200;
+            uint8_t* p = &rgba[(static_cast<size_t>(y) * w + x) * 4];
+            p[0] = static_cast<uint8_t>(c);
+            p[1] = static_cast<uint8_t>(255 - c);
+            p[2] = static_cast<uint8_t>((c * 3) % 256);
+            p[3] = (x < 10 && y < 10) ? 0 : 255;
+        }
+    }
+    const std::vector<uint8_t> file = gif::encode(w, h, rgba, true);
+    CHECK(file.size() > 13 && file[0] == 'G' && file.back() == 0x3B);
+    // Left for tools/check_gif.py to decode with an independent reader.
+    const char* out = std::getenv("PHOENIX_GIF_OUT");
+    if (out)
+    {
+        std::ofstream stream(out, std::ios::binary);
+        stream.write(reinterpret_cast<const char*>(file.data()), static_cast<std::streamsize>(file.size()));
+    }
 }

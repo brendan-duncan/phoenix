@@ -76,6 +76,7 @@ set(HEADERS
     src/gui/swap_symbol_dialog.h
     src/gui/start_dialog.h
     src/gui/autosave.h
+    src/gui/image_export.h
     src/gui/file_association.h
     src/gui/color_panel.h
     src/gui/video_import.h
@@ -215,6 +216,7 @@ set(HEADERS
     src/phx/wire.h
     src/util/zip_archive.h
     src/util/zip_writer.h
+    src/util/gif_writer.h
 )
 
 set(SOURCES
@@ -227,6 +229,7 @@ set(SOURCES
     src/gui/swap_symbol_dialog.cpp
     src/gui/start_dialog.cpp
     src/gui/autosave.cpp
+    src/gui/image_export.cpp
     src/gui/file_association.cpp
     src/gui/color_panel.cpp
     src/gui/video_import.cpp
@@ -360,6 +363,7 @@ set(SOURCES
     src/phx/phx_write.cpp
     src/util/zip_archive.cpp
     src/util/zip_writer.cpp
+    src/util/gif_writer.cpp
 )
 
 qt6_standard_project_setup()

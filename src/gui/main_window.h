@@ -63,6 +63,10 @@ public:
     /// sequence for a .png name, a video otherwise. Returns the process exit
     /// code, writing any error to stderr.
     int exportFromCommandLine(const QString& source, const QString& output);
+    /// Phoenix --export-image in out [--frame N] [--size WxH]
+    /// [--matte stage|transparent|#rrggbb] [--quality Q]: one frame, no
+    /// window. Returns the exit code.
+    int exportImageFromCommandLine(const QString& source, const QString& output, const QStringList& options);
    
     void loadFLAFile(const QString& filePath);
 
@@ -86,6 +90,8 @@ private slots:
 
     void exportSvg();
     void exportMovie();
+    /// File > Export > Export Image: one frame as PNG, JPEG or GIF.
+    void exportImage();
     /// File > Import: image and sound files into the library and, for
     /// Import to Stage, images onto the current frame.
     void importToStage();
