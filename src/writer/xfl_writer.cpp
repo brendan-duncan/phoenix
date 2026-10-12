@@ -486,13 +486,21 @@ void XFLWriter::writeShape(const Shape& shape, XMLElement* parent)
 
             // Prefer the text the file was read with: it round-trips exactly,
             // including anything the reader normalized away. Regenerating is for
-            // edges that have actually been edited.
+            // edges that have actually been edited, and writes their cubics
+            // as Animate does, quadratics here and the cubics after.
+            std::vector<std::string> cubicRecords;
             const std::string data = edge->data.empty()
-                ? EdgeWriter::writeEdge(*edge)
+                ? EdgeWriter::writeEdgeAsAnimate(*edge, cubicRecords)
                 : edge->data;
             edgeNode->SetAttribute("edges", data.c_str());
 
             edges->InsertEndChild(edgeNode);
+            for (const std::string& record : cubicRecords)
+            {
+                XMLElement* cubicNode = doc->NewElement("Edge");
+                cubicNode->SetAttribute("cubics", record.c_str());
+                edges->InsertEndChild(cubicNode);
+            }
         }
         while (cubics && cubic < shape.cubicEdges.size())
             appendRawXml(shape.cubicEdges[cubic++].second, edges);

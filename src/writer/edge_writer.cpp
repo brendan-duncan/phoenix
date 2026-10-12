@@ -38,6 +38,45 @@ void appendHex(long long value, int minDigits, std::string& out)
         out.push_back(buffer[i - 1]);
 }
 
+/// Whole twips, as the `cubics` text writes them.
+std::string twips(const Point& point)
+{
+    return std::to_string(std::llround(point.x * 20.0)) + " " + std::to_string(std::llround(point.y * 20.0));
+}
+
+std::string twipsComma(const Point& point)
+{
+    return std::to_string(std::llround(point.x * 20.0)) + "," + std::to_string(std::llround(point.y * 20.0));
+}
+
+Point lerp(const Point& a, const Point& b, double t)
+{
+    return Point(a.x + (b.x - a.x) * t, a.y + (b.y - a.y) * t);
+}
+
+/// Quadratics for the cubic \a p0 to \a p3, as control and end pairs,
+/// split in half until each lies within a fortieth of a pixel (half a twip)
+/// of the cubic.
+void cubicToQuads(const Point& p0, const Point& p1, const Point& p2, const Point& p3,
+    std::vector<std::pair<Point, Point>>& quads, int depth = 0)
+{
+    // How far the midpoint quadratic can stray from the cubic.
+    const double dx = p3.x - 3.0 * p2.x + 3.0 * p1.x - p0.x;
+    const double dy = p3.y - 3.0 * p2.y + 3.0 * p1.y - p0.y;
+    const double error = std::sqrt(3.0) / 36.0 * std::sqrt(dx * dx + dy * dy);
+    if (error <= 0.025 || depth >= 8)
+    {
+        const Point control((3.0 * (p1.x + p2.x) - p0.x - p3.x) / 4.0, (3.0 * (p1.y + p2.y) - p0.y - p3.y) / 4.0);
+        quads.emplace_back(control, p3);
+        return;
+    }
+    const Point a = lerp(p0, p1, 0.5), b = lerp(p1, p2, 0.5), c = lerp(p2, p3, 0.5);
+    const Point d = lerp(a, b, 0.5), e = lerp(b, c, 0.5);
+    const Point mid = lerp(d, e, 0.5);
+    cubicToQuads(p0, a, d, mid, quads, depth + 1);
+    cubicToQuads(mid, e, c, p3, quads, depth + 1);
+}
+
 } // namespace
 
 std::string EdgeWriter::formatMorphCoordinate(double pixels)
@@ -103,8 +142,9 @@ void EdgeWriter::appendPoint(const Point& point, std::string& out)
     out += formatCoordinate(point.y);
 }
 
-void EdgeWriter::writePath(const Path& path, std::string& out)
+void EdgeWriter::writePath(const Path& path, std::string& out, std::vector<std::string>* cubics)
 {
+    Point current;
     bool stylesWritten = false;
     const auto writeStyles = [&]()
     {
@@ -135,6 +175,7 @@ void EdgeWriter::writePath(const Path& path, std::string& out)
             {
                 out.push_back('!');
                 appendPoint(segment->points[0], out);
+                current = segment->points[0];
             }
             if (!stylesWritten)
                 writeStyles();
@@ -145,6 +186,7 @@ void EdgeWriter::writePath(const Path& path, std::string& out)
             {
                 out.push_back('|');
                 appendPoint(segment->points[0], out);
+                current = segment->points[0];
             }
             break;
 
@@ -155,12 +197,36 @@ void EdgeWriter::writePath(const Path& path, std::string& out)
                 appendPoint(segment->points[0], out);
                 out.push_back(' ');
                 appendPoint(segment->points[1], out);
+                current = segment->points[1];
             }
             break;
 
         case PathSegment::Command::Cubic:
-            if (segment->points.size() >= 3)
+            if (segment->points.size() >= 3 && cubics)
             {
+                // Animate's way: quadratics in the edges, and the cubic with
+                // the same quadratics in its own record, "!start(;control
+                // control end" then the quadratics as q (on the curve) and Q
+                // (control) points, ");".
+                std::vector<std::pair<Point, Point>> quads;
+                cubicToQuads(current, segment->points[0], segment->points[1], segment->points[2], quads);
+                std::string record = "!" + twips(current) + "(;" + twipsComma(segment->points[0]) + " " +
+                    twipsComma(segment->points[1]) + " " + twipsComma(segment->points[2]) + "q" + twips(current);
+                for (const auto& quad : quads)
+                {
+                    out.push_back('[');
+                    appendPoint(quad.first, out);
+                    out.push_back(' ');
+                    appendPoint(quad.second, out);
+                    record += "Q" + twips(quad.first) + "q" + twips(quad.second);
+                }
+                record += ");";
+                cubics->push_back(record);
+                current = segment->points[2];
+            }
+            else if (segment->points.size() >= 3)
+            {
+                current = segment->points[2];
                 // The reader takes three points before the closing paren as
                 // control, control, endpoint. Flash also stores a `q`/`p`
                 // quadratic approximation inside the parens, which the reader
@@ -185,6 +251,17 @@ void EdgeWriter::writePath(const Path& path, std::string& out)
     // A path with styles but no segments at all still records them.
     if (!stylesWritten)
         writeStyles();
+}
+
+std::string EdgeWriter::writeEdgeAsAnimate(const Edge& edge, std::vector<std::string>& cubics)
+{
+    std::string out;
+    for (const Path* path : edge.paths)
+    {
+        if (path)
+            writePath(*path, out, &cubics);
+    }
+    return out;
 }
 
 std::string EdgeWriter::writeEdge(const Edge& edge)

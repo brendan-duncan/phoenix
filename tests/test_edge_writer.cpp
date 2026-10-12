@@ -300,3 +300,38 @@ TEST(morph_coordinates_round_trip)
         CHECK(std::fabs(back.x - pixels) < 0.05);
     }
 }
+
+TEST(an_edited_cubic_is_written_as_quadratics_and_a_cubics_record)
+{
+    fla::Edge edge(nullptr);
+    fla::Path* path = new fla::Path(&edge);
+    path->segments.push_back(new fla::PathSegment{fla::PathSegment::Command::Move, {fla::Point(0, 0)}, path});
+    path->segments.push_back(new fla::PathSegment{fla::PathSegment::Command::Cubic,
+        {fla::Point(0, 100), fla::Point(100, 100), fla::Point(100, 0)}, path});
+    edge.paths.push_back(path);
+
+    std::vector<std::string> cubics;
+    const std::string data = EdgeWriter::writeEdgeAsAnimate(edge, cubics);
+    CHECK(data.find('(') == std::string::npos);
+    CHECK(data.find('[') != std::string::npos);
+    CHECK(cubics.size() == 1);
+    if (!cubics.empty())
+        CHECK(cubics[0].rfind("!0 0(;0,2000 2000,2000 2000,0q0 0Q", 0) == 0 && cubics[0].back() == ';');
+
+    // The quadratics end where the cubic does and pass through its middle.
+    std::unique_ptr<fla::Edge> read = parseEdge(data);
+    CHECK(read != nullptr && !read->paths.empty());
+    if (!read || read->paths.empty())
+        return;
+    const auto& segments = read->paths[0]->segments;
+    CHECK(segments.size() > 2);
+    const fla::PathSegment* last = segments.back();
+    CHECK(std::fabs(last->points.back().x - 100.0) < 0.01 && std::fabs(last->points.back().y) < 0.01);
+    bool throughMiddle = false;
+    for (const fla::PathSegment* segment : segments)
+    {
+        const fla::Point& end = segment->points.back();
+        throughMiddle = throughMiddle || (std::fabs(end.x - 50.0) < 0.01 && std::fabs(end.y - 75.0) < 0.01);
+    }
+    CHECK(throughMiddle);
+}

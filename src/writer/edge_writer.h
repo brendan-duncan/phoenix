@@ -3,6 +3,7 @@
 #include "../data/edge.h"
 
 #include <string>
+#include <vector>
 
 namespace fla {
 
@@ -32,8 +33,15 @@ public:
     /// read with and therefore round-trips exactly.
     static std::string writeEdge(const Edge& edge);
 
-    /// Appends one path's commands to \a out.
-    static void writePath(const Path& path, std::string& out);
+    /// The \a edge as Animate writes it: every cubic replaced by quadratics
+    /// close to it, since Animate reads only quadratics from `edges`, with
+    /// each cubic itself added to \a cubics as the text of a `cubics`
+    /// attribute, which Animate keeps for editing the curve again.
+    static std::string writeEdgeAsAnimate(const Edge& edge, std::vector<std::string>& cubics);
+
+    /// Appends one path's commands to \a out; with \a cubics, as
+    /// writeEdgeAsAnimate does.
+    static void writePath(const Path& path, std::string& out, std::vector<std::string>* cubics = nullptr);
 
 private:
     static void appendPoint(const Point& point, std::string& out);
