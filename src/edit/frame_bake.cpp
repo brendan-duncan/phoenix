@@ -22,7 +22,7 @@ namespace fla {
 
 namespace {
 
-/// The symbol frame a graphic shows  framesIn frames on, as it plays:
+/// The symbol frame a graphic shows \a framesIn frames on, as it plays:
 /// on, back or round its loop. Forward loops keep counting past the end, as
 /// Animate's synced tweens leave them.
 int playedOn(const SymbolInstance& instance, int framesIn)
