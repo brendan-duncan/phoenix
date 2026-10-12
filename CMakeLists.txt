@@ -218,6 +218,7 @@ set(HEADERS
     src/edit/shot_breakdown.h
     src/edit/linked_assets.h
     src/edit/review_notes.h
+    src/edit/pegs.h
     src/edit/combine_objects.h
     src/edit/transform_parts.h
     src/edit/swatches.h
@@ -392,6 +393,7 @@ set(SOURCES
     src/edit/shot_breakdown.cpp
     src/edit/linked_assets.cpp
     src/edit/review_notes.cpp
+    src/edit/pegs.cpp
     src/edit/combine_objects.cpp
     src/edit/swatches.cpp
     src/geom/curve.cpp

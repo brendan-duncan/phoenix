@@ -44,6 +44,7 @@ const NAV = [
     { href: "shortcuts.html", title: "Keyboard shortcuts" },
     { href: "preferences.html", title: "Settings and preferences" },
     { href: "animate.html", title: "Coming from Animate" },
+    { href: "harmony.html", title: "Coming from Harmony" },
   ] },
 ];
 

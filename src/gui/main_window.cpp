@@ -28,6 +28,7 @@
 #include "toolbar_editor.h"
 #include "toolbox.h"
 #include "notes_panel.h"
+#include "../edit/pegs.h"
 #include "theme.h"
 #include "theme_editor.h"
 #include "../parser/fla_doctor.h"
@@ -1666,6 +1667,51 @@ void MainWindow::setParentLayer(fla::Timeline* timeline, fla::Layer* layer, fla:
         _timelineView->refresh();
 }
 
+void MainWindow::addPeg()
+{
+    fla::Document* document = _flaDocument ? _flaDocument->document : nullptr;
+    fla::Timeline* timeline = nullptr;
+    int index = 0;
+    if (!document || !_timelineView || !_timelineView->currentLayer(timeline, index) || !timeline || index < 0 ||
+        index >= static_cast<int>(timeline->layers.size()))
+    {
+        statusBar()->showMessage("Pick the layer the peg is to move.", 3000);
+        return;
+    }
+    fla::Layer* child = timeline->layers[static_cast<size_t>(index)];
+    if (!child || child->layerType == fla::Layer::Type::Folder)
+        return;
+    // The pivot: the middle of the stage, which the peg can then be moved
+    // from with the Free Transform tool's transformation point.
+    const QRectF stage = _phoenixView ? _phoenixView->stageInScope() : QRectF(0, 0, document->width, document->height);
+    fla::CommandStack& stack = _editContext.commandStack();
+    stack.beginMacro("Add Peg");
+    if (!document->symbolList)
+        document->symbolList = new fla::SymbolList(document);
+    fla::Symbol* peg = fla::pegs::pegSymbol(*document->symbolList);
+    if (!peg)
+    {
+        const std::string name = fla::library::nameIsFree(*document, "Peg") ? std::string("Peg")
+                                                                             : fla::library::freeCopyName(*document, "Peg");
+        peg = fla::pegs::newPegSymbol(name);
+        stack.push(fla::CommandPtr(new fla::AddSymbolCommand(document, peg, "Add Peg")));
+    }
+    fla::Layer* pegLayer = fla::pegs::newPegLayer(*timeline, peg, stage.center().x(), stage.center().y());
+    stack.push(fla::CommandPtr(new fla::AddLayerCommand(timeline, index, pegLayer, "Add Peg")));
+    setParentLayer(timeline, child, pegLayer);
+    stack.endMacro();
+    stack.breakMergeChain();
+    if (_timelineView)
+        _timelineView->refresh();
+    if (_libraryPanel)
+        _libraryPanel->refreshIfStale();
+    if (_phoenixView)
+    {
+        _phoenixView->clearCaches();
+        _phoenixView->update();
+    }
+}
+
 void MainWindow::addCamera()
 {
     fla::Document* document = _flaDocument ? _flaDocument->document : nullptr;
@@ -2367,6 +2413,9 @@ void MainWindow::setupMenus()
     QAction* cameraAction = insertMenu->addAction("Ca&mera");
     cameraAction->setStatusTip("A multiplane camera for the scene: pan, zoom and turn it, with layers at depths");
     connect(cameraAction, &QAction::triggered, this, &MainWindow::addCamera);
+    QAction* pegAction = insertMenu->addAction("&Peg");
+    pegAction->setStatusTip("A peg above the current layer, which follows it: animate the peg to move, turn and scale the layer about its pivot");
+    connect(pegAction, &QAction::triggered, this, &MainWindow::addPeg);
     QAction* motionTweenAction = insertMenu->addAction("&Motion Tween");
     motionTweenAction->setStatusTip("Move the span's symbol by a motion tween; changing it later in the span keys it");
     connect(motionTweenAction, &QAction::triggered, this, &MainWindow::createMotionTween);
@@ -2649,6 +2698,14 @@ void MainWindow::setupMenus()
 
     QMenu* viewMenu = menuBar->addMenu("&View");
 
+    QAction* lightTableAction = viewMenu->addAction("&Light Table");
+    lightTableAction->setCheckable(true);
+    lightTableAction->setShortcut(QKeySequence(Qt::SHIFT | Qt::Key_L));
+    lightTableAction->setStatusTip("Fade every layer but the one drawn on, as on a light table");
+    connect(lightTableAction, &QAction::toggled, this, [this](bool on) {
+        if (_phoenixView)
+            _phoenixView->setLightTable(on);
+    });
     QAction* cameraViewAction = viewMenu->addAction("&Camera View");
     cameraViewAction->setCheckable(true);
     cameraViewAction->setChecked(true);

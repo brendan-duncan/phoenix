@@ -1,5 +1,8 @@
 #include "phoenix_view.h"
 #include "theme.h"
+#include "../edit/pegs.h"
+
+#include <optional>
 
 #include "../edit/guide_command.h"
 #include "../edit/timeline_edit.h"
@@ -676,8 +679,65 @@ void PhoenixView::paintEvent(QPaintEvent *event)
         painter.restore();
     }
 
+    if (!_exporting)
+        drawPegs(painter);
+
     // Guides over the art, rulers over everything.
     drawRulersAndGuides(painter);
+}
+
+void PhoenixView::setLightTable(bool on)
+{
+    _lightTable = on;
+    clearCaches();
+    update();
+}
+
+void PhoenixView::drawPegs(QPainter& painter)
+{
+    // A peg draws nothing of its own; while editing, its pivot shows as a
+    // crosshair in a circle, in its layer's color, where its children turn.
+    if (!_flaDocument || !_flaDocument->document)
+        return;
+    const fla::Timeline* timeline = scopeTimeline() ? scopeTimeline() : _flaDocument->document->currentScene();
+    if (!timeline)
+        return;
+    const int frame = shownFrame();
+    painter.save();
+    painter.setRenderHint(QPainter::Antialiasing, true);
+    for (const fla::Layer* layer : timeline->layers)
+    {
+        if (!layer || !layer->isVisible())
+            continue;
+        const LayerFrame state = resolveLayerFrame(layer, fla::LoopType::PlayOnce, 0);
+        if (!state.frame)
+            continue;
+        for (size_t i = 0; i < state.frame->elements.size(); ++i)
+        {
+            const auto* instance = dynamic_cast<const fla::SymbolInstance*>(state.frame->elements[i]);
+            if (!instance || !instance->symbol || !fla::pegs::isPeg(*instance->symbol))
+                continue;
+            const fla::Transform shown = shownTransform(state, i);
+            const QTransform placed = QTransform(shown.m11, shown.m12, shown.m21, shown.m22, shown.tx, shown.ty) *
+                                      parentingAt(layer, state.frame, frame);
+            const QPointF at = stageToWidget(placed.map(QPointF(0.0, 0.0)));
+            const QColor ink(layer->color[0], layer->color[1], layer->color[2]);
+            painter.setTransform(QTransform());
+            painter.setPen(QPen(QColor(0, 0, 0, 120), 3.0));
+            painter.setBrush(Qt::NoBrush);
+            painter.drawEllipse(at, 9.0, 9.0);
+            painter.setPen(QPen(ink, 1.6));
+            painter.drawEllipse(at, 9.0, 9.0);
+            painter.drawLine(at + QPointF(-14.0, 0.0), at + QPointF(14.0, 0.0));
+            painter.drawLine(at + QPointF(0.0, -14.0), at + QPointF(0.0, 14.0));
+            // Which way it faces: a tick along its own x axis.
+            const QPointF along = stageToWidget(placed.map(QPointF(24.0, 0.0))) - at;
+            const double length = std::hypot(along.x(), along.y());
+            if (length > 0.5)
+                painter.drawLine(at, at + along / length * 22.0);
+        }
+    }
+    painter.restore();
 }
 
 void PhoenixView::drawStageContents(QPainter& painter, const fla::Document* document)
@@ -1116,6 +1176,21 @@ void PhoenixView::drawTimeline(QPainter& painter, const fla::Timeline* timeline,
         maskCache[i] = { maskPixmap, crop };
     }
 
+    // The light table fades every layer but the one drawn on.
+    const bool lightTable = editing && _lightTable &&
+        std::any_of(timeline->layers.begin(), timeline->layers.end(), [](const fla::Layer* layer) { return layer && layer->selected; });
+    struct Faded
+    {
+        QPainter& painter;
+        Faded(QPainter& p, qreal opacity)
+            : painter(p)
+        {
+            painter.save();
+            painter.setOpacity(painter.opacity() * opacity);
+        }
+        ~Faded() { painter.restore(); }
+    };
+
     // Second pass: draw layers with masks applied
     for (int i = timeline->layers.size() - 1; i >= 0; --i)
     {
@@ -1127,6 +1202,9 @@ void PhoenixView::drawTimeline(QPainter& painter, const fla::Timeline* timeline,
         if (_onlyLayer && layer != _onlyLayer &&
             std::find(timeline->layers.begin(), timeline->layers.end(), _onlyLayer) != timeline->layers.end())
             continue;
+        std::optional<Faded> faded;
+        if (lightTable && !layer->selected)
+            faded.emplace(painter, 0.3);
         if (layer->layerType == fla::Layer::Type::Mask)
         {
             // An unlocked mask, while editing, is art like any other.

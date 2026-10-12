@@ -264,6 +264,11 @@ public:
     /// after green, as Animate draws them.
     void setOnionSkin(bool on, int before, int after);
 
+    /// Light Table: while drawing, every layer but the one drawn on shows
+    /// faded behind it, as on Harmony's light table.
+    void setLightTable(bool on);
+    bool lightTable() const { return _lightTable; }
+
     /// How the onion skin draws: frames as outlines, only keyframes, how
     /// strongly, and the colors of the frames before and after.
     void setOnionStyle(bool outline, bool keyframesOnly, double opacity, const QColor& before, const QColor& after);
@@ -673,6 +678,9 @@ private:
 
     const fla::Layer* _onlyLayer = nullptr;
     bool _onionSkin = false;
+    bool _lightTable = false;
+    /// Pegs (instances of a peg symbol) drawn as their crosshairs.
+    void drawPegs(QPainter& painter);
     int _onionBefore = 2;
     int _onionAfter = 2;
     bool _onionOutline = false;
