@@ -827,6 +827,70 @@ bool bend(std::string& xml, double time, double end, double x, double y)
     return true;
 }
 
+bool rebase(std::string& xml, const MotionState& from, const MotionState& to)
+{
+    tinyxml2::XMLDocument document;
+    if (document.Parse(xml.c_str()) != tinyxml2::XML_SUCCESS)
+        return false;
+    tinyxml2::XMLElement* core = coreOf(document);
+    if (!core)
+        return false;
+    std::vector<tinyxml2::XMLElement*> found;
+    properties(core, found);
+    for (tinyxml2::XMLElement* property : found)
+    {
+        const char* id = property->Attribute("id");
+        if (!id)
+            continue;
+        double add = 0.0;
+        double times = 1.0;
+        if (std::strcmp(id, "Rotation_Z") == 0)
+            add = to.rotation - from.rotation;
+        else if (std::strcmp(id, "Skew_X") == 0)
+            add = to.skewX - from.skewX;
+        else if (std::strcmp(id, "Skew_Y") == 0)
+            add = to.skewY - from.skewY;
+        else if (std::strcmp(id, "Scale_X") == 0 && from.scaleX != 0.0)
+            times = to.scaleX / from.scaleX;
+        else if (std::strcmp(id, "Scale_Y") == 0 && from.scaleY != 0.0)
+            times = to.scaleY / from.scaleY;
+        else
+            continue;
+        for (tinyxml2::XMLElement* key = property->FirstChildElement("Keyframe"); key;
+             key = key->NextSiblingElement("Keyframe"))
+        {
+            for (const char* name : {"anchor", "next", "previous"})
+            {
+                double a = 0.0;
+                double b = 0.0;
+                if (pair(key->Attribute(name), a, b))
+                    key->SetAttribute(name, (number(a) + "," + number(b * times + add)).c_str());
+            }
+        }
+    }
+    xml = print(document);
+    return true;
+}
+
+std::string wrapped(const std::string& text)
+{
+    tinyxml2::XMLDocument document;
+    if (document.Parse(text.c_str()) != tinyxml2::XML_SUCCESS)
+        return std::string();
+    tinyxml2::XMLElement* root = document.RootElement();
+    if (!root)
+        return std::string();
+    if (std::strcmp(root->Name(), "motionObjectXML") == 0)
+        return root->FirstChildElement("AnimationCore") ? print(document) : std::string();
+    if (std::strcmp(root->Name(), "AnimationCore") != 0)
+        return std::string();
+    tinyxml2::XMLDocument out;
+    tinyxml2::XMLElement* wrapper = out.NewElement("motionObjectXML");
+    out.InsertEndChild(wrapper);
+    wrapper->InsertEndChild(root->DeepClone(&out));
+    return print(out);
+}
+
 std::vector<PropertyKey> keysOf(const std::string& xml, const std::string& id)
 {
     std::vector<PropertyKey> keys;

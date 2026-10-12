@@ -594,29 +594,71 @@ bool setTween(Layer& layer, int index, bool classic)
     return true;
 }
 
+namespace {
+
+/// The one object a motion tween on \a span would move: a symbol instance
+/// or a text block alone on it.
+const Element* motionTarget(const Frame& span)
+{
+    if (span.elements.size() != 1 || !span.elements.front())
+        return nullptr;
+    const Element* element = span.elements.front();
+    return element->elementType() == Element::Type::SymbolInstance ||
+                   element->elementType() == Element::Type::StaticText
+        ? element : nullptr;
+}
+
+/// Makes \a span an object motion tween moving by \a xml, as Animate marks one.
+void markMotion(Frame& span, const std::string& xml)
+{
+    removeMotion(span);
+    span.tweenType = TweenType::None;
+    span.otherTweenType = "motion object";
+    span.motionTweenRotate = "none";
+    span.keyMode = "8195";
+    span.extraAttributes.push_back({"isMotionObject", "true"});
+    span.extraAttributes.push_back({"visibleAnimationKeyframes", "4194303"});
+    span.extraChildren.push_back(xml);
+}
+
+} // namespace
+
 bool createMotionTween(Layer& layer, int index, double frameRate,
     const std::function<std::pair<double, double>(const Element&)>& pivotOf)
 {
     Frame* span = spanAt(layer, index);
-    if (!span || motionOf(*span) || span->elements.size() != 1 || !span->elements.front())
-        return false;
-    const Element& element = *span->elements.front();
-    if (element.elementType() != Element::Type::SymbolInstance && element.elementType() != Element::Type::StaticText)
+    const Element* element = span ? motionTarget(*span) : nullptr;
+    if (!element || motionOf(*span))
         return false;
     const double fps = frameRate > 0.0 ? frameRate : 24.0;
     if (span->duration <= 1 && !nextOf(layer, span))
         insertFrames(layer, span->index, std::max(1, static_cast<int>(std::lround(fps))) - 1);
 
-    const std::pair<double, double> pivot = pivotOf ? pivotOf(element) : std::make_pair(0.5, 0.5);
-    removeMotion(*span);
-    span->tweenType = TweenType::None;
-    span->otherTweenType = "motion object";
-    span->motionTweenRotate = "none";
-    span->keyMode = "8195";
-    span->extraAttributes.push_back({"isMotionObject", "true"});
-    span->extraAttributes.push_back({"visibleAnimationKeyframes", "4194303"});
-    span->extraChildren.push_back(
-        motion::create(motion::stateOf(element.transform), span->duration, fps, pivot.first, pivot.second));
+    const std::pair<double, double> pivot = pivotOf ? pivotOf(*element) : std::make_pair(0.5, 0.5);
+    markMotion(*span,
+        motion::create(motion::stateOf(element->transform), span->duration, fps, pivot.first, pivot.second));
+    return true;
+}
+
+bool pasteMotion(Layer& layer, int index, const std::string& xml, double frameRate)
+{
+    Frame* span = spanAt(layer, index);
+    const Element* element = span ? motionTarget(*span) : nullptr;
+    MotionObject copied;
+    std::string motion = motion::wrapped(xml);
+    if (!element || motion.empty() || !copied.parse(motion))
+        return false;
+    const double fps = frameRate > 0.0 ? frameRate : 24.0;
+    // The span at the layer's end grows to the motion's length; otherwise
+    // the motion is fitted to the span.
+    const int frames = std::max(1, static_cast<int>(std::lround(copied.frames(fps))));
+    if (!nextOf(layer, span) && frames > span->duration)
+        insertFrames(layer, span->index + span->duration - 1, frames - span->duration);
+    // Turned and scaled from where the object is, not where the one it was
+    // copied from was.
+    motion::rebase(motion, copied.at(0.0, fps), motion::stateOf(element->transform));
+    markMotion(*span, motion);
+    fitMotionSpans(layer);
     return true;
 }
 

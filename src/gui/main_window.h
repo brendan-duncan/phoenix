@@ -197,6 +197,14 @@ private slots:
     void setClassicTween(bool on);
     void createShapeTween();
     void createMotionTween();
+    /// The object motion tween in hand: the selected object's, or the
+    /// current layer's at the playhead; null when there is none.
+    fla::Frame* currentMotionSpan();
+    void copyMotion();
+    /// Paste Motion onto the selected frames (or the current layer at the
+    /// playhead); false when nothing took it.
+    bool pasteMotion(const std::string& motion);
+    void showMotionPresets();
     void moveKeyframe(const fla::Layer* layer, int from, int to);
     /// A span Ctrl-dragged to \a duration frames: frames go in or come out
     /// at its end, and what follows moves along.
@@ -402,6 +410,8 @@ private:
     QDockWidget* _infoDock = nullptr;
     class MotionEditorPanel* _motionEditor = nullptr;
     QDockWidget* _motionEditorDock = nullptr;
+    /// What Copy Motion copied, a motionObjectXML.
+    std::string _copiedMotion;
     QDockWidget* _framePickerDock = nullptr;
     class ColorPanel* _colorPanel = nullptr;
     QDockWidget* _colorDock = nullptr;

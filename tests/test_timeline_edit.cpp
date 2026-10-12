@@ -441,3 +441,46 @@ TEST(create_motion_tween_on_a_symbol_instance)
     CHECK(l->frames[0]->duration == 1 && l->frames[0]->otherTweenType.empty() && l->frames[0]->keyMode.empty());
     CHECK(fla::timeline::motionOf(*l->frames[0]) == nullptr);
 }
+
+TEST(paste_motion_onto_another_instance)
+{
+    // Copied: a slide 100 px right while turning from 10 to 40 degrees,
+    // over 10 frames at 10 fps.
+    fla::MotionState start;
+    start.rotation = 10.0;
+    std::string copied = fla::motion::create(start, 10, 10.0);
+    fla::MotionState end = start;
+    end.x = 100.0;
+    end.rotation = 40.0;
+    CHECK(fla::motion::setKeys(copied, 27000.0, end));
+
+    std::unique_ptr<fla::Layer> layer(new fla::Layer(nullptr));
+    fla::Layer* l = layer.get();
+    fla::Frame* frame = new fla::Frame(l);
+    frame->duration = 3;
+    l->frames = {frame};
+    auto* instance = new fla::SymbolInstance(frame);
+    frame->elements.push_back(instance);
+
+    fla::EditFramesCommand paste({l}, "Paste Motion", [l, copied](std::vector<fla::Frame*>&) {
+        fla::timeline::pasteMotion(*l, 0, copied, 10.0);
+    });
+    paste.redo();
+    CHECK(paste.changedAnything());
+    // The span grew to the motion's length; the turn starts from this
+    // object's (none), still turning 30 degrees.
+    CHECK(l->frames[0]->duration == 10);
+    fla::MotionObject motion;
+    CHECK(motion.parse(*fla::timeline::motionOf(*l->frames[0])));
+    CHECK_NEAR(motion.at(0.0, 10.0).rotation, 0.0);
+    CHECK_NEAR(motion.at(9.0, 10.0).rotation, 30.0);
+    CHECK_NEAR(motion.at(9.0, 10.0).x, 100.0);
+    paste.undo();
+    CHECK(l->frames[0]->duration == 3 && !fla::timeline::motionOf(*l->frames[0]));
+
+    // A bare AnimationCore, as a preset keeps it, pastes as well.
+    const std::string core = copied.substr(copied.find("<AnimationCore"),
+        copied.find("</motionObjectXML>") - copied.find("<AnimationCore"));
+    CHECK(fla::timeline::pasteMotion(*l, 0, core, 10.0));
+    CHECK(!fla::timeline::pasteMotion(*l, 0, "<nothing/>", 10.0));
+}

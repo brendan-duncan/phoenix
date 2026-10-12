@@ -115,6 +115,13 @@ void fitMotionSpans(Layer& layer);
 bool createMotionTween(Layer& layer, int index, double frameRate,
     const std::function<std::pair<double, double>(const Element&)>& pivotOf = {});
 
+/// Paste Motion: the span at \a index moves its one symbol instance or text
+/// block by \a xml (a motionObjectXML, or a bare AnimationCore as a motion
+/// preset keeps it), turned and scaled from where the object is. A span at
+/// the layer's end grows to the motion's length. False when the span holds
+/// anything else or \a xml is not a motion.
+bool pasteMotion(Layer& layer, int index, const std::string& xml, double frameRate);
+
 } // namespace timeline
 
 /// An undoable edit of some layers' frames. The edit runs on the first

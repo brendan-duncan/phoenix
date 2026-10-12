@@ -20,6 +20,7 @@
 #include "color_panel.h"
 #include "arrange_panels.h"
 #include "motion_editor.h"
+#include "motion_presets.h"
 #include "swatches_panel.h"
 #include "../edit/swatches.h"
 #include "swap_symbol_dialog.h"
@@ -520,21 +521,7 @@ void MainWindow::adoptDocument(fla::FLADocument* document, const QString& filePa
     // The Motion Editor, below the stage as in Animate, closed until asked.
     MotionEditorLinks motionLinks;
     motionLinks.commands = [this]() { return &_editContext.commandStack(); };
-    motionLinks.span = [this]() -> fla::Frame* {
-        // The selected object's tween, or the current layer's at the playhead.
-        if (!_phoenixView)
-            return nullptr;
-        const std::vector<PhoenixView::MotionPath> paths = _phoenixView->motionPaths();
-        if (!paths.empty())
-            return paths.front().frame;
-        fla::Timeline* timeline = nullptr;
-        int index = 0;
-        if (!_timelineView || !_timelineView->currentLayer(timeline, index) || !timeline || index < 0 ||
-            index >= static_cast<int>(timeline->layers.size()))
-            return nullptr;
-        fla::Frame* frame = fla::timeline::spanAt(*timeline->layers[index], _player ? _player->currentFrame() : 0);
-        return frame && fla::timeline::motionOf(*frame) ? frame : nullptr;
-    };
+    motionLinks.span = [this]() { return currentMotionSpan(); };
     motionLinks.currentFrame = [this]() { return _player ? _player->currentFrame() : 0; };
     motionLinks.frameRate = [this]() {
         return _flaDocument && _flaDocument->document && _flaDocument->document->frameRate > 0.0
@@ -1051,6 +1038,91 @@ void MainWindow::createMotionTween()
         for (int index = first; index <= last; ++index)
             fla::timeline::createMotionTween(layer, index, rate, pivotOf);
     });
+}
+
+fla::Frame* MainWindow::currentMotionSpan()
+{
+    // The selected object's tween, or the current layer's at the playhead.
+    if (!_phoenixView)
+        return nullptr;
+    const std::vector<PhoenixView::MotionPath> paths = _phoenixView->motionPaths();
+    if (!paths.empty())
+        return paths.front().frame;
+    fla::Timeline* timeline = nullptr;
+    int index = 0;
+    if (!_timelineView || !_timelineView->currentLayer(timeline, index) || !timeline || index < 0 ||
+        index >= static_cast<int>(timeline->layers.size()))
+        return nullptr;
+    fla::Frame* frame = fla::timeline::spanAt(*timeline->layers[index], _player ? _player->currentFrame() : 0);
+    return frame && fla::timeline::motionOf(*frame) ? frame : nullptr;
+}
+
+void MainWindow::copyMotion()
+{
+    fla::Frame* span = currentMotionSpan();
+    const std::string* motion = span ? fla::timeline::motionOf(*span) : nullptr;
+    if (!motion)
+    {
+        statusBar()->showMessage("Copy Motion copies a motion tween: select its object or put the playhead in it.", 4000);
+        return;
+    }
+    _copiedMotion = *motion;
+    statusBar()->showMessage("Motion copied.", 2000);
+}
+
+bool MainWindow::pasteMotion(const std::string& motion)
+{
+    if (motion.empty())
+        return false;
+    const double rate = _flaDocument && _flaDocument->document && _flaDocument->document->frameRate > 0.0
+        ? _flaDocument->document->frameRate : 24.0;
+    // Onto the selected object's frame when one is selected on the stage.
+    const std::vector<fla::Element*> elements = selectedElements();
+    fla::Frame* target = elements.size() == 1 && elements.front()
+        ? dynamic_cast<fla::Frame*>(elements.front()->parent) : nullptr;
+    fla::Layer* targetLayer = target ? dynamic_cast<fla::Layer*>(target->parent) : nullptr;
+    if (targetLayer)
+    {
+        const int index = target->index;
+        _selection.clear();
+        auto* command = new fla::EditFramesCommand({targetLayer}, "Paste Motion",
+            [targetLayer, index, motion, rate](std::vector<fla::Frame*>&) {
+                fla::timeline::pasteMotion(*targetLayer, index, motion, rate);
+            });
+        command->redo();
+        const bool changed = command->changedAnything();
+        command->undo();
+        if (!changed)
+        {
+            delete command;
+            return false;
+        }
+        _editContext.commandStack().push(fla::CommandPtr(command));
+        _editContext.commandStack().breakMergeChain();
+        _phoenixView->clearCaches();
+        _phoenixView->update();
+        if (_timelineView)
+            _timelineView->refreshFrames();
+        return true;
+    }
+    const fla::Command* before = _editContext.commandStack().topCommand();
+    editFrames("Paste Motion", [motion, rate](fla::Layer& layer, int first, int last, std::vector<fla::Frame*>&) {
+        for (int index = first; index <= last; ++index)
+            fla::timeline::pasteMotion(layer, index, motion, rate);
+    });
+    return _editContext.commandStack().topCommand() != before;
+}
+
+void MainWindow::showMotionPresets()
+{
+    MotionPresetsDialog dialog(
+        [this]() {
+            fla::Frame* span = currentMotionSpan();
+            const std::string* motion = span ? fla::timeline::motionOf(*span) : nullptr;
+            return motion ? *motion : std::string();
+        },
+        [this](const std::string& motion) { return pasteMotion(motion); }, this);
+    dialog.exec();
 }
 
 void MainWindow::resizeSpan(const fla::Layer* constLayer, int keyframe, int duration)
@@ -1621,6 +1693,18 @@ void MainWindow::setupMenus()
     QAction* pasteOverwriteAction = editTimelineMenu->addAction("Paste and &Overwrite Frames");
     connect(pasteOverwriteAction, &QAction::triggered, this, &MainWindow::pasteFramesOverwrite);
     editTimelineMenu->addSeparator();
+    QAction* copyMotionAction = editTimelineMenu->addAction("Copy &Motion");
+    copyMotionAction->setStatusTip("Copy the motion of the selected motion tween");
+    connect(copyMotionAction, &QAction::triggered, this, &MainWindow::copyMotion);
+    QAction* pasteMotionAction = editTimelineMenu->addAction("Paste Mo&tion");
+    pasteMotionAction->setStatusTip("Move the selected object by the motion copied");
+    connect(pasteMotionAction, &QAction::triggered, this, [this]() {
+        if (_copiedMotion.empty())
+            statusBar()->showMessage("Copy a motion first.", 3000);
+        else if (!pasteMotion(_copiedMotion))
+            statusBar()->showMessage("Paste Motion moves one symbol instance or text block alone on its frame.", 4000);
+    });
+    editTimelineMenu->addSeparator();
     QAction* reverseAction = editTimelineMenu->addAction("&Reverse Frames");
     reverseAction->setStatusTip("Play the selected frames backward");
     connect(reverseAction, &QAction::triggered, this, &MainWindow::reverseFrames);
@@ -1636,6 +1720,8 @@ void MainWindow::setupMenus()
     _framesMenu->addAction(classicTweenAction);
     _framesMenu->addAction(shapeTweenAction);
     _framesMenu->addAction(removeTweenAction);
+    _framesMenu->addAction(copyMotionAction);
+    _framesMenu->addAction(pasteMotionAction);
     _framesMenu->addSeparator();
     _framesMenu->addAction(insertFrameAction);
     _framesMenu->addAction(removeFramesAction);
@@ -1858,6 +1944,9 @@ void MainWindow::setupMenus()
     QAction* infoAction = viewMenu->addAction("&Info");
     infoAction->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_I));
     connect(infoAction, &QAction::triggered, this, showDock(&_infoDock));
+    QAction* motionPresetsAction = viewMenu->addAction("Motion &Presets…");
+    motionPresetsAction->setStatusTip("Saved motions to put on an object, Animate's among them");
+    connect(motionPresetsAction, &QAction::triggered, this, &MainWindow::showMotionPresets);
     QAction* motionEditorAction = viewMenu->addAction("&Motion Editor");
     motionEditorAction->setStatusTip("The property curves of a motion tween, with their keyframes and eases");
     connect(motionEditorAction, &QAction::triggered, this, [this]() {

@@ -133,6 +133,16 @@ bool moveStart(std::string& xml, double dx, double dy);
 /// \a time gets one at \a end, the tween's end, holding where it was.
 bool bend(std::string& xml, double time, double end, double x, double y);
 
+/// The motion moved onto an object that starts as \a to rather than \a from:
+/// its turns and skews moved by the difference, its scales in proportion.
+/// Its offsets are as they were. What Paste Motion does to what it pastes.
+bool rebase(std::string& xml, const MotionState& from, const MotionState& to);
+
+/// A motion as text, the motionObjectXML element, from \a text that is that
+/// or a bare AnimationCore (as Animate's motion presets keep it). Empty when
+/// it is neither.
+std::string wrapped(const std::string& text);
+
 /// One keyframe of a property's curve, as the Motion Editor edits it: a
 /// value at a time (TimeScale units) and its handles, each a time offset
 /// from the keyframe and a value.
