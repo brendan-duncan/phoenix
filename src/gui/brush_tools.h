@@ -38,10 +38,11 @@ QPainterPath sweptOutline(const std::vector<fla::BrushDab>& dabs, double zoom, b
 /// fill and no outline, and merges like any other drawing, so passes of one
 /// color run together without seams.
 ///
-/// - **Fluid Brush**, Animate's: width from pressure and speed, tapered
-///   ends, smoothing, and an elliptical tip with roundness and angle.
-/// - **Classic Brush**, Animate's (Flash's) brush: one of Flash's tip
-///   shapes, with Use Pressure and Use Tilt, which turns the tip.
+/// - **Flow Brush** (Animate's Fluid Brush): width from pressure and
+///   speed, tapered ends, smoothing, and an elliptical tip with roundness
+///   and angle.
+/// - **Nib Brush** (Animate's Classic Brush, Flash's brush): a shaped nib,
+///   with Use Pressure and Use Tilt, which turns the nib.
 /// - **Ink Brush**, Phoenix's own: a stabilizer for steady lines, a
 ///   pressure response curve, and tilt that broadens the line.
 ///

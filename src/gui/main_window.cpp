@@ -3233,16 +3233,16 @@ void MainWindow::setupToolBar()
     addSlot({makeTool(ToolIcons::Tool::Pencil, "Pencil", Qt::Key_D,
         "Draw freehand. The stroke is fitted on release; the mode is in the Properties panel.",
         [this]() -> Tool* { return _pencilTool.get(); })});
-    // Animate's two brushes and Phoenix's own share a slot; B is the Fluid
-    // Brush's, as in Animate.
+    // The Flow, Nib and Ink brushes share a slot; B is the Flow Brush's, as
+    // it is the brush Animate gives B.
     addSlot({
-        makeTool(ToolIcons::Tool::FluidBrush, "Fluid Brush", Qt::Key_B,
+        makeTool(ToolIcons::Tool::FluidBrush, "Flow Brush", Qt::Key_B,
             "Paint a fill whose width follows the pen's pressure and speed, with tapered ends "
             "and a smoothed line. Settings are in the Properties panel.",
             [this]() -> Tool* { return _brushTool.get(); }),
-        makeTool(ToolIcons::Tool::Brush, "Classic Brush", Qt::Key_unknown,
-            "Paint a fill with one of Flash's brush shapes. Use Pressure varies the width; "
-            "Use Tilt turns the tip with the pen.",
+        makeTool(ToolIcons::Tool::Brush, "Nib Brush", Qt::Key_unknown,
+            "Paint a fill with a shaped nib: round, oval, square or slanted. Use Pressure varies "
+            "the width; Use Tilt turns the nib with the pen.",
             [this]() -> Tool* { return _classicBrushTool.get(); }),
         makeTool(ToolIcons::Tool::InkBrush, "Ink Brush", Qt::Key_unknown,
             "Paint steady inked lines: a stabilizer trails the pen, the pressure response is "

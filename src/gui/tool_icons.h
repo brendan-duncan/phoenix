@@ -32,7 +32,7 @@ public:
         PaintBucket,
         InkBottle,
         Eyedropper,
-        /// The Classic Brush.
+        /// The Nib Brush.
         Brush,
         FluidBrush,
         InkBrush,

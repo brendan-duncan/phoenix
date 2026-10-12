@@ -862,7 +862,7 @@ void PropertiesPanel::buildToolTab()
     const QString precisionTip = "How closely the finished outline follows the stroke; lower is smoother "
         "with fewer points";
 
-    // Fluid Brush, as Animate's.
+    // Flow Brush (Animate's Fluid Brush).
     const BrushMember fluid = &fla::DrawingStyle::fluidBrush;
     brushNumber(fluid, IconTool::FluidBrush, "Size", 1.0, 200.0, 1, " px", sizeTip, sizeOf, setSize);
     brushCheck(fluid, IconTool::FluidBrush, "Pressure", "Let a pen's pressure vary the width", pressureOf,
@@ -887,7 +887,7 @@ void PropertiesPanel::buildToolTab()
         "The tip's turn, clockwise", [](const Brush& b) { return b.angle; },
         [](Brush& b, double v) { b.angle = v; });
 
-    // Classic Brush, as Animate's (Flash's): its tip shapes, Use Pressure and
+    // Nib Brush (Animate's Classic Brush, Flash's): its nib shapes, Use Pressure and
     // Use Tilt.
     const BrushMember classic = &fla::DrawingStyle::classicBrush;
     struct TipShape
@@ -902,9 +902,9 @@ void PropertiesPanel::buildToolTab()
         {Brush::Tip::Rectangle, 20.0, 90.0}, {Brush::Tip::Rectangle, 20.0, -45.0},
         {Brush::Tip::Rectangle, 20.0, 45.0}};
     brushNumber(classic, IconTool::Brush, "Size", 1.0, 200.0, 1, " px", sizeTip, sizeOf, setSize);
-    brushChoice(classic, IconTool::Brush, "Brush shape",
+    brushChoice(classic, IconTool::Brush, "Nib shape",
         {"Round", "Oval", "Square", "Rectangle", "Vertical line", "Diagonal /", "Diagonal \\"},
-        "The shape of the tip, as Flash's brush offers them",
+        "The shape of the nib",
         [](const Brush& b) {
             for (int i = 0; i < 7; ++i)
             {

@@ -333,8 +333,8 @@ private:
     std::unique_ptr<MagicWandTool> _magicWandTool;
     std::unique_ptr<RotationTool> _rotationTool;
     std::unique_ptr<TimeScrubTool> _timeScrubTool;
-    /// Animate's Fluid Brush (the B key's), its Classic Brush, and the Ink
-    /// Brush, sharing the toolbox slot.
+    /// The Flow Brush (the B key's), the Nib Brush and the Ink Brush,
+    /// sharing the toolbox slot.
     std::unique_ptr<BrushTool> _brushTool;
     std::unique_ptr<BrushTool> _classicBrushTool;
     std::unique_ptr<BrushTool> _inkBrushTool;

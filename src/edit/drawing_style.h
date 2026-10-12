@@ -114,8 +114,8 @@ public:
     /// The eraser's width, in pixels.
     double eraserSize = 12.0;
 
-    /// Each brush's own settings: Animate's Fluid Brush and Classic Brush,
-    /// and Phoenix's Ink Brush. Pressure is on in all three; a mouse always
+    /// Each brush's own settings: the Flow Brush (fluidBrush), the Nib Brush
+    /// (classicBrush) and the Ink Brush. Pressure is on in all three; a mouse always
     /// paints at full width.
     BrushSettings fluidBrush = BrushSettings::fluidDefaults();
     BrushSettings classicBrush = BrushSettings::classicDefaults();

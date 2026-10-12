@@ -22,12 +22,12 @@ struct BrushSample
 /// The settings of one brush, as its Properties panel sets them. The three
 /// brushes share them and differ in which they show and their defaults:
 ///
-/// - Animate's **Fluid Brush** varies the width with pressure and speed,
-///   tapers the ends, smooths the line and has an elliptical tip with a
-///   roundness and an angle.
-/// - Animate's **Classic Brush** is Flash's brush: a tip of one of Flash's
-///   shapes, with Use Pressure for the width and Use Tilt turning the tip
-///   with the pen.
+/// - The **Flow Brush** (Animate's Fluid Brush) varies the width with
+///   pressure and speed, tapers the ends, smooths the line and has an
+///   elliptical tip with a roundness and an angle.
+/// - The **Nib Brush** (Animate's Classic Brush, Flash's brush) has a shaped
+///   nib, with Use Pressure for the width and Use Tilt turning the nib with
+///   the pen.
 /// - Phoenix's **Ink Brush** adds what the others lack: a stabilizer that
 ///   trails the pen on a string for steady lines, a pressure response curve,
 ///   and tilt that broadens the line as a tilted pencil does.
@@ -41,7 +41,7 @@ struct BrushSettings
         Rectangle
     };
 
-    /// How the speed of the stroke changes its width (Fluid Brush).
+    /// How the speed of the stroke changes its width (Flow Brush).
     enum class Velocity
     {
         None,
@@ -54,7 +54,7 @@ struct BrushSettings
     /// What the pen's tilt does, when it is used.
     enum class TiltEffect
     {
-        /// Turns the tip to the direction the pen leans (Classic Brush).
+        /// Turns the tip to the direction the pen leans (Nib Brush).
         Angle,
         /// Broadens the line the further the pen leans (Ink Brush).
         Width
