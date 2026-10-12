@@ -108,6 +108,20 @@ QColor highlightColorFor(const fla::Element* element)
 /// start angle clockwise to its end angle, with a hole or a notch of the
 /// inner radius (a percentage of the outer). Animate measures angles
 /// clockwise from three o'clock; Qt's arcs run the other way.
+/// An oval primitive with Close Path switched off and a part of the oval
+/// cut away: Animate draws its arc as an open line, with no fill.
+bool ovalIsOpen(const fla::OvalPrimitive& oval)
+{
+    bool closed = true;
+    for (const auto& attribute : oval.extraAttributes)
+    {
+        if (attribute.first == "closePath")
+            closed = attribute.second != "false";
+    }
+    const double sweep = std::fmod(std::fmod(oval.endAngle - oval.startAngle, 360.0) + 360.0, 360.0);
+    return !closed && sweep != 0.0;
+}
+
 QPainterPath ovalPrimitivePath(const fla::OvalPrimitive& oval)
 {
     const QRectF outer(QPointF(oval.rect.topLeft.x, oval.rect.topLeft.y),
@@ -133,6 +147,16 @@ QPainterPath ovalPrimitivePath(const fla::OvalPrimitive& oval)
 
     path.arcMoveTo(outer, -oval.startAngle);
     path.arcTo(outer, -oval.startAngle, -sweep);
+    if (ovalIsOpen(oval))
+    {
+        // Close Path off: the arcs alone, a line rather than a wedge.
+        if (inner > 0.0)
+        {
+            path.arcMoveTo(hole, -oval.startAngle);
+            path.arcTo(hole, -oval.startAngle, -sweep);
+        }
+        return path;
+    }
     if (inner > 0.0)
         path.arcTo(hole, -oval.endAngle, sweep);
     else
@@ -1724,7 +1748,7 @@ void PhoenixView::drawElement(QPainter& painter, const fla::Element* element, co
     {
         const fla::OvalPrimitive* oval = static_cast<const fla::OvalPrimitive*>(element);
         QPen pen = getPen(oval->strokeStyle);
-        QBrush brush = getFillBrush(oval->fillStyle, oval->localBounds);
+        QBrush brush = ovalIsOpen(*oval) ? QBrush(Qt::NoBrush) : getFillBrush(oval->fillStyle, oval->localBounds);
         painter.setPen(pen);
         painter.setBrush(brush);
         painter.drawPath(ovalPrimitivePath(*oval));
