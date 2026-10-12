@@ -128,6 +128,8 @@ signals:
     /// A bitmap's or a sound's settings, in a dialog.
     void bitmapPropertiesRequested(const QString& name);
     void soundPropertiesRequested(const QString& name);
+    /// Properties of a video in the library.
+    void videoPropertiesRequested(const QString& name);
     /// Generate Sprite Sheet on a symbol.
     void spriteSheetRequested(const QString& name);
     /// The bitmaps chosen, read again from the files they came from.
@@ -154,7 +156,8 @@ private:
         Symbol,
         Bitmap,
         Sound,
-        Font
+        Font,
+        Video
     };
 
     QTreeWidgetItem* folderItem(const QString& path);

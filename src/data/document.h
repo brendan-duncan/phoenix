@@ -95,6 +95,22 @@ public:
     };
     std::vector<SoundInfo> sounds;
 
+    /// The library's videos, as read (the items themselves are kept in
+    /// extraMedia and written back as they came): their size in pixels,
+    /// their frame rate and where they were imported from.
+    struct VideoInfo
+    {
+        std::string name;
+        int width = 0;
+        int height = 0;
+        double fps = 0.0;
+        std::string source;
+        /// Whether the video's frames are in the file (embedded) rather
+        /// than linked.
+        bool embedded = false;
+    };
+    std::vector<VideoInfo> videos;
+
     /// What a .phx file held that this Phoenix does not know: whole chunks,
     /// written back unchanged on save, and the Phoenix-only features the
     /// document uses (docs/PHOENIX_FORMAT.md).

@@ -6999,6 +6999,30 @@ void MainWindow::setupPropertiesPanel()
     connect(_libraryPanel, &LibraryPanel::updateBitmapsRequested, this, &MainWindow::updateBitmaps);
     connect(_libraryPanel, &LibraryPanel::editBitmapWithRequested, this, &MainWindow::editBitmapWith);
     connect(_libraryPanel, &LibraryPanel::soundPropertiesRequested, this, &MainWindow::soundProperties);
+    connect(_libraryPanel, &LibraryPanel::videoPropertiesRequested, this, [this](const QString& name) {
+        const fla::Document* document = _flaDocument ? _flaDocument->document : nullptr;
+        if (!document)
+            return;
+        for (const fla::Document::VideoInfo& video : document->videos)
+        {
+            if (QString::fromStdString(video.name) != name)
+                continue;
+            QStringList lines;
+            lines << QString("<b>%1</b>").arg(name.toHtmlEscaped());
+            lines << (video.embedded ? QString("Embedded in the document") : QString("Linked to its file"));
+            if (video.width > 0 && video.height > 0)
+                lines << QString("%1 x %2 pixels").arg(video.width).arg(video.height);
+            if (video.fps > 0.0)
+                lines << QString("%1 frames a second").arg(video.fps, 0, 'g', 4);
+            if (!video.source.empty())
+                lines << QString("Imported from %1").arg(QString::fromStdString(video.source).toHtmlEscaped());
+            lines << QString("Phoenix keeps the video and its placements as they are, and shows each placement as "
+                             "a frame; it does not play the video. To animate over footage, use File &gt; Import &gt; "
+                             "Import Video.");
+            QMessageBox::information(this, "Video Properties", lines.join("<br>"));
+            return;
+        }
+    });
     connect(_libraryPanel, &LibraryPanel::spriteSheetRequested, this, [this](const QString& name) { exportSpriteSheet(name); });
     connect(_libraryPanel, &LibraryPanel::newSymbolRequested, this, &MainWindow::newSymbol);
     _libraryPanel->setCanPaste([this]() {
@@ -7798,6 +7822,7 @@ void MainWindow::importArtwork(const QString& path, bool toStage, const QPointF*
                 folder = current->parentLayer;
         }
         int insertAt = std::max(0, index);
+        bool clippedLayers = false;
         const double dx = at ? at->x() - image.width / 2.0 : 0.0;
         const double dy = at ? at->y() - image.height / 2.0 : 0.0;
         std::function<void(const std::vector<fla::psd::Layer>&, fla::Layer*)> addLayers =
@@ -7817,7 +7842,7 @@ void MainWindow::importArtwork(const QString& path, bool toStage, const QPointF*
                     layer->autoNamed = false;
                     layer->parentLayer = parent;
                     layer->visible = !source.hidden;
-                    if (!source.group && !layer->frames.empty())
+                    if (!source.group && !layer->frames.empty() && source.blend.empty())
                     {
                         fla::Frame* first = layer->frames.front();
                         fla::BitmapInstance* instance = new fla::BitmapInstance(first);
@@ -7826,12 +7851,52 @@ void MainWindow::importArtwork(const QString& path, bool toStage, const QPointF*
                         instance->transform.ty = dy + source.top;
                         first->elements.push_back(instance);
                     }
+                    else if (!source.group && !layer->frames.empty())
+                    {
+                        // Animate blends movie clips only: the layer's bitmap
+                        // goes in one, which takes the blend.
+                        if (!document->symbolList)
+                            document->symbolList = new fla::SymbolList(document);
+                        std::string symbolName = itemName + " Blend";
+                        for (int n = 2; !fla::library::nameIsFree(*document, symbolName); ++n)
+                            symbolName = itemName + " Blend " + std::to_string(n);
+                        auto* symbol = new fla::Symbol(document->symbolList);
+                        symbol->name = symbolName;
+                        symbol->href = symbolName + ".xml";
+                        symbol->symbolType = fla::SymbolType::MovieClip;
+                        symbol->itemId = fla::media::newItemId();
+                        auto* inside = new fla::Timeline(symbol);
+                        inside->name = symbolName;
+                        fla::Layer* insideLayer = fla::newLayerFor(*inside, false);
+                        inside->layers.push_back(insideLayer);
+                        symbol->timelines.push_back(inside);
+                        if (!insideLayer->frames.empty())
+                        {
+                            auto* bitmap = new fla::BitmapInstance(insideLayer->frames.front());
+                            bitmap->libraryItemName = itemName;
+                            insideLayer->frames.front()->elements.push_back(bitmap);
+                        }
+                        stack.push(fla::CommandPtr(new fla::AddSymbolCommand(document, symbol, name)));
+                        fla::Frame* first = layer->frames.front();
+                        auto* clip = new fla::SymbolInstance(first);
+                        clip->libraryItemName = symbolName;
+                        clip->symbol = symbol;
+                        clip->symbolType = fla::SymbolType::MovieClip;
+                        clip->blendMode = source.blend;
+                        clip->transform.tx = dx + source.left;
+                        clip->transform.ty = dy + source.top;
+                        first->elements.push_back(clip);
+                    }
+                    if (source.clipped)
+                        clippedLayers = true;
                     stack.push(fla::CommandPtr(new fla::AddLayerCommand(timeline, insertAt++, layer, name)));
                     if (source.group)
                         addLayers(source.children, layer);
                 }
             };
         addLayers(image.layers, folder);
+        if (clippedLayers)
+            problems << QString("%1: layers clipped to the layer below came in unclipped.").arg(fileName);
         if (_timelineView)
             _timelineView->refresh();
         return;
@@ -7843,23 +7908,100 @@ void MainWindow::importArtwork(const QString& path, bool toStage, const QPointF*
     note(art.notes);
     const double dx = at ? at->x() - art.width / 2.0 : 0.0;
     const double dy = at ? at->y() - art.height / 2.0 : 0.0;
-    std::vector<fla::Shape*> shapes;
-    for (fla::vectors::Painted painted : art.paths)
+    const auto onStage = [&](const fla::vectors::Placement& p) {
+        return fla::Transform(p.a, p.b, p.c, p.d, p.tx + dx, p.ty + dy);
+    };
+    // Everything, in drawing order: paths as drawing objects, images as
+    // bitmaps placed, text as static text.
+    std::vector<fla::Element*> shapes;
+    std::vector<std::pair<fla::Bitmap*, bool>> newBitmaps;
+    const QDir folder = QFileInfo(path).absoluteDir();
+    std::vector<std::pair<fla::vectors::Artwork::Kind, size_t>> order = art.order;
+    if (order.empty())
+        for (size_t i = 0; i < art.paths.size(); ++i)
+            order.emplace_back(fla::vectors::Artwork::Kind::Path, i);
+    bool missingImage = false;
+    for (const auto& [kind, index] : order)
     {
-        for (fla::vectors::Subpath& subpath : painted.subpaths)
-            for (fla::vectors::Segment& segment : subpath.segments)
-                for (fla::Point& point : segment.points)
-                {
-                    point.x += dx;
-                    point.y += dy;
-                }
-        if (fla::Shape* shape = fla::vectors::toShape(painted))
-            shapes.push_back(shape);
+        if (kind == fla::vectors::Artwork::Kind::Path && index < art.paths.size())
+        {
+            fla::vectors::Painted painted = art.paths[index];
+            for (fla::vectors::Subpath& subpath : painted.subpaths)
+                for (fla::vectors::Segment& segment : subpath.segments)
+                    for (fla::Point& point : segment.points)
+                    {
+                        point.x += dx;
+                        point.y += dy;
+                    }
+            if (painted.gradient)
+            {
+                painted.gradient->placement.tx += dx;
+                painted.gradient->placement.ty += dy;
+            }
+            if (fla::Shape* shape = fla::vectors::toShape(painted))
+                shapes.push_back(shape);
+        }
+        else if (kind == fla::vectors::Artwork::Kind::Image && index < art.images.size())
+        {
+            const fla::vectors::Image& source = art.images[index];
+            QImage pixels;
+            if (!source.encoded.empty())
+                pixels.loadFromData(source.encoded.data(), static_cast<int>(source.encoded.size()));
+            else if (!source.rgba.empty())
+            {
+                pixels = QImage(source.width, source.height, QImage::Format_RGBA8888);
+                for (int y = 0; y < source.height; ++y)
+                    std::memcpy(pixels.scanLine(y), source.rgba.data() + static_cast<size_t>(y) * source.width * 4,
+                        static_cast<size_t>(source.width) * 4);
+            }
+            else if (!source.href.empty())
+                pixels.load(folder.filePath(QUrl::fromPercentEncoding(QByteArray::fromStdString(source.href))));
+            if (pixels.isNull())
+            {
+                missingImage = true;
+                continue;
+            }
+            fla::Bitmap* bitmap = MediaImport::bitmapFromImage(*document, pixels,
+                QFileInfo(path).completeBaseName() + " Image");
+            if (!bitmap)
+                continue;
+            stack.push(fla::CommandPtr(new fla::AddBitmapCommand(document, bitmap, name)));
+            auto* instance = new fla::BitmapInstance(nullptr);
+            instance->libraryItemName = bitmap->name;
+            // The placement takes the unit square; the bitmap is its pixels.
+            fla::Transform unit = onStage(source.placement);
+            const double sx = 1.0 / std::max(1, pixels.width());
+            const double sy = 1.0 / std::max(1, pixels.height());
+            instance->transform = fla::Transform(unit.m11 * sx, unit.m12 * sx, unit.m21 * sy, unit.m22 * sy, unit.tx, unit.ty);
+            shapes.push_back(instance);
+        }
+        else if (kind == fla::vectors::Artwork::Kind::Text && index < art.texts.size())
+        {
+            const fla::vectors::Text& source = art.texts[index];
+            auto* text = new fla::StaticText(nullptr);
+            text->autoExpand = true;
+            // The box's top above the baseline by the font's ascent.
+            text->left = 0.0;
+            text->top = -source.size * 0.9;
+            fla::TextRun run;
+            run.text = source.text;
+            run.face = source.family;
+            if (source.bold || source.italic)
+                run.face += std::string("-") + (source.bold ? "Bold" : "") + (source.italic ? "Italic" : "");
+            run.size = source.size;
+            for (int i = 0; i < 4; ++i)
+                run.fillColor[i] = source.color[static_cast<size_t>(i)];
+            text->runs.push_back(run);
+            text->transform = onStage(source.placement);
+            shapes.push_back(text);
+        }
     }
+    if (missingImage)
+        problems << QString("%1: an image it shows could not be found or read.").arg(fileName);
     if (shapes.empty())
     {
         if (art.notes.empty())
-            problems << QString("%1 has no paths to import.").arg(fileName);
+            problems << QString("%1 has no artwork to import.").arg(fileName);
         return;
     }
 
@@ -7867,7 +8009,7 @@ void MainWindow::importArtwork(const QString& path, bool toStage, const QPointF*
     {
         // Each path a drawing object, grouped as one piece of artwork.
         std::vector<fla::Element*> added;
-        for (fla::Shape* shape : shapes)
+        for (fla::Element* shape : shapes)
         {
             shape->parent = frame;
             stack.push(fla::CommandPtr(new fla::AddElementCommand(frame, shape, name, &_selection)));
@@ -7905,7 +8047,7 @@ void MainWindow::importArtwork(const QString& path, bool toStage, const QPointF*
     if (!layer->frames.empty())
     {
         fla::Frame* first = layer->frames.front();
-        for (fla::Shape* shape : shapes)
+        for (fla::Element* shape : shapes)
         {
             shape->parent = first;
             first->elements.push_back(shape);
@@ -7913,7 +8055,7 @@ void MainWindow::importArtwork(const QString& path, bool toStage, const QPointF*
     }
     else
     {
-        for (fla::Shape* shape : shapes)
+        for (fla::Element* shape : shapes)
             delete shape;
     }
     stack.push(fla::CommandPtr(new fla::AddSymbolCommand(document, symbol, name)));

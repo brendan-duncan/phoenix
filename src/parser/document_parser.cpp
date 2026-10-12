@@ -28,6 +28,8 @@
 
 namespace {
 
+void describeVideo(fla::RawElement& raw);
+
 std::string _currentFile;
 
 bool parseGroup(const tinyxml2::XMLElement* element, fla::Group* group);
@@ -1231,7 +1233,49 @@ fla::Element* parseElementByType(const tinyxml2::XMLElement* element, fla::DOMEl
     // as read, in its place, and written back.
     fla::RawElement* raw = new fla::RawElement(parent);
     raw->xml = elementText(element);
+    describeVideo(*raw);
     return raw;
+}
+
+void describeVideo(fla::RawElement& raw)
+{
+    if (raw.xml.find("DOMVideoInstance") == std::string::npos)
+        return;
+    tinyxml2::XMLDocument xml;
+    if (xml.Parse(raw.xml.c_str(), raw.xml.size()) != tinyxml2::XML_SUCCESS || !xml.RootElement() ||
+        std::strcmp(xml.RootElement()->Name(), "DOMVideoInstance") != 0)
+        return;
+    const tinyxml2::XMLElement* element = xml.RootElement();
+    // Where it sits and how big its frame is, to draw it by.
+    parseElement(element, &raw);
+    raw.videoItem = getAttribute(element, "libraryItemName");
+    const double right = getDoubleAttribute(element, "frameRight", 0.0) / 20.0;
+    const double bottom = getDoubleAttribute(element, "frameBottom", 0.0) / 20.0;
+    raw.localBounds = fla::Rect(fla::Point(0.0, 0.0), fla::Point(right, bottom));
+    raw.bounds = raw.localBounds;
+}
+
+void collectVideoItems(fla::Document& document)
+{
+    document.videos.clear();
+    for (const std::string& text : document.extraMedia)
+    {
+        if (text.find("DOMVideoItem") == std::string::npos)
+            continue;
+        tinyxml2::XMLDocument xml;
+        if (xml.Parse(text.c_str(), text.size()) != tinyxml2::XML_SUCCESS || !xml.RootElement() ||
+            std::strcmp(xml.RootElement()->Name(), "DOMVideoItem") != 0)
+            continue;
+        const tinyxml2::XMLElement* item = xml.RootElement();
+        fla::Document::VideoInfo video;
+        video.name = getAttribute(item, "name");
+        video.width = getIntAttribute(item, "width", 0);
+        video.height = getIntAttribute(item, "height", 0);
+        video.fps = getDoubleAttribute(item, "fps", 0.0);
+        video.source = getAttribute(item, "sourceExternalFilepath");
+        video.embedded = !getAttribute(item, "videoDataHRef").empty();
+        document.videos.push_back(video);
+    }
 }
 
 bool parseGroup(const tinyxml2::XMLElement* element, fla::Group* group)
@@ -2200,6 +2244,16 @@ bool parseDocument(fla::Document* document, const tinyxml2::XMLElement* element,
 
 } // namespace
 
+void describeVideoInstance(fla::RawElement& raw)
+{
+    describeVideo(raw);
+}
+
+void collectVideos(fla::Document& document)
+{
+    collectVideoItems(document);
+}
+
 DocumentParser::DocumentParser(ZipReader* zipReader)
     : _zipReader(zipReader)
 {}
@@ -2250,5 +2304,6 @@ fla::Document* DocumentParser::parse(const std::string& xmlContent, fla::DOMElem
 
     document->source = xmlContent;
 
+    collectVideoItems(*document);
     return document;
 }

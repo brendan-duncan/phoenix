@@ -158,7 +158,7 @@
   <thead><tr><th>Kind</th><th>Formats</th></tr></thead>
   <tbody>
     <tr><td>Images</td><td>PNG, JPEG, GIF, BMP</td></tr>
-    <tr><td>Layered images</td><td>Photoshop (PSD), 8-bit RGB or grayscale</td></tr>
+    <tr><td>Layered images</td><td>Photoshop (PSD and PSB), RGB, CMYK or grayscale, 8, 16 or 32 bits</td></tr>
     <tr><td>Vector artwork</td><td>SVG, Illustrator (AI), PDF</td></tr>
     <tr><td>Sound</td><td>WAV, AIFF, MP3, FLAC, Ogg</td></tr>
     <tr><td>Video (reference)</td><td>MP4, MOV, M4V, AVI, MKV, WebM, FLV, WMV, MPEG</td></tr>
@@ -169,11 +169,18 @@
 
 <h3>Photoshop files</h3>
 
-<p>Import to Stage turns each layer of a PSD into a layer of its own, named as it was, above the current layer, with the layer's pixels as a bitmap in the library and placed where they were on the canvas. Groups become layer folders, hidden layers stay hidden, and a layer's opacity and layer mask are kept in its pixels. Import to Library adds just the bitmaps.</p>
+<p>Import to Stage turns each layer of a PSD into a layer of its own, named as it was, above the current layer, with the layer's pixels as a bitmap in the library and placed where they were on the canvas. Groups become layer folders, hidden layers stay hidden, and a layer's opacity and layer mask are kept in its pixels. A layer with a blend mode (Multiply, Screen, Overlay, Darken, Lighten, Difference, Linear Dodge, Subtract or Hard Light) is placed inside a movie clip that blends the same way, since only movie clips can blend; other blend modes come in as Normal, and Phoenix says which. Import to Library adds just the bitmaps.</p>
+
+<p>Large documents (PSB), 16- and 32-bit documents and CMYK documents are read too; their colors are brought to 8-bit RGB. Adjustment and fill layers have no pixels of their own and are left out, and layers clipped to the layer below come in unclipped.</p>
 
 <h3>SVG, Illustrator and PDF files</h3>
 
-<p>Each filled or stroked path becomes a drawing object with its fill and stroke color and stroke width, and on the stage they are grouped as one piece of artwork. Import to Library makes a graphic symbol named after the file instead. Phoenix reads paths, rectangles, circles, ellipses, lines, polylines and polygons, with their groups, transforms and opacity. An Illustrator file is read through the PDF copy it carries, which Illustrator saves by default; for a PDF, the first page is read. Text, gradients and embedded images are left out: convert text to outlines before you save.</p>
+<p>Each filled or stroked path becomes a drawing object with its fill and stroke color and stroke width, images become bitmaps in the library placed where they were, and text becomes static text. On the stage they are grouped as one piece of artwork, in the order they were drawn; Import to Library makes a graphic symbol named after the file instead.</p>
+
+<ul>
+  <li><strong>SVG:</strong> paths, rectangles, circles, ellipses, lines, polylines and polygons, with their groups, transforms and opacity, styled by attributes, the <code>style</code> attribute or the style sheet's classes; linear and radial gradients, which become gradient fills; <code>use</code> and symbols; images, embedded or in files beside the SVG; and text, with its font, size, weight and color.</li>
+  <li><strong>Illustrator and PDF:</strong> an Illustrator file is read through the PDF copy it carries, which Illustrator saves by default; for a PDF, the first page is read. Paths with their colors and opacity, grouped and placed artwork, gradients (Illustrator's linear and radial ones), and images. Text in these files is left out: convert it to outlines before you save.</li>
+</ul>
 
 <p>You can also drag images, sounds, PSD, SVG and Illustrator files from your desktop. Dropped on the stage, they are placed where you drop them; dropped elsewhere, they go into the library. An image copied in another app can be pasted straight onto the stage.</p>
 

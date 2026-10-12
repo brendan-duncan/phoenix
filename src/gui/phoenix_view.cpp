@@ -40,6 +40,7 @@
 #include "../data/bitmap.h"
 #include "../data/bitmap_instance.h"
 #include "../data/group.h"
+#include "../data/raw_element.h"
 #include "../data/linear_gradient.h"
 #include "../data/oval_primitive.h"
 #include "../data/radial_gradient.h"
@@ -3102,6 +3103,31 @@ void PhoenixView::drawElement(QPainter& painter, const fla::Element* element, co
         }
 
         TextLayout::draw(painter, *static_cast<const fla::StaticText*>(element));
+    }
+    else if (type == fla::Element::Type::Raw && !static_cast<const fla::RawElement*>(element)->videoItem.empty())
+    {
+        // A video: its frame, a film strip down each side and its name, as
+        // Phoenix does not play its frames.
+        const fla::RawElement* video = static_cast<const fla::RawElement*>(element);
+        const QRectF frame(video->localBounds.topLeft.x, video->localBounds.topLeft.y,
+            std::max(video->localBounds.width(), 32.0), std::max(video->localBounds.height(), 24.0));
+        painter.fillRect(frame, QColor(30, 30, 34));
+        const double hole = std::max(2.0, std::min(frame.width(), frame.height()) / 16.0);
+        painter.setPen(Qt::NoPen);
+        painter.setBrush(QColor(200, 200, 205));
+        for (double y = frame.top() + hole; y + hole < frame.bottom(); y += hole * 2.5)
+        {
+            painter.drawRect(QRectF(frame.left() + hole * 0.5, y, hole, hole));
+            painter.drawRect(QRectF(frame.right() - hole * 1.5, y, hole, hole));
+        }
+        {
+            QFont font = painter.font();
+            font.setPixelSize(static_cast<int>(std::max(8.0, std::min(frame.height() / 8.0, 24.0))));
+            painter.setFont(font);
+            painter.setPen(QColor(220, 220, 225));
+            painter.drawText(frame.adjusted(hole * 2.5, 0, -hole * 2.5, 0), Qt::AlignCenter | Qt::TextWordWrap,
+                QString::fromStdString(video->videoItem));
+        }
     }
     else if (type == fla::Element::Type::BitmapInstance)
     {

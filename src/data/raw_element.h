@@ -13,6 +13,10 @@ class RawElement : public Element
 public:
     std::string xml;
 
+    /// For a video placed on the stage (DOMVideoInstance), the library video
+    /// it shows; read from the XML, which is what is written back.
+    std::string videoItem;
+
     RawElement(DOMElement* parent)
         : Element(parent)
     {}

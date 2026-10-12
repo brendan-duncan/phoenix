@@ -1,6 +1,8 @@
 #include "vector_import.h"
 
 #include "../data/edge.h"
+#include "../data/linear_gradient.h"
+#include "../data/radial_gradient.h"
 #include "../data/shape.h"
 #include "../data/solid_color.h"
 #include "../data/stroke_style.h"
@@ -45,6 +47,16 @@ struct Affine
     double scale() const { return std::sqrt(std::fabs(a * d - b * c)); }
 };
 
+Affine toAffine(const Placement& p)
+{
+    return Affine{p.a, p.b, p.c, p.d, p.tx, p.ty};
+}
+
+Placement toPlacement(const Affine& m)
+{
+    return Placement{m.a, m.b, m.c, m.d, m.e, m.f};
+}
+
 void transform(Painted& painted, const Affine& m)
 {
     for (Subpath& subpath : painted.subpaths)
@@ -52,6 +64,38 @@ void transform(Painted& painted, const Affine& m)
             for (Point& point : segment.points)
                 point = m.map(point);
     painted.strokeWidth *= m.scale();
+    if (painted.gradient)
+        painted.gradient->placement = toPlacement(m.after(toAffine(painted.gradient->placement)));
+}
+
+/// Animate's gradient square is 1638.4 pixels across.
+constexpr double kGradientSquare = 1638.4;
+
+/// The placement of a linear gradient's square running from \a from to \a
+/// to: its x along the line, its y across it.
+Placement linearPlacement(const Point& from, const Point& to)
+{
+    const double dx = to.x - from.x;
+    const double dy = to.y - from.y;
+    return Placement{dx / kGradientSquare, dy / kGradientSquare, -dy / kGradientSquare, dx / kGradientSquare,
+        (from.x + to.x) / 2.0, (from.y + to.y) / 2.0};
+}
+
+/// A radial gradient's square on a circle of \a radius around \a center,
+/// its x turned toward \a toward when that is not the center.
+Placement radialPlacement(const Point& center, double radius, double angle)
+{
+    const double k = radius / (kGradientSquare / 2.0);
+    const double cs = std::cos(angle) * k;
+    const double sn = std::sin(angle) * k;
+    return Placement{cs, sn, -sn, cs, center.x, center.y};
+}
+
+/// Remembers what was added, in drawing order.
+void addPath(Artwork& artwork, Painted painted)
+{
+    artwork.order.emplace_back(Artwork::Kind::Path, artwork.paths.size());
+    artwork.paths.push_back(std::move(painted));
 }
 
 // ---------------------------------------------------------------- numbers
@@ -536,49 +580,141 @@ struct SvgStyle
     double strokeOpacity = 1.0;
     std::optional<Color> color;
     bool hidden = false;
+    /// A fill or stroke given as url(#id): the gradient's id.
+    std::string fillUrl;
+    std::string strokeUrl;
+    std::string family = "Arial";
+    double fontSize = 16.0;
+    bool bold = false;
+    bool italic = false;
 };
+
+/// What the document says once and elements refer to: elements by id, and
+/// the style sheet's rules by class and by element name.
+struct SvgDefs
+{
+    std::map<std::string, const tinyxml2::XMLElement*> ids;
+    std::map<std::string, std::string> classRules;
+    std::map<std::string, std::string> typeRules;
+};
+
+/// The document being read.
+const SvgDefs* gDefs = nullptr;
+
+std::string trimmed(std::string s)
+{
+    s.erase(0, s.find_first_not_of(" \t\r\n"));
+    s.erase(s.find_last_not_of(" \t\r\n") + 1);
+    return s;
+}
+
+/// "key: value; ..." as pairs.
+void declarationsOf(const std::string& text, std::vector<std::pair<std::string, std::string>>& out)
+{
+    size_t at = 0;
+    while (at < text.size())
+    {
+        size_t semi = text.find(';', at);
+        if (semi == std::string::npos)
+            semi = text.size();
+        const std::string declaration = text.substr(at, semi - at);
+        const size_t colon = declaration.find(':');
+        if (colon != std::string::npos)
+            out.emplace_back(trimmed(declaration.substr(0, colon)), trimmed(declaration.substr(colon + 1)));
+        at = semi + 1;
+    }
+}
+
+/// The id a "url(#id)" names, or empty.
+std::string urlId(const std::string& value)
+{
+    const size_t url = value.find("url(");
+    if (url == std::string::npos)
+        return std::string();
+    const size_t hash = value.find('#', url);
+    if (hash == std::string::npos)
+        return std::string();
+    const size_t close = value.find(')', hash);
+    std::string id = value.substr(hash + 1, close == std::string::npos ? std::string::npos : close - hash - 1);
+    id.erase(std::remove(id.begin(), id.end(), '"'), id.end());
+    id.erase(std::remove(id.begin(), id.end(), '\''), id.end());
+    return trimmed(id);
+}
+
+std::string localName(const tinyxml2::XMLElement& element)
+{
+    std::string name = element.Name();
+    const size_t colon = name.find(':');
+    return colon == std::string::npos ? name : name.substr(colon + 1);
+}
 
 void applyStyle(const tinyxml2::XMLElement& element, SvgStyle& style)
 {
-    // Attributes, then the style attribute's declarations over them.
+    // Attributes, then the style sheet's rules, then the style attribute's
+    // declarations over them.
     std::vector<std::pair<std::string, std::string>> declarations;
-    for (const char* name : {"color", "fill", "stroke", "stroke-width", "opacity", "fill-opacity", "stroke-opacity", "display", "visibility"})
+    for (const char* name : {"color", "fill", "stroke", "stroke-width", "opacity", "fill-opacity", "stroke-opacity",
+             "display", "visibility", "font-family", "font-size", "font-weight", "font-style"})
         if (const char* value = element.Attribute(name))
             declarations.emplace_back(name, value);
-    if (const char* css = element.Attribute("style"))
+    if (gDefs)
     {
-        std::string text = css;
-        size_t at = 0;
-        while (at < text.size())
+        const auto type = gDefs->typeRules.find(localName(element));
+        if (type != gDefs->typeRules.end())
+            declarationsOf(type->second, declarations);
+        if (const char* classes = element.Attribute("class"))
         {
-            size_t semi = text.find(';', at);
-            if (semi == std::string::npos)
-                semi = text.size();
-            const std::string declaration = text.substr(at, semi - at);
-            const size_t colon = declaration.find(':');
-            if (colon != std::string::npos)
+            const std::string list = classes;
+            size_t at = 0;
+            while (at < list.size())
             {
-                std::string key = declaration.substr(0, colon);
-                std::string value = declaration.substr(colon + 1);
-                const auto trim = [](std::string& s) {
-                    s.erase(0, s.find_first_not_of(" \t\r\n"));
-                    s.erase(s.find_last_not_of(" \t\r\n") + 1);
-                };
-                trim(key);
-                trim(value);
-                declarations.emplace_back(key, value);
+                size_t space = list.find_first_of(" \t", at);
+                if (space == std::string::npos)
+                    space = list.size();
+                const auto rule = gDefs->classRules.find(list.substr(at, space - at));
+                if (rule != gDefs->classRules.end())
+                    declarationsOf(rule->second, declarations);
+                at = space + 1;
             }
-            at = semi + 1;
         }
     }
+    if (const char* css = element.Attribute("style"))
+        declarationsOf(css, declarations);
     for (const auto& [key, value] : declarations)
     {
         if (key == "color")
             style.color = parseColor(value, style.color);
         else if (key == "fill")
-            style.fill = parseColor(value, style.color);
+        {
+            style.fillUrl = urlId(value);
+            style.fill = style.fillUrl.empty() ? parseColor(value, style.color) : std::optional<Color>(Color{0, 0, 0, 255});
+        }
         else if (key == "stroke")
-            style.stroke = parseColor(value, style.color);
+        {
+            style.strokeUrl = urlId(value);
+            style.stroke = style.strokeUrl.empty() ? parseColor(value, style.color) : std::optional<Color>(Color{0, 0, 0, 255});
+        }
+        else if (key == "font-family")
+        {
+            std::string family = value.substr(0, value.find(','));
+            family.erase(std::remove(family.begin(), family.end(), '"'), family.end());
+            family.erase(std::remove(family.begin(), family.end(), '\''), family.end());
+            family = trimmed(family);
+            if (family == "sans-serif")
+                family = "Arial";
+            else if (family == "serif")
+                family = "Times New Roman";
+            else if (family == "monospace")
+                family = "Courier New";
+            if (!family.empty())
+                style.family = family;
+        }
+        else if (key == "font-size")
+            style.fontSize = length(value.c_str(), style.fontSize);
+        else if (key == "font-weight")
+            style.bold = value == "bold" || value == "bolder" || std::atoi(value.c_str()) >= 600;
+        else if (key == "font-style")
+            style.italic = value == "italic" || value == "oblique";
         else if (key == "stroke-width")
             style.strokeWidth = length(value.c_str(), style.strokeWidth);
         else if (key == "opacity")
@@ -618,12 +754,185 @@ Subpath ellipse(double cx, double cy, double rx, double ry)
     return subpath;
 }
 
-void walkSvg(const tinyxml2::XMLElement& element, SvgStyle style, const Affine& outer, Artwork& artwork)
+/// An attribute of a gradient, or of the ones it takes after through href.
+const char* gradientAttribute(const tinyxml2::XMLElement* element, const char* name)
 {
-    std::string name = element.Name();
-    const size_t colon = name.find(':');
-    if (colon != std::string::npos)
-        name = name.substr(colon + 1);
+    for (int depth = 0; element && depth < 8; ++depth)
+    {
+        if (const char* value = element->Attribute(name))
+            return value;
+        const char* href = element->Attribute("xlink:href");
+        if (!href)
+            href = element->Attribute("href");
+        if (!href || href[0] != '#' || !gDefs)
+            break;
+        const auto found = gDefs->ids.find(href + 1);
+        element = found != gDefs->ids.end() ? found->second : nullptr;
+    }
+    return nullptr;
+}
+
+/// A coordinate of a gradient: a number, or a percentage of \a whole.
+double gradientNumber(const char* text, double fallback, bool fraction)
+{
+    if (!text)
+        return fallback;
+    const double value = std::atof(text);
+    if (std::strchr(text, '%'))
+        return fraction ? value / 100.0 : value / 100.0;
+    return value;
+}
+
+/// The gradient \a id names, for a path whose bounds are \a box in its
+/// own space; its colors faded by \a alpha.
+std::optional<Gradient> svgGradient(const std::string& id, double left, double top, double width, double height,
+    double alpha)
+{
+    if (!gDefs)
+        return std::nullopt;
+    const auto found = gDefs->ids.find(id);
+    if (found == gDefs->ids.end())
+        return std::nullopt;
+    const tinyxml2::XMLElement* element = found->second;
+    const std::string kind = localName(*element);
+    if (kind != "linearGradient" && kind != "radialGradient")
+        return std::nullopt;
+    Gradient gradient;
+    gradient.radial = kind == "radialGradient";
+    // The stops: its own, or those of the gradient it takes after.
+    const tinyxml2::XMLElement* stopsFrom = element;
+    for (int depth = 0; stopsFrom && depth < 8; ++depth)
+    {
+        if (stopsFrom->FirstChildElement())
+            break;
+        const char* href = stopsFrom->Attribute("xlink:href");
+        if (!href)
+            href = stopsFrom->Attribute("href");
+        const auto next = href && href[0] == '#' ? gDefs->ids.find(href + 1) : gDefs->ids.end();
+        stopsFrom = next != gDefs->ids.end() ? next->second : nullptr;
+    }
+    double last = 0.0;
+    for (const tinyxml2::XMLElement* stop = stopsFrom ? stopsFrom->FirstChildElement() : nullptr; stop;
+         stop = stop->NextSiblingElement())
+    {
+        if (localName(*stop) != "stop")
+            continue;
+        std::vector<std::pair<std::string, std::string>> declarations;
+        if (const char* color = stop->Attribute("stop-color"))
+            declarations.emplace_back("stop-color", color);
+        if (const char* opacity = stop->Attribute("stop-opacity"))
+            declarations.emplace_back("stop-opacity", opacity);
+        if (const char* css = stop->Attribute("style"))
+            declarationsOf(css, declarations);
+        Gradient::Stop entry;
+        entry.offset = std::clamp(gradientNumber(stop->Attribute("offset"), 0.0, true), 0.0, 1.0);
+        entry.offset = std::max(entry.offset, last);
+        last = entry.offset;
+        double opacity = 1.0;
+        for (const auto& [key, value] : declarations)
+        {
+            if (key == "stop-color")
+                if (const std::optional<Color> color = parseColor(value, std::nullopt))
+                    entry.color = *color;
+            if (key == "stop-opacity")
+                opacity = std::atof(value.c_str());
+        }
+        entry.color[3] = static_cast<uint8_t>(std::clamp(std::lround(255.0 * opacity * alpha), 0L, 255L));
+        gradient.stops.push_back(entry);
+    }
+    if (gradient.stops.empty())
+        return std::nullopt;
+    if (const char* spread = gradientAttribute(element, "spreadMethod"))
+        gradient.spread = std::string(spread) == "reflect" ? Gradient::Spread::Reflect
+            : std::string(spread) == "repeat"              ? Gradient::Spread::Repeat
+                                                           : Gradient::Spread::Pad;
+    // Its space: the path's bounds unless it says user space, then its own
+    // transform.
+    const char* units = gradientAttribute(element, "gradientUnits");
+    const bool userSpace = units && std::string(units) == "userSpaceOnUse";
+    Affine space;
+    if (!userSpace)
+        space = Affine{width, 0.0, 0.0, height, left, top};
+    if (const char* transformText = gradientAttribute(element, "gradientTransform"))
+        space = space.after(parseTransform(transformText));
+    Placement local;
+    if (gradient.radial)
+    {
+        const double cx = gradientNumber(gradientAttribute(element, "cx"), 0.5, true);
+        const double cy = gradientNumber(gradientAttribute(element, "cy"), 0.5, true);
+        const double r = gradientNumber(gradientAttribute(element, "r"), 0.5, true);
+        const double fx = gradientNumber(gradientAttribute(element, "fx"), cx, true);
+        const double fy = gradientNumber(gradientAttribute(element, "fy"), cy, true);
+        const double toward = std::hypot(fx - cx, fy - cy);
+        local = radialPlacement(Point(cx, cy), r, toward > 1.0e-9 ? std::atan2(fy - cy, fx - cx) : 0.0);
+        gradient.focal = r > 0.0 ? std::clamp(toward / r, 0.0, 0.99) : 0.0;
+    }
+    else
+    {
+        const Point from(gradientNumber(gradientAttribute(element, "x1"), 0.0, true),
+            gradientNumber(gradientAttribute(element, "y1"), 0.0, true));
+        const Point to(gradientNumber(gradientAttribute(element, "x2"), 1.0, true),
+            gradientNumber(gradientAttribute(element, "y2"), 0.0, true));
+        local = linearPlacement(from, to);
+    }
+    gradient.placement = toPlacement(space.after(toAffine(local)));
+    return gradient;
+}
+
+/// The text an element holds, its children's too.
+std::string textOf(const tinyxml2::XMLNode& node)
+{
+    std::string text;
+    for (const tinyxml2::XMLNode* child = node.FirstChild(); child; child = child->NextSibling())
+    {
+        if (const tinyxml2::XMLText* plain = child->ToText())
+            text += plain->Value();
+        else
+            text += textOf(*child);
+    }
+    return text;
+}
+
+void walkSvg(const tinyxml2::XMLElement& element, SvgStyle style, const Affine& outer, Artwork& artwork,
+    int depth = 0);
+
+void addText(const tinyxml2::XMLElement& element, const SvgStyle& style, const Affine& m, double x, double y,
+    const std::string& words, Artwork& artwork)
+{
+    std::string text = words;
+    // Runs of white space are one space, as SVG shows them.
+    std::string squeezed;
+    bool space = false;
+    for (char c : text)
+    {
+        const bool white = c == ' ' || c == '\t' || c == '\r' || c == '\n';
+        if (white && space)
+            continue;
+        squeezed += white ? ' ' : c;
+        space = white;
+    }
+    squeezed = trimmed(squeezed);
+    if (squeezed.empty() || !style.fill)
+        return;
+    Text placed;
+    placed.text = squeezed;
+    placed.family = style.family;
+    placed.size = style.fontSize;
+    placed.bold = style.bold;
+    placed.italic = style.italic;
+    placed.color = *style.fill;
+    placed.color[3] = static_cast<uint8_t>(std::clamp(std::lround(placed.color[3] * style.opacity * style.fillOpacity), 0L, 255L));
+    placed.placement = toPlacement(m.after(Affine{1.0, 0.0, 0.0, 1.0, x, y}));
+    (void)element;
+    artwork.order.emplace_back(Artwork::Kind::Text, artwork.texts.size());
+    artwork.texts.push_back(std::move(placed));
+}
+
+void walkSvg(const tinyxml2::XMLElement& element, SvgStyle style, const Affine& outer, Artwork& artwork, int depth)
+{
+    if (depth > 32)
+        return;
+    const std::string name = localName(element);
     if (name == "defs" || name == "clipPath" || name == "mask" || name == "symbol" || name == "metadata" ||
         name == "title" || name == "desc" || name == "style" || name == "pattern" || name == "linearGradient" ||
         name == "radialGradient" || name == "marker" || name == "filter")
@@ -712,16 +1021,75 @@ void walkSvg(const tinyxml2::XMLElement& element, SvgStyle style, const Affine& 
     }
     else if (name == "text")
     {
-        const std::string note = "Text was left out; convert it to outlines first.";
-        if (std::find(artwork.notes.begin(), artwork.notes.end(), note) == artwork.notes.end())
-            artwork.notes.push_back(note);
+        // Each tspan with a place of its own is a line of its own; the rest
+        // runs on from the text's start.
+        const double x = number("x"), y = number("y");
+        std::string loose;
+        for (const tinyxml2::XMLNode* child = element.FirstChild(); child; child = child->NextSibling())
+        {
+            const tinyxml2::XMLElement* span = child->ToElement();
+            if (span && localName(*span) == "tspan" && (span->Attribute("x") || span->Attribute("y")))
+            {
+                SvgStyle spanStyle = style;
+                applyStyle(*span, spanStyle);
+                addText(*span, spanStyle, m, length(span->Attribute("x"), x), length(span->Attribute("y"), y),
+                    textOf(*span), artwork);
+            }
+            else if (const tinyxml2::XMLText* plain = child->ToText())
+                loose += plain->Value();
+            else if (span)
+                loose += textOf(*span);
+        }
+        addText(element, style, m, x, y, loose, artwork);
         return;
     }
     else if (name == "image")
     {
-        const std::string note = "Embedded images were left out.";
-        if (std::find(artwork.notes.begin(), artwork.notes.end(), note) == artwork.notes.end())
-            artwork.notes.push_back(note);
+        const char* href = element.Attribute("xlink:href");
+        if (!href)
+            href = element.Attribute("href");
+        const double w = number("width"), h = number("height");
+        if (!href || w <= 0.0 || h <= 0.0)
+            return;
+        Image image;
+        const std::string link = href;
+        if (link.rfind("data:", 0) == 0)
+        {
+            const size_t comma = link.find(',');
+            if (comma != std::string::npos && link.find(";base64") < comma)
+                image.encoded = fromBase64(link.substr(comma + 1));
+            if (image.encoded.empty())
+                return;
+        }
+        else
+            image.href = link;
+        // The unit square onto the image's box.
+        image.placement = toPlacement(m.after(Affine{w, 0.0, 0.0, h, number("x"), number("y")}));
+        artwork.order.emplace_back(Artwork::Kind::Image, artwork.images.size());
+        artwork.images.push_back(std::move(image));
+        return;
+    }
+    else if (name == "use")
+    {
+        const char* href = element.Attribute("xlink:href");
+        if (!href)
+            href = element.Attribute("href");
+        if (!href || href[0] != '#' || !gDefs)
+            return;
+        const auto found = gDefs->ids.find(href + 1);
+        if (found == gDefs->ids.end())
+            return;
+        const Affine placed = m.after(Affine{1.0, 0.0, 0.0, 1.0, number("x"), number("y")});
+        if (localName(*found->second) == "symbol")
+        {
+            SvgStyle inner = style;
+            applyStyle(*found->second, inner);
+            for (const tinyxml2::XMLElement* child = found->second->FirstChildElement(); child;
+                 child = child->NextSiblingElement())
+                walkSvg(*child, inner, placed, artwork, depth + 1);
+        }
+        else
+            walkSvg(*found->second, style, placed, artwork, depth + 1);
         return;
     }
 
@@ -737,13 +1105,47 @@ void walkSvg(const tinyxml2::XMLElement& element, SvgStyle style, const Affine& 
         painted.fill = withAlpha(style.fill, style.opacity * style.fillOpacity);
         painted.stroke = withAlpha(style.stroke, style.opacity * style.strokeOpacity);
         painted.strokeWidth = style.strokeWidth;
+        if (!style.fillUrl.empty() || !style.strokeUrl.empty())
+        {
+            // A gradient's bounding box is the path's, in its own space.
+            double left = 1.0e300, top = 1.0e300, right = -1.0e300, bottom = -1.0e300;
+            for (const Subpath& subpath : painted.subpaths)
+                for (const Segment& segment : subpath.segments)
+                    for (const Point& point : segment.points)
+                    {
+                        left = std::min(left, point.x);
+                        top = std::min(top, point.y);
+                        right = std::max(right, point.x);
+                        bottom = std::max(bottom, point.y);
+                    }
+            if (!style.fillUrl.empty())
+            {
+                painted.gradient = svgGradient(style.fillUrl, left, top, right - left, bottom - top,
+                    style.opacity * style.fillOpacity);
+                // The plain color, where a gradient cannot go, is its first.
+                if (painted.gradient)
+                    painted.fill = painted.gradient->stops.front().color;
+                else
+                    painted.fill.reset();
+            }
+            if (!style.strokeUrl.empty())
+            {
+                // Strokes take a plain color: the gradient's first.
+                const std::optional<Gradient> strokeGradient = svgGradient(style.strokeUrl, left, top,
+                    right - left, bottom - top, style.opacity * style.strokeOpacity);
+                if (strokeGradient)
+                    painted.stroke = strokeGradient->stops.front().color;
+                else
+                    painted.stroke.reset();
+            }
+        }
         transform(painted, m);
         if (painted.fill || painted.stroke)
-            artwork.paths.push_back(std::move(painted));
+            addPath(artwork, std::move(painted));
     }
 
     for (const tinyxml2::XMLElement* child = element.FirstChildElement(); child; child = child->NextSiblingElement())
-        walkSvg(*child, style, m, artwork);
+        walkSvg(*child, style, m, artwork, depth + 1);
 }
 
 // ---------------------------------------------------------------- shapes
@@ -956,57 +1358,460 @@ std::vector<int> contentRefs(const std::string& page)
     return refs;
 }
 
-/// Runs a page's content: its paths, as they are painted.
-void runContent(const std::string& content, double pageLeft, double pageTop, Artwork& artwork)
+/// A PDF file's objects, found by number: plain ones by their "N 0 obj",
+/// and those packed in object streams by the streams' tables.
+struct PdfFile
 {
+    std::string text;
+    std::map<int, std::string> packed;
+    bool unpacked = false;
+
+    /// An object's dictionary (or value) and, for a stream, its data.
+    bool object(int number, std::string& dictionary, std::vector<uint8_t>& data, bool& isStream)
+    {
+        if (findObject(text, number, dictionary, data, isStream))
+            return true;
+        unpack();
+        const auto found = packed.find(number);
+        if (found == packed.end())
+            return false;
+        dictionary = found->second;
+        data.clear();
+        isStream = false;
+        return true;
+    }
+
+    std::string dictionaryOf(int number)
+    {
+        std::string dictionary;
+        std::vector<uint8_t> data;
+        bool isStream = false;
+        return object(number, dictionary, data, isStream) ? dictionary : std::string();
+    }
+
+    void unpack()
+    {
+        if (unpacked)
+            return;
+        unpacked = true;
+        size_t at = 0;
+        while ((at = text.find("/ObjStm", at)) != std::string::npos)
+        {
+            const size_t open = text.rfind("<<", at);
+            const size_t streamAt = text.find("stream", at);
+            if (open == std::string::npos || streamAt == std::string::npos)
+                break;
+            const std::string head = text.substr(open, streamAt - open);
+            const auto value = [&head](const char* key) {
+                const size_t k = head.find(key);
+                return k == std::string::npos ? 0 : std::atoi(head.c_str() + k + std::strlen(key));
+            };
+            const int count = value("/N");
+            const int first = value("/First");
+            size_t begin = streamAt + 6;
+            if (begin < text.size() && text[begin] == '\r')
+                ++begin;
+            if (begin < text.size() && text[begin] == '\n')
+                ++begin;
+            const size_t stop = text.find("endstream", begin);
+            if (stop == std::string::npos)
+                break;
+            const std::vector<uint8_t> data =
+                inflate(reinterpret_cast<const uint8_t*>(text.data()) + begin, stop - begin);
+            const std::string body(data.begin(), data.end());
+            Scanner scan{body.data(), body.data() + std::min(body.size(), static_cast<size_t>(std::max(first, 0)))};
+            std::vector<std::pair<int, size_t>> table;
+            double number = 0, offset = 0;
+            for (int i = 0; i < count && scan.number(number) && scan.number(offset); ++i)
+                table.emplace_back(static_cast<int>(number), static_cast<size_t>(first) + static_cast<size_t>(offset));
+            for (size_t i = 0; i < table.size(); ++i)
+            {
+                const size_t from = table[i].second;
+                const size_t to = i + 1 < table.size() ? table[i + 1].second : body.size();
+                if (from < body.size() && to <= body.size() && to > from)
+                    packed[table[i].first] = body.substr(from, to - from);
+            }
+            at = stop;
+        }
+    }
+};
+
+/// The value of \a key in a dictionary's text: a nested dictionary, an
+/// array, or a single token (a reference keeps its "N 0 R").
+std::string valueOf(const std::string& dictionary, const std::string& key)
+{
+    size_t at = 0;
+    while ((at = dictionary.find(key, at)) != std::string::npos)
+    {
+        const size_t after = at + key.size();
+        // The whole key, not the start of a longer one.
+        if (after < dictionary.size() && (std::isalnum(static_cast<unsigned char>(dictionary[after])) ||
+                                             dictionary[after] == '_'))
+        {
+            at = after;
+            continue;
+        }
+        size_t p = dictionary.find_first_not_of(" \r\n\t", after);
+        if (p == std::string::npos)
+            return std::string();
+        if (dictionary.compare(p, 2, "<<") == 0)
+        {
+            int depth = 0;
+            for (size_t i = p; i + 1 < dictionary.size(); ++i)
+            {
+                if (dictionary.compare(i, 2, "<<") == 0)
+                {
+                    ++depth;
+                    ++i;
+                }
+                else if (dictionary.compare(i, 2, ">>") == 0)
+                {
+                    ++i;
+                    if (--depth == 0)
+                        return dictionary.substr(p, i - p + 1);
+                }
+            }
+            return dictionary.substr(p);
+        }
+        if (dictionary[p] == '[')
+        {
+            int depth = 0;
+            for (size_t i = p; i < dictionary.size(); ++i)
+            {
+                if (dictionary[i] == '[')
+                    ++depth;
+                else if (dictionary[i] == ']' && --depth == 0)
+                    return dictionary.substr(p, i - p + 1);
+            }
+            return dictionary.substr(p);
+        }
+        // A token, or a reference "N G R".
+        size_t end = p + 1;
+        while (end < dictionary.size() && std::strchr(" \r\n\t/[]<>()", dictionary[end]) == nullptr)
+            ++end;
+        std::string token = dictionary.substr(p, end - p);
+        const size_t r = dictionary.find_first_not_of(" \r\n\t", end);
+        if (r != std::string::npos && std::isdigit(static_cast<unsigned char>(dictionary[p])))
+        {
+            size_t g = r;
+            while (g < dictionary.size() && std::isdigit(static_cast<unsigned char>(dictionary[g])))
+                ++g;
+            const size_t rr = dictionary.find_first_not_of(" \r\n\t", g);
+            if (g > r && rr != std::string::npos && dictionary[rr] == 'R')
+                token = dictionary.substr(p, rr - p + 1);
+        }
+        return token;
+    }
+    return std::string();
+}
+
+/// A reference's object number, or -1 when \a value is not "N G R".
+int referenceOf(const std::string& value)
+{
+    if (value.empty() || value.back() != 'R' || !std::isdigit(static_cast<unsigned char>(value[0])))
+        return -1;
+    return std::atoi(value.c_str());
+}
+
+/// A value, followed through a reference to the object it names.
+std::string resolved(PdfFile& file, const std::string& value)
+{
+    const int ref = referenceOf(value);
+    return ref >= 0 ? file.dictionaryOf(ref) : value;
+}
+
+std::vector<double> numbersOf(const std::string& array)
+{
+    std::vector<double> numbers;
+    const std::string inside = array.empty() ? array : array.substr(array.front() == '[' ? 1 : 0);
+    Scanner scan{inside.data(), inside.data() + inside.size()};
+    double value = 0;
+    while (scan.at < scan.end)
+    {
+        if (scan.number(value))
+            numbers.push_back(value);
+        else
+            ++scan.at;
+    }
+    return numbers;
+}
+
+/// A color from \a values in a space of their count: gray, RGB or CMYK.
+Color colorOf(const std::vector<double>& values)
+{
+    const auto byte = [](double v) { return static_cast<uint8_t>(std::clamp(std::lround(v * 255.0), 0L, 255L)); };
+    if (values.size() >= 4)
+    {
+        const double c = values[0], m = values[1], y = values[2], k = values[3];
+        return Color{byte((1 - c) * (1 - k)), byte((1 - m) * (1 - k)), byte((1 - y) * (1 - k)), 255};
+    }
+    if (values.size() == 3)
+        return Color{byte(values[0]), byte(values[1]), byte(values[2]), 255};
+    if (!values.empty())
+        return Color{byte(values[0]), byte(values[0]), byte(values[0]), 255};
+    return Color{0, 0, 0, 255};
+}
+
+/// A shading's colors, from its function: an exponential one between two
+/// colors, or stitched ones end to end. Empty for ones not read.
+std::vector<Gradient::Stop> shadingStops(PdfFile& file, const std::string& function, int depth = 0)
+{
+    std::vector<Gradient::Stop> stops;
+    const std::string dictionary = resolved(file, function);
+    if (dictionary.empty() || depth > 4)
+        return stops;
+    const int type = std::atoi(valueOf(dictionary, "/FunctionType").c_str());
+    if (type == 2)
+    {
+        std::vector<double> c0 = numbersOf(valueOf(dictionary, "/C0"));
+        std::vector<double> c1 = numbersOf(valueOf(dictionary, "/C1"));
+        if (c0.empty())
+            c0 = {0.0};
+        if (c1.empty())
+            c1 = {1.0};
+        stops.push_back({0.0, colorOf(c0)});
+        stops.push_back({1.0, colorOf(c1)});
+    }
+    else if (type == 3)
+    {
+        const std::string list = valueOf(dictionary, "/Functions");
+        std::vector<double> bounds = numbersOf(valueOf(dictionary, "/Bounds"));
+        std::vector<double> domain = numbersOf(valueOf(dictionary, "/Domain"));
+        const double low = domain.size() >= 2 ? domain[0] : 0.0;
+        const double high = domain.size() >= 2 ? domain[1] : 1.0;
+        // The functions: references, or dictionaries written in place.
+        std::vector<std::string> parts;
+        for (size_t i = 1; i + 1 < list.size();)
+        {
+            const size_t p = list.find_first_not_of(" \r\n\t", i);
+            if (p == std::string::npos || p + 1 >= list.size())
+                break;
+            if (list.compare(p, 2, "<<") == 0)
+            {
+                const std::string inner = valueOf(" /X " + list.substr(p), "/X");
+                parts.push_back(inner);
+                i = p + inner.size();
+            }
+            else if (std::isdigit(static_cast<unsigned char>(list[p])))
+            {
+                const size_t r = list.find('R', p);
+                if (r == std::string::npos)
+                    break;
+                parts.push_back(list.substr(p, r - p + 1));
+                i = r + 1;
+            }
+            else
+                i = p + 1;
+        }
+        std::vector<double> edges = {low};
+        edges.insert(edges.end(), bounds.begin(), bounds.end());
+        edges.push_back(high);
+        const double span = high > low ? high - low : 1.0;
+        for (size_t k = 0; k < parts.size() && k + 1 < edges.size(); ++k)
+        {
+            const std::vector<Gradient::Stop> inner = shadingStops(file, parts[k], depth + 1);
+            for (const Gradient::Stop& stop : inner)
+            {
+                const double offset = (edges[k] + stop.offset * (edges[k + 1] - edges[k]) - low) / span;
+                if (!stops.empty() && std::fabs(stops.back().offset - offset) < 1.0e-9 &&
+                    stops.back().color == stop.color)
+                    continue;
+                stops.push_back({std::clamp(offset, 0.0, 1.0), stop.color});
+            }
+        }
+    }
+    return stops;
+}
+
+/// A shading as a gradient, its coordinates mapped to the stage by
+/// \a toStage; none for kinds not read.
+std::optional<Gradient> shadingGradient(PdfFile& file, const std::string& value, const Affine& toStage)
+{
+    const std::string shading = resolved(file, value);
+    if (shading.empty())
+        return std::nullopt;
+    const int type = std::atoi(valueOf(shading, "/ShadingType").c_str());
+    const std::vector<double> coords = numbersOf(valueOf(shading, "/Coords"));
+    Gradient gradient;
+    gradient.stops = shadingStops(file, valueOf(shading, "/Function"));
+    if (gradient.stops.size() < 2)
+        return std::nullopt;
+    if (type == 2 && coords.size() >= 4)
+    {
+        gradient.placement = toPlacement(toStage.after(toAffine(
+            linearPlacement(Point(coords[0], coords[1]), Point(coords[2], coords[3])))));
+        return gradient;
+    }
+    if (type == 3 && coords.size() >= 6 && coords[5] > 0.0)
+    {
+        gradient.radial = true;
+        const Point inner(coords[0], coords[1]);
+        const Point outer(coords[3], coords[4]);
+        const double radius = coords[5];
+        const double toward = std::hypot(inner.x - outer.x, inner.y - outer.y);
+        gradient.placement = toPlacement(toStage.after(toAffine(radialPlacement(outer, radius,
+            toward > 1.0e-9 ? std::atan2(inner.y - outer.y, inner.x - outer.x) : 0.0))));
+        gradient.focal = std::clamp(toward / radius, 0.0, 0.99);
+        // A start circle of its own: the colors begin out at it.
+        const double start = std::clamp(coords[2] / radius, 0.0, 0.99);
+        for (Gradient::Stop& stop : gradient.stops)
+            stop.offset = start + stop.offset * (1.0 - start);
+        return gradient;
+    }
+    return std::nullopt;
+}
+
+/// An image XObject as pixels or its JPEG file; false for kinds not read.
+bool pdfImage(PdfFile& file, const std::string& dictionary, const std::vector<uint8_t>& data, Image& image)
+{
+    const std::string filter = valueOf(dictionary, "/Filter");
+    image.width = std::atoi(valueOf(dictionary, "/Width").c_str());
+    image.height = std::atoi(valueOf(dictionary, "/Height").c_str());
+    if (image.width <= 0 || image.height <= 0)
+        return false;
+    if (filter.find("DCTDecode") != std::string::npos)
+    {
+        image.encoded = data;
+        return !image.encoded.empty();
+    }
+    // Flate (already undone) or none: 8-bit gray, RGB or CMYK samples.
+    if (!filter.empty() && filter.find("FlateDecode") == std::string::npos)
+        return false;
+    if (std::atoi(valueOf(dictionary, "/BitsPerComponent").c_str()) != 8)
+        return false;
+    const std::string space = resolved(file, valueOf(dictionary, "/ColorSpace"));
+    int components = space.find("RGB") != std::string::npos ? 3 : space.find("CMYK") != std::string::npos ? 4
+        : space.find("Gray") != std::string::npos                                                    ? 1
+                                                                                                     : 0;
+    if (components == 0)
+    {
+        // An ICC profile's channels.
+        const std::vector<double> n = numbersOf(valueOf(resolved(file, valueOf(space, "/ICCBased")), "/N"));
+        components = n.empty() ? 3 : static_cast<int>(n.front());
+    }
+    const size_t pixels = static_cast<size_t>(image.width) * static_cast<size_t>(image.height);
+    if (data.size() < pixels * static_cast<size_t>(components))
+        return false;
+    image.rgba.assign(pixels * 4, 255);
+    for (size_t p = 0; p < pixels; ++p)
+    {
+        const uint8_t* in = &data[p * static_cast<size_t>(components)];
+        uint8_t* out = &image.rgba[p * 4];
+        if (components == 1)
+            out[0] = out[1] = out[2] = in[0];
+        else if (components == 4)
+        {
+            const int k = 255 - in[3];
+            out[0] = static_cast<uint8_t>((255 - in[0]) * k / 255);
+            out[1] = static_cast<uint8_t>((255 - in[1]) * k / 255);
+            out[2] = static_cast<uint8_t>((255 - in[2]) * k / 255);
+        }
+        else
+        {
+            out[0] = in[0];
+            out[1] = in[1];
+            out[2] = in[2];
+        }
+    }
+    // A soft mask: the alpha, 8-bit gray.
+    const int mask = referenceOf(valueOf(dictionary, "/SMask"));
+    if (mask >= 0)
+    {
+        std::string maskDictionary;
+        std::vector<uint8_t> alpha;
+        bool isStream = false;
+        if (file.object(mask, maskDictionary, alpha, isStream) && isStream && alpha.size() >= pixels &&
+            std::atoi(valueOf(maskDictionary, "/Width").c_str()) == image.width)
+            for (size_t p = 0; p < pixels; ++p)
+                image.rgba[p * 4 + 3] = alpha[p];
+    }
+    return true;
+}
+
+struct PdfRun
+{
+    PdfFile& file;
+    double pageLeft = 0.0;
+    double pageTop = 0.0;
+    Artwork& artwork;
+    std::vector<std::string> notes;
+
+    void note(const std::string& text)
+    {
+        if (std::find(notes.begin(), notes.end(), text) == notes.end())
+            notes.push_back(text);
+    }
+
+    /// Page space to the stage: y downward from the page's top.
+    Affine stage() const { return Affine{1.0, 0.0, 0.0, -1.0, -pageLeft, pageTop}; }
+};
+
+/// Runs content: its paths, as they are painted, with \a resources naming
+/// what it draws and \a start its starting transform.
+void runContent(const std::string& content, PdfRun& run, const std::string& resources, const Affine& start,
+    int depth)
+{
+    Artwork& artwork = run.artwork;
     struct State
     {
         Affine ctm;
         Color fill{0, 0, 0, 255};
         Color stroke{0, 0, 0, 255};
+        double fillAlpha = 1.0;
+        double strokeAlpha = 1.0;
         double lineWidth = 1.0;
+        std::optional<Gradient> fillGradient;
+        std::vector<Subpath> clip;
     };
     std::vector<State> stack(1);
+    stack.back().ctm = start;
     std::vector<double> operands;
+    std::string lastName;
     std::vector<Subpath> path;
     Point current;
-    Point start;
-    bool sawXObject = false;
-    // Page space to the stage: y downward from the page's top.
+    Point startPoint;
+    bool clipNext = false;
     const auto toStage = [&](double x, double y) {
         const Point p = stack.back().ctm.map(Point(x, y));
-        return Point(p.x - pageLeft, pageTop - p.y);
+        return run.stage().map(p);
     };
-    const auto color = [&operands]() -> Color {
-        const auto byte = [](double v) { return static_cast<uint8_t>(std::clamp(std::lround(v * 255.0), 0L, 255L)); };
-        if (operands.size() >= 4)
-        {
-            // CMYK, as plainly as it goes.
-            const size_t n = operands.size();
-            const double c = operands[n - 4], m = operands[n - 3], y = operands[n - 2], k = operands[n - 1];
-            return Color{byte((1 - c) * (1 - k)), byte((1 - m) * (1 - k)), byte((1 - y) * (1 - k)), 255};
-        }
-        if (operands.size() == 3)
-            return Color{byte(operands[0]), byte(operands[1]), byte(operands[2]), 255};
-        if (operands.size() >= 1)
-            return Color{byte(operands.back()), byte(operands.back()), byte(operands.back()), 255};
-        return Color{0, 0, 0, 255};
+    const auto resource = [&](const char* category, const std::string& name) {
+        const std::string group = resolved(run.file, valueOf(resources, category));
+        return valueOf(group, "/" + name);
+    };
+    const auto faded = [](Color color, double alpha) {
+        color[3] = static_cast<uint8_t>(std::clamp(std::lround(color[3] * alpha), 0L, 255L));
+        return color;
     };
     const auto paint = [&](bool fill, bool stroke, bool close) {
         if (close && !path.empty())
             path.back().closed = true;
+        if (clipNext)
+        {
+            stack.back().clip = path;
+            clipNext = false;
+        }
         if (!path.empty() && (fill || stroke))
         {
             Painted painted;
             painted.subpaths = path;
             if (fill)
-                painted.fill = stack.back().fill;
+            {
+                painted.fill = faded(stack.back().fill, stack.back().fillAlpha);
+                if (stack.back().fillGradient)
+                {
+                    painted.gradient = stack.back().fillGradient;
+                    for (Gradient::Stop& stop : painted.gradient->stops)
+                        stop.color = faded(stop.color, stack.back().fillAlpha);
+                    painted.fill = painted.gradient->stops.front().color;
+                }
+            }
             if (stroke)
             {
-                painted.stroke = stack.back().stroke;
+                painted.stroke = faded(stack.back().stroke, stack.back().strokeAlpha);
                 painted.strokeWidth = std::max(0.1, stack.back().lineWidth * stack.back().ctm.scale());
             }
-            artwork.paths.push_back(std::move(painted));
+            addPath(artwork, std::move(painted));
         }
         path.clear();
     };
@@ -1030,7 +1835,7 @@ void runContent(const std::string& content, double pageLeft, double pageTop, Art
         if (c == '(')
         {
             // A string, skipped with its nesting and escapes.
-            int depth = 0;
+            int nesting = 0;
             for (; i < n; ++i)
             {
                 if (content[i] == '\\')
@@ -1039,8 +1844,8 @@ void runContent(const std::string& content, double pageLeft, double pageTop, Art
                     continue;
                 }
                 if (content[i] == '(')
-                    ++depth;
-                else if (content[i] == ')' && --depth == 0)
+                    ++nesting;
+                else if (content[i] == ')' && --nesting == 0)
                 {
                     ++i;
                     break;
@@ -1069,9 +1874,10 @@ void runContent(const std::string& content, double pageLeft, double pageTop, Art
         }
         if (c == '/')
         {
-            ++i;
+            const size_t begin = ++i;
             while (i < n && !std::isspace(static_cast<unsigned char>(content[i])) && std::strchr("/[]()<>{}%", content[i]) == nullptr)
                 ++i;
+            lastName = content.substr(begin, i - begin);
             continue;
         }
         if (std::isdigit(static_cast<unsigned char>(c)) || c == '-' || c == '+' || c == '.')
@@ -1095,6 +1901,7 @@ void runContent(const std::string& content, double pageLeft, double pageTop, Art
         i = end;
         const auto has = [&operands](size_t count) { return operands.size() >= count; };
         const auto arg = [&operands](size_t back) { return operands[operands.size() - back]; };
+        State& state = stack.back();
         if (op == "q")
             stack.push_back(stack.back());
         else if (op == "Q")
@@ -1103,13 +1910,13 @@ void runContent(const std::string& content, double pageLeft, double pageTop, Art
                 stack.pop_back();
         }
         else if (op == "cm" && has(6))
-            stack.back().ctm = stack.back().ctm.after(Affine{arg(6), arg(5), arg(4), arg(3), arg(2), arg(1)});
+            state.ctm = state.ctm.after(Affine{arg(6), arg(5), arg(4), arg(3), arg(2), arg(1)});
         else if (op == "w" && has(1))
-            stack.back().lineWidth = arg(1);
+            state.lineWidth = arg(1);
         else if (op == "m" && has(2))
         {
             current = Point(arg(2), arg(1));
-            start = current;
+            startPoint = current;
             path.push_back(Subpath());
             path.back().segments.push_back({Segment::Kind::Move, {toStage(current.x, current.y)}});
         }
@@ -1120,29 +1927,30 @@ void runContent(const std::string& content, double pageLeft, double pageTop, Art
         }
         else if ((op == "c" && has(6)) || ((op == "v" || op == "y") && has(4)))
         {
-            if (path.empty())
-                continue;
-            Point c1, c2, to;
-            if (op == "c")
+            if (!path.empty())
             {
-                c1 = Point(arg(6), arg(5));
-                c2 = Point(arg(4), arg(3));
-                to = Point(arg(2), arg(1));
+                Point c1, c2, to;
+                if (op == "c")
+                {
+                    c1 = Point(arg(6), arg(5));
+                    c2 = Point(arg(4), arg(3));
+                    to = Point(arg(2), arg(1));
+                }
+                else if (op == "v")
+                {
+                    c1 = current;
+                    c2 = Point(arg(4), arg(3));
+                    to = Point(arg(2), arg(1));
+                }
+                else
+                {
+                    c1 = Point(arg(4), arg(3));
+                    to = Point(arg(2), arg(1));
+                    c2 = to;
+                }
+                path.back().segments.push_back({Segment::Kind::Cubic, {toStage(c1.x, c1.y), toStage(c2.x, c2.y), toStage(to.x, to.y)}});
+                current = to;
             }
-            else if (op == "v")
-            {
-                c1 = current;
-                c2 = Point(arg(4), arg(3));
-                to = Point(arg(2), arg(1));
-            }
-            else
-            {
-                c1 = Point(arg(4), arg(3));
-                to = Point(arg(2), arg(1));
-                c2 = to;
-            }
-            path.back().segments.push_back({Segment::Kind::Cubic, {toStage(c1.x, c1.y), toStage(c2.x, c2.y), toStage(to.x, to.y)}});
-            current = to;
         }
         else if (op == "re" && has(4))
         {
@@ -1154,14 +1962,16 @@ void runContent(const std::string& content, double pageLeft, double pageTop, Art
                 {Segment::Kind::Line, {toStage(x, y)}}};
             path.push_back(rect);
             current = Point(x, y);
-            start = current;
+            startPoint = current;
         }
         else if (op == "h")
         {
             if (!path.empty())
                 path.back().closed = true;
-            current = start;
+            current = startPoint;
         }
+        else if (op == "W" || op == "W*")
+            clipNext = true;
         else if (op == "f" || op == "F" || op == "f*")
             paint(true, false, true);
         else if (op == "S")
@@ -1173,26 +1983,143 @@ void runContent(const std::string& content, double pageLeft, double pageTop, Art
         else if (op == "b" || op == "b*")
             paint(true, true, true);
         else if (op == "n")
-            path.clear();
+            paint(false, false, false);
+        else if (op == "scn" && operands.empty() && !lastName.empty())
+        {
+            // A pattern: a shading's gradient, placed by the pattern's own
+            // matrix in the page's space.
+            const std::string pattern = resolved(run.file, resource("/Pattern", lastName));
+            const std::vector<double> matrix = numbersOf(valueOf(pattern, "/Matrix"));
+            Affine placed;
+            if (matrix.size() >= 6)
+                placed = Affine{matrix[0], matrix[1], matrix[2], matrix[3], matrix[4], matrix[5]};
+            state.fillGradient.reset();
+            if (std::atoi(valueOf(pattern, "/PatternType").c_str()) == 2)
+                state.fillGradient = shadingGradient(run.file, valueOf(pattern, "/Shading"), run.stage().after(start.after(placed)));
+            if (state.fillGradient)
+                state.fill = state.fillGradient->stops.front().color;
+            else
+                run.note("Pattern fills other than gradients came in as plain colors.");
+        }
         else if (op == "g" || op == "rg" || op == "k" || op == "sc" || op == "scn")
-            stack.back().fill = color();
+        {
+            state.fill = colorOf(operands);
+            state.fillGradient.reset();
+        }
         else if (op == "G" || op == "RG" || op == "K" || op == "SC" || op == "SCN")
-            stack.back().stroke = color();
+            state.stroke = colorOf(operands);
+        else if (op == "gs" && !lastName.empty())
+        {
+            const std::string graphics = resolved(run.file, resource("/ExtGState", lastName));
+            const std::string fillAlpha = valueOf(graphics, "/ca");
+            const std::string strokeAlpha = valueOf(graphics, "/CA");
+            if (!fillAlpha.empty())
+                state.fillAlpha = std::clamp(std::atof(fillAlpha.c_str()), 0.0, 1.0);
+            if (!strokeAlpha.empty())
+                state.strokeAlpha = std::clamp(std::atof(strokeAlpha.c_str()), 0.0, 1.0);
+        }
+        else if (op == "sh" && !lastName.empty())
+        {
+            // A shading painted over the clip: the clip's outline with the
+            // gradient as its fill.
+            std::optional<Gradient> gradient =
+                shadingGradient(run.file, resource("/Shading", lastName), run.stage().after(state.ctm));
+            if (gradient && !state.clip.empty())
+            {
+                Painted painted;
+                painted.subpaths = state.clip;
+                for (Gradient::Stop& stop : gradient->stops)
+                    stop.color = faded(stop.color, state.fillAlpha);
+                painted.fill = gradient->stops.front().color;
+                painted.gradient = gradient;
+                addPath(artwork, std::move(painted));
+            }
+            else if (!gradient)
+                run.note("Some shadings are of kinds Phoenix does not read and were left out.");
+        }
         else if (op == "BI")
         {
             // An inline image: skipped to its end.
             const size_t ei = content.find("EI", i);
             i = ei == std::string::npos ? n : ei + 2;
+            run.note("Images written into the page's content were left out.");
         }
-        else if (op == "Do")
-            sawXObject = true;
+        else if (op == "Do" && !lastName.empty())
+        {
+            const std::string reference = resource("/XObject", lastName);
+            const int number = referenceOf(reference);
+            std::string dictionary;
+            std::vector<uint8_t> data;
+            bool isStream = false;
+            if (number >= 0 && run.file.object(number, dictionary, data, isStream) && isStream)
+            {
+                const std::string subtype = valueOf(dictionary, "/Subtype");
+                if (subtype == "/Form" && depth < 12)
+                {
+                    // A group or placed art: its content, in its own space.
+                    const std::vector<double> matrix = numbersOf(valueOf(dictionary, "/Matrix"));
+                    Affine inside = state.ctm;
+                    if (matrix.size() >= 6)
+                        inside = inside.after(Affine{matrix[0], matrix[1], matrix[2], matrix[3], matrix[4], matrix[5]});
+                    std::string own = resolved(run.file, valueOf(dictionary, "/Resources"));
+                    if (own.empty())
+                        own = resources;
+                    runContent(std::string(data.begin(), data.end()), run, own, inside, depth + 1);
+                }
+                else if (subtype == "/Image")
+                {
+                    Image image;
+                    if (pdfImage(run.file, dictionary, data, image))
+                    {
+                        // The unit square, its top row first, onto the page.
+                        image.placement = toPlacement(run.stage().after(state.ctm.after(Affine{1.0, 0.0, 0.0, -1.0, 0.0, 1.0})));
+                        artwork.order.emplace_back(Artwork::Kind::Image, artwork.images.size());
+                        artwork.images.push_back(std::move(image));
+                    }
+                    else
+                        run.note("Some images are of kinds Phoenix does not read and were left out.");
+                }
+            }
+        }
         operands.clear();
+        lastName.clear();
     }
-    if (sawXObject)
-        artwork.notes.push_back("Artwork in placed or grouped objects of the page was left out.");
 }
 
 } // namespace
+
+std::vector<uint8_t> fromBase64(const std::string& text)
+{
+    std::vector<uint8_t> out;
+    uint32_t buffer = 0;
+    int bits = 0;
+    for (char c : text)
+    {
+        int value = -1;
+        if (c >= 'A' && c <= 'Z')
+            value = c - 'A';
+        else if (c >= 'a' && c <= 'z')
+            value = c - 'a' + 26;
+        else if (c >= '0' && c <= '9')
+            value = c - '0' + 52;
+        else if (c == '+' || c == '-')
+            value = 62;
+        else if (c == '/' || c == '_')
+            value = 63;
+        else if (c == '=')
+            break;
+        if (value < 0)
+            continue;
+        buffer = (buffer << 6) | static_cast<uint32_t>(value);
+        bits += 6;
+        if (bits >= 8)
+        {
+            bits -= 8;
+            out.push_back(static_cast<uint8_t>(buffer >> bits));
+        }
+    }
+    return out;
+}
 
 std::vector<Segment> arcToCubics(const Point& from, double rx, double ry, double rotation, bool large, bool sweep,
     const Point& to)
@@ -1231,6 +2158,47 @@ Artwork readSvg(const std::string& text)
     }
     artwork.width = width;
     artwork.height = height;
+
+    // Elements by id, and the style sheets' rules.
+    SvgDefs defs;
+    std::function<void(const tinyxml2::XMLElement&)> gather = [&](const tinyxml2::XMLElement& element) {
+        if (const char* id = element.Attribute("id"))
+            defs.ids[id] = &element;
+        if (localName(element) == "style")
+        {
+            const std::string sheet = textOf(element);
+            size_t at = 0;
+            while (at < sheet.size())
+            {
+                const size_t open = sheet.find('{', at);
+                const size_t close = open == std::string::npos ? std::string::npos : sheet.find('}', open);
+                if (close == std::string::npos)
+                    break;
+                const std::string body = sheet.substr(open + 1, close - open - 1);
+                std::string selectors = sheet.substr(at, open - at);
+                size_t start = 0;
+                while (start <= selectors.size())
+                {
+                    size_t comma = selectors.find(',', start);
+                    if (comma == std::string::npos)
+                        comma = selectors.size();
+                    const std::string selector = trimmed(selectors.substr(start, comma - start));
+                    if (selector.size() > 1 && selector[0] == '.' && selector.find_first_of(" >:[") == std::string::npos)
+                        defs.classRules[selector.substr(1)] += body + ";";
+                    else if (!selector.empty() && std::isalpha(static_cast<unsigned char>(selector[0])) &&
+                        selector.find_first_of(" >:[.#") == std::string::npos)
+                        defs.typeRules[selector] += body + ";";
+                    start = comma + 1;
+                }
+                at = close + 1;
+            }
+        }
+        for (const tinyxml2::XMLElement* child = element.FirstChildElement(); child; child = child->NextSiblingElement())
+            gather(*child);
+    };
+    gather(root);
+    gDefs = &defs;
+
     SvgStyle style;
     for (const tinyxml2::XMLElement* child = root.FirstChildElement(); child; child = child->NextSiblingElement())
     {
@@ -1238,6 +2206,7 @@ Artwork readSvg(const std::string& text)
         applyStyle(root, rootStyle);
         walkSvg(*child, rootStyle, view, artwork);
     }
+    gDefs = nullptr;
     return artwork;
 }
 
@@ -1288,13 +2257,14 @@ Artwork readPdf(const std::vector<uint8_t>& bytes)
     }
     artwork.width = right - left;
     artwork.height = top - bottom;
+    PdfFile pdf{file};
     std::string content;
     for (int ref : contentRefs(page))
     {
         std::string dictionary;
         std::vector<uint8_t> data;
         bool isStream = false;
-        if (findObject(file, ref, dictionary, data, isStream) && isStream)
+        if (pdf.object(ref, dictionary, data, isStream) && isStream)
             content.append(data.begin(), data.end()).push_back('\n');
     }
     if (content.empty())
@@ -1302,7 +2272,9 @@ Artwork readPdf(const std::vector<uint8_t>& bytes)
         artwork.notes.push_back("The page's content could not be read.");
         return artwork;
     }
-    runContent(content, left, top, artwork);
+    PdfRun run{pdf, left, top, artwork, {}};
+    runContent(content, run, resolved(pdf, valueOf(page, "/Resources")), Affine(), 0);
+    artwork.notes.insert(artwork.notes.end(), run.notes.begin(), run.notes.end());
     return artwork;
 }
 
@@ -1314,7 +2286,36 @@ Shape* toShape(const Painted& painted)
     shape->isDrawingObject = true;
     int fillIndex = -1;
     int strokeIndex = -1;
-    if (painted.fill)
+    if (painted.gradient && painted.gradient->stops.size() >= 2)
+    {
+        const Gradient& gradient = *painted.gradient;
+        FillStyle* fill = nullptr;
+        if (gradient.radial)
+        {
+            RadialGradient* radial = new RadialGradient(shape);
+            for (const Gradient::Stop& stop : gradient.stops)
+                radial->entries.push_back({stop.offset, {stop.color[0], stop.color[1], stop.color[2], stop.color[3]}});
+            radial->focalPointRatio = gradient.focal;
+            fill = radial;
+        }
+        else
+        {
+            LinearGradient* linear = new LinearGradient(shape);
+            for (const Gradient::Stop& stop : gradient.stops)
+                linear->entries.push_back({stop.offset, {stop.color[0], stop.color[1], stop.color[2], stop.color[3]}});
+            fill = linear;
+        }
+        const Placement& p = gradient.placement;
+        fill->transform = Transform(p.a, p.b, p.c, p.d, p.tx, p.ty);
+        if (gradient.spread == Gradient::Spread::Reflect)
+            fill->spreadMethod = "reflect";
+        else if (gradient.spread == Gradient::Spread::Repeat)
+            fill->spreadMethod = "repeat";
+        shape->fills.push_back(fill);
+        shape->fillsMap[1] = fill;
+        fillIndex = 1;
+    }
+    else if (painted.fill)
     {
         SolidColor* fill = new SolidColor(shape);
         for (int i = 0; i < 4; ++i)

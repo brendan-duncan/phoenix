@@ -26,6 +26,7 @@
 #include "../data/publish_history.h"
 #include "../data/radial_gradient.h"
 #include "../data/raw_element.h"
+#include "../parser/document_parser.h"
 #include "../data/rectangle_primitive.h"
 #include "../data/script_list.h"
 #include "../data/shape.h"
@@ -764,6 +765,8 @@ fla::Element* readKind(const Reader& kind, fla::DOMElement* parent, Context& con
                 r.keep(raw->phxUnknown);
         }
         finish(r, context);
+        // A placed video: where it sits, to draw it by.
+        describeVideoInstance(*raw);
         return raw;
     }
     default:
@@ -1572,6 +1575,7 @@ fla::FLADocument* load(const std::string& path, std::string& error, std::string&
     {
         // Nothing to warn about: newer additions are kept as they are.
     }
+    collectVideos(*document);
     return flaDocument;
 }
 

@@ -1,6 +1,11 @@
 #include "psd_import.h"
 
+#include "zlib.h"
+
 #include <algorithm>
+#include <cmath>
+#include <cstring>
+#include <map>
 
 namespace fla {
 
@@ -16,14 +21,14 @@ struct Reader
     bool failed = false;
 
     bool has(size_t count) const { return !failed && at <= bytes.size() && bytes.size() - at >= count; }
-    uint32_t read(int count)
+    uint64_t read(int count)
     {
         if (!has(static_cast<size_t>(count)))
         {
             failed = true;
             return 0;
         }
-        uint32_t value = 0;
+        uint64_t value = 0;
         for (int i = 0; i < count; ++i)
             value = (value << 8) | bytes[at++];
         return value;
@@ -31,7 +36,7 @@ struct Reader
     uint8_t u8() { return static_cast<uint8_t>(read(1)); }
     uint16_t u16() { return static_cast<uint16_t>(read(2)); }
     int16_t i16() { return static_cast<int16_t>(read(2)); }
-    uint32_t u32() { return read(4); }
+    uint32_t u32() { return static_cast<uint32_t>(read(4)); }
     int32_t i32() { return static_cast<int32_t>(read(4)); }
     std::string text(size_t count)
     {
@@ -51,6 +56,19 @@ struct Reader
         else
             at += count;
     }
+};
+
+/// What a document's pixels are, and how its lengths are written.
+struct Format
+{
+    /// A large document (PSB) writes some lengths in eight bytes.
+    bool large = false;
+    /// Bits a sample: 8, 16 or 32.
+    int depth = 8;
+    /// 1 grayscale, 3 RGB, 4 CMYK.
+    int mode = 3;
+
+    uint64_t length(Reader& in) const { return large ? in.read(8) : in.u32(); }
 };
 
 std::string utf8(const std::vector<uint16_t>& units)
@@ -87,10 +105,153 @@ std::string utf8(const std::vector<uint16_t>& units)
     return out;
 }
 
+std::vector<uint8_t> inflateAll(const uint8_t* data, size_t size, size_t expected)
+{
+    std::vector<uint8_t> out(expected);
+    z_stream stream{};
+    if (inflateInit(&stream) != Z_OK)
+        return std::vector<uint8_t>();
+    stream.next_in = const_cast<Bytef*>(data);
+    stream.avail_in = static_cast<uInt>(size);
+    stream.next_out = out.data();
+    stream.avail_out = static_cast<uInt>(out.size());
+    ::inflate(&stream, Z_FINISH);
+    out.resize(out.size() - stream.avail_out);
+    inflateEnd(&stream);
+    return out;
+}
+
+/// Samples of \a depth bits as bytes: 16-bit ones by their high byte, and
+/// 32-bit (linear floating point) ones brought into display gamma.
+std::vector<uint8_t> toEightBit(const std::vector<uint8_t>& data, size_t count, int depth)
+{
+    if (depth == 8)
+        return data;
+    std::vector<uint8_t> out(count, 0);
+    const size_t bytes = static_cast<size_t>(depth / 8);
+    for (size_t i = 0; i < count && (i + 1) * bytes <= data.size(); ++i)
+    {
+        if (depth == 16)
+        {
+            out[i] = data[i * 2];
+            continue;
+        }
+        uint32_t bits = 0;
+        for (size_t k = 0; k < 4; ++k)
+            bits = (bits << 8) | data[i * 4 + k];
+        float value = 0.0f;
+        std::memcpy(&value, &bits, 4);
+        const double shown = std::pow(std::clamp(static_cast<double>(value), 0.0, 1.0), 1.0 / 2.2);
+        out[i] = static_cast<uint8_t>(std::lround(shown * 255.0));
+    }
+    return out;
+}
+
+/// Undoes ZIP-with-prediction: each row was written as differences from
+/// the sample before; 32-bit rows also had their bytes split into planes.
+void unpredict(std::vector<uint8_t>& data, int width, int height, int depth)
+{
+    const size_t w = static_cast<size_t>(width);
+    if (depth == 8)
+    {
+        for (int y = 0; y < height; ++y)
+        {
+            uint8_t* row = data.data() + static_cast<size_t>(y) * w;
+            if ((static_cast<size_t>(y) + 1) * w > data.size())
+                return;
+            for (size_t x = 1; x < w; ++x)
+                row[x] = static_cast<uint8_t>(row[x] + row[x - 1]);
+        }
+    }
+    else if (depth == 16)
+    {
+        for (int y = 0; y < height; ++y)
+        {
+            uint8_t* row = data.data() + static_cast<size_t>(y) * w * 2;
+            if ((static_cast<size_t>(y) + 1) * w * 2 > data.size())
+                return;
+            uint16_t previous = static_cast<uint16_t>((row[0] << 8) | row[1]);
+            for (size_t x = 1; x < w; ++x)
+            {
+                const uint16_t value = static_cast<uint16_t>(((row[x * 2] << 8) | row[x * 2 + 1]) + previous);
+                row[x * 2] = static_cast<uint8_t>(value >> 8);
+                row[x * 2 + 1] = static_cast<uint8_t>(value);
+                previous = value;
+            }
+        }
+    }
+    else if (depth == 32)
+    {
+        std::vector<uint8_t> row(w * 4);
+        for (int y = 0; y < height; ++y)
+        {
+            uint8_t* stored = data.data() + static_cast<size_t>(y) * w * 4;
+            if ((static_cast<size_t>(y) + 1) * w * 4 > data.size())
+                return;
+            for (size_t i = 1; i < w * 4; ++i)
+                stored[i] = static_cast<uint8_t>(stored[i] + stored[i - 1]);
+            // Plane k holds every sample's k-th byte.
+            for (size_t x = 0; x < w; ++x)
+                for (size_t k = 0; k < 4; ++k)
+                    row[x * 4 + k] = stored[k * w + x];
+            std::copy(row.begin(), row.end(), stored);
+        }
+    }
+}
+
+/// One channel's samples, raw, PackBits or ZIP, \a width by \a height, as
+/// bytes. \a end is where the channel's data stops.
+std::vector<uint8_t> channelData(Reader& in, size_t end, int width, int height, const Format& format)
+{
+    const size_t count = static_cast<size_t>(width) * static_cast<size_t>(height);
+    const size_t sample = static_cast<size_t>(format.depth / 8);
+    const size_t size = count * sample;
+    const uint16_t compression = in.u16();
+    std::vector<uint8_t> data;
+    const size_t available = end > in.at && end <= in.bytes.size() ? end - in.at : 0;
+    if (compression == 0)
+    {
+        if (available >= size)
+            data.assign(in.bytes.begin() + static_cast<std::ptrdiff_t>(in.at),
+                in.bytes.begin() + static_cast<std::ptrdiff_t>(in.at + size));
+    }
+    else if (compression == 1)
+    {
+        size_t packed = 0;
+        for (int row = 0; row < height; ++row)
+            packed += format.large ? in.u32() : in.u16();
+        if (in.has(packed))
+            data = unpackBits(in.bytes.data() + in.at, packed, size);
+    }
+    else if (compression == 2 || compression == 3)
+    {
+        if (available > 0)
+            data = inflateAll(in.bytes.data() + in.at, available, size);
+        if (data.size() == size && compression == 3)
+            unpredict(data, width, height, format.depth);
+    }
+    in.at = end;
+    if (data.size() != size)
+        data.assign(size, 0);
+    return toEightBit(data, count, format.depth);
+}
+
+/// Photoshop's blend modes as Animate names them; empty for normal, and
+/// for those Animate has no like of.
+std::string blendName(const std::string& key, bool& known)
+{
+    static const std::map<std::string, std::string> names = {{"norm", ""}, {"pass", ""}, {"mul ", "multiply"},
+        {"scrn", "screen"}, {"over", "overlay"}, {"dark", "darken"}, {"lite", "lighten"}, {"diff", "difference"},
+        {"lddg", "add"}, {"fsub", "subtract"}, {"hLit", "hardlight"}};
+    const auto found = names.find(key);
+    known = found != names.end();
+    return known ? found->second : std::string();
+}
+
 struct Channel
 {
     int16_t id = 0;
-    uint32_t length = 0;
+    uint64_t length = 0;
 };
 
 struct Record
@@ -100,34 +261,191 @@ struct Record
     /// lsct: 0 a layer, 1 or 2 a group's start (its top), 3 its end.
     uint32_t section = 0;
     int maskLeft = 0, maskTop = 0, maskWidth = 0, maskHeight = 0;
+    uint8_t maskDefault = 255;
 };
 
-/// One channel's pixels: raw or PackBits, \a width by \a height.
-std::vector<uint8_t> channelData(Reader& in, size_t end, int width, int height)
+/// Keys whose length a large document writes in eight bytes.
+bool longKey(const std::string& key)
 {
-    const size_t count = static_cast<size_t>(width) * static_cast<size_t>(height);
-    const uint16_t compression = in.u16();
-    std::vector<uint8_t> pixels;
-    if (compression == 0)
+    static const char* const keys[] = {"LMsk", "Lr16", "Lr32", "Layr", "Mt16", "Mt32", "Mtrn", "Alph", "FMsk",
+        "lnk2", "FEid", "FXid", "PxSD"};
+    for (const char* name : keys)
+        if (key == name)
+            return true;
+    return false;
+}
+
+/// The layer records and their channels from \a in up to \a end: the
+/// layer info section, or an Lr16 or Lr32 block, which hold the same.
+std::vector<Record> readLayers(Reader& in, size_t end, const Format& format, Image& image)
+{
+    std::vector<Record> records;
+    const int count = std::abs(static_cast<int>(in.i16()));
+    std::vector<std::string> unknownBlends;
+    for (int i = 0; i < count && !in.failed && in.at < end; ++i)
     {
-        if (in.has(count) && in.at + count <= end)
+        Record record;
+        const int top = in.i32(), left = in.i32(), bottom = in.i32(), right = in.i32();
+        record.layer.left = left;
+        record.layer.top = top;
+        record.layer.width = std::max(0, right - left);
+        record.layer.height = std::max(0, bottom - top);
+        const uint16_t channelCount = in.u16();
+        for (int c = 0; c < channelCount; ++c)
         {
-            pixels.assign(in.bytes.begin() + static_cast<std::ptrdiff_t>(in.at),
-                in.bytes.begin() + static_cast<std::ptrdiff_t>(in.at + count));
+            Channel channel;
+            channel.id = in.i16();
+            channel.length = format.length(in);
+            record.channels.push_back(channel);
+        }
+        in.skip(4); // "8BIM"
+        const std::string blendKey = in.text(4);
+        bool known = true;
+        record.layer.blend = blendName(blendKey, known);
+        if (!known && std::find(unknownBlends.begin(), unknownBlends.end(), blendKey) == unknownBlends.end())
+            unknownBlends.push_back(blendKey);
+        record.layer.opacity = in.u8();
+        record.layer.clipped = in.u8() != 0;
+        const uint8_t flags = in.u8();
+        record.layer.hidden = (flags & 0x02) != 0;
+        in.u8();
+        const uint32_t extra = in.u32();
+        const size_t extraEnd = in.at + extra;
+        const uint32_t maskLength = in.u32();
+        const size_t maskEnd = in.at + maskLength;
+        if (maskLength >= 18)
+        {
+            const int mt = in.i32(), ml = in.i32(), mb = in.i32(), mr = in.i32();
+            record.maskLeft = ml;
+            record.maskTop = mt;
+            record.maskWidth = std::max(0, mr - ml);
+            record.maskHeight = std::max(0, mb - mt);
+            record.maskDefault = in.u8();
+            const uint8_t maskFlags = in.u8();
+            // A disabled mask leaves the layer whole.
+            if (maskFlags & 0x02)
+                record.maskWidth = record.maskHeight = 0;
+        }
+        in.at = maskEnd;
+        in.skip(in.u32()); // blending ranges
+        const uint8_t nameLength = in.u8();
+        record.layer.name = in.text(nameLength);
+        // The name and its length byte, padded to four.
+        in.skip((4 - (nameLength + 1) % 4) % 4);
+        while (!in.failed && in.at + 12 <= extraEnd)
+        {
+            const std::string signature = in.text(4);
+            if (signature != "8BIM" && signature != "8B64")
+                break;
+            const std::string key = in.text(4);
+            const uint64_t length = format.large && longKey(key) ? in.read(8) : in.u32();
+            const size_t blockEnd = in.at + static_cast<size_t>(length);
+            if (key == "luni" && length >= 4)
+            {
+                const uint32_t units = in.u32();
+                std::vector<uint16_t> name;
+                for (uint32_t u = 0; u < units && in.at + 2 <= blockEnd; ++u)
+                    name.push_back(in.u16());
+                record.layer.name = utf8(name);
+            }
+            else if ((key == "lsct" || key == "lsdk") && length >= 4)
+                record.section = in.u32();
+            in.at = blockEnd + (length % 2);
+            if (in.at > extraEnd)
+                in.at = extraEnd;
+        }
+        in.at = extraEnd;
+        records.push_back(std::move(record));
+    }
+    for (const std::string& key : unknownBlends)
+        image.notes.push_back("A layer blend mode Animate has no like of (" + key + ") was drawn as Normal.");
+
+    // Each layer's channels, in the order of the records.
+    for (Record& record : records)
+    {
+        Layer& layer = record.layer;
+        const size_t pixels = static_cast<size_t>(layer.width) * static_cast<size_t>(layer.height);
+        std::map<int, std::vector<uint8_t>> planes;
+        std::vector<uint8_t> mask;
+        for (const Channel& channel : record.channels)
+        {
+            const size_t channelEnd = in.at + static_cast<size_t>(channel.length);
+            if (in.failed || channelEnd > in.bytes.size())
+            {
+                in.failed = true;
+                break;
+            }
+            const bool isMask = channel.id == -2 || channel.id == -3;
+            const int w = isMask ? record.maskWidth : layer.width;
+            const int h = isMask ? record.maskHeight : layer.height;
+            if (record.section != 0 || w == 0 || h == 0 || channel.length < 2)
+            {
+                in.at = channelEnd;
+                continue;
+            }
+            std::vector<uint8_t> data = channelData(in, channelEnd, w, h, format);
+            if (channel.id == -2)
+                mask = std::move(data);
+            else if (!isMask)
+                planes[channel.id] = std::move(data);
+        }
+        if (record.section != 0 || pixels == 0)
+            continue;
+        layer.rgba.assign(pixels * 4, 255);
+        const auto plane = [&](int id) -> const std::vector<uint8_t>* {
+            const auto found = planes.find(id);
+            return found != planes.end() && found->second.size() == pixels ? &found->second : nullptr;
+        };
+        const std::vector<uint8_t>* alpha = plane(-1);
+        for (size_t p = 0; p < pixels; ++p)
+        {
+            uint8_t* out = &layer.rgba[p * 4];
+            if (format.mode == 1)
+            {
+                const std::vector<uint8_t>* g = plane(0);
+                out[0] = out[1] = out[2] = g ? (*g)[p] : 0;
+            }
+            else if (format.mode == 4)
+            {
+                // Ink is stored inverted: 255 is none.
+                const std::vector<uint8_t>* c = plane(0);
+                const std::vector<uint8_t>* m = plane(1);
+                const std::vector<uint8_t>* y = plane(2);
+                const std::vector<uint8_t>* k = plane(3);
+                const int key = k ? (*k)[p] : 255;
+                out[0] = static_cast<uint8_t>((c ? (*c)[p] : 255) * key / 255);
+                out[1] = static_cast<uint8_t>((m ? (*m)[p] : 255) * key / 255);
+                out[2] = static_cast<uint8_t>((y ? (*y)[p] : 255) * key / 255);
+            }
+            else
+            {
+                for (int s = 0; s < 3; ++s)
+                    if (const std::vector<uint8_t>* channel = plane(s))
+                        out[s] = (*channel)[p];
+            }
+            if (alpha)
+                out[3] = (*alpha)[p];
+        }
+        // A user mask: its pixels scale the alpha where it covers, its
+        // default outside.
+        if (!mask.empty())
+        {
+            const int w = record.maskWidth;
+            const int h = record.maskHeight;
+            for (int y = 0; y < layer.height; ++y)
+                for (int x = 0; x < layer.width; ++x)
+                {
+                    const int mx = layer.left + x - record.maskLeft;
+                    const int my = layer.top + y - record.maskTop;
+                    const uint8_t value = mx >= 0 && my >= 0 && mx < w && my < h
+                        ? mask[static_cast<size_t>(my) * static_cast<size_t>(w) + static_cast<size_t>(mx)]
+                        : record.maskDefault;
+                    uint8_t& a = layer.rgba[(static_cast<size_t>(y) * static_cast<size_t>(layer.width) + static_cast<size_t>(x)) * 4 + 3];
+                    a = static_cast<uint8_t>(a * value / 255);
+                }
         }
     }
-    else if (compression == 1)
-    {
-        size_t packed = 0;
-        for (int row = 0; row < height; ++row)
-            packed += in.u16();
-        if (in.has(packed))
-            pixels = unpackBits(in.bytes.data() + in.at, packed, count);
-    }
-    in.at = end;
-    if (pixels.size() != count)
-        pixels.assign(count, 0);
-    return pixels;
+    return records;
 }
 
 } // namespace
@@ -174,162 +492,61 @@ Image read(const std::vector<uint8_t>& bytes)
     const uint16_t channels = in.u16();
     image.height = static_cast<int>(in.u32());
     image.width = static_cast<int>(in.u32());
-    const uint16_t depth = in.u16();
-    const uint16_t mode = in.u16();
-    if (version != 1)
+    Format format;
+    format.depth = in.u16();
+    format.mode = in.u16();
+    format.large = version == 2;
+    if (version != 1 && version != 2)
     {
-        image.notes.push_back("Large documents (PSB) are not read; save it as a PSD.");
+        image.notes.push_back("The file is not a Photoshop document Phoenix reads.");
         return image;
     }
-    if (depth != 8 || (mode != 3 && mode != 1))
+    if ((format.depth != 8 && format.depth != 16 && format.depth != 32) ||
+        (format.mode != 1 && format.mode != 3 && format.mode != 4))
     {
-        image.notes.push_back("Only 8-bit RGB and grayscale documents are read; convert it in Photoshop first.");
+        image.notes.push_back("Only RGB, CMYK and grayscale documents of 8, 16 or 32 bits are read; convert it in "
+                              "Photoshop first.");
         return image;
     }
-    const bool gray = mode == 1;
     in.skip(in.u32()); // color mode data
     in.skip(in.u32()); // image resources
 
-    // Layers, bottom first as stored.
+    // Layers, bottom first as stored. 16- and 32-bit documents keep them
+    // in an Lr16 or Lr32 block after the global mask instead.
     std::vector<Record> records;
-    const uint32_t layerAndMask = in.u32();
-    const size_t layerAndMaskEnd = in.at + layerAndMask;
+    const uint64_t layerAndMask = format.length(in);
+    const size_t layerAndMaskEnd = in.at + static_cast<size_t>(layerAndMask);
     if (layerAndMask > 0 && !in.failed)
     {
-        const uint32_t infoLength = in.u32();
-        const size_t infoEnd = in.at + infoLength;
+        const uint64_t infoLength = format.length(in);
+        const size_t infoEnd = in.at + static_cast<size_t>(infoLength);
         if (infoLength > 0)
+            records = readLayers(in, infoEnd, format, image);
+        in.at = infoEnd;
+        // The global layer mask, then blocks of more layer information.
+        in.skip(in.u32());
+        while (records.empty() && !in.failed && in.at + 12 <= layerAndMaskEnd)
         {
-            const int count = std::abs(static_cast<int>(in.i16()));
-            for (int i = 0; i < count && !in.failed; ++i)
-            {
-                Record record;
-                const int top = in.i32(), left = in.i32(), bottom = in.i32(), right = in.i32();
-                record.layer.left = left;
-                record.layer.top = top;
-                record.layer.width = std::max(0, right - left);
-                record.layer.height = std::max(0, bottom - top);
-                const uint16_t channelCount = in.u16();
-                for (int c = 0; c < channelCount; ++c)
-                {
-                    Channel channel;
-                    channel.id = in.i16();
-                    channel.length = in.u32();
-                    record.channels.push_back(channel);
-                }
-                in.skip(8); // "8BIM" and the blend mode
-                record.layer.opacity = in.u8();
-                in.u8(); // clipping
-                const uint8_t flags = in.u8();
-                record.layer.hidden = (flags & 0x02) != 0;
-                in.u8();
-                const uint32_t extra = in.u32();
-                const size_t extraEnd = in.at + extra;
-                const uint32_t maskLength = in.u32();
-                const size_t maskEnd = in.at + maskLength;
-                if (maskLength >= 16)
-                {
-                    const int mt = in.i32(), ml = in.i32(), mb = in.i32(), mr = in.i32();
-                    record.maskLeft = ml;
-                    record.maskTop = mt;
-                    record.maskWidth = std::max(0, mr - ml);
-                    record.maskHeight = std::max(0, mb - mt);
-                }
-                in.at = maskEnd;
-                in.skip(in.u32()); // blending ranges
-                const uint8_t nameLength = in.u8();
-                record.layer.name = in.text(nameLength);
-                // The name and its length byte, padded to four.
-                in.skip((4 - (nameLength + 1) % 4) % 4);
-                while (!in.failed && in.at + 12 <= extraEnd)
-                {
-                    const std::string signature = in.text(4);
-                    if (signature != "8BIM" && signature != "8B64")
-                        break;
-                    const std::string key = in.text(4);
-                    const uint32_t length = in.u32();
-                    const size_t end = in.at + length;
-                    if (key == "luni" && length >= 4)
-                    {
-                        const uint32_t units = in.u32();
-                        std::vector<uint16_t> name;
-                        for (uint32_t u = 0; u < units && in.at + 2 <= end; ++u)
-                            name.push_back(in.u16());
-                        record.layer.name = utf8(name);
-                    }
-                    else if ((key == "lsct" || key == "lsdk") && length >= 4)
-                        record.section = in.u32();
-                    in.at = end + (length % 2);
-                    if (in.at > extraEnd)
-                        in.at = extraEnd;
-                }
-                in.at = extraEnd;
-                records.push_back(std::move(record));
-            }
-
-            // Each layer's channels, in the order of the records.
-            for (Record& record : records)
-            {
-                Layer& layer = record.layer;
-                const size_t pixels = static_cast<size_t>(layer.width) * static_cast<size_t>(layer.height);
-                if (record.section == 0)
-                    layer.rgba.assign(pixels * 4, 255);
-                for (const Channel& channel : record.channels)
-                {
-                    const size_t end = in.at + channel.length;
-                    if (in.failed || end > bytes.size())
-                    {
-                        in.failed = true;
-                        break;
-                    }
-                    const bool mask = channel.id == -2 || channel.id == -3;
-                    const int w = mask ? record.maskWidth : layer.width;
-                    const int h = mask ? record.maskHeight : layer.height;
-                    if (record.section != 0 || w == 0 || h == 0 || channel.length < 2)
-                    {
-                        in.at = end;
-                        continue;
-                    }
-                    const std::vector<uint8_t> data = channelData(in, end, w, h);
-                    if (mask)
-                    {
-                        // A user mask: its pixels scale the alpha where it
-                        // covers, the default color outside.
-                        if (channel.id != -2)
-                            continue;
-                        for (int y = 0; y < layer.height; ++y)
-                            for (int x = 0; x < layer.width; ++x)
-                            {
-                                const int mx = layer.left + x - record.maskLeft;
-                                const int my = layer.top + y - record.maskTop;
-                                const uint8_t value = mx >= 0 && my >= 0 && mx < w && my < h
-                                    ? data[static_cast<size_t>(my) * static_cast<size_t>(w) + static_cast<size_t>(mx)]
-                                    : 255;
-                                uint8_t& alpha = layer.rgba[(static_cast<size_t>(y) * static_cast<size_t>(layer.width) + static_cast<size_t>(x)) * 4 + 3];
-                                alpha = static_cast<uint8_t>(alpha * value / 255);
-                            }
-                        continue;
-                    }
-                    const int slot = channel.id == -1 ? 3 : channel.id;
-                    if (slot < 0 || slot > 3)
-                        continue;
-                    for (size_t p = 0; p < pixels; ++p)
-                    {
-                        if (gray && slot == 0)
-                            layer.rgba[p * 4] = layer.rgba[p * 4 + 1] = layer.rgba[p * 4 + 2] = data[p];
-                        else if (!gray || slot == 3)
-                            layer.rgba[p * 4 + static_cast<size_t>(slot)] = data[p];
-                    }
-                }
-            }
+            const std::string signature = in.text(4);
+            if (signature != "8BIM" && signature != "8B64")
+                break;
+            const std::string key = in.text(4);
+            const uint64_t length = format.large && longKey(key) ? in.read(8) : in.u32();
+            const size_t end = in.at + static_cast<size_t>(length);
+            if ((key == "Lr16" || key == "Lr32" || key == "Layr") && length > 2)
+                records = readLayers(in, end, format, image);
+            in.at = end;
+            // Blocks are padded to four bytes.
+            while (in.at % 4 != 0 && in.at < layerAndMaskEnd)
+                ++in.at;
         }
         in.at = layerAndMaskEnd;
-        (void)infoEnd;
     }
 
     // Groups from the section markers: an end marker opens a group, read
     // from the bottom, and its start closes it.
     std::vector<std::vector<Layer>> stack(1);
+    bool emptyLayers = false;
     for (Record& record : records)
     {
         if (record.section == 3)
@@ -346,6 +563,8 @@ Image read(const std::vector<uint8_t>& bytes)
         }
         else if (record.section == 0 && record.layer.width > 0 && record.layer.height > 0)
             stack.back().push_back(std::move(record.layer));
+        else if (record.section == 0)
+            emptyLayers = true;
     }
     while (stack.size() > 1)
     {
@@ -355,6 +574,8 @@ Image read(const std::vector<uint8_t>& bytes)
     }
     image.layers = std::move(stack.front());
     std::reverse(image.layers.begin(), image.layers.end());
+    if (emptyLayers)
+        image.notes.push_back("Adjustment and fill layers, which have no pixels of their own, were left out.");
 
     if (image.layers.empty() && !in.failed && in.has(2))
     {
@@ -362,14 +583,17 @@ Image read(const std::vector<uint8_t>& bytes)
         // before any channel's data.
         const uint16_t compression = in.u16();
         const size_t count = static_cast<size_t>(image.width) * static_cast<size_t>(image.height);
-        const int planes = std::min<int>(channels, gray ? 2 : 4);
+        const size_t sample = static_cast<size_t>(format.depth / 8);
+        const int planes = std::min<int>(channels, format.mode == 1 ? 2 : format.mode == 4 ? 5 : 4);
         std::vector<std::vector<uint8_t>> data;
         if (compression == 0)
         {
-            for (int c = 0; c < planes && in.has(count); ++c)
+            for (int c = 0; c < planes && in.has(count * sample); ++c)
             {
-                data.emplace_back(bytes.begin() + static_cast<std::ptrdiff_t>(in.at), bytes.begin() + static_cast<std::ptrdiff_t>(in.at + count));
-                in.at += count;
+                std::vector<uint8_t> plane(bytes.begin() + static_cast<std::ptrdiff_t>(in.at),
+                    bytes.begin() + static_cast<std::ptrdiff_t>(in.at + count * sample));
+                data.push_back(toEightBit(plane, count, format.depth));
+                in.at += count * sample;
             }
         }
         else if (compression == 1)
@@ -377,13 +601,13 @@ Image read(const std::vector<uint8_t>& bytes)
             std::vector<size_t> sizes(channels, 0);
             for (int c = 0; c < channels; ++c)
                 for (int row = 0; row < image.height; ++row)
-                    sizes[static_cast<size_t>(c)] += in.u16();
+                    sizes[static_cast<size_t>(c)] += format.large ? in.u32() : in.u16();
             for (int c = 0; c < planes && !in.failed; ++c)
             {
                 const size_t size = sizes[static_cast<size_t>(c)];
                 if (!in.has(size))
                     break;
-                data.push_back(unpackBits(bytes.data() + in.at, size, count));
+                data.push_back(toEightBit(unpackBits(bytes.data() + in.at, size, count * sample), count, format.depth));
                 in.at += size;
             }
         }
@@ -396,16 +620,25 @@ Image read(const std::vector<uint8_t>& bytes)
             layer.rgba.assign(count * 4, 255);
             for (size_t p = 0; p < count; ++p)
             {
-                if (gray)
+                uint8_t* out = &layer.rgba[p * 4];
+                if (format.mode == 1)
                 {
-                    layer.rgba[p * 4] = layer.rgba[p * 4 + 1] = layer.rgba[p * 4 + 2] = data[0][p];
+                    out[0] = out[1] = out[2] = data[0][p];
                     if (data.size() > 1)
-                        layer.rgba[p * 4 + 3] = data[1][p];
+                        out[3] = data[1][p];
+                }
+                else if (format.mode == 4)
+                {
+                    const int key = data.size() > 3 ? data[3][p] : 255;
+                    for (size_t c = 0; c < 3 && c < data.size(); ++c)
+                        out[c] = static_cast<uint8_t>(data[c][p] * key / 255);
+                    if (data.size() > 4)
+                        out[3] = data[4][p];
                 }
                 else
                 {
                     for (size_t c = 0; c < data.size(); ++c)
-                        layer.rgba[p * 4 + c] = data[c][p];
+                        out[c] = data[c][p];
                 }
             }
             image.layers.push_back(std::move(layer));

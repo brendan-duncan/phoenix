@@ -7,9 +7,10 @@
 namespace fla {
 
 /// Photoshop documents read into their layers: each pixel layer's pixels
-/// and place, the groups they are in, which are hidden and how opaque each
-/// is. 8-bit RGB and grayscale documents; a document with no layers gives
-/// its flattened image as one. Free of Qt.
+/// and place, the groups they are in, which are hidden, how opaque each is
+/// and how it blends. RGB, CMYK and grayscale documents of 8, 16 or 32 bits,
+/// large documents (PSB) too; masks are applied to the pixels, and a
+/// document with no layers gives its flattened image as one. Free of Qt.
 namespace psd {
 
 struct Layer
@@ -28,6 +29,10 @@ struct Layer
     /// 0 to 255, applied by whoever draws it.
     uint8_t opacity = 255;
     bool hidden = false;
+    /// The blend mode as Animate names it ("multiply", "screen"...), empty
+    /// for normal; and whether the layer was clipped to the one below.
+    std::string blend;
+    bool clipped = false;
 };
 
 struct Image

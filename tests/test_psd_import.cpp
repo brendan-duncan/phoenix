@@ -2,6 +2,8 @@
 
 #include "../src/edit/psd_import.h"
 
+#include "zlib.h"
+
 namespace {
 
 struct Writer
@@ -24,8 +26,18 @@ struct Spec
     uint32_t section;
     bool hidden;
     uint8_t opacity;
-    /// Each channel's data, compression first; ids -1, 0, 1, 2.
+    /// Each channel's data, compression first; ids -1, 0, 1, 2 (and 3).
     std::vector<std::vector<uint8_t>> channels;
+    std::string blend = "norm";
+};
+
+/// How the document is written.
+struct Kind
+{
+    int depth = 8;
+    int mode = 3;
+    /// 2 for a large document (PSB).
+    int version = 1;
 };
 
 std::vector<uint8_t> raw(size_t count, uint8_t value)
@@ -35,8 +47,14 @@ std::vector<uint8_t> raw(size_t count, uint8_t value)
     return data;
 }
 
-std::vector<uint8_t> document(const std::vector<Spec>& specs)
+std::vector<uint8_t> document(const std::vector<Spec>& specs, const Kind& kind = Kind())
 {
+    const int lengthBytes = kind.version == 2 ? 8 : 4;
+    const auto putLength = [&](Writer& out, size_t value) {
+        if (lengthBytes == 8)
+            out.put(0, 4);
+        out.put(static_cast<uint32_t>(value), 4);
+    };
     Writer records;
     records.put(static_cast<uint32_t>(specs.size()), 2);
     for (const Spec& spec : specs)
@@ -46,13 +64,13 @@ std::vector<uint8_t> document(const std::vector<Spec>& specs)
         records.put(static_cast<uint32_t>(spec.bottom), 4);
         records.put(static_cast<uint32_t>(spec.right), 4);
         records.put(static_cast<uint32_t>(spec.channels.size()), 2);
-        const int16_t ids[] = {-1, 0, 1, 2};
+        const int16_t ids[] = {-1, 0, 1, 2, 3};
         for (size_t c = 0; c < spec.channels.size(); ++c)
         {
             records.put(static_cast<uint16_t>(ids[c]), 2);
-            records.put(static_cast<uint32_t>(spec.channels[c].size()), 4);
+            putLength(records, spec.channels[c].size());
         }
-        records.text("8BIMnorm");
+        records.text("8BIM" + spec.blend);
         records.put(spec.opacity, 1);
         records.put(0, 1);
         records.put(spec.hidden ? 2 : 0, 1);
@@ -79,18 +97,19 @@ std::vector<uint8_t> document(const std::vector<Spec>& specs)
 
     Writer file;
     file.text("8BPS");
-    file.put(1, 2);
+    file.put(static_cast<uint32_t>(kind.version), 2);
     file.put(0, 6);
     file.put(3, 2);
     file.put(4, 4); // height
     file.put(6, 4); // width
-    file.put(8, 2);
-    file.put(3, 2);
+    file.put(static_cast<uint32_t>(kind.depth), 2);
+    file.put(static_cast<uint32_t>(kind.mode), 2);
     file.put(0, 4);
     file.put(0, 4);
-    file.put(static_cast<uint32_t>(records.bytes.size() + 4), 4);
-    file.put(static_cast<uint32_t>(records.bytes.size()), 4);
+    putLength(file, records.bytes.size() + static_cast<size_t>(lengthBytes) + 4);
+    putLength(file, records.bytes.size());
     file.append(records.bytes);
+    file.put(0, 4); // the global mask
     return file.bytes;
 }
 
@@ -124,8 +143,80 @@ TEST(psd_rejects_what_it_does_not_read)
 {
     CHECK(!fla::psd::read({'n', 'o'}).ok);
     std::vector<uint8_t> bytes = document({});
-    bytes[23] = 16; // 16-bit
-    const fla::psd::Image deep = fla::psd::read(bytes);
-    CHECK(!deep.ok && deep.notes.size() == 1);
+    bytes[25] = 9; // Lab
+    const fla::psd::Image lab = fla::psd::read(bytes);
+    CHECK(!lab.ok && lab.notes.size() == 1);
     CHECK((fla::psd::unpackBits(std::vector<uint8_t>{0xfe, 7, 1, 8, 9}.data(), 5, 5) == std::vector<uint8_t>{7, 7, 7, 8, 9}));
+}
+
+namespace {
+
+/// A channel of 16-bit samples, raw.
+std::vector<uint8_t> raw16(size_t count, uint16_t value)
+{
+    std::vector<uint8_t> data = {0, 0};
+    for (size_t i = 0; i < count; ++i)
+    {
+        data.push_back(static_cast<uint8_t>(value >> 8));
+        data.push_back(static_cast<uint8_t>(value));
+    }
+    return data;
+}
+
+/// A channel ZIP-compressed with prediction: each row as differences.
+std::vector<uint8_t> zipPredicted(const std::vector<uint8_t>& samples, int width)
+{
+    std::vector<uint8_t> deltas = samples;
+    for (size_t row = 0; row * width < deltas.size(); ++row)
+        for (int x = width - 1; x > 0; --x)
+            deltas[row * width + x] = static_cast<uint8_t>(samples[row * width + x] - samples[row * width + x - 1]);
+    uLongf size = compressBound(static_cast<uLong>(deltas.size()));
+    std::vector<uint8_t> packed(size);
+    compress(packed.data(), &size, deltas.data(), static_cast<uLong>(deltas.size()));
+    packed.resize(size);
+    std::vector<uint8_t> data = {0, 3};
+    data.insert(data.end(), packed.begin(), packed.end());
+    return data;
+}
+
+} // namespace
+
+TEST(psd_deep_cmyk_large_and_zip_documents_are_read)
+{
+    // 16-bit RGB: the high byte of each sample.
+    Spec deep{"Deep", 0, 0, 2, 3, 0, false, 255, {raw16(6, 0xffff), raw16(6, 0x8000), raw16(6, 0x4000), raw16(6, 0x1234)}};
+    deep.blend = "mul ";
+    Kind sixteen;
+    sixteen.depth = 16;
+    fla::psd::Image image = fla::psd::read(document({deep}, sixteen));
+    CHECK(image.ok && image.layers.size() == 1);
+    CHECK(image.layers[0].rgba[0] == 0x80 && image.layers[0].rgba[1] == 0x40 && image.layers[0].rgba[2] == 0x12);
+    CHECK(image.layers[0].blend == "multiply");
+
+    // CMYK, ink inverted as Photoshop stores it: no cyan, full magenta, no
+    // yellow, no black is a pure magenta.
+    Spec ink{"Ink", 0, 0, 1, 2, 0, false, 255, {raw(2, 255), raw(2, 255), raw(2, 0), raw(2, 255), raw(2, 255)}};
+    Kind cmyk;
+    cmyk.mode = 4;
+    image = fla::psd::read(document({ink}, cmyk));
+    CHECK(image.ok);
+    CHECK(image.layers[0].rgba[0] == 255 && image.layers[0].rgba[1] == 0 && image.layers[0].rgba[2] == 255);
+
+    // A large document, with eight-byte lengths, and ZIP with prediction.
+    const std::vector<uint8_t> ramp = {10, 20, 30, 40, 50, 60};
+    Spec zipped{"Zipped", 0, 0, 2, 3, 0, false, 255, {raw(6, 255), zipPredicted(ramp, 3), raw(6, 0), raw(6, 0)}};
+    zipped.blend = "lddg";
+    Kind large;
+    large.version = 2;
+    image = fla::psd::read(document({zipped}, large));
+    CHECK(image.ok && image.layers.size() == 1);
+    for (size_t p = 0; p < ramp.size(); ++p)
+        CHECK(image.layers[0].rgba[p * 4] == ramp[p]);
+    CHECK(image.layers[0].blend == "add");
+
+    // A blend Animate has no like of is drawn as Normal, and said so.
+    Spec odd{"Odd", 0, 0, 1, 1, 0, false, 255, {raw(1, 255), raw(1, 1), raw(1, 2), raw(1, 3)}};
+    odd.blend = "hue ";
+    image = fla::psd::read(document({odd}));
+    CHECK(image.ok && image.layers[0].blend.empty() && image.notes.size() == 1);
 }

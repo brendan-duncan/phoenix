@@ -25,13 +25,20 @@ TEST(svg_paths_shapes_and_styles_are_read)
   <path d="M0 0 h10 v10 z m20 0 l5 5" fill="none" stroke="#0f0"/>
   <line x1="0" y1="0" x2="4" y2="0" stroke="blue"/>
   <polygon points="0,0 4,0 4,4" fill="none"/>
-  <text>left out</text>
+  <text x="5" y="20" font-family="'Helvetica', sans-serif" font-size="12" font-weight="bold">Hi  there</text>
 </svg>)svg";
     const fla::vectors::Artwork art = fla::vectors::readSvg(svg);
     CHECK(near(art.width, 200.0) && near(art.height, 100.0));
     // The polygon paints nothing: three paths remain, then the line.
     CHECK(art.paths.size() == 4);
-    CHECK(art.notes.size() == 1);
+    CHECK(art.notes.empty());
+    // The text, its spaces run together, its baseline placed by the view box.
+    CHECK(art.texts.size() == 1);
+    if (art.texts.size() != 1)
+        return;
+    CHECK(art.texts[0].text == "Hi there" && art.texts[0].family == "Helvetica" && art.texts[0].bold);
+    CHECK(near(art.texts[0].size, 12.0) && near(art.texts[0].placement.tx, 10.0) && near(art.texts[0].placement.ty, 40.0));
+    CHECK(art.order.size() == 5 && !art.order.empty() && art.order.back().first == fla::vectors::Artwork::Kind::Text);
 
     // The rect: the group's translate, then the view box's doubling.
     const fla::vectors::Painted& rect = art.paths[0];
@@ -129,4 +136,94 @@ TEST(painted_paths_become_drawing_objects_with_holes)
     fla::vectors::Painted nothing;
     nothing.subpaths = {square(0, 0, 1, 1, true)};
     CHECK(fla::vectors::toShape(nothing) == nullptr);
+}
+
+TEST(svg_gradients_classes_use_and_images_are_read)
+{
+    const std::string svg = R"svg(<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="100" height="100">
+  <defs>
+    <style>.warm { fill: #ff8000 } .thin, line { stroke-width: 0.5 }</style>
+    <linearGradient id="base"><stop offset="0" stop-color="#000"/><stop offset="100%" style="stop-color:#fff;stop-opacity:0.5"/></linearGradient>
+    <linearGradient id="across" xlink:href="#base" x1="0" y1="0" x2="1" y2="0" spreadMethod="reflect"/>
+    <radialGradient id="glow" gradientUnits="userSpaceOnUse" cx="50" cy="50" r="20"><stop offset="0" stop-color="red"/><stop offset="1" stop-color="blue"/></radialGradient>
+    <rect id="tile" width="4" height="4" class="warm"/>
+  </defs>
+  <rect x="10" y="10" width="40" height="20" fill="url(#across)"/>
+  <circle cx="50" cy="50" r="20" fill="url( #glow )"/>
+  <use xlink:href="#tile" x="70" y="80"/>
+  <image x="0" y="90" width="8" height="4" xlink:href="data:image/png;base64,iVBORw0KGgo="/>
+</svg>)svg";
+    const fla::vectors::Artwork art = fla::vectors::readSvg(svg);
+    CHECK(art.paths.size() == 3 && art.images.size() == 1);
+    if (art.paths.size() != 3 || art.images.size() != 1 || art.order.size() != 4)
+        return;
+
+    // The linear one takes its stops from the gradient it names, and spans
+    // the rect's width: its square's x axis runs 40 pixels.
+    const fla::vectors::Painted& rect = art.paths[0];
+    CHECK(rect.gradient && !rect.gradient->radial && rect.gradient->stops.size() == 2);
+    CHECK(rect.gradient->stops[1].color[0] == 255 && rect.gradient->stops[1].color[3] == 128);
+    CHECK(rect.gradient->spread == fla::vectors::Gradient::Spread::Reflect);
+    CHECK(near(rect.gradient->placement.a * 1638.4, 40.0, 1.0e-6) && near(rect.gradient->placement.tx, 30.0));
+    CHECK(rect.fill && (*rect.fill)[0] == 0);
+
+    // The radial one in user space: centered, 20 pixels out.
+    const fla::vectors::Painted& circle = art.paths[1];
+    CHECK(circle.gradient && circle.gradient->radial);
+    CHECK(near(circle.gradient->placement.tx, 50.0) && near(circle.gradient->placement.a * 819.2, 20.0, 1.0e-6));
+
+    // The used rect, placed, with its class's fill.
+    const fla::vectors::Painted& tile = art.paths[2];
+    CHECK(tile.fill && (*tile.fill)[0] == 255 && (*tile.fill)[1] == 128);
+    CHECK(near(tile.subpaths[0].segments[0].points[0].x, 70.0) && near(tile.subpaths[0].segments[0].points[0].y, 80.0));
+
+    // The image's bytes, decoded, and its box.
+    const fla::vectors::Image& image = art.images[0];
+    CHECK(image.encoded.size() == 8 && image.encoded[1] == 'P' && image.encoded[2] == 'N');
+    CHECK(near(image.placement.a, 8.0) && near(image.placement.d, 4.0) && near(image.placement.ty, 90.0));
+    CHECK(art.order[3].first == fla::vectors::Artwork::Kind::Image);
+
+    // Shapes take the gradient as Animate's fill.
+    fla::Shape* shape = fla::vectors::toShape(rect);
+    CHECK(shape && shape->fills.size() == 1 && shape->fills[0]->type() == fla::FillStyle::Type::LinearGradient);
+    CHECK(shape->fills[0]->spreadMethod == "reflect");
+    delete shape;
+}
+
+TEST(pdf_forms_shadings_and_opacity_are_read)
+{
+    // A form drawn twice, moved; a gradient painted through a clip; and a
+    // half-opaque fill.
+    const std::string form = "0 0 1 rg 0 0 10 10 re f";
+    const std::string content =
+        "q 1 0 0 1 20 0 cm /Fm0 Do Q q 1 0 0 1 40 0 cm /Fm0 Do Q "
+        "q 0 50 100 20 re W n /Sh0 sh Q "
+        "/GS0 gs 1 0 0 rg 0 80 10 10 re f";
+    std::string pdf = "%PDF-1.4\n1 0 obj << /Type /Catalog /Pages 2 0 R >> endobj\n"
+                      "2 0 obj << /Type /Pages /Kids [3 0 R] /Count 1 >> endobj\n"
+                      "3 0 obj << /Type /Page /Parent 2 0 R /MediaBox [0 0 200 100] /Contents 4 0 R "
+                      "/Resources << /XObject << /Fm0 5 0 R >> /Shading << /Sh0 6 0 R >> /ExtGState << /GS0 << /ca 0.5 >> >> >> >> endobj\n"
+                      "4 0 obj << /Length " + std::to_string(content.size()) + " >>\nstream\n" + content + "\nendstream\nendobj\n"
+                      "5 0 obj << /Type /XObject /Subtype /Form /BBox [0 0 10 10] /Length " + std::to_string(form.size()) +
+        " >>\nstream\n" + form + "\nendstream\nendobj\n"
+        "6 0 obj << /ShadingType 2 /ColorSpace /DeviceRGB /Coords [0 0 100 0] /Function 7 0 R >> endobj\n"
+        "7 0 obj << /FunctionType 3 /Domain [0 1] /Bounds [0.5] /Encode [0 1 0 1] /Functions [8 0 R 9 0 R] >> endobj\n"
+        "8 0 obj << /FunctionType 2 /Domain [0 1] /C0 [1 0 0] /C1 [0 1 0] /N 1 >> endobj\n"
+        "9 0 obj << /FunctionType 2 /Domain [0 1] /C0 [0 1 0] /C1 [0 0 1] /N 1 >> endobj\n%%EOF\n";
+    const fla::vectors::Artwork art = fla::vectors::readPdf(std::vector<uint8_t>(pdf.begin(), pdf.end()));
+    CHECK(art.paths.size() == 4);
+    if (art.paths.size() != 4)
+        return;
+    // The form, twice, where each put it.
+    CHECK(near(art.paths[0].subpaths[0].segments[0].points[0].x, 20.0));
+    CHECK(near(art.paths[1].subpaths[0].segments[0].points[0].x, 40.0));
+    CHECK(art.paths[0].fill && (*art.paths[0].fill)[2] == 255);
+    // The shading: the clip's rectangle, filled red to green to blue.
+    const fla::vectors::Painted& shaded = art.paths[2];
+    CHECK(shaded.gradient && shaded.gradient->stops.size() == 3);
+    CHECK(shaded.gradient->stops[0].color[0] == 255 && shaded.gradient->stops[1].color[1] == 255);
+    CHECK(near(shaded.gradient->stops[1].offset, 0.5) && near(shaded.gradient->placement.a * 1638.4, 100.0, 1.0e-6));
+    // Half opaque.
+    CHECK(art.paths[3].fill && (*art.paths[3].fill)[3] == 128);
+    CHECK(art.notes.empty());
 }

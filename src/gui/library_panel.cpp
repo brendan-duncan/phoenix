@@ -144,6 +144,23 @@ QIcon bitmapIcon()
     });
 }
 
+QIcon videoIcon()
+{
+    // A film frame with its sprocket holes, as Animate marks a video.
+    return glyph([](QPainter& painter) {
+        painter.setPen(Qt::NoPen);
+        painter.setBrush(ink());
+        painter.drawRect(QRectF(2.0, 3.0, 12.0, 10.0));
+        painter.setBrush(QColor(255, 255, 255));
+        for (double y = 4.0; y < 12.0; y += 3.0)
+        {
+            painter.drawRect(QRectF(3.0, y, 1.5, 1.5));
+            painter.drawRect(QRectF(11.5, y, 1.5, 1.5));
+        }
+        painter.drawRect(QRectF(5.5, 5.0, 5.0, 6.0));
+    });
+}
+
 QIcon fontIcon()
 {
     // A capital A, as the library marks a font.
@@ -394,6 +411,8 @@ LibraryPanel::LibraryPanel(QWidget* parent)
             emit bitmapPropertiesRequested(name);
         else if (kind == static_cast<int>(Kind::Sound))
             emit soundPropertiesRequested(name);
+        else if (kind == static_cast<int>(Kind::Video))
+            emit videoPropertiesRequested(name);
     });
     connect(_tree, &LibraryTree::moveRequested, this, &LibraryPanel::moveRequested);
     connect(_tree, &LibraryTree::dragStarting, this, [this](const QString& kind, const QString& name) {
@@ -837,6 +856,8 @@ QStringList LibraryPanel::snapshot() const
             names << "b:" + QString::fromStdString(static_cast<const fla::Bitmap*>(resource)->name);
     for (const fla::Document::SoundInfo& sound : doc->sounds)
         names << "a:" + QString::fromStdString(sound.name);
+    for (const fla::Document::VideoInfo& video : doc->videos)
+        names << "v:" + QString::fromStdString(video.name);
     for (const fla::fonts::FontItem& font : fla::fonts::itemsOf(*doc))
         names << "t:" + QString::fromStdString(font.name) + ":" + QString::fromStdString(font.font);
     return names;
@@ -966,6 +987,9 @@ void LibraryPanel::refresh()
     }
     for (const fla::Document::SoundInfo& sound : doc->sounds)
         add(QString::fromStdString(sound.name), soundIcon(), "Sound", Kind::Sound);
+    for (const fla::Document::VideoInfo& video : doc->videos)
+        add(QString::fromStdString(video.name), videoIcon(), video.embedded ? "Embedded Video" : "Video",
+            Kind::Video);
     for (const fla::fonts::FontItem& font : fla::fonts::itemsOf(*doc))
         add(QString::fromStdString(font.name), fontIcon(), "Font", Kind::Font);
 
