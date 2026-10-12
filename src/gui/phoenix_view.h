@@ -563,6 +563,11 @@ public:
     /// The same of \a area of the document, rather than the stage.
     QImage renderFrame(int frame, const QSize& size, bool transparent, const QRectF& area);
 
+    /// The same as vectors: what frame \a frame paints at \a size, the
+    /// stage at the origin, as fills and images (no stage color), masks as
+    /// clips. What SWF export writes.
+    std::vector<struct RecordedItem> recordFrame(int frame, const QSize& size);
+
     /// While set, renderFrame draws nothing of the scene but \a layer (its
     /// mask still masking it), for exporting a sequence per layer.
     void setOnlyLayer(const fla::Layer* layer) { _onlyLayer = layer; }
@@ -957,6 +962,9 @@ private:
     fla::Snapper* _snapper = nullptr;
     bool _showGrid = false;
     bool _drawHidden = false;
+    /// Masks clip what they mask to their area as a path, for exports that
+    /// write vectors, rather than compositing pixels.
+    bool _vectorMasks = false;
     bool _gridOver = false;
     bool _clipOutsideStage = false;
     bool _showPasteboard = true;

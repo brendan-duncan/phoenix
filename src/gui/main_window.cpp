@@ -41,6 +41,8 @@
 #include "../edit/palettes.h"
 #include "../edit/shape_recognition.h"
 #include <QButtonGroup>
+#include <QProgressDialog>
+#include <QCryptographicHash>
 #include <QGridLayout>
 #include "spell_checker.h"
 #include "../edit/text_style.h"
@@ -76,6 +78,10 @@
 #include "movie_export.h"
 #include "sprite_sheet_dialog.h"
 #include "brush_properties_dialog.h"
+#include "publish_dialog.h"
+#include "paint_recorder.h"
+#include "../util/swf_writer.h"
+#include "../edit/publish_settings.h"
 #include "../edit/brush_presets.h"
 #include "image_export.h"
 #include "timeline_view.h"
@@ -3662,6 +3668,37 @@ void MainWindow::setupMenus()
     exportShotsAction->setStatusTip("Split the episode into shot files, by scene, frame label or camera cut");
     connect(exportShotsAction, &QAction::triggered, this, &MainWindow::exportShots);
     exportMenu->addAction(exportShotsAction);
+    QAction* exportSwfAction = new QAction("Export S&WF Movie...", this);
+    exportSwfAction->setStatusTip("The scene as an SWF movie of vector shapes, for players and pipelines that read SWF");
+    connect(exportSwfAction, &QAction::triggered, this, [this]() {
+        const fla::Document* document = _flaDocument ? _flaDocument->document : nullptr;
+        if (!document)
+            return;
+        const QString base = _documentPath.isEmpty() ? QString("movie") : QFileInfo(_documentPath).completeBaseName();
+        const QString folder = _lastDirectory.isEmpty() ? QFileInfo(_documentPath).absolutePath() : _lastDirectory;
+        const QString path = QFileDialog::getSaveFileName(this, "Export SWF Movie", QDir(folder).filePath(base + ".swf"),
+            "SWF Movie (*.swf)");
+        if (path.isEmpty())
+            return;
+        QString error;
+        if (exportSwf(path, QSize(document->width, document->height), error))
+        {
+            _lastDirectory = QFileInfo(path).absolutePath();
+            statusBar()->showMessage(QString("Exported %1").arg(QDir::toNativeSeparators(path)), 5000);
+        }
+        else if (!error.isEmpty())
+            QMessageBox::warning(this, "Export Failed", error);
+    });
+    exportMenu->addAction(exportSwfAction);
+
+    QAction* publishSettingsAction = fileMenu->addAction("Publish Settings...");
+    publishSettingsAction->setShortcut(QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_F12));
+    publishSettingsAction->setStatusTip("Which formats Publish writes, and their options");
+    connect(publishSettingsAction, &QAction::triggered, this, &MainWindow::publishSettings);
+    QAction* publishAction = fileMenu->addAction("Publish");
+    publishAction->setShortcut(QKeySequence(Qt::SHIFT | Qt::Key_F12));
+    publishAction->setStatusTip("Write the formats the publish settings ask for, beside the document");
+    connect(publishAction, &QAction::triggered, this, &MainWindow::publish);
 
     // The format Save As starts in for a new document: XFL folders suit a
     // studio keeping its files in version control.
@@ -5446,6 +5483,20 @@ int MainWindow::renderCommand(const QString& source, const QStringList& options)
         settings.format = MovieExportSettings::Format::SvgSequence;
         QDir().mkpath(QFileInfo(out).absolutePath());
     }
+    else if (suffix == "swf")
+    {
+        // A movie of vector shapes, the scene's frames all.
+        QDir().mkpath(QFileInfo(out).absolutePath());
+        QString error;
+        if (!exportSwf(QFileInfo(out).absoluteFilePath(), settings.size, error))
+        {
+            std::fprintf(stderr, "%s\n", qPrintable(error.isEmpty() ? QString("Render stopped.") : error));
+            return 1;
+        }
+        std::printf("Rendered %d frames of %s to %s\n", std::max(1, _phoenixView->frameCount()), qPrintable(source),
+            qPrintable(QFileInfo(out).absoluteFilePath()));
+        return 0;
+    }
     else if (suffix != "png")
     {
         QDir().mkpath(out);
@@ -5694,6 +5745,457 @@ void MainWindow::openBrushProperties()
             _phoenixView->update();
     });
     _brushProperties->show();
+}
+
+namespace {
+
+const char* const kPublishFile = "PublishSettings.xml";
+
+/// The document's publish settings file, as text; empty when it has none.
+std::string publishXml(const fla::Document& document)
+{
+    for (const auto& [path, bytes] : document.extraFiles)
+        if (path == kPublishFile)
+        {
+            const std::vector<uint8_t>& data = bytes.get();
+            return std::string(data.begin(), data.end());
+        }
+    return std::string();
+}
+
+} // namespace
+
+void MainWindow::publishSettings()
+{
+    fla::Document* document = _flaDocument ? _flaDocument->document : nullptr;
+    if (!document)
+        return;
+    const QString name = _documentPath.isEmpty() ? QString("Untitled") : QFileInfo(_documentPath).completeBaseName();
+    const std::string xml = publishXml(*document);
+    PublishSettingsDialog dialog(fla::publish::read(xml, name.toStdString()), name, document->width, document->height, this);
+    if (dialog.exec() != QDialog::Accepted)
+        return;
+    const std::string written = fla::publish::write(xml, dialog.settings(), name.toStdString());
+    if (written == xml)
+        return;
+    // One undo step: the package file replaced, or added.
+    using Files = std::vector<std::pair<std::string, fla::LazyBytes>>;
+    Files after = document->extraFiles;
+    bool found = false;
+    for (auto& [path, bytes] : after)
+        if (path == kPublishFile)
+        {
+            bytes = fla::LazyBytes(std::vector<uint8_t>(written.begin(), written.end()));
+            found = true;
+        }
+    if (!found)
+        after.emplace_back(kPublishFile, fla::LazyBytes(std::vector<uint8_t>(written.begin(), written.end())));
+    _editContext.commandStack().push(fla::CommandPtr(
+        new fla::SetPropertyCommand<Files>(document->extraFiles, document->extraFiles, after, "Publish Settings")));
+    _editContext.commandStack().breakMergeChain();
+}
+
+void MainWindow::publish()
+{
+    fla::Document* document = _flaDocument ? _flaDocument->document : nullptr;
+    if (!document || !_phoenixView)
+        return;
+    // Published files go beside the document, named after it: it needs a
+    // name and a place first.
+    if (_documentPath.isEmpty())
+    {
+        QMessageBox::information(this, "Publish", "Save the document first: Publish writes its files beside it.");
+        return;
+    }
+    const QFileInfo info(_documentPath);
+    const QString name = info.completeBaseName();
+    const QDir folder = info.absoluteDir();
+    const fla::publish::Settings settings = fla::publish::read(publishXml(*document), name.toStdString());
+    const QSize size = settings.matchMovie || settings.width <= 0 || settings.height <= 0
+        ? QSize(std::max(1, document->width), std::max(1, document->height))
+        : QSize(settings.width, settings.height);
+    // Still images show the frame labeled #Static, as in Animate, or the
+    // first.
+    int still = 0;
+    if (const fla::Timeline* scene = document->currentScene())
+        for (const fla::Layer* layer : scene->layers)
+            for (const fla::Frame* frame : layer ? layer->frames : std::vector<fla::Frame*>())
+                if (frame && frame->name == "#Static")
+                    still = frame->index;
+    const auto pathOf = [&](const char* format) {
+        return folder.filePath(QString::fromStdString(fla::publish::fileName(settings, format, name.toStdString())));
+    };
+    QStringList written;
+    QStringList problems;
+    const auto image = [&](ImageExportSettings::Format format, const char* key) {
+        ImageExportSettings out;
+        out.format = format;
+        out.path = pathOf(key);
+        out.size = size;
+        out.frame = still;
+        out.quality = settings.jpegQuality;
+        if (format == ImageExportSettings::Format::Png)
+        {
+            out.matte = settings.pngBitDepth == "24-bit" ? ImageExportSettings::Matte::Stage
+                                                         : ImageExportSettings::Matte::Transparent;
+            out.png8 = settings.pngBitDepth == "8-bit";
+            out.colors = settings.pngColors;
+        }
+        if (format == ImageExportSettings::Format::Gif)
+            out.colors = settings.gifColors;
+        QString error;
+        if (ImageExport::run(out, *_phoenixView, error))
+            written << QFileInfo(out.path).fileName();
+        else
+            problems << QString("%1: %2").arg(QFileInfo(out.path).fileName(), error);
+    };
+    if (settings.png)
+        image(ImageExportSettings::Format::Png, "png");
+    if (settings.jpeg)
+        image(ImageExportSettings::Format::Jpeg, "jpeg");
+    if (settings.gif && !settings.gifAnimated)
+        image(ImageExportSettings::Format::Gif, "gif");
+    if (settings.gif && settings.gifAnimated)
+    {
+        MovieExportSettings movie;
+        movie.format = MovieExportSettings::Format::Gif;
+        movie.path = pathOf("gif");
+        movie.size = size;
+        movie.first = 0;
+        movie.last = std::max(1, _phoenixView->frameCount()) - 1;
+        movie.loop = settings.gifLoop || settings.gifLoopCount > 0;
+        movie.gifRepeat = settings.gifLoop ? 0 : settings.gifLoopCount;
+        movie.gifColors = settings.gifColors;
+        QString error;
+        if (MovieExport::run(movie, *_phoenixView, _timelineAudio, document->frameRate, this, error))
+            written << QFileInfo(movie.path).fileName();
+        else if (!error.isEmpty())
+            problems << QString("%1: %2").arg(QFileInfo(movie.path).fileName(), error);
+    }
+    if (settings.svg)
+    {
+        const QString path = pathOf("svg");
+        QStringList linked;
+        if (_phoenixView->exportFrameSvg(path, still, false, settings.svgHiddenLayers, !settings.svgEmbed, QRectF(), &linked))
+            written << QFileInfo(path).fileName();
+        else
+            problems << QString("%1 could not be written.").arg(QFileInfo(path).fileName());
+    }
+    if (settings.flash)
+    {
+        const QString path = pathOf("flash");
+        QString error;
+        if (exportSwf(path, size, error))
+            written << QFileInfo(path).fileName();
+        else
+            problems << QString("%1: %2").arg(QFileInfo(path).fileName(), error);
+    }
+    if (settings.html)
+    {
+        // A page showing what was published: the movie, or else an image.
+        const QString path = pathOf("html");
+        QString body;
+        const QString title = name.toHtmlEscaped();
+        if (settings.flash && written.contains(QFileInfo(pathOf("flash")).fileName()))
+            body = QString("<object data=\"%1\" type=\"application/x-shockwave-flash\" width=\"%2\" height=\"%3\">"
+                           "<p>This page shows an SWF movie, which needs a player that plays SWF.</p></object>")
+                       .arg(QFileInfo(pathOf("flash")).fileName().toHtmlEscaped())
+                       .arg(size.width())
+                       .arg(size.height());
+        for (const char* key : {"gif", "svg", "png", "jpeg"})
+        {
+            if (!body.isEmpty())
+                break;
+            const QString file = QFileInfo(pathOf(key)).fileName();
+            if (written.contains(file))
+                body = QString("<img src=\"%1\" width=\"%2\" height=\"%3\" alt=\"%4\">")
+                           .arg(file.toHtmlEscaped())
+                           .arg(size.width())
+                           .arg(size.height())
+                           .arg(title);
+        }
+        if (body.isEmpty())
+            problems << "The HTML page has nothing to show: publish a movie or an image with it.";
+        else
+        {
+            QFile page(path);
+            const QColor stage(document->backgroundColor[0], document->backgroundColor[1], document->backgroundColor[2]);
+            const QString html = QString("<!doctype html>\n<html lang=\"en\">\n<head>\n<meta charset=\"utf-8\">\n"
+                                         "<title>%1</title>\n<style>body { margin: 0; background: %2; }</style>\n"
+                                         "</head>\n<body>\n%3\n</body>\n</html>\n")
+                                     .arg(title, stage.name(), body);
+            if (page.open(QIODevice::WriteOnly | QIODevice::Text) && page.write(html.toUtf8()) > 0)
+                written << QFileInfo(path).fileName();
+            else
+                problems << QString("%1 could not be written.").arg(QFileInfo(path).fileName());
+        }
+    }
+    _phoenixView->update();
+    if (!problems.isEmpty())
+        QMessageBox::warning(this, "Publish", problems.join("\n"));
+    statusBar()->showMessage(written.isEmpty() ? QString("Nothing was published.")
+                                               : QString("Published %1").arg(written.join(", ")),
+        6000);
+}
+
+namespace {
+
+/// A path's outline for SWF: lines kept, cubic curves as quadratic ones
+/// (four to a cubic), every subpath closed.
+std::vector<swf::Segment> swfOutline(const QPainterPath& path)
+{
+    using K = swf::Segment::Kind;
+    std::vector<swf::Segment> out;
+    QPointF start, at;
+    bool open = false;
+    const auto close = [&]() {
+        if (open && at != start)
+            out.push_back({K::Line, start.x(), start.y()});
+        open = false;
+    };
+    for (int i = 0; i < path.elementCount(); ++i)
+    {
+        const QPainterPath::Element& e = path.elementAt(i);
+        if (e.type == QPainterPath::MoveToElement)
+        {
+            close();
+            start = at = QPointF(e.x, e.y);
+            out.push_back({K::Move, e.x, e.y});
+            open = true;
+        }
+        else if (e.type == QPainterPath::LineToElement)
+        {
+            at = QPointF(e.x, e.y);
+            out.push_back({K::Line, e.x, e.y});
+        }
+        else if (e.type == QPainterPath::CurveToElement && i + 2 < path.elementCount())
+        {
+            const QPointF p0 = at;
+            const QPointF p1(e.x, e.y);
+            const QPointF p2(path.elementAt(i + 1).x, path.elementAt(i + 1).y);
+            const QPointF p3(path.elementAt(i + 2).x, path.elementAt(i + 2).y);
+            const auto point = [&](double t) {
+                const double u = 1.0 - t;
+                return p0 * (u * u * u) + p1 * (3 * u * u * t) + p2 * (3 * u * t * t) + p3 * (t * t * t);
+            };
+            const auto tangent = [&](double t) {
+                const double u = 1.0 - t;
+                return (p1 - p0) * (3 * u * u) + (p2 - p1) * (6 * u * t) + (p3 - p2) * (3 * t * t);
+            };
+            // Each quarter as a quadratic whose control sits where the
+            // tangents at its ends meet, or midway when they do not.
+            for (int k = 0; k < 4; ++k)
+            {
+                const double t0 = k / 4.0, t1 = (k + 1) / 4.0;
+                const QPointF a = point(t0), b = point(t1);
+                const QPointF da = tangent(t0), db = tangent(t1);
+                const double cross = da.x() * db.y() - da.y() * db.x();
+                QPointF control = (a + b) / 2.0;
+                if (std::fabs(cross) > 1.0e-9)
+                {
+                    const QPointF d = b - a;
+                    const double s = (d.x() * db.y() - d.y() * db.x()) / cross;
+                    const QPointF meet = a + da * s;
+                    if (std::hypot(meet.x() - control.x(), meet.y() - control.y()) < std::hypot(d.x(), d.y()) * 2.0)
+                        control = meet;
+                }
+                out.push_back({K::Quad, b.x(), b.y(), control.x(), control.y()});
+            }
+            at = p3;
+            i += 2;
+        }
+    }
+    close();
+    return out;
+}
+
+swf::Color swfColor(const QColor& color, double opacity)
+{
+    return swf::Color{static_cast<uint8_t>(color.red()), static_cast<uint8_t>(color.green()),
+        static_cast<uint8_t>(color.blue()), static_cast<uint8_t>(std::lround(color.alpha() * std::clamp(opacity, 0.0, 1.0)))};
+}
+
+swf::Matrix swfMatrix(const QTransform& t)
+{
+    return swf::Matrix{t.m11(), t.m12(), t.m21(), t.m22(), t.dx(), t.dy()};
+}
+
+/// The premultiplied ARGB bytes SWF bitmaps hold.
+std::vector<uint8_t> swfPixels(const QImage& source)
+{
+    const QImage image = source.convertToFormat(QImage::Format_ARGB32_Premultiplied);
+    std::vector<uint8_t> out;
+    out.reserve(static_cast<size_t>(image.width()) * image.height() * 4);
+    for (int y = 0; y < image.height(); ++y)
+    {
+        const QRgb* line = reinterpret_cast<const QRgb*>(image.constScanLine(y));
+        for (int x = 0; x < image.width(); ++x)
+        {
+            out.push_back(static_cast<uint8_t>(qAlpha(line[x])));
+            out.push_back(static_cast<uint8_t>(qRed(line[x])));
+            out.push_back(static_cast<uint8_t>(qGreen(line[x])));
+            out.push_back(static_cast<uint8_t>(qBlue(line[x])));
+        }
+    }
+    return out;
+}
+
+} // namespace
+
+bool MainWindow::exportSwf(const QString& path, const QSize& size, QString& error)
+{
+    const fla::Document* document = _flaDocument ? _flaDocument->document : nullptr;
+    if (!document || !_phoenixView)
+    {
+        error = "No document is open.";
+        return false;
+    }
+    const int frames = std::max(1, _phoenixView->frameCount());
+    swf::Writer writer(size.width(), size.height(), document->frameRate,
+        swf::Color{document->backgroundColor[0], document->backgroundColor[1], document->backgroundColor[2], 255});
+    // Shapes and bitmaps written once and placed in every frame they show in.
+    std::map<QByteArray, int> shapes;
+    std::map<QByteArray, int> bitmaps;
+    const auto bitmapOf = [&](const QImage& image) {
+        const QImage pixels = image.convertToFormat(QImage::Format_ARGB32_Premultiplied);
+        QCryptographicHash hash(QCryptographicHash::Sha1);
+        hash.addData(QByteArrayView(reinterpret_cast<const char*>(pixels.constBits()), pixels.sizeInBytes()));
+        hash.addData(QByteArray::number(pixels.width()) + "x" + QByteArray::number(pixels.height()));
+        const QByteArray key = hash.result();
+        const auto found = bitmaps.find(key);
+        if (found != bitmaps.end())
+            return found->second;
+        const int id = writer.defineBitmap(pixels.width(), pixels.height(), swfPixels(pixels));
+        bitmaps[key] = id;
+        return id;
+    };
+    QProgressDialog progress("Exporting SWF...", "Cancel", 0, frames, this);
+    progress.setWindowModality(Qt::WindowModal);
+    progress.setMinimumDuration(400);
+    int placed = 0;
+    for (int frame = 0; frame < frames; ++frame)
+    {
+        progress.setValue(frame);
+        if (progress.wasCanceled())
+            return false;
+        // What last frame showed goes; this frame's things go on in order.
+        for (int depth = 1; depth <= placed; ++depth)
+            writer.remove(depth);
+        placed = 0;
+        for (const RecordedItem& item : _phoenixView->recordFrame(frame, size))
+        {
+            QPainterPath area = item.path;
+            if (item.clipped)
+                area = area.intersected(item.clip);
+            area = area.simplified();
+            if (area.isEmpty())
+                continue;
+            swf::Fill fill;
+            double alpha = item.opacity;
+            if (item.kind == RecordedItem::Kind::Image)
+            {
+                fill.type = swf::Fill::Type::Bitmap;
+                fill.bitmap = bitmapOf(item.image);
+                fill.matrix = swfMatrix(item.imageTransform);
+            }
+            else
+            {
+                const QBrush& brush = item.brush;
+                const QGradient* gradient = brush.gradient();
+                if (gradient && (gradient->type() == QGradient::LinearGradient || gradient->type() == QGradient::RadialGradient))
+                {
+                    fill.type = gradient->type() == QGradient::LinearGradient ? swf::Fill::Type::Linear : swf::Fill::Type::Radial;
+                    for (const QGradientStop& stop : gradient->stops())
+                        fill.stops.push_back({stop.first, swfColor(stop.second, alpha)});
+                    fill.spread = gradient->spread() == QGradient::ReflectSpread ? 1 : gradient->spread() == QGradient::RepeatSpread ? 2 : 0;
+                    QTransform square;
+                    if (fill.type == swf::Fill::Type::Linear)
+                    {
+                        const auto* linear = static_cast<const QLinearGradient*>(gradient);
+                        const QPointF from = linear->start(), to = linear->finalStop();
+                        const QPointF d = to - from;
+                        square = QTransform(d.x() / 1638.4, d.y() / 1638.4, -d.y() / 1638.4, d.x() / 1638.4,
+                            (from.x() + to.x()) / 2.0, (from.y() + to.y()) / 2.0);
+                    }
+                    else
+                    {
+                        const auto* radial = static_cast<const QRadialGradient*>(gradient);
+                        const QPointF center = radial->center();
+                        const QPointF toward = radial->focalPoint() - center;
+                        const double radius = std::max(radial->radius(), 1.0e-6);
+                        const double angle = std::hypot(toward.x(), toward.y()) > 1.0e-9 ? std::atan2(toward.y(), toward.x()) : 0.0;
+                        const double k = radius / 819.2;
+                        square = QTransform(std::cos(angle) * k, std::sin(angle) * k, -std::sin(angle) * k, std::cos(angle) * k,
+                            center.x(), center.y());
+                        fill.focal = std::clamp(std::hypot(toward.x(), toward.y()) / radius, 0.0, 0.99);
+                    }
+                    fill.matrix = swfMatrix(square * brush.transform());
+                    alpha = 1.0;
+                }
+                else if (brush.style() == Qt::TexturePattern)
+                {
+                    fill.type = swf::Fill::Type::Bitmap;
+                    fill.repeat = true;
+                    fill.bitmap = bitmapOf(brush.textureImage());
+                    fill.matrix = swfMatrix(brush.transform());
+                }
+                else
+                {
+                    fill.color = swfColor(brush.color(), alpha);
+                    alpha = 1.0;
+                }
+            }
+            const std::vector<swf::Segment> outline = swfOutline(area);
+            // The same outline and fill: the same shape.
+            QCryptographicHash hash(QCryptographicHash::Sha1);
+            for (const swf::Segment& segment : outline)
+                hash.addData(QByteArrayView(reinterpret_cast<const char*>(&segment), sizeof(segment)));
+            hash.addData(QByteArrayView(reinterpret_cast<const char*>(&fill.type), sizeof(fill.type)));
+            hash.addData(QByteArrayView(reinterpret_cast<const char*>(&fill.color), sizeof(fill.color)));
+            hash.addData(QByteArrayView(reinterpret_cast<const char*>(&fill.matrix), sizeof(fill.matrix)));
+            hash.addData(QByteArray::number(fill.bitmap) + "/" + QByteArray::number(fill.spread) + "/" +
+                QByteArray::number(fill.focal) + "/" + QByteArray::number(fill.repeat));
+            for (const swf::Fill::Stop& stop : fill.stops)
+                hash.addData(QByteArrayView(reinterpret_cast<const char*>(&stop), sizeof(stop)));
+            const QByteArray key = hash.result();
+            int id = 0;
+            const auto found = shapes.find(key);
+            if (found != shapes.end())
+                id = found->second;
+            else
+            {
+                id = writer.defineShape(fill, outline);
+                shapes[key] = id;
+            }
+            if (id == 0)
+                continue;
+            swf::Writer::Blend blend = swf::Writer::Blend::Normal;
+            switch (item.composition)
+            {
+            case QPainter::CompositionMode_Multiply: blend = swf::Writer::Blend::Multiply; break;
+            case QPainter::CompositionMode_Screen: blend = swf::Writer::Blend::Screen; break;
+            case QPainter::CompositionMode_Lighten: blend = swf::Writer::Blend::Lighten; break;
+            case QPainter::CompositionMode_Darken: blend = swf::Writer::Blend::Darken; break;
+            case QPainter::CompositionMode_Difference: blend = swf::Writer::Blend::Difference; break;
+            case QPainter::CompositionMode_Plus: blend = swf::Writer::Blend::Add; break;
+            case QPainter::CompositionMode_Overlay: blend = swf::Writer::Blend::Overlay; break;
+            case QPainter::CompositionMode_HardLight: blend = swf::Writer::Blend::HardLight; break;
+            default: break;
+            }
+            writer.place(id, ++placed, alpha, blend);
+        }
+        writer.showFrame();
+    }
+    progress.setValue(frames);
+    const std::vector<uint8_t> bytes = writer.finish(true);
+    QFile file(path);
+    if (!file.open(QIODevice::WriteOnly) ||
+        file.write(reinterpret_cast<const char*>(bytes.data()), static_cast<qint64>(bytes.size())) != static_cast<qint64>(bytes.size()))
+    {
+        error = QString("Could not write %1.").arg(QDir::toNativeSeparators(path));
+        return false;
+    }
+    return true;
 }
 
 void MainWindow::exportSpriteSheet(const QString& symbolName)

@@ -1,0 +1,74 @@
+#pragma once
+
+#include <string>
+
+namespace fla {
+
+/// Animate's publish settings (PublishSettings.xml in the package): which
+/// formats File > Publish writes, their file names and their options.
+/// Phoenix reads the current profile, publishes what it can of it, and
+/// edits it in place, so every setting it does not use goes back to
+/// Animate unchanged. Free of Qt.
+namespace publish {
+
+struct Settings
+{
+    /// The profile's name, as Animate shows it.
+    std::string profile = "Default";
+
+    /// The formats to publish.
+    bool flash = true;
+    bool html = true;
+    bool png = false;
+    bool jpeg = false;
+    bool gif = false;
+    bool svg = false;
+
+    /// File names; with defaultNames, each is the document's name with the
+    /// format's extension.
+    bool defaultNames = true;
+    std::string flashFile;
+    std::string htmlFile;
+    std::string pngFile;
+    std::string jpegFile;
+    std::string gifFile;
+    std::string svgFile;
+
+    /// The images' size: the stage's (matchMovie), or their own.
+    bool matchMovie = true;
+    int width = 0;
+    int height = 0;
+
+    /// PNG: "24-bit with Alpha", "24-bit" or "8-bit", and an 8-bit
+    /// image's colors.
+    std::string pngBitDepth = "24-bit with Alpha";
+    int pngColors = 255;
+    /// JPEG: quality 0 to 100, progressive.
+    int jpegQuality = 80;
+    bool jpegProgressive = false;
+    /// GIF: animated, looping (forever, or loopCount times), colors.
+    bool gifAnimated = false;
+    bool gifLoop = true;
+    int gifLoopCount = 0;
+    int gifColors = 255;
+    /// SVG: hidden layers drawn, images embedded rather than written beside
+    /// it.
+    bool svgHiddenLayers = true;
+    bool svgEmbed = false;
+};
+
+/// The current profile of a PublishSettings.xml; the defaults for a
+/// document named \a name when \a xml is empty or not one.
+Settings read(const std::string& xml, const std::string& name);
+
+/// \a xml with the current profile's settings set to \a settings and all
+/// else kept; a new file of Animate's form when \a xml is empty.
+std::string write(const std::string& xml, const Settings& settings, const std::string& name);
+
+/// A format's file name: its own, or with default names \a name and the
+/// extension.
+std::string fileName(const Settings& settings, const std::string& format, const std::string& name);
+
+} // namespace publish
+
+} // namespace fla

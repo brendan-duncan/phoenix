@@ -18,6 +18,9 @@ struct Options
     /// color is spread onto its neighbors, so gradients keep their look in
     /// few colors.
     bool dither = false;
+    /// For a looping animation, how many times it plays after the first;
+    /// 0 for over and over.
+    int repeat = 0;
 };
 
 /// A picture cut down to a palette: its colors (red, green, blue), an index

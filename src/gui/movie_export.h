@@ -70,6 +70,8 @@ struct MovieExportSettings
     /// An animated GIF's colors, 2 to 256, and whether they are dithered.
     int gifColors = 256;
     bool gifDither = false;
+    /// A looping GIF plays this many times after the first; 0 for ever.
+    int gifRepeat = 0;
     /// For a sequence per layer, the layers by name; empty for every
     /// visible one.
     QStringList layers;

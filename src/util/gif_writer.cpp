@@ -433,7 +433,10 @@ AnimationWriter::AnimationWriter(int width, int height, bool loop, const Options
     if (loop)
     {
         // The Netscape extension: play over and over.
-        const uint8_t netscape[] = {0x21, 0xFF, 11, 'N', 'E', 'T', 'S', 'C', 'A', 'P', 'E', '2', '.', '0', 3, 1, 0, 0, 0};
+        // Its count, low byte first: 0 for over and over.
+        const int count = std::clamp(options.repeat, 0, 65535);
+        const uint8_t netscape[] = {0x21, 0xFF, 11, 'N', 'E', 'T', 'S', 'C', 'A', 'P', 'E', '2', '.', '0', 3, 1,
+            static_cast<uint8_t>(count & 0xFF), static_cast<uint8_t>(count >> 8), 0};
         _out.insert(_out.end(), netscape, netscape + sizeof(netscape));
     }
 }

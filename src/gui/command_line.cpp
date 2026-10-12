@@ -52,7 +52,7 @@ namespace {
 const char* const kHelp =
     "Phoenix commands, run with no window:\n"
     "\n"
-    "  render <file> [--range 1-240] [--out frames/|movie.mp4|anim.gif|frame.svg]\n"
+    "  render <file> [--range 1-240] [--out frames/|movie.mp4|anim.gif|frame.svg|movie.swf]\n"
     "         [--size WxH] [--transparent] [--no-camera] [--no-audio] [--per-layer]\n"
     "         [--layers A,B] [--passes] [--exr] [--prores|--prores4444] [--everything]\n"
     "         [--all-scenes|--each-scene] [--colors N] [--dither] [--link-images]\n"

@@ -194,6 +194,8 @@ if(TARGET tinyxml2 AND TARGET zlibstatic)
         ${PHOENIX_SRC}/edit/font_items.cpp
         ${PHOENIX_SRC}/edit/vector_import.cpp
         ${PHOENIX_SRC}/edit/shortcut_sets.cpp
+        ${PHOENIX_SRC}/edit/publish_settings.cpp
+        ${PHOENIX_SRC}/util/swf_writer.cpp
         ${PHOENIX_SRC}/util/zip_writer.cpp
         ${PHOENIX_SRC}/writer/fla_writer.cpp
         ${PHOENIX_SRC}/writer/xfl_content.cpp
@@ -209,6 +211,8 @@ if(TARGET tinyxml2 AND TARGET zlibstatic)
         test_font_items.cpp
         test_vector_import.cpp
         test_shortcut_sets.cpp
+        test_publish_settings.cpp
+        test_swf_writer.cpp
         test_fla_doctor.cpp
         test_exr_writer.cpp
         test_edit_list.cpp

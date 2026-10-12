@@ -41,6 +41,7 @@
 #include "../data/bitmap_instance.h"
 #include "../data/group.h"
 #include "../data/raw_element.h"
+#include "paint_recorder.h"
 #include "../data/linear_gradient.h"
 #include "../data/oval_primitive.h"
 #include "../data/radial_gradient.h"
@@ -370,7 +371,8 @@ bool PhoenixView::exportFrameSvg(const QString& filePath, int frame, bool transp
     QBuffer buffer;
     buffer.open(QIODevice::WriteOnly);
     {
-        QSvgGenerator generator;
+        // SVG 1.1, which has clip paths: masks are written as them.
+        QSvgGenerator generator(QSvgGenerator::SvgVersion::Svg11);
         generator.setOutputDevice(&buffer);
         generator.setSize(QSize(qCeil(area.width()), qCeil(area.height())));
         // CSS pixels, so the drawing is as wide as the stage.
@@ -389,11 +391,13 @@ bool PhoenixView::exportFrameSvg(const QString& filePath, int frame, bool transp
         _frameOverride = std::max(0, frame);
         _drawHidden = hidden;
         _exporting = true;
+        _vectorMasks = true;
         if (!transparent)
             painter.fillRect(area, QColor(document->backgroundColor[0], document->backgroundColor[1],
                                        document->backgroundColor[2], document->backgroundColor[3]));
         drawDocument(painter, document);
         _exporting = false;
+        _vectorMasks = false;
         _drawHidden = false;
         _frameOverride = savedOverride;
         viewTransform = savedView;
@@ -440,46 +444,10 @@ bool PhoenixView::exportFrameSvg(const QString& filePath, int frame, bool transp
 
 bool PhoenixView::exportToSvg(const QString& filePath)
 {
-    if (!_flaDocument || !_flaDocument->document)
-        return false;
-
-    fla::Document* document = _flaDocument->document;
-
-    double docWidth = document->width;
-    double docHeight = document->height;
-    if (docWidth <= 0 || docHeight <= 0)
-        return false;
-
-    QSvgGenerator generator;
-    generator.setFileName(filePath);
-    generator.setSize(QSize(qCeil(docWidth), qCeil(docHeight)));
-    generator.setResolution(96);
-    generator.setViewBox(QRectF(0, 0, docWidth, docHeight));
-    generator.setTitle("Phoenix SVG Export");
-    generator.setDescription("Single frame exported from Phoenix.");
-
-    QPainter painter(&generator);
-    painter.setRenderHint(QPainter::Antialiasing, true);
-    painter.setRenderHint(QPainter::TextAntialiasing, true);
-    painter.setRenderHint(QPainter::SmoothPixmapTransform, true);
-
-    // Render in pure document space: no pan/zoom and no supersampling, so SVG
-    // coordinates map 1:1 to document pixels. The traversal below reuses the
-    // exact same drawing code as on-screen rendering, so vector shapes,
-    // gradients, strokes and text are written out as real SVG primitives.
-    // viewTransform is consulted by the color-transformed symbol path; here the
-    // painter's base transform is identity (document space).
-    viewTransform = painter.transform();
-    _visibleRect = QRectF(0, 0, docWidth, docHeight);
-
-    painter.fillRect(QRectF(0, 0, docWidth, docHeight),
-        QColor(document->backgroundColor[0], document->backgroundColor[1],
-            document->backgroundColor[2], document->backgroundColor[3]));
-
-    drawDocument(painter, document);
-
-    painter.end();
-    return true;
+    // The frame showing, as an export draws it: hidden layers left out,
+    // images embedded, masks as clip paths.
+    const int frame = _player ? _player->currentFrame() : 0;
+    return exportFrameSvg(filePath, frame, false, false, false, QRectF());
 }
 
 QImage PhoenixView::renderFrame(int frame, const QSize& size, bool transparent)
@@ -547,6 +515,34 @@ QImage PhoenixView::renderFrame(int frame, const QSize& size, bool transparent, 
     _visibleRect = savedVisible;
     painter.end();
     return image;
+}
+
+std::vector<RecordedItem> PhoenixView::recordFrame(int frame, const QSize& size)
+{
+    PaintRecorder recorder(size);
+    if (!_flaDocument || !_flaDocument->document || size.isEmpty())
+        return recorder.items;
+    fla::Document* document = _flaDocument->document;
+    if (document->width <= 0 || document->height <= 0)
+        return recorder.items;
+    QPainter painter(&recorder);
+    painter.scale(static_cast<double>(size.width()) / document->width, static_cast<double>(size.height()) / document->height);
+    const QTransform savedView = viewTransform;
+    const QRectF savedVisible = _visibleRect;
+    const int savedOverride = _frameOverride;
+    viewTransform = painter.transform();
+    _visibleRect = QRectF(0, 0, document->width, document->height);
+    _frameOverride = std::max(0, frame);
+    _exporting = true;
+    _vectorMasks = true;
+    drawDocument(painter, document);
+    _vectorMasks = false;
+    _exporting = false;
+    _frameOverride = savedOverride;
+    viewTransform = savedView;
+    _visibleRect = savedVisible;
+    painter.end();
+    return recorder.items;
 }
 
 QImage PhoenixView::renderElements(const std::vector<const fla::Element*>& elements, double scale)
@@ -1525,6 +1521,9 @@ void PhoenixView::drawTimeline(QPainter& painter, const fla::Timeline* timeline,
         QRect crop;
     };
     QMap<int, MaskData> maskCache;
+    // For an export that writes vectors: each mask as the area it covers on
+    // the device, to clip what it masks to.
+    QMap<int, QPainterPath> vectorMasks;
     QTransform painterTransform = painter.transform();
     const QRect deviceRect(0, 0, painter.device()->width(), painter.device()->height());
 
@@ -1551,6 +1550,20 @@ void PhoenixView::drawTimeline(QPainter& painter, const fla::Timeline* timeline,
         const fla::Layer* layer = timeline->layers[i];
         if (layer->layerType != fla::Layer::Type::Mask || !shown(layer) || !masking(layer))
         {
+            continue;
+        }
+
+        if (_vectorMasks)
+        {
+            // The mask's fills recorded as vectors rather than drawn.
+            PaintRecorder recorder(deviceRect.size());
+            QPainter recording(&recorder);
+            recording.setTransform(painterTransform);
+            _maskPass = true;
+            drawLayer(recording, layer, loopType, firstFrame, nullptr);
+            _maskPass = false;
+            recording.end();
+            vectorMasks[i] = coveredArea(recorder.items);
             continue;
         }
 
@@ -1660,6 +1673,23 @@ void PhoenixView::drawTimeline(QPainter& painter, const fla::Timeline* timeline,
             continue;
         }
 
+        if (layer->layerType == fla::Layer::Type::Masked && _vectorMasks)
+        {
+            const auto mask = vectorMasks.find(layer->parentLayerIndex);
+            if (mask != vectorMasks.end())
+            {
+                // Clipped to the mask's area: a clip path in an SVG.
+                painter.save();
+                painter.setTransform(QTransform());
+                painter.setClipPath(mask.value(), Qt::IntersectClip);
+                painter.setTransform(painterTransform);
+                drawLayer(painter, layer, loopType, firstFrame, nullptr);
+                painter.restore();
+            }
+            else
+                drawLayer(painter, layer, loopType, firstFrame, nullptr);
+            continue;
+        }
         if (layer->layerType == fla::Layer::Type::Masked)
         {
             auto maskIt = maskCache.find(layer->parentLayerIndex);

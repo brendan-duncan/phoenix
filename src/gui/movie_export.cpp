@@ -556,6 +556,7 @@ bool runOne(const MovieExportSettings& settings, PhoenixView& view, TimelineAudi
         gif::Options options;
         options.colors = settings.gifColors;
         options.dither = settings.gifDither;
+        options.repeat = settings.gifRepeat;
         gif::AnimationWriter writer(size.width(), size.height(), settings.loop, options);
         for (int i = 0; i < count; ++i)
         {

@@ -81,7 +81,17 @@
 
 <h2>Export to SVG</h2>
 
-<p><span class="menu-path">File &rsaquo; Export &rsaquo; Export to SVG...</span> writes the current frame as an SVG file, which scales cleanly for print and the web. Hidden layers are left out and images are embedded. Filters and masks, which SVG cannot express the same way, are included as images.</p>
+<p><span class="menu-path">File &rsaquo; Export &rsaquo; Export to SVG...</span> writes the current frame as an SVG file, which scales cleanly for print and the web. Hidden layers are left out and images are embedded. Masks are written as SVG clip paths, so masked art stays vector. Filters, which SVG cannot express the same way, are included as images, and blend modes draw as Normal.</p>
+
+<h2 id="swf">SWF movies</h2>
+
+<p><span class="menu-path">File &rsaquo; Export &rsaquo; Export SWF Movie...</span> writes the scene as an SWF movie, for players and pipelines that read SWF. Each frame's shapes, strokes, gradients and text go in as vector shapes, written once and placed again in every frame that shows them; masks clip their art; bitmaps, and what filters make, go in as images; blend modes are kept. Sound and ActionScript are not written. From the command line, <code>Phoenix render shot.fla --out shot.swf</code> does the same.</p>
+
+<h2 id="publish">Publish</h2>
+
+<p><span class="menu-path">File &rsaquo; Publish Settings...</span> (<kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>F12</kbd>) chooses what <span class="menu-path">File &rsaquo; Publish</span> (<kbd>Shift</kbd>+<kbd>F12</kbd>) writes, beside the document: an SWF movie, an HTML page, and PNG, JPEG, GIF and SVG images, each named after the document or with a name of its own. Images take the stage's size or one of their own. PNG can be 24-bit with alpha (a clear background), 24-bit, or 8-bit with a number of colors; JPEG has a quality; GIF can be still or animated, looping forever, playing once or repeating a number of times, with a number of colors; SVG can include hidden layers and embed its images or write them beside it.</p>
+
+<p>Still images show the frame labeled <code>#Static</code>, or else the first frame. The HTML page shows the SWF movie, or else the first image published. The settings are kept in the FLA file's own publish settings, so a file that was set up to publish elsewhere publishes the same from Phoenix, and every setting Phoenix does not use is kept unchanged.</p>
 
 <h2 id="sprite-sheets">Sprite sheets</h2>
 

@@ -122,6 +122,14 @@ private slots:
     /// The frames of the scene, or of the library symbol \a symbol, on one
     /// image with a description beside it.
     void exportSpriteSheet(const QString& symbol = QString());
+    /// File > Publish Settings and File > Publish: the formats Animate's
+    /// publish settings ask for, written beside the document.
+    void publishSettings();
+    void publish();
+    /// The current scene as an SWF movie at \a size: its frames as vector
+    /// shapes, images and what filters and blends make as bitmaps. False
+    /// with \a error when it could not be written.
+    bool exportSwf(const QString& path, const QSize& size, QString& error);
     /// File > Export > Export Image: one frame as PNG, JPEG or GIF.
     void exportImage();
     /// File > Import: image and sound files into the library and, for

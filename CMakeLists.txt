@@ -130,6 +130,8 @@ set(HEADERS
     src/gui/movie_export.h
     src/gui/sprite_sheet_dialog.h
     src/gui/brush_properties_dialog.h
+    src/gui/publish_dialog.h
+    src/gui/paint_recorder.h
     src/gui/selection_targets.h
     src/gui/navigation_tools.h
     src/gui/draw_placement.h
@@ -215,6 +217,7 @@ set(HEADERS
     src/edit/brush_stroke.h
     src/edit/brush_presets.h
     src/edit/shortcut_sets.h
+    src/edit/publish_settings.h
     src/edit/brush_texture.h
     src/edit/camera.h
     src/edit/motion_object.h
@@ -282,6 +285,7 @@ set(HEADERS
     src/util/zip_writer.h
     src/util/gif_writer.h
     src/util/sprite_sheet.h
+    src/util/swf_writer.h
 )
 
 set(SOURCES
@@ -349,6 +353,8 @@ set(SOURCES
     src/gui/movie_export.cpp
     src/gui/sprite_sheet_dialog.cpp
     src/gui/brush_properties_dialog.cpp
+    src/gui/publish_dialog.cpp
+    src/gui/paint_recorder.cpp
     src/gui/navigation_tools.cpp
     src/gui/draw_placement.cpp
     src/gui/filters.cpp
@@ -427,6 +433,7 @@ set(SOURCES
     src/edit/brush_stroke.cpp
     src/edit/brush_presets.cpp
     src/edit/shortcut_sets.cpp
+    src/edit/publish_settings.cpp
     src/edit/brush_texture.cpp
     src/edit/camera.cpp
     src/edit/motion_object.cpp
@@ -492,6 +499,7 @@ set(SOURCES
     src/util/zip_writer.cpp
     src/util/gif_writer.cpp
     src/util/sprite_sheet.cpp
+    src/util/swf_writer.cpp
 )
 
 qt6_standard_project_setup()
