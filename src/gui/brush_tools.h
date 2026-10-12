@@ -95,6 +95,10 @@ public:
 private:
     void finish(PhoenixView& view);
 
+    /// The bitmap brush: paints \a dabs into the frame's paint canvas,
+    /// making one if the frame has none, growing it to take the stroke.
+    void paintBitmap(PhoenixView& view, fla::Frame* frame, const std::vector<fla::BrushDab>& dabs);
+
     /// The settings of this brush.
     const fla::BrushSettings& settings() const;
 

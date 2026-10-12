@@ -28,6 +28,9 @@ fla::Bitmap* loadImage(const fla::Document& document, const QString& path, QStri
 /// \a name.
 fla::Bitmap* bitmapFromImage(const fla::Document& document, const QImage& image, const QString& name);
 
+/// An image's pixels in Animate's lossless bitmap encoding.
+std::vector<uint8_t> losslessData(const QImage& image);
+
 /// Decodes a sound file (WAV, AIFF, MP3, FLAC, Ogg) to 16-bit samples at
 /// 44.1 kHz, mono or stereo as it was. False, with \a error, when it cannot.
 bool loadSound(const QString& path, fla::media::Sound& sound, QString& error);

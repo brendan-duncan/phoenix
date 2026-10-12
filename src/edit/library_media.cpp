@@ -196,4 +196,45 @@ void AddSoundCommand::undo()
         files.end());
 }
 
+
+
+SetBitmapPixelsCommand::SetBitmapPixelsCommand(Bitmap* bitmap, std::vector<uint8_t> data, int width, int height,
+    const std::string& name)
+    : _bitmap(bitmap)
+    , _name(name)
+{
+    if (_bitmap)
+    {
+        _before.data = _bitmap->datData;
+        _before.image = _bitmap->imageData;
+        _before.frameRight = _bitmap->frameRight;
+        _before.frameBottom = _bitmap->frameBottom;
+        _before.jpeg = _bitmap->isJPEG;
+    }
+    _after.data = LazyBytes(std::move(data));
+    _after.frameRight = width * 20;
+    _after.frameBottom = height * 20;
+}
+
+void SetBitmapPixelsCommand::apply(const Pixels& pixels)
+{
+    if (!_bitmap)
+        return;
+    _bitmap->datData = pixels.data;
+    _bitmap->imageData = pixels.image;
+    _bitmap->frameRight = pixels.frameRight;
+    _bitmap->frameBottom = pixels.frameBottom;
+    _bitmap->isJPEG = pixels.jpeg;
+}
+
+void SetBitmapPixelsCommand::redo()
+{
+    apply(_after);
+}
+
+void SetBitmapPixelsCommand::undo()
+{
+    apply(_before);
+}
+
 } // namespace fla

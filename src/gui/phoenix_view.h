@@ -861,10 +861,15 @@ private:
     QMap<const fla::Shape*, PathCacheList> _pathCache;
 
     QMap<QString, QPixmap> _bitmapCache;
+    /// The pixel data each cached bitmap was made from.
+    QMap<QString, const void*> _bitmapSource;
 
 public:
     /// The library bitmap of that name, decoded once and kept.
     QPixmap libraryBitmap(const QString& name);
+
+    /// Drops a library bitmap from the view's cache, after its pixels change.
+    void forgetBitmap(const QString& name) { _bitmapCache.remove(name); }
 
     /// A texture's tile of coverage, built in or from the library, and a
     /// brush of \a color taking on its grain.

@@ -269,3 +269,17 @@ TEST(imported_bitmaps_and_sounds_are_saved_and_read_back)
     stack.undo();
     CHECK(document->resources.empty() && document->sounds.empty() && document->extraMedia.empty());
 }
+
+TEST(bitmap_pixels_are_repainted_and_undone)
+{
+    fla::Document document(nullptr);
+    fla::Bitmap* bitmap = fla::media::newBitmap(document, "Paint.png", "", 2, 1, {1, 2, 3}, false);
+    fla::SetBitmapPixelsCommand paint(bitmap, {4, 5, 6, 7}, 4, 2, "Bitmap Brush");
+    paint.redo();
+    CHECK(bitmap->datData.get() == std::vector<uint8_t>({4, 5, 6, 7}));
+    CHECK(bitmap->frameRight == 80 && bitmap->frameBottom == 40);
+    paint.undo();
+    CHECK(bitmap->datData.get() == std::vector<uint8_t>({1, 2, 3}));
+    CHECK(bitmap->frameRight == 40 && bitmap->frameBottom == 20);
+    delete bitmap;
+}

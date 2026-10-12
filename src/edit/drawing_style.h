@@ -150,6 +150,15 @@ public:
     double brushTextureScale = 100.0;
     double brushTextureStrength = 100.0;
 
+    /// The bitmap brush: strokes paint pixels into the frame's paint canvas,
+    /// a bitmap in the library, rather than vector shapes. Softness feathers
+    /// the tip's edge, opacity is each stroke's strength (both in percent),
+    /// and Erase takes paint away instead.
+    bool bitmapBrush = false;
+    double bitmapSoftness = 50.0;
+    double bitmapOpacity = 100.0;
+    bool bitmapErase = false;
+
     /// Animate's eraser modes: what a pass of the eraser takes away.
     enum class EraserMode
     {

@@ -2844,10 +2844,8 @@ QGradient::Spread PhoenixView::gradientSpread(const std::string& method)
 
 QPixmap PhoenixView::libraryBitmap(const QString& name)
 {
-    if (_bitmapCache.contains(name))
-        return _bitmapCache[name];
     if (!_flaDocument || !_flaDocument->document)
-        return QPixmap();
+        return _bitmapCache.value(name);
 
     for (fla::Resource* resource : _flaDocument->document->resources)
     {
@@ -2856,6 +2854,14 @@ QPixmap PhoenixView::libraryBitmap(const QString& name)
         const fla::Bitmap* bitmap = static_cast<const fla::Bitmap*>(resource);
         if (bitmap->name != name.toStdString())
             continue;
+
+        // Kept while the bitmap's pixels are the ones it was made from: a
+        // bitmap brush, or undoing one, gives it others.
+        const void* source = bitmap->imageData.empty() ? static_cast<const void*>(&bitmap->datData.get())
+                                                       : static_cast<const void*>(&bitmap->imageData.get());
+        if (_bitmapCache.contains(name) && _bitmapSource.value(name) == source)
+            return _bitmapCache[name];
+        _bitmapSource[name] = source;
 
         QPixmap pixmap;
         if (!bitmap->imageData.empty())
@@ -5155,6 +5161,15 @@ void PhoenixView::resetView()
 
 void PhoenixView::clearCaches()
 {
+    // A drawing waiting to merge that an undo took off its frame is let go
+    // of: the history may free it once a new edit drops the redo.
+    _pending.erase(std::remove_if(_pending.begin(), _pending.end(),
+                       [](const PendingDrop& pending) {
+                           return !pending.frame ||
+                                  std::find(pending.frame->elements.begin(), pending.frame->elements.end(),
+                                      pending.shape) == pending.frame->elements.end();
+                       }),
+        _pending.end());
     _pathCache.clear();
     _guideCache.clear();
     _boundsCache.clear();

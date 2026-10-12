@@ -981,6 +981,28 @@ void PropertiesPanel::buildToolTab()
     });
     addOption("Grain strength", textureStrength, brushes);
 
+    // The bitmap brush: paint as pixels, Harmony's bitmap layer.
+    QCheckBox* bitmapBrush = new QCheckBox("Bitmap brush", this);
+    bitmapBrush->setChecked(style.bitmapBrush);
+    bitmapBrush->setToolTip("Paint pixels into the frame's paint canvas rather than vector shapes");
+    connect(bitmapBrush, &QCheckBox::toggled, this, [this](bool on) { _links.style->bitmapBrush = on; });
+    addOption(QString(), bitmapBrush, brushes);
+    HotText* softness = makeHotText(0.0, 100.0, 0, " %");
+    softness->setValue(style.bitmapSoftness);
+    softness->setToolTip("How soft the bitmap brush's edge is");
+    connect(softness, &HotText::valueChanged, this, [this](double value, bool) { _links.style->bitmapSoftness = value; });
+    addOption("Softness", softness, brushes);
+    HotText* opacity = makeHotText(1.0, 100.0, 0, " %");
+    opacity->setValue(style.bitmapOpacity);
+    opacity->setToolTip("How strong each bitmap stroke is");
+    connect(opacity, &HotText::valueChanged, this, [this](double value, bool) { _links.style->bitmapOpacity = value; });
+    addOption("Opacity", opacity, brushes);
+    QCheckBox* erase = new QCheckBox("Erase pixels", this);
+    erase->setChecked(style.bitmapErase);
+    erase->setToolTip("The bitmap brush takes paint away instead");
+    connect(erase, &QCheckBox::toggled, this, [this](bool on) { _links.style->bitmapErase = on; });
+    addOption(QString(), erase, brushes);
+
     // Eraser.
     HotText* eraserSize = makeHotText(1.0, 200.0, 1, " px");
     eraserSize->setValue(style.eraserSize);

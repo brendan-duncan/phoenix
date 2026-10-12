@@ -1,4 +1,12 @@
 #include "brush_tools.h"
+
+#include <QRadialGradient>
+#include "../edit/library_media.h"
+#include "../data/document.h"
+#include "../data/fla_document.h"
+#include "../data/bitmap_instance.h"
+#include "../data/bitmap.h"
+#include "media_import.h"
 #include "../edit/brush_texture.h"
 
 #include "cursors.h"
@@ -515,6 +523,12 @@ void BrushTool::finish(PhoenixView& view)
     const double precision = std::max(0, std::min(100, brush.precision)) / 100.0;
     const double tolerance = (0.15 + (1.0 - precision) * 1.35) / zoom;
     const std::vector<fla::BrushDab> dabs = fla::BrushStroke::dabs(_samples, brush, zoom, true);
+    if (_style.bitmapBrush)
+    {
+        _samples.clear();
+        paintBitmap(view, frame, dabs);
+        return;
+    }
     fla::Shape* shape = outlineShape(sweptOutline(dabs, zoom, true), tolerance, frame, _style, true);
     _samples.clear();
     if (!shape)
@@ -612,6 +626,160 @@ void BrushTool::finish(PhoenixView& view)
     texture(piece);
     placeDrawnElement(view, _commandStack, _selection, frame, piece, "Brush",
         _style.objectDrawing || textured, true);
+}
+
+void BrushTool::paintBitmap(PhoenixView& view, fla::Frame* frame, const std::vector<fla::BrushDab>& dabs)
+{
+    const fla::FLADocument* fla = view.flaDocument();
+    fla::Document* document = fla ? fla->document : nullptr;
+    if (!document || dabs.empty())
+    {
+        view.update();
+        return;
+    }
+    // Canvas pixels to a stage pixel, so paint stays crisp zoomed in a little.
+    constexpr double kDensity = 2.0;
+    constexpr double kMaxPixels = 8192.0;
+
+    QRectF stroke;
+    for (const fla::BrushDab& dab : dabs)
+    {
+        const double reach = std::max(dab.width, dab.height) * 0.5 + 2.0;
+        stroke = stroke.united(QRectF(dab.x - reach, dab.y - reach, reach * 2.0, reach * 2.0));
+    }
+
+    // The frame's canvas: a library bitmap placed on it, marked as Phoenix's.
+    fla::BitmapInstance* canvas = nullptr;
+    for (fla::Element* element : frame->elements)
+    {
+        auto* candidate = dynamic_cast<fla::BitmapInstance*>(element);
+        if (!candidate)
+            continue;
+        for (const auto& attribute : candidate->extraAttributes)
+            if (attribute.first == "phoenixPaint")
+                canvas = candidate;
+    }
+    fla::Bitmap* bitmap = nullptr;
+    QImage old;
+    QRectF was;
+    if (canvas)
+    {
+        for (fla::Resource* resource : document->resources)
+        {
+            if (resource && resource->resourceType() == fla::Resource::Type::Bitmap &&
+                static_cast<fla::Bitmap*>(resource)->name == canvas->libraryItemName)
+                bitmap = static_cast<fla::Bitmap*>(resource);
+        }
+        old = view.libraryBitmap(QString::fromStdString(canvas->libraryItemName)).toImage();
+        if (!bitmap || old.isNull())
+            canvas = nullptr;
+        else
+            was = QRectF(canvas->transform.tx, canvas->transform.ty, old.width() / kDensity, old.height() / kDensity);
+    }
+    if (!canvas && _style.bitmapErase)
+    {
+        view.update();
+        return;
+    }
+
+    // Big enough for what is there and the stroke; a new canvas at the scene
+    // starts as the stage.
+    QRectF area = was.united(stroke.adjusted(-32.0, -32.0, 32.0, 32.0));
+    if (!canvas && !view.inSymbol())
+        area = area.united(QRectF(0.0, 0.0, document->width, document->height));
+    area = QRectF(std::floor(area.left()), std::floor(area.top()),
+        std::min(kMaxPixels / kDensity, std::ceil(area.width()) + 1.0),
+        std::min(kMaxPixels / kDensity, std::ceil(area.height()) + 1.0));
+    const int width = static_cast<int>(area.width() * kDensity);
+    const int height = static_cast<int>(area.height() * kDensity);
+
+    QImage image(width, height, QImage::Format_ARGB32_Premultiplied);
+    image.fill(Qt::transparent);
+    if (!old.isNull())
+    {
+        QPainter copy(&image);
+        copy.drawImage(QPointF((was.left() - area.left()) * kDensity, (was.top() - area.top()) * kDensity),
+            old.convertToFormat(QImage::Format_ARGB32_Premultiplied));
+    }
+
+    // The stroke on its own first, so dabs that overlap do not build up and
+    // the texture and opacity apply to it as a whole.
+    QImage layer(width, height, QImage::Format_ARGB32_Premultiplied);
+    layer.fill(Qt::transparent);
+    {
+        QPainter paint(&layer);
+        paint.setRenderHint(QPainter::Antialiasing);
+        paint.scale(kDensity, kDensity);
+        paint.translate(-area.topLeft());
+        paint.setPen(Qt::NoPen);
+        paint.setCompositionMode(QPainter::CompositionMode_Lighten);
+        const QColor color(_style.fillColor[0], _style.fillColor[1], _style.fillColor[2], _style.fillColor[3]);
+        const double softness = std::clamp(_style.bitmapSoftness / 100.0, 0.0, 0.99);
+        for (const fla::BrushDab& dab : dabs)
+        {
+            const double radius = std::max(0.5, dab.width * 0.5);
+            QRadialGradient gradient(QPointF(0.0, 0.0), radius);
+            gradient.setColorAt(0.0, color);
+            gradient.setColorAt(1.0 - softness, color);
+            QColor edge = color;
+            edge.setAlpha(0);
+            gradient.setColorAt(1.0, edge);
+            paint.save();
+            paint.translate(dab.x, dab.y);
+            paint.rotate(dab.angle);
+            paint.scale(1.0, dab.width > 0.0 ? dab.height / dab.width : 1.0);
+            paint.setBrush(gradient);
+            paint.drawEllipse(QPointF(0.0, 0.0), radius, radius);
+            paint.restore();
+        }
+        // The grain, when the brush has one.
+        if (!_style.brushTexture.empty())
+        {
+            fla::texture::Spec spec;
+            spec.name = _style.brushTexture;
+            spec.scale = std::max(0.01, _style.brushTextureScale / 100.0);
+            spec.strength = std::clamp(_style.brushTextureStrength / 100.0, 0.0, 1.0);
+            paint.setCompositionMode(QPainter::CompositionMode_DestinationIn);
+            paint.fillRect(area, view.texturedBrush(Qt::black, spec));
+        }
+    }
+    {
+        QPainter merge(&image);
+        merge.setOpacity(std::clamp(_style.bitmapOpacity / 100.0, 0.0, 1.0));
+        merge.setCompositionMode(_style.bitmapErase ? QPainter::CompositionMode_DestinationOut
+                                                    : QPainter::CompositionMode_SourceOver);
+        merge.drawImage(0, 0, layer);
+    }
+
+    const char* name = _style.bitmapErase ? "Bitmap Erase" : "Bitmap Brush";
+    const fla::Transform placed(1.0 / kDensity, 0.0, 0.0, 1.0 / kDensity, area.left(), area.top());
+    _commandStack.beginMacro(name);
+    if (canvas)
+    {
+        _commandStack.push(fla::CommandPtr(
+            new fla::SetBitmapPixelsCommand(bitmap, MediaImport::losslessData(image), width, height, name)));
+        if (placed.tx != canvas->transform.tx || placed.ty != canvas->transform.ty)
+            _commandStack.push(fla::CommandPtr(
+                new fla::SetElementTransformCommand(canvas, canvas->transform, placed, name)));
+        view.forgetBitmap(QString::fromStdString(bitmap->name));
+    }
+    else
+    {
+        fla::Bitmap* made = MediaImport::bitmapFromImage(*document, image, "Paint.png");
+        if (made)
+        {
+            auto* instance = new fla::BitmapInstance(frame);
+            instance->libraryItemName = made->name;
+            instance->transform = placed;
+            instance->extraAttributes.emplace_back("phoenixPaint", "1");
+            _commandStack.push(fla::CommandPtr(new fla::AddBitmapCommand(document, made, name)));
+            _commandStack.push(fla::CommandPtr(new fla::AddElementCommand(frame, instance, name, &_selection)));
+        }
+    }
+    _commandStack.endMacro();
+    _commandStack.breakMergeChain();
+    view.clearCaches();
+    view.update();
 }
 
 void BrushTool::paintOverlay(PhoenixView& view, QPainter& painter, double scale)

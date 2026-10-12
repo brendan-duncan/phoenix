@@ -82,6 +82,11 @@ fla::Bitmap* bitmapFromImage(const fla::Document& document, const QImage& image,
         fla::encodeLosslessBitmap(image.width(), image.height(), pixelsOf(image)), false);
 }
 
+std::vector<uint8_t> losslessData(const QImage& image)
+{
+    return fla::encodeLosslessBitmap(image.width(), image.height(), pixelsOf(image));
+}
+
 bool loadSound(const QString& path, fla::media::Sound& sound, QString& error)
 {
     // Read once as it is to learn its channels, then as 16-bit at 44.1 kHz

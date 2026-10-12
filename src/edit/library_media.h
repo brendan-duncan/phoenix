@@ -3,6 +3,7 @@
 #include "command.h"
 
 #include "../data/document.h"
+#include "../data/lazy_bytes.h"
 
 #include <cstdint>
 #include <string>
@@ -67,6 +68,33 @@ private:
     Bitmap* _bitmap;
     std::string _name;
     bool _owned = true;
+};
+
+/// Gives a library bitmap new pixels, as a bitmap brush paints into its
+/// canvas: \a data in the lossless encoding, \a width by \a height.
+class SetBitmapPixelsCommand : public Command
+{
+public:
+    SetBitmapPixelsCommand(Bitmap* bitmap, std::vector<uint8_t> data, int width, int height, const std::string& name);
+    void redo() override;
+    void undo() override;
+    std::string name() const override { return _name; }
+
+private:
+    struct Pixels
+    {
+        LazyBytes data;
+        LazyBytes image;
+        int frameRight = 0;
+        int frameBottom = 0;
+        bool jpeg = false;
+    };
+    void apply(const Pixels& pixels);
+
+    Bitmap* _bitmap;
+    Pixels _before;
+    Pixels _after;
+    std::string _name;
 };
 
 /// Adds a sound to the library: its item, as Animate writes a
