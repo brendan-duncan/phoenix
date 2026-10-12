@@ -24,6 +24,7 @@
 #include "xsheet_panel.h"
 #include "layer_depth_panel.h"
 #include "camera_tool.h"
+#include "find_replace_dialog.h"
 #include "swatches_panel.h"
 #include "../edit/swatches.h"
 #include "swap_symbol_dialog.h"
@@ -670,6 +671,8 @@ void MainWindow::adoptDocument(fla::FLADocument* document, const QString& filePa
         connect(_phoenixView, &PhoenixView::scopeChanged, _xsheet, [this]() { _xsheet->refresh(); });
     }
     restoreLayout();
+    if (_findReplace)
+        _findReplace->refresh();
 
     if (_flaDocument)
         _player->setCurrentFrame(0);
@@ -2028,6 +2031,12 @@ void MainWindow::setupMenus()
     });
     editMenu->addAction(clearAction);
 
+    editMenu->addSeparator();
+    QAction* findAction = editMenu->addAction("&Find and Replace...");
+    findAction->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_F));
+    findAction->setStatusTip("Find text, a font, a color or a symbol anywhere in the document, and replace it");
+    connect(findAction, &QAction::triggered, this, &MainWindow::showFindReplace);
+
     // Modify menu, with Animate's keys.
     // Insert: Animate's timeline commands, which also live on the frames'
     // right-click menu.
@@ -3298,6 +3307,64 @@ void MainWindow::viewDocument()
     dialog->setLayout(layout);
 
     dialog->exec();
+}
+
+void MainWindow::showFindReplace()
+{
+    if (!_findReplace)
+    {
+        _findReplace = new FindReplaceDialog(
+            [this]() -> fla::Document* { return _flaDocument ? _flaDocument->document : nullptr; }, this);
+        connect(_findReplace, &FindReplaceDialog::replaceRequested, this, [this](const fla::find::Query& query) {
+            fla::Document* document = _flaDocument ? _flaDocument->document : nullptr;
+            if (!document)
+                return;
+            int count = 0;
+            fla::CommandPtr command = fla::find::replaceAll(*document, query, &count);
+            if (!command)
+            {
+                statusBar()->showMessage(query.kind == fla::find::Kind::Symbol && query.find == query.replace
+                                             ? QString("Pick another symbol to replace it with.")
+                                             : QString("Nothing to replace."),
+                    3000);
+                return;
+            }
+            _editContext.commandStack().push(std::move(command));
+            _editContext.commandStack().breakMergeChain();
+            statusBar()->showMessage(QString("Replaced %1.").arg(count), 3000);
+            if (_phoenixView)
+            {
+                _phoenixView->clearCaches();
+                _phoenixView->update();
+            }
+            if (_timelineView)
+                _timelineView->refreshFrames();
+            if (_propertiesPanel)
+                _propertiesPanel->refresh();
+        });
+        connect(_findReplace, &FindReplaceDialog::goToRequested, this, [this](const fla::find::Match& match) {
+            fla::Document* document = _flaDocument ? _flaDocument->document : nullptr;
+            if (!document || !_phoenixView)
+                return;
+            // On its scene, or inside its symbol, at its frame, selected.
+            _phoenixView->exitToDepth(0);
+            if (match.symbol)
+                _phoenixView->editSymbol(match.symbol);
+            else
+                goToScene(match.scene);
+            if (_player)
+                _player->setCurrentFrame(match.frame);
+            _selection.clear();
+            _selection.select(match.topElement);
+            _phoenixView->clearCaches();
+            _phoenixView->update();
+            updateSelectionState();
+        });
+    }
+    _findReplace->refresh();
+    _findReplace->show();
+    _findReplace->raise();
+    _findReplace->activateWindow();
 }
 
 void MainWindow::refreshHistory()

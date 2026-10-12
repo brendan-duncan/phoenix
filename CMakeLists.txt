@@ -71,6 +71,7 @@ set(HEADERS
     src/gui/main_window.h
     src/gui/properties_panel.h
     src/gui/library_panel.h
+    src/gui/find_replace_dialog.h
     src/gui/audio_engine.h
     src/gui/frame_picker_panel.h
     src/gui/swap_symbol_dialog.h
@@ -203,6 +204,7 @@ set(HEADERS
     src/edit/layer_commands.h
     src/edit/timeline_edit.h
     src/edit/library_commands.h
+    src/edit/find_replace.h
     src/edit/library_media.h
     src/edit/frame_sound.h
     src/edit/frame_bake.h
@@ -237,6 +239,7 @@ set(SOURCES
     src/gui/main_window.cpp
     src/gui/properties_panel.cpp
     src/gui/library_panel.cpp
+    src/gui/find_replace_dialog.cpp
     src/gui/audio_engine.cpp
     src/gui/frame_picker_panel.cpp
     src/gui/swap_symbol_dialog.cpp
@@ -364,6 +367,7 @@ set(SOURCES
     src/edit/layer_commands.cpp
     src/edit/timeline_edit.cpp
     src/edit/library_commands.cpp
+    src/edit/find_replace.cpp
     src/edit/library_media.cpp
     src/edit/frame_sound.cpp
     src/edit/frame_bake.cpp

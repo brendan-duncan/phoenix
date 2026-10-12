@@ -74,6 +74,7 @@ set(TEST_CORE_SOURCES
     ${PHOENIX_SRC}/edit/layer_commands.cpp
     ${PHOENIX_SRC}/edit/timeline_edit.cpp
     ${PHOENIX_SRC}/edit/library_commands.cpp
+    ${PHOENIX_SRC}/edit/find_replace.cpp
     ${PHOENIX_SRC}/edit/library_media.cpp
     ${PHOENIX_SRC}/edit/frame_sound.cpp
     ${PHOENIX_SRC}/edit/frame_bake.cpp
@@ -116,6 +117,7 @@ set(TEST_SOURCES
     test_layer_commands.cpp
     test_timeline_edit.cpp
     test_library_commands.cpp
+    test_find_replace.cpp
     test_audio_decode.cpp
     test_brush_stroke.cpp
     test_magic_wand.cpp

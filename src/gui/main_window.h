@@ -438,6 +438,9 @@ private:
     /// back or forward to it.
     class QListWidget* _history = nullptr;
     QDockWidget* _historyDock = nullptr;
+    /// Edit > Find and Replace, made when first asked for.
+    class FindReplaceDialog* _findReplace = nullptr;
+    void showFindReplace();
     void refreshHistory();
     /// Edit > Repeat: the last Insert, Modify or Timeline command run, to
     /// run again on what is selected now.
