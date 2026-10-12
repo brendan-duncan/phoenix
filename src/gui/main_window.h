@@ -75,6 +75,12 @@ public:
     /// returned there) at \a size (when empty, the stage's, no wider than
     /// 960). Empty when the file does not open.
     std::vector<QImage> renderSamples(const QString& path, std::vector<int>& frames, QSize& size, int samples);
+    /// For the benchmark: opens \a path as the editor does, then draws its
+    /// first \a maxFrames frames at the stage's size twice, with nothing
+    /// cached and then cached. Times in milliseconds; false when it does
+    /// not open.
+    bool benchmarkRender(const QString& path, int maxFrames, double& openMs, std::vector<double>& coldMs,
+        std::vector<double>& warmMs, QSize& size);
     /// Phoenix --export-image in out [--frame N] [--size WxH]
     /// [--matte stage|transparent|#rrggbb] [--quality Q]: one frame, no
     /// window. Returns the exit code.

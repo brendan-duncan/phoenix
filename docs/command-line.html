@@ -84,6 +84,16 @@ Phoenix batch episode/ --python fix_names.py --save</code></pre>
 
 <p>Runs one operation on every <code>.fla</code> and <code>.phx</code> in the folder (add <code>--recursive</code> for subfolders). With <code>--python</code>, each document is opened out as an XFL folder and the script is run as <code>python script.py <em>xfl-folder</em> <em>document</em></code>; it can edit the XML there with any Python tools. With <code>--save</code>, what the script changed is written back to the document; with <code>--out</code>, to a copy. A script that exits with an error leaves its document alone. Set <code>PHOENIX_PYTHON</code> to choose the Python interpreter.</p>
 
+<h2>Measure performance</h2>
+
+<pre><code>Phoenix benchmark episode.fla
+Phoenix benchmark episode.fla --frames 120 --json episode.phoenix.json
+Phoenix benchmark episode.fla --against episode.animate.json</code></pre>
+
+<p>Times each step of working with a document: reading it, opening it in the editor, drawing its frames at the stage's size (first with nothing cached, then again cached, with the frame rate that gives), saving it as FLA, PHX and XFL, and reopening the PHX. It also reports peak memory. <code>--frames</code> sets how many frames are drawn (240 by default). <code>--json</code> writes the numbers to a file, to track them over time or between machines. Use a Release build for numbers worth comparing.</p>
+
+<p>To compare with another app, run <code>docs/benchmark.jsfl</code> there on the same file: it opens the file, exports every frame as a PNG and saves a copy, timing each, and writes <code><em>file</em>.animate.json</code> beside it. <code>--against</code> that file prints both sets of times side by side.</p>
+
 <h2>Export a movie</h2>
 
 <pre><code>Phoenix --export-movie scene.fla out.mp4

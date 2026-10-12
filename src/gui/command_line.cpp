@@ -20,6 +20,10 @@
 
 #include <QDir>
 #include <QDirIterator>
+#include <QElapsedTimer>
+#include <QJsonDocument>
+#include <QJsonObject>
+#include <QFile>
 #include <QFileInfo>
 #include <QImage>
 #include <QProcess>
@@ -30,6 +34,15 @@
 #include <cstdio>
 #include <cstring>
 #include <map>
+#include <numeric>
+
+#ifdef _WIN32
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#include <windows.h>
+#include <psapi.h>
+#endif
 
 namespace commands {
 
@@ -69,6 +82,11 @@ const char* const kHelp =
     "      Lists the symbols linked to a master file; --update brings them up to\n"
     "      date from their masters (what they use comes too), --save writes the\n"
     "      file back. batch <folder> --update-links --save does every shot.\n"
+    "\n"
+    "  benchmark <file> [--frames N] [--json <out.json>] [--against <animate.json>]\n"
+    "      Times opening, drawing (first with nothing cached, then cached),\n"
+    "      saving as FLA, PHX and XFL, and reopening the PHX, with peak memory.\n"
+    "      --against compares with the times docs/benchmark.jsfl took in Animate.\n"
     "\n"
     "  --convert <in> <out>, --export-image, --export-movie and --roundtrip\n"
     "      work as before.\n";
@@ -503,11 +521,156 @@ int batch(const QStringList& args)
     return failed ? 2 : 0;
 }
 
+double mean(const std::vector<double>& values)
+{
+    return values.empty() ? 0.0 : std::accumulate(values.begin(), values.end(), 0.0) / values.size();
+}
+
+double percentile(std::vector<double> values, double p)
+{
+    if (values.empty())
+        return 0.0;
+    std::sort(values.begin(), values.end());
+    return values[std::min(values.size() - 1, static_cast<size_t>(p * (values.size() - 1) + 0.5))];
+}
+
+double peakMemoryMb()
+{
+#ifdef _WIN32
+    PROCESS_MEMORY_COUNTERS counters{};
+    if (GetProcessMemoryInfo(GetCurrentProcess(), &counters, sizeof(counters)))
+        return counters.PeakWorkingSetSize / (1024.0 * 1024.0);
+#endif
+    return 0.0;
+}
+
+int benchmark(const QStringList& args)
+{
+    if (args.isEmpty())
+    {
+        std::fprintf(stderr, "benchmark: which file?\n");
+        return 1;
+    }
+    const QString file = args.at(0);
+    const int maxFrames = option(args, "--frames").isEmpty() ? 240 : std::max(1, option(args, "--frames").toInt());
+    QJsonObject result;
+    result["file"] = QFileInfo(file).fileName();
+    result["bytes"] = static_cast<double>(QFileInfo(file).size());
+
+    // Reading alone, as a command does.
+    QElapsedTimer timer;
+    timer.start();
+    std::string error;
+    std::unique_ptr<fla::FLADocument> document = load(file.toStdString(), error);
+    result["parse_ms"] = timer.nsecsElapsed() / 1.0e6;
+    if (!document)
+    {
+        std::fprintf(stderr, "Could not read %s: %s\n", qPrintable(file), error.c_str());
+        return 1;
+    }
+
+    // Opening as the editor does, and drawing.
+    double openMs = 0.0;
+    std::vector<double> cold;
+    std::vector<double> warm;
+    QSize size;
+    {
+        MainWindow window(QString(), nullptr, false);
+        if (!window.benchmarkRender(file, maxFrames, openMs, cold, warm, size))
+        {
+            std::fprintf(stderr, "Could not open %s\n", qPrintable(file));
+            return 1;
+        }
+    }
+    result["open_ms"] = openMs;
+    result["frames"] = static_cast<int>(cold.size());
+    result["width"] = size.width();
+    result["height"] = size.height();
+    result["render_cold_ms_per_frame"] = mean(cold);
+    result["render_warm_ms_per_frame"] = mean(warm);
+    result["render_warm_p95_ms"] = percentile(warm, 0.95);
+    result["render_warm_fps"] = mean(warm) > 0.0 ? 1000.0 / mean(warm) : 0.0;
+
+    // Saving each way, and reopening the PHX.
+    QTemporaryDir scratch;
+    for (const char* format : {"fla", "phx", "xfl"})
+    {
+        const std::string target = QDir(scratch.path()).filePath(QString("benchmark.") + format).toStdString();
+        timer.restart();
+        const bool saved = save(*document->document, target, error);
+        result[QString("save_%1_ms").arg(format)] = saved ? timer.nsecsElapsed() / 1.0e6 : -1.0;
+        if (saved && std::strcmp(format, "phx") == 0)
+        {
+            timer.restart();
+            std::unique_ptr<fla::FLADocument> again = load(target, error);
+            result["open_phx_ms"] = again ? timer.nsecsElapsed() / 1.0e6 : -1.0;
+        }
+    }
+    result["peak_memory_mb"] = peakMemoryMb();
+
+    const auto number = [&result](const char* key) { return result.value(key).toDouble(); };
+    std::printf("%s: %d frames at %dx%d\n", qPrintable(result["file"].toString()), result["frames"].toInt(), size.width(),
+        size.height());
+    std::printf("  parse            %9.1f ms\n", number("parse_ms"));
+    std::printf("  open             %9.1f ms\n", number("open_ms"));
+    std::printf("  draw, uncached   %9.2f ms a frame\n", number("render_cold_ms_per_frame"));
+    std::printf("  draw, cached     %9.2f ms a frame (95%% under %.2f ms, %.0f fps)\n", number("render_warm_ms_per_frame"),
+        number("render_warm_p95_ms"), number("render_warm_fps"));
+    std::printf("  save FLA         %9.1f ms\n", number("save_fla_ms"));
+    std::printf("  save PHX         %9.1f ms\n", number("save_phx_ms"));
+    std::printf("  save XFL         %9.1f ms\n", number("save_xfl_ms"));
+    std::printf("  reopen PHX       %9.1f ms\n", number("open_phx_ms"));
+    std::printf("  peak memory      %9.1f MB\n", number("peak_memory_mb"));
+
+    // Side by side with Animate's times for the same file.
+    const QString against = option(args, "--against");
+    if (!against.isEmpty())
+    {
+        QFile in(against);
+        const QJsonObject animate = in.open(QIODevice::ReadOnly) ? QJsonDocument::fromJson(in.readAll()).object() : QJsonObject();
+        if (animate.isEmpty())
+            std::fprintf(stderr, "Could not read %s\n", qPrintable(against));
+        else
+        {
+            std::printf("\n  against Animate   %10s %10s %8s\n", "Animate", "Phoenix", "faster");
+            const struct
+            {
+                const char* label;
+                const char* theirs;
+                const char* ours;
+            } rows[] = {
+                {"open", "open_ms", "open_ms"},
+                {"draw a frame", "render_ms_per_frame", "render_cold_ms_per_frame"},
+                {"save FLA", "save_fla_ms", "save_fla_ms"},
+            };
+            for (const auto& row : rows)
+            {
+                const double theirs = animate.value(row.theirs).toDouble(-1.0);
+                const double ours = number(row.ours);
+                if (theirs <= 0.0 || ours <= 0.0)
+                    continue;
+                std::printf("  %-16s %10.1f %10.1f %7.1fx\n", row.label, theirs, ours, theirs / ours);
+            }
+        }
+    }
+    const QString json = option(args, "--json");
+    if (!json.isEmpty())
+    {
+        QFile out(json);
+        if (!out.open(QIODevice::WriteOnly) || out.write(QJsonDocument(result).toJson()) < 0)
+        {
+            std::fprintf(stderr, "Could not write %s\n", qPrintable(json));
+            return 1;
+        }
+    }
+    return 0;
+}
+
 } // namespace
 
 bool isCommand(const QString& name)
 {
-    return name == "render" || name == "doctor" || name == "diff" || name == "batch" || name == "shots" || name == "links" || name == "help" ||
+    return name == "benchmark" || name == "render" || name == "doctor" || name == "diff" || name == "batch" || name == "shots" || name == "links" || name == "help" ||
            name == "--help";
 }
 
@@ -559,6 +722,8 @@ int run(const QStringList& arguments)
     }
     if (name == "doctor")
         return doctor(args);
+    if (name == "benchmark")
+        return benchmark(args);
     if (name == "diff")
         return diff(args);
     if (name == "batch")

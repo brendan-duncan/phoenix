@@ -93,6 +93,7 @@
 #include <QApplication>
 #include <QBuffer>
 #include <QClipboard>
+#include <QElapsedTimer>
 #include <QImage>
 #include <QPushButton>
 #include <QCloseEvent>
@@ -4405,6 +4406,29 @@ std::vector<QImage> MainWindow::renderSamples(const QString& path, std::vector<i
     for (int frame : frames)
         images.push_back(_phoenixView->renderFrame(frame, size, false).convertToFormat(QImage::Format_ARGB32));
     return images;
+}
+
+bool MainWindow::benchmarkRender(const QString& path, int maxFrames, double& openMs, std::vector<double>& coldMs,
+    std::vector<double>& warmMs, QSize& size)
+{
+    QElapsedTimer timer;
+    timer.start();
+    loadFLAFile(path);
+    openMs = timer.nsecsElapsed() / 1.0e6;
+    if (!_flaDocument || !_flaDocument->document || !_phoenixView)
+        return false;
+    const fla::Document* document = _flaDocument->document;
+    size = QSize(std::max(1, document->width), std::max(1, document->height));
+    const int frames = std::max(1, std::min(maxFrames, _phoenixView->frameCount()));
+    _phoenixView->clearCaches();
+    for (std::vector<double>* times : {&coldMs, &warmMs})
+        for (int frame = 0; frame < frames; ++frame)
+        {
+            timer.restart();
+            const QImage image = _phoenixView->renderFrame(frame, size, false);
+            times->push_back(timer.nsecsElapsed() / 1.0e6);
+        }
+    return true;
 }
 
 int MainWindow::exportImageFromCommandLine(const QString& source, const QString& output, const QStringList& options)
