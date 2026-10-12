@@ -13,6 +13,12 @@
 #include "../edit/element_commands.h"
 #include "../edit/region_split.h"
 #include "../edit/shape_merge.h"
+#include "../edit/color_art.h"
+#include "../data/layer.h"
+#include "../data/timeline.h"
+#include "../data/frame.h"
+#include "../data/transform.h"
+#include "../geom/curve.h"
 
 #include <cstdint>
 #include <QMouseEvent>
@@ -113,6 +119,80 @@ void commitContents(PhoenixView& view, fla::CommandStack& commandStack, fla::Sha
     view.update();
 }
 
+/// The bucket on a color art layer: the region the line layer's strokes
+/// close around the click is filled on this layer, the lines staying on
+/// theirs. False when the layer is not color art or the click is in no
+/// closed region, for the bucket to go on as usual.
+bool paintUnderLines(PhoenixView& view, fla::CommandStack& commandStack, const fla::DrawingStyle& style,
+    const QPointF& documentPos)
+{
+    fla::Frame* active = view.activeFrame();
+    auto* layer = active ? dynamic_cast<fla::Layer*>(active->parent) : nullptr;
+    auto* timeline = layer ? dynamic_cast<fla::Timeline*>(layer->parent) : nullptr;
+    if (!layer || !timeline || !fla::colorart::isColorArt(*layer))
+        return false;
+    const fla::Layer* line = fla::colorart::lineLayerOf(*timeline, *layer);
+    if (!line)
+        return false;
+
+    // The paint already on this frame under the click, painted further; else
+    // the topmost paint, which the new region joins; or a new shape.
+    fla::Shape* target = nullptr;
+    for (auto it = active->elements.rbegin(); it != active->elements.rend(); ++it)
+    {
+        if (!*it || (*it)->elementType() != fla::Element::Type::Shape)
+            continue;
+        auto* shape = static_cast<fla::Shape*>(*it);
+        if (!target)
+            target = shape;
+        bool inverts = false;
+        const QPointF at = toQTransform(shape->transform).inverted(&inverts).map(documentPos);
+        if (inverts && fla::RegionSplitter(*shape).faceAt(fla::Point(at.x(), at.y())) >= 0)
+        {
+            target = shape;
+            break;
+        }
+    }
+    std::unique_ptr<fla::Shape> working(target ? fla::cloneShape(*target, nullptr) : new fla::Shape(nullptr));
+    bool invertible = false;
+    const QTransform toShape = target ? toQTransform(target->transform).inverted(&invertible) : QTransform();
+    if (target && !invertible)
+        return false;
+    const fla::Transform stageToShape(toShape.m11(), toShape.m12(), toShape.m21(), toShape.m22(), toShape.dx(), toShape.dy());
+    const std::vector<fla::Curve> lines = fla::colorart::lineCutters(*line, view.playheadFrame(), stageToShape);
+    if (lines.empty())
+        return false;
+    const std::vector<fla::Curve> cutters = fla::colorart::withoutShared(lines, *working);
+
+    const QPointF local = toShape.map(documentPos);
+    const fla::Point localPoint(local.x(), local.y());
+    fla::RegionSplitter regions(*working, cutters);
+    const int face = regions.faceAt(localPoint);
+    if (face < 0)
+        return false;
+    const int fill = ensureFill(*working, style);
+    if (fill < 0 || regions.faceFill(face) == fill)
+        return true;
+    std::unique_ptr<fla::Shape> after(regions.withFaceFill(face, fill));
+    if (!after)
+        return true;
+    fla::DrawingStyle::fitFills(*after);
+    if (target)
+    {
+        commitContents(view, commandStack, target, *after, "Paint Bucket");
+        return true;
+    }
+    // The first paint on this frame: a keyframe here when the playhead is
+    // past the span's start, then the shape.
+    fla::Frame* frame = view.keyframeForDrawing(active);
+    after->parent = frame;
+    commandStack.push(fla::CommandPtr(new fla::AddElementCommand(frame, after.release(), "Paint Bucket")));
+    commandStack.breakMergeChain();
+    view.clearCaches();
+    view.update();
+    return true;
+}
+
 } // namespace
 
 QCursor PaintBucketTool::cursor() const
@@ -128,6 +208,10 @@ bool PaintBucketTool::mousePress(PhoenixView& view, QMouseEvent* event, const QP
     // A line just drawn is part of the artwork as far as the bucket is
     // concerned, so anything still floating goes in first.
     view.flushPendingMerge();
+
+    // On a color art layer, the lines it paints within are on the layer above.
+    if (paintUnderLines(view, _commandStack, _style, documentPos))
+        return true;
 
     for (fla::Shape* shape : shapesNear(view, documentPos))
     {

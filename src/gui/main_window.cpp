@@ -31,6 +31,7 @@
 #include "controllers_panel.h"
 #include "palettes_panel.h"
 #include "../edit/pegs.h"
+#include "../edit/color_art.h"
 #include "theme.h"
 #include "theme_editor.h"
 #include "../parser/fla_doctor.h"
@@ -1742,6 +1743,60 @@ void MainWindow::setParentLayer(fla::Timeline* timeline, fla::Layer* layer, fla:
         _timelineView->refresh();
 }
 
+void MainWindow::separateLineAndColor()
+{
+    fla::Timeline* timeline = nullptr;
+    int index = 0;
+    if (!_timelineView || !_timelineView->currentLayer(timeline, index) || !timeline || index < 0 ||
+        index >= static_cast<int>(timeline->layers.size()))
+    {
+        statusBar()->showMessage("Pick the line layer first.", 3000);
+        return;
+    }
+    fla::Layer* line = timeline->layers[static_cast<size_t>(index)];
+    if (!line || line->layerType == fla::Layer::Type::Folder || fla::colorart::isColorArt(*line))
+        return;
+    if (_phoenixView)
+        _phoenixView->flushPendingMerge();
+    _selection.clear();
+    fla::CommandStack& stack = _editContext.commandStack();
+    stack.beginMacro("Color Art Layer");
+    // The color layer under the line layer, with the fills.
+    fla::Layer* color = fla::colorart::newColorLayer(*line);
+    stack.push(fla::CommandPtr(new fla::AddLayerCommand(timeline, index + 1, color, "Color Art Layer")));
+    // The line layer keeps its strokes.
+    for (fla::Frame* frame : line->frames)
+    {
+        if (!frame)
+            continue;
+        for (fla::Element* element : std::vector<fla::Element*>(frame->elements))
+        {
+            if (!element || element->elementType() != fla::Element::Type::Shape)
+                continue;
+            fla::Shape* shape = static_cast<fla::Shape*>(element);
+            std::unique_ptr<fla::Shape> strokes(fla::colorart::strokesOnly(*shape));
+            if (strokes->edges.empty())
+                stack.push(fla::CommandPtr(new fla::RemoveElementCommand(frame, shape, "Color Art Layer")));
+            else
+                stack.push(fla::CommandPtr(new fla::SetShapeContentsCommand(shape, *strokes, "Color Art Layer")));
+        }
+    }
+    stack.endMacro();
+    stack.breakMergeChain();
+    if (_timelineView)
+    {
+        _timelineView->refresh();
+        _timelineView->setCurrentLayer(color);
+    }
+    if (_phoenixView)
+    {
+        _phoenixView->clearCaches();
+        _phoenixView->update();
+    }
+    statusBar()->showMessage(QString("The fills went to %1; the Paint Bucket there paints within the lines of %2.")
+                                 .arg(QString::fromStdString(color->name), QString::fromStdString(line->name)), 5000);
+}
+
 void MainWindow::addPeg()
 {
     fla::Document* document = _flaDocument ? _flaDocument->document : nullptr;
@@ -2488,6 +2543,9 @@ void MainWindow::setupMenus()
     QAction* cameraAction = insertMenu->addAction("Ca&mera");
     cameraAction->setStatusTip("A multiplane camera for the scene: pan, zoom and turn it, with layers at depths");
     connect(cameraAction, &QAction::triggered, this, &MainWindow::addCamera);
+    QAction* separateAction = insertMenu->addAction("Color &Art Layer");
+    separateAction->setStatusTip("Move the current layer's fills to a color art layer under it; the bucket there paints within its lines");
+    connect(separateAction, &QAction::triggered, this, &MainWindow::separateLineAndColor);
     QAction* pegAction = insertMenu->addAction("&Peg");
     pegAction->setStatusTip("A peg above the current layer, which follows it: animate the peg to move, turn and scale the layer about its pivot");
     connect(pegAction, &QAction::triggered, this, &MainWindow::addPeg);

@@ -216,6 +216,9 @@ private slots:
     void setParentLayer(fla::Timeline* timeline, fla::Layer* layer, fla::Layer* parent);
     /// Insert > Peg: a peg layer above the current one, which it follows.
     void addPeg();
+    /// Insert > Color Art Layer: the current layer's
+    /// fills to a color art layer under it, its strokes kept.
+    void separateLineAndColor();
     /// Adds a shape hint to the shape tween at the playhead, or removes all.
     void editShapeHints(bool add);
     void clearFrames();

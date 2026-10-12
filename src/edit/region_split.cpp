@@ -83,15 +83,21 @@ RegionSplitter::RegionSplitter(const Shape& shape, const std::vector<Curve>& cut
     : _shape(shape)
     , _curves(shapeCurves(shape))
 {
-    if (_curves.empty())
+    // An empty shape still divides by its cutters alone: painting under
+    // another layer's lines starts that way.
+    if (_curves.empty() && cutters.empty())
         return;
 
     // What the shape paints, on its own, to ask about each divided face.
     PlanarMap painted;
-    for (size_t i = 0; i < _curves.size(); ++i)
-        painted.addCurve(_curves[i].curve, static_cast<int>(i));
-    painted.build();
-    attributeFillsFromSource(painted, _curves);
+    const bool paints = !_curves.empty();
+    if (paints)
+    {
+        for (size_t i = 0; i < _curves.size(); ++i)
+            painted.addCurve(_curves[i].curve, static_cast<int>(i));
+        painted.build();
+        attributeFillsFromSource(painted, _curves);
+    }
 
     // The cutters join the arrangement as curves with no styles of their own.
     for (const Curve& curve : cutters)
@@ -130,7 +136,7 @@ RegionSplitter::RegionSplitter(const Shape& shape, const std::vector<Curve>& cut
             _map.setFaceFill(index, -1);
             continue;
         }
-        _map.setFaceFill(index, painted.fillAt(inside));
+        _map.setFaceFill(index, paints ? painted.fillAt(inside) : -1);
     }
 }
 
