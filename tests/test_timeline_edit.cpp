@@ -484,3 +484,27 @@ TEST(paste_motion_onto_another_instance)
     CHECK(fla::timeline::pasteMotion(*l, 0, core, 10.0));
     CHECK(!fla::timeline::pasteMotion(*l, 0, "<nothing/>", 10.0));
 }
+
+TEST(scale_spans_keeps_their_length_in_seconds)
+{
+    // Keyframes at 0, 12 and 18 of a 24-frame layer: from 24 fps to 30.
+    std::unique_ptr<fla::Layer> layer(new fla::Layer(nullptr));
+    fla::Layer* l = layer.get();
+    for (const auto& span : {std::make_pair(0, 12), std::make_pair(12, 6), std::make_pair(18, 6)})
+    {
+        fla::Frame* frame = new fla::Frame(l);
+        frame->index = span.first;
+        frame->duration = span.second;
+        l->frames.push_back(frame);
+    }
+    fla::timeline::scaleSpans(*l, 30.0 / 24.0);
+    CHECK(l->frames[0]->index == 0 && l->frames[0]->duration == 15);
+    CHECK(l->frames[1]->index == 15 && l->frames[1]->duration == 8);
+    CHECK(l->frames[2]->index == 23 && l->frames[2]->duration == 7);
+
+    // Squeezed hard, every keyframe still has a frame of its own.
+    fla::timeline::scaleSpans(*l, 0.01);
+    CHECK(l->frames[0]->index == 0 && l->frames[1]->index == 1 && l->frames[2]->index == 2);
+    for (const fla::Frame* frame : l->frames)
+        CHECK(frame->duration >= 1);
+}

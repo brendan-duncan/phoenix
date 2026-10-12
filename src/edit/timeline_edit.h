@@ -106,6 +106,11 @@ void removeMotion(Frame& frame);
 /// shorter.
 void fitMotionSpans(Layer& layer);
 
+/// Scales the layer's frame spans by \a factor, as a change of frame rate
+/// with Scale Spans on does, so they last as long in seconds: each keyframe
+/// moves to its index times \a factor, rounded, each span at least a frame.
+void scaleSpans(Layer& layer, double factor);
+
 /// Create Motion Tween on the span at \a index, as Animate makes one: the
 /// span's one symbol instance or text block moves by an object motion tween
 /// over the span (a span of one frame at the layer's end first grows to a

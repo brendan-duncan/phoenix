@@ -76,6 +76,16 @@ SnapResult Snapper::snap(const std::vector<double>& values, double gridSpacing,
         }
     }
 
+    // Nothing else in reach: the first value (an edge, or the point dragged)
+    // goes to the nearest whole pixel.
+    if (_pixelSnapEnabled && best.kind == SnapKind::None && !values.empty())
+    {
+        const double target = std::round(values.front());
+        best.adjustment = target - values.front();
+        best.kind = SnapKind::Pixel;
+        best.target = target;
+    }
+
     return best;
 }
 

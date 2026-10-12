@@ -11,7 +11,8 @@ enum class SnapKind
     None,
     Grid,
     Object,
-    Guide
+    Guide,
+    Pixel
 };
 
 /// The adjustment to apply along one axis.
@@ -71,11 +72,15 @@ public:
     void setGuideSnapEnabled(bool enabled) { _guideSnapEnabled = enabled; }
     bool guideSnapEnabled() const { return _guideSnapEnabled; }
 
+    /// Snap to Pixels: what snaps to nothing else lands on a whole pixel.
+    void setPixelSnapEnabled(bool enabled) { _pixelSnapEnabled = enabled; }
+    bool pixelSnapEnabled() const { return _pixelSnapEnabled; }
+
     /// Whether anything at all would snap. Lets a caller skip gathering
     /// candidates when every kind is switched off.
     bool isEnabled() const
     {
-        return _gridEnabled || _objectSnapEnabled ||
+        return _gridEnabled || _objectSnapEnabled || _pixelSnapEnabled ||
             (_guideSnapEnabled && (!_guidesX.empty() || !_guidesY.empty()));
     }
 
@@ -105,6 +110,7 @@ private:
     std::vector<double> _candidatesX;
     std::vector<double> _candidatesY;
     bool _guideSnapEnabled = true;
+    bool _pixelSnapEnabled = false;
     std::vector<double> _guidesX;
     std::vector<double> _guidesY;
 };

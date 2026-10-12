@@ -210,3 +210,21 @@ TEST(guides_snap_and_hold_against_objects_no_closer)
     CHECK(!snapper.isEnabled());
     CHECK(!snapper.snapX({100.0}).snapped());
 }
+
+TEST(snap_to_pixels_when_nothing_else_is_near)
+{
+    fla::Snapper snapper;
+    snapper.setObjectSnapEnabled(false);
+    CHECK(!snapper.isEnabled() || snapper.guideSnapEnabled());
+    snapper.setPixelSnapEnabled(true);
+    CHECK(snapper.isEnabled());
+    const fla::SnapResult x = snapper.snapX({10.3, 20.0});
+    CHECK(x.kind == fla::SnapKind::Pixel);
+    CHECK(std::fabs(x.adjustment + 0.3) < 1.0e-9);
+
+    // An object in reach still wins.
+    snapper.setObjectSnapEnabled(true);
+    snapper.addCandidateX(12.0);
+    const fla::SnapResult y = snapper.snapX({10.3});
+    CHECK(y.kind == fla::SnapKind::Object);
+}

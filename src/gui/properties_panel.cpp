@@ -1,4 +1,5 @@
 #include "properties_panel.h"
+#include "../data/symbol_list.h"
 #include "../edit/timeline_edit.h"
 
 #include "color_panel.h"
@@ -39,6 +40,7 @@
 #include <QCheckBox>
 #include <QColorDialog>
 #include <QComboBox>
+#include <QSettings>
 #include <QFontComboBox>
 #include <QFrame>
 #include <QGridLayout>
@@ -2700,8 +2702,39 @@ void PropertiesPanel::rebuildDocTab()
             emit documentEdited();
         },
         [=]() {
-            push(std::unique_ptr<fla::Command>(new fla::SetPropertyCommand<double>(
-                doc->frameRate, *beforeRate, doc->frameRate, "Frame Rate")));
+            const double after = doc->frameRate;
+            const double before = *beforeRate;
+            if (!QSettings().value("document/scaleSpans", false).toBool() || before <= 0.0 || after == before)
+            {
+                push(std::unique_ptr<fla::Command>(new fla::SetPropertyCommand<double>(
+                    doc->frameRate, before, after, "Frame Rate")));
+                return;
+            }
+            // Scale Spans: every span of every timeline lasts as long in
+            // seconds at the new rate.
+            std::vector<fla::Layer*> layers;
+            const auto gather = [&layers](const std::vector<fla::Timeline*>& timelines) {
+                for (fla::Timeline* timeline : timelines)
+                    for (fla::Layer* layer : timeline ? timeline->layers : std::vector<fla::Layer*>())
+                        if (layer)
+                            layers.push_back(layer);
+            };
+            gather(doc->timelines);
+            if (doc->symbolList)
+                for (fla::Symbol* symbol : doc->symbolList->symbols)
+                    if (symbol)
+                        gather(symbol->timelines);
+            auto* command = new fla::CompoundCommand("Frame Rate");
+            command->addCommand(fla::CommandPtr(new fla::SetPropertyCommand<double>(
+                doc->frameRate, before, after, "Frame Rate")));
+            const double factor = after / before;
+            command->addCommand(fla::CommandPtr(new fla::EditFramesCommand(layers, "Frame Rate",
+                [layers, factor](std::vector<fla::Frame*>&) {
+                    for (fla::Layer* layer : layers)
+                        fla::timeline::scaleSpans(*layer, factor);
+                })));
+            push(std::unique_ptr<fla::Command>(command));
+            emit documentEdited();
         });
     settings->addField(1, 0, "FPS", frameRate);
 
@@ -2718,6 +2751,12 @@ void PropertiesPanel::rebuildDocTab()
         emit documentEdited();
     });
     settings->addField(1, 1, "Stage", stage);
+
+    QCheckBox* scaleSpans = new QCheckBox("Scale spans", this);
+    scaleSpans->setToolTip("A change of frame rate stretches or squeezes every span so it lasts as long");
+    scaleSpans->setChecked(QSettings().value("document/scaleSpans", false).toBool());
+    connect(scaleSpans, &QCheckBox::toggled, this, [](bool on) { QSettings().setValue("document/scaleSpans", on); });
+    settings->addLong(2, "", scaleSpans);
 
     PropertySection* about = addSection(page, "Document Info");
     about->addLong(0, "Version", fieldLabel(QString::fromStdString(doc->xflVersion), this));

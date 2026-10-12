@@ -20,6 +20,10 @@ public:
 
     QString symbolName() const;
 
+    /// For Create New Symbol, which has nothing to place a registration
+    /// point in: the grid goes.
+    void hideRegistration();
+
     fla::SymbolType symbolType() const;
 
     /// Where the registration point sits inside the selection's bounds, each
@@ -30,6 +34,8 @@ private:
     QLineEdit* _name;
     QComboBox* _type;
     RegistrationGrid* _registration;
+    QWidget* _registrationRow = nullptr;
+    class QFormLayout* _form = nullptr;
 };
 
 /// Nine small boxes, the chosen one filled, for picking which corner, edge

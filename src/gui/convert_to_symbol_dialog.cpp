@@ -49,12 +49,14 @@ ConvertToSymbolDialog::ConvertToSymbolDialog(const QString& defaultName, QWidget
         settings.value(kRegistrationRowSetting, 0).toInt());
 
     QWidget* registrationRow = new QWidget(this);
+    _registrationRow = registrationRow;
     QHBoxLayout* registrationLayout = new QHBoxLayout(registrationRow);
     registrationLayout->setContentsMargins(0, 0, 0, 0);
     registrationLayout->addWidget(_registration);
     registrationLayout->addStretch();
 
     QFormLayout* form = new QFormLayout;
+    _form = form;
     form->addRow("Name:", _name);
     form->addRow("Type:", _type);
     form->addRow("Registration:", registrationRow);
@@ -166,4 +168,10 @@ void RegistrationGrid::mousePressEvent(QMouseEvent* event)
         }
     }
     QWidget::mousePressEvent(event);
+}
+
+void ConvertToSymbolDialog::hideRegistration()
+{
+    if (_form && _registrationRow)
+        _form->setRowVisible(_registrationRow, false);
 }

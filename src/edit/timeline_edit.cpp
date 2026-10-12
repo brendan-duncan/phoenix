@@ -384,6 +384,33 @@ void fitMotionSpans(Layer& layer)
     }
 }
 
+void scaleSpans(Layer& layer, double factor)
+{
+    if (factor <= 0.0 || layer.frames.empty())
+        return;
+    sortFrames(layer);
+    const Frame* last = layer.frames.back();
+    const int end = std::max(1, static_cast<int>(std::lround((last->index + last->duration) * factor)));
+    int previous = -1;
+    std::vector<int> starts;
+    for (const Frame* frame : layer.frames)
+    {
+        // In order, and never on top of the keyframe before.
+        const int at = std::max(previous + 1, static_cast<int>(std::lround(frame->index * factor)));
+        starts.push_back(at);
+        previous = at;
+    }
+    for (size_t i = 0; i < layer.frames.size(); ++i)
+    {
+        Frame* frame = layer.frames[i];
+        frame->index = starts[i];
+        const int next = i + 1 < starts.size() ? starts[i + 1] : std::max(end, starts[i] + 1);
+        frame->duration = std::max(1, next - starts[i]);
+    }
+    updateExtent(layer);
+    fitMotionSpans(layer);
+}
+
 Frame* insertKeyframe(Layer& layer, int index, bool blank)
 {
     if (index < 0)

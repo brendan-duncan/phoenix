@@ -2191,6 +2191,17 @@ void MainWindow::setupMenus()
     });
     viewMenu->addAction(snapToObjectsAction);
 
+    QAction* snapToPixelsAction = new QAction("Snap to &Pixels", this);
+    snapToPixelsAction->setCheckable(true);
+    snapToPixelsAction->setChecked(QSettings().value("snap/pixels", false).toBool());
+    _snapper.setPixelSnapEnabled(snapToPixelsAction->isChecked());
+    snapToPixelsAction->setStatusTip("Put what is drawn or dragged on whole pixels");
+    connect(snapToPixelsAction, &QAction::toggled, this, [this](bool on) {
+        _snapper.setPixelSnapEnabled(on);
+        QSettings().setValue("snap/pixels", on);
+    });
+    viewMenu->addAction(snapToPixelsAction);
+
     viewMenu->addSeparator();
 
     QAction* dimOutsideDocumentAction = new QAction("Dim Outside Document", this);
@@ -4118,6 +4129,16 @@ void MainWindow::rebuildBreadcrumb()
     }
 
     const int depth = _phoenixView->scopeDepth();
+
+    // Back out one level, as Animate's edit bar arrow does.
+    QToolButton* back = new QToolButton(_breadcrumb);
+    back->setText(QString::fromUtf8("\u2190"));
+    back->setAutoRaise(true);
+    back->setToolTip("Back");
+    back->setEnabled(depth > 0);
+    connect(back, &QToolButton::clicked, this, [this]() { _phoenixView->exitScope(); });
+    layout->addWidget(back);
+
     for (int level = 0; level <= depth; ++level)
     {
         if (level > 0)
@@ -4136,6 +4157,31 @@ void MainWindow::rebuildBreadcrumb()
         layout->addWidget(button);
     }
     layout->addStretch();
+
+    // Edit Symbols: any symbol of the library, by name.
+    QToolButton* symbols = new QToolButton(_breadcrumb);
+    symbols->setText("Edit Symbols");
+    symbols->setAutoRaise(true);
+    symbols->setPopupMode(QToolButton::InstantPopup);
+    QMenu* menu = new QMenu(symbols);
+    connect(menu, &QMenu::aboutToShow, this, [this, menu]() {
+        menu->clear();
+        const fla::Document* document = _flaDocument ? _flaDocument->document : nullptr;
+        std::vector<const fla::Symbol*> list;
+        if (document && document->symbolList)
+            for (const fla::Symbol* symbol : document->symbolList->symbols)
+                if (symbol && !symbol->timelines.empty())
+                    list.push_back(symbol);
+        std::sort(list.begin(), list.end(),
+            [](const fla::Symbol* a, const fla::Symbol* b) { return a->name < b->name; });
+        if (list.empty())
+            menu->addAction("No symbols")->setEnabled(false);
+        for (const fla::Symbol* symbol : list)
+            menu->addAction(QString::fromStdString(symbol->name), this,
+                [this, symbol]() { _phoenixView->editSymbol(symbol); });
+    });
+    symbols->setMenu(menu);
+    layout->addWidget(symbols);
 }
 
 void MainWindow::refreshStyleSwatches()
@@ -4844,6 +4890,7 @@ void MainWindow::newSymbol()
     }
     ConvertToSymbolDialog dialog(QString::fromStdString(suggested), this);
     dialog.setWindowTitle("Create New Symbol");
+    dialog.hideRegistration();
     if (dialog.exec() != QDialog::Accepted)
         return;
     const std::string name = dialog.symbolName().trimmed().toStdString();
