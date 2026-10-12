@@ -135,6 +135,20 @@ private slots:
     /// library symbol, keeping their transform, color and looping.
     void swapSymbol();
 
+    /// Modify > Transform: the selection turned about the center of its
+    /// bounds by \a change (a flip, a quarter turn, a scale and rotation).
+    void transformSelection(const char* name, const QTransform& change);
+    /// Modify > Transform > Scale and Rotate (Ctrl+Alt+S).
+    void scaleAndRotate();
+    /// Modify > Transform > Remove Transform: back to unscaled and unturned,
+    /// staying where it is.
+    void removeTransform();
+    /// Modify > Timeline > Distribute to Layers (Ctrl+Shift+D): each
+    /// selected object on a new layer of its own, under the current one.
+    void distributeToLayers();
+    /// The stage's right-click menu.
+    void showStageMenu(const QPoint& globalPos, const QPointF& documentPos);
+
     /// Modify > Shape: each rewrites every selected shape's paths as one
     /// undo step per shape.
     void smoothSelection();
@@ -408,6 +422,9 @@ private:
     QAction* _breakApartAction = nullptr;
     QAction* _convertToSymbolAction = nullptr;
     QAction* _swapSymbolAction = nullptr;
+    QMenu* _transformMenu = nullptr;
+    std::vector<QAction*> _transformActions;
+    QAction* _distributeAction = nullptr;
     QAction* _arrangeActions[4] = {nullptr, nullptr, nullptr, nullptr};
 
     /// Copies of the shapes last cut or copied. Only shapes can be copied so

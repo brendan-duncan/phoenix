@@ -1348,6 +1348,39 @@ void MainWindow::setupMenus()
 
     modifyMenu->addSeparator();
 
+    // Modify > Transform, with Animate's keys (its Remove Transform key is
+    // Redo's here).
+    _transformMenu = modifyMenu->addMenu("&Transform");
+    const auto addTransform = [this](const QString& text, const QKeySequence& key, std::function<void()> act) {
+        QAction* action = new QAction(text, this);
+        if (!key.isEmpty())
+            action->setShortcut(key);
+        connect(action, &QAction::triggered, this, [act]() { act(); });
+        _transformMenu->addAction(action);
+        _transformActions.push_back(action);
+        return action;
+    };
+    addTransform("Scale and &Rotate...", QKeySequence(Qt::CTRL | Qt::ALT | Qt::Key_S), [this]() { scaleAndRotate(); });
+    _transformMenu->addSeparator();
+    addTransform("Rotate 90\u00b0 &CW", QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_9),
+        [this]() { transformSelection("Rotate 90\u00b0 CW", QTransform().rotate(90.0)); });
+    addTransform("Rotate 90\u00b0 CC&W", QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_7),
+        [this]() { transformSelection("Rotate 90\u00b0 CCW", QTransform().rotate(-90.0)); });
+    _transformMenu->addSeparator();
+    addTransform("Flip &Vertical", QKeySequence(),
+        [this]() { transformSelection("Flip Vertical", QTransform::fromScale(1.0, -1.0)); });
+    addTransform("Flip &Horizontal", QKeySequence(),
+        [this]() { transformSelection("Flip Horizontal", QTransform::fromScale(-1.0, 1.0)); });
+    _transformMenu->addSeparator();
+    addTransform("Remove &Transform", QKeySequence(), [this]() { removeTransform(); });
+
+    QMenu* modifyTimelineMenu = modifyMenu->addMenu("Ti&meline");
+    _distributeAction = new QAction("&Distribute to Layers", this);
+    _distributeAction->setShortcut(QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_D));
+    _distributeAction->setStatusTip("Put each selected object on a layer of its own");
+    connect(_distributeAction, &QAction::triggered, this, &MainWindow::distributeToLayers);
+    modifyTimelineMenu->addAction(_distributeAction);
+
     // Modify > Shape, as Animate groups them.
     QMenu* shapeMenu = modifyMenu->addMenu("S&hape");
 
@@ -2653,6 +2686,7 @@ void MainWindow::setupPropertiesPanel()
             _phoenixView->editSymbol(found->second);
     });
     connect(_phoenixView, &PhoenixView::libraryItemDropped, this, &MainWindow::placeLibraryItem);
+    connect(_phoenixView, &PhoenixView::stageMenuRequested, this, &MainWindow::showStageMenu);
 
     // The pen's eraser end picks the eraser, and turning the pen back picks
     // whatever tool was in use before, unless another was chosen meanwhile.
@@ -4002,6 +4036,258 @@ void MainWindow::swapSymbol()
     updateFramePicker();
 }
 
+namespace {
+
+QTransform toQ(const fla::Transform& t)
+{
+    return QTransform(t.m11, t.m12, t.m21, t.m22, t.tx, t.ty);
+}
+
+fla::Transform fromQ(const QTransform& q)
+{
+    return fla::Transform(q.m11(), q.m12(), q.m21(), q.m22(), q.dx(), q.dy());
+}
+
+} // namespace
+
+void MainWindow::transformSelection(const char* name, const QTransform& change)
+{
+    if (!_phoenixView)
+        return;
+    _phoenixView->flushPendingMerge();
+    const std::vector<fla::Element*> elements = selectedElements();
+    QRectF bounds;
+    for (fla::Element* element : elements)
+    {
+        const QRectF each = _phoenixView->elementBounds(element);
+        if (each.isValid())
+            bounds = bounds.isValid() ? bounds.united(each) : each;
+    }
+    if (elements.empty() || !bounds.isValid())
+        return;
+
+    // About the middle of the selection, as Animate turns and flips it.
+    const QPointF c = bounds.center();
+    const QTransform about = QTransform::fromTranslate(-c.x(), -c.y()) * change * QTransform::fromTranslate(c.x(), c.y());
+    fla::CommandStack& stack = _editContext.commandStack();
+    stack.beginMacro(name);
+    for (fla::Element* element : elements)
+    {
+        const fla::Transform before = element->transform;
+        stack.push(fla::CommandPtr(new fla::SetElementTransformCommand(element, before,
+            fromQ(toQ(before) * about), name)));
+        if (element->elementType() == fla::Element::Type::Shape)
+            _phoenixView->markShapeEdited(static_cast<fla::Shape*>(element));
+    }
+    stack.endMacro();
+    stack.breakMergeChain();
+    _phoenixView->invalidateBounds();
+    _phoenixView->clearCaches();
+    _phoenixView->update();
+    if (_propertiesPanel)
+        _propertiesPanel->refresh();
+}
+
+void MainWindow::scaleAndRotate()
+{
+    if (selectedElements().empty())
+        return;
+    static double scale = 100.0;
+    static double rotation = 0.0;
+    QDialog dialog(this);
+    dialog.setWindowTitle("Scale and Rotate");
+    QDoubleSpinBox* scaleBox = new QDoubleSpinBox(&dialog);
+    scaleBox->setRange(1.0, 10000.0);
+    scaleBox->setSuffix(" %");
+    scaleBox->setValue(scale);
+    QDoubleSpinBox* rotateBox = new QDoubleSpinBox(&dialog);
+    rotateBox->setRange(-360.0, 360.0);
+    rotateBox->setSuffix(QString::fromUtf8(" °"));
+    rotateBox->setValue(rotation);
+    QFormLayout* form = new QFormLayout();
+    form->addRow("Scale:", scaleBox);
+    form->addRow("Rotate:", rotateBox);
+    QDialogButtonBox* buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, &dialog);
+    connect(buttons, &QDialogButtonBox::accepted, &dialog, &QDialog::accept);
+    connect(buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
+    QVBoxLayout* layout = new QVBoxLayout(&dialog);
+    layout->addLayout(form);
+    layout->addWidget(buttons);
+    if (dialog.exec() != QDialog::Accepted)
+        return;
+    scale = scaleBox->value();
+    rotation = rotateBox->value();
+    QTransform change;
+    change.rotate(rotation);
+    change.scale(scale / 100.0, scale / 100.0);
+    transformSelection("Scale and Rotate", change);
+}
+
+void MainWindow::removeTransform()
+{
+    if (!_phoenixView)
+        return;
+    _phoenixView->flushPendingMerge();
+    const std::vector<fla::Element*> elements = selectedElements();
+    if (elements.empty())
+        return;
+    fla::CommandStack& stack = _editContext.commandStack();
+    stack.beginMacro("Remove Transform");
+    for (fla::Element* element : elements)
+    {
+        // Unscaled and unturned, with the middle of the object where it was.
+        const fla::Transform before = element->transform;
+        const QRectF bounds = _phoenixView->elementBounds(element);
+        bool invertible = false;
+        const QTransform inverse = toQ(before).inverted(&invertible);
+        if (!bounds.isValid() || !invertible)
+            continue;
+        const QPointF localCenter = inverse.map(bounds.center());
+        const fla::Transform after(1.0, 0.0, 0.0, 1.0, bounds.center().x() - localCenter.x(),
+            bounds.center().y() - localCenter.y());
+        stack.push(fla::CommandPtr(new fla::SetElementTransformCommand(element, before, after, "Remove Transform")));
+        if (element->elementType() == fla::Element::Type::Shape)
+            _phoenixView->markShapeEdited(static_cast<fla::Shape*>(element));
+    }
+    stack.endMacro();
+    stack.breakMergeChain();
+    _phoenixView->invalidateBounds();
+    _phoenixView->clearCaches();
+    _phoenixView->update();
+    if (_propertiesPanel)
+        _propertiesPanel->refresh();
+}
+
+void MainWindow::distributeToLayers()
+{
+    if (!_phoenixView || !_timelineView)
+        return;
+    _phoenixView->flushPendingMerge();
+    fla::Timeline* timeline = nullptr;
+    int current = 0;
+    if (!_timelineView->currentLayer(timeline, current) || !timeline)
+        return;
+    std::vector<fla::Element*> elements = selectedElements();
+    // Only objects lying on a frame of the current timeline move.
+    elements.erase(std::remove_if(elements.begin(), elements.end(), [timeline](fla::Element* element) {
+        auto* frame = dynamic_cast<fla::Frame*>(element->parent);
+        auto* layer = frame ? dynamic_cast<fla::Layer*>(frame->parent) : nullptr;
+        return !layer || std::find(timeline->layers.begin(), timeline->layers.end(), layer) == timeline->layers.end();
+    }), elements.end());
+    if (elements.empty())
+        return;
+
+    _selection.clear();
+    const fla::SymbolList* library = _flaDocument && _flaDocument->document ? _flaDocument->document->symbolList : nullptr;
+    fla::CommandStack& stack = _editContext.commandStack();
+    stack.beginMacro("Distribute to Layers");
+    // The topmost object gets the layer just under the current one, the next
+    // the one under that, as Animate stacks them.
+    int at = current + 1;
+    for (auto it = elements.rbegin(); it != elements.rend(); ++it)
+    {
+        fla::Element* element = *it;
+        auto* frame = static_cast<fla::Frame*>(element->parent);
+        fla::Layer* layer = fla::newLayerFor(*timeline, false);
+        for (fla::Frame* empty : layer->frames)
+            delete empty;
+        layer->frames.clear();
+        // Named for the symbol, as Animate names them, else numbered.
+        if (element->elementType() == fla::Element::Type::SymbolInstance)
+        {
+            const auto* instance = static_cast<const fla::SymbolInstance*>(element);
+            const std::string& name = instance->name.empty() ? instance->libraryItemName : instance->name;
+            layer->name = name.substr(name.find_last_of('/') == std::string::npos ? 0 : name.find_last_of('/') + 1);
+            layer->autoNamed = false;
+        }
+        if (frame->index > 0)
+        {
+            fla::Frame* before = new fla::Frame(layer);
+            before->index = 0;
+            before->duration = frame->index;
+            before->keyMode = "9728";
+            layer->frames.push_back(before);
+        }
+        fla::Frame* holder = new fla::Frame(layer);
+        holder->index = frame->index;
+        holder->duration = frame->duration;
+        holder->keyMode = "9728";
+        if (fla::Element* copy = fla::cloneElement(*element, holder))
+        {
+            fla::relinkSymbols(*copy, library);
+            holder->elements.push_back(copy);
+        }
+        layer->frames.push_back(holder);
+        layer->firstFrame = 0;
+        layer->lastFrame = holder->index + holder->duration;
+        stack.push(fla::CommandPtr(new fla::RemoveElementCommand(frame, element, "Distribute to Layers", &_selection)));
+        stack.push(fla::CommandPtr(new fla::AddLayerCommand(timeline, at++, layer, "Distribute to Layers")));
+    }
+    stack.endMacro();
+    stack.breakMergeChain();
+    _timelineView->refresh();
+    _timelineView->refreshFrames();
+    onVisibilityChanged();
+    _phoenixView->clearCaches();
+    _phoenixView->update();
+}
+
+void MainWindow::showStageMenu(const QPoint& globalPos, const QPointF& documentPos)
+{
+    if (!_phoenixView || !_flaDocument || !_flaDocument->document)
+        return;
+    // A right-click on something not selected selects it, as a click would.
+    const HitResult hit = _phoenixView->hitTest(documentPos, _phoenixView->pickTolerance());
+    if (hit.element && !_selection.contains(hit.element))
+        _selection.select(hit.element);
+    else if (!hit.element && !_selection.isEmpty())
+        _selection.clear();
+    updateSelectionState();
+
+    QMenu menu(this);
+    const bool selected = !_selection.isEmpty();
+    for (QAction* action : {_cutAction, _copyAction, _pasteAction, _pasteInPlaceAction})
+    {
+        if (action)
+            menu.addAction(action);
+    }
+    menu.addSeparator();
+    if (selected)
+    {
+        QMenu* arrange = menu.addMenu("Arrange");
+        for (QAction* action : _arrangeActions)
+        {
+            if (action)
+                arrange->addAction(action);
+        }
+        if (_transformMenu)
+            menu.addMenu(_transformMenu);
+        if (_distributeAction)
+            menu.addAction(_distributeAction);
+        menu.addSeparator();
+        if (_convertToSymbolAction)
+            menu.addAction(_convertToSymbolAction);
+        auto* instance = dynamic_cast<fla::SymbolInstance*>(_selection.single());
+        if (instance && instance->symbol)
+        {
+            menu.addAction("Edit Symbol", this, [this, instance]() { _phoenixView->editSymbol(instance->symbol); });
+            menu.addAction("Edit in Place", this, [this, instance]() { _phoenixView->enterSymbol(instance); });
+            if (_swapSymbolAction)
+                menu.addAction(_swapSymbolAction);
+        }
+        for (QAction* action : {_breakApartAction, _groupAction, _ungroupAction})
+        {
+            if (action && action->isEnabled())
+                menu.addAction(action);
+        }
+    }
+    else if (_selectAllAction)
+    {
+        menu.addAction(_selectAllAction);
+    }
+    menu.exec(globalPos);
+}
+
 void MainWindow::applyFillToSelection()
 {
     if (!_phoenixView || !_drawingStyle.hasFill)
@@ -4567,6 +4853,10 @@ void MainWindow::updateSelectionState()
         _convertToSymbolAction->setEnabled(hasElements);
     if (_swapSymbolAction)
         _swapSymbolAction->setEnabled(hasInstance);
+    for (QAction* action : _transformActions)
+        action->setEnabled(hasElements);
+    if (_distributeAction)
+        _distributeAction->setEnabled(hasElements);
     for (QAction* action : {_smoothAction, _straightenAction, _optimizeAction, _linesToFillsAction,
              _expandFillAction, _softenFillAction})
     {

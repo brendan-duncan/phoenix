@@ -3154,6 +3154,12 @@ void PhoenixView::mouseReleaseEvent(QMouseEvent *event)
     }
 }
 
+void PhoenixView::contextMenuEvent(QContextMenuEvent* event)
+{
+    emit stageMenuRequested(event->globalPos(), mapToDocument(QPointF(event->pos())));
+    event->accept();
+}
+
 void PhoenixView::mouseDoubleClickEvent(QMouseEvent* event)
 {
     if (_activeTool &&

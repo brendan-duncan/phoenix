@@ -194,6 +194,8 @@ public:
     QString scopeName(int depth) const;
 
 signals:
+    /// The stage was right-clicked at \a documentPos.
+    void stageMenuRequested(const QPoint& globalPos, const QPointF& documentPos);
     void scopeChanged();
 
     /// The stage was turned with the Rotation tool or set straight.
@@ -419,6 +421,7 @@ protected:
     void keyReleaseEvent(QKeyEvent *event) override;
 
     void mouseDoubleClickEvent(QMouseEvent *event) override;
+    void contextMenuEvent(QContextMenuEvent* event) override;
 
 private:
     const fla::FLADocument* _flaDocument;
