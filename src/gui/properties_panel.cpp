@@ -1078,6 +1078,16 @@ void PropertiesPanel::buildToolTab()
         _links.style->gapSize = static_cast<fla::DrawingStyle::GapSize>(index);
     });
     addOption("Gap size", gapSize, {IconTool::PaintBucket});
+    QCheckBox* fillAll = new QCheckBox("Fill all regions", this);
+    fillAll->setChecked(style.fillAllRegions);
+    fillAll->setToolTip("A click paints every enclosed region of the shape that has the clicked region's fill");
+    connect(fillAll, &QCheckBox::toggled, this, [this](bool on) { _links.style->fillAllRegions = on; });
+    addOption(QString(), fillAll, {IconTool::PaintBucket});
+    QCheckBox* lockFill = new QCheckBox("Lock fill", this);
+    lockFill->setChecked(style.lockFill);
+    lockFill->setToolTip("A gradient or bitmap spans the whole stage, so separate areas read as one sweep; drag with the bucket to lay a gradient along the drag");
+    connect(lockFill, &QCheckBox::toggled, this, [this](bool on) { _links.style->lockFill = on; });
+    addOption(QString(), lockFill, {IconTool::PaintBucket, IconTool::Brush, IconTool::FluidBrush, IconTool::InkBrush});
 
     // Pencil.
     QComboBox* pencilMode = new QComboBox(this);

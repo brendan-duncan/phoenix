@@ -122,6 +122,15 @@ void DrawingStyle::fitFill(FillStyle& fill, double left, double top, double righ
     }
 }
 
+void DrawingStyle::fitFillsTo(Element& element, double left, double top, double right, double bottom)
+{
+    if (element.elementType() != Element::Type::Shape)
+        return;
+    for (const auto& entry : static_cast<Shape&>(element).fillsMap)
+        if (entry.second && unplaced(*entry.second))
+            fitFill(*entry.second, left, top, right, bottom);
+}
+
 void DrawingStyle::fitFills(Element& element)
 {
     if (element.elementType() == Element::Type::Rectangle)

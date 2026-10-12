@@ -127,6 +127,10 @@ QPointF GradientTransformTool::handlePoint(Handle handle, const Frame& frame) co
         if (radial)
             return frame.center + frame.axisX * static_cast<const fla::RadialGradient*>(style)->focalPointRatio;
         return frame.center;
+    case Handle::SkewX:
+        return frame.center - frame.axisY;
+    case Handle::SkewY:
+        return frame.center - frame.axisX;
     case Handle::None:
         break;
     }
@@ -149,6 +153,8 @@ GradientTransformTool::Handle GradientTransformTool::handleAt(PhoenixView& view,
     }
     if (bitmap)
         handles.push_back(Handle::Height);
+    handles.push_back(Handle::SkewX);
+    handles.push_back(Handle::SkewY);
     handles.push_back(Handle::Center);
     const double reach = kGrab / std::max(view.zoom(), 1.0e-6);
     for (Handle handle : handles)
@@ -282,6 +288,25 @@ bool GradientTransformTool::mouseMove(PhoenixView& view, QMouseEvent* event, con
         }
         break;
     }
+    case Handle::SkewX:
+    case Handle::SkewY:
+    {
+        // The other axis leans: the handle's movement along the axis it
+        // rides is taken up by the axis it sits on the end of.
+        const bool across = _dragging == Handle::SkewX;
+        const QPointF along = across ? _pressFrame.axisX : _pressFrame.axisY;
+        const double alongLength = std::max(length(along), 1.0e-9);
+        const QPointF direction = along / alongLength;
+        const QPointF moved = local - _pressLocal;
+        const double shift = moved.x() * direction.x() + moved.y() * direction.y();
+        // The handle sits at center minus the axis that leans, so moving it
+        // one way leans that axis the other.
+        if (across)
+            frame.axisY = _pressFrame.axisY - direction * shift;
+        else
+            frame.axisX = _pressFrame.axisX - direction * shift;
+        break;
+    }
     case Handle::None:
         break;
     }
@@ -383,6 +408,14 @@ void GradientTransformTool::paintOverlay(PhoenixView& view, QPainter& painter, d
         painter.drawEllipse(at, r, r);
     };
     circle(toScreen.map(handlePoint(Handle::Center, frame)), 4.5);
+    // The skew handles, small diamonds on the top and left edges.
+    for (Handle skew : {Handle::SkewX, Handle::SkewY})
+    {
+        const QPointF at = toScreen.map(handlePoint(skew, frame));
+        painter.setPen(QPen(ink, 1.0));
+        painter.setBrush(paper);
+        painter.drawPolygon(QPolygonF({at + QPointF(0, -4.5), at + QPointF(4.5, 0), at + QPointF(0, 4.5), at + QPointF(-4.5, 0)}));
+    }
     square(toScreen.map(handlePoint(Handle::Width, frame)));
     if (bitmap)
         square(toScreen.map(handlePoint(Handle::Height, frame)));

@@ -551,6 +551,12 @@ void BrushTool::finish(PhoenixView& view)
     }
     fla::Shape* shape = outlineShape(sweptOutline(dabs, zoom, true), tolerance, frame, _style, true);
     _samples.clear();
+    // Lock Fill: a gradient or bitmap over the whole stage, not the stroke.
+    if (shape && _style.lockFill)
+    {
+        const QRectF stage = view.stageInScope();
+        fla::DrawingStyle::fitFillsTo(*shape, stage.left(), stage.top(), stage.right(), stage.bottom());
+    }
     if (!shape)
     {
         view.update();

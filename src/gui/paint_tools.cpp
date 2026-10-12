@@ -22,6 +22,11 @@
 
 #include <cstdint>
 #include <QMouseEvent>
+#include <cmath>
+#include <QPainter>
+#include "../data/bitmap_fill.h"
+#include "../data/radial_gradient.h"
+#include "../data/linear_gradient.h"
 
 #include <memory>
 
@@ -260,19 +265,113 @@ bool PaintBucketTool::mousePress(PhoenixView& view, QMouseEvent* event, const QP
         if (regions.faceFill(face) == fill)
             return true;
 
-        std::unique_ptr<fla::Shape> after(regions.withFaceFill(face, fill));
-        if (!after)
-            return true;
-        fla::DrawingStyle::fitFills(*after);
-
         // The arrangement was built before the fill was added, which is fine:
         // styles do not change the geometry, and the result is cloned from
         // the painted copy, style table and all.
-        commitContents(view, _commandStack, shape, *after, "Paint Bucket");
+        std::unique_ptr<fla::Shape> after(regions.withFaceFill(face, fill));
+        if (!after)
+            return true;
+
+        // Fill All Regions: every other enclosed region with the fill the
+        // clicked one had, one at a time, the shape divided afresh each time.
+        if (_style.fillAllRegions)
+        {
+            const int was = regions.faceFill(face);
+            for (const fla::Point& inside : regions.regionsFilledWith(was))
+            {
+                fla::RegionSplitter again(*after);
+                const int other = again.faceAt(inside);
+                if (other < 0 || again.faceFill(other) != was)
+                    continue;
+                if (fla::Shape* more = again.withFaceFill(other, fill))
+                    after.reset(more);
+            }
+        }
+
+        // The paint is placed on release, so a gradient can be dragged.
+        _pending = std::move(after);
+        _pendingTarget = shape;
+        _pendingFill = fill;
+        _pressAt = documentPos;
+        _dragAt = documentPos;
+        _toShape = toShape;
         return true;
     }
 
     return true;
+}
+
+bool PaintBucketTool::mouseMove(PhoenixView& view, QMouseEvent* event, const QPointF& documentPos)
+{
+    (void)event;
+    if (!_pending)
+        return false;
+    _dragAt = documentPos;
+    view.update();
+    return true;
+}
+
+bool PaintBucketTool::mouseRelease(PhoenixView& view, QMouseEvent* event, const QPointF& documentPos)
+{
+    if (event->button() != Qt::LeftButton || !_pending)
+        return false;
+    _dragAt = documentPos;
+    const double moved = std::hypot(_dragAt.x() - _pressAt.x(), _dragAt.y() - _pressAt.y()) * std::max(view.zoom(), 1.0e-6);
+    place(view, moved > 4.0 ? &_dragAt : nullptr);
+    return true;
+}
+
+void PaintBucketTool::place(PhoenixView& view, const QPointF* dragEnd)
+{
+    std::unique_ptr<fla::Shape> after = std::move(_pending);
+    fla::Shape* target = _pendingTarget;
+    _pendingTarget = nullptr;
+    fla::FillStyle* fill = after ? const_cast<fla::FillStyle*>(after->getFillStyleByIndex(_pendingFill)) : nullptr;
+    if (!after || !target)
+    {
+        view.update();
+        return;
+    }
+    const bool gradient = fill && (fill->type() == fla::FillStyle::Type::LinearGradient ||
+                                      fill->type() == fla::FillStyle::Type::RadialGradient);
+    if (fill && gradient && dragEnd)
+    {
+        // Along the drag, in the shape's own space.
+        constexpr double kSpan = 1638.4;
+        const QPointF a = _toShape.map(_pressAt);
+        const QPointF b = _toShape.map(*dragEnd);
+        const double dx = b.x() - a.x();
+        const double dy = b.y() - a.y();
+        if (fill->type() == fla::FillStyle::Type::LinearGradient)
+            fill->transform = fla::Transform(dx / kSpan, dy / kSpan, -dy / kSpan, dx / kSpan, (a.x() + b.x()) / 2.0, (a.y() + b.y()) / 2.0);
+        else
+        {
+            const double reach = 2.0 * std::hypot(dx, dy) / kSpan;
+            fill->transform = fla::Transform(reach, 0.0, 0.0, reach, a.x(), a.y());
+        }
+    }
+    else if (_style.lockFill)
+    {
+        // Lock Fill: over the stage, wherever it is painted.
+        const QRectF stage = _toShape.mapRect(view.stageInScope());
+        fla::DrawingStyle::fitFillsTo(*after, stage.left(), stage.top(), stage.right(), stage.bottom());
+    }
+    fla::DrawingStyle::fitFills(*after);
+    commitContents(view, _commandStack, target, *after, "Paint Bucket");
+}
+
+void PaintBucketTool::paintOverlay(PhoenixView& view, QPainter& painter, double scale)
+{
+    (void)view;
+    // The line a gradient is being dragged along.
+    if (!_pending || _dragAt == _pressAt || _style.fillKind == fla::DrawingStyle::FillKind::Solid ||
+        _style.fillKind == fla::DrawingStyle::FillKind::Bitmap)
+        return;
+    painter.setPen(QPen(QColor(0, 0, 0), 1.0 * scale));
+    painter.drawLine(_pressAt, _dragAt);
+    painter.setBrush(Qt::white);
+    painter.drawEllipse(_pressAt, 3.0 * scale, 3.0 * scale);
+    painter.drawEllipse(_dragAt, 3.0 * scale, 3.0 * scale);
 }
 
 QCursor InkBottleTool::cursor() const
@@ -409,6 +508,48 @@ bool EyedropperTool::mousePress(PhoenixView& view, QMouseEvent* event, const QPo
         const fla::SolidColor* color = static_cast<const fla::SolidColor*>(fill);
         for (int i = 0; i < 4; ++i)
             _style.fillColor[i] = color->color[i];
+        _style.fillKind = fla::DrawingStyle::FillKind::Solid;
+        _style.hasFill = true;
+        if (_onSampled)
+            _onSampled(false);
+    }
+    else if (fill && (fill->type() == fla::FillStyle::Type::LinearGradient ||
+                         fill->type() == fla::FillStyle::Type::RadialGradient))
+    {
+        // A gradient: its stops, spread and blending become the fill.
+        std::vector<fla::DrawingStyle::Stop> stops;
+        const auto take = [&stops](const auto& entries) {
+            for (const auto& entry : entries)
+            {
+                fla::DrawingStyle::Stop stop;
+                stop.ratio = entry.ratio;
+                for (int i = 0; i < 4; ++i)
+                    stop.color[i] = entry.color[i];
+                stops.push_back(stop);
+            }
+        };
+        if (fill->type() == fla::FillStyle::Type::LinearGradient)
+            take(static_cast<const fla::LinearGradient*>(fill)->entries);
+        else
+            take(static_cast<const fla::RadialGradient*>(fill)->entries);
+        if (stops.size() >= 2)
+        {
+            _style.gradient = stops;
+            _style.gradientSpread = fill->spreadMethod;
+            _style.gradientLinearRGB = fill->interpolationMethod == "linearRGB";
+            _style.fillKind = fill->type() == fla::FillStyle::Type::LinearGradient
+                ? fla::DrawingStyle::FillKind::Linear : fla::DrawingStyle::FillKind::Radial;
+            _style.hasFill = true;
+            if (_onSampled)
+                _onSampled(false);
+        }
+    }
+    else if (fill && fill->type() == fla::FillStyle::Type::BitmapFill)
+    {
+        // A bitmap fill: its bitmap tiles the next fill. Animate's eyedropper
+        // locks the fill, so the sample continues where it was taken.
+        _style.fillBitmap = static_cast<const fla::BitmapFill*>(fill)->bitmapPath;
+        _style.fillKind = fla::DrawingStyle::FillKind::Bitmap;
         _style.hasFill = true;
         if (_onSampled)
             _onSampled(false);

@@ -3,6 +3,10 @@
 #include "tool.h"
 
 #include <functional>
+#include <memory>
+
+#include <QPointF>
+#include <QTransform>
 
 namespace fla {
 class CommandStack;
@@ -31,10 +35,26 @@ public:
     QCursor cursor() const override;
 
     bool mousePress(PhoenixView& view, QMouseEvent* event, const QPointF& documentPos) override;
+    /// A gradient is laid along a drag from the press: a linear one from
+    /// where it began to where it ended, a radial one out to there.
+    bool mouseMove(PhoenixView& view, QMouseEvent* event, const QPointF& documentPos) override;
+    bool mouseRelease(PhoenixView& view, QMouseEvent* event, const QPointF& documentPos) override;
+    void paintOverlay(PhoenixView& view, QPainter& painter, double scale) override;
 
 private:
+    /// Places the new fill: along the drag, over the stage with Lock Fill,
+    /// or fitted to its art, then commits.
+    void place(PhoenixView& view, const QPointF* dragEnd);
+
     fla::CommandStack& _commandStack;
     const fla::DrawingStyle& _style;
+    /// The paint waiting for the release, for a gradient to be dragged.
+    std::unique_ptr<fla::Shape> _pending;
+    fla::Shape* _pendingTarget = nullptr;
+    int _pendingFill = -1;
+    QPointF _pressAt;
+    QPointF _dragAt;
+    QTransform _toShape;
 };
 
 /// Animate's ink bottle: click a fill to stroke its outline with the current

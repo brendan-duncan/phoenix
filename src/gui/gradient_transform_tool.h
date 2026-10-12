@@ -60,7 +60,11 @@ private:
         Height,
         Size,
         Rotate,
-        Focal
+        Focal,
+        /// Shear the fill: across, from the top edge's middle, and down,
+        /// from the left edge's.
+        SkewX,
+        SkewY
     };
 
     /// The fill being edited as a center and two half-axes in the shape's

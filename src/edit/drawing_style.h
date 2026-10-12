@@ -78,6 +78,14 @@ public:
     /// The library bitmap a bitmap fill tiles.
     std::string fillBitmap;
 
+    /// Lock Fill: a gradient or bitmap the bucket or a brush puts down is
+    /// placed over the whole stage rather than fitted to each piece, so
+    /// separate areas read as one sweep of color.
+    bool lockFill = false;
+    /// The bucket's Fill All Regions: a click paints every enclosed region
+    /// of the shape that has the clicked region's fill.
+    bool fillAllRegions = false;
+
     static std::vector<Stop> defaultGradient();
 
     bool hasStroke = true;
@@ -257,6 +265,10 @@ public:
     /// Fits every unplaced gradient and bitmap fill of \a element (a shape,
     /// or a rectangle or oval primitive) to the art it fills.
     static void fitFills(Element& element);
+    /// Places every unplaced gradient or bitmap fill of a shape over the
+    /// rectangle given (in the shape's space), as Lock Fill places them
+    /// over the stage.
+    static void fitFillsTo(Element& element, double left, double top, double right, double bottom);
 
     /// Builds the stroke for a new object, or null when strokes are switched
     /// off. The caller owns the result.

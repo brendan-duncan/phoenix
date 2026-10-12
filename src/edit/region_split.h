@@ -77,6 +77,10 @@ public:
     /// within that area.
     std::vector<int> facesWhere(const std::function<bool(const Point&)>& inside) const;
 
+    /// A point inside each enclosed region filled with \a fill (-1 for the
+    /// unpainted ones), as Fill All Regions finds them.
+    std::vector<Point> regionsFilledWith(int fill) const;
+
     /// Straight joins that close the gaps in an outline that does not quite
     /// meet: each loose stroke end is joined to the nearest other loose end
     /// within \a gap, or failing that to the nearest point on another piece

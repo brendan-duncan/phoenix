@@ -421,6 +421,21 @@ std::vector<int> RegionSplitter::facesWhere(const std::function<bool(const Point
     return faces;
 }
 
+std::vector<Point> RegionSplitter::regionsFilledWith(int fill) const
+{
+    std::vector<Point> points;
+    if (!valid())
+        return points;
+    for (size_t face = 0; face < _map.faces().size(); ++face)
+    {
+        const int index = static_cast<int>(face);
+        Point point;
+        if (!_map.faces()[face].unbounded && _map.faceFill(index) == fill && _map.interiorPoint(index, point))
+            points.push_back(point);
+    }
+    return points;
+}
+
 std::vector<int> RegionSplitter::strokesWhere(const std::function<bool(const Point&)>& inside) const
 {
     std::vector<int> strokes;
