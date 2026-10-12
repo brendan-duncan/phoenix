@@ -1728,6 +1728,13 @@ void MainWindow::setupMenus()
     QAction* removeFramesAction = editTimelineMenu->addAction("&Remove Frames");
     removeFramesAction->setShortcut(QKeySequence(Qt::SHIFT | Qt::Key_F5));
     connect(removeFramesAction, &QAction::triggered, this, &MainWindow::removeFrames);
+    QAction* editMultipleAction = editTimelineMenu->addAction("&Edit Multiple Frames");
+    editMultipleAction->setCheckable(true);
+    editMultipleAction->setStatusTip("Edit every keyframe within the onion skin's range at once");
+    connect(editMultipleAction, &QAction::toggled, this, [this](bool on) {
+        if (_phoenixView)
+            _phoenixView->setEditMultipleFrames(on);
+    });
     QAction* clearFramesAction = editTimelineMenu->addAction("Clear &Frames");
     clearFramesAction->setShortcut(QKeySequence(Qt::ALT | Qt::Key_Backspace));
     clearFramesAction->setStatusTip("Empty the selected frames, keeping what follows");
@@ -1878,6 +1885,9 @@ void MainWindow::setupMenus()
     _distributeAction->setStatusTip("Put each selected object on a layer of its own");
     connect(_distributeAction, &QAction::triggered, this, &MainWindow::distributeToLayers);
     modifyTimelineMenu->addAction(_distributeAction);
+    QAction* distributeKeysAction = modifyTimelineMenu->addAction("Distribute to &Keyframes");
+    distributeKeysAction->setStatusTip("Put each selected object on a keyframe of its own, one after another");
+    connect(distributeKeysAction, &QAction::triggered, this, &MainWindow::distributeToKeyframes);
 
     // Modify > Shape, as Animate groups them.
     QMenu* shapeMenu = modifyMenu->addMenu("S&hape");
@@ -5200,6 +5210,57 @@ void MainWindow::combineObjects(int operation)
     _phoenixView->invalidateBounds();
     _phoenixView->clearCaches();
     _phoenixView->update();
+}
+
+void MainWindow::distributeToKeyframes()
+{
+    if (!_phoenixView)
+        return;
+    _phoenixView->flushPendingMerge();
+    // The selected objects of one frame, bottom first; the first stays and
+    // each next one gets the keyframe after.
+    std::vector<fla::Element*> elements = selectedElements();
+    fla::Frame* frame = elements.empty() ? nullptr : dynamic_cast<fla::Frame*>(elements.front()->parent);
+    fla::Layer* layer = frame ? dynamic_cast<fla::Layer*>(frame->parent) : nullptr;
+    if (!layer || elements.size() < 2 || layer->isLocked())
+        return;
+    for (fla::Element* element : elements)
+        if (element->parent != frame)
+            return;
+    const int at = frame->index;
+    const int count = static_cast<int>(elements.size());
+    const fla::SymbolList* library = _flaDocument && _flaDocument->document ? _flaDocument->document->symbolList : nullptr;
+
+    _selection.clear();
+    fla::CommandStack& stack = _editContext.commandStack();
+    stack.beginMacro("Distribute to Keyframes");
+    // Room for them: frames after this one, each a blank keyframe.
+    stack.push(fla::CommandPtr(new fla::EditFramesCommand({layer}, "Distribute to Keyframes",
+        [layer, at, count](std::vector<fla::Frame*>&) {
+            fla::timeline::insertFrames(*layer, at, count - 1);
+            for (int k = 1; k < count; ++k)
+                fla::timeline::insertKeyframe(*layer, at + k, true);
+        })));
+    for (int k = 1; k < count; ++k)
+    {
+        fla::Frame* target = nullptr;
+        for (fla::Frame* candidate : layer->frames)
+            if (candidate && candidate->index == at + k)
+                target = candidate;
+        fla::Element* element = elements[static_cast<size_t>(k)];
+        fla::Element* copy = target ? fla::cloneElement(*element, target) : nullptr;
+        if (!copy)
+            continue;
+        fla::relinkSymbols(*copy, library);
+        stack.push(fla::CommandPtr(new fla::AddElementCommand(target, copy, "Distribute to Keyframes", &_selection)));
+        stack.push(fla::CommandPtr(new fla::RemoveElementCommand(frame, element, "Distribute to Keyframes", &_selection)));
+    }
+    stack.endMacro();
+    stack.breakMergeChain();
+    _phoenixView->clearCaches();
+    _phoenixView->update();
+    if (_timelineView)
+        _timelineView->refreshFrames();
 }
 
 void MainWindow::distributeToLayers()

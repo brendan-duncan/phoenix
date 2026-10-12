@@ -180,6 +180,11 @@ public:
     /// Whether a symbol is being edited (and not only groups at the scene).
     bool inSymbol() const;
 
+    /// Edit Multiple Frames: every keyframe within the onion skin's range is
+    /// drawn in full and can be picked and edited with the current one.
+    void setEditMultipleFrames(bool on);
+    bool editMultipleFrames() const { return _editMultiple; }
+
     /// Rulers along the top and left of the stage, in stage pixels.
     void setRulersVisible(bool on);
     bool rulersVisible() const { return _showRulers; }
@@ -969,6 +974,13 @@ private:
         fla::Transform transform;
     };
     PathDrag _pathDrag;
+
+    bool _editMultiple = false;
+    /// While the other keyframes of Edit Multiple Frames draw: only layers
+    /// with a keyframe at the frame drawn, and not their current one.
+    bool _multiKeysOnly = false;
+    /// The keyframes of \a layer that Edit Multiple Frames adds, nearest first.
+    std::vector<fla::Frame*> multipleFrames(const fla::Layer* layer) const;
 
     /// While drawing an instance a motion tween colors or filters: the color
     /// effect and filters it has there.

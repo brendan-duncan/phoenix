@@ -783,11 +783,63 @@ void PhoenixView::drawStageContents(QPainter& painter, const fla::Document* docu
         painter.setTransform(rootFull, false);
     }
 
+    // Edit Multiple Frames: the other keyframes in range, in full.
+    if (_editMultiple && (_scope.empty() || !_scope.back().group) && _player)
+    {
+        const fla::Timeline* timeline = scopeTimeline() ? scopeTimeline() : document->currentScene();
+        std::set<int> keys;
+        for (const fla::Layer* layer : timeline ? timeline->layers : std::vector<fla::Layer*>())
+            for (const fla::Frame* frame : multipleFrames(layer))
+                keys.insert(frame->index);
+        if (!keys.empty())
+        {
+            painter.setTransform(scopeToDocument() * rootFull, false);
+            const int savedOverride = _frameOverride;
+            for (int key : keys)
+            {
+                _frameOverride = key;
+                _multiKeysOnly = true;
+                drawTimeline(painter, timeline, fla::LoopType::PlayOnce, 0);
+            }
+            _multiKeysOnly = false;
+            _frameOverride = savedOverride;
+            painter.setTransform(rootFull, false);
+        }
+    }
+
     if (_drawPhase == DrawPhase::All || _drawPhase == DrawPhase::Above)
     {
         painter.setPen(QPen(QColor(0, 0, 0, 255), 1.0));
         painter.drawRect(QRectF(0, 0, docWidth, docHeight));
     }
+}
+
+void PhoenixView::setEditMultipleFrames(bool on)
+{
+    _editMultiple = on;
+    _staticValid = false;
+    update();
+}
+
+std::vector<fla::Frame*> PhoenixView::multipleFrames(const fla::Layer* layer) const
+{
+    std::vector<fla::Frame*> frames;
+    if (!_editMultiple || !_player || !layer || !layer->isVisible() || layer->isLocked() ||
+        layer->layerType == fla::Layer::Type::Folder)
+        return frames;
+    const int current = _player->currentFrame();
+    for (fla::Frame* frame : layer->frames)
+    {
+        if (!frame || frame->index < current - _onionBefore || frame->index > current + _onionAfter)
+            continue;
+        if (frame->index <= current && current < frame->index + std::max(1, frame->duration))
+            continue;
+        frames.push_back(frame);
+    }
+    std::sort(frames.begin(), frames.end(), [current](const fla::Frame* a, const fla::Frame* b) {
+        return std::abs(a->index - current) < std::abs(b->index - current);
+    });
+    return frames;
 }
 
 bool PhoenixView::needsBackdrop(const fla::Element* element, int depth)
@@ -1711,6 +1763,16 @@ QTransform PhoenixView::parentTransform(const fla::Layer* layer, const fla::Fram
 
 void PhoenixView::drawLayer(QPainter& painter, const fla::Layer* layer, fla::LoopType loopType, int firstFrame, const QPixmap* maskPixmap)
 {
+    // Edit Multiple Frames draws a layer's other keyframes, one at a time.
+    if (_multiKeysOnly && _frameDepth == 0)
+    {
+        const std::vector<fla::Frame*> others = multipleFrames(layer);
+        const bool keyed = std::any_of(others.begin(), others.end(),
+            [this](const fla::Frame* frame) { return frame->index == _frameOverride; });
+        if (!keyed)
+            return;
+    }
+
     // Onion skin leaves locked layers out, as Animate does, so a locked
     // background is not drawn again faded under every frame.
     if (_frameOverride >= 0 && !_exporting && layer->isLocked() && !inSymbol())
@@ -3325,6 +3387,22 @@ void PhoenixView::hitTestTimeline(const fla::Timeline& timeline, fla::LoopType l
             if (result)
                 return;
         }
+
+        // Edit Multiple Frames: the layer's other keyframes in range.
+        if (toDocument.isIdentity() || _scope.empty())
+        {
+            for (fla::Frame* other : multipleFrames(layer))
+            {
+                for (size_t index = other->elements.size(); index-- > 0;)
+                {
+                    if (other->elements[index])
+                        hitTestElement(*other->elements[index], other, loopType, layerToDocument, documentPos,
+                            tolerance, result, nullptr);
+                    if (result)
+                        return;
+                }
+            }
+        }
     }
 }
 
@@ -3933,6 +4011,17 @@ std::vector<fla::Element*> PhoenixView::elementsIn(const QRectF& documentRect)
                 const QRectF bounds = getElementBounds(element);
                 if (bounds.isValid() && documentRect.intersects(bounds))
                     found.push_back(element);
+            }
+            for (fla::Frame* other : multipleFrames(layer))
+            {
+                for (fla::Element* element : other->elements)
+                {
+                    if (!element || !element->visible || element->isLocked)
+                        continue;
+                    const QRectF bounds = getElementBounds(element);
+                    if (bounds.isValid() && documentRect.intersects(bounds))
+                        found.push_back(element);
+                }
             }
         }
     }

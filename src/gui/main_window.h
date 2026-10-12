@@ -198,6 +198,7 @@ private slots:
     void createShapeTween();
     void createMotionTween();
     void clearFrames();
+    void distributeToKeyframes();
     /// Selects what is on \a layer at \a frame, as clicking the frame does.
     void pickFrameContents(const fla::Layer* layer, int frame);
     /// The object motion tween in hand: the selected object's, or the
