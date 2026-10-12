@@ -5,6 +5,7 @@
 #include "timeline_view.h"
 #include "player.h"
 #include "../data/fla_document.h"
+#include "../data/bitmap.h"
 #include "../data/static_text.h"
 #include "free_transform_tool.h"
 #include "brush_tools.h"
@@ -241,6 +242,17 @@ private slots:
     /// document's strokes are drawn with, how many strokes use each, and
     /// taking one off them or drawing with it.
     void manageBrushes();
+
+    /// The library's bitmap and sound items: their settings, reading a
+    /// bitmap again from its file, and editing one in another program.
+    fla::Bitmap* bitmapNamed(const QString& name) const;
+    void bitmapProperties(const QString& name);
+    void updateBitmaps(const QStringList& names);
+    /// Gives \a bitmap the pixels of the image file at \a path, as one
+    /// undo step; false with a message when it cannot be read.
+    bool reimportBitmap(fla::Bitmap* bitmap, const QString& path, const char* name);
+    void editBitmapWith(const QString& name);
+    void soundProperties(const QString& name);
     /// Layer parenting: \a layer follows \a parent (null for none) from
     /// now on, its objects staying where they are on every keyframe.
     void setParentLayer(fla::Timeline* timeline, fla::Layer* layer, fla::Layer* parent);
@@ -521,6 +533,10 @@ private:
     /// Every command with a key, with Phoenix's own keys, for Edit >
     /// Keyboard Shortcuts.
     std::vector<ShortcutEntry> _shortcuts;
+    /// Bitmaps open in another program: the file each was written to, by
+    /// bitmap name, watched for saves.
+    class QFileSystemWatcher* _editedBitmaps = nullptr;
+    std::map<QString, QString> _editedBitmapFiles;
     void chooseTool(Tool* tool);
     /// The tool to go back to when the pen is turned back from its eraser
     /// end.

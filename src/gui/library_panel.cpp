@@ -1,4 +1,7 @@
 #include "library_panel.h"
+#include <QHBoxLayout>
+#include <QToolButton>
+#include <QDateTime>
 #include "../edit/font_items.h"
 #include "theme.h"
 
@@ -42,6 +45,7 @@ enum Column
     TypeColumn,
     UseColumn,
     LinkageColumn,
+    DateColumn,
     ColumnCount
 };
 
@@ -286,9 +290,44 @@ LibraryPanel::LibraryPanel(QWidget* parent)
     _preview->setAlignment(Qt::AlignCenter);
     _preview->setStyleSheet("QLabel { background: palette(base); border-bottom: 1px solid palette(mid); }");
     layout->addWidget(_preview);
+    // Play: a symbol's frames run in the preview.
+    _play = new QToolButton(_preview);
+    _play->setText(QString(QChar(0x25B6)));
+    _play->setCheckable(true);
+    _play->setAutoRaise(true);
+    _play->setToolTip("Play the symbol in the preview");
+    _play->move(6, 150 - 30);
+    _play->hide();
+    _playTimer = new QTimer(this);
+    _playTimer->setInterval(1000 / 24);
+    connect(_play, &QToolButton::toggled, this, &LibraryPanel::playPreview);
+    connect(_playTimer, &QTimer::timeout, this, [this]() {
+        QTreeWidgetItem* item = _tree->currentItem();
+        if (!item || !_framePreview || !_frameCount)
+            return;
+        const QString name = item->data(0, NameRole).toString();
+        const int frames = std::max(1, _frameCount(name));
+        _playFrame = (_playFrame + 1) % frames;
+        const qreal ratio = devicePixelRatioF();
+        QImage image = _framePreview(name, _playFrame, QSize(std::max(_preview->width(), 1), _preview->height()) * ratio);
+        image.setDevicePixelRatio(ratio);
+        _preview->setPixmap(QPixmap::fromImage(image));
+    });
 
-    _count->setContentsMargins(10, 6, 10, 6);
-    layout->addWidget(_count);
+    // The item count, and the panel menu.
+    QWidget* countRow = new QWidget(this);
+    QHBoxLayout* countLayout = new QHBoxLayout(countRow);
+    countLayout->setContentsMargins(10, 4, 6, 4);
+    countLayout->addWidget(_count, 1);
+    QToolButton* panelMenu = new QToolButton(countRow);
+    panelMenu->setText(QString(QChar(0x2630)));
+    panelMenu->setAutoRaise(true);
+    panelMenu->setToolTip("Library menu");
+    connect(panelMenu, &QToolButton::clicked, this, [this, panelMenu]() {
+        showItemMenu(_tree->currentItem(), panelMenu->mapToGlobal(QPoint(0, panelMenu->height())));
+    });
+    countLayout->addWidget(panelMenu);
+    layout->addWidget(countRow);
 
     _search->setPlaceholderText("Search");
     _search->setClearButtonEnabled(true);
@@ -297,7 +336,7 @@ LibraryPanel::LibraryPanel(QWidget* parent)
     layout->addWidget(_search);
 
     _tree->setColumnCount(ColumnCount);
-    _tree->setHeaderLabels({"Name", "Type", "Use Count", "Linkage"});
+    _tree->setHeaderLabels({"Name", "Type", "Use Count", "Linkage", "Date Modified"});
     // The name keeps room to read; the rest scrolls into view when the
     // panel is narrow.
     _tree->header()->setStretchLastSection(true);
@@ -320,7 +359,89 @@ LibraryPanel::LibraryPanel(QWidget* parent)
     _tree->setContextMenuPolicy(Qt::CustomContextMenu);
     _tree->setEditTriggers(QAbstractItemView::EditKeyPressed);
     connect(_tree, &QTreeWidget::customContextMenuRequested, this, [this](const QPoint& at) {
-        QTreeWidgetItem* item = _tree->itemAt(at);
+        showItemMenu(_tree->itemAt(at), _tree->viewport()->mapToGlobal(at));
+    });
+    connect(_tree, &QTreeWidget::itemChanged, this, [this](QTreeWidgetItem* item, int column) {
+        if (_refreshing || column != 0)
+            return;
+        const QString name = item->data(0, NameRole).toString();
+        const QString typed = item->text(0).trimmed();
+        const int slash = name.lastIndexOf('/');
+        const QString folder = slash < 0 ? QString() : name.left(slash + 1);
+        const QString leaf = slash < 0 ? name : name.mid(slash + 1);
+        if (typed.isEmpty() || typed == leaf || typed.contains('/'))
+        {
+            _refreshing = true;
+            item->setText(0, leaf);
+            _refreshing = false;
+            return;
+        }
+        // After the edit has closed: the rename rebuilds the list, which
+        // must not delete the item while its editor is still finishing.
+        const QString newName = folder + typed;
+        QTimer::singleShot(0, this, [this, name, newName]() { emit renameRequested(name, newName); });
+    });
+    connect(_tree, &QTreeWidget::itemDoubleClicked, this, [this](QTreeWidgetItem* item, int) {
+        if (!item)
+            return;
+        const int kind = item->data(0, KindRole).toInt();
+        const QString name = item->data(0, NameRole).toString();
+        if (kind == static_cast<int>(Kind::Symbol))
+            emit editSymbolRequested(name);
+        else if (kind == static_cast<int>(Kind::Bitmap))
+            emit bitmapPropertiesRequested(name);
+        else if (kind == static_cast<int>(Kind::Sound))
+            emit soundPropertiesRequested(name);
+    });
+    connect(_tree, &LibraryTree::moveRequested, this, &LibraryPanel::moveRequested);
+    // The icons are drawn in the theme's colors.
+    connect(theme::notifier(), &theme::Notifier::changed, this, &LibraryPanel::refresh);
+
+    // Delete in the list deletes what is selected there.
+    _tree->installEventFilter(this);
+}
+
+void LibraryPanel::setAllExpanded(bool open)
+{
+    for (QTreeWidgetItemIterator it(_tree); *it; ++it)
+        if ((*it)->data(0, KindRole).toInt() == static_cast<int>(Kind::Folder))
+            (*it)->setExpanded(open);
+}
+
+QString LibraryPanel::currentFolder() const
+{
+    const QTreeWidgetItem* item = _tree->currentItem();
+    if (!item)
+        return QString();
+    const QString name = item->data(0, NameRole).toString();
+    if (item->data(0, KindRole).toInt() == static_cast<int>(Kind::Folder))
+        return name;
+    const int slash = name.lastIndexOf('/');
+    return slash < 0 ? QString() : name.left(slash);
+}
+
+void LibraryPanel::setAnimationProvider(std::function<int(const QString&)> frames,
+    std::function<QImage(const QString&, int, const QSize&)> frame)
+{
+    _frameCount = std::move(frames);
+    _framePreview = std::move(frame);
+}
+
+void LibraryPanel::playPreview(bool play)
+{
+    _playFrame = 0;
+    if (play)
+        _playTimer->start();
+    else
+    {
+        _playTimer->stop();
+        updatePreview();
+    }
+}
+
+void LibraryPanel::showItemMenu(QTreeWidgetItem* item, const QPoint& globalPos)
+{
+    {
         const int kind = item ? item->data(0, KindRole).toInt() : -1;
         const QString name = item ? item->data(0, NameRole).toString() : QString();
         QMenu menu(this);
@@ -367,16 +488,66 @@ LibraryPanel::LibraryPanel(QWidget* parent)
             remove = menu.addAction(chosenItems.size() == 1 ? QString("Delete") : QString("Delete %1 Items").arg(chosenItems.size()));
         if (item)
             menu.addSeparator();
+        QAction* bitmapProperties = nullptr;
+        QAction* updateBitmap = nullptr;
+        QAction* editWith = nullptr;
+        QAction* soundProperties = nullptr;
+        if (kind == static_cast<int>(Kind::Bitmap))
+        {
+            bitmapProperties = menu.addAction("Properties...");
+            updateBitmap = menu.addAction("Update");
+            editWith = menu.addAction("Edit With...");
+            menu.addSeparator();
+        }
+        if (kind == static_cast<int>(Kind::Sound))
+        {
+            soundProperties = menu.addAction("Properties...");
+            menu.addSeparator();
+        }
+        QAction* newSymbol = menu.addAction("New Symbol...");
         QAction* folder = menu.addAction("New Folder");
         QAction* newFont = menu.addAction("New Font...");
+        menu.addSeparator();
+        QAction* expandAll = menu.addAction("Expand All Folders");
+        QAction* collapseAll = menu.addAction("Collapse All Folders");
         QAction* unused = menu.addAction("Select Unused Items");
         QAction* updateAll = nullptr;
         if (anyLinked)
             updateAll = menu.addAction("Update All Linked Items");
-        QAction* chosen = menu.exec(_tree->viewport()->mapToGlobal(at));
+        QAction* chosen = menu.exec(globalPos);
         if (!chosen)
             return;
-        if (chosen == rename)
+        if (chosen == expandAll || chosen == collapseAll)
+        {
+            setAllExpanded(chosen == expandAll);
+        }
+        else if (chosen == newSymbol)
+        {
+            emit newSymbolRequested();
+        }
+        else if (bitmapProperties && chosen == bitmapProperties)
+        {
+            emit bitmapPropertiesRequested(name);
+        }
+        else if (updateBitmap && chosen == updateBitmap)
+        {
+            QStringList bitmaps;
+            for (QTreeWidgetItem* selected : _tree->selectedItems())
+                if (selected->data(0, KindRole).toInt() == static_cast<int>(Kind::Bitmap))
+                    bitmaps << selected->data(0, NameRole).toString();
+            if (bitmaps.isEmpty())
+                bitmaps << name;
+            emit updateBitmapsRequested(bitmaps);
+        }
+        else if (editWith && chosen == editWith)
+        {
+            emit editBitmapWithRequested(name);
+        }
+        else if (soundProperties && chosen == soundProperties)
+        {
+            emit soundPropertiesRequested(name);
+        }
+        else if (chosen == rename)
         {
             _tree->editItem(item, 0);
         }
@@ -434,37 +605,7 @@ LibraryPanel::LibraryPanel(QWidget* parent)
                 parent = name.left(name.lastIndexOf('/'));
             emit newFolderRequested(parent);
         }
-    });
-    connect(_tree, &QTreeWidget::itemChanged, this, [this](QTreeWidgetItem* item, int column) {
-        if (_refreshing || column != 0)
-            return;
-        const QString name = item->data(0, NameRole).toString();
-        const QString typed = item->text(0).trimmed();
-        const int slash = name.lastIndexOf('/');
-        const QString folder = slash < 0 ? QString() : name.left(slash + 1);
-        const QString leaf = slash < 0 ? name : name.mid(slash + 1);
-        if (typed.isEmpty() || typed == leaf || typed.contains('/'))
-        {
-            _refreshing = true;
-            item->setText(0, leaf);
-            _refreshing = false;
-            return;
-        }
-        // After the edit has closed: the rename rebuilds the list, which
-        // must not delete the item while its editor is still finishing.
-        const QString newName = folder + typed;
-        QTimer::singleShot(0, this, [this, name, newName]() { emit renameRequested(name, newName); });
-    });
-    connect(_tree, &QTreeWidget::itemDoubleClicked, this, [this](QTreeWidgetItem* item, int) {
-        if (item && item->data(0, KindRole).toInt() == static_cast<int>(Kind::Symbol))
-            emit editSymbolRequested(item->data(0, NameRole).toString());
-    });
-    connect(_tree, &LibraryTree::moveRequested, this, &LibraryPanel::moveRequested);
-    // The icons are drawn in the theme's colors.
-    connect(theme::notifier(), &theme::Notifier::changed, this, &LibraryPanel::refresh);
-
-    // Delete in the list deletes what is selected there.
-    _tree->installEventFilter(this);
+    }
 }
 
 bool LibraryPanel::eventFilter(QObject* watched, QEvent* event)
@@ -574,6 +715,14 @@ void LibraryPanel::updatePreview()
 {
     QTreeWidgetItem* item = _tree->currentItem();
     const int kind = item ? item->data(0, KindRole).toInt() : 0;
+    // Play shows for a symbol with frames to play.
+    const bool animated = item && kind == static_cast<int>(Kind::Symbol) && _frameCount &&
+        _frameCount(item->data(0, NameRole).toString()) > 1;
+    if (!animated && _play->isChecked())
+        _play->setChecked(false);
+    _play->setVisible(animated);
+    if (_playTimer->isActive())
+        return;
     if (!item || kind == static_cast<int>(Kind::Folder) || kind == static_cast<int>(Kind::Sound) ||
         !_previewProvider || !_document)
     {
@@ -701,7 +850,7 @@ void LibraryPanel::refresh()
 
     int items = 0;
     const auto add = [&](const QString& path, const QIcon& icon, const QString& type, Kind kind,
-                         const QString& linkage = QString()) {
+                         const QString& linkage = QString(), qint64 date = 0) {
         const int slash = path.lastIndexOf('/');
         QTreeWidgetItem* item = new LibraryItem();
         item->setText(LinkageColumn, linkage);
@@ -712,6 +861,8 @@ void LibraryPanel::refresh()
         item->setData(0, NameRole, path);
         item->setToolTip(0, path);
         item->setFlags((item->flags() | Qt::ItemIsEditable) & ~Qt::ItemIsDropEnabled);
+        if (date > 0)
+            item->setText(DateColumn, QDateTime::fromSecsSinceEpoch(date).toString("yyyy-MM-dd hh:mm"));
         if (QTreeWidgetItem* parent = folderItem(slash < 0 ? QString() : path.left(slash)))
             parent->addChild(item);
         else
@@ -730,7 +881,8 @@ void LibraryPanel::refresh()
                 const bool linked = fla::links::linkOf(*symbol, link);
                 add(QString::fromStdString(symbol->name), symbolIcon(symbol->symbolType),
                     typeName(symbol->symbolType) + (linked ? QString(" (linked)") : QString()), Kind::Symbol,
-                    QString::fromStdString(fla::library::linkageOf(*symbol)));
+                    QString::fromStdString(fla::library::linkageOf(*symbol)),
+                    QString::fromStdString(symbol->lastModified).toLongLong());
             }
         }
     }
@@ -738,7 +890,7 @@ void LibraryPanel::refresh()
     {
         if (resource && resource->resourceType() == fla::Resource::Type::Bitmap)
             add(QString::fromStdString(static_cast<const fla::Bitmap*>(resource)->name), bitmapIcon(),
-                "Bitmap", Kind::Bitmap);
+                "Bitmap", Kind::Bitmap, QString(), static_cast<const fla::Bitmap*>(resource)->sourceLastImported);
     }
     for (const fla::Document::SoundInfo& sound : doc->sounds)
         add(QString::fromStdString(sound.name), soundIcon(), "Sound", Kind::Sound);

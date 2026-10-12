@@ -245,6 +245,7 @@ set(HEADERS
     src/edit/vector_import.h
     src/edit/psd_import.h
     src/edit/three_d.h
+    src/edit/filter_presets.h
     src/edit/edit_list.h
     src/edit/combine_objects.h
     src/edit/transform_parts.h
@@ -448,6 +449,7 @@ set(SOURCES
     src/edit/vector_import.cpp
     src/edit/psd_import.cpp
     src/edit/three_d.cpp
+    src/edit/filter_presets.cpp
     src/edit/edit_list.cpp
     src/edit/combine_objects.cpp
     src/edit/swatches.cpp

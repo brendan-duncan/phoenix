@@ -24,9 +24,9 @@
   <div>
     <p>The Library is a tab beside Properties in the panel dock. From top to bottom it shows:</p>
     <ul>
-      <li>A <strong>preview</strong> of the selected item: a symbol's first frame, or the image.</li>
-      <li>The number of items in the library.</li>
-      <li>The <strong>item list</strong>, with each item's name and type. Click a column heading to sort by it.</li>
+      <li>A <strong>preview</strong> of the selected item: a symbol's first frame, or the image. A symbol with more than one frame shows a <strong>Play</strong> button that runs it in the preview.</li>
+      <li>The number of items in the library, and the library menu (&#9776;), which has the same commands as right-clicking the selected item.</li>
+      <li>The <strong>item list</strong>, with each item's name, type, use count, linkage and the date it was last changed or imported. Click a column heading to sort by it.</li>
     </ul>
     <p>Item types are folders, graphics, movie clips, buttons, bitmaps and sounds, each with its own icon.</p>
   </div>
@@ -37,7 +37,7 @@
 <ul>
   <li><strong>Drag a symbol or bitmap onto the stage</strong> to place an instance of it, centered where you drop it.</li>
   <li><strong>Drag a sound onto the stage</strong> to attach it to the current frame. See <a href="sound.html">Sound</a>.</li>
-  <li><strong>Double-click a symbol</strong> to open it for editing.</li>
+  <li><strong>Double-click a symbol</strong> to open it for editing, or a bitmap or sound to see its properties.</li>
 </ul>
 
 <h2>Organize the library</h2>
@@ -48,8 +48,23 @@
   <dt>Rename</dt><dd>Also <kbd>F2</kbd>, or double-click the name. Every instance follows the new name automatically.</dd>
   <dt>Duplicate</dt><dd>Makes a full copy of a symbol, named after the original with <em>copy</em> added.</dd>
   <dt>Delete</dt><dd>Removes a symbol that no longer has instances. If it is still in use, Phoenix tells you how many times instead of deleting it.</dd>
+  <dt>New Symbol...</dt><dd>Makes a new symbol in the selected folder. <span class="menu-path">Insert &rsaquo; New Symbol</span> puts it there too.</dd>
   <dt>New Folder</dt><dd>Adds a folder inside the folder you clicked.</dd>
+  <dt>Expand All Folders, Collapse All Folders</dt><dd>Opens or closes every folder at once.</dd>
+  <dt>Select Unused Items</dt><dd>Selects every item nothing in the document uses, ready to delete.</dd>
 </dl>
+
+<h2>Bitmap and sound properties</h2>
+
+<p>Right-click a bitmap for:</p>
+
+<dl class="defs">
+  <dt>Properties...</dt><dd>Shows the bitmap with its source file, size and when it was imported. <strong>Allow smoothing</strong> draws it smoothly when scaled or turned. <strong>Compression</strong> (Photo or Lossless) and <strong>Quality</strong> are kept for publishing. <strong>Import...</strong> replaces the image with another file, keeping every use of it.</dd>
+  <dt>Update</dt><dd>Reads the selected bitmaps again from the files they were imported from, after you change them in another program.</dd>
+  <dt>Edit With...</dt><dd>Opens the bitmap in an image editor you choose (Phoenix remembers it). Each time you save in the editor, Phoenix takes the change, as a step you can undo.</dd>
+</dl>
+
+<p>A sound's <strong>Properties...</strong> show its format and length, with <strong>Play</strong> and <strong>Stop</strong> to hear it.</p>
 
 <p>Drag items or folders onto a folder to move them into it, or onto empty space to move them to the top level. Moving or renaming a folder takes everything inside it along, and every symbol instance, bitmap fill and sound that uses those items is updated to match. If a name is already taken, Phoenix refuses the change and explains why in the status bar.</p>
 
@@ -68,7 +83,7 @@
 
 <div class="callout planned">
   <span class="label">Planned</span>
-  <p>Properties dialogs for bitmaps and sounds, and shared libraries across documents.</p>
+  <p>Shared libraries across documents.</p>
 </div>
 
 </article>

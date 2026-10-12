@@ -37,6 +37,9 @@ public:
 
     void setDocument(const fla::FLADocument* document);
     void setMuted(bool muted);
+
+    /// A library sound decoded, by name; null when it cannot be read.
+    std::shared_ptr<const PcmBuffer> librarySound(const std::string& name) { return buffer(name); }
     bool muted() const { return _muted; }
 
     /// The decoded sound a frame plays, for drawing its waveform; null when

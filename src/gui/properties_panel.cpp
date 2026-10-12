@@ -1,4 +1,6 @@
 #include "properties_panel.h"
+
+#include "../edit/filter_presets.h"
 #include <QSpinBox>
 #include "text_layout.h"
 #include "../edit/text_style.h"
@@ -62,6 +64,7 @@
 #include <QScrollArea>
 #include <QStandardItemModel>
 #include <QTimer>
+#include <QInputDialog>
 #include <QToolButton>
 #include <QVBoxLayout>
 
@@ -1941,6 +1944,18 @@ void PropertiesPanel::addInstanceSections(QVBoxLayout* layout, fla::SymbolInstan
         amount->setValue(color.tintMultiplier * 100.0);
         bindColor(amount, [](fla::ColorTransform& c, double v) { c.tintMultiplier = v / 100.0; }, "Tint");
         effect->addField(row++, 1, "", amount);
+        // The tint color by its channels.
+        const char* channelNames[3] = {"Red", "Green", "Blue"};
+        for (int i = 0; i < 3; ++i)
+        {
+            HotText* channel = makeHotText(0, 255, 0);
+            channel->setValue(color.tintColor[i]);
+            bindColor(channel,
+                [i](fla::ColorTransform& c, double v) { c.tintColor[i] = static_cast<uint8_t>(std::clamp(v, 0.0, 255.0)); },
+                "Tint");
+            effect->addField(row + i / 2, i % 2, channelNames[i], channel);
+        }
+        row += 2;
         break;
     }
     case ColorStyle::Alpha:
@@ -2008,6 +2023,57 @@ void PropertiesPanel::addInstanceSections(QVBoxLayout* layout, fla::SymbolInstan
         emit documentEdited();
     });
     display->addLong(0, "Blending", blend);
+
+    // Visible: a movie clip or button that does not show, though it is
+    // there for scripts. Animate keeps it as isVisible.
+    QCheckBox* visible = new QCheckBox("Visible", this);
+    visible->setChecked(instance->visible);
+    connect(visible, &QCheckBox::toggled, this, [this, instance](bool on) {
+        using Attributes = std::vector<std::pair<std::string, std::string>>;
+        Attributes after;
+        for (const auto& attribute : instance->extraAttributes)
+            if (attribute.first != "isVisible")
+                after.push_back(attribute);
+        if (!on)
+            after.emplace_back("isVisible", "false");
+        fla::CommandStack* stack = _links.editContext ? &_links.editContext->commandStack() : nullptr;
+        if (!stack)
+            return;
+        stack->beginMacro("Visible");
+        stack->push(fla::CommandPtr(new fla::SetPropertyCommand<bool>(instance->visible, instance->visible, on, "Visible")));
+        stack->push(fla::CommandPtr(new fla::SetPropertyCommand<Attributes>(
+            instance->extraAttributes, instance->extraAttributes, after, "Visible")));
+        stack->endMacro();
+        stack->breakMergeChain();
+        emit documentEdited();
+    });
+    if (instance->symbolType != fla::SymbolType::Graphic)
+        display->addLong(1, "", visible);
+
+    // Where the registration point is, in the space the instance is in.
+    HotText* registrationX = makeHotText(-99999, 99999, 2);
+    HotText* registrationY = makeHotText(-99999, 99999, 2);
+    registrationX->setValue(instance->transform.tx);
+    registrationY->setValue(instance->transform.ty);
+    registrationX->setToolTip("The registration point's X");
+    registrationY->setToolTip("The registration point's Y");
+    const auto bindRegistration = [this, instance](HotText* hot, bool horizontal) {
+        auto before = std::make_shared<fla::Transform>();
+        bindLive(hot,
+            [=]() { *before = instance->transform; },
+            [=](double value) {
+                (horizontal ? instance->transform.tx : instance->transform.ty) = value;
+                emit documentEdited();
+            },
+            [=]() {
+                if (_links.view)
+                    push(_links.view->transformCommand(instance, *before, instance->transform, "Move"));
+            });
+    };
+    bindRegistration(registrationX, true);
+    bindRegistration(registrationY, false);
+    display->addField(2, 0, "Reg X", registrationX);
+    display->addField(2, 1, "Reg Y", registrationY);
 
     // --- Looping (graphics) ---
     if (instance->symbolType == fla::SymbolType::Graphic)
@@ -2305,6 +2371,50 @@ void PropertiesPanel::addFilterSection(QVBoxLayout* layout, fla::SymbolInstance*
     clipboardLayout->setContentsMargins(0, 0, 0, 0);
     clipboardLayout->addWidget(copy);
     clipboardLayout->addWidget(paste);
+
+    // Presets: the filters kept under a name, to put on any instance.
+    QToolButton* presets = new QToolButton(this);
+    presets->setText("Presets");
+    presets->setPopupMode(QToolButton::InstantPopup);
+    QMenu* presetMenu = new QMenu(presets);
+    connect(presetMenu, &QMenu::aboutToShow, this, [this, presetMenu, filters, change]() {
+        presetMenu->clear();
+        QSettings settings;
+        settings.beginGroup("filterPresets");
+        const QStringList names = settings.childKeys();
+        settings.endGroup();
+        QAction* save = presetMenu->addAction("Save As...");
+        save->setEnabled(!filters->empty());
+        connect(save, &QAction::triggered, this, [this, filters]() {
+            bool ok = false;
+            const QString name = QInputDialog::getText(this, "Save Filter Preset", "Preset name:", QLineEdit::Normal,
+                QString(), &ok).trimmed().replace('/', '-');
+            if (ok && !name.isEmpty())
+                QSettings().setValue("filterPresets/" + name,
+                    QString::fromStdString(fla::filterpresets::toText(*filters)));
+        });
+        if (!names.isEmpty())
+            presetMenu->addSeparator();
+        for (const QString& name : names)
+        {
+            QAction* apply = presetMenu->addAction(name);
+            apply->setStatusTip("Put this preset's filters on the instance in place of its own");
+            connect(apply, &QAction::triggered, this, [name, change]() {
+                const std::vector<fla::Filter> preset = fla::filterpresets::fromText(
+                    QSettings().value("filterPresets/" + name).toString().toStdString());
+                change(preset, "Apply Filter Preset", true);
+            });
+        }
+        if (!names.isEmpty())
+        {
+            QMenu* remove = presetMenu->addMenu("Delete");
+            for (const QString& name : names)
+                connect(remove->addAction(name), &QAction::triggered, this,
+                    [name]() { QSettings().remove("filterPresets/" + name); });
+        }
+    });
+    presets->setMenu(presetMenu);
+    clipboardLayout->addWidget(presets);
     clipboardLayout->addStretch();
     section->addWide(row++, clipboardRow);
 

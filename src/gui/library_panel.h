@@ -75,6 +75,15 @@ public:
     /// fla::library::usedItems), as Animate's Select Unused Items does.
     void selectUnused();
 
+    /// The folder new symbols go into: the folder selected, or the one
+    /// holding the item selected; empty for the top level.
+    QString currentFolder() const;
+
+    /// What plays a symbol in the preview: how many frames it has, and one
+    /// of them drawn at a size.
+    void setAnimationProvider(std::function<int(const QString&)> frames,
+        std::function<QImage(const QString&, int, const QSize&)> frame);
+
 signals:
     /// A symbol was double-clicked, to be edited on its own.
     void editSymbolRequested(const QString& name);
@@ -102,6 +111,14 @@ signals:
     void updateLinkedRequested(const QStringList& names);
     /// A new folder inside \a parentPath (empty for the top level).
     void newFolderRequested(const QString& parentPath);
+    /// A bitmap's or a sound's settings, in a dialog.
+    void bitmapPropertiesRequested(const QString& name);
+    void soundPropertiesRequested(const QString& name);
+    /// The bitmaps chosen, read again from the files they came from.
+    void updateBitmapsRequested(const QStringList& names);
+    /// A bitmap opened in another program, and read back when it is saved.
+    void editBitmapWithRequested(const QString& name);
+    void newSymbolRequested();
 
 protected:
     bool eventFilter(QObject* watched, QEvent* event) override;
@@ -125,6 +142,10 @@ private:
     void applyFilter();
     /// The full names of the symbols and bitmaps selected.
     QStringList selectedItems() const;
+    /// The item menu, for \a item (null for none), at \a globalPos.
+    void showItemMenu(QTreeWidgetItem* item, const QPoint& globalPos);
+    void setAllExpanded(bool open);
+    void playPreview(bool play);
 
     const fla::FLADocument* _document = nullptr;
     void updatePreview();
@@ -135,6 +156,11 @@ private:
     QLineEdit* _search;
     std::function<QImage(const QString&, const QString&, const QSize&)> _previewProvider;
     QStringList _built;
+    std::function<int(const QString&)> _frameCount;
+    std::function<QImage(const QString&, int, const QSize&)> _framePreview;
+    class QToolButton* _play = nullptr;
+    class QTimer* _playTimer = nullptr;
+    int _playFrame = 0;
     QStringList _openFolders;
     bool _refreshing = false;
 };

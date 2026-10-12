@@ -94,6 +94,7 @@ set(TEST_CORE_SOURCES
     ${PHOENIX_SRC}/edit/text_style.cpp
     ${PHOENIX_SRC}/edit/psd_import.cpp
     ${PHOENIX_SRC}/edit/three_d.cpp
+    ${PHOENIX_SRC}/edit/filter_presets.cpp
     ${PHOENIX_SRC}/edit/combine_objects.cpp
     ${PHOENIX_SRC}/edit/swatches.cpp
     ${PHOENIX_SRC}/gui/audio_engine.cpp
@@ -149,6 +150,7 @@ set(TEST_SOURCES
     test_text_style.cpp
     test_psd_import.cpp
     test_three_d.cpp
+    test_filter_presets.cpp
     test_stroke_width.cpp
     test_swatches.cpp
     test_find_replace.cpp

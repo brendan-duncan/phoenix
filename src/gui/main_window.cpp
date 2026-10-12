@@ -120,6 +120,8 @@
 #include <QScrollArea>
 #include <QPlainTextEdit>
 #include <QProcess>
+#include <QDesktopServices>
+#include <QFileSystemWatcher>
 #include <QJsonObject>
 #include <QGuiApplication>
 #include <QScreen>
@@ -6761,6 +6763,28 @@ void MainWindow::setupPropertiesPanel()
     _libraryPanel->setPreviewProvider([this](const QString& kind, const QString& name, const QSize& size) {
         return _phoenixView ? _phoenixView->libraryPreview(kind, name, size) : QImage();
     });
+    _libraryPanel->setAnimationProvider(
+        [this](const QString& name) {
+            if (!_flaDocument || !_flaDocument->document || !_flaDocument->document->symbolList)
+                return 0;
+            const auto& symbols = _flaDocument->document->symbolList->symbolMap;
+            const auto found = symbols.find(name.toStdString());
+            if (found == symbols.end() || !found->second || found->second->timelines.empty())
+                return 0;
+            int frames = 0;
+            for (const fla::Layer* layer : found->second->timelines.front()->layers)
+                if (layer)
+                    frames = std::max(frames, fla::timeline::layerEnd(*layer));
+            return frames;
+        },
+        [this](const QString& name, int frame, const QSize& size) {
+            return _phoenixView ? _phoenixView->libraryPreview("symbol", name, size, frame) : QImage();
+        });
+    connect(_libraryPanel, &LibraryPanel::bitmapPropertiesRequested, this, &MainWindow::bitmapProperties);
+    connect(_libraryPanel, &LibraryPanel::updateBitmapsRequested, this, &MainWindow::updateBitmaps);
+    connect(_libraryPanel, &LibraryPanel::editBitmapWithRequested, this, &MainWindow::editBitmapWith);
+    connect(_libraryPanel, &LibraryPanel::soundPropertiesRequested, this, &MainWindow::soundProperties);
+    connect(_libraryPanel, &LibraryPanel::newSymbolRequested, this, &MainWindow::newSymbol);
     connect(_libraryPanel, &LibraryPanel::editSymbolRequested, this, [this](const QString& name) {
         if (!_phoenixView || !_flaDocument || !_flaDocument->document || !_flaDocument->document->symbolList)
             return;
@@ -8974,6 +8998,272 @@ void MainWindow::manageBrushes()
     dialog.exec();
 }
 
+fla::Bitmap* MainWindow::bitmapNamed(const QString& name) const
+{
+    fla::Document* document = _flaDocument ? _flaDocument->document : nullptr;
+    if (!document)
+        return nullptr;
+    for (fla::Resource* resource : document->resources)
+        if (resource && resource->resourceType() == fla::Resource::Type::Bitmap &&
+            static_cast<fla::Bitmap*>(resource)->name == name.toStdString())
+            return static_cast<fla::Bitmap*>(resource);
+    return nullptr;
+}
+
+bool MainWindow::reimportBitmap(fla::Bitmap* bitmap, const QString& path, const char* name)
+{
+    QImage image(path);
+    if (image.isNull())
+    {
+        QMessageBox::warning(this, name, QString("%1 could not be read as an image.").arg(QFileInfo(path).fileName()));
+        return false;
+    }
+    _editContext.commandStack().push(fla::CommandPtr(new fla::SetBitmapPixelsCommand(
+        bitmap, MediaImport::losslessData(image), image.width(), image.height(), name)));
+    _editContext.commandStack().breakMergeChain();
+    bitmap->sourceLastImported = static_cast<uint32_t>(QDateTime::currentSecsSinceEpoch());
+    if (_phoenixView)
+    {
+        _phoenixView->clearCaches();
+        _phoenixView->update();
+    }
+    if (_libraryPanel)
+        _libraryPanel->refresh();
+    return true;
+}
+
+void MainWindow::updateBitmaps(const QStringList& names)
+{
+    QStringList missing;
+    int updated = 0;
+    for (const QString& name : names)
+    {
+        fla::Bitmap* bitmap = bitmapNamed(name);
+        if (!bitmap)
+            continue;
+        const QString source = QString::fromStdString(bitmap->sourceExternalFilepath);
+        if (source.isEmpty() || !QFileInfo::exists(source))
+        {
+            missing << name;
+            continue;
+        }
+        if (reimportBitmap(bitmap, source, "Update Bitmap"))
+            ++updated;
+    }
+    if (!missing.isEmpty())
+        QMessageBox::information(this, "Update",
+            QString("The file these came from could not be found:\n\n%1\n\nChoose a new one with Import in the "
+                    "bitmap's Properties.").arg(missing.join("\n")));
+    else if (updated)
+        statusBar()->showMessage(QString("Updated %1 bitmap%2.").arg(updated).arg(updated == 1 ? "" : "s"), 4000);
+}
+
+void MainWindow::bitmapProperties(const QString& name)
+{
+    fla::Bitmap* bitmap = bitmapNamed(name);
+    if (!bitmap || !_phoenixView)
+        return;
+    QDialog dialog(this);
+    dialog.setWindowTitle("Bitmap Properties");
+    QHBoxLayout* layout = new QHBoxLayout(&dialog);
+    QLabel* preview = new QLabel(&dialog);
+    preview->setFixedSize(160, 160);
+    preview->setAlignment(Qt::AlignCenter);
+    preview->setPixmap(_phoenixView->libraryBitmap(name).scaled(150, 150, Qt::KeepAspectRatio, Qt::SmoothTransformation));
+    layout->addWidget(preview, 0, Qt::AlignTop);
+    QFormLayout* form = new QFormLayout();
+    layout->addLayout(form, 1);
+    form->addRow("Name", new QLabel(name, &dialog));
+    const QString source = QString::fromStdString(bitmap->sourceExternalFilepath);
+    QLabel* path = new QLabel(source.isEmpty() ? QString("(not known)") : source, &dialog);
+    path->setWordWrap(true);
+    path->setTextInteractionFlags(Qt::TextSelectableByMouse);
+    form->addRow("Source", path);
+    form->addRow("Size", new QLabel(QString("%1 x %2 pixels").arg(bitmap->frameRight / 20).arg(bitmap->frameBottom / 20), &dialog));
+    if (bitmap->sourceLastImported > 0)
+        form->addRow("Imported", new QLabel(QDateTime::fromSecsSinceEpoch(bitmap->sourceLastImported).toString("yyyy-MM-dd hh:mm"), &dialog));
+    QCheckBox* smoothing = new QCheckBox("Allow smoothing", &dialog);
+    smoothing->setChecked(bitmap->allowSmoothing);
+    form->addRow(QString(), smoothing);
+    // How it is compressed when published: kept for that, as Animate keeps it.
+    std::string compression = "photo";
+    for (const auto& attribute : bitmap->extraAttributes)
+        if (attribute.first == "compressionType" || attribute.first == "originalCompressionType")
+            compression = attribute.second;
+    QComboBox* kind = new QComboBox(&dialog);
+    kind->addItems({"Photo (JPEG)", "Lossless (PNG/GIF)"});
+    kind->setCurrentIndex(compression == "lossless" ? 1 : 0);
+    form->addRow("Compression", kind);
+    QSpinBox* quality = new QSpinBox(&dialog);
+    quality->setRange(0, 100);
+    quality->setSpecialValueText("Document default");
+    quality->setValue(bitmap->quality);
+    quality->setEnabled(kind->currentIndex() == 0);
+    connect(kind, &QComboBox::currentIndexChanged, &dialog, [quality](int index) { quality->setEnabled(index == 0); });
+    form->addRow("Quality", quality);
+    QHBoxLayout* buttonsRow = new QHBoxLayout();
+    QPushButton* update = new QPushButton("Update", &dialog);
+    update->setEnabled(!source.isEmpty() && QFileInfo::exists(source));
+    QPushButton* import = new QPushButton("Import...", &dialog);
+    QPushButton* editWith = new QPushButton("Edit With...", &dialog);
+    buttonsRow->addWidget(update);
+    buttonsRow->addWidget(import);
+    buttonsRow->addWidget(editWith);
+    form->addRow(buttonsRow);
+    connect(update, &QPushButton::clicked, &dialog, [this, bitmap, source, preview, name]() {
+        if (reimportBitmap(bitmap, source, "Update Bitmap"))
+            preview->setPixmap(_phoenixView->libraryBitmap(name).scaled(150, 150, Qt::KeepAspectRatio, Qt::SmoothTransformation));
+    });
+    connect(import, &QPushButton::clicked, &dialog, [this, bitmap, preview, path, name]() {
+        const QString chosen = QFileDialog::getOpenFileName(this, "Import Bitmap", QString(),
+            "Images (*.png *.jpg *.jpeg *.gif *.bmp)");
+        if (chosen.isEmpty() || !reimportBitmap(bitmap, chosen, "Import Bitmap"))
+            return;
+        bitmap->sourceExternalFilepath = chosen.toStdString();
+        path->setText(chosen);
+        preview->setPixmap(_phoenixView->libraryBitmap(name).scaled(150, 150, Qt::KeepAspectRatio, Qt::SmoothTransformation));
+    });
+    connect(editWith, &QPushButton::clicked, &dialog, [this, name]() { editBitmapWith(name); });
+    QDialogButtonBox* buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, &dialog);
+    connect(buttons, &QDialogButtonBox::accepted, &dialog, &QDialog::accept);
+    connect(buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
+    form->addRow(buttons);
+    if (dialog.exec() != QDialog::Accepted)
+        return;
+    using Attributes = std::vector<std::pair<std::string, std::string>>;
+    Attributes attributes;
+    for (const auto& attribute : bitmap->extraAttributes)
+        if (attribute.first != "compressionType")
+            attributes.push_back(attribute);
+    attributes.emplace_back("compressionType", kind->currentIndex() == 1 ? "lossless" : "photo");
+    fla::CommandStack& stack = _editContext.commandStack();
+    stack.beginMacro("Bitmap Properties");
+    if (smoothing->isChecked() != bitmap->allowSmoothing)
+        stack.push(fla::CommandPtr(new fla::SetPropertyCommand<bool>(bitmap->allowSmoothing, bitmap->allowSmoothing,
+            smoothing->isChecked(), "Bitmap Properties")));
+    if (quality->value() != bitmap->quality)
+        stack.push(fla::CommandPtr(new fla::SetPropertyCommand<int>(bitmap->quality, bitmap->quality, quality->value(),
+            "Bitmap Properties")));
+    if (attributes != bitmap->extraAttributes)
+        stack.push(fla::CommandPtr(new fla::SetPropertyCommand<Attributes>(bitmap->extraAttributes,
+            bitmap->extraAttributes, attributes, "Bitmap Properties")));
+    stack.endMacro();
+    stack.breakMergeChain();
+    _phoenixView->clearCaches();
+    _phoenixView->update();
+}
+
+void MainWindow::editBitmapWith(const QString& name)
+{
+    fla::Bitmap* bitmap = bitmapNamed(name);
+    if (!bitmap || !_phoenixView)
+        return;
+    // The program: the one chosen before, or ask; Cancel uses the
+    // system's own for PNG files.
+    QSettings settings;
+    QString program = settings.value("library/editWith").toString();
+    if (program.isEmpty() || !QFileInfo::exists(program))
+    {
+        program = QFileDialog::getOpenFileName(this, "Edit With", QString(),
+#ifdef Q_OS_WIN
+            "Programs (*.exe)"
+#else
+            "Programs (*)"
+#endif
+        );
+        if (!program.isEmpty())
+            settings.setValue("library/editWith", program);
+    }
+    // The pixels as a PNG beside nothing else, named for the bitmap.
+    QString leaf = name.mid(name.lastIndexOf('/') + 1);
+    leaf = QFileInfo(leaf).completeBaseName().isEmpty() ? QString("bitmap") : QFileInfo(leaf).completeBaseName();
+    const QString folder = QDir(QStandardPaths::writableLocation(QStandardPaths::TempLocation)).filePath("Phoenix Edit With");
+    QDir().mkpath(folder);
+    const QString file = QDir(folder).filePath(leaf + ".png");
+    if (!_phoenixView->libraryBitmap(name).save(file, "PNG"))
+    {
+        QMessageBox::warning(this, "Edit With", "The bitmap could not be written out for editing.");
+        return;
+    }
+    if (!_editedBitmaps)
+    {
+        _editedBitmaps = new QFileSystemWatcher(this);
+        connect(_editedBitmaps, &QFileSystemWatcher::fileChanged, this, [this](const QString& changed) {
+            for (const auto& [bitmapName, path] : _editedBitmapFiles)
+            {
+                if (path != changed)
+                    continue;
+                // Editors write the file in steps; read it once they are done.
+                QTimer::singleShot(500, this, [this, bitmapName = bitmapName, path = path]() {
+                    if (fla::Bitmap* edited = bitmapNamed(bitmapName))
+                        if (reimportBitmap(edited, path, "Edit With"))
+                            statusBar()->showMessage(QString("%1 was updated from the editor.").arg(bitmapName), 4000);
+                    // Some editors replace the file, which ends the watch.
+                    if (!_editedBitmaps->files().contains(path) && QFileInfo::exists(path))
+                        _editedBitmaps->addPath(path);
+                });
+            }
+        });
+    }
+    _editedBitmapFiles[name] = file;
+    _editedBitmaps->addPath(file);
+    const bool started = program.isEmpty() ? QDesktopServices::openUrl(QUrl::fromLocalFile(file))
+                                           : QProcess::startDetached(program, {QDir::toNativeSeparators(file)});
+    if (!started)
+        QMessageBox::warning(this, "Edit With", "The program could not be started.");
+    else
+        statusBar()->showMessage("Save the image in the other program and Phoenix takes the change.", 6000);
+}
+
+void MainWindow::soundProperties(const QString& name)
+{
+    fla::Document* document = _flaDocument ? _flaDocument->document : nullptr;
+    if (!document)
+        return;
+    const fla::Document::SoundInfo* info = nullptr;
+    for (const fla::Document::SoundInfo& sound : document->sounds)
+        if (sound.name == name.toStdString())
+            info = &sound;
+    if (!info)
+        return;
+    std::shared_ptr<const PcmBuffer> pcm = _timelineAudio ? _timelineAudio->librarySound(info->name) : nullptr;
+    QDialog dialog(this);
+    dialog.setWindowTitle("Sound Properties");
+    QFormLayout* form = new QFormLayout(&dialog);
+    form->addRow("Name", new QLabel(name, &dialog));
+    form->addRow("Format", new QLabel(info->format.empty() ? QString("MP3") : QString::fromStdString(info->format), &dialog));
+    if (pcm)
+    {
+        const double seconds = static_cast<double>(pcm->frames()) / PcmBuffer::kRate;
+        form->addRow("Length", new QLabel(QString("%1 s").arg(seconds, 0, 'f', 2), &dialog));
+    }
+    QPushButton* play = new QPushButton("Play", &dialog);
+    QPushButton* stop = new QPushButton("Stop", &dialog);
+    play->setEnabled(pcm != nullptr);
+    auto voice = std::make_shared<int>(-1);
+    connect(play, &QPushButton::clicked, &dialog, [pcm, voice]() {
+        if (*voice >= 0)
+            AudioEngine::instance().stop(*voice);
+        *voice = AudioEngine::instance().play(pcm, 0, pcm->frames());
+    });
+    connect(stop, &QPushButton::clicked, &dialog, [voice]() {
+        if (*voice >= 0)
+            AudioEngine::instance().stop(*voice);
+        *voice = -1;
+    });
+    QHBoxLayout* row = new QHBoxLayout();
+    row->addWidget(play);
+    row->addWidget(stop);
+    row->addStretch(1);
+    form->addRow(row);
+    QDialogButtonBox* buttons = new QDialogButtonBox(QDialogButtonBox::Close, &dialog);
+    connect(buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
+    form->addRow(buttons);
+    dialog.exec();
+    if (*voice >= 0)
+        AudioEngine::instance().stop(*voice);
+}
+
 void MainWindow::checkSpelling()
 {
     if (!_flaDocument || !_flaDocument->document)
@@ -9592,7 +9882,11 @@ void MainWindow::newSymbol()
     dialog.hideRegistration();
     if (dialog.exec() != QDialog::Accepted)
         return;
-    const std::string name = dialog.symbolName().trimmed().toStdString();
+    std::string name = dialog.symbolName().trimmed().toStdString();
+    // Into the library folder selected, as Animate puts a new symbol.
+    const QString folder = _libraryPanel ? _libraryPanel->currentFolder() : QString();
+    if (!folder.isEmpty() && name.find('/') == std::string::npos && !name.empty())
+        name = folder.toStdString() + "/" + name;
     if (name.empty() || !fla::library::nameIsFree(*document, name))
     {
         QMessageBox::information(this, "Create New Symbol",
