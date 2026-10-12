@@ -112,7 +112,7 @@ ColorTransform blendColorTransforms(const ColorTransform& from, const ColorTrans
 
 namespace {
 
-/// A filter of the same kind as  filter with no effect, what a keyframe
+/// A filter of the same kind as \a filter with no effect, what a keyframe
 /// without it is taken to have.
 Filter withoutEffect(const Filter& filter)
 {

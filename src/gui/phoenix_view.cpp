@@ -726,6 +726,12 @@ int PhoenixView::shownFrame() const
     return _player ? _player->currentFrame() : 0;
 }
 
+int PhoenixView::symbolFrameShown(const fla::SymbolInstance& instance, const fla::Frame& frame)
+{
+    ElapsedScope elapsed(_elapsed, std::max(0, shownFrame() - frame.index));
+    return symbolFrame(instance);
+}
+
 void PhoenixView::setOnionSkin(bool on, int before, int after)
 {
     _onionSkin = on;

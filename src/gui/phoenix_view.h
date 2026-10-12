@@ -212,6 +212,11 @@ public:
     /// playhead drawn faded under it, those before tinted blue and those
     /// after green, as Animate draws them.
     void setOnionSkin(bool on, int before, int after);
+
+    /// The frame of its symbol an instance in \a frame shows at the playhead,
+    /// as the stage draws it: a graphic by its loop setting, counted from
+    /// its keyframe; a movie clip or a button at its first frame.
+    int symbolFrameShown(const fla::SymbolInstance& instance, const fla::Frame& frame);
     bool onionSkin() const { return _onionSkin; }
 
 public:

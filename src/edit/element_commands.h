@@ -428,8 +428,10 @@ private:
 class BreakApartInstanceCommand : public Command
 {
 public:
+    /// \a shown is the frame of the symbol to take apart, the one the stage
+    /// shows; left out, the one shownFrameIndex says.
     BreakApartInstanceCommand(Frame* frame, SymbolInstance* instance,
-        const std::string& name, Selection* selection = nullptr);
+        const std::string& name, Selection* selection = nullptr, int shown = -1);
 
     ~BreakApartInstanceCommand() override;
 

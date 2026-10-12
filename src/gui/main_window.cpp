@@ -2732,8 +2732,10 @@ void MainWindow::breakApartSelection()
     for (fla::SymbolInstance* instance : instances)
     {
         fla::Frame* frame = frameOfElement(instance);
+        // What the stage shows of it is what is taken apart.
+        const int shown = frame && _phoenixView ? _phoenixView->symbolFrameShown(*instance, *frame) : -1;
         fla::BreakApartInstanceCommand* command =
-            new fla::BreakApartInstanceCommand(frame, instance, "Break Apart", &_selection);
+            new fla::BreakApartInstanceCommand(frame, instance, "Break Apart", &_selection, shown);
         const std::vector<fla::Element*> pieces = command->pieces();
         stack.push(fla::CommandPtr(command));
         for (fla::Element* piece : pieces)

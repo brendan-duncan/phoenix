@@ -615,7 +615,7 @@ int BreakApartInstanceCommand::shownFrameIndex(const SymbolInstance& instance)
 }
 
 BreakApartInstanceCommand::BreakApartInstanceCommand(Frame* frame, SymbolInstance* instance,
-    const std::string& name, Selection* selection)
+    const std::string& name, Selection* selection, int shownFrame)
     : _frame(frame)
     , _instance(instance)
     , _name(name)
@@ -625,7 +625,7 @@ BreakApartInstanceCommand::BreakApartInstanceCommand(Frame* frame, SymbolInstanc
         return;
 
     const Timeline* timeline = _instance->symbol->timelines.front();
-    const int shown = shownFrameIndex(*_instance);
+    const int shown = shownFrame >= 0 ? shownFrame : shownFrameIndex(*_instance);
 
     // Layers are listed top first; the stage draws the bottom one first, so
     // the copies are gathered from the last layer back to keep that order.
