@@ -80,6 +80,7 @@ set(HEADERS
     src/gui/notes_panel.h
     src/gui/controllers_panel.h
     src/gui/palettes_panel.h
+    src/gui/lip_sync_dialog.h
     src/gui/audio_engine.h
     src/gui/frame_picker_panel.h
     src/gui/swap_symbol_dialog.h
@@ -225,6 +226,7 @@ set(HEADERS
     src/edit/palettes.h
     src/edit/color_art.h
     src/edit/layer_effects.h
+    src/edit/lip_sync.h
     src/edit/combine_objects.h
     src/edit/transform_parts.h
     src/edit/swatches.h
@@ -267,6 +269,7 @@ set(SOURCES
     src/gui/notes_panel.cpp
     src/gui/controllers_panel.cpp
     src/gui/palettes_panel.cpp
+    src/gui/lip_sync_dialog.cpp
     src/gui/audio_engine.cpp
     src/gui/frame_picker_panel.cpp
     src/gui/swap_symbol_dialog.cpp
@@ -407,6 +410,7 @@ set(SOURCES
     src/edit/palettes.cpp
     src/edit/color_art.cpp
     src/edit/layer_effects.cpp
+    src/edit/lip_sync.cpp
     src/edit/combine_objects.cpp
     src/edit/swatches.cpp
     src/geom/curve.cpp

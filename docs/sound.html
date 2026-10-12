@@ -65,6 +65,17 @@
   <p>Dragging sounds straight onto timeline frames, an envelope editor, sound properties and compression settings, and automatic lip sync from a dialogue track.</p>
 </div>
 
+<h2>Lip sync</h2>
+
+<p>Draw the mouth shapes as the frames of a graphic symbol, put an instance of it on a layer of its own, select it and choose <b>Modify &gt; Lip Sync</b>.</p>
+
+<ul>
+  <li><b>From a recording.</b> Phoenix runs <a href="https://github.com/DanielSWolf/rhubarb-lip-sync">Rhubarb Lip Sync</a>, a free program (MIT licensed) that listens to a WAV or Ogg recording of the line and works out the mouth shapes. Download it once and point Phoenix at <code>rhubarb.exe</code>; Phoenix remembers where it is. Typing the words spoken helps it get them right.</li>
+  <li><b>From a cue file.</b> Load mouth shapes worked out before: Rhubarb's TSV output, or a Papagayo or Moho switch file (<code>.dat</code>).</li>
+</ul>
+
+<p>Choose <b>Read Mouth Shapes</b>, then set the mouth chart: the frame of your mouth graphic each shape is drawn on (Rhubarb's shapes are A to H and X for rest; Papagayo's are its phoneme names). <b>Key the Mouth</b> clears the mouth layer over the line and puts a keyframe wherever the mouth changes, each showing its shape's frame as a single frame, starting on the frame you chose. The chart is kept with the mouth symbol for next time, and the whole step undoes at once.</p>
+
 </article>
 </main>
 </body>

@@ -1,0 +1,168 @@
+#include "lip_sync.h"
+
+#include "element_clone.h"
+#include "timeline_edit.h"
+
+#include "../data/frame.h"
+#include "../data/layer.h"
+#include "../data/symbol_instance.h"
+
+#include <algorithm>
+#include <cmath>
+#include <cstdlib>
+#include <sstream>
+
+namespace fla {
+
+namespace lipsync {
+
+namespace {
+
+std::string trimmed(const std::string& text)
+{
+    const size_t first = text.find_first_not_of(" \t\r\n");
+    if (first == std::string::npos)
+        return std::string();
+    const size_t last = text.find_last_not_of(" \t\r\n");
+    return text.substr(first, last - first + 1);
+}
+
+} // namespace
+
+std::vector<Cue> parse(const std::string& text, double frameRate)
+{
+    std::vector<Cue> cues;
+    std::istringstream in(text);
+    std::string line;
+    bool moho = false;
+    bool first = true;
+    while (std::getline(in, line))
+    {
+        line = trimmed(line);
+        if (line.empty())
+            continue;
+        if (first)
+        {
+            first = false;
+            if (line.compare(0, 10, "MohoSwitch") == 0)
+            {
+                moho = true;
+                continue;
+            }
+        }
+        std::istringstream fields(line);
+        std::string when;
+        std::string shape;
+        if (!(fields >> when >> shape))
+            continue;
+        char* end = nullptr;
+        const double value = std::strtod(when.c_str(), &end);
+        if (end == when.c_str())
+            continue;
+        Cue cue;
+        cue.shape = shape;
+        // Papagayo counts frames from 1; Rhubarb gives seconds.
+        cue.time = moho ? std::max(0.0, (value - 1.0) / std::max(frameRate, 1.0)) : value;
+        cues.push_back(cue);
+    }
+    std::stable_sort(cues.begin(), cues.end(), [](const Cue& a, const Cue& b) { return a.time < b.time; });
+    return cues;
+}
+
+std::vector<std::string> shapesOf(const std::vector<Cue>& cues)
+{
+    static const std::vector<std::string> order = {"A", "B", "C", "D", "E", "F", "G", "H", "X", "AI", "O", "U", "WQ",
+        "MBP", "FV", "L", "etc", "rest"};
+    std::vector<std::string> shapes;
+    for (const std::string& known : order)
+        if (std::any_of(cues.begin(), cues.end(), [&known](const Cue& cue) { return cue.shape == known; }))
+            shapes.push_back(known);
+    for (const Cue& cue : cues)
+        if (std::find(shapes.begin(), shapes.end(), cue.shape) == shapes.end())
+            shapes.push_back(cue.shape);
+    return shapes;
+}
+
+std::map<std::string, int> defaultChart(const std::vector<std::string>& shapes)
+{
+    std::map<std::string, int> chart;
+    int frame = 1;
+    for (const std::string& shape : shapes)
+        chart[shape] = frame++;
+    return chart;
+}
+
+std::string chartText(const std::map<std::string, int>& chart)
+{
+    std::string text;
+    for (const auto& [shape, frame] : chart)
+        text += (text.empty() ? "" : ";") + shape + "=" + std::to_string(frame);
+    return text;
+}
+
+std::map<std::string, int> chartFrom(const std::string& text)
+{
+    std::map<std::string, int> chart;
+    std::istringstream in(text);
+    std::string pair;
+    while (std::getline(in, pair, ';'))
+    {
+        const size_t equals = pair.find('=');
+        if (equals != std::string::npos)
+            chart[pair.substr(0, equals)] = std::atoi(pair.c_str() + equals + 1);
+    }
+    return chart;
+}
+
+CommandPtr apply(Layer& layer, const SymbolInstance& mouth, const std::vector<Cue>& cues,
+    const std::map<std::string, int>& chart, int start, double frameRate)
+{
+    if (cues.empty())
+        return nullptr;
+    const double fps = frameRate > 0.0 ? frameRate : 24.0;
+    // A keyframe where the mouth changes, on the frame its cue falls on.
+    std::vector<std::pair<int, int>> keys;
+    for (const Cue& cue : cues)
+    {
+        const auto found = chart.find(cue.shape);
+        const int shown = found == chart.end() ? 1 : std::max(1, found->second);
+        const int frame = start + static_cast<int>(std::lround(cue.time * fps));
+        if (!keys.empty() && keys.back().first == frame)
+            keys.back().second = shown;
+        else if (keys.empty() || keys.back().second != shown)
+            keys.emplace_back(frame, shown);
+    }
+    if (keys.empty())
+        return nullptr;
+    const int last = keys.back().first;
+    // The copy each keyframe holds is made now, from the mouth as it is.
+    std::shared_ptr<Element> model(cloneElement(mouth, nullptr));
+    Layer* target = &layer;
+    return CommandPtr(new EditFramesCommand({target}, "Lip Sync", [target, keys, start, last, model](std::vector<Frame*>& removed) {
+        bool keyedAfter = false;
+        for (const Frame* frame : target->frames)
+            keyedAfter = keyedAfter || (frame && frame->index == last + 1);
+        timeline::clearFrames(*target, start, last, removed);
+        // The last shape holds on to the next keyframe there was, rather
+        // than the mouth as it was coming back after it.
+        if (!keyedAfter)
+            timeline::clearKeyframe(*target, last + 1, removed);
+        for (const auto& [frame, shown] : keys)
+        {
+            Frame* key = timeline::insertKeyframe(*target, frame, true);
+            if (!key)
+                continue;
+            Element* copy = cloneElement(*model, key);
+            if (auto* instance = dynamic_cast<SymbolInstance*>(copy))
+            {
+                instance->firstFrame = shown - 1;
+                instance->loopType = LoopType::SingleFrame;
+            }
+            key->elements.push_back(copy);
+        }
+    }));
+}
+
+} // namespace lipsync
+
+} // namespace fla

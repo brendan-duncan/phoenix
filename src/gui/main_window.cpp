@@ -33,6 +33,8 @@
 #include "../edit/pegs.h"
 #include "../edit/color_art.h"
 #include "../edit/layer_effects.h"
+#include "../edit/lip_sync.h"
+#include "lip_sync_dialog.h"
 #include "theme.h"
 #include "theme_editor.h"
 #include "../parser/fla_doctor.h"
@@ -1898,6 +1900,58 @@ void MainWindow::editEffect(fla::Layer* layer)
     }
 }
 
+void MainWindow::lipSync()
+{
+    auto* mouth = dynamic_cast<fla::SymbolInstance*>(_selection.single());
+    fla::Frame* frame = mouth ? frameOfElement(mouth) : nullptr;
+    auto* layer = frame ? dynamic_cast<fla::Layer*>(frame->parent) : nullptr;
+    if (!mouth || !layer || !_flaDocument || !_flaDocument->document)
+    {
+        QMessageBox::information(this, "Lip Sync",
+            "Select the mouth: a graphic symbol whose frames are the mouth shapes, on a layer of its own.");
+        return;
+    }
+    if (layer->isLocked())
+        return;
+    // The mouth chart kept on the symbol from last time.
+    std::map<std::string, int> saved;
+    if (mouth->symbol)
+        for (const auto& [key, value] : mouth->symbol->extraAttributes)
+            if (key == "phoenixMouthChart")
+                saved = fla::lipsync::chartFrom(value);
+    const double fps = _flaDocument->document->frameRate > 0.0 ? _flaDocument->document->frameRate : 24.0;
+    LipSyncDialog dialog(QString::fromStdString(mouth->libraryItemName), saved, _player ? _player->currentFrame() : 0, fps, this);
+    if (dialog.exec() != QDialog::Accepted || dialog.cues().empty())
+        return;
+    const std::map<std::string, int> chart = dialog.chart();
+    fla::CommandPtr keys = fla::lipsync::apply(*layer, *mouth, dialog.cues(), chart, dialog.startFrame(), fps);
+    if (!keys)
+        return;
+    _selection.clear();
+    fla::CommandStack& stack = _editContext.commandStack();
+    stack.beginMacro("Lip Sync");
+    if (fla::Symbol* symbol = mouth->symbol)
+    {
+        using Attributes = std::vector<std::pair<std::string, std::string>>;
+        Attributes after = symbol->extraAttributes;
+        after.erase(std::remove_if(after.begin(), after.end(), [](const auto& pair) { return pair.first == "phoenixMouthChart"; }),
+            after.end());
+        after.emplace_back("phoenixMouthChart", fla::lipsync::chartText(chart));
+        stack.push(fla::CommandPtr(new fla::SetPropertyCommand<Attributes>(symbol->extraAttributes, symbol->extraAttributes, after, "Lip Sync")));
+    }
+    stack.push(std::move(keys));
+    stack.endMacro();
+    stack.breakMergeChain();
+    if (_timelineView)
+        _timelineView->refreshFrames();
+    if (_phoenixView)
+    {
+        _phoenixView->clearCaches();
+        _phoenixView->update();
+    }
+    statusBar()->showMessage(QString("Keyed %1 mouth shapes.").arg(dialog.cues().size()), 4000);
+}
+
 void MainWindow::addPeg()
 {
     fla::Document* document = _flaDocument ? _flaDocument->document : nullptr;
@@ -2747,6 +2801,11 @@ void MainWindow::setupMenus()
     _framesMenu->addAction(frameByFrameAction);
 
     QMenu* modifyMenu = menuBar->addMenu("&Modify");
+
+    QAction* lipSyncAction = modifyMenu->addAction("&Lip Sync...");
+    lipSyncAction->setStatusTip("Key the selected mouth graphic to a voice track, its mouth shapes from Rhubarb Lip Sync or a cue file");
+    connect(lipSyncAction, &QAction::triggered, this, &MainWindow::lipSync);
+    modifyMenu->addSeparator();
 
     _groupAction = new QAction("&Group", this);
     _groupAction->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_G));

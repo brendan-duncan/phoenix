@@ -223,6 +223,9 @@ private slots:
     /// layer; and an effect layer's settings.
     void addEffectLayer(int kind);
     void editEffect(fla::Layer* layer);
+    /// Modify > Lip Sync: mouth shapes from a voice track onto the selected
+    /// mouth graphic's layer.
+    void lipSync();
     /// Adds a shape hint to the shape tween at the playhead, or removes all.
     void editShapeHints(bool add);
     void clearFrames();
