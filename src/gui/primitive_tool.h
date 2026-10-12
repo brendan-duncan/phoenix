@@ -118,6 +118,11 @@ private:
 
     /// Whether the last move had alt held, drawing from the center out.
     bool _fromCenter = false;
+    /// Alt held when the press came: a click without a drag asks for the
+    /// size instead.
+    bool _altClick = false;
+    /// The size dialog for an Alt-click at \a at; false when cancelled.
+    bool askSize(PhoenixView& view, const QPointF& at, QPointF& start, QPointF& end);
 
     /// Whether the last snapped position actually snapped, for the ring.
     mutable bool _snapped = false;

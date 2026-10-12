@@ -78,7 +78,7 @@ std::vector<Point> samplePath(const EditablePath& path, double spacing)
     return samples;
 }
 
-void smoothPath(EditablePath& path, double amount)
+void smoothPath(EditablePath& path, double amount, const std::function<bool(double)>& which)
 {
     amount = std::max(0.0, std::min(1.0, amount));
     const size_t count = path.anchors.size();
@@ -97,6 +97,21 @@ void smoothPath(EditablePath& path, double amount)
         // end it runs along the one chord there is.
         const Point& previous = before[hasPrevious ? (i + count - 1) % count : i].position;
         const Point& next = before[hasNext ? (i + 1) % count : i].position;
+        // The corner here, between the lines to the two neighbors.
+        if (which && hasPrevious && hasNext)
+        {
+            const double ax = previous.x - here.position.x;
+            const double ay = previous.y - here.position.y;
+            const double bx = next.x - here.position.x;
+            const double by = next.y - here.position.y;
+            const double lengths = std::hypot(ax, ay) * std::hypot(bx, by);
+            if (lengths > 1.0e-12)
+            {
+                const double cosine = std::max(-1.0, std::min(1.0, (ax * bx + ay * by) / lengths));
+                if (!which(std::acos(cosine) * 180.0 / 3.14159265358979323846))
+                    continue;
+            }
+        }
         double dx = next.x - previous.x;
         double dy = next.y - previous.y;
         const double length = std::hypot(dx, dy);

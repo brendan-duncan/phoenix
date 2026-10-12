@@ -430,6 +430,25 @@ void BrushTool::takeSamples(PhoenixView& view, QMouseEvent* event, const QPointF
     sample.y = documentPos.y();
     sample.pressure = _pen ? view.pressure() : 1.0;
     sample.time = event ? static_cast<double>(event->timestamp()) : 0.0;
+    // Shift keeps the stroke straight across or down, its direction set
+    // by the first few pixels of movement.
+    if (event && (event->modifiers() & Qt::ShiftModifier) && !_samples.empty())
+    {
+        const fla::BrushSample& start = _samples.front();
+        if (_axis == 0)
+        {
+            const double dx = std::fabs(sample.x - start.x);
+            const double dy = std::fabs(sample.y - start.y);
+            if (std::max(dx, dy) >= 3.0)
+                _axis = dx >= dy ? 1 : 2;
+        }
+        if (_axis == 1)
+            sample.y = start.y;
+        else if (_axis == 2)
+            sample.x = start.x;
+        else
+            return;
+    }
     _samples.push_back(sample);
 }
 
@@ -457,6 +476,7 @@ bool BrushTool::mousePress(PhoenixView& view, QMouseEvent* event, const QPointF&
 
     _drawing = true;
     _samples.clear();
+    _axis = 0;
     _pen = view.penDown();
     takeSamples(view, event, documentPos);
     view.update();

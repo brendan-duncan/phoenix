@@ -30,6 +30,7 @@
 #include "notes_panel.h"
 #include "controllers_panel.h"
 #include "function_curves_panel.h"
+#include "../edit/shape_recognition.h"
 #include <QGridLayout>
 #include "spell_checker.h"
 #include "../edit/text_style.h"
@@ -3715,11 +3716,19 @@ void MainWindow::setupMenus()
     _smoothAction->setStatusTip("Soften the selected shapes' curves");
     connect(_smoothAction, &QAction::triggered, this, &MainWindow::smoothSelection);
     shapeMenu->addAction(_smoothAction);
+    QAction* advancedSmoothAction = shapeMenu->addAction("Advanced S&mooth...");
+    advancedSmoothAction->setShortcut(QKeySequence(Qt::CTRL | Qt::ALT | Qt::SHIFT | Qt::Key_M));
+    advancedSmoothAction->setStatusTip("Smooth the selected shapes' corners within angle limits, as strongly as you choose");
+    connect(advancedSmoothAction, &QAction::triggered, this, &MainWindow::advancedSmooth);
 
     _straightenAction = new QAction("S&traighten", this);
     _straightenAction->setStatusTip("Replace the selected shapes' curves with straight segments");
     connect(_straightenAction, &QAction::triggered, this, &MainWindow::straightenSelection);
     shapeMenu->addAction(_straightenAction);
+    QAction* advancedStraightenAction = shapeMenu->addAction("Advanced Straig&hten...");
+    advancedStraightenAction->setShortcut(QKeySequence(Qt::CTRL | Qt::ALT | Qt::SHIFT | Qt::Key_N));
+    advancedStraightenAction->setStatusTip("Straighten the selected shapes as strongly as you choose, and turn rough rectangles and ovals into true ones");
+    connect(advancedStraightenAction, &QAction::triggered, this, &MainWindow::advancedStraighten);
 
     _optimizeAction = new QAction("&Optimize...", this);
     _optimizeAction->setShortcut(QKeySequence(Qt::CTRL | Qt::ALT | Qt::SHIFT | Qt::Key_C));
@@ -7406,6 +7415,95 @@ void MainWindow::straightenSelection()
     const double tolerance = 2.0 / qMax(_phoenixView ? _phoenixView->zoom() : 1.0, 1.0e-6);
     tidySelectedShapes("Straighten", [tolerance](fla::EditablePath& path) {
         fla::straightenPath(path, tolerance);
+    });
+}
+
+void MainWindow::advancedSmooth()
+{
+    QDialog dialog(this);
+    dialog.setWindowTitle("Advanced Smooth");
+    QFormLayout* form = new QFormLayout(&dialog);
+    QSettings settings;
+    QCheckBox* belowOn = new QCheckBox("Smooth angles below", &dialog);
+    belowOn->setChecked(settings.value("advancedSmooth/belowOn", true).toBool());
+    QSpinBox* below = new QSpinBox(&dialog);
+    below->setRange(0, 180);
+    below->setSuffix(QString::fromUtf8("\u00b0"));
+    below->setValue(settings.value("advancedSmooth/below", 90).toInt());
+    form->addRow(belowOn, below);
+    QCheckBox* aboveOn = new QCheckBox("Smooth angles above", &dialog);
+    aboveOn->setChecked(settings.value("advancedSmooth/aboveOn", true).toBool());
+    QSpinBox* above = new QSpinBox(&dialog);
+    above->setRange(0, 180);
+    above->setSuffix(QString::fromUtf8("\u00b0"));
+    above->setValue(settings.value("advancedSmooth/above", 90).toInt());
+    form->addRow(aboveOn, above);
+    QSpinBox* strength = new QSpinBox(&dialog);
+    strength->setRange(0, 100);
+    strength->setSuffix("%");
+    strength->setValue(settings.value("advancedSmooth/strength", 50).toInt());
+    form->addRow("Smoothing strength:", strength);
+    form->addRow(new QLabel("A corner's angle is 180\u00b0 where the line runs straight on.", &dialog));
+    QDialogButtonBox* buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, &dialog);
+    connect(buttons, &QDialogButtonBox::accepted, &dialog, &QDialog::accept);
+    connect(buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
+    form->addRow(buttons);
+    if (dialog.exec() != QDialog::Accepted)
+        return;
+    settings.setValue("advancedSmooth/belowOn", belowOn->isChecked());
+    settings.setValue("advancedSmooth/below", below->value());
+    settings.setValue("advancedSmooth/aboveOn", aboveOn->isChecked());
+    settings.setValue("advancedSmooth/above", above->value());
+    settings.setValue("advancedSmooth/strength", strength->value());
+    const bool useBelow = belowOn->isChecked();
+    const bool useAbove = aboveOn->isChecked();
+    const double belowAngle = below->value();
+    const double aboveAngle = above->value();
+    const double amount = strength->value() / 100.0;
+    tidySelectedShapes("Advanced Smooth", [=](fla::EditablePath& path) {
+        fla::smoothPath(path, amount, [=](double angle) {
+            return (useBelow && angle < belowAngle) || (useAbove && angle > aboveAngle);
+        });
+    });
+}
+
+void MainWindow::advancedStraighten()
+{
+    QDialog dialog(this);
+    dialog.setWindowTitle("Advanced Straighten");
+    QFormLayout* form = new QFormLayout(&dialog);
+    QSettings settings;
+    QSpinBox* strength = new QSpinBox(&dialog);
+    strength->setRange(0, 100);
+    strength->setSuffix("%");
+    strength->setValue(settings.value("advancedStraighten/strength", 50).toInt());
+    form->addRow("Straightening strength:", strength);
+    QCheckBox* recognize = new QCheckBox("Recognize shapes", &dialog);
+    recognize->setToolTip("A closed path that reads as a rectangle or an oval becomes one");
+    recognize->setChecked(settings.value("advancedStraighten/recognize", false).toBool());
+    form->addRow("", recognize);
+    QDialogButtonBox* buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, &dialog);
+    connect(buttons, &QDialogButtonBox::accepted, &dialog, &QDialog::accept);
+    connect(buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
+    form->addRow(buttons);
+    if (dialog.exec() != QDialog::Accepted)
+        return;
+    settings.setValue("advancedStraighten/strength", strength->value());
+    settings.setValue("advancedStraighten/recognize", recognize->isChecked());
+    // The strength is a tolerance in screen pixels.
+    const double screenTolerance = 0.25 + 7.75 * (strength->value() / 100.0);
+    const double tolerance = screenTolerance / qMax(_phoenixView ? _phoenixView->zoom() : 1.0, 1.0e-6);
+    const bool shapes = recognize->isChecked();
+    tidySelectedShapes("Advanced Straighten", [tolerance, shapes](fla::EditablePath& path) {
+        const std::vector<fla::Point> raw = fla::samplePath(path, 2.0);
+        fla::straightenPath(path, tolerance);
+        if (shapes && path.closed)
+        {
+            fla::StrokeTidyOptions options;
+            options.connectLines = false;
+            options.recognizeShapes = true;
+            fla::tidyStraightenedStroke(path, raw, options);
+        }
     });
 }
 

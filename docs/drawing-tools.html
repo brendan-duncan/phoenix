@@ -86,11 +86,11 @@
 <table>
   <thead><tr><th>Tool</th><th>Key</th><th>Notes</th></tr></thead>
   <tbody>
-    <tr><td>Rectangle</td><td><kbd>R</kbd></td><td class="wrap"><kbd>Shift</kbd> draws a square, <kbd>Alt</kbd> draws from the center. While dragging, press <kbd>&uarr;</kbd> and <kbd>&darr;</kbd> to round the corners (with <kbd>Shift</kbd> for bigger steps). <strong>Corner radius</strong> sets the rounding before you draw.</td></tr>
-    <tr><td>Oval</td><td><kbd>O</kbd></td><td class="wrap"><kbd>Shift</kbd> draws a circle, <kbd>Alt</kbd> draws from the center.</td></tr>
+    <tr><td>Rectangle</td><td><kbd>R</kbd></td><td class="wrap"><kbd>Shift</kbd> draws a square, <kbd>Alt</kbd> draws from the center. While dragging, press <kbd>&uarr;</kbd> and <kbd>&darr;</kbd> to round the corners (with <kbd>Shift</kbd> for bigger steps). <strong>Corner radius</strong> sets the rounding before you draw. <kbd>Alt</kbd>-click without dragging to type the width, height and corner radius instead.</td></tr>
+    <tr><td>Oval</td><td><kbd>O</kbd></td><td class="wrap"><kbd>Shift</kbd> draws a circle, <kbd>Alt</kbd> draws from the center. <kbd>Alt</kbd>-click without dragging to type the width and height.</td></tr>
     <tr><td>Rectangle Primitive</td><td></td><td class="wrap">A rectangle whose four corner radii stay editable.</td></tr>
     <tr><td>Oval Primitive</td><td></td><td class="wrap">An oval with an editable start angle, end angle and inner radius, for pie slices and rings.</td></tr>
-    <tr><td>PolyStar</td><td><kbd>Y</kbd></td><td class="wrap">Drag out from the center. Set the number of <strong>Sides</strong>, and check <strong>Star</strong> to draw a star. <kbd>Shift</kbd> snaps the angle.</td></tr>
+    <tr><td>PolyStar</td><td></td><td class="wrap">Drag out from the center. Set the number of <strong>Sides</strong>, and check <strong>Star</strong> to draw a star; <strong>Star point size</strong> sets how deep its points are, from long and thin near 0 to a plain polygon at 1. <kbd>Shift</kbd> snaps the angle.</td></tr>
   </tbody>
 </table>
 
@@ -123,13 +123,13 @@
       <dt>Recognize shapes</dt>
       <dd>In Straighten mode, turns a rough rectangle or oval into a true one.</dd>
     </dl>
-    <p>Start a stroke on the end of a selected open path to extend it.</p>
+    <p>Start a stroke on the end of a selected open path to extend it. Hold <kbd>Shift</kbd> to draw a straight line across or down: the first few pixels of movement choose which.</p>
   </div>
 </div>
 
 <h2>Brushes</h2>
 
-<p>The brush slot (<kbd>B</kbd>) holds three brushes. All three paint filled shapes, use your tablet's pen pressure, and remember their settings.</p>
+<p>The brush slot holds three brushes: the Nib Brush (<kbd>B</kbd>), the Flow Brush (<kbd>Shift</kbd>+<kbd>B</kbd>) and the Ink Brush. All three paint filled shapes, use your tablet's pen pressure, and remember their settings. Hold <kbd>Shift</kbd> to paint a straight stroke across or down.</p>
 
 <figure class="narrow">
   <img src="assets/shots/flyout-brushes.webp" alt="Flyout listing Flow Brush (B), Nib Brush and Ink Brush" width="147" height="78">

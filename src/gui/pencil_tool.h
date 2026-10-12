@@ -74,6 +74,11 @@ private:
 
     /// Raw cursor positions, in document space, in the order they arrived.
     std::vector<fla::Point> _points;
+    /// With shift held, the stroke keeps to one direction once it has one:
+    /// 1 across, 2 down.
+    int _axis = 0;
+    /// Where a point goes with shift held.
+    fla::Point constrained(QMouseEvent* event, const QPointF& documentPos);
 
     bool _drawing = false;
 

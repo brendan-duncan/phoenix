@@ -107,3 +107,19 @@ TEST(optimizing_keeps_a_path_that_is_already_lean)
     fla::optimizePath(path, 1.0);
     CHECK(path.anchors.size() == 4);
 }
+
+TEST(advanced_smooth_keeps_to_the_corners_its_angles_take)
+{
+    // A square's corners are right angles; a long straight run is 180.
+    EditablePath square = polyline({Point(0, 0), Point(100, 0), Point(100, 100), Point(0, 100)}, true);
+    EditablePath kept = square;
+    fla::smoothPath(kept, 1.0, [](double angle) { return angle < 45.0; });
+    CHECK(!kept.anchors[1].smooth && kept.anchors[1].outHandle.x == 100.0 && kept.anchors[1].outHandle.y == 0.0);
+    EditablePath smoothed = square;
+    fla::smoothPath(smoothed, 1.0, [](double angle) { return angle < 100.0; });
+    CHECK(smoothed.anchors[1].smooth && smoothed.anchors[1].outHandle.y > 0.0);
+    // Only the corner the test picks.
+    EditablePath one = polyline({Point(0, 0), Point(100, 0), Point(200, 0), Point(200, 100)});
+    fla::smoothPath(one, 1.0, [](double angle) { return angle > 170.0; });
+    CHECK(one.anchors[1].smooth && !one.anchors[2].smooth);
+}

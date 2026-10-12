@@ -787,6 +787,14 @@ void PropertiesPanel::buildToolTab()
     star->setToolTip("Draw a star rather than a regular polygon");
     connect(star, &QCheckBox::toggled, this, [this](bool on) { _links.style->star = on; });
     addOption(QString(), star, {IconTool::PolyStar});
+    HotText* pointSize = makeHotText(0.0, 1.0, 2);
+    pointSize->setValue(style.starInnerRatio);
+    pointSize->setStep(0.005);
+    pointSize->setToolTip("How deep a star's points are: near 0 they are long and thin, at 1 the star is a polygon");
+    connect(pointSize, &HotText::valueChanged, this, [this](double value, bool) {
+        _links.style->starInnerRatio = std::clamp(value, 0.0, 1.0);
+    });
+    addOption("Star point size", pointSize, {IconTool::PolyStar});
 
     // Free transform.
     QComboBox* transformMode = new QComboBox(this);

@@ -253,6 +253,11 @@ private slots:
     /// in a dialog; then the text layout learns the document's symbols.
     void fontItemDialog(const QString& name);
     void syncFontSymbols();
+    /// Modify > Shape > Advanced Smooth and Advanced Straighten: Smooth with
+    /// angle limits and a strength, Straighten with a strength and shape
+    /// recognition.
+    void advancedSmooth();
+    void advancedStraighten();
     /// Edit > Check Spelling: every text field of every scene and symbol,
     /// a misspelled word at a time.
     void checkSpelling();

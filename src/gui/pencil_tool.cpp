@@ -37,6 +37,7 @@ bool PencilTool::mousePress(PhoenixView& view, QMouseEvent* event, const QPointF
 
     _drawing = true;
     _points.clear();
+    _axis = 0;
     beginExtension(view, documentPos);
     _points.push_back(fla::Point(documentPos.x(), documentPos.y()));
     view.update();
@@ -99,9 +100,31 @@ bool PencilTool::mouseMove(PhoenixView& view, QMouseEvent* event, const QPointF&
 
     // Everything the cursor reports is kept; thinning happens in the fit, where
     // the spacing rule can be applied consistently.
-    _points.push_back(fla::Point(documentPos.x(), documentPos.y()));
+    _points.push_back(constrained(event, documentPos));
     view.update();
     return true;
+}
+
+fla::Point PencilTool::constrained(QMouseEvent* event, const QPointF& documentPos)
+{
+    fla::Point point(documentPos.x(), documentPos.y());
+    if (!event || !(event->modifiers() & Qt::ShiftModifier) || _points.empty())
+        return point;
+    const fla::Point& start = _points.front();
+    // The direction is set by the first few pixels of movement.
+    if (_axis == 0)
+    {
+        const double dx = std::fabs(point.x - start.x);
+        const double dy = std::fabs(point.y - start.y);
+        if (std::max(dx, dy) < 3.0)
+            return fla::Point(start.x, start.y);
+        _axis = dx >= dy ? 1 : 2;
+    }
+    if (_axis == 1)
+        point.y = start.y;
+    else
+        point.x = start.x;
+    return point;
 }
 
 bool PencilTool::mouseRelease(PhoenixView& view, QMouseEvent* event, const QPointF& documentPos)
@@ -109,7 +132,7 @@ bool PencilTool::mouseRelease(PhoenixView& view, QMouseEvent* event, const QPoin
     if (event->button() != Qt::LeftButton || !_drawing)
         return false;
 
-    _points.push_back(fla::Point(documentPos.x(), documentPos.y()));
+    _points.push_back(constrained(event, documentPos));
     _drawing = false;
     finish(view);
     return true;

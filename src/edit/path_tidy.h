@@ -4,6 +4,7 @@
 
 #include "../data/point.h"
 
+#include <functional>
 #include <vector>
 
 namespace fla {
@@ -14,8 +15,11 @@ namespace fla {
 /// tangent through its neighbors (a third of the way to each neighbor,
 /// along the line from the previous to the next), by \a amount from 0 (no
 /// change) to 1 (all the way), and the anchor is made smooth. The ends of an
-/// open path keep their place but gain a handle along the chord.
-void smoothPath(EditablePath& path, double amount);
+/// open path keep their place but gain a handle along the chord. With
+/// \a which, only the anchors whose corner it accepts are smoothed: the
+/// angle between the lines to the neighbors, in degrees, 180 for a
+/// straight run (Advanced Smooth's angle limits).
+void smoothPath(EditablePath& path, double amount, const std::function<bool(double)>& which = {});
 
 /// Straighten: the path is sampled and reduced to straight segments by
 /// Ramer-Douglas-Peucker within \a tolerance, so gentle curves become a few

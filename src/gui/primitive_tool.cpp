@@ -14,6 +14,12 @@
 #include "../edit/selection.h"
 #include "../edit/snapping.h"
 
+#include <QCheckBox>
+#include <QDialog>
+#include <QDialogButtonBox>
+#include <QDoubleSpinBox>
+#include <QFormLayout>
+#include <QSettings>
 #include <QKeyEvent>
 #include <QMouseEvent>
 
@@ -161,6 +167,7 @@ bool PrimitiveTool::mousePress(PhoenixView& view, QMouseEvent* event, const QPoi
     _dragging = true;
     _constrained = false;
     _fromCenter = false;
+    _altClick = (event->modifiers() & Qt::AltModifier) != 0;
     _cornerRadius = _style.cornerRadius;
     _start = snap(view, documentPos);
     _end = _start;
@@ -202,7 +209,21 @@ bool PrimitiveTool::mouseRelease(PhoenixView& view, QMouseEvent* event, const QP
         return true;
     }
 
-    fla::Element* element = createElement(frame, effectiveStart(), _end);
+    // An Alt-click with the rectangle or oval asks for the size, as Animate
+    // does, and draws it from the click.
+    QPointF start = effectiveStart();
+    QPointF end = _end;
+    const bool click = std::hypot(_end.x() - _start.x(), _end.y() - _start.y()) < 2.0;
+    if (_altClick && click && _kind != Kind::Line && _kind != Kind::PolyStar)
+    {
+        if (!askSize(view, _start, start, end))
+        {
+            view.update();
+            return true;
+        }
+    }
+
+    fla::Element* element = createElement(frame, start, end);
     if (!element)
     {
         // Too small to be a shape, so the click drew nothing.
@@ -212,6 +233,57 @@ bool PrimitiveTool::mouseRelease(PhoenixView& view, QMouseEvent* event, const QP
 
     placeDrawnElement(view, _commandStack, _selection, frame, element, name(),
         _style.objectDrawing);
+    return true;
+}
+
+bool PrimitiveTool::askSize(PhoenixView& view, const QPointF& at, QPointF& start, QPointF& end)
+{
+    const bool rectangle = _kind == Kind::Rectangle || _kind == Kind::RectanglePrimitive;
+    QDialog dialog(&view);
+    dialog.setWindowTitle(rectangle ? "Rectangle Settings" : "Oval Settings");
+    QFormLayout* form = new QFormLayout(&dialog);
+    // The last size asked for, from run to run.
+    QSettings settings;
+    const QString key = rectangle ? "rectangleSettings" : "ovalSettings";
+    QDoubleSpinBox* width = new QDoubleSpinBox(&dialog);
+    QDoubleSpinBox* height = new QDoubleSpinBox(&dialog);
+    for (QDoubleSpinBox* box : {width, height})
+    {
+        box->setRange(1.0, 8192.0);
+        box->setDecimals(2);
+        box->setSuffix(" px");
+    }
+    width->setValue(settings.value(key + "/width", 100.0).toDouble());
+    height->setValue(settings.value(key + "/height", 100.0).toDouble());
+    form->addRow("Width:", width);
+    form->addRow("Height:", height);
+    QDoubleSpinBox* radius = nullptr;
+    if (rectangle)
+    {
+        radius = new QDoubleSpinBox(&dialog);
+        radius->setRange(-500.0, 500.0);
+        radius->setDecimals(2);
+        radius->setSuffix(" px");
+        radius->setValue(_style.cornerRadius);
+        form->addRow("Corner radius:", radius);
+    }
+    QCheckBox* center = new QCheckBox("Draw from center", &dialog);
+    center->setChecked(settings.value(key + "/center", false).toBool());
+    form->addRow("", center);
+    QDialogButtonBox* buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, &dialog);
+    QObject::connect(buttons, &QDialogButtonBox::accepted, &dialog, &QDialog::accept);
+    QObject::connect(buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
+    form->addRow(buttons);
+    if (dialog.exec() != QDialog::Accepted)
+        return false;
+    settings.setValue(key + "/width", width->value());
+    settings.setValue(key + "/height", height->value());
+    settings.setValue(key + "/center", center->isChecked());
+    if (radius)
+        _cornerRadius = radius->value();
+    const QPointF size(width->value(), height->value());
+    start = center->isChecked() ? at - size / 2.0 : at;
+    end = start + size;
     return true;
 }
 

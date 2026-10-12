@@ -113,6 +113,8 @@ private:
     const fla::DrawingStyle& _style;
 
     std::vector<fla::BrushSample> _samples;
+    /// With shift held, the stroke keeps to one direction: 1 across, 2 down.
+    int _axis = 0;
     /// Whether the stroke under way comes from a pen.
     bool _pen = false;
     bool _drawing = false;
