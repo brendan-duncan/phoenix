@@ -1,15 +1,135 @@
 #include "gui/main_window.h"
 #include "gui/updater.h"
+#include "phx/container.h"
+#include "phx/phx_document.h"
+#include "data/fla_document.h"
+#include "parser/fla_parser.h"
+#include "writer/fla_writer.h"
+#include "writer/xfl_content.h"
+#include "writer/xfl_folder_writer.h"
 #include <QApplication>
+#include <QFileOpenEvent>
 #include <QStringList>
 
+#include <cstdio>
 #include <cstring>
+#include <cctype>
+#include <functional>
+#include <memory>
+#include <string>
+
+namespace {
+
+/// Hands the files the system asks Phoenix to open to \a open.
+class FileOpenHandler : public QObject
+{
+public:
+    explicit FileOpenHandler(std::function<void(const QString&)> open)
+        : _open(std::move(open))
+    {}
+
+protected:
+    bool eventFilter(QObject* watched, QEvent* event) override
+    {
+        if (event->type() == QEvent::FileOpen)
+        {
+            _open(static_cast<QFileOpenEvent*>(event)->file());
+            return true;
+        }
+        return QObject::eventFilter(watched, event);
+    }
+
+private:
+    std::function<void(const QString&)> _open;
+};
+
+/// Reads \a in (.phx, .fla or an XFL folder) and writes it to \a out in the
+/// format its extension names: .phx, .fla, or anything else an XFL folder.
+bool convertDocument(const std::string& in, const std::string& out, std::string& error)
+{
+    std::unique_ptr<fla::FLADocument> document;
+    if (phx::isPhx(in))
+    {
+        std::string warning;
+        bool readOnly = false;
+        document.reset(phx::load(in, error, warning, readOnly));
+        if (!warning.empty())
+            std::fprintf(stderr, "%s", warning.c_str());
+    }
+    else
+    {
+        FLAParser parser;
+        document.reset(parser.parse(in));
+        error = parser.errorString();
+    }
+    if (!document || !document->document)
+    {
+        if (error.empty())
+            error = "Could not read " + in;
+        return false;
+    }
+    const auto endsWith = [&out](const char* suffix) {
+        const size_t n = std::strlen(suffix);
+        if (out.size() < n)
+            return false;
+        for (size_t i = 0; i < n; ++i)
+        {
+            if (std::tolower(static_cast<unsigned char>(out[out.size() - n + i])) != suffix[i])
+                return false;
+        }
+        return true;
+    };
+    if (endsWith(".phx"))
+        return phx::save(*document->document, out, phx::SaveOptions{"Phoenix " + Updater::currentVersion().toStdString(), {}}, error);
+    for (const std::string& lost : fla::unsupportedContent(*document->document))
+        std::fprintf(stderr, "Not written: %s\n", lost.c_str());
+    if (endsWith(".fla"))
+    {
+        fla::FLAWriter writer;
+        if (!writer.write(*document->document, out))
+        {
+            error = writer.errorString();
+            return false;
+        }
+        return true;
+    }
+    fla::XFLFolderWriter writer;
+    if (!writer.write(*document->document, out))
+    {
+        error = writer.errorString();
+        return false;
+    }
+    return true;
+}
+
+} // namespace
 
 int main(int argc, char *argv[])
 {
     // Before anything else: the installer and the updater run Phoenix with
     // arguments of their own, which this answers and exits on.
     Updater::handleStartup();
+
+    // Phoenix --phx-dump file.phx: the file's parts as text, no window.
+    if (argc == 3 && std::strcmp(argv[1], "--phx-dump") == 0)
+    {
+        const std::string text = phx::dump(argv[2]);
+        std::fwrite(text.data(), 1, text.size(), stdout);
+        return 0;
+    }
+
+    // Phoenix --convert in out: between .phx, .fla and XFL folders, by the
+    // output's extension, no window.
+    if (argc == 4 && std::strcmp(argv[1], "--convert") == 0)
+    {
+        std::string error;
+        if (!convertDocument(argv[2], argv[3], error))
+        {
+            std::fprintf(stderr, "%s\n", error.c_str());
+            return 1;
+        }
+        return 0;
+    }
 
 #ifdef Q_OS_WIN
     // Exporting headless (QT_QPA_PLATFORM=offscreen) reads fonts from a
@@ -42,6 +162,11 @@ int main(int argc, char *argv[])
 
     MainWindow window(initialFile);
     window.show();
+
+    // On macOS a file opened from Finder arrives as an event, not as an
+    // argument.
+    FileOpenHandler fileOpen([&window](const QString& path) { window.openDocumentPath(path); });
+    a.installEventFilter(&fileOpen);
 
     return a.exec();
 }

@@ -66,6 +66,10 @@ public:
    
     void loadFLAFile(const QString& filePath);
 
+    /// Opens a document the system handed over (a double-click in Finder),
+    /// asking first about unsaved changes.
+    void openDocumentPath(const QString& filePath);
+
 private slots:
     void newFile();
     /// The start screen: new from a preset, Open, or a recent file.

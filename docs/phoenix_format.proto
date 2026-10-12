@@ -1,0 +1,728 @@
+// The Phoenix document format, version 1.0: the content of the chunks of a
+// .phx file. See PHOENIX_FORMAT.md for the container, the conventions and the
+// compatibility rules. In short:
+//
+// - Field numbers are never reused or renumbered; removed ones are reserved.
+// - A field left out has the default given here (proto2 defaults), so
+//   writers leave out fields at their defaults.
+// - Readers keep the fields they do not know and write them back.
+// - Colors are RGBA in a fixed32, red in the low byte.
+// - Geometry is in units of 1/256 twip (1/5120 pixel), as zigzag deltas.
+//
+// Phoenix encodes and decodes this with its own codec (src/phx/wire.h); the
+// file is here as the specification, and so that protoc can decode a chunk.
+
+syntax = "proto2";
+
+package phoenix;
+
+// ---------------------------------------------------------------------------
+// Container
+
+// The content of the INDX chunk.
+message ChunkIndex {
+  repeated ChunkEntry chunks = 1;
+}
+
+message ChunkEntry {
+  optional uint32 id = 1;
+  // The four letters of the type, as a little-endian fixed32.
+  optional fixed32 type = 2;
+  optional uint64 offset = 3;          // of the chunk header
+  optional uint64 stored_length = 4;
+  optional uint64 length = 5;          // once decompressed
+  optional uint32 flags = 6;
+  optional fixed32 crc = 7;            // of the stored bytes
+  optional uint32 media_id = 8;        // MDIA chunks
+  optional string symbol_name = 9;     // SYMB chunks
+}
+
+// The start of an MDIA chunk's content, as a length-delimited message: a
+// varint length, then the message. The media's bytes follow it.
+message MediaHeader {
+  optional uint32 id = 1;              // unique in the file, referenced by items
+  optional MediaKind kind = 2;
+  // The encoding of the bytes: "png", "jpeg", "gif", "flash-lossless" (the
+  // bin .dat encoding of Animate), "pcm-s16le", "mp3", "wav", "mp4", "ttf"...
+  optional string format = 3;
+  optional string source_name = 4;     // original file name
+  optional uint64 source_size = 5;
+  optional uint32 width = 6;           // bitmaps and video, in pixels
+  optional uint32 height = 7;
+  optional uint32 sample_rate = 8;     // sounds
+  optional uint32 channels = 9;
+  optional uint64 sample_count = 10;   // per channel
+  optional fixed64 content_hash = 11;  // FNV-1a 64 of the bytes
+  // For a file an FLA package carried, its path in the package
+  // ("bin/M 1 1700000000.dat"), so an export writes it back there.
+  optional string package_path = 12;
+}
+
+enum MediaKind {
+  MEDIA_OTHER = 0;
+  MEDIA_BITMAP = 1;
+  MEDIA_SOUND = 2;
+  MEDIA_VIDEO = 3;
+  MEDIA_FONT = 4;
+  MEDIA_BRUSH_TEXTURE = 5;
+  MEDIA_PACKAGE_FILE = 6;              // a file of an FLA package, kept as is
+}
+
+// The content of the META chunk.
+message Metadata {
+  optional string application = 1;     // "Phoenix 0.3.0"
+  optional string created = 2;         // ISO 8601
+  optional string modified = 3;
+  optional string author = 4;
+  repeated KeyValue values = 5;
+}
+
+// ---------------------------------------------------------------------------
+// Shared pieces
+
+message KeyValue {
+  optional string key = 1;
+  optional string value = 2;
+}
+
+message Matrix {
+  optional double a = 1 [default = 1];
+  optional double b = 2;
+  optional double c = 3;
+  optional double d = 4 [default = 1];
+  optional double tx = 5;
+  optional double ty = 6;
+}
+
+message Vector2 {
+  optional double x = 1;
+  optional double y = 2;
+}
+
+message Rectangle {
+  optional double left = 1;
+  optional double top = 2;
+  optional double right = 3;
+  optional double bottom = 4;
+}
+
+// What Phoenix keeps of an XFL element without modeling it, so that an
+// export to FLA writes back what was read. Never needed to draw.
+message XflDetail {
+  // Attributes not modeled, in the order read.
+  repeated KeyValue extra_attributes = 1;
+  // The modeled attributes the file wrote even at their default values.
+  repeated string present_attributes = 2;
+  // Child elements not modeled, as XML text.
+  repeated string extra_children = 3;
+}
+
+// ---------------------------------------------------------------------------
+// The document (DOCU chunk)
+
+message Document {
+  optional int32 width = 1 [default = 550];
+  optional int32 height = 2 [default = 400];
+  optional double frame_rate = 3 [default = 24];
+  optional fixed32 background_color = 4 [default = 0xFFFFFFFF];
+  optional fixed32 grid_color = 5 [default = 0xFF000000];
+  optional fixed32 guides_color = 6 [default = 0xFF00FF00];
+  optional int32 grid_spacing_x = 7 [default = 18];
+  optional int32 grid_spacing_y = 8 [default = 18];
+  optional int32 snap_align_border_spacing = 9 [default = 18];
+  optional bool objects_snap_to = 10 [default = true];
+  optional bool guides_snap_to = 11 [default = true];
+  optional int32 timeline_height = 12 [default = 197];
+  optional int32 timeline_label_width = 13 [default = 256];
+  optional double vanishing_point_x = 14 [default = 400];
+  optional double vanishing_point_y = 15 [default = 275];
+  optional double view_angle_3d = 16;
+  optional int32 next_scene_identifier = 17 [default = 2];
+  optional bool play_loop = 18 [default = true];
+  optional bool play_pages = 19 [default = true];
+  optional bool play_frame_actions = 20 [default = true];
+  optional string current_timeline = 21;
+  // Whether the document has a symbol list at all (an FLA may have none).
+  optional bool has_symbol_list = 22;
+
+  repeated Timeline scenes = 30;
+  repeated LibraryFolder folders = 31;
+  repeated BitmapItem bitmaps = 32;
+  repeated SoundItem sounds = 33;
+  // The library's symbols in order, by name; each is a SYMB chunk.
+  repeated string symbol_order = 34;
+  repeated SwatchList swatch_lists = 35;
+  // Files of an FLA package Phoenix does not model, in their order there.
+  repeated PackageFile package_files = 36;
+
+  // Phoenix-only features the document uses (see FeatureRegistry).
+  repeated string features = 40;
+  // Features a reader must know to show the document correctly.
+  repeated string required_features = 41;
+
+  optional XflDocument xfl = 50;
+
+  // 60-99: set aside for Phoenix's own document settings (brush library,
+  // linked palettes, camera, review notes...).
+  repeated BrushDefinition brushes = 60;
+  repeated Palette palettes = 61;
+  repeated VideoItem videos = 62;
+}
+
+// The parts of an FLA's DOMDocument Phoenix keeps without modeling.
+message XflDocument {
+  optional string filetype_guid = 1;
+  optional string file_guid = 2;
+  optional string xfl_version = 3;
+  optional string creator_info = 4;
+  optional string platform = 5;
+  optional string version_info = 6;
+  optional int32 major_version = 7;
+  optional int32 build_number = 8;
+  optional string script_list_xml = 9;
+  optional string publish_history_xml = 10;
+  optional string printer_settings_xml = 11;
+  repeated RawSection extra_sections = 12;
+  // Media items not modeled (DOMSoundItem, DOMVideoItem...), as XML text.
+  repeated string extra_media = 13;
+  optional XflDetail detail = 14;
+  // Whether the FLA was an old binary one, converted on reading.
+  optional bool from_binary = 15;
+}
+
+message RawSection {
+  optional string xml = 1;
+  optional bool before_timelines = 2;
+}
+
+message LibraryFolder {
+  optional string name = 1;            // full path, "Characters/Bob"
+  optional string item_id = 2;
+  optional bool is_expanded = 3;
+  optional XflDetail xfl = 15;
+}
+
+message BitmapItem {
+  optional string name = 1;
+  optional string item_id = 2;
+  optional string source_external_filepath = 3;
+  optional uint32 source_last_imported = 4;
+  optional uint32 external_file_crc32 = 5;
+  optional uint32 external_file_size = 6;
+  optional bool allow_smoothing = 7;
+  optional int32 quality = 8;
+  optional string href = 9;
+  optional string bitmap_data_href = 10;
+  optional int32 frame_right = 11;     // twips
+  optional int32 frame_bottom = 12;
+  optional bool is_jpeg = 13;
+  optional uint32 data_media = 14;     // the bin .dat (flash-lossless or jpeg)
+  optional uint32 image_media = 15;    // the LIBRARY copy (the imported file)
+  optional XflDetail xfl = 16;
+}
+
+message SoundItem {
+  optional string name = 1;
+  optional string format = 2;          // "44kHz 16bit Stereo"
+  optional string data_path = 3;       // package path of its data
+}
+
+message PackageFile {
+  optional string path = 1;            // "bin/M 2 1700000000.dat", "META-INF/metadata.xml"
+  optional uint32 media = 2;
+}
+
+message SwatchList {
+  optional string name = 1;
+  repeated fixed32 colors = 2 [packed = true];
+  optional string xml = 3;             // the list as read, gradients included
+}
+
+// ---------------------------------------------------------------------------
+// Symbols (SYMB chunks)
+
+message Symbol {
+  optional string name = 1;
+  optional string item_id = 2;
+  optional string last_modified = 3;
+  optional string href = 4;
+  optional SymbolType symbol_type = 5 [default = GRAPHIC];
+  optional string other_symbol_type = 6;
+  repeated KeyValue include_attributes = 7;
+  optional bool scale9 = 8;
+  optional Rectangle scale_grid = 9;
+  repeated Timeline timelines = 10;
+  optional XflDetail xfl = 15;
+}
+
+enum SymbolType {
+  MOVIE_CLIP = 0;
+  BUTTON = 1;
+  GRAPHIC = 2;
+}
+
+// ---------------------------------------------------------------------------
+// Timelines
+
+message Timeline {
+  optional string name = 1;
+  optional bool layer_depth_enabled = 2;
+  repeated double guides_x = 3 [packed = true];
+  repeated double guides_y = 4 [packed = true];
+  repeated Layer layers = 5;
+  repeated string extra_children = 6;
+  optional XflDetail xfl = 15;
+}
+
+message Layer {
+  optional string name = 1;
+  optional fixed32 color = 2 [default = 0xFF000000];
+  optional string current = 3;
+  optional LayerType layer_type = 4;
+  optional string other_layer_type = 5;
+  optional sint32 parent_layer_index = 6 [default = -1];
+  optional bool auto_named = 7;
+  optional bool selected = 8;
+  optional bool locked = 9;
+  optional bool outline = 10;
+  optional bool visible = 11 [default = true];
+  repeated Frame frames = 12;
+  repeated string extra_children = 13;
+  optional XflDetail xfl = 15;
+}
+
+enum LayerType {
+  NORMAL = 0;
+  MASK = 1;
+  MASKED = 2;
+  FOLDER = 3;
+  GUIDE = 4;
+}
+
+message Frame {
+  optional int32 index = 1;
+  optional int32 duration = 2 [default = 1];
+  optional string key_mode = 3;
+  optional string name = 4;
+  optional string label_type = 5;
+  optional TweenType tween_type = 6;
+  optional bool motion_tween_snap = 7;
+  optional bool motion_tween_sync = 8;
+  optional sint32 acceleration = 9;
+  optional bool has_custom_ease = 10;
+  repeated double custom_ease = 11 [packed = true]; // x, y pairs
+  optional string custom_ease_name = 12;
+  optional bool has_ease = 13;
+  optional string ease_method = 14;
+  repeated string other_eases = 15;
+  optional string motion_tween_rotate = 16;
+  optional int32 motion_tween_rotate_times = 17;
+  optional string other_tween_type = 18;
+  repeated string extra_children = 19;
+  optional string action_script = 20;
+  optional MorphShape morph_shape = 21;
+  optional fixed64 morph_signature = 22;
+  repeated Element elements = 23;
+  optional bool visible = 24 [default = true];
+  optional XflDetail xfl = 25;
+  optional XflDetail action_script_xfl = 26;
+}
+
+enum TweenType {
+  TWEEN_NONE = 0;
+  TWEEN_MOTION = 1;
+  TWEEN_SHAPE = 2;
+}
+
+// ---------------------------------------------------------------------------
+// Elements
+
+message Element {
+  optional Matrix matrix = 1;
+  optional Vector2 transformation_point = 2;
+  optional bool is_locked = 3;
+  optional bool is_selected = 4;
+  optional bool is_floating = 5;
+  optional bool keep_matrix = 6;
+  optional bool keep_transformation_point = 7;
+  optional bool visible = 8 [default = true];
+  repeated string extra_children = 9;
+  optional Rectangle local_bounds = 10;
+  optional XflDetail xfl = 15;
+
+  oneof kind {
+    Shape shape = 20;
+    Group group = 21;
+    SymbolInstance symbol_instance = 22;
+    BitmapInstance bitmap_instance = 23;
+    Text text = 24;
+    RectanglePrimitive rectangle = 25;
+    OvalPrimitive oval = 26;
+    RawXml raw = 27;
+    // 28-49 for new kinds (video instances, brush strokes kept live...).
+    VideoInstance video_instance = 28;
+  }
+}
+
+message Shape {
+  // The styles, in order, each with the index edges use for it.
+  repeated IndexedFill fills = 1;
+  repeated IndexedStroke strokes = 2;
+  repeated Edge edges = 3;
+  optional bool is_drawing_object = 4;
+  // Animate's cubics records, kept while the edges are as read.
+  repeated CubicRecord cubic_edges = 5;
+  optional uint64 read_edge_count = 6;
+}
+
+message IndexedFill {
+  optional int32 index = 1;            // 0 when not in the index map
+  optional Fill fill = 2;
+}
+
+message IndexedStroke {
+  optional int32 index = 1;
+  optional Stroke stroke = 2;
+}
+
+message CubicRecord {
+  optional uint64 before_edge = 1;
+  optional string xml = 2;
+}
+
+message Edge {
+  optional sint32 fill_style0 = 1 [default = -1];
+  optional sint32 fill_style1 = 2 [default = -1];
+  optional sint32 stroke_style = 3 [default = -1];
+  repeated Path paths = 4;
+  optional XflDetail xfl = 15;
+}
+
+// A path's segments: for each, (point count << 3) | command, where the
+// command is 0 move, 1 line, 2 quadratic, 3 cubic, 4 close; and the points
+// of all segments, in 1/256 twip, as zigzag deltas x, y from the previous
+// point (the first from 0, 0).
+message Path {
+  optional sint32 style_index = 1 [default = -1];
+  optional sint32 line_style_index = 2 [default = -1];
+  optional sint32 fill_style_index = 3 [default = -1];
+  repeated uint32 segments = 4 [packed = true];
+  repeated sint64 coordinates = 5 [packed = true];
+}
+
+message Group {
+  repeated Element members = 1;
+}
+
+message SymbolInstance {
+  optional string library_item_name = 1;
+  optional string name = 2;
+  optional int32 first_frame = 3;
+  optional SymbolType symbol_type = 4 [default = GRAPHIC];
+  optional LoopType loop_type = 5 [default = LOOP_PLAY_ONCE];
+  optional ColorTransform color_transform = 6;
+  optional string blend_mode = 7;
+  optional string other_symbol_type = 8;
+  optional bool keep_color = 9;
+  repeated string extra_filters = 10;
+  repeated Filter filters = 11;
+}
+
+enum LoopType {
+  LOOP_NONE = 0;
+  LOOP_SINGLE_FRAME = 1;
+  LOOP_LOOP = 2;
+  LOOP_PLAY_ONCE = 3;
+  LOOP_PING_PONG = 4;
+}
+
+message ColorTransform {
+  optional double tint_multiplier = 1;
+  optional fixed32 tint_color = 2 [default = 0xFF000000];
+  optional double brightness = 3;
+  optional double red_multiplier = 4 [default = 1];
+  optional double green_multiplier = 5 [default = 1];
+  optional double blue_multiplier = 6 [default = 1];
+  optional double alpha_multiplier = 7 [default = 1];
+  optional sint32 red_offset = 8;
+  optional sint32 green_offset = 9;
+  optional sint32 blue_offset = 10;
+  optional sint32 alpha_offset = 11;
+}
+
+message Filter {
+  optional FilterType type = 1;
+  optional bool enabled = 2 [default = true];
+  optional double blur_x = 3 [default = 5];
+  optional double blur_y = 4 [default = 5];
+  optional int32 quality = 5 [default = 1];
+  optional double angle = 6 [default = 45];
+  optional double distance = 7 [default = 5];
+  optional double strength = 8 [default = 1];
+  optional fixed32 color = 9 [default = 0xFF000000];
+  optional fixed32 highlight_color = 10 [default = 0xFFFFFFFF];
+  optional fixed32 shadow_color = 11 [default = 0xFF000000];
+  optional bool inner = 12;
+  optional bool knockout = 13;
+  optional bool hide_object = 14;
+  optional string bevel_type = 15;
+  optional double brightness = 16;
+  optional double contrast = 17;
+  optional double saturation = 18;
+  optional double hue = 19;
+  repeated GradientStop entries = 20;
+  optional XflDetail xfl = 21;
+}
+
+enum FilterType {
+  BLUR = 0;
+  DROP_SHADOW = 1;
+  GLOW = 2;
+  BEVEL = 3;
+  GRADIENT_GLOW = 4;
+  GRADIENT_BEVEL = 5;
+  ADJUST_COLOR = 6;
+}
+
+message BitmapInstance {
+  optional string library_item_name = 1;
+}
+
+message Text {
+  optional double left = 1;
+  optional double top = 2;
+  optional double width = 3;
+  optional double height = 4;
+  optional bool auto_expand = 5;
+  optional TextType text_type = 6;
+  optional string instance_name = 7;
+  optional string line_type = 8;
+  repeated TextRun runs = 9;
+}
+
+enum TextType {
+  TEXT_STATIC = 0;
+  TEXT_DYNAMIC = 1;
+  TEXT_INPUT = 2;
+}
+
+message TextRun {
+  optional string text = 1;
+  optional Alignment alignment = 2;
+  optional bool alias_text = 3;
+  optional bool auto_kern = 4 [default = true];
+  optional double letter_spacing = 5;
+  optional double line_height = 6;
+  optional double size = 7;
+  optional double bitmap_size = 8;
+  optional string face = 9;
+  optional fixed32 fill_color = 10 [default = 0xFF000000];
+  optional XflDetail xfl = 15;
+}
+
+enum Alignment {
+  ALIGN_LEFT = 0;
+  ALIGN_CENTER = 1;
+  ALIGN_RIGHT = 2;
+  ALIGN_JUSTIFY = 3;
+}
+
+message RectanglePrimitive {
+  optional Rectangle rect = 1;
+  optional Fill fill = 2;
+  optional Stroke stroke = 3;
+  optional double top_left_radius = 4;
+  optional double top_right_radius = 5;
+  optional double bottom_left_radius = 6;
+  optional double bottom_right_radius = 7;
+}
+
+message OvalPrimitive {
+  optional Rectangle rect = 1;
+  optional Fill fill = 2;
+  optional Stroke stroke = 3;
+  optional double start_angle = 4;
+  optional double end_angle = 5;
+  optional double inner_radius = 6;
+}
+
+message RawXml {
+  optional string xml = 1;
+}
+
+// ---------------------------------------------------------------------------
+// Fills and strokes
+
+message Fill {
+  optional Matrix matrix = 1;
+  optional string spread_method = 2;
+  optional string interpolation_method = 3;
+  optional XflDetail xfl = 15;
+
+  oneof kind {
+    fixed32 solid = 20;
+    Gradient linear_gradient = 21;
+    Gradient radial_gradient = 22;
+    BitmapFill bitmap = 23;
+  }
+}
+
+message Gradient {
+  repeated GradientStop stops = 1;
+  optional double focal_point_ratio = 2;  // radial
+}
+
+message GradientStop {
+  optional double ratio = 1;
+  optional fixed32 color = 2 [default = 0xFF000000];
+}
+
+message BitmapFill {
+  optional string bitmap_path = 1;
+  optional bool clipped = 2;
+}
+
+message Stroke {
+  optional StrokeKind kind = 1;
+  optional double weight = 2 [default = 1];
+  optional string scale_mode = 3;
+  optional string solid_style = 4;
+  optional string caps = 5;
+  optional string joints = 6;
+  optional double miter_limit = 7 [default = 3];
+  optional bool pixel_hinting = 8;
+  optional double dash1 = 9 [default = 6];
+  optional double dash2 = 10 [default = 6];
+  optional double dot_space = 11 [default = 3];
+  repeated KeyValue style_attributes = 12;
+  repeated string extra_children = 13;
+  repeated WidthMarker width_profile = 14;
+  optional Fill fill = 15;
+  optional XflDetail xfl = 16;
+  // 30-49: Phoenix's own stroke kinds. A brush stroke names its brush.
+  optional string brush = 30;
+}
+
+enum StrokeKind {
+  STROKE_SOLID = 0;
+  STROKE_DASHED = 1;
+  STROKE_RAGGED = 2;
+  STROKE_STIPPLE = 3;
+  STROKE_DOTTED = 4;
+  STROKE_HATCHED = 5;
+  STROKE_BRUSH = 6;                    // Phoenix: a textured or art brush
+}
+
+message WidthMarker {
+  optional double position = 1;
+  optional double left = 2 [default = 0.5];
+  optional double right = 3 [default = 0.5];
+  optional bool corner = 4;
+}
+
+// ---------------------------------------------------------------------------
+// Shape tweens
+
+message MorphShape {
+  repeated MorphSegment segments = 1;
+  optional string hints_xml = 2;
+  optional XflDetail xfl = 15;
+}
+
+message MorphSegment {
+  optional Vector2 start_a = 1;
+  optional Vector2 start_b = 2;
+  optional int32 stroke_index1 = 3;
+  optional int32 stroke_index2 = 4;
+  optional int32 fill_index1 = 5;
+  optional int32 fill_index2 = 6;
+  repeated MorphCurve curves = 7;
+  optional XflDetail xfl = 15;
+}
+
+message MorphCurve {
+  optional Vector2 control_a = 1;
+  optional Vector2 anchor_a = 2;
+  optional Vector2 control_b = 3;
+  optional Vector2 anchor_b = 4;
+  optional bool is_line = 5;
+  optional XflDetail xfl = 15;
+}
+
+// ---------------------------------------------------------------------------
+// Phoenix's own features. Defined so files can carry them; Phoenix fills
+// them in as the features are built. Each is a feature name in
+// FeatureRegistry below.
+
+// A brush for the Paint Brush and textured strokes ("textured-brushes"):
+// a tip image stamped along the stroke, or an art or pattern brush that
+// stretches or repeats a piece of art.
+message BrushDefinition {
+  optional string name = 1;
+  optional BrushKind kind = 2;
+  optional uint32 tip_media = 3;       // MEDIA_BRUSH_TEXTURE
+  optional double spacing = 4 [default = 0.25]; // of the tip size
+  optional double scatter = 5;
+  optional double angle = 6;
+  optional double angle_jitter = 7;
+  optional double size_jitter = 8;
+  optional double opacity_jitter = 9;
+  optional double roundness = 10 [default = 1];
+  optional bool follow_direction = 11;
+  repeated PressureMapping pressure = 12;
+  optional string art_symbol = 13;     // art and pattern brushes
+  optional fixed32 tint_mode = 14;
+}
+
+enum BrushKind {
+  BRUSH_STAMP = 0;                     // textured: a tip stamped along the stroke
+  BRUSH_ART = 1;                       // art stretched along the stroke
+  BRUSH_PATTERN = 2;                   // art repeated along the stroke
+}
+
+message PressureMapping {
+  // What the pen's pressure (or tilt, or speed) changes, and the curve,
+  // as x, y pairs from 0 to 1.
+  optional string input = 1;           // "pressure", "tilt", "velocity"
+  optional string target = 2;          // "size", "opacity", "flow"
+  repeated double curve = 3 [packed = true];
+}
+
+// A linked palette ("linked-palettes"): named colors that fills and strokes
+// point at, so one change recolors every use.
+message Palette {
+  optional string name = 1;
+  repeated PaletteColor colors = 2;
+}
+
+message PaletteColor {
+  optional string id = 1;
+  optional string name = 2;
+  optional fixed32 color = 3;
+}
+
+// A reference video ("reference-video"): a library item whose frames show
+// in the timeline while drawing and never export.
+message VideoItem {
+  optional string name = 1;
+  optional uint32 media = 2;           // MEDIA_VIDEO
+  optional double frame_rate = 3;
+  optional uint32 width = 4;
+  optional uint32 height = 5;
+  optional uint64 frame_count = 6;
+  optional uint32 sound_media = 7;
+}
+
+message VideoInstance {
+  optional string library_item_name = 1;
+  optional int32 first_frame = 2;
+}
+
+// Phoenix-only feature names, for Document.features and
+// required_features, and for the warning before an export to FLA:
+//
+//   variable-width-strokes   written to FLA as Animate's own (no loss)
+//   textured-brushes         flattened to fills on export
+//   linked-palettes          baked to plain colors on export
+//   reference-video          left out of the export
+message FeatureRegistry {}

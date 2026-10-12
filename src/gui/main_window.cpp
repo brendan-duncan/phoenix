@@ -46,6 +46,8 @@
 #include "../data/timeline.h"
 #include "../writer/xfl_content.h"
 #include "../writer/xfl_folder_writer.h"
+#include "../phx/container.h"
+#include "../phx/phx_document.h"
 
 #include <cmath>
 #include <cstdint>
@@ -53,6 +55,7 @@
 #include <algorithm>
 
 #include <QApplication>
+#include <QBuffer>
 #include <QClipboard>
 #include <QImage>
 #include <QPushButton>
@@ -266,7 +269,12 @@ namespace {
 bool isDocumentPath(const QString& path)
 {
     const QString lower = path.toLower();
-    return lower.endsWith(".fla") || lower.endsWith(".xfl");
+    return lower.endsWith(".phx") || lower.endsWith(".fla") || lower.endsWith(".xfl");
+}
+
+bool isPhxPath(const QString& path)
+{
+    return path.endsWith(".phx", Qt::CaseInsensitive);
 }
 
 } // namespace
@@ -477,9 +485,49 @@ void MainWindow::createNewDocument(int width, int height, double frameRate, cons
         QTimer::singleShot(0, this, [this]() { _phoenixView->zoomToFit(); });
 }
 
+void MainWindow::openDocumentPath(const QString& filePath)
+{
+    if (filePath.isEmpty() || !confirmDiscardChanges())
+        return;
+    loadFLAFile(filePath);
+}
+
 void MainWindow::loadFLAFile(const QString& filePath)
 {
     releaseDocument();
+
+    // A Phoenix document is known by its first bytes, whatever its name.
+    if (phx::isPhx(filePath.toStdString()))
+    {
+        std::string error;
+        std::string warning;
+        bool readOnly = false;
+        fla::FLADocument* document = phx::load(filePath.toStdString(), error, warning, readOnly);
+        if (!document)
+        {
+            adoptDocument(nullptr, QString(), QString());
+            QMessageBox::warning(this, "Cannot Open Document",
+                QString("%1\n\n%2").arg(QFileInfo(filePath).fileName(), QString::fromStdString(error)));
+            return;
+        }
+        adoptDocument(document, filePath, QFileInfo(filePath).fileName());
+        addToRecentFiles(filePath);
+        if (readOnly)
+        {
+            // Saving over it could lose what this Phoenix does not
+            // understand: Save asks for a new name instead.
+            _documentPath.clear();
+            _documentName = QFileInfo(filePath).fileName() + " (read-only)";
+            updateEditState();
+        }
+        if (!warning.empty())
+        {
+            QMessageBox::information(this, "Open Document",
+                QString("%1\n\n%2").arg(QFileInfo(filePath).fileName(),
+                    QString::fromStdString(warning).trimmed()));
+        }
+        return;
+    }
 
     FLAParser parser;
     fla::FLADocument* document = parser.parse(filePath.toStdString());
@@ -1747,8 +1795,9 @@ void MainWindow::setupMenus()
 
 void MainWindow::openFile()
 {
-    QString fileName = QFileDialog::getOpenFileName(this,
-        tr("Open FLA File"), _lastDirectory, tr("FLA Files (*.fla;DOMDocument.xml);;All Files (*)"));
+    QString fileName = QFileDialog::getOpenFileName(this, tr("Open"), _lastDirectory,
+        tr("Documents (*.phx *.fla DOMDocument.xml);;Phoenix Documents (*.phx);;FLA Files (*.fla);;"
+           "XFL Documents (DOMDocument.xml);;All Files (*)"));
 
     if (!fileName.isEmpty())
     {
@@ -1801,12 +1850,32 @@ bool MainWindow::saveToPath(const QString& filePath)
     if (_phoenixView)
         _phoenixView->flushPendingMerge();
 
-    if (!confirmLossySave())
+    if (!isPhxPath(filePath) && !confirmLossySave())
         return false;
 
     QString error;
 
-    if (filePath.endsWith(".fla", Qt::CaseInsensitive))
+    if (isPhxPath(filePath))
+    {
+        phx::SaveOptions options;
+        options.application = QString("Phoenix %1").arg(QCoreApplication::applicationVersion()).toStdString();
+        if (_phoenixView)
+        {
+            // A small picture of the first frame, for file browsers.
+            const int width = 256;
+            const fla::Document* document = _flaDocument->document;
+            const int height = std::max(1, width * std::max(1, document->height) / std::max(1, document->width));
+            const QImage picture = _phoenixView->renderFrame(0, QSize(width, height), false);
+            QByteArray png;
+            QBuffer buffer(&png);
+            if (buffer.open(QIODevice::WriteOnly) && picture.save(&buffer, "PNG"))
+                options.thumbnailPng.assign(png.begin(), png.end());
+        }
+        std::string phxError;
+        if (!phx::save(*_flaDocument->document, filePath.toStdString(), options, phxError))
+            error = QString::fromStdString(phxError);
+    }
+    else if (filePath.endsWith(".fla", Qt::CaseInsensitive))
     {
         // Written beside the original and moved into place once complete,
         // so a save that fails part way leaves the original untouched.
@@ -1866,7 +1935,7 @@ void MainWindow::saveFile()
 
     // Saving writes the current format, which Flash CS4 and earlier cannot
     // open, so an old binary document is not replaced without asking.
-    if (_flaDocument && _flaDocument->fromBinary)
+    if (_flaDocument && _flaDocument->fromBinary && !isPhxPath(_documentPath))
     {
         QMessageBox box(QMessageBox::Question, "Save",
             "This document was opened from the Flash CS4 (or earlier) format. Phoenix saves the current "
@@ -1897,17 +1966,28 @@ void MainWindow::saveFileAs()
         return;
     }
 
+    // A new document is a Phoenix document; one opened from FLA or XFL is
+    // offered in its own format, with Phoenix's a choice away.
     const QString suggested = _documentPath.isEmpty()
-        ? (_lastDirectory.isEmpty() ? QString("untitled.fla")
-                                    : QDir(_lastDirectory).filePath("untitled.fla"))
+        ? (_lastDirectory.isEmpty() ? QString("untitled.phx")
+                                    : QDir(_lastDirectory).filePath("untitled.phx"))
         : _documentPath;
 
+    const QString phxFilter = tr("Phoenix Document (*.phx)");
+    const QString flaFilter = tr("FLA Files (*.fla)");
+    const QString xflFilter = tr("XFL Folder (*)");
+    QString selected = isPhxPath(suggested) ? phxFilter
+        : suggested.endsWith(".fla", Qt::CaseInsensitive) ? flaFilter : xflFilter;
     QString fileName = QFileDialog::getSaveFileName(this,
-        tr("Save As"), suggested,
-        tr("FLA Files (*.fla);;XFL Folder (*)"));
+        tr("Save As"), suggested, phxFilter + ";;" + flaFilter + ";;" + xflFilter, &selected);
 
     if (fileName.isEmpty())
         return;
+    // The format chosen decides the extension when the name has none.
+    if (selected == phxFilter && !isPhxPath(fileName))
+        fileName += ".phx";
+    else if (selected == flaFilter && !fileName.endsWith(".fla", Qt::CaseInsensitive))
+        fileName += ".fla";
 
     if (saveToPath(fileName))
     {

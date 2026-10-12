@@ -141,9 +141,14 @@ if(TARGET tinyxml2 AND TARGET zlibstatic)
         ${PHOENIX_SRC}/writer/xfl_content.cpp
         ${PHOENIX_SRC}/writer/xfl_folder_writer.cpp
         ${PHOENIX_SRC}/writer/xfl_writer.cpp
+        ${PHOENIX_SRC}/phx/container.cpp
+        ${PHOENIX_SRC}/phx/phx_dump.cpp
+        ${PHOENIX_SRC}/phx/phx_read.cpp
+        ${PHOENIX_SRC}/phx/phx_write.cpp
     )
     list(APPEND TEST_SOURCES
         test_fla_writer.cpp
+        test_phx.cpp
         test_shape_geometry.cpp
         test_xfl_writer.cpp
     )

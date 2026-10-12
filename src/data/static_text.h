@@ -36,6 +36,8 @@ struct TextRun
     /// file wrote, as DOMElement keeps them.
     std::vector<std::pair<std::string, std::string>> extraAttributes;
     std::vector<std::string> presentAttributes;
+    /// Unknown .phx fields of the run, kept (see DOMElement::phxUnknown).
+    std::string phxUnknown;
 };
 
 class StaticText : public Element

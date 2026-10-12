@@ -94,6 +94,19 @@ public:
     };
     std::vector<SoundInfo> sounds;
 
+    /// What a .phx file held that this Phoenix does not know: whole chunks,
+    /// written back unchanged on save, and the Phoenix-only features the
+    /// document uses (docs/PHOENIX_FORMAT.md).
+    struct UnknownChunk
+    {
+        uint32_t type = 0;
+        uint32_t flags = 0;
+        std::string content;
+    };
+    std::vector<UnknownChunk> phxUnknownChunks;
+    std::vector<std::string> phxFeatures;
+    std::vector<std::string> phxRequiredFeatures;
+
     std::vector<fla::SymbolInstance*> symbolInstances; // List of all symbol instances in the document
     std::map<const fla::Symbol*, std::vector<const fla::SymbolInstance*>> symbolInstancesMap; // Map of symbols to their instances
 

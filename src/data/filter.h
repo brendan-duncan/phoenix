@@ -71,6 +71,8 @@ struct Filter
     /// modeled ones the file wrote, as DOMElement keeps them.
     std::vector<std::pair<std::string, std::string>> extraAttributes;
     std::vector<std::string> presentAttributes;
+    /// Unknown .phx fields of the filter, kept (see DOMElement::phxUnknown).
+    std::string phxUnknown;
 
     /// The element name the file uses for this type.
     const char* elementName() const

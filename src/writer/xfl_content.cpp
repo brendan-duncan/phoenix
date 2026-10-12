@@ -167,6 +167,17 @@ std::vector<std::string> unsupportedContent(const Document& document)
     if (!XFLContent::build(document, std::string(), entries, unsupported, error))
         unsupported.push_back(error);
 
+    // What a Phoenix document holds that an FLA cannot: Phoenix's own
+    // features, and parts from a newer Phoenix this one keeps without
+    // knowing them. Variable width strokes are Animate's own as well.
+    for (const std::string& feature : document.phxFeatures)
+    {
+        if (feature != "variable-width-strokes")
+            unsupported.push_back("Phoenix-only feature: " + feature);
+    }
+    if (!document.phxUnknownChunks.empty() || !document.phxUnknown.empty())
+        unsupported.push_back("parts saved by a newer Phoenix");
+
     return unsupported;
 }
 

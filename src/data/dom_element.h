@@ -94,6 +94,11 @@ public:
     /// own defaults and writes some attributes always.
     std::vector<std::string> presentAttributes;
 
+    /// Fields a .phx file had for this object that this Phoenix does not
+    /// know, as they were encoded, written back on save so a newer Phoenix's
+    /// data survives an older one (docs/PHOENIX_FORMAT.md).
+    std::string phxUnknown;
+
     DOMElement(DOMElement* parent)
         : parent(parent)
     {}

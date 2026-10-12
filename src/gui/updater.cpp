@@ -1,4 +1,5 @@
 #include "updater.h"
+#include "file_association.h"
 
 #include <QApplication>
 #include <QMessageBox>
@@ -47,7 +48,13 @@ void Updater::handleStartup()
     {
         // An update downloaded but not installed is installed as Phoenix
         // quits instead (applyOnExit), rather than holding up a start.
-        Velopack::VelopackApp::Build().SetAutoApplyOnStartup(false).Run();
+        // The installer's hooks: Phoenix's file types come and go with it.
+        Velopack::VelopackApp::Build()
+            .SetAutoApplyOnStartup(false)
+            .OnAfterInstall([](void*, const char*) { FileAssociation::registerTypes(); })
+            .OnAfterUpdate([](void*, const char*) { FileAssociation::registerTypes(); })
+            .OnBeforeUninstall([](void*, const char*) { FileAssociation::unregisterTypes(); })
+            .Run();
     }
     catch (const std::exception&)
     {

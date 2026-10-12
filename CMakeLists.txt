@@ -75,6 +75,7 @@ set(HEADERS
     src/gui/frame_picker_panel.h
     src/gui/swap_symbol_dialog.h
     src/gui/start_dialog.h
+    src/gui/file_association.h
     src/gui/color_panel.h
     src/gui/video_import.h
     src/gui/swatches_panel.h
@@ -205,6 +206,11 @@ set(HEADERS
     src/writer/xfl_content.h
     src/writer/xfl_folder_writer.h
     src/writer/xfl_writer.h
+    src/phx/container.h
+    src/phx/phx_codec.h
+    src/phx/phx_document.h
+    src/phx/phx_schema.h
+    src/phx/wire.h
     src/util/zip_archive.h
     src/util/zip_writer.h
 )
@@ -218,6 +224,7 @@ set(SOURCES
     src/gui/frame_picker_panel.cpp
     src/gui/swap_symbol_dialog.cpp
     src/gui/start_dialog.cpp
+    src/gui/file_association.cpp
     src/gui/color_panel.cpp
     src/gui/video_import.cpp
     src/gui/swatches_panel.cpp
@@ -343,6 +350,10 @@ set(SOURCES
     src/writer/xfl_content.cpp
     src/writer/xfl_folder_writer.cpp
     src/writer/xfl_writer.cpp
+    src/phx/container.cpp
+    src/phx/phx_dump.cpp
+    src/phx/phx_read.cpp
+    src/phx/phx_write.cpp
     src/util/zip_archive.cpp
     src/util/zip_writer.cpp
 )
@@ -377,7 +388,8 @@ if(APPLE)
         MACOSX_BUNDLE_GUI_IDENTIFIER com.brendanduncan.phoenix
         MACOSX_BUNDLE_ICON_FILE phoenix.icns
         MACOSX_BUNDLE_BUNDLE_VERSION ${PHOENIX_VERSION_NUMERIC}
-        MACOSX_BUNDLE_SHORT_VERSION_STRING ${PHOENIX_VERSION_NUMERIC})
+        MACOSX_BUNDLE_SHORT_VERSION_STRING ${PHOENIX_VERSION_NUMERIC}
+        MACOSX_BUNDLE_INFO_PLIST ${CMAKE_CURRENT_SOURCE_DIR}/cmake/Info.plist.in)
 endif()
 
 target_link_libraries(Phoenix PRIVATE Qt6::Widgets Qt6::Svg zlibstatic tinyxml2 libas3)
