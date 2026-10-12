@@ -23,6 +23,7 @@
 #include "../edit/layer_commands.h"
 #include "../edit/library_media.h"
 #include "../edit/frame_commands.h"
+#include "../edit/frame_bake.h"
 #include "../edit/timeline_edit.h"
 #include "../edit/library_commands.h"
 #include "../edit/property_command.h"
@@ -714,6 +715,7 @@ void MainWindow::setupUI()
 
     // Frame edits from the grid itself: dragging a keyframe, the menu.
     connect(_timelineView, &TimelineView::keyframeMoveRequested, this, &MainWindow::moveKeyframe);
+    connect(_timelineView, &TimelineView::spanResizeRequested, this, &MainWindow::resizeSpan);
     connect(_timelineView, &TimelineView::framesMoveRequested, this, &MainWindow::moveFrames);
     connect(_timelineView, &TimelineView::framesContextMenuRequested, this, &MainWindow::showFramesMenu);
 
@@ -839,6 +841,40 @@ void MainWindow::createShapeTween()
     });
 }
 
+void MainWindow::resizeSpan(const fla::Layer* constLayer, int keyframe, int duration)
+{
+    fla::Layer* layer = const_cast<fla::Layer*>(constLayer);
+    if (!layer || layer->isLocked() || duration < 1)
+        return;
+    fla::Frame* span = nullptr;
+    for (fla::Frame* frame : layer->frames)
+    {
+        if (frame && frame->index == keyframe)
+            span = frame;
+    }
+    if (!span || span->duration == duration)
+        return;
+    const int before = span->duration;
+    _selection.clear();
+    auto* command = new fla::EditFramesCommand({layer}, duration > before ? "Extend Span" : "Shorten Span",
+        [layer, keyframe, before, duration](std::vector<fla::Frame*>& removed) {
+            if (duration > before)
+                fla::timeline::insertFrames(*layer, keyframe + before - 1, duration - before);
+            else
+                fla::timeline::removeFrames(*layer, keyframe + duration, before - duration, removed);
+            fla::timeline::fitMotionSpans(*layer);
+        });
+    _editContext.commandStack().push(fla::CommandPtr(command));
+    _editContext.commandStack().breakMergeChain();
+    if (_phoenixView)
+    {
+        _phoenixView->clearCaches();
+        _phoenixView->update();
+    }
+    if (_timelineView)
+        _timelineView->refreshFrames();
+}
+
 void MainWindow::moveKeyframe(const fla::Layer* constLayer, int from, int to)
 {
     if (!constLayer)
@@ -960,6 +996,31 @@ void MainWindow::relinkFrameClipboard(const fla::SymbolList* library)
 
 void MainWindow::pasteFrames()
 {
+    pasteFramesAs(false);
+}
+
+void MainWindow::pasteFramesOverwrite()
+{
+    pasteFramesAs(true);
+}
+
+void MainWindow::convertToFrameByFrame()
+{
+    const double rate = _flaDocument && _flaDocument->document ? _flaDocument->document->frameRate : 24.0;
+    editFrames("Convert to Frame-by-Frame", [rate](fla::Layer& layer, int first, int last, std::vector<fla::Frame*>&) {
+        fla::frames::convertToFrameByFrame(layer, first, last, rate);
+    });
+}
+
+void MainWindow::reverseFrames()
+{
+    editFrames("Reverse Frames", [](fla::Layer& layer, int first, int last, std::vector<fla::Frame*>& removed) {
+        fla::frames::reverseFrames(layer, first, last, removed);
+    });
+}
+
+void MainWindow::pasteFramesAs(bool overwrite)
+{
     if (_frameClipboard.empty())
         return;
     const FrameSelection selection = framesToEdit();
@@ -1001,10 +1062,15 @@ void MainWindow::pasteFrames()
     const int at = selection.first;
 
     _selection.clear();
-    auto* command = new fla::EditFramesCommand(targets, "Paste Frames",
-        [targets, clips, at](std::vector<fla::Frame*>& removed) {
+    auto* command = new fla::EditFramesCommand(targets, overwrite ? "Paste and Overwrite Frames" : "Paste Frames",
+        [targets, clips, at, overwrite](std::vector<fla::Frame*>& removed) {
             for (size_t i = 0; i < targets.size() && i < clips.size(); ++i)
-                fla::timeline::pasteFrames(*targets[i], at, clips[i], removed);
+            {
+                if (overwrite)
+                    fla::timeline::pasteFrames(*targets[i], at, clips[i], removed);
+                else
+                    fla::frames::insertFrames(*targets[i], at, clips[i], removed);
+            }
         });
     _editContext.commandStack().push(fla::CommandPtr(command));
     _editContext.commandStack().breakMergeChain();
@@ -1299,6 +1365,15 @@ void MainWindow::setupMenus()
     QAction* pasteFramesAction = editTimelineMenu->addAction("&Paste Frames");
     pasteFramesAction->setShortcut(QKeySequence(Qt::CTRL | Qt::ALT | Qt::Key_V));
     connect(pasteFramesAction, &QAction::triggered, this, &MainWindow::pasteFrames);
+    QAction* pasteOverwriteAction = editTimelineMenu->addAction("Paste and &Overwrite Frames");
+    connect(pasteOverwriteAction, &QAction::triggered, this, &MainWindow::pasteFramesOverwrite);
+    editTimelineMenu->addSeparator();
+    QAction* reverseAction = editTimelineMenu->addAction("&Reverse Frames");
+    reverseAction->setStatusTip("Play the selected frames backward");
+    connect(reverseAction, &QAction::triggered, this, &MainWindow::reverseFrames);
+    QAction* frameByFrameAction = editTimelineMenu->addAction("Convert to &Frame-by-Frame Animation");
+    frameByFrameAction->setStatusTip("Make every frame of the selected tweens a keyframe of its own");
+    connect(frameByFrameAction, &QAction::triggered, this, &MainWindow::convertToFrameByFrame);
     editMenu->addSeparator();
     editMenu->addMenu(editTimelineMenu);
 
@@ -1318,6 +1393,10 @@ void MainWindow::setupMenus()
     _framesMenu->addAction(cutFramesAction);
     _framesMenu->addAction(copyFramesAction);
     _framesMenu->addAction(pasteFramesAction);
+    _framesMenu->addAction(pasteOverwriteAction);
+    _framesMenu->addSeparator();
+    _framesMenu->addAction(reverseAction);
+    _framesMenu->addAction(frameByFrameAction);
 
     QMenu* modifyMenu = menuBar->addMenu("&Modify");
 

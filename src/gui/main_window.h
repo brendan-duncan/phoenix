@@ -176,10 +176,21 @@ private slots:
     void setClassicTween(bool on);
     void createShapeTween();
     void moveKeyframe(const fla::Layer* layer, int from, int to);
+    /// A span Ctrl-dragged to \a duration frames: frames go in or come out
+    /// at its end, and what follows moves along.
+    void resizeSpan(const fla::Layer* layer, int keyframe, int duration);
     void moveFrames(const std::vector<const fla::Layer*>& sources, const std::vector<const fla::Layer*>& targets, int first, int last, int to, bool copy);
     void copyFrames();
     void cutFrames();
     void pasteFrames();
+    /// Paste and Overwrite Frames: the copies replace the frames from the
+    /// selection on, nothing moving (Paste Frames moves them along).
+    void pasteFramesOverwrite();
+    void pasteFramesAs(bool overwrite);
+    /// Modify > Timeline > Convert to Frame-by-Frame Animation and Reverse
+    /// Frames.
+    void convertToFrameByFrame();
+    void reverseFrames();
     void showFramesMenu(const QPoint& globalPos);
     void addLayer(bool folder);
     void deleteCurrentLayer();

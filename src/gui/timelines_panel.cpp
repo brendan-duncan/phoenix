@@ -257,6 +257,7 @@ TimelinesPanel::TimelinesPanel(Player* player, QWidget *parent)
     connect(_gridContainer, &TimelineGrid::keyframeMoveRequested, this, &TimelinesPanel::keyframeMoveRequested);
     connect(_gridContainer, &TimelineGrid::framesMoveRequested, this, &TimelinesPanel::framesMoveRequested);
     connect(_gridContainer, &TimelineGrid::contextMenuRequested, this, &TimelinesPanel::contextMenuRequested);
+    connect(_gridContainer, &TimelineGrid::spanResizeRequested, this, &TimelinesPanel::spanResizeRequested);
     connect(_playTimer, &QTimer::timeout, this, &TimelinesPanel::onTimerTick);
 }
 
@@ -739,9 +740,28 @@ void TimelineGrid::mousePressEvent(QMouseEvent* event)
     if (event->button() == Qt::RightButton && insideSelection)
         return;
 
+    const fla::Layer* layer = _rows[row].layer;
+
+    // Ctrl on a span's last frame takes hold of its end: dragging stretches
+    // or shortens the span, as in Animate.
+    if (layer && event->button() == Qt::LeftButton && (event->modifiers() & Qt::ControlModifier))
+    {
+        for (const fla::Frame* span : layer->frames)
+        {
+            if (span && span->index + span->duration - 1 == frame)
+            {
+                _resizingSpan = true;
+                _resizeRow = row;
+                _resizeKeyframe = span->index;
+                _resizeDuration = span->duration;
+                update();
+                return;
+            }
+        }
+    }
+
     // Pressing a keyframe that is already selected on its own picks it up
     // to drag, as Animate does.
-    const fla::Layer* layer = _rows[row].layer;
     bool onKeyframe = false;
     if (layer && event->button() == Qt::LeftButton)
     {
@@ -791,7 +811,16 @@ void TimelineGrid::mousePressEvent(QMouseEvent* event)
 
 void TimelineGrid::mouseMoveEvent(QMouseEvent* event)
 {
-    if (_draggingLoop)
+    if (_resizingSpan)
+    {
+        const int duration = std::max(1, frameAt(event->pos().x()) - _resizeKeyframe + 1);
+        if (duration != _resizeDuration)
+        {
+            _resizeDuration = duration;
+            update();
+        }
+    }
+    else if (_draggingLoop)
     {
         const int at = std::max(0, frameAt(event->pos().x()));
         if (_draggingLoop == 1)
@@ -851,6 +880,13 @@ void TimelineGrid::mouseReleaseEvent(QMouseEvent* event)
     {
         _isDragging = false;
         _draggingLoop = 0;
+        if (_resizingSpan)
+        {
+            _resizingSpan = false;
+            if (_resizeRow < static_cast<int>(_rows.size()))
+                emit spanResizeRequested(_rows[_resizeRow].layer, _resizeKeyframe, _resizeDuration);
+            update();
+        }
         _selecting = false;
         if (_movingBlock)
         {
@@ -1148,6 +1184,17 @@ void TimelineGrid::paintEvent(QPaintEvent* event)
         const int last = std::max(_anchorFrame, _focusFrame) + _blockFrames;
         const QRect ghost(first * cellStride, headerHeight + top * layerRowHeight,
             (last - first + 1) * cellStride - margin, (bottom - top) * layerRowHeight + frameHeight);
+        painter.setRenderHint(QPainter::Antialiasing, false);
+        painter.setPen(QPen(QColor(41, 128, 238), 2.0));
+        painter.setBrush(Qt::NoBrush);
+        painter.drawRect(ghost.adjusted(1, 1, -1, -1));
+    }
+
+    // A span being stretched shows its new length.
+    if (_resizingSpan)
+    {
+        const QRect ghost(_resizeKeyframe * cellStride, headerHeight + _resizeRow * layerRowHeight,
+            _resizeDuration * cellStride - margin, frameHeight);
         painter.setRenderHint(QPainter::Antialiasing, false);
         painter.setPen(QPen(QColor(41, 128, 238), 2.0));
         painter.setBrush(Qt::NoBrush);

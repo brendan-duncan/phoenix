@@ -192,6 +192,7 @@ set(HEADERS
     src/edit/library_commands.h
     src/edit/library_media.h
     src/edit/frame_sound.h
+    src/edit/frame_bake.h
     src/edit/swatches.h
     src/edit/property_command.h
     src/geom/curve.h
@@ -337,6 +338,7 @@ set(SOURCES
     src/edit/library_commands.cpp
     src/edit/library_media.cpp
     src/edit/frame_sound.cpp
+    src/edit/frame_bake.cpp
     src/edit/swatches.cpp
     src/geom/curve.cpp
     src/geom/intersect.cpp

@@ -6,6 +6,9 @@
 #include "../src/edit/command_stack.h"
 #include "../src/edit/timeline_edit.h"
 #include "../src/edit/motion_object.h"
+#include "../src/edit/frame_bake.h"
+#include "../src/data/symbol_instance.h"
+#include <cmath>
 #include <memory>
 
 #include <memory>
@@ -305,4 +308,107 @@ TEST(frame_commands_keep_an_object_motion_tween_whole)
     CHECK(fla::timeline::setTween(*l, 0, false));
     CHECK(l->frames[0]->otherTweenType.empty());
     CHECK(fla::timeline::motionOf(*l->frames[0]) == nullptr);
+}
+
+namespace {
+
+/// A classic tween: an instance at x 0 on frame 0 (10 frames) moving to
+/// x 100 on frame 10 (1 frame).
+std::unique_ptr<fla::Layer> classicTween()
+{
+    std::unique_ptr<fla::Layer> layer(new fla::Layer(nullptr));
+    fla::Frame* a = new fla::Frame(layer.get());
+    a->index = 0;
+    a->duration = 10;
+    a->tweenType = fla::TweenType::Motion;
+    a->acceleration = 50;
+    a->elements.push_back(new fla::SymbolInstance(a));
+    fla::Frame* b = new fla::Frame(layer.get());
+    b->index = 10;
+    b->duration = 1;
+    auto* moved = new fla::SymbolInstance(b);
+    moved->transform.tx = 100.0;
+    b->elements.push_back(moved);
+    layer->frames = {a, b};
+    layer->lastFrame = 11;
+    return layer;
+}
+
+} // namespace
+
+TEST(convert_to_frame_by_frame_bakes_a_tween_into_keyframes)
+{
+    std::unique_ptr<fla::Layer> layer = classicTween();
+    layer->frames[0]->acceleration = 0;
+    fla::frames::convertToFrameByFrame(*layer, 0, 9, 24.0);
+    CHECK(layer->frames.size() == 11);
+    for (int i = 0; i < 10; ++i)
+    {
+        const fla::Frame* frame = layer->frames[static_cast<size_t>(i)];
+        CHECK(frame->index == i && frame->duration == 1 && frame->tweenType == fla::TweenType::None);
+        CHECK(frame->elements.size() == 1 && std::fabs(frame->elements[0]->transform.tx - 10.0 * i) < 1e-9);
+    }
+    for (fla::Frame* frame : layer->frames)
+    {
+        for (fla::Element* element : frame->elements)
+            CHECK(element->parent == frame);
+    }
+}
+
+TEST(reverse_frames_plays_a_tween_backward)
+{
+    std::unique_ptr<fla::Layer> layer = classicTween();
+    std::vector<fla::Frame*> removed;
+    fla::frames::reverseFrames(*layer, 0, 10, removed);
+    // The end keyframe comes first and tweens back to the start, eased the
+    // other way.
+    CHECK(spans(*layer, {{0, 10}, {10, 1}}));
+    CHECK(layer->frames[0]->elements[0]->transform.tx == 100.0);
+    CHECK(layer->frames[0]->tweenType == fla::TweenType::Motion && layer->frames[0]->acceleration == -50);
+    CHECK(layer->frames[1]->elements[0]->transform.tx == 0.0);
+    CHECK(layer->frames[1]->tweenType == fla::TweenType::None);
+}
+
+TEST(reverse_frames_reverses_held_drawings)
+{
+    // Drawing A for 1 frame, then B held for 5: reversed, B for 5 then A.
+    std::unique_ptr<fla::Layer> layer(new fla::Layer(nullptr));
+    fla::Frame* a = new fla::Frame(layer.get());
+    a->index = 0;
+    a->duration = 1;
+    a->elements.push_back(new fla::Shape(a));
+    fla::Frame* b = new fla::Frame(layer.get());
+    b->index = 1;
+    b->duration = 5;
+    b->elements.push_back(new fla::Shape(b));
+    b->elements.push_back(new fla::Shape(b));
+    layer->frames = {a, b};
+    std::vector<fla::Frame*> removed;
+    fla::frames::reverseFrames(*layer, 0, 5, removed);
+    CHECK(layer->frames.size() == 3);
+    // A has one shape, B two.
+    CHECK(layer->frames.back()->index == 5 && layer->frames.back()->elements.size() == 1);
+    for (size_t i = 0; i + 1 < layer->frames.size(); ++i)
+        CHECK(layer->frames[i]->elements.size() == 2);
+    int covered = 0;
+    for (const fla::Frame* frame : layer->frames)
+        covered += frame->duration;
+    CHECK(covered == 6);
+}
+
+TEST(paste_frames_inserts_and_moves_the_rest_along)
+{
+    std::unique_ptr<fla::Layer> layer = twoSpans();
+    std::vector<fla::Frame*> copies = fla::timeline::copyFrames(*layer, 0, 1);
+    std::vector<const fla::Frame*> copied(copies.begin(), copies.end());
+    std::vector<fla::Frame*> removed;
+    fla::frames::insertFrames(*layer, 5, copied, removed);
+    // The pasted two frames sit at 5 and the span that was there starts at 7.
+    CHECK(layer->frames.size() == 3);
+    CHECK(layer->frames[1]->index == 5 && layer->frames[1]->duration == 2);
+    CHECK(layer->frames[2]->index == 7 && layer->frames[2]->duration == 5);
+    for (fla::Frame* frame : copies)
+        delete frame;
+    for (fla::Frame* frame : removed)
+        delete frame;
 }

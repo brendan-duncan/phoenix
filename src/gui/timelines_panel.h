@@ -97,6 +97,9 @@ signals:
 
     /// The frames were right-clicked; the menu goes at \a globalPos.
     void contextMenuRequested(const QPoint& globalPos);
+    /// The span starting at \a keyframe was stretched or shortened to
+    /// \a duration frames by Ctrl-dragging its end.
+    void spanResizeRequested(const fla::Layer* layer, int keyframe, int duration);
 
 protected:
     void paintEvent(QPaintEvent* event) override;
@@ -145,6 +148,12 @@ private:
     int _focusRow = 0;
     int _focusFrame = 0;
     bool _selecting = false;
+
+    /// A span's end being dragged: its row, its keyframe and its length.
+    bool _resizingSpan = false;
+    int _resizeRow = 0;
+    int _resizeKeyframe = 0;
+    int _resizeDuration = 0;
 
     /// A keyframe being dragged: its row, where it started and where it is.
     bool _movingKeyframe = false;
@@ -225,6 +234,7 @@ signals:
     void keyframeMoveRequested(const fla::Layer* layer, int from, int to);
     void framesMoveRequested(const std::vector<const fla::Layer*>& sources, const std::vector<const fla::Layer*>& targets, int first, int last, int to, bool copy);
     void contextMenuRequested(const QPoint& globalPos);
+    void spanResizeRequested(const fla::Layer* layer, int keyframe, int duration);
 
 private slots:
     void onGotoFirstFrame();
