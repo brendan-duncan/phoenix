@@ -1459,7 +1459,28 @@ void MainWindow::setupMenus()
     // Modify menu, with Animate's keys.
     // Insert: Animate's timeline commands, which also live on the frames'
     // right-click menu.
+    // Edit > Edit Symbols / Edit Document, and Edit in Place.
+    editMenu->addSeparator();
+    QAction* editSymbolsAction = editMenu->addAction("Edit S&ymbols");
+    editSymbolsAction->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_E));
+    editSymbolsAction->setStatusTip("Open the selected instance's symbol, or go back to the document");
+    connect(editSymbolsAction, &QAction::triggered, this, &MainWindow::editSymbolsOrDocument);
+    connect(editMenu, &QMenu::aboutToShow, this, [this, editSymbolsAction]() {
+        editSymbolsAction->setText(_phoenixView && _phoenixView->scopeDepth() > 0 ? "Edit &Document" : "Edit S&ymbols");
+    });
+    QAction* editInPlaceAction = editMenu->addAction("Edit in &Place");
+    connect(editInPlaceAction, &QAction::triggered, this, [this]() {
+        if (auto* instance = dynamic_cast<fla::SymbolInstance*>(_selection.single()))
+            _phoenixView->enterSymbol(instance);
+    });
+
     QMenu* insertMenu = menuBar->addMenu("&Insert");
+    QAction* newSymbolAction = insertMenu->addAction("New &Symbol...");
+    newSymbolAction->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_F8));
+    newSymbolAction->setStatusTip("Make an empty symbol in the library and open it to draw in");
+    connect(newSymbolAction, &QAction::triggered, this, &MainWindow::newSymbol);
+    insertMenu->addSeparator();
+
     QMenu* timelineMenu = insertMenu->addMenu("&Timeline");
     QAction* insertFrameAction = timelineMenu->addAction("&Frame");
     insertFrameAction->setShortcut(QKeySequence(Qt::Key_F5));
@@ -1650,6 +1671,13 @@ void MainWindow::setupMenus()
     modifyMenu->addSeparator();
 
     QMenu* arrangeMenu = modifyMenu->addMenu("&Arrange");
+    QAction* lockAction = new QAction("&Lock", this);
+    lockAction->setShortcut(QKeySequence(Qt::CTRL | Qt::ALT | Qt::Key_L));
+    lockAction->setStatusTip("Keep the selected objects from being picked or moved");
+    connect(lockAction, &QAction::triggered, this, &MainWindow::lockSelection);
+    QAction* unlockAction = new QAction("&Unlock All", this);
+    unlockAction->setShortcut(QKeySequence(Qt::CTRL | Qt::ALT | Qt::SHIFT | Qt::Key_L));
+    connect(unlockAction, &QAction::triggered, this, &MainWindow::unlockAll);
     struct ArrangeEntry
     {
         const char* label;
@@ -1675,6 +1703,9 @@ void MainWindow::setupMenus()
         arrangeMenu->addAction(action);
         _arrangeActions[i] = action;
     }
+    arrangeMenu->addSeparator();
+    arrangeMenu->addAction(lockAction);
+    arrangeMenu->addAction(unlockAction);
 
     // View menu
     QMenu* viewMenu = menuBar->addMenu("&View");
@@ -4588,6 +4619,112 @@ void MainWindow::removeTransform()
     _phoenixView->update();
     if (_propertiesPanel)
         _propertiesPanel->refresh();
+}
+
+void MainWindow::newSymbol()
+{
+    if (!_flaDocument || !_flaDocument->document || !_phoenixView)
+        return;
+    fla::Document* document = _flaDocument->document;
+    std::string suggested;
+    for (int n = 1;; ++n)
+    {
+        suggested = "Symbol " + std::to_string(n);
+        if (fla::library::nameIsFree(*document, suggested))
+            break;
+    }
+    ConvertToSymbolDialog dialog(QString::fromStdString(suggested), this);
+    dialog.setWindowTitle("Create New Symbol");
+    if (dialog.exec() != QDialog::Accepted)
+        return;
+    const std::string name = dialog.symbolName().trimmed().toStdString();
+    if (name.empty() || !fla::library::nameIsFree(*document, name))
+    {
+        QMessageBox::information(this, "Create New Symbol",
+            QString("The library already has an item named %1.").arg(QString::fromStdString(name)));
+        return;
+    }
+    if (!document->symbolList)
+        document->symbolList = new fla::SymbolList(document);
+
+    // One layer with one empty keyframe, as Animate makes it.
+    auto* symbol = new fla::Symbol(document->symbolList);
+    symbol->name = name;
+    symbol->href = name + ".xml";
+    symbol->symbolType = dialog.symbolType();
+    symbol->itemId = fla::media::newItemId();
+    auto* timeline = new fla::Timeline(symbol);
+    timeline->name = name.substr(name.find_last_of('/') == std::string::npos ? 0 : name.find_last_of('/') + 1);
+    fla::Layer* layer = fla::newLayerFor(*timeline, false);
+    timeline->layers.push_back(layer);
+    symbol->timelines.push_back(timeline);
+
+    _editContext.commandStack().push(fla::CommandPtr(new fla::AddSymbolCommand(document, symbol, "New Symbol")));
+    _editContext.commandStack().breakMergeChain();
+    if (_libraryPanel)
+        _libraryPanel->refreshIfStale();
+    _phoenixView->editSymbol(symbol);
+}
+
+void MainWindow::editSymbolsOrDocument()
+{
+    if (!_phoenixView)
+        return;
+    if (_phoenixView->scopeDepth() > 0)
+    {
+        _phoenixView->exitToDepth(0);
+        return;
+    }
+    auto* instance = dynamic_cast<fla::SymbolInstance*>(_selection.single());
+    if (instance && instance->symbol)
+        _phoenixView->editSymbol(instance->symbol);
+}
+
+void MainWindow::lockSelection()
+{
+    const std::vector<fla::Element*> elements = selectedElements();
+    if (elements.empty())
+        return;
+    _phoenixView->flushPendingMerge();
+    _selection.clear();
+    fla::CommandStack& stack = _editContext.commandStack();
+    stack.beginMacro("Lock");
+    for (fla::Element* element : elements)
+        stack.push(fla::CommandPtr(new fla::SetPropertyCommand<bool>(element->isLocked, element->isLocked, true, "Lock")));
+    stack.endMacro();
+    stack.breakMergeChain();
+    _phoenixView->update();
+}
+
+void MainWindow::unlockAll()
+{
+    // Every locked object on the frames shown of the timeline being edited.
+    fla::Timeline* timeline = editedTimeline();
+    if (!timeline || !_player)
+        return;
+    std::vector<fla::Element*> locked;
+    const int at = _player->currentFrame();
+    for (fla::Layer* layer : timeline->layers)
+    {
+        fla::Frame* frame = layer ? fla::timeline::spanAt(*layer, at) : nullptr;
+        if (!frame)
+            continue;
+        for (fla::Element* element : frame->elements)
+        {
+            if (element && element->isLocked)
+                locked.push_back(element);
+        }
+    }
+    if (locked.empty())
+        return;
+    fla::CommandStack& stack = _editContext.commandStack();
+    stack.beginMacro("Unlock All");
+    for (fla::Element* element : locked)
+        stack.push(fla::CommandPtr(new fla::SetPropertyCommand<bool>(element->isLocked, true, false, "Unlock All")));
+    stack.endMacro();
+    stack.breakMergeChain();
+    _selection.select(std::vector<fla::DOMElement*>(locked.begin(), locked.end()));
+    _phoenixView->update();
 }
 
 void MainWindow::combineObjects(int operation)

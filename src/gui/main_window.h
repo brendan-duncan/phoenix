@@ -158,6 +158,15 @@ private slots:
     /// Modify > Combine Objects: Union, Intersect, Punch, Crop on the
     /// selected shapes (operation as fla::combine::Operation).
     void combineObjects(int operation);
+    /// Insert > New Symbol (Ctrl+F8): an empty symbol, opened for drawing.
+    void newSymbol();
+    /// Edit > Edit Symbols / Edit Document (Ctrl+E): the selected instance's
+    /// symbol on its own, or back to the document from a symbol.
+    void editSymbolsOrDocument();
+    /// Modify > Arrange > Lock (Ctrl+Alt+L) and Unlock All
+    /// (Ctrl+Alt+Shift+L): objects that stay put and cannot be picked.
+    void lockSelection();
+    void unlockAll();
     /// The stage's right-click menu.
     void showStageMenu(const QPoint& globalPos, const QPointF& documentPos);
 

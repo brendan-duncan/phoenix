@@ -2814,7 +2814,8 @@ void PhoenixView::hitTestElement(fla::Element& element, fla::Frame* frame,
     fla::LoopType loopType, const QTransform& toDocument, const QPointF& documentPos,
     double tolerance, HitResult& result, const fla::Transform* shownTransform)
 {
-    if (!element.visible)
+    // A locked object (Modify > Arrange > Lock) stays where it is, unpicked.
+    if (!element.visible || element.isLocked)
         return;
 
     const fla::Transform& t = shownTransform ? *shownTransform : element.transform;
@@ -3405,7 +3406,7 @@ std::vector<fla::Element*> PhoenixView::elementsIn(const QRectF& documentRect)
 
             for (fla::Element* element : state.frame->elements)
             {
-                if (!element || !element->visible)
+                if (!element || !element->visible || element->isLocked)
                     continue;
 
                 // Top-level elements carry their own transform into the bounds,
@@ -3969,6 +3970,31 @@ void PhoenixView::drawToolOverlay(QPainter& painter)
 
     const bool showBounds = !_activeTool || _activeTool->showsSelectionBounds();
     const bool showFills = !_activeTool || _activeTool->showsFillHighlight();
+
+    // A cross at a registration point: the symbol being edited's origin, and
+    // each selected instance's, as Animate marks them.
+    const auto crosshair = [&painter, scale](const QPointF& at, double reach) {
+        const double r = reach * scale;
+        painter.setPen(QPen(QColor(255, 255, 255), 3.0 * scale));
+        painter.drawLine(QPointF(at.x() - r, at.y()), QPointF(at.x() + r, at.y()));
+        painter.drawLine(QPointF(at.x(), at.y() - r), QPointF(at.x(), at.y() + r));
+        painter.setPen(QPen(QColor(0, 0, 0), 1.0 * scale));
+        painter.drawLine(QPointF(at.x() - r, at.y()), QPointF(at.x() + r, at.y()));
+        painter.drawLine(QPointF(at.x(), at.y() - r), QPointF(at.x(), at.y() + r));
+    };
+    painter.save();
+    if (!_scope.empty())
+        crosshair(QPointF(0.0, 0.0), 9.0);
+    if (_selection && showBounds)
+    {
+        for (fla::DOMElement* selected : _selection->elements())
+        {
+            const auto* instance = dynamic_cast<const fla::SymbolInstance*>(selected);
+            if (instance && owningFrame(instance))
+                crosshair(QPointF(instance->transform.tx, instance->transform.ty), 5.0);
+        }
+    }
+    painter.restore();
 
     if (_selection && !_selection->isEmpty())
     {
