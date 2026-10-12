@@ -64,8 +64,11 @@ bool contents(const Document& document, std::map<std::string, const XFLEntry*>& 
             *error = problem;
         return false;
     }
+    // The package's metadata (XMP, publish history) changes with every
+    // save in Animate and says nothing about the art.
     for (const XFLEntry& entry : entries)
-        byPath[entry.path] = &entry;
+        if (entry.path.compare(0, 9, "META-INF/") != 0)
+            byPath[entry.path] = &entry;
     return true;
 }
 

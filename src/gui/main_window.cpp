@@ -2131,6 +2131,23 @@ void MainWindow::setupMenus()
     connect(exportMovieAction, &QAction::triggered, this, &MainWindow::exportMovie);
     exportMenu->addAction(exportMovieAction);
 
+    // The format Save As starts in for a new document: XFL folders suit a
+    // studio keeping its files in version control.
+    QMenu* formatMenu = fileMenu->addMenu("Default Save &Format");
+    QActionGroup* formatGroup = new QActionGroup(this);
+    const std::pair<const char*, const char*> formats[] = {
+        {"phx", "Phoenix Document (.phx)"}, {"fla", "FLA File (.fla)"}, {"xfl", "XFL Folder (for version control)"}};
+    const QString savedFormat = QSettings().value("save/defaultFormat", "phx").toString();
+    for (const auto& [key, label] : formats)
+    {
+        QAction* choice = formatMenu->addAction(label);
+        choice->setCheckable(true);
+        choice->setChecked(savedFormat == key);
+        formatGroup->addAction(choice);
+        const QString value = key;
+        connect(choice, &QAction::triggered, this, [value]() { QSettings().setValue("save/defaultFormat", value); });
+    }
+
     // How often unsaved work is copied aside for after a crash.
     QMenu* autoSaveMenu = fileMenu->addMenu("A&uto-Save");
     QActionGroup* autoSaveGroup = new QActionGroup(this);
@@ -3105,11 +3122,13 @@ void MainWindow::saveFileAs()
         return;
     }
 
-    // A new document is a Phoenix document; one opened from FLA or XFL is
-    // offered in its own format, with Phoenix's a choice away.
+    // A new document is saved in the default format (File > Default Save
+    // Format: a Phoenix document unless a studio asks for FLA or XFL
+    // folders); one opened from a file is offered in its own format.
+    const QString format = QSettings().value("save/defaultFormat", "phx").toString();
+    const QString untitled = format == "fla" ? QString("untitled.fla") : format == "xfl" ? QString("untitled") : QString("untitled.phx");
     const QString suggested = _documentPath.isEmpty()
-        ? (_lastDirectory.isEmpty() ? QString("untitled.phx")
-                                    : QDir(_lastDirectory).filePath("untitled.phx"))
+        ? (_lastDirectory.isEmpty() ? untitled : QDir(_lastDirectory).filePath(untitled))
         : _documentPath;
 
     const QString phxFilter = tr("Phoenix Document (*.phx)");

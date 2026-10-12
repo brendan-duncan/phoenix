@@ -36,6 +36,9 @@ const NAV = [
     { href: "export.html", title: "Exporting" },
     { href: "command-line.html", title: "Command line" },
   ] },
+  { group: "Studio pipeline", pages: [
+    { href: "version-control.html", title: "Version control" },
+  ] },
   { group: "Reference", pages: [
     { href: "shortcuts.html", title: "Keyboard shortcuts" },
     { href: "preferences.html", title: "Settings and preferences" },

@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Version control · Phoenix User Guide</title>
+<meta name="description" content="Keep Phoenix and Animate documents in Git: XFL folders that diff as text, Git LFS for media, and Phoenix as the diff tool.">
+<meta name="keywords" content="git version control xfl lfs gitattributes diff difftool deterministic studio pipeline">
+<link rel="icon" href="assets/img/logo.png">
+<link rel="stylesheet" href="assets/site.css">
+<script>try { const t = localStorage.getItem("phoenix-docs-theme"); if (t) document.documentElement.dataset.theme = t; } catch (e) {}</script>
+<script src="assets/site.js" defer></script>
+</head>
+<body>
+<main>
+<article class="content">
+
+<p class="eyebrow">Studio pipeline</p>
+<h1>Version control</h1>
+<p class="lead">Phoenix writes documents the same way every time, so a save that changes nothing changes no bytes, and a save that changes one symbol changes only that symbol's file.</p>
+
+<h2>Save as XFL folders</h2>
+
+<p>An <code>.fla</code> is a zip archive: version control sees one opaque file that changes as a whole. An XFL folder holds the same document as separate files: <code>DOMDocument.xml</code> for the scenes, one file per symbol under <code>LIBRARY/</code>, and the bitmap and sound data under <code>bin/</code>. Animate opens XFL folders too (through their <code>.xfl</code> file).</p>
+
+<p>To make XFL folders the format new documents are saved in, choose <b>File &gt; Default Save Format &gt; XFL Folder</b>. To convert existing files, use the command line:</p>
+
+<pre><code>Phoenix batch episode/ --convert xfl --out episode_xfl/</code></pre>
+
+<h2>Git LFS for the media</h2>
+
+<p>The XML files diff and merge as text. The media under <code>bin/</code>, and any whole <code>.fla</code> or <code>.phx</code> files, are binary and belong in Git LFS. A <code>.gitattributes</code> for a project:</p>
+
+<pre><code># Whole documents and the media inside XFL folders
+*.fla        filter=lfs diff=lfs merge=lfs -text
+*.phx        filter=lfs diff=lfs merge=lfs -text
+**/bin/**    filter=lfs diff=lfs merge=lfs -text
+*.wav        filter=lfs diff=lfs merge=lfs -text
+*.mp3        filter=lfs diff=lfs merge=lfs -text
+*.png        filter=lfs diff=lfs merge=lfs -text
+*.psd        filter=lfs diff=lfs merge=lfs -text
+
+# The XML of an XFL folder is text
+*.xml        text eol=lf
+*.xfl        text eol=lf</code></pre>
+
+<p>Run <code>git lfs install</code> once on each machine, and add the file before committing any documents.</p>
+
+<h2>Phoenix as the diff tool</h2>
+
+<p><code>Phoenix diff</code> compares two versions of a document part by part and frame by frame (see <a href="command-line.html">Command line</a>). To use it from Git:</p>
+
+<pre><code>git config --global difftool.phoenix.cmd 'Phoenix diff "$LOCAL" "$REMOTE" --out phoenix-diff'
+git difftool --tool=phoenix HEAD~1 -- shots/sh010.fla</code></pre>
+
+<p>In Phoenix, <b>File &gt; Compare With</b> shows the same report for the open document against another file.</p>
+
+<h2>Locking</h2>
+
+<p>Two people editing the same symbol at once will conflict, as in any binary-heavy project. Git LFS file locking (<code>git lfs lock</code>) keeps a shot file or a rig to one person at a time; with XFL folders, lock the symbol files you are working on.</p>
+
+</article>
+</main>
+</body>
+</html>
