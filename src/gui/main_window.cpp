@@ -51,6 +51,8 @@
 #include "../writer/xfl_writer.h"
 #include "../parser/document_parser.h"
 #include "text_layout.h"
+#include "../data/solid_color.h"
+#include "shape_outline.h"
 #include "../data/static_text.h"
 #include "../data/layer.h"
 #include "../data/timeline.h"
@@ -4382,12 +4384,18 @@ void MainWindow::breakApartSelection()
     std::vector<fla::Group*> groups;
     std::vector<fla::Shape*> drawingObjects;
     std::vector<fla::SymbolInstance*> instances;
+    std::vector<fla::StaticText*> texts;
+    std::vector<fla::BitmapInstance*> bitmaps;
     for (fla::DOMElement* selected : _selection.elements())
     {
         fla::Element* element = dynamic_cast<fla::Element*>(selected);
         if (!element || !frameOfElement(element))
             continue;
-        if (element->elementType() == fla::Element::Type::Group)
+        if (element->elementType() == fla::Element::Type::StaticText)
+            texts.push_back(static_cast<fla::StaticText*>(element));
+        else if (element->elementType() == fla::Element::Type::BitmapInstance)
+            bitmaps.push_back(static_cast<fla::BitmapInstance*>(element));
+        else if (element->elementType() == fla::Element::Type::Group)
             groups.push_back(static_cast<fla::Group*>(element));
         else if (element->elementType() == fla::Element::Type::Shape &&
             static_cast<fla::Shape*>(element)->isDrawingObject)
@@ -4395,11 +4403,118 @@ void MainWindow::breakApartSelection()
         else if (element->elementType() == fla::Element::Type::SymbolInstance)
             instances.push_back(static_cast<fla::SymbolInstance*>(element));
     }
-    if (groups.empty() && drawingObjects.empty() && instances.empty())
+    if (groups.empty() && drawingObjects.empty() && instances.empty() && texts.empty() && bitmaps.empty())
         return;
 
     fla::CommandStack& stack = _editContext.commandStack();
     stack.beginMacro("Break Apart");
+    std::vector<fla::DOMElement*> results;
+    for (fla::StaticText* text : texts)
+    {
+        fla::Frame* frame = frameOfElement(text);
+        const int index = static_cast<int>(
+            std::find(frame->elements.begin(), frame->elements.end(), text) - frame->elements.begin());
+        const QString joined = TextLayout::joinedText(*text);
+        int letters = 0;
+        for (const QChar c : joined)
+            letters += c.isSpace() ? 0 : 1;
+        if (letters > 1)
+        {
+            // Into letters: a text field for each, standing where it stood.
+            int at = index + 1;
+            int offset = 0;
+            for (size_t r = 0; r < text->runs.size(); ++r)
+            {
+                const QString runText = QString::fromStdString(text->runs[r].text);
+                for (int k = 0; k < runText.size(); ++k, ++offset)
+                {
+                    if (runText[k].isSpace())
+                        continue;
+                    auto* letter = static_cast<fla::StaticText*>(fla::cloneElement(*text, frame));
+                    if (!letter)
+                        continue;
+                    fla::TextRun run = text->runs[r];
+                    run.text = QString(runText[k]).toStdString();
+                    run.alignment = fla::TextRun::Alignment::Left;
+                    letter->runs = {run};
+                    letter->autoExpand = true;
+                    letter->width = 0.0;
+                    const QRectF was = TextLayout::caretRect(*text, offset);
+                    const QRectF now = TextLayout::caretRect(*letter, 0);
+                    letter->left += was.left() - now.left();
+                    letter->top += was.top() - now.top();
+                    stack.push(fla::CommandPtr(new fla::AddElementCommand(frame, letter, "Break Apart", &_selection, at++)));
+                    results.push_back(letter);
+                }
+            }
+            stack.push(fla::CommandPtr(new fla::RemoveElementCommand(frame, text, "Break Apart", &_selection)));
+            continue;
+        }
+        // A letter into shapes: its glyph's outline, filled with its color.
+        const TextLayout::Layout layout = TextLayout::layout(*text);
+        QPainterPath glyphs;
+        int offset = 0;
+        for (const fla::TextRun& run : text->runs)
+        {
+            const QString runText = QString::fromStdString(run.text);
+            for (int k = 0; k < runText.size(); ++k, ++offset)
+            {
+                if (runText[k].isSpace())
+                    continue;
+                const QRectF caret = TextLayout::caretRect(*text, offset);
+                double ascent = caret.height() * 0.8;
+                for (const TextLayout::Line& line : layout.lines)
+                    if (offset >= line.start && offset <= line.start + line.length)
+                        ascent = line.ascent;
+                glyphs.addText(QPointF(caret.left(), caret.top() + ascent), TextLayout::fontFor(run), QString(runText[k]));
+            }
+        }
+        const fla::Transform& t = text->transform;
+        glyphs = QTransform(t.m11, t.m12, t.m21, t.m22, t.tx, t.ty).map(glyphs);
+        auto* fill = new fla::SolidColor(nullptr);
+        if (!text->runs.empty())
+            std::copy(text->runs.front().fillColor, text->runs.front().fillColor + 4, fill->color);
+        fla::Shape* shape = fla::outline::shapeFromOutline(glyphs, fill);
+        if (!shape)
+        {
+            delete fill;
+            continue;
+        }
+        stack.push(fla::CommandPtr(new fla::AddElementCommand(frame, shape, "Break Apart", &_selection, index + 1)));
+        stack.push(fla::CommandPtr(new fla::RemoveElementCommand(frame, text, "Break Apart", &_selection)));
+        _phoenixView->setPendingMerge(shape, frame);
+        results.push_back(shape);
+    }
+    for (fla::BitmapInstance* bitmap : bitmaps)
+    {
+        // Into a shape filled with the bitmap, clipped, where the bitmap was.
+        fla::Frame* frame = frameOfElement(bitmap);
+        const QSize size = _phoenixView->libraryBitmap(QString::fromStdString(bitmap->libraryItemName)).size();
+        if (size.isEmpty())
+            continue;
+        const fla::Transform& t = bitmap->transform;
+        const QTransform place(t.m11, t.m12, t.m21, t.m22, t.tx, t.ty);
+        const QPolygonF corners = place.map(QPolygonF(QRectF(0.0, 0.0, size.width(), size.height())));
+        auto* fill = new fla::BitmapFill(nullptr);
+        fill->bitmapPath = bitmap->libraryItemName;
+        fill->bitmapIsClipped = true;
+        fill->transform = fla::Transform(t.m11 * 20.0, t.m12 * 20.0, t.m21 * 20.0, t.m22 * 20.0, t.tx, t.ty);
+        QPolygonF ring = corners;
+        if (ring.size() == 5)
+            ring.removeLast();
+        fla::Shape* shape = fla::outline::shapeFromLoops({ring}, fill);
+        if (!shape)
+        {
+            delete fill;
+            continue;
+        }
+        const int index = static_cast<int>(
+            std::find(frame->elements.begin(), frame->elements.end(), bitmap) - frame->elements.begin());
+        stack.push(fla::CommandPtr(new fla::AddElementCommand(frame, shape, "Break Apart", &_selection, index + 1)));
+        stack.push(fla::CommandPtr(new fla::RemoveElementCommand(frame, bitmap, "Break Apart", &_selection)));
+        _phoenixView->setPendingMerge(shape, frame);
+        results.push_back(shape);
+    }
     for (fla::Group* group : groups)
     {
         stack.push(fla::CommandPtr(new fla::UngroupCommand(
@@ -4429,6 +4544,8 @@ void MainWindow::breakApartSelection()
         _phoenixView->setPendingMerge(shape, frameOfElement(shape));
     }
     stack.endMacro();
+    if (!results.empty())
+        _selection.select(results);
     stack.breakMergeChain();
     _phoenixView->clearCaches();
     _phoenixView->update();
@@ -5944,7 +6061,9 @@ void MainWindow::updateSelectionState()
         if (element->elementType() == fla::Element::Type::Shape &&
             static_cast<fla::Shape*>(element)->isDrawingObject)
             hasDrawingObject = true;
-        if (element->elementType() == fla::Element::Type::SymbolInstance)
+        if (element->elementType() == fla::Element::Type::SymbolInstance ||
+            element->elementType() == fla::Element::Type::StaticText ||
+            element->elementType() == fla::Element::Type::BitmapInstance)
             hasInstance = true;
     }
     if (_ungroupAction)
