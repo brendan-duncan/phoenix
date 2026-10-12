@@ -157,6 +157,19 @@ bool MotionObject::parse(const std::string& xml)
     return true;
 }
 
+std::vector<double> MotionObject::keyTimes() const
+{
+    std::vector<double> times;
+    for (const auto& property : _properties)
+    {
+        for (const Key& key : property.second)
+            times.push_back(key.time);
+    }
+    std::sort(times.begin(), times.end());
+    times.erase(std::unique(times.begin(), times.end()), times.end());
+    return times;
+}
+
 double MotionObject::frames(double frameRate) const
 {
     return _duration * frameRate / _timeScale;

@@ -10,6 +10,7 @@
 
 #include <algorithm>
 #include <functional>
+#include <map>
 #include <vector>
 #include <QPushButton>
 #include <QTimer>
@@ -66,6 +67,13 @@ public:
     /// Shows the onion skin range in the ruler.
     void setOnionSkin(bool on, int before, int after);
 
+    /// The loop range playback keeps to while it is on, shown in the ruler
+    /// with handles to drag its ends by.
+    void setLoop(bool on, int first, int last);
+    bool loopOn() const { return _loopOn; }
+    int loopFirst() const { return _loopFirst; }
+    int loopLast() const { return _loopLast; }
+
     /// Where the grid finds a frame's sound and the point in it the frame
     /// starts from, to draw its waveform along the span.
     using SoundProvider = std::function<std::shared_ptr<const PcmBuffer>(const fla::Frame*, size_t& in)>;
@@ -113,6 +121,23 @@ private:
     int _onionBefore = 2;
     int _onionAfter = 2;
 
+    bool _loopOn = false;
+    int _loopFirst = 0;
+    int _loopLast = 0;
+    /// The end of the loop range being dragged: 1 its start, 2 its end.
+    int _draggingLoop = 0;
+
+    /// The frames a motion tween span keys, from its motion, kept by the
+    /// span and the motion they were read from.
+    struct MotionKeys
+    {
+        size_t motionHash = 0;
+        int duration = 0;
+        std::vector<int> frames;
+    };
+    mutable std::map<const fla::Frame*, MotionKeys> _motionKeys;
+    const std::vector<int>& motionKeysOf(const fla::Frame* frame) const;
+
     /// The selected block, in rows and frames, while there is one.
     bool _hasSelection = false;
     int _anchorRow = 0;
@@ -150,6 +175,20 @@ class TimelinesPanel : public QWidget
 {
     Q_OBJECT
 public:
+    /// Play or stop (Enter), the first and last frames, a frame either way,
+    /// as the Control menu and the transport buttons do them.
+    void playStop() { onPlayStop(); }
+    void goToFirst() { onGotoFirstFrame(); }
+    void goToLast();
+    void stepBack() { onStepBack(); }
+    void stepForward() { onStepForward(); }
+
+    /// Loop Playback: on, playback keeps to the loop range, starting as the
+    /// selected frames or, with one frame or none selected, the whole
+    /// timeline.
+    void setLoopPlayback(bool on);
+    bool loopPlayback() const;
+
     explicit TimelinesPanel(Player* player, QWidget *parent = nullptr);
 
     void setDocument(const fla::FLADocument* document);
@@ -208,6 +247,7 @@ private:
     Player* _player;
     QPushButton* _playButton;
     QPushButton* _onionButton = nullptr;
+    QPushButton* _loopButton = nullptr;
     /// Animate's timeline status: the frame shown, the frame rate and the
     /// time into the animation.
     class QLabel* _frameLabel = nullptr;

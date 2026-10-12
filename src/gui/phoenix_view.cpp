@@ -3219,6 +3219,15 @@ std::vector<fla::BrushSample> PhoenixView::takeTabletSamples()
 
 bool PhoenixView::event(QEvent* event)
 {
+    if (event->type() == QEvent::ShortcutOverride && _activeTool && _activeTool->wantsEnter())
+    {
+        const int key = static_cast<const QKeyEvent*>(event)->key();
+        if (key == Qt::Key_Return || key == Qt::Key_Enter)
+        {
+            event->accept();
+            return true;
+        }
+    }
     // While a tool is taking typed text, a plain key is a character for it,
     // not a tool shortcut; the window's shortcuts only see keys with ctrl.
     if (event->type() == QEvent::ShortcutOverride && _activeTool && _activeTool->capturesKeyboard())

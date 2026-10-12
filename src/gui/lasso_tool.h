@@ -29,6 +29,8 @@ public:
 
     QString name() const override { return _polygon ? "Polygon" : "Lasso"; }
 
+    bool wantsEnter() const override { return _polygon && !_loop.isEmpty(); }
+
     QCursor cursor() const override { return Qt::CrossCursor; }
 
     bool mousePress(PhoenixView& view, QMouseEvent* event, const QPointF& documentPos) override;

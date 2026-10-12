@@ -1559,6 +1559,91 @@ void MainWindow::setupMenus()
     viewMenu->addAction(dimOutsideDocumentAction);
 
     // Help menu
+    // Control menu: playback, with Animate's keys. They act while the stage
+    // or the timeline has the focus, so Enter in a field stays the field's.
+    QMenu* controlMenu = menuBar->addMenu("&Control");
+    const auto addControl = [this, controlMenu](const QString& text, const QKeySequence& key,
+                                std::function<void()> act) {
+        QAction* action = new QAction(text, this);
+        action->setShortcut(key);
+        action->setShortcutContext(Qt::WidgetWithChildrenShortcut);
+        connect(action, &QAction::triggered, this, [act]() { act(); });
+        controlMenu->addAction(action);
+        if (_phoenixView)
+            _phoenixView->addAction(action);
+        if (_timelineView)
+            _timelineView->addAction(action);
+        return action;
+    };
+    const auto timelines = [this]() { return _timelineView ? _timelineView->timelines() : nullptr; };
+    // The keyframe after or before the playhead on the current layer, or on
+    // any layer when there is no current one.
+    const auto keyframeStep = [this](bool forward) {
+        if (!_player || !_timelineView)
+            return;
+        fla::Timeline* timeline = nullptr;
+        int index = 0;
+        if (!_timelineView->currentLayer(timeline, index) || !timeline)
+            timeline = _phoenixView ? _phoenixView->scopeTimeline() : nullptr;
+        if (!timeline && _flaDocument && _flaDocument->document)
+            timeline = _flaDocument->document->currentScene();
+        if (!timeline)
+            return;
+        std::vector<const fla::Layer*> layers;
+        if (index >= 0 && index < static_cast<int>(timeline->layers.size()) &&
+            timeline->layers[index]->layerType != fla::Layer::Type::Folder)
+            layers.push_back(timeline->layers[index]);
+        else
+            layers.assign(timeline->layers.begin(), timeline->layers.end());
+        const int current = _player->currentFrame();
+        int best = -1;
+        for (const fla::Layer* layer : layers)
+        {
+            for (const fla::Frame* frame : layer->frames)
+            {
+                if (forward && frame->index > current && (best < 0 || frame->index < best))
+                    best = frame->index;
+                if (!forward && frame->index < current && frame->index > best)
+                    best = frame->index;
+            }
+        }
+        if (best >= 0)
+            _player->setCurrentFrame(best);
+    };
+    addControl("&Play", QKeySequence(Qt::Key_Return), [timelines]() {
+        if (TimelinesPanel* panel = timelines())
+            panel->playStop();
+    });
+    // Shift with comma and period comes through as < and > on many
+    // keyboards, so those keys do it too.
+    QAction* rewind = addControl("&Rewind", QKeySequence(Qt::SHIFT | Qt::Key_Comma), [timelines]() {
+        if (TimelinesPanel* panel = timelines())
+            panel->goToFirst();
+    });
+    rewind->setShortcuts({QKeySequence(Qt::SHIFT | Qt::Key_Comma), QKeySequence(Qt::SHIFT | Qt::Key_Less)});
+    QAction* toEnd = addControl("Go To &End", QKeySequence(Qt::SHIFT | Qt::Key_Period), [timelines]() {
+        if (TimelinesPanel* panel = timelines())
+            panel->goToLast();
+    });
+    toEnd->setShortcuts({QKeySequence(Qt::SHIFT | Qt::Key_Period), QKeySequence(Qt::SHIFT | Qt::Key_Greater)});
+    controlMenu->addSeparator();
+    addControl("Step &Forward One Frame", QKeySequence(Qt::Key_Period), [timelines]() {
+        if (TimelinesPanel* panel = timelines())
+            panel->stepForward();
+    });
+    addControl("Step &Backward One Frame", QKeySequence(Qt::Key_Comma), [timelines]() {
+        if (TimelinesPanel* panel = timelines())
+            panel->stepBack();
+    });
+    addControl("&Next Keyframe", QKeySequence(Qt::ALT | Qt::Key_Period), [keyframeStep]() { keyframeStep(true); });
+    addControl("Pre&vious Keyframe", QKeySequence(Qt::ALT | Qt::Key_Comma), [keyframeStep]() { keyframeStep(false); });
+    controlMenu->addSeparator();
+    QAction* loopAction = addControl("&Loop Playback", QKeySequence(Qt::ALT | Qt::SHIFT | Qt::Key_L), [timelines]() {
+        if (TimelinesPanel* panel = timelines())
+            panel->setLoopPlayback(!panel->loopPlayback());
+    });
+    loopAction->setStatusTip("Play the loop range over and over; drag its ends in the ruler");
+
     QMenu* helpMenu = menuBar->addMenu("&Help");
 
     QAction* checkForUpdatesAction = new QAction("Check for &Updates...", this);

@@ -115,6 +115,10 @@ public:
     /// shortcuts must not fire. The text tool says yes while a box is open.
     virtual bool capturesKeyboard() const { return false; }
 
+    /// Whether Enter finishes something the tool has under way (a pen path,
+    /// a polygon lasso), so that it does not play the timeline.
+    virtual bool wantsEnter() const { return false; }
+
     /// Whether the view should draw its selection bounding box while this tool
     /// is active. Tools that show their own handles turn it off, so the box does
     /// not sit on top of what the user is trying to grab.

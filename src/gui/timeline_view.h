@@ -43,6 +43,9 @@ public:
     /// Lets the frames draw the waveforms of their sounds.
     void setSoundProvider(std::function<std::shared_ptr<const PcmBuffer>(const fla::Frame*, size_t& in)> provider);
 
+    /// The frames side, for playback and the loop range.
+    TimelinesPanel* timelines() const { return _timelinesPanel; }
+
 signals:
     void layerVisibilityChanged(const QString& timelineName, int layerIndex, bool visible);
 

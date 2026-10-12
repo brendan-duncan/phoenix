@@ -53,6 +53,10 @@ public:
     /// The span's length in TimeScale units.
     double duration() const { return _duration; }
 
+    /// When the tween's property keyframes fall, in TimeScale units, in
+    /// order and each once, whichever properties they key.
+    std::vector<double> keyTimes() const;
+
 private:
     struct Key
     {

@@ -1,5 +1,7 @@
 #include "timelines_panel.h"
 #include "player.h"
+#include "../edit/motion_object.h"
+#include "../edit/timeline_edit.h"
 
 namespace {
 
@@ -211,10 +213,37 @@ TimelinesPanel::TimelinesPanel(Player* player, QWidget *parent)
     });
     headerLayout->addWidget(_onionButton);
 
+    // Loop Playback, beside the onion skin as in Animate.
+    _loopButton = new QPushButton(_header);
+    _loopButton->setFixedSize(btnSize, btnSize);
+    _loopButton->setCheckable(true);
+    _loopButton->setToolTip("Loop playback (Alt+Shift+L)");
+    {
+        QPixmap pixmap(iconSize, iconSize);
+        pixmap.fill(Qt::transparent);
+        QPainter icon(&pixmap);
+        icon.setRenderHint(QPainter::Antialiasing, true);
+        icon.setPen(QPen(QColor(220, 220, 220), 1.6));
+        icon.setBrush(Qt::NoBrush);
+        // Two arrows chasing each other round a loop.
+        icon.drawArc(QRectF(4.5, 6.5, 13, 9), 30 * 16, 150 * 16);
+        icon.drawArc(QRectF(4.5, 6.5, 13, 9), 210 * 16, 150 * 16);
+        icon.setBrush(QColor(220, 220, 220));
+        icon.setPen(Qt::NoPen);
+        icon.drawPolygon(QPolygonF({QPointF(17.5, 6.0), QPointF(17.5, 11.0), QPointF(13.5, 8.5)}));
+        icon.drawPolygon(QPolygonF({QPointF(4.5, 16.0), QPointF(4.5, 11.0), QPointF(8.5, 13.5)}));
+        _loopButton->setIcon(QIcon(pixmap));
+    }
+    _loopButton->setIconSize(QSize(iconSize, iconSize));
+    _loopButton->setStyleSheet(styleTransport +
+        "QPushButton:checked { background-color: rgba(41,128,238,0.45); border-radius: 4px; }");
+    connect(_loopButton, &QPushButton::toggled, this, [this](bool on) { setLoopPlayback(on); });
+    headerLayout->addWidget(_loopButton);
+
     headerLayout->addStretch();
     // Balance the status labels so the transport stays centered.
     QWidget* balance = new QWidget(_header);
-    balance->setFixedWidth(3 * 60 + 2 * 2);
+    balance->setFixedWidth(3 * 60 + 2 * 2 - btnSize - 2);
     headerLayout->addWidget(balance);
 
     _gridContainer = new TimelineGrid(_player, this);
@@ -372,10 +401,18 @@ void TimelinesPanel::onPlayStop()
     }
     if (!_player)
         return;
-    // From the end, play starts over from the first frame, as in Animate.
+    // From the end, play starts over from the first frame, as in Animate;
+    // looping, from outside the range, at its start.
     const int last = _gridContainer->frameCount() - 1;
-    if (last > 0 && _player->currentFrame() >= last)
+    if (_gridContainer->loopOn())
+    {
+        if (_player->currentFrame() < _gridContainer->loopFirst() || _player->currentFrame() > _gridContainer->loopLast())
+            _player->setCurrentFrame(_gridContainer->loopFirst());
+    }
+    else if (last > 0 && _player->currentFrame() >= last)
+    {
         _player->setCurrentFrame(0);
+    }
     if (!_playClock)
         _playClock = new QElapsedTimer();
     _playClock->start();
@@ -386,6 +423,72 @@ void TimelinesPanel::onPlayStop()
     _playButton->setIcon(makeTransportIcon(TransportIcon::Stop, 22));
     _isPlaying = true;
     _player->setPlaying(true);
+}
+
+void TimelinesPanel::goToLast()
+{
+    if (_player)
+        _player->setCurrentFrame(std::max(0, _gridContainer->frameCount() - 1));
+}
+
+void TimelinesPanel::setLoopPlayback(bool on)
+{
+    if (_loopButton && _loopButton->isChecked() != on)
+    {
+        const QSignalBlocker blocker(_loopButton);
+        _loopButton->setChecked(on);
+    }
+    if (on == _gridContainer->loopOn())
+        return;
+    if (!on)
+    {
+        _gridContainer->setLoop(false, _gridContainer->loopFirst(), _gridContainer->loopLast());
+        return;
+    }
+    const FrameSelection selected = _gridContainer->selection();
+    if (!selected.isEmpty() && selected.last > selected.first)
+        _gridContainer->setLoop(true, selected.first, selected.last);
+    else
+        _gridContainer->setLoop(true, 0, std::max(0, _gridContainer->frameCount() - 1));
+}
+
+bool TimelinesPanel::loopPlayback() const
+{
+    return _gridContainer->loopOn();
+}
+
+void TimelineGrid::setLoop(bool on, int first, int last)
+{
+    _loopOn = on;
+    _loopFirst = std::max(0, std::min(first, last));
+    _loopLast = std::max(_loopFirst, std::max(first, last));
+    update();
+}
+
+const std::vector<int>& TimelineGrid::motionKeysOf(const fla::Frame* frame) const
+{
+    static const std::vector<int> none;
+    const std::string* xml = fla::timeline::motionOf(const_cast<fla::Frame&>(*frame));
+    if (!xml)
+        return none;
+    const size_t hash = std::hash<std::string>()(*xml);
+    MotionKeys& keys = _motionKeys[frame];
+    if (keys.motionHash == hash && keys.duration == frame->duration)
+        return keys.frames;
+    keys.motionHash = hash;
+    keys.duration = frame->duration;
+    keys.frames.clear();
+    fla::MotionObject motion;
+    if (motion.parse(*xml) && motion.duration() > 0.0)
+    {
+        for (const double time : motion.keyTimes())
+        {
+            const int at = static_cast<int>(std::lround(time / motion.duration() * frame->duration));
+            if (at > 0 && at < frame->duration && (keys.frames.empty() || keys.frames.back() != at))
+                keys.frames.push_back(at);
+        }
+    }
+    return keys.frames;
 }
 
 void TimelinesPanel::onStepForward()
@@ -401,6 +504,14 @@ void TimelinesPanel::onTimerTick()
     if (!_player || !_playClock)
         return;
     const int due = _playStartFrame + static_cast<int>(_playClock->elapsed() * frameRate() / 1000.0);
+    if (_gridContainer->loopOn())
+    {
+        // Round the range again and again, by the clock.
+        const int first = _gridContainer->loopFirst();
+        const int length = std::max(1, _gridContainer->loopLast() - first + 1);
+        _player->setCurrentFrame(due <= _gridContainer->loopLast() ? due : first + (due - first) % length);
+        return;
+    }
     const int last = std::max(0, _gridContainer->frameCount() - 1);
     // Playback stops on the last frame, as Animate's does without looping.
     if (due >= last)
@@ -594,7 +705,19 @@ void TimelineGrid::mousePressEvent(QMouseEvent* event)
 
     if (row < 0)
     {
-        // The ruler scrubs the playhead.
+        // The loop range's ends are dragged by their handles; elsewhere the
+        // ruler scrubs the playhead.
+        if (event->button() == Qt::LeftButton && _loopOn)
+        {
+            const int stride = 21;
+            const int x = event->pos().x();
+            if (std::abs(x - _loopFirst * stride) <= 4)
+                _draggingLoop = 1;
+            else if (std::abs(x - ((_loopLast + 1) * stride - 1)) <= 4)
+                _draggingLoop = 2;
+            if (_draggingLoop)
+                return;
+        }
         if (event->button() == Qt::LeftButton)
         {
             _isDragging = true;
@@ -668,7 +791,16 @@ void TimelineGrid::mousePressEvent(QMouseEvent* event)
 
 void TimelineGrid::mouseMoveEvent(QMouseEvent* event)
 {
-    if (_isDragging)
+    if (_draggingLoop)
+    {
+        const int at = std::max(0, frameAt(event->pos().x()));
+        if (_draggingLoop == 1)
+            _loopFirst = std::min(at, _loopLast);
+        else
+            _loopLast = std::max(at, _loopFirst);
+        update();
+    }
+    else if (_isDragging)
     {
         updatePlayerFromMouse(event->pos().x());
     }
@@ -718,6 +850,7 @@ void TimelineGrid::mouseReleaseEvent(QMouseEvent* event)
     if (event->button() == Qt::LeftButton)
     {
         _isDragging = false;
+        _draggingLoop = 0;
         _selecting = false;
         if (_movingBlock)
         {
@@ -781,6 +914,8 @@ void TimelineGrid::paintEvent(QPaintEvent* event)
     const QColor staticSpan(196, 196, 196);
     const QColor motionSpan(197, 183, 232);
     const QColor shapeSpan(186, 224, 180);
+    const QColor motionObjectSpan(156, 196, 238);
+    const QColor poseSpan(214, 228, 168);
     // Animate's time head is blue.
     const QColor playheadColor(41, 128, 238);
 
@@ -820,10 +955,16 @@ void TimelineGrid::paintEvent(QPaintEvent* event)
 
                 const bool hasContent = !frame->elements.empty();
                 QColor spanColor = hasContent ? staticSpan : emptySpan;
+                const bool motionObject = frame->otherTweenType == "motion object";
+                const bool pose = frame->otherTweenType == "IK pose";
                 if (frame->tweenType == fla::TweenType::Motion)
                     spanColor = motionSpan;
                 else if (frame->tweenType == fla::TweenType::Shape)
                     spanColor = shapeSpan;
+                else if (motionObject)
+                    spanColor = motionObjectSpan;
+                else if (pose)
+                    spanColor = poseSpan;
                 painter.fillRect(span, spanColor);
 
                 // A sound draws its waveform along the span, from where the
@@ -868,7 +1009,92 @@ void TimelineGrid::paintEvent(QPaintEvent* event)
                 painter.setBrush(hasContent ? QColor(20, 20, 20) : QColor(255, 255, 255));
                 painter.drawEllipse(QPointF(dotX, midY), 3.2, 3.2);
 
-                if (duration > 1 && frame->tweenType != fla::TweenType::None)
+                // A script on the keyframe is marked with an "a" over its dot.
+                if (frame->actionScript && !frame->actionScript->code.empty())
+                {
+                    painter.save();
+                    QFont small = painter.font();
+                    small.setPointSize(7);
+                    small.setBold(true);
+                    painter.setFont(small);
+                    painter.setPen(QColor(20, 20, 20));
+                    painter.drawText(QRectF(x0, y - 1, frameWidth, frameHeight / 2.0), Qt::AlignCenter, "a");
+                    painter.restore();
+                }
+
+                // A label follows the keyframe along its span: a red flag for a
+                // name, green slashes for a comment, a gold anchor for an
+                // anchor, then the text where there is room.
+                if (!frame->name.empty())
+                {
+                    painter.save();
+                    painter.setClipRect(span);
+                    const double gx = duration > 1 ? x0 + frameWidth + 1.0 : x0 + 2.0;
+                    const double top = y + 3.0;
+                    QColor glyphColor(210, 40, 40);
+                    QString text = QString::fromStdString(frame->name);
+                    if (frame->labelType == "comment")
+                    {
+                        glyphColor = QColor(40, 150, 60);
+                        painter.setPen(QPen(glyphColor, 1.4));
+                        painter.drawLine(QPointF(gx + 3.0, top), QPointF(gx, top + 8.0));
+                        painter.drawLine(QPointF(gx + 6.0, top), QPointF(gx + 3.0, top + 8.0));
+                    }
+                    else if (frame->labelType == "anchor")
+                    {
+                        glyphColor = QColor(200, 150, 20);
+                        painter.setPen(QPen(glyphColor, 1.4));
+                        painter.setBrush(Qt::NoBrush);
+                        painter.drawEllipse(QPointF(gx + 3.0, top + 1.0), 1.5, 1.5);
+                        painter.drawLine(QPointF(gx + 3.0, top + 2.5), QPointF(gx + 3.0, top + 9.0));
+                        painter.drawArc(QRectF(gx, top + 4.0, 6.0, 5.0), 180 * 16, 180 * 16);
+                    }
+                    else
+                    {
+                        painter.setPen(QPen(QColor(20, 20, 20), 1.0));
+                        painter.drawLine(QPointF(gx + 0.5, top), QPointF(gx + 0.5, top + 10.0));
+                        painter.setPen(Qt::NoPen);
+                        painter.setBrush(glyphColor);
+                        painter.drawPolygon(QPolygonF({QPointF(gx + 1.0, top), QPointF(gx + 7.0, top + 2.5),
+                            QPointF(gx + 1.0, top + 5.0)}));
+                    }
+                    if (duration > 1)
+                    {
+                        QFont labelFont = painter.font();
+                        labelFont.setPointSize(8);
+                        labelFont.setBold(false);
+                        painter.setFont(labelFont);
+                        painter.setPen(QColor(20, 20, 20));
+                        painter.drawText(QRectF(gx + 9.0, y, x1 - gx - 9.0, frameHeight),
+                            Qt::AlignLeft | Qt::AlignVCenter, text);
+                    }
+                    painter.restore();
+                }
+
+                if (motionObject || pose)
+                {
+                    // A motion tween or a pose span has no arrow; its property
+                    // keyframes are small diamonds along it, as Animate marks
+                    // them, and its last frame a hollow one.
+                    painter.setPen(QPen(QColor(20, 20, 20), 1.0));
+                    painter.setBrush(QColor(20, 20, 20));
+                    const auto diamond = [&](double cx, bool filled) {
+                        painter.setBrush(filled ? QColor(20, 20, 20) : QColor(Qt::transparent));
+                        painter.drawPolygon(QPolygonF({QPointF(cx, midY - 3.5), QPointF(cx + 3.5, midY),
+                            QPointF(cx, midY + 3.5), QPointF(cx - 3.5, midY)}));
+                    };
+                    if (motionObject)
+                    {
+                        for (const int at : motionKeysOf(frame))
+                            diamond((frame->index + at) * cellStride + frameWidth / 2.0, true);
+                    }
+                    if (duration > 1)
+                    {
+                        painter.setBrush(Qt::NoBrush);
+                        painter.drawRect(QRectF(x1 - frameWidth / 2.0 - 2.5, midY - 4.0, 5.0, 8.0));
+                    }
+                }
+                else if (duration > 1 && frame->tweenType != fla::TweenType::None)
                 {
                     // A tween runs an arrow from the keyframe to the end of
                     // its span.
@@ -980,6 +1206,18 @@ void TimelineGrid::paintEvent(QPaintEvent* event)
         painter.drawLine(left, 2, left + 4, 2);
         painter.drawLine(right, 2, right, headerHeight - 10);
         painter.drawLine(right, 2, right - 4, 2);
+    }
+
+    // The loop range: a band in the ruler with a handle at either end.
+    if (_loopOn)
+    {
+        painter.setRenderHint(QPainter::Antialiasing, false);
+        const int left = _loopFirst * cellStride;
+        const int right = (_loopLast + 1) * cellStride - margin;
+        const QColor loopColor(150, 150, 150);
+        painter.fillRect(QRect(left, headerHeight - 8, right - left, 4), QColor(150, 150, 150, 160));
+        painter.fillRect(QRect(left - 1, 2, 3, headerHeight - 4), loopColor);
+        painter.fillRect(QRect(right - 2, 2, 3, headerHeight - 4), loopColor);
     }
 
     if (_player)

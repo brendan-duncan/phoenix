@@ -44,6 +44,8 @@ public:
 
     QString name() const override { return "Pen"; }
 
+    bool wantsEnter() const override { return _active; }
+
     /// The pen with an x before a path starts, an o when a click would close
     /// it, and plain in between.
     QCursor cursor() const override;
