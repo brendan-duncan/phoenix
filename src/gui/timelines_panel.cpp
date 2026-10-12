@@ -287,6 +287,7 @@ TimelinesPanel::TimelinesPanel(Player* player, QWidget *parent)
         });
         menu.addSeparator();
         choose("Time in Seconds", now.seconds, [](TimelineGrid::View& view) { view.seconds = !view.seconds; });
+        choose("Span Based Selection", now.spanSelection, [](TimelineGrid::View& view) { view.spanSelection = !view.spanSelection; });
         menu.exec(viewButton->mapToGlobal(QPoint(0, viewButton->height())));
     });
     headerLayout->addWidget(viewButton);
@@ -940,6 +941,14 @@ void TimelineGrid::mousePressEvent(QMouseEvent* event)
         _cells.clear();
         _anchorRow = _focusRow = row;
         _anchorFrame = _focusFrame = frame;
+        // Span based: the whole span the click lands in.
+        if (_view.spanSelection && layer)
+            for (const fla::Frame* span : layer->frames)
+                if (span && frame >= span->index && frame < span->index + std::max(span->duration, 1))
+                {
+                    _anchorFrame = span->index;
+                    _focusFrame = span->index + std::max(span->duration, 1) - 1;
+                }
     }
     _selecting = event->button() == Qt::LeftButton;
     _picked = event->button() == Qt::LeftButton && !(event->modifiers() & Qt::ShiftModifier);

@@ -77,6 +77,7 @@ TimelineView::TimelineView(Player* player, QWidget *parent)
         view.rowHeight = settings.value("timeline/rowHeight", 22).toInt();
         view.seconds = settings.value("timeline/seconds", false).toBool();
         view.preview = settings.value("timeline/preview", 0).toInt();
+        view.spanSelection = settings.value("timeline/spanSelection", false).toBool();
         _timelinesPanel->grid()->setView(view);
         _layersPanel->setRowHeight(_timelinesPanel->grid()->view().rowHeight);
     }
@@ -87,6 +88,7 @@ TimelineView::TimelineView(Player* player, QWidget *parent)
         settings.setValue("timeline/rowHeight", view.rowHeight);
         settings.setValue("timeline/seconds", view.seconds);
         settings.setValue("timeline/preview", view.preview);
+        settings.setValue("timeline/spanSelection", view.spanSelection);
         _layersPanel->setRowHeight(view.rowHeight);
     });
     // The grid draws the rows the list shows, so folders fold their lanes.

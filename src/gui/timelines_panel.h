@@ -89,6 +89,8 @@ public:
         int rowHeight = 22;
         bool seconds = false;
         int preview = 0;
+        /// A click selects the whole span it lands in, as a unit to drag.
+        bool spanSelection = false;
     };
     void setView(const View& view);
     const View& view() const { return _view; }
