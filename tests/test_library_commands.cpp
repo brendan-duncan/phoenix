@@ -111,6 +111,58 @@ TEST(only_an_unused_symbol_is_deleted_and_undo_brings_it_back)
     CHECK(document->folders.empty());
 }
 
+TEST(use_counts_unused_items_and_deleting_a_symbol_with_its_instances)
+{
+    fla::Symbol* ball = nullptr;
+    fla::SymbolInstance* instance = nullptr;
+    std::unique_ptr<fla::Document> document = documentWithBall(ball, instance);
+
+    // "Box" holds a ball inside a group, and nothing uses Box: Box is
+    // unused, the ball is used once on the stage and once in Box.
+    fla::Symbol* box = new fla::Symbol(document->symbolList);
+    box->name = "Box";
+    fla::Timeline* inner = new fla::Timeline(box);
+    fla::Layer* innerLayer = new fla::Layer(inner);
+    fla::Frame* innerFrame = new fla::Frame(innerLayer);
+    fla::Group* group = new fla::Group(innerFrame);
+    fla::SymbolInstance* nested = new fla::SymbolInstance(group);
+    nested->libraryItemName = "Ball";
+    nested->symbol = ball;
+    group->members.push_back(nested);
+    innerFrame->elements.push_back(group);
+    innerLayer->frames.push_back(innerFrame);
+    inner->layers.push_back(innerLayer);
+    box->timelines.push_back(inner);
+    document->symbolList->symbols.push_back(box);
+    document->symbolList->symbolMap["Box"] = box;
+
+    const std::map<std::string, int> counts = fla::library::useCounts(*document);
+    CHECK(counts.at("Ball") == 2 && counts.count("Box") == 0);
+    std::set<std::string> used = fla::library::usedItems(*document);
+    CHECK(used.count("Ball") == 1 && used.count("Box") == 0);
+
+    // Exported for ActionScript, Box counts as used.
+    box->extraAttributes = fla::library::withLinkage(box->extraAttributes, "game.Box");
+    CHECK(fla::library::linkageOf(*box) == "game.Box");
+    CHECK(fla::library::usedItems(*document).count("Box") == 1);
+    box->extraAttributes = fla::library::withLinkage(box->extraAttributes, "");
+    CHECK(fla::library::linkageOf(*box).empty() && box->extraAttributes.empty());
+
+    // Deleting the ball takes both instances; undo puts them back in place.
+    fla::CommandStack stack;
+    stack.push(fla::CommandPtr(new fla::DeleteSymbolCommand(document.get(), ball)));
+    CHECK(document->symbolList->symbolMap.count("Ball") == 0);
+    CHECK(document->timelines[0]->layers[0]->frames[0]->elements.empty());
+    CHECK(group->members.empty());
+    stack.undo();
+    CHECK(document->symbolList->symbolMap.count("Ball") == 1);
+    CHECK(document->timelines[0]->layers[0]->frames[0]->elements.size() == 1);
+    CHECK(group->members.size() == 1 && group->members[0] == nested);
+    CHECK(fla::library::instancesOf(*document, ball).size() == 2);
+    stack.redo();
+    CHECK(fla::library::instancesOf(*document, ball).empty());
+}
+
 #include "../src/data/bitmap.h"
 #include "../src/data/bitmap_fill.h"
 #include "../src/data/bitmap_instance.h"

@@ -2,12 +2,17 @@
 
 #include "command.h"
 
+#include <map>
+#include <set>
 #include <string>
+#include <utility>
 #include <vector>
 
 namespace fla {
 
+class Bitmap;
 class Document;
+class Element;
 class Folder;
 class Symbol;
 class SymbolInstance;
@@ -17,6 +22,27 @@ namespace library {
 /// Every instance of \a symbol anywhere in the document: on the main
 /// timelines, inside other symbols, and inside groups.
 std::vector<SymbolInstance*> instancesOf(Document& document, const Symbol* symbol);
+
+/// How many times each library item is used, by name: the instances of a
+/// symbol or a bitmap, the shapes filling with a bitmap and the frames
+/// playing a sound, anywhere in the document, inside symbols too. Items
+/// not used have no entry.
+std::map<std::string, int> useCounts(Document& document);
+
+/// The library items the document needs: those its scenes use, those
+/// exported for ActionScript, and whatever those use in turn. The rest is
+/// what Select Unused Items picks; a symbol used only by unused symbols is
+/// unused too.
+std::set<std::string> usedItems(Document& document);
+
+/// A symbol's linkage: the class it is exported for ActionScript as, or
+/// its identifier, or empty when it is not exported.
+std::string linkageOf(const Symbol& symbol);
+
+/// \a attributes with the linkage class set to \a className and export
+/// for ActionScript on, or the linkage taken off when it is empty.
+std::vector<std::pair<std::string, std::string>> withLinkage(
+    std::vector<std::pair<std::string, std::string>> attributes, const std::string& className);
 
 /// Whether \a name is free for a new library item or folder.
 bool nameIsFree(const Document& document, const std::string& name);
@@ -119,12 +145,56 @@ public:
     void redo() override;
     void undo() override;
     std::string name() const override { return "Delete Symbol"; }
+    Symbol* symbol() const { return _symbol; }
 
 private:
     Document* _document;
     Symbol* _symbol;
     size_t _index = 0;
     bool _owned = false;
+};
+
+/// Deletes a symbol along with every instance of it, wherever they are:
+/// on the scenes, inside other symbols and inside groups.
+class DeleteSymbolCommand : public Command
+{
+public:
+    DeleteSymbolCommand(Document* document, Symbol* symbol);
+    ~DeleteSymbolCommand() override;
+    DeleteSymbolCommand(const DeleteSymbolCommand&) = delete;
+    DeleteSymbolCommand& operator=(const DeleteSymbolCommand&) = delete;
+    void redo() override;
+    void undo() override;
+    std::string name() const override { return "Delete Symbol"; }
+
+private:
+    struct Removed
+    {
+        std::vector<Element*>* list;
+        size_t index;
+        Element* element;
+    };
+
+    Document* _document;
+    RemoveSymbolCommand _remove;
+    std::vector<Removed> _removed;
+};
+
+/// Takes a bitmap out of the library. Only for a bitmap nothing uses: the
+/// caller checks.
+class RemoveBitmapCommand : public Command
+{
+public:
+    RemoveBitmapCommand(Document* document, Bitmap* bitmap);
+    void redo() override;
+    void undo() override;
+    std::string name() const override { return "Delete Bitmap"; }
+
+private:
+    Document* _document;
+    Bitmap* _bitmap;
+    size_t _index = 0;
+    bool _removed = false;
 };
 
 /// Adds an empty library folder.

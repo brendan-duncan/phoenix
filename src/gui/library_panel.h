@@ -6,6 +6,7 @@
 #include <functional>
 
 class QLabel;
+class QLineEdit;
 
 namespace fla {
 class FLADocument;
@@ -44,7 +45,9 @@ private:
 };
 
 /// Animate's Library panel: the document's symbols, bitmaps and sounds in
-/// their folders, with a count and the kind of each. Dragging an item to
+/// their folders, with a count, the kind of each, how many times it is
+/// used and the class a symbol is exported as. A search field above the
+/// list narrows it by name. Dragging an item to
 /// the stage places an instance of it there; dragging it onto a folder in
 /// the list moves it there; double-clicking a symbol edits it, and
 /// double-clicking a name (or Rename) renames it.
@@ -64,8 +67,13 @@ public:
     /// Rebuilds the list, keeping which folders are open.
     void refresh();
 
-    /// Rebuilds the list only when the items no longer match the document.
+    /// Rebuilds the list only when the items no longer match the document,
+    /// and brings the use counts up to date.
     void refreshIfStale();
+
+    /// Selects every item the document does not need (see
+    /// fla::library::usedItems), as Animate's Select Unused Items does.
+    void selectUnused();
 
 signals:
     /// A symbol was double-clicked, to be edited on its own.
@@ -78,9 +86,15 @@ signals:
     /// An item or folder dropped into another folder.
     void moveRequested(const QString& name, const QString& folder);
     void duplicateSymbolRequested(const QString& name);
-    void deleteSymbolRequested(const QString& name);
+    /// The symbols and bitmaps selected, to be deleted.
+    void deleteItemsRequested(const QStringList& names);
+    /// A symbol's linkage, to be set.
+    void linkageRequested(const QString& name);
     /// A new folder inside \a parentPath (empty for the top level).
     void newFolderRequested(const QString& parentPath);
+
+protected:
+    bool eventFilter(QObject* watched, QEvent* event) override;
 
 private:
     enum class Kind
@@ -93,6 +107,13 @@ private:
 
     QTreeWidgetItem* folderItem(const QString& path);
     QStringList snapshot() const;
+    /// The Use Count column, from the document as it is now.
+    void updateCounts();
+    /// Shows only the items whose names hold the search text, and the
+    /// folders they are in.
+    void applyFilter();
+    /// The full names of the symbols and bitmaps selected.
+    QStringList selectedItems() const;
 
     const fla::FLADocument* _document = nullptr;
     void updatePreview();
@@ -100,6 +121,7 @@ private:
     LibraryTree* _tree;
     QLabel* _preview;
     QLabel* _count;
+    QLineEdit* _search;
     std::function<QImage(const QString&, const QString&, const QSize&)> _previewProvider;
     QStringList _built;
     QStringList _openFolders;

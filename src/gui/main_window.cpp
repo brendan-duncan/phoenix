@@ -4059,24 +4059,95 @@ void MainWindow::setupPropertiesPanel()
                 _flaDocument->document, fla::library::cloneSymbol(*symbol, copyName), "Duplicate Symbol")));
             afterLibraryEdit();
         });
-    connect(_libraryPanel, &LibraryPanel::deleteSymbolRequested, this,
+    connect(_libraryPanel, &LibraryPanel::deleteItemsRequested, this,
+        [this, symbolNamed, afterLibraryEdit](const QStringList& names) {
+            if (!_flaDocument || !_flaDocument->document)
+                return;
+            fla::Document& document = *_flaDocument->document;
+            std::vector<fla::Symbol*> symbols;
+            std::vector<fla::Bitmap*> bitmaps;
+            QStringList kept;
+            size_t instances = 0;
+            const std::map<std::string, int> uses = fla::library::useCounts(document);
+            for (const QString& name : names)
+            {
+                if (fla::Symbol* symbol = symbolNamed(name))
+                {
+                    symbols.push_back(symbol);
+                    instances += fla::library::instancesOf(document, symbol).size();
+                    continue;
+                }
+                for (fla::Resource* resource : document.resources)
+                {
+                    if (!resource || resource->resourceType() != fla::Resource::Type::Bitmap ||
+                        static_cast<fla::Bitmap*>(resource)->name != name.toStdString())
+                        continue;
+                    // A bitmap in use stays: its fills have nothing to
+                    // stand in for it.
+                    if (uses.count(name.toStdString()))
+                        kept << name;
+                    else
+                        bitmaps.push_back(static_cast<fla::Bitmap*>(resource));
+                }
+            }
+            if (symbols.empty() && bitmaps.empty())
+            {
+                if (!kept.isEmpty())
+                    QMessageBox::information(this, "Delete",
+                        QString("%1 is in use, so it cannot be deleted.").arg(kept.join(", ")));
+                return;
+            }
+            // Animate asks before taking instances with the symbols.
+            if (instances > 0)
+            {
+                const QString what = symbols.size() == 1 ? QString::fromStdString(symbols.front()->name)
+                                                         : QString("These %1 symbols").arg(symbols.size());
+                if (QMessageBox::question(this, "Delete",
+                        QString("%1 %2 used %3 time%4 in the document. Delete %5 along with %6?")
+                            .arg(what)
+                            .arg(symbols.size() == 1 ? "is" : "are")
+                            .arg(instances)
+                            .arg(instances == 1 ? "" : "s")
+                            .arg(symbols.size() == 1 ? "it" : "them")
+                            .arg(instances == 1 ? "the instance" : "every instance")) != QMessageBox::Yes)
+                    return;
+            }
+            // Not while one is open for editing.
+            if (_phoenixView)
+            {
+                _phoenixView->exitToDepth(0);
+                if (_phoenixView->selection())
+                    _phoenixView->selection()->clear();
+            }
+            fla::CommandStack& stack = _editContext.commandStack();
+            const size_t count = symbols.size() + bitmaps.size();
+            stack.beginMacro(count == 1 ? (symbols.empty() ? "Delete Bitmap" : "Delete Symbol") : "Delete Library Items");
+            for (fla::Symbol* symbol : symbols)
+                stack.push(fla::CommandPtr(new fla::DeleteSymbolCommand(&document, symbol)));
+            for (fla::Bitmap* bitmap : bitmaps)
+                stack.push(fla::CommandPtr(new fla::RemoveBitmapCommand(&document, bitmap)));
+            stack.endMacro();
+            if (!kept.isEmpty())
+                statusBar()->showMessage(QString("Kept %1: it is in use.").arg(kept.join(", ")), 4000);
+            afterLibraryEdit();
+            if (_timelineView)
+                _timelineView->refreshFrames();
+        });
+    connect(_libraryPanel, &LibraryPanel::linkageRequested, this,
         [this, symbolNamed, afterLibraryEdit](const QString& name) {
             fla::Symbol* symbol = symbolNamed(name);
             if (!symbol)
                 return;
-            const size_t uses = fla::library::instancesOf(*_flaDocument->document, symbol).size();
-            if (uses > 0)
-            {
-                QMessageBox::information(this, "Delete Symbol",
-                    QString("%1 is used %2 time%3 in the document, so it cannot be deleted. Delete its instances first.")
-                        .arg(name).arg(uses).arg(uses == 1 ? "" : "s"));
+            bool ok = false;
+            const QString className = QInputDialog::getText(this, "Linkage",
+                "Class (empty for no export):", QLineEdit::Normal,
+                QString::fromStdString(fla::library::linkageOf(*symbol)), &ok).trimmed();
+            if (!ok || className.toStdString() == fla::library::linkageOf(*symbol))
                 return;
-            }
-            // Not while it is open for editing.
-            if (_phoenixView)
-                _phoenixView->exitToDepth(0);
+            auto after = fla::library::withLinkage(symbol->extraAttributes, className.toStdString());
             _editContext.commandStack().push(fla::CommandPtr(
-                new fla::RemoveSymbolCommand(_flaDocument->document, symbol)));
+                new fla::SetPropertyCommand<std::vector<std::pair<std::string, std::string>>>(
+                    symbol->extraAttributes, symbol->extraAttributes, after, "Linkage")));
             afterLibraryEdit();
         });
     connect(_libraryPanel, &LibraryPanel::newFolderRequested, this,

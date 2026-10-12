@@ -6,13 +6,16 @@
 #include "../data/folder.h"
 #include "../data/symbol.h"
 #include "../data/symbol_list.h"
+#include "../edit/library_commands.h"
 
 #include <QDrag>
 #include <QDragEnterEvent>
 #include <QDragMoveEvent>
 #include <QDropEvent>
 #include <QHeaderView>
+#include <QKeyEvent>
 #include <QLabel>
+#include <QLineEdit>
 #include <QMenu>
 #include <QMimeData>
 #include <QTimer>
@@ -28,6 +31,29 @@ namespace {
 
 constexpr int KindRole = Qt::UserRole;
 constexpr int NameRole = Qt::UserRole + 1;
+
+/// The columns, as Animate's library has them.
+enum Column
+{
+    NameColumn,
+    TypeColumn,
+    UseColumn,
+    LinkageColumn,
+    ColumnCount
+};
+
+/// Sorts the Use Count column by number, the others as text.
+class LibraryItem : public QTreeWidgetItem
+{
+public:
+    bool operator<(const QTreeWidgetItem& other) const override
+    {
+        const int column = treeWidget() ? treeWidget()->sortColumn() : 0;
+        if (column == UseColumn)
+            return data(UseColumn, Qt::UserRole).toInt() < other.data(UseColumn, Qt::UserRole).toInt();
+        return text(column).compare(other.text(column), Qt::CaseInsensitive) < 0;
+    }
+};
 
 const QColor kInk(220, 220, 220);
 
@@ -226,6 +252,7 @@ LibraryPanel::LibraryPanel(QWidget* parent)
     , _tree(new LibraryTree(this))
     , _preview(new QLabel(this))
     , _count(new QLabel(this))
+    , _search(new QLineEdit(this))
 {
     QVBoxLayout* layout = new QVBoxLayout(this);
     layout->setContentsMargins(0, 0, 0, 0);
@@ -240,11 +267,23 @@ LibraryPanel::LibraryPanel(QWidget* parent)
     _count->setContentsMargins(10, 6, 10, 6);
     layout->addWidget(_count);
 
-    _tree->setColumnCount(2);
-    _tree->setHeaderLabels({"Name", "Type"});
-    _tree->header()->setStretchLastSection(false);
-    _tree->header()->setSectionResizeMode(0, QHeaderView::Stretch);
-    _tree->header()->setSectionResizeMode(1, QHeaderView::ResizeToContents);
+    _search->setPlaceholderText("Search");
+    _search->setClearButtonEnabled(true);
+    _search->setContentsMargins(6, 0, 6, 6);
+    connect(_search, &QLineEdit::textChanged, this, [this]() { applyFilter(); });
+    layout->addWidget(_search);
+
+    _tree->setColumnCount(ColumnCount);
+    _tree->setHeaderLabels({"Name", "Type", "Use Count", "Linkage"});
+    // The name keeps room to read; the rest scrolls into view when the
+    // panel is narrow.
+    _tree->header()->setStretchLastSection(true);
+    _tree->header()->setSectionResizeMode(NameColumn, QHeaderView::Interactive);
+    _tree->header()->resizeSection(NameColumn, 170);
+    _tree->header()->setSectionResizeMode(TypeColumn, QHeaderView::ResizeToContents);
+    _tree->header()->setSectionResizeMode(UseColumn, QHeaderView::ResizeToContents);
+    _tree->header()->setSectionResizeMode(LinkageColumn, QHeaderView::Interactive);
+    _tree->setSelectionMode(QAbstractItemView::ExtendedSelection);
     _tree->setIndentation(14);
     _tree->setUniformRowHeights(true);
     _tree->setSortingEnabled(true);
@@ -265,16 +304,21 @@ LibraryPanel::LibraryPanel(QWidget* parent)
         QAction* rename = nullptr;
         QAction* duplicate = nullptr;
         QAction* remove = nullptr;
+        QAction* linkage = nullptr;
+        const QStringList chosenItems = selectedItems();
         if (item)
             rename = menu.addAction("Rename");
         if (kind == static_cast<int>(Kind::Symbol))
         {
             duplicate = menu.addAction("Duplicate");
-            remove = menu.addAction("Delete");
+            linkage = menu.addAction("Linkage...");
         }
+        if (!chosenItems.isEmpty())
+            remove = menu.addAction(chosenItems.size() == 1 ? QString("Delete") : QString("Delete %1 Items").arg(chosenItems.size()));
         if (item)
             menu.addSeparator();
         QAction* folder = menu.addAction("New Folder");
+        QAction* unused = menu.addAction("Select Unused Items");
         QAction* chosen = menu.exec(_tree->viewport()->mapToGlobal(at));
         if (!chosen)
             return;
@@ -288,7 +332,15 @@ LibraryPanel::LibraryPanel(QWidget* parent)
         }
         else if (chosen == remove)
         {
-            emit deleteSymbolRequested(name);
+            emit deleteItemsRequested(chosenItems);
+        }
+        else if (chosen == linkage)
+        {
+            emit linkageRequested(name);
+        }
+        else if (chosen == unused)
+        {
+            selectUnused();
         }
         else if (chosen == folder)
         {
@@ -326,6 +378,106 @@ LibraryPanel::LibraryPanel(QWidget* parent)
             emit editSymbolRequested(item->data(0, NameRole).toString());
     });
     connect(_tree, &LibraryTree::moveRequested, this, &LibraryPanel::moveRequested);
+
+    // Delete in the list deletes what is selected there.
+    _tree->installEventFilter(this);
+}
+
+bool LibraryPanel::eventFilter(QObject* watched, QEvent* event)
+{
+    if (watched == _tree && event->type() == QEvent::KeyPress)
+    {
+        const int key = static_cast<QKeyEvent*>(event)->key();
+        if ((key == Qt::Key_Delete || key == Qt::Key_Backspace))
+        {
+            const QStringList items = selectedItems();
+            if (!items.isEmpty())
+                emit deleteItemsRequested(items);
+            return true;
+        }
+    }
+    return QWidget::eventFilter(watched, event);
+}
+
+QStringList LibraryPanel::selectedItems() const
+{
+    QStringList names;
+    for (const QTreeWidgetItem* item : _tree->selectedItems())
+    {
+        const int kind = item->data(0, KindRole).toInt();
+        if (kind == static_cast<int>(Kind::Symbol) || kind == static_cast<int>(Kind::Bitmap))
+            names << item->data(0, NameRole).toString();
+    }
+    return names;
+}
+
+void LibraryPanel::updateCounts()
+{
+    fla::Document* doc = _document ? _document->document : nullptr;
+    if (!doc)
+        return;
+    const std::map<std::string, int> counts = fla::library::useCounts(*doc);
+    const bool sorting = _tree->isSortingEnabled();
+    _tree->setSortingEnabled(false);
+    for (QTreeWidgetItemIterator it(_tree); *it; ++it)
+    {
+        const int kind = (*it)->data(0, KindRole).toInt();
+        if (kind == static_cast<int>(Kind::Folder))
+            continue;
+        const auto found = counts.find((*it)->data(0, NameRole).toString().toStdString());
+        const int uses = found == counts.end() ? 0 : found->second;
+        if ((*it)->data(UseColumn, Qt::UserRole).toInt() == uses && !(*it)->text(UseColumn).isEmpty())
+            continue;
+        (*it)->setText(UseColumn, QString::number(uses));
+        (*it)->setData(UseColumn, Qt::UserRole, uses);
+        (*it)->setTextAlignment(UseColumn, Qt::AlignRight | Qt::AlignVCenter);
+    }
+    _tree->setSortingEnabled(sorting);
+}
+
+void LibraryPanel::selectUnused()
+{
+    fla::Document* doc = _document ? _document->document : nullptr;
+    if (!doc)
+        return;
+    const std::set<std::string> used = fla::library::usedItems(*doc);
+    _search->clear();
+    _tree->clearSelection();
+    int picked = 0;
+    for (QTreeWidgetItemIterator it(_tree); *it; ++it)
+    {
+        const int kind = (*it)->data(0, KindRole).toInt();
+        if (kind != static_cast<int>(Kind::Symbol) && kind != static_cast<int>(Kind::Bitmap))
+            continue;
+        if (used.count((*it)->data(0, NameRole).toString().toStdString()))
+            continue;
+        (*it)->setSelected(true);
+        for (QTreeWidgetItem* parent = (*it)->parent(); parent; parent = parent->parent())
+            parent->setExpanded(true);
+        if (picked++ == 0)
+            _tree->scrollToItem(*it);
+    }
+    _count->setText(picked ? QString("%1 unused item%2 selected").arg(picked).arg(picked == 1 ? "" : "s")
+                           : QString("Every item is used"));
+}
+
+void LibraryPanel::applyFilter()
+{
+    const QString text = _search->text().trimmed();
+    // A folder shows when it matches or holds something that does.
+    std::function<bool(QTreeWidgetItem*)> show = [&](QTreeWidgetItem* item) {
+        bool any = false;
+        for (int i = 0; i < item->childCount(); ++i)
+            any = show(item->child(i)) || any;
+        const bool match = text.isEmpty() || item->text(NameColumn).contains(text, Qt::CaseInsensitive);
+        const bool visible = match || any;
+        item->setHidden(!visible);
+        if (!text.isEmpty() && any)
+            item->setExpanded(true);
+        return visible;
+    };
+    for (int i = 0; i < _tree->topLevelItemCount(); ++i)
+        show(_tree->topLevelItem(i));
 }
 
 void LibraryPanel::setPreviewProvider(std::function<QImage(const QString&, const QString&, const QSize&)> provider)
@@ -369,7 +521,8 @@ QStringList LibraryPanel::snapshot() const
         names << "f:" + QString::fromStdString(folder->name);
     if (doc->symbolList)
         for (const fla::Symbol* symbol : doc->symbolList->symbols)
-            names << "s:" + QString::fromStdString(symbol->name);
+            names << "s:" + QString::fromStdString(symbol->name) + ":" +
+                         QString::fromStdString(fla::library::linkageOf(*symbol));
     for (const fla::Resource* resource : doc->resources)
         if (resource && resource->resourceType() == fla::Resource::Type::Bitmap)
             names << "b:" + QString::fromStdString(static_cast<const fla::Bitmap*>(resource)->name);
@@ -382,6 +535,8 @@ void LibraryPanel::refreshIfStale()
 {
     if (snapshot() != _built)
         refresh();
+    else if (isVisible())
+        updateCounts();
 }
 
 QTreeWidgetItem* LibraryPanel::folderItem(const QString& path)
@@ -405,7 +560,7 @@ QTreeWidgetItem* LibraryPanel::folderItem(const QString& path)
         }
         if (!found)
         {
-            found = new QTreeWidgetItem();
+            found = new LibraryItem();
             found->setText(0, part);
             found->setIcon(0, folderIcon());
             found->setText(1, "Folder");
@@ -455,9 +610,11 @@ void LibraryPanel::refresh()
         folderItem(QString::fromStdString(folder->name));
 
     int items = 0;
-    const auto add = [&](const QString& path, const QIcon& icon, const QString& type, Kind kind) {
+    const auto add = [&](const QString& path, const QIcon& icon, const QString& type, Kind kind,
+                         const QString& linkage = QString()) {
         const int slash = path.lastIndexOf('/');
-        QTreeWidgetItem* item = new QTreeWidgetItem();
+        QTreeWidgetItem* item = new LibraryItem();
+        item->setText(LinkageColumn, linkage);
         item->setText(0, slash < 0 ? path : path.mid(slash + 1));
         item->setIcon(0, icon);
         item->setText(1, type);
@@ -478,7 +635,8 @@ void LibraryPanel::refresh()
         {
             if (symbol)
                 add(QString::fromStdString(symbol->name), symbolIcon(symbol->symbolType),
-                    typeName(symbol->symbolType), Kind::Symbol);
+                    typeName(symbol->symbolType), Kind::Symbol,
+                    QString::fromStdString(fla::library::linkageOf(*symbol)));
         }
     }
     for (const fla::Resource* resource : doc->resources)
@@ -492,6 +650,8 @@ void LibraryPanel::refresh()
 
     _count->setText(QString("%1 item%2").arg(items).arg(items == 1 ? "" : "s"));
     _tree->setSortingEnabled(true);
+    updateCounts();
+    applyFilter();
     _refreshing = false;
     updatePreview();
 }

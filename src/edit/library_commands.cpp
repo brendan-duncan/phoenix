@@ -83,6 +83,165 @@ std::vector<SymbolInstance*> instancesOf(Document& document, const Symbol* symbo
     return found;
 }
 
+namespace {
+
+/// Calls \a use with the name of every library item \a element uses,
+/// inside groups too.
+void usesOf(Element* element, const std::function<void(const std::string&)>& use);
+
+} // namespace
+
+std::map<std::string, int> useCounts(Document& document)
+{
+    std::map<std::string, int> counts;
+    const auto count = [&counts](const std::string& name) {
+        if (!name.empty())
+            ++counts[name];
+    };
+    const auto timeline = [&](Timeline* timeline) {
+        if (!timeline)
+            return;
+        for (Layer* layer : timeline->layers)
+            for (Frame* frame : layer ? layer->frames : std::vector<Frame*>())
+            {
+                if (!frame)
+                    continue;
+                for (Element* element : frame->elements)
+                    usesOf(element, count);
+                for (const auto& attribute : frame->extraAttributes)
+                    if (attribute.first == "soundName")
+                        count(attribute.second);
+            }
+    };
+    for (Timeline* t : document.timelines)
+        timeline(t);
+    if (document.symbolList)
+        for (Symbol* symbol : document.symbolList->symbols)
+            if (symbol)
+                for (Timeline* t : symbol->timelines)
+                    timeline(t);
+    return counts;
+}
+
+std::set<std::string> usedItems(Document& document)
+{
+    std::set<std::string> used;
+    std::vector<Symbol*> pending;
+    const auto use = [&](const std::string& name) {
+        if (name.empty() || !used.insert(name).second)
+            return;
+        if (document.symbolList)
+        {
+            const auto it = document.symbolList->symbolMap.find(name);
+            if (it != document.symbolList->symbolMap.end() && it->second)
+                pending.push_back(it->second);
+        }
+    };
+    const auto timeline = [&](Timeline* timeline) {
+        if (!timeline)
+            return;
+        for (Layer* layer : timeline->layers)
+            for (Frame* frame : layer ? layer->frames : std::vector<Frame*>())
+            {
+                if (!frame)
+                    continue;
+                for (Element* element : frame->elements)
+                    usesOf(element, use);
+                for (const auto& attribute : frame->extraAttributes)
+                    if (attribute.first == "soundName")
+                        use(attribute.second);
+            }
+    };
+    for (Timeline* t : document.timelines)
+        timeline(t);
+    // Code can make what is exported, so it counts as used.
+    if (document.symbolList)
+        for (Symbol* symbol : document.symbolList->symbols)
+            if (symbol && !linkageOf(*symbol).empty())
+                use(symbol->name);
+    while (!pending.empty())
+    {
+        Symbol* symbol = pending.back();
+        pending.pop_back();
+        for (Timeline* t : symbol->timelines)
+            timeline(t);
+    }
+    return used;
+}
+
+std::string linkageOf(const Symbol& symbol)
+{
+    std::string className;
+    std::string identifier;
+    bool exported = false;
+    for (const auto& attribute : symbol.extraAttributes)
+    {
+        if (attribute.first == "linkageClassName")
+            className = attribute.second;
+        else if (attribute.first == "linkageIdentifier")
+            identifier = attribute.second;
+        else if (attribute.first == "linkageExportForAS" || attribute.first == "linkageExportForRS")
+            exported = exported || attribute.second == "true";
+    }
+    if (!className.empty())
+        return className;
+    return exported ? identifier : std::string();
+}
+
+std::vector<std::pair<std::string, std::string>> withLinkage(
+    std::vector<std::pair<std::string, std::string>> attributes, const std::string& className)
+{
+    attributes.erase(std::remove_if(attributes.begin(), attributes.end(),
+                         [](const std::pair<std::string, std::string>& attribute) {
+                             return attribute.first == "linkageClassName" || attribute.first == "linkageExportForAS" ||
+                                    attribute.first == "linkageExportInFirstFrame" ||
+                                    attribute.first == "linkageBaseClass" || attribute.first == "linkageIdentifier";
+                         }),
+        attributes.end());
+    if (!className.empty())
+    {
+        attributes.emplace_back("linkageExportForAS", "true");
+        attributes.emplace_back("linkageClassName", className);
+    }
+    return attributes;
+}
+
+namespace {
+
+void usesOf(Element* element, const std::function<void(const std::string&)>& use)
+{
+    if (!element)
+        return;
+    switch (element->elementType())
+    {
+    case Element::Type::SymbolInstance:
+        use(static_cast<SymbolInstance*>(element)->libraryItemName);
+        break;
+    case Element::Type::BitmapInstance:
+        use(static_cast<BitmapInstance*>(element)->libraryItemName);
+        break;
+    case Element::Type::Shape:
+    {
+        Shape* shape = static_cast<Shape*>(element);
+        for (FillStyle* fill : shape->fills)
+            if (fill && fill->type() == FillStyle::Type::BitmapFill)
+                use(static_cast<BitmapFill*>(fill)->bitmapPath);
+        for (StrokeStyle* stroke : shape->strokes)
+            if (stroke && stroke->fill && stroke->fill->type() == FillStyle::Type::BitmapFill)
+                use(static_cast<BitmapFill*>(stroke->fill)->bitmapPath);
+        break;
+    }
+    case Element::Type::Group:
+        for (Element* member : static_cast<Group*>(element)->members)
+            usesOf(member, use);
+        break;
+    default:
+        break;
+    }
+}
+
+} // namespace
+
 bool nameIsFree(const Document& document, const std::string& name)
 {
     if (name.empty())
@@ -533,6 +692,96 @@ void RemoveSymbolCommand::undo()
     symbols.insert(symbols.begin() + static_cast<long>(std::min(_index, symbols.size())), _symbol);
     _document->symbolList->symbolMap[_symbol->name] = _symbol;
     _owned = false;
+}
+
+DeleteSymbolCommand::DeleteSymbolCommand(Document* document, Symbol* symbol)
+    : _document(document)
+    , _remove(document, symbol)
+{
+}
+
+DeleteSymbolCommand::~DeleteSymbolCommand()
+{
+    // The instances taken out are this command's while it is done.
+    for (const Removed& removed : _removed)
+        delete removed.element;
+}
+
+void DeleteSymbolCommand::redo()
+{
+    _removed.clear();
+    if (!_document)
+        return;
+    std::function<void(std::vector<Element*>&)> sweep = [&](std::vector<Element*>& list) {
+        for (size_t i = 0; i < list.size();)
+        {
+            Element* element = list[i];
+            if (element && element->elementType() == Element::Type::SymbolInstance &&
+                static_cast<SymbolInstance*>(element)->symbol == _remove.symbol())
+            {
+                _removed.push_back({&list, i, element});
+                list.erase(list.begin() + static_cast<long>(i));
+                continue;
+            }
+            if (element && element->elementType() == Element::Type::Group)
+                sweep(static_cast<Group*>(element)->members);
+            ++i;
+        }
+    };
+    const auto timeline = [&](Timeline* timeline) {
+        if (!timeline)
+            return;
+        for (Layer* layer : timeline->layers)
+            if (layer)
+                for (Frame* frame : layer->frames)
+                    if (frame)
+                        sweep(frame->elements);
+    };
+    for (Timeline* t : _document->timelines)
+        timeline(t);
+    if (_document->symbolList)
+        for (Symbol* other : _document->symbolList->symbols)
+            if (other && other != _remove.symbol())
+                for (Timeline* t : other->timelines)
+                    timeline(t);
+    _remove.redo();
+}
+
+void DeleteSymbolCommand::undo()
+{
+    _remove.undo();
+    // Back where each was, the last taken out first.
+    for (auto it = _removed.rbegin(); it != _removed.rend(); ++it)
+        it->list->insert(it->list->begin() + static_cast<long>(std::min(it->index, it->list->size())), it->element);
+    _removed.clear();
+}
+
+RemoveBitmapCommand::RemoveBitmapCommand(Document* document, Bitmap* bitmap)
+    : _document(document)
+    , _bitmap(bitmap)
+{
+}
+
+void RemoveBitmapCommand::redo()
+{
+    if (!_document || !_bitmap)
+        return;
+    std::vector<Resource*>& resources = _document->resources;
+    const auto at = std::find(resources.begin(), resources.end(), _bitmap);
+    if (at == resources.end())
+        return;
+    _index = static_cast<size_t>(at - resources.begin());
+    resources.erase(at);
+    _removed = true;
+}
+
+void RemoveBitmapCommand::undo()
+{
+    if (!_document || !_bitmap || !_removed)
+        return;
+    std::vector<Resource*>& resources = _document->resources;
+    resources.insert(resources.begin() + static_cast<long>(std::min(_index, resources.size())), _bitmap);
+    _removed = false;
 }
 
 RenameLibraryCommand::RenameLibraryCommand(Document* document, library::Renames renames, const std::string& name)
