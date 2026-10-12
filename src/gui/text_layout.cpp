@@ -398,6 +398,115 @@ private:
     double _widest = 0.0;
 };
 
+/// Whether the text runs in columns, and which way they follow each other.
+bool isVertical(const fla::StaticText& text, bool* leftToRight = nullptr)
+{
+    std::string orientation;
+    for (const auto& attribute : text.extraAttributes)
+        if (attribute.first == "orientation")
+            orientation = attribute.second;
+    if (leftToRight)
+        *leftToRight = orientation == "vertical left to right";
+    return orientation.rfind("vertical", 0) == 0;
+}
+
+/// One character of vertical text and the cell it stands in.
+struct Cell
+{
+    int index = 0;
+    int run = 0;
+    QRectF rect;
+};
+
+/// Lays vertical text out: each character in a cell as tall as its font,
+/// down a column until a return or (in a fixed box) the box's height, the
+/// columns side by side as wide as their widest font.
+std::vector<Cell> verticalCells(const fla::StaticText& text, QRectF* bounds)
+{
+    bool leftToRight = false;
+    isVertical(text, &leftToRight);
+    const QString joined = joinedText(text);
+    std::vector<int> runOf;
+    for (size_t r = 0; r < text.runs.size(); ++r)
+        for (int k = 0; k < QString::fromStdString(text.runs[r].text).length(); ++k)
+            runOf.push_back(static_cast<int>(r));
+    const double room = text.autoExpand ? 0.0 : std::max(0.0, text.height - 2.0 * kGutter);
+
+    // Columns first, in the order they are read, measured.
+    struct Column
+    {
+        std::vector<Cell> cells;
+        double width = 0.0;
+        double height = 0.0;
+    };
+    std::vector<Column> columns(1);
+    double y = 0.0;
+    for (int i = 0; i < joined.length(); ++i)
+    {
+        const int run = i < static_cast<int>(runOf.size()) ? runOf[static_cast<size_t>(i)] : 0;
+        const fla::TextRun fallback;
+        const QFontMetricsF fm(fontFor(text.runs.empty() ? fallback : text.runs[static_cast<size_t>(run)]));
+        if (isBreak(joined[i]))
+        {
+            // The break sits at the column's foot.
+            Cell cell{i, run, QRectF(0.0, y, fm.height(), 0.0)};
+            columns.back().cells.push_back(cell);
+            columns.back().width = std::max(columns.back().width, fm.height());
+            columns.emplace_back();
+            y = 0.0;
+            continue;
+        }
+        if (room > 0.0 && y > 0.0 && y + fm.height() > room + 1.0e-6)
+        {
+            columns.emplace_back();
+            y = 0.0;
+        }
+        Cell cell{i, run, QRectF(0.0, y, fm.height(), fm.height())};
+        columns.back().cells.push_back(cell);
+        columns.back().width = std::max(columns.back().width, fm.height());
+        y += fm.height();
+        columns.back().height = y;
+    }
+    for (Column& column : columns)
+        if (column.width <= 0.0)
+        {
+            const fla::TextRun fallback;
+            column.width = QFontMetricsF(fontFor(text.runs.empty() ? fallback : text.runs.back())).height();
+        }
+
+    double total = 0.0;
+    double tallest = 0.0;
+    for (const Column& column : columns)
+    {
+        total += column.width;
+        tallest = std::max(tallest, column.height);
+    }
+    const double width = text.autoExpand ? total + 2.0 * kGutter : text.width;
+    const double height = text.autoExpand ? tallest + 2.0 * kGutter : text.height;
+    if (bounds)
+        *bounds = QRectF(text.left, text.top, std::max(width, 2.0 * kGutter), std::max(height, 2.0 * kGutter));
+
+    // Then placed: from the right edge leftward, or the left rightward.
+    std::vector<Cell> cells;
+    double x = leftToRight ? text.left + kGutter : text.left + width - kGutter;
+    for (const Column& column : columns)
+    {
+        if (!leftToRight)
+            x -= column.width;
+        for (Cell cell : column.cells)
+        {
+            cell.rect = QRectF(x, text.top + kGutter + cell.rect.top(), column.width, cell.rect.height());
+            cells.push_back(cell);
+        }
+        // An empty column still holds the caret.
+        if (column.cells.empty())
+            cells.push_back(Cell{static_cast<int>(joined.length()), 0, QRectF(x, text.top + kGutter, column.width, 0.0)});
+        if (leftToRight)
+            x += column.width;
+    }
+    return cells;
+}
+
 const Line& lineFor(const Layout& layout, int index)
 {
     // The last line that starts at or before the index; an index at the very
@@ -465,11 +574,41 @@ Layout layout(const fla::StaticText& text)
 
 QRectF localBounds(const fla::StaticText& text)
 {
+    if (isVertical(text))
+    {
+        QRectF bounds;
+        verticalCells(text, &bounds);
+        return bounds;
+    }
     return layout(text).bounds;
 }
 
 void draw(QPainter& painter, const fla::StaticText& text)
 {
+    if (isVertical(text))
+    {
+        QRectF bounds;
+        const std::vector<Cell> cells = verticalCells(text, &bounds);
+        const QString joined = joinedText(text);
+        painter.setBrush(Qt::NoBrush);
+        if (text.textType != fla::StaticText::TextType::Static)
+        {
+            QPen outline(QColor(0, 0, 0), 0.0);
+            outline.setStyle(Qt::DotLine);
+            painter.setPen(outline);
+            painter.drawRect(bounds);
+        }
+        for (const Cell& cell : cells)
+        {
+            if (cell.index >= joined.length() || isBreak(joined[cell.index]) || text.runs.empty())
+                continue;
+            const fla::TextRun& run = text.runs[static_cast<size_t>(cell.run)];
+            painter.setFont(fontFor(run));
+            painter.setPen(QPen(colorOf(run), 1.0));
+            painter.drawText(cell.rect, Qt::AlignCenter, QString(joined[cell.index]));
+        }
+        return;
+    }
     const Layout laid = layout(text);
     const QString joined = joinedText(text);
     painter.setBrush(Qt::NoBrush);
@@ -501,6 +640,30 @@ void draw(QPainter& painter, const fla::StaticText& text)
 
 int indexAt(const fla::StaticText& text, const QPointF& localPos)
 {
+    if (isVertical(text))
+    {
+        // The nearest cell edge: above a cell's middle is before it.
+        const std::vector<Cell> cells = verticalCells(text, nullptr);
+        int best = 0;
+        double bestDistance = 1.0e300;
+        for (const Cell& cell : cells)
+        {
+            const double dx = localPos.x() < cell.rect.left() ? cell.rect.left() - localPos.x()
+                : localPos.x() > cell.rect.right()            ? localPos.x() - cell.rect.right()
+                                                              : 0.0;
+            for (int end = 0; end < 2; ++end)
+            {
+                const double y = end == 0 ? cell.rect.top() : cell.rect.bottom();
+                const double distance = dx * 4.0 + std::abs(localPos.y() - y);
+                if (distance < bestDistance)
+                {
+                    bestDistance = distance;
+                    best = cell.index + (end == 1 && cell.rect.height() > 0.0 ? 1 : 0);
+                }
+            }
+        }
+        return best;
+    }
     const Layout laid = layout(text);
     if (laid.lines.empty())
         return 0;
@@ -537,6 +700,13 @@ std::vector<QRectF> selectionRects(const fla::StaticText& text, int from, int to
     std::vector<QRectF> bands;
     if (to <= from)
         return bands;
+    if (isVertical(text))
+    {
+        for (const Cell& cell : verticalCells(text, nullptr))
+            if (cell.index >= from && cell.index < to)
+                bands.push_back(cell.rect.height() > 0.0 ? cell.rect : cell.rect.adjusted(0.0, 0.0, 0.0, 3.0));
+        return bands;
+    }
     const Layout laid = layout(text);
     const QString joined = joinedText(text);
     for (const Line& line : laid.lines)
@@ -558,6 +728,19 @@ std::vector<QRectF> selectionRects(const fla::StaticText& text, int from, int to
 
 QRectF caretRect(const fla::StaticText& text, int index)
 {
+    if (isVertical(text))
+    {
+        // Across the column, at the top of the cell it comes before, or at
+        // the foot of the last.
+        const std::vector<Cell> cells = verticalCells(text, nullptr);
+        if (cells.empty())
+            return QRectF(text.left + kGutter, text.top + kGutter, 12.0, 0.0);
+        for (const Cell& cell : cells)
+            if (cell.index == index)
+                return QRectF(cell.rect.left(), cell.rect.top(), cell.rect.width(), 0.0);
+        const Cell& last = cells.back();
+        return QRectF(last.rect.left(), last.rect.bottom(), last.rect.width(), 0.0);
+    }
     const Layout laid = layout(text);
     if (laid.lines.empty())
         return QRectF(text.left + kGutter, text.top + kGutter, 0.0, 12.0);

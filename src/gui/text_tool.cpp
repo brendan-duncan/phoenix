@@ -915,7 +915,10 @@ void TextTool::paintOverlay(PhoenixView& view, QPainter& painter, double scale)
 
     const QRectF caret = TextLayout::caretRect(*_text, _caret);
     painter.setPen(QPen(QColor(0, 0, 0), 1.0 * scale));
-    painter.drawLine(QPointF(caret.left(), caret.top()), QPointF(caret.left(), caret.bottom()));
+    if (caret.width() > caret.height())
+        painter.drawLine(QPointF(caret.left(), caret.top()), QPointF(caret.right(), caret.top()));
+    else
+        painter.drawLine(QPointF(caret.left(), caret.top()), QPointF(caret.left(), caret.bottom()));
 
     // Text an input method is composing, underlined at the caret over a
     // white band until it is committed.
