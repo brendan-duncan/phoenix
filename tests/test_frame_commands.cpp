@@ -119,3 +119,39 @@ TEST(a_frame_sound_is_written_as_animate_keeps_it)
     fla::frame_sound::write(settings, 4000, frame.extraAttributes, frame.extraChildren);
     CHECK(frame.extraAttributes.size() == 1);
 }
+
+TEST(sound_envelopes_and_split_audio)
+{
+    fla::Layer layer(nullptr);
+    fla::Frame* frame = new fla::Frame(&layer);
+    frame->duration = 48;
+    frame->extraAttributes.emplace_back("soundName", "voice.wav");
+    frame->extraAttributes.emplace_back("soundSync", "stream");
+    layer.frames.push_back(frame);
+    CHECK(fla::frame_sound::envelope(*frame).empty());
+
+    // A hand-made envelope and trim, read back.
+    std::vector<fla::frame_sound::EnvelopePoint> points = {{0, 0, 0}, {22050, 32768, 16384}, {88200, 32768, 32768}};
+    fla::frame_sound::setEnvelope(points, 4410, 132300, frame->extraAttributes, frame->extraChildren);
+    CHECK(fla::frame_sound::envelope(*frame) == points);
+    CHECK(fla::frame_sound::read(*frame).effect == "custom");
+    size_t in = 0, out = 0;
+    fla::frame_sound::trim(*frame, in, out);
+    CHECK(in == 4410 && out == 132300);
+
+    // Cut a second in, at 24 fps: the second keyframe starts the sound a
+    // second further on, with the envelope still.
+    CHECK(fla::frame_sound::splitAudio(layer, 24, 24.0));
+    CHECK(layer.frames.size() == 2 && layer.frames[1]->index == 24);
+    size_t secondIn = 0, secondOut = 0;
+    fla::frame_sound::trim(*layer.frames[1], secondIn, secondOut);
+    CHECK(secondIn == 4410 + 44100 && secondOut == 132300);
+    fla::frame_sound::trim(*layer.frames[0], in, out);
+    CHECK(out == 4410 + 44100);
+    CHECK(fla::frame_sound::read(*layer.frames[1]).name == "voice.wav");
+    CHECK(fla::frame_sound::envelope(*layer.frames[1]) == points);
+    // Not on a keyframe, nor on an event sound.
+    CHECK(!fla::frame_sound::splitAudio(layer, 24, 24.0));
+    fla::frame_sound::setEnvelope({}, 0, 0, frame->extraAttributes, frame->extraChildren);
+    CHECK(fla::frame_sound::envelope(*frame).empty() && fla::frame_sound::read(*frame).effect == "none");
+}

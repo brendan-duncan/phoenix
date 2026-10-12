@@ -25,6 +25,9 @@
 #include "layer_depth_panel.h"
 #include "camera_tool.h"
 #include "bone_tool.h"
+#include "envelope_dialog.h"
+#include "../edit/frame_sound.h"
+#include "../edit/trace_bitmap.h"
 #include "movie_explorer.h"
 #include "../edit/library_transfer.h"
 #include "preferences.h"
@@ -4029,6 +4032,9 @@ void MainWindow::setupMenus()
     QAction* swapBitmapAction = bitmapMenu->addAction("&Swap Bitmap...");
     swapBitmapAction->setStatusTip("Show another library bitmap in the selected bitmaps");
     connect(swapBitmapAction, &QAction::triggered, this, &MainWindow::swapBitmap);
+    QAction* traceBitmapAction = bitmapMenu->addAction("&Trace Bitmap...");
+    traceBitmapAction->setStatusTip("Turn the selected bitmaps into vector artwork: areas of like color become fills");
+    connect(traceBitmapAction, &QAction::triggered, this, &MainWindow::traceBitmaps);
 
     modifyMenu->addSeparator();
 
@@ -4079,6 +4085,9 @@ void MainWindow::setupMenus()
     QAction* distributeKeysAction = modifyTimelineMenu->addAction("Distribute to &Keyframes");
     distributeKeysAction->setStatusTip("Put each selected object on a keyframe of its own, one after another");
     connect(distributeKeysAction, &QAction::triggered, this, &MainWindow::distributeToKeyframes);
+    QAction* splitAudioAction = modifyTimelineMenu->addAction("Split &Audio");
+    splitAudioAction->setStatusTip("Cut the stream sound on the current layer at the playhead into two keyframes");
+    connect(splitAudioAction, &QAction::triggered, this, &MainWindow::splitAudio);
 
     // Modify > Shape, as Animate groups them.
     QMenu* shapeMenu = modifyMenu->addMenu("S&hape");
@@ -6593,6 +6602,7 @@ void MainWindow::setupPropertiesPanel()
     });
     connect(_framePicker, &FramePickerPanel::frameChosen, this, &MainWindow::pickInstanceFrame);
     connect(_propertiesPanel, &PropertiesPanel::swapSymbolRequested, this, &MainWindow::swapSymbol);
+    connect(_propertiesPanel, &PropertiesPanel::editEnvelopeRequested, this, &MainWindow::editEnvelope);
     connect(_propertiesPanel, &PropertiesPanel::swapBitmapRequested, this, &MainWindow::swapBitmap);
     connect(_propertiesPanel, &PropertiesPanel::textStyleRequested, this, &MainWindow::applyTextStyle);
     connect(_framePicker, &FramePickerPanel::loopChosen, this, [this](int loopType) {
@@ -9464,6 +9474,168 @@ void MainWindow::goToMatch(const fla::find::Match& match)
     _phoenixView->clearCaches();
     _phoenixView->update();
     updateSelectionState();
+}
+
+void MainWindow::traceBitmaps()
+{
+    if (!_phoenixView)
+        return;
+    std::vector<fla::BitmapInstance*> bitmaps;
+    for (fla::DOMElement* selected : _selection.elements())
+        if (auto* bitmap = dynamic_cast<fla::BitmapInstance*>(selected))
+            bitmaps.push_back(bitmap);
+    if (bitmaps.empty())
+    {
+        statusBar()->showMessage("Select a bitmap on the stage to trace.", 4000);
+        return;
+    }
+    QDialog dialog(this);
+    dialog.setWindowTitle("Trace Bitmap");
+    QFormLayout* form = new QFormLayout(&dialog);
+    QSettings settings;
+    QSpinBox* threshold = new QSpinBox(&dialog);
+    threshold->setRange(1, 500);
+    threshold->setValue(settings.value("trace/threshold", 100).toInt());
+    threshold->setToolTip("How different two colors may be and still make one area; higher makes fewer areas");
+    form->addRow("Color threshold", threshold);
+    QSpinBox* area = new QSpinBox(&dialog);
+    area->setRange(1, 1000);
+    area->setSuffix(" px");
+    area->setValue(settings.value("trace/minimumArea", 8).toInt());
+    area->setToolTip("Areas smaller than this join their neighbors");
+    form->addRow("Minimum area", area);
+    QComboBox* fit = new QComboBox(&dialog);
+    const std::pair<const char*, double> fits[] = {{"Pixels", 0.25}, {"Very Tight", 0.5}, {"Tight", 1.0},
+        {"Normal", 2.0}, {"Smooth", 3.0}, {"Very Smooth", 5.0}};
+    for (const auto& [label, tolerance] : fits)
+        fit->addItem(label, tolerance);
+    fit->setCurrentIndex(std::clamp(settings.value("trace/curveFit", 3).toInt(), 0, 5));
+    fit->setToolTip("How closely the outlines follow the pixels; smoother outlines have fewer points");
+    form->addRow("Curve fit", fit);
+    QDialogButtonBox* buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, &dialog);
+    connect(buttons, &QDialogButtonBox::accepted, &dialog, &QDialog::accept);
+    connect(buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
+    form->addRow(buttons);
+    if (dialog.exec() != QDialog::Accepted)
+        return;
+    settings.setValue("trace/threshold", threshold->value());
+    settings.setValue("trace/minimumArea", area->value());
+    settings.setValue("trace/curveFit", fit->currentIndex());
+    fla::trace::Options options;
+    options.colorThreshold = threshold->value();
+    options.minimumArea = area->value();
+    options.curveFit = fit->currentData().toDouble();
+
+    QApplication::setOverrideCursor(Qt::WaitCursor);
+    _phoenixView->flushPendingMerge();
+    fla::CommandStack& stack = _editContext.commandStack();
+    std::vector<fla::DOMElement*> traced;
+    stack.beginMacro("Trace Bitmap");
+    for (fla::BitmapInstance* bitmap : bitmaps)
+    {
+        fla::Frame* frame = dynamic_cast<fla::Frame*>(bitmap->parent);
+        if (!frame)
+            continue;
+        const QImage image = _phoenixView->libraryBitmap(QString::fromStdString(bitmap->libraryItemName))
+                                 .toImage()
+                                 .convertToFormat(QImage::Format_RGBA8888);
+        if (image.isNull())
+            continue;
+        std::vector<uint8_t> pixels(static_cast<size_t>(image.width()) * image.height() * 4);
+        for (int y = 0; y < image.height(); ++y)
+            std::memcpy(pixels.data() + static_cast<size_t>(y) * image.width() * 4, image.constScanLine(y),
+                static_cast<size_t>(image.width()) * 4);
+        fla::Shape* shape = fla::trace::traceBitmap(pixels.data(), image.width(), image.height(), options);
+        if (!shape)
+            continue;
+        // In the bitmap's place, as it was placed.
+        shape->parent = frame;
+        shape->transform = bitmap->transform;
+        const auto found = std::find(frame->elements.begin(), frame->elements.end(), bitmap);
+        const int index = found == frame->elements.end() ? -1 : static_cast<int>(found - frame->elements.begin());
+        stack.push(fla::CommandPtr(new fla::RemoveElementCommand(frame, bitmap, "Trace Bitmap", &_selection)));
+        stack.push(fla::CommandPtr(new fla::AddElementCommand(frame, shape, "Trace Bitmap", &_selection, index)));
+        traced.push_back(shape);
+    }
+    stack.endMacro();
+    stack.breakMergeChain();
+    QApplication::restoreOverrideCursor();
+    if (!traced.empty())
+        _selection.select(traced);
+    _phoenixView->invalidateBounds();
+    _phoenixView->clearCaches();
+    _phoenixView->update();
+}
+
+void MainWindow::editEnvelope(fla::Frame* frame)
+{
+    if (!frame || !_flaDocument || !_flaDocument->document)
+        return;
+    const fla::frame_sound::Settings settings = fla::frame_sound::read(*frame);
+    if (settings.name.empty())
+        return;
+    std::shared_ptr<const PcmBuffer> sound = _timelineAudio ? _timelineAudio->librarySound(settings.name) : nullptr;
+    if (!sound)
+    {
+        QMessageBox::information(this, "Edit Envelope", "The sound could not be read.");
+        return;
+    }
+    size_t in = 0, out = 0;
+    fla::frame_sound::trim(*frame, in, out);
+    EnvelopeDialog dialog(sound, _flaDocument->document->frameRate, fla::frame_sound::envelope(*frame), in, out, this);
+    if (dialog.exec() != QDialog::Accepted)
+    {
+        if (_propertiesPanel)
+            _propertiesPanel->refresh();
+        return;
+    }
+    using Attributes = std::vector<std::pair<std::string, std::string>>;
+    Attributes attributes = frame->extraAttributes;
+    std::vector<std::string> children = frame->extraChildren;
+    fla::frame_sound::setEnvelope(dialog.editor()->points, dialog.editor()->in, dialog.editor()->out, attributes, children);
+    if (attributes != frame->extraAttributes || children != frame->extraChildren)
+    {
+        auto* command = new fla::CompoundCommand("Edit Envelope");
+        command->addCommand(fla::CommandPtr(new fla::SetPropertyCommand<Attributes>(
+            frame->extraAttributes, frame->extraAttributes, attributes, "Edit Envelope")));
+        command->addCommand(fla::CommandPtr(new fla::SetPropertyCommand<std::vector<std::string>>(
+            frame->extraChildren, frame->extraChildren, children, "Edit Envelope")));
+        _editContext.commandStack().push(fla::CommandPtr(command));
+        _editContext.commandStack().breakMergeChain();
+    }
+    if (_timelineView)
+        _timelineView->refreshFrames();
+    if (_propertiesPanel)
+        _propertiesPanel->refresh();
+}
+
+void MainWindow::splitAudio()
+{
+    if (!_flaDocument || !_flaDocument->document || !_timelineView || !_player)
+        return;
+    fla::Timeline* timeline = nullptr;
+    int index = 0;
+    if (!_timelineView->currentLayer(timeline, index) || !timeline || index < 0 ||
+        index >= static_cast<int>(timeline->layers.size()))
+        return;
+    fla::Layer* layer = timeline->layers[static_cast<size_t>(index)];
+    const int at = _player->currentFrame();
+    const double fps = _flaDocument->document->frameRate;
+    auto split = std::make_shared<bool>(false);
+    auto* command = new fla::EditFramesCommand({layer}, "Split Audio", [layer, at, fps, split](std::vector<fla::Frame*>&) {
+        *split = fla::frame_sound::splitAudio(*layer, at, fps);
+    });
+    _editContext.commandStack().push(fla::CommandPtr(command));
+    _editContext.commandStack().breakMergeChain();
+    if (!*split)
+    {
+        _editContext.commandStack().discardLast();
+        statusBar()->showMessage("Split Audio cuts a stream sound inside its span: put the playhead there, on its layer.", 5000);
+        return;
+    }
+    _timelineView->refreshFrames();
+    if (_propertiesPanel)
+        _propertiesPanel->refresh();
 }
 
 void MainWindow::checkSpelling()

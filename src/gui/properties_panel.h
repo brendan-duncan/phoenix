@@ -157,6 +157,8 @@ signals:
     /// The Object tab's Swap button was pressed.
     void swapSymbolRequested();
     void swapBitmapRequested();
+    /// The keyframe's sound envelope and trim, to edit in Edit Envelope.
+    void editEnvelopeRequested(fla::Frame* frame);
 
 private:
     struct ToolRow

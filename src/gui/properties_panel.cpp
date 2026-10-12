@@ -3234,16 +3234,27 @@ void PropertiesPanel::rebuildFrameTab()
                 if (sound.effect == fla::frame_sound::kEffects[i])
                     effect->setCurrentIndex(i);
             }
-            // A custom envelope is drawn in Animate's Edit Envelope; here it
-            // is only kept.
-            if (sound.effect != "custom")
-                qobject_cast<QStandardItemModel*>(effect->model())->item(7)->setEnabled(false);
+            // Custom is drawn in Edit Envelope.
             connect(effect, &QComboBox::currentIndexChanged, this, [=](int index) {
+                if (index == 7)
+                {
+                    emit editEnvelopeRequested(frame);
+                    return;
+                }
                 fla::frame_sound::Settings settings = sound;
                 settings.effect = fla::frame_sound::kEffects[std::clamp(index, 0, 7)];
                 setSound(settings, "Sound Effect");
             });
-            soundSection->addLong(1, "Effect", effect);
+            QWidget* effectRow = new QWidget(this);
+            QHBoxLayout* effectLayout = new QHBoxLayout(effectRow);
+            effectLayout->setContentsMargins(0, 0, 0, 0);
+            effectLayout->addWidget(effect, 1);
+            QToolButton* editEnvelope = new QToolButton(effectRow);
+            editEnvelope->setText("Edit...");
+            editEnvelope->setToolTip("Edit Envelope: shape the volume of each channel and trim the sound");
+            connect(editEnvelope, &QToolButton::clicked, this, [this, frame]() { emit editEnvelopeRequested(frame); });
+            effectLayout->addWidget(editEnvelope);
+            soundSection->addLong(1, "Effect", effectRow);
 
             QComboBox* sync = new QComboBox(this);
             sync->addItems({"Event", "Start", "Stop", "Stream"});

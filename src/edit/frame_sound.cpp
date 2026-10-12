@@ -1,7 +1,10 @@
 #include "frame_sound.h"
 
+#include "timeline_edit.h"
+
 #include "../data/document.h"
 #include "../data/frame.h"
+#include "../data/layer.h"
 
 #include <algorithm>
 #include <cstdlib>
@@ -174,6 +177,122 @@ void write(const Settings& settings, size_t sampleCount,
         if (!envelope.empty())
             children.insert(children.begin(), envelope);
     }
+}
+
+std::vector<EnvelopePoint> envelope(const Frame& frame)
+{
+    std::vector<EnvelopePoint> points;
+    for (const std::string& child : frame.extraChildren)
+    {
+        if (!isEnvelope(child))
+            continue;
+        size_t at = 0;
+        while ((at = child.find("<SoundEnvelopePoint", at)) != std::string::npos)
+        {
+            const size_t end = child.find('>', at);
+            const std::string tag = child.substr(at, end - at);
+            EnvelopePoint point;
+            point.mark = static_cast<size_t>(std::max(0LL, std::atoll(attributeOf(tag, "mark44").c_str())));
+            // A level left out is silence.
+            point.left = std::atoi(attributeOf(tag, "level0").c_str());
+            point.right = std::atoi(attributeOf(tag, "level1").c_str());
+            points.push_back(point);
+            at = end;
+        }
+    }
+    std::stable_sort(points.begin(), points.end(),
+        [](const EnvelopePoint& a, const EnvelopePoint& b) { return a.mark < b.mark; });
+    return points;
+}
+
+void trim(const Frame& frame, size_t& in, size_t& out)
+{
+    in = 0;
+    out = 0;
+    for (const auto& attribute : frame.extraAttributes)
+    {
+        if (attribute.first == "inPoint44")
+            in = static_cast<size_t>(std::max(0LL, std::atoll(attribute.second.c_str())));
+        else if (attribute.first == "outPoint44")
+            out = static_cast<size_t>(std::max(0LL, std::atoll(attribute.second.c_str())));
+    }
+}
+
+void setEnvelope(const std::vector<EnvelopePoint>& points, size_t in, size_t out,
+    std::vector<std::pair<std::string, std::string>>& attributes, std::vector<std::string>& children)
+{
+    children.erase(std::remove_if(children.begin(), children.end(), isEnvelope), children.end());
+    attributes.erase(std::remove_if(attributes.begin(), attributes.end(),
+                         [](const std::pair<std::string, std::string>& attribute) {
+                             return attribute.first == "soundEffect" || attribute.first == "inPoint44" ||
+                                 attribute.first == "outPoint44";
+                         }),
+        attributes.end());
+    // Next to the sound's name, as Animate orders them.
+    auto after = std::find_if(attributes.begin(), attributes.end(),
+        [](const std::pair<std::string, std::string>& attribute) { return attribute.first == "soundName"; });
+    std::vector<std::pair<std::string, std::string>> added;
+    if (!points.empty())
+        added.emplace_back("soundEffect", "custom");
+    if (in > 0)
+        added.emplace_back("inPoint44", std::to_string(in));
+    if (out > 0)
+        added.emplace_back("outPoint44", std::to_string(out));
+    attributes.insert(after == attributes.end() ? attributes.end() : after + 1, added.begin(), added.end());
+    if (points.empty())
+        return;
+    std::string xml = "<SoundEnvelope>";
+    for (const EnvelopePoint& each : points)
+        xml += point(each.mark, each.left, each.right);
+    children.insert(children.begin(), xml + "</SoundEnvelope>");
+}
+
+bool splitAudio(Layer& layer, int frame, double frameRate)
+{
+    Frame* first = timeline::spanAt(layer, frame);
+    if (!first || first->index == frame || frameRate <= 0.0)
+        return false;
+    const Settings settings = read(*first);
+    if (settings.name.empty() || settings.sync != "stream")
+        return false;
+    size_t in = 0, out = 0;
+    trim(*first, in, out);
+    const size_t at = in + static_cast<size_t>((frame - first->index) * 44100.0 / frameRate + 0.5);
+    if (out > 0 && at >= out)
+        return false;
+    // The sound's attributes and envelope as they are, before the cut.
+    std::vector<std::pair<std::string, std::string>> sound;
+    for (const auto& attribute : first->extraAttributes)
+        if (among(attribute.first, kSoundAttributes) || among(attribute.first, kSoundAttributesOfName))
+            sound.push_back(attribute);
+    std::vector<std::string> envelopes;
+    for (const std::string& child : first->extraChildren)
+        if (isEnvelope(child))
+            envelopes.push_back(child);
+
+    Frame* second = timeline::insertKeyframe(layer, frame, false);
+    if (!second || second == first)
+        return false;
+    const auto setPoint = [](std::vector<std::pair<std::string, std::string>>& attributes, const char* name, size_t value) {
+        attributes.erase(std::remove_if(attributes.begin(), attributes.end(),
+                             [name](const std::pair<std::string, std::string>& a) { return a.first == name; }),
+            attributes.end());
+        attributes.emplace_back(name, std::to_string(value));
+    };
+    // The second takes the sound from the cut on; the first stops there.
+    auto& attributes = second->extraAttributes;
+    attributes.erase(std::remove_if(attributes.begin(), attributes.end(),
+                         [](const std::pair<std::string, std::string>& a) {
+                             return among(a.first, kSoundAttributes) || among(a.first, kSoundAttributesOfName);
+                         }),
+        attributes.end());
+    attributes.insert(attributes.end(), sound.begin(), sound.end());
+    setPoint(attributes, "inPoint44", at);
+    second->extraChildren.erase(std::remove_if(second->extraChildren.begin(), second->extraChildren.end(), isEnvelope),
+        second->extraChildren.end());
+    second->extraChildren.insert(second->extraChildren.begin(), envelopes.begin(), envelopes.end());
+    setPoint(first->extraAttributes, "outPoint44", at);
+    return true;
 }
 
 size_t sampleCount(const Document& document, const std::string& name)

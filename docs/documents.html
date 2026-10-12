@@ -177,10 +177,17 @@
 
 <p>You can also drag images, sounds, PSD, SVG and Illustrator files from your desktop. Dropped on the stage, they are placed where you drop them; dropped elsewhere, they go into the library. An image copied in another app can be pasted straight onto the stage.</p>
 
-<div class="callout planned">
-  <span class="label">Planned</span>
-  <p>Tracing bitmaps into vector shapes.</p>
-</div>
+<h3>Trace Bitmap</h3>
+
+<p>To turn a picture into artwork you can edit, select it on the stage and choose <span class="menu-path">Modify &rsaquo; Bitmap &rsaquo; Trace Bitmap</span>. Areas of like color become fills in their average color, and neighboring areas share their edges, so nothing shows through between them:</p>
+
+<dl class="defs">
+  <dt>Color threshold</dt><dd>How different two colors may be and still make one area, from 1 to 500. Higher makes fewer, larger areas.</dd>
+  <dt>Minimum area</dt><dd>Areas smaller than this many pixels join the neighbor they share the most edge with.</dd>
+  <dt>Curve fit</dt><dd>How closely the outlines follow the pixels, from Pixels (every step kept) to Very Smooth (fewer points).</dd>
+</dl>
+
+<p>The traced artwork takes the bitmap's place and position, as one step you can undo. The bitmap stays in the library.</p>
 
 <h2>Auto-save and recovery</h2>
 

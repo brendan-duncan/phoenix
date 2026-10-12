@@ -259,6 +259,16 @@ private slots:
     /// read-only, in a panel of its own, its items copied in by dragging
     /// them to the stage or with Copy to Document.
     void openExternalLibrary();
+
+    /// Modify > Bitmap > Trace Bitmap: the selected bitmaps turned into
+    /// vector artwork, as one undo step.
+    void traceBitmaps();
+
+    /// Edit Envelope for a keyframe's sound, as one undo step.
+    void editEnvelope(fla::Frame* frame);
+    /// Modify > Timeline > Split Audio: the stream sound on the current
+    /// layer cut at the playhead.
+    void splitAudio();
     /// Copies \a names and what they use from \a source into the open
     /// document, asking what to do with items it already has (Resolve
     /// Library Conflicts). The names they have here, empty when nothing

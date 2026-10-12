@@ -43,8 +43,25 @@
     <strong>Stop</strong> silences the chosen sound.
   </dd>
   <dt>Repeat / Loop</dt><dd>Plays the sound a set number of times, or loops it.</dd>
-  <dt>Effect</dt><dd>Left Channel, Right Channel, Fade Left to Right, Fade Right to Left, Fade In and Fade Out. Custom volume envelopes in FLA files play as <strong>Custom</strong>.</dd>
+  <dt>Effect</dt><dd>Left Channel, Right Channel, Fade Left to Right, Fade Right to Left, Fade In and Fade Out, or <strong>Custom</strong>, a volume envelope of your own.</dd>
 </dl>
+
+<h3>Edit Envelope</h3>
+
+<p>Click <strong>Edit...</strong> beside the Effect, or choose Custom, to shape the sound's volume. The waveform shows in two lanes, the left channel over the right, each with its volume as a line from silent at the bottom to full at the top:</p>
+
+<ul>
+  <li>Click a lane to add a point there, up to eight. Drag a point to move it along the sound and to set that channel's volume.</li>
+  <li>Drag a point well out of its lane to take it away.</li>
+  <li>Drag the green and red bars on the ruler between the lanes to trim where the sound starts and stops.</li>
+  <li><strong>Zoom In</strong> and <strong>Zoom Out</strong> to work closely; <strong>Frames</strong> measures the ruler in frames instead of seconds; <strong>Play</strong> plays the sound as the frame will; <strong>Clear</strong> sets full volume throughout, untrimmed.</li>
+</ul>
+
+<p>The envelope and trim are one step to undo, and are saved as FLA files keep them.</p>
+
+<h3>Split Audio</h3>
+
+<p>To cut a stream sound in two, for example to slip the second half of a line a few frames later, put the playhead inside its span on its layer and choose <span class="menu-path">Modify &rsaquo; Timeline &rsaquo; Split Audio</span>. A new keyframe starts there, playing the sound from that point on with the same settings and envelope, and the first keyframe stops where the second begins.</p>
 
 <p>Sounds inside movie clips play too when you export. Sounds inside graphic symbols and buttons stay silent.</p>
 
@@ -62,7 +79,7 @@
 
 <div class="callout planned">
   <span class="label">Planned</span>
-  <p>Dragging sounds straight onto timeline frames, an envelope editor, sound properties and compression settings, and automatic lip sync from a dialogue track.</p>
+  <p>Dragging sounds straight onto timeline frames, and sound compression settings for publishing.</p>
 </div>
 
 <h2>Lip sync</h2>
