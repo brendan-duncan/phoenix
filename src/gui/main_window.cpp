@@ -29,6 +29,7 @@
 #include "toolbox.h"
 #include "theme.h"
 #include "theme_editor.h"
+#include "../parser/fla_doctor.h"
 #include "swatches_panel.h"
 #include "../edit/swatches.h"
 #include "swap_symbol_dialog.h"
@@ -88,6 +89,11 @@
 #include <QUrl>
 #include <QFileDialog>
 #include <QMessageBox>
+#include <QHeaderView>
+#include <QTreeWidget>
+#include <QScrollArea>
+#include <QPlainTextEdit>
+#include <QProcess>
 #include <QJsonObject>
 #include <QGuiApplication>
 #include <QScreen>
@@ -2139,6 +2145,14 @@ void MainWindow::setupMenus()
     }
 
     fileMenu->addSeparator();
+    QAction* checkAction = fileMenu->addAction("&Check Document...");
+    checkAction->setStatusTip("Look for damage in the document and repair what can be repaired");
+    connect(checkAction, &QAction::triggered, this, &MainWindow::checkDocument);
+    QAction* compareAction = fileMenu->addAction("Compare &With...");
+    compareAction->setStatusTip("What changed between this document and another version of it, part by part and frame by frame");
+    connect(compareAction, &QAction::triggered, this, &MainWindow::compareWith);
+
+    fileMenu->addSeparator();
 
     QAction* exitAction = new QAction("&Exit", this);
     exitAction->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_Q));
@@ -3214,6 +3228,224 @@ int MainWindow::exportFromCommandLine(const QString& source, const QString& outp
         return 1;
     }
     std::printf("Exported %d frames to %s\n", settings.last + 1, qPrintable(settings.path));
+    return 0;
+}
+
+void MainWindow::checkDocument()
+{
+    if (!_flaDocument || !_flaDocument->document)
+        return;
+    fla::doctor::Report report;
+    // The file as saved, when it is: its parts, as they are on disk.
+    if (!_documentPath.isEmpty() && QFileInfo(_documentPath).isFile() && !_editContext.isModified() &&
+        !_documentPath.endsWith(".phx", Qt::CaseInsensitive))
+        fla::doctor::checkContainer(_documentPath.toStdString(), report);
+    fla::doctor::checkDocument(*_flaDocument->document, report, false);
+
+    QDialog dialog(this);
+    dialog.setWindowTitle("Check Document");
+    QVBoxLayout* layout = new QVBoxLayout(&dialog);
+    QLabel* summary = new QLabel(&dialog);
+    layout->addWidget(summary);
+    QTreeWidget* list = new QTreeWidget(&dialog);
+    list->setHeaderLabels({"", "Where", "What"});
+    list->setRootIsDecorated(false);
+    list->header()->setSectionResizeMode(0, QHeaderView::ResizeToContents);
+    list->header()->setSectionResizeMode(1, QHeaderView::Interactive);
+    list->header()->resizeSection(1, 220);
+    list->setMinimumSize(640, 300);
+    layout->addWidget(list, 1);
+    const auto fill = [list, summary](const fla::doctor::Report& shown) {
+        list->clear();
+        for (const fla::doctor::Issue& issue : shown.issues)
+        {
+            QTreeWidgetItem* item = new QTreeWidgetItem(list);
+            const bool error = issue.severity == fla::doctor::Issue::Severity::Error;
+            item->setText(0, error ? "Error" : issue.severity == fla::doctor::Issue::Severity::Warning ? "Warning" : "Note");
+            item->setText(1, QString::fromStdString(issue.where));
+            item->setText(2, QString::fromStdString(issue.what) + (issue.repaired ? "  (repaired)" : issue.repairable ? "  (can be repaired)" : ""));
+            item->setToolTip(2, item->text(2));
+        }
+        summary->setText(shown.issues.empty() ? QString("No problems found.")
+                                              : QString("%1 errors, %2 warnings.")
+                                                    .arg(shown.count(fla::doctor::Issue::Severity::Error))
+                                                    .arg(shown.count(fla::doctor::Issue::Severity::Warning)));
+    };
+    fill(report);
+    QDialogButtonBox* buttons = new QDialogButtonBox(QDialogButtonBox::Close, &dialog);
+    QPushButton* repair = buttons->addButton("Repair", QDialogButtonBox::ActionRole);
+    repair->setEnabled(std::any_of(report.issues.begin(), report.issues.end(),
+        [](const fla::doctor::Issue& issue) { return issue.repairable && !issue.repaired; }));
+    layout->addWidget(buttons);
+    connect(buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
+    connect(repair, &QPushButton::clicked, this, [this, &fill, repair]() {
+        // The repair reshapes the document under the history, which is
+        // let go; the document is unsaved until saved.
+        if (_phoenixView)
+            _phoenixView->exitToDepth(0);
+        _selection.clear();
+        fla::doctor::Report repaired;
+        fla::doctor::checkDocument(*_flaDocument->document, repaired, true);
+        _editContext.commandStack().clear();
+        _editContext.commandStack().setDirty();
+        fill(repaired);
+        repair->setEnabled(false);
+        if (_timelineView)
+            _timelineView->setDocument(_flaDocument);
+        if (_libraryPanel)
+            _libraryPanel->refresh();
+        if (_phoenixView)
+        {
+            _phoenixView->clearCaches();
+            _phoenixView->update();
+        }
+        updateEditState();
+    });
+    dialog.exec();
+}
+
+void MainWindow::compareWith()
+{
+    if (!_flaDocument || _documentPath.isEmpty() || !QFileInfo::exists(_documentPath))
+    {
+        QMessageBox::information(this, "Compare With", "Save the document first; its file is what is compared.");
+        return;
+    }
+    if (_editContext.isModified() &&
+        QMessageBox::question(this, "Compare With",
+            "The document has unsaved changes; the file as last saved is compared. Go on?") != QMessageBox::Yes)
+        return;
+    const QString other = QFileDialog::getOpenFileName(this, "Compare With", QFileInfo(_documentPath).absolutePath(),
+        "Documents (*.fla *.phx);;All files (*)");
+    if (other.isEmpty())
+        return;
+
+    // The diff command, run apart so neither document disturbs the open one.
+    QTemporaryDir folder;
+    QProcess process;
+    QApplication::setOverrideCursor(Qt::WaitCursor);
+    process.start(QCoreApplication::applicationFilePath(), {"diff", other, _documentPath, "--out", folder.path()});
+    process.waitForFinished(-1);
+    QApplication::restoreOverrideCursor();
+    const QString text = QString::fromLocal8Bit(process.readAllStandardOutput()) +
+                         QString::fromLocal8Bit(process.readAllStandardError());
+
+    QDialog dialog(this);
+    dialog.setWindowTitle(QString("Compare: %1 → %2").arg(QFileInfo(other).fileName(), QFileInfo(_documentPath).fileName()));
+    QVBoxLayout* layout = new QVBoxLayout(&dialog);
+    QPlainTextEdit* report = new QPlainTextEdit(text, &dialog);
+    report->setReadOnly(true);
+    report->setMaximumHeight(180);
+    layout->addWidget(report);
+    // Each frame that draws differently: before, after, and the changes in red.
+    QScrollArea* scroll = new QScrollArea(&dialog);
+    QWidget* strips = new QWidget(scroll);
+    QVBoxLayout* stripLayout = new QVBoxLayout(strips);
+    for (const QFileInfo& image : QDir(folder.path()).entryInfoList({"frame*.png"}, QDir::Files, QDir::Name))
+    {
+        QLabel* caption = new QLabel(QString("Frame %1: before, after, changes").arg(image.baseName().mid(5).toInt()), strips);
+        QLabel* picture = new QLabel(strips);
+        picture->setPixmap(QPixmap(image.absoluteFilePath()).scaledToWidth(900, Qt::SmoothTransformation));
+        stripLayout->addWidget(caption);
+        stripLayout->addWidget(picture);
+    }
+    stripLayout->addStretch(1);
+    scroll->setWidget(strips);
+    scroll->setWidgetResizable(true);
+    layout->addWidget(scroll, 1);
+    QDialogButtonBox* buttons = new QDialogButtonBox(QDialogButtonBox::Close, &dialog);
+    connect(buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
+    layout->addWidget(buttons);
+    dialog.resize(960, 760);
+    dialog.exec();
+}
+
+int MainWindow::renderCommand(const QString& source, const QStringList& options)
+{
+    // Phoenix render <document> [--range 1-240] [--out frames/|movie.mp4|anim.gif]
+    // [--size 1920x1080] [--transparent] [--no-camera] [--per-layer] [--no-audio]
+    if (!QFileInfo::exists(source))
+    {
+        std::fprintf(stderr, "No such file: %s\n", qPrintable(source));
+        return 1;
+    }
+    loadFLAFile(source);
+    if (!_flaDocument || !_flaDocument->document || !_phoenixView)
+    {
+        std::fprintf(stderr, "Could not open %s\n", qPrintable(source));
+        return 1;
+    }
+    const fla::Document* document = _flaDocument->document;
+    const int count = std::max(1, _phoenixView->frameCount());
+    MovieExportSettings settings;
+    settings.format = MovieExportSettings::Format::PngSequence;
+    settings.size = QSize(static_cast<int>(std::lround(document->width)), static_cast<int>(std::lround(document->height)));
+    settings.first = 0;
+    settings.last = count - 1;
+    const QString base = QFileInfo(source).completeBaseName();
+    QString out = QFileInfo(source).absoluteDir().filePath(base + "_frames");
+    for (int i = 0; i < options.size(); ++i)
+    {
+        const QString& name = options.at(i);
+        const QString value = i + 1 < options.size() ? options.at(i + 1) : QString();
+        if (name == "--range" && !value.isEmpty())
+        {
+            // 1-based and inclusive, as the timeline counts: "1-240", "12".
+            const QStringList parts = value.split('-');
+            settings.first = std::clamp(parts.value(0).toInt() - 1, 0, count - 1);
+            settings.last = std::clamp(parts.size() > 1 ? parts.value(1).toInt() - 1 : settings.first, settings.first, count - 1);
+            ++i;
+        }
+        else if (name == "--out" && !value.isEmpty())
+        {
+            out = value;
+            ++i;
+        }
+        else if (name == "--size" && !value.isEmpty())
+        {
+            const QStringList parts = value.split('x');
+            if (parts.size() == 2)
+                settings.size = QSize(std::max(1, parts.at(0).toInt()), std::max(1, parts.at(1).toInt()));
+            ++i;
+        }
+        else if (name == "--transparent")
+            settings.transparent = true;
+        else if (name == "--no-camera")
+            settings.camera = false;
+        else if (name == "--no-audio")
+            settings.audio = false;
+        else if (name == "--per-layer")
+            settings.format = MovieExportSettings::Format::LayerSequences;
+        else
+        {
+            std::fprintf(stderr, "Unknown option %s\n", qPrintable(name));
+            return 1;
+        }
+    }
+    // A folder gets a numbered PNG sequence; a file name says its format.
+    const QString suffix = QFileInfo(out).suffix().toLower();
+    if (suffix == "mp4" || suffix == "mov")
+        settings.format = MovieExportSettings::Format::Video;
+    else if (suffix == "gif")
+        settings.format = MovieExportSettings::Format::Gif;
+    else if (suffix != "png")
+    {
+        QDir().mkpath(out);
+        out = QDir(out).filePath(base + ".png");
+    }
+    else
+    {
+        QDir().mkpath(QFileInfo(out).absolutePath());
+    }
+    settings.path = QFileInfo(out).absoluteFilePath();
+    QString error;
+    if (!MovieExport::run(settings, *_phoenixView, _timelineAudio, document->frameRate, nullptr, error))
+    {
+        std::fprintf(stderr, "%s\n", qPrintable(error.isEmpty() ? QString("Render stopped.") : error));
+        return 1;
+    }
+    std::printf("Rendered frames %d-%d of %s to %s\n", settings.first + 1, settings.last + 1, qPrintable(source),
+        qPrintable(settings.path));
     return 0;
 }
 

@@ -143,6 +143,8 @@ if(TARGET tinyxml2 AND TARGET zlibstatic)
         ${PHOENIX_SRC}/parser/binary_fla.cpp
         ${PHOENIX_SRC}/parser/compound_file.cpp
         ${PHOENIX_SRC}/parser/zip_reader.cpp
+        ${PHOENIX_SRC}/parser/fla_doctor.cpp
+        ${PHOENIX_SRC}/writer/document_diff.cpp
         ${PHOENIX_SRC}/util/zip_archive.cpp
         ${PHOENIX_SRC}/util/zip_writer.cpp
         ${PHOENIX_SRC}/writer/fla_writer.cpp
@@ -156,6 +158,7 @@ if(TARGET tinyxml2 AND TARGET zlibstatic)
     )
     list(APPEND TEST_SOURCES
         test_fla_writer.cpp
+        test_fla_doctor.cpp
         test_phx.cpp
         test_shape_geometry.cpp
         test_xfl_writer.cpp

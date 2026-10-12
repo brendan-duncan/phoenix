@@ -4,8 +4,8 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Command line · Phoenix User Guide</title>
-<meta name="description" content="Open files, export movies and images, and convert between PHX, FLA and XFL from the command line, without opening a window.">
-<meta name="keywords" content="command line terminal batch script headless render export-movie export-image convert phx-dump per-layer offscreen server automation">
+<meta name="description" content="Render, check, repair, compare and batch-process documents from the command line, without opening a window.">
+<meta name="keywords" content="command line terminal batch script headless render doctor repair salvage diff compare python pipeline export-movie export-image convert phx-dump per-layer offscreen server automation">
 <link rel="icon" href="assets/img/logo.png">
 <link rel="stylesheet" href="assets/site.css">
 <script>try { const t = localStorage.getItem("phoenix-docs-theme"); if (t) document.documentElement.dataset.theme = t; } catch (e) {}</script>
@@ -26,6 +26,51 @@
 <pre><code>Phoenix drawing.fla</code></pre>
 
 <p>Starts Phoenix with the file open, the same as dropping it on the program.</p>
+
+<h2>Render frames</h2>
+
+<pre><code>Phoenix render shot.fla --range 1-240 --out frames/
+Phoenix render shot.fla --out shot.mp4 --size 1920x1080
+Phoenix render shot.fla --range 12 --out still/ --transparent</code></pre>
+
+<p>Renders without a window, for render nodes and pipelines. A folder gets a numbered PNG sequence named after the document; a name ending in <code>.mp4</code>, <code>.mov</code> or <code>.gif</code> makes that instead. Without <code>--out</code>, frames go to a folder next to the document called <code><em>name</em>_frames</code>.</p>
+
+<table>
+  <thead><tr><th>Option</th><th>Meaning</th></tr></thead>
+  <tbody>
+    <tr><td><code>--range A-B</code></td><td class="wrap">The frames to render, counting from 1, both ends included. One number renders one frame.</td></tr>
+    <tr><td><code>--size WxH</code></td><td class="wrap">The output size in pixels.</td></tr>
+    <tr><td><code>--transparent</code></td><td class="wrap">No stage color behind the art (PNG only).</td></tr>
+    <tr><td><code>--no-camera</code></td><td class="wrap">Render the stage as drawn rather than through the scene's camera.</td></tr>
+    <tr><td><code>--no-audio</code></td><td class="wrap">A video without its soundtrack.</td></tr>
+    <tr><td><code>--per-layer</code></td><td class="wrap">A PNG sequence for each layer.</td></tr>
+  </tbody>
+</table>
+
+<h2>Check and repair a document</h2>
+
+<pre><code>Phoenix doctor shot.fla
+Phoenix doctor RECOVER_shot.fla --repair shot_fixed.fla
+Phoenix doctor shot.fla --json</code></pre>
+
+<p>Looks for damage: parts of the file that are missing or not well-formed, keyframes out of order or overlapping, spans of no length, instances of symbols the library does not have, symbols that contain themselves, broken folder and mask links, sounds that are not in the library. With <code>--repair</code>, Phoenix fixes what it can and writes the result to a new file; a missing symbol gets an empty one of the same name standing in, so nothing that uses it is lost.</p>
+
+<p>A file too damaged to open (a save cut short, a <code>RECOVER_</code> file) is salvaged part by part, and a symbol whose part was cut off is replaced by an empty one so the rest opens. The exit code is 2 when errors remain. In Phoenix, <b>File &gt; Check Document</b> does the same for the open document.</p>
+
+<h2>Compare two versions</h2>
+
+<pre><code>Phoenix diff shot_v1.fla shot_v2.fla --out changes/</code></pre>
+
+<p>Lists what changed, part by part (the scenes, each symbol, each bitmap and sound, compared as they would be saved), then renders sample frames of both and compares them pixel by pixel. With <code>--out</code>, each frame that draws differently is saved as an image of before, after and the changes in red. <code>--samples N</code> sets how many frames are compared (12 by default). The exit code is 2 when the versions differ. In Phoenix, <b>File &gt; Compare With</b> shows the same report.</p>
+
+<h2>Run something over a folder</h2>
+
+<pre><code>Phoenix batch episode/ --doctor
+Phoenix batch episode/ --convert phx --out converted/
+Phoenix batch episode/ --render --out renders/
+Phoenix batch episode/ --python fix_names.py --save</code></pre>
+
+<p>Runs one operation on every <code>.fla</code> and <code>.phx</code> in the folder (add <code>--recursive</code> for subfolders). With <code>--python</code>, each document is opened out as an XFL folder and the script is run as <code>python script.py <em>xfl-folder</em> <em>document</em></code>; it can edit the XML there with any Python tools. With <code>--save</code>, what the script changed is written back to the document; with <code>--out</code>, to a copy. A script that exits with an error leaves its document alone. Set <code>PHOENIX_PYTHON</code> to choose the Python interpreter.</p>
 
 <h2>Export a movie</h2>
 
@@ -82,7 +127,7 @@ Phoenix --convert scene.fla scene_xfl</code></pre>
 
 <h2>Running on a machine without a display</h2>
 
-<p>Exports never show a window. On a server or build agent with no display at all, set the environment variable <code>QT_QPA_PLATFORM=offscreen</code> so Phoenix doesn't look for one:</p>
+<p>Exports never show a window. On Linux, the <code>render</code>, <code>doctor</code>, <code>diff</code> and <code>batch</code> commands draw offscreen by themselves when there is no display. Elsewhere, or for the older options, set the environment variable <code>QT_QPA_PLATFORM=offscreen</code> so Phoenix doesn't look for one:</p>
 
 <pre><code>QT_QPA_PLATFORM=offscreen Phoenix --export-movie scene.fla out.mp4</code></pre>
 

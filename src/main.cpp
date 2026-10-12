@@ -1,3 +1,4 @@
+#include "gui/command_line.h"
 #include "gui/main_window.h"
 #include "gui/theme.h"
 #include "gui/updater.h"
@@ -52,65 +53,6 @@ private:
     std::function<void(const QString&)> _open;
 };
 
-/// Reads \a in (.phx, .fla or an XFL folder) and writes it to \a out in the
-/// format its extension names: .phx, .fla, or anything else an XFL folder.
-bool convertDocument(const std::string& in, const std::string& out, std::string& error)
-{
-    std::unique_ptr<fla::FLADocument> document;
-    if (phx::isPhx(in))
-    {
-        std::string warning;
-        bool readOnly = false;
-        document.reset(phx::load(in, error, warning, readOnly));
-        if (!warning.empty())
-            std::fprintf(stderr, "%s", warning.c_str());
-    }
-    else
-    {
-        FLAParser parser;
-        document.reset(parser.parse(in));
-        error = parser.errorString();
-    }
-    if (!document || !document->document)
-    {
-        if (error.empty())
-            error = "Could not read " + in;
-        return false;
-    }
-    const auto endsWith = [&out](const char* suffix) {
-        const size_t n = std::strlen(suffix);
-        if (out.size() < n)
-            return false;
-        for (size_t i = 0; i < n; ++i)
-        {
-            if (std::tolower(static_cast<unsigned char>(out[out.size() - n + i])) != suffix[i])
-                return false;
-        }
-        return true;
-    };
-    if (endsWith(".phx"))
-        return phx::save(*document->document, out, phx::SaveOptions{"Phoenix " + Updater::currentVersion().toStdString(), {}}, error);
-    for (const std::string& lost : fla::unsupportedContent(*document->document))
-        std::fprintf(stderr, "Not written: %s\n", lost.c_str());
-    if (endsWith(".fla"))
-    {
-        fla::FLAWriter writer;
-        if (!writer.write(*document->document, out))
-        {
-            error = writer.errorString();
-            return false;
-        }
-        return true;
-    }
-    fla::XFLFolderWriter writer;
-    if (!writer.write(*document->document, out))
-    {
-        error = writer.errorString();
-        return false;
-    }
-    return true;
-}
-
 } // namespace
 
 int main(int argc, char *argv[])
@@ -132,13 +74,22 @@ int main(int argc, char *argv[])
     if (argc == 4 && std::strcmp(argv[1], "--convert") == 0)
     {
         std::string error;
-        if (!convertDocument(argv[2], argv[3], error))
+        if (!commands::convert(argv[2], argv[3], error))
         {
             std::fprintf(stderr, "%s\n", error.c_str());
             return 1;
         }
         return 0;
     }
+
+    // The pipeline commands (render, doctor, diff, batch) run with no
+    // window; on a render node with no display, Qt draws offscreen.
+    const bool command = argc > 1 && commands::isCommand(QString::fromLocal8Bit(argv[1]));
+#if !defined(Q_OS_WIN) && !defined(Q_OS_MACOS)
+    if (command && qEnvironmentVariableIsEmpty("DISPLAY") && qEnvironmentVariableIsEmpty("WAYLAND_DISPLAY") &&
+        qEnvironmentVariableIsEmpty("QT_QPA_PLATFORM"))
+        qputenv("QT_QPA_PLATFORM", "offscreen");
+#endif
 
 #ifdef Q_OS_WIN
     // Exporting headless (QT_QPA_PLATFORM=offscreen) reads fonts from a
@@ -167,6 +118,9 @@ int main(int argc, char *argv[])
     // A file named on the command line, or dropped on the executable, which
     // Windows passes the same way, opens instead of the most recent one.
     const QStringList arguments = a.arguments();
+
+    if (command)
+        return commands::run(arguments);
 
     // Phoenix --export-movie <document> <output.png|output.mp4>: writes
     // every frame and exits, without showing a window.
@@ -213,7 +167,7 @@ int main(int argc, char *argv[])
             QJsonObject result;
             const QString copy = folder.filePath(base + "_rt." + extension);
             std::string error;
-            if (!convertDocument(source.toStdString(), copy.toStdString(), error))
+            if (!commands::convert(source.toStdString(), copy.toStdString(), error))
             {
                 result["error"] = QString::fromStdString(error);
                 report[extension] = result;

@@ -66,6 +66,9 @@ public:
     /// sequence for a .png name, a video otherwise. Returns the process exit
     /// code, writing any error to stderr.
     int exportFromCommandLine(const QString& source, const QString& output, bool perLayer = false);
+    /// Phoenix render: frames of a document to a PNG sequence, a video or
+    /// a GIF, with no window. See the command line help.
+    int renderCommand(const QString& source, const QStringList& options);
 
     /// For the round-trip check: opens \a path and renders \a frames (when
     /// empty, \a samples frames spread over the document, chosen and
@@ -451,6 +454,10 @@ private:
     /// Edit > Find and Replace, made when first asked for.
     class FindReplaceDialog* _findReplace = nullptr;
     void showFindReplace();
+    /// File > Check Document: the FLA doctor on the open document.
+    void checkDocument();
+    /// File > Compare With: the diff command against another version.
+    void compareWith();
     void refreshHistory();
     /// Edit > Repeat: the last Insert, Modify or Timeline command run, to
     /// run again on what is selected now.

@@ -76,6 +76,7 @@ set(HEADERS
     src/gui/toolbar_editor.h
     src/gui/theme.h
     src/gui/theme_editor.h
+    src/gui/command_line.h
     src/gui/audio_engine.h
     src/gui/frame_picker_panel.h
     src/gui/swap_symbol_dialog.h
@@ -133,6 +134,7 @@ set(HEADERS
     src/parser/document_parser.h
     src/parser/ik_tree.h
     src/parser/zip_reader.h
+    src/parser/fla_doctor.h
     src/parser/fla_parser.h
     src/parser/binary_fla.h
     src/parser/compound_file.h
@@ -228,6 +230,7 @@ set(HEADERS
     src/writer/xfl_content.h
     src/writer/xfl_folder_writer.h
     src/writer/xfl_writer.h
+    src/writer/document_diff.h
     src/phx/container.h
     src/phx/phx_codec.h
     src/phx/phx_document.h
@@ -248,6 +251,7 @@ set(SOURCES
     src/gui/toolbar_editor.cpp
     src/gui/theme.cpp
     src/gui/theme_editor.cpp
+    src/gui/command_line.cpp
     src/gui/audio_engine.cpp
     src/gui/frame_picker_panel.cpp
     src/gui/swap_symbol_dialog.cpp
@@ -307,6 +311,7 @@ set(SOURCES
     src/parser/document_parser.cpp
     src/parser/ik_tree.cpp
     src/parser/zip_reader.cpp
+    src/parser/fla_doctor.cpp
     src/parser/fla_parser.cpp
     src/parser/binary_fla.cpp
     src/parser/compound_file.cpp
@@ -393,6 +398,7 @@ set(SOURCES
     src/writer/xfl_content.cpp
     src/writer/xfl_folder_writer.cpp
     src/writer/xfl_writer.cpp
+    src/writer/document_diff.cpp
     src/phx/container.cpp
     src/phx/phx_dump.cpp
     src/phx/phx_read.cpp
