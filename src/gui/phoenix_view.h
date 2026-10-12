@@ -681,6 +681,10 @@ private:
     bool _lightTable = false;
     /// Pegs (instances of a peg symbol) drawn as their crosshairs.
     void drawPegs(QPainter& painter);
+    /// An effect layer (tone, highlight, glow): its art blurred, colored and
+    /// composited over \a target, clipped to it unless it glows outside.
+    void drawEffectLayer(QPainter& painter, const fla::Layer* layer, const fla::Layer* target,
+        fla::LoopType loopType, int firstFrame, bool editing);
     int _onionBefore = 2;
     int _onionAfter = 2;
     bool _onionOutline = false;

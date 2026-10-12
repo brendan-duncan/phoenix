@@ -70,6 +70,7 @@ signals:
     void layerRenamed(const fla::Timeline* timeline, int layerIndex, const QString& name);
     void layerEditRequested(fla::Timeline* timeline, const fla::LayerSnapshot& after, const QString& name);
     void parentLayerRequested(fla::Timeline* timeline, fla::Layer* layer, fla::Layer* parent);
+    void effectSettingsRequested(fla::Layer* layer);
     void keyframeMoveRequested(const fla::Layer* layer, int from, int to);
     void framePicked(const fla::Layer* layer, int frame);
     void framesMoveRequested(const std::vector<const fla::Layer*>& sources, const std::vector<const fla::Layer*>& targets, int first, int last, int to, bool copy);

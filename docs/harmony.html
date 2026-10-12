@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Coming from Harmony · Phoenix User Guide</title>
 <meta name="description" content="Harmony's ways of working in Phoenix: the X-sheet, pegs, the light table, the multiplane camera and more, all saved in files Animate opens.">
-<meta name="keywords" content="harmony toon boom x-sheet exposure sheet peg pivot light table multiplane camera rig master controller slider palette linked colors day night line art color art ink paint">
+<meta name="keywords" content="harmony toon boom x-sheet exposure sheet peg pivot light table multiplane camera rig master controller slider palette linked colors day night line art color art ink paint tone highlight glow shadow effect composite">
 <link rel="icon" href="assets/img/logo.png">
 <link rel="stylesheet" href="assets/site.css">
 <script>try { const t = localStorage.getItem("phoenix-docs-theme"); if (t) document.documentElement.dataset.theme = t; } catch (e) {}</script>
@@ -34,6 +34,12 @@
 <p>Keep a drawing's clean lines on one layer and its paint on the layer under it, so painting never disturbs a line and lines can be redrawn without losing the paint. Pick the layer with the drawing and choose <b>Insert &gt; Color Art Layer</b>: its fills move to a new layer under it, named after it with <em>Color</em>, and the strokes stay where they are.</p>
 
 <p>On the color art layer, the <b>Paint Bucket</b> fills the regions the line layer's strokes close around where you click, even where the color layer has nothing yet, so you can ink first and paint after. The paint lands on the color layer and the lines stay untouched above it. Both are ordinary layers in the saved file.</p>
+
+<h2>Tone, highlight and glow</h2>
+
+<p>Pick the layer to shade and choose <b>Insert &gt; Effect Layer</b>: <b>Tone</b>, <b>Highlight</b> or <b>Glow</b>. An effect layer appears above it; draw the shape of the shadow or light on it with any tool. Phoenix softens the shape, colors it and composites it over the layer under it: a tone is multiplied, darkening what is beneath; a highlight is screened, lightening it; a glow is added. A tone or highlight is kept within the layer's art, so a shadow drawn roughly over a character never spills off it; a glow spreads outside.</p>
+
+<p>Right-click the effect layer and choose <b>Effect Settings</b> to change its color, softness, strength and whether it is kept within the layer. While you draw on it, its shape shows faintly so you can see what you draw. Effects render on the stage and in everything Phoenix exports. In the saved file an effect layer is a guide layer, which Animate leaves out rather than drawing its shape flat.</p>
 
 <h2>Linked palettes</h2>
 

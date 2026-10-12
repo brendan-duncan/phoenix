@@ -224,6 +224,7 @@ set(HEADERS
     src/edit/controllers.h
     src/edit/palettes.h
     src/edit/color_art.h
+    src/edit/layer_effects.h
     src/edit/combine_objects.h
     src/edit/transform_parts.h
     src/edit/swatches.h
@@ -404,6 +405,7 @@ set(SOURCES
     src/edit/controllers.cpp
     src/edit/palettes.cpp
     src/edit/color_art.cpp
+    src/edit/layer_effects.cpp
     src/edit/combine_objects.cpp
     src/edit/swatches.cpp
     src/geom/curve.cpp

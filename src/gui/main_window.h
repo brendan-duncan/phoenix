@@ -219,6 +219,10 @@ private slots:
     /// Insert > Color Art Layer: the current layer's
     /// fills to a color art layer under it, its strokes kept.
     void separateLineAndColor();
+    /// Insert > Effect Layer: a tone, highlight or glow over the current
+    /// layer; and an effect layer's settings.
+    void addEffectLayer(int kind);
+    void editEffect(fla::Layer* layer);
     /// Adds a shape hint to the shape tween at the playhead, or removes all.
     void editShapeHints(bool add);
     void clearFrames();

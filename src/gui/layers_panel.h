@@ -109,6 +109,8 @@ signals:
     void layerEditRequested(fla::Timeline* timeline, const fla::LayerSnapshot& after, const QString& name);
     /// Layer parenting: \a layer to follow \a parent (null for none).
     void parentLayerRequested(fla::Timeline* timeline, fla::Layer* layer, fla::Layer* parent);
+    /// An effect layer's settings, to be edited.
+    void effectSettingsRequested(fla::Layer* layer);
 
 private:
     enum Column

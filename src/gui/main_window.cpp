@@ -32,6 +32,7 @@
 #include "palettes_panel.h"
 #include "../edit/pegs.h"
 #include "../edit/color_art.h"
+#include "../edit/layer_effects.h"
 #include "theme.h"
 #include "theme_editor.h"
 #include "../parser/fla_doctor.h"
@@ -1420,6 +1421,7 @@ void MainWindow::setupUI()
     connect(_timelineView, &TimelineView::layerRenamed, this, &MainWindow::renameLayer);
     connect(_timelineView, &TimelineView::layerEditRequested, this, &MainWindow::editLayers);
     connect(_timelineView, &TimelineView::parentLayerRequested, this, &MainWindow::setParentLayer);
+    connect(_timelineView, &TimelineView::effectSettingsRequested, this, &MainWindow::editEffect);
 }
 
 fla::Timeline* MainWindow::editedTimeline() const
@@ -1795,6 +1797,105 @@ void MainWindow::separateLineAndColor()
     }
     statusBar()->showMessage(QString("The fills went to %1; the Paint Bucket there paints within the lines of %2.")
                                  .arg(QString::fromStdString(color->name), QString::fromStdString(line->name)), 5000);
+}
+
+void MainWindow::addEffectLayer(int kind)
+{
+    fla::Timeline* timeline = nullptr;
+    int index = 0;
+    if (!_timelineView || !_timelineView->currentLayer(timeline, index) || !timeline || index < 0 ||
+        index >= static_cast<int>(timeline->layers.size()))
+    {
+        statusBar()->showMessage("Pick the layer the effect goes over.", 3000);
+        return;
+    }
+    fla::Layer* target = timeline->layers[static_cast<size_t>(index)];
+    if (!target || target->layerType == fla::Layer::Type::Folder)
+        return;
+    const fla::effects::Effect effect = fla::effects::defaults(static_cast<fla::effects::Kind>(kind));
+    fla::Layer* layer = fla::effects::newEffectLayer(*timeline, *target, effect);
+    _editContext.commandStack().push(fla::CommandPtr(new fla::AddLayerCommand(timeline, index, layer,
+        std::string("Add ") + fla::effects::kindName(effect.kind))));
+    _editContext.commandStack().breakMergeChain();
+    if (_timelineView)
+    {
+        _timelineView->refresh();
+        _timelineView->setCurrentLayer(layer);
+    }
+    if (_phoenixView)
+    {
+        _phoenixView->clearCaches();
+        _phoenixView->update();
+    }
+    statusBar()->showMessage(QString("Draw the %1's shape on %2; it is softened and kept within %3.")
+                                 .arg(QString(fla::effects::kindName(effect.kind)).toLower(),
+                                     QString::fromStdString(layer->name), QString::fromStdString(target->name)), 6000);
+}
+
+void MainWindow::editEffect(fla::Layer* layer)
+{
+    if (!layer || !fla::effects::isEffect(*layer))
+        return;
+    fla::effects::Effect effect = fla::effects::effectOf(*layer);
+    QDialog dialog(this);
+    dialog.setWindowTitle(QString("Effect: %1").arg(QString::fromStdString(layer->name)));
+    QFormLayout* form = new QFormLayout(&dialog);
+    QComboBox* kind = new QComboBox(&dialog);
+    kind->addItems({"Tone (multiplied)", "Highlight (screened)", "Glow (added)"});
+    kind->setCurrentIndex(static_cast<int>(effect.kind));
+    form->addRow("Effect:", kind);
+    QPushButton* color = new QPushButton(&dialog);
+    QColor chosen(effect.color[0], effect.color[1], effect.color[2]);
+    const auto showColor = [color, &chosen]() {
+        QPixmap swatch(28, 14);
+        swatch.fill(chosen);
+        color->setIcon(QIcon(swatch));
+        color->setText(chosen.name().toUpper());
+    };
+    showColor();
+    connect(color, &QPushButton::clicked, &dialog, [&dialog, &chosen, showColor]() {
+        const QColor picked = QColorDialog::getColor(chosen, &dialog, "Effect Color");
+        if (picked.isValid())
+        {
+            chosen = picked;
+            showColor();
+        }
+    });
+    form->addRow("Color:", color);
+    QDoubleSpinBox* blur = new QDoubleSpinBox(&dialog);
+    blur->setRange(0.0, 200.0);
+    blur->setSuffix(" px");
+    blur->setValue(effect.blur);
+    form->addRow("Softness:", blur);
+    QSpinBox* opacity = new QSpinBox(&dialog);
+    opacity->setRange(0, 100);
+    opacity->setSuffix(" %");
+    opacity->setValue(static_cast<int>(std::lround(effect.opacity * 100.0)));
+    form->addRow("Strength:", opacity);
+    QCheckBox* clip = new QCheckBox("Keep within the layer under it", &dialog);
+    clip->setChecked(effect.clip);
+    form->addRow("", clip);
+    QDialogButtonBox* buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, &dialog);
+    form->addRow(buttons);
+    connect(buttons, &QDialogButtonBox::accepted, &dialog, &QDialog::accept);
+    connect(buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
+    if (dialog.exec() != QDialog::Accepted)
+        return;
+    effect.kind = static_cast<fla::effects::Kind>(kind->currentIndex());
+    effect.color[0] = static_cast<uint8_t>(chosen.red());
+    effect.color[1] = static_cast<uint8_t>(chosen.green());
+    effect.color[2] = static_cast<uint8_t>(chosen.blue());
+    effect.blur = blur->value();
+    effect.opacity = opacity->value() / 100.0;
+    effect.clip = clip->isChecked();
+    using Attributes = std::vector<std::pair<std::string, std::string>>;
+    _editContext.commandStack().push(fla::CommandPtr(new fla::SetPropertyCommand<Attributes>(
+        layer->extraAttributes, layer->extraAttributes, fla::effects::withEffect(*layer, effect), "Effect Settings")));
+    if (_phoenixView)
+    {
+        _phoenixView->clearCaches();
+        _phoenixView->update();
+    }
 }
 
 void MainWindow::addPeg()
@@ -2546,6 +2647,11 @@ void MainWindow::setupMenus()
     QAction* separateAction = insertMenu->addAction("Color &Art Layer");
     separateAction->setStatusTip("Move the current layer's fills to a color art layer under it; the bucket there paints within its lines");
     connect(separateAction, &QAction::triggered, this, &MainWindow::separateLineAndColor);
+    QMenu* effectMenu = insertMenu->addMenu("&Effect Layer");
+    effectMenu->setStatusTip("A tone, highlight or glow over the current layer: draw its shape on it");
+    effectMenu->addAction("&Tone", this, [this]() { addEffectLayer(static_cast<int>(fla::effects::Kind::Tone)); });
+    effectMenu->addAction("&Highlight", this, [this]() { addEffectLayer(static_cast<int>(fla::effects::Kind::Highlight)); });
+    effectMenu->addAction("&Glow", this, [this]() { addEffectLayer(static_cast<int>(fla::effects::Kind::Glow)); });
     QAction* pegAction = insertMenu->addAction("&Peg");
     pegAction->setStatusTip("A peg above the current layer, which follows it: animate the peg to move, turn and scale the layer about its pivot");
     connect(pegAction, &QAction::triggered, this, &MainWindow::addPeg);

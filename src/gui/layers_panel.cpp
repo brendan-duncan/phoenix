@@ -1,4 +1,5 @@
 #include "layers_panel.h"
+#include "../edit/layer_effects.h"
 
 #include "theme.h"
 
@@ -975,6 +976,9 @@ void LayersPanel::showLayerMenu(QTreeWidgetItem* item, const QPoint& globalPos)
         });
         mask->setCheckable(true);
         mask->setChecked(kind == fla::layers::Kind::Mask);
+
+        if (fla::effects::isEffect(*layer))
+            menu.addAction("Effect Settings...", this, [=]() { emit effectSettingsRequested(layer); });
 
         // Layer parenting: the layer follows another's object, as a forearm
         // its arm.

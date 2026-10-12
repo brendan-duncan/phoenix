@@ -1,6 +1,8 @@
 #include "phoenix_view.h"
 #include "theme.h"
 #include "../edit/pegs.h"
+#include "../edit/layer_effects.h"
+#include "../edit/image_blur.h"
 
 #include <optional>
 
@@ -686,6 +688,72 @@ void PhoenixView::paintEvent(QPaintEvent *event)
     drawRulersAndGuides(painter);
 }
 
+void PhoenixView::drawEffectLayer(QPainter& painter, const fla::Layer* layer, const fla::Layer* target,
+    fla::LoopType loopType, int firstFrame, bool editing)
+{
+    const fla::effects::Effect effect = fla::effects::effectOf(*layer);
+    const QSize size(painter.device()->width(), painter.device()->height());
+    if (size.isEmpty())
+        return;
+    const QTransform toDevice = painter.transform();
+    const auto render = [&](const fla::Layer* which) {
+        QImage image(size, QImage::Format_ARGB32_Premultiplied);
+        image.fill(Qt::transparent);
+        QPainter into(&image);
+        into.setRenderHint(QPainter::Antialiasing, true);
+        into.setTransform(toDevice);
+        drawLayer(into, which, loopType, firstFrame, nullptr);
+        return image;
+    };
+
+    QImage art = render(layer);
+    // Softened by the blur, its width scaling with the view.
+    const double scale = std::max(std::hypot(toDevice.m11(), toDevice.m12()), 1.0e-6);
+    const double width = effect.blur * scale;
+    if (width >= 1.0)
+        fla::boxBlur(reinterpret_cast<uint32_t*>(art.bits()), art.width(), art.height(), width, width, 3);
+
+    // Colored with the effect's color, as strong as the art's coverage, and
+    // kept to the layer under it.
+    QImage clip;
+    if (effect.clip && target)
+        clip = render(target);
+    const double opacity = effect.opacity * effect.color[3] / 255.0;
+    for (int y = 0; y < art.height(); ++y)
+    {
+        QRgb* line = reinterpret_cast<QRgb*>(art.scanLine(y));
+        const QRgb* inside = clip.isNull() ? nullptr : reinterpret_cast<const QRgb*>(clip.constScanLine(y));
+        for (int x = 0; x < art.width(); ++x)
+        {
+            double alpha = qAlpha(line[x]) / 255.0 * opacity;
+            if (!clip.isNull())
+                alpha *= qAlpha(inside[x]) / 255.0;
+            const int a = static_cast<int>(std::lround(alpha * 255.0));
+            line[x] = qRgba(effect.color[0] * a / 255, effect.color[1] * a / 255, effect.color[2] * a / 255, a);
+        }
+    }
+
+    painter.save();
+    painter.resetTransform();
+    switch (effect.kind)
+    {
+    case fla::effects::Kind::Tone: painter.setCompositionMode(QPainter::CompositionMode_Multiply); break;
+    case fla::effects::Kind::Highlight: painter.setCompositionMode(QPainter::CompositionMode_Screen); break;
+    case fla::effects::Kind::Glow: painter.setCompositionMode(QPainter::CompositionMode_Plus); break;
+    }
+    painter.drawImage(0, 0, art);
+    painter.restore();
+
+    // Drawing on it, the art itself shows faintly, to see what is drawn.
+    if (editing && layer->selected)
+    {
+        painter.save();
+        painter.setOpacity(painter.opacity() * 0.25);
+        drawLayer(painter, layer, loopType, firstFrame, nullptr);
+        painter.restore();
+    }
+}
+
 void PhoenixView::setLightTable(bool on)
 {
     _lightTable = on;
@@ -1205,6 +1273,20 @@ void PhoenixView::drawTimeline(QPainter& painter, const fla::Timeline* timeline,
         std::optional<Faded> faded;
         if (lightTable && !layer->selected)
             faded.emplace(painter, 0.3);
+        // An effect composites over the layer under it, on the stage and in
+        // what is exported.
+        if (fla::effects::isEffect(*layer))
+        {
+            const fla::Layer* target = nullptr;
+            for (int j = i + 1; j < static_cast<int>(timeline->layers.size()) && !target; ++j)
+            {
+                const fla::Layer* below = timeline->layers[j];
+                if (below && below->layerType != fla::Layer::Type::Folder && !fla::effects::isEffect(*below))
+                    target = below;
+            }
+            drawEffectLayer(painter, layer, target, loopType, firstFrame, editing);
+            continue;
+        }
         if (layer->layerType == fla::Layer::Type::Mask)
         {
             // An unlocked mask, while editing, is art like any other.
