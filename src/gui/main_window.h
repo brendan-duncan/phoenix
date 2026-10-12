@@ -68,6 +68,8 @@ public:
 
 private slots:
     void newFile();
+    /// The start screen: new from a preset, Open, or a recent file.
+    void showStartDialog();
 
     void openFile();
 
@@ -437,6 +439,10 @@ private:
     QMenu* _recentFilesMenu;
 
     QStringList _recentFiles;
+
+    /// A new, empty document of that size, rate and stage color, in place
+    /// of the one open.
+    void createNewDocument(int width, int height, double frameRate, const QColor& stage);
     QString _lastDirectory;
     bool _highQualityAntiAliasing = true;
 };

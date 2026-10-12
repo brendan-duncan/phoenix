@@ -3,6 +3,7 @@
 #include "lines_to_fills.h"
 #include "fill_offset.h"
 #include "new_document_dialog.h"
+#include "start_dialog.h"
 #include "timeline_audio.h"
 #include "updater.h"
 #include "../data/bitmap.h"
@@ -234,13 +235,17 @@ MainWindow::MainWindow(const QString& initialFile, QWidget* parent, bool startup
 
     setAcceptDrops(true);
 
-    // The file asked for, else the one worked on last. Opened once the
-    // window is up, so a message about a file that cannot be opened has a
-    // window to sit on rather than appearing before there is one.
+    // The file asked for; else the start screen, or, with that turned off,
+    // the file worked on last. Opened once the window is up, so a message
+    // about a file that cannot be opened has a window to sit on rather than
+    // appearing before there is one.
+    const bool startScreen = initialFile.isEmpty() && QSettings().value("showStartDialog", true).toBool();
     const QString startFile = !initialFile.isEmpty() ? initialFile
-        : (_recentFiles.isEmpty() ? QString() : _recentFiles.first());
+        : (_recentFiles.isEmpty() || startScreen ? QString() : _recentFiles.first());
     if (startup && !startFile.isEmpty())
         QTimer::singleShot(0, this, [this, startFile]() { loadFLAFile(startFile); });
+    else if (startup && startScreen)
+        QTimer::singleShot(0, this, [this]() { showStartDialog(); });
 
     // Look for an update once the start-up file has had its turn.
     connect(_updater, &Updater::statusMessage, this, [this](const QString& message) {
@@ -402,11 +407,47 @@ void MainWindow::newFile()
     NewDocumentDialog dialog(this);
     if (dialog.exec() != QDialog::Accepted)
         return;
-    fla::FLADocument* document = fla::createEmptyDocument(dialog.documentWidth(), dialog.documentHeight(),
-        dialog.frameRate());
+    createNewDocument(dialog.documentWidth(), dialog.documentHeight(), dialog.frameRate(), dialog.stageColor());
+}
+
+void MainWindow::showStartDialog()
+{
+    StartDialog dialog(_recentFiles, this);
+    const int result = dialog.exec();
+    QSettings().setValue("showStartDialog", dialog.showAtStartup());
+    if (result != QDialog::Accepted)
+        return;
+    switch (dialog.choice())
+    {
+    case StartDialog::Choice::NewPreset:
+    {
+        const auto& presets = NewDocumentDialog::presets();
+        if (dialog.preset() < 0 || dialog.preset() >= static_cast<int>(presets.size()) || !confirmDiscardChanges())
+            return;
+        const NewDocumentDialog::Preset& preset = presets[static_cast<size_t>(dialog.preset())];
+        createNewDocument(preset.width, preset.height, preset.frameRate, Qt::white);
+        break;
+    }
+    case StartDialog::Choice::NewCustom:
+        newFile();
+        break;
+    case StartDialog::Choice::Browse:
+        openFile();
+        break;
+    case StartDialog::Choice::OpenRecent:
+        if (confirmDiscardChanges())
+            loadFLAFile(dialog.path());
+        break;
+    case StartDialog::Choice::None:
+        break;
+    }
+}
+
+void MainWindow::createNewDocument(int width, int height, double frameRate, const QColor& stage)
+{
+    fla::FLADocument* document = fla::createEmptyDocument(width, height, frameRate);
     if (document && document->document)
     {
-        const QColor stage = dialog.stageColor();
         document->document->backgroundColor[0] = static_cast<uint8_t>(stage.red());
         document->document->backgroundColor[1] = static_cast<uint8_t>(stage.green());
         document->document->backgroundColor[2] = static_cast<uint8_t>(stage.blue());
@@ -1645,6 +1686,10 @@ void MainWindow::setupMenus()
     loopAction->setStatusTip("Play the loop range over and over; drag its ends in the ruler");
 
     QMenu* helpMenu = menuBar->addMenu("&Help");
+    QAction* startAction = new QAction("&Start Screen...", this);
+    startAction->setStatusTip("New from a preset, or open a recent file");
+    connect(startAction, &QAction::triggered, this, &MainWindow::showStartDialog);
+    helpMenu->addAction(startAction);
 
     QAction* checkForUpdatesAction = new QAction("Check for &Updates...", this);
     checkForUpdatesAction->setStatusTip("Look for a newer version of Phoenix");
