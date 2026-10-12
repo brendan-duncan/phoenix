@@ -1,5 +1,7 @@
 #pragma once
 
+#include "../data/color_transform.h"
+#include "../data/filter.h"
 #include "../data/point.h"
 #include "../data/transform.h"
 
@@ -40,6 +42,18 @@ public:
     /// second.
     MotionState at(double frame, double frameRate) const;
 
+    /// The color effect \a frame frames in: \a base (the object's own) with
+    /// whatever the tween's color curves set over it.
+    ColorTransform colorAt(double frame, double frameRate, const ColorTransform& base) const;
+
+    /// The filters \a frame frames in: \a base with the values the tween's
+    /// filter curves set.
+    std::vector<Filter> filtersAt(double frame, double frameRate, const std::vector<Filter>& base) const;
+
+    /// Whether the tween has color curves, or filter curves.
+    bool animatesColor() const;
+    bool animatesFilters() const;
+
     /// The span's length in frames.
     double frames(double frameRate) const;
 
@@ -68,6 +82,9 @@ private:
         double previousValue = 0.0;
     };
     double value(const std::string& property, double time, double fallback) const;
+    /// The time \a frame frames in, the TimeMap's ease applied.
+    double timeOf(double frame, double frameRate) const;
+    bool has(const std::string& property) const;
 
     std::map<std::string, std::vector<Key>> _properties;
     double _timeScale = 1.0;
@@ -164,6 +181,26 @@ struct PropertyKey
         return key;
     }
 };
+
+/// A color property of a tween: its id, its name in the Motion Editor, and
+/// the scale between the curve and the color effect (percent for the
+/// multipliers, 1 for the offsets and channel values).
+struct ColorChannel
+{
+    const char* id;
+    const char* label;
+};
+extern const ColorChannel kColorChannels[];
+extern const int kColorChannelCount;
+
+/// What color property \a id is on \a color now, in the curve's units.
+double colorValue(const ColorTransform& color, const std::string& id);
+
+/// The numeric fields of a filter that a tween animates, and their ids:
+/// "<FilterElement>_<index>_<field>".
+std::vector<std::string> filterFields(const Filter& filter);
+std::string filterPropertyId(const Filter& filter, size_t index, const std::string& field);
+double filterValue(const Filter& filter, const std::string& field);
 
 /// The keyframes of property \a id, in time order; none when the tween
 /// does not animate it.

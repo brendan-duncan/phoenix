@@ -1679,8 +1679,7 @@ void PropertiesPanel::addInstanceSections(QVBoxLayout* layout, fla::SymbolInstan
             after = before;
             break;
         }
-        push(std::unique_ptr<fla::Command>(new fla::SetPropertyCommand<fla::ColorTransform>(
-            instance->colorTransform, before, after, "Color Effect")));
+        push(_links.view->colorCommand(instance, before, after, "Color Effect"));
         emit documentEdited();
     });
 
@@ -1696,8 +1695,7 @@ void PropertiesPanel::addInstanceSections(QVBoxLayout* layout, fla::SymbolInstan
                 emit documentEdited();
             },
             [=]() {
-                push(std::unique_ptr<fla::Command>(new fla::SetPropertyCommand<fla::ColorTransform>(
-                    instance->colorTransform, *before, instance->colorTransform, name)));
+                push(_links.view->colorCommand(instance, *before, instance->colorTransform, name));
             });
     };
 
@@ -1725,8 +1723,7 @@ void PropertiesPanel::addInstanceSections(QVBoxLayout* layout, fla::SymbolInstan
             fla::ColorTransform after = instance->colorTransform;
             applyColor(chosen, after.tintColor);
             after.tintColor[3] = 255;
-            push(std::unique_ptr<fla::Command>(new fla::SetPropertyCommand<fla::ColorTransform>(
-                instance->colorTransform, instance->colorTransform, after, "Tint")));
+            push(_links.view->colorCommand(instance, instance->colorTransform, after, "Tint"));
             emit documentEdited();
         });
         effect->addField(row, 0, "Tint", swatch);

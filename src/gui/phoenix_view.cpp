@@ -1411,6 +1411,53 @@ fla::CommandPtr PhoenixView::transformCommand(fla::Element* element, const fla::
     return fla::CommandPtr(command);
 }
 
+fla::CommandPtr PhoenixView::colorCommand(fla::SymbolInstance* instance, const fla::ColorTransform& before,
+    const fla::ColorTransform& after, const std::string& name)
+{
+    MotionHere here;
+    if (!instance || !motionHere(instance, here) || here.offset <= 0)
+        return fla::CommandPtr(new fla::SetPropertyCommand<fla::ColorTransform>(
+            instance->colorTransform, before, after, name));
+    std::vector<std::string> children = here.frame->extraChildren;
+    for (std::string& child : children)
+    {
+        if (child.compare(0, 16, "<motionObjectXML") != 0)
+            continue;
+        fla::MotionObject motion;
+        if (!motion.parse(child))
+            continue;
+        const double rate = _flaDocument && _flaDocument->document && _flaDocument->document->frameRate > 0.0
+            ? _flaDocument->document->frameRate : 24.0;
+        // What the tween shows here, and what the edit made of it.
+        const fla::ColorTransform shown = motion.colorAt(here.offset, rate, before);
+        for (int i = 0; i < fla::motion::kColorChannelCount; ++i)
+        {
+            const std::string id = fla::motion::kColorChannels[i].id;
+            const double was = fla::motion::colorValue(before, id);
+            const double now = fla::motion::colorValue(after, id);
+            if (std::fabs(was - now) < 1.0e-9)
+                continue;
+            std::vector<fla::motion::PropertyKey> keys = fla::motion::keysOf(child, id);
+            if (keys.empty())
+                keys.push_back(fla::motion::PropertyKey::at(0.0, was));
+            const size_t index = fla::motion::splitAt(keys, here.time);
+            // The keyframe takes the change the edit made to what showed.
+            const double value = fla::motion::colorValue(shown, id) + (now - was);
+            const double change = value - keys[index].value;
+            keys[index].value = value;
+            keys[index].nextValue += change;
+            keys[index].previousValue += change;
+            fla::motion::setKeysOf(child, id, keys);
+        }
+    }
+    auto* command = new fla::CompoundCommand(name);
+    command->addCommand(fla::CommandPtr(new fla::SetPropertyCommand<fla::ColorTransform>(
+        instance->colorTransform, before, before, name)));
+    command->addCommand(fla::CommandPtr(new fla::SetPropertyCommand<std::vector<std::string>>(
+        here.frame->extraChildren, here.frame->extraChildren, children, name)));
+    return fla::CommandPtr(command);
+}
+
 std::vector<PhoenixView::MotionPath> PhoenixView::motionPaths()
 {
     std::vector<MotionPath> paths;
@@ -1751,9 +1798,22 @@ void PhoenixView::drawFrame(QPainter& painter, const fla::Frame* frame, const fl
                     _overrideElement = element;
                     _overrideTransform = shownTransform(*motionState, static_cast<size_t>(nextElementIndex));
                     nextElement = nullptr;
+                    // A motion tween's color and filter curves.
+                    const fla::MotionObject* motion = motionOf(frame);
+                    const auto* instance = dynamic_cast<const fla::SymbolInstance*>(element);
+                    if (motion && instance && (motion->animatesColor() || motion->animatesFilters()))
+                    {
+                        const double rate = _flaDocument && _flaDocument->document &&
+                                _flaDocument->document->frameRate > 0.0
+                            ? _flaDocument->document->frameRate : 24.0;
+                        _overrideStyleElement = element;
+                        _overrideColor = motion->colorAt(motionState->offset, rate, instance->colorTransform);
+                        _overrideFilters = motion->filtersAt(motionState->offset, rate, instance->filters);
+                    }
                 }
                 drawElement(painter, element, nextElement, tweenProgress);
                 _overrideElement = nullptr;
+                _overrideStyleElement = nullptr;
             }
         }
 
@@ -1942,8 +2002,9 @@ void PhoenixView::drawElement(QPainter& painter, const fla::Element* element, co
 
             // Part way through a classic tween, the color is between the
             // two keyframes' colors.
-            fla::ColorTransform color = instance->colorTransform;
-            if (tweenElement && tweenElement->elementType() == fla::Element::Type::SymbolInstance)
+            const bool styled = _overrideStyleElement == element;
+            fla::ColorTransform color = styled ? _overrideColor : instance->colorTransform;
+            if (!styled && tweenElement && tweenElement->elementType() == fla::Element::Type::SymbolInstance)
             {
                 color = fla::blendColorTransforms(color,
                     static_cast<const fla::SymbolInstance*>(tweenElement)->colorTransform, tweenProgress);
@@ -1955,7 +2016,7 @@ void PhoenixView::drawElement(QPainter& painter, const fla::Element* element, co
 
             // And its filters are between the two keyframes' filters.
             std::vector<fla::Filter> filters;
-            const std::vector<fla::Filter> shownFilters =
+            const std::vector<fla::Filter> shownFilters = styled ? _overrideFilters :
                 tweenElement && tweenElement->elementType() == fla::Element::Type::SymbolInstance
                 ? fla::blendFilters(instance->filters,
                       static_cast<const fla::SymbolInstance*>(tweenElement)->filters, tweenProgress)

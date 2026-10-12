@@ -109,6 +109,19 @@ private:
     void removeKey();
     void applyEase(int preset);
     void updateKeyFields();
+    /// The properties listed: the transform's, the color effect's and the
+    /// filters' of the object.
+    void buildRows();
+
+    struct Row
+    {
+        std::string label;
+        std::string id;
+        QString unit;
+        double fallback = 0.0;
+    };
+    const Row& currentRow() const;
+    std::vector<Row> _rows;
 
     MotionEditorLinks _links;
     fla::Frame* _frame = nullptr;

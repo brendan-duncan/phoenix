@@ -305,6 +305,12 @@ public:
     fla::CommandPtr transformCommand(fla::Element* element, const fla::Transform& before,
         const fla::Transform& after, const std::string& name);
 
+    /// The command for changing \a instance's color effect from \a before to
+    /// \a after: past the start of an object motion tween, keyframes of the
+    /// color properties that changed instead.
+    fla::CommandPtr colorCommand(fla::SymbolInstance* instance, const fla::ColorTransform& before,
+        const fla::ColorTransform& after, const std::string& name);
+
     /// The motion paths of the selected object motion tweens, as drawn.
     struct MotionPath
     {
@@ -957,6 +963,12 @@ private:
         fla::Transform transform;
     };
     PathDrag _pathDrag;
+
+    /// While drawing an instance a motion tween colors or filters: the color
+    /// effect and filters it has there.
+    const fla::Element* _overrideStyleElement = nullptr;
+    fla::ColorTransform _overrideColor;
+    std::vector<fla::Filter> _overrideFilters;
 
     /// Layer parenting: the transform a layer's content is placed by, its
     /// parent layer's element as shown, through its own parent in turn.

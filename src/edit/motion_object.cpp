@@ -214,7 +214,7 @@ double MotionObject::value(const std::string& property, double time, double fall
     return keys.back().value;
 }
 
-MotionState MotionObject::at(double frame, double frameRate) const
+double MotionObject::timeOf(double frame, double frameRate) const
 {
     double time = frame * _timeScale / std::max(frameRate, 1.0e-6);
     if (_ease != 0.0 && _duration > 0.0)
@@ -223,6 +223,212 @@ MotionState MotionObject::at(double frame, double frameRate) const
         const double t = std::max(0.0, std::min(1.0, time / _duration));
         time = easeProgress(t, static_cast<int>(std::lround(_ease)), {}) * _duration;
     }
+    return time;
+}
+
+bool MotionObject::has(const std::string& property) const
+{
+    const auto found = _properties.find(property);
+    return found != _properties.end() && !found->second.empty();
+}
+
+namespace motion {
+
+const ColorChannel kColorChannels[] = {
+    {"Alpha_Amount", "Alpha"},
+    {"Brightness_Amount", "Brightness"},
+    {"Tint_Amount", "Tint"},
+    {"Tint_Color_Red", "Tint Red"},
+    {"Tint_Color_Green", "Tint Green"},
+    {"Tint_Color_Blue", "Tint Blue"},
+    {"AdvClr_R_Pct", "Red %"},
+    {"AdvClr_R_Offset", "Red Offset"},
+    {"AdvClr_G_Pct", "Green %"},
+    {"AdvClr_G_Offset", "Green Offset"},
+    {"AdvClr_B_Pct", "Blue %"},
+    {"AdvClr_B_Offset", "Blue Offset"},
+    {"AdvClr_A_Pct", "Alpha %"},
+    {"AdvClr_A_Offset", "Alpha Offset"},
+};
+const int kColorChannelCount = static_cast<int>(sizeof(kColorChannels) / sizeof(kColorChannels[0]));
+
+namespace {
+
+/// Where each color property lives on a color effect, and its scale.
+double* colorField(ColorTransform& color, const std::string& id, double& scale, int*& offset, uint8_t*& channel)
+{
+    scale = 100.0;
+    offset = nullptr;
+    channel = nullptr;
+    if (id == "Alpha_Amount" || id == "AdvClr_A_Pct")
+        return &color.alphaMultiplier;
+    if (id == "Brightness_Amount")
+        return &color.brightness;
+    if (id == "Tint_Amount")
+        return &color.tintMultiplier;
+    if (id == "AdvClr_R_Pct")
+        return &color.redMultiplier;
+    if (id == "AdvClr_G_Pct")
+        return &color.greenMultiplier;
+    if (id == "AdvClr_B_Pct")
+        return &color.blueMultiplier;
+    scale = 1.0;
+    if (id == "AdvClr_R_Offset")
+        offset = &color.redOffset;
+    else if (id == "AdvClr_G_Offset")
+        offset = &color.greenOffset;
+    else if (id == "AdvClr_B_Offset")
+        offset = &color.blueOffset;
+    else if (id == "AdvClr_A_Offset")
+        offset = &color.alphaOffset;
+    else if (id == "Tint_Color_Red")
+        channel = &color.tintColor[0];
+    else if (id == "Tint_Color_Green")
+        channel = &color.tintColor[1];
+    else if (id == "Tint_Color_Blue")
+        channel = &color.tintColor[2];
+    return nullptr;
+}
+
+void setColorValue(ColorTransform& color, const std::string& id, double value)
+{
+    double scale = 1.0;
+    int* offset = nullptr;
+    uint8_t* channel = nullptr;
+    if (double* field = colorField(color, id, scale, offset, channel))
+        *field = value / scale;
+    else if (offset)
+        *offset = static_cast<int>(std::lround(std::max(-255.0, std::min(255.0, value))));
+    else if (channel)
+        *channel = static_cast<uint8_t>(std::lround(std::max(0.0, std::min(255.0, value))));
+}
+
+} // namespace
+
+double colorValue(const ColorTransform& color, const std::string& id)
+{
+    ColorTransform copy = color;
+    double scale = 1.0;
+    int* offset = nullptr;
+    uint8_t* channel = nullptr;
+    if (double* field = colorField(copy, id, scale, offset, channel))
+        return *field * scale;
+    if (offset)
+        return *offset;
+    if (channel)
+        return *channel;
+    return 0.0;
+}
+
+std::vector<std::string> filterFields(const Filter& filter)
+{
+    switch (filter.type)
+    {
+    case Filter::Type::Blur:
+        return {"blurX", "blurY"};
+    case Filter::Type::DropShadow:
+    case Filter::Type::Bevel:
+    case Filter::Type::GradientBevel:
+    case Filter::Type::GradientGlow:
+        return {"blurX", "blurY", "strength", "distance", "angle"};
+    case Filter::Type::Glow:
+        return {"blurX", "blurY", "strength"};
+    case Filter::Type::AdjustColor:
+        return {"brightness", "contrast", "saturation", "hue"};
+    }
+    return {};
+}
+
+std::string filterPropertyId(const Filter& filter, size_t index, const std::string& field)
+{
+    return std::string(filter.elementName()) + "_" + std::to_string(index) + "_" + field;
+}
+
+double filterValue(const Filter& filter, const std::string& field)
+{
+    if (field == "blurX") return filter.blurX;
+    if (field == "blurY") return filter.blurY;
+    if (field == "strength") return filter.strength * 100.0;
+    if (field == "distance") return filter.distance;
+    if (field == "angle") return filter.angle;
+    if (field == "brightness") return filter.brightness;
+    if (field == "contrast") return filter.contrast;
+    if (field == "saturation") return filter.saturation;
+    if (field == "hue") return filter.hue;
+    return 0.0;
+}
+
+namespace {
+
+void setFilterValue(Filter& filter, const std::string& field, double value)
+{
+    if (field == "blurX") filter.blurX = std::max(0.0, value);
+    else if (field == "blurY") filter.blurY = std::max(0.0, value);
+    else if (field == "strength") filter.strength = std::max(0.0, value / 100.0);
+    else if (field == "distance") filter.distance = value;
+    else if (field == "angle") filter.angle = value;
+    else if (field == "brightness") filter.brightness = value;
+    else if (field == "contrast") filter.contrast = value;
+    else if (field == "saturation") filter.saturation = value;
+    else if (field == "hue") filter.hue = value;
+}
+
+} // namespace
+
+} // namespace motion
+
+ColorTransform MotionObject::colorAt(double frame, double frameRate, const ColorTransform& base) const
+{
+    ColorTransform color = base;
+    const double time = timeOf(frame, frameRate);
+    for (int i = 0; i < motion::kColorChannelCount; ++i)
+    {
+        const std::string id = motion::kColorChannels[i].id;
+        if (has(id))
+            motion::setColorValue(color, id, value(id, time, 0.0));
+    }
+    return color;
+}
+
+std::vector<Filter> MotionObject::filtersAt(double frame, double frameRate, const std::vector<Filter>& base) const
+{
+    std::vector<Filter> filters = base;
+    const double time = timeOf(frame, frameRate);
+    for (size_t i = 0; i < filters.size(); ++i)
+    {
+        for (const std::string& field : motion::filterFields(filters[i]))
+        {
+            const std::string id = motion::filterPropertyId(filters[i], i, field);
+            if (has(id))
+                motion::setFilterValue(filters[i], field, value(id, time, 0.0));
+        }
+    }
+    return filters;
+}
+
+bool MotionObject::animatesColor() const
+{
+    for (int i = 0; i < motion::kColorChannelCount; ++i)
+    {
+        if (has(motion::kColorChannels[i].id))
+            return true;
+    }
+    return false;
+}
+
+bool MotionObject::animatesFilters() const
+{
+    for (const auto& property : _properties)
+    {
+        if (property.first.find("Filter_") != std::string::npos && !property.second.empty())
+            return true;
+    }
+    return false;
+}
+
+MotionState MotionObject::at(double frame, double frameRate) const
+{
+    const double time = timeOf(frame, frameRate);
     MotionState state;
     state.x = value("Motion_X", time, 0.0);
     state.y = value("Motion_Y", time, 0.0);
@@ -951,6 +1157,13 @@ bool setKeysOf(std::string& xml, const std::string& id, const std::vector<Proper
             if (id == slot.id)
                 containerId = slot.container;
         }
+        for (int i = 0; i < kColorChannelCount; ++i)
+        {
+            if (id == kColorChannels[i].id)
+                containerId = "Colors";
+        }
+        if (id.find("Filter_") != std::string::npos)
+            containerId = "Filters";
         tinyxml2::XMLElement* container = containerOf(core, containerId);
         if (!container)
         {

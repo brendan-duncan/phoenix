@@ -1,6 +1,7 @@
 #include "motion_editor.h"
 
 #include "../data/frame.h"
+#include "../data/symbol_instance.h"
 #include "../edit/command_stack.h"
 #include "../edit/property_command.h"
 #include "../edit/timeline_edit.h"
@@ -34,7 +35,7 @@ struct PropertyRow
     double fallback;
 };
 
-const PropertyRow kRows[] = {
+const PropertyRow kTransformRows[] = {
     {"X", "Motion_X", " px", 0.0},
     {"Y", "Motion_Y", " px", 0.0},
     {"Rotation", "Rotation_Z", "°", 0.0},
@@ -394,9 +395,7 @@ MotionEditorPanel::MotionEditorPanel(MotionEditorLinks links, QWidget* parent)
 
     QHBoxLayout* body = new QHBoxLayout();
     _properties = new QListWidget(this);
-    for (const PropertyRow& row : kRows)
-        _properties->addItem(row.label);
-    _properties->setFixedWidth(96);
+    _properties->setFixedWidth(120);
     _properties->setCurrentRow(0);
     body->addWidget(_properties);
     _curve = new MotionCurveView(this);
@@ -434,6 +433,8 @@ MotionEditorPanel::MotionEditorPanel(MotionEditorLinks links, QWidget* parent)
     layout->addLayout(eases);
 
     connect(_properties, &QListWidget::currentRowChanged, this, [this](int) {
+        if (_updating)
+            return;
         _curve->selectKey(-1);
         showProperty();
     });
@@ -513,6 +514,7 @@ void MotionEditorPanel::refresh()
         return;
     }
     _title->setText(QString("Motion tween, frames %1 to %2").arg(_frame->index + 1).arg(_frame->index + _frame->duration));
+    buildRows();
     _updating = true;
     _spanEase->setValue(fla::motion::spanEase(*fla::timeline::motionOf(*_frame)));
     _keyFrame->setRange(1, std::max(1, _frame->duration));
@@ -528,8 +530,8 @@ void MotionEditorPanel::showProperty()
     fla::MotionObject motion;
     if (!xml || !motion.parse(*xml))
         return;
-    const PropertyRow& row = kRows[std::max(0, std::min(_properties->currentRow(), static_cast<int>(std::size(kRows)) - 1))];
-    std::vector<fla::motion::PropertyKey> keys = fla::motion::keysOf(*xml, row.id);
+    const Row& row = currentRow();
+    std::vector<fla::motion::PropertyKey> keys = fla::motion::keysOf(*xml, row.id.c_str());
     if (keys.empty())
         keys.push_back(fla::motion::PropertyKey::at(0.0, motion.valueAt(row.id, 0.0, row.fallback)));
     const double frames = motion.frames(_links.frameRate ? _links.frameRate() : 24.0);
@@ -572,7 +574,7 @@ void MotionEditorPanel::writeKeys(bool done, const char* name)
         _before = _frame->extraChildren;
         _editing = true;
     }
-    const PropertyRow& row = kRows[std::max(0, std::min(_properties->currentRow(), static_cast<int>(std::size(kRows)) - 1))];
+    const Row& row = currentRow();
     std::vector<std::string> children = _before;
     for (std::string& child : children)
     {
@@ -652,4 +654,64 @@ void MotionEditorPanel::applyEase(int preset)
     _curve->setKeys(keys);
     writeKeys(true, "Ease");
     showProperty();
+}
+
+void MotionEditorPanel::buildRows()
+{
+    // The transform's properties, the color effect's, and each filter's
+    // numbers, at the values the object has when the tween does not set them.
+    std::vector<Row> rows;
+    for (const PropertyRow& row : kTransformRows)
+        rows.push_back({row.label, row.id, row.unit, row.fallback});
+    const auto* instance = _frame && _frame->elements.size() == 1
+        ? dynamic_cast<const fla::SymbolInstance*>(_frame->elements.front()) : nullptr;
+    if (instance)
+    {
+        const char* percents[] = {"Alpha_Amount", "Brightness_Amount", "Tint_Amount", "AdvClr_R_Pct", "AdvClr_G_Pct",
+            "AdvClr_B_Pct", "AdvClr_A_Pct"};
+        for (int i = 0; i < fla::motion::kColorChannelCount; ++i)
+        {
+            const std::string id = fla::motion::kColorChannels[i].id;
+            const bool percent = std::find(std::begin(percents), std::end(percents), id) != std::end(percents);
+            rows.push_back({fla::motion::kColorChannels[i].label, id, percent ? "%" : "",
+                fla::motion::colorValue(instance->colorTransform, id)});
+        }
+        for (size_t f = 0; f < instance->filters.size(); ++f)
+        {
+            const fla::Filter& filter = instance->filters[f];
+            QString name = QString(filter.elementName()).remove("Filter");
+            for (const std::string& field : fla::motion::filterFields(filter))
+            {
+                QString label = QString::fromStdString(field);
+                label[0] = label[0].toUpper();
+                rows.push_back({(name + " " + label).toStdString(), fla::motion::filterPropertyId(filter, f, field),
+                    field == "angle" || field == "hue" ? "\u00b0" : (field == "strength" ? "%" : ""),
+                    fla::motion::filterValue(filter, field)});
+            }
+        }
+    }
+    const QString current = _properties->currentItem() ? _properties->currentItem()->text() : QString();
+    bool same = rows.size() == _rows.size();
+    for (size_t i = 0; same && i < rows.size(); ++i)
+        same = rows[i].id == _rows[i].id;
+    if (same)
+    {
+        _rows = rows;
+        return;
+    }
+    _rows = rows;
+    _updating = true;
+    _properties->clear();
+    for (const Row& row : _rows)
+        _properties->addItem(QString::fromStdString(row.label));
+    const QList<QListWidgetItem*> found = _properties->findItems(current, Qt::MatchExactly);
+    _properties->setCurrentRow(found.isEmpty() ? 0 : _properties->row(found.front()));
+    _updating = false;
+}
+
+const MotionEditorPanel::Row& MotionEditorPanel::currentRow() const
+{
+    static const Row none{"X", "Motion_X", " px", 0.0};
+    const int index = _properties->currentRow();
+    return index >= 0 && index < static_cast<int>(_rows.size()) ? _rows[static_cast<size_t>(index)] : none;
 }

@@ -254,3 +254,31 @@ TEST(motion_property_keys_are_read_written_and_eased)
     CHECK(fla::motion::spanEase(xml) == 0.0);
     CHECK(fla::motion::setSpanEase(xml, -50.0) && fla::motion::spanEase(xml) == -50.0);
 }
+
+TEST(motion_color_and_filter_curves_play)
+{
+    std::string xml = fla::motion::create(fla::MotionState(), 10, 10.0);
+    // Alpha from 100% to 0% over the span; a drop shadow's blur from 4 to 20.
+    CHECK(fla::motion::setKeysOf(xml, "Alpha_Amount",
+        {fla::motion::PropertyKey::at(0.0, 100.0), fla::motion::PropertyKey::at(27000.0, 0.0)}));
+    fla::Filter shadow;
+    shadow.type = fla::Filter::Type::DropShadow;
+    shadow.blurX = 4.0;
+    const std::string blur = fla::motion::filterPropertyId(shadow, 0, "blurX");
+    CHECK(blur == "DropShadowFilter_0_blurX");
+    CHECK(fla::motion::setKeysOf(xml, blur,
+        {fla::motion::PropertyKey::at(0.0, 4.0), fla::motion::PropertyKey::at(27000.0, 20.0)}));
+    CHECK(xml.find("<PropertyContainer id=\"Colors\"><Property enabled=\"1\" id=\"Alpha_Amount\"") != std::string::npos);
+
+    fla::MotionObject motion;
+    CHECK(motion.parse(xml));
+    CHECK(motion.animatesColor() && motion.animatesFilters());
+    fla::ColorTransform base;
+    base.brightness = 0.25;
+    const fla::ColorTransform half = motion.colorAt(4.5, 10.0, base);
+    CHECK(std::fabs(half.alphaMultiplier - 0.5) < 1.0e-6);
+    CHECK(half.brightness == 0.25);
+    const std::vector<fla::Filter> filters = motion.filtersAt(9.0, 10.0, {shadow});
+    CHECK(filters.size() == 1 && std::fabs(filters[0].blurX - 20.0) < 1.0e-6 && filters[0].blurY == 5.0);
+    CHECK(fla::motion::colorValue(half, "Alpha_Amount") > 49.0);
+}
