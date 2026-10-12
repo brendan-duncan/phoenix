@@ -138,6 +138,9 @@ signals:
     /// Something drawn was edited through the Object, Frame or Doc tab.
     void documentEdited();
 
+    /// The Object tab's Swap button was pressed.
+    void swapSymbolRequested();
+
 private:
     struct ToolRow
     {

@@ -168,8 +168,11 @@ public:
     void clearGuides();
 
     /// A picture of a library item for the library's preview: a symbol's
-    /// first frame or a bitmap, fitted into \a size with a margin.
-    QImage libraryPreview(const QString& kind, const QString& name, const QSize& size);
+    /// first frame or a bitmap, fitted into \a size with a margin. With
+    /// \a frame, the symbol's frame of that index, framed to fit all of its
+    /// frames so that pictures of its frames line up, as the Frame Picker
+    /// shows them.
+    QImage libraryPreview(const QString& kind, const QString& name, const QSize& size, int frame = -1);
 
     /// Edits \a symbol on its own, as a double-click in the library does:
     /// the document is put away and the symbol shown at the stage's center.

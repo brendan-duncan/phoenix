@@ -44,6 +44,7 @@
 #include <QSettings>
 #include <QStringList>
 
+class QDockWidget;
 class QDoubleSpinBox;
 
 class Updater;
@@ -121,6 +122,9 @@ private slots:
     void breakApartSelection();
 
     void convertToSymbol();
+    /// Modify > Symbol > Swap Symbol: the selected instances show another
+    /// library symbol, keeping their transform, color and looping.
+    void swapSymbol();
 
     /// Modify > Shape: each rewrites every selected shape's paths as one
     /// undo step per shape.
@@ -314,6 +318,14 @@ private:
     fla::DrawingStyle _drawingStyle;
     PropertiesPanel* _propertiesPanel = nullptr;
     class LibraryPanel* _libraryPanel = nullptr;
+    class FramePickerPanel* _framePicker = nullptr;
+    QDockWidget* _framePickerDock = nullptr;
+
+    /// Shows the selected graphic instance's frames in the Frame Picker.
+    void updateFramePicker();
+    /// The Frame Picker's choice of first frame, on a new keyframe with
+    /// \a createKeyframe.
+    void pickInstanceFrame(int frame, bool createKeyframe);
 
     /// Places an instance of a library item where it was dropped, centered
     /// there, as Animate does.
@@ -374,6 +386,7 @@ private:
     QAction* _ungroupAction = nullptr;
     QAction* _breakApartAction = nullptr;
     QAction* _convertToSymbolAction = nullptr;
+    QAction* _swapSymbolAction = nullptr;
     QAction* _arrangeActions[4] = {nullptr, nullptr, nullptr, nullptr};
 
     /// Copies of the shapes last cut or copied. Only shapes can be copied so

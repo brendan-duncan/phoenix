@@ -10,8 +10,11 @@
 #include "draw_placement.h"
 #include "library_panel.h"
 #include "media_import.h"
+#include "frame_picker_panel.h"
+#include "swap_symbol_dialog.h"
 #include "../edit/layer_commands.h"
 #include "../edit/library_media.h"
+#include "../edit/frame_commands.h"
 #include "../edit/timeline_edit.h"
 #include "../edit/library_commands.h"
 #include "../edit/property_command.h"
@@ -61,6 +64,7 @@
 #include <QMenuBar>
 #include <QMenu>
 #include <QInputDialog>
+#include <QLineEdit>
 
 #include <memory>
 #include <filesystem>
@@ -137,6 +141,7 @@ MainWindow::MainWindow(const QString& initialFile, QWidget* parent, bool startup
 
     _selection.setChangedCallback([this]() {
         updateSelectionState();
+        updateFramePicker();
         // The Properties panel follows the selection the way Animate's does:
         // an object shows its Object tab; nothing selected shows the tool, or
         // the document when the arrow is the tool.
@@ -1227,6 +1232,12 @@ void MainWindow::setupMenus()
     connect(_convertToSymbolAction, &QAction::triggered, this, &MainWindow::convertToSymbol);
     modifyMenu->addAction(_convertToSymbolAction);
 
+    QMenu* symbolMenu = modifyMenu->addMenu("S&ymbol");
+    _swapSymbolAction = new QAction("S&wap Symbol...", this);
+    _swapSymbolAction->setStatusTip("Show another library symbol in the selected instances");
+    connect(_swapSymbolAction, &QAction::triggered, this, &MainWindow::swapSymbol);
+    symbolMenu->addAction(_swapSymbolAction);
+
     modifyMenu->addSeparator();
 
     // Modify > Shape, as Animate groups them.
@@ -1296,6 +1307,18 @@ void MainWindow::setupMenus()
 
     // View menu
     QMenu* viewMenu = menuBar->addMenu("&View");
+
+    QAction* framePickerAction = new QAction("&Frame Picker", this);
+    framePickerAction->setStatusTip("Pick the frame a graphic instance shows from pictures of its frames");
+    connect(framePickerAction, &QAction::triggered, this, [this]() {
+        if (!_framePickerDock)
+            return;
+        _framePickerDock->show();
+        _framePickerDock->raise();
+        updateFramePicker();
+    });
+    viewMenu->addAction(framePickerAction);
+    viewMenu->addSeparator();
 
     // Animate shows one scene at a time; these pick which.
     QMenu* sceneMenu = viewMenu->addMenu("&Scene");
@@ -1934,6 +1957,7 @@ void MainWindow::updateEditState()
     // New Layer, say), so the list is rebuilt when it no longer matches.
     if (_libraryPanel)
         _libraryPanel->refreshIfStale();
+    updateFramePicker();
     if (_timelineView)
     {
         _timelineView->refreshIfStale();
@@ -2286,6 +2310,31 @@ void MainWindow::setupPropertiesPanel()
     addDockWidget(Qt::RightDockWidgetArea, libraryDock);
     setTabPosition(Qt::RightDockWidgetArea, QTabWidget::North);
     tabifyDockWidget(dock, libraryDock);
+
+    // The Frame Picker waits, closed, until View > Frame Picker opens it.
+    _framePickerDock = new QDockWidget("Frame Picker", this);
+    _framePickerDock->setObjectName("framePickerDock");
+    _framePickerDock->setAllowedAreas(Qt::AllDockWidgetAreas);
+    _framePicker = new FramePickerPanel(_framePickerDock);
+    _framePickerDock->setWidget(_framePicker);
+    addDockWidget(Qt::RightDockWidgetArea, _framePickerDock);
+    tabifyDockWidget(libraryDock, _framePickerDock);
+    _framePickerDock->hide();
+    _framePicker->setPreviewProvider([this](const QString& name, int frame, const QSize& size) {
+        return _phoenixView ? _phoenixView->libraryPreview("symbol", name, size, frame) : QImage();
+    });
+    connect(_framePicker, &FramePickerPanel::frameChosen, this, &MainWindow::pickInstanceFrame);
+    connect(_propertiesPanel, &PropertiesPanel::swapSymbolRequested, this, &MainWindow::swapSymbol);
+    connect(_framePicker, &FramePickerPanel::loopChosen, this, [this](int loopType) {
+        auto* instance = dynamic_cast<fla::SymbolInstance*>(_selection.single());
+        if (!instance || instance->loopType == static_cast<fla::LoopType>(loopType))
+            return;
+        _editContext.commandStack().push(fla::CommandPtr(new fla::SetPropertyCommand<fla::LoopType>(
+            instance->loopType, instance->loopType, static_cast<fla::LoopType>(loopType), "Looping")));
+        if (_phoenixView)
+            _phoenixView->update();
+    });
+    connect(_framePickerDock, &QDockWidget::visibilityChanged, this, [this](bool) { updateFramePicker(); });
     dock->raise();
     _libraryPanel->setDocument(_flaDocument);
     _libraryPanel->setPreviewProvider([this](const QString& kind, const QString& name, const QSize& size) {
@@ -3394,6 +3443,151 @@ void MainWindow::convertToSymbol()
     _phoenixView->update();
 }
 
+void MainWindow::swapSymbol()
+{
+    if (!_flaDocument || !_flaDocument->document || !_flaDocument->document->symbolList)
+        return;
+    std::vector<fla::SymbolInstance*> instances;
+    for (fla::DOMElement* selected : _selection.elements())
+    {
+        if (auto* instance = dynamic_cast<fla::SymbolInstance*>(selected))
+            instances.push_back(instance);
+    }
+    if (instances.empty())
+        return;
+    fla::Document* document = _flaDocument->document;
+
+    QStringList names;
+    for (const fla::Symbol* symbol : document->symbolList->symbols)
+    {
+        if (symbol)
+            names << QString::fromStdString(symbol->name);
+    }
+    names.sort(Qt::CaseInsensitive);
+
+    // A duplicate made in the dialog stays, whether or not it is chosen, as
+    // in Animate; it is its own undo step.
+    SwapSymbolDialog dialog(names, QString::fromStdString(instances.front()->libraryItemName),
+        [this](const QString& name, const QSize& size) {
+            return _phoenixView ? _phoenixView->libraryPreview("symbol", name, size) : QImage();
+        },
+        [this, document](const QString& name) {
+            const auto found = document->symbolList->symbolMap.find(name.toStdString());
+            if (found == document->symbolList->symbolMap.end() || !found->second)
+                return QString();
+            bool ok = false;
+            const std::string suggested = fla::library::freeCopyName(*document, found->second->name);
+            const QString copyName = QInputDialog::getText(this, "Duplicate Symbol", "Symbol name:",
+                QLineEdit::Normal, QString::fromStdString(suggested), &ok).trimmed();
+            if (!ok || copyName.isEmpty())
+                return QString();
+            if (!fla::library::nameIsFree(*document, copyName.toStdString()))
+            {
+                QMessageBox::information(this, "Duplicate Symbol",
+                    QString("The library already has an item named %1.").arg(copyName));
+                return QString();
+            }
+            _editContext.commandStack().push(fla::CommandPtr(new fla::AddSymbolCommand(
+                document, fla::library::cloneSymbol(*found->second, copyName.toStdString()), "Duplicate Symbol")));
+            if (_libraryPanel)
+                _libraryPanel->refreshIfStale();
+            return copyName;
+        },
+        this);
+    if (dialog.exec() != QDialog::Accepted)
+        return;
+    const std::string chosen = dialog.chosen().toStdString();
+    const auto found = document->symbolList->symbolMap.find(chosen);
+    if (found == document->symbolList->symbolMap.end() || !found->second)
+        return;
+    fla::Symbol* symbol = found->second;
+
+    fla::CommandStack& stack = _editContext.commandStack();
+    stack.beginMacro("Swap Symbol");
+    for (fla::SymbolInstance* instance : instances)
+    {
+        if (instance->symbol == symbol)
+            continue;
+        stack.push(fla::CommandPtr(new fla::SetPropertyCommand<std::string>(
+            instance->libraryItemName, instance->libraryItemName, chosen, "Swap Symbol")));
+        stack.push(fla::CommandPtr(new fla::SetPropertyCommand<fla::Symbol*>(
+            instance->symbol, instance->symbol, symbol, "Swap Symbol")));
+    }
+    stack.endMacro();
+    stack.breakMergeChain();
+    if (_phoenixView)
+    {
+        _phoenixView->invalidateBounds();
+        _phoenixView->clearCaches();
+        _phoenixView->update();
+    }
+    if (_propertiesPanel)
+        _propertiesPanel->refresh();
+    updateFramePicker();
+}
+
+void MainWindow::updateFramePicker()
+{
+    if (!_framePicker || !_framePickerDock || !_framePickerDock->isVisible())
+        return;
+    auto* instance = dynamic_cast<fla::SymbolInstance*>(_selection.single());
+    int frames = 0;
+    if (instance && instance->symbol && !instance->symbol->timelines.empty())
+    {
+        for (const fla::Layer* layer : instance->symbol->timelines.front()->layers)
+        {
+            if (layer)
+                frames = std::max(frames, fla::timeline::layerEnd(*layer));
+        }
+    }
+    _framePicker->setInstance(instance, frames);
+}
+
+void MainWindow::pickInstanceFrame(int frame, bool createKeyframe)
+{
+    auto* instance = dynamic_cast<fla::SymbolInstance*>(_selection.single());
+    if (!instance || !_phoenixView)
+        return;
+    fla::CommandStack& stack = _editContext.commandStack();
+    stack.beginMacro("Pick Frame");
+    if (createKeyframe)
+    {
+        // The instance's copy on a new keyframe at the playhead takes the
+        // frame, leaving the one before as it was.
+        fla::Frame* holder = dynamic_cast<fla::Frame*>(instance->parent);
+        fla::Layer* layer = holder ? dynamic_cast<fla::Layer*>(holder->parent) : nullptr;
+        const int at = _player ? _player->currentFrame() : 0;
+        if (layer && holder && holder->index != at && !layer->isLocked())
+        {
+            const auto position = std::find(holder->elements.begin(), holder->elements.end(), instance);
+            const size_t slot = static_cast<size_t>(position - holder->elements.begin());
+            auto* insert = new fla::InsertKeyframeCommand(layer, at, "Pick Frame");
+            stack.push(fla::CommandPtr(insert));
+            fla::Frame* made = insert->frame();
+            if (made && made != holder && slot < made->elements.size())
+            {
+                if (auto* copy = dynamic_cast<fla::SymbolInstance*>(made->elements[slot]))
+                    instance = copy;
+            }
+        }
+    }
+    if (instance->firstFrame != frame)
+    {
+        stack.push(fla::CommandPtr(new fla::SetPropertyCommand<int>(
+            instance->firstFrame, instance->firstFrame, frame, "Pick Frame")));
+    }
+    stack.endMacro();
+    stack.breakMergeChain();
+    if (!_selection.contains(instance))
+        _selection.select(instance);
+    _phoenixView->clearCaches();
+    _phoenixView->update();
+    if (_timelineView)
+        _timelineView->refreshFrames();
+    if (_propertiesPanel)
+        _propertiesPanel->refresh();
+}
+
 void MainWindow::arrangeSelection(int step, bool toEnd)
 {
     if (!_phoenixView)
@@ -3851,6 +4045,8 @@ void MainWindow::updateSelectionState()
     }
     if (_convertToSymbolAction)
         _convertToSymbolAction->setEnabled(hasElements);
+    if (_swapSymbolAction)
+        _swapSymbolAction->setEnabled(hasInstance);
     for (QAction* action : {_smoothAction, _straightenAction, _optimizeAction, _linesToFillsAction,
              _expandFillAction, _softenFillAction})
     {

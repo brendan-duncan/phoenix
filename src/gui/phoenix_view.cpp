@@ -4526,7 +4526,7 @@ bool PhoenixView::editSymbol(const fla::Symbol* symbol)
     return true;
 }
 
-QImage PhoenixView::libraryPreview(const QString& kind, const QString& name, const QSize& size)
+QImage PhoenixView::libraryPreview(const QString& kind, const QString& name, const QSize& size, int frame)
 {
     QImage image(size, QImage::Format_ARGB32_Premultiplied);
     image.fill(Qt::transparent);
@@ -4577,11 +4577,16 @@ QImage PhoenixView::libraryPreview(const QString& kind, const QString& name, con
     {
         if (!layer || layer->layerType == fla::Layer::Type::Guide || layer->frames.empty())
             continue;
-        for (const fla::Element* element : layer->frames.front()->elements)
+        for (const fla::Frame* keyframe : layer->frames)
         {
-            const QRectF each = calculateElementBounds(element);
-            if (each.isValid())
-                bounds = bounds.isNull() ? each : bounds.united(each);
+            for (const fla::Element* element : keyframe->elements)
+            {
+                const QRectF each = calculateElementBounds(element);
+                if (each.isValid())
+                    bounds = bounds.isNull() ? each : bounds.united(each);
+            }
+            if (frame < 0)
+                break;
         }
     }
     _tightBounds = wasTight;
@@ -4593,7 +4598,7 @@ QImage PhoenixView::libraryPreview(const QString& kind, const QString& name, con
     _frameOverride = 0;
     _outlineColor = QColor();
     painter.setTransform(fit(bounds));
-    drawTimeline(painter, timeline, fla::LoopType::SingleFrame, 0);
+    drawTimeline(painter, timeline, fla::LoopType::SingleFrame, std::max(frame, 0));
     _frameOverride = savedOverride;
     _outlineColor = savedOutline;
     return image;

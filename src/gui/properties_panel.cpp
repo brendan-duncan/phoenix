@@ -1604,7 +1604,15 @@ void PropertiesPanel::rebuildObjectTab()
         page->addWidget(makeHeader(objectGlyph("symbol", palette()), kind->currentText(), nameEdit));
 
         PropertySection* symbol = addSection(page, "Instance");
-        symbol->addLong(0, "Symbol", fieldLabel(QString::fromStdString(instance->libraryItemName), this));
+        QWidget* symbolRow = new QWidget(this);
+        QHBoxLayout* symbolLayout = new QHBoxLayout(symbolRow);
+        symbolLayout->setContentsMargins(0, 0, 0, 0);
+        symbolLayout->addWidget(fieldLabel(QString::fromStdString(instance->libraryItemName), this), 1);
+        QPushButton* swap = new QPushButton("Swap...", this);
+        swap->setToolTip("Show another library symbol in this instance");
+        connect(swap, &QPushButton::clicked, this, &PropertiesPanel::swapSymbolRequested);
+        symbolLayout->addWidget(swap);
+        symbol->addLong(0, "Symbol", symbolRow);
         symbol->addLong(1, "Type", kind);
 
         addPositionAndSize(page, elements);

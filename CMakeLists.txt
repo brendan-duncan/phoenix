@@ -72,6 +72,8 @@ set(HEADERS
     src/gui/properties_panel.h
     src/gui/library_panel.h
     src/gui/audio_engine.h
+    src/gui/frame_picker_panel.h
+    src/gui/swap_symbol_dialog.h
     src/gui/media_import.h
     src/gui/timeline_audio.h
     src/gui/new_document_dialog.h
@@ -208,6 +210,8 @@ set(SOURCES
     src/gui/properties_panel.cpp
     src/gui/library_panel.cpp
     src/gui/audio_engine.cpp
+    src/gui/frame_picker_panel.cpp
+    src/gui/swap_symbol_dialog.cpp
     src/gui/media_import.cpp
     src/gui/timeline_audio.cpp
     src/gui/miniaudio_impl.c
