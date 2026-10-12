@@ -1835,14 +1835,18 @@ QPen PhoenixView::getPen(const fla::StrokeStyle* strokeStyle, bool scaleForEleme
         pen.setBrush(getFillBrush(strokeStyle->fill, fla::Rect()));
     }
 
+    // A mask is its fills' area: Animate leaves the lines out of it.
     if (_maskPass)
-        pen.setBrush(QBrush(Qt::black));
+        return QPen(Qt::NoPen);
 
     return pen;
 }
 
 void PhoenixView::paintEntry(QPainter& painter, const PathCacheEntry& entry)
 {
+    // Lines take no part in a mask.
+    if (_maskPass && entry.strokeStyle)
+        return;
     if (_outlineColor.isValid())
     {
         // Outline view: the fill's boundary and the stroke's center line,
