@@ -35,6 +35,13 @@ std::vector<WarpPin> blend(const std::vector<WarpPin>& a, const std::vector<Warp
 /// a triangle mesh and is not documented; this is a close stand-in.
 Point warp(const std::vector<WarpPin>& pins, const Point& point);
 
+/// \a puppetHandles with its pins made \a pins: a pin kept keeps the rest
+/// of what Animate wrote for it and takes its new place; a new one is
+/// written as Animate writes a pin just placed. The rig tree lists the
+/// pins left, and the rest of the document is kept as it was (or, for an
+/// empty one, as Animate starts one).
+std::string withPins(const std::string& puppetHandles, const std::vector<WarpPin>& pins);
+
 } // namespace AssetWarp
 
 } // namespace fla

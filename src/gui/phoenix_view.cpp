@@ -2930,7 +2930,10 @@ void PhoenixView::drawElement(QPainter& painter, const fla::Element* element, co
             if (!pixmap.isNull())
             {
                 painter.setRenderHint(QPainter::SmoothPixmapTransform, bitmap->allowSmoothing);
-                painter.drawPixmap(0, 0, pixmap);
+                if (_warping)
+                    drawWarpedPixmap(painter, pixmap);
+                else
+                    painter.drawPixmap(0, 0, pixmap);
             }
         }
     }
@@ -3825,6 +3828,77 @@ void PhoenixView::drawShape(QPainter& painter, const fla::Shape* shape, const fl
     if (isSelected && _showBounds)
     {
         drawOverlayPoints(painter, shape);
+    }
+}
+
+void PhoenixView::drawWarpedPixmap(QPainter& painter, const QPixmap& pixmap) const
+{
+    // A grid over the bitmap, each cell two triangles, each triangle drawn
+    // with the affine map that takes its corners where the warp takes them.
+    const QTransform toPuppet = painter.transform() * _warpBaseInverse;
+    const int width = pixmap.width();
+    const int height = pixmap.height();
+    const int columns = std::clamp(width / 12, 4, 32);
+    const int rows = std::clamp(height / 12, 4, 32);
+    std::vector<QPointF> source;
+    std::vector<QPointF> target;
+    for (int j = 0; j <= rows; ++j)
+    {
+        for (int i = 0; i <= columns; ++i)
+        {
+            const QPointF at(width * static_cast<double>(i) / columns, height * static_cast<double>(j) / rows);
+            const QPointF puppet = toPuppet.map(at);
+            const fla::Point moved = _warpMap(fla::Point(puppet.x(), puppet.y()));
+            source.push_back(at);
+            target.emplace_back(moved.x, moved.y);
+        }
+    }
+    const auto mapOf = [](const QPointF& a, const QPointF& b, const QPointF& c, const QPointF& A, const QPointF& B,
+                           const QPointF& C, QTransform& map) {
+        const QPointF u = b - a, v = c - a, U = B - A, V = C - A;
+        const double det = u.x() * v.y() - u.y() * v.x();
+        if (std::fabs(det) < 1.0e-12)
+            return false;
+        const double m11 = (U.x() * v.y() - V.x() * u.y()) / det;
+        const double m21 = (V.x() * u.x() - U.x() * v.x()) / det;
+        const double m12 = (U.y() * v.y() - V.y() * u.y()) / det;
+        const double m22 = (V.y() * u.x() - U.y() * v.x()) / det;
+        map = QTransform(m11, m12, m21, m22, A.x() - (m11 * a.x() + m21 * a.y()), A.y() - (m12 * a.x() + m22 * a.y()));
+        return true;
+    };
+    const QTransform base = _warpBase;
+    for (int j = 0; j < rows; ++j)
+    {
+        for (int i = 0; i < columns; ++i)
+        {
+            const int k = j * (columns + 1) + i;
+            const int corners[2][3] = {{k, k + 1, k + columns + 2}, {k, k + columns + 2, k + columns + 1}};
+            for (const auto& triangle : corners)
+            {
+                const QPointF a = source[triangle[0]], b = source[triangle[1]], c = source[triangle[2]];
+                QTransform map;
+                if (!mapOf(a, b, c, target[triangle[0]], target[triangle[1]], target[triangle[2]], map))
+                    continue;
+                // A little past its edges, so neighbors leave no seam.
+                const QPointF middle = (a + b + c) / 3.0;
+                QPolygonF clip;
+                for (const QPointF& corner : {a, b, c})
+                {
+                    const QPointF out = corner - middle;
+                    const double length = std::hypot(out.x(), out.y());
+                    clip << (length > 0.0 ? corner + out / length * 0.75 : corner);
+                }
+                painter.save();
+                painter.setTransform(map * base);
+                QPainterPath path;
+                path.addPolygon(clip);
+                path.closeSubpath();
+                painter.setClipPath(path);
+                const QRectF piece = clip.boundingRect().adjusted(-1.0, -1.0, 1.0, 1.0).intersected(QRectF(0, 0, width, height));
+                painter.drawPixmap(piece, pixmap, piece);
+                painter.restore();
+            }
+        }
     }
 }
 

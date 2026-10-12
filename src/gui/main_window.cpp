@@ -322,6 +322,9 @@ MainWindow::MainWindow(const QString& initialFile, QWidget* parent, bool startup
     _magicWandTool = std::make_unique<MagicWandTool>(_drawingStyle);
     _rotationTool = std::make_unique<RotationTool>();
     _timeScrubTool = std::make_unique<TimeScrubTool>();
+    _assetWarpTool = std::make_unique<AssetWarpTool>(stack, [this](const QString& message) {
+        statusBar()->showMessage(message, 5000);
+    });
     _boneTool = std::make_unique<BoneTool>(
         [this](PhoenixView&, const BoneTool::Link& link) { addBone(link); },
         [this](PhoenixView&, fla::Frame* frame, size_t child, int joint) { editJointLimits(frame, child, joint); });
@@ -5991,10 +5994,16 @@ void MainWindow::setupToolBar()
             "the Properties panel.",
             [this]() -> Tool* { return _magicWandTool.get(); }),
     });
-    addSlot({makeTool(ToolIcons::Tool::Bone, "Bone", Qt::Key_M,
-        "Drag from one symbol instance to another to join them with a bone; drag from an instance in an "
-        "armature to add a bone to it. Click a bone to limit how far its joint turns.",
-        [this]() -> Tool* { return _boneTool.get(); })});
+    addSlot({
+        makeTool(ToolIcons::Tool::Bone, "Bone", Qt::Key_M,
+            "Drag from one symbol instance to another to join them with a bone; drag from an instance in an "
+            "armature to add a bone to it. Click a bone to limit how far its joint turns.",
+            [this]() -> Tool* { return _boneTool.get(); }),
+        makeTool(ToolIcons::Tool::AssetWarp, "Asset Warp", Qt::Key_W,
+            "Click a puppet to pin it, drag a pin to bend the art round the others. Alt-click a pin, or "
+            "select it and press Delete, to take it away.",
+            [this]() -> Tool* { return _assetWarpTool.get(); }),
+    });
 
     addLine();
 
@@ -7542,6 +7551,7 @@ ToolIcons::Tool MainWindow::iconForTool(const Tool* tool) const
     if (tool == _timeScrubTool.get()) return IconTool::TimeScrub;
     if (tool == _cameraTool.get()) return IconTool::Camera;
     if (tool == _boneTool.get()) return IconTool::Bone;
+    if (tool == _assetWarpTool.get()) return IconTool::AssetWarp;
     if (tool == _textTool.get()) return IconTool::Text;
     return IconTool::Selection;
 }

@@ -1,6 +1,8 @@
 #include "asset_warp.h"
 
+#include <algorithm>
 #include <cmath>
+#include <cstdio>
 #include <cstdlib>
 #include <map>
 
@@ -35,7 +37,141 @@ bool location(const std::string& text, const std::string& key, size_t from, size
     return number(text, "x", at, close, point.x) && number(text, "y", at, close, point.y);
 }
 
+/// Where the array after "key": starts and ends (its brackets), or false.
+bool arrayOf(const std::string& json, const std::string& key, size_t& open, size_t& close)
+{
+    const size_t at = json.find("\"" + key + "\":[");
+    if (at == std::string::npos)
+        return false;
+    open = json.find('[', at);
+    int depth = 0;
+    for (size_t i = open; i < json.size(); ++i)
+    {
+        if (json[i] == '[' || json[i] == '{')
+            ++depth;
+        else if ((json[i] == ']' || json[i] == '}') && --depth == 0)
+        {
+            close = i;
+            return true;
+        }
+    }
+    return false;
+}
+
+/// The objects at depth one of the array between \a open and \a close.
+std::vector<std::string> objectsIn(const std::string& json, size_t open, size_t close)
+{
+    std::vector<std::string> objects;
+    size_t at = json.find('{', open);
+    while (at != std::string::npos && at < close)
+    {
+        int depth = 0;
+        size_t end = at;
+        for (size_t i = at; i < close; ++i)
+        {
+            if (json[i] == '{')
+                ++depth;
+            else if (json[i] == '}' && --depth == 0)
+            {
+                end = i;
+                break;
+            }
+        }
+        objects.push_back(json.substr(at, end - at + 1));
+        at = json.find('{', end + 1);
+    }
+    return objects;
+}
+
+std::string numberText(double value)
+{
+    char buffer[64];
+    std::snprintf(buffer, sizeof(buffer), "%.15g", value);
+    return buffer;
+}
+
+std::string pointText(const Point& point)
+{
+    return "{\"x\":" + numberText(point.x) + ",\"y\":" + numberText(point.y) + "}";
+}
+
+/// \a object with the object after "key": replaced by \a value.
+std::string replaced(std::string object, const std::string& key, const std::string& value)
+{
+    const size_t at = object.find("\"" + key + "\":{");
+    if (at == std::string::npos)
+        return object;
+    const size_t open = object.find('{', at);
+    const size_t close = object.find('}', open);
+    return object.replace(open, close - open + 1, value);
+}
+
 } // namespace
+
+std::string withPins(const std::string& puppetHandles, const std::vector<WarpPin>& pins)
+{
+    std::string json = puppetHandles;
+    if (json.find("\"puppetPoints\":[") == std::string::npos)
+        json = "{\"envelope_bz\":{\"deformed_bz\":[],\"original_bz\":[]},\"puppetMeshDensity\":7,\"puppetPoints\":[],"
+               "\"rigTree\":[],\"type\":1}";
+
+    // What was written for each pin read, by ID.
+    std::map<int, std::string> written;
+    size_t open = 0, close = 0;
+    if (arrayOf(json, "puppetPoints", open, close))
+    {
+        for (const std::string& object : objectsIn(json, open, close))
+        {
+            double id = 0.0;
+            if (number(object, "ID", 0, object.size(), id))
+                written[static_cast<int>(id)] = object;
+        }
+    }
+    std::string points;
+    std::string tree;
+    for (const WarpPin& pin : pins)
+    {
+        const Point to(std::round(pin.to.x * 20.0), std::round(pin.to.y * 20.0));
+        std::string object;
+        const auto found = written.find(pin.id);
+        if (found != written.end())
+            object = replaced(found->second, "newLocation", pointText(to));
+        else
+        {
+            object = "{\"ID\":" + std::to_string(pin.id) +
+                ",\"boneHandleEnable\":true,\"isPartialBezier\":false,\"mode\":1,\"newEndControlPt\":{\"x\":0,\"y\":0},"
+                "\"newLocation\":" + pointText(to) +
+                ",\"newStartControlPt\":{\"x\":0,\"y\":0},\"orgEndControlPt\":{\"x\":0,\"y\":0},\"orgLocation\":" +
+                pointText(pin.from) +
+                ",\"orgStartControlPt\":{\"x\":0,\"y\":0},\"pointFreeze\":false,\"rotationAngle\":0,\"selected\":false}";
+        }
+        points += (points.empty() ? "" : ",") + object;
+        tree += std::string(tree.empty() ? "" : ",") + "{\"ID\":" + std::to_string(pin.id) +
+            ",\"children\":[],\"connectionType\":\"smooth\"}";
+    }
+    if (arrayOf(json, "puppetPoints", open, close))
+        json.replace(open + 1, close - open - 1, points);
+
+    // The rig tree as read while it names the same pins; else a flat one.
+    if (arrayOf(json, "rigTree", open, close))
+    {
+        std::vector<int> listed;
+        for (const std::string& object : objectsIn(json, open, close))
+        {
+            double id = 0.0;
+            if (number(object, "ID", 0, object.size(), id))
+                listed.push_back(static_cast<int>(id));
+        }
+        std::vector<int> wanted;
+        for (const WarpPin& pin : pins)
+            wanted.push_back(pin.id);
+        std::sort(listed.begin(), listed.end());
+        std::sort(wanted.begin(), wanted.end());
+        if (listed != wanted)
+            json.replace(open + 1, close - open - 1, tree);
+    }
+    return json;
+}
 
 std::vector<WarpPin> pins(const std::string& json)
 {

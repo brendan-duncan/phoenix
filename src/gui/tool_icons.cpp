@@ -466,6 +466,21 @@ void drawBone(QPainter& painter)
     painter.drawEllipse(QPointF(18.5, 5.5), 2.0, 2.0);
 }
 
+void drawAssetWarp(QPainter& painter)
+{
+    // A bent strip held by two pins.
+    QPainterPath strip;
+    strip.moveTo(3.5, 15.0);
+    strip.cubicTo(8.0, 6.0, 14.0, 20.0, 20.5, 9.0);
+    painter.setPen(QPen(strokeColor(), 3.2, Qt::SolidLine, Qt::RoundCap));
+    painter.setBrush(Qt::NoBrush);
+    painter.drawPath(strip);
+    painter.setPen(QPen(strokeColor(), 1.0));
+    painter.setBrush(Qt::white);
+    painter.drawEllipse(QPointF(7.0, 10.5), 2.4, 2.4);
+    painter.drawEllipse(QPointF(17.0, 13.5), 2.4, 2.4);
+}
+
 void drawLasso(QPainter& painter)
 {
     // A loop of rope with its tail hanging down.
@@ -556,6 +571,7 @@ QPixmap render(ToolIcons::Tool tool, int size)
     case ToolIcons::Tool::Camera:        drawCamera(painter); break;
     case ToolIcons::Tool::Text:          drawText(painter); break;
     case ToolIcons::Tool::Bone:          drawBone(painter); break;
+    case ToolIcons::Tool::AssetWarp:     drawAssetWarp(painter); break;
     case ToolIcons::Tool::ObjectDrawing: drawObjectDrawing(painter); break;
     }
 

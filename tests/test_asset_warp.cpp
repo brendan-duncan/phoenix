@@ -62,3 +62,39 @@ TEST(asset_warp_moves_the_art_with_its_pins)
     const std::vector<fla::WarpPin> blended = fla::AssetWarp::blend({a}, {later}, 0.5);
     CHECK(blended.size() == 1 && near(blended[0].to, 20, 5));
 }
+
+TEST(asset_warp_pins_are_written_back_as_animate_keeps_them)
+{
+    const std::string read = R"({"envelope_bz":{"deformed_bz":[],"original_bz":[]},"puppetMeshDensity":7,"puppetPoints":[)"
+        R"({"ID":0,"boneHandleEnable":true,"mode":1,"newLocation":{"x":2781,"y":5003},"orgLocation":{"x":139.05,"y":250.15},"selected":true},)"
+        R"({"ID":2,"boneHandleEnable":true,"mode":1,"newLocation":{"x":1329,"y":573},"orgLocation":{"x":66.5,"y":28.65},"selected":false}],)"
+        R"("rigTree":[{"ID":0,"children":[],"connectionType":"smooth"},{"ID":2,"children":[],"connectionType":"smooth"}],"type":1})";
+    std::vector<fla::WarpPin> pins = fla::AssetWarp::pins(read);
+    CHECK(pins.size() == 2);
+
+    // Moved: only its newLocation changes; the rest is kept.
+    pins[0].to = fla::Point(150.0, 260.0);
+    std::string written = fla::AssetWarp::withPins(read, pins);
+    CHECK(written.find(R"("newLocation":{"x":3000,"y":5200})") != std::string::npos);
+    CHECK(written.find(R"("selected":true)") != std::string::npos);
+    CHECK(written.find(R"("rigTree":[{"ID":0,"children":[],"connectionType":"smooth"},{"ID":2)") != std::string::npos);
+    CHECK(fla::AssetWarp::pins(written).size() == 2);
+
+    // Added and taken away: the rig tree follows.
+    fla::WarpPin added;
+    added.id = 3;
+    added.from = fla::Point(10.0, 20.0);
+    added.to = added.from;
+    pins.erase(pins.begin() + 1);
+    pins.push_back(added);
+    written = fla::AssetWarp::withPins(read, pins);
+    const std::vector<fla::WarpPin> back = fla::AssetWarp::pins(written);
+    CHECK(back.size() == 2 && back[1].id == 3 && near(back[1].from, 10.0, 20.0) && near(back[1].to, 10.0, 20.0));
+    CHECK(written.find(R"("ID":2)") == std::string::npos);
+    CHECK(written.find(R"({"ID":3,"children":[])") != std::string::npos);
+    CHECK(written.find(R"("puppetMeshDensity":7)") != std::string::npos);
+
+    // From nothing, a document Animate would start.
+    const std::string fresh = fla::AssetWarp::withPins("", {added});
+    CHECK(fla::AssetWarp::pins(fresh).size() == 1 && fresh.find(R"("type":1)") != std::string::npos);
+}

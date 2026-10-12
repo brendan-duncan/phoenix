@@ -1139,6 +1139,8 @@ private:
     /// \a path, in a shape's space, taken by \a toPuppet into the puppet's
     /// space, flattened finely and warped by the pins.
     QPainterPath warpedPath(const QPainterPath& path, const QTransform& toPuppet) const;
+    /// Draws a bitmap through the warp, a piece of mesh at a time.
+    void drawWarpedPixmap(QPainter& painter, const QPixmap& pixmap) const;
 
     /// Draws a shape, or, part way through a shape tween to \a tweenShape,
     /// the morph between them. \a ownTransform is the element's transform
