@@ -1,4 +1,8 @@
 #include "test_util.h"
+#include "../src/data/symbol_instance.h"
+#include "../src/data/frame.h"
+#include "../src/data/shape.h"
+#include "../src/edit/transform_blend.h"
 
 #include "../src/data/shape.h"
 #include "../src/data/solid_color.h"
@@ -382,4 +386,32 @@ TEST(rotate_none_blends_the_matrix_without_turning)
     // Auto turns it, keeping its size.
     const fla::Transform turned = fla::blendTransforms(from, to, 0.5);
     CHECK_NEAR(turned.m11 * turned.m11 + turned.m12 * turned.m12, 1.0);
+}
+
+TEST(classic_tween_elements_pair_as_animate_pairs_them)
+{
+    fla::Frame from(nullptr);
+    fla::Frame to(nullptr);
+    const auto instance = [](fla::Frame& frame, const char* name) {
+        auto* element = new fla::SymbolInstance(&frame);
+        element->libraryItemName = name;
+        frame.elements.push_back(element);
+    };
+    // The end keyframe has the same two symbols in the other order, and a
+    // shape that does not tween.
+    instance(from, "Wheel");
+    instance(from, "Body");
+    from.elements.push_back(new fla::Shape(&from));
+    instance(to, "Body");
+    instance(to, "Wheel");
+    to.elements.push_back(new fla::Shape(&to));
+    const std::vector<int> pairs = fla::pairTweenElements(from.elements, to.elements);
+    CHECK(pairs.size() == 3 && pairs[0] == 1 && pairs[1] == 0 && pairs[2] == -1);
+
+    // A lone symbol swapped for another still tweens.
+    fla::Frame a(nullptr);
+    fla::Frame b(nullptr);
+    instance(a, "Head");
+    instance(b, "Head copy");
+    CHECK(fla::pairTweenElements(a.elements, b.elements) == std::vector<int>{0});
 }

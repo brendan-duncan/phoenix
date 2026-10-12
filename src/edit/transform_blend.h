@@ -8,6 +8,8 @@
 
 namespace fla {
 
+class Element;
+
 /// The matrix part way between two keyframes' matrices, as a motion tween
 /// shows it: each matrix is taken apart into translation, x and y scale and
 /// the two skew angles Animate's Transform panel shows (a rotation is both
@@ -40,5 +42,13 @@ ColorTransform blendColorTransforms(const ColorTransform& from, const ColorTrans
 /// blend; switches (inner, knockout, the bevel's placement) and a pair of
 /// different kinds come from the first keyframe.
 std::vector<Filter> blendFilters(const std::vector<Filter>& from, const std::vector<Filter>& to, double t);
+
+/// Which element of a classic tween's end keyframe each element of its
+/// start keyframe tweens toward, as Animate pairs them: the same symbol at
+/// the same place in the stacking order, else the first unpaired instance
+/// of that symbol; a lone instance, group or text swapped for another
+/// symbol tweens to it. Raw shapes are not classic-tweened (that is a
+/// shape tween's work). -1 where an element holds still.
+std::vector<int> pairTweenElements(const std::vector<Element*>& from, const std::vector<Element*>& to);
 
 } // namespace fla

@@ -1304,9 +1304,12 @@ fla::Transform PhoenixView::shownTransform(const LayerFrame& state, size_t eleme
         return fla::applyMotion(element->transform, element->transformationPoint, motion->at(0.0, rate),
             motion->at(state.offset, rate));
     }
-    if (state.tweenFrame && elementIndex < state.tweenFrame->elements.size() && state.tweenFrame->elements[elementIndex])
+    const std::vector<int> pairs = state.tweenFrame && state.frame->tweenType == fla::TweenType::Motion
+        ? fla::pairTweenElements(state.frame->elements, state.tweenFrame->elements) : std::vector<int>();
+    const int paired = elementIndex < pairs.size() ? pairs[elementIndex] : -1;
+    if (paired >= 0 && state.tweenFrame->elements[static_cast<size_t>(paired)])
     {
-        const fla::Element* end = state.tweenFrame->elements[elementIndex];
+        const fla::Element* end = state.tweenFrame->elements[static_cast<size_t>(paired)];
         const fla::Transform tweened = interpolateTransform(element->transform, end->transform, state.tweenProgress);
         return guidedTransform(state, *element, *end, tweened);
     }
@@ -1869,12 +1872,18 @@ void PhoenixView::drawFrame(QPainter& painter, const fla::Frame* frame, const fl
     const bool filtered = _frameDepth == 1 && !_maskPass && _drawPhase != DrawPhase::All;
 
     int nextElementIndex = 0;
+    // What each element tweens toward, paired as Animate pairs them.
+    const std::vector<int> pairs = nextTweenFrame && frame->tweenType == fla::TweenType::Motion
+        ? fla::pairTweenElements(frame->elements, nextTweenFrame->elements) : std::vector<int>();
     for (const fla::Element* element : frame->elements)
     {
         if (element->visible)
         {
-            const fla::Element* nextElement = nextTweenFrame && nextTweenFrame->elements.size() > nextElementIndex ?
-                nextTweenFrame->elements[nextElementIndex] : nullptr;
+            const int paired = static_cast<size_t>(nextElementIndex) < pairs.size() ? pairs[nextElementIndex] : -1;
+            const fla::Element* nextElement = nextTweenFrame && frame->tweenType != fla::TweenType::Motion &&
+                    nextTweenFrame->elements.size() > static_cast<size_t>(nextElementIndex)
+                ? nextTweenFrame->elements[nextElementIndex]
+                : (paired >= 0 ? nextTweenFrame->elements[static_cast<size_t>(paired)] : nullptr);
 
             bool skip = false;
             if (filtered)

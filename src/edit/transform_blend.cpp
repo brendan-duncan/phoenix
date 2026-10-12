@@ -1,4 +1,7 @@
 #include "transform_blend.h"
+#include "../data/element.h"
+#include "../data/bitmap_instance.h"
+#include "../data/symbol_instance.h"
 
 #include <algorithm>
 #include <cmath>
@@ -200,6 +203,64 @@ Transform blendTransforms(const Transform& from, const Transform& to, double t,
     mixed.tx = blend(a.tx, b.tx, t);
     mixed.ty = blend(a.ty, b.ty, t);
     return putTogether(mixed);
+}
+
+namespace {
+
+/// What a classic tween can move, and what makes two of them the same.
+bool tweenable(const Element* element)
+{
+    if (!element)
+        return false;
+    const Element::Type type = element->elementType();
+    return type == Element::Type::SymbolInstance || type == Element::Type::Group ||
+           type == Element::Type::StaticText || type == Element::Type::BitmapInstance;
+}
+
+std::string identity(const Element* element)
+{
+    if (const auto* instance = dynamic_cast<const SymbolInstance*>(element))
+        return "symbol:" + instance->libraryItemName;
+    if (const auto* bitmap = dynamic_cast<const BitmapInstance*>(element))
+        return "bitmap:" + bitmap->libraryItemName;
+    return std::to_string(static_cast<int>(element->elementType()));
+}
+
+} // namespace
+
+std::vector<int> pairTweenElements(const std::vector<Element*>& from, const std::vector<Element*>& to)
+{
+    std::vector<int> pairs(from.size(), -1);
+    std::vector<bool> used(to.size(), false);
+    // The same symbol at the same place.
+    for (size_t i = 0; i < from.size() && i < to.size(); ++i)
+    {
+        if (tweenable(from[i]) && tweenable(to[i]) && identity(from[i]) == identity(to[i]))
+        {
+            pairs[i] = static_cast<int>(i);
+            used[i] = true;
+        }
+    }
+    // The same symbol elsewhere in the stack.
+    for (size_t i = 0; i < from.size(); ++i)
+    {
+        if (pairs[i] >= 0 || !tweenable(from[i]))
+            continue;
+        for (size_t k = 0; k < to.size(); ++k)
+        {
+            if (!used[k] && tweenable(to[k]) && identity(from[i]) == identity(to[k]))
+            {
+                pairs[i] = static_cast<int>(k);
+                used[k] = true;
+                break;
+            }
+        }
+    }
+    // A swapped symbol, alone on both keyframes.
+    if (from.size() == 1 && to.size() == 1 && pairs[0] < 0 && tweenable(from[0]) && tweenable(to[0]) &&
+        from[0]->elementType() == to[0]->elementType())
+        pairs[0] = 0;
+    return pairs;
 }
 
 } // namespace fla
