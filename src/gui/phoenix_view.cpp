@@ -1171,7 +1171,9 @@ void PhoenixView::drawFrame(QPainter& painter, const fla::Frame* frame, const fl
         _tweenRotation = fla::TweenRotation::Clockwise;
     else if (frame->motionTweenRotate == "counter-clockwise")
         _tweenRotation = fla::TweenRotation::CounterClockwise;
-    if (_tweenRotation != fla::TweenRotation::Auto)
+    else if (frame->motionTweenRotate == "none")
+        _tweenRotation = fla::TweenRotation::None;
+    if (_tweenRotation == fla::TweenRotation::Clockwise || _tweenRotation == fla::TweenRotation::CounterClockwise)
         _tweenTurns = std::max(0, frame->motionTweenRotateTimes);
     struct Restore
     {

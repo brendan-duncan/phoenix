@@ -76,6 +76,8 @@ double blendAngle(double from, double to, double t, TweenRotation rotation, int 
             delta -= 2.0 * kPi;
         delta -= extraTurns * 2.0 * kPi;
         break;
+    case TweenRotation::None:
+        break;
     }
     return from + delta * t;
 }
@@ -175,6 +177,18 @@ std::vector<Filter> blendFilters(const std::vector<Filter>& from, const std::vec
 Transform blendTransforms(const Transform& from, const Transform& to, double t,
     TweenRotation rotation, int extraTurns)
 {
+    if (rotation == TweenRotation::None)
+    {
+        Transform mixed;
+        mixed.m11 = blend(from.m11, to.m11, t);
+        mixed.m12 = blend(from.m12, to.m12, t);
+        mixed.m21 = blend(from.m21, to.m21, t);
+        mixed.m22 = blend(from.m22, to.m22, t);
+        mixed.tx = blend(from.tx, to.tx, t);
+        mixed.ty = blend(from.ty, to.ty, t);
+        return mixed;
+    }
+
     const Parts a = takeApart(from);
     const Parts b = takeApart(to);
 

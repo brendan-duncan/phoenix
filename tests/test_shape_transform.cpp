@@ -366,3 +366,20 @@ TEST(tween_blends_color_transforms)
     CHECK(near(fla::blendColorTransforms(from, to, 0.0).alphaMultiplier, 1.0));
     CHECK(near(fla::blendColorTransforms(from, to, 1.0).alphaMultiplier, 0.0));
 }
+
+TEST(rotate_none_blends_the_matrix_without_turning)
+{
+    // A quarter turn with Rotate None does not turn: half way, the matrix
+    // is half of each, which squashes rather than rotates.
+    const fla::Transform from(1.0, 0.0, 0.0, 1.0, 0.0, 0.0);
+    const fla::Transform to(0.0, 1.0, -1.0, 0.0, 10.0, 0.0);
+    const fla::Transform half = fla::blendTransforms(from, to, 0.5, fla::TweenRotation::None);
+    CHECK_NEAR(half.m11, 0.5);
+    CHECK_NEAR(half.m12, 0.5);
+    CHECK_NEAR(half.m21, -0.5);
+    CHECK_NEAR(half.m22, 0.5);
+    CHECK_NEAR(half.tx, 5.0);
+    // Auto turns it, keeping its size.
+    const fla::Transform turned = fla::blendTransforms(from, to, 0.5);
+    CHECK_NEAR(turned.m11 * turned.m11 + turned.m12 * turned.m12, 1.0);
+}

@@ -20,7 +20,10 @@ enum class TweenRotation
 {
     Auto,
     Clockwise,
-    CounterClockwise
+    CounterClockwise,
+    /// Rotate None: no turning at all; the six matrix entries blend
+    /// straight, as Flash's tween did with rotation switched off.
+    None
 };
 
 Transform blendTransforms(const Transform& from, const Transform& to, double t,
