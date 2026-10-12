@@ -363,6 +363,12 @@ private:
     class LibraryPanel* _libraryPanel = nullptr;
     class FramePickerPanel* _framePicker = nullptr;
     class AutoSave* _autoSave = nullptr;
+    class AlignPanel* _alignPanel = nullptr;
+    class TransformPanel* _transformPanel = nullptr;
+    class InfoPanel* _infoPanel = nullptr;
+    QDockWidget* _alignDock = nullptr;
+    QDockWidget* _transformDock = nullptr;
+    QDockWidget* _infoDock = nullptr;
     QDockWidget* _framePickerDock = nullptr;
     class ColorPanel* _colorPanel = nullptr;
     QDockWidget* _colorDock = nullptr;

@@ -77,6 +77,7 @@ set(HEADERS
     src/gui/start_dialog.h
     src/gui/autosave.h
     src/gui/image_export.h
+    src/gui/arrange_panels.h
     src/gui/file_association.h
     src/gui/color_panel.h
     src/gui/video_import.h
@@ -196,6 +197,7 @@ set(HEADERS
     src/edit/library_media.h
     src/edit/frame_sound.h
     src/edit/frame_bake.h
+    src/edit/transform_parts.h
     src/edit/swatches.h
     src/edit/property_command.h
     src/geom/curve.h
@@ -231,6 +233,7 @@ set(SOURCES
     src/gui/start_dialog.cpp
     src/gui/autosave.cpp
     src/gui/image_export.cpp
+    src/gui/arrange_panels.cpp
     src/gui/file_association.cpp
     src/gui/color_panel.cpp
     src/gui/video_import.cpp

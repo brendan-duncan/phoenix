@@ -71,6 +71,10 @@ public:
 
     QPointF mapToDocument(const QPointF& widgetPos) const;
 
+    /// The stage in the space of the timeline being edited: the document's
+    /// own, or a symbol's when one is open.
+    QRectF stageInScope() const;
+
     QPointF mapToWidget(const QPointF& documentPos) const;
 
     /// Finds the topmost thing under \p documentPos, searching in reverse draw
@@ -196,6 +200,9 @@ public:
 signals:
     /// The stage was right-clicked at \a documentPos.
     void stageMenuRequested(const QPoint& globalPos, const QPointF& documentPos);
+    /// The cursor moved over the stage, to the document point given and the
+    /// widget point it is at (for the Info panel).
+    void cursorMoved(const QPointF& documentPos, const QPoint& widgetPos);
     void scopeChanged();
 
     /// The stage was turned with the Rotation tool or set straight.

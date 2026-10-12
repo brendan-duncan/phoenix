@@ -3059,6 +3059,7 @@ void PhoenixView::mousePressEvent(QMouseEvent *event)
 
 void PhoenixView::mouseMoveEvent(QMouseEvent *event)
 {
+    emit cursorMoved(mapToDocument(event->position()), event->position().toPoint());
     if (_guideDrag)
     {
         bool invertible = false;
@@ -5026,6 +5027,17 @@ QPointF PhoenixView::widgetToStage(const QPointF& widgetPos) const
 QPointF PhoenixView::stageToWidget(const QPointF& stagePos) const
 {
     return rootToWidget().map(stagePos);
+}
+
+QRectF PhoenixView::stageInScope() const
+{
+    const fla::Document* document = _flaDocument ? _flaDocument->document : nullptr;
+    if (!document)
+        return QRectF();
+    const QRectF stage(0.0, 0.0, document->width, document->height);
+    bool invertible = false;
+    const QTransform toScope = scopeToDocument().inverted(&invertible);
+    return invertible ? toScope.mapRect(stage) : stage;
 }
 
 QPointF PhoenixView::mapToDocument(const QPointF& widgetPos) const

@@ -18,6 +18,7 @@
 #include "video_import.h"
 #include "frame_picker_panel.h"
 #include "color_panel.h"
+#include "arrange_panels.h"
 #include "swatches_panel.h"
 #include "../edit/swatches.h"
 #include "swap_symbol_dialog.h"
@@ -156,6 +157,10 @@ MainWindow::MainWindow(const QString& initialFile, QWidget* parent, bool startup
 
     _selection.setChangedCallback([this]() {
         updateSelectionState();
+        if (_transformPanel)
+            _transformPanel->refresh();
+        if (_infoPanel)
+            _infoPanel->refresh();
         updateFramePicker();
         // The Properties panel follows the selection the way Animate's does:
         // an object shows its Object tab; nothing selected shows the tool, or
@@ -448,6 +453,46 @@ void MainWindow::adoptDocument(fla::FLADocument* document, const QString& filePa
         _colorPanel->setDocument(_flaDocument);
     if (_swatchesPanel)
         _swatchesPanel->setDocument(_flaDocument);
+
+    // Align, Transform and Info, closed until asked for (Ctrl+K, Ctrl+T,
+    // Ctrl+I), in a group of their own as in Animate.
+    ArrangeLinks arrange;
+    arrange.view = _phoenixView;
+    arrange.selection = &_selection;
+    arrange.commands = [this]() { return &_editContext.commandStack(); };
+    arrange.elements = [this]() { return selectedElements(); };
+    arrange.stage = [this]() { return _phoenixView ? _phoenixView->stageInScope() : QRectF(); };
+    arrange.changed = [this]() {
+        _phoenixView->clearCaches();
+        _phoenixView->update();
+        if (_propertiesPanel)
+            _propertiesPanel->refresh();
+        if (_transformPanel)
+            _transformPanel->refresh();
+        if (_infoPanel)
+            _infoPanel->refresh();
+    };
+    arrange.duplicate = [this]() { duplicateSelection(); };
+    const auto arrangeDock = [this](const char* title, const char* name, QWidget* panel) {
+        QDockWidget* dock = new QDockWidget(title, this);
+        dock->setObjectName(name);
+        dock->setAllowedAreas(Qt::AllDockWidgetAreas);
+        panel->setParent(dock);
+        dock->setWidget(panel);
+        addDockWidget(Qt::RightDockWidgetArea, dock);
+        return dock;
+    };
+    _alignPanel = new AlignPanel(arrange);
+    _alignDock = arrangeDock("Align", "alignDock", _alignPanel);
+    _transformPanel = new TransformPanel(arrange);
+    _transformDock = arrangeDock("Transform", "transformDock", _transformPanel);
+    _infoPanel = new InfoPanel(arrange);
+    _infoDock = arrangeDock("Info", "infoDock", _infoPanel);
+    tabifyDockWidget(_alignDock, _transformDock);
+    tabifyDockWidget(_transformDock, _infoDock);
+    for (QDockWidget* dock : {_alignDock, _transformDock, _infoDock})
+        dock->hide();
+    connect(_phoenixView, &PhoenixView::cursorMoved, _infoPanel, &InfoPanel::cursorMoved);
 
     if (_flaDocument)
         _player->setCurrentFrame(0);
@@ -1652,6 +1697,24 @@ void MainWindow::setupMenus()
         }
     });
     viewMenu->addAction(swatchesAction);
+    const auto showDock = [this](QDockWidget* const* dock) {
+        return [this, dock]() {
+            if (*dock)
+            {
+                (*dock)->show();
+                (*dock)->raise();
+            }
+        };
+    };
+    QAction* alignAction = viewMenu->addAction("&Align");
+    alignAction->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_K));
+    connect(alignAction, &QAction::triggered, this, showDock(&_alignDock));
+    QAction* transformAction = viewMenu->addAction("&Transform");
+    transformAction->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_T));
+    connect(transformAction, &QAction::triggered, this, showDock(&_transformDock));
+    QAction* infoAction = viewMenu->addAction("&Info");
+    infoAction->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_I));
+    connect(infoAction, &QAction::triggered, this, showDock(&_infoDock));
     viewMenu->addSeparator();
 
     // Animate shows one scene at a time; these pick which.
@@ -2478,6 +2541,10 @@ void MainWindow::updateEditState()
         _libraryPanel->refreshIfStale();
     if (_swatchesPanel)
         _swatchesPanel->refreshIfStale();
+    if (_transformPanel)
+        _transformPanel->refresh();
+    if (_infoPanel)
+        _infoPanel->refresh();
     if (_colorPanel)
         _colorPanel->refresh();
     updateFramePicker();

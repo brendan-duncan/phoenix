@@ -1,4 +1,6 @@
 #include "test_util.h"
+#include "../src/edit/transform_parts.h"
+#include <cmath>
 
 #include "../src/data/document.h"
 #include "../src/data/group.h"
@@ -732,4 +734,24 @@ TEST(breaking_an_instance_apart_bakes_its_color_effect)
     for (fla::Element* element : frame.elements)
         delete element;
     frame.elements.clear();
+}
+
+TEST(transform_parts_take_a_matrix_apart_and_back)
+{
+    const fla::Transform cases[] = {
+        fla::Transform(),
+        fla::Transform(2.0, 0.0, 0.0, 0.5, 10.0, 20.0),
+        fla::Transform(0.866, 0.5, -0.5, 0.866, 0.0, 0.0),
+        fla::Transform(-1.0, 0.0, 0.0, 1.0, 0.0, 0.0),
+        fla::Transform(1.0, 0.0, 0.0, -1.0, 0.0, 0.0),
+        fla::Transform(0.868804931640625, 0.495147705078125, -0.559661865234375, 0.880783081054688, -33.7, -42.0),
+    };
+    for (const fla::Transform& t : cases)
+    {
+        const fla::Transform back = fla::TransformParts::of(t).matrix(t.tx, t.ty);
+        CHECK(std::fabs(back.m11 - t.m11) < 1e-9 && std::fabs(back.m12 - t.m12) < 1e-9);
+        CHECK(std::fabs(back.m21 - t.m21) < 1e-9 && std::fabs(back.m22 - t.m22) < 1e-9);
+    }
+    const fla::TransformParts rotated = fla::TransformParts::of(fla::Transform(0.0, 1.0, -1.0, 0.0, 0.0, 0.0));
+    CHECK(std::fabs(rotated.skewX - 90.0) < 1e-9 && std::fabs(rotated.skewY - 90.0) < 1e-9);
 }
