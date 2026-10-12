@@ -3,6 +3,7 @@
 #include "../src/data/document.h"
 #include "../src/data/fla_document.h"
 #include "../src/data/symbol_list.h"
+#include "../src/edit/new_document.h"
 #include "../src/parser/fla_parser.h"
 #include "../src/parser/zip_reader.h"
 #include "../src/util/zip_writer.h"
@@ -195,4 +196,24 @@ TEST(fla_writer_produces_a_readable_file)
 
     std::printf("    packed %s (%zu symbols) and read it back\n",
         fs::path(source).filename().string().c_str(), symbolsAfter);
+}
+
+TEST(fla_writer_packs_a_new_document_as_animate_does)
+{
+    // A document made here has no package files of its own: it still gets
+    // the marker Animate looks for, the media type and the metadata file.
+    std::unique_ptr<fla::FLADocument> created(fla::createEmptyDocument());
+    CHECK(created && created->document);
+    if (!created || !created->document)
+        return;
+    ScratchDirectory scratch("fla_new");
+    const std::string written = scratch.file("Untitled-1.fla");
+    fla::FLAWriter writer;
+    CHECK(writer.write(*created->document, written));
+    ZipReader reader;
+    CHECK(reader.open(written));
+    CHECK(reader.readTextFile("Untitled-1.xfl") == "PROXY-CS5");
+    CHECK(reader.readTextFile("mimetype") == "application/vnd.adobe.xfl");
+    CHECK(reader.containsFile("META-INF/metadata.xml"));
+    CHECK(reader.containsFile("DOMDocument.xml"));
 }

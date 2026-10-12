@@ -46,13 +46,13 @@ bool XFLContent::build(const Document& document, const std::string& projectName,
     documentEntry.text = writer.writeDocument(document);
     entries.push_back(std::move(documentEntry));
 
-    // Animate recognizes a folder as a project by this marker. A zipped .fla
-    // does not need one, so callers can leave the name empty to skip it.
+    // Animate recognizes a project by this marker, whose text is always
+    // PROXY-CS5. Callers can leave the name empty to skip it.
     if (!projectName.empty())
     {
         XFLEntry marker;
         marker.path = projectName + ".xfl";
-        marker.text = "PROJECT_XFL\n";
+        marker.text = "PROXY-CS5";
         entries.push_back(std::move(marker));
     }
 
@@ -125,6 +125,31 @@ bool XFLContent::build(const Document& document, const std::string& projectName,
         entry.path = file.first;
         entry.binary = &file.second;
         entries.push_back(std::move(entry));
+    }
+
+    // The files every Animate package has, for a document that came without
+    // them (one made here): the media type and an empty metadata file. A
+    // document read from a file carries its own through extraFiles.
+    const auto carried = [&document](const std::string& path) {
+        for (const auto& file : document.extraFiles)
+        {
+            if (file.first == path)
+                return true;
+        }
+        return false;
+    };
+    if (!carried("META-INF/metadata.xml"))
+    {
+        XFLEntry metadata;
+        metadata.path = "META-INF/metadata.xml";
+        entries.push_back(std::move(metadata));
+    }
+    if (!carried("mimetype"))
+    {
+        XFLEntry mimetype;
+        mimetype.path = "mimetype";
+        mimetype.text = "application/vnd.adobe.xfl";
+        entries.push_back(std::move(mimetype));
     }
 
     for (const std::string& description : writer.unsupported())

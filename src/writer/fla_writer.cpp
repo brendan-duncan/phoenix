@@ -5,6 +5,8 @@
 #include "../data/document.h"
 #include "../util/zip_writer.h"
 
+#include <filesystem>
+
 namespace fla {
 
 bool FLAWriter::write(const Document& document, const std::string& filePath)
@@ -12,10 +14,11 @@ bool FLAWriter::write(const Document& document, const std::string& filePath)
     _errorString.clear();
     _unsupported.clear();
 
-    // A zipped .fla carries no .xfl marker; that file only exists to mark a
-    // folder as a project.
+    // A zipped .fla carries the .xfl marker too, named after the file, as
+    // Animate's own do.
     std::vector<XFLEntry> entries;
-    if (!XFLContent::build(document, std::string(), entries, _unsupported, _errorString))
+    const std::string projectName = std::filesystem::path(filePath).stem().string();
+    if (!XFLContent::build(document, projectName, entries, _unsupported, _errorString))
         return false;
 
     ZipWriter zip;
