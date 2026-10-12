@@ -354,6 +354,7 @@ MainWindow::MainWindow(const QString& initialFile, QWidget* parent, bool startup
     });
     _penTool = std::make_unique<PenTool>(_selection, stack, _drawingStyle);
     _pencilTool = std::make_unique<PencilTool>(_selection, stack, _drawingStyle);
+    _paintBrushTool = std::make_unique<PencilTool>(_selection, stack, _drawingStyle, "Paint Brush");
     _textTool = std::make_unique<TextTool>(_selection, stack, _drawingStyle);
     _subselectionTool = std::make_unique<SubselectionTool>(_selection, stack);
     _phoenixView->setSelection(&_selection);
@@ -1285,6 +1286,9 @@ void MainWindow::setupWindowMenu()
     QAction* motionPresetsAction = windowMenu->addAction("Motion &Presets…");
     motionPresetsAction->setStatusTip("Saved motions to put on an object, Animate's among them");
     connect(motionPresetsAction, &QAction::triggered, this, &MainWindow::showMotionPresets);
+    QAction* brushesAction = windowMenu->addAction("Document &Brushes…");
+    brushesAction->setStatusTip("The art and pattern brushes the document's strokes are drawn with");
+    connect(brushesAction, &QAction::triggered, this, &MainWindow::manageBrushes);
     windowMenu->addSeparator();
 
     QAction* hidePanels = windowMenu->addAction("&Hide Panels");
@@ -6066,9 +6070,15 @@ void MainWindow::setupToolBar()
         "Drag out from a stroke to widen it there, in to thin it; drag a width point to change it, select one "
         "and press Delete to take it away. Alt changes one side only.",
         [this]() -> Tool* { return _widthTool.get(); })});
-    addSlot({makeTool(ToolIcons::Tool::Pencil, "Pencil", Qt::SHIFT | Qt::Key_Y,
-        "Draw freehand. The stroke is fitted on release; the mode is in the Properties panel.",
-        [this]() -> Tool* { return _pencilTool.get(); })});
+    addSlot({
+        makeTool(ToolIcons::Tool::Pencil, "Pencil", Qt::SHIFT | Qt::Key_Y,
+            "Draw freehand. The stroke is fitted on release; the mode is in the Properties panel.",
+            [this]() -> Tool* { return _pencilTool.get(); }),
+        makeTool(ToolIcons::Tool::PaintBrush, "Paint Brush", Qt::Key_Y,
+            "Paint a stroke with an art or pattern brush: a graphic symbol drawn along it, chosen under Brush "
+            "in the Properties panel.",
+            [this]() -> Tool* { return _paintBrushTool.get(); }),
+    });
     // The Flow, Nib and Ink brushes share a slot; B is the Flow Brush's, as
     // it is the brush Animate gives B.
     addSlot({
@@ -7572,6 +7582,7 @@ ToolIcons::Tool MainWindow::iconForTool(const Tool* tool) const
     if (tool == _rotate3DTool.get()) return IconTool::Rotate3D;
     if (tool == _translate3DTool.get()) return IconTool::Translate3D;
     if (tool == _widthTool.get()) return IconTool::Width;
+    if (tool == _paintBrushTool.get()) return IconTool::PaintBrush;
     if (tool == _textTool.get()) return IconTool::Text;
     return IconTool::Selection;
 }
@@ -8600,6 +8611,129 @@ std::vector<fla::StaticText*> MainWindow::allTexts() const
                 for (fla::Element* element : frame ? frame->elements : std::vector<fla::Element*>())
                     visit(element);
     return texts;
+}
+
+std::vector<fla::StrokeStyle*> MainWindow::allStrokes() const
+{
+    std::vector<fla::StrokeStyle*> strokes;
+    fla::Document* document = _flaDocument ? _flaDocument->document : nullptr;
+    if (!document)
+        return strokes;
+    std::vector<fla::Timeline*> timelines(document->timelines.begin(), document->timelines.end());
+    if (document->symbolList)
+        for (fla::Symbol* symbol : document->symbolList->symbols)
+            if (symbol)
+                timelines.insert(timelines.end(), symbol->timelines.begin(), symbol->timelines.end());
+    std::function<void(fla::Element*)> visit = [&](fla::Element* element) {
+        if (auto* shape = dynamic_cast<fla::Shape*>(element))
+            strokes.insert(strokes.end(), shape->strokes.begin(), shape->strokes.end());
+        if (auto* group = dynamic_cast<fla::Group*>(element))
+            for (fla::Element* member : group->members)
+                visit(member);
+    };
+    for (fla::Timeline* timeline : timelines)
+        for (fla::Layer* layer : timeline ? timeline->layers : std::vector<fla::Layer*>())
+            for (fla::Frame* frame : layer ? layer->frames : std::vector<fla::Frame*>())
+                for (fla::Element* element : frame ? frame->elements : std::vector<fla::Element*>())
+                    visit(element);
+    return strokes;
+}
+
+void MainWindow::manageBrushes()
+{
+    if (!_flaDocument || !_flaDocument->document)
+        return;
+    QDialog dialog(this);
+    dialog.setWindowTitle("Document Brushes");
+    QVBoxLayout* layout = new QVBoxLayout(&dialog);
+    QLabel* intro = new QLabel("The graphic symbols the document's strokes are drawn with. Choose a brush for new "
+                               "strokes under Brush in the Properties panel; any graphic symbol can be one.", &dialog);
+    intro->setWordWrap(true);
+    layout->addWidget(intro);
+    QListWidget* list = new QListWidget(&dialog);
+    layout->addWidget(list);
+    QHBoxLayout* buttons = new QHBoxLayout;
+    QPushButton* draw = new QPushButton("Draw With It", &dialog);
+    draw->setToolTip("Use this brush for new strokes");
+    QPushButton* remove = new QPushButton("Take Off Strokes", &dialog);
+    remove->setToolTip("Draw the strokes that use this brush as plain lines again");
+    QPushButton* close = new QPushButton("Close", &dialog);
+    buttons->addWidget(draw);
+    buttons->addWidget(remove);
+    buttons->addStretch(1);
+    buttons->addWidget(close);
+    layout->addLayout(buttons);
+    connect(close, &QPushButton::clicked, &dialog, &QDialog::accept);
+
+    const auto brushOf = [](const fla::StrokeStyle* stroke) {
+        for (const auto& attribute : stroke->extraAttributes)
+            if (attribute.first == "phoenixBrush")
+                return attribute.second;
+        return std::string();
+    };
+    const auto fill = [&]() {
+        std::map<std::string, int> uses;
+        for (const fla::StrokeStyle* stroke : allStrokes())
+        {
+            const std::string brush = brushOf(stroke);
+            if (!brush.empty())
+                ++uses[brush];
+        }
+        list->clear();
+        for (const auto& [name, count] : uses)
+        {
+            QListWidgetItem* item = new QListWidgetItem(
+                QString("%1  (%2 stroke%3)").arg(QString::fromStdString(name)).arg(count).arg(count == 1 ? "" : "s"), list);
+            item->setData(Qt::UserRole, QString::fromStdString(name));
+        }
+        if (uses.empty())
+            list->addItem("No strokes are drawn with a brush.");
+        draw->setEnabled(!uses.empty());
+        remove->setEnabled(!uses.empty());
+    };
+    fill();
+    const auto chosen = [list]() {
+        QListWidgetItem* item = list->currentItem();
+        return item ? item->data(Qt::UserRole).toString().toStdString() : std::string();
+    };
+    connect(draw, &QPushButton::clicked, &dialog, [&]() {
+        const std::string name = chosen();
+        if (name.empty())
+            return;
+        _drawingStyle.strokeLook.brush = name;
+        if (_propertiesPanel)
+            _propertiesPanel->refresh();
+        statusBar()->showMessage(QString("New strokes are drawn with %1.").arg(QString::fromStdString(name)), 4000);
+    });
+    connect(remove, &QPushButton::clicked, &dialog, [&]() {
+        const std::string name = chosen();
+        if (name.empty())
+            return;
+        using Attributes = std::vector<std::pair<std::string, std::string>>;
+        fla::CommandStack& stack = _editContext.commandStack();
+        stack.beginMacro("Take Off Brush");
+        for (fla::StrokeStyle* stroke : allStrokes())
+        {
+            if (brushOf(stroke) != name)
+                continue;
+            Attributes after;
+            for (const auto& attribute : stroke->extraAttributes)
+                if (attribute.first != "phoenixBrush" && attribute.first != "phoenixBrushPattern")
+                    after.push_back(attribute);
+            stack.push(fla::CommandPtr(new fla::SetPropertyCommand<Attributes>(stroke->extraAttributes,
+                stroke->extraAttributes, after, "Take Off Brush")));
+        }
+        stack.endMacro();
+        stack.breakMergeChain();
+        if (_phoenixView)
+        {
+            _phoenixView->clearCaches();
+            _phoenixView->update();
+        }
+        fill();
+    });
+    dialog.resize(420, 320);
+    dialog.exec();
 }
 
 void MainWindow::checkSpelling()

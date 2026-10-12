@@ -643,6 +643,24 @@ TEST(xfl_keeps_what_it_does_not_model)
     CHECK(written.find("<SoundEnvelope>") < written.find("<elements"));
 }
 
+TEST(xfl_keeps_a_strokes_own_attributes)
+{
+    std::unique_ptr<fla::Document> document = parseDocumentText(
+        "<DOMDocument xmlns='http://ns.adobe.com/xfl/2008/'><timelines><DOMTimeline name='Scene 1'><layers>"
+        "<DOMLayer name='Layer 1'><frames><DOMFrame index='0'><elements><DOMShape><strokes>"
+        "<StrokeStyle index='1'><SolidStroke weight='2' phoenixBrush='Leaf' phoenixBrushPattern='true'>"
+        "<fill><SolidColor/></fill></SolidStroke></StrokeStyle></strokes>"
+        "<edges><Edge strokeStyle='1' edges='!0 0|2000 0'/></edges></DOMShape>"
+        "</elements></DOMFrame></frames></DOMLayer></layers></DOMTimeline></timelines></DOMDocument>");
+    CHECK(document != nullptr);
+    if (!document)
+        return;
+    XFLWriter writer;
+    const std::string written = writer.writeDocument(*document);
+    CHECK(written.find("phoenixBrush=\"Leaf\"") != std::string::npos);
+    CHECK(written.find("phoenixBrushPattern=\"true\"") != std::string::npos);
+}
+
 TEST(xfl_writes_an_armature_pose_after_the_frame_elements)
 {
     std::unique_ptr<fla::Document> document = parseDocumentText(

@@ -400,6 +400,8 @@ void XFLWriter::writeStrokeStyle(const StrokeStyle& stroke, XMLElement* parent)
         node->SetAttribute("dotSpace", formatDouble(stroke.dotSpace).c_str());
     for (const auto& entry : stroke.styleAttributes)
         node->SetAttribute(entry.first.c_str(), entry.second.c_str());
+    for (const auto& entry : stroke.extraAttributes)
+        node->SetAttribute(entry.first.c_str(), entry.second.c_str());
 
     if (stroke.fill)
     {

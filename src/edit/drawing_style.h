@@ -30,6 +30,12 @@ struct StrokeLook
     double miterLimit = 3.0;
     /// How the width varies along the stroke; empty for even.
     std::vector<StrokeStyle::WidthMarker> widthProfile;
+    /// A graphic symbol drawn along the stroke instead of a line: stretched
+    /// from end to end (an art brush), or repeated along it (a pattern
+    /// brush). Empty for a plain stroke. Kept on the stroke for Phoenix
+    /// (phoenixBrush, phoenixBrushPattern).
+    std::string brush;
+    bool brushPattern = false;
 
     static StrokeLook of(const StrokeStyle& stroke);
     bool operator==(const StrokeLook& other) const;

@@ -1141,6 +1141,11 @@ private:
     QPainterPath warpedPath(const QPainterPath& path, const QTransform& toPuppet) const;
     /// Draws a bitmap through the warp, a piece of mesh at a time.
     void drawWarpedPixmap(QPainter& painter, const QPixmap& pixmap) const;
+    /// The graphic symbol a stroke is drawn with as a brush, or null.
+    const fla::Symbol* brushOf(const fla::StrokeStyle& stroke) const;
+    /// A stroke drawn with a brush: the symbol bent along its centerline,
+    /// stretched end to end or repeated.
+    void drawBrushStroke(QPainter& painter, const PathCacheEntry& entry, const fla::Symbol& brush);
 
 public:
     /// A movie clip's 3D turn and depth, in perspective, as a map in the

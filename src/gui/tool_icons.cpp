@@ -520,6 +520,18 @@ void drawWidth(QPainter& painter)
     painter.drawEllipse(QPointF(12.0, 13.5), 1.8, 1.8);
 }
 
+void drawPaintBrush(QPainter& painter)
+{
+    // A round brush over a stroke of leaves along a curve.
+    painter.setPen(QPen(strokeColor(), 1.2));
+    painter.setBrush(Qt::NoBrush);
+    painter.drawLine(QPointF(14.0, 3.5), QPointF(20.5, 10.0));
+    painter.drawEllipse(QPointF(11.5, 12.5), 2.5, 2.5);
+    painter.setBrush(strokeColor());
+    for (const QPointF& leaf : {QPointF(4.5, 19.5), QPointF(8.5, 17.0), QPointF(12.5, 18.5), QPointF(16.5, 20.0)})
+        painter.drawEllipse(leaf, 1.6, 1.1);
+}
+
 void drawLasso(QPainter& painter)
 {
     // A loop of rope with its tail hanging down.
@@ -614,6 +626,7 @@ QPixmap render(ToolIcons::Tool tool, int size)
     case ToolIcons::Tool::Rotate3D:      drawRotate3D(painter); break;
     case ToolIcons::Tool::Translate3D:   drawTranslate3D(painter); break;
     case ToolIcons::Tool::Width:         drawWidth(painter); break;
+    case ToolIcons::Tool::PaintBrush:    drawPaintBrush(painter); break;
     case ToolIcons::Tool::ObjectDrawing: drawObjectDrawing(painter); break;
     }
 

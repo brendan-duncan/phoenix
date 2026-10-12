@@ -231,6 +231,15 @@ private slots:
 
     /// How far a joint of the armature on \a frame may turn, in a dialog.
     void editJointLimits(fla::Frame* frame, size_t child, int joint);
+
+    /// Every stroke style in the document's shapes, main timelines and
+    /// symbols alike.
+    std::vector<fla::StrokeStyle*> allStrokes() const;
+
+    /// Window > Document Brushes: the art and pattern brushes the
+    /// document's strokes are drawn with, how many strokes use each, and
+    /// taking one off them or drawing with it.
+    void manageBrushes();
     /// Layer parenting: \a layer follows \a parent (null for none) from
     /// now on, its objects staying where they are on every keyframe.
     void setParentLayer(fla::Timeline* timeline, fla::Layer* layer, fla::Layer* parent);
@@ -459,6 +468,7 @@ private:
     std::unique_ptr<ThreeDTool> _rotate3DTool;
     std::unique_ptr<ThreeDTool> _translate3DTool;
     std::unique_ptr<WidthTool> _widthTool;
+    std::unique_ptr<PencilTool> _paintBrushTool;
     /// The Flow Brush (the B key's), the Nib Brush and the Ink Brush,
     /// sharing the toolbox slot.
     std::unique_ptr<BrushTool> _brushTool;

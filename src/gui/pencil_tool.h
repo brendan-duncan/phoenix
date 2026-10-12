@@ -29,14 +29,17 @@ class Shape;
 class PencilTool : public Tool
 {
 public:
+    /// \a name tells the Pencil from the Paint Brush, the same tool drawing
+    /// with the stroke's brush.
     PencilTool(fla::Selection& selection, fla::CommandStack& commandStack,
-        const fla::DrawingStyle& style)
+        const fla::DrawingStyle& style, const QString& name = "Pencil")
         : _selection(selection)
         , _commandStack(commandStack)
         , _style(style)
+        , _name(name)
     {}
 
-    QString name() const override { return "Pencil"; }
+    QString name() const override { return _name; }
 
     QCursor cursor() const override { return Qt::CrossCursor; }
 
@@ -71,6 +74,7 @@ private:
     fla::Selection& _selection;
     fla::CommandStack& _commandStack;
     const fla::DrawingStyle& _style;
+    QString _name;
 
     /// Raw cursor positions, in document space, in the order they arrived.
     std::vector<fla::Point> _points;

@@ -376,6 +376,11 @@ bool parseStroke(const tinyxml2::XMLElement* element, fla::StrokeStyle* stroke)
         if (hasAttribute(element, name))
             stroke->styleAttributes[name] = getAttribute(element, name);
     }
+    // Anything else on the stroke, such as Phoenix's own brush, is kept.
+    std::vector<std::string> present;
+    keepAttributes(element, {"scaleMode", "weight", "solidStyle", "caps", "joints", "miterLimit", "pixelHinting",
+        "dash1", "dash2", "dotSpace", "pattern", "waveHeight", "waveLength", "dotSize", "variation", "density",
+        "hatchThickness", "space", "jiggle", "rotate", "curve", "length"}, stroke->extraAttributes, present);
 
     for (const tinyxml2::XMLElement* childElement = element->FirstChildElement();
          childElement != nullptr;

@@ -49,6 +49,7 @@ public:
         Rotate3D,
         Translate3D,
         Width,
+        PaintBrush,
         /// Not a tool: the toggle that keeps a drawing its own object.
         ObjectDrawing
     };

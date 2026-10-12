@@ -657,7 +657,7 @@ void PropertiesPanel::buildToolTab()
         IconTool::FluidBrush, IconTool::InkBrush, IconTool::PaintBucket, IconTool::Text};
     const std::vector<IconTool> strokeTools = {IconTool::Rectangle, IconTool::Oval, IconTool::Line,
         IconTool::PolyStar, IconTool::RectanglePrimitive, IconTool::OvalPrimitive, IconTool::Pen,
-        IconTool::Pencil, IconTool::InkBottle};
+        IconTool::Pencil, IconTool::PaintBrush, IconTool::InkBottle};
 
     // --- Color and Style ---
     _colorSection = addSection(page, "Color and Style");
@@ -1097,13 +1097,13 @@ void PropertiesPanel::buildToolTab()
     connect(pencilMode, &QComboBox::currentIndexChanged, this, [this](int index) {
         _links.style->pencilMode = static_cast<fla::DrawingStyle::PencilMode>(index);
     });
-    addOption("Pencil mode", pencilMode, {IconTool::Pencil});
+    addOption("Pencil mode", pencilMode, {IconTool::Pencil, IconTool::PaintBrush});
 
     HotText* smoothing = makeHotText(0, 100, 0);
     smoothing->setValue(style.pencilSmoothing);
     smoothing->setToolTip("How much the pencil smooths a stroke, 0 to 100, as in Animate");
     connect(smoothing, &HotText::valueChanged, this, [this](double value, bool) { _links.style->pencilSmoothing = static_cast<int>(value); });
-    addOption("Smoothing", smoothing, {IconTool::Pencil});
+    addOption("Smoothing", smoothing, {IconTool::Pencil, IconTool::PaintBrush});
 
     QCheckBox* connectLines = new QCheckBox("Connect lines", this);
     connectLines->setChecked(style.connectLines);
@@ -1387,6 +1387,44 @@ std::vector<std::pair<QWidget*, QWidget*>> PropertiesPanel::addStrokeLookFields(
         apply(*current);
     });
     add("Width", width);
+
+    // A brush: a graphic symbol of the library drawn along the stroke.
+    QWidget* brushRow = new QWidget(this);
+    QHBoxLayout* brushLayout = new QHBoxLayout(brushRow);
+    brushLayout->setContentsMargins(0, 0, 0, 0);
+    QComboBox* brush = new QComboBox(brushRow);
+    brush->setToolTip("A graphic symbol drawn along the stroke instead of a line");
+    brush->addItem("None");
+    QStringList names;
+    if (const fla::Document* doc = document())
+    {
+        if (doc->symbolList)
+            for (const fla::Symbol* symbol : doc->symbolList->symbols)
+                if (symbol && symbol->symbolType == fla::SymbolType::Graphic)
+                    names << QString::fromStdString(symbol->name);
+    }
+    names.sort(Qt::CaseInsensitive);
+    if (!look.brush.empty() && !names.contains(QString::fromStdString(look.brush)))
+        names << QString::fromStdString(look.brush);
+    brush->addItems(names);
+    brush->setCurrentIndex(look.brush.empty() ? 0 : brush->findText(QString::fromStdString(look.brush)));
+    QComboBox* mode = new QComboBox(brushRow);
+    mode->addItems({"Stretch", "Repeat"});
+    mode->setToolTip("Stretch the symbol from end to end (an art brush), or repeat it along the stroke (a pattern brush)");
+    mode->setCurrentIndex(look.brushPattern ? 1 : 0);
+    mode->setEnabled(!look.brush.empty());
+    connect(brush, &QComboBox::currentIndexChanged, this, [=](int index) {
+        current->brush = index <= 0 ? std::string() : brush->itemText(index).toStdString();
+        mode->setEnabled(index > 0);
+        apply(*current);
+    });
+    connect(mode, &QComboBox::currentIndexChanged, this, [=](int index) {
+        current->brushPattern = index == 1;
+        apply(*current);
+    });
+    brushLayout->addWidget(brush, 1);
+    brushLayout->addWidget(mode);
+    add("Brush", brushRow);
     return rows;
 }
 

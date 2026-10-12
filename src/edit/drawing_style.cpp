@@ -197,6 +197,13 @@ StrokeLook StrokeLook::of(const StrokeStyle& stroke)
     look.scaleMode = stroke.scaleMode;
     look.miterLimit = stroke.miterLimit;
     look.widthProfile = stroke.widthProfile;
+    for (const auto& attribute : stroke.extraAttributes)
+    {
+        if (attribute.first == "phoenixBrush")
+            look.brush = attribute.second;
+        else if (attribute.first == "phoenixBrushPattern")
+            look.brushPattern = attribute.second == "true";
+    }
     return look;
 }
 
@@ -223,7 +230,8 @@ const std::vector<WidthPreset>& widthPresets()
 bool StrokeLook::operator==(const StrokeLook& other) const
 {
     return kind == other.kind && hairline == other.hairline && caps == other.caps && joints == other.joints &&
-        scaleMode == other.scaleMode && miterLimit == other.miterLimit && widthProfile == other.widthProfile;
+        scaleMode == other.scaleMode && miterLimit == other.miterLimit && widthProfile == other.widthProfile &&
+        brush == other.brush && brushPattern == other.brushPattern;
 }
 
 StrokeStyle* StrokeLook::applyTo(const StrokeStyle& stroke, DOMElement* parent) const
@@ -245,7 +253,18 @@ StrokeStyle* StrokeLook::applyTo(const StrokeStyle& stroke, DOMElement* parent) 
     copy->dotSpace = stroke.dotSpace;
     copy->extraChildren = stroke.extraChildren;
     copy->widthProfile = widthProfile;
-    copy->extraAttributes = stroke.extraAttributes;
+    copy->extraAttributes.clear();
+    for (const auto& attribute : stroke.extraAttributes)
+    {
+        if (attribute.first != "phoenixBrush" && attribute.first != "phoenixBrushPattern")
+            copy->extraAttributes.push_back(attribute);
+    }
+    if (!brush.empty())
+    {
+        copy->extraAttributes.emplace_back("phoenixBrush", brush);
+        if (brushPattern)
+            copy->extraAttributes.emplace_back("phoenixBrushPattern", "true");
+    }
     // A kind's own settings only mean something to that kind.
     if (kind == stroke.style())
         copy->styleAttributes = stroke.styleAttributes;

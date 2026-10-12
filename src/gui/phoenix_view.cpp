@@ -3038,6 +3038,14 @@ void PhoenixView::paintEntry(QPainter& painter, const PathCacheEntry& entry)
         painter.drawPath(entry.painterPath);
         return;
     }
+    if (entry.strokeStyle)
+    {
+        if (const fla::Symbol* brush = brushOf(*entry.strokeStyle))
+        {
+            drawBrushStroke(painter, entry, *brush);
+            return;
+        }
+    }
     if (!entry.effectPath.isEmpty())
     {
         painter.setPen(Qt::NoPen);
@@ -3865,6 +3873,79 @@ QTransform PhoenixView::threeDTransform(const fla::Element* element, const QTran
     const std::array<double, 9> m = fla::threed::projection(pose, fla::Point(center.x(), center.y()),
         fla::Point(document->width / 2.0, document->height / 2.0), focal);
     return QTransform(m[0], m[3], m[6], m[1], m[4], m[7], m[2], m[5], m[8]);
+}
+
+const fla::Symbol* PhoenixView::brushOf(const fla::StrokeStyle& stroke) const
+{
+    const fla::Document* document = _flaDocument ? _flaDocument->document : nullptr;
+    if (!document || !document->symbolList)
+        return nullptr;
+    for (const auto& attribute : stroke.extraAttributes)
+    {
+        if (attribute.first != "phoenixBrush")
+            continue;
+        const auto found = document->symbolList->symbolMap.find(attribute.second);
+        if (found != document->symbolList->symbolMap.end() && found->second && !found->second->timelines.empty())
+            return found->second;
+    }
+    return nullptr;
+}
+
+void PhoenixView::drawBrushStroke(QPainter& painter, const PathCacheEntry& entry, const fla::Symbol& brush)
+{
+    const QPainterPath& path = entry.painterPath;
+    const double length = path.length();
+    const QRectF art = shownSymbolBounds(&brush, fla::LoopType::SingleFrame, 0, 1);
+    if (length <= 0.0 || !art.isValid() || art.width() <= 0.0 || _warping)
+        return;
+    bool pattern = false;
+    for (const auto& attribute : entry.strokeStyle->extraAttributes)
+    {
+        if (attribute.first == "phoenixBrushPattern")
+            pattern = attribute.second == "true";
+    }
+    // The art's height is the stroke's size times its own; its length runs
+    // along the stroke, end to end or a tile at a time.
+    const double across = std::max(entry.strokeStyle->weight, 0.1);
+    const double tileLength = pattern ? art.width() * across : length;
+    const int tiles = pattern ? std::max(1, static_cast<int>(std::lround(length / std::max(tileLength, 1.0e-6)))) : 1;
+    const double piece = length / tiles;
+    const double middle = art.center().y();
+
+    const bool wasWarping = _warping;
+    const auto savedMap = _warpMap;
+    const QTransform savedBase = _warpBase;
+    const QTransform savedInverse = _warpBaseInverse;
+    bool invertible = false;
+    const QTransform base = painter.transform();
+    const QTransform inverse = base.inverted(&invertible);
+    if (!invertible)
+        return;
+    const fla::Timeline* timeline = brush.timelines.front();
+    for (int tile = 0; tile < tiles; ++tile)
+    {
+        const double start = tile * piece;
+        _warping = true;
+        _warpBase = base;
+        _warpBaseInverse = inverse;
+        _warpMap = [&path, &art, start, piece, across, middle, length](const fla::Point& point) {
+            const double along = start + std::clamp((point.x - art.left()) / art.width(), 0.0, 1.0) * piece;
+            const double percent = path.percentAtLength(std::clamp(along, 0.0, length));
+            const QPointF at = path.pointAtPercent(percent);
+            const double angle = path.angleAtPercent(percent) * 3.14159265358979323846 / 180.0;
+            // Qt turns counterclockwise with y up; the page's y runs down.
+            const QPointF normal(std::sin(angle), std::cos(angle));
+            const double out = (point.y - middle) * across;
+            return fla::Point(at.x() + normal.x() * out, at.y() + normal.y() * out);
+        };
+        painter.save();
+        drawTimeline(painter, timeline, fla::LoopType::SingleFrame, 0);
+        painter.restore();
+    }
+    _warping = wasWarping;
+    _warpMap = savedMap;
+    _warpBase = savedBase;
+    _warpBaseInverse = savedInverse;
 }
 
 void PhoenixView::drawWarpedPixmap(QPainter& painter, const QPixmap& pixmap) const
