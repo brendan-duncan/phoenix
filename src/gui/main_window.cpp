@@ -26,6 +26,7 @@
 #include "../edit/library_media.h"
 #include "../edit/frame_commands.h"
 #include "../edit/frame_bake.h"
+#include "../edit/combine_objects.h"
 #include "../edit/timeline_edit.h"
 #include "../edit/library_commands.h"
 #include "../edit/property_command.h"
@@ -1589,6 +1590,19 @@ void MainWindow::setupMenus()
         [this]() { transformSelection("Flip Horizontal", QTransform::fromScale(-1.0, 1.0)); });
     _transformMenu->addSeparator();
     addTransform("Remove &Transform", QKeySequence(), [this]() { removeTransform(); });
+
+    QMenu* combineMenu = modifyMenu->addMenu("&Combine Objects");
+    const char* combineNames[4] = {"&Union", "&Intersect", "&Punch", "&Crop"};
+    const char* combineTips[4] = {"Make the selected shapes one drawing object",
+        "Keep only where the selected shapes overlap, in the topmost one's colors",
+        "Cut the topmost shape's area out of the ones under it", "Keep only what lies inside the topmost shape"};
+    for (int i = 0; i < 4; ++i)
+    {
+        QAction* action = combineMenu->addAction(combineNames[i]);
+        action->setStatusTip(combineTips[i]);
+        connect(action, &QAction::triggered, this, [this, i]() { combineObjects(i); });
+        _combineActions.push_back(action);
+    }
 
     QMenu* modifyTimelineMenu = modifyMenu->addMenu("Ti&meline");
     _distributeAction = new QAction("&Distribute to Layers", this);
@@ -4576,6 +4590,69 @@ void MainWindow::removeTransform()
         _propertiesPanel->refresh();
 }
 
+void MainWindow::combineObjects(int operation)
+{
+    if (!_phoenixView)
+        return;
+    _phoenixView->flushPendingMerge();
+    // The selected shapes of one frame, bottom first.
+    std::vector<fla::Shape*> shapes;
+    fla::Frame* frame = nullptr;
+    for (fla::Element* element : selectedElements())
+    {
+        if (element->elementType() != fla::Element::Type::Shape)
+            continue;
+        auto* owner = dynamic_cast<fla::Frame*>(element->parent);
+        if (!owner || (frame && owner != frame))
+            continue;
+        frame = owner;
+        shapes.push_back(static_cast<fla::Shape*>(element));
+    }
+    if (shapes.size() < 2 || !frame)
+    {
+        statusBar()->showMessage("Select two or more shapes on one frame to combine.", 4000);
+        return;
+    }
+    const auto op = static_cast<fla::combine::Operation>(operation);
+    const char* names[4] = {"Union", "Intersect", "Punch", "Crop"};
+    const std::string name = names[std::clamp(operation, 0, 3)];
+    fla::combine::Result result;
+    if (!fla::combine::apply(op, shapes, result))
+    {
+        statusBar()->showMessage(op == fla::combine::Operation::Intersect ? "The shapes do not overlap."
+                                                                          : "Nothing to combine.", 4000);
+        return;
+    }
+
+    _selection.clear();
+    fla::CommandStack& stack = _editContext.commandStack();
+    stack.beginMacro(name);
+    fla::Element* placed = nullptr;
+    if (result.replacement)
+    {
+        // The new object goes where the lowest of them was.
+        const auto at = std::find(frame->elements.begin(), frame->elements.end(), shapes.front());
+        const int index = at == frame->elements.end() ? -1 : static_cast<int>(at - frame->elements.begin());
+        result.replacement->parent = frame;
+        placed = result.replacement;
+        stack.push(fla::CommandPtr(new fla::AddElementCommand(frame, result.replacement, name, &_selection, index)));
+    }
+    for (const auto& rewrite : result.rewritten)
+    {
+        stack.push(fla::CommandPtr(new fla::SetShapeContentsCommand(rewrite.first, *rewrite.second, name)));
+        delete rewrite.second;
+    }
+    for (fla::Shape* shape : result.removed)
+        stack.push(fla::CommandPtr(new fla::RemoveElementCommand(frame, shape, name, &_selection)));
+    stack.endMacro();
+    stack.breakMergeChain();
+    if (placed)
+        _selection.select(placed);
+    _phoenixView->invalidateBounds();
+    _phoenixView->clearCaches();
+    _phoenixView->update();
+}
+
 void MainWindow::distributeToLayers()
 {
     if (!_phoenixView || !_timelineView)
@@ -5275,6 +5352,14 @@ void MainWindow::updateSelectionState()
         action->setEnabled(hasElements);
     if (_distributeAction)
         _distributeAction->setEnabled(hasElements);
+    int selectedShapes = 0;
+    for (fla::DOMElement* selected : _selection.elements())
+    {
+        if (auto* element = dynamic_cast<fla::Element*>(selected))
+            selectedShapes += element->elementType() == fla::Element::Type::Shape ? 1 : 0;
+    }
+    for (QAction* action : _combineActions)
+        action->setEnabled(selectedShapes >= 2);
     for (QAction* action : {_smoothAction, _straightenAction, _optimizeAction, _linesToFillsAction,
              _expandFillAction, _softenFillAction})
     {

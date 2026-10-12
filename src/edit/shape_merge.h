@@ -76,6 +76,11 @@ public:
     /// leaving every fill as it was: the eraser's Erase Lines mode.
     static bool eraseStrokes(Shape& target, const Shape& cutter);
 
+    /// Keeps only what of \a target lies inside \a cutter's filled area,
+    /// fills and strokes: Combine Objects' Crop and Intersect. The cutter
+    /// adds nothing of its own.
+    static bool clip(Shape& target, const Shape& cutter);
+
 private:
     enum class Operation
     {
@@ -84,7 +89,9 @@ private:
         /// The addition takes its area away.
         Erase,
         /// The addition takes away the strokes inside it and nothing else.
-        EraseStrokes
+        EraseStrokes,
+        /// Only what the addition covers stays.
+        Keep
     };
     static bool combine(Shape& target, const Shape& addition, Operation operation,
         const MergeOptions& options);

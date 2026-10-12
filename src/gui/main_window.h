@@ -155,6 +155,9 @@ private slots:
     /// Modify > Timeline > Distribute to Layers (Ctrl+Shift+D): each
     /// selected object on a new layer of its own, under the current one.
     void distributeToLayers();
+    /// Modify > Combine Objects: Union, Intersect, Punch, Crop on the
+    /// selected shapes (operation as fla::combine::Operation).
+    void combineObjects(int operation);
     /// The stage's right-click menu.
     void showStageMenu(const QPoint& globalPos, const QPointF& documentPos);
 
@@ -452,6 +455,7 @@ private:
     QMenu* _transformMenu = nullptr;
     std::vector<QAction*> _transformActions;
     QAction* _distributeAction = nullptr;
+    std::vector<QAction*> _combineActions;
     QAction* _arrangeActions[4] = {nullptr, nullptr, nullptr, nullptr};
 
     /// Copies of the shapes last cut or copied. Only shapes can be copied so

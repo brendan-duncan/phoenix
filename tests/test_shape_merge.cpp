@@ -6,6 +6,7 @@
 #include "../src/edit/command_stack.h"
 #include "../src/edit/element_commands.h"
 #include "../src/edit/shape_merge.h"
+#include "../src/edit/combine_objects.h"
 #include "../src/edit/shape_transform.h"
 #include "../src/geom/planar_map.h"
 #include "../src/geom/shape_geometry.h"
@@ -1022,4 +1023,58 @@ TEST(pieces_of_one_edge_are_joined_back_when_the_cut_between_them_goes)
     CHECK(target->edges.size() == 4);
     CHECK(colorAt(*target, Point(25.0, 50.0)) == kRed);
     CHECK(colorAt(*target, Point(75.0, 50.0)) == kRed);
+}
+
+TEST(combine_objects_union_intersect_punch_and_crop)
+{
+    // A red square from 0 to 100 pixels and a blue one over it from 50 to 150.
+    const auto pair = []() {
+        std::vector<std::unique_ptr<Shape>> shapes;
+        shapes.push_back(filledRectangle(0, 0, 2000, 2000, 255, 0, 0));
+        shapes.push_back(filledRectangle(1000, 1000, 3000, 3000, 0, 0, 255));
+        return shapes;
+    };
+    const auto raw = [](std::vector<std::unique_ptr<Shape>>& shapes) {
+        std::vector<Shape*> list;
+        for (auto& shape : shapes)
+            list.push_back(shape.get());
+        return list;
+    };
+    {
+        auto shapes = pair();
+        fla::combine::Result result;
+        CHECK(fla::combine::apply(fla::combine::Operation::Union, raw(shapes), result));
+        std::unique_ptr<Shape> merged(result.replacement);
+        CHECK(merged && merged->isDrawingObject && result.removed.size() == 2);
+        CHECK(colorAt(*merged, Point(25, 25)) == kRed && colorAt(*merged, Point(75, 75)) == kBlue &&
+            colorAt(*merged, Point(125, 125)) == kBlue);
+    }
+    {
+        auto shapes = pair();
+        fla::combine::Result result;
+        CHECK(fla::combine::apply(fla::combine::Operation::Intersect, raw(shapes), result));
+        std::unique_ptr<Shape> shared(result.replacement);
+        CHECK(colorAt(*shared, Point(75, 75)) == kBlue);
+        CHECK(colorAt(*shared, Point(25, 25)) == -1 && colorAt(*shared, Point(125, 125)) == -1);
+    }
+    {
+        auto shapes = pair();
+        fla::combine::Result result;
+        CHECK(fla::combine::apply(fla::combine::Operation::Punch, raw(shapes), result));
+        CHECK(result.removed.size() == 1 && result.removed[0] == shapes[1].get() && result.rewritten.size() == 1);
+        std::unique_ptr<Shape> punched(result.rewritten.front().second);
+        CHECK(colorAt(*punched, Point(25, 25)) == kRed && colorAt(*punched, Point(75, 75)) == -1);
+    }
+    {
+        auto shapes = pair();
+        // The top one moved 50 pixels up and left by its transform: it now
+        // covers the red square exactly, so a crop keeps all of it.
+        shapes[1]->transform.tx = -50.0;
+        shapes[1]->transform.ty = -50.0;
+        fla::combine::Result result;
+        CHECK(fla::combine::apply(fla::combine::Operation::Crop, raw(shapes), result));
+        std::unique_ptr<Shape> cropped(result.rewritten.front().second);
+        CHECK(colorAt(*cropped, Point(25, 25)) == kRed && colorAt(*cropped, Point(75, 75)) == kRed);
+        CHECK(colorAt(*cropped, Point(125, 125)) == -1);
+    }
 }

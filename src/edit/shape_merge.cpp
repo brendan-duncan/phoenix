@@ -268,6 +268,11 @@ bool ShapeMerger::eraseStrokes(Shape& target, const Shape& cutter)
     return combine(target, cutter, Operation::EraseStrokes, MergeOptions());
 }
 
+bool ShapeMerger::clip(Shape& target, const Shape& cutter)
+{
+    return combine(target, cutter, Operation::Keep, MergeOptions());
+}
+
 
 bool ShapeMerger::combine(Shape& target, const Shape& addition, Operation operation,
     const MergeOptions& options)
@@ -387,7 +392,13 @@ bool ShapeMerger::combine(Shape& target, const Shape& addition, Operation operat
         // there shows through, which is how an outline drawn over a fill cuts
         // without erasing.
         int fill;
-        if (additionFill == -1 || operation == Operation::EraseStrokes)
+        if (operation == Operation::Keep)
+        {
+            // The target as it was, where the cutter covers it; nothing
+            // elsewhere.
+            fill = additionFill != -1 ? targetFill : -1;
+        }
+        else if (additionFill == -1 || operation == Operation::EraseStrokes)
         {
             // Erasing strokes alone leaves every fill as it was.
             fill = targetFill;
@@ -425,6 +436,15 @@ bool ShapeMerger::combine(Shape& target, const Shape& addition, Operation operat
         // punched, not artwork being added.
         if (fromAddition)
             return operation == Operation::Paint;
+
+        const int sidesOf[2] = {
+            half.face,
+            half.twin >= 0 && half.twin < static_cast<int>(merged.halfEdges().size())
+                ? merged.halfEdges()[half.twin].face : -1
+        };
+        // Keeping, a stroke stays where the cutter covers it, on either side.
+        if (operation == Operation::Keep)
+            return additionCovers(sidesOf[0]) || additionCovers(sidesOf[1]);
 
         // Both sides, because a stroke along the edge of the addition's fill is
         // still visible from the outside and has to stay.
