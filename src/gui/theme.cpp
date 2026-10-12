@@ -64,7 +64,44 @@ const std::vector<Role> kRoles = {
     {"graph.text", "Graphs", "Labels", QColor(150, 150, 150), QColor(90, 90, 90)},
 };
 
-const QStringList kBuiltIn = {"Follow System", "Dark", "Light"};
+const QStringList kBuiltIn = {"Follow System", "Dark", "Light", "Turquoise"};
+
+/// Turquoise: an example of a theme that is neither black nor white, dark
+/// teal panels with a turquoise accent. Its roles are what a saved theme
+/// would set.
+Theme turquoise()
+{
+    Theme theme;
+    theme.name = "Turquoise";
+    theme.base = "Dark";
+    const std::pair<const char*, const char*> colors[] = {
+        {"window", "#16292b"},
+        {"base", "#0f2022"},
+        {"text", "#e2f4f2"},
+        {"dimText", "#7fa3a0"},
+        {"accent", "#1fb5a8"},
+        {"panelHeader", "#1d3638"},
+        {"icon", "#cdeeea"},
+        {"folder", "#e8c96a"},
+        {"hotText", "#48e3d4"},
+        {"timeline.background", "#0e1d1f"},
+        {"timeline.cell", "#18302f"},
+        {"timeline.cellFifth", "#22403f"},
+        {"timeline.text", "#8fb8b4"},
+        {"playhead", "#2ad4c4"},
+        {"stage.pasteboard", "#0c1a1c"},
+        {"stage.ruler", "#132a2c"},
+        {"stage.rulerText", "#8fb8b4"},
+        {"stage.rulerLine", "#2a4a4c"},
+        {"graph.background", "#0e1d1f"},
+        {"graph.area", "#18302f"},
+        {"graph.grid", "#2a4a4c"},
+        {"graph.text", "#8fb8b4"},
+    };
+    for (const auto& [key, value] : colors)
+        theme.colors[key] = QColor(value);
+    return theme;
+}
 
 Theme g_current;
 QString g_name = "Follow System";
@@ -270,6 +307,8 @@ Theme load(const QString& name)
         theme.base = qApp->styleHints()->colorScheme() == Qt::ColorScheme::Light ? "Light" : "Dark";
         return theme;
     }
+    if (name == "Turquoise")
+        return turquoise();
     if (name == "Dark" || name == "Light")
     {
         theme.base = name;
