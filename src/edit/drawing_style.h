@@ -113,6 +113,15 @@ public:
 
     /// The eraser's width, in pixels.
     double eraserSize = 12.0;
+    /// The eraser's nib, pressure and tilt, as a brush's (its size is
+    /// eraserSize); with eraserSyncWithBrush it takes the Nib Brush's
+    /// size and nib instead.
+    BrushSettings eraserBrush = []() {
+        BrushSettings eraser = BrushSettings::classicDefaults();
+        eraser.usePressure = false;
+        return eraser;
+    }();
+    bool eraserSyncWithBrush = false;
 
     /// Each brush's own settings: the Flow Brush (fluidBrush), the Nib Brush
     /// (classicBrush) and the Ink Brush. Pressure is on in all three; a mouse always

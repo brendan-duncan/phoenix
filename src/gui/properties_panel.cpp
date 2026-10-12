@@ -1027,6 +1027,29 @@ void PropertiesPanel::buildToolTab()
     eraserSize->setValue(style.eraserSize);
     connect(eraserSize, &HotText::valueChanged, this, [this](double value, bool) { _links.style->eraserSize = value; });
     addOption("Size", eraserSize, {IconTool::Eraser});
+    const BrushMember eraserNib = &fla::DrawingStyle::eraserBrush;
+    brushChoice(eraserNib, IconTool::Eraser, "Eraser shape",
+        {"Round", "Oval", "Square", "Rectangle", "Vertical line", "Diagonal /", "Diagonal \\"},
+        "The shape of the eraser's nib",
+        [](const Brush& b) {
+            for (int i = 0; i < 7; ++i)
+                if (tipShapes[i].tip == b.tip && tipShapes[i].roundness == b.roundness && tipShapes[i].angle == b.angle)
+                    return i;
+            return 0;
+        },
+        [](Brush& b, int i) {
+            b.tip = tipShapes[i].tip;
+            b.roundness = tipShapes[i].roundness;
+            b.angle = tipShapes[i].angle;
+        });
+    brushCheck(eraserNib, IconTool::Eraser, "Use pressure", "Let a pen's pressure vary the width", pressureOf, setPressure);
+    brushCheck(eraserNib, IconTool::Eraser, "Use tilt", "Turn the nib to the direction the pen leans",
+        [](const Brush& b) { return b.useTilt; }, [](Brush& b, bool on) { b.useTilt = on; });
+    QCheckBox* syncWithBrush = new QCheckBox("Sync with Nib Brush", this);
+    syncWithBrush->setChecked(style.eraserSyncWithBrush);
+    syncWithBrush->setToolTip("Erase with the Nib Brush's size, nib, pressure and tilt");
+    connect(syncWithBrush, &QCheckBox::toggled, this, [this](bool on) { _links.style->eraserSyncWithBrush = on; });
+    addOption(QString(), syncWithBrush, {IconTool::Eraser});
 
     QComboBox* eraserMode = new QComboBox(this);
     eraserMode->addItems({"Erase Normal", "Erase Fills", "Erase Lines", "Erase Selected Fills", "Erase Inside"});

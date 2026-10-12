@@ -882,9 +882,38 @@ bool EraserTool::mousePress(PhoenixView& view, QMouseEvent* event, const QPointF
 
     _erasing = true;
     _points.clear();
+    _samples.clear();
+    _pen = view.penDown();
     _points.push_back(fla::Point(documentPos.x(), documentPos.y()));
+    takeSamples(view, event, documentPos);
     view.update();
     return true;
+}
+
+fla::BrushSettings EraserTool::nib() const
+{
+    if (_style.eraserSyncWithBrush)
+        return _style.classicBrush;
+    fla::BrushSettings nib = _style.eraserBrush;
+    nib.size = _style.eraserSize;
+    return nib;
+}
+
+void EraserTool::takeSamples(PhoenixView& view, QMouseEvent* event, const QPointF& documentPos)
+{
+    if (_pen)
+    {
+        const std::vector<fla::BrushSample> taken = view.takeTabletSamples();
+        _samples.insert(_samples.end(), taken.begin(), taken.end());
+        if (!taken.empty())
+            return;
+    }
+    fla::BrushSample sample;
+    sample.x = documentPos.x();
+    sample.y = documentPos.y();
+    sample.pressure = _pen ? view.pressure() : 1.0;
+    sample.time = event ? static_cast<double>(event->timestamp()) : 0.0;
+    _samples.push_back(sample);
 }
 
 bool EraserTool::mouseMove(PhoenixView& view, QMouseEvent* event, const QPointF& documentPos)
@@ -895,7 +924,10 @@ bool EraserTool::mouseMove(PhoenixView& view, QMouseEvent* event, const QPointF&
     _hoverValid = true;
 
     if (_erasing)
+    {
         _points.push_back(fla::Point(documentPos.x(), documentPos.y()));
+        takeSamples(view, event, documentPos);
+    }
 
     view.update();
     return _erasing;
@@ -907,6 +939,7 @@ bool EraserTool::mouseRelease(PhoenixView& view, QMouseEvent* event, const QPoin
         return false;
 
     _points.push_back(fla::Point(documentPos.x(), documentPos.y()));
+    takeSamples(view, event, documentPos);
     _erasing = false;
     finish(view);
     return true;
@@ -933,9 +966,15 @@ void EraserTool::finish(PhoenixView& view)
         return;
     }
 
-    std::unique_ptr<fla::Shape> cutter(brushOutlineShape(_points, _style.eraserSize, false,
-        nullptr, _style, false));
+    // The pass swept by the eraser's nib, at the pen's pressure and tilt
+    // when it uses them.
+    const double zoom = std::max(view.zoom(), 1.0e-6);
+    const std::vector<fla::BrushDab> dabs = fla::BrushStroke::dabs(_samples, nib(), zoom, true);
+    std::unique_ptr<fla::Shape> cutter(dabs.empty()
+            ? brushOutlineShape(_points, _style.eraserSize, false, nullptr, _style, false)
+            : outlineShape(sweptOutline(dabs, zoom, true), 0.3 / zoom, nullptr, _style, false));
     _points.clear();
+    _samples.clear();
     if (!cutter)
     {
         view.update();
@@ -1053,19 +1092,32 @@ void EraserTool::paintOverlay(PhoenixView& view, QPainter& painter, double scale
 
     painter.setPen(Qt::NoPen);
 
-    if (_erasing && !_points.empty())
+    const fla::BrushSettings eraser = nib();
+    if (_erasing && !_samples.empty())
     {
         // What will be taken away, shown as the stage color so it reads as
         // already gone.
         painter.setBrush(QColor(255, 255, 255, 200));
-        painter.drawPath(brushOutline(_points, _style.eraserSize, false, 1.0));
+        const double zoom = std::max(view.zoom(), 1.0e-6);
+        painter.drawPath(sweptOutline(fla::BrushStroke::dabs(_samples, eraser, zoom, false), zoom, false));
     }
 
     if (_hoverValid && !_style.faucet)
     {
+        // The nib, its shape and turn.
+        fla::BrushDab tip;
+        tip.x = _hover.x();
+        tip.y = _hover.y();
+        tip.width = eraser.size;
+        tip.height = eraser.size * std::max(1.0, eraser.roundness) / 100.0;
+        tip.angle = eraser.angle;
+        tip.rectangular = eraser.tip == fla::BrushSettings::Tip::Rectangle;
+        QPolygonF outline;
+        for (const fla::Point& point : fla::BrushStroke::dabOutline(tip, 1.0))
+            outline << QPointF(point.x, point.y);
         painter.setBrush(Qt::NoBrush);
         painter.setPen(QPen(QColor(0, 0, 0), 1.0 * scale));
-        painter.drawEllipse(_hover, _style.eraserSize / 2.0, _style.eraserSize / 2.0);
+        painter.drawPolygon(outline);
     }
 }
 

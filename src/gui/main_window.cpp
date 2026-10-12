@@ -9789,6 +9789,8 @@ void MainWindow::loadSettings()
     loadBrush(settings, "brushes/fluid", _drawingStyle.fluidBrush);
     loadBrush(settings, "brushes/classic", _drawingStyle.classicBrush);
     loadBrush(settings, "brushes/ink", _drawingStyle.inkBrush);
+    loadBrush(settings, "brushes/eraser", _drawingStyle.eraserBrush);
+    _drawingStyle.eraserSyncWithBrush = settings.value("brushes/eraserSync", false).toBool();
     const int brushMode = settings.value("brushes/mode", 0).toInt();
     _drawingStyle.brushMode = brushMode >= 0 && brushMode <= 4
         ? static_cast<fla::DrawingStyle::BrushMode>(brushMode) : fla::DrawingStyle::BrushMode::Normal;
@@ -9812,6 +9814,8 @@ void MainWindow::saveSettings()
     saveBrush(settings, "brushes/fluid", _drawingStyle.fluidBrush);
     saveBrush(settings, "brushes/classic", _drawingStyle.classicBrush);
     saveBrush(settings, "brushes/ink", _drawingStyle.inkBrush);
+    saveBrush(settings, "brushes/eraser", _drawingStyle.eraserBrush);
+    settings.setValue("brushes/eraserSync", _drawingStyle.eraserSyncWithBrush);
     settings.setValue("brushes/mode", static_cast<int>(_drawingStyle.brushMode));
     settings.setValue("window/geometry", saveGeometry());
     if (_layoutRestored)

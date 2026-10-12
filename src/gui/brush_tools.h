@@ -170,6 +170,12 @@ private:
     const fla::DrawingStyle& _style;
 
     std::vector<fla::Point> _points;
+    /// The pass as the pen gave it, with pressure and tilt.
+    std::vector<fla::BrushSample> _samples;
+    bool _pen = false;
+    void takeSamples(PhoenixView& view, QMouseEvent* event, const QPointF& documentPos);
+    /// The eraser's nib, its own or the Nib Brush's.
+    fla::BrushSettings nib() const;
     bool _erasing = false;
     QPointF _hover;
     bool _hoverValid = false;
