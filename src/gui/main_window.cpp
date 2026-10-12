@@ -73,6 +73,7 @@
 #include "../edit/property_command.h"
 #include "phoenix_view.h"
 #include "movie_export.h"
+#include "sprite_sheet_dialog.h"
 #include "image_export.h"
 #include "timeline_view.h"
 #include "../data/frame.h"
@@ -3650,6 +3651,10 @@ void MainWindow::setupMenus()
     exportMovieAction->setStatusTip("Export the frames as a PNG sequence or a video");
     connect(exportMovieAction, &QAction::triggered, this, &MainWindow::exportMovie);
     exportMenu->addAction(exportMovieAction);
+    QAction* exportSpritesAction = new QAction("Export S&prite Sheet...", this);
+    exportSpritesAction->setStatusTip("Lay the frames out on one image, with a JSON description for game engines");
+    connect(exportSpritesAction, &QAction::triggered, this, [this]() { exportSpriteSheet(); });
+    exportMenu->addAction(exportSpritesAction);
     QAction* exportShotsAction = new QAction("Export S&hots...", this);
     exportShotsAction->setStatusTip("Split the episode into shot files, by scene, frame label or camera cut");
     connect(exportShotsAction, &QAction::triggered, this, &MainWindow::exportShots);
@@ -5653,6 +5658,82 @@ void MainWindow::exportMovie()
     }
 }
 
+void MainWindow::exportSpriteSheet(const QString& symbolName)
+{
+    if (!_flaDocument || !_flaDocument->document || !_phoenixView)
+    {
+        QMessageBox::information(this, "No Document", "No FLA document is currently loaded.");
+        return;
+    }
+    const fla::Document* document = _flaDocument->document;
+    const fla::Symbol* symbol = nullptr;
+    if (!symbolName.isEmpty() && document->symbolList)
+    {
+        const auto found = document->symbolList->symbolMap.find(symbolName.toStdString());
+        symbol = found != document->symbolList->symbolMap.end() ? found->second : nullptr;
+    }
+    if (!symbolName.isEmpty() && (!symbol || symbol->timelines.empty()))
+        return;
+    QString source;
+    int count = 0;
+    SpriteSheetDialog::Renderer render;
+    PhoenixView* view = _phoenixView;
+    if (symbol)
+    {
+        source = symbolName.section('/', -1);
+        for (const fla::Layer* layer : symbol->timelines.front()->layers)
+            if (layer)
+                count = std::max(count, fla::timeline::layerEnd(*layer));
+        // One area for every frame, so they line up.
+        const QRectF area = view->symbolFramesBounds(symbol, 0, std::max(0, count - 1)).adjusted(-1, -1, 1, 1);
+        const QColor stage(document->backgroundColor[0], document->backgroundColor[1], document->backgroundColor[2]);
+        render = [view, symbol, area, stage](int frame, double scale, bool background) {
+            QImage image = view->renderSymbolFrame(symbol, frame, area, scale);
+            if (background && !image.isNull())
+            {
+                QImage under(image.size(), QImage::Format_ARGB32_Premultiplied);
+                under.fill(stage);
+                QPainter painter(&under);
+                painter.drawImage(0, 0, image);
+                painter.end();
+                image = under;
+            }
+            return image;
+        };
+    }
+    else
+    {
+        const fla::Timeline* scene = document->currentScene();
+        source = scene ? QString::fromStdString(scene->name) : QString("Scene");
+        count = std::max(1, view->frameCount());
+        const QSize stage(std::max(1, static_cast<int>(std::lround(document->width))),
+            std::max(1, static_cast<int>(std::lround(document->height))));
+        render = [view, stage](int frame, double scale, bool background) {
+            const QSize size(std::max(1, static_cast<int>(std::lround(stage.width() * scale))),
+                std::max(1, static_cast<int>(std::lround(stage.height() * scale))));
+            return view->renderFrame(frame, size, !background);
+        };
+    }
+    // A scene's sheet is named after the document, and the scene when there
+    // are more.
+    QString base = source;
+    if (!symbol && !_documentPath.isEmpty())
+        base = QFileInfo(_documentPath).completeBaseName() + (document->timelines.size() > 1 ? "_" + source : QString());
+    base.replace(QRegularExpression("[\\\\/:*?\"<>|]"), "_");
+    const QString folder = _lastDirectory.isEmpty() ? QFileInfo(_documentPath).absolutePath() : _lastDirectory;
+    SpriteSheetDialog dialog(source, count, document->frameRate, render, QDir(folder).filePath(base + ".png"), this);
+    _phoenixView->update();
+    if (dialog.exec() != QDialog::Accepted)
+        return;
+    QString error;
+    if (!dialog.write(error))
+    {
+        QMessageBox::warning(this, "Export Failed", error);
+        return;
+    }
+    statusBar()->showMessage(QString("Exported the sprite sheet of %1").arg(source), 5000);
+}
+
 void MainWindow::quit()
 {
     // close() goes through closeEvent(), so File > Exit gets the same
@@ -6881,6 +6962,7 @@ void MainWindow::setupPropertiesPanel()
     connect(_libraryPanel, &LibraryPanel::updateBitmapsRequested, this, &MainWindow::updateBitmaps);
     connect(_libraryPanel, &LibraryPanel::editBitmapWithRequested, this, &MainWindow::editBitmapWith);
     connect(_libraryPanel, &LibraryPanel::soundPropertiesRequested, this, &MainWindow::soundProperties);
+    connect(_libraryPanel, &LibraryPanel::spriteSheetRequested, this, [this](const QString& name) { exportSpriteSheet(name); });
     connect(_libraryPanel, &LibraryPanel::newSymbolRequested, this, &MainWindow::newSymbol);
     _libraryPanel->setCanPaste([this]() {
         return !_libraryClipboard.isEmpty() && documentAlive(_libraryClipboardSource) &&

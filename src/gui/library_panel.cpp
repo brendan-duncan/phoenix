@@ -505,6 +505,7 @@ void LibraryPanel::showItemMenu(QTreeWidgetItem* item, const QPoint& globalPos)
         QAction* linkMaster = nullptr;
         QAction* updateLinked = nullptr;
         QAction* unlink = nullptr;
+        QAction* spriteSheet = nullptr;
         const QStringList chosenItems = selectedItems();
         bool linked = false;
         bool anyLinked = false;
@@ -528,6 +529,7 @@ void LibraryPanel::showItemMenu(QTreeWidgetItem* item, const QPoint& globalPos)
         {
             duplicate = menu.addAction("Duplicate");
             linkage = menu.addAction("Linkage...");
+            spriteSheet = menu.addAction("Generate Sprite Sheet...");
             menu.addSeparator();
             linkMaster = menu.addAction(linked ? "Change Master File..." : "Link to Master File...");
             if (linked)
@@ -594,6 +596,10 @@ void LibraryPanel::showItemMenu(QTreeWidgetItem* item, const QPoint& globalPos)
         else if (bitmapProperties && chosen == bitmapProperties)
         {
             emit bitmapPropertiesRequested(name);
+        }
+        else if (spriteSheet && chosen == spriteSheet)
+        {
+            emit spriteSheetRequested(name);
         }
         else if (updateBitmap && chosen == updateBitmap)
         {

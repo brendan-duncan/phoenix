@@ -128,6 +128,7 @@ set(HEADERS
     src/gui/anchor_point_tool.h
     src/gui/ik_poser.h
     src/gui/movie_export.h
+    src/gui/sprite_sheet_dialog.h
     src/gui/selection_targets.h
     src/gui/navigation_tools.h
     src/gui/draw_placement.h
@@ -277,6 +278,7 @@ set(HEADERS
     src/util/exr_writer.h
     src/util/zip_writer.h
     src/util/gif_writer.h
+    src/util/sprite_sheet.h
 )
 
 set(SOURCES
@@ -342,6 +344,7 @@ set(SOURCES
     src/gui/anchor_point_tool.cpp
     src/gui/ik_poser.cpp
     src/gui/movie_export.cpp
+    src/gui/sprite_sheet_dialog.cpp
     src/gui/navigation_tools.cpp
     src/gui/draw_placement.cpp
     src/gui/filters.cpp
@@ -482,6 +485,7 @@ set(SOURCES
     src/util/exr_writer.cpp
     src/util/zip_writer.cpp
     src/util/gif_writer.cpp
+    src/util/sprite_sheet.cpp
 )
 
 qt6_standard_project_setup()

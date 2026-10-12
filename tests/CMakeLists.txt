@@ -24,6 +24,7 @@ set(PHOENIX_SRC ${CMAKE_CURRENT_SOURCE_DIR}/../src)
 set(TEST_CORE_SOURCES
     ${PHOENIX_SRC}/data/bitmap_decoder.cpp
     ${PHOENIX_SRC}/util/gif_writer.cpp
+    ${PHOENIX_SRC}/util/sprite_sheet.cpp
     ${PHOENIX_SRC}/data/dom_element.cpp
     ${PHOENIX_SRC}/data/document.cpp
     ${PHOENIX_SRC}/data/edge.cpp
@@ -155,6 +156,7 @@ set(TEST_SOURCES
     test_three_d.cpp
     test_filter_presets.cpp
     test_trace_bitmap.cpp
+    test_sprite_sheet.cpp
     test_stroke_width.cpp
     test_swatches.cpp
     test_find_replace.cpp

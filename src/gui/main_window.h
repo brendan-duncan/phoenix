@@ -117,6 +117,9 @@ private slots:
 
     void exportSvg();
     void exportMovie();
+    /// The frames of the scene, or of the library symbol \a symbol, on one
+    /// image with a description beside it.
+    void exportSpriteSheet(const QString& symbol = QString());
     /// File > Export > Export Image: one frame as PNG, JPEG or GIF.
     void exportImage();
     /// File > Import: image and sound files into the library and, for

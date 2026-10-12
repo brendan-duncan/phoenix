@@ -83,6 +83,21 @@
 
 <p><span class="menu-path">File &rsaquo; Export &rsaquo; Export to SVG...</span> writes the current frame as an SVG file, which scales cleanly for print and the web. Hidden layers are left out and images are embedded. Filters and masks, which SVG cannot express the same way, are included as images.</p>
 
+<h2 id="sprite-sheets">Sprite sheets</h2>
+
+<p><span class="menu-path">File &rsaquo; Export &rsaquo; Export Sprite Sheet...</span> lays the scene's frames out on one PNG for a game engine. To make a sheet of one symbol, right-click it in the library and choose <strong>Generate Sprite Sheet...</strong>; its frames are drawn on their own, each the size of everything the symbol draws over them. The preview updates as you change:</p>
+
+<dl class="defs">
+  <dt>Frames, Scale</dt><dd>Which frames, and how big, as a percentage.</dd>
+  <dt>Layout</dt><dd><strong>Grid</strong> puts each frame in a cell the size of the largest, in as many columns as you set (Auto for a sheet as square as fits). <strong>One row</strong> puts them side by side. <strong>Packed</strong> fits them closely, tallest first, in rows no wider than <strong>Max width</strong>.</dd>
+  <dt>Padding</dt><dd>Clear pixels between frames, so a scaled sprite never picks up its neighbor, and around the sheet.</dd>
+  <dt>Trim clear edges</dt><dd>Keeps only each frame's drawn pixels. The description says where they sit in the whole frame, so the sprite stays put as it plays.</dd>
+  <dt>Share repeated frames</dt><dd>A frame the same as an earlier one points at its pixels rather than taking room of its own.</dd>
+  <dt>Power-of-two size</dt><dd>Rounds the sheet's sides up to 256, 512, 1024 and so on, for engines that want it.</dd>
+  <dt>Stage color behind</dt><dd>Off, the sheet is clear wherever nothing is drawn.</dd>
+  <dt>Data</dt><dd>A JSON file beside the image with the same name, describing each frame's place, trim and size, in the hash or array layout most engines and texture tools read; or none.</dd>
+</dl>
+
 <h2>Exporting without opening Phoenix</h2>
 
 <p>Every movie and image export can also run from the command line, for batch jobs and render scripts. See <a href="command-line.html">Command line</a>.</p>

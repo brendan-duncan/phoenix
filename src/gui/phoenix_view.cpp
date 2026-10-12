@@ -592,6 +592,48 @@ QImage PhoenixView::renderElements(const std::vector<const fla::Element*>& eleme
     return image;
 }
 
+QRectF PhoenixView::symbolFramesBounds(const fla::Symbol* symbol, int first, int last)
+{
+    QRectF bounds;
+    if (!symbol || symbol->timelines.empty())
+        return bounds;
+    for (int frame = first; frame <= last; ++frame)
+    {
+        const QRectF here = shownSymbolBounds(symbol, fla::LoopType::SingleFrame, frame, 1);
+        if (here.isValid())
+            bounds = bounds.isValid() ? bounds.united(here) : here;
+    }
+    return bounds;
+}
+
+QImage PhoenixView::renderSymbolFrame(const fla::Symbol* symbol, int frame, const QRectF& area, double scale)
+{
+    if (!symbol || symbol->timelines.empty() || !area.isValid() || area.isEmpty())
+        return QImage();
+    const QSize size(std::max(1, static_cast<int>(std::ceil(area.width() * scale))),
+        std::max(1, static_cast<int>(std::ceil(area.height() * scale))));
+    QImage image(size, QImage::Format_ARGB32_Premultiplied);
+    image.fill(Qt::transparent);
+    QPainter painter(&image);
+    painter.setRenderHint(QPainter::Antialiasing, true);
+    painter.setRenderHint(QPainter::TextAntialiasing, true);
+    painter.setRenderHint(QPainter::SmoothPixmapTransform, true);
+    painter.scale(scale, scale);
+    painter.translate(-area.topLeft());
+    const QTransform savedView = viewTransform;
+    const QRectF savedVisible = _visibleRect;
+    const bool wasExporting = _exporting;
+    viewTransform = painter.transform();
+    _visibleRect = area;
+    _exporting = true;
+    drawTimeline(painter, symbol->timelines.front(), fla::LoopType::SingleFrame, std::max(0, frame));
+    _exporting = wasExporting;
+    viewTransform = savedView;
+    _visibleRect = savedVisible;
+    painter.end();
+    return image;
+}
+
 void PhoenixView::paintEvent(QPaintEvent *event)
 {
     QPainter painter(this);

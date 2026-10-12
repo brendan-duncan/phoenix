@@ -566,6 +566,13 @@ public:
     /// Copy offers other applications.
     QImage renderElements(const std::vector<const fla::Element*>& elements, double scale);
 
+    /// A library symbol's frame \a frame drawn on its own, \a area of its
+    /// space at \a scale pixels per pixel on a clear image: what a sprite
+    /// sheet of the symbol holds.
+    QImage renderSymbolFrame(const fla::Symbol* symbol, int frame, const QRectF& area, double scale);
+    /// What the symbol draws over frames \a first to \a last, in its space.
+    QRectF symbolFramesBounds(const fla::Symbol* symbol, int first, int last);
+
 public slots:
     void onPlayerFrameChanged(int frame);
 
