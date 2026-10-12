@@ -1121,7 +1121,7 @@ void PhoenixView::drawLayer(QPainter& painter, const fla::Layer* layer, fla::Loo
 {
     // Onion skin leaves locked layers out, as Animate does, so a locked
     // background is not drawn again faded under every frame.
-    if (_frameOverride >= 0 && !_exporting && layer->locked && _scope.empty())
+    if (_frameOverride >= 0 && !_exporting && layer->isLocked() && _scope.empty())
         return;
 
     QColor color;
@@ -2676,7 +2676,7 @@ void PhoenixView::hitTestTimeline(const fla::Timeline& timeline, fla::LoopType l
 {
     for (const fla::Layer* layer : timeline.layers)
     {
-        if (!layer || !layer->isVisible() || layer->locked)
+        if (!layer || !layer->isVisible() || layer->isLocked())
             continue;
 
         // Guide layers are authoring aids and never rendered, so they cannot be
@@ -3282,7 +3282,7 @@ std::vector<fla::Element*> PhoenixView::elementsIn(const QRectF& documentRect)
 
         for (const fla::Layer* layer : timeline->layers)
         {
-            if (!layer || !layer->isVisible() || layer->locked)
+            if (!layer || !layer->isVisible() || layer->isLocked())
                 continue;
 
             if (layer->layerType == fla::Layer::Type::Guide ||
@@ -3702,7 +3702,7 @@ fla::Frame* PhoenixView::activeFrame()
 
         for (const fla::Layer* layer : timeline->layers)
         {
-            if (!layer || !layer->isVisible() || layer->locked)
+            if (!layer || !layer->isVisible() || layer->isLocked())
                 continue;
 
             // Folders hold no artwork, and guide layers are drawing aids that
@@ -4014,7 +4014,7 @@ PhoenixView::IKBoneHit PhoenixView::ikBoneAt(const QPointF& documentPos) const
                     best.into = entry.second;
                     best.tail = tail;
                     const fla::Layer* layer = dynamic_cast<const fla::Layer*>(frame->parent);
-                    best.locked = layer && layer->locked;
+                    best.locked = layer && layer->isLocked();
                 }
             }
         }

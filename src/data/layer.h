@@ -70,6 +70,17 @@ public:
         }
         return true;
     }
+
+    /// Whether the layer is locked, by itself or by a folder it sits in:
+    /// locking a folder locks what is in it.
+    bool isLocked() const
+    {
+        if (locked)
+            return true;
+        if (parentLayer && parentLayer->layerType == Type::Folder)
+            return parentLayer->isLocked();
+        return false;
+    }
 };
 
 } // namespace fla

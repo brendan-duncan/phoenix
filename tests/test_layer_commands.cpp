@@ -106,3 +106,20 @@ TEST(removing_the_current_layer_makes_a_neighbor_current)
     stack.undo();
     CHECK(timeline->layers.size() == 3 && timeline->layers[2]->selected && !timeline->layers[1]->selected);
 }
+
+TEST(a_locked_folder_locks_the_layers_in_it)
+{
+    fla::Layer folder(nullptr);
+    folder.layerType = fla::Layer::Type::Folder;
+    fla::Layer inner(nullptr);
+    inner.parentLayer = &folder;
+    fla::Layer deeper(nullptr);
+    deeper.parentLayer = &inner;
+    CHECK(!deeper.isLocked());
+    folder.locked = true;
+    CHECK(inner.isLocked());
+    // Only folders pass their lock on.
+    CHECK(!deeper.isLocked());
+    inner.layerType = fla::Layer::Type::Folder;
+    CHECK(deeper.isLocked());
+}
