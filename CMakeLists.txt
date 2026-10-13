@@ -272,6 +272,7 @@ set(HEADERS
     src/geom/planar_map.h
     src/geom/shape_geometry.h
     src/geom/fill_tracing.h
+    src/geom/nine_slice.h
     src/edit/editable_path.h
     src/writer/edge_writer.h
     src/writer/fla_writer.h
@@ -491,6 +492,7 @@ set(SOURCES
     src/geom/planar_map.cpp
     src/geom/shape_geometry.cpp
     src/geom/fill_tracing.cpp
+    src/geom/nine_slice.cpp
     src/edit/editable_path.cpp
     src/writer/edge_writer.cpp
     src/writer/fla_writer.cpp
