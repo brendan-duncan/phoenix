@@ -341,3 +341,33 @@ TEST(brush_textures_are_made_alike_and_kept_on_shapes)
     fla::texture::set(shape.extraAttributes, fla::texture::Spec());
     CHECK(!fla::texture::of(shape).valid() && shape.extraAttributes.empty());
 }
+
+TEST(motion_object_honors_ignore_time_map_and_orient_to_path)
+{
+    // Eased all the way out, but X ignores the ease; Y goes down then
+    // right, a quarter turn of the path.
+    const std::string xml =
+        "<AnimationCore TimeScale=\"10\" Version=\"1\" duration=\"20\">"
+        "<TimeMap strength=\"100\" type=\"Quadratic\"/>"
+        "<metadata><Settings orientToPath=\"1\"/></metadata>"
+        "<PropertyContainer id=\"headContainer\"><PropertyContainer id=\"Basic_Motion\">"
+        "<Property enabled=\"1\" id=\"Motion_X\" ignoreTimeMap=\"1\">"
+        "<Keyframe anchor=\"0,0\" timevalue=\"0\"/><Keyframe anchor=\"0,0\" timevalue=\"10\"/>"
+        "<Keyframe anchor=\"0,100\" timevalue=\"20\"/></Property>"
+        "<Property enabled=\"1\" id=\"Motion_Y\" ignoreTimeMap=\"1\">"
+        "<Keyframe anchor=\"0,0\" timevalue=\"0\"/><Keyframe anchor=\"0,100\" timevalue=\"10\"/></Property>"
+        "<Property enabled=\"1\" id=\"Scale_X\">"
+        "<Keyframe anchor=\"0,100\" timevalue=\"0\"/><Keyframe anchor=\"0,200\" timevalue=\"20\"/></Property>"
+        "</PropertyContainer></PropertyContainer></AnimationCore>";
+    fla::MotionObject motion;
+    CHECK(motion.parse(xml));
+    // Half way: X and Y linear in time; the eased scale is past half way.
+    const fla::MotionState middle = motion.at(1.0, 1.0);
+    CHECK(std::fabs(middle.y - 100.0) < 1.0e-6);
+    CHECK(middle.scaleX > 150.0 + 1.0);
+    // Heading down at the start, then right: turned a quarter turn back.
+    const fla::MotionState start = motion.at(0.0, 1.0);
+    const fla::MotionState later = motion.at(1.5, 1.0);
+    CHECK(std::fabs(start.rotation) < 1.0e-6);
+    CHECK(std::fabs(later.rotation + 90.0) < 1.0e-3);
+}

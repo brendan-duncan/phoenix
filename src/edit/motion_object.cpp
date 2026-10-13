@@ -99,6 +99,8 @@ Affine linearPart(const MotionState& state)
 bool MotionObject::parse(const std::string& xml)
 {
     _properties.clear();
+    _ignoreTimeMap.clear();
+    _orientToPath = false;
     tinyxml2::XMLDocument document;
     if (document.Parse(xml.c_str()) != tinyxml2::XML_SUCCESS)
         return false;
@@ -111,6 +113,9 @@ bool MotionObject::parse(const std::string& xml)
     _duration = root->DoubleAttribute("duration", 0.0);
     const tinyxml2::XMLElement* timeMap = root->FirstChildElement("TimeMap");
     _ease = timeMap ? timeMap->DoubleAttribute("strength", 0.0) : 0.0;
+    if (const tinyxml2::XMLElement* metadata = root->FirstChildElement("metadata"))
+        if (const tinyxml2::XMLElement* settings = metadata->FirstChildElement("Settings"))
+            _orientToPath = settings->IntAttribute("orientToPath", 0) != 0;
 
     // Properties sit in nested containers (Basic_Motion, Transformation,
     // Colors, Filters); every Property found is read.
@@ -131,6 +136,8 @@ bool MotionObject::parse(const std::string& xml)
                 continue;
             if (child->IntAttribute("enabled", 1) == 0)
                 continue;
+            if (child->IntAttribute("ignoreTimeMap", 0) != 0)
+                _ignoreTimeMap.push_back(child->Attribute("id"));
             std::vector<Key>& keys = _properties[child->Attribute("id")];
             for (const tinyxml2::XMLElement* keyframe = child->FirstChildElement("Keyframe"); keyframe;
                  keyframe = keyframe->NextSiblingElement("Keyframe"))
@@ -224,6 +231,27 @@ double MotionObject::timeOf(double frame, double frameRate) const
         time = easeProgress(t, static_cast<int>(std::lround(_ease)), {}) * _duration;
     }
     return time;
+}
+
+double MotionObject::sample(const std::string& property, double raw, double eased, double fallback) const
+{
+    const bool ignores =
+        std::find(_ignoreTimeMap.begin(), _ignoreTimeMap.end(), property) != _ignoreTimeMap.end();
+    return value(property, ignores ? raw : eased, fallback);
+}
+
+double MotionObject::heading(double raw, double eased) const
+{
+    // Along the curve a little either side, inside the span.
+    const double step = std::max(_duration * 1.0e-3, 1.0e-6);
+    const double before = std::max(0.0, std::min(raw, _duration - step));
+    const double after = before + step;
+    const double shift = eased - raw;
+    const double dx = sample("Motion_X", after, after + shift, 0.0) - sample("Motion_X", before, before + shift, 0.0);
+    const double dy = sample("Motion_Y", after, after + shift, 0.0) - sample("Motion_Y", before, before + shift, 0.0);
+    if (dx == 0.0 && dy == 0.0)
+        return 0.0;
+    return std::atan2(dy, dx) * 180.0 / kPi;
 }
 
 bool MotionObject::has(const std::string& property) const
@@ -380,12 +408,13 @@ void setFilterValue(Filter& filter, const std::string& field, double value)
 ColorTransform MotionObject::colorAt(double frame, double frameRate, const ColorTransform& base) const
 {
     ColorTransform color = base;
+    const double raw = frame * _timeScale / std::max(frameRate, 1.0e-6);
     const double time = timeOf(frame, frameRate);
     for (int i = 0; i < motion::kColorChannelCount; ++i)
     {
         const std::string id = motion::kColorChannels[i].id;
         if (has(id))
-            motion::setColorValue(color, id, value(id, time, 0.0));
+            motion::setColorValue(color, id, sample(id, raw, time, 0.0));
     }
     return color;
 }
@@ -393,6 +422,7 @@ ColorTransform MotionObject::colorAt(double frame, double frameRate, const Color
 std::vector<Filter> MotionObject::filtersAt(double frame, double frameRate, const std::vector<Filter>& base) const
 {
     std::vector<Filter> filters = base;
+    const double raw = frame * _timeScale / std::max(frameRate, 1.0e-6);
     const double time = timeOf(frame, frameRate);
     for (size_t i = 0; i < filters.size(); ++i)
     {
@@ -400,7 +430,7 @@ std::vector<Filter> MotionObject::filtersAt(double frame, double frameRate, cons
         {
             const std::string id = motion::filterPropertyId(filters[i], i, field);
             if (has(id))
-                motion::setFilterValue(filters[i], field, value(id, time, 0.0));
+                motion::setFilterValue(filters[i], field, sample(id, raw, time, 0.0));
         }
     }
     return filters;
@@ -428,15 +458,20 @@ bool MotionObject::animatesFilters() const
 
 MotionState MotionObject::at(double frame, double frameRate) const
 {
+    const double raw = frame * _timeScale / std::max(frameRate, 1.0e-6);
     const double time = timeOf(frame, frameRate);
     MotionState state;
-    state.x = value("Motion_X", time, 0.0);
-    state.y = value("Motion_Y", time, 0.0);
-    state.rotation = value("Rotation_Z", time, 0.0);
-    state.skewX = value("Skew_X", time, 0.0);
-    state.skewY = value("Skew_Y", time, 0.0);
-    state.scaleX = value("Scale_X", time, 100.0);
-    state.scaleY = value("Scale_Y", time, 100.0);
+    state.x = sample("Motion_X", raw, time, 0.0);
+    state.y = sample("Motion_Y", raw, time, 0.0);
+    state.rotation = sample("Rotation_Z", raw, time, 0.0);
+    state.skewX = sample("Skew_X", raw, time, 0.0);
+    state.skewY = sample("Skew_Y", raw, time, 0.0);
+    state.scaleX = sample("Scale_X", raw, time, 100.0);
+    state.scaleY = sample("Scale_Y", raw, time, 100.0);
+    // Oriented to its path, the object turns by as much as the path has
+    // since the start: it keeps the angle to the path it started with.
+    if (_orientToPath && (has("Motion_X") || has("Motion_Y")))
+        state.rotation += heading(raw, time) - heading(0.0, timeOf(0.0, frameRate));
     return state;
 }
 

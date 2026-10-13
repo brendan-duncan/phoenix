@@ -84,9 +84,18 @@ private:
     double value(const std::string& property, double time, double fallback) const;
     /// The time \a frame frames in, the TimeMap's ease applied.
     double timeOf(double frame, double frameRate) const;
+    /// A property's value with the span's \a raw time and its \a eased
+    /// one: the raw time for a property that ignores the TimeMap.
+    double sample(const std::string& property, double raw, double eased, double fallback) const;
+    /// The direction the position curve heads at \a time, in degrees.
+    double heading(double raw, double eased) const;
     bool has(const std::string& property) const;
 
     std::map<std::string, std::vector<Key>> _properties;
+    /// Properties marked ignoreTimeMap: the span's ease leaves them be.
+    std::vector<std::string> _ignoreTimeMap;
+    /// Orient to Path: the object turns as its path does.
+    bool _orientToPath = false;
     double _timeScale = 1.0;
     double _duration = 0.0;
     double _ease = 0.0;
