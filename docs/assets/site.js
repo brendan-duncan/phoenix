@@ -46,6 +46,7 @@ const NAV = [
   { group: "Studio pipeline", pages: [
     { href: "pipeline.html", title: "Shots, assets and review" },
     { href: "version-control.html", title: "Version control" },
+    { href: "scripting.html", title: "Scripting with JSFL" },
     { href: "ai-assistants.html", title: "AI assistants" },
   ] },
   { group: "Reference", pages: [

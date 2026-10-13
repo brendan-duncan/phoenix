@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Scripting with JSFL · Phoenix User Guide</title>
+<meta name="description" content="Run JSFL scripts on your documents: the Commands menu, the Output panel, the command line, and what the scripts can reach.">
+<meta name="keywords" content="jsfl script scripting commands command menu run command manage saved commands output panel trace fl.trace alert confirm prompt run-script automation batch pipeline javascript undo stop FLfile library timeline layer frame element">
+<link rel="icon" href="assets/img/logo.png">
+<link rel="stylesheet" href="assets/site.css">
+<script>try { const t = localStorage.getItem("phoenix-docs-theme"); if (t) document.documentElement.dataset.theme = t; } catch (e) {}</script>
+<script src="assets/site.js" defer></script>
+</head>
+<body>
+<main>
+<article class="content">
+
+<p class="eyebrow">Studio pipeline</p>
+<h1>Scripting with JSFL</h1>
+<p class="lead">Phoenix runs JSFL scripts, the JavaScript files many studio pipelines use to clean up, check and export FLA documents. A script reaches the open documents, their timelines, layers, frames, objects and library, and the files on disk.</p>
+
+<h2>Run a script</h2>
+
+<p>Choose <b>Commands &rsaquo; Run Command...</b> and pick a <code>.jsfl</code> file. The script runs on the document in front.</p>
+
+<ul>
+  <li>Everything a script changes is <b>one step</b> in the undo history, named after the script, so <kbd>Ctrl</kbd>+<kbd>Z</kbd> takes the whole run back. A script that opens another document and changes it makes a step in that document too.</li>
+  <li>A script that takes more than a second shows a dialog. <b>Stop</b>, or <kbd>Esc</kbd>, ends it; what it changed up to then stays, as one step you can undo.</li>
+  <li>When a script stops on an error, the Output panel says which file and line, and why.</li>
+</ul>
+
+<h2>Your own commands</h2>
+
+<p>Scripts you put in your Commands folder appear at the bottom of the <b>Commands</b> menu, by file name, ready to run in one click. <b>Commands &rsaquo; Open Commands Folder</b> shows the folder; <b>Commands &rsaquo; Manage Saved Commands...</b> renames or deletes them.</p>
+
+<p>The Commands folder sits in Phoenix's script configuration folder (what scripts call <code>fl.configURI</code>), beside Phoenix's settings. Scripts often keep their own settings in that folder too.</p>
+
+<h2>The Output panel</h2>
+
+<p><b>Window &rsaquo; Output</b> (<kbd>F2</kbd>) shows what scripts write with <code>fl.trace</code> and the errors they stop on, in red. It opens by itself when a script writes to it. <b>Clear</b> empties it; <b>Save...</b> writes it to a text file. Scripts can do the same with <code>fl.outputPanel.clear()</code> and <code>fl.outputPanel.save()</code>.</p>
+
+<p><code>alert</code>, <code>confirm</code> and <code>prompt</code> show ordinary dialogs while a script runs.</p>
+
+<h2>From the command line</h2>
+
+<pre><code>Phoenix tidy.jsfl</code></pre>
+
+<p>Runs the script in the Phoenix already open, as if you had chosen it from the Commands menu, or starts Phoenix to run it. This is also what opening a <code>.jsfl</code> file from your file browser does when it is set to open with Phoenix.</p>
+
+<pre><code>Phoenix run-script check.jsfl shot_010.fla shot_020.fla</code></pre>
+
+<p>Opens the documents and runs the script with no window, for render nodes and pipelines. What the script traces goes to standard output; errors go to standard error, and Phoenix exits with 1 when the script fails, so a build can stop on it.</p>
+
+<table>
+  <thead><tr><th>Option</th><th>Meaning</th></tr></thead>
+  <tbody>
+    <tr><td><code>--timeout SECONDS</code></td><td class="wrap">Stops a script that runs longer than this. 600 seconds unless given; <code>0</code> for no limit.</td></tr>
+  </tbody>
+</table>
+
+<p>With no one to answer them, the dialogs answer themselves: <code>alert</code> prints its message, <code>confirm</code> answers yes, <code>prompt</code> answers with its default, and a file picker for opening answers with the first document named on the command line. Save the documents the script changed from the script itself, for example with <code>fl.saveDocument(doc, uri)</code>.</p>
+
+<p>See <a href="command-line.html">Command line</a> for the other commands.</p>
+
+<h2>What scripts can reach</h2>
+
+<p>Phoenix builds the scripting objects in the order real scripts use them. This release covers:</p>
+
+<table>
+  <thead><tr><th>Object</th><th>What works</th></tr></thead>
+  <tbody>
+    <tr><td><code>fl</code></td><td class="wrap">The open documents, <code>getDocumentDOM</code> (null with nothing open), opening, creating, saving and closing documents, <code>trace</code>, <code>outputPanel</code>, <code>runScript</code> (including another file, and calling a function in it), <code>scriptURI</code>, <code>configURI</code>, file and folder pickers, <code>clipCopyString</code>, <code>fl.Math</code>.</td></tr>
+    <tr><td><code>FLfile</code></td><td class="wrap">Reading, writing and appending text, copying, removing, listing folders (with a <code>*.ext</code> mask), making folders, sizes, dates and attributes, and converting between <code>file:///</code> URIs and paths. Both <code>file:///C|/</code> and <code>file:///C:/</code> work.</td></tr>
+    <tr><td>Document</td><td class="wrap">Stage size, frame rate and color; the selection; selecting all or none; grouping, ungrouping, breaking apart, converting to a symbol, swapping a symbol; arranging, aligning, distributing, moving, scaling, rotating and transforming the selection; deleting, duplicating, copying, cutting and pasting; new rectangles, ovals, lines and text; the toolbar's fill and stroke; editing scenes and symbols; saving and exporting PNG frames.</td></tr>
+    <tr><td>Timeline</td><td class="wrap">Layers (adding, deleting, reordering, selecting), the playhead and current layer, inserting and removing frames, keyframes and blank keyframes, clearing keyframes, classic tweens, selecting, copying, cutting and pasting frames, and setting frame and layer properties in bulk.</td></tr>
+    <tr><td>Layer and Frame</td><td class="wrap">Name, kind, visible, locked, outline and color; each frame's objects, start and length, label, tween, ease, rotation, sound settings and frame script.</td></tr>
+    <tr><td>Element</td><td class="wrap">Kind, position, size, scale, rotation, skew, matrix, transformation point, name and depth. Symbol instances add their library item, behavior, first frame and looping, color effect, filters, blend mode and visibility. Text adds its characters and their font, size and color. Shapes say whether they are groups, drawing objects or primitives, and list a group's members.</td></tr>
+    <tr><td>Library and items</td><td class="wrap">Every item; selecting, finding, adding symbols and folders, deleting, renaming, moving into folders, duplicating, editing a symbol, placing an item on the stage, unused items; each item's name, kind and linkage, a symbol's timeline and type, a bitmap's size and smoothing.</td></tr>
+  </tbody>
+</table>
+
+<p>Scripts written for older versions of the JSFL language also run: <code>for each</code> loops, setters with no parameter, <code>class</code> used as a name, a <code>return</code> at the top of a script, and <code>toSource</code>.</p>
+
+<p>An object a script holds stays tied to what it stands for. If the script deletes the layer, undoes the element or closes the document it came from, using it again stops the script with an error that says so, rather than acting on something else. A frame stands for a frame number on its layer, so it follows the layer as keyframes are added and cleared.</p>
+
+<div class="callout">
+  <span class="label">Not yet</span>
+  <p>XML dialogs (<code>xmlPanel</code>), E4X XML in scripts, reading and editing shape outlines (edges, contours, vertices), custom tools, panels built on HTML, persistent data on elements and items, publishing and SWF export from scripts, and saving History panel steps as a command. Each run starts fresh: functions one script defines are not kept for the next.</p>
+</div>
+
+</article>
+</main>
+</body>
+</html>
