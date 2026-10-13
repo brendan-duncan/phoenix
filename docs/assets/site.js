@@ -1,6 +1,10 @@
 // Phoenix user guide: builds the header, sidebar, page contents, search and
 // page links around each page's <main>, so every page only carries its text.
 
+// The Phoenix release this guide describes. CMake warns when it falls
+// behind the project version, so update it with each release.
+const VERSION = "0.5.0";
+
 const NAV = [
   { group: "Get started", pages: [
     { href: "index.html", title: "Welcome to Phoenix" },
@@ -90,7 +94,7 @@ function buildHeader() {
   header.className = "site-header";
   header.innerHTML = `
     <button class="icon-button menu-button" aria-label="Open navigation">${ICONS.menu}</button>
-    <a class="brand" href="index.html"><img src="assets/img/logo.png" alt=""> Phoenix <span>User Guide</span></a>
+    <a class="brand" href="index.html"><img src="assets/img/logo.png" alt=""> Phoenix <span>User Guide ${VERSION}</span></a>
     <div class="header-spacer"></div>
     <div class="search">
       ${ICONS.search}
@@ -173,7 +177,7 @@ function buildPager(content, page) {
 
   const footer = document.createElement("footer");
   footer.className = "site-footer";
-  footer.innerHTML = `Phoenix is open source. Found a mistake in this guide? <a href="${REPO}/issues">Open an issue</a>.`;
+  footer.innerHTML = `This guide describes Phoenix ${VERSION}. Phoenix is open source. Found a mistake in this guide? <a href="${REPO}/issues">Open an issue</a>.`;
   content.append(footer);
 }
 
