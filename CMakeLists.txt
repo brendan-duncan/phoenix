@@ -11,7 +11,7 @@ FetchContent_MakeAvailable(libas3)
 add_library(libas3 INTERFACE)
 add_dependencies(libas3 as3_parser)
 
-project(Phoenix VERSION 0.6.0 LANGUAGES C CXX)
+project(Phoenix VERSION 0.7.0 LANGUAGES C CXX)
 
 # The version shown in the app and given to the installer. A release build
 # passes the tag's version (-DPHOENIX_VERSION=1.2.3).

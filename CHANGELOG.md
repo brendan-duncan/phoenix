@@ -2,6 +2,8 @@
 
 What changed in each release of Phoenix, newest first.
 
+## 0.7.0 (Unreleased)
+
 ## 0.6.0 (2026-10-13)
 
 - Closing the last document brings back the start screen
