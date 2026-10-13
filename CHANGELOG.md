@@ -4,6 +4,14 @@ What changed in each release of Phoenix, newest first.
 
 ## 0.6.0 (Unreleased)
 
+- Document tabs: a right-click menu (Close Others, Close All, Copy Path, Show in Explorer) and Ctrl+Shift+Tab
+- Move a tab to a window of its own, by its menu or by dragging it off the tab bar, and drag it back to merge
+- Copy and paste between documents and windows brings the symbols, bitmaps and sounds it uses
+- Quitting with several unsaved documents offers Save All, Discard All or a review of each
+- Recovery copies cover every open document, and several can be recovered at once
+- Phoenix reopens the documents that were open when you quit
+- Each tab keeps its zoom and scroll, and documents in the background use less memory
+
 - 3D Position and View: set a movie clip's depth, the perspective angle and the vanishing point
 - Saving as FLA or XFL lists the Phoenix-only features the document uses; XFL folders keep them all
 - Bones: symbol armatures play between poses, the Bone tool bones shapes, and the new Bind tool picks which bone each point follows
