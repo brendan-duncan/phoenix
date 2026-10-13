@@ -88,30 +88,69 @@ bool TimelineAudio::soundSettings(const fla::Frame& frame, FrameSound& sound)
 
 std::shared_ptr<const PcmBuffer> TimelineAudio::buffer(const std::string& name)
 {
-    const auto cached = _decoded.find(name);
-    if (cached != _decoded.end())
-        return cached->second;
-    std::shared_ptr<const PcmBuffer> decoded;
     const fla::Document* doc = _document ? _document->document : nullptr;
+    const fla::Document::SoundInfo* info = nullptr;
+    const fla::LazyBytes* bytes = nullptr;
     if (doc)
     {
         for (const fla::Document::SoundInfo& sound : doc->sounds)
         {
             if (sound.name != name)
                 continue;
+            info = &sound;
             for (const auto& file : doc->extraFiles)
-            {
                 if (file.first == sound.dataPath)
                 {
-                    decoded = AudioDecode::decode(file.second, sound.format);
+                    bytes = &file.second;
                     break;
                 }
-            }
             break;
         }
     }
-    _decoded[name] = decoded;
+    const std::weak_ptr<const void> source = bytes ? bytes->token() : std::weak_ptr<const void>();
+
+    const auto cached = _decoded.find(name);
+    if (cached != _decoded.end())
+    {
+        Decoded& entry = cached->second;
+        const std::shared_ptr<const void> was = entry.source.lock();
+        const bool same = info && entry.dataPath == info->dataPath && entry.format == info->format &&
+                          was && was == source.lock();
+        if (same || (!info && !entry.buffer))
+        {
+            entry.used = ++_useClock;
+            return entry.buffer;
+        }
+        _decoded.erase(cached);
+    }
+    std::shared_ptr<const PcmBuffer> decoded;
+    if (info && bytes)
+        decoded = AudioDecode::decode(*bytes, info->format);
+    Decoded entry;
+    entry.buffer = decoded;
+    entry.dataPath = info ? info->dataPath : std::string();
+    entry.format = info ? info->format : std::string();
+    entry.source = source;
+    entry.used = ++_useClock;
+    _decoded[name] = entry;
+    trimDecoded();
     return decoded;
+}
+
+void TimelineAudio::trimDecoded()
+{
+    size_t total = 0;
+    for (const auto& [name, entry] : _decoded)
+        total += entry.buffer ? entry.buffer->samples.size() * sizeof(float) : 0;
+    while (total > kDecodedBudgetBytes && _decoded.size() > 1)
+    {
+        auto oldest = _decoded.begin();
+        for (auto it = _decoded.begin(); it != _decoded.end(); ++it)
+            if (it->second.used < oldest->second.used)
+                oldest = it;
+        total -= oldest->second.buffer ? oldest->second.buffer->samples.size() * sizeof(float) : 0;
+        _decoded.erase(oldest);
+    }
 }
 
 std::shared_ptr<const PcmBuffer> TimelineAudio::soundOf(const fla::Frame* frame, size_t* in)

@@ -78,8 +78,23 @@ private:
     bool _playing = false;
     bool _muted = false;
     int _lastFrame = -1;
-    /// Decoded sounds by name.
-    std::map<std::string, std::shared_ptr<const PcmBuffer>> _decoded;
+    /// Decoded sounds by name, each with the bytes it was decoded from (a
+    /// sound edited, or a name reused, decodes again) and when it was last
+    /// played. Decoded audio is large (about 1.3 GB an hour), so the least
+    /// recently used go once the total passes a budget; voices still
+    /// playing one keep their own share of it.
+    struct Decoded
+    {
+        std::shared_ptr<const PcmBuffer> buffer;
+        std::string dataPath;
+        std::string format;
+        std::weak_ptr<const void> source;
+        uint64_t used = 0;
+    };
+    std::map<std::string, Decoded> _decoded;
+    uint64_t _useClock = 0;
+    static constexpr size_t kDecodedBudgetBytes = size_t(768) * 1024 * 1024;
+    void trimDecoded();
     /// The stream voice playing for each keyframe.
     std::map<const fla::Frame*, int> _streams;
     /// Event and start voices by sound name, so Start and Stop can find them.
