@@ -208,3 +208,61 @@ TEST(find_and_replace_sounds_and_bitmaps)
     bitmap.replace = "missing.png";
     CHECK(fla::find::replaceAll(document, bitmap) == nullptr);
 }
+
+namespace {
+
+/// Rebuilds a shape's solid fills as new objects each way, as undoing or
+/// redoing a merge does (setShapeContents).
+class RebuildFills : public fla::Command
+{
+public:
+    explicit RebuildFills(fla::Shape* shape)
+        : _shape(shape)
+    {}
+    void redo() override { rebuild(); }
+    void undo() override { rebuild(); }
+    std::string name() const override { return "Rebuild"; }
+
+private:
+    void rebuild()
+    {
+        for (fla::FillStyle*& fill : _shape->fills)
+        {
+            auto* solid = static_cast<fla::SolidColor*>(fill);
+            auto* copy = new fla::SolidColor(_shape);
+            std::copy(solid->color, solid->color + 4, copy->color);
+            delete solid;
+            fill = copy;
+        }
+    }
+    fla::Shape* _shape;
+};
+
+} // namespace
+
+// A replacement finds its fields again each time rather than keeping
+// pointers to fills that a later edit, undone and redone, rebuilds.
+TEST(a_replacement_survives_the_fills_it_changed_being_rebuilt)
+{
+    Scene scene = makeScene();
+    fla::Shape* shape = static_cast<fla::Shape*>(scene.fill->parent);
+    fla::CommandStack stack;
+    fla::find::Query color;
+    color.kind = fla::find::Kind::Color;
+    color.color[0] = 255;
+    color.replaceColor[1] = 200;
+    stack.push(fla::find::replaceAll(*scene.document, color));
+    stack.push(fla::CommandPtr(new RebuildFills(shape)));
+    CHECK(static_cast<fla::SolidColor*>(shape->fills[0])->color[1] == 200);
+
+    stack.undo();
+    stack.redo();
+    stack.undo();
+    stack.undo();
+    const uint8_t* now = static_cast<fla::SolidColor*>(shape->fills[0])->color;
+    CHECK(now[0] == 255 && now[1] == 0);
+    stack.redo();
+    CHECK(static_cast<fla::SolidColor*>(shape->fills[0])->color[1] == 200);
+    stack.redo();
+    CHECK(static_cast<fla::SolidColor*>(shape->fills[0])->color[1] == 200);
+}

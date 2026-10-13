@@ -186,64 +186,90 @@ void everySlot(const Document& document, const std::function<void(const Slot&)>&
                 timeline(inner);
 }
 
-/// One color and link changed, both ways.
+/// One color and link changed, both ways. The color is found again each time
+/// by its place (ordinal) among the slots of its root, the whole document or
+/// one element, never by a pointer: merges and undo rebuild fills, while the
+/// history always brings the document back to the state the change was
+/// recorded in, where the same walk finds the same slot.
 struct Change
 {
-    uint8_t* rgba;
-    uint8_t before[4];
-    uint8_t after[4];
-    Attributes* attributes;
+    Element* root = nullptr;
+    size_t ordinal = 0;
+    uint8_t before[4] = {};
+    uint8_t after[4] = {};
     Attributes attributesBefore;
     Attributes attributesAfter;
 };
 
+/// The slots under \a root, in the order changes count them: the whole
+/// document's when \a root is null.
+std::vector<Slot> slotsUnder(const Document* document, Element* root)
+{
+    std::vector<Slot> slots;
+    const auto collect = [&slots](const Slot& slot) { slots.push_back(slot); };
+    if (root)
+        slotsOf(root, collect);
+    else if (document)
+        everySlot(*document, collect);
+    return slots;
+}
+
 class ChangesCommand : public Command
 {
 public:
-    ChangesCommand(std::vector<Change> changes, std::string name)
-        : _changes(std::move(changes))
+    ChangesCommand(const Document* document, std::vector<Change> changes, std::string name)
+        : _document(document)
+        , _changes(std::move(changes))
         , _name(std::move(name))
     {
     }
 
-    void redo() override
-    {
-        for (Change& change : _changes)
-        {
-            std::copy(change.after, change.after + 4, change.rgba);
-            *change.attributes = change.attributesAfter;
-        }
-    }
+    void redo() override { apply(true); }
 
-    void undo() override
-    {
-        for (auto it = _changes.rbegin(); it != _changes.rend(); ++it)
-        {
-            std::copy(it->before, it->before + 4, it->rgba);
-            *it->attributes = it->attributesBefore;
-        }
-    }
+    void undo() override { apply(false); }
 
     std::string name() const override { return _name; }
 
 private:
+    void apply(bool forward)
+    {
+        std::map<Element*, std::vector<Slot>> slots;
+        for (const Change& change : _changes)
+        {
+            auto found = slots.find(change.root);
+            if (found == slots.end())
+                found = slots.emplace(change.root, slotsUnder(_document, change.root)).first;
+            if (change.ordinal >= found->second.size())
+                continue;
+            const Slot& slot = found->second[change.ordinal];
+            const uint8_t* rgba = forward ? change.after : change.before;
+            std::copy(rgba, rgba + 4, slot.rgba);
+            *slot.attributes = forward ? change.attributesAfter : change.attributesBefore;
+        }
+    }
+
+    const Document* _document;
     std::vector<Change> _changes;
     std::string _name;
 };
 
-Change changeOf(const Slot& slot, const uint8_t* rgba, const std::string& link)
+Change changeOf(Element* root, size_t ordinal, const Slot& slot, const uint8_t* rgba, const std::string& link)
 {
-    Change change{slot.rgba, {}, {}, slot.attributes, *slot.attributes, withAttribute(*slot.attributes, kLink, link)};
+    Change change;
+    change.root = root;
+    change.ordinal = ordinal;
     std::copy(slot.rgba, slot.rgba + 4, change.before);
     std::copy(rgba, rgba + 4, change.after);
+    change.attributesBefore = *slot.attributes;
+    change.attributesAfter = withAttribute(*slot.attributes, kLink, link);
     return change;
 }
 
-CommandPtr commandOf(std::vector<Change> changes, const std::string& name)
+CommandPtr commandOf(const Document* document, std::vector<Change> changes, const std::string& name)
 {
     if (changes.empty())
         return nullptr;
-    return CommandPtr(new ChangesCommand(std::move(changes), name));
+    return CommandPtr(new ChangesCommand(document, std::move(changes), name));
 }
 
 } // namespace
@@ -329,49 +355,61 @@ CommandPtr recolor(Document& document, const Palettes& palettes)
     for (const Color& color : palette->colors)
         byName[color.name] = &color;
     std::vector<Change> changes;
+    size_t ordinal = 0;
     everySlot(document, [&](const Slot& slot) {
+        const size_t at = ordinal++;
         const auto found = byName.find(attribute(*slot.attributes, kLink));
         if (found == byName.end() || std::equal(slot.rgba, slot.rgba + 4, found->second->rgba))
             return;
-        changes.push_back(changeOf(slot, found->second->rgba, found->first));
+        changes.push_back(changeOf(nullptr, at, slot, found->second->rgba, found->first));
     });
-    return commandOf(std::move(changes), "Recolor from Palette");
+    return commandOf(&document, std::move(changes), "Recolor from Palette");
 }
 
 CommandPtr linkMatching(Document& document, const Color& color)
 {
     std::vector<Change> changes;
+    size_t ordinal = 0;
     everySlot(document, [&](const Slot& slot) {
+        const size_t at = ordinal++;
         if (slot.rgba[0] != color.rgba[0] || slot.rgba[1] != color.rgba[1] || slot.rgba[2] != color.rgba[2])
             return;
         if (attribute(*slot.attributes, kLink) == color.name)
             return;
         // The color stays as it is; only the link is made.
-        changes.push_back(changeOf(slot, slot.rgba, color.name));
+        changes.push_back(changeOf(nullptr, at, slot, slot.rgba, color.name));
     });
-    return commandOf(std::move(changes), "Link to Palette");
+    return commandOf(&document, std::move(changes), "Link to Palette");
 }
 
 CommandPtr paint(const std::vector<Element*>& elements, const Color& color, bool fills, bool strokes)
 {
     std::vector<Change> changes;
     for (Element* element : elements)
+    {
+        size_t ordinal = 0;
         slotsOf(element, [&](const Slot& slot) {
+            const size_t at = ordinal++;
             if ((slot.stroke && strokes) || (!slot.stroke && fills))
-                changes.push_back(changeOf(slot, color.rgba, color.name));
+                changes.push_back(changeOf(element, at, slot, color.rgba, color.name));
         });
-    return commandOf(std::move(changes), "Paint from Palette");
+    }
+    return commandOf(nullptr, std::move(changes), "Paint from Palette");
 }
 
 CommandPtr unlink(const std::vector<Element*>& elements)
 {
     std::vector<Change> changes;
     for (Element* element : elements)
+    {
+        size_t ordinal = 0;
         slotsOf(element, [&](const Slot& slot) {
+            const size_t at = ordinal++;
             if (!attribute(*slot.attributes, kLink).empty())
-                changes.push_back(changeOf(slot, slot.rgba, std::string()));
+                changes.push_back(changeOf(element, at, slot, slot.rgba, std::string()));
         });
-    return commandOf(std::move(changes), "Unlink from Palette");
+    }
+    return commandOf(nullptr, std::move(changes), "Unlink from Palette");
 }
 
 } // namespace palettes

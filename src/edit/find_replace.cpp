@@ -23,6 +23,7 @@
 
 #include <algorithm>
 #include <cctype>
+#include <map>
 #include <set>
 
 namespace fla {
@@ -31,37 +32,45 @@ namespace find {
 
 namespace {
 
-/// One field changed, both ways.
+/// One field changed, both ways. The field is found again each time by its
+/// place among every field of its kind a search walks over (its ordinal),
+/// never by a pointer: merges, frame edits and undo rebuild fills, text runs
+/// and frames, while the history always brings the document back to the
+/// state the change was recorded in, where the same walk finds the same
+/// field.
 struct Change
 {
-    std::function<void()> redo;
-    std::function<void()> undo;
+    size_t ordinal = 0;
+    std::string textBefore;
+    std::string textAfter;
+    uint8_t colorBefore[3] = {};
+    uint8_t colorAfter[3] = {};
+    Symbol* symbolBefore = nullptr;
+    Symbol* symbolAfter = nullptr;
 };
+
+void apply(Document& document, const Query& query, const std::vector<Change>& changes, bool forward);
 
 class ReplaceCommand : public Command
 {
 public:
-    ReplaceCommand(std::vector<Change> changes, std::string name)
-        : _changes(std::move(changes))
+    ReplaceCommand(Document& document, Query query, std::vector<Change> changes, std::string name)
+        : _document(document)
+        , _query(std::move(query))
+        , _changes(std::move(changes))
         , _name(std::move(name))
     {
     }
 
-    void redo() override
-    {
-        for (const Change& change : _changes)
-            change.redo();
-    }
+    void redo() override { apply(_document, _query, _changes, true); }
 
-    void undo() override
-    {
-        for (auto it = _changes.rbegin(); it != _changes.rend(); ++it)
-            it->undo();
-    }
+    void undo() override { apply(_document, _query, _changes, false); }
 
     std::string name() const override { return _name; }
 
 private:
+    Document& _document;
+    Query _query;
     std::vector<Change> _changes;
     std::string _name;
 };
@@ -124,6 +133,18 @@ public:
     /// The symbol replacing the one looked for, if any.
     const Symbol* replacement() const { return _replacement; }
 
+    /// Whether what is visited next may be replaced; its fields are counted
+    /// either way, so the ordinals stay the same.
+    void setRecording(bool recording) { _recording = recording; }
+
+    /// Puts \a changes, by ordinal, into the fields instead of searching:
+    /// their after values when \a forward, else their before values.
+    void setApplying(const std::map<size_t, const Change*>* changes, bool forward)
+    {
+        _apply = changes;
+        _forward = forward;
+    }
+
     /// How many times \a frame plays the sound looked for.
     int visitFrame(Frame* frame)
     {
@@ -132,11 +153,11 @@ public:
         int count = 0;
         for (auto& attribute : frame->extraAttributes)
         {
-            if (attribute.first != "soundName" || attribute.second != _query.find)
+            if (attribute.first != "soundName")
                 continue;
-            ++count;
-            if (_changes)
-                set(attribute.second, _query.replace);
+            const bool hit = attribute.second == _query.find;
+            text(attribute.second, hit, _query.replace);
+            count += hit ? 1 : 0;
         }
         return count;
     }
@@ -167,12 +188,9 @@ public:
             if (_query.kind == Kind::Bitmap)
             {
                 BitmapInstance* instance = static_cast<BitmapInstance*>(element);
-                if (instance->libraryItemName == _query.find)
-                {
-                    ++count;
-                    if (_changes)
-                        set(instance->libraryItemName, _query.replace);
-                }
+                const bool hit = instance->libraryItemName == _query.find;
+                text(instance->libraryItemName, hit, _query.replace);
+                count += hit ? 1 : 0;
             }
             break;
         case Element::Type::Rectangle:
@@ -195,23 +213,25 @@ public:
             if (_query.kind == Kind::Symbol)
             {
                 SymbolInstance* instance = static_cast<SymbolInstance*>(element);
+                const size_t ordinal = _ordinal++;
+                if (const Change* change = applying(ordinal))
+                {
+                    instance->libraryItemName = _forward ? change->textAfter : change->textBefore;
+                    instance->symbol = _forward ? change->symbolAfter : change->symbolBefore;
+                    break;
+                }
                 if (instance->libraryItemName == _query.find)
                 {
                     ++count;
-                    if (_changes && _replacement)
+                    if (_changes && _recording && _replacement)
                     {
-                        const std::string beforeName = instance->libraryItemName;
-                        Symbol* beforeSymbol = instance->symbol;
-                        const std::string afterName = _query.replace;
-                        Symbol* afterSymbol = _replacement;
-                        _changes->push_back({[=]() {
-                                                 instance->libraryItemName = afterName;
-                                                 instance->symbol = afterSymbol;
-                                             },
-                            [=]() {
-                                instance->libraryItemName = beforeName;
-                                instance->symbol = beforeSymbol;
-                            }});
+                        Change change;
+                        change.ordinal = ordinal;
+                        change.textBefore = instance->libraryItemName;
+                        change.textAfter = _query.replace;
+                        change.symbolBefore = instance->symbol;
+                        change.symbolAfter = _replacement;
+                        _changes->push_back(change);
                     }
                 }
             }
@@ -234,17 +254,16 @@ private:
         case Kind::Text:
         {
             int count = 0;
-            const std::string after = replaced(run.text, _query, count);
-            if (count && _changes)
-                set(run.text, after);
+            const std::string after = _apply ? std::string() : replaced(run.text, _query, count);
+            text(run.text, count > 0, after);
             return count;
         }
         case Kind::Font:
-            if (_query.find.empty() || !sameFace(run.face, _query.find))
-                return 0;
-            if (_changes && !_query.replace.empty())
-                set(run.face, _query.replace);
-            return 1;
+        {
+            const bool hit = !_query.find.empty() && sameFace(run.face, _query.find);
+            text(run.face, hit && !_query.replace.empty(), _query.replace);
+            return hit ? 1 : 0;
+        }
         case Kind::Color:
             return visitColor(run.fillColor);
         case Kind::Symbol:
@@ -262,11 +281,11 @@ private:
         if (_query.kind == Kind::Bitmap)
         {
             auto* bitmap = dynamic_cast<BitmapFill*>(fill);
-            if (!bitmap || bitmap->bitmapPath != _query.find)
+            if (!bitmap)
                 return 0;
-            if (_changes)
-                set(bitmap->bitmapPath, _query.replace);
-            return 1;
+            const bool hit = bitmap->bitmapPath == _query.find;
+            text(bitmap->bitmapPath, hit, _query.replace);
+            return hit ? 1 : 0;
         }
         int count = 0;
         switch (fill->type())
@@ -290,27 +309,60 @@ private:
 
     int visitColor(uint8_t* color)
     {
+        const size_t ordinal = _ordinal++;
+        if (const Change* change = applying(ordinal))
+        {
+            const uint8_t* value = _forward ? change->colorAfter : change->colorBefore;
+            std::copy(value, value + 3, color);
+            return 0;
+        }
         if (color[0] != _query.color[0] || color[1] != _query.color[1] || color[2] != _query.color[2])
             return 0;
-        if (_changes)
+        if (_changes && _recording)
         {
-            const uint8_t before[3] = {color[0], color[1], color[2]};
-            const uint8_t after[3] = {_query.replaceColor[0], _query.replaceColor[1], _query.replaceColor[2]};
-            _changes->push_back({[=]() { std::copy(after, after + 3, color); },
-                [=]() { std::copy(before, before + 3, color); }});
+            Change change;
+            change.ordinal = ordinal;
+            std::copy(color, color + 3, change.colorBefore);
+            std::copy(_query.replaceColor, _query.replaceColor + 3, change.colorAfter);
+            _changes->push_back(change);
         }
         return 1;
     }
 
-    void set(std::string& field, const std::string& after)
+    /// A text field of the kind looked for: counted, and replaced with
+    /// \a after when it \a matches (or set from its change, when applying).
+    void text(std::string& field, bool matches, const std::string& after)
     {
-        std::string* target = &field;
-        const std::string before = field;
-        _changes->push_back({[=]() { *target = after; }, [=]() { *target = before; }});
+        const size_t ordinal = _ordinal++;
+        if (const Change* change = applying(ordinal))
+        {
+            field = _forward ? change->textAfter : change->textBefore;
+            return;
+        }
+        if (matches && _changes && _recording)
+        {
+            Change change;
+            change.ordinal = ordinal;
+            change.textBefore = field;
+            change.textAfter = after;
+            _changes->push_back(change);
+        }
+    }
+
+    const Change* applying(size_t ordinal) const
+    {
+        if (!_apply)
+            return nullptr;
+        const auto found = _apply->find(ordinal);
+        return found == _apply->end() ? nullptr : found->second;
     }
 
     const Query& _query;
     std::vector<Change>* _changes;
+    const std::map<size_t, const Change*>* _apply = nullptr;
+    bool _forward = true;
+    bool _recording = true;
+    size_t _ordinal = 0;
     Symbol* _replacement = nullptr;
     bool _replacementBitmap = false;
     bool _replacementSound = false;
@@ -495,10 +547,13 @@ CommandPtr replaceAll(Document& document, const Query& query, int* replaced)
     else
         forEachObject(document, [&](Match& match, Element* element) {
             // An instance inside a symbol the replacement contains would put
-            // that symbol inside itself: it is left as it is.
-            if (query.kind == Kind::Symbol && symbolContains(searcher.replacement(), match.symbol))
-                return;
-            count += searcher.visit(element);
+            // that symbol inside itself: it is left as it is (but still
+            // walked, so the fields keep their ordinals).
+            const bool recording =
+                !(query.kind == Kind::Symbol && symbolContains(searcher.replacement(), match.symbol));
+            searcher.setRecording(recording);
+            const int found = searcher.visit(element);
+            count += recording ? found : 0;
         });
     if (changes.empty())
         return nullptr;
@@ -506,8 +561,25 @@ CommandPtr replaceAll(Document& document, const Query& query, int* replaced)
         *replaced = count;
     static const char* const names[] = {"Replace Text", "Replace Font", "Replace Color", "Replace Symbol",
         "Replace Sound", "Replace Bitmap"};
-    return CommandPtr(new ReplaceCommand(std::move(changes), names[static_cast<int>(query.kind)]));
+    return CommandPtr(new ReplaceCommand(document, query, std::move(changes), names[static_cast<int>(query.kind)]));
 }
+
+namespace {
+
+void apply(Document& document, const Query& query, const std::vector<Change>& changes, bool forward)
+{
+    std::map<size_t, const Change*> byOrdinal;
+    for (const Change& change : changes)
+        byOrdinal[change.ordinal] = &change;
+    Searcher searcher(document, query, nullptr);
+    searcher.setApplying(&byOrdinal, forward);
+    if (query.kind == Kind::Sound)
+        forEachFrame(document, [&](Match&, Frame* frame) { searcher.visitFrame(frame); });
+    else
+        forEachObject(document, [&](Match&, Element* element) { searcher.visit(element); });
+}
+
+} // namespace
 
 std::vector<std::string> fontsUsed(Document& document)
 {
