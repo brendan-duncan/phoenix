@@ -334,7 +334,7 @@ void PhoenixView::onElementSelected(const fla::DOMElement* element)
 void PhoenixView::setDocument(const fla::FLADocument* document)
 {
     _bitmapCache.clear(); // Clear bitmap cache when loading new document
-    _bitmapSource.clear();
+    _bitmapsByName.clear();
     _textureTiles.clear();
     _motionCache.clear();
     clearCaches();
@@ -3444,9 +3444,8 @@ void addGradientStops(QGradient& gradient, const std::vector<GradientStop>& stop
 
 QImage PhoenixView::textureTile(const std::string& name)
 {
-    const auto cached = _textureTiles.constFind(QString::fromStdString(name));
-    if (cached != _textureTiles.constEnd())
-        return cached.value();
+    if (const QImage* cached = _textureTiles.object(QString::fromStdString(name)))
+        return *cached;
     QImage tile;
     const std::string prefix = fla::texture::kBitmapPrefix;
     if (name.compare(0, prefix.size(), prefix) == 0)
@@ -3467,7 +3466,8 @@ QImage PhoenixView::textureTile(const std::string& name)
                     made.coverage.begin() + static_cast<std::ptrdiff_t>(y + 1) * made.size, tile.scanLine(y));
         }
     }
-    _textureTiles.insert(QString::fromStdString(name), tile);
+    _textureTiles.insert(QString::fromStdString(name), new QImage(tile),
+        std::max<qsizetype>(1, tile.sizeInBytes() / 1024));
     return tile;
 }
 
@@ -3641,26 +3641,53 @@ QGradient::Spread PhoenixView::gradientSpread(const std::string& method)
     return QGradient::PadSpread;
 }
 
+const fla::Bitmap* PhoenixView::findBitmap(const QString& name)
+{
+    if (!_flaDocument || !_flaDocument->document)
+        return nullptr;
+    const std::string wanted = name.toStdString();
+    const auto known = _bitmapsByName.constFind(name);
+    if (known != _bitmapsByName.constEnd() && known.value() && known.value()->name == wanted)
+    {
+        // Still the library's? A bitmap deleted from the library is gone
+        // from resources (and may be freed).
+        const std::vector<fla::Resource*>& resources = _flaDocument->document->resources;
+        if (std::find(resources.begin(), resources.end(), known.value()) != resources.end())
+            return known.value();
+    }
+    // Added, removed or renamed since the map was made: made again.
+    _bitmapsByName.clear();
+    for (fla::Resource* resource : _flaDocument->document->resources)
+        if (resource && resource->resourceType() == fla::Resource::Type::Bitmap)
+        {
+            const fla::Bitmap* bitmap = static_cast<const fla::Bitmap*>(resource);
+            _bitmapsByName.insert(QString::fromStdString(bitmap->name), bitmap);
+        }
+    return _bitmapsByName.value(name, nullptr);
+}
+
 QPixmap PhoenixView::libraryBitmap(const QString& name)
 {
     if (!_flaDocument || !_flaDocument->document)
-        return _bitmapCache.value(name);
-
-    for (fla::Resource* resource : _flaDocument->document->resources)
     {
-        if (!resource || resource->resourceType() != fla::Resource::Type::Bitmap)
-            continue;
-        const fla::Bitmap* bitmap = static_cast<const fla::Bitmap*>(resource);
-        if (bitmap->name != name.toStdString())
-            continue;
+        const CachedBitmap* cached = _bitmapCache.object(name);
+        return cached ? cached->pixmap : QPixmap();
+    }
 
-        // Kept while the bitmap's pixels are the ones it was made from: a
-        // bitmap brush, or undoing one, gives it others.
-        const void* source = bitmap->imageData.empty() ? static_cast<const void*>(&bitmap->datData.get())
-                                                       : static_cast<const void*>(&bitmap->imageData.get());
-        if (_bitmapCache.contains(name) && _bitmapSource.value(name) == source)
-            return _bitmapCache[name];
-        _bitmapSource[name] = source;
+    if (const fla::Bitmap* bitmap = findBitmap(name))
+    {
+        // Kept while the bitmap's bytes are the ones it was made from: a
+        // bitmap brush, or undoing one, gives it others. Told from a token,
+        // so a bitmap not yet read from a Phoenix document is not read just
+        // to be compared.
+        const std::weak_ptr<const void> source =
+            bitmap->imageData.empty() ? bitmap->datData.token() : bitmap->imageData.token();
+        if (const CachedBitmap* cached = _bitmapCache.object(name))
+        {
+            const std::shared_ptr<const void> was = cached->source.lock();
+            if (was && was == source.lock())
+                return cached->pixmap;
+        }
 
         QPixmap pixmap;
         if (!bitmap->imageData.empty())
@@ -3692,7 +3719,9 @@ QPixmap PhoenixView::libraryBitmap(const QString& name)
                 pixmap = QPixmap::fromImage(image);
             }
         }
-        _bitmapCache[name] = pixmap;
+        const qsizetype kilobytes = std::max<qsizetype>(1,
+            static_cast<qsizetype>(pixmap.width()) * pixmap.height() * 4 / 1024);
+        _bitmapCache.insert(name, new CachedBitmap{pixmap, source}, kilobytes);
         return pixmap;
     }
     return QPixmap();

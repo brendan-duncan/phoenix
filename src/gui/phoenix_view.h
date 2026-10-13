@@ -15,6 +15,8 @@
 #include "../edit/asset_warp.h"
 #include "../edit/deformers.h"
 
+#include <memory>
+#include <QCache>
 #include <QHash>
 #include <QList>
 #include <QMap>
@@ -40,6 +42,7 @@ class QTimer;
 #include <vector>
 
 namespace fla {
+class Bitmap;
 class Command;
 class CommandStack;
 class Selection;
@@ -1029,9 +1032,20 @@ private:
     QPen penForHere(const PathCacheEntry& entry) const;
     QMap<const fla::Shape*, PathCacheList> _pathCache;
 
-    QMap<QString, QPixmap> _bitmapCache;
-    /// The pixel data each cached bitmap was made from.
-    QMap<QString, const void*> _bitmapSource;
+    /// Decoded library bitmaps, by name, with the bytes each was made from
+    /// (a bitmap brush, or undoing one, gives a bitmap others). Kept within
+    /// a budget, the least recently shown going first: a document with many
+    /// large bitmaps does not hold them all decoded.
+    struct CachedBitmap
+    {
+        QPixmap pixmap;
+        std::weak_ptr<const void> source;
+    };
+    static constexpr int kBitmapCacheKilobytes = 512 * 1024;
+    QCache<QString, CachedBitmap> _bitmapCache{kBitmapCacheKilobytes};
+    /// The library's bitmaps by name, rebuilt when a lookup misses.
+    QHash<QString, const fla::Bitmap*> _bitmapsByName;
+    const fla::Bitmap* findBitmap(const QString& name);
 
 public:
     /// The library bitmap of that name, decoded once and kept.
@@ -1165,7 +1179,8 @@ private:
     };
     HintDrag _hintDrag;
 
-    QHash<QString, QImage> _textureTiles;
+    /// Brush texture tiles by name, within a budget like the bitmaps'.
+    QCache<QString, QImage> _textureTiles{64 * 1024};
 
     bool _editMultiple = false;
     /// While the other keyframes of Edit Multiple Frames draw: only layers

@@ -110,6 +110,12 @@ public:
         _state->location = std::move(location);
     }
 
+    /// Stands for these very bytes: a holder of the token can tell whether
+    /// they are still the ones it saw (it is not expired and locks to the
+    /// same object) without reading them, and without being fooled by
+    /// another set of bytes taking their address after they are freed.
+    std::weak_ptr<const void> token() const { return std::shared_ptr<const void>(_state); }
+
     /// Whether the bytes have been read into memory.
     bool loaded() const
     {
