@@ -4888,8 +4888,8 @@ void MainWindow::setupMenus()
 void MainWindow::openFile()
 {
     QString fileName = QFileDialog::getOpenFileName(this, tr("Open"), _lastDirectory,
-        tr("Documents (*.phx *.fla DOMDocument.xml);;Phoenix Documents (*.phx);;FLA Files (*.fla);;"
-           "XFL Documents (DOMDocument.xml);;All Files (*)"));
+        tr("Documents (*.phx *.fla *.xfl DOMDocument.xml);;Phoenix Documents (*.phx);;FLA Files (*.fla);;"
+           "XFL Documents (*.xfl DOMDocument.xml);;All Files (*)"));
 
     if (!fileName.isEmpty())
     {

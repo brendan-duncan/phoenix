@@ -147,6 +147,11 @@ std::string Report::json() const
 
 void checkContainer(const std::string& path, Report& report)
 {
+    // An XFL folder named by one of its files (the .xfl marker or
+    // DOMDocument.xml) is a folder, not a container.
+    const std::string extension = std::filesystem::path(path).extension().string();
+    if (extension == ".xfl" || extension == ".xml")
+        return;
     // A Flash CS4 (or earlier) document is a compound file, not an
     // archive; reading it is the check.
     {

@@ -25,12 +25,13 @@ bool ZipReader::open(const std::string& zipFilePath)
 
     fs::path filePath(zipFilePath);
 
-    // Handle .xml files by using their parent directory
-    if (filePath.extension() == ".xml")
+    // An XFL folder opened by one of its files: DOMDocument.xml, or the .xfl
+    // marker file named after the document.
+    if (filePath.extension() == ".xml" || filePath.extension() == ".xfl")
     {
         if (!fs::exists(filePath) || !fs::is_regular_file(filePath))
         {
-            _errorString = "XML file does not exist: " + zipFilePath;
+            _errorString = "File does not exist: " + zipFilePath;
             return false;
         }
         // Use the directory containing the XML file as the path

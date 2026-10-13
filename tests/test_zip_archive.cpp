@@ -136,3 +136,14 @@ TEST(zip_reader_keeps_a_folder_document_inside_its_folder)
     CHECK(!reader.containsFile("../secret.txt") && reader.readFile("../secret.txt").empty());
     CHECK(reader.readFile((root / "secret.txt").string()).empty());
 }
+
+TEST(zip_reader_opens_a_folder_document_by_its_xfl_file)
+{
+    const std::filesystem::path root = std::filesystem::temp_directory_path() / "phoenix_zip_tests" / "marker";
+    std::filesystem::create_directories(root / "doc");
+    writeAll((root / "doc" / "DOMDocument.xml").string(), {'<', 'a', '/', '>'});
+    writeAll((root / "doc" / "doc.xfl").string(), {'P', 'R', 'O', 'X', 'Y'});
+    ZipReader reader;
+    CHECK(reader.open((root / "doc" / "doc.xfl").string()));
+    CHECK(reader.readFile("DOMDocument.xml").size() == 4);
+}
