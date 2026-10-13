@@ -14,11 +14,6 @@ namespace fla {
 
 namespace {
 
-/// How many points to sample a curve at when measuring the area it encloses.
-/// Areas are only used to tell bounded faces from the unbounded one and to
-/// report a rough size, so this does not need to be exact.
-constexpr int kAreaSamples = 8;
-
 /// A piece shorter than this in twips is a rounding artifact rather than
 /// geometry, and welding has already pulled its ends together.
 constexpr double kMinimumPieceLength = PlanarMap::kTwip * 0.5;
@@ -32,22 +27,71 @@ int64_t toTwips(double value)
     return static_cast<int64_t>(std::llround(value / PlanarMap::kTwip));
 }
 
-/// Twice the signed area contributed by a curve, sampled along its length.
-/// Summed around a closed boundary this gives twice the enclosed area, positive
-/// for a counter-clockwise walk in a y-down coordinate system.
+/// Twice the signed area contributed by a curve: the integral of
+/// x dy - y dx along it. Summed around a closed boundary this gives twice the
+/// enclosed area, positive for a counter-clockwise walk in a y-down coordinate
+/// system.
+///
+/// For a cubic the integrand is a polynomial of degree five, which three-point
+/// Gauss-Legendre quadrature integrates exactly. A sliver between two curves
+/// bulging the same way is measured by the difference of two such areas, and
+/// sampling each curve at a few points would have lost it in the error.
 double signedAreaContribution(const Curve& curve)
 {
-    double total = 0.0;
-
-    Point previous = curve.pointAt(0.0);
-    for (int i = 1; i <= kAreaSamples; ++i)
+    if (curve.isLine())
     {
-        const Point current = curve.pointAt(static_cast<double>(i) / kAreaSamples);
-        total += previous.x * current.y - current.x * previous.y;
-        previous = current;
+        const Point& a = curve.start();
+        const Point& b = curve.end();
+        return a.x * b.y - b.x * a.y;
     }
 
+    static const double kNodes[3] = {
+        0.5 - 0.5 * 0.7745966692414834, 0.5, 0.5 + 0.5 * 0.7745966692414834
+    };
+    static const double kWeights[3] = {5.0 / 18.0, 8.0 / 18.0, 5.0 / 18.0};
+
+    double total = 0.0;
+    for (int i = 0; i < 3; ++i)
+    {
+        const Point p = curve.pointAt(kNodes[i]);
+        const Point d = curve.tangentAt(kNodes[i]);
+        total += kWeights[i] * (p.x * d.y - p.y * d.x);
+    }
     return total;
+}
+
+/// Appends a polyline following \a curve to \a points, leaving out its start,
+/// which the previous curve has already put there. The curve is halved until
+/// each piece strays from its chord by no more than \a tolerance.
+void flattenInto(const Curve& curve, double tolerance, std::vector<Point>& points, int depth = 0)
+{
+    if (curve.isLine() || depth >= 16 || curve.flatness() <= tolerance)
+    {
+        points.push_back(curve.end());
+        return;
+    }
+
+    Curve before;
+    Curve after;
+    curve.split(0.5, before, after);
+    flattenInto(before, tolerance, points, depth + 1);
+    flattenInto(after, tolerance, points, depth + 1);
+}
+
+/// The length of a curve, closely enough to compare boundaries by.
+double curveLength(const Curve& curve)
+{
+    if (curve.isLine())
+        return curve.chordLength();
+
+    std::vector<Point> points;
+    points.push_back(curve.start());
+    flattenInto(curve, PlanarMap::kTwip / 8.0, points);
+
+    double length = 0.0;
+    for (size_t i = 1; i < points.size(); ++i)
+        length += std::hypot(points[i].x - points[i - 1].x, points[i].y - points[i - 1].y);
+    return length;
 }
 
 } // namespace
@@ -837,10 +881,101 @@ bool PlanarMap::interiorPoint(int face, Point& result) const
     if (target.unbounded || target.halfEdge < 0)
         return false;
 
-    // Step off each boundary edge in turn until a point lands inside. One edge
-    // is usually enough; a sliver of a face may need another, or a bigger
-    // step. Every candidate is checked against the face, so a larger step
-    // that lands in a neighbor is simply passed over.
+    // The face's boundary, outer cycle and holes, flattened finely into
+    // straight segments. Holes run the other way round, so the winding of
+    // the whole is non-zero exactly inside the face, and an edge with the
+    // face on both of its sides cancels itself out.
+    const double flatness = kTwip / 16.0;
+    std::vector<std::pair<Point, Point>> segments;
+    double top = 0.0;
+    double bottom = 0.0;
+    bool haveBounds = false;
+    const auto addBoundary = [&](int start) {
+        std::vector<Point> points;
+        for (const int edge : cycleFrom(start))
+        {
+            const Curve& curve = _halfEdges[edge].curve;
+            if (points.empty())
+                points.push_back(curve.start());
+            flattenInto(curve, flatness, points);
+        }
+        for (size_t i = 1; i < points.size(); ++i)
+            segments.push_back({points[i - 1], points[i]});
+        for (const Point& point : points)
+        {
+            top = haveBounds ? std::min(top, point.y) : point.y;
+            bottom = haveBounds ? std::max(bottom, point.y) : point.y;
+            haveBounds = true;
+        }
+    };
+    addBoundary(target.halfEdge);
+    for (const int hole : target.holes)
+        addBoundary(hole);
+
+    // Scan a few horizontal lines across the face and take the middle of the
+    // widest stretch inside it: the point furthest from the boundary along
+    // those lines, where nothing about the boundary's exact position can tip
+    // it outside. The lines are kept off the twip grid every vertex sits on,
+    // so none of them runs through a vertex or along a horizontal edge.
+    struct Span
+    {
+        double width;
+        Point middle;
+    };
+    std::vector<Span> spans;
+    constexpr int kScanLines = 9;
+    const double height = bottom - top;
+    for (int scan = 0; scan < kScanLines && haveBounds && height > 0.0; ++scan)
+    {
+        // From the middle line outwards, so that among stretches of equal
+        // width the one nearest the middle comes first.
+        const int line = kScanLines / 2 + ((scan % 2) ? (scan + 1) / 2 : -(scan / 2));
+        double y = top + height * (line + 0.5) / kScanLines;
+        if (height > kTwip * 4.0)
+        {
+            const double nudged = std::floor(y / kTwip) * kTwip + kTwip * 0.3819660113;
+            if (nudged > top && nudged < bottom)
+                y = nudged;
+        }
+
+        std::vector<std::pair<double, int>> crossings;
+        for (const auto& [a, b] : segments)
+        {
+            if ((a.y <= y) == (b.y <= y))
+                continue;
+            const double x = a.x + (b.x - a.x) * (y - a.y) / (b.y - a.y);
+            crossings.push_back({x, b.y > a.y ? 1 : -1});
+        }
+        std::sort(crossings.begin(), crossings.end());
+
+        int winding = 0;
+        for (size_t i = 0; i + 1 < crossings.size(); ++i)
+        {
+            winding += crossings[i].second;
+            if (winding == 0)
+                continue;
+            const double width = crossings[i + 1].first - crossings[i].first;
+            if (width > 0.0)
+                spans.push_back({width, Point((crossings[i].first + crossings[i + 1].first) * 0.5, y)});
+        }
+    }
+
+    // The flattened boundary is within a sixteenth of a twip of the real one,
+    // so the widest stretch is inside unless the face is thinner than that;
+    // each candidate is still checked against the exact curves.
+    std::stable_sort(spans.begin(), spans.end(),
+        [](const Span& a, const Span& b) { return a.width > b.width; });
+    for (const Span& span : spans)
+    {
+        if (faceContains(face, span.middle))
+        {
+            result = span.middle;
+            return true;
+        }
+    }
+
+    // Nothing the scan found held up, which leaves stepping off each boundary
+    // edge in turn until a point lands inside, in steps of growing size.
     const std::vector<int> outer = cycleFrom(target.halfEdge);
 
     for (const double step : {kTwip * 0.25, kTwip, kTwip * 4.0})
@@ -874,6 +1009,61 @@ bool PlanarMap::interiorPoint(int face, Point& result) const
     }
 
     return false;
+}
+
+double PlanarMap::facePerimeter(int face) const
+{
+    double perimeter = 0.0;
+    for (const int edge : faceHalfEdges(face))
+        perimeter += curveLength(_halfEdges[edge].curve);
+    return perimeter;
+}
+
+bool PlanarMap::isSliver(int face, double width) const
+{
+    if (face < 0 || face >= static_cast<int>(_faces.size()) || _faces[face].unbounded)
+        return false;
+
+    // A curve is never longer than its control polygon, so a face wide enough
+    // measured by that is wide enough, without flattening anything.
+    const double area = std::fabs(_faces[face].area);
+    double longest = 0.0;
+    for (const int edge : faceHalfEdges(face))
+        longest += _halfEdges[edge].curve.controlPolygonLength();
+    if (longest <= 0.0 || 2.0 * area / longest >= width)
+        return false;
+
+    const double perimeter = facePerimeter(face);
+    if (perimeter <= 0.0)
+        return false;
+    return 2.0 * area / perimeter < width;
+}
+
+int PlanarMap::widestNeighbor(int face) const
+{
+    std::map<int, double> shared;
+    for (const int edge : faceHalfEdges(face))
+    {
+        const int twin = _halfEdges[edge].twin;
+        if (twin < 0 || twin >= static_cast<int>(_halfEdges.size()))
+            continue;
+        const int other = _halfEdges[twin].face;
+        if (other < 0 || other == face)
+            continue;
+        shared[other] += curveLength(_halfEdges[edge].curve);
+    }
+
+    int best = -1;
+    double longest = 0.0;
+    for (const auto& [other, length] : shared)
+    {
+        if (length > longest)
+        {
+            longest = length;
+            best = other;
+        }
+    }
+    return best;
 }
 
 int PlanarMap::faceAt(const Point& point) const

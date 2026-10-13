@@ -490,3 +490,204 @@ TEST(planar_map_leaves_out_curves_that_are_not_numbers)
     CHECK(boundedFaces(map).size() == 1);
     CHECK(map.faceAt(Point(5.0, 5.0)) >= 0);
 }
+
+namespace {
+
+/// How far a point is from the nearest part of a face's boundary, sampled
+/// finely along every curve bordering it.
+double distanceToBoundary(const PlanarMap& map, int face, const Point& point)
+{
+    double nearest = 1.0e300;
+    for (const int edge : map.faceHalfEdges(face))
+    {
+        const Curve& curve = map.halfEdges()[edge].curve;
+        for (int i = 0; i <= 400; ++i)
+        {
+            const Point at = curve.pointAt(i / 400.0);
+            nearest = std::min(nearest, std::hypot(at.x - point.x, at.y - point.y));
+        }
+    }
+    return nearest;
+}
+
+/// An oval of four cubics, as the oval tool draws one.
+void addOval(PlanarMap& map, double cx, double cy, double rx, double ry, int source)
+{
+    const double k = 0.5522847498;
+    map.addCurve(Curve::cubic(Point(cx, cy - ry), Point(cx + k * rx, cy - ry),
+        Point(cx + rx, cy - k * ry), Point(cx + rx, cy)), source);
+    map.addCurve(Curve::cubic(Point(cx + rx, cy), Point(cx + rx, cy + k * ry),
+        Point(cx + k * rx, cy + ry), Point(cx, cy + ry)), source);
+    map.addCurve(Curve::cubic(Point(cx, cy + ry), Point(cx - k * rx, cy + ry),
+        Point(cx - rx, cy + k * ry), Point(cx - rx, cy)), source);
+    map.addCurve(Curve::cubic(Point(cx - rx, cy), Point(cx - rx, cy - k * ry),
+        Point(cx - k * rx, cy - ry), Point(cx, cy - ry)), source);
+}
+
+} // namespace
+
+TEST(interior_point_of_a_thin_face_sits_on_its_midline)
+{
+    // Four twips tall and two hundred pixels long: a point stepped off one
+    // edge lands a hair inside it, while the scan finds the middle.
+    PlanarMap map;
+    addPolygon(map, rectangle(0.0, 0.0, 200.0, 0.2));
+    map.build();
+    const int face = map.faceAt(Point(100.0, 0.1));
+    CHECK(face >= 0);
+
+    Point inside;
+    CHECK(map.interiorPoint(face, inside));
+    CHECK(map.faceContains(face, inside));
+    CHECK(std::fabs(inside.y - 0.1) < 0.03);
+    CHECK(inside.x > 10.0 && inside.x < 190.0);
+}
+
+TEST(interior_point_of_a_concave_face_keeps_clear_of_its_boundary)
+{
+    // A C shape: thin arms and a thin spine round a deep notch.
+    PlanarMap map;
+    addPolygon(map, {Point(0.0, 0.0), Point(100.0, 0.0), Point(100.0, 10.0), Point(10.0, 10.0),
+        Point(10.0, 90.0), Point(100.0, 90.0), Point(100.0, 100.0), Point(0.0, 100.0)});
+    map.build();
+    const int face = map.faceAt(Point(5.0, 50.0));
+    CHECK(face >= 0);
+
+    Point inside;
+    CHECK(map.interiorPoint(face, inside));
+    CHECK(map.faceContains(face, inside));
+    CHECK(!(inside.x > 10.0 && inside.y > 10.0 && inside.y < 90.0));
+    CHECK(distanceToBoundary(map, face, inside) > 3.0);
+}
+
+TEST(interior_point_of_a_face_with_holes_stays_out_of_them)
+{
+    // A frame five pixels wide round a large square hole.
+    PlanarMap frame;
+    addPolygon(frame, rectangle(0.0, 0.0, 100.0, 100.0), 0);
+    addPolygon(frame, rectangle(5.0, 5.0, 95.0, 95.0), 1);
+    frame.build();
+    const int border = frame.faceAt(Point(2.5, 50.0));
+    CHECK(border >= 0);
+    CHECK(frame.faces()[border].holes.size() == 1);
+
+    Point inside;
+    CHECK(frame.interiorPoint(border, inside));
+    CHECK(frame.faceContains(border, inside));
+    CHECK(!(inside.x > 5.0 && inside.x < 95.0 && inside.y > 5.0 && inside.y < 95.0));
+    CHECK(distanceToBoundary(frame, border, inside) > 2.0);
+
+    // A ring between two ovals, curves all round, with a third oval as an
+    // island inside the hole.
+    PlanarMap ring;
+    addOval(ring, 50.0, 50.0, 40.0, 30.0, 0);
+    addOval(ring, 50.0, 50.0, 37.0, 27.0, 1);
+    addOval(ring, 50.0, 50.0, 10.0, 10.0, 2);
+    ring.build();
+    const int band = ring.faceAt(Point(11.5, 50.0));
+    CHECK(band >= 0);
+    CHECK(ring.interiorPoint(band, inside));
+    CHECK(ring.faceAt(inside) == band);
+    CHECK(distanceToBoundary(ring, band, inside) > 1.0);
+}
+
+TEST(interior_point_of_a_crescent_between_two_curves)
+{
+    // Two arcs between the same ends, one bulging a little further: the
+    // face between them is thin at both tips and curved all along.
+    PlanarMap map;
+    map.addCurve(Curve::cubic(Point(0.0, 0.0), Point(30.0, -40.0), Point(70.0, -40.0),
+        Point(100.0, 0.0)), 0);
+    map.addCurve(Curve::cubic(Point(0.0, 0.0), Point(30.0, -42.0), Point(70.0, -42.0),
+        Point(100.0, 0.0)), 1);
+    map.build();
+
+    int crescent = -1;
+    for (size_t i = 0; i < map.faces().size(); ++i)
+    {
+        if (!map.faces()[i].unbounded)
+            crescent = static_cast<int>(i);
+    }
+    CHECK(crescent >= 0);
+
+    Point inside;
+    CHECK(map.interiorPoint(crescent, inside));
+    CHECK(map.faceAt(inside) == crescent);
+    CHECK(distanceToBoundary(map, crescent, inside) > 0.3);
+}
+
+TEST(face_areas_are_exact_for_curves)
+{
+    // The area is integrated exactly along each cubic, so an oval's comes
+    // out as pi r^2 to within the four-cubic approximation of a circle.
+    PlanarMap map;
+    addOval(map, 0.0, 0.0, 50.0, 50.0, 0);
+    map.build();
+    const int face = map.faceAt(Point(0.0, 0.0));
+    CHECK(face >= 0);
+    CHECK(std::fabs(map.faces()[face].area - 3.14159265358979 * 2500.0) < 3.0);
+
+    // A crescent between two cubics is measured by the difference of their
+    // areas, which sampling each at a few points would get badly wrong.
+    PlanarMap crescent;
+    crescent.addCurve(Curve::line(Point(0.0, 0.0), Point(100.0, 0.0)), 0);
+    crescent.addCurve(Curve::cubic(Point(0.0, 0.0), Point(0.0, 3.0), Point(100.0, 3.0),
+        Point(100.0, 0.0)), 1);
+    crescent.build();
+    // The cubic is y = 9t(1-t), x = 100(3t^2 - 2t^3), enclosing 180.
+    int measured = 0;
+    for (const MapFace& face : crescent.faces())
+    {
+        if (face.unbounded)
+            continue;
+        ++measured;
+        CHECK(std::fabs(face.area - 180.0) < 1.0e-6);
+    }
+    CHECK(measured == 1);
+}
+
+TEST(slivers_are_found_by_their_width)
+{
+    // A line and a curve between the same ends, the curve bulging three
+    // hundredths of a pixel: a face too thin to see.
+    PlanarMap sliver;
+    sliver.addCurve(Curve::line(Point(0.0, 0.0), Point(100.0, 0.0)), 0);
+    sliver.addCurve(Curve::cubic(Point(0.0, 0.0), Point(33.0, 0.04), Point(66.0, 0.04),
+        Point(100.0, 0.0)), 1);
+    sliver.build();
+    int thin = -1;
+    for (size_t i = 0; i < sliver.faces().size(); ++i)
+    {
+        if (!sliver.faces()[i].unbounded)
+            thin = static_cast<int>(i);
+    }
+    CHECK(thin >= 0);
+    CHECK(sliver.isSliver(thin));
+    CHECK(sliver.widestNeighbor(thin) == sliver.unboundedFace());
+
+    // A strip half a pixel wide is thin but plainly visible.
+    PlanarMap strip;
+    addPolygon(strip, rectangle(0.0, 0.0, 100.0, 0.5));
+    strip.build();
+    const int band = strip.faceAt(Point(50.0, 0.25));
+    CHECK(band >= 0);
+    CHECK(!strip.isSliver(band));
+    CHECK(std::fabs(strip.facePerimeter(band) - 201.0) < 1.0e-6);
+
+    // Two squares side by side: the small one borders the outside along
+    // three sides and its neighbor along one.
+    PlanarMap pair;
+    addPolygon(pair, rectangle(0.0, 0.0, 10.0, 10.0), 0);
+    addPolygon(pair, rectangle(10.0, 0.0, 30.0, 10.0), 1);
+    pair.build();
+    const int left = pair.faceAt(Point(5.0, 5.0));
+    CHECK(!pair.isSliver(left));
+    CHECK(pair.widestNeighbor(left) == pair.unboundedFace());
+
+    // A square in a much larger one borders only the larger one.
+    PlanarMap nested;
+    addPolygon(nested, rectangle(0.0, 0.0, 100.0, 100.0), 0);
+    addPolygon(nested, rectangle(40.0, 40.0, 60.0, 60.0), 1);
+    nested.build();
+    CHECK(nested.widestNeighbor(nested.faceAt(Point(50.0, 50.0))) == nested.faceAt(Point(10.0, 10.0)));
+}
