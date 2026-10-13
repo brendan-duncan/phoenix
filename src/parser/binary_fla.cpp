@@ -243,6 +243,10 @@ public:
     }
 
     size_t position() const { return _at; }
+
+    /// The Contents version (0x129, 0x138, 0x143), for the few records whose
+    /// layout follows the file rather than a schema of their own.
+    uint16_t version = 0;
     size_t size() const { return _data.size(); }
 
     [[noreturn]] void fail(const std::string& what) const
@@ -401,25 +405,33 @@ public:
             _at += length;
             _load.push_back({true, cls, nullptr});
         }
-        else if (tag == 0x7FFF)
-        {
-            fail("a 32-bit class tag");
-        }
-        else if (tag & 0x8000)
-        {
-            const size_t index = tag & 0x7FFF;
-            if (index >= _load.size() || !_load[index].isClass)
-                fail("a bad class index");
-            cls = _load[index].cls;
-        }
         else
         {
-            if (tag >= _load.size() || _load[tag].isClass || !_load[tag].object)
-                fail("a bad object reference");
-            // An object inside itself would make a loop of the tree.
-            if (_load[tag].reading)
-                fail("a reference to an object still being read");
-            return _load[tag].object;
+            // Past 0x7FFE loaded entries, the tag is 0x7FFF and a u32
+            // follows: its top bit marks a class, the rest is the index.
+            bool isClass = (tag & 0x8000) != 0;
+            size_t index = tag & 0x7FFF;
+            if (tag == 0x7FFF)
+            {
+                const uint32_t big = u32();
+                isClass = (big & 0x80000000u) != 0;
+                index = big & 0x7FFFFFFFu;
+            }
+            if (isClass)
+            {
+                if (index >= _load.size() || !_load[index].isClass)
+                    fail("a bad class index");
+                cls = _load[index].cls;
+            }
+            else
+            {
+                if (index >= _load.size() || _load[index].isClass || !_load[index].object)
+                    fail("a bad object reference");
+                // An object inside itself would make a loop of the tree.
+                if (_load[index].reading)
+                    fail("a reference to an object still being read");
+                return _load[index].object;
+            }
         }
         const auto serializer = serializers.find(cls);
         if (serializer == serializers.end())
@@ -636,10 +648,10 @@ std::string readActions(Reader& r)
     const uint32_t version = r.u32();
     r.skip(12);
     if (version >= 5)
-    {
         r.u32();
+    // Version 4 (Flash 8) has the script without the u32 before it.
+    if (version >= 4)
         return r.cstring();
-    }
     return std::string();
 }
 
@@ -728,6 +740,81 @@ void readInstance(Reader& r, Object& o)
     o.symbol = r.u32();
     if (schema >= 19)
         r.skip(7);
+    else if (schema >= 14)
+        r.skip(3); // Flash 8
+}
+
+/// A bitmap on the stage: the CPicObj base, a schema byte (2), its matrix
+/// (bitmap pixels to the parent, translation in twips), the number N of its
+/// "Media N" and a byte (0).
+void readBitmapInstance(Reader& r, Object& o)
+{
+    readPicObj(r, o);
+    r.u8();
+    o.matrix = r.matrix();
+    o.number = r.u16();
+    r.u8();
+}
+
+/// An MFC CObList: a count, then that many objects.
+void readObList(Reader& r, Object& o)
+{
+    uint32_t count = r.u16();
+    if (count == 0xFFFF)
+        count = r.u32();
+    for (uint32_t i = 0; i < count; ++i)
+    {
+        if (Object* item = r.readObject(kTimeline))
+            o.children.push_back(item);
+    }
+}
+
+/// A shape hint of a shape tween: where it sits on the first keyframe and
+/// on the last (s32 x, y twips each), and a u32. Not carried into XFL.
+void readMorphHint(Reader& r, Object&)
+{
+    r.skip(20);
+}
+
+/// A shape tween's precomputed in-between shape. Phoenix tweens from the
+/// keyframes itself, so this is read past rather than kept: the frame only
+/// notes that it is shape tweened.
+void readMorphShape(Reader& r, Object&)
+{
+    r.u8(); // schema (2)
+    r.matrix();
+    r.matrix();
+    r.skip(8);
+    const uint16_t segments = r.u16();
+    for (uint16_t i = 0; i < segments; ++i)
+        r.readObject(kTimeline);
+    r.u16();
+    const uint16_t fills = r.u16();
+    for (uint16_t i = 0; i < fills; ++i)
+    {
+        r.color();
+        if (r.u16() != 0)
+            r.fail("a shape tween with a gradient or bitmap fill, which Phoenix cannot read yet");
+    }
+    const uint16_t lines = r.u16();
+    r.skip(static_cast<size_t>(lines) * 10); // color, u16 width, 4 bytes
+}
+
+/// One run of a shape tween's outline: 16 bytes, its start on the first
+/// keyframe and the last (s32 x, y twips each), then its curves.
+void readMorphSegment(Reader& r, Object&)
+{
+    r.skip(16 + 16);
+    const uint16_t curves = r.u16();
+    for (uint16_t i = 0; i < curves; ++i)
+        r.readObject(kTimeline);
+}
+
+/// One curve of a segment: control and anchor points on the first keyframe
+/// and the last (s32 x, y twips each), and a u32 (1 for a straight line).
+void readMorphCurve(Reader& r, Object&)
+{
+    r.skip(36);
 }
 
 void readSprite(Reader& r, Object& o)
@@ -784,7 +871,7 @@ void readText(Reader& r, Object& o)
         const bool wide = runSchema >= 10;
         run.font = wide ? r.wide8() : r.ansi8();
         run.color = r.color();
-        const size_t attrs = runSchema == 7 ? 23 : runSchema == 12 ? 35 : 0;
+        const size_t attrs = runSchema == 7 ? 23 : runSchema == 10 ? 24 : runSchema == 12 ? 35 : 0;
         if (attrs == 0)
             r.fail("a text run of a schema Phoenix does not know");
         std::vector<uint8_t> a(attrs);
@@ -827,6 +914,12 @@ void readText(Reader& r, Object& o)
 }
 
 const std::map<std::string, Reader::Serializer> kTimeline = {
+    {"CObList", readObList},
+    {"CMorphHintItem", readMorphHint},
+    {"CPicBitmap", readBitmapInstance},
+    {"CPicMorphShape", readMorphShape},
+    {"CMorphSegment", readMorphSegment},
+    {"CMorphCurve", readMorphCurve},
     {"CPicPage", readPage},
     {"CPicLayer", readLayer},
     {"CPicFrame", readFrame},
@@ -847,7 +940,7 @@ void readLinkage(Reader& r)
     r.cstring();
     r.cstring();
     r.cstring();
-    if (version >= 7)
+    if (version >= 5)
         r.u8();
     r.u32();
 }
@@ -873,9 +966,13 @@ ItemHeader readItem(Reader& r)
     readSource(r);
     if (version >= 6)
     {
+        // Flash 8 (Contents 0x138) has the byte alone; CS3 adds the rest.
         r.u8();
-        r.cstring();
-        r.u8();
+        if (r.version >= 0x143)
+        {
+            r.cstring();
+            r.u8();
+        }
     }
     return item;
 }
@@ -883,7 +980,7 @@ ItemHeader readItem(Reader& r)
 void readDocumentPage(Reader& r, Object& o)
 {
     const uint8_t schema = r.u8();
-    o.stream = schema >= 24 ? r.wide8() : r.ansi8();
+    o.stream = schema >= 22 ? r.wide8() : r.ansi8();
     o.name = r.cstring();
     o.number = static_cast<int>(r.u32());
     o.symbolType = r.u8();
@@ -899,10 +996,14 @@ void readDocumentPage(Reader& r, Object& o)
     r.u32();
     readLinkage(r);
     readSource(r);
-    if (schema >= 24)
+    if (schema >= 22)
     {
-        r.u8();
-        r.cstring();
+        // Schema 22 (Flash 8) is schema 24 (CS3) without a few fields.
+        if (schema >= 24)
+        {
+            r.u8();
+            r.cstring();
+        }
         r.u32();
         r.u8();
         r.cstring();
@@ -919,16 +1020,22 @@ void readDocumentPage(Reader& r, Object& o)
         r.u8();
         r.u32();
         r.cstring();
-        r.skip(16);
-        r.cstring();
+        if (schema >= 24)
+        {
+            r.skip(16);
+            r.cstring();
+        }
         r.skip(8);
         r.cstring();
         r.cstring();
         r.u32();
         r.cstring();
-        r.u32();
-        r.skip(16); // scale-9 rectangle
-        r.skip(9);
+        if (schema >= 24)
+        {
+            r.u32();
+            r.skip(16); // scale-9 rectangle
+            r.skip(9);
+        }
     }
     else
     {
@@ -936,7 +1043,8 @@ void readDocumentPage(Reader& r, Object& o)
     }
 }
 
-void readMediaCommon(Reader& r, Object& o)
+/// The fields every media record starts with; returns its schema.
+uint8_t readMediaCommon(Reader& r, Object& o)
 {
     const uint8_t schema = r.u8();
     o.stream = schema >= 6 ? r.wide8() : r.ansi8();
@@ -945,6 +1053,7 @@ void readMediaCommon(Reader& r, Object& o)
     o.importPath = r.cstring();
     o.lastModified = r.u32();
     o.item = readItem(r);
+    return schema;
 }
 
 void readMediaBits(Reader& r, Object& o)
@@ -959,13 +1068,15 @@ void readMediaBits(Reader& r, Object& o)
 
 void readMediaSound(Reader& r, Object& o)
 {
-    readMediaCommon(r, o);
+    const uint8_t schema = readMediaCommon(r, o);
     r.u32();
     r.u8();
     o.format = r.u16();
     o.sampleCount = r.u32();
     r.u32();
     r.skip(11);
+    if (schema >= 6)
+        r.cstring();
 }
 
 void readColorDef(Reader& r, Object& o)
@@ -989,10 +1100,19 @@ void readQtAudio(Reader& r, Object&)
     r.u32();
 }
 
+/// An embedded video (CS4): the fields every media record has, then a u32
+/// (1). [S] one file.
+void readMediaVideo(Reader& r, Object& o)
+{
+    readMediaCommon(r, o);
+    r.u32();
+}
+
 const std::map<std::string, Reader::Serializer> kContents = {
     {"CDocumentPage", readDocumentPage},
     {"CMediaBits", readMediaBits},
     {"CMediaSound", readMediaSound},
+    {"CMediaVideoStream", readMediaVideo},
     {"CColorDef", readColorDef},
     {"CQTAudioSettings", readQtAudio},
 };
@@ -1023,13 +1143,14 @@ std::vector<Object*> readList(Reader& r)
     return list;
 }
 
-Contents readContents(Reader& r)
+/// Reads into \a c as it goes, so that what came before a failure is kept.
+void readContents(Reader& r, Contents& c)
 {
-    Contents c;
     const uint16_t version = r.u16();
-    if (version != 0x129 && version != 0x143)
+    if (version != 0x129 && version != 0x138 && version != 0x143)
         r.fail("a Contents version Phoenix does not know");
-    r.skip(version >= 0x143 ? 25 : 13);
+    r.version = version;
+    r.skip(version >= 0x143 ? 25 : version >= 0x138 ? 17 : 13);
     c.scenes = readList(r);
     r.skip(6);
     c.symbols = readList(r);
@@ -1061,7 +1182,7 @@ Contents readContents(Reader& r)
         }
     };
     pairs();
-    if (version >= 0x143)
+    if (version >= 0x138)
     {
         const uint32_t profiles = r.u32();
         for (uint32_t i = 0; i < profiles; ++i)
@@ -1091,7 +1212,6 @@ Contents readContents(Reader& r)
     }
     // The rest (named settings and the save history) says nothing Phoenix
     // shows.
-    return c;
 }
 
 // ---------------------------------------------------------------------------
@@ -1236,6 +1356,20 @@ private:
         const std::string path = _mediaPaths[m.number];
         const std::string dat = m.stream + ".dat";
         const auto data = _streams.find(m.stream);
+        if (m.cls == "CMediaVideoStream")
+        {
+            // An embedded video: its stream is in a layout Phoenix does not
+            // know, so the item keeps only where the video came from.
+            tinyxml2::XMLElement* item = doc.NewElement("DOMVideoItem");
+            item->SetAttribute("name", path.c_str());
+            if (!m.item.itemId.empty())
+                item->SetAttribute("itemID", m.item.itemId.c_str());
+            item->SetAttribute("sourceLastImported", m.lastModified);
+            if (!m.importPath.empty())
+                item->SetAttribute("sourceExternalFilepath", m.importPath.c_str());
+            parent->InsertEndChild(item);
+            return;
+        }
         if (data != _streams.end())
             files["bin/" + dat] = data->second;
         if (m.cls == "CMediaBits")
@@ -1443,6 +1577,15 @@ private:
         else if (element->cls == "CPicText")
         {
             parent->InsertEndChild(writeText(doc, *element));
+        }
+        else if (element->cls == "CPicBitmap")
+        {
+            tinyxml2::XMLElement* node = doc.NewElement("DOMBitmapInstance");
+            const auto media = _mediaPaths.find(element->number);
+            if (media != _mediaPaths.end())
+                node->SetAttribute("libraryItemName", media->second.c_str());
+            writeMatrix(doc, node, element->matrix);
+            parent->InsertEndChild(node);
         }
     }
 
@@ -1748,7 +1891,7 @@ private:
 } // namespace
 
 bool convert(const std::map<std::string, std::vector<uint8_t>>& streams,
-    std::map<std::string, std::vector<uint8_t>>& files, std::string& error)
+    std::map<std::string, std::vector<uint8_t>>& files, std::string& error, std::string* warning)
 {
     files.clear();
     error.clear();
@@ -1758,24 +1901,62 @@ bool convert(const std::map<std::string, std::vector<uint8_t>>& streams,
         error = "The document has no Contents stream.";
         return false;
     }
+    // MFC objects carry no length, so a class Phoenix does not know (or
+    // damage) ends the stream it is in: nothing after it can be found. What
+    // was read before it is kept, and the rest of the document still read.
+    std::string notes;
     std::vector<std::unique_ptr<Object>> pool;
     try
     {
-        Reader contentsReader(contentsStream->second, "Contents", pool);
-        const Contents contents = readContents(contentsReader);
+        Contents contents;
+        {
+            Reader contentsReader(contentsStream->second, "Contents", pool);
+            try
+            {
+                readContents(contentsReader, contents);
+            }
+            catch (const ParseError& failure)
+            {
+                // Without the version nothing in it can be trusted.
+                if (contentsReader.version == 0)
+                    throw;
+                notes += std::string(failure.what()) + "\n";
+            }
+        }
 
+        // The timeline streams: "Page N" and "Symbol N", or in CS4 "P N <time>"
+        // and "S N <time>", as the scenes and symbols name them.
+        std::set<std::string> named;
+        for (const std::vector<Object*>* list : {&contents.scenes, &contents.symbols})
+        {
+            for (const Object* page : *list)
+                named.insert(page->stream);
+        }
         std::map<std::string, Object*> timelines;
         for (const auto& stream : streams)
         {
-            if (stream.first.compare(0, 5, "Page ") != 0 && stream.first.compare(0, 7, "Symbol ") != 0)
+            if (!named.count(stream.first) && stream.first.compare(0, 5, "Page ") != 0 &&
+                stream.first.compare(0, 7, "Symbol ") != 0)
                 continue;
+            const size_t first = pool.size();
             Reader reader(stream.second, stream.first, pool);
-            if (reader.u8() != 1)
-                reader.fail("a stream that does not start with a page");
-            Object* page = reader.readObject(kTimeline);
-            if (!page || page->cls != "CPicPage")
-                reader.fail("a stream without a page");
-            timelines[stream.first] = page;
+            try
+            {
+                if (reader.u8() != 1)
+                    reader.fail("a stream that does not start with a page");
+                Object* page = reader.readObject(kTimeline);
+                if (!page || page->cls != "CPicPage")
+                    reader.fail("a stream without a page");
+                timelines[stream.first] = page;
+            }
+            catch (const ParseError& failure)
+            {
+                notes += std::string(failure.what()) + "\n";
+                // The page as far as it was read: its layers before the
+                // failure whole, the one it was in up to it.
+                if (pool.size() > first && pool[first]->cls == "CPicPage")
+                    timelines[stream.first] = pool[first].get();
+            }
         }
 
         Writer writer(contents, timelines, streams);
@@ -1787,6 +1968,8 @@ bool convert(const std::map<std::string, std::vector<uint8_t>>& streams,
         files.clear();
         return false;
     }
+    if (warning && !notes.empty())
+        *warning = "Parts of this Flash CS4 (or earlier) document could not be read and are missing:\n" + notes;
     return true;
 }
 

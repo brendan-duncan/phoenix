@@ -206,11 +206,11 @@ TEST(compound_file_survives_a_difat_that_points_at_itself)
 namespace {
 
 /// A Contents stream with nothing in it, of the oldest version read.
-std::vector<uint8_t> emptyContents()
+std::vector<uint8_t> emptyContents(uint16_t version = 0x129)
 {
     std::vector<uint8_t> contents(400, 0);
-    contents[0] = 0x29;
-    contents[1] = 0x01;
+    contents[0] = static_cast<uint8_t>(version);
+    contents[1] = static_cast<uint8_t>(version >> 8);
     return contents;
 }
 
@@ -227,21 +227,23 @@ std::vector<uint8_t> pageStream(const std::vector<uint8_t>& body)
 
 } // namespace
 
-TEST(binary_fla_refuses_an_object_inside_itself)
+TEST(binary_fla_stops_a_stream_at_an_object_inside_itself)
 {
-    // The page's first child is a reference to the page, still being read.
+    // The page's first child is a reference to the page, still being read:
+    // the page ends there, and the document opens with a warning.
     std::map<std::string, std::vector<uint8_t>> streams;
     streams["Contents"] = emptyContents();
     streams["Page 1"] = pageStream({0, 0, 2, 0});
     std::map<std::string, std::vector<uint8_t>> files;
     std::string error;
-    CHECK(!BinaryFla::convert(streams, files, error));
-    CHECK(error.find("still being read") != std::string::npos);
+    std::string warning;
+    CHECK(BinaryFla::convert(streams, files, error, &warning));
+    CHECK(warning.find("still being read") != std::string::npos && files.count("DOMDocument.xml"));
 }
 
-TEST(binary_fla_refuses_objects_nested_past_a_limit)
+TEST(binary_fla_stops_a_stream_at_objects_nested_past_a_limit)
 {
-    // Shapes inside shapes, thousands deep: an error, not a stack overflow.
+    // Shapes inside shapes, thousands deep: a warning, not a stack overflow.
     std::vector<uint8_t> body = {0, 0};
     const std::string cls = "CPicShape";
     body.insert(body.end(), {0xFF, 0xFF, 0, 0, static_cast<uint8_t>(cls.size()), 0});
@@ -254,6 +256,61 @@ TEST(binary_fla_refuses_objects_nested_past_a_limit)
     streams["Page 1"] = pageStream(body);
     std::map<std::string, std::vector<uint8_t>> files;
     std::string error;
-    CHECK(!BinaryFla::convert(streams, files, error));
-    CHECK(error.find("too deep") != std::string::npos);
+    std::string warning;
+    CHECK(BinaryFla::convert(streams, files, error, &warning));
+    CHECK(warning.find("too deep") != std::string::npos);
+}
+
+TEST(binary_fla_keeps_what_comes_before_a_class_it_does_not_know)
+{
+    // A layer whose frame holds an object of a class Phoenix cannot read:
+    // the layer is kept, up to that object.
+    std::vector<uint8_t> body = {0, 0};
+    const auto declare = [&body](const std::string& name) {
+        body.insert(body.end(), {0xFF, 0xFF, 0, 0, static_cast<uint8_t>(name.size()), 0});
+        body.insert(body.end(), name.begin(), name.end());
+    };
+    declare("CPicLayer");
+    body.insert(body.end(), {0, 0});
+    declare("CPicNotAClass");
+    std::map<std::string, std::vector<uint8_t>> streams;
+    streams["Contents"] = emptyContents();
+    streams["Page 1"] = pageStream(body);
+    streams["Symbol 1"] = pageStream({0, 0, 0, 0});
+    std::map<std::string, std::vector<uint8_t>> files;
+    std::string error;
+    std::string warning;
+    CHECK(BinaryFla::convert(streams, files, error, &warning));
+    CHECK(warning.find("CPicNotAClass") != std::string::npos && warning.find("Page 1") != std::string::npos);
+    CHECK(warning.find("Symbol 1") == std::string::npos);
+
+    // A Contents version Phoenix does not know still refuses the document.
+    streams["Contents"][0] = 0x99;
+    CHECK(!BinaryFla::convert(streams, files, error, &warning) && error.find("version") != std::string::npos);
+}
+
+TEST(binary_fla_reads_flash_8_contents_and_32_bit_tags)
+{
+    // Contents 0x138 (Flash 8), and a page whose second layer names its
+    // class with the 32-bit tag a stream of more than 0x7FFE objects uses.
+    std::vector<uint8_t> layer = {0, 0, 0, 0};       // CPicObj: schema, flags, no children
+    layer.insert(layer.end(), 8, 0);                 // transformation point
+    layer.push_back(11);                             // layer schema
+    layer.push_back(0);                              // name
+    layer.insert(layer.end(), 3 + 4 + 4 + 4 + 4, 0); // current, hidden, locked; u32; color; u32 x2
+    layer.insert(layer.end(), {0, 0, 0, 1, 1});      // type, no parent, u8, autoNamed
+    std::vector<uint8_t> body = {0, 0, 0xFF, 0xFF, 0, 0, 9, 0};
+    const std::string cls = "CPicLayer";
+    body.insert(body.end(), cls.begin(), cls.end());
+    body.insert(body.end(), layer.begin(), layer.end());
+    body.insert(body.end(), {0xFF, 0x7F, 0x03, 0x00, 0x00, 0x80}); // 0x7FFF, class 3
+    body.insert(body.end(), layer.begin(), layer.end());
+    std::map<std::string, std::vector<uint8_t>> streams;
+    streams["Contents"] = emptyContents(0x138);
+    streams["Page 1"] = pageStream(body);
+    std::map<std::string, std::vector<uint8_t>> files;
+    std::string error;
+    std::string warning;
+    // Both layers read (a misread tag would stop the page with a warning).
+    CHECK(BinaryFla::convert(streams, files, error, &warning) && warning.empty() && files.count("DOMDocument.xml"));
 }

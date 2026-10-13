@@ -1741,6 +1741,12 @@ void MainWindow::loadFLAFile(const QString& filePath)
 
         adoptDocument(document, filePath, displayName);
         addToRecentFiles(filePath);
+        if (!parser.warningString().empty())
+        {
+            QMessageBox::information(this, "Open Document",
+                QString("%1\n\n%2").arg(fileInfo.fileName(),
+                    QString::fromStdString(parser.warningString()).trimmed()));
+        }
     }
     else
     {

@@ -16,8 +16,11 @@
 /// folder membership); frames (duration, classic tween and ease, label,
 /// script, sound); shapes and groups (solid, gradient and bitmap fills,
 /// strokes, edges to the 1/256 twip); symbol instances (matrix,
-/// transformation point, loop and first frame, color effect, name); static
-/// text; bitmaps (JPEG and lossless) and sounds.
+/// transformation point, loop and first frame, color effect, name); bitmaps
+/// placed on the stage; shape tweens (as the tween type: Phoenix tweens from
+/// the keyframes); static text; bitmaps (JPEG and lossless), sounds, and
+/// embedded videos (as where they came from). MX 2004, Flash 8 and CS3
+/// documents are read in full; CS4 drawing objects are not yet.
 ///
 /// The format is undocumented. The layouts here follow the independent
 /// reverse engineering in fla-decoder (MIT, Ed Moore) and were checked
@@ -28,8 +31,10 @@ namespace BinaryFla {
 /// Converts the streams of a binary FLA (by name: "Contents", "Page 1",
 /// "Symbol 3", "Media 2"...) into XFL files by path: DOMDocument.xml,
 /// LIBRARY/<item>.xml and bin/<media>.dat. False with \a error set when the
-/// document cannot be read.
+/// document cannot be read. A part that cannot be read (a class Phoenix does
+/// not know ends its stream) is left out from there on, and \a warning, when
+/// given, says which.
 bool convert(const std::map<std::string, std::vector<uint8_t>>& streams,
-    std::map<std::string, std::vector<uint8_t>>& files, std::string& error);
+    std::map<std::string, std::vector<uint8_t>>& files, std::string& error, std::string* warning = nullptr);
 
 } // namespace BinaryFla

@@ -20,9 +20,17 @@ public:
         return _errorString;
     }
 
+    /// What of a document that did open could not be read, for the person
+    /// opening it; empty when all of it was.
+    const std::string& warningString() const
+    {
+        return _warningString;
+    }
+
 private:
     fla::FLADocument* parseUnguarded(const std::string& filePath);
     static void keepUnreadFiles(const ZipReader& zipReader, fla::Document& document);
 
     std::string _errorString;
+    std::string _warningString;
 };

@@ -699,6 +699,8 @@ std::unique_ptr<fla::FLADocument> load(const std::string& path, std::string& err
         FLAParser parser;
         document.reset(parser.parse(path));
         error = parser.errorString();
+        if (document && !parser.warningString().empty())
+            std::fprintf(stderr, "%s", parser.warningString().c_str());
     }
     if (document && !document->document)
         document.reset();

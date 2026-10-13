@@ -63,7 +63,7 @@ fla::FLADocument* FLAParser::parseUnguarded(const std::string& filePath)
                 return nullptr;
             }
             std::map<std::string, std::vector<uint8_t>> files;
-            if (!BinaryFla::convert(compoundFile.streams(), files, _errorString))
+            if (!BinaryFla::convert(compoundFile.streams(), files, _errorString, &_warningString))
                 return nullptr;
             zipReader.openMemory(std::move(files));
             fromBinary = true;
