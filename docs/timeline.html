@@ -101,6 +101,7 @@
     <dt>Outline color</dt><dd>The layer's color for outlines and highlights.</dd>
     <dt>View layer as outlines</dt><dd>Draws the layer's artwork as outlines.</dd>
     <dt>Transparent</dt><dd>Shows the layer faded, at the percentage you set, while you edit.</dd>
+    <dt>Follow parent's</dt><dd>For a layer that follows a parent layer, whether it takes on the parent's <strong>Scale</strong>, <strong>Skew</strong> and <strong>Flip</strong>. See <a href="#layer-parenting">Layer parenting</a>.</dd>
   </dl>
 </div>
 
@@ -109,6 +110,8 @@
 <p>A layer can follow another layer's artwork, the way a forearm follows the upper arm: move, turn or scale the parent and the child goes with it.</p>
 
 <p>To make a layer follow another, right-click it and choose the layer from <strong>Parent Layer</strong> (or <strong>None</strong> to set it free), or use the <strong>parenting view</strong>: click the linked-circles button at the top right of the layer list and a column of handles appears, with a line from each layer to the one it follows, in that layer's color. Drag a layer's handle onto another layer to make it follow that one, or let go below the layers so it follows none. The objects stay where they are on the stage. A layer can't follow one that already follows it. Hover over a layer's name to see which layer it follows. For multiplane camera moves, see <a href="rigging.html#multiplane-camera">Rigs and motion</a>.</p>
+
+<p>A child always follows its parent's position and rotation. By default it takes on the parent's scale, skew and flip too; turn any of them off under <strong>Follow parent's</strong> in Layer Properties and the child keeps its own. With <strong>Scale</strong> off, a parent grown to twice its size carries the child along without growing it, and the child's distance from the parent's pivot stays as drawn. With <strong>Flip</strong> off, a parent mirrored side to side leaves the child unmirrored; a parent flipped top to bottom is a side-to-side flip turned half round, so the child still turns with it. The settings go with the child layer and apply through the whole chain above it. Changing them can move the child on the stage, and Undo puts it back.</p>
 
 <h2>Frame view</h2>
 

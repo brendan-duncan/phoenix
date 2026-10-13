@@ -11,6 +11,7 @@
 
 #include <algorithm>
 #include <cstdio>
+#include <cmath>
 #include <cstdlib>
 
 namespace fla {
@@ -309,6 +310,7 @@ LayerSnapshot snapshotLayers(const Timeline& timeline)
         state.visible = layer->visible;
         state.locked = layer->locked;
         state.outline = layer->outline;
+        state.extraAttributes = layer->extraAttributes;
         snapshot.push_back(state);
     }
     return snapshot;
@@ -340,6 +342,7 @@ void LayerEditCommand::apply(Timeline& timeline, const LayerSnapshot& snapshot)
         layer->visible = state.visible;
         layer->locked = state.locked;
         layer->outline = state.outline;
+        layer->extraAttributes = state.extraAttributes;
     }
     renumberParents(timeline);
 }
@@ -561,6 +564,93 @@ std::vector<std::pair<std::string, std::string>> withTransparency(const Layer& l
     if (percent > 0 && percent < 100)
         attributes.emplace_back("phoenixTransparency", std::to_string(percent));
     return attributes;
+}
+
+namespace {
+
+const char* const kParentScale = "phoenixParentScale";
+const char* const kParentSkew = "phoenixParentSkew";
+const char* const kParentFlip = "phoenixParentFlip";
+
+} // namespace
+
+ParentPropagation propagationOf(const Layer& layer)
+{
+    ParentPropagation propagation;
+    for (const auto& [key, value] : layer.extraAttributes)
+    {
+        if (key == kParentScale)
+            propagation.scale = value != "false";
+        else if (key == kParentSkew)
+            propagation.skew = value != "false";
+        else if (key == kParentFlip)
+            propagation.flip = value != "false";
+    }
+    return propagation;
+}
+
+std::vector<std::pair<std::string, std::string>> withPropagation(
+    const std::vector<std::pair<std::string, std::string>>& from, ParentPropagation propagation)
+{
+    std::vector<std::pair<std::string, std::string>> attributes;
+    for (const auto& attribute : from)
+        if (attribute.first != kParentScale && attribute.first != kParentSkew && attribute.first != kParentFlip)
+            attributes.push_back(attribute);
+    if (!propagation.scale)
+        attributes.emplace_back(kParentScale, "false");
+    if (!propagation.skew)
+        attributes.emplace_back(kParentSkew, "false");
+    if (!propagation.flip)
+        attributes.emplace_back(kParentFlip, "false");
+    return attributes;
+}
+
+Transform propagatedTransform(const Transform& parent, ParentPropagation propagation)
+{
+    if (propagation.all())
+        return parent;
+    // The x axis's image is (a, b), the y axis's (c, d). A flip, a mirror
+    // across the parent's y axis, is taken off first, leaving no mirror.
+    double a = parent.m11;
+    double b = parent.m12;
+    const double c = parent.m21;
+    const double d = parent.m22;
+    const bool flipped = a * d - b * c < 0.0;
+    if (flipped)
+    {
+        a = -a;
+        b = -b;
+    }
+    const double scaleX = std::hypot(a, b);
+    if (scaleX < 1e-12)
+        return parent;
+    // The rotation turns the x axis to (a, b); the y axis, turned back by
+    // it, is the skew's slant along x and the y scale.
+    const double cosine = a / scaleX;
+    const double sine = b / scaleX;
+    const double along = c * cosine + d * sine;
+    double scaleY = d * cosine - c * sine;
+    double slant = std::abs(scaleY) < 1e-12 ? 0.0 : along / scaleY;
+    double sx = scaleX;
+    if (!propagation.scale)
+    {
+        sx = 1.0;
+        scaleY = 1.0;
+    }
+    if (!propagation.skew)
+        slant = 0.0;
+
+    Transform result(parent);
+    result.m11 = sx * cosine;
+    result.m12 = sx * sine;
+    result.m21 = slant * scaleY * cosine - scaleY * sine;
+    result.m22 = slant * scaleY * sine + scaleY * cosine;
+    if (flipped && propagation.flip)
+    {
+        result.m11 = -result.m11;
+        result.m12 = -result.m12;
+    }
+    return result;
 }
 
 std::vector<int> withContents(const Timeline& timeline, std::vector<int> indices)

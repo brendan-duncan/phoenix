@@ -2,6 +2,7 @@
 
 #include "command.h"
 #include "../data/layer.h"
+#include "../data/transform.h"
 
 #include <cstdint>
 
@@ -94,6 +95,9 @@ struct LayerState
     bool visible = true;
     bool locked = false;
     bool outline = false;
+    /// Settings kept for the file or for Phoenix: parenting rigs, layer
+    /// transparency, which parts of a parent's transform it takes on.
+    std::vector<std::pair<std::string, std::string>> extraAttributes;
 };
 
 /// A timeline's layers, top first, as an edit leaves them.
@@ -157,6 +161,34 @@ bool setKind(LayerSnapshot& snapshot, Layer* layer, Kind kind);
 /// Kept on the layer for Phoenix; exports draw the layer in full.
 int transparencyOf(const Layer& layer);
 std::vector<std::pair<std::string, std::string>> withTransparency(const Layer& layer, int percent);
+
+/// Layer parenting: which parts of its parent's transform a parented layer
+/// takes on. Position and rotation always carry over; scale, skew and flip
+/// each can be left behind. Kept on the child layer for Phoenix as
+/// phoenixParentScale, phoenixParentSkew and phoenixParentFlip, written
+/// only as "false"; the file format has no setting for this, so a file
+/// saved with all three on reads the same anywhere.
+struct ParentPropagation
+{
+    bool scale = true;
+    bool skew = true;
+    bool flip = true;
+
+    bool all() const { return scale && skew && flip; }
+};
+
+ParentPropagation propagationOf(const Layer& layer);
+/// A layer's \a attributes with \a propagation in place of what they said.
+std::vector<std::pair<std::string, std::string>> withPropagation(
+    const std::vector<std::pair<std::string, std::string>>& attributes, ParentPropagation propagation);
+
+/// \a parent, a parent's transform, with the parts \a propagation leaves
+/// behind taken out. It is read as translate * rotate * skew * scale * flip,
+/// the skew a slant of the parent's y axis along its x axis and the flip a
+/// mirror across its y axis (a parent flipped top to bottom is one flipped
+/// side to side and turned half round, so a child that leaves flips behind
+/// still turns with it). With everything taken on it is \a parent exactly.
+Transform propagatedTransform(const Transform& parent, ParentPropagation propagation);
 
 /// The layers at \a indices with everything inside them, in timeline order:
 /// a selection of layers grown to whole folders, masks and guides.

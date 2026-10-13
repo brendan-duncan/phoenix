@@ -8,6 +8,7 @@
 #include <string>
 #include "../src/edit/layer_commands.h"
 
+#include <cmath>
 #include <memory>
 
 namespace {
@@ -335,4 +336,105 @@ TEST(layer_parents_in_a_circle_do_not_hang)
     fla::layers::setKind(snapshot, mask, fla::layers::Kind::Normal);
     fla::layers::setKind(snapshot, guide, fla::layers::Kind::Masked);
     CHECK(snapshot.size() == 2);
+}
+
+namespace {
+
+/// A parent's transform built as translate * rotate * skew * scale * flip,
+/// the skew a slant of y along x, the flip a mirror across the y axis.
+fla::Transform parentMatrix(double degrees, double sx, double sy, double slant, bool flip, double tx = 0.0,
+    double ty = 0.0)
+{
+    const double r = degrees * 3.14159265358979323846 / 180.0;
+    const double cosine = std::cos(r);
+    const double sine = std::sin(r);
+    const double f = flip ? -1.0 : 1.0;
+    return fla::Transform(f * sx * cosine, f * sx * sine, slant * sy * cosine - sy * sine,
+        slant * sy * sine + sy * cosine, tx, ty);
+}
+
+void checkSame(const fla::Transform& a, const fla::Transform& b)
+{
+    CHECK_NEAR(a.m11, b.m11);
+    CHECK_NEAR(a.m12, b.m12);
+    CHECK_NEAR(a.m21, b.m21);
+    CHECK_NEAR(a.m22, b.m22);
+    CHECK_NEAR(a.tx, b.tx);
+    CHECK_NEAR(a.ty, b.ty);
+}
+
+fla::layers::ParentPropagation follows(bool scale, bool skew, bool flip)
+{
+    fla::layers::ParentPropagation propagation;
+    propagation.scale = scale;
+    propagation.skew = skew;
+    propagation.flip = flip;
+    return propagation;
+}
+
+} // namespace
+
+TEST(parent_propagation_settings_round_trip)
+{
+    fla::Layer layer(nullptr);
+    layer.extraAttributes = {{"layerRiggingIndex", "0"}};
+    CHECK(fla::layers::propagationOf(layer).all());
+    layer.extraAttributes = fla::layers::withPropagation(layer.extraAttributes, follows(false, true, false));
+    const fla::layers::ParentPropagation read = fla::layers::propagationOf(layer);
+    CHECK(!read.scale && read.skew && !read.flip);
+    CHECK(layer.extraAttributes.size() == 3 && layer.extraAttributes[1].first == "phoenixParentScale");
+    // Everything followed again writes nothing.
+    layer.extraAttributes = fla::layers::withPropagation(layer.extraAttributes, follows(true, true, true));
+    CHECK(layer.extraAttributes.size() == 1 && fla::layers::propagationOf(layer).all());
+}
+
+TEST(parent_propagation_leaves_out_what_is_off)
+{
+    const fla::Transform full = parentMatrix(30.0, 2.0, 3.0, 0.5, true, 40.0, -7.0);
+
+    // Everything followed: the parent's transform exactly.
+    checkSame(fla::layers::propagatedTransform(full, follows(true, true, true)), full);
+    // Each part left out on its own, the rest kept.
+    checkSame(fla::layers::propagatedTransform(full, follows(false, true, true)),
+        parentMatrix(30.0, 1.0, 1.0, 0.5, true, 40.0, -7.0));
+    checkSame(fla::layers::propagatedTransform(full, follows(true, false, true)),
+        parentMatrix(30.0, 2.0, 3.0, 0.0, true, 40.0, -7.0));
+    checkSame(fla::layers::propagatedTransform(full, follows(true, true, false)),
+        parentMatrix(30.0, 2.0, 3.0, 0.5, false, 40.0, -7.0));
+    // Only position and rotation.
+    checkSame(fla::layers::propagatedTransform(full, follows(false, false, false)),
+        parentMatrix(30.0, 1.0, 1.0, 0.0, false, 40.0, -7.0));
+
+    // A parent with no flip is the same with flips left out.
+    const fla::Transform plain = parentMatrix(-120.0, 0.5, 1.5, -0.25, false, 3.0, 4.0);
+    checkSame(fla::layers::propagatedTransform(plain, follows(true, true, false)), plain);
+    // Nor one of scale 1 with scale left out.
+    const fla::Transform unscaled = parentMatrix(75.0, 1.0, 1.0, 0.3, true);
+    checkSame(fla::layers::propagatedTransform(unscaled, follows(false, true, true)), unscaled);
+
+    // Flipped top to bottom: a side to side flip turned half round, so with
+    // flips left out the child still turns half round.
+    checkSame(fla::layers::propagatedTransform(fla::Transform(1.0, 0.0, 0.0, -1.0, 0.0, 0.0),
+                  follows(true, true, false)),
+        fla::Transform(-1.0, 0.0, 0.0, -1.0, 0.0, 0.0));
+    // A collapsed parent is left as it is.
+    const fla::Transform collapsed(0.0, 0.0, 0.0, 0.0, 5.0, 6.0);
+    checkSame(fla::layers::propagatedTransform(collapsed, follows(false, false, false)), collapsed);
+}
+
+TEST(layer_properties_edit_undoes_layer_settings)
+{
+    std::unique_ptr<fla::Timeline> timeline(new fla::Timeline(nullptr));
+    fla::Layer* layer = new fla::Layer(timeline.get());
+    timeline->layers = {layer};
+    fla::LayerSnapshot after = fla::snapshotLayers(*timeline);
+    after[0].extraAttributes = fla::layers::withPropagation(after[0].extraAttributes, follows(true, false, true));
+    fla::CommandStack stack;
+    stack.push(fla::CommandPtr(new fla::LayerEditCommand(timeline.get(), fla::snapshotLayers(*timeline), after,
+        "Layer Properties")));
+    CHECK(!fla::layers::propagationOf(*layer).skew);
+    stack.undo();
+    CHECK(fla::layers::propagationOf(*layer).all() && layer->extraAttributes.empty());
+    stack.redo();
+    CHECK(!fla::layers::propagationOf(*layer).skew);
 }

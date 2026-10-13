@@ -2548,8 +2548,15 @@ QTransform PhoenixView::rigTransform(const fla::Layer* layer, const fla::Frame* 
         if (!parent.frame || parent.frame->elements.empty())
             return QTransform();
         const fla::Transform t = shownTransform(parent, 0);
-        return QTransform(t.m11, t.m12, t.m21, t.m22, t.tx, t.ty) *
+        const QTransform world = QTransform(t.m11, t.m12, t.m21, t.m22, t.tx, t.ty) *
             rigTransform(candidate, parent.frame, loopType, firstFrame, depth + 1);
+        // The parent's scale, skew or flip, as the layer takes them on.
+        const fla::layers::ParentPropagation propagation = fla::layers::propagationOf(*layer);
+        if (propagation.all())
+            return world;
+        const fla::Transform kept = fla::layers::propagatedTransform(
+            fla::Transform(world.m11(), world.m12(), world.m21(), world.m22(), world.dx(), world.dy()), propagation);
+        return QTransform(kept.m11, kept.m12, kept.m21, kept.m22, kept.tx, kept.ty);
     }
     return QTransform();
 }
