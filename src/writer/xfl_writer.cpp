@@ -45,8 +45,14 @@ using tinyxml2::XMLPrinter;
 /// 0.10000000000000001 all through the file.
 std::string formatDouble(double value)
 {
-    if (value == static_cast<long long>(value) &&
-        std::fabs(value) < 1.0e15)
+    // A file cannot hold "nan" or "inf", which no reader takes for a number;
+    // zero is the least harm.
+    if (!std::isfinite(value))
+        return "0";
+
+    // In range before the cast, which is undefined past a long long.
+    if (std::fabs(value) < 1.0e15 &&
+        value == static_cast<long long>(value))
     {
         return std::to_string(static_cast<long long>(value));
     }

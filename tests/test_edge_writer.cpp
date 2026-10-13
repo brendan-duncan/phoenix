@@ -350,4 +350,27 @@ TEST(damaged_edge_numbers_read_as_zero)
     CHECK_NEAR(PathParser::parseNumber("-", pos), 0.0);
     std::unique_ptr<fla::Edge> edge = parseEdge("!- #|# - ");
     CHECK(true);
+
+TEST(coordinates_past_the_format_or_not_numbers_stay_readable)
+{
+    // Not a number writes as the origin, never as "nan".
+    CHECK(EdgeWriter::formatCoordinate(std::nan("")) == "0");
+    CHECK(EdgeWriter::formatMorphCoordinate(std::nan("")) == "#0.0");
+    const std::string infinite = EdgeWriter::formatCoordinate(HUGE_VAL);
+    CHECK(infinite.find("inf") == std::string::npos && infinite.find('#') == std::string::npos);
+
+    // Past the hex form's 24 bits of whole twips (about 419,000 pixels) the
+    // fraction gives way to the nearest whole twip, which reads back on the
+    // right side of the drawing.
+    const double far = 500000.0 + 0.3 / 20.0;
+    CHECK(std::fabs(roundTripCoordinate(far) - far) <= 0.5 / 20.0);
+    CHECK(std::fabs(roundTripCoordinate(-far) + far) <= 0.5 / 20.0);
+    const double justInside = 400000.0 + 0.5 / 20.0;
+    CHECK(EdgeWriter::formatCoordinate(justInside)[0] == '#');
+    CHECK(std::fabs(roundTripCoordinate(justInside) - justInside) <= 1.0e-9);
+
+    // A morph coordinate past what its whole part holds stays at the far
+    // edge rather than wrapping round to the other side.
+    const std::string morphFar = EdgeWriter::formatMorphCoordinate(1.0e9);
+    CHECK(morphFar == "#7FFFFF.FF");
 }

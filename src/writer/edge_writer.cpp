@@ -1,5 +1,6 @@
 #include "edge_writer.h"
 
+#include <algorithm>
 #include <cmath>
 #include <cstdio>
 
@@ -38,15 +39,30 @@ void appendHex(long long value, int minDigits, std::string& out)
         out.push_back(buffer[i - 1]);
 }
 
+/// \a value rounded, held within plus or minus \a limit. Not a number
+/// comes out as 0: rounding one, or anything past the integers, is undefined.
+long long roundedWithin(double value, double limit)
+{
+    if (std::isnan(value))
+        return 0;
+    return std::llround(std::max(-limit, std::min(limit, value)));
+}
+
+/// Whole twips in a pixel coordinate.
+long long wholeTwips(double pixels)
+{
+    return roundedWithin(pixels * 20.0, 4.0e18);
+}
+
 /// Whole twips, as the `cubics` text writes them.
 std::string twips(const Point& point)
 {
-    return std::to_string(std::llround(point.x * 20.0)) + " " + std::to_string(std::llround(point.y * 20.0));
+    return std::to_string(wholeTwips(point.x)) + " " + std::to_string(wholeTwips(point.y));
 }
 
 std::string twipsComma(const Point& point)
 {
-    return std::to_string(std::llround(point.x * 20.0)) + "," + std::to_string(std::llround(point.y * 20.0));
+    return std::to_string(wholeTwips(point.x)) + "," + std::to_string(wholeTwips(point.y));
 }
 
 Point lerp(const Point& a, const Point& b, double t)
@@ -83,8 +99,10 @@ std::string EdgeWriter::formatMorphCoordinate(double pixels)
 {
     // The whole part is twips over 256, written as a 24-bit two's
     // complement integer, and the fraction is the remaining twips as two
-    // hex digits (a trailing zero dropped, as the format writes it).
-    const long long twips = static_cast<long long>(std::llround(pixels * 20.0));
+    // hex digits (a trailing zero dropped, as the format writes it). The
+    // whole part has 24 bits, so twips needing more than 32 are held at the
+    // most it can write rather than wrapping round to the other side.
+    const long long twips = roundedWithin(pixels * 20.0, static_cast<double>((1LL << 31) - 1));
     long long whole = twips / 256;
     long long fraction = twips % 256;
     if (fraction < 0)
@@ -105,8 +123,7 @@ std::string EdgeWriter::formatCoordinate(double pixels)
 {
     // Snap to the 1/256-twip grid the format stores, so what is written reads
     // back as the same number.
-    const double scaled = std::round(pixels * 20.0 * static_cast<double>(kFractionScale));
-    long long fixed = static_cast<long long>(scaled);
+    const long long fixed = roundedWithin(pixels * 20.0 * static_cast<double>(kFractionScale), 4.0e18);
 
     // Split into whole twips plus a non-negative fraction. Truncating division
     // rounds toward zero, which would put the fraction on the wrong side of the
@@ -121,6 +138,13 @@ std::string EdgeWriter::formatCoordinate(double pixels)
 
     if (fraction == 0)
         return std::to_string(twips);
+
+    // The hex form holds 24 bits of whole twips, about 419,000 pixels either
+    // way. Further out it would read back on the other side of the drawing,
+    // so the nearest whole twip is written instead, in decimal, which has no
+    // such limit.
+    if (twips < -(kIntegerRange / 2) || twips >= kIntegerRange / 2)
+        return std::to_string(fraction >= kFractionScale / 2 ? twips + 1 : twips);
 
     // Hex fixed point. Negatives are written as 24-bit two's complement, which
     // is how the reader interprets a value above the signed maximum.
