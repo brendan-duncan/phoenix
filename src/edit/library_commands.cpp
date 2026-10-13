@@ -762,6 +762,12 @@ RemoveBitmapCommand::RemoveBitmapCommand(Document* document, Bitmap* bitmap)
 {
 }
 
+RemoveBitmapCommand::~RemoveBitmapCommand()
+{
+    if (_removed)
+        delete _bitmap;
+}
+
 void RemoveBitmapCommand::redo()
 {
     if (!_document || !_bitmap)

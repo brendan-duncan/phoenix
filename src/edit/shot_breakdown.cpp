@@ -88,8 +88,12 @@ void removeUnused(Document& document)
         std::vector<Resource*>& resources = document.resources;
         resources.erase(std::remove_if(resources.begin(), resources.end(),
                             [&used](Resource* resource) {
-                                return resource && resource->resourceType() == Resource::Type::Bitmap &&
-                                       !used.count(static_cast<Bitmap*>(resource)->name);
+                                const bool unused = resource && resource->resourceType() == Resource::Type::Bitmap &&
+                                                    !used.count(static_cast<Bitmap*>(resource)->name);
+                                // Out of the document, it would never be freed.
+                                if (unused)
+                                    delete resource;
+                                return unused;
                             }),
             resources.end());
     }

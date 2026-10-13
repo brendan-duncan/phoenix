@@ -97,6 +97,21 @@ Document::~Document()
         delete folder;
     }
     folders.clear();
+
+    // The library's bitmaps (and their image data), the swatches, scripts
+    // and the settings kept as they were read.
+    for (Resource* resource : resources)
+        delete resource;
+    resources.clear();
+    for (SwatchList* list : swatchLists)
+        delete list;
+    swatchLists.clear();
+    delete scriptList;
+    scriptList = nullptr;
+    delete publishHistory;
+    publishHistory = nullptr;
+    delete printerSettings;
+    printerSettings = nullptr;
 }
 
 } // namespace fla

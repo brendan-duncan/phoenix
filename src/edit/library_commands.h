@@ -186,6 +186,9 @@ class RemoveBitmapCommand : public Command
 {
 public:
     RemoveBitmapCommand(Document* document, Bitmap* bitmap);
+    /// A bitmap still out of the library when the history lets go of this
+    /// step is the command's alone, and goes with it.
+    ~RemoveBitmapCommand() override;
     void redo() override;
     void undo() override;
     std::string name() const override { return "Delete Bitmap"; }
