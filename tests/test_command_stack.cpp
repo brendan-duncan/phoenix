@@ -585,3 +585,35 @@ TEST(discard_last_is_refused_with_steps_to_redo)
     CHECK(stack.discardLast());
     CHECK(log == "a");
 }
+
+namespace {
+
+/// An append that says it keeps a megabyte.
+class HeavyCommand : public AppendCommand
+{
+public:
+    using AppendCommand::AppendCommand;
+    size_t memoryUse() const override { return 1024 * 1024; }
+};
+
+} // namespace
+
+// Past its memory budget the history lets the oldest steps go, always
+// keeping the newest, as it does past its step limit.
+TEST(the_history_keeps_to_its_memory_budget)
+{
+    std::string log;
+    CommandStack stack;
+    stack.setByteBudget(3 * 1024 * 1024);
+    for (char c : std::string("abcde"))
+        stack.push(CommandPtr(new HeavyCommand(&log, c)));
+    CHECK(stack.count() == 3);
+    CHECK(log == "abcde");
+    stack.undo();
+    stack.undo();
+    stack.undo();
+    CHECK(!stack.canUndo());
+    CHECK(log == "ab");
+    stack.setByteBudget(1);
+    CHECK(stack.count() == 3);
+}

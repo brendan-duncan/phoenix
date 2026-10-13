@@ -45,6 +45,11 @@ public:
         (void)other;
         return false;
     }
+
+    /// Roughly how many bytes the command keeps to undo and redo (its
+    /// snapshots), so the history can hold to a memory budget as well as a
+    /// number of steps. Most commands keep little and report 0.
+    virtual size_t memoryUse() const { return 0; }
 };
 
 typedef std::unique_ptr<Command> CommandPtr;
@@ -86,6 +91,14 @@ public:
     }
 
     std::string name() const override { return _name; }
+
+    size_t memoryUse() const override
+    {
+        size_t total = 0;
+        for (const CommandPtr& command : _commands)
+            total += command->memoryUse();
+        return total;
+    }
 
     void setName(const std::string& name) { _name = name; }
 

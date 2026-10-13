@@ -138,6 +138,13 @@ public:
     void setLimit(size_t limit);
     size_t limit() const { return _limit; }
 
+    /// The most memory the history keeps for undo (0 for no limit): past
+    /// it, the oldest steps go as new ones come, whatever the step limit.
+    /// A few steps that each copy a large shape can otherwise hold
+    /// gigabytes.
+    void setByteBudget(size_t bytes);
+    size_t byteBudget() const { return _byteBudget; }
+
 private:
     void notifyChanged() const
     {
@@ -156,6 +163,10 @@ private:
 
     std::vector<CommandPtr> _commands;
     size_t _limit = 0;
+    size_t _byteBudget = size_t(1024) * 1024 * 1024;
+    /// Drops the oldest applied steps while the history is over its budget,
+    /// always keeping the newest.
+    void trimToBudget();
 
     /// Number of commands currently applied. Commands at or past this index
     /// have been undone and are available to redo.

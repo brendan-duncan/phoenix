@@ -58,6 +58,35 @@ void CommandStack::addToHistory(CommandPtr command)
     _commands.push_back(std::move(command));
     ++_index;
     setLimit(_limit);
+    trimToBudget();
+}
+
+void CommandStack::setByteBudget(size_t bytes)
+{
+    _byteBudget = bytes;
+    trimToBudget();
+}
+
+void CommandStack::trimToBudget()
+{
+    if (_byteBudget == 0 || !_macroStack.empty())
+        return;
+    size_t total = 0;
+    for (const CommandPtr& command : _commands)
+        total += command->memoryUse();
+    // Only applied steps go, from the oldest, and never the newest.
+    size_t drop = 0;
+    while (total > _byteBudget && drop + 1 < _index)
+    {
+        total -= _commands[drop]->memoryUse();
+        ++drop;
+    }
+    if (drop == 0)
+        return;
+    _commands.erase(_commands.begin(), _commands.begin() + static_cast<long long>(drop));
+    _index -= drop;
+    if (_cleanIndex >= 0)
+        _cleanIndex = _cleanIndex >= static_cast<int>(drop) ? _cleanIndex - static_cast<int>(drop) : -1;
 }
 
 void CommandStack::setLimit(size_t limit)

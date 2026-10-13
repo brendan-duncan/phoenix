@@ -157,6 +157,8 @@ public:
     /// left off the history.
     bool changedAnything() const { return _changed; }
 
+    size_t memoryUse() const override;
+
 private:
     struct FrameState
     {

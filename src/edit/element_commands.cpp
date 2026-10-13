@@ -77,6 +77,30 @@ bool SetElementTransformCommand::mergeWith(const Command* other)
     return true;
 }
 
+size_t shapeMemory(const Shape* shape)
+{
+    if (!shape)
+        return 0;
+    size_t total = sizeof(Shape);
+    for (const Edge* edge : shape->edges)
+    {
+        if (!edge)
+            continue;
+        total += sizeof(Edge) + edge->data.size();
+        for (const Path* path : edge->paths)
+        {
+            if (!path)
+                continue;
+            total += sizeof(Path);
+            for (const PathSegment* segment : path->segments)
+                if (segment)
+                    total += sizeof(PathSegment) + segment->points.size() * sizeof(Point);
+        }
+    }
+    total += (shape->fills.size() + shape->strokes.size()) * 256;
+    return total;
+}
+
 SetEdgeGeometryCommand::SetEdgeGeometryCommand(Edge* edge, const EditablePath& before,
     const EditablePath& after, const std::string& name, size_t pathIndex)
     : _edge(edge)

@@ -103,6 +103,10 @@ private:
     size_t _pathIndex = 0;
 };
 
+/// Roughly how many bytes a shape snapshot takes: its edges, their paths
+/// and points, and its styles. For the history's memory budget.
+size_t shapeMemory(const Shape* shape);
+
 /// Merges a newly drawn shape into an existing one.
 ///
 /// A merge rewrites the target completely -- its edges, its fills and its
@@ -127,6 +131,7 @@ public:
     void undo() override;
 
     std::string name() const override { return _name; }
+    size_t memoryUse() const override { return shapeMemory(_before) + shapeMemory(_after); }
 
 private:
     Shape* _target;
@@ -152,6 +157,7 @@ public:
     void undo() override;
 
     std::string name() const override { return _name; }
+    size_t memoryUse() const override { return shapeMemory(_before) + shapeMemory(_after); }
 
 private:
     Shape* _target;
@@ -184,6 +190,7 @@ public:
     void undo() override;
 
     std::string name() const override { return _name; }
+    size_t memoryUse() const override { return shapeMemory(_before) + shapeMemory(_after); }
 
 private:
     Shape* _target;
@@ -250,6 +257,7 @@ public:
     void undo() override;
 
     std::string name() const override { return _name; }
+    size_t memoryUse() const override { return shapeMemory(_before) + shapeMemory(_after); }
 
 private:
     Shape* _target;
@@ -283,6 +291,7 @@ public:
     void undo() override;
 
     std::string name() const override { return _name; }
+    size_t memoryUse() const override { return shapeMemory(_before) + shapeMemory(_remainder); }
 
     Shape* piece() const { return _piece; }
 

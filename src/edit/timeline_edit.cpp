@@ -854,6 +854,22 @@ void EditFramesCommand::redo()
     _done = true;
 }
 
+size_t EditFramesCommand::memoryUse() const
+{
+    size_t total = 0;
+    for (const std::vector<LayerState>* states : {&_before, &_after})
+        for (const LayerState& state : *states)
+            for (const FrameState& frame : state.frames)
+            {
+                total += sizeof(FrameState);
+                for (const std::string& child : frame.extraChildren)
+                    total += child.size();
+                for (const auto& attribute : frame.extraAttributes)
+                    total += attribute.first.size() + attribute.second.size();
+            }
+    return total;
+}
+
 void EditFramesCommand::undo()
 {
     for (size_t i = 0; i < _layers.size() && i < _before.size(); ++i)
