@@ -29,8 +29,8 @@ class PhoenixView;
 /// and makes it all one undo step.
 ///
 /// An armature of symbols turns and moves the instances its joints name, each
-/// with its joint. Phoenix does not yet play such an armature between poses,
-/// so only one posed on a single frame can be dragged.
+/// with its joint: posing the span's first frame moves their saved matrices,
+/// and any other frame shows them where its joints put them.
 class IKPoser
 {
 public:
@@ -65,6 +65,11 @@ private:
     /// Turns and moves the carried instances with their joints.
     void carry(const std::vector<fla::IKJoint>& before, const std::vector<fla::IKJoint>& after);
 
+    /// Sets \a shape to \a bent's frame's shape bent to the new pose: from
+    /// the first frame's shape by the binding, when the shape has one
+    /// Phoenix can follow, or else from the frame's own by nearness.
+    void bend(Bent& bent, fla::Shape& shape);
+
     std::string posesOf(const fla::IKArmature& armature) const;
     fla::Transform toArmature(const fla::Shape& shape) const;
     void reset();
@@ -82,4 +87,8 @@ private:
     fla::SymbolInstance* _instance = nullptr;
     std::vector<Bent> _bent;
     std::vector<Carried> _carried;
+    /// The shape's binding, and its first frame's shape as it was, when
+    /// every frame bends from that.
+    fla::ShapeBinding _binding;
+    const fla::Shape* _rest = nullptr;
 };

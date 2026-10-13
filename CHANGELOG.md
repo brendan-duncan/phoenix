@@ -6,6 +6,7 @@ What changed in each release of Phoenix, newest first.
 
 - 3D Position and View: set a movie clip's depth, the perspective angle and the vanishing point
 - Saving as FLA or XFL lists the Phoenix-only features the document uses; XFL folders keep them all
+- Bones: symbol armatures play between poses, the Bone tool bones shapes, and the new Bind tool picks which bone each point follows
 - AI assistants such as Claude can look at and change your document through MCP, with every change undoable
 - An animated graphic's selection box and snapping follow the frame it shows, not its first
 - The camera can fade, tint or dim the whole scene, keyed and tweened with its moves

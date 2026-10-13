@@ -10,6 +10,7 @@
 #include "../data/timeline.h"
 #include "../edit/command_stack.h"
 #include "../edit/element_commands.h"
+#include "../edit/property_command.h"
 #include "../edit/shape_merge.h"
 
 #include <cmath>
@@ -92,6 +93,8 @@ void IKPoser::reset()
     _instance = nullptr;
     _bent.clear();
     _carried.clear();
+    _binding.clear();
+    _rest = nullptr;
     _moved = false;
     _joint = -1;
 }
@@ -118,16 +121,11 @@ bool IKPoser::begin(PhoenixView& view, const QPointF& documentPos)
     }
     _posed = _original;
 
-    // An armature of symbols carries its instances, which only a single
-    // pose leaves where they are drawn; that pose is the span's first frame.
+    // An armature of symbols carries its instances: their matrices are
+    // where the span's first frame has them, and every other frame places
+    // them from its joints (IKArmature::carried).
     if (!_original.bendsShape())
     {
-        if (_original.poses().size() != 1)
-        {
-            reset();
-            return false;
-        }
-        _into = 0;
         for (int joint = 0; joint < static_cast<int>(_original.jointsAt(0).size()); ++joint)
         {
             const std::string reference = _original.referenceOf(joint);
@@ -190,7 +188,40 @@ bool IKPoser::begin(PhoenixView& view, const QPointF& documentPos)
             }
         }
     }
+
+    // A shape bound to its bones point by point, as the Bone tool binds it,
+    // bends every frame from the span's first: its points follow their
+    // bones from the first frame's joints to the frame's own.
+    _binding.clear();
+    _rest = nullptr;
+    if (_original.bendsShape() && _original.bindsAnchors())
+    {
+        for (const Bent& bent : _bent)
+        {
+            if (bent.frame == 0)
+                _rest = bent.original.get();
+        }
+        _binding = _original.binding();
+        if (!_rest || fla::shapeAnchors(*_rest).size() != _binding.size())
+        {
+            _binding.clear();
+            _rest = nullptr;
+        }
+    }
     return true;
+}
+
+void IKPoser::bend(Bent& bent, fla::Shape& shape)
+{
+    fla::setShapeContents(shape, *bent.original);
+    if (_rest)
+    {
+        // From the first frame's shape, by the binding.
+        fla::setShapeContents(shape, *_rest);
+        fla::bindShape(shape, toArmature(*bent.shape), _binding, _original.shownAt(0), _posed.shownAt(bent.frame));
+        return;
+    }
+    fla::reskinShape(shape, toArmature(*bent.shape), _original.shownAt(bent.frame), _posed.shownAt(bent.frame));
 }
 
 void IKPoser::drag(PhoenixView& view, const QPointF& documentPos)
@@ -210,18 +241,18 @@ void IKPoser::drag(PhoenixView& view, const QPointF& documentPos)
     _moved = true;
     fla::PoseArmatureCommand::apply(_frame, _child, _posed.xml(), posesOf(_posed));
 
-    // The frame on show bends now; the rest when the drag ends.
-    const std::vector<fla::IKJoint> before = _original.shownAt(_into);
-    const std::vector<fla::IKJoint> after = _posed.shownAt(_into);
-    carry(before, after);
+    // The frame on show bends now; the rest when the drag ends. Instances
+    // are saved where the span's first frame has them, so only posing that
+    // frame moves them; the others follow their joints as drawn.
+    if (_into == 0)
+        carry(_original.shownAt(0), _posed.shownAt(0));
     if (!_carried.empty())
         view.invalidateBounds();
     for (Bent& bent : _bent)
     {
         if (bent.frame != _into)
             continue;
-        fla::setShapeContents(*bent.shape, *bent.original);
-        fla::reskinShape(*bent.shape, toArmature(*bent.shape), before, after);
+        bend(bent, *bent.shape);
         view.forgetShape(bent.shape);
     }
     view.update();
@@ -250,8 +281,20 @@ void IKPoser::finish(PhoenixView& view, fla::CommandStack& commandStack)
             continue;
         std::unique_ptr<fla::Shape> reshaped(fla::cloneShape(*bent.original, nullptr));
         reshaped->transform = bent.shape->transform;
-        fla::reskinShape(*reshaped, toArmature(*bent.shape), before, after);
+        bend(bent, *reshaped);
         compound->addCommand(fla::CommandPtr(new fla::SetShapeContentsCommand(bent.shape, *reshaped, "Pose Armature")));
+    }
+    // The instances' places in their joints' frames, for every frame.
+    std::vector<std::string> children = _frame->extraChildren;
+    if (!_carried.empty())
+    {
+        std::vector<const fla::Transform*> placed(_posed.jointsAt(0).size(), nullptr);
+        for (const Carried& carried : _carried)
+        {
+            if (carried.joint >= 0 && static_cast<size_t>(carried.joint) < placed.size())
+                placed[static_cast<size_t>(carried.joint)] = &carried.instance->transform;
+        }
+        fla::setBetweenFrames(children, _posed.betweenFrameMatrixList(placed));
     }
     for (Carried& carried : _carried)
     {
@@ -261,6 +304,11 @@ void IKPoser::finish(PhoenixView& view, fla::CommandStack& commandStack)
     }
     // The pose text goes back too, so the stack applies it all as one.
     fla::PoseArmatureCommand::apply(_frame, _child, _xml, _poses);
+    if (!_carried.empty() && children != _frame->extraChildren)
+    {
+        compound->addCommand(fla::CommandPtr(new fla::SetPropertyCommand<std::vector<std::string>>(
+            _frame->extraChildren, _frame->extraChildren, children, "Pose Armature")));
+    }
     commandStack.push(std::move(compound));
     commandStack.breakMergeChain();
     for (Bent& bent : _bent)

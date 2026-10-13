@@ -45,6 +45,7 @@ public:
         Camera,
         Text,
         Bone,
+        Bind,
         AssetWarp,
         Rotate3D,
         Translate3D,

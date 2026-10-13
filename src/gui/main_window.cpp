@@ -104,6 +104,7 @@
 #include "../edit/shape_tween.h"
 #include "../edit/new_document.h"
 #include "../edit/shape_merge.h"
+#include "../edit/shape_transform.h"
 #include "../parser/fla_parser.h"
 #include "../writer/fla_writer.h"
 #include "../writer/xfl_writer.h"
@@ -380,6 +381,10 @@ MainWindow::MainWindow(const QString& initialFile, QWidget* parent, bool startup
     _boneTool = std::make_unique<BoneTool>(
         [this](PhoenixView&, const BoneTool::Link& link) { addBone(link); },
         [this](PhoenixView&, fla::Frame* frame, size_t child, int joint) { editJointLimits(frame, child, joint); });
+    _bindTool = std::make_unique<BindTool>(
+        [this](PhoenixView&, fla::Frame* frame, size_t child, const fla::ShapeBinding& binding) {
+            rebindShape(frame, child, binding);
+        });
     _cameraTool = std::make_unique<CameraTool>(stack, [this]() -> fla::Layer* {
         fla::Document* document = _flaDocument ? _flaDocument->document : nullptr;
         fla::Timeline* scene = document ? document->currentScene() : nullptr;
@@ -2994,10 +2999,67 @@ std::string poseLocationsOf(const fla::Frame& frame)
     return "0";
 }
 
+/// The highest numbers in use on \a timeline for armature nodes, trees and
+/// armature layers, so new ones go past them.
+void armatureNumbers(const fla::Timeline& timeline, int& nodes, int& trees, int& armatures)
+{
+    nodes = 0;
+    trees = 0;
+    armatures = 0;
+    const QRegularExpression nodePattern("ikNode_(\\d+)");
+    const QRegularExpression treePattern("ikTreeName(\\d+)");
+    for (const fla::Layer* layer : timeline.layers)
+    {
+        const QRegularExpressionMatch named = QRegularExpression("^Armature_(\\d+)$").match(QString::fromStdString(layer->name));
+        if (named.hasMatch())
+            armatures = std::max(armatures, named.captured(1).toInt());
+        for (const fla::Frame* frame : layer->frames)
+        {
+            for (const std::string& child : frame->extraChildren)
+            {
+                const QString text = QString::fromStdString(child);
+                for (auto it = nodePattern.globalMatch(text); it.hasNext();)
+                    nodes = std::max(nodes, it.next().captured(1).toInt());
+                for (auto it = treePattern.globalMatch(text); it.hasNext();)
+                    trees = std::max(trees, it.next().captured(1).toInt());
+            }
+        }
+    }
+}
+
+/// The betweenFrameMatrixList for the armature of symbols in \a frame's
+/// IKTree \a xml: the instances there whose referenceIDs its joints name.
+std::string betweenFramesOf(const fla::Frame& frame, const std::string& xml)
+{
+    fla::IKArmature armature;
+    if (!armature.parse(xml) || armature.bendsShape())
+        return std::string();
+    std::vector<const fla::Transform*> placed(armature.jointsAt(0).size(), nullptr);
+    for (size_t joint = 0; joint < placed.size(); ++joint)
+    {
+        const std::string reference = armature.referenceOf(static_cast<int>(joint));
+        for (const fla::Element* element : frame.elements)
+        {
+            const fla::SymbolInstance* instance = dynamic_cast<const fla::SymbolInstance*>(element);
+            for (const auto& attribute : instance ? instance->extraAttributes : std::vector<std::pair<std::string, std::string>>())
+            {
+                if (!reference.empty() && attribute.first == "referenceID" && attribute.second == reference)
+                    placed[joint] = &instance->transform;
+            }
+        }
+    }
+    return armature.betweenFrameMatrixList(placed);
+}
+
 } // namespace
 
 void MainWindow::addBone(const BoneTool::Link& link)
 {
+    if (link.inShape())
+    {
+        addShapeBone(link);
+        return;
+    }
     fla::Document* document = _flaDocument ? _flaDocument->document : nullptr;
     if (!document || !_phoenixView || !link.from || !link.to || !link.fromFrame || !link.toFrame)
         return;
@@ -3019,25 +3081,7 @@ void MainWindow::addBone(const BoneTool::Link& link)
     int nodes = 0;
     int trees = 0;
     int armatures = 0;
-    const QRegularExpression nodePattern("ikNode_(\\d+)");
-    const QRegularExpression treePattern("ikTreeName(\\d+)");
-    for (const fla::Layer* layer : timeline->layers)
-    {
-        const QRegularExpressionMatch named = QRegularExpression("^Armature_(\\d+)$").match(QString::fromStdString(layer->name));
-        if (named.hasMatch())
-            armatures = std::max(armatures, named.captured(1).toInt());
-        for (const fla::Frame* frame : layer->frames)
-        {
-            for (const std::string& child : frame->extraChildren)
-            {
-                const QString text = QString::fromStdString(child);
-                for (auto it = nodePattern.globalMatch(text); it.hasNext();)
-                    nodes = std::max(nodes, it.next().captured(1).toInt());
-                for (auto it = treePattern.globalMatch(text); it.hasNext();)
-                    trees = std::max(trees, it.next().captured(1).toInt());
-            }
-        }
-    }
+    armatureNumbers(*timeline, nodes, trees, armatures);
     const auto guid = []() { return QUuid::createUuid().toString(QUuid::WithoutBraces).toUpper().toStdString(); };
 
     _phoenixView->flushPendingMerge();
@@ -3095,28 +3139,9 @@ void MainWindow::addBone(const BoneTool::Link& link)
         // A new armature: a pose layer above the first instance's layer,
         // posed over the frames that instance was on.
         const std::string armatureName = "Armature_" + std::to_string(armatures + 1);
-        fla::Layer* layer = fla::newLayerFor(*timeline, false);
-        layer->name = armatureName;
-        layer->autoNamed = false;
-        layer->extraAttributes.emplace_back("animationType", "IK pose");
-        if (layer->frames.empty())
-            layer->frames.push_back(new fla::Frame(layer));
-        fla::Frame* pose = layer->frames.front();
-        const int start = link.fromFrame->index;
         const int length = std::max(1, link.fromFrame->duration);
-        pose->index = start;
-        pose->duration = length;
-        if (start > 0)
-        {
-            fla::Frame* empty = new fla::Frame(layer);
-            empty->index = 0;
-            empty->duration = start;
-            layer->frames.insert(layer->frames.begin(), empty);
-        }
-        pose->otherTweenType = "IK pose";
-        pose->keyMode = "9732";
-        pose->extraAttributes.emplace_back("isIKPose", "true");
-        pose->extraAttributes.emplace_back("poseLocations", "0");
+        fla::Frame* pose = nullptr;
+        fla::Layer* layer = fla::newArmatureLayer(*timeline, *fromLayer, armatureName, link.fromFrame->index, length, pose);
         std::vector<fla::ArmatureJoint> joints;
         joints.push_back(jointFor(link.from, link.head, -1, "ikNode_" + std::to_string(nodes + 1), guid()));
         joints.push_back(jointFor(link.to, link.tail, 0, "ikNode_" + std::to_string(nodes + 2), guid()));
@@ -3129,12 +3154,15 @@ void MainWindow::addBone(const BoneTool::Link& link)
             if (timeline->layers[i] == fromLayer)
                 at = static_cast<int>(i);
         }
-        layer->parentLayer = fromLayer->parentLayer && fromLayer->parentLayer->layerType == fla::Layer::Type::Folder
-            ? fromLayer->parentLayer : nullptr;
         stack.beginMacro(name);
         stack.push(fla::CommandPtr(new fla::AddLayerCommand(timeline, at, layer, name)));
         enlist(link.fromFrame, link.from, pose, link.head, joints[0].node, joints[0].reference);
         enlist(link.toFrame, link.to, pose, link.tail, joints[1].node, joints[1].reference);
+        // Each instance's place in its joint's frame.
+        std::vector<std::string> children = pose->extraChildren;
+        fla::setBetweenFrames(children, betweenFramesOf(*pose, children.back()));
+        stack.push(fla::CommandPtr(new fla::SetPropertyCommand<std::vector<std::string>>(pose->extraChildren,
+            pose->extraChildren, children, name)));
         stack.endMacro();
     }
     else
@@ -3164,11 +3192,19 @@ void MainWindow::addBone(const BoneTool::Link& link)
             return;
         joints.push_back(jointFor(link.to, link.tail, parent, "ikNode_" + std::to_string(nodes + 1), guid()));
         const std::string before = link.fromFrame->extraChildren[static_cast<size_t>(child)];
-        const std::string after = fla::symbolArmatureXml(armature.name(), armature.treeName(), joints, armature.frames());
+        // Built again with the bone more, keeping what the old nodes carried.
+        fla::IKArmature rebuilt;
+        rebuilt.parse(fla::symbolArmatureXml(armature.name(), armature.treeName(), joints, armature.frames()));
+        rebuilt.keepAttributesOf(armature);
+        const std::string after = rebuilt.xml();
         const std::string poses = poseLocationsOf(*link.fromFrame);
         stack.beginMacro(name);
         stack.push(fla::CommandPtr(new fla::PoseArmatureCommand(link.fromFrame, static_cast<size_t>(child), before, after, poses, poses)));
         enlist(link.toFrame, link.to, link.fromFrame, link.tail, joints.back().node, joints.back().reference);
+        std::vector<std::string> children = link.fromFrame->extraChildren;
+        fla::setBetweenFrames(children, betweenFramesOf(*link.fromFrame, after));
+        stack.push(fla::CommandPtr(new fla::SetPropertyCommand<std::vector<std::string>>(link.fromFrame->extraChildren,
+            link.fromFrame->extraChildren, children, name)));
         stack.endMacro();
     }
     stack.breakMergeChain();
@@ -3178,6 +3214,171 @@ void MainWindow::addBone(const BoneTool::Link& link)
     _phoenixView->clearCaches();
     _phoenixView->update();
     statusBar()->showMessage("Bone added. Drag a bone with the Selection tool to pose the armature.", 4000);
+}
+
+void MainWindow::addShapeBone(const BoneTool::Link& link)
+{
+    fla::Document* document = _flaDocument ? _flaDocument->document : nullptr;
+    if (!document || !_phoenixView)
+        return;
+    fla::CommandStack& stack = _editContext.commandStack();
+    const char* name = "Add Bone";
+    const fla::Layer* armatureLayerOf = link.armature ? dynamic_cast<const fla::Layer*>(link.armature->parent) : nullptr;
+    fla::Layer* shapeLayer = link.shapeFrame ? dynamic_cast<fla::Layer*>(link.shapeFrame->parent) : nullptr;
+    fla::Timeline* timeline = shapeLayer ? dynamic_cast<fla::Timeline*>(shapeLayer->parent)
+        : armatureLayerOf ? dynamic_cast<fla::Timeline*>(armatureLayerOf->parent) : nullptr;
+    if (!timeline || (shapeLayer && shapeLayer->isLocked()) || (armatureLayerOf && armatureLayerOf->isLocked()))
+    {
+        statusBar()->showMessage("Bones go in shapes on unlocked layers.", 4000);
+        return;
+    }
+    int nodes = 0;
+    int trees = 0;
+    int armatures = 0;
+    armatureNumbers(*timeline, nodes, trees, armatures);
+    _phoenixView->flushPendingMerge();
+
+    if (link.armature)
+    {
+        // A bone more, from a joint of a boned shape: the armature built
+        // again with it and every point bound again to its nearest bone.
+        BoundShape bound;
+        if (!BoundShape::find(link.armature, link.child, 0, bound) || bound.armature.poses().size() != 1)
+        {
+            statusBar()->showMessage("Bones can be added to a boned shape with one pose.", 4000);
+            return;
+        }
+        std::vector<fla::ArmatureJoint> joints = bound.armature.symbolJoints();
+        if (link.joint < 0 || static_cast<size_t>(link.joint) >= joints.size())
+            return;
+        fla::ArmatureJoint added;
+        added.position = fla::Point(link.tail.x(), link.tail.y());
+        added.registration = added.position;
+        added.parent = link.joint;
+        added.node = "ikNode_" + std::to_string(nodes + 1);
+        joints.push_back(added);
+        fla::IKArmature rebuilt;
+        if (!rebuilt.parse(fla::armatureXml(bound.armature.name(), bound.armature.treeName(), joints,
+                bound.armature.frames(), true)))
+        {
+            return;
+        }
+        rebuilt.keepAttributesOf(bound.armature);
+        rebuilt.setBinding(fla::bindToNearestBones(bound.anchors, rebuilt.jointsAt(0)), bound.anchors,
+            bound.instance->transform, fla::contourStyle(*bound.rest));
+        const std::string poses = poseLocationsOf(*link.armature);
+        stack.push(fla::CommandPtr(new fla::PoseArmatureCommand(link.armature, link.child,
+            link.armature->extraChildren[link.child], rebuilt.xml(), poses, poses)));
+    }
+    else
+    {
+        if (!link.shape || !link.shapeFrame)
+            return;
+        // The shape moves into a symbol of its own, an ik container holding
+        // it on every frame of the span, placed about its middle on a new
+        // pose layer above the shape's layer.
+        std::string symbolName;
+        for (int n = 1;; ++n)
+        {
+            symbolName = "lsd_" + std::to_string(n);
+            if (!document->symbolList || document->symbolList->symbolMap.count(symbolName) == 0)
+                break;
+        }
+        std::vector<fla::ArmatureJoint> joints(2);
+        joints[0].position = fla::Point(link.head.x(), link.head.y());
+        joints[0].node = "ikNode_" + std::to_string(nodes + 1);
+        joints[1].position = fla::Point(link.tail.x(), link.tail.y());
+        joints[1].parent = 0;
+        joints[1].node = "ikNode_" + std::to_string(nodes + 2);
+        const fla::BonedShape boned = fla::boneShape(*timeline, *shapeLayer, *link.shapeFrame, *link.shape, joints,
+            symbolName, "Armature_" + std::to_string(armatures + 1), "ikTreeName" + std::to_string(trees + 1));
+        if (!boned.symbol)
+            return;
+        const std::time_t now = std::time(nullptr);
+        char id[40];
+        std::snprintf(id, sizeof(id), "%08lx-%08lx", static_cast<unsigned long>(now),
+            static_cast<unsigned long>(reinterpret_cast<std::uintptr_t>(boned.symbol) & 0xffffffffu));
+        boned.symbol->itemId = id;
+        boned.symbol->lastModified = std::to_string(static_cast<long long>(now));
+
+        int at = 0;
+        for (size_t i = 0; i < timeline->layers.size(); ++i)
+        {
+            if (timeline->layers[i] == shapeLayer)
+                at = static_cast<int>(i);
+        }
+        _selection.clear();
+        stack.beginMacro(name);
+        stack.push(fla::CommandPtr(new fla::AddSymbolCommand(document, boned.symbol, name)));
+        stack.push(fla::CommandPtr(new fla::RemoveElementCommand(link.shapeFrame, link.shape, name, &_selection)));
+        stack.push(fla::CommandPtr(new fla::AddLayerCommand(timeline, at, boned.layer, name)));
+        stack.endMacro();
+        _documentView->setDocument(_flaDocument);
+    }
+    stack.breakMergeChain();
+    if (_timelineView)
+        _timelineView->refresh();
+    _phoenixView->invalidateBounds();
+    _phoenixView->clearCaches();
+    _phoenixView->update();
+    statusBar()->showMessage("Bone added. Drag a bone with the Selection tool to pose the shape; the Bind tool "
+        "changes which bone a point follows.", 5000);
+}
+
+void MainWindow::rebindShape(fla::Frame* frame, size_t child, const fla::ShapeBinding& binding)
+{
+    BoundShape bound;
+    if (!_phoenixView || !BoundShape::find(frame, child, 0, bound))
+        return;
+    fla::IKArmature armature = bound.armature;
+    armature.setBinding(binding, bound.anchors, bound.instance->transform, fla::contourStyle(*bound.rest));
+    const std::string after = armature.xml();
+    if (after == frame->extraChildren[child])
+        return;
+    std::unique_ptr<fla::CompoundCommand> compound(new fla::CompoundCommand("Bind Points"));
+    const std::string poses = poseLocationsOf(*frame);
+    compound->addCommand(fla::CommandPtr(new fla::PoseArmatureCommand(frame, child, frame->extraChildren[child], after,
+        poses, poses)));
+    // Every other frame's shape bent again from the first's by the new
+    // binding, where its joints are not the first frame's.
+    const std::vector<fla::IKJoint> first = armature.shownAt(0);
+    const fla::Timeline* inside = bound.instance->symbol->timelines.front();
+    for (int k = 1; k < armature.frames(); ++k)
+    {
+        const std::vector<fla::IKJoint> joints = armature.shownAt(k);
+        for (const fla::Layer* layer : inside->layers)
+        {
+            for (fla::Frame* own : layer ? layer->frames : std::vector<fla::Frame*>())
+            {
+                if (!own || own->index != bound.instance->firstFrame + k || own->duration > 1)
+                    continue;
+                for (fla::Element* element : own->elements)
+                {
+                    if (!element || element->elementType() != fla::Element::Type::Shape)
+                        continue;
+                    fla::Shape* shape = static_cast<fla::Shape*>(element);
+                    std::unique_ptr<fla::Shape> bent(fla::cloneShape(*bound.rest, nullptr));
+                    bent->transform = bound.rest->transform;
+                    fla::Transform toArmature = bound.rest->transform;
+                    const fla::Transform& placed = bound.instance->transform;
+                    toArmature = fla::Transform(toArmature.m11 * placed.m11 + toArmature.m12 * placed.m21,
+                        toArmature.m11 * placed.m12 + toArmature.m12 * placed.m22,
+                        toArmature.m21 * placed.m11 + toArmature.m22 * placed.m21,
+                        toArmature.m21 * placed.m12 + toArmature.m22 * placed.m22,
+                        toArmature.tx * placed.m11 + toArmature.ty * placed.m21 + placed.tx,
+                        toArmature.tx * placed.m12 + toArmature.ty * placed.m22 + placed.ty);
+                    fla::bindShape(*bent, toArmature, binding, first, joints);
+                    bent->transform = shape->transform;
+                    compound->addCommand(fla::CommandPtr(new fla::SetShapeContentsCommand(shape, *bent, "Bind Points")));
+                    _phoenixView->forgetShape(shape);
+                }
+            }
+        }
+    }
+    _editContext.commandStack().push(std::move(compound));
+    _editContext.commandStack().breakMergeChain();
+    _phoenixView->clearCaches();
+    _phoenixView->update();
 }
 
 void MainWindow::editJointLimits(fla::Frame* frame, size_t child, int joint)
@@ -7305,9 +7506,14 @@ void MainWindow::setupToolBar()
     });
     addSlot({
         makeTool(ToolIcons::Tool::Bone, "Bone", Qt::Key_M,
-            "Drag from one symbol instance to another to join them with a bone; drag from an instance in an "
-            "armature to add a bone to it. Click a bone to limit how far its joint turns.",
+            "Drag from one symbol instance to another to join them with a bone, or drag inside a shape to "
+            "bone it; drag from an instance or joint in an armature to add a bone to it. Click a bone to "
+            "limit how far its joint turns.",
             [this]() -> Tool* { return _boneTool.get(); }),
+        makeTool(ToolIcons::Tool::Bind, "Bind", Qt::Key_unknown,
+            "Click a bone of a boned shape to see the points that follow it; click a point to bind it to the "
+            "bone, Shift-click to bind or unbind it, Ctrl-click to unbind it.",
+            [this]() -> Tool* { return _bindTool.get(); }),
         makeTool(ToolIcons::Tool::AssetWarp, "Asset Warp", Qt::SHIFT | Qt::Key_W,
             "Click a puppet to pin it, drag a pin to bend the art round the others. Alt-click a pin, or "
             "select it and press Delete, to take it away.",
@@ -9154,6 +9360,7 @@ ToolIcons::Tool MainWindow::iconForTool(const Tool* tool) const
     if (tool == _timeScrubTool.get()) return IconTool::TimeScrub;
     if (tool == _cameraTool.get()) return IconTool::Camera;
     if (tool == _boneTool.get()) return IconTool::Bone;
+    if (tool == _bindTool.get()) return IconTool::Bind;
     if (tool == _assetWarpTool.get()) return IconTool::AssetWarp;
     if (tool == _rotate3DTool.get()) return IconTool::Rotate3D;
     if (tool == _translate3DTool.get()) return IconTool::Translate3D;
