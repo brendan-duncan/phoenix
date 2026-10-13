@@ -198,6 +198,10 @@ StrokeLook StrokeLook::of(const StrokeStyle& stroke)
     look.miterLimit = stroke.miterLimit;
     look.hinting = stroke.pixelHinting;
     look.widthProfile = stroke.widthProfile;
+    look.dash1 = stroke.dash1;
+    look.dash2 = stroke.dash2;
+    look.dotSpace = stroke.dotSpace;
+    look.styleAttributes = stroke.styleAttributes;
     for (const auto& attribute : stroke.extraAttributes)
     {
         if (attribute.first == "phoenixBrush")
@@ -233,7 +237,8 @@ bool StrokeLook::operator==(const StrokeLook& other) const
     return kind == other.kind && hairline == other.hairline && caps == other.caps && joints == other.joints &&
         scaleMode == other.scaleMode && miterLimit == other.miterLimit && hinting == other.hinting &&
         widthProfile == other.widthProfile &&
-        brush == other.brush && brushPattern == other.brushPattern;
+        brush == other.brush && brushPattern == other.brushPattern && dash1 == other.dash1 &&
+        dash2 == other.dash2 && dotSpace == other.dotSpace && styleAttributes == other.styleAttributes;
 }
 
 StrokeStyle* StrokeLook::applyTo(const StrokeStyle& stroke, DOMElement* parent) const
@@ -250,9 +255,9 @@ StrokeStyle* StrokeLook::applyTo(const StrokeStyle& stroke, DOMElement* parent) 
     }
     copy->weight = stroke.weight;
     copy->pixelHinting = hinting;
-    copy->dash1 = stroke.dash1;
-    copy->dash2 = stroke.dash2;
-    copy->dotSpace = stroke.dotSpace;
+    copy->dash1 = dash1;
+    copy->dash2 = dash2;
+    copy->dotSpace = dotSpace;
     copy->extraChildren = stroke.extraChildren;
     copy->widthProfile = widthProfile;
     copy->extraAttributes.clear();
@@ -267,9 +272,9 @@ StrokeStyle* StrokeLook::applyTo(const StrokeStyle& stroke, DOMElement* parent) 
         if (brushPattern)
             copy->extraAttributes.emplace_back("phoenixBrushPattern", "true");
     }
-    // A kind's own settings only mean something to that kind.
-    if (kind == stroke.style())
-        copy->styleAttributes = stroke.styleAttributes;
+    // The look's own settings, for its kind (a change of kind starts them
+    // afresh).
+    copy->styleAttributes = styleAttributes;
     copy->fill = cloneFill(stroke.fill, copy);
     copy->caps = caps;
     copy->joints = joints;

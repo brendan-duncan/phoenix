@@ -60,6 +60,7 @@
 #include <QMenu>
 #include <QPainter>
 #include <QPainterPath>
+#include "stroke_style_dialog.h"
 #include <QPushButton>
 #include <QSignalBlocker>
 #include <QScrollArea>
@@ -1385,11 +1386,35 @@ std::vector<std::pair<QWidget*, QWidget*>> PropertiesPanel::addStrokeLookFields(
     }
     style->setCurrentIndex(styleIndex);
     connect(style, &QComboBox::currentIndexChanged, this, [=](int index) {
-        current->kind = kinds[std::clamp(index, 0, 6)];
+        const fla::StrokeStyle::Style kind = kinds[std::clamp(index, 0, 6)];
+        // Another kind starts with its own settings at their defaults.
+        if (kind != current->kind)
+            current->styleAttributes.clear();
+        current->kind = kind;
         current->hairline = index == 1;
         apply(*current);
     });
-    add("Style", style);
+    // Custom Stroke Style: the kind's own settings, with a preview.
+    QWidget* styleRow = new QWidget(this);
+    QHBoxLayout* styleLayout = new QHBoxLayout(styleRow);
+    styleLayout->setContentsMargins(0, 0, 0, 0);
+    styleLayout->addWidget(style, 1);
+    QToolButton* custom = new QToolButton(styleRow);
+    custom->setText("...");
+    custom->setToolTip("Custom Stroke Style: dash and gap, dot spacing, and the ragged, stipple and hatched choices");
+    styleLayout->addWidget(custom);
+    connect(custom, &QToolButton::clicked, this, [=]() {
+        const QColor color = _links.style ? QColor(_links.style->strokeColor[0], _links.style->strokeColor[1],
+                                                _links.style->strokeColor[2])
+                                          : QColor(Qt::black);
+        const double weight = _links.style ? _links.style->strokeWeight : 1.0;
+        StrokeStyleDialog dialog(*current, weight, color, this);
+        if (dialog.exec() != QDialog::Accepted)
+            return;
+        *current = dialog.look();
+        apply(*current);
+    });
+    add("Style", styleRow);
 
     // Caps and joins as the file spells them; empty is Animate's round.
     QComboBox* cap = new QComboBox(this);

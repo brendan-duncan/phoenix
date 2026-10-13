@@ -5,6 +5,7 @@
 #include "../data/stroke_style.h"
 
 #include <cstdint>
+#include <map>
 #include <string>
 #include <vector>
 
@@ -38,6 +39,13 @@ struct StrokeLook
     /// (phoenixBrush, phoenixBrushPattern).
     std::string brush;
     bool brushPattern = false;
+    /// The kind's own settings (Custom Stroke Style): a dashed stroke's
+    /// dash and gap, a dotted one's spacing, and a ragged, stipple or
+    /// hatched one's choices by attribute name, as the file spells them.
+    double dash1 = 6.0;
+    double dash2 = 6.0;
+    double dotSpace = 3.0;
+    std::map<std::string, std::string> styleAttributes;
 
     static StrokeLook of(const StrokeStyle& stroke);
     bool operator==(const StrokeLook& other) const;
