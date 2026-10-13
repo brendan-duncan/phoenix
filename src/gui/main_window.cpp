@@ -575,6 +575,11 @@ void MainWindow::releaseDocument()
         delete _flaDocument;
         _flaDocument = nullptr;
     }
+    // Their results pointed into the document that went.
+    if (_movieExplorer)
+        _movieExplorer->refresh();
+    if (_findReplace)
+        _findReplace->refresh();
 }
 
 void MainWindow::adoptDocument(fla::FLADocument* document, const QString& filePath,

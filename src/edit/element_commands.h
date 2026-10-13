@@ -87,7 +87,16 @@ public:
     bool mergeWith(const Command* other) override;
 
 private:
+    /// The edge as it is now. An edge of a shape is found again by its
+    /// place among the shape's edges each time: undoing or redoing a merge
+    /// rebuilds every edge of the shape (setShapeContents), freeing the one
+    /// this was made with, but in the same order, and the history always
+    /// brings the shape back to the state this command saw.
+    Edge* edge() const;
+
     Edge* _edge;
+    Shape* _shape = nullptr;
+    size_t _edgeIndex = 0;
     EditablePath _before;
     EditablePath _after;
     std::string _name;

@@ -84,18 +84,38 @@ SetEdgeGeometryCommand::SetEdgeGeometryCommand(Edge* edge, const EditablePath& b
     , _after(after)
     , _name(name)
     , _pathIndex(pathIndex)
-{}
+{
+    if (edge && edge->parent)
+    {
+        if (Shape* shape = dynamic_cast<Shape*>(edge->parent))
+        {
+            const auto found = std::find(shape->edges.begin(), shape->edges.end(), edge);
+            if (found != shape->edges.end())
+            {
+                _shape = shape;
+                _edgeIndex = static_cast<size_t>(found - shape->edges.begin());
+            }
+        }
+    }
+}
+
+Edge* SetEdgeGeometryCommand::edge() const
+{
+    if (_shape)
+        return _edgeIndex < _shape->edges.size() ? _shape->edges[_edgeIndex] : nullptr;
+    return _edge;
+}
 
 void SetEdgeGeometryCommand::redo()
 {
-    if (_edge)
-        _after.applyTo(*_edge, _pathIndex);
+    if (Edge* target = edge())
+        _after.applyTo(*target, _pathIndex);
 }
 
 void SetEdgeGeometryCommand::undo()
 {
-    if (_edge)
-        _before.applyTo(*_edge, _pathIndex);
+    if (Edge* target = edge())
+        _before.applyTo(*target, _pathIndex);
 }
 
 int SetEdgeGeometryCommand::mergeId() const
@@ -108,7 +128,8 @@ bool SetEdgeGeometryCommand::mergeWith(const Command* other)
     const SetEdgeGeometryCommand* next =
         static_cast<const SetEdgeGeometryCommand*>(other);
 
-    if (next->_edge != _edge || next->_name != _name || next->_pathIndex != _pathIndex)
+    if (next->_edge != _edge || next->_shape != _shape || next->_edgeIndex != _edgeIndex ||
+        next->_name != _name || next->_pathIndex != _pathIndex)
         return false;
 
     // Keep this command's starting geometry so undo still returns to where the

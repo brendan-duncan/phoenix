@@ -8,6 +8,7 @@
 #include "../src/edit/shape_merge.h"
 #include "../src/edit/combine_objects.h"
 #include "../src/edit/shape_transform.h"
+#include "../src/edit/editable_path.h"
 #include "../src/geom/planar_map.h"
 #include "../src/geom/shape_geometry.h"
 #include "../src/parser/path_parser.h"
@@ -1076,5 +1077,36 @@ TEST(combine_objects_union_intersect_punch_and_crop)
         std::unique_ptr<Shape> cropped(result.rewritten.front().second);
         CHECK(colorAt(*cropped, Point(25, 25)) == kRed && colorAt(*cropped, Point(75, 75)) == kRed);
         CHECK(colorAt(*cropped, Point(125, 125)) == -1);
+    }
+}
+
+// Undoing and redoing a merge rebuilds every edge of the shape, freeing the
+// ones an edge edit was made with; the edit finds its edge again by place.
+TEST(an_edge_edit_survives_the_merge_under_it_being_undone_and_redone)
+{
+    std::unique_ptr<Shape> target = filledRectangle(0, 0, 2000, 2000, 255, 0, 0);
+    std::unique_ptr<Shape> addition = filledRectangle(1000, 1000, 3000, 3000, 0, 0, 255);
+
+    fla::CommandStack stack;
+    stack.push(fla::CommandPtr(new fla::MergeShapeCommand(target.get(), *addition, "Merge")));
+    stack.breakMergeChain();
+
+    fla::Edge* edge = target->edges.front();
+    CHECK(!edge->paths.empty());
+    const fla::EditablePath before = fla::EditablePath::fromPath(*edge->paths.front());
+    fla::EditablePath after = before;
+    CHECK(!after.anchors.empty());
+    after.anchors.front().translate(7.0, 0.0);
+    const double movedX = after.anchors.front().position.x;
+    stack.push(fla::CommandPtr(new fla::SetEdgeGeometryCommand(edge, before, after, "Move Anchor")));
+
+    for (int i = 0; i < 2; ++i)
+    {
+        stack.undo();
+        stack.undo();
+        stack.redo();
+        stack.redo();
+        const fla::EditablePath now = fla::EditablePath::fromPath(*target->edges.front()->paths.front());
+        CHECK(!now.anchors.empty() && std::fabs(now.anchors.front().position.x - movedX) < 1e-6);
     }
 }
