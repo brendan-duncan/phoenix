@@ -594,6 +594,45 @@ QImage PhoenixView::renderElements(const std::vector<const fla::Element*>& eleme
     return image;
 }
 
+QByteArray PhoenixView::svgOfElements(const std::vector<const fla::Element*>& elements)
+{
+    QRectF bounds;
+    for (const fla::Element* element : elements)
+    {
+        const QRectF box = element ? elementBounds(element) : QRectF();
+        if (box.isValid())
+            bounds = bounds.isValid() ? bounds.united(box) : box;
+    }
+    if (!bounds.isValid() || bounds.isEmpty())
+        return QByteArray();
+    bounds.adjust(-1.0, -1.0, 1.0, 1.0);
+    QBuffer buffer;
+    buffer.open(QIODevice::WriteOnly);
+    QSvgGenerator generator;
+    generator.setOutputDevice(&buffer);
+    generator.setSize(bounds.size().toSize());
+    generator.setViewBox(QRectF(QPointF(0, 0), bounds.size()));
+    QPainter painter(&generator);
+    painter.setRenderHint(QPainter::Antialiasing, true);
+    painter.translate(-bounds.topLeft());
+    const QTransform savedView = viewTransform;
+    const QRectF savedVisible = _visibleRect;
+    viewTransform = painter.transform();
+    _visibleRect = bounds;
+    for (const fla::Element* element : elements)
+    {
+        if (!element)
+            continue;
+        painter.save();
+        drawElement(painter, element, nullptr, 0.0);
+        painter.restore();
+    }
+    viewTransform = savedView;
+    _visibleRect = savedVisible;
+    painter.end();
+    return buffer.data();
+}
+
 QRectF PhoenixView::symbolFramesBounds(const fla::Symbol* symbol, int first, int last)
 {
     QRectF bounds;

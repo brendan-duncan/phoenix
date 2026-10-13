@@ -592,6 +592,10 @@ public:
     /// Elements of the timeline being edited drawn on their own, on a
     /// transparent image fitted to them at \a scale pixels per pixel: what
     /// Copy offers other applications.
+    /// The same as vectors, as an SVG document, for other applications to
+    /// paste; empty when nothing is drawn.
+    QByteArray svgOfElements(const std::vector<const fla::Element*>& elements);
+
     QImage renderElements(const std::vector<const fla::Element*>& elements, double scale);
 
     /// A library symbol's frame \a frame drawn on its own, \a area of its

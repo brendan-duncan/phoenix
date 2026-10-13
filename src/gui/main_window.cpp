@@ -12022,9 +12022,9 @@ bool MainWindow::canPaste() const
 
 void MainWindow::putOnSystemClipboard()
 {
-    // Three forms: the elements as XFL, which another Phoenix window pastes
-    // whole; a picture of them for other applications; and a lone text
-    // field's characters as plain text.
+    // Four forms: the elements as XFL, which another Phoenix window pastes
+    // whole; a picture and an SVG of them for other applications; and a
+    // lone text field's characters as plain text.
     QMimeData* data = new QMimeData();
     {
         fla::Document holder(nullptr);
@@ -12053,6 +12053,10 @@ void MainWindow::putOnSystemClipboard()
         const QImage picture = _phoenixView->renderElements(shown, 2.0);
         if (!picture.isNull())
             data->setImageData(picture);
+        // And as vectors, for applications that paste SVG.
+        const QByteArray svg = _phoenixView->svgOfElements(shown);
+        if (!svg.isEmpty())
+            data->setData("image/svg+xml", svg);
     }
     if (_clipboard.size() == 1 && _clipboard.front()->elementType() == fla::Element::Type::StaticText)
     {
@@ -12090,6 +12094,37 @@ bool MainWindow::pasteFromSystemClipboard(const char* name, bool centerInView)
             }
             frame->elements.clear();
         }
+    }
+    else if (_flaDocument && _flaDocument->document && _phoenixView &&
+             (data->hasFormat("image/svg+xml") || data->hasFormat("application/pdf") ||
+                 (data->hasUrls() && !data->urls().isEmpty() && data->urls().front().isLocalFile())))
+    {
+        // Vectors from another application (SVG from a browser or an
+        // editor, PDF from Illustrator), and files copied in a file
+        // manager: imported to the stage as a drop of the file would be.
+        QTemporaryDir folder;
+        QStringList paths;
+        if (data->hasFormat("image/svg+xml") || data->hasFormat("application/pdf"))
+        {
+            const bool svg = data->hasFormat("image/svg+xml");
+            const QString path = folder.filePath(svg ? "Pasted.svg" : "Pasted.pdf");
+            QFile file(path);
+            if (!folder.isValid() || !file.open(QIODevice::WriteOnly) ||
+                file.write(data->data(svg ? "image/svg+xml" : "application/pdf")) < 0)
+                return false;
+            file.close();
+            paths << path;
+        }
+        else
+        {
+            for (const QUrl& url : data->urls())
+                if (url.isLocalFile())
+                    paths << url.toLocalFile();
+        }
+        const QPointF center = _phoenixView->mapToDocument(
+            QPointF(_phoenixView->width() / 2.0, _phoenixView->height() / 2.0));
+        importMedia(paths, true, centerInView ? &center : nullptr);
+        return true;
     }
     else if (data->hasImage() && _flaDocument && _flaDocument->document && _phoenixView)
     {
