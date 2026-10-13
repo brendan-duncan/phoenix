@@ -3745,7 +3745,8 @@ QPixmap PhoenixView::libraryBitmap(const QString& name)
             if (fla::decodeLosslessBitmap(bitmap->datData, decoded))
             {
                 QImage image(decoded.width, decoded.height, QImage::Format_ARGB32_Premultiplied);
-                for (int y = 0; y < decoded.height; ++y)
+                // Null when Qt cannot set aside the memory.
+                for (int y = 0; !image.isNull() && y < decoded.height; ++y)
                 {
                     std::memcpy(image.scanLine(y),
                         decoded.pixels.data() + static_cast<size_t>(y) * decoded.width,

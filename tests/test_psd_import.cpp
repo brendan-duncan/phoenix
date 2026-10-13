@@ -149,6 +149,24 @@ TEST(psd_rejects_what_it_does_not_read)
     CHECK((fla::psd::unpackBits(std::vector<uint8_t>{0xfe, 7, 1, 8, 9}.data(), 5, 5) == std::vector<uint8_t>{7, 7, 7, 8, 9}));
 }
 
+TEST(psd_damaged_sizes_are_not_given_memory)
+{
+    // A document size past what Photoshop allows (here negative as an int).
+    std::vector<uint8_t> bytes = document({});
+    for (int i = 14; i < 22; ++i)
+        bytes[static_cast<size_t>(i)] = 0xff;
+    const fla::psd::Image huge = fla::psd::read(bytes);
+    CHECK(!huge.ok && huge.layers.empty() && !huge.notes.empty());
+
+    // A layer whose right - left overflows, and one far bigger than its few
+    // bytes of channels could hold: both left out, the good one kept.
+    Spec wrapped{"Wrapped", 0, -2147483647 - 1, 2, 2147483647, 0, false, 255, {raw(4, 255), raw(4, 1), raw(4, 2), raw(4, 3)}};
+    Spec claimed{"Claimed", 0, 0, 16000, 16000, 0, false, 255, {raw(4, 255), raw(4, 1), raw(4, 2), raw(4, 3)}};
+    Spec good{"Good", 0, 0, 2, 2, 0, false, 255, {raw(4, 255), raw(4, 1), raw(4, 2), raw(4, 3)}};
+    const fla::psd::Image image = fla::psd::read(document({wrapped, claimed, good}));
+    CHECK(image.layers.size() == 1 && image.layers[0].name == "Good" && image.layers[0].rgba.size() == 16);
+}
+
 namespace {
 
 /// A channel of 16-bit samples, raw.

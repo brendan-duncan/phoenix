@@ -66,6 +66,14 @@ bool decodeLosslessBitmap(const std::vector<uint8_t>& data, DecodedBitmap& out)
     if (!gatherStream(data, packed))
         return false;
 
+    // The header's size is not trusted with memory: past what the stream
+    // could inflate to (deflate shrinks by at most about 1032 to 1), or past
+    // a quarter billion pixels, the file is damaged.
+    const uint64_t claimed = static_cast<uint64_t>(rowBytes) * static_cast<uint64_t>(height);
+    if (static_cast<uint64_t>(width) * height > (uint64_t(1) << 28) ||
+        claimed > static_cast<uint64_t>(packed.size()) * 1032 + 1024)
+        return false;
+
     std::vector<uint8_t> rows(rowBytes * static_cast<size_t>(height));
 
     z_stream stream;

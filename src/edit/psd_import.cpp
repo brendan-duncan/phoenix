@@ -56,7 +56,24 @@ struct Reader
         else
             at += count;
     }
+    /// Where a block of \a length bytes from here ends, held to the end of
+    /// the file so that no length can wrap round to before it.
+    size_t endOf(uint64_t length) const
+    {
+        const size_t from = std::min(at, bytes.size());
+        return length <= bytes.size() - from ? from + static_cast<size_t>(length) : bytes.size();
+    }
 };
+
+/// The longest side a large document may have, and the most pixels any one
+/// image or layer is given memory for: past them, the size is damage.
+constexpr int64_t kMaxSide = 300000;
+constexpr int64_t kMaxPixels = int64_t(1) << 28;
+
+bool sensibleSize(int64_t width, int64_t height)
+{
+    return width >= 0 && height >= 0 && width <= kMaxSide && height <= kMaxSide && width * height <= kMaxPixels;
+}
 
 /// What a document's pixels are, and how its lengths are written.
 struct Format
@@ -288,8 +305,15 @@ std::vector<Record> readLayers(Reader& in, size_t end, const Format& format, Ima
         const int top = in.i32(), left = in.i32(), bottom = in.i32(), right = in.i32();
         record.layer.left = left;
         record.layer.top = top;
-        record.layer.width = std::max(0, right - left);
-        record.layer.height = std::max(0, bottom - top);
+        // In 64 bits, as right - left can overflow; a damaged size is left
+        // empty, and the layer with it.
+        const int64_t width = std::max<int64_t>(0, int64_t(right) - left);
+        const int64_t height = std::max<int64_t>(0, int64_t(bottom) - top);
+        if (sensibleSize(width, height))
+        {
+            record.layer.width = static_cast<int>(width);
+            record.layer.height = static_cast<int>(height);
+        }
         const uint16_t channelCount = in.u16();
         for (int c = 0; c < channelCount; ++c)
         {
@@ -310,16 +334,21 @@ std::vector<Record> readLayers(Reader& in, size_t end, const Format& format, Ima
         record.layer.hidden = (flags & 0x02) != 0;
         in.u8();
         const uint32_t extra = in.u32();
-        const size_t extraEnd = in.at + extra;
+        const size_t extraEnd = in.endOf(extra);
         const uint32_t maskLength = in.u32();
-        const size_t maskEnd = in.at + maskLength;
+        const size_t maskEnd = in.endOf(maskLength);
         if (maskLength >= 18)
         {
             const int mt = in.i32(), ml = in.i32(), mb = in.i32(), mr = in.i32();
             record.maskLeft = ml;
             record.maskTop = mt;
-            record.maskWidth = std::max(0, mr - ml);
-            record.maskHeight = std::max(0, mb - mt);
+            const int64_t maskWidth = std::max<int64_t>(0, int64_t(mr) - ml);
+            const int64_t maskHeight = std::max<int64_t>(0, int64_t(mb) - mt);
+            if (sensibleSize(maskWidth, maskHeight))
+            {
+                record.maskWidth = static_cast<int>(maskWidth);
+                record.maskHeight = static_cast<int>(maskHeight);
+            }
             record.maskDefault = in.u8();
             const uint8_t maskFlags = in.u8();
             // A disabled mask leaves the layer whole.
@@ -339,7 +368,7 @@ std::vector<Record> readLayers(Reader& in, size_t end, const Format& format, Ima
                 break;
             const std::string key = in.text(4);
             const uint64_t length = format.large && longKey(key) ? in.read(8) : in.u32();
-            const size_t blockEnd = in.at + static_cast<size_t>(length);
+            const size_t blockEnd = in.endOf(length);
             if (key == "luni" && length >= 4)
             {
                 const uint32_t units = in.u32();
@@ -369,16 +398,19 @@ std::vector<Record> readLayers(Reader& in, size_t end, const Format& format, Ima
         std::vector<uint8_t> mask;
         for (const Channel& channel : record.channels)
         {
-            const size_t channelEnd = in.at + static_cast<size_t>(channel.length);
-            if (in.failed || channelEnd > in.bytes.size())
+            if (in.failed || in.at > in.bytes.size() || channel.length > in.bytes.size() - in.at)
             {
                 in.failed = true;
                 break;
             }
+            const size_t channelEnd = in.at + static_cast<size_t>(channel.length);
             const bool isMask = channel.id == -2 || channel.id == -3;
             const int w = isMask ? record.maskWidth : layer.width;
             const int h = isMask ? record.maskHeight : layer.height;
-            if (record.section != 0 || w == 0 || h == 0 || channel.length < 2)
+            // No compression Photoshop uses packs more than about a thousand
+            // samples a byte: a channel claiming more is damaged.
+            const bool fits = static_cast<uint64_t>(w) * static_cast<uint64_t>(h) <= channel.length * 1032 + 4096;
+            if (record.section != 0 || w == 0 || h == 0 || channel.length < 2 || !fits)
             {
                 in.at = channelEnd;
                 continue;
@@ -391,6 +423,15 @@ std::vector<Record> readLayers(Reader& in, size_t end, const Format& format, Ima
         }
         if (record.section != 0 || pixels == 0)
             continue;
+        uint64_t stored = 0;
+        for (const Channel& channel : record.channels)
+            stored += std::min<uint64_t>(channel.length, in.bytes.size());
+        if (pixels > stored * 1032 + 4096)
+        {
+            // More pixels than its channels could hold: damaged, left out.
+            layer.width = layer.height = 0;
+            continue;
+        }
         layer.rgba.assign(pixels * 4, 255);
         const auto plane = [&](int id) -> const std::vector<uint8_t>* {
             const auto found = planes.find(id);
@@ -435,8 +476,8 @@ std::vector<Record> readLayers(Reader& in, size_t end, const Format& format, Ima
             for (int y = 0; y < layer.height; ++y)
                 for (int x = 0; x < layer.width; ++x)
                 {
-                    const int mx = layer.left + x - record.maskLeft;
-                    const int my = layer.top + y - record.maskTop;
+                    const int64_t mx = int64_t(layer.left) + x - record.maskLeft;
+                    const int64_t my = int64_t(layer.top) + y - record.maskTop;
                     const uint8_t value = mx >= 0 && my >= 0 && mx < w && my < h
                         ? mask[static_cast<size_t>(my) * static_cast<size_t>(w) + static_cast<size_t>(mx)]
                         : record.maskDefault;
@@ -501,6 +542,12 @@ Image read(const std::vector<uint8_t>& bytes)
         image.notes.push_back("The file is not a Photoshop document Phoenix reads.");
         return image;
     }
+    if (!sensibleSize(image.width, image.height))
+    {
+        image.width = image.height = 0;
+        image.notes.push_back("The document's size is damaged.");
+        return image;
+    }
     if ((format.depth != 8 && format.depth != 16 && format.depth != 32) ||
         (format.mode != 1 && format.mode != 3 && format.mode != 4))
     {
@@ -515,11 +562,11 @@ Image read(const std::vector<uint8_t>& bytes)
     // in an Lr16 or Lr32 block after the global mask instead.
     std::vector<Record> records;
     const uint64_t layerAndMask = format.length(in);
-    const size_t layerAndMaskEnd = in.at + static_cast<size_t>(layerAndMask);
+    const size_t layerAndMaskEnd = in.endOf(layerAndMask);
     if (layerAndMask > 0 && !in.failed)
     {
         const uint64_t infoLength = format.length(in);
-        const size_t infoEnd = in.at + static_cast<size_t>(infoLength);
+        const size_t infoEnd = in.endOf(infoLength);
         if (infoLength > 0)
             records = readLayers(in, infoEnd, format, image);
         in.at = infoEnd;
@@ -532,7 +579,7 @@ Image read(const std::vector<uint8_t>& bytes)
                 break;
             const std::string key = in.text(4);
             const uint64_t length = format.large && longKey(key) ? in.read(8) : in.u32();
-            const size_t end = in.at + static_cast<size_t>(length);
+            const size_t end = in.endOf(length);
             if ((key == "Lr16" || key == "Lr32" || key == "Layr") && length > 2)
                 records = readLayers(in, end, format, image);
             in.at = end;
@@ -605,7 +652,7 @@ Image read(const std::vector<uint8_t>& bytes)
             for (int c = 0; c < planes && !in.failed; ++c)
             {
                 const size_t size = sizes[static_cast<size_t>(c)];
-                if (!in.has(size))
+                if (!in.has(size) || count > size * 1032 + 4096)
                     break;
                 data.push_back(toEightBit(unpackBits(bytes.data() + in.at, size, count * sample), count, format.depth));
                 in.at += size;

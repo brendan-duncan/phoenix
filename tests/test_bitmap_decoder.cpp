@@ -106,6 +106,19 @@ TEST(damaged_dat_is_refused)
     CHECK(fla::isJpegData(std::vector<uint8_t>{0xff, 0xd8, 0xff, 0xe0}));
 }
 
+TEST(dat_with_a_huge_size_and_a_tiny_stream_is_refused)
+{
+    // 65535 by 65535 claimed from a few bytes of stream: refused, not given
+    // gigabytes.
+    std::vector<uint8_t> dat = losslessDat(4, 1, 4, std::vector<uint8_t>(16, 0x40));
+    dat[2] = dat[3] = 0xff; // bytes per row
+    dat[4] = dat[5] = 0xff; // width
+    dat[6] = dat[7] = 0xff; // height
+    fla::DecodedBitmap decoded;
+    CHECK(!fla::decodeLosslessBitmap(dat, decoded));
+    CHECK(decoded.pixels.empty());
+}
+
 TEST(lossless_bitmaps_encode_as_animate_reads_them)
 {
     const std::vector<uint32_t> pixels = {0xff112233u, 0x80402010u, 0x00000000u, 0xffffffffu, 0xff000000u, 0x7f7f7f7fu};
