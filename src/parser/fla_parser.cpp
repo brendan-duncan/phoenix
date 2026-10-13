@@ -10,10 +10,36 @@
 #include <set>
 #include <fstream>
 #include <iostream>
+#include <new>
+#include <stdexcept>
 
 using namespace fla;
 
 fla::FLADocument* FLAParser::parse(const std::string& filePath)
+{
+    // A damaged or hostile file must never take Phoenix down: anything
+    // thrown while reading (a bad number, a size too big to allocate) ends
+    // the read with an error instead.
+    try
+    {
+        return parseUnguarded(filePath);
+    }
+    catch (const std::bad_alloc&)
+    {
+        _errorString = "The document is too large, or damaged: there is not enough memory to read it.";
+    }
+    catch (const std::exception& e)
+    {
+        _errorString = std::string("The document is damaged and could not be read (") + e.what() + ").";
+    }
+    catch (...)
+    {
+        _errorString = "The document is damaged and could not be read.";
+    }
+    return nullptr;
+}
+
+fla::FLADocument* FLAParser::parseUnguarded(const std::string& filePath)
 {
     // A .fla from Flash CS4 or earlier is not a zip at all but a Microsoft
     // compound document holding a binary format: it is converted to the

@@ -24,6 +24,7 @@
 #include <QStringList>
 
 #include <cstdio>
+#include <clocale>
 #include <cstring>
 #include <cctype>
 #include <functional>
@@ -144,6 +145,10 @@ int main(int argc, char *argv[])
     }
 
     QApplication a(argc, argv);
+    // Qt takes the system's locale on Linux and macOS, and with it a comma
+    // for the decimal point in printf and strtod: files would be written
+    // with "0,5" and read back wrong. Numbers in files are always "C".
+    std::setlocale(LC_NUMERIC, "C");
     QApplication::setStyle(new MenuSpacingStyle);
     QApplication::setApplicationVersion(Updater::currentVersion());
 

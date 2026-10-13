@@ -335,3 +335,19 @@ TEST(an_edited_cubic_is_written_as_quadratics_and_a_cubics_record)
     }
     CHECK(throughMiddle);
 }
+
+// Damaged numbers in edge data read as 0 instead of throwing out of the
+// whole load (std::stod and std::stoll threw on these).
+TEST(damaged_edge_numbers_read_as_zero)
+{
+    for (const char* text : {"-", ".", "-.", "#", "#.", "#123456789ABCDEF0123", "#12.GG"})
+    {
+        int pos = 0;
+        const double value = PathParser::parseNumber(text, pos);
+        CHECK(std::isfinite(value));
+    }
+    int pos = 0;
+    CHECK_NEAR(PathParser::parseNumber("-", pos), 0.0);
+    std::unique_ptr<fla::Edge> edge = parseEdge("!- #|# - ");
+    CHECK(true);
+}

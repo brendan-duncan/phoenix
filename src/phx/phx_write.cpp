@@ -39,6 +39,8 @@
 #include <fstream>
 #include <set>
 #include <map>
+#include <new>
+#include <stdexcept>
 
 namespace phx {
 
@@ -904,7 +906,35 @@ std::string isoNow()
 // ---------------------------------------------------------------------------
 // The document
 
+namespace {
+bool saveUnguarded(const fla::Document& document, const std::string& path, const SaveOptions& options, std::string& error);
+}
+
 bool save(const fla::Document& document, const std::string& path, const SaveOptions& options, std::string& error)
+{
+    // Anything thrown while writing (memory, above all) fails the save
+    // rather than ending Phoenix with the work unsaved.
+    try
+    {
+        return saveUnguarded(document, path, options, error);
+    }
+    catch (const std::bad_alloc&)
+    {
+        error = "There is not enough memory to save the document.";
+    }
+    catch (const std::exception& e)
+    {
+        error = std::string("The document could not be saved (") + e.what() + ").";
+    }
+    catch (...)
+    {
+        error = "The document could not be saved.";
+    }
+    return false;
+}
+
+namespace {
+bool saveUnguarded(const fla::Document& document, const std::string& path, const SaveOptions& options, std::string& error)
 {
     ContainerWriter out;
     if (!out.open(path, error))
@@ -1156,5 +1186,6 @@ bool save(const fla::Document& document, const std::string& path, const SaveOpti
     }
     return true;
 }
+} // namespace
 
 } // namespace phx

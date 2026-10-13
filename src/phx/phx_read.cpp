@@ -49,7 +49,9 @@
 #include <future>
 #include <map>
 #include <memory>
+#include <new>
 #include <set>
+#include <stdexcept>
 #include <thread>
 
 namespace phx {
@@ -1212,7 +1214,36 @@ private:
 // ---------------------------------------------------------------------------
 // The document
 
+namespace {
+fla::FLADocument* loadUnguarded(const std::string& path, std::string& error, std::string& warning, bool& readOnly);
+}
+
 fla::FLADocument* load(const std::string& path, std::string& error, std::string& warning, bool& readOnly)
+{
+    // A damaged or hostile file must never take Phoenix down: anything
+    // thrown while reading (a size too big to allocate, a worker's failure
+    // rethrown by future.get()) ends the read with an error instead.
+    try
+    {
+        return loadUnguarded(path, error, warning, readOnly);
+    }
+    catch (const std::bad_alloc&)
+    {
+        error = "The document is too large, or damaged: there is not enough memory to read it.";
+    }
+    catch (const std::exception& e)
+    {
+        error = std::string("The document is damaged and could not be read (") + e.what() + ").";
+    }
+    catch (...)
+    {
+        error = "The document is damaged and could not be read.";
+    }
+    return nullptr;
+}
+
+namespace {
+fla::FLADocument* loadUnguarded(const std::string& path, std::string& error, std::string& warning, bool& readOnly)
 {
     readOnly = false;
     // PHOENIX_PHX_PROFILE=1 prints how long each part of a read takes.
@@ -1578,5 +1609,6 @@ fla::FLADocument* load(const std::string& path, std::string& error, std::string&
     collectVideos(*document);
     return flaDocument;
 }
+} // namespace
 
 } // namespace phx

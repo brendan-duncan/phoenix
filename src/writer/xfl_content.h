@@ -50,6 +50,11 @@ public:
     /// ".." that would climb out of it. Library paths come from the file being
     /// edited, so they are not automatically trustworthy.
     static bool isSafeRelativePath(const std::string& path);
+
+private:
+    static bool buildUnguarded(const Document& document, const std::string& projectName,
+        std::vector<XFLEntry>& entries, std::vector<std::string>& unsupported,
+        std::string& error);
 };
 
 /// Content that saving \a document would not preserve, without writing anything.

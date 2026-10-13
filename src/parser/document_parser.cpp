@@ -132,9 +132,11 @@ void parseHexColor(const std::string& hexColor, uint8_t rgba[4], double alpha = 
     // Parse 6-digit hex
     if (color.size() == 6)
     {
-        rgba[0] = std::stoi(color.substr(0, 2), nullptr, 16);
-        rgba[1] = std::stoi(color.substr(2, 2), nullptr, 16);
-        rgba[2] = std::stoi(color.substr(4, 2), nullptr, 16);
+        // strtol, not stoi: a color that is not hex reads as 0 rather than
+        // throwing out of the whole load.
+        rgba[0] = static_cast<int>(std::strtol(color.substr(0, 2).c_str(), nullptr, 16));
+        rgba[1] = static_cast<int>(std::strtol(color.substr(2, 2).c_str(), nullptr, 16));
+        rgba[2] = static_cast<int>(std::strtol(color.substr(4, 2).c_str(), nullptr, 16));
         rgba[3] = a; // Alpha is fully opaque
     }
     else

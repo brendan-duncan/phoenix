@@ -8,6 +8,8 @@
 #include "../data/symbol_list.h"
 
 #include <filesystem>
+#include <new>
+#include <stdexcept>
 
 namespace fla {
 
@@ -32,6 +34,31 @@ bool XFLContent::isSafeRelativePath(const std::string& path)
 }
 
 bool XFLContent::build(const Document& document, const std::string& projectName,
+    std::vector<XFLEntry>& entries, std::vector<std::string>& unsupported,
+    std::string& error)
+{
+    // Anything thrown while laying the document out (memory, above all)
+    // fails the save rather than ending Phoenix with the work unsaved.
+    try
+    {
+        return buildUnguarded(document, projectName, entries, unsupported, error);
+    }
+    catch (const std::bad_alloc&)
+    {
+        error = "There is not enough memory to save the document.";
+    }
+    catch (const std::exception& e)
+    {
+        error = std::string("The document could not be saved (") + e.what() + ").";
+    }
+    catch (...)
+    {
+        error = "The document could not be saved.";
+    }
+    return false;
+}
+
+bool XFLContent::buildUnguarded(const Document& document, const std::string& projectName,
     std::vector<XFLEntry>& entries, std::vector<std::string>& unsupported,
     std::string& error)
 {

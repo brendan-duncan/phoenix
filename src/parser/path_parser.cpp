@@ -1,6 +1,7 @@
 #include "path_parser.h"
 #include <iostream>
 #include <cmath>
+#include <cstdlib>
 
 namespace {
 inline bool isHexDigit(char c)
@@ -8,6 +9,27 @@ inline bool isHexDigit(char c)
     return (c >= '0' && c <= '9') ||
             (c >= 'A' && c <= 'F') ||
             (c >= 'a' && c <= 'f');
+}
+
+inline int hexValue(char c)
+{
+    if (c >= '0' && c <= '9')
+        return c - '0';
+    if (c >= 'a' && c <= 'f')
+        return c - 'a' + 10;
+    return c - 'A' + 10;
+}
+
+// The value of a run of hex digits; 0 for none, or for more than fit in 64
+// bits, which only a damaged file has. Never throws, unlike std::stoll.
+inline long long parseHexDigits(const std::string& digits)
+{
+    if (digits.empty() || digits.size() > 15)
+        return 0;
+    long long value = 0;
+    for (char c : digits)
+        value = value * 16 + hexValue(c);
+    return value;
 }
 
 inline bool isDigit(char c)
@@ -424,8 +446,7 @@ double PathParser::parseNumber(const std::string& data, int& pos, std::string* o
             pos++;
 
         std::string hexPart = data.substr(start, pos - start);
-        bool ok;
-        long long value = std::stoll(hexPart, nullptr, 16);
+        long long value = parseHexDigits(hexPart);
 
         // Handle two's complement negative numbers
         // Determine bit width based on number of hex digits
@@ -460,7 +481,7 @@ double PathParser::parseNumber(const std::string& data, int& pos, std::string* o
             std::string decPart = data.substr(decStart, pos - decStart);
             if (!decPart.empty())
             {
-                double decValue = std::stoll(decPart, nullptr, 16);
+                double decValue = static_cast<double>(parseHexDigits(decPart));
                 int decDigits = pos - decStart;
                 result += decValue / pow(16.0, decDigits);
             }
@@ -499,7 +520,10 @@ double PathParser::parseNumber(const std::string& data, int& pos, std::string* o
             outStr->append(numStr);
         }
 
-        return std::stod(numStr);
+        // A bare "-" or "." in a damaged file reads as 0 rather than
+        // throwing out of the whole load.
+        const double value = std::strtod(numStr.c_str(), nullptr);
+        return std::isfinite(value) ? value : 0.0;
     }
 }
 
