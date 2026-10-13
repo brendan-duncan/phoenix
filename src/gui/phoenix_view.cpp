@@ -1570,9 +1570,12 @@ void PhoenixView::drawTimeline(QPainter& painter, const fla::Timeline* timeline,
             PaintRecorder recorder(deviceRect.size());
             QPainter recording(&recorder);
             recording.setTransform(painterTransform);
+            // Restored rather than cleared: a mask inside a symbol drawn by
+            // an outer mask pass is still in that pass.
+            const bool wasMaskPass = _maskPass;
             _maskPass = true;
             drawLayer(recording, layer, loopType, firstFrame, nullptr);
-            _maskPass = false;
+            _maskPass = wasMaskPass;
             recording.end();
             vectorMasks[i] = coveredArea(recorder.items);
             continue;
@@ -1605,6 +1608,11 @@ void PhoenixView::drawTimeline(QPainter& painter, const fla::Timeline* timeline,
         }
 
         QPixmap maskPixmap(crop.size());
+        if (maskPixmap.isNull())
+        {
+            maskCache[i] = { QPixmap(), QRect() };
+            continue;
+        }
         maskPixmap.fill(Qt::transparent);
 
         QPainter maskPainter(&maskPixmap);
@@ -1613,9 +1621,10 @@ void PhoenixView::drawTimeline(QPainter& painter, const fla::Timeline* timeline,
         maskPainter.setRenderHint(QPainter::SmoothPixmapTransform, true);
         maskPainter.setTransform(painterTransform * QTransform::fromTranslate(-crop.x(), -crop.y()));
 
+        const bool wasMaskPass = _maskPass;
         _maskPass = true;
         drawLayer(maskPainter, layer, loopType, firstFrame, nullptr);
-        _maskPass = false;
+        _maskPass = wasMaskPass;
         maskPainter.end();
 
         // A mask is coverage, not alpha: a half-transparent mask fill shows
@@ -1712,6 +1721,8 @@ void PhoenixView::drawTimeline(QPainter& painter, const fla::Timeline* timeline,
                     continue;
 
                 QPixmap contentPixmap(maskPixmap.size());
+                if (contentPixmap.isNull())
+                    continue;
                 contentPixmap.fill(Qt::transparent);
 
                 QPainter contentPainter(&contentPixmap);
@@ -1722,22 +1733,17 @@ void PhoenixView::drawTimeline(QPainter& painter, const fla::Timeline* timeline,
 
                 drawLayer(contentPainter, layer, loopType, firstFrame, nullptr);
 
-                // Composite: content masked by mask
-                QPixmap maskedResult(contentPixmap.size());
-                maskedResult.fill(Qt::transparent);
-                {
-                    QPainter composite(&maskedResult);
-                    composite.setCompositionMode(QPainter::CompositionMode_Source);
-                    composite.drawPixmap(0, 0, contentPixmap);
-                    composite.setCompositionMode(QPainter::CompositionMode_DestinationIn);
-                    composite.drawPixmap(0, 0, maskPixmap);
-                }
+                // The content masked in place: no third image.
+                contentPainter.resetTransform();
+                contentPainter.setCompositionMode(QPainter::CompositionMode_DestinationIn);
+                contentPainter.drawPixmap(0, 0, maskPixmap);
+                contentPainter.end();
 
                 // Draw to main painter
                 painter.save();
                 painter.resetTransform();
                 painter.setCompositionMode(QPainter::CompositionMode_SourceOver);
-                painter.drawPixmap(crop.topLeft(), maskedResult);
+                painter.drawPixmap(crop.topLeft(), contentPixmap);
                 painter.restore();
 
                 continue;
