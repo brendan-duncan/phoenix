@@ -11927,6 +11927,14 @@ void MainWindow::arrangeSelection(int step, bool toEnd)
         return false;
     };
 
+    // Merge shapes stay below groups, symbols and drawing objects, as
+    // drawn artwork lies under the objects on its layer: each kind moves
+    // only within its own band of the stack.
+    const auto merge = [](const fla::Element* element) {
+        return element->elementType() == fla::Element::Type::Shape &&
+            !static_cast<const fla::Shape*>(element)->isDrawingObject;
+    };
+
     fla::CommandStack& stack = _editContext.commandStack();
     stack.beginMacro(step > 0 ? (toEnd ? "Bring to Front" : "Bring Forward")
                               : (toEnd ? "Send to Back" : "Send Backward"));
@@ -11936,8 +11944,12 @@ void MainWindow::arrangeSelection(int step, bool toEnd)
         std::vector<fla::Element*>& elements = entry.frame->elements;
         const int index = static_cast<int>(std::find(elements.begin(), elements.end(), entry.element) - elements.begin());
         const int count = static_cast<int>(elements.size());
-        const int target = toEnd ? (step > 0 ? count - 1 : 0) : index + step;
-        if (target == index || target < 0 || target >= count || (!toEnd && selected(elements[target])))
+        const int merges = static_cast<int>(std::count_if(elements.begin(), elements.end(),
+            [&](const fla::Element* element) { return element && merge(element); }));
+        const int low = merge(entry.element) ? 0 : std::min(merges, index);
+        const int high = merge(entry.element) ? std::max(merges - 1, index) : count - 1;
+        const int target = toEnd ? (step > 0 ? high : low) : index + step;
+        if (target == index || target < low || target > high || (!toEnd && selected(elements[target])))
             continue;
         stack.push(fla::CommandPtr(new fla::ReorderElementCommand(
             entry.frame, entry.element, target, "Arrange")));

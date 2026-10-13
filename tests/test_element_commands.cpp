@@ -755,3 +755,30 @@ TEST(transform_parts_take_a_matrix_apart_and_back)
     const fla::TransformParts rotated = fla::TransformParts::of(fla::Transform(0.0, 1.0, -1.0, 0.0, 0.0, 0.0));
     CHECK(std::fabs(rotated.skewX - 90.0) < 1e-9 && std::fabs(rotated.skewY - 90.0) < 1e-9);
 }
+
+TEST(new_merge_artwork_goes_under_the_objects_on_its_frame)
+{
+    fla::Frame frame(nullptr);
+    fla::Shape* artwork = new fla::Shape(&frame);
+    fla::Group* group = new fla::Group(&frame);
+    frame.elements.push_back(artwork);
+    frame.elements.push_back(group);
+
+    CommandStack stack;
+    fla::Shape* drawn = new fla::Shape(nullptr);
+    stack.push(CommandPtr(new fla::AddElementCommand(&frame, drawn, "Brush")));
+    CHECK(frame.elements.size() == 3);
+    CHECK(frame.elements[1] == drawn);
+
+    // A drawing object is an object: on top.
+    fla::Shape* object = new fla::Shape(nullptr);
+    object->isDrawingObject = true;
+    stack.push(CommandPtr(new fla::AddElementCommand(&frame, object, "Brush")));
+    CHECK(frame.elements.back() == object);
+
+    // Undone and redone, each comes back where it was.
+    stack.undo();
+    stack.undo();
+    stack.redo();
+    CHECK(frame.elements[1] == drawn);
+}

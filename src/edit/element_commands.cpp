@@ -369,7 +369,21 @@ void AddElementCommand::redo()
     // Re-inserting at the recorded index is what preserves z-order across an
     // undo and redo, rather than the object jumping to the front.
     if (_index < 0 || _index > static_cast<int>(elements.size()))
+    {
         _index = static_cast<int>(elements.size());
+        // Merge artwork goes on top of the layer's other merge artwork but
+        // under its groups, symbols and drawing objects.
+        const auto merge = [](const Element* element) {
+            return element && element->elementType() == Element::Type::Shape &&
+                !static_cast<const Shape*>(element)->isDrawingObject;
+        };
+        if (merge(_element))
+        {
+            const auto object = std::find_if(elements.begin(), elements.end(),
+                [&](const Element* element) { return !merge(element); });
+            _index = static_cast<int>(object - elements.begin());
+        }
+    }
 
     elements.insert(elements.begin() + _index, _element);
     _owned = false;
