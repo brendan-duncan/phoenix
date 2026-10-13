@@ -1,0 +1,807 @@
+// Document: the stage's settings, the selection and what is done to it, the
+// timelines, saving and exporting.
+
+#include "flfile.h"
+#include "model.h"
+
+#include "../data/document.h"
+#include "../data/fla_document.h"
+#include "../data/frame.h"
+#include "../data/group.h"
+#include "../data/layer.h"
+#include "../data/shape.h"
+#include "../data/symbol.h"
+#include "../data/symbol_instance.h"
+#include "../data/symbol_list.h"
+#include "../data/timeline.h"
+#include "../edit/command_stack.h"
+#include "../edit/document_settings.h"
+#include "../edit/drawing_style.h"
+#include "../edit/element_clone.h"
+#include "../edit/element_commands.h"
+#include "../edit/library_commands.h"
+#include "../edit/property_command.h"
+#include "../edit/selection.h"
+#include "../edit/timeline_edit.h"
+#include "../edit/vector_import.h"
+
+#include <algorithm>
+#include <cmath>
+#include <cstdio>
+
+namespace jsfl {
+
+namespace {
+
+constexpr double kPi = 3.14159265358979323846;
+
+Rect unite(const Rect& a, const Rect& b)
+{
+    if (!a.valid())
+        return b;
+    if (!b.valid())
+        return a;
+    return {std::min(a.left, b.left), std::min(a.top, b.top), std::max(a.right, b.right), std::max(a.bottom, b.bottom)};
+}
+
+Rect selectionBounds(Session& session, fla::FLADocument* document, const std::vector<fla::Element*>& elements)
+{
+    Rect bounds;
+    for (const fla::Element* element : elements)
+        bounds = unite(bounds, session.host().bounds(document, element));
+    return bounds;
+}
+
+/// A named point of \a box: "top left", "center", "bottom right"...
+bool namedPoint(const Rect& box, std::string name, double& x, double& y)
+{
+    std::transform(name.begin(), name.end(), name.begin(), [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+    const bool top = name.find("top") != std::string::npos;
+    const bool bottom = name.find("bottom") != std::string::npos;
+    const bool left = name.find("left") != std::string::npos;
+    const bool right = name.find("right") != std::string::npos;
+    if (!top && !bottom && !left && !right && name.find("center") == std::string::npos)
+        return false;
+    x = left ? box.left : right ? box.right : (box.left + box.right) / 2;
+    y = top ? box.top : bottom ? box.bottom : (box.top + box.bottom) / 2;
+    return true;
+}
+
+double field(const Value& value, const char* name, double fallback = 0.0)
+{
+    const Value* found = value.field(name);
+    return found && !found->isNullish() ? found->toNumber() : fallback;
+}
+
+Value rectValue(const Rect& box)
+{
+    Value value = Value::map();
+    value.set("left", box.left);
+    value.set("top", box.top);
+    value.set("right", box.right);
+    value.set("bottom", box.bottom);
+    return value;
+}
+
+fla::Frame* frameOf(const fla::Element* element)
+{
+    return element ? dynamic_cast<fla::Frame*>(element->parent) : nullptr;
+}
+
+/// \a change about the point \a x, \a y, applied to each element.
+void transformAll(Session& session, fla::FLADocument* document, const std::vector<fla::Element*>& elements,
+    const fla::Transform& change, double x, double y, const char* name)
+{
+    const fla::Transform about = compose(fla::Transform::fromTranslate(x, y), compose(change, fla::Transform::fromTranslate(-x, -y)));
+    for (fla::Element* element : elements)
+        setTransform(session, document, element, compose(about, element->transform), name);
+}
+
+std::vector<fla::Element*> needSelection(Session& session, fla::FLADocument* document)
+{
+    std::vector<fla::Element*> elements = selectedElements(session, document);
+    if (elements.empty())
+        throw Error("Nothing is selected.");
+    return elements;
+}
+
+/// A new shape from SVG path data, filled and stroked as \a style says,
+/// placed on the current keyframe as a drawing object or merged into the
+/// artwork there.
+void addShape(Document& doc, const std::string& path, bool fill, bool stroke)
+{
+    Session& session = doc.session;
+    fla::DrawingStyle fallback;
+    const fla::DrawingStyle* style = session.host().drawingStyle();
+    if (!style)
+        style = &fallback;
+    fla::Frame* frame = currentKeyframe(session, doc.document);
+    const bool filled = fill && style->hasFill;
+    const bool stroked = stroke && style->hasStroke;
+    if (!filled && !stroked)
+        return;
+    const auto color = [](const uint8_t rgba[4]) {
+        char buffer[16];
+        std::snprintf(buffer, sizeof(buffer), "#%02X%02X%02X", rgba[0], rgba[1], rgba[2]);
+        return std::string(buffer);
+    };
+    char opacity[64];
+    std::snprintf(opacity, sizeof(opacity), " fill-opacity=\"%g\" stroke-opacity=\"%g\"", style->fillColor[3] / 255.0,
+        style->strokeColor[3] / 255.0);
+    char width[32];
+    std::snprintf(width, sizeof(width), "%g", std::max(0.1, style->strokeWeight));
+    const std::string svg = "<svg xmlns=\"http://www.w3.org/2000/svg\"><path d=\"" + path + "\" fill=\"" +
+        (filled ? color(style->fillColor) : std::string("none")) + "\" stroke=\"" +
+        (stroked ? color(style->strokeColor) : std::string("none")) + "\" stroke-width=\"" + width + "\"" + opacity + "/></svg>";
+    const fla::vectors::Artwork art = fla::vectors::readSvg(svg);
+    if (art.paths.empty())
+        throw Error("That draws nothing.");
+    fla::Shape* shape = fla::vectors::toShape(art.paths.front());
+    if (!shape)
+        throw Error("That could not be made into a shape.");
+    shape->parent = frame;
+    fla::Selection& selection = session.host().selection(doc.document);
+    if (style->objectDrawing)
+    {
+        shape->isDrawingObject = true;
+        session.push(doc.document, fla::CommandPtr(new fla::AddElementCommand(frame, shape, "Shape", &selection)));
+        return;
+    }
+    shape->isDrawingObject = false;
+    // Merge drawing: into the artwork already on the frame, as drawing it
+    // by hand would.
+    for (fla::Element* element : frame->elements)
+    {
+        if (element && element->elementType() == fla::Element::Type::Shape && !static_cast<fla::Shape*>(element)->isDrawingObject)
+        {
+            session.push(doc.document, fla::CommandPtr(new fla::MergeShapeCommand(static_cast<fla::Shape*>(element), *shape, "Shape")));
+            delete shape;
+            return;
+        }
+    }
+    session.push(doc.document, fla::CommandPtr(new fla::AddElementCommand(frame, shape, "Shape", &selection, 0)));
+}
+
+std::string number(double value)
+{
+    char buffer[32];
+    std::snprintf(buffer, sizeof(buffer), "%.4f", value);
+    return buffer;
+}
+
+/// Sets \a name on every selected element, as Element's own property does.
+void setOnSelection(Document& doc, const std::string& name, const Value& value)
+{
+    for (fla::Element* element : needSelection(doc.session, doc.document))
+    {
+        auto wrapper = wrapElement(doc.session, doc.document, element);
+        bool found = false;
+        for (const ClassInfo* info = &wrapper->classInfo(); info && !found; info = info->parent)
+        {
+            for (const Property& property : info->properties)
+            {
+                if (property.name == name && property.set)
+                {
+                    property.set(*wrapper, value);
+                    found = true;
+                    break;
+                }
+            }
+        }
+    }
+}
+
+} // namespace
+
+const ClassInfo& Document::classInfo() const
+{
+    static const ClassInfo info = []() {
+        ClassInfo info;
+        ClassDef<Document> def(info, "Document");
+
+        def.prop("width", [](Document& d) { return Value(d.data().width); },
+            [](Document& d, const Value& v) {
+                const int width = std::clamp(v.toInt(), 1, 8192);
+                if (width != d.data().width)
+                    d.push(fla::docsettings::resize(d.data(), width, d.data().height, false, 0.0, 0.0), false);
+            });
+        def.prop("height", [](Document& d) { return Value(d.data().height); },
+            [](Document& d, const Value& v) {
+                const int height = std::clamp(v.toInt(), 1, 8192);
+                if (height != d.data().height)
+                    d.push(fla::docsettings::resize(d.data(), d.data().width, height, false, 0.0, 0.0), false);
+            });
+        def.prop("frameRate", [](Document& d) { return Value(d.data().frameRate); },
+            [](Document& d, const Value& v) {
+                const double rate = std::clamp(v.toNumber(), 0.01, 120.0);
+                d.push(fla::CommandPtr(new fla::SetPropertyCommand<double>(d.data().frameRate, d.data().frameRate, rate, "Frame Rate")), false);
+            });
+        def.prop("backgroundColor", [](Document& d) { return Value(colorText(d.data().backgroundColor)); },
+            [](Document& d, const Value& v) {
+                uint8_t color[4];
+                if (!parseColor(v, color))
+                    throw Error("That is not a color: " + v.toString());
+                d.push(fla::CommandPtr(new fla::SetColorCommand(d.data().backgroundColor, d.data().backgroundColor, color, "Background Color")), false);
+            });
+        def.get("name", [](Document& d) {
+            d.data();
+            return Value(d.session.host().name(d.document));
+        });
+        def.get("path", [](Document& d) {
+            d.data();
+            const std::string path = d.session.host().path(d.document);
+            return path.empty() ? Value() : Value(path);
+        });
+        def.get("pathURI", [](Document& d) {
+            d.data();
+            const std::string path = d.session.host().path(d.document);
+            return path.empty() ? Value() : Value(uri::fromPath(path));
+        });
+        def.get("library", [](Document& d) {
+            d.data();
+            return Value(std::make_shared<Library>(d.session, d.document));
+        });
+        def.get("timelines", [](Document& d) {
+            Value list = Value::array();
+            for (fla::Timeline* scene : d.data().timelines)
+                list.items.emplace_back(wrapTimeline(d.session, d.document, scene));
+            return list;
+        });
+        def.prop("currentTimeline", [](Document& d) { return Value(d.data().currentSceneIndex()); },
+            [](Document& d, const Value& v) {
+                const int index = v.toInt();
+                if (index < 0 || index >= static_cast<int>(d.data().timelines.size()))
+                    throw Error("There is no scene " + v.toString() + ".");
+                d.session.host().editTimeline(d.document, d.data().timelines[static_cast<size_t>(index)]);
+            });
+        def.method("getTimeline", 0, [](Document& d, const Args&) {
+            d.data();
+            return Value(wrapTimeline(d.session, d.document, d.session.host().editedTimeline(d.document)));
+        });
+        def.method("editScene", 1, [](Document& d, const Args& args) {
+            const int index = arg(args, 0).toInt();
+            if (index < 0 || index >= static_cast<int>(d.data().timelines.size()))
+                throw Error("There is no scene " + arg(args, 0).toString() + ".");
+            d.session.host().editTimeline(d.document, d.data().timelines[static_cast<size_t>(index)]);
+            return Value();
+        });
+        def.method("exitEditMode", 0, [](Document& d, const Args&) {
+            d.session.host().editTimeline(d.document, d.data().currentScene());
+            return Value();
+        });
+        def.method("enterEditMode", 1, [](Document& d, const Args&) {
+            const std::vector<fla::Element*> elements = needSelection(d.session, d.document);
+            auto* instance = dynamic_cast<fla::SymbolInstance*>(elements.front());
+            if (!instance || !instance->symbol || instance->symbol->timelines.empty())
+                throw Error("Select a symbol instance to edit its symbol.");
+            d.session.host().editTimeline(d.document, instance->symbol->timelines.front());
+            return Value();
+        });
+
+        // The selection.
+        def.prop("selection",
+            [](Document& d) {
+                Value list = Value::array();
+                for (fla::Element* element : selectedElements(d.session, d.document))
+                    list.items.emplace_back(wrapElement(d.session, d.document, element));
+                return list;
+            },
+            [](Document& d, const Value& v) {
+                std::vector<fla::DOMElement*> chosen;
+                for (const Value& item : v.items)
+                {
+                    const auto element = item.as<Element>();
+                    if (!element)
+                        throw Error("The selection takes elements.");
+                    chosen.push_back(&element->get());
+                }
+                d.session.host().selection(d.document).select(chosen);
+            });
+        def.method("selectAll", 0, [](Document& d, const Args&) {
+            std::vector<fla::DOMElement*> chosen;
+            fla::Timeline* timeline = d.session.host().editedTimeline(d.document);
+            const int frame = d.session.host().currentFrame(d.document);
+            for (fla::Layer* layer : timeline ? timeline->layers : std::vector<fla::Layer*>())
+            {
+                if (!layer || layer->isLocked() || !layer->visible || layer->layerType == fla::Layer::Type::Folder)
+                    continue;
+                if (fla::Frame* key = fla::timeline::spanAt(*layer, frame))
+                {
+                    for (fla::Element* element : key->elements)
+                    {
+                        if (element)
+                            chosen.push_back(element);
+                    }
+                }
+            }
+            d.session.host().selection(d.document).select(chosen);
+            return Value();
+        });
+        def.method("selectNone", 0, [](Document& d, const Args&) {
+            d.data();
+            d.session.host().selection(d.document).clear();
+            return Value();
+        });
+        def.method("getSelectionRect", 0, [](Document& d, const Args&) {
+            const Rect box = selectionBounds(d.session, d.document, needSelection(d.session, d.document));
+            return rectValue(box);
+        });
+        def.method("deleteSelection", 0, [](Document& d, const Args&) {
+            fla::Selection& selection = d.session.host().selection(d.document);
+            for (fla::Element* element : selectedElements(d.session, d.document))
+            {
+                if (fla::Frame* frame = frameOf(element))
+                    d.push(fla::CommandPtr(new fla::RemoveElementCommand(frame, element, "Delete", &selection)));
+            }
+            selection.clear();
+            return Value();
+        });
+        def.method("duplicateSelection", 0, [](Document& d, const Args&) {
+            fla::Selection& selection = d.session.host().selection(d.document);
+            std::vector<fla::DOMElement*> copies;
+            for (fla::Element* element : needSelection(d.session, d.document))
+            {
+                fla::Frame* frame = frameOf(element);
+                fla::Element* copy = frame ? fla::cloneElement(*element, frame) : nullptr;
+                if (!copy)
+                    continue;
+                copy->transform.tx += 10;
+                copy->transform.ty += 10;
+                d.push(fla::CommandPtr(new fla::AddElementCommand(frame, copy, "Duplicate", &selection)));
+                copies.push_back(copy);
+            }
+            selection.select(copies);
+            return Value();
+        });
+        def.method("group", 0, [](Document& d, const Args&) {
+            std::vector<fla::Element*> elements = needSelection(d.session, d.document);
+            fla::Frame* frame = frameOf(elements.front());
+            elements.erase(std::remove_if(elements.begin(), elements.end(), [frame](fla::Element* e) { return frameOf(e) != frame; }),
+                elements.end());
+            if (!frame)
+                throw Error("The selection cannot be grouped.");
+            d.push(fla::CommandPtr(new fla::GroupElementsCommand(frame, elements, "Group", &d.session.host().selection(d.document))));
+            return Value();
+        });
+        def.method("unGroup", 0, [](Document& d, const Args&) {
+            for (fla::Element* element : needSelection(d.session, d.document))
+            {
+                fla::Frame* frame = frameOf(element);
+                if (frame && element->elementType() == fla::Element::Type::Group)
+                    d.push(fla::CommandPtr(new fla::UngroupCommand(frame, static_cast<fla::Group*>(element), "Ungroup",
+                        &d.session.host().selection(d.document))));
+            }
+            return Value();
+        });
+        def.method("breakApart", 0, [](Document& d, const Args&) {
+            fla::Selection& selection = d.session.host().selection(d.document);
+            for (fla::Element* element : needSelection(d.session, d.document))
+            {
+                fla::Frame* frame = frameOf(element);
+                if (!frame)
+                    continue;
+                switch (element->elementType())
+                {
+                case fla::Element::Type::SymbolInstance:
+                    d.push(fla::CommandPtr(new fla::BreakApartInstanceCommand(frame, static_cast<fla::SymbolInstance*>(element),
+                        "Break Apart", &selection)));
+                    break;
+                case fla::Element::Type::Group:
+                    d.push(fla::CommandPtr(new fla::UngroupCommand(frame, static_cast<fla::Group*>(element), "Break Apart", &selection)));
+                    break;
+                case fla::Element::Type::Shape:
+                    if (static_cast<fla::Shape*>(element)->isDrawingObject)
+                        d.push(fla::CommandPtr(new fla::SetDrawingObjectCommand(static_cast<fla::Shape*>(element), false, "Break Apart")));
+                    break;
+                default:
+                    break;
+                }
+            }
+            return Value();
+        });
+        def.method("convertToSymbol", 3, [](Document& d, const Args& args) {
+            const std::string type = arg(args, 0).toString();
+            const std::string name = arg(args, 1).isNullish() ? std::string() : arg(args, 1).toString();
+            std::vector<fla::Element*> elements = needSelection(d.session, d.document);
+            fla::Frame* frame = frameOf(elements.front());
+            elements.erase(std::remove_if(elements.begin(), elements.end(), [frame](fla::Element* e) { return frameOf(e) != frame; }),
+                elements.end());
+            if (!frame)
+                throw Error("The selection cannot be made into a symbol.");
+            fla::Document& data = d.data();
+            std::string symbolName = name;
+            for (int n = 1; symbolName.empty() || (name.empty() && !fla::library::nameIsFree(data, symbolName)); ++n)
+                symbolName = "Symbol " + std::to_string(n);
+            if (!fla::library::nameIsFree(data, symbolName))
+                throw Error("The library already has an item called " + symbolName + ".");
+            const fla::SymbolType symbolType = type == "movie clip" ? fla::SymbolType::MovieClip
+                : type == "button"                               ? fla::SymbolType::Button
+                                                                 : fla::SymbolType::Graphic;
+            double x = 0.0;
+            double y = 0.0;
+            const Rect box = selectionBounds(d.session, d.document, elements);
+            if (!box.valid() || !namedPoint(box, given(args, 2) ? arg(args, 2).toString() : "center", x, y))
+            {
+                x = (box.left + box.right) / 2;
+                y = (box.top + box.bottom) / 2;
+            }
+            auto* command = new fla::ConvertToSymbolCommand(&data, frame, elements, symbolName, x, y, "Convert to Symbol",
+                &d.session.host().selection(d.document), symbolType);
+            d.push(fla::CommandPtr(command));
+            if (command->instance())
+                d.session.host().selection(d.document).select(command->instance());
+            return Value(wrapSymbol(d.session, d.document, command->symbol()));
+        });
+        def.method("swapElement", 1, [](Document& d, const Args& args) {
+            const auto item = findItem(d.session, d.document, arg(args, 0).toString());
+            if (!item || !item->symbol())
+                throw Error("There is no symbol called " + arg(args, 0).toString() + " in the library.");
+            for (fla::Element* element : needSelection(d.session, d.document))
+            {
+                auto* instance = dynamic_cast<fla::SymbolInstance*>(element);
+                if (!instance)
+                    continue;
+                fla::Symbol* symbol = item->symbol();
+                d.push(fla::CommandPtr(new fla::SetPropertyCommand<std::string>(instance->libraryItemName,
+                    instance->libraryItemName, symbol->name, "Swap Symbol")), false);
+                d.push(fla::CommandPtr(new fla::SetPropertyCommand<fla::Symbol*>(instance->symbol, instance->symbol, symbol,
+                    "Swap Symbol")), false);
+            }
+            return Value();
+        });
+
+        // Arranging and transforming the selection.
+        def.method("arrange", 1, [](Document& d, const Args& args) {
+            const std::string mode = arg(args, 0).toString();
+            std::vector<fla::Element*> elements = needSelection(d.session, d.document);
+            // Forward and to the front start from the top, so each move
+            // leaves the next one's place alone.
+            const bool up = mode == "forward" || mode == "front";
+            const auto indexOf = [](fla::Element* e) {
+                fla::Frame* frame = frameOf(e);
+                return frame ? static_cast<int>(std::find(frame->elements.begin(), frame->elements.end(), e) - frame->elements.begin()) : -1;
+            };
+            std::sort(elements.begin(), elements.end(), [&](fla::Element* a, fla::Element* b) {
+                return up ? indexOf(a) > indexOf(b) : indexOf(a) < indexOf(b);
+            });
+            int placed = 0;
+            for (fla::Element* element : elements)
+            {
+                fla::Frame* frame = frameOf(element);
+                const int at = indexOf(element);
+                if (!frame || at < 0)
+                    continue;
+                const int last = static_cast<int>(frame->elements.size()) - 1;
+                int to = at;
+                if (mode == "back")
+                    to = placed++;
+                else if (mode == "front")
+                    to = last - placed++;
+                else if (mode == "backward")
+                    to = std::max(0, at - 1);
+                else if (mode == "forward")
+                    to = std::min(last, at + 1);
+                else
+                    throw Error("arrange takes back, backward, forward or front, not " + mode + ".");
+                if (to != at)
+                    d.push(fla::CommandPtr(new fla::ReorderElementCommand(frame, element, to, "Arrange")));
+            }
+            return Value();
+        });
+        def.method("align", 2, [](Document& d, const Args& args) {
+            const std::string mode = arg(args, 0).toString();
+            const std::vector<fla::Element*> elements = needSelection(d.session, d.document);
+            const Rect area = arg(args, 1).toBool() ? Rect{0.0, 0.0, static_cast<double>(d.data().width), static_cast<double>(d.data().height)}
+                                                    : selectionBounds(d.session, d.document, elements);
+            for (fla::Element* element : elements)
+            {
+                const Rect box = d.session.host().bounds(d.document, element);
+                if (!box.valid())
+                    continue;
+                double dx = 0.0;
+                double dy = 0.0;
+                if (mode == "left")
+                    dx = area.left - box.left;
+                else if (mode == "right")
+                    dx = area.right - box.right;
+                else if (mode == "top")
+                    dy = area.top - box.top;
+                else if (mode == "bottom")
+                    dy = area.bottom - box.bottom;
+                else if (mode == "vertical center")
+                    dx = (area.left + area.right) / 2 - (box.left + box.right) / 2;
+                else if (mode == "horizontal center")
+                    dy = (area.top + area.bottom) / 2 - (box.top + box.bottom) / 2;
+                else
+                    throw Error("align takes left, right, top, bottom, vertical center or horizontal center, not " + mode + ".");
+                if (dx != 0.0 || dy != 0.0)
+                    setTransform(d.session, d.document, element, compose(fla::Transform::fromTranslate(dx, dy), element->transform), "Align");
+            }
+            return Value();
+        });
+        def.method("distribute", 2, [](Document& d, const Args& args) {
+            const std::string mode = arg(args, 0).toString();
+            std::vector<fla::Element*> elements = needSelection(d.session, d.document);
+            const bool horizontal = mode.find("left") != std::string::npos || mode.find("right") != std::string::npos ||
+                                    mode == "horizontal center";
+            const auto key = [&](const Rect& box) {
+                if (mode == "left edge")
+                    return box.left;
+                if (mode == "right edge")
+                    return box.right;
+                if (mode == "top edge")
+                    return box.top;
+                if (mode == "bottom edge")
+                    return box.bottom;
+                if (mode == "horizontal center")
+                    return (box.left + box.right) / 2;
+                if (mode == "vertical center")
+                    return (box.top + box.bottom) / 2;
+                throw Error("distribute takes left edge, horizontal center, right edge, top edge, vertical center or bottom edge, not " + mode + ".");
+            };
+            std::vector<std::pair<double, fla::Element*>> placed;
+            for (fla::Element* element : elements)
+            {
+                const Rect box = d.session.host().bounds(d.document, element);
+                if (box.valid())
+                    placed.emplace_back(key(box), element);
+            }
+            if (placed.size() < 2)
+                return Value();
+            std::sort(placed.begin(), placed.end(), [](const auto& a, const auto& b) { return a.first < b.first; });
+            double first = placed.front().first;
+            double last = placed.back().first;
+            if (arg(args, 1).toBool())
+            {
+                first = 0.0;
+                last = horizontal ? d.data().width : d.data().height;
+            }
+            const double step = (last - first) / static_cast<double>(placed.size() - 1);
+            for (size_t i = 0; i < placed.size(); ++i)
+            {
+                const double move = first + step * static_cast<double>(i) - placed[i].first;
+                if (move == 0.0)
+                    continue;
+                fla::Element* element = placed[i].second;
+                setTransform(d.session, d.document, element,
+                    compose(fla::Transform::fromTranslate(horizontal ? move : 0.0, horizontal ? 0.0 : move), element->transform), "Distribute");
+            }
+            return Value();
+        });
+        def.method("moveSelectionBy", 1, [](Document& d, const Args& args) {
+            const double dx = field(arg(args, 0), "x");
+            const double dy = field(arg(args, 0), "y");
+            for (fla::Element* element : needSelection(d.session, d.document))
+                setTransform(d.session, d.document, element, compose(fla::Transform::fromTranslate(dx, dy), element->transform), "Move");
+            return Value();
+        });
+        def.method("scaleSelection", 3, [](Document& d, const Args& args) {
+            const std::vector<fla::Element*> elements = needSelection(d.session, d.document);
+            const Rect box = selectionBounds(d.session, d.document, elements);
+            double x = (box.left + box.right) / 2;
+            double y = (box.top + box.bottom) / 2;
+            if (given(args, 2))
+                namedPoint(box, arg(args, 2).toString(), x, y);
+            transformAll(d.session, d.document, elements,
+                fla::Transform::fromScale(given(args, 0) ? arg(args, 0).toNumber() : 1.0, given(args, 1) ? arg(args, 1).toNumber() : 1.0),
+                x, y, "Scale");
+            return Value();
+        });
+        def.method("rotateSelection", 2, [](Document& d, const Args& args) {
+            const std::vector<fla::Element*> elements = needSelection(d.session, d.document);
+            const Rect box = selectionBounds(d.session, d.document, elements);
+            double x = (box.left + box.right) / 2;
+            double y = (box.top + box.bottom) / 2;
+            if (given(args, 1))
+                namedPoint(box, arg(args, 1).toString(), x, y);
+            const double angle = arg(args, 0).toNumber() * kPi / 180.0;
+            transformAll(d.session, d.document, elements,
+                fla::Transform(std::cos(angle), std::sin(angle), -std::sin(angle), std::cos(angle), 0.0, 0.0), x, y, "Rotate");
+            return Value();
+        });
+        def.method("transformSelection", 4, [](Document& d, const Args& args) {
+            const std::vector<fla::Element*> elements = needSelection(d.session, d.document);
+            const Rect box = selectionBounds(d.session, d.document, elements);
+            transformAll(d.session, d.document, elements,
+                fla::Transform(arg(args, 0).toNumber(), arg(args, 1).toNumber(), arg(args, 2).toNumber(), arg(args, 3).toNumber(), 0.0, 0.0),
+                (box.left + box.right) / 2, (box.top + box.bottom) / 2, "Transform");
+            return Value();
+        });
+        def.method("setElementProperty", 2, [](Document& d, const Args& args) {
+            setOnSelection(d, arg(args, 0).toString(), arg(args, 1));
+            return Value();
+        });
+        def.method("setInstanceAlpha", 1, [](Document& d, const Args& args) {
+            setOnSelection(d, "colorMode", Value("alpha"));
+            setOnSelection(d, "colorAlphaPercent", arg(args, 0));
+            return Value();
+        });
+        def.method("setInstanceBrightness", 1, [](Document& d, const Args& args) {
+            setOnSelection(d, "colorMode", Value("brightness"));
+            setOnSelection(d, "brightness", arg(args, 0));
+            return Value();
+        });
+        def.method("setInstanceTint", 2, [](Document& d, const Args& args) {
+            setOnSelection(d, "colorMode", Value("tint"));
+            setOnSelection(d, "tintColor", arg(args, 0));
+            setOnSelection(d, "tintPercent", arg(args, 1));
+            return Value();
+        });
+
+        // New shapes.
+        def.method("addNewRectangle", 4, [](Document& d, const Args& args) {
+            const Value& box = arg(args, 0);
+            double left = field(box, "left");
+            double top = field(box, "top");
+            double right = field(box, "right");
+            double bottom = field(box, "bottom");
+            if (right < left)
+                std::swap(left, right);
+            if (bottom < top)
+                std::swap(top, bottom);
+            const double radius = std::clamp(arg(args, 1).toNumber(), 0.0, std::min(right - left, bottom - top) / 2);
+            std::string path;
+            if (radius > 0.0)
+            {
+                const std::string r = number(radius);
+                path = "M " + number(left + radius) + " " + number(top) + " L " + number(right - radius) + " " + number(top) +
+                       " A " + r + " " + r + " 0 0 1 " + number(right) + " " + number(top + radius) + " L " + number(right) + " " +
+                       number(bottom - radius) + " A " + r + " " + r + " 0 0 1 " + number(right - radius) + " " + number(bottom) +
+                       " L " + number(left + radius) + " " + number(bottom) + " A " + r + " " + r + " 0 0 1 " + number(left) + " " +
+                       number(bottom - radius) + " L " + number(left) + " " + number(top + radius) + " A " + r + " " + r + " 0 0 1 " +
+                       number(left + radius) + " " + number(top) + " Z";
+            }
+            else
+                path = "M " + number(left) + " " + number(top) + " L " + number(right) + " " + number(top) + " L " + number(right) +
+                       " " + number(bottom) + " L " + number(left) + " " + number(bottom) + " Z";
+            addShape(d, path, !arg(args, 2).toBool(), !arg(args, 3).toBool());
+            return Value();
+        });
+        def.method("addNewOval", 3, [](Document& d, const Args& args) {
+            const Value& box = arg(args, 0);
+            const double left = field(box, "left");
+            const double top = field(box, "top");
+            const double right = field(box, "right");
+            const double bottom = field(box, "bottom");
+            const double rx = std::fabs(right - left) / 2;
+            const double ry = std::fabs(bottom - top) / 2;
+            const double cx = (left + right) / 2;
+            const double cy = (top + bottom) / 2;
+            const std::string r = number(rx) + " " + number(ry);
+            const std::string path = "M " + number(cx + rx) + " " + number(cy) + " A " + r + " 0 0 1 " + number(cx) + " " +
+                                      number(cy + ry) + " A " + r + " 0 0 1 " + number(cx - rx) + " " + number(cy) + " A " + r +
+                                      " 0 0 1 " + number(cx) + " " + number(cy - ry) + " A " + r + " 0 0 1 " + number(cx + rx) +
+                                      " " + number(cy) + " Z";
+            addShape(d, path, !arg(args, 1).toBool(), !arg(args, 2).toBool());
+            return Value();
+        });
+        def.method("addNewLine", 2, [](Document& d, const Args& args) {
+            const std::string path = "M " + number(field(arg(args, 0), "x")) + " " + number(field(arg(args, 0), "y")) + " L " +
+                                     number(field(arg(args, 1), "x")) + " " + number(field(arg(args, 1), "y"));
+            addShape(d, path, false, true);
+            return Value();
+        });
+        def.method("addItem", 2, [](Document& d, const Args& args) {
+            const auto item = arg(args, 1).as<Item>();
+            if (!item)
+                throw Error("addItem takes a library item.");
+            placeItem(d.session, d.document, *item, field(arg(args, 0), "x"), field(arg(args, 0), "y"));
+            return Value(true);
+        });
+
+        // Files.
+        def.method("save", 1, [](Document& d, const Args& args) {
+            d.data();
+            Session& session = d.session;
+            std::string path;
+            if (session.host().path(d.document).empty())
+            {
+                if (given(args, 0) && !arg(args, 0).toBool())
+                    return Value(false);
+                path = session.host().browseForFile("save", "Save Document");
+                if (path.empty())
+                    return Value(false);
+            }
+            session.beforeSwitch();
+            std::string error;
+            if (!session.host().save(d.document, path, false, error))
+                throw Error(error.empty() ? "The document could not be saved." : error);
+            return Value(true);
+        });
+        def.method("saveAndCompact", 1, [](Document& d, const Args&) {
+            d.data();
+            if (d.session.host().path(d.document).empty())
+                return Value(false);
+            d.session.beforeSwitch();
+            std::string error;
+            if (!d.session.host().save(d.document, std::string(), false, error))
+                throw Error(error.empty() ? "The document could not be saved." : error);
+            return Value(true);
+        });
+        def.method("saveAsCopy", 1, [](Document& d, const Args& args) {
+            d.data();
+            d.session.beforeSwitch();
+            std::string error;
+            if (!d.session.host().save(d.document, uri::toPath(arg(args, 0).toString()), true, error))
+                throw Error(error.empty() ? "The copy could not be saved." : error);
+            return Value(true);
+        });
+        def.method("close", 1, [](Document& d, const Args& args) {
+            d.data();
+            d.session.beforeSwitch();
+            const bool closed = d.session.host().close(d.document, given(args, 0) ? arg(args, 0).toBool() : true);
+            if (closed)
+                d.session.forget(d.document);
+            return Value(closed);
+        });
+        def.method("exportPNG", 3, [](Document& d, const Args& args) {
+            d.data();
+            std::string path = given(args, 0) ? uri::toPath(arg(args, 0).toString()) : std::string();
+            if (path.empty())
+            {
+                path = d.session.host().browseForFile("save", "Export PNG");
+                if (path.empty())
+                    return Value(false);
+            }
+            if (d.document != d.session.host().activeDocument())
+                d.session.beforeSwitch();
+            std::string error;
+            if (!d.session.host().exportPNG(d.document, path, arg(args, 2).toBool(), error))
+                throw Error(error.empty() ? "The PNG could not be written." : error);
+            return Value(true);
+        });
+        def.method("xmlPanel", 1, [](Document&, const Args&) -> Value {
+            throw Error("document.xmlPanel (XUL dialogs) is not supported yet.");
+        });
+        return info;
+    }();
+    return info;
+}
+
+fla::Frame* currentKeyframe(Session& session, fla::FLADocument* document)
+{
+    session.data(document);
+    fla::Timeline* timeline = session.host().editedTimeline(document);
+    if (!timeline || timeline->layers.empty())
+        throw Error("There is no layer to put it on.");
+    const int index = std::clamp(session.host().currentLayer(document), 0, static_cast<int>(timeline->layers.size()) - 1);
+    fla::Layer* layer = timeline->layers[static_cast<size_t>(index)];
+    if (!layer || layer->layerType == fla::Layer::Type::Folder)
+        throw Error("The current layer is a folder; choose a layer to put it on.");
+    fla::Frame* frame = fla::timeline::spanAt(*layer, session.host().currentFrame(document));
+    if (!frame)
+        throw Error("The current layer has no frame at the playhead.");
+    return frame;
+}
+
+std::vector<fla::Element*> selectedElements(Session& session, fla::FLADocument* document)
+{
+    session.data(document);
+    std::vector<fla::Element*> elements;
+    for (fla::DOMElement* selected : session.host().selection(document).elements())
+    {
+        auto* element = dynamic_cast<fla::Element*>(selected);
+        if (element && session.alive(document, element))
+            elements.push_back(element);
+    }
+    return elements;
+}
+
+void setTransform(Session& session, fla::FLADocument* document, fla::Element* element, const fla::Transform& after,
+    const char* name)
+{
+    const fla::Transform before = element->transform;
+    if (before.m11 == after.m11 && before.m12 == after.m12 && before.m21 == after.m21 && before.m22 == after.m22 &&
+        before.tx == after.tx && before.ty == after.ty)
+        return;
+    session.push(document, fla::CommandPtr(new fla::SetElementTransformCommand(element, before, after, name)), false);
+}
+
+fla::Transform compose(const fla::Transform& a, const fla::Transform& b)
+{
+    fla::Transform result = a;
+    result.concatenate(b);
+    return result;
+}
+
+} // namespace jsfl

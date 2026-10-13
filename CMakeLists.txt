@@ -71,6 +71,19 @@ set(ZLIB_LIBRARY zlibstatic CACHE STRING "" FORCE)
 set(ZLIB_LIBRARIES zlibstatic CACHE STRING "" FORCE)
 set(ZLIB_VERSION_STRING "1.3.1" CACHE STRING "" FORCE)
 
+# QuickJS (quickjs-ng), the JavaScript engine JSFL scripts run in (src/jsfl).
+# Only its library is built; its own command-line tools are left out.
+set(QJS_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
+set(QJS_ENABLE_INSTALL OFF CACHE BOOL "" FORCE)
+FetchContent_Declare(
+    quickjs
+    GIT_REPOSITORY https://github.com/quickjs-ng/quickjs
+    GIT_TAG v0.17.0
+    GIT_SHALLOW TRUE
+    EXCLUDE_FROM_ALL
+)
+FetchContent_MakeAvailable(quickjs)
+
 # Add tinyxml2 from third_party
 set(tinyxml2_SHARED_LIBS OFF CACHE BOOL "Don't build tinyxml2 as a shared library")
 set(tinyxml2_BUILD_TESTING OFF CACHE BOOL "Don't build tinyxml2 tests")
@@ -147,6 +160,12 @@ set(HEADERS
     src/gui/tutorial_lesson.h
     src/gui/tutorial_runner.h
     src/gui/script_api.h
+    src/jsfl/engine.h
+    src/jsfl/flfile.h
+    src/jsfl/host.h
+    src/jsfl/model.h
+    src/jsfl/object.h
+    src/jsfl/session.h
     src/gui/mcp_server.h
     src/gui/stroke_style_dialog.h
     src/gui/selection_targets.h
@@ -382,6 +401,15 @@ set(SOURCES
     src/gui/tutorial_lesson.cpp
     src/gui/tutorial_runner.cpp
     src/gui/script_api.cpp
+    src/jsfl/engine.cpp
+    src/jsfl/flfile.cpp
+    src/jsfl/model_document.cpp
+    src/jsfl/model_element.cpp
+    src/jsfl/model_flash.cpp
+    src/jsfl/model_library.cpp
+    src/jsfl/model_timeline.cpp
+    src/jsfl/object.cpp
+    src/jsfl/session.cpp
     src/gui/mcp_server.cpp
     src/gui/stroke_style_dialog.cpp
     src/gui/navigation_tools.cpp
@@ -570,6 +598,11 @@ if(APPLE)
 endif()
 
 target_link_libraries(Phoenix PRIVATE Qt6::Widgets Qt6::Svg zlibstatic tinyxml2 libas3)
+target_link_libraries(Phoenix PRIVATE qjs)
+if(MSVC)
+    # Scripts run on the window's thread; room for deep recursion in them.
+    target_link_options(Phoenix PRIVATE /STACK:8388608)
+endif()
 if(WIN32)
     # The AI assistants' local socket (mcp_server.cpp).
     target_link_libraries(Phoenix PRIVATE ws2_32)

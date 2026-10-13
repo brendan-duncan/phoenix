@@ -237,7 +237,31 @@ else()
         "XFL round-trip tests as well.")
 endif()
 
+# The JSFL engine, when QuickJS is there (the top-level build fetches it).
+if(PHOENIX_TESTS_HAVE_PARSER AND TARGET qjs)
+    list(APPEND TEST_CORE_SOURCES
+        ${PHOENIX_SRC}/jsfl/engine.cpp
+        ${PHOENIX_SRC}/jsfl/flfile.cpp
+        ${PHOENIX_SRC}/jsfl/model_document.cpp
+        ${PHOENIX_SRC}/jsfl/model_element.cpp
+        ${PHOENIX_SRC}/jsfl/model_flash.cpp
+        ${PHOENIX_SRC}/jsfl/model_library.cpp
+        ${PHOENIX_SRC}/jsfl/model_timeline.cpp
+        ${PHOENIX_SRC}/jsfl/object.cpp
+        ${PHOENIX_SRC}/jsfl/session.cpp
+    )
+    list(APPEND TEST_SOURCES test_jsfl.cpp)
+    set(PHOENIX_TESTS_HAVE_JSFL TRUE)
+endif()
+
 add_executable(phoenix_tests ${TEST_SOURCES} ${TEST_CORE_SOURCES})
+if(PHOENIX_TESTS_HAVE_JSFL)
+    target_link_libraries(phoenix_tests PRIVATE qjs)
+    target_compile_definitions(phoenix_tests PRIVATE PHOENIX_TEST_DATA="${CMAKE_CURRENT_SOURCE_DIR}/data")
+    if(MSVC)
+        target_link_options(phoenix_tests PRIVATE /STACK:8388608)
+    endif()
+endif()
 
 if(PHOENIX_TESTS_HAVE_PARSER)
     target_link_libraries(phoenix_tests PRIVATE tinyxml2 zlibstatic)
