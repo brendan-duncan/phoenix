@@ -416,3 +416,77 @@ TEST(a_curve_that_loops_back_on_itself_encloses_a_face)
         CHECK(half.next >= 0);
     }
 }
+
+TEST(planar_map_arranges_a_dense_grid_cell_by_cell)
+{
+    // Lines crossing in a grid, each a little past the last line across it:
+    // every cell is a face, a point in a cell finds that face, and painting a
+    // face touches its own four sides and nothing else.
+    constexpr int kLines = 24;
+    constexpr double kSpacing = 10.0;
+    const double far = (kLines - 1) * kSpacing + 1.0;
+    PlanarMap map;
+    for (int i = 0; i < kLines; ++i)
+    {
+        map.addCurve(Curve::line(Point(-1.0, i * kSpacing), Point(far, i * kSpacing)), i);
+        map.addCurve(Curve::line(Point(i * kSpacing, -1.0), Point(i * kSpacing, far)), kLines + i);
+    }
+    map.build();
+
+    CHECK(boundedFaces(map).size() == static_cast<size_t>((kLines - 1) * (kLines - 1)));
+
+    std::vector<bool> seen(map.faces().size(), false);
+    bool allFound = true;
+    bool allFourSided = true;
+    for (int row = 0; row + 1 < kLines; ++row)
+    {
+        for (int column = 0; column + 1 < kLines; ++column)
+        {
+            const Point middle((column + 0.5) * kSpacing, (row + 0.5) * kSpacing);
+            const int face = map.faceAt(middle);
+            if (face < 0 || seen[face])
+            {
+                allFound = false;
+                continue;
+            }
+            seen[face] = true;
+            const std::vector<int>& sides = map.faceHalfEdges(face);
+            allFourSided = allFourSided && sides.size() == 4;
+            for (const int side : sides)
+                allFourSided = allFourSided && map.halfEdges()[side].face == face;
+        }
+    }
+    CHECK(allFound);
+    CHECK(allFourSided);
+    CHECK(map.faceAt(Point(-5.0, -5.0)) == -1);
+
+    const int painted = map.faceAt(Point(15.0, 25.0));
+    map.setFaceFill(painted, 7);
+    int sevens = 0;
+    for (const HalfEdge& half : map.halfEdges())
+    {
+        if (half.leftFill == 7)
+        {
+            ++sevens;
+            CHECK(half.face == painted);
+        }
+    }
+    CHECK(sevens == 4);
+    CHECK(map.fillAt(Point(15.0, 25.0)) == 7);
+}
+
+TEST(planar_map_leaves_out_curves_that_are_not_numbers)
+{
+    // A curve with a coordinate that is not a number has no place on the
+    // grid; the rest arrange as if it were not there.
+    PlanarMap map;
+    addPolygon(map, rectangle(0.0, 0.0, 10.0, 10.0), 0);
+    map.addCurve(Curve::line(Point(std::nan(""), 0.0), Point(5.0, 5.0)), 1);
+    map.addCurve(Curve::line(Point(0.0, 5.0), Point(HUGE_VAL, 5.0)), 2);
+    map.addCurve(Curve::cubic(Point(0.0, 0.0), Point(1.0e300, 3.0), Point(4.0, 4.0), Point(10.0, 10.0)), 3);
+    map.build();
+
+    CHECK(map.vertices().size() == 4);
+    CHECK(boundedFaces(map).size() == 1);
+    CHECK(map.faceAt(Point(5.0, 5.0)) >= 0);
+}

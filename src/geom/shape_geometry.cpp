@@ -126,10 +126,9 @@ void attributeFillsFromSource(PlanarMap& map, const std::vector<ShapeCurve>& sou
         // Any half-edge bordering the face answers the question; they all agree
         // when the arrangement matches the file it came from.
         int fill = -1;
-        for (const HalfEdge& edge : map.halfEdges())
+        for (const int half : map.faceHalfEdges(index))
         {
-            if (edge.face != index)
-                continue;
+            const HalfEdge& edge = map.halfEdges()[half];
             if (edge.source < 0 || edge.source >= static_cast<int>(sources.size()))
                 continue;
 
@@ -145,9 +144,10 @@ void attributeFillsFromSource(PlanarMap& map, const std::vector<ShapeCurve>& sou
 bool faceFillFromSources(const PlanarMap& map, int face, const std::vector<ShapeCurve>& sources,
     size_t first, size_t last, int& fill)
 {
-    for (const HalfEdge& edge : map.halfEdges())
+    for (const int half : map.faceHalfEdges(face))
     {
-        if (edge.face != face || edge.source < 0)
+        const HalfEdge& edge = map.halfEdges()[half];
+        if (edge.source < 0)
             continue;
         const size_t source = static_cast<size_t>(edge.source);
         if (source < first || source >= last || source >= sources.size())

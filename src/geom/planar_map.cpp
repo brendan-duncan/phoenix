@@ -5,7 +5,10 @@
 #include <cstdint>
 #include <algorithm>
 #include <cmath>
+#include <map>
+#include <numeric>
 #include <tuple>
+#include <unordered_map>
 
 namespace fla {
 
@@ -19,6 +22,10 @@ constexpr int kAreaSamples = 8;
 /// A piece shorter than this in twips is a rounding artifact rather than
 /// geometry, and welding has already pulled its ends together.
 constexpr double kMinimumPieceLength = PlanarMap::kTwip * 0.5;
+
+/// Coordinates past this many pixels are far beyond anything the format can
+/// store, and would overflow the twip grid's integers.
+constexpr double kLargestCoordinate = 1.0e12;
 
 int64_t toTwips(double value)
 {
@@ -53,6 +60,14 @@ Point PlanarMap::snapToTwips(const Point& point)
 
 void PlanarMap::addCurve(const Curve& curve, int source)
 {
+    // A NaN would break every comparison the arrangement sorts and welds by.
+    for (int i = 0; i < 4; ++i)
+    {
+        const Point& point = curve.controlPoint(i);
+        if (!(std::fabs(point.x) <= kLargestCoordinate && std::fabs(point.y) <= kLargestCoordinate))
+            return;
+    }
+
     Input input;
     input.curve = curve;
     input.source = source;
@@ -65,6 +80,8 @@ void PlanarMap::clear()
     _vertices.clear();
     _halfEdges.clear();
     _faces.clear();
+    _faceHalfEdges.clear();
+    _faceBounds.clear();
     _vertexLookup.clear();
     _unboundedFace = -1;
 }
@@ -195,7 +212,51 @@ std::vector<PlanarMap::Input> PlanarMap::splitAtCrossings(double tolerance) cons
         cuts[onto].push_back({t, true, point});
     };
 
-    for (size_t i = 0; i < _inputs.size(); ++i)
+    // Only curves whose control boxes come within touching distance of each
+    // other can cut each other. A sweep across the boxes, ordered by their
+    // left sides, finds those pairs without testing every pair; each curve's
+    // partners are then visited in index order, which is the order the cuts
+    // have always been recorded in.
+    const size_t count = _inputs.size();
+    struct Box
+    {
+        double left, top, right, bottom;
+    };
+    std::vector<Box> boxes(count);
+    for (size_t i = 0; i < count; ++i)
+        _inputs[i].curve.controlBounds(boxes[i].left, boxes[i].top, boxes[i].right, boxes[i].bottom);
+
+    const auto overlap = [&](size_t i, size_t j) {
+        const Box& a = boxes[i];
+        const Box& b = boxes[j];
+        return !(a.right < b.left - touch || b.right < a.left - touch ||
+            a.bottom < b.top - touch || b.bottom < a.top - touch);
+    };
+
+    std::vector<size_t> order(count);
+    std::iota(order.begin(), order.end(), size_t(0));
+    std::sort(order.begin(), order.end(), [&](size_t a, size_t b) {
+        return boxes[a].left < boxes[b].left || (boxes[a].left == boxes[b].left && a < b);
+    });
+
+    std::vector<std::vector<size_t>> partners(count);
+    for (size_t p = 0; p < count; ++p)
+    {
+        const size_t a = order[p];
+        // Twice the reach, so rounding in the overlap test never loses a pair
+        // the sweep should have offered it.
+        const double reach = boxes[a].right + 2.0 * touch;
+        for (size_t q = p + 1; q < count && boxes[order[q]].left <= reach; ++q)
+        {
+            const size_t b = order[q];
+            const size_t i = std::min(a, b);
+            const size_t j = std::max(a, b);
+            if (overlap(i, j))
+                partners[i].push_back(j);
+        }
+    }
+
+    for (size_t i = 0; i < count; ++i)
     {
         for (const CurveIntersection& hit : selfIntersections(_inputs[i].curve, tolerance))
         {
@@ -203,20 +264,11 @@ std::vector<PlanarMap::Input> PlanarMap::splitAtCrossings(double tolerance) cons
             cuts[i].push_back({hit.t2, true, hit.position});
         }
 
-        double il, it, ir, ib;
-        _inputs[i].curve.controlBounds(il, it, ir, ib);
+        std::vector<size_t>& others = partners[i];
+        std::sort(others.begin(), others.end());
 
-        for (size_t j = i + 1; j < _inputs.size(); ++j)
+        for (const size_t j : others)
         {
-            // Every pair is tested, but a pair whose control boxes miss each
-            // other is dismissed here before any curve work. A sweep line would
-            // avoid the quadratic count altogether; a brush stroke's outline
-            // runs to a few hundred pieces, which this handles.
-            double jl, jt, jr, jb;
-            _inputs[j].curve.controlBounds(jl, jt, jr, jb);
-            if (ir < jl - touch || jr < il - touch || ib < jt - touch || jb < it - touch)
-                continue;
-
             const std::vector<CurveIntersection> hits =
                 intersectCurves(_inputs[i].curve, _inputs[j].curve, tolerance);
 
@@ -299,7 +351,15 @@ void PlanarMap::buildHalfEdges(const std::vector<Input>& pieces)
         /// The forward half-edge the piece became.
         int halfEdge;
     };
-    std::map<std::pair<int, int>, std::vector<Seen>> seen;
+    struct PairHash
+    {
+        size_t operator()(const std::pair<int, int>& key) const
+        {
+            return std::hash<int>()(key.first) * 1000003u ^ std::hash<int>()(key.second);
+        }
+    };
+    std::unordered_map<std::pair<int, int>, std::vector<Seen>, PairHash> seen;
+    _halfEdges.reserve(pieces.size() * 2);
 
     for (const Input& piece : pieces)
     {
@@ -485,6 +545,7 @@ std::vector<PlanarMap::Cycle> PlanarMap::collectCycles() const
             visited[current] = true;
             cycle.edges.push_back(current);
             doubleArea += signedAreaContribution(_halfEdges[current].curve);
+            cycle.bounds.add(_halfEdges[current].curve);
 
             current = _halfEdges[current].next;
             if (current == static_cast<int>(i))
@@ -498,15 +559,75 @@ std::vector<PlanarMap::Cycle> PlanarMap::collectCycles() const
     return cycles;
 }
 
+void PlanarMap::Bounds::add(const Curve& curve)
+{
+    double l, t, r, b;
+    curve.controlBounds(l, t, r, b);
+    if (empty)
+    {
+        left = l;
+        top = t;
+        right = r;
+        bottom = b;
+        empty = false;
+        return;
+    }
+    left = std::min(left, l);
+    top = std::min(top, t);
+    right = std::max(right, r);
+    bottom = std::max(bottom, b);
+}
+
+bool PlanarMap::Bounds::rayCanHit(const Point& point) const
+{
+    if (empty)
+        return false;
+
+    // A curve stays inside its control box, give or take the rounding of
+    // evaluating it, which is far below this.
+    const double slack = 1.0e-6 * (1.0 + std::max(std::max(std::fabs(left), std::fabs(right)),
+        std::max(std::fabs(top), std::fabs(bottom))));
+    return !(point.y < top - slack || point.y > bottom + slack || point.x > right + slack);
+}
+
+int PlanarMap::rayCrossings(const Curve& curve, const Point& point)
+{
+    // A ray that misses the curve's box crosses nothing, and that is much
+    // cheaper to find out than solving for where it would.
+    Bounds bounds;
+    bounds.add(curve);
+    return bounds.rayCanHit(point) ? curve.horizontalRayCrossings(point) : 0;
+}
+
 bool PlanarMap::cycleContains(const Cycle& cycle, const Point& point) const
 {
     // Cast a ray and count exactly where the boundary curves cross it. A
     // sampled outline sags inside a curve by more than the quarter twip an
     // interior point steps off the boundary, which put faces on the wrong
     // side of their own edges.
+    if (!cycle.bounds.rayCanHit(point))
+        return false;
     int crossings = 0;
     for (int edge : cycle.edges)
-        crossings += _halfEdges[edge].curve.horizontalRayCrossings(point);
+        crossings += rayCrossings(_halfEdges[edge].curve, point);
+    return (crossings % 2) == 1;
+}
+
+bool PlanarMap::boundaryContains(int halfEdge, const Point& point) const
+{
+    // The walk cycleFrom() takes, counting as it goes.
+    if (halfEdge < 0 || halfEdge >= static_cast<int>(_halfEdges.size()))
+        return false;
+
+    int crossings = 0;
+    int current = halfEdge;
+    for (size_t step = 0; step <= _halfEdges.size(); ++step)
+    {
+        crossings += rayCrossings(_halfEdges[current].curve, point);
+        current = _halfEdges[current].next;
+        if (current < 0 || current == halfEdge)
+            break;
+    }
     return (crossings % 2) == 1;
 }
 
@@ -631,6 +752,18 @@ void PlanarMap::linkFaces()
         for (int edge : cycles[i].edges)
             _halfEdges[edge].face = faceIndex;
     }
+
+    _faceHalfEdges.assign(_faces.size(), std::vector<int>());
+    for (size_t i = 0; i < _halfEdges.size(); ++i)
+    {
+        const int face = _halfEdges[i].face;
+        if (face >= 0 && face < static_cast<int>(_faces.size()))
+            _faceHalfEdges[face].push_back(static_cast<int>(i));
+    }
+
+    _faceBounds.assign(_faces.size(), Bounds());
+    for (size_t index : regions)
+        _faceBounds[faceOfCycle[index]] = cycles[index].bounds;
 }
 
 std::vector<int> PlanarMap::cycleFrom(int halfEdge) const
@@ -651,6 +784,14 @@ std::vector<int> PlanarMap::cycleFrom(int halfEdge) const
     return edges;
 }
 
+const std::vector<int>& PlanarMap::faceHalfEdges(int face) const
+{
+    static const std::vector<int> none;
+    if (face < 0 || face >= static_cast<int>(_faceHalfEdges.size()))
+        return none;
+    return _faceHalfEdges[face];
+}
+
 bool PlanarMap::faceContains(int face, const Point& point) const
 {
     if (face < 0 || face >= static_cast<int>(_faces.size()))
@@ -664,25 +805,23 @@ bool PlanarMap::faceContains(int face, const Point& point) const
     {
         for (int hole : target.holes)
         {
-            Cycle cycle;
-            cycle.edges = cycleFrom(hole);
-            if (cycleContains(cycle, point))
+            if (boundaryContains(hole, point))
                 return false;
         }
         return true;
     }
 
-    Cycle outer;
-    outer.edges = cycleFrom(target.halfEdge);
-    if (!cycleContains(outer, point))
+    // A ray that misses the outer boundary's box crosses none of it.
+    if (face < static_cast<int>(_faceBounds.size()) && !_faceBounds[face].rayCanHit(point))
+        return false;
+
+    if (!boundaryContains(target.halfEdge, point))
         return false;
 
     // Inside the outer boundary but inside a hole is not inside the face.
     for (int hole : target.holes)
     {
-        Cycle cycle;
-        cycle.edges = cycleFrom(hole);
-        if (cycleContains(cycle, point))
+        if (boundaryContains(hole, point))
             return false;
     }
 
@@ -772,11 +911,8 @@ void PlanarMap::setFaceFill(int face, int fillStyle)
 
     // A half-edge carries the fill of the face it borders, which is the fill on
     // its left.
-    for (HalfEdge& edge : _halfEdges)
-    {
-        if (edge.face == face)
-            edge.leftFill = fillStyle;
-    }
+    for (const int edge : faceHalfEdges(face))
+        _halfEdges[edge].leftFill = fillStyle;
 }
 
 void PlanarMap::build(double tolerance)
@@ -784,6 +920,8 @@ void PlanarMap::build(double tolerance)
     _vertices.clear();
     _halfEdges.clear();
     _faces.clear();
+    _faceHalfEdges.clear();
+    _faceBounds.clear();
     _vertexLookup.clear();
     _unboundedFace = -1;
 

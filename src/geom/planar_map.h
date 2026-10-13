@@ -4,6 +4,7 @@
 
 #include <cstdint>
 #include <map>
+#include <unordered_map>
 #include <utility>
 #include <vector>
 
@@ -107,7 +108,9 @@ public:
     /// One twentieth of a pixel: the grid Flash stores coordinates on.
     static constexpr double kTwip = 1.0 / 20.0;
 
-    /// Adds a curve to be arranged. Nothing is computed until build().
+    /// Adds a curve to be arranged. Nothing is computed until build(). A curve
+    /// with a coordinate that is not a finite number, or one far past anything
+    /// the format can store, is left out: it has no place on the twip grid.
     void addCurve(const Curve& curve, int source = -1);
 
     /// Splits every curve at its crossings, welds coincident points, and builds
@@ -130,6 +133,10 @@ public:
 
     /// The half-edges forming a boundary, starting from one of them.
     std::vector<int> cycleFrom(int halfEdge) const;
+
+    /// Every half-edge bordering a face, outer boundary and holes alike, in
+    /// index order.
+    const std::vector<int>& faceHalfEdges(int face) const;
 
     /// Whether a point is inside a face: within its outer boundary and outside
     /// every hole.
@@ -172,18 +179,42 @@ private:
 
     void linkFaces();
 
+    /// A box round some curves' control points, which the curves never leave.
+    struct Bounds
+    {
+        double left = 0.0;
+        double top = 0.0;
+        double right = 0.0;
+        double bottom = 0.0;
+        bool empty = true;
+
+        void add(const Curve& curve);
+
+        /// Whether a horizontal ray cast from \a point can meet anything
+        /// inside: false only when it passes above, below or to the right of
+        /// the box, by a margin wider than evaluating a curve can stray.
+        bool rayCanHit(const Point& point) const;
+    };
+
     /// A closed run of half-edges, found by following `next`.
     struct Cycle
     {
         std::vector<int> edges;
         /// Positive for a region, negative for a boundary seen from outside.
         double area = 0.0;
+        Bounds bounds;
     };
 
     std::vector<Cycle> collectCycles() const;
 
     /// Whether a point falls inside the region a cycle encloses.
     bool cycleContains(const Cycle& cycle, const Point& point) const;
+
+    /// The same for the boundary through \a halfEdge, without collecting it.
+    bool boundaryContains(int halfEdge, const Point& point) const;
+
+    /// Where \a curve crosses a horizontal ray cast from \a point.
+    static int rayCrossings(const Curve& curve, const Point& point);
 
     /// A point just outside the region a cycle encloses, for asking which face
     /// the cycle sits in. A vertex of the cycle will not do: it lies on the
@@ -195,9 +226,25 @@ private:
     std::vector<HalfEdge> _halfEdges;
     std::vector<MapFace> _faces;
 
+    /// The half-edges of each face, so a face's edges are found without
+    /// scanning them all.
+    std::vector<std::vector<int>> _faceHalfEdges;
+
+    /// The box round each face's outer boundary; a point outside it cannot be
+    /// in the face.
+    std::vector<Bounds> _faceBounds;
+
+    struct TwipHash
+    {
+        size_t operator()(const std::pair<int64_t, int64_t>& key) const
+        {
+            return std::hash<int64_t>()(key.first) * 1000003u ^ std::hash<int64_t>()(key.second);
+        }
+    };
+
     /// Vertex lookup by exact twip coordinates, which is what snapping buys:
     /// welding becomes a dictionary hit rather than a distance search.
-    std::map<std::pair<int64_t, int64_t>, int> _vertexLookup;
+    std::unordered_map<std::pair<int64_t, int64_t>, int, TwipHash> _vertexLookup;
 
     int _unboundedFace = -1;
 };
