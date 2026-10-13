@@ -50,7 +50,7 @@
   <dt>Duplicate</dt><dd>Makes a full copy of a symbol, named after the original with <em>copy</em> added.</dd>
   <dt>Linkage...</dt><dd>Gives a symbol a class name, so scripts can create it by that name. Leave it empty for none. The name shows in the <strong>Linkage</strong> column.</dd>
   <dt>Generate Sprite Sheet...</dt><dd>Lays the symbol's frames out on one image for a game. See <a href="export.html#sprite-sheets">Sprite sheets</a>.</dd>
-  <dt>Link to Master File...</dt><dd>Keeps a symbol in step with the same symbol in another file, with <strong>Update from Master</strong>, <strong>Unlink from Master</strong> and <strong>Update All Linked Items</strong> once it is linked. See <a href="pipeline.html#linked-shared-assets">Linked shared assets</a>.</dd>
+  <dt>Link to Master File...</dt><dd>Keeps a symbol in step with the same symbol in another file, Once it is linked, the menu reads <strong>Change Master File...</strong> and adds <strong>Update from Master</strong> and <strong>Unlink from Master</strong>, and the library menu has <strong>Update All Linked Items</strong>. See <a href="pipeline.html#linked-shared-assets">Linked shared assets</a>.</dd>
   <dt>Delete</dt><dd>Removes the selected symbols, bitmaps and fonts (also <kbd>Delete</kbd>). If a symbol is still in use, Phoenix says how many times and asks before deleting it along with its instances. A bitmap that is still in use is kept. Text set in a deleted font symbol uses the font itself instead.</dd>
   <dt>New Symbol...</dt><dd>Makes a new symbol in the selected folder. <span class="menu-path">Insert &rsaquo; New Symbol</span> puts it there too.</dd>
   <dt>New Folder</dt><dd>Adds a folder inside the folder you clicked.</dd>
@@ -69,6 +69,8 @@
 </dl>
 
 <p>A sound's <strong>Properties...</strong> show its format and length, with <strong>Play</strong> and <strong>Stop</strong> to hear it.</p>
+
+<h2>Folders and moving items</h2>
 
 <p>Drag items or folders onto a folder to move them into it, or onto empty space to move them to the top level. Moving or renaming a folder takes everything inside it along, and every symbol instance, bitmap fill and sound that uses those items is updated to match. If a name is already taken, Phoenix refuses the change and explains why in the status bar.</p>
 

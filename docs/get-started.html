@@ -17,19 +17,21 @@
 
 <p class="eyebrow">Get started</p>
 <h1>Install and update</h1>
-<p class="lead">Phoenix installs per user, needs no administrator rights, and keeps itself up to date.</p>
+<p class="lead">Phoenix comes as one download per platform, with everything it needs inside, and keeps itself up to date.</p>
 
 <h2>System requirements</h2>
 
 <table>
   <thead><tr><th>Platform</th><th>Supported</th><th>Download</th></tr></thead>
   <tbody>
-    <tr><td>Windows 10 and 11 (64-bit)</td><td>Yes</td><td><code>Phoenix-win-x64-Setup.exe</code>, or a portable zip</td></tr>
-    <tr><td>macOS on Apple silicon</td><td>Yes</td><td><code>Phoenix-osx-arm64-Setup.pkg</code>, or a portable zip</td></tr>
+    <tr><td>Windows 10 and 11 (64-bit)</td><td>Yes</td><td><code>Phoenix-win-x64-Setup.exe</code>, or <code>Phoenix-win-x64-Portable.zip</code></td></tr>
+    <tr><td>macOS on Apple silicon</td><td>Yes</td><td><code>Phoenix-osx-arm64-Setup.pkg</code>, or <code>Phoenix-osx-arm64-Portable.zip</code></td></tr>
     <tr><td>macOS on Intel</td><td><span class="badge">Planned</span></td><td>&mdash;</td></tr>
     <tr><td>Linux</td><td><span class="badge">Planned</span></td><td>&mdash;</td></tr>
   </tbody>
 </table>
+
+<p>Nothing else needs installing. Phoenix ships with its own copy of ffmpeg, which it uses to export MP4 and ProRes video and to import video, so those work straight away.</p>
 
 <p>A graphics tablet is optional. When one is connected, the brushes respond to pen pressure and tilt, and turning the pen over to its eraser end switches to the Eraser.</p>
 
@@ -38,7 +40,7 @@
 <ol class="steps">
   <li>Open the <a href="https://github.com/brendan-duncan/phoenix/releases/latest">latest release</a> on GitHub and download <code>Phoenix-win-x64-Setup.exe</code>.</li>
   <li>Run the installer. Phoenix installs into your user account, so it does not ask for administrator rights, and it starts when the installer finishes.</li>
-  <li>Phoenix adds itself to the Start menu. It also registers the <code>.phx</code> file type and adds itself to the <strong>Open with</strong> list for <code>.fla</code> files, without replacing Animate as the default for them.</li>
+  <li>Phoenix adds itself to the Start menu. It also registers the <code>.phx</code> file type and adds itself to the <strong>Open with</strong> list for <code>.fla</code> files, without changing which app opens them by default.</li>
 </ol>
 
 <div class="callout warn">
@@ -46,7 +48,7 @@
   <p>The Windows installer is not code-signed yet, so SmartScreen may warn that the publisher is unknown. Choose <strong>More info</strong>, then <strong>Run anyway</strong>. Signing is <span class="badge">Planned</span>.</p>
 </div>
 
-<p>To use Phoenix without installing it, download the portable zip instead, unpack it anywhere, and run <code>Phoenix.exe</code>. A portable copy does not update itself.</p>
+<p>To use Phoenix without installing it, download <code>Phoenix-win-x64-Portable.zip</code> instead, unpack it anywhere, and run <code>Phoenix.exe</code>. Keep the unpacked files together: <code>ffmpeg.exe</code> next to <code>Phoenix.exe</code> is what exports video. A portable copy does not update itself.</p>
 
 <h2>Install on macOS</h2>
 
@@ -84,7 +86,7 @@
 
 <h2>Open a file</h2>
 
-<p>Phoenix opens Phoenix documents (<code>.phx</code>), Animate files (<code>.fla</code>), uncompressed XFL folders, and files saved by older versions of Flash. You can open a file in several ways:</p>
+<p>Phoenix opens Phoenix documents (<code>.phx</code>), FLA files (<code>.fla</code>), uncompressed XFL folders, and older binary FLA files. You can open a file in several ways:</p>
 
 <ul>
   <li><span class="menu-path">File &rsaquo; Open...</span> (<kbd>Ctrl</kbd>+<kbd>O</kbd>), or <span class="menu-path">File &rsaquo; Open Recent</span>.</li>

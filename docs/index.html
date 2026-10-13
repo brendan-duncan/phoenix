@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Phoenix User Guide</title>
-<meta name="description" content="Learn to draw, animate and export with Phoenix, the open source 2D vector animation app that opens and saves Animate FLA files.">
+<meta name="description" content="Learn to draw, animate and export with Phoenix, the open source 2D vector animation app that opens and saves FLA and XFL files.">
 <link rel="icon" href="assets/img/logo.png">
 <link rel="stylesheet" href="assets/site.css">
 <script>try { const t = localStorage.getItem("phoenix-docs-theme"); if (t) document.documentElement.dataset.theme = t; } catch (e) {}</script>
@@ -18,7 +18,7 @@
   <div>
     <p class="eyebrow">Phoenix User Guide</p>
     <h1>Draw, animate and ship your 2D vector work</h1>
-    <p class="lead">Phoenix is an open source 2D vector animation app for Windows and macOS. It has the drawing tools, timeline and symbols animators already know, and it opens and saves Adobe Animate FLA files without losing anything.</p>
+    <p class="lead">Phoenix is an open source 2D vector animation app for Windows and macOS. It has the drawing tools, timeline and symbols animators already know, and it opens and saves FLA and XFL files, so existing projects carry straight over.</p>
     <div class="actions">
       <a class="button primary" href="get-started.html">Install Phoenix</a>
       <a class="button" href="first-animation.html">Make your first animation</a>
@@ -58,12 +58,22 @@
   <a class="card" href="documents.html">
     <div class="card-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg></div>
     <h3>Work with FLA files</h3>
-    <p>Open files from Animate and older versions of Flash, and save them so Animate opens them again.</p>
+    <p>Open FLA files, XFL folders and older binary FLAs, and save back to FLA whenever you need to.</p>
   </a>
   <a class="card" href="export.html">
     <div class="card-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 3v12"/><path d="M7 10l5 5 5-5"/><path d="M5 21h14"/></svg></div>
     <h3>Export anywhere</h3>
-    <p>MP4 and ProRes video, animated GIF, PNG and SVG sequences, sprite sheets, single images, SWF and WAV, from the app or the command line.</p>
+    <p>MP4 and ProRes video, animated GIF, PNG and SVG sequences, compositing passes, sprite sheets, images, SWF and WAV, from the app, the render queue or the command line.</p>
+  </a>
+  <a class="card" href="rigging.html">
+    <div class="card-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="5" r="2"/><circle cx="6" cy="19" r="2"/><circle cx="18" cy="19" r="2"/><path d="M12 7v5M12 12l-5 5.5M12 12l5 5.5"/></svg></div>
+    <h3>Rig and stage shots</h3>
+    <p>Pegs, deformers, master controllers, function curves, an X-sheet and a multiplane camera.</p>
+  </a>
+  <a class="card" href="pipeline.html">
+    <div class="card-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="M2 9h20M8 4v5M14 4v5"/></svg></div>
+    <h3>Run a production</h3>
+    <p>Animatics, shot breakdown, linked shared assets, review notes, and XFL folders for version control.</p>
   </a>
 </div>
 
@@ -81,13 +91,13 @@
 <p>After that, use the sidebar or press <kbd>/</kbd> to search. The <a href="shortcuts.html">keyboard shortcuts</a> page lists every key Phoenix uses.</p>
 
 <div class="callout">
-  <span class="label">Already know Animate?</span>
-  <p>Most tools, panels and keys work the way you expect. <a href="animate.html">Coming from Animate</a> lists the few keys that differ and what Phoenix adds.</p>
+  <span class="label">Coming from another app?</span>
+  <p>Most tools, panels and keys work the way you expect. <a href="animate.html">Coming from Animate</a> and <a href="harmony.html">Coming from Harmony</a> map what you know onto Phoenix.</p>
 </div>
 
 <h2>About Phoenix</h2>
 
-<p>Phoenix is free and open source, and is developed in the open on <a href="https://github.com/brendan-duncan/phoenix">GitHub</a>. It keeps its own work in the <a href="documents.html#the-phoenix-format">Phoenix document format</a> (<code>.phx</code>), which opens faster than FLA and has room for features FLA cannot store. You can export to FLA at any time.</p>
+<p>Phoenix is free and open source, and is developed in the open on <a href="https://github.com/brendan-duncan/phoenix">GitHub</a>. It keeps its own work in the <a href="documents.html#the-phoenix-format">Phoenix document format</a> (<code>.phx</code>), which opens faster than FLA and has room for features FLA cannot store. You can save as FLA at any time. Everything Phoenix needs comes with it, including the video encoder, so there is nothing else to install.</p>
 
 <p>Phoenix is under active development, and new tools and panels arrive often. Sections marked <span class="badge">Planned</span> describe work that is on the way but not in the current release.</p>
 

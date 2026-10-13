@@ -60,11 +60,13 @@
 
 <h2>Light table</h2>
 
-<p><span class="menu-path">View &rsaquo; Light Table</span> (<kbd>Shift</kbd>+<kbd>L</kbd>) fades every layer except the one you are drawing on, so you can see the other layers through it without mistaking them for your own.</p>
+<p><span class="menu-path">View &rsaquo; Light Table</span> (<kbd>Shift</kbd>+<kbd>L</kbd>) fades every layer except the ones selected in the timeline, where you are drawing, so you can trace over the other layers without mistaking them for your own.</p>
 
 <h2>Multiplane camera</h2>
 
-<p><span class="menu-path">Insert &rsaquo; Camera</span> adds a camera to the scene; <span class="menu-path">Window &rsaquo; Layer Depth</span> sets how far each layer sits from it, so a pan moves near layers faster than far ones. The Camera tool (<kbd>C</kbd>) pans, zooms and turns it, keyed on the frame shown.</p>
+<p><span class="menu-path">Insert &rsaquo; Camera</span> adds a camera layer at the top of the scene, running its full length; a scene has one camera. In <span class="menu-path">Window &rsaquo; Layer Depth</span>, drag each layer nearer to or farther from the camera, so a pan moves near layers faster than far ones.</p>
+
+<p>The <a href="stage.html#the-camera">Camera tool</a> (<kbd>C</kbd>) moves the camera: drag to pan, <kbd>Shift</kbd>-drag to zoom and <kbd>Alt</kbd>-drag to turn. Each drag keys the camera on the frame shown, and the camera tweens into that keyframe from the one before. Function Curves shows the camera's pan, zoom and turn on the camera layer. Turn off <span class="menu-path">View &rsaquo; Camera View</span> to see the scene without the camera's moves.</p>
 
 </article>
 </main>

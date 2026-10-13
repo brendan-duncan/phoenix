@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Text · Phoenix User Guide</title>
 <meta name="description" content="Add and edit text with the Text tool: growing and fixed-width boxes, fonts, sizes and colors, and static, dynamic and input text.">
-<meta name="keywords" content="text tool type font family size color static dynamic input text box fixed width wrap caret selection vertical superscript subscript justify spell check font mapping break apart find replace">
+<meta name="keywords" content="text tool type font family size color static dynamic input text box fixed width wrap caret selection vertical superscript subscript justify spell check font mapping break apart find replace tlf text layout framework">
 <link rel="icon" href="assets/img/logo.png">
 <link rel="stylesheet" href="assets/site.css">
 <script>try { const t = localStorage.getItem("phoenix-docs-theme"); if (t) document.documentElement.dataset.theme = t; } catch (e) {}</script>
@@ -68,7 +68,7 @@
 <p>Select a text box with the Selection tool, or click into one with the Text tool, and the Object tab of the Properties panel shows its settings. With the Selection tool a change applies to the whole box, or to every text box selected. While typing, character settings apply to the selected characters and paragraph settings to the paragraphs the selection or caret is in.</p>
 
 <dl class="defs">
-  <dt>Family, Size, Color</dt><dd>The font, its size in pixels and the text color.</dd>
+  <dt>Family, Size, Color</dt><dd>The font, its size in points (a point is a pixel on the stage at 100%) and the text color.</dd>
   <dt>Style</dt><dd><strong>B</strong> and <strong>I</strong> for bold and italic (drawn bolder or slanted when the font has no bold or italic face), and <strong>Superscript</strong> or <strong>Subscript</strong>, set smaller above or below the line.</dd>
   <dt>Letter spacing, Auto kern</dt><dd>Room added between letters, and whether the font's own kerning pairs are used.</dd>
   <dt>Anti-alias</dt><dd>How the text is smoothed where it plays: device fonts, bitmap text, anti-aliasing for animation or for readability, or custom anti-aliasing.</dd>
@@ -109,9 +109,9 @@
 
 <h2>Check spelling</h2>
 
-<p><span class="menu-path">Edit &rsaquo; Check Spelling...</span> goes through every text box in every scene and symbol, one word not in the dictionary at a time, showing it in its sentence with suggestions. <strong>Change</strong> fixes this one, <strong>Change All</strong> every one in the document; <strong>Ignore</strong> skips it, <strong>Ignore All</strong> skips it everywhere, and <strong>Add to Dictionary</strong> keeps it as a word from now on. Phoenix uses your computer's spell checker and its dictionary, in the language Phoenix runs in. Each change can be undone.</p>
+<p><span class="menu-path">Edit &rsaquo; Check Spelling...</span> goes through every text box in every scene and symbol, one word not in the dictionary at a time, showing it in its sentence with suggestions. <strong>Change</strong> fixes this one, <strong>Change All</strong> every one in the document; <strong>Ignore</strong> skips it, <strong>Ignore All</strong> skips it everywhere, and <strong>Add to Dictionary</strong> keeps it as a word from now on. Each change can be undone.</p>
 
-<p>Spell checking uses the Windows spell checker; on macOS it is not available yet.</p>
+<p>Phoenix uses the Windows spell checker and its dictionary, in the language Phoenix runs in. On other systems, Check Spelling says that no spell checker is available.</p>
 
 <h2>Find and replace text</h2>
 
@@ -124,6 +124,8 @@
 <h2>How text is drawn</h2>
 
 <p>Phoenix draws the text settings saved in FLA files, including alignment, letter and line spacing, kerning, and bold and italic. All text settings are kept when you save, even those that cannot yet be changed in Phoenix.</p>
+
+<p>TLF text in older FLA and XFL files opens as classic text you can edit: its paragraphs and line breaks, and each span's font, size, color, bold, italic and tracking, with each paragraph's alignment. A TLF field with an instance name becomes dynamic text, so scripts can still reach it; the rest becomes static text. A TLF field Phoenix cannot read is kept as it was and saved back unchanged.</p>
 
 </article>
 </main>

@@ -17,7 +17,7 @@
 
 <p class="eyebrow">Workspace</p>
 <h1>Stage, zoom and view</h1>
-<p class="lead">How to move around your artwork, line things up precisely, and control what the stage shows. None of these change your document except guides, which are saved with it.</p>
+<p class="lead">How to move around your artwork, line things up precisely, and control what the stage shows. These are view settings, except guides, the grid and the guide and object snap settings, which are saved with the document.</p>
 
 <h2>Zoom</h2>
 
@@ -30,19 +30,19 @@
     <tr><td>Actual size</td><td class="wrap"><kbd>Ctrl</kbd>+<kbd>1</kbd></td></tr>
     <tr><td>400% and 800%</td><td class="wrap"><kbd>Ctrl</kbd>+<kbd>4</kbd> and <kbd>Ctrl</kbd>+<kbd>8</kbd></td></tr>
     <tr><td>Other set sizes</td><td class="wrap"><span class="menu-path">View &rsaquo; Magnification</span>: 25%, 50%, 100%, 200%, 400%, 800%</td></tr>
-    <tr><td>Any size</td><td class="wrap">Type a percentage in the zoom box at the right of the edit bar and press <kbd>Enter</kbd></td></tr>
+    <tr><td>Any size</td><td class="wrap">Type a percentage, from 5% to 10000%, in the zoom box on the edit bar and press <kbd>Enter</kbd></td></tr>
   </tbody>
 </table>
 
 <h3>The stage controls</h3>
 
-<p>The right end of the edit bar, above the stage, holds the view controls you reach for most:</p>
+<p>The right end of the edit bar, the strip above the stage that shows which scene or symbol you are editing, holds the view controls you reach for most:</p>
 
 <dl class="defs">
   <dt>Center Stage</dt><dd>Brings the stage to the middle of the view, keeping the zoom.</dd>
-  <dt>Rotation</dt><dd>Picks the Rotation tool. While the view is turned, the button shows the angle, and clicking it sets the view straight again.</dd>
-  <dt>Content outside the stage</dt><dd>Choose whether artwork on the pasteboard is shown, dimmed, or clipped away. This is the same as Dim Outside Document and Clip Content Outside Stage in the View menu, and Phoenix remembers your choice. Exports are never affected.</dd>
-  <dt>Zoom box</dt><dd>Shows the current zoom and follows every other way of zooming. Type a percentage, use its arrows (or the <kbd>Up</kbd> and <kbd>Down</kbd> keys) to step through the set sizes, or open the menu beside it for Fit in Window, Show Frame, Show All and the set sizes.</dd>
+  <dt>Rotation</dt><dd>Picks the <a href="#rotate-the-view">Rotation tool</a>. While the view is turned, the button shows the angle beside its icon, and clicking it sets the view straight again.</dd>
+  <dt>Content outside the stage</dt><dd>The button's icon shows the current mode; click it to choose <strong>Show</strong>, <strong>Dim</strong> or <strong>Clip Content Outside Stage</strong> for artwork on the pasteboard. These are the same settings as <strong>Dim Outside Document</strong> and <strong>Clip Content Outside Stage</strong> in the View menu, and Phoenix remembers them. Exports are not affected.</dd>
+  <dt>Zoom box</dt><dd>Shows the current zoom and follows every other way of zooming. Type a percentage, or use its arrows (or the <kbd>Up</kbd> and <kbd>Down</kbd> keys) to step through 8%, 25%, 50%, 100%, 200%, 400%, 800%, 1600% and 3200%. The arrow button beside it opens a menu with <strong>Fit in Window</strong> and <strong>Show Frame</strong> (both fit the stage in the view), <strong>Show All</strong>, and 25% to 800%.</dd>
 </dl>
 
 <h3>The Zoom tool</h3>
@@ -81,7 +81,7 @@
 
 <h2>Rulers and guides</h2>
 
-<p>Turn on rulers with <span class="menu-path">View &rsaquo; Rulers</span> (<kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>R</kbd>). Rulers measure from the stage's top-left corner, in the units set in <span class="menu-path">Modify &rsaquo; Document</span> (pixels unless you change them).</p>
+<p>Turn on rulers with <span class="menu-path">View &rsaquo; Rulers</span> (<kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>R</kbd>). Rulers measure from the stage's top-left corner, in the units set in <span class="menu-path">Modify &rsaquo; Document...</span> (<kbd>Ctrl</kbd>+<kbd>J</kbd>), pixels unless you change them.</p>
 
 <ol class="steps">
   <li>Drag from the top ruler to create a horizontal guide, or from the left ruler for a vertical one.</li>
@@ -101,7 +101,7 @@
 
 <h2>Grid and snapping</h2>
 
-<p>Snapping helps you place artwork exactly. While snapping is happening, a small ring appears under the cursor at the point it snapped to. Each kind can be turned on and off in the View menu:</p>
+<p>Snapping helps you place artwork exactly. While snapping is happening, a small ring appears under the cursor at the point it snapped to. Each kind is turned on and off in the View menu (Snap to Guides is under <span class="menu-path">View &rsaquo; Guides</span>):</p>
 
 <table>
   <thead><tr><th>Option</th><th>Default</th><th>Snaps to</th></tr></thead>
@@ -113,20 +113,20 @@
   </tbody>
 </table>
 
-<p><span class="menu-path">View &rsaquo; Edit Grid</span> (<kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>G</kbd>) sets the grid's color and its spacing across and down, saved with the document, and whether it shows, shows over the artwork instead of under it, and snaps. Ruler units are in <span class="menu-path">Modify &rsaquo; Document</span>.</p>
+<p><span class="menu-path">View &rsaquo; Edit Grid...</span> (<kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>G</kbd>) sets the grid's color and its spacing across and down, saved with the document, and whether it shows, shows over the artwork instead of under it, and snaps.</p>
 
 <h2>Display options</h2>
 
 <dl class="defs">
-  <dt>Clip Content Outside Stage</dt><dd>Hides whatever lies off the stage, so you see what will be exported.</dd>
+  <dt>Clip Content Outside Stage</dt><dd>Hides whatever lies off the stage, so you see the frame as a stage-sized export shows it. Phoenix remembers this setting.</dd>
   <dt>Pasteboard</dt><dd>On by default. Turn it off to show only the stage, with nothing around it.</dd>
-  <dt>Center Stage</dt><dd>Brings the stage to the middle of the view, keeping the zoom.</dd>
+  <dt>Center Stage</dt><dd>Brings the stage to the middle of the view, keeping the zoom. Also a button on the edit bar.</dd>
   <dt>Dim Outside Document</dt><dd>Darkens the pasteboard so you can judge what is on the stage. Artwork off the stage still draws, so you can grab it. Phoenix remembers this setting.</dd>
   <dt>High Quality Anti-Aliasing</dt><dd>On by default. Turn it off to draw faster in very heavy scenes.</dd>
   <dt>Show Bounding Boxes</dt><dd><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>B</kbd>. Outlines each element's bounds, which helps track down a stray point far from the artwork.</dd>
   <dt>Onion Skin</dt><dd>See <a href="frames.html#onion-skinning">Onion skinning</a>.</dd>
   <dt>Light Table</dt><dd><kbd>Shift</kbd>+<kbd>L</kbd>. Fades every layer except the one you are drawing on. See <a href="rigging.html#light-table">Light table</a>.</dd>
-  <dt>View Document...</dt><dd>Opens a read-only window with the document's underlying XML, for the curious and for troubleshooting.</dd>
+  <dt>View Document...</dt><dd>Opens the read-only <strong>Document Source</strong> window, showing the document's XML (<code>DOMDocument.xml</code>) as saving would write it, for troubleshooting.</dd>
 </dl>
 
 <h2>Scenes</h2>

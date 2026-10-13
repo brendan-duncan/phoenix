@@ -33,7 +33,7 @@
   </tbody>
 </table>
 
-<p>These are in <span class="menu-path">Insert &rsaquo; Timeline</span> and <span class="menu-path">Edit &rsaquo; Timeline</span>, and on the menu you get by right-clicking frames.</p>
+<p>Frame, Keyframe and Blank Keyframe are in <span class="menu-path">Insert &rsaquo; Timeline</span>; the others are in <span class="menu-path">Edit &rsaquo; Timeline</span>. All but Clear Frames are also on the menu you get by right-clicking frames. Each acts on every selected frame, or on the playhead's frame of the current layer.</p>
 
 <div class="callout tip">
   <span class="label">Tip</span>
@@ -71,8 +71,8 @@
   <dt>Paste and Overwrite Frames</dt><dd>Pastes over the frames already there instead of inserting.</dd>
   <dt>Reverse Frames</dt><dd>Plays the selected frames backward.</dd>
   <dt>Convert to Frame-by-Frame Animation</dt><dd>Turns a tween into a keyframe on every frame, ready to adjust by hand.</dd>
-  <dt>Copy Motion, Paste Motion</dt><dd>Copies the movement of a tween and applies it to another object.</dd>
-  <dt>Remove Tween</dt><dd>Removes a tween, leaving its keyframes.</dd>
+  <dt>Copy Motion, Paste Motion</dt><dd>Copies a <a href="tweens.html#motion-tweens">motion tween</a>'s movement and gives it to another symbol instance or text block, alone on its keyframe, as a motion tween of its own starting from where that object is.</dd>
+  <dt>Remove Tween</dt><dd>Removes the classic, shape or motion tween from the selected spans, leaving their keyframes. A span that had a motion tween holds its object where the motion started.</dd>
   <dt>Distribute to Keyframes</dt><dd>In <span class="menu-path">Modify &rsaquo; Timeline</span>. Select several objects on one frame and each goes on a keyframe of its own, one after another: the bottom one stays, the next goes on the frame after, and so on.</dd>
 </dl>
 
@@ -106,7 +106,7 @@
   </tbody>
 </table>
 
-<p>These are also in the <strong>Control</strong> menu and as buttons in the timeline header. They work when the stage or timeline has focus, so they never interfere with typing in a text box or panel.</p>
+<p>These are in the <strong>Control</strong> menu, and the timeline header has buttons for the first frame, stepping, play, onion skin and loop. They work when the stage or timeline has focus, so they never interfere with typing in a text box or panel.</p>
 
 <p>Playback runs at the document's frame rate. If a frame takes too long to draw, Phoenix skips ahead to stay in time, so what you see matches the real speed. Sounds play along, unless you turn on <span class="menu-path">View &rsaquo; Mute Sounds</span> (<kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>M</kbd>).</p>
 
@@ -126,9 +126,9 @@
   <dt><code>nextFrame()</code>, <code>prevFrame()</code></dt><dd>Steps one frame on or back and stops.</dd>
 </dl>
 
-<p>The calls can be written with <code>this.</code> in front. A script runs when the playhead arrives at its keyframe, but not the frame you start from, so pressing <kbd>Enter</kbd> on a frame with <code>stop()</code> plays on past it. Phoenix does not run the scripts: anything else in them is ignored, and so is a call it cannot be sure of, such as one inside an <code>if</code>, a function or a block, one aimed at another clip, or a goto to a computed frame. Scripts on guide layers are left out.</p>
+<p>The calls can be written with <code>this.</code> in front. A script runs when the playhead arrives at its keyframe, but not the frame you start from, so pressing <kbd>Enter</kbd> on a frame with <code>stop()</code> plays on past it. Phoenix does not run the scripts: anything else in them is ignored, and so is a call it cannot be sure of, such as one inside an <code>if</code>, a function or a block, one aimed at another clip, or a goto to a computed frame or another scene. Scripts on guide layers are left out.</p>
 
-<p>The setting is off by default and is remembered. While it is on, exported movies follow the same calls in movie clips' frame scripts, so a clip with <code>stop()</code> on its first frame holds that frame instead of looping.</p>
+<p>The setting is off by default and is remembered. While it is on, movie clips follow the same calls in their own frame scripts, both as they play on the stage during playback and in exported movies, so a clip with <code>stop()</code> on its first frame holds that frame instead of looping.</p>
 
 <h2>Onion skinning</h2>
 

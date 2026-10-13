@@ -32,7 +32,7 @@
 
 <div class="callout">
   <span class="label">Note</span>
-  <p>On the stage, a movie clip shows its first frame while you edit and scrub. Its animation plays while the document plays (<kbd>Enter</kbd>) and when you <a href="export.html">export</a>. Use graphic symbols when you want to see the animation frame by frame as you scrub.</p>
+  <p>On the stage, a movie clip shows its first frame while you edit and scrub. Its own timeline plays while the document plays (<kbd>Enter</kbd>) and when you <a href="export.html">export</a>, and with <span class="menu-path">Control &rsaquo; Enable Simple Frame Actions</span> on it follows the <code>stop()</code> and goto calls in its frame scripts (see <a href="frames.html#frame-scripts">Frame scripts</a>). Use graphic symbols when you want to see the animation frame by frame as you scrub.</p>
 </div>
 
 <h2>Create a symbol</h2>
@@ -61,7 +61,7 @@
 
 <dl class="defs">
   <dt>Edit in place</dt><dd>Double-click an instance on the stage, or choose <span class="menu-path">Edit &rsaquo; Edit in Place</span>. The rest of the stage stays visible but dims, so you can draw the symbol in context.</dd>
-  <dt>Edit on its own</dt><dd>Choose <span class="menu-path">Edit &rsaquo; Edit Symbols</span> (<kbd>Ctrl</kbd>+<kbd>E</kbd>), double-click the symbol in the library, or pick it from the <strong>Edit Symbols</strong> list at the right of the edit bar.</dd>
+  <dt>Edit on its own</dt><dd>Choose <span class="menu-path">Edit &rsaquo; Edit Symbols</span> (<kbd>Ctrl</kbd>+<kbd>E</kbd>), double-click the symbol in the library, or pick it from the <strong>Edit Symbols</strong> list on the edit bar above the stage, just left of the <a href="stage.html#the-stage-controls">stage controls</a>.</dd>
 </dl>
 
 <figure>
@@ -124,11 +124,11 @@
 
 <h2>9-slice scaling</h2>
 
-<p>Symbols that use 9-slice scaling, such as panels and buttons, keep their corners crisp when stretched: only the middle sections scale. Phoenix draws 9-slice symbols correctly on the stage and in exports.</p>
+<p>A symbol with 9-slice scale guides, such as a panel or a button frame, keeps its corners at their own size when a movie clip instance of it is stretched: the edges stretch one way and the middle both. Phoenix draws this on the stage and in exports, including on instances that are rotated or skewed, or that have a color effect, filters or a blend mode. The guides come from the file; graphic instances of the symbol scale as a whole.</p>
 
 <div class="callout planned">
   <span class="label">Planned</span>
-  <p>Setting up 9-slice guides in Phoenix, and movie clips that animate on the stage during playback.</p>
+  <p>Setting up and moving 9-slice guides in Phoenix.</p>
 </div>
 
 </article>

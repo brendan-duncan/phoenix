@@ -17,19 +17,19 @@
 
 <p class="eyebrow">Reference</p>
 <h1>Settings and preferences</h1>
-<p class="lead">Phoenix remembers the choices you make as you work, and you change most settings where you use them. A few general ones are in the Preferences dialog, and every key can be changed in Keyboard Shortcuts.</p>
+<p class="lead">Phoenix remembers the choices you make as you work, and you change most settings where you use them. A few general ones are in the Preferences dialog, and almost every key can be changed in Keyboard Shortcuts.</p>
 
 <h2>Preferences</h2>
 
-<p>Choose <span class="menu-path">Edit &rsaquo; Preferences</span> (<kbd>Ctrl</kbd>+<kbd>U</kbd>):</p>
+<p>Choose <span class="menu-path">Edit &rsaquo; Preferences</span> (<kbd>Ctrl</kbd>+<kbd>U</kbd>). The <strong>General</strong> group has the first four settings, the <strong>Drawing</strong> group the rest. Changes apply when you click <strong>OK</strong>.</p>
 
 <dl class="defs">
   <dt>Undo levels</dt><dd>How many steps Edit &rsaquo; Undo can go back, 200 unless you change it. The oldest steps are let go as new ones come; <strong>No limit</strong> keeps them all, at the cost of memory.</dd>
   <dt>Auto-recovery</dt><dd>How often a recovery copy of unsaved work is written, or Off. The same setting as <span class="menu-path">File &rsaquo; Auto-Save</span>.</dd>
-  <dt>At startup</dt><dd>Whether the start screen appears.</dd>
-  <dt>Highlight</dt><dd>A selection is outlined in its layer's color, or in one color you choose.</dd>
+  <dt>At startup</dt><dd><strong>Show the start screen</strong>. Turn it off and Phoenix reopens your most recent file instead.</dd>
+  <dt>Highlight</dt><dd><strong>Layer color</strong> outlines a selection in its layer's color; <strong>One color</strong> outlines every selection in the color you pick with the button beside it.</dd>
   <dt>Click accuracy</dt><dd>How near a click must be to a line or a point to pick it: Strict, Normal or Tolerant.</dd>
-  <dt>Connect lines</dt><dd>How near the ends of a Straighten pencil line must be to be joined into a closed shape.</dd>
+  <dt>Connect lines</dt><dd>How near the ends of a Straighten pencil line must be to be joined into a closed shape: Must be close, Normal or Can be distant.</dd>
   <dt>Pen</dt><dd><strong>Show pen preview</strong> draws the next segment to the cursor before you click; <strong>Show solid points</strong> draws the pen's anchors filled.</dd>
 </dl>
 
@@ -43,9 +43,9 @@
 
 <p>Save your keys as a named set with <strong>Save As</strong>, switch between sets from the <strong>Set</strong> list, and remove a set of your own with <strong>Delete</strong>. <strong>Export</strong> and <strong>Import</strong> pass a set to another machine as a JSON file.</p>
 
-<p>The <strong>Set</strong> list starts with two built-in sets. <strong>Phoenix Defaults</strong> gives every command its own key. <strong>Animate Standard</strong> uses the standard keys of Animate shortcut files for the commands Phoenix has. Most are the same as Phoenix's; among those that differ, the Brush is <kbd>B</kbd>, the Nib Brush is <kbd>Shift</kbd>+<kbd>B</kbd>, <span class="menu-path">View &rsaquo; Pasteboard</span> is <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>W</kbd> and <span class="menu-path">View &rsaquo; Snap to Objects</span> is <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>/</kbd>. A key the set gives one command is taken from any command that had it.</p>
+<p>The <strong>Set</strong> list starts with two built-in sets. <strong>Phoenix Defaults</strong> gives every command its own key. <strong>Animate Standard</strong> uses the keys most animators who work with FLA files already know, for the commands Phoenix has. Most keys are the same as Phoenix's; among those that differ, the Brush is <kbd>B</kbd>, the Nib Brush is <kbd>Shift</kbd>+<kbd>B</kbd>, <span class="menu-path">View &rsaquo; Pasteboard</span> is <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>W</kbd> and <span class="menu-path">View &rsaquo; Snap to Objects</span> is <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>/</kbd>. A key the set gives one command is taken from any command that had it.</p>
 
-<p><strong>Import</strong> also reads a shortcut set saved from Animate, as XML or as a text list of commands and keys. Each command is matched to Phoenix's by its menu and name, or by Animate's name for it where Phoenix names it differently. Keys written for macOS (<kbd>Cmd</kbd>, <kbd>Option</kbd>) become <kbd>Ctrl</kbd> and <kbd>Alt</kbd>. Phoenix then says how many were matched and lists the commands it does not have.</p>
+<p><strong>Import</strong> also reads shortcut sets exported from other animation software, as XML or as a text list of commands and keys. Each command is matched to Phoenix's by its menu and name, or by the other name it is known by where Phoenix names it differently. Keys written for macOS (<kbd>Cmd</kbd>, <kbd>Option</kbd>) become <kbd>Ctrl</kbd> and <kbd>Alt</kbd>. Phoenix then says how many were matched and lists the commands it does not have.</p>
 
 <p>From the command line, <code>Phoenix shortcuts</code> lists every command with its key, and <code>Phoenix shortcuts --defaults</code> lists Phoenix's own.</p>
 
@@ -57,11 +57,13 @@
     <tr><td>Recent files (the last ten)</td><td class="wrap"><span class="menu-path">File &rsaquo; Open Recent</span> and the start screen</td></tr>
     <tr><td>Whether the start screen appears</td><td class="wrap"><strong>Show at startup</strong> on the start screen</td></tr>
     <tr><td>Auto-save interval</td><td class="wrap"><span class="menu-path">File &rsaquo; Auto-Save</span> or Preferences</td></tr>
-    <tr><td>Grid shown over the art, Clip Content Outside Stage, Pasteboard, Lock Guides</td><td class="wrap">The View menu</td></tr>
+    <tr><td>Grid shown over the art, Clip Content Outside Stage, Pasteboard, Dim Outside Document, Lock Guides</td><td class="wrap">The View menu, and the stage controls on the edit bar</td></tr>
+    <tr><td>Enable Simple Frame Actions</td><td class="wrap">The Control menu</td></tr>
+    <tr><td>Frame size, row height, frame previews, time in seconds and span based selection</td><td class="wrap">The frame view menu (&#9776;) in the timeline header</td></tr>
     <tr><td>Window size and panel layout</td><td class="wrap">Arrange the window and panels; they are restored next time</td></tr>
     <tr><td>Saved workspaces, and the one in use</td><td class="wrap"><span class="menu-path">Window &rsaquo; Workspaces</span></td></tr>
     <tr><td>Which tools the Tools panel shows, and in what order</td><td class="wrap"><span class="menu-path">Window &rsaquo; Edit Toolbar...</span></td></tr>
-    <tr><td>The theme, and your own themes</td><td class="wrap"><span class="menu-path">Window &rsaquo; Theme</span></td></tr>
+    <tr><td>The theme, your own themes, and the UI scale</td><td class="wrap"><span class="menu-path">Window &rsaquo; Theme</span></td></tr>
     <tr><td>Keyboard shortcuts and saved shortcut sets</td><td class="wrap"><span class="menu-path">Edit &rsaquo; Keyboard Shortcuts</span></td></tr>
     <tr><td>Undo levels, highlight, click accuracy, connect lines and pen display</td><td class="wrap"><span class="menu-path">Edit &rsaquo; Preferences</span></td></tr>
     <tr><td>The format new documents save in</td><td class="wrap"><span class="menu-path">File &rsaquo; Default Save Format</span></td></tr>
@@ -71,8 +73,12 @@
     <tr><td>High-quality anti-aliasing, Snap to Pixels</td><td class="wrap">The View menu</td></tr>
     <tr><td>Last New Document size and frame rate</td><td class="wrap">The New Document dialog</td></tr>
     <tr><td>Symbol type and registration</td><td class="wrap">The Convert to Symbol dialog</td></tr>
-    <tr><td>Last export format and its options</td><td class="wrap">The Export Movie dialog</td></tr>
-    <tr><td>Saved custom eases and motion presets</td><td class="wrap">The Custom Ease dialog and Motion Presets panel</td></tr>
+    <tr><td>Last export format and its options</td><td class="wrap">The Export Movie and Export Sprite Sheet dialogs</td></tr>
+    <tr><td>Jobs waiting in the render queue</td><td class="wrap"><span class="menu-path">Window &rsaquo; Render Queue...</span></td></tr>
+    <tr><td>Default swatches for new documents</td><td class="wrap"><strong>Save as Default</strong> in the Swatches panel menu</td></tr>
+    <tr><td>The program bitmaps open in with Edit With</td><td class="wrap">The Library</td></tr>
+    <tr><td>Your name on review notes</td><td class="wrap">The Review Notes panel</td></tr>
+    <tr><td>Saved custom eases, motion presets, brush presets and filter presets</td><td class="wrap">Where each is saved: the Custom Ease dialog, the Motion Presets panel, Brush Properties and Presets, and the Properties panel's Filters section</td></tr>
     <tr><td>Last folders used to open and import</td><td class="wrap">The file dialogs</td></tr>
   </tbody>
 </table>
@@ -83,7 +89,7 @@
 
 <h2>Where settings are stored</h2>
 
-<p>On Windows, Phoenix keeps its settings in the registry under <code>HKEY_CURRENT_USER\Software\Phoenix</code>. On macOS, they are in Phoenix's preferences file in <code>~/Library/Preferences</code>. Themes you save are <code>.phxtheme</code> files in a <code>themes</code> folder in Phoenix's application data folder, and auto-save recovery copies are kept in Phoenix's local application data folder. Removing these resets Phoenix to its first-run state.</p>
+<p>On Windows, Phoenix keeps its settings in the registry under <code>HKEY_CURRENT_USER\Software\Phoenix\FLAViewer</code>. On macOS, they are in Phoenix's preferences file in <code>~/Library/Preferences</code>. Themes you save are <code>.phxtheme</code> files in a <code>themes</code> folder in Phoenix's application data folder, templates you save are in a <code>Templates</code> folder beside it, and auto-save recovery copies are kept in Phoenix's local application data folder. Removing these resets Phoenix to its first-run state.</p>
 
 <p>To keep the settings somewhere else, for tests, demonstrations or a shared machine, set the <code>PHOENIX_SETTINGS_DIR</code> environment variable to a folder before starting Phoenix. Phoenix then keeps its settings in INI files in that folder instead.</p>
 

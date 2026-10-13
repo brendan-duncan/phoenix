@@ -4,8 +4,8 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Drawing tools · Phoenix User Guide</title>
-<meta name="description" content="Every drawing and painting tool in Phoenix: pen, line, width tool, shapes, primitives, PolyStar, paint brush, pencil, the three brushes and their presets, eraser, paint bucket, ink bottle and eyedropper.">
-<meta name="keywords" content="pen anchor point bezier line rectangle oval primitive polystar star pencil smooth straighten ink recognize shapes fluid brush classic brush ink brush pressure tilt stabilizer taper eraser faucet paint bucket gap ink bottle eyedropper stroke style cap join width profile paint brush art brush pattern brush brush presets dynamics texture grain bitmap brush auto fill repaint lock fill fill all regions">
+<meta name="description" content="Every drawing and painting tool in Phoenix: pen, line, width tool, shapes, primitives, PolyStar, paint brush, pencil, the Brush, Nib Brush and Ink Brush and their presets, eraser, paint bucket, ink bottle and eyedropper.">
+<meta name="keywords" content="pen anchor point bezier line rectangle oval primitive polystar star pencil smooth straighten ink recognize shapes brush nib brush ink brush pressure tilt stabilizer taper eraser faucet paint bucket gap ink bottle eyedropper stroke style cap join width profile paint brush art brush pattern brush brush presets dynamics texture grain bitmap brush auto fill repaint lock fill fill all regions">
 <link rel="icon" href="assets/img/logo.png">
 <link rel="stylesheet" href="assets/site.css">
 <script>try { const t = localStorage.getItem("phoenix-docs-theme"); if (t) document.documentElement.dataset.theme = t; } catch (e) {}</script>
@@ -17,18 +17,18 @@
 
 <p class="eyebrow">Drawing</p>
 <h1>Drawing tools</h1>
-<p class="lead">Every tool's settings live on the Properties panel's <strong>Tool</strong> tab, which appears when you pick the tool. Phoenix remembers each tool's settings between sessions.</p>
+<p class="lead">Every tool's settings live on the Properties panel's <strong>Tool</strong> tab, which appears when you pick the tool. The panel stays on the Tool tab while you draw, even though the shape you just drew is selected; it switches to the <strong>Object</strong> tab only when you select something with a selection tool. Phoenix remembers each tool's settings between sessions.</p>
 
 <h2>Color and style</h2>
 
 <p>Tools that draw show a <strong>Color and Style</strong> section at the top of the Tool tab:</p>
 
 <dl class="defs">
-  <dt>Fill and Stroke</dt><dd>The colors to draw with. Uncheck either one to draw without it, for example a rectangle with no outline.</dd>
+  <dt>Fill and Stroke</dt><dd>The colors to draw with, the same ones as the swatches in the toolbox. Click a swatch to pick a color; uncheck either one to draw without it, for example a rectangle with no outline. Each tool shows only what it draws: the shape tools and Pen show both, the brushes and Paint Bucket only the fill, and the Line, Pencil, Paint Brush and Ink Bottle only the stroke and its style.</dd>
   <dt>Stroke size</dt><dd>Line thickness, from 0.1 to 200 pixels.</dd>
-  <dt>Style</dt><dd>Solid, Hairline (always one screen pixel wide), Dashed, Dotted, Ragged, Stipple or Hatched. The <strong>...</strong> button beside it sets the style's own settings (<a href="color.html">Custom Stroke Style</a>).</dd>
+  <dt>Style</dt><dd>Solid, Hairline (always one screen pixel wide), Dashed, Dotted, Ragged, Stipple or Hatched. The <strong>...</strong> button beside it opens <a href="color.html#stroke-styles">Custom Stroke Style</a> for the style's own settings, such as dash length.</dd>
   <dt>Cap</dt><dd>How open line ends look: Round, None (flat at the end point) or Square.</dd>
-  <dt>Join</dt><dd>How corners look: Round, Bevel or Miter. A miter limit stops very sharp corners from spiking.</dd>
+  <dt>Join</dt><dd>How corners look: Round, Miter or Bevel. For Miter, the <strong>Miter</strong> limit beside it stops very sharp corners from spiking.</dd>
   <dt>Scale</dt><dd>Whether the stroke thickens when the artwork is scaled: Normal (it does), Horizontal, Vertical, or None (it stays the same width).</dd>
   <dt>Hinting</dt><dd>Marks the stroke for pixel hinting. It is saved with the stroke for players that snap thin lines to whole pixels; Phoenix draws the stroke the same either way.</dd>
   <dt>Width</dt><dd>How the width varies along the stroke: Even, Taper Both Ends, Taper Start, Taper End, Swell or Pinch. A stroke shaped with the Width tool shows Custom.</dd>
@@ -78,11 +78,11 @@
 
 <h2>Line</h2>
 
-<p>Press <kbd>N</kbd> and drag to draw a straight line. Hold <kbd>Shift</kbd> to keep it at a multiple of 45&deg;, or <kbd>Alt</kbd> to draw outward from the middle.</p>
+<p>Press <kbd>N</kbd> and drag to draw a straight line. Hold <kbd>Shift</kbd> to keep it at a multiple of 45&deg;.</p>
 
 <h2>Width tool</h2>
 
-<p>Press <kbd>U</kbd> to shape a stroke's width by hand:</p>
+<p>Press <kbd>U</kbd> for the Width tool, which has a toolbox slot of its own, and shape a stroke's width by hand:</p>
 
 <ul>
   <li>Drag out from a stroke to make it wider there, or in toward its middle to make it thinner. This places a <strong>width point</strong>, and the width eases smoothly between points.</li>
@@ -94,7 +94,7 @@
 
 <h2>Shapes and primitives</h2>
 
-<p>One toolbox slot holds the shape tools. Press and hold it to choose.</p>
+<p>One toolbox slot holds the shape tools. Press and hold it to choose one, or press its key.</p>
 
 <figure class="narrow">
   <img src="assets/shots/flyout-shapes.webp" alt="Flyout listing Rectangle (R), Oval (O), Rectangle Primitive (Shift+R), Oval Primitive (Shift+O) and PolyStar" width="242" height="126">
@@ -105,15 +105,15 @@
   <tbody>
     <tr><td>Rectangle</td><td><kbd>R</kbd></td><td class="wrap"><kbd>Shift</kbd> draws a square, <kbd>Alt</kbd> draws from the center. While dragging, press <kbd>&uarr;</kbd> and <kbd>&darr;</kbd> to round the corners (with <kbd>Shift</kbd> for bigger steps). <strong>Corner radius</strong> sets the rounding before you draw. <kbd>Alt</kbd>-click without dragging to type the width, height and corner radius instead.</td></tr>
     <tr><td>Oval</td><td><kbd>O</kbd></td><td class="wrap"><kbd>Shift</kbd> draws a circle, <kbd>Alt</kbd> draws from the center. <kbd>Alt</kbd>-click without dragging to type the width and height.</td></tr>
-    <tr><td>Rectangle Primitive</td><td><kbd>Shift</kbd>+<kbd>R</kbd></td><td class="wrap">A rectangle whose four corner radii stay editable.</td></tr>
-    <tr><td>Oval Primitive</td><td><kbd>Shift</kbd>+<kbd>O</kbd></td><td class="wrap">An oval with an editable start angle, end angle and inner radius, for pie slices and rings.</td></tr>
-    <tr><td>PolyStar</td><td></td><td class="wrap">Drag out from the center. Set the number of <strong>Sides</strong>, and check <strong>Star</strong> to draw a star; <strong>Star point size</strong> sets how deep its points are, from long and thin near 0 to a plain polygon at 1. <kbd>Shift</kbd> snaps the angle.</td></tr>
+    <tr><td>Rectangle Primitive</td><td><kbd>Shift</kbd>+<kbd>R</kbd></td><td class="wrap">A rectangle whose four corner radii stay editable. Draws like the Rectangle, with the same keys.</td></tr>
+    <tr><td>Oval Primitive</td><td><kbd>Shift</kbd>+<kbd>O</kbd></td><td class="wrap">An oval with an editable start angle, end angle and inner radius, for pie slices and rings. Set them before drawing with <strong>Start angle</strong>, <strong>End angle</strong> and <strong>Inner radius</strong>.</td></tr>
+    <tr><td>PolyStar</td><td></td><td class="wrap">Drag out from the center. Set the number of <strong>Sides</strong> (3 to 32), and check <strong>Star</strong> to draw a star; <strong>Star point size</strong> sets how deep its points are, from long and thin near 0 to a plain polygon at 1. <kbd>Shift</kbd> turns it in 45&deg; steps.</td></tr>
   </tbody>
 </table>
 
 <h3>Editing primitives</h3>
 
-<p>Select a primitive and the Object tab shows its options:</p>
+<p>Select a primitive with the Selection tool and the Object tab shows its options:</p>
 
 <ul>
   <li><strong>Rectangle Options</strong>: the radius of each corner, with <strong>Lock corners together</strong> to change all four at once.</li>
@@ -125,7 +125,7 @@
 
 <h2>Paint Brush</h2>
 
-<p>Press <kbd>Y</kbd> and draw freehand to paint with an art or pattern brush. The Paint Brush shares a slot with the Pencil. Choose the brush under <strong>Brush</strong> in the Tool tab: any graphic symbol in the library can be one, such as a leaf, a rope or a chain link. The stroke is fitted like a pencil line, in the Pencil mode and Smoothing you set. A stroke already drawn takes a brush when you select it and choose one in the Properties panel.</p>
+<p>Press <kbd>Y</kbd> and draw freehand to paint with an art or pattern brush. The Paint Brush shares a slot with the Pencil. Choose the brush under <strong>Brush</strong> on the Tool tab, with <strong>Stretch</strong> or <strong>Repeat</strong> beside it: any graphic symbol in the library can be one, such as a leaf, a rope or a chain link. The stroke is fitted like a pencil line, in the Pencil mode and Smoothing you set. To give a stroke already drawn a brush, select it and choose one under <strong>Brush</strong> on the Object tab.</p>
 
 <p><span class="menu-path">Window &rsaquo; Document Brushes</span> lists the brushes the document's strokes use and how many strokes use each. <strong>Draw With It</strong> makes one the brush for new strokes; <strong>Take Off Strokes</strong> turns the strokes that use it back into plain lines.</p>
 
@@ -152,7 +152,7 @@
 
 <h2>Brushes</h2>
 
-<p>The brush slot holds three brushes: the Nib Brush (<kbd>B</kbd>), the Brush (<kbd>Shift</kbd>+<kbd>B</kbd>) and the Ink Brush. All three paint filled shapes, use your tablet's pen pressure, and remember their settings. Hold <kbd>Shift</kbd> to paint a straight stroke across or down.</p>
+<p>The brush slot holds three brushes: the Brush (<kbd>Shift</kbd>+<kbd>B</kbd>), the Nib Brush (<kbd>B</kbd>) and the Ink Brush, which has no key until you give it one. All three paint filled shapes in the fill color, use your tablet's pen pressure, and keep their own settings. Hold <kbd>Shift</kbd> to paint a straight stroke across or down.</p>
 
 <figure class="narrow">
   <img src="assets/shots/flyout-brushes.webp" alt="Flyout listing Brush (Shift+B), Nib Brush (B) and Ink Brush" width="190" height="78">
@@ -174,22 +174,22 @@
 
 <h3>Nib Brush</h3>
 
-<p>A brush with a shaped nib: Round, Oval, Square, Rectangle, Vertical line, or one of two diagonals. It can use pen pressure for size and tilt for shape, and has its own smoothing.</p>
+<p>A brush with a shaped nib, set by <strong>Size</strong> and <strong>Nib shape</strong>: Round, Oval, Square, Rectangle, Vertical line, or one of two diagonals. <strong>Use pressure</strong> lets pen pressure vary the width, <strong>Use tilt</strong> turns the nib the way the pen leans, and <strong>Smoothing</strong> takes out hand wobble.</p>
 
 <h3>Ink Brush</h3>
 
-<p>A brush for confident inked lines, unique to Phoenix.</p>
+<p>A brush for confident inked lines, unique to Phoenix. Besides <strong>Size</strong>, <strong>Smoothing</strong> and <strong>Precision</strong>, it has:</p>
 
 <dl class="defs">
   <dt>Stabilizer</dt><dd>0 to 60 pixels. The line trails behind the cursor as if pulled on a string, which irons out shaky strokes. Higher values give smoother, slower lines.</dd>
   <dt>Pressure</dt><dd>Soft, Linear or Firm: how quickly the line reaches full width as you press harder.</dd>
-  <dt>Min size</dt><dd>The width at the lightest pressure.</dd>
+  <dt>Min size</dt><dd>The width at the lightest pressure, as a percentage of the size.</dd>
   <dt>Tilt shading</dt><dd>Tilting the pen broadens the line, like the side of a brush.</dd>
 </dl>
 
 <h3>Brush modes</h3>
 
-<p>Every brush has a <strong>Brush mode</strong> that limits where paint lands:</p>
+<p>The three brushes share a <strong>Brush mode</strong> that limits where paint lands. <strong>Lock fill</strong>, also on the brushes' Tool tab, works as it does for the <a href="#paint-bucket-and-ink-bottle">Paint Bucket</a>.</p>
 
 <table>
   <thead><tr><th>Mode</th><th>Paints</th></tr></thead>
@@ -218,7 +218,7 @@
 <dl class="defs">
   <dt>Tip</dt><dd><strong>Size</strong>, <strong>Roundness</strong> and <strong>Angle</strong>. <strong>Shape</strong>: Ellipse, Rectangle, Triangle, Diamond, Hexagon, Star, or Custom. <strong>Tip from Library Bitmap...</strong> traces a library bitmap's outline as a custom tip; the bitmap brush stamps the image itself. <strong>Angle follows</strong>: nothing; the stroke's direction (heading), as a calligraphy pen held to the line; the way the pen leans (azimuth); or the turn of an art pen's barrel (twist). <strong>Tilt stretch</strong> lengthens the tip as the pen leans. <strong>Size follows the camera</strong> keeps the tip's size on screen while a camera zooms, so the line looks the same width in the shot.</dd>
   <dt>Dynamics</dt><dd>Pressure, with <strong>Invert pressure</strong> to make pressing harder paint thinner, a minimum size and a response curve. Tilt that broadens the line, with <strong>Invert tilt</strong>. <strong>Speed</strong>, with a sensitivity for how quickly speed has its full effect. <strong>Taper by</strong> a percentage of each stroke or a distance in pixels, so short and long strokes taper alike. Smoothing, precision and the stabilizer.</dd>
-  <dt>Painting</dt><dd>The brush mode, as on the Tool tab. <strong>Auto fill</strong> fills a stroke that closes on itself, so an outline drawn round a shape comes out solid. <strong>Snap to guides</strong>: a stroke begun on a ruler guide keeps to it, which gives straight inked edges.</dd>
+  <dt>Painting</dt><dd>The brush mode, as on the Tool tab. <strong>Auto fill</strong> fills a stroke that closes on itself, so an outline drawn around a shape comes out solid. <strong>Snap to guides</strong>: a stroke begun on a ruler guide keeps to it, which gives straight inked edges.</dd>
   <dt>Bitmap</dt><dd>The bitmap brush; see below.</dd>
   <dt>Texture</dt><dd>See below.</dd>
 </dl>
@@ -231,7 +231,7 @@
 
 <h3>Bitmap brush</h3>
 
-<p>Turn on <strong>Bitmap brush</strong> to paint pixels into the frame's paint canvas, a bitmap in the library, rather than vector shapes. Any of the three brushes can paint this way, with its own tip and dynamics.</p>
+<p>Turn on <strong>Bitmap brush</strong> on the Tool tab to paint pixels into the frame's paint canvas, a bitmap in the library, rather than vector shapes. Any of the three brushes can paint this way, with its own tip and dynamics. The Tool tab also has <strong>Softness</strong>, <strong>Opacity</strong> and <strong>Erase pixels</strong>; every setting is on the <strong>Bitmap</strong> page of Brush Properties:</p>
 
 <dl class="defs">
   <dt>Flow</dt><dd>How much paint each dab lays down. At 100% the paint does not build up where a stroke overlaps itself; below that it does, as an airbrush's.</dd>

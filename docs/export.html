@@ -35,7 +35,7 @@
     <dt>Size</dt><dd>The output size in pixels. Keep proportions to match the stage's shape.</dd>
     <dt>Frames</dt><dd>The first and last frame to export.</dd>
     <dt>Options</dt><dd>Transparent background, Include sound, and Loop forever, where the format supports them. <strong>Through the camera</strong> renders the scene as its <a href="rigging.html#multiplane-camera">camera</a> sees it; turn it off for the stage as drawn.</dd>
-    <dt>Codec</dt><dd>For video: <strong>H.264</strong> (MP4) to watch and share; <strong>ProRes 422 HQ</strong> (MOV) for editing; <strong>ProRes 4444</strong> (MOV), which keeps a transparent background, for compositing. ProRes carries the sound as uncompressed PCM.</dd>
+    <dt>Codec</dt><dd>For video: <strong>H.264</strong> (MP4) to watch and share; <strong>ProRes 422 HQ</strong> (MOV) for editing; <strong>ProRes 4444 with alpha</strong> (MOV), which keeps a transparent background, for compositing.</dd>
     <dt>Area</dt><dd><strong>Stage</strong>, or <strong>Everything</strong>: all the artwork on the frames, wherever it is, the pasteboard too. The size is then the stage's scale applied to that larger area.</dd>
     <dt>Colors</dt><dd>For a GIF, how many colors each frame may use (2 to 256), and <strong>Dither</strong> to mix them so gradients stay smooth in few colors.</dd>
     <dt>Layers</dt><dd>For a sequence per layer, which layers get one. All visible layers until you choose.</dd>
@@ -46,11 +46,12 @@
 <table>
   <thead><tr><th>Format</th><th>Produces</th></tr></thead>
   <tbody>
-    <tr><td>Video (MP4, H.264)</td><td class="wrap">An MP4, or MOV if you name the file <code>.mov</code>, with the soundtrack mixed in as AAC audio. Good quality, plays everywhere.</td></tr>
     <tr><td>PNG Sequence</td><td class="wrap">One numbered image per frame (<code>name0001.png</code>, <code>name0002.png</code>...), optionally with a transparent background. Ideal for compositing and editing software.</td></tr>
+    <tr><td>Video</td><td class="wrap">With the <strong>H.264</strong> codec, an MP4 (or a MOV if you name the file <code>.mov</code>) with the soundtrack mixed in as AAC audio: good quality, plays everywhere. With a <strong>ProRes</strong> codec, a MOV with the soundtrack as uncompressed PCM audio.</td></tr>
     <tr><td>Animated GIF</td><td class="wrap">A GIF, looping forever or playing once, with its own color palette for each frame.</td></tr>
     <tr><td>PNG Sequence per Layer</td><td class="wrap">A separate PNG sequence for every visible layer, with masks applied, for compositing layers separately.</td></tr>
     <tr><td>Sound (WAV)</td><td class="wrap">The mixed soundtrack on its own.</td></tr>
+    <tr><td>Compositing Passes (PNG), Multi-layer EXR</td><td class="wrap">Line, color and matte passes for compositing. See <a href="#compositing-passes">Compositing passes</a>.</td></tr>
     <tr><td>SVG Sequence</td><td class="wrap">One numbered SVG per frame, its shapes, strokes, gradients and text kept as vectors. <strong>Include hidden layers</strong> draws layers you have hidden; <strong>Link images</strong> writes each bitmap once as a file beside the SVGs (<code>name_image_….png</code>) rather than inside every frame.</td></tr>
   </tbody>
 </table>
@@ -59,7 +60,7 @@
 
 <h3>About ffmpeg</h3>
 
-<p>Phoenix encodes video with <a href="https://ffmpeg.org/">ffmpeg</a>, which comes with Phoenix: it is installed beside Phoenix itself, so video export works with nothing else installed. Phoenix always uses its own copy, never another ffmpeg on the machine, so a movie comes out the same everywhere. ffmpeg is a separate program under the GNU General Public License; its license, and where to get the source it was built from, are in the <code>licenses/ffmpeg</code> folder of the installation (on macOS, inside Phoenix.app).</p>
+<p>Phoenix encodes and reads video with <a href="https://ffmpeg.org/">ffmpeg</a>, which comes with Phoenix: it is installed beside Phoenix itself, so video export and <a href="sound.html#reference-video">video import</a> work with nothing else installed. Phoenix always uses its own copy, never another ffmpeg on the machine, so a movie comes out the same everywhere. ffmpeg is a separate program under the GNU General Public License; its license, and where to get the source it was built from, are in the <code>licenses/ffmpeg</code> folder of the installation (on macOS, inside Phoenix.app).</p>
 
 <h2>Export Image</h2>
 
@@ -136,11 +137,11 @@
 
 <h2>Compositing passes</h2>
 
-<p>For compositing in another program, choose a passes format in <b>File &gt; Export &gt; Export Movie</b>:</p>
+<p>For compositing, choose a passes format in <span class="menu-path">File &rsaquo; Export &rsaquo; Export Movie...</span>:</p>
 
 <ul>
   <li><b>Compositing Passes (PNG)</b> writes three numbered sequences: <em>line</em> (the strokes alone), <em>color</em> (the fills, text and bitmaps alone) and <em>matte</em> (the coverage of everything, white on black). The line and color passes have no background.</li>
-  <li><b>Multi-layer EXR</b> writes one OpenEXR file a frame holding the whole picture as its main layer and the passes as layers named <code>line</code>, <code>color</code> and <code>matte</code>, in linear light with premultiplied alpha, as Nuke, After Effects, Fusion and Blender expect.</li>
+  <li><b>Multi-layer EXR</b> writes one OpenEXR file a frame holding the whole picture as its main layer and the passes as layers named <code>line</code>, <code>color</code> and <code>matte</code>, in linear light with premultiplied alpha, as compositing software expects.</li>
 </ul>
 
 <p>From the command line, add <code>--passes</code> or <code>--exr</code> to <code>Phoenix render</code> (see <a href="command-line.html">Command line</a>).</p>

@@ -21,7 +21,7 @@
 
 <h2>Switching between them</h2>
 
-<p>The <strong>Object Drawing</strong> button at the bottom of the toolbox, or <kbd>J</kbd>, switches the mode for new shapes. Merge drawing is the default. The setting applies to the shape tools, Pen, Pencil and brushes; existing shapes keep whatever kind they already are.</p>
+<p>The <strong>Object Drawing</strong> button at the end of the toolbox, after the color swatches, or <kbd>J</kbd>, switches the mode for new shapes. Merge drawing is the default. The setting applies to the shape tools, Line, Pen, Pencil, Paint Brush and brushes; existing shapes keep whatever kind they already are.</p>
 
 <h2>Merge drawing</h2>
 
@@ -44,6 +44,13 @@
 <p>A shape you have just drawn floats above the artwork, still selected. It cuts what is under it when you draw it, so moving it straight away reveals the hole it made. When you click elsewhere, the floating shape drops into the artwork and merges with it.</p>
 
 <p>The same happens when you move, transform or reshape part of a merge drawing: the edited part floats while it is selected, and settles back into the artwork when you deselect it.</p>
+
+<figure>
+  <img src="assets/shots/drawing-oval.webp" alt="A blue oval just drawn over the teal shape, still selected and showing the dot pattern" width="1660" height="702">
+  <figcaption>A newly drawn oval floats above the artwork until you deselect it.</figcaption>
+</figure>
+
+<p>New merge artwork always goes under the layer's groups, symbol instances and drawing objects, so drawing on a layer never covers the objects on it. <span class="menu-path">Modify &rsaquo; Arrange</span> keeps it there: merge artwork moves only among the layer's other merge artwork, and objects only among objects.</p>
 
 <div class="callout tip">
   <span class="label">Tip</span>
@@ -75,14 +82,9 @@
 
 <p>With Object Drawing on, each shape you draw becomes a <strong>drawing object</strong>: a self-contained shape that never cuts or joins anything else. When selected, it shows a thin box rather than the dot pattern. You can stack drawing objects freely and change their order with <span class="menu-path">Modify &rsaquo; Arrange</span>.</p>
 
-<figure>
-  <img src="assets/shots/drawing-oval.webp" alt="A blue oval just drawn over the teal shape, with the Properties panel showing the shape's position, size, fill, stroke, texture and shape options" width="1660" height="702">
-  <figcaption>A newly drawn oval floats above the artwork until you deselect it.</figcaption>
-</figure>
-
 <h3>Primitives</h3>
 
-<p>The <strong>Rectangle Primitive</strong> and <strong>Oval Primitive</strong> tools always make objects, in either mode. Unlike plain shapes, primitives stay editable: you can change a rectangle's corner radii, or an oval's start and end angles and inner radius, on the Properties panel at any time. See <a href="drawing-tools.html#shapes-and-primitives">Shapes and primitives</a>.</p>
+<p>The <strong>Rectangle Primitive</strong> and <strong>Oval Primitive</strong> tools always make objects, in either mode. Unlike plain shapes, primitives stay editable: you can change a rectangle's corner radii, or an oval's start and end angles and inner radius, on the Object tab of the Properties panel at any time. See <a href="drawing-tools.html#shapes-and-primitives">Shapes and primitives</a>.</p>
 
 <h2>Converting between the two</h2>
 

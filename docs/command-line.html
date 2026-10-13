@@ -41,7 +41,7 @@ Phoenix render shot.fla --range 12 --out still/ --transparent
 Phoenix render shot.fla --out comp/shot.mov --prores4444 --transparent
 Phoenix render shot.fla --out vector/shot.svg --link-images</code></pre>
 
-<p>Renders without a window, for render nodes and pipelines. A folder gets a numbered PNG sequence named after the document; a name ending in <code>.mp4</code>, <code>.mov</code> or <code>.gif</code> makes that instead, one ending in <code>.svg</code> a numbered SVG sequence, and one ending in <code>.swf</code> an SWF movie. Without <code>--out</code>, frames go to a folder next to the document called <code><em>name</em>_frames</code>.</p>
+<p>Renders without a window, for render nodes and pipelines. The <code>--out</code> name decides what you get: a folder gets a numbered PNG sequence named after the document, and a name ending in <code>.png</code> a numbered sequence with that name; <code>.mp4</code> or <code>.mov</code> makes a video (H.264 with AAC sound unless you ask for ProRes), <code>.gif</code> an animated GIF, <code>.svg</code> a numbered SVG sequence, and <code>.swf</code> an SWF movie. Without <code>--out</code>, frames go to a folder next to the document called <code><em>name</em>_frames</code>. Every frame of the scene the document opens on is rendered at the stage's size unless you say otherwise. An option Phoenix does not know stops the render with an error.</p>
 
 <table>
   <thead><tr><th>Option</th><th>Meaning</th></tr></thead>
@@ -53,15 +53,15 @@ Phoenix render shot.fla --out vector/shot.svg --link-images</code></pre>
     <tr><td><code>--no-audio</code></td><td class="wrap">A video without its soundtrack.</td></tr>
     <tr><td><code>--per-layer</code></td><td class="wrap">A PNG sequence for each layer.</td></tr>
     <tr><td><code>--layers A,B</code></td><td class="wrap">With <code>--per-layer</code>, only the layers named.</td></tr>
-    <tr><td><code>--prores</code>, <code>--prores4444</code></td><td class="wrap">A <code>.mov</code> in ProRes 422 HQ, or ProRes 4444 which keeps transparency, rather than H.264.</td></tr>
+    <tr><td><code>--prores</code>, <code>--prores4444</code></td><td class="wrap">A <code>.mov</code> in ProRes 422 HQ, or ProRes 4444 which keeps transparency, rather than H.264. The sound is uncompressed PCM.</td></tr>
     <tr><td><code>--everything</code></td><td class="wrap">All the artwork on the frames, the pasteboard too, rather than the stage.</td></tr>
     <tr><td><code>--scene NAME</code></td><td class="wrap">The scene of that name, rather than the one the document opens on.</td></tr>
     <tr><td><code>--all-scenes</code></td><td class="wrap">Every scene, one after another, into one output.</td></tr>
     <tr><td><code>--each-scene</code></td><td class="wrap">Every scene to its own output, named after the scene.</td></tr>
     <tr><td><code>--colors N</code>, <code>--dither</code></td><td class="wrap">For a GIF: at most N colors a frame, and dithered.</td></tr>
     <tr><td><code>--link-images</code></td><td class="wrap">For SVG: each bitmap written once beside the SVGs rather than inside each.</td></tr>
-    <tr><td><code>--passes</code></td><td class="wrap">Line, color and matte PNG sequences for compositing.</td></tr>
-    <tr><td><code>--exr</code></td><td class="wrap">One multi-layer OpenEXR a frame: the picture, with the line, color and matte passes as layers.</td></tr>
+    <tr><td><code>--passes</code></td><td class="wrap">Line, color and matte PNG sequences for compositing, in the <code>--out</code> folder.</td></tr>
+    <tr><td><code>--exr</code></td><td class="wrap">One multi-layer OpenEXR a frame, in the <code>--out</code> folder: the picture, with the line, color and matte passes as layers.</td></tr>
   </tbody>
 </table>
 
@@ -89,7 +89,7 @@ Phoenix shots episode.fla --by camera</code></pre>
 
 <p>Writes a file per shot. With <code>--by label</code> (the default), each frame label starts a shot and gives it its name; frames before the first label become a shot of their own. <code>--by scene</code> makes one file per scene, named after it. <code>--by camera</code> cuts where the scene's camera jumps: at each camera keyframe that is not tweened into.</p>
 
-<p>Each shot starts at frame 1. A tween that runs across a cut is baked into a keyframe per frame on the shot's side, so the shot plays exactly as it did in the episode, and the camera is keyed where it stood at each cut. Library items a shot does not use are left out of its file. <code>--format</code> chooses <code>fla</code> (the default), <code>phx</code> or <code>xfl</code>. In Phoenix, <b>File &gt; Export &gt; Export Shots</b> does the same for the saved episode.</p>
+<p>Each shot starts at frame 1. A tween that runs across a cut is baked into a keyframe per frame on the shot's side, so the shot plays exactly as it did in the episode, and the camera is keyed where it stood at each cut. Library items a shot does not use are left out of its file. <code>--format</code> chooses <code>fla</code> (the default), <code>phx</code> or <code>xfl</code>. Without <code>--out</code>, the shots go in a folder beside the episode named after it with <code>_shots</code>. In Phoenix, <b>File &gt; Export &gt; Export Shots</b> does the same for the saved episode.</p>
 
 <h2>Run something over a folder</h2>
 
@@ -125,7 +125,7 @@ Phoenix benchmark episode.fla --against episode.animate.json</code></pre>
 
 <p>Times each step of working with a document: reading it, opening it in the editor, drawing its frames at the stage's size (first with nothing cached, then again cached, with the frame rate that gives), saving it as FLA, PHX and XFL, and reopening the PHX. It also reports peak memory. <code>--frames</code> sets how many frames are drawn (240 by default). <code>--json</code> writes the numbers to a file, to track them over time or between machines. Use a Release build for numbers worth comparing.</p>
 
-<p>To compare with another app, run <code>docs/benchmark.jsfl</code> there on the same file: it opens the file, exports every frame as a PNG and saves a copy, timing each, and writes <code><em>file</em>.animate.json</code> beside it. <code>--against</code> that file prints both sets of times side by side.</p>
+<p>To compare with an editor that runs JSFL scripts, run <code>docs/benchmark.jsfl</code> in it on the same file: it opens the file, exports every frame as a PNG and saves a copy, timing each, and writes <code><em>file</em>.animate.json</code> beside it. <code>--against</code> that file prints both sets of times side by side.</p>
 
 <h2>Export a movie</h2>
 
@@ -144,7 +144,7 @@ Phoenix --export-movie scene.fla soundtrack.wav</code></pre>
     <tr><td><code>.gif</code></td><td class="wrap">An animated GIF</td></tr>
     <tr><td><code>.svg</code></td><td class="wrap">An SVG sequence: <code>frames0001.svg</code>, <code>frames0002.svg</code> and so on</td></tr>
     <tr><td><code>.wav</code></td><td class="wrap">The soundtrack</td></tr>
-    <tr><td>anything else</td><td class="wrap">H.264 video, for example <code>.mp4</code> or <code>.mov</code>, with sound</td></tr>
+    <tr><td>anything else</td><td class="wrap">H.264 video with AAC sound, for example <code>.mp4</code> or <code>.mov</code></td></tr>
   </tbody>
 </table>
 

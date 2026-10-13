@@ -41,7 +41,7 @@
   </tbody>
 </table>
 
-<p>Width and height can be from 1 to 8192 pixels. The frame rate list runs from 8 to 120 fps and includes the broadcast rates 23.976, 29.97 and 59.94; you can also type any rate. Phoenix remembers your last choice and opens on it next time.</p>
+<p>Width and height can be from 1 to 8192 pixels. The frame rate list runs from 8 to 120 fps and includes the broadcast rates 23.976, 29.97 and 59.94; you can also type any rate up to 120. Phoenix remembers your last choice and opens on it next time.</p>
 
 <h2>Document settings</h2>
 
@@ -110,7 +110,7 @@
 
 <p>To start new documents from one you have set up (a stage size, a layer structure, a character), choose <span class="menu-path">File &rsaquo; Save as Template...</span> and give it a name. <span class="menu-path">File &rsaquo; New from Template...</span> then opens an untitled copy of it, so the template itself is never changed.</p>
 
-<p>Saves are safe: Phoenix writes to a temporary file and only replaces the original once the new file is complete, so a crash or full disk in the middle of a save cannot damage your file.</p>
+<p>Saves are safe: Phoenix writes an FLA or Phoenix document to a temporary file and only replaces the original once the new file is complete, so a crash or full disk in the middle of a save cannot damage your file.</p>
 
 <p><span class="menu-path">File &rsaquo; Check Document...</span> looks through the document for damage, lists errors and warnings, and offers <strong>Repair</strong> for what can be repaired. <span class="menu-path">File &rsaquo; Compare With...</span> shows what changed between this document and another version of it; see <a href="version-control.html">Version control</a>.</p>
 
@@ -120,21 +120,24 @@
   <thead><tr><th>Format</th><th>Open</th><th>Save</th><th>Notes</th></tr></thead>
   <tbody>
     <tr><td>Phoenix document (<code>.phx</code>)</td><td>Yes</td><td>Yes</td><td class="wrap">The default for new documents. See below.</td></tr>
-    <tr><td>Animate document (<code>.fla</code>)</td><td>Yes</td><td>Yes</td><td class="wrap">Files from Flash Professional CS5 through current Animate.</td></tr>
-    <tr><td>XFL folder</td><td>Yes</td><td>Yes</td><td class="wrap">The uncompressed form of an FLA. Open its <code>DOMDocument.xml</code>.</td></tr>
-    <tr><td>Older Flash files</td><td>Yes</td><td>As FLA or PHX</td><td class="wrap">Files from Flash 5 to Flash CS4 are converted when opened.</td></tr>
+    <tr><td>FLA file (<code>.fla</code>)</td><td>Yes</td><td>Yes</td><td class="wrap">The zipped FLA format, from CS5 to the current version.</td></tr>
+    <tr><td>XFL folder</td><td>Yes</td><td>Yes</td><td class="wrap">The uncompressed form of an FLA. Open its <code>.xfl</code> file or its <code>DOMDocument.xml</code>.</td></tr>
+    <tr><td>Binary FLA (<code>.fla</code>)</td><td>Yes</td><td>As FLA, XFL or PHX</td><td class="wrap">The format before CS5: versions MX&nbsp;2004, 8, CS3 and CS4, converted when opened. See below.</td></tr>
   </tbody>
 </table>
 
 <h3>Working with FLA files</h3>
 
-<p>Phoenix is built to round-trip Animate files. When you open an FLA and save it again, Phoenix keeps everything it found, including settings and data it does not use itself, such as scripts. The saved file opens in Animate as before.</p>
+<p>Phoenix is built to round-trip FLA files. When you open an FLA and save it again, Phoenix keeps everything it found, including settings and data it does not use itself, such as scripts, so the saved file opens elsewhere as it did before. TLF text in older files opens as classic text you can edit; see <a href="text.html">Text</a>.</p>
 
 <p>Some things Phoenix can do have no place in an FLA. If saving as FLA or XFL would leave something out, Phoenix tells you what before it writes, so nothing is lost silently.</p>
 
+<p>To see what an FLA would hold, choose <span class="menu-path">View &rsaquo; View Document...</span>. The <strong>Document Source</strong> window shows the document's <code>DOMDocument.xml</code> as Phoenix would write it if you saved now. It is read-only.</p>
+
 <div class="callout">
-  <span class="label">Older Flash files</span>
-  <p>Files from Flash CS4 and earlier use a binary format that Phoenix converts on open. When you save one, Phoenix asks whether to save under a new name or replace the original. A few of these files, such as those with a bitmap placed on the stage or a video, cannot be converted yet; Phoenix says so instead of opening part of the file.</p>
+  <span class="label">Binary FLA files</span>
+  <p>FLA files saved before CS5 use a binary format that Phoenix converts when it opens them. Versions MX&nbsp;2004, 8 and CS3 open in full, with their layers, classic and shape tweens, symbols, bitmaps (on the stage too), static text and sounds. CS4 files can open with parts missing: drawing objects in them cannot be read yet. When part of a file cannot be read, Phoenix opens the rest and lists what is missing. An embedded video keeps only the name of the file it came from. Files older than MX&nbsp;2004 do not open.</p>
+  <p>Phoenix saves only the current format, which the old versions cannot open, so <strong>Save</strong> on a converted file asks first: <strong>Save As...</strong> to keep the original, or <strong>Replace</strong>.</p>
 </div>
 
 <h3>The Phoenix format</h3>
@@ -193,7 +196,9 @@
   <li><strong>Illustrator and PDF:</strong> an Illustrator file is read through the PDF copy it carries, which Illustrator saves by default; for a PDF, the first page is read. Paths with their colors and opacity, grouped and placed artwork, gradients (Illustrator's linear and radial ones), and images. Text in these files is left out: convert it to outlines before you save.</li>
 </ul>
 
-<p>You can also drag images, sounds, PSD, SVG and Illustrator files from your desktop. Dropped on the stage, they are placed where you drop them; dropped elsewhere, they go into the library. An image copied in another app can be pasted straight onto the stage.</p>
+<p>You can also drag images, sounds, PSD, SVG and Illustrator files from your desktop. Dropped on the stage, they are placed where you drop them; dropped elsewhere, they go into the library.</p>
+
+<p><span class="menu-path">Edit &rsaquo; Paste in Center</span> (<kbd>Ctrl</kbd>+<kbd>V</kbd>) also takes what other applications copy: an image, vector artwork copied as SVG or PDF, which comes in as it would from a file, or files copied in your file manager, which are imported to the stage. Copying in Phoenix puts an image and an SVG of the selection on the clipboard, for pasting into other applications.</p>
 
 <h3>Trace Bitmap</h3>
 
@@ -211,12 +216,13 @@
 
 <p>While a document has unsaved changes, Phoenix writes a recovery copy in the background. It never touches your own file. Choose how often under <span class="menu-path">File &rsaquo; Auto-Save</span>: every minute, every 2 (the default), 5 or 10 minutes, or off.</p>
 
-<p>If Phoenix closes without saving, for example after a crash or power cut, it offers the recovery copy the next time it starts:</p>
+<p>If Phoenix closes without saving, for example after a crash or power cut, the next time it starts the <strong>Recover Unsaved Work</strong> dialog lists every recovery copy, newest first, with the document's name and when the copy was made:</p>
 
 <dl class="defs">
-  <dt>Recover</dt><dd>Opens the recovered work. Save it to keep it.</dd>
-  <dt>Discard</dt><dd>Deletes the recovery copy.</dd>
-  <dt>Later</dt><dd>Keeps the copy and asks again next time.</dd>
+  <dt>Recover</dt><dd>Opens the selected copy as the document it came from, unsaved. Save it to keep it. Any other copies are offered again next time.</dd>
+  <dt>Discard</dt><dd>Deletes the selected copies.</dd>
+  <dt>Discard All</dt><dd>Deletes every copy, after asking.</dd>
+  <dt>Later</dt><dd>Keeps the copies and asks again next time.</dd>
 </dl>
 
 </article>

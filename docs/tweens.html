@@ -33,16 +33,16 @@
 <ol class="steps">
   <li>Put an instance of a symbol on a keyframe.</li>
   <li>Add a second keyframe later on the same layer (<kbd>F6</kbd>) and change the instance there: move it, scale it, rotate it, or change its color effect.</li>
-  <li>Right-click a frame between them and choose <strong>Classic Tween</strong>, or choose <span class="menu-path">Insert &rsaquo; Classic Tween</span>.</li>
+  <li>Right-click a frame between them and choose <strong>Classic Tween</strong>, or choose <span class="menu-path">Insert &rsaquo; Classic Tween</span>. You can also pick <strong>Classic Tween</strong> from the <strong>Tween</strong> list in the Frame tab's <strong>Tweening</strong> section.</li>
 </ol>
 
-<p>The span turns lilac with an arrow. Click any frame in it to set its options on the Frame tab's <strong>Tweening</strong> section:</p>
+<p>The span turns lilac with an arrow. Click any frame in it to set its options in the Tweening section:</p>
 
 <dl class="defs">
   <dt>Ease</dt><dd>How the motion speeds up and slows down. See <a href="#easing">Easing</a>.</dd>
   <dt>Rotate</dt><dd><strong>Auto</strong> turns the shortest way; <strong>Clockwise</strong> and <strong>Counter Clockwise</strong> add whole extra turns, as many as you enter; <strong>None</strong> stops it rotating.</dd>
   <dt>Snap</dt><dd>Snaps the instance's registration point onto a motion guide.</dd>
-  <dt>Sync</dt><dd>Keeps a graphic symbol's own animation in step with the tween.</dd>
+  <dt>Sync</dt><dd>Keeps a graphic symbol's own animation in step with the timeline. How the graphic plays (loop, play once, single frame and so on) is set on the instance; see <a href="symbols.html#looping-for-graphics">Looping for graphics</a>.</dd>
 </dl>
 
 <p>To move an object along a curved path, draw the path on a guide layer above it. See <a href="masks-guides.html#motion-guides">Motion guides</a>.</p>
@@ -52,7 +52,7 @@
 <ol class="steps">
   <li>Draw a shape on a keyframe.</li>
   <li>Add a keyframe later on the same layer and draw, or reshape, the shape it should become. Colors and strokes can change too.</li>
-  <li>Right-click a frame between them and choose <strong>Shape Tween</strong>, or <span class="menu-path">Insert &rsaquo; Shape Tween</span>.</li>
+  <li>Right-click a frame between them and choose <strong>Shape Tween</strong>, or <span class="menu-path">Insert &rsaquo; Shape Tween</span>, or pick it from the Frame tab's <strong>Tween</strong> list.</li>
 </ol>
 
 <p>The span turns green. Shape tweens work on shapes, not on symbol instances or groups; break those apart first. Gradients and stroke widths tween along with the outline.</p>
@@ -76,7 +76,7 @@
 
 <h2>Motion tweens</h2>
 
-<p>Select an instance and choose <span class="menu-path">Insert &rsaquo; Motion Tween</span>. A motion tween span is created, and from then on you animate by changing the object rather than by adding keyframes:</p>
+<p>Put a symbol instance or a text block alone on a keyframe, click a frame of its span, and choose <span class="menu-path">Insert &rsaquo; Motion Tween</span> (or right-click the frame and choose <strong>Motion Tween</strong>). The span turns blue; a span only one frame long at the end of the layer first grows to one second. From then on you animate by changing the object rather than by adding keyframes:</p>
 
 <ul>
   <li>Move the playhead to any frame in the span, then move, rotate or scale the object. Phoenix adds a <strong>property keyframe</strong> there.</li>
@@ -91,9 +91,10 @@
 
 <ul>
   <li>Drag a point to change the value or the frame; drag its handles to shape the curve.</li>
-  <li>Double-click the curve, or use <strong>Add Keyframe</strong>, to add a point. Select one and press <kbd>Delete</kbd>, or use <strong>Remove</strong>, to delete it.</li>
-  <li>Type exact numbers in the <strong>Frame</strong> and <strong>Value</strong> fields.</li>
-  <li>Apply an ease to one property with <strong>Property ease</strong>, or to the whole tween with <strong>Tween ease</strong> (from -100 to 100).</li>
+  <li>Double-click the curve to add a point there, or use <strong>Add Keyframe</strong> to add one at the playhead. Select a point and press <kbd>Delete</kbd>, or use <strong>Remove</strong>, to delete it; the first point stays.</li>
+  <li>Type exact numbers in the <strong>Frame</strong> and value fields beside the buttons.</li>
+  <li><strong>Property ease</strong> applies a preset ease (Sine, Quad, Cubic, Back and others) to the stretch after the selected point, or to the whole curve when no point is selected.</li>
+  <li><strong>Tween ease</strong> eases the whole tween, from -100 (ease in) to 100 (ease out). A property that the file marks to ignore the tween's ease keeps its own timing.</li>
 </ul>
 
 <p>Changing an instance's color effect in the Properties panel part way through a motion tween keys it there too, just as moving it does.</p>
@@ -135,7 +136,7 @@
 
 <div class="callout planned">
   <span class="label">Planned</span>
-  <p>Orient to Path for motion tweens, and 3D rotation in motion tweens (classic tweens carry it).</p>
+  <p>An Orient to Path setting for motion tweens, and 3D rotation in motion tweens (classic tweens carry it). Motion tweens in FLA files that are already set to orient to their path do turn along it as they play.</p>
 </div>
 
 </article>

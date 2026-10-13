@@ -22,10 +22,10 @@
 <h2>What carries over</h2>
 
 <ul>
-  <li><strong>Your files.</strong> Phoenix opens FLA and XFL files, and older Flash files, and saves FLA files that Animate opens again. Data Phoenix does not use itself, such as ActionScript, is kept as it was. Publish settings are read and written by Phoenix's own <a href="export.html#publish">Publish</a>, and the settings it does not use are kept.</li>
+  <li><strong>Your files.</strong> Phoenix opens FLA and XFL files, and binary FLA files from Flash MX&nbsp;2004 to CS4 (a CS4 file can open with its drawing objects missing), and saves FLA files that Animate opens again. TLF text opens as classic text, as Animate converts it. Data Phoenix does not use itself, such as ActionScript, is kept as it was. Publish settings are read and written by Phoenix's own <a href="export.html#publish">Publish</a>, and the settings it does not use are kept.</li>
   <li><strong>The drawing model.</strong> Merge and object drawing, primitives, groups, and how strokes and fills interact all behave as you expect.</li>
-  <li><strong>The timeline.</strong> Layers, folders, keyframes, classic, shape and motion tweens, eases, masks, guides and motion guides.</li>
-  <li><strong>Symbols.</strong> Graphics, movie clips and buttons, editing in place, looping options, color effects, blend modes and filters.</li>
+  <li><strong>The timeline.</strong> Layers, folders, keyframes, classic, shape and motion tweens, eases, masks, guides and motion guides, and layer parenting. In Layer Properties, <strong>Follow parent's</strong> Scale, Skew and Flip can each be turned off for a child layer; see <a href="timeline.html#layer-parenting">Layer parenting</a>.</li>
+  <li><strong>Symbols.</strong> Graphics, movie clips and buttons, editing in place, looping options, color effects, blend modes and filters. 9-slice scaling draws on the stage and in exports, also on rotated or skewed instances and those with color effects, filters or blend modes.</li>
   <li><strong>Your muscle memory.</strong> Tool keys, F5 to F8, the frame and arrange shortcuts, and the modifier keys while drawing are the same.</li>
 </ul>
 
@@ -56,7 +56,7 @@
     <tr><td>Show Frame</td><td class="wrap"><span class="menu-path">View &rsaquo; Magnification &rsaquo; Fit in Window</span> (<kbd>Ctrl</kbd>+<kbd>2</kbd>)</td></tr>
     <tr><td>Preferences</td><td class="wrap"><span class="menu-path">Edit &rsaquo; Preferences</span> (<kbd>Ctrl</kbd>+<kbd>U</kbd>) and <span class="menu-path">Edit &rsaquo; Keyboard Shortcuts</span>; see <a href="preferences.html">Settings and preferences</a></td></tr>
     <tr><td>Publish</td><td class="wrap"><span class="menu-path">File &rsaquo; Publish Settings</span> and <span class="menu-path">File &rsaquo; Publish</span>: SWF, HTML, PNG, JPEG, GIF and SVG. <span class="menu-path">File &rsaquo; Export</span> has video, GIF, PNG and SVG sequences, images, SWF and sprite sheets</td></tr>
-    <tr><td>Test Movie</td><td class="wrap">Play on the stage with <kbd>Enter</kbd>, or export</td></tr>
+    <tr><td>Test Movie</td><td class="wrap">Play on the stage with <kbd>Enter</kbd>, or export. Turn on <span class="menu-path">Control &rsaquo; Enable Simple Frame Actions</span> (<kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>F</kbd>) to follow <code>stop()</code>, <code>play()</code> and gotos in frame scripts</td></tr>
   </tbody>
 </table>
 
@@ -65,13 +65,13 @@
 <ul>
   <li><strong>Native format.</strong> New documents save as <code>.phx</code>, which opens much faster. Use <span class="menu-path">Save As</span> to write an FLA whenever you need one, or choose FLA files or XFL folders under <span class="menu-path">File &rsaquo; Default Save Format</span>.</li>
   <li><strong>Movie clips on the stage</strong> show their first frame while you edit and scrub; their animation plays while the document plays and in exports.</li>
-  <li><strong>Scripts are kept, not run.</strong> ActionScript and frame scripts are saved with the file, but Phoenix does not run them.</li>
+  <li><strong>Scripts are kept, not run.</strong> ActionScript and frame scripts are saved with the file, but Phoenix does not run them. With <span class="menu-path">Control &rsaquo; Enable Simple Frame Actions</span> on, playback and exported movie clips follow the simple calls in frame scripts (<code>stop()</code>, <code>play()</code>, <code>gotoAndPlay()</code>, <code>gotoAndStop()</code>, <code>nextFrame()</code> and <code>prevFrame()</code>); everything else in a script is ignored. See <a href="frames.html#frame-scripts">Frame scripts</a>.</li>
 </ul>
 
 <h2>What Phoenix adds</h2>
 
 <dl class="defs">
-  <dt>Ink Brush</dt><dd>A brush with a string stabilizer and adjustable pressure response, for clean inking.</dd>
+  <dt>Ink Brush</dt><dd>A brush with a stabilizer for steady lines, an adjustable pressure response and tilt that broadens the line, for clean inking.</dd>
   <dt>Time Scrub tool</dt><dd>Drag across the stage to move through time.</dd>
   <dt>Outliner</dt><dd>The whole document as a tree, down to individual paths.</dd>
   <dt>Phoenix documents</dt><dd>A faster, more robust file format with room to grow. See <a href="documents.html#the-phoenix-format">The Phoenix format</a>.</dd>
@@ -95,7 +95,8 @@
   <li>3D rotation and translation are drawn and edited in Phoenix, but kept as Phoenix's own settings: Animate shows such clips flat.</li>
   <li>Bones inside shapes and the Bind tool (the Bone tool builds armatures of symbols), and turning artwork into a new puppet (the Asset Warp tool pins and bends existing puppets). Existing armatures and warps play.</li>
   <li>Animate's built-in art and pattern brush library. Phoenix's Paint Brush draws art and pattern brushes made from your own graphic symbols; Animate shows those strokes as plain lines.</li>
-  <li>Running ActionScript or JavaScript, and JSFL commands and extensions.</li>
+  <li>Running ActionScript or JavaScript beyond the simple frame actions, and JSFL commands and extensions.</li>
+  <li>Setting up and moving 9-slice guides. Guides already in the file work.</li>
   <li>HTML5 Canvas documents, and publishing to AIR or projectors. Published SWF movies have no sound or ActionScript.</li>
 </ul>
 

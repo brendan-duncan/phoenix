@@ -21,7 +21,7 @@
 
 <h2>Bring in sound</h2>
 
-<p>Import sounds with <span class="menu-path">File &rsaquo; Import &rsaquo; Import to Library...</span>, or drag sound files onto the window. Phoenix reads WAV, AIFF, MP3, FLAC and Ogg files. Each sound becomes a library item. <span class="menu-path">File &rsaquo; Import &rsaquo; Import Animatic...</span> brings in an animatic's audio tracks, each on a layer of its own; see <a href="pipeline.html#start-from-the-animatic">Start from the animatic</a>.</p>
+<p>Import sounds with <span class="menu-path">File &rsaquo; Import &rsaquo; Import to Library...</span>, or drag sound files onto the window. Phoenix reads WAV, AIFF, MP3, FLAC and Ogg files. Each sound becomes a library item. <span class="menu-path">File &rsaquo; Import &rsaquo; Import to Stage...</span> (<kbd>Ctrl</kbd>+<kbd>R</kbd>), or dropping a sound file on the stage, also puts it on the current frame. <span class="menu-path">File &rsaquo; Import &rsaquo; Import Animatic...</span> brings in an animatic's audio tracks, each on a layer of its own; see <a href="pipeline.html#start-from-the-animatic">Start from the animatic</a>.</p>
 
 <h2>Put a sound on the timeline</h2>
 
@@ -46,7 +46,7 @@
   <dt>Effect</dt><dd>Left Channel, Right Channel, Fade Left to Right, Fade Right to Left, Fade In and Fade Out, or <strong>Custom</strong>, a volume envelope of your own.</dd>
 </dl>
 
-<p>Sounds inside movie clips play too when you export. Sounds inside graphic symbols and buttons stay silent.</p>
+<p>When you play the document in Phoenix, you hear the sounds on the scene's own timeline. Sounds inside movie clips are mixed into exports but are not heard during playback in Phoenix. Sounds inside graphic symbols and buttons stay silent, and sounds on hidden layers are left out of both.</p>
 
 <p>To work in silence, choose <span class="menu-path">View &rsaquo; Mute Sounds</span> (<kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>M</kbd>).</p>
 
@@ -58,7 +58,7 @@
   <li>Click a lane to add a point there, up to eight. Drag a point to move it along the sound and to set that channel's volume.</li>
   <li>Drag a point well out of its lane to take it away.</li>
   <li>Drag the green and red bars on the ruler between the lanes to trim where the sound starts and stops.</li>
-  <li><strong>Zoom In</strong> and <strong>Zoom Out</strong> to work closely; <strong>Frames</strong> measures the ruler in frames instead of seconds; <strong>Play</strong> plays the sound as the frame will; <strong>Clear</strong> sets full volume throughout, untrimmed.</li>
+  <li><strong>Zoom In</strong> and <strong>Zoom Out</strong> to work closely; <strong>Frames</strong> measures the ruler in frames instead of seconds; <strong>Play</strong> and <strong>Stop</strong> preview the sound as the frame will play it; <strong>Clear</strong> sets full volume throughout, untrimmed.</li>
 </ul>
 
 <p>The envelope and trim are one step to undo, and are saved as FLA files keep them.</p>
@@ -69,7 +69,7 @@
 
 <h2>Exporting sound</h2>
 
-<p>Video exports include the mixed soundtrack as AAC audio. You can also export the mix on its own as a WAV file. See <a href="export.html">Exporting</a>.</p>
+<p><span class="menu-path">File &rsaquo; Export &rsaquo; Export Movie...</span> (<kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>S</kbd>) mixes every sound that plays, movie clip sounds included, into the video while <strong>Include sound</strong> is checked: as AAC in an H.264 MP4, or as uncompressed audio in a ProRes MOV. To export the mix on its own, choose the <strong>Sound (WAV)</strong> format. See <a href="export.html#export-movie">Export Movie</a>.</p>
 
 <h2>Reference video</h2>
 
