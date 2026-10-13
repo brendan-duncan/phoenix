@@ -1,6 +1,7 @@
 #include "updater.h"
 #include "file_association.h"
 
+#include <mutex>
 #include <QApplication>
 #include <QMessageBox>
 #include <QPushButton>
@@ -20,10 +21,22 @@ namespace {
 /// version's installer, packages and feed there.
 const char* RepositoryUrl = "https://github.com/brendan-duncan/phoenix";
 
+/// Whether the updater, and so the application, is still there: the
+/// network thread posts only while it is. Checked and cleared under the
+/// lock, so a post never reaches an application already gone.
+struct Mailbox
+{
+    std::mutex mutex;
+    bool open = true;
+};
+
 /// Runs f on the GUI thread, if the updater is still there by then.
 template <typename F>
-void onGuiThread(QPointer<Updater> updater, F f)
+void onGuiThread(const std::shared_ptr<Mailbox>& mailbox, QPointer<Updater> updater, F f)
 {
+    std::lock_guard<std::mutex> lock(mailbox->mutex);
+    if (!mailbox->open)
+        return;
     QMetaObject::invokeMethod(qApp, [updater, f]() {
         if (updater)
             f(updater.data());
@@ -34,6 +47,7 @@ void onGuiThread(QPointer<Updater> updater, F f)
 
 struct Updater::State
 {
+    std::shared_ptr<Mailbox> mailbox = std::make_shared<Mailbox>();
 #ifdef PHOENIX_UPDATER
     std::unique_ptr<Velopack::UpdateManager> manager;
     /// The downloaded update waiting to be installed.
@@ -75,7 +89,15 @@ Updater::Updater(QWidget* window)
 {
 }
 
-Updater::~Updater() = default;
+Updater::~Updater()
+{
+    // Before the application goes: a check still running posts no more.
+    if (_state)
+    {
+        std::lock_guard<std::mutex> lock(_state->mailbox->mutex);
+        _state->mailbox->open = false;
+    }
+}
 
 void Updater::checkForUpdates(bool userAsked)
 {
@@ -118,7 +140,7 @@ void Updater::checkForUpdates(bool userAsked)
             catch (const std::exception& e)
             {
                 const QString error = QString::fromUtf8(e.what());
-                onGuiThread(self, [userAsked, error](Updater* u) {
+                onGuiThread(state->mailbox, self, [userAsked, error](Updater* u) {
                     u->onChecked(userAsked, QString(), error, true);
                 });
                 return;
@@ -133,13 +155,13 @@ void Updater::checkForUpdates(bool userAsked)
             if (update)
             {
                 version = QString::fromStdString(update->TargetFullRelease.Version);
-                onGuiThread(self, [version](Updater* u) {
+                onGuiThread(state->mailbox, self, [version](Updater* u) {
                     emit u->statusMessage(QString("Downloading Phoenix %1...").arg(version));
                 });
 
                 // Reported in tenths, so the status bar is not flooded.
-                struct Progress { QPointer<Updater> updater; QString version; int last = -1; };
-                Progress progress{ self, version };
+                struct Progress { std::shared_ptr<Mailbox> mailbox; QPointer<Updater> updater; QString version; int last = -1; };
+                Progress progress{ state->mailbox, self, version };
                 state->manager->DownloadUpdates(*update, [](void* data, size_t percent) {
                     Progress* p = static_cast<Progress*>(data);
                     const int tenth = int(percent / 10);
@@ -148,7 +170,7 @@ void Updater::checkForUpdates(bool userAsked)
                     p->last = tenth;
                     const QString message = QString("Downloading Phoenix %1... %2%")
                         .arg(p->version).arg(percent);
-                    onGuiThread(p->updater, [message](Updater* u) { emit u->statusMessage(message); });
+                    onGuiThread(p->mailbox, p->updater, [message](Updater* u) { emit u->statusMessage(message); });
                 }, &progress);
 
                 state->ready = update;
@@ -159,7 +181,7 @@ void Updater::checkForUpdates(bool userAsked)
             error = QString::fromUtf8(e.what());
         }
 
-        onGuiThread(self, [userAsked, version, error](Updater* u) {
+        onGuiThread(state->mailbox, self, [userAsked, version, error](Updater* u) {
             u->onChecked(userAsked, version, error, false);
         });
     }).detach();

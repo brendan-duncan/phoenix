@@ -590,6 +590,18 @@ void MainWindow::releaseDocument()
             _copiedLayers.clear();
             _copiedLayersFrom = nullptr;
         }
+        // Bitmaps out in an editor for this document have nowhere to go.
+        for (auto it = _editedBitmapFiles.begin(); it != _editedBitmapFiles.end();)
+        {
+            if (it->second.document == _flaDocument->document)
+            {
+                if (_editedBitmaps)
+                    _editedBitmaps->removePath(it->second.file);
+                it = _editedBitmapFiles.erase(it);
+            }
+            else
+                ++it;
+        }
         delete _flaDocument;
         _flaDocument = nullptr;
     }
@@ -10277,12 +10289,23 @@ void MainWindow::editBitmapWith(const QString& name)
     {
         _editedBitmaps = new QFileSystemWatcher(this);
         connect(_editedBitmaps, &QFileSystemWatcher::fileChanged, this, [this](const QString& changed) {
-            for (const auto& [bitmapName, path] : _editedBitmapFiles)
+            for (const auto& [bitmapName, edit] : _editedBitmapFiles)
             {
-                if (path != changed)
+                if (edit.file != changed)
                     continue;
+                const QString path = edit.file;
+                const fla::Document* owner = edit.document;
                 // Editors write the file in steps; read it once they are done.
-                QTimer::singleShot(500, this, [this, bitmapName = bitmapName, path = path]() {
+                QTimer::singleShot(500, this, [this, bitmapName = bitmapName, path, owner]() {
+                    // Only into the document it came from: another tab may
+                    // have a bitmap of the same name.
+                    if (!_flaDocument || _flaDocument->document != owner)
+                    {
+                        statusBar()->showMessage(
+                            QString("%1 changed in the editor: switch back to its document to take it.").arg(bitmapName),
+                            5000);
+                        return;
+                    }
                     if (fla::Bitmap* edited = bitmapNamed(bitmapName))
                         if (reimportBitmap(edited, path, "Edit With"))
                             statusBar()->showMessage(QString("%1 was updated from the editor.").arg(bitmapName), 4000);
@@ -10293,7 +10316,7 @@ void MainWindow::editBitmapWith(const QString& name)
             }
         });
     }
-    _editedBitmapFiles[name] = file;
+    _editedBitmapFiles[name] = EditedBitmap{file, _flaDocument ? _flaDocument->document : nullptr};
     _editedBitmaps->addPath(file);
     const bool started = program.isEmpty() ? QDesktopServices::openUrl(QUrl::fromLocalFile(file))
                                            : QProcess::startDetached(program, {QDir::toNativeSeparators(file)});

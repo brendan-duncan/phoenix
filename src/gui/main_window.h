@@ -581,7 +581,14 @@ private:
     /// Bitmaps open in another program: the file each was written to, by
     /// bitmap name, watched for saves.
     class QFileSystemWatcher* _editedBitmaps = nullptr;
-    std::map<QString, QString> _editedBitmapFiles;
+    /// Bitmaps out in another program: the file, and the document the
+    /// bitmap is in, which alone takes the change back.
+    struct EditedBitmap
+    {
+        QString file;
+        const fla::Document* document = nullptr;
+    };
+    std::map<QString, EditedBitmap> _editedBitmapFiles;
     /// Libraries of other files opened beside the document.
     struct ExternalLibrary
     {

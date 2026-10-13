@@ -1109,7 +1109,10 @@ void LayersPanel::onItemChanged(QTreeWidgetItem* item, int column)
         item->setText(NameColumn, QString::fromStdString(layer->name));
         return;
     }
-    emit layerRenamed(timeline, item->data(NameColumn, Qt::UserRole).toInt(), name);
+    // After the tree is done with the item: the rename rebuilds the list,
+    // which would delete the item while the tree is still in its handler.
+    const int index = item->data(NameColumn, Qt::UserRole).toInt();
+    QTimer::singleShot(0, this, [this, timeline, index, name]() { emit layerRenamed(timeline, index, name); });
 }
 
 void LayersPanel::onItemClicked(QTreeWidgetItem* item, int column)

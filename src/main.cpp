@@ -12,6 +12,7 @@
 #include <QApplication>
 #include <QProxyStyle>
 #include <QStyleOptionMenuItem>
+#include <QTimer>
 #include <QSettings>
 #include <cmath>
 #include <algorithm>
@@ -46,13 +47,26 @@ protected:
     {
         if (event->type() == QEvent::FileOpen)
         {
-            _open(static_cast<QFileOpenEvent*>(event)->file());
+            openWhenIdle(static_cast<QFileOpenEvent*>(event)->file());
             return true;
         }
         return QObject::eventFilter(watched, event);
     }
 
 private:
+    /// A file can arrive inside a modal dialog or an export's progress
+    /// loop; replacing the document there would pull it out from under
+    /// them. It waits until nothing modal is up.
+    void openWhenIdle(const QString& file)
+    {
+        if (QApplication::activeModalWidget() || QApplication::activePopupWidget())
+        {
+            QTimer::singleShot(500, this, [this, file]() { openWhenIdle(file); });
+            return;
+        }
+        _open(file);
+    }
+
     std::function<void(const QString&)> _open;
 };
 
