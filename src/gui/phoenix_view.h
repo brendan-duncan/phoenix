@@ -1086,7 +1086,11 @@ private:
 
 
     // Bounds cache for culling
-    QMap<const fla::Element*, QRectF> _boundsCache;
+    /// Keyed by element and how far into its keyframe it is measured (-1
+    /// for an element that looks the same on every frame): an animated
+    /// symbol's instance is as big as the frame it shows.
+    using BoundsKey = QPair<const fla::Element*, int>;
+    QHash<BoundsKey, QRectF> _boundsCache;
     /// Each symbol's bounds over all its frames: its visible layers'
     /// (culling, 9-slice) and all its art's (the offscreen a filtered or
     /// blended instance draws into). Walking every frame recursively is
@@ -1109,7 +1113,17 @@ private:
     /// An element's bounds in the space of what holds it, over every frame
     /// of a symbol it places: for symbol bounds, culling and offscreens.
     QRectF memberReach(const fla::Element* element);
-    QMap<const fla::Element*, QRectF> _artBoundsCache;
+    QHash<BoundsKey, QRectF> _artBoundsCache;
+    /// How deep bounds are being worked out inside a symbol's frame, where
+    /// _elapsed is that frame's playhead.
+    int _boundsDepth = 0;
+    /// Whether an element can look different from frame to frame: an
+    /// instance of a symbol longer than a frame, or a group holding one.
+    bool animates(const fla::Element* element, int depth = 0);
+    /// How far into its keyframe \a element is measured: the frame being
+    /// drawn or measured inside a symbol, else the playhead's distance into
+    /// the keyframe that holds it. -1 when it never changes.
+    int boundsElapsed(const fla::Element* element);
     /// True while art bounds are being worked out: no antialiasing margin,
     /// and the padded cache is neither read nor filled.
     bool _tightBounds = false;
@@ -1268,6 +1282,9 @@ private:
     /// How the scene's multiplane camera shows a layer of the scene, for its
     /// depth, on the frame shown; identity with no camera or the view off.
     QTransform cameraTransform(const fla::Layer* layer);
+    /// The camera's color effect on the frame shown, when the scene is seen
+    /// through a camera; the identity otherwise.
+    fla::ColorTransform cameraColor();
     bool _cameraView = true;
 
     /// An element drawn with a transform other than its own (an object

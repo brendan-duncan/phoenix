@@ -27,6 +27,7 @@ class QVBoxLayout;
 
 namespace fla {
 class Command;
+class ColorTransform;
 class DrawingStyle;
 class FillStyle;
 struct StrokeLook;
@@ -223,6 +224,25 @@ private:
     std::vector<std::pair<QWidget*, QWidget*>> addStrokeLookFields(PropertySection* section, int& row,
         const fla::StrokeLook& look, std::function<void(const fla::StrokeLook&)> apply);
     void addInstanceSections(QVBoxLayout* layout, fla::SymbolInstance* instance);
+    /// An instance's Display and Looping sections, and the rest under its
+    /// color effect.
+    void addInstanceDisplaySections(QVBoxLayout* layout, fla::SymbolInstance* instance);
+
+    /// A Color Effect section (None, Brightness, Tint, Alpha, Advanced)
+    /// titled \a title, for whatever \a get reads: \a live applies a value
+    /// while a field is dragged, and \a commit records the change from
+    /// before to after as one undo step under the name given. \a key
+    /// remembers the style chosen while the effect is still at rest.
+    void addColorEffectSection(QVBoxLayout* layout, const QString& title, const void* key,
+        std::function<fla::ColorTransform()> get, std::function<void(const fla::ColorTransform&)> live,
+        std::function<void(const fla::ColorTransform&, const fla::ColorTransform&, const char*)> commit);
+
+    /// The camera keyframe \a frame's sections: where it looks, its zoom
+    /// and turn, and its color effect over the whole scene.
+    void addCameraSections(QVBoxLayout* layout, fla::Frame* frame);
+    /// The Tool tab's camera sections, while the Camera tool is in use: the
+    /// camera's keyframe at the playhead.
+    void rebuildCameraToolSections();
 
     fla::Frame* currentFrame(fla::Layer** layerOut) const;
     fla::Document* document() const;
@@ -258,16 +278,19 @@ private:
     QToolButton* _fillSwatch = nullptr;
     QToolButton* _strokeSwatch = nullptr;
     HotText* _cornerRadius = nullptr;
+    /// The camera's keyframe, shown under the Camera tool's options.
+    QWidget* _cameraHolder = nullptr;
+    QVBoxLayout* _cameraLayout = nullptr;
 
     bool _inEdit = false;
     bool _refreshPending = false;
     bool _aspectLocked = true;
 
-    /// The color effect style chosen for an instance whose transform is
-    /// still the identity (Alpha at 100%, say), so the choice shows its
-    /// fields rather than falling back to None. Keys are compared, never
-    /// followed.
-    QMap<const fla::SymbolInstance*, int> _colorStyleChoice;
+    /// The color effect style chosen for an instance (or a camera keyframe)
+    /// whose transform is still the identity (Alpha at 100%, say), so the
+    /// choice shows its fields rather than falling back to None. Keys are
+    /// compared, never followed.
+    QMap<const void*, int> _colorStyleChoice;
 
     /// What Copy Filters copied, for Paste Filters.
     std::vector<fla::Filter> _copiedFilters;

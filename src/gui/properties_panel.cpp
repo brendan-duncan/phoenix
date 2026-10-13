@@ -503,6 +503,7 @@ void PropertiesPanel::refresh()
     rebuildObjectTab();
     rebuildFrameTab();
     rebuildDocTab();
+    rebuildCameraToolSections();
 }
 
 void PropertiesPanel::flushRefresh()
@@ -635,6 +636,7 @@ void PropertiesPanel::setActiveTool(Tool* tool, ToolIcons::Tool icon)
     if (_toolNameLabel)
         _toolNameLabel->setText(tool ? tool->name() + " Tool" : QString("No tool"));
     applyToolVisibility();
+    rebuildCameraToolSections();
 }
 
 void PropertiesPanel::refreshToolOptions()
@@ -1243,6 +1245,41 @@ void PropertiesPanel::buildToolTab()
         emit toolSettingChanged("textType");
     });
     addOption("Text type", textType, {IconTool::Text});
+
+    // The Camera tool's keyframe, rebuilt as the playhead and the camera
+    // change.
+    _cameraHolder = new QWidget(this);
+    _cameraLayout = new QVBoxLayout(_cameraHolder);
+    _cameraLayout->setContentsMargins(0, 0, 0, 0);
+    _cameraLayout->setSpacing(0);
+    page->addWidget(_cameraHolder);
+    rebuildCameraToolSections();
+}
+
+void PropertiesPanel::rebuildCameraToolSections()
+{
+    if (!_cameraLayout)
+        return;
+    clearLayout(_cameraLayout);
+    const bool camera = _toolIcon == ToolIcons::Tool::Camera;
+    _cameraHolder->setVisible(camera);
+    if (!camera)
+        return;
+    fla::Document* doc = document();
+    fla::Timeline* scene = doc ? doc->currentScene() : nullptr;
+    fla::Layer* layer = scene ? fla::camera::cameraOf(*scene) : nullptr;
+    fla::Frame* frame = layer && _links.player
+        ? fla::InsertKeyframeCommand::spanAt(*layer, _links.player->currentFrame()) : nullptr;
+    if (!frame)
+    {
+        QLabel* hint = new QLabel(layer ? "The camera has no keyframe here." : "Drag on the stage to add a camera.",
+            _cameraHolder);
+        hint->setContentsMargins(12, 4, 12, 8);
+        hint->setEnabled(false);
+        _cameraLayout->addWidget(hint);
+        return;
+    }
+    addCameraSections(_cameraLayout, frame);
 }
 
 // ---------------------------------------------------------------------------
@@ -2055,21 +2092,39 @@ void PropertiesPanel::addThreeDSection(QVBoxLayout* layout, fla::SymbolInstance*
 void PropertiesPanel::addInstanceSections(QVBoxLayout* layout, fla::SymbolInstance* instance)
 {
     // --- Color Effect ---
-    PropertySection* effect = addSection(layout, "Color Effect");
+    addColorEffectSection(layout, "Color Effect", instance,
+        [instance]() { return instance->colorTransform; },
+        [this, instance](const fla::ColorTransform& color) {
+            instance->colorTransform = color;
+            emit documentEdited();
+        },
+        [this, instance](const fla::ColorTransform& before, const fla::ColorTransform& after, const char* name) {
+            push(_links.view->colorCommand(instance, before, after, name));
+        });
+
+    addInstanceDisplaySections(layout, instance);
+}
+
+void PropertiesPanel::addColorEffectSection(QVBoxLayout* layout, const QString& title, const void* key,
+    std::function<fla::ColorTransform()> get, std::function<void(const fla::ColorTransform&)> live,
+    std::function<void(const fla::ColorTransform&, const fla::ColorTransform&, const char*)> commit)
+{
+    PropertySection* effect = addSection(layout, title);
     QComboBox* styleBox = new QComboBox(this);
     styleBox->addItems({"None", "Brightness", "Tint", "Alpha", "Advanced"});
-    ColorStyle current = colorStyleOf(instance->colorTransform);
-    if (current == ColorStyle::None && _colorStyleChoice.contains(instance))
-        current = static_cast<ColorStyle>(_colorStyleChoice.value(instance));
+    const fla::ColorTransform color = get();
+    ColorStyle current = colorStyleOf(color);
+    if (current == ColorStyle::None && _colorStyleChoice.contains(key))
+        current = static_cast<ColorStyle>(_colorStyleChoice.value(key));
     styleBox->setCurrentIndex(static_cast<int>(current));
     effect->addLong(0, "Style", styleBox);
 
     // Choosing a style resets the transform to that style's starting point,
     // as Animate does, keeping what carries over.
-    connect(styleBox, &QComboBox::currentIndexChanged, this, [this, instance](int index) {
-        _colorStyleChoice.insert(instance, index);
+    connect(styleBox, &QComboBox::currentIndexChanged, this, [this, key, get, commit](int index) {
+        _colorStyleChoice.insert(key, index);
         fla::ColorTransform after;
-        const fla::ColorTransform& before = instance->colorTransform;
+        const fla::ColorTransform before = get();
         switch (static_cast<ColorStyle>(index))
         {
         case ColorStyle::None:
@@ -2089,28 +2144,26 @@ void PropertiesPanel::addInstanceSections(QVBoxLayout* layout, fla::SymbolInstan
             after = before;
             break;
         }
-        push(_links.view->colorCommand(instance, before, after, "Color Effect"));
+        commit(before, after, "Color Effect");
         emit documentEdited();
     });
 
     // One helper for every hot text that sets part of the color transform:
     // the field is applied live and committed as one step.
-    const auto bindColor = [this, instance](HotText* hot, std::function<void(fla::ColorTransform&, double)> set,
+    const auto bindColor = [this, get, live, commit](HotText* hot, std::function<void(fla::ColorTransform&, double)> set,
                                const char* name) {
         std::shared_ptr<fla::ColorTransform> before = std::make_shared<fla::ColorTransform>();
         bindLive(hot,
-            [=]() { *before = instance->colorTransform; },
+            [=]() { *before = get(); },
             [=](double value) {
-                set(instance->colorTransform, value);
-                emit documentEdited();
+                fla::ColorTransform now = get();
+                set(now, value);
+                live(now);
             },
-            [=]() {
-                push(_links.view->colorCommand(instance, *before, instance->colorTransform, name));
-            });
+            [=]() { commit(*before, get(), name); });
     };
 
     int row = 1;
-    const fla::ColorTransform& color = instance->colorTransform;
     switch (current)
     {
     case ColorStyle::None:
@@ -2127,13 +2180,14 @@ void PropertiesPanel::addInstanceSections(QVBoxLayout* layout, fla::SymbolInstan
     {
         QToolButton* swatch = makeSwatch(color.tintColor, "Tint color");
         connect(swatch, &QToolButton::clicked, this, [=]() {
-            const QColor chosen = QColorDialog::getColor(toQColor(instance->colorTransform.tintColor), this, "Tint Color");
+            const fla::ColorTransform before = get();
+            const QColor chosen = QColorDialog::getColor(toQColor(before.tintColor), this, "Tint Color");
             if (!chosen.isValid())
                 return;
-            fla::ColorTransform after = instance->colorTransform;
+            fla::ColorTransform after = before;
             applyColor(chosen, after.tintColor);
             after.tintColor[3] = 255;
-            push(_links.view->colorCommand(instance, instance->colorTransform, after, "Tint"));
+            commit(before, after, "Tint");
             emit documentEdited();
         });
         effect->addField(row, 0, "Tint", swatch);
@@ -2201,7 +2255,10 @@ void PropertiesPanel::addInstanceSections(QVBoxLayout* layout, fla::SymbolInstan
         break;
     }
     }
+}
 
+void PropertiesPanel::addInstanceDisplaySections(QVBoxLayout* layout, fla::SymbolInstance* instance)
+{
     // --- Display ---
     PropertySection* display = addSection(layout, "Display");
     QComboBox* blend = new QComboBox(this);
@@ -3033,6 +3090,73 @@ void PropertiesPanel::addTextSections(QVBoxLayout* page, const fla::StaticText& 
 // ---------------------------------------------------------------------------
 // Frame tab
 
+void PropertiesPanel::addCameraSections(QVBoxLayout* layout, fla::Frame* frame)
+{
+    const fla::Document* doc = document();
+    if (!doc || !frame)
+        return;
+    using Attributes = std::vector<std::pair<std::string, std::string>>;
+    PropertySection* cameraSection = addSection(layout, "Camera");
+    const double w = doc->width;
+    const double h = doc->height;
+    const fla::camera::State state = fla::camera::stateOf(*frame, w, h);
+    auto before = std::make_shared<Attributes>();
+    const auto field = [&](double fla::camera::State::*member, double minimum, double maximum, const QString& suffix,
+                           const char* name) {
+        HotText* hot = makeHotText(minimum, maximum, 1, suffix);
+        hot->setValue(state.*member);
+        bindLive(hot,
+            [=]() { *before = frame->extraAttributes; },
+            [=](double value) {
+                fla::camera::State now = fla::camera::stateOf(*frame, w, h);
+                now.*member = value;
+                fla::camera::set(frame->extraAttributes, now);
+                if (_links.view)
+                    _links.view->clearCaches();
+                emit documentEdited();
+            },
+            [=]() {
+                const auto after = frame->extraAttributes;
+                frame->extraAttributes = *before;
+                push(std::unique_ptr<fla::Command>(
+                    new fla::SetPropertyCommand<Attributes>(frame->extraAttributes, *before, after, name)));
+            });
+        return hot;
+    };
+    cameraSection->addField(0, 0, "X", field(&fla::camera::State::x, -100000.0, 100000.0, " px", "Camera Position"));
+    cameraSection->addField(0, 1, "Y", field(&fla::camera::State::y, -100000.0, 100000.0, " px", "Camera Position"));
+    cameraSection->addField(1, 0, "Zoom", field(&fla::camera::State::zoom, 1.0, 10000.0, " %", "Camera Zoom"));
+    cameraSection->addField(1, 1, "Turn", field(&fla::camera::State::rotation, -3600.0, 3600.0,
+        QString::fromUtf8("\u00b0"), "Camera Rotation"));
+
+    // Over everything the camera sees, tweened from key to key as the
+    // camera is.
+    const auto withColor = [frame, w, h](const fla::ColorTransform& color) {
+        fla::camera::State now = fla::camera::stateOf(*frame, w, h);
+        now.color = color;
+        Attributes attributes = frame->extraAttributes;
+        fla::camera::set(attributes, now);
+        return attributes;
+    };
+    addColorEffectSection(layout, "Camera Color Effect", frame,
+        [frame, w, h]() { return fla::camera::stateOf(*frame, w, h).color; },
+        [this, frame, withColor](const fla::ColorTransform& color) {
+            frame->extraAttributes = withColor(color);
+            if (_links.view)
+                _links.view->clearCaches();
+            emit documentEdited();
+        },
+        [this, frame, withColor](const fla::ColorTransform& from, const fla::ColorTransform& to, const char* name) {
+            const Attributes was = withColor(from);
+            const Attributes now = withColor(to);
+            frame->extraAttributes = was;
+            push(std::unique_ptr<fla::Command>(new fla::SetPropertyCommand<Attributes>(
+                frame->extraAttributes, was, now, std::string("Camera ") + name)));
+            if (_links.view)
+                _links.view->clearCaches();
+        });
+}
+
 fla::Frame* PropertiesPanel::currentFrame(fla::Layer** layerOut) const
 {
     if (layerOut)
@@ -3109,43 +3233,12 @@ void PropertiesPanel::rebuildFrameTab()
     where->setEnabled(false);
     page->addWidget(where);
 
-    // The multiplane camera's keyframe: where it looks, its zoom and turn.
+    // The multiplane camera's keyframe: where it looks, its zoom and turn,
+    // and its color effect.
     const fla::Document* doc = document();
     if (layer && fla::camera::isCamera(*layer) && doc)
     {
-        PropertySection* cameraSection = addSection(page, "Camera");
-        const double w = doc->width;
-        const double h = doc->height;
-        const fla::camera::State state = fla::camera::stateOf(*frame, w, h);
-        auto before = std::make_shared<std::vector<std::pair<std::string, std::string>>>();
-        const auto field = [&](double fla::camera::State::*member, double minimum, double maximum, const QString& suffix,
-                               const char* name) {
-            HotText* hot = makeHotText(minimum, maximum, 1, suffix);
-            hot->setValue(state.*member);
-            bindLive(hot,
-                [=]() { *before = frame->extraAttributes; },
-                [=](double value) {
-                    fla::camera::State now = fla::camera::stateOf(*frame, w, h);
-                    now.*member = value;
-                    fla::camera::set(frame->extraAttributes, now);
-                    if (_links.view)
-                        _links.view->clearCaches();
-                    emit documentEdited();
-                },
-                [=]() {
-                    const auto after = frame->extraAttributes;
-                    frame->extraAttributes = *before;
-                    push(std::unique_ptr<fla::Command>(
-                        new fla::SetPropertyCommand<std::vector<std::pair<std::string, std::string>>>(
-                            frame->extraAttributes, *before, after, name)));
-                });
-            return hot;
-        };
-        cameraSection->addField(0, 0, "X", field(&fla::camera::State::x, -100000.0, 100000.0, " px", "Camera Position"));
-        cameraSection->addField(0, 1, "Y", field(&fla::camera::State::y, -100000.0, 100000.0, " px", "Camera Position"));
-        cameraSection->addField(1, 0, "Zoom", field(&fla::camera::State::zoom, 1.0, 10000.0, " %", "Camera Zoom"));
-        cameraSection->addField(1, 1, "Turn", field(&fla::camera::State::rotation, -3600.0, 3600.0,
-            QString::fromUtf8("\u00b0"), "Camera Rotation"));
+        addCameraSections(page, frame);
     }
     else if (layer && doc && fla::camera::cameraOf(*doc->currentScene()))
     {
