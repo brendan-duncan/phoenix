@@ -5,6 +5,7 @@
 #include "new_document_dialog.h"
 #include "start_dialog.h"
 #include "stage_controls.h"
+#include "app_identity.h"
 #include "autosave.h"
 #include "timeline_audio.h"
 #include "updater.h"
@@ -217,8 +218,7 @@ MainWindow::MainWindow(const QString& initialFile, QWidget* parent, bool startup
     _interactive = startup;
     setWindowTitle(QString("Phoenix %1").arg(QCoreApplication::applicationVersion()));
 
-    QCoreApplication::setOrganizationName("Phoenix");
-    QCoreApplication::setApplicationName("FLAViewer");
+    app_identity::apply();
 
     // Set application icon
     QIcon phoenixIcon = createPhoenixIcon();

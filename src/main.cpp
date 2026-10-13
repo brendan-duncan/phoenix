@@ -1,3 +1,4 @@
+#include "gui/app_identity.h"
 #include "gui/command_line.h"
 #include "gui/main_window.h"
 #include "gui/theme.h"
@@ -151,9 +152,14 @@ int main(int argc, char *argv[])
         QSettings::setPath(QSettings::IniFormat, QSettings::UserScope, settingsDir);
     }
 
+    // Phoenix's name, which places its settings; settings kept under the
+    // old name are brought over on the first start.
+    app_identity::apply();
+    app_identity::adoptOldSettings();
+
     // The theme's UI scale, which Qt takes only before it starts.
     {
-        const double scale = QSettings("Phoenix", "FLAViewer").value("theme/uiScale", 1.0).toDouble();
+        const double scale = QSettings().value("theme/uiScale", 1.0).toDouble();
         if (scale >= 0.75 && scale <= 2.5 && scale != 1.0 && qEnvironmentVariableIsEmpty("QT_SCALE_FACTOR"))
             qputenv("QT_SCALE_FACTOR", QByteArray::number(scale));
     }
@@ -303,8 +309,7 @@ int main(int argc, char *argv[])
     const QString initialFile = arguments.size() > 1 ? arguments.at(1) : QString();
 
     // The theme last chosen, before any window is made.
-    QCoreApplication::setOrganizationName("Phoenix");
-    QCoreApplication::setApplicationName("FLAViewer");
+    app_identity::apply();
     theme::applySaved();
     MainWindow window(initialFile);
     window.show();
