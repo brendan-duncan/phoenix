@@ -56,6 +56,7 @@
 #include "../edit/frame_commands.h"
 #include "../geom/curve.h"
 #include "../geom/nine_slice.h"
+#include "../geom/shape_geometry.h"
 #include "../data/bitmap_fill.h"
 #include "../data/static_text.h"
 #include "text_layout.h"
@@ -95,6 +96,15 @@
 static const int supersampleFactor = 2;
 
 namespace {
+
+/// Whether shapes' fills are drawn from their planar map rather than traced
+/// from their edges: PHOENIX_RENDER_FROM_MAP=1. Off by default; see
+/// fla::fillOutlinesFromMap.
+bool renderFillsFromMap()
+{
+    static const bool enabled = qEnvironmentVariableIntValue("PHOENIX_RENDER_FROM_MAP") != 0;
+    return enabled;
+}
 
 const fla::Frame* owningFrame(const fla::DOMElement* element)
 {
@@ -4193,30 +4203,68 @@ void PhoenixView::buildShapePaths(const fla::Shape* shape, PathCacheList& cacheE
         }
     };
 
-    // Each fill's outlines, traced from the edges (see traceFills), drawn as
-    // one compound path.
-    for (const auto& [fillIdx, loops] : fla::traceFills(*shape))
+    // Each fill's outlines as one compound path. Read off the shape's planar
+    // map when that is switched on and the map agrees with the file, each
+    // face its outer boundary and its holes; otherwise traced from the edges
+    // (see traceFills), which also joins up outlines that do not quite close.
+    std::map<int, QPainterPath> fillPaths;
+    std::map<int, std::vector<std::vector<fla::Curve>>> mapOutlines;
+    if (renderFillsFromMap() && fla::fillOutlinesFromMap(*shape, mapOutlines))
+    {
+        for (const auto& [fillIdx, loops] : mapOutlines)
+        {
+            QPainterPath& compoundPath = fillPaths[fillIdx];
+            compoundPath.setFillRule(Qt::WindingFill);
+            for (const std::vector<fla::Curve>& loop : loops)
+            {
+                QPainterPath loopPath;
+                loopPath.moveTo(loop.front().start().x, loop.front().start().y);
+                for (const fla::Curve& curve : loop)
+                {
+                    if (curve.isLine())
+                    {
+                        loopPath.lineTo(curve.end().x, curve.end().y);
+                    }
+                    else
+                    {
+                        loopPath.cubicTo(curve.controlPoint(1).x, curve.controlPoint(1).y,
+                            curve.controlPoint(2).x, curve.controlPoint(2).y,
+                            curve.end().x, curve.end().y);
+                    }
+                }
+                loopPath.closeSubpath();
+                compoundPath.addPath(loopPath);
+            }
+        }
+    }
+    else
+    {
+        for (const auto& [fillIdx, loops] : fla::traceFills(*shape))
+        {
+            QPainterPath& compoundPath = fillPaths[fillIdx];
+            compoundPath.setFillRule(Qt::WindingFill);
+            for (const fla::TracedLoop& loop : loops)
+            {
+                if (loop.legs.empty())
+                    continue;
+                const auto [first, last] = getPathEndpoints(loop.legs.front().path);
+                const fla::Point start = loop.legs.front().reversed ? last : first;
+                QPainterPath loopPath;
+                loopPath.moveTo(start.x, start.y);
+                for (const fla::TracedLeg& leg : loop.legs)
+                    addSegmentToPath(loopPath, leg.path, leg.reversed, shape);
+                if (loop.closed)
+                    loopPath.closeSubpath();
+                compoundPath.addPath(loopPath);
+            }
+        }
+    }
+
+    for (const auto& [fillIdx, compoundPath] : fillPaths)
     {
         const fla::FillStyle* fillStyle = shape->getFillStyleByIndex(fillIdx);
         if (!fillStyle)
             continue;
-
-        QPainterPath compoundPath;
-        compoundPath.setFillRule(Qt::WindingFill);
-        for (const fla::TracedLoop& loop : loops)
-        {
-            if (loop.legs.empty())
-                continue;
-            const auto [first, last] = getPathEndpoints(loop.legs.front().path);
-            const fla::Point start = loop.legs.front().reversed ? last : first;
-            QPainterPath loopPath;
-            loopPath.moveTo(start.x, start.y);
-            for (const fla::TracedLeg& leg : loop.legs)
-                addSegmentToPath(loopPath, leg.path, leg.reversed, shape);
-            if (loop.closed)
-                loopPath.closeSubpath();
-            compoundPath.addPath(loopPath);
-        }
 
         QRectF bounds = compoundPath.boundingRect();
         fla::Rect rect({bounds.left(), bounds.top()}, {bounds.left() + bounds.width(), bounds.top() + bounds.height()});

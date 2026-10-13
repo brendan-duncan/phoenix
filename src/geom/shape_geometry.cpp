@@ -353,6 +353,98 @@ bool joinCurves(const std::vector<Curve>& pieces, double tolerance, Curve& joine
     return found;
 }
 
+bool fillOutlinesFromMap(const Shape& shape,
+    std::map<int, std::vector<std::vector<Curve>>>& outlines, size_t maximumCurves)
+{
+    outlines.clear();
+
+    for (const Edge* edge : shape.edges)
+    {
+        if (!edge || !edge->visible)
+            return false;
+        for (const Path* path : edge->paths)
+        {
+            if (path && !path->visible)
+                return false;
+        }
+    }
+
+    const std::vector<ShapeCurve> curves = shapeCurves(shape);
+    if (curves.size() > maximumCurves)
+        return false;
+
+    PlanarMap map;
+    for (size_t i = 0; i < curves.size(); ++i)
+        map.addCurve(curves[i].curve, static_cast<int>(i));
+    map.build();
+    attributeFillsFromSource(map, curves);
+
+    // The file's fills have to agree with the arrangement everywhere: each
+    // half-edge's face is painted with what its source records on that
+    // side. A boundary that does not quite close lets a face leak into its
+    // neighbor, and shows up here as an edge with different fills recorded
+    // on its two sides but one face on both.
+    const std::vector<HalfEdge>& halves = map.halfEdges();
+    for (const HalfEdge& half : halves)
+    {
+        if (half.source < 0 || half.source >= static_cast<int>(curves.size()))
+            return false;
+        const ShapeCurve& source = curves[half.source];
+        const int recorded = half.forward ? source.fillStyle1 : source.fillStyle0;
+        if (recorded != map.faceFill(half.face))
+            return false;
+    }
+
+    // A face too thin to see goes with the face it borders most, so the
+    // hairline between two fills is not left open.
+    const size_t faceCount = map.faces().size();
+    std::vector<int> paint(faceCount, -1);
+    for (size_t face = 0; face < faceCount; ++face)
+        paint[face] = map.faceFill(static_cast<int>(face));
+    for (size_t face = 0; face < faceCount; ++face)
+    {
+        const int index = static_cast<int>(face);
+        if (map.faces()[face].unbounded || !map.isSliver(index))
+            continue;
+        const int neighbor = map.widestNeighbor(index);
+        paint[face] = neighbor < 0 ? -1 : map.faceFill(neighbor);
+    }
+
+    for (size_t face = 0; face < faceCount; ++face)
+    {
+        const MapFace& target = map.faces()[face];
+        if (target.unbounded || paint[face] == -1 || target.halfEdge < 0)
+            continue;
+
+        std::vector<std::vector<Curve>>& loops = outlines[paint[face]];
+        // Each piece is drawn as the stretch of the file's own curve it came
+        // from, not the map's copy welded onto the twip grid: the arrangement
+        // decides only which pieces bound which face, and a shape already
+        // stored as a planar map is drawn with exactly the coordinates it
+        // stores.
+        const auto pieceOf = [&](const HalfEdge& half) {
+            const Curve& whole = curves[half.source].curve;
+            const Curve piece = (half.t0 <= 0.0 && half.t1 >= 1.0)
+                ? whole : whole.subcurve(half.t0, half.t1);
+            if (half.forward)
+                return piece;
+            return piece.isLine() ? Curve::line(piece.end(), piece.start())
+                : Curve::cubic(piece.end(), piece.controlPoint(2), piece.controlPoint(1), piece.start());
+        };
+        const auto addLoop = [&](int start) {
+            std::vector<Curve> loop;
+            for (const int edge : map.cycleFrom(start))
+                loop.push_back(pieceOf(halves[edge]));
+            if (!loop.empty())
+                loops.push_back(std::move(loop));
+        };
+        addLoop(target.halfEdge);
+        for (const int hole : target.holes)
+            addLoop(hole);
+    }
+    return true;
+}
+
 void rebuildShapeEdges(Shape& shape, const PlanarMap& map,
     const std::vector<ShapeCurve>& sources, const StrokeFilter& keepStroke,
     const StrokeOverride& strokeFor)
