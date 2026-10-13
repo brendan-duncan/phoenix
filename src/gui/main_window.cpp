@@ -4832,6 +4832,25 @@ void MainWindow::setupMenus()
             panel->setLoopPlayback(!panel->loopPlayback());
     });
     loopAction->setStatusTip("Play the loop range over and over; drag its ends in the ruler");
+    controlMenu->addSeparator();
+    // Off by default: playback and export run every frame unless asked.
+    QAction* frameActionsAction = addControl("Enable Simple &Frame Actions",
+        QKeySequence(Qt::CTRL | Qt::ALT | Qt::Key_F), []() {});
+    frameActionsAction->setCheckable(true);
+    frameActionsAction->setChecked(QSettings().value("control/simpleFrameActions", false).toBool());
+    frameActionsAction->setStatusTip("Have playback and exported movie clips follow the stop(), play() and goto calls "
+                                     "in frame scripts");
+    const auto applyFrameActions = [this, timelines](bool on) {
+        if (TimelinesPanel* panel = timelines())
+            panel->setFrameActions(on);
+        if (_phoenixView)
+            _phoenixView->setFrameActions(on);
+    };
+    applyFrameActions(frameActionsAction->isChecked());
+    connect(frameActionsAction, &QAction::toggled, this, [applyFrameActions](bool on) {
+        applyFrameActions(on);
+        QSettings().setValue("control/simpleFrameActions", on);
+    });
 
     QMenu* helpMenu = menuBar->addMenu("&Help");
     QAction* startAction = new QAction("&Start Screen...", this);

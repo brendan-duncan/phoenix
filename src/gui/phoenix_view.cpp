@@ -667,6 +667,7 @@ QImage PhoenixView::renderSymbolFrame(const fla::Symbol* symbol, int frame, cons
     viewTransform = painter.transform();
     _visibleRect = area;
     _exporting = true;
+    _clipSequences.clear();
     drawTimeline(painter, symbol->timelines.front(), fla::LoopType::SingleFrame, std::max(0, frame));
     _exporting = wasExporting;
     viewTransform = savedView;
@@ -1558,6 +1559,8 @@ void PhoenixView::drawDocument(QPainter& painter, const fla::Document* document)
     if (!document->visible)
         return;
 
+    // The clips' frame actions are read again each time, after any edit.
+    _clipSequences.clear();
     // One scene at a time, as Animate shows them.
     const fla::Timeline* scene = document->currentScene();
     if (scene && scene->visible)
@@ -2788,7 +2791,19 @@ int PhoenixView::symbolFrame(const fla::SymbolInstance& instance) const
     const int elapsed = std::max(0, _elapsed);
     const int length = symbolLength(instance.symbol);
     if (instance.symbolType != fla::SymbolType::Graphic)
-        return _exporting && instance.symbolType == fla::SymbolType::MovieClip ? elapsed % length : 0;
+    {
+        if (!_exporting || instance.symbolType != fla::SymbolType::MovieClip)
+            return 0;
+        if (_frameActions && instance.symbol && !instance.symbol->timelines.empty() && instance.symbol->timelines.front())
+        {
+            auto found = _clipSequences.find(instance.symbol);
+            if (found == _clipSequences.end())
+                found = _clipSequences.emplace(instance.symbol,
+                    fla::frameactions::TimelineActions(*instance.symbol->timelines.front()).sequence()).first;
+            return std::min(found->second.frameAt(elapsed), length - 1);
+        }
+        return elapsed % length;
+    }
     // A looping graphic's first frame can be past its end: a synced tween
     // (Animate's Sync) counts it on from keyframe to keyframe without
     // wrapping, and Animate plays it round the loop from there rather than
