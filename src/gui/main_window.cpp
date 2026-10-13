@@ -8160,9 +8160,9 @@ void MainWindow::placeLibraryItem(const QString& kind, const QString& droppedNam
 namespace {
 
 const char* const kImportFilter =
-    "All importable files (*.png *.jpg *.jpeg *.gif *.bmp *.psd *.svg *.ai *.pdf *.wav *.aif *.aiff *.mp3 *.flac *.ogg);;"
+    "All importable files (*.png *.jpg *.jpeg *.gif *.bmp *.psd *.psb *.svg *.ai *.pdf *.wav *.aif *.aiff *.mp3 *.flac *.ogg);;"
     "Images (*.png *.jpg *.jpeg *.gif *.bmp);;"
-    "Photoshop documents (*.psd);;"
+    "Photoshop documents (*.psd *.psb);;"
     "Vector artwork (*.svg *.ai *.pdf);;"
     "Sounds (*.wav *.aif *.aiff *.mp3 *.flac *.ogg);;"
     "All files (*)";
@@ -8473,7 +8473,7 @@ void MainWindow::importArtwork(const QString& path, bool toStage, const QPointF*
             problems << QString("%1: %2").arg(fileName, QString::fromStdString(text));
     };
 
-    if (QFileInfo(path).suffix().toLower() == "psd")
+    if (QFileInfo(path).suffix().toLower() == "psd" || QFileInfo(path).suffix().toLower() == "psb")
     {
         const fla::psd::Image image = fla::psd::read(bytes);
         note(image.notes);
