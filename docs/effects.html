@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Filters, blends and color effects · Phoenix User Guide</title>
 <meta name="description" content="Tint, brighten and fade instances, apply blend modes, and add filters such as drop shadow, blur, glow and bevel.">
-<meta name="keywords" content="color effect brightness tint alpha advanced blend mode multiply screen overlay layer erase filters blur drop shadow glow bevel gradient glow gradient bevel adjust color copy paste filters">
+<meta name="keywords" content="color effect brightness tint alpha advanced blend mode multiply screen overlay layer erase filters blur drop shadow glow bevel gradient glow gradient bevel adjust color copy paste filters filter presets motion tween effect layer">
 <link rel="icon" href="assets/img/logo.png">
 <link rel="stylesheet" href="assets/site.css">
 <script>try { const t = localStorage.getItem("phoenix-docs-theme"); if (t) document.documentElement.dataset.theme = t; } catch (e) {}</script>
@@ -36,7 +36,7 @@
   <dt>Advanced</dt><dd>Separate multipliers and offsets for red, green, blue and alpha, for any color change the others cannot make.</dd>
 </dl>
 
-<p>Color effects tween smoothly in classic tweens, so a character can fade in or flush red over a few frames.</p>
+<p>Color effects tween smoothly, so a character can fade in or flush red over a few frames. In a classic tween, set a different effect on each keyframe. In a <a href="tweens.html#motion-tweens">motion tween</a>, move the playhead into the span and change the effect there: Phoenix keys the color curve on that frame.</p>
 
 <h2>Blend modes</h2>
 
@@ -68,7 +68,6 @@
     <ul>
       <li>Click <strong>Add Filter</strong> and choose one. An instance can have several, applied top to bottom.</li>
       <li>Use the checkbox to turn a filter off without losing its settings, the arrows to change the order, and <strong>&times;</strong> to remove it.</li>
-      <li><strong>Copy Filters</strong> and <strong>Paste Filters</strong> move a whole set of filters from one instance to another.</li>
     </ul>
     <p>Quality can be Low, Medium or High. Higher quality looks smoother and takes longer to draw.</p>
   </div>
@@ -87,14 +86,13 @@
   </tbody>
 </table>
 
-<p>Filters tween between classic tween keyframes. Graphic symbols only show the Filters section if they already have filters, for example in a file from elsewhere.</p>
+<p>Filters tween the same way: between classic tween keyframes, and in motion tweens, where changing a filter setting on a frame inside the span keys it there. Graphic symbols only show the Filters section if they already have filters, for example in a file from elsewhere.</p>
 
 <p><strong>Copy Filters</strong> and <strong>Paste Filters</strong> pass an instance's filters to another. Under <strong>Presets</strong>, <strong>Save As...</strong> keeps them under a name, choosing a preset puts its filters on the selected instance in place of its own, and <strong>Delete</strong> removes one. Presets are kept with Phoenix, for every document.</p>
 
-<div class="callout planned">
-  <span class="label">Planned</span>
-  <p>Tweening color effects and filters in motion tweens.</p>
-</div>
+<h2>Effect layers</h2>
+
+<p>To shade part of a layer with a tone, highlight or glow whose shape you draw, rather than change a whole instance, use an effect layer. See <a href="ink-and-paint.html#tone-highlight-and-glow">Tone, highlight and glow</a>.</p>
 
 </article>
 </main>

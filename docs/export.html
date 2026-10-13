@@ -4,8 +4,8 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Exporting · Phoenix User Guide</title>
-<meta name="description" content="Export your animation as MP4 or MOV video, animated GIF, PNG sequences, per-layer PNG sequences, single images, SVG or WAV.">
-<meta name="keywords" content="export movie video mp4 mov h.264 ffmpeg gif animated png sequence per layer transparent background image jpeg svg wav audio size frame range matte render">
+<meta name="description" content="Export your animation as MP4 or MOV video, animated GIF, PNG sequences, per-layer PNG sequences, SVG sequences, compositing passes, single images, SVG, SWF, sprite sheets or WAV, and publish or queue renders.">
+<meta name="keywords" content="export movie video mp4 mov h.264 ffmpeg gif animated png sequence per layer transparent background image jpeg svg wav audio size frame range matte render prores exr passes swf publish sprite sheet render queue shots">
 <link rel="icon" href="assets/img/logo.png">
 <link rel="stylesheet" href="assets/site.css">
 <script>try { const t = localStorage.getItem("phoenix-docs-theme"); if (t) document.documentElement.dataset.theme = t; } catch (e) {}</script>
@@ -34,7 +34,7 @@
     <dt>File</dt><dd>Where to save it. <strong>Browse...</strong> picks a location.</dd>
     <dt>Size</dt><dd>The output size in pixels. Keep proportions to match the stage's shape.</dd>
     <dt>Frames</dt><dd>The first and last frame to export.</dd>
-    <dt>Options</dt><dd>Transparent background, Include sound, and Loop forever, where the format supports them.</dd>
+    <dt>Options</dt><dd>Transparent background, Include sound, and Loop forever, where the format supports them. <strong>Through the camera</strong> renders the scene as its <a href="rigging.html#multiplane-camera">camera</a> sees it; turn it off for the stage as drawn.</dd>
     <dt>Codec</dt><dd>For video: <strong>H.264</strong> (MP4) to watch and share; <strong>ProRes 422 HQ</strong> (MOV) for editing; <strong>ProRes 4444</strong> (MOV), which keeps a transparent background, for compositing. ProRes carries the sound as uncompressed PCM.</dd>
     <dt>Area</dt><dd><strong>Stage</strong>, or <strong>Everything</strong>: all the artwork on the frames, wherever it is, the pasteboard too. The size is then the stage's scale applied to that larger area.</dd>
     <dt>Colors</dt><dd>For a GIF, how many colors each frame may use (2 to 256), and <strong>Dither</strong> to mix them so gradients stay smooth in few colors.</dd>
@@ -89,7 +89,7 @@
 
 <h2 id="publish">Publish</h2>
 
-<p><span class="menu-path">File &rsaquo; Publish Settings...</span> (<kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>F12</kbd>) chooses what <span class="menu-path">File &rsaquo; Publish</span> (<kbd>Shift</kbd>+<kbd>F12</kbd>) writes, beside the document: an SWF movie, an HTML page, and PNG, JPEG, GIF and SVG images, each named after the document or with a name of its own. Images take the stage's size or one of their own. PNG can be 24-bit with alpha (a clear background), 24-bit, or 8-bit with a number of colors; JPEG has a quality; GIF can be still or animated, looping forever, playing once or repeating a number of times, with a number of colors; SVG can include hidden layers and embed its images or write them beside it.</p>
+<p><span class="menu-path">File &rsaquo; Publish Settings...</span> (<kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>F12</kbd>) chooses what <span class="menu-path">File &rsaquo; Publish</span> (<kbd>Shift</kbd>+<kbd>F12</kbd>) writes, beside the document: an SWF movie, an HTML page, and PNG, JPEG, GIF and SVG images, each named after the document or with a name of its own. Images take the stage's size or one of their own. PNG can be 24-bit with alpha (a clear background), 24-bit, or 8-bit with a number of colors; JPEG has a quality and can be progressive; GIF can be still or animated, looping forever, playing once or repeating a number of times, with a number of colors; SVG can include hidden layers and embed its images or write them beside it.</p>
 
 <p>Still images show the frame labeled <code>#Static</code>, or else the first frame. The HTML page shows the SWF movie, or else the first image published. The settings are kept in the FLA file's own publish settings, so a file that was set up to publish elsewhere publishes the same from Phoenix, and every setting Phoenix does not use is kept unchanged.</p>
 
@@ -117,6 +117,10 @@
 </figure>
 
 <p><strong>Render All</strong> runs every waiting job in order, and <strong>Stop</strong> ends the one running. A job shows Waiting, Rendering, Done or Failed; hold the pointer over a failed job to see why. The queue is kept when Phoenix closes.</p>
+
+<h2 id="export-shots">Export Shots</h2>
+
+<p><span class="menu-path">File &rsaquo; Export &rsaquo; Export Shots...</span> splits a saved episode into shot files, cut at frame labels, scenes or camera cuts, saved as FLA files, Phoenix documents or XFL folders in the folder you choose. See <a href="pipeline.html#split-an-episode-into-shots">Shots, assets and review</a>.</p>
 
 <h2>Exporting without opening Phoenix</h2>
 

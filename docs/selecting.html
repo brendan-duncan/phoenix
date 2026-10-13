@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Selecting and transforming · Phoenix User Guide</title>
 <meta name="description" content="Select, move, copy, transform, align, arrange and reshape artwork in Phoenix.">
-<meta name="keywords" content="selection tool subselection lasso polygon magic wand marquee nudge duplicate paste in place free transform distort envelope rotate scale skew flip align distribute arrange bring to front lock transform panel info panel smooth straighten optimize expand fill soften edges convert lines to fills distribute to layers">
+<meta name="keywords" content="selection tool subselection lasso polygon magic wand marquee nudge duplicate paste in place free transform distort envelope rotate scale skew flip align distribute arrange bring to front lock transform panel info panel smooth straighten optimize expand fill soften edges convert lines to fills distribute to layers distribute to keyframes remove transform">
 <link rel="icon" href="assets/img/logo.png">
 <link rel="stylesheet" href="assets/site.css">
 <script>try { const t = localStorage.getItem("phoenix-docs-theme"); if (t) document.documentElement.dataset.theme = t; } catch (e) {}</script>
@@ -44,7 +44,7 @@
 <p>Press <kbd>A</kbd>. The Subselection tool edits the points of a path directly. Click a path to show its points, drawn as small hollow squares; a selected point is filled.</p>
 
 <ul>
-  <li>Drag a point, or drag a rectangle to select several and drag them together.</li>
+  <li>Drag a point, or drag a rectangle to select several and drag them together. <kbd>Shift</kbd>-click or <kbd>Shift</kbd>-drag adds points to the selection.</li>
   <li>Drag a handle to change the curve; <kbd>Alt</kbd>-drag to move one handle independently of its partner.</li>
   <li><kbd>Alt</kbd>-drag from a corner point to pull out handles, or <kbd>Alt</kbd>-click a smooth point to make it a corner.</li>
   <li>Nudge selected points with the arrow keys, and press <kbd>Delete</kbd> to remove them.</li>
@@ -82,17 +82,6 @@
 
 <p>In <strong>Envelope</strong> mode, a mesh of points and handles surrounds the shape, and dragging them warps the artwork inside. <kbd>Esc</kbd> cancels a transform in progress.</p>
 
-<h2>3D rotation and translation</h2>
-
-<p>Movie clips can be turned and moved in 3D, drawn in perspective. The two 3D tools share a slot in the toolbox:</p>
-
-<dl class="defs">
-  <dt>3D Rotation (<kbd>W</kbd>)</dt><dd>Drag a movie clip left or right to turn it about its vertical axis, up or down to tip it about its horizontal axis. It turns about its transformation point. <kbd>Alt</kbd>-click sets it flat again.</dd>
-  <dt>3D Translation (<kbd>G</kbd>)</dt><dd>Drag a movie clip up to push it into the stage, down to bring it nearer. A clip further in draws smaller and closer to the vanishing point in the middle of the stage. Move it across the stage with the Selection tool as usual.</dd>
-</dl>
-
-<p>The view has a perspective angle of 55&deg;. The 3D turn and depth are keyed on keyframes like any other property, and a classic tween between two keyframes turns and moves the clip smoothly from one to the other. Each drag is a single step to undo.</p>
-
 <h3>Transform commands</h3>
 
 <p><span class="menu-path">Modify &rsaquo; Transform</span> has exact transforms:</p>
@@ -104,13 +93,26 @@
     <tr><td>Rotate 90&deg; CW</td><td><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>9</kbd></td></tr>
     <tr><td>Rotate 90&deg; CCW</td><td><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>7</kbd></td></tr>
     <tr><td>Flip Vertical, Flip Horizontal</td><td></td></tr>
-    <tr><td>Remove Transform</td><td class="wrap">Returns an instance, group or object to its original size and angle</td></tr>
+    <tr><td>Remove Transform</td><td><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>Z</kbd></td></tr>
   </tbody>
 </table>
 
+<p><strong>Remove Transform</strong> returns an instance, group or object to its original size and angle.</p>
+
 <h3>The Transform panel</h3>
 
-<p><span class="menu-path">View &rsaquo; Transform</span> (<kbd>Ctrl</kbd>+<kbd>T</kbd>) scales the selection by a percentage (with <strong>Constrain</strong> to keep proportions), rotates it by an angle, or skews it. <strong>Duplicate and Transform</strong> applies the values to a copy, which is a quick way to make a ring of evenly turned copies.</p>
+<p><span class="menu-path">Window &rsaquo; Transform</span> (<kbd>Ctrl</kbd>+<kbd>T</kbd>) scales the selection by a percentage (with <strong>Constrain</strong> to keep proportions), rotates it by an angle, or skews it. <strong>Duplicate and Transform</strong> applies the values to a copy, which is a quick way to make a ring of evenly turned copies. <strong>Remove Transform</strong> does the same as the menu command.</p>
+
+<h2>3D rotation and translation</h2>
+
+<p>Movie clips can be turned and moved in 3D, drawn in perspective. The two 3D tools share a slot in the toolbox:</p>
+
+<dl class="defs">
+  <dt>3D Rotation (<kbd>W</kbd>)</dt><dd>Drag a movie clip left or right to turn it about its vertical axis, up or down to tip it about its horizontal axis. It turns about its transformation point. <kbd>Alt</kbd>-click sets it flat again.</dd>
+  <dt>3D Translation (<kbd>G</kbd>)</dt><dd>Drag a movie clip up to push it into the stage, down to bring it nearer. A clip further in draws smaller and closer to the vanishing point in the middle of the stage. Move it across the stage with the Selection tool as usual.</dd>
+</dl>
+
+<p>The view has a perspective angle of 55&deg;. The 3D turn and depth are keyed on keyframes like any other property, and a classic tween between two keyframes turns and moves the clip smoothly from one to the other. Each drag is a single step to undo.</p>
 
 <h2>Cut, copy and paste</h2>
 
@@ -148,7 +150,7 @@
 
 <h2>Align</h2>
 
-<p><span class="menu-path">View &rsaquo; Align</span> (<kbd>Ctrl</kbd>+<kbd>K</kbd>) lines up the selected objects:</p>
+<p><span class="menu-path">Window &rsaquo; Align</span> (<kbd>Ctrl</kbd>+<kbd>K</kbd>) lines up the selected objects:</p>
 
 <ul>
   <li><strong>Align</strong> their left edges, centers or right edges, or their tops, middles or bottoms.</li>
@@ -161,7 +163,7 @@
 
 <h2>The Info panel</h2>
 
-<p><span class="menu-path">View &rsaquo; Info</span> (<kbd>Ctrl</kbd>+<kbd>I</kbd>) shows the size and position of the selection, the position of the cursor, and the color under the cursor.</p>
+<p><span class="menu-path">Window &rsaquo; Info</span> (<kbd>Ctrl</kbd>+<kbd>I</kbd>) shows the size and position of the selection, the position of the cursor, and the color under the cursor.</p>
 
 <h2>Position and size</h2>
 
@@ -185,6 +187,8 @@
 <h2>Distribute to layers</h2>
 
 <p><span class="menu-path">Modify &rsaquo; Timeline &rsaquo; Distribute to Layers</span> (<kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>D</kbd>) moves each selected object onto a new layer of its own, ready to animate separately.</p>
+
+<p><span class="menu-path">Modify &rsaquo; Timeline &rsaquo; Distribute to Keyframes</span> does the same in time: the bottom object stays on the current keyframe and each one above it moves to a new keyframe of its own, one after another, which turns a row of drawings into frame-by-frame animation.</p>
 
 </article>
 </main>

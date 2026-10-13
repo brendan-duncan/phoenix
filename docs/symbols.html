@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Symbols and instances · Phoenix User Guide</title>
 <meta name="description" content="Make reusable symbols, place and edit their instances, swap symbols, and control which frames a graphic plays.">
-<meta name="keywords" content="symbol instance graphic movie clip button convert to symbol F8 new symbol registration edit in place edit symbols breadcrumb swap symbol duplicate looping play once single frame ping pong first frame frame picker 9-slice scale instance name">
+<meta name="keywords" content="symbol instance graphic movie clip button convert to symbol F8 new symbol registration edit in place edit symbols breadcrumb swap symbol duplicate looping play once single frame loop reverse play once reverse ping pong first frame last frame frame picker 9-slice scale instance name">
 <link rel="icon" href="assets/img/logo.png">
 <link rel="stylesheet" href="assets/site.css">
 <script>try { const t = localStorage.getItem("phoenix-docs-theme"); if (t) document.documentElement.dataset.theme = t; } catch (e) {}</script>
@@ -25,7 +25,7 @@
   <thead><tr><th>Type</th><th>Best for</th><th>Timeline</th></tr></thead>
   <tbody>
     <tr><td>Graphic</td><td class="wrap">Character parts, props, lip-sync mouths: anything animated in step with the main timeline</td><td class="wrap">Plays in sync with the timeline it is placed on, so you see its animation as you scrub</td></tr>
-    <tr><td>Movie Clip</td><td class="wrap">Self-contained loops, and anything that needs filters or blend modes</td><td class="wrap">Plays on its own clock, independent of the timeline it is placed on</td></tr>
+    <tr><td>Movie Clip</td><td class="wrap">Self-contained loops, and anything that needs filters or <a href="selecting.html#3d-rotation-and-translation">3D rotation</a></td><td class="wrap">Plays on its own clock, independent of the timeline it is placed on</td></tr>
     <tr><td>Button</td><td class="wrap">Interactive content for players that support it</td><td class="wrap">Four frames: Up, Over, Down and Hit</td></tr>
   </tbody>
 </table>
@@ -78,9 +78,9 @@
 <p>Select an instance to see its settings on the Object tab:</p>
 
 <dl class="defs">
-  <dt>Instance name</dt><dd>For movie clips and buttons, a name that scripts can use to find the instance.</dd>
-  <dt>Behavior</dt><dd>Whether this instance acts as a graphic, movie clip or button, independent of the symbol's own type.</dd>
-  <dt>Swap...</dt><dd>Replaces the symbol this instance shows, keeping its position, transform and effects.</dd>
+  <dt>Instance name</dt><dd>For movie clips and buttons, a name that scripts can use to find the instance. It is in the header at the top of the tab.</dd>
+  <dt>Symbol and Swap...</dt><dd>The symbol this instance shows. <strong>Swap...</strong> replaces it, keeping the instance's position, transform and effects.</dd>
+  <dt>Type</dt><dd>Whether this instance acts as a graphic, movie clip or button, independent of the symbol's own type.</dd>
   <dt>Position and Size</dt><dd>X, Y, width and height.</dd>
   <dt>Color Effect and Display</dt><dd>Brightness, tint, alpha and blend modes. See <a href="effects.html">Filters, blends and color effects</a>.</dd>
   <dt>Filters</dt><dd>Drop shadows, blurs, glows and more, for movie clips and buttons.</dd>
@@ -96,11 +96,13 @@
     <tr><td>Loop</td><td class="wrap">From the first frame to the end, then starts again</td></tr>
     <tr><td>Play Once</td><td class="wrap">To the end, then holds the last frame</td></tr>
     <tr><td>Single Frame</td><td class="wrap">Holds one frame, which is how you switch mouth shapes or hand poses</td></tr>
+    <tr><td>Loop Reverse</td><td class="wrap">Backward to frame 1, then starts again from the end</td></tr>
+    <tr><td>Play Once Reverse</td><td class="wrap">Backward to frame 1, then holds it</td></tr>
     <tr><td>Ping Pong</td><td class="wrap">Forward to the end, then backward, and again</td></tr>
   </tbody>
 </table>
 
-<p><strong>First</strong> sets the frame of the symbol to start from.</p>
+<p><strong>First</strong> sets the frame of the symbol to start from. <strong>Last</strong> sets where playing stops or turns around: the loops run between First and Last, and the Play Once options hold on Last. Leave Last at 0 to play to the symbol's end.</p>
 
 <h2>Display</h2>
 
@@ -108,7 +110,7 @@
 
 <h2>The Frame Picker</h2>
 
-<p>When a symbol holds a set of poses, such as mouth shapes, the Frame Picker is the fastest way to choose between them. Open it from <span class="menu-path">View &rsaquo; Frame Picker</span>, select a graphic instance, and click a thumbnail to show that frame. Check <strong>Create Keyframe</strong> to put each choice on a new keyframe at the playhead, which makes lip sync a matter of stepping through the timeline and clicking.</p>
+<p>When a symbol holds a set of poses, such as mouth shapes, the Frame Picker is the fastest way to choose between them. Open it from <span class="menu-path">Window &rsaquo; Frame Picker</span>, select a graphic instance, and click a thumbnail to show that frame. The list beside <strong>Create Keyframe</strong> sets the instance's looping option. Check <strong>Create Keyframe</strong> to put each choice on a new keyframe at the playhead, which makes lip sync a matter of stepping through the timeline and clicking. To key a whole line of dialogue from a recording at once, see <a href="sound.html#lip-sync">Lip sync</a>.</p>
 
 <h2>Swap Symbol</h2>
 

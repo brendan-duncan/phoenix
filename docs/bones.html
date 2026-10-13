@@ -31,14 +31,14 @@
 <ol class="steps">
   <li>Drag from a point on one instance to a point on another. The bone runs from where you press to where you let go.</li>
   <li>Phoenix puts both instances on a new armature layer, <em>Armature_1</em>, above the first one's layer. Each instance turns about its joint, which becomes its transformation point.</li>
-  <li>To grow the armature, drag from any instance already in it to another instance. The new bone starts at that instance's joint, so one instance can branch into several bones.</li>
+  <li>To grow the armature, drag from any instance already in it to another instance. The new bone starts at that instance's joint, so one instance can branch into several bones. Bones can be added while the armature has a single pose, and an instance can be in only one armature.</li>
 </ol>
 
 <p>Each bone added is a single step to undo.</p>
 
 <h3>Joint limits</h3>
 
-<p>Click a bone with the Bone tool to set how far the joint at its head may turn. Turn on <strong>Constrain</strong> and give the <strong>Min</strong> and <strong>Max</strong> angles, measured from the bone above. When you drag the armature into a pose, a limited joint stops at its limit and the other joints turn further to make up the difference.</p>
+<p>Click a bone with the Bone tool, without dragging, to set how far the joint at its head may turn. In the <strong>Joint Rotation</strong> dialog, turn on <strong>Constrain</strong> and give the <strong>Min</strong> and <strong>Max</strong> angles, measured from the bone above. When you drag the armature into a pose, a limited joint stops at its limit and the other joints turn further to make up the difference.</p>
 
 <h2>Armature layers</h2>
 

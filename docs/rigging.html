@@ -21,46 +21,46 @@
 
 <h2>Pegs</h2>
 
-<p>A peg is a layer that holds only a transform. Pick a layer and choose <b>Insert &gt; Peg</b>: a <em>Peg</em> layer appears above it and the layer is parented to it. Move, turn or scale the peg (with the Free Transform tool, or tween it) and everything parented to it follows, about the peg's pivot. Parent more layers to the same peg from the layer menu's <b>Parent Layer</b>, or parent pegs to pegs to build a hierarchy.</p>
+<p>A peg is a layer that holds only a transform. Pick a layer and choose <span class="menu-path">Insert &rsaquo; Peg</span>: a peg layer (<em>Peg 1</em>) appears above it and the layer is parented to it. Move, turn or scale the peg (with the Free Transform tool, or tween it) and everything parented to it follows, about the peg's pivot. Parent more layers to the same peg by right-clicking them and choosing it from <strong>Parent Layer</strong>, or parent pegs to pegs to build a hierarchy. See <a href="timeline.html#layer-parenting">Layer parenting</a>.</p>
 
 <p>On the stage a peg shows as a crosshair in a circle, in its layer's color, with a tick for the way it faces. It never draws in exports. In the file a peg is an instance of an empty graphic symbol on a parent layer, so the animation plays the same anywhere the FLA opens.</p>
 
 <h2>Master controllers</h2>
 
-<p>A controller is one slider that drives several properties at once: a head turn that moves the head, swaps the eyes' drawing and turns the nose. Open <b>Window &gt; Controllers</b> and choose <b>New</b>. Then, for each thing it should drive, pick the layer in the timeline, select the controller and choose <b>Bind</b>: choose the property (X, Y, rotation, scale, alpha, or a graphic's frame) and the values it should have with the slider at 0 and at 1. Both start at the value the layer has now.</p>
+<p>A controller is one slider that drives several properties at once: a head turn that moves the head, swaps the eyes' drawing and turns the nose. Open <span class="menu-path">Window &rsaquo; Controllers</span> and choose <strong>New...</strong>. Then, for each thing it should drive, pick the layer in the timeline, select the controller and choose <strong>Bind...</strong>: choose the property (X, Y, rotation, scale, scale X, scale Y, alpha, or a graphic's frame) and the values it should have with the slider at 0 and at 1. Both start at the value the layer has now. <strong>Remove</strong> takes out the selected binding or controller.</p>
 
 <p>Dragging the slider sets every property it drives on the frame shown, as one undo step. A layer with no keyframe there gets one; cut into a tween, the new keyframe takes the in-between and both halves keep tweening. What is saved is ordinary keyframes; the controllers themselves are kept with the document for the next time you open it in Phoenix.</p>
 
 <h2>Deformers</h2>
 
-<p>A deformer bends a symbol's art by handles instead of redrawing it. Select one or more instances and choose <b>Modify &gt; Deformer</b>:</p>
+<p>A deformer bends a symbol's art by handles instead of redrawing it. Select one or more instances and choose <span class="menu-path">Modify &rsaquo; Deformer</span>:</p>
 
 <ul>
-<li><b>Curve Deformer</b> lays a spine along the art. Drag its square anchors and round handles with the Selection tool and the art bends along it, keeping its thickness: an arm at the elbow, a tail, a sway.</li>
-<li><b>Envelope Deformer</b> puts a four by four grid of handles around the art. Drag any of them and the art is pulled with it, smoothly, most near the handle: a squash, a stretch, a lean.</li>
+<li><strong>Curve Deformer</strong> lays a spine along the art. Drag its square anchors and round handles with the Selection tool and the art bends along it, keeping its thickness: an arm at the elbow, a tail, a sway.</li>
+<li><strong>Envelope Deformer</strong> puts a four by four grid of handles around the art. Drag any of them and the art is pulled with it, smoothly, most near the handle: a squash, a stretch, a lean.</li>
 </ul>
 
-<p>The handles show on a selected instance's keyframe. Each keyframe keeps its own pose, and a classic tween goes from one pose to the next. <b>Reset Pose</b> puts the handles back where they started; <b>Remove Deformer</b> takes the deformer off. Shapes are bent; bitmaps and text inside the symbol are not.</p>
+<p>The handles show on a selected instance's keyframe. Each keyframe keeps its own pose, and a classic tween goes from one pose to the next. <strong>Reset Pose</strong> puts the handles back where they started; <strong>Remove Deformer</strong> takes the deformer off. Shapes are bent; bitmaps and text inside the symbol are not.</p>
 
 <p>Deformed art shows bent on the stage and in everything Phoenix exports: movies, image sequences and passes. Other apps that open the FLA show the art as drawn.</p>
 
 <h2>Function curves</h2>
 
-<p><b>Window &gt; Function Curves</b> shows one property of the layer picked in the timeline as a curve over its frames: X, Y, rotation, scale, skew, alpha, brightness, tint or a graphic's frame, or the camera's pan, zoom and turn on a camera layer. The curve runs through the tweens between keyframes, as they play, and each keyframe is a dot.</p>
+<p><span class="menu-path">Window &rsaquo; Function Curves</span> shows one property of the layer picked in the timeline as a curve over its frames: X, Y, rotation, scale X and Y, skew, alpha, brightness, tint or a graphic's frame, or the camera's pan, zoom and turn on a camera layer. The curve runs through the tweens between keyframes, as they play, and each keyframe is a dot.</p>
 
 <p>Drag a dot up or down to change that keyframe's value, or double-click it to type one; both are one undo step. Click anywhere else in the graph to go to that frame.</p>
 
 <h2>X-sheet</h2>
 
-<p><b>Window &gt; X-Sheet</b> shows the timeline as an exposure sheet: a column per layer, a row per frame, each drawing numbered by its content. Type a drawing number into a cell to expose that drawing there, <code>x</code> to hold, or Delete to clear.</p>
+<p><span class="menu-path">Window &rsaquo; X-Sheet</span> shows the timeline as an exposure sheet: a column per layer, a row per frame, each drawing numbered by its content. Type a drawing number into a cell and press <kbd>Enter</kbd> to expose that drawing there, press <kbd>X</kbd> to hold, or <kbd>Delete</kbd> to clear the cell. The arrow keys move between cells.</p>
 
 <h2>Light table</h2>
 
-<p><b>View &gt; Light Table</b> (<kbd>Shift</kbd>+<kbd>L</kbd>) fades every layer except the one you are drawing on, so you can see the other layers through it without mistaking them for your own.</p>
+<p><span class="menu-path">View &rsaquo; Light Table</span> (<kbd>Shift</kbd>+<kbd>L</kbd>) fades every layer except the one you are drawing on, so you can see the other layers through it without mistaking them for your own.</p>
 
 <h2>Multiplane camera</h2>
 
-<p><b>Insert &gt; Camera</b> adds a camera to the scene; <b>Window &gt; Layer Depth</b> sets how far each layer sits from it, so a pan moves near layers faster than far ones. The Camera tool (<kbd>C</kbd>) pans, zooms and turns it, keyed on the frame shown.</p>
+<p><span class="menu-path">Insert &rsaquo; Camera</span> adds a camera to the scene; <span class="menu-path">Window &rsaquo; Layer Depth</span> sets how far each layer sits from it, so a pan moves near layers faster than far ones. The Camera tool (<kbd>C</kbd>) pans, zooms and turns it, keyed on the frame shown.</p>
 
 </article>
 </main>

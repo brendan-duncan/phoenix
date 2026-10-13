@@ -4,8 +4,8 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>The workspace · Phoenix User Guide</title>
-<meta name="description" content="A tour of the Phoenix window: menus, toolbox, outliner, stage, timeline and the panels docked on the right.">
-<meta name="keywords" content="panels dock toolbox outliner properties library color swatches align transform info frame picker motion editor menu bar status bar edit bar breadcrumb hot text">
+<meta name="description" content="A tour of the Phoenix window: menus, Tools panel, outliner, stage, timeline and panels, with workspaces, themes and history.">
+<meta name="keywords" content="panels dock toolbox outliner properties library color swatches align transform info frame picker motion editor menu bar status bar edit bar breadcrumb hot text window menu workspaces theme dark light ui scale edit toolbar history repeat hide panels document tabs">
 <link rel="icon" href="assets/img/logo.png">
 <link rel="stylesheet" href="assets/site.css">
 <script>try { const t = localStorage.getItem("phoenix-docs-theme"); if (t) document.documentElement.dataset.theme = t; } catch (e) {}</script>
@@ -25,10 +25,10 @@
 </figure>
 
 <ol>
-  <li><strong>Menu bar</strong>: File, Edit, Insert, Modify, View, Control and Help.</li>
-  <li><strong>Toolbox</strong>: drawing and editing tools, the stroke and fill colors, and the Object Drawing switch.</li>
-  <li><strong>Outliner</strong>: the document as a tree, from scenes and layers down to individual shapes.</li>
-  <li><strong>Edit bar</strong>: where you are in the document (the scene, and any symbol you have opened), with a Back button and the <strong>Edit Symbols</strong> list.</li>
+  <li><strong>Menu bar</strong>: File, Edit, Insert, Modify, View, Control, Window and Help.</li>
+  <li><strong>Tools panel</strong>: drawing and editing tools, the stroke and fill colors, and the Object Drawing switch.</li>
+  <li><strong>Outliner</strong>: the document as a tree, from scenes and layers down to individual shapes. It is closed until you open it from <span class="menu-path">Window &rsaquo; Outliner</span>.</li>
+  <li><strong>Edit bar</strong>: where you are in the document (the scene, and any symbol you have opened), with a Back button and the <strong>Edit Symbols</strong> list. When more than one document is open, their tabs sit above it.</li>
   <li><strong>Stage</strong>: the visible area of your animation, on a gray pasteboard where you can park artwork off screen.</li>
   <li><strong>Timeline header</strong>: the current frame, frame rate and time, the playback controls, onion skinning and looping.</li>
   <li><strong>Layers</strong>: the layer stack, with visibility, lock and outline controls.</li>
@@ -36,9 +36,13 @@
   <li><strong>Panel dock</strong>: Properties, Library, Color and Swatches as tabs, with room for more panels.</li>
 </ol>
 
-<h2>The toolbox</h2>
+<h2>The Tools panel</h2>
 
-<p>The toolbox is a single column on the left. Related tools share a slot: a small corner mark on a button means there is more than one tool in it. <strong>Press and hold</strong> the button to see the others, and the one you pick takes over the slot. Every tool's shortcut key works even while its tool is hidden in a slot.</p>
+<p>The Tools panel starts as a column on the left. Related tools share a slot: a small corner mark on a button means there is more than one tool in it. <strong>Press and hold</strong> the button to see the others, and the one you pick takes over the slot. Every tool's shortcut key works even while its tool is hidden in a slot.</p>
+
+<p>The tools flow to fill the panel. Drag its edge to make it wider and they arrange themselves in as many columns as fit; dock it along the top or bottom of the window and they run in rows instead. Drag the row of grip dots at its end to move the panel, or double-click the grip to float it or dock it again.</p>
+
+<p>To rearrange the tools, choose <span class="menu-path">Window &rsaquo; Edit Toolbar...</span>, or right-click the Tools panel and choose <strong>Edit Toolbar...</strong>. Drag a tool into a slot to group it there, between slots to give it a slot of its own, or under <strong>Hidden</strong> to take it off the panel; a hidden tool still works by its key. The first tool in a slot is the one shown. <strong>Add Line</strong> adds a divider between sections, and <strong>Reset</strong> puts back Phoenix's own layout.</p>
 
 <div class="split">
   <figure class="inline" style="margin:0"><img src="assets/shots/toolbox.webp" alt="The toolbox column with the shape slot's flyout open, listing Rectangle, Oval, Rectangle Primitive, Oval Primitive and PolyStar" width="236" height="632"></figure>
@@ -89,36 +93,90 @@
 
 <h2>Other panels</h2>
 
-<p>Phoenix has no Window menu; panels open from the <strong>View</strong> menu.</p>
+<p>Every panel opens from the <strong>Window</strong> menu, which ticks the ones that are open. Choosing an open panel that is in view closes it; choosing one that is closed, or hidden behind another tab, brings it to the front. The keys work with the menu closed too.</p>
 
 <table>
-  <thead><tr><th>Panel</th><th>Opens with</th><th>Use it to</th></tr></thead>
+  <thead><tr><th>Panel</th><th>Key</th><th>Use it to</th></tr></thead>
   <tbody>
-    <tr><td><a href="library.html">Library</a></td><td>Tab beside Properties</td><td class="wrap">Browse and organize symbols, bitmaps and sounds</td></tr>
+    <tr><td><a href="timeline.html">Timeline</a></td><td><kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>T</kbd></td><td class="wrap">Work with layers and frames</td></tr>
+    <tr><td><a href="#the-tools-panel">Tools</a></td><td><kbd>Ctrl</kbd>+<kbd>F2</kbd></td><td class="wrap">Pick drawing and selection tools</td></tr>
+    <tr><td><a href="#the-properties-panel">Properties</a></td><td><kbd>Ctrl</kbd>+<kbd>F3</kbd></td><td class="wrap">Change the selection, the tool, the frame or the document</td></tr>
+    <tr><td><a href="library.html">Library</a></td><td><kbd>Ctrl</kbd>+<kbd>L</kbd></td><td class="wrap">Browse and organize symbols, bitmaps and sounds</td></tr>
+    <tr><td><a href="#the-outliner">Outliner</a></td><td><kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>O</kbd></td><td class="wrap">See the document as a tree</td></tr>
     <tr><td><a href="color.html#the-color-panel">Color</a></td><td><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>F9</kbd></td><td class="wrap">Choose solid, gradient and bitmap fills</td></tr>
     <tr><td><a href="color.html#swatches">Swatches</a></td><td><kbd>Ctrl</kbd>+<kbd>F9</kbd></td><td class="wrap">Pick from the document's saved colors</td></tr>
     <tr><td><a href="selecting.html#align">Align</a></td><td><kbd>Ctrl</kbd>+<kbd>K</kbd></td><td class="wrap">Line up, distribute, match sizes and space objects</td></tr>
     <tr><td><a href="selecting.html#the-transform-panel">Transform</a></td><td><kbd>Ctrl</kbd>+<kbd>T</kbd></td><td class="wrap">Scale, rotate and skew by exact amounts</td></tr>
     <tr><td><a href="selecting.html#the-info-panel">Info</a></td><td><kbd>Ctrl</kbd>+<kbd>I</kbd></td><td class="wrap">Read the size, position, cursor position and color under the cursor</td></tr>
-    <tr><td><a href="symbols.html#the-frame-picker">Frame Picker</a></td><td>View menu</td><td class="wrap">Choose which frame a graphic symbol shows, from thumbnails</td></tr>
-    <tr><td><a href="tweens.html#the-motion-editor">Motion Editor</a></td><td>View menu</td><td class="wrap">Edit a motion tween's property curves</td></tr>
-    <tr><td><a href="tweens.html#motion-presets">Motion Presets</a></td><td>View menu</td><td class="wrap">Save and apply reusable motion</td></tr>
-    <tr><td>Outliner</td><td><kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>O</kbd></td><td class="wrap">Show or hide the document tree</td></tr>
+    <tr><td><a href="symbols.html#the-frame-picker">Frame Picker</a></td><td>&mdash;</td><td class="wrap">Choose which frame a graphic symbol shows, from thumbnails</td></tr>
+    <tr><td><a href="tweens.html#the-motion-editor">Motion Editor</a></td><td>&mdash;</td><td class="wrap">Edit a motion tween's property curves</td></tr>
+    <tr><td><a href="rigging.html#multiplane-camera">Layer Depth</a></td><td>&mdash;</td><td class="wrap">Set how far each layer sits from the multiplane camera</td></tr>
+    <tr><td><a href="rigging.html#x-sheet">X-Sheet</a></td><td>&mdash;</td><td class="wrap">Type each layer's exposures frame by frame, by drawing number</td></tr>
+    <tr><td><a href="#history-and-repeat">History</a></td><td><kbd>Ctrl</kbd>+<kbd>F10</kbd></td><td class="wrap">See every step you can undo, and go back or forward to one</td></tr>
+    <tr><td><a href="pipeline.html#review-notes">Review Notes</a></td><td>&mdash;</td><td class="wrap">Read and add notes on frames that never export</td></tr>
+    <tr><td><a href="rigging.html#master-controllers">Controllers</a></td><td>&mdash;</td><td class="wrap">Drive properties on several layers with one slider</td></tr>
+    <tr><td><a href="stage.html#scenes">Scene</a></td><td><kbd>Shift</kbd>+<kbd>F2</kbd></td><td class="wrap">Switch, add, duplicate, delete, rename and reorder scenes</td></tr>
+    <tr><td><a href="#movie-explorer">Movie Explorer</a></td><td><kbd>Alt</kbd>+<kbd>F3</kbd></td><td class="wrap">Browse the whole document as a tree</td></tr>
+    <tr><td><a href="rigging.html#function-curves">Function Curves</a></td><td>&mdash;</td><td class="wrap">Edit any property of the current layer as a curve over time</td></tr>
+    <tr><td><a href="ink-and-paint.html#linked-palettes">Palettes</a></td><td>&mdash;</td><td class="wrap">Recolor everything linked to a palette's named colors</td></tr>
   </tbody>
 </table>
 
+<p>The Window menu also opens <a href="tweens.html#motion-presets">Motion Presets</a>, <a href="drawing-tools.html#paint-brush">Document Brushes</a> and the <a href="export.html#render-queue">Render Queue</a>, and has <strong>Workspaces</strong>, <strong>Hide Panels</strong>, <strong>Theme</strong> and <strong>Edit Toolbar...</strong>, described below.</p>
+
 <figure class="narrow">
-  <img src="assets/shots/menu-view.webp" alt="The View menu, listing panels, scene and onion skin options, rulers, guides, zoom and snapping" width="275" height="672">
-  <figcaption>The View menu opens panels and controls what the stage shows.</figcaption>
+  <img src="assets/shots/menu-view.webp" alt="The View menu, with the light table, camera view, scene and onion skin options, rulers, guides, zoom and snapping" width="275" height="672">
+  <figcaption>The View menu controls what the stage shows.</figcaption>
 </figure>
 
 <h2>Arranging panels</h2>
 
-<p>Panels are docked windows. Drag a panel by its title bar to move it to another edge or onto another panel to make a tab group, or click the float button in its title bar to give it a window of its own. Phoenix remembers the layout between sessions.</p>
+<p>Every panel, including the timeline, the Tools panel and the outliner, is a docked window. Drag a panel by its title bar to move it to any edge of the window or onto another panel to make a tab group, or click the float button in its title bar to give it a window of its own. Phoenix remembers the layout between sessions, and a floating panel left on a screen that is no longer connected comes back onto the main one.</p>
 
-<p>The outliner can be hidden to give the stage more room: use the fold arrow at the left of the edit bar, <span class="menu-path">View &rsaquo; Outliner</span>, or drag its edge. Its visibility and width are remembered too.</p>
+<p>Press <kbd>F4</kbd> (<span class="menu-path">Window &rsaquo; Hide Panels</span>) to hide every open panel and see the stage alone. Press it again to bring them back.</p>
 
-<p>Save named workspaces and switch between them under <span class="menu-path">View &rsaquo; Workspace</span>. Every panel has a toggle in the <span class="menu-path">Window</span> menu, and <span class="menu-path">View &rsaquo; History</span> (<kbd>Ctrl</kbd>+<kbd>F10</kbd>) lists the steps you can undo.</p>
+<h3>Workspaces</h3>
+
+<p>A workspace is a saved arrangement of the panels, the Tools panel's layout and the width of the layers list. Switch between them under <span class="menu-path">Window &rsaquo; Workspaces</span>. Phoenix comes with four:</p>
+
+<dl class="defs">
+  <dt>Essentials</dt><dd>Phoenix's own layout: the tools on the left, the timeline below the stage, and Properties, Library, Color and Swatches as tabs on the right.</dd>
+  <dt>Animator</dt><dd>A tall timeline with the Motion Editor and Layer Depth as tabs beside it, the Frame Picker among the panels, and the tools in two columns.</dd>
+  <dt>Designer</dt><dd>Color, Swatches, Align, Transform and Info grouped under Properties, a short timeline, and the tools in two columns.</dd>
+  <dt>Classic</dt><dd>The timeline above the stage, and the tools down the right beside Properties and the Library.</dd>
+</dl>
+
+<p>The rest of the Workspaces menu manages them:</p>
+
+<dl class="defs">
+  <dt>New Workspace...</dt><dd>Saves the current layout under a new name.</dd>
+  <dt>Save Workspace</dt><dd>Saves the current layout over the workspace in use.</dd>
+  <dt>Reset</dt><dd>Puts the workspace in use back the way it was last saved.</dd>
+  <dt>Rename Workspace, Delete Workspace</dt><dd>Rename or delete one of your own workspaces. The built-in ones stay.</dd>
+  <dt>Import Workspace..., Export Workspace...</dt><dd>Pass a workspace to another machine as a <code>.phxworkspace</code> file. An imported workspace never replaces one you have; it gets a number after its name instead.</dd>
+</dl>
+
+<h3>Themes</h3>
+
+<p><span class="menu-path">Window &rsaquo; Theme</span> sets the colors of Phoenix's window. <strong>Follow System</strong> (the default) is dark or light as your system is; <strong>Dark</strong> and <strong>Light</strong> stay as they are; <strong>Turquoise</strong> is a built-in example of a theme of its own. Themes you save are listed after them.</p>
+
+<p>Choose <span class="menu-path">Window &rsaquo; Theme &rsaquo; Edit Theme...</span> to make your own. Changes show on the window as you make them.</p>
+
+<dl class="defs">
+  <dt>Start from</dt><dd>The theme to begin with.</dd>
+  <dt>Mode</dt><dd>Dark or Light: how the window's controls are drawn. Colors you leave alone take the mode's own.</dd>
+  <dt>Font size</dt><dd>The size of the text in the window, or System for your system's size.</dd>
+  <dt>UI scale</dt><dd>The size of everything in Phoenix's window, from 75% to 250%. It takes effect the next time Phoenix starts.</dd>
+  <dt>Colors</dt><dd>Every color the window uses, grouped as Window, Timeline, Stage and Graphs: panels, text, hot text, frame cells and tween spans, the playhead, the pasteboard, rulers, onion skin colors and graph backgrounds. Double-click a color to change it; right-click it to put back the mode's own. Colors the theme sets itself are shown in italics.</dd>
+</dl>
+
+<p><strong>Save As...</strong> names the theme and uses it. <strong>Import...</strong> and <strong>Export...</strong> read and write <code>.phxtheme</code> files, and <strong>Delete</strong> removes one of your themes. <strong>Close</strong> without saving puts back the theme you had.</p>
+
+<h2>History and Repeat</h2>
+
+<p><span class="menu-path">Window &rsaquo; History</span> (<kbd>Ctrl</kbd>+<kbd>F10</kbd>) lists every step you can undo, from <strong>Opened</strong> at the top to your latest change. Click a step to undo or redo back to it. Steps you have undone are grayed until you redo them or make a new change. The Undo and Redo commands in the Edit menu also name the step they undo or redo.</p>
+
+<p><span class="menu-path">Edit &rsaquo; Repeat</span> (<kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>Y</kbd>) runs the last command you chose from the Insert or Modify menu, or from <span class="menu-path">Edit &rsaquo; Timeline</span>, again on what is selected now. The menu names the command it will repeat.</p>
 
 <h2>Find and Replace</h2>
 
@@ -130,7 +188,7 @@
 
 <h2>The outliner</h2>
 
-<p>The outliner shows the whole document as a tree: scenes, layers, frames, and the elements on them, down to individual paths and edges in a shape. Select something in the outliner and it is selected on the stage too. It is a quick way to find a small or hidden element in a crowded scene.</p>
+<p>Open the outliner with <span class="menu-path">Window &rsaquo; Outliner</span> (<kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>O</kbd>). It shows the whole document as a tree: scenes, layers, frames, and the elements on them, down to individual paths and edges in a shape. Select something in the outliner and it is selected on the stage too. It is a quick way to find a small or hidden element in a crowded scene.</p>
 
 <h2>The status bar</h2>
 
@@ -142,9 +200,10 @@
 
 <ul>
   <li><strong>On the stage</strong>: cut, copy and paste; arrange; transform; distribute to layers; convert to symbol; edit, edit in place or swap a symbol; break apart; group and ungroup.</li>
-  <li><strong>On a layer</strong>: insert and delete layers and folders, guide and mask types, show and lock others, and layer properties.</li>
-  <li><strong>On frames</strong>: tweens, frames and keyframes, cut, copy and paste frames, reverse frames, and copy and paste motion.</li>
-  <li><strong>In the Library</strong>: rename, duplicate, delete and new folder.</li>
+  <li><strong>On a layer</strong>: insert and delete layers and folders; cut, copy, paste and duplicate layers; guide and mask types; the parent layer; show all, hide others and lock others; and layer properties.</li>
+  <li><strong>On frames</strong>: tweens, frames and keyframes, cut, copy and paste frames, paste and overwrite, reverse frames, convert to frame-by-frame, and copy and paste motion.</li>
+  <li><strong>In the Library</strong>: rename, duplicate, delete, copy and paste items, new symbols, folders and fonts, properties, and selecting unused items.</li>
+  <li><strong>On the Tools panel</strong>: Edit Toolbar.</li>
 </ul>
 
 <div class="tool-grid">

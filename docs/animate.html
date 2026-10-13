@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Coming from Animate · Phoenix User Guide</title>
 <meta name="description" content="A guide for Adobe Animate users: what carries over, the keys that differ, what Phoenix adds, and what is still to come.">
-<meta name="keywords" content="adobe animate flash migrate switch differences compatibility fla round trip shortcuts window menu camera actionscript jsfl">
+<meta name="keywords" content="adobe animate flash migrate switch differences compatibility fla round trip shortcuts animate standard shortcut set window menu camera actionscript jsfl publish swf">
 <link rel="icon" href="assets/img/logo.png">
 <link rel="stylesheet" href="assets/site.css">
 <script>try { const t = localStorage.getItem("phoenix-docs-theme"); if (t) document.documentElement.dataset.theme = t; } catch (e) {}</script>
@@ -22,7 +22,7 @@
 <h2>What carries over</h2>
 
 <ul>
-  <li><strong>Your files.</strong> Phoenix opens FLA and XFL files, and older Flash files, and saves FLA files that Animate opens again. Data Phoenix does not use itself, such as ActionScript and publish settings, is kept as it was.</li>
+  <li><strong>Your files.</strong> Phoenix opens FLA and XFL files, and older Flash files, and saves FLA files that Animate opens again. Data Phoenix does not use itself, such as ActionScript, is kept as it was. Publish settings are read and written by Phoenix's own <a href="export.html#publish">Publish</a>, and the settings it does not use are kept.</li>
   <li><strong>The drawing model.</strong> Merge and object drawing, primitives, groups, and how strokes and fills interact all behave as you expect.</li>
   <li><strong>The timeline.</strong> Layers, folders, keyframes, classic, shape and motion tweens, eases, masks, guides and motion guides.</li>
   <li><strong>Symbols.</strong> Graphics, movie clips and buttons, editing in place, looping options, color effects, blend modes and filters.</li>
@@ -34,24 +34,28 @@
 <table>
   <thead><tr><th>Key</th><th>In Phoenix</th><th>In Animate</th></tr></thead>
   <tbody>
-    <tr><td><kbd>Ctrl</kbd>+<kbd>2</kbd></td><td class="wrap">Fit in Window</td><td class="wrap">Show Frame</td></tr>
-    <tr><td><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>B</kbd></td><td class="wrap">Show Bounding Boxes</td><td class="wrap">&mdash;</td></tr>
+    <tr><td><kbd>B</kbd></td><td class="wrap">Nib Brush</td><td class="wrap">Fluid Brush</td></tr>
+    <tr><td><kbd>Shift</kbd>+<kbd>B</kbd></td><td class="wrap">Flow Brush</td><td class="wrap">Classic Brush</td></tr>
+    <tr><td><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>B</kbd></td><td class="wrap">Show Bounding Boxes</td><td class="wrap">Bold text</td></tr>
   </tbody>
 </table>
 
 <p>Everything else, from <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>Z</kbd> for Remove Transform to <kbd>Shift</kbd>+<kbd>Y</kbd> for the Pencil, is where Animate puts it.</p>
+
+<p>To use Animate's keys exactly, choose the <strong>Animate Standard</strong> set in <a href="preferences.html#keyboard-shortcuts">Edit &rsaquo; Keyboard Shortcuts</a>. <strong>Import</strong> there also reads a shortcut set saved from Animate, matching each command by its menu and name, and lists any commands Phoenix does not have.</p>
 
 <h2>Where things are</h2>
 
 <table>
   <thead><tr><th>Looking for</th><th>In Phoenix</th></tr></thead>
   <tbody>
-    <tr><td>The Window menu</td><td class="wrap">Panels open from the <strong>View</strong> menu</td></tr>
-    <tr><td>Document Settings</td><td class="wrap">The <strong>Doc</strong> tab of the Properties panel</td></tr>
+    <tr><td>Document Settings</td><td class="wrap"><span class="menu-path">Modify &rsaquo; Document</span> (<kbd>Ctrl</kbd>+<kbd>J</kbd>), or the <strong>Doc</strong> tab of the Properties panel</td></tr>
     <tr><td>Properties panel tabs</td><td class="wrap">Tool, Object, Frame and Doc, as in recent Animate</td></tr>
-    <tr><td>Library</td><td class="wrap">A tab beside Properties</td></tr>
-    <tr><td>Preferences</td><td class="wrap">Settings are remembered as you use them; see <a href="preferences.html">Settings and preferences</a></td></tr>
-    <tr><td>Publish</td><td class="wrap"><span class="menu-path">File &rsaquo; Export</span>: video, GIF, PNG sequences, images and SVG</td></tr>
+    <tr><td>Library</td><td class="wrap">A tab beside Properties, or <span class="menu-path">Window &rsaquo; Library</span> (<kbd>Ctrl</kbd>+<kbd>L</kbd>)</td></tr>
+    <tr><td>Fluid Brush, Classic Brush</td><td class="wrap">The <strong>Flow Brush</strong> and the <strong>Nib Brush</strong></td></tr>
+    <tr><td>Show Frame</td><td class="wrap"><span class="menu-path">View &rsaquo; Magnification &rsaquo; Fit in Window</span> (<kbd>Ctrl</kbd>+<kbd>2</kbd>)</td></tr>
+    <tr><td>Preferences</td><td class="wrap"><span class="menu-path">Edit &rsaquo; Preferences</span> (<kbd>Ctrl</kbd>+<kbd>U</kbd>) and <span class="menu-path">Edit &rsaquo; Keyboard Shortcuts</span>; see <a href="preferences.html">Settings and preferences</a></td></tr>
+    <tr><td>Publish</td><td class="wrap"><span class="menu-path">File &rsaquo; Publish Settings</span> and <span class="menu-path">File &rsaquo; Publish</span>: SWF, HTML, PNG, JPEG, GIF and SVG. <span class="menu-path">File &rsaquo; Export</span> has video, GIF, PNG and SVG sequences, images, SWF and sprite sheets</td></tr>
     <tr><td>Test Movie</td><td class="wrap">Play on the stage with <kbd>Enter</kbd>, or export</td></tr>
   </tbody>
 </table>
@@ -59,8 +63,7 @@
 <h2>What works differently</h2>
 
 <ul>
-  <li><strong>One document at a time.</strong> Phoenix shows one document per window. Opening another replaces it, after asking about unsaved changes.</li>
-  <li><strong>Native format.</strong> New documents save as <code>.phx</code>, which opens much faster. Use <span class="menu-path">Save As</span> to write an FLA whenever you need one.</li>
+  <li><strong>Native format.</strong> New documents save as <code>.phx</code>, which opens much faster. Use <span class="menu-path">Save As</span> to write an FLA whenever you need one, or choose FLA files or XFL folders under <span class="menu-path">File &rsaquo; Default Save Format</span>.</li>
   <li><strong>Movie clips on the stage</strong> show their first frame while you edit; their animation plays in exports.</li>
   <li><strong>Scripts are kept, not run.</strong> ActionScript and frame scripts are saved with the file, but Phoenix does not run them.</li>
 </ul>
@@ -75,7 +78,12 @@
   <dt>Crash recovery</dt><dd>Regular recovery copies, offered back after a crash.</dd>
   <dt>Reference video</dt><dd>Import video straight onto a guide layer to animate over.</dd>
   <dt>Shareable eases and presets</dt><dd>Export custom eases as JSON, and import Animate's motion presets.</dd>
-  <dt>Command-line rendering</dt><dd>Export and convert without opening a window. See <a href="command-line.html">Command line</a>.</dd>
+  <dt>Rigging</dt><dd>An X-sheet, pegs, master controllers, curve and envelope deformers, and function curves for any layer property. See <a href="rigging.html">Rigs and motion</a>.</dd>
+  <dt>Ink and paint</dt><dd>Line and color art on separate layers, linked palettes that recolor a whole document, and tone, highlight and glow layers. See <a href="ink-and-paint.html">Ink, paint and palettes</a>.</dd>
+  <dt>Compositing output</dt><dd>Line, color and matte passes, multi-layer EXR, and ProRes video. See <a href="export.html#compositing-passes">Compositing passes</a>.</dd>
+  <dt>Render queue</dt><dd>Renders lined up and run in the background while you work. See <a href="export.html#render-queue">Render queue</a>.</dd>
+  <dt>Studio pipeline</dt><dd>Split an episode into shots, link rigs to master files and update every shot, and leave review notes on frames. See <a href="pipeline.html">Shots, assets and review</a>.</dd>
+  <dt>Command-line rendering</dt><dd>Render, convert, check and repair, compare versions and process whole folders without opening a window. See <a href="command-line.html">Command line</a> and <a href="version-control.html">Version control</a>.</dd>
   <dt>Free and open source</dt><dd>On Windows and macOS, with Linux on the way.</dd>
 </dl>
 
@@ -88,7 +96,7 @@
   <li>Bones inside shapes and the Bind tool (the Bone tool builds armatures of symbols), and turning artwork into a new puppet (the Asset Warp tool pins and bends existing puppets). Existing armatures and warps play.</li>
   <li>Animate's built-in art and pattern brush library. Phoenix's Paint Brush draws art and pattern brushes made from your own graphic symbols; Animate shows those strokes as plain lines.</li>
   <li>Running ActionScript or JavaScript, and JSFL commands and extensions.</li>
-  <li>HTML5 Canvas, SWF and other publish targets.</li>
+  <li>HTML5 Canvas documents, and publishing to AIR or projectors. Published SWF movies have no sound or ActionScript.</li>
 </ul>
 
 </article>

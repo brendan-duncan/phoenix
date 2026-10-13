@@ -21,11 +21,12 @@
 
 <h2>Save as XFL folders</h2>
 
-<p>An <code>.fla</code> is a zip archive: version control sees one opaque file that changes as a whole. An XFL folder holds the same document as separate files: <code>DOMDocument.xml</code> for the scenes, one file per symbol under <code>LIBRARY/</code>, and the bitmap and sound data under <code>bin/</code>. Animate opens XFL folders too (through their <code>.xfl</code> file).</p>
+<p>An <code>.fla</code> is a zip archive: version control sees one opaque file that changes as a whole. An XFL folder holds the same document as separate files: <code>DOMDocument.xml</code> for the scenes, one file per symbol under <code>LIBRARY/</code>, and the bitmap and sound data under <code>bin/</code>. To open one, open the <code>.xfl</code> file inside it.</p>
 
-<p>To make XFL folders the format new documents are saved in, choose <b>File &gt; Default Save Format &gt; XFL Folder</b>. To convert existing files, use the command line:</p>
+<p>To make XFL folders the format new documents are saved in, choose <b>File &gt; Default Save Format &gt; XFL Folder (for version control)</b>. To save one document as a folder, choose <b>XFL Folder</b> as the type in <b>File &gt; Save As</b>. To convert existing files, use the command line, one file or a whole folder at a time:</p>
 
-<pre><code>Phoenix batch episode/ --convert xfl --out episode_xfl/</code></pre>
+<pre><code>Phoenix --convert shots/sh010.fla shots_xfl/sh010
+Phoenix batch episode/ --convert xfl --out episode_xfl/</code></pre>
 
 <h2>Git LFS for the media</h2>
 

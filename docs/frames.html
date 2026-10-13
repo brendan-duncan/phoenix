@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Frames and keyframes · Phoenix User Guide</title>
 <meta name="description" content="Insert frames and keyframes, select, move, copy and stretch frames, label them, play your animation, and use onion skinning.">
-<meta name="keywords" content="frame keyframe blank keyframe F5 F6 F7 insert remove clear frames select move copy paste overwrite reverse convert to frame-by-frame label comment anchor playback play loop step onion skin frame by frame">
+<meta name="keywords" content="frame keyframe blank keyframe F5 F6 F7 insert remove clear frames select move copy paste overwrite reverse convert to frame-by-frame label comment anchor playback play loop step onion skin frame by frame edit multiple frames select all frames distribute to keyframes">
 <link rel="icon" href="assets/img/logo.png">
 <link rel="stylesheet" href="assets/site.css">
 <script>try { const t = localStorage.getItem("phoenix-docs-theme"); if (t) document.documentElement.dataset.theme = t; } catch (e) {}</script>
@@ -29,6 +29,7 @@
     <tr><td>Blank Keyframe</td><td><kbd>F7</kbd></td><td class="wrap">Makes an empty keyframe, to draw the next drawing from scratch</td></tr>
     <tr><td>Remove Frames</td><td><kbd>Shift</kbd>+<kbd>F5</kbd></td><td class="wrap">Deletes the selected frames, closing the gap</td></tr>
     <tr><td>Clear Keyframe</td><td><kbd>Shift</kbd>+<kbd>F6</kbd></td><td class="wrap">Turns a keyframe back into an ordinary frame</td></tr>
+    <tr><td>Clear Frames</td><td><kbd>Alt</kbd>+<kbd>Backspace</kbd></td><td class="wrap">Empties the selected frames, leaving the frames after them where they are</td></tr>
   </tbody>
 </table>
 
@@ -45,7 +46,11 @@
   <li><strong>Click</strong> a cell to select it. This also moves the playhead there and makes that layer current.</li>
   <li><strong>Drag</strong> across cells, including across several layers, to select a block.</li>
   <li><strong>Shift-click</strong> to extend the selection.</li>
+  <li><strong>Ctrl-click</strong> to add single frames anywhere, on any layer, or take them out again. Frame commands such as <kbd>F6</kbd> or Clear Keyframe then act on each of them.</li>
+  <li><span class="menu-path">Edit &rsaquo; Timeline &rsaquo; Select All Frames</span> (<kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>A</kbd>) selects every frame of every layer.</li>
 </ul>
+
+<p>To select whole spans between keyframes with one click, turn on <strong>Span Based Selection</strong> in the <a href="timeline.html#frame-view">frame view</a> menu.</p>
 
 <h2>Move, copy and stretch frames</h2>
 
@@ -54,7 +59,7 @@
   <tbody>
     <tr><td>Drag a selected block</td><td class="wrap">Move it to another frame or layer</td></tr>
     <tr><td><kbd>Alt</kbd> when you drop</td><td class="wrap">Copy the block instead of moving it</td></tr>
-    <tr><td>Drag a keyframe</td><td class="wrap">Move just that keyframe</td></tr>
+    <tr><td>Click a keyframe, then drag it</td><td class="wrap">Move just that keyframe; hold <kbd>Alt</kbd> when you drop to copy it</td></tr>
     <tr><td><kbd>Ctrl</kbd>-drag the end of a span</td><td class="wrap">Lengthen or shorten the span</td></tr>
   </tbody>
 </table>
@@ -68,7 +73,12 @@
   <dt>Convert to Frame-by-Frame Animation</dt><dd>Turns a tween into a keyframe on every frame, ready to adjust by hand.</dd>
   <dt>Copy Motion, Paste Motion</dt><dd>Copies the movement of a tween and applies it to another object.</dd>
   <dt>Remove Tween</dt><dd>Removes a tween, leaving its keyframes.</dd>
+  <dt>Distribute to Keyframes</dt><dd>In <span class="menu-path">Modify &rsaquo; Timeline</span>. Select several objects on one frame and each goes on a keyframe of its own, one after another: the bottom one stays, the next goes on the frame after, and so on.</dd>
 </dl>
+
+<h2>Edit Multiple Frames</h2>
+
+<p>Turn on <span class="menu-path">Edit &rsaquo; Timeline &rsaquo; Edit Multiple Frames</span> to see the keyframes within the onion skin markers in full, not faded, and to select and change their artwork together: drag a marquee over a whole run of drawings and move them all at once, for example. Hidden and locked layers are left out. Set the range by dragging the <a href="#onion-skinning">onion skin</a> markers in the ruler.</p>
 
 <h2>Frame labels</h2>
 
@@ -97,7 +107,7 @@
 
 <p>These are also in the <strong>Control</strong> menu and as buttons in the timeline header. They work when the stage or timeline has focus, so they never interfere with typing in a text box or panel.</p>
 
-<p>Playback runs at the document's frame rate. If a frame takes too long to draw, Phoenix skips ahead to stay in time, so what you see matches the real speed. Sounds play along, unless you turn on <span class="menu-path">View &rsaquo; Mute Sounds</span>.</p>
+<p>Playback runs at the document's frame rate. If a frame takes too long to draw, Phoenix skips ahead to stay in time, so what you see matches the real speed. Sounds play along, unless you turn on <span class="menu-path">View &rsaquo; Mute Sounds</span> (<kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>M</kbd>).</p>
 
 <h3>Looping a range</h3>
 
@@ -127,7 +137,7 @@
 
 <div class="callout planned">
   <span class="label">Planned</span>
-  <p>Selecting scattered frames with <kbd>Ctrl</kbd>, Edit Multiple Frames, adjustable frame width and thumbnails in the timeline, time shown in seconds on the ruler, and scripts such as <code>stop()</code> honored during playback.</p>
+  <p>Scripts such as <code>stop()</code> honored during playback, and playback that runs on from one scene into the next.</p>
 </div>
 
 </article>

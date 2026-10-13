@@ -93,11 +93,20 @@
   <li>Name the file on the <a href="command-line.html">command line</a>.</li>
 </ul>
 
-<p>Phoenix shows one document at a time. Opening another document closes the current one, and asks first if it has unsaved changes.</p>
+<p>Each document you open gets a tab of its own above the stage; the tabs appear once more than one document is open. Click a tab to switch to it, drag tabs to reorder them, and click a tab's close button or press <kbd>Ctrl</kbd>+<kbd>W</kbd> (<span class="menu-path">File &rsaquo; Close</span>) to close it. <kbd>Ctrl</kbd>+<kbd>Tab</kbd> moves to the next tab. Opening a file that is already open switches to its tab, and an untouched new document is simply replaced by the next one you open.</p>
 
 <h2>Recovering after a crash</h2>
 
-<p>Phoenix saves a recovery copy of your work every two minutes while it has unsaved changes. If Phoenix closes unexpectedly, the next time it starts it offers to <strong>Recover</strong> that work, <strong>Discard</strong> it, or decide <strong>Later</strong>. See <a href="documents.html#auto-save-and-recovery">Auto-save and recovery</a> to change how often it saves.</p>
+<p>Phoenix saves a recovery copy of your work every two minutes while it has unsaved changes. If Phoenix closes unexpectedly, the next time it starts it opens <strong>Recover Unsaved Work</strong>, which lists every copy it kept, newest first, with the document's name and when it was saved. Hover over one to see where the document came from.</p>
+
+<dl class="defs">
+  <dt>Recover</dt><dd>Opens the selected copy, back at its original location and marked unsaved. Save it to keep it. Double-clicking a copy does the same.</dd>
+  <dt>Discard</dt><dd>Deletes the selected copies. Select several with <kbd>Ctrl</kbd> or <kbd>Shift</kbd>.</dd>
+  <dt>Discard All</dt><dd>Deletes every copy, after asking.</dd>
+  <dt>Later</dt><dd>Keeps the copies and offers them again the next time Phoenix starts.</dd>
+</dl>
+
+<p>Copies you do not recover are offered again next time. See <a href="documents.html#auto-save-and-recovery">Auto-save and recovery</a> to change how often Phoenix saves them.</p>
 
 </article>
 </main>

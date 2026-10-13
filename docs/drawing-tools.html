@@ -4,8 +4,8 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Drawing tools · Phoenix User Guide</title>
-<meta name="description" content="Every drawing and painting tool in Phoenix: pen, line, shapes, primitives, PolyStar, pencil, the three brushes, eraser, paint bucket, ink bottle and eyedropper.">
-<meta name="keywords" content="pen anchor point bezier line rectangle oval primitive polystar star pencil smooth straighten ink recognize shapes fluid brush classic brush ink brush pressure tilt stabilizer taper eraser faucet paint bucket gap ink bottle eyedropper stroke style cap join">
+<meta name="description" content="Every drawing and painting tool in Phoenix: pen, line, width tool, shapes, primitives, PolyStar, paint brush, pencil, the three brushes and their presets, eraser, paint bucket, ink bottle and eyedropper.">
+<meta name="keywords" content="pen anchor point bezier line rectangle oval primitive polystar star pencil smooth straighten ink recognize shapes fluid brush classic brush ink brush pressure tilt stabilizer taper eraser faucet paint bucket gap ink bottle eyedropper stroke style cap join width profile paint brush art brush pattern brush brush presets dynamics texture grain bitmap brush auto fill repaint lock fill fill all regions">
 <link rel="icon" href="assets/img/logo.png">
 <link rel="stylesheet" href="assets/site.css">
 <script>try { const t = localStorage.getItem("phoenix-docs-theme"); if (t) document.documentElement.dataset.theme = t; } catch (e) {}</script>
@@ -105,8 +105,8 @@
   <tbody>
     <tr><td>Rectangle</td><td><kbd>R</kbd></td><td class="wrap"><kbd>Shift</kbd> draws a square, <kbd>Alt</kbd> draws from the center. While dragging, press <kbd>&uarr;</kbd> and <kbd>&darr;</kbd> to round the corners (with <kbd>Shift</kbd> for bigger steps). <strong>Corner radius</strong> sets the rounding before you draw. <kbd>Alt</kbd>-click without dragging to type the width, height and corner radius instead.</td></tr>
     <tr><td>Oval</td><td><kbd>O</kbd></td><td class="wrap"><kbd>Shift</kbd> draws a circle, <kbd>Alt</kbd> draws from the center. <kbd>Alt</kbd>-click without dragging to type the width and height.</td></tr>
-    <tr><td>Rectangle Primitive</td><td></td><td class="wrap">A rectangle whose four corner radii stay editable.</td></tr>
-    <tr><td>Oval Primitive</td><td></td><td class="wrap">An oval with an editable start angle, end angle and inner radius, for pie slices and rings.</td></tr>
+    <tr><td>Rectangle Primitive</td><td><kbd>Shift</kbd>+<kbd>R</kbd></td><td class="wrap">A rectangle whose four corner radii stay editable.</td></tr>
+    <tr><td>Oval Primitive</td><td><kbd>Shift</kbd>+<kbd>O</kbd></td><td class="wrap">An oval with an editable start angle, end angle and inner radius, for pie slices and rings.</td></tr>
     <tr><td>PolyStar</td><td></td><td class="wrap">Drag out from the center. Set the number of <strong>Sides</strong>, and check <strong>Star</strong> to draw a star; <strong>Star point size</strong> sets how deep its points are, from long and thin near 0 to a plain polygon at 1. <kbd>Shift</kbd> snaps the angle.</td></tr>
   </tbody>
 </table>
@@ -125,13 +125,13 @@
 
 <h2>Paint Brush</h2>
 
-<p>Press <kbd>Y</kbd> and draw freehand to paint with an art or pattern brush. Choose the brush under <strong>Brush</strong> in the Tool tab: any graphic symbol in the library can be one, such as a leaf, a rope or a chain link. The stroke is fitted like a pencil line, in the Pencil mode and Smoothing you set. A stroke already drawn takes a brush when you select it and choose one in the Properties panel.</p>
+<p>Press <kbd>Y</kbd> and draw freehand to paint with an art or pattern brush. The Paint Brush shares a slot with the Pencil. Choose the brush under <strong>Brush</strong> in the Tool tab: any graphic symbol in the library can be one, such as a leaf, a rope or a chain link. The stroke is fitted like a pencil line, in the Pencil mode and Smoothing you set. A stroke already drawn takes a brush when you select it and choose one in the Properties panel.</p>
 
 <p><span class="menu-path">Window &rsaquo; Document Brushes</span> lists the brushes the document's strokes use and how many strokes use each. <strong>Draw With It</strong> makes one the brush for new strokes; <strong>Take Off Strokes</strong> turns the strokes that use it back into plain lines.</p>
 
 <h2>Pencil</h2>
 
-<p>Press <kbd>D</kbd> and draw freehand. Phoenix shows how your line will be fitted as you draw, and fits it when you release.</p>
+<p>Press <kbd>Shift</kbd>+<kbd>Y</kbd> and draw freehand. Phoenix shows how your line will be fitted as you draw, and fits it when you release.</p>
 
 <div class="split">
   <figure style="margin:0"><img src="assets/shots/tool-pencil.webp" alt="Pencil tool settings: pencil mode, smoothing, connect lines and recognize shapes" width="304" height="519"></figure>
@@ -212,7 +212,7 @@
 <p><strong>Presets</strong> are named brushes. Each brush keeps its own list, and the bitmap brush keeps another. Each preset shows the stroke it paints: choose <strong>Small Thumbnails</strong>, <strong>Large Thumbnails</strong> or <strong>Stroke View</strong> above the list. Click a preset to use it. <strong>New...</strong> keeps the brush as it is now as a preset; <strong>Rename...</strong> and <strong>Delete</strong> do what they say. <strong>Export...</strong> writes the list to a <code>.phxbrushes</code> file to share, and <strong>Import...</strong> adds the presets in one. A preset holds the tip and its dynamics, and also the texture, the bitmap brush's settings and the painting options.</p>
 
 <dl class="defs">
-  <dt>Tip</dt><dd><strong>Shape</strong>: Ellipse, Rectangle, Triangle, Diamond, Hexagon, Star, or Custom. <strong>Tip from Library Bitmap...</strong> traces a library bitmap's outline as a custom tip; the bitmap brush stamps the image itself. <strong>Angle follows</strong>: nothing; the stroke's direction (heading), as a calligraphy pen held to the line; the way the pen leans (azimuth); or the turn of an art pen's barrel (twist). <strong>Tilt stretch</strong> lengthens the tip as the pen leans. <strong>Size follows the camera</strong> keeps the tip's size on screen while a camera zooms, so the line looks the same width in the shot.</dd>
+  <dt>Tip</dt><dd><strong>Size</strong>, <strong>Roundness</strong> and <strong>Angle</strong>. <strong>Shape</strong>: Ellipse, Rectangle, Triangle, Diamond, Hexagon, Star, or Custom. <strong>Tip from Library Bitmap...</strong> traces a library bitmap's outline as a custom tip; the bitmap brush stamps the image itself. <strong>Angle follows</strong>: nothing; the stroke's direction (heading), as a calligraphy pen held to the line; the way the pen leans (azimuth); or the turn of an art pen's barrel (twist). <strong>Tilt stretch</strong> lengthens the tip as the pen leans. <strong>Size follows the camera</strong> keeps the tip's size on screen while a camera zooms, so the line looks the same width in the shot.</dd>
   <dt>Dynamics</dt><dd>Pressure, with <strong>Invert pressure</strong> to make pressing harder paint thinner, a minimum size and a response curve. Tilt that broadens the line, with <strong>Invert tilt</strong>. <strong>Speed</strong>, with a sensitivity for how quickly speed has its full effect. <strong>Taper by</strong> a percentage of each stroke or a distance in pixels, so short and long strokes taper alike. Smoothing, precision and the stabilizer.</dd>
   <dt>Painting</dt><dd>The brush mode, as on the Tool tab. <strong>Auto fill</strong> fills a stroke that closes on itself, so an outline drawn round a shape comes out solid. <strong>Snap to guides</strong>: a stroke begun on a ruler guide keeps to it, which gives straight inked edges.</dd>
   <dt>Bitmap</dt><dd>The bitmap brush; see below.</dd>
@@ -221,9 +221,9 @@
 
 <h3>Textured brushes</h3>
 
-<p>A brush can paint with a grain, as chalk takes the tooth of the paper. Choose the <strong>Texture</strong> on the Tool tab: one of Phoenix's own (papers, dry media, paint and patterns) or a library bitmap. <strong>Grain size</strong> and <strong>Grain strength</strong> set how large it is and how much paint it takes away where it is lightest. In Brush Properties you can also move the grain (<strong>Offset X</strong>, <strong>Offset Y</strong>) and turn it (<strong>Rotation</strong>) so neighboring strokes don't share it. <strong>Pressure sets the strength</strong> shows more grain at a light touch. <strong>Fixed to the frame</strong> keeps the grain the same size in the rendered frame as a camera zooms or the art is scaled. Without it, the grain scales with the art.</p>
+<p>A brush can paint with a grain, as chalk takes the tooth of the paper. Choose the <strong>Texture</strong> on the Tool tab: one of Phoenix's own, such as Paper, Watercolor Paper, Chalk, Charcoal, Crayon, Sponge, Canvas or Halftone, or a library bitmap. <strong>Grain size</strong> and <strong>Grain strength</strong> set how large it is and how much paint it takes away where it is lightest. In Brush Properties you can also move the grain (<strong>Offset X</strong>, <strong>Offset Y</strong>) and turn it (<strong>Rotation</strong>) so neighboring strokes don't share it. <strong>Pressure sets the strength</strong> shows more grain at a light touch. <strong>Fixed to the frame</strong> keeps the grain the same size in the rendered frame as a camera zooms or the art is scaled. Without it, the grain scales with the art.</p>
 
-<p>A textured stroke stays an object of its own, so merging never spreads its grain. Animate opens it as plain paint.</p>
+<p>A textured stroke stays an object of its own, so merging never spreads its grain. To change the grain of a stroke already painted, or to give any shape one, select it and use the <strong>Texture</strong> section of the Object tab. In an FLA file the grain is kept for Phoenix; other apps show the stroke as plain paint.</p>
 
 <h3>Bitmap brush</h3>
 
@@ -273,7 +273,7 @@
 
 <h2>Eyedropper</h2>
 
-<p>Press <kbd>I</kbd> and click a fill or stroke to take its color, or a gradient or bitmap fill to take the whole gradient or bitmap. After you pick up a fill, Phoenix switches to the Paint Bucket so you can apply it straight away; after a stroke, to the Ink Bottle.</p>
+<p>Press <kbd>I</kbd> and click a fill to take its color, or a stroke to take its color and size, or a gradient or bitmap fill to take the whole gradient or bitmap. After you pick up a fill, Phoenix switches to the Paint Bucket so you can apply it straight away; after a stroke, to the Ink Bottle.</p>
 
 </article>
 </main>

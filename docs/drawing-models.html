@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Merge and object drawing · Phoenix User Guide</title>
 <meta name="description" content="How shapes combine in Phoenix: merge drawing, where shapes cut and join, and object drawing, where each shape stays separate.">
-<meta name="keywords" content="merge drawing object drawing mode J drawing object shapes cut overlap fill stroke region selection stipple break apart group combine objects union intersect punch crop primitives">
+<meta name="keywords" content="merge drawing object drawing mode J drawing object shapes cut overlap fill stroke region selection stipple break apart group combine objects union intersect punch crop primitives trace bitmap">
 <link rel="icon" href="assets/img/logo.png">
 <link rel="stylesheet" href="assets/site.css">
 <script>try { const t = localStorage.getItem("phoenix-docs-theme"); if (t) document.documentElement.dataset.theme = t; } catch (e) {}</script>
@@ -89,6 +89,7 @@
 <dl class="defs">
   <dt>Break Apart</dt><dd><kbd>Ctrl</kbd>+<kbd>B</kbd>. Turns a drawing object or primitive into merge artwork. It also breaks a group into its contents, and a symbol instance into the artwork of the frame it shows.</dd>
   <dt>Union</dt><dd><span class="menu-path">Modify &rsaquo; Combine Objects &rsaquo; Union</span>. Turns the selected shapes, of either kind, into a single drawing object.</dd>
+  <dt>Trace Bitmap</dt><dd><span class="menu-path">Modify &rsaquo; Bitmap &rsaquo; Trace Bitmap...</span>. Turns a bitmap on the stage into filled shapes you can edit, one for each area of like color. See <a href="documents.html#trace-bitmap">Trace Bitmap</a>.</dd>
 </dl>
 
 <h2>Combining objects</h2>

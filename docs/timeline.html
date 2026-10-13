@@ -77,7 +77,8 @@
   <li>The buttons below the layer list add a <strong>new layer</strong> or a <strong>new folder</strong>, and <strong>delete</strong> the layers selected. <span class="menu-path">Insert &rsaquo; Timeline &rsaquo; Layer</span> and <span class="menu-path">Layer Folder</span> add them too.</li>
   <li><kbd>Ctrl</kbd>-click or <kbd>Shift</kbd>-click layer names to select several layers at once.</li>
   <li>Drag a layer up or down to change the stacking order. Drop it onto a folder to move it inside.</li>
-  <li>Right-click a layer for <strong>Insert Layer</strong>, <strong>Insert Folder</strong>, <strong>Delete Layer</strong>, <strong>Show All</strong>, <strong>Hide Others</strong> and <strong>Lock Others</strong>.</li>
+  <li>Right-click a layer for <strong>Insert Layer</strong>, <strong>Insert Folder</strong>, <strong>Delete Layer</strong>, the layer clipboard commands below, <strong>Guide</strong>, <strong>Mask</strong>, <strong>Parent Layer</strong>, <strong>Show All</strong>, <strong>Hide Others</strong>, <strong>Lock Others</strong> and <strong>Properties...</strong>.</li>
+  <li>A timeline always keeps at least one layer that can hold frames, so the last one cannot be deleted.</li>
 </ul>
 
 <h3>Copy, paste and duplicate layers</h3>
@@ -105,9 +106,9 @@
 
 <h3>Layer parenting</h3>
 
-<p>Layer parenting, where one layer's artwork follows another's, plays back correctly in Phoenix.</p>
+<p>A layer can follow another layer's artwork, the way a forearm follows the upper arm: move, turn or scale the parent and the child goes with it.</p>
 
-<p>To make a layer follow another, right-click it and choose the layer from <strong>Parent Layer</strong>, or use the <strong>parenting view</strong>: click the linked-circles button at the top right of the layer list and a column of handles appears, with a line from each layer to the one it follows, in that layer's color. Drag a layer's handle onto another layer to make it follow that one, or let go below the layers so it follows none. The objects stay where they are on the stage. For multiplane camera moves, see <a href="rigging.html#multiplane-camera">Rigs and motion</a>.</p>
+<p>To make a layer follow another, right-click it and choose the layer from <strong>Parent Layer</strong> (or <strong>None</strong> to set it free), or use the <strong>parenting view</strong>: click the linked-circles button at the top right of the layer list and a column of handles appears, with a line from each layer to the one it follows, in that layer's color. Drag a layer's handle onto another layer to make it follow that one, or let go below the layers so it follows none. The objects stay where they are on the stage. A layer can't follow one that already follows it. Hover over a layer's name to see which layer it follows. For multiplane camera moves, see <a href="rigging.html#multiplane-camera">Rigs and motion</a>.</p>
 
 <h2>Frame view</h2>
 
@@ -123,6 +124,17 @@
 </dl>
 
 <p>Phoenix remembers the frame view between sessions.</p>
+
+<h2>Other views of the timeline</h2>
+
+<p>The <span class="menu-path">Window</span> menu has panels that show the same layers another way:</p>
+
+<dl class="defs">
+  <dt>X-Sheet</dt><dd>Each layer's exposures frame by frame, typed in by drawing number. See <a href="rigging.html#x-sheet">X-sheet</a>.</dd>
+  <dt>Function Curves</dt><dd>Any property of the current layer as a curve over time. See <a href="rigging.html#function-curves">Function curves</a>.</dd>
+  <dt>Layer Depth</dt><dd>How far each layer sits from the multiplane camera. See <a href="rigging.html#multiplane-camera">Multiplane camera</a>.</dd>
+  <dt>Scene</dt><dd>The document's scenes, each with its own timeline. See <a href="documents.html#scenes">Scenes</a>.</dd>
+</dl>
 
 </article>
 </main>

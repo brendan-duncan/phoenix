@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>The library · Phoenix User Guide</title>
 <meta name="description" content="Use the Library panel to preview, place, rename, duplicate, delete and organize symbols, bitmaps and sounds.">
-<meta name="keywords" content="library panel folders symbols bitmaps sounds preview rename duplicate delete new folder drag to stage organize items">
+<meta name="keywords" content="library panel folders symbols bitmaps sounds fonts preview play search use count linkage unused items rename duplicate delete new folder drag to stage organize items external library copy paste master file edit with">
 <link rel="icon" href="assets/img/logo.png">
 <link rel="stylesheet" href="assets/site.css">
 <script>try { const t = localStorage.getItem("phoenix-docs-theme"); if (t) document.documentElement.dataset.theme = t; } catch (e) {}</script>
@@ -22,13 +22,14 @@
 <div class="split">
   <figure style="margin:0"><img src="assets/shots/library-panel.webp" alt="The Library panel with a preview of a selected hair symbol above a list of 90 items with their types" width="304" height="610"></figure>
   <div>
-    <p>The Library is a tab beside Properties in the panel dock. From top to bottom it shows:</p>
+    <p>The Library is a tab beside Properties in the panel dock (<span class="menu-path">Window &rsaquo; Library</span>, <kbd>Ctrl</kbd>+<kbd>L</kbd>). From top to bottom it shows:</p>
     <ul>
       <li>A <strong>preview</strong> of the selected item: a symbol's first frame, or the image. A symbol with more than one frame shows a <strong>Play</strong> button that runs it in the preview.</li>
       <li>The number of items in the library, and the library menu (&#9776;), which has the same commands as right-clicking the selected item.</li>
+      <li>A <strong>Search</strong> field. Type part of a name to show only the items that match, with the folders that hold them.</li>
       <li>The <strong>item list</strong>, with each item's name, type, use count, linkage and the date it was last changed or imported. Click a column heading to sort by it.</li>
     </ul>
-    <p>Item types are folders, graphics, movie clips, buttons, bitmaps and sounds, each with its own icon.</p>
+    <p>Item types are folders, graphics, movie clips, buttons, bitmaps, sounds, fonts and videos, each with its own icon. <strong>Use Count</strong> is how many times the document uses the item.</p>
   </div>
 </div>
 
@@ -45,14 +46,16 @@
 <p>Right-click an item for:</p>
 
 <dl class="defs">
-  <dt>Rename</dt><dd>Also <kbd>F2</kbd>, or double-click the name. Every instance follows the new name automatically.</dd>
+  <dt>Rename</dt><dd>Also <kbd>F2</kbd>. Every instance follows the new name automatically.</dd>
   <dt>Duplicate</dt><dd>Makes a full copy of a symbol, named after the original with <em>copy</em> added.</dd>
+  <dt>Linkage...</dt><dd>Gives a symbol a class name, so scripts can create it by that name. Leave it empty for none. The name shows in the <strong>Linkage</strong> column.</dd>
   <dt>Generate Sprite Sheet...</dt><dd>Lays the symbol's frames out on one image for a game. See <a href="export.html#sprite-sheets">Sprite sheets</a>.</dd>
-  <dt>Delete</dt><dd>Removes a symbol that no longer has instances. If it is still in use, Phoenix tells you how many times instead of deleting it.</dd>
+  <dt>Link to Master File...</dt><dd>Keeps a symbol in step with the same symbol in another file, with <strong>Update from Master</strong>, <strong>Unlink from Master</strong> and <strong>Update All Linked Items</strong> once it is linked. See <a href="pipeline.html#linked-shared-assets">Linked shared assets</a>.</dd>
+  <dt>Delete</dt><dd>Removes the selected symbols, bitmaps and fonts (also <kbd>Delete</kbd>). If a symbol is still in use, Phoenix says how many times and asks before deleting it along with its instances. A bitmap that is still in use is kept. Text set in a deleted font symbol uses the font itself instead.</dd>
   <dt>New Symbol...</dt><dd>Makes a new symbol in the selected folder. <span class="menu-path">Insert &rsaquo; New Symbol</span> puts it there too.</dd>
   <dt>New Folder</dt><dd>Adds a folder inside the folder you clicked.</dd>
   <dt>Expand All Folders, Collapse All Folders</dt><dd>Opens or closes every folder at once.</dd>
-  <dt>Select Unused Items</dt><dd>Selects every item nothing in the document uses, ready to delete.</dd>
+  <dt>Select Unused Items</dt><dd>Selects every symbol and bitmap nothing in the document uses, ready to delete. The item count reads how many it found.</dd>
 </dl>
 
 <h2>Bitmap and sound properties</h2>
@@ -84,7 +87,7 @@
 
 <h2>Libraries of other documents</h2>
 
-<p>To use items from another document, choose <span class="menu-path">File &rsaquo; Import &rsaquo; Open External Library</span> (<kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>O</kbd>) and pick an FLA, XFL or PHX file. Its library opens in a panel of its own, read-only. Then:</p>
+<p>To use items from another document, choose <span class="menu-path">File &rsaquo; Import &rsaquo; Open External Library...</span> (<kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>O</kbd>) and pick an FLA, XFL or PHX file. Its library opens in a panel of its own, read-only. Then:</p>
 
 <ul>
   <li><strong>Drag an item onto the stage</strong> to copy it into your document's library and place it.</li>
@@ -101,7 +104,7 @@
   <dt>Keep both</dt><dd>The incoming items get new names (<em>Head copy</em>), and what came with them uses those names.</dd>
 </dl>
 
-<p>Copying is a single step you can undo. To keep a symbol in step with the file it came from, link it to that file instead; see <a href="pipeline.html">Pipeline</a>.</p>
+<p>Copying is a single step you can undo. To keep a symbol in step with the file it came from, link it to that file instead; see <a href="pipeline.html#linked-shared-assets">Linked shared assets</a>.</p>
 
 </article>
 </main>

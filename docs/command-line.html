@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Command line · Phoenix User Guide</title>
 <meta name="description" content="Render, check, repair, compare and batch-process documents from the command line, without opening a window.">
-<meta name="keywords" content="command line terminal batch script headless render doctor repair salvage diff compare python pipeline export-movie export-image convert phx-dump per-layer offscreen server automation">
+<meta name="keywords" content="command line terminal batch script headless render doctor repair salvage diff compare python pipeline export-movie export-image convert phx-dump per-layer offscreen server automation shortcuts keys links master update roundtrip help">
 <link rel="icon" href="assets/img/logo.png">
 <link rel="stylesheet" href="assets/site.css">
 <script>try { const t = localStorage.getItem("phoenix-docs-theme"); if (t) document.documentElement.dataset.theme = t; } catch (e) {}</script>
@@ -26,6 +26,12 @@
 <pre><code>Phoenix drawing.fla</code></pre>
 
 <p>Starts Phoenix with the file open, the same as dropping it on the program.</p>
+
+<h2>List the commands</h2>
+
+<pre><code>Phoenix help</code></pre>
+
+<p>Prints the commands below and their options. <code>Phoenix --help</code> does the same.</p>
 
 <h2>Render frames</h2>
 
@@ -67,7 +73,7 @@ Phoenix doctor shot.fla --json</code></pre>
 
 <p>Looks for damage: parts of the file that are missing or not well-formed, keyframes out of order or overlapping, spans of no length, instances of symbols the library does not have, symbols that contain themselves, broken folder and mask links, sounds that are not in the library. With <code>--repair</code>, Phoenix fixes what it can and writes the result to a new file; a missing symbol gets an empty one of the same name standing in, so nothing that uses it is lost.</p>
 
-<p>A file too damaged to open (a save cut short, a <code>RECOVER_</code> file) is salvaged part by part, and a symbol whose part was cut off is replaced by an empty one so the rest opens. The exit code is 2 when errors remain. In Phoenix, <b>File &gt; Check Document</b> does the same for the open document.</p>
+<p>A file too damaged to open (a save cut short, a <code>RECOVER_</code> file) is salvaged part by part, and a symbol whose part was cut off is replaced by an empty one so the rest opens. <code>--json</code> prints the report as JSON, for scripts. The exit code is 2 when errors remain. In Phoenix, <b>File &gt; Check Document</b> does the same for the open document.</p>
 
 <h2>Compare two versions</h2>
 
@@ -90,9 +96,26 @@ Phoenix shots episode.fla --by camera</code></pre>
 <pre><code>Phoenix batch episode/ --doctor
 Phoenix batch episode/ --convert phx --out converted/
 Phoenix batch episode/ --render --out renders/
+Phoenix batch episode/ --update-links --save
 Phoenix batch episode/ --python fix_names.py --save</code></pre>
 
-<p>Runs one operation on every <code>.fla</code> and <code>.phx</code> in the folder (add <code>--recursive</code> for subfolders). With <code>--python</code>, each document is opened out as an XFL folder and the script is run as <code>python script.py <em>xfl-folder</em> <em>document</em></code>; it can edit the XML there with any Python tools. With <code>--save</code>, what the script changed is written back to the document; with <code>--out</code>, to a copy. A script that exits with an error leaves its document alone. Set <code>PHOENIX_PYTHON</code> to choose the Python interpreter.</p>
+<p>Runs one operation on every <code>.fla</code> and <code>.phx</code> in the folder (add <code>--recursive</code> for subfolders). <code>--doctor</code> checks each; with <code>--save</code> or <code>--out</code> it also repairs, in place or to a copy. <code>--convert</code> writes each as <code>fla</code>, <code>phx</code> or <code>xfl</code>, beside it or in <code>--out</code>. <code>--render</code> renders each to a PNG sequence, in a folder named after it. <code>--update-links</code> brings each document's <a href="pipeline.html#linked-shared-assets">linked symbols</a> up to date from their master files, and <code>--save</code> writes the documents back. With <code>--python</code>, each document is opened out as an XFL folder and the script is run as <code>python script.py <em>xfl-folder</em> <em>document</em></code>; it can edit the XML there with any Python tools. With <code>--save</code>, what the script changed is written back to the document; with <code>--out</code>, to a copy. A script that exits with an error leaves its document alone. Set <code>PHOENIX_PYTHON</code> to choose the Python interpreter.</p>
+
+<p>At the end, Phoenix says how many documents there were and how many had problems; the exit code is 2 if any did.</p>
+
+<h2>Update linked assets</h2>
+
+<pre><code>Phoenix links shots/sh010.fla
+Phoenix links shots/sh010.fla --update --save</code></pre>
+
+<p>Lists the symbols in a document that are <a href="pipeline.html#linked-shared-assets">linked to a master file</a>, each with its master. <code>--update</code> brings them up to date from their masters, along with the symbols, bitmaps and sounds they use; <code>--save</code> writes the document back. To update every shot in a folder, use <code>Phoenix batch <em>folder</em> --update-links --save</code>. The exit code is 2 when a link could not be updated.</p>
+
+<h2>List keyboard shortcuts</h2>
+
+<pre><code>Phoenix shortcuts
+Phoenix shortcuts --defaults</code></pre>
+
+<p>Prints every command and tool with its key, one to a line, separated by a tab: the keys of the set in use, or with <code>--defaults</code>, Phoenix's own. See <a href="preferences.html#keyboard-shortcuts">Keyboard shortcuts</a> to change them.</p>
 
 <h2>Measure performance</h2>
 
@@ -109,15 +132,17 @@ Phoenix benchmark episode.fla --against episode.animate.json</code></pre>
 <pre><code>Phoenix --export-movie scene.fla out.mp4
 Phoenix --export-movie scene.fla frames.png
 Phoenix --export-movie scene.fla loop.gif
+Phoenix --export-movie scene.fla frames.svg
 Phoenix --export-movie scene.fla soundtrack.wav</code></pre>
 
-<p>Renders every frame and exits. The output name decides the format:</p>
+<p>Renders every frame of the scene the document opens on, at the stage's size, and exits. <code>Phoenix render</code> does the same with more options. The output name decides the format:</p>
 
 <table>
   <thead><tr><th>Output ends in</th><th>Makes</th></tr></thead>
   <tbody>
     <tr><td><code>.png</code></td><td class="wrap">A PNG sequence: <code>frames0001.png</code>, <code>frames0002.png</code> and so on</td></tr>
     <tr><td><code>.gif</code></td><td class="wrap">An animated GIF</td></tr>
+    <tr><td><code>.svg</code></td><td class="wrap">An SVG sequence: <code>frames0001.svg</code>, <code>frames0002.svg</code> and so on</td></tr>
     <tr><td><code>.wav</code></td><td class="wrap">The soundtrack</td></tr>
     <tr><td>anything else</td><td class="wrap">H.264 video, for example <code>.mp4</code> or <code>.mov</code>, with sound</td></tr>
   </tbody>
@@ -159,13 +184,20 @@ Phoenix --convert scene.fla scene_xfl</code></pre>
 
 <p>Prints the parts of a <code>.phx</code> file as text, which is useful when reporting a problem with a file.</p>
 
+<h2>Check that a document saves faithfully</h2>
+
+<pre><code>Phoenix --roundtrip scene.fla check/
+Phoenix --roundtrip scene.fla check/ 12</code></pre>
+
+<p>Saves the document as FLA and as PHX in the folder, opens each copy again, and compares sample frames (5 by default, or the number given) with the original's, pixel by pixel. It prints one line of JSON saying how many pixels changed in each copy and on which frames, and saves images of the original, the copy and the differences for each frame that differs. The exit code is 2 when a copy draws differently.</p>
+
 <h2>Running on a machine without a display</h2>
 
-<p>Exports never show a window. On Linux, the <code>render</code>, <code>doctor</code>, <code>diff</code> and <code>batch</code> commands draw offscreen by themselves when there is no display. Elsewhere, or for the older options, set the environment variable <code>QT_QPA_PLATFORM=offscreen</code> so Phoenix doesn't look for one:</p>
+<p>Exports never show a window. On Linux, the named commands (<code>render</code>, <code>doctor</code>, <code>diff</code>, <code>batch</code> and the others above) draw offscreen by themselves when there is no display. Elsewhere, or for the older options, set the environment variable <code>QT_QPA_PLATFORM=offscreen</code> so Phoenix doesn't look for one:</p>
 
 <pre><code>QT_QPA_PLATFORM=offscreen Phoenix --export-movie scene.fla out.mp4</code></pre>
 
-<p>On Windows, Phoenix finds the system fonts by itself in this mode, so text renders normally.</p>
+<p>On Windows, <code>--export-movie</code>, <code>--export-image</code> and <code>--roundtrip</code> find the system fonts by themselves in this mode, so text renders normally.</p>
 
 <p>Exit codes are 0 on success and non-zero on failure, with the reason printed, so scripts can stop on errors.</p>
 

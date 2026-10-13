@@ -25,17 +25,19 @@
 
 <p>On the color art layer, the <b>Paint Bucket</b> fills the regions the line layer's strokes close around where you click, even where the color layer has nothing yet, so you can ink first and paint after. The paint lands on the color layer and the lines stay untouched above it. Both are ordinary layers in the saved file.</p>
 
+<p>Two more ways to paint quickly: the Paint Bucket's <strong>Fill all regions</strong> fills, with one click, every enclosed area of a shape that has the same fill as the one you click, and a brush in <strong>Repaint</strong> mode recolors the fills it passes over without painting anything new on empty areas. See <a href="drawing-tools.html#paint-bucket-and-ink-bottle">Paint Bucket and Ink Bottle</a> and <a href="drawing-tools.html#brush-modes">Brush modes</a>.</p>
+
 <h2>Linked palettes</h2>
 
-<p>Open <b>Window &gt; Palettes</b>. A palette is a set of named colors (skin, hair, outline, shadow). <b>Add</b> makes a color from the current fill color. Select art and choose <b>Fill</b> or <b>Stroke</b> to color it with the palette color and link it; <b>Link Matching</b> links every fill, stroke and text in the document that already has that color, which is the quick way to bring existing art into a palette. The number beside each color is how many uses are linked to it.</p>
+<p>Open <b>Window &gt; Palettes</b>. A palette is a set of named colors (skin, hair, outline, shadow). <b>Add</b> makes a color from the current fill color. Select art and choose <b>Fill</b> or <b>Stroke</b> to color it with the palette color and link it; <b>Link Matching</b> links every fill, stroke and text in the document that already has that color, which is the quick way to bring existing art into a palette. The number beside each color is how many uses are linked to it. <b>Unlink</b> takes the links off the selection, and <b>Remove</b> takes a color out of every palette; what used it keeps its color.</p>
 
-<p><b>Edit</b> (or double-click a color) changes it everywhere it is linked, as one undo step. From the <b>...</b> menu, <b>New Palette</b> makes a copy of the palette in use under a new name, such as <em>Night</em>: recolor its colors, and switching palettes in the list recolors the whole document. The colors are written into the art itself, so the file shows its last coloring anywhere it opens; the palettes and links are kept with the document for Phoenix.</p>
+<p><b>Edit</b> (or double-click a color) changes it everywhere it is linked, as one undo step. From the <b>...</b> menu, <b>New Palette</b> makes a copy of the palette in use under a new name, such as <em>Night</em>: recolor its colors, and switching palettes in the list recolors the whole document. The same menu renames and deletes palettes. The colors are written into the art itself, so the file shows its last coloring anywhere it opens; the palettes and links are kept with the document for Phoenix.</p>
 
 <h2>Tone, highlight and glow</h2>
 
 <p>Pick the layer to shade and choose <b>Insert &gt; Effect Layer</b>: <b>Tone</b>, <b>Highlight</b> or <b>Glow</b>. An effect layer appears above it; draw the shape of the shadow or light on it with any tool. Phoenix softens the shape, colors it and composites it over the layer under it: a tone is multiplied, darkening what is beneath; a highlight is screened, lightening it; a glow is added. A tone or highlight is kept within the layer's art, so a shadow drawn roughly over a character never spills off it; a glow spreads outside.</p>
 
-<p>Right-click the effect layer and choose <b>Effect Settings</b> to change its color, softness, strength and whether it is kept within the layer. While you draw on it, its shape shows faintly so you can see what you draw. Effects render on the stage and in everything Phoenix exports. In the saved FLA an effect layer is a guide layer, so other apps leave it out rather than drawing its shape flat.</p>
+<p>Right-click the effect layer and choose <b>Effect Settings</b> to change its kind, color, softness, strength and whether it is kept within the layer. While you draw on it, its shape shows faintly so you can see what you draw. Effects render on the stage and in everything Phoenix exports. In the saved FLA an effect layer is a guide layer, so other apps leave it out rather than drawing its shape flat.</p>
 
 </article>
 </main>

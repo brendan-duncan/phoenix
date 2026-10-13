@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Sound · Phoenix User Guide</title>
 <meta name="description" content="Import sounds, place them on frames, choose how they sync and loop, and bring in reference video to animate over.">
-<meta name="keywords" content="sound audio import wav mp3 aiff flac ogg stream event start stop sync loop repeat effect fade envelope waveform mute scrub lip sync reference video ffmpeg">
+<meta name="keywords" content="sound audio import wav mp3 aiff flac ogg stream event start stop sync loop repeat effect fade envelope waveform mute scrub lip sync rhubarb papagayo mouth chart edit envelope trim split audio reference video ffmpeg">
 <link rel="icon" href="assets/img/logo.png">
 <link rel="stylesheet" href="assets/site.css">
 <script>try { const t = localStorage.getItem("phoenix-docs-theme"); if (t) document.documentElement.dataset.theme = t; } catch (e) {}</script>
@@ -21,7 +21,7 @@
 
 <h2>Bring in sound</h2>
 
-<p>Import sounds with <span class="menu-path">File &rsaquo; Import &rsaquo; Import to Library...</span>, or drag sound files onto the window. Phoenix reads WAV, AIFF, MP3, FLAC and Ogg files. Each sound becomes a library item.</p>
+<p>Import sounds with <span class="menu-path">File &rsaquo; Import &rsaquo; Import to Library...</span>, or drag sound files onto the window. Phoenix reads WAV, AIFF, MP3, FLAC and Ogg files. Each sound becomes a library item. <span class="menu-path">File &rsaquo; Import &rsaquo; Import Animatic...</span> brings in an animatic's audio tracks, each on a layer of its own; see <a href="pipeline.html#start-from-the-animatic">Start from the animatic</a>.</p>
 
 <h2>Put a sound on the timeline</h2>
 
@@ -46,6 +46,10 @@
   <dt>Effect</dt><dd>Left Channel, Right Channel, Fade Left to Right, Fade Right to Left, Fade In and Fade Out, or <strong>Custom</strong>, a volume envelope of your own.</dd>
 </dl>
 
+<p>Sounds inside movie clips play too when you export. Sounds inside graphic symbols and buttons stay silent.</p>
+
+<p>To work in silence, choose <span class="menu-path">View &rsaquo; Mute Sounds</span> (<kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>M</kbd>).</p>
+
 <h3>Edit Envelope</h3>
 
 <p>Click <strong>Edit...</strong> beside the Effect, or choose Custom, to shape the sound's volume. The waveform shows in two lanes, the left channel over the right, each with its volume as a line from silent at the bottom to full at the top:</p>
@@ -63,10 +67,6 @@
 
 <p>To cut a stream sound in two, for example to slip the second half of a line a few frames later, put the playhead inside its span on its layer and choose <span class="menu-path">Modify &rsaquo; Timeline &rsaquo; Split Audio</span>. A new keyframe starts there, playing the sound from that point on with the same settings and envelope, and the first keyframe stops where the second begins.</p>
 
-<p>Sounds inside movie clips play too when you export. Sounds inside graphic symbols and buttons stay silent.</p>
-
-<p>To work in silence, choose <span class="menu-path">View &rsaquo; Mute Sounds</span> (<kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>M</kbd>).</p>
-
 <h2>Exporting sound</h2>
 
 <p>Video exports include the mixed soundtrack as AAC audio. You can also export the mix on its own as a WAV file. See <a href="export.html">Exporting</a>.</p>
@@ -79,21 +79,21 @@
 
 <p>An FLA file may hold video items of its own, embedded or linked, placed on the stage. Phoenix lists them in the library (double-click one for its size, frame rate and source), shows each placement as a frame with the video's name, and saves them unchanged; it does not play them.</p>
 
-<div class="callout planned">
-  <span class="label">Planned</span>
-  <p>Sound compression settings for publishing.</p>
-</div>
-
 <h2>Lip sync</h2>
 
-<p>Draw the mouth shapes as the frames of a graphic symbol, put an instance of it on a layer of its own, select it and choose <b>Modify &gt; Lip Sync</b>.</p>
+<p>Draw the mouth shapes as the frames of a graphic symbol, put an instance of it on a layer of its own, select it and choose <span class="menu-path">Modify &rsaquo; Lip Sync...</span>.</p>
 
 <ul>
-  <li><b>From a recording.</b> Phoenix runs <a href="https://github.com/DanielSWolf/rhubarb-lip-sync">Rhubarb Lip Sync</a>, a free program (MIT licensed) that listens to a WAV or Ogg recording of the line and works out the mouth shapes. Download it once and point Phoenix at <code>rhubarb.exe</code>; Phoenix remembers where it is. Typing the words spoken helps it get them right. Without Rhubarb, Phoenix listens itself: it opens the mouth wider as the voice gets louder, closes it between syllables, sets the teeth together for hissing sounds and rests it in the quiet. That is rougher than Rhubarb but needs nothing else.</li>
-  <li><b>From a cue file.</b> Load mouth shapes worked out before: Rhubarb's TSV output, or a Papagayo or Moho switch file (<code>.dat</code>).</li>
+  <li><strong>From a recording.</strong> Phoenix runs <a href="https://github.com/DanielSWolf/rhubarb-lip-sync">Rhubarb Lip Sync</a>, a free program (MIT licensed) that listens to a WAV or Ogg recording of the line and works out the mouth shapes. Download it once and point Phoenix at <code>rhubarb.exe</code>; Phoenix remembers where it is. Typing the words spoken helps it get them right. Without Rhubarb, Phoenix listens itself: it opens the mouth wider as the voice gets louder, closes it between syllables, sets the teeth together for hissing sounds and rests it in the quiet. That is rougher than Rhubarb but needs nothing else.</li>
+  <li><strong>From a cue file.</strong> Load mouth shapes worked out before: Rhubarb's TSV output, or a Papagayo or Moho switch file (<code>.dat</code>).</li>
 </ul>
 
-<p>Choose <b>Read Mouth Shapes</b>, then set the mouth chart: the frame of your mouth graphic each shape is drawn on (Rhubarb's shapes are A to H and X for rest; Papagayo's are its phoneme names). <b>Key the Mouth</b> clears the mouth layer over the line and puts a keyframe wherever the mouth changes, each showing its shape's frame as a single frame, starting on the frame you chose. The chart is kept with the mouth symbol for next time, and the whole step undoes at once.</p>
+<p>Choose <strong>Read Mouth Shapes</strong>, then set the mouth chart: the frame of your mouth graphic each shape is drawn on (Rhubarb's shapes are A to H and X for rest; Papagayo's are its phoneme names). <strong>Key the Mouth</strong> clears the mouth layer over the line and puts a keyframe wherever the mouth changes, each showing its shape's frame as a single frame, starting on the frame you chose. The chart is kept with the mouth symbol for next time, and the whole step undoes at once.</p>
+
+<div class="callout planned">
+  <span class="label">Planned</span>
+  <p>Sound compression settings for publishing, and sound in published SWF movies.</p>
+</div>
 
 </article>
 </main>

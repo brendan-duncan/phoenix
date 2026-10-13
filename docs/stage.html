@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Stage, zoom and view · Phoenix User Guide</title>
 <meta name="description" content="Zoom, pan and rotate the view, use rulers, guides and grids, snap artwork, and switch scenes.">
-<meta name="keywords" content="zoom magnification fit in window pan hand space rotate view rotation tool time scrub rulers guides grid snap snapping pixels objects pasteboard dim outside anti-aliasing scenes">
+<meta name="keywords" content="zoom magnification fit in window pan hand space rotate view rotation tool time scrub rulers guides grid snap snapping pixels objects pasteboard dim outside anti-aliasing scenes camera tool camera view light table">
 <link rel="icon" href="assets/img/logo.png">
 <link rel="stylesheet" href="assets/site.css">
 <script>try { const t = localStorage.getItem("phoenix-docs-theme"); if (t) document.documentElement.dataset.theme = t; } catch (e) {}</script>
@@ -59,11 +59,17 @@
 
 <h2>Scrub through time on the stage</h2>
 
-<p>The <strong>Time Scrub</strong> tool (<kbd>C</kbd>), also in the Hand tool's slot, moves the playhead as you drag left and right across the stage, one frame for every few pixels. It is a quick way to check motion without reaching for the timeline.</p>
+<p>The <strong>Time Scrub</strong> tool, also in the Hand tool's slot, moves the playhead as you drag left and right across the stage, one frame for every few pixels. It is a quick way to check motion without reaching for the timeline.</p>
+
+<h2>The camera</h2>
+
+<p>The <strong>Camera</strong> tool (<kbd>C</kbd>), the last in the Hand tool's slot, moves the scene's camera rather than your view of it: drag to pan, <kbd>Shift</kbd>-drag to zoom in and out, and <kbd>Alt</kbd>-drag to turn it about the middle of the stage. Each move is keyed on the frame shown, so the camera animates from one key to the next. If the scene has no camera yet, the first drag adds one (as <span class="menu-path">Insert &rsaquo; Camera</span> does).</p>
+
+<p>With <span class="menu-path">View &rsaquo; Camera View</span> on, as it is by default, the stage shows the scene through its camera. Turn it off to see the scene as laid out, without the camera's moves. For layers at different depths from the camera, see <a href="rigging.html#multiplane-camera">Multiplane camera</a>.</p>
 
 <h2>Rulers and guides</h2>
 
-<p>Turn on rulers with <span class="menu-path">View &rsaquo; Rulers</span> (<kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>R</kbd>). Rulers measure in pixels from the stage's top-left corner.</p>
+<p>Turn on rulers with <span class="menu-path">View &rsaquo; Rulers</span> (<kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>R</kbd>). Rulers measure from the stage's top-left corner, in the units set in <span class="menu-path">Modify &rsaquo; Document</span> (pixels unless you change them).</p>
 
 <ol class="steps">
   <li>Drag from the top ruler to create a horizontal guide, or from the left ruler for a vertical one.</li>
@@ -107,16 +113,17 @@
   <dt>High Quality Anti-Aliasing</dt><dd>On by default. Turn it off to draw faster in very heavy scenes.</dd>
   <dt>Show Bounding Boxes</dt><dd><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>B</kbd>. Outlines each element's bounds, which helps track down a stray point far from the artwork.</dd>
   <dt>Onion Skin</dt><dd>See <a href="frames.html#onion-skinning">Onion skinning</a>.</dd>
+  <dt>Light Table</dt><dd><kbd>Shift</kbd>+<kbd>L</kbd>. Fades every layer except the one you are drawing on. See <a href="rigging.html#light-table">Light table</a>.</dd>
   <dt>View Document...</dt><dd>Opens a read-only window with the document's underlying XML, for the curious and for troubleshooting.</dd>
 </dl>
 
 <h2>Scenes</h2>
 
-<p>A document can be split into scenes, which play one after another. Phoenix shows one scene at a time. Switch scenes from <span class="menu-path">View &rsaquo; Scene</span>, or press <kbd>Shift</kbd>+<kbd>Page Up</kbd> and <kbd>Shift</kbd>+<kbd>Page Down</kbd> for the previous and next scene. The current scene's name appears in the edit bar above the stage.</p>
+<p>A document can be split into scenes, which play one after another. Phoenix shows one scene at a time. Switch scenes from <span class="menu-path">View &rsaquo; Scene</span> or the <span class="menu-path">Window &rsaquo; Scene</span> panel (<kbd>Shift</kbd>+<kbd>F2</kbd>), or press <kbd>Shift</kbd>+<kbd>Page Up</kbd> and <kbd>Shift</kbd>+<kbd>Page Down</kbd> for the previous and next scene. The current scene's name appears in the edit bar above the stage. To add, rename, reorder and delete scenes, see <a href="documents.html#scenes">Scenes</a>; to export every scene at once, see <a href="export.html#export-movie">Export Movie</a>.</p>
 
 <div class="callout planned">
   <span class="label">Planned</span>
-  <p>A Scene panel to add, rename, reorder and delete scenes, playing through scenes in order, and exporting every scene at once.</p>
+  <p>Playback in Phoenix that runs on from one scene into the next.</p>
 </div>
 
 </article>

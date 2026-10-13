@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Text · Phoenix User Guide</title>
 <meta name="description" content="Add and edit text with the Text tool: growing and fixed-width boxes, fonts, sizes and colors, and static, dynamic and input text.">
-<meta name="keywords" content="text tool type font family size color static dynamic input text box fixed width wrap caret selection">
+<meta name="keywords" content="text tool type font family size color static dynamic input text box fixed width wrap caret selection vertical superscript subscript justify spell check font mapping break apart find replace">
 <link rel="icon" href="assets/img/logo.png">
 <link rel="stylesheet" href="assets/site.css">
 <script>try { const t = localStorage.getItem("phoenix-docs-theme"); if (t) document.documentElement.dataset.theme = t; } catch (e) {}</script>
@@ -42,7 +42,8 @@
 <table>
   <thead><tr><th>Key or action</th><th>Does</th></tr></thead>
   <tbody>
-    <tr><td><kbd>&larr;</kbd> <kbd>&rarr;</kbd> <kbd>Home</kbd> <kbd>End</kbd></td><td class="wrap">Move the caret</td></tr>
+    <tr><td><kbd>&larr;</kbd> <kbd>&rarr;</kbd></td><td class="wrap">Move the caret</td></tr>
+    <tr><td><kbd>Home</kbd> <kbd>End</kbd></td><td class="wrap">Move the caret to the start or end of the text</td></tr>
     <tr><td><kbd>&uarr;</kbd> <kbd>&darr;</kbd></td><td class="wrap">Move the caret to the line above or below</td></tr>
     <tr><td><kbd>Ctrl</kbd>+<kbd>&larr;</kbd> <kbd>Ctrl</kbd>+<kbd>&rarr;</kbd></td><td class="wrap">Move a word at a time</td></tr>
     <tr><td><kbd>Shift</kbd> with those keys</td><td class="wrap">Extend the selection</td></tr>
@@ -70,7 +71,7 @@
   <dt>Family, Size, Color</dt><dd>The font, its size in pixels and the text color.</dd>
   <dt>Style</dt><dd><strong>B</strong> and <strong>I</strong> for bold and italic (drawn bolder or slanted when the font has no bold or italic face), and <strong>Superscript</strong> or <strong>Subscript</strong>, set smaller above or below the line.</dd>
   <dt>Letter spacing, Auto kern</dt><dd>Room added between letters, and whether the font's own kerning pairs are used.</dd>
-  <dt>Anti-alias</dt><dd>How the text is smoothed where it plays: device fonts, bitmap text, or anti-aliasing for animation or for readability.</dd>
+  <dt>Anti-alias</dt><dd>How the text is smoothed where it plays: device fonts, bitmap text, anti-aliasing for animation or for readability, or custom anti-aliasing.</dd>
   <dt>Direction</dt><dd>Horizontal, or vertical: characters stand upright one under another, in columns that run from right to left (or, chosen so, from left to right), as Chinese, Japanese and Korean are often set. A return starts a new column; a fixed-size box starts one when a column reaches its foot.</dd>
   <dt>Link, Target</dt><dd>A web address the characters open when clicked, and the window it opens in.</dd>
   <dt>Align</dt><dd>Left, center, right or justified. A justified paragraph spreads each wrapped line to both edges; its last line stays to the left.</dd>
@@ -98,6 +99,10 @@
   <dt>Max characters</dt><dd>For input text, how much the viewer can type.</dd>
 </dl>
 
+<h2>Break text apart</h2>
+
+<p>Select a text box and choose <span class="menu-path">Modify &rsaquo; Break Apart</span> (<kbd>Ctrl</kbd>+<kbd>B</kbd>) to split it into one box for each letter, each standing where it stood. Break a single letter apart again to turn it into filled shapes in its color, which you can then reshape like any other drawing. The letters are no longer text after that, so you can't retype them.</p>
+
 <h2>Font symbols</h2>
 
 <p>Text can be set in a font symbol from the library, so the font travels with the document. See <a href="library.html#font-symbols">Font symbols</a>.</p>
@@ -107,6 +112,10 @@
 <p><span class="menu-path">Edit &rsaquo; Check Spelling...</span> goes through every text box in every scene and symbol, one word not in the dictionary at a time, showing it in its sentence with suggestions. <strong>Change</strong> fixes this one, <strong>Change All</strong> every one in the document; <strong>Ignore</strong> skips it, <strong>Ignore All</strong> skips it everywhere, and <strong>Add to Dictionary</strong> keeps it as a word from now on. Phoenix uses your computer's spell checker and its dictionary, in the language Phoenix runs in. Each change can be undone.</p>
 
 <p>Spell checking uses the Windows spell checker; on macOS it is not available yet.</p>
+
+<h2>Find and replace text</h2>
+
+<p><span class="menu-path">Edit &rsaquo; Find and Replace...</span> (<kbd>Ctrl</kbd>+<kbd>F</kbd>) finds words, or every use of a font, in every text box of the document and can replace them all at once. See <a href="workspace.html#find-and-replace">Find and Replace</a>.</p>
 
 <h2>Missing fonts</h2>
 

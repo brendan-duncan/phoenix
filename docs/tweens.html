@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Tweens and easing · Phoenix User Guide</title>
 <meta name="description" content="Animate with classic, shape and motion tweens, edit motion paths and curves in the Motion Editor, ease with presets or custom curves, and reuse motion with presets.">
-<meta name="keywords" content="tween classic tween shape tween motion tween morph ease easing in out custom ease curve rotate clockwise snap sync motion path property keyframe motion editor motion presets copy motion">
+<meta name="keywords" content="tween classic tween shape tween motion tween morph ease easing in out custom ease curve rotate clockwise snap sync motion path property keyframe motion editor motion presets copy motion shape hints color effect filters">
 <link rel="icon" href="assets/img/logo.png">
 <link rel="stylesheet" href="assets/site.css">
 <script>try { const t = localStorage.getItem("phoenix-docs-theme"); if (t) document.documentElement.dataset.theme = t; } catch (e) {}</script>
@@ -59,8 +59,20 @@
 
 <div class="callout tip">
   <span class="label">Tip</span>
-  <p>Shape tweens are smoothest between similar shapes. If a morph twists or flips, add an in-between keyframe that guides it.</p>
+  <p>Shape tweens are smoothest between similar shapes. If a morph twists or flips, add shape hints, or an in-between keyframe that guides it.</p>
 </div>
+
+<h3>Shape hints</h3>
+
+<p>Shape hints tell a shape tween which point of the first shape becomes which point of the last, so a morph keeps its corners where you want them.</p>
+
+<ol class="steps">
+  <li>Put the playhead on the first keyframe of the shape tween and choose <span class="menu-path">Modify &rsaquo; Shape &rsaquo; Add Shape Hint</span> (<kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>H</kbd>). A lettered circle, starting at <em>a</em>, appears in the middle of the shape.</li>
+  <li>With the Selection tool, drag the hint onto a point of the shape's outline. Hints on the first keyframe are yellow.</li>
+  <li>Go to the tween's end keyframe, where the same letter waits in green, and drag it to where that point should end up.</li>
+</ol>
+
+<p>You can add up to 26 hints. To remove one, drag it off the stage; <span class="menu-path">Modify &rsaquo; Shape &rsaquo; Remove All Hints</span> removes them all. Hints are saved with the tween in FLA files too.</p>
 
 <h2>Motion tweens</h2>
 
@@ -75,7 +87,7 @@
 
 <h3>The Motion Editor</h3>
 
-<p>Open <span class="menu-path">View &rsaquo; Motion Editor</span> and select a motion tween to see each property as a curve over time: X and Y position, rotation, skew and scale. Pick a property from the list to edit its curve:</p>
+<p>Open <span class="menu-path">Window &rsaquo; Motion Editor</span> and select a motion tween to see each property as a curve over time: X and Y position, rotation, skew and scale. For a symbol instance, the list also has its color effect (alpha, brightness, tint and the advanced color percentages and offsets) and the numbers of each of its filters, such as blur, strength, distance and angle. Pick a property from the list to edit its curve:</p>
 
 <ul>
   <li>Drag a point to change the value or the frame; drag its handles to shape the curve.</li>
@@ -83,6 +95,8 @@
   <li>Type exact numbers in the <strong>Frame</strong> and <strong>Value</strong> fields.</li>
   <li>Apply an ease to one property with <strong>Property ease</strong>, or to the whole tween with <strong>Tween ease</strong> (from -100 to 100).</li>
 </ul>
+
+<p>Changing an instance's color effect in the Properties panel part way through a motion tween keys it there too, just as moving it does.</p>
 
 <h2>Easing</h2>
 
@@ -110,7 +124,7 @@
 
 <h2>Motion presets</h2>
 
-<p><span class="menu-path">View &rsaquo; Motion Presets...</span> keeps a collection of reusable motions.</p>
+<p><span class="menu-path">Window &rsaquo; Motion Presets...</span> keeps a collection of reusable motions.</p>
 
 <dl class="defs">
   <dt>Save Current...</dt><dd>Saves the selected motion tween as a preset.</dd>
@@ -121,7 +135,7 @@
 
 <div class="callout planned">
   <span class="label">Planned</span>
-  <p>Shape hints to control how shape tweens match points, color and filter curves in the Motion Editor, Orient to Path for motion tweens, and 3D rotation in motion tweens (classic tweens carry it).</p>
+  <p>Orient to Path for motion tweens, and 3D rotation in motion tweens (classic tweens carry it).</p>
 </div>
 
 </article>

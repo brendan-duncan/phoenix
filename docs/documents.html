@@ -108,6 +108,8 @@
 
 <p>Saves are safe: Phoenix writes to a temporary file and only replaces the original once the new file is complete, so a crash or full disk in the middle of a save cannot damage your file.</p>
 
+<p><span class="menu-path">File &rsaquo; Check Document...</span> looks through the document for damage, lists errors and warnings, and offers <strong>Repair</strong> for what can be repaired. <span class="menu-path">File &rsaquo; Compare With...</span> shows what changed between this document and another version of it; see <a href="version-control.html">Version control</a>.</p>
+
 <h2>File formats</h2>
 
 <table>
@@ -122,7 +124,7 @@
 
 <h3>Working with FLA files</h3>
 
-<p>Phoenix is built to round-trip Animate files. When you open an FLA and save it again, Phoenix keeps everything it found, including settings and data it does not use itself, such as publish settings, scripts and shape hints. The saved file opens in Animate as before.</p>
+<p>Phoenix is built to round-trip Animate files. When you open an FLA and save it again, Phoenix keeps everything it found, including settings and data it does not use itself, such as scripts. The saved file opens in Animate as before.</p>
 
 <p>Some things Phoenix can do have no place in an FLA. If saving as FLA or XFL would leave something out, Phoenix tells you what before it writes, so nothing is lost silently.</p>
 
@@ -143,6 +145,8 @@
   <li><strong>Previewable.</strong> Each file carries a thumbnail of its first frame.</li>
 </ul>
 
+<p>New documents are saved as <code>.phx</code> unless you choose otherwise under <span class="menu-path">File &rsaquo; Default Save Format</span>: <strong>Phoenix Document</strong>, <strong>FLA File</strong>, or <strong>XFL Folder</strong>, which suits a studio keeping its files in version control. A new document's first Save As starts in that format.</p>
+
 <p>To convert files without opening them, see <a href="command-line.html#convert-between-formats">the <code>--convert</code> option</a>.</p>
 
 <h2>Import</h2>
@@ -153,6 +157,8 @@
   <dt>Import to Stage...</dt><dd><kbd>Ctrl</kbd>+<kbd>R</kbd>. Adds the file to the library and places it on the current frame.</dd>
   <dt>Import to Library...</dt><dd>Adds the file to the library only.</dd>
   <dt>Import Video...</dt><dd>Brings in a video as a reference to animate over. See <a href="sound.html#reference-video">Reference video</a>.</dd>
+  <dt>Open External Library...</dt><dd><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>O</kbd>. Opens another file's library beside this one, to copy items from. See <a href="library.html#libraries-of-other-documents">Libraries of other documents</a>.</dd>
+  <dt>Import Animatic...</dt><dd>Brings in an animatic's cut (EDL or Final Cut XML) as shot labels, boards and audio. See <a href="pipeline.html#start-from-the-animatic">Start from the animatic</a>.</dd>
 </dl>
 
 <table>
