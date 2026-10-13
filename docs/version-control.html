@@ -28,6 +28,12 @@
 <pre><code>Phoenix --convert shots/sh010.fla shots_xfl/sh010
 Phoenix batch episode/ --convert xfl --out episode_xfl/</code></pre>
 
+<div class="callout">
+  <span class="label">Phoenix's own features</span>
+  <p>An XFL folder keeps everything a Phoenix document does, Phoenix's own features included: textured and art brushes, linked palettes, effect layers, the multiplane camera, deformers, review notes and the rest are written into the folder in a form Phoenix reads back, and Phoenix's tests check that each one comes back. What a <code>.phx</code> adds is speed with very large documents, not anything the folder lacks.</p>
+  <p>The one risk is another FLA editor: it shows the artwork without those features and leaves them out if it saves the folder. Keep the folder edited in Phoenix, and Phoenix warns before saving a document that uses them as FLA or XFL.</p>
+</div>
+
 <h2>Git LFS for the media</h2>
 
 <p>The XML files diff and merge as text. The media under <code>bin/</code>, and any whole <code>.fla</code> or <code>.phx</code> files, are binary and belong in Git LFS. A <code>.gitattributes</code> for a project:</p>

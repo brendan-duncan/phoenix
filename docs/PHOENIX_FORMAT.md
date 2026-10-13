@@ -168,10 +168,42 @@ never exports FLA can skip it.
 
 ### Phoenix-only features
 
-`FeatureRegistry` in the schema lists, by name, the features a document
-uses that FLA cannot hold (`variable-width-strokes`, `textured-brushes`,
-...). Phoenix uses the list to warn, before an export to FLA, about what
-will be flattened or dropped. The list is written in `Document.features`.
+Phoenix's own features are kept in FLA and XFL files too: each is stored as
+attributes of its own (named `phoenix...`) on the document, symbols, layers,
+frames, elements, fill and stroke styles or text runs, which other FLA
+editors ignore and Phoenix reads back. `src/edit/phoenix_features.cpp` is the
+one list of them: each feature's id, its name, the attributes that mark it,
+and how another FLA editor shows a document that uses it. The test
+`phoenix_features_survive_xfl_and_phx` writes a document using every one of
+them to an XFL folder and to a `.phx` and checks that each comes back.
+
+Phoenix uses the list to warn before an FLA or XFL save: the features are
+kept, but another editor drops them if it saves the file. `Document.features`
+in a `.phx` lists the ids of those the document uses, written from the
+document at each save; ids a newer Phoenix wrote that this one does not know
+are kept, and an FLA export lists them as possibly lost.
+
+| id | Feature | Another FLA editor shows |
+| --- | --- | --- |
+| `textured-brushes` | Textured brushes | plain fills, without the grain |
+| `art-and-pattern-brushes` | Art and pattern brushes | plain strokes along the same lines |
+| `bitmap-painting` | Bitmap painting | the painted canvas as an ordinary bitmap |
+| `linked-palettes` | Linked palettes | the colors as they are, without the palettes or their links |
+| `effect-layers` | Effect layers | hidden guide layers: the tone, highlight or glow is missing |
+| `line-and-color-art` | Line and color art layers | ordinary layers |
+| `review-notes` | Review notes | the notes as text on a guide layer, which is not exported |
+| `multiplane-camera` | Multiplane camera | a guide layer: the shot is not framed, moved or given depth |
+| `pegs` | Pegs | ordinary symbols |
+| `deformers` | Deformers | the instances without their bend |
+| `master-controllers` | Master controllers | the properties as keyed, without the sliders |
+| `3d-rotation` | 3D rotation and depth | the movie clips flat, without their 3D turn |
+| `parenting-options` | Layer parenting options | child layers taking on all of the parent's transform |
+| `joint-limits` | Bone joint limits | bones that turn freely when posed |
+| `shape-hints` | Shape hints | shape tweens without the hints steering them |
+| `mouth-charts` | Lip sync mouth charts | the mouth frames as set, without the chart |
+| `layer-transparency` | Layer transparency | the layers drawn solid |
+| `see-through-stage` | See-through stage | an opaque stage color |
+| `other-phoenix-settings` | Other Phoenix settings | the document without them |
 
 ## Versioning and compatibility
 

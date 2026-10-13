@@ -4,6 +4,8 @@ What changed in each release of Phoenix, newest first.
 
 ## Unreleased
 
+- Saving as FLA or XFL lists the Phoenix-only features the document uses; XFL folders keep them all
+
 - AI assistants such as Claude can look at and change your document through MCP, with every change undoable
 
 ## 0.5.2 (2026-10-13)
