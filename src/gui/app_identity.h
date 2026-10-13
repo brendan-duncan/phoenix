@@ -11,7 +11,7 @@ void apply();
 
 /// Phoenix kept its settings and data folders under "FLAViewer" before
 /// 0.6: the first start without settings of its own copies the old settings
-/// and data folders over. The old ones are left as they were, for an older
+/// and (once) data folders over. The old ones are left as they were, for an older
 /// version still installed. Call apply() first.
 void adoptOldSettings();
 
