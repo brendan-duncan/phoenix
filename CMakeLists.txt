@@ -248,6 +248,7 @@ set(HEADERS
     src/edit/color_art.h
     src/edit/layer_effects.h
     src/edit/lip_sync.h
+    src/edit/frame_actions.h
     src/edit/function_curves.h
     src/edit/deformers.h
     src/edit/scene_commands.h
@@ -468,6 +469,7 @@ set(SOURCES
     src/edit/color_art.cpp
     src/edit/layer_effects.cpp
     src/edit/lip_sync.cpp
+    src/edit/frame_actions.cpp
     src/edit/function_curves.cpp
     src/edit/deformers.cpp
     src/edit/scene_commands.cpp

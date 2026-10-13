@@ -4,6 +4,7 @@
 #include <QMimeData>
 #include "library_panel.h"
 #include "player.h"
+#include "../edit/frame_actions.h"
 #include "../edit/motion_object.h"
 #include "../edit/timeline_edit.h"
 
@@ -504,6 +505,18 @@ void TimelinesPanel::onPlayStop()
         _playClock = new QElapsedTimer();
     _playClock->start();
     _playStartFrame = _player->currentFrame();
+    _frameActions.reset();
+    if (_frameActionsOn)
+    {
+        if (const fla::Timeline* timeline = _gridContainer->shownTimeline())
+        {
+            auto actions = std::make_shared<fla::frameactions::TimelineActions>(*timeline);
+            if (!actions->empty())
+                _frameActions = std::move(actions);
+        }
+    }
+    _playShown = _playStartFrame;
+    _playSteps = 0;
     // Ticks a few times a frame; which frame shows is worked out from the
     // clock.
     _playTimer->start(std::max(1, static_cast<int>(1000.0 / frameRate() / 2.0)));
@@ -590,6 +603,11 @@ void TimelinesPanel::onTimerTick()
 {
     if (!_player || !_playClock)
         return;
+    if (_frameActions)
+    {
+        playFrameActions();
+        return;
+    }
     const int due = _playStartFrame + static_cast<int>(_playClock->elapsed() * frameRate() / 1000.0);
     if (_gridContainer->loopOn())
     {
@@ -608,6 +626,38 @@ void TimelinesPanel::onTimerTick()
         return;
     }
     _player->setCurrentFrame(due);
+}
+
+void TimelinesPanel::playFrameActions()
+{
+    // Each frame that is due is entered in turn, so its actions run even
+    // when drawing falls behind the clock.
+    const int due = static_cast<int>(_playClock->elapsed() * frameRate() / 1000.0);
+    const int last = std::max(0, _gridContainer->frameCount() - 1);
+    const bool looping = _gridContainer->loopOn();
+    int frame = _playShown;
+    while (_playSteps < due)
+    {
+        ++_playSteps;
+        int next = frame + 1;
+        if (looping && (frame == _gridContainer->loopLast() || next > last))
+            next = _gridContainer->loopFirst();
+        const fla::frameactions::State state = _frameActions->enter(std::min(next, last));
+        frame = state.frame;
+        // A stop, or the last frame without looping, ends playback there.
+        if (!state.playing || (!looping && frame >= last))
+        {
+            _playShown = frame;
+            _player->setCurrentFrame(frame);
+            stopPlaying();
+            return;
+        }
+    }
+    if (frame != _playShown)
+    {
+        _playShown = frame;
+        _player->setCurrentFrame(frame);
+    }
 }
 
 void TimelinesPanel::onPlayerFrameChanged(int frame)

@@ -11,12 +11,17 @@
 #include <algorithm>
 #include <functional>
 #include <map>
+#include <memory>
 #include <vector>
 #include <QPushButton>
 #include <QTimer>
 #include <QImage>
 
 class Player;
+
+namespace fla::frameactions {
+class TimelineActions;
+}
 
 /// A block of selected frames in the timeline: the layers of the rows it
 /// spans, top to bottom, and the frames from \a first to \a last.
@@ -68,6 +73,12 @@ public:
 
     /// How many frames the shown timeline has: where its last frame ends.
     int frameCount() const;
+    /// The timeline shown: the one set, or the document's current scene.
+    const fla::Timeline* shownTimeline() const
+    {
+        const std::vector<const fla::Timeline*> timelines = shownTimelines();
+        return timelines.empty() ? nullptr : timelines.front();
+    }
     void clearSelection();
 
     /// Shows the onion skin range in the ruler.
@@ -252,6 +263,13 @@ public:
     void setLoopPlayback(bool on);
     bool loopPlayback() const;
 
+    /// Simple frame actions (Control > Enable Simple Frame Actions): on,
+    /// playback stops at a frame whose script calls stop() and jumps where
+    /// gotoAndPlay() and gotoAndStop() send it. The frame playback starts
+    /// from is not one of them, so Enter plays on past a stop.
+    void setFrameActions(bool on) { _frameActionsOn = on; }
+    bool frameActions() const { return _frameActionsOn; }
+
     explicit TimelinesPanel(Player* player, QWidget *parent = nullptr);
 
     void setDocument(const fla::FLADocument* document);
@@ -343,6 +361,16 @@ private:
     /// stays in step: the frame and time it started from.
     class QElapsedTimer* _playClock = nullptr;
     int _playStartFrame = 0;
+    /// With frame actions: the timeline's, read as playback starts (null
+    /// when it has none), the frame last shown and the frames played since
+    /// the clock started. Playback then goes frame by frame, so none of
+    /// their scripts is passed over.
+    bool _frameActionsOn = false;
+    std::shared_ptr<const fla::frameactions::TimelineActions> _frameActions;
+    int _playShown = 0;
+    int _playSteps = 0;
     double frameRate() const;
     void stopPlaying();
+    /// A tick of playback with frame actions.
+    void playFrameActions();
 };

@@ -90,6 +90,7 @@ set(TEST_CORE_SOURCES
     ${PHOENIX_SRC}/edit/color_art.cpp
     ${PHOENIX_SRC}/edit/layer_effects.cpp
     ${PHOENIX_SRC}/edit/lip_sync.cpp
+    ${PHOENIX_SRC}/edit/frame_actions.cpp
     ${PHOENIX_SRC}/edit/function_curves.cpp
     ${PHOENIX_SRC}/edit/deformers.cpp
     ${PHOENIX_SRC}/edit/scene_commands.cpp
@@ -148,6 +149,7 @@ set(TEST_SOURCES
     test_color_art.cpp
     test_layer_effects.cpp
     test_lip_sync.cpp
+    test_frame_actions.cpp
     test_function_curves.cpp
     test_deformers.cpp
     test_scene_commands.cpp

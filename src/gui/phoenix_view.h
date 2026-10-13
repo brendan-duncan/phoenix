@@ -14,6 +14,7 @@
 #include "../edit/motion_object.h"
 #include "../edit/asset_warp.h"
 #include "../edit/deformers.h"
+#include "../edit/frame_actions.h"
 
 #include <memory>
 #include <QCache>
@@ -508,6 +509,10 @@ public:
     /// stage shows.
     void setShowPasteboard(bool show) { _showPasteboard = show; update(); }
     bool showPasteboard() const { return _showPasteboard; }
+    /// Simple frame actions: on, an exported movie's movie clips stop and
+    /// jump as the stop(), play() and goto calls in their frame scripts say.
+    void setFrameActions(bool on) { _frameActions = on; }
+    bool frameActions() const { return _frameActions; }
     /// Guides that cannot be dragged.
     void setGuidesLocked(bool locked) { _guidesLocked = locked; }
     bool guidesLocked() const { return _guidesLocked; }
@@ -1143,8 +1148,13 @@ private:
     /// wrapping round the symbol (loop), stopping at its end (play once) or
     /// holding (single frame). On Animate's stage a movie clip or a button
     /// shows its first frame; an exported movie plays its movie clips round
-    /// and round from when they appear.
+    /// and round from when they appear, or, with frame actions, as their
+    /// frame scripts' stops and gotos lead.
     int symbolFrame(const fla::SymbolInstance& instance) const;
+    bool _frameActions = false;
+    /// Each movie clip's frames with frame actions, worked out once a
+    /// drawing of the document.
+    mutable std::map<const fla::Symbol*, fla::frameactions::TimelineActions::Sequence> _clipSequences;
 
     /// Which frame of a layer is showing right now, and how far a tween on it
     /// has progressed. Shared by drawing and hit-testing so the two cannot

@@ -102,6 +102,7 @@
     <tr><td>Rewind to the first frame</td><td><kbd>Shift</kbd>+<kbd>,</kbd></td></tr>
     <tr><td>Go to the last frame</td><td><kbd>Shift</kbd>+<kbd>.</kbd></td></tr>
     <tr><td>Loop playback</td><td><kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>L</kbd></td></tr>
+    <tr><td>Enable simple frame actions</td><td><kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>F</kbd></td></tr>
   </tbody>
 </table>
 
@@ -112,6 +113,22 @@
 <h3>Looping a range</h3>
 
 <p>Turn on <strong>Loop Playback</strong> and drag the ends of the loop range in the ruler to play just part of the timeline over and over, which is ideal for polishing a cycle.</p>
+
+<h3>Frame scripts</h3>
+
+<p>Frames can carry scripts, and files made for broadcast often use a few of them to hold a pose or repeat a section. Turn on <span class="menu-path">Control &rsaquo; Enable Simple Frame Actions</span> (<kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>F</kbd>) and playback follows these calls in the timeline's frame scripts:</p>
+
+<dl class="defs">
+  <dt><code>stop()</code></dt><dd>Playback stops on that frame.</dd>
+  <dt><code>play()</code></dt><dd>Playback carries on, after a <code>stop()</code> earlier in the same script.</dd>
+  <dt><code>gotoAndPlay(10)</code>, <code>gotoAndPlay("walk")</code></dt><dd>Jumps to a frame number (counting from 1, as the ruler does) or to a frame label, and plays on from there.</dd>
+  <dt><code>gotoAndStop(...)</code></dt><dd>Jumps to the frame or label and stops there.</dd>
+  <dt><code>nextFrame()</code>, <code>prevFrame()</code></dt><dd>Steps one frame on or back and stops.</dd>
+</dl>
+
+<p>The calls can be written with <code>this.</code> in front. A script runs when the playhead arrives at its keyframe, but not the frame you start from, so pressing <kbd>Enter</kbd> on a frame with <code>stop()</code> plays on past it. Phoenix does not run the scripts: anything else in them is ignored, and so is a call it cannot be sure of, such as one inside an <code>if</code>, a function or a block, one aimed at another clip, or a goto to a computed frame. Scripts on guide layers are left out.</p>
+
+<p>The setting is off by default and is remembered. While it is on, exported movies follow the same calls in movie clips' frame scripts, so a clip with <code>stop()</code> on its first frame holds that frame instead of looping.</p>
 
 <h2>Onion skinning</h2>
 
@@ -137,7 +154,7 @@
 
 <div class="callout planned">
   <span class="label">Planned</span>
-  <p>Scripts such as <code>stop()</code> honored during playback, and playback that runs on from one scene into the next.</p>
+  <p>Playback that runs on from one scene into the next.</p>
 </div>
 
 </article>
