@@ -20,7 +20,7 @@
 <p class="lead">Exports render through the same drawing code as the stage, so what you see is what you get. All export commands are under <span class="menu-path">File &rsaquo; Export</span>.</p>
 
 <figure class="narrow">
-  <img src="assets/shots/menu-file-export.webp" alt="File, Export submenu: Export to SVG, Export Image, Export Movie" width="195" height="78">
+  <img src="assets/shots/menu-file-export.webp" alt="File, Export submenu: Export to SVG, Export Image, Export Movie, Export Sprite Sheet, Export Shots and Export SWF Movie" width="219" height="150">
 </figure>
 
 <h2>Export Movie</h2>
@@ -28,7 +28,7 @@
 <p>Choose <span class="menu-path">File &rsaquo; Export &rsaquo; Export Movie...</span> (<kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>S</kbd>) to render a range of frames.</p>
 
 <div class="split">
-  <figure style="margin:0"><img src="assets/shots/export-movie.webp" alt="Export Movie dialog with format, codec, file, size, frame range, options, area, GIF colors, SVG options, layers and scenes" width="341" height="554"></figure>
+  <figure style="margin:0"><img src="assets/shots/export-movie.webp" alt="Export Movie dialog with format, codec, file, size, frame range, options, area, GIF colors, SVG options, layers and scenes" width="341" height="524"></figure>
   <dl class="defs" style="grid-template-columns:1fr">
     <dt>Format</dt><dd>What to make. See the table below.</dd>
     <dt>File</dt><dd>Where to save it. <strong>Browse...</strong> picks a location.</dd>
@@ -66,7 +66,7 @@
 <p><span class="menu-path">File &rsaquo; Export &rsaquo; Export Image...</span> renders a single frame.</p>
 
 <figure>
-  <img src="assets/shots/export-image.webp" alt="Export Image dialog with file, format, size, frame, matte and quality" width="496" height="279">
+  <img src="assets/shots/export-image.webp" alt="Export Image dialog with file, format, size, frame, matte and quality" width="480" height="304">
 </figure>
 
 <dl class="defs">
@@ -91,11 +91,19 @@
 
 <p><span class="menu-path">File &rsaquo; Publish Settings...</span> (<kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>F12</kbd>) chooses what <span class="menu-path">File &rsaquo; Publish</span> (<kbd>Shift</kbd>+<kbd>F12</kbd>) writes, beside the document: an SWF movie, an HTML page, and PNG, JPEG, GIF and SVG images, each named after the document or with a name of its own. Images take the stage's size or one of their own. PNG can be 24-bit with alpha (a clear background), 24-bit, or 8-bit with a number of colors; JPEG has a quality and can be progressive; GIF can be still or animated, looping forever, playing once or repeating a number of times, with a number of colors; SVG can include hidden layers and embed its images or write them beside it.</p>
 
+<figure class="narrow">
+  <img src="assets/shots/publish-settings.webp" alt="Publish Settings dialog with the formats to publish and their file names, the image size, and PNG, JPEG, GIF and SVG options" width="496" height="602">
+</figure>
+
 <p>Still images show the frame labeled <code>#Static</code>, or else the first frame. The HTML page shows the SWF movie, or else the first image published. The settings are kept in the FLA file's own publish settings, so a file that was set up to publish elsewhere publishes the same from Phoenix, and every setting Phoenix does not use is kept unchanged.</p>
 
 <h2 id="sprite-sheets">Sprite sheets</h2>
 
 <p><span class="menu-path">File &rsaquo; Export &rsaquo; Export Sprite Sheet...</span> lays the scene's frames out on one PNG for a game engine. To make a sheet of one symbol, right-click it in the library and choose <strong>Generate Sprite Sheet...</strong>; its frames are drawn on their own, each the size of everything the symbol draws over them. The preview updates as you change:</p>
+
+<figure>
+  <img src="assets/shots/sprite-sheet.webp" alt="Export Sprite Sheet dialog with frames, scale, layout, padding, trim and data options beside a preview of the sheet" width="1070" height="460">
+</figure>
 
 <dl class="defs">
   <dt>Frames, Scale</dt><dd>Which frames, and how big, as a percentage.</dd>

@@ -20,14 +20,13 @@
 <p class="lead">Phoenix keeps the stage in the middle and everything that acts on it around the edges. This page names each area and the panels you can open.</p>
 
 <figure>
-  <img src="assets/shots/workspace-annotated.webp" alt="The Phoenix window with numbered markers on the menu bar, toolbox, outliner, edit bar, stage, timeline header, layers list, frame grid and panel dock" width="1704" height="1061">
+  <img src="assets/shots/workspace-annotated.webp" alt="The Phoenix window with numbered markers on the menu bar, Tools panel, edit bar, stage, timeline header, layers list, frame grid and panel dock" width="1704" height="1061">
   <figcaption>The default layout. The numbers match the list below.</figcaption>
 </figure>
 
 <ol>
   <li><strong>Menu bar</strong>: File, Edit, Insert, Modify, View, Control, Window and Help.</li>
   <li><strong>Tools panel</strong>: drawing and editing tools, the stroke and fill colors, and the Object Drawing switch.</li>
-  <li><strong>Outliner</strong>: the document as a tree, from scenes and layers down to individual shapes. It is closed until you open it from <span class="menu-path">Window &rsaquo; Outliner</span>.</li>
   <li><strong>Edit bar</strong>: where you are in the document (the scene, and any symbol you have opened), with a Back button and the <strong>Edit Symbols</strong> list. When more than one document is open, their tabs sit above it.</li>
   <li><strong>Stage</strong>: the visible area of your animation, on a gray pasteboard where you can park artwork off screen.</li>
   <li><strong>Timeline header</strong>: the current frame, frame rate and time, the playback controls, onion skinning and looping.</li>
@@ -45,7 +44,7 @@
 <p>To rearrange the tools, choose <span class="menu-path">Window &rsaquo; Edit Toolbar...</span>, or right-click the Tools panel and choose <strong>Edit Toolbar...</strong>. Drag a tool into a slot to group it there, between slots to give it a slot of its own, or under <strong>Hidden</strong> to take it off the panel; a hidden tool still works by its key. The first tool in a slot is the one shown. <strong>Add Line</strong> adds a divider between sections, and <strong>Reset</strong> puts back Phoenix's own layout.</p>
 
 <div class="split">
-  <figure class="inline" style="margin:0"><img src="assets/shots/toolbox.webp" alt="The toolbox column with the shape slot's flyout open, listing Rectangle, Oval, Rectangle Primitive, Oval Primitive and PolyStar" width="236" height="632"></figure>
+  <figure class="inline" style="margin:0"><img src="assets/shots/toolbox.webp" alt="The Tools panel with the shape slot's flyout open, listing Rectangle, Oval, Rectangle Primitive, Oval Primitive and PolyStar" width="302" height="837"></figure>
   <div>
     <p>Below the tools are:</p>
     <ul>
@@ -70,8 +69,8 @@
 </dl>
 
 <div class="tool-grid">
-  <figure style="margin:0"><img src="assets/shots/object-instance.webp" alt="Object tab for a graphic symbol instance, showing Instance, Position and Size, Color Effect, Display and Looping sections" width="304" height="555"><figcaption>Object tab for a symbol instance</figcaption></figure>
-  <figure style="margin:0"><img src="assets/shots/tool-brush.webp" alt="Tool tab for the Flow Brush, with size, pressure, velocity, taper, smoothing and brush mode options" width="304" height="530"><figcaption>Tool tab for the Flow Brush</figcaption></figure>
+  <figure style="margin:0"><img src="assets/shots/object-instance.webp" alt="Object tab for a graphic symbol instance, showing Instance, Position and Size, Color Effect, Display and Looping sections" width="391" height="573"><figcaption>Object tab for a symbol instance</figcaption></figure>
+  <figure style="margin:0"><img src="assets/shots/tool-brush.webp" alt="Tool tab for the Flow Brush, with size, pressure, velocity, taper, smoothing and brush mode options" width="391" height="817"><figcaption>Tool tab for the Flow Brush</figcaption></figure>
 </div>
 
 <h3>Hot text</h3>
@@ -94,6 +93,10 @@
 <h2>Other panels</h2>
 
 <p>Every panel opens from the <strong>Window</strong> menu, which ticks the ones that are open. Choosing an open panel that is in view closes it; choosing one that is closed, or hidden behind another tab, brings it to the front. The keys work with the menu closed too.</p>
+
+<figure class="narrow">
+  <img src="assets/shots/menu-window.webp" alt="The Window menu: Workspaces, the panels with their keys, Motion Presets, Document Brushes, Render Queue, Hide Panels, Theme and Edit Toolbar" width="227" height="693">
+</figure>
 
 <table>
   <thead><tr><th>Panel</th><th>Key</th><th>Use it to</th></tr></thead>
@@ -125,7 +128,7 @@
 <p>The Window menu also opens <a href="tweens.html#motion-presets">Motion Presets</a>, <a href="drawing-tools.html#paint-brush">Document Brushes</a> and the <a href="export.html#render-queue">Render Queue</a>, and has <strong>Workspaces</strong>, <strong>Hide Panels</strong>, <strong>Theme</strong> and <strong>Edit Toolbar...</strong>, described below.</p>
 
 <figure class="narrow">
-  <img src="assets/shots/menu-view.webp" alt="The View menu, with the light table, camera view, scene and onion skin options, rulers, guides, zoom and snapping" width="275" height="672">
+  <img src="assets/shots/menu-view.webp" alt="The View menu, with the light table, camera view, scene and onion skin options, rulers, guides, zoom and snapping" width="281" height="600">
   <figcaption>The View menu controls what the stage shows.</figcaption>
 </figure>
 
@@ -161,6 +164,10 @@
 <p><span class="menu-path">Window &rsaquo; Theme</span> sets the colors of Phoenix's window. <strong>Follow System</strong> (the default) is dark or light as your system is; <strong>Dark</strong> and <strong>Light</strong> stay as they are; <strong>Turquoise</strong> is a built-in example of a theme of its own. Themes you save are listed after them.</p>
 
 <p>Choose <span class="menu-path">Window &rsaquo; Theme &rsaquo; Edit Theme...</span> to make your own. Changes show on the window as you make them.</p>
+
+<figure class="narrow">
+  <img src="assets/shots/theme-editor.webp" alt="Edit Theme dialog with Start from, Mode, Font size and UI scale above a list of color roles for the window and the timeline" width="440" height="640">
+</figure>
 
 <dl class="defs">
   <dt>Start from</dt><dd>The theme to begin with.</dd>
@@ -207,8 +214,7 @@
 </ul>
 
 <div class="tool-grid">
-  <figure style="margin:0"><img src="assets/shots/menu-layer.webp" alt="Layer context menu" width="112" height="231"><figcaption>Layer menu</figcaption></figure>
-  <figure style="margin:0"><img src="assets/shots/menu-frames.webp" alt="Frames context menu" width="288" height="426"><figcaption>Frames menu</figcaption></figure>
+  <figure style="margin:0"><img src="assets/shots/menu-layer.webp" alt="Layer context menu" width="133" height="354"><figcaption>Layer menu</figcaption></figure>
 </div>
 
 </article>
