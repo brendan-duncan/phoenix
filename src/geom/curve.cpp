@@ -12,6 +12,22 @@ Point lerp(const Point& a, const Point& b, double t)
     return Point(a.x + (b.x - a.x) * t, a.y + (b.y - a.y) * t);
 }
 
+double lerp(double a, double b, double t)
+{
+    return a + (b - a) * t;
+}
+
+/// One coordinate of a cubic, by de Casteljau. The same arithmetic as
+/// lerping whole points, one axis at a time: a Point carries strings, and
+/// building one per step made evaluating a curve several times slower.
+double cubicAt(double p0, double p1, double p2, double p3, double t)
+{
+    const double a = lerp(p0, p1, t);
+    const double b = lerp(p1, p2, t);
+    const double c = lerp(p2, p3, t);
+    return lerp(lerp(a, b, t), lerp(b, c, t), t);
+}
+
 /// Distance from \a point to the infinite line through \a a and \a b. Falls back
 /// to the distance from \a a when the two are the same place.
 double distanceToLine(const Point& point, const Point& a, const Point& b)
@@ -66,10 +82,8 @@ Curve Curve::quadratic(const Point& from, const Point& control, const Point& to)
 
 Point Curve::pointAt(double t) const
 {
-    const Point a = lerp(_points[0], _points[1], t);
-    const Point b = lerp(_points[1], _points[2], t);
-    const Point c = lerp(_points[2], _points[3], t);
-    return lerp(lerp(a, b, t), lerp(b, c, t), t);
+    return Point(cubicAt(_points[0].x, _points[1].x, _points[2].x, _points[3].x, t),
+        cubicAt(_points[0].y, _points[1].y, _points[2].y, _points[3].y, t));
 }
 
 Point Curve::tangentAt(double t) const
@@ -108,15 +122,35 @@ void Curve::split(double t, Curve& before, Curve& after) const
 {
     // De Casteljau: the intermediate points of the evaluation are exactly the
     // control points of the two halves.
-    const Point a = lerp(_points[0], _points[1], t);
-    const Point b = lerp(_points[1], _points[2], t);
-    const Point c = lerp(_points[2], _points[3], t);
-    const Point d = lerp(a, b, t);
-    const Point e = lerp(b, c, t);
-    const Point f = lerp(d, e, t);
+    // Worked on one axis at a time and written straight into the halves:
+    // building and copying whole points, which carry strings, was most of
+    // the cost of cutting curves up.
+    const auto axis = [&](double Point::*coordinate, double out[6]) {
+        const double p0 = _points[0].*coordinate;
+        const double p1 = _points[1].*coordinate;
+        const double p2 = _points[2].*coordinate;
+        const double p3 = _points[3].*coordinate;
+        out[0] = lerp(p0, p1, t);
+        out[1] = lerp(p1, p2, t);
+        out[2] = lerp(p2, p3, t);
+        out[3] = lerp(out[0], out[1], t);
+        out[4] = lerp(out[1], out[2], t);
+        out[5] = lerp(out[3], out[4], t);
+    };
+    double x[6];
+    double y[6];
+    axis(&Point::x, x);
+    axis(&Point::y, y);
 
-    before = cubic(_points[0], a, d, f);
-    after = cubic(f, e, c, _points[3]);
+    // a, b, c, then d and e between them, and f on the curve.
+    before._points[0] = _points[0];
+    before._points[1] = Point(x[0], y[0]);
+    before._points[2] = Point(x[3], y[3]);
+    before._points[3] = Point(x[5], y[5]);
+    after._points[0] = Point(x[5], y[5]);
+    after._points[1] = Point(x[4], y[4]);
+    after._points[2] = Point(x[2], y[2]);
+    after._points[3] = _points[3];
 
     // Splitting a line gives two lines.
     before._isLine = _isLine;
@@ -255,7 +289,7 @@ int Curve::horizontalRayCrossings(const Point& point) const
         std::sort(splits, splits + count);
     }
 
-    const auto yAt = [&](double t) { return pointAt(t).y; };
+    const auto yAt = [&](double t) { return cubicAt(y0, y1, y2, y3, t); };
 
     int crossings = 0;
     for (int i = 1; i < count; ++i)
@@ -284,7 +318,7 @@ int Curve::horizontalRayCrossings(const Point& point) const
             else
                 hi = mid;
         }
-        const double x = pointAt((lo + hi) * 0.5).x;
+        const double x = cubicAt(_points[0].x, _points[1].x, _points[2].x, _points[3].x, (lo + hi) * 0.5);
         if (x > point.x)
             ++crossings;
     }
