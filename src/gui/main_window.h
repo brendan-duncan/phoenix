@@ -538,6 +538,8 @@ private:
     /// The edit-in-place breadcrumb above the stage: the scene, then each
     /// symbol entered. Clicking a level steps back out to it.
     QWidget* _breadcrumb = nullptr;
+    /// The row the breadcrumb is in, with the stage controls at its right.
+    QWidget* _breadcrumbRow = nullptr;
 
     /// The outliner (the document tree at the left) folds away: by its
     /// arrow at the left of the breadcrumb row, View > Outliner, or by

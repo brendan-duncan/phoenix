@@ -133,6 +133,7 @@ set(HEADERS
     src/gui/publish_dialog.h
     src/gui/paint_recorder.h
     src/gui/render_queue.h
+    src/gui/stage_controls.h
     src/gui/stroke_style_dialog.h
     src/gui/selection_targets.h
     src/gui/navigation_tools.h
@@ -358,6 +359,7 @@ set(SOURCES
     src/gui/publish_dialog.cpp
     src/gui/paint_recorder.cpp
     src/gui/render_queue.cpp
+    src/gui/stage_controls.cpp
     src/gui/stroke_style_dialog.cpp
     src/gui/navigation_tools.cpp
     src/gui/draw_placement.cpp

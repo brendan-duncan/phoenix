@@ -255,6 +255,10 @@ signals:
     /// The stage was turned with the Rotation tool or set straight.
     void rotationChanged(double degrees);
 
+    /// The zoom or the turn of the view changed, however it was done; told
+    /// as the view next draws.
+    void zoomChanged();
+
     /// The tool that now has the stage.
     void activeToolChanged(Tool* tool);
 
@@ -948,6 +952,9 @@ private:
     double _pressure = 1.0;
     double _rotation = 0.0;
     QPointF _rotationPivot;
+    /// The zoom and turn zoomChanged last told of.
+    double _toldZoom = -1.0;
+    double _toldRotation = 0.0;
     /// Whether the pen's eraser end is the one in use.
     bool _penEraser = false;
     bool _penDown = false;

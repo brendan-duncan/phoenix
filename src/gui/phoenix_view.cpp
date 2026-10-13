@@ -677,6 +677,13 @@ QImage PhoenixView::renderSymbolFrame(const fla::Symbol* symbol, int frame, cons
 
 void PhoenixView::paintEvent(QPaintEvent *event)
 {
+    if (_zoom != _toldZoom || _rotation != _toldRotation)
+    {
+        _toldZoom = _zoom;
+        _toldRotation = _rotation;
+        emit zoomChanged();
+    }
+
     QPainter painter(this);
     painter.setRenderHint(QPainter::Antialiasing, true);
     painter.setRenderHint(QPainter::TextAntialiasing, true);

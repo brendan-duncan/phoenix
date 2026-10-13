@@ -4,6 +4,7 @@
 #include "fill_offset.h"
 #include "new_document_dialog.h"
 #include "start_dialog.h"
+#include "stage_controls.h"
 #include "autosave.h"
 #include "timeline_audio.h"
 #include "updater.h"
@@ -1820,6 +1821,10 @@ void MainWindow::setupUI()
     breadcrumbRowLayout->setContentsMargins(2, 0, 0, 0);
     breadcrumbRowLayout->setSpacing(0);
     breadcrumbRowLayout->addWidget(_breadcrumb, 1);
+    // On a narrow window the breadcrumb gives up its room before the stage
+    // controls beside it do.
+    _breadcrumb->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Preferred);
+    _breadcrumbRow = breadcrumbRow;
 
     QWidget* stageColumn = new QWidget(this);
     QVBoxLayout* stageLayout = new QVBoxLayout(stageColumn);
@@ -4742,10 +4747,19 @@ void MainWindow::setupMenus()
 
     QAction* dimOutsideDocumentAction = new QAction("Dim Outside Document", this);
     dimOutsideDocumentAction->setCheckable(true);
-    dimOutsideDocumentAction->setChecked(false);
+    dimOutsideDocumentAction->setChecked(QSettings().value("view/dimOutside", false).toBool());
     dimOutsideDocumentAction->setStatusTip("Dim the area outside the document rectangle");
-    connect(dimOutsideDocumentAction, &QAction::toggled, _phoenixView, &PhoenixView::setDimOutsideDocument);
+    _phoenixView->setDimOutsideDocument(dimOutsideDocumentAction->isChecked());
+    connect(dimOutsideDocumentAction, &QAction::toggled, this, [this](bool on) {
+        _phoenixView->setDimOutsideDocument(on);
+        QSettings().setValue("view/dimOutside", on);
+    });
     viewMenu->addAction(dimOutsideDocumentAction);
+
+    // The common view controls on the edit bar, at its right.
+    if (_breadcrumbRow)
+        _breadcrumbRow->layout()->addWidget(new StageControls(_phoenixView, clipAction, dimOutsideDocumentAction,
+            [this]() { chooseTool(_rotationTool.get()); }, _breadcrumbRow));
 
     // Help menu
     // Control menu: playback, with Animate's keys. They act while the stage
