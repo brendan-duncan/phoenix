@@ -954,7 +954,7 @@ void TutorialRunner::previous()
         return;
     // Back to where the step before began: what it and this one did, undone.
     const size_t back = _stepStart[static_cast<size_t>(_index - 1)];
-    QAction* undo = tutorials::findMenuAction(*_window, "Edit/Undo");
+    QAction* undo = _window->undoAction();
     for (int guard = 0; undo && _window->commandStack().index() > back && guard < 200; ++guard)
     {
         if (!undo->isEnabled())

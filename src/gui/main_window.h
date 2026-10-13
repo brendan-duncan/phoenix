@@ -110,6 +110,8 @@ public:
     class Toolbox* toolbox() const { return _toolbox; }
     fla::CommandStack& commandStack() { return _editContext.commandStack(); }
     const fla::FLADocument* shownDocument() const { return _flaDocument; }
+    /// Edit > Undo, whose text names the edit it undoes.
+    QAction* undoAction() const { return _undoAction; }
     /// Whether  document is open, shown or in another tab.
     bool hasDocument(const fla::FLADocument* document) const;
     /// The toolbox name of  tool ("Oval", "Selection").
