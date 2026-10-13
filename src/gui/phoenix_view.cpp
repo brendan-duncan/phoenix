@@ -7471,6 +7471,34 @@ void PhoenixView::setRotation(double degrees)
     update();
 }
 
+PhoenixView::ViewState PhoenixView::viewState() const
+{
+    ViewState state;
+    state.valid = true;
+    state.zoom = _zoom;
+    state.panX = _panX;
+    state.panY = _panY;
+    state.rotation = _rotation;
+    state.pivot = _rotationPivot;
+    return state;
+}
+
+void PhoenixView::setViewState(const ViewState& state)
+{
+    if (!state.valid)
+        return;
+    _zoom = std::clamp(state.zoom, _minZoom, _maxZoom);
+    _panX = state.panX;
+    _panY = state.panY;
+    _rotationPivot = state.pivot;
+    if (_rotation != state.rotation)
+    {
+        _rotation = state.rotation;
+        emit rotationChanged(_rotation);
+    }
+    update();
+}
+
 void PhoenixView::setRotationPivot(const QPointF& stagePos)
 {
     // A new pivot shifts the picture by the difference in where the turn

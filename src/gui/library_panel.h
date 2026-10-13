@@ -34,6 +34,9 @@ signals:
     /// A drag of an item is starting, and has ended.
     void dragStarting(const QString& kind, const QString& name);
     void dragEnded();
+    /// An item from another library (another window's, an external one)
+    /// was dropped here, to be copied in.
+    void foreignItemDropped(const QString& name);
 
 protected:
     void startDrag(Qt::DropActions supportedActions) override;
@@ -145,6 +148,12 @@ signals:
     /// From an external library: a drag of an item has started or ended.
     void externalDragStarted(const QString& kind, const QString& name);
     void externalDragEnded();
+    /// From this library: a drag of an item has started or ended, which
+    /// another window's stage or library may take.
+    void itemDragStarted(const QString& kind, const QString& name);
+    void itemDragEnded();
+    /// An item from another library dropped on this one, to be copied in.
+    void foreignItemDropped(const QString& name);
 
 protected:
     bool eventFilter(QObject* watched, QEvent* event) override;

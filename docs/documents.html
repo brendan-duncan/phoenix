@@ -104,7 +104,35 @@
 
 <h3>Several documents</h3>
 
-<p>Each document you open or create gets a tab over the stage, so you can keep several open and copy between them. Click a tab to switch; <kbd>Ctrl</kbd>+<kbd>Tab</kbd> goes to the next. Each tab keeps its own undo history, playhead and unsaved changes, marked with a <code>*</code>. Drag tabs to reorder them, and click a tab's <strong>&times;</strong> or press <kbd>Ctrl</kbd>+<kbd>W</kbd> to close it. Opening a file that is already open switches to its tab. A blank new document you have not changed is replaced by the next file you open. When you quit, Phoenix asks about each document with unsaved changes.</p>
+<p>Each document you open or create gets a tab over the stage, so you can keep several open and copy between them. Click a tab to switch; <kbd>Ctrl</kbd>+<kbd>Tab</kbd> goes to the next and <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>Tab</kbd> to the previous. Each tab keeps its own undo history, playhead, zoom and scroll, and unsaved changes, marked with a <code>*</code>. Every panel shows the document whose tab is in front, and switching tabs stops playback. Drag tabs to reorder them, and click a tab's <strong>&times;</strong> or press <kbd>Ctrl</kbd>+<kbd>W</kbd> to close it. Opening a file that is already open switches to its tab, in whichever window it is. A blank new document you have not changed is replaced by the next file you open.</p>
+
+<p>Right-click a tab for more:</p>
+
+<dl class="defs">
+  <dt>Close, Close Others, Close All</dt><dd>Close that tab, every other tab, or all of them. Phoenix asks about any with unsaved changes first.</dd>
+  <dt>Copy Path</dt><dd>Puts the document's file path on the clipboard.</dd>
+  <dt>Show in Explorer (Reveal in Finder on macOS)</dt><dd>Opens the folder the file is in, with the file selected.</dd>
+  <dt>Move to New Window</dt><dd>Opens the document in a window of its own, with its own stage, timeline and panels, so two documents can sit side by side or on two screens. Its undo history, playhead and view go with it. You can also drag a tab off the tab bar and let go anywhere outside it.</dd>
+  <dt>Move to Window</dt><dd>Moves the document into another Phoenix window as a tab. Dragging a tab onto another window's tab bar does the same. A window closes by itself when its last document moves out.</dd>
+</dl>
+
+<p>To keep your work light, a document waiting in a tab lets go of the bitmaps and sounds it has read from its file, and reads them again when you come back to it.</p>
+
+<h3>Copying between documents</h3>
+
+<p>Copy and paste work between tabs and windows. When what you paste uses symbols, bitmaps or sounds from the other document's library, they come along with everything they use in turn, nested symbols included, as one step you can undo. The same happens when you copy frames, when you drag an item from one window's Library onto another window's stage or Library, and when you copy library items and paste them into another library. If the library already has items with the same names, Phoenix asks what to do:</p>
+
+<dl class="defs">
+  <dt>Don't replace existing items</dt><dd>The library's own items are kept, and what you paste uses them.</dd>
+  <dt>Replace existing items</dt><dd>The library's items take the copies' contents, and everything that uses them shows the copies.</dd>
+  <dt>Keep both</dt><dd>The copies come in under new names (<code>Head copy</code>), and what you paste uses those.</dd>
+</dl>
+
+<h3>Closing and quitting</h3>
+
+<p>Closing a tab with unsaved changes asks whether to save it. When you quit (<span class="menu-path">File &rsaquo; Exit</span>, which closes every window) or close a window with several unsaved documents, Phoenix asks once: <strong>Save All</strong>, <strong>Discard All</strong>, <strong>Review Each...</strong> to be asked about each document in turn, or <strong>Cancel</strong>. Closing one of several windows leaves the others open.</p>
+
+<p>The next time Phoenix starts, it opens the saved documents that were open when you quit, each in its tab, with the one you were looking at in front. Documents never saved are not reopened; save them or they are left behind. To start with nothing open instead, turn off <strong>Reopen documents from last time</strong> in <span class="menu-path">Edit &rsaquo; Preferences</span>.</p>
 
 <h3>Templates</h3>
 
@@ -216,12 +244,12 @@
 
 <h2>Auto-save and recovery</h2>
 
-<p>While a document has unsaved changes, Phoenix writes a recovery copy in the background. It never touches your own file. Choose how often under <span class="menu-path">File &rsaquo; Auto-Save</span>: every minute, every 2 (the default), 5 or 10 minutes, or off.</p>
+<p>While a document has unsaved changes, Phoenix writes a recovery copy in the background, for every document open, in a tab in front or not. It never touches your own file. Choose how often under <span class="menu-path">File &rsaquo; Auto-Save</span>: every minute, every 2 (the default), 5 or 10 minutes, or off.</p>
 
 <p>If Phoenix closes without saving, for example after a crash or power cut, the next time it starts the <strong>Recover Unsaved Work</strong> dialog lists every recovery copy, newest first, with the document's name and when the copy was made:</p>
 
 <dl class="defs">
-  <dt>Recover</dt><dd>Opens the selected copy as the document it came from, unsaved. Save it to keep it. Any other copies are offered again next time.</dd>
+  <dt>Recover</dt><dd>Opens the selected copies, each in a tab of its own, as the documents they came from, unsaved. Save them to keep them. Any copies not selected are offered again next time.</dd>
   <dt>Discard</dt><dd>Deletes the selected copies.</dd>
   <dt>Discard All</dt><dd>Deletes every copy, after asking.</dd>
   <dt>Later</dt><dd>Keeps the copies and asks again next time.</dd>

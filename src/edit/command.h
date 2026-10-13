@@ -6,6 +6,8 @@
 
 namespace fla {
 
+class Selection;
+
 /// A single reversible edit.
 ///
 /// Commands are executed by the CommandStack, never directly: push() calls
@@ -50,6 +52,16 @@ public:
     /// snapshots), so the history can hold to a memory budget as well as a
     /// number of steps. Most commands keep little and report 0.
     virtual size_t memoryUse() const { return 0; }
+
+    /// Points the command at another selection to let go of what it takes
+    /// out of the document, when it holds \a from: a document moved to
+    /// another window takes its history along, and that window's selection
+    /// is the one to keep in step. Most commands hold none.
+    virtual void retargetSelection(Selection* from, Selection* to)
+    {
+        (void)from;
+        (void)to;
+    }
 };
 
 typedef std::unique_ptr<Command> CommandPtr;
@@ -98,6 +110,12 @@ public:
         for (const CommandPtr& command : _commands)
             total += command->memoryUse();
         return total;
+    }
+
+    void retargetSelection(Selection* from, Selection* to) override
+    {
+        for (CommandPtr& command : _commands)
+            command->retargetSelection(from, to);
     }
 
     void setName(const std::string& name) { _name = name; }

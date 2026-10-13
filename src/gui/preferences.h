@@ -46,6 +46,7 @@ private:
     QSpinBox* _undoLevels;
     QComboBox* _autoSave;
     QCheckBox* _startScreen;
+    QCheckBox* _reopenDocuments;
     QComboBox* _highlight;
     QToolButton* _highlightColor;
     QColor _color;

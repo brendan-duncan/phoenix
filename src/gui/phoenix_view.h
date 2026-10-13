@@ -136,6 +136,20 @@ public:
     /// Fit in Window: the stage fills the view.
     void zoomToFit();
 
+    /// Where the view stands on the stage: its zoom, pan and turn. A
+    /// document waiting in a tab keeps it and is shown that way again.
+    struct ViewState
+    {
+        bool valid = false;
+        double zoom = 1.0;
+        double panX = 0.0;
+        double panY = 0.0;
+        double rotation = 0.0;
+        QPointF pivot;
+    };
+    ViewState viewState() const;
+    void setViewState(const ViewState& state);
+
     /// The stage's rotation on screen, in degrees clockwise, as Animate's
     /// Rotation tool sets it: a view setting, not an edit. It turns about a
     /// pivot in the stage's coordinates. Changing the pivot leaves the view

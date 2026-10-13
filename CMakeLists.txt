@@ -275,6 +275,7 @@ set(HEADERS
     src/edit/three_d.h
     src/edit/filter_presets.h
     src/edit/library_transfer.h
+    src/edit/document_session.h
     src/edit/trace_bitmap.h
     src/edit/edit_list.h
     src/edit/combine_objects.h
@@ -503,6 +504,7 @@ set(SOURCES
     src/edit/three_d.cpp
     src/edit/filter_presets.cpp
     src/edit/library_transfer.cpp
+    src/edit/document_session.cpp
     src/edit/trace_bitmap.cpp
     src/edit/edit_list.cpp
     src/edit/combine_objects.cpp

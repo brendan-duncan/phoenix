@@ -112,6 +112,10 @@ PreferencesDialog::PreferencesDialog(QWidget* parent)
     _startScreen = new QCheckBox("Show the start screen", general);
     _startScreen->setChecked(QSettings().value("showStartDialog", true).toBool());
     generalForm->addRow("At startup", _startScreen);
+    _reopenDocuments = new QCheckBox("Reopen documents from last time", general);
+    _reopenDocuments->setChecked(QSettings().value("reopenDocuments", true).toBool());
+    _reopenDocuments->setToolTip("Open the saved documents that were open when Phoenix last quit, each in its tab");
+    generalForm->addRow(QString(), _reopenDocuments);
     QWidget* highlightRow = new QWidget(general);
     QHBoxLayout* highlightLayout = new QHBoxLayout(highlightRow);
     highlightLayout->setContentsMargins(0, 0, 0, 0);
@@ -190,6 +194,7 @@ void PreferencesDialog::save()
     settings.setValue("preferences/undoLevels", _undoLevels->value());
     AutoSave::setInterval(_autoSave->currentData().toInt());
     settings.setValue("showStartDialog", _startScreen->isChecked());
+    settings.setValue("reopenDocuments", _reopenDocuments->isChecked());
     settings.setValue("preferences/layerHighlight", _highlight->currentIndex() == 0);
     settings.setValue("preferences/highlightColor", _color.name());
     settings.setValue("preferences/clickPixels", _clickAccuracy->currentData().toDouble());

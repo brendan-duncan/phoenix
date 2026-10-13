@@ -225,6 +225,11 @@ public:
     void undo() override;
 
     std::string name() const override { return _name; }
+    void retargetSelection(Selection* from, Selection* to) override
+    {
+        if (_selection == from)
+            _selection = to;
+    }
 
     Element* element() const { return _element; }
 
@@ -291,6 +296,11 @@ public:
     void undo() override;
 
     std::string name() const override { return _name; }
+    void retargetSelection(Selection* from, Selection* to) override
+    {
+        if (_selection == from)
+            _selection = to;
+    }
     size_t memoryUse() const override { return shapeMemory(_before) + shapeMemory(_remainder); }
 
     Shape* piece() const { return _piece; }
@@ -327,6 +337,11 @@ public:
     void undo() override;
 
     std::string name() const override { return _name; }
+    void retargetSelection(Selection* from, Selection* to) override
+    {
+        if (_selection == from)
+            _selection = to;
+    }
 
     Group* group() const { return _group; }
 
@@ -358,6 +373,11 @@ public:
     void undo() override;
 
     std::string name() const override { return _name; }
+    void retargetSelection(Selection* from, Selection* to) override
+    {
+        if (_selection == from)
+            _selection = to;
+    }
 
 private:
     Frame* _frame;
@@ -461,6 +481,11 @@ public:
     void undo() override;
 
     std::string name() const override { return _name; }
+    void retargetSelection(Selection* from, Selection* to) override
+    {
+        if (_selection == from)
+            _selection = to;
+    }
 
     /// The copies that stand in for the instance.
     const std::vector<Element*>& pieces() const { return _pieces; }
@@ -505,6 +530,11 @@ public:
     void undo() override;
 
     std::string name() const override { return _name; }
+    void retargetSelection(Selection* from, Selection* to) override
+    {
+        if (_selection == from)
+            _selection = to;
+    }
 
     SymbolInstance* instance() const { return _instance; }
 
@@ -549,6 +579,11 @@ public:
     void undo() override;
 
     std::string name() const override { return _name; }
+    void retargetSelection(Selection* from, Selection* to) override
+    {
+        if (_selection == from)
+            _selection = to;
+    }
 
 private:
     Frame* _frame;

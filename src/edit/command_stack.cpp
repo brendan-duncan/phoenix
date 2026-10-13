@@ -187,6 +187,14 @@ void CommandStack::clear()
     notifyChanged();
 }
 
+void CommandStack::retargetSelection(Selection* from, Selection* to)
+{
+    for (CommandPtr& command : _commands)
+        command->retargetSelection(from, to);
+    for (CommandPtr& macro : _macroStack)
+        macro->retargetSelection(from, to);
+}
+
 void CommandStack::swapHistory(CommandStack& other)
 {
     std::swap(_commands, other._commands);
