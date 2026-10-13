@@ -10,6 +10,7 @@
 #include "../data/group.h"
 #include "../data/layer.h"
 #include "../data/shape.h"
+#include "../data/static_text.h"
 #include "../data/symbol.h"
 #include "../data/symbol_instance.h"
 #include "../data/symbol_list.h"
@@ -129,16 +130,23 @@ std::vector<fla::Element*> needSelection(Session& session, fla::FLADocument* doc
     return elements;
 }
 
+/// The toolbar's fill and stroke: the host's, or one kept for the run.
+fla::DrawingStyle& toolbarStyle(Document& d)
+{
+    d.data();
+    if (fla::DrawingStyle* style = d.session.host().drawingStyle())
+        return *style;
+    static fla::DrawingStyle fallback;
+    return fallback;
+}
+
 /// A new shape from SVG path data, filled and stroked as \a style says,
 /// placed on the current keyframe as a drawing object or merged into the
 /// artwork there.
 void addShape(Document& doc, const std::string& path, bool fill, bool stroke)
 {
     Session& session = doc.session;
-    fla::DrawingStyle fallback;
-    const fla::DrawingStyle* style = session.host().drawingStyle();
-    if (!style)
-        style = &fallback;
+    const fla::DrawingStyle* style = &toolbarStyle(doc);
     fla::Frame* frame = currentKeyframe(session, doc.document);
     const bool filled = fill && style->hasFill;
     const bool stroked = stroke && style->hasStroke;
@@ -734,6 +742,109 @@ const ClassInfo& Document::classInfo() const
             setOnSelection(d, "colorMode", Value("tint"));
             setOnSelection(d, "tintColor", arg(args, 0));
             setOnSelection(d, "tintPercent", arg(args, 1));
+            return Value();
+        });
+
+        // The fill and stroke new shapes get (the toolbar's).
+        def.method("getCustomFill", 1, [](Document& d, const Args&) {
+            const fla::DrawingStyle& style = toolbarStyle(d);
+            Value fill = Value::map();
+            fill.set("style", style.hasFill ? "solid" : "noFill");
+            fill.set("color", colorText(style.fillColor));
+            return fill;
+        });
+        def.method("getCustomStroke", 1, [](Document& d, const Args&) {
+            const fla::DrawingStyle& style = toolbarStyle(d);
+            Value stroke = Value::map();
+            stroke.set("style", style.hasStroke ? "solid" : "noStroke");
+            stroke.set("color", colorText(style.strokeColor));
+            stroke.set("thickness", style.strokeWeight);
+            return stroke;
+        });
+        def.method("setCustomFill", 1, [](Document& d, const Args& args) {
+            fla::DrawingStyle& style = toolbarStyle(d);
+            if (const Value* kind = arg(args, 0).field("style"))
+                style.hasFill = kind->toString() != "noFill";
+            if (const Value* color = arg(args, 0).field("color"))
+                parseColor(*color, style.fillColor);
+            return Value();
+        });
+        def.method("setCustomStroke", 1, [](Document& d, const Args& args) {
+            fla::DrawingStyle& style = toolbarStyle(d);
+            if (const Value* kind = arg(args, 0).field("style"))
+                style.hasStroke = kind->toString() != "noStroke";
+            if (const Value* color = arg(args, 0).field("color"))
+                parseColor(*color, style.strokeColor);
+            if (const Value* thickness = arg(args, 0).field("thickness"))
+                style.strokeWeight = std::max(0.1, thickness->toNumber());
+            return Value();
+        });
+        def.method("setFillColor", 1, [](Document& d, const Args& args) {
+            fla::DrawingStyle& style = toolbarStyle(d);
+            style.hasFill = !arg(args, 0).isNullish();
+            if (style.hasFill && !parseColor(arg(args, 0), style.fillColor))
+                throw Error("That is not a color: " + arg(args, 0).toString());
+            return Value();
+        });
+        def.method("setStrokeColor", 1, [](Document& d, const Args& args) {
+            fla::DrawingStyle& style = toolbarStyle(d);
+            style.hasStroke = !arg(args, 0).isNullish();
+            if (style.hasStroke && !parseColor(arg(args, 0), style.strokeColor))
+                throw Error("That is not a color: " + arg(args, 0).toString());
+            return Value();
+        });
+        def.method("setStrokeSize", 1, [](Document& d, const Args& args) {
+            toolbarStyle(d).strokeWeight = std::max(0.1, arg(args, 0).toNumber());
+            return Value();
+        });
+        def.method("swapStrokeAndFill", 0, [](Document& d, const Args&) {
+            fla::DrawingStyle& style = toolbarStyle(d);
+            std::swap(style.hasFill, style.hasStroke);
+            for (int i = 0; i < 4; ++i)
+                std::swap(style.fillColor[i], style.strokeColor[i]);
+            return Value();
+        });
+        def.method("getTransformationPoint", 0, [](Document& d, const Args&) {
+            const fla::Point& point = needSelection(d.session, d.document).front()->transformationPoint;
+            Value value = Value::map();
+            value.set("x", point.x);
+            value.set("y", point.y);
+            return value;
+        });
+        def.method("setTransformationPoint", 1, [](Document& d, const Args& args) {
+            for (fla::Element* element : needSelection(d.session, d.document))
+            {
+                fla::Point point = element->transformationPoint;
+                if (const Value* x = arg(args, 0).field("x"))
+                    point.x = x->toNumber();
+                if (const Value* y = arg(args, 0).field("y"))
+                    point.y = y->toNumber();
+                d.push(fla::CommandPtr(new fla::SetPropertyCommand<fla::Point>(element->transformationPoint,
+                           element->transformationPoint, point, "Transformation Point")),
+                    false);
+            }
+            return Value();
+        });
+        def.method("addNewText", 2, [](Document& d, const Args& args) {
+            // A text block over the rectangle, in the toolbar's fill color.
+            fla::Frame* frame = currentKeyframe(d.session, d.document);
+            auto* text = new fla::StaticText(frame);
+            const Value& box = arg(args, 0);
+            text->transform.tx = field(box, "left");
+            text->transform.ty = field(box, "top");
+            text->width = std::max(1.0, field(box, "right") - field(box, "left"));
+            text->height = std::max(1.0, field(box, "bottom") - field(box, "top"));
+            text->autoExpand = !box.field("right");
+            fla::TextRun run;
+            run.text = given(args, 1) ? arg(args, 1).toString() : std::string();
+            std::replace(run.text.begin(), run.text.end(), '\n', '\r');
+            run.face = "Arial";
+            run.size = 12.0;
+            std::copy(toolbarStyle(d).fillColor, toolbarStyle(d).fillColor + 4, run.fillColor);
+            text->runs.push_back(run);
+            fla::Selection& selection = d.session.host().selection(d.document);
+            d.push(fla::CommandPtr(new fla::AddElementCommand(frame, text, "Text", &selection)));
+            selection.select(text);
             return Value();
         });
 

@@ -13,6 +13,7 @@
 #include "../src/data/symbol_list.h"
 #include "../src/data/timeline.h"
 #include "../src/edit/command_stack.h"
+#include "../src/edit/drawing_style.h"
 #include "../src/edit/new_document.h"
 #include "../src/edit/selection.h"
 #include "../src/edit/timeline_edit.h"
@@ -55,6 +56,9 @@ public:
     std::vector<std::string> alerts;
     std::string answer = "typed";
     bool cancelPrompt = false;
+    fla::DrawingStyle style;
+
+    fla::DrawingStyle* drawingStyle() override { return &style; }
 
     fla::FLADocument* add(fla::FLADocument* document, const std::string& path = std::string())
     {
@@ -549,6 +553,21 @@ TEST(jsfl_clipboard)
     CHECK_OUTPUT(f, "Copy 1 1\n0\n");
 }
 
+TEST(jsfl_toolbar_style_and_text)
+{
+    Fixture f;
+    CHECK(f.run("var d = fl.getDocumentDOM();\n"
+                "d.setFillColor('#ff0000'); d.setStrokeSize(3);\n"
+                "var fill = d.getCustomFill('toolbar'), stroke = d.getCustomStroke();\n"
+                "fl.trace(fill.style + ' ' + fill.color + ' ' + stroke.thickness);\n"
+                "d.swapStrokeAndFill(); fl.trace(d.getCustomFill().color);\n"
+                "d.addNewText({left: 10, top: 20, right: 110, bottom: 40}, 'Hi');\n"
+                "var t = d.selection[0]; fl.trace(t.elementType + ' ' + t.getTextString() + ' ' + t.x);\n"
+                "var trace = fl.trace; trace('detached');\n")
+              .ok);
+    CHECK_OUTPUT(f, "solid #FF0000 3\n#000000\ntext Hi 10\ndetached\n");
+}
+
 TEST(jsfl_library)
 {
     Fixture f;
@@ -706,6 +725,57 @@ TEST(jsfl_corpus_compiles)
         }
     }
     std::printf("    %d scripts, %d do not compile\n", total, failed);
+    for (const auto& reason : reasons)
+        std::printf("    %4d  %s\n", reason.second, reason.first.c_str());
+}
+
+TEST(jsfl_corpus_runs)
+{
+    // Opt in: runs each .jsfl under PHOENIX_JSFL_CORPUS that neither touches
+    // files nor includes others, on PHOENIX_JSFL_DOCUMENT, and tallies the
+    // errors they stop on: what the object model still lacks.
+    const char* folder = std::getenv("PHOENIX_JSFL_CORPUS");
+    const char* document = std::getenv("PHOENIX_JSFL_DOCUMENT");
+    if (!folder || !*folder || !document || !*document)
+    {
+        std::printf("    skipped: set PHOENIX_JSFL_CORPUS and PHOENIX_JSFL_DOCUMENT\n");
+        return;
+    }
+    int total = 0;
+    int failed = 0;
+    std::map<std::string, int> reasons;
+    for (const auto& entry : std::filesystem::recursive_directory_iterator(std::filesystem::u8path(folder)))
+    {
+        if (!entry.is_regular_file() || entry.path().extension() != ".jsfl")
+            continue;
+        std::ifstream in(entry.path());
+        std::ostringstream text;
+        text << in.rdbuf();
+        const std::string source = text.str();
+        if (source.find("FLfile") != std::string::npos || source.find("runScript") != std::string::npos ||
+            source.find("getDocumentDOM") == std::string::npos)
+            continue;
+        TestHost host;
+        std::string error;
+        if (!host.open(document, error))
+        {
+            std::printf("    could not open %s\n", document);
+            return;
+        }
+        jsfl::Engine engine(host);
+        jsfl::RunOptions options;
+        options.timeLimit = 5.0;
+        ++total;
+        const jsfl::RunResult result = engine.runString(source, entry.path().u8string(), options);
+        if (!result.ok)
+        {
+            ++failed;
+            ++reasons[result.message.substr(0, 70)];
+            if (std::getenv("PHOENIX_JSFL_CORPUS_VERBOSE"))
+                std::printf("    %s\n", result.report().c_str());
+        }
+    }
+    std::printf("    %d scripts run, %d stopped on an error\n", total, failed);
     for (const auto& reason : reasons)
         std::printf("    %4d  %s\n", reason.second, reason.first.c_str());
 }

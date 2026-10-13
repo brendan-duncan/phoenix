@@ -256,6 +256,11 @@ const ClassInfo& Flash::classInfo() const
         });
         def.get("outputPanel", [](Flash& fl) { return Value(std::make_shared<OutputPanel>(fl.session)); });
         def.method("showIdleMessage", 1, [](Flash&, const Args&) { return Value(); });
+        def.method("clipCopyString", 1, [](Flash& fl, const Args& args) {
+            fl.session.host().copyText(arg(args, 0).toString());
+            return Value();
+        });
+        def.method("closeAllPlayerDocuments", 0, [](Flash&, const Args&) { return Value(true); });
         def.method("xmlPanel", 1, [](Flash&, const Args&) -> Value {
             throw Error("fl.xmlPanel (XUL dialogs) is not supported yet.");
         });

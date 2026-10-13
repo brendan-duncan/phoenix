@@ -253,14 +253,27 @@ private:
     }
 
     /// The model object a member is called on, checked to be of the
-    /// member's class.
-    static ObjectPtr self(JSValueConst value, const ClassInfo* owner)
+    /// member's class. A method of fl, FLfile or the output panel taken
+    /// off its object (var trace = fl.trace) still works, as it did.
+    ObjectPtr self(JSValueConst value, const ClassInfo* owner)
     {
         ObjectPtr object = unwrap(value);
         if (!object || !inherits(&object->classInfo(), owner))
+        {
+            const auto found = _singletons.find(owner);
+            if (found != _singletons.end())
+                return found->second;
             throw Error("This is not a " + owner->name + ".");
+        }
         return object;
     }
+
+public:
+    /// Makes \a object the one its class's methods use when called with
+    /// no object of theirs.
+    void singleton(const ObjectPtr& object) { _singletons[&object->classInfo()] = object; }
+
+private:
 
     Args arguments(int argc, JSValueConst* argv)
     {
@@ -281,14 +294,14 @@ private:
         {
             const Property& property = info->properties[i];
             JSValue getter = function(0, [this, info, i](JSContext*, JSValueConst self, int, JSValueConst*) {
-                ObjectPtr object = Binding::self(self, info);
+                ObjectPtr object = this->self(self, info);
                 return toJS(info->properties[i].get(*object));
             });
             JSValue setter = JS_UNDEFINED;
             if (property.set)
             {
                 setter = function(1, [this, info, i](JSContext*, JSValueConst self, int argc, JSValueConst* argv) {
-                    ObjectPtr object = Binding::self(self, info);
+                    ObjectPtr object = this->self(self, info);
                     info->properties[i].set(*object, argc > 0 ? fromJS(argv[0]) : Value());
                     return JS_UNDEFINED;
                 });
@@ -302,7 +315,7 @@ private:
             const Method& method = info->methods[i];
             defineFunction(proto, method.name.c_str(), method.length,
                 [this, info, i](JSContext*, JSValueConst self, int argc, JSValueConst* argv) {
-                    ObjectPtr object = Binding::self(self, info);
+                    ObjectPtr object = this->self(self, info);
                     return toJS(info->methods[i].call(*object, arguments(argc, argv)));
                 });
         }
@@ -316,6 +329,7 @@ private:
 
     std::vector<Function> _functions;
     std::map<const ClassInfo*, JSValue> _prototypes;
+    std::map<const ClassInfo*, ObjectPtr> _singletons;
     std::map<std::tuple<const ClassInfo*, const void*, const void*>, JSValue> _identities;
 };
 
@@ -778,7 +792,11 @@ RunResult Engine::run(const std::string& source, const std::string& name, const 
             return answer;
         });
         JS_SetPropertyStr(ctx, global, "fl", fl);
-        JS_SetPropertyStr(ctx, global, "FLfile", binding.wrap(makeFileSystem()));
+        const std::shared_ptr<FileSystem> files = makeFileSystem();
+        JS_SetPropertyStr(ctx, global, "FLfile", binding.wrap(files));
+        binding.singleton(flash);
+        binding.singleton(files);
+        binding.singleton(std::make_shared<OutputPanel>(session));
         Host& host = _host;
         binding.defineFunction(global, "alert", 1, [&host](JSContext* c, JSValueConst, int argc, JSValueConst* argv) {
             host.alert(argc > 0 ? toStd(c, argv[0]) : std::string());

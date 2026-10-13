@@ -48,6 +48,7 @@ class OutputPanel final : public Object
 public:
     explicit OutputPanel(Session& session) : session(session) {}
     const ClassInfo& classInfo() const override;
+    const void* identity() const override { return &session; }
     Session& session;
 };
 

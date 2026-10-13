@@ -19,6 +19,7 @@
 #include "../phx/phx_document.h"
 
 #include <QApplication>
+#include <QClipboard>
 #include <QDesktopServices>
 #include <QDialog>
 #include <QDialogButtonBox>
@@ -442,7 +443,8 @@ public:
     }
 
     // Drawing.
-    const fla::DrawingStyle* drawingStyle() override { return &_window._drawingStyle; }
+    fla::DrawingStyle* drawingStyle() override { return &_window._drawingStyle; }
+    void copyText(const std::string& value) override { QApplication::clipboard()->setText(qtext(value)); }
     jsfl::Rect bounds(fla::FLADocument*, const fla::Element* element) override
     {
         PhoenixView* view = _window._phoenixView;

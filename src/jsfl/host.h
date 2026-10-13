@@ -125,7 +125,9 @@ public:
     // Drawing.
     /// The fill and stroke new shapes get, and whether they are drawing
     /// objects; null for Phoenix's defaults.
-    virtual const fla::DrawingStyle* drawingStyle() { return nullptr; }
+    virtual fla::DrawingStyle* drawingStyle() { return nullptr; }
+    /// Puts the text on the system clipboard.
+    virtual void copyText(const std::string& text) { (void)text; }
     /// \a element's bounds in its timeline, as the stage draws it.
     virtual Rect bounds(fla::FLADocument* document, const fla::Element* element) = 0;
     /// The current frame (or every frame, numbered) of the document as PNG.
