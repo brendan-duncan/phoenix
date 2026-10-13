@@ -100,7 +100,11 @@ jobs:
             -DPHOENIX_VERSION=${{ steps.version.outputs.version }} \
             -DPHOENIX_FFMPEG_REQUIRED=ON \
             -DCMAKE_BUILD_TYPE=Release
-          cmake --build build --config Release --target Phoenix phoenix_tests --parallel
+          # A job count, always: with no number, --parallel on macOS's
+          # Makefiles means `make -j` with no limit, which started every
+          # compile at once and swapped the runner for hours.
+          jobs=$(getconf _NPROCESSORS_ONLN 2>/dev/null || echo "${NUMBER_OF_PROCESSORS:-4}")
+          cmake --build build --config Release --target Phoenix phoenix_tests --parallel "$jobs"
 
       - name: Run the tests
         shell: bash
