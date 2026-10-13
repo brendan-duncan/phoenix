@@ -7,12 +7,14 @@
 #include <map>
 #include <memory>
 #include <string>
+#include <vector>
 
 class Player;
 
 namespace fla {
 class FLADocument;
 class Frame;
+class Timeline;
 }
 
 /// Plays a document's sounds along with its timeline, as Animate does:
@@ -27,7 +29,9 @@ class Frame;
 /// - **Stop** silences the sound named.
 ///
 /// A frame's in and out points (inPoint44, outPoint44) trim the sound, and
-/// its loop settings repeat it.
+/// its loop settings repeat it. Movie clips on the stage sound their own
+/// timelines' sounds as they play, unless setMovieClipSounds turns them
+/// off for playback; graphic symbols' sounds stay silent.
 class TimelineAudio : public QObject
 {
     Q_OBJECT
@@ -37,6 +41,10 @@ public:
 
     void setDocument(const fla::FLADocument* document);
     void setMuted(bool muted);
+    /// Whether playback sounds movie clips' own sounds (on by default).
+    /// Exports always include them.
+    void setMovieClipSounds(bool on) { _movieClipSounds = on; }
+    bool movieClipSounds() const { return _movieClipSounds; }
 
     /// A library sound decoded, by name; null when it cannot be read.
     std::shared_ptr<const PcmBuffer> librarySound(const std::string& name) { return buffer(name); }
@@ -69,6 +77,17 @@ private:
         std::shared_ptr<const AudioEnvelope> envelope;
     };
     static bool soundSettings(const fla::Frame& frame, FrameSound& sound);
+    /// A timeline sounding at a frame, at its own frame then.
+    struct Sounding
+    {
+        const fla::Timeline* timeline;
+        int frame;
+    };
+    /// The timelines sounding at the scene's \a frame: the scene's, and,
+    /// with \a clips, those of the movie clips on it, which play round and
+    /// round from when they appear (as the view draws them), down through
+    /// groups and nested clips.
+    std::vector<Sounding> soundingAt(int frame, bool clips) const;
     std::shared_ptr<const PcmBuffer> buffer(const std::string& name);
     double frameRate() const;
     void stopStreams();
@@ -77,6 +96,7 @@ private:
     const fla::FLADocument* _document = nullptr;
     bool _playing = false;
     bool _muted = false;
+    bool _movieClipSounds = true;
     int _lastFrame = -1;
     /// Decoded sounds by name, each with the bytes it was decoded from (a
     /// sound edited, or a name reused, decodes again) and when it was last

@@ -4432,6 +4432,21 @@ void MainWindow::setupMenus()
     });
     viewMenu->addAction(muteAction);
 
+    // Movie clips play their own sounds as they play on the stage; this
+    // leaves only the scene's. Exports always include them.
+    QAction* muteClipsAction = new QAction("Mute Movie &Clip Sounds", this);
+    muteClipsAction->setCheckable(true);
+    muteClipsAction->setChecked(QSettings().value("sound/muteMovieClips", false).toBool());
+    muteClipsAction->setStatusTip("Play only the scene's own sounds, not those inside movie clips");
+    if (_timelineAudio)
+        _timelineAudio->setMovieClipSounds(!muteClipsAction->isChecked());
+    connect(muteClipsAction, &QAction::toggled, this, [this](bool on) {
+        if (_timelineAudio)
+            _timelineAudio->setMovieClipSounds(!on);
+        QSettings().setValue("sound/muteMovieClips", on);
+    });
+    viewMenu->addAction(muteClipsAction);
+
     QAction* rulersAction = new QAction("&Rulers", this);
     rulersAction->setCheckable(true);
     rulersAction->setShortcut(QKeySequence(Qt::CTRL | Qt::ALT | Qt::SHIFT | Qt::Key_R));

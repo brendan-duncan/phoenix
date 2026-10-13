@@ -163,50 +163,12 @@ std::shared_ptr<const PcmBuffer> TimelineAudio::soundOf(const fla::Frame* frame,
     return buffer(sound.name);
 }
 
-std::vector<float> TimelineAudio::mixdown(int first, int last)
+std::vector<TimelineAudio::Sounding> TimelineAudio::soundingAt(int frame, bool clips) const
 {
-    std::vector<float> mixed;
+    std::vector<Sounding> sounding;
     const fla::Document* doc = _document ? _document->document : nullptr;
-    if (!doc || last < first)
-        return mixed;
-    const double samplesPerFrame = PcmBuffer::kRate / frameRate();
-    const auto at = [&](int frame) { return static_cast<size_t>(std::llround((frame - first) * samplesPerFrame)); };
-    const size_t total = at(last + 1);
-    mixed.assign(total * 2, 0.0f);
-
-    // Each sound placed on the output: from where, which part of it, how
-    // many times round (0 for until stopped), how far into its playing it
-    // starts (a stream picked up part way), and where a stop cuts it.
-    struct Placed
-    {
-        std::string name;
-        std::shared_ptr<const PcmBuffer> pcm;
-        size_t start = 0;
-        size_t in = 0;
-        size_t out = 0;
-        int loops = 1;
-        size_t skip = 0;
-        size_t cut = static_cast<size_t>(-1);
-        std::shared_ptr<const AudioEnvelope> envelope;
-
-        size_t end() const
-        {
-            const size_t length = out - in;
-            const size_t natural = loops > 0 ? start + length * static_cast<size_t>(loops) - skip : static_cast<size_t>(-1);
-            return std::min(natural, cut);
-        }
-    };
-    std::vector<Placed> placed;
-
-    // The timelines sounding at a frame: the scene's, and those of the movie
-    // clips on it, which an exported movie plays round and round from when
-    // they appear (as the view draws them), down through groups and nested
-    // clips. A graphic symbol's own sounds stay silent, as in Animate.
-    struct Sounding
-    {
-        const fla::Timeline* timeline;
-        int frame;
-    };
+    if (!doc)
+        return sounding;
     std::function<void(const fla::Timeline*, int, std::vector<Sounding>&)> collect;
     const std::function<void(const fla::Element*, int, std::vector<Sounding>&)> clipsIn =
         [&](const fla::Element* element, int elapsed, std::vector<Sounding>& out) {
@@ -250,18 +212,56 @@ std::vector<float> TimelineAudio::mixdown(int first, int last)
             {
                 if (!key || key->index > frame || frame >= key->index + std::max(key->duration, 1))
                     continue;
-                for (const fla::Element* element : key->elements)
-                    clipsIn(element, frame - key->index, out);
+                if (clips)
+                    for (const fla::Element* element : key->elements)
+                        clipsIn(element, frame - key->index, out);
             }
         }
     };
 
+    collect(doc->currentScene(), frame, sounding);
+    return sounding;
+}
+
+std::vector<float> TimelineAudio::mixdown(int first, int last)
+{
+    std::vector<float> mixed;
+    const fla::Document* doc = _document ? _document->document : nullptr;
+    if (!doc || last < first)
+        return mixed;
+    const double samplesPerFrame = PcmBuffer::kRate / frameRate();
+    const auto at = [&](int frame) { return static_cast<size_t>(std::llround((frame - first) * samplesPerFrame)); };
+    const size_t total = at(last + 1);
+    mixed.assign(total * 2, 0.0f);
+
+    // Each sound placed on the output: from where, which part of it, how
+    // many times round (0 for until stopped), how far into its playing it
+    // starts (a stream picked up part way), and where a stop cuts it.
+    struct Placed
+    {
+        std::string name;
+        std::shared_ptr<const PcmBuffer> pcm;
+        size_t start = 0;
+        size_t in = 0;
+        size_t out = 0;
+        int loops = 1;
+        size_t skip = 0;
+        size_t cut = static_cast<size_t>(-1);
+        std::shared_ptr<const AudioEnvelope> envelope;
+
+        size_t end() const
+        {
+            const size_t length = out - in;
+            const size_t natural = loops > 0 ? start + length * static_cast<size_t>(loops) - skip : static_cast<size_t>(-1);
+            return std::min(natural, cut);
+        }
+    };
+    std::vector<Placed> placed;
+
     for (int frame = first; frame <= last; ++frame)
     {
         const size_t here = at(frame);
-        std::vector<Sounding> sounding;
-        collect(doc->currentScene(), frame, sounding);
-        for (const Sounding& where : sounding)
+        for (const Sounding& where : soundingAt(frame, true))
         {
             const int local = where.frame;
             for (const fla::Layer* layer : where.timeline->layers)
@@ -389,17 +389,19 @@ void TimelineAudio::onFrameChanged(int frame)
     }
 
     std::map<const fla::Frame*, int> stillStreaming;
-    for (const fla::Timeline* timeline : {static_cast<const fla::Timeline*>(doc->currentScene())})
+    // Movie clips sound only while playing: a scrub holds them at their
+    // first frame, as the stage shows them.
+    for (const Sounding& where : soundingAt(frame, _playing && _movieClipSounds))
     {
-        if (!timeline)
-            continue;
+        const fla::Timeline* timeline = where.timeline;
+        const int local = where.frame;
         for (const fla::Layer* layer : timeline->layers)
         {
             if (!layer || !layer->visible)
                 continue;
             for (const fla::Frame* key : layer->frames)
             {
-                if (!key || key->index > frame || frame >= key->index + std::max(key->duration, 1))
+                if (!key || key->index > local || local >= key->index + std::max(key->duration, 1))
                     continue;
                 FrameSound sound;
                 if (!soundSettings(*key, sound))
@@ -407,7 +409,7 @@ void TimelineAudio::onFrameChanged(int frame)
 
                 if (sound.sync == "stop")
                 {
-                    if (_playing && key->index == frame)
+                    if (_playing && key->index == local)
                     {
                         const auto range = _events.equal_range(sound.name);
                         for (auto it = range.first; it != range.second; ++it)
@@ -429,7 +431,7 @@ void TimelineAudio::onFrameChanged(int frame)
                     // its repeats counted: a stream repeats as told for as
                     // long as its span lasts.
                     const size_t length = out - in;
-                    const size_t elapsed = static_cast<size_t>(frame - key->index) * samplesPerFrame;
+                    const size_t elapsed = static_cast<size_t>(local - key->index) * samplesPerFrame;
                     if (length == 0 || (sound.loops > 0 && elapsed >= length * static_cast<size_t>(sound.loops)))
                         continue;
                     if (!_playing)
@@ -456,7 +458,7 @@ void TimelineAudio::onFrameChanged(int frame)
 
                 // Event and Start sounds go off as the playhead reaches
                 // their keyframe.
-                if (!_playing || key->index != frame)
+                if (!_playing || key->index != local)
                     continue;
                 if (sound.sync == "start")
                 {
