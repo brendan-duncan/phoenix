@@ -2,7 +2,7 @@
 
 What changed in each release of Phoenix, newest first.
 
-## Unreleased
+## 0.6.0 (Unreleased)
 
 - 3D Position and View: set a movie clip's depth, the perspective angle and the vanishing point
 - Saving as FLA or XFL lists the Phoenix-only features the document uses; XFL folders keep them all
