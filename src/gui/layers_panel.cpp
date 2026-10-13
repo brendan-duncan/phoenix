@@ -753,7 +753,9 @@ void LayersPanel::setToggle(QTreeWidgetItem* item, int column, bool value)
             {
                 fla::Layer* inside = timeline->layers[static_cast<size_t>(i)];
                 bool within = false;
-                for (const fla::Layer* up = inside ? inside->parentLayer : nullptr; up && !within; up = up->parentLayer)
+                int guard = 0;
+                for (const fla::Layer* up = inside ? inside->parentLayer : nullptr; up && !within && guard < 256;
+                     up = up->parentLayer, ++guard)
                     within = up == layer;
                 if (!within || inside->visible == value)
                     continue;
@@ -862,8 +864,10 @@ bool LayersPanel::eventFilter(QObject* watched, QEvent* event)
             parent->layerType == fla::Layer::Type::Guide)
             return true;
         // Not onto one that follows this one, which would go round in a circle.
+        // A step limit too, as a damaged file can already hold a circle.
+        int guard = 0;
         for (const fla::Layer* up = parent; up; up = parentLayerOf(*up))
-            if (up == layer)
+            if (up == layer || ++guard > 256)
                 return true;
         if (parentLayerOf(*layer) != parent)
             emit parentLayerRequested(timeline, layer, parent);

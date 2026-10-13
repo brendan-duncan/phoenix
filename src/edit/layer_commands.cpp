@@ -398,11 +398,16 @@ Layer::Type typeIn(const LayerSnapshot& snapshot, const Layer* layer)
 /// The folder a layer is in, looking through the mask or guide it is under.
 Layer* folderOf(const LayerSnapshot& snapshot, const Layer* layer)
 {
-    const int index = indexIn(snapshot, layer);
-    Layer* parent = index < 0 ? nullptr : snapshot[static_cast<size_t>(index)].parent;
-    if (parent && typeIn(snapshot, parent) != Layer::Type::Folder)
-        return folderOf(snapshot, parent);
-    return parent;
+    // A step limit, as within() has, so a loop of parents cannot hang.
+    for (int guard = 0; guard < 256; ++guard)
+    {
+        const int index = indexIn(snapshot, layer);
+        Layer* parent = index < 0 ? nullptr : snapshot[static_cast<size_t>(index)].parent;
+        if (!parent || typeIn(snapshot, parent) == Layer::Type::Folder)
+            return parent;
+        layer = parent;
+    }
+    return nullptr;
 }
 
 /// The layer just below everything \a layer holds: where a layer goes to be

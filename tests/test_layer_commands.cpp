@@ -318,3 +318,21 @@ TEST(layers_copy_with_their_folders_and_rigs_and_fade)
     layer.extraAttributes = fla::layers::withTransparency(layer, 0);
     CHECK(fla::layers::transparencyOf(layer) == 0 && layer.extraAttributes.size() == 1);
 }
+
+TEST(layer_parents_in_a_circle_do_not_hang)
+{
+    // A damaged file: a mask under a guide that is under the mask. Finding
+    // the folder they are in goes round the circle a bounded number of times.
+    std::unique_ptr<fla::Timeline> timeline(new fla::Timeline(nullptr));
+    fla::Layer* mask = new fla::Layer(timeline.get());
+    mask->layerType = fla::Layer::Type::Mask;
+    fla::Layer* guide = new fla::Layer(timeline.get());
+    guide->layerType = fla::Layer::Type::Guide;
+    mask->parentLayer = guide;
+    guide->parentLayer = mask;
+    timeline->layers = {mask, guide};
+    fla::LayerSnapshot snapshot = fla::snapshotLayers(*timeline);
+    fla::layers::setKind(snapshot, mask, fla::layers::Kind::Normal);
+    fla::layers::setKind(snapshot, guide, fla::layers::Kind::Masked);
+    CHECK(snapshot.size() == 2);
+}

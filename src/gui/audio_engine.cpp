@@ -100,7 +100,9 @@ bool parseFormat(const std::string& format, int& rate, int& bits, int& channels)
     case 22: rate = 22050; break;
     case 44: rate = 44100; break;
     case 48: rate = 48000; break;
-    default: rate = khz * 1000; break;
+    // Any other rate within reason; one outside it (a damaged name) would
+    // overflow, or make the resampling expand the sound many times over.
+    default: rate = khz >= 4 && khz <= 192 ? khz * 1000 : 0; break;
     }
     channels = format.find("Stereo") != std::string::npos ? 2 : 1;
     return rate > 0 && (bits == 8 || bits == 16);
