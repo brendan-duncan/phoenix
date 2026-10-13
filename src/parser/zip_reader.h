@@ -47,6 +47,9 @@ public:
     void setRoot(const std::string& prefix) { _root = prefix; }
 
 private:
+    /// Whether \a fileName names something inside the document folder.
+    static bool withinFolder(const std::string& fileName);
+
     ZipArchive* _zipArchive;
     std::string _path;
     std::string _errorString;

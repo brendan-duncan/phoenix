@@ -219,6 +219,7 @@ if(TARGET tinyxml2 AND TARGET zlibstatic)
         test_phx.cpp
         test_shape_geometry.cpp
         test_xfl_writer.cpp
+        test_zip_archive.cpp
     )
     set(PHOENIX_TESTS_HAVE_PARSER TRUE)
 else()

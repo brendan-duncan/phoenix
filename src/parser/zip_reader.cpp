@@ -167,6 +167,10 @@ std::vector<uint8_t> ZipReader::readFile(const std::string& fileName) const
     if (_isDirectory)
     {
         // Read from filesystem
+        if (!withinFolder(fileName))
+        {
+            return std::vector<uint8_t>();
+        }
         fs::path filePath = fs::path(_path) / fileName;
 
         std::ifstream file(filePath, std::ios::binary | std::ios::ate);
@@ -177,8 +181,12 @@ std::vector<uint8_t> ZipReader::readFile(const std::string& fileName) const
 
         std::streamsize size = file.tellg();
         file.seekg(0, std::ios::beg);
+        if (size <= 0)
+        {
+            return std::vector<uint8_t>();
+        }
 
-        std::vector<uint8_t> buffer(size);
+        std::vector<uint8_t> buffer(static_cast<size_t>(size));
         if (!file.read(reinterpret_cast<char*>(buffer.data()), size))
         {
             return std::vector<uint8_t>();
@@ -199,7 +207,21 @@ std::vector<uint8_t> ZipReader::readFile(const std::string& fileName) const
 std::string ZipReader::readTextFile(const std::string& fileName) const
 {
     std::vector<uint8_t> data = readFile(fileName);
-    return std::string(reinterpret_cast<const char*>(data.data()), static_cast<int>(data.size()));
+    return std::string(reinterpret_cast<const char*>(data.data()), data.size());
+}
+
+bool ZipReader::withinFolder(const std::string& fileName)
+{
+    // A name from the document (an href) may not climb out of its folder.
+    const fs::path name(fileName);
+    if (name.empty() || name.has_root_name() || name.has_root_directory())
+        return false;
+    for (const fs::path& part : name)
+    {
+        if (part == "..")
+            return false;
+    }
+    return true;
 }
 
 bool ZipReader::containsFile(const std::string& fileName) const
@@ -212,8 +234,11 @@ bool ZipReader::containsFile(const std::string& fileName) const
 
     if (_isDirectory)
     {
+        if (!withinFolder(fileName))
+            return false;
         fs::path filePath = fs::path(_path) / fileName;
-        return fs::exists(filePath) && fs::is_regular_file(filePath);
+        std::error_code ignored;
+        return fs::is_regular_file(filePath, ignored);
     }
 
     // Check if file exists in zip archive

@@ -1,5 +1,6 @@
 #include "zip_archive.h"
 #include "../third_party/zlib/zlib.h"
+#include <algorithm>
 #include <cstdint>
 #include <fstream>
 #include <cstring>
@@ -63,39 +64,46 @@ struct EndOfCentralDirectory
 constexpr uint32_t LOCAL_FILE_HEADER_SIG = 0x04034b50;
 constexpr uint32_t CENTRAL_DIR_HEADER_SIG = 0x02014b50;
 constexpr uint32_t END_OF_CENTRAL_DIR_SIG = 0x06054b50;
+constexpr uint32_t ZIP64_LOCATOR_SIG = 0x07064b50;
+constexpr uint32_t ZIP64_END_SIG = 0x06064b50;
 
 class ZipArchive::Impl
 {
 public:
     std::string filepath;
     std::ifstream file;
+    uint64_t file_size = 0;
     std::vector<ZipFileEntry> entries;
 
     bool findEndOfCentralDirectory(uint64_t& offset);
 
-    bool parseCentralDirectory(uint64_t offset, uint32_t size);
+    bool parseCentralDirectory(uint64_t offset, uint64_t count);
 
     bool decompressData(const std::vector<uint8_t>& compressed,
-                       std::vector<uint8_t>& decompressed,
-                       uint32_t uncompressed_size);
+                       std::vector<uint8_t>& decompressed);
 };
 
 bool ZipArchive::Impl::findEndOfCentralDirectory(uint64_t& offset)
 {
     file.seekg(0, std::ios::end);
-    uint64_t file_size = file.tellg();
+    const std::streamoff end = file.tellg();
+    if (end < static_cast<std::streamoff>(sizeof(EndOfCentralDirectory)))
+        return false;
+    file_size = static_cast<uint64_t>(end);
 
-    const int max_comment_size = 65535;
-    const int search_size = sizeof(EndOfCentralDirectory) + max_comment_size;
-    int search_start = (file_size > search_size) ? file_size - search_size : 0;
+    const uint64_t max_comment_size = 65535;
+    const uint64_t search_size = sizeof(EndOfCentralDirectory) + max_comment_size;
+    const uint64_t search_start = (file_size > search_size) ? file_size - search_size : 0;
 
-    file.seekg(search_start, std::ios::beg);
-    std::vector<uint8_t> buffer(file_size - search_start);
-    file.read(reinterpret_cast<char*>(buffer.data()), buffer.size());
+    file.seekg(static_cast<std::streamoff>(search_start), std::ios::beg);
+    std::vector<uint8_t> buffer(static_cast<size_t>(file_size - search_start));
+    if (!file.read(reinterpret_cast<char*>(buffer.data()), static_cast<std::streamsize>(buffer.size())))
+        return false;
 
-    for (int i = buffer.size() - sizeof(EndOfCentralDirectory); i >= 0; i--)
+    for (size_t i = buffer.size() - sizeof(EndOfCentralDirectory) + 1; i-- > 0;)
     {
-        uint32_t sig = *reinterpret_cast<uint32_t*>(&buffer[i]);
+        uint32_t sig = 0;
+        memcpy(&sig, &buffer[i], sizeof(sig));
         if (sig == END_OF_CENTRAL_DIR_SIG)
         {
             offset = search_start + i;
@@ -106,24 +114,81 @@ bool ZipArchive::Impl::findEndOfCentralDirectory(uint64_t& offset)
     return false;
 }
 
-bool ZipArchive::Impl::parseCentralDirectory(uint64_t offset, uint32_t size)
+namespace {
+
+uint64_t load64(const uint8_t* p)
 {
-    file.seekg(offset, std::ios::beg);
+    uint64_t value = 0;
+    for (int i = 7; i >= 0; --i)
+        value = (value << 8) | p[i];
+    return value;
+}
 
-    while (true)
+/// The Zip64 extended information in an entry's extra field: the sizes and
+/// offset its central directory header marks with 0xFFFFFFFF.
+void readZip64Extra(const std::vector<uint8_t>& extra, ZipFileEntry& entry, const CentralDirectoryHeader& header)
+{
+    size_t at = 0;
+    while (at + 4 <= extra.size())
     {
-        CentralDirectoryHeader header;
-        file.read(reinterpret_cast<char*>(&header), sizeof(header));
+        const uint16_t id = static_cast<uint16_t>(extra[at] | (extra[at + 1] << 8));
+        const uint16_t size = static_cast<uint16_t>(extra[at + 2] | (extra[at + 3] << 8));
+        at += 4;
+        if (size > extra.size() - at)
+            return;
+        if (id == 0x0001)
+        {
+            // Only the fields that overflowed are present, in this order.
+            size_t field = at;
+            const size_t end = at + size;
+            if (header.uncompressed_size == 0xFFFFFFFF && field + 8 <= end)
+            {
+                entry.uncompressed_size = load64(&extra[field]);
+                field += 8;
+            }
+            if (header.compressed_size == 0xFFFFFFFF && field + 8 <= end)
+            {
+                entry.compressed_size = load64(&extra[field]);
+                field += 8;
+            }
+            if (header.local_header_offset == 0xFFFFFFFF && field + 8 <= end)
+                entry.local_header_offset = load64(&extra[field]);
+            return;
+        }
+        at += size;
+    }
+}
 
-        if (header.signature != CENTRAL_DIR_HEADER_SIG)
+} // namespace
+
+bool ZipArchive::Impl::parseCentralDirectory(uint64_t offset, uint64_t count)
+{
+    // The entry count, not the directory size, says where to stop: archives
+    // that overstate the size are common. Every header is checked as read,
+    // and none can be past the end of the file.
+    if (offset >= file_size)
+        return false;
+    file.seekg(static_cast<std::streamoff>(offset), std::ios::beg);
+
+    const uint64_t most = (file_size - offset) / sizeof(CentralDirectoryHeader);
+    while (entries.size() < count && entries.size() < most)
+    {
+        CentralDirectoryHeader header{};
+        if (!file.read(reinterpret_cast<char*>(&header), sizeof(header)) ||
+            header.signature != CENTRAL_DIR_HEADER_SIG)
         {
             break;
         }
 
         std::string filename(header.filename_length, '\0');
-        file.read(&filename[0], header.filename_length);
+        std::vector<uint8_t> extra(header.extra_field_length);
+        if (!file.read(&filename[0], header.filename_length) ||
+            !file.read(reinterpret_cast<char*>(extra.data()), header.extra_field_length))
+        {
+            break;
+        }
 
-        file.seekg(header.extra_field_length + header.file_comment_length, std::ios::cur);
+        file.seekg(header.file_comment_length, std::ios::cur);
 
         ZipFileEntry entry;
         entry.filename = filename;
@@ -132,6 +197,7 @@ bool ZipArchive::Impl::parseCentralDirectory(uint64_t offset, uint32_t size)
         entry.compression_method = header.compression_method;
         entry.crc32 = header.crc32;
         entry.local_header_offset = header.local_header_offset;
+        readZip64Extra(extra, entry, header);
 
         entries.push_back(entry);
     }
@@ -140,27 +206,50 @@ bool ZipArchive::Impl::parseCentralDirectory(uint64_t offset, uint32_t size)
 }
 
 bool ZipArchive::Impl::decompressData(const std::vector<uint8_t>& compressed,
-                                     std::vector<uint8_t>& decompressed,
-                                     uint32_t uncompressed_size)
+                                     std::vector<uint8_t>& decompressed)
 {
-    decompressed.resize(uncompressed_size);
+    // Grown as it inflates, never past what deflate can expand to (about
+    // 1032 to 1), rather than sized up front from a header that may lie.
+    const uint64_t limit = static_cast<uint64_t>(compressed.size()) * 1032 + 1024;
+    decompressed.clear();
 
     z_stream stream;
     memset(&stream, 0, sizeof(stream));
-
-    stream.next_in = const_cast<uint8_t*>(compressed.data());
-    stream.avail_in = compressed.size();
-    stream.next_out = decompressed.data();
-    stream.avail_out = uncompressed_size;
-
     if (inflateInit2(&stream, -MAX_WBITS) != Z_OK)
     {
         return false;
     }
 
-    int ret = inflate(&stream, Z_FINISH);
+    const uint8_t* in = compressed.data();
+    size_t in_left = compressed.size();
+    size_t produced = 0;
+    int ret = Z_OK;
+    while (ret == Z_OK)
+    {
+        if (stream.avail_in == 0 && in_left > 0)
+        {
+            stream.next_in = const_cast<uint8_t*>(in);
+            stream.avail_in = static_cast<uInt>(std::min<size_t>(in_left, 1u << 30));
+            in += stream.avail_in;
+            in_left -= stream.avail_in;
+        }
+        if (decompressed.size() - produced < 4096)
+        {
+            if (decompressed.size() >= limit)
+                break;
+            const size_t grown = static_cast<size_t>(
+                std::min<uint64_t>(limit, std::max<uint64_t>(decompressed.size() * 2, 65536)));
+            decompressed.resize(grown);
+        }
+        stream.next_out = decompressed.data() + produced;
+        stream.avail_out = static_cast<uInt>(std::min<size_t>(decompressed.size() - produced, 1u << 30));
+        const uInt before = stream.avail_out;
+        ret = inflate(&stream, Z_NO_FLUSH);
+        produced += before - stream.avail_out;
+    }
     inflateEnd(&stream);
 
+    decompressed.resize(produced);
     return ret == Z_STREAM_END;
 }
 
@@ -267,18 +356,42 @@ bool ZipArchive::open(const std::string& filepath)
         return false;
     }
 
-    pImpl->file.seekg(eocd_offset, std::ios::beg);
-    EndOfCentralDirectory eocd;
-    pImpl->file.read(reinterpret_cast<char*>(&eocd), sizeof(eocd));
-
-    if (eocd.signature != END_OF_CENTRAL_DIR_SIG)
+    pImpl->file.clear();
+    pImpl->file.seekg(static_cast<std::streamoff>(eocd_offset), std::ios::beg);
+    EndOfCentralDirectory eocd{};
+    if (!pImpl->file.read(reinterpret_cast<char*>(&eocd), sizeof(eocd)) || eocd.signature != END_OF_CENTRAL_DIR_SIG)
     {
         return false;
     }
 
+    uint64_t directory_offset = eocd.central_dir_offset;
+    uint64_t count = eocd.num_entries;
+    if ((eocd.central_dir_offset == 0xFFFFFFFF || eocd.num_entries == 0xFFFF) && eocd_offset >= 20)
+    {
+        // Zip64: a locator just before the record points at the Zip64 end of
+        // central directory, which holds the full count and offset.
+        uint8_t locator[20] = {};
+        pImpl->file.seekg(static_cast<std::streamoff>(eocd_offset - 20), std::ios::beg);
+        uint32_t sig = 0;
+        if (pImpl->file.read(reinterpret_cast<char*>(locator), sizeof(locator)) &&
+            (memcpy(&sig, locator, 4), sig == ZIP64_LOCATOR_SIG))
+        {
+            const uint64_t record_offset = load64(locator + 8);
+            uint8_t record[56] = {};
+            pImpl->file.seekg(static_cast<std::streamoff>(record_offset), std::ios::beg);
+            if (record_offset < pImpl->file_size && pImpl->file.read(reinterpret_cast<char*>(record), sizeof(record)) &&
+                (memcpy(&sig, record, 4), sig == ZIP64_END_SIG))
+            {
+                count = load64(record + 32);
+                directory_offset = load64(record + 48);
+            }
+        }
+        pImpl->file.clear();
+    }
+
 	pImpl->filepath = filepath;
 
-    return pImpl->parseCentralDirectory(eocd.central_dir_offset, eocd.central_dir_size);
+    return pImpl->parseCentralDirectory(directory_offset, count);
 }
 
 void ZipArchive::close()
@@ -299,29 +412,40 @@ bool ZipArchive::extractFile(const ZipFileEntry& entry, std::vector<uint8_t>& ou
 {
     std::ifstream file;
     file.open(pImpl->filepath, std::ios::binary);
-    file.seekg(entry.local_header_offset, std::ios::beg);
+    if (entry.local_header_offset >= pImpl->file_size)
+    {
+        return false;
+    }
+    file.seekg(static_cast<std::streamoff>(entry.local_header_offset), std::ios::beg);
 
-    LocalFileHeader header;
-    file.read(reinterpret_cast<char*>(&header), sizeof(header));
-
-    if (header.signature != LOCAL_FILE_HEADER_SIG)
+    LocalFileHeader header{};
+    if (!file.read(reinterpret_cast<char*>(&header), sizeof(header)) || header.signature != LOCAL_FILE_HEADER_SIG)
     {
         return false;
     }
 
     file.seekg(header.filename_length + header.extra_field_length, std::ios::cur);
 
-    std::vector<uint8_t> compressed_data(entry.compressed_size);
-    file.read(reinterpret_cast<char*>(compressed_data.data()), entry.compressed_size);
+    // The data must lie within the file before memory is set aside for it.
+    const std::streamoff start = file.tellg();
+    if (start < 0 || entry.compressed_size > pImpl->file_size - static_cast<uint64_t>(start))
+    {
+        return false;
+    }
+    std::vector<uint8_t> compressed_data(static_cast<size_t>(entry.compressed_size));
+    if (!file.read(reinterpret_cast<char*>(compressed_data.data()), static_cast<std::streamsize>(compressed_data.size())))
+    {
+        return false;
+    }
 
     if (entry.compression_method == 0)
     {
-        output = compressed_data;
+        output = std::move(compressed_data);
         return true;
     }
     else if (entry.compression_method == 8)
     {
-        return pImpl->decompressData(compressed_data, output, entry.uncompressed_size);
+        return pImpl->decompressData(compressed_data, output);
     }
 
     return false;
@@ -337,39 +461,4 @@ bool ZipArchive::extractFile(const std::string& filename, std::vector<uint8_t>& 
         }
     }
     return false;
-}
-
-bool ZipArchive::extractAll(const std::string& output_directory)
-{
-    fs::create_directories(output_directory);
-
-    for (const auto& entry : pImpl->entries)
-    {
-        if (entry.filename.back() == '/' || entry.filename.back() == '\\')
-        {
-            fs::create_directories(fs::path(output_directory) / entry.filename);
-            continue;
-        }
-
-        std::vector<uint8_t> data;
-        if (!extractFile(entry, data))
-        {
-            std::cerr << "Failed to extract: " << entry.filename << std::endl;
-            continue;
-        }
-
-        fs::path output_path = fs::path(output_directory) / entry.filename;
-        fs::create_directories(output_path.parent_path());
-
-        std::ofstream out(output_path, std::ios::binary);
-        if (!out.is_open())
-        {
-            std::cerr << "Failed to write: " << output_path << std::endl;
-            continue;
-        }
-
-        out.write(reinterpret_cast<const char*>(data.data()), data.size());
-    }
-
-    return true;
 }
