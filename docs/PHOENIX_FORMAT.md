@@ -192,7 +192,7 @@ are kept, and an FLA export lists them as possibly lost.
 | `effect-layers` | Effect layers | hidden guide layers: the tone, highlight or glow is missing |
 | `line-and-color-art` | Line and color art layers | ordinary layers |
 | `review-notes` | Review notes | the notes as text on a guide layer, which is not exported |
-| `multiplane-camera` | Multiplane camera | a guide layer: the shot is not framed, moved or given depth |
+| `multiplane-camera` | Multiplane camera | a guide layer: the shot is not framed, moved, colored or given depth |
 | `pegs` | Pegs | ordinary symbols |
 | `deformers` | Deformers | the instances without their bend |
 | `master-controllers` | Master controllers | the properties as keyed, without the sliders |
