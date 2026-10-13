@@ -2,7 +2,7 @@
 
 What changed in each release of Phoenix, newest first.
 
-## 0.6.0 (Unreleased)
+## 0.6.0 (2026-10-13)
 
 - Closing the last document brings back the start screen
 - Document tabs: a right-click menu (Close Others, Close All, Copy Path, Show in Explorer) and Ctrl+Shift+Tab
