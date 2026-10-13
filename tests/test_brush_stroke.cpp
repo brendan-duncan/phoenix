@@ -504,3 +504,46 @@ TEST(brush_presets_carry_the_brush_and_its_painting_options)
         CHECK(air.bitmapFlow == 12.0 && air.bitmapFlowPressure && tip.size == 60.0);
     }
 }
+
+TEST(brush_drops_readings_that_are_not_numbers)
+{
+    // A tablet glitch reports a reading that is not a number, or is off the
+    // end of the numbers: it is dropped, and the stroke still ends where the
+    // pen lifted.
+    std::vector<BrushSample> samples = straightDrag(20.0, 1.0);
+    samples[5].x = std::nan("");
+    samples[8].y = HUGE_VAL;
+    samples[11].pressure = std::nan("");
+    samples[12].time = std::nan("");
+    BrushSettings settings;
+    const std::vector<BrushDab> dabs = fla::BrushStroke::dabs(samples, settings, 1.0, true);
+    CHECK(!dabs.empty());
+    bool finite = true;
+    for (const BrushDab& dab : dabs)
+    {
+        finite = finite && std::isfinite(dab.x) && std::isfinite(dab.y) &&
+            std::isfinite(dab.width) && std::isfinite(dab.height);
+    }
+    CHECK(finite);
+    if (!dabs.empty())
+        CHECK(std::fabs(dabs.back().x - 20.0) < 1.0e-6);
+
+    // Readings so far apart the distance between them is infinite once
+    // finished instead of walking that distance a step at a time forever.
+    std::vector<BrushSample> apart(2);
+    apart[0].x = -1.7e308;
+    apart[1].x = 1.7e308;
+    apart[1].time = 16.0;
+    fla::BrushStroke::dabs(apart, settings, 1.0, true);
+
+    // Every reading dropped leaves nothing to draw.
+    std::vector<BrushSample> broken(3);
+    for (BrushSample& sample : broken)
+        sample.x = std::nan("");
+    CHECK(fla::BrushStroke::dabs(broken, settings, 1.0, true).empty());
+
+    // A hull of points that are not all numbers is the hull of those that are.
+    const std::vector<fla::Point> hull = fla::BrushStroke::convexHull({fla::Point(0.0, 0.0),
+        fla::Point(std::nan(""), 1.0), fla::Point(10.0, 0.0), fla::Point(10.0, 10.0), fla::Point(0.0, 10.0)});
+    CHECK(hull.size() == 4);
+}

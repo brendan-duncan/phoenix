@@ -454,38 +454,56 @@ std::vector<size_t> findCorners(const std::vector<Point>& points, double window,
 }
 
 /// Ramer-Douglas-Peucker: keep the end points, and the point furthest from
-/// the line between them if it is too far off, and recurse either side of
-/// it.
+/// the line between them if it is too far off, and go on either side of it.
+/// The points kept between \a first and \a last are added to \a kept in
+/// order. The spans still to look at are kept on a list rather than
+/// recursed into, so a long run of points cannot run the stack out.
 void simplifyRun(const std::vector<Point>& points, size_t first, size_t last,
     double tolerance, std::vector<size_t>& kept)
 {
     if (last <= first + 1)
         return;
 
-    const Vector along = subtract(points[last], points[first]);
-    const double length = std::hypot(along.x, along.y);
-
-    size_t worst = first;
-    double worstDistance = 0.0;
-    for (size_t i = first + 1; i < last; ++i)
+    std::vector<bool> keep(last - first + 1, false);
+    std::vector<std::pair<size_t, size_t>> spans{{first, last}};
+    while (!spans.empty())
     {
-        const double distance = length <= kEpsilon
-            ? std::hypot(points[i].x - points[first].x, points[i].y - points[first].y)
-            : std::fabs(along.x * (points[first].y - points[i].y) -
-                        (points[first].x - points[i].x) * along.y) / length;
-        if (distance > worstDistance)
+        const auto [from, to] = spans.back();
+        spans.pop_back();
+        if (to <= from + 1)
+            continue;
+
+        const Vector along = subtract(points[to], points[from]);
+        const double length = std::hypot(along.x, along.y);
+
+        size_t worst = from;
+        double worstDistance = 0.0;
+        for (size_t i = from + 1; i < to; ++i)
         {
-            worstDistance = distance;
-            worst = i;
+            const double distance = length <= kEpsilon
+                ? std::hypot(points[i].x - points[from].x, points[i].y - points[from].y)
+                : std::fabs(along.x * (points[from].y - points[i].y) -
+                            (points[from].x - points[i].x) * along.y) / length;
+            if (distance > worstDistance)
+            {
+                worstDistance = distance;
+                worst = i;
+            }
         }
+
+        if (worstDistance <= tolerance)
+            continue;
+
+        keep[worst - first] = true;
+        spans.push_back({from, worst});
+        spans.push_back({worst, to});
     }
 
-    if (worstDistance <= tolerance)
-        return;
-
-    simplifyRun(points, first, worst, tolerance, kept);
-    kept.push_back(worst);
-    simplifyRun(points, worst, last, tolerance, kept);
+    for (size_t i = first + 1; i < last; ++i)
+    {
+        if (keep[i - first])
+            kept.push_back(i);
+    }
 }
 
 } // namespace

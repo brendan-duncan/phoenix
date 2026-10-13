@@ -67,7 +67,11 @@ std::vector<Point> samplePath(const EditablePath& path, double spacing)
             length = distance(a.position, a.outHandle) + distance(a.outHandle, b.inHandle) +
                 distance(b.inHandle, b.position);
         }
-        const int steps = std::max(1, static_cast<int>(std::ceil(length / spacing)));
+        // Clamped before it becomes an int: a length that is not a number,
+        // or absurdly long, would otherwise be undefined or never finish.
+        constexpr double kMostSteps = 100000.0;
+        const double wanted = std::ceil(length / spacing);
+        const int steps = wanted > 1.0 ? static_cast<int>(std::min(wanted, kMostSteps)) : 1;
         for (int i = 1; i <= steps; ++i)
         {
             const double t = static_cast<double>(i) / steps;

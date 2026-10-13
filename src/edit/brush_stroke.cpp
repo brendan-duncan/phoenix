@@ -23,6 +23,24 @@ double clamp01(double value)
     return std::max(0.0, std::min(1.0, value));
 }
 
+/// \a value, rounded down, as a count from \a least to \a most. Not a
+/// number counts as \a least; casting one, or anything past the range of an
+/// int, would be undefined.
+int clampedCount(double value, int least, int most)
+{
+    if (!(value > least))
+        return least;
+    if (value >= most)
+        return most;
+    return static_cast<int>(value);
+}
+
+/// The most an int can hold of a size, for clamping a count against it.
+int countLimit(size_t size)
+{
+    return static_cast<int>(std::min<size_t>(size, 1000000000));
+}
+
 BrushSample lerp(const BrushSample& a, const BrushSample& b, double t)
 {
     BrushSample out;
@@ -78,6 +96,8 @@ std::vector<BrushSample> resample(const std::vector<BrushSample>& in, double ste
     std::vector<BrushSample> out;
     if (in.empty())
         return out;
+    if (!(step > 0.0) || !std::isfinite(step))
+        return in;
     out.push_back(in.front());
     double carried = 0.0;
     for (size_t i = 1; i < in.size(); ++i)
@@ -85,7 +105,8 @@ std::vector<BrushSample> resample(const std::vector<BrushSample>& in, double ste
         const BrushSample& a = in[i - 1];
         const BrushSample& b = in[i];
         const double length = distance(a, b);
-        if (length <= 1.0e-12)
+        // An infinite length would never be walked to its end.
+        if (length <= 1.0e-12 || !std::isfinite(length))
             continue;
         double at = step - carried;
         while (at <= length)
@@ -112,7 +133,8 @@ void smoothAlong(std::vector<BrushSample>& samples, double sigma, Get get, Set s
     std::vector<double> values(n);
     for (int i = 0; i < n; ++i)
         values[i] = get(samples[i]);
-    const int reachMost = std::max(1, static_cast<int>(std::ceil(sigma * 3.0)));
+    // No sample reaches further than the ends, so neither does the window.
+    const int reachMost = clampedCount(std::ceil(sigma * 3.0), 1, countLimit(samples.size()));
     std::vector<double> weights(reachMost + 1);
     for (int k = 0; k <= reachMost; ++k)
         weights[k] = std::exp(-(k * k) / (2.0 * sigma * sigma));
@@ -142,7 +164,7 @@ std::vector<double> velocityFactors(const std::vector<BrushSample>& samples, dou
         return factors;
     // The speed over about ten screen pixels either side, in screen pixels
     // per millisecond; past about 2.5 (2500 a second) counts as fast.
-    const int reach = std::max(1, static_cast<int>(10.0 / std::max(step * zoom, 1.0e-9)));
+    const int reach = clampedCount(10.0 / std::max(step * zoom, 1.0e-9), 1, countLimit(n));
     for (size_t i = 0; i < n; ++i)
     {
         const size_t a = i >= static_cast<size_t>(reach) ? i - reach : 0;
@@ -522,7 +544,10 @@ void fromText(const std::string& text, BrushSettings& into)
         const std::string key = line.substr(0, equals);
         const std::string value = line.substr(equals + 1);
         const double number = std::atof(value.c_str());
-        const int whole = static_cast<int>(std::lround(number));
+        // A setting that is not a number, or is infinite, is left as it was.
+        if (!std::isfinite(number) && key != "tipSource" && key != "customTip")
+            continue;
+        const int whole = static_cast<int>(std::round(std::clamp(number, -1.0e9, 1.0e9)));
         if (key == "size") into.size = std::clamp(number, 0.1, 1000.0);
         else if (key == "tip") into.tip = static_cast<BrushSettings::Tip>(std::clamp(whole, 0, 6));
         else if (key == "roundness") into.roundness = std::clamp(number, 1.0, 100.0);
@@ -561,8 +586,12 @@ void fromText(const std::string& text, BrushSettings& into)
                 const std::string pair = value.substr(at, stop - at);
                 const size_t comma = pair.find(',');
                 if (comma != std::string::npos)
-                    into.customTip.push_back(
-                        Point(std::atof(pair.substr(0, comma).c_str()), std::atof(pair.substr(comma + 1).c_str())));
+                {
+                    const Point point(std::atof(pair.substr(0, comma).c_str()),
+                        std::atof(pair.substr(comma + 1).c_str()));
+                    if (std::isfinite(point.x) && std::isfinite(point.y))
+                        into.customTip.push_back(point);
+                }
                 at = stop + 1;
             }
         }
@@ -583,8 +612,23 @@ std::vector<BrushDab> dabs(const std::vector<BrushSample>& input, const BrushSet
     // Readings at the same spot add nothing but a pause: the latest stands.
     std::vector<BrushSample> raw;
     raw.reserve(input.size());
-    for (const BrushSample& sample : input)
+    for (BrushSample sample : input)
     {
+        // A reading off the end of the numbers is a glitch, not a place: it
+        // is dropped, and a reading the pen could not have meant falls back
+        // to what it reads at rest.
+        if (!std::isfinite(sample.x) || !std::isfinite(sample.y))
+            continue;
+        if (!std::isfinite(sample.pressure))
+            sample.pressure = 1.0;
+        if (!std::isfinite(sample.tiltX))
+            sample.tiltX = 0.0;
+        if (!std::isfinite(sample.tiltY))
+            sample.tiltY = 0.0;
+        if (!std::isfinite(sample.rotation))
+            sample.rotation = 0.0;
+        if (!std::isfinite(sample.time))
+            sample.time = raw.empty() ? 0.0 : raw.back().time;
         if (!raw.empty() && distance(raw.back(), sample) < pixel * 0.02)
         {
             const double x = raw.back().x;
@@ -596,6 +640,8 @@ std::vector<BrushDab> dabs(const std::vector<BrushSample>& input, const BrushSet
         }
         raw.push_back(sample);
     }
+    if (raw.empty())
+        return result;
 
     // A mouse reports full pressure throughout; then pressure plays no part.
     bool pressureVaries = false;
@@ -669,7 +715,7 @@ std::vector<BrushDab> dabs(const std::vector<BrushSample>& input, const BrushSet
             shape = std::make_shared<const std::vector<Point>>(std::move(polygon));
     }
     // The direction of travel, over about two screen pixels either side.
-    const int headingReach = std::max(1, static_cast<int>(std::lround(2.0 / std::max(stepPixels, 1.0e-9))));
+    const int headingReach = clampedCount(std::round(2.0 / std::max(stepPixels, 1.0e-9)), 1, countLimit(line.size()));
     const double minimum = clamp01(settings.minSize / 100.0);
     const double curve = std::max(0.1, settings.pressureCurve);
     const double roundness = std::max(1.0, std::min(100.0, settings.roundness)) / 100.0;
@@ -778,8 +824,7 @@ std::vector<Point> dabOutline(const BrushDab& dab, double zoom)
         place(-a, b);
         return points;
     }
-    const int count = std::max(8, std::min(64, static_cast<int>(std::ceil(std::max(dab.width, dab.height) *
-        std::max(zoom, 1.0e-6) * 0.6))));
+    const int count = clampedCount(std::ceil(std::max(dab.width, dab.height) * std::max(zoom, 1.0e-6) * 0.6), 8, 64);
     for (int k = 0; k < count; ++k)
     {
         const double theta = 2.0 * kPi * k / count;
@@ -790,6 +835,11 @@ std::vector<Point> dabOutline(const BrushDab& dab, double zoom)
 
 std::vector<Point> convexHull(std::vector<Point> points)
 {
+    // A point that is not a number cannot be ordered, and sorting with one
+    // is undefined.
+    points.erase(std::remove_if(points.begin(), points.end(), [](const Point& p) {
+        return !std::isfinite(p.x) || !std::isfinite(p.y);
+    }), points.end());
     if (points.size() < 3)
         return points;
     std::sort(points.begin(), points.end(), [](const Point& p, const Point& q) {

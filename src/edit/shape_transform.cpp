@@ -95,7 +95,12 @@ double polylineLength(const Point p[4])
 /// Appends a cubic as pieces short enough for the warp.
 void appendPieces(std::vector<PathSegment*>& out, Path* path, const Point p[4], double pieceLength)
 {
-    const int count = std::max(1, static_cast<int>(std::ceil(polylineLength(p) / pieceLength)));
+    // Clamped before it becomes an int: a length that is not a number, or
+    // absurdly long, would otherwise be undefined or ask for billions of
+    // pieces.
+    constexpr double kMostPieces = 10000.0;
+    const double pieces = std::ceil(polylineLength(p) / pieceLength);
+    const int count = pieces > 1.0 ? static_cast<int>(std::min(pieces, kMostPieces)) : 1;
     Point rest[4] = {p[0], p[1], p[2], p[3]};
     for (int i = 0; i < count; ++i)
     {
