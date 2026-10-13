@@ -240,3 +240,60 @@ TEST(a_ragged_cut_leaves_both_parts_whole)
         CHECK(std::fabs(cut + rest - box) < pixel);
     }
 }
+
+TEST(tracing_joins_thousands_of_pieces_listed_out_of_order)
+{
+    // A round fill cut into thousands of pieces, each its own edge and listed
+    // in a scrambled order, a few starting a fifth of a pixel off where the
+    // piece before ends: still one closed outline, piece after piece.
+    constexpr int kPieces = 3000;
+    const double pi = 3.14159265358979323846;
+    std::vector<Point> corners;
+    for (int i = 0; i < kPieces; ++i)
+    {
+        const double angle = 2.0 * pi * i / kPieces;
+        corners.push_back(Point(500.0 + 400.0 * std::cos(angle), 500.0 + 400.0 * std::sin(angle)));
+    }
+
+    std::unique_ptr<fla::Shape> shape(new fla::Shape(nullptr));
+    fla::SolidColor* fill = new fla::SolidColor(shape.get());
+    shape->fills.push_back(fill);
+    shape->fillsMap[1] = fill;
+    for (int k = 0; k < kPieces; ++k)
+    {
+        // 7 shares no factor with the count, so this visits every piece.
+        const int i = (k * 7) % kPieces;
+        Point start = corners[i];
+        if (i % 50 == 25)
+            start.x += 0.2;
+        fla::Edge* edge = new fla::Edge(shape.get());
+        edge->fillStyle0 = 1;
+        fla::Path* path = new fla::Path(edge);
+        path->segments.push_back(new fla::PathSegment(fla::PathSegment::Command::Move, {start}, path));
+        path->segments.push_back(new fla::PathSegment(fla::PathSegment::Command::Line,
+            {corners[(i + 1) % kPieces]}, path));
+        edge->paths.push_back(path);
+        shape->edges.push_back(edge);
+    }
+
+    const auto traced = fla::traceFills(*shape);
+    CHECK(traced.size() == 1);
+    const std::vector<fla::TracedLoop>& loops = traced.begin()->second;
+    CHECK(loops.size() == 1);
+    if (loops.size() != 1)
+        return;
+    CHECK(loops[0].closed);
+    CHECK(loops[0].legs.size() == static_cast<size_t>(kPieces));
+
+    // Each leg starts within half a pixel of where the one before ended.
+    bool joined = true;
+    for (size_t k = 0; k < loops[0].legs.size(); ++k)
+    {
+        const fla::TracedLeg& leg = loops[0].legs[k];
+        const fla::TracedLeg& next = loops[0].legs[(k + 1) % loops[0].legs.size()];
+        const std::vector<Point> here = walk(leg.path, leg.reversed);
+        const std::vector<Point> there = walk(next.path, next.reversed);
+        joined = joined && std::hypot(here.back().x - there.front().x, here.back().y - there.front().y) < 0.5;
+    }
+    CHECK(joined);
+}

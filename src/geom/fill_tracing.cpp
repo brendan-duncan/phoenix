@@ -3,7 +3,10 @@
 #include "../data/edge.h"
 #include "../data/shape.h"
 
+#include <algorithm>
 #include <cmath>
+#include <limits>
+#include <unordered_map>
 
 namespace fla {
 
@@ -130,11 +133,41 @@ double rightTurn(const Point& in, const Point& out)
     return angle;
 }
 
+/// A coordinate in whole twips. One too large to round, or not a number at
+/// all, comes out as a value no real coordinate rounds to.
+long long twipOf(double value)
+{
+    const double scaled = value * 20.0;
+    if (!(std::fabs(scaled) < 9.0e18))
+        return std::numeric_limits<long long>::min();
+    return std::llround(scaled);
+}
+
 /// Whether two points are the same to a twip.
 bool sameTwip(const Point& a, const Point& b)
 {
-    return std::lround(a.x * 20.0) == std::lround(b.x * 20.0) && std::lround(a.y * 20.0) == std::lround(b.y * 20.0);
+    return twipOf(a.x) == twipOf(b.x) && twipOf(a.y) == twipOf(b.y);
 }
+
+/// The whole pixel a coordinate falls in, for finding points near each other.
+long long pixelOf(double value)
+{
+    if (!(std::fabs(value) < 9.0e18))
+        return std::numeric_limits<long long>::min();
+    return static_cast<long long>(std::floor(value));
+}
+
+struct CellHash
+{
+    size_t operator()(const std::pair<long long, long long>& key) const
+    {
+        return std::hash<long long>()(key.first) * 1000003u ^ std::hash<long long>()(key.second);
+    }
+};
+
+/// Paths filed by a grid cell their start falls in, each cell listing them in
+/// the order they were filed.
+using StartIndex = std::unordered_map<std::pair<long long, long long>, std::vector<size_t>, CellHash>;
 
 /// Whether two points are within half a pixel, near enough to join when
 /// nothing meets exactly.
@@ -239,6 +272,33 @@ std::map<int, std::vector<TracedLoop>> traceFills(const Shape& shape)
             }
         }
 
+        // Where each path starts, by twip and by pixel, so the way on from a
+        // point is looked up rather than searched for among every path.
+        StartIndex byTwip;
+        StartIndex byPixel;
+        for (size_t i = 0; i < paths.size(); ++i)
+        {
+            if (paths[i].used)
+                continue;
+            const Point& start = paths[i].start;
+            byTwip[{twipOf(start.x), twipOf(start.y)}].push_back(i);
+            byPixel[{pixelOf(start.x), pixelOf(start.y)}].push_back(i);
+        }
+
+        // The unused paths filed under a cell, dropping used ones as they are
+        // met so a busy cell does not keep being walked past them.
+        const auto unusedIn = [&](StartIndex& index, const std::pair<long long, long long>& key,
+                                  std::vector<size_t>& into) {
+            const auto it = index.find(key);
+            if (it == index.end())
+                return;
+            std::vector<size_t>& filed = it->second;
+            filed.erase(std::remove_if(filed.begin(), filed.end(),
+                [&](size_t i) { return paths[i].used; }), filed.end());
+            into.insert(into.end(), filed.begin(), filed.end());
+        };
+        std::vector<size_t> candidates;
+
         // The rest are joined into outlines. Every directed path has its fill
         // on the right, so the boundary of one region is traced by keeping
         // right: at a junction, of the paths that set off from here, take the
@@ -266,8 +326,30 @@ std::map<int, std::vector<TracedLoop>> traceFills(const Shape& shape)
                 double bestTurn = 0.0;
                 for (int pass = 0; pass < 2 && !best; ++pass)
                 {
-                    for (DirectedPath& next : paths)
+                    // Every start within half a pixel lies in the pixel the
+                    // end is in or one of the eight round it. Taken in the
+                    // order the paths were listed, so ties go the same way.
+                    candidates.clear();
+                    if (pass == 0)
                     {
+                        unusedIn(byTwip, {twipOf(end.x), twipOf(end.y)}, candidates);
+                    }
+                    else
+                    {
+                        const long long px = pixelOf(end.x);
+                        const long long py = pixelOf(end.y);
+                        if (px != std::numeric_limits<long long>::min() &&
+                            py != std::numeric_limits<long long>::min())
+                        {
+                            for (long long dy = -1; dy <= 1; ++dy)
+                                for (long long dx = -1; dx <= 1; ++dx)
+                                    unusedIn(byPixel, {px + dx, py + dy}, candidates);
+                        }
+                        std::sort(candidates.begin(), candidates.end());
+                    }
+                    for (const size_t index : candidates)
+                    {
+                        DirectedPath& next = paths[index];
                         if (next.used)
                             continue;
                         if (pass == 0 ? !sameTwip(end, next.start) : !near(end, next.start))
