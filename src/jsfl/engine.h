@@ -21,6 +21,8 @@ struct RunOptions
     /// Called every few hundredths of a second while the script runs, so
     /// the window can answer a Stop button; set \a stop to end the run.
     std::function<void()> poll;
+    /// Only compile the script, to find syntax errors without running it.
+    bool compileOnly = false;
 };
 
 /// How a run went.

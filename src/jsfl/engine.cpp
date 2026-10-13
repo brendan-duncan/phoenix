@@ -628,6 +628,26 @@ std::string Engine::modernize(const std::string& s)
                     continue;
                 }
             }
+            if (word == "class" && !member)
+            {
+                // The old engine took "class" as a name (var class, a
+                // parameter); a class declaration has a name after it.
+                size_t k = j;
+                while (k < s.size() && (s[k] == ' ' || s[k] == '\t'))
+                    ++k;
+                if (k >= s.size() || !identStart(s[k]) || s.compare(k, 7, "extends") == 0)
+                {
+                    const bool key = k < s.size() && s[k] == ':' && !out.empty() &&
+                                     (out.back() == '{' || out.back() == ',' || space(out.back()));
+                    if (!key)
+                    {
+                        out += "__jsflClass";
+                        i = j;
+                        regexAllowed = false;
+                        continue;
+                    }
+                }
+            }
             out += word;
             i = j;
             static const char* const kBeforeExpression[] = {"return", "typeof", "case", "do", "else", "in", "of", "new",
@@ -779,7 +799,30 @@ RunResult Engine::run(const std::string& source, const std::string& name, const 
         JS_FreeValue(ctx, prelude);
 
         const std::string modern = modernize(source);
-        JSValue value = JS_Eval(ctx, modern.c_str(), modern.size(), name.c_str(), JS_EVAL_TYPE_GLOBAL);
+        const int flags = JS_EVAL_TYPE_GLOBAL | (options.compileOnly ? JS_EVAL_FLAG_COMPILE_ONLY : 0);
+        JSValue value = JS_Eval(ctx, modern.c_str(), modern.size(), name.c_str(), flags);
+        if (JS_IsException(value))
+        {
+            // The old engine let a script return from its top level: such
+            // a script runs as a function, its lines where they were.
+            JSValue error = JS_GetException(ctx);
+            std::string message;
+            try
+            {
+                message = toStd(ctx, error);
+            }
+            catch (const PendingException&)
+            {
+            }
+            if (message.find("return not in a function") != std::string::npos)
+            {
+                JS_FreeValue(ctx, error);
+                const std::string wrapped = "(function () {" + modern + "\n})();";
+                value = JS_Eval(ctx, wrapped.c_str(), wrapped.size(), name.c_str(), flags);
+            }
+            else
+                JS_Throw(ctx, error);
+        }
         if (JS_IsException(value))
         {
             JSValue error = JS_GetException(ctx);

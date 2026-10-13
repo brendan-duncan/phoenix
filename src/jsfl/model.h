@@ -142,16 +142,19 @@ public:
     fla::Layer& get() const;
 };
 
-/// A frame of a layer: the keyframe whose span covers it.
+/// A frame of a layer, by its number: it shows whichever keyframe's span
+/// covers that frame now, so it follows the layer through frame edits (a
+/// keyframe cleared under it, frames inserted before it).
 class Frame final : public DocumentPart
 {
 public:
-    Frame(Session& session, fla::FLADocument* document, fla::Frame* frame)
-        : DocumentPart(session, document), frame(frame)
+    Frame(Session& session, fla::FLADocument* document, fla::Layer* layer, int index)
+        : DocumentPart(session, document), layer(layer), index(index)
     {}
     const ClassInfo& classInfo() const override;
-    const void* identity() const override { return frame; }
-    fla::Frame* frame;
+    fla::Layer* layer;
+    int index;
+    /// The keyframe covering the frame; an error past the layer's end.
     fla::Frame& get() const;
 };
 

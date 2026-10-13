@@ -22,9 +22,11 @@
 #include "../src/writer/fla_writer.h"
 
 #include <algorithm>
+#include <cstdlib>
 #include <filesystem>
 #include <fstream>
 #include <map>
+#include <sstream>
 #include <memory>
 #include <string>
 #include <vector>
@@ -404,7 +406,7 @@ TEST(jsfl_timeline_layers_and_frames)
                 "tl.insertKeyframe(5); tl.insertBlankKeyframe(8);\n"
                 "var layer = tl.layers[1];\n"
                 "fl.trace(tl.frameCount + ' ' + layer.frameCount + ' ' + layer.frames.length);\n"
-                "fl.trace(layer.frames[6].startFrame + ' ' + layer.frames[6].duration + ' ' + (layer.frames[3] === layer.frames[3]));\n"
+                "fl.trace(layer.frames[6].startFrame + ' ' + layer.frames[6].duration + ' ' + (layer.frames[3].startFrame === layer.frames[4].startFrame));\n"
                 "layer.frames[5].name = 'walk'; layer.frames[5].labelType = 'comment';\n"
                 "tl.setSelectedFrames(0, 1);\n"
                 "tl.createMotionTween();\n"
@@ -632,6 +634,82 @@ TEST(jsfl_run_script_includes_share_the_global)
     CHECK_OUTPUT(f, "in lib.jsfl\ntrue 42 main.jsfl\nin lib.jsfl\n10\nin lib.jsfl\nlib.jsfl 1\n");
 }
 
+TEST(jsfl_corpus_clear_extra_blank_keyframes)
+{
+    // A published command (tests/data/jsfl/SOURCES.txt): blank keyframes
+    // right after blank keyframes go.
+    Fixture f;
+    CHECK(f.run("var d = fl.getDocumentDOM(), tl = d.getTimeline();\n"
+                "d.addNewRectangle({left: 0, top: 0, right: 10, bottom: 10}, 0);\n"
+                "tl.insertFrames(11); tl.insertBlankKeyframe(4); tl.insertBlankKeyframe(8);\n")
+              .ok);
+    CHECK(f.scene().layers[0]->frames.size() == 3);
+    const jsfl::RunResult result = f.engine.runFile(std::string(PHOENIX_TEST_DATA) + "/jsfl/clear_extra_blank_keyframes.jsfl");
+    CHECK(result.ok);
+    if (!result.ok)
+        std::printf("    %s\n", result.report().c_str());
+    CHECK(f.host.alerts.size() == 1 && f.host.alerts[0] == "Cleared 1 extra blank keyframe");
+    CHECK(f.scene().layers[0]->frames.size() == 2);
+    CHECK(f.scene().layers[0]->visible);
+}
+
+TEST(jsfl_corpus_setters_without_a_parameter)
+{
+    // Flash2Svg's wrappers declare setters with no parameter, which only the
+    // old engine took.
+    std::string source;
+    {
+        std::ifstream in(std::filesystem::u8path(std::string(PHOENIX_TEST_DATA) + "/jsfl/flash2svg_vertex.jsfl"));
+        std::ostringstream text;
+        text << in.rdbuf();
+        source = text.str();
+    }
+    CHECK(!source.empty());
+    Fixture f;
+    const std::string stub = "var extensible = {Object: function () { this.extend = function () {}; }, Point: function () {},\n"
+                             "    extend: function (o) { this.Vertex = o.Vertex; }};\n"
+                             "function Vertex() {} function Shape() {}\n";
+    CHECK(f.run(stub + source + ";\nvar v = new extensible.Vertex(); fl.trace(typeof v.setLocation);").ok);
+    CHECK_OUTPUT(f, "function\n");
+}
+
+TEST(jsfl_corpus_compiles)
+{
+    // Opt in: PHOENIX_JSFL_CORPUS names a folder of .jsfl files, each
+    // compiled (never run) after the old-dialect rewrite. Lists the ones
+    // that do not compile.
+    const char* folder = std::getenv("PHOENIX_JSFL_CORPUS");
+    if (!folder || !*folder)
+    {
+        std::printf("    skipped: set PHOENIX_JSFL_CORPUS to a folder of .jsfl files\n");
+        return;
+    }
+    TestHost host;
+    jsfl::Engine engine(host);
+    jsfl::RunOptions options;
+    options.compileOnly = true;
+    int total = 0;
+    int failed = 0;
+    std::map<std::string, int> reasons;
+    for (const auto& entry : std::filesystem::recursive_directory_iterator(std::filesystem::u8path(folder)))
+    {
+        if (!entry.is_regular_file() || entry.path().extension() != ".jsfl")
+            continue;
+        ++total;
+        const jsfl::RunResult result = engine.runFile(entry.path().u8string(), options);
+        if (!result.ok)
+        {
+            ++failed;
+            ++reasons[result.message.substr(0, 60)];
+            if (std::getenv("PHOENIX_JSFL_CORPUS_VERBOSE"))
+                std::printf("    %s\n", result.report().c_str());
+        }
+    }
+    std::printf("    %d scripts, %d do not compile\n", total, failed);
+    for (const auto& reason : reasons)
+        std::printf("    %4d  %s\n", reason.second, reason.first.c_str());
+}
+
 TEST(jsfl_old_dialect)
 {
     // for each loops, setters without a parameter, toSource.
@@ -650,4 +728,11 @@ TEST(jsfl_old_dialect)
                 "fl.trace(fl.Math.concatMatrix({a: 2, b: 0, c: 0, d: 2, tx: 1, ty: 1}, {a: 1, b: 0, c: 0, d: 1, tx: 5, ty: 0}).tx);\n")
               .ok);
     CHECK_OUTPUT(f, "6xy 7 {\"a\":1} [1]\n6\n");
+
+    // "class" as a name, and a return at the top level.
+    f.host.output.clear();
+    CHECK(f.run("var class = 'c'; function make(class) { return class + 1; }\nvar o = {class: 2};\n"
+                "fl.trace(class + make(class) + o.class);\nif (true) return;\nfl.trace('not reached');")
+              .ok);
+    CHECK_OUTPUT(f, "cc12\n");
 }

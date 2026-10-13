@@ -234,7 +234,7 @@ void setOnFrames(Timeline& t, const std::vector<Span>& spans, const std::string&
             if (!frame || std::find(done.begin(), done.end(), frame) != done.end())
                 continue;
             done.push_back(frame);
-            Frame wrapper(t.session, t.document, frame);
+            Frame wrapper(t.session, t.document, span.layer, start);
             const ClassInfo& info = wrapper.classInfo();
             const auto found = std::find_if(info.properties.begin(), info.properties.end(),
                 [&name](const Property& p) { return p.name == name; });
@@ -390,7 +390,10 @@ fla::Layer& Layer::get() const
 
 fla::Frame& Frame::get() const
 {
-    require(frame, "frame");
+    require(layer, "layer");
+    fla::Frame* frame = fla::timeline::spanAt(*layer, index);
+    if (!frame)
+        throw Error("Frame " + std::to_string(index) + " is past the end of layer " + layer->name + ".");
     return *frame;
 }
 
@@ -772,7 +775,7 @@ const ClassInfo& Timeline::classInfo() const
             fla::Frame* frame = fla::timeline::spanAt(*spans.front().layer, spans.front().first);
             if (!frame)
                 return Value();
-            Frame wrapper(t.session, t.document, frame);
+            Frame wrapper(t.session, t.document, spans.front().layer, spans.front().first);
             for (const Property& property : wrapper.classInfo().properties)
             {
                 if (property.name == arg(args, 0).toString())
@@ -863,7 +866,7 @@ const ClassInfo& Layer::classInfo() const
             for (int i = 0; i < end; ++i)
             {
                 fla::Frame* frame = fla::timeline::spanAt(layer, i);
-                list.items.emplace_back(frame ? Value(std::make_shared<Frame>(l.session, l.document, frame)) : Value());
+                list.items.emplace_back(frame ? Value(std::make_shared<Frame>(l.session, l.document, &layer, i)) : Value());
             }
             return list;
         });
@@ -894,9 +897,7 @@ const ClassInfo& Frame::classInfo() const
         def.prop("duration", [](Frame& f) { return Value(f.get().duration); },
             [](Frame& f, const Value& v) {
                 fla::Frame& frame = f.get();
-                auto* layer = dynamic_cast<fla::Layer*>(frame.parent);
-                if (!layer)
-                    throw Error("That frame is not on a layer.");
+                fla::Layer* layer = f.layer;
                 const int wanted = std::max(1, v.toInt());
                 const int change = wanted - frame.duration;
                 if (change == 0)
@@ -951,9 +952,9 @@ const ClassInfo& Frame::classInfo() const
             },
             [](Frame& f, const Value& v) {
                 fla::Frame& frame = f.get();
-                auto* layer = dynamic_cast<fla::Layer*>(frame.parent);
+                fla::Layer* layer = f.layer;
                 const std::string type = v.toString();
-                if (!layer || (type != "motion" && type != "shape" && type != "none"))
+                if ((type != "motion" && type != "shape" && type != "none"))
                     throw Error("A frame's tween is motion, shape or none, not " + type + ".");
                 const int start = frame.index;
                 f.session.host().selection(f.document).clear();
