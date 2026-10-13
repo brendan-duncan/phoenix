@@ -87,7 +87,8 @@ QString userFolder();
 /// cannot be read.
 bool readLesson(const QString& folder, TutorialLesson& lesson, QString& error);
 
-/// Every lesson, built-in and the reader's own, in order. \a problems lists
+/// Every lesson, built-in and the reader's own (and those in the folder
+/// PHOENIX_TUTORIALS_DIR names, for lessons being written), in order. \a problems lists
 /// the lessons that could not be read.
 std::vector<TutorialLesson> allLessons(QStringList* problems = nullptr);
 

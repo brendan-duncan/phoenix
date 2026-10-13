@@ -91,7 +91,13 @@ bool readLesson(const QString& folder, TutorialLesson& lesson, QString& error)
 std::vector<TutorialLesson> allLessons(QStringList* problems)
 {
     std::vector<TutorialLesson> lessons;
-    for (const QString& root : {QString(":/tutorials"), userFolder()})
+    // PHOENIX_TUTORIALS_DIR: lessons being written, read from their folder
+    // without building them into the app.
+    QStringList roots = {QString(":/tutorials"), userFolder()};
+    const QString writing = qEnvironmentVariable("PHOENIX_TUTORIALS_DIR");
+    if (!writing.isEmpty())
+        roots << writing;
+    for (const QString& root : roots)
     {
         const QDir dir(root);
         for (const QString& name : dir.entryList(QDir::Dirs | QDir::NoDotAndDotDot, QDir::Name))
