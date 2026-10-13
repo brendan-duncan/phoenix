@@ -44,6 +44,7 @@ class QTimer;
 
 namespace fla {
 class Bitmap;
+class IKArmature;
 class Command;
 class CommandStack;
 class Selection;
@@ -1191,6 +1192,25 @@ private:
     /// Moves on with any edit that may touch a frame's motion (clearCaches,
     /// invalidateBounds), so the XML is looked at again.
     unsigned _motionRevision = 0;
+
+    /// The armature of symbols a pose frame keeps, parsed once, with the
+    /// joint each instance follows by its referenceID; null when the frame
+    /// has none, or its span is a single frame, so its instances stay put.
+    struct CachedArmature
+    {
+        std::string xml;
+        std::shared_ptr<fla::IKArmature> armature;
+        std::map<std::string, int> joints;
+        unsigned revision = 0;
+        bool parsed = false;
+    };
+    const CachedArmature* symbolArmatureOf(const fla::Frame* frame);
+    std::map<const fla::Frame*, CachedArmature> _armatureCache;
+    /// Where an instance of an armature of symbols shows \a offset frames
+    /// into its pose span; false when it is not in one that moves.
+    bool armatureTransform(const fla::Frame* frame, const fla::Element* element, int offset, fla::Transform& shown);
+    /// The same for \a element at the playhead, on the timeline shown.
+    bool armatureHere(const fla::Element* element, fla::Transform& shown);
 
     /// The path of the motion guide a frame's layer is guided by, from the
     /// guide layer's strokes as shown now; null when it has none.

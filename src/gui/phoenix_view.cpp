@@ -340,6 +340,7 @@ void PhoenixView::setDocument(const fla::FLADocument* document)
     _bitmapsByName.clear();
     _textureTiles.clear();
     _motionCache.clear();
+    _armatureCache.clear();
     clearCaches();
     _flaDocument = document;
     _panX = 0;
@@ -1939,11 +1940,69 @@ const fla::MotionObject* PhoenixView::motionOf(const fla::Frame* frame)
     return entry.motion.get();
 }
 
+const PhoenixView::CachedArmature* PhoenixView::symbolArmatureOf(const fla::Frame* frame)
+{
+    if (!frame || frame->otherTweenType != "IK pose" || frame->duration <= 1)
+        return nullptr;
+    const std::string* xml = nullptr;
+    for (const std::string& child : frame->extraChildren)
+    {
+        const size_t at = child.find('<');
+        if (at != std::string::npos && child.compare(at, 7, "<IKTree") == 0)
+            xml = &child;
+    }
+    if (!xml)
+        return nullptr;
+    CachedArmature& entry = _armatureCache[frame];
+    if (!entry.parsed || entry.revision != _motionRevision)
+    {
+        entry.revision = _motionRevision;
+        if (!entry.parsed || entry.xml != *xml)
+        {
+            entry.parsed = true;
+            auto armature = std::make_shared<fla::IKArmature>();
+            entry.xml = *xml;
+            entry.joints.clear();
+            entry.armature = armature->parse(*xml) && !armature->bendsShape() && armature->frames() > 1 ? armature : nullptr;
+            for (int joint = 0; entry.armature && joint < static_cast<int>(armature->jointsAt(0).size()); ++joint)
+            {
+                const std::string reference = armature->referenceOf(joint);
+                if (!reference.empty())
+                    entry.joints.emplace(reference, joint);
+            }
+        }
+    }
+    return entry.armature ? &entry : nullptr;
+}
+
+bool PhoenixView::armatureTransform(const fla::Frame* frame, const fla::Element* element, int offset, fla::Transform& shown)
+{
+    const CachedArmature* entry = element && element->elementType() == fla::Element::Type::SymbolInstance
+        ? symbolArmatureOf(frame) : nullptr;
+    if (!entry)
+        return false;
+    for (const auto& attribute : static_cast<const fla::SymbolInstance*>(element)->extraAttributes)
+    {
+        if (attribute.first != "referenceID")
+            continue;
+        const auto joint = entry->joints.find(attribute.second);
+        if (joint == entry->joints.end())
+            return false;
+        shown = entry->armature->carried(joint->second, element->transform, offset);
+        return true;
+    }
+    return false;
+}
+
 fla::Transform PhoenixView::shownTransform(const LayerFrame& state, size_t elementIndex)
 {
     if (!state.frame || elementIndex >= state.frame->elements.size() || !state.frame->elements[elementIndex])
         return fla::Transform();
     const fla::Element* element = state.frame->elements[elementIndex];
+    // An armature of symbols places its instances from its joints.
+    fla::Transform posed;
+    if (armatureTransform(state.frame, element, state.offset, posed))
+        return posed;
     if (const fla::MotionObject* motion = motionOf(state.frame))
     {
         const double rate = _flaDocument && _flaDocument->document && _flaDocument->document->frameRate > 0.0
@@ -2051,11 +2110,24 @@ bool PhoenixView::motionHere(const fla::Element* element, MotionHere& here)
     return true;
 }
 
+bool PhoenixView::armatureHere(const fla::Element* element, fla::Transform& shown)
+{
+    const fla::Frame* frame = element ? dynamic_cast<const fla::Frame*>(element->parent) : nullptr;
+    const fla::Layer* layer = frame ? dynamic_cast<const fla::Layer*>(frame->parent) : nullptr;
+    if (!layer || !symbolArmatureOf(frame))
+        return false;
+    const LayerFrame state = resolveLayerFrame(layer, fla::LoopType::PlayOnce, 0);
+    return state.frame == frame && armatureTransform(frame, element, state.offset, shown);
+}
+
 fla::Transform PhoenixView::shownTransformOf(const fla::Element* element)
 {
     MotionHere here;
     if (!element)
         return fla::Transform();
+    fla::Transform posed;
+    if (armatureHere(element, posed))
+        return posed;
     if (!motionHere(element, here))
         return element->transform;
     return fla::applyMotion(element->transform, element->transformationPoint, here.start, here.now);
@@ -2064,6 +2136,19 @@ fla::Transform PhoenixView::shownTransformOf(const fla::Element* element)
 fla::Transform PhoenixView::storedTransformFor(const fla::Element* element, const fla::Transform& shown)
 {
     MotionHere here;
+    fla::Transform posed;
+    if (element && armatureHere(element, posed))
+    {
+        // The joints' move undone: shown, back off where the stored matrix
+        // shows, onto the stored matrix.
+        const auto q = [](const fla::Transform& t) { return QTransform(t.m11, t.m12, t.m21, t.m22, t.tx, t.ty); };
+        bool invertible = false;
+        const QTransform back = q(posed).inverted(&invertible);
+        if (!invertible)
+            return shown;
+        const QTransform stored = q(shown) * back * q(element->transform);
+        return fla::Transform(stored.m11(), stored.m12(), stored.m21(), stored.m22(), stored.dx(), stored.dy());
+    }
     if (!element || !motionHere(element, here))
         return shown;
     return fla::unapplyMotion(shown, element->transformationPoint, here.start, here.now);
@@ -2665,8 +2750,8 @@ void PhoenixView::drawFrame(QPainter& painter, const fla::Frame* frame, const fl
     // frame being drawn; their stored bounds are not where they show.
     // So does a classic tween along a motion guide.
     const bool moving = _drawnState && _drawnState->frame == frame &&
-                        (motionOf(frame) || (nextTweenFrame && frame->tweenType == fla::TweenType::Motion &&
-                                                guidePathOf(frame)));
+                        (motionOf(frame) || symbolArmatureOf(frame) ||
+                            (nextTweenFrame && frame->tweenType == fla::TweenType::Motion && guidePathOf(frame)));
     const LayerFrame* motionState = moving ? _drawnState : nullptr;
     // A group's members are drawn by its frame's playhead, as it is.
     ElapsedScope elapsed(_elapsed, _drawnState && _drawnState->frame == frame ? _drawnState->offset : _elapsed);
@@ -6198,6 +6283,24 @@ void PhoenixView::drawIKBones(QPainter& painter, const fla::Frame& frame, double
         const size_t at = child.find('<');
         if (at != std::string::npos && child.compare(at, 7, "<IKTree") == 0)
         {
+            // An armature of symbols' joints move with its instances.
+            fla::IKArmature armature;
+            if (armature.parse(child) && !armature.bendsShape())
+            {
+                const std::vector<fla::IKJoint> joints = armature.shownAt(into);
+                for (const fla::IKJoint& joint : joints)
+                {
+                    const int parent = joint.parent;
+                    if (parent < 0)
+                        continue;
+                    fla::IKBone bone;
+                    bone.head = joints[static_cast<size_t>(parent)].position;
+                    bone.tail = joint.position;
+                    if (std::hypot(bone.tail.x - bone.head.x, bone.tail.y - bone.head.y) > 1.0e-6)
+                        bones.push_back(bone);
+                }
+                continue;
+            }
             const std::vector<fla::IKBone> found = fla::ikBones(child, into);
             bones.insert(bones.end(), found.begin(), found.end());
         }

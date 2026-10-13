@@ -1,12 +1,22 @@
 #include "test_util.h"
 
 #include "../src/data/document.h"
+#include "../src/data/edge.h"
 #include "../src/data/fla_document.h"
 #include "../src/data/frame.h"
 #include "../src/data/layer.h"
+#include "../src/data/shape.h"
+#include "../src/data/solid_color.h"
+#include "../src/data/symbol.h"
+#include "../src/data/symbol_instance.h"
+#include "../src/data/symbol_list.h"
 #include "../src/data/timeline.h"
 #include "../src/edit/ik_pose.h"
+#include "../src/edit/new_document.h"
+#include "../src/edit/shape_merge.h"
 #include "../src/parser/fla_parser.h"
+#include "../src/parser/path_parser.h"
+#include "../src/writer/xfl_folder_writer.h"
 
 #include <cmath>
 #include <cstdio>
@@ -278,4 +288,393 @@ TEST(the_bone_tool_builds_armatures_of_symbols)
     const std::vector<fla::IKJoint> solved = fla::solveIK(posed, 2, fla::Point(400.0, 100.0), 32, armature.limits());
     const double relative = solved[1].angle - solved[0].angle;
     CHECK(relative >= -0.5 - 1.0e-9 && relative <= 0.5 + 1.0e-9);
+}
+
+namespace {
+
+/// Where \a t takes \a p.
+fla::Point mapped(const fla::Transform& t, const fla::Point& p)
+{
+    return fla::Point(t.m11 * p.x + t.m21 * p.y + t.tx, t.m12 * p.x + t.m22 * p.y + t.ty);
+}
+
+/// Three symbol joints in a row along x, 100 pixels apart, posed over 11
+/// frames.
+fla::IKArmature threeSymbols()
+{
+    std::vector<fla::ArmatureJoint> joints(3);
+    for (int i = 0; i < 3; ++i)
+    {
+        joints[i].position = fla::Point(100.0 + 100.0 * i, 100.0);
+        joints[i].parent = i - 1;
+        joints[i].node = "ikNode_" + std::to_string(i + 1);
+        joints[i].reference = "R" + std::to_string(i + 1);
+        // Each instance's registration point up and left of its joint.
+        joints[i].registration = fla::Point(90.0 + 100.0 * i, 60.0);
+    }
+    fla::IKArmature armature;
+    armature.parse(fla::symbolArmatureXml("Armature_1", "ikTreeName1", joints, 11));
+    return armature;
+}
+
+/// A rectangle 200 by 40 pixels from the origin, filled.
+std::unique_ptr<fla::Shape> rectangle()
+{
+    std::unique_ptr<fla::Shape> shape(new fla::Shape(nullptr));
+    PathParser parser;
+    fla::Edge* edge = parser.parse("!0 0|4000 0|4000 800|0 800|0 0", shape.get());
+    if (edge)
+    {
+        edge->fillStyle1 = 1;
+        shape->edges.push_back(edge);
+    }
+    return shape;
+}
+
+} // namespace
+
+TEST(symbol_armatures_play_between_poses)
+{
+    fla::IKArmature armature = threeSymbols();
+    CHECK(!armature.bendsShape() && armature.frames() == 11);
+
+    // Posed at the span's end: the root turned a quarter, the middle joint
+    // a quarter more; eased at full strength.
+    const std::vector<fla::IKJoint> start = armature.jointsAt(0);
+    CHECK(armature.setPose(10, {start[0].angle + kPi / 2.0, start[1].angle + kPi, start[2].angle + kPi}));
+    CHECK(armature.poses() == std::vector<int>({0, 10}));
+    fla::IKArmature eased;
+    std::string xml = armature.xml();
+    const size_t state = xml.find("<IKState duration=\"10\"");
+    CHECK(state != std::string::npos);
+    xml.insert(state + 8, " easeType=\"simple quadratic\" easeValue=\"100\"");
+    CHECK(eased.parse(xml));
+    // Every frame worked out again with the ease.
+    CHECK(eased.setFrames(11));
+
+    // Halfway, the ease has run three quarters of the way: (1-s)t + s(2t - t^2).
+    const std::vector<fla::IKJoint> middle = eased.posedAt(5);
+    CHECK(std::fabs(middle[0].angle - (start[0].angle + 0.75 * kPi / 2.0)) < 1.0e-6);
+    CHECK(near(eased.shownAt(5)[1].position, middle[1].position.x, middle[1].position.y, 0.01));
+
+    // Each instance, saved as the first frame has it, turns and moves with
+    // its joint: its transformation point (the joint) lands on the joint.
+    for (int joint = 0; joint < 3; ++joint)
+    {
+        const fla::Point registration(90.0 + 100.0 * joint, 60.0);
+        const fla::Transform stored(2.0, 0.0, 0.0, 2.0, registration.x, registration.y);
+        const fla::Point pivot((start[joint].position.x - registration.x) / 2.0, (start[joint].position.y - registration.y) / 2.0);
+        CHECK(near(mapped(stored, pivot), start[joint].position.x, start[joint].position.y));
+        for (int frame : {0, 3, 5, 10})
+        {
+            const fla::Transform shown = eased.carried(joint, stored, frame);
+            const fla::IKJoint at = eased.shownAt(frame)[joint];
+            CHECK(near(mapped(shown, pivot), at.position.x, at.position.y, 0.01));
+            // Turned as the joint has turned, its scale kept.
+            const double turned = std::atan2(shown.m12, shown.m11);
+            CHECK(std::fabs(std::remainder(turned - (at.angle - start[joint].angle), 2.0 * kPi)) < 1.0e-6);
+            CHECK(std::fabs(std::hypot(shown.m11, shown.m12) - 2.0) < 1.0e-9);
+        }
+    }
+    // The last joint has swung round to the root's left.
+    const fla::IKJoint last = eased.shownAt(10)[2];
+    CHECK(near(last.position, 0.0, 200.0, 0.01));
+
+    // The instances' places in their joints' frames, for every frame.
+    const fla::Transform a(1.0, 0.0, 0.0, 1.0, 90.0, 60.0);
+    const fla::Transform b(1.0, 0.0, 0.0, 1.0, 190.0, 60.0);
+    const std::string list = eased.betweenFrameMatrixList({&a, &b, nullptr});
+    size_t matrices = 0;
+    for (size_t at = list.find("<Matrix"); at != std::string::npos; at = list.find("<Matrix", at + 1))
+        ++matrices;
+    CHECK(list.find("<betweenFrameMatrixList>") == 0 && matrices == 22);
+    std::vector<std::string> children = {"<IKTree/>"};
+    fla::setBetweenFrames(children, list);
+    CHECK(children.size() == 2 && children[0] == list);
+    fla::setBetweenFrames(children, "<betweenFrameMatrixList/>");
+    CHECK(children.size() == 2 && children[0] == "<betweenFrameMatrixList/>");
+
+    // A longer span holds the last pose.
+    CHECK(eased.setFrames(20) && eased.frames() == 20 && eased.poses() == std::vector<int>({0, 10}));
+    CHECK(near(eased.jointsAt(19)[2].position, 0.0, 200.0, 0.01));
+}
+
+TEST(boned_shapes_bind_points_to_their_nearest_bones)
+{
+    // Bones along the middle of a 200 by 40 rectangle.
+    std::vector<fla::ArmatureJoint> joints(3);
+    for (int i = 0; i < 3; ++i)
+    {
+        joints[i].position = fla::Point(100.0 * i, 20.0);
+        joints[i].registration = joints[i].position;
+        joints[i].parent = i - 1;
+        joints[i].node = "ikNode_" + std::to_string(i + 1);
+    }
+    fla::IKArmature armature;
+    CHECK(armature.parse(fla::armatureXml("Armature_1", "ikTreeName1", joints, 11, true)));
+    CHECK(armature.bendsShape() && armature.frames() == 11);
+    CHECK(armature.xml().find("nodeType=\"lsd\"") != std::string::npos);
+    CHECK(armature.xml().find("<worldMatrix>") != std::string::npos);
+    CHECK(near(armature.jointsAt(0)[2].position, 200.0, 20.0));
+
+    std::unique_ptr<fla::Shape> shape = rectangle();
+    const std::vector<fla::Point> anchors = fla::shapeAnchors(*shape);
+    CHECK(anchors.size() == 4);
+    CHECK(near(anchors[1], 200.0, 0.0) && near(anchors[3], 0.0, 40.0));
+    const fla::ShapeBinding binding = fla::bindToNearestBones(anchors, armature.jointsAt(0));
+    CHECK(binding.size() == 4 && binding[0].size() == 1 && binding[0][0].bone == 1);
+    CHECK(binding[1].size() == 1 && binding[1][0].bone == 2);
+
+    // Kept on the tree as the sample keeps it, and read back.
+    armature.setBinding(binding, anchors, fla::Transform(), fla::contourStyle(*shape));
+    fla::IKArmature again;
+    CHECK(again.parse(armature.xml()) && again.bindsAnchors());
+    const fla::ShapeBinding read = again.binding();
+    CHECK(read.size() == 4);
+    for (size_t i = 0; i < read.size() && i < binding.size(); ++i)
+    {
+        CHECK(read[i].size() == binding[i].size());
+        if (!read[i].empty())
+            CHECK(read[i][0].bone == binding[i][0].bone && std::fabs(read[i][0].weight - 1.0) < 1.0e-9);
+    }
+    const std::string xml = again.xml();
+    CHECK(xml.find("connectionIndices=\"4.000000,0.000000,1.000000,0.000000,1.000000,4.000000,8.000000,-1.000000") !=
+        std::string::npos);
+    // The first point: at the bone's head, 20 pixels to its left side.
+    CHECK(xml.find("connectionData=\"0.000000,-20.000000,20.000000,1.000000") != std::string::npos);
+    CHECK(xml.find("<IKContour interior=\"true\"") != std::string::npos);
+    CHECK(xml.find("rectRight=\"4000\"") != std::string::npos);
+
+    // The middle joint turns a quarter: the far corners swing round it and
+    // the near ones stay.
+    std::vector<fla::IKJoint> before = again.shownAt(0);
+    std::vector<double> angles = {before[0].angle, before[1].angle + kPi / 2.0, before[2].angle + kPi / 2.0};
+    CHECK(again.setPose(10, angles));
+    fla::bindShape(*shape, fla::Transform(), read, before, again.shownAt(10));
+    const std::vector<fla::Point> bent = fla::shapeAnchors(*shape);
+    CHECK(bent.size() == 4);
+    CHECK(near(bent[0], 0.0, 0.0, 0.01) && near(bent[3], 0.0, 40.0, 0.01));
+    CHECK(near(bent[1], 120.0, 120.0, 0.01) && near(bent[2], 80.0, 120.0, 0.01));
+
+    // A point bound to no bone stays where it is.
+    std::unique_ptr<fla::Shape> other = rectangle();
+    fla::ShapeBinding loose = read;
+    loose[1].clear();
+    fla::bindShape(*other, fla::Transform(), loose, before, again.shownAt(10));
+    CHECK(near(fla::shapeAnchors(*other)[1], 200.0, 0.0, 0.01));
+}
+
+TEST(rebuilt_armatures_keep_springs_and_other_attributes)
+{
+    const std::string xml = "<IKTree name=\"Armature_1\" treeName=\"ikTreeName2\" physicsEnabled=\"true\" custom=\"1\">"
+        "<IKNode name=\"ikNode_1\" location=\"0, 0\"><childNodes>"
+        "<ChildNode name=\"ikNode_1\" location=\"0, 0\" xArray=\"0\" yArray=\"0\" angleArray=\"0\" referenceID=\"A\">"
+        "<states><State duration=\"1\" angle=\"0\" x=\"0\" y=\"0\"/></states><childNodes>"
+        "<ChildNode name=\"ikNode_2\" location=\"7.8125, 0\" xArray=\"2000\" yArray=\"0\" angleArray=\"0\" "
+        "referenceID=\"B\" springStrength=\"40\" springDamping=\"25\">"
+        "<states><State duration=\"1\" angle=\"0\" x=\"2000\" y=\"0\"/></states></ChildNode>"
+        "</childNodes></ChildNode></childNodes></IKNode><states><IKState duration=\"1\"/></states></IKTree>";
+    fla::IKArmature armature;
+    CHECK(armature.parse(xml));
+    const fla::BoneSpring spring = armature.spring(1);
+    CHECK(spring.present && spring.strength == 40.0 && spring.damping == 25.0);
+    CHECK(!armature.spring(0).present);
+
+    // Built again with a bone more, as the Bone tool does.
+    std::vector<fla::ArmatureJoint> joints = armature.symbolJoints();
+    fla::ArmatureJoint added;
+    added.position = fla::Point(200.0, 0.0);
+    added.registration = added.position;
+    added.parent = 1;
+    added.node = "ikNode_3";
+    added.reference = "C";
+    joints.push_back(added);
+    fla::IKArmature rebuilt;
+    CHECK(rebuilt.parse(fla::symbolArmatureXml(armature.name(), armature.treeName(), joints, armature.frames())));
+    CHECK(!rebuilt.spring(1).present);
+    rebuilt.keepAttributesOf(armature);
+    CHECK(rebuilt.spring(1).present && rebuilt.spring(1).strength == 40.0 && rebuilt.spring(1).damping == 25.0);
+    CHECK(!rebuilt.spring(2).present);
+    CHECK(rebuilt.xml().find("custom=\"1\"") != std::string::npos);
+    CHECK(rebuilt.jointsAt(0).size() == 3);
+    // And they survive posing.
+    std::vector<double> angles;
+    for (const fla::IKJoint& joint : rebuilt.jointsAt(0))
+        angles.push_back(joint.angle + 0.25);
+    CHECK(rebuilt.setPose(0, angles));
+    CHECK(rebuilt.spring(1).strength == 40.0);
+}
+
+TEST(a_symbol_armature_posed_twice_saves_and_plays)
+{
+    // Opt-in: the corpus's ik_symbols.fla, given a second pose 29 frames on
+    // with Phoenix's posing code, saved as an XFL folder for a render check.
+    const char* corpus = std::getenv("PHOENIX_FLA_CORPUS");
+    const std::filesystem::path source = corpus ? std::filesystem::path(corpus) / "ik_symbols.fla"
+                                                : std::filesystem::path();
+    if (!corpus || !std::filesystem::exists(source))
+    {
+        std::printf("    skipped: no ik_symbols.fla in PHOENIX_FLA_CORPUS\n");
+        return;
+    }
+    FLAParser parser;
+    std::unique_ptr<fla::FLADocument> fla(parser.parse(source.string()));
+    CHECK(fla && fla->document && !fla->document->timelines.empty());
+    if (!fla || !fla->document || fla->document->timelines.empty())
+        return;
+    fla::Timeline* scene = fla->document->timelines.front();
+    fla::Frame* pose = nullptr;
+    for (fla::Layer* layer : scene->layers)
+    {
+        for (fla::Frame* frame : layer->frames)
+        {
+            frame->duration = 30;
+            if (frame->otherTweenType == "IK pose")
+                pose = frame;
+        }
+    }
+    CHECK(pose != nullptr);
+    if (!pose)
+        return;
+    size_t child = 0;
+    while (child < pose->extraChildren.size() && pose->extraChildren[child].find("<IKTree") == std::string::npos)
+        ++child;
+    fla::IKArmature armature;
+    CHECK(child < pose->extraChildren.size() && armature.parse(pose->extraChildren[child]));
+    CHECK(armature.setFrames(30));
+    std::vector<double> angles;
+    const std::vector<fla::IKJoint> start = armature.jointsAt(0);
+    for (size_t i = 0; i < start.size(); ++i)
+        angles.push_back(start[i].angle + (i == 0 ? 0.6 : 1.4));
+    CHECK(armature.setPose(29, angles));
+    fla::PoseArmatureCommand::apply(pose, child, armature.xml(), "0,29");
+
+    // Every instance at frame 15 has its joint where the armature does.
+    std::vector<const fla::Transform*> placed(start.size(), nullptr);
+    for (fla::Element* element : pose->elements)
+    {
+        const fla::SymbolInstance* instance = dynamic_cast<const fla::SymbolInstance*>(element);
+        if (!instance)
+            continue;
+        for (const auto& attribute : instance->extraAttributes)
+        {
+            for (size_t joint = 0; joint < start.size(); ++joint)
+            {
+                if (attribute.first != "referenceID" || attribute.second != armature.referenceOf(static_cast<int>(joint)))
+                    continue;
+                placed[joint] = &instance->transform;
+                const fla::Transform shown = armature.carried(static_cast<int>(joint), instance->transform, 15);
+                const fla::IKJoint at = armature.shownAt(15)[joint];
+                CHECK(near(mapped(shown, instance->transformationPoint), at.position.x, at.position.y, 0.2));
+            }
+        }
+    }
+    fla::setBetweenFrames(pose->extraChildren, armature.betweenFrameMatrixList(placed));
+
+    const std::filesystem::path out = std::filesystem::temp_directory_path() / "phoenix_ik_tests" / "ik_symbols_posed";
+    std::filesystem::remove_all(out);
+    fla::XFLFolderWriter writer;
+    CHECK(writer.write(*fla->document, out.string(), "ik_symbols_posed"));
+    std::printf("    written: %s\n", out.string().c_str());
+}
+
+TEST(the_bone_tool_bones_a_shape_and_its_poses_bend_it)
+{
+    // A 200 by 40 rectangle at (100, 100) on a new document's first layer,
+    // held for 30 frames, boned along its middle.
+    std::unique_ptr<fla::FLADocument> fla(fla::createEmptyDocument(640, 360));
+    CHECK(fla && fla->document && !fla->document->timelines.empty());
+    if (!fla || !fla->document || fla->document->timelines.empty())
+        return;
+    fla::Document* document = fla->document;
+    fla::Timeline* scene = document->timelines.front();
+    CHECK(!scene->layers.empty() && !scene->layers.front()->frames.empty());
+    fla::Layer* layer = scene->layers.front();
+    fla::Frame* frame = layer->frames.front();
+    frame->duration = 30;
+    std::unique_ptr<fla::Shape> made = rectangle();
+    fla::Shape* shape = made.release();
+    shape->parent = frame;
+    shape->transform.tx = 100.0;
+    shape->transform.ty = 100.0;
+    fla::SolidColor* fill = new fla::SolidColor(shape);
+    fill->color[0] = 0;
+    fill->color[1] = 160;
+    fill->color[2] = 255;
+    shape->fills.push_back(fill);
+    shape->fillsMap[1] = fill;
+    frame->elements.push_back(shape);
+
+    std::vector<fla::ArmatureJoint> joints(3);
+    for (int i = 0; i < 3; ++i)
+    {
+        joints[i].position = fla::Point(100.0 + 100.0 * i, 120.0);
+        joints[i].parent = i - 1;
+        joints[i].node = "ikNode_" + std::to_string(i + 1);
+    }
+    const fla::BonedShape boned = fla::boneShape(*scene, *layer, *frame, *shape, joints, "lsd_1", "Armature_1", "ikTreeName1");
+    CHECK(boned.symbol && boned.layer && boned.pose && boned.instance);
+    if (!boned.symbol)
+        return;
+    CHECK(boned.symbol->otherSymbolType == "ik container");
+    CHECK(boned.symbol->timelines.front()->layers.front()->frames.size() == 30);
+    CHECK(boned.pose->duration == 30 && boned.pose->otherTweenType == "IK pose");
+    CHECK(near(fla::Point(boned.instance->transform.tx, boned.instance->transform.ty), 200.0, 120.0));
+    fla::IKArmature armature;
+    CHECK(armature.parse(boned.pose->extraChildren.back()) && armature.bendsShape() && armature.bindsAnchors());
+    CHECK(armature.binding().size() == 4 && armature.frames() == 30);
+
+    // Into the document, as the Bone tool's commands put it.
+    if (!document->symbolList)
+        document->symbolList = new fla::SymbolList(document);
+    boned.symbol->parent = document->symbolList;
+    document->symbolList->symbols.push_back(boned.symbol);
+    document->symbolList->link(boned.symbol);
+    frame->elements.clear();
+    delete shape;
+    scene->layers.insert(scene->layers.begin(), boned.layer);
+
+    // Posed at the last frame, its second bone turned a third of a half
+    // turn down; every frame bent from the first's shape by the binding,
+    // as the Selection tool's drag bends them.
+    const std::vector<fla::IKJoint> start = armature.shownAt(0);
+    CHECK(armature.setPose(29, {start[0].angle, start[1].angle + kPi / 3.0, start[2].angle + kPi / 3.0}));
+    fla::PoseArmatureCommand::apply(boned.pose, boned.pose->extraChildren.size() - 1, armature.xml(), "0,29");
+    std::vector<fla::Frame*>& frames = boned.symbol->timelines.front()->layers.front()->frames;
+    fla::Shape* rest = static_cast<fla::Shape*>(frames.front()->elements.front());
+    std::unique_ptr<fla::Shape> first(fla::cloneShape(*rest, nullptr));
+    for (size_t k = 0; k < frames.size(); ++k)
+    {
+        fla::Shape* own = static_cast<fla::Shape*>(frames[k]->elements.front());
+        std::unique_ptr<fla::Shape> bent(fla::cloneShape(*first, nullptr));
+        fla::bindShape(*bent, boned.instance->transform, armature.binding(), armature.shownAt(0),
+            armature.shownAt(static_cast<int>(k)));
+        fla::setShapeContents(*own, *bent);
+    }
+    // At the end the far corners have swung down round the middle joint.
+    const std::vector<fla::Point> last = fla::shapeAnchors(*static_cast<fla::Shape*>(frames.back()->elements.front()));
+    const double c = std::cos(kPi / 3.0);
+    const double s = std::sin(kPi / 3.0);
+    CHECK(last.size() == 4 &&
+        near(last[1], 100.0 * c + 20.0 * s, 100.0 * s - 20.0 * c, 0.05) && near(last[0], -100.0, -20.0, 0.05));
+
+    const std::filesystem::path out = std::filesystem::temp_directory_path() / "phoenix_ik_tests" / "boned_shape";
+    std::filesystem::remove_all(out);
+    fla::XFLFolderWriter writer;
+    CHECK(writer.write(*document, out.string(), "boned_shape"));
+    std::printf("    written: %s\n", out.string().c_str());
+
+    // Read back, the armature and its binding are as written.
+    FLAParser parser;
+    std::unique_ptr<fla::FLADocument> back(parser.parse((out / "boned_shape.xfl").string()));
+    CHECK(back && back->document && !back->document->timelines.empty());
+    if (!back || !back->document || back->document->timelines.empty())
+        return;
+    const fla::Layer* armatureLayer = back->document->timelines.front()->layers.front();
+    CHECK(armatureLayer && !armatureLayer->frames.empty());
+    const fla::Frame* pose = armatureLayer->frames.front();
+    fla::IKArmature read;
+    CHECK(!pose->extraChildren.empty() && read.parse(pose->extraChildren.back()));
+    CHECK(read.bindsAnchors() && read.binding().size() == 4 && read.poses() == std::vector<int>({0, 29}));
+    CHECK(back->document->symbolList && back->document->symbolList->symbols.size() == 1);
 }

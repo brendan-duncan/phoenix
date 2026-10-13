@@ -287,6 +287,14 @@ private slots:
     /// layer above the first one's layer, or a bone more on the armature the
     /// first one is in, as one undo step.
     void addBone(const BoneTool::Link& link);
+    /// A bone in a shape: the first makes the shape an ik container symbol
+    /// on a new pose layer, its points bound to their nearest bones; one
+    /// from a joint of a boned shape adds to its armature and binds every
+    /// point again.
+    void addShapeBone(const BoneTool::Link& link);
+    /// The Bind tool's change to which bones a boned shape's points follow,
+    /// with every frame of its span bent again by it, as one undo step.
+    void rebindShape(fla::Frame* frame, size_t child, const fla::ShapeBinding& binding);
 
     /// How far a joint of the armature on \a frame may turn, in a dialog.
     void editJointLimits(fla::Frame* frame, size_t child, int joint);
@@ -556,6 +564,7 @@ private:
     std::unique_ptr<TimeScrubTool> _timeScrubTool;
     std::unique_ptr<CameraTool> _cameraTool;
     std::unique_ptr<BoneTool> _boneTool;
+    std::unique_ptr<BindTool> _bindTool;
     std::unique_ptr<AssetWarpTool> _assetWarpTool;
     std::unique_ptr<ThreeDTool> _rotate3DTool;
     std::unique_ptr<ThreeDTool> _translate3DTool;

@@ -466,6 +466,21 @@ void drawBone(QPainter& painter)
     painter.drawEllipse(QPointF(18.5, 5.5), 2.0, 2.0);
 }
 
+void drawBind(QPainter& painter)
+{
+    // A bone with a square control point tied to it.
+    painter.setPen(QPen(strokeColor(), 1.2));
+    painter.setBrush(Qt::NoBrush);
+    painter.drawPolygon(QPolygonF({QPointF(5.0, 15.0), QPointF(9.5, 10.5), QPointF(15.0, 7.5), QPointF(11.0, 12.5)}));
+    painter.drawEllipse(QPointF(4.0, 16.5), 2.4, 2.4);
+    painter.drawEllipse(QPointF(16.5, 6.0), 1.8, 1.8);
+    painter.setPen(QPen(strokeColor(), 1.0, Qt::DotLine));
+    painter.drawLine(QPointF(10.5, 12.5), QPointF(16.0, 18.0));
+    painter.setPen(QPen(strokeColor(), 1.2));
+    painter.setBrush(Qt::white);
+    painter.drawRect(QRectF(15.5, 16.5, 4.5, 4.5));
+}
+
 void drawAssetWarp(QPainter& painter)
 {
     // A bent strip held by two pins.
@@ -622,6 +637,7 @@ QPixmap render(ToolIcons::Tool tool, int size)
     case ToolIcons::Tool::Camera:        drawCamera(painter); break;
     case ToolIcons::Tool::Text:          drawText(painter); break;
     case ToolIcons::Tool::Bone:          drawBone(painter); break;
+    case ToolIcons::Tool::Bind:          drawBind(painter); break;
     case ToolIcons::Tool::AssetWarp:     drawAssetWarp(painter); break;
     case ToolIcons::Tool::Rotate3D:      drawRotate3D(painter); break;
     case ToolIcons::Tool::Translate3D:   drawTranslate3D(painter); break;

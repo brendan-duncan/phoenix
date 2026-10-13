@@ -1,9 +1,18 @@
 #include "ik_pose.h"
 
+#include "layer_commands.h"
+#include "shape_merge.h"
 #include "shape_transform.h"
 
+#include "../data/edge.h"
 #include "../data/frame.h"
+#include "../data/layer.h"
 #include "../data/shape.h"
+#include "../data/solid_color.h"
+#include "../data/stroke_style.h"
+#include "../data/symbol.h"
+#include "../data/symbol_instance.h"
+#include "../data/timeline.h"
 
 #include <tinyxml2.h>
 
@@ -12,6 +21,7 @@
 #include <cstdio>
 #include <cstring>
 #include <functional>
+#include <map>
 #include <sstream>
 
 namespace fla {
@@ -135,6 +145,89 @@ double distanceToSegment(const Point& p, const Point& a, const Point& b)
     t = std::max(0.0, std::min(1.0, t));
     return std::hypot(p.x - (a.x + dx * t), p.y - (a.y + dy * t));
 }
+
+/// \a first, then \a second.
+Transform then(const Transform& first, const Transform& second)
+{
+    return Transform(first.m11 * second.m11 + first.m12 * second.m21, first.m11 * second.m12 + first.m12 * second.m22,
+        first.m21 * second.m11 + first.m22 * second.m21, first.m21 * second.m12 + first.m22 * second.m22,
+        first.tx * second.m11 + first.ty * second.m21 + second.tx, first.tx * second.m12 + first.ty * second.m22 + second.ty);
+}
+
+/// A turn by \a angle radians about the origin, as a transform.
+Transform turn(double angle)
+{
+    const double c = std::cos(angle);
+    const double s = std::sin(angle);
+    return Transform(c, s, -s, c, 0.0, 0.0);
+}
+
+bool inverse(const Transform& m, Transform& out)
+{
+    const double det = m.m11 * m.m22 - m.m12 * m.m21;
+    if (std::fabs(det) < 1.0e-12)
+        return false;
+    out.m11 = m.m22 / det;
+    out.m12 = -m.m12 / det;
+    out.m21 = -m.m21 / det;
+    out.m22 = m.m11 / det;
+    out.tx = -(out.m11 * m.tx + out.m21 * m.ty);
+    out.ty = -(out.m12 * m.tx + out.m22 * m.ty);
+    return true;
+}
+
+/// A Matrix element with only the entries that differ from the identity,
+/// as Animate writes them.
+void writeMatrix(tinyxml2::XMLElement* matrix, const Transform& m)
+{
+    const auto entry = [matrix](const char* name, double value, double plain) {
+        if (std::fabs(value - plain) > 1.0e-9)
+            setNumber(matrix, name, value);
+    };
+    entry("a", m.m11, 1.0);
+    entry("b", m.m12, 0.0);
+    entry("c", m.m21, 0.0);
+    entry("d", m.m22, 1.0);
+    entry("tx", m.tx, 0.0);
+    entry("ty", m.ty, 0.0);
+}
+
+/// A shape's control points numbered as they are first reached, each place
+/// once.
+struct AnchorIndex
+{
+    std::vector<Point> anchors;
+    std::map<std::pair<long long, long long>, int> numbers;
+
+    static std::pair<long long, long long> key(const Point& p)
+    {
+        return {std::llround(p.x * 1000.0), std::llround(p.y * 1000.0)};
+    }
+
+    int of(const Point& p)
+    {
+        const auto found = numbers.emplace(key(p), static_cast<int>(anchors.size()));
+        if (found.second)
+            anchors.push_back(p);
+        return found.first->second;
+    }
+
+    /// Each segment's end, numbered, in the order the edges reach them.
+    void walk(const Shape& shape)
+    {
+        for (const Edge* edge : shape.edges)
+        {
+            for (const Path* path : edge ? edge->paths : std::vector<Path*>())
+            {
+                for (const PathSegment* segment : path ? path->segments : std::vector<PathSegment*>())
+                {
+                    if (segment && segment->command != PathSegment::Command::Close && !segment->points.empty())
+                        of(segment->points.back());
+                }
+            }
+        }
+    }
+};
 
 } // namespace
 
@@ -309,6 +402,11 @@ double IKArmature::easedTime(int pose, double t) const
 
 std::vector<IKJoint> IKArmature::shownAt(int frame) const
 {
+    // An armature of symbols shows its stored joints: its instances follow
+    // them frame by frame.
+    if (!_bendsShape)
+        return jointsAt(std::max(0, std::min(frame, frames() - 1)));
+
     // The entry, as ikBones finds it: the span's time eased with t^2 for a
     // positive strength.
     double entry = frame;
@@ -410,6 +508,17 @@ void IKArmature::storeJoints()
         for (size_t i = 0; i < joints.size(); ++i)
         {
             Point at = joints[i].position;
+            tinyxml2::XMLElement* world = frame == 0 ? _nodes[i].element->FirstChildElement("worldMatrix") : nullptr;
+            if (tinyxml2::XMLElement* matrix = world ? world->FirstChildElement("Matrix") : nullptr)
+            {
+                // The joint's frame as the span starts.
+                for (const char* name : {"a", "b", "c", "d", "tx", "ty"})
+                    matrix->DeleteAttribute(name);
+                Transform placed = turn(joints[i].angle);
+                placed.tx = at.x;
+                placed.ty = at.y;
+                writeMatrix(matrix, placed);
+            }
             if (!_bendsShape)
             {
                 // The instance's registration point, which turns with it.
@@ -495,6 +604,24 @@ bool IKArmature::setPose(int frame, const std::vector<double>& angles)
     return true;
 }
 
+bool IKArmature::setFrames(int count)
+{
+    const std::vector<int> starts = poses();
+    if (starts.empty() || count <= starts.back())
+        return false;
+    const int last = count - starts.back();
+    std::vector<tinyxml2::XMLElement*> treeStates = states(_document->FirstChildElement("IKTree"), "IKState");
+    treeStates.back()->SetAttribute("duration", last);
+    for (Node& node : _nodes)
+    {
+        std::vector<tinyxml2::XMLElement*> list = states(node.element, "State");
+        if (list.size() == starts.size())
+            list.back()->SetAttribute("duration", last);
+    }
+    storeJoints();
+    return true;
+}
+
 // ---------------------------------------------------------------------------
 
 std::vector<JointLimit> IKArmature::limits() const
@@ -561,8 +688,302 @@ std::vector<ArmatureJoint> IKArmature::symbolJoints() const
     return found;
 }
 
+bool IKArmature::storedAt(int joint, int frame, Point& registration, double& angle) const
+{
+    if (joint < 0 || static_cast<size_t>(joint) >= _nodes.size())
+        return false;
+    const tinyxml2::XMLElement* element = _nodes[static_cast<size_t>(joint)].element;
+    const std::vector<double> xs = numbers(element->Attribute("xArray"));
+    const std::vector<double> ys = numbers(element->Attribute("yArray"));
+    const std::vector<double> angles = numbers(element->Attribute("angleArray"));
+    const size_t count = std::min(xs.size(), ys.size());
+    if (count == 0)
+        return false;
+    const size_t at = static_cast<size_t>(std::max(0, std::min(frame, static_cast<int>(count) - 1)));
+    registration = Point(xs[at] / 20.0, ys[at] / 20.0);
+    angle = angles.empty() ? 0.0 : angles[std::min(at, angles.size() - 1)];
+    return true;
+}
+
+Transform IKArmature::carried(int joint, const Transform& stored, int frame) const
+{
+    Point first;
+    Point now;
+    double firstAngle = 0.0;
+    double nowAngle = 0.0;
+    if (_bendsShape || frame <= 0 || !storedAt(joint, 0, first, firstAngle) || !storedAt(joint, frame, now, nowAngle))
+        return stored;
+    // Off the first frame's registration point, turned, onto this frame's.
+    Transform moved = stored;
+    moved.tx -= first.x;
+    moved.ty -= first.y;
+    moved = then(moved, turn(nowAngle - firstAngle));
+    moved.tx += now.x;
+    moved.ty += now.y;
+    return moved;
+}
+
+std::string IKArmature::betweenFrameMatrixList(const std::vector<const Transform*>& instances) const
+{
+    tinyxml2::XMLDocument document;
+    tinyxml2::XMLElement* list = document.NewElement("betweenFrameMatrixList");
+    document.InsertEndChild(list);
+    std::vector<Transform> between;
+    for (size_t i = 0; i < _nodes.size(); ++i)
+    {
+        Point registration;
+        double angle = 0.0;
+        if (i >= instances.size() || !instances[i] || !storedAt(static_cast<int>(i), 0, registration, angle))
+            continue;
+        Transform local = *instances[i];
+        local.tx -= registration.x;
+        local.ty -= registration.y;
+        between.push_back(then(local, turn(-angle)));
+    }
+    const int count = std::max(1, frames());
+    for (int frame = 0; frame < count; ++frame)
+    {
+        for (const Transform& matrix : between)
+        {
+            tinyxml2::XMLElement* element = document.NewElement("Matrix");
+            list->InsertEndChild(element);
+            writeMatrix(element, matrix);
+        }
+    }
+    tinyxml2::XMLPrinter printer(nullptr, true);
+    document.Print(&printer);
+    return printer.CStr();
+}
+
+BoneSpring IKArmature::spring(int joint) const
+{
+    BoneSpring found;
+    if (joint < 0 || static_cast<size_t>(joint) >= _nodes.size())
+        return found;
+    const tinyxml2::XMLElement* element = _nodes[static_cast<size_t>(joint)].element;
+    const char* strength = element->Attribute("springStrength") ? "springStrength" : "strength";
+    const char* damping = element->Attribute("springDamping") ? "springDamping" : "damping";
+    found.present = element->Attribute(strength) || element->Attribute(damping);
+    found.strength = element->DoubleAttribute(strength, 0.0);
+    found.damping = element->DoubleAttribute(damping, 0.0);
+    return found;
+}
+
+void IKArmature::keepAttributesOf(const IKArmature& other)
+{
+    tinyxml2::XMLElement* tree = _document->FirstChildElement("IKTree");
+    const tinyxml2::XMLElement* otherTree = other._document->FirstChildElement("IKTree");
+    if (!tree || !otherTree)
+        return;
+    const auto keep = [](tinyxml2::XMLElement* to, const tinyxml2::XMLElement* from) {
+        for (const tinyxml2::XMLAttribute* attribute = from->FirstAttribute(); attribute; attribute = attribute->Next())
+        {
+            if (!to->Attribute(attribute->Name()))
+                to->SetAttribute(attribute->Name(), attribute->Value());
+        }
+    };
+    keep(tree, otherTree);
+    // Every node by its element and name: the root's IKNode and the
+    // ChildNode under it share a name.
+    std::map<std::string, const tinyxml2::XMLElement*> before;
+    std::function<void(const tinyxml2::XMLElement*)> gather = [&](const tinyxml2::XMLElement* owner) {
+        for (const tinyxml2::XMLElement* child = owner->FirstChildElement(); child; child = child->NextSiblingElement())
+        {
+            const char* name = child->Attribute("name");
+            if (name && (std::strcmp(child->Name(), "IKNode") == 0 || std::strcmp(child->Name(), "ChildNode") == 0))
+                before.emplace(std::string(child->Name()) + "/" + name, child);
+            if (std::strcmp(child->Name(), "childNodes") == 0 || std::strcmp(child->Name(), "IKNode") == 0 ||
+                std::strcmp(child->Name(), "ChildNode") == 0)
+            {
+                gather(child);
+            }
+        }
+    };
+    gather(otherTree);
+    std::function<void(tinyxml2::XMLElement*)> apply = [&](tinyxml2::XMLElement* owner) {
+        for (tinyxml2::XMLElement* child = owner->FirstChildElement(); child; child = child->NextSiblingElement())
+        {
+            const char* name = child->Attribute("name");
+            if (name)
+            {
+                const auto found = before.find(std::string(child->Name()) + "/" + name);
+                if (found != before.end())
+                    keep(child, found->second);
+            }
+            if (std::strcmp(child->Name(), "childNodes") == 0 || std::strcmp(child->Name(), "IKNode") == 0 ||
+                std::strcmp(child->Name(), "ChildNode") == 0)
+            {
+                apply(child);
+            }
+        }
+    };
+    apply(tree);
+    index();
+}
+
+ShapeBinding IKArmature::binding() const
+{
+    ShapeBinding found;
+    const tinyxml2::XMLElement* tree = _document->FirstChildElement("IKTree");
+    const std::vector<double> indices = numbers(tree ? tree->Attribute("connectionIndices") : nullptr);
+    const std::vector<double> data = numbers(tree ? tree->Attribute("connectionData") : nullptr);
+    if (indices.empty())
+        return found;
+    // The number of points; then each point's number and, for each of its
+    // bones, the bone, where its group of four sits in connectionData, a
+    // count of handle pairs and where each handle's group sits; -1 ends a
+    // point.
+    const int points = static_cast<int>(indices[0]);
+    size_t at = 1;
+    for (int point = 0; point < points && at < indices.size(); ++point)
+    {
+        const int number = static_cast<int>(indices[at++]);
+        if (number < 0 || number > 100000)
+            break;
+        if (found.size() <= static_cast<size_t>(number))
+            found.resize(static_cast<size_t>(number) + 1);
+        while (at < indices.size() && indices[at] >= 0.0)
+        {
+            BoneWeight bound;
+            bound.bone = static_cast<int>(indices[at]);
+            const size_t group = at + 1 < indices.size() ? static_cast<size_t>(std::max(0.0, indices[at + 1])) : 0;
+            const size_t handles = at + 2 < indices.size() ? static_cast<size_t>(std::max(0.0, indices[at + 2])) : 0;
+            bound.weight = group + 3 < data.size() ? data[group + 3] : 1.0;
+            found[static_cast<size_t>(number)].push_back(bound);
+            at += 3 + 2 * handles;
+        }
+        ++at;
+    }
+    return found;
+}
+
+bool IKArmature::bindsAnchors() const
+{
+    const tinyxml2::XMLElement* tree = _document->FirstChildElement("IKTree");
+    const char* kind = tree ? tree->Attribute("phoenixBinding") : nullptr;
+    return kind && std::strcmp(kind, "anchors") == 0;
+}
+
+void IKArmature::setBinding(const ShapeBinding& binding, const std::vector<Point>& anchors, const Transform& contour,
+    const std::string& style)
+{
+    tinyxml2::XMLElement* tree = _document->FirstChildElement("IKTree");
+    if (!tree)
+        return;
+    const std::vector<IKJoint> joints = jointsAt(0);
+    std::vector<double> indices;
+    std::vector<double> data;
+    indices.push_back(static_cast<double>(anchors.size()));
+    for (size_t point = 0; point < anchors.size(); ++point)
+    {
+        indices.push_back(static_cast<double>(point));
+        const std::vector<BoneWeight> none;
+        for (const BoneWeight& bound : point < binding.size() ? binding[point] : none)
+        {
+            if (bound.bone < 0 || static_cast<size_t>(bound.bone) >= joints.size() || joints[bound.bone].parent < 0)
+                continue;
+            const Point& head = joints[joints[bound.bone].parent].position;
+            const Point& tail = joints[bound.bone].position;
+            const double dx = tail.x - head.x;
+            const double dy = tail.y - head.y;
+            const double length = std::hypot(dx, dy);
+            if (length < 1.0e-9)
+                continue;
+            const Point& p = anchors[point];
+            const double along = ((p.x - head.x) * dx + (p.y - head.y) * dy) / (length * length);
+            const double side = (dx * (p.y - head.y) - dy * (p.x - head.x)) / length;
+            const double distance = distanceToSegment(p, head, tail);
+            // The point's group, then its two handles', which sit on it.
+            const double group = static_cast<double>(data.size());
+            for (int copy = 0; copy < 3; ++copy)
+            {
+                data.push_back(along);
+                data.push_back(side);
+                data.push_back(distance);
+                data.push_back(bound.weight);
+            }
+            indices.push_back(static_cast<double>(bound.bone));
+            indices.push_back(group);
+            indices.push_back(1.0);
+            indices.push_back(group + 4.0);
+            indices.push_back(group + 8.0);
+        }
+        indices.push_back(-1.0);
+    }
+    tree->SetAttribute("connectionIndices", listOf(indices).c_str());
+    tree->SetAttribute("connectionData", listOf(data).c_str());
+    tree->SetAttribute("phoenixBinding", "anchors");
+
+    // The outline, its points with their handles (on them) in turn: the
+    // first point and its handle out, each other's handle in, the point and
+    // its handle out, and the last's handle in and the point.
+    for (tinyxml2::XMLElement* old = tree->FirstChildElement("IKContour"); old; old = tree->FirstChildElement("IKContour"))
+        tree->DeleteChild(old);
+    tinyxml2::XMLElement* outline = _document->NewElement("IKContour");
+    tree->InsertEndChild(outline);
+    outline->SetAttribute("interior", "true");
+    outline->SetAttribute("orientation", "counter clockwise");
+    if (!anchors.empty())
+    {
+        double left = anchors[0].x;
+        double top = anchors[0].y;
+        double right = left;
+        double bottom = top;
+        for (const Point& p : anchors)
+        {
+            left = std::min(left, p.x);
+            top = std::min(top, p.y);
+            right = std::max(right, p.x);
+            bottom = std::max(bottom, p.y);
+        }
+        outline->SetAttribute("rectLeft", static_cast<int>(std::lround(left * 20.0)));
+        outline->SetAttribute("rectTop", static_cast<int>(std::lround(top * 20.0)));
+        outline->SetAttribute("rectRight", static_cast<int>(std::lround(right * 20.0)));
+        outline->SetAttribute("rectBottom", static_cast<int>(std::lround(bottom * 20.0)));
+    }
+    Transform toContour;
+    if (!inverse(contour, toContour))
+        toContour = Transform();
+    tinyxml2::XMLElement* points = _document->NewElement("dataPoints");
+    outline->InsertEndChild(points);
+    for (size_t i = 0; i < anchors.size(); ++i)
+    {
+        const std::string text = locationText(anchors[i].transformed(toContour));
+        const int copies = anchors.size() == 1 ? 1 : (i == 0 || i + 1 == anchors.size() ? 2 : 3);
+        for (int copy = 0; copy < copies; ++copy)
+        {
+            tinyxml2::XMLElement* point = _document->NewElement("DataPoint");
+            points->InsertEndChild(point);
+            point->SetAttribute("integerPoint", text.c_str());
+        }
+    }
+    tinyxml2::XMLElement* matrixList = _document->NewElement("matrix");
+    outline->InsertEndChild(matrixList);
+    tinyxml2::XMLElement* matrix = _document->NewElement("Matrix");
+    matrixList->InsertEndChild(matrix);
+    writeMatrix(matrix, contour);
+    if (!style.empty())
+    {
+        tinyxml2::XMLDocument styles;
+        if (styles.Parse(("<style>" + style + "</style>").c_str()) == tinyxml2::XML_SUCCESS)
+        {
+            for (const tinyxml2::XMLElement* part = styles.FirstChildElement()->FirstChildElement(); part;
+                 part = part->NextSiblingElement())
+            {
+                outline->InsertEndChild(part->DeepClone(_document.get()));
+            }
+        }
+    }
+}
+
 std::string symbolArmatureXml(const std::string& name, const std::string& treeName,
     const std::vector<ArmatureJoint>& joints, int frames)
+{
+    return armatureXml(name, treeName, joints, frames, false);
+}
+
+std::string armatureXml(const std::string& name, const std::string& treeName, const std::vector<ArmatureJoint>& joints,
+    int frames, bool bendsShape)
 {
     frames = std::max(1, frames);
     // Each joint turned toward its first child; one with none keeps its
@@ -606,14 +1027,32 @@ std::string symbolArmatureXml(const std::string& name, const std::string& treeNa
         if (!boneNames[i].empty())
             element->SetAttribute("boneName", boneNames[i].c_str());
         element->SetAttribute("location", locationText(joints[i].position).c_str());
+        if (bendsShape)
+            element->SetAttribute("nodeType", "lsd");
+    };
+    // A shape's node keeps its joint's frame as a matrix too.
+    const auto world = [&](tinyxml2::XMLElement* element, size_t i) {
+        if (!bendsShape)
+            return;
+        tinyxml2::XMLElement* list = document.NewElement("worldMatrix");
+        element->InsertEndChild(list);
+        tinyxml2::XMLElement* matrix = document.NewElement("Matrix");
+        list->InsertEndChild(matrix);
+        Transform frame = turn(angles[i]);
+        frame.tx = joints[i].position.x;
+        frame.ty = joints[i].position.y;
+        writeMatrix(matrix, frame);
     };
     std::function<void(tinyxml2::XMLElement*, size_t)> node = [&](tinyxml2::XMLElement* list, size_t i) {
         tinyxml2::XMLElement* element = document.NewElement("ChildNode");
         list->InsertEndChild(element);
         describe(element, i);
         const size_t span = static_cast<size_t>(frames);
-        element->SetAttribute("xArray", listOf(std::vector<double>(span, joints[i].registration.x * 20.0)).c_str());
-        element->SetAttribute("yArray", listOf(std::vector<double>(span, joints[i].registration.y * 20.0)).c_str());
+        // A shape's joint lists hold the joint; a symbol's, its instance's
+        // registration point.
+        const Point& at = bendsShape ? joints[i].position : joints[i].registration;
+        element->SetAttribute("xArray", listOf(std::vector<double>(span, at.x * 20.0)).c_str());
+        element->SetAttribute("yArray", listOf(std::vector<double>(span, at.y * 20.0)).c_str());
         element->SetAttribute("angleArray", listOf(std::vector<double>(span, angles[i])).c_str());
         if (!joints[i].reference.empty())
             element->SetAttribute("referenceID", joints[i].reference.c_str());
@@ -643,6 +1082,7 @@ std::string symbolArmatureXml(const std::string& name, const std::string& treeNa
         setNumber(state, "x", offset.x * 20.0);
         setNumber(state, "y", offset.y * 20.0);
         state->SetAttribute("blendMode", 1);
+        world(element, i);
         if (!children[i].empty())
         {
             tinyxml2::XMLElement* below = document.NewElement("childNodes");
@@ -662,6 +1102,7 @@ std::string symbolArmatureXml(const std::string& name, const std::string& treeNa
         if (!joints[i].reference.empty())
             root->SetAttribute("referenceID", joints[i].reference.c_str());
         root->SetAttribute("speed", "1");
+        world(root, i);
         tinyxml2::XMLElement* list = document.NewElement("childNodes");
         root->InsertEndChild(list);
         node(list, i);
@@ -768,6 +1209,298 @@ void reskinShape(Shape& shape, const Transform& toArmature, const std::vector<IK
     warpShape(shape, [&](const Point& p) {
         return skinPoint(p.transformed(toArmature), before, after).transformed(toShape);
     });
+}
+
+std::vector<Point> shapeAnchors(const Shape& shape)
+{
+    AnchorIndex index;
+    index.walk(shape);
+    return index.anchors;
+}
+
+std::string contourStyle(const Shape& shape)
+{
+    char color[16];
+    const auto solid = [&color](const FillStyle* fill) {
+        if (!fill || fill->type() != FillStyle::Type::SolidColor)
+            return false;
+        const SolidColor* paint = static_cast<const SolidColor*>(fill);
+        std::snprintf(color, sizeof(color), "#%02X%02X%02X", paint->color[0], paint->color[1], paint->color[2]);
+        return true;
+    };
+    std::string style;
+    const StrokeStyle* stroke = shape.strokes.empty() ? nullptr : shape.strokes.front();
+    if (stroke && solid(stroke->fill))
+    {
+        char weight[32];
+        std::snprintf(weight, sizeof(weight), "%g", stroke->weight);
+        style += std::string("<SolidStroke scaleMode=\"normal\"") + (stroke->weight != 1.0 ? std::string(" weight=\"") + weight + "\"" : "") +
+            "><fill><SolidColor color=\"" + color + "\"/></fill></SolidStroke>";
+    }
+    if (!shape.fills.empty() && solid(shape.fills.front()))
+        style += std::string("<SolidColor color=\"") + color + "\"/>";
+    return style;
+}
+
+ShapeBinding bindToNearestBones(const std::vector<Point>& anchors, const std::vector<IKJoint>& joints)
+{
+    ShapeBinding binding(anchors.size());
+    for (size_t point = 0; point < anchors.size(); ++point)
+    {
+        std::vector<std::pair<double, int>> distances;
+        for (size_t i = 0; i < joints.size(); ++i)
+        {
+            const int parent = joints[i].parent;
+            if (parent < 0 || static_cast<size_t>(parent) >= joints.size())
+                continue;
+            distances.emplace_back(distanceToSegment(anchors[point], joints[parent].position, joints[i].position),
+                static_cast<int>(i));
+        }
+        if (distances.empty())
+            continue;
+        double nearest = distances.front().first;
+        for (const auto& found : distances)
+            nearest = std::min(nearest, found.first);
+        // As near one bone as another to a hundredth of a pixel: both.
+        for (const auto& found : distances)
+        {
+            if (found.first <= nearest + 0.01)
+                binding[point].push_back({found.second, 1.0});
+        }
+        for (BoneWeight& bound : binding[point])
+            bound.weight = 1.0 / static_cast<double>(binding[point].size());
+    }
+    return binding;
+}
+
+void bindShape(Shape& shape, const Transform& toArmature, const ShapeBinding& binding,
+    const std::vector<IKJoint>& before, const std::vector<IKJoint>& after)
+{
+    Transform toShape;
+    if (!inverse(toArmature, toShape))
+        return;
+    AnchorIndex index;
+    index.walk(shape);
+    if (index.anchors.size() != binding.size())
+        return;
+
+    // A point carried by its bones: each moves it rigidly with the frame of
+    // the joint at its head, and the places are averaged by weight.
+    const auto carry = [&](const Point& p, const std::vector<BoneWeight>& bones) {
+        Point sum;
+        double total = 0.0;
+        for (const BoneWeight& bound : bones)
+        {
+            if (bound.bone < 0 || static_cast<size_t>(bound.bone) >= before.size() ||
+                static_cast<size_t>(bound.bone) >= after.size() || bound.weight <= 0.0)
+            {
+                continue;
+            }
+            const int parent = before[bound.bone].parent;
+            if (parent < 0 || static_cast<size_t>(parent) >= after.size())
+                continue;
+            const IKJoint& from = before[parent];
+            const IKJoint& to = after[parent];
+            const Point local = rotated(Point(p.x - from.position.x, p.y - from.position.y), to.angle - from.angle);
+            sum.x += bound.weight * (to.position.x + local.x);
+            sum.y += bound.weight * (to.position.y + local.y);
+            total += bound.weight;
+        }
+        return total > 0.0 ? Point(sum.x / total, sum.y / total) : p;
+    };
+    // Where each point goes, by where it is: a curve's control point goes
+    // with the points either side of it, half by each. The points first, so
+    // a control point lying on one does not decide where it goes.
+    std::map<std::pair<long long, long long>, Point> moved;
+    const auto place = [&](const Point& p, const Point& to) {
+        moved.emplace(AnchorIndex::key(p), to.transformed(toShape));
+    };
+    const auto pass = [&](bool controls) {
+        for (const Edge* edge : shape.edges)
+        {
+            for (const Path* path : edge ? edge->paths : std::vector<Path*>())
+            {
+                int previous = -1;
+                for (const PathSegment* segment : path ? path->segments : std::vector<PathSegment*>())
+                {
+                    if (!segment || segment->command == PathSegment::Command::Close || segment->points.empty())
+                        continue;
+                    const int number = index.of(segment->points.back());
+                    const std::vector<BoneWeight>& own = binding[static_cast<size_t>(number)];
+                    const std::vector<BoneWeight>& last = previous >= 0 ? binding[static_cast<size_t>(previous)] : own;
+                    for (size_t i = 0; i < segment->points.size(); ++i)
+                    {
+                        const Point& p = segment->points[i];
+                        const Point at = p.transformed(toArmature);
+                        if ((i + 1 != segment->points.size()) != controls)
+                            continue;
+                        if (i + 1 == segment->points.size())
+                            place(p, carry(at, own));
+                        else if (segment->command == PathSegment::Command::Cubic)
+                            place(p, carry(at, i == 0 ? last : own));
+                        else
+                        {
+                            const Point a = carry(at, last);
+                            const Point b = carry(at, own);
+                            place(p, Point((a.x + b.x) / 2.0, (a.y + b.y) / 2.0));
+                        }
+                    }
+                    previous = number;
+                }
+            }
+        }
+    };
+    pass(false);
+    pass(true);
+    warpShape(shape, [&](const Point& p) {
+        const auto found = moved.find(AnchorIndex::key(p));
+        return found != moved.end() ? found->second : p;
+    });
+}
+
+Layer* newArmatureLayer(Timeline& timeline, const Layer& below, const std::string& name, int start, int length,
+    Frame*& pose)
+{
+    Layer* layer = newLayerFor(timeline, false);
+    layer->name = name;
+    layer->autoNamed = false;
+    layer->extraAttributes.emplace_back("animationType", "IK pose");
+    if (layer->frames.empty())
+        layer->frames.push_back(new Frame(layer));
+    pose = layer->frames.front();
+    pose->index = start;
+    pose->duration = length;
+    if (start > 0)
+    {
+        Frame* empty = new Frame(layer);
+        empty->index = 0;
+        empty->duration = start;
+        layer->frames.insert(layer->frames.begin(), empty);
+    }
+    pose->otherTweenType = "IK pose";
+    pose->keyMode = "9732";
+    pose->extraAttributes.emplace_back("isIKPose", "true");
+    pose->extraAttributes.emplace_back("poseLocations", "0");
+    layer->parentLayer = below.parentLayer && below.parentLayer->layerType == Layer::Type::Folder ? below.parentLayer : nullptr;
+    return layer;
+}
+
+BonedShape boneShape(Timeline& timeline, const Layer& layer, const Frame& shapeFrame, const Shape& shape,
+    const std::vector<ArmatureJoint>& joints, const std::string& symbolName, const std::string& armatureName,
+    const std::string& treeName)
+{
+    BonedShape boned;
+    const std::vector<Point> local = shapeAnchors(shape);
+    if (local.empty() || joints.size() < 2)
+        return boned;
+    // The middle of the shape's points, to a twip.
+    double left = 0.0;
+    double top = 0.0;
+    double right = 0.0;
+    double bottom = 0.0;
+    for (size_t i = 0; i < local.size(); ++i)
+    {
+        const Point at = local[i].transformed(shape.transform);
+        left = i == 0 ? at.x : std::min(left, at.x);
+        top = i == 0 ? at.y : std::min(top, at.y);
+        right = i == 0 ? at.x : std::max(right, at.x);
+        bottom = i == 0 ? at.y : std::max(bottom, at.y);
+    }
+    const Point middle(std::round((left + right) * 10.0) / 20.0, std::round((top + bottom) * 10.0) / 20.0);
+    const int length = std::max(1, shapeFrame.duration);
+
+    // The container: the shape on a frame of its own for each of the span's,
+    // which posing bends one by one.
+    Symbol* symbol = new Symbol(nullptr);
+    symbol->name = symbolName;
+    symbol->symbolType = SymbolType::Graphic;
+    symbol->otherSymbolType = "ik container";
+    Timeline* inside = new Timeline(symbol);
+    inside->name = symbolName;
+    symbol->timelines.push_back(inside);
+    Layer* art = new Layer(inside);
+    art->name = "Layer_1";
+    art->color[0] = 0;
+    art->color[1] = 255;
+    art->color[2] = 255;
+    art->color[3] = 255;
+    inside->layers.push_back(art);
+    Shape* rest = nullptr;
+    for (int k = 0; k < length; ++k)
+    {
+        Frame* frame = new Frame(art);
+        frame->index = k;
+        frame->duration = 1;
+        frame->keyMode = "9728";
+        Shape* copy = cloneShape(shape, frame);
+        const Transform placed = shape.transform;
+        warpShape(*copy, [&](const Point& p) {
+            const Point at = p.transformed(placed);
+            return Point(at.x - middle.x, at.y - middle.y);
+        });
+        copy->transform = Transform();
+        copy->isDrawingObject = false;
+        frame->elements.push_back(copy);
+        art->frames.push_back(frame);
+        if (!rest)
+            rest = copy;
+    }
+    art->firstFrame = 0;
+    art->lastFrame = length;
+
+    Frame* pose = nullptr;
+    Layer* armatureLayer = newArmatureLayer(timeline, layer, armatureName, shapeFrame.index, length, pose);
+    SymbolInstance* instance = new SymbolInstance(pose);
+    instance->libraryItemName = symbolName;
+    instance->symbol = symbol;
+    instance->symbolType = SymbolType::Graphic;
+    instance->loopType = LoopType::PlayOnce;
+    instance->firstFrame = 0;
+    instance->transform.tx = middle.x;
+    instance->transform.ty = middle.y;
+    pose->elements.push_back(instance);
+
+    std::vector<ArmatureJoint> lsd = joints;
+    for (ArmatureJoint& joint : lsd)
+    {
+        joint.registration = joint.position;
+        joint.reference.clear();
+    }
+    IKArmature armature;
+    armature.parse(armatureXml(armatureName, treeName, lsd, length, true));
+    std::vector<Point> anchors;
+    for (const Point& p : shapeAnchors(*rest))
+        anchors.push_back(p.transformed(instance->transform));
+    armature.setBinding(bindToNearestBones(anchors, armature.jointsAt(0)), anchors, instance->transform,
+        contourStyle(shape));
+    pose->extraChildren.push_back("<betweenFrameMatrixList><Matrix/></betweenFrameMatrixList>");
+    pose->extraChildren.push_back(armature.xml());
+
+    boned.symbol = symbol;
+    boned.layer = armatureLayer;
+    boned.pose = pose;
+    boned.instance = instance;
+    return boned;
+}
+
+void setBetweenFrames(std::vector<std::string>& children, const std::string& list)
+{
+    const auto starts = [](const std::string& child, const char* tag) {
+        const size_t at = child.find('<');
+        return at != std::string::npos && child.compare(at, std::strlen(tag), tag) == 0;
+    };
+    for (std::string& child : children)
+    {
+        if (starts(child, "<betweenFrameMatrixList"))
+        {
+            child = list;
+            return;
+        }
+    }
+    auto at = children.begin();
+    while (at != children.end() && !starts(*at, "<IKTree"))
+        ++at;
+    children.insert(at, list);
 }
 
 // ---------------------------------------------------------------------------
