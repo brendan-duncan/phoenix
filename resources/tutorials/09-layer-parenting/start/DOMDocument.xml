@@ -1,0 +1,49 @@
+<DOMDocument xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns="http://ns.adobe.com/xfl/2008/" width="1280" height="720" frameRate="24" backgroundColor="#FFFFFF" currentTimeline="1" xflVersion="23.0" creatorInfo="Phoenix" platform="Windows" versionInfo="Saved by Phoenix" majorVersion="24">
+  <symbols>
+    <Include href="Body.xml" itemIcon="1" loadImmediate="false"/>
+    <Include href="Arm.xml" itemIcon="1" loadImmediate="false"/>
+    <Include href="Hand.xml" itemIcon="1" loadImmediate="false"/>
+  </symbols>
+  <timelines>
+    <DOMTimeline name="Scene 1">
+      <layers>
+        <DOMLayer name="Hand" color="#FF4FFF">
+          <frames>
+            <DOMFrame index="0" keyMode="9728">
+              <elements>
+                <DOMSymbolInstance libraryItemName="Hand" symbolType="graphic" loop="loop">
+                  <matrix><Matrix tx="840" ty="324"/></matrix>
+                  <transformationPoint><Point/></transformationPoint>
+                </DOMSymbolInstance>
+              </elements>
+            </DOMFrame>
+          </frames>
+        </DOMLayer>
+        <DOMLayer name="Arm" color="#4FFFFF">
+          <frames>
+            <DOMFrame index="0" keyMode="9728">
+              <elements>
+                <DOMSymbolInstance libraryItemName="Arm" symbolType="graphic" loop="loop">
+                  <matrix><Matrix tx="690" ty="324"/></matrix>
+                  <transformationPoint><Point/></transformationPoint>
+                </DOMSymbolInstance>
+              </elements>
+            </DOMFrame>
+          </frames>
+        </DOMLayer>
+        <DOMLayer name="Body" color="#FF8000" current="true" isSelected="true">
+          <frames>
+            <DOMFrame index="0" keyMode="9728">
+              <elements>
+                <DOMSymbolInstance libraryItemName="Body" symbolType="graphic" loop="loop">
+                  <matrix><Matrix tx="640" ty="400"/></matrix>
+                  <transformationPoint><Point/></transformationPoint>
+                </DOMSymbolInstance>
+              </elements>
+            </DOMFrame>
+          </frames>
+        </DOMLayer>
+      </layers>
+    </DOMTimeline>
+  </timelines>
+</DOMDocument>

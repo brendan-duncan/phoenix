@@ -27,6 +27,10 @@
 
 <p>Starts Phoenix with the file open, the same as dropping it on the program.</p>
 
+<pre><code>Phoenix --tutorial 01-first-animation</code></pre>
+
+<p>Starts Phoenix with a lesson running, by its folder name. See <a href="tutorials.html">Interactive tutorials</a>.</p>
+
 <h2>List the commands</h2>
 
 <pre><code>Phoenix help</code></pre>
@@ -116,6 +120,13 @@ Phoenix links shots/sh010.fla --update --save</code></pre>
 Phoenix shortcuts --defaults</code></pre>
 
 <p>Prints every command and tool with its key, one to a line, separated by a tab: the keys of the set in use, or with <code>--defaults</code>, Phoenix's own. See <a href="preferences.html#keyboard-shortcuts">Keyboard shortcuts</a> to change them.</p>
+
+<h2>Check the tutorials</h2>
+
+<pre><code>Phoenix lessons
+Phoenix lessons --check</code></pre>
+
+<p>Lists the interactive tutorials: each lesson's folder name, title and number of steps. With <code>--check</code>, Phoenix opens its window out of sight and finds every tool, menu command, panel and control the lessons point at, and every tool and command they wait for, printing any it cannot find. It exits with 2 when something is missing, so a studio can check its own lessons after an update. Lessons in the folder named by <code>PHOENIX_TUTORIALS_DIR</code> are checked too, which helps while writing one.</p>
 
 <h2>Measure performance</h2>
 

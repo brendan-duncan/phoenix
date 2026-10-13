@@ -1,0 +1,39 @@
+<DOMDocument xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns="http://ns.adobe.com/xfl/2008/" width="1280" height="720" frameRate="24" backgroundColor="#CCE8FF" currentTimeline="1" xflVersion="23.0" creatorInfo="Phoenix" platform="Windows" versionInfo="Saved by Phoenix" majorVersion="24">
+  <symbols>
+    <Include href="Ball.xml" itemIcon="1" loadImmediate="false"/>
+  </symbols>
+  <timelines>
+    <DOMTimeline name="Scene 1">
+      <layers>
+        <DOMLayer name="Ball" color="#FF4FFF" current="true" isSelected="true">
+          <frames>
+            <DOMFrame index="0" keyMode="9728">
+              <elements>
+                <DOMSymbolInstance libraryItemName="Ball" symbolType="graphic" loop="loop">
+                  <matrix><Matrix tx="200" ty="480"/></matrix>
+                  <transformationPoint><Point/></transformationPoint>
+                </DOMSymbolInstance>
+              </elements>
+            </DOMFrame>
+          </frames>
+        </DOMLayer>
+        <DOMLayer name="Ground" color="#4FFF4F" locked="true">
+          <frames>
+            <DOMFrame index="0" duration="24" keyMode="9728">
+              <elements>
+                <DOMShape isDrawingObject="true">
+                  <fills><FillStyle index="1"><SolidColor color="#7BC67B"/></FillStyle></fills>
+                  <edges><Edge fillStyle1="1" edges="!0 11200|25600 11200|25600 14400|0 14400|0 11200"/></edges>
+                </DOMShape>
+                <DOMShape isDrawingObject="true">
+                  <fills><FillStyle index="1"><SolidColor color="#FFE066"/></FillStyle></fills>
+                  <edges><Edge fillStyle1="1" edges="!23600 2200[23600 2697 23249 3049[22897 3400 22400 3400[21903 3400 21551 3049[21200 2697 21200 2200[21200 1703 21551 1351[21903 1000 22400 1000[22897 1000 23249 1351[23600 1703 23600 2200"/></edges>
+                </DOMShape>
+              </elements>
+            </DOMFrame>
+          </frames>
+        </DOMLayer>
+      </layers>
+    </DOMTimeline>
+  </timelines>
+</DOMDocument>

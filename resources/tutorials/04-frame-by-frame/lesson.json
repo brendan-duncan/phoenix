@@ -1,0 +1,133 @@
+{
+  "title": "Frame-by-frame and onion skinning",
+  "summary": "Draw a bouncing ball one keyframe at a time with F6 and F7, use onion skinning to see the frames around the one you draw, step through it, and play it on a loop.",
+  "minutes": 8,
+  "order": 4,
+  "start": {"new": {"width": 1280, "height": 720, "fps": 12}},
+  "steps": [
+    {
+      "title": "Welcome",
+      "text": "<p>In this lesson you will animate a ball bouncing across the stage by drawing it again on each frame, the way hand-drawn animation is made.</p><p>The new document runs at 12 frames per second, so each drawing stays up a little longer.</p>"
+    },
+    {
+      "title": "Pick the Oval tool",
+      "text": "<p>Press <kbd>O</kbd>, or choose the Oval tool from the Rectangle slot.</p>",
+      "target": "tool:Oval",
+      "wait": {"tool": "Oval"}
+    },
+    {
+      "title": "Frame 1: the ball up high",
+      "text": "<p>Hold <kbd>Shift</kbd> and draw a ball near the top left of the stage. This is the top of its fall.</p>",
+      "target": "stage:100,60,160,160",
+      "wait": {"command": "Oval"}
+    },
+    {
+      "title": "Go to frame 2",
+      "text": "<p>Click the cell under frame <b>2</b> in the timeline.</p>",
+      "target": "frame::2",
+      "wait": {"frame": 2}
+    },
+    {
+      "title": "A blank keyframe",
+      "text": "<p>Press <kbd>F7</kbd>, or choose <b>Insert &gt; Timeline &gt; Blank Keyframe</b>. Frame 2 is now a keyframe of its own, with nothing on it: the stage is empty.</p>",
+      "target": "menu:Insert/Timeline/Blank Keyframe",
+      "wait": {"command": "Insert Blank Keyframe"}
+    },
+    {
+      "title": "Turn on onion skinning",
+      "text": "<p>Click this button, or press <kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>O</kbd>. The ball from frame 1 shows faintly, so you can place the next drawing against it. Frames before the playhead show in blue, frames after it in green.</p>",
+      "target": "widget:timelineOnionSkin"
+    },
+    {
+      "title": "Frame 2: falling",
+      "text": "<p>Draw the ball again, lower down and a little to the right of the faint one.</p>",
+      "target": "stage:280,260,160,160",
+      "wait": {"command": "Oval"}
+    },
+    {
+      "title": "Go to frame 3",
+      "text": "<p>Click the cell under frame <b>3</b>.</p>",
+      "target": "frame::3",
+      "wait": {"frame": 3}
+    },
+    {
+      "title": "A keyframe with a copy",
+      "text": "<p>This time press <kbd>F6</kbd>, or choose <b>Insert &gt; Timeline &gt; Keyframe</b>. A keyframe starts with a copy of the frame before it, so the ball is already there to move.</p>",
+      "target": "menu:Insert/Timeline/Keyframe",
+      "wait": {"command": "Insert Keyframe"}
+    },
+    {
+      "title": "Pick the Selection tool",
+      "text": "<p>Press <kbd>V</kbd>.</p>",
+      "target": "tool:Selection",
+      "wait": {"tool": "Selection"}
+    },
+    {
+      "title": "Frame 3: hitting the ground",
+      "text": "<p>Double-click the ball to select its fill and outline, then drag it down to the bottom of the stage, a little further right.</p>",
+      "target": "stage:280,260,160,160",
+      "wait": {"command": "Move"}
+    },
+    {
+      "title": "Squash it (if you like)",
+      "text": "<p>A ball squashes as it lands. Press <kbd>Q</kbd> for the <b>Free Transform</b> tool and drag the handles to make the ball a little wider and shorter.</p><p>Click <b>Next</b> when you are happy with it.</p>",
+      "target": "tool:Free Transform"
+    },
+    {
+      "title": "Frame 4: bouncing up",
+      "text": "<p>Click the cell under frame <b>4</b>, then press <kbd>F7</kbd> for a blank keyframe, so you can draw the ball fresh.</p>",
+      "target": "frame::4",
+      "wait": {"command": "Insert Blank Keyframe"}
+    },
+    {
+      "title": "Draw the rising ball",
+      "text": "<p>Press <kbd>O</kbd> and draw the ball rising again, up and to the right of where it landed. The onion skin shows the frames before it.</p>",
+      "target": "stage",
+      "wait": {"command": "Oval"}
+    },
+    {
+      "title": "Frame 5: up high again",
+      "text": "<p>Click the cell under frame <b>5</b> and press <kbd>F7</kbd>.</p>",
+      "target": "frame::5",
+      "wait": {"command": "Insert Blank Keyframe"}
+    },
+    {
+      "title": "Draw the top of the bounce",
+      "text": "<p>Draw the ball near the top of the stage, further right again.</p>",
+      "target": "stage",
+      "wait": {"command": "Oval"}
+    },
+    {
+      "title": "The onion skin markers",
+      "text": "<p>The markers in the ruler above the frames show which frames the onion skin covers, a few each side of the playhead. Drag a marker to show more frames or fewer. Right-click the onion skin button for more settings.</p>",
+      "target": "ruler:3"
+    },
+    {
+      "title": "Back to the start",
+      "text": "<p>Click the <b>Step back</b> button, or press <kbd>,</kbd> (comma), until the playhead is on frame 1.</p>",
+      "target": "widget:timelineStepBack",
+      "wait": {"frame": 1}
+    },
+    {
+      "title": "Step through the drawings",
+      "text": "<p>Now step forward with this button, or <kbd>.</kbd> (period), to frame 3. Flipping between drawings like this is the best way to check the motion.</p><p><kbd>Alt</kbd>+<kbd>.</kbd> and <kbd>Alt</kbd>+<kbd>,</kbd> jump to the next and previous keyframe.</p>",
+      "target": "widget:timelineStepForward",
+      "wait": {"frame": 3}
+    },
+    {
+      "title": "Loop playback",
+      "text": "<p>Click the <b>Loop</b> button, or press <kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>L</kbd>, so playback goes round and round. Drag the ends of the loop range in the ruler to loop only part of the timeline.</p>",
+      "target": "widget:timelineLoop"
+    },
+    {
+      "title": "Play it",
+      "text": "<p>Press <kbd>Enter</kbd>, or click <b>Play</b>. Turn the onion skin off to see the ball move cleanly. Press <kbd>Enter</kbd> again to stop.</p>",
+      "target": "widget:timelinePlay",
+      "wait": {"playing": true}
+    },
+    {
+      "title": "Well done",
+      "text": "<p>You drew an animation frame by frame, with <kbd>F7</kbd> for empty keyframes and <kbd>F6</kbd> for copies, checked it with onion skinning and stepping, and played it on a loop.</p><p>To keep the ball bouncing, add more keyframes after frame 5. Then try <i>Symbols and editing in place</i>.</p>"
+    }
+  ]
+}

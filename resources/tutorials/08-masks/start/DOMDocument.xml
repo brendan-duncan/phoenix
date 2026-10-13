@@ -1,0 +1,51 @@
+<DOMDocument xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns="http://ns.adobe.com/xfl/2008/" width="1280" height="720" frameRate="24" backgroundColor="#222233" currentTimeline="1" xflVersion="23.0" creatorInfo="Phoenix" platform="Windows" versionInfo="Saved by Phoenix" majorVersion="24">
+  <timelines>
+    <DOMTimeline name="Scene 1">
+      <layers>
+        <DOMLayer name="Spotlight" color="#FF4FFF" current="true" isSelected="true">
+          <frames>
+            <DOMFrame index="0" duration="48" keyMode="9728">
+              <elements/>
+            </DOMFrame>
+          </frames>
+        </DOMLayer>
+        <DOMLayer name="Picture" color="#4FFFFF">
+          <frames>
+            <DOMFrame index="0" duration="48" keyMode="9728">
+              <elements>
+                <DOMShape isDrawingObject="true">
+                  <fills><FillStyle index="1"><SolidColor color="#2E86DE"/></FillStyle></fills>
+                  <edges><Edge fillStyle1="1" edges="!0 0|25600 0|25600 14400|0 14400|0 0"/></edges>
+                </DOMShape>
+                <DOMShape isDrawingObject="true">
+                  <fills><FillStyle index="1"><SolidColor color="#FF6B6B"/></FillStyle></fills>
+                  <edges><Edge fillStyle1="1" edges="!7800 4000[7800 5408 6804 6404[5808 7400 4400 7400[2992 7400 1996 6404[1000 5408 1000 4000[1000 2592 1996 1596[2992 600 4400 600[5808 600 6804 1596[7800 2592 7800 4000"/></edges>
+                </DOMShape>
+                <DOMShape isDrawingObject="true">
+                  <fills><FillStyle index="1"><SolidColor color="#FECA57"/></FillStyle></fills>
+                  <edges><Edge fillStyle1="1" edges="!17200 8400[17200 10223 15911 11511[14623 12800 12800 12800[10977 12800 9689 11511[8400 10223 8400 8400[8400 6577 9689 5289[10977 4000 12800 4000[14623 4000 15911 5289[17200 6577 17200 8400"/></edges>
+                </DOMShape>
+                <DOMShape isDrawingObject="true">
+                  <fills><FillStyle index="1"><SolidColor color="#1DD1A1"/></FillStyle></fills>
+                  <edges><Edge fillStyle1="1" edges="!24800 4400[24800 5891 23746 6946[22691 8000 21200 8000[19709 8000 18654 6946[17600 5891 17600 4400[17600 2909 18654 1854[19709 800 21200 800[22691 800 23746 1854[24800 2909 24800 4400"/></edges>
+                </DOMShape>
+                <DOMShape isDrawingObject="true">
+                  <fills><FillStyle index="1"><SolidColor color="#FF9FF3"/></FillStyle></fills>
+                  <edges><Edge fillStyle1="1" edges="!1600 9400|7600 9400|7600 13000|1600 13000|1600 9400"/></edges>
+                </DOMShape>
+                <DOMShape isDrawingObject="true">
+                  <fills><FillStyle index="1"><SolidColor color="#5F27CD"/></FillStyle></fills>
+                  <edges><Edge fillStyle1="1" edges="!18000 9600|24000 9600|24000 13000|18000 13000|18000 9600"/></edges>
+                </DOMShape>
+                <DOMShape isDrawingObject="true">
+                  <fills><FillStyle index="1"><SolidColor color="#FFFFFF"/></FillStyle></fills>
+                  <edges><Edge fillStyle1="1" edges="!14600 8400[14600 9146 14073 9673[13546 10200 12800 10200[12054 10200 11527 9673[11000 9146 11000 8400[11000 7654 11527 7127[12054 6600 12800 6600[13546 6600 14073 7127[14600 7654 14600 8400"/></edges>
+                </DOMShape>
+              </elements>
+            </DOMFrame>
+          </frames>
+        </DOMLayer>
+      </layers>
+    </DOMTimeline>
+  </timelines>
+</DOMDocument>

@@ -1,0 +1,146 @@
+{
+  "title": "A tour of the workspace",
+  "summary": "Find your way around Phoenix: the toolbox and its flyouts, the edit bar and stage controls, the timeline, the Properties panel's tabs, the Library, Color and Swatches panels, and workspaces.",
+  "minutes": 6,
+  "order": 2,
+  "start": {"new": {"width": 1280, "height": 720, "fps": 24}},
+  "steps": [
+    {
+      "title": "Welcome",
+      "text": "<p>This lesson is a quick walk around the Phoenix window, so you know where everything is before you start animating.</p><p>Phoenix has opened a new document to look around in. Most steps just point something out: read them and click <b>Next</b>. A few ask you to try something, and move on by themselves when you do.</p>"
+    },
+    {
+      "title": "The toolbox",
+      "text": "<p>The drawing and selection tools live here. Each button is a <b>slot</b>. Many slots hold several related tools, and show the one you used last.</p><p>Right-click the toolbox and choose <b>Edit Toolbar</b> to arrange the slots your way.</p>",
+      "target": "dock:Tools"
+    },
+    {
+      "title": "Open a flyout",
+      "text": "<p>Press and hold the slot with the Rectangle and Oval tools. A flyout opens with the other tools in that slot.</p><p>Choose the <b>PolyStar</b> tool. The slot now shows it, so it is one click away next time.</p>",
+      "target": "tool:PolyStar",
+      "wait": {"tool": "PolyStar"}
+    },
+    {
+      "title": "Stroke color",
+      "text": "<p>Under the tools are the colors new artwork is drawn with. The outlined square is the <b>stroke</b> color: click it to pick a new one.</p>",
+      "target": "widget:toolboxStroke"
+    },
+    {
+      "title": "Fill color",
+      "text": "<p>The solid square is the <b>fill</b> color. The small buttons beside them set black and white, or swap stroke and fill.</p><p>Below them is the <b>Object Drawing</b> button, <kbd>J</kbd>, which the lesson <i>Merge and object drawing</i> explains.</p>",
+      "target": "widget:toolboxFill"
+    },
+    {
+      "title": "The stage and pasteboard",
+      "text": "<p>The white rectangle is the <b>stage</b>: what is on it is what your movie shows. The gray area around it is the <b>pasteboard</b>, where artwork can wait off screen, ready to enter.</p>",
+      "target": "stage"
+    },
+    {
+      "title": "Pan the view",
+      "text": "<p>Press <kbd>H</kbd> for the <b>Hand</b> tool and drag the stage around. With any other tool, holding <kbd>Space</kbd> does the same.</p>",
+      "target": "tool:Hand",
+      "wait": {"tool": "Hand"}
+    },
+    {
+      "title": "The zoom box",
+      "text": "<p>The <b>edit bar</b> above the stage holds the stage controls. This box shows the magnification: type a percentage, or click its arrows to step through the presets. <kbd>Ctrl</kbd>+<kbd>=</kbd> and <kbd>Ctrl</kbd>+<kbd>-</kbd> zoom in and out too.</p>",
+      "target": "widget:stageZoom"
+    },
+    {
+      "title": "Magnification presets",
+      "text": "<p>This arrow opens the presets: <b>Fit in Window</b>, <b>Show All</b> and fixed sizes. Choose <b>200%</b> to get close.</p>",
+      "target": "widget:stageZoomMenu"
+    },
+    {
+      "title": "Fit the stage again",
+      "text": "<p>Press <kbd>Ctrl</kbd>+<kbd>2</kbd>, or choose <b>View &gt; Magnification &gt; Fit in Window</b>, to see the whole stage again.</p>",
+      "target": "menu:View/Magnification/Fit in Window",
+      "wait": {"action": "View/Magnification/Fit in Window"}
+    },
+    {
+      "title": "Center the stage",
+      "text": "<p>This button brings the stage back to the middle of the view after panning, keeping the magnification.</p>",
+      "target": "widget:stageCenter"
+    },
+    {
+      "title": "Turn the view",
+      "text": "<p>This button picks the <b>Rotation</b> tool (<kbd>Shift</kbd>+<kbd>H</kbd>), which turns your view of the stage the way you would turn a sheet of paper. Once the view is turned, the button shows the angle and a click sets it straight. Turning the view never changes the artwork.</p>",
+      "target": "widget:stageRotation"
+    },
+    {
+      "title": "Content outside the stage",
+      "text": "<p>This menu chooses what happens to artwork out on the pasteboard: <b>Show</b> it, <b>Dim</b> it, or <b>Clip</b> it away so you see only what the movie will show.</p>",
+      "target": "widget:stageClip"
+    },
+    {
+      "title": "Edit Symbols",
+      "text": "<p>The left of the edit bar shows what you are editing: the scene, and the symbols you have gone into. Click a name to go back up to it.</p><p>At its right, <b>Edit Symbols</b> lists the library's symbols to open one directly. <b>Edit &gt; Edit Symbols</b> (<kbd>Ctrl</kbd>+<kbd>E</kbd>) opens the selected instance's symbol, or takes you back to the document.</p>",
+      "target": "menu:Edit/Edit Symbols"
+    },
+    {
+      "title": "The timeline",
+      "text": "<p>The timeline holds the layers on the left and their frames on the right. Above the frames are the transport buttons: first frame, step back, <b>Play</b> and step forward. <kbd>Enter</kbd> plays and stops.</p>",
+      "target": "widget:timelinePlay"
+    },
+    {
+      "title": "Onion skin and loop",
+      "text": "<p>This button turns on <b>onion skinning</b>, showing the frames around the playhead faintly on the stage. Right-click it for its settings. The button beside it loops playback.</p>",
+      "target": "widget:timelineOnionSkin"
+    },
+    {
+      "title": "Frame view",
+      "text": "<p>This menu sets how the frames look: their width, the height of the rows, thumbnails of the artwork, and time in seconds. <kbd>Ctrl</kbd>+wheel over the frames zooms them.</p>",
+      "target": "widget:timelineFrameView"
+    },
+    {
+      "title": "Add a layer",
+      "text": "<p>Under the layer list are buttons for a new layer, a new folder and delete. Click <b>New Layer</b> now.</p><p>Double-click a layer's name to rename it.</p>",
+      "target": "widget:layerNew",
+      "wait": {"command": "New Layer"}
+    },
+    {
+      "title": "Properties: the Tool tab",
+      "text": "<p>The <b>Properties</b> panel has four tabs along its top: <b>Tool</b>, <b>Object</b>, <b>Frame</b> and <b>Doc</b>. Click <b>Tool</b>: it holds the settings of the tool in use, such as its color and style and the tool's own options.</p>",
+      "target": "tab:Properties/Tool"
+    },
+    {
+      "title": "Object and Frame",
+      "text": "<p>Click the tabs as you read. <b>Object</b> shows what is selected on the stage: position and size, and for a symbol instance its color effect, looping and filters.</p><p><b>Frame</b> shows the frame at the playhead: its label, its tween and ease, and its sound.</p>",
+      "target": "tab:Properties/Object"
+    },
+    {
+      "title": "Doc",
+      "text": "<p><b>Doc</b> holds the document's settings: the stage's width and height, its color, and the frame rate.</p>",
+      "target": "tab:Properties/Doc"
+    },
+    {
+      "title": "The Library",
+      "text": "<p>The <b>Library</b> keeps the document's symbols, bitmaps and sounds. Drag an item onto the stage to place an instance of it; double-click one to edit it. <kbd>Ctrl</kbd>+<kbd>L</kbd> opens it.</p>",
+      "target": "dock:Library"
+    },
+    {
+      "title": "The Color panel",
+      "text": "<p>The <b>Color</b> panel sets what new artwork is filled with: a solid color, a linear or radial gradient, or a bitmap. <b>Apply to Selection</b> fills the selected shapes with it.</p>",
+      "target": "dock:Color"
+    },
+    {
+      "title": "Swatches",
+      "text": "<p><b>Swatches</b> are the document's saved colors. Click one to make it the fill color; its menu sorts them and brings color tables in and out.</p>",
+      "target": "dock:Swatches"
+    },
+    {
+      "title": "The Window menu",
+      "text": "<p>Every panel is in the <b>Window</b> menu, ticked when open. Choose one to open it or bring it forward.</p><p><b>Window &gt; Workspaces</b> switches between whole layouts: <b>Essentials</b>, <b>Animator</b>, <b>Designer</b> and <b>Classic</b>. Arrange the panels your way and choose <b>New Workspace</b> to keep it.</p>",
+      "target": "menu:Window/Workspaces"
+    },
+    {
+      "title": "Hide the panels",
+      "text": "<p>Press <kbd>F4</kbd> to hide every panel and see the stage alone. Press <kbd>F4</kbd> again to bring them back.</p>",
+      "target": "menu:Window/Hide Panels"
+    },
+    {
+      "title": "That's the tour",
+      "text": "<p>You have seen the toolbox and its flyouts, the edit bar and stage controls, the timeline, the Properties tabs, the Library, Color and Swatches panels, and workspaces.</p><p>Next, try <i>Merge and object drawing</i> to learn how shapes you draw combine, or <i>Your first animation</i> if you have not made one yet.</p>"
+    }
+  ]
+}

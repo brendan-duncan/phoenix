@@ -10,6 +10,7 @@ const NAV = [
     { href: "index.html", title: "Welcome to Phoenix" },
     { href: "get-started.html", title: "Install and update" },
     { href: "first-animation.html", title: "Your first animation" },
+    { href: "tutorials.html", title: "Interactive tutorials" },
   ] },
   { group: "Workspace", pages: [
     { href: "workspace.html", title: "The workspace" },

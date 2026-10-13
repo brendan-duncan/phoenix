@@ -1,0 +1,72 @@
+{
+  "title": "Rigging with layer parenting",
+  "summary": "Rig a character's arm and hand to its body with layer parenting, pose the rig, and choose what the children take on from their parents.",
+  "minutes": 8,
+  "order": 9,
+  "guide": "timeline.html",
+  "start": {"document": "start"},
+  "steps": [
+    {
+      "title": "Welcome",
+      "text": "<p>In this lesson you will rig a simple character with <b>layer parenting</b>: the hand follows the arm and the arm follows the body, the way a forearm follows the upper arm.</p><p>The document is ready: the body, the arm and the hand are symbol instances on layers of their own. Click <b>Next</b> to begin.</p>"
+    },
+    {
+      "title": "Parent the arm to the body",
+      "text": "<p>Right-click the <i>Arm</i> layer's name and choose <b>Parent Layer &gt; Body</b>.</p><p>Nothing moves yet: the arm stays where it is, but from now on it follows the body.</p>",
+      "target": "layer:Arm",
+      "wait": {"command": "Parent Layer"}
+    },
+    {
+      "title": "Parent the hand to the arm",
+      "text": "<p>Right-click the <i>Hand</i> layer's name and choose <b>Parent Layer &gt; Arm</b>. The hand now follows the arm, and through it the body.</p><p>The linked-circles button at the top right of the layer list shows the links as lines, and lets you drag a layer's handle onto its parent instead.</p>",
+      "target": "layer:Hand",
+      "wait": {"command": "Parent Layer"}
+    },
+    {
+      "title": "Move the body",
+      "text": "<p>Press <kbd>V</kbd> for the Selection tool and drag the body across the stage. The arm and the hand come along.</p>",
+      "target": "stage:580,310,120,180",
+      "wait": {"command": "Move"}
+    },
+    {
+      "title": "Pick the Free Transform tool",
+      "text": "<p>Press <kbd>Q</kbd>, or click the Free Transform tool in the toolbox.</p>",
+      "target": "tool:Free Transform",
+      "wait": {"tool": "Free Transform"}
+    },
+    {
+      "title": "Raise the arm",
+      "text": "<p>Click the arm to select it. Then drag from just outside a corner handle of its box to rotate it, so the arm points up. It turns at the shoulder, where its transformation point is, and the hand turns with it.</p>",
+      "target": "stage",
+      "wait": {"command": "Rotate"}
+    },
+    {
+      "title": "Lean the body",
+      "text": "<p>Click the body and rotate it a little the same way. The whole rig leans together: the arm keeps its pose and the hand stays on the end of it.</p>",
+      "target": "stage",
+      "wait": {"command": "Rotate"}
+    },
+    {
+      "title": "Scale the body",
+      "text": "<p>With the body selected, drag a corner handle outward to make it bigger. The arm and the hand grow with it, as children take on their parent's scale by default.</p>",
+      "target": "stage",
+      "wait": {"command": "Scale"}
+    },
+    {
+      "title": "Choose what the arm follows",
+      "text": "<p>Right-click the <i>Arm</i> layer's name and choose <b>Properties...</b>. Under <b>Follow parent's</b>, uncheck <b>Scale</b> and click <b>OK</b>.</p><p>A child always follows its parent's position and rotation; <b>Scale</b>, <b>Skew</b> and <b>Flip</b> are yours to choose. The arm may change size on the stage, as it no longer takes on the body's scale.</p>",
+      "target": "layer:Arm",
+      "wait": {"command": "Layer Properties"}
+    },
+    {
+      "title": "Scale the body again",
+      "text": "<p>Select the body and scale it again. Now the arm and the hand still move and turn with it, but keep their size.</p>",
+      "target": "stage",
+      "wait": {"command": "Scale"}
+    },
+    {
+      "title": "Well done",
+      "text": "<p>You rigged a body, arm and hand with layer parenting, posed the rig by moving and rotating the parents, and chose which parts of a parent's transform a child follows.</p><p>To set a layer free, choose <b>Parent Layer &gt; None</b>. Help &gt; Tutorials has more lessons, such as <i>Motion tweens and the Motion Editor</i>.</p>"
+    }
+  ]
+}

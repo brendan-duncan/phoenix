@@ -1,0 +1,24 @@
+<DOMSymbolItem xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns="http://ns.adobe.com/xfl/2008/" name="Hand" symbolType="graphic">
+  <timeline>
+    <DOMTimeline name="Hand">
+      <layers>
+        <DOMLayer name="Layer_1" color="#4FFF4F" current="true" isSelected="true">
+          <frames>
+            <DOMFrame index="0" keyMode="9728">
+              <elements>
+                <DOMShape>
+                  <fills>
+                    <FillStyle index="1"><SolidColor color="#F5C99B"/></FillStyle>
+                  </fills>
+                  <edges>
+                    <Edge fillStyle1="1" edges="!880 0[880 182 751 311[622 440 440 440[258 440 129 311[0 182 0 0[0 -182 129 -311[258 -440 440 -440[622 -440 751 -311[880 -182 880 0"/>
+                  </edges>
+                </DOMShape>
+              </elements>
+            </DOMFrame>
+          </frames>
+        </DOMLayer>
+      </layers>
+    </DOMTimeline>
+  </timeline>
+</DOMSymbolItem>

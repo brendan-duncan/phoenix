@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Interactive tutorials · Phoenix User Guide</title>
+<meta name="description" content="Lessons inside Phoenix that walk through a task step by step, circling the control to use next, and how to write lessons of your own.">
+<meta name="keywords" content="tutorials lessons interactive guided learn first animation tour help step lesson.json write your own training">
+<link rel="icon" href="assets/img/logo.png">
+<link rel="stylesheet" href="assets/site.css">
+<script>try { const t = localStorage.getItem("phoenix-docs-theme"); if (t) document.documentElement.dataset.theme = t; } catch (e) {}</script>
+<script src="assets/site.js" defer></script>
+</head>
+<body>
+<main>
+<article class="content">
+
+<p class="eyebrow">Get started</p>
+<h1>Interactive tutorials</h1>
+<p class="lead">Phoenix can teach itself. A lesson walks you through a task one step at a time: a small window says what to do, and the control to use next is circled on the screen.</p>
+
+<h2>Start a lesson</h2>
+
+<ol class="steps">
+  <li>Choose <span class="menu-path">Help &rsaquo; Tutorials...</span>, or click <strong>Tutorials...</strong> on the start screen.</li>
+  <li>Pick a lesson. Each shows how long it takes and whether you have finished it.</li>
+  <li>Click <strong>Start</strong>. The lesson opens a new document of its own, so your work is never touched.</li>
+</ol>
+
+<p>Most steps wait for you to do what they ask, such as choosing a tool, drawing a shape or inserting a keyframe, and move on by themselves when you have. <strong>Next</strong> skips a step, and <strong>Previous</strong> goes back one, undoing what that step did. Drag the step window anywhere; it stays where you put it.</p>
+
+<p>Close a lesson with its <strong>&#10005;</strong> button or <kbd>Esc</kbd>. Closing the lesson's document ends it too. The document you made stays open, so you can save it if you want to keep it.</p>
+
+<div class="callout">
+  <span class="label">Tip</span>
+  <p>If a step points at something that is not on the screen, such as a panel you have closed, the step window says how to get it back. Next always moves on.</p>
+</div>
+
+<h2>The lessons</h2>
+
+<table>
+  <thead><tr><th>Lesson</th><th>Minutes</th><th>What you do</th></tr></thead>
+  <tbody>
+    <tr><td>Your first animation</td><td>10</td><td class="wrap">Draw a ball, turn it into a symbol, send it across the stage with a classic tween, ease it, check the spacing with onion skinning, and export a video.</td></tr>
+    <tr><td>A tour of the workspace</td><td>6</td><td class="wrap">Find your way around Phoenix: the toolbox and its flyouts, the edit bar and stage controls, the timeline, the Properties panel's tabs, the Library, Color and Swatches panels, and workspaces.</td></tr>
+    <tr><td>Merge and object drawing</td><td>7</td><td class="wrap">See how shapes drawn in merge mode cut into each other, keep shapes apart with Object Drawing, and use Break Apart and Group to move between the two.</td></tr>
+    <tr><td>Frame-by-frame and onion skinning</td><td>8</td><td class="wrap">Draw a bouncing ball one keyframe at a time with F6 and F7, use onion skinning to see the frames around the one you draw, step through it, and play it on a loop.</td></tr>
+    <tr><td>Symbols and editing in place</td><td>7</td><td class="wrap">Turn a drawing into a graphic symbol, place it twice, edit it in place and watch both copies change, then tint one and set how a graphic loops.</td></tr>
+    <tr><td>Shape tweens</td><td>8</td><td class="wrap">Morph a square into a circle with a shape tween, play it, and steer the morph with shape hints.</td></tr>
+    <tr><td>Motion tweens and the Motion Editor</td><td>10</td><td class="wrap">Send a ball across the sky with a motion tween, bend its motion path, and ease it in the Motion Editor.</td></tr>
+    <tr><td>Masks</td><td>8</td><td class="wrap">Shine a spotlight on a picture with a mask layer, then tween the mask to sweep the light across it.</td></tr>
+    <tr><td>Rigging with layer parenting</td><td>8</td><td class="wrap">Rig a character's arm and hand to its body with layer parenting, pose the rig, and choose what the children take on from their parents.</td></tr>
+  </tbody>
+</table>
+
+<h2>Write your own lessons</h2>
+
+<p>A lesson is a folder holding a <code>lesson.json</code> file, and, if it starts from prepared artwork, that document. Put the folder in the <code>tutorials</code> folder in Phoenix's application data folder; the Tutorials dialog shows where that is and opens it. A lesson there with the same folder name as a built-in one takes its place, which lets a studio adapt a lesson to its own pipeline.</p>
+
+<pre><code>{
+  "title": "Our cut-out rig",
+  "summary": "Pose the studio's standard character.",
+  "minutes": 8,
+  "order": 50,
+  "start": {"document": "start"},
+  "steps": [
+    {
+      "title": "Pick the Selection tool",
+      "text": "&lt;p&gt;Press &lt;kbd&gt;V&lt;/kbd&gt;.&lt;/p&gt;",
+      "target": "tool:Selection",
+      "wait": {"tool": "Selection"}
+    }
+  ]
+}</code></pre>
+
+<dl class="defs">
+  <dt>start</dt><dd><code>{"new": {"width": 1280, "height": 720, "fps": 24}}</code> for a new document, or <code>{"document": "start"}</code> for a document in the lesson's folder: an XFL folder, an <code>.fla</code> or a <code>.phx</code>. It opens as an untitled copy.</dd>
+  <dt>text</dt><dd>Rich text: paragraphs, <code>&lt;b&gt;</code>, <code>&lt;i&gt;</code>, links, and <code>&lt;kbd&gt;</code> for keys. A step can also have an <code>image</code>, a picture or animated GIF in the lesson's folder.</dd>
+  <dt>target</dt><dd>What to circle: <code>tool:Oval</code>; a menu command, <code>menu:Insert/Timeline/Keyframe</code>; a panel, <code>dock:Library</code>; a panel's tab, <code>tab:Properties/Frame</code>; a field by its label, <code>label:Properties/Ease</code>; timeline frames, <code>frame:Layer_1:24</code> or <code>frame::2-23</code> for the top layer; the ruler, <code>ruler:12</code>; the stage or a part of it in document pixels, <code>stage:60,240,320,320</code>; or a control by name, such as <code>widget:timelinePlay</code>.</dd>
+  <dt>wait</dt><dd>What moves the lesson on: <code>{"tool": "Oval"}</code>; <code>{"command": "Convert to Symbol"}</code>, an edit by the name <span class="menu-path">Edit &rsaquo; Undo</span> shows for it; <code>{"action": "File/Export/Export Movie"}</code>, a menu command run; <code>{"frame": 24}</code>; <code>{"selection": "shape"}</code> (or <code>instance</code>, <code>text</code>, <code>any</code>, <code>none</code>); <code>{"scope": "symbol"}</code> or <code>"scene"</code>; or <code>{"playing": true}</code>. Without one, the reader clicks Next.</dd>
+</dl>
+
+<p>To check a lesson without stepping through it, run <code>Phoenix lessons --check</code> (see <a href="command-line.html">Command line</a>): it lists every lesson and any target or wait that Phoenix cannot find.</p>
+
+</article>
+</main>
+</body>
+</html>

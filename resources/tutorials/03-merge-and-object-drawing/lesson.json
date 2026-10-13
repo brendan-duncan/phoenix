@@ -1,0 +1,125 @@
+{
+  "title": "Merge and object drawing",
+  "summary": "See how shapes drawn in merge mode cut into each other, keep shapes apart with Object Drawing, and use Break Apart and Group to move between the two.",
+  "minutes": 7,
+  "order": 3,
+  "start": {"new": {"width": 1280, "height": 720, "fps": 24}},
+  "steps": [
+    {
+      "title": "Welcome",
+      "text": "<p>Phoenix has two ways of drawing. In <b>merge</b> mode, shapes on the same layer join up and cut into each other, like wet paint. In <b>Object Drawing</b> mode, each shape stays a separate object.</p><p>In this lesson you will draw a few overlapping shapes both ways and see the difference.</p>"
+    },
+    {
+      "title": "Start in merge mode",
+      "text": "<p>This is the <b>Object Drawing</b> button. For now it should be off, not highlighted. If it is on, click it or press <kbd>J</kbd>.</p>",
+      "target": "widget:toolboxObjectDrawing"
+    },
+    {
+      "title": "Pick the Oval tool",
+      "text": "<p>Press <kbd>O</kbd>, or choose the Oval tool from the Rectangle slot.</p>",
+      "target": "tool:Oval",
+      "wait": {"tool": "Oval"}
+    },
+    {
+      "title": "Draw a circle",
+      "text": "<p>Hold <kbd>Shift</kbd> and drag on the left of the stage to draw a large circle.</p>",
+      "target": "stage:100,180,340,340",
+      "wait": {"command": "Oval"}
+    },
+    {
+      "title": "Pick the Rectangle tool",
+      "text": "<p>Press <kbd>R</kbd> for the Rectangle tool. To tell the shapes apart, pick a different fill color with the fill swatch at the bottom of the toolbox.</p>",
+      "target": "tool:Rectangle",
+      "wait": {"tool": "Rectangle"}
+    },
+    {
+      "title": "Overlap the circle",
+      "text": "<p>Draw a rectangle that covers the right side of the circle and reaches past it.</p>",
+      "target": "stage:320,260,260,180",
+      "wait": {"command": "Rectangle"}
+    },
+    {
+      "title": "Pick the Selection tool",
+      "text": "<p>Press <kbd>V</kbd>, or click the arrow at the top of the toolbox.</p>",
+      "target": "tool:Selection",
+      "wait": {"tool": "Selection"}
+    },
+    {
+      "title": "Pull the rectangle away",
+      "text": "<p>The rectangle you just drew is still selected. Drag it down and away from the circle.</p><p>If it is not selected, double-click its fill first: that selects the fill with its outline.</p>",
+      "target": "stage:320,260,260,180",
+      "wait": {"command": "Move"}
+    },
+    {
+      "title": "A bite out of the circle",
+      "text": "<p>The circle has a piece missing. Where the rectangle covered it, the rectangle's fill replaced the circle's, and its outline cut the circle's outline. Merge shapes really are one drawing.</p><p>This is handy for sketching and cutting shapes, but easy to do by accident. <kbd>Ctrl</kbd>+<kbd>Z</kbd> undoes it.</p>",
+      "target": "stage:100,180,340,340"
+    },
+    {
+      "title": "Turn on Object Drawing",
+      "text": "<p>Click the <b>Object Drawing</b> button, or press <kbd>J</kbd>, so it is highlighted. New shapes will now each be an object of their own.</p>",
+      "target": "widget:toolboxObjectDrawing"
+    },
+    {
+      "title": "Pick the Oval tool again",
+      "text": "<p>Press <kbd>O</kbd>.</p>",
+      "target": "tool:Oval",
+      "wait": {"tool": "Oval"}
+    },
+    {
+      "title": "Draw a circle object",
+      "text": "<p>With <kbd>Shift</kbd> held, draw a circle on the right of the stage. When you let go it shows a box around it: it is a <b>drawing object</b>.</p>",
+      "target": "stage:760,160,340,340",
+      "wait": {"command": "Oval"}
+    },
+    {
+      "title": "And a rectangle object",
+      "text": "<p>Press <kbd>R</kbd> and draw a rectangle over the right side of this circle, as before.</p>",
+      "target": "stage:980,240,260,180",
+      "wait": {"command": "Rectangle"}
+    },
+    {
+      "title": "Move it away",
+      "text": "<p>Press <kbd>V</kbd>, then drag the rectangle away from the circle. A single click selects a whole object.</p>",
+      "target": "stage:980,240,260,180",
+      "wait": {"command": "Move"}
+    },
+    {
+      "title": "Nothing was cut",
+      "text": "<p>This circle is whole. Drawing objects sit on top of one another without merging, like cut-out paper.</p><p>To turn one back into merge artwork, break it apart, as you will do next.</p>",
+      "target": "stage:760,160,340,340"
+    },
+    {
+      "title": "Break it apart",
+      "text": "<p>Click the circle object to select it, then press <kbd>Ctrl</kbd>+<kbd>B</kbd>, or choose <b>Modify &gt; Break Apart</b>. It becomes plain merge artwork again.</p>",
+      "target": "menu:Modify/Break Apart",
+      "wait": {"command": "Break Apart"}
+    },
+    {
+      "title": "Group it",
+      "text": "<p>With the shape still selected, press <kbd>Ctrl</kbd>+<kbd>G</kbd>, or choose <b>Modify &gt; Group</b>.</p><p>A group keeps merge artwork safe from what is drawn around it, like a drawing object, and can hold several things at once. Double-click a group to edit inside it.</p>",
+      "target": "menu:Modify/Group",
+      "wait": {"command": "Group"}
+    },
+    {
+      "title": "Back to merge mode",
+      "text": "<p>Click the <b>Object Drawing</b> button or press <kbd>J</kbd> again, so it is off.</p>",
+      "target": "widget:toolboxObjectDrawing"
+    },
+    {
+      "title": "Draw over an object",
+      "text": "<p>Press <kbd>O</kbd> and draw an oval that overlaps the rectangle object you moved, away from the other shapes.</p>",
+      "target": "stage",
+      "wait": {"command": "Oval"}
+    },
+    {
+      "title": "Merge artwork goes underneath",
+      "text": "<p>The oval went <b>under</b> the rectangle, although you drew it last. On a layer, merge artwork always sits below the layer's drawing objects, groups and symbols.</p><p>To put a shape over an object, draw it on a layer above, or make it an object too.</p>",
+      "target": "stage"
+    },
+    {
+      "title": "Well done",
+      "text": "<p>You saw merge shapes cut into each other, kept shapes apart with Object Drawing, and used <b>Break Apart</b> and <b>Group</b> to change one into the other.</p><p>Next, try <i>Frame-by-frame and onion skinning</i> to draw an animation by hand.</p>"
+    }
+  ]
+}

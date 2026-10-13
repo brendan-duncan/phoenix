@@ -1,0 +1,70 @@
+{
+  "title": "Motion tweens and the Motion Editor",
+  "summary": "Send a ball across the sky with a motion tween, bend its motion path, and ease it in the Motion Editor.",
+  "minutes": 10,
+  "order": 7,
+  "guide": "tweens.html",
+  "start": {"document": "start"},
+  "steps": [
+    {
+      "title": "Welcome",
+      "text": "<p>In this lesson you will send a ball across the sky with a <b>motion tween</b>, bend its path into an arc, and ease it in the <b>Motion Editor</b>.</p><p>The document is ready: the ball is an instance of the <i>Ball</i> symbol, alone on its layer, with the ground on a locked layer below. Click <b>Next</b> to begin.</p>"
+    },
+    {
+      "title": "Make a motion tween",
+      "text": "<p>Click frame <b>1</b> of the <i>Ball</i> layer, then choose <b>Insert &gt; Motion Tween</b>, or right-click the frame and choose <b>Motion Tween</b>.</p><p>The span turns blue and grows to one second, 24 frames. A motion tween needs a symbol instance or a text block alone on its frame.</p>",
+      "target": "menu:Insert/Motion Tween",
+      "wait": {"command": "Create Motion Tween"}
+    },
+    {
+      "title": "Go to frame 24",
+      "text": "<p>Click frame <b>24</b> of the <i>Ball</i> layer, the last frame of the tween.</p>",
+      "target": "frame:Ball:24",
+      "wait": {"frame": 24}
+    },
+    {
+      "title": "Move the ball",
+      "text": "<p>Press <kbd>V</kbd> for the Selection tool and drag the ball to the right side of the stage.</p><p>There is no need to add a keyframe first: changing the object inside a motion tween keys it there by itself.</p>",
+      "target": "stage:150,430,100,100",
+      "wait": {"command": "Move"}
+    },
+    {
+      "title": "The motion path",
+      "text": "<p>With the ball selected, its <b>motion path</b> shows on the stage: a line with a dot for each frame and a square at each keyframe.</p><p>Drag a dot in the middle of the path, between the squares, upward. The path bends into an arc, and the ball will follow it.</p>",
+      "target": "stage:250,330,800,200",
+      "wait": {"command": "Bend Motion Path"}
+    },
+    {
+      "title": "Play it",
+      "text": "<p>Press <kbd>Enter</kbd>, or click the play button in the timeline header. The ball arcs across the sky. Press it again to stop.</p>",
+      "target": "widget:timelinePlay",
+      "wait": {"playing": true}
+    },
+    {
+      "title": "Open the Motion Editor",
+      "text": "<p>Choose <b>Window &gt; Motion Editor</b>. It opens as a tab beside the timeline and shows the tween's properties as curves over time.</p>",
+      "target": "menu:Window/Motion Editor",
+      "wait": {"action": "Window/Motion Editor"}
+    },
+    {
+      "title": "Pick a property",
+      "text": "<p>Click <b>X</b> in the list on the left. Its curve shows how the ball's position across the stage changes from frame 1 to 24. You can drag the points and their handles to reshape it.</p>",
+      "target": "dock:Motion Editor"
+    },
+    {
+      "title": "Choose an ease",
+      "text": "<p>Open the <b>Property ease</b> list and choose <b>Sine In Out</b>, or another ease you like. With no point selected, it eases the whole curve.</p><p><b>Tween ease</b> below it eases the whole tween at once, from -100 to 100.</p>",
+      "target": "label:Motion Editor/Property ease",
+      "wait": {"command": "Ease"}
+    },
+    {
+      "title": "Play it again",
+      "text": "<p>Click the <b>Timeline</b> tab and press <kbd>Enter</kbd>. The ball now starts gently, speeds up across the middle and settles at the end.</p>",
+      "wait": {"playing": true}
+    },
+    {
+      "title": "Well done",
+      "text": "<p>You made a motion tween, keyed it by moving the ball, bent its motion path, and eased it in the Motion Editor.</p><p>Help &gt; Tutorials has more lessons, such as <i>Masks</i> and <i>Rigging with layer parenting</i>.</p>"
+    }
+  ]
+}

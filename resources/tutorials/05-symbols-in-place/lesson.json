@@ -1,0 +1,99 @@
+{
+  "title": "Symbols and editing in place",
+  "summary": "Turn a drawing into a graphic symbol, place it twice, edit it in place and watch both copies change, then tint one and set how a graphic loops.",
+  "minutes": 7,
+  "order": 5,
+  "start": {"document": "start"},
+  "steps": [
+    {
+      "title": "Welcome",
+      "text": "<p>In this lesson you will turn this plain face into a <b>symbol</b>, put two of it on the stage, and give both a face by drawing on just one of them.</p><p>A symbol is drawn once and kept in the Library; each copy on the stage is an <b>instance</b> of it. Change the symbol and every instance changes.</p>"
+    },
+    {
+      "title": "Pick the Selection tool",
+      "text": "<p>Press <kbd>V</kbd>, or click the arrow at the top of the toolbox.</p>",
+      "target": "tool:Selection",
+      "wait": {"tool": "Selection"}
+    },
+    {
+      "title": "Select the face",
+      "text": "<p>Double-click the yellow face to select its fill and its outline together.</p>",
+      "target": "stage:220,220,280,280",
+      "wait": {"selection": "shape"}
+    },
+    {
+      "title": "Convert it to a symbol",
+      "text": "<p>Press <kbd>F8</kbd>, or choose <b>Modify &gt; Convert to Symbol</b>. Name it <i>Face</i>, set <b>Type</b> to <b>Graphic</b>, and click <b>OK</b>.</p><p>The face is now an instance, shown with a box around it when selected.</p>",
+      "target": "menu:Modify/Convert to Symbol",
+      "wait": {"command": "Convert to Symbol"}
+    },
+    {
+      "title": "Place a second face",
+      "text": "<p><i>Face</i> is now in the <b>Library</b>. Drag it from the Library onto the right side of the stage to place a second instance.</p><p>You can also press <kbd>Ctrl</kbd>+<kbd>D</kbd> (<b>Edit &gt; Duplicate</b>) with the face selected, drag the copy to the right, and click <b>Next</b>.</p>",
+      "target": "dock:Library",
+      "wait": {"command": "Add Instance"}
+    },
+    {
+      "title": "Edit in place",
+      "text": "<p>Double-click the face on the left. You are now inside the symbol: the rest of the stage is dimmed, and the edit bar above the stage reads <b>Scene 1 &rsaquo; Face</b>.</p>",
+      "target": "stage:220,220,280,280",
+      "wait": {"scope": "symbol"}
+    },
+    {
+      "title": "Pick the Oval tool",
+      "text": "<p>Press <kbd>O</kbd>, and choose a dark fill color with the fill swatch at the bottom of the toolbox.</p>",
+      "target": "tool:Oval",
+      "wait": {"tool": "Oval"}
+    },
+    {
+      "title": "Draw an eye",
+      "text": "<p>Draw a small oval for the left eye.</p>",
+      "target": "stage:290,280,60,70",
+      "wait": {"command": "Oval"}
+    },
+    {
+      "title": "And another",
+      "text": "<p>Draw the right eye. Watch the other face as you let go.</p>",
+      "target": "stage:370,280,60,70",
+      "wait": {"command": "Oval"}
+    },
+    {
+      "title": "Both faces changed",
+      "text": "<p>The face on the right has eyes too, though you never touched it. Both instances show the same symbol, so editing it once changes them all.</p><p>Add a mouth if you like, then click <b>Next</b>.</p>",
+      "target": "stage"
+    },
+    {
+      "title": "Back to the scene",
+      "text": "<p>Press <kbd>V</kbd> for the Selection tool, then double-click an empty part of the stage. You can also click <b>Scene 1</b> at the left of the edit bar, or press <kbd>Ctrl</kbd>+<kbd>E</kbd>.</p>",
+      "target": "stage",
+      "wait": {"scope": "scene"}
+    },
+    {
+      "title": "Select one face",
+      "text": "<p>Click the face on the right. A single click selects the whole instance; its settings show on the Properties panel's <b>Object</b> tab.</p>",
+      "target": "stage",
+      "wait": {"selection": "instance"}
+    },
+    {
+      "title": "Tint it",
+      "text": "<p>Under <b>Color Effect</b>, open the <b>Style</b> list and choose <b>Tint</b>.</p><p>A color effect belongs to the instance, not the symbol, so only this face changes.</p>",
+      "target": "label:Properties/Style",
+      "wait": {"command": "Color Effect"}
+    },
+    {
+      "title": "Choose the tint",
+      "text": "<p>Click the <b>Tint</b> swatch to pick the color, and drag the percentage beside it to set how strongly it is applied. <b>Red</b>, <b>Green</b> and <b>Blue</b> set the color by numbers.</p>",
+      "target": "label:Properties/Tint"
+    },
+    {
+      "title": "Looping",
+      "text": "<p>A graphic symbol's timeline plays in step with the timeline it sits on. The <b>Looping</b> options say how: <b>Loop</b> repeats it, <b>Play Once</b> stops at its end, and <b>Single Frame</b> holds one frame, set by <b>First</b>. Reverse and ping-pong options play it backward.</p><p>Choose <b>Single Frame</b> now. With one frame in <i>Face</i> it looks the same, but on a symbol of mouth shapes or poses, this is how you pick the one to show.</p>",
+      "target": "label:Properties/Options",
+      "wait": {"command": "Looping"}
+    },
+    {
+      "title": "Well done",
+      "text": "<p>You made a graphic symbol, placed it twice, edited it in place to change both instances, tinted one, and set how it loops.</p><p>Save with <kbd>Ctrl</kbd>+<kbd>S</kbd> if you want to keep it. Help &gt; Tutorials has more lessons; if you have not animated a symbol yet, try <i>Your first animation</i>.</p>"
+    }
+  ]
+}
