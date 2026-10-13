@@ -7220,6 +7220,9 @@ void MainWindow::setupToolBar()
             return QIcon(pixmap);
         });
         button->setIconSize(QSize(12, 12));
+        // Small and fixed: every toolbox cell is as large as its largest
+        // item, so the pair must fit inside a tool button's cell.
+        button->setFixedSize(16, 16);
         button->setAutoRaise(true);
         button->setToolTip(tip);
         return button;
