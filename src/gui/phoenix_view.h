@@ -233,6 +233,10 @@ public:
     /// The timeline being edited, or null for the scene.
     fla::Timeline* scopeTimeline() const;
 
+    /// The innermost symbol being edited, or null on a scene. Nothing that
+    /// contains it can be placed while it is open (fla::symbolContains).
+    const fla::Symbol* scopeSymbol() const;
+
     /// The name of a level of the scope, for a breadcrumb: the scene at 0,
     /// then each symbol entered.
     QString scopeName(int depth) const;
@@ -851,6 +855,23 @@ private:
     int _firstMoving = -1;
     int _lastMoving = -1;
     int _frameDepth = 0;
+
+    /// How deep the walks into symbols (drawing, bounds, hit testing) go at
+    /// most. Loading and editing never let a symbol contain itself
+    /// (fla::symbolContains), so this only stops a loop that got past them
+    /// from overflowing the stack.
+    static constexpr int kMaxNesting = 64;
+    mutable int _nesting = 0;
+    struct NestingGuard
+    {
+        int& depth;
+        bool ok;
+        explicit NestingGuard(int& counter)
+            : depth(counter)
+            , ok(++counter <= kMaxNesting)
+        {}
+        ~NestingGuard() { --depth; }
+    };
 
     /// Whether an element, or anything inside it, blends with what is
     /// drawn beneath it. Such an element cannot be rendered ahead into the

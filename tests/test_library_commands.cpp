@@ -336,3 +336,50 @@ TEST(a_stroke_look_restyles_a_stroke_and_new_strokes_take_it)
     CHECK(restyled->weight == 3.0 && restyled->fill && restyled->fill != stroke->fill);
     CHECK(!style.strokeMatches(*restyled));
 }
+
+// A symbol placed inside itself, directly or through another symbol and a
+// group, is a loop nothing can draw: placing it is refused, and a file
+// holding one has the loop cut on load.
+TEST(symbols_never_contain_themselves)
+{
+    fla::Symbol* ball = nullptr;
+    fla::SymbolInstance* onStage = nullptr;
+    std::unique_ptr<fla::Document> document = documentWithBall(ball, onStage);
+
+    // Box holds a group holding Ball.
+    fla::Symbol* box = new fla::Symbol(document->symbolList);
+    box->name = "Box";
+    fla::Timeline* timeline = new fla::Timeline(box);
+    fla::Layer* layer = new fla::Layer(timeline);
+    fla::Frame* frame = new fla::Frame(layer);
+    fla::Group* group = new fla::Group(frame);
+    fla::SymbolInstance* ballInBox = new fla::SymbolInstance(group);
+    ballInBox->libraryItemName = "Ball";
+    ballInBox->symbol = ball;
+    group->members.push_back(ballInBox);
+    frame->elements.push_back(group);
+    layer->frames.push_back(frame);
+    timeline->layers.push_back(layer);
+    box->timelines.push_back(timeline);
+    document->symbolList->symbols.push_back(box);
+    document->symbolList->symbolMap["Box"] = box;
+
+    CHECK(fla::symbolContains(box, ball));
+    CHECK(fla::symbolContains(ball, ball));
+    CHECK(!fla::symbolContains(ball, box));
+    CHECK(fla::placingNestsSymbol(*group, ball));
+    CHECK(!fla::placingNestsSymbol(*group, nullptr));
+    CHECK(fla::breakSymbolCycles(*document) == 0);
+
+    // Box placed inside Ball closes the loop Ball > Box > Ball.
+    fla::Frame* ballFrame = ball->timelines.front()->layers.front()->frames.front();
+    fla::SymbolInstance* boxInBall = new fla::SymbolInstance(ballFrame);
+    boxInBall->libraryItemName = "Box";
+    boxInBall->symbol = box;
+    ballFrame->elements.push_back(boxInBall);
+    CHECK(fla::symbolContains(ball, box) && fla::symbolContains(box, ball));
+    CHECK(fla::breakSymbolCycles(*document) >= 1);
+    CHECK(!fla::symbolContains(ball, box) || !fla::symbolContains(box, ball));
+    CHECK(fla::breakSymbolCycles(*document) == 0);
+    CHECK(boxInBall->libraryItemName == "Box");
+}

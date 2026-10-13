@@ -3343,6 +3343,15 @@ void MainWindow::pasteFramesAs(bool overwrite)
     }
     if (targets.empty())
         return;
+    for (const auto& spans : _frameClipboard)
+        for (const auto& frame : spans)
+            for (const fla::Element* element : frame->elements)
+                if (element && fla::placingNestsSymbol(*element, _phoenixView->scopeSymbol()))
+                {
+                    statusBar()->showMessage("The frames contain the symbol being edited, "
+                                             "which cannot go inside itself.", 4000);
+                    return;
+                }
 
     // The copies may come from another document: their instances are
     // pointed at this one's symbols before they are pasted.
@@ -7958,6 +7967,12 @@ void MainWindow::placeLibraryItem(const QString& kind, const QString& droppedNam
         const auto found = list ? list->symbolMap.find(itemName) : decltype(list->symbolMap)::iterator();
         if (!list || found == list->symbolMap.end())
             return;
+        if (fla::symbolContains(found->second, _phoenixView->scopeSymbol()))
+        {
+            statusBar()->showMessage(
+                QString("%1 cannot go inside itself.").arg(QString::fromStdString(itemName)), 4000);
+            return;
+        }
         fla::SymbolInstance* instance = new fla::SymbolInstance(frame);
         instance->libraryItemName = itemName;
         instance->symbol = found->second;
@@ -11002,6 +11017,13 @@ void MainWindow::swapSymbol()
     if (found == document->symbolList->symbolMap.end() || !found->second)
         return;
     fla::Symbol* symbol = found->second;
+    if (_phoenixView && fla::symbolContains(symbol, _phoenixView->scopeSymbol()))
+    {
+        QMessageBox::information(this, "Swap Symbol",
+            QString("%1 contains the symbol being edited, which cannot go inside itself.")
+                .arg(QString::fromStdString(chosen)));
+        return;
+    }
 
     fla::CommandStack& stack = _editContext.commandStack();
     stack.beginMacro("Swap Symbol");
@@ -12007,22 +12029,33 @@ void MainWindow::placeCopies(const std::vector<const fla::Element*>& sources, co
     // the artwork as it will be rather than on a drawing about to vanish.
     _phoenixView->flushPendingMerge();
 
-    fla::CommandStack& stack = _editContext.commandStack();
-    stack.beginMacro(name);
-
     // A copy's instances point at this document's symbols, whichever
     // document the copy came from.
     const fla::SymbolList* library = _flaDocument && _flaDocument->document
         ? _flaDocument->document->symbolList : nullptr;
-    std::vector<fla::Element*> copies;
+    std::vector<std::unique_ptr<fla::Element>> prepared;
     for (const fla::Element* source : sources)
     {
         fla::Element* copy = fla::cloneElement(*source, frame);
         if (!copy)
             continue;
         fla::relinkSymbols(*copy, library);
-        stack.push(fla::CommandPtr(new fla::AddElementCommand(frame, copy, name, &_selection)));
-        copies.push_back(copy);
+        prepared.emplace_back(copy);
+        if (fla::placingNestsSymbol(*copy, _phoenixView->scopeSymbol()))
+        {
+            statusBar()->showMessage("What is being pasted contains the symbol being edited, "
+                                     "which cannot go inside itself.", 4000);
+            return;
+        }
+    }
+
+    fla::CommandStack& stack = _editContext.commandStack();
+    stack.beginMacro(name);
+    std::vector<fla::Element*> copies;
+    for (std::unique_ptr<fla::Element>& copy : prepared)
+    {
+        stack.push(fla::CommandPtr(new fla::AddElementCommand(frame, copy.get(), name, &_selection)));
+        copies.push_back(copy.release());
     }
 
     stack.endMacro();

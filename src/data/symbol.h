@@ -60,4 +60,27 @@ public:
     static DOMType staticDomType() { return DOMType::Symbol; }
 };
 
+class Document;
+
+/// Whether \a outer shows \a target anywhere inside it, at any depth: on
+/// its timelines, inside groups, and inside the symbols it places. A symbol
+/// counts as containing itself. Placing \a target inside \a outer would make
+/// a symbol contain itself, which nothing can draw, when
+/// symbolContains(target, outer); every way of placing a symbol checks this.
+bool symbolContains(const Symbol* outer, const Symbol* target);
+
+class Element;
+
+/// Whether placing \a element inside \a outer would make a symbol contain
+/// itself: \a element is, or holds in a group, an instance of a symbol that
+/// contains \a outer. Always false when \a outer is null (a scene).
+bool placingNestsSymbol(const Element& element, const Symbol* outer);
+
+/// Cuts every loop of symbols containing themselves in a document just read
+/// (A inside A, or A inside B inside A): the instance that closes a loop
+/// keeps its library name, so the file saves as it was, but no longer links
+/// to its symbol, so it is drawn as a missing symbol. Returns how many
+/// instances were cut.
+int breakSymbolCycles(Document& document);
+
 } // namespace fla

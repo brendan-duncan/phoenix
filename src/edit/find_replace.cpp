@@ -121,6 +121,9 @@ public:
         }
     }
 
+    /// The symbol replacing the one looked for, if any.
+    const Symbol* replacement() const { return _replacement; }
+
     /// How many times \a frame plays the sound looked for.
     int visitFrame(Frame* frame)
     {
@@ -490,7 +493,13 @@ CommandPtr replaceAll(Document& document, const Query& query, int* replaced)
     if (query.kind == Kind::Sound)
         forEachFrame(document, [&](Match&, Frame* frame) { count += searcher.visitFrame(frame); });
     else
-        forEachObject(document, [&](Match&, Element* element) { count += searcher.visit(element); });
+        forEachObject(document, [&](Match& match, Element* element) {
+            // An instance inside a symbol the replacement contains would put
+            // that symbol inside itself: it is left as it is.
+            if (query.kind == Kind::Symbol && symbolContains(searcher.replacement(), match.symbol))
+                return;
+            count += searcher.visit(element);
+        });
     if (changes.empty())
         return nullptr;
     if (replaced)

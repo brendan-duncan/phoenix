@@ -1565,6 +1565,8 @@ fla::FLADocument* loadUnguarded(const std::string& path, std::string& error, std
             document->symbolInstancesMap[found->second].push_back(instance);
         }
     }
+    if (fla::breakSymbolCycles(*document))
+        warning += "Some symbols contain themselves, which cannot be drawn; those instances are shown as missing.\n";
     if (context.damaged)
         warning += "Part of the document is damaged; what could be read of it is shown.\n";
 

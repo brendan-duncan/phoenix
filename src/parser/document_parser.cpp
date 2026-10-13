@@ -15,6 +15,7 @@
 #include "../data/solid_color.h"
 #include "../data/static_text.h"
 #include "../data/swatch.h"
+#include "../data/symbol.h"
 #include "../data/symbol_instance.h"
 #include "../third_party/tinyxml2/tinyxml2.h"
 #include <cstdint>
@@ -2306,6 +2307,11 @@ fla::Document* DocumentParser::parse(const std::string& xmlContent, fla::DOMElem
             }
         }
     }
+
+    // A symbol inside itself cannot be drawn: the loop is cut, and the
+    // instance closing it shows as a missing symbol.
+    if (int cut = fla::breakSymbolCycles(*document))
+        std::cerr << cut << " symbol instance(s) placed a symbol inside itself and were cut" << std::endl;
 
     document->source = xmlContent;
 

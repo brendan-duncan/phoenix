@@ -2593,6 +2593,9 @@ void PhoenixView::drawFrame(QPainter& painter, const fla::Frame* frame, const fl
     _drawnState = nullptr;
     const bool culling = !nextTweenFrame && !moving && painter.device()->width() > 0;
 
+    NestingGuard nesting(_nesting);
+    if (!nesting.ok)
+        return;
     struct Depth
     {
         int& counter;
@@ -4468,6 +4471,9 @@ void PhoenixView::hitTestElement(fla::Element& element, fla::Frame* frame,
     fla::LoopType loopType, const QTransform& toDocument, const QPointF& documentPos,
     double tolerance, HitResult& result, const fla::Transform* shownTransform)
 {
+    NestingGuard nesting(_nesting);
+    if (!nesting.ok)
+        return;
     // A locked object (Modify > Arrange > Lock) stays where it is, unpicked,
     // as does all but a group being edited.
     if (!element.visible || element.isLocked || outsideGroup(&element))
@@ -6344,6 +6350,15 @@ fla::Timeline* PhoenixView::scopeTimeline() const
     return _scope.empty() ? nullptr : _scope.back().timeline;
 }
 
+const fla::Symbol* PhoenixView::scopeSymbol() const
+{
+    // A group edited in place is inside whatever symbol encloses it.
+    for (auto level = _scope.rbegin(); level != _scope.rend(); ++level)
+        if (level->symbol)
+            return level->symbol;
+    return nullptr;
+}
+
 QString PhoenixView::scopeName(int depth) const
 {
     if (depth <= 0)
@@ -7065,6 +7080,9 @@ QRectF PhoenixView::getElementBounds(const fla::Element* element)
 
 QRectF PhoenixView::calculateElementBounds(const fla::Element* element)
 {
+    NestingGuard nesting(_nesting);
+    if (!nesting.ok)
+        return QRectF();
     fla::Element::Type type = element->elementType();
 
     if (type == fla::Element::Type::Shape)
@@ -7301,7 +7319,8 @@ QRectF PhoenixView::calculateShapeBounds(const fla::Shape* shape)
 
 void PhoenixView::drawElementBounds(QPainter& painter, const fla::Element* element)
 {
-    if (!element->visible)
+    NestingGuard nesting(_nesting);
+    if (!nesting.ok || !element->visible)
         return;
 
     QRectF bounds = getElementBounds(element);
@@ -7453,6 +7472,9 @@ void PhoenixView::applyColorTransform(QImage& image, const fla::ColorTransform& 
 
 QRectF PhoenixView::calculateSymbolLocalBounds(const fla::Symbol* symbol)
 {
+    NestingGuard nesting(_nesting);
+    if (!nesting.ok)
+        return QRectF();
     QRectF bounds;
     if (!symbol || symbol->timelines.empty())
         return QRectF(0, 0, 100, 100);
@@ -7721,7 +7743,8 @@ bool PhoenixView::isElementSelected(const fla::DOMElement* element) const
 
 bool PhoenixView::isElementInsideSymbol(const fla::DOMElement* element, const fla::Symbol* symbol) const
 {
-    if (!symbol)
+    NestingGuard nesting(_nesting);
+    if (!symbol || !nesting.ok)
         return false;
 
     for (const fla::Timeline* timeline : symbol->timelines)
