@@ -1873,14 +1873,17 @@ const fla::MotionObject* PhoenixView::motionOf(const fla::Frame* frame)
     }
     if (!xml)
         return nullptr;
-    auto& entry = _motionCache[frame];
-    if (!entry.second || entry.first != *xml)
+    CachedMotion& entry = _motionCache[frame];
+    if (entry.motion && entry.revision == _motionRevision)
+        return entry.motion.get();
+    if (!entry.motion || entry.xml != *xml)
     {
         auto motion = std::make_shared<fla::MotionObject>();
-        entry.first = *xml;
-        entry.second = motion->parse(*xml) ? motion : nullptr;
+        entry.xml = *xml;
+        entry.motion = motion->parse(*xml) ? motion : nullptr;
     }
-    return entry.second.get();
+    entry.revision = _motionRevision;
+    return entry.motion.get();
 }
 
 fla::Transform PhoenixView::shownTransform(const LayerFrame& state, size_t elementIndex)
@@ -2671,7 +2674,12 @@ void PhoenixView::drawFrame(QPainter& painter, const fla::Frame* frame, const fl
             }
             if (!skip && culling)
             {
-                const QRectF bounds = getElementBounds(element);
+                // An instance by everything its symbol draws over all its
+                // frames: the first frame's box would cull an animated
+                // symbol whose later frames are on screen.
+                const QRectF bounds = element->elementType() == fla::Element::Type::SymbolInstance
+                    ? memberReach(element)
+                    : getElementBounds(element);
                 if (bounds.isValid())
                 {
                     const QRectF onDevice = painter.transform().mapRect(bounds).adjusted(-2.0, -2.0, 2.0, 2.0);
@@ -3037,8 +3045,9 @@ void PhoenixView::drawElement(QPainter& painter, const fla::Element* element, co
                     return std::fabs(a.m11() - b.m11()) < 1.0e-9 && std::fabs(a.m12() - b.m12()) < 1.0e-9 &&
                         std::fabs(a.m21() - b.m21()) < 1.0e-9 && std::fabs(a.m22() - b.m22()) < 1.0e-9;
                 };
+                const int innerFrame = symbolFrame(*instance);
                 if (cached != _filterCache.end() && !cached->clipped && cached->frame == shownFrame &&
-                    cached->revision == _revision && sameLinear(cached->full, full))
+                    cached->inner == innerFrame && cached->revision == _revision && sameLinear(cached->full, full))
                 {
                     const QPoint shift(static_cast<int>(std::lround(full.dx() - cached->full.dx())),
                                        static_cast<int>(std::lround(full.dy() - cached->full.dy())));
@@ -3093,6 +3102,7 @@ void PhoenixView::drawElement(QPainter& painter, const fla::Element* element, co
                         FilteredImage entry;
                         entry.full = full;
                         entry.frame = shownFrame;
+                        entry.inner = innerFrame;
                         entry.revision = _revision;
                         entry.clipped = clipped;
                         entry.image = symbolImage;
@@ -6403,6 +6413,7 @@ void PhoenixView::clearCaches()
     _symbolBoundsCache.clear();
     _symbolReachCache.clear();
     _insideSelectedValid = false;
+    ++_motionRevision;
     _staticValid = false;
     ++_revision;
 }
@@ -6422,6 +6433,7 @@ void PhoenixView::forgetShape(const fla::Shape* shape)
 
 void PhoenixView::invalidateBounds()
 {
+    ++_motionRevision;
     _boundsCache.clear();
     _artBoundsCache.clear();
     _symbolBoundsCache.clear();
@@ -7605,28 +7617,37 @@ void PhoenixView::applyColorTransform(QImage& image, const fla::ColorTransform& 
 
 QRectF PhoenixView::symbolReach(const fla::Symbol* symbol)
 {
-    const auto cached = _symbolReachCache.constFind(symbol);
-    if (cached != _symbolReachCache.constEnd())
-        return cached.value();
-    QRectF local;
-    for (const fla::Timeline* timeline : symbol->timelines)
+    return calculateSymbolLocalBounds(symbol);
+}
+
+QRectF PhoenixView::memberReach(const fla::Element* element)
+{
+    if (!element)
+        return QRectF();
+    const QTransform transform(element->transform.m11, element->transform.m12, element->transform.m21,
+        element->transform.m22, element->transform.tx, element->transform.ty);
+    switch (element->elementType())
     {
-        for (const fla::Layer* layer : timeline->layers)
-        {
-            for (const fla::Frame* frame : layer->frames)
-            {
-                for (const fla::Element* member : frame->elements)
-                {
-                    const QRectF bounds = calculateElementLocalBounds(member);
-                    local = local.isNull() ? bounds : local.united(bounds);
-                }
-            }
-        }
+    case fla::Element::Type::SymbolInstance:
+    {
+        const fla::Symbol* symbol = static_cast<const fla::SymbolInstance*>(element)->symbol;
+        return transform.mapRect(symbol ? calculateSymbolLocalBounds(symbol) : QRectF(-50, -50, 100, 100));
     }
-    if (local.isNull())
-        local = QRectF(0, 0, 100, 100);
-    _symbolReachCache.insert(symbol, local);
-    return local;
+    case fla::Element::Type::Group:
+    {
+        // A group's members are placed in the group's parent's space.
+        QRectF bounds;
+        for (const fla::Element* member : static_cast<const fla::Group*>(element)->members)
+        {
+            const QRectF memberBounds = memberReach(member);
+            if (!memberBounds.isNull())
+                bounds = bounds.isNull() ? memberBounds : bounds.united(memberBounds);
+        }
+        return bounds;
+    }
+    default:
+        return calculateElementBounds(element);
+    }
 }
 
 QRectF PhoenixView::calculateSymbolLocalBounds(const fla::Symbol* symbol)
@@ -7650,7 +7671,9 @@ QRectF PhoenixView::calculateSymbolLocalBounds(const fla::Symbol* symbol)
             continue;
         for (const fla::Layer* layer : timeline->layers)
         {
-            if (!layer || !layer->visible)
+            // Hidden layers draw inside a symbol placed on the stage (as the
+            // published movie has them), so they count; guides never draw.
+            if (!layer || layer->layerType == fla::Layer::Type::Guide)
                 continue;
             for (const fla::Frame* frame : layer->frames)
             {
@@ -7660,7 +7683,11 @@ QRectF PhoenixView::calculateSymbolLocalBounds(const fla::Symbol* symbol)
                 {
                     if (!elem)
                         continue;
-                    QRectF elemBounds = calculateElementLocalBounds(elem);
+                    // Each member where it is placed in the symbol, by its
+                    // own matrix.
+                    const QRectF elemBounds = memberReach(elem);
+                    if (elemBounds.isNull())
+                        continue;
                     if (bounds.isNull())
                         bounds = elemBounds;
                     else

@@ -896,6 +896,10 @@ private:
     {
         QTransform full;
         int frame = -1;
+        /// The frame of its own symbol the instance showed: inside a graphic
+        /// placed twice at different first frames, the same instance shows
+        /// different frames under one playhead.
+        int inner = -1;
         unsigned revision = 0;
         bool clipped = false;
         QImage image;
@@ -1086,6 +1090,9 @@ private:
     QCache<QString, QPixmap> _paddedFills{256 * 1024};
     QHash<const fla::Symbol*, QRectF> _symbolReachCache;
     QRectF symbolReach(const fla::Symbol* symbol);
+    /// An element's bounds in the space of what holds it, over every frame
+    /// of a symbol it places: for symbol bounds, culling and offscreens.
+    QRectF memberReach(const fla::Element* element);
     QMap<const fla::Element*, QRectF> _artBoundsCache;
     /// True while art bounds are being worked out: no antialiasing margin,
     /// and the padded cache is neither read nor filled.
@@ -1150,7 +1157,19 @@ private:
     /// The parsed motion of a frame with an object motion tween, kept per
     /// frame; null when it has none.
     const fla::MotionObject* motionOf(const fla::Frame* frame);
-    std::map<const fla::Frame*, std::pair<std::string, std::shared_ptr<fla::MotionObject>>> _motionCache;
+    /// Each frame's object motion, parsed once: the XML it came from, and
+    /// the view's revision when it was last checked against the frame (no
+    /// edit since, no need to compare the XML again).
+    struct CachedMotion
+    {
+        std::string xml;
+        std::shared_ptr<fla::MotionObject> motion;
+        unsigned revision = 0;
+    };
+    std::map<const fla::Frame*, CachedMotion> _motionCache;
+    /// Moves on with any edit that may touch a frame's motion (clearCaches,
+    /// invalidateBounds), so the XML is looked at again.
+    unsigned _motionRevision = 0;
 
     /// The path of the motion guide a frame's layer is guided by, from the
     /// guide layer's strokes as shown now; null when it has none.
