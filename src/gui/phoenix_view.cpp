@@ -55,6 +55,7 @@
 #include "../geom/fill_tracing.h"
 #include "../edit/frame_commands.h"
 #include "../geom/curve.h"
+#include "../geom/nine_slice.h"
 #include "../data/bitmap_fill.h"
 #include "../data/static_text.h"
 #include "text_layout.h"
@@ -2975,6 +2976,88 @@ void PhoenixView::drawElement(QPainter& painter, const fla::Element* element, co
                 ((!color.isIdentity() && !alphaOnly) || !filters.empty() ||
                     Filters::needsIsolation(instance->blendMode));
 
+            // 9-slice scaling: a movie clip with scale guides, stretched,
+            // draws as nine cells, the corners at their own size, the edges
+            // stretched one way and the middle both. Each cell is the symbol
+            // drawn again under a clip with the cell's own stretch. The cells
+            // are cut for the stretch along the symbol's own axes and the
+            // rest of the matrix turns or slants them as a whole, so a turned
+            // or skewed instance keeps its corners too (see nine_slice.h for
+            // why not Flash Player's way). It holds with or without a color
+            // effect, filter or blend, which only change where the cells
+            // are drawn to.
+            const fla::Transform linear(qTransform.m11(), qTransform.m12(), qTransform.m21(), qTransform.m22(), 0.0, 0.0);
+            const bool sliced = symbol->scale9 && instance->symbolType == fla::SymbolType::MovieClip &&
+                fla::nineslice::stretches(linear);
+            const auto drawSymbolTimelines = [&](QPainter& target,
+                                                 const std::function<void(QPainter&, const fla::Timeline*)>& drawOne) {
+                if (!sliced)
+                {
+                    for (const fla::Timeline* timeline : symbol->timelines)
+                    {
+                        if (timeline->visible)
+                            drawOne(target, timeline);
+                    }
+                    return;
+                }
+                const QRectF local = calculateSymbolLocalBounds(symbol);
+                const std::vector<fla::nineslice::Cell> cells = fla::nineslice::cells(
+                    fla::Rect(fla::Point(local.left(), local.top()), fla::Point(local.right(), local.bottom())),
+                    symbol->scaleGridLeft, symbol->scaleGridTop, symbol->scaleGridRight, symbol->scaleGridBottom,
+                    fla::nineslice::axisScale(linear));
+                // A cell's clip stops only where it meets another cell; on
+                // the symbol's own sides it reaches past them, so the art's
+                // smoothed edges there are kept. Turned or slanted, the clip
+                // is a region of whole pixels: a smoothed clip edge would
+                // blend each layer of the art over the last along the seam
+                // and leave a faint line of what is behind.
+                const double outside = std::max(local.width(), local.height()) + 100.0;
+                const QTransform device = target.transform();
+                const bool square = device.type() <= QTransform::TxScale;
+                for (const fla::nineslice::Cell& slice : cells)
+                {
+                    const QRectF source(QPointF(slice.source.topLeft.x, slice.source.topLeft.y),
+                        QPointF(slice.source.bottomRight.x, slice.source.bottomRight.y));
+                    const QRectF cellArea(QPointF(slice.target.topLeft.x, slice.target.topLeft.y),
+                        QPointF(slice.target.bottomRight.x, slice.target.bottomRight.y));
+                    const QTransform cell = QTransform::fromTranslate(-source.x(), -source.y()) *
+                        QTransform::fromScale(cellArea.width() / source.width(), cellArea.height() / source.height()) *
+                        QTransform::fromTranslate(cellArea.x(), cellArea.y());
+                    QRectF clip = cellArea;
+                    if (source.left() <= local.left())
+                        clip.setLeft(clip.left() - outside);
+                    if (source.top() <= local.top())
+                        clip.setTop(clip.top() - outside);
+                    if (source.right() >= local.right())
+                        clip.setRight(clip.right() + outside);
+                    if (source.bottom() >= local.bottom())
+                        clip.setBottom(clip.bottom() + outside);
+                    target.save();
+                    if (square)
+                    {
+                        target.setClipRect(clip, Qt::IntersectClip);
+                    }
+                    else
+                    {
+                        const QPolygonF corners = device.map(QPolygonF(clip));
+                        QPolygon pixels;
+                        for (const QPointF& corner : corners)
+                            pixels << QPoint(static_cast<int>(std::lround(corner.x())),
+                                static_cast<int>(std::lround(corner.y())));
+                        target.resetTransform();
+                        target.setClipRegion(QRegion(pixels), Qt::IntersectClip);
+                        target.setTransform(device);
+                    }
+                    target.setTransform(cell, true);
+                    for (const fla::Timeline* timeline : symbol->timelines)
+                    {
+                        if (timeline->visible)
+                            drawOne(target, timeline);
+                    }
+                    target.restore();
+                }
+            };
+
             if (!isolate)
             {
                 // Flash scales every shape's own alpha, so overlapping
@@ -2984,73 +3067,11 @@ void PhoenixView::drawElement(QPainter& painter, const fla::Element* element, co
                 if (!color.isIdentity() && !_maskPass)
                     painter.setOpacity(painter.opacity() * std::max(0.0, std::min(1.0, color.alphaMultiplier)));
 
-                // 9-slice scaling: a movie clip with scale guides, scaled
-                // but not turned, draws as nine cells, the corners at their
-                // own size, the edges stretched one way and the middle
-                // both. Each cell is the symbol drawn again under a clip
-                // with the cell's own stretch.
-                const bool sliced = symbol->scale9 && instance->symbolType == fla::SymbolType::MovieClip &&
-                    std::fabs(qTransform.m12()) < 1.0e-9 && std::fabs(qTransform.m21()) < 1.0e-9 &&
-                    (std::fabs(qTransform.m11() - 1.0) > 1.0e-6 || std::fabs(qTransform.m22() - 1.0) > 1.0e-6) &&
-                    std::fabs(qTransform.m11()) > 1.0e-6 && std::fabs(qTransform.m22()) > 1.0e-6;
-                if (sliced)
-                {
-                    const QRectF local = calculateSymbolLocalBounds(symbol);
-                    const double sx = std::fabs(qTransform.m11());
-                    const double sy = std::fabs(qTransform.m22());
-                    // The cut lines in symbol space, and where they land
-                    // once the corners are kept at their own size: a
-                    // corner that is w wide in the symbol must be w / sx
-                    // wide here so that the instance's scale brings it
-                    // back to w.
-                    const double srcX[4] = {local.left(), symbol->scaleGridLeft, symbol->scaleGridRight, local.right()};
-                    const double srcY[4] = {local.top(), symbol->scaleGridTop, symbol->scaleGridBottom, local.bottom()};
-                    const double dstX[4] = {local.left(), local.left() + (srcX[1] - srcX[0]) / sx,
-                        local.right() - (srcX[3] - srcX[2]) / sx, local.right()};
-                    const double dstY[4] = {local.top(), local.top() + (srcY[1] - srcY[0]) / sy,
-                        local.bottom() - (srcY[3] - srcY[2]) / sy, local.bottom()};
-                    for (int row = 0; row < 3; ++row)
-                    {
-                        for (int column = 0; column < 3; ++column)
-                        {
-                            const QRectF source(QPointF(srcX[column], srcY[row]), QPointF(srcX[column + 1], srcY[row + 1]));
-                            const QRectF target(QPointF(dstX[column], dstY[row]), QPointF(dstX[column + 1], dstY[row + 1]));
-                            if (source.width() <= 1.0e-6 || source.height() <= 1.0e-6 ||
-                                target.width() <= 1.0e-6 || target.height() <= 1.0e-6)
-                                continue;
-                            const double cellSx = target.width() / source.width();
-                            const double cellSy = target.height() / source.height();
-                            const QTransform cell = QTransform::fromTranslate(-source.x(), -source.y()) *
-                                QTransform::fromScale(cellSx, cellSy) *
-                                QTransform::fromTranslate(target.x(), target.y());
-                            painter.save();
-                            painter.setClipRect(target, Qt::IntersectClip);
-                            painter.setTransform(cell, true);
-                            for (const fla::Timeline* timeline : symbol->timelines)
-                            {
-                                if (timeline->visible)
-                                {
-                                    painter.save();
-                                    drawTimeline(painter, timeline, loopType, frameOffset);
-                                    painter.restore();
-                                }
-                            }
-                            painter.restore();
-                        }
-                    }
-                }
-                else
-                {
-                    for (const fla::Timeline* timeline : symbol->timelines)
-                    {
-                        if (timeline->visible)
-                        {
-                            painter.save();
-                            drawTimeline(painter, timeline, loopType, frameOffset);
-                            painter.restore();
-                        }
-                    }
-                }
+                drawSymbolTimelines(painter, [&](QPainter& target, const fla::Timeline* timeline) {
+                    target.save();
+                    drawTimeline(target, timeline, loopType, frameOffset);
+                    target.restore();
+                });
                 painter.restore();
             }
             else
@@ -3111,21 +3132,17 @@ void PhoenixView::drawElement(QPainter& painter, const fla::Element* element, co
                     if (!color.isIdentity() && alphaOnly && !_maskPass)
                         symbolPainter.setOpacity(std::max(0.0, std::min(1.0, color.alphaMultiplier)));
 
-                    for (const fla::Timeline* timeline : symbol->timelines)
-                    {
-                        if (timeline->visible)
-                        {
-                            // A Layer group's offscreen is what alpha and
-                            // erase instances inside it cut into; an inner
-                            // isolated instance starts a group of its own.
-                            const int outerDepth = _layerGroupDepth;
-                            _layerGroupDepth = instance->blendMode == "layer" ? outerDepth + 1 : 0;
-                            symbolPainter.save();
-                            drawTimeline(symbolPainter, timeline, loopType, frameOffset);
-                            symbolPainter.restore();
-                            _layerGroupDepth = outerDepth;
-                        }
-                    }
+                    drawSymbolTimelines(symbolPainter, [&](QPainter& target, const fla::Timeline* timeline) {
+                        // A Layer group's offscreen is what alpha and
+                        // erase instances inside it cut into; an inner
+                        // isolated instance starts a group of its own.
+                        const int outerDepth = _layerGroupDepth;
+                        _layerGroupDepth = instance->blendMode == "layer" ? outerDepth + 1 : 0;
+                        target.save();
+                        drawTimeline(target, timeline, loopType, frameOffset);
+                        target.restore();
+                        _layerGroupDepth = outerDepth;
+                    });
                     symbolPainter.end();
 
                     if (!color.isIdentity() && !alphaOnly)

@@ -111,6 +111,7 @@ set(TEST_CORE_SOURCES
     ${PHOENIX_SRC}/geom/planar_map.cpp
     ${PHOENIX_SRC}/geom/shape_geometry.cpp
     ${PHOENIX_SRC}/geom/fill_tracing.cpp
+    ${PHOENIX_SRC}/geom/nine_slice.cpp
     ${PHOENIX_SRC}/parser/path_parser.cpp
     ${PHOENIX_SRC}/writer/edge_writer.cpp
 )
@@ -128,6 +129,7 @@ set(TEST_SOURCES
     test_geometry.cpp
     test_intersect.cpp
     test_new_document.cpp
+    test_nine_slice.cpp
     test_planar_map.cpp
     test_selection.cpp
     test_region_split.cpp
