@@ -20,6 +20,7 @@
 #include <map>
 #include <memory>
 #include <set>
+#include <unordered_map>
 
 namespace fla {
 
@@ -391,9 +392,10 @@ private:
     /// The piece \a length along the outline and the parameter there.
     void locate(double length, size_t& piece, double& t) const
     {
-        piece = 0;
-        while (piece + 1 < _starts.size() && _starts[piece + 1] <= length)
-            ++piece;
+        // The last piece starting at or before the length; the starts only
+        // grow, so it is found by halving rather than walking from the first.
+        const auto after = std::upper_bound(_starts.begin() + 1, _starts.end(), length);
+        piece = static_cast<size_t>(after - _starts.begin()) - 1;
         t = parameter(piece, length - _starts[piece]);
     }
 
@@ -458,11 +460,66 @@ double length(const Outline& outline)
     return Measured(outline).total();
 }
 
+/// Pieces filed by the pixel one of their ends falls in, so the pieces with
+/// an end meeting a point are found without trying every piece.
+class EndIndex
+{
+public:
+    void add(const Point& at, size_t piece) { _cells[cellOf(at)].push_back(piece); }
+
+    /// Every piece not yet \a used filed within a pixel of \a at: all those
+    /// that can meet it, and some that do not.
+    void around(const Point& at, const std::vector<bool>& used, std::vector<size_t>& into)
+    {
+        const std::pair<long long, long long> cell = cellOf(at);
+        for (long long dy = -1; dy <= 1; ++dy)
+        {
+            for (long long dx = -1; dx <= 1; ++dx)
+            {
+                const auto it = _cells.find({cell.first + dx, cell.second + dy});
+                if (it == _cells.end())
+                    continue;
+                std::vector<size_t>& filed = it->second;
+                filed.erase(std::remove_if(filed.begin(), filed.end(),
+                    [&](size_t piece) { return used[piece]; }), filed.end());
+                into.insert(into.end(), filed.begin(), filed.end());
+            }
+        }
+    }
+
+private:
+    struct CellHash
+    {
+        size_t operator()(const std::pair<long long, long long>& cell) const
+        {
+            return std::hash<long long>()(cell.first) * 1000003u ^ std::hash<long long>()(cell.second);
+        }
+    };
+
+    static long long pixelOf(double value)
+    {
+        // Kept well inside the integers, so the neighbors either side exist.
+        const double clamped = std::max(-4.0e18, std::min(4.0e18, std::floor(value)));
+        return clamped == clamped ? static_cast<long long>(clamped) : 0;
+    }
+
+    static std::pair<long long, long long> cellOf(const Point& at)
+    {
+        return {pixelOf(at.x), pixelOf(at.y)};
+    }
+
+    std::unordered_map<std::pair<long long, long long>, std::vector<size_t>, CellHash> _cells;
+};
+
 /// Chains directed pieces end to start into outlines.
 std::vector<Outline> chainDirected(std::vector<Curve> pieces)
 {
     std::vector<Outline> outlines;
     std::vector<bool> used(pieces.size(), false);
+    EndIndex starts;
+    for (size_t i = 0; i < pieces.size(); ++i)
+        starts.add(pieces[i].start(), i);
+    std::vector<size_t> candidates;
     for (size_t first = 0; first < pieces.size(); ++first)
     {
         if (used[first])
@@ -472,11 +529,14 @@ std::vector<Outline> chainDirected(std::vector<Curve> pieces)
         outline.pieces.push_back(pieces[first]);
         while (!meets(outline.pieces.back().end(), outline.pieces.front().start()))
         {
+            // The first piece, in order, that starts where this one ends.
             const Point end = outline.pieces.back().end();
             size_t next = pieces.size();
-            for (size_t i = 0; i < pieces.size() && next == pieces.size(); ++i)
+            candidates.clear();
+            starts.around(end, used, candidates);
+            for (const size_t i : candidates)
             {
-                if (!used[i] && meets(pieces[i].start(), end))
+                if (i < next && meets(pieces[i].start(), end))
                     next = i;
             }
             if (next == pieces.size())
@@ -495,25 +555,29 @@ std::vector<Outline> chainUndirected(std::vector<Curve> pieces)
 {
     std::vector<Outline> outlines;
     std::vector<bool> used(pieces.size(), false);
+    EndIndex ends;
+    for (size_t i = 0; i < pieces.size(); ++i)
+    {
+        ends.add(pieces[i].start(), i);
+        ends.add(pieces[i].end(), i);
+    }
+    std::vector<size_t> candidates;
+    // The first piece, in order, with either end at \a at, turned to run on
+    // from there.
     const auto take = [&](const Point& at, Curve& found) {
-        for (size_t i = 0; i < pieces.size(); ++i)
+        candidates.clear();
+        ends.around(at, used, candidates);
+        size_t best = pieces.size();
+        for (const size_t i : candidates)
         {
-            if (used[i])
-                continue;
-            if (meets(pieces[i].start(), at))
-            {
-                used[i] = true;
-                found = pieces[i];
-                return true;
-            }
-            if (meets(pieces[i].end(), at))
-            {
-                used[i] = true;
-                found = reversed(pieces[i]);
-                return true;
-            }
+            if (i < best && (meets(pieces[i].start(), at) || meets(pieces[i].end(), at)))
+                best = i;
         }
-        return false;
+        if (best == pieces.size())
+            return false;
+        used[best] = true;
+        found = meets(pieces[best].start(), at) ? pieces[best] : reversed(pieces[best]);
+        return true;
     };
     for (size_t first = 0; first < pieces.size(); ++first)
     {
@@ -542,7 +606,10 @@ void outlinesOf(const Shape& shape, std::vector<Outline>& fills, std::vector<Out
     std::map<int, std::vector<Curve>> byStroke;
     for (const ShapeCurve& source : shapeCurves(shape))
     {
-        if (source.curve.controlPolygonLength() < 1.0e-9)
+        // Not a number, or too large to measure, would break the sorting and
+        // measuring that pairing outlines rests on.
+        if (!(source.curve.controlPolygonLength() >= 1.0e-9 &&
+                source.curve.controlPolygonLength() < 1.0e15))
             continue;
         // A seam with one fill both sides bounds nothing.
         if (source.fillStyle0 != source.fillStyle1)

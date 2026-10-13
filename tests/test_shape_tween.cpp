@@ -322,3 +322,57 @@ TEST(shape_hints_pin_points_of_the_morph)
     const std::vector<fla::ShapeHint> read = fla::hintsOf(frame);
     CHECK(read.size() == 2 && near(read[1].end.y, 100.0, 1.0e-6));
 }
+
+TEST(built_morph_pairs_outlines_of_thousands_of_pieces)
+{
+    // Two round fills of thousands of straight pieces each, the pieces listed
+    // as separate edges in a scrambled order: each chains back into one
+    // outline, and the two pair into one segment running round both.
+    const double pi = 3.14159265358979323846;
+    const auto round = [&](int pieces, double rx, double ry) {
+        std::unique_ptr<fla::Shape> shape(new fla::Shape(nullptr));
+        fla::SolidColor* fill = new fla::SolidColor(shape.get());
+        shape->fills.push_back(fill);
+        shape->fillsMap[1] = fill;
+        for (int k = 0; k < pieces; ++k)
+        {
+            const int i = static_cast<int>((static_cast<long long>(k) * 11) % pieces);
+            const double a0 = 2.0 * pi * i / pieces;
+            const double a1 = 2.0 * pi * (i + 1) / pieces;
+            fla::Edge* edge = new fla::Edge(shape.get());
+            edge->fillStyle1 = 1;
+            fla::Path* path = new fla::Path(edge);
+            path->segments.push_back(new fla::PathSegment(fla::PathSegment::Command::Move,
+                {Point(rx * std::cos(a0), ry * std::sin(a0))}, path));
+            path->segments.push_back(new fla::PathSegment(fla::PathSegment::Command::Line,
+                {Point(rx * std::cos(a1), ry * std::sin(a1))}, path));
+            edge->paths.push_back(path);
+            shape->edges.push_back(edge);
+        }
+        return shape;
+    };
+
+    const std::unique_ptr<fla::Shape> from = round(1500, 200.0, 200.0);
+    const std::unique_ptr<fla::Shape> to = round(1600, 300.0, 150.0);
+    const std::unique_ptr<fla::MorphShape> morph(fla::buildMorph(*from, *to, nullptr));
+    CHECK(morph->segments.size() == 1);
+    if (morph->segments.size() != 1)
+        return;
+
+    // Cut at every corner of either outline.
+    const fla::MorphSegment* segment = morph->segments.front();
+    CHECK(segment->curves.size() >= 1600);
+
+    bool onA = true;
+    bool onB = true;
+    for (const fla::MorphCurves* curves : segment->curves)
+    {
+        const Point& a = curves->anchorPointA;
+        const Point& b = curves->anchorPointB;
+        onA = onA && near(std::hypot(a.x, a.y), 200.0, 0.01);
+        const double ellipse = (b.x / 300.0) * (b.x / 300.0) + (b.y / 150.0) * (b.y / 150.0);
+        onB = onB && near(ellipse, 1.0, 0.001);
+    }
+    CHECK(onA);
+    CHECK(onB);
+}
