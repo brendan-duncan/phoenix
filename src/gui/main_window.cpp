@@ -287,12 +287,22 @@ MainWindow::MainWindow(const QString& initialFile, QWidget* parent, bool startup
             _motionEditor->refresh();
         updateFramePicker();
         // The Properties panel follows the selection the way Animate's does:
-        // an object shows its Object tab; nothing selected shows the tool, or
-        // the document when the arrow is the tool.
+        // an object picked with a selecting tool shows its Object tab, while
+        // a drawing tool keeps its own settings in view even though what it
+        // just drew is selected; nothing selected shows the tool, or the
+        // document when the arrow is the tool.
         if (_propertiesPanel)
         {
             _propertiesPanel->refresh();
-            if (!_selection.isEmpty())
+            const Tool* tool = _phoenixView ? _phoenixView->activeTool() : nullptr;
+            const bool selecting = !tool || tool == _selectionTool.get() || tool == _subselectionTool.get() ||
+                                   tool == _freeTransformTool.get() || tool == _lassoTool.get() ||
+                                   tool == _polygonTool.get() || tool == _magicWandTool.get() ||
+                                   tool == _gradientTransformTool.get() || tool == _rotate3DTool.get() ||
+                                   tool == _translate3DTool.get();
+            if (!_selection.isEmpty() && !selecting)
+                _propertiesPanel->setTab(PropertiesPanel::Tab::Tool);
+            else if (!_selection.isEmpty())
                 _propertiesPanel->setTab(PropertiesPanel::Tab::Object);
             else if (_phoenixView && _phoenixView->activeTool() == _selectionTool.get())
                 _propertiesPanel->setTab(PropertiesPanel::Tab::Doc);
