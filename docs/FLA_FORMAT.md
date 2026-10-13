@@ -159,8 +159,21 @@ no corpus file has guides):
 Masked layers are often written as `normal` with `parentLayerIndex` pointing at
 a mask layer. A layer's type has to be worked out from its parent's
 (`document_parser.cpp`). Layers are listed top to bottom: `layers[0]` draws on
-top. Layer parenting (Animate 2019's parent layer, not the folder link) has not
-been seen in a file yet.
+top.
+
+Layer parenting (Animate 2019's parent layer, not the folder link) is stored
+apart from `parentLayerIndex` on the layer: a parent layer carries
+`layerRiggingIndex="N"`, and each keyframe of a child names it with
+`parentLayerIndex="N"` on its `DOMFrame`, so a child can change parents from
+keyframe to keyframe. The child's content is placed by the parent's first
+element as shown, through the parent's own parent in turn. Tweened parent
+keyframes also carry `rigPropagationMatrix` (a JSON matrix in 16.16 fixed
+point, seen holding a pure rotation) and, on motion object tweens,
+`propagateRotMap` (a list of angles in degrees); Phoenix keeps both but does
+not read them. The format has no setting for leaving out a parent's scale,
+skew or flip: Phoenix keeps those as `phoenixParentScale`,
+`phoenixParentSkew` and `phoenixParentFlip` (`"false"` when off, absent
+otherwise) on the child `DOMLayer`.
 
 ### DOMFrame
 
@@ -494,7 +507,7 @@ they're followed:
 - What does `S` in an `edges` string mean? (section 6)
 - The guides attribute format (section 4)
 - The spelling of the reverse loop options (section 5)
-- Camera layers, layer depth, layer parenting and 3D rotation: no samples yet
+- Camera layers, layer depth and 3D rotation: no samples yet
 - Asset Warp mesh and pin storage (section 7)
 - IK between symbol instances, and IK pose tweening (section 7)
 - What `keyMode` encodes

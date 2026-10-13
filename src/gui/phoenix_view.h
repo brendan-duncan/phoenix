@@ -1240,7 +1240,9 @@ private:
     /// Layer parenting: the transform a layer's content is placed by, its
     /// parent layer's element as shown, through its own parent in turn.
     /// Identity for a layer with no parent. A frame names its parent by the
-    /// parent layer's layerRiggingIndex.
+    /// parent layer's layerRiggingIndex. The layer's parent propagation
+    /// settings leave out the parent's scale, skew or flip. Drawing, hit
+    /// testing and the tools all place parented content by this.
     QTransform parentTransform(const fla::Layer* layer, const fla::Frame* frame, fla::LoopType loopType,
         int firstFrame, int depth = 0);
     /// The parenting chain alone, without the camera.

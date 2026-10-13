@@ -1436,6 +1436,25 @@ void LayersPanel::showLayerProperties(QTreeWidgetItem* item)
     outline->setChecked(layer->outline);
     form->addRow("", outline);
 
+    // Layer parenting: the parts of the parent's transform this layer takes
+    // on. Position and rotation always do.
+    const fla::layers::ParentPropagation propagation = fla::layers::propagationOf(*layer);
+    QCheckBox* parentScale = new QCheckBox("Scale", &dialog);
+    parentScale->setChecked(propagation.scale);
+    QCheckBox* parentSkew = new QCheckBox("Skew", &dialog);
+    parentSkew->setChecked(propagation.skew);
+    QCheckBox* parentFlip = new QCheckBox("Flip", &dialog);
+    parentFlip->setChecked(propagation.flip);
+    QHBoxLayout* propagationRow = new QHBoxLayout();
+    for (QCheckBox* check : {parentScale, parentSkew, parentFlip})
+    {
+        check->setToolTip("Whether this layer follows its parent layer's " + check->text().toLower() +
+            ". It always follows the parent's position and rotation.");
+        propagationRow->addWidget(check);
+    }
+    propagationRow->addStretch();
+    form->addRow("Follow parent's:", propagationRow);
+
     QDialogButtonBox* box = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, &dialog);
     connect(box, &QDialogButtonBox::accepted, &dialog, &QDialog::accept);
     connect(box, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
@@ -1474,7 +1493,12 @@ void LayersPanel::showLayerProperties(QTreeWidgetItem* item)
         state.color[0] = static_cast<uint8_t>(color.red());
         state.color[1] = static_cast<uint8_t>(color.green());
         state.color[2] = static_cast<uint8_t>(color.blue());
+        fla::layers::ParentPropagation follows;
+        follows.scale = parentScale->isChecked();
+        follows.skew = parentSkew->isChecked();
+        follows.flip = parentFlip->isChecked();
+        state.extraAttributes = fla::layers::withPropagation(
+            fla::layers::withTransparency(*layer, fade->isChecked() ? fadePercent->value() : 0), follows);
     }
-    layer->extraAttributes = fla::layers::withTransparency(*layer, fade->isChecked() ? fadePercent->value() : 0);
     emit layerEditRequested(timeline, after, "Layer Properties");
 }
