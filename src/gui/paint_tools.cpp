@@ -321,6 +321,15 @@ bool PaintBucketTool::mouseRelease(PhoenixView& view, QMouseEvent* event, const 
     return true;
 }
 
+void PaintBucketTool::deactivate(PhoenixView& view)
+{
+    // A fill waiting for the release points at the shape it fills, which an
+    // undo can take away.
+    _pending.reset();
+    _pendingTarget = nullptr;
+    view.update();
+}
+
 void PaintBucketTool::place(PhoenixView& view, const QPointF* dragEnd)
 {
     std::unique_ptr<fla::Shape> after = std::move(_pending);

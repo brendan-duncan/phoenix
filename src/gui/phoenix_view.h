@@ -437,6 +437,13 @@ public:
     /// belongs to is going away.
     void clearPendingMerge();
 
+    /// After an undo or redo: lets go of everything the view holds that the
+    /// document no longer does (an undone edit owns what it took out, and
+    /// frees it when the next edit is made). Steps out of edit scopes whose
+    /// symbol, instance or frame is gone, forgets waiting drawings and lifted
+    /// regions that went, and the highlighted outliner element.
+    void pruneToDocument();
+
     /// Commits a waiting drawing now, whether or not it is still selected.
     ///
     /// Starting another drawing does this, so the waiting one merges into what

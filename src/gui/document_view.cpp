@@ -109,6 +109,18 @@ void DocumentView::refreshTree()
     // Don't auto-expand - let user expand as needed for lazy loading
 }
 
+void DocumentView::pruneTo(const std::unordered_set<const fla::DOMElement*>& reachable)
+{
+    for (auto it = _elementToItem.constBegin(); it != _elementToItem.constEnd(); ++it)
+    {
+        if (it.key() && !reachable.count(it.key()))
+        {
+            refreshTree();
+            return;
+        }
+    }
+}
+
 void DocumentView::clearTree()
 {
     clear();

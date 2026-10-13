@@ -38,6 +38,10 @@ public:
 
     void refresh() { update(); }
 
+    /// Abandons a depth drag in progress, putting the layer back as it was:
+    /// an undo or redo is about to change the layers.
+    void cancelDrag();
+
 protected:
     void paintEvent(QPaintEvent* event) override;
     void mousePressEvent(QMouseEvent* event) override;

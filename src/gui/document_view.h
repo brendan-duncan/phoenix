@@ -23,6 +23,11 @@ public:
 
     void refreshTree();
 
+    /// Rebuilds the tree when it shows anything not in \a reachable (after
+    /// an undo took it out of the document); otherwise leaves it, folds and
+    /// all, as it is.
+    void pruneTo(const std::unordered_set<const fla::DOMElement*>& reachable);
+
 signals:
     void visibilityChanged();
 

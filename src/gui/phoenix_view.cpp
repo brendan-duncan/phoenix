@@ -5225,6 +5225,69 @@ void PhoenixView::clearPendingMerge()
     }
 }
 
+void PhoenixView::pruneToDocument()
+{
+    if (!_flaDocument || !_flaDocument->document)
+        return;
+    const std::unordered_set<const fla::DOMElement*> reachable = _flaDocument->document->reachable();
+    const auto alive = [&reachable](const fla::DOMElement* element) {
+        return !element || reachable.count(element) > 0;
+    };
+
+    _pending.erase(std::remove_if(_pending.begin(), _pending.end(),
+                       [&](const PendingDrop& drop) { return !alive(drop.shape) || !alive(drop.frame); }),
+        _pending.end());
+    _floating.erase(std::remove_if(_floating.begin(), _floating.end(),
+                        [&](const FloatingRegion& region) {
+                            return !alive(region.source) || !alive(region.piece) || !alive(region.frame);
+                        }),
+        _floating.end());
+    if (!alive(_selectedElement))
+        _selectedElement = nullptr;
+    if (!alive(_onlyLayer))
+        _onlyLayer = nullptr;
+    if (!alive(_overrideElement))
+        _overrideElement = nullptr;
+    if (!alive(_overrideStyleElement))
+        _overrideStyleElement = nullptr;
+
+    // The scope, outermost first: everything from the first level whose
+    // symbol, instance or frame went is dropped as it is, with none of what
+    // stepping out does (regrouping, selecting the instance), since those
+    // objects are no longer the document's.
+    size_t valid = 0;
+    for (; valid < _scope.size(); ++valid)
+    {
+        const EditScope& level = _scope[valid];
+        const bool ok = level.group ? alive(level.frame)
+                                    : alive(level.timeline) && alive(level.symbol) && alive(level.instance);
+        if (!ok)
+            break;
+    }
+    bool changed = false;
+    if (valid < _scope.size())
+    {
+        _scope.resize(valid);
+        if (_selection)
+            _selection->clear();
+        changed = true;
+    }
+    // A group whose taking apart was undone is whole again on its frame:
+    // stepping out of it now just leaves it.
+    while (!_scope.empty() && _scope.back().group)
+    {
+        const EditScope& level = _scope.back();
+        if (std::find(level.frame->elements.begin(), level.frame->elements.end(), level.group) ==
+            level.frame->elements.end())
+            break;
+        exitScope();
+    }
+    clearCaches();
+    if (changed)
+        emit scopeChanged();
+    update();
+}
+
 const PhoenixView::FloatingRegion* PhoenixView::floatingFor(const fla::Element* element) const
 {
     for (const FloatingRegion& region : _floating)

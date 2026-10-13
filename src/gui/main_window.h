@@ -784,6 +784,14 @@ private:
     /// \a title and gives an empty path.
     QString findFfmpeg(const QString& title);
 
+    /// Ends whatever a tool or a panel is in the middle of, before an undo or
+    /// redo moves the history under it.
+    void settleGestures();
+
+    /// After an undo or redo: lets go of whatever the document no longer
+    /// holds (stage scope, selection, outliner, explorer and search results).
+    void pruneToDocument();
+
     /// Which toolbox icon stands for \a tool, for the Properties panel's
     /// Tool tab.
     ToolIcons::Tool iconForTool(const Tool* tool) const;

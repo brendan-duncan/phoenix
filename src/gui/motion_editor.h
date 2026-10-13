@@ -100,6 +100,10 @@ public:
     /// changed.
     void refresh();
 
+    /// Abandons a curve drag in progress, putting the keys back as they
+    /// were: an undo or redo is about to change what it was editing.
+    void cancelDrag();
+
 private:
     void showProperty();
     /// Writes the curve's keys into the tween, live, or as an undo step when

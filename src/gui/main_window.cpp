@@ -528,6 +528,9 @@ void MainWindow::dropEvent(QDropEvent* event)
 
 void MainWindow::releaseDocument()
 {
+    // Nothing a tool is in the middle of may outlive the document.
+    if (_flaDocument)
+        settleGestures();
     // The document is going; so is the copy kept of it for recovery.
     if (_autoSave)
         _autoSave->discard();
@@ -672,6 +675,8 @@ void MainWindow::parkActiveDocument()
 {
     if (!_flaDocument || _activeTab < 0 || _activeTab >= static_cast<int>(_tabs.size()))
         return;
+    // Text being typed goes into the document it was typed in.
+    settleGestures();
     DocumentTab& tab = *_tabs[static_cast<size_t>(_activeTab)];
     if (_phoenixView)
         _phoenixView->exitToDepth(0);
@@ -710,6 +715,8 @@ void MainWindow::makeRoomForDocument()
 {
     if (!_flaDocument)
         return;
+    // Text being typed makes a new document one worth keeping.
+    settleGestures();
     // A blank document nobody has touched is simply replaced.
     if (_documentPath.isEmpty() && !_editContext.isModified())
         return;
@@ -6724,17 +6731,55 @@ void MainWindow::fillWorkspaceMenu(QMenu* menu)
 
 void MainWindow::undo()
 {
+    settleGestures();
     _editContext.commandStack().undo();
-    if (_phoenixView)
-    {
-        _phoenixView->clearCaches();
-        _phoenixView->update();
-    }
+    pruneToDocument();
 }
 
 void MainWindow::redo()
 {
+    settleGestures();
     _editContext.commandStack().redo();
+    pruneToDocument();
+}
+
+void MainWindow::settleGestures()
+{
+    // Whatever a tool or a panel is in the middle of points into the
+    // document as it is now: the gesture ends before the history moves.
+    // Text being typed and a path being drawn are committed, so an undo
+    // then takes them back as a step.
+    if (_phoenixView && _phoenixView->activeTool())
+        _phoenixView->activeTool()->deactivate(*_phoenixView);
+    if (_motionEditor)
+        _motionEditor->cancelDrag();
+    if (_layerDepth)
+        _layerDepth->cancelDrag();
+}
+
+void MainWindow::pruneToDocument()
+{
+    // An undone edit owns again what it took out, and frees it when the next
+    // edit is made: nothing may keep pointing at it.
+    if (_phoenixView)
+        _phoenixView->pruneToDocument();
+    if (_flaDocument && _flaDocument->document)
+    {
+        const std::unordered_set<const fla::DOMElement*> reachable = _flaDocument->document->reachable();
+        std::vector<fla::DOMElement*> kept;
+        for (fla::DOMElement* element : _selection.elements())
+            if (reachable.count(element))
+                kept.push_back(element);
+        if (kept.size() != _selection.elements().size())
+            _selection.select(kept);
+        if (_documentView)
+            _documentView->pruneTo(reachable);
+    }
+    // These hold raw pointers into the document; they rebuild from it.
+    if (_movieExplorer)
+        _movieExplorer->refresh();
+    if (_findReplace)
+        _findReplace->refresh();
     if (_phoenixView)
     {
         _phoenixView->clearCaches();
@@ -6833,6 +6878,8 @@ void MainWindow::updateWindowTitle()
 
 bool MainWindow::confirmDiscardChanges()
 {
+    // Text being typed counts as a change to save.
+    settleGestures();
     if (!_editContext.isModified())
         return true;
 

@@ -115,6 +115,15 @@ void LayerDepthPanel::paintEvent(QPaintEvent*)
     }
 }
 
+void LayerDepthPanel::cancelDrag()
+{
+    if (!_dragging)
+        return;
+    _dragging->extraAttributes = _before;
+    _dragging = nullptr;
+    update();
+}
+
 void LayerDepthPanel::mousePressEvent(QMouseEvent* event)
 {
     const std::vector<fla::Layer*> all = layers();

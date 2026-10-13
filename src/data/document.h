@@ -14,6 +14,7 @@
 #include <cstdint>
 #include <map>
 #include <string>
+#include <unordered_set>
 #include <vector>
 #include <utility>
 
@@ -138,6 +139,13 @@ public:
 
     /// The scene shown and edited; null with no scenes.
     Timeline* currentScene() const;
+
+    /// Everything the document holds right now: its scenes, its symbols and
+    /// their timelines, every layer, frame and object on them, and the
+    /// members of groups. An object an undone edit took out is not here;
+    /// whatever keeps pointers into the document (the selection, the stage's
+    /// edit scope, panels) checks against this after an undo or redo.
+    std::unordered_set<const DOMElement*> reachable() const;
 
     /// Makes the scene at \a index the one shown and edited.
     void setCurrentScene(int index);

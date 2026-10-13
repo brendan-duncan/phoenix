@@ -46,6 +46,10 @@ private:
     /// or fitted to its art, then commits.
     void place(PhoenixView& view, const QPointF* dragEnd);
 
+public:
+    void deactivate(PhoenixView& view) override;
+
+private:
     fla::CommandStack& _commandStack;
     const fla::DrawingStyle& _style;
     /// The paint waiting for the release, for a gradient to be dragged.

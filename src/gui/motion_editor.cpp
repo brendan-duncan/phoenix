@@ -565,6 +565,15 @@ void MotionEditorPanel::updateKeyFields()
     _updating = false;
 }
 
+void MotionEditorPanel::cancelDrag()
+{
+    if (!_editing)
+        return;
+    if (_frame)
+        _frame->extraChildren = _before;
+    _editing = false;
+}
+
 void MotionEditorPanel::writeKeys(bool done, const char* name)
 {
     if (!_frame)
