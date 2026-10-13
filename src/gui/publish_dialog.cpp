@@ -119,6 +119,7 @@ PublishSettingsDialog::PublishSettingsDialog(const fla::publish::Settings& setti
     gifRow->addWidget(_gifLoopCount);
     gifRow->addWidget(new QLabel("Colors", options));
     gifRow->addWidget(_gifColors);
+    gifRow->addStretch(1);
     form->addRow("GIF", gifRow);
     _svgHidden = new QCheckBox("Include hidden layers", options);
     _svgHidden->setChecked(settings.svgHiddenLayers);
@@ -130,9 +131,11 @@ PublishSettingsDialog::PublishSettingsDialog(const fla::publish::Settings& setti
     svgRow->addStretch(1);
     form->addRow("SVG", svgRow);
     layout->addWidget(options);
-    layout->addWidget(new QLabel("Still images show the frame labeled #Static, or the first frame. The settings "
-                                 "are kept in the document, where Animate reads them too.",
-        this));
+    QLabel* note = new QLabel("Still images show the frame labeled #Static, or the first frame. The settings "
+                              "are kept in the document, so the file publishes the same wherever it goes.",
+        this);
+    note->setWordWrap(true);
+    layout->addWidget(note);
 
     QDialogButtonBox* buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, this);
     connect(buttons, &QDialogButtonBox::accepted, this, &QDialog::accept);

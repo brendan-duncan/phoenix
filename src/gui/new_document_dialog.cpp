@@ -102,7 +102,7 @@ const std::vector<NewDocumentDialog::Preset>& NewDocumentDialog::presets()
         {"Advanced", "PAL", 720, 576, 25},
         {"Advanced", "NTSC", 720, 480, 29.97},
         {"Advanced", "Film 24p", 1920, 1080, 23.976},
-        {"Advanced", "Animate default", 550, 400, 24},
+        {"Advanced", "Classic default", 550, 400, 24},
     };
     return all;
 }
