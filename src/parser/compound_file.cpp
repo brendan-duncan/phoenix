@@ -113,12 +113,18 @@ bool CompoundFile::read(const std::vector<uint8_t>& data)
     const uint32_t sectorCount = static_cast<uint32_t>(data.size() / sectorSize);
 
     // The FAT's sectors: 109 listed in the header, the rest in DIFAT sectors.
+    // There cannot be more of them than the file has sectors, and the DIFAT
+    // chain is guarded against loops.
+    const uint32_t fatCount = std::min(fatSectors, sectorCount);
     std::vector<uint32_t> fatList;
-    for (int i = 0; i < 109 && fatList.size() < fatSectors; ++i)
+    for (int i = 0; i < 109 && fatList.size() < fatCount; ++i)
         fatList.push_back(u32(data, 76 + 4 * i));
     const size_t perDifat = sectorSize / 4 - 1;
-    for (uint32_t n = 0; n < difatSectors && difatSector < sectorCount && fatList.size() < fatSectors; ++n)
+    std::set<uint32_t> difatSeen;
+    for (uint32_t n = 0; n < difatSectors && difatSector < sectorCount && fatList.size() < fatCount; ++n)
     {
+        if (!difatSeen.insert(difatSector).second)
+            break;
         const size_t at = sectorAt(difatSector);
         for (size_t i = 0; i < perDifat && fatList.size() < fatSectors; ++i)
             fatList.push_back(u32(data, at + 4 * i));
@@ -208,24 +214,41 @@ bool CompoundFile::read(const std::vector<uint8_t>& data)
         return out;
     };
 
-    // Each storage's children are a tree of siblings.
+    // Each storage's children are a tree of siblings, walked with a list
+    // rather than recursion: a damaged tree can be one long branch. Streams
+    // that share sectors would each copy them, so all the streams together
+    // may not come to much more than the file.
+    const uint64_t budget = static_cast<uint64_t>(data.size()) * 2 + (1u << 20);
+    uint64_t total = 0;
     std::set<uint32_t> visited;
-    std::function<void(uint32_t, const std::string&)> walk = [&](uint32_t index, const std::string& prefix) {
+    std::vector<std::pair<uint32_t, std::string>> pending = {{entries[0].child, std::string()}};
+    while (!pending.empty())
+    {
+        const uint32_t index = pending.back().first;
+        const std::string prefix = std::move(pending.back().second);
+        pending.pop_back();
         if (index == kNoStream || index >= entries.size() || !visited.insert(index).second)
-            return;
+            continue;
         const Entry& entry = entries[index];
-        walk(entry.left, prefix);
-        walk(entry.right, prefix);
+        pending.emplace_back(entry.left, prefix);
+        pending.emplace_back(entry.right, prefix);
         if (entry.type == 2)
         {
-            _streams[prefix + entry.name] = entry.size < miniCutoff ? readMini(entry.start, entry.size)
-                                                                    : readChain(entry.start, entry.size);
+            std::vector<uint8_t> stream = entry.size < miniCutoff ? readMini(entry.start, entry.size)
+                                                                  : readChain(entry.start, entry.size);
+            total += stream.size();
+            if (total > budget)
+            {
+                _streams.clear();
+                _error = "Compound file directory is damaged.";
+                return false;
+            }
+            _streams[prefix + entry.name] = std::move(stream);
         }
         else if (entry.type == 1)
         {
-            walk(entry.child, prefix + entry.name + "/");
+            pending.emplace_back(entry.child, prefix + entry.name + "/");
         }
-    };
-    walk(entries[0].child, "");
+    }
     return true;
 }

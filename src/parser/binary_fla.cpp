@@ -416,16 +416,26 @@ public:
         {
             if (tag >= _load.size() || _load[tag].isClass || !_load[tag].object)
                 fail("a bad object reference");
+            // An object inside itself would make a loop of the tree.
+            if (_load[tag].reading)
+                fail("a reference to an object still being read");
             return _load[tag].object;
         }
         const auto serializer = serializers.find(cls);
         if (serializer == serializers.end())
             fail("an object of class " + cls + ", which Phoenix does not know");
+        // Each level costs stack, here and in everything that walks the tree.
+        if (_depth >= kMaxDepth)
+            fail("objects nested too deep");
         _pool.push_back(std::make_unique<Object>());
         Object* object = _pool.back().get();
         object->cls = cls;
-        _load.push_back({false, cls, object});
+        const size_t loaded = _load.size();
+        _load.push_back({false, cls, object, true});
+        ++_depth;
         serializer->second(*this, *object);
+        --_depth;
+        _load[loaded].reading = false;
         return object;
     }
 
@@ -455,13 +465,18 @@ private:
         bool isClass = false;
         std::string cls;
         Object* object = nullptr;
+        /// Still being read: its serializer has not returned.
+        bool reading = false;
     };
+
+    static constexpr int kMaxDepth = 200;
 
     const std::vector<uint8_t>& _data;
     std::string _name;
     std::vector<std::unique_ptr<Object>>& _pool;
     std::vector<Loaded> _load;
     size_t _at = 0;
+    int _depth = 0;
 };
 
 // ---------------------------------------------------------------------------
@@ -1333,7 +1348,8 @@ private:
                         if (!frame || frame->cls != "CPicFrame")
                             continue;
                         frames->InsertEndChild(writeFrame(doc, *frame, index));
-                        index += std::max(1, frame->duration);
+                        // Held where the XFL reader clamps frames (fla::kMaxFrames).
+                        index = std::min(index + std::max(1, frame->duration), 1 << 24);
                     }
                     node->InsertEndChild(frames);
                 }

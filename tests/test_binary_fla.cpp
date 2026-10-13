@@ -7,6 +7,7 @@
 #include "../src/data/symbol.h"
 #include "../src/data/symbol_instance.h"
 #include "../src/data/timeline.h"
+#include "../src/parser/binary_fla.h"
 #include "../src/parser/compound_file.h"
 #include "../src/parser/fla_parser.h"
 
@@ -181,4 +182,78 @@ TEST(binary_fla_reads_as_its_xfl_twin)
             }
         }
     }
+}
+
+TEST(compound_file_survives_a_difat_that_points_at_itself)
+{
+    // Counts in the header far past the file, and a DIFAT sector whose
+    // next link is itself: read in moments, not grown to gigabytes.
+    std::vector<uint8_t> file = compoundFile("Contents", 5000);
+    const auto put32 = [&](size_t at, uint32_t v) {
+        for (int i = 0; i < 4; ++i)
+            file[at + i] = static_cast<uint8_t>(v >> (8 * i));
+    };
+    const size_t sector = 3; // the stream's first sector
+    put32(44, 0xFFFFFFFF);
+    put32(68, static_cast<uint32_t>(sector));
+    put32(72, 0xFFFFFFFF);
+    put32((sector + 1) * 512 + 508, static_cast<uint32_t>(sector));
+    CompoundFile compound;
+    compound.read(file);
+    CHECK(compound.streams().size() <= 1);
+}
+
+namespace {
+
+/// A Contents stream with nothing in it, of the oldest version read.
+std::vector<uint8_t> emptyContents()
+{
+    std::vector<uint8_t> contents(400, 0);
+    contents[0] = 0x29;
+    contents[1] = 0x01;
+    return contents;
+}
+
+/// A page stream: the page's class declared, then \a body.
+std::vector<uint8_t> pageStream(const std::vector<uint8_t>& body)
+{
+    std::vector<uint8_t> page = {1, 0xFF, 0xFF, 0, 0, 8, 0};
+    const std::string cls = "CPicPage";
+    page.insert(page.end(), cls.begin(), cls.end());
+    page.insert(page.end(), body.begin(), body.end());
+    page.resize(page.size() + 64, 0);
+    return page;
+}
+
+} // namespace
+
+TEST(binary_fla_refuses_an_object_inside_itself)
+{
+    // The page's first child is a reference to the page, still being read.
+    std::map<std::string, std::vector<uint8_t>> streams;
+    streams["Contents"] = emptyContents();
+    streams["Page 1"] = pageStream({0, 0, 2, 0});
+    std::map<std::string, std::vector<uint8_t>> files;
+    std::string error;
+    CHECK(!BinaryFla::convert(streams, files, error));
+    CHECK(error.find("still being read") != std::string::npos);
+}
+
+TEST(binary_fla_refuses_objects_nested_past_a_limit)
+{
+    // Shapes inside shapes, thousands deep: an error, not a stack overflow.
+    std::vector<uint8_t> body = {0, 0};
+    const std::string cls = "CPicShape";
+    body.insert(body.end(), {0xFF, 0xFF, 0, 0, static_cast<uint8_t>(cls.size()), 0});
+    body.insert(body.end(), cls.begin(), cls.end());
+    body.insert(body.end(), {0, 0});
+    for (int i = 0; i < 5000; ++i)
+        body.insert(body.end(), {0x03, 0x80, 0, 0}); // the class, declared third
+    std::map<std::string, std::vector<uint8_t>> streams;
+    streams["Contents"] = emptyContents();
+    streams["Page 1"] = pageStream(body);
+    std::map<std::string, std::vector<uint8_t>> files;
+    std::string error;
+    CHECK(!BinaryFla::convert(streams, files, error));
+    CHECK(error.find("too deep") != std::string::npos);
 }
