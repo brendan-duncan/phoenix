@@ -48,6 +48,11 @@ struct Sound
     std::vector<int16_t> samples;
 };
 
+/// Lets go of the bitmaps' and sounds' bytes that were read from the
+/// document's file, as for a document waiting in a tab; they are read again
+/// when next shown. The number of bytes let go.
+size_t releaseLoadedMedia(const Document& document);
+
 } // namespace media
 
 /// Adds a bitmap to the library.

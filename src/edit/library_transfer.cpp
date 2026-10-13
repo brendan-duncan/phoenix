@@ -92,17 +92,20 @@ std::vector<uint8_t> fileOf(const Document& document, const std::string& path)
     return {};
 }
 
+/// \a e and, for a group, its members, all the way in.
+void visitElement(Element* e, const std::function<void(Element&)>& element)
+{
+    if (!e)
+        return;
+    element(*e);
+    if (e->elementType() == Element::Type::Group)
+        for (Element* member : static_cast<Group*>(e)->members)
+            visitElement(member, element);
+}
+
 /// Every element and frame of \a symbol, inside groups too.
 void walk(const Symbol& symbol, const std::function<void(Element&)>& element, const std::function<void(Frame&)>& frame)
 {
-    std::function<void(Element*)> visit = [&](Element* e) {
-        if (!e)
-            return;
-        element(*e);
-        if (e->elementType() == Element::Type::Group)
-            for (Element* member : static_cast<Group*>(e)->members)
-                visit(member);
-    };
     for (const Timeline* timeline : symbol.timelines)
         for (Layer* layer : timeline ? timeline->layers : std::vector<Layer*>())
             for (Frame* f : layer ? layer->frames : std::vector<Frame*>())
@@ -111,7 +114,7 @@ void walk(const Symbol& symbol, const std::function<void(Element&)>& element, co
                     continue;
                 frame(*f);
                 for (Element* e : f->elements)
-                    visit(e);
+                    visitElement(e, element);
             }
 }
 
@@ -123,6 +126,36 @@ void bitmapFills(Shape& shape, const std::function<void(std::string&)>& visit)
     for (StrokeStyle* stroke : shape.strokes)
         if (stroke && stroke->fill && stroke->fill->type() == FillStyle::Type::BitmapFill)
             visit(static_cast<BitmapFill*>(stroke->fill)->bitmapPath);
+}
+
+/// The library names \a element uses itself.
+void namesOf(Element& element, std::set<std::string>& names)
+{
+    switch (element.elementType())
+    {
+    case Element::Type::SymbolInstance:
+        names.insert(static_cast<SymbolInstance&>(element).libraryItemName);
+        break;
+    case Element::Type::BitmapInstance:
+        names.insert(static_cast<BitmapInstance&>(element).libraryItemName);
+        break;
+    case Element::Type::Shape:
+        bitmapFills(static_cast<Shape&>(element), [&](std::string& name) { names.insert(name); });
+        break;
+    default:
+        break;
+    }
+}
+
+/// What \a element uses, named as \a rename says.
+void renameIn(Element& element, const std::function<void(std::string&)>& rename)
+{
+    if (element.elementType() == Element::Type::SymbolInstance)
+        rename(static_cast<SymbolInstance&>(element).libraryItemName);
+    else if (element.elementType() == Element::Type::BitmapInstance)
+        rename(static_cast<BitmapInstance&>(element).libraryItemName);
+    else if (element.elementType() == Element::Type::Shape)
+        bitmapFills(static_cast<Shape&>(element), rename);
 }
 
 /// Every library name a symbol uses, through the symbols it uses.
@@ -354,7 +387,7 @@ std::vector<std::string> conflicts(const Document& target, const Document& sourc
 }
 
 CommandPtr copyItems(Document& target, const Document& source, const std::vector<std::string>& items,
-    Resolution resolution, std::vector<std::string>* added)
+    Resolution resolution, std::vector<std::string>* added, std::map<std::string, std::string>* renamedOut)
 {
     const std::vector<std::string> names = withDependencies(source, items);
     if (names.empty())
@@ -386,14 +419,7 @@ CommandPtr copyItems(Document& target, const Document& source, const std::vector
     // What a copied symbol uses goes by its name in the target.
     const auto renameUses = [&](Symbol& symbol) {
         walk(symbol,
-            [&](Element& element) {
-                if (element.elementType() == Element::Type::SymbolInstance)
-                    rename(static_cast<SymbolInstance&>(element).libraryItemName);
-                else if (element.elementType() == Element::Type::BitmapInstance)
-                    rename(static_cast<BitmapInstance&>(element).libraryItemName);
-                else if (element.elementType() == Element::Type::Shape)
-                    bitmapFills(static_cast<Shape&>(element), rename);
-            },
+            [&](Element& element) { renameIn(element, rename); },
             [&](Frame& frame) {
                 for (auto& attribute : frame.extraAttributes)
                     if (attribute.first == "soundName")
@@ -489,6 +515,8 @@ CommandPtr copyItems(Document& target, const Document& source, const std::vector
             any = true;
         }
     }
+    if (renamedOut)
+        *renamedOut = renamed;
     if (!any)
         return nullptr;
     // The folders what came in sits in, that the target lacks.
@@ -518,6 +546,56 @@ CommandPtr copyItems(Document& target, const Document& source, const std::vector
         for (const std::string& item : items)
             added->push_back(renamed.count(item) ? renamed[item] : item);
     return command;
+}
+
+std::vector<std::string> usedBy(const std::vector<const Element*>& elements)
+{
+    std::set<std::string> names;
+    for (const Element* element : elements)
+        visitElement(const_cast<Element*>(element), [&names](Element& e) { namesOf(e, names); });
+    names.erase(std::string());
+    return std::vector<std::string>(names.begin(), names.end());
+}
+
+std::vector<std::string> usedByFrames(const std::vector<const Frame*>& frames)
+{
+    std::set<std::string> names;
+    for (const Frame* frame : frames)
+    {
+        if (!frame)
+            continue;
+        for (const auto& attribute : frame->extraAttributes)
+            if (attribute.first == "soundName")
+                names.insert(attribute.second);
+        for (Element* element : frame->elements)
+            visitElement(element, [&names](Element& e) { namesOf(e, names); });
+    }
+    names.erase(std::string());
+    return std::vector<std::string>(names.begin(), names.end());
+}
+
+void renameUses(Element& element, const std::map<std::string, std::string>& names)
+{
+    const auto rename = [&names](std::string& name) {
+        const auto found = names.find(name);
+        if (found != names.end())
+            name = found->second;
+    };
+    visitElement(&element, [&rename](Element& e) { renameIn(e, rename); });
+}
+
+void renameUses(Frame& frame, const std::map<std::string, std::string>& names)
+{
+    for (auto& attribute : frame.extraAttributes)
+        if (attribute.first == "soundName")
+        {
+            const auto found = names.find(attribute.second);
+            if (found != names.end())
+                attribute.second = found->second;
+        }
+    for (Element* element : frame.elements)
+        if (element)
+            renameUses(*element, names);
 }
 
 } // namespace transfer

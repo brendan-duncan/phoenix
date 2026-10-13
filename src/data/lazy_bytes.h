@@ -116,6 +116,23 @@ public:
     /// another set of bytes taking their address after they are freed.
     std::weak_ptr<const void> token() const { return std::shared_ptr<const void>(_state); }
 
+    /// Lets go of bytes read from where they lie, to be read again when next
+    /// asked for, so a document put aside keeps little in memory. Bytes made
+    /// in memory stay, and so do bytes another holder shares (a copy in
+    /// another document, a save under way), which may be reading them. True
+    /// when they were let go.
+    bool unload() const
+    {
+        if (!_state || _state.use_count() != 1)
+            return false;
+        std::lock_guard<std::mutex> lock(_state->mutex);
+        if (!_state->loaded || !_state->location || !_state->location->load)
+            return false;
+        std::vector<uint8_t>().swap(_state->bytes);
+        _state->loaded = false;
+        return true;
+    }
+
     /// Whether the bytes have been read into memory.
     bool loaded() const
     {

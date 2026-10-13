@@ -80,6 +80,11 @@ public:
     /// comes back. Neither may be in a macro.
     void swapHistory(CommandStack& other);
 
+    /// Points every command at \a to where it held the selection \a from
+    /// (see Command::retargetSelection), for a history moved to another
+    /// window with its document.
+    void retargetSelection(Selection* from, Selection* to);
+
     /// Number of commands retained, including those currently undone.
     size_t count() const { return _commands.size(); }
 

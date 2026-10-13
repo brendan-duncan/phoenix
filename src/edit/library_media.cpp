@@ -112,6 +112,29 @@ Bitmap* newBitmap(const Document& document, const std::string& name, const std::
     return bitmap;
 }
 
+size_t releaseLoadedMedia(const Document& document)
+{
+    size_t released = 0;
+    const auto release = [&released](const LazyBytes& bytes) {
+        if (!bytes.loaded())
+            return;
+        const size_t size = bytes.size();
+        if (bytes.unload())
+            released += size;
+    };
+    for (const Resource* resource : document.resources)
+    {
+        if (!resource || resource->resourceType() != Resource::Type::Bitmap)
+            continue;
+        const Bitmap* bitmap = static_cast<const Bitmap*>(resource);
+        release(bitmap->imageData);
+        release(bitmap->datData);
+    }
+    for (const auto& file : document.extraFiles)
+        release(file.second);
+    return released;
+}
+
 } // namespace media
 
 AddBitmapCommand::AddBitmapCommand(Document* document, Bitmap* bitmap, const std::string& name)
