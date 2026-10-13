@@ -19,6 +19,7 @@ Installers for Windows and macOS (Apple silicon) are on the [releases page](http
 ## Documentation
 
 - [User Guide](https://brendan-duncan.github.io/phoenix/): installing, drawing, animating and exporting
+- [Changelog](CHANGELOG.md): what changed in each release
 - [Building](docs/BUILDING.md): building from source and running the tests
 - [Phoenix document format](docs/PHOENIX_FORMAT.md)
 - [FLA format](docs/FLA_FORMAT.md) and [binary FLA format](docs/BINARY_FLA_FORMAT.md)
