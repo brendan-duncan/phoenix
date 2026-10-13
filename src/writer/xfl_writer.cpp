@@ -546,7 +546,8 @@ void XFLWriter::writeSymbolInstance(const SymbolInstance& instance, XMLElement* 
         node->SetAttribute("loop", loopTypeName(instance.loopType));
 
     writeElementCommon(instance, node);
-    writeKept(node, instance.extraAttributes);
+    // The 3D center point moved with the instance.
+    writeKept(node, instance.keptAttributes());
 
     const ColorTransform& color = instance.colorTransform;
     const bool hasTintColor =

@@ -1603,6 +1603,7 @@ fla::FLADocument* loadUnguarded(const std::string& path, std::string& error, std
             document->symbolInstancesMap[found->second].push_back(instance);
         }
     }
+    fla::noteCenterPoints(*document);
     if (fla::breakSymbolCycles(*document))
         warning += "Some symbols contain themselves, which cannot be drawn; those instances are shown as missing.\n";
     if (context.damaged)

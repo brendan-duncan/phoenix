@@ -83,4 +83,8 @@ bool placingNestsSymbol(const Element& element, const Symbol* outer);
 /// instances were cut.
 int breakSymbolCycles(Document& document);
 
+/// Notes, for every instance read with a 3D center point, the matrix it was
+/// read with (SymbolInstance::readMatrix), so a save can move the point.
+void noteCenterPoints(Document& document);
+
 } // namespace fla

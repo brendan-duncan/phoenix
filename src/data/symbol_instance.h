@@ -25,6 +25,16 @@ public:
     SymbolType symbolType = SymbolType::Graphic;
     LoopType loopType = LoopType::PlayOnce;
     ColorTransform colorTransform;
+    /// The matrix the instance had when it was read, when the file gave it
+    /// a 3D center point (centerPoint3DX/Y, kept among its attributes):
+    /// saving moves the point with the instance, as Animate keeps it, by
+    /// how far the instance has moved since.
+    bool hasReadMatrix = false;
+    Transform readMatrix;
+
+    /// extraAttributes as a save writes them: with the 3D center point
+    /// moved by however the instance has moved since it was read.
+    std::vector<std::pair<std::string, std::string>> keptAttributes() const;
 
     /// How the instance is composited over what is under it, as the file
     /// names it: normal, layer, multiply, screen, lighten, darken,

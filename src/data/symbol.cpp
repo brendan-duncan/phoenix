@@ -16,12 +16,13 @@ namespace fla {
 
 namespace {
 
-/// Calls \a visit with every instance \a symbol places directly: on its
-/// timelines and inside its groups, but not inside other symbols.
-void forEachPlacedInstance(const Symbol& symbol, const std::function<void(SymbolInstance*)>& visit)
+/// Calls \a visit with every instance placed directly on \a timelines: on
+/// their frames and inside their groups, but not inside other symbols.
+void forEachPlacedInstance(
+    const std::vector<Timeline*>& timelines, const std::function<void(SymbolInstance*)>& visit)
 {
     std::vector<Element*> pending;
-    for (Timeline* timeline : symbol.timelines)
+    for (Timeline* timeline : timelines)
     {
         if (!timeline)
             continue;
@@ -62,7 +63,7 @@ bool symbolContains(const Symbol* outer, const Symbol* target)
             return true;
         if (!visited.insert(symbol).second)
             continue;
-        forEachPlacedInstance(*symbol, [&](SymbolInstance* instance) {
+        forEachPlacedInstance(symbol->timelines, [&](SymbolInstance* instance) {
             if (instance->symbol && !visited.count(instance->symbol))
                 pending.push_back(instance->symbol);
         });
@@ -83,6 +84,24 @@ bool placingNestsSymbol(const Element& element, const Symbol* outer)
     return false;
 }
 
+void noteCenterPoints(Document& document)
+{
+    const auto note = [](SymbolInstance* instance) {
+        for (const auto& attribute : instance->extraAttributes)
+            if (attribute.first == "centerPoint3DX" || attribute.first == "centerPoint3DY")
+            {
+                instance->hasReadMatrix = true;
+                instance->readMatrix = instance->transform;
+                return;
+            }
+    };
+    forEachPlacedInstance(document.timelines, note);
+    if (document.symbolList)
+        for (Symbol* symbol : document.symbolList->symbols)
+            if (symbol)
+                forEachPlacedInstance(symbol->timelines, note);
+}
+
 int breakSymbolCycles(Document& document)
 {
     if (!document.symbolList)
@@ -92,7 +111,7 @@ int breakSymbolCycles(Document& document)
     {
         if (!symbol)
             continue;
-        forEachPlacedInstance(*symbol, [&](SymbolInstance* instance) {
+        forEachPlacedInstance(symbol->timelines, [&](SymbolInstance* instance) {
             if (!instance->symbol || !symbolContains(instance->symbol, symbol))
                 return;
             auto users = document.symbolInstancesMap.find(instance->symbol);

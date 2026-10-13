@@ -84,6 +84,8 @@ Element* cloneElement(const Element& element, DOMElement* parent)
         copy->extraFilters = instance.extraFilters;
         copy->filters = instance.filters;
         copy->symbol = instance.symbol;
+        copy->hasReadMatrix = instance.hasReadMatrix;
+        copy->readMatrix = instance.readMatrix;
         return copy;
     }
     case Element::Type::BitmapInstance:

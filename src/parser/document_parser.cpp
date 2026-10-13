@@ -2310,6 +2310,7 @@ fla::Document* DocumentParser::parse(const std::string& xmlContent, fla::DOMElem
 
     // A symbol inside itself cannot be drawn: the loop is cut, and the
     // instance closing it shows as a missing symbol.
+    fla::noteCenterPoints(*document);
     if (int cut = fla::breakSymbolCycles(*document))
         std::cerr << cut << " symbol instance(s) placed a symbol inside itself and were cut" << std::endl;
 

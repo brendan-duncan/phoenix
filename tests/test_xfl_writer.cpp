@@ -1468,3 +1468,31 @@ TEST(an_instance_with_visible_off_is_hidden_and_kept_so)
     XFLWriter writer;
     CHECK(writer.writeDocument(*document).find("isVisible=\"false\"") != std::string::npos);
 }
+
+TEST(xfl_moves_an_instances_3d_center_point_with_it)
+{
+    std::unique_ptr<fla::Document> document = parseDocumentText(
+        "<DOMDocument xmlns='http://ns.adobe.com/xfl/2008/'>"
+        "<timelines><DOMTimeline name='Scene 1'><layers><DOMLayer name='L'><frames><DOMFrame index='0'><elements>"
+        "<DOMSymbolInstance libraryItemName='A' centerPoint3DX='1366.8' centerPoint3DY='862.95'>"
+        "<matrix><Matrix a='2' d='2' tx='1230.75' ty='754.55'/></matrix></DOMSymbolInstance>"
+        "</elements></DOMFrame></frames></DOMLayer></layers></DOMTimeline></timelines></DOMDocument>");
+    CHECK(document != nullptr);
+    if (!document || document->timelines.empty())
+        return;
+    auto* instance = dynamic_cast<fla::SymbolInstance*>(document->timelines[0]->layers[0]->frames[0]->elements[0]);
+    CHECK(instance && instance->hasReadMatrix);
+    if (!instance)
+        return;
+    XFLWriter writer;
+    // Unmoved, the point is written as read.
+    std::string written = writer.writeDocument(*document);
+    CHECK(written.find("centerPoint3DX=\"1366.8\"") != std::string::npos);
+    CHECK(written.find("centerPoint3DY=\"862.95\"") != std::string::npos);
+    // Moved 10 to the right and squeezed to half its width, the point follows.
+    instance->transform.m11 = 1.0;
+    instance->transform.tx += 10.0;
+    written = writer.writeDocument(*document);
+    CHECK(written.find("centerPoint3DX=\"1308.775\"") != std::string::npos);
+    CHECK(written.find("centerPoint3DY=\"862.95\"") != std::string::npos);
+}

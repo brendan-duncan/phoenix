@@ -525,7 +525,11 @@ Writer encodeElement(const fla::Element& element)
     writeStrings(w, s::Element::ExtraChildren, element.extraChildren);
     const fla::Rect& b = element.localBounds;
     writeRectangle(w, s::Element::LocalBounds, b.topLeft.x, b.topLeft.y, b.bottomRight.x, b.bottomRight.y);
-    writeXfl(w, s::Element::Xfl, element);
+    if (element.elementType() == fla::Element::Type::SymbolInstance)
+        writeXfl(w, s::Element::Xfl, static_cast<const fla::SymbolInstance&>(element).keptAttributes(),
+            element.presentAttributes);
+    else
+        writeXfl(w, s::Element::Xfl, element);
     uint32_t field = 0;
     const Writer kind = encodeKind(element, field);
     if (field)
