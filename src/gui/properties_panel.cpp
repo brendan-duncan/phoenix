@@ -42,6 +42,7 @@
 #include "../edit/frame_commands.h"
 #include "../edit/frame_sound.h"
 #include "../edit/property_command.h"
+#include "../edit/three_d.h"
 #include "../edit/selection.h"
 
 #include <QAction>
@@ -1965,6 +1966,92 @@ void PropertiesPanel::addShapeSections(QVBoxLayout* layout, fla::Shape* shape)
     options->addWide(0, buttons);
 }
 
+void PropertiesPanel::addThreeDSection(QVBoxLayout* layout, fla::SymbolInstance* instance)
+{
+    fla::Document* document = this->document();
+    if (!document)
+        return;
+    using Attributes = std::vector<std::pair<std::string, std::string>>;
+    PropertySection* section = addSection(layout, "3D Position and View");
+
+    // The instance's depth: nearer the viewer below 0, farther above.
+    HotText* z = makeHotText(-10000, 10000, 1);
+    z->setValue(fla::threed::of(*instance).z);
+    z->setToolTip("How far the movie clip is from the stage, toward the vanishing point (3D Translation's Z)");
+    {
+        std::shared_ptr<Attributes> before = std::make_shared<Attributes>();
+        bindLive(z, [=]() { *before = instance->extraAttributes; },
+            [=](double value) {
+                fla::threed::Pose pose = fla::threed::of(*instance);
+                pose.z = value;
+                instance->extraAttributes = fla::threed::withPose(*instance, pose);
+                emit documentEdited();
+            },
+            [=]() {
+                push(std::make_unique<fla::SetPropertyCommand<Attributes>>(instance->extraAttributes, *before,
+                    instance->extraAttributes, "3D Position"));
+            });
+    }
+    section->addField(0, 0, "Z", z);
+
+    // The view every 3D movie clip in the document shares.
+    HotText* angle = makeHotText(1, 179, 1, QString::fromUtf8("\u00b0"));
+    angle->setValue(fla::threed::perspectiveAngle(*document));
+    angle->setToolTip("Perspective angle: wider exaggerates depth, narrower flattens it. For the whole document");
+    {
+        std::shared_ptr<Attributes> before = std::make_shared<Attributes>();
+        bindLive(angle, [=]() { *before = document->extraAttributes; },
+            [=](double value) {
+                document->extraAttributes = fla::threed::withPerspectiveAngle(*document, value);
+                emit documentEdited();
+            },
+            [=]() {
+                push(std::make_unique<fla::SetPropertyCommand<Attributes>>(document->extraAttributes, *before,
+                    document->extraAttributes, "Perspective Angle"));
+            });
+    }
+    section->addField(0, 1, "Angle", angle);
+
+    const auto bindPoint = [this](HotText* hot, double& field, const char* name) {
+        std::shared_ptr<double> before = std::make_shared<double>();
+        bindLive(hot, [=, &field]() { *before = field; },
+            [=, &field](double value) {
+                field = value;
+                emit documentEdited();
+            },
+            [=, &field]() { push(std::make_unique<fla::SetPropertyCommand<double>>(field, *before, field, name)); });
+    };
+    HotText* vanishX = makeHotText(-100000, 100000, 1);
+    vanishX->setValue(document->vanishingPoint3DX);
+    vanishX->setToolTip("Vanishing point: where depth recedes to. For the whole document");
+    bindPoint(vanishX, document->vanishingPoint3DX, "Vanishing Point");
+    HotText* vanishY = makeHotText(-100000, 100000, 1);
+    vanishY->setValue(document->vanishingPoint3DY);
+    vanishY->setToolTip(vanishX->toolTip());
+    bindPoint(vanishY, document->vanishingPoint3DY, "Vanishing Point");
+    section->addField(1, 0, "Vanish X", vanishX);
+    section->addField(1, 1, "Y", vanishY);
+
+    QPushButton* reset = new QPushButton("Reset View", this);
+    reset->setToolTip(QString::fromUtf8("The vanishing point back to the middle of the stage, and the angle to 55\u00b0"));
+    connect(reset, &QPushButton::clicked, this, [this, document]() {
+        if (!_links.editContext)
+            return;
+        fla::CommandStack& stack = _links.editContext->commandStack();
+        stack.beginMacro("Reset 3D View");
+        push(std::make_unique<fla::SetPropertyCommand<double>>(document->vanishingPoint3DX,
+            document->vanishingPoint3DX, document->width / 2.0, "Reset 3D View"));
+        push(std::make_unique<fla::SetPropertyCommand<double>>(document->vanishingPoint3DY,
+            document->vanishingPoint3DY, document->height / 2.0, "Reset 3D View"));
+        push(std::make_unique<fla::SetPropertyCommand<Attributes>>(document->extraAttributes,
+            document->extraAttributes, fla::threed::withPerspectiveAngle(*document, 55.0), "Reset 3D View"));
+        stack.endMacro();
+        emit documentEdited();
+        refresh();
+    });
+    section->addWide(2, reset);
+}
+
 void PropertiesPanel::addInstanceSections(QVBoxLayout* layout, fla::SymbolInstance* instance)
 {
     // --- Color Effect ---
@@ -2691,6 +2778,10 @@ void PropertiesPanel::rebuildObjectTab()
 
         addPositionAndSize(page, elements);
         addInstanceSections(page, instance);
+        // Movie clips turn and move in 3D (the 3D Rotation and Translation
+        // tools); their depth and the document's view are set here.
+        if (instance->symbolType == fla::SymbolType::MovieClip)
+            addThreeDSection(page, instance);
         break;
     }
     case fla::Element::Type::StaticText:

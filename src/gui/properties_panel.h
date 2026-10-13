@@ -229,6 +229,8 @@ private:
 
     /// Pushes \a command on the edit context's stack.
     void push(std::unique_ptr<fla::Command> command);
+    /// The 3D Position and View section of a movie clip instance.
+    void addThreeDSection(QVBoxLayout* layout, fla::SymbolInstance* instance);
 
     /// A refresh that arrived during one of the panel's own edits, to run
     /// when the edit is done.

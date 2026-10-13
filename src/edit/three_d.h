@@ -42,6 +42,10 @@ Pose blend(const Pose& a, const Pose& b, double t);
 /// stage is (55 unless set).
 double perspectiveAngle(const Document& document);
 
+/// The document's attributes with its perspective angle set to \a angle
+/// (1 to 179 degrees); 55, the default, is written as no attribute.
+std::vector<std::pair<std::string, std::string>> withPerspectiveAngle(const Document& document, double angle);
+
 /// How far the viewer is from the stage for that angle across \a width.
 double focalLength(double angle, double width);
 

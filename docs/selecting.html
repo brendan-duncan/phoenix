@@ -109,10 +109,12 @@
 
 <dl class="defs">
   <dt>3D Rotation (<kbd>W</kbd>)</dt><dd>Drag a movie clip left or right to turn it about its vertical axis, up or down to tip it about its horizontal axis. It turns about its transformation point. <kbd>Alt</kbd>-click sets it flat again.</dd>
-  <dt>3D Translation (<kbd>G</kbd>)</dt><dd>Drag a movie clip up to push it into the stage, down to bring it nearer. A clip further in draws smaller and closer to the vanishing point in the middle of the stage. Move it across the stage with the Selection tool as usual.</dd>
+  <dt>3D Translation (<kbd>G</kbd>)</dt><dd>Drag a movie clip up to push it into the stage, down to bring it nearer. A clip further in draws smaller and closer to the vanishing point, the middle of the stage unless you move it. Move it across the stage with the Selection tool as usual.</dd>
 </dl>
 
-<p>The view has a perspective angle of 55&deg;. The 3D turn and depth are keyed on keyframes like any other property, and a classic tween between two keyframes turns and moves the clip smoothly from one to the other. Each drag is a single step to undo.</p>
+<p>The 3D turn and depth are keyed on keyframes like any other property, and a classic tween between two keyframes turns and moves the clip smoothly from one to the other. Each drag is a single step to undo.</p>
+
+<p>With a movie clip selected, the Object tab's <strong>3D Position and View</strong> section sets its depth (<strong>Z</strong>) exactly, and the view every 3D clip in the document shares: the <strong>Angle</strong> of perspective (55&deg; unless you change it; wider exaggerates depth) and the <strong>Vanish X</strong> and <strong>Y</strong> point that depth recedes to. <strong>Reset View</strong> puts the vanishing point back in the middle of the stage and the angle at 55&deg;.</p>
 
 <h2>Cut, copy and paste</h2>
 

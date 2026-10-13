@@ -80,6 +80,20 @@ double perspectiveAngle(const Document& document)
     return 55.0;
 }
 
+std::vector<std::pair<std::string, std::string>> withPerspectiveAngle(const Document& document, double angle)
+{
+    std::vector<std::pair<std::string, std::string>> attributes;
+    for (const auto& attribute : document.extraAttributes)
+    {
+        if (attribute.first != "phoenixPerspectiveAngle")
+            attributes.push_back(attribute);
+    }
+    angle = std::clamp(angle, 1.0, 179.0);
+    if (angle != 55.0)
+        attributes.emplace_back("phoenixPerspectiveAngle", numberText(angle));
+    return attributes;
+}
+
 double focalLength(double angle, double width)
 {
     return (std::max(width, 1.0) / 2.0) / std::tan(std::clamp(angle, 1.0, 179.0) * kPi / 360.0);
