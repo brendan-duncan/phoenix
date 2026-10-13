@@ -14,6 +14,7 @@
 #include "../src/parser/path_parser.h"
 
 #include <cmath>
+#include <map>
 #include <memory>
 #include <string>
 #include <vector>
@@ -1109,4 +1110,214 @@ TEST(an_edge_edit_survives_the_merge_under_it_being_undone_and_redone)
         const fla::EditablePath now = fla::EditablePath::fromPath(*target->edges.front()->paths.front());
         CHECK(!now.anchors.empty() && std::fabs(now.anchors.front().position.x - movedX) < 1e-6);
     }
+}
+
+namespace {
+
+/// What a shape paints, region by region: for each fill, how many faces of
+/// its arrangement carry it and their total area. Bounded faces painting
+/// nothing are counted under -1.
+std::map<int, std::pair<int, double>> regionsOf(const Shape& shape)
+{
+    const std::vector<ShapeCurve> curves = fla::shapeCurves(shape);
+    fla::PlanarMap map;
+    for (size_t i = 0; i < curves.size(); ++i)
+        map.addCurve(curves[i].curve, static_cast<int>(i));
+    map.build();
+    fla::attributeFillsFromSource(map, curves);
+
+    std::map<int, std::pair<int, double>> regions;
+    for (size_t face = 0; face < map.faces().size(); ++face)
+    {
+        if (map.faces()[face].unbounded)
+            continue;
+        auto& entry = regions[map.faceFill(static_cast<int>(face))];
+        ++entry.first;
+        entry.second += map.faces()[face].area;
+    }
+    return regions;
+}
+
+/// The fill index a shape gives a color, or -1.
+int fillOfColor(const Shape& shape, int color)
+{
+    for (const auto& [index, fill] : shape.fillsMap)
+    {
+        if (!fill || fill->type() != fla::FillStyle::Type::SolidColor)
+            continue;
+        const fla::SolidColor* solid = static_cast<const fla::SolidColor*>(fill);
+        if (((solid->color[0] << 16) | (solid->color[1] << 8) | solid->color[2]) == color)
+            return index;
+    }
+    return -1;
+}
+
+/// A shape of one fill bounded by the given curves, each its own edge, with
+/// the fill on the left of each (fillStyle1).
+std::unique_ptr<Shape> filledCurves(const std::vector<fla::Curve>& curves,
+    uint8_t red, uint8_t green, uint8_t blue, bool fillOnLeft = true)
+{
+    std::unique_ptr<Shape> shape(new Shape(nullptr));
+    fla::SolidColor* fill = new fla::SolidColor(shape.get());
+    fill->color[0] = red;
+    fill->color[1] = green;
+    fill->color[2] = blue;
+    fill->color[3] = 255;
+    shape->fills.push_back(fill);
+    shape->fillsMap[1] = fill;
+
+    using Cmd = fla::PathSegment::Command;
+    for (const fla::Curve& curve : curves)
+    {
+        fla::Edge* edge = new fla::Edge(shape.get());
+        (fillOnLeft ? edge->fillStyle1 : edge->fillStyle0) = 1;
+        fla::Path* path = new fla::Path(edge);
+        path->segments.push_back(new fla::PathSegment(Cmd::Move, {curve.start()}, path));
+        if (curve.isLine())
+            path->segments.push_back(new fla::PathSegment(Cmd::Line, {curve.end()}, path));
+        else
+            path->segments.push_back(new fla::PathSegment(Cmd::Cubic,
+                {curve.controlPoint(1), curve.controlPoint(2), curve.end()}, path));
+        edge->paths.push_back(path);
+        shape->edges.push_back(edge);
+    }
+    return shape;
+}
+
+} // namespace
+
+TEST(merges_paint_the_regions_and_areas_they_should)
+{
+    // Two overlapping squares: the newer one whole, the older one less the
+    // overlap.
+    {
+        std::unique_ptr<Shape> target = filledRectangle(0, 0, 2000, 2000, 255, 0, 0);
+        std::unique_ptr<Shape> addition = filledRectangle(1000, 1000, 3000, 3000, 0, 0, 255);
+        CHECK(ShapeMerger::merge(*target, *addition));
+        const auto regions = regionsOf(*target);
+        const int red = fillOfColor(*target, kRed);
+        const int blue = fillOfColor(*target, kBlue);
+        CHECK(regions.count(-1) == 0);
+        CHECK(regions.at(red).first == 1);
+        CHECK(std::fabs(regions.at(red).second - 7500.0) < 1.0e-6);
+        CHECK(regions.at(blue).first == 1);
+        CHECK(std::fabs(regions.at(blue).second - 10000.0) < 1.0e-6);
+    }
+
+    // An oval inside a square: the square becomes a frame with an oval hole
+    // the oval fills exactly.
+    {
+        std::unique_ptr<Shape> target = filledRectangle(0, 0, 2000, 2000, 255, 0, 0);
+        std::unique_ptr<Shape> oval = filledOval(50.0, 50.0, 30.0, 20.0, 0, 0, 255);
+        CHECK(ShapeMerger::merge(*target, *oval));
+        const auto regions = regionsOf(*target);
+        const int red = fillOfColor(*target, kRed);
+        const int blue = fillOfColor(*target, kBlue);
+        CHECK(regions.at(blue).first == 1);
+        CHECK(regions.at(red).first == 1);
+        const double ovalArea = regions.at(blue).second;
+        CHECK(std::fabs(ovalArea - 3.14159265358979 * 600.0) < 2.0);
+        CHECK(std::fabs(regions.at(red).second + ovalArea - 10000.0) < 1.0e-6);
+    }
+
+    // A brush band across a square: the square split in two either side of it.
+    {
+        std::unique_ptr<Shape> target = filledRectangle(0, 0, 2000, 2000, 255, 0, 0);
+        std::unique_ptr<Shape> band = brushBand(-20.0, 50.0, 120.0, 50.0, 10.0, 12);
+        CHECK(ShapeMerger::merge(*target, *band));
+        const auto regions = regionsOf(*target);
+        const int red = fillOfColor(*target, kRed);
+        CHECK(regions.at(red).first == 2);
+        CHECK(std::fabs(regions.at(red).second - 9000.0) < 1.0);
+        CHECK(regions.count(-1) == 0);
+    }
+}
+
+TEST(two_curves_cut_from_one_are_joined_back_into_it)
+{
+    const fla::Curve whole = fla::Curve::cubic(Point(0.0, 0.0), Point(30.0, -60.0),
+        Point(80.0, 40.0), Point(120.0, 10.0));
+    fla::Curve before;
+    fla::Curve after;
+    whole.split(0.37, before, after);
+
+    fla::Curve joined;
+    CHECK(fla::joinCurves({before, after}, fla::PlanarMap::kTwip * 0.5, joined));
+    for (int i = 0; i < 4; ++i)
+    {
+        CHECK(std::fabs(joined.controlPoint(i).x - whole.controlPoint(i).x) < 1.0e-3);
+        CHECK(std::fabs(joined.controlPoint(i).y - whole.controlPoint(i).y) < 1.0e-3);
+    }
+
+    // Three pieces of it, one barely longer than a twip.
+    fla::Curve middle;
+    fla::Curve rest;
+    after.split(0.002, middle, rest);
+    CHECK(fla::joinCurves({before, middle, rest}, fla::PlanarMap::kTwip * 0.5, joined));
+
+    // An oval's quarter cut near one end, the cut welded onto the twip grid
+    // a hundredth of a pixel off the curve: still one curve to the eye.
+    CHECK(fla::joinCurves({
+        fla::Curve::cubic(Point(50.0, 20.0), Point(51.6934, 20.0), Point(53.3622, 20.0789), Point(55.0, 20.25)),
+        fla::Curve::cubic(Point(55.0, 20.25), Point(74.7317, 22.0776), Point(90.0, 34.7015), Point(90.0, 50.0))},
+        fla::PlanarMap::kTwip * 0.5, joined));
+
+    // Two quarters of a large circle meet smoothly, but no one cubic follows
+    // half a circle closely: they stay apart.
+    const double k = 0.5522847498;
+    const double r = 50.0;
+    const fla::Curve first = fla::Curve::cubic(Point(0.0, -r), Point(k * r, -r), Point(r, -k * r), Point(r, 0.0));
+    const fla::Curve second = fla::Curve::cubic(Point(r, 0.0), Point(r, k * r), Point(k * r, r), Point(0.0, r));
+    CHECK(!fla::joinCurves({first, second}, fla::PlanarMap::kTwip * 0.5, joined));
+
+    // A corner is not smoothed over.
+    CHECK(!fla::joinCurves({fla::Curve::line(Point(0.0, 0.0), Point(10.0, 0.0)),
+        fla::Curve::cubic(Point(10.0, 0.0), Point(10.0, 5.0), Point(10.0, 10.0), Point(10.0, 20.0))},
+        fla::PlanarMap::kTwip * 0.5, joined));
+}
+
+TEST(a_curve_cut_by_an_earlier_merge_is_joined_when_the_cut_goes)
+{
+    // A line across an oval cuts its top and bottom curves; once saved the
+    // pieces are separate edges. Taking the line away again leaves each pair
+    // meeting smoothly with nothing else there, and they become one curve.
+    std::unique_ptr<Shape> target = filledOval(50.0, 50.0, 40.0, 30.0, 255, 0, 0);
+    std::unique_ptr<Shape> line = strokedLine(1100, -400, 1100, 2400);
+    CHECK(ShapeMerger::merge(*target, *line));
+    CHECK(target->edges.size() > 4);
+
+    CHECK(ShapeMerger::eraseStrokes(*target, *line));
+    CHECK(target->edges.size() == 4);
+    for (const fla::Edge* edge : target->edges)
+        CHECK(edge->strokeStyle == -1);
+    CHECK(colorAt(*target, Point(50.0, 50.0)) == kRed);
+    CHECK(colorAt(*target, Point(50.0, 21.0)) == kRed);
+    CHECK(colorAt(*target, Point(50.0, 19.0)) == -1);
+    const auto regions = regionsOf(*target);
+    CHECK(regions.size() == 1);
+    CHECK(std::fabs(regions.begin()->second.second - 3.14159265358979 * 1200.0) < 2.0);
+}
+
+TEST(merging_along_a_nearly_shared_edge_leaves_no_gap)
+{
+    // A red square, and a blue shape drawn above it whose bottom edge was
+    // meant to run along the square's top but bows up by three hundredths
+    // of a pixel. The hairline between them is too thin to be anything but
+    // rounding, and is given to the side it borders most rather than left
+    // as an unpainted gap.
+    std::unique_ptr<Shape> target = filledRectangle(0, 0, 2000, 2000, 255, 0, 0);
+    std::unique_ptr<Shape> addition = filledCurves({
+        fla::Curve::cubic(Point(0.0, 0.0), Point(33.0, -0.04), Point(66.0, -0.04), Point(100.0, 0.0)),
+        fla::Curve::line(Point(100.0, 0.0), Point(100.0, -50.0)),
+        fla::Curve::line(Point(100.0, -50.0), Point(0.0, -50.0)),
+        fla::Curve::line(Point(0.0, -50.0), Point(0.0, 0.0))}, 0, 0, 255, false);
+    CHECK(colorAt(*addition, Point(50.0, -25.0)) == kBlue);
+
+    CHECK(ShapeMerger::merge(*target, *addition));
+    const auto regions = regionsOf(*target);
+    CHECK(regions.count(-1) == 0);
+    CHECK(regions.at(fillOfColor(*target, kRed)).first == 1);
+    CHECK(regions.at(fillOfColor(*target, kBlue)).first == 1);
+    CHECK(colorAt(*target, Point(50.0, -25.0)) == kBlue);
+    CHECK(colorAt(*target, Point(50.0, 25.0)) == kRed);
 }

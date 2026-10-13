@@ -58,6 +58,18 @@ void attributeFillsFromSource(PlanarMap& map, const std::vector<ShapeCurve>& sou
 bool faceFillFromSources(const PlanarMap& map, int face, const std::vector<ShapeCurve>& sources,
     size_t first, size_t last, int& fill);
 
+/// Joins curves running end to start into one cubic, when one cubic can
+/// follow them all to within \a tolerance.
+///
+/// The joined curve keeps the run's ends and the directions it leaves and
+/// arrives in; only how far the handles reach is fitted, by least squares
+/// against points along the pieces. This is how a curve an earlier merge cut
+/// into separate edges is put back together once what cut it has gone, which
+/// the pieces' own parameters cannot do, since they no longer share a source.
+/// Returns false, leaving \a joined alone, when the fit strays further than
+/// \a tolerance from any of the pieces.
+bool joinCurves(const std::vector<Curve>& pieces, double tolerance, Curve& joined);
+
 /// Decides whether a rebuilt piece keeps the stroke its source carried.
 ///
 /// A merge uses this to drop the older artwork's strokes where the newer
