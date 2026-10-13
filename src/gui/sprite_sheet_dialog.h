@@ -60,7 +60,6 @@ private:
     QLabel* _preview = nullptr;
     QLabel* _summary = nullptr;
 
-    std::vector<QImage> _images;
     std::vector<sprites::Frame> _frames;
     sprites::Sheet _sheet;
     QImage _sheetImage;

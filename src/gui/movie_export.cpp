@@ -75,7 +75,10 @@ bool writeWav(QIODevice& device, const std::vector<float>& samples, int rate)
 {
     QDataStream out(&device);
     out.setByteOrder(QDataStream::LittleEndian);
-    const quint32 dataBytes = static_cast<quint32>(samples.size() * 2);
+    // A WAV's sizes are 32-bit: past about 6.7 hours of stereo, what does
+    // not fit is left off rather than the header wrapping.
+    const size_t count = std::min(samples.size(), static_cast<size_t>((0xFFFFFFFFull - 36) / 2));
+    const quint32 dataBytes = static_cast<quint32>(count * 2);
     out.writeRawData("RIFF", 4);
     out << quint32(36 + dataBytes);
     out.writeRawData("WAVE", 4);
@@ -84,8 +87,8 @@ bool writeWav(QIODevice& device, const std::vector<float>& samples, int rate)
         << quint16(16);
     out.writeRawData("data", 4);
     out << dataBytes;
-    for (float sample : samples)
-        out << qint16(std::lround(std::max(-1.0f, std::min(1.0f, sample)) * 32767.0f));
+    for (size_t i = 0; i < count; ++i)
+        out << qint16(std::lround(std::max(-1.0f, std::min(1.0f, samples[i])) * 32767.0f));
     return out.status() == QDataStream::Ok;
 }
 
@@ -482,11 +485,20 @@ bool runOne(const MovieExportSettings& settings, PhoenixView& view, TimelineAudi
             settings.showScene(segments.front().scene);
             shownScene = segments.front().scene;
         }
-        const double scale = doc->width > 0 ? static_cast<double>(settings.size.width()) / doc->width : 1.0;
+        double scale = doc->width > 0 ? static_cast<double>(settings.size.width()) / doc->width : 1.0;
         area = area.toAlignedRect();
-        size = QSize(std::max(1, static_cast<int>(std::lround(area.width() * scale))),
-            std::max(1, static_cast<int>(std::lround(area.height() * scale))));
+        // Art spread far over the pasteboard can make an image no one can
+        // hold: the longer side is kept to 16384 pixels.
+        const double longest = std::max(area.width(), area.height()) * scale;
+        if (longest > 16384.0)
+            scale *= 16384.0 / longest;
+        size = QSize(std::max(1, static_cast<int>(std::lround(std::min(area.width() * scale, 16384.0)))),
+            std::max(1, static_cast<int>(std::lround(std::min(area.height() * scale, 16384.0)))));
     }
+    const QString tooLarge = QString("A frame at %1 × %2 pixels could not be drawn: there is not enough "
+                                     "memory for it. Export at a smaller size.")
+                                 .arg(size.width())
+                                 .arg(size.height());
     const auto render = [&](int i, const QSize& at, bool transparent) {
         int frame = 0;
         locate(i, frame);
@@ -563,6 +575,11 @@ bool runOne(const MovieExportSettings& settings, PhoenixView& view, TimelineAudi
             if (progress.wasCanceled())
                 return false;
             const QImage image = render(i, size, settings.transparent).convertToFormat(QImage::Format_RGBA8888);
+            if (image.isNull())
+            {
+                error = tooLarge;
+                return false;
+            }
             std::vector<uint8_t> rgba(static_cast<size_t>(image.width()) * image.height() * 4);
             for (int y = 0; y < image.height(); ++y)
                 std::memcpy(rgba.data() + static_cast<size_t>(y) * image.width() * 4, image.constScanLine(y),
@@ -620,6 +637,12 @@ bool runOne(const MovieExportSettings& settings, PhoenixView& view, TimelineAudi
                     return false;
                 }
                 const QImage image = render(i, size, settings.transparent);
+                if (image.isNull())
+                {
+                    view.setOnlyLayer(nullptr);
+                    error = tooLarge;
+                    return false;
+                }
                 const QString file = sequenceName(base, i + 1, digits);
                 if (!image.save(file, "PNG"))
                 {
@@ -666,6 +689,11 @@ bool runOne(const MovieExportSettings& settings, PhoenixView& view, TimelineAudi
             view.setRenderPass(PhoenixView::RenderPass::Color);
             const QImage color = render(i, size, true).convertToFormat(QImage::Format_ARGB32);
             view.setRenderPass(PhoenixView::RenderPass::All);
+            if (whole.isNull() || lines.isNull() || color.isNull())
+            {
+                error = tooLarge;
+                return false;
+            }
             QImage matte(whole.size(), QImage::Format_Grayscale8);
             for (int y = 0; y < whole.height(); ++y)
             {
@@ -767,6 +795,11 @@ bool runOne(const MovieExportSettings& settings, PhoenixView& view, TimelineAudi
             if (progress.wasCanceled())
                 return false;
             const QImage image = render(i, size, settings.transparent);
+            if (image.isNull())
+            {
+                error = tooLarge;
+                return false;
+            }
             const QString file = sequenceName(settings.path, i + 1, digits);
             if (!image.save(file, "PNG"))
             {
@@ -837,7 +870,18 @@ bool runOne(const MovieExportSettings& settings, PhoenixView& view, TimelineAudi
         progress.setValue(i);
         if (progress.wasCanceled() || process.state() != QProcess::Running)
             break;
-        const QImage image = render(i, even, alpha).convertToFormat(QImage::Format_ARGB32);
+        QImage image = render(i, even, alpha).convertToFormat(QImage::Format_ARGB32);
+        if (image.isNull())
+        {
+            // A frame of no bytes would shift every later one: stopped.
+            process.kill();
+            process.waitForFinished(5000);
+            error = tooLarge;
+            return false;
+        }
+        // ffmpeg was told the size: every frame is exactly that.
+        if (image.size() != even)
+            image = image.copy(0, 0, even.width(), even.height());
         for (int y = 0; y < image.height(); ++y)
             process.write(reinterpret_cast<const char*>(image.constScanLine(y)), image.width() * 4);
         while (process.bytesToWrite() > 0 && process.state() == QProcess::Running)

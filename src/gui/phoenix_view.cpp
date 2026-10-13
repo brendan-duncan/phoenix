@@ -483,6 +483,9 @@ QRectF PhoenixView::framesBounds(int first, int last)
 QImage PhoenixView::renderFrame(int frame, const QSize& size, bool transparent, const QRectF& wanted)
 {
     QImage image(size, QImage::Format_ARGB32_Premultiplied);
+    // Too large to allocate: a null image, which every export checks for.
+    if (image.isNull())
+        return image;
     image.fill(Qt::transparent);
     if (!_flaDocument || !_flaDocument->document || size.isEmpty())
         return image;

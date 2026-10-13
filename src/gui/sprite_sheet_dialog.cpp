@@ -185,7 +185,6 @@ void SpriteSheetDialog::renderFrames()
     const int first = _first->value() - 1;
     const int last = _last->value() - 1;
     const double scale = _scale->value() / 100.0;
-    _images.clear();
     _frames.clear();
     QProgressDialog progress("Drawing frames...", "Cancel", 0, last - first + 1, this);
     progress.setWindowModality(Qt::WindowModal);
@@ -195,7 +194,7 @@ void SpriteSheetDialog::renderFrames()
         progress.setValue(frame - first);
         if (progress.wasCanceled())
             break;
-        QImage image = _render(frame, scale, _background->isChecked()).convertToFormat(QImage::Format_RGBA8888);
+        const QImage image = _render(frame, scale, _background->isChecked()).convertToFormat(QImage::Format_RGBA8888);
         sprites::Frame pixels;
         pixels.width = image.width();
         pixels.height = image.height();
@@ -203,7 +202,7 @@ void SpriteSheetDialog::renderFrames()
         for (int y = 0; y < image.height(); ++y)
             std::memcpy(pixels.rgba.data() + static_cast<size_t>(y) * image.width() * 4, image.constScanLine(y),
                 static_cast<size_t>(image.width()) * 4);
-        _images.push_back(std::move(image));
+        // Kept once, as pixels: the sheet is drawn from these.
         _frames.push_back(std::move(pixels));
     }
     relayout();
@@ -214,18 +213,36 @@ void SpriteSheetDialog::relayout()
     _columns->setEnabled(_layout->currentIndex() == 0);
     _maxWidth->setEnabled(_layout->currentIndex() == 2);
     _sheet = sprites::layout(_frames, options());
-    _sheetImage = QImage(std::max(1, _sheet.width), std::max(1, _sheet.height), QImage::Format_ARGB32);
+    // An image past what Qt can hold (sides over 32767, or 2 GB) cannot be
+    // made: said, rather than an empty sheet saved.
+    const qint64 bytes = static_cast<qint64>(std::max(1, _sheet.width)) * std::max(1, _sheet.height) * 4;
+    if (_sheet.width > 32767 || _sheet.height > 32767 || bytes > (qint64(1) << 31))
+        _sheetImage = QImage();
+    else
+        _sheetImage = QImage(std::max(1, _sheet.width), std::max(1, _sheet.height), QImage::Format_ARGB32);
+    if (_sheetImage.isNull())
+    {
+        _preview->setPixmap(QPixmap());
+        _summary->setText(QString("%1 × %2 px is too large for one image: lower the scale, use fewer frames, "
+                                  "or a Max width for a packed layout.")
+                              .arg(_sheet.width)
+                              .arg(_sheet.height));
+        return;
+    }
     _sheetImage.fill(Qt::transparent);
     QPainter painter(&_sheetImage);
     painter.setCompositionMode(QPainter::CompositionMode_Source);
     int unique = 0;
-    for (size_t i = 0; i < _sheet.frames.size() && i < _images.size(); ++i)
+    for (size_t i = 0; i < _sheet.frames.size() && i < _frames.size(); ++i)
     {
         const sprites::Placed& placed = _sheet.frames[i];
         if (placed.sameAs >= 0)
             continue;
         ++unique;
-        painter.drawImage(QPoint(placed.x, placed.y), _images[i],
+        const sprites::Frame& pixels = _frames[i];
+        const QImage image(pixels.rgba.data(), pixels.width, pixels.height, pixels.width * 4,
+            QImage::Format_RGBA8888);
+        painter.drawImage(QPoint(placed.x, placed.y), image,
             QRect(placed.offsetX, placed.offsetY, placed.width, placed.height));
     }
     painter.end();
@@ -258,6 +275,11 @@ bool SpriteSheetDialog::write(QString& error)
     }
     if (QFileInfo(path).suffix().toLower() != "png")
         path += ".png";
+    if (_sheetImage.isNull())
+    {
+        error = "The sprite sheet is too large for one image.";
+        return false;
+    }
     QDir().mkpath(QFileInfo(path).absolutePath());
     if (!_sheetImage.save(path, "PNG"))
     {
