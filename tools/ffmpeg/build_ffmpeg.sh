@@ -16,8 +16,9 @@
 # The build is one static program with no libraries of its own to find:
 # x264 for H.264, and FFmpeg's own encoders for ProRes, AAC, PCM and JPEG,
 # and its decoders for reading reference video. Nothing on the machine is
-# picked up by chance (--disable-autodetect), there is no networking, and
-# zlib is the only library asked for.
+# picked up by chance (--disable-autodetect), there is no networking and no
+# capture devices (only lavfi, for the smoke test), and zlib is the only
+# library asked for.
 #
 # Windows runs this in MSYS2: MINGW64 for x64, CLANGARM64 for arm64. macOS
 # makes one universal program, arm64 and x86_64. Linux builds on the oldest
@@ -102,6 +103,7 @@ build_arch() {
             --enable-gpl --enable-libx264 --enable-zlib \
             --enable-static --disable-shared \
             --disable-autodetect --disable-network \
+            --disable-indevs --enable-indev=lavfi --disable-outdevs \
             --disable-doc --disable-ffplay --disable-ffprobe --disable-debug \
             --pkg-config-flags=--static \
             --extra-cflags="-I$prefix/include" --extra-ldflags="-L$prefix/lib" \
