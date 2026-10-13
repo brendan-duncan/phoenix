@@ -7,6 +7,7 @@
 #include "timelines_panel.h"
 #include "toolbox.h"
 
+#include <QAbstractButton>
 #include <QAction>
 #include <QApplication>
 #include <QDateTime>
@@ -36,6 +37,8 @@
 #include <QStatusBar>
 #include <QTabBar>
 #include <QTimer>
+#include <QTreeWidget>
+#include <QTreeWidgetItemIterator>
 #include <QToolButton>
 #include <QUrl>
 #include <QVBoxLayout>
@@ -319,6 +322,16 @@ TutorialTarget resolve(MainWindow& window, const QString& spec, bool reveal)
                     }
                 }
             }
+            // Tabs drawn as buttons, as the Properties panel's are.
+            for (QAbstractButton* button : dock->findChildren<QAbstractButton*>())
+            {
+                if (button->isVisible() && plain(button->text()).compare(name, Qt::CaseInsensitive) == 0)
+                {
+                    target.widget = button;
+                    target.rect = button->rect();
+                    return target;
+                }
+            }
             target.problem = QString("The %1 panel has no %2 tab.").arg(dockTitle, name);
             return target;
         }
@@ -335,6 +348,31 @@ TutorialTarget resolve(MainWindow& window, const QString& spec, bool reveal)
             return target;
         }
         target.problem = QString("%1 is not showing in the %2 panel.").arg(name, dockTitle);
+        return target;
+    }
+    if (kind == "layer")
+    {
+        // A layer's row in the list beside the timeline, by its name.
+        TimelineView* timeline = window.timelineView();
+        for (QTreeWidget* tree : timeline ? timeline->findChildren<QTreeWidget*>() : QList<QTreeWidget*>())
+        {
+            if (!tree->isVisible())
+                continue;
+            for (QTreeWidgetItemIterator it(tree); *it; ++it)
+            {
+                for (int column = 0; column < tree->columnCount(); ++column)
+                {
+                    if ((*it)->text(column) == argument)
+                    {
+                        target.widget = tree->viewport();
+                        target.rect = tree->visualItemRect(*it);
+                        return target;
+                    }
+                }
+            }
+        }
+        target.problem = timeline && timeline->isVisible() ? QString("There is no layer called %1.").arg(argument)
+                                                           : QString("Open the timeline with Window > Timeline.");
         return target;
     }
     if (kind == "frame" || kind == "ruler")
@@ -443,7 +481,7 @@ QStringList checkLessons(MainWindow& window)
                     problems << QString("%1: %2: %3").arg(where, step.target, target.problem);
             }
             else if (!step.target.isEmpty() && kind != "frame" && kind != "ruler" && kind != "stage" &&
-                     kind != "label")
+                     kind != "label" && kind != "layer")
                 problems << QString("%1: %2 is not a kind of target").arg(where, step.target);
             if (step.waitKind == "tool" && !(window.toolbox() && window.toolbox()->tool(step.waitValue)))
                 problems << QString("%1: waits for a tool called %2, which there is not").arg(where, step.waitValue);

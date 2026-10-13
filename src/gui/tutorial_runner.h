@@ -31,6 +31,7 @@ class QTimer;
 /// - frame:<layer>:<n> or frame:<layer>:<n>-<m>: timeline cells, frames
 ///   counted from 1; an empty layer is the top row ("frame::24")
 /// - ruler:<n>: the timeline ruler over frame n
+/// - layer:<name>: a layer's row in the list beside the timeline
 /// - stage, or stage:<x>,<y>,<w>,<h>: the stage, or a part of it in the
 ///   document's pixels
 /// - widget:<objectName>: any control by its object name ("widget:stageZoom")
