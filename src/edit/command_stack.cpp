@@ -65,6 +65,15 @@ void CommandStack::setLimit(size_t limit)
     _limit = limit;
     if (_limit == 0 || _commands.size() <= _limit || !_macroStack.empty())
         return;
+    // Dropping undone steps from the front while keeping later redoable ones
+    // would leave those acting on what the dropped steps owned: when the cut
+    // reaches past the applied steps, the redo branch goes first.
+    if (_commands.size() - _limit > _index)
+    {
+        clearRedoBranch();
+        if (_commands.size() <= _limit)
+            return;
+    }
     // The oldest steps go; the saved point moves with what is left, and is
     // lost when it went with them.
     const size_t drop = _commands.size() - _limit;
@@ -105,7 +114,9 @@ void CommandStack::undo()
 
 bool CommandStack::discardLast()
 {
-    if (!canUndo() || !_macroStack.empty())
+    // With steps undone after it, those would be redone onto a document
+    // without it (and onto what it owned, freed): refused.
+    if (!canUndo() || canRedo() || !_macroStack.empty())
         return false;
 
     --_index;

@@ -71,3 +71,43 @@ TEST(a_controller_drives_several_layers_and_keys_them_on_the_frame)
     CHECK(headLayer->frames.size() == 2);
     CHECK(fla::controllers::currentValue(*headLayer, 15, "x", rotation) && std::abs(rotation - 120.0) < 1e-6);
 }
+
+// Keying inside a span cuts it; undo gives back exactly the frames there
+// were (the keyframe insertion is a frame edit).
+TEST(undoing_a_controller_puts_the_frames_back_exactly)
+{
+    std::unique_ptr<fla::Document> document(new fla::Document(nullptr));
+    document->symbolList = new fla::SymbolList(document.get());
+    fla::Symbol* head = new fla::Symbol(document->symbolList);
+    head->name = "Head";
+    document->symbolList->symbols.push_back(head);
+    document->symbolList->symbolMap["Head"] = head;
+    fla::Timeline* scene = new fla::Timeline(document.get());
+    document->timelines.push_back(scene);
+    fla::Layer* layer = new fla::Layer(scene);
+    layer->name = "head";
+    fla::Frame* frame = new fla::Frame(layer);
+    frame->duration = 5;
+    fla::SymbolInstance* instance = new fla::SymbolInstance(frame);
+    instance->libraryItemName = "Head";
+    instance->symbol = head;
+    frame->elements.push_back(instance);
+    layer->frames.push_back(frame);
+    scene->layers.push_back(layer);
+
+    fla::controllers::Controller slide;
+    slide.name = "Slide";
+    slide.bindings.push_back({"scene:0", "head", "x", 0.0, 100.0});
+    fla::CommandStack stack;
+    stack.push(fla::controllers::apply(*document, slide, 1.0, 3));
+    CHECK(layer->frames.size() >= 2);
+    for (int i = 0; i < 2; ++i)
+    {
+        stack.undo();
+        CHECK(layer->frames.size() == 1 && layer->frames[0] == frame);
+        CHECK(frame->index == 0 && frame->duration == 5);
+        CHECK(std::abs(instance->transform.tx) < 1e-9);
+        stack.redo();
+        CHECK(layer->frames.size() >= 2);
+    }
+}

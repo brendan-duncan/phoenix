@@ -606,9 +606,9 @@ void RenameSymbolCommand::apply(const std::string& from, const std::string& to)
     if (!_document || !_symbol || !_document->symbolList)
         return;
     SymbolList* list = _document->symbolList;
-    list->symbolMap.erase(from);
-    list->symbolMap[to] = _symbol;
     _symbol->name = to;
+    list->unlink(_symbol, from);
+    list->link(_symbol);
     for (SymbolInstance* instance : library::instancesOf(*_document, _symbol))
         instance->libraryItemName = to;
 }
@@ -644,7 +644,7 @@ void AddSymbolCommand::redo()
         _document->symbolList = new SymbolList(_document);
     _symbol->parent = _document->symbolList;
     _document->symbolList->symbols.push_back(_symbol);
-    _document->symbolList->symbolMap[_symbol->name] = _symbol;
+    _document->symbolList->link(_symbol);
     _owned = false;
 }
 
@@ -654,7 +654,7 @@ void AddSymbolCommand::undo()
         return;
     std::vector<Symbol*>& symbols = _document->symbolList->symbols;
     symbols.erase(std::remove(symbols.begin(), symbols.end(), _symbol), symbols.end());
-    _document->symbolList->symbolMap.erase(_symbol->name);
+    _document->symbolList->unlink(_symbol, _symbol->name);
     _owned = true;
 }
 
@@ -680,7 +680,7 @@ void RemoveSymbolCommand::redo()
         return;
     _index = static_cast<size_t>(at - symbols.begin());
     symbols.erase(at);
-    _document->symbolList->symbolMap.erase(_symbol->name);
+    _document->symbolList->unlink(_symbol, _symbol->name);
     _owned = true;
 }
 
@@ -690,7 +690,7 @@ void RemoveSymbolCommand::undo()
         return;
     std::vector<Symbol*>& symbols = _document->symbolList->symbols;
     symbols.insert(symbols.begin() + static_cast<long>(std::min(_index, symbols.size())), _symbol);
-    _document->symbolList->symbolMap[_symbol->name] = _symbol;
+    _document->symbolList->link(_symbol);
     _owned = false;
 }
 

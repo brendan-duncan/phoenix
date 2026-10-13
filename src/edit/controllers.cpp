@@ -15,6 +15,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdlib>
+#include <memory>
 #include <sstream>
 
 namespace fla {
@@ -177,23 +178,19 @@ public:
         , _name(std::move(name))
         , _frameRate(document && document->frameRate > 0.0 ? document->frameRate : 24.0)
     {
-    }
-
-    ~ApplyCommand() override
-    {
-        for (Frame* frame : _ownedKeys)
-            delete frame;
-    }
-
-    void redo() override
-    {
-        // The keyframes first, the first time; after an undo, the same
-        // ones go back in.
-        if (!_made)
-        {
-            for (auto& [layer, index] : _keys)
+        // The keyframes go in as a frame edit, which keeps everything it
+        // changed (a blank frame before, a span stretched or cut, a motion
+        // trimmed) and puts it all back on undo.
+        std::vector<Layer*> layers;
+        for (const auto& [layer, index] : _keys)
+            if (layer && std::find(layers.begin(), layers.end(), layer) == layers.end())
+                layers.push_back(layer);
+        const double frameRate = _frameRate;
+        const std::vector<std::pair<Layer*, int>> wanted = _keys;
+        _frames = std::make_unique<EditFramesCommand>(layers, _name, [wanted, frameRate](std::vector<Frame*>&) {
+            for (const auto& [layer, index] : wanted)
             {
-                if (keyAt(*layer, index))
+                if (!layer || keyAt(*layer, index))
                     continue;
                 // Cut into a classic or shape tween, the keyframe takes
                 // the in-between there and both halves go on tweening.
@@ -205,7 +202,7 @@ public:
                 const TweenType tween = span ? span->tweenType : TweenType::None;
                 std::vector<Element*> between;
                 if (span && next && (tween == TweenType::Motion || tween == TweenType::Shape))
-                    between = frames::elementsAt(*span, next, index - span->index, _frameRate, nullptr);
+                    between = frames::elementsAt(*span, next, index - span->index, frameRate, nullptr);
                 timeline::insertKeyframe(*layer, index, false);
                 Frame* key = keyAt(*layer, index);
                 if (!key)
@@ -223,8 +220,17 @@ public:
                         element->parent = key;
                     key->tweenType = tween;
                 }
-                _inserted.push_back({layer, key});
             }
+        });
+    }
+
+    void redo() override
+    {
+        // The keyframes first; the first time, the values are then set on
+        // the instances on them and what they were is kept.
+        _frames->redo();
+        if (!_made)
+        {
             _made = true;
             _changes.clear();
             for (const auto& [binding, value] : _targets)
@@ -267,16 +273,6 @@ public:
             }
             return;
         }
-        for (auto& [layer, key] : _inserted)
-        {
-            layer->frames.push_back(key);
-            std::sort(layer->frames.begin(), layer->frames.end(), [](const Frame* a, const Frame* b) { return a->index < b->index; });
-            // The span before gives back the frames the keyframe took.
-            for (Frame* frame : layer->frames)
-                if (frame != key && frame->index < key->index && frame->index + frame->duration > key->index)
-                    frame->duration = key->index - frame->index;
-            _ownedKeys.erase(std::remove(_ownedKeys.begin(), _ownedKeys.end(), key), _ownedKeys.end());
-        }
         for (Change& change : _changes)
         {
             change.instance->transform = change.transform[1];
@@ -293,19 +289,7 @@ public:
             change.instance->colorTransform.alphaMultiplier = change.alpha[0];
             change.instance->firstFrame = change.firstFrame[0];
         }
-        // The keyframes made go, the span before taking their frames back.
-        for (auto it = _inserted.rbegin(); it != _inserted.rend(); ++it)
-        {
-            Layer* layer = it->first;
-            Frame* key = it->second;
-            auto at = std::find(layer->frames.begin(), layer->frames.end(), key);
-            if (at == layer->frames.end())
-                continue;
-            if (at != layer->frames.begin())
-                (*(at - 1))->duration += key->duration;
-            layer->frames.erase(at);
-            _ownedKeys.push_back(key);
-        }
+        _frames->undo();
     }
 
     std::string name() const override { return _name; }
@@ -316,8 +300,7 @@ private:
     Document* _document;
     std::string _name;
     bool _made = false;
-    std::vector<std::pair<Layer*, Frame*>> _inserted;
-    std::vector<Frame*> _ownedKeys;
+    std::unique_ptr<EditFramesCommand> _frames;
     std::vector<Change> _changes;
     double _frameRate = 24.0;
 };

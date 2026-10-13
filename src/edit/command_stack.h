@@ -65,7 +65,8 @@ public:
     /// Reverses and removes the most recent command as if it had never been
     /// pushed. For edits that exist only to serve a selection, such as lifting
     /// a region out of a shape, which should leave no trace when the selection
-    /// is let go untouched. Refused inside a macro or when nothing is applied.
+    /// is let go untouched. Refused inside a macro, when nothing is applied,
+    /// and when anything is undone (redoable steps would follow it).
     bool discardLast();
 
     /// Drops the entire history and any open macros. Does not change the

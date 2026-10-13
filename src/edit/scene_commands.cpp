@@ -38,7 +38,8 @@ void SceneListCommand::apply(const std::vector<Timeline*>& scenes, int current)
     _document->timelines = scenes;
     for (Timeline* scene : scenes)
         scene->parent = _document;
-    _document->setCurrentScene(std::clamp(current, 0, static_cast<int>(scenes.size()) - 1));
+    // clamp with an empty list would have its bounds the wrong way round.
+    _document->setCurrentScene(scenes.empty() ? 0 : std::clamp(current, 0, static_cast<int>(scenes.size()) - 1));
     // What is out of the document now is the command's to keep.
     _out.clear();
     std::set<Timeline*> in(scenes.begin(), scenes.end());

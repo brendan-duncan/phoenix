@@ -5326,7 +5326,8 @@ void PhoenixView::settleFloating()
         // Untouched: the split is still the last edit, so it is taken back
         // and the source is whole again, with no trace in the history. Touched:
         // the ordinary drop puts the piece back in wherever it now sits.
-        if (_commandStack->topCommand() == region.split && !_commandStack->isInMacro())
+        if (_commandStack->topCommand() == region.split && !_commandStack->isInMacro() &&
+            !_commandStack->canRedo())
         {
             _pending.erase(std::remove_if(_pending.begin(), _pending.end(),
                 [&](const PendingDrop& pending) { return pending.shape == region.piece; }),
@@ -6950,7 +6951,8 @@ bool PhoenixView::exitScope()
         const bool restored = std::find(frame->elements.begin(), frame->elements.end(), level.group) !=
                               frame->elements.end();
         fla::Element* result = restored ? level.group : nullptr;
-        if (!restored && _commandStack && _commandStack->topCommand() == level.entered)
+        if (!restored && _commandStack && _commandStack->topCommand() == level.entered &&
+            !_commandStack->canRedo())
         {
             // Nothing changed: no trace of having been in it.
             _commandStack->discardLast();

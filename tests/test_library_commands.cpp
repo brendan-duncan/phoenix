@@ -383,3 +383,24 @@ TEST(symbols_never_contain_themselves)
     CHECK(fla::breakSymbolCycles(*document) == 0);
     CHECK(boxInBall->libraryItemName == "Box");
 }
+
+// Two symbols sharing a name for a moment (a file with duplicates, a step
+// taken back) never cut each other off from the name.
+TEST(removing_a_symbol_keeps_the_name_for_another_that_has_it)
+{
+    fla::Symbol* ball = nullptr;
+    fla::SymbolInstance* instance = nullptr;
+    std::unique_ptr<fla::Document> document = documentWithBall(ball, instance);
+    fla::Symbol* twin = new fla::Symbol(document->symbolList);
+    twin->name = "Ball";
+
+    fla::CommandStack stack;
+    stack.push(fla::CommandPtr(new fla::AddSymbolCommand(document.get(), twin, "Add")));
+    CHECK(document->symbolList->symbolMap["Ball"] == twin);
+    stack.undo();
+    CHECK(document->symbolList->symbolMap.count("Ball") && document->symbolList->symbolMap["Ball"] == ball);
+    stack.redo();
+    stack.push(fla::CommandPtr(new fla::RenameSymbolCommand(document.get(), twin, "Twin")));
+    CHECK(document->symbolList->symbolMap["Ball"] == ball);
+    CHECK(document->symbolList->symbolMap["Twin"] == twin);
+}

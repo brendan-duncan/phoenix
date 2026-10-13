@@ -873,7 +873,7 @@ void ConvertToSymbolCommand::redo()
 
     SymbolList* library = _document->symbolList;
     library->symbols.push_back(_symbol);
-    library->symbolMap[_symbol->name] = _symbol;
+    library->link(_symbol);
 
     std::vector<Element*>& frameElements = _frame->elements;
     for (Element* element : _elements)
@@ -933,7 +933,7 @@ void ConvertToSymbolCommand::undo()
     const auto found = std::find(library->symbols.begin(), library->symbols.end(), _symbol);
     if (found != library->symbols.end())
         library->symbols.erase(found);
-    library->symbolMap.erase(_symbol->name);
+    library->unlink(_symbol, _symbol->name);
     _applied = false;
 
     if (_selection)

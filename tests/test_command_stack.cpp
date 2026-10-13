@@ -549,3 +549,39 @@ TEST(the_history_keeps_no_more_than_its_limit)
     stack.setLimit(1);
     CHECK(stack.count() == 1 && stack.index() == 1);
 }
+
+// Lowering the limit past the applied steps takes the redo branch with the
+// undone steps it drops: keeping later redoable steps would leave them acting
+// on what the dropped ones owned.
+TEST(lowering_the_limit_never_keeps_redo_steps_past_dropped_ones)
+{
+    std::string log;
+    CommandStack stack;
+    for (char c : std::string("abcd"))
+        stack.push(CommandPtr(new AppendCommand(&log, c)));
+    stack.undo();
+    stack.undo();
+    stack.undo();
+    CHECK(log == "a");
+    stack.setLimit(1);
+    CHECK(!stack.canRedo());
+    CHECK(stack.count() <= 1);
+    stack.redo();
+    CHECK(log == "a");
+}
+
+// Discarding the last applied step is refused while steps are undone after
+// it: they would be redone onto a history without it.
+TEST(discard_last_is_refused_with_steps_to_redo)
+{
+    std::string log;
+    CommandStack stack;
+    stack.push(CommandPtr(new AppendCommand(&log, 'a')));
+    stack.push(CommandPtr(new AppendCommand(&log, 'b')));
+    stack.undo();
+    CHECK(!stack.discardLast());
+    CHECK(log == "a");
+    stack.redo();
+    CHECK(stack.discardLast());
+    CHECK(log == "a");
+}
