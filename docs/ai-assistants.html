@@ -1,0 +1,104 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AI assistants · Phoenix User Guide</title>
+<meta name="description" content="Connect an AI assistant such as Claude Desktop or Claude Code to Phoenix through MCP, so it can look at your document and make changes you can undo.">
+<meta name="keywords" content="ai assistant mcp model context protocol claude desktop claude code automation tools prompts analyze generate bounce library tidy check document">
+<link rel="icon" href="assets/img/logo.png">
+<link rel="stylesheet" href="assets/site.css">
+<script>try { const t = localStorage.getItem("phoenix-docs-theme"); if (t) document.documentElement.dataset.theme = t; } catch (e) {}</script>
+<script src="assets/site.js" defer></script>
+</head>
+<body>
+<main>
+<article class="content">
+
+<p class="eyebrow">Studio pipeline</p>
+<h1>AI assistants</h1>
+<p class="lead">An AI assistant can work with Phoenix: look at your document, tell you what is in it or wrong with it, and make changes for you, such as adding layers, drawing shapes, setting up tweens or tidying the library. Every change goes into the undo history, so one <kbd>Ctrl</kbd>+<kbd>Z</kbd> takes back what you did not want.</p>
+
+<p>Phoenix speaks the Model Context Protocol (MCP), which assistants such as Claude Desktop and Claude Code use to work with other programs. The assistant runs on your computer and talks to Phoenix there.</p>
+
+<h2>Connect Claude Desktop</h2>
+
+<p>Add Phoenix to Claude Desktop's configuration file (<span class="menu-path">Settings &rsaquo; Developer &rsaquo; Edit Config</span> in Claude Desktop) and restart it:</p>
+
+<pre><code>{
+  "mcpServers": {
+    "phoenix": {
+      "command": "C:\\Users\\<em>you</em>\\AppData\\Local\\Phoenix\\current\\Phoenix.exe",
+      "args": ["--mcp"]
+    }
+  }
+}</code></pre>
+
+<p>On macOS the command is <code>/Applications/Phoenix.app/Contents/MacOS/Phoenix</code>. When Claude needs Phoenix, it starts it, and Phoenix asks whether to allow it.</p>
+
+<h2>Connect Claude Code</h2>
+
+<pre><code>claude mcp add phoenix -- "C:\Users\<em>you</em>\AppData\Local\Phoenix\current\Phoenix.exe" --mcp</code></pre>
+
+<h2>Work with the window you already have open</h2>
+
+<p>By default an assistant that starts Phoenix gets a Phoenix window of its own. To have it work in the Phoenix you already have open, turn on <strong>Let AI assistants connect (MCP)</strong> in <span class="menu-path">Edit &rsaquo; Preferences</span>. Then <code>Phoenix --mcp</code> connects to your open Phoenix instead of starting another. Only programs on your own computer can connect; the <strong>Port</strong> setting is there in case another program already uses the default, 47290.</p>
+
+<h2>Staying in control</h2>
+
+<dl class="defs">
+  <dt>It asks first</dt><dd>The first time an assistant connects, Phoenix names it and asks whether to allow it. Nothing happens until you say yes, and you are asked again after you stop it.</dd>
+  <dt>You see it working</dt><dd>While an assistant is connected, the status bar says so and shows what it is doing. Click <strong>Stop</strong> there to disconnect it at once.</dd>
+  <dt>Everything can be undone</dt><dd>Each change is named <strong>AI: ...</strong> in <span class="menu-path">Edit &rsaquo; Undo</span>. When an assistant makes several changes for one request, it can group them so they undo together.</dd>
+  <dt>Your files are safe</dt><dd>An assistant works on the open document only. Before it writes a file anywhere, such as an exported image, Phoenix asks you. It cannot save over your document; you save when you are happy.</dd>
+  <dt>Read-only documents stay that way</dt><dd>A document opened from a newer Phoenix, shown as read-only, cannot be changed by an assistant.</dd>
+  <dt>A record is kept</dt><dd>Every request is written to <code>mcp.log</code> in Phoenix's local application data folder, with the assistant's name and whether it worked.</dd>
+</dl>
+
+<h2>What an assistant can do</h2>
+
+<table>
+  <thead><tr><th>To look</th><th>What it gets</th></tr></thead>
+  <tbody>
+    <tr><td>Document summary</td><td class="wrap">Stage size, frame rate, scenes, layers and the library with how often each item is used</td></tr>
+    <tr><td>Timeline</td><td class="wrap">Every layer and keyframe, with tweens, eases, labels and scripts, in the scene or any symbol</td></tr>
+    <tr><td>Elements</td><td class="wrap">What is on a keyframe: shapes, instances, text, with their positions and color effects</td></tr>
+    <tr><td>Render frame</td><td class="wrap">A picture of any frame, so the assistant can see the artwork</td></tr>
+    <tr><td>Check document</td><td class="wrap">Damage, unused library items, empty and hidden layers, artwork off the stage, huge bitmaps and very heavy shapes</td></tr>
+  </tbody>
+</table>
+
+<table>
+  <thead><tr><th>To change</th><th>What it does</th></tr></thead>
+  <tbody>
+    <tr><td>Documents</td><td class="wrap">Open a document, or start a new one</td></tr>
+    <tr><td>Layers</td><td class="wrap">Add, rename, show, hide, lock, change their kind, delete</td></tr>
+    <tr><td>Frames</td><td class="wrap">Insert keyframes and frames, remove frames, label frames, add classic, shape and motion tweens with eases</td></tr>
+    <tr><td>Artwork</td><td class="wrap">Draw shapes from path data, add text, place symbol instances, move, scale, turn, tint and delete them</td></tr>
+    <tr><td>Library</td><td class="wrap">Convert artwork to symbols, rename and move items into folders, tidy loose items into folders by kind</td></tr>
+    <tr><td>Bounce</td><td class="wrap">Make a symbol instance bounce, with eases and squash and stretch, in one step</td></tr>
+    <tr><td>Show and export</td><td class="wrap">Go to a frame or into a symbol so you can see it; export a frame as a PNG (after asking you)</td></tr>
+  </tbody>
+</table>
+
+<h2>Things to ask</h2>
+
+<ul>
+  <li>"What's in this document? Summarize the scenes and layers."</li>
+  <li>"Find everything unused in the library, and tidy the rest into folders."</li>
+  <li>"Check this file for problems before I send it."</li>
+  <li>"Add a layer called Background and fill the stage with a dark blue gradient-like stack of rectangles."</li>
+  <li>"Make the ball on the Ball layer bounce three times with squash and stretch."</li>
+  <li>"Rename the layers in this symbol to say what is on them."</li>
+  <li>"Render frame 12 and tell me whether the character's arm reads clearly."</li>
+</ul>
+
+<div class="callout">
+  <span class="label">Planned</span>
+  <p>An assistant panel inside Phoenix, so you can ask without a separate app; lip sync, walk cycles and in-betweens as single steps.</p>
+</div>
+
+</article>
+</main>
+</body>
+</html>

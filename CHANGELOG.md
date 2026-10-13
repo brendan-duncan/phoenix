@@ -4,6 +4,8 @@ What changed in each release of Phoenix, newest first.
 
 ## Unreleased
 
+- AI assistants such as Claude can look at and change your document through MCP, with every change undoable
+
 ## 0.5.2 (2026-10-13)
 
 - Interactive tutorials: nine guided lessons in Help > Tutorials, from your first animation to rigging
