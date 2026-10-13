@@ -318,6 +318,10 @@ void PhoenixView::onPlayerFrameChanged(int frame)
 {
     (void)frame;
 
+    // An animated instance is as big as the frame it shows, so what
+    // snapping lines up with is gathered again.
+    _snapBoundsValid = false;
+
     // What was selected lives on the frame just left, so the selection
     // goes with it, as in Animate; letting go also drops a drawing that
     // was still floating into the artwork of its own frame.
@@ -1643,11 +1647,16 @@ void PhoenixView::drawTimeline(QPainter& painter, const fla::Timeline* timeline,
         const LayerFrame shown = resolveLayerFrame(layer, loopType, firstFrame);
         if (shown.frame)
         {
+            ElapsedScope elapsed(_elapsed, shown.offset);
             for (const fla::Element* element : shown.frame->elements)
             {
                 if (!element || !element->visible)
                     continue;
-                const QRectF bounds = getElementBounds(element);
+                // An instance by everything its symbol draws over all its
+                // frames, as culling has it.
+                const QRectF bounds = element->elementType() == fla::Element::Type::SymbolInstance
+                    ? memberReach(element)
+                    : getElementBounds(element);
                 if (bounds.isValid())
                     reach = reach.isNull() ? bounds : reach.united(bounds);
             }
@@ -6514,8 +6523,8 @@ void PhoenixView::clearCaches()
 void PhoenixView::forgetShape(const fla::Shape* shape)
 {
     _pathCache.remove(shape);
-    _boundsCache.remove(shape);
-    _artBoundsCache.remove(shape);
+    _boundsCache.remove(BoundsKey(shape, -1));
+    _artBoundsCache.remove(BoundsKey(shape, -1));
     // The shape may be inside any symbol.
     _symbolBoundsCache.clear();
     _symbolReachCache.clear();
@@ -7287,16 +7296,55 @@ QPointF PhoenixView::mapToWidget(const QPointF& documentPos) const
     return documentToWidget().map(documentPos);
 }
 
+namespace {
+
+/// Bounds kept for so many elements and frames at most; played through, an
+/// animated instance adds one for each frame.
+constexpr int kBoundsCacheLimit = 200000;
+
+} // namespace
+
+bool PhoenixView::animates(const fla::Element* element, int depth)
+{
+    if (!element || depth > 16)
+        return false;
+    if (element->elementType() == fla::Element::Type::SymbolInstance)
+        return symbolLength(static_cast<const fla::SymbolInstance*>(element)->symbol) > 1;
+    if (element->elementType() == fla::Element::Type::Group)
+    {
+        for (const fla::Element* member : static_cast<const fla::Group*>(element)->members)
+            if (animates(member, depth + 1))
+                return true;
+    }
+    return false;
+}
+
+int PhoenixView::boundsElapsed(const fla::Element* element)
+{
+    if (!animates(element))
+        return -1;
+    // Inside a symbol's frame, or while a frame is drawn, that frame's
+    // playhead is set; asked from outside, an element is as far into its
+    // keyframe as the playhead is.
+    if (_boundsDepth > 0 || _frameDepth > 0)
+        return std::max(0, _elapsed);
+    const fla::Frame* frame = owningFrame(element);
+    return frame ? std::max(0, shownFrame() - frame->index) : std::max(0, _elapsed);
+}
+
 QRectF PhoenixView::elementBounds(const fla::Element* element)
 {
-    auto it = _artBoundsCache.find(element);
-    if (it != _artBoundsCache.end())
+    const BoundsKey key(element, boundsElapsed(element));
+    auto it = _artBoundsCache.constFind(key);
+    if (it != _artBoundsCache.constEnd())
         return it.value();
     const bool wasTight = _tightBounds;
     _tightBounds = true;
     const QRectF bounds = calculateElementBounds(element);
     _tightBounds = wasTight;
-    _artBoundsCache[element] = bounds;
+    if (_artBoundsCache.size() > kBoundsCacheLimit)
+        _artBoundsCache.clear();
+    _artBoundsCache.insert(key, bounds);
     return bounds;
 }
 
@@ -7306,13 +7354,16 @@ QRectF PhoenixView::getElementBounds(const fla::Element* element)
         return calculateElementBounds(element);
 
     // Check cache first
-    auto it = _boundsCache.find(element);
-    if (it != _boundsCache.end())
+    const BoundsKey key(element, boundsElapsed(element));
+    auto it = _boundsCache.constFind(key);
+    if (it != _boundsCache.constEnd())
         return it.value();
 
     // Calculate bounds
     QRectF bounds = calculateElementBounds(element);
-    _boundsCache[element] = bounds;
+    if (_boundsCache.size() > kBoundsCacheLimit)
+        _boundsCache.clear();
+    _boundsCache.insert(key, bounds);
     return bounds;
 }
 
@@ -7349,24 +7400,62 @@ QRectF PhoenixView::calculateElementBounds(const fla::Element* element)
             const fla::Symbol* symbol = instance->symbol;
             if (symbol && !symbol->timelines.empty())
             {
-                // Calculate bounds from symbol's first timeline
-                const fla::Timeline* timeline = symbol->timelines[0];
+                // What the instance shows now: its symbol's frame at the
+                // playhead (a graphic part way through its span), not its
+                // first. A puppet shows its first frame.
+                int frameOffset = 0;
+                {
+                    ElapsedScope elapsed(_elapsed, std::max(0, boundsElapsed(element)));
+                    frameOffset = instance->otherSymbolType == "puppet" ? 0 : symbolFrame(*instance);
+                }
+                struct Depth
+                {
+                    int& counter;
+                    ~Depth() { --counter; }
+                } depth{_boundsDepth};
+                ++_boundsDepth;
                 QRectF bounds;
 
-                for (const fla::Layer* layer : timeline->layers)
+                for (const fla::Timeline* timeline : symbol->timelines)
                 {
-                    if (!layer->visible || layer->frames.empty())
-                        continue;
-
-                    const fla::Frame* frame = layer->frames[0];
-                    for (const fla::Element* elem : frame->elements)
+                    for (const fla::Layer* layer : timeline ? timeline->layers : std::vector<fla::Layer*>())
                     {
-                        QRectF elemBounds = getElementBounds(elem);
+                        if (!layer || !layer->visible || layer->layerType == fla::Layer::Type::Guide ||
+                            layer->layerType == fla::Layer::Type::Folder)
+                            continue;
+                        const LayerFrame state = resolveLayerFrame(layer, fla::LoopType::SingleFrame, frameOffset);
+                        if (!state.frame)
+                            continue;
+                        const QTransform parent = parentTransform(layer, state.frame, fla::LoopType::SingleFrame,
+                            frameOffset);
+                        // A tween moves its elements from where they are kept.
+                        const bool tweened = state.tweenFrame || motionOf(state.frame);
+                        ElapsedScope elapsed(_elapsed, state.offset);
+                        for (size_t i = 0; i < state.frame->elements.size(); ++i)
+                        {
+                            const fla::Element* elem = state.frame->elements[i];
+                            if (!elem || !elem->visible)
+                                continue;
+                            QRectF elemBounds = getElementBounds(elem);
+                            if (tweened && elem->elementType() != fla::Element::Type::Group)
+                            {
+                                const fla::Transform& kept = elem->transform;
+                                const fla::Transform shown = shownTransform(state, i);
+                                const QTransform from(kept.m11, kept.m12, kept.m21, kept.m22, kept.tx, kept.ty);
+                                const QTransform to(shown.m11, shown.m12, shown.m21, shown.m22, shown.tx, shown.ty);
+                                bool invertible = false;
+                                const QTransform back = from.inverted(&invertible);
+                                if (invertible && from != to)
+                                    elemBounds = (back * to).mapRect(elemBounds);
+                            }
+                            if (!parent.isIdentity())
+                                elemBounds = parent.mapRect(elemBounds);
 
-                        if (bounds.isNull())
-                            bounds = elemBounds;
-                        else
-                            bounds = bounds.united(elemBounds);
+                            if (bounds.isNull())
+                                bounds = elemBounds;
+                            else
+                                bounds = bounds.united(elemBounds);
+                        }
                     }
                 }
 
