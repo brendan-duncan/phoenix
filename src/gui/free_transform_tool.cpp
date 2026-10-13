@@ -561,7 +561,7 @@ bool FreeTransformTool::boxMatchesSelection() const
 }
 
 QTransform FreeTransformTool::adjustForDrag(const QPointF& documentPos,
-    Qt::KeyboardModifiers modifiers) const
+    Qt::KeyboardModifiers modifiers, const fla::Snapper* snapper) const
 {
     switch (_grip)
     {
@@ -592,13 +592,22 @@ QTransform FreeTransformTool::adjustForDrag(const QPointF& documentPos,
         double sx = std::fabs(start.x()) > 1.0e-6 ? now.x() / start.x() : 1.0;
         double sy = std::fabs(start.y()) > 1.0e-6 ? now.y() / start.y() : 1.0;
 
+        bool scalesX = std::fabs(start.x()) > 1.0e-6;
+        bool scalesY = std::fabs(start.y()) > 1.0e-6;
+
         // An edge handle only has one meaningful axis; the other must not move.
         if (_gripIndex % 2 == 1)
         {
             if (std::fabs(start.x()) <= std::fabs(start.y()))
+            {
                 sx = 1.0;
+                scalesX = false;
+            }
             else
+            {
                 sy = 1.0;
+                scalesY = false;
+            }
         }
 
         // Shift keeps the aspect ratio, as everywhere else in Animate: the
@@ -608,6 +617,32 @@ QTransform FreeTransformTool::adjustForDrag(const QPointF& documentPos,
             const double uniform = std::max(std::fabs(sx), std::fabs(sy));
             sx = sx < 0.0 ? -uniform : uniform;
             sy = sy < 0.0 ? -uniform : uniform;
+        }
+
+        if (snapper)
+        {
+            // The handle sits at anchor + sx * (its offset along the box's
+            // first side) + sy * (along the second), so the snapper can solve
+            // the scale that puts the handle itself on a target, wherever on
+            // the handle the drag was grabbed.
+            const QPointF offset = toBox.map(handlePoint(_boxAtDragStart, _gripIndex) - anchor);
+            const QPointF axisX = fromBox.map(QPointF(offset.x(), 0.0));
+            const QPointF axisY = fromBox.map(QPointF(0.0, offset.y()));
+            fla::HandleDrag drag;
+            drag.anchorX = anchor.x();
+            drag.anchorY = anchor.y();
+            drag.axisXx = axisX.x();
+            drag.axisXy = axisX.y();
+            drag.axisYx = axisY.x();
+            drag.axisYy = axisY.y();
+            drag.scaleX = sx;
+            drag.scaleY = sy;
+            drag.scalesX = scalesX;
+            drag.scalesY = scalesY;
+            drag.uniform = (modifiers & Qt::ShiftModifier) != 0;
+            const fla::HandleSnapResult snapped = snapper->snapHandle(drag);
+            sx = snapped.scaleX;
+            sy = snapped.scaleY;
         }
 
         QTransform scale;
@@ -703,12 +738,24 @@ QPointF FreeTransformTool::snapDragPoint(PhoenixView& view, const QPointF& docum
         return QPointF(documentPos.x() + x.adjustment, documentPos.y() + y.adjustment);
     }
 
-    // For a handle drag it is the handle that should land on a grid line or an
-    // edge, and the handle follows the cursor, so snapping the cursor snaps it.
+    // A scale handle is snapped through its scale, in adjustForDrag, so the
+    // handle lands on the target however far from it the drag was grabbed.
+    if (_grip == Grip::Handle)
+        return documentPos;
+
     const fla::SnapResult x = snapper->snapX({documentPos.x()});
     const fla::SnapResult y = snapper->snapY({documentPos.y()});
 
     return QPointF(documentPos.x() + x.adjustment, documentPos.y() + y.adjustment);
+}
+
+const fla::Snapper* FreeTransformTool::handleSnapper(PhoenixView& view) const
+{
+    fla::Snapper* snapper = view.snapper();
+    if (_grip != Grip::Handle || !snapper || !snapper->isEnabled())
+        return nullptr;
+    snapper->setTolerance(view.pickTolerance() * 2.0);
+    return snapper;
 }
 
 void FreeTransformTool::applyAdjust(PhoenixView& view, const QTransform& adjust)
@@ -1024,7 +1071,8 @@ bool FreeTransformTool::mouseMove(PhoenixView& view, QMouseEvent* event, const Q
         return true;
     }
 
-    const QTransform adjust = adjustForDrag(snapDragPoint(view, documentPos), event->modifiers());
+    const QTransform adjust =
+        adjustForDrag(snapDragPoint(view, documentPos), event->modifiers(), handleSnapper(view));
     applyAdjust(view, adjust);
 
     // Carry the box with the gesture so the handles stay on the object.
@@ -1199,7 +1247,8 @@ bool FreeTransformTool::mouseRelease(PhoenixView& view, QMouseEvent* event, cons
         return true;
     }
 
-    const QTransform adjust = adjustForDrag(snapDragPoint(view, documentPos), event->modifiers());
+    const QTransform adjust =
+        adjustForDrag(snapDragPoint(view, documentPos), event->modifiers(), handleSnapper(view));
     applyAdjust(view, adjust);
     _box = adjust.map(_boxAtDragStart);
 

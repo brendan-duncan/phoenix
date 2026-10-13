@@ -4,6 +4,7 @@
 #include "../src/parser/path_parser.h"
 #include "../src/writer/edge_writer.h"
 
+#include <algorithm>
 #include <cmath>
 #include <memory>
 #include <string>
@@ -505,4 +506,152 @@ TEST(transforming_a_path_maps_handles_too)
     const EditablePath moved = path.transformed(t);
     CHECK(samePoint(moved.anchors[0].position, Point(12.0, 24.0)));
     CHECK(samePoint(moved.anchors[0].outHandle, Point(16.0, 28.0)));
+}
+
+namespace {
+
+/// A point on the cubic through four control points.
+Point bezierAt(const Point& p0, const Point& p1, const Point& p2, const Point& p3, double t)
+{
+    const double u = 1.0 - t;
+    const double a = u * u * u;
+    const double b = 3.0 * u * u * t;
+    const double c = 3.0 * u * t * t;
+    const double d = t * t * t;
+    return Point(a * p0.x + b * p1.x + c * p2.x + d * p3.x, a * p0.y + b * p1.y + c * p2.y + d * p3.y);
+}
+
+/// The nearest distance from \a point to the cubic by brute force: a dense
+/// sweep, then golden-section search around the best sample.
+double bruteForceDistance(const Point& p0, const Point& p1, const Point& p2, const Point& p3,
+    const Point& point, double& sampled)
+{
+    const auto distanceAt = [&](double t) {
+        const Point at = bezierAt(p0, p1, p2, p3, t);
+        return std::hypot(at.x - point.x, at.y - point.y);
+    };
+
+    constexpr int kSamples = 100000;
+    int bestIndex = 0;
+    sampled = distanceAt(0.0);
+    for (int i = 1; i <= kSamples; ++i)
+    {
+        const double distance = distanceAt(static_cast<double>(i) / kSamples);
+        if (distance < sampled)
+        {
+            sampled = distance;
+            bestIndex = i;
+        }
+    }
+
+    double lower = std::max(0.0, (bestIndex - 1.0) / kSamples);
+    double upper = std::min(1.0, (bestIndex + 1.0) / kSamples);
+    const double ratio = 0.6180339887498949;
+    for (int i = 0; i < 200; ++i)
+    {
+        const double a = upper - ratio * (upper - lower);
+        const double b = lower + ratio * (upper - lower);
+        if (distanceAt(a) < distanceAt(b))
+            upper = b;
+        else
+            lower = a;
+    }
+    return std::min(sampled, distanceAt((lower + upper) / 2.0));
+}
+
+/// A deterministic stream of numbers in [lo, hi).
+struct Numbers
+{
+    unsigned int state = 12345u;
+
+    double next(double lo, double hi)
+    {
+        state = state * 1664525u + 1013904223u;
+        return lo + (hi - lo) * (static_cast<double>(state >> 8) / 16777216.0);
+    }
+};
+
+/// Checks closestPoint on a one-segment path against brute force at a spread
+/// of points around it.
+void checkAgainstBruteForce(const Point& p0, const Point& p1, const Point& p2, const Point& p3, Numbers& numbers)
+{
+    EditablePath path;
+    Anchor start(p0);
+    start.outHandle = p1;
+    Anchor end(p3);
+    end.inHandle = p2;
+    path.anchors.push_back(start);
+    path.anchors.push_back(end);
+
+    for (int i = 0; i < 12; ++i)
+    {
+        const Point point(numbers.next(-60.0, 160.0), numbers.next(-60.0, 160.0));
+        const EditablePath::PathPoint found = path.closestPoint(point);
+        CHECK(found.valid);
+
+        double sampled = 0.0;
+        const double exact = bruteForceDistance(p0, p1, p2, p3, point, sampled);
+        CHECK(std::fabs(found.distance - exact) < 1.0e-6);
+        CHECK(found.distance <= sampled + 1.0e-12);
+
+        // The answer is a point of the curve at the parameter given.
+        const Point at = bezierAt(p0, p1, p2, p3, found.t);
+        CHECK(std::hypot(at.x - found.position.x, at.y - found.position.y) < 1.0e-9);
+    }
+}
+
+} // namespace
+
+TEST(closest_point_on_a_quadratic_is_exact)
+{
+    Numbers numbers;
+    for (int curve = 0; curve < 25; ++curve)
+    {
+        const Point p0(numbers.next(0.0, 100.0), numbers.next(0.0, 100.0));
+        const Point control(numbers.next(-50.0, 150.0), numbers.next(-50.0, 150.0));
+        const Point p3(numbers.next(0.0, 100.0), numbers.next(0.0, 100.0));
+
+        // Raised to a cubic, as a quadratic read from a file is.
+        const Point p1(p0.x + 2.0 / 3.0 * (control.x - p0.x), p0.y + 2.0 / 3.0 * (control.y - p0.y));
+        const Point p2(p3.x + 2.0 / 3.0 * (control.x - p3.x), p3.y + 2.0 / 3.0 * (control.y - p3.y));
+        checkAgainstBruteForce(p0, p1, p2, p3, numbers);
+    }
+}
+
+TEST(closest_point_on_a_cubic_is_exact)
+{
+    Numbers numbers;
+    for (int curve = 0; curve < 25; ++curve)
+    {
+        const Point p0(numbers.next(0.0, 100.0), numbers.next(0.0, 100.0));
+        const Point p1(numbers.next(-50.0, 150.0), numbers.next(-50.0, 150.0));
+        const Point p2(numbers.next(-50.0, 150.0), numbers.next(-50.0, 150.0));
+        const Point p3(numbers.next(0.0, 100.0), numbers.next(0.0, 100.0));
+        checkAgainstBruteForce(p0, p1, p2, p3, numbers);
+    }
+
+    // An S bend and a loop, where the distance dips more than once.
+    checkAgainstBruteForce(Point(0.0, 0.0), Point(100.0, 0.0), Point(0.0, 100.0), Point(100.0, 100.0), numbers);
+    checkAgainstBruteForce(Point(0.0, 50.0), Point(150.0, 120.0), Point(-50.0, 120.0), Point(100.0, 50.0), numbers);
+}
+
+TEST(closest_point_on_a_curve_from_on_it_and_below_it)
+{
+    // A point on the curve is found at no distance.
+    EditablePath path;
+    Anchor start(Point(0.0, 0.0));
+    start.outHandle = Point(0.0, 10.0);
+    Anchor end(Point(10.0, 0.0));
+    end.inHandle = Point(10.0, 10.0);
+    path.anchors.push_back(start);
+    path.anchors.push_back(end);
+    const EditablePath::PathPoint on = path.closestPoint(Point(5.0, 7.5));
+    CHECK(on.valid);
+    CHECK(on.distance < 1.0e-12);
+    CHECK(std::fabs(on.t - 0.5) < 1.0e-9);
+
+    // Below the arc the two ends tie as nearest, and one of them is taken.
+    const EditablePath::PathPoint center = path.closestPoint(Point(5.0, -100.0));
+    CHECK(center.valid);
+    CHECK(std::fabs(center.t - 0.0) < 1.0e-9 || std::fabs(center.t - 1.0) < 1.0e-9);
 }

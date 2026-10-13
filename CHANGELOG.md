@@ -10,6 +10,7 @@ What changed in each release of Phoenix, newest first.
 - AI assistants such as Claude can look at and change your document through MCP, with every change undoable
 - An animated graphic's selection box and snapping follow the frame it shows, not its first
 - The camera can fade, tint or dim the whole scene, keyed and tweened with its moves
+- Scale handles snap exactly onto guides, grid lines and other artwork's edges and anchor points
 
 ## 0.5.2 (2026-10-13)
 

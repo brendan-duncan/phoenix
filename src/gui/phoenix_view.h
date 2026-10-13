@@ -21,6 +21,7 @@
 #include <QHash>
 #include <QList>
 #include <QMap>
+#include <QLineF>
 #include <QRectF>
 #include <QGradient>
 #include <QPixmap>
@@ -475,7 +476,8 @@ public:
 
     /// Loads \p snapper with the edges and centers of everything on stage apart
     /// from \p exclude, so a drag can line up with its neighbors but not with
-    /// itself.
+    /// itself, and with the vertices and outline pieces of their artwork, which
+    /// scale handles land on.
     void gatherSnapCandidates(fla::Snapper& snapper,
         const std::vector<fla::Element*>& exclude);
 
@@ -1129,9 +1131,20 @@ private:
     /// and the padded cache is neither read nor filled.
     bool _tightBounds = false;
 
-    /// The stage's elements and bounds for snapping, kept between drags
-    /// and dropped with the bounds cache.
-    std::vector<std::pair<fla::Element*, QRectF>> _snapBounds;
+    /// The stage's elements for snapping, kept between drags and dropped
+    /// with the bounds cache: each one's bounds, and its artwork's vertices
+    /// and outline (curves as short straight pieces) in document space.
+    struct SnapEntry
+    {
+        fla::Element* element = nullptr;
+        QRectF bounds;
+        std::vector<QPointF> vertices;
+        std::vector<QLineF> outline;
+    };
+    std::vector<SnapEntry> _snapBounds;
+
+    /// Adds the vertices and outline of \p element's shapes to \p entry.
+    void gatherSnapOutline(const fla::Element* element, SnapEntry& entry);
     bool _snapBoundsValid = false;
 
     /// The pen for a stroke. The width follows the stroke's scaleMode for
