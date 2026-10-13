@@ -1,6 +1,7 @@
 #include "gui/app_identity.h"
 #include "gui/command_line.h"
 #include "gui/mcp_server.h"
+#include "gui/script_runner.h"
 #include "gui/main_window.h"
 #include "gui/theme.h"
 #include "gui/updater.h"
@@ -135,7 +136,7 @@ int main(int argc, char *argv[])
     // folder rather than from Windows, and Qt's own folder has none: text
     // would come out as empty boxes. Point it at the system's.
     if (argc > 1 && (std::strcmp(argv[1], "--export-movie") == 0 || std::strcmp(argv[1], "--export-image") == 0 ||
-                     std::strcmp(argv[1], "--roundtrip") == 0) &&
+                     std::strcmp(argv[1], "--roundtrip") == 0 || std::strcmp(argv[1], "run-script") == 0) &&
         qEnvironmentVariableIsEmpty("QT_QPA_FONTDIR"))
     {
         const QByteArray windows = qgetenv("WINDIR");
@@ -333,13 +334,27 @@ int main(int argc, char *argv[])
         launch.remove(tutorialAt, 2);
         MainWindow::skipStartScreen();
     }
-    const QString initialFile = launch.size() > 1 ? launch.at(1) : QString();
+    QString initialFile = launch.size() > 1 ? launch.at(1) : QString();
+
+    // Phoenix script.jsfl: a Phoenix already running runs it; else this one
+    // does, once its window is up.
+    QString script;
+    if (initialFile.endsWith(".jsfl", Qt::CaseInsensitive))
+    {
+        if (ScriptRunner::handToRunning(initialFile))
+            return 0;
+        script = QFileInfo(initialFile).absoluteFilePath();
+        initialFile.clear();
+        MainWindow::skipStartScreen();
+    }
 
     // The theme last chosen, before any window is made.
     app_identity::apply();
     theme::applySaved();
     MainWindow window(initialFile);
     window.show();
+    if (!script.isEmpty())
+        QTimer::singleShot(300, &window, [&window, script]() { window.scripts()->runFile(script); });
     if (!tutorial.isEmpty())
         QTimer::singleShot(300, &window, [&window, tutorial]() { window.startTutorial(tutorial); });
     if (mcp)

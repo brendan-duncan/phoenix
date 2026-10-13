@@ -195,13 +195,13 @@ struct Fixture
     Fixture() { document = host.add(fla::createEmptyDocument(550, 400, 24.0)); }
     fla::Document& data() { return *document->document; }
     fla::Timeline& scene() { return *data().currentScene(); }
-    jsfl::RunResult run(const std::string& source, const std::string& undo = "Test Script")
+    jsfl::RunResult run(const std::string& source, const std::string& undo = "Test Script", bool mayFail = false)
     {
         jsfl::RunOptions options;
         options.undoName = undo;
         options.timeLimit = 20.0;
         const jsfl::RunResult result = engine.runString(source, "test.jsfl", options);
-        if (!result.ok)
+        if (!result.ok && !mayFail)
             std::printf("    script error: %s\n", result.report().c_str());
         return result;
     }
@@ -331,7 +331,7 @@ TEST(jsfl_a_run_is_one_undo_step)
     CHECK(!history.canUndo() || history.undoName() != "Test Script");
 
     // A failed script keeps what it did before failing, as one step.
-    const jsfl::RunResult failed = f.run("fl.getDocumentDOM().getTimeline().addNewLayer('X'); null.y;", "Half");
+    const jsfl::RunResult failed = f.run("fl.getDocumentDOM().getTimeline().addNewLayer('X'); null.y;", "Half", true);
     CHECK(!failed.ok);
     CHECK(history.undoName() == "Half");
     CHECK(!history.isInMacro());
@@ -382,12 +382,13 @@ TEST(jsfl_stale_objects_fail_clearly)
                                          "tl.addNewLayer('Doomed');\n"
                                          "var layer = tl.layers[0];\n"
                                          "tl.deleteLayer(0);\n"
-                                         "layer.name;\n");
+                                         "layer.name;\n",
+        "Test Script", true);
     CHECK(!result.ok);
     CHECK(result.line == 5);
     CHECK(result.message.find("no longer in the document") != std::string::npos);
 
-    const jsfl::RunResult closed = f.run("var d = fl.getDocumentDOM(); fl.closeDocument(d, false); d.width;");
+    const jsfl::RunResult closed = f.run("var d = fl.getDocumentDOM(); fl.closeDocument(d, false); d.width;", "Test Script", true);
     CHECK(!closed.ok);
     CHECK(closed.message.find("closed") != std::string::npos);
 }
@@ -532,6 +533,18 @@ TEST(jsfl_document_edits)
     f.host.history(f.document).undo();
     CHECK(f.scene().layers[0]->frames[0]->elements.empty());
     CHECK(!f.data().symbolList || f.data().symbolList->symbolMap.count("Box") == 0);
+}
+
+TEST(jsfl_clipboard)
+{
+    Fixture f;
+    CHECK(f.run("var d = fl.getDocumentDOM(); d.addNewRectangle({left: 0, top: 0, right: 10, bottom: 10}, 0);\n"
+                "d.selectAll(); d.clipCopy(); d.getTimeline().addNewLayer('Copy'); d.clipPaste(true);\n"
+                "var tl = d.getTimeline();\n"
+                "fl.trace(tl.layers[0].name + ' ' + tl.layers[0].frames[0].elements.length + ' ' + d.selection.length);\n"
+                "d.clipCut(); fl.trace(tl.layers[0].frames[0].elements.length);\n")
+              .ok);
+    CHECK_OUTPUT(f, "Copy 1 1\n0\n");
 }
 
 TEST(jsfl_library)

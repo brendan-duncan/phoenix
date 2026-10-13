@@ -16,6 +16,7 @@ class FLADocument;
 ///   Phoenix diff <before> <after> [--out <folder>] [--samples N]
 ///   Phoenix batch <folder> --doctor | --convert fla|phx|xfl | --render
 ///                 | --python <script.py> [--save] [--recursive] [--out <folder>]
+///   Phoenix run-script <script.jsfl> [document ...] [--timeout SECONDS]
 ///   Phoenix help
 namespace commands {
 

@@ -143,7 +143,12 @@ public:
     /// whether the document is one from a newer Phoenix, kept read-only.
     void refreshAfterScript();
     bool isReadOnlyDocument() const;
+    /// JSFL scripts run in this window (Commands menu, Output panel,
+    /// Phoenix run-script).
+    class ScriptRunner* scripts() const { return _scripts; }
     friend class ScriptApi;
+    friend class ScriptRunner;
+    friend class JsflHost;
     friend struct ScriptContext;
     /// Serves the AI assistant that started Phoenix (`Phoenix --mcp`) on
     /// standard input and output.
@@ -527,6 +532,10 @@ private:
     /// .fla and as an uncompressed XFL folder otherwise. Reports failures and
     /// updates the saved state.
     bool saveToPath(const QString& filePath);
+    /// Writes \a document to \a filePath in the format its name says (.phx,
+    /// .fla, else an XFL folder), asking nothing; false with \a error when
+    /// it could not.
+    bool writeDocumentFile(const fla::Document& document, const QString& filePath, QString& error);
 
     /// Warns when saving would drop content the writer cannot represent yet.
     /// Returns false if the user would rather not go ahead.
@@ -852,6 +861,8 @@ private:
     /// Palettes: Harmony's linked palettes.
     class PalettesPanel* _palettes = nullptr;
     QDockWidget* _palettesDock = nullptr;
+    /// JSFL scripts: the Commands menu and the Output panel.
+    class ScriptRunner* _scripts = nullptr;
     /// Edit > Find and Replace, made when first asked for.
     class FindReplaceDialog* _findReplace = nullptr;
     void showFindReplace();

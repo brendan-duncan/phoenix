@@ -28,6 +28,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
+#include <memory>
 
 namespace jsfl {
 
@@ -95,6 +96,29 @@ void transformAll(Session& session, fla::FLADocument* document, const std::vecto
     const fla::Transform about = compose(fla::Transform::fromTranslate(x, y), compose(change, fla::Transform::fromTranslate(-x, -y)));
     for (fla::Element* element : elements)
         setTransform(session, document, element, compose(about, element->transform), name);
+}
+
+/// Elements copied by clipCopy or clipCut, kept between runs as a
+/// clipboard is.
+std::vector<std::unique_ptr<fla::Element>>& elementClipboard()
+{
+    static std::vector<std::unique_ptr<fla::Element>> elements;
+    return elements;
+}
+
+void copyToClipboard(const std::vector<fla::Element*>& elements)
+{
+    std::vector<std::unique_ptr<fla::Element>> copies;
+    for (const fla::Element* element : elements)
+    {
+        if (fla::Element* copy = fla::cloneElement(*element, nullptr))
+        {
+            // Kept apart from the document it came from.
+            fla::relinkSymbols(*copy, nullptr);
+            copies.emplace_back(copy);
+        }
+    }
+    elementClipboard() = std::move(copies);
 }
 
 std::vector<fla::Element*> needSelection(Session& session, fla::FLADocument* document)
@@ -351,6 +375,91 @@ const ClassInfo& Document::classInfo() const
                 copies.push_back(copy);
             }
             selection.select(copies);
+            return Value();
+        });
+        def.method("clipCopy", 0, [](Document& d, const Args&) {
+            copyToClipboard(needSelection(d.session, d.document));
+            return Value();
+        });
+        def.method("clipCut", 0, [](Document& d, const Args&) {
+            copyToClipboard(needSelection(d.session, d.document));
+            fla::Selection& selection = d.session.host().selection(d.document);
+            for (fla::Element* element : selectedElements(d.session, d.document))
+            {
+                if (fla::Frame* frame = frameOf(element))
+                    d.push(fla::CommandPtr(new fla::RemoveElementCommand(frame, element, "Cut", &selection)));
+            }
+            selection.clear();
+            return Value();
+        });
+        def.method("clipPaste", 1, [](Document& d, const Args& args) {
+            // In place, or with the pasted objects centered on the stage.
+            const auto& copied = elementClipboard();
+            if (copied.empty())
+                return Value();
+            fla::Frame* frame = currentKeyframe(d.session, d.document);
+            fla::Selection& selection = d.session.host().selection(d.document);
+            std::vector<fla::Element*> pasted;
+            for (const auto& element : copied)
+            {
+                fla::Element* copy = fla::cloneElement(*element, frame);
+                if (!copy)
+                    continue;
+                fla::relinkSymbols(*copy, d.data().symbolList);
+                d.push(fla::CommandPtr(new fla::AddElementCommand(frame, copy, "Paste", &selection)));
+                pasted.push_back(copy);
+            }
+            if (!arg(args, 0).toBool())
+            {
+                const Rect box = selectionBounds(d.session, d.document, pasted);
+                if (box.valid())
+                {
+                    const double dx = d.data().width / 2.0 - (box.left + box.right) / 2;
+                    const double dy = d.data().height / 2.0 - (box.top + box.bottom) / 2;
+                    for (fla::Element* element : pasted)
+                        setTransform(d.session, d.document, element, compose(fla::Transform::fromTranslate(dx, dy), element->transform), "Paste");
+                }
+            }
+            selection.select(std::vector<fla::DOMElement*>(pasted.begin(), pasted.end()));
+            return Value();
+        });
+        def.method("getElementProperty", 1, [](Document& d, const Args& args) {
+            const std::vector<fla::Element*> elements = needSelection(d.session, d.document);
+            auto wrapper = wrapElement(d.session, d.document, elements.front());
+            for (const ClassInfo* info = &wrapper->classInfo(); info; info = info->parent)
+            {
+                for (const Property& property : info->properties)
+                {
+                    if (property.name == arg(args, 0).toString())
+                        return property.get(*wrapper);
+                }
+            }
+            return Value();
+        });
+        def.method("setSelectionRect", 2, [](Document& d, const Args& args) {
+            // Everything on the current frame inside the rectangle.
+            const Value& box = arg(args, 0);
+            const Rect area{field(box, "left"), field(box, "top"), field(box, "right"), field(box, "bottom")};
+            std::vector<fla::DOMElement*> chosen;
+            if (given(args, 1) && !arg(args, 1).toBool())
+            {
+                for (fla::Element* element : selectedElements(d.session, d.document))
+                    chosen.push_back(element);
+            }
+            fla::Timeline* timeline = d.session.host().editedTimeline(d.document);
+            const int frame = d.session.host().currentFrame(d.document);
+            for (fla::Layer* layer : timeline ? timeline->layers : std::vector<fla::Layer*>())
+            {
+                fla::Frame* key = layer && !layer->isLocked() && layer->visible ? fla::timeline::spanAt(*layer, frame) : nullptr;
+                for (fla::Element* element : key ? key->elements : std::vector<fla::Element*>())
+                {
+                    const Rect bounds = d.session.host().bounds(d.document, element);
+                    if (bounds.valid() && bounds.left >= area.left && bounds.right <= area.right && bounds.top >= area.top &&
+                        bounds.bottom <= area.bottom && std::find(chosen.begin(), chosen.end(), element) == chosen.end())
+                        chosen.push_back(element);
+                }
+            }
+            d.session.host().selection(d.document).select(chosen);
             return Value();
         });
         def.method("group", 0, [](Document& d, const Args&) {

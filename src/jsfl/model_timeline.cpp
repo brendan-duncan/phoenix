@@ -1036,6 +1036,11 @@ const ClassInfo& Frame::classInfo() const
                 fla::Frame& frame = f.get();
                 f.push(fla::CommandPtr(new SetActionScriptCommand(&frame, v.isNullish() ? std::string() : v.toString())), false);
             });
+        def.get("soundLibraryItem", [](Frame& f) {
+            const std::string name = attribute(f.get(), "soundName");
+            auto item = name.empty() ? nullptr : findItem(f.session, f.document, name);
+            return item ? Value(item) : Value::null();
+        });
         def.get("keyMode", [](Frame& f) { return Value(f.get().keyMode); });
         def.method("isMotionObject", 0, [](Frame& f, const Args&) {
             return Value(fla::timeline::motionOf(f.get()) != nullptr);

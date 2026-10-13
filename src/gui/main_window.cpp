@@ -9,6 +9,7 @@
 #include "tutorial_runner.h"
 #include "../edit/phoenix_features.h"
 #include "mcp_server.h"
+#include "script_runner.h"
 #include "app_identity.h"
 #include "autosave.h"
 #include "timeline_audio.h"
@@ -360,6 +361,7 @@ MainWindow::MainWindow(const QString& initialFile, QWidget* parent, bool startup
     loadSettings();
 
     setupUI();
+    _scripts = new ScriptRunner(*this);
     setupMenus();
     setupToolBar();
     setupPropertiesPanel();
@@ -2157,6 +2159,7 @@ void MainWindow::setupWindowMenu()
             {"Layer &Depth", _layerDepthDock, QKeySequence(), "How far each layer sits from the multiplane camera"},
             {"&X-Sheet", _xsheetDock, QKeySequence(), "The exposures of each layer, frame by frame, typed in by drawing number"},
             {"&History", _historyDock, QKeySequence(Qt::CTRL | Qt::Key_F10), "Every step that can be undone; click one to go back or forward to it"},
+            {"&Output", _scripts ? _scripts->outputDock() : nullptr, QKeySequence(Qt::Key_F2), "What scripts trace, and the errors they stop on"},
             {"&Review Notes", _notesDock, QKeySequence(), "Notes on frames from whoever reviews the shot; they never export"},
             {"Co&ntrollers", _controllersDock, QKeySequence(), "Master controllers: one slider driving properties on several layers"},
             {"Sc&ene", _scenesDock, QKeySequence(Qt::SHIFT | Qt::Key_F2), "The document's scenes: switch, add, duplicate, delete, rename and reorder them"},
@@ -5979,6 +5982,9 @@ void MainWindow::setupMenus()
         QSettings().setValue("control/simpleFrameActions", on);
     });
 
+    // Commands: JSFL scripts, from a file or the user's Commands folder.
+    _scripts->fillCommandsMenu(menuBar->addMenu("&Commands"));
+
     QMenu* helpMenu = menuBar->addMenu("&Help");
     QAction* startAction = new QAction("&Start Screen...", this);
     startAction->setStatusTip("New from a preset, or open a recent file");
@@ -6072,39 +6078,18 @@ bool MainWindow::confirmPhoenixFeatures()
     return true;
 }
 
-bool MainWindow::saveToPath(const QString& filePath)
+bool MainWindow::writeDocumentFile(const fla::Document& document, const QString& filePath, QString& error)
 {
-    if (!_flaDocument || !_flaDocument->document)
-    {
-        QMessageBox::information(this, "No Document", "No FLA document is currently loaded.");
-        return false;
-    }
-
-    // A group being edited is a group again in the file.
-    if (_phoenixView)
-        _phoenixView->exitGroups();
-
-    // A drawing still floating is committed before anything is written, so that
-    // saving with one selected and saving just after letting it go produce the
-    // same file rather than two shapes in one case and one in the other.
-    if (_phoenixView)
-        _phoenixView->flushPendingMerge();
-
-    if (!isPhxPath(filePath) && (!confirmLossySave() || !confirmPhoenixFeatures()))
-        return false;
-
-    QString error;
-
+    error.clear();
     if (isPhxPath(filePath))
     {
         phx::SaveOptions options;
         options.application = QString("Phoenix %1").arg(QCoreApplication::applicationVersion()).toStdString();
-        if (_phoenixView)
+        if (_phoenixView && _flaDocument && _flaDocument->document == &document)
         {
             // A small picture of the first frame, for file browsers.
             const int width = 256;
-            const fla::Document* document = _flaDocument->document;
-            const int height = std::max(1, width * std::max(1, document->height) / std::max(1, document->width));
+            const int height = std::max(1, width * std::max(1, document.height) / std::max(1, document.width));
             const QImage picture = _phoenixView->renderFrame(0, QSize(width, height), false);
             QByteArray png;
             QBuffer buffer(&png);
@@ -6112,10 +6097,7 @@ bool MainWindow::saveToPath(const QString& filePath)
                 options.thumbnailPng.assign(png.begin(), png.end());
         }
         std::string phxError;
-        // The recovery copy being written reads the media this save moves.
-        if (AutoSave* autoSave = activeAutoSave())
-            autoSave->waitForWrite();
-        if (!phx::save(*_flaDocument->document, filePath.toStdString(), options, phxError))
+        if (!phx::save(document, filePath.toStdString(), options, phxError))
             error = QString::fromStdString(phxError);
     }
     else if (filePath.endsWith(".fla", Qt::CaseInsensitive))
@@ -6124,7 +6106,7 @@ bool MainWindow::saveToPath(const QString& filePath)
         // so a save that fails part way leaves the original untouched.
         const QString temporary = filePath + ".saving";
         fla::FLAWriter writer;
-        if (!writer.write(*_flaDocument->document, temporary.toStdString()))
+        if (!writer.write(document, temporary.toStdString()))
         {
             error = QString::fromStdString(writer.errorString());
             QFile::remove(temporary);
@@ -6147,9 +6129,38 @@ bool MainWindow::saveToPath(const QString& filePath)
         // Anything that is not a .fla is written as an uncompressed XFL folder,
         // which Animate opens just as happily and which stays readable on disk.
         fla::XFLFolderWriter writer;
-        if (!writer.write(*_flaDocument->document, filePath.toStdString()))
+        if (!writer.write(document, filePath.toStdString()))
             error = QString::fromStdString(writer.errorString());
     }
+    return error.isEmpty();
+}
+
+bool MainWindow::saveToPath(const QString& filePath)
+{
+    if (!_flaDocument || !_flaDocument->document)
+    {
+        QMessageBox::information(this, "No Document", "No FLA document is currently loaded.");
+        return false;
+    }
+
+    // A group being edited is a group again in the file.
+    if (_phoenixView)
+        _phoenixView->exitGroups();
+
+    // A drawing still floating is committed before anything is written, so that
+    // saving with one selected and saving just after letting it go produce the
+    // same file rather than two shapes in one case and one in the other.
+    if (_phoenixView)
+        _phoenixView->flushPendingMerge();
+
+    if (!isPhxPath(filePath) && (!confirmLossySave() || !confirmPhoenixFeatures()))
+        return false;
+
+    // The recovery copy being written reads the media this save moves.
+    if (AutoSave* autoSave = activeAutoSave())
+        autoSave->waitForWrite();
+    QString error;
+    writeDocumentFile(*_flaDocument->document, filePath, error);
 
     if (!error.isEmpty())
     {

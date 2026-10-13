@@ -1,0 +1,832 @@
+#include "script_runner.h"
+
+#include "autosave.h"
+#include "main_window.h"
+#include "output_panel.h"
+
+#include "../data/document.h"
+#include "../data/fla_document.h"
+#include "../data/layer.h"
+#include "../data/symbol.h"
+#include "../data/timeline.h"
+#include "../edit/new_document.h"
+#include "../edit/selection.h"
+#include "../edit/timeline_edit.h"
+#include "../jsfl/engine.h"
+#include "../jsfl/flfile.h"
+#include "../parser/fla_parser.h"
+#include "../phx/container.h"
+#include "../phx/phx_document.h"
+
+#include <QApplication>
+#include <QDesktopServices>
+#include <QDialog>
+#include <QDialogButtonBox>
+#include <QDir>
+#include <QDockWidget>
+#include <QElapsedTimer>
+#include <QFile>
+#include <QFileDialog>
+#include <QFileInfo>
+#include <QFileSystemWatcher>
+#include <QGuiApplication>
+#include <QHBoxLayout>
+#include <QInputDialog>
+#include <QListWidget>
+#include <QLockFile>
+#include <QMenu>
+#include <QMessageBox>
+#include <QProgressDialog>
+#include <QPushButton>
+#include <QSettings>
+#include <QStandardPaths>
+#include <QTimer>
+#include <QUrl>
+#include <QUuid>
+#include <QVBoxLayout>
+
+#include <cstdio>
+#include <map>
+
+namespace {
+
+QString settingsBase()
+{
+    // Beside settings kept apart (PHOENIX_SETTINGS_DIR), or in Phoenix's
+    // own data folder.
+    const QString apart = qEnvironmentVariable("PHOENIX_SETTINGS_DIR");
+    return !apart.isEmpty() ? apart : QStandardPaths::writableLocation(QStandardPaths::AppDataLocation);
+}
+
+QString requestsFolder()
+{
+    return QDir(settingsBase()).filePath("script-requests");
+}
+
+QString lockPath()
+{
+    return QDir(settingsBase()).filePath("scripts.lock");
+}
+
+/// No one to answer a dialog: the command line, or a window drawn offscreen.
+bool noOneToAsk(const MainWindow& window)
+{
+    const QString platform = QGuiApplication::platformName();
+    return !window.isVisible() || platform == "offscreen" || platform == "minimal";
+}
+
+std::string text(const QString& value)
+{
+    return value.toUtf8().toStdString();
+}
+
+QString qtext(const std::string& value)
+{
+    return QString::fromUtf8(value.data(), static_cast<int>(value.size()));
+}
+
+} // namespace
+
+/// The object model's view of a window: its tabs, history, selection,
+/// stage and dialogs. MainWindow makes it a friend.
+class JsflHost : public jsfl::Host
+{
+public:
+    JsflHost(MainWindow& window, OutputPanel* output)
+        : _window(window)
+        , _output(output)
+    {}
+
+    /// Where trace output goes when there is no panel to show it.
+    std::function<void(const std::string&)> print;
+    /// What a file dialog answers on the command line.
+    QString fileAnswer;
+
+    // Output and dialogs.
+    void trace(const std::string& message) override
+    {
+        if (print)
+            print(message);
+        else if (_output)
+            _output->append(qtext(message));
+        _text += message + "\n";
+    }
+    void clearOutput() override
+    {
+        _text.clear();
+        if (_output && !print)
+            _output->clear();
+    }
+    std::string outputText() override { return _output && !print ? text(_output->text()) + "\n" : _text; }
+    void alert(const std::string& message) override
+    {
+        if (noOneToAsk(_window))
+        {
+            trace(message);
+            return;
+        }
+        QMessageBox::information(&_window, "Phoenix", qtext(message));
+    }
+    bool confirm(const std::string& message) override
+    {
+        if (noOneToAsk(_window))
+            return true;
+        return QMessageBox::question(&_window, "Phoenix", qtext(message), QMessageBox::Ok | QMessageBox::Cancel) ==
+               QMessageBox::Ok;
+    }
+    bool prompt(const std::string& message, const std::string& initial, std::string& answer) override
+    {
+        if (noOneToAsk(_window))
+        {
+            answer = initial;
+            return true;
+        }
+        bool ok = false;
+        const QString typed = QInputDialog::getText(&_window, "Phoenix", qtext(message), QLineEdit::Normal, qtext(initial), &ok);
+        answer = text(typed);
+        return ok;
+    }
+    std::string browseForFile(const std::string& mode, const std::string& title) override
+    {
+        if (noOneToAsk(_window))
+            return mode == "open" || mode == "select" ? text(fileAnswer) : std::string();
+        const QString caption = title.empty() ? QString("Choose a File") : qtext(title);
+        const QString path = mode == "save" ? QFileDialog::getSaveFileName(&_window, caption)
+                                            : QFileDialog::getOpenFileName(&_window, caption);
+        return text(path);
+    }
+    std::string browseForFolder(const std::string& title) override
+    {
+        if (noOneToAsk(_window))
+            return {};
+        return text(QFileDialog::getExistingDirectory(&_window, title.empty() ? QString("Choose a Folder") : qtext(title)));
+    }
+    std::string configDirectory() override { return text(ScriptRunner::configFolder()); }
+    std::string version() override { return text(QCoreApplication::applicationVersion()); }
+
+    // Documents.
+    std::vector<fla::FLADocument*> documents() override
+    {
+        std::vector<fla::FLADocument*> list;
+        for (size_t i = 0; i < _window._tabs.size(); ++i)
+        {
+            fla::FLADocument* document = documentAt(static_cast<int>(i));
+            if (document)
+                list.push_back(document);
+        }
+        return list;
+    }
+    fla::FLADocument* activeDocument() override { return _window._flaDocument; }
+    void activate(fla::FLADocument* document) override
+    {
+        const int index = tabOf(document);
+        if (index >= 0 && document != _window._flaDocument)
+            _window.activateTab(index);
+    }
+    fla::FLADocument* open(const std::string& path, std::string& error) override
+    {
+        const QString wanted = QFileInfo(qtext(path)).absoluteFilePath();
+        for (size_t i = 0; i < _window._tabs.size(); ++i)
+        {
+            const QString tabPath = _window.tabPath(*_window._tabs[i]);
+            if (!tabPath.isEmpty() && QFileInfo(tabPath).absoluteFilePath() == wanted)
+            {
+                _window.activateTab(static_cast<int>(i));
+                return _window._flaDocument;
+            }
+        }
+        if (!QFileInfo::exists(wanted))
+        {
+            error = "There is no document at " + path + ".";
+            return nullptr;
+        }
+        // Read without the dialogs File > Open shows: what it would warn
+        // about goes to the output.
+        fla::FLADocument* document = nullptr;
+        bool readOnly = false;
+        std::string warning;
+        if (phx::isPhx(text(wanted)))
+            document = phx::load(text(wanted), error, warning, readOnly);
+        else
+        {
+            FLAParser parser;
+            document = parser.parse(text(wanted));
+            error = parser.errorString();
+            warning = parser.warningString();
+        }
+        if (!document || !document->document)
+        {
+            delete document;
+            if (error.empty())
+                error = "Could not read " + path + ".";
+            return nullptr;
+        }
+        error.clear();
+        if (!warning.empty())
+            trace(QFileInfo(wanted).fileName().toStdString() + ": " + warning);
+        _window.makeRoomForDocument();
+        _window.adoptDocument(document, wanted, QFileInfo(wanted).fileName());
+        if (readOnly)
+        {
+            _window._documentPath.clear();
+            _window._documentName = QFileInfo(wanted).fileName() + " (read-only)";
+        }
+        if (_window._interactive)
+            _window.addToRecentFiles(wanted);
+        _window.updateEditState();
+        return _window._flaDocument;
+    }
+    fla::FLADocument* create(std::string& error) override
+    {
+        _window.makeRoomForDocument();
+        _window.createNewDocument(fla::kDefaultDocumentWidth, fla::kDefaultDocumentHeight, fla::kDefaultDocumentFrameRate, Qt::white);
+        if (!_window._flaDocument)
+            error = "A new document could not be made.";
+        return _window._flaDocument;
+    }
+    bool save(fla::FLADocument* document, const std::string& path, bool copy, std::string& error) override
+    {
+        const int index = tabOf(document);
+        if (index < 0 || !document->document)
+        {
+            error = "That document is not open.";
+            return false;
+        }
+        MainWindow::DocumentTab& tab = *_window._tabs[static_cast<size_t>(index)];
+        const bool shown = document == _window._flaDocument;
+        const QString target = path.empty() ? (shown ? _window._documentPath : tab.path) : QFileInfo(qtext(path)).absoluteFilePath();
+        if (target.isEmpty())
+        {
+            error = "The document has never been saved; give a file to save it to.";
+            return false;
+        }
+        if (shown && _window._phoenixView)
+        {
+            _window._phoenixView->exitGroups();
+            _window._phoenixView->flushPendingMerge();
+        }
+        if (tab.autoSave)
+            tab.autoSave->waitForWrite();
+        QString problem;
+        if (!_window.writeDocumentFile(*document->document, target, problem))
+        {
+            error = text(target) + " could not be written: " + text(problem);
+            return false;
+        }
+        if (copy)
+            return true;
+        if (shown)
+        {
+            _window._documentPath = target;
+            _window._documentName = QFileInfo(target).fileName();
+            _window._editContext.markSaved();
+            _window.updateEditState();
+        }
+        else
+        {
+            tab.path = target;
+            tab.name = QFileInfo(target).fileName();
+            tab.history.setClean();
+        }
+        document->fromBinary = false;
+        if (tab.autoSave)
+            tab.autoSave->discard();
+        if (_window._interactive)
+            _window.addToRecentFiles(target);
+        _window.refreshTabs();
+        return true;
+    }
+    bool close(fla::FLADocument* document, bool askToSave) override
+    {
+        const int index = tabOf(document);
+        if (index < 0)
+            return false;
+        _selections.erase(document);
+        _edited.erase(document);
+        return _window.closeTab(index, askToSave && !noOneToAsk(_window));
+    }
+    std::string path(fla::FLADocument* document) override
+    {
+        const int index = tabOf(document);
+        return index < 0 ? std::string() : text(_window.tabPath(*_window._tabs[static_cast<size_t>(index)]));
+    }
+    std::string name(fla::FLADocument* document) override
+    {
+        const int index = tabOf(document);
+        return index < 0 ? std::string() : text(_window.tabName(*_window._tabs[static_cast<size_t>(index)]));
+    }
+    bool modified(fla::FLADocument* document) override
+    {
+        const int index = tabOf(document);
+        return index >= 0 && _window.tabModified(*_window._tabs[static_cast<size_t>(index)]);
+    }
+    bool readOnly(fla::FLADocument* document) override
+    {
+        const int index = tabOf(document);
+        return index >= 0 && _window.tabName(*_window._tabs[static_cast<size_t>(index)]).endsWith(" (read-only)");
+    }
+
+    // Editing.
+    fla::CommandStack& history(fla::FLADocument* document) override
+    {
+        if (document == _window._flaDocument)
+            return _window._editContext.commandStack();
+        return _window._tabs[static_cast<size_t>(tabOf(document))]->history;
+    }
+    fla::Selection& selection(fla::FLADocument* document) override
+    {
+        if (document == _window._flaDocument)
+            return _window._selection;
+        std::unique_ptr<fla::Selection>& own = _selections[document];
+        if (!own)
+            own = std::make_unique<fla::Selection>();
+        return *own;
+    }
+    void changed(fla::FLADocument* document) override
+    {
+        if (document == _window._flaDocument)
+            _boundsStale = true;
+    }
+    void refresh() override
+    {
+        _window.refreshAfterScript();
+        _window.refreshTabs();
+    }
+
+    // Where editing happens.
+    fla::Timeline* editedTimeline(fla::FLADocument* document) override
+    {
+        if (document == _window._flaDocument)
+            return _window.editedTimeline();
+        const auto found = _edited.find(document);
+        if (found != _edited.end() && found->second)
+            return found->second;
+        return document && document->document ? document->document->currentScene() : nullptr;
+    }
+    void editTimeline(fla::FLADocument* document, fla::Timeline* timeline) override
+    {
+        if (document != _window._flaDocument)
+        {
+            _edited[document] = timeline;
+            return;
+        }
+        fla::Document& data = *document->document;
+        const auto scene = std::find(data.timelines.begin(), data.timelines.end(), timeline);
+        if (scene != data.timelines.end())
+        {
+            if (_window._phoenixView)
+                _window._phoenixView->exitToDepth(0);
+            _window.goToScene(static_cast<int>(scene - data.timelines.begin()));
+        }
+        else if (auto* symbol = dynamic_cast<fla::Symbol*>(timeline ? timeline->parent : nullptr))
+        {
+            if (_window._phoenixView)
+                _window._phoenixView->editSymbol(symbol);
+        }
+        _window.refreshAfterScript();
+    }
+    int currentFrame(fla::FLADocument* document) override
+    {
+        if (document == _window._flaDocument && _window._player)
+            return _window._player->currentFrame();
+        return _frames[document];
+    }
+    void setCurrentFrame(fla::FLADocument* document, int frame) override
+    {
+        if (document == _window._flaDocument && _window._player)
+            _window._player->setCurrentFrame(frame);
+        else
+            _frames[document] = frame;
+    }
+    int currentLayer(fla::FLADocument* document) override
+    {
+        if (document == _window._flaDocument && _window._timelineView)
+        {
+            fla::Timeline* timeline = nullptr;
+            int index = 0;
+            if (_window._timelineView->currentLayer(timeline, index) && timeline == editedTimeline(document))
+                return index;
+            return 0;
+        }
+        return _layers[document];
+    }
+    void setCurrentLayer(fla::FLADocument* document, int layer) override
+    {
+        fla::Timeline* timeline = editedTimeline(document);
+        if (document == _window._flaDocument && _window._timelineView && timeline && layer >= 0 &&
+            layer < static_cast<int>(timeline->layers.size()))
+            _window._timelineView->setCurrentLayer(timeline->layers[static_cast<size_t>(layer)]);
+        else
+            _layers[document] = layer;
+    }
+    std::vector<jsfl::FrameRange> selectedFrames(fla::FLADocument* document) override
+    {
+        std::vector<jsfl::FrameRange> ranges;
+        fla::Timeline* timeline = editedTimeline(document);
+        if (document != _window._flaDocument || !_window._timelineView || !timeline)
+            return ranges;
+        const FrameSelection chosen = _window._timelineView->frameSelection();
+        for (const fla::Layer* layer : chosen.layers)
+        {
+            const auto at = std::find(timeline->layers.begin(), timeline->layers.end(), layer);
+            if (at != timeline->layers.end())
+                ranges.push_back({static_cast<int>(at - timeline->layers.begin()), chosen.first, chosen.last});
+        }
+        for (const auto& cell : chosen.cells)
+        {
+            const auto at = std::find(timeline->layers.begin(), timeline->layers.end(), cell.first);
+            if (at != timeline->layers.end())
+                ranges.push_back({static_cast<int>(at - timeline->layers.begin()), cell.second, cell.second});
+        }
+        return ranges;
+    }
+
+    // Drawing.
+    const fla::DrawingStyle* drawingStyle() override { return &_window._drawingStyle; }
+    jsfl::Rect bounds(fla::FLADocument*, const fla::Element* element) override
+    {
+        PhoenixView* view = _window._phoenixView;
+        if (!view)
+            return {};
+        if (_boundsStale)
+        {
+            view->invalidateBounds();
+            _boundsStale = false;
+        }
+        const QRectF box = view->elementBounds(element);
+        if (!box.isValid())
+            return {};
+        return {box.left(), box.top(), box.right(), box.bottom()};
+    }
+    bool exportPNG(fla::FLADocument* document, const std::string& path, bool currentFrameOnly, std::string& error) override
+    {
+        activate(document);
+        PhoenixView* view = _window._phoenixView;
+        if (document != _window._flaDocument || !view || !document->document)
+        {
+            error = "Only a document that can be shown can be exported.";
+            return false;
+        }
+        view->invalidateBounds();
+        view->clearCaches();
+        const fla::Document& data = *document->document;
+        const QSize size(std::max(1, data.width), std::max(1, data.height));
+        const QString target = qtext(path);
+        if (currentFrameOnly)
+        {
+            const QImage image = view->renderFrame(currentFrame(document), size, false);
+            if (image.isNull() || !image.save(target, "PNG"))
+            {
+                error = path + " could not be written.";
+                return false;
+            }
+            return true;
+        }
+        // Every frame of the scene, numbered from 1: frame0001.png...
+        int count = 1;
+        if (const fla::Timeline* scene = data.currentScene())
+        {
+            for (const fla::Layer* layer : scene->layers)
+            {
+                if (layer)
+                    count = std::max(count, fla::timeline::layerEnd(*layer));
+            }
+        }
+        const QFileInfo info(target);
+        const QString stem = info.dir().filePath(info.completeBaseName());
+        for (int frame = 0; frame < count; ++frame)
+        {
+            const QImage image = view->renderFrame(frame, size, false);
+            const QString file = QString("%1%2.png").arg(stem).arg(frame + 1, 4, 10, QChar('0'));
+            if (image.isNull() || !image.save(file, "PNG"))
+            {
+                error = text(file) + " could not be written.";
+                return false;
+            }
+        }
+        return true;
+    }
+
+private:
+    fla::FLADocument* documentAt(int index) const
+    {
+        if (index == _window._activeTab)
+            return _window._flaDocument;
+        return _window._tabs[static_cast<size_t>(index)]->document;
+    }
+    int tabOf(const fla::FLADocument* document) const
+    {
+        for (size_t i = 0; document && i < _window._tabs.size(); ++i)
+        {
+            if (documentAt(static_cast<int>(i)) == document)
+                return static_cast<int>(i);
+        }
+        return -1;
+    }
+
+    MainWindow& _window;
+    OutputPanel* _output;
+    std::string _text;
+    bool _boundsStale = false;
+    std::map<const fla::FLADocument*, std::unique_ptr<fla::Selection>> _selections;
+    std::map<const fla::FLADocument*, fla::Timeline*> _edited;
+    std::map<const fla::FLADocument*, int> _frames;
+    std::map<const fla::FLADocument*, int> _layers;
+};
+
+ScriptRunner::ScriptRunner(MainWindow& window)
+    : QObject(&window)
+    , _window(window)
+{
+    _output = new OutputPanel(&window);
+    _outputDock = new QDockWidget("Output", &window);
+    _outputDock->setObjectName("outputDock");
+    _outputDock->setAllowedAreas(Qt::AllDockWidgetAreas);
+    _outputDock->setWidget(_output);
+    window.addDockWidget(Qt::BottomDockWidgetArea, _outputDock);
+    _outputDock->hide();
+    connect(_output, &OutputPanel::written, this, [this]() {
+        if (!_outputDock->isVisible())
+            _outputDock->show();
+        _outputDock->raise();
+    });
+
+    _host = std::make_unique<JsflHost>(window, _output);
+    _engine = std::make_unique<jsfl::Engine>(*_host);
+
+    // The first window that people work in takes scripts other Phoenix
+    // processes hand over (Phoenix script.jsfl with Phoenix open).
+    if (window._interactive && !window._secondary)
+    {
+        QDir().mkpath(settingsBase());
+        auto lock = std::make_unique<QLockFile>(lockPath());
+        lock->setStaleLockTime(0);
+        if (lock->tryLock(0))
+        {
+            _lock = std::move(lock);
+            QDir().mkpath(requestsFolder());
+            _watcher = new QFileSystemWatcher({requestsFolder()}, this);
+            connect(_watcher, &QFileSystemWatcher::directoryChanged, this, [this]() { takeRequests(); });
+            QTimer::singleShot(0, this, [this]() { takeRequests(); });
+        }
+    }
+}
+
+ScriptRunner::~ScriptRunner() = default;
+
+QString ScriptRunner::configFolder()
+{
+    const QString folder = QDir(settingsBase()).filePath("Configuration");
+    QDir().mkpath(QDir(folder).filePath("Commands"));
+    QDir().mkpath(QDir(folder).filePath("Tools"));
+    return folder;
+}
+
+QString ScriptRunner::commandsFolder()
+{
+    return QDir(configFolder()).filePath("Commands");
+}
+
+bool ScriptRunner::handToRunning(const QString& script)
+{
+    QLockFile lock(lockPath());
+    lock.setStaleLockTime(0);
+    if (lock.tryLock(0))
+    {
+        // No Phoenix holds it: this one runs the script itself.
+        lock.unlock();
+        return false;
+    }
+    if (lock.error() != QLockFile::LockFailedError)
+        return false;
+    QDir().mkpath(requestsFolder());
+    const QString request = QDir(requestsFolder()).filePath(QUuid::createUuid().toString(QUuid::WithoutBraces) + ".request");
+    QFile file(request + ".part");
+    if (!file.open(QIODevice::WriteOnly))
+        return false;
+    file.write(QFileInfo(script).absoluteFilePath().toUtf8());
+    file.close();
+    // Named once it is whole, so the running Phoenix never reads half of it.
+    return QFile::rename(request + ".part", request);
+}
+
+void ScriptRunner::takeRequests()
+{
+    const QDir folder(requestsFolder());
+    for (const QFileInfo& info : folder.entryInfoList({"*.request"}, QDir::Files, QDir::Time | QDir::Reversed))
+    {
+        QFile file(info.absoluteFilePath());
+        if (!file.open(QIODevice::ReadOnly))
+            continue;
+        const QString script = QString::fromUtf8(file.readAll()).trimmed();
+        file.close();
+        file.remove();
+        if (!script.isEmpty())
+            _pending << script;
+    }
+    if (_pending.isEmpty())
+        return;
+    // One at a time, when nothing modal is up.
+    QTimer::singleShot(0, this, [this]() {
+        if (running() || QApplication::activeModalWidget())
+        {
+            QTimer::singleShot(500, this, [this]() { takeRequests(); });
+            return;
+        }
+        if (_pending.isEmpty())
+            return;
+        const QString script = _pending.takeFirst();
+        _window.raise();
+        _window.activateWindow();
+        runFile(script);
+        if (!_pending.isEmpty())
+            QTimer::singleShot(0, this, [this]() { takeRequests(); });
+    });
+}
+
+bool ScriptRunner::running() const
+{
+    return _engine->running();
+}
+
+bool ScriptRunner::runFile(const QString& path)
+{
+    if (running())
+        return false;
+    // What is being typed or drawn goes into the document first.
+    _window.settleGestures();
+    if (_window._phoenixView)
+        _window._phoenixView->flushPendingMerge();
+
+    jsfl::RunOptions options;
+    options.undoName = QFileInfo(path).completeBaseName().toStdString();
+    // A long run brings up a dialog whose Stop (or Esc) ends it.
+    QElapsedTimer clock;
+    clock.start();
+    std::unique_ptr<QProgressDialog> progress;
+    options.poll = [&]() {
+        if (noOneToAsk(_window))
+            return;
+        if (!progress && clock.elapsed() > 1000)
+        {
+            progress = std::make_unique<QProgressDialog>(QString("Running %1...").arg(QFileInfo(path).fileName()), "Stop", 0, 0, &_window);
+            progress->setWindowTitle("Phoenix");
+            progress->setWindowModality(Qt::WindowModal);
+            progress->setMinimumDuration(0);
+            progress->show();
+        }
+        if (progress)
+        {
+            QCoreApplication::processEvents();
+            if (progress->wasCanceled())
+                _engine->stop();
+        }
+    };
+    QApplication::setOverrideCursor(Qt::WaitCursor);
+    const jsfl::RunResult result = _engine->runFile(path.toStdString(), options);
+    QApplication::restoreOverrideCursor();
+    progress.reset();
+    if (!result.ok)
+    {
+        QString report = QString::fromStdString(result.report());
+        if (!result.stack.empty() && !result.interrupted)
+            report += "\n" + QString::fromStdString(result.stack).trimmed();
+        _output->appendError(report);
+    }
+    return result.ok;
+}
+
+int ScriptRunner::runHeadless(const QString& script, const QStringList& documents, double timeLimit)
+{
+    _host->print = [](const std::string& line) {
+        std::fwrite(line.data(), 1, line.size(), stdout);
+        std::fputc('\n', stdout);
+        std::fflush(stdout);
+    };
+    for (const QString& document : documents)
+    {
+        std::string error;
+        if (!_host->open(QFileInfo(document).absoluteFilePath().toStdString(), error))
+        {
+            std::fprintf(stderr, "%s\n", error.c_str());
+            return 1;
+        }
+    }
+    if (!documents.isEmpty())
+        _host->fileAnswer = QFileInfo(documents.front()).absoluteFilePath();
+    jsfl::RunOptions options;
+    options.undoName = QFileInfo(script).completeBaseName().toStdString();
+    options.timeLimit = timeLimit;
+    const jsfl::RunResult result = _engine->runFile(QFileInfo(script).absoluteFilePath().toStdString(), options);
+    if (!result.ok)
+    {
+        std::fprintf(stderr, "%s\n", result.report().c_str());
+        if (!result.stack.empty() && !result.interrupted)
+            std::fprintf(stderr, "%s\n", result.stack.c_str());
+        return 1;
+    }
+    return 0;
+}
+
+void ScriptRunner::fillCommandsMenu(QMenu* menu)
+{
+    connect(menu, &QMenu::aboutToShow, this, [this, menu]() {
+        menu->clear();
+        QAction* runAction = menu->addAction("&Run Command...");
+        runAction->setStatusTip("Run a JSFL script on the open document, as one step to undo");
+        connect(runAction, &QAction::triggered, this, &ScriptRunner::runCommand);
+        menu->addSeparator();
+        // The user's own commands: the scripts in the Commands folder.
+        QDir folder(commandsFolder());
+        const QFileInfoList scripts = folder.entryInfoList({"*.jsfl"}, QDir::Files, QDir::Name | QDir::IgnoreCase);
+        for (const QFileInfo& script : scripts)
+        {
+            QAction* action = menu->addAction(script.completeBaseName());
+            action->setStatusTip(QString("Run %1").arg(script.fileName()));
+            const QString path = script.absoluteFilePath();
+            connect(action, &QAction::triggered, this, [this, path]() { runFile(path); });
+        }
+        if (!scripts.isEmpty())
+            menu->addSeparator();
+        QAction* manage = menu->addAction("&Manage Saved Commands...");
+        manage->setStatusTip("Rename or delete the commands in your Commands folder");
+        connect(manage, &QAction::triggered, this, &ScriptRunner::manageCommands);
+        QAction* openFolder = menu->addAction("&Open Commands Folder");
+        openFolder->setStatusTip("Show the folder whose scripts this menu lists; put .jsfl files there to add commands");
+        connect(openFolder, &QAction::triggered, this, []() { QDesktopServices::openUrl(QUrl::fromLocalFile(commandsFolder())); });
+    });
+    // Filled once now too, so its keys and the shortcut list see it.
+    emit menu->aboutToShow();
+}
+
+void ScriptRunner::runCommand()
+{
+    QSettings settings;
+    const QString start = settings.value("scripts/lastFolder", commandsFolder()).toString();
+    const QString path = QFileDialog::getOpenFileName(&_window, "Run Command", start, "JSFL scripts (*.jsfl);;All files (*)");
+    if (path.isEmpty())
+        return;
+    settings.setValue("scripts/lastFolder", QFileInfo(path).absolutePath());
+    runFile(path);
+}
+
+void ScriptRunner::manageCommands()
+{
+    QDialog dialog(&_window);
+    dialog.setWindowTitle("Manage Saved Commands");
+    QListWidget* list = new QListWidget(&dialog);
+    const auto fill = [list]() {
+        list->clear();
+        const QFileInfoList scripts = QDir(commandsFolder()).entryInfoList({"*.jsfl"}, QDir::Files, QDir::Name | QDir::IgnoreCase);
+        for (const QFileInfo& script : scripts)
+        {
+            QListWidgetItem* item = new QListWidgetItem(script.completeBaseName(), list);
+            item->setData(Qt::UserRole, script.absoluteFilePath());
+        }
+    };
+    fill();
+    QPushButton* rename = new QPushButton("&Rename...", &dialog);
+    QPushButton* remove = new QPushButton("&Delete", &dialog);
+    connect(rename, &QPushButton::clicked, &dialog, [&dialog, list, fill]() {
+        QListWidgetItem* item = list->currentItem();
+        if (!item)
+            return;
+        bool ok = false;
+        const QString name = QInputDialog::getText(&dialog, "Rename Command", "Name:", QLineEdit::Normal, item->text(), &ok).trimmed();
+        if (!ok || name.isEmpty() || name == item->text())
+            return;
+        if (name.contains('/') || name.contains('\\'))
+        {
+            QMessageBox::warning(&dialog, "Rename Command", "A command's name cannot hold a slash.");
+            return;
+        }
+        const QString from = item->data(Qt::UserRole).toString();
+        const QString to = QDir(commandsFolder()).filePath(name + ".jsfl");
+        if (QFileInfo::exists(to) || !QFile::rename(from, to))
+            QMessageBox::warning(&dialog, "Rename Command", QString("%1 could not be renamed to %2.").arg(item->text(), name));
+        fill();
+    });
+    connect(remove, &QPushButton::clicked, &dialog, [&dialog, list, fill]() {
+        QListWidgetItem* item = list->currentItem();
+        if (!item)
+            return;
+        if (QMessageBox::question(&dialog, "Delete Command", QString("Delete the command %1?").arg(item->text())) != QMessageBox::Yes)
+            return;
+        QFile::remove(item->data(Qt::UserRole).toString());
+        fill();
+    });
+    QDialogButtonBox* buttons = new QDialogButtonBox(QDialogButtonBox::Close, &dialog);
+    connect(buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
+    QVBoxLayout* side = new QVBoxLayout();
+    side->addWidget(rename);
+    side->addWidget(remove);
+    side->addStretch();
+    QHBoxLayout* body = new QHBoxLayout();
+    body->addWidget(list, 1);
+    body->addLayout(side);
+    QVBoxLayout* layout = new QVBoxLayout(&dialog);
+    layout->addLayout(body);
+    layout->addWidget(buttons);
+    dialog.resize(420, 320);
+    dialog.exec();
+}

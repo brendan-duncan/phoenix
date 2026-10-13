@@ -160,6 +160,8 @@ set(HEADERS
     src/gui/tutorial_lesson.h
     src/gui/tutorial_runner.h
     src/gui/script_api.h
+    src/gui/script_runner.h
+    src/gui/output_panel.h
     src/jsfl/engine.h
     src/jsfl/flfile.h
     src/jsfl/host.h
@@ -401,6 +403,8 @@ set(SOURCES
     src/gui/tutorial_lesson.cpp
     src/gui/tutorial_runner.cpp
     src/gui/script_api.cpp
+    src/gui/script_runner.cpp
+    src/gui/output_panel.cpp
     src/jsfl/engine.cpp
     src/jsfl/flfile.cpp
     src/jsfl/model_document.cpp

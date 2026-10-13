@@ -1,6 +1,7 @@
 #include "command_line.h"
 
 #include "main_window.h"
+#include "script_runner.h"
 #include "shortcuts_dialog.h"
 #include "updater.h"
 
@@ -99,6 +100,13 @@ const char* const kHelp =
     "      Lists the symbols linked to a master file; --update brings them up to\n"
     "      date from their masters (what they use comes too), --save writes the\n"
     "      file back. batch <folder> --update-links --save does every shot.\n"
+    "\n"
+    "  run-script <script.jsfl> [document ...] [--timeout SECONDS]\n"
+    "      Opens the documents and runs a JSFL script on them with no window.\n"
+    "      What it traces goes to standard output, its alerts too; confirm\n"
+    "      answers yes, prompt its default, and an open-file dialog the first\n"
+    "      document. Exits 1 when the script fails. The script stops after\n"
+    "      --timeout seconds (600 unless given; 0 for no limit).\n"
     "\n"
     "  benchmark <file> [--frames N] [--json <out.json>] [--against <animate.json>]\n"
     "      Times opening, drawing (first with nothing cached, then cached),\n"
@@ -691,7 +699,7 @@ int benchmark(const QStringList& args)
 
 bool isCommand(const QString& name)
 {
-    return name == "benchmark" || name == "render" || name == "doctor" || name == "diff" || name == "batch" || name == "shots" || name == "links" || name == "shortcuts" || name == "lessons" || name == "help" ||
+    return name == "benchmark" || name == "render" || name == "run-script" || name == "doctor" || name == "diff" || name == "batch" || name == "shots" || name == "links" || name == "shortcuts" || name == "lessons" || name == "help" ||
            name == "--help";
 }
 
@@ -780,6 +788,25 @@ int run(const QStringList& arguments)
             std::printf("%s\t%s\n", entry.id.toUtf8().constData(), key.toString(QKeySequence::PortableText).toUtf8().constData());
         }
         return 0;
+    }
+    if (name == "run-script")
+    {
+        if (args.isEmpty() || !args.at(0).endsWith(".jsfl", Qt::CaseInsensitive))
+        {
+            std::fprintf(stderr, "run-script: which .jsfl script?\n");
+            return 1;
+        }
+        QStringList documents;
+        for (int i = 1; i < args.size(); ++i)
+        {
+            if (args.at(i) == "--timeout")
+                ++i;
+            else
+                documents << args.at(i);
+        }
+        const QString timeout = option(args, "--timeout");
+        MainWindow window(QString(), nullptr, false);
+        return window.scripts()->runHeadless(args.at(0), documents, timeout.isEmpty() ? 600.0 : timeout.toDouble());
     }
     if (name == "doctor")
         return doctor(args);
