@@ -816,8 +816,8 @@ bool parseSymbolInstance(const tinyxml2::XMLElement* element, fla::SymbolInstanc
     // "normal" is what no blend mode means; Animate leaves it out.
     if (instance->blendMode == "normal")
         instance->blendMode.clear();
-    instance->firstFrame = getIntAttribute(element, "firstFrame", 0);
-    instance->lastFrame = getIntAttribute(element, "lastFrame", -1);
+    instance->firstFrame = fla::clampFrameIndex(getIntAttribute(element, "firstFrame", 0));
+    instance->lastFrame = std::min(getIntAttribute(element, "lastFrame", -1), fla::kMaxFrames);
 
     // Animate leaves the type out for a movie clip and writes it for
     // everything else, a graphic always with its loop.
@@ -1449,8 +1449,8 @@ bool parseFrame(const tinyxml2::XMLElement* element, fla::Frame* frame)
         "motionTweenSnap", "motionTWeenSnap", "motionTweenSync", "acceleration", "hasCustomEase",
         "motionTweenRotate", "motionTweenRotateTimes"}, frame);
 
-    frame->index = getIntAttribute(element, "index");
-    frame->duration = getIntAttribute(element, "duration", 1);
+    frame->index = fla::clampFrameIndex(getIntAttribute(element, "index"));
+    frame->duration = fla::clampFrameDuration(getIntAttribute(element, "duration", 1));
     frame->keyMode = getAttribute(element, "keyMode");
     frame->name = getAttribute(element, "name");
     frame->labelType = getAttribute(element, "labelType");

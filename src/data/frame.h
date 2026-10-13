@@ -90,4 +90,18 @@ public:
     static DOMType staticDomType() { return DOMType::Frame; }
 };
 
+/// The furthest a timeline reaches. Frame indexes and durations read from a
+/// file are held within it, so index + duration cannot overflow an int.
+constexpr int kMaxFrames = 1 << 24;
+
+inline int clampFrameIndex(int64_t index)
+{
+    return static_cast<int>(index < 0 ? 0 : index > kMaxFrames ? kMaxFrames : index);
+}
+
+inline int clampFrameDuration(int64_t duration)
+{
+    return static_cast<int>(duration < 1 ? 1 : duration > kMaxFrames ? kMaxFrames : duration);
+}
+
 } // namespace fla

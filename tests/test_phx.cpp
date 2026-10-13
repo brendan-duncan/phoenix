@@ -520,3 +520,106 @@ TEST(phx_snapshot_writes_the_document_as_it_was)
     std::unique_ptr<fla::FLADocument> back(phx::load(path, error, warning, readOnly));
     CHECK(back && back->document && back->document->width == 1280);
 }
+
+TEST(phx_container_refuses_sizes_past_the_file)
+{
+    const std::string path = scratchPath("hostile.phx");
+    {
+        phx::ContainerWriter out;
+        std::string error;
+        CHECK(out.open(path, error));
+        out.add(phx::kDocument, std::string(1000, 'a'), true, true);
+        // A chunk that says it inflates to 100 GB.
+        phx::PreparedChunk big = phx::prepare(phx::fourcc("BIGC"), std::string(1000, 'b'), true, false);
+        big.info.length = 100ull << 30;
+        out.addStored(big.info, reinterpret_cast<const uint8_t*>(big.stored.data()));
+        CHECK(out.finish(error));
+    }
+    const std::vector<uint8_t> good = readFile(path);
+    {
+        phx::ContainerReader in;
+        std::string error;
+        CHECK(in.openMemory(good, error) && in.chunks().size() == 2);
+        std::string content;
+        CHECK(in.chunks().size() == 2 && !in.content(in.chunks()[1], content, error) && content.empty());
+        CHECK(error.find("damaged") != std::string::npos);
+    }
+    // Header and trailer damaged, so the chunks are walked, and the first
+    // chunk's stored length so large that offset + length wraps round.
+    {
+        std::vector<uint8_t> bad = good;
+        bad[20] ^= 0xFF;
+        bad[bad.size() - 1] ^= 0xFF;
+        for (int i = 0; i < 8; ++i)
+            bad[32 + 8 + static_cast<size_t>(i)] = i == 0 ? 0xF0 : 0xFF;
+        phx::ContainerReader in;
+        std::string error;
+        CHECK(!in.openMemory(bad, error) && in.chunks().empty());
+    }
+}
+
+TEST(phx_damaged_documents_read_what_they_can)
+{
+    std::unique_ptr<fla::FLADocument> document(fla::createEmptyDocument(320, 240, 24.0));
+    CHECK(document && document->document && !document->document->timelines.empty());
+    if (!document || !document->document || document->document->timelines.empty())
+        return;
+    fla::Layer* layer = document->document->timelines[0]->layers[0];
+    fla::Frame* frame = layer->frames[0];
+    frame->duration = 2147483647;
+
+    // Groups nested past the reader's limit.
+    fla::DOMElement* parent = frame;
+    fla::Group* outer = nullptr;
+    for (int i = 0; i < 260; ++i)
+    {
+        auto* group = new fla::Group(parent);
+        if (outer)
+            static_cast<fla::Group*>(parent)->members.push_back(group);
+        else
+            outer = group;
+        parent = group;
+    }
+    frame->elements.push_back(outer);
+
+    // A shape whose path starts with a move that has no point.
+    auto* shape = new fla::Shape(frame);
+    auto* edge = new fla::Edge(shape);
+    auto* path = new fla::Path(edge);
+    path->segments.push_back(new fla::PathSegment(fla::PathSegment::Command::Move, {}, path));
+    path->segments.push_back(new fla::PathSegment(fla::PathSegment::Command::Line, {fla::Point(10, 10)}, path));
+    edge->paths.push_back(path);
+    shape->edges.push_back(edge);
+    frame->elements.push_back(shape);
+
+    const std::string file = scratchPath("damaged.phx");
+    std::string error;
+    CHECK(phx::save(*document->document, file, phx::SaveOptions(), error));
+    std::string warning;
+    bool readOnly = false;
+    std::unique_ptr<fla::FLADocument> back(phx::load(file, error, warning, readOnly));
+    CHECK(back && back->document);
+    if (!back || !back->document)
+        return;
+    CHECK(warning.find("damaged") != std::string::npos);
+    const fla::Frame* read = back->document->timelines[0]->layers[0]->frames[0];
+    CHECK(read->duration == fla::kMaxFrames);
+    CHECK(read->elements.size() == 2);
+    if (read->elements.size() != 2)
+        return;
+    int depth = 0;
+    for (const fla::Element* at = read->elements[0]; at && at->elementType() == fla::Element::Type::Group;)
+    {
+        ++depth;
+        const auto* group = static_cast<const fla::Group*>(at);
+        at = group->members.empty() ? nullptr : group->members[0];
+    }
+    CHECK(depth > 0 && depth <= 200);
+    const auto* readShape = static_cast<const fla::Shape*>(read->elements[1]);
+    CHECK(readShape->edges.size() == 1 && readShape->edges[0]->paths.size() == 1);
+    if (readShape->edges.size() == 1 && readShape->edges[0]->paths.size() == 1)
+    {
+        const fla::Path* readPath = readShape->edges[0]->paths[0];
+        CHECK(readPath->segments.size() == 1 && readPath->segments[0]->command == fla::PathSegment::Command::Line);
+    }
+}

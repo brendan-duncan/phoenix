@@ -66,7 +66,13 @@ struct Context
 {
     std::vector<fla::SymbolInstance*> instances;
     bool damaged = false;
+    /// How deep in groups the element being read is.
+    int depth = 0;
 };
+
+/// Groups nested deeper than this are damage: each level costs stack, here
+/// and in everything that walks the elements.
+constexpr int kMaxDepth = 200;
 
 void finish(const Reader& r, Context& context)
 {
@@ -412,7 +418,7 @@ fla::Path* readPath(const Reader& field, fla::Edge* edge, Context& context)
     {
         const uint32_t command = static_cast<uint32_t>(segment & 7);
         const size_t count = static_cast<size_t>(segment >> 3);
-        if (command > static_cast<uint32_t>(fla::PathSegment::Command::Close) || at + count * 2 > coordinates.size())
+        if (command > static_cast<uint32_t>(fla::PathSegment::Command::Close) || count > (coordinates.size() - at) / 2)
         {
             context.damaged = true;
             break;
@@ -424,6 +430,14 @@ fla::Path* readPath(const Reader& field, fla::Edge* edge, Context& context)
             x += coordinates[at++];
             y += coordinates[at++];
             points.emplace_back(fromUnits(x), fromUnits(y));
+        }
+        // Everything that draws a path takes each command's points as there:
+        // a segment short of them is dropped.
+        static const size_t needed[] = {1, 1, 2, 3, 0};
+        if (count < needed[command])
+        {
+            context.damaged = true;
+            continue;
         }
         path->segments.push_back(new fla::PathSegment(static_cast<fla::PathSegment::Command>(command), points, path));
     }
@@ -615,7 +629,7 @@ fla::Element* readKind(const Reader& kind, fla::DOMElement* parent, Context& con
             {
             case s::SymbolInstance::LibraryItemName: instance->libraryItemName = r.string(); break;
             case s::SymbolInstance::Name: instance->name = r.string(); break;
-            case s::SymbolInstance::FirstFrame: instance->firstFrame = r.int32(); break;
+            case s::SymbolInstance::FirstFrame: instance->firstFrame = fla::clampFrameIndex(r.int32()); break;
             case s::SymbolInstance::SymbolType:
                 instance->symbolType = readEnum(r, 3, fla::SymbolType::Graphic, instance->phxUnknown);
                 break;
@@ -628,7 +642,7 @@ fla::Element* readKind(const Reader& kind, fla::DOMElement* parent, Context& con
             case s::SymbolInstance::KeepColor: instance->keepColor = r.boolean(); break;
             case s::SymbolInstance::ExtraFilters: instance->extraFilters.push_back(r.string()); break;
             case s::SymbolInstance::Filters: instance->filters.push_back(readFilter(r, context)); break;
-            case s::SymbolInstance::LastFrame: instance->lastFrame = r.int32(); break;
+            case s::SymbolInstance::LastFrame: instance->lastFrame = std::min(r.int32(), fla::kMaxFrames); break;
             default: r.keep(instance->phxUnknown); break;
             }
         }
@@ -783,6 +797,22 @@ bool isKindField(uint32_t field)
 
 fla::Element* readElement(const Reader& field, fla::DOMElement* parent, Context& context)
 {
+    if (context.depth >= kMaxDepth)
+    {
+        context.damaged = true;
+        return nullptr;
+    }
+    struct Level
+    {
+        int& depth;
+        explicit Level(int& d)
+            : depth(d)
+        {
+            ++depth;
+        }
+        ~Level() { --depth; }
+    } level(context.depth);
+
     // The kind makes the object, so it is found first.
     // As in protobuf, the last kind field is the one that counts.
     fla::Element* element = nullptr;
@@ -908,8 +938,8 @@ fla::Frame* readFrame(const Reader& field, fla::Layer* layer, Context& context)
     {
         switch (r.field())
         {
-        case s::Frame::Index: frame->index = r.int32(); break;
-        case s::Frame::Duration: frame->duration = r.int32(); break;
+        case s::Frame::Index: frame->index = fla::clampFrameIndex(r.int32()); break;
+        case s::Frame::Duration: frame->duration = fla::clampFrameDuration(r.int32()); break;
         case s::Frame::KeyMode: frame->keyMode = r.string(); break;
         case s::Frame::Name: frame->name = r.string(); break;
         case s::Frame::LabelType: frame->labelType = r.string(); break;
@@ -1019,6 +1049,14 @@ fla::Timeline* readTimeline(const Reader& field, fla::DOMElement* parent, Contex
         }
     }
     finish(r, context);
+    // Each layer's folder, mask or guide, as the FLA reader links them: only
+    // to a layer above, so a damaged index cannot make a circle.
+    for (size_t i = 0; i < timeline->layers.size(); ++i)
+    {
+        fla::Layer* layer = timeline->layers[i];
+        if (layer->parentLayerIndex >= 0 && static_cast<size_t>(layer->parentLayerIndex) < i)
+            layer->parentLayer = timeline->layers[static_cast<size_t>(layer->parentLayerIndex)];
+    }
     return timeline;
 }
 
@@ -1074,7 +1112,7 @@ bool readMediaHeader(const uint8_t* p, size_t size, uint32_t& id, uint64_t& hash
         if (!(byte & 0x80))
             break;
     }
-    if (at + headerSize > size)
+    if (headerSize > size - at)
         return false;
     Reader header(p + at, static_cast<size_t>(headerSize));
     while (header.next())
@@ -1123,10 +1161,10 @@ bool loadMedia(const fla::ByteLocation& location, std::vector<uint8_t>& out)
     std::vector<uint8_t> content;
     if ((location.flags & kCompressionMask) == kDeflate)
     {
+        if (!plausibleLength(location.storedLength, location.length))
+            return false;
         content.resize(static_cast<size_t>(location.length));
-        uLongf length = static_cast<uLongf>(location.length);
-        if (uncompress(content.data(), &length, stored.data(), static_cast<uLong>(stored.size())) != Z_OK ||
-            length != location.length)
+        if (!inflateAll(stored.data(), stored.size(), content.data(), content.size()))
             return false;
     }
     else
@@ -1191,7 +1229,7 @@ public:
             location->crc = chunk.crc;
             location->type = chunk.type;
             location->mediaId = id;
-            location->size = chunk.length - prefix;
+            location->size = chunk.length > prefix ? chunk.length - prefix : 0;
             location->hash = hash;
             _items[id] = location;
         }

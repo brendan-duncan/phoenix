@@ -46,13 +46,15 @@ Point forwardStartTangent(const Path* path)
     bool started = false;
     for (const PathSegment* segment : path->segments)
     {
+        if (segment->points.empty())
+            continue;
         if (segment->command == PathSegment::Command::Move)
         {
             at = segment->points[0];
             started = true;
             continue;
         }
-        if (!started || segment->points.empty())
+        if (!started)
             continue;
         for (const Point& point : segment->points)
         {
@@ -73,13 +75,15 @@ Point forwardEndTangent(const Path* path)
     Point tangent(0.0, 0.0);
     for (const PathSegment* segment : path->segments)
     {
+        if (segment->points.empty())
+            continue;
         if (segment->command == PathSegment::Command::Move)
         {
             at = segment->points[0];
             started = true;
             continue;
         }
-        if (!started || segment->points.empty())
+        if (!started)
             continue;
         // From the last point before the end, back to the segment's start
         // when the controls sit on the end.

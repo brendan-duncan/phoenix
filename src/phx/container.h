@@ -139,6 +139,9 @@ public:
     bool recovered() const { return _recovered; }
 
 private:
+    /// Whether a chunk header at \a offset and \a storedLength bytes after it
+    /// lie within the file.
+    bool fits(uint64_t offset, uint64_t storedLength) const;
     bool readIndex(uint64_t offset);
     void walkChunks();
     bool openBytes(std::string& error);
@@ -158,6 +161,14 @@ private:
 /// CRC-32 (zlib's), and FNV-1a 64 for media content hashes.
 uint32_t crc32(const void* data, size_t size);
 uint64_t fnv1a64(const void* data, size_t size);
+
+/// Whether a chunk of \a storedLength deflated bytes could hold \a length
+/// bytes: a damaged or hostile size is not given the memory it asks for.
+bool plausibleLength(uint64_t storedLength, uint64_t length);
+
+/// Inflates \a in into exactly \a outSize bytes; false when the stream is
+/// damaged or its size differs. Sizes past 4 GB are fine.
+bool inflateAll(const uint8_t* in, size_t inSize, uint8_t* out, size_t outSize);
 
 /// Whether a file starts with the .phx magic.
 bool isPhx(const std::string& path);

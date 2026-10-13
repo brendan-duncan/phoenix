@@ -139,6 +139,13 @@ void prepareForWarp(Shape& shape, double pieceLength)
             {
                 if (!segment)
                     continue;
+                // A segment short of its command's points is dropped.
+                static const size_t needed[] = {1, 1, 2, 3, 0};
+                if (segment->points.size() < needed[static_cast<int>(segment->command)])
+                {
+                    delete segment;
+                    continue;
+                }
                 switch (segment->command)
                 {
                 case PathSegment::Command::Move:

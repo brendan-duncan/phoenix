@@ -30,6 +30,8 @@ const uint8_t kTrailerMark[4] = {'P', 'H', 'X', '!'};
 constexpr size_t kHeaderSize = 32;
 constexpr size_t kChunkHeaderSize = 32;
 constexpr size_t kTrailerSize = 16;
+// zlib's one-call compress counts in 32 bits; bigger chunks are stored.
+constexpr size_t kMaxDeflate = 0x7FFFFFFF;
 
 void put16(uint8_t* p, uint16_t v)
 {
@@ -133,6 +135,41 @@ uint32_t crc32(const void* data, size_t size)
     return static_cast<uint32_t>(crc);
 }
 
+bool plausibleLength(uint64_t storedLength, uint64_t length)
+{
+    // Deflate shrinks by at most about 1032 to 1; storedLength is already
+    // known to fit in the file.
+    return length <= storedLength * 1032 + 1024 && length <= SIZE_MAX;
+}
+
+bool inflateAll(const uint8_t* in, size_t inSize, uint8_t* out, size_t outSize)
+{
+    // In pieces, as zlib counts in 32 bits.
+    z_stream stream{};
+    if (inflateInit(&stream) != Z_OK)
+        return false;
+    stream.next_in = const_cast<Bytef*>(in);
+    stream.next_out = out;
+    int status = Z_OK;
+    while (status == Z_OK)
+    {
+        if (stream.avail_in == 0 && inSize > 0)
+        {
+            stream.avail_in = static_cast<uInt>(std::min<size_t>(inSize, 1u << 30));
+            inSize -= stream.avail_in;
+        }
+        if (stream.avail_out == 0 && outSize > 0)
+        {
+            stream.avail_out = static_cast<uInt>(std::min<size_t>(outSize, 1u << 30));
+            outSize -= stream.avail_out;
+        }
+        status = inflate(&stream, Z_NO_FLUSH);
+    }
+    const bool whole = status == Z_STREAM_END && stream.avail_out == 0 && outSize == 0;
+    inflateEnd(&stream);
+    return whole;
+}
+
 uint64_t fnv1a64(const void* data, size_t size)
 {
     uint64_t hash = 0xcbf29ce484222325ULL;
@@ -215,7 +252,7 @@ PreparedChunk prepare(uint32_t type, std::string content, bool compress, bool cr
     info.length = content.size();
     info.mediaId = mediaId;
     info.symbolName = symbolName;
-    if (compress && content.size() > 64)
+    if (compress && content.size() > 64 && content.size() <= kMaxDeflate)
     {
         // A light level: most of the gain at a fraction of the time.
         uLongf bound = compressBound(static_cast<uLong>(content.size()));
@@ -259,7 +296,7 @@ uint32_t ContainerWriter::add(uint32_t type, const void* content, size_t size, b
     std::vector<uint8_t> deflated;
     const void* stored = content;
     info.storedLength = size;
-    if (compress && size > 64)
+    if (compress && size > 64 && size <= kMaxDeflate)
     {
         // A light level: most of the gain at a fraction of the time.
         uLongf bound = compressBound(static_cast<uLong>(size));
@@ -497,15 +534,21 @@ bool ContainerReader::openBytes(std::string& error)
     return true;
 }
 
+bool ContainerReader::fits(uint64_t offset, uint64_t storedLength) const
+{
+    // Written so that no sum can wrap.
+    return offset <= _size && _size - offset >= kChunkHeaderSize && storedLength <= _size - offset - kChunkHeaderSize;
+}
+
 bool ContainerReader::readIndex(uint64_t offset)
 {
-    if (offset + kChunkHeaderSize > _size)
+    if (!fits(offset, 0))
         return false;
     const uint8_t* header = _bytes + offset;
     if (Reader::load32(header) != kIndex)
         return false;
     const uint64_t stored = Reader::load64(header + 8);
-    if (offset + kChunkHeaderSize + stored > _size)
+    if (!fits(offset, stored))
         return false;
     const uint8_t* body = header + kChunkHeaderSize;
     if (crc32(body, static_cast<size_t>(stored)) != Reader::load32(header + 24))
@@ -515,7 +558,7 @@ bool ContainerReader::readIndex(uint64_t offset)
         return false;
     for (const ChunkInfo& chunk : chunks)
     {
-        if (chunk.offset + kChunkHeaderSize + chunk.storedLength > _size)
+        if (!fits(chunk.offset, chunk.storedLength))
             return false;
     }
     _chunks = std::move(chunks);
@@ -525,7 +568,7 @@ bool ContainerReader::readIndex(uint64_t offset)
 void ContainerReader::walkChunks()
 {
     uint64_t offset = kHeaderSize;
-    while (offset + kChunkHeaderSize <= _size)
+    while (fits(offset, 0))
     {
         const uint8_t* header = _bytes + offset;
         ChunkInfo chunk;
@@ -536,7 +579,7 @@ void ContainerReader::walkChunks()
         chunk.crc = Reader::load32(header + 24);
         chunk.id = Reader::load32(header + 28);
         chunk.offset = offset;
-        if (offset + kChunkHeaderSize + chunk.storedLength > _size)
+        if (!fits(offset, chunk.storedLength))
             break;
         if (chunk.type != kIndex)
         {
@@ -574,9 +617,13 @@ bool ContainerReader::content(const ChunkInfo& chunk, std::vector<uint8_t>& out,
             " uses a compression this Phoenix does not know.";
         return false;
     }
+    if (!plausibleLength(chunk.storedLength, chunk.length))
+    {
+        error = "The " + typeName(chunk.type) + " part " + std::to_string(chunk.id) + " is damaged (size).";
+        return false;
+    }
     out.resize(static_cast<size_t>(chunk.length));
-    uLongf length = static_cast<uLongf>(chunk.length);
-    if (uncompress(out.data(), &length, bytes, static_cast<uLong>(size)) != Z_OK || length != chunk.length)
+    if (!inflateAll(bytes, size, out.data(), out.size()))
     {
         error = "The " + typeName(chunk.type) + " part " + std::to_string(chunk.id) + " is damaged (inflate).";
         return false;
@@ -600,10 +647,13 @@ bool ContainerReader::content(const ChunkInfo& chunk, std::string& out, std::str
         return true;
     case kDeflate:
     {
+        if (!plausibleLength(chunk.storedLength, chunk.length))
+        {
+            error = "The " + typeName(chunk.type) + " part " + std::to_string(chunk.id) + " is damaged (size).";
+            return false;
+        }
         out.resize(static_cast<size_t>(chunk.length));
-        uLongf length = static_cast<uLongf>(chunk.length);
-        if (uncompress(reinterpret_cast<Bytef*>(out.data()), &length, bytes, static_cast<uLong>(size)) != Z_OK ||
-            length != chunk.length)
+        if (!inflateAll(bytes, size, reinterpret_cast<uint8_t*>(out.data()), out.size()))
         {
             error = "The " + typeName(chunk.type) + " part " + std::to_string(chunk.id) + " is damaged (inflate).";
             return false;
