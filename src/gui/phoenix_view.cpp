@@ -2800,7 +2800,11 @@ int PhoenixView::symbolFrame(const fla::SymbolInstance& instance) const
     const int length = symbolLength(instance.symbol);
     if (instance.symbolType != fla::SymbolType::Graphic)
     {
-        if (!_exporting || instance.symbolType != fla::SymbolType::MovieClip)
+        // A movie clip plays its own timeline in an export and on the stage
+        // while the document plays; stopped, the stage shows its first frame
+        // to edit.
+        const bool playing = _exporting || (_player && _player->isPlaying());
+        if (!playing || instance.symbolType != fla::SymbolType::MovieClip)
             return 0;
         if (_frameActions && instance.symbol && !instance.symbol->timelines.empty() && instance.symbol->timelines.front())
         {
