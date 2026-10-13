@@ -24,12 +24,14 @@
 <table>
   <thead><tr><th>Platform</th><th>Supported</th><th>Download</th></tr></thead>
   <tbody>
-    <tr><td>Windows 10 and 11 (64-bit)</td><td>Yes</td><td><code>Phoenix-win-x64-Setup.exe</code>, or <code>Phoenix-win-x64-Portable.zip</code></td></tr>
-    <tr><td>macOS on Apple silicon</td><td>Yes</td><td><code>Phoenix-osx-arm64-Setup.pkg</code>, or <code>Phoenix-osx-arm64-Portable.zip</code></td></tr>
+    <tr><td>Windows 10 and 11 (64-bit)</td><td>Yes</td><td><a href="https://github.com/brendan-duncan/phoenix/releases/latest/download/Phoenix-win-x64-Setup.exe"><code>Phoenix-win-x64-Setup.exe</code></a>, or <a href="https://github.com/brendan-duncan/phoenix/releases/latest/download/Phoenix-win-x64-Portable.zip"><code>Phoenix-win-x64-Portable.zip</code></a></td></tr>
+    <tr><td>macOS on Apple silicon</td><td>Yes</td><td><a href="https://github.com/brendan-duncan/phoenix/releases/latest/download/Phoenix-osx-arm64-Setup.pkg"><code>Phoenix-osx-arm64-Setup.pkg</code></a>, or <a href="https://github.com/brendan-duncan/phoenix/releases/latest/download/Phoenix-osx-arm64-Portable.zip"><code>Phoenix-osx-arm64-Portable.zip</code></a></td></tr>
     <tr><td>macOS on Intel</td><td><span class="badge">Planned</span></td><td>&mdash;</td></tr>
     <tr><td>Linux</td><td><span class="badge">Planned</span></td><td>&mdash;</td></tr>
   </tbody>
 </table>
+
+<p>The links above always download the latest version. Earlier versions, pre-releases and the release notes for each version are on the <a href="https://github.com/brendan-duncan/phoenix/releases">releases page</a> on GitHub.</p>
 
 <p>Nothing else needs installing. Phoenix ships with its own copy of ffmpeg, which it uses to export MP4 and ProRes video and to import video, so those work straight away.</p>
 
@@ -38,7 +40,7 @@
 <h2>Install on Windows</h2>
 
 <ol class="steps">
-  <li>Open the <a href="https://github.com/brendan-duncan/phoenix/releases/latest">latest release</a> on GitHub and download <code>Phoenix-win-x64-Setup.exe</code>.</li>
+  <li>Download <a href="https://github.com/brendan-duncan/phoenix/releases/latest/download/Phoenix-win-x64-Setup.exe"><code>Phoenix-win-x64-Setup.exe</code></a>, the installer from the <a href="https://github.com/brendan-duncan/phoenix/releases/latest">latest release</a>.</li>
   <li>Run the installer. Phoenix installs into your user account, so it does not ask for administrator rights, and it starts when the installer finishes.</li>
   <li>Phoenix adds itself to the Start menu. It also registers the <code>.phx</code> file type and adds itself to the <strong>Open with</strong> list for <code>.fla</code> files, without changing which app opens them by default.</li>
 </ol>
@@ -48,12 +50,12 @@
   <p>The Windows installer is not code-signed yet, so SmartScreen may warn that the publisher is unknown. Choose <strong>More info</strong>, then <strong>Run anyway</strong>. Signing is <span class="badge">Planned</span>.</p>
 </div>
 
-<p>To use Phoenix without installing it, download <code>Phoenix-win-x64-Portable.zip</code> instead, unpack it anywhere, and run <code>Phoenix.exe</code>. Keep the unpacked files together: <code>ffmpeg.exe</code> next to <code>Phoenix.exe</code> is what exports video. A portable copy does not update itself.</p>
+<p>To use Phoenix without installing it, download <a href="https://github.com/brendan-duncan/phoenix/releases/latest/download/Phoenix-win-x64-Portable.zip"><code>Phoenix-win-x64-Portable.zip</code></a> instead, unpack it anywhere, and run <code>Phoenix.exe</code>. Keep the unpacked files together: <code>ffmpeg.exe</code> next to <code>Phoenix.exe</code> is what exports video. A portable copy does not update itself.</p>
 
 <h2>Install on macOS</h2>
 
 <ol class="steps">
-  <li>Download <code>Phoenix-osx-arm64-Setup.pkg</code> from the <a href="https://github.com/brendan-duncan/phoenix/releases/latest">latest release</a>.</li>
+  <li>Download <a href="https://github.com/brendan-duncan/phoenix/releases/latest/download/Phoenix-osx-arm64-Setup.pkg"><code>Phoenix-osx-arm64-Setup.pkg</code></a>, the installer from the <a href="https://github.com/brendan-duncan/phoenix/releases/latest">latest release</a>.</li>
   <li>Open the package and follow the installer. It puts <strong>Phoenix.app</strong> in your Applications folder. The package is signed and notarized by Apple, so Gatekeeper opens it without a warning.</li>
   <li>Start Phoenix from Launchpad or Applications. You can also drag a <code>.fla</code> or <code>.phx</code> file onto the Dock icon to open it.</li>
 </ol>
@@ -65,7 +67,7 @@
 <ul>
   <li>When an update is found, Phoenix downloads it in the background and shows the progress in the status bar. Usually only the changed parts are downloaded, so updates are small.</li>
   <li>When the download finishes, Phoenix offers <strong>Restart Now</strong> or <strong>Later</strong>. If you choose Later, the update installs when you quit.</li>
-  <li>Pre-release builds are not offered as updates. To try one, download it from the releases page.</li>
+  <li>Pre-release builds are not offered as updates. To try one, download it from the <a href="https://github.com/brendan-duncan/phoenix/releases">releases page</a>.</li>
 </ul>
 
 <div class="callout">

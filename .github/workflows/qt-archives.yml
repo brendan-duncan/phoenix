@@ -161,7 +161,7 @@ jobs:
         run: |
           tag="qt-${{ inputs.qt_version }}"
           gh release view "$tag" >/dev/null 2>&1 || \
-            gh release create "$tag" --title "Qt ${{ inputs.qt_version }} for Phoenix" \
+            gh release create "$tag" --latest=false --title "Qt ${{ inputs.qt_version }} for Phoenix" \
               --notes "Trimmed Qt ${{ inputs.qt_version }} archives, made by tools/qt/make_qt_archive.py. The build downloads these when it finds no Qt."
           gh release upload "$tag" --clobber dist/qt-*.zip dist/qt-*.tar.gz dist/*.sha256
 

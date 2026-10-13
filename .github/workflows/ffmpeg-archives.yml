@@ -130,7 +130,7 @@ jobs:
           version="${{ needs.sources.outputs.version }}"
           tag="ffmpeg-$version"
           gh release view "$tag" >/dev/null 2>&1 || \
-            gh release create "$tag" --title "ffmpeg $version for Phoenix" \
+            gh release create "$tag" --latest=false --title "ffmpeg $version for Phoenix" \
               --notes "The ffmpeg program Phoenix ships beside itself, for each platform, built by tools/ffmpeg/build_ffmpeg.sh: FFmpeg $version with x264, under the GPL version 2 or later. The source tarballs here are the exact sources the programs were built from. The build downloads these archives; see cmake/PhoenixFfmpeg.cmake."
           gh release upload "$tag" --clobber dist/*
 
