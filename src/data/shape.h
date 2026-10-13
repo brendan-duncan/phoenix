@@ -57,6 +57,11 @@ public:
 
     ~Shape() override;
 
+    // It owns what its pointers point at, so a copy would delete them twice.
+    // Copies are made with the clone functions instead.
+    Shape(const Shape&) = delete;
+    Shape& operator=(const Shape&) = delete;
+
     Element::Type elementType() const override { return Element::Type::Shape; }
 
     const FillStyle* getFillStyleByIndex(int index) const

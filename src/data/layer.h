@@ -53,6 +53,11 @@ public:
 
     ~Layer() override;
 
+    // It owns what its pointers point at, so a copy would delete them twice.
+    // Copies are made with the clone functions instead.
+    Layer(const Layer&) = delete;
+    Layer& operator=(const Layer&) = delete;
+
     std::string domTypeName() const override { return "Layer"; }
 
     DOMType domType() const override { return DOMType::Layer; }

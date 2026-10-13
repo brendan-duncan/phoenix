@@ -47,6 +47,11 @@ struct Path : public DOMElement
 
     ~Path() override;
 
+    // It owns what its pointers point at, so a copy would delete them twice.
+    // Copies are made with the clone functions instead.
+    Path(const Path&) = delete;
+    Path& operator=(const Path&) = delete;
+
     std::string domTypeName() const override { return "Path"; }
 
     DOMType domType() const override { return DOMType::Path; }
@@ -68,6 +73,11 @@ public:
     {}
 
     ~Edge() override;
+
+    // It owns what its pointers point at, so a copy would delete them twice.
+    // Copies are made with the clone functions instead.
+    Edge(const Edge&) = delete;
+    Edge& operator=(const Edge&) = delete;
 
     std::string domTypeName() const override { return "Edge"; }
 

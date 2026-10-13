@@ -78,6 +78,11 @@ public:
 
     ~Frame() override;
 
+    // It owns what its pointers point at, so a copy would delete them twice.
+    // Copies are made with the clone functions instead.
+    Frame(const Frame&) = delete;
+    Frame& operator=(const Frame&) = delete;
+
     std::string domTypeName() const override { return "Frame"; }
 
     DOMType domType() const override { return DOMType::Frame; }
