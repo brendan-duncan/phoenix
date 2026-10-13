@@ -234,25 +234,49 @@ QString LibraryTree::folderAt(const QPoint& position) const
     return slash < 0 ? QString() : name.left(slash);
 }
 
+namespace {
+
+/// Whether \a source, a drop's, is a library list: this one, moving an item
+/// into a folder, or another (another window's, an external library),
+/// whose item is copied in. Folders do not come from another library.
+bool takesDrop(const QObject* source, const QObject* self, const QMimeData* data)
+{
+    if (!data->hasFormat(LibraryTree::mimeType()))
+        return false;
+    if (source == self)
+        return true;
+    return qobject_cast<const LibraryTree*>(source) && !QString::fromUtf8(data->data(LibraryTree::mimeType())).startsWith("folder:");
+}
+
+} // namespace
+
 void LibraryTree::dragEnterEvent(QDragEnterEvent* event)
 {
-    if (event->source() == this && event->mimeData()->hasFormat(mimeType()))
-        event->acceptProposedAction();
+    if (takesDrop(event->source(), this, event->mimeData()))
+    {
+        if (event->source() != this)
+            event->setDropAction(Qt::CopyAction);
+        event->accept();
+    }
     else
         event->ignore();
 }
 
 void LibraryTree::dragMoveEvent(QDragMoveEvent* event)
 {
-    if (event->source() == this && event->mimeData()->hasFormat(mimeType()))
-        event->acceptProposedAction();
+    if (takesDrop(event->source(), this, event->mimeData()))
+    {
+        if (event->source() != this)
+            event->setDropAction(Qt::CopyAction);
+        event->accept();
+    }
     else
         event->ignore();
 }
 
 void LibraryTree::dropEvent(QDropEvent* event)
 {
-    if (event->source() != this || !event->mimeData()->hasFormat(mimeType()))
+    if (!takesDrop(event->source(), this, event->mimeData()))
     {
         event->ignore();
         return;
@@ -262,6 +286,14 @@ void LibraryTree::dropEvent(QDropEvent* event)
     if (colon < 0)
         return;
     const QString name = text.mid(colon + 1);
+    if (event->source() != this)
+    {
+        event->setDropAction(Qt::CopyAction);
+        event->accept();
+        // After the drag has finished: the copy may ask about clashes.
+        QTimer::singleShot(0, this, [this, name]() { emit foreignItemDropped(name); });
+        return;
+    }
     const QString folder = folderAt(event->position().toPoint());
     event->acceptProposedAction();
     // After the drag has finished: the move rebuilds the list.
@@ -418,11 +450,16 @@ LibraryPanel::LibraryPanel(QWidget* parent)
     connect(_tree, &LibraryTree::dragStarting, this, [this](const QString& kind, const QString& name) {
         if (_external)
             emit externalDragStarted(kind, name);
+        else
+            emit itemDragStarted(kind, name);
     });
     connect(_tree, &LibraryTree::dragEnded, this, [this]() {
         if (_external)
             emit externalDragEnded();
+        else
+            emit itemDragEnded();
     });
+    connect(_tree, &LibraryTree::foreignItemDropped, this, &LibraryPanel::foreignItemDropped);
     // The icons are drawn in the theme's colors.
     connect(theme::notifier(), &theme::Notifier::changed, this, &LibraryPanel::refresh);
 

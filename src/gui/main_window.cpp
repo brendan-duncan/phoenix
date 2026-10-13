@@ -36,6 +36,7 @@
 #include "../edit/trace_bitmap.h"
 #include "movie_explorer.h"
 #include "../edit/library_transfer.h"
+#include "../edit/document_session.h"
 #include "preferences.h"
 #include "../edit/ik_pose.h"
 #include "find_replace_dialog.h"
@@ -199,6 +200,9 @@
 #include <QStandardPaths>
 #include <QTimer>
 #include <QSignalBlocker>
+#include <QCursor>
+#include <QDrag>
+#include <QMouseEvent>
 
 #include "tool_icons.h"
 
@@ -212,7 +216,122 @@ fla::Frame* frameOfElement(const fla::Element* element);
 
 namespace {
 bool s_skipStartScreen = false;
+/// The next window made is one opened to take a tab (openSecondaryWindow).
+bool s_openingSecondary = false;
+/// Every window people work in, in the order they opened.
+QList<MainWindow*> s_windows;
+/// What a tab dragged between windows carries: its index in its window.
+constexpr const char* kTabMime = "application/x-phoenix-document-tab";
 }
+
+bool MainWindow::s_quitting = false;
+const fla::Document* MainWindow::_libraryClipboardSource = nullptr;
+QStringList MainWindow::_libraryClipboard;
+const fla::Document* MainWindow::_externalDragSource = nullptr;
+QString MainWindow::_externalDragName;
+// Never freed: they outlive every window, and the elements in them are let
+// go with the process rather than after the libraries they use.
+std::vector<std::unique_ptr<fla::Element>>& MainWindow::_clipboard =
+    *new std::vector<std::unique_ptr<fla::Element>>();
+const fla::Document* MainWindow::_clipboardFrom = nullptr;
+std::vector<std::vector<std::unique_ptr<fla::Frame>>>& MainWindow::_frameClipboard =
+    *new std::vector<std::vector<std::unique_ptr<fla::Frame>>>();
+const fla::Document* MainWindow::_frameClipboardFrom = nullptr;
+
+/// The document tabs over the stage. A tab dragged well off the bar comes
+/// away: dropped on another window's tabs it moves there, anywhere else it
+/// opens in a window of its own. The bar takes tabs dropped from another
+/// window's.
+class DocumentTabBar : public QTabBar
+{
+public:
+    explicit DocumentTabBar(MainWindow* window)
+        : QTabBar(window)
+        , _window(window)
+    {
+        setAcceptDrops(true);
+    }
+
+protected:
+    void mousePressEvent(QMouseEvent* event) override
+    {
+        _pressed = event->button() == Qt::LeftButton && tabAt(event->position().toPoint()) >= 0;
+        QTabBar::mousePressEvent(event);
+    }
+
+    void mouseMoveEvent(QMouseEvent* event) override
+    {
+        if (_pressed && (event->buttons() & Qt::LeftButton))
+        {
+            const QPoint at = event->position().toPoint();
+            const int margin = std::max(30, height());
+            if (at.y() < -margin || at.y() > height() + margin)
+            {
+                _pressed = false;
+                // The bar's own drag of the tab ends where it is first.
+                QMouseEvent release(QEvent::MouseButtonRelease, event->position(), event->globalPosition(),
+                    Qt::LeftButton, Qt::NoButton, event->modifiers());
+                QTabBar::mouseReleaseEvent(&release);
+                const int index = currentIndex();
+                QTimer::singleShot(0, _window, [window = _window, index]() { window->tabDraggedOut(index); });
+                return;
+            }
+        }
+        QTabBar::mouseMoveEvent(event);
+    }
+
+    void mouseReleaseEvent(QMouseEvent* event) override
+    {
+        _pressed = false;
+        QTabBar::mouseReleaseEvent(event);
+    }
+
+    void dragEnterEvent(QDragEnterEvent* event) override
+    {
+        if (event->mimeData()->hasFormat(kTabMime))
+            event->acceptProposedAction();
+        else
+            QTabBar::dragEnterEvent(event);
+    }
+
+    void dragMoveEvent(QDragMoveEvent* event) override
+    {
+        if (event->mimeData()->hasFormat(kTabMime))
+            event->acceptProposedAction();
+        else
+            QTabBar::dragMoveEvent(event);
+    }
+
+    void dropEvent(QDropEvent* event) override
+    {
+        if (!event->mimeData()->hasFormat(kTabMime))
+        {
+            QTabBar::dropEvent(event);
+            return;
+        }
+        event->acceptProposedAction();
+        // Back onto its own bar: it stays.
+        if (event->source() == this)
+            return;
+        MainWindow* source = nullptr;
+        for (MainWindow* window : MainWindow::windows())
+            if (window->_tabBar == event->source())
+                source = window;
+        const int index = event->mimeData()->data(kTabMime).toInt();
+        int at = tabAt(event->position().toPoint());
+        if (at < 0)
+            at = count();
+        // Once the drag is over in the window it came from.
+        QTimer::singleShot(0, _window, [source, target = _window, index, at]() {
+            if (source && MainWindow::windows().contains(source))
+                source->moveTabToWindow(index, target, at);
+        });
+    }
+
+private:
+    MainWindow* _window;
+    bool _pressed = false;
+};
 
 MainWindow::MainWindow(const QString& initialFile, QWidget* parent, bool startup)
     : QMainWindow(parent)
@@ -225,6 +344,10 @@ MainWindow::MainWindow(const QString& initialFile, QWidget* parent, bool startup
     , _recentFilesMenu(nullptr)
 {
     _interactive = startup;
+    _secondary = startup && s_openingSecondary;
+    s_openingSecondary = false;
+    if (startup)
+        s_windows.push_back(this);
     setWindowTitle(QString("Phoenix %1").arg(QCoreApplication::applicationVersion()));
 
     app_identity::apply();
@@ -425,23 +548,32 @@ MainWindow::MainWindow(const QString& initialFile, QWidget* parent, bool startup
     // about a file that cannot be opened has a window to sit on rather than
     // appearing before there is one.
     // A lesson asked for on the command line opens a document of its own.
+    // A window opened to take a tab starts empty.
+    const bool first = startup && !_secondary;
     const bool lesson = s_skipStartScreen;
     s_skipStartScreen = false;
-    const bool startScreen = initialFile.isEmpty() && !lesson && QSettings().value("showStartDialog", true).toBool();
+    // The documents open last time come back, when that is wanted.
+    const bool reopen = first && initialFile.isEmpty() && !lesson &&
+        QSettings().value("reopenDocuments", true).toBool() &&
+        !QSettings().value("session/documents").toStringList().isEmpty();
+    const bool startScreen = initialFile.isEmpty() && !lesson && !reopen &&
+        QSettings().value("showStartDialog", true).toBool();
     const QString startFile = !initialFile.isEmpty() ? initialFile
-        : (_recentFiles.isEmpty() || startScreen || lesson ? QString() : _recentFiles.first());
+        : (_recentFiles.isEmpty() || startScreen || lesson || reopen ? QString() : _recentFiles.first());
     // Work a crash left behind comes first, unless a file was asked for.
-    if (startup && !startFile.isEmpty())
+    if (first && !startFile.isEmpty())
     {
         QTimer::singleShot(0, this, [this, startFile, initialFile]() {
             if (!initialFile.isEmpty() || !offerRecovery())
                 loadFLAFile(startFile);
         });
     }
-    else if (startup)
+    else if (first)
     {
         QTimer::singleShot(0, this, [this, startScreen]() {
-            if (!offerRecovery() && startScreen)
+            const bool recovered = offerRecovery();
+            const bool reopened = reopenSession();
+            if (!recovered && !reopened && startScreen)
                 showStartDialog();
         });
     }
@@ -464,20 +596,11 @@ MainWindow::MainWindow(const QString& initialFile, QWidget* parent, bool startup
                 _onion.afterColor);
     }
 
-    // A copy of unsaved work every few minutes, for after a crash.
-    if (startup)
-    {
-        AutoSave::Links links;
-        links.document = [this]() { return _flaDocument ? _flaDocument->document : nullptr; };
-        links.modified = [this]() { return _editContext.isModified(); };
-        links.path = [this]() { return _documentPath; };
-        links.name = [this]() { return _documentName; };
-        links.busy = []() { return QApplication::mouseButtons() != Qt::NoButton; };
-        _autoSave = new AutoSave(links, this);
-    }
+    // A copy of unsaved work every few minutes, for after a crash, is
+    // written for each document (giveAutoSave).
 
     // AI assistants attach through MCP when Preferences allows it.
-    if (startup)
+    if (first)
     {
         _mcpServer = new McpServer(this);
         _mcpServer->applySettings();
@@ -487,8 +610,47 @@ MainWindow::MainWindow(const QString& initialFile, QWidget* parent, bool startup
     connect(_updater, &Updater::statusMessage, this, [this](const QString& message) {
         statusBar()->showMessage(message, message.isEmpty() ? 0 : 8000);
     });
-    if (startup)
+    if (first)
         QTimer::singleShot(3000, this, [this]() { _updater->checkForUpdates(false); });
+}
+
+MainWindow::~MainWindow()
+{
+    s_windows.removeAll(this);
+    if (!_secondary)
+        return;
+    // A window opened for tabs lets its documents go as it goes; the first
+    // window's go with the process. Each history first: it points into its
+    // document.
+    _switchingTabs = true;
+    releaseDocument();
+    for (const std::unique_ptr<DocumentTab>& tab : _tabs)
+    {
+        tab->history.clear();
+        delete tab->document;
+        tab->document = nullptr;
+    }
+}
+
+QList<MainWindow*> MainWindow::windows()
+{
+    return s_windows;
+}
+
+bool MainWindow::documentOpenAnywhere(const fla::Document* document)
+{
+    for (const MainWindow* window : s_windows)
+        if (window->documentAlive(document))
+            return true;
+    return false;
+}
+
+MainWindow* MainWindow::openSecondaryWindow()
+{
+    s_openingSecondary = true;
+    MainWindow* window = new MainWindow();
+    window->setAttribute(Qt::WA_DeleteOnClose);
+    return window;
 }
 
 namespace {
@@ -565,9 +727,9 @@ void MainWindow::releaseDocument()
     // Nothing a tool is in the middle of may outlive the document.
     if (_flaDocument)
         settleGestures();
-    // The document is going; so is the copy kept of it for recovery.
-    if (_autoSave)
-        _autoSave->discard();
+    // Playback stops with the document it was playing.
+    if (_player && _player->isPlaying())
+        _player->setPlaying(false);
     // A drawing still waiting to merge points into the document too, and must
     // not outlive it. It is dropped rather than committed: the document is on
     // its way out either way.
@@ -606,34 +768,69 @@ void MainWindow::releaseDocument()
 
     if (_flaDocument)
     {
-        // Copied layers point at this document's symbols, and only paste
-        // back into it: they go with it, before another document can take
-        // its address.
-        if (_flaDocument->document && _flaDocument->document == _copiedLayersFrom)
-        {
-            _copiedLayers.clear();
-            _copiedLayersFrom = nullptr;
-        }
-        // Bitmaps out in an editor for this document have nowhere to go.
-        for (auto it = _editedBitmapFiles.begin(); it != _editedBitmapFiles.end();)
-        {
-            if (it->second.document == _flaDocument->document)
-            {
-                if (_editedBitmaps)
-                    _editedBitmaps->removePath(it->second.file);
-                it = _editedBitmapFiles.erase(it);
-            }
-            else
-                ++it;
-        }
+        // The document is going; so is the copy kept of it for recovery.
+        if (AutoSave* autoSave = activeAutoSave())
+            autoSave->discard();
+        forgetDocument(_flaDocument);
         delete _flaDocument;
         _flaDocument = nullptr;
     }
-    // Their results pointed into the document that went.
+    // Every panel lets go of what it showed of the document, whether it is
+    // in view or not: one closed now is not refreshed until it opens.
     if (_movieExplorer)
         _movieExplorer->refresh();
     if (_findReplace)
         _findReplace->refresh();
+    if (_motionEditor)
+        _motionEditor->refresh();
+    if (_functionCurves)
+        _functionCurves->refresh();
+    if (_notes)
+        _notes->refresh();
+    if (_scenes)
+        _scenes->refresh();
+    if (_controllers)
+        _controllers->refresh();
+    if (_palettes)
+        _palettes->refresh();
+    if (_xsheet)
+        _xsheet->refresh();
+    if (_layerDepth)
+        _layerDepth->refresh();
+    if (_propertiesPanel)
+        _propertiesPanel->refresh();
+    if (_transformPanel)
+        _transformPanel->refresh();
+    if (_infoPanel)
+        _infoPanel->refresh();
+    _shownScene = nullptr;
+}
+
+void MainWindow::forgetDocument(const fla::FLADocument* document)
+{
+    if (!document)
+        return;
+    _featuresAcknowledged.remove(document);
+    // Copied layers point at this document's symbols, and only paste back
+    // into it: they go with it, before another document can take its
+    // address.
+    if (document->document && document->document == _copiedLayersFrom)
+    {
+        _copiedLayers.clear();
+        _copiedLayersFrom = nullptr;
+    }
+    // Bitmaps out in an editor for this document have nowhere to go.
+    for (auto it = _editedBitmapFiles.begin(); it != _editedBitmapFiles.end();)
+    {
+        if (it->second.document == document->document)
+        {
+            if (_editedBitmaps)
+                _editedBitmaps->removePath(it->second.file);
+            it = _editedBitmapFiles.erase(it);
+        }
+        else
+            ++it;
+    }
 }
 
 void MainWindow::adoptDocument(fla::FLADocument* document, const QString& filePath,
@@ -682,6 +879,9 @@ void MainWindow::adoptDocument(fla::FLADocument* document, const QString& filePa
 
     if (_findReplace)
         _findReplace->refresh();
+    // Filled while it is in view; one opened later fills itself then.
+    if (_movieExplorer && _movieExplorerDock && _movieExplorerDock->isVisible())
+        _movieExplorer->refresh();
 
     if (_flaDocument)
         _player->setCurrentFrame(0);
@@ -693,7 +893,7 @@ void MainWindow::adoptDocument(fla::FLADocument* document, const QString& filePa
     {
         if (_flaDocument && (_activeTab < 0 || _activeTab >= static_cast<int>(_tabs.size())))
         {
-            _tabs.push_back(std::make_unique<DocumentTab>());
+            addTab();
             _activeTab = static_cast<int>(_tabs.size()) - 1;
         }
         else if (!_flaDocument && _activeTab >= 0 && _activeTab < static_cast<int>(_tabs.size()) && _tabs.size() > 1)
@@ -738,7 +938,10 @@ void MainWindow::parkActiveDocument()
     settleGestures();
     DocumentTab& tab = *_tabs[static_cast<size_t>(_activeTab)];
     if (_phoenixView)
+    {
         _phoenixView->exitToDepth(0);
+        tab.view = _phoenixView->viewState();
+    }
     tab.path = _documentPath;
     tab.name = _documentName;
     tab.frame = _player ? _player->currentFrame() : 0;
@@ -748,6 +951,17 @@ void MainWindow::parkActiveDocument()
     // go of it as releaseDocument has them do.
     _flaDocument = nullptr;
     releaseDocument();
+    releaseParkedMedia(tab);
+}
+
+void MainWindow::releaseParkedMedia(DocumentTab& tab)
+{
+    if (!tab.document || !tab.document->document)
+        return;
+    // A recovery copy being written reads the media too.
+    if (tab.autoSave)
+        tab.autoSave->waitForWrite();
+    fla::media::releaseLoadedMedia(*tab.document->document);
 }
 
 void MainWindow::activateTab(int index)
@@ -764,10 +978,79 @@ void MainWindow::activateTab(int index)
     _editContext.commandStack().swapHistory(tab.history);
     if (_player)
         _player->setCurrentFrame(tab.frame);
+    // As it was left; a document shown for the first time is fitted.
+    if (_phoenixView && tab.view.valid)
+        _phoenixView->setViewState(tab.view);
     _switchingTabs = false;
     updateEditState();
     updateWindowTitle();
     refreshTabs();
+}
+
+MainWindow::DocumentTab& MainWindow::addTab()
+{
+    _tabs.push_back(std::make_unique<DocumentTab>());
+    DocumentTab& tab = *_tabs.back();
+    tab.owner = this;
+    giveAutoSave(tab);
+    return tab;
+}
+
+void MainWindow::giveAutoSave(DocumentTab& tab)
+{
+    // Headless windows write no recovery copies.
+    if (!_interactive || tab.autoSave)
+        return;
+    // The tab is reached through the window it is in now, which a move to
+    // another window changes.
+    DocumentTab* reach = &tab;
+    AutoSave::Links links;
+    links.document = [reach]() -> const fla::Document* { return reach->owner ? reach->owner->tabDocument(*reach) : nullptr; };
+    links.modified = [reach]() { return reach->owner && reach->owner->tabModified(*reach); };
+    links.path = [reach]() { return reach->owner ? reach->owner->tabPath(*reach) : QString(); };
+    links.name = [reach]() { return reach->owner ? reach->owner->tabName(*reach) : QString(); };
+    links.busy = []() { return QApplication::mouseButtons() != Qt::NoButton; };
+    tab.autoSave = std::make_unique<AutoSave>(links);
+}
+
+const fla::Document* MainWindow::tabDocument(const DocumentTab& tab) const
+{
+    const bool active = _activeTab >= 0 && _activeTab < static_cast<int>(_tabs.size()) &&
+        _tabs[static_cast<size_t>(_activeTab)].get() == &tab;
+    if (active)
+        return _flaDocument ? _flaDocument->document : nullptr;
+    return tab.document ? tab.document->document : nullptr;
+}
+
+QString MainWindow::tabPath(const DocumentTab& tab) const
+{
+    const bool active = _activeTab >= 0 && _activeTab < static_cast<int>(_tabs.size()) &&
+        _tabs[static_cast<size_t>(_activeTab)].get() == &tab;
+    return active ? _documentPath : tab.path;
+}
+
+QString MainWindow::tabName(const DocumentTab& tab) const
+{
+    const bool active = _activeTab >= 0 && _activeTab < static_cast<int>(_tabs.size()) &&
+        _tabs[static_cast<size_t>(_activeTab)].get() == &tab;
+    const QString name = active ? _documentName : tab.name;
+    return name.isEmpty() ? QString("Untitled") : name;
+}
+
+bool MainWindow::tabModified(const DocumentTab& tab) const
+{
+    const bool active = _activeTab >= 0 && _activeTab < static_cast<int>(_tabs.size()) &&
+        _tabs[static_cast<size_t>(_activeTab)].get() == &tab;
+    if (active)
+        return _flaDocument && _editContext.isModified();
+    return tab.document && !tab.history.isClean();
+}
+
+AutoSave* MainWindow::activeAutoSave() const
+{
+    if (_activeTab < 0 || _activeTab >= static_cast<int>(_tabs.size()))
+        return nullptr;
+    return _tabs[static_cast<size_t>(_activeTab)]->autoSave.get();
 }
 
 void MainWindow::makeRoomForDocument()
@@ -781,7 +1064,7 @@ void MainWindow::makeRoomForDocument()
         return;
     _switchingTabs = true;
     parkActiveDocument();
-    _tabs.push_back(std::make_unique<DocumentTab>());
+    addTab();
     _activeTab = static_cast<int>(_tabs.size()) - 1;
     _switchingTabs = false;
 }
@@ -790,28 +1073,52 @@ void MainWindow::openInTab(const QString& path)
 {
     if (path.isEmpty())
         return;
-    // Open already: its tab.
+    // Open already, here or in another window: its tab.
     const QString wanted = QFileInfo(path).absoluteFilePath();
-    for (size_t i = 0; i < _tabs.size(); ++i)
+    for (MainWindow* window : s_windows.isEmpty() ? QList<MainWindow*>{this} : s_windows)
     {
-        const QString tabPath = static_cast<int>(i) == _activeTab ? _documentPath : _tabs[i]->path;
-        if (!tabPath.isEmpty() && QFileInfo(tabPath).absoluteFilePath() == wanted)
+        for (size_t i = 0; i < window->_tabs.size(); ++i)
         {
-            activateTab(static_cast<int>(i));
-            return;
+            const QString tabPath = window->tabPath(*window->_tabs[i]);
+            if (!tabPath.isEmpty() && QFileInfo(tabPath).absoluteFilePath() == wanted)
+            {
+                window->activateTab(static_cast<int>(i));
+                if (window != this)
+                {
+                    window->raise();
+                    window->activateWindow();
+                }
+                return;
+            }
         }
     }
     makeRoomForDocument();
     loadFLAFile(path);
 }
 
-bool MainWindow::closeTab(int index)
+bool MainWindow::closeTab(int index, bool ask)
 {
     if (index < 0 || index >= static_cast<int>(_tabs.size()))
         return true;
+    if (index != _activeTab && (!ask || !tabModified(*_tabs[static_cast<size_t>(index)])))
+    {
+        // Waiting and nothing to ask about: it goes without being shown.
+        std::unique_ptr<DocumentTab> tab = std::move(_tabs[static_cast<size_t>(index)]);
+        _tabs.erase(_tabs.begin() + index);
+        if (index < _activeTab)
+            --_activeTab;
+        if (tab->autoSave)
+            tab->autoSave->discard();
+        forgetDocument(tab->document);
+        // The history points into the document, so it goes first.
+        tab->history.clear();
+        delete tab->document;
+        refreshTabs();
+        return true;
+    }
     if (index != _activeTab)
         activateTab(index);
-    if (!confirmDiscardChanges())
+    if (ask && !confirmDiscardChanges())
         return false;
     _switchingTabs = true;
     releaseDocument();
@@ -829,6 +1136,205 @@ bool MainWindow::closeTab(int index)
     return true;
 }
 
+bool MainWindow::closeOtherTabs(int keep)
+{
+    if (keep < 0 || keep >= static_cast<int>(_tabs.size()))
+        return false;
+    const DocumentTab* kept = _tabs[static_cast<size_t>(keep)].get();
+    if (!settleUnsaved({this}, this, kept))
+        return false;
+    for (int i = static_cast<int>(_tabs.size()) - 1; i >= 0; --i)
+    {
+        if (_tabs[static_cast<size_t>(i)].get() != kept)
+            closeTab(i, false);
+    }
+    return true;
+}
+
+bool MainWindow::closeAllTabs()
+{
+    if (!settleUnsaved({this}, this))
+        return false;
+    // The waiting ones first, so none is shown on its way out.
+    for (int i = static_cast<int>(_tabs.size()) - 1; i >= 0; --i)
+    {
+        if (i != _activeTab)
+            closeTab(i, false);
+    }
+    if (!_tabs.empty())
+        closeTab(_activeTab, false);
+    return true;
+}
+
+void MainWindow::cycleTabs(int step)
+{
+    const int count = static_cast<int>(_tabs.size());
+    if (count < 2)
+        return;
+    activateTab(((_activeTab + step) % count + count) % count);
+}
+
+void MainWindow::revealInFileManager(const QString& path)
+{
+    if (path.isEmpty())
+        return;
+    const QFileInfo info(path);
+#if defined(Q_OS_WIN)
+    QProcess::startDetached("explorer.exe", {"/select,", QDir::toNativeSeparators(info.absoluteFilePath())});
+#elif defined(Q_OS_MACOS)
+    QProcess::startDetached("open", {"-R", info.absoluteFilePath()});
+#else
+    QDesktopServices::openUrl(QUrl::fromLocalFile(info.absolutePath()));
+#endif
+}
+
+void MainWindow::showTabMenu(int index, const QPoint& globalPos)
+{
+    if (index < 0 || index >= static_cast<int>(_tabs.size()))
+        return;
+    // The tab is found again by itself afterward: closing others moves it.
+    DocumentTab* tab = _tabs[static_cast<size_t>(index)].get();
+    const auto indexOf = [this, tab]() {
+        for (size_t i = 0; i < _tabs.size(); ++i)
+            if (_tabs[i].get() == tab)
+                return static_cast<int>(i);
+        return -1;
+    };
+    const QString path = tabPath(*tab);
+    QMenu menu(this);
+    menu.addAction("&Close", this, [this, indexOf]() { closeTab(indexOf()); });
+    QAction* others = menu.addAction("Close &Others", this, [this, indexOf]() { closeOtherTabs(indexOf()); });
+    others->setEnabled(_tabs.size() > 1);
+    menu.addAction("Close &All", this, [this]() { closeAllTabs(); });
+    menu.addSeparator();
+    QAction* copyPath = menu.addAction("Copy &Path", this, [path]() {
+        QApplication::clipboard()->setText(QDir::toNativeSeparators(path));
+    });
+    copyPath->setEnabled(!path.isEmpty());
+#if defined(Q_OS_MACOS)
+    const QString reveal = "Reveal in &Finder";
+#elif defined(Q_OS_WIN)
+    const QString reveal = "Show in &Explorer";
+#else
+    const QString reveal = "Show in &Folder";
+#endif
+    QAction* show = menu.addAction(reveal, this, [path]() { revealInFileManager(path); });
+    show->setEnabled(!path.isEmpty() && QFileInfo::exists(path));
+    menu.addSeparator();
+    QAction* newWindow = menu.addAction("Move to &New Window", this, [this, indexOf]() {
+        moveTabToNewWindow(indexOf());
+    });
+    newWindow->setEnabled(_tabs.size() > 1);
+    QMenu* toWindow = menu.addMenu("Move to &Window");
+    for (MainWindow* window : s_windows)
+    {
+        if (window == this || !window->isVisible())
+            continue;
+        toWindow->addAction(window->windowTitle(), this, [this, indexOf, window]() {
+            if (s_windows.contains(window))
+                moveTabToWindow(indexOf(), window);
+        });
+    }
+    toWindow->setEnabled(!toWindow->isEmpty());
+    menu.exec(globalPos);
+}
+
+std::unique_ptr<MainWindow::DocumentTab> MainWindow::detachTab(int index)
+{
+    if (index < 0 || index >= static_cast<int>(_tabs.size()))
+        return nullptr;
+    const bool wasActive = index == _activeTab;
+    _switchingTabs = true;
+    if (wasActive)
+        parkActiveDocument();
+    std::unique_ptr<DocumentTab> tab = std::move(_tabs[static_cast<size_t>(index)]);
+    _tabs.erase(_tabs.begin() + index);
+    tab->owner = nullptr;
+    if (wasActive)
+        _activeTab = -1;
+    else if (index < _activeTab)
+        --_activeTab;
+    _switchingTabs = false;
+    if (wasActive && !_tabs.empty())
+        activateTab(std::min(index, static_cast<int>(_tabs.size()) - 1));
+    else if (wasActive)
+    {
+        adoptDocument(nullptr, QString(), QString());
+        updateEditState();
+    }
+    refreshTabs();
+    return tab;
+}
+
+void MainWindow::attachTab(std::unique_ptr<DocumentTab> tab, int at)
+{
+    if (!tab)
+        return;
+    tab->owner = this;
+    giveAutoSave(*tab);
+    if (at < 0 || at > static_cast<int>(_tabs.size()))
+        at = static_cast<int>(_tabs.size());
+    _tabs.insert(_tabs.begin() + at, std::move(tab));
+    if (_activeTab >= at)
+        ++_activeTab;
+    activateTab(at);
+    refreshTabs();
+}
+
+void MainWindow::moveTabToWindow(int index, MainWindow* target, int at)
+{
+    if (!target || target == this || index < 0 || index >= static_cast<int>(_tabs.size()))
+        return;
+    std::unique_ptr<DocumentTab> tab = detachTab(index);
+    if (!tab)
+        return;
+    // What this window kept about it (copied layers, bitmaps out in an
+    // editor) stays behind; undoing there keeps that window's selection in
+    // step, not this one's.
+    forgetDocument(tab->document);
+    tab->history.retargetSelection(&_selection, &target->_selection);
+    target->attachTab(std::move(tab), at);
+    target->show();
+    target->raise();
+    target->activateWindow();
+    // A window opened for tabs goes once it has none.
+    if (_tabs.empty() && _secondary)
+        close();
+}
+
+void MainWindow::moveTabToNewWindow(int index, const QPoint* globalPos)
+{
+    if (index < 0 || index >= static_cast<int>(_tabs.size()) || _tabs.size() < 2)
+        return;
+    MainWindow* window = openSecondaryWindow();
+    if (isMaximized() || isFullScreen())
+        window->showNormal();
+    if (globalPos)
+        window->move(*globalPos - QPoint(window->width() / 3, 20));
+    else
+        window->move(pos() + QPoint(40, 40));
+    window->keepOnScreen();
+    moveTabToWindow(index, window);
+}
+
+void MainWindow::tabDraggedOut(int index)
+{
+    if (!_tabBar || index < 0 || index >= static_cast<int>(_tabs.size()))
+        return;
+    QDrag* drag = new QDrag(_tabBar);
+    QMimeData* data = new QMimeData;
+    data->setData(kTabMime, QByteArray::number(index));
+    drag->setMimeData(data);
+    drag->setPixmap(_tabBar->grab(_tabBar->tabRect(index)));
+    // Let go over another window's tabs, that window takes it (its bar's
+    // drop does the move); anywhere else, a window of its own.
+    if (drag->exec(Qt::MoveAction) == Qt::IgnoreAction && _tabs.size() > 1)
+    {
+        const QPoint at = QCursor::pos();
+        moveTabToNewWindow(index, &at);
+    }
+}
+
 void MainWindow::refreshTabs()
 {
     if (!_tabBar)
@@ -840,18 +1346,152 @@ void MainWindow::refreshTabs()
         _tabBar->addTab(QString());
     for (size_t i = 0; i < _tabs.size(); ++i)
     {
-        const bool active = static_cast<int>(i) == _activeTab;
         const DocumentTab& tab = *_tabs[i];
-        const QString name = active ? _documentName : tab.name;
-        const bool modified = active ? _editContext.isModified() : !tab.history.isClean();
-        _tabBar->setTabText(static_cast<int>(i), (name.isEmpty() ? QString("Untitled") : name) + (modified ? "*" : ""));
-        _tabBar->setTabToolTip(static_cast<int>(i), QDir::toNativeSeparators(active ? _documentPath : tab.path));
+        _tabBar->setTabText(static_cast<int>(i), tabName(tab) + (tabModified(tab) ? "*" : ""));
+        _tabBar->setTabToolTip(static_cast<int>(i), QDir::toNativeSeparators(tabPath(tab)));
     }
     if (_activeTab >= 0)
         _tabBar->setCurrentIndex(_activeTab);
-    // One document needs no tabs.
-    _tabBar->setVisible(_tabs.size() > 1);
+    // One document needs no tabs, except in a window opened to hold one,
+    // whose tab can be dragged back.
+    _tabBar->setVisible(_tabs.size() > 1 || (_secondary && !_tabs.empty()));
     _switchingTabs = false;
+}
+
+bool MainWindow::settleUnsaved(const QList<MainWindow*>& windows, QWidget* parent, const DocumentTab* except)
+{
+    struct Unsaved
+    {
+        QPointer<MainWindow> window;
+        const DocumentTab* tab;
+    };
+    std::vector<Unsaved> unsaved;
+    for (MainWindow* window : windows)
+    {
+        // Text being typed counts as a change to save.
+        if (window->_flaDocument)
+            window->settleGestures();
+        for (const std::unique_ptr<DocumentTab>& tab : window->_tabs)
+            if (tab.get() != except && window->tabModified(*tab))
+                unsaved.push_back({window, tab.get()});
+    }
+    if (unsaved.empty())
+        return true;
+    // Each is shown in turn to be asked about or saved.
+    const auto show = [](const Unsaved& entry) {
+        if (!entry.window)
+            return false;
+        for (size_t i = 0; i < entry.window->_tabs.size(); ++i)
+        {
+            if (entry.window->_tabs[i].get() != entry.tab)
+                continue;
+            entry.window->activateTab(static_cast<int>(i));
+            entry.window->raise();
+            entry.window->activateWindow();
+            return true;
+        }
+        return false;
+    };
+    const auto review = [&show](const Unsaved& entry) {
+        return !show(entry) || entry.window->confirmDiscardChanges();
+    };
+    if (unsaved.size() == 1)
+        return review(unsaved.front());
+
+    QStringList names;
+    for (const Unsaved& entry : unsaved)
+        names << entry.window->tabName(*entry.tab);
+    QMessageBox box(parent);
+    box.setIcon(QMessageBox::Warning);
+    box.setWindowTitle("Unsaved Changes");
+    box.setText(QString("%1 documents have unsaved changes.").arg(unsaved.size()));
+    box.setInformativeText(names.join("\n"));
+    QPushButton* saveAll = box.addButton("Save All", QMessageBox::AcceptRole);
+    QPushButton* discardAll = box.addButton("Discard All", QMessageBox::DestructiveRole);
+    QPushButton* reviewEach = box.addButton("Review Each…", QMessageBox::ActionRole);
+    box.addButton(QMessageBox::Cancel);
+    box.setDefaultButton(saveAll);
+    box.exec();
+    const QAbstractButton* chosen = box.clickedButton();
+    if (chosen == discardAll)
+        return true;
+    if (chosen == saveAll)
+    {
+        for (const Unsaved& entry : unsaved)
+        {
+            if (!show(entry))
+                continue;
+            entry.window->saveFile();
+            // Save As canceled, or a save that failed: the rest wait.
+            if (entry.window->_editContext.isModified())
+                return false;
+        }
+        return true;
+    }
+    if (chosen == reviewEach)
+    {
+        for (const Unsaved& entry : unsaved)
+            if (!review(entry))
+                return false;
+        return true;
+    }
+    return false;
+}
+
+void MainWindow::quitAll()
+{
+    // The window quitting from first: the document it shows comes back
+    // shown next time.
+    QList<MainWindow*> all = s_windows;
+    all.removeAll(this);
+    all.prepend(this);
+    if (!settleUnsaved(all, this))
+        return;
+    saveSession(all);
+    s_quitting = true;
+    for (MainWindow* window : all)
+        if (window != this)
+            window->close();
+    close();
+    s_quitting = false;
+}
+
+void MainWindow::saveSession(const QList<MainWindow*>& windows)
+{
+    QSettings settings;
+    if (!settings.value("reopenDocuments", true).toBool())
+    {
+        settings.remove("session/documents");
+        return;
+    }
+    std::vector<std::vector<fla::session::OpenDocument>> open;
+    for (const MainWindow* window : windows)
+    {
+        std::vector<fla::session::OpenDocument> documents;
+        for (size_t i = 0; i < window->_tabs.size(); ++i)
+            documents.push_back({window->tabPath(*window->_tabs[i]).toStdString(), static_cast<int>(i) == window->_activeTab});
+        open.push_back(documents);
+    }
+    QStringList paths;
+    for (const std::string& path : fla::session::reopenList(open))
+        paths << QString::fromStdString(path);
+    settings.setValue("session/documents", paths);
+}
+
+bool MainWindow::reopenSession()
+{
+    QSettings settings;
+    if (!settings.value("reopenDocuments", true).toBool())
+        return false;
+    bool any = false;
+    for (const QString& path : settings.value("session/documents").toStringList())
+    {
+        if (!QFileInfo::exists(path))
+            continue;
+        openInTab(path);
+        any = any || _flaDocument;
+    }
+    return any;
 }
 
 QString MainWindow::templatesFolder()
@@ -879,8 +1519,8 @@ void MainWindow::saveAsTemplate()
     phx::SaveOptions options;
     options.application = QString("Phoenix %1").arg(QCoreApplication::applicationVersion()).toStdString();
     std::string error;
-    if (_autoSave)
-        _autoSave->waitForWrite();
+    if (AutoSave* autoSave = activeAutoSave())
+        autoSave->waitForWrite();
     if (!phx::save(*_flaDocument->document, path.toStdString(), options, error))
         QMessageBox::warning(this, "Save as Template", QString::fromStdString(error));
     else
@@ -986,8 +1626,7 @@ void MainWindow::openLessonDocument(const QString& path)
     // As New from Template does: a copy, untitled, never the file itself.
     makeRoomForDocument();
     loadFLAFile(path);
-    _recentFiles.removeAll(path);
-    updateRecentFilesMenu();
+    forgetRecentFile(path);
     if (_flaDocument)
     {
         _documentPath.clear();
@@ -1045,9 +1684,7 @@ void MainWindow::newFromTemplate()
     // whose first Save asks where to put it.
     loadFLAFile(files[index].absoluteFilePath());
     // A template is not a recent file.
-    _recentFiles.removeAll(files[index].absoluteFilePath());
-    updateRecentFilesMenu();
-    saveSettings();
+    forgetRecentFile(files[index].absoluteFilePath());
     if (_flaDocument)
     {
         _documentPath.clear();
@@ -1705,8 +2342,9 @@ bool MainWindow::offerRecovery()
     std::sort(orphans.begin(), orphans.end(),
         [](const AutoSave::Orphan& a, const AutoSave::Orphan& b) { return a.saved > b.saved; });
 
-    // One dialog for every copy left behind, newest first: recover one,
-    // discard any or all, or keep them for next time.
+    // One dialog for every copy left behind, newest first: recover any or
+    // all, each in a tab of its own, discard any or all, or keep them for
+    // next time.
     QDialog dialog(this);
     dialog.setWindowTitle("Recover Unsaved Work");
     QVBoxLayout* layout = new QVBoxLayout(&dialog);
@@ -1743,7 +2381,7 @@ bool MainWindow::offerRecovery()
     recover->setDefault(true);
     layout->addWidget(buttons);
     const auto update = [&]() {
-        recover->setEnabled(list->selectedItems().size() == 1);
+        recover->setEnabled(!list->selectedItems().isEmpty());
         discard->setEnabled(!list->selectedItems().isEmpty());
     };
     connect(list, &QListWidget::itemSelectionChanged, &dialog, update);
@@ -1776,28 +2414,41 @@ bool MainWindow::offerRecovery()
     connect(buttons, &QDialogButtonBox::accepted, &dialog, &QDialog::accept);
     connect(buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
     update();
-    if (dialog.exec() != QDialog::Accepted || list->currentRow() < 0 || list->currentRow() >= orphans.size())
+    if (dialog.exec() != QDialog::Accepted)
         return false;
+    QList<AutoSave::Orphan> chosen;
+    for (int row = 0; row < orphans.size() && row < list->count(); ++row)
+        if (list->item(row)->isSelected())
+            chosen.push_back(orphans[row]);
 
-    const AutoSave::Orphan orphan = orphans[list->currentRow()];
-    const QString name = orphan.name.isEmpty() ? QString("Untitled") : orphan.name;
-    std::string error;
-    std::string warning;
-    bool readOnly = false;
-    fla::FLADocument* document = phx::load(orphan.file.toStdString(), error, warning, readOnly);
-    if (!document)
+    // The newest last, so it is the one shown.
+    std::reverse(chosen.begin(), chosen.end());
+    QStringList recovered;
+    for (const AutoSave::Orphan& orphan : chosen)
     {
-        QMessageBox::warning(this, "Recover Unsaved Work",
-            QString("The copy could not be read: %1").arg(QString::fromStdString(error)));
-        return false;
+        const QString name = orphan.name.isEmpty() ? QString("Untitled") : orphan.name;
+        std::string error;
+        std::string warning;
+        bool readOnly = false;
+        fla::FLADocument* document = phx::load(orphan.file.toStdString(), error, warning, readOnly);
+        if (!document)
+        {
+            QMessageBox::warning(this, "Recover Unsaved Work",
+                QString("The copy of %1 could not be read: %2").arg(name, QString::fromStdString(error)));
+            continue;
+        }
+        // Back where it came from, and unsaved until it is saved. The copies
+        // not chosen are offered again next time.
+        makeRoomForDocument();
+        adoptDocument(document, orphan.originalPath, name);
+        _editContext.markUnsaved();
+        updateEditState();
+        AutoSave::remove(orphan);
+        recovered << name;
     }
-    // Back where it came from, and unsaved until it is saved. The other
-    // copies are offered again next time.
-    adoptDocument(document, orphan.originalPath, name);
-    _editContext.markUnsaved();
-    updateEditState();
-    AutoSave::remove(orphan);
-    statusBar()->showMessage(QString("Recovered %1. Save it to keep it.").arg(name), 8000);
+    if (recovered.isEmpty())
+        return false;
+    statusBar()->showMessage(QString("Recovered %1. Save to keep them.").arg(recovered.join(", ")), 8000);
     return true;
 }
 
@@ -1857,6 +2508,21 @@ void MainWindow::createNewDocument(int width, int height, double frameRate, cons
 
 void MainWindow::openDocumentPath(const QString& filePath)
 {
+    // The first window may have been closed while others stay open: one of
+    // those takes it.
+    if (!isVisible())
+    {
+        for (MainWindow* window : s_windows)
+        {
+            if (window != this && window->isVisible())
+            {
+                window->openInTab(filePath);
+                window->raise();
+                window->activateWindow();
+                return;
+            }
+        }
+    }
     openInTab(filePath);
 }
 
@@ -1992,7 +2658,7 @@ void MainWindow::setupUI()
     QVBoxLayout* stageLayout = new QVBoxLayout(stageColumn);
     stageLayout->setContentsMargins(0, 0, 0, 0);
     stageLayout->setSpacing(0);
-    _tabBar = new QTabBar(this);
+    _tabBar = new DocumentTabBar(this);
     _tabBar->setTabsClosable(true);
     _tabBar->setMovable(true);
     _tabBar->setDocumentMode(true);
@@ -2007,10 +2673,20 @@ void MainWindow::setupUI()
     connect(_tabBar, &QTabBar::tabMoved, this, [this](int from, int to) {
         if (from < 0 || to < 0 || from >= static_cast<int>(_tabs.size()) || to >= static_cast<int>(_tabs.size()))
             return;
+        // The list follows the bar; the tab shown stays the one shown,
+        // wherever it went.
+        const DocumentTab* shown = _activeTab >= 0 && _activeTab < static_cast<int>(_tabs.size())
+            ? _tabs[static_cast<size_t>(_activeTab)].get() : nullptr;
         std::unique_ptr<DocumentTab> moved = std::move(_tabs[static_cast<size_t>(from)]);
         _tabs.erase(_tabs.begin() + from);
         _tabs.insert(_tabs.begin() + to, std::move(moved));
-        _activeTab = _tabBar->currentIndex();
+        for (size_t i = 0; i < _tabs.size(); ++i)
+            if (_tabs[i].get() == shown)
+                _activeTab = static_cast<int>(i);
+    });
+    _tabBar->setContextMenuPolicy(Qt::CustomContextMenu);
+    connect(_tabBar, &QWidget::customContextMenuRequested, this, [this](const QPoint& at) {
+        showTabMenu(_tabBar->tabAt(at), _tabBar->mapToGlobal(at));
     });
     stageLayout->addWidget(_tabBar);
     stageLayout->addWidget(breadcrumbRow);
@@ -3667,6 +4343,7 @@ void MainWindow::copyFrames()
     if (selection.isEmpty())
         return;
     _frameClipboard.clear();
+    _frameClipboardFrom = _flaDocument ? _flaDocument->document : nullptr;
     for (const fla::Layer* layer : selection.layers)
     {
         std::vector<std::unique_ptr<fla::Frame>> spans;
@@ -3766,23 +4443,68 @@ void MainWindow::pasteFramesAs(bool overwrite)
                     return;
                 }
 
+    // Copied from another document still open: the symbols, bitmaps and
+    // sounds the frames use come along first, as one step with the paste.
+    const char* stepName = overwrite ? "Paste and Overwrite Frames" : "Paste Frames";
+    fla::Document* document = _flaDocument ? _flaDocument->document : nullptr;
+    fla::CommandStack& stack = _editContext.commandStack();
+    std::map<std::string, std::string> renamed;
+    bool macro = false;
+    if (document && _frameClipboardFrom && _frameClipboardFrom != document && documentOpenAnywhere(_frameClipboardFrom))
+    {
+        std::vector<const fla::Frame*> all;
+        for (const auto& spans : _frameClipboard)
+            for (const auto& frame : spans)
+                all.push_back(frame.get());
+        const std::vector<std::string> used = fla::transfer::usedByFrames(all);
+        if (!fla::transfer::withDependencies(*_frameClipboardFrom, used).empty())
+        {
+            stack.beginMacro(stepName);
+            macro = true;
+            if (!bringLibraryItems(*_frameClipboardFrom, used, renamed))
+            {
+                stack.endMacro();
+                return;
+            }
+        }
+    }
+    const bool rename = std::any_of(renamed.begin(), renamed.end(),
+        [](const auto& name) { return name.first != name.second; });
+
     // The copies may come from another document: their instances are
     // pointed at this one's symbols before they are pasted.
-    relinkFrameClipboard(_flaDocument && _flaDocument->document ? _flaDocument->document->symbolList : nullptr);
+    const fla::SymbolList* library = document ? document->symbolList : nullptr;
+    relinkFrameClipboard(library);
 
+    // Items that came in under new names: the frames pasted are copies
+    // naming them so, kept for as long as the step is.
+    auto renamedFrames = std::make_shared<std::vector<std::unique_ptr<fla::Frame>>>();
     std::vector<std::vector<const fla::Frame*>> clips;
     for (const auto& spans : _frameClipboard)
     {
         std::vector<const fla::Frame*> clip;
         for (const auto& frame : spans)
-            clip.push_back(frame.get());
+        {
+            if (!rename)
+            {
+                clip.push_back(frame.get());
+                continue;
+            }
+            fla::Frame* copy = fla::timeline::cloneFrame(*frame, nullptr);
+            fla::transfer::renameUses(*copy, renamed);
+            for (fla::Element* element : copy->elements)
+                if (element)
+                    fla::relinkSymbols(*element, library);
+            renamedFrames->emplace_back(copy);
+            clip.push_back(copy);
+        }
         clips.push_back(clip);
     }
     const int at = selection.first;
 
     _selection.clear();
-    auto* command = new fla::EditFramesCommand(targets, overwrite ? "Paste and Overwrite Frames" : "Paste Frames",
-        [targets, clips, at, overwrite](std::vector<fla::Frame*>& removed) {
+    auto* command = new fla::EditFramesCommand(targets, stepName,
+        [targets, clips, at, overwrite, renamedFrames](std::vector<fla::Frame*>& removed) {
             for (size_t i = 0; i < targets.size() && i < clips.size(); ++i)
             {
                 if (overwrite)
@@ -3793,6 +4515,8 @@ void MainWindow::pasteFramesAs(bool overwrite)
         });
     _editContext.commandStack().push(fla::CommandPtr(command));
     _editContext.commandStack().breakMergeChain();
+    if (macro)
+        stack.endMacro();
     if (_phoenixView)
     {
         _phoenixView->clearCaches();
@@ -4063,11 +4787,14 @@ void MainWindow::setupMenus()
     });
     QAction* nextTabAction = new QAction(this);
     nextTabAction->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_Tab));
-    connect(nextTabAction, &QAction::triggered, this, [this]() {
-        if (_tabs.size() > 1)
-            activateTab((_activeTab + 1) % static_cast<int>(_tabs.size()));
-    });
+    connect(nextTabAction, &QAction::triggered, this, [this]() { cycleTabs(1); });
     addAction(nextTabAction);
+    // Shift+Tab arrives as Backtab on most systems.
+    QAction* previousTabAction = new QAction(this);
+    previousTabAction->setShortcuts({QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_Backtab),
+        QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_Tab)});
+    connect(previousTabAction, &QAction::triggered, this, [this]() { cycleTabs(-1); });
+    addAction(previousTabAction);
 
     fileMenu->addSeparator();
 
@@ -5375,8 +6102,8 @@ bool MainWindow::saveToPath(const QString& filePath)
         }
         std::string phxError;
         // The recovery copy being written reads the media this save moves.
-        if (_autoSave)
-            _autoSave->waitForWrite();
+        if (AutoSave* autoSave = activeAutoSave())
+            autoSave->waitForWrite();
         if (!phx::save(*_flaDocument->document, filePath.toStdString(), options, phxError))
             error = QString::fromStdString(phxError);
     }
@@ -5423,8 +6150,8 @@ bool MainWindow::saveToPath(const QString& filePath)
     _documentPath = filePath;
     _documentName = QFileInfo(filePath).fileName();
     _editContext.markSaved();
-    if (_autoSave)
-        _autoSave->discard();
+    if (AutoSave* autoSave = activeAutoSave())
+        autoSave->discard();
     _flaDocument->fromBinary = false;
     updateEditState();
     addToRecentFiles(filePath);
@@ -6826,9 +7553,9 @@ void MainWindow::exportSpriteSheet(const QString& symbolName)
 
 void MainWindow::quit()
 {
-    // close() goes through closeEvent(), so File > Exit gets the same
-    // unsaved-changes prompt as closing the window.
-    close();
+    // Every window goes, after one round of asking about every unsaved
+    // document in any of them.
+    quitAll();
 }
 
 void MainWindow::showAbout()
@@ -7287,8 +8014,8 @@ void MainWindow::updateEditState()
 {
     emit editStateChanged();
     const fla::CommandStack& stack = _editContext.commandStack();
-    if (_autoSave)
-        _autoSave->noteChanged();
+    if (AutoSave* autoSave = activeAutoSave())
+        autoSave->noteChanged();
 
     // Frames come and go with edits too, and the Properties panel shows
     // whatever an edit or an undo just changed. Layers do as well (an undone
@@ -8146,7 +8873,7 @@ void MainWindow::setupPropertiesPanel()
     connect(_libraryPanel, &LibraryPanel::spriteSheetRequested, this, [this](const QString& name) { exportSpriteSheet(name); });
     connect(_libraryPanel, &LibraryPanel::newSymbolRequested, this, &MainWindow::newSymbol);
     _libraryPanel->setCanPaste([this]() {
-        return !_libraryClipboard.isEmpty() && documentAlive(_libraryClipboardSource) &&
+        return !_libraryClipboard.isEmpty() && documentOpenAnywhere(_libraryClipboardSource) &&
             (!_flaDocument || _libraryClipboardSource != _flaDocument->document);
     });
     connect(_libraryPanel, &LibraryPanel::copyItemsRequested, this, [this](const QStringList& names) {
@@ -8155,8 +8882,24 @@ void MainWindow::setupPropertiesPanel()
         statusBar()->showMessage("Paste them into another document's library.", 4000);
     });
     connect(_libraryPanel, &LibraryPanel::pasteItemsRequested, this, [this]() {
-        if (_libraryClipboardSource && documentAlive(_libraryClipboardSource))
+        if (_libraryClipboardSource && documentOpenAnywhere(_libraryClipboardSource))
             copyLibraryItems(*_libraryClipboardSource, _libraryClipboard);
+    });
+    // An item dragged from this library may land in another window, whose
+    // stage or library copies it in with what it uses.
+    connect(_libraryPanel, &LibraryPanel::itemDragStarted, this, [this](const QString&, const QString& name) {
+        _externalDragSource = _flaDocument ? _flaDocument->document : nullptr;
+        _externalDragName = name;
+    });
+    connect(_libraryPanel, &LibraryPanel::itemDragEnded, this, [this]() {
+        // After the drop has been handled.
+        QTimer::singleShot(0, this, []() { _externalDragSource = nullptr; });
+    });
+    connect(_libraryPanel, &LibraryPanel::foreignItemDropped, this, [this](const QString& name) {
+        const fla::Document* source = _externalDragSource;
+        const fla::Document* own = _flaDocument ? _flaDocument->document : nullptr;
+        if (source && source != own && _externalDragName == name && documentOpenAnywhere(source))
+            copyLibraryItems(*source, {name});
     });
     connect(_libraryPanel, &LibraryPanel::editSymbolRequested, this, [this](const QString& name) {
         if (!_phoenixView || !_flaDocument || !_flaDocument->document || !_flaDocument->document->symbolList)
@@ -8511,7 +9254,8 @@ void MainWindow::placeLibraryItem(const QString& kind, const QString& droppedNam
         return;
     QString name = droppedName;
     // From an external library: copied in first, with what it uses.
-    if (_externalDragSource && _externalDragName == droppedName && documentAlive(_externalDragSource))
+    if (_externalDragSource && _externalDragSource != _flaDocument->document && _externalDragName == droppedName &&
+        documentOpenAnywhere(_externalDragSource))
     {
         const fla::Document* source = _externalDragSource;
         _externalDragSource = nullptr;
@@ -10842,7 +11586,8 @@ bool MainWindow::documentAlive(const fla::Document* document) const
     return false;
 }
 
-std::vector<std::string> MainWindow::copyLibraryItems(const fla::Document& source, const QStringList& names)
+std::vector<std::string> MainWindow::copyLibraryItems(const fla::Document& source, const QStringList& names,
+    std::map<std::string, std::string>* renamed, bool* canceled)
 {
     std::vector<std::string> added;
     fla::Document* document = _flaDocument ? _flaDocument->document : nullptr;
@@ -10880,12 +11625,16 @@ std::vector<std::string> MainWindow::copyLibraryItems(const fla::Document& sourc
         connect(buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
         layout->addWidget(buttons);
         if (dialog.exec() != QDialog::Accepted)
+        {
+            if (canceled)
+                *canceled = true;
             return added;
+        }
         resolution = replace->isChecked() ? fla::transfer::Resolution::Replace
             : both->isChecked()           ? fla::transfer::Resolution::KeepBoth
                                           : fla::transfer::Resolution::Skip;
     }
-    fla::CommandPtr command = fla::transfer::copyItems(*document, source, items, resolution, &added);
+    fla::CommandPtr command = fla::transfer::copyItems(*document, source, items, resolution, &added, renamed);
     if (!command)
     {
         // Nothing new: what is wanted is the library's own.
@@ -10950,7 +11699,7 @@ void MainWindow::openExternalLibrary()
     });
     connect(panel, &LibraryPanel::externalDragEnded, this, [this]() {
         // After the drop has been handled.
-        QTimer::singleShot(0, this, [this]() { _externalDragSource = nullptr; });
+        QTimer::singleShot(0, this, []() { _externalDragSource = nullptr; });
     });
     // Closing the panel lets the file go.
     ExternalLibrary* raw = library.get();
@@ -12456,6 +13205,7 @@ void MainWindow::copy()
         return;
 
     _clipboard.clear();
+    _clipboardFrom = _flaDocument ? _flaDocument->document : nullptr;
     for (const fla::Element* element : elements)
     {
         if (fla::Element* copy = fla::cloneElement(*element, nullptr))
@@ -12739,22 +13489,75 @@ void MainWindow::placeCopies(const std::vector<const fla::Element*>& sources, co
 
 void MainWindow::paste()
 {
-    if (pasteFromSystemClipboard("Paste", true))
-        return;
-    std::vector<const fla::Element*> sources;
-    for (const std::unique_ptr<fla::Element>& element : _clipboard)
-        sources.push_back(element.get());
-    placeCopies(sources, "Paste", true);
+    pasteElements("Paste", true);
 }
 
 void MainWindow::pasteInPlace()
 {
-    if (pasteFromSystemClipboard("Paste in Place", false))
+    pasteElements("Paste in Place", false);
+}
+
+void MainWindow::pasteElements(const char* name, bool centerInView)
+{
+    if (pasteFromSystemClipboard(name, centerInView))
         return;
     std::vector<const fla::Element*> sources;
     for (const std::unique_ptr<fla::Element>& element : _clipboard)
         sources.push_back(element.get());
-    placeCopies(sources, "Paste in Place", false);
+    if (sources.empty())
+        return;
+
+    // Copied from another document still open, in this window or another:
+    // the symbols and bitmaps the copies use come along first, with what
+    // they use in turn, as one step with the paste.
+    fla::Document* document = _flaDocument ? _flaDocument->document : nullptr;
+    fla::CommandStack& stack = _editContext.commandStack();
+    std::vector<std::unique_ptr<fla::Element>> renamedCopies;
+    bool macro = false;
+    if (document && _clipboardFrom && _clipboardFrom != document && documentOpenAnywhere(_clipboardFrom))
+    {
+        const std::vector<std::string> used = fla::transfer::usedBy(sources);
+        if (!fla::transfer::withDependencies(*_clipboardFrom, used).empty())
+        {
+            if (_phoenixView)
+                _phoenixView->flushPendingMerge();
+            stack.beginMacro(name);
+            macro = true;
+            std::map<std::string, std::string> renamed;
+            if (!bringLibraryItems(*_clipboardFrom, used, renamed))
+            {
+                stack.endMacro();
+                return;
+            }
+            // Items kept under new names: the copies name them so.
+            if (std::any_of(renamed.begin(), renamed.end(), [](const auto& item) { return item.first != item.second; }))
+            {
+                for (const fla::Element* source : sources)
+                    if (fla::Element* copy = fla::cloneElement(*source, nullptr))
+                    {
+                        fla::transfer::renameUses(*copy, renamed);
+                        renamedCopies.emplace_back(copy);
+                    }
+                sources.clear();
+                for (const std::unique_ptr<fla::Element>& copy : renamedCopies)
+                    sources.push_back(copy.get());
+            }
+        }
+    }
+    placeCopies(sources, name, centerInView);
+    if (macro)
+        stack.endMacro();
+}
+
+bool MainWindow::bringLibraryItems(const fla::Document& source, const std::vector<std::string>& names,
+    std::map<std::string, std::string>& renamed)
+{
+    QStringList list;
+    for (const std::string& name : names)
+        list << QString::fromStdString(name);
+    bool canceled = false;
+    copyLibraryItems(source, list, &renamed, &canceled);
+    return !canceled;
 }
 
 void MainWindow::duplicateSelection()
@@ -12945,6 +13748,8 @@ void MainWindow::updateRecentFilesMenu()
 
 void MainWindow::addToRecentFiles(const QString& filePath)
 {
+    // The list is every window's: another may have added to it since.
+    _recentFiles = QSettings().value("recentFiles").toStringList();
     if (_recentFiles.length() > 0 && _recentFiles[0] == filePath)
         return;
 
@@ -12956,8 +13761,26 @@ void MainWindow::addToRecentFiles(const QString& filePath)
         _recentFiles.removeLast();
     }
 
-    updateRecentFilesMenu();
+    storeRecentFiles();
     saveSettings();
+}
+
+void MainWindow::forgetRecentFile(const QString& filePath)
+{
+    _recentFiles = QSettings().value("recentFiles").toStringList();
+    _recentFiles.removeAll(filePath);
+    storeRecentFiles();
+}
+
+void MainWindow::storeRecentFiles()
+{
+    QSettings().setValue("recentFiles", _recentFiles);
+    for (MainWindow* window : s_windows)
+    {
+        window->_recentFiles = _recentFiles;
+        window->updateRecentFilesMenu();
+    }
+    updateRecentFilesMenu();
 }
 
 namespace {
@@ -13047,7 +13870,6 @@ void MainWindow::loadSettings()
 void MainWindow::saveSettings()
 {
     QSettings settings;
-    settings.setValue("recentFiles", _recentFiles);
     settings.setValue("lastDirectory", _lastDirectory);
     settings.setValue("view/highQualityAntiAliasing", _highQualityAntiAliasing);
     saveBrush(settings, "brushes/fluid", _drawingStyle.fluidBrush);
@@ -13058,6 +13880,10 @@ void MainWindow::saveSettings()
     settings.setValue("brushes/mode", static_cast<int>(_drawingStyle.brushMode));
     settings.setValue("brushes/style", QString::fromStdString(fla::brushpresets::styleText(_drawingStyle)));
     settings.setValue("brushes/bitmap", _drawingStyle.bitmapBrush);
+    // The window's place and the panels' layout are the first window's; a
+    // window opened for tabs leaves them as they are.
+    if (_secondary)
+        return;
     settings.setValue("window/geometry", saveGeometry());
     if (_layoutRestored)
         settings.setValue("window/state", saveState(kLayoutVersion));
@@ -13065,28 +13891,33 @@ void MainWindow::saveSettings()
 
 void MainWindow::closeEvent(QCloseEvent* event)
 {
-    // Every tab with unsaved changes is shown in turn and asked about.
-    for (size_t i = 0; i < _tabs.size(); ++i)
-    {
-        const bool modified = static_cast<int>(i) == _activeTab ? _editContext.isModified() : !_tabs[i]->history.isClean();
-        if (!modified)
-            continue;
-        activateTab(static_cast<int>(i));
-        if (!confirmDiscardChanges())
-        {
-            event->ignore();
-            return;
-        }
-    }
-    if (!confirmDiscardChanges())
+    // The documents with unsaved changes are asked about, unless quitting
+    // asked about every window's already.
+    if (!s_quitting && !settleUnsaved({this}, this))
     {
         event->ignore();
         return;
     }
+    // The last window to close says what to reopen next time.
+    const bool last = s_windows.size() == 1 && s_windows.front() == this;
+    if (!s_quitting && last)
+        saveSession({this});
 
     saveSettings();
+    // What was let go of needs no recovery copy, and while other windows
+    // stay open, no memory either: nothing asks about it again.
+    for (const std::unique_ptr<DocumentTab>& tab : _tabs)
+        tab->autoSave.reset();
+    if (!s_quitting && !last)
+    {
+        while (!_tabs.empty())
+            closeTab(static_cast<int>(_tabs.size()) - 1, false);
+    }
+    s_windows.removeAll(this);
     event->accept();
-    _updater->applyOnExit();
+    // An update the first window downloaded goes in once Phoenix has quit.
+    if (!_secondary)
+        _updater->applyOnExit();
 }
 
 void MainWindow::onHighQualityAntiAliasingToggled(bool checked)

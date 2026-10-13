@@ -35,6 +35,7 @@
 #include "../edit/drawing_style.h"
 #include "../edit/snapping.h"
 
+#include <map>
 #include <memory>
 #include <vector>
 
@@ -70,6 +71,13 @@ public:
     /// With \a startup false, nothing opens by itself and no update check
     /// runs, as for exporting from the command line.
     explicit MainWindow(const QString& initialFile = QString(), QWidget* parent = nullptr, bool startup = true);
+    ~MainWindow() override;
+
+    /// Every window people work in, the one Phoenix started with first.
+    static QList<MainWindow*> windows();
+    /// Whether \a document is open in any window: shown, in a tab or in an
+    /// external library.
+    static bool documentOpenAnywhere(const fla::Document* document);
 
     /// Opens \a source and exports all its frames to \a output: a PNG
     /// sequence for a .png name, a video otherwise. Returns the process exit
@@ -337,7 +345,10 @@ private slots:
     /// document, asking what to do with items it already has (Resolve
     /// Library Conflicts). The names they have here, empty when nothing
     /// was copied.
-    std::vector<std::string> copyLibraryItems(const fla::Document& source, const QStringList& names);
+    /// \a renamed, when given, gets the name here of each item and of what
+    /// it uses; \a canceled whether the person canceled.
+    std::vector<std::string> copyLibraryItems(const fla::Document& source, const QStringList& names,
+        std::map<std::string, std::string>* renamed = nullptr, bool* canceled = nullptr);
     /// Whether \a document is still open, in a tab or an external library.
     bool documentAlive(const fla::Document* document) const;
     /// Layer parenting: \a layer follows \a parent (null for none) from
@@ -441,7 +452,7 @@ private slots:
     void activateTab(int index);
     /// Closes the tab, asking about unsaved changes first; false when the
     /// person cancels.
-    bool closeTab(int index);
+    bool closeTab(int index, bool ask = true);
     void refreshTabs();
     /// File > Revert: the saved file again, its changes dropped.
     void revertDocument();
@@ -524,6 +535,10 @@ private:
     void updateRecentFilesMenu();
 
     void addToRecentFiles(const QString& filePath);
+    /// The recent files are every window's: written to the settings and
+    /// shown in each window's menu.
+    void forgetRecentFile(const QString& filePath);
+    void storeRecentFiles();
 
     void loadSettings();
 
@@ -660,12 +675,22 @@ private:
         class LibraryPanel* panel = nullptr;
     };
     std::vector<std::unique_ptr<ExternalLibrary>> _externalLibraries;
-    /// Library items copied, to paste into another document's library.
-    const fla::Document* _libraryClipboardSource = nullptr;
-    QStringList _libraryClipboard;
-    /// An item being dragged from an external library onto the stage.
-    const fla::Document* _externalDragSource = nullptr;
-    QString _externalDragName;
+    /// Library items copied, to paste into another document's library, in
+    /// this window or another.
+    static const fla::Document* _libraryClipboardSource;
+    static QStringList _libraryClipboard;
+    /// An item being dragged from a library, an external one or another
+    /// window's, onto the stage or into the library: from another document,
+    /// it is copied in with what it uses.
+    static const fla::Document* _externalDragSource;
+    static QString _externalDragName;
+    /// Copies \a names (library items) from \a source in, as Paste does
+    /// for what it pastes: asking about clashes, and giving the name each
+    /// has here in \a renamed. False when the person cancels.
+    bool bringLibraryItems(const fla::Document& source, const std::vector<std::string>& names,
+        std::map<std::string, std::string>& renamed);
+    /// Paste and Paste in Place from the copies Phoenix holds.
+    void pasteElements(const char* name, bool centerInView);
     void chooseTool(Tool* tool);
     /// The tool to go back to when the pen is turned back from its eraser
     /// end.
@@ -683,7 +708,6 @@ private:
     PropertiesPanel* _propertiesPanel = nullptr;
     class LibraryPanel* _libraryPanel = nullptr;
     class FramePickerPanel* _framePicker = nullptr;
-    class AutoSave* _autoSave = nullptr;
 
     /// The onion skin's settings, kept between sessions.
     struct OnionSettings
@@ -737,13 +761,79 @@ private:
         QString path;
         QString name;
         int frame = 0;
+        /// The zoom, pan and turn it was left at.
+        PhoenixView::ViewState view;
+        /// Its recovery copy, written while it has unsaved changes, shown
+        /// or not. Null in a window that runs headless.
+        std::unique_ptr<class AutoSave> autoSave;
+        /// The window it is in, which a tab moved to another window changes.
+        MainWindow* owner = nullptr;
     };
     std::vector<std::unique_ptr<DocumentTab>> _tabs;
     int _activeTab = -1;
-    class QTabBar* _tabBar = nullptr;
+    class DocumentTabBar* _tabBar = nullptr;
     bool _switchingTabs = false;
     /// Takes the document shown off the window, keeping it whole.
     void parkActiveDocument();
+    /// What the window keeps about a document beyond the panels (copied
+    /// layers, bitmaps out in an editor), let go as the document closes.
+    void forgetDocument(const fla::FLADocument* document);
+    /// A new tab at the end, with its recovery copy.
+    DocumentTab& addTab();
+    /// The recovery copy of \a tab, reading the document wherever it is.
+    void giveAutoSave(DocumentTab& tab);
+    /// The tab's document, file, name and whether it has unsaved changes,
+    /// whether it is the one shown or one waiting.
+    const fla::Document* tabDocument(const DocumentTab& tab) const;
+    QString tabPath(const DocumentTab& tab) const;
+    QString tabName(const DocumentTab& tab) const;
+    bool tabModified(const DocumentTab& tab) const;
+    class AutoSave* activeAutoSave() const;
+    /// The right-click menu of the tab at \a index.
+    void showTabMenu(int index, const QPoint& globalPos);
+    /// Closes every tab but \a keep, or every tab, asking about unsaved
+    /// changes as each goes; false when the person cancels.
+    bool closeOtherTabs(int keep);
+    bool closeAllTabs();
+    /// Shows \a path selected in Explorer or the Finder.
+    static void revealInFileManager(const QString& path);
+    /// Ctrl+Tab and Ctrl+Shift+Tab.
+    void cycleTabs(int step);
+    /// Takes the tab at \a index out of this window, document, history,
+    /// view and all, showing another tab in its place; and puts one in
+    /// at \a at, shown.
+    std::unique_ptr<DocumentTab> detachTab(int index);
+    void attachTab(std::unique_ptr<DocumentTab> tab, int at = -1);
+    /// Move to New Window and Move to Window: the tab's document in
+    /// another window, which a new one opens at \a globalPos when given.
+    void moveTabToNewWindow(int index, const QPoint* globalPos = nullptr);
+    void moveTabToWindow(int index, MainWindow* target, int at = -1);
+    /// A tab dragged off the bar and let go: onto another window's tab bar
+    /// it moves there, anywhere else to a window of its own.
+    void tabDraggedOut(int index);
+    friend class DocumentTabBar;
+    /// Another window to hold documents: its own stage, timeline and
+    /// panels, no start screen. It goes when it closes.
+    static MainWindow* openSecondaryWindow();
+    /// A window opened to take a tab, rather than the one Phoenix started
+    /// with: it writes no layout or window place to the settings.
+    bool _secondary = false;
+    /// Quitting: every window's unsaved documents settled at once, then
+    /// every window closed.
+    static bool s_quitting;
+    void quitAll();
+    /// Asks about the unsaved documents in \a windows: one at a time, or
+    /// Save All, Discard All or Cancel when there are several. False when
+    /// the person cancels.
+    static bool settleUnsaved(const QList<MainWindow*>& windows, QWidget* parent,
+        const DocumentTab* except = nullptr);
+    /// The documents open in every window, for Reopen documents from last
+    /// time; and opening them again.
+    static void saveSession(const QList<MainWindow*>& windows);
+    bool reopenSession();
+    /// Lets go of what \a tab's document keeps read in memory while it
+    /// waits (bitmaps, sounds); they are read again when it is shown.
+    void releaseParkedMedia(DocumentTab& tab);
 
     /// Copy Layers: copies of the layers, for the document they came from.
     std::vector<std::unique_ptr<fla::Layer>> _copiedLayers;
@@ -891,7 +981,9 @@ private:
 
     /// Frames copied with Copy Frames, one list of spans per layer copied,
     /// top layer first, each numbered from 0.
-    std::vector<std::vector<std::unique_ptr<fla::Frame>>> _frameClipboard;
+    /// Shared by every window, with the document they came from.
+    static std::vector<std::vector<std::unique_ptr<fla::Frame>>>& _frameClipboard;
+    static const fla::Document* _frameClipboardFrom;
 
     /// Points the copied frames' symbol instances at \a library's symbols
     /// (at nothing for null).
@@ -914,7 +1006,10 @@ private:
     /// far, since nothing else can be cloned yet.
     /// What Copy took: copies of the elements, of any kind, in stacking
     /// order. The system clipboard carries them too (see copy()).
-    std::vector<std::unique_ptr<fla::Element>> _clipboard;
+    /// Shared by every window, with the document it came from, whose
+    /// library items a paste into another document brings along.
+    static std::vector<std::unique_ptr<fla::Element>>& _clipboard;
+    static const fla::Document* _clipboardFrom;
 
     /// The shapes currently selected, in selection order.
     std::vector<fla::Shape*> selectedShapes() const;
