@@ -780,9 +780,9 @@ private:
     /// timeline goes.
     void attachSoundTo(fla::Layer* layer, int frame, const QString& name);
 
-    /// ffmpeg's path, asking for it when it is not on the PATH; empty when
-    /// the person did not say.
-    QString findFfmpeg(const QString& title, const QString& why);
+    /// The ffmpeg that ships with Phoenix; when it is missing, says so with
+    /// \a title and gives an empty path.
+    QString findFfmpeg(const QString& title);
 
     /// Which toolbox icon stands for \a tool, for the Properties panel's
     /// Tool tab.

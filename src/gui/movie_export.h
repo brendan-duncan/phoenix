@@ -142,12 +142,13 @@ private:
 
 namespace MovieExport {
 
-/// Where ffmpeg is: the one set in Phoenix's settings, or one on the PATH.
-/// Empty when there is none.
+/// The ffmpeg that ships with Phoenix, beside its program; empty when it is
+/// missing. Phoenix never uses another one, so video works the same on
+/// every machine with nothing else installed.
 QString ffmpegPath();
 
-/// Remembers \a path as the ffmpeg to use.
-void setFfmpegPath(const QString& path);
+/// What to tell someone whose Phoenix has lost its ffmpeg.
+QString missingFfmpeg();
 
 /// Writes the movie, showing progress over \a parent and letting it be
 /// cancelled. False with \a error set when it could not be written; false

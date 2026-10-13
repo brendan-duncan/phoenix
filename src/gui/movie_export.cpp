@@ -30,7 +30,6 @@
 #include <QPushButton>
 #include <QSettings>
 #include <QSpinBox>
-#include <QStandardPaths>
 #include <QTemporaryFile>
 #include <QVBoxLayout>
 
@@ -289,12 +288,7 @@ void MovieExportDialog::formatChanged()
     else if (index == kSvgIndex)
         _encoderNote->setText("One SVG a frame, numbered from 0001: shapes, strokes, gradients and text as vectors.");
     else if (video)
-    {
-        const QString ffmpeg = MovieExport::ffmpegPath();
-        _encoderNote->setText(ffmpeg.isEmpty()
-            ? "Video is encoded with ffmpeg, which was not found. You will be asked where it is."
-            : QString("Encoded with %1").arg(QDir::toNativeSeparators(ffmpeg)));
-    }
+        _encoderNote->setText(MovieExport::ffmpegPath().isEmpty() ? MovieExport::missingFfmpeg() : QString());
     else
     {
         _encoderNote->setText("One image a frame, numbered from 0001.");
@@ -368,15 +362,20 @@ namespace MovieExport {
 
 QString ffmpegPath()
 {
-    const QString stored = QSettings().value("export/ffmpeg").toString();
-    if (!stored.isEmpty() && QFileInfo(stored).isExecutable())
-        return stored;
-    return QStandardPaths::findExecutable("ffmpeg");
+#ifdef Q_OS_WIN
+    const QString name = "ffmpeg.exe";
+#else
+    const QString name = "ffmpeg";
+#endif
+    const QString path = QDir(QCoreApplication::applicationDirPath()).filePath(name);
+    return QFileInfo(path).isExecutable() ? path : QString();
 }
 
-void setFfmpegPath(const QString& path)
+QString missingFfmpeg()
 {
-    QSettings().setValue("export/ffmpeg", path);
+    return QString("This copy of Phoenix is missing its ffmpeg, which it encodes and reads video with. "
+                   "It belongs in %1; reinstalling Phoenix puts it back.")
+        .arg(QDir::toNativeSeparators(QCoreApplication::applicationDirPath()));
 }
 
 bool runOne(const MovieExportSettings& settings, PhoenixView& view, TimelineAudio* audio, double frameRate,
@@ -782,7 +781,7 @@ bool runOne(const MovieExportSettings& settings, PhoenixView& view, TimelineAudi
     const QString ffmpeg = ffmpegPath();
     if (ffmpeg.isEmpty())
     {
-        error = "ffmpeg was not found.";
+        error = missingFfmpeg();
         return false;
     }
     // H.264 in 4:2:0, and ProRes, want even sides.

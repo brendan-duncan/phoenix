@@ -589,6 +589,11 @@ qt_generate_deploy_app_script(
     ${PHOENIX_DEPLOY_OPTIONS})
 install(SCRIPT ${PHOENIX_DEPLOY_SCRIPT} COMPONENT Phoenix)
 
+# The ffmpeg Phoenix encodes and reads video with ships beside it: see
+# cmake/PhoenixFfmpeg.cmake.
+include(cmake/PhoenixFfmpeg.cmake)
+phoenix_ship_ffmpeg()
+
 # Tests for the non-Qt core. Also configurable standalone from tests/.
 enable_testing()
 add_subdirectory(tests)

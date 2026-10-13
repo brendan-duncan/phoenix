@@ -1,0 +1,162 @@
+# Builds the ffmpeg Phoenix ships beside itself, for every platform, from
+# the sources pinned in tools/ffmpeg/build_ffmpeg.sh, and publishes the
+# archives, with the exact sources they were built from, as assets of the
+# release tagged ffmpeg-<version>. A pull request then pins the archives'
+# hashes in cmake/FfmpegArchives.cmake, which the build downloads them by.
+#
+# Run it by hand from the Actions tab when moving to a new ffmpeg or x264:
+# change the pins in build_ffmpeg.sh and the version in FfmpegArchives.cmake
+# first.
+
+name: ffmpeg archives
+
+on:
+  workflow_dispatch:
+    inputs:
+      publish:
+        description: "Publish to the ffmpeg-<version> release and open the pin PR"
+        type: boolean
+        default: true
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  # The sources once, so every platform builds the same x264 and the same
+  # sources are published.
+  sources:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - id: version
+        run: echo "version=$(bash tools/ffmpeg/build_ffmpeg.sh version)" >> "$GITHUB_OUTPUT"
+
+      - name: Fetch the sources
+        run: bash tools/ffmpeg/build_ffmpeg.sh sources sources
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ffmpeg-sources
+          path: sources/
+          if-no-files-found: error
+
+  build:
+    needs: sources
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            target: windows-x64
+            msystem: MINGW64
+            packages: toolchain:p nasm:p zlib:p pkgconf:p
+          - os: windows-11-arm
+            target: windows-arm64
+            msystem: CLANGARM64
+            packages: toolchain:p zlib:p pkgconf:p
+          - os: macos-latest
+            target: macos
+          # The oldest runners, so the program runs on older systems too.
+          - os: ubuntu-22.04
+            target: linux-x64
+          - os: ubuntu-22.04-arm
+            target: linux-arm64
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: ffmpeg-sources
+          path: sources
+
+      - name: MSYS2
+        if: runner.os == 'Windows'
+        uses: msys2/setup-msys2@v2
+        with:
+          msystem: ${{ matrix.msystem }}
+          update: true
+          install: make zip diffutils
+          pacboy: ${{ matrix.packages }}
+
+      - name: Build (Windows)
+        if: runner.os == 'Windows'
+        shell: msys2 {0}
+        run: bash tools/ffmpeg/build_ffmpeg.sh build ${{ matrix.target }} sources dist
+
+      - name: Build (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          brew install nasm pkgconf
+          bash tools/ffmpeg/build_ffmpeg.sh build ${{ matrix.target }} sources dist
+
+      - name: Build (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y nasm pkg-config zlib1g-dev
+          bash tools/ffmpeg/build_ffmpeg.sh build ${{ matrix.target }} sources dist
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ffmpeg-${{ matrix.target }}
+          path: dist/
+          if-no-files-found: error
+
+  publish:
+    needs: [sources, build]
+    if: inputs.publish
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: ffmpeg-*
+          path: dist
+          merge-multiple: true
+
+      - name: Pin the hashes
+        run: python tools/ffmpeg/pin_ffmpeg_hashes.py "${{ needs.sources.outputs.version }}" dist/*.sha256
+
+      - name: Publish the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          version="${{ needs.sources.outputs.version }}"
+          tag="ffmpeg-$version"
+          gh release view "$tag" >/dev/null 2>&1 || \
+            gh release create "$tag" --title "ffmpeg $version for Phoenix" \
+              --notes "The ffmpeg program Phoenix ships beside itself, for each platform, built by tools/ffmpeg/build_ffmpeg.sh: FFmpeg $version with x264, under the GPL version 2 or later. The source tarballs here are the exact sources the programs were built from. The build downloads these archives; see cmake/PhoenixFfmpeg.cmake."
+          gh release upload "$tag" --clobber dist/*
+
+      - name: Open the pin pull request
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          version="${{ needs.sources.outputs.version }}"
+          branch="ffmpeg-archives-$version"
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git checkout -B "$branch"
+          git add cmake/FfmpegArchives.cmake
+          if git diff --cached --quiet; then
+            echo "hashes already pinned"
+            exit 0
+          fi
+          git commit -m "Pin ffmpeg $version archive hashes"
+          git push --force origin "$branch"
+          # Opening the pull request needs "Allow GitHub Actions to create and
+          # approve pull requests" under Settings > Actions > General. Without
+          # it the branch is still pushed, and the link below opens the PR.
+          if gh pr view "$branch" >/dev/null 2>&1; then
+            echo "pull request for $branch already open"
+          elif ! gh pr create --head "$branch" --base "${{ github.ref_name }}" \
+            --title "Pin ffmpeg $version archive hashes" \
+            --body "Hashes of the archives published on the ffmpeg-$version release, written by the ffmpeg archives workflow."; then
+            echo "::warning::Could not open the pull request (allow Actions to create pull requests in Settings > Actions > General). Open it here: ${{ github.server_url }}/${{ github.repository }}/pull/new/$branch"
+          fi

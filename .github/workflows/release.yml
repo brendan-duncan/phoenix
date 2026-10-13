@@ -98,6 +98,7 @@ jobs:
           cmake -S . -B build ${{ matrix.generator }} \
             -DPHOENIX_USE_SYSTEM_QT=OFF \
             -DPHOENIX_VERSION=${{ steps.version.outputs.version }} \
+            -DPHOENIX_FFMPEG_REQUIRED=ON \
             -DCMAKE_BUILD_TYPE=Release
           cmake --build build --config Release --target Phoenix phoenix_tests --parallel
 

@@ -5740,7 +5740,7 @@ void MainWindow::exportMovie()
     };
 
     if (settings.format == MovieExportSettings::Format::Video &&
-        findFfmpeg("Export Movie", "Phoenix encodes video with ffmpeg").isEmpty())
+        findFfmpeg("Export Movie").isEmpty())
         return;
 
     QString error;
@@ -6330,7 +6330,7 @@ void MainWindow::quit()
 void MainWindow::showAbout()
 {
     QMessageBox::about(this, "About Phoenix",
-        QString("<b>Phoenix</b> %1<br><br>An experimental Flash FLA editor.<br><br>"
+        QString("<b>Phoenix</b> %1<br><br>2D Vector Animation Production Software.<br><br>"
                 "<a href=\"https://github.com/brendan-duncan/phoenix\">github.com/brendan-duncan/phoenix</a>")
             .arg(Updater::currentVersion()));
 }
@@ -8045,24 +8045,12 @@ void MainWindow::importToLibrary()
     importMedia(paths, false);
 }
 
-QString MainWindow::findFfmpeg(const QString& title, const QString& why)
+QString MainWindow::findFfmpeg(const QString& title)
 {
     const QString found = MovieExport::ffmpegPath();
-    if (!found.isEmpty())
-        return found;
-    QMessageBox::information(this, title,
-        why + ", which it could not find on the PATH. "
-        "Choose ffmpeg's program file to use it; Phoenix will remember it.\n\n"
-        "ffmpeg is free from ffmpeg.org.");
-    const QString chosen = QFileDialog::getOpenFileName(this, "Where is ffmpeg?", QString(),
-#ifdef Q_OS_WIN
-        "ffmpeg (ffmpeg.exe);;Programs (*.exe)");
-#else
-        "ffmpeg (ffmpeg);;All Files (*)");
-#endif
-    if (!chosen.isEmpty())
-        MovieExport::setFfmpegPath(chosen);
-    return chosen;
+    if (found.isEmpty())
+        QMessageBox::warning(this, title, MovieExport::missingFfmpeg());
+    return found;
 }
 
 void MainWindow::importVideo()
@@ -8078,7 +8066,7 @@ void MainWindow::importVideo()
     if (video.isEmpty())
         return;
     settings.setValue("importFolder", QFileInfo(video).absolutePath());
-    const QString ffmpeg = findFfmpeg("Import Video", "Phoenix reads video with ffmpeg");
+    const QString ffmpeg = findFfmpeg("Import Video");
     if (ffmpeg.isEmpty())
         return;
 

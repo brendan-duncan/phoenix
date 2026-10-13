@@ -101,6 +101,39 @@ Linux arm64 runners included), uploads them to the `qt-<version>` release, and
 opens a pull request that pins their hashes in `cmake/QtArchives.cmake`
 (`tools/qt/pin_qt_hashes.py`). Merge that PR to switch the build over.
 
+## ffmpeg
+
+Phoenix encodes and reads video with ffmpeg, and ships its own copy beside
+itself: next to `Phoenix.exe`, in `Phoenix.app/Contents/MacOS`, or beside the
+Linux binary. Phoenix only ever runs that copy, so video works on a machine
+with nothing else installed. It is a separate program rather than a library
+linked in: it is built with x264, which is GPL, and as its own program it
+leaves Phoenix under the MIT license.
+
+The configure step finds it (`cmake/PhoenixFfmpeg.cmake`), first found first:
+
+1. `-DPHOENIX_FFMPEG_EXECUTABLE=...`, a program to ship as it is
+2. an archive already unpacked under `third_party/ffmpeg/<version>/<target>`
+3. the archive in `-DPHOENIX_FFMPEG_ARCHIVE_DIR=...`, or downloaded from the
+   `ffmpeg-<version>` release, checked against the hash pinned in
+   `cmake/FfmpegArchives.cmake`
+
+and the build copies it next to Phoenix, so a build runs as an installed copy
+does; `cmake --install` puts it, and its licenses (`licenses/ffmpeg`), into the
+package. Without one the build warns and video export and import say the
+program is missing; `-DPHOENIX_FFMPEG_REQUIRED=ON`, which release builds set,
+makes that an error.
+
+The archives are built from source by `tools/ffmpeg/build_ffmpeg.sh`, which
+pins the FFmpeg release and the x264 commit: one static program with x264,
+FFmpeg's own ProRes, AAC and JPEG encoders and its decoders, nothing picked up
+from the machine it is built on, and no networking. The **ffmpeg archives**
+workflow (`.github/workflows/ffmpeg-archives.yml`, run by hand from the Actions
+tab) builds the five archives on Windows (MSYS2), macOS (one universal
+program) and Ubuntu runners, encodes a test movie with each, uploads them with
+the exact sources to the `ffmpeg-<version>` release, and opens a pull request
+that pins their hashes (`tools/ffmpeg/pin_ffmpeg_hashes.py`).
+
 ## Tests
 
 Building the top-level project builds the tests too, as the `phoenix_tests`

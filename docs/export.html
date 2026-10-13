@@ -59,7 +59,7 @@
 
 <h3>About ffmpeg</h3>
 
-<p>Video export uses <a href="https://ffmpeg.org/">ffmpeg</a>, a free video encoder. If it is installed and on your path, Phoenix finds it. If not, Phoenix asks you to locate it the first time you export video, and remembers where it is. Other formats do not need it.</p>
+<p>Phoenix encodes video with <a href="https://ffmpeg.org/">ffmpeg</a>, which comes with Phoenix: it is installed beside Phoenix itself, so video export works with nothing else installed. Phoenix always uses its own copy, never another ffmpeg on the machine, so a movie comes out the same everywhere. ffmpeg is a separate program under the GNU General Public License; its license, and where to get the source it was built from, are in the <code>licenses/ffmpeg</code> folder of the installation (on macOS, inside Phoenix.app).</p>
 
 <h2>Export Image</h2>
 
