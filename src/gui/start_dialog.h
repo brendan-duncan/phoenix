@@ -25,6 +25,8 @@ public:
         Browse,
         /// The recent file path().
         OpenRecent,
+        /// Help > Tutorials, the guided lessons.
+        Tutorials,
     };
 
     StartDialog(const QStringList& recentFiles, QWidget* parent = nullptr);

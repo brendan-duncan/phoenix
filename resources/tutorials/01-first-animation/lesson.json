@@ -1,0 +1,106 @@
+{
+  "title": "Your first animation",
+  "summary": "Draw a ball, turn it into a symbol, send it across the stage with a classic tween, ease it, check the spacing with onion skinning, and export a video.",
+  "minutes": 10,
+  "order": 1,
+  "guide": "first-animation.html",
+  "start": {"new": {"width": 1280, "height": 720, "fps": 24}},
+  "steps": [
+    {
+      "title": "Welcome",
+      "text": "<p>In this lesson you will draw a ball and animate it across the stage.</p><p>Phoenix has opened a new HD document for it, 1280&times;720 at 24 frames per second. The white rectangle is the <b>stage</b>: whatever is on it ends up in your video.</p><p>Click <b>Next</b> to begin. You can drag this window anywhere.</p>"
+    },
+    {
+      "title": "Pick the Oval tool",
+      "text": "<p>Press <kbd>O</kbd>, or click the Oval tool in the toolbox. It shares a slot with the Rectangle: press and hold the slot to choose between them.</p>",
+      "target": "tool:Oval",
+      "wait": {"tool": "Oval"}
+    },
+    {
+      "title": "Choose a color",
+      "text": "<p>Click the <b>fill swatch</b>, the solid square at the bottom of the toolbox, and pick a bright color for the ball.</p><p>The outlined square beside it is the stroke color. To draw the ball without an outline, uncheck <b>Stroke</b> on the Properties panel's Tool tab.</p>",
+      "target": "widget:toolboxFill"
+    },
+    {
+      "title": "Draw a circle",
+      "text": "<p>Hold <kbd>Shift</kbd> and drag near the left edge of the stage to draw a circle. Shift keeps it round.</p>",
+      "target": "stage:60,240,320,320",
+      "wait": {"command": "Oval"}
+    },
+    {
+      "title": "Switch to the Selection tool",
+      "text": "<p>Press <kbd>V</kbd>, or click the arrow at the top of the toolbox.</p>",
+      "target": "tool:Selection",
+      "wait": {"tool": "Selection"}
+    },
+    {
+      "title": "Select the whole ball",
+      "text": "<p>Double-click the ball. That selects its fill and its outline together, shown with a fine dot pattern.</p>",
+      "target": "stage:60,240,320,320",
+      "wait": {"selection": "shape"}
+    },
+    {
+      "title": "Turn it into a symbol",
+      "text": "<p>Tweens move whole objects, so the ball needs to become a symbol.</p><p>Press <kbd>F8</kbd>, or choose <b>Modify &gt; Convert to Symbol</b>. Name it <i>Ball</i>, set <b>Type</b> to <b>Graphic</b>, and click <b>OK</b>.</p>",
+      "target": "menu:Modify/Convert to Symbol",
+      "wait": {"command": "Convert to Symbol"}
+    },
+    {
+      "title": "Go to frame 24",
+      "text": "<p>In the timeline, click the cell under frame <b>24</b> on the ball's layer. At 24 frames per second that is one second in.</p>",
+      "target": "frame::24",
+      "wait": {"frame": 24}
+    },
+    {
+      "title": "Insert a keyframe",
+      "text": "<p>Press <kbd>F6</kbd>, or choose <b>Insert &gt; Timeline &gt; Keyframe</b>. The frames between 1 and 24 fill in, showing that the ball is held across them.</p>",
+      "target": "menu:Insert/Timeline/Keyframe",
+      "wait": {"command": "Insert Keyframe"}
+    },
+    {
+      "title": "Move the ball",
+      "text": "<p>With the playhead still on frame 24, drag the ball to the right side of the stage.</p>",
+      "target": "stage:880,240,340,320",
+      "wait": {"command": "Move"}
+    },
+    {
+      "title": "Tween between the keyframes",
+      "text": "<p>Right-click any frame between 1 and 24 and choose <b>Classic Tween</b>, or click one and choose <b>Insert &gt; Classic Tween</b>.</p><p>The span turns lilac with an arrow: Phoenix now works out the frames in between.</p>",
+      "target": "frame::2-23",
+      "wait": {"command": "Create Classic Tween"}
+    },
+    {
+      "title": "Play it",
+      "text": "<p>Press <kbd>Enter</kbd>, or click the play button in the timeline header. Press it again to stop.</p>",
+      "target": "widget:timelinePlay",
+      "wait": {"playing": true}
+    },
+    {
+      "title": "Pick a frame of the tween",
+      "text": "<p>Stop playback, then click a frame inside the tween, such as frame 12. Its settings show on the Properties panel's <b>Frame</b> tab.</p>",
+      "target": "frame::12",
+      "wait": {"frame": 12}
+    },
+    {
+      "title": "Ease the motion",
+      "text": "<p>Real objects speed up and slow down. On the Properties panel's Frame tab, open the <b>Ease</b> list and choose an <b>In Out</b> preset.</p><p>Play again: the ball now starts gently and settles into place.</p>",
+      "target": "label:Properties/Ease",
+      "wait": {"command": "Ease"}
+    },
+    {
+      "title": "Check the spacing",
+      "text": "<p>Turn on onion skinning with this button, or <kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>O</kbd>. Frames before the playhead show in blue and frames after it in green, so you can see how the ball's spacing changes as it eases.</p>",
+      "target": "widget:timelineOnionSkin"
+    },
+    {
+      "title": "Export a video",
+      "text": "<p>Choose <b>File &gt; Export &gt; Export Movie</b>, set <b>Format</b> to <b>Video</b> and the codec to <b>H.264</b>, and click <b>Export</b>. Phoenix encodes the video itself; nothing else needs installing.</p>",
+      "target": "menu:File/Export/Export Movie",
+      "wait": {"action": "File/Export/Export Movie"}
+    },
+    {
+      "title": "Well done",
+      "text": "<p>You drew a ball, made it a symbol, tweened and eased it, and exported a movie.</p><p>Save your document with <kbd>Ctrl</kbd>+<kbd>S</kbd> if you want to keep it. Help &gt; Tutorials has more lessons, such as <i>Merge and object drawing</i> and <i>Symbols and editing in place</i>.</p>"
+    }
+  ]
+}

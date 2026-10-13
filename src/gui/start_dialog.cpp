@@ -118,7 +118,12 @@ StartDialog::StartDialog(const QStringList& recentFiles, QWidget* parent)
 
     QPushButton* open = new QPushButton("Open...", this);
     connect(open, &QPushButton::clicked, this, [this]() { choose(Choice::Browse); });
+    // New to Phoenix: lessons that walk through it step by step.
+    QPushButton* tutorials = new QPushButton("Tutorials...", this);
+    tutorials->setToolTip("Guided lessons: draw and animate step by step, with the control to use next circled");
+    connect(tutorials, &QPushButton::clicked, this, [this]() { choose(Choice::Tutorials); });
     QHBoxLayout* openButtons = new QHBoxLayout();
+    openButtons->addWidget(tutorials);
     openButtons->addStretch();
     openButtons->addWidget(open);
 

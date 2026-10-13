@@ -10,6 +10,7 @@
 
 class QAction;
 class QFrame;
+class QToolButton;
 
 /// Animate's Tools panel: the tools in slots, a slot with more than one
 /// tool showing the last one used and opening the others on a long press,
@@ -48,6 +49,9 @@ public:
     QAction* tool(const QString& id) const { return _tools.value(id); }
     /// Every tool's id, in the order they were registered.
     QStringList toolIds() const { return _order; }
+    /// The button that holds tool  id, shown or in its flyout; null when
+    /// the tool is hidden.
+    QToolButton* buttonFor(const QString& id) const;
 
     /// The layout Phoenix starts with; set once all tools are registered.
     void setDefaultLayout(const Layout& layout) { _default = layout; }

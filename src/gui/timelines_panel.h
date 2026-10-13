@@ -68,6 +68,12 @@ public:
     /// The selected frames, or an empty selection.
     FrameSelection selection() const;
 
+    /// Where frames  first to  last (from 0) of the layer named
+    ///  layer are drawn, in the grid's coordinates; the first row's when
+    ///  layer is empty. Empty when no row has that name. With  ruler,
+    /// the ruler above those frames instead.
+    QRect cellsRect(const QString& layer, int first, int last, bool ruler = false) const;
+
     /// Every frame of every layer shown (Select All Frames).
     void selectAll();
 

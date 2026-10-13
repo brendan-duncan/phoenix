@@ -16,6 +16,9 @@
 #include "../data/symbol.h"
 #include "../data/symbol_list.h"
 #include "../writer/fla_writer.h"
+#include "tutorial_lesson.h"
+#include <QApplication>
+#include "tutorial_runner.h"
 #include "../writer/xfl_content.h"
 #include "../writer/xfl_folder_writer.h"
 
@@ -65,6 +68,10 @@ const char* const kHelp =
     "\n"
     "  shortcuts [--defaults]\n"
     "      Lists every command and its key: the set in use, or Phoenix's defaults.\n"
+    "\n"
+    "  lessons [--check]\n"
+    "      Lists the interactive tutorials. --check finds every control their\n"
+    "      steps point at in the default workspace; exits 2 when one is missing.\n"
     "\n"
     "  doctor <file> [--repair <out.fla|out.phx>] [--json]\n"
     "      Checks a document for damage and repairs what it can; a file that\n"
@@ -679,7 +686,7 @@ int benchmark(const QStringList& args)
 
 bool isCommand(const QString& name)
 {
-    return name == "benchmark" || name == "render" || name == "doctor" || name == "diff" || name == "batch" || name == "shots" || name == "links" || name == "shortcuts" || name == "help" ||
+    return name == "benchmark" || name == "render" || name == "doctor" || name == "diff" || name == "batch" || name == "shots" || name == "links" || name == "shortcuts" || name == "lessons" || name == "help" ||
            name == "--help";
 }
 
@@ -730,6 +737,30 @@ int run(const QStringList& arguments)
         }
         MainWindow window(QString(), nullptr, false);
         return window.renderCommand(args.at(0), args.mid(1));
+    }
+    if (name == "lessons")
+    {
+        QStringList unreadable;
+        const std::vector<TutorialLesson> lessons = tutorials::allLessons(&unreadable);
+        for (const TutorialLesson& lesson : lessons)
+            std::printf("%s\t%s\t%d steps\n", lesson.id.toUtf8().constData(), lesson.title.toUtf8().constData(),
+                static_cast<int>(lesson.steps.size()));
+        for (const QString& problem : unreadable)
+            std::fprintf(stderr, "%s\n", problem.toUtf8().constData());
+        if (!args.contains("--check"))
+            return unreadable.isEmpty() ? 0 : 2;
+        MainWindow window(QString(), nullptr, false);
+        // Shown (offscreen, for a check), so its panels are laid out as a
+        // reader sees them.
+        window.resize(1600, 1000);
+        window.show();
+        window.newLessonDocument(1280, 720, 24.0);
+        QApplication::processEvents();
+        const QStringList problems = tutorials::checkLessons(window);
+        for (const QString& problem : problems)
+            std::fprintf(stderr, "%s\n", problem.toUtf8().constData());
+        std::printf("%d lessons, %d problems\n", static_cast<int>(lessons.size()), static_cast<int>(problems.size()));
+        return problems.isEmpty() ? 0 : 2;
     }
     if (name == "shortcuts")
     {

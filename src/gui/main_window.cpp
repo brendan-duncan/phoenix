@@ -5,6 +5,8 @@
 #include "new_document_dialog.h"
 #include "start_dialog.h"
 #include "stage_controls.h"
+#include "tutorial_lesson.h"
+#include "tutorial_runner.h"
 #include "app_identity.h"
 #include "autosave.h"
 #include "timeline_audio.h"
@@ -203,6 +205,10 @@ namespace {
 /// layout from before the timeline, tools and outliner docked is not used.
 constexpr int kLayoutVersion = 2;
 fla::Frame* frameOfElement(const fla::Element* element);
+}
+
+namespace {
+bool s_skipStartScreen = false;
 }
 
 MainWindow::MainWindow(const QString& initialFile, QWidget* parent, bool startup)
@@ -411,9 +417,12 @@ MainWindow::MainWindow(const QString& initialFile, QWidget* parent, bool startup
     // the file worked on last. Opened once the window is up, so a message
     // about a file that cannot be opened has a window to sit on rather than
     // appearing before there is one.
-    const bool startScreen = initialFile.isEmpty() && QSettings().value("showStartDialog", true).toBool();
+    // A lesson asked for on the command line opens a document of its own.
+    const bool lesson = s_skipStartScreen;
+    s_skipStartScreen = false;
+    const bool startScreen = initialFile.isEmpty() && !lesson && QSettings().value("showStartDialog", true).toBool();
     const QString startFile = !initialFile.isEmpty() ? initialFile
-        : (_recentFiles.isEmpty() || startScreen ? QString() : _recentFiles.first());
+        : (_recentFiles.isEmpty() || startScreen || lesson ? QString() : _recentFiles.first());
     // Work a crash left behind comes first, unless a file was asked for.
     if (startup && !startFile.isEmpty())
     {
@@ -862,6 +871,114 @@ void MainWindow::saveAsTemplate()
         QMessageBox::warning(this, "Save as Template", QString::fromStdString(error));
     else
         statusBar()->showMessage(QString("Saved the template %1.").arg(name), 3000);
+}
+
+void MainWindow::skipStartScreen()
+{
+    s_skipStartScreen = true;
+}
+
+bool MainWindow::hasDocument(const fla::FLADocument* document) const
+{
+    if (!document)
+        return false;
+    if (document == _flaDocument)
+        return true;
+    for (const auto& tab : _tabs)
+    {
+        if (tab && tab->document == document)
+            return true;
+    }
+    return false;
+}
+
+QString MainWindow::toolName(const Tool* tool) const
+{
+    if (!tool || !_toolbox)
+        return QString();
+    for (const auto& [reach, action] : _toolActionList)
+    {
+        if (reach() != tool)
+            continue;
+        for (const QString& id : _toolbox->toolIds())
+        {
+            if (_toolbox->tool(id) == action)
+                return id;
+        }
+    }
+    return QString();
+}
+
+QString MainWindow::selectionKind() const
+{
+    for (fla::DOMElement* selected : _selection.elements())
+    {
+        const fla::Element* element = dynamic_cast<const fla::Element*>(selected);
+        if (!element)
+            continue;
+        switch (element->elementType())
+        {
+        case fla::Element::Type::Shape:
+            return "shape";
+        case fla::Element::Type::SymbolInstance:
+            return "instance";
+        case fla::Element::Type::StaticText:
+            return "text";
+        case fla::Element::Type::Group:
+            return "group";
+        default:
+            return "other";
+        }
+    }
+    return "none";
+}
+
+void MainWindow::newLessonDocument(int width, int height, double frameRate)
+{
+    makeRoomForDocument();
+    createNewDocument(width, height, frameRate, Qt::white);
+}
+
+void MainWindow::openLessonDocument(const QString& path)
+{
+    // As New from Template does: a copy, untitled, never the file itself.
+    makeRoomForDocument();
+    loadFLAFile(path);
+    _recentFiles.removeAll(path);
+    updateRecentFilesMenu();
+    if (_flaDocument)
+    {
+        _documentPath.clear();
+        _documentName = "Untitled";
+        _editContext.markUnsaved();
+        updateWindowTitle();
+        updateEditState();
+    }
+    if (_phoenixView)
+        QTimer::singleShot(0, this, [this]() { _phoenixView->zoomToFit(); });
+}
+
+void MainWindow::showTutorials()
+{
+    TutorialsDialog dialog(this);
+    if (dialog.exec() == QDialog::Accepted && !dialog.chosen().isEmpty())
+        startTutorial(dialog.chosen());
+}
+
+void MainWindow::startTutorial(const QString& id)
+{
+    for (const TutorialLesson& lesson : tutorials::allLessons())
+    {
+        if (lesson.id != id)
+            continue;
+        if (!_tutorial)
+            _tutorial = new TutorialRunner(this);
+        QString error;
+        if (!_tutorial->start(lesson, error))
+            QMessageBox::warning(this, "Tutorials", QString("The lesson could not start: %1").arg(error));
+        return;
+    }
+    QMessageBox::warning(this, "Tutorials", QString("There is no lesson called %1.").arg(id));
 }
 
 void MainWindow::newFromTemplate()
@@ -1668,6 +1785,9 @@ void MainWindow::showStartDialog()
         break;
     case StartDialog::Choice::OpenRecent:
         openInTab(dialog.path());
+        break;
+    case StartDialog::Choice::Tutorials:
+        showTutorials();
         break;
     case StartDialog::Choice::None:
         break;
@@ -4887,6 +5007,12 @@ void MainWindow::setupMenus()
     connect(startAction, &QAction::triggered, this, &MainWindow::showStartDialog);
     helpMenu->addAction(startAction);
 
+    // Interactive tutorials: lessons that walk through a task step by step.
+    QAction* tutorialsAction = new QAction("&Tutorials...", this);
+    tutorialsAction->setStatusTip("Lessons that walk through Phoenix step by step, pointing at what to use next");
+    connect(tutorialsAction, &QAction::triggered, this, &MainWindow::showTutorials);
+    helpMenu->addAction(tutorialsAction);
+
     QAction* checkForUpdatesAction = new QAction("Check for &Updates...", this);
     checkForUpdatesAction->setStatusTip("Look for a newer version of Phoenix");
     connect(checkForUpdatesAction, &QAction::triggered, this, [this]() { _updater->checkForUpdates(true); });
@@ -6891,6 +7017,7 @@ void MainWindow::pruneToDocument()
 
 void MainWindow::updateEditState()
 {
+    emit editStateChanged();
     const fla::CommandStack& stack = _editContext.commandStack();
     if (_autoSave)
         _autoSave->noteChanged();
@@ -7336,6 +7463,7 @@ void MainWindow::setupToolBar()
     // the stroke drawn as an outline, the fill solid, so the two never
     // read as each other.
     _toolboxStrokeSwatch = new QToolButton(toolBar);
+    _toolboxStrokeSwatch->setObjectName("toolboxStroke");
     _toolboxStrokeSwatch->setIcon(PropertiesPanel::strokeSwatchIcon(_drawingStyle.strokeColor));
     _toolboxStrokeSwatch->setIconSize(QSize(20, 20));
     _toolboxStrokeSwatch->setAutoRaise(true);
@@ -7344,6 +7472,7 @@ void MainWindow::setupToolBar()
     addExtra(_toolboxStrokeSwatch);
 
     _toolboxFillSwatch = new QToolButton(toolBar);
+    _toolboxFillSwatch->setObjectName("toolboxFill");
     _toolboxFillSwatch->setIcon(PropertiesPanel::swatchIcon(_drawingStyle.fillColor));
     _toolboxFillSwatch->setIconSize(QSize(20, 20));
     _toolboxFillSwatch->setAutoRaise(true);
@@ -7369,6 +7498,7 @@ void MainWindow::setupToolBar()
     });
     addAction(objectDrawingAction);
     QToolButton* objectDrawingButton = new QToolButton(toolBar);
+    objectDrawingButton->setObjectName("toolboxObjectDrawing");
     objectDrawingButton->setAutoRaise(true);
     objectDrawingButton->setIconSize(QSize(22, 22));
     objectDrawingButton->setDefaultAction(objectDrawingAction);
@@ -12405,6 +12535,7 @@ void MainWindow::setSelectedTextType(fla::StaticText::TextType type)
 
 void MainWindow::updateSelectionState()
 {
+    emit selectionStateChanged();
     const bool hasDocument = _flaDocument && _flaDocument->document;
 
     if (_selectAllAction)

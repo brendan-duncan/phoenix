@@ -458,6 +458,9 @@ LayersPanel::LayersPanel(QWidget *parent)
     QToolButton* newLayer = smallButton(buttons, glyph(drawNewLayer), "New Layer");
     QToolButton* newFolder = smallButton(buttons, glyph(drawNewFolder), "New Folder");
     QToolButton* remove = smallButton(buttons, glyph(drawTrash), "Delete the current layer");
+    newLayer->setObjectName("layerNew");
+    newFolder->setObjectName("layerNewFolder");
+    remove->setObjectName("layerDelete");
     theme::themedIcon(newLayer, []() { return glyph(drawNewLayer); });
     theme::themedIcon(newFolder, []() { return glyph(drawNewFolder); });
     theme::themedIcon(remove, []() { return glyph(drawTrash); });

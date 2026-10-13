@@ -134,12 +134,14 @@ StageControls::StageControls(PhoenixView* view, QAction* clip, QAction* dim, std
     layout->setSpacing(1);
 
     _center = new QToolButton(this);
+    _center->setObjectName("stageCenter");
     _center->setAutoRaise(true);
     _center->setToolTip("Center Stage: bring the stage to the middle of the view");
     connect(_center, &QToolButton::clicked, _view, &PhoenixView::centerStage);
     layout->addWidget(_center);
 
     _rotation = new QToolButton(this);
+    _rotation->setObjectName("stageRotation");
     _rotation->setAutoRaise(true);
     _rotation->setToolButtonStyle(Qt::ToolButtonTextBesideIcon);
     connect(_rotation, &QToolButton::clicked, this, [this, pickRotationTool]() {
@@ -154,6 +156,7 @@ StageControls::StageControls(PhoenixView* view, QAction* clip, QAction* dim, std
     layout->addWidget(_rotation);
 
     _clipButton = new QToolButton(this);
+    _clipButton->setObjectName("stageClip");
     _clipButton->setAutoRaise(true);
     _clipButton->setPopupMode(QToolButton::InstantPopup);
     QMenu* clipMenu = new QMenu(_clipButton);
@@ -196,6 +199,7 @@ StageControls::StageControls(PhoenixView* view, QAction* clip, QAction* dim, std
     layout->addWidget(_clipButton);
 
     _zoom = new ZoomBox(this);
+    _zoom->setObjectName("stageZoom");
     _zoom->setRange(5.0, 10000.0);
     _zoom->setDecimals(0);
     _zoom->setSuffix("%");
@@ -215,6 +219,7 @@ StageControls::StageControls(PhoenixView* view, QAction* clip, QAction* dim, std
     layout->addWidget(_zoom);
 
     _zoomMenu = new QToolButton(this);
+    _zoomMenu->setObjectName("stageZoomMenu");
     _zoomMenu->setAutoRaise(true);
     _zoomMenu->setPopupMode(QToolButton::InstantPopup);
     _zoomMenu->setArrowType(Qt::DownArrow);

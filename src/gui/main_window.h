@@ -103,6 +103,36 @@ public:
     /// asking first about unsaved changes.
     void openDocumentPath(const QString& filePath);
 
+    /// For the interactive tutorials (tutorial_runner.cpp): the parts a
+    /// lesson points at and watches.
+    PhoenixView* phoenixView() const { return _phoenixView; }
+    TimelineView* timelineView() const { return _timelineView; }
+    class Toolbox* toolbox() const { return _toolbox; }
+    fla::CommandStack& commandStack() { return _editContext.commandStack(); }
+    const fla::FLADocument* shownDocument() const { return _flaDocument; }
+    /// Whether  document is open, shown or in another tab.
+    bool hasDocument(const fla::FLADocument* document) const;
+    /// The toolbox name of  tool ("Oval", "Selection").
+    QString toolName(const Tool* tool) const;
+    /// What is selected on the stage: "none", "shape", "instance", "text",
+    /// "group" or "other" for the first selected object.
+    QString selectionKind() const;
+    /// A lesson's document: a new one, or an untitled copy of  path, in a
+    /// tab of its own.
+    void newLessonDocument(int width, int height, double frameRate);
+    void openLessonDocument(const QString& path);
+    /// Help > Tutorials, and starting a lesson by its id.
+    void showTutorials();
+    void startTutorial(const QString& id);
+    /// The next window starts without the start screen, as for a lesson
+    /// asked for on the command line.
+    static void skipStartScreen();
+
+signals:
+    /// The history changed: an edit made, undone or redone.
+    void editStateChanged();
+    void selectionStateChanged();
+
 private slots:
     void newFile();
     /// The start screen: new from a preset, Open, or a recent file.
@@ -550,6 +580,8 @@ private:
     QDockWidget* _timelineDock = nullptr;
     QDockWidget* _toolsDock = nullptr;
     class Toolbox* _toolbox = nullptr;
+    /// The lesson running, if one is (Help > Tutorials).
+    class TutorialRunner* _tutorial = nullptr;
     /// Edit Toolbar: the tools' slots rearranged.
     void editToolbar();
     /// The panels that open from the Window menu, made at the start.

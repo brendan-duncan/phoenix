@@ -306,13 +306,25 @@ int main(int argc, char *argv[])
         return window.exportFromCommandLine(arguments.at(2), arguments.at(3));
     }
 
-    const QString initialFile = arguments.size() > 1 ? arguments.at(1) : QString();
+    // Phoenix --tutorial <lesson>: starts with that lesson running.
+    QString tutorial;
+    QStringList launch = arguments;
+    const int tutorialAt = static_cast<int>(launch.indexOf("--tutorial"));
+    if (tutorialAt > 0 && tutorialAt + 1 < launch.size())
+    {
+        tutorial = launch.at(tutorialAt + 1);
+        launch.remove(tutorialAt, 2);
+        MainWindow::skipStartScreen();
+    }
+    const QString initialFile = launch.size() > 1 ? launch.at(1) : QString();
 
     // The theme last chosen, before any window is made.
     app_identity::apply();
     theme::applySaved();
     MainWindow window(initialFile);
     window.show();
+    if (!tutorial.isEmpty())
+        QTimer::singleShot(300, &window, [&window, tutorial]() { window.startTutorial(tutorial); });
 
     // On macOS a file opened from Finder arrives as an event, not as an
     // argument.

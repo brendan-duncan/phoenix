@@ -10,6 +10,22 @@
 
 #include <algorithm>
 
+QToolButton* Toolbox::buttonFor(const QString& id) const
+{
+    QAction* action = _tools.value(id);
+    if (!action)
+        return nullptr;
+    for (const Item& item : _items)
+    {
+        QToolButton* button = qobject_cast<QToolButton*>(item.widget);
+        if (!button)
+            continue;
+        if (button->defaultAction() == action || (button->menu() && button->menu()->actions().contains(action)))
+            return button;
+    }
+    return nullptr;
+}
+
 QJsonObject Toolbox::Layout::toJson() const
 {
     QJsonArray list;

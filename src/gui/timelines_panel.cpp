@@ -189,6 +189,7 @@ TimelinesPanel::TimelinesPanel(Player* player, QWidget *parent)
     headerLayout->addStretch();
 
     QPushButton* gotoFirstBtn = new QPushButton(_header);
+    gotoFirstBtn->setObjectName("timelineFirstFrame");
     gotoFirstBtn->setFixedSize(btnSize, btnSize);
     gotoFirstBtn->setProperty("transport", static_cast<int>(TransportIcon::First));
     gotoFirstBtn->setIconSize(QSize(iconSize, iconSize));
@@ -198,6 +199,7 @@ TimelinesPanel::TimelinesPanel(Player* player, QWidget *parent)
     headerLayout->addWidget(gotoFirstBtn);
 
     QPushButton* stepBackBtn = new QPushButton(_header);
+    stepBackBtn->setObjectName("timelineStepBack");
     stepBackBtn->setFixedSize(btnSize, btnSize);
     stepBackBtn->setProperty("transport", static_cast<int>(TransportIcon::Prev));
     stepBackBtn->setIconSize(QSize(iconSize, iconSize));
@@ -207,6 +209,7 @@ TimelinesPanel::TimelinesPanel(Player* player, QWidget *parent)
     headerLayout->addWidget(stepBackBtn);
 
     _playButton = new QPushButton(_header);
+    _playButton->setObjectName("timelinePlay");
     _playButton->setFixedSize(btnSize, btnSize);
     _playButton->setIconSize(QSize(iconSize, iconSize));
     _playButton->setToolTip("Play/Stop");
@@ -215,6 +218,7 @@ TimelinesPanel::TimelinesPanel(Player* player, QWidget *parent)
     headerLayout->addWidget(_playButton);
 
     QPushButton* stepForwardBtn = new QPushButton(_header);
+    stepForwardBtn->setObjectName("timelineStepForward");
     stepForwardBtn->setFixedSize(btnSize, btnSize);
     stepForwardBtn->setProperty("transport", static_cast<int>(TransportIcon::Next));
     stepForwardBtn->setIconSize(QSize(iconSize, iconSize));
@@ -226,6 +230,7 @@ TimelinesPanel::TimelinesPanel(Player* player, QWidget *parent)
     // Onion skin, beside the transport as in Animate's timeline.
     headerLayout->addSpacing(16);
     _onionButton = new QPushButton(_header);
+    _onionButton->setObjectName("timelineOnionSkin");
     _onionButton->setFixedSize(btnSize, btnSize);
     _onionButton->setCheckable(true);
     _onionButton->setToolTip("Onion skin (Alt+Shift+O); right-click for its settings, drag its markers in the ruler");
@@ -243,6 +248,7 @@ TimelinesPanel::TimelinesPanel(Player* player, QWidget *parent)
 
     // Loop Playback, beside the onion skin as in Animate.
     _loopButton = new QPushButton(_header);
+    _loopButton->setObjectName("timelineLoop");
     _loopButton->setFixedSize(btnSize, btnSize);
     _loopButton->setCheckable(true);
     _loopButton->setToolTip("Loop playback (Alt+Shift+L)");
@@ -254,6 +260,7 @@ TimelinesPanel::TimelinesPanel(Player* player, QWidget *parent)
 
     // The frame view: frame widths, row heights, thumbnails and seconds.
     QPushButton* viewButton = new QPushButton(_header);
+    viewButton->setObjectName("timelineFrameView");
     viewButton->setFixedSize(btnSize, btnSize);
     viewButton->setText(QString::fromUtf8("\u2630"));
     viewButton->setToolTip("Frame view: frame size, row height, thumbnails, time in seconds (Ctrl+wheel zooms)");
@@ -783,6 +790,23 @@ int TimelineGrid::rowAt(int y) const
         return -1;
     const int row = (y - headerHeight) / _view.rowHeight;
     return row < static_cast<int>(_rows.size()) ? row : -1;
+}
+
+QRect TimelineGrid::cellsRect(const QString& layer, int first, int last, bool ruler) const
+{
+    first = std::max(0, first);
+    last = std::max(first, last);
+    const int x = first * cellStride();
+    const int width = (last - first + 1) * cellStride();
+    if (ruler)
+        return QRect(x, rulerTop(), width, kRulerHeight);
+    for (size_t row = 0; row < _rows.size(); ++row)
+    {
+        const fla::Layer* shown = _rows[row].layer;
+        if (layer.isEmpty() || (shown && QString::fromStdString(shown->name) == layer))
+            return QRect(x, kRulerHeight + static_cast<int>(row) * _view.rowHeight, width, _view.rowHeight);
+    }
+    return QRect();
 }
 
 int TimelineGrid::frameAt(int x) const
