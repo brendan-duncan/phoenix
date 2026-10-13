@@ -130,6 +130,17 @@ public:
     /// asked for on the command line.
     static void skipStartScreen();
 
+    /// For scripts and AI assistants (script_api.cpp): everything shown
+    /// brought up to date after a change made without the mouse, and
+    /// whether the document is one from a newer Phoenix, kept read-only.
+    void refreshAfterScript();
+    bool isReadOnlyDocument() const;
+    friend class ScriptApi;
+    friend struct ScriptContext;
+    /// Serves the AI assistant that started Phoenix (`Phoenix --mcp`) on
+    /// standard input and output.
+    void serveMcpOnStdio();
+
 signals:
     /// The history changed: an edit made, undone or redone.
     void editStateChanged();
@@ -584,6 +595,8 @@ private:
     class Toolbox* _toolbox = nullptr;
     /// The lesson running, if one is (Help > Tutorials).
     class TutorialRunner* _tutorial = nullptr;
+    /// AI assistants' way in (MCP), in the window a person works in.
+    class McpServer* _mcpServer = nullptr;
     /// Edit Toolbar: the tools' slots rearranged.
     void editToolbar();
     /// The panels that open from the Window menu, made at the start.

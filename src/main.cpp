@@ -1,5 +1,6 @@
 #include "gui/app_identity.h"
 #include "gui/command_line.h"
+#include "gui/mcp_server.h"
 #include "gui/main_window.h"
 #include "gui/theme.h"
 #include "gui/updater.h"
@@ -157,6 +158,11 @@ int main(int argc, char *argv[])
     app_identity::apply();
     app_identity::adoptOldSettings();
 
+    // Phoenix --mcp with a Phoenix already running that takes AI assistants:
+    // this process only passes messages between the two, with no window.
+    if (argc == 2 && std::strcmp(argv[1], "--mcp") == 0 && McpServer::relayToRunning())
+        return 0;
+
     // The theme's UI scale, which Qt takes only before it starts.
     {
         const double scale = QSettings().value("theme/uiScale", 1.0).toDouble();
@@ -306,9 +312,20 @@ int main(int argc, char *argv[])
         return window.exportFromCommandLine(arguments.at(2), arguments.at(3));
     }
 
+    // Phoenix --mcp: an AI assistant (an MCP client) started Phoenix to work
+    // with it over standard input and output.
+    bool mcp = false;
+    QStringList launch = arguments;
+    if (launch.size() > 1 && launch.at(1) == "--mcp")
+    {
+        mcp = true;
+        launch.removeAt(1);
+        // The assistant works with the window; no start screen in its way.
+        MainWindow::skipStartScreen();
+    }
+
     // Phoenix --tutorial <lesson>: starts with that lesson running.
     QString tutorial;
-    QStringList launch = arguments;
     const int tutorialAt = static_cast<int>(launch.indexOf("--tutorial"));
     if (tutorialAt > 0 && tutorialAt + 1 < launch.size())
     {
@@ -325,6 +342,8 @@ int main(int argc, char *argv[])
     window.show();
     if (!tutorial.isEmpty())
         QTimer::singleShot(300, &window, [&window, tutorial]() { window.startTutorial(tutorial); });
+    if (mcp)
+        window.serveMcpOnStdio();
 
     // On macOS a file opened from Finder arrives as an event, not as an
     // argument.

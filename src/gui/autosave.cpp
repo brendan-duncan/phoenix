@@ -87,7 +87,10 @@ void AutoSave::setInterval(int minutes)
 
 QString AutoSave::folder()
 {
-    const QString base = QStandardPaths::writableLocation(QStandardPaths::AppLocalDataLocation);
+    // Settings kept apart (PHOENIX_SETTINGS_DIR, for tests and demos) keep
+    // their recovery copies beside them, out of the person's own.
+    const QString apart = qEnvironmentVariable("PHOENIX_SETTINGS_DIR");
+    const QString base = !apart.isEmpty() ? apart : QStandardPaths::writableLocation(QStandardPaths::AppLocalDataLocation);
     return QDir(base).filePath("recovery");
 }
 

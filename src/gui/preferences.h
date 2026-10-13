@@ -53,4 +53,6 @@ private:
     QComboBox* _connectLines;
     QCheckBox* _penPreview;
     QCheckBox* _solidPoints;
+    QCheckBox* _mcp;
+    QSpinBox* _mcpPort;
 };

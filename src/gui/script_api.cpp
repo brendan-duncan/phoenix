@@ -1,0 +1,1338 @@
+#include "script_api.h"
+
+#include "document_view.h"
+#include "draw_placement.h"
+#include "main_window.h"
+#include "phoenix_view.h"
+#include "timeline_view.h"
+
+#include "../data/bitmap.h"
+#include "../data/document.h"
+#include "../data/fla_document.h"
+#include "../data/folder.h"
+#include "../data/frame.h"
+#include "../data/group.h"
+#include "../data/layer.h"
+#include "../data/shape.h"
+#include "../data/static_text.h"
+#include "../data/symbol.h"
+#include "../data/symbol_instance.h"
+#include "../data/symbol_list.h"
+#include "../data/timeline.h"
+#include "../edit/command_stack.h"
+#include "../edit/element_commands.h"
+#include "../edit/layer_commands.h"
+#include "../edit/library_commands.h"
+#include "../edit/property_command.h"
+#include "../edit/timeline_edit.h"
+#include "../edit/vector_import.h"
+#include "../parser/fla_doctor.h"
+
+#include <QBuffer>
+#include <QDir>
+#include <QFileInfo>
+#include <QJsonDocument>
+
+#include <algorithm>
+#include <cmath>
+#include <set>
+#include <stdexcept>
+
+namespace {
+
+/// An operation's failure, in words for the one who asked.
+struct ScriptError : std::runtime_error
+{
+    using std::runtime_error::runtime_error;
+};
+
+[[noreturn]] void fail(const QString& message)
+{
+    throw ScriptError(message.toStdString());
+}
+
+QJsonObject prop(const QString& type, const QString& description)
+{
+    return QJsonObject{{"type", type}, {"description", description}};
+}
+
+QJsonObject anyOf(const QString& description)
+{
+    return QJsonObject{{"description", description},
+        {"anyOf", QJsonArray{QJsonObject{{"type", "string"}}, QJsonObject{{"type", "integer"}}}}};
+}
+
+QJsonObject choice(const QStringList& values, const QString& description)
+{
+    return QJsonObject{{"type", "string"}, {"enum", QJsonArray::fromStringList(values)}, {"description", description}};
+}
+
+const QJsonObject kSymbolArg = prop("string", "A library symbol to work inside; the scene shown when left out");
+const QJsonObject kLayerArg = anyOf("A layer's name, or its index counting from 0 at the top");
+const QJsonObject kFrameArg = prop("integer", "A frame number, counting from 1");
+
+QString colorText(const uint8_t rgba[4])
+{
+    QString text = QString("#%1%2%3").arg(rgba[0], 2, 16, QChar('0')).arg(rgba[1], 2, 16, QChar('0'))
+                       .arg(rgba[2], 2, 16, QChar('0'));
+    if (rgba[3] != 255)
+        text += QString("%1").arg(rgba[3], 2, 16, QChar('0'));
+    return text.toUpper();
+}
+
+bool parseColor(const QString& text, uint8_t rgba[4])
+{
+    const QColor color(text.trimmed().length() == 9 && text.startsWith('#')
+            ? "#" + text.mid(7, 2) + text.mid(1, 6)  // #RRGGBBAA, as CSS writes it
+            : text.trimmed());
+    if (!color.isValid())
+        return false;
+    rgba[0] = static_cast<uint8_t>(color.red());
+    rgba[1] = static_cast<uint8_t>(color.green());
+    rgba[2] = static_cast<uint8_t>(color.blue());
+    rgba[3] = static_cast<uint8_t>(color.alpha());
+    return true;
+}
+
+QString layerTypeName(const fla::Layer& layer)
+{
+    switch (layer.layerType)
+    {
+    case fla::Layer::Type::Mask: return "mask";
+    case fla::Layer::Type::Masked: return "masked";
+    case fla::Layer::Type::Folder: return "folder";
+    case fla::Layer::Type::Guide: return "guide";
+    default: return layer.parentLayer && layer.parentLayer->layerType == fla::Layer::Type::Guide ? "guided" : "normal";
+    }
+}
+
+QString tweenName(const fla::Frame& frame)
+{
+    if (frame.tweenType == fla::TweenType::None)
+        return "none";
+    if (frame.tweenType == fla::TweenType::Shape)
+        return "shape";
+    return fla::timeline::motionOf(const_cast<fla::Frame&>(frame)) ? "motion" : "classic";
+}
+
+QString elementTypeName(const fla::Element& element)
+{
+    switch (element.elementType())
+    {
+    case fla::Element::Type::Shape:
+        return static_cast<const fla::Shape&>(element).isDrawingObject ? "drawing object" : "shape";
+    case fla::Element::Type::SymbolInstance:
+        return "instance";
+    case fla::Element::Type::StaticText:
+        return "text";
+    case fla::Element::Type::Group:
+        return "group";
+    case fla::Element::Type::BitmapInstance:
+        return "bitmap";
+    default:
+        return "other";
+    }
+}
+
+QString symbolTypeName(fla::SymbolType type)
+{
+    switch (type)
+    {
+    case fla::SymbolType::MovieClip: return "movie clip";
+    case fla::SymbolType::Button: return "button";
+    default: return "graphic";
+    }
+}
+
+/// The keyframe showing at \a index (from 0) on \a layer, or null.
+fla::Frame* keyframeAt(const fla::Layer& layer, int index)
+{
+    for (fla::Frame* frame : layer.frames)
+    {
+        if (frame && frame->index <= index && index < frame->index + std::max(1, frame->duration))
+            return frame;
+    }
+    return nullptr;
+}
+
+} // namespace
+
+// The parts of the main window the operations work through. MainWindow makes
+// ScriptApi a friend so these stay out of its public face.
+struct ScriptContext
+{
+    MainWindow& window;
+
+    fla::Document& document() const
+    {
+        if (!window._flaDocument || !window._flaDocument->document)
+            fail("No document is open.");
+        return *window._flaDocument->document;
+    }
+
+    fla::CommandStack& stack() const { return window._editContext.commandStack(); }
+
+    fla::Symbol* symbolNamed(const QString& name) const
+    {
+        fla::SymbolList* list = document().symbolList;
+        const auto found = list ? list->symbolMap.find(name.toStdString()) : decltype(list->symbolMap)::iterator();
+        if (!list || found == list->symbolMap.end())
+            fail(QString("There is no symbol called %1 in the library.").arg(name));
+        return found->second;
+    }
+
+    fla::Timeline& timeline(const QJsonObject& args) const
+    {
+        const QString symbol = args.value("symbol").toString();
+        if (!symbol.isEmpty())
+        {
+            fla::Symbol* found = symbolNamed(symbol);
+            if (found->timelines.empty() || !found->timelines.front())
+                fail(QString("%1 has no timeline.").arg(symbol));
+            return *found->timelines.front();
+        }
+        fla::Timeline* scene = document().currentScene();
+        if (!scene)
+            fail("The document has no scene.");
+        return *scene;
+    }
+
+    int layerIndex(const fla::Timeline& timeline, const QJsonObject& args, const char* key = "layer") const
+    {
+        const QJsonValue value = args.value(key);
+        if (value.isDouble())
+        {
+            const int index = value.toInt(-1);
+            if (index < 0 || index >= static_cast<int>(timeline.layers.size()))
+                fail(QString("There is no layer %1; the timeline has %2.").arg(index).arg(timeline.layers.size()));
+            return index;
+        }
+        const QString name = value.toString();
+        if (name.isEmpty())
+            fail(QString("Say which layer, by name or index (\"%1\").").arg(key));
+        for (size_t i = 0; i < timeline.layers.size(); ++i)
+        {
+            if (timeline.layers[i] && QString::fromStdString(timeline.layers[i]->name) == name)
+                return static_cast<int>(i);
+        }
+        fail(QString("There is no layer called %1.").arg(name));
+    }
+
+    fla::Layer& layer(fla::Timeline& timeline, const QJsonObject& args) const
+    {
+        fla::Layer* found = timeline.layers[static_cast<size_t>(layerIndex(timeline, args))];
+        if (!found)
+            fail("That layer is missing.");
+        return *found;
+    }
+
+    static int frameIndex(const QJsonObject& args, const char* key = "frame", int fallback = 1)
+    {
+        const int frame = args.value(key).toInt(fallback);
+        if (frame < 1 || frame > 100000)
+            fail(QString("%1 is not a frame number (they count from 1).").arg(frame));
+        return frame - 1;
+    }
+
+    fla::Frame& keyframe(fla::Layer& layer, const QJsonObject& args) const
+    {
+        fla::Frame* frame = keyframeAt(layer, frameIndex(args));
+        if (!frame)
+            fail(QString("Layer %1 has no frame %2.").arg(QString::fromStdString(layer.name)).arg(args.value("frame").toInt(1)));
+        return *frame;
+    }
+
+    fla::Element& element(fla::Frame& frame, const QJsonObject& args) const
+    {
+        const int index = args.value("index").toInt(-1);
+        if (index < 0 || index >= static_cast<int>(frame.elements.size()) || !frame.elements[static_cast<size_t>(index)])
+            fail(QString("There is no element %1 on that keyframe; it has %2.").arg(index).arg(frame.elements.size()));
+        return *frame.elements[static_cast<size_t>(index)];
+    }
+
+    /// Everything shown changed: the stage, the timeline, the library.
+    void refresh() const
+    {
+        window.refreshAfterScript();
+    }
+};
+
+namespace {
+
+QJsonObject boundsJson(const QRectF& bounds)
+{
+    return QJsonObject{{"x", std::round(bounds.x() * 100) / 100}, {"y", std::round(bounds.y() * 100) / 100},
+        {"width", std::round(bounds.width() * 100) / 100}, {"height", std::round(bounds.height() * 100) / 100}};
+}
+
+QJsonObject elementJson(MainWindow& window, const fla::Element& element, int index)
+{
+    QJsonObject json{{"index", index}, {"type", elementTypeName(element)}};
+    const fla::Transform& m = element.transform;
+    const double scaleX = std::hypot(m.m11, m.m12);
+    const double scaleY = std::hypot(m.m21, m.m22);
+    json["transform"] = QJsonObject{{"x", m.tx}, {"y", m.ty}, {"scaleX", scaleX}, {"scaleY", scaleY},
+        {"rotation", std::atan2(m.m12, m.m11) * 180.0 / 3.14159265358979}};
+    if (PhoenixView* view = window.phoenixView())
+    {
+        const QRectF bounds = view->elementBounds(&element);
+        if (bounds.isValid())
+            json["bounds"] = boundsJson(bounds);
+    }
+    switch (element.elementType())
+    {
+    case fla::Element::Type::SymbolInstance:
+    {
+        const auto& instance = static_cast<const fla::SymbolInstance&>(element);
+        json["symbol"] = QString::fromStdString(instance.libraryItemName);
+        json["symbolType"] = symbolTypeName(instance.symbolType);
+        if (!instance.name.empty())
+            json["name"] = QString::fromStdString(instance.name);
+        if (!instance.colorTransform.isIdentity())
+            json["alpha"] = instance.colorTransform.alphaMultiplier;
+        if (instance.colorTransform.tintMultiplier != 0.0)
+        {
+            json["tint"] = colorText(instance.colorTransform.tintColor);
+            json["tintAmount"] = instance.colorTransform.tintMultiplier;
+        }
+        break;
+    }
+    case fla::Element::Type::StaticText:
+    {
+        const auto& text = static_cast<const fla::StaticText&>(element);
+        QString characters;
+        for (const fla::TextRun& run : text.runs)
+            characters += QString::fromStdString(run.text);
+        json["text"] = characters.replace('\r', '\n');
+        if (!text.runs.empty())
+        {
+            json["font"] = QString::fromStdString(text.runs.front().face);
+            json["size"] = text.runs.front().size;
+            json["color"] = colorText(text.runs.front().fillColor);
+        }
+        break;
+    }
+    case fla::Element::Type::Group:
+        json["members"] = static_cast<int>(static_cast<const fla::Group&>(element).members.size());
+        break;
+    default:
+        break;
+    }
+    return json;
+}
+
+/// Library items: symbols, bitmaps and sounds, with what they are and how
+/// often they are used.
+QJsonArray libraryJson(fla::Document& document)
+{
+    const std::map<std::string, int> uses = fla::library::useCounts(document);
+    const auto useOf = [&](const std::string& name) {
+        const auto found = uses.find(name);
+        return found == uses.end() ? 0 : found->second;
+    };
+    QJsonArray items;
+    if (document.symbolList)
+    {
+        for (const fla::Symbol* symbol : document.symbolList->symbols)
+        {
+            if (symbol)
+                items.append(QJsonObject{{"name", QString::fromStdString(symbol->name)},
+                    {"kind", "symbol"}, {"symbolType", symbolTypeName(symbol->symbolType)},
+                    {"uses", useOf(symbol->name)}});
+        }
+    }
+    for (const fla::Resource* resource : document.resources)
+    {
+        if (const auto* bitmap = dynamic_cast<const fla::Bitmap*>(resource))
+            items.append(QJsonObject{{"name", QString::fromStdString(bitmap->name)}, {"kind", "bitmap"},
+                {"width", bitmap->frameRight / 20}, {"height", bitmap->frameBottom / 20},
+                {"uses", useOf(bitmap->name)}});
+    }
+    for (const auto& sound : document.sounds)
+        items.append(QJsonObject{{"name", QString::fromStdString(sound.name)}, {"kind", "sound"},
+            {"uses", useOf(sound.name)}});
+    for (const fla::Folder* folder : document.folders)
+    {
+        if (folder)
+            items.append(QJsonObject{{"name", QString::fromStdString(folder->name)}, {"kind", "folder"}});
+    }
+    return items;
+}
+
+QJsonObject timelineJson(const fla::Timeline& timeline, bool frames)
+{
+    QJsonArray layers;
+    for (size_t i = 0; i < timeline.layers.size(); ++i)
+    {
+        const fla::Layer* layer = timeline.layers[i];
+        if (!layer)
+            continue;
+        QJsonObject json{{"index", static_cast<int>(i)}, {"name", QString::fromStdString(layer->name)},
+            {"type", layerTypeName(*layer)}, {"visible", layer->visible}, {"locked", layer->locked}};
+        if (layer->parentLayer)
+            json["in"] = QString::fromStdString(layer->parentLayer->name);
+        int length = 0;
+        QJsonArray keyframes;
+        for (const fla::Frame* frame : layer->frames)
+        {
+            if (!frame)
+                continue;
+            length = std::max(length, frame->index + std::max(1, frame->duration));
+            if (!frames)
+                continue;
+            QJsonObject key{{"frame", frame->index + 1}, {"duration", frame->duration},
+                {"elements", static_cast<int>(frame->elements.size())}};
+            const QString tween = tweenName(*frame);
+            if (tween != "none")
+            {
+                key["tween"] = tween;
+                if (frame->acceleration != 0)
+                    key["ease"] = frame->acceleration;
+            }
+            if (!frame->name.empty())
+            {
+                key["label"] = QString::fromStdString(frame->name);
+                key["labelType"] = QString::fromStdString(frame->labelType.empty() ? "name" : frame->labelType);
+            }
+            if (frame->actionScript)
+                key["script"] = true;
+            keyframes.append(key);
+        }
+        json["frames"] = length;
+        if (frames)
+            json["keyframes"] = keyframes;
+        layers.append(json);
+    }
+    return QJsonObject{{"name", QString::fromStdString(timeline.name)}, {"layers", layers}};
+}
+
+QJsonObject documentJson(MainWindow& window, fla::Document& document)
+{
+    QJsonArray scenes;
+    for (const fla::Timeline* scene : document.timelines)
+    {
+        if (scene)
+            scenes.append(QString::fromStdString(scene->name));
+    }
+    const fla::Timeline* current = document.currentScene();
+    QJsonObject json{{"width", document.width}, {"height", document.height}, {"fps", document.frameRate},
+        {"background", colorText(document.backgroundColor)}, {"scenes", scenes},
+        {"scene", current ? QString::fromStdString(current->name) : QString()},
+        {"name", window.windowTitle()}};
+    if (current)
+        json["timeline"] = timelineJson(*current, false);
+    json["library"] = libraryJson(document);
+    if (window.phoenixView() && window.phoenixView()->player())
+        json["playhead"] = window.phoenixView()->player()->currentFrame() + 1;
+    return json;
+}
+
+QString fontFamilyOf(const std::string& face)
+{
+    // Faces are kept as family plus "-Bold" or "-Italic".
+    QString family = QString::fromStdString(face);
+    const int dash = static_cast<int>(family.lastIndexOf('-'));
+    if (dash > 0)
+        family = family.left(dash);
+    return family;
+}
+
+} // namespace
+
+ScriptApi::ScriptApi(MainWindow& window)
+    : _window(window)
+{
+    addReadOperations();
+    addWriteOperations();
+    addHelperOperations();
+}
+
+void ScriptApi::add(const QString& name, const QString& title, const QString& description,
+    const QJsonObject& properties, const QStringList& required, bool writes, std::function<Result(const QJsonObject&)> run)
+{
+    QJsonObject schema{{"type", "object"}, {"properties", properties}};
+    if (!required.isEmpty())
+        schema["required"] = QJsonArray::fromStringList(required);
+    _operations.push_back({name, title, description, schema, writes, std::move(run)});
+}
+
+ScriptApi::Result ScriptApi::call(const QString& name, const QJsonObject& arguments)
+{
+    const auto found = std::find_if(_operations.begin(), _operations.end(),
+        [&](const Operation& operation) { return operation.name == name; });
+    if (found == _operations.end())
+        return {QJsonValue(), QImage(), QString("There is no operation called %1.").arg(name)};
+    ScriptContext context{_window};
+    const bool grouped = !_group.isEmpty();
+    try
+    {
+        if (!found->writes)
+            return found->run(arguments);
+        if (_window.isReadOnlyDocument())
+            fail("This document is read-only: it came from a newer Phoenix. Save a copy to change it.");
+        fla::CommandStack& stack = context.stack();
+        // Each change is one undo step named for what asked it, unless a
+        // group gathers several.
+        if (!grouped)
+            stack.beginMacro(("AI: " + found->title).toStdString());
+        Result result;
+        try
+        {
+            result = found->run(arguments);
+        }
+        catch (...)
+        {
+            if (!grouped)
+                stack.endMacro();
+            context.refresh();
+            throw;
+        }
+        if (!grouped)
+        {
+            stack.endMacro();
+            stack.breakMergeChain();
+        }
+        context.refresh();
+        return result;
+    }
+    catch (const ScriptError& error)
+    {
+        return {QJsonValue(), QImage(), QString::fromStdString(error.what())};
+    }
+    catch (const std::exception& error)
+    {
+        return {QJsonValue(), QImage(), QString("That failed: %1").arg(error.what())};
+    }
+}
+
+void ScriptApi::addReadOperations()
+{
+    add("get_document", "Document summary",
+        "The open document: stage size, frame rate, background, scenes, the current scene's layers, the library "
+        "with how often each item is used, and the playhead.",
+        {}, {}, false, [this](const QJsonObject&) {
+            ScriptContext context{_window};
+            return Result{documentJson(_window, context.document())};
+        });
+
+    add("get_timeline", "Timeline",
+        "Every layer of the scene (or of a symbol) from the top, with its keyframes: where each starts, how long "
+        "it lasts, its tween and ease, its label, and how many elements it holds.",
+        {{"symbol", kSymbolArg}}, {}, false, [this](const QJsonObject& args) {
+            ScriptContext context{_window};
+            return Result{timelineJson(context.timeline(args), true)};
+        });
+
+    add("get_elements", "Elements",
+        "The elements on a layer at a frame, bottom first: type, transform, bounds on the stage, and for "
+        "instances their symbol and color effect, for text its characters and font.",
+        {{"symbol", kSymbolArg}, {"layer", kLayerArg}, {"frame", kFrameArg}}, {"layer", "frame"}, false,
+        [this](const QJsonObject& args) {
+            ScriptContext context{_window};
+            fla::Layer& layer = context.layer(context.timeline(args), args);
+            fla::Frame& frame = context.keyframe(layer, args);
+            QJsonArray elements;
+            for (size_t i = 0; i < frame.elements.size(); ++i)
+            {
+                if (frame.elements[i])
+                    elements.append(elementJson(_window, *frame.elements[i], static_cast<int>(i)));
+            }
+            return Result{QJsonObject{{"keyframe", frame.index + 1}, {"duration", frame.duration},
+                {"elements", elements}}};
+        });
+
+    add("get_library", "Library",
+        "Every library item: symbols with their type, bitmaps with their size, sounds and folders, each with its "
+        "use count. Items used nowhere have 0.",
+        {}, {}, false, [this](const QJsonObject&) {
+            ScriptContext context{_window};
+            return Result{libraryJson(context.document())};
+        });
+
+    add("render_frame", "Render frame",
+        "A picture of a frame of the scene, or of a symbol, as a PNG, so you can see the artwork. Width defaults "
+        "to 640 pixels.",
+        {{"symbol", kSymbolArg}, {"frame", kFrameArg}, {"width", prop("integer", "The picture's width in pixels, 16 to 2048")}},
+        {}, false, [this](const QJsonObject& args) {
+            ScriptContext context{_window};
+            fla::Document& document = context.document();
+            PhoenixView* view = _window.phoenixView();
+            if (!view)
+                fail("There is no stage to draw with.");
+            const int width = std::clamp(args.value("width").toInt(640), 16, 2048);
+            const int frame = ScriptContext::frameIndex(args);
+            QImage image;
+            const QString symbol = args.value("symbol").toString();
+            if (!symbol.isEmpty())
+            {
+                fla::Symbol* found = context.symbolNamed(symbol);
+                const QRectF area = view->symbolFramesBounds(found, frame, frame);
+                if (!area.isValid() || area.isEmpty())
+                    fail(QString("%1 shows nothing on frame %2.").arg(symbol).arg(frame + 1));
+                image = view->renderSymbolFrame(found, frame, area.adjusted(-4, -4, 4, 4), width / (area.width() + 8));
+            }
+            else
+            {
+                const double scale = width / std::max(1.0, static_cast<double>(document.width));
+                const QSize size(width, std::max(1, static_cast<int>(std::lround(document.height * scale))));
+                image = view->renderFrame(frame, size, false);
+            }
+            if (image.isNull())
+                fail("The frame could not be drawn.");
+            return Result{QJsonObject{{"width", image.width()}, {"height", image.height()}}, image};
+        });
+
+    add("check_document", "Check document",
+        "Problems worth fixing: damage the document checker finds, library items used nowhere, empty and hidden "
+        "layers, artwork entirely off the stage, very large bitmaps and very heavy shapes.",
+        {}, {}, false, [this](const QJsonObject&) {
+            ScriptContext context{_window};
+            fla::Document& document = context.document();
+            QJsonArray issues;
+            const auto issue = [&](const QString& severity, const QString& where, const QString& what) {
+                issues.append(QJsonObject{{"severity", severity}, {"where", where}, {"what", what}});
+            };
+            fla::doctor::Report report;
+            fla::doctor::checkDocument(document, report, false);
+            for (const fla::doctor::Issue& found : report.issues)
+            {
+                const QString severity = found.severity == fla::doctor::Issue::Severity::Error ? "error"
+                    : found.severity == fla::doctor::Issue::Severity::Warning               ? "warning"
+                                                                                             : "info";
+                issue(severity, QString::fromStdString(found.where), QString::fromStdString(found.what));
+            }
+            const std::map<std::string, int> uses = fla::library::useCounts(document);
+            for (const QJsonValue& value : libraryJson(document))
+            {
+                const QJsonObject item = value.toObject();
+                if (item["kind"] != "folder" && item["uses"].toInt() == 0)
+                    issue("info", item["name"].toString(), "used nowhere in the document");
+                if (item["kind"] == "bitmap" && (item["width"].toInt() > 4096 || item["height"].toInt() > 4096))
+                    issue("warning", item["name"].toString(),
+                        QString("a very large bitmap (%1x%2)").arg(item["width"].toInt()).arg(item["height"].toInt()));
+            }
+            const QRectF stage(0, 0, document.width, document.height);
+            for (const fla::Timeline* scene : document.timelines)
+            {
+                if (!scene)
+                    continue;
+                for (const fla::Layer* layer : scene->layers)
+                {
+                    if (!layer)
+                        continue;
+                    const QString where = QString("%1 > %2").arg(QString::fromStdString(scene->name),
+                        QString::fromStdString(layer->name));
+                    if (layer->layerType != fla::Layer::Type::Folder)
+                    {
+                        bool empty = true;
+                        for (const fla::Frame* frame : layer->frames)
+                            empty = empty && (!frame || frame->elements.empty());
+                        if (empty)
+                            issue("info", where, "an empty layer");
+                    }
+                    if (!layer->visible)
+                        issue("info", where, "a hidden layer");
+                    for (const fla::Frame* frame : layer->frames)
+                    {
+                        for (const fla::Element* element : frame ? frame->elements : std::vector<fla::Element*>())
+                        {
+                            if (!element)
+                                continue;
+                            if (scene == document.currentScene() && _window.phoenixView())
+                            {
+                                const QRectF bounds = _window.phoenixView()->elementBounds(element);
+                                if (bounds.isValid() && !bounds.intersects(stage))
+                                    issue("info", QString("%1, frame %2").arg(where).arg(frame->index + 1),
+                                        QString("a %1 entirely off the stage").arg(elementTypeName(*element)));
+                            }
+                            if (element->elementType() == fla::Element::Type::Shape &&
+                                static_cast<const fla::Shape*>(element)->edges.size() > 3000)
+                                issue("warning", QString("%1, frame %2").arg(where).arg(frame->index + 1),
+                                    QString("a very heavy shape (%1 edges)")
+                                        .arg(static_cast<const fla::Shape*>(element)->edges.size()));
+                        }
+                    }
+                }
+            }
+            return Result{QJsonObject{{"issues", issues}, {"count", issues.size()}}};
+        });
+}
+
+void ScriptApi::addWriteOperations()
+{
+    add("new_document", "New document",
+        "Opens a new, empty document in a tab of its own and shows it. Nothing already open is touched.",
+        {{"width", prop("integer", "Stage width in pixels; 1280 when left out")},
+            {"height", prop("integer", "Stage height; 720 when left out")},
+            {"fps", prop("number", "Frames per second; 24 when left out")}},
+        {}, false, [this](const QJsonObject& args) {
+            _window.newLessonDocument(std::clamp(args.value("width").toInt(1280), 1, 8192),
+                std::clamp(args.value("height").toInt(720), 1, 8192), std::clamp(args.value("fps").toDouble(24.0), 1.0, 120.0));
+            ScriptContext context{_window};
+            return Result{documentJson(_window, context.document())};
+        });
+
+    add("open_document", "Open document",
+        "Opens an FLA, XFL or Phoenix document from disk in a tab of its own and shows it.",
+        {{"path", prop("string", "The document's path")}}, {"path"}, false, [this](const QJsonObject& args) {
+            const QString path = args.value("path").toString();
+            if (!QFileInfo::exists(path))
+                fail(QString("There is no file at %1.").arg(path));
+            _window.openDocumentPath(path);
+            ScriptContext context{_window};
+            return Result{documentJson(_window, context.document())};
+        });
+
+    add("begin_edit", "Begin edit",
+        "Starts gathering changes into one undo step, named as given, until end_edit. Use it around a request "
+        "that takes several calls, so the person can undo it all at once.",
+        {{"label", prop("string", "What the changes do, for the Edit menu: \"Add walk cycle\"")}}, {"label"}, false,
+        [this](const QJsonObject& args) {
+            ScriptContext context{_window};
+            if (!_group.isEmpty())
+                fail("An edit is already open; end it first.");
+            const QString label = args.value("label").toString().trimmed();
+            _group = label.isEmpty() ? "Edit" : label;
+            context.stack().beginMacro(("AI: " + _group).toStdString());
+            return Result{QJsonObject{{"open", _group}}};
+        });
+
+    add("end_edit", "End edit", "Ends the undo step begin_edit started.", {}, {}, false,
+        [this](const QJsonObject&) {
+            ScriptContext context{_window};
+            if (_group.isEmpty())
+                fail("No edit is open.");
+            const QString closed = _group;
+            _group.clear();
+            context.stack().endMacro();
+            context.stack().breakMergeChain();
+            context.refresh();
+            return Result{QJsonObject{{"closed", closed}}};
+        });
+
+    add("add_layer", "Add layer",
+        "Adds a layer above another (or at the top) of the scene or a symbol.",
+        {{"symbol", kSymbolArg}, {"name", prop("string", "The new layer's name")},
+            {"type", choice({"normal", "guide", "mask", "folder"}, "What kind of layer; normal when left out")},
+            {"above", kLayerArg}},
+        {"name"}, true, [this](const QJsonObject& args) {
+            ScriptContext context{_window};
+            fla::Timeline& timeline = context.timeline(args);
+            const QString type = args.value("type").toString("normal");
+            const int index = args.contains("above") ? context.layerIndex(timeline, args, "above") : 0;
+            fla::Layer* layer = fla::newLayerFor(timeline, type == "folder");
+            layer->name = args.value("name").toString().toStdString();
+            layer->autoNamed = false;
+            if (type == "guide")
+                layer->layerType = fla::Layer::Type::Guide;
+            else if (type == "mask")
+                layer->layerType = fla::Layer::Type::Mask;
+            context.stack().push(fla::CommandPtr(new fla::AddLayerCommand(&timeline, index, layer, "Add Layer")));
+            return Result{QJsonObject{{"layer", QString::fromStdString(layer->name)}, {"index", index}}};
+        });
+
+    add("set_layer", "Change layer",
+        "Renames a layer, shows or hides it, locks or unlocks it, or changes its kind.",
+        {{"symbol", kSymbolArg}, {"layer", kLayerArg}, {"name", prop("string", "A new name")},
+            {"visible", prop("boolean", "Shown or hidden")}, {"locked", prop("boolean", "Locked or not")},
+            {"type", choice({"normal", "guide", "guided", "mask", "masked"}, "A new kind")}},
+        {"layer"}, true, [this](const QJsonObject& args) {
+            ScriptContext context{_window};
+            fla::Timeline& timeline = context.timeline(args);
+            fla::Layer* layer = timeline.layers[static_cast<size_t>(context.layerIndex(timeline, args))];
+            fla::LayerSnapshot after = fla::snapshotLayers(timeline);
+            for (fla::LayerState& state : after)
+            {
+                if (state.layer != layer)
+                    continue;
+                if (args.contains("name"))
+                {
+                    state.name = args.value("name").toString().toStdString();
+                    state.autoNamed = false;
+                }
+                if (args.contains("visible"))
+                    state.visible = args.value("visible").toBool();
+                if (args.contains("locked"))
+                    state.locked = args.value("locked").toBool();
+            }
+            if (args.contains("type"))
+            {
+                const QString type = args.value("type").toString();
+                const fla::layers::Kind kind = type == "guide" ? fla::layers::Kind::Guide
+                    : type == "guided"                        ? fla::layers::Kind::Guided
+                    : type == "mask"                          ? fla::layers::Kind::Mask
+                    : type == "masked"                        ? fla::layers::Kind::Masked
+                                                              : fla::layers::Kind::Normal;
+                if (!fla::layers::setKind(after, layer, kind))
+                    fail(QString("That layer cannot become %1 where it is (a guided or masked layer needs a guide or "
+                                 "mask above it).").arg(type));
+            }
+            context.stack().push(fla::CommandPtr(
+                new fla::LayerEditCommand(&timeline, fla::snapshotLayers(timeline), after, "Layer Properties")));
+            return Result{timelineJson(timeline, false)};
+        });
+
+    add("delete_layer", "Delete layer", "Deletes a layer and everything on it (a folder with what is in it).",
+        {{"symbol", kSymbolArg}, {"layer", kLayerArg}}, {"layer"}, true, [this](const QJsonObject& args) {
+            ScriptContext context{_window};
+            fla::Timeline& timeline = context.timeline(args);
+            if (timeline.layers.size() <= 1)
+                fail("A timeline keeps at least one layer.");
+            const int index = context.layerIndex(timeline, args);
+            _window._selection.clear();
+            context.stack().push(fla::CommandPtr(new fla::RemoveLayerCommand(&timeline, index, "Delete Layer")));
+            return Result{timelineJson(timeline, false)};
+        });
+
+    const auto frameEdit = [this](const QJsonObject& args, const char* name,
+                               const std::function<void(fla::Layer&, std::vector<fla::Frame*>&)>& edit) {
+        ScriptContext context{_window};
+        fla::Timeline& timeline = context.timeline(args);
+        fla::Layer& layer = context.layer(timeline, args);
+        _window._selection.clear();
+        fla::Layer* target = &layer;
+        auto* command = new fla::EditFramesCommand({target}, name,
+            [target, edit](std::vector<fla::Frame*>& removed) { edit(*target, removed); });
+        context.stack().push(fla::CommandPtr(command));
+        return timelineJson(timeline, true);
+    };
+
+    add("insert_keyframe", "Insert keyframe",
+        "Inserts a keyframe at a frame, holding a copy of what shows there (or an empty one with blank). Past the "
+        "layer's end its last frame is stretched up to it.",
+        {{"symbol", kSymbolArg}, {"layer", kLayerArg}, {"frame", kFrameArg},
+            {"blank", prop("boolean", "An empty keyframe rather than a copy")}},
+        {"layer", "frame"}, true, [frameEdit](const QJsonObject& args) {
+            const int index = ScriptContext::frameIndex(args);
+            const bool blank = args.value("blank").toBool(false);
+            return Result{frameEdit(args, "Insert Keyframe", [index, blank](fla::Layer& layer, std::vector<fla::Frame*>&) {
+                fla::timeline::insertKeyframe(layer, index, blank);
+            })};
+        });
+
+    add("insert_frames", "Insert frames", "Inserts frames at a frame, lengthening the span there.",
+        {{"symbol", kSymbolArg}, {"layer", kLayerArg}, {"frame", kFrameArg},
+            {"count", prop("integer", "How many frames; 1 when left out")}},
+        {"layer", "frame"}, true, [frameEdit](const QJsonObject& args) {
+            const int index = ScriptContext::frameIndex(args);
+            const int count = std::clamp(args.value("count").toInt(1), 1, 10000);
+            return Result{frameEdit(args, "Insert Frame", [index, count](fla::Layer& layer, std::vector<fla::Frame*>&) {
+                fla::timeline::insertFrames(layer, index, count);
+            })};
+        });
+
+    add("remove_frames", "Remove frames", "Removes frames from a layer, shortening it.",
+        {{"symbol", kSymbolArg}, {"layer", kLayerArg}, {"frame", kFrameArg},
+            {"count", prop("integer", "How many frames; 1 when left out")}},
+        {"layer", "frame"}, true, [frameEdit](const QJsonObject& args) {
+            const int index = ScriptContext::frameIndex(args);
+            const int count = std::clamp(args.value("count").toInt(1), 1, 10000);
+            return Result{frameEdit(args, "Remove Frames", [index, count](fla::Layer& layer, std::vector<fla::Frame*>& removed) {
+                fla::timeline::removeFrames(layer, index, count, removed);
+            })};
+        });
+
+    add("set_tween", "Set tween",
+        "Puts a tween on the span holding a frame: classic (between keyframes of the same symbol instance), shape "
+        "(between shapes), motion (one instance or text block alone on its span), or none. Ease runs from -100 (in) "
+        "to 100 (out).",
+        {{"symbol", kSymbolArg}, {"layer", kLayerArg}, {"frame", kFrameArg},
+            {"tween", choice({"classic", "shape", "motion", "none"}, "The kind of tween")},
+            {"ease", prop("integer", "-100 (ease in) to 100 (ease out); 0 for none")}},
+        {"layer", "frame", "tween"}, true, [this, frameEdit](const QJsonObject& args) {
+            ScriptContext context{_window};
+            const int index = ScriptContext::frameIndex(args);
+            const QString tween = args.value("tween").toString();
+            const bool hasEase = args.contains("ease");
+            const int ease = std::clamp(args.value("ease").toInt(0), -100, 100);
+            const double fps = context.document().frameRate;
+            bool done = true;
+            const QJsonObject result = frameEdit(args, "Tween",
+                [&done, index, tween, hasEase, ease, fps](fla::Layer& layer, std::vector<fla::Frame*>&) {
+                    if (tween == "classic")
+                        done = fla::timeline::setTween(layer, index, true);
+                    else if (tween == "none")
+                        done = fla::timeline::setTween(layer, index, false);
+                    else if (tween == "shape")
+                        done = fla::timeline::setShapeTween(layer, index);
+                    else if (tween == "motion")
+                        done = fla::timeline::createMotionTween(layer, index, fps);
+                    if (fla::Frame* span = fla::timeline::spanAt(layer, index); span && hasEase)
+                        span->acceleration = ease;
+                });
+            if (!done)
+                fail(tween == "motion"
+                        ? "A motion tween needs one symbol instance or text block alone on its span."
+                        : QString("No %1 tween could be made there.").arg(tween));
+            return Result{result};
+        });
+
+    add("set_label", "Label frame", "Gives the keyframe at a frame a label (a name, a comment or an anchor), or "
+        "removes it with an empty label.",
+        {{"symbol", kSymbolArg}, {"layer", kLayerArg}, {"frame", kFrameArg}, {"label", prop("string", "The label")},
+            {"labelType", choice({"name", "comment", "anchor"}, "What kind of label")}},
+        {"layer", "frame", "label"}, true, [this](const QJsonObject& args) {
+            ScriptContext context{_window};
+            fla::Layer& layer = context.layer(context.timeline(args), args);
+            fla::Frame& frame = context.keyframe(layer, args);
+            const std::string label = args.value("label").toString().toStdString();
+            const std::string type = args.value("labelType").toString(label.empty() ? "" : "name").toStdString();
+            context.stack().push(fla::CommandPtr(new fla::SetPropertyCommand<std::string>(frame.name, frame.name, label, "Label")));
+            context.stack().push(fla::CommandPtr(new fla::SetPropertyCommand<std::string>(frame.labelType, frame.labelType,
+                type == "name" ? std::string() : type, "Label")));
+            return Result{QJsonObject{{"frame", frame.index + 1}, {"label", QString::fromStdString(label)}}};
+        });
+
+    add("add_shape", "Add shape",
+        "Draws a shape from SVG path data (\"M 0 0 L 100 0 L 50 80 Z\", in stage pixels) on a layer at a frame, "
+        "with a fill and an optional stroke. It is a drawing object, which keeps apart from other artwork, unless "
+        "merge is true. For a rectangle or ellipse, write it as a path.",
+        {{"symbol", kSymbolArg}, {"layer", kLayerArg}, {"frame", kFrameArg},
+            {"path", prop("string", "SVG path data, in the stage's pixels")},
+            {"fill", prop("string", "Fill color, #RRGGBB or #RRGGBBAA; none for no fill")},
+            {"stroke", prop("string", "Stroke color; none for no stroke (the default)")},
+            {"strokeWidth", prop("number", "Stroke width in pixels; 1 when left out")},
+            {"merge", prop("boolean", "Merge into the artwork beneath, as merge drawing does")}},
+        {"layer", "frame", "path"}, true, [this](const QJsonObject& args) {
+            ScriptContext context{_window};
+            fla::Layer& layer = context.layer(context.timeline(args), args);
+            fla::Frame& frame = context.keyframe(layer, args);
+            const QString path = args.value("path").toString();
+            if (path.trimmed().isEmpty() || path.contains('"') || path.contains('<'))
+                fail("Give the shape as SVG path data.");
+            const QString fill = args.value("fill").toString("#000000");
+            const QString stroke = args.value("stroke").toString("none");
+            uint8_t check[4];
+            if (fill != "none" && !parseColor(fill, check))
+                fail(QString("%1 is not a color.").arg(fill));
+            if (stroke != "none" && !parseColor(stroke, check))
+                fail(QString("%1 is not a color.").arg(stroke));
+            const QString svg = QString("<svg xmlns=\"http://www.w3.org/2000/svg\"><path d=\"%1\" fill=\"%2\" stroke=\"%3\" "
+                                        "stroke-width=\"%4\"/></svg>")
+                                    .arg(path, fill, stroke)
+                                    .arg(std::clamp(args.value("strokeWidth").toDouble(1.0), 0.1, 200.0));
+            const fla::vectors::Artwork art = fla::vectors::readSvg(svg.toStdString());
+            if (art.paths.empty())
+                fail("That path draws nothing.");
+            fla::Shape* shape = fla::vectors::toShape(art.paths.front());
+            if (!shape)
+                fail("That path could not be made into a shape.");
+            const bool merge = args.value("merge").toBool(false);
+            shape->isDrawingObject = !merge;
+            shape->parent = &frame;
+            PhoenixView* view = _window.phoenixView();
+            if (merge && view && view->activeFrame() == &frame)
+            {
+                // As drawing it by hand would: cut into the artwork under it.
+                placeDrawnElement(*view, context.stack(), _window._selection, &frame, shape, "Shape", false);
+                commitPendingMerge(*view, context.stack(), _window._selection, shape, &frame);
+            }
+            else
+            {
+                if (merge)
+                    shape->isDrawingObject = false;
+                context.stack().push(fla::CommandPtr(new fla::AddElementCommand(&frame, shape, "Shape", &_window._selection)));
+            }
+            const auto at = std::find(frame.elements.begin(), frame.elements.end(), shape);
+            const int index = at == frame.elements.end() ? -1 : static_cast<int>(at - frame.elements.begin());
+            return Result{index >= 0 ? QJsonValue(elementJson(_window, *shape, index))
+                                     : QJsonValue(QJsonObject{{"merged", true}})};
+        });
+
+    add("add_text", "Add text", "Puts a line or block of text on the stage.",
+        {{"symbol", kSymbolArg}, {"layer", kLayerArg}, {"frame", kFrameArg}, {"text", prop("string", "What it says; \\n for new lines")},
+            {"x", prop("number", "Left edge, in stage pixels")}, {"y", prop("number", "Top edge, in stage pixels")},
+            {"font", prop("string", "Font family; Arial when left out")}, {"size", prop("number", "Size in points; 24 when left out")},
+            {"color", prop("string", "#RRGGBB; black when left out")}, {"bold", prop("boolean", "Bold")},
+            {"italic", prop("boolean", "Italic")}},
+        {"layer", "frame", "text"}, true, [this](const QJsonObject& args) {
+            ScriptContext context{_window};
+            fla::Layer& layer = context.layer(context.timeline(args), args);
+            fla::Frame& frame = context.keyframe(layer, args);
+            auto* text = new fla::StaticText(&frame);
+            text->autoExpand = true;
+            fla::TextRun run;
+            run.text = args.value("text").toString().replace('\n', '\r').toStdString();
+            run.face = args.value("font").toString("Arial").toStdString();
+            const bool bold = args.value("bold").toBool();
+            const bool italic = args.value("italic").toBool();
+            if (bold || italic)
+                run.face += std::string("-") + (bold ? "Bold" : "") + (italic ? "Italic" : "");
+            run.size = std::clamp(args.value("size").toDouble(24.0), 1.0, 1000.0);
+            if (!parseColor(args.value("color").toString("#000000"), run.fillColor))
+                fail("That is not a color.");
+            text->runs.push_back(run);
+            text->transform.tx = args.value("x").toDouble(0.0);
+            text->transform.ty = args.value("y").toDouble(0.0);
+            context.stack().push(fla::CommandPtr(new fla::AddElementCommand(&frame, text, "Text", &_window._selection)));
+            return Result{elementJson(_window, *text, static_cast<int>(frame.elements.size()) - 1)};
+        });
+
+    add("add_instance", "Add instance",
+        "Places an instance of a library symbol with its registration point at x, y, optionally scaled and turned.",
+        {{"symbol", kSymbolArg}, {"layer", kLayerArg}, {"frame", kFrameArg},
+            {"item", prop("string", "The library symbol to place")}, {"x", prop("number", "Stage x")},
+            {"y", prop("number", "Stage y")}, {"scaleX", prop("number", "1 for its own size")},
+            {"scaleY", prop("number", "1 for its own size")}, {"rotation", prop("number", "Degrees, clockwise")}},
+        {"layer", "frame", "item"}, true, [this](const QJsonObject& args) {
+            ScriptContext context{_window};
+            fla::Timeline& timeline = context.timeline(args);
+            fla::Layer& layer = context.layer(timeline, args);
+            fla::Frame& frame = context.keyframe(layer, args);
+            fla::Symbol* symbol = context.symbolNamed(args.value("item").toString());
+            const QString inside = args.value("symbol").toString();
+            if (!inside.isEmpty() && fla::symbolContains(symbol, context.symbolNamed(inside)))
+                fail("A symbol cannot be placed inside itself.");
+            auto* instance = new fla::SymbolInstance(&frame);
+            instance->libraryItemName = symbol->name;
+            instance->symbol = symbol;
+            instance->symbolType = symbol->symbolType;
+            instance->loopType = fla::LoopType::Loop;
+            const double angle = args.value("rotation").toDouble(0.0) * 3.14159265358979 / 180.0;
+            const double sx = args.value("scaleX").toDouble(1.0);
+            const double sy = args.value("scaleY").toDouble(1.0);
+            instance->transform = fla::Transform(sx * std::cos(angle), sx * std::sin(angle), -sy * std::sin(angle),
+                sy * std::cos(angle), args.value("x").toDouble(0.0), args.value("y").toDouble(0.0));
+            context.stack().push(fla::CommandPtr(new fla::AddElementCommand(&frame, instance, "Add Instance", &_window._selection)));
+            const auto at = std::find(frame.elements.begin(), frame.elements.end(), instance);
+            return Result{elementJson(_window, *instance, static_cast<int>(at - frame.elements.begin()))};
+        });
+
+    add("modify_element", "Change element",
+        "Moves, scales or turns an element, and for symbol instances sets its alpha, tint or instance name. Values "
+        "left out stay as they are.",
+        {{"symbol", kSymbolArg}, {"layer", kLayerArg}, {"frame", kFrameArg}, {"index", prop("integer", "The element, from 0 at the bottom")},
+            {"x", prop("number", "Stage x of its registration point")}, {"y", prop("number", "Stage y")},
+            {"scaleX", prop("number", "Horizontal scale, 1 for its own size")}, {"scaleY", prop("number", "Vertical scale")},
+            {"rotation", prop("number", "Degrees, clockwise")}, {"alpha", prop("number", "0 (clear) to 1 (solid), instances only")},
+            {"tint", prop("string", "A tint color, instances only")}, {"tintAmount", prop("number", "0 to 1")},
+            {"name", prop("string", "Instance name, for scripts")}},
+        {"layer", "frame", "index"}, true, [this](const QJsonObject& args) {
+            ScriptContext context{_window};
+            fla::Layer& layer = context.layer(context.timeline(args), args);
+            fla::Frame& frame = context.keyframe(layer, args);
+            fla::Element& element = context.element(frame, args);
+            const fla::Transform before = element.transform;
+            fla::Transform after = before;
+            const double scaleX = std::hypot(before.m11, before.m12);
+            const double scaleY = std::hypot(before.m21, before.m22);
+            const double angle = std::atan2(before.m12, before.m11);
+            const double newScaleX = args.value("scaleX").toDouble(scaleX);
+            const double newScaleY = args.value("scaleY").toDouble(scaleY);
+            const double newAngle = args.contains("rotation") ? args.value("rotation").toDouble() * 3.14159265358979 / 180.0 : angle;
+            if (args.contains("scaleX") || args.contains("scaleY") || args.contains("rotation"))
+            {
+                after.m11 = newScaleX * std::cos(newAngle);
+                after.m12 = newScaleX * std::sin(newAngle);
+                after.m21 = -newScaleY * std::sin(newAngle);
+                after.m22 = newScaleY * std::cos(newAngle);
+            }
+            after.tx = args.value("x").toDouble(before.tx);
+            after.ty = args.value("y").toDouble(before.ty);
+            if (after.m11 != before.m11 || after.m12 != before.m12 || after.m21 != before.m21 || after.m22 != before.m22 ||
+                after.tx != before.tx || after.ty != before.ty)
+                context.stack().push(fla::CommandPtr(new fla::SetElementTransformCommand(&element, before, after, "Transform")));
+            if (args.contains("alpha") || args.contains("tint") || args.contains("tintAmount") || args.contains("name"))
+            {
+                if (element.elementType() != fla::Element::Type::SymbolInstance)
+                    fail("Alpha, tint and names are for symbol instances.");
+                auto& instance = static_cast<fla::SymbolInstance&>(element);
+                fla::ColorTransform color = instance.colorTransform;
+                if (args.contains("alpha"))
+                    color.alphaMultiplier = std::clamp(args.value("alpha").toDouble(), 0.0, 1.0);
+                if (args.contains("tint"))
+                {
+                    if (!parseColor(args.value("tint").toString(), color.tintColor))
+                        fail("That is not a color.");
+                    color.tintMultiplier = std::clamp(args.value("tintAmount").toDouble(0.5), 0.0, 1.0);
+                }
+                else if (args.contains("tintAmount"))
+                    color.tintMultiplier = std::clamp(args.value("tintAmount").toDouble(), 0.0, 1.0);
+                context.stack().push(fla::CommandPtr(new fla::SetPropertyCommand<fla::ColorTransform>(
+                    instance.colorTransform, instance.colorTransform, color, "Color Effect")));
+                if (args.contains("name"))
+                    context.stack().push(fla::CommandPtr(new fla::SetPropertyCommand<std::string>(
+                        instance.name, instance.name, args.value("name").toString().toStdString(), "Instance Name")));
+            }
+            return Result{elementJson(_window, element, args.value("index").toInt())};
+        });
+
+    add("delete_element", "Delete element", "Removes an element from its keyframe.",
+        {{"symbol", kSymbolArg}, {"layer", kLayerArg}, {"frame", kFrameArg}, {"index", prop("integer", "The element")}},
+        {"layer", "frame", "index"}, true, [this](const QJsonObject& args) {
+            ScriptContext context{_window};
+            fla::Layer& layer = context.layer(context.timeline(args), args);
+            fla::Frame& frame = context.keyframe(layer, args);
+            fla::Element& element = context.element(frame, args);
+            context.stack().push(fla::CommandPtr(new fla::RemoveElementCommand(&frame, &element, "Delete", &_window._selection)));
+            return Result{QJsonObject{{"remaining", static_cast<int>(frame.elements.size())}}};
+        });
+
+    add("convert_to_symbol", "Convert to symbol",
+        "Turns elements on a keyframe into a new library symbol and leaves an instance of it in their place.",
+        {{"symbol", kSymbolArg}, {"layer", kLayerArg}, {"frame", kFrameArg},
+            {"indices", QJsonObject{{"type", "array"}, {"items", QJsonObject{{"type", "integer"}}},
+                            {"description", "The elements; all on the keyframe when left out"}}},
+            {"name", prop("string", "The new symbol's name")},
+            {"type", choice({"graphic", "movie clip", "button"}, "Graphic when left out")}},
+        {"layer", "frame", "name"}, true, [this](const QJsonObject& args) {
+            ScriptContext context{_window};
+            fla::Document& document = context.document();
+            fla::Layer& layer = context.layer(context.timeline(args), args);
+            fla::Frame& frame = context.keyframe(layer, args);
+            const std::string name = args.value("name").toString().trimmed().toStdString();
+            if (name.empty() || !fla::library::nameIsFree(document, name))
+                fail(QString("%1 is already in the library, or empty.").arg(QString::fromStdString(name)));
+            std::vector<fla::Element*> elements;
+            if (args.contains("indices"))
+            {
+                for (const QJsonValue& value : args.value("indices").toArray())
+                {
+                    QJsonObject one = args;
+                    one["index"] = value.toInt(-1);
+                    elements.push_back(&context.element(frame, one));
+                }
+            }
+            else
+                elements.assign(frame.elements.begin(), frame.elements.end());
+            if (elements.empty())
+                fail("There is nothing on that keyframe to convert.");
+            QRectF bounds;
+            for (const fla::Element* element : elements)
+            {
+                const QRectF box = _window.phoenixView() ? _window.phoenixView()->elementBounds(element) : QRectF();
+                bounds = bounds.isValid() ? bounds.united(box) : box;
+            }
+            const QPointF registration = bounds.isValid() ? bounds.center() : QPointF();
+            const QString type = args.value("type").toString("graphic");
+            const fla::SymbolType symbolType = type == "movie clip" ? fla::SymbolType::MovieClip
+                : type == "button"                               ? fla::SymbolType::Button
+                                                                 : fla::SymbolType::Graphic;
+            context.stack().push(fla::CommandPtr(new fla::ConvertToSymbolCommand(&document, &frame, elements, name,
+                registration.x(), registration.y(), "Convert to Symbol", &_window._selection, symbolType)));
+            return Result{QJsonObject{{"symbol", QString::fromStdString(name)}, {"type", type}}};
+        });
+
+    add("rename_library_item", "Rename library item",
+        "Renames a library item or folder, or moves it into a folder by giving a path (\"Characters/Ball\"). "
+        "Instances follow.",
+        {{"from", prop("string", "Its name now, with its folder path")}, {"to", prop("string", "The new name or path")}},
+        {"from", "to"}, true, [this](const QJsonObject& args) {
+            ScriptContext context{_window};
+            fla::Document& document = context.document();
+            const std::string to = args.value("to").toString().toStdString();
+            // A folder the new path needs is made first.
+            const QString folder = QFileInfo(QString::fromStdString(to)).path();
+            if (folder != "." && !fla::library::isFolder(document, folder.toStdString()))
+                context.stack().push(fla::CommandPtr(new fla::AddFolderCommand(&document, folder.toStdString())));
+            std::string problem;
+            const fla::library::Renames renames =
+                fla::library::pathRenames(document, args.value("from").toString().toStdString(), to, &problem);
+            if (renames.empty())
+                fail(problem.empty() ? QString("Nothing is called %1.").arg(args.value("from").toString())
+                                     : QString::fromStdString(problem));
+            context.stack().push(fla::CommandPtr(new fla::RenameLibraryCommand(&document, renames, "Rename")));
+            return Result{QJsonObject{{"renamed", static_cast<int>(renames.size())}}};
+        });
+
+    add("go_to", "Go to",
+        "Shows a frame on the stage, in the scene or inside a symbol, so the person sees what you changed.",
+        {{"symbol", kSymbolArg}, {"frame", kFrameArg}}, {}, false, [this](const QJsonObject& args) {
+            ScriptContext context{_window};
+            PhoenixView* view = _window.phoenixView();
+            if (!view)
+                fail("There is no stage.");
+            const QString symbol = args.value("symbol").toString();
+            if (!symbol.isEmpty())
+                view->editSymbol(context.symbolNamed(symbol));
+            else
+                view->exitToDepth(0);
+            if (args.contains("frame") && view->player())
+                view->player()->setCurrentFrame(ScriptContext::frameIndex(args));
+            context.refresh();
+            return Result{QJsonObject{{"shown", symbol.isEmpty() ? "scene" : symbol}}};
+        });
+
+    add("export_image", "Export image",
+        "Writes a frame of the scene to a PNG file. Phoenix asks the person before writing anywhere new.",
+        {{"path", prop("string", "Where to write the PNG")}, {"frame", kFrameArg},
+            {"width", prop("integer", "Width in pixels; the stage's when left out")}},
+        {"path"}, false, [this](const QJsonObject& args) {
+            ScriptContext context{_window};
+            fla::Document& document = context.document();
+            const QString path = QDir::cleanPath(args.value("path").toString());
+            if (!path.endsWith(".png", Qt::CaseInsensitive))
+                fail("Give a path ending in .png.");
+            if (!approveWrite || !approveWrite(path))
+                fail("The person did not allow writing there.");
+            const int width = std::clamp(args.value("width").toInt(static_cast<int>(document.width)), 16, 8192);
+            const double scale = width / std::max(1.0, static_cast<double>(document.width));
+            const QSize size(width, std::max(1, static_cast<int>(std::lround(document.height * scale))));
+            const QImage image = _window.phoenixView()->renderFrame(ScriptContext::frameIndex(args), size, false);
+            if (image.isNull() || !image.save(path, "PNG"))
+                fail(QString("%1 could not be written.").arg(path));
+            return Result{QJsonObject{{"written", path}, {"width", image.width()}, {"height", image.height()}}};
+        });
+}
+
+void ScriptApi::addHelperOperations()
+{
+    add("tidy_library", "Tidy library",
+        "Moves loose library items into folders by kind (Symbols, Bitmaps, Sounds), leaving items already in "
+        "folders where they are. With removeUnused, also deletes symbols used nowhere.",
+        {{"removeUnused", prop("boolean", "Also delete symbols used nowhere")}}, {}, true, [this](const QJsonObject& args) {
+            ScriptContext context{_window};
+            fla::Document& document = context.document();
+            int moved = 0;
+            int removed = 0;
+            const std::map<std::string, int> uses = fla::library::useCounts(document);
+            if (args.value("removeUnused").toBool() && document.symbolList)
+            {
+                for (fla::Symbol* symbol : std::vector<fla::Symbol*>(document.symbolList->symbols))
+                {
+                    const auto found = symbol ? uses.find(symbol->name) : uses.end();
+                    if (symbol && (found == uses.end() || found->second == 0))
+                    {
+                        context.stack().push(fla::CommandPtr(new fla::DeleteSymbolCommand(&document, symbol)));
+                        ++removed;
+                    }
+                }
+            }
+            for (const QJsonValue& value : libraryJson(document))
+            {
+                const QJsonObject item = value.toObject();
+                const QString name = item["name"].toString();
+                const QString kind = item["kind"].toString();
+                if (kind == "folder" || name.contains('/'))
+                    continue;
+                const QString folder = kind == "symbol" ? "Symbols" : kind == "bitmap" ? "Bitmaps" : "Sounds";
+                if (!fla::library::isFolder(document, folder.toStdString()))
+                    context.stack().push(fla::CommandPtr(new fla::AddFolderCommand(&document, folder.toStdString())));
+                std::string problem;
+                const fla::library::Renames renames = fla::library::pathRenames(document, name.toStdString(),
+                    (folder + "/" + name).toStdString(), &problem);
+                if (renames.empty())
+                    continue;
+                context.stack().push(fla::CommandPtr(new fla::RenameLibraryCommand(&document, renames, "Move")));
+                ++moved;
+            }
+            return Result{QJsonObject{{"moved", moved}, {"removed", removed}}};
+        });
+
+    add("bounce", "Bounce",
+        "Makes the symbol instance alone on a layer's keyframe bounce in place: up and down a number of times over "
+        "the frames given, easing out of each landing and into each fall, squashing as it lands and stretching as "
+        "it leaves when squash is on. Builds keyframes and classic tweens.",
+        {{"symbol", kSymbolArg}, {"layer", kLayerArg}, {"frame", prop("integer", "The keyframe it starts on; 1 when left out")},
+            {"height", prop("number", "How high it rises, in pixels; 150 when left out")},
+            {"bounces", prop("integer", "How many times; 3 when left out")},
+            {"frames", prop("integer", "Frames for each bounce; 12 when left out")},
+            {"squash", prop("boolean", "Squash and stretch; on when left out")}},
+        {"layer"}, true, [this](const QJsonObject& args) {
+            ScriptContext context{_window};
+            fla::Timeline& timeline = context.timeline(args);
+            fla::Layer& layer = context.layer(timeline, args);
+            const int start = ScriptContext::frameIndex(args);
+            fla::Frame* key = keyframeAt(layer, start);
+            if (!key || key->elements.size() != 1 || !key->elements.front() ||
+                key->elements.front()->elementType() != fla::Element::Type::SymbolInstance)
+                fail("Put one symbol instance alone on that keyframe first.");
+            const double height = std::clamp(args.value("height").toDouble(150.0), 1.0, 10000.0);
+            const int bounces = std::clamp(args.value("bounces").toInt(3), 1, 50);
+            const int each = std::clamp(args.value("frames").toInt(12), 4, 240);
+            const bool squash = args.value("squash").toBool(true);
+            const fla::Transform ground = key->elements.front()->transform;
+            // How far the instance reaches below its registration point: a
+            // squash keeps that edge on the ground.
+            const QRectF resting = _window.phoenixView() ? _window.phoenixView()->elementBounds(key->elements.front()) : QRectF();
+            const double below = resting.isValid() ? resting.bottom() - ground.ty : 0.0;
+            const int startKey = key->index;
+            const int half = each / 2;
+
+            fla::Layer* target = &layer;
+            _window._selection.clear();
+            auto* command = new fla::EditFramesCommand({target}, "Bounce",
+                [target, startKey, bounces, each, half, height, squash, ground, below](std::vector<fla::Frame*>&) {
+                    // A keyframe at each landing and each top, the instance
+                    // placed and shaped for that moment, and the ease of the
+                    // tween leaving it: out of a landing fast and slowing to
+                    // the top (ease out), falling faster and faster (ease in).
+                    struct Key
+                    {
+                        int index;
+                        double rise;
+                        double sx;
+                        double sy;
+                        int ease;
+                    };
+                    std::vector<Key> keys;
+                    for (int b = 0; b < bounces; ++b)
+                    {
+                        const int land = startKey + b * each;
+                        keys.push_back({land, 0.0, squash ? 1.2 : 1.0, squash ? 0.8 : 1.0, 100});
+                        if (squash)
+                            keys.push_back({land + 1, height * 0.08, 0.9, 1.15, 100});
+                        keys.push_back({land + half, height, 1.0, 1.0, -100});
+                    }
+                    keys.push_back({startKey + bounces * each, 0.0, squash ? 1.2 : 1.0, squash ? 0.8 : 1.0, 0});
+                    // Every keyframe first, then the tweens between them,
+                    // which each need the next keyframe there.
+                    for (const Key& key : keys)
+                    {
+                        fla::Frame* frame = key.index == startKey ? fla::timeline::spanAt(*target, key.index)
+                                                                  : fla::timeline::insertKeyframe(*target, key.index, false);
+                        if (!frame || frame->elements.size() != 1)
+                            continue;
+                        fla::Transform m = ground;
+                        m.m11 *= key.sx;
+                        m.m12 *= key.sx;
+                        m.m21 *= key.sy;
+                        m.m22 *= key.sy;
+                        m.ty -= key.rise;
+                        m.ty += below * (1.0 - key.sy);
+                        frame->elements.front()->transform = m;
+                    }
+                    for (size_t i = 0; i + 1 < keys.size(); ++i)
+                    {
+                        if (fla::timeline::setTween(*target, keys[i].index, true))
+                            if (fla::Frame* span = fla::timeline::spanAt(*target, keys[i].index))
+                                span->acceleration = keys[i].ease;
+                    }
+                });
+            context.stack().push(fla::CommandPtr(command));
+            return Result{QJsonObject{{"frames", bounces * each + 1}, {"layer", QString::fromStdString(layer.name)}}};
+        });
+}
+
+QJsonArray ScriptApi::resources() const
+{
+    QJsonArray list{QJsonObject{{"uri", "phoenix://document"}, {"name", "Document"},
+                        {"description", "The open document's summary"}, {"mimeType", "application/json"}},
+        QJsonObject{{"uri", "phoenix://timeline"}, {"name", "Timeline"},
+            {"description", "The scene's layers and keyframes"}, {"mimeType", "application/json"}}};
+    const fla::Document* document =
+        _window._flaDocument && _window._flaDocument->document ? _window._flaDocument->document : nullptr;
+    if (document && document->symbolList)
+    {
+        for (const fla::Symbol* symbol : document->symbolList->symbols)
+        {
+            if (symbol)
+                list.append(QJsonObject{{"uri", "phoenix://symbol/" + QString::fromStdString(symbol->name)},
+                    {"name", QString::fromStdString(symbol->name)}, {"description", "A symbol's layers and keyframes"},
+                    {"mimeType", "application/json"}});
+        }
+    }
+    return list;
+}
+
+ScriptApi::Result ScriptApi::readResource(const QString& uri)
+{
+    if (uri == "phoenix://document")
+        return call("get_document", {});
+    if (uri == "phoenix://timeline")
+        return call("get_timeline", {});
+    const QString prefix = "phoenix://symbol/";
+    if (uri.startsWith(prefix))
+        return call("get_timeline", QJsonObject{{"symbol", uri.mid(prefix.size())}});
+    return {QJsonValue(), QImage(), QString("There is no resource %1.").arg(uri)};
+}

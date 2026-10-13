@@ -146,6 +146,8 @@ set(HEADERS
     src/gui/app_identity.h
     src/gui/tutorial_lesson.h
     src/gui/tutorial_runner.h
+    src/gui/script_api.h
+    src/gui/mcp_server.h
     src/gui/stroke_style_dialog.h
     src/gui/selection_targets.h
     src/gui/navigation_tools.h
@@ -377,6 +379,8 @@ set(SOURCES
     src/gui/app_identity.cpp
     src/gui/tutorial_lesson.cpp
     src/gui/tutorial_runner.cpp
+    src/gui/script_api.cpp
+    src/gui/mcp_server.cpp
     src/gui/stroke_style_dialog.cpp
     src/gui/navigation_tools.cpp
     src/gui/draw_placement.cpp
@@ -562,6 +566,10 @@ if(APPLE)
 endif()
 
 target_link_libraries(Phoenix PRIVATE Qt6::Widgets Qt6::Svg zlibstatic tinyxml2 libas3)
+if(WIN32)
+    # The AI assistants' local socket (mcp_server.cpp).
+    target_link_libraries(Phoenix PRIVATE ws2_32)
+endif()
 
 # The built-in lessons (Help > Tutorials), in the app as :/tutorials.
 file(GLOB_RECURSE PHOENIX_TUTORIAL_FILES CONFIGURE_DEPENDS "${CMAKE_SOURCE_DIR}/resources/tutorials/*")

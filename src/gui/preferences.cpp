@@ -3,6 +3,7 @@
 #include "autosave.h"
 
 #include <QCheckBox>
+#include "mcp_server.h"
 #include <QColorDialog>
 #include <QComboBox>
 #include <QDialogButtonBox>
@@ -160,6 +161,23 @@ PreferencesDialog::PreferencesDialog(QWidget* parent)
     drawingForm->addRow(QString(), _solidPoints);
     layout->addWidget(drawing);
 
+    // AI assistants (MCP clients) attaching to this Phoenix.
+    QGroupBox* assistants = new QGroupBox("AI Assistants", this);
+    QFormLayout* assistantsForm = new QFormLayout(assistants);
+    _mcp = new QCheckBox("Let AI assistants connect (MCP)", assistants);
+    _mcp->setChecked(McpServer::enabled());
+    _mcp->setToolTip("An AI assistant on this computer, such as Claude Desktop or Claude Code, can read and change "
+                     "the open document. Phoenix asks before each one works, and only connections from this "
+                     "computer are taken.");
+    _mcpPort = new QSpinBox(assistants);
+    _mcpPort->setRange(1024, 65535);
+    _mcpPort->setValue(McpServer::port());
+    _mcpPort->setEnabled(_mcp->isChecked());
+    connect(_mcp, &QCheckBox::toggled, _mcpPort, &QSpinBox::setEnabled);
+    assistantsForm->addRow("Connections", _mcp);
+    assistantsForm->addRow("Port", _mcpPort);
+    layout->addWidget(assistants);
+
     QDialogButtonBox* buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, this);
     connect(buttons, &QDialogButtonBox::accepted, this, &QDialog::accept);
     connect(buttons, &QDialogButtonBox::rejected, this, &QDialog::reject);
@@ -178,5 +196,6 @@ void PreferencesDialog::save()
     settings.setValue("preferences/connectPixels", _connectLines->currentData().toDouble());
     settings.setValue("preferences/penPreview", _penPreview->isChecked());
     settings.setValue("preferences/solidPoints", _solidPoints->isChecked());
+    McpServer::setEnabled(_mcp->isChecked(), _mcpPort->value());
     Preferences::reload();
 }

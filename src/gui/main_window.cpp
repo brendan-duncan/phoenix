@@ -7,6 +7,7 @@
 #include "stage_controls.h"
 #include "tutorial_lesson.h"
 #include "tutorial_runner.h"
+#include "mcp_server.h"
 #include "app_identity.h"
 #include "autosave.h"
 #include "timeline_audio.h"
@@ -469,6 +470,13 @@ MainWindow::MainWindow(const QString& initialFile, QWidget* parent, bool startup
         _autoSave = new AutoSave(links, this);
     }
 
+    // AI assistants attach through MCP when Preferences allows it.
+    if (startup)
+    {
+        _mcpServer = new McpServer(this);
+        _mcpServer->applySettings();
+    }
+
     // Look for an update once the start-up file has had its turn.
     connect(_updater, &Updater::statusMessage, this, [this](const QString& message) {
         statusBar()->showMessage(message, message.isEmpty() ? 0 : 8000);
@@ -871,6 +879,34 @@ void MainWindow::saveAsTemplate()
         QMessageBox::warning(this, "Save as Template", QString::fromStdString(error));
     else
         statusBar()->showMessage(QString("Saved the template %1.").arg(name), 3000);
+}
+
+void MainWindow::serveMcpOnStdio()
+{
+    if (!_mcpServer)
+        _mcpServer = new McpServer(this);
+    _mcpServer->serveStdio();
+}
+
+void MainWindow::refreshAfterScript()
+{
+    if (_timelineView)
+        _timelineView->refresh();
+    if (_documentView)
+        _documentView->setDocument(_flaDocument);
+    if (_phoenixView)
+    {
+        _phoenixView->invalidateBounds();
+        _phoenixView->clearCaches();
+        _phoenixView->update();
+    }
+    updateEditState();
+    updateSelectionState();
+}
+
+bool MainWindow::isReadOnlyDocument() const
+{
+    return _documentName.endsWith(" (read-only)");
 }
 
 void MainWindow::skipStartScreen()
@@ -4065,6 +4101,8 @@ void MainWindow::setupMenus()
             return;
         dialog.save();
         _editContext.commandStack().setLimit(static_cast<size_t>(Preferences::undoLevels()));
+        if (_mcpServer)
+            _mcpServer->applySettings();
         if (_phoenixView)
             _phoenixView->update();
     });
