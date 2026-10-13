@@ -16,6 +16,7 @@ class DrawingStyle;
 class Element;
 class Selection;
 class Shape;
+class Snapper;
 }
 
 /// Animate's free transform tool: move, scale, rotate and skew whatever is
@@ -200,11 +201,19 @@ private:
 
     void clearDistortTargets();
 
-    QTransform adjustForDrag(const QPointF& documentPos, Qt::KeyboardModifiers modifiers) const;
+    /// The change the drag makes. With \a snapper, a scale handle is snapped
+    /// by solving its scale so the handle itself lands on what is in reach.
+    QTransform adjustForDrag(const QPointF& documentPos, Qt::KeyboardModifiers modifiers,
+        const fla::Snapper* snapper = nullptr) const;
 
     /// Nudges the cursor position onto the grid or a neighboring edge before
-    /// the gesture is computed from it.
+    /// the gesture is computed from it. A scale handle is left alone: it is
+    /// snapped by handleSnapper's solve instead.
     QPointF snapDragPoint(PhoenixView& view, const QPointF& documentPos) const;
+
+    /// The view's snapper, ready for a scale handle drag, or null when this is
+    /// not one or nothing would snap.
+    const fla::Snapper* handleSnapper(PhoenixView& view) const;
 
     fla::Selection& _selection;
     fla::CommandStack& _commandStack;

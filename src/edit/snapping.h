@@ -29,6 +29,50 @@ struct SnapResult
     bool snapped() const { return kind != SnapKind::None; }
 };
 
+/// A scale handle being dragged. Wherever the drag takes it, the handle sits
+/// at anchor + scaleX * axisX + scaleY * axisY: the anchor is the point held
+/// still (the opposite handle, or the center), and the axes are the handle's
+/// offset from it along each side of the box, at the size the drag began.
+struct HandleDrag
+{
+    double anchorX = 0.0;
+    double anchorY = 0.0;
+    double axisXx = 0.0;
+    double axisXy = 0.0;
+    double axisYx = 0.0;
+    double axisYy = 0.0;
+
+    /// The scales the pointer asks for.
+    double scaleX = 1.0;
+    double scaleY = 1.0;
+
+    /// Which scales follow the pointer. An edge handle moves only one.
+    bool scalesX = true;
+    bool scalesY = true;
+
+    /// Both axes take the same scale, as Shift keeps the proportions.
+    bool uniform = false;
+};
+
+/// Where a handle drag should land instead.
+struct HandleSnapResult
+{
+    double scaleX = 1.0;
+    double scaleY = 1.0;
+
+    SnapKind kind = SnapKind::None;
+
+    /// Whether it landed on a point (a vertex, a grid crossing, or two lines
+    /// at once) rather than a single line.
+    bool onPoint = false;
+
+    /// Where the handle lands.
+    double x = 0.0;
+    double y = 0.0;
+
+    bool snapped() const { return kind != SnapKind::None; }
+};
+
 /// Works out how far to nudge a drag so it lands on the grid or lines up with
 /// another object.
 ///
@@ -91,12 +135,40 @@ public:
 
     void addCandidateY(double y);
 
+    /// A vertex of other artwork. Handle drags land on these in preference to
+    /// lines.
+    void addCandidatePoint(double x, double y);
+
+    /// A straight piece of other artwork's outline, for handle drags.
+    void addCandidateSegment(double x1, double y1, double x2, double y2);
+
     /// Finds the smallest adjustment that brings one of \a values onto a target.
     SnapResult snapX(const std::vector<double>& values) const;
 
     SnapResult snapY(const std::vector<double>& values) const;
 
+    /// Snaps a scale handle. For each target the scale is solved directly so
+    /// the handle lands exactly on it (as near as it can, for a point off the
+    /// handle's path). A snap that would flip or collapse the box, or move the
+    /// handle more than twice the tolerance, is refused, and a point beats a
+    /// line. Returns the drag's own scales when nothing is in reach.
+    HandleSnapResult snapHandle(const HandleDrag& drag) const;
+
 private:
+    struct CandidatePoint
+    {
+        double x;
+        double y;
+    };
+
+    struct CandidateSegment
+    {
+        double x1;
+        double y1;
+        double x2;
+        double y2;
+    };
+
     SnapResult snap(const std::vector<double>& values, double gridSpacing,
         const std::vector<double>& candidates, const std::vector<double>& guides) const;
 
@@ -109,6 +181,8 @@ private:
     bool _objectSnapEnabled = false;
     std::vector<double> _candidatesX;
     std::vector<double> _candidatesY;
+    std::vector<CandidatePoint> _candidatePoints;
+    std::vector<CandidateSegment> _candidateSegments;
     bool _guideSnapEnabled = true;
     bool _pixelSnapEnabled = false;
     std::vector<double> _guidesX;

@@ -6008,23 +6008,27 @@ void PhoenixView::gatherSnapCandidates(fla::Snapper& snapper,
         const QRectF everything(-1.0e6, -1.0e6, 2.0e6, 2.0e6);
         for (fla::Element* element : elementsIn(everything))
         {
-            const QRectF bounds = elementBounds(element);
-            if (bounds.isValid())
-                _snapBounds.push_back({element, bounds});
+            SnapEntry entry;
+            entry.element = element;
+            entry.bounds = elementBounds(element);
+            if (!entry.bounds.isValid())
+                continue;
+            gatherSnapOutline(element, entry);
+            _snapBounds.push_back(std::move(entry));
         }
         _snapBoundsValid = true;
     }
 
-    for (const auto& entry : _snapBounds)
+    for (const SnapEntry& entry : _snapBounds)
     {
-        fla::Element* element = entry.first;
+        fla::Element* element = entry.element;
         bool skip = false;
         for (const fla::Element* excluded : exclude)
             skip = skip || excluded == element;
         if (skip)
             continue;
 
-        const QRectF bounds = entry.second;
+        const QRectF bounds = entry.bounds;
 
         snapper.addCandidateX(bounds.left());
         snapper.addCandidateX(bounds.center().x());
@@ -6032,6 +6036,94 @@ void PhoenixView::gatherSnapCandidates(fla::Snapper& snapper,
         snapper.addCandidateY(bounds.top());
         snapper.addCandidateY(bounds.center().y());
         snapper.addCandidateY(bounds.bottom());
+
+        // The box's corners and center are points too, for whatever has no
+        // vertices of its own (an instance, a bitmap, text).
+        for (const QPointF& corner : {bounds.topLeft(), bounds.topRight(), bounds.bottomLeft(),
+                 bounds.bottomRight(), bounds.center()})
+            snapper.addCandidatePoint(corner.x(), corner.y());
+        for (const QPointF& vertex : entry.vertices)
+            snapper.addCandidatePoint(vertex.x(), vertex.y());
+        for (const QLineF& piece : entry.outline)
+            snapper.addCandidateSegment(piece.x1(), piece.y1(), piece.x2(), piece.y2());
+    }
+}
+
+void PhoenixView::gatherSnapOutline(const fla::Element* element, SnapEntry& entry)
+{
+    if (!element)
+        return;
+
+    if (element->elementType() == fla::Element::Type::Group)
+    {
+        for (const fla::Element* member : static_cast<const fla::Group*>(element)->members)
+            gatherSnapOutline(member, entry);
+        return;
+    }
+    if (element->elementType() != fla::Element::Type::Shape)
+        return;
+
+    const fla::Transform shown = shownTransformOf(element);
+    const QTransform toDocument(shown.m11, shown.m12, shown.m21, shown.m22, shown.tx, shown.ty);
+    const auto place = [&](const fla::Point& point) { return toDocument.map(QPointF(point.x, point.y)); };
+
+    // Curves are laid down as a few straight pieces: a handle that lands
+    // within a fraction of a pixel of the curve is close enough.
+    constexpr int kCurvePieces = 8;
+
+    for (const fla::Edge* edge : static_cast<const fla::Shape*>(element)->edges)
+    {
+        if (!edge || !edge->visible)
+            continue;
+        for (const fla::Path* path : edge->paths)
+        {
+            if (!path || !path->visible)
+                continue;
+            fla::Point current;
+            bool haveCurrent = false;
+            for (const fla::PathSegment* segment : path->segments)
+            {
+                if (!segment || segment->points.empty())
+                    continue;
+                const std::vector<fla::Point>& pts = segment->points;
+                const fla::Point& end = pts.back();
+                switch (segment->command)
+                {
+                case fla::PathSegment::Command::Move:
+                    entry.vertices.push_back(place(end));
+                    break;
+                case fla::PathSegment::Command::Line:
+                    entry.vertices.push_back(place(end));
+                    if (haveCurrent)
+                        entry.outline.push_back(QLineF(place(current), place(end)));
+                    break;
+                case fla::PathSegment::Command::Quad:
+                case fla::PathSegment::Command::Cubic:
+                {
+                    entry.vertices.push_back(place(end));
+                    if (!haveCurrent)
+                        break;
+                    const bool quad = segment->command == fla::PathSegment::Command::Quad;
+                    if ((quad && pts.size() < 2) || (!quad && pts.size() < 3))
+                        break;
+                    const fla::Curve curve = quad ? fla::Curve::quadratic(current, pts[0], pts[1])
+                                                  : fla::Curve::cubic(current, pts[0], pts[1], pts[2]);
+                    QPointF previous = place(current);
+                    for (int i = 1; i <= kCurvePieces; ++i)
+                    {
+                        const QPointF next = place(curve.pointAt(static_cast<double>(i) / kCurvePieces));
+                        entry.outline.push_back(QLineF(previous, next));
+                        previous = next;
+                    }
+                    break;
+                }
+                case fla::PathSegment::Command::Close:
+                    continue;
+                }
+                current = end;
+                haveCurrent = true;
+            }
+        }
     }
 }
 
