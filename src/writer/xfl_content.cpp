@@ -1,5 +1,7 @@
 #include "xfl_content.h"
 
+#include "../edit/phoenix_features.h"
+
 #include "xfl_writer.h"
 
 #include "../data/bitmap.h"
@@ -194,13 +196,16 @@ std::vector<std::string> unsupportedContent(const Document& document)
     if (!XFLContent::build(document, std::string(), entries, unsupported, error))
         unsupported.push_back(error);
 
-    // What a Phoenix document holds that an FLA cannot: Phoenix's own
-    // features, and parts from a newer Phoenix this one keeps without
-    // knowing them. Variable width strokes are Animate's own as well.
+    // Phoenix's own features travel in the FLA as attributes of its own
+    // (phoenix_features.h); one a newer Phoenix listed that this one does
+    // not know may not, and nor do parts this one keeps without knowing them.
     for (const std::string& feature : document.phxFeatures)
     {
-        if (feature != "variable-width-strokes")
-            unsupported.push_back("Phoenix-only feature: " + feature);
+        bool known = feature == "variable-width-strokes" || feature == "other-phoenix-settings";
+        for (const features::Feature& each : features::all())
+            known = known || feature == each.id;
+        if (!known)
+            unsupported.push_back("a feature of a newer Phoenix: " + feature);
     }
     if (!document.phxUnknownChunks.empty() || !document.phxUnknown.empty())
         unsupported.push_back("parts saved by a newer Phoenix");

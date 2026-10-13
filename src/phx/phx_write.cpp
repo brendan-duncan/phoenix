@@ -6,6 +6,7 @@
 #include "phx_schema.h"
 #include "wire.h"
 
+#include "../edit/phoenix_features.h"
 #include "../data/action_script.h"
 #include "../data/bitmap.h"
 #include "../data/bitmap_fill.h"
@@ -1127,7 +1128,21 @@ std::shared_ptr<SaveSnapshot> snapshotUnguarded(const fla::Document& document, c
         writeInt(p, s::PackageFile::Media, media.add(file.second, sound ? s::MediaSound : s::MediaPackageFile, file.first));
         w.message(s::Document::PackageFiles, p);
     }
-    writeStrings(w, s::Document::Features, document.phxFeatures);
+    // The Phoenix-only features it uses, as found now, and any a newer
+    // Phoenix listed that this one does not know.
+    std::vector<std::string> featureIds = fla::features::ids(fla::features::used(document));
+    for (const std::string& kept : document.phxFeatures)
+    {
+        if (std::find(featureIds.begin(), featureIds.end(), kept) == featureIds.end())
+        {
+            bool known = false;
+            for (const fla::features::Feature& each : fla::features::all())
+                known = known || kept == each.id;
+            if (!known)
+                featureIds.push_back(kept);
+        }
+    }
+    writeStrings(w, s::Document::Features, featureIds);
     writeStrings(w, s::Document::RequiredFeatures, document.phxRequiredFeatures);
 
     Writer x;

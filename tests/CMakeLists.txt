@@ -71,6 +71,7 @@ set(TEST_CORE_SOURCES
     ${PHOENIX_SRC}/edit/shape_recognition.cpp
     ${PHOENIX_SRC}/edit/path_tidy.cpp
     ${PHOENIX_SRC}/edit/shape_tween.cpp
+    ${PHOENIX_SRC}/edit/phoenix_features.cpp
     ${PHOENIX_SRC}/edit/ik_pose.cpp
     ${PHOENIX_SRC}/edit/frame_commands.cpp
     ${PHOENIX_SRC}/edit/layer_commands.cpp
@@ -224,6 +225,7 @@ if(TARGET tinyxml2 AND TARGET zlibstatic)
         test_shape_geometry.cpp
         test_xfl_writer.cpp
         test_zip_archive.cpp
+        test_phoenix_features.cpp
     )
     set(PHOENIX_TESTS_HAVE_PARSER TRUE)
 else()

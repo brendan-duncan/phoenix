@@ -7,6 +7,7 @@
 #include "stage_controls.h"
 #include "tutorial_lesson.h"
 #include "tutorial_runner.h"
+#include "../edit/phoenix_features.h"
 #include "mcp_server.h"
 #include "app_identity.h"
 #include "autosave.h"
@@ -5104,6 +5105,34 @@ bool MainWindow::confirmLossySave()
     return answer == QMessageBox::Save;
 }
 
+bool MainWindow::confirmPhoenixFeatures()
+{
+    if (!_flaDocument || !_flaDocument->document || _featuresAcknowledged.contains(_flaDocument))
+        return true;
+    const std::vector<fla::features::Use> uses = fla::features::used(*_flaDocument->document);
+    if (uses.empty())
+        return true;
+
+    QString list;
+    for (const fla::features::Use& use : uses)
+        list += QString("<li><b>%1</b>: %2</li>")
+                    .arg(QString::fromUtf8(use.feature->title), QString::fromUtf8(use.feature->elsewhere).toHtmlEscaped());
+    QMessageBox box(QMessageBox::Information, "Phoenix Features in an FLA",
+        QString("This document uses features of Phoenix's own. Phoenix keeps them in the FLA or XFL file and reads "
+                "them back, but other FLA editors leave them out, showing:<ul>%1</ul>If one of them saves the file, "
+                "these features are gone from it. A Phoenix document (.phx) is the safe place for the master copy.")
+            .arg(list),
+        QMessageBox::Save | QMessageBox::Cancel, this);
+    box.setDefaultButton(QMessageBox::Save);
+    QCheckBox* dontAsk = new QCheckBox("Don't ask again for this document", &box);
+    box.setCheckBox(dontAsk);
+    if (box.exec() != QMessageBox::Save)
+        return false;
+    if (dontAsk->isChecked())
+        _featuresAcknowledged.insert(_flaDocument);
+    return true;
+}
+
 bool MainWindow::saveToPath(const QString& filePath)
 {
     if (!_flaDocument || !_flaDocument->document)
@@ -5122,7 +5151,7 @@ bool MainWindow::saveToPath(const QString& filePath)
     if (_phoenixView)
         _phoenixView->flushPendingMerge();
 
-    if (!isPhxPath(filePath) && !confirmLossySave())
+    if (!isPhxPath(filePath) && (!confirmLossySave() || !confirmPhoenixFeatures()))
         return false;
 
     QString error;

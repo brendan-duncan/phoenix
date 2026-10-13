@@ -244,6 +244,7 @@ set(HEADERS
     src/edit/shape_recognition.h
     src/edit/path_tidy.h
     src/edit/shape_tween.h
+    src/edit/phoenix_features.h
     src/edit/ik_pose.h
     src/edit/frame_commands.h
     src/edit/layer_commands.h
@@ -471,6 +472,7 @@ set(SOURCES
     src/edit/shape_recognition.cpp
     src/edit/path_tidy.cpp
     src/edit/shape_tween.cpp
+    src/edit/phoenix_features.cpp
     src/edit/ik_pose.cpp
     src/edit/frame_commands.cpp
     src/edit/layer_commands.cpp

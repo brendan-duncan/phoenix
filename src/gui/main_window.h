@@ -593,6 +593,11 @@ private:
     QDockWidget* _timelineDock = nullptr;
     QDockWidget* _toolsDock = nullptr;
     class Toolbox* _toolbox = nullptr;
+    /// Saving as FLA or XFL: lists the Phoenix-only features the document
+    /// uses, kept in the file but left out by other FLA editors, and asks.
+    bool confirmPhoenixFeatures();
+    /// Documents whose Phoenix features were acknowledged for the session.
+    QSet<const fla::FLADocument*> _featuresAcknowledged;
     /// The lesson running, if one is (Help > Tutorials).
     class TutorialRunner* _tutorial = nullptr;
     /// AI assistants' way in (MCP), in the window a person works in.

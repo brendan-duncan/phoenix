@@ -16,6 +16,7 @@
 #include "../data/symbol.h"
 #include "../data/symbol_list.h"
 #include "../writer/fla_writer.h"
+#include "../edit/phoenix_features.h"
 #include "tutorial_lesson.h"
 #include <QApplication>
 #include "tutorial_runner.h"
@@ -125,6 +126,10 @@ bool save(const fla::Document& document, const std::string& out, std::string& er
         return phx::save(document, out, phx::SaveOptions{"Phoenix " + Updater::currentVersion().toStdString(), {}}, error);
     for (const std::string& lost : fla::unsupportedContent(document))
         std::fprintf(stderr, "Not written: %s\n", lost.c_str());
+    // Kept, but only Phoenix reads them back.
+    for (const fla::features::Use& use : fla::features::used(document))
+        std::fprintf(stderr, "Phoenix feature kept in the file (other FLA editors show %s): %s\n",
+            use.feature->elsewhere, use.feature->title);
     if (endsWith(out, ".fla"))
     {
         fla::FLAWriter writer;
