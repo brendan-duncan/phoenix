@@ -4,6 +4,7 @@
 #include "planar_map.h"
 
 #include <functional>
+#include <map>
 #include <vector>
 
 namespace fla {
@@ -57,6 +58,35 @@ void attributeFillsFromSource(PlanarMap& map, const std::vector<ShapeCurve>& sou
 /// case the caller has to ask geometrically.
 bool faceFillFromSources(const PlanarMap& map, int face, const std::vector<ShapeCurve>& sources,
     size_t first, size_t last, int& fill);
+
+/// Joins curves running end to start into one cubic, when one cubic can
+/// follow them all to within \a tolerance.
+///
+/// The joined curve keeps the run's ends and the directions it leaves and
+/// arrives in; only how far the handles reach is fitted, by least squares
+/// against points along the pieces. This is how a curve an earlier merge cut
+/// into separate edges is put back together once what cut it has gone, which
+/// the pieces' own parameters cannot do, since they no longer share a source.
+/// Returns false, leaving \a joined alone, when the fit strays further than
+/// \a tolerance from any of the pieces.
+bool joinCurves(const std::vector<Curve>& pieces, double tolerance, Curve& joined);
+
+/// The outlines of every fill of a shape, read off its arrangement: for each
+/// fill, each face it paints as its outer boundary followed by its holes, a
+/// loop of curves each, walked with the face on the left. Faces too thin to
+/// see are left out.
+///
+/// The edges' own fills have to describe the arrangement exactly: every
+/// half-edge must find on its left the fill its source records on that side.
+/// Where they do not -- outlines that do not quite close, a fill recorded on
+/// one edge of a face and not another -- this returns false and the caller
+/// falls back on tracing the fills from the edges as stored, which joins up
+/// such leftovers the way they have always been drawn. Shapes with hidden
+/// edges, or more curves than \a maximumCurves, are also left to the
+/// tracing.
+bool fillOutlinesFromMap(const Shape& shape,
+    std::map<int, std::vector<std::vector<Curve>>>& outlines,
+    size_t maximumCurves = 20000);
 
 /// Decides whether a rebuilt piece keeps the stroke its source carried.
 ///

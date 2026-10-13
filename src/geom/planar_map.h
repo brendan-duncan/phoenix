@@ -144,7 +144,26 @@ public:
 
     /// A point strictly inside a face, for asking what covers it. Returns false
     /// for the unbounded face, which has no inside.
+    ///
+    /// The boundary is flattened finely and a few horizontal lines, kept off
+    /// the twip grid, are scanned across it; the point is the middle of the
+    /// widest stretch where the boundary winds round, checked against the
+    /// exact curves. That stays well inside a thin, concave or holed face,
+    /// where a point stepped off one edge can land in a neighbor.
     bool interiorPoint(int face, Point& result) const;
+
+    /// The length of everything bordering a face, holes included.
+    double facePerimeter(int face) const;
+
+    /// Whether a face is too thin to see: twice its area over its perimeter,
+    /// which is its width for a long strip, falls below \a width. Two curves
+    /// that ought to coincide but miss by rounding leave such a face between
+    /// them.
+    bool isSliver(int face, double width = kTwip) const;
+
+    /// The face across the longest stretch of a face's boundary, which is the
+    /// one a sliver belongs with. -1 when nothing borders it but itself.
+    int widestNeighbor(int face) const;
 
     /// The fill each face ended up with, assigned by attributeFills().
     int faceFill(int face) const;

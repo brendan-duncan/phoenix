@@ -432,6 +432,29 @@ bool ShapeMerger::combine(Shape& target, const Shape& addition, Operation operat
         merged.setFaceFill(index, fill);
     }
 
+    // Two outlines that ought to coincide but miss each other by rounding
+    // leave a face between them thinner than a twip. Nothing that thin can be
+    // seen, but kept apart it splits a region in two and leaves seams; it is
+    // taken as part of the face it borders most, so the edges between them
+    // drop out.
+    const std::vector<int> settledAddition = additionFillOfFace;
+    const std::vector<int> settledTarget = targetFillOfFace;
+    std::vector<int> settledFill(faceCount, -1);
+    for (size_t face = 0; face < faceCount; ++face)
+        settledFill[face] = merged.faceFill(static_cast<int>(face));
+    for (size_t face = 0; face < faceCount; ++face)
+    {
+        const int index = static_cast<int>(face);
+        if (merged.faces()[face].unbounded || !merged.isSliver(index))
+            continue;
+        const int neighbor = merged.widestNeighbor(index);
+        if (neighbor < 0)
+            continue;
+        additionFillOfFace[face] = settledAddition[neighbor];
+        targetFillOfFace[face] = settledTarget[neighbor];
+        merged.setFaceFill(index, settledFill[neighbor]);
+    }
+
     // Whether the addition paints a face, by index.
     const auto additionCovers = [&](int face) {
         if (face < 0 || face >= static_cast<int>(faceCount))

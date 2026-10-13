@@ -159,6 +159,292 @@ bool faceFillFromSources(const PlanarMap& map, int face, const std::vector<Shape
     return false;
 }
 
+namespace {
+
+/// The unit direction a curve leaves its start in, or arrives at its end in.
+/// A handle pulled back onto its anchor leaves no tangent there, so the next
+/// control point along gives the direction instead.
+bool endDirection(const Curve& curve, bool atEnd, Point& direction)
+{
+    const Point candidates[3] = {
+        atEnd ? curve.tangentAt(1.0) : curve.tangentAt(0.0),
+        atEnd ? Point(curve.end().x - curve.controlPoint(1).x, curve.end().y - curve.controlPoint(1).y)
+              : Point(curve.controlPoint(2).x - curve.start().x, curve.controlPoint(2).y - curve.start().y),
+        Point(curve.end().x - curve.start().x, curve.end().y - curve.start().y)
+    };
+    for (const Point& candidate : candidates)
+    {
+        const double length = std::hypot(candidate.x, candidate.y);
+        if (length > 1.0e-9)
+        {
+            direction = Point(candidate.x / length, candidate.y / length);
+            return true;
+        }
+    }
+    return false;
+}
+
+} // namespace
+
+bool joinCurves(const std::vector<Curve>& pieces, double tolerance, Curve& joined)
+{
+    if (pieces.empty())
+        return false;
+    if (pieces.size() == 1)
+    {
+        joined = pieces.front();
+        return true;
+    }
+
+    const Point p0 = pieces.front().start();
+    const Point p3 = pieces.back().end();
+    Point d0;
+    Point d3;
+    if (!endDirection(pieces.front(), false, d0) || !endDirection(pieces.back(), true, d3))
+        return false;
+
+    // Points along the pieces, parameterized by how far along the run they
+    // are; the fit is asked to pass near each at its parameter.
+    constexpr int kSamplesPerPiece = 16;
+    std::vector<Point> samples;
+    samples.push_back(p0);
+    for (const Curve& piece : pieces)
+    {
+        for (int i = 1; i <= kSamplesPerPiece; ++i)
+            samples.push_back(piece.pointAt(static_cast<double>(i) / kSamplesPerPiece));
+    }
+
+    // Where each piece starts on the joined curve. Cutting a cubic at s
+    // scales the speed of the piece before by s and the one after by 1 - s,
+    // so the ratio of the speeds either side of a joint gives the ratio of
+    // the pieces' spans. For pieces truly cut from one cubic this is the
+    // exact parameterization, and the first fit is the original; when a
+    // speed is zero, how far along the run each point is will do instead.
+    std::vector<double> parameters(samples.size(), 0.0);
+    std::vector<double> spans(pieces.size(), 1.0);
+    bool bySpeed = true;
+    for (size_t i = 1; i < pieces.size() && bySpeed; ++i)
+    {
+        const Point before = pieces[i - 1].tangentAt(1.0);
+        const Point after = pieces[i].tangentAt(0.0);
+        const double arriving = std::hypot(before.x, before.y);
+        const double leaving = std::hypot(after.x, after.y);
+        bySpeed = arriving > 1.0e-9 && leaving > 1.0e-9;
+        if (bySpeed)
+            spans[i] = spans[i - 1] * leaving / arriving;
+    }
+    if (bySpeed)
+    {
+        double total = 0.0;
+        for (const double span : spans)
+            total += span;
+        double start = 0.0;
+        size_t k = 1;
+        for (size_t i = 0; i < pieces.size(); ++i)
+        {
+            const double span = spans[i] / total;
+            for (int j = 1; j <= kSamplesPerPiece; ++j, ++k)
+                parameters[k] = start + span * j / kSamplesPerPiece;
+            start += span;
+        }
+    }
+    else
+    {
+        for (size_t k = 1; k < samples.size(); ++k)
+        {
+            parameters[k] = parameters[k - 1] +
+                std::hypot(samples[k].x - samples[k - 1].x, samples[k].y - samples[k - 1].y);
+        }
+        const double total = parameters.back();
+        if (total <= 1.0e-9)
+            return false;
+        for (double& u : parameters)
+            u /= total;
+    }
+    parameters.back() = 1.0;
+
+    // Each pass fits the handle lengths for the current parameters, then moves
+    // each parameter to the point of the fit nearest its sample (a Newton
+    // step), which is how Schneider's fit converges. Passes go on past the
+    // first fit within tolerance, since a few more cost little and bring the
+    // fit closer still; the closest is kept. A fit that has stopped getting
+    // better is given up on.
+    bool found = false;
+    double closest = tolerance;
+    double previous = 1.0e300;
+    const double chord = std::hypot(p3.x - p0.x, p3.y - p0.y);
+    for (int pass = 0; pass < 32; ++pass)
+    {
+        double c11 = 0.0, c12 = 0.0, c22 = 0.0, x1 = 0.0, x2 = 0.0;
+        for (size_t k = 0; k < samples.size(); ++k)
+        {
+            const double u = parameters[k];
+            const double v = 1.0 - u;
+            const double b0 = v * v * v, b1 = 3.0 * u * v * v, b2 = 3.0 * u * u * v, b3 = u * u * u;
+            const Point a1(b1 * d0.x, b1 * d0.y);
+            const Point a2(-b2 * d3.x, -b2 * d3.y);
+            const Point r(samples[k].x - (b0 + b1) * p0.x - (b2 + b3) * p3.x,
+                samples[k].y - (b0 + b1) * p0.y - (b2 + b3) * p3.y);
+            c11 += a1.x * a1.x + a1.y * a1.y;
+            c12 += a1.x * a2.x + a1.y * a2.y;
+            c22 += a2.x * a2.x + a2.y * a2.y;
+            x1 += a1.x * r.x + a1.y * r.y;
+            x2 += a2.x * r.x + a2.y * r.y;
+        }
+        const double determinant = c11 * c22 - c12 * c12;
+        if (std::fabs(determinant) <= 1.0e-12 * std::max(1.0, c11 * c22))
+            return false;
+        double reach0 = (x1 * c22 - c12 * x2) / determinant;
+        double reach3 = (c11 * x2 - c12 * x1) / determinant;
+        // A handle pointing backwards is not the curve the pieces draw. Early
+        // on that can be the parameters' fault, so the pass carries on with
+        // a plain third of the chord to improve them, but it is not a fit.
+        const bool usable = reach0 > 0.0 && reach3 > 0.0;
+        if (!usable)
+        {
+            reach0 = chord / 3.0;
+            reach3 = chord / 3.0;
+        }
+
+        const Curve fit = Curve::cubic(p0, Point(p0.x + reach0 * d0.x, p0.y + reach0 * d0.y),
+            Point(p3.x - reach3 * d3.x, p3.y - reach3 * d3.y), p3);
+
+        double worst = 0.0;
+        for (size_t k = 0; k < samples.size(); ++k)
+        {
+            const Point at = fit.pointAt(parameters[k]);
+            worst = std::max(worst, std::hypot(at.x - samples[k].x, at.y - samples[k].y));
+        }
+        if (usable && worst <= closest)
+        {
+            joined = fit;
+            found = true;
+            closest = worst;
+            if (worst <= tolerance * 1.0e-4)
+                break;
+        }
+        if (usable && pass >= 2 && worst > previous * 0.95 && (found || worst > tolerance * 4.0))
+            break;
+        if (usable)
+            previous = worst;
+
+        for (size_t k = 1; k + 1 < samples.size(); ++k)
+        {
+            const double u = parameters[k];
+            const Point at = fit.pointAt(u);
+            const Point first = fit.tangentAt(u);
+            // The second derivative, from the control points' second differences.
+            const double v = 1.0 - u;
+            const Point& q0 = fit.controlPoint(0);
+            const Point& q1 = fit.controlPoint(1);
+            const Point& q2 = fit.controlPoint(2);
+            const Point& q3 = fit.controlPoint(3);
+            const Point second(6.0 * (v * (q2.x - 2.0 * q1.x + q0.x) + u * (q3.x - 2.0 * q2.x + q1.x)),
+                6.0 * (v * (q2.y - 2.0 * q1.y + q0.y) + u * (q3.y - 2.0 * q2.y + q1.y)));
+            const Point off(at.x - samples[k].x, at.y - samples[k].y);
+            const double numerator = off.x * first.x + off.y * first.y;
+            const double denominator = first.x * first.x + first.y * first.y +
+                off.x * second.x + off.y * second.y;
+            if (std::fabs(denominator) > 1.0e-12)
+                parameters[k] = std::min(1.0, std::max(0.0, u - numerator / denominator));
+        }
+    }
+
+    return found;
+}
+
+bool fillOutlinesFromMap(const Shape& shape,
+    std::map<int, std::vector<std::vector<Curve>>>& outlines, size_t maximumCurves)
+{
+    outlines.clear();
+
+    for (const Edge* edge : shape.edges)
+    {
+        if (!edge || !edge->visible)
+            return false;
+        for (const Path* path : edge->paths)
+        {
+            if (path && !path->visible)
+                return false;
+        }
+    }
+
+    const std::vector<ShapeCurve> curves = shapeCurves(shape);
+    if (curves.size() > maximumCurves)
+        return false;
+
+    PlanarMap map;
+    for (size_t i = 0; i < curves.size(); ++i)
+        map.addCurve(curves[i].curve, static_cast<int>(i));
+    map.build();
+    attributeFillsFromSource(map, curves);
+
+    // The file's fills have to agree with the arrangement everywhere: each
+    // half-edge's face is painted with what its source records on that
+    // side. A boundary that does not quite close lets a face leak into its
+    // neighbor, and shows up here as an edge with different fills recorded
+    // on its two sides but one face on both.
+    const std::vector<HalfEdge>& halves = map.halfEdges();
+    for (const HalfEdge& half : halves)
+    {
+        if (half.source < 0 || half.source >= static_cast<int>(curves.size()))
+            return false;
+        const ShapeCurve& source = curves[half.source];
+        const int recorded = half.forward ? source.fillStyle1 : source.fillStyle0;
+        if (recorded != map.faceFill(half.face))
+            return false;
+    }
+
+    // A face too thin to see goes with the face it borders most, so the
+    // hairline between two fills is not left open.
+    const size_t faceCount = map.faces().size();
+    std::vector<int> paint(faceCount, -1);
+    for (size_t face = 0; face < faceCount; ++face)
+        paint[face] = map.faceFill(static_cast<int>(face));
+    for (size_t face = 0; face < faceCount; ++face)
+    {
+        const int index = static_cast<int>(face);
+        if (map.faces()[face].unbounded || !map.isSliver(index))
+            continue;
+        const int neighbor = map.widestNeighbor(index);
+        paint[face] = neighbor < 0 ? -1 : map.faceFill(neighbor);
+    }
+
+    for (size_t face = 0; face < faceCount; ++face)
+    {
+        const MapFace& target = map.faces()[face];
+        if (target.unbounded || paint[face] == -1 || target.halfEdge < 0)
+            continue;
+
+        std::vector<std::vector<Curve>>& loops = outlines[paint[face]];
+        // Each piece is drawn as the stretch of the file's own curve it came
+        // from, not the map's copy welded onto the twip grid: the arrangement
+        // decides only which pieces bound which face, and a shape already
+        // stored as a planar map is drawn with exactly the coordinates it
+        // stores.
+        const auto pieceOf = [&](const HalfEdge& half) {
+            const Curve& whole = curves[half.source].curve;
+            const Curve piece = (half.t0 <= 0.0 && half.t1 >= 1.0)
+                ? whole : whole.subcurve(half.t0, half.t1);
+            if (half.forward)
+                return piece;
+            return piece.isLine() ? Curve::line(piece.end(), piece.start())
+                : Curve::cubic(piece.end(), piece.controlPoint(2), piece.controlPoint(1), piece.start());
+        };
+        const auto addLoop = [&](int start) {
+            std::vector<Curve> loop;
+            for (const int edge : map.cycleFrom(start))
+                loop.push_back(pieceOf(halves[edge]));
+            if (!loop.empty())
+                loops.push_back(std::move(loop));
+        };
+        addLoop(target.halfEdge);
+        for (const int hole : target.holes)
+            addLoop(hole);
+    }
+    return true;
+}
+
 void rebuildShapeEdges(Shape& shape, const PlanarMap& map,
     const std::vector<ShapeCurve>& sources, const StrokeFilter& keepStroke,
     const StrokeOverride& strokeFor)
@@ -276,12 +562,46 @@ void rebuildShapeEdges(Shape& shape, const PlanarMap& map,
         return dot > 0.0 && std::fabs(cross) <= 1.0e-6 * lengths;
     };
 
+    // Whether the forward half b carries on smoothly from a without being
+    // the next stretch of the same input: a curve an earlier merge cut into
+    // separate edges comes back as several sources. Such a joint is only a
+    // candidate; the pieces either side are joined by refitting them as one
+    // cubic, which has to stay within tolerance of them. Segments of one
+    // edge's path meet where whoever drew it put an anchor, and stay apart.
+    const auto joinsSmoothly = [&](int a, int b) {
+        const HalfEdge& first = halves[a];
+        const HalfEdge& second = halves[b];
+        if (!first.forward || !second.forward || !sameStyle(a, b))
+            return false;
+        if (first.curve.isLine() && second.curve.isLine())
+            return false;
+        if (first.source < 0 || second.source < 0 ||
+            first.source >= static_cast<int>(sources.size()) ||
+            second.source >= static_cast<int>(sources.size()) ||
+            sources[first.source].edgeIndex == sources[second.source].edgeIndex)
+        {
+            return false;
+        }
+        Point arriving;
+        Point leaving;
+        if (!endDirection(first.curve, true, arriving) || !endDirection(second.curve, false, leaving))
+            return false;
+        const double cross = arriving.x * leaving.y - arriving.y * leaving.x;
+        const double dot = arriving.x * leaving.x + arriving.y * leaving.y;
+        // About three degrees: a curve cut in two meets itself exactly, give
+        // or take welding moving a short piece's end by half a twip.
+        return dot > 0.0 && std::fabs(cross) <= 0.05;
+    };
+    const auto linked = [&](int a, int b) {
+        return continues(a, b) || joinsSmoothly(a, b);
+    };
+
     const auto nextInRun = [&](int h) -> int {
         const HalfEdge& half = halves[h];
         if (half.to < 0 || half.to >= static_cast<int>(vertices.size()))
             return -1;
         const int k = onlyOtherDrawn(vertices[half.to], half.twin);
-        if (k < 0 || !continues(h, k))
+        if (k < 0 || !linked(h, k))
             return -1;
         return k;
     };
@@ -294,7 +614,7 @@ void rebuildShapeEdges(Shape& shape, const PlanarMap& map,
             return -1;
         // The piece before arrives here, so it is the twin of what leaves.
         const int p = halves[j].twin;
-        if (p < 0 || p >= static_cast<int>(count) || !continues(p, h))
+        if (p < 0 || p >= static_cast<int>(count) || !linked(p, h))
             return -1;
         return p;
     };
@@ -323,54 +643,111 @@ void rebuildShapeEdges(Shape& shape, const PlanarMap& map,
             current = nextInRun(current);
         }
 
-        const HalfEdge& first = halves[run.front()];
-        const HalfEdge& last = halves[run.back()];
         const Styled& style = styled[run.front()];
 
-        Curve curve = first.curve;
-        if (run.size() > 1)
+        // The run in stretches that are exactly one curve: pieces of one
+        // source, or collinear lines. Between stretches the run only carries
+        // on smoothly, and the stretches are joined by refitting.
+        std::vector<Curve> stretches;
+        for (size_t begin = 0; begin < run.size();)
         {
-            if (first.source == last.source && first.source >= 0 &&
-                first.source < static_cast<int>(sources.size()) &&
-                !sources[first.source].curve.isLine())
+            size_t end = begin + 1;
+            while (end < run.size() && continues(run[end - 1], run[end]))
+                ++end;
+
+            const HalfEdge& first = halves[run[begin]];
+            const HalfEdge& last = halves[run[end - 1]];
+            Curve curve = first.curve;
+            if (end - begin > 1)
             {
-                // The stretch of the original between the run's ends, pinned
-                // to the vertices the pieces were welded to.
-                const Curve whole = sources[first.source].curve.subcurve(first.t0, last.t1);
-                curve = Curve::cubic(first.curve.start(), whole.controlPoint(1),
-                    whole.controlPoint(2), last.curve.end());
+                if (first.source == last.source && first.source >= 0 &&
+                    first.source < static_cast<int>(sources.size()) &&
+                    !sources[first.source].curve.isLine())
+                {
+                    // The stretch of the original between the run's ends, pinned
+                    // to the vertices the pieces were welded to.
+                    const Curve whole = sources[first.source].curve.subcurve(first.t0, last.t1);
+                    curve = Curve::cubic(first.curve.start(), whole.controlPoint(1),
+                        whole.controlPoint(2), last.curve.end());
+                }
+                else
+                {
+                    // A run of collinear lines is one line.
+                    curve = Curve::line(first.curve.start(), last.curve.end());
+                }
+            }
+            stretches.push_back(curve);
+            begin = end;
+        }
+
+        // As many stretches at a time as one cubic follows to within half a
+        // twip, which is finer than the file stores; where it cannot, the
+        // stretches stay separate edges, exactly as they were.
+        std::vector<Curve> curves;
+        std::vector<size_t> firstStretch;
+        for (size_t begin = 0; begin < stretches.size();)
+        {
+            Curve joined = stretches[begin];
+            size_t end = begin + 1;
+            while (end < stretches.size())
+            {
+                Curve attempt;
+                const std::vector<Curve> span(stretches.begin() + begin, stretches.begin() + end + 1);
+                if (!joinCurves(span, PlanarMap::kTwip * 0.5, attempt))
+                    break;
+                joined = attempt;
+                ++end;
+            }
+            curves.push_back(joined);
+            firstStretch.push_back(begin);
+            begin = end;
+        }
+
+        // A run closed on itself starts wherever the search happened to
+        // begin, which may be in the middle of a curve that was cut: the
+        // last and first curves get a chance to join across that point.
+        const bool closedRun = run.size() > 1 &&
+            halves[run.back()].to == halves[run.front()].from && linked(run.back(), run.front());
+        if (closedRun && curves.size() > 1)
+        {
+            std::vector<Curve> span(stretches.begin() + firstStretch.back(), stretches.end());
+            const size_t firstEnd = firstStretch.size() > 1 ? firstStretch[1] : stretches.size();
+            span.insert(span.end(), stretches.begin(), stretches.begin() + firstEnd);
+            Curve attempt;
+            if (joinCurves(span, PlanarMap::kTwip * 0.5, attempt))
+            {
+                curves.front() = attempt;
+                curves.pop_back();
+            }
+        }
+
+        for (const Curve& curve : curves)
+        {
+            Edge* edge = new Edge(&shape);
+            edge->fillStyle1 = style.leftFill;
+            edge->fillStyle0 = style.rightFill;
+            edge->strokeStyle = style.stroke;
+
+            Path* path = new Path(edge);
+            path->segments.push_back(new PathSegment(
+                PathSegment::Command::Move, {curve.start()}, path));
+
+            if (curve.isLine())
+            {
+                path->segments.push_back(new PathSegment(
+                    PathSegment::Command::Line, {curve.end()}, path));
             }
             else
             {
-                // A run of collinear lines is one line.
-                curve = Curve::line(first.curve.start(), last.curve.end());
+                path->segments.push_back(new PathSegment(
+                    PathSegment::Command::Cubic,
+                    {curve.controlPoint(1), curve.controlPoint(2), curve.end()},
+                    path));
             }
+
+            edge->paths.push_back(path);
+            shape.edges.push_back(edge);
         }
-
-        Edge* edge = new Edge(&shape);
-        edge->fillStyle1 = style.leftFill;
-        edge->fillStyle0 = style.rightFill;
-        edge->strokeStyle = style.stroke;
-
-        Path* path = new Path(edge);
-        path->segments.push_back(new PathSegment(
-            PathSegment::Command::Move, {curve.start()}, path));
-
-        if (curve.isLine())
-        {
-            path->segments.push_back(new PathSegment(
-                PathSegment::Command::Line, {curve.end()}, path));
-        }
-        else
-        {
-            path->segments.push_back(new PathSegment(
-                PathSegment::Command::Cubic,
-                {curve.controlPoint(1), curve.controlPoint(2), curve.end()},
-                path));
-        }
-
-        edge->paths.push_back(path);
-        shape.edges.push_back(edge);
     }
 }
 

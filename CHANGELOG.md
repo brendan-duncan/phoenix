@@ -20,6 +20,7 @@ What changed in each release of Phoenix, newest first.
 - An animated graphic's selection box and snapping follow the frame it shows, not its first
 - The camera can fade, tint or dim the whole scene, keyed and tweened with its moves
 - Scale handles snap exactly onto guides, grid lines and other artwork's edges and anchor points
+- Merge drawing leaves no hairline gaps where shapes nearly share an edge, and rejoins curves an earlier merge cut once the cut is gone
 
 ## 0.5.2 (2026-10-13)
 
