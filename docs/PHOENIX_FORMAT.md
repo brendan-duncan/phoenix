@@ -199,6 +199,7 @@ are kept, and an FLA export lists them as possibly lost.
 | `3d-rotation` | 3D rotation and depth | the movie clips flat, without their 3D turn |
 | `parenting-options` | Layer parenting options | child layers taking on all of the parent's transform |
 | `joint-limits` | Bone joint limits | bones that turn freely when posed |
+| `shape-binding` | Bones bound in Phoenix | boned shapes as drawn; posing them may bend them differently |
 | `shape-hints` | Shape hints | shape tweens without the hints steering them |
 | `mouth-charts` | Lip sync mouth charts | the mouth frames as set, without the chart |
 | `layer-transparency` | Layer transparency | the layers drawn solid |

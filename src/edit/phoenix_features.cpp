@@ -50,6 +50,8 @@ const std::vector<Feature>& all()
             {"phoenixParentScale", "phoenixParentSkew", "phoenixParentFlip"}},
         {"joint-limits", "Bone joint limits", "bones that turn freely when posed",
             {"phoenixMinRotation", "phoenixMaxRotation"}},
+        {"shape-binding", "Bones bound in Phoenix", "boned shapes as drawn; posing them may bend them differently",
+            {"phoenixBinding"}},
         {"shape-hints", "Shape hints", "shape tweens without the hints steering them", {"phoenixShapeHints"}},
         {"mouth-charts", "Lip sync mouth charts", "the mouth frames as set, without the chart",
             {"phoenixMouthChart"}},
