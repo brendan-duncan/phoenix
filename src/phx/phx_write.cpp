@@ -747,6 +747,9 @@ struct MediaJob
     std::vector<const fla::LazyBytes*> holders;
     /// Where the bytes lie as stored, when they are copied from there.
     std::shared_ptr<fla::ByteLocation> copyFrom;
+    /// The bytes themselves, held by the job (LazyBytes share their bytes),
+    /// so a snapshot written on another thread does not read the document.
+    fla::LazyBytes data;
 };
 
 /// Media met so far, by where they lie or by content, so the same bytes go
@@ -783,6 +786,7 @@ public:
                 job.hash = location->hash;
                 job.size = location->size;
                 job.holders.push_back(&bytes);
+                job.data = bytes;
                 job.copyFrom = location;
                 _used.insert(job.id);
                 _byLocation.emplace(location.get(), _jobs.size());
@@ -814,6 +818,7 @@ public:
         job.hash = hash;
         job.size = data.size();
         job.holders.push_back(&bytes);
+        job.data = bytes;
         _used.insert(job.id);
         _byHash.emplace(hash, _jobs.size());
         _jobs.push_back(std::move(job));
@@ -865,10 +870,10 @@ bool prepareMedia(const MediaJob& job, PreparedChunk& chunk)
             return true;
         }
         // Gone from there: the bytes the document has read, if it has.
-        if (!job.holders.front()->loaded())
+        if (!job.data.loaded())
             return false;
     }
-    const std::vector<uint8_t>& data = job.holders.front()->get();
+    const std::vector<uint8_t>& data = job.data.get();
     if (data.empty())
         return false;
     Writer header;
@@ -908,6 +913,44 @@ std::string isoNow()
 
 namespace {
 bool saveUnguarded(const fla::Document& document, const std::string& path, const SaveOptions& options, std::string& error);
+std::shared_ptr<SaveSnapshot> snapshotUnguarded(const fla::Document& document, const SaveOptions& options);
+bool writeUnguarded(const SaveSnapshot& snapshot, const std::string& path, std::vector<ChunkInfo>& written,
+    std::string& error);
+}
+
+std::shared_ptr<SaveSnapshot> snapshot(const fla::Document& document, const SaveOptions& options, std::string& error)
+{
+    try
+    {
+        return snapshotUnguarded(document, options);
+    }
+    catch (const std::bad_alloc&)
+    {
+        error = "There is not enough memory to save the document.";
+    }
+    catch (const std::exception& e)
+    {
+        error = std::string("The document could not be saved (") + e.what() + ").";
+    }
+    return nullptr;
+}
+
+bool write(const SaveSnapshot& snapshot, const std::string& path, std::string& error)
+{
+    try
+    {
+        std::vector<ChunkInfo> written;
+        return writeUnguarded(snapshot, path, written, error);
+    }
+    catch (const std::bad_alloc&)
+    {
+        error = "There is not enough memory to save the document.";
+    }
+    catch (const std::exception& e)
+    {
+        error = std::string("The document could not be saved (") + e.what() + ").";
+    }
+    return false;
 }
 
 bool save(const fla::Document& document, const std::string& path, const SaveOptions& options, std::string& error)
@@ -933,12 +976,25 @@ bool save(const fla::Document& document, const std::string& path, const SaveOpti
     return false;
 }
 
-namespace {
-bool saveUnguarded(const fla::Document& document, const std::string& path, const SaveOptions& options, std::string& error)
+/// Everything a save writes, taken from the document at one moment: the
+/// document and symbols encoded, and the media held by reference. Writing it
+/// reads nothing of the document, so it can happen on another thread while
+/// the document is edited.
+struct SaveSnapshot
 {
-    ContainerWriter out;
-    if (!out.open(path, error))
-        return false;
+    std::string document;
+    std::vector<std::pair<std::string, std::string>> symbols;
+    std::vector<MediaJob> jobs;
+    std::vector<fla::Document::UnknownChunk> unknownChunks;
+    SaveOptions options;
+};
+
+namespace {
+
+std::shared_ptr<SaveSnapshot> snapshotUnguarded(const fla::Document& document, const SaveOptions& options)
+{
+    auto snapshot = std::make_shared<SaveSnapshot>();
+    snapshot->options = options;
     MediaTable media;
     // Media copied from a Phoenix file keep their ids; new ones go round them.
     for (const fla::Resource* resource : document.resources)
@@ -1098,10 +1154,9 @@ bool saveUnguarded(const fla::Document& document, const std::string& path, const
         w.message(s::Document::Xfl, x);
     w.rawFields(document.phxUnknown);
 
-    out.add(kDocument, w.buffer(), true, true);
+    snapshot->document = std::move(w.buffer());
 
-    // Symbols encoded and every chunk compressed and checksummed on several
-    // threads, then written in order.
+    // Symbols encoded on several threads.
     std::vector<const fla::Symbol*> symbols;
     if (document.symbolList)
     {
@@ -1111,14 +1166,35 @@ bool saveUnguarded(const fla::Document& document, const std::string& path, const
                 symbols.push_back(symbol);
         }
     }
-    const std::vector<MediaJob>& jobs = media.jobs();
-    std::vector<PreparedChunk> prepared(symbols.size() + jobs.size());
+    snapshot->symbols.resize(symbols.size());
+    parallelFor(symbols.size(), [&](size_t i) {
+        snapshot->symbols[i] = {symbols[i]->name, std::move(encodeSymbol(*symbols[i]).buffer())};
+    });
+    snapshot->jobs = media.jobs();
+    snapshot->unknownChunks = document.phxUnknownChunks;
+    return snapshot;
+}
+
+/// Writes \a snapshot to \a path; \a written gets where each medium went.
+bool writeUnguarded(const SaveSnapshot& snapshot, const std::string& path, std::vector<ChunkInfo>& written,
+    std::string& error)
+{
+    ContainerWriter out;
+    if (!out.open(path, error))
+        return false;
+    out.add(kDocument, snapshot.document, true, true);
+
+    // Every chunk compressed and checksummed on several threads, then
+    // written in order.
+    const std::vector<MediaJob>& jobs = snapshot.jobs;
+    const size_t symbolCount = snapshot.symbols.size();
+    std::vector<PreparedChunk> prepared(symbolCount + jobs.size());
     std::vector<char> missing(jobs.size(), 0);
     parallelFor(prepared.size(), [&](size_t i) {
-        if (i < symbols.size())
-            prepared[i] = prepare(kSymbol, std::move(encodeSymbol(*symbols[i]).buffer()), true, true, 0, symbols[i]->name);
-        else if (!prepareMedia(jobs[i - symbols.size()], prepared[i]))
-            missing[i - symbols.size()] = 1;
+        if (i < symbolCount)
+            prepared[i] = prepare(kSymbol, snapshot.symbols[i].second, true, true, 0, snapshot.symbols[i].first);
+        else if (!prepareMedia(jobs[i - symbolCount], prepared[i]))
+            missing[i - symbolCount] = 1;
     });
     // Media that could not be read would be lost: the save stops instead.
     for (size_t j = 0; j < jobs.size(); ++j)
@@ -1132,33 +1208,41 @@ bool saveUnguarded(const fla::Document& document, const std::string& path, const
             return false;
         }
     }
-    std::vector<ChunkInfo> written(jobs.size());
+    written.assign(jobs.size(), ChunkInfo());
     for (size_t i = 0; i < prepared.size(); ++i)
     {
         out.add(prepared[i]);
-        if (i >= symbols.size() && !out.chunks().empty())
-            written[i - symbols.size()] = out.chunks().back();
+        if (i >= symbolCount && !out.chunks().empty())
+            written[i - symbolCount] = out.chunks().back();
         prepared[i].stored.clear();
         prepared[i].stored.shrink_to_fit();
     }
 
-    for (const fla::Document::UnknownChunk& chunk : document.phxUnknownChunks)
+    for (const fla::Document::UnknownChunk& chunk : snapshot.unknownChunks)
         out.add(chunk.type, chunk.content, true, (chunk.flags & kCritical) != 0);
 
-    if (!options.thumbnailPng.empty())
-        out.add(kThumbnail, options.thumbnailPng.data(), options.thumbnailPng.size(), false, false);
+    if (!snapshot.options.thumbnailPng.empty())
+        out.add(kThumbnail, snapshot.options.thumbnailPng.data(), snapshot.options.thumbnailPng.size(), false, false);
     Writer meta;
-    writeString(meta, s::Metadata::Application, options.application);
+    writeString(meta, s::Metadata::Application, snapshot.options.application);
     meta.string(s::Metadata::Modified, isoNow());
     out.add(kMetadata, meta.buffer(), true, false);
 
-    if (!out.finish(error))
+    return out.finish(error);
+}
+
+bool saveUnguarded(const fla::Document& document, const std::string& path, const SaveOptions& options, std::string& error)
+{
+    const std::shared_ptr<SaveSnapshot> snapshot = snapshotUnguarded(document, options);
+    std::vector<ChunkInfo> written;
+    if (!writeUnguarded(*snapshot, path, written, error))
         return false;
 
     // The media now lie in the new file: everything holding them reads them,
     // and the next save copies them, from there.
     if (options.relocateMedia)
     {
+        const std::vector<MediaJob>& jobs = snapshot->jobs;
         std::string absolute = path;
         std::error_code ignored;
         const std::filesystem::path full = std::filesystem::absolute(std::filesystem::u8path(path), ignored);

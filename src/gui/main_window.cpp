@@ -843,6 +843,8 @@ void MainWindow::saveAsTemplate()
     phx::SaveOptions options;
     options.application = QString("Phoenix %1").arg(QCoreApplication::applicationVersion()).toStdString();
     std::string error;
+    if (_autoSave)
+        _autoSave->waitForWrite();
     if (!phx::save(*_flaDocument->document, path.toStdString(), options, error))
         QMessageBox::warning(this, "Save as Template", QString::fromStdString(error));
     else
@@ -4912,6 +4914,9 @@ bool MainWindow::saveToPath(const QString& filePath)
                 options.thumbnailPng.assign(png.begin(), png.end());
         }
         std::string phxError;
+        // The recovery copy being written reads the media this save moves.
+        if (_autoSave)
+            _autoSave->waitForWrite();
         if (!phx::save(*_flaDocument->document, filePath.toStdString(), options, phxError))
             error = QString::fromStdString(phxError);
     }

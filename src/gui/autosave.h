@@ -5,7 +5,9 @@
 #include <QObject>
 #include <QString>
 
+#include <atomic>
 #include <functional>
+#include <thread>
 
 class QTimer;
 
@@ -64,8 +66,14 @@ public:
     /// Removes an orphan's files.
     static void remove(const Orphan& orphan);
 
-    /// Writes the copy now, when there is something to write.
+    /// Writes the copy now, when there is something to write. The document
+    /// is read here; the file is written on another thread, so a large
+    /// document does not hold the window up while it goes to disk.
     void saveNow();
+
+    /// Waits for a copy being written to finish. A save of the document
+    /// itself does first, since it moves the media both read.
+    void waitForWrite();
 
 private:
     static QString folder();
@@ -76,4 +84,9 @@ private:
     quint64 _changes = 0;
     quint64 _savedChanges = 0;
     QDateTime _lastSave;
+    std::thread _writer;
+    std::atomic<bool> _writing{false};
+    /// Moves on with every discard, so a write that finishes after one
+    /// leaves no note behind.
+    quint64 _generation = 0;
 };

@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstdint>
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -29,6 +30,15 @@ struct SaveOptions
 /// Writes \a document to \a path. False with \a error when it could not;
 /// the file at \a path is then as it was.
 bool save(const fla::Document& document, const std::string& path, const SaveOptions& options, std::string& error);
+
+/// A save taken in two steps, for writing on another thread (the recovery
+/// copy, so it never holds the window up): snapshot() reads the document,
+/// on the thread that edits it, and write() puts that on disk without
+/// touching the document again. Media are not relocated: the document
+/// keeps reading them from where they were. Neither throws.
+struct SaveSnapshot;
+std::shared_ptr<SaveSnapshot> snapshot(const fla::Document& document, const SaveOptions& options, std::string& error);
+bool write(const SaveSnapshot& snapshot, const std::string& path, std::string& error);
 
 /// Reads the document at \a path; null with \a error when it cannot be read.
 /// \a warning says what was wrong but could be worked around (a damaged

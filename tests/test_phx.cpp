@@ -495,3 +495,28 @@ TEST(phx_media_load_when_needed_and_are_copied_as_stored)
     CHECK(!phx::save(*orphan->document, scratchPath("lazy_c.phx"), phx::SaveOptions(), lost));
     CHECK(lost.find("could not be read") != std::string::npos);
 }
+
+// A snapshot is the document as it was when taken: written after the
+// document has changed (as the recovery copy is, on another thread), the
+// file holds the earlier state.
+TEST(phx_snapshot_writes_the_document_as_it_was)
+{
+    std::unique_ptr<fla::FLADocument> document(fla::createEmptyDocument(1280, 720, 30.0));
+    CHECK(document && document->document);
+    if (!document || !document->document)
+        return;
+    std::string error;
+    const std::shared_ptr<phx::SaveSnapshot> snapshot =
+        phx::snapshot(*document->document, phx::SaveOptions(), error);
+    CHECK(snapshot != nullptr);
+    if (!snapshot)
+        return;
+    document->document->width = 640;
+    const std::string path = scratchPath("snapshot.phx");
+    CHECK(phx::write(*snapshot, path, error));
+
+    std::string warning;
+    bool readOnly = false;
+    std::unique_ptr<fla::FLADocument> back(phx::load(path, error, warning, readOnly));
+    CHECK(back && back->document && back->document->width == 1280);
+}

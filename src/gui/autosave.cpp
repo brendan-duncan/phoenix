@@ -69,6 +69,12 @@ AutoSave::~AutoSave()
     discard();
 }
 
+void AutoSave::waitForWrite()
+{
+    if (_writer.joinable())
+        _writer.join();
+}
+
 int AutoSave::interval()
 {
     return QSettings().value("autosaveMinutes", 2).toInt();
@@ -98,6 +104,12 @@ void AutoSave::saveNow()
         QTimer::singleShot(5000, this, [this]() { saveNow(); });
         return;
     }
+    if (_writing)
+    {
+        // The last copy is still going to disk: this one a little later.
+        QTimer::singleShot(5000, this, [this]() { saveNow(); });
+        return;
+    }
     QDir().mkpath(folder());
     const QString file = QDir(folder()).filePath(_id + ".phx");
     phx::SaveOptions options;
@@ -106,23 +118,43 @@ void AutoSave::saveNow()
     // reading its media from where they are.
     options.relocateMedia = false;
     std::string error;
-    if (!phx::save(*document, file.toStdString(), options, error))
+    const std::shared_ptr<phx::SaveSnapshot> snapshot = phx::snapshot(*document, options, error);
+    if (!snapshot)
         return;
 
     QJsonObject note;
     note["path"] = _links.path ? _links.path() : QString();
     note["name"] = _links.name ? _links.name() : QString();
     note["pid"] = QCoreApplication::applicationPid();
-    note["saved"] = QDateTime::currentDateTime().toString(Qt::ISODate);
-    QFile noteFile(QDir(folder()).filePath(_id + ".json"));
-    if (noteFile.open(QIODevice::WriteOnly | QIODevice::Truncate))
-        noteFile.write(QJsonDocument(note).toJson());
-    _savedChanges = _changes;
-    _lastSave = QDateTime::currentDateTime();
+    const QString noteFile = QDir(folder()).filePath(_id + ".json");
+    const quint64 changes = _changes;
+    const quint64 generation = _generation;
+
+    waitForWrite();
+    _writing = true;
+    _writer = std::thread([this, snapshot, file, note, noteFile, changes, generation]() mutable {
+        std::string failure;
+        const bool written = phx::write(*snapshot, file.toStdString(), failure);
+        // Back on the window's thread for the note; dropped if this is gone.
+        QMetaObject::invokeMethod(this, [this, written, note, noteFile, changes, generation]() mutable {
+            if (!written || generation != _generation)
+                return;
+            note["saved"] = QDateTime::currentDateTime().toString(Qt::ISODate);
+            QFile out(noteFile);
+            if (out.open(QIODevice::WriteOnly | QIODevice::Truncate))
+                out.write(QJsonDocument(note).toJson());
+            _savedChanges = changes;
+            _lastSave = QDateTime::currentDateTime();
+        }, Qt::QueuedConnection);
+        _writing = false;
+    });
 }
 
 void AutoSave::discard()
 {
+    // A copy being written would come back after its files go.
+    waitForWrite();
+    ++_generation;
     QFile::remove(QDir(folder()).filePath(_id + ".phx"));
     QFile::remove(QDir(folder()).filePath(_id + ".json"));
     _lastSave = QDateTime();
