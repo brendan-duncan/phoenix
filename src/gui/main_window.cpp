@@ -582,6 +582,14 @@ void MainWindow::releaseDocument()
 
     if (_flaDocument)
     {
+        // Copied layers point at this document's symbols, and only paste
+        // back into it: they go with it, before another document can take
+        // its address.
+        if (_flaDocument->document && _flaDocument->document == _copiedLayersFrom)
+        {
+            _copiedLayers.clear();
+            _copiedLayersFrom = nullptr;
+        }
         delete _flaDocument;
         _flaDocument = nullptr;
     }
