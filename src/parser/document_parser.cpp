@@ -1146,6 +1146,190 @@ bool parseStaticText(const tinyxml2::XMLElement* element, fla::StaticText* stati
 
 std::string elementText(const tinyxml2::XMLElement* element);
 
+namespace {
+
+/// The character formatting a TLF element passes down to what it holds.
+struct TlfStyle
+{
+    std::string family = "Arial";
+    double size = 12.0;
+    uint8_t color[4] = {0, 0, 0, 255};
+    bool bold = false;
+    bool italic = false;
+    std::string tracking;
+    fla::TextRun::Alignment alignment = fla::TextRun::Alignment::Left;
+};
+
+/// \a style with what \a element sets of TLF's formatting attributes.
+TlfStyle tlfStyleOf(const tinyxml2::XMLElement* element, TlfStyle style)
+{
+    if (const char* family = element->Attribute("fontFamily"))
+    {
+        // A list of fallbacks: the first is the font meant.
+        std::string first = family;
+        first = first.substr(0, first.find(','));
+        first.erase(std::remove(first.begin(), first.end(), '\''), first.end());
+        if (!first.empty())
+            style.family = first;
+    }
+    if (const char* size = element->Attribute("fontSize"))
+        if (std::strtod(size, nullptr) > 0.0)
+            style.size = std::strtod(size, nullptr);
+    if (const char* color = element->Attribute("color"))
+    {
+        std::string digits = color;
+        if (!digits.empty() && digits[0] == '#')
+            digits = digits.substr(1);
+        else if (digits.size() > 2 && digits[0] == '0' && (digits[1] == 'x' || digits[1] == 'X'))
+            digits = digits.substr(2);
+        const unsigned long rgb = std::strtoul(digits.c_str(), nullptr, 16);
+        style.color[0] = static_cast<uint8_t>((rgb >> 16) & 0xFF);
+        style.color[1] = static_cast<uint8_t>((rgb >> 8) & 0xFF);
+        style.color[2] = static_cast<uint8_t>(rgb & 0xFF);
+    }
+    if (const char* alpha = element->Attribute("textAlpha"))
+        style.color[3] = static_cast<uint8_t>(std::clamp(std::strtod(alpha, nullptr), 0.0, 1.0) * 255.0 + 0.5);
+    if (const char* weight = element->Attribute("fontWeight"))
+        style.bold = std::strcmp(weight, "bold") == 0;
+    if (const char* posture = element->Attribute("fontStyle"))
+        style.italic = std::strcmp(posture, "italic") == 0;
+    if (const char* tracking = element->Attribute("trackingRight"))
+        style.tracking = tracking;
+    if (const char* align = element->Attribute("textAlign"))
+    {
+        const std::string value = align;
+        if (value == "center")
+            style.alignment = fla::TextRun::Alignment::Center;
+        else if (value == "right" || value == "end")
+            style.alignment = fla::TextRun::Alignment::Right;
+        else if (value == "justify")
+            style.alignment = fla::TextRun::Alignment::Justify;
+        else
+            style.alignment = fla::TextRun::Alignment::Left;
+    }
+    return style;
+}
+
+/// A classic run with \a style's formatting.
+fla::TextRun tlfRun(const TlfStyle& style)
+{
+    fla::TextRun run;
+    run.face = style.family;
+    if (style.bold || style.italic)
+        run.face += std::string("-") + (style.bold ? "Bold" : "") + (style.italic ? "Italic" : "");
+    run.size = style.size;
+    std::copy(std::begin(style.color), std::end(style.color), run.fillColor);
+    run.alignment = style.alignment;
+    // Tracking is in pixels, or a percentage of the font's size.
+    if (!style.tracking.empty())
+    {
+        const double amount = std::strtod(style.tracking.c_str(), nullptr);
+        run.letterSpacing = style.tracking.back() == '%' ? style.size * amount / 100.0 : amount;
+    }
+    return run;
+}
+
+/// Adds the text inside \a element (a paragraph, span, link...) to \a runs
+/// as runs of its formatting; a line break or tab inside it becomes the
+/// character classic text holds for it.
+void addTlfRuns(const tinyxml2::XMLElement* element, const TlfStyle& outer, std::vector<fla::TextRun>& runs)
+{
+    const TlfStyle style = tlfStyleOf(element, outer);
+    for (const tinyxml2::XMLNode* node = element->FirstChild(); node; node = node->NextSibling())
+    {
+        std::string characters;
+        if (const tinyxml2::XMLText* text = node->ToText())
+            characters = text->Value() ? text->Value() : "";
+        else if (const tinyxml2::XMLElement* child = node->ToElement())
+        {
+            if (std::strcmp(child->Name(), "br") == 0)
+                characters = "\r";
+            else if (std::strcmp(child->Name(), "tab") == 0)
+                characters = "\t";
+            else
+            {
+                // A span, link, or other holder of text (an image has none).
+                addTlfRuns(child, style, runs);
+                continue;
+            }
+        }
+        if (characters.empty())
+            continue;
+        fla::TextRun run = tlfRun(style);
+        if (!runs.empty() && runs.back().face == run.face && runs.back().size == run.size &&
+            std::equal(std::begin(run.fillColor), std::end(run.fillColor), runs.back().fillColor) &&
+            runs.back().letterSpacing == run.letterSpacing && runs.back().alignment == run.alignment)
+            runs.back().text += characters;
+        else
+        {
+            run.text = characters;
+            runs.push_back(run);
+        }
+    }
+}
+
+/// Adds the paragraphs under \a element (the flow, or a division of it),
+/// each ended by a paragraph break but the first's start.
+void addTlfParagraphs(const tinyxml2::XMLElement* element, const TlfStyle& outer, std::vector<fla::TextRun>& runs)
+{
+    const TlfStyle style = tlfStyleOf(element, outer);
+    for (const tinyxml2::XMLElement* child = element->FirstChildElement(); child;
+         child = child->NextSiblingElement())
+    {
+        if (std::strcmp(child->Name(), "div") == 0)
+        {
+            addTlfParagraphs(child, style, runs);
+            continue;
+        }
+        if (std::strcmp(child->Name(), "p") != 0)
+            continue;
+        if (!runs.empty())
+            runs.back().text += "\r";
+        const size_t before = runs.size();
+        addTlfRuns(child, style, runs);
+        // An empty paragraph still has its formatting, as classic text keeps it.
+        if (runs.size() == before)
+            runs.push_back(tlfRun(tlfStyleOf(child, style)));
+    }
+}
+
+} // namespace
+
+bool convertTlfText(const tinyxml2::XMLElement* element, fla::StaticText* text)
+{
+    const tinyxml2::XMLElement* markup = element->FirstChildElement("markup");
+    const char* source = markup ? markup->GetText() : nullptr;
+    if (!source)
+        return false;
+    tinyxml2::XMLDocument xml;
+    if (xml.Parse(source) != tinyxml2::XML_SUCCESS || !xml.RootElement())
+        return false;
+    const tinyxml2::XMLElement* flow = xml.RootElement();
+    if (std::strcmp(flow->Name(), "TextFlow") != 0)
+        flow = flow->FirstChildElement("TextFlow");
+    if (!flow || !parseElement(element, text))
+        return false;
+
+    // The box is in twips, as the file's other frames are.
+    text->left = getDoubleAttribute(element, "left", 0.0) / 20.0;
+    text->top = getDoubleAttribute(element, "top", 0.0) / 20.0;
+    text->width = (getDoubleAttribute(element, "right", 0.0) - getDoubleAttribute(element, "left", 0.0)) / 20.0;
+    text->height = (getDoubleAttribute(element, "bottom", 0.0) - getDoubleAttribute(element, "top", 0.0)) / 20.0;
+    // Without a width it grows with its text.
+    text->autoExpand = text->width <= 0.0;
+    if (text->autoExpand)
+        text->width = 0.0;
+    // A named field is one a script reaches: dynamic text keeps it reachable.
+    text->instanceName = getAttribute(element, "name");
+    if (!text->instanceName.empty())
+        text->textType = fla::StaticText::TextType::Dynamic;
+
+    addTlfParagraphs(flow, TlfStyle(), text->runs);
+    if (text->runs.empty())
+        text->runs.push_back(tlfRun(TlfStyle()));
+    return true;
+}
+
 fla::Element* parseElementByType(const tinyxml2::XMLElement* element, fla::DOMElement* parent)
 {
     const char* tagName = element->Name();
@@ -1232,8 +1416,18 @@ fla::Element* parseElementByType(const tinyxml2::XMLElement* element, fla::DOMEl
         return oval;
     }
 
-    // A kind Phoenix does not model (TLF text, a component, a video): kept
-    // as read, in its place, and written back.
+    // TLF text, which Animate no longer edits, opens as classic text, as
+    // Animate converts it.
+    if (std::strcmp(tagName, "DOMTLFText") == 0)
+    {
+        fla::StaticText* text = new fla::StaticText(parent);
+        if (convertTlfText(element, text))
+            return text;
+        delete text;
+    }
+
+    // A kind Phoenix does not model (a component, a video, TLF text it
+    // could not read): kept as read, in its place, and written back.
     fla::RawElement* raw = new fla::RawElement(parent);
     raw->xml = elementText(element);
     describeVideo(*raw);

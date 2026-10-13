@@ -1496,3 +1496,49 @@ TEST(xfl_moves_an_instances_3d_center_point_with_it)
     CHECK(written.find("centerPoint3DX=\"1308.775\"") != std::string::npos);
     CHECK(written.find("centerPoint3DY=\"862.95\"") != std::string::npos);
 }
+
+TEST(tlf_text_opens_as_classic_text)
+{
+    std::unique_ptr<fla::Document> document = parseDocumentText(
+        "<DOMDocument xmlns='http://ns.adobe.com/xfl/2008/'>"
+        "<timelines><DOMTimeline name='Scene 1'><layers><DOMLayer name='L'><frames><DOMFrame index='0'><elements>"
+        "<DOMTLFText name='score' right='2000' bottom='800'>"
+        "<matrix><Matrix tx='30' ty='40'/></matrix>"
+        "<markup><![CDATA[<tlfTextObject><TextFlow fontFamily='Verdana' fontSize='20' "
+        "xmlns='http://ns.adobe.com/textLayout/2008'>"
+        "<p textAlign='center'><span color='#FF0000'>Hello </span><span fontWeight='bold'>world</span></p>"
+        "<p><span fontSize='10' trackingRight='50%'>Second</span></p>"
+        "</TextFlow></tlfTextObject>]]></markup>"
+        "</DOMTLFText>"
+        "</elements></DOMFrame></frames></DOMLayer></layers></DOMTimeline></timelines></DOMDocument>");
+    CHECK(document != nullptr);
+    if (!document || document->timelines.empty())
+        return;
+    const auto* text =
+        dynamic_cast<const fla::StaticText*>(document->timelines[0]->layers[0]->frames[0]->elements[0]);
+    CHECK(text != nullptr);
+    if (!text)
+        return;
+    CHECK(text->transform.tx == 30.0 && text->transform.ty == 40.0);
+    CHECK(text->width == 100.0 && text->height == 40.0 && !text->autoExpand);
+    CHECK(text->instanceName == "score");
+    CHECK(text->textType == fla::StaticText::TextType::Dynamic);
+    CHECK(text->runs.size() == 3);
+    if (text->runs.size() != 3)
+        return;
+    CHECK(text->runs[0].text == "Hello ");
+    CHECK(text->runs[0].face == "Verdana" && text->runs[0].size == 20.0);
+    CHECK(text->runs[0].fillColor[0] == 255 && text->runs[0].fillColor[1] == 0);
+    CHECK(text->runs[0].alignment == fla::TextRun::Alignment::Center);
+    CHECK(text->runs[1].text == "world\r");
+    CHECK(text->runs[1].face == "Verdana-Bold");
+    CHECK(text->runs[2].text == "Second");
+    CHECK(text->runs[2].size == 10.0 && text->runs[2].letterSpacing == 5.0);
+    CHECK(text->runs[2].alignment == fla::TextRun::Alignment::Left);
+
+    // Saved as classic text.
+    XFLWriter writer;
+    const std::string written = writer.writeDocument(*document);
+    CHECK(written.find("DOMTLFText") == std::string::npos);
+    CHECK(written.find("DOMDynamicText") != std::string::npos);
+}
