@@ -12043,7 +12043,10 @@ bool MainWindow::canPaste() const
     if (!_clipboard.empty())
         return true;
     const QMimeData* data = QApplication::clipboard()->mimeData();
-    return data && (data->hasFormat(kElementsMime) || data->hasImage() || (data->hasText() && !data->text().isEmpty()));
+    return data && (data->hasFormat(kElementsMime) || data->hasImage() || data->hasFormat("image/svg+xml") ||
+        data->hasFormat("application/pdf") ||
+        (data->hasUrls() && !data->urls().isEmpty() && data->urls().front().isLocalFile()) ||
+        (data->hasText() && !data->text().isEmpty()));
 }
 
 void MainWindow::putOnSystemClipboard()
