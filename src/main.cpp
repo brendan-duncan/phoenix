@@ -10,6 +10,8 @@
 #include "writer/xfl_content.h"
 #include "writer/xfl_folder_writer.h"
 #include <QApplication>
+#include <QProxyStyle>
+#include <QStyleOptionMenuItem>
 #include <QSettings>
 #include <cmath>
 #include <algorithm>
@@ -51,6 +53,26 @@ protected:
 
 private:
     std::function<void(const QString&)> _open;
+};
+
+/// The platform's style, with room between a menu item's name and its
+/// shortcut: the Windows style leaves almost none, and a long name runs
+/// into its keys.
+class MenuSpacingStyle : public QProxyStyle
+{
+public:
+    QSize sizeFromContents(ContentsType type, const QStyleOption* option, const QSize& size,
+                           const QWidget* widget) const override
+    {
+        QSize result = QProxyStyle::sizeFromContents(type, option, size, widget);
+        if (type == CT_MenuItem)
+        {
+            const auto* item = qstyleoption_cast<const QStyleOptionMenuItem*>(option);
+            if (item && item->text.contains('\t'))
+                result.rwidth() += 24;
+        }
+        return result;
+    }
 };
 
 } // namespace
@@ -105,6 +127,15 @@ int main(int argc, char *argv[])
     }
 #endif
 
+    // PHOENIX_SETTINGS_DIR keeps the settings in INI files in that folder
+    // rather than the user's own: for tests, demos and shared machines.
+    const QString settingsDir = qEnvironmentVariable("PHOENIX_SETTINGS_DIR");
+    if (!settingsDir.isEmpty())
+    {
+        QSettings::setDefaultFormat(QSettings::IniFormat);
+        QSettings::setPath(QSettings::IniFormat, QSettings::UserScope, settingsDir);
+    }
+
     // The theme's UI scale, which Qt takes only before it starts.
     {
         const double scale = QSettings("Phoenix", "FLAViewer").value("theme/uiScale", 1.0).toDouble();
@@ -113,6 +144,7 @@ int main(int argc, char *argv[])
     }
 
     QApplication a(argc, argv);
+    QApplication::setStyle(new MenuSpacingStyle);
     QApplication::setApplicationVersion(Updater::currentVersion());
 
     // A file named on the command line, or dropped on the executable, which
