@@ -27,7 +27,7 @@ struct BrushSample
 /// The settings of one brush, as its Properties panel sets them. The three
 /// brushes share them and differ in which they show and their defaults:
 ///
-/// - The **Flow Brush** (Animate's Fluid Brush) varies the width with
+/// - The **Brush** (Animate's Fluid Brush) varies the width with
 ///   pressure and speed, tapers the ends, smooths the line and has an
 ///   elliptical tip with a roundness and an angle.
 /// - The **Nib Brush** (Animate's Classic Brush, Flash's brush) has a shaped
@@ -75,7 +75,7 @@ struct BrushSettings
         Pixels
     };
 
-    /// How the speed of the stroke changes its width (Flow Brush).
+    /// How the speed of the stroke changes its width (Brush).
     enum class Velocity
     {
         None,

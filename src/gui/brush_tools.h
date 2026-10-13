@@ -39,7 +39,7 @@ QPainterPath sweptOutline(const std::vector<fla::BrushDab>& dabs, double zoom, b
 /// fill and no outline, and merges like any other drawing, so passes of one
 /// color run together without seams.
 ///
-/// - **Flow Brush** (Animate's Fluid Brush): width from pressure and
+/// - **Brush** (Animate's Fluid Brush): width from pressure and
 ///   speed, tapered ends, smoothing, and an elliptical tip with roundness
 ///   and angle.
 /// - **Nib Brush** (Animate's Classic Brush, Flash's brush): a shaped nib,

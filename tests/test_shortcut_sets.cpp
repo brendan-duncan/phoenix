@@ -10,7 +10,7 @@ namespace {
 
 const std::vector<std::string> kCommands = {"File > Save As", "Edit > Redo", "Edit > Paste in Center",
     "Modify > Transform > Remove Transform", "Modify > Transform > Rotate 90° CW", "View > Show Grid",
-    "View > Magnification > Fit in Window", "Tools > Flow Brush", "Tools > Nib Brush", "Tools > Selection",
+    "View > Magnification > Fit in Window", "Tools > Brush", "Tools > Nib Brush", "Tools > Selection",
     "Control > Play"};
 
 std::string keyOf(const std::map<std::string, std::string>& keys, const std::string& command)
@@ -42,7 +42,7 @@ TEST(animate_standard_matches_phoenix_commands)
     CHECK(keyOf(keys, "Modify > Transform > Remove Transform") == "Ctrl+Shift+Z");
     CHECK(keyOf(keys, "Modify > Transform > Rotate 90° CW") == "Ctrl+Shift+9");
     // Animate's names for Phoenix's commands.
-    CHECK(keyOf(keys, "Tools > Flow Brush") == "B");
+    CHECK(keyOf(keys, "Tools > Brush") == "B");
     CHECK(keyOf(keys, "Tools > Nib Brush") == "Shift+B");
     CHECK(keyOf(keys, "View > Magnification > Fit in Window") == "Ctrl+2");
     CHECK(keyOf(keys, "View > Show Grid") == "Ctrl+'");

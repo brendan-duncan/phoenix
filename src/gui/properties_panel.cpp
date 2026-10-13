@@ -930,7 +930,7 @@ void PropertiesPanel::buildToolTab()
     const QString precisionTip = "How closely the finished outline follows the stroke; lower is smoother "
         "with fewer points";
 
-    // Flow Brush (Animate's Fluid Brush).
+    // Brush (Animate's Fluid Brush).
     const BrushMember fluid = &fla::DrawingStyle::fluidBrush;
     brushNumber(fluid, IconTool::FluidBrush, "Size", 1.0, 200.0, 1, " px", sizeTip, sizeOf, setSize);
     brushCheck(fluid, IconTool::FluidBrush, "Pressure", "Let a pen's pressure vary the width", pressureOf,

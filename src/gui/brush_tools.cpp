@@ -442,7 +442,7 @@ QString BrushTool::name() const
 {
     switch (_kind)
     {
-    case Kind::Fluid: return "Flow Brush";
+    case Kind::Fluid: return "Brush";
     case Kind::Classic: return "Nib Brush";
     case Kind::Ink: return "Ink Brush";
     }

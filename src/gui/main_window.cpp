@@ -7114,10 +7114,10 @@ void MainWindow::setupToolBar()
             "in the Properties panel.",
             [this]() -> Tool* { return _paintBrushTool.get(); }),
     });
-    // The Flow, Nib and Ink brushes share a slot; B is the Flow Brush's, as
+    // The Brush, Nib and Ink brushes share a slot; Shift+B is the Brush's, as
     // it is the brush Animate gives B.
     addSlot({
-        makeTool(ToolIcons::Tool::FluidBrush, "Flow Brush", Qt::SHIFT | Qt::Key_B,
+        makeTool(ToolIcons::Tool::FluidBrush, "Brush", Qt::SHIFT | Qt::Key_B,
             "Paint a fill whose width follows the pen's pressure and speed, with tapered ends "
             "and a smoothed line. Settings are in the Properties panel.",
             [this]() -> Tool* { return _brushTool.get(); }),

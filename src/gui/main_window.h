@@ -518,7 +518,7 @@ private:
     std::unique_ptr<ThreeDTool> _translate3DTool;
     std::unique_ptr<WidthTool> _widthTool;
     std::unique_ptr<PencilTool> _paintBrushTool;
-    /// The Flow Brush (the B key's), the Nib Brush and the Ink Brush,
+    /// The Brush (Shift+B), the Nib Brush and the Ink Brush,
     /// sharing the toolbox slot.
     std::unique_ptr<BrushTool> _brushTool;
     std::unique_ptr<BrushTool> _classicBrushTool;

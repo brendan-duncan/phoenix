@@ -46,7 +46,13 @@ std::map<QString, QKeySequence> read(const QString& group)
     QSettings settings;
     settings.beginGroup(group);
     for (const QString& id : settings.childKeys())
-        keys[QString(id).replace('|', '/')] = QKeySequence(settings.value(id).toString(), QKeySequence::PortableText);
+    {
+        QString command = QString(id).replace('|', '/');
+        // A tool renamed since the keys were saved.
+        if (command == "Tools > Flow Brush")
+            command = "Tools > Brush";
+        keys[command] = QKeySequence(settings.value(id).toString(), QKeySequence::PortableText);
+    }
     return keys;
 }
 

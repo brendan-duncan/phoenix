@@ -23,6 +23,18 @@ QJsonObject Toolbox::Layout::toJson() const
     return json;
 }
 
+namespace {
+
+/// A tool's id as a layout saved before a rename gives it.
+QString currentToolId(const QString& id)
+{
+    if (id == "Flow Brush")
+        return "Brush";
+    return id;
+}
+
+} // namespace
+
 Toolbox::Layout Toolbox::Layout::fromJson(const QJsonObject& json)
 {
     Layout layout;
@@ -32,13 +44,13 @@ Toolbox::Layout Toolbox::Layout::fromJson(const QJsonObject& json)
         Slot slot;
         for (const QJsonValue& id : value.toArray())
             if (id.isString())
-                slot << id.toString();
+                slot << currentToolId(id.toString());
         if (!slot.isEmpty())
             layout.entries.push_back(slot);
     }
     for (const QJsonValue& id : json["hidden"].toArray())
         if (id.isString())
-            layout.hidden << id.toString();
+            layout.hidden << currentToolId(id.toString());
     return layout;
 }
 

@@ -151,7 +151,7 @@ public:
     }();
     bool eraserSyncWithBrush = false;
 
-    /// Each brush's own settings: the Flow Brush (fluidBrush), the Nib Brush
+    /// Each brush's own settings: the Brush (fluidBrush), the Nib Brush
     /// (classicBrush) and the Ink Brush. Pressure is on in all three; a mouse always
     /// paints at full width.
     BrushSettings fluidBrush = BrushSettings::fluidDefaults();
