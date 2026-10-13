@@ -417,25 +417,77 @@ template_robot.fla has 12.
 
 ### IK armatures
 
-From one sample, ik_bones.fla (Animate 24, a shape with four bones):
+From three samples saved by Animate 24: ik_bones.fla (a shape with four
+bones), ik_poses.fla (a shape posed twice, eased) and ik_symbols.fla (bones
+joining three movie clips).
 
 - The armature layer has `animationType="IK pose"`. Its pose keyframes have
-  `tweenType="IK pose"`, `isIKPose="true"`, `poseLocations`, `keyMode="9732"`
-  and an empty `betweenFrameMatrixList`
+  `tweenType="IK pose"`, `isIKPose="true"`, `poseLocations` (the poses'
+  frames into the span, "0,29"), `keyMode="9732"` and a
+  `betweenFrameMatrixList`
 - An `<IKTree name treeName physicsEnabled>` holds a root `<IKNode>` whose
-  `<ChildNode>`s nest one per bone: `boneName`, the joint location in hex fixed
-  point, `xArray`/`yArray`/`angleArray`, a `worldMatrix`, and a `<State>` per
-  pose (duration, angle in radians, x and y in twips)
-- `<IKState>` entries give the pose durations
-- `<IKContour>` is the shape's outline (`dataPoints` in hex fixed point, a
-  matrix, its stroke and fill). `connectionIndices` and `connectionData` bind
-  outline points to bones with weights, in groups of four floats ending in a
-  weight of 1 or 0.5
-- The boned shape becomes a library symbol of `symbolType="ik container"`
+  `<ChildNode>`s nest one per joint (the first sits on the root and carries
+  the root's pose): `name`, `boneName`, the joint `location` in hex fixed
+  point (units of 256 twips, "#1D.D8" is 0x1DD8 twips), `xArray`/`yArray`
+  (twips) and `angleArray` (radians) for every frame of the span, and a
+  `<State>` per pose (duration, angle, x and y)
+- A State's angle is relative to the parent joint's absolute angle, and its
+  x, y the joint's offset in the parent's frame, in twips (absolute for the
+  root's child)
+- `<IKState>` entries give each pose's length and the ease to the next
+  (`easeType="simple quadratic"`, `easeValue` -100 to 100). A positive
+  strength s runs time as (1 - s) t + s (2t - t^2). The joint lists hold
+  every frame worked out from the poses this way (checked to 1e-5 against
+  every frame of ik_poses.fla)
 - `persistentData` keeps `ikBoneCount`, `ikTreeCount` and `ikNodeCount`
 
-Not yet sampled: bones between symbol instances, and how poses tween (two
-poses). Phoenix keeps all of it on save and draws the shape as stored.
+Armatures of symbols: each node names its instance by `referenceID` (the
+DOMSymbolInstance carries the same). `location` is the joint, the instance's
+transformation point; `xArray`/`yArray` are the instance's registration
+point (its matrix's tx, ty) and `angleArray` its turn, frame by frame. The
+nodes have no worldMatrix. `betweenFrameMatrixList` holds one near-identity
+Matrix per instance in the one-pose sample. Phoenix reads it as each
+instance's matrix in its joint's frame (the instance's matrix with the
+joint's registration point and angle taken off) and writes one per instance
+for every frame of the span, frame by frame (inferred: no multi-pose symbol
+sample). Phoenix plays the instances from the joint lists: on each frame an
+instance is its saved matrix (the span's first frame) turned by the change
+in its node's angle and moved onto that frame's registration point.
+
+Shape armatures: nodes have `nodeType="lsd"`, their joint lists hold the
+joints themselves, and each has a `worldMatrix` (the joint's frame). The
+boned shape becomes a library symbol of `symbolType="ik container"` placed
+on the armature layer as a graphic playing once; it holds the bent shape on
+a keyframe for every frame of the span, so it plays as stored.
+
+- `<IKContour>` is the shape's outline as a cubic contour: `dataPoints` in
+  hex fixed point relative to its `matrix` (the container's placement):
+  the first point and its handle out, then each point's handle in, the
+  point and its handle out, and the last point's handle in and the point
+  (25 data points for 9 points in ik_bones.fla). Then the stroke and fill
+- `connectionIndices`: the number of bound points, then for each point its
+  number and, for each bone it follows, the bone (numbered by the joint at
+  its tail, as the nodes are numbered depth first under the root), the
+  offset of its group of four in `connectionData`, a 1, and the offsets of
+  its two handles' groups; -1 ends the point
+- `connectionData`: groups of four floats, one for the point and one for
+  each handle per bone: the place along the bone (0 at its head, 1 at its
+  tail), the signed distance to its side in pixels (the bone's direction
+  crossed with the point's offset from the head), the distance from the
+  bone, and the weight. A point beside a joint follows both bones, 0.5 each
+
+Phoenix's own boned shapes (the Bone tool) keep this layout, inferred from
+the one sample, with two differences, marked by `phoenixBinding="anchors"`
+on the IKTree: the bound points are the shape's own anchors, numbered in the
+order its edges reach them (not a cubic contour Animate fits), and each
+point's handles sit on the point. Phoenix bends a shape by its binding only
+when it has that mark; an Animate binding is kept as read and the shape is
+bent by nearness to the bones. Joint rotation limits are Phoenix's own
+attributes (`phoenixMinRotation`, `phoenixMaxRotation`); no sample has
+Animate's limits or springs. Spring settings, read as `springStrength` and
+`springDamping` (or `strength` and `damping`) on a node, and any other
+attribute of a node or the tree are kept when an armature is built again
+with a bone more.
 
 ### Asset Warp
 
@@ -509,7 +561,8 @@ they're followed:
 - The spelling of the reverse loop options (section 5)
 - Camera layers, layer depth and 3D rotation: no samples yet
 - Asset Warp mesh and pin storage (section 7)
-- IK between symbol instances, and IK pose tweening (section 7)
+- IK: a symbol armature with two poses (its betweenFrameMatrixList), joint
+  limits and springs as Animate writes them (section 7)
 - What `keyMode` encodes
 
 ## 12. Where Phoenix implements this
@@ -526,3 +579,4 @@ they're followed:
 | Fill sides and faces | `src/geom/planar_map.cpp`, `src/geom/fill_attribution.cpp` |
 | Classic tween blending and easing | `src/edit/transform_blend.cpp`, `src/edit/tween_ease.cpp` |
 | Shape tweens | `src/edit/shape_tween.cpp` |
+| IK armatures, poses and binding | `src/edit/ik_pose.cpp`, `src/parser/ik_tree.cpp` |

@@ -4,8 +4,8 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Bones and inverse kinematics · Phoenix User Guide</title>
-<meta name="description" content="Build armatures of symbols with the Bone tool, limit their joints, pose and play armatures, and play Asset Warp puppets.">
-<meta name="keywords" content="bones ik inverse kinematics armature pose layer bone tool joint limits constrain rotation asset warp tool puppet pins rig">
+<meta name="description" content="Build armatures of symbols and bone shapes with the Bone tool, bind shape points with the Bind tool, limit their joints, pose and play armatures, and play Asset Warp puppets.">
+<meta name="keywords" content="bones ik inverse kinematics armature pose layer bone tool bind tool shape bones control points joint limits constrain rotation springs asset warp tool puppet pins rig">
 <link rel="icon" href="assets/img/logo.png">
 <link rel="stylesheet" href="assets/site.css">
 <script>try { const t = localStorage.getItem("phoenix-docs-theme"); if (t) document.documentElement.dataset.theme = t; } catch (e) {}</script>
@@ -17,7 +17,7 @@
 
 <p class="eyebrow">Animation</p>
 <h1>Bones and inverse kinematics</h1>
-<p class="lead">An <strong>armature</strong> is a chain of bones inside a shape or between symbols. Drag the end of the chain and the joints bend to follow, which is called inverse kinematics (IK). Build armatures of symbols with the Bone tool, and pose and play them along with the armatures in FLA files.</p>
+<p class="lead">An <strong>armature</strong> is a chain of bones inside a shape or between symbols. Drag the end of the chain and the joints bend to follow, which is called inverse kinematics (IK). Build armatures of symbols or bone a shape with the Bone tool, and pose and play them along with the armatures in FLA files.</p>
 
 <figure>
   <img src="assets/shots/bones.webp" alt="A green curved shape with three bones drawn inside it as slim blue kites joined by round joints, and a pose span in the timeline" width="1256" height="794">
@@ -36,31 +36,56 @@
 
 <p>Each bone added is a single step to undo.</p>
 
+<h3>Bones inside a shape</h3>
+
+<p>The Bone tool also bones a shape, so its outline bends as the bones turn:</p>
+
+<ol class="steps">
+  <li>Drag inside a shape, a merged shape or a drawing object, from where the first bone starts to where it ends.</li>
+  <li>Phoenix moves the shape to a new armature layer, kept in a library symbol of its own, and binds each of its control points to the nearest bone. A point as near one bone as another, such as one beside the joint between them, follows both.</li>
+  <li>To grow the armature, drag from one of its joints. Every point is bound again to its nearest bone.</li>
+</ol>
+
+<h3>Binding points with the Bind tool</h3>
+
+<p>The <strong>Bind tool</strong>, in the Bone tool's slot, changes which bones a boned shape's control points follow. It shows the points of every boned shape on the stage: a square for a point that follows one bone, a triangle for one that follows several, and a red outline for one that follows none and so stays where it is.</p>
+
+<ol class="steps">
+  <li>Click a bone. The points that follow it turn yellow.</li>
+  <li>Click a point to bind it to the bone, as well as to any bones it already follows.</li>
+  <li><kbd>Shift</kbd>-click a point to bind it, or to unbind it if it is already bound. <kbd>Ctrl</kbd>-click a point to unbind it.</li>
+</ol>
+
+<p>A point bound to several bones follows them evenly. Every frame of the armature is bent again from its first frame by the new binding, and each change is a single step to undo.</p>
+
 <h3>Joint limits</h3>
 
 <p>Click a bone with the Bone tool, without dragging, to set how far the joint at its head may turn. In the <strong>Joint Rotation</strong> dialog, turn on <strong>Constrain</strong> and give the <strong>Min</strong> and <strong>Max</strong> angles, measured from the bone above. When you drag the armature into a pose, a limited joint stops at its limit and the other joints turn further to make up the difference.</p>
 
 <h2>Armature layers</h2>
 
-<p>Armatures live on their own layers, and their spans are drawn yellow-green in the timeline. A <strong>pose</strong> is a keyframe for the whole armature: Phoenix fills in the frames between poses, easing them the way the file says.</p>
+<p>Armatures live on their own layers, and their spans are drawn yellow-green in the timeline. A <strong>pose</strong> is a keyframe for the whole armature: Phoenix fills in the frames between poses, easing them the way the file says, when you play the document and when you export it. A shape bends from pose to pose, and the instances of a symbol armature turn and move with their joints.</p>
 
 <h2>Posing</h2>
 
-<p>Bones are drawn in the layer's color as slim shapes with round joints; for a shape armature, select the shape to show them. Then, with the Selection tool:</p>
+<p>Bones are drawn in the layer's color as slim shapes with round joints. Then, with the Selection tool:</p>
 
 <ol class="steps">
   <li>Move the playhead to the frame you want to pose.</li>
   <li>Drag a bone. Its tip follows the cursor and the bones above it in the chain bend to reach.</li>
 </ol>
 
-<p>The frame becomes a pose if it wasn't one already. Each pose change is a single step to undo.</p>
-
-<h2>Symbol armatures and Asset Warp</h2>
+<p>The frame becomes a pose if it wasn't one already, and the frames on either side of it ease into it. Each pose change is a single step to undo.</p>
 
 <ul>
-  <li><strong>Armatures between symbols</strong> show their bones and carry the instances with them. One with a single pose can be posed from any frame of its span.</li>
-  <li><strong>Asset Warp</strong> puppets, where artwork bends around pins, are drawn deformed by their pins, vector and bitmap art alike.</li>
+  <li><strong>Armatures between symbols</strong> carry their instances with them on every frame. Posing the first frame of a span moves the instances themselves; posing a later frame moves them only there and in the frames that ease toward it.</li>
+  <li><strong>Boned shapes</strong> bend the points of the shape, each with the bones it is bound to.</li>
+  <li><strong>Springs</strong> set on bones in a file are kept when you save. Phoenix does not simulate them yet.</li>
 </ul>
+
+<h2>Asset Warp</h2>
+
+<p><strong>Asset Warp</strong> puppets, where artwork bends around pins, are drawn deformed by their pins, vector and bitmap art alike.</p>
 
 <h3>Asset Warp tool</h3>
 
@@ -78,7 +103,7 @@
 
 <div class="callout planned">
   <span class="label">Planned</span>
-  <p>Bones inside shapes and the Bind tool, springs, pose commands (insert, copy and paste poses), poses that play between keyframes on symbol armatures, making new puppets from artwork, and a rigging layer.</p>
+  <p>Spring simulation, pose commands (insert, copy and paste poses), adding bones to an armature with more than one pose, making new puppets from artwork, and a rigging layer.</p>
 </div>
 
 </article>

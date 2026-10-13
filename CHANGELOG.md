@@ -4,6 +4,7 @@ What changed in each release of Phoenix, newest first.
 
 ## Unreleased
 
+- Bones: symbol armatures play between poses, the Bone tool bones shapes, and the new Bind tool picks which bone each point follows
 - AI assistants such as Claude can look at and change your document through MCP, with every change undoable
 
 ## 0.5.2 (2026-10-13)
