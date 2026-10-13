@@ -350,6 +350,7 @@ TEST(damaged_edge_numbers_read_as_zero)
     CHECK_NEAR(PathParser::parseNumber("-", pos), 0.0);
     std::unique_ptr<fla::Edge> edge = parseEdge("!- #|# - ");
     CHECK(true);
+}
 
 TEST(coordinates_past_the_format_or_not_numbers_stay_readable)
 {
