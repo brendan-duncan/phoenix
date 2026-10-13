@@ -9,7 +9,7 @@
 namespace fs = std::filesystem;
 
 ZipReader::ZipReader()
-    : _zipArchive(nullptr)
+    : _zipArchive()
     , _isOpen(false)
     , _isDirectory(false)
 {}
@@ -62,12 +62,11 @@ bool ZipReader::open(const std::string& zipFilePath)
 
     // Open zip file using libzip
     int error = 0;
-    _zipArchive = new ZipArchive();
+    _zipArchive = std::make_shared<ZipArchive>();
     if (!_zipArchive->open(filePath.string()))
     {
         _errorString = "Failed to open zip file: " + filePath.string();
-        delete _zipArchive;
-        _zipArchive = nullptr;
+        _zipArchive.reset();
         return false;
     }
 
@@ -87,11 +86,7 @@ void ZipReader::openMemory(std::map<std::string, std::vector<uint8_t>> files)
 
 void ZipReader::close()
 {
-    if (_zipArchive)
-    {
-        delete _zipArchive;
-        _zipArchive = nullptr;
-    }
+    _zipArchive.reset();
     _isOpen = false;
     _isDirectory = false;
     _isMemory = false;
@@ -241,15 +236,25 @@ bool ZipReader::containsFile(const std::string& fileName) const
         return fs::is_regular_file(filePath, ignored);
     }
 
-    // Check if file exists in zip archive
-    for (const auto& entry : _zipArchive->getEntries())
-    {
-        if (entry.filename == _root + fileName)
-        {
-            return true;
-        }
-    }
-    return false;
+    return _zipArchive->find(_root + fileName) != nullptr;
+}
+
+fla::LazyBytes ZipReader::lazyFile(const std::string& fileName) const
+{
+    if (!isOpen() || _isMemory || _isDirectory || !_zipArchive)
+        return fla::LazyBytes(readFile(fileName));
+    const std::string name = _root + fileName;
+    const ZipFileEntry* entry = _zipArchive->find(name);
+    if (!entry)
+        return fla::LazyBytes();
+    auto location = std::make_shared<fla::ByteLocation>();
+    location->path = _path;
+    location->size = entry->uncompressed_size;
+    std::shared_ptr<ZipArchive> archive = _zipArchive;
+    location->load = [archive, name](const fla::ByteLocation&, std::vector<uint8_t>& out) {
+        return archive->extractFile(name, out);
+    };
+    return fla::LazyBytes(location);
 }
 
 std::string ZipReader::errorString() const

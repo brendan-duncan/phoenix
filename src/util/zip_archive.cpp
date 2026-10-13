@@ -1,5 +1,6 @@
 #include "zip_archive.h"
 #include "../third_party/zlib/zlib.h"
+#include <unordered_map>
 #include <algorithm>
 #include <cstdint>
 #include <fstream>
@@ -74,6 +75,9 @@ public:
     std::ifstream file;
     uint64_t file_size = 0;
     std::vector<ZipFileEntry> entries;
+    /// Entries by name: a production FLA has thousands, and each item read
+    /// would otherwise scan them all.
+    std::unordered_map<std::string, size_t> byName;
 
     bool findEndOfCentralDirectory(uint64_t& offset);
 
@@ -391,7 +395,21 @@ bool ZipArchive::open(const std::string& filepath)
 
 	pImpl->filepath = filepath;
 
-    return pImpl->parseCentralDirectory(directory_offset, count);
+    const bool parsed = pImpl->parseCentralDirectory(directory_offset, count);
+    pImpl->byName.clear();
+    for (size_t i = 0; i < pImpl->entries.size(); ++i)
+        pImpl->byName.emplace(pImpl->entries[i].filename, i);
+    // Each extraction opens the file for itself: the handle is not held,
+    // so the document can be saved over while its media are still read
+    // from here as they are needed.
+    pImpl->file.close();
+    return parsed;
+}
+
+const ZipFileEntry* ZipArchive::find(const std::string& filename) const
+{
+    const auto found = pImpl->byName.find(filename);
+    return found == pImpl->byName.end() ? nullptr : &pImpl->entries[found->second];
 }
 
 void ZipArchive::close()
@@ -401,6 +419,7 @@ void ZipArchive::close()
         pImpl->file.close();
     }
     pImpl->entries.clear();
+    pImpl->byName.clear();
 }
 
 const std::vector<ZipFileEntry>& ZipArchive::getEntries() const
@@ -453,12 +472,6 @@ bool ZipArchive::extractFile(const ZipFileEntry& entry, std::vector<uint8_t>& ou
 
 bool ZipArchive::extractFile(const std::string& filename, std::vector<uint8_t>& output)
 {
-    for (const auto& entry : pImpl->entries)
-    {
-        if (entry.filename == filename)
-        {
-            return extractFile(entry, output);
-        }
-    }
-    return false;
+    const ZipFileEntry* entry = find(filename);
+    return entry && extractFile(*entry, output);
 }

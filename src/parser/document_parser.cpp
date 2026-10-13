@@ -1958,10 +1958,10 @@ bool parseMedia(const tinyxml2::XMLElement* element, fla::Document* document, Zi
             // enough to draw from.
             const std::string mediaPath = "LIBRARY/" + bitmap->href;
             if (!bitmap->href.empty() && zipReader->containsFile(mediaPath))
-                bitmap->imageData = zipReader->readFile(mediaPath);
+                bitmap->imageData = zipReader->lazyFile(mediaPath);
             const std::string dataPath = "bin/" + bitmap->bitmapDataHRef;
             if (!bitmap->bitmapDataHRef.empty() && zipReader->containsFile(dataPath))
-                bitmap->datData = zipReader->readFile(dataPath);
+                bitmap->datData = zipReader->lazyFile(dataPath);
 
             if (!bitmap->imageData.empty() || !bitmap->datData.empty())
             {
@@ -2000,7 +2000,7 @@ bool parseMedia(const tinyxml2::XMLElement* element, fla::Document* document, Zi
                 else if (name == "href")
                     path = std::string("LIBRARY/") + attribute->Value();
                 if (!path.empty() && zipReader && zipReader->containsFile(path))
-                    document->extraFiles.emplace_back(path, zipReader->readFile(path));
+                    document->extraFiles.emplace_back(path, zipReader->lazyFile(path));
             }
         }
     }
@@ -2236,7 +2236,7 @@ bool parseDocument(fla::Document* document, const tinyxml2::XMLElement* element,
                     {
                         const std::string href = getAttribute(child, "href");
                         if (!href.empty() && zipReader && zipReader->containsFile(href))
-                            document->extraFiles.emplace_back(href, zipReader->readFile(href));
+                            document->extraFiles.emplace_back(href, zipReader->lazyFile(href));
                     }
                     includes(child);
                 }

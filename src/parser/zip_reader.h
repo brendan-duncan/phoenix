@@ -1,7 +1,10 @@
 #pragma once
 
+#include "../data/lazy_bytes.h"
+
 #include <cstdint>
 #include <map>
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -36,6 +39,12 @@ public:
     // Read a file from zip as string
     std::string readTextFile(const std::string& fileName) const;
 
+    /// A file's bytes that read themselves from the archive the first time
+    /// they are needed: a production document's bitmaps and sounds are not
+    /// all held in memory from the moment it opens. Read now from a folder
+    /// or from memory.
+    fla::LazyBytes lazyFile(const std::string& fileName) const;
+
     // Check if a file exists in zip
     bool containsFile(const std::string& fileName) const;
 
@@ -50,7 +59,8 @@ private:
     /// Whether \a fileName names something inside the document folder.
     static bool withinFolder(const std::string& fileName);
 
-    ZipArchive* _zipArchive;
+    /// Shared with the bytes read from it later (lazyFile).
+    std::shared_ptr<ZipArchive> _zipArchive;
     std::string _path;
     std::string _errorString;
     bool _isOpen;

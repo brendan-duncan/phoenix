@@ -31,6 +31,9 @@ public:
 
     bool extractFile(const std::string& filename, std::vector<uint8_t>& output);
 
+    /// The entry of that name, or null; found by index, not by a scan.
+    const ZipFileEntry* find(const std::string& filename) const;
+
 private:
     class Impl;
     Impl* pImpl;
