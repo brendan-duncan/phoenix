@@ -1131,6 +1131,17 @@ bool MainWindow::closeTab(int index, bool ask)
     {
         adoptDocument(nullptr, QString(), QString());
         updateEditState();
+        // The last document gone from the window Phoenix started with: the
+        // start screen comes back rather than an empty editor (not while
+        // quitting, and not when it was turned off).
+        if (!_secondary && !s_quitting && _interactive && isVisible() &&
+            QSettings().value("showStartDialog", true).toBool())
+        {
+            QTimer::singleShot(0, this, [this]() {
+                if (_tabs.empty() && !s_quitting && isVisible())
+                    showStartDialog();
+            });
+        }
     }
     refreshTabs();
     return true;
