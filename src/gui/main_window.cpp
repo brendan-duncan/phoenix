@@ -8005,6 +8005,17 @@ void MainWindow::setupPropertiesPanel()
     // the signal first), so with nothing left selected the frame is what
     // the panel shows, as Animate does when a frame is clicked.
     connect(_player, &Player::currentFrameChanged, this, [this](int) {
+        // Rebuilding every tab on every frame of playback costs more than
+        // the frame: the panel catches up when playback stops.
+        if (_player->isPlaying())
+            return;
+        _propertiesPanel->refresh();
+        if (_selection.isEmpty())
+            _propertiesPanel->setTab(PropertiesPanel::Tab::Frame);
+    });
+    connect(_player, &Player::playingChanged, this, [this](bool playing) {
+        if (playing)
+            return;
         _propertiesPanel->refresh();
         if (_selection.isEmpty())
             _propertiesPanel->setTab(PropertiesPanel::Tab::Frame);

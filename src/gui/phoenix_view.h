@@ -1067,6 +1067,25 @@ private:
 
     // Bounds cache for culling
     QMap<const fla::Element*, QRectF> _boundsCache;
+    /// Each symbol's bounds over all its frames: its visible layers'
+    /// (culling, 9-slice) and all its art's (the offscreen a filtered or
+    /// blended instance draws into). Walking every frame recursively is
+    /// costly, and an isolated instance needs it on every paint. Cleared
+    /// with the other caches on any edit.
+    QHash<const fla::Symbol*, QRectF> _symbolBoundsCache;
+    /// Everything inside the symbol of the instance selected in the
+    /// Outliner, worked out once per selection and edit rather than for
+    /// every shape painted.
+    mutable std::unordered_set<const fla::DOMElement*> _insideSelected;
+    mutable bool _insideSelectedValid = false;
+
+    /// The 2x buffer the stage is drawn into for supersampling, kept.
+    QImage _supersample;
+    /// Clipped bitmap fills grown by their edge pixels, by bitmap and
+    /// padding, within a budget.
+    QCache<QString, QPixmap> _paddedFills{256 * 1024};
+    QHash<const fla::Symbol*, QRectF> _symbolReachCache;
+    QRectF symbolReach(const fla::Symbol* symbol);
     QMap<const fla::Element*, QRectF> _artBoundsCache;
     /// True while art bounds are being worked out: no antialiasing margin,
     /// and the padded cache is neither read nor filled.

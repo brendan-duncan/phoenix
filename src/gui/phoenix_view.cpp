@@ -328,12 +328,14 @@ void PhoenixView::onPlayerFrameChanged(int frame)
 void PhoenixView::onElementSelected(const fla::DOMElement* element)
 {
     _selectedElement = element;
+    _insideSelectedValid = false;
     update();
 }
 
 void PhoenixView::setDocument(const fla::FLADocument* document)
 {
     _bitmapCache.clear(); // Clear bitmap cache when loading new document
+    _paddedFills.clear();
     _bitmapsByName.clear();
     _textureTiles.clear();
     _motionCache.clear();
@@ -700,12 +702,21 @@ void PhoenixView::paintEvent(QPaintEvent *event)
     _overlayPen = QPen(QColor(0, 255, 255, 255), penWidth);
     _overlayBrush = QBrush(QColor(0, 255, 255, 150));
 
+    // Supersampling: render at 2x resolution and scale down for smoother
+    // edges. The buffer is kept between paints (at 4K it is over 100 MB, too
+    // much to allocate every time), and when there is no room for it the
+    // stage is drawn straight to the window.
+    bool supersampled = false;
     if (_highQualityAntiAliasing && !_interacting)
     {
-        // Supersampling: render at 2x resolution and scale down for smoother edges
-        int bufW = width() * supersampleFactor;
-        int bufH = height() * supersampleFactor;
-        QImage buffer(bufW, bufH, QImage::Format_ARGB32_Premultiplied);
+        const QSize wanted(width() * supersampleFactor, height() * supersampleFactor);
+        if (_supersample.size() != wanted)
+            _supersample = QImage(wanted, QImage::Format_ARGB32_Premultiplied);
+        supersampled = !_supersample.isNull();
+    }
+    if (supersampled)
+    {
+        QImage& buffer = _supersample;
         buffer.fill(backgroundColor);
 
         QPainter bufferPainter(&buffer);
@@ -2992,23 +3003,7 @@ void PhoenixView::drawElement(QPainter& painter, const fla::Element* element, co
                 // device, so the offscreen is sized to the instance as seen
                 // (full parent transform and zoom, nothing off the stage
                 // lost) rather than to the stage at 1x.
-                QRectF local;
-                for (const fla::Timeline* timeline : symbol->timelines)
-                {
-                    for (const fla::Layer* layer : timeline->layers)
-                    {
-                        for (const fla::Frame* frame : layer->frames)
-                        {
-                            for (const fla::Element* member : frame->elements)
-                            {
-                                const QRectF bounds = calculateElementLocalBounds(member);
-                                local = local.isNull() ? bounds : local.united(bounds);
-                            }
-                        }
-                    }
-                }
-                if (local.isNull())
-                    local = QRectF(0, 0, 100, 100);
+                const QRectF local = symbolReach(symbol);
 
                 // Filters are sized in the parent's pixels, so they scale
                 // with the parent and the zoom but not with the instance's
@@ -3614,8 +3609,27 @@ QBrush PhoenixView::getFillBrush(const fla::FillStyle* fillStyle, const fla::Rec
         const int top = grow(-need.top());
         const int right = grow(need.right() - w);
         const int bottom = grow(need.bottom() - h);
+        // Made once for each bitmap and padding, not on every paint.
+        const QString key = QString("%1|%2|%3|%4|%5|%6")
+                                .arg(pixmap.cacheKey())
+                                .arg(QString::fromStdString(bitmapFill->bitmapPath))
+                                .arg(left).arg(top).arg(right).arg(bottom);
+        if (const QPixmap* cached = _paddedFills.object(key))
+        {
+            QBrush brush(*cached);
+            brush.setTransform(QTransform::fromTranslate(-left, -top) * placed);
+            return brush;
+        }
         const QImage source = pixmap.toImage().convertToFormat(QImage::Format_ARGB32_Premultiplied);
         QImage padded(w + left + right, h + top + bottom, QImage::Format_ARGB32_Premultiplied);
+        if (padded.isNull() || source.isNull())
+        {
+            // No room for the padded image: the bitmap tiles past its edge
+            // rather than nothing being drawn.
+            QBrush brush(pixmap);
+            brush.setTransform(placed);
+            return brush;
+        }
         for (int y = 0; y < padded.height(); ++y)
         {
             const QRgb* from = reinterpret_cast<const QRgb*>(source.constScanLine(std::clamp(y - top, 0, h - 1)));
@@ -3624,7 +3638,9 @@ QBrush PhoenixView::getFillBrush(const fla::FillStyle* fillStyle, const fla::Rec
             std::copy(from, from + w, to + left);
             std::fill(to + left + w, to + padded.width(), from[w - 1]);
         }
-        QBrush brush(QPixmap::fromImage(padded));
+        const QPixmap grown = QPixmap::fromImage(padded);
+        _paddedFills.insert(key, new QPixmap(grown), std::max<qsizetype>(1, padded.sizeInBytes() / 1024));
+        QBrush brush(grown);
         brush.setTransform(QTransform::fromTranslate(-left, -top) * placed);
         return brush;
     }
@@ -4567,6 +4583,15 @@ void PhoenixView::hitTestElement(fla::Element& element, fla::Frame* frame,
         // Record what the instance contains, but report the instance itself:
         // clicking a symbol on the stage selects the instance, not the artwork
         // inside it. Editing the contents means entering the symbol.
+        // Nowhere near everything the symbol draws over all its frames: not
+        // descended into. The box is grown by its own size each way, since
+        // a warp, a deformer or 3D can carry art past it.
+        {
+            const QRectF reach = symbolReach(symbol);
+            const double grow = std::max(reach.width(), reach.height()) + localTolerance;
+            if (!reach.adjusted(-grow, -grow, grow, grow).contains(localPos))
+                return;
+        }
         HitResult inner;
         // A puppet is picked by its art as placed (its first frame).
         const bool puppet = instance.otherSymbolType == "puppet";
@@ -6369,6 +6394,9 @@ void PhoenixView::clearCaches()
     _snapBoundsValid = false;
     _filterCache.clear();
     _backdropCache.clear();
+    _symbolBoundsCache.clear();
+    _symbolReachCache.clear();
+    _insideSelectedValid = false;
     _staticValid = false;
     ++_revision;
 }
@@ -6378,6 +6406,9 @@ void PhoenixView::forgetShape(const fla::Shape* shape)
     _pathCache.remove(shape);
     _boundsCache.remove(shape);
     _artBoundsCache.remove(shape);
+    // The shape may be inside any symbol.
+    _symbolBoundsCache.clear();
+    _symbolReachCache.clear();
     _staticValid = false;
     ++_revision;
     update();
@@ -6387,6 +6418,8 @@ void PhoenixView::invalidateBounds()
 {
     _boundsCache.clear();
     _artBoundsCache.clear();
+    _symbolBoundsCache.clear();
+    _symbolReachCache.clear();
     _snapBoundsValid = false;
 }
 
@@ -7564,6 +7597,32 @@ void PhoenixView::applyColorTransform(QImage& image, const fla::ColorTransform& 
     }
 }
 
+QRectF PhoenixView::symbolReach(const fla::Symbol* symbol)
+{
+    const auto cached = _symbolReachCache.constFind(symbol);
+    if (cached != _symbolReachCache.constEnd())
+        return cached.value();
+    QRectF local;
+    for (const fla::Timeline* timeline : symbol->timelines)
+    {
+        for (const fla::Layer* layer : timeline->layers)
+        {
+            for (const fla::Frame* frame : layer->frames)
+            {
+                for (const fla::Element* member : frame->elements)
+                {
+                    const QRectF bounds = calculateElementLocalBounds(member);
+                    local = local.isNull() ? bounds : local.united(bounds);
+                }
+            }
+        }
+    }
+    if (local.isNull())
+        local = QRectF(0, 0, 100, 100);
+    _symbolReachCache.insert(symbol, local);
+    return local;
+}
+
 QRectF PhoenixView::calculateSymbolLocalBounds(const fla::Symbol* symbol)
 {
     NestingGuard nesting(_nesting);
@@ -7572,6 +7631,9 @@ QRectF PhoenixView::calculateSymbolLocalBounds(const fla::Symbol* symbol)
     QRectF bounds;
     if (!symbol || symbol->timelines.empty())
         return QRectF(0, 0, 100, 100);
+    const auto cached = _symbolBoundsCache.constFind(symbol);
+    if (cached != _symbolBoundsCache.constEnd())
+        return cached.value();
 
     // Over every frame of every layer: an animated symbol reaches wherever
     // any of its frames does, and culling by a first-frame box would drop
@@ -7605,6 +7667,7 @@ QRectF PhoenixView::calculateSymbolLocalBounds(const fla::Symbol* symbol)
     if (bounds.isNull())
         bounds = QRectF(0, 0, 100, 100);
 
+    _symbolBoundsCache.insert(symbol, bounds);
     return bounds;
 }
 
@@ -7805,7 +7868,43 @@ bool PhoenixView::isElementSelected(const fla::DOMElement* element) const
         const fla::Symbol* selectedSymbol = selectedInstance->symbol;
         if (selectedSymbol)
         {
-            return isElementInsideSymbol(element, selectedSymbol);
+            if (!_insideSelectedValid)
+            {
+                // Every element of the symbol, inside groups and the symbols
+                // it places, once.
+                _insideSelected.clear();
+                std::set<const fla::Symbol*> visited;
+                std::vector<const fla::Symbol*> symbols{selectedSymbol};
+                std::vector<const fla::Element*> pending;
+                while (!symbols.empty() || !pending.empty())
+                {
+                    if (!pending.empty())
+                    {
+                        const fla::Element* member = pending.back();
+                        pending.pop_back();
+                        if (!member || !_insideSelected.insert(member).second)
+                            continue;
+                        if (member->elementType() == fla::Element::Type::Group)
+                            for (const fla::Element* inner : static_cast<const fla::Group*>(member)->members)
+                                pending.push_back(inner);
+                        else if (member->elementType() == fla::Element::Type::SymbolInstance)
+                            if (const fla::Symbol* nested = static_cast<const fla::SymbolInstance*>(member)->symbol)
+                                symbols.push_back(nested);
+                        continue;
+                    }
+                    const fla::Symbol* symbol = symbols.back();
+                    symbols.pop_back();
+                    if (!visited.insert(symbol).second)
+                        continue;
+                    for (const fla::Timeline* timeline : symbol->timelines)
+                        for (const fla::Layer* layer : timeline ? timeline->layers : std::vector<fla::Layer*>())
+                            for (const fla::Frame* frame : layer ? layer->frames : std::vector<fla::Frame*>())
+                                if (frame)
+                                    pending.insert(pending.end(), frame->elements.begin(), frame->elements.end());
+                }
+                _insideSelectedValid = true;
+            }
+            return _insideSelected.count(element) > 0;
         }
     }
 
