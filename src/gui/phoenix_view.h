@@ -1282,6 +1282,9 @@ private:
     /// How the scene's multiplane camera shows a layer of the scene, for its
     /// depth, on the frame shown; identity with no camera or the view off.
     QTransform cameraTransform(const fla::Layer* layer);
+    /// The camera's color effect on the frame shown, when the scene is seen
+    /// through a camera; the identity otherwise.
+    fla::ColorTransform cameraColor();
     bool _cameraView = true;
 
     /// An element drawn with a transform other than its own (an object

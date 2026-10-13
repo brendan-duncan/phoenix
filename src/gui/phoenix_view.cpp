@@ -1575,8 +1575,42 @@ void PhoenixView::drawDocument(QPainter& painter, const fla::Document* document)
     _clipSequences.clear();
     // One scene at a time, as Animate shows them.
     const fla::Timeline* scene = document->currentScene();
-    if (scene && scene->visible)
+    if (!scene || !scene->visible)
+        return;
+    // The camera's color effect is over everything it sees: the scene drawn
+    // on its own, colored as one picture, and laid on the stage.
+    const fla::ColorTransform color = _drawPhase == DrawPhase::Scan ? fla::ColorTransform() : cameraColor();
+    QPaintDevice* device = painter.device();
+    if (color.isIdentity() || !device)
+    {
         drawTimeline(painter, scene);
+        return;
+    }
+    const qreal ratio = std::max<qreal>(1.0, device->devicePixelRatioF());
+    // An image or a pixmap measures in its own pixels, a widget in its
+    // logical ones.
+    QSizeF logical(device->width(), device->height());
+    if (device->devType() == QInternal::Image || device->devType() == QInternal::Pixmap)
+        logical /= ratio;
+    QImage image(qCeil(logical.width() * ratio), qCeil(logical.height() * ratio), QImage::Format_ARGB32_Premultiplied);
+    if (image.isNull())
+    {
+        drawTimeline(painter, scene);
+        return;
+    }
+    image.setDevicePixelRatio(ratio);
+    image.fill(Qt::transparent);
+    {
+        QPainter into(&image);
+        into.setRenderHints(painter.renderHints());
+        into.setTransform(painter.transform());
+        drawTimeline(into, scene);
+    }
+    applyColorTransform(image, color);
+    painter.save();
+    painter.resetTransform();
+    painter.drawImage(QPointF(0.0, 0.0), image);
+    painter.restore();
 }
 
 void PhoenixView::drawTimeline(QPainter& painter, const fla::Timeline* timeline, fla::LoopType loopType, int firstFrame)
@@ -2514,6 +2548,15 @@ QTransform PhoenixView::cameraTransform(const fla::Layer* layer)
     if (!fla::camera::view(state, fla::camera::depthOf(*layer), document->width, document->height, t))
         return QTransform(0.0, 0.0, 0.0, 0.0, 0.0, 0.0);
     return QTransform(t.m11, t.m12, t.m21, t.m22, t.tx, t.ty);
+}
+
+fla::ColorTransform PhoenixView::cameraColor()
+{
+    const fla::Document* document = _flaDocument ? _flaDocument->document : nullptr;
+    const fla::Timeline* scene = document ? document->currentScene() : nullptr;
+    if (!_cameraView || !scene || !fla::camera::cameraOf(*scene))
+        return fla::ColorTransform();
+    return fla::camera::stateAt(*scene, shownFrame(), document->width, document->height).color;
 }
 
 QTransform PhoenixView::parentingAt(const fla::Layer* layer, const fla::Frame* frame, int index)

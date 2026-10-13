@@ -1,5 +1,6 @@
 #pragma once
 
+#include "../data/color_transform.h"
 #include "../data/transform.h"
 
 #include <string>
@@ -23,13 +24,16 @@ class Timeline;
 namespace camera {
 
 /// Where the camera is on one frame: the point of the stage it looks at,
-/// its zoom in percent, and its turn in degrees.
+/// its zoom in percent, its turn in degrees, and the color effect over
+/// everything it sees (brightness, tint, alpha or advanced, as an
+/// instance's).
 struct State
 {
     double x = 0.0;
     double y = 0.0;
     double zoom = 100.0;
     double rotation = 0.0;
+    ColorTransform color;
 };
 
 /// The distance from the camera to the stage's plane, in pixels: a layer

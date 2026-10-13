@@ -276,6 +276,24 @@ TEST(multiplane_camera_pans_near_layers_more_than_far)
     CHECK(half.x > 200.0 && half.x < 300.0);
     CHECK(std::fabs(fla::camera::stateAt(timeline, 7, 400.0, 300.0).zoom - 400.0) < 1e-9);
 
+    // The color effect is kept only where it is not at rest, and tweens.
+    CHECK(fla::camera::stateAt(timeline, 2, 400.0, 300.0).color.isIdentity());
+    moved.color.brightness = -1.0;
+    moved.color.tintMultiplier = 0.5;
+    moved.color.tintColor[0] = 255;
+    moved.color.alphaMultiplier = 0.25;
+    moved.color.redOffset = 40;
+    fla::camera::set(second->extraAttributes, moved);
+    const fla::ColorTransform kept = fla::camera::stateOf(*second, 400.0, 300.0).color;
+    CHECK(kept.brightness == -1.0 && kept.tintMultiplier == 0.5 && kept.tintColor[0] == 255 &&
+          kept.tintColor[1] == 0 && kept.alphaMultiplier == 0.25 && kept.redOffset == 40);
+    const fla::ColorTransform between = fla::camera::stateAt(timeline, 2, 400.0, 300.0).color;
+    CHECK(between.brightness < 0.0 && between.brightness > -1.0);
+    CHECK(between.alphaMultiplier > 0.25 && between.alphaMultiplier < 1.0);
+    moved.color = fla::ColorTransform();
+    fla::camera::set(second->extraAttributes, moved);
+    CHECK(second->extraAttributes.size() == 4);
+
     fla::Layer layer(nullptr);
     fla::camera::setDepth(layer.extraAttributes, 250.0);
     CHECK(fla::camera::depthOf(layer) == 250.0);
