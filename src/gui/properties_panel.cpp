@@ -112,6 +112,33 @@ QIcon PropertiesPanel::swatchIcon(const uint8_t rgba[4])
     return QIcon(pixmap);
 }
 
+QIcon PropertiesPanel::strokeSwatchIcon(const uint8_t rgba[4])
+{
+    QPixmap pixmap(20, 20);
+    pixmap.fill(Qt::transparent);
+
+    QPainter painter(&pixmap);
+    painter.setRenderHint(QPainter::Antialiasing, false);
+    // The ring: a checker under it, so a transparent stroke still shows as
+    // one, then the color.
+    QPainterPath ring;
+    ring.setFillRule(Qt::OddEvenFill);
+    ring.addRect(0, 0, 20, 20);
+    ring.addRect(6, 6, 8, 8);
+    painter.setClipPath(ring);
+    painter.fillRect(0, 0, 20, 20, QColor(120, 120, 120));
+    painter.fillRect(0, 0, 10, 10, QColor(160, 160, 160));
+    painter.fillRect(10, 10, 10, 10, QColor(160, 160, 160));
+    painter.fillRect(0, 0, 20, 20, QColor(rgba[0], rgba[1], rgba[2], rgba[3]));
+    painter.setClipping(false);
+    painter.setPen(QColor(30, 30, 30));
+    painter.setBrush(Qt::NoBrush);
+    painter.drawRect(0, 0, 19, 19);
+    painter.drawRect(5, 5, 9, 9);
+
+    return QIcon(pixmap);
+}
+
 namespace {
 
 void applyColor(const QColor& color, uint8_t rgba[4])
@@ -487,7 +514,7 @@ void PropertiesPanel::refreshStyleSwatches()
     if (_fillSwatch)
         _fillSwatch->setIcon(swatchIcon(_links.style->fillColor));
     if (_strokeSwatch)
-        _strokeSwatch->setIcon(swatchIcon(_links.style->strokeColor));
+        _strokeSwatch->setIcon(strokeSwatchIcon(_links.style->strokeColor));
     if (_cornerRadius)
         _cornerRadius->setValue(_links.style->cornerRadius);
 }
@@ -703,6 +730,7 @@ void PropertiesPanel::buildToolTab()
     strokeLayout->setContentsMargins(0, 0, 0, 0);
     strokeLayout->setSpacing(6);
     _strokeSwatch = makeSwatch(style.strokeColor, "Stroke color for new shapes");
+    _strokeSwatch->setIcon(strokeSwatchIcon(style.strokeColor));
     connect(_strokeSwatch, &QToolButton::clicked, this, [this]() {
         fla::DrawingStyle& current = *_links.style;
         const QColor chosen = QColorDialog::getColor(toQColor(current.strokeColor), this, "Stroke Color",
@@ -710,7 +738,7 @@ void PropertiesPanel::buildToolTab()
         if (!chosen.isValid())
             return;
         applyColor(chosen, current.strokeColor);
-        _strokeSwatch->setIcon(swatchIcon(current.strokeColor));
+        _strokeSwatch->setIcon(strokeSwatchIcon(current.strokeColor));
         emit toolSettingChanged("strokeColor");
     });
     QCheckBox* strokeEnabled = new QCheckBox("Stroke", strokeRow);

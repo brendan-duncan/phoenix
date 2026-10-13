@@ -118,6 +118,10 @@ public:
     /// it here and in the toolbox.
     static QIcon swatchIcon(const uint8_t rgba[4]);
 
+    /// A stroke color as an outline: a thick square ring of the color with
+    /// the middle open, so it never reads as a fill.
+    static QIcon strokeSwatchIcon(const uint8_t rgba[4]);
+
     /// The tool that has the stage, and the icon it is shown with.
     void setActiveTool(Tool* tool, ToolIcons::Tool icon);
 

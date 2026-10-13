@@ -7183,27 +7183,14 @@ void MainWindow::setupToolBar()
     const auto addExtra = [&extras](QWidget* widget) { extras << widget; };
     const auto addExtraLine = [&extras]() { extras << nullptr; };
 
-    // The stroke and fill colors, under the tools as in Animate's toolbox.
-    _toolboxStrokeSwatch = new QToolButton(toolBar);
-    _toolboxStrokeSwatch->setIcon(PropertiesPanel::swatchIcon(_drawingStyle.strokeColor));
-    _toolboxStrokeSwatch->setIconSize(QSize(20, 20));
-    _toolboxStrokeSwatch->setAutoRaise(true);
-    _toolboxStrokeSwatch->setToolTip("Stroke color");
-    connect(_toolboxStrokeSwatch, &QToolButton::clicked, this, [this]() { chooseStyleColor(true); });
-    addExtra(_toolboxStrokeSwatch);
-
-    _toolboxFillSwatch = new QToolButton(toolBar);
-    _toolboxFillSwatch->setIcon(PropertiesPanel::swatchIcon(_drawingStyle.fillColor));
-    _toolboxFillSwatch->setIconSize(QSize(20, 20));
-    _toolboxFillSwatch->setAutoRaise(true);
-    _toolboxFillSwatch->setToolTip("Fill color");
-    connect(_toolboxFillSwatch, &QToolButton::clicked, this, [this]() { chooseStyleColor(false); });
-    addExtra(_toolboxFillSwatch);
-
-    // Black and White, and Swap Colors, under the swatches as in Animate's
-    // toolbar.
-    const auto smallButton = [toolBar](const QString& tip, const std::function<void(QPainter&)>& draw) {
-        QToolButton* button = new QToolButton(toolBar);
+    // Black and White, and Swap Colors: small, side by side, above the
+    // swatches as in Animate's toolbar.
+    QWidget* colorButtons = new QWidget(toolBar);
+    QHBoxLayout* colorButtonsLayout = new QHBoxLayout(colorButtons);
+    colorButtonsLayout->setContentsMargins(0, 0, 0, 0);
+    colorButtonsLayout->setSpacing(0);
+    const auto smallButton = [colorButtons](const QString& tip, const std::function<void(QPainter&)>& draw) {
+        QToolButton* button = new QToolButton(colorButtons);
         theme::themedIcon(button, [draw]() {
             QPixmap pixmap(16, 16);
             pixmap.fill(Qt::transparent);
@@ -7213,7 +7200,7 @@ void MainWindow::setupToolBar()
             painter.end();
             return QIcon(pixmap);
         });
-        button->setIconSize(QSize(16, 16));
+        button->setIconSize(QSize(12, 12));
         button->setAutoRaise(true);
         button->setToolTip(tip);
         return button;
@@ -7238,7 +7225,7 @@ void MainWindow::setupToolBar()
         if (_propertiesPanel)
             _propertiesPanel->refresh();
     });
-    addExtra(blackWhite);
+    colorButtonsLayout->addWidget(blackWhite);
     QToolButton* swap = smallButton("Swap stroke and fill colors", [](QPainter& p) {
         p.setPen(QPen(theme::color("icon"), 1.4));
         p.setBrush(Qt::NoBrush);
@@ -7260,7 +7247,27 @@ void MainWindow::setupToolBar()
         if (_propertiesPanel)
             _propertiesPanel->refresh();
     });
-    addExtra(swap);
+    colorButtonsLayout->addWidget(swap);
+    addExtra(colorButtons);
+
+    // The stroke and fill colors, under the tools as in Animate's toolbox:
+    // the stroke drawn as an outline, the fill solid, so the two never
+    // read as each other.
+    _toolboxStrokeSwatch = new QToolButton(toolBar);
+    _toolboxStrokeSwatch->setIcon(PropertiesPanel::strokeSwatchIcon(_drawingStyle.strokeColor));
+    _toolboxStrokeSwatch->setIconSize(QSize(20, 20));
+    _toolboxStrokeSwatch->setAutoRaise(true);
+    _toolboxStrokeSwatch->setToolTip("Stroke color");
+    connect(_toolboxStrokeSwatch, &QToolButton::clicked, this, [this]() { chooseStyleColor(true); });
+    addExtra(_toolboxStrokeSwatch);
+
+    _toolboxFillSwatch = new QToolButton(toolBar);
+    _toolboxFillSwatch->setIcon(PropertiesPanel::swatchIcon(_drawingStyle.fillColor));
+    _toolboxFillSwatch->setIconSize(QSize(20, 20));
+    _toolboxFillSwatch->setAutoRaise(true);
+    _toolboxFillSwatch->setToolTip("Fill color");
+    connect(_toolboxFillSwatch, &QToolButton::clicked, this, [this]() { chooseStyleColor(false); });
+    addExtra(_toolboxFillSwatch);
 
     addExtraLine();
 
@@ -8941,7 +8948,7 @@ void MainWindow::refreshStyleSwatches()
     if (_propertiesPanel)
         _propertiesPanel->refreshStyleSwatches();
     if (_toolboxStrokeSwatch)
-        _toolboxStrokeSwatch->setIcon(PropertiesPanel::swatchIcon(_drawingStyle.strokeColor));
+        _toolboxStrokeSwatch->setIcon(PropertiesPanel::strokeSwatchIcon(_drawingStyle.strokeColor));
     if (_toolboxFillSwatch)
         _toolboxFillSwatch->setIcon(PropertiesPanel::swatchIcon(_drawingStyle.fillColor));
 }
