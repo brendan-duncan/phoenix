@@ -6394,8 +6394,16 @@ void MainWindow::viewDocument()
     QTextEdit* textEdit = new QTextEdit(dialog);
     textEdit->setReadOnly(true);
 
-    // For now, just show basic document info
-    QString docText = QString::fromStdString(_flaDocument->document->source);
+    // DOMDocument.xml as saving would write it now. The text read from the
+    // file is not kept: on a production document it is many megabytes.
+    QString docText;
+    std::vector<fla::XFLEntry> entries;
+    std::vector<std::string> unsupported;
+    std::string problem;
+    if (fla::XFLContent::build(*_flaDocument->document, std::string(), entries, unsupported, problem))
+        for (const fla::XFLEntry& entry : entries)
+            if (entry.path == "DOMDocument.xml")
+                docText = QString::fromStdString(entry.text);
 
     textEdit->setPlainText(docText);
 

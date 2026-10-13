@@ -2313,8 +2313,6 @@ fla::Document* DocumentParser::parse(const std::string& xmlContent, fla::DOMElem
     if (int cut = fla::breakSymbolCycles(*document))
         std::cerr << cut << " symbol instance(s) placed a symbol inside itself and were cut" << std::endl;
 
-    document->source = xmlContent;
-
     collectVideoItems(*document);
     return document;
 }
