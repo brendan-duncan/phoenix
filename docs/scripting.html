@@ -81,11 +81,13 @@
 
 <p>Scripts written for older versions of the JSFL language also run: <code>for each</code> loops, setters with no parameter, <code>class</code> used as a name, a <code>return</code> at the top of a script, and <code>toSource</code>.</p>
 
+<p>E4X XML works too: <code>new XML(text)</code> and XML literals with <code>{expressions}</code>, <code>x.@id</code> to read and set attributes, <code>x.item[0]</code>, <code>x..item</code>, <code>x.*</code>, filters such as <code>x.item.(@id == 3)</code>, <code>for each</code> over lists, and methods like <code>length()</code>, <code>children()</code>, <code>appendChild()</code> and <code>toXMLString()</code>. An attribute read on its own gives its text, so <code>a.@id == b.@id</code> compares the values; XML namespaces are not supported.</p>
+
 <p>An object a script holds stays tied to what it stands for. If the script deletes the layer, undoes the element or closes the document it came from, using it again stops the script with an error that says so, rather than acting on something else. A frame stands for a frame number on its layer, so it follows the layer as keyframes are added and cleared.</p>
 
 <div class="callout">
   <span class="label">Not yet</span>
-  <p>XML dialogs (<code>xmlPanel</code>), E4X XML in scripts, reading and editing shape outlines (edges, contours, vertices), custom tools, panels built on HTML, persistent data on elements and items, publishing and SWF export from scripts, and saving History panel steps as a command. Each run starts fresh: functions one script defines are not kept for the next.</p>
+  <p>XML dialogs (<code>xmlPanel</code>), reading and editing shape outlines (edges, contours, vertices), custom tools, panels built on HTML, persistent data on elements and items, publishing and SWF export from scripts, and saving History panel steps as a command. Each run starts fresh: functions one script defines are not kept for the next.</p>
 </div>
 
 </article>

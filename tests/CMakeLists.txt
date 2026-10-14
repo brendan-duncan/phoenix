@@ -240,6 +240,7 @@ endif()
 # The JSFL engine, when QuickJS is there (the top-level build fetches it).
 if(PHOENIX_TESTS_HAVE_PARSER AND TARGET qjs)
     list(APPEND TEST_CORE_SOURCES
+        ${PHOENIX_SRC}/jsfl/e4x.cpp
         ${PHOENIX_SRC}/jsfl/engine.cpp
         ${PHOENIX_SRC}/jsfl/flfile.cpp
         ${PHOENIX_SRC}/jsfl/model_document.cpp
@@ -250,7 +251,7 @@ if(PHOENIX_TESTS_HAVE_PARSER AND TARGET qjs)
         ${PHOENIX_SRC}/jsfl/object.cpp
         ${PHOENIX_SRC}/jsfl/session.cpp
     )
-    list(APPEND TEST_SOURCES test_jsfl.cpp)
+    list(APPEND TEST_SOURCES test_jsfl.cpp test_jsfl_e4x.cpp)
     set(PHOENIX_TESTS_HAVE_JSFL TRUE)
 endif()
 

@@ -3,6 +3,7 @@
 
 #include "engine.h"
 
+#include "e4x.h"
 #include "flfile.h"
 #include "model.h"
 
@@ -179,6 +180,8 @@ public:
             return Value(toStd(ctx, value));
         if (!JS_IsObject(value) || depth > 16)
             return Value();
+        if (isE4X(value))
+            return Value(toStd(ctx, value));
         if (ObjectPtr object = unwrap(value))
             return Value(object);
         if (JS_IsDate(value))
@@ -229,6 +232,19 @@ public:
     JSContext* ctx;
 
 private:
+    /// An E4X XML or XMLList, which the model takes as its text.
+    bool isE4X(JSValueConst value)
+    {
+        if (!JS_IsProxy(value))
+            return false;
+        JSValue handler = JS_GetProxyHandler(ctx, value);
+        JSValue flag = JS_IsObject(handler) ? JS_GetPropertyStr(ctx, handler, "e4x") : JS_UNDEFINED;
+        const bool e4x = JS_IsBool(flag) && JS_ToBool(ctx, flag) > 0;
+        JS_FreeValue(ctx, flag);
+        JS_FreeValue(ctx, handler);
+        return e4x;
+    }
+
     static JSValue trampoline(JSContext* ctx, JSValueConst self, int argc, JSValueConst* argv, int, JSValueConst* data)
     {
         int32_t index = 0;
@@ -525,6 +541,24 @@ size_t matchParen(const std::string& s, size_t open, size_t& topLevelIn)
     return std::string::npos;
 }
 
+/// The script as QuickJS compiles it: its E4X rewritten, with XML and
+/// XMLList defined for it, then its old dialect.
+std::string prepare(JSContext* ctx, const std::string& source)
+{
+    if (!e4x::mayUse(source))
+        return Engine::modernize(source);
+    JSValue global = JS_GetGlobalObject(ctx);
+    JSValue helpers = JS_GetPropertyStr(ctx, global, "__e4x");
+    if (JS_IsUndefined(helpers))
+    {
+        const char* prelude = e4x::prelude();
+        JS_FreeValue(ctx, JS_Eval(ctx, prelude, std::strlen(prelude), "<phoenix-e4x>", JS_EVAL_TYPE_GLOBAL));
+    }
+    JS_FreeValue(ctx, helpers);
+    JS_FreeValue(ctx, global);
+    return Engine::modernize(e4x::rewrite(source));
+}
+
 } // namespace
 
 std::string Engine::modernize(const std::string& s)
@@ -539,7 +573,7 @@ std::string Engine::modernize(const std::string& s)
         const char c = s[i];
         if (c == '/' && i + 1 < s.size() && s[i + 1] == '/')
         {
-            const size_t end = s.find('\n', i);
+            const size_t end = s.find_first_of("\r\n", i);
             const size_t stop = end == std::string::npos ? s.size() : end;
             out.append(s, i, stop - i);
             i = stop;
@@ -565,7 +599,7 @@ std::string Engine::modernize(const std::string& s)
         {
             size_t j = i + 1;
             bool inClass = false;
-            while (j < s.size() && s[j] != '\n' && (inClass || s[j] != '/'))
+            while (j < s.size() && s[j] != '\n' && s[j] != '\r' && (inClass || s[j] != '/'))
             {
                 if (s[j] == '\\')
                     ++j;
@@ -758,7 +792,7 @@ RunResult Engine::run(const std::string& source, const std::string& name, const 
                 throw Error("Could not read the script " + file + ".");
             const std::string saved = session.scriptPath;
             session.scriptPath = file;
-            const std::string modern = Engine::modernize(text);
+            const std::string modern = prepare(c, text);
             JSValue ran = JS_Eval(c, modern.c_str(), modern.size(), file.c_str(), JS_EVAL_TYPE_GLOBAL);
             if (JS_IsException(ran))
             {
@@ -816,7 +850,7 @@ RunResult Engine::run(const std::string& source, const std::string& name, const 
         JSValue prelude = JS_Eval(ctx, kPrelude, std::strlen(kPrelude), "<phoenix>", JS_EVAL_TYPE_GLOBAL);
         JS_FreeValue(ctx, prelude);
 
-        const std::string modern = modernize(source);
+        const std::string modern = prepare(ctx, source);
         const int flags = JS_EVAL_TYPE_GLOBAL | (options.compileOnly ? JS_EVAL_FLAG_COMPILE_ONLY : 0);
         JSValue value = JS_Eval(ctx, modern.c_str(), modern.size(), name.c_str(), flags);
         if (JS_IsException(value))
