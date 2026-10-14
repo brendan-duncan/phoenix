@@ -260,6 +260,12 @@ std::string symbolArmatureXml(const std::string& name, const std::string& treeNa
 std::string armatureXml(const std::string& name, const std::string& treeName, const std::vector<ArmatureJoint>& joints,
     int frames, bool bendsShape);
 
+/// \a rebuilt, an armature made again with a joint more from \a old's first
+/// frame's joints, posed as \a old was at each of its other poses: every
+/// joint \a old has at its angle there (matched by node name), and the new
+/// one keeping the turn from its parent it has on the first frame.
+void carryPoses(const IKArmature& old, IKArmature& rebuilt);
+
 /// The control points of a shape, in its own space, numbered in the order
 /// its edges reach them: each anchor once, however many edges meet there.
 /// Bending a shape keeps its edges, so its points keep their numbers.

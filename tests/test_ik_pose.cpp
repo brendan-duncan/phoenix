@@ -505,6 +505,52 @@ TEST(rebuilt_armatures_keep_springs_and_other_attributes)
     CHECK(rebuilt.spring(1).strength == 40.0);
 }
 
+TEST(a_bone_added_to_an_armature_with_poses_turns_with_its_parent_in_each)
+{
+    // Three joints along x, a second pose at frame 10 with the whole arm
+    // turned a quarter round from its root.
+    fla::IKArmature armature = threeSymbols();
+    std::vector<double> angles;
+    for (const fla::IKJoint& joint : armature.jointsAt(0))
+        angles.push_back(joint.angle + 3.14159265358979 / 2.0);
+    CHECK(armature.setPose(10, angles));
+    CHECK(armature.poses().size() == 2);
+
+    // A fourth joint hanging off the last, 50 pixels on along x on the
+    // first frame, as the Bone tool adds it.
+    std::vector<fla::ArmatureJoint> joints = armature.symbolJoints();
+    fla::ArmatureJoint added;
+    added.position = fla::Point(350.0, 100.0);
+    added.registration = fla::Point(340.0, 60.0);
+    added.parent = 2;
+    added.node = "ikNode_4";
+    added.reference = "R4";
+    joints.push_back(added);
+    fla::IKArmature rebuilt;
+    CHECK(rebuilt.parse(fla::symbolArmatureXml(armature.name(), armature.treeName(), joints, armature.frames())));
+    rebuilt.keepAttributesOf(armature);
+    fla::carryPoses(armature, rebuilt);
+
+    // Both poses kept; on the second the new joint has turned with the arm,
+    // still 50 pixels from its parent, now straight down from it.
+    CHECK(rebuilt.poses().size() == 2);
+    const std::vector<fla::IKJoint> before = armature.jointsAt(10);
+    const std::vector<fla::IKJoint> after = rebuilt.jointsAt(10);
+    CHECK(after.size() == 4);
+    if (after.size() != 4)
+        return;
+    for (int j = 0; j < 3; ++j)
+    {
+        CHECK(std::fabs(after[j].angle - before[j].angle) < 1.0e-6);
+        CHECK(std::fabs(after[j].position.x - before[j].position.x) < 0.01);
+        CHECK(std::fabs(after[j].position.y - before[j].position.y) < 0.01);
+    }
+    CHECK(std::fabs(after[3].position.x - after[2].position.x) < 0.01);
+    CHECK(std::fabs(after[3].position.y - after[2].position.y - 50.0) < 0.01);
+    // The first frame as it was drawn.
+    CHECK(std::fabs(rebuilt.jointsAt(0)[3].position.x - 350.0) < 0.01);
+}
+
 TEST(a_symbol_armature_posed_twice_saves_and_plays)
 {
     // Opt-in: the corpus's ik_symbols.fla, given a second pose 29 frames on

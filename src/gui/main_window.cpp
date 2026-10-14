@@ -3675,6 +3675,22 @@ void MainWindow::addPeg()
 
 namespace {
 
+/// The frames of an armature's span \a frame frames in, drawn there, as
+/// the span's first frame has them: carried with the joint \a joint hangs
+/// a new bone from, turning with it.
+QTransform backToFirstFrame(const fla::IKArmature& armature, int joint, int frame)
+{
+    const std::vector<fla::IKJoint> here = armature.shownAt(frame);
+    const std::vector<fla::IKJoint> first = armature.shownAt(0);
+    if (frame <= 0 || joint < 0 || static_cast<size_t>(joint) >= here.size() || static_cast<size_t>(joint) >= first.size())
+        return QTransform();
+    QTransform carry;
+    carry.translate(first[static_cast<size_t>(joint)].position.x, first[static_cast<size_t>(joint)].position.y);
+    carry.rotateRadians(first[static_cast<size_t>(joint)].angle - here[static_cast<size_t>(joint)].angle);
+    carry.translate(-here[static_cast<size_t>(joint)].position.x, -here[static_cast<size_t>(joint)].position.y);
+    return carry;
+}
+
 /// Which of a frame's kept children is an armature, or -1.
 int armatureChild(const fla::Frame* frame)
 {
@@ -3866,10 +3882,9 @@ void MainWindow::addBone(const BoneTool::Link& link)
     {
         // A bone more, from the joint of the instance dragged from.
         fla::IKArmature armature;
-        if (!armature.parse(link.fromFrame->extraChildren[static_cast<size_t>(child)]) || armature.bendsShape() ||
-            armature.poses().size() != 1)
+        if (!armature.parse(link.fromFrame->extraChildren[static_cast<size_t>(child)]) || armature.bendsShape())
         {
-            statusBar()->showMessage("Bones can be added to an armature of symbols with one pose.", 4000);
+            statusBar()->showMessage("Bones can be added to an armature of symbols.", 4000);
             return;
         }
         std::string reference;
@@ -3887,17 +3902,38 @@ void MainWindow::addBone(const BoneTool::Link& link)
         }
         if (parent < 0)
             return;
-        joints.push_back(jointFor(link.to, link.tail, parent, "ikNode_" + std::to_string(nodes + 1), guid()));
+        // Drawn on a later frame of the span, the bone and its instance are
+        // carried back to where they would be on the first, which the
+        // armature is built from, turning with the joint they hang from.
+        const int drawnAt = std::clamp((_player ? _player->currentFrame() : 0) - link.fromFrame->index, 0,
+            std::max(0, armature.frames() - 1));
+        const QTransform carry = backToFirstFrame(armature, parent, drawnAt);
+        stack.beginMacro(name);
+        if (!carry.isIdentity())
+        {
+            const fla::Transform& m = link.to->transform;
+            const QTransform placed = QTransform(m.m11, m.m12, m.m21, m.m22, m.tx, m.ty) * carry;
+            fla::Transform first = m;
+            first.m11 = placed.m11();
+            first.m12 = placed.m12();
+            first.m21 = placed.m21();
+            first.m22 = placed.m22();
+            first.tx = placed.dx();
+            first.ty = placed.dy();
+            stack.push(fla::CommandPtr(new fla::SetPropertyCommand<fla::Transform>(link.to->transform, m, first, name)));
+        }
+        joints.push_back(jointFor(link.to, carry.map(link.tail), parent, "ikNode_" + std::to_string(nodes + 1), guid()));
         const std::string before = link.fromFrame->extraChildren[static_cast<size_t>(child)];
-        // Built again with the bone more, keeping what the old nodes carried.
+        // Built again with the bone more, keeping what the old nodes carried,
+        // and posed again as each later pose was.
         fla::IKArmature rebuilt;
         rebuilt.parse(fla::symbolArmatureXml(armature.name(), armature.treeName(), joints, armature.frames()));
         rebuilt.keepAttributesOf(armature);
+        fla::carryPoses(armature, rebuilt);
         const std::string after = rebuilt.xml();
         const std::string poses = poseLocationsOf(*link.fromFrame);
-        stack.beginMacro(name);
         stack.push(fla::CommandPtr(new fla::PoseArmatureCommand(link.fromFrame, static_cast<size_t>(child), before, after, poses, poses)));
-        enlist(link.toFrame, link.to, link.fromFrame, link.tail, joints.back().node, joints.back().reference);
+        enlist(link.toFrame, link.to, link.fromFrame, carry.map(link.tail), joints.back().node, joints.back().reference);
         std::vector<std::string> children = link.fromFrame->extraChildren;
         fla::setBetweenFrames(children, betweenFramesOf(*link.fromFrame, after));
         stack.push(fla::CommandPtr(new fla::SetPropertyCommand<std::vector<std::string>>(link.fromFrame->extraChildren,
@@ -3940,16 +3976,21 @@ void MainWindow::addShapeBone(const BoneTool::Link& link)
         // A bone more, from a joint of a boned shape: the armature built
         // again with it and every point bound again to its nearest bone.
         BoundShape bound;
-        if (!BoundShape::find(link.armature, link.child, 0, bound) || bound.armature.poses().size() != 1)
+        if (!BoundShape::find(link.armature, link.child, 0, bound))
         {
-            statusBar()->showMessage("Bones can be added to a boned shape with one pose.", 4000);
+            statusBar()->showMessage("Bones can be added to a boned shape.", 4000);
             return;
         }
         std::vector<fla::ArmatureJoint> joints = bound.armature.symbolJoints();
         if (link.joint < 0 || static_cast<size_t>(link.joint) >= joints.size())
             return;
+        // Drawn on a later frame of the span, the bone is carried back to
+        // where it would be on the first, which the binding is made on.
+        const int drawnAt = std::clamp((_player ? _player->currentFrame() : 0) - link.armature->index, 0,
+            std::max(0, bound.armature.frames() - 1));
+        const QPointF tail = backToFirstFrame(bound.armature, link.joint, drawnAt).map(link.tail);
         fla::ArmatureJoint added;
-        added.position = fla::Point(link.tail.x(), link.tail.y());
+        added.position = fla::Point(tail.x(), tail.y());
         added.registration = added.position;
         added.parent = link.joint;
         added.node = "ikNode_" + std::to_string(nodes + 1);
@@ -3963,6 +4004,7 @@ void MainWindow::addShapeBone(const BoneTool::Link& link)
         rebuilt.keepAttributesOf(bound.armature);
         rebuilt.setBinding(fla::bindToNearestBones(bound.anchors, rebuilt.jointsAt(0)), bound.anchors,
             bound.instance->transform, fla::contourStyle(*bound.rest));
+        fla::carryPoses(bound.armature, rebuilt);
         const std::string poses = poseLocationsOf(*link.armature);
         stack.push(fla::CommandPtr(new fla::PoseArmatureCommand(link.armature, link.child,
             link.armature->extraChildren[link.child], rebuilt.xml(), poses, poses)));

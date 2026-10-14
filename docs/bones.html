@@ -31,7 +31,7 @@
 <ol class="steps">
   <li>Drag from a point on one instance to a point on another. The bone runs from where you press to where you let go. Both instances must be on unlocked layers.</li>
   <li>Phoenix puts both instances on a new armature layer, <em>Armature_1</em>, above the first one's layer. Each instance turns about its joint, which becomes its transformation point.</li>
-  <li>To grow the armature, drag from any instance already in it to another instance. The new bone starts at that instance's joint, so one instance can branch into several bones. Bones can be added while the armature has a single pose, and an instance can be in only one armature.</li>
+  <li>To grow the armature, drag from any instance already in it to another instance. The new bone starts at that instance's joint, so one instance can branch into several bones. Bones can be added at any time, on any frame of the span: in every other pose the new bone turns with the bone it hangs from. An instance can be in only one armature.</li>
 </ol>
 
 <p>Each bone added is a single step to undo.</p>
@@ -103,7 +103,7 @@
 
 <div class="callout planned">
   <span class="label">Planned</span>
-  <p>Spring simulation, pose commands (insert, copy and paste poses), adding bones to an armature with more than one pose, making new puppets from artwork, and a rigging layer.</p>
+  <p>Spring simulation, pose commands (insert, copy and paste poses), making new puppets from artwork, and a rigging layer.</p>
 </div>
 
 </article>

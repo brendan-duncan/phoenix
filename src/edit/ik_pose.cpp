@@ -1542,4 +1542,38 @@ void PoseArmatureCommand::undo()
     apply(_frame, _child, _before, _posesBefore);
 }
 
+void carryPoses(const IKArmature& old, IKArmature& rebuilt)
+{
+    const std::vector<ArmatureJoint> was = old.symbolJoints();
+    const std::vector<ArmatureJoint> now = rebuilt.symbolJoints();
+    const std::vector<IKJoint> first = rebuilt.posedAt(0);
+    if (first.size() != now.size())
+        return;
+    for (int pose : old.poses())
+    {
+        if (pose <= 0)
+            continue;
+        const std::vector<IKJoint> there = old.posedAt(pose);
+        std::vector<double> angles(now.size(), 0.0);
+        std::vector<size_t> added;
+        for (size_t j = 0; j < now.size(); ++j)
+        {
+            const auto found = std::find_if(was.begin(), was.end(),
+                [&](const ArmatureJoint& joint) { return joint.node == now[j].node; });
+            const size_t index = static_cast<size_t>(found - was.begin());
+            if (found != was.end() && index < there.size())
+                angles[j] = there[index].angle;
+            else
+                added.push_back(j);
+        }
+        for (size_t j : added)
+        {
+            const int parent = first[j].parent;
+            angles[j] = parent >= 0 ? angles[static_cast<size_t>(parent)] + first[j].angle - first[static_cast<size_t>(parent)].angle
+                                    : first[j].angle;
+        }
+        rebuilt.setPose(pose, angles);
+    }
+}
+
 } // namespace fla
