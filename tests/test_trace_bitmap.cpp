@@ -134,3 +134,52 @@ TEST(trace_bitmap_splits_a_soft_noisy_border_where_its_colors_cross)
         }
     CHECK(borders == 1);
 }
+
+TEST(trace_bitmap_fits_curves_to_rounds_and_keeps_squares_square)
+{
+    // 64 by 64 white: a dark disc of radius 18 with soft edges on the left,
+    // a dark 16 pixel square on the right.
+    const int width = 64, height = 64;
+    std::vector<uint8_t> pixels(static_cast<size_t>(width * height * 4), 255);
+    for (int y = 0; y < height; ++y)
+        for (int x = 0; x < width; ++x)
+        {
+            uint8_t* p = &pixels[static_cast<size_t>((y * width + x) * 4)];
+            // How much of the pixel the disc covers, sampled 4 by 4.
+            int inside = 0;
+            for (int s = 0; s < 16; ++s)
+            {
+                const double sx = x + (s % 4 + 0.5) / 4.0 - 20.0;
+                const double sy = y + (s / 4 + 0.5) / 4.0 - 32.0;
+                inside += sx * sx + sy * sy < 18.0 * 18.0 ? 1 : 0;
+            }
+            const bool square = x >= 44 && x < 60 && y >= 24 && y < 40;
+            const int shade = square ? 30 : 255 - (255 - 30) * inside / 16;
+            p[0] = p[1] = p[2] = static_cast<uint8_t>(shade);
+        }
+    fla::trace::Options options;
+    options.colorThreshold = 100;
+    options.minimumArea = 8;
+    options.curveFit = 2.0;
+    std::unique_ptr<fla::Shape> shape(fla::trace::traceBitmap(pixels.data(), width, height, options));
+    CHECK(shape != nullptr);
+    if (!shape)
+        return;
+    // White, the disc and the square.
+    CHECK(shape->fills.size() == 3);
+    int discCurves = 0, squareCurves = 0, squareLines = 0;
+    for (const fla::Edge* edge : shape->edges)
+        for (const fla::Path* path : edge->paths)
+        {
+            const bool square = path->segments.front()->points.back().x > 40.0;
+            for (const fla::PathSegment* segment : path->segments)
+            {
+                if (segment->command == fla::PathSegment::Command::Quad)
+                    ++(square ? squareCurves : discCurves);
+                if (square && segment->command == fla::PathSegment::Command::Line)
+                    ++squareLines;
+            }
+        }
+    CHECK(discCurves >= 4);
+    CHECK(squareCurves == 0 && squareLines == 4);
+}

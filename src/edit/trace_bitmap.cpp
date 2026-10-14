@@ -611,9 +611,164 @@ Shape* traceBitmap(const uint8_t* rgba, int width, int height, const Options& op
                 corners.push_back(b);
         }
         corners.push_back(points.back());
-        std::vector<bool> keep(corners.size(), false);
+        Edge* edge = new Edge(shape);
+        edge->fillStyle0 = chainLeft + 1;
+        edge->fillStyle1 = chainRight + 1;
+        shape->edges.push_back(edge);
+        const auto widen = [&](const Point& p) {
+            left = std::min(left, p.x);
+            top = std::min(top, p.y);
+            right = std::max(right, p.x);
+            bottom = std::max(bottom, p.y);
+        };
+        const bool ring = corners.size() > 2 &&
+            std::hypot(corners.front().x - corners.back().x, corners.front().y - corners.back().y) < 1.0e-9;
+        if (options.curveFit >= 1.0 && corners.size() > 2)
+        {
+            // Curves through the outline as the picture meant it rather than
+            // as the pixels stepped: a short step of a staircase stands for
+            // its middle, so a slope or a round comes out smooth, and a long
+            // straight run keeps both its ends, so a square keeps its
+            // corners. The chain's own ends stay exact, where it meets the
+            // others.
+            std::vector<Point> run = corners;
+            if (ring)
+            {
+                // A ring starts at a corner between two long runs where it
+                // has one, so where it closes is a corner anyway.
+                run.pop_back();
+                const size_t n = run.size();
+                const auto length = [&](size_t i) {
+                    const Point& a = run[i % n];
+                    const Point& b = run[(i + 1) % n];
+                    return std::fabs(b.x - a.x) + std::fabs(b.y - a.y);
+                };
+                for (size_t i = 0; i < n; ++i)
+                    if (length(i + n - 1) >= 3.0 && length(i) >= 3.0)
+                    {
+                        std::rotate(run.begin(), run.begin() + static_cast<std::ptrdiff_t>(i), run.end());
+                        break;
+                    }
+                run.push_back(run.front());
+            }
+            std::vector<Point> guide{run.front()};
+            for (size_t i = 0; i + 1 < run.size(); ++i)
+            {
+                const Point& a = run[i];
+                const Point& b = run[i + 1];
+                if (std::fabs(b.x - a.x) + std::fabs(b.y - a.y) >= 3.0)
+                {
+                    guide.push_back(a);
+                    guide.push_back(b);
+                }
+                else
+                {
+                    guide.emplace_back((a.x + b.x) / 2.0, (a.y + b.y) / 2.0);
+                }
+            }
+            guide.push_back(run.back());
+            // Points every pixel or so along it, so the fit is held to the
+            // outline all the way and can tell a corner from a bend.
+            std::vector<Point> dense{guide.front()};
+            for (size_t i = 1; i < guide.size(); ++i)
+            {
+                const Point& a = guide[i - 1];
+                const Point& b = guide[i];
+                const int steps = static_cast<int>(std::ceil(std::hypot(b.x - a.x, b.y - a.y)));
+                for (int s = 1; s <= steps; ++s)
+                    dense.emplace_back(a.x + (b.x - a.x) * s / steps, a.y + (b.y - a.y) * s / steps);
+            }
+            guide.swap(dense);
+
+            // The fewest points that keep within the tolerance of it: a
+            // polygon. A sharp turn of it is a corner; through a gentle one
+            // the outline curves, from the middle of the side before to the
+            // middle of the side after, bent toward the point itself. A side
+            // between two corners stays straight.
+            std::vector<bool> marked(guide.size(), false);
+            marked.front() = marked.back() = true;
+            simplify(guide, 0, guide.size() - 1, options.curveFit, marked);
+            std::vector<Point> polygon;
+            std::vector<size_t> at;
+            for (size_t i = 0; i < guide.size(); ++i)
+                if (marked[i])
+                {
+                    polygon.push_back(guide[i]);
+                    at.push_back(i);
+                }
+            const size_t n = polygon.size();
+            // Whether the outline itself turns sharply at a point, judged a
+            // few pixels either side of it: a square's corner does, while a
+            // circle drawn with few points only looks sharp in the polygon.
+            const double sharp = std::cos(55.0 * 3.14159265358979323846 / 180.0);
+            const size_t loop = guide.size() - 1;
+            const auto corner = [&](size_t i, const Point&, const Point&) {
+                const size_t g = at[i];
+                const size_t reach = 3;
+                Point before, after;
+                if (ring)
+                {
+                    before = guide[(g + loop - reach % loop) % loop];
+                    after = guide[(g + reach) % loop];
+                }
+                else
+                {
+                    before = guide[g >= reach ? g - reach : 0];
+                    after = guide[std::min(g + reach, guide.size() - 1)];
+                }
+                const Point& here = guide[g];
+                const double ix = here.x - before.x, iy = here.y - before.y;
+                const double ox = after.x - here.x, oy = after.y - here.y;
+                const double li = std::hypot(ix, iy), lo = std::hypot(ox, oy);
+                return li < 1.0e-9 || lo < 1.0e-9 || (ix * ox + iy * oy) / (li * lo) < sharp;
+            };            const auto middle = [](const Point& a, const Point& b) { return Point((a.x + b.x) / 2.0, (a.y + b.y) / 2.0); };
+            Path* path = new Path(edge);
+            const auto to = [&](PathSegment::Command command, std::vector<Point> points) {
+                for (const Point& p : points)
+                    widen(p);
+                path->segments.push_back(new PathSegment(command, points, path));
+            };
+            Point current;
+            const auto lineTo = [&](const Point& p) {
+                if (std::hypot(p.x - current.x, p.y - current.y) > 1.0e-9)
+                    to(PathSegment::Command::Line, {p});
+                current = p;
+            };
+            const auto visit = [&](size_t i, const Point& before, const Point& after) {
+                if (corner(i, before, after))
+                {
+                    lineTo(polygon[i]);
+                    return;
+                }
+                lineTo(middle(before, polygon[i]));
+                const Point out = middle(polygon[i], after);
+                to(PathSegment::Command::Quad, {polygon[i], out});
+                current = out;
+            };
+            // A ring with no corner where it closes starts in the middle of
+            // its last side, so it closes as smoothly as it goes round.
+            const size_t sides = n - 1;
+            if (ring && sides >= 3 && !corner(0, polygon[sides - 1], polygon[1]))
+            {
+                const Point start = middle(polygon[sides - 1], polygon[0]);
+                current = start;
+                to(PathSegment::Command::Move, {start});
+                for (size_t i = 0; i < sides; ++i)
+                    visit(i, polygon[(i + sides - 1) % sides], polygon[(i + 1) % sides]);
+                lineTo(start);
+            }
+            else
+            {
+                current = polygon[0];
+                to(PathSegment::Command::Move, {polygon[0]});
+                for (size_t i = 1; i + 1 < n; ++i)
+                    visit(i, polygon[i - 1], polygon[i + 1]);
+                lineTo(polygon[n - 1]);
+            }            edge->paths.push_back(path);
+            return;
+        }        std::vector<bool> keep(corners.size(), false);
         keep.front() = keep.back() = true;
-        if (corners.size() > 2 && std::hypot(corners.front().x - corners.back().x, corners.front().y - corners.back().y) < 1.0e-9)
+        if (ring)
         {
             // A ring: split at its farthest point so both halves fit.
             size_t far = 1;
@@ -635,9 +790,6 @@ Shape* traceBitmap(const uint8_t* rgba, int width, int height, const Options& op
         {
             simplify(corners, 0, corners.size() - 1, tolerance, keep);
         }
-        Edge* edge = new Edge(shape);
-        edge->fillStyle0 = chainLeft + 1;
-        edge->fillStyle1 = chainRight + 1;
         Path* path = new Path(edge);
         bool started = false;
         for (size_t i = 0; i < corners.size(); ++i)
@@ -647,13 +799,9 @@ Shape* traceBitmap(const uint8_t* rgba, int width, int height, const Options& op
             path->segments.push_back(new PathSegment(started ? PathSegment::Command::Line : PathSegment::Command::Move,
                 {corners[i]}, path));
             started = true;
-            left = std::min(left, corners[i].x);
-            top = std::min(top, corners[i].y);
-            right = std::max(right, corners[i].x);
-            bottom = std::max(bottom, corners[i].y);
+            widen(corners[i]);
         }
         edge->paths.push_back(path);
-        shape->edges.push_back(edge);
     };
     // Chains between break points, then rings with none.
     for (size_t i = 0; i < units.size(); ++i)
