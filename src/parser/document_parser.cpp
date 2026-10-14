@@ -22,6 +22,7 @@
 #include "../edit/shape_tween.h"
 
 #include <algorithm>
+#include <cmath>
 #include <functional>
 #include <iostream>
 #include <cstdlib>
