@@ -49,7 +49,7 @@ public:
     QAction* tool(const QString& id) const { return _tools.value(id); }
     /// Every tool's id, in the order they were registered.
     QStringList toolIds() const { return _order; }
-    /// The button that holds tool  id, shown or in its flyout; null when
+    /// The button that holds tool \a id, shown or in its flyout; null when
     /// the tool is hidden.
     QToolButton* buttonFor(const QString& id) const;
 
