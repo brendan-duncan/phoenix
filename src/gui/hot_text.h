@@ -2,6 +2,7 @@
 
 #include <QWidget>
 
+class QKeyEvent;
 class QLineEdit;
 
 /// A number shown as Animate's "hot text": blue, underlined, and live. It is
@@ -92,6 +93,9 @@ protected:
 private:
     QString text() const;
     void openEditor();
+    /// Sends Enter on to the dialog the field is in, for its default
+    /// button; false outside a dialog.
+    bool passToDialog(QKeyEvent* key);
     void closeEditor(bool commit);
 
     QLineEdit* _editor;

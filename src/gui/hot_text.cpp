@@ -1,6 +1,8 @@
 #include "hot_text.h"
 #include "theme.h"
 
+#include <QCoreApplication>
+#include <QDialog>
 #include <QFocusEvent>
 #include <QFontMetrics>
 #include <QKeyEvent>
@@ -297,6 +299,12 @@ void HotText::keyPressEvent(QKeyEvent* event)
         return;
     case Qt::Key_Return:
     case Qt::Key_Enter:
+        // In a dialog Enter is for its default button, as it is from a
+        // spin box; F2 still opens the number for typing.
+        if (passToDialog(event))
+            return;
+        openEditor();
+        return;
     case Qt::Key_F2:
         openEditor();
         return;
@@ -356,6 +364,13 @@ bool HotText::eventFilter(QObject* watched, QEvent* event)
         case Qt::Key_Escape:
             closeEditor(false);
             return true;
+        case Qt::Key_Return:
+        case Qt::Key_Enter:
+            // The value typed is kept, and in a dialog Enter goes on to its
+            // default button.
+            closeEditor(true);
+            passToDialog(key);
+            return true;
         case Qt::Key_Tab:
             // Commit, then move on from this field, not from its editor
             // (which would land back on the field and open it again).
@@ -388,6 +403,16 @@ bool HotText::eventFilter(QObject* watched, QEvent* event)
         return true;
     }
     return QWidget::eventFilter(watched, event);
+}
+
+bool HotText::passToDialog(QKeyEvent* key)
+{
+    QDialog* dialog = qobject_cast<QDialog*>(window());
+    if (!dialog)
+        return false;
+    QKeyEvent copy(key->type(), key->key(), key->modifiers(), key->text());
+    QCoreApplication::sendEvent(dialog, &copy);
+    return true;
 }
 
 void HotText::openEditor()
