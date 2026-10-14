@@ -507,6 +507,9 @@ endif()
 if(MSVC)
     # Scripts run on the window's thread; room for deep recursion in them.
     target_link_options(Phoenix PRIVATE /STACK:8388608)
+    # main_window.cpp has more sections than an object file holds by
+    # default once inlining adds its own (RelWithDebInfo).
+    target_compile_options(Phoenix PRIVATE /bigobj)
 endif()
 if(WIN32)
     # The AI assistants' local socket (mcp_server.cpp).
