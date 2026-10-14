@@ -1,10 +1,12 @@
 cmake_minimum_required(VERSION 3.16)
 
 include(FetchContent)
+# Pinned to a commit, so a release tag always builds the same parser; move
+# it forward on purpose when libas3 changes.
 FetchContent_Declare(
     libas3
     GIT_REPOSITORY https://github.com/brendan-duncan/libas3
-    GIT_TAG main
+    GIT_TAG 5bbd4f3241ba16a8f5331c36bb24c36ae1e5c529
 )
 FetchContent_MakeAvailable(libas3)
 
@@ -12,6 +14,16 @@ add_library(libas3 INTERFACE)
 add_dependencies(libas3 as3_parser)
 
 project(Phoenix VERSION 0.8.0 LANGUAGES C CXX)
+
+# libas3 copies as3_parser.pdb from beside the library after a Debug build,
+# but a single-configuration generator (Ninja) has MSVC write a static
+# library's compile PDB in its object folder; put it where the copy looks.
+if(MSVC AND NOT CMAKE_CONFIGURATION_TYPES AND TARGET as3_parser)
+    get_target_property(AS3_PARSER_DIR as3_parser BINARY_DIR)
+    set_target_properties(as3_parser PROPERTIES
+        COMPILE_PDB_NAME as3_parser
+        COMPILE_PDB_OUTPUT_DIRECTORY "${AS3_PARSER_DIR}")
+endif()
 
 # The version shown in the app and given to the installer. A release build
 # passes the tag's version (-DPHOENIX_VERSION=1.2.3).

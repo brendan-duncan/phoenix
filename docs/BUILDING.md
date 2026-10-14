@@ -22,14 +22,10 @@ cmake --build build --config Debug
 
 Substitute your own generator; `"Visual Studio 17 2022"` works the same way.
 
-On Windows, prefer a Visual Studio generator over Ninja. Ninja currently fails
-in the libas3 dependency, which copies `as3_parser.pdb` after archiving — MSVC
-does not emit that file for a static library under Ninja, so the copy errors out
-before Phoenix itself is reached.
-
-A Visual Studio generator also finds the MSVC toolchain by itself, so it works
-from an ordinary shell. Ninja does not: it needs the compiler already on `PATH`,
-which means a Developer Command Prompt, or a shell that has run `vcvars64.bat`.
+Ninja works too (`-G Ninja -DCMAKE_BUILD_TYPE=Debug`). A Visual Studio
+generator finds the MSVC toolchain by itself, so it works from an ordinary
+shell. Ninja does not: it needs the compiler already on `PATH`, which means a
+Developer Command Prompt, or a shell that has run `vcvars64.bat`.
 
 ## Finding Qt
 
