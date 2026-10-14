@@ -5,6 +5,7 @@
 #include <QWidget>
 
 class QCheckBox;
+class QCompleter;
 class QLabel;
 class QLineEdit;
 class QToolButton;
@@ -50,6 +51,13 @@ public:
     /// the caret near where it was.
     void replaceAllText(const QString& text);
 
+    /// Words offered as hints besides the language's own: the instance
+    /// names a script can reach, say.
+    void setExtraWords(const QStringList& words);
+    /// Shows the hints that fit where the caret is: after a dot, what can
+    /// follow it; with \a asked (Ctrl+Space), every word that fits.
+    void complete(bool asked);
+
 protected:
     void keyPressEvent(QKeyEvent* event) override;
     void resizeEvent(QResizeEvent* event) override;
@@ -64,10 +72,14 @@ private:
     void updateMarks();
     QString indentOf(const QTextBlock& block) const;
     QString commentPrefix() const;
+    QString wordBeforeCursor() const;
+    void insertCompletion(const QString& word);
 
     class LineNumberArea* _gutter = nullptr;
     class CodeHighlighter* _highlighter = nullptr;
     Language _language = Language::ActionScript;
+    QCompleter* _completer = nullptr;
+    QStringList _extraWords;
     int _errorLine = 0;
     QString _errorMessage;
 };

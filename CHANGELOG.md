@@ -13,6 +13,8 @@ What changed in each release of Phoenix, newest first.
 - In Test Movie, buttons and clips are clicked by their art rather than their bounding box
 - Double-clicking a script error in the Output panel opens the script in the Actions panel at its line
 - The Actions panel's Target button inserts the path to a named movie clip or button
+- Code hints in the Actions panel and Script Editor: a dot offers what can follow it, and Ctrl+Space every word that fits, instance names included
+- The Actions panel's Snippets menu puts in ready-made ActionScript 2 and 3 for clicks, dragging, keys, text fields and sounds
 - `Phoenix play <file>` plays a movie's scripts with no window and prints what they trace and the errors they stop on; `--click-all` clicks every button
 - ActionScript fixes: `x += 1` and the other compound assignments, `++x`, `a[i] = v`, and `new Object()` and `new Array()` work as they should
 - Commands > Open Claude Code now runs Claude Code in a panel inside Phoenix, with copy, paste and scrollback; Open Claude Code in a Terminal Window still opens it in a terminal of its own

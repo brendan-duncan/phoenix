@@ -7,6 +7,7 @@
 #include "../data/frame.h"
 #include "../data/layer.h"
 #include "../data/symbol.h"
+#include "../data/static_text.h"
 #include "../data/symbol_instance.h"
 #include "../data/symbol_list.h"
 #include "../data/timeline.h"
@@ -17,6 +18,8 @@
 
 #include <QDialog>
 #include <QDialogButtonBox>
+#include <QInputDialog>
+#include <QMenu>
 #include <QHBoxLayout>
 #include <QHeaderView>
 #include <QLabel>
@@ -76,6 +79,83 @@ void addNamedInstances(const fla::Timeline* timeline, QTreeWidgetItem* parent, Q
     }
 }
 
+/// The names a script on \a timeline reaches things by: its named movie
+/// clips, buttons and text fields.
+QStringList namesOn(const fla::Timeline* timeline)
+{
+    QStringList names;
+    for (const fla::Layer* layer : timeline ? timeline->layers : std::vector<fla::Layer*>{})
+    {
+        for (const fla::Frame* frame : layer ? layer->frames : std::vector<fla::Frame*>{})
+        {
+            for (const fla::Element* element : frame->elements)
+            {
+                if (!element)
+                    continue;
+                if (element->elementType() == fla::Element::Type::SymbolInstance)
+                {
+                    const auto* instance = static_cast<const fla::SymbolInstance*>(element);
+                    if (!instance->name.empty() && instance->symbolType != fla::SymbolType::Graphic)
+                        names << QString::fromStdString(instance->name);
+                }
+                else if (element->elementType() == fla::Element::Type::StaticText)
+                {
+                    const auto* text = static_cast<const fla::StaticText*>(element);
+                    if (!text->instanceName.empty())
+                        names << QString::fromStdString(text->instanceName);
+                }
+            }
+        }
+    }
+    names.removeDuplicates();
+    names.sort(Qt::CaseInsensitive);
+    return names;
+}
+
+/// Code snippets: a menu title and the code, where $instance is the name
+/// of the instance it works on, asked for when it is put in.
+struct Snippet
+{
+    const char* title;
+    const char* code;
+};
+
+const Snippet kActionScript2Snippets[] = {
+    {"Stop at This Frame", "stop();\n"},
+    {"On Click, Go to Frame 2 and Stop", "on (release) {\n    gotoAndStop(2);\n}\n"},
+    {"On Click, Show or Hide a Clip", "on (release) {\n    _root.$instance._visible = !_root.$instance._visible;\n}\n"},
+    {"Drag and Drop", "on (press) {\n    startDrag(this);\n}\non (release, releaseOutside) {\n    stopDrag();\n}\n"},
+    {"Move with the Arrow Keys",
+        "onClipEvent (enterFrame) {\n    if (Key.isDown(Key.LEFT)) _x -= 5;\n    if (Key.isDown(Key.RIGHT)) _x += 5;\n"
+        "    if (Key.isDown(Key.UP)) _y -= 5;\n    if (Key.isDown(Key.DOWN)) _y += 5;\n}\n"},
+    {"On Click, Play a Library Sound",
+        "on (release) {\n    var sound = new Sound();\n    sound.attachSound(\"sound_linkage\");\n    sound.start();\n}\n"},
+};
+
+const Snippet kActionScript3Snippets[] = {
+    {"Stop at This Frame", "stop();\n"},
+    {"Click to Go to Frame 2 and Stop",
+        "$instance.addEventListener(MouseEvent.CLICK, function(event:MouseEvent):void {\n    gotoAndStop(2);\n});\n"},
+    {"Click to Show or Hide",
+        "$instance.addEventListener(MouseEvent.CLICK, function(event:MouseEvent):void {\n"
+        "    $instance.visible = !$instance.visible;\n});\n"},
+    {"Drag and Drop",
+        "$instance.addEventListener(MouseEvent.MOUSE_DOWN, function(event:MouseEvent):void {\n    $instance.startDrag();\n});\n"
+        "$instance.addEventListener(MouseEvent.MOUSE_UP, function(event:MouseEvent):void {\n    $instance.stopDrag();\n});\n"},
+    {"Move with the Arrow Keys",
+        "stage.addEventListener(KeyboardEvent.KEY_DOWN, function(event:KeyboardEvent):void {\n"
+        "    if (event.keyCode == Keyboard.LEFT) $instance.x -= 5;\n    if (event.keyCode == Keyboard.RIGHT) $instance.x += 5;\n"
+        "    if (event.keyCode == Keyboard.UP) $instance.y -= 5;\n    if (event.keyCode == Keyboard.DOWN) $instance.y += 5;\n});\n"},
+    {"Count Clicks in a Text Field",
+        "var clicks:int = 0;\n$instance.addEventListener(MouseEvent.CLICK, function(event:MouseEvent):void {\n"
+        "    clicks++;\n    count_txt.text = \"Clicks: \" + clicks;\n});\n"},
+    {"Click to Play a Library Sound",
+        "var sound:Sound = new MySound();\n$instance.addEventListener(MouseEvent.CLICK, function(event:MouseEvent):void {\n"
+        "    sound.play();\n});\n"},
+    {"Every Frame, Turn a Clip",
+        "$instance.addEventListener(Event.ENTER_FRAME, function(event:Event):void {\n    $instance.rotation += 5;\n});\n"},
+};
+
 bool canHoldScript(const fla::Element* element)
 {
     if (!element || element->elementType() != fla::Element::Type::SymbolInstance)
@@ -126,6 +206,25 @@ ActionsPanel::ActionsPanel(const ActionsLinks& links, QWidget* parent)
     targetButton->setToolTip("Insert Target Path: the path to a named movie clip or button, typed in at the caret");
     bar->addWidget(targetButton);
     connect(targetButton, &QToolButton::clicked, this, &ActionsPanel::insertTargetPath);
+    auto* snippetsButton = new QToolButton(this);
+    snippetsButton->setText("Snippets");
+    snippetsButton->setAutoRaise(true);
+    snippetsButton->setPopupMode(QToolButton::InstantPopup);
+    snippetsButton->setToolTip("Code snippets: ready-made code for what movies often do, typed in at the caret");
+    auto* snippets = new QMenu(snippetsButton);
+    const auto addSnippets = [this](QMenu* menu, const Snippet* begin, const Snippet* end) {
+        for (const Snippet* snippet = begin; snippet != end; ++snippet)
+        {
+            const QString code = QString::fromUtf8(snippet->code);
+            menu->addAction(snippet->title, this, [this, code]() { insertSnippet(code); });
+        }
+    };
+    addSnippets(snippets->addMenu("ActionScript &2 (on a Button or Clip)"), std::begin(kActionScript2Snippets),
+        std::end(kActionScript2Snippets));
+    addSnippets(snippets->addMenu("ActionScript &3 (on a Frame)"), std::begin(kActionScript3Snippets),
+        std::end(kActionScript3Snippets));
+    snippetsButton->setMenu(snippets);
+    bar->addWidget(snippetsButton);
     auto* findButton = new QToolButton(this);
     findButton->setText("Find");
     findButton->setAutoRaise(true);
@@ -327,6 +426,8 @@ void ActionsPanel::show(const Target& target)
     _target = target;
     bool reloaded = false;
     _where->setText(describe(target));
+    // Hints offer the names the script can reach.
+    _editor->setExtraWords(namesOn(target.timeline));
     _where->setToolTip(_where->text());
     _loading = true;
     if (target.kind == Target::Kind::None)
@@ -522,6 +623,36 @@ void ActionsPanel::insertTargetPath()
         names.prepend(item->data(0, Qt::UserRole).toString());
     names.prepend(absolute->isChecked() ? "_root" : "this");
     _editor->insertPlainText(names.join('.'));
+    focusEditor();
+}
+
+void ActionsPanel::insertSnippet(QString code)
+{
+    if (_target.kind == Target::Kind::None)
+        return;
+    if (code.contains("$instance"))
+    {
+        // The instance it works on, picked from those named here.
+        const QStringList names = namesOn(_target.timeline);
+        QString name = "instance_name";
+        if (!names.isEmpty())
+        {
+            bool ok = false;
+            name = QInputDialog::getItem(this, "Code Snippet", "The instance it works on:", names, 0, true, &ok);
+            if (!ok || name.isEmpty())
+                return;
+        }
+        code.replace("$instance", name);
+    }
+    // At the start of a line, indented as the line is.
+    QTextCursor cursor = _editor->textCursor();
+    if (cursor.positionInBlock() > 0 && !cursor.block().text().trimmed().isEmpty())
+    {
+        cursor.movePosition(QTextCursor::EndOfBlock);
+        cursor.insertText("\n");
+    }
+    cursor.insertText(code);
+    _editor->setTextCursor(cursor);
     focusEditor();
 }
 

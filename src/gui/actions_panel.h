@@ -97,6 +97,9 @@ private:
     /// Insert Target Path: the path to an instance, picked from those the
     /// script can reach, typed in at the caret.
     void insertTargetPath();
+    /// Puts a code snippet in at the caret, asking for the instance it
+    /// works on when it names one.
+    void insertSnippet(QString code);
 
     ActionsLinks _links;
     CodeView* _view = nullptr;

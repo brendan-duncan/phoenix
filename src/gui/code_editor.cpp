@@ -1,7 +1,9 @@
 #include "code_editor.h"
 
+#include <QAbstractItemView>
 #include <QApplication>
 #include <QCheckBox>
+#include <QCompleter>
 #include <QFileInfo>
 #include <QFontDatabase>
 #include <QHBoxLayout>
@@ -13,6 +15,7 @@
 #include <QScrollBar>
 #include <QSet>
 #include <QShortcut>
+#include <QStringListModel>
 #include <QTextBlock>
 #include <QToolButton>
 #include <QToolTip>
@@ -102,6 +105,66 @@ const QSet<QString>& builtins(CodeEditor::Language language)
 bool isDark(const QPalette& palette)
 {
     return palette.color(QPalette::Base).lightness() < 128;
+}
+
+/// What can follow "object." in \a language: the members of the object the
+/// name is, or what movie clips and documents have when it is not one
+/// known by name.
+QStringList membersOf(CodeEditor::Language language, const QString& object)
+{
+    if (language == CodeEditor::Language::ActionScript)
+    {
+        if (object == "MouseEvent")
+            return {"CLICK", "DOUBLE_CLICK", "MOUSE_DOWN", "MOUSE_UP", "MOUSE_OVER", "MOUSE_OUT", "MOUSE_MOVE",
+                "ROLL_OVER", "ROLL_OUT"};
+        if (object == "Event")
+            return {"ENTER_FRAME", "ADDED_TO_STAGE", "COMPLETE"};
+        if (object == "KeyboardEvent")
+            return {"KEY_DOWN", "KEY_UP"};
+        const QStringList keys = {"LEFT", "RIGHT", "UP", "DOWN", "SPACE", "ENTER", "ESCAPE", "SHIFT", "CONTROL", "TAB",
+            "BACKSPACE", "DELETEKEY", "HOME", "END", "PGUP", "PGDN"};
+        if (object == "Keyboard")
+            return keys;
+        if (object == "Key")
+            return keys + QStringList{"isDown", "getCode", "getAscii", "addListener", "removeListener"};
+        if (object == "Math")
+            return {"abs", "ceil", "floor", "round", "random", "max", "min", "sqrt", "pow", "sin", "cos", "tan",
+                "atan2", "PI"};
+        if (object == "SoundMixer")
+            return {"stopAll"};
+        if (object == "Mouse")
+            return {"hide", "show"};
+        if (object == "event" || object == "e" || object == "evt")
+            return {"target", "currentTarget", "type", "keyCode", "charCode", "stopPropagation"};
+        // A movie clip, a button or a text field, in ActionScript 3's
+        // names and the older ones.
+        return {"gotoAndStop", "gotoAndPlay", "play", "stop", "nextFrame", "prevFrame", "addEventListener",
+            "removeEventListener", "startDrag", "stopDrag", "hitTest", "hitTestPoint", "hitTestObject", "attachMovie",
+            "duplicateMovieClip", "removeMovieClip", "addChild", "removeChild", "getChildByName", "x", "y", "visible",
+            "alpha", "scaleX", "scaleY", "rotation", "width", "height", "currentFrame", "totalFrames", "currentLabel",
+            "name", "parent", "root", "mouseX", "mouseY", "dropTarget", "buttonMode", "text", "_x", "_y", "_visible",
+            "_alpha", "_xscale", "_yscale", "_rotation", "_width", "_height", "_currentframe", "_totalframes", "_name",
+            "_parent", "_xmouse", "_ymouse", "_droptarget"};
+    }
+    if (language == CodeEditor::Language::JavaScript || language == CodeEditor::Language::Python)
+    {
+        if (object == "fl")
+            return {"getDocumentDOM", "trace", "openDocument", "createDocument", "closeDocument", "saveDocument",
+                "outputPanel", "configURI", "runScript", "browseForFileURL", "documents", "phoenix", "clipCopyString",
+                "getDocumentIndex", "setActiveWindow"};
+        if (object == "FLfile")
+            return {"exists", "read", "write", "remove", "createFolder", "listFolder", "copy", "getAttributes",
+                "uriToPlatformPath", "platformPathToURI"};
+        // A document, its timeline, a layer, a frame or an element.
+        return {"getTimeline", "selection", "library", "selectAll", "selectNone", "addNewRectangle", "addNewOval",
+            "addNewLine", "addNewText", "convertToSymbol", "enterEditMode", "exitEditMode", "name", "path", "width",
+            "height", "frameRate", "layers", "frames", "currentFrame", "currentLayer", "frameCount", "layerCount",
+            "addNewLayer", "deleteLayer", "insertFrames", "insertKeyframe", "convertToKeyframes", "setSelectedLayers",
+            "setSelectedFrames", "elements", "items", "addItemToDocument", "selectItem", "getSelectedItems",
+            "elementType", "x", "y", "rotation", "scaleX", "scaleY", "libraryItem", "actionScript", "labelType",
+            "startFrame", "duration", "tweenType"};
+    }
+    return {};
 }
 
 } // namespace
@@ -306,6 +369,80 @@ CodeEditor::CodeEditor(QWidget* parent)
     connect(this, &QPlainTextEdit::cursorPositionChanged, this, &CodeEditor::updateMarks);
     setViewportMargins(gutterWidth(), 0, 0, 0);
     updateMarks();
+
+    // Code hints: what can follow a dot, or a word begun (Ctrl+Space).
+    _completer = new QCompleter(this);
+    _completer->setWidget(this);
+    _completer->setCompletionMode(QCompleter::PopupCompletion);
+    _completer->setCaseSensitivity(Qt::CaseInsensitive);
+    _completer->setModel(new QStringListModel(_completer));
+    connect(_completer, qOverload<const QString&>(&QCompleter::activated), this, &CodeEditor::insertCompletion);
+}
+
+void CodeEditor::setExtraWords(const QStringList& words)
+{
+    _extraWords = words;
+}
+
+QString CodeEditor::wordBeforeCursor() const
+{
+    QTextCursor cursor = textCursor();
+    const QString text = cursor.block().text().left(cursor.positionInBlock());
+    int start = static_cast<int>(text.size());
+    while (start > 0 && (text.at(start - 1).isLetterOrNumber() || text.at(start - 1) == '_' || text.at(start - 1) == '$'))
+        --start;
+    return text.mid(start);
+}
+
+void CodeEditor::complete(bool asked)
+{
+    QTextCursor cursor = textCursor();
+    const QString line = cursor.block().text().left(cursor.positionInBlock());
+    const QString prefix = wordBeforeCursor();
+    const int wordStart = static_cast<int>(line.size() - prefix.size());
+    QStringList words;
+    if (wordStart > 0 && line.at(wordStart - 1) == '.')
+    {
+        // The name before the dot: "MouseEvent", "fl", "hat"...
+        int start = wordStart - 1;
+        while (start > 0 && (line.at(start - 1).isLetterOrNumber() || line.at(start - 1) == '_'))
+            --start;
+        words = membersOf(_language, line.mid(start, wordStart - 1 - start));
+    }
+    else if (asked)
+    {
+        for (const QString& word : keywords(_language))
+            words << word;
+        for (const QString& word : builtins(_language))
+            words << word;
+        words << _extraWords;
+    }
+    if (words.isEmpty())
+    {
+        _completer->popup()->hide();
+        return;
+    }
+    words.removeDuplicates();
+    words.sort(Qt::CaseInsensitive);
+    static_cast<QStringListModel*>(_completer->model())->setStringList(words);
+    _completer->setCompletionPrefix(prefix);
+    if (_completer->completionCount() == 0)
+    {
+        _completer->popup()->hide();
+        return;
+    }
+    _completer->popup()->setCurrentIndex(_completer->completionModel()->index(0, 0));
+    QRect at = cursorRect();
+    at.setWidth(_completer->popup()->sizeHintForColumn(0) + _completer->popup()->verticalScrollBar()->sizeHint().width() + 8);
+    _completer->complete(at);
+}
+
+void CodeEditor::insertCompletion(const QString& word)
+{
+    QTextCursor cursor = textCursor();
+    cursor.movePosition(QTextCursor::PreviousCharacter, QTextCursor::KeepAnchor, static_cast<int>(wordBeforeCursor().size()));
+    cursor.insertText(word);
+    setTextCursor(cursor);
 }
 
 CodeEditor::Language CodeEditor::languageFor(const QString& path)
@@ -525,6 +662,19 @@ void CodeEditor::keyPressEvent(QKeyEvent* event)
     const Qt::KeyboardModifiers modifiers = event->modifiers();
     QTextCursor cursor = textCursor();
 
+    // While hints show, Enter, Tab and Esc are theirs.
+    if (_completer->popup()->isVisible() &&
+        (key == Qt::Key_Return || key == Qt::Key_Enter || key == Qt::Key_Tab || key == Qt::Key_Escape ||
+            key == Qt::Key_Backtab))
+    {
+        event->ignore();
+        return;
+    }
+    if (key == Qt::Key_Space && (modifiers & Qt::ControlModifier))
+    {
+        complete(true);
+        return;
+    }
     if (key == Qt::Key_Slash && (modifiers & Qt::ControlModifier))
     {
         toggleComment();
@@ -603,6 +753,19 @@ void CodeEditor::keyPressEvent(QKeyEvent* event)
         return;
     }
     QPlainTextEdit::keyPressEvent(event);
+
+    // After a dot, what can follow it; while the hints show, the word typed
+    // so far narrows them.
+    const QString typed = event->text();
+    if (typed == QLatin1String("."))
+        complete(false);
+    else if (_completer->popup()->isVisible())
+    {
+        if (!typed.isEmpty() && !typed.at(0).isLetterOrNumber() && typed.at(0) != '_' && key != Qt::Key_Backspace)
+            _completer->popup()->hide();
+        else
+            complete(true);
+    }
 }
 
 void CodeEditor::resizeEvent(QResizeEvent* event)
