@@ -83,6 +83,9 @@ class MovieRuntime
 public:
     /// Plays \a root, the scene, at \a frameRate frames a second.
     MovieRuntime(const Timeline& root, double frameRate);
+    /// Plays \a scenes one after another, from the first, as Flash Player
+    /// plays a movie's scenes; after the last, the first again.
+    MovieRuntime(const std::vector<const Timeline*>& scenes, double frameRate);
     ~MovieRuntime();
 
     MovieRuntime(const MovieRuntime&) = delete;
@@ -95,6 +98,9 @@ public:
     void step();
 
     Clip& root() { return *_root; }
+    /// The scene playing, from 0, and how many there are.
+    int scene() const { return _scene; }
+    int sceneCount() const { return static_cast<int>(_scenes.size()); }
     double frameRate() const { return _frameRate; }
 
     /// The clip \a instance (on \a layer, on \a parent's current frame) is,
@@ -145,7 +151,15 @@ private:
 
     /// A frame by number or label, on \a clip's timeline; -1 when none.
     int frameOf(const Clip& clip, const as3::ValuePtr& target) const;
+    int frameIn(const Timeline* timeline, const as3::ValuePtr& target) const;
     void goTo(Clip& clip, int frame, bool play);
+    /// The root moves to frame \a frame of scene \a scene: what was on the
+    /// stage goes, and the scene's own is placed when the move settles.
+    void goToScene(int scene, int frame, bool play);
+    /// Makes the move now: only once no script is running.
+    void applyScene(int scene, int frame, bool play);
+    /// The scene \a name names, or -1.
+    int sceneNamed(const std::string& name) const;
     /// The clip a target names ("hat", "/hat", "_root.hat", "../hat",
     /// "_parent.hat", "_level0.hat", "this"), from \a from; null when none.
     Clip* resolve(Clip& from, const std::string& target);
@@ -156,7 +170,16 @@ private:
     as3::ValuePtr objectFor(Clip& clip);
     void forget(Clip& clip);
 
-    const Timeline& _rootTimeline;
+    std::vector<const Timeline*> _scenes;
+    int _scene = 0;
+    /// A move to another scene a script asked for, made when it is done.
+    struct SceneMove
+    {
+        int scene = -1;
+        int frame = 0;
+        bool play = true;
+    };
+    SceneMove _sceneMove;
     double _frameRate;
     std::unique_ptr<as3::VM> _vm;
     std::unique_ptr<Clip> _root;

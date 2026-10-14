@@ -167,9 +167,15 @@ private:
 };
 
 MovieRuntime::MovieRuntime(const Timeline& root, double frameRate)
-    : _rootTimeline(root)
-    , _frameRate(frameRate > 0.0 ? frameRate : 24.0)
+    : MovieRuntime(std::vector<const Timeline*>{&root}, frameRate)
+{}
+
+MovieRuntime::MovieRuntime(const std::vector<const Timeline*>& scenes, double frameRate)
+    : _frameRate(frameRate > 0.0 ? frameRate : 24.0)
 {
+    for (const Timeline* scene : scenes)
+        if (scene)
+            _scenes.push_back(scene);
     start();
 }
 
@@ -181,10 +187,12 @@ void MovieRuntime::start()
     _buttonHandlers.clear();
     _hovered = _pressed = nullptr;
     _sent.clear();
+    _sceneMove = SceneMove();
+    _scene = 0;
     _vm = std::make_unique<as3::VM>();
     _root = std::make_unique<Clip>();
-    _root->timeline = &_rootTimeline;
-    _root->length = lengthOf(&_rootTimeline);
+    _root->timeline = _scenes.empty() ? nullptr : _scenes.front();
+    _root->length = lengthOf(_root->timeline);
     _root->name = "_level0";
     setupGlobals();
     std::vector<Clip*> entered{_root.get()};
@@ -227,18 +235,53 @@ void MovieRuntime::setupGlobals()
     const auto gotoFrame = [this, current, arg](bool play) {
         return [this, current, arg, play](const Args& args) {
             Clip& clip = current();
-            // gotoAndPlay(scene, frame) names a scene; only the one is played.
+            // gotoAndPlay(scene, frame) names a scene of the movie.
+            if (args.size() >= 2)
+            {
+                const int scene = sceneNamed(arg(args, 0)->toString());
+                if (scene >= 0)
+                {
+                    goToScene(scene, std::max(0, frameIn(_scenes[static_cast<size_t>(scene)], arg(args, 1))), play);
+                    return Value::makeUndefined();
+                }
+            }
             const ValuePtr target = args.size() >= 2 ? arg(args, 1) : arg(args, 0);
             const int frame = frameOf(clip, target);
             if (frame >= 0)
+            {
                 goTo(clip, frame, play);
-            else
-                clip.playing = play;
+                return Value::makeUndefined();
+            }
+            // On the main timeline, a label may be in another scene.
+            if (&clip == _root.get() && target && !target->isNumber())
+            {
+                for (size_t scene = 0; scene < _scenes.size(); ++scene)
+                {
+                    const int there = frameIn(_scenes[scene], target);
+                    if (there >= 0)
+                    {
+                        goToScene(static_cast<int>(scene), there, play);
+                        return Value::makeUndefined();
+                    }
+                }
+            }
+            clip.playing = play;
             return Value::makeUndefined();
         };
     };
     vm.registerBuiltin("gotoAndPlay", gotoFrame(true));
     vm.registerBuiltin("gotoAndStop", gotoFrame(false));
+    // The first frame of the next or the scene before, stopped there.
+    vm.registerBuiltin("nextScene", [this](const Args&) {
+        if (_scene + 1 < sceneCount())
+            goToScene(_scene + 1, 0, false);
+        return Value::makeUndefined();
+    });
+    vm.registerBuiltin("prevScene", [this](const Args&) {
+        if (_scene > 0)
+            goToScene(_scene - 1, 0, false);
+        return Value::makeUndefined();
+    });
     vm.registerBuiltin("nextFrame", [this, current](const Args&) {
         goTo(current(), std::min(current().frame + 1, current().length - 1), false);
         return Value::makeUndefined();
@@ -464,12 +507,56 @@ void MovieRuntime::goTo(Clip& clip, int frame, bool play)
         _sent.push_back(&clip);
 }
 
+void MovieRuntime::goToScene(int scene, int frame, bool play)
+{
+    if (scene < 0 || scene >= sceneCount())
+        return;
+    if (scene == _scene && _sceneMove.scene < 0)
+    {
+        goTo(*_root, frame, play);
+        return;
+    }
+    _sceneMove = SceneMove{scene, frame, play};
+}
+
+void MovieRuntime::applyScene(int scene, int frame, bool play)
+{
+    Clip& root = *_root;
+    for (auto& child : root.children)
+        if (child)
+            forget(*child);
+    root.children.clear();
+    _scene = scene;
+    root.timeline = _scenes[static_cast<size_t>(scene)];
+    root.length = lengthOf(root.timeline);
+    root.frame = std::clamp(frame, 0, std::max(0, root.length - 1));
+    root.playing = play;
+}
+
+int MovieRuntime::sceneNamed(const std::string& name) const
+{
+    for (size_t i = 0; i < _scenes.size(); ++i)
+        if (_scenes[i]->name == name)
+            return static_cast<int>(i);
+    return -1;
+}
+
 void MovieRuntime::settle()
 {
     // A script sent clips to other frames: their scripts run there, which
     // may send them on again; a chain is cut short at a few.
-    for (int round = 0; round < 8 && !_sent.empty(); ++round)
+    for (int round = 0; round < 8 && (!_sent.empty() || _sceneMove.scene >= 0); ++round)
     {
+        // A move to another scene first: what it takes off the stage is
+        // forgotten, and the root goes where it was sent.
+        if (_sceneMove.scene >= 0)
+        {
+            const SceneMove move = _sceneMove;
+            _sceneMove = SceneMove();
+            applyScene(move.scene, move.frame, move.play);
+            if (std::find(_sent.begin(), _sent.end(), _root.get()) == _sent.end())
+                _sent.push_back(_root.get());
+        }
         std::vector<Clip*> sent;
         sent.swap(_sent);
         std::vector<Clip*> entered;
@@ -496,6 +583,15 @@ void MovieRuntime::advance(Clip& clip, std::vector<Clip*>& entered)
     std::vector<Clip*> before;
     for (const auto& child : clip.children)
         before.push_back(child.get());
+    // The main timeline's last frame leads on to the next scene, and the
+    // last scene's back to the first.
+    if (&clip == _root.get() && clip.playing && sceneCount() > 1 && clip.frame + 1 >= clip.length)
+    {
+        applyScene((_scene + 1) % sceneCount(), 0, true);
+        syncChildren(clip, entered);
+        runFrameScripts(clip);
+        return;
+    }
     if (clip.playing && !clip.button && clip.length > 1)
     {
         clip.frame = (clip.frame + 1) % clip.length;
@@ -626,6 +722,11 @@ Clip* MovieRuntime::clipOf(const Clip& parent, const Layer& layer, const SymbolI
 
 int MovieRuntime::frameOf(const Clip& clip, const as3::ValuePtr& target) const
 {
+    return frameIn(clip.timeline, target);
+}
+
+int MovieRuntime::frameIn(const Timeline* timeline, const as3::ValuePtr& target) const
+{
     if (!target || target->isUndefined())
         return -1;
     if (target->isNumber())
@@ -635,9 +736,9 @@ int MovieRuntime::frameOf(const Clip& clip, const as3::ValuePtr& target) const
     const double number = target->toNumber();
     if (!std::isnan(number))
         return static_cast<int>(number) - 1;
-    if (!clip.timeline)
+    if (!timeline)
         return -1;
-    for (const Layer* layer : clip.timeline->layers)
+    for (const Layer* layer : timeline->layers)
         for (const Frame* frame : layer ? layer->frames : std::vector<Frame*>())
             if (frame && frame->name == text && frame->labelType != "comment")
                 return frame->index;

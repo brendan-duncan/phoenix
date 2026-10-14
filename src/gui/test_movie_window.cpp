@@ -48,10 +48,11 @@ TestMovieWindow::TestMovieWindow(const fla::FLADocument& document, const QString
     bar->addWidget(_status, 1);
     layout->addLayout(bar);
 
-    const fla::Timeline* scene = data.currentScene();
-    if (scene)
+    // Every scene, from the first, as the published movie plays them.
+    std::vector<const fla::Timeline*> scenes(data.timelines.begin(), data.timelines.end());
+    if (!scenes.empty())
     {
-        _movie = std::make_unique<fla::play::MovieRuntime>(*scene, data.frameRate);
+        _movie = std::make_unique<fla::play::MovieRuntime>(scenes, data.frameRate);
         _movie->trace = [print](const std::string& line) {
             if (print)
                 print(QString::fromStdString(line));
@@ -125,6 +126,8 @@ void TestMovieWindow::showFrame()
     if (_player->currentFrame() != root.frame)
         _player->setCurrentFrame(root.frame);
     QString status = QString("Frame %1 of %2").arg(root.frame + 1).arg(root.length);
+    if (_movie->sceneCount() > 1 && root.timeline)
+        status = QString("%1, %2").arg(QString::fromStdString(root.timeline->name), status.toLower());
     if (!root.playing)
         status += ", stopped";
     if (_errors > 0)

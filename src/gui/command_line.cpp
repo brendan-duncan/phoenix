@@ -5,7 +5,11 @@
 #include "shortcuts_dialog.h"
 #include "updater.h"
 
+#include "../data/action_script.h"
 #include "../data/document.h"
+#include "../data/frame.h"
+#include "../data/layer.h"
+#include "../data/timeline.h"
 #include "../data/fla_document.h"
 #include "../parser/fla_doctor.h"
 #include "../parser/fla_parser.h"
@@ -23,6 +27,7 @@
 #include "tutorial_runner.h"
 #include "../writer/xfl_content.h"
 #include "../writer/xfl_folder_writer.h"
+#include "../play/movie_runtime.h"
 
 #include <QDir>
 #include <QDirIterator>
@@ -39,6 +44,7 @@
 #include <cctype>
 #include <cstdio>
 #include <cstring>
+#include <functional>
 #include <map>
 #include <numeric>
 
@@ -117,6 +123,14 @@ const char* const kHelp =
     "      answers yes, prompt its default, and an open-file dialog the first\n"
     "      document. Exits 1 when the script fails. The script stops after\n"
     "      --timeout seconds (600 unless given; 0 for no limit).\n"
+    "\n"
+    "  play <file> [--frames N] [--tree] [--click-all]\n"
+    "      Plays the movie as Control > Test Movie does, scripts and all, for N\n"
+    "      frames (120 unless given), printing what its scripts trace and the\n"
+    "      errors they stop on. --tree lists the clips playing then, with\n"
+    "      their scripts. --click-all then clicks each button it finds,\n"
+    "      one after another, playing a few frames after each. Exits 1 when a\n"
+    "      script stopped on an error.\n"
     "\n"
     "  benchmark <file> [--frames N] [--json <out.json>] [--against <animate.json>]\n"
     "      Times opening, drawing (first with nothing cached, then cached),\n"
@@ -754,11 +768,116 @@ int benchmark(const QStringList& args)
     return 0;
 }
 
+/// Plays a movie with no window, as Test Movie does, for checking a game's
+/// scripts: what they trace and the errors they stop on.
+int play(const QStringList& args)
+{
+    if (args.isEmpty())
+    {
+        std::fprintf(stderr, "play: which file?\n");
+        return 1;
+    }
+    std::string error;
+    std::unique_ptr<fla::FLADocument> document = load(args.at(0).toStdString(), error);
+    if (!document || !document->document || !document->document->currentScene())
+    {
+        std::fprintf(stderr, "%s\n", error.empty() ? "Could not open it." : error.c_str());
+        return 1;
+    }
+    const int frames = option(args, "--frames").isEmpty() ? 120 : std::max(0, option(args, "--frames").toInt());
+    const std::vector<const fla::Timeline*> scenes(document->document->timelines.begin(), document->document->timelines.end());
+    fla::play::MovieRuntime movie(scenes, document->document->frameRate > 0.0 ? document->document->frameRate : 24.0);
+    int errors = 0;
+    movie.trace = [](const std::string& text) { std::printf("%s\n", text.c_str()); };
+    movie.error = [&errors](const std::string& text) {
+        ++errors;
+        std::printf("ERROR %s\n", text.c_str());
+    };
+    movie.getURL = [](const std::string& url, const std::string& window) {
+        std::printf("getURL %s %s\n", url.c_str(), window.c_str());
+    };
+    movie.start();
+    for (int i = 0; i < frames; ++i)
+        movie.step();
+    std::printf("after %d frames: scene %d of %d, frame %d, %s\n", frames, movie.scene() + 1, movie.sceneCount(),
+        movie.root().frame + 1, movie.root().playing ? "playing" : "stopped");
+    if (args.contains("--tree"))
+    {
+        // Every clip there is now, with what scripts it has.
+        std::function<void(const fla::play::Clip&, int)> show = [&](const fla::play::Clip& clip, int depth) {
+            int frameScripts = 0;
+            if (clip.timeline)
+            {
+                for (const fla::Layer* layer : clip.timeline->layers)
+                {
+                    for (const fla::Frame* frame : layer ? layer->frames : std::vector<fla::Frame*>{})
+                        frameScripts += frame->actionScript && !frame->actionScript->code.empty() ? 1 : 0;
+                }
+            }
+            const bool own = clip.placed && !fla::play::instanceScript(*clip.placed).empty();
+            std::printf("%*s%s%s%s frame %d/%d %s%s%s\n", depth * 2, "", clip.key.empty() ? "root" : clip.key.c_str(),
+                clip.name.empty() ? "" : (" \"" + clip.name + "\"").c_str(), clip.button ? " [button]" : "",
+                clip.frame + 1, clip.length, clip.playing ? "playing" : "stopped",
+                frameScripts ? (", " + std::to_string(frameScripts) + " frame scripts").c_str() : "",
+                own ? ", own script" : "");
+            for (const auto& child : clip.children)
+                show(*child, depth + 1);
+        };
+        show(movie.root(), 0);
+    }
+    if (args.contains("--click-all"))
+    {
+        // The buttons there are now, by the keys that lead to them; clicking
+        // may make or drop others, so each is looked for again before it is
+        // clicked.
+        std::vector<std::vector<std::string>> paths;
+        std::vector<std::string> path;
+        std::function<void(const fla::play::Clip&)> collect = [&](const fla::play::Clip& clip) {
+            for (const auto& child : clip.children)
+            {
+                path.push_back(child->key);
+                if (child->button)
+                    paths.push_back(path);
+                collect(*child);
+                path.pop_back();
+            }
+        };
+        collect(movie.root());
+        std::printf("%d buttons\n", static_cast<int>(paths.size()));
+        for (const std::vector<std::string>& keys : paths)
+        {
+            fla::play::Clip* clip = &movie.root();
+            std::string shown;
+            for (const std::string& key : keys)
+            {
+                clip = clip ? clip->child(key) : nullptr;
+                shown += "/" + key;
+            }
+            if (!clip)
+            {
+                std::printf("click %s: gone\n", shown.c_str());
+                continue;
+            }
+            std::printf("click %s\n", shown.c_str());
+            movie.pointerOver(clip);
+            movie.pointerDown();
+            movie.pointerUp();
+            movie.pointerOver(nullptr);
+            for (int i = 0; i < 4; ++i)
+                movie.step();
+        }
+        std::printf("after clicking: root on frame %d, %s\n", movie.root().frame + 1,
+            movie.root().playing ? "playing" : "stopped");
+    }
+    std::printf("%d errors\n", errors);
+    return errors > 0 ? 1 : 0;
+}
+
 } // namespace
 
 bool isCommand(const QString& name)
 {
-    return name == "benchmark" || name == "render" || name == "run-script" || name == "doctor" || name == "diff" || name == "batch" || name == "shots" || name == "links" || name == "shortcuts" || name == "lessons" || name == "help" ||
+    return name == "play" || name == "benchmark" || name == "render" || name == "run-script" || name == "doctor" || name == "diff" || name == "batch" || name == "shots" || name == "links" || name == "shortcuts" || name == "lessons" || name == "help" ||
            name == "--help";
 }
 
@@ -871,6 +990,8 @@ int run(const QStringList& arguments)
         return doctor(args);
     if (name == "benchmark")
         return benchmark(args);
+    if (name == "play")
+        return play(args);
     if (name == "diff")
         return diff(args);
     if (name == "batch")

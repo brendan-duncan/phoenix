@@ -219,3 +219,41 @@ TEST(movie_runtime_scripts_find_clips_by_path_and_dot)
     for (const std::string& error : errors)
         std::printf("    %s\n", error.c_str());
 }
+
+TEST(movie_runtime_plays_scenes_in_turn_and_goes_to_them)
+{
+    Movie movie;
+    movie.root->name = "Intro";
+    fla::Layer* introLayer = movie.layer(*movie.root, "actions");
+    movie.frame(*introLayer, 0, 2);
+    fla::Timeline second(nullptr);
+    second.name = "Story";
+    fla::Layer* storyLayer = movie.layer(second, "actions");
+    movie.frame(*storyLayer, 0, 1, "trace('story');");
+    movie.frame(*storyLayer, 1, 1)->name = "ending";
+    movie.frame(*storyLayer, 2, 1, "stop();");
+
+    std::vector<std::string> traced;
+    fla::play::MovieRuntime runtime(std::vector<const fla::Timeline*>{movie.root.get(), &second}, 12.0);
+    runtime.trace = [&traced](const std::string& line) { traced.push_back(line); };
+    CHECK(runtime.sceneCount() == 2 && runtime.scene() == 0);
+    runtime.step();
+    CHECK(runtime.scene() == 0 && runtime.root().frame == 1);
+    // Past the first scene's end, the next scene's first frame and its script.
+    runtime.step();
+    CHECK(runtime.scene() == 1 && runtime.root().frame == 0 && traced.size() == 1 && traced[0] == "story");
+    runtime.step();
+    runtime.step();
+    CHECK(runtime.scene() == 1 && runtime.root().frame == 2 && !runtime.root().playing);
+
+    // A script that names a scene, or a label in another scene, goes there.
+    fla::Layer* buttons = movie.layer(*movie.root, "nav");
+    (void)buttons;
+    movie.root->layers[0]->frames[0]->actionScript = new fla::ActionScript(movie.root->layers[0]->frames[0]);
+    movie.root->layers[0]->frames[0]->actionScript->code = "gotoAndStop('ending');";
+    runtime.start();
+    CHECK(runtime.scene() == 1 && runtime.root().frame == 1 && !runtime.root().playing);
+    movie.root->layers[0]->frames[0]->actionScript->code = "gotoAndPlay('Story', 3);";
+    runtime.start();
+    CHECK(runtime.scene() == 1 && runtime.root().frame == 2);
+}

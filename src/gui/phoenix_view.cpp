@@ -1602,8 +1602,9 @@ void PhoenixView::drawDocument(QPainter& painter, const fla::Document* document)
 
     // The clips' frame actions are read again each time, after any edit.
     _clipSequences.clear();
-    // One scene at a time, as Animate shows them.
-    const fla::Timeline* scene = document->currentScene();
+    // One scene at a time, as Animate shows them; Test Movie shows the one
+    // the movie is playing.
+    const fla::Timeline* scene = _movie && _movie->root().timeline ? _movie->root().timeline : document->currentScene();
     if (!scene || !scene->visible)
         return;
     // The camera's color effect is over everything it sees: the scene drawn
