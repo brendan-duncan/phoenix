@@ -1,4 +1,5 @@
 #include "color_panel.h"
+#include "theme.h"
 
 #include "../data/bitmap.h"
 #include "../data/document.h"
@@ -63,7 +64,7 @@ QIcon swatchIcon(const QColor& color)
     QPainter painter(&pixmap);
     paintChecks(painter, QRectF(1, 1, 20, 20));
     painter.fillRect(QRectF(1, 1, 20, 20), color);
-    painter.setPen(QColor(120, 120, 120));
+    painter.setPen(theme::color("swatchBorder"));
     painter.drawRect(QRectF(0.5, 0.5, 21, 21));
     return QIcon(pixmap);
 }
@@ -174,7 +175,7 @@ void GradientBar::paintEvent(QPaintEvent*)
     for (const auto& stop : _stops)
         gradient.setColorAt(std::clamp(stop.ratio, 0.0, 1.0), toQColor(stop.color));
     painter.fillRect(bar, gradient);
-    painter.setPen(QColor(120, 120, 120));
+    painter.setPen(theme::color("swatchBorder"));
     painter.setBrush(Qt::NoBrush);
     painter.drawRect(bar);
 
@@ -195,7 +196,7 @@ void GradientBar::paintEvent(QPaintEvent*)
         pointer.closeSubpath();
         painter.setBrush(toQColor(_stops[i].color));
         const bool picked = static_cast<int>(i) == _current;
-        painter.setPen(QPen(picked ? QColor(41, 128, 238) : QColor(90, 90, 90), picked ? 2.0 : 1.0));
+        painter.setPen(QPen(picked ? palette().color(QPalette::Highlight) : theme::color("swatchBorder"), picked ? 2.0 : 1.0));
         painter.drawPath(pointer);
     }
 }

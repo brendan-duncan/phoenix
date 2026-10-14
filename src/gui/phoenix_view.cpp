@@ -6274,10 +6274,10 @@ void PhoenixView::drawToolOverlay(QPainter& painter)
     // each selected instance's, as Animate marks them.
     const auto crosshair = [&painter, scale](const QPointF& at, double reach) {
         const double r = reach * scale;
-        painter.setPen(QPen(QColor(255, 255, 255), 3.0 * scale));
+        painter.setPen(QPen(theme::color("stage.handleFill"), 3.0 * scale));
         painter.drawLine(QPointF(at.x() - r, at.y()), QPointF(at.x() + r, at.y()));
         painter.drawLine(QPointF(at.x(), at.y() - r), QPointF(at.x(), at.y() + r));
-        painter.setPen(QPen(QColor(0, 0, 0), 1.0 * scale));
+        painter.setPen(QPen(theme::color("stage.handleLine"), 1.0 * scale));
         painter.drawLine(QPointF(at.x() - r, at.y()), QPointF(at.x() + r, at.y()));
         painter.drawLine(QPointF(at.x(), at.y() - r), QPointF(at.x(), at.y() + r));
     };
@@ -6315,10 +6315,10 @@ void PhoenixView::drawToolOverlay(QPainter& painter)
             {
                 const fla::Point& p = start ? hints[i].start : hints[i].end;
                 const QPointF at(p.x, p.y);
-                painter.setPen(QPen(QColor(0, 0, 0), 1.0 * scale));
+                painter.setPen(QPen(theme::color("stage.handleLine"), 1.0 * scale));
                 painter.setBrush(start ? QColor(255, 220, 0) : QColor(60, 200, 60));
                 painter.drawEllipse(at, r, r);
-                painter.setPen(QColor(0, 0, 0));
+                painter.setPen(theme::color("stage.handleLine"));
                 painter.drawText(QRectF(at.x() - r, at.y() - r, 2 * r, 2 * r), Qt::AlignCenter,
                     QString(QChar('a' + static_cast<int>(i))));
             }
@@ -6345,7 +6345,7 @@ void PhoenixView::drawToolOverlay(QPainter& painter)
                 continue;
             const double r = 3.5 * scale;
             painter.setPen(QPen(path.color, 1.0 * scale));
-            painter.setBrush(QColor(255, 255, 255));
+            painter.setBrush(theme::color("stage.handleFill"));
             painter.drawRect(QRectF(path.points[key].x() - r, path.points[key].y() - r, 2.0 * r, 2.0 * r));
         }
         if (path.current >= 0 && path.current < static_cast<int>(path.points.size()))

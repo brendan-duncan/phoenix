@@ -1,4 +1,5 @@
 #include "free_transform_tool.h"
+#include "theme.h"
 
 #include "phoenix_view.h"
 #include "selection_targets.h"
@@ -334,7 +335,7 @@ void FreeTransformTool::drawEnvelope(QPainter& painter, double scale) const
         sides.cubicTo(a.out, b.in, b.point);
     }
     painter.setBrush(Qt::NoBrush);
-    painter.setPen(QPen(QColor(0, 0, 0), 1.0 * scale));
+    painter.setPen(QPen(theme::color("stage.handleLine"), 1.0 * scale));
     painter.drawPath(sides);
 
     // Each handle on a thin line from its anchor, as a hollow circle; the
@@ -342,18 +343,18 @@ void FreeTransformTool::drawEnvelope(QPainter& painter, double scale) const
     const double half = kHandleScreenSize * scale;
     for (const EnvelopeAnchor& anchor : _envelope)
     {
-        painter.setPen(QPen(QColor(0, 0, 0), 0.5 * scale));
+        painter.setPen(QPen(theme::color("stage.handleLine"), 0.5 * scale));
         painter.drawLine(anchor.point, anchor.in);
         painter.drawLine(anchor.point, anchor.out);
-        painter.setPen(QPen(QColor(0, 0, 0), 1.0 * scale));
-        painter.setBrush(QColor(255, 255, 255));
+        painter.setPen(QPen(theme::color("stage.handleLine"), 1.0 * scale));
+        painter.setBrush(theme::color("stage.handleFill"));
         painter.drawEllipse(anchor.in, half, half);
         painter.drawEllipse(anchor.out, half, half);
     }
     for (const EnvelopeAnchor& anchor : _envelope)
     {
-        painter.setPen(QPen(QColor(0, 0, 0), 1.0 * scale));
-        painter.setBrush(QColor(255, 255, 255));
+        painter.setPen(QPen(theme::color("stage.handleLine"), 1.0 * scale));
+        painter.setBrush(theme::color("stage.handleFill"));
         painter.drawRect(QRectF(anchor.point.x() - half, anchor.point.y() - half, half * 2.0, half * 2.0));
     }
 }
@@ -1425,12 +1426,12 @@ void FreeTransformTool::paintOverlay(PhoenixView& view, QPainter& painter, doubl
     // Animate's transform box: a thin black outline, hollow white handles with
     // a black border, and a white circle for the transformation point.
     painter.setBrush(Qt::NoBrush);
-    painter.setPen(QPen(QColor(0, 0, 0), 1.0 * scale));
+    painter.setPen(QPen(theme::color("stage.handleLine"), 1.0 * scale));
     painter.drawPolygon(_box);
 
     const double half = kHandleScreenSize * scale;
-    painter.setBrush(QColor(255, 255, 255));
-    painter.setPen(QPen(QColor(0, 0, 0), 1.0 * scale));
+    painter.setBrush(theme::color("stage.handleFill"));
+    painter.setPen(QPen(theme::color("stage.handleLine"), 1.0 * scale));
 
     for (int i = 0; i < kHandleCount; ++i)
     {
@@ -1439,8 +1440,8 @@ void FreeTransformTool::paintOverlay(PhoenixView& view, QPainter& painter, doubl
     }
 
     // The transformation point, which rotation turns about.
-    painter.setBrush(QColor(255, 255, 255));
-    painter.setPen(QPen(QColor(0, 0, 0), 1.0 * scale));
+    painter.setBrush(theme::color("stage.handleFill"));
+    painter.setPen(QPen(theme::color("stage.handleLine"), 1.0 * scale));
     painter.drawEllipse(_pivot, half, half);
 }
 

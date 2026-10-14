@@ -1,4 +1,5 @@
 #include "document_view.h"
+#include "theme.h"
 #include <QSignalBlocker>
 #include <QTreeWidgetItemIterator>
 #include "../data/bitmap_instance.h"
@@ -36,31 +37,12 @@ DocumentView::DocumentView(QWidget *parent)
     connect(this, &QTreeWidget::itemExpanded, this, &DocumentView::onItemExpanded);
     connect(this, &QTreeWidget::itemSelectionChanged, this, &DocumentView::onSelectionChanged);
 
-    // Create type icons
+    // The icons, drawn again in the theme's colors when it changes.
     createTypeIcons();
-
-    // Visible icon
-    {
-        QString iconText = "👁";
-        QPixmap pixmap(16, 16);
-        pixmap.fill(Qt::transparent);
-        QPainter painter(&pixmap);
-        painter.setFont(QFont("Segoe UI Emoji", 10));
-        painter.setPen(Qt::black);
-        painter.drawText(pixmap.rect(), Qt::AlignCenter, iconText);
-        _visibleIcon = QIcon(pixmap);
-    }
-    // Hidden icon
-    {
-        QString iconText = "⚠";
-        QPixmap pixmap(16, 16);
-        pixmap.fill(Qt::transparent);
-        QPainter painter(&pixmap);
-        painter.setFont(QFont("Segoe UI Emoji", 10));
-        painter.setPen(Qt::gray);
-        painter.drawText(pixmap.rect(), Qt::AlignCenter, iconText);
-        _hiddenIcon = QIcon(pixmap);
-    }
+    connect(theme::notifier(), &theme::Notifier::changed, this, [this]() {
+        createTypeIcons();
+        refreshTree();
+    });
 }
 
 void DocumentView::createTypeIcons()
@@ -76,16 +58,21 @@ void DocumentView::createTypeIcons()
         return QIcon(pixmap);
     };
 
-    // Create type-specific icons with Unicode symbols
-    _documentIcon = createIcon("📋", QColor(70, 130, 180));   // Clipboard for document
-    _timelineIcon = createIcon("⏱", QColor(100, 100, 200));   // Clock for timeline
-    _layerIcon = createIcon("≣", QColor(150, 150, 50));      // Document for layer
-    _frameIcon = createIcon("🎞", QColor(200, 100, 100));      // Film for frame
-    _shapeIcon = createIcon("▢", QColor(100, 200, 100));      // Square for shape
-    _groupIcon = createIcon("📁", QColor(200, 150, 50));       // Folder for group
-    _symbolIcon = createIcon("⭐", QColor(200, 200, 50));      // Star for symbol
-    _bitmapIcon = createIcon("🖼", QColor(150, 100, 200));     // Picture for bitmap
-    _textIcon = createIcon("A", QColor(255, 255, 255));          // A for text
+    // A symbol per kind of item. The emoji draw in their own colors; the
+    // plain characters take the theme's icon color, so they show on a
+    // light theme as on a dark one.
+    const QColor ink = theme::color("icon");
+    _documentIcon = createIcon("📋", ink);
+    _timelineIcon = createIcon("⏱", ink);
+    _layerIcon = createIcon("≣", ink);
+    _frameIcon = createIcon("🎞", ink);
+    _shapeIcon = createIcon("▢", ink);
+    _groupIcon = createIcon("📁", ink);
+    _symbolIcon = createIcon("⭐", ink);
+    _bitmapIcon = createIcon("🖼", ink);
+    _textIcon = createIcon("A", ink);
+    _visibleIcon = createIcon("👁", ink);
+    _hiddenIcon = createIcon("⚠", theme::color("dimText"));
 }
 
 DocumentView::~DocumentView()

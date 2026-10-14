@@ -1,4 +1,5 @@
 #include "xsheet_panel.h"
+#include "theme.h"
 
 #include "../data/document.h"
 #include "../data/frame.h"
@@ -205,7 +206,7 @@ void XSheetGrid::paintEvent(QPaintEvent* event)
         const int y = kHeader + row * kRow;
         // Every eighth frame and seconds marked, as on a paper sheet.
         if (row == current)
-            painter.fillRect(QRect(0, y, width(), kRow), QColor(230, 60, 60, 60));
+            painter.fillRect(QRect(0, y, width(), kRow), theme::withAlpha(theme::color("playhead"), 60));
         else if (row % 2 == 1)
             painter.fillRect(QRect(0, y, width(), kRow), pal.color(QPalette::AlternateBase));
         painter.setPen(pal.color(QPalette::PlaceholderText));

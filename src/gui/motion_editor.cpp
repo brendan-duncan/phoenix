@@ -1,4 +1,5 @@
 #include "motion_editor.h"
+#include "theme.h"
 
 #include "../data/frame.h"
 #include "../data/symbol_instance.h"
@@ -216,7 +217,7 @@ void MotionCurveView::paintEvent(QPaintEvent*)
 
     // The playhead.
     const double playX = toScreen(_current * _timePerFrame, _low).x();
-    painter.setPen(QPen(QColor(230, 60, 60), 1.0));
+    painter.setPen(QPen(theme::color("playhead"), 1.0));
     painter.drawLine(QPointF(playX, r.top()), QPointF(playX, r.bottom()));
 
     // The curve.

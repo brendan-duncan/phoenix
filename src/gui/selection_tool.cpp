@@ -1,4 +1,5 @@
 #include "selection_tool.h"
+#include "theme.h"
 #include "../edit/element_clone.h"
 
 #include "phoenix_view.h"
@@ -398,7 +399,7 @@ void SelectionTool::paintOverlay(PhoenixView& view, QPainter& painter, double sc
 {
     if (_marqueeActive)
     {
-        QPen pen(QColor(0, 0, 0), 1.0 * scale, Qt::DashLine);
+        QPen pen(theme::color("stage.handleLine"), 1.0 * scale, Qt::DashLine);
         painter.setPen(pen);
         painter.setBrush(Qt::NoBrush);
         painter.drawRect(marqueeRect());
@@ -410,7 +411,7 @@ void SelectionTool::paintOverlay(PhoenixView& view, QPainter& painter, double sc
         // The snap ring sits at the grab point and grows when the drag has
         // locked onto something.
         const double radius = (_snapped ? 6.0 : 3.5) * scale;
-        painter.setPen(QPen(QColor(0, 0, 0), (_snapped ? 1.5 : 1.0) * scale));
+        painter.setPen(QPen(theme::color("stage.handleLine"), (_snapped ? 1.5 : 1.0) * scale));
         painter.setBrush(Qt::NoBrush);
         painter.drawEllipse(_snapRingPos, radius, radius);
     }
