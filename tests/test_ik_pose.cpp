@@ -549,6 +549,19 @@ TEST(a_bone_added_to_an_armature_with_poses_turns_with_its_parent_in_each)
     CHECK(std::fabs(after[3].position.y - after[2].position.y - 50.0) < 0.01);
     // The first frame as it was drawn.
     CHECK(std::fabs(rebuilt.jointsAt(0)[3].position.x - 350.0) < 0.01);
+
+    // The ease from the first pose to the second goes along too.
+    std::string xml = armature.xml();
+    const size_t state = xml.find("<IKState ");
+    CHECK(state != std::string::npos);
+    xml.insert(state + 9, "easeType=\"simple quadratic\" easeValue=\"50\" ");
+    fla::IKArmature eased;
+    CHECK(eased.parse(xml));
+    fla::IKArmature again;
+    CHECK(again.parse(fla::symbolArmatureXml(armature.name(), armature.treeName(), joints, armature.frames())));
+    fla::carryPoses(eased, again);
+    CHECK(again.xml().find("easeValue=\"50\"") != std::string::npos);
+    CHECK(armature.xml().find("easeValue=\"50\"") == std::string::npos);
 }
 
 TEST(a_symbol_armature_posed_twice_saves_and_plays)

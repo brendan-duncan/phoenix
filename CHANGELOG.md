@@ -2,6 +2,12 @@
 
 What changed in each release of Phoenix, newest first.
 
+## 0.10.0 (Unreleased)
+
+- The Asset Warp tool makes a puppet from a shape, bitmap, group or graphic: click it, and the first pin goes where you clicked
+- Window > Collapse Right (or Left) Panels to Icons folds a side's panels into a strip of their names, each opening beside it, for more stage
+- Adding a bone to a posed armature keeps the eases between its poses
+
 ## 0.9.0
 
 - Phoenix for Linux: a 64-bit AppImage that runs from the file and updates itself

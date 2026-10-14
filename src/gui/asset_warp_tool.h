@@ -15,6 +15,8 @@
 
 namespace fla {
 class CommandStack;
+class Element;
+class Frame;
 class SymbolInstance;
 }
 
@@ -25,8 +27,12 @@ class SymbolInstance;
 class AssetWarpTool : public Tool
 {
 public:
-    /// \a status shows a message in the status bar.
-    AssetWarpTool(fla::CommandStack& commands, std::function<void(const QString&)> status);
+    /// \a status shows a message in the status bar. \a makePuppet turns art
+    /// (a shape, a bitmap, a group or a graphic) into a puppet in its place,
+    /// as one undo step, and gives the puppet's instance; null when it
+    /// cannot.
+    AssetWarpTool(fla::CommandStack& commands, std::function<void(const QString&)> status,
+        std::function<fla::SymbolInstance*(fla::Element* art, fla::Frame* frame)> makePuppet = {});
 
     QString name() const override { return "Asset Warp"; }
     QCursor cursor() const override { return Qt::CrossCursor; }
@@ -52,6 +58,7 @@ private:
 
     fla::CommandStack& _commands;
     std::function<void(const QString&)> _status;
+    std::function<fla::SymbolInstance*(fla::Element*, fla::Frame*)> _makePuppet;
     fla::SymbolInstance* _puppet = nullptr;
     /// The puppet's own space to the document's, from when it was picked.
     QTransform _toDocument;

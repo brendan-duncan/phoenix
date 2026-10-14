@@ -510,7 +510,8 @@ MainWindow::MainWindow(const QString& initialFile, QWidget* parent, bool startup
     _rotationTool = std::make_unique<RotationTool>();
     _timeScrubTool = std::make_unique<TimeScrubTool>();
     const auto showStatus = [this](const QString& message) { statusBar()->showMessage(message, 5000); };
-    _assetWarpTool = std::make_unique<AssetWarpTool>(stack, showStatus);
+    _assetWarpTool = std::make_unique<AssetWarpTool>(stack, showStatus,
+        [this](fla::Element* art, fla::Frame* frame) { return makePuppet(art, frame); });
     _rotate3DTool = std::make_unique<ThreeDTool>(ThreeDTool::Mode::Rotate, stack, showStatus);
     _translate3DTool = std::make_unique<ThreeDTool>(ThreeDTool::Mode::Translate, stack, showStatus);
     _widthTool = std::make_unique<WidthTool>(stack);
@@ -2171,6 +2172,19 @@ void MainWindow::setupWindowMenu()
 
     QMenu* workspaceMenu = windowMenu->addMenu("&Workspaces");
     connect(workspaceMenu, &QMenu::aboutToShow, this, [this, workspaceMenu]() { fillWorkspaceMenu(workspaceMenu); });
+    // A side's panels folded to a strip of their names, to give the stage
+    // the room; each opens beside the strip.
+    for (const auto& [area, label] : {std::pair<Qt::DockWidgetArea, const char*>{Qt::RightDockWidgetArea,
+                                          "Collapse &Right Panels to Icons"},
+             {Qt::LeftDockWidgetArea, "Collapse &Left Panels to Icons"}})
+    {
+        QAction* collapse = windowMenu->addAction(label);
+        collapse->setCheckable(true);
+        collapse->setStatusTip("Fold the panels docked on that side into a strip of their names; click one to open it");
+        const Qt::DockWidgetArea side = area;
+        connect(collapse, &QAction::toggled, this, [this, side](bool on) { setPanelsCollapsed(side, on); });
+        _collapseActions[side] = collapse;
+    }
     windowMenu->addSeparator();
 
     struct Panel
@@ -7919,6 +7933,93 @@ QString workspaceKey(const QString& name)
 
 } // namespace
 
+void MainWindow::setPanelsCollapsed(Qt::DockWidgetArea area, bool collapsed)
+{
+    CollapsedSide& side = _collapsed[area];
+    if (collapsed == (side.strip != nullptr))
+        return;
+    if (collapsed)
+    {
+        // The panels open on that side, docked.
+        for (QDockWidget* dock : findChildren<QDockWidget*>())
+        {
+            if (dock->parentWidget() == this && dockWidgetArea(dock) == area && !dock->isFloating() &&
+                dock->toggleViewAction()->isChecked())
+                side.docks.push_back(dock);
+        }
+        if (side.docks.empty())
+        {
+            if (QAction* action = _collapseActions[area])
+            {
+                const QSignalBlocker block(action);
+                action->setChecked(false);
+            }
+            statusBar()->showMessage("No panels are docked on that side.", 4000);
+            return;
+        }
+        side.strip = new QToolBar("Collapsed Panels", this);
+        side.strip->setObjectName(area == Qt::RightDockWidgetArea ? "collapsedRight" : "collapsedLeft");
+        side.strip->setMovable(false);
+        side.strip->setFloatable(false);
+        side.strip->setOrientation(Qt::Vertical);
+        side.strip->setToolButtonStyle(Qt::ToolButtonTextOnly);
+        addToolBar(area == Qt::RightDockWidgetArea ? Qt::RightToolBarArea : Qt::LeftToolBarArea, side.strip);
+        QToolBar* strip = side.strip;
+        for (QDockWidget* dock : side.docks)
+        {
+            dock->hide();
+            QAction* open = strip->addAction(dock->windowTitle());
+            open->setToolTip(QString("Open %1").arg(dock->windowTitle()));
+            connect(open, &QAction::triggered, this, [this, area, dock, strip, open]() {
+                // Open beside the strip, by its button; again, it closes.
+                const bool shown = dock->isVisible();
+                for (QDockWidget* other : _collapsed[area].docks)
+                    if (other->isFloating())
+                        other->hide();
+                if (shown)
+                    return;
+                dock->setFloating(true);
+                QWidget* button = strip->widgetForAction(open);
+                const QPoint at = button ? button->mapToGlobal(QPoint(0, 0)) : strip->mapToGlobal(QPoint(0, 0));
+                const int width = std::max(dock->width(), 260);
+                const int height = std::max(dock->height(), 320);
+                dock->resize(width, height);
+                dock->move(area == Qt::RightDockWidgetArea ? at.x() - width - 4 : at.x() + strip->width() + 4, at.y());
+                dock->show();
+                dock->raise();
+                dock->activateWindow();
+            });
+        }
+        strip->addSeparator();
+        QAction* expand = strip->addAction("Expand");
+        expand->setToolTip("Put the panels back as they were docked");
+        connect(expand, &QAction::triggered, this, [this, area]() { setPanelsCollapsed(area, false); });
+    }
+    else
+    {
+        for (QDockWidget* dock : side.docks)
+        {
+            if (dock->isFloating())
+                dock->setFloating(false);
+            dock->show();
+        }
+        removeToolBar(side.strip);
+        side.strip->deleteLater();
+        side = CollapsedSide();
+    }
+    if (QAction* action = _collapseActions[area])
+    {
+        const QSignalBlocker block(action);
+        action->setChecked(collapsed);
+    }
+}
+
+void MainWindow::expandCollapsedPanels()
+{
+    for (const Qt::DockWidgetArea area : {Qt::RightDockWidgetArea, Qt::LeftDockWidgetArea})
+        setPanelsCollapsed(area, false);
+}
+
 QJsonObject MainWindow::currentWorkspace() const
 {
     QJsonObject workspace;
@@ -8024,6 +8125,8 @@ void MainWindow::useWorkspace(const QString& name)
 
 void MainWindow::saveWorkspaceAs(const QString& name)
 {
+    // Panels folded to icons are saved where they are docked.
+    expandCollapsedPanels();
     QSettings().setValue(workspaceKey(name), QJsonDocument(currentWorkspace()).toJson(QJsonDocument::Compact));
     QSettings().setValue("workspace/current", name);
     statusBar()->showMessage(QString("Saved the workspace %1.").arg(name), 3000);
@@ -12067,6 +12170,56 @@ void MainWindow::testMovie()
     window.exec();
 }
 
+fla::SymbolInstance* MainWindow::makePuppet(fla::Element* art, fla::Frame* frame)
+{
+    fla::Document* document = _flaDocument ? _flaDocument->document : nullptr;
+    if (!document || !art || !frame || !_phoenixView || art->parent != frame)
+        return nullptr;
+    // As Animate makes one: the art in a graphic symbol (WarpedAsset_n), in
+    // a puppet symbol (PuppetShape_n) whose first frame is that graphic,
+    // placed where the art was. The pins go on the instance.
+    const auto freeName = [document](const std::string& base) {
+        for (int n = 1;; ++n)
+            if (fla::library::nameIsFree(*document, base + std::to_string(n)))
+                return base + std::to_string(n);
+    };
+    const QRectF bounds = _phoenixView->elementBounds(art);
+    const QPointF registration = bounds.isValid() ? bounds.center() : QPointF();
+    const bool bitmap = art->elementType() == fla::Element::Type::BitmapInstance;
+    fla::CommandStack& stack = _editContext.commandStack();
+    stack.beginMacro("Make Puppet");
+    auto asset = std::make_unique<fla::ConvertToSymbolCommand>(document, frame, std::vector<fla::Element*>{art},
+        freeName("WarpedAsset_"), registration.x(), registration.y(), "Make Puppet", &_selection,
+        fla::SymbolType::Graphic);
+    fla::ConvertToSymbolCommand* assetCommand = asset.get();
+    stack.push(std::move(asset));
+    fla::SymbolInstance* assetInstance = assetCommand->instance();
+    auto puppet = std::make_unique<fla::ConvertToSymbolCommand>(document, frame,
+        std::vector<fla::Element*>{assetInstance}, freeName("PuppetShape_"), registration.x(), registration.y(),
+        "Make Puppet", &_selection, fla::SymbolType::Graphic);
+    fla::ConvertToSymbolCommand* puppetCommand = puppet.get();
+    stack.push(std::move(puppet));
+    fla::Symbol* symbol = puppetCommand->symbol();
+    fla::SymbolInstance* instance = puppetCommand->instance();
+    if (symbol && instance)
+    {
+        stack.push(fla::CommandPtr(new fla::SetPropertyCommand<std::string>(symbol->otherSymbolType,
+            symbol->otherSymbolType, "puppet", "Make Puppet")));
+        stack.push(fla::CommandPtr(new fla::SetPropertyCommand<std::string>(instance->otherSymbolType,
+            instance->otherSymbolType, "puppet", "Make Puppet")));
+        auto attributes = symbol->extraAttributes;
+        attributes.emplace_back("puppetData", bitmap ? "[{\"type\":\"bitmap\"}]" : "[{\"type\":\"vector\"}]");
+        stack.push(fla::CommandPtr(new fla::SetPropertyCommand<decltype(attributes)>(symbol->extraAttributes,
+            symbol->extraAttributes, attributes, "Make Puppet")));
+    }
+    stack.endMacro();
+    if (_libraryPanel)
+        _libraryPanel->refreshIfStale();
+    _phoenixView->clearCaches();
+    _phoenixView->update();
+    return symbol && instance ? instance : nullptr;
+}
+
 void MainWindow::showScript(const fla::DOMElement* source, int line)
 {
     if (!_actionsDock || !_actionsPanel)
@@ -14271,7 +14424,10 @@ void MainWindow::saveSettings()
         return;
     settings.setValue("window/geometry", saveGeometry());
     if (_layoutRestored)
+    {
+        expandCollapsedPanels();
         settings.setValue("window/state", saveState(kLayoutVersion));
+    }
 }
 
 void MainWindow::closeEvent(QCloseEvent* event)

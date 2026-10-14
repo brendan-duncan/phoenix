@@ -779,6 +779,22 @@ private:
     /// The Actions panel shows \a source's script (a keyframe or an
     /// instance), at \a line.
     void showScript(const fla::DOMElement* source, int line);
+    /// The Asset Warp tool's first pin on art: the art made a puppet in its
+    /// place, one undo step; its instance, or null.
+    fla::SymbolInstance* makePuppet(fla::Element* art, fla::Frame* frame);
+    /// Window > Collapse ... Panels to Icons: the panels docked on \a area
+    /// folded to a strip of their names beside the stage, each opening
+    /// beside it; or put back.
+    void setPanelsCollapsed(Qt::DockWidgetArea area, bool collapsed);
+    /// Every side put back, as layouts are saved.
+    void expandCollapsedPanels();
+    struct CollapsedSide
+    {
+        class QToolBar* strip = nullptr;
+        std::vector<QDockWidget*> docks;
+    };
+    std::map<int, CollapsedSide> _collapsed;
+    std::map<int, QAction*> _collapseActions;
     /// Review Notes: notes on frames, kept on a guide layer.
     class NotesPanel* _notes = nullptr;
     QDockWidget* _notesDock = nullptr;

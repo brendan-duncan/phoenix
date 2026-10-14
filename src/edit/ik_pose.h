@@ -125,6 +125,10 @@ public:
     /// The frames, into the span, where poses are.
     std::vector<int> poses() const;
 
+    /// Each pose's ease to the next (its IKState's easeType and easeValue)
+    /// made what \a from has for the pose starting on the same frame.
+    void copyEases(const IKArmature& from);
+
     /// The joints as stored for \a frame frames into the span.
     std::vector<IKJoint> jointsAt(int frame) const;
 

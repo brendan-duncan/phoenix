@@ -386,6 +386,43 @@ std::vector<IKJoint> IKArmature::jointsAt(int frame) const
     return joints;
 }
 
+void IKArmature::copyEases(const IKArmature& from)
+{
+    if (!_document || !from._document)
+        return;
+    // Where each pose span starts, in both.
+    const auto starts = [](const std::vector<tinyxml2::XMLElement*>& list) {
+        std::vector<int> at;
+        int start = 0;
+        for (const tinyxml2::XMLElement* state : list)
+        {
+            at.push_back(start);
+            start += std::max(1, state->IntAttribute("duration", 1));
+        }
+        return at;
+    };
+    const std::vector<tinyxml2::XMLElement*> source = states(from._document->FirstChildElement("IKTree"), "IKState");
+    const std::vector<tinyxml2::XMLElement*> target = states(_document->FirstChildElement("IKTree"), "IKState");
+    const std::vector<int> sourceStarts = starts(source);
+    const std::vector<int> targetStarts = starts(target);
+    for (size_t t = 0; t < target.size(); ++t)
+    {
+        for (size_t s = 0; s < source.size(); ++s)
+        {
+            if (sourceStarts[s] != targetStarts[t])
+                continue;
+            for (const char* name : {"easeType", "easeValue"})
+            {
+                if (const char* value = source[s]->Attribute(name))
+                    target[t]->SetAttribute(name, value);
+                else
+                    target[t]->DeleteAttribute(name);
+            }
+            break;
+        }
+    }
+}
+
 double IKArmature::easedTime(int pose, double t) const
 {
     const std::vector<tinyxml2::XMLElement*> list = states(_document->FirstChildElement("IKTree"), "IKState");
@@ -1575,6 +1612,8 @@ void carryPoses(const IKArmature& old, IKArmature& rebuilt)
         }
         rebuilt.setPose(pose, angles);
     }
+    // And the eases between them.
+    rebuilt.copyEases(old);
 }
 
 } // namespace fla

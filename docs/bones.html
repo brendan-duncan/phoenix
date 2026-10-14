@@ -89,15 +89,16 @@
 
 <h3>Asset Warp tool</h3>
 
-<p>Use the <strong>Asset Warp tool</strong> (<kbd>Shift</kbd>+<kbd>W</kbd>) to bend a puppet by its pins:</p>
+<p>Use the <strong>Asset Warp tool</strong> (<kbd>Shift</kbd>+<kbd>W</kbd>) to make a puppet and bend it by its pins:</p>
 
 <ul>
+  <li>Click a shape, a bitmap, a group or a graphic symbol instance to make it a puppet, with the first pin where you clicked. Its art goes into a graphic symbol (<em>WarpedAsset_1</em>) inside a puppet symbol (<em>PuppetShape_1</em>), both in the library, and the puppet takes its place. Movie clips and buttons cannot be warped.</li>
   <li>Click the puppet to show its pins. A click on the art where there is no pin adds one there.</li>
   <li>Drag a pin. The art bends around the other pins, which hold their places.</li>
   <li><kbd>Alt</kbd>-click a pin, or click it and press <kbd>Delete</kbd>, to take it away.</li>
 </ul>
 
-<p>Each pin change is a single step to undo. Pins are kept on each keyframe's instance, so a classic tween between two keyframes bends the art from one set of pins to the other. To bend art that is not a puppet, use a <a href="rigging.html">deformer</a>.</p>
+<p>Making a puppet, and each pin change, is a single step to undo. Pins are kept on each keyframe's instance, so a classic tween between two keyframes bends the art from one set of pins to the other. To bend art by handles without making it a puppet, use a <a href="rigging.html">deformer</a>.</p>
 
 <p>All armature and warp data is kept when you save, so saved FLA files keep them intact.</p>
 

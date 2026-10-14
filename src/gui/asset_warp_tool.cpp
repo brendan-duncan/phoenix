@@ -12,9 +12,11 @@
 #include <algorithm>
 #include <cmath>
 
-AssetWarpTool::AssetWarpTool(fla::CommandStack& commands, std::function<void(const QString&)> status)
+AssetWarpTool::AssetWarpTool(fla::CommandStack& commands, std::function<void(const QString&)> status,
+    std::function<fla::SymbolInstance*(fla::Element*, fla::Frame*)> makePuppet)
     : _commands(commands)
     , _status(std::move(status))
+    , _makePuppet(std::move(makePuppet))
 {
 }
 
@@ -121,15 +123,44 @@ bool AssetWarpTool::mousePress(PhoenixView& view, QMouseEvent* event, const QPoi
         return true;
     }
 
-    // Otherwise the puppet under the cursor, pinned there.
-    if (!instance || instance->otherSymbolType != "puppet")
+    // Art that is not a puppet yet becomes one, and the pin goes on it.
+    if (hit && (!instance || instance->otherSymbolType != "puppet"))
     {
-        if (instance && _status)
-            _status("Pins go on puppets. To bend other art by handles, use Modify > Deformer.");
+        const bool puppetable = !instance || instance->symbolType == fla::SymbolType::Graphic;
+        fla::SymbolInstance* made = puppetable && _makePuppet ? _makePuppet(hit.element, hit.frame) : nullptr;
+        if (!made)
+        {
+            if (_status)
+                _status(instance ? "A movie clip or button cannot be warped: pins go on shapes, bitmaps, groups "
+                                   "and graphics."
+                                 : "This art cannot be made into a puppet.");
+            _puppet = nullptr;
+            _selected = -1;
+            view.update();
+            return true;
+        }
+        const HitResult again = view.hitTest(documentPos, view.pickTolerance());
+        instance = again && again.element == made ? made : nullptr;
+        if (!instance)
+        {
+            // Under the cursor no longer (a stroke picked at its edge, say):
+            // the puppet is made, pins wait for the next click.
+            _puppet = made;
+            _selected = -1;
+            view.update();
+            return true;
+        }
+        _puppet = nullptr;
+        if (_status)
+            _status("Made a puppet. Click to add pins, drag a pin to bend the art around the others.");
+        return mousePress(view, event, documentPos);
+    }
+    if (!instance)
+    {
         _puppet = nullptr;
         _selected = -1;
         view.update();
-        return instance != nullptr;
+        return false;
     }
     if (instance != _puppet)
     {
