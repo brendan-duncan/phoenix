@@ -545,6 +545,40 @@ public:
         }
         return true;
     }
+    bool exportSWF(fla::FLADocument* document, const std::string& path, std::string& error) override
+    {
+        activate(document);
+        if (document != _window._flaDocument || !_window._phoenixView || !document->document)
+        {
+            error = "Only a document that can be shown can be exported.";
+            return false;
+        }
+        const fla::Document& data = *document->document;
+        QString problem;
+        if (!_window.exportSwf(QFileInfo(qtext(path)).absoluteFilePath(), QSize(std::max(1, data.width), std::max(1, data.height)), problem))
+        {
+            error = problem.isEmpty() ? path + " could not be written." : text(problem);
+            return false;
+        }
+        return true;
+    }
+    bool publish(fla::FLADocument* document, std::vector<std::string>& written, std::string& error) override
+    {
+        activate(document);
+        if (document != _window._flaDocument || !_window._phoenixView || !document->document)
+        {
+            error = "Only a document that can be shown can be published.";
+            return false;
+        }
+        QStringList files;
+        QStringList problems;
+        const bool ok = _window.publishFiles(files, problems);
+        for (const QString& file : files)
+            written.push_back(text(file));
+        if (!ok)
+            error = text(problems.join("\n"));
+        return ok;
+    }
 
 private:
     fla::FLADocument* documentAt(int index) const
@@ -818,6 +852,59 @@ int ScriptRunner::runHeadless(const QString& script, const QStringList& document
         return 1;
     }
     return 0;
+}
+
+int ScriptRunner::runBatch(const QString& script, const QStringList& documents, bool save, const QString& out, double timeLimit)
+{
+    _host->print = [](const std::string& line) {
+        std::fwrite(line.data(), 1, line.size(), stdout);
+        std::fputc('\n', stdout);
+        std::fflush(stdout);
+    };
+    const std::string scriptPath = QFileInfo(script).absoluteFilePath().toStdString();
+    int failed = 0;
+    for (const QString& file : documents)
+    {
+        std::printf("== %s\n", qPrintable(file));
+        std::fflush(stdout);
+        const QString path = QFileInfo(file).absoluteFilePath();
+        std::string error;
+        fla::FLADocument* document = _host->open(path.toStdString(), error);
+        if (!document)
+        {
+            std::fprintf(stderr, "%s\n", error.c_str());
+            ++failed;
+            continue;
+        }
+        _host->fileAnswer = path;
+        jsfl::RunOptions options;
+        options.undoName = QFileInfo(script).completeBaseName().toStdString();
+        options.timeLimit = timeLimit;
+        const jsfl::RunResult result = _engine->runFile(scriptPath, options);
+        bool ok = result.ok;
+        if (!ok)
+        {
+            std::fprintf(stderr, "%s\n", result.report().c_str());
+            if (!result.stack.empty() && !result.interrupted)
+                std::fprintf(stderr, "%s\n", result.stack.c_str());
+        }
+        // The script may have closed the document itself.
+        const std::vector<fla::FLADocument*> open = _host->documents();
+        const bool stillOpen = std::find(open.begin(), open.end(), document) != open.end();
+        if (ok && stillOpen && (save || !out.isEmpty()))
+        {
+            const QString target = !out.isEmpty() ? QDir(out).filePath(QFileInfo(path).fileName()) : path;
+            if ((!out.isEmpty() || _host->modified(document)) && !_host->save(document, target.toStdString(), !out.isEmpty(), error))
+            {
+                std::fprintf(stderr, "%s\n", error.c_str());
+                ok = false;
+            }
+        }
+        if (stillOpen)
+            _host->close(document, false);
+        failed += ok ? 0 : 1;
+    }
+    return failed;
 }
 
 void ScriptRunner::fillCommandsMenu(QMenu* menu)

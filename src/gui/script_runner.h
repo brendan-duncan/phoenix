@@ -67,6 +67,14 @@ public:
     /// standard error. The exit code: 0, or 1 when the script failed.
     int runHeadless(const QString& script, const QStringList& documents, double timeLimit);
 
+    /// Phoenix batch --jsfl: opens each of \a documents alone and runs
+    /// \a script on it with no window, printing "== file" before each as
+    /// batch does, what it traces on standard output and errors on standard
+    /// error. With \a save, what the script changed is written back to the
+    /// file; with \a out, a copy goes into that folder instead. Returns how
+    /// many documents failed.
+    int runBatch(const QString& script, const QStringList& documents, bool save, const QString& out, double timeLimit);
+
     bool running() const;
 
 private:

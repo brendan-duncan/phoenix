@@ -182,6 +182,10 @@ private slots:
     /// publish settings ask for, written beside the document.
     void publishSettings();
     void publish();
+    /// Publishes the shown document beside its file as its publish
+    /// settings say, with no dialogs: the files written and what went
+    /// wrong. False when something could not be written.
+    bool publishFiles(QStringList& written, QStringList& problems);
     /// The current scene as an SWF movie at \a size: its frames as vector
     /// shapes, images and what filters and blends make as bitmaps. False
     /// with \a error when it could not be written.

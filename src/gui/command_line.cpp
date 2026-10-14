@@ -91,6 +91,12 @@ const char* const kHelp =
     "      (python script.py <xfl folder> <document>); with --save, what the\n"
     "      script changed is written back.\n"
     "\n"
+    "  batch --jsfl <script.jsfl> <files or folders> [--save] [--out <folder>]\n"
+    "        [--recursive] [--timeout SECONDS]\n"
+    "      Runs a JSFL script on each document (every .fla and .phx in a\n"
+    "      folder), opened alone, as run-script does. --save writes what the\n"
+    "      script changed back; --out writes a copy into a folder instead.\n"
+    "\n"
     "  shots <episode> [--by scene|label|camera] [--out <folder>] [--format fla|phx|xfl]\n"
     "      Splits an episode into shot files: one per scene, per frame label, or\n"
     "      per camera cut. Tweens across a cut are baked so each shot plays as it\n"
@@ -449,8 +455,57 @@ int updateLinks(const QString& file, bool update, bool saveBack)
     return failed ? 2 : 0;
 }
 
+/// batch --jsfl script.jsfl <files or folders>: the script run on each
+/// document, every .fla and .phx in a folder.
+int batchScript(const QStringList& args)
+{
+    const QString script = option(args, "--jsfl");
+    if (!script.endsWith(".jsfl", Qt::CaseInsensitive) || !QFileInfo(script).isFile())
+    {
+        std::fprintf(stderr, "batch: --jsfl needs a .jsfl script\n");
+        return 1;
+    }
+    QStringList files;
+    for (int i = 0; i < args.size(); ++i)
+    {
+        const QString& each = args.at(i);
+        if (each == "--jsfl" || each == "--out" || each == "--timeout")
+        {
+            ++i;
+            continue;
+        }
+        if (each.startsWith("--"))
+            continue;
+        if (QFileInfo(each).isDir())
+            files << documentsIn(each, args.contains("--recursive"));
+        else if (QFileInfo(each).isFile())
+            files << each;
+        else
+        {
+            std::fprintf(stderr, "batch: there is no %s\n", qPrintable(each));
+            return 1;
+        }
+    }
+    if (files.isEmpty())
+    {
+        std::fprintf(stderr, "batch: which documents?\n");
+        return 1;
+    }
+    const QString out = option(args, "--out");
+    if (!out.isEmpty())
+        QDir().mkpath(out);
+    const QString timeout = option(args, "--timeout");
+    MainWindow window(QString(), nullptr, false);
+    const int failed = window.scripts()->runBatch(script, files, args.contains("--save"), out,
+        timeout.isEmpty() ? 600.0 : timeout.toDouble());
+    std::printf("%lld documents, %d with problems\n", static_cast<long long>(files.size()), failed);
+    return failed ? 2 : 0;
+}
+
 int batch(const QStringList& args)
 {
+    if (args.contains("--jsfl"))
+        return batchScript(args);
     if (args.isEmpty() || !QFileInfo(args.at(0)).isDir())
     {
         std::fprintf(stderr, "batch: which folder?\n");

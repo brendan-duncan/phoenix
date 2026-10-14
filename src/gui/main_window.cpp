@@ -7106,6 +7106,24 @@ void MainWindow::publish()
         QMessageBox::information(this, "Publish", "Save the document first: Publish writes its files beside it.");
         return;
     }
+    QStringList written;
+    QStringList problems;
+    publishFiles(written, problems);
+    if (!problems.isEmpty())
+        QMessageBox::warning(this, "Publish", problems.join("\n"));
+    statusBar()->showMessage(written.isEmpty() ? QString("Nothing was published.")
+                                               : QString("Published %1").arg(written.join(", ")),
+        6000);
+}
+
+bool MainWindow::publishFiles(QStringList& written, QStringList& problems)
+{
+    fla::Document* document = _flaDocument ? _flaDocument->document : nullptr;
+    if (!document || !_phoenixView || _documentPath.isEmpty())
+    {
+        problems << "Save the document first: Publish writes its files beside it.";
+        return false;
+    }
     const QFileInfo info(_documentPath);
     const QString name = info.completeBaseName();
     const QDir folder = info.absoluteDir();
@@ -7124,8 +7142,6 @@ void MainWindow::publish()
     const auto pathOf = [&](const char* format) {
         return folder.filePath(QString::fromStdString(fla::publish::fileName(settings, format, name.toStdString())));
     };
-    QStringList written;
-    QStringList problems;
     const auto image = [&](ImageExportSettings::Format format, const char* key) {
         ImageExportSettings out;
         out.format = format;
@@ -7230,11 +7246,7 @@ void MainWindow::publish()
         }
     }
     _phoenixView->update();
-    if (!problems.isEmpty())
-        QMessageBox::warning(this, "Publish", problems.join("\n"));
-    statusBar()->showMessage(written.isEmpty() ? QString("Nothing was published.")
-                                               : QString("Published %1").arg(written.join(", ")),
-        6000);
+    return problems.isEmpty();
 }
 
 namespace {
