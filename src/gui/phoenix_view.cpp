@@ -3755,7 +3755,26 @@ void PhoenixView::paintEntry(QPainter& painter, const PathCacheEntry& entry)
     {
         painter.setBrush(entry.fillBrush);
     }
-    painter.setPen(penForHere(entry));
+    const QPen pen = penForHere(entry);
+    // Lines thinner than a pixel on screen Qt draws its own way; wider
+    // ones are filled from their outline, made once: building the outline
+    // is a good part of stroking line art.
+    const double onScreen = pen.widthF() * std::sqrt(std::fabs(painter.worldTransform().determinant()));
+    if (entry.strokeStyle && entry.fillBrush.style() == Qt::NoBrush && !pen.isCosmetic() && onScreen >= 1.0 &&
+        pen.style() != Qt::NoPen)
+    {
+        if (entry.strokeOutlineWidth != pen.widthF())
+        {
+            QPainterPathStroker stroker(pen);
+            entry.strokeOutline = stroker.createStroke(entry.painterPath);
+            entry.strokeOutlineWidth = pen.widthF();
+        }
+        painter.setPen(Qt::NoPen);
+        painter.setBrush(pen.brush());
+        painter.drawPath(entry.strokeOutline);
+        return;
+    }
+    painter.setPen(pen);
     painter.drawPath(entry.painterPath);
     if (!entry.seamPath.isEmpty())
     {

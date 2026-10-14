@@ -1142,6 +1142,13 @@ private:
         /// stroked a pixel wide in its own paint so no line of what is
         /// behind shows between the two.
         QPainterPath seamPath;
+
+        /// A stroke entry's outline, filled in place of stroking it again
+        /// on every paint, and the pen width it was made for. Qt's outline
+        /// keeps its curves, so it serves at any zoom; a width that depends
+        /// on where the shape is drawn (scaleMode) makes it again.
+        mutable QPainterPath strokeOutline;
+        mutable double strokeOutlineWidth = -1.0;
     };
 
     /// Paints one cached entry: its fill and stroke, or its procedural
