@@ -5,6 +5,7 @@
 
 #include "../edit/command.h"
 
+#include <functional>
 #include <map>
 #include <memory>
 #include <string>
@@ -20,6 +21,10 @@ class Timeline;
 } // namespace fla
 
 namespace jsfl {
+
+namespace xul {
+class Dialog;
+}
 
 /// One script run: the host it works through, the undo steps it opened, and
 /// what it keeps between calls (its frame and library selections).
@@ -83,6 +88,12 @@ public:
 
     /// The script's own file, as a platform path (empty for a string).
     std::string scriptPath;
+
+    /// Runs code from an XML dialog's handlers in the script's context;
+    /// the error it threw, or empty. Set by the engine.
+    std::function<std::string(const std::string& code)> evaluate;
+    /// The XML dialogs open, innermost last (fl.xmlui works on that one).
+    std::vector<xul::Dialog*> dialogs;
 
 private:
     struct DocumentState

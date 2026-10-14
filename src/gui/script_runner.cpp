@@ -3,6 +3,7 @@
 #include "autosave.h"
 #include "main_window.h"
 #include "output_panel.h"
+#include "xul_dialog.h"
 
 #include "../data/document.h"
 #include "../data/fla_document.h"
@@ -162,6 +163,26 @@ public:
             return {};
         return text(QFileDialog::getExistingDirectory(&_window, title.empty() ? QString("Choose a Folder") : qtext(title)));
     }
+    bool showDialog(jsfl::xul::Dialog& dialog) override
+    {
+        if (noOneToAsk(_window))
+            return false;
+        // The run's wait cursor and its Stop dialog stay away while the
+        // person works in the dialog.
+        ++dialogsOpen;
+        QApplication::setOverrideCursor(Qt::ArrowCursor);
+        {
+            XulDialog window(dialog, &_window);
+            window.exec();
+        }
+        QApplication::restoreOverrideCursor();
+        --dialogsOpen;
+        ++dialogsShown;
+        return true;
+    }
+    /// Dialogs open now, and shown so far.
+    int dialogsOpen = 0;
+    int dialogsShown = 0;
     std::string configDirectory() override { return text(ScriptRunner::configFolder()); }
     std::string version() override { return text(QCoreApplication::applicationVersion()); }
 
@@ -666,9 +687,19 @@ bool ScriptRunner::runFile(const QString& path)
     QElapsedTimer clock;
     clock.start();
     std::unique_ptr<QProgressDialog> progress;
+    int dialogsShown = _host->dialogsShown;
     options.poll = [&]() {
         if (noOneToAsk(_window))
             return;
+        // Time the person spends in a script's dialog is not the script
+        // running long.
+        if (_host->dialogsOpen > 0 || _host->dialogsShown != dialogsShown)
+        {
+            dialogsShown = _host->dialogsShown;
+            clock.restart();
+            if (_host->dialogsOpen > 0)
+                return;
+        }
         if (!progress && clock.elapsed() > 1000)
         {
             progress = std::make_unique<QProgressDialog>(QString("Running %1...").arg(QFileInfo(path).fileName()), "Stop", 0, 0, &_window);
