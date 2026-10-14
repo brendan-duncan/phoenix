@@ -128,6 +128,7 @@
 #include <cmath>
 #include <cstdint>
 #include <cstdio>
+#include <optional>
 #include <algorithm>
 
 #include <QApplication>
@@ -5274,12 +5275,12 @@ void MainWindow::setupMenus()
     connect(_swapSymbolAction, &QAction::triggered, this, &MainWindow::swapSymbol);
     symbolMenu->addAction(_swapSymbolAction);
     QMenu* bitmapMenu = modifyMenu->addMenu("&Bitmap");
-    QAction* swapBitmapAction = bitmapMenu->addAction("&Swap Bitmap...");
-    swapBitmapAction->setStatusTip("Show another library bitmap in the selected bitmaps");
-    connect(swapBitmapAction, &QAction::triggered, this, &MainWindow::swapBitmap);
-    QAction* traceBitmapAction = bitmapMenu->addAction("&Trace Bitmap...");
-    traceBitmapAction->setStatusTip("Turn the selected bitmaps into vector artwork: areas of like color become fills");
-    connect(traceBitmapAction, &QAction::triggered, this, &MainWindow::traceBitmaps);
+    _swapBitmapAction = bitmapMenu->addAction("&Swap Bitmap...");
+    _swapBitmapAction->setStatusTip("Show another library bitmap in the selected bitmaps");
+    connect(_swapBitmapAction, &QAction::triggered, this, &MainWindow::swapBitmap);
+    _traceBitmapAction = bitmapMenu->addAction("&Trace Bitmap...");
+    _traceBitmapAction->setStatusTip("Turn the selected bitmaps into vector artwork: areas of like color become fills");
+    connect(_traceBitmapAction, &QAction::triggered, this, &MainWindow::traceBitmaps);
 
     modifyMenu->addSeparator();
 
@@ -11888,56 +11889,114 @@ void MainWindow::traceBitmaps()
         statusBar()->showMessage("Select a bitmap on the stage to trace.", 4000);
         return;
     }
-    const QImage first = _phoenixView->libraryBitmap(QString::fromStdString(bitmaps.front()->libraryItemName)).toImage();
-    if (first.isNull())
+    // Each bitmap's pixels, read once for every preview.
+    struct Source
+    {
+        fla::BitmapInstance* bitmap;
+        QImage image;
+    };
+    std::vector<Source> sources;
+    for (fla::BitmapInstance* bitmap : bitmaps)
+    {
+        const QImage image = _phoenixView->libraryBitmap(QString::fromStdString(bitmap->libraryItemName))
+                                 .toImage()
+                                 .convertToFormat(QImage::Format_RGBA8888);
+        if (dynamic_cast<fla::Frame*>(bitmap->parent) && !image.isNull())
+            sources.push_back({bitmap, image});
+    }
+    if (sources.empty())
     {
         statusBar()->showMessage("The bitmap could not be read.", 4000);
         return;
     }
-    TraceBitmapDialog dialog(first, static_cast<int>(bitmaps.size()), this);
-    if (dialog.exec() != QDialog::Accepted)
-        return;
-    const fla::trace::Options options = dialog.options();
-
-    QApplication::setOverrideCursor(Qt::WaitCursor);
     _phoenixView->flushPendingMerge();
     fla::CommandStack& stack = _editContext.commandStack();
+    const auto refresh = [this] {
+        _phoenixView->invalidateBounds();
+        _phoenixView->clearCaches();
+        _phoenixView->update();
+    };
+
+    // The trace is made as one step to undo. A preview is that step, taken
+    // back without a trace in the history when the settings change or the
+    // dialog is canceled, and kept when it is accepted as it stands.
+    bool applied = false;
+    std::optional<fla::trace::Options> appliedWith;
     std::vector<fla::DOMElement*> traced;
-    stack.beginMacro("Trace Bitmap");
-    for (fla::BitmapInstance* bitmap : bitmaps)
+    const auto takeBack = [&] {
+        if (!applied)
+            return;
+        if (!stack.discardLast())
+            stack.undo();
+        applied = false;
+        appliedWith.reset();
+        traced.clear();
+        std::vector<fla::DOMElement*> back;
+        for (const Source& source : sources)
+            back.push_back(source.bitmap);
+        _selection.select(back);
+    };
+    const auto trace = [&](const fla::trace::Options& options) {
+        takeBack();
+        TraceBitmapDialog::Counts counts;
+        const size_t before = stack.index();
+        stack.beginMacro("Trace Bitmap");
+        for (const Source& source : sources)
+        {
+            fla::BitmapInstance* bitmap = source.bitmap;
+            auto* frame = static_cast<fla::Frame*>(bitmap->parent);
+            const QImage& image = source.image;
+            counts.pixels += static_cast<long long>(image.width()) * image.height();
+            std::vector<uint8_t> pixels(static_cast<size_t>(image.width()) * image.height() * 4);
+            for (int y = 0; y < image.height(); ++y)
+                std::memcpy(pixels.data() + static_cast<size_t>(y) * image.width() * 4, image.constScanLine(y),
+                    static_cast<size_t>(image.width()) * 4);
+            fla::Shape* shape = fla::trace::traceBitmap(pixels.data(), image.width(), image.height(), options);
+            if (!shape)
+                continue;
+            counts.areas += static_cast<int>(shape->fills.size());
+            for (const fla::Edge* edge : shape->edges)
+                for (const fla::Path* path : edge->paths)
+                    counts.points += static_cast<int>(path->segments.size());
+            // In the bitmap's place, as it was placed.
+            shape->parent = frame;
+            shape->transform = bitmap->transform;
+            const auto found = std::find(frame->elements.begin(), frame->elements.end(), bitmap);
+            const int index = found == frame->elements.end() ? -1 : static_cast<int>(found - frame->elements.begin());
+            stack.push(fla::CommandPtr(new fla::RemoveElementCommand(frame, bitmap, "Trace Bitmap", &_selection)));
+            stack.push(fla::CommandPtr(new fla::AddElementCommand(frame, shape, "Trace Bitmap", &_selection, index)));
+            traced.push_back(shape);
+        }
+        stack.endMacro();
+        stack.breakMergeChain();
+        applied = stack.index() > before;
+        if (applied)
+            appliedWith = options;
+        // Nothing selected while previewing, so the artwork shows as it
+        // will be rather than under the selection's hatching.
+        _selection.clear();
+        refresh();
+        return counts;
+    };
+
+    TraceBitmapDialog dialog(static_cast<int>(sources.size()), trace, this);
+    const bool accepted = dialog.exec() == QDialog::Accepted;
+    const fla::trace::Options options = dialog.options();
+    const auto same = [](const fla::trace::Options& a, const fla::trace::Options& b) {
+        return a.colorThreshold == b.colorThreshold && a.minimumArea == b.minimumArea && a.curveFit == b.curveFit;
+    };
+    if (!accepted)
+        takeBack();
+    else if (!appliedWith || !same(*appliedWith, options))
     {
-        fla::Frame* frame = dynamic_cast<fla::Frame*>(bitmap->parent);
-        if (!frame)
-            continue;
-        const QImage image = _phoenixView->libraryBitmap(QString::fromStdString(bitmap->libraryItemName))
-                                 .toImage()
-                                 .convertToFormat(QImage::Format_RGBA8888);
-        if (image.isNull())
-            continue;
-        std::vector<uint8_t> pixels(static_cast<size_t>(image.width()) * image.height() * 4);
-        for (int y = 0; y < image.height(); ++y)
-            std::memcpy(pixels.data() + static_cast<size_t>(y) * image.width() * 4, image.constScanLine(y),
-                static_cast<size_t>(image.width()) * 4);
-        fla::Shape* shape = fla::trace::traceBitmap(pixels.data(), image.width(), image.height(), options);
-        if (!shape)
-            continue;
-        // In the bitmap's place, as it was placed.
-        shape->parent = frame;
-        shape->transform = bitmap->transform;
-        const auto found = std::find(frame->elements.begin(), frame->elements.end(), bitmap);
-        const int index = found == frame->elements.end() ? -1 : static_cast<int>(found - frame->elements.begin());
-        stack.push(fla::CommandPtr(new fla::RemoveElementCommand(frame, bitmap, "Trace Bitmap", &_selection)));
-        stack.push(fla::CommandPtr(new fla::AddElementCommand(frame, shape, "Trace Bitmap", &_selection, index)));
-        traced.push_back(shape);
+        QApplication::setOverrideCursor(Qt::WaitCursor);
+        trace(options);
+        QApplication::restoreOverrideCursor();
     }
-    stack.endMacro();
-    stack.breakMergeChain();
-    QApplication::restoreOverrideCursor();
-    if (!traced.empty())
+    if (accepted && !traced.empty())
         _selection.select(traced);
-    _phoenixView->invalidateBounds();
-    _phoenixView->clearCaches();
-    _phoenixView->update();
+    refresh();
+    updateSelectionState();
 }
 
 void MainWindow::editEnvelope(fla::Frame* frame)
@@ -13076,6 +13135,15 @@ void MainWindow::showStageMenu(const QPoint& globalPos, const QPointF& documentP
         }
         if (auto* group = dynamic_cast<fla::Group*>(_selection.single()))
             menu.addAction("Edit in Place", this, [this, group]() { _phoenixView->enterGroup(group); });
+        const auto& chosen = _selection.elements();
+        if (std::any_of(chosen.begin(), chosen.end(), [](const fla::DOMElement* e) { return dynamic_cast<const fla::BitmapInstance*>(e); }))
+        {
+            for (QAction* action : {_traceBitmapAction, _swapBitmapAction})
+            {
+                if (action)
+                    menu.addAction(action);
+            }
+        }
         for (QAction* action : {_breakApartAction, _groupAction, _ungroupAction})
         {
             if (action && action->isEnabled())

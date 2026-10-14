@@ -1014,6 +1014,8 @@ private:
     QAction* _breakApartAction = nullptr;
     QAction* _convertToSymbolAction = nullptr;
     QAction* _swapSymbolAction = nullptr;
+    QAction* _swapBitmapAction = nullptr;
+    QAction* _traceBitmapAction = nullptr;
     QMenu* _transformMenu = nullptr;
     std::vector<QAction*> _transformActions;
     QAction* _distributeAction = nullptr;
