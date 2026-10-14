@@ -300,16 +300,23 @@ TEST(jsfl_layer_filters_at_frames)
 TEST(jsfl_publishing_goes_to_the_host)
 {
     Fixture f;
+#ifdef _WIN32
+    const std::string folder = "file:///C|/work/";
+    const std::string path = "C:/work/";
+#else
+    const std::string folder = "file:///tmp/work/";
+    const std::string path = "/tmp/work/";
+#endif
     CHECK(f.run("var doc = fl.getDocumentDOM();\n"
-                "doc.exportSWF('file:///C|/work/movie.fla', true);\n"
-                "doc.exportSWF('file:///C|/work/other.swf');\n")
+                "doc.exportSWF('" + folder + "movie.fla', true);\n"
+                "doc.exportSWF('" + folder + "other.swf');\n")
               .ok);
     CHECK(f.host.swfs.size() == 2);
     if (f.host.swfs.size() == 2)
     {
         // Never written over the document itself.
-        CHECK(f.host.swfs[0] == "C:/work/movie.swf");
-        CHECK(f.host.swfs[1] == "C:/work/other.swf");
+        CHECK(f.host.swfs[0] == path + "movie.swf");
+        CHECK(f.host.swfs[1] == path + "other.swf");
     }
     const jsfl::RunResult unsaved = f.run("fl.getDocumentDOM().publish();", true);
     CHECK(!unsaved.ok);

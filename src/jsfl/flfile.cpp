@@ -105,18 +105,17 @@ std::string toPath(const std::string& text)
 #ifdef __APPLE__
     // Scripts written on a Mac often start with the volume's name:
     // file:///Macintosh HD/Users/... is /Users/... on the startup volume.
+    // Only a first name that is no folder at the root is a volume's: a
+    // file still to be made (/var/folders/.../new.fla) keeps its path.
     std::error_code error;
-    if (!fs::exists(fs::u8path(path), error))
+    const size_t slash = path.find('/', 1);
+    if (slash != std::string::npos && !fs::exists(fs::u8path(path.substr(0, slash)), error))
     {
-        const size_t slash = path.find('/', 1);
-        if (slash != std::string::npos)
-        {
-            const std::string volume = path.substr(1, slash - 1);
-            const std::string onStartup = path.substr(slash);
-            if (fs::exists(fs::u8path("/Volumes/" + volume), error) && !fs::exists(fs::u8path(onStartup), error))
-                return "/Volumes/" + path.substr(1);
-            return onStartup;
-        }
+        const std::string volume = path.substr(1, slash - 1);
+        const std::string onStartup = path.substr(slash);
+        if (fs::exists(fs::u8path("/Volumes/" + volume), error) && !fs::exists(fs::u8path(onStartup), error))
+            return "/Volumes/" + path.substr(1);
+        return onStartup;
     }
 #endif
     return path;
