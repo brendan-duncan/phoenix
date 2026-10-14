@@ -71,6 +71,8 @@
 #include "theme.h"
 #include "claude_code.h"
 #include "theme_editor.h"
+#include "output_panel.h"
+#include "test_movie_window.h"
 #include "trace_bitmap_dialog.h"
 #include "../parser/fla_doctor.h"
 #include "../edit/linked_assets.h"
@@ -5992,6 +5994,13 @@ void MainWindow::setupMenus()
     // Control menu: playback, with Animate's keys. They act while the stage
     // or the timeline has the focus, so Enter in a field stays the field's.
     QMenu* controlMenu = menuBar->addMenu("&Control");
+    // Test Movie: the scene played with its scripts, its buttons clickable.
+    QAction* testMovieAction = new QAction("&Test Movie", this);
+    testMovieAction->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_Return));
+    testMovieAction->setStatusTip("Play the scene as Flash Player would, running its ActionScript, so its buttons can be clicked");
+    connect(testMovieAction, &QAction::triggered, this, &MainWindow::testMovie);
+    controlMenu->addAction(testMovieAction);
+    controlMenu->addSeparator();
     const auto addControl = [this, controlMenu](const QString& text, const QKeySequence& key,
                                 std::function<void()> act) {
         QAction* action = new QAction(text, this);
@@ -11926,6 +11935,43 @@ void MainWindow::goToMatch(const fla::find::Match& match)
     _phoenixView->clearCaches();
     _phoenixView->update();
     updateSelectionState();
+}
+
+void MainWindow::testMovie()
+{
+    if (!_flaDocument || !_flaDocument->document || !_flaDocument->document->currentScene())
+        return;
+    if (_phoenixView)
+        _phoenixView->flushPendingMerge();
+    // What the scripts trace, and the errors they stop on, in the Output
+    // panel, shown when there is something in it.
+    OutputPanel* output = _scripts ? _scripts->output() : nullptr;
+    if (output)
+        output->clear();
+    const auto showOutput = [this]() {
+        if (_scripts && _scripts->outputDock() && !_scripts->outputDock()->isVisible())
+        {
+            _scripts->outputDock()->show();
+            _scripts->outputDock()->raise();
+        }
+    };
+    const QString name = _activeTab >= 0 && _activeTab < static_cast<int>(_tabs.size()) ? tabName(*_tabs[static_cast<size_t>(_activeTab)])
+                                                                                     : QString("Untitled");
+    TestMovieWindow window(*_flaDocument, name,
+        [output, showOutput](const QString& line) {
+            if (!output)
+                return;
+            output->append(line);
+            showOutput();
+        },
+        [output, showOutput](const QString& line) {
+            if (!output)
+                return;
+            output->appendError(line);
+            showOutput();
+        },
+        this);
+    window.exec();
 }
 
 void MainWindow::traceBitmaps()

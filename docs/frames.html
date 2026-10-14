@@ -126,9 +126,34 @@
   <dt><code>nextFrame()</code>, <code>prevFrame()</code></dt><dd>Steps one frame on or back and stops.</dd>
 </dl>
 
-<p>The calls can be written with <code>this.</code> in front. A script runs when the playhead arrives at its keyframe, but not the frame you start from, so pressing <kbd>Enter</kbd> on a frame with <code>stop()</code> plays on past it. Phoenix does not run the scripts: anything else in them is ignored, and so is a call it cannot be sure of, such as one inside an <code>if</code>, a function or a block, one aimed at another clip, or a goto to a computed frame or another scene. Scripts on guide layers are left out.</p>
+<p>The calls can be written with <code>this.</code> in front. A script runs when the playhead arrives at its keyframe, but not the frame you start from, so pressing <kbd>Enter</kbd> on a frame with <code>stop()</code> plays on past it. Playback on the stage does not run the scripts: anything else in them is ignored, and so is a call it cannot be sure of, such as one inside an <code>if</code>, a function or a block, one aimed at another clip, or a goto to a computed frame or another scene. Scripts on guide layers are left out. To run a movie's scripts in full, use Test Movie.</p>
 
 <p>The setting is off by default and is remembered. While it is on, movie clips follow the same calls in their own frame scripts, both as they play on the stage during playback and in exported movies, so a clip with <code>stop()</code> on its first frame holds that frame instead of looping.</p>
+
+<h3 id="test-movie">Test Movie</h3>
+
+<p><span class="menu-path">Control &rsaquo; Test Movie</span> (<kbd>Ctrl</kbd>+<kbd>Enter</kbd>) plays the scene in a window of its own as Flash Player would, at the document's frame rate, running its ActionScript. Buttons light up under the mouse and answer clicks, so an interactive movie, such as a dress-up game, can be played. <strong>Restart</strong> plays it again from the first frame. Close the window to go back to editing; the document is not changed by playing it.</p>
+
+<figure>
+  <img src="assets/shots/test-movie.webp" alt="Test Movie window playing a dress-up game: a fairy dressed in blonde hair, a blue blouse and skirt and pink tights, with the buttons that chose them on the left" width="760" height="620">
+</figure>
+
+<p>Scripts in ActionScript 1 and 2, as older movies and games are written, run as Flash Player runs them:</p>
+
+<ul>
+  <li>Frame scripts run as their keyframes are reached, on the root timeline and in every movie clip, after the frame's objects are placed.</li>
+  <li><code>stop()</code>, <code>play()</code>, <code>gotoAndPlay()</code>, <code>gotoAndStop()</code>, <code>nextFrame()</code> and <code>prevFrame()</code>, on the timeline or on a named clip (<code>hat.gotoAndStop(3)</code>), and <code>tellTarget</code>.</li>
+  <li><code>on (release)</code>, <code>on (press)</code>, <code>on (rollOver)</code> and the other button events, and <code>onClipEvent (load)</code> and <code>onClipEvent (enterFrame)</code> on movie clips.</li>
+  <li>A clip's <code>_x</code>, <code>_y</code>, <code>_visible</code>, <code>_alpha</code>, <code>_xscale</code>, <code>_yscale</code>, <code>_rotation</code>, <code>_currentframe</code> and <code>_totalframes</code>, read and set by dot (<code>hat._visible = false</code>) or with <code>getProperty</code> and <code>setProperty</code>, and clips found by name or by path (<code>"/hat"</code>, <code>_root.hat</code>, <code>_parent</code>).</li>
+  <li>Variables, <code>if</code>, loops, functions, <code>ifFrameLoaded</code> (everything counts as loaded) and <code>trace()</code>, whose output goes to the Output panel (<kbd>F2</kbd>).</li>
+</ul>
+
+<p>A script error stops that script only, and is shown in the Output panel with the frame or button and the line it was on; the movie plays on. <code>getURL()</code> opens web links in your browser.</p>
+
+<div class="callout">
+  <span class="label">Not yet</span>
+  <p>ActionScript 3's display list and events (<code>addEventListener</code>, <code>MovieClip</code> classes), sound started from scripts, text fields, dragging, the keyboard, and scenes after the first.</p>
+</div>
 
 <h2>Onion skinning</h2>
 

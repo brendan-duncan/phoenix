@@ -128,6 +128,11 @@ if(PHOENIX_TESTS_HAVE_JSFL)
     list(APPEND TEST_SOURCES test_jsfl.cpp test_jsfl_e4x.cpp test_jsfl_xul.cpp test_jsfl_extensions.cpp)
 endif()
 
+# Playing movies with their scripts, with libas3 in the build.
+if(TARGET phoenix_core AND TARGET as3_parser)
+    list(APPEND TEST_SOURCES test_movie_runtime.cpp)
+endif()
+
 # Python scripts over the same object model; the tests skip themselves where
 # no Python is installed.
 if(PHOENIX_TESTS_HAVE_PYTHON)

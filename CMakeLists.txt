@@ -1,17 +1,29 @@
 cmake_minimum_required(VERSION 3.16)
 
 include(FetchContent)
-# Pinned to a commit, so a release tag always builds the same parser; move
-# it forward on purpose when libas3 changes.
+# libas3, the ActionScript parser and VM, is developed alongside Phoenix:
+# a checkout beside this one (../libas3), or the one PHOENIX_LIBAS3_SOURCE
+# names, is built as it stands. Without one (CI, a release), the commit
+# pinned here is fetched; move it forward on purpose when libas3 changes.
+set(PHOENIX_LIBAS3_SOURCE "" CACHE PATH "A libas3 checkout to build instead of the pinned commit")
+if(NOT PHOENIX_LIBAS3_SOURCE AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/../libas3/CMakeLists.txt")
+    get_filename_component(PHOENIX_LIBAS3_SOURCE "${CMAKE_CURRENT_SOURCE_DIR}/../libas3" ABSOLUTE)
+endif()
+if(PHOENIX_LIBAS3_SOURCE)
+    message(STATUS "libas3: ${PHOENIX_LIBAS3_SOURCE}")
+    set(FETCHCONTENT_SOURCE_DIR_LIBAS3 "${PHOENIX_LIBAS3_SOURCE}" CACHE PATH "" FORCE)
+else()
+    unset(FETCHCONTENT_SOURCE_DIR_LIBAS3 CACHE)
+endif()
 FetchContent_Declare(
     libas3
     GIT_REPOSITORY https://github.com/brendan-duncan/libas3
-    GIT_TAG 5bbd4f3241ba16a8f5331c36bb24c36ae1e5c529
+    GIT_TAG 3f37c7dd0e578cda8b41f31b675036023dbf88d6
 )
 FetchContent_MakeAvailable(libas3)
 
 add_library(libas3 INTERFACE)
-add_dependencies(libas3 as3_parser)
+target_link_libraries(libas3 INTERFACE as3_parser)
 
 project(Phoenix VERSION 0.8.0 LANGUAGES C CXX)
 
@@ -112,6 +124,7 @@ set(HEADERS
     src/gui/theme_editor.h
     src/gui/claude_code.h
     src/gui/trace_bitmap_dialog.h
+    src/gui/test_movie_window.h
     src/gui/command_line.h
     src/gui/notes_panel.h
     src/gui/controllers_panel.h
@@ -362,6 +375,7 @@ set(SOURCES
     src/gui/theme_editor.cpp
     src/gui/claude_code.cpp
     src/gui/trace_bitmap_dialog.cpp
+    src/gui/test_movie_window.cpp
     src/gui/command_line.cpp
     src/gui/notes_panel.cpp
     src/gui/controllers_panel.cpp
@@ -461,9 +475,9 @@ endif()
 # The Qt-free core, compiled once for the app and the tests.
 include(cmake/PhoenixCore.cmake)
 if(PHOENIX_PYTHON)
-    phoenix_add_core(phoenix_core ${CMAKE_CURRENT_SOURCE_DIR}/src FILES JSFL PYTHON)
+    phoenix_add_core(phoenix_core ${CMAKE_CURRENT_SOURCE_DIR}/src FILES JSFL PYTHON PLAY)
 else()
-    phoenix_add_core(phoenix_core ${CMAKE_CURRENT_SOURCE_DIR}/src FILES JSFL)
+    phoenix_add_core(phoenix_core ${CMAKE_CURRENT_SOURCE_DIR}/src FILES JSFL PLAY)
 endif()
 
 qt6_standard_project_setup()

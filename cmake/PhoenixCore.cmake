@@ -179,10 +179,16 @@ set(PHOENIX_CORE_PYTHON_SOURCES
     python/python_engine.cpp
 )
 
-# phoenix_add_core(<target> <src dir> [FILES] [JSFL] [PYTHON]): the core as an
-# object library with the groups asked for, carrying what they link against.
+# Playing movies with their ActionScript (Control > Test Movie): libas3.
+set(PHOENIX_CORE_PLAY_SOURCES
+    play/movie_runtime.cpp
+)
+
+# phoenix_add_core(<target> <src dir> [FILES] [JSFL] [PYTHON] [PLAY]): the core
+# as an object library with the groups asked for, carrying what they link
+# against.
 function(phoenix_add_core target src)
-    cmake_parse_arguments(CORE "FILES;JSFL;PYTHON" "" "" ${ARGN})
+    cmake_parse_arguments(CORE "FILES;JSFL;PYTHON;PLAY" "" "" ${ARGN})
     set(groups PHOENIX_CORE_SOURCES)
     if(CORE_FILES)
         list(APPEND groups PHOENIX_CORE_FILE_SOURCES)
@@ -192,6 +198,9 @@ function(phoenix_add_core target src)
     endif()
     if(CORE_PYTHON)
         list(APPEND groups PHOENIX_CORE_PYTHON_SOURCES)
+    endif()
+    if(CORE_PLAY)
+        list(APPEND groups PHOENIX_CORE_PLAY_SOURCES)
     endif()
     set(sources)
     foreach(group ${groups})
@@ -222,6 +231,10 @@ function(phoenix_add_core target src)
     endif()
     if(CORE_PYTHON)
         target_link_libraries(${target} PUBLIC ${CMAKE_DL_LIBS})
+    endif()
+    if(CORE_PLAY)
+        target_link_libraries(${target} PUBLIC as3_parser)
+        target_compile_definitions(${target} PUBLIC PHOENIX_PLAY)
     endif()
     # The audio engine (miniaudio) needs the system's audio and threads.
     if(APPLE)

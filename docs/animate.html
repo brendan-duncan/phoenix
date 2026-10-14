@@ -56,7 +56,7 @@
     <tr><td>Show Frame</td><td class="wrap"><span class="menu-path">View &rsaquo; Magnification &rsaquo; Fit in Window</span> (<kbd>Ctrl</kbd>+<kbd>2</kbd>)</td></tr>
     <tr><td>Preferences</td><td class="wrap"><span class="menu-path">Edit &rsaquo; Preferences</span> (<kbd>Ctrl</kbd>+<kbd>U</kbd>) and <span class="menu-path">Edit &rsaquo; Keyboard Shortcuts</span>; see <a href="preferences.html">Settings and preferences</a></td></tr>
     <tr><td>Publish</td><td class="wrap"><span class="menu-path">File &rsaquo; Publish Settings</span> and <span class="menu-path">File &rsaquo; Publish</span>: SWF, HTML, PNG, JPEG, GIF and SVG. <span class="menu-path">File &rsaquo; Export</span> has video, GIF, PNG and SVG sequences, images, SWF and sprite sheets</td></tr>
-    <tr><td>Test Movie</td><td class="wrap">Play on the stage with <kbd>Enter</kbd>, or export. Turn on <span class="menu-path">Control &rsaquo; Enable Simple Frame Actions</span> (<kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>F</kbd>) to follow <code>stop()</code>, <code>play()</code> and gotos in frame scripts</td></tr>
+    <tr><td>Test Movie</td><td class="wrap"><span class="menu-path">Control &rsaquo; Test Movie</span> (<kbd>Ctrl</kbd>+<kbd>Enter</kbd>) runs ActionScript 1 and 2 frame scripts and button handlers, with clickable buttons; see <a href="frames.html#test-movie">Test Movie</a>. <kbd>Enter</kbd> plays on the stage, which can follow simple frame actions with <span class="menu-path">Control &rsaquo; Enable Simple Frame Actions</span> (<kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>F</kbd>)</td></tr>
   </tbody>
 </table>
 
@@ -65,7 +65,7 @@
 <ul>
   <li><strong>Native format.</strong> New documents save as <code>.phx</code>, which opens much faster. Use <span class="menu-path">Save As</span> to write an FLA whenever you need one, or choose FLA files or XFL folders under <span class="menu-path">File &rsaquo; Default Save Format</span>.</li>
   <li><strong>Movie clips on the stage</strong> show their first frame while you edit and scrub; their animation plays while the document plays and in exports.</li>
-  <li><strong>Scripts are kept, not run.</strong> ActionScript and frame scripts are saved with the file, but Phoenix does not run them. With <span class="menu-path">Control &rsaquo; Enable Simple Frame Actions</span> on, playback and exported movie clips follow the simple calls in frame scripts (<code>stop()</code>, <code>play()</code>, <code>gotoAndPlay()</code>, <code>gotoAndStop()</code>, <code>nextFrame()</code> and <code>prevFrame()</code>); everything else in a script is ignored. See <a href="frames.html#frame-scripts">Frame scripts</a>.</li>
+  <li><strong>Scripts run in Test Movie.</strong> ActionScript is saved with the file. <span class="menu-path">Control &rsaquo; Test Movie</span> runs ActionScript 1 and 2, frame scripts and button handlers alike; ActionScript 3 classes and events are not run yet. Playback on the stage and exports follow only the simple calls in frame scripts (<code>stop()</code>, <code>play()</code> and the gotos), with <span class="menu-path">Control &rsaquo; Enable Simple Frame Actions</span> on. See <a href="frames.html#frame-scripts">Frame scripts</a>.</li>
 </ul>
 
 <h2>What Phoenix adds</h2>
@@ -95,7 +95,7 @@
   <li>3D rotation and translation are drawn and edited in Phoenix, but kept as Phoenix's own settings: Animate shows such clips flat.</li>
   <li>Spring simulation on bones (springs are kept), and turning artwork into a new puppet (the Asset Warp tool pins and bends existing puppets). Armatures, boned shapes and warps play.</li>
   <li>Animate's built-in art and pattern brush library. Phoenix's Paint Brush draws art and pattern brushes made from your own graphic symbols; Animate shows those strokes as plain lines.</li>
-  <li>Running ActionScript or JavaScript beyond the simple frame actions, and JSFL commands and extensions.</li>
+  <li>Running ActionScript 3 (its classes, display list and events) and HTML5 Canvas JavaScript; ActionScript 1 and 2 run in Test Movie.</li>
   <li>Setting up and moving 9-slice guides. Guides already in the file work.</li>
   <li>HTML5 Canvas documents, and publishing to AIR or projectors. Published SWF movies have no sound or ActionScript.</li>
 </ul>

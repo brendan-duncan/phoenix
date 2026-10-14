@@ -2,6 +2,10 @@
 
 What changed in each release of Phoenix, newest first.
 
+## 0.9.0 (Unreleased)
+
+- Control > Test Movie (Ctrl+Enter) plays the scene with its ActionScript 1 and 2: frame scripts, button handlers and clip events run, buttons answer the mouse, and what scripts trace and the errors they stop on go to the Output panel, so old Flash games such as dress-up games can be played
+
 ## 0.8.0
 
 - Commands > Open Claude Code opens Claude Code in a terminal, already connected to Phoenix and let in without asking

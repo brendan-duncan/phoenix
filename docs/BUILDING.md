@@ -27,6 +27,16 @@ generator finds the MSVC toolchain by itself, so it works from an ordinary
 shell. Ninja does not: it needs the compiler already on `PATH`, which means a
 Developer Command Prompt, or a shell that has run `vcvars64.bat`.
 
+## libas3
+
+The ActionScript parser and VM, [libas3](https://github.com/brendan-duncan/libas3),
+is developed alongside Phoenix. With a checkout of it beside this one
+(`../libas3`), the build uses that checkout as it stands, so changes to both
+can be made together; `-DPHOENIX_LIBAS3_SOURCE=<path>` names another one.
+Without one, the build fetches the commit pinned in `CMakeLists.txt`, which
+has to be moved forward (and pushed) whenever Phoenix comes to need a newer
+libas3.
+
 ## Finding Qt
 
 The build looks for Qt in this order, and stops at the first that works

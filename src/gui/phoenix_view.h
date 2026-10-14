@@ -42,6 +42,7 @@ class QTimer;
 #include "../edit/transform_blend.h"
 
 #include <vector>
+#include <QPolygonF>
 
 namespace fla {
 class Bitmap;
@@ -50,6 +51,10 @@ class Command;
 class CommandStack;
 class Selection;
 class Snapper;
+namespace play {
+struct Clip;
+class MovieRuntime;
+}
 }
 
 class Player;
@@ -63,6 +68,13 @@ public:
     ~PhoenixView();
 
     void setDocument(const fla::FLADocument* document);
+
+    /// Plays \a movie (Control > Test Movie): the stage draws its clips as
+    /// its scripts leave them, buttons show their over and down frames, and
+    /// the mouse goes to the movie rather than to a tool. Null goes back to
+    /// editing.
+    void setMovie(fla::play::MovieRuntime* movie);
+    fla::play::MovieRuntime* movie() const { return _movie; }
 
     void setShowBounds(bool show) { _showBounds = show; update(); }
 
@@ -653,6 +665,10 @@ protected:
     void dropEvent(QDropEvent* event) override;
 
     void mousePressEvent(QMouseEvent *event) override;
+    /// The mouse over a movie being played: its buttons.
+    void movieMouse(QMouseEvent* event);
+    /// The button under \a widgetPos in the movie last drawn, or null.
+    fla::play::Clip* movieButtonAt(const QPointF& widgetPos) const;
 
     void mouseMoveEvent(QMouseEvent *event) override;
 
@@ -796,6 +812,17 @@ private:
     /// The frame to draw instead of the playhead's, while an onion frame is
     /// drawn; -1 otherwise.
     int _frameOverride = -1;
+
+    /// The movie being played, the clips of what is being drawn (the
+    /// root's at the bottom), and its buttons' hit areas as last drawn.
+    fla::play::MovieRuntime* _movie = nullptr;
+    std::vector<fla::play::Clip*> _movieClips;
+    struct ButtonArea
+    {
+        QPolygonF area;
+        fla::play::Clip* clip;
+    };
+    std::vector<ButtonArea> _buttonAreas;
     /// Drawing for export (renderFrame): locked layers show and movie clips
     /// play.
     bool _exporting = false;

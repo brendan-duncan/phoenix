@@ -344,6 +344,8 @@ private slots:
     /// Modify > Bitmap > Trace Bitmap: the selected bitmaps turned into
     /// vector artwork, as one undo step.
     void traceBitmaps();
+    /// Control > Test Movie: the scene played with its scripts.
+    void testMovie();
 
     /// Edit Envelope for a keyframe's sound, as one undo step.
     void editEnvelope(fla::Frame* frame);

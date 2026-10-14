@@ -1,5 +1,6 @@
 #include "phoenix_view.h"
 #include "theme.h"
+#include "../play/movie_runtime.h"
 #include "../edit/pegs.h"
 #include "preferences.h"
 #include "../edit/three_d.h"
@@ -1235,6 +1236,11 @@ void PhoenixView::drawStageContents(QPainter& painter, const fla::Document* docu
 {
     const QTransform rootFull = painter.transform();
     viewTransform = rootFull;
+    if (_movie)
+    {
+        _buttonAreas.clear();
+        _movieClips.assign(1, &_movie->root());
+    }
 
     const double docWidth = document->width;
     const double docHeight = document->height;
@@ -3024,6 +3030,23 @@ void PhoenixView::drawElement(QPainter& painter, const fla::Element* element, co
         transform = interpolateTransform(element->transform, tweenElement->transform, tweenProgress);
     }
 
+    // Playing a movie (Test Movie): a movie clip or button shows as its
+    // scripts have left it, hidden, moved, scaled or faded.
+    fla::play::Clip* movieClip = nullptr;
+    if (_movie && !_movieClips.empty() && element->elementType() == fla::Element::Type::SymbolInstance)
+    {
+        const auto* frame = dynamic_cast<const fla::Frame*>(element->parent);
+        const auto* layer = frame ? dynamic_cast<const fla::Layer*>(frame->parent) : nullptr;
+        if (layer)
+            movieClip = _movie->clipOf(*_movieClips.back(), *layer, *static_cast<const fla::SymbolInstance*>(element));
+        if (movieClip)
+        {
+            if (!movieClip->shown())
+                return;
+            transform = movieClip->transform(transform);
+        }
+    }
+
     QTransform qTransform(transform.m11, transform.m12,
                        transform.m21, transform.m22,
                        transform.tx, transform.ty);
@@ -3048,6 +3071,8 @@ void PhoenixView::drawElement(QPainter& painter, const fla::Element* element, co
         painter.setTransform(qTransform, true);
         _elementTransform = qTransform * _elementTransform;
     }
+    if (movieClip && movieClip->opacity() < 1.0)
+        painter.setOpacity(painter.opacity() * movieClip->opacity());
 
     fla::Element::Type type = element->elementType();
 
@@ -3068,6 +3093,36 @@ void PhoenixView::drawElement(QPainter& painter, const fla::Element* element, co
             // stage a movie clip or a button shows its first frame.
             int frameOffset = symbolFrame(*instance);
             fla::LoopType loopType = fla::LoopType::SingleFrame;
+
+            // In a movie playing, the frame its clip is on (a button's up,
+            // over or down frame), and the clip is what the instances
+            // inside it are looked up in. A button's hit area, in the
+            // document's space, is where the mouse finds it.
+            struct MovieScope
+            {
+                std::vector<fla::play::Clip*>& stack;
+                bool pushed;
+                ~MovieScope()
+                {
+                    if (pushed)
+                        stack.pop_back();
+                }
+            } movieScope{_movieClips, movieClip != nullptr};
+            if (movieClip)
+            {
+                frameOffset = movieClip->button ? _movie->buttonFrame(*movieClip) : movieClip->frame;
+                _movieClips.push_back(movieClip);
+                if (movieClip->button)
+                {
+                    QRectF hit = symbolFramesBounds(symbol, 3, 3);
+                    if (!hit.isValid() || hit.isEmpty())
+                        hit = symbolFramesBounds(symbol, frameOffset, frameOffset);
+                    bool invertible = false;
+                    const QTransform toDocument = painter.transform() * viewTransform.inverted(&invertible);
+                    if (invertible && hit.isValid())
+                        _buttonAreas.push_back({toDocument.map(QPolygonF(hit)), movieClip});
+                }
+            }
 
             // An Asset Warp puppet shows its first frame, the art as it was
             // placed, warped by the instance's pins (between two keyframes'
@@ -3290,7 +3345,7 @@ void PhoenixView::drawElement(QPainter& painter, const fla::Element* element, co
                 const int shownFrame = this->shownFrame();
                 // Onion frames are drawn once and passed over, so they are
                 // neither looked up nor kept.
-                const bool cacheable = !_maskPass && _frameOverride < 0;
+                const bool cacheable = !_maskPass && _frameOverride < 0 && !_movie;
                 const auto cached = cacheable ? _filterCache.find(instance) : _filterCache.end();
                 const auto sameLinear = [](const QTransform& a, const QTransform& b) {
                     return std::fabs(a.m11() - b.m11()) < 1.0e-9 && std::fabs(a.m12() - b.m12()) < 1.0e-9 &&
@@ -5077,8 +5132,52 @@ bool PhoenixView::isNearAnchor(const fla::Shape& shape, const QPointF& localPos,
     return false;
 }
 
+void PhoenixView::setMovie(fla::play::MovieRuntime* movie)
+{
+    _movie = movie;
+    _movieClips.clear();
+    _buttonAreas.clear();
+    clearCaches();
+    update();
+}
+
+fla::play::Clip* PhoenixView::movieButtonAt(const QPointF& widgetPos) const
+{
+    const QPointF at = mapToDocument(widgetPos);
+    // The one drawn last is on top.
+    for (auto area = _buttonAreas.rbegin(); area != _buttonAreas.rend(); ++area)
+        if (area->area.containsPoint(at, Qt::OddEvenFill))
+            return area->clip;
+    return nullptr;
+}
+
+void PhoenixView::movieMouse(QMouseEvent* event)
+{
+    fla::play::Clip* button = movieButtonAt(event->position());
+    if (event->type() == QEvent::MouseMove)
+        _movie->pointerOver(button);
+    else if (event->type() == QEvent::MouseButtonPress && event->button() == Qt::LeftButton)
+    {
+        _movie->pointerOver(button);
+        _movie->pointerDown();
+    }
+    else if (event->type() == QEvent::MouseButtonRelease && event->button() == Qt::LeftButton)
+    {
+        _movie->pointerOver(button);
+        _movie->pointerUp();
+    }
+    setCursor(button ? Qt::PointingHandCursor : Qt::ArrowCursor);
+    update();
+    event->accept();
+}
+
 void PhoenixView::mousePressEvent(QMouseEvent *event)
 {
+    if (_movie)
+    {
+        movieMouse(event);
+        return;
+    }
     // An undo or redo may have changed the guides since the last gesture;
     // the snapper takes them afresh before this one.
     pushGuidesToSnapper();
@@ -5125,6 +5224,11 @@ void PhoenixView::mousePressEvent(QMouseEvent *event)
 
 void PhoenixView::mouseMoveEvent(QMouseEvent *event)
 {
+    if (_movie)
+    {
+        movieMouse(event);
+        return;
+    }
     emit cursorMoved(mapToDocument(event->position()), event->position().toPoint());
     if (_guideDrag)
     {
@@ -5192,6 +5296,11 @@ void PhoenixView::mouseMoveEvent(QMouseEvent *event)
 
 void PhoenixView::mouseReleaseEvent(QMouseEvent *event)
 {
+    if (_movie)
+    {
+        movieMouse(event);
+        return;
+    }
     if (_deformerDrag.instance)
     {
         // One undo step for the whole drag.
@@ -6263,6 +6372,9 @@ void PhoenixView::drawGrid(QPainter& painter, const fla::Document* document)
 
 void PhoenixView::drawToolOverlay(QPainter& painter)
 {
+    // A movie playing shows only itself.
+    if (_movie)
+        return;
     // Handles have to stay the same size on screen, so everything here is drawn
     // in document units scaled back by the zoom.
     const double scale = _zoom > 0.0 ? 1.0 / _zoom : 1.0;
