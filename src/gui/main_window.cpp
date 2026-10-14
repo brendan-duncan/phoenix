@@ -70,7 +70,9 @@
 #include "lip_sync_dialog.h"
 #include "theme.h"
 #include "claude_code.h"
+#include "actions_panel.h"
 #include "claude_code_panel.h"
+#include "script_window.h"
 #include "theme_editor.h"
 #include "output_panel.h"
 #include "test_movie_window.h"
@@ -1840,6 +1842,39 @@ void MainWindow::createPanels()
         _layerDepthDock->hide();
     }
 
+    // Actions, closed until asked.
+    if (!_actionsDock)
+    {
+        ActionsLinks links;
+        links.commands = [this]() -> fla::CommandStack* {
+            return _flaDocument && _flaDocument->document ? &_editContext.commandStack() : nullptr;
+        };
+        links.document = [this]() -> fla::Document* { return _flaDocument ? _flaDocument->document : nullptr; };
+        links.timeline = [this]() -> fla::Timeline* {
+            if (!_flaDocument || !_flaDocument->document)
+                return nullptr;
+            fla::Timeline* scope = _phoenixView ? _phoenixView->scopeTimeline() : nullptr;
+            return scope ? scope : _flaDocument->document->currentScene();
+        };
+        links.currentFrame = [this]() { return _player ? _player->currentFrame() : 0; };
+        links.selection = [this]() { return selectedElements(); };
+        _actionsPanel = new ActionsPanel(links);
+        _actionsDock = new QDockWidget("Actions", this);
+        _actionsDock->setObjectName("actionsDock");
+        _actionsDock->setAllowedAreas(Qt::AllDockWidgetAreas);
+        _actionsPanel->setParent(_actionsDock);
+        _actionsDock->setWidget(_actionsPanel);
+        addDockWidget(Qt::BottomDockWidgetArea, _actionsDock);
+        splitDockWidget(_timelineDock, _actionsDock, Qt::Horizontal);
+        _actionsDock->hide();
+        connect(_actionsDock, &QDockWidget::visibilityChanged, this, [this](bool shown) {
+            if (shown)
+                _actionsPanel->refresh();
+            else
+                _actionsPanel->commit();
+        });
+    }
+
     // History, closed until asked.
     if (!_historyDock)
     {
@@ -2165,6 +2200,7 @@ void MainWindow::setupWindowMenu()
             {"&Motion Editor", _motionEditorDock, QKeySequence(), "The property curves of a motion tween, with their keyframes and eases"},
             {"Layer &Depth", _layerDepthDock, QKeySequence(), "How far each layer sits from the multiplane camera"},
             {"&X-Sheet", _xsheetDock, QKeySequence(), "The exposures of each layer, frame by frame, typed in by drawing number"},
+            {"&Actions", _actionsDock, QKeySequence(Qt::Key_F9), "The script of the frame at the playhead, or of the button or movie clip selected"},
             {"&History", _historyDock, QKeySequence(Qt::CTRL | Qt::Key_F10), "Every step that can be undone; click one to go back or forward to it"},
             {"&Output", _scripts ? _scripts->outputDock() : nullptr, QKeySequence(Qt::Key_F2), "What scripts trace, and the errors they stop on"},
             {"&Review Notes", _notesDock, QKeySequence(), "Notes on frames from whoever reviews the shot; they never export"},
@@ -6136,7 +6172,10 @@ void MainWindow::setupMenus()
         const QString folder = _documentPath.isEmpty() ? QString() : QFileInfo(_documentPath).absolutePath();
         claude_code::open(*_mcpServer, folder, this);
     });
-    _scripts->fillCommandsMenu(menuBar->addMenu("&Commands"), {claudeAction, claudeWindowAction});
+    QAction* scriptEditorAction = new QAction("&Script Editor...", this);
+    scriptEditorAction->setStatusTip("Write, open and run JSFL and Python scripts, and edit ActionScript files");
+    connect(scriptEditorAction, &QAction::triggered, this, [this]() { openScriptEditor(); });
+    _scripts->fillCommandsMenu(menuBar->addMenu("&Commands"), {claudeAction, claudeWindowAction, scriptEditorAction});
 
     QMenu* helpMenu = menuBar->addMenu("&Help");
     QAction* startAction = new QAction("&Start Screen...", this);
@@ -8201,9 +8240,31 @@ void MainWindow::pruneToDocument()
     }
 }
 
+void MainWindow::refreshActions()
+{
+    if (_actionsPanel && _actionsDock && _actionsDock->isVisible())
+        _actionsPanel->refresh();
+}
+
+void MainWindow::openScriptEditor(const QString& path)
+{
+    if (!_scriptWindow)
+    {
+        _scriptWindow = new ScriptWindow([this](const QString& script) { return _scripts && _scripts->runFile(script); },
+            ScriptRunner::commandsFolder(), this);
+        _scriptWindow->newScript(CodeEditor::Language::JavaScript);
+    }
+    if (!path.isEmpty())
+        _scriptWindow->openFile(path);
+    _scriptWindow->show();
+    _scriptWindow->raise();
+    _scriptWindow->activateWindow();
+}
+
 void MainWindow::updateEditState()
 {
     emit editStateChanged();
+    refreshActions();
     const fla::CommandStack& stack = _editContext.commandStack();
     if (AutoSave* autoSave = activeAutoSave())
         autoSave->noteChanged();
@@ -9426,6 +9487,7 @@ void MainWindow::setupPropertiesPanel()
         _propertiesPanel->refresh();
         if (_selection.isEmpty())
             _propertiesPanel->setTab(PropertiesPanel::Tab::Frame);
+        refreshActions();
     });
     connect(_player, &Player::playingChanged, this, [this](bool playing) {
         if (playing)
@@ -9436,6 +9498,7 @@ void MainWindow::setupPropertiesPanel()
     });
     connect(_timelineView, &TimelineView::currentLayerChanged, this, [this]() {
         _propertiesPanel->refresh();
+        refreshActions();
     });
 }
 
@@ -13918,6 +13981,7 @@ void MainWindow::setSelectedTextType(fla::StaticText::TextType type)
 void MainWindow::updateSelectionState()
 {
     emit selectionStateChanged();
+    refreshActions();
     const bool hasDocument = _flaDocument && _flaDocument->document;
 
     if (_selectAllAction)
@@ -14196,6 +14260,12 @@ void MainWindow::saveSettings()
 
 void MainWindow::closeEvent(QCloseEvent* event)
 {
+    // Scripts being written are asked about first.
+    if (_scriptWindow && _scriptWindow->isVisible() && !_scriptWindow->close())
+    {
+        event->ignore();
+        return;
+    }
     // The documents with unsaved changes are asked about, unless quitting
     // asked about every window's already.
     if (!s_quitting && !settleUnsaved({this}, this))

@@ -114,7 +114,22 @@
 
 <p>Turn on <strong>Loop Playback</strong> and drag the ends of the loop range in the ruler to play just part of the timeline over and over, which is ideal for polishing a cycle.</p>
 
-<h3>Frame scripts</h3>
+<h3 id="actions">Write scripts: the Actions panel</h3>
+
+<p><span class="menu-path">Window &rsaquo; Actions</span> (<kbd>F9</kbd>) shows the script of the keyframe at the playhead on the current layer, ready to type into. Select a button or movie clip instance on the stage instead and it shows that instance's own script: its <code>on (release)</code> and <code>onClipEvent</code> handlers, in ActionScript 1 and 2.</p>
+
+<ul>
+  <li>What you type goes into the document as you type. Each script you work on is one step in the undo history until you move to another script or click away, so <kbd>Ctrl</kbd>+<kbd>Z</kbd> on the stage takes back the whole edit. Inside the editor, <kbd>Ctrl</kbd>+<kbd>Z</kbd> undoes typing.</li>
+  <li>The <strong>script navigator</strong> on the left lists every script in the document, scene by scene and symbol by symbol. Click one to edit it without moving the playhead. The &#9776; button shows or hides it.</li>
+  <li><strong>Pin</strong> keeps the script in the panel while you select other things and move the playhead. Picking a script in the navigator pins it; click Pin again to follow the selection.</li>
+  <li><strong>Check</strong> checks the script's syntax. It is also checked each time it goes into the document: the line with an error is marked, and the line below the editor says what is wrong.</li>
+  <li><strong>Find</strong> (<kbd>Ctrl</kbd>+<kbd>F</kbd>) finds, and <kbd>Ctrl</kbd>+<kbd>H</kbd> replaces. <kbd>Ctrl</kbd>+<kbd>G</kbd> goes to a line, and <kbd>Ctrl</kbd>+<kbd>/</kbd> comments the selected lines out or back in.</li>
+  <li><kbd>Tab</kbd> and <kbd>Shift</kbd>+<kbd>Tab</kbd> indent and outdent the selected lines. A new line keeps the indent, one step deeper after an opening brace.</li>
+</ul>
+
+<p>To play what you wrote, use <a href="#test-movie">Test Movie</a>.</p>
+
+<h3 id="frame-scripts">Frame scripts</h3>
 
 <p>Frames can carry scripts, and files made for broadcast often use a few of them to hold a pose or repeat a section. Turn on <span class="menu-path">Control &rsaquo; Enable Simple Frame Actions</span> (<kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>F</kbd>) and playback follows these calls in the timeline's frame scripts:</p>
 

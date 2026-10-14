@@ -93,6 +93,7 @@ set(PHOENIX_CORE_SOURCES
     edit/review_notes.cpp
     edit/safe_zones.cpp
     edit/scene_commands.cpp
+    edit/script_edit.cpp
     edit/selection.cpp
     edit/shape_merge.cpp
     edit/shape_recognition.cpp

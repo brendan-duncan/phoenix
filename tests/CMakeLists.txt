@@ -54,6 +54,7 @@ set(TEST_SOURCES
     test_function_curves.cpp
     test_deformers.cpp
     test_scene_commands.cpp
+    test_script_edit.cpp
     test_document_settings.cpp
     test_text_style.cpp
     test_three_d.cpp

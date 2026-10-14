@@ -6,6 +6,7 @@
 #include "../data/symbol.h"
 #include "../data/symbol_instance.h"
 #include "../data/timeline.h"
+#include "../edit/script_edit.h"
 
 #include "bytecode/compiler.h"
 #include "bytecode/vm.h"
@@ -16,6 +17,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdlib>
 #include <sstream>
 
 namespace fla {
@@ -85,23 +87,27 @@ double scaleOf(double a, double b)
 
 std::string instanceScript(const SymbolInstance& instance)
 {
-    std::string script;
-    for (const std::string& child : instance.extraChildren)
-    {
-        if (child.find("<Actionscript") == std::string::npos)
-            continue;
-        tinyxml2::XMLDocument xml;
-        if (xml.Parse(child.c_str(), child.size()) != tinyxml2::XML_SUCCESS)
-            continue;
-        const tinyxml2::XMLElement* root = xml.FirstChildElement();
-        for (const tinyxml2::XMLElement* part = root ? root->FirstChildElement("script") : nullptr; part;
-             part = part->NextSiblingElement("script"))
-        {
-            if (const char* text = part->GetText())
-                script += std::string(text) + "\n";
-        }
-    }
-    return script;
+    return fla::scripts::instanceScript(instance);
+}
+
+bool checkSyntax(const std::string& source, int& line, std::string& message)
+{
+    line = 0;
+    message.clear();
+    as3::Parser parser(source);
+    parser.parse();
+    if (!parser.hasErrors())
+        return true;
+    // The first of them: "Parse error at line N, column C: what".
+    std::string first = parser.getErrors();
+    first = first.substr(0, first.find('\n'));
+    const std::string at = "at line ";
+    const std::size_t place = first.find(at);
+    if (place != std::string::npos)
+        line = std::atoi(first.c_str() + place + at.size());
+    const std::size_t colon = first.find(": ");
+    message = colon != std::string::npos ? first.substr(colon + 2) : first;
+    return false;
 }
 
 Clip* Clip::child(const std::string& wanted) const

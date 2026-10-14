@@ -176,6 +176,10 @@ private:
 /// onClipEvent handlers), or empty.
 std::string instanceScript(const SymbolInstance& instance);
 
+/// Whether \a source parses as ActionScript; when it does not, the line
+/// (from 1, or 0 when unknown) and the message of the first error.
+bool checkSyntax(const std::string& source, int& line, std::string& message);
+
 } // namespace play
 
 } // namespace fla

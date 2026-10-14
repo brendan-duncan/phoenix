@@ -768,6 +768,14 @@ private:
     /// back or forward to it.
     class QListWidget* _history = nullptr;
     QDockWidget* _historyDock = nullptr;
+    // Window > Actions, and Commands > Script Editor.
+    QDockWidget* _actionsDock = nullptr;
+    class ActionsPanel* _actionsPanel = nullptr;
+    class ScriptWindow* _scriptWindow = nullptr;
+    /// The Actions panel follows the selection, the playhead and edits,
+    /// while it is open.
+    void refreshActions();
+    void openScriptEditor(const QString& path = QString());
     /// Review Notes: notes on frames, kept on a guide layer.
     class NotesPanel* _notes = nullptr;
     QDockWidget* _notesDock = nullptr;

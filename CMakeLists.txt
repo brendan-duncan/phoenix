@@ -123,7 +123,10 @@ set(HEADERS
     src/gui/toolbar_editor.h
     src/gui/theme.h
     src/gui/theme_editor.h
+    src/gui/actions_panel.h
     src/gui/claude_code.h
+    src/gui/code_editor.h
+    src/gui/script_window.h
     src/gui/claude_code_panel.h
     src/gui/pty_process.h
     src/gui/terminal_view.h
@@ -325,6 +328,7 @@ set(HEADERS
     src/edit/function_curves.h
     src/edit/deformers.h
     src/edit/scene_commands.h
+    src/edit/script_edit.h
     src/edit/document_settings.h
     src/edit/text_style.h
     src/edit/font_items.h
@@ -377,7 +381,10 @@ set(SOURCES
     src/gui/toolbar_editor.cpp
     src/gui/theme.cpp
     src/gui/theme_editor.cpp
+    src/gui/actions_panel.cpp
     src/gui/claude_code.cpp
+    src/gui/code_editor.cpp
+    src/gui/script_window.cpp
     src/gui/claude_code_panel.cpp
     src/gui/pty_process.cpp
     src/gui/terminal_view.cpp
