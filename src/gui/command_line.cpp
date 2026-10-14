@@ -462,7 +462,7 @@ int batchScript(const QStringList& args)
     const QString script = option(args, "--jsfl");
     if (!ScriptRunner::isScript(script) || !QFileInfo(script).isFile())
     {
-        std::fprintf(stderr, "batch: --jsfl needs a .jsfl script\n");
+        std::fprintf(stderr, "batch: --jsfl needs a .jsfl or .py script\n");
         return 1;
     }
     QStringList files;
