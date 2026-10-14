@@ -12166,7 +12166,7 @@ void MainWindow::testMovie()
             output->appendError(line, open);
             showOutput();
         },
-        this);
+        this, _documentPath.isEmpty() ? QString() : QFileInfo(_documentPath).absolutePath());
     window.exec();
 }
 

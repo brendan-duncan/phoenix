@@ -1,11 +1,13 @@
 #include "movie_runtime.h"
 
 #include "../data/action_script.h"
+#include "../data/document.h"
 #include "../data/frame.h"
 #include "../data/layer.h"
 #include "../data/static_text.h"
 #include "../data/symbol.h"
 #include "../data/symbol_instance.h"
+#include "../data/symbol_list.h"
 #include "../data/timeline.h"
 #include "../edit/script_edit.h"
 
@@ -19,6 +21,9 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdlib>
+#include <cstring>
+#include <filesystem>
+#include <fstream>
 #include <sstream>
 
 namespace fla {
@@ -191,6 +196,90 @@ std::string instanceScript(const SymbolInstance& instance)
     return fla::scripts::instanceScript(instance);
 }
 
+std::map<std::string, std::string> classFiles(const Document& document, const std::string& folder,
+    std::string& documentClass)
+{
+    documentClass.clear();
+    // The publish settings name the document class and the source paths.
+    // Paths are UTF-8, as Phoenix keeps them.
+    const std::filesystem::path base = std::filesystem::u8path(folder);
+    std::vector<std::filesystem::path> roots{base};
+    for (const auto& [path, bytes] : document.extraFiles)
+    {
+        if (path != "PublishSettings.xml")
+            continue;
+        const std::vector<uint8_t>& data = bytes.get();
+        tinyxml2::XMLDocument xml;
+        if (xml.Parse(reinterpret_cast<const char*>(data.data()), data.size()) != tinyxml2::XML_SUCCESS)
+            break;
+        std::function<const tinyxml2::XMLElement*(const tinyxml2::XMLElement*, const char*)> find =
+            [&](const tinyxml2::XMLElement* at, const char* name) -> const tinyxml2::XMLElement* {
+            for (const tinyxml2::XMLElement* child = at ? at->FirstChildElement() : nullptr; child;
+                 child = child->NextSiblingElement())
+            {
+                if (std::strcmp(child->Name(), name) == 0)
+                    return child;
+                if (const tinyxml2::XMLElement* deeper = find(child, name))
+                    return deeper;
+            }
+            return nullptr;
+        };
+        const tinyxml2::XMLElement* top = xml.RootElement();
+        if (const tinyxml2::XMLElement* named = find(top, "DocumentClass"); named && named->GetText())
+            documentClass = named->GetText();
+        if (const tinyxml2::XMLElement* paths = find(top, "AS3PackagePaths"); paths && paths->GetText())
+        {
+            std::stringstream list(paths->GetText());
+            std::string entry;
+            while (std::getline(list, entry, ';'))
+            {
+                if (entry.empty() || entry == "." || entry.find('$') != std::string::npos)
+                    continue;
+                const std::filesystem::path root = std::filesystem::u8path(entry);
+                roots.push_back(root.is_absolute() ? root : base / root);
+            }
+        }
+        break;
+    }
+
+    // The classes wanted: the document's, and those symbols are linked to.
+    std::vector<std::string> wanted;
+    if (!documentClass.empty())
+        wanted.push_back(documentClass);
+    if (document.symbolList)
+        for (const Symbol* symbol : document.symbolList->symbols)
+        {
+            for (const auto& [key, value] : symbol->extraAttributes)
+                if (key == "linkageClassName" && !value.empty())
+                    wanted.push_back(value);
+        }
+
+    std::map<std::string, std::string> sources;
+    for (const std::string& name : wanted)
+    {
+        std::string relative = name;
+        std::replace(relative.begin(), relative.end(), '.', '/');
+        relative += ".as";
+        for (const std::filesystem::path& root : roots)
+        {
+            const std::filesystem::path file = root / std::filesystem::u8path(relative);
+            std::ifstream in(file, std::ios::binary);
+            if (!in)
+                continue;
+            std::stringstream text;
+            text << in.rdbuf();
+            // The class goes by its own name, without its package.
+            const size_t dot = name.find_last_of('.');
+            sources[dot == std::string::npos ? name : name.substr(dot + 1)] = text.str();
+            break;
+        }
+    }
+    const size_t dot = documentClass.find_last_of('.');
+    if (dot != std::string::npos)
+        documentClass = documentClass.substr(dot + 1);
+    return sources;
+}
+
 bool checkSyntax(const std::string& source, int& line, std::string& message)
 {
     line = 0;
@@ -307,8 +396,98 @@ void MovieRuntime::start()
     _root->length = lengthOf(_root->timeline);
     _root->name = "_level0";
     setupGlobals();
+    loadClasses();
     std::vector<Clip*> entered{_root.get()};
+    // The document class runs before the first frame's scripts, with what
+    // the first frame has placed.
+    if (_classes.count(_documentClass))
+    {
+        syncChildren(*_root, entered);
+        runClass(*_root);
+    }
     enter(entered);
+}
+
+void MovieRuntime::setClasses(const std::map<std::string, std::string>& sources, const std::string& documentClass)
+{
+    _classSources = sources;
+    _documentClass = documentClass;
+}
+
+void MovieRuntime::loadClasses()
+{
+    _classes.clear();
+    for (const auto& [name, source] : _classSources)
+    {
+        as3::Parser parser(source);
+        std::unique_ptr<as3::Program> program = parser.parse();
+        if (parser.hasErrors())
+        {
+            const std::string errors = parser.getErrors();
+            const std::size_t at = errors.find("at line ");
+            tell(name + ".as: " + errors, nullptr, at == std::string::npos ? 0 : std::atoi(errors.c_str() + at + 8));
+            continue;
+        }
+        std::shared_ptr<as3::BytecodeFunction> code;
+        try
+        {
+            as3::Compiler compiler;
+            code = compiler.compile(program.get());
+        }
+        catch (const std::exception& failed)
+        {
+            tell(name + ".as: " + failed.what(), nullptr, 0);
+            continue;
+        }
+        _vm->execute(code, nullptr);
+        report(name + ".as");
+        const as3::ValuePtr made = _vm->getGlobal(name);
+        if (made && made->isClass())
+            _classes[name] = made;
+    }
+    // A symbol whose class has a file: new makes a clip of it, the class
+    // run on it there and then.
+    for (const Symbol* symbol : _library)
+    {
+        const std::string className = attributeOf(symbol->extraAttributes, "linkageClassName");
+        const size_t dot = className.find_last_of('.');
+        const std::string shortName = dot == std::string::npos ? className : className.substr(dot + 1);
+        if (!_classes.count(shortName) || symbol->symbolType == SymbolType::Graphic)
+            continue;
+        _vm->registerBuiltin(shortName, [this, symbol](const std::vector<as3::ValuePtr>&) {
+            Clip* made = makeClip(nullptr, *symbol, std::string());
+            runClass(*made);
+            return objectFor(*made);
+        });
+    }
+}
+
+void MovieRuntime::runClass(Clip& clip)
+{
+    if (clip.classed)
+        return;
+    std::string name;
+    if (&clip == _root.get())
+        name = _documentClass;
+    else if (clip.symbol)
+    {
+        name = attributeOf(clip.symbol->extraAttributes, "linkageClassName");
+        const size_t dot = name.find_last_of('.');
+        if (dot != std::string::npos)
+            name = name.substr(dot + 1);
+    }
+    const auto found = _classes.find(name);
+    if (found == _classes.end())
+        return;
+    clip.classed = true;
+    // Its methods and fields, on it; then its constructor, with it as this.
+    const as3::ValuePtr object = objectFor(clip);
+    for (const auto& [key, value] : found->second->properties)
+        if (key != "__class__")
+            object->properties[key] = value;
+    const as3::ValuePtr constructor = found->second->getProperty(name);
+    if (constructor && constructor->isFunction())
+        runFunction(constructor, {}, clip, name + " constructor");
 }
 
 as3::ValuePtr MovieRuntime::objectFor(Clip& clip)
@@ -1330,8 +1509,9 @@ void MovieRuntime::enter(std::vector<Clip*>& entered)
             runClipEvent(clip, "load");
         }
         // Its children are placed before its frame's scripts run, so the
-        // scripts find them.
+        // scripts find them; its class, when it has one, runs first.
         syncChildren(clip, entered);
+        runClass(clip);
         if (!clip.button)
             runFrameScripts(clip);
     }
@@ -1396,6 +1576,7 @@ void MovieRuntime::settle()
             for (size_t i = 0; i < made.size(); ++i)
             {
                 syncChildren(*made[i], made);
+                runClass(*made[i]);
                 if (!made[i]->button)
                     runFrameScripts(*made[i]);
             }

@@ -95,6 +95,17 @@
   <li><code>stage.focus = name_txt</code>, for input fields.</li>
 </ul>
 
+<h3 id="class-files">Class files</h3>
+
+<p>An ActionScript 3 movie can keep its code in class files (<code>.as</code>) beside the FLA rather than on its frames. Test Movie runs two kinds:</p>
+
+<ul>
+  <li>The <strong>document class</strong>, named in the publish settings. Its constructor runs on the main timeline before the first frame's scripts, with the first frame's instances already placed, so <code>btn.addEventListener(...)</code> in the constructor finds <em>btn</em>. Its methods and fields belong to the main timeline: frame scripts see them, and a method passed as a listener runs there.</li>
+  <li>A symbol's <strong>class</strong>, its linkage class name. Each clip of the symbol, placed on a timeline or made with <code>new</code>, runs the class's constructor with the clip as <code>this</code>.</li>
+</ul>
+
+<p>A class <code>Main</code> is looked for in <code>Main.as</code> in the document's folder, and a class in a package, <code>game.Hat</code>, in <code>game/Hat.as</code>; the source paths in the publish settings are searched too. A class file's error shows in the Output panel with its file and line, as a frame script's does.</p>
+
 <h2 id="games">What games use</h2>
 
 <p>In both versions:</p>
@@ -123,7 +134,7 @@
 
 <div class="callout">
   <span class="label">Not yet</span>
-  <p>ActionScript 3 class files (a document class and <code>.as</code> files), drawing from scripts, and loading other movies. Published SWF files carry the artwork but not the scripts.</p>
+  <p>Interfaces, getters and setters, calls to <code>super</code>, drawing from scripts, and loading other movies. Published SWF files carry the artwork but not the scripts.</p>
 </div>
 
 </article>

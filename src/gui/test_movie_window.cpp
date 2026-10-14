@@ -67,7 +67,7 @@ int flashKeyCode(int key)
 
 TestMovieWindow::TestMovieWindow(const fla::FLADocument& document, const QString& name,
     std::function<void(const QString&)> print, std::function<void(const QString&, const fla::DOMElement*, int)> printError,
-    QWidget* parent)
+    QWidget* parent, const QString& folder)
     : QDialog(parent)
 {
     const fla::Document& data = *document.document;
@@ -162,6 +162,12 @@ TestMovieWindow::TestMovieWindow(const fla::FLADocument& document, const QString
             }
         }
         _movie->setLibrary(symbols, soundIdentifiers, soundClasses);
+        if (!folder.isEmpty())
+        {
+            std::string documentClass;
+            const std::map<std::string, std::string> classes = fla::play::classFiles(data, folder.toStdString(), documentClass);
+            _movie->setClasses(classes, documentClass);
+        }
         _audio = new TimelineAudio(_player, this);
         _audio->setDocument(&document);
         _movie->playSound = [this](const std::string& linkage, double offset, int loops, double volume) {

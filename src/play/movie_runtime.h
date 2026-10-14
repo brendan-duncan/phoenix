@@ -21,6 +21,7 @@ using ValuePtr = std::shared_ptr<Value>;
 namespace fla {
 
 class DOMElement;
+class Document;
 class Frame;
 class Layer;
 class StaticText;
@@ -98,6 +99,9 @@ struct Clip
     /// addChild in ActionScript 3), not on any frame: the instance it shows
     /// as, its own. Drawn over what its parent's timeline has.
     std::shared_ptr<SymbolInstance> made;
+    /// Whether its ActionScript 3 class (its symbol's, or the document
+    /// class for the root) has been run on it.
+    bool classed = false;
 
     /// Whether ActionScript 3 listens on it for \a type.
     bool listensFor(const std::string& type) const;
@@ -169,6 +173,11 @@ public:
     /// Set before start().
     void setLibrary(const std::vector<const Symbol*>& symbols, const std::vector<std::string>& soundIdentifiers,
         const std::vector<std::string>& soundClasses);
+    /// ActionScript 3 class files, by class name, and the document class:
+    /// the classes are compiled as the movie starts, the document class run
+    /// on the main timeline before its first frame's scripts, and a
+    /// symbol's class (its linkage) on each clip of it. Set before start().
+    void setClasses(const std::map<std::string, std::string>& sources, const std::string& documentClass);
 
     /// Whether \a clip's art is at (\a x, \a y) on the stage, as drawn; set
     /// by whatever draws the movie. Without it, its box counts.
@@ -284,6 +293,11 @@ private:
     /// The clip a script value is (a clip's object), or null.
     Clip* clipOfValue(const as3::ValuePtr& value);
     as3::ValuePtr textFieldObject(Clip& clip, const std::string& name);
+    /// Compiles the class files, keeping the classes they define.
+    void loadClasses();
+    /// Runs \a clip's class on it: its methods and fields put on it, its
+    /// constructor called with it as this. Once.
+    void runClass(Clip& clip);
     /// Typing into the focused field: \a character added, Backspace
     /// (\a code 8) taking the last one off, Enter a new line where the field
     /// has more than one.
@@ -353,6 +367,9 @@ private:
     int _lastKey = 0;
     int _lastCharacter = 0;
     std::vector<as3::ValuePtr> _keyListeners;
+    std::map<std::string, std::string> _classSources;
+    std::string _documentClass;
+    std::map<std::string, as3::ValuePtr> _classes;
     /// The pointer on the stage, and the clip being dragged.
     double _mouseX = 0.0;
     double _mouseY = 0.0;
@@ -381,6 +398,14 @@ private:
     std::vector<std::unique_ptr<Clip>> _offStage;
     int _madeCount = 0;
 };
+
+/// The ActionScript 3 class files a document uses, by class name: its
+/// document class and the classes its symbols are linked to, found in
+/// \a folder (the document's) or under the source paths its publish
+/// settings give, by package ("com.studio.Hat" in com/studio/Hat.as).
+/// \a documentClass is set to the document class's name, empty when none.
+std::map<std::string, std::string> classFiles(const Document& document, const std::string& folder,
+    std::string& documentClass);
 
 /// The script kept on an instance (a button's on handlers, a movie clip's
 /// onClipEvent handlers), or empty.

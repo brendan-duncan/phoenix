@@ -805,6 +805,11 @@ int play(const QStringList& args)
     if (document->document->symbolList)
         symbols.assign(document->document->symbolList->symbols.begin(), document->document->symbolList->symbols.end());
     movie.setLibrary(symbols, {}, {});
+    // ActionScript 3 class files beside the document.
+    std::string documentClass;
+    const auto classes = fla::play::classFiles(*document->document,
+        QFileInfo(args.at(0)).absolutePath().toStdString(), documentClass);
+    movie.setClasses(classes, documentClass);
     movie.start();
     for (int i = 0; i < frames; ++i)
         movie.step();

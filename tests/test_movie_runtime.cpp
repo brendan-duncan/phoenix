@@ -1,15 +1,20 @@
 #include "test_util.h"
 
 #include "../src/data/action_script.h"
+#include "../src/data/document.h"
 #include "../src/data/frame.h"
 #include "../src/data/layer.h"
-#include "../src/data/symbol.h"
 #include "../src/data/static_text.h"
+#include "../src/data/symbol.h"
 #include "../src/data/symbol_instance.h"
+#include "../src/data/symbol_list.h"
 #include "../src/data/timeline.h"
 #include "../src/play/movie_runtime.h"
 
 #include <cstdio>
+#include <filesystem>
+#include <fstream>
+#include <map>
 #include <memory>
 #include <string>
 #include <vector>
@@ -573,4 +578,98 @@ TEST(movie_runtime_tells_of_frame_sounds)
     CHECK(heard.size() == 1 && heard[0] == "0");
     runtime.step();
     CHECK(heard.size() == 2);
+}
+
+TEST(movie_runtime_runs_a_document_class_and_symbol_classes)
+{
+    Movie movie;
+    movie.root->name = "Scene 1";
+    fla::Symbol* button = movie.symbol("Button", fla::SymbolType::MovieClip, 1);
+    fla::Symbol* star = movie.symbol("Star", fla::SymbolType::MovieClip, 1);
+    star->extraAttributes.emplace_back("linkageClassName", "Star");
+    fla::Layer* art = movie.layer(*movie.root, "art");
+    movie.place(*movie.frame(*art, 0, 1), *button, "btn");
+    fla::Layer* actions = movie.layer(*movie.root, "actions");
+    movie.frame(*actions, 0, 1, "trace('frame 1, clicks ' + clicks);\n");
+
+    std::map<std::string, std::string> classes;
+    classes["Main"] =
+        "package {\n"
+        "    import flash.display.MovieClip;\n"
+        "    import flash.events.MouseEvent;\n"
+        "    public class Main extends MovieClip {\n"
+        "        public var clicks:int = 0;\n"
+        "        public function Main() {\n"
+        "            stop();\n"
+        "            btn.addEventListener(MouseEvent.CLICK, onClick);\n"
+        "            var made = new Star();\n"
+        "            addChild(made);\n"
+        "            trace('main ' + made.rotation);\n"
+        "        }\n"
+        "        private function onClick(event:MouseEvent):void {\n"
+        "            clicks++;\n"
+        "            trace('clicked ' + clicks);\n"
+        "        }\n"
+        "    }\n"
+        "}\n";
+    classes["Star"] =
+        "package {\n"
+        "    import flash.display.MovieClip;\n"
+        "    public class Star extends MovieClip {\n"
+        "        public function Star() {\n"
+        "            rotation = 45;\n"
+        "        }\n"
+        "    }\n"
+        "}\n";
+
+    std::vector<std::string> traced;
+    std::vector<std::string> errors;
+    fla::play::MovieRuntime runtime(*movie.root, 12.0);
+    runtime.setLibrary({button, star}, {}, {});
+    runtime.setClasses(classes, "Main");
+    runtime.trace = [&traced](const std::string& line) { traced.push_back(line); };
+    runtime.error = [&errors](const std::string& line) { errors.push_back(line); };
+    runtime.start();
+    for (const std::string& error : errors)
+        std::printf("    %s\n", error.c_str());
+    CHECK(errors.empty());
+    // The constructor first, then the first frame's script, which sees its field.
+    CHECK(traced.size() == 2 && traced[0] == "main 45" && traced[1] == "frame 1, clicks 0");
+    CHECK(!runtime.root().playing && runtime.madeChildren(runtime.root()).size() == 1);
+    fla::play::Clip* btn = runtime.root().named("btn");
+    CHECK(btn != nullptr);
+    if (!btn)
+        return;
+    runtime.pointerOver(btn);
+    runtime.pointerDown();
+    runtime.pointerUp();
+    CHECK(traced.size() == 3 && traced[2] == "clicked 1" && errors.empty());
+}
+
+TEST(movie_runtime_finds_class_files_beside_the_document)
+{
+    namespace fs = std::filesystem;
+    const fs::path folder = fs::temp_directory_path() / "phoenix_class_files";
+    fs::remove_all(folder);
+    fs::create_directories(folder / "src" / "game");
+    std::ofstream(folder / "Main.as") << "package { public class Main {} }";
+    std::ofstream(folder / "src" / "game" / "Star.as") << "package game { public class Star {} }";
+
+    fla::Document document(nullptr);
+    const std::string settings =
+        "<flash_profiles><flash_profile><PublishFlashProperties><DocumentClass>Main</DocumentClass>"
+        "<AS3PackagePaths>.;src</AS3PackagePaths></PublishFlashProperties></flash_profile></flash_profiles>";
+    document.extraFiles.emplace_back("PublishSettings.xml", fla::LazyBytes(std::vector<uint8_t>(settings.begin(), settings.end())));
+    document.symbolList = new fla::SymbolList(&document);
+    auto* star = new fla::Symbol(document.symbolList);
+    star->name = "Star";
+    star->extraAttributes.emplace_back("linkageClassName", "game.Star");
+    document.symbolList->symbols.push_back(star);
+
+    std::string documentClass;
+    const std::map<std::string, std::string> classes = fla::play::classFiles(document, folder.string(), documentClass);
+    CHECK(documentClass == "Main");
+    CHECK(classes.size() == 2 && classes.count("Main") && classes.count("Star"));
+    CHECK(classes.count("Star") && classes.at("Star").find("package game") != std::string::npos);
+    fs::remove_all(folder);
 }
