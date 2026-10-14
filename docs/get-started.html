@@ -27,7 +27,7 @@
     <tr><td>Windows 10 and 11 (64-bit)</td><td>Yes</td><td><a href="https://github.com/brendan-duncan/phoenix/releases/latest/download/Phoenix-win-x64-Setup.exe"><code>Phoenix-win-x64-Setup.exe</code></a>, or <a href="https://github.com/brendan-duncan/phoenix/releases/latest/download/Phoenix-win-x64-Portable.zip"><code>Phoenix-win-x64-Portable.zip</code></a></td></tr>
     <tr><td>macOS on Apple silicon</td><td>Yes</td><td><a href="https://github.com/brendan-duncan/phoenix/releases/latest/download/Phoenix-osx-arm64-Setup.pkg"><code>Phoenix-osx-arm64-Setup.pkg</code></a>, or <a href="https://github.com/brendan-duncan/phoenix/releases/latest/download/Phoenix-osx-arm64-Portable.zip"><code>Phoenix-osx-arm64-Portable.zip</code></a></td></tr>
     <tr><td>macOS on Intel</td><td><span class="badge">Planned</span></td><td>&mdash;</td></tr>
-    <tr><td>Linux</td><td><span class="badge">Planned</span></td><td>&mdash;</td></tr>
+    <tr><td>Linux (64-bit x86), with a desktop</td><td>Yes</td><td><a href="https://github.com/brendan-duncan/phoenix/releases/latest/download/Phoenix-linux-x64.AppImage"><code>Phoenix-linux-x64.AppImage</code></a></td></tr>
   </tbody>
 </table>
 
@@ -59,6 +59,16 @@
   <li>Open the package and follow the installer. It puts <strong>Phoenix.app</strong> in your Applications folder. The package is signed and notarized by Apple, so Gatekeeper opens it without a warning.</li>
   <li>Start Phoenix from Launchpad or Applications. You can also drag a <code>.fla</code> or <code>.phx</code> file onto the Dock icon to open it.</li>
 </ol>
+
+<h2>Install on Linux</h2>
+
+<ol class="steps">
+  <li>Download <a href="https://github.com/brendan-duncan/phoenix/releases/latest/download/Phoenix-linux-x64.AppImage"><code>Phoenix-linux-x64.AppImage</code></a> from the <a href="https://github.com/brendan-duncan/phoenix/releases/latest">latest release</a>, and keep it where you keep programs, such as <code>~/Applications</code>.</li>
+  <li>Let it run: in a terminal, <code>chmod +x Phoenix-linux-x64.AppImage</code>, or tick <strong>Allow executing file as program</strong> in its properties in your file manager.</li>
+  <li>Open it. Phoenix runs straight from the file; nothing is installed, and it updates the file itself.</li>
+</ol>
+
+<p>It runs on recent desktop Linux (Ubuntu 22.04 and later, Fedora, Debian 12 and the like) with X11 or Wayland. Some systems need FUSE to open an AppImage; on Ubuntu, <code>sudo apt install libfuse2</code>.</p>
 
 <h2>Updates</h2>
 

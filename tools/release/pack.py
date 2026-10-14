@@ -23,7 +23,10 @@ with --sign-install-identity ("Developer ID Application: ..." and
 store-credentials`. Without them the release is unsigned, which macOS
 refuses to open from a download.
 
-Windows and macOS (Apple silicon) are packed so far; Linux is still to come.
+On Linux the release is an AppImage, which runs on its own wherever it is
+saved and updates itself as installed copies do elsewhere.
+
+Windows, macOS (Apple silicon) and Linux (x64) are packed so far.
 """
 
 import argparse
@@ -59,6 +62,14 @@ TARGETS = {
         "channel": "osx-arm64", "runtime": "osx-arm64", "pack_dir": "Phoenix.app", "main_exe": "Phoenix",
         "icon": "src/phoenix.icns",
     },
+    "linux-x64": {
+        "channel": "linux-x64", "runtime": "linux-x64", "pack_dir": ".", "main_exe": "Phoenix",
+        "icon": "src/phoenix.png",
+    },
+    "linux-arm64": {
+        "channel": "linux-arm64", "runtime": "linux-arm64", "pack_dir": ".", "main_exe": "Phoenix",
+        "icon": "src/phoenix.png",
+    },
 }
 
 
@@ -68,6 +79,8 @@ def host_target():
         return "windows-arm64" if machine in ("arm64", "aarch64") else "windows-x64"
     if sys.platform == "darwin" and machine == "arm64":
         return "macos-arm64"
+    if sys.platform.startswith("linux"):
+        return "linux-arm64" if machine in ("arm64", "aarch64") else "linux-x64"
     sys.exit(f"Packing is not done for {sys.platform} {machine} yet")
 
 

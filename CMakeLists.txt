@@ -586,6 +586,13 @@ if(WIN32)
     # Flat, as Windows apps are: the exe, its DLLs and plugins/ side by side.
     set(PHOENIX_INSTALL_BINDIR .)
     install(CODE "set(QT_DEPLOY_BIN_DIR .)" COMPONENT Phoenix)
+elseif(UNIX AND NOT APPLE)
+    # Flat on Linux too, as the AppImage Velopack makes runs it: phoenix at
+    # the top, the Qt it needs in lib/ and plugins/ beside it, found from
+    # where it is wherever the AppImage mounts.
+    set(PHOENIX_INSTALL_BINDIR .)
+    install(CODE "set(QT_DEPLOY_BIN_DIR .)" COMPONENT Phoenix)
+    set_target_properties(Phoenix PROPERTIES INSTALL_RPATH "$ORIGIN/lib")
 endif()
 install(TARGETS Phoenix
     RUNTIME DESTINATION ${PHOENIX_INSTALL_BINDIR} COMPONENT Phoenix

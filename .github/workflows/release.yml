@@ -10,9 +10,9 @@
 # Run by hand from the Actions tab to try a version without publishing it:
 # the packed release is kept as a workflow artifact instead.
 #
-# Windows x64 and macOS (Apple silicon, signed and notarized) are released
-# so far. Linux and Windows arm64 are still to come, each a matrix entry
-# once tools/release/pack.py can pack it.
+# Windows x64, macOS (Apple silicon, signed and notarized) and Linux x64 (an
+# AppImage) are released so far. Windows arm64 is still to come, a matrix
+# entry once its cross kit is built.
 
 name: Release
 
@@ -51,6 +51,12 @@ jobs:
             target: macos-arm64
             channel: osx-arm64
             generator: ""
+          # The oldest Ubuntu runner, so the AppImage runs on Linux systems
+          # as old as its C library.
+          - os: ubuntu-22.04
+            target: linux-x64
+            channel: linux-x64
+            generator: ""
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
@@ -62,6 +68,15 @@ jobs:
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: "9.0.x"
+
+      # What Qt's archive needs to configure and run on Linux, as the Tests
+      # workflow has it.
+      - name: Linux packages
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgl1-mesa-dev libxkbcommon-dev libfontconfig1-dev libegl1-mesa-dev
 
       - name: Version
         id: version
