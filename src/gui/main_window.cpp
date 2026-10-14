@@ -12053,14 +12053,28 @@ void MainWindow::testMovie()
             output->append(line);
             showOutput();
         },
-        [output, showOutput](const QString& line) {
+        [this, output, showOutput](const QString& line, const fla::DOMElement* source, int at) {
             if (!output)
                 return;
-            output->appendError(line);
+            // Double-clicking the error shows its script, at its line.
+            std::function<void()> open;
+            if (source)
+                open = [this, source, at]() { showScript(source, at); };
+            output->appendError(line, open);
             showOutput();
         },
         this);
     window.exec();
+}
+
+void MainWindow::showScript(const fla::DOMElement* source, int line)
+{
+    if (!_actionsDock || !_actionsPanel)
+        return;
+    _actionsDock->show();
+    _actionsDock->raise();
+    if (!_actionsPanel->reveal(source, line))
+        statusBar()->showMessage("That script is no longer in the document.", 4000);
 }
 
 void MainWindow::traceBitmaps()

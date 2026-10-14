@@ -20,8 +20,48 @@
 #include <algorithm>
 #include <cmath>
 
+namespace {
+
+/// A key as Flash numbers it (Key.LEFT is 37, "A" 65), or 0 for one it
+/// does not.
+int flashKeyCode(int key)
+{
+    if (key >= Qt::Key_A && key <= Qt::Key_Z)
+        return 65 + (key - Qt::Key_A);
+    if (key >= Qt::Key_0 && key <= Qt::Key_9)
+        return 48 + (key - Qt::Key_0);
+    if (key >= Qt::Key_F1 && key <= Qt::Key_F12)
+        return 112 + (key - Qt::Key_F1);
+    switch (key)
+    {
+    case Qt::Key_Backspace: return 8;
+    case Qt::Key_Tab: return 9;
+    case Qt::Key_Return:
+    case Qt::Key_Enter: return 13;
+    case Qt::Key_Shift: return 16;
+    case Qt::Key_Control: return 17;
+    case Qt::Key_Alt: return 18;
+    case Qt::Key_Escape: return 27;
+    case Qt::Key_Space: return 32;
+    case Qt::Key_PageUp: return 33;
+    case Qt::Key_PageDown: return 34;
+    case Qt::Key_End: return 35;
+    case Qt::Key_Home: return 36;
+    case Qt::Key_Left: return 37;
+    case Qt::Key_Up: return 38;
+    case Qt::Key_Right: return 39;
+    case Qt::Key_Down: return 40;
+    case Qt::Key_Insert: return 45;
+    case Qt::Key_Delete: return 46;
+    default: return 0;
+    }
+}
+
+} // namespace
+
 TestMovieWindow::TestMovieWindow(const fla::FLADocument& document, const QString& name,
-    std::function<void(const QString&)> print, std::function<void(const QString&)> printError, QWidget* parent)
+    std::function<void(const QString&)> print, std::function<void(const QString&, const fla::DOMElement*, int)> printError,
+    QWidget* parent)
     : QDialog(parent)
 {
     const fla::Document& data = *document.document;
@@ -43,6 +83,20 @@ TestMovieWindow::TestMovieWindow(const fla::FLADocument& document, const QString
     restartButton->setAutoDefault(false);
     connect(restartButton, &QPushButton::clicked, this, &TestMovieWindow::restart);
     bar->addWidget(restartButton);
+    _pause = new QPushButton("Pause", this);
+    _pause->setToolTip("Hold the movie where it is, or play it on");
+    _pause->setAutoDefault(false);
+    connect(_pause, &QPushButton::clicked, this, [this]() { setPaused(!_paused); });
+    bar->addWidget(_pause);
+    _step = new QPushButton("Step", this);
+    _step->setToolTip("Play one frame of the paused movie");
+    _step->setAutoDefault(false);
+    _step->setEnabled(false);
+    connect(_step, &QPushButton::clicked, this, &TestMovieWindow::tick);
+    bar->addWidget(_step);
+    // The buttons never keep the keys from the movie.
+    for (QPushButton* button : {restartButton, _pause, _step})
+        button->setFocusPolicy(Qt::NoFocus);
     _status = new QLabel(this);
     _status->setForegroundRole(QPalette::PlaceholderText);
     bar->addWidget(_status, 1);
@@ -57,10 +111,10 @@ TestMovieWindow::TestMovieWindow(const fla::FLADocument& document, const QString
             if (print)
                 print(QString::fromStdString(line));
         };
-        _movie->error = [this, printError](const std::string& line) {
+        _movie->scriptError = [this, printError](const fla::play::MovieRuntime::ScriptError& error) {
             ++_errors;
             if (printError)
-                printError(QString::fromStdString(line));
+                printError(QString::fromStdString(error.message), error.source, error.line);
             showFrame();
         };
         _movie->getURL = [](const std::string& url, const std::string&) {
@@ -80,7 +134,46 @@ TestMovieWindow::TestMovieWindow(const fla::FLADocument& document, const QString
 
     // The stage at its own size, as far as the screen allows.
     resize(std::clamp(data.width + 40, 320, 1600), std::clamp(data.height + 80, 240, 1000));
+    _view->installEventFilter(this);
+    installEventFilter(this);
+    _view->setFocus();
     restart();
+}
+
+bool TestMovieWindow::eventFilter(QObject* watched, QEvent* event)
+{
+    // Keys go to the movie; Esc still closes the window.
+    if (_movie && (event->type() == QEvent::KeyPress || event->type() == QEvent::KeyRelease))
+    {
+        auto* key = static_cast<QKeyEvent*>(event);
+        if (key->key() == Qt::Key_Escape)
+            return QDialog::eventFilter(watched, event);
+        const int code = flashKeyCode(key->key());
+        const QString text = key->text();
+        const int character = text.size() == 1 && text.at(0).unicode() >= 32 ? text.at(0).unicode() : 0;
+        if (code != 0 || character != 0)
+        {
+            if (event->type() == QEvent::KeyPress)
+                _movie->keyDown(code, character);
+            else if (!key->isAutoRepeat())
+                _movie->keyUp(code, character);
+            showFrame();
+        }
+        return true;
+    }
+    return QDialog::eventFilter(watched, event);
+}
+
+void TestMovieWindow::setPaused(bool paused)
+{
+    _paused = paused;
+    _pause->setText(paused ? "Play" : "Pause");
+    _step->setEnabled(paused);
+    if (paused)
+        _timer->stop();
+    else if (_movie)
+        _timer->start();
+    showFrame();
 }
 
 TestMovieWindow::~TestMovieWindow()
@@ -107,7 +200,8 @@ void TestMovieWindow::restart()
     _errors = 0;
     _movie->start();
     showFrame();
-    _timer->start();
+    if (!_paused)
+        _timer->start();
 }
 
 void TestMovieWindow::tick()
@@ -130,6 +224,8 @@ void TestMovieWindow::showFrame()
         status = QString("%1, %2").arg(QString::fromStdString(root.timeline->name), status.toLower());
     if (!root.playing)
         status += ", stopped";
+    if (_paused)
+        status += ", paused";
     if (_errors > 0)
         status += QString(", %1 script %2 (see the Output panel)").arg(_errors).arg(_errors == 1 ? "error" : "errors");
     _status->setText(status);

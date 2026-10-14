@@ -15,9 +15,12 @@
 #include "../edit/script_edit.h"
 #include "../play/movie_runtime.h"
 
+#include <QDialog>
+#include <QDialogButtonBox>
 #include <QHBoxLayout>
 #include <QHeaderView>
 #include <QLabel>
+#include <QRadioButton>
 #include <QSplitter>
 #include <QToolButton>
 #include <QTreeWidget>
@@ -40,6 +43,37 @@ bool hasInstanceScript(const fla::Element* element)
             return true;
     }
     return false;
+}
+
+/// The named movie clips and buttons on \a timeline, each once, with what is
+/// named inside them, into \a parent: the instances a script there can
+/// reach by name.
+void addNamedInstances(const fla::Timeline* timeline, QTreeWidgetItem* parent, QTreeWidget* tree, int depth)
+{
+    if (!timeline || depth > 8)
+        return;
+    QStringList seen;
+    for (const fla::Layer* layer : timeline->layers)
+    {
+        for (const fla::Frame* frame : layer ? layer->frames : std::vector<fla::Frame*>{})
+        {
+            for (const fla::Element* element : frame->elements)
+            {
+                if (!element || element->elementType() != fla::Element::Type::SymbolInstance)
+                    continue;
+                const auto* instance = static_cast<const fla::SymbolInstance*>(element);
+                const QString name = QString::fromStdString(instance->name);
+                if (name.isEmpty() || seen.contains(name) || instance->symbolType == fla::SymbolType::Graphic)
+                    continue;
+                seen << name;
+                const QString label = QString("%1  (%2)").arg(name, QString::fromStdString(instance->libraryItemName));
+                auto* item = parent ? new QTreeWidgetItem(parent, {label}) : new QTreeWidgetItem(tree, {label});
+                item->setData(0, Qt::UserRole, name);
+                if (instance->symbol && !instance->symbol->timelines.empty())
+                    addNamedInstances(instance->symbol->timelines.front(), item, tree, depth + 1);
+            }
+        }
+    }
 }
 
 bool canHoldScript(const fla::Element* element)
@@ -86,6 +120,12 @@ ActionsPanel::ActionsPanel(const ActionsLinks& links, QWidget* parent)
     checkButton->setAutoRaise(true);
     checkButton->setToolTip("Check the script's syntax");
     bar->addWidget(checkButton);
+    auto* targetButton = new QToolButton(this);
+    targetButton->setText("Target");
+    targetButton->setAutoRaise(true);
+    targetButton->setToolTip("Insert Target Path: the path to a named movie clip or button, typed in at the caret");
+    bar->addWidget(targetButton);
+    connect(targetButton, &QToolButton::clicked, this, &ActionsPanel::insertTargetPath);
     auto* findButton = new QToolButton(this);
     findButton->setText("Find");
     findButton->setAutoRaise(true);
@@ -385,6 +425,104 @@ void ActionsPanel::check()
     _editor->setErrorLine(line, QString::fromStdString(message));
     _status->setText(line > 0 ? QString("Line %1: %2").arg(line).arg(QString::fromStdString(message))
                               : QString::fromStdString(message));
+}
+
+bool ActionsPanel::reveal(const fla::DOMElement* source, int line)
+{
+    fla::Document* document = _links.document ? _links.document() : nullptr;
+    if (!document || !source || !document->reachable().count(source))
+        return false;
+    Target target;
+    if (const auto* frame = dynamic_cast<const fla::Frame*>(source))
+    {
+        target.kind = Target::Kind::Frame;
+        target.frame = const_cast<fla::Frame*>(frame);
+    }
+    else if (const auto* element = dynamic_cast<const fla::Element*>(source))
+    {
+        target.kind = Target::Kind::Instance;
+        target.element = const_cast<fla::Element*>(element);
+        target.frame = dynamic_cast<fla::Frame*>(element->parent);
+    }
+    else
+        return false;
+    target.layer = target.frame ? dynamic_cast<fla::Layer*>(target.frame->parent) : nullptr;
+    target.timeline = target.layer ? dynamic_cast<fla::Timeline*>(target.layer->parent) : nullptr;
+    if (target.kind == Target::Kind::Frame && !target.layer)
+        return false;
+    commit();
+    _pinned = true;
+    {
+        const QSignalBlocker block(_pin);
+        _pin->setChecked(true);
+    }
+    show(target);
+    rebuildNavigator();
+    if (line > 0)
+        _editor->goToLine(line);
+    else
+        focusEditor();
+    return true;
+}
+
+void ActionsPanel::insertTargetPath()
+{
+    if (_target.kind == Target::Kind::None)
+        return;
+    // A frame's script runs on its timeline; an instance's on its own (a
+    // movie clip's onClipEvent) or on the one it is on (a button's on()).
+    const fla::Timeline* from = _target.timeline;
+    if (_target.kind == Target::Kind::Instance)
+    {
+        const auto* instance = static_cast<const fla::SymbolInstance*>(_target.element);
+        if (instance->symbolType == fla::SymbolType::MovieClip && instance->symbol && !instance->symbol->timelines.empty())
+            from = instance->symbol->timelines.front();
+    }
+    fla::Document* document = _links.document ? _links.document() : nullptr;
+    const bool onScene = document && from &&
+        std::find(document->timelines.begin(), document->timelines.end(), from) != document->timelines.end();
+
+    QDialog dialog(this);
+    dialog.setWindowTitle("Insert Target Path");
+    auto* layout = new QVBoxLayout(&dialog);
+    auto* tree = new QTreeWidget(&dialog);
+    tree->setHeaderHidden(true);
+    auto* here = new QTreeWidgetItem(tree, {"this"});
+    here->setData(0, Qt::UserRole, QString());
+    addNamedInstances(from, here, tree, 0);
+    here->setExpanded(true);
+    tree->setCurrentItem(here->childCount() > 0 ? here->child(0) : here);
+    layout->addWidget(tree, 1);
+    if (here->childCount() == 0)
+        layout->addWidget(new QLabel("No movie clip or button here has an instance name yet: name one in the "
+                                     "Properties panel to reach it from a script.",
+            &dialog));
+    auto* relative = new QRadioButton("Relative (this.)", &dialog);
+    auto* absolute = new QRadioButton("Absolute (_root.)", &dialog);
+    relative->setChecked(true);
+    absolute->setEnabled(onScene);
+    if (!onScene)
+        absolute->setToolTip("Only a script on a scene's own timeline knows where it is from the root");
+    auto* mode = new QHBoxLayout;
+    mode->addWidget(relative);
+    mode->addWidget(absolute);
+    mode->addStretch();
+    layout->addLayout(mode);
+    auto* buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, &dialog);
+    connect(buttons, &QDialogButtonBox::accepted, &dialog, &QDialog::accept);
+    connect(buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
+    connect(tree, &QTreeWidget::itemDoubleClicked, &dialog, &QDialog::accept);
+    layout->addWidget(buttons);
+    dialog.resize(360, 420);
+    if (dialog.exec() != QDialog::Accepted || !tree->currentItem())
+        return;
+
+    QStringList names;
+    for (QTreeWidgetItem* item = tree->currentItem(); item && item != here; item = item->parent())
+        names.prepend(item->data(0, Qt::UserRole).toString());
+    names.prepend(absolute->isChecked() ? "_root" : "this");
+    _editor->insertPlainText(names.join('.'));
+    focusEditor();
 }
 
 void ActionsPanel::setPinned(bool pinned)

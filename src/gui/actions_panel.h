@@ -16,6 +16,7 @@ class QTreeWidgetItem;
 
 namespace fla {
 class CommandStack;
+class DOMElement;
 class Document;
 class Element;
 class Frame;
@@ -52,6 +53,10 @@ public:
     /// Puts what has been typed into the document now.
     void commit();
     void focusEditor();
+    /// Shows the script of \a source (a keyframe, or a button or movie clip
+    /// instance), pinned, with the caret on \a line when it is not 0. False
+    /// when it is no longer in the document.
+    bool reveal(const fla::DOMElement* source, int line);
 
 protected:
     bool eventFilter(QObject* watched, QEvent* event) override;
@@ -89,6 +94,9 @@ private:
     void rebuildNavigator();
     void navigatorPicked(QTreeWidgetItem* item);
     void setPinned(bool pinned);
+    /// Insert Target Path: the path to an instance, picked from those the
+    /// script can reach, typed in at the caret.
+    void insertTargetPath();
 
     ActionsLinks _links;
     CodeView* _view = nullptr;

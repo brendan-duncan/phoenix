@@ -125,6 +125,7 @@
   <li><strong>Check</strong> checks the script's syntax. It is also checked each time it goes into the document: the line with an error is marked, and the line below the editor says what is wrong.</li>
   <li><strong>Find</strong> (<kbd>Ctrl</kbd>+<kbd>F</kbd>) finds, and <kbd>Ctrl</kbd>+<kbd>H</kbd> replaces. <kbd>Ctrl</kbd>+<kbd>G</kbd> goes to a line, and <kbd>Ctrl</kbd>+<kbd>/</kbd> comments the selected lines out or back in.</li>
   <li><kbd>Tab</kbd> and <kbd>Shift</kbd>+<kbd>Tab</kbd> indent and outdent the selected lines. A new line keeps the indent, one step deeper after an opening brace.</li>
+  <li><strong>Target</strong> (Insert Target Path) lists the named movie clips and buttons the script can reach, those inside them too, and types the path to the one you pick at the caret: <code>this.hat.bow</code>, or from the root (<code>_root.hat.bow</code>) for a script on a scene's timeline. Only instances with a name are listed; name them in the Properties panel.</li>
 </ul>
 
 <p>To play what you wrote, use <a href="#test-movie">Test Movie</a>.</p>
@@ -147,7 +148,7 @@
 
 <h3 id="test-movie">Test Movie</h3>
 
-<p><span class="menu-path">Control &rsaquo; Test Movie</span> (<kbd>Ctrl</kbd>+<kbd>Enter</kbd>) plays the scene in a window of its own as Flash Player would, at the document's frame rate, running its ActionScript. Buttons light up under the mouse and answer clicks, so an interactive movie, such as a dress-up game, can be played. <strong>Restart</strong> plays it again from the first frame. Close the window to go back to editing; the document is not changed by playing it.</p>
+<p><span class="menu-path">Control &rsaquo; Test Movie</span> (<kbd>Ctrl</kbd>+<kbd>Enter</kbd>) plays the movie in a window of its own as Flash Player would, at the document's frame rate, running its ActionScript. It starts at the first scene and plays the scenes in turn, back to the first after the last. Buttons light up under the mouse and answer clicks, and keys typed in the window go to the movie, so an interactive movie, such as a dress-up game, can be played. <strong>Restart</strong> plays it again from the first frame; <strong>Pause</strong> holds it, and <strong>Step</strong> moves it on one frame at a time. Close the window to go back to editing; the document is not changed by playing it.</p>
 
 <figure>
   <img src="assets/shots/test-movie.webp" alt="Test Movie window playing a dress-up game: a fairy dressed in blonde hair, a blue blouse and skirt and pink tights, with the buttons that chose them on the left" width="760" height="620">
@@ -158,16 +159,25 @@
 <ul>
   <li>Frame scripts run as their keyframes are reached, on the root timeline and in every movie clip, after the frame's objects are placed.</li>
   <li><code>stop()</code>, <code>play()</code>, <code>gotoAndPlay()</code>, <code>gotoAndStop()</code>, <code>nextFrame()</code> and <code>prevFrame()</code>, on the timeline or on a named clip (<code>hat.gotoAndStop(3)</code>), and <code>tellTarget</code>.</li>
-  <li><code>on (release)</code>, <code>on (press)</code>, <code>on (rollOver)</code> and the other button events, and <code>onClipEvent (load)</code> and <code>onClipEvent (enterFrame)</code> on movie clips.</li>
+  <li><code>nextScene()</code> and <code>prevScene()</code>, and gotos that name a scene (<code>gotoAndPlay("Ending", 1)</code>) or a label in another scene.</li>
+  <li><code>on (release)</code>, <code>on (press)</code>, <code>on (rollOver)</code> and the other button events, <code>on (keyPress "&lt;Left&gt;")</code>, and <code>onClipEvent (load)</code>, <code>onClipEvent (enterFrame)</code>, <code>onClipEvent (keyDown)</code> and <code>onClipEvent (keyUp)</code> on movie clips.</li>
+  <li>The keyboard: <code>Key.isDown(Key.LEFT)</code>, <code>Key.getCode()</code>, <code>Key.getAscii()</code> and <code>Key.addListener()</code>.</li>
   <li>A clip's <code>_x</code>, <code>_y</code>, <code>_visible</code>, <code>_alpha</code>, <code>_xscale</code>, <code>_yscale</code>, <code>_rotation</code>, <code>_currentframe</code> and <code>_totalframes</code>, read and set by dot (<code>hat._visible = false</code>) or with <code>getProperty</code> and <code>setProperty</code>, and clips found by name or by path (<code>"/hat"</code>, <code>_root.hat</code>, <code>_parent</code>).</li>
   <li>Variables, <code>if</code>, loops, functions, <code>ifFrameLoaded</code> (everything counts as loaded) and <code>trace()</code>, whose output goes to the Output panel (<kbd>F2</kbd>).</li>
 </ul>
 
-<p>A script error stops that script only, and is shown in the Output panel with the frame or button and the line it was on; the movie plays on. <code>getURL()</code> opens web links in your browser.</p>
+<p>Frame scripts in ActionScript 3 run too, with what simple games use:</p>
+
+<ul>
+  <li><code>addEventListener</code> and <code>removeEventListener</code> on named movie clips and buttons and on <code>stage</code>, for <code>MouseEvent.CLICK</code>, <code>MOUSE_DOWN</code>, <code>MOUSE_UP</code>, <code>ROLL_OVER</code>, <code>ROLL_OUT</code>, <code>MOUSE_OVER</code> and <code>MOUSE_OUT</code>, <code>Event.ENTER_FRAME</code>, and <code>KeyboardEvent.KEY_DOWN</code> and <code>KEY_UP</code> (with <code>keyCode</code>). Mouse events go on up to the clips a clip is in. A movie clip with a mouse listener answers clicks as a button does.</li>
+  <li>A clip's <code>x</code>, <code>y</code>, <code>visible</code>, <code>alpha</code>, <code>scaleX</code>, <code>scaleY</code>, <code>rotation</code>, <code>currentFrame</code>, <code>totalFrames</code>, <code>currentLabel</code>, <code>name</code>, <code>parent</code> and <code>root</code>, <code>MovieClip(root)</code>, and <code>import</code> lines, which are taken as read.</li>
+</ul>
+
+<p>A script error stops that script only, and is shown in the Output panel with the frame or button and the line it was on; the movie plays on. Double-click the error, once the Test Movie window is closed, to see the script in the <a href="#actions">Actions panel</a> with the caret on that line. <code>getURL()</code> opens web links in your browser.</p>
 
 <div class="callout">
   <span class="label">Not yet</span>
-  <p>ActionScript 3's display list and events (<code>addEventListener</code>, <code>MovieClip</code> classes), sound started from scripts, text fields, dragging, the keyboard, and scenes after the first.</p>
+  <p>ActionScript 3 classes (a document class, <code>.as</code> files, <code>new MovieClip()</code> and <code>addChild</code>), sound started from scripts, text fields and dragging.</p>
 </div>
 
 <h2>Onion skinning</h2>

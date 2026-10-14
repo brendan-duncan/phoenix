@@ -6,9 +6,21 @@
 #include <QHBoxLayout>
 #include <QPlainTextEdit>
 #include <QPushButton>
+#include <QMouseEvent>
 #include <QScrollBar>
+#include <QTextBlock>
 #include <QTextStream>
 #include <QVBoxLayout>
+
+namespace {
+
+/// What double-clicking an error line does.
+struct OpenAction : QTextBlockUserData
+{
+    std::function<void()> open;
+};
+
+} // namespace
 
 OutputPanel::OutputPanel(QWidget* parent)
     : QWidget(parent)
@@ -19,6 +31,7 @@ OutputPanel::OutputPanel(QWidget* parent)
     _text->setLineWrapMode(QPlainTextEdit::WidgetWidth);
     // Long runs of output stay usable.
     _text->setMaximumBlockCount(100000);
+    _text->viewport()->installEventFilter(this);
 
     QPushButton* clearButton = new QPushButton("Clear", this);
     clearButton->setToolTip("Empty the Output panel");
@@ -54,7 +67,21 @@ void OutputPanel::append(const QString& text)
     emit written();
 }
 
-void OutputPanel::appendError(const QString& text)
+bool OutputPanel::eventFilter(QObject* watched, QEvent* event)
+{
+    if (watched == _text->viewport() && event->type() == QEvent::MouseButtonDblClick)
+    {
+        const QTextBlock block = _text->cursorForPosition(static_cast<QMouseEvent*>(event)->position().toPoint()).block();
+        if (auto* action = dynamic_cast<OpenAction*>(block.userData()); action && action->open)
+        {
+            action->open();
+            return true;
+        }
+    }
+    return QWidget::eventFilter(watched, event);
+}
+
+void OutputPanel::appendError(const QString& text, std::function<void()> open)
 {
     // A colored line, so an error stands out from what the script traced.
     QTextCharFormat format;
@@ -64,6 +91,12 @@ void OutputPanel::appendError(const QString& text)
     if (!_text->document()->isEmpty())
         cursor.insertBlock();
     cursor.insertText(text, format);
+    if (open)
+    {
+        auto* action = new OpenAction;
+        action->open = std::move(open);
+        cursor.block().setUserData(action);
+    }
     _text->verticalScrollBar()->setValue(_text->verticalScrollBar()->maximum());
     emit written();
 }

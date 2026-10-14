@@ -8,6 +8,7 @@
 #include "../src/data/timeline.h"
 #include "../src/play/movie_runtime.h"
 
+#include <cstdio>
 #include <memory>
 #include <string>
 #include <vector>
@@ -256,4 +257,125 @@ TEST(movie_runtime_plays_scenes_in_turn_and_goes_to_them)
     movie.root->layers[0]->frames[0]->actionScript->code = "gotoAndPlay('Story', 3);";
     runtime.start();
     CHECK(runtime.scene() == 1 && runtime.root().frame == 2);
+}
+
+TEST(movie_runtime_runs_actionscript_3_listeners)
+{
+    Movie movie;
+    movie.root->name = "Scene 1";
+    fla::Symbol* button = movie.symbol("Button", fla::SymbolType::MovieClip, 2);
+    fla::Symbol* hat = movie.symbol("Hat", fla::SymbolType::MovieClip, 3);
+    fla::Layer* art = movie.layer(*movie.root, "art");
+    fla::Frame* first = movie.frame(*art, 0, 1);
+    movie.place(*first, *button, "btn");
+    movie.place(*first, *hat, "hat");
+    fla::Layer* actions = movie.layer(*movie.root, "actions");
+    movie.frame(*actions, 0, 1,
+        "import flash.events.MouseEvent;\n"
+        "import flash.events.KeyboardEvent;\n"
+        "var clicks:int = 0;\n"
+        "function onClick(e:MouseEvent):void {\n"
+        "    clicks++;\n"
+        "    trace('clicked ' + e.currentTarget.name + ' ' + clicks);\n"
+        "    hat.visible = false;\n"
+        "    hat.gotoAndStop(3);\n"
+        "}\n"
+        "btn.addEventListener(MouseEvent.CLICK, onClick);\n"
+        "btn.buttonMode = true;\n"
+        "stage.addEventListener(KeyboardEvent.KEY_DOWN, function(e:KeyboardEvent):void {\n"
+        "    trace('key ' + e.keyCode);\n"
+        "    hat.alpha = 0.5;\n"
+        "});\n"
+        "stop();\n");
+
+    std::vector<std::string> traced;
+    std::vector<std::string> errors;
+    fla::play::MovieRuntime runtime(*movie.root, 12.0);
+    runtime.trace = [&traced](const std::string& line) { traced.push_back(line); };
+    runtime.error = [&errors](const std::string& line) { errors.push_back(line); };
+    runtime.start();
+    CHECK(errors.empty());
+    for (const std::string& error : errors)
+        std::printf("    %s\n", error.c_str());
+    fla::play::Clip* btn = runtime.root().named("btn");
+    fla::play::Clip* hatClip = runtime.root().named("hat");
+    CHECK(btn && hatClip && btn->wantsMouse() && !hatClip->wantsMouse());
+    if (!btn || !hatClip)
+        return;
+
+    runtime.pointerOver(btn);
+    runtime.pointerDown();
+    runtime.pointerUp();
+    CHECK(traced.size() == 1 && traced[0] == "clicked btn 1");
+    CHECK(!hatClip->shown() && hatClip->frame == 2 && !hatClip->playing);
+    // A press that ends elsewhere is no click.
+    runtime.pointerDown();
+    runtime.pointerOver(nullptr);
+    runtime.pointerUp();
+    CHECK(traced.size() == 1);
+
+    runtime.keyDown(37, 0);
+    runtime.keyUp(37, 0);
+    CHECK(traced.size() == 2 && traced[1] == "key 37" && hatClip->opacity() == 0.5);
+    for (const std::string& error : errors)
+        std::printf("    %s\n", error.c_str());
+    CHECK(errors.empty());
+}
+
+TEST(movie_runtime_hears_keys_in_actionscript_2)
+{
+    Movie movie;
+    movie.root->name = "Scene 1";
+    fla::Symbol* button = movie.symbol("Button", fla::SymbolType::Button, 4);
+    fla::Layer* art = movie.layer(*movie.root, "art");
+    fla::Frame* first = movie.frame(*art, 0, 3);
+    movie.place(*first, *button, "", "on (keyPress \"<Right>\") {\n    nextFrame();\n}\non (keyPress \"a\") {\n    trace('a');\n}");
+    fla::Layer* actions = movie.layer(*movie.root, "actions");
+    movie.frame(*actions, 0, 3,
+        "stop();\n"
+        "var listener = new Object();\n"
+        "listener.onKeyDown = function() { trace('down ' + Key.getCode() + ' ' + Key.isDown(Key.RIGHT)); };\n"
+        "Key.addListener(listener);\n");
+
+    std::vector<std::string> traced;
+    std::vector<std::string> errors;
+    fla::play::MovieRuntime runtime(*movie.root, 12.0);
+    runtime.trace = [&traced](const std::string& line) { traced.push_back(line); };
+    runtime.error = [&errors](const std::string& line) { errors.push_back(line); };
+    runtime.start();
+    runtime.keyDown(39, 0);
+    CHECK(runtime.root().frame == 1);
+    CHECK(traced.size() == 1 && traced[0] == "down 39 true");
+    runtime.keyUp(39, 0);
+    runtime.keyDown(65, 'a');
+    CHECK(traced.size() == 3 && traced[1] == "a" && traced[2] == "down 65 false");
+    for (const std::string& error : errors)
+        std::printf("    %s\n", error.c_str());
+    CHECK(errors.empty());
+}
+
+TEST(movie_runtime_errors_name_their_script_and_line)
+{
+    Movie movie;
+    movie.root->name = "Scene 1";
+    fla::Symbol* button = movie.symbol("Button", fla::SymbolType::Button, 4);
+    fla::Layer* art = movie.layer(*movie.root, "art");
+    fla::Frame* first = movie.frame(*art, 0, 1);
+    fla::SymbolInstance* placed = movie.place(*first, *button, "go", "on (release) {\n    trace('ok');\n    missing();\n}");
+    fla::Layer* actions = movie.layer(*movie.root, "actions");
+    fla::Frame* scripted = movie.frame(*actions, 0, 1, "stop();\nvar a = 1;\nnothing();\n");
+
+    std::vector<fla::play::MovieRuntime::ScriptError> errors;
+    fla::play::MovieRuntime runtime(*movie.root, 12.0);
+    runtime.scriptError = [&errors](const fla::play::MovieRuntime::ScriptError& error) { errors.push_back(error); };
+    runtime.start();
+    CHECK(errors.size() == 1 && errors[0].source == scripted && errors[0].line == 3);
+    fla::play::Clip* go = runtime.root().named("go");
+    CHECK(go != nullptr);
+    if (!go)
+        return;
+    runtime.pointerOver(go);
+    runtime.pointerDown();
+    runtime.pointerUp();
+    CHECK(errors.size() == 2 && errors[1].source == placed && errors[1].line == 3);
 }

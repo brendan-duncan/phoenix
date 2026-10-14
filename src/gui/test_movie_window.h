@@ -8,9 +8,11 @@
 class PhoenixView;
 class Player;
 class QLabel;
+class QPushButton;
 class QTimer;
 
 namespace fla {
+class DOMElement;
 class FLADocument;
 namespace play {
 class MovieRuntime;
@@ -19,24 +21,29 @@ class MovieRuntime;
 
 /// Control > Test Movie: the scene played as Flash Player plays it, at its
 /// frame rate, its scripts run and its buttons answering the mouse.
-/// Restart plays it again from the first frame. While it is open the
-/// document cannot be edited, so it stays as the movie found it.
+/// Keys typed go to the movie. Restart plays it again from the first frame;
+/// Pause holds it, and Step moves a paused movie on one frame. While it is
+/// open the document cannot be edited, so it stays as the movie found it.
 class TestMovieWindow : public QDialog
 {
     Q_OBJECT
 
 public:
     /// \a name is the document's, for the title; \a print and \a printError
-    /// get what the scripts trace and the errors they stop on.
+    /// get what the scripts trace and the errors they stop on, with the
+    /// script an error is in (a keyframe or an instance, or null) and its
+    /// line (0 when not known).
     TestMovieWindow(const fla::FLADocument& document, const QString& name, std::function<void(const QString&)> print,
-        std::function<void(const QString&)> printError, QWidget* parent = nullptr);
+        std::function<void(const QString&, const fla::DOMElement*, int)> printError, QWidget* parent = nullptr);
     ~TestMovieWindow() override;
 
 protected:
     void resizeEvent(QResizeEvent* event) override;
+    bool eventFilter(QObject* watched, QEvent* event) override;
 
 private:
     void restart();
+    void setPaused(bool paused);
     void tick();
     void showFrame();
 
@@ -44,6 +51,9 @@ private:
     Player* _player = nullptr;
     QTimer* _timer = nullptr;
     QLabel* _status = nullptr;
+    QPushButton* _pause = nullptr;
+    QPushButton* _step = nullptr;
+    bool _paused = false;
     std::unique_ptr<fla::play::MovieRuntime> _movie;
     int _errors = 0;
 };

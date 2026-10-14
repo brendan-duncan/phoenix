@@ -3117,9 +3117,12 @@ void PhoenixView::drawElement(QPainter& painter, const fla::Element* element, co
             {
                 frameOffset = movieClip->button ? _movie->buttonFrame(*movieClip) : movieClip->frame;
                 _movieClips.push_back(movieClip);
-                if (movieClip->button)
+                // Buttons, and movie clips ActionScript 3 listens on for the
+                // mouse, are where the pointer finds them: a button by its
+                // hit frame, a clip by what it shows.
+                if (movieClip->wantsMouse())
                 {
-                    QRectF hit = symbolFramesBounds(symbol, 3, 3);
+                    QRectF hit = movieClip->button ? symbolFramesBounds(symbol, 3, 3) : QRectF();
                     if (!hit.isValid() || hit.isEmpty())
                         hit = symbolFramesBounds(symbol, frameOffset, frameOffset);
                     bool invertible = false;

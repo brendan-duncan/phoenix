@@ -19,6 +19,7 @@ using ValuePtr = std::shared_ptr<Value>;
 
 namespace fla {
 
+class DOMElement;
 class Frame;
 class Layer;
 class Symbol;
@@ -64,6 +65,23 @@ struct Clip
     as3::ValuePtr object;
     /// Its onClipEvent handlers, by event.
     std::map<std::string, as3::ValuePtr> clipEvents;
+    /// What ActionScript 3 added with addEventListener, by event type: the
+    /// function, and the clip whose script added it (where the function's
+    /// names are looked up).
+    struct Listener
+    {
+        as3::ValuePtr function;
+        Clip* scope = nullptr;
+        /// The script it was written in: a keyframe, or an instance.
+        const DOMElement* source = nullptr;
+    };
+    std::map<std::string, std::vector<Listener>> listeners;
+
+    /// Whether ActionScript 3 listens on it for \a type.
+    bool listensFor(const std::string& type) const;
+    /// Whether the pointer finds it: a button, or a clip listening for the
+    /// mouse.
+    bool wantsMouse() const;
 
     /// The child with this key, or null.
     Clip* child(const std::string& key) const;
@@ -114,6 +132,12 @@ public:
     void pointerOver(Clip* button);
     void pointerDown();
     void pointerUp();
+    /// A key went down or up: \a code is the key's code as Flash numbers
+    /// them (Key.LEFT 37, "A" 65...), \a character what it types, 0 for
+    /// none. AS2 keyPress handlers, onClipEvent(keyDown) and Key listeners
+    /// hear it, and ActionScript 3's keyDown and keyUp listeners.
+    void keyDown(int code, int character);
+    void keyUp(int code, int character);
     Clip* hovered() const { return _hovered; }
     /// The frame a button shows: down, over or up.
     int buttonFrame(const Clip& button) const;
@@ -121,6 +145,17 @@ public:
     /// What the scripts trace, and the errors they stop on.
     std::function<void(const std::string&)> trace;
     std::function<void(const std::string&)> error;
+    /// An error a script stopped on, and the script it is in: the keyframe
+    /// (a Frame) or the button or movie clip instance (a SymbolInstance)
+    /// whose script it is, null when not known, and the line, 0 when not
+    /// known. Given as well as error.
+    struct ScriptError
+    {
+        std::string message;
+        const DOMElement* source = nullptr;
+        int line = 0;
+    };
+    std::function<void(const ScriptError&)> scriptError;
     /// getURL and fscommand: what the movie asks of the player around it.
     std::function<void(const std::string& url, const std::string& window)> getURL;
 
@@ -142,10 +177,23 @@ private:
     void enter(std::vector<Clip*>& entered);
     void runClipEvent(Clip& clip, const std::string& event);
     void runButtonEvent(Clip& button, const std::string& event);
+    /// A button's on() handlers, by event, gathered the first time.
+    std::map<std::string, as3::ValuePtr>& buttonHandlers(Clip& button);
+    /// Sends an ActionScript 3 event of \a type to \a target's listeners,
+    /// and on up its parents' when it \a bubbles; \a fill adds what the
+    /// event carries.
+    void dispatch(Clip& target, const std::string& type, bool bubbles,
+        const std::function<void(const as3::ValuePtr&)>& fill = {});
+    /// Every clip on the stage, the root first.
+    void eachClip(const std::function<void(Clip&)>& visit);
+    void runFunction(const as3::ValuePtr& function, const std::vector<as3::ValuePtr>& args, Clip& scope,
+        const std::string& where, const DOMElement* source = nullptr);
+    /// Tells of an error: \a message, in the script \a source, at \a line.
+    void tell(const std::string& message, const DOMElement* source, int line);
 
     /// Runs code compiled from \a source (cached by \a key), on \a scope.
-    void run(const void* key, const std::string& source, Clip& scope, const std::string& where);
-    std::shared_ptr<as3::BytecodeFunction> compiled(const void* key, const std::string& source,
+    void run(const DOMElement* key, const std::string& source, Clip& scope, const std::string& where);
+    std::shared_ptr<as3::BytecodeFunction> compiled(const DOMElement* key, const std::string& source,
         const std::string& where);
     void report(const std::string& where);
 
@@ -186,6 +234,8 @@ private:
     /// The clip whose script runs: what a bare stop() or gotoAndPlay()
     /// moves (tellTarget changes it).
     Clip* _current = nullptr;
+    /// The script running, for errors.
+    const DOMElement* _source = nullptr;
     /// Clips sent to another frame by a script, whose new frame's scripts
     /// run once the script is done.
     std::vector<Clip*> _sent;
@@ -193,6 +243,12 @@ private:
     std::map<const void*, std::map<std::string, as3::ValuePtr>> _buttonHandlers;
     Clip* _hovered = nullptr;
     Clip* _pressed = nullptr;
+    /// The keys held down, and the last to go down (Key.getCode and
+    /// Key.getAscii), and what Key.addListener added.
+    std::vector<int> _keysDown;
+    int _lastKey = 0;
+    int _lastCharacter = 0;
+    std::vector<as3::ValuePtr> _keyListeners;
 };
 
 /// The script kept on an instance (a button's on handlers, a movie clip's
