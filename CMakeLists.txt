@@ -574,6 +574,15 @@ set(SOURCES
     src/util/swf_writer.cpp
 )
 
+# Python scripts (src/python) run with the person's own Python, loaded when
+# the first one runs: building needs no Python, and Phoenix starts without
+# one. OFF leaves Python scripting out.
+option(PHOENIX_PYTHON "Run Python scripts with the user's own Python" ON)
+if(PHOENIX_PYTHON)
+    list(APPEND HEADERS src/python/python_api.h src/python/python_engine.h)
+    list(APPEND SOURCES src/python/python_api.cpp src/python/python_engine.cpp)
+endif()
+
 qt6_standard_project_setup()
 
 # The version without a pre-release suffix, for the places that only take
@@ -610,6 +619,10 @@ endif()
 
 target_link_libraries(Phoenix PRIVATE Qt6::Widgets Qt6::Svg zlibstatic tinyxml2 libas3)
 target_link_libraries(Phoenix PRIVATE qjs)
+if(PHOENIX_PYTHON)
+    target_compile_definitions(Phoenix PRIVATE PHOENIX_PYTHON)
+    target_link_libraries(Phoenix PRIVATE ${CMAKE_DL_LIBS})
+endif()
 if(MSVC)
     # Scripts run on the window's thread; room for deep recursion in them.
     target_link_options(Phoenix PRIVATE /STACK:8388608)

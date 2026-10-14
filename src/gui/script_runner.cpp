@@ -18,6 +18,7 @@
 #include "../parser/fla_parser.h"
 #include "../phx/container.h"
 #include "../phx/phx_document.h"
+#include "../python/python_engine.h"
 
 #include <QApplication>
 #include <QClipboard>
@@ -85,6 +86,21 @@ std::string text(const QString& value)
 QString qtext(const std::string& value)
 {
     return QString::fromUtf8(value.data(), static_cast<int>(value.size()));
+}
+
+/// The scripts the Commands folder lists.
+QStringList scriptPatterns()
+{
+#ifdef PHOENIX_PYTHON
+    return {"*.jsfl", "*.py"};
+#else
+    return {"*.jsfl"};
+#endif
+}
+
+bool isPython(const QString& path)
+{
+    return path.endsWith(".py", Qt::CaseInsensitive);
 }
 
 } // namespace
@@ -576,6 +592,10 @@ ScriptRunner::ScriptRunner(MainWindow& window)
 
     _host = std::make_unique<JsflHost>(window, _output);
     _engine = std::make_unique<jsfl::Engine>(*_host);
+#ifdef PHOENIX_PYTHON
+    // Python itself is only looked for when a Python script first runs.
+    _python = std::make_unique<python::Engine>(*_host);
+#endif
 
     // The first window that people work in takes scripts other Phoenix
     // processes hand over (Phoenix script.jsfl with Phoenix open).
@@ -669,7 +689,46 @@ void ScriptRunner::takeRequests()
 
 bool ScriptRunner::running() const
 {
+#ifdef PHOENIX_PYTHON
+    if (_python->running())
+        return true;
+#endif
     return _engine->running();
+}
+
+bool ScriptRunner::isScript(const QString& path)
+{
+#ifdef PHOENIX_PYTHON
+    if (isPython(path))
+        return true;
+#endif
+    return path.endsWith(".jsfl", Qt::CaseInsensitive);
+}
+
+jsfl::RunResult ScriptRunner::run(const QString& path, const jsfl::RunOptions& options)
+{
+    const std::string file = QFileInfo(path).absoluteFilePath().toStdString();
+    if (isPython(path))
+    {
+#ifdef PHOENIX_PYTHON
+        return _python->runFile(file, options);
+#else
+        jsfl::RunResult result;
+        result.ok = false;
+        result.file = file;
+        result.message = "This Phoenix was built without Python scripts.";
+        return result;
+#endif
+    }
+    return _engine->runFile(file, options);
+}
+
+void ScriptRunner::stop()
+{
+    _engine->stop();
+#ifdef PHOENIX_PYTHON
+    _python->stop();
+#endif
 }
 
 bool ScriptRunner::runFile(const QString& path)
@@ -712,11 +771,11 @@ bool ScriptRunner::runFile(const QString& path)
         {
             QCoreApplication::processEvents();
             if (progress->wasCanceled())
-                _engine->stop();
+                stop();
         }
     };
     QApplication::setOverrideCursor(Qt::WaitCursor);
-    const jsfl::RunResult result = _engine->runFile(path.toStdString(), options);
+    const jsfl::RunResult result = run(path, options);
     QApplication::restoreOverrideCursor();
     progress.reset();
     if (!result.ok)
@@ -750,7 +809,7 @@ int ScriptRunner::runHeadless(const QString& script, const QStringList& document
     jsfl::RunOptions options;
     options.undoName = QFileInfo(script).completeBaseName().toStdString();
     options.timeLimit = timeLimit;
-    const jsfl::RunResult result = _engine->runFile(QFileInfo(script).absoluteFilePath().toStdString(), options);
+    const jsfl::RunResult result = run(script, options);
     if (!result.ok)
     {
         std::fprintf(stderr, "%s\n", result.report().c_str());
@@ -766,12 +825,12 @@ void ScriptRunner::fillCommandsMenu(QMenu* menu)
     connect(menu, &QMenu::aboutToShow, this, [this, menu]() {
         menu->clear();
         QAction* runAction = menu->addAction("&Run Command...");
-        runAction->setStatusTip("Run a JSFL script on the open document, as one step to undo");
+        runAction->setStatusTip("Run a script (JSFL or Python) on the open document, as one step to undo");
         connect(runAction, &QAction::triggered, this, &ScriptRunner::runCommand);
         menu->addSeparator();
         // The user's own commands: the scripts in the Commands folder.
         QDir folder(commandsFolder());
-        const QFileInfoList scripts = folder.entryInfoList({"*.jsfl"}, QDir::Files, QDir::Name | QDir::IgnoreCase);
+        const QFileInfoList scripts = folder.entryInfoList(scriptPatterns(), QDir::Files, QDir::Name | QDir::IgnoreCase);
         for (const QFileInfo& script : scripts)
         {
             QAction* action = menu->addAction(script.completeBaseName());
@@ -785,7 +844,7 @@ void ScriptRunner::fillCommandsMenu(QMenu* menu)
         manage->setStatusTip("Rename or delete the commands in your Commands folder");
         connect(manage, &QAction::triggered, this, &ScriptRunner::manageCommands);
         QAction* openFolder = menu->addAction("&Open Commands Folder");
-        openFolder->setStatusTip("Show the folder whose scripts this menu lists; put .jsfl files there to add commands");
+        openFolder->setStatusTip("Show the folder whose scripts this menu lists; put .jsfl or .py files there to add commands");
         connect(openFolder, &QAction::triggered, this, []() { QDesktopServices::openUrl(QUrl::fromLocalFile(commandsFolder())); });
     });
     // Filled once now too, so its keys and the shortcut list see it.
@@ -796,7 +855,12 @@ void ScriptRunner::runCommand()
 {
     QSettings settings;
     const QString start = settings.value("scripts/lastFolder", commandsFolder()).toString();
-    const QString path = QFileDialog::getOpenFileName(&_window, "Run Command", start, "JSFL scripts (*.jsfl);;All files (*)");
+#ifdef PHOENIX_PYTHON
+    const QString filter = "Scripts (*.jsfl *.py);;JSFL scripts (*.jsfl);;Python scripts (*.py);;All files (*)";
+#else
+    const QString filter = "JSFL scripts (*.jsfl);;All files (*)";
+#endif
+    const QString path = QFileDialog::getOpenFileName(&_window, "Run Command", start, filter);
     if (path.isEmpty())
         return;
     settings.setValue("scripts/lastFolder", QFileInfo(path).absolutePath());
@@ -810,7 +874,7 @@ void ScriptRunner::manageCommands()
     QListWidget* list = new QListWidget(&dialog);
     const auto fill = [list]() {
         list->clear();
-        const QFileInfoList scripts = QDir(commandsFolder()).entryInfoList({"*.jsfl"}, QDir::Files, QDir::Name | QDir::IgnoreCase);
+        const QFileInfoList scripts = QDir(commandsFolder()).entryInfoList(scriptPatterns(), QDir::Files, QDir::Name | QDir::IgnoreCase);
         for (const QFileInfo& script : scripts)
         {
             QListWidgetItem* item = new QListWidgetItem(script.completeBaseName(), list);
@@ -834,7 +898,7 @@ void ScriptRunner::manageCommands()
             return;
         }
         const QString from = item->data(Qt::UserRole).toString();
-        const QString to = QDir(commandsFolder()).filePath(name + ".jsfl");
+        const QString to = QDir(commandsFolder()).filePath(name + "." + QFileInfo(from).suffix());
         if (QFileInfo::exists(to) || !QFile::rename(from, to))
             QMessageBox::warning(&dialog, "Rename Command", QString("%1 could not be renamed to %2.").arg(item->text(), name));
         fill();

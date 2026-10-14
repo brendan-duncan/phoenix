@@ -8,6 +8,7 @@ What changed in each release of Phoenix, newest first.
 - `Phoenix script.jsfl` runs a script in the open Phoenix, and `Phoenix run-script` runs one on documents with no window
 - Older scripts that use E4X XML (`x.@id`, `x..item`, XML literals) run
 - Scripts can ask for their settings in XUL dialogs (`fl.xmlPanel`, `fl.xmlPanelFromString`), with handlers and `fl.xmlui`
+- Python scripts: run `.py` files from the Commands menu or `Phoenix run-script`, with your own Python and its packages, using the same objects and names as JSFL
 
 ## 0.6.0 (2026-10-13)
 
