@@ -1,14 +1,9 @@
-# Tests for Phoenix's non-Qt core. This can be configured standalone (handy when
-# only a C++ compiler is around) or pulled in from the top-level CMakeLists.
-#
-# Most of what is tested needs neither Qt nor a file reader, so it builds either
-# way. The parts that read and write documents need tinyxml2 and zlib, which the
-# top-level build provides; standalone those targets are absent and their tests
-# are left out rather than failing to configure.
-#
-# Keep the two lists in step with what the tests actually touch. A source in the
-# wrong list shows up as a link error in the standalone build only, which is easy
-# to miss when working from the top-level one.
+# Tests for Phoenix's Qt-free core. Configured from the top-level
+# CMakeLists, they link the core the app is built from (phoenix_core, listed
+# in cmake/PhoenixCore.cmake), so each source compiles once. This file can
+# also be configured on its own, with no Qt: it then builds the core from the
+# same list with the zlib and tinyxml2 kept in src/third_party, and leaves out
+# JSFL and Python, whose engine the top-level build downloads.
 cmake_minimum_required(VERSION 3.16)
 
 if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
@@ -20,106 +15,6 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 set(PHOENIX_SRC ${CMAKE_CURRENT_SOURCE_DIR}/../src)
 
-# Free of Qt and of the file readers.
-set(TEST_CORE_SOURCES
-    ${PHOENIX_SRC}/data/bitmap_decoder.cpp
-    ${PHOENIX_SRC}/util/gif_writer.cpp
-    ${PHOENIX_SRC}/util/sprite_sheet.cpp
-    ${PHOENIX_SRC}/data/dom_element.cpp
-    ${PHOENIX_SRC}/data/document.cpp
-    ${PHOENIX_SRC}/data/edge.cpp
-    ${PHOENIX_SRC}/data/fla_document.cpp
-    ${PHOENIX_SRC}/data/element.cpp
-    ${PHOENIX_SRC}/data/fill_style.cpp
-    ${PHOENIX_SRC}/data/frame.cpp
-    ${PHOENIX_SRC}/data/group.cpp
-    ${PHOENIX_SRC}/data/layer.cpp
-    ${PHOENIX_SRC}/data/linear_gradient.cpp
-    ${PHOENIX_SRC}/data/oval_primitive.cpp
-    ${PHOENIX_SRC}/data/radial_gradient.cpp
-    ${PHOENIX_SRC}/data/rect.cpp
-    ${PHOENIX_SRC}/data/rectangle_primitive.cpp
-    ${PHOENIX_SRC}/data/shape.cpp
-    ${PHOENIX_SRC}/data/symbol.cpp
-    ${PHOENIX_SRC}/data/symbol_instance.cpp
-    ${PHOENIX_SRC}/data/symbol_list.cpp
-    ${PHOENIX_SRC}/data/stroke_style.cpp
-    ${PHOENIX_SRC}/data/timeline.cpp
-    ${PHOENIX_SRC}/data/transform.cpp
-    ${PHOENIX_SRC}/edit/command_stack.cpp
-    ${PHOENIX_SRC}/edit/brush_stroke.cpp
-    ${PHOENIX_SRC}/edit/brush_presets.cpp
-    ${PHOENIX_SRC}/edit/motion_object.cpp
-    ${PHOENIX_SRC}/edit/brush_texture.cpp
-    ${PHOENIX_SRC}/edit/camera.cpp
-    ${PHOENIX_SRC}/edit/guide_path.cpp
-    ${PHOENIX_SRC}/edit/asset_warp.cpp
-    ${PHOENIX_SRC}/edit/magic_wand.cpp
-    ${PHOENIX_SRC}/edit/curve_fit.cpp
-    ${PHOENIX_SRC}/edit/drawing_style.cpp
-    ${PHOENIX_SRC}/edit/editable_path.cpp
-    ${PHOENIX_SRC}/edit/edit_context.cpp
-    ${PHOENIX_SRC}/edit/element_commands.cpp
-    ${PHOENIX_SRC}/edit/element_clone.cpp
-    ${PHOENIX_SRC}/edit/new_document.cpp
-    ${PHOENIX_SRC}/edit/selection.cpp
-    ${PHOENIX_SRC}/edit/shape_merge.cpp
-    ${PHOENIX_SRC}/edit/shape_transform.cpp
-    ${PHOENIX_SRC}/edit/transform_blend.cpp
-    ${PHOENIX_SRC}/edit/tween_ease.cpp
-    ${PHOENIX_SRC}/edit/image_blur.cpp
-    ${PHOENIX_SRC}/edit/shape_recognition.cpp
-    ${PHOENIX_SRC}/edit/path_tidy.cpp
-    ${PHOENIX_SRC}/edit/shape_tween.cpp
-    ${PHOENIX_SRC}/edit/phoenix_features.cpp
-    ${PHOENIX_SRC}/edit/ik_pose.cpp
-    ${PHOENIX_SRC}/edit/frame_commands.cpp
-    ${PHOENIX_SRC}/edit/layer_commands.cpp
-    ${PHOENIX_SRC}/edit/timeline_edit.cpp
-    ${PHOENIX_SRC}/edit/library_commands.cpp
-    ${PHOENIX_SRC}/edit/find_replace.cpp
-    ${PHOENIX_SRC}/edit/library_media.cpp
-    ${PHOENIX_SRC}/edit/frame_sound.cpp
-    ${PHOENIX_SRC}/edit/frame_bake.cpp
-    ${PHOENIX_SRC}/edit/shot_breakdown.cpp
-    ${PHOENIX_SRC}/edit/linked_assets.cpp
-    ${PHOENIX_SRC}/edit/library_transfer.cpp
-    ${PHOENIX_SRC}/edit/document_session.cpp
-    ${PHOENIX_SRC}/edit/review_notes.cpp
-    ${PHOENIX_SRC}/edit/safe_zones.cpp
-    ${PHOENIX_SRC}/edit/pegs.cpp
-    ${PHOENIX_SRC}/edit/controllers.cpp
-    ${PHOENIX_SRC}/edit/palettes.cpp
-    ${PHOENIX_SRC}/edit/color_art.cpp
-    ${PHOENIX_SRC}/edit/layer_effects.cpp
-    ${PHOENIX_SRC}/edit/lip_sync.cpp
-    ${PHOENIX_SRC}/edit/frame_actions.cpp
-    ${PHOENIX_SRC}/edit/function_curves.cpp
-    ${PHOENIX_SRC}/edit/deformers.cpp
-    ${PHOENIX_SRC}/edit/scene_commands.cpp
-    ${PHOENIX_SRC}/edit/document_settings.cpp
-    ${PHOENIX_SRC}/edit/text_style.cpp
-    ${PHOENIX_SRC}/edit/psd_import.cpp
-    ${PHOENIX_SRC}/edit/three_d.cpp
-    ${PHOENIX_SRC}/edit/filter_presets.cpp
-    ${PHOENIX_SRC}/edit/trace_bitmap.cpp
-    ${PHOENIX_SRC}/edit/combine_objects.cpp
-    ${PHOENIX_SRC}/edit/swatches.cpp
-    ${PHOENIX_SRC}/gui/audio_engine.cpp
-    ${PHOENIX_SRC}/gui/miniaudio_impl.c
-    ${PHOENIX_SRC}/edit/snapping.cpp
-    ${PHOENIX_SRC}/edit/region_split.cpp
-    ${PHOENIX_SRC}/geom/curve.cpp
-    ${PHOENIX_SRC}/geom/fill_attribution.cpp
-    ${PHOENIX_SRC}/geom/intersect.cpp
-    ${PHOENIX_SRC}/geom/planar_map.cpp
-    ${PHOENIX_SRC}/geom/shape_geometry.cpp
-    ${PHOENIX_SRC}/geom/fill_tracing.cpp
-    ${PHOENIX_SRC}/geom/nine_slice.cpp
-    ${PHOENIX_SRC}/parser/path_parser.cpp
-    ${PHOENIX_SRC}/writer/edge_writer.cpp
-)
-
 set(TEST_SOURCES
     test_main.cpp
     test_command_stack.cpp
@@ -129,7 +24,6 @@ set(TEST_SOURCES
     test_editable_path.cpp
     test_element_commands.cpp
     test_fill_attribution.cpp
-    test_bitmap_decoder.cpp
     test_geometry.cpp
     test_intersect.cpp
     test_new_document.cpp
@@ -162,7 +56,6 @@ set(TEST_SOURCES
     test_scene_commands.cpp
     test_document_settings.cpp
     test_text_style.cpp
-    test_psd_import.cpp
     test_three_d.cpp
     test_filter_presets.cpp
     test_trace_bitmap.cpp
@@ -174,10 +67,8 @@ set(TEST_SOURCES
     test_brush_stroke.cpp
     test_magic_wand.cpp
     test_ik_tree.cpp
-    test_ik_pose.cpp
     test_fill_tracing.cpp
     test_binary_fla.cpp
-    test_motion_object.cpp
     test_asset_warp.cpp
     test_property_command.cpp
     test_tween_ease.cpp
@@ -186,36 +77,36 @@ set(TEST_SOURCES
     test_snapping.cpp
 )
 
-if(TARGET tinyxml2 AND TARGET zlibstatic)
-    list(APPEND TEST_CORE_SOURCES
-        ${PHOENIX_SRC}/data/swatch_list.cpp
-        ${PHOENIX_SRC}/parser/document_parser.cpp
-        ${PHOENIX_SRC}/parser/ik_tree.cpp
-        ${PHOENIX_SRC}/parser/fla_parser.cpp
-        ${PHOENIX_SRC}/parser/binary_fla.cpp
-        ${PHOENIX_SRC}/parser/compound_file.cpp
-        ${PHOENIX_SRC}/parser/zip_reader.cpp
-        ${PHOENIX_SRC}/parser/fla_doctor.cpp
-        ${PHOENIX_SRC}/writer/document_diff.cpp
-        ${PHOENIX_SRC}/util/zip_archive.cpp
-        ${PHOENIX_SRC}/util/exr_writer.cpp
-        ${PHOENIX_SRC}/edit/edit_list.cpp
-        ${PHOENIX_SRC}/edit/font_items.cpp
-        ${PHOENIX_SRC}/edit/vector_import.cpp
-        ${PHOENIX_SRC}/edit/shortcut_sets.cpp
-        ${PHOENIX_SRC}/edit/publish_settings.cpp
-        ${PHOENIX_SRC}/util/swf_writer.cpp
-        ${PHOENIX_SRC}/util/zip_writer.cpp
-        ${PHOENIX_SRC}/writer/fla_writer.cpp
-        ${PHOENIX_SRC}/writer/xfl_content.cpp
-        ${PHOENIX_SRC}/writer/xfl_folder_writer.cpp
-        ${PHOENIX_SRC}/writer/xfl_writer.cpp
-        ${PHOENIX_SRC}/phx/container.cpp
-        ${PHOENIX_SRC}/phx/phx_dump.cpp
-        ${PHOENIX_SRC}/phx/phx_read.cpp
-        ${PHOENIX_SRC}/phx/phx_write.cpp
-    )
+if(TARGET phoenix_core)
+    set(TEST_CORE phoenix_core)
+    set(PHOENIX_TESTS_HAVE_PARSER TRUE)
+    if(TARGET qjs)
+        set(PHOENIX_TESTS_HAVE_JSFL TRUE)
+    endif()
+    if(PHOENIX_PYTHON)
+        set(PHOENIX_TESTS_HAVE_PYTHON TRUE)
+    endif()
+else()
+    # On its own: the libraries kept in the tree, as the top-level adds them.
+    set(ZLIB_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
+    add_subdirectory(${PHOENIX_SRC}/third_party/zlib ${CMAKE_BINARY_DIR}/src/third_party/zlib)
+    set(tinyxml2_SHARED_LIBS OFF CACHE BOOL "" FORCE)
+    set(tinyxml2_BUILD_TESTING OFF CACHE BOOL "" FORCE)
+    add_subdirectory(${PHOENIX_SRC}/third_party/tinyxml2 ${CMAKE_BINARY_DIR}/src/third_party/tinyxml2)
+    include(${CMAKE_CURRENT_SOURCE_DIR}/../cmake/PhoenixCore.cmake)
+    phoenix_add_core(phoenix_test_core ${PHOENIX_SRC} FILES)
+    set(TEST_CORE phoenix_test_core)
+    set(PHOENIX_TESTS_HAVE_PARSER TRUE)
+    message(STATUS "phoenix_tests: building without JSFL and Python; configure from the "
+                   "top-level CMakeLists to include their tests as well.")
+endif()
+
+if(PHOENIX_TESTS_HAVE_PARSER)
     list(APPEND TEST_SOURCES
+        test_motion_object.cpp
+        test_psd_import.cpp
+        test_ik_pose.cpp
+        test_bitmap_decoder.cpp
         test_fla_writer.cpp
         test_font_items.cpp
         test_vector_import.cpp
@@ -231,73 +122,25 @@ if(TARGET tinyxml2 AND TARGET zlibstatic)
         test_zip_archive.cpp
         test_phoenix_features.cpp
     )
-    set(PHOENIX_TESTS_HAVE_PARSER TRUE)
-else()
-    message(STATUS
-        "phoenix_tests: building without the file readers (tinyxml2/zlib targets "
-        "not available). Configure from the top-level CMakeLists to include the "
-        "XFL round-trip tests as well.")
 endif()
 
-# The JSFL engine, when QuickJS is there (the top-level build fetches it).
-if(PHOENIX_TESTS_HAVE_PARSER AND TARGET qjs)
-    list(APPEND TEST_CORE_SOURCES
-        ${PHOENIX_SRC}/jsfl/e4x.cpp
-        ${PHOENIX_SRC}/jsfl/engine.cpp
-        ${PHOENIX_SRC}/jsfl/flfile.cpp
-        ${PHOENIX_SRC}/jsfl/model_document.cpp
-        ${PHOENIX_SRC}/jsfl/model_element.cpp
-        ${PHOENIX_SRC}/jsfl/model_flash.cpp
-        ${PHOENIX_SRC}/jsfl/model_library.cpp
-        ${PHOENIX_SRC}/jsfl/model_data.cpp
-        ${PHOENIX_SRC}/jsfl/model_layers.cpp
-        ${PHOENIX_SRC}/jsfl/model_publish.cpp
-        ${PHOENIX_SRC}/jsfl/model_shape.cpp
-        ${PHOENIX_SRC}/jsfl/model_timeline.cpp
-        ${PHOENIX_SRC}/jsfl/object.cpp
-        ${PHOENIX_SRC}/jsfl/session.cpp
-        ${PHOENIX_SRC}/jsfl/xul.cpp
-        ${PHOENIX_SRC}/jsfl/model_xul.cpp
-    )
-    list(APPEND TEST_SOURCES test_jsfl.cpp test_jsfl_e4x.cpp test_jsfl_xul.cpp test_jsfl_extensions.cpp)
-    set(PHOENIX_TESTS_HAVE_JSFL TRUE)
-endif()
-
-# Python scripts over the same object model, when the top-level build has
-# them (PHOENIX_PYTHON); the tests skip themselves where no Python is
-# installed.
-if(PHOENIX_TESTS_HAVE_JSFL AND PHOENIX_PYTHON)
-    list(APPEND TEST_CORE_SOURCES
-        ${PHOENIX_SRC}/python/python_api.cpp
-        ${PHOENIX_SRC}/python/python_engine.cpp
-    )
-    list(APPEND TEST_SOURCES test_python.cpp)
-    set(PHOENIX_TESTS_HAVE_PYTHON TRUE)
-endif()
-
-add_executable(phoenix_tests ${TEST_SOURCES} ${TEST_CORE_SOURCES})
-if(PHOENIX_TESTS_HAVE_PYTHON)
-    target_link_libraries(phoenix_tests PRIVATE ${CMAKE_DL_LIBS})
-endif()
 if(PHOENIX_TESTS_HAVE_JSFL)
-    target_link_libraries(phoenix_tests PRIVATE qjs)
+    list(APPEND TEST_SOURCES test_jsfl.cpp test_jsfl_e4x.cpp test_jsfl_xul.cpp test_jsfl_extensions.cpp)
+endif()
+
+# Python scripts over the same object model; the tests skip themselves where
+# no Python is installed.
+if(PHOENIX_TESTS_HAVE_PYTHON)
+    list(APPEND TEST_SOURCES test_python.cpp)
+endif()
+
+add_executable(phoenix_tests ${TEST_SOURCES})
+target_link_libraries(phoenix_tests PRIVATE ${TEST_CORE})
+if(PHOENIX_TESTS_HAVE_JSFL)
     target_compile_definitions(phoenix_tests PRIVATE PHOENIX_TEST_DATA="${CMAKE_CURRENT_SOURCE_DIR}/data")
     if(MSVC)
         target_link_options(phoenix_tests PRIVATE /STACK:8388608)
     endif()
-endif()
-
-if(PHOENIX_TESTS_HAVE_PARSER)
-    target_link_libraries(phoenix_tests PRIVATE tinyxml2 zlibstatic)
-    if(UNIX AND NOT APPLE)
-        target_link_libraries(phoenix_tests PRIVATE ${CMAKE_DL_LIBS} pthread m)
-    elseif(APPLE)
-        target_link_libraries(phoenix_tests PRIVATE "-framework CoreFoundation" "-framework CoreAudio" "-framework AudioToolbox")
-    endif()
-    target_include_directories(phoenix_tests PRIVATE
-        ${CMAKE_CURRENT_SOURCE_DIR}/../src/third_party/zlib
-        ${CMAKE_BINARY_DIR}/src/third_party/zlib
-    )
 endif()
 
 if(MSVC)

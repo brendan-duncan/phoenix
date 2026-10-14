@@ -1,0 +1,225 @@
+# phoenix_core: the parts of Phoenix free of Qt (the document model, the
+# readers and writers, the editing commands and geometry, scripting), compiled
+# once for both the app and the tests. This is the one list of those sources;
+# the app's own (Qt) sources are listed in the top-level CMakeLists.
+#
+# The groups follow what they need beyond a C++ compiler; the first two go
+# together (the model and the commands use the file code), and the tests can
+# be configured on their own (tests/CMakeLists.txt) with just those:
+#   PHOENIX_CORE_SOURCES         the model, the commands, the geometry
+#   PHOENIX_CORE_FILE_SOURCES    tinyxml2 and zlib, both kept in src/third_party
+#   PHOENIX_CORE_JSFL_SOURCES    QuickJS (JSFL scripts)
+#   PHOENIX_CORE_PYTHON_SOURCES  nothing at build time (Python is loaded when
+#                                a script runs); left out with PHOENIX_PYTHON off
+#
+# Paths are relative to src/. It is an OBJECT library, so every object goes
+# into both programs: nothing is dropped by the linker as it could be from a
+# static library.
+
+set(PHOENIX_CORE_SOURCES
+    data/action_script.cpp
+    data/bitmap.cpp
+    data/document.cpp
+    data/dom_element.cpp
+    data/edge.cpp
+    data/element.cpp
+    data/fill_style.cpp
+    data/fla_document.cpp
+    data/folder.cpp
+    data/frame.cpp
+    data/group.cpp
+    data/layer.cpp
+    data/linear_gradient.cpp
+    data/oval_primitive.cpp
+    data/point.cpp
+    data/printer_settings.cpp
+    data/publish_history.cpp
+    data/radial_gradient.cpp
+    data/rect.cpp
+    data/rectangle_primitive.cpp
+    data/resource.cpp
+    data/script_list.cpp
+    data/shape.cpp
+    data/solid_color.cpp
+    data/static_text.cpp
+    data/stroke_style.cpp
+    data/swatch.cpp
+    data/symbol.cpp
+    data/symbol_instance.cpp
+    data/symbol_list.cpp
+    data/timeline.cpp
+    data/transform.cpp
+    edit/asset_warp.cpp
+    edit/brush_presets.cpp
+    edit/brush_stroke.cpp
+    edit/brush_texture.cpp
+    edit/camera.cpp
+    edit/color_art.cpp
+    edit/combine_objects.cpp
+    edit/command_stack.cpp
+    edit/controllers.cpp
+    edit/curve_fit.cpp
+    edit/deformers.cpp
+    edit/document_session.cpp
+    edit/document_settings.cpp
+    edit/drawing_style.cpp
+    edit/edit_context.cpp
+    edit/editable_path.cpp
+    edit/element_clone.cpp
+    edit/element_commands.cpp
+    edit/filter_presets.cpp
+    edit/find_replace.cpp
+    edit/frame_actions.cpp
+    edit/frame_bake.cpp
+    edit/frame_commands.cpp
+    edit/frame_sound.cpp
+    edit/function_curves.cpp
+    edit/guide_path.cpp
+    edit/image_blur.cpp
+    edit/layer_commands.cpp
+    edit/layer_effects.cpp
+    edit/library_commands.cpp
+    edit/library_media.cpp
+    edit/library_transfer.cpp
+    edit/linked_assets.cpp
+    edit/lip_sync.cpp
+    edit/magic_wand.cpp
+    edit/new_document.cpp
+    edit/palettes.cpp
+    edit/path_tidy.cpp
+    edit/pegs.cpp
+    edit/phoenix_features.cpp
+    edit/region_split.cpp
+    edit/review_notes.cpp
+    edit/safe_zones.cpp
+    edit/scene_commands.cpp
+    edit/selection.cpp
+    edit/shape_merge.cpp
+    edit/shape_recognition.cpp
+    edit/shape_transform.cpp
+    edit/shape_tween.cpp
+    edit/shot_breakdown.cpp
+    edit/snapping.cpp
+    edit/swatches.cpp
+    edit/text_style.cpp
+    edit/three_d.cpp
+    edit/timeline_edit.cpp
+    edit/trace_bitmap.cpp
+    edit/transform_blend.cpp
+    edit/tween_ease.cpp
+    geom/curve.cpp
+    geom/fill_attribution.cpp
+    geom/fill_tracing.cpp
+    geom/intersect.cpp
+    geom/nine_slice.cpp
+    geom/planar_map.cpp
+    geom/shape_geometry.cpp
+    gui/audio_engine.cpp
+    gui/miniaudio_impl.c
+    parser/path_parser.cpp
+    util/gif_writer.cpp
+    util/sprite_sheet.cpp
+    writer/edge_writer.cpp
+)
+
+set(PHOENIX_CORE_FILE_SOURCES
+    edit/psd_import.cpp
+    edit/motion_object.cpp
+    edit/ik_pose.cpp
+    data/bitmap_decoder.cpp
+    data/swatch_list.cpp
+    parser/document_parser.cpp
+    parser/ik_tree.cpp
+    parser/fla_parser.cpp
+    parser/binary_fla.cpp
+    parser/compound_file.cpp
+    parser/zip_reader.cpp
+    parser/fla_doctor.cpp
+    writer/document_diff.cpp
+    util/zip_archive.cpp
+    util/exr_writer.cpp
+    edit/edit_list.cpp
+    edit/font_items.cpp
+    edit/vector_import.cpp
+    edit/shortcut_sets.cpp
+    edit/publish_settings.cpp
+    util/swf_writer.cpp
+    util/zip_writer.cpp
+    writer/fla_writer.cpp
+    writer/xfl_content.cpp
+    writer/xfl_folder_writer.cpp
+    writer/xfl_writer.cpp
+    phx/container.cpp
+    phx/phx_dump.cpp
+    phx/phx_read.cpp
+    phx/phx_write.cpp
+)
+
+set(PHOENIX_CORE_JSFL_SOURCES
+    jsfl/e4x.cpp
+    jsfl/engine.cpp
+    jsfl/flfile.cpp
+    jsfl/model_document.cpp
+    jsfl/model_element.cpp
+    jsfl/model_flash.cpp
+    jsfl/model_library.cpp
+    jsfl/model_data.cpp
+    jsfl/model_layers.cpp
+    jsfl/model_publish.cpp
+    jsfl/model_shape.cpp
+    jsfl/model_timeline.cpp
+    jsfl/object.cpp
+    jsfl/session.cpp
+    jsfl/xul.cpp
+    jsfl/model_xul.cpp
+)
+
+set(PHOENIX_CORE_PYTHON_SOURCES
+    python/python_api.cpp
+    python/python_engine.cpp
+)
+
+# phoenix_add_core(<target> <src dir> [FILES] [JSFL] [PYTHON]): the core as an
+# object library with the groups asked for, carrying what they link against.
+function(phoenix_add_core target src)
+    cmake_parse_arguments(CORE "FILES;JSFL;PYTHON" "" "" ${ARGN})
+    set(groups PHOENIX_CORE_SOURCES)
+    if(CORE_FILES)
+        list(APPEND groups PHOENIX_CORE_FILE_SOURCES)
+    endif()
+    if(CORE_JSFL)
+        list(APPEND groups PHOENIX_CORE_JSFL_SOURCES)
+    endif()
+    if(CORE_PYTHON)
+        list(APPEND groups PHOENIX_CORE_PYTHON_SOURCES)
+    endif()
+    set(sources)
+    foreach(group ${groups})
+        foreach(file ${${group}})
+            list(APPEND sources ${src}/${file})
+        endforeach()
+    endforeach()
+
+    add_library(${target} OBJECT ${sources})
+    # No Qt here: keep Qt's code generators off it.
+    set_target_properties(${target} PROPERTIES AUTOMOC OFF AUTOUIC OFF AUTORCC OFF)
+    target_compile_features(${target} PUBLIC cxx_std_17)
+    if(CORE_FILES)
+        target_link_libraries(${target} PUBLIC tinyxml2 zlibstatic)
+        target_include_directories(${target} PUBLIC
+            ${src}/third_party/zlib
+            ${CMAKE_BINARY_DIR}/src/third_party/zlib)
+    endif()
+    if(CORE_JSFL)
+        target_link_libraries(${target} PUBLIC qjs)
+    endif()
+    if(CORE_PYTHON)
+        target_link_libraries(${target} PUBLIC ${CMAKE_DL_LIBS})
+    endif()
+    # The audio engine (miniaudio) needs the system's audio and threads.
+    if(APPLE)
+        target_link_libraries(${target} PUBLIC "-framework CoreFoundation" "-framework CoreAudio" "-framework AudioToolbox")
+    elseif(UNIX)
+        target_link_libraries(${target} PUBLIC ${CMAKE_DL_LIBS} pthread m)
+    endif()
+endfunction()

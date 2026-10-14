@@ -148,9 +148,14 @@ Drop `-C Debug` with a single-config generator such as Ninja or Unix Makefiles.
 That reports two tests, because libas3 registers its own suite alongside
 Phoenix's. Add `-R phoenix_tests` to run only Phoenix's.
 
-The editing model, the geometry and the path parser and writer need neither Qt
-nor the file readers, so their tests also build on their own — useful when Qt is
-not installed:
+Everything the tests cover is Phoenix's Qt-free core: the document model, the
+readers and writers, the editing commands, the geometry and scripting. It is
+listed once, in `cmake/PhoenixCore.cmake`, and built once as the `phoenix_core`
+object library that both the app and the tests link. A new Qt-free source goes
+in that list (in the group for what it needs), not in the app's own list.
+
+The tests also build on their own, with no Qt installed, using the zlib and
+tinyxml2 kept in `src/third_party`:
 
 ```
 cmake -S tests -B build-tests
@@ -158,8 +163,9 @@ cmake --build build-tests --config Debug
 ctest --test-dir build-tests -C Debug --output-on-failure
 ```
 
-That leaves out the tests covering the XML and zip readers, which the top-level
-build supplies: 177 tests standalone against 200 from the full build.
+That leaves out the JSFL and Python tests, since the JavaScript engine is
+downloaded by the top-level build: 605 tests standalone against 664 from the
+full build.
 
 Some tests exercise real documents rather than hand-built ones — checking that
 files round-trip through the writer unchanged, and that the shape arrangement

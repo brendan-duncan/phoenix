@@ -354,7 +354,6 @@ set(SOURCES
     src/gui/function_curves_panel.cpp
     src/gui/scene_panel.cpp
     src/gui/spell_checker.cpp
-    src/gui/audio_engine.cpp
     src/gui/frame_picker_panel.cpp
     src/gui/swap_symbol_dialog.cpp
     src/gui/start_dialog.cpp
@@ -381,7 +380,6 @@ set(SOURCES
     src/gui/swatches_panel.cpp
     src/gui/media_import.cpp
     src/gui/timeline_audio.cpp
-    src/gui/miniaudio_impl.c
     src/gui/new_document_dialog.cpp
     src/gui/updater.cpp
     src/gui/hot_text.cpp
@@ -411,22 +409,6 @@ set(SOURCES
     src/gui/script_api.cpp
     src/gui/script_runner.cpp
     src/gui/output_panel.cpp
-    src/jsfl/e4x.cpp
-    src/jsfl/engine.cpp
-    src/jsfl/flfile.cpp
-    src/jsfl/model_document.cpp
-    src/jsfl/model_element.cpp
-    src/jsfl/model_flash.cpp
-    src/jsfl/model_library.cpp
-    src/jsfl/model_data.cpp
-    src/jsfl/model_layers.cpp
-    src/jsfl/model_publish.cpp
-    src/jsfl/model_shape.cpp
-    src/jsfl/model_timeline.cpp
-    src/jsfl/object.cpp
-    src/jsfl/session.cpp
-    src/jsfl/xul.cpp
-    src/jsfl/model_xul.cpp
     src/gui/xul_dialog.cpp
     src/gui/mcp_server.cpp
     src/gui/stroke_style_dialog.cpp
@@ -450,137 +432,6 @@ set(SOURCES
     src/gui/layers_panel.cpp
     src/gui/timelines_panel.cpp
     src/gui/player.cpp
-    src/parser/document_parser.cpp
-    src/parser/ik_tree.cpp
-    src/parser/zip_reader.cpp
-    src/parser/fla_doctor.cpp
-    src/parser/fla_parser.cpp
-    src/parser/binary_fla.cpp
-    src/parser/compound_file.cpp
-    src/parser/path_parser.cpp
-    src/data/action_script.cpp
-    src/data/bitmap.cpp
-    src/data/bitmap_decoder.cpp
-    src/data/document.cpp
-    src/data/dom_element.cpp
-    src/data/edge.cpp
-    src/data/element.cpp
-    src/data/fill_style.cpp
-    src/data/fla_document.cpp
-    src/data/folder.cpp
-    src/data/frame.cpp
-    src/data/group.cpp
-    src/data/layer.cpp
-    src/data/linear_gradient.cpp
-    src/data/oval_primitive.cpp
-    src/data/point.cpp
-    src/data/printer_settings.cpp
-    src/data/publish_history.cpp    
-    src/data/radial_gradient.cpp
-    src/data/rect.cpp
-    src/data/rectangle_primitive.cpp
-    src/data/resource.cpp
-    src/data/script_list.cpp
-    src/data/shape.cpp
-    src/data/solid_color.cpp
-    src/data/static_text.cpp
-    src/data/stroke_style.cpp
-    src/data/swatch.cpp
-    src/data/swatch_list.cpp
-    src/data/symbol_instance.cpp
-    src/data/symbol.cpp
-    src/data/symbol_list.cpp
-    src/data/timeline.cpp
-    src/data/transform.cpp
-    src/edit/command_stack.cpp
-    src/edit/edit_context.cpp
-    src/edit/new_document.cpp
-    src/edit/shape_transform.cpp
-    src/edit/transform_blend.cpp
-    src/edit/tween_ease.cpp
-    src/edit/image_blur.cpp
-    src/edit/element_commands.cpp
-    src/edit/element_clone.cpp
-    src/edit/selection.cpp
-    src/edit/shape_merge.cpp
-    src/edit/snapping.cpp
-    src/edit/region_split.cpp
-    src/edit/drawing_style.cpp
-    src/edit/brush_stroke.cpp
-    src/edit/brush_presets.cpp
-    src/edit/shortcut_sets.cpp
-    src/edit/publish_settings.cpp
-    src/edit/brush_texture.cpp
-    src/edit/camera.cpp
-    src/edit/motion_object.cpp
-    src/edit/guide_path.cpp
-    src/edit/asset_warp.cpp
-    src/edit/magic_wand.cpp
-    src/edit/curve_fit.cpp
-    src/edit/shape_recognition.cpp
-    src/edit/path_tidy.cpp
-    src/edit/shape_tween.cpp
-    src/edit/phoenix_features.cpp
-    src/edit/ik_pose.cpp
-    src/edit/frame_commands.cpp
-    src/edit/layer_commands.cpp
-    src/edit/timeline_edit.cpp
-    src/edit/library_commands.cpp
-    src/edit/find_replace.cpp
-    src/edit/library_media.cpp
-    src/edit/frame_sound.cpp
-    src/edit/frame_bake.cpp
-    src/edit/shot_breakdown.cpp
-    src/edit/linked_assets.cpp
-    src/edit/review_notes.cpp
-    src/edit/safe_zones.cpp
-    src/edit/pegs.cpp
-    src/edit/controllers.cpp
-    src/edit/palettes.cpp
-    src/edit/color_art.cpp
-    src/edit/layer_effects.cpp
-    src/edit/lip_sync.cpp
-    src/edit/frame_actions.cpp
-    src/edit/function_curves.cpp
-    src/edit/deformers.cpp
-    src/edit/scene_commands.cpp
-    src/edit/document_settings.cpp
-    src/edit/text_style.cpp
-    src/edit/font_items.cpp
-    src/edit/vector_import.cpp
-    src/edit/psd_import.cpp
-    src/edit/three_d.cpp
-    src/edit/filter_presets.cpp
-    src/edit/library_transfer.cpp
-    src/edit/document_session.cpp
-    src/edit/trace_bitmap.cpp
-    src/edit/edit_list.cpp
-    src/edit/combine_objects.cpp
-    src/edit/swatches.cpp
-    src/geom/curve.cpp
-    src/geom/intersect.cpp
-    src/geom/fill_attribution.cpp
-    src/geom/planar_map.cpp
-    src/geom/shape_geometry.cpp
-    src/geom/fill_tracing.cpp
-    src/geom/nine_slice.cpp
-    src/edit/editable_path.cpp
-    src/writer/edge_writer.cpp
-    src/writer/fla_writer.cpp
-    src/writer/xfl_content.cpp
-    src/writer/xfl_folder_writer.cpp
-    src/writer/xfl_writer.cpp
-    src/writer/document_diff.cpp
-    src/phx/container.cpp
-    src/phx/phx_dump.cpp
-    src/phx/phx_read.cpp
-    src/phx/phx_write.cpp
-    src/util/zip_archive.cpp
-    src/util/exr_writer.cpp
-    src/util/zip_writer.cpp
-    src/util/gif_writer.cpp
-    src/util/sprite_sheet.cpp
-    src/util/swf_writer.cpp
 )
 
 # Python scripts (src/python) run with the person's own Python, loaded when
@@ -589,7 +440,14 @@ set(SOURCES
 option(PHOENIX_PYTHON "Run Python scripts with the user's own Python" ON)
 if(PHOENIX_PYTHON)
     list(APPEND HEADERS src/python/python_api.h src/python/python_engine.h)
-    list(APPEND SOURCES src/python/python_api.cpp src/python/python_engine.cpp)
+endif()
+
+# The Qt-free core, compiled once for the app and the tests.
+include(cmake/PhoenixCore.cmake)
+if(PHOENIX_PYTHON)
+    phoenix_add_core(phoenix_core ${CMAKE_CURRENT_SOURCE_DIR}/src FILES JSFL PYTHON)
+else()
+    phoenix_add_core(phoenix_core ${CMAKE_CURRENT_SOURCE_DIR}/src FILES JSFL)
 endif()
 
 qt6_standard_project_setup()
@@ -626,7 +484,7 @@ if(APPLE)
         MACOSX_BUNDLE_INFO_PLIST ${CMAKE_CURRENT_SOURCE_DIR}/cmake/Info.plist.in)
 endif()
 
-target_link_libraries(Phoenix PRIVATE Qt6::Widgets Qt6::Svg zlibstatic tinyxml2 libas3)
+target_link_libraries(Phoenix PRIVATE phoenix_core Qt6::Widgets Qt6::Svg zlibstatic tinyxml2 libas3)
 target_link_libraries(Phoenix PRIVATE qjs)
 if(PHOENIX_PYTHON)
     target_compile_definitions(Phoenix PRIVATE PHOENIX_PYTHON)
