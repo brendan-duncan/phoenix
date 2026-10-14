@@ -17,12 +17,19 @@ class JsflHost;
 
 namespace jsfl {
 class Engine;
+struct RunOptions;
+struct RunResult;
+} // namespace jsfl
+
+namespace python {
+class Engine;
 }
 
-/// Runs JSFL scripts in a window: the Commands menu, the Output panel, and
-/// scripts handed over from the command line (`Phoenix script.jsfl`) by
-/// another Phoenix process. Each run is one undo step named after the
-/// script; Stop (or Esc) in the dialog that comes up for a long run ends it.
+/// Runs JSFL and Python scripts in a window: the Commands menu, the Output
+/// panel, and scripts handed over from the command line (`Phoenix
+/// script.jsfl`) by another Phoenix process. Each run is one undo step
+/// named after the script; Stop (or Esc) in the dialog that comes up for a
+/// long run ends it.
 class ScriptRunner : public QObject
 {
     Q_OBJECT
@@ -47,9 +54,13 @@ public:
     /// The Commands menu, filled each time it opens.
     void fillCommandsMenu(QMenu* menu);
 
-    /// Runs the script at \a path. False when it failed (the Output panel
-    /// says why).
+    /// Runs the script (.jsfl or .py) at \a path. False when it failed
+    /// (the Output panel says why).
     bool runFile(const QString& path);
+
+    /// Whether \a path is a script Phoenix runs: JSFL, and Python when
+    /// built with it.
+    static bool isScript(const QString& path);
 
     /// Phoenix run-script: opens \a documents, runs \a script with no
     /// window, prints what it traces on standard output and errors on
@@ -63,10 +74,15 @@ private:
     void manageCommands();
     /// Takes the scripts other processes left in the requests folder.
     void takeRequests();
+    /// Runs \a path with the engine for its language.
+    jsfl::RunResult run(const QString& path, const jsfl::RunOptions& options);
+    void stop();
 
     MainWindow& _window;
     std::unique_ptr<JsflHost> _host;
     std::unique_ptr<jsfl::Engine> _engine;
+    /// Python scripts' engine; null when Phoenix is built without them.
+    std::unique_ptr<python::Engine> _python;
     OutputPanel* _output = nullptr;
     QDockWidget* _outputDock = nullptr;
     std::unique_ptr<QLockFile> _lock;

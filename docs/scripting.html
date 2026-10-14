@@ -3,9 +3,9 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Scripting with JSFL · Phoenix User Guide</title>
-<meta name="description" content="Run JSFL scripts on your documents: the Commands menu, the Output panel, the command line, and what the scripts can reach.">
-<meta name="keywords" content="jsfl script scripting commands command menu run command manage saved commands output panel trace fl.trace alert confirm prompt run-script automation batch pipeline javascript undo stop FLfile library timeline layer frame element">
+<title>Scripting with JSFL and Python · Phoenix User Guide</title>
+<meta name="description" content="Run JSFL and Python scripts on your documents: the Commands menu, the Output panel, the command line, and what the scripts can reach.">
+<meta name="keywords" content="jsfl python py script scripting pipeline shotgrid ftrack kitsu virtual environment venv PHOENIX_PYTHON commands command menu run command manage saved commands output panel trace fl.trace alert confirm prompt run-script automation batch pipeline javascript undo stop FLfile library timeline layer frame element">
 <link rel="icon" href="assets/img/logo.png">
 <link rel="stylesheet" href="assets/site.css">
 <script>try { const t = localStorage.getItem("phoenix-docs-theme"); if (t) document.documentElement.dataset.theme = t; } catch (e) {}</script>
@@ -16,12 +16,12 @@
 <article class="content">
 
 <p class="eyebrow">Studio pipeline</p>
-<h1>Scripting with JSFL</h1>
-<p class="lead">Phoenix runs JSFL scripts, the JavaScript files many studio pipelines use to clean up, check and export FLA documents. A script reaches the open documents, their timelines, layers, frames, objects and library, and the files on disk.</p>
+<h1>Scripting with JSFL and Python</h1>
+<p class="lead">Phoenix runs JSFL scripts, the JavaScript files many studio pipelines use to clean up, check and export FLA documents, and Python scripts that use the same objects by the same names. A script reaches the open documents, their timelines, layers, frames, objects and library, and the files on disk.</p>
 
 <h2>Run a script</h2>
 
-<p>Choose <b>Commands &rsaquo; Run Command...</b> and pick a <code>.jsfl</code> file. The script runs on the document in front.</p>
+<p>Choose <b>Commands &rsaquo; Run Command...</b> and pick a <code>.jsfl</code> or <code>.py</code> file. The script runs on the document in front.</p>
 
 <ul>
   <li>Everything a script changes is <b>one step</b> in the undo history, named after the script, so <kbd>Ctrl</kbd>+<kbd>Z</kbd> takes the whole run back. A script that opens another document and changes it makes a step in that document too.</li>
@@ -47,7 +47,8 @@
 
 <p>Runs the script in the Phoenix already open, as if you had chosen it from the Commands menu, or starts Phoenix to run it. This is also what opening a <code>.jsfl</code> file from your file browser does when it is set to open with Phoenix.</p>
 
-<pre><code>Phoenix run-script check.jsfl shot_010.fla shot_020.fla</code></pre>
+<pre><code>Phoenix run-script check.jsfl shot_010.fla shot_020.fla
+Phoenix run-script publish.py shot_010.fla</code></pre>
 
 <p>Opens the documents and runs the script with no window, for render nodes and pipelines. What the script traces goes to standard output; errors go to standard error, and Phoenix exits with 1 when the script fails, so a build can stop on it.</p>
 
@@ -61,6 +62,25 @@
 <p>With no one to answer them, the dialogs answer themselves: <code>alert</code> prints its message, <code>confirm</code> answers yes, <code>prompt</code> answers with its default, and a file picker for opening answers with the first document named on the command line. Save the documents the script changed from the script itself, for example with <code>fl.saveDocument(doc, uri)</code>.</p>
 
 <p>See <a href="command-line.html">Command line</a> for the other commands.</p>
+
+<h2>Python scripts</h2>
+
+<p>A <code>.py</code> file runs wherever a <code>.jsfl</code> file does: from the Commands menu, your Commands folder, <code>Phoenix script.py</code> and <code>Phoenix run-script</code>. It sees the same objects under the same names, so the JSFL reference and what you know of it carry over:</p>
+
+<pre><code>doc = fl.getDocumentDOM()
+for layer in doc.getTimeline().layers:
+    print(layer.name, layer.frameCount)
+doc.getTimeline().addNewLayer("Notes")</code></pre>
+
+<ul>
+  <li><code>fl</code>, <code>FLfile</code>, <code>alert</code>, <code>confirm</code> and <code>prompt</code> are ready in every script. Modules your script imports reach them with <code>import phoenix</code> (<code>phoenix.fl</code>, <code>phoenix.FLfile</code>).</li>
+  <li>Every property and method also has a snake_case name: <code>fl.get_document_dom()</code>, <code>layer.frame_count</code>, <code>timeline.add_new_layer("Notes")</code>.</li>
+  <li><code>print</code> writes to the Output panel, or to standard output with <code>run-script</code>. Lists come back as Python lists, plain objects as dicts, whole numbers as <code>int</code>, and nothing as <code>None</code>.</li>
+  <li>A run is one step to undo, Stop ends it, and an error names the file and line, as with JSFL. Errors from Phoenix are <code>phoenix.Error</code>, which a script can catch. A misspelled property is an <code>AttributeError</code> rather than a new property.</li>
+  <li>Each run starts with fresh globals, and the objects it got from <code>fl</code> stop working when it ends: get them again in the next run. Modules stay imported between runs, so a pipeline library loads once.</li>
+</ul>
+
+<p>Phoenix uses your own Python, 3.8 or later, so the packages you installed for it are there to import: your studio's ShotGrid, ftrack or Kitsu library, or anything else. Phoenix finds the newest Python installed for you or for everyone, then one on your <code>PATH</code>. To pick one, set the <code>PHOENIX_PYTHON</code> environment variable to its <code>python</code> program, its folder, or a virtual environment; scripts then import the environment's packages, and <code>sys.executable</code> is its <code>python</code>, so a script can run tools with it. <code>PHOENIX_PYTHON=off</code> turns Python scripts off. Phoenix itself starts and runs JSFL scripts with no Python installed.</p>
 
 <h2>What scripts can reach</h2>
 

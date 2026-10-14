@@ -101,8 +101,10 @@ const char* const kHelp =
     "      date from their masters (what they use comes too), --save writes the\n"
     "      file back. batch <folder> --update-links --save does every shot.\n"
     "\n"
-    "  run-script <script.jsfl> [document ...] [--timeout SECONDS]\n"
-    "      Opens the documents and runs a JSFL script on them with no window.\n"
+    "  run-script <script.jsfl|script.py> [document ...] [--timeout SECONDS]\n"
+    "      Opens the documents and runs a JSFL or Python script on them with no\n"
+    "      window (Python scripts use your own Python 3.8 or later; set\n"
+    "      PHOENIX_PYTHON to pick a python or virtual environment).\n"
     "      What it traces goes to standard output, its alerts too; confirm\n"
     "      answers yes, prompt its default, and an open-file dialog the first\n"
     "      document. Exits 1 when the script fails. The script stops after\n"
@@ -791,9 +793,9 @@ int run(const QStringList& arguments)
     }
     if (name == "run-script")
     {
-        if (args.isEmpty() || !args.at(0).endsWith(".jsfl", Qt::CaseInsensitive))
+        if (args.isEmpty() || !ScriptRunner::isScript(args.at(0)))
         {
-            std::fprintf(stderr, "run-script: which .jsfl script?\n");
+            std::fprintf(stderr, "run-script: which .jsfl or .py script?\n");
             return 1;
         }
         QStringList documents;

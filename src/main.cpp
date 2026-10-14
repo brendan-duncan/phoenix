@@ -336,10 +336,10 @@ int main(int argc, char *argv[])
     }
     QString initialFile = launch.size() > 1 ? launch.at(1) : QString();
 
-    // Phoenix script.jsfl: a Phoenix already running runs it; else this one
-    // does, once its window is up.
+    // Phoenix script.jsfl (or script.py): a Phoenix already running runs
+    // it; else this one does, once its window is up.
     QString script;
-    if (initialFile.endsWith(".jsfl", Qt::CaseInsensitive))
+    if (ScriptRunner::isScript(initialFile))
     {
         if (ScriptRunner::handToRunning(initialFile))
             return 0;

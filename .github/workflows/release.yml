@@ -106,8 +106,13 @@ jobs:
           jobs=$(getconf _NPROCESSORS_ONLN 2>/dev/null || echo "${NUMBER_OF_PROCESSORS:-4}")
           cmake --build build --config Release --target Phoenix phoenix_tests --parallel "$jobs"
 
+      # The Python script tests use the runner's Python (setup-python
+      # above). They are left off on macOS until Phoenix's Python loading
+      # has been tried on a Mac; the Python code is built there all the same.
       - name: Run the tests
         shell: bash
+        env:
+          PHOENIX_PYTHON: ${{ runner.os == 'macOS' && 'off' || '' }}
         run: ctest --test-dir build -C Release -R phoenix_tests --output-on-failure
 
       # The Developer ID certificates go into a keychain of their own for

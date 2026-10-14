@@ -254,7 +254,22 @@ if(PHOENIX_TESTS_HAVE_PARSER AND TARGET qjs)
     set(PHOENIX_TESTS_HAVE_JSFL TRUE)
 endif()
 
+# Python scripts over the same object model, when the top-level build has
+# them (PHOENIX_PYTHON); the tests skip themselves where no Python is
+# installed.
+if(PHOENIX_TESTS_HAVE_JSFL AND PHOENIX_PYTHON)
+    list(APPEND TEST_CORE_SOURCES
+        ${PHOENIX_SRC}/python/python_api.cpp
+        ${PHOENIX_SRC}/python/python_engine.cpp
+    )
+    list(APPEND TEST_SOURCES test_python.cpp)
+    set(PHOENIX_TESTS_HAVE_PYTHON TRUE)
+endif()
+
 add_executable(phoenix_tests ${TEST_SOURCES} ${TEST_CORE_SOURCES})
+if(PHOENIX_TESTS_HAVE_PYTHON)
+    target_link_libraries(phoenix_tests PRIVATE ${CMAKE_DL_LIBS})
+endif()
 if(PHOENIX_TESTS_HAVE_JSFL)
     target_link_libraries(phoenix_tests PRIVATE qjs)
     target_compile_definitions(phoenix_tests PRIVATE PHOENIX_TEST_DATA="${CMAKE_CURRENT_SOURCE_DIR}/data")
