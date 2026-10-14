@@ -29,6 +29,10 @@ struct Palette
 {
     std::string name;
     std::vector<Color> colors;
+    /// The palette file it is linked to, shared with other documents:
+    /// relative to the document's folder, or absolute; empty when it is
+    /// the document's own.
+    std::string file;
 };
 
 struct Palettes
@@ -44,6 +48,13 @@ struct Palettes
 Palettes load(const Document& document);
 /// \a document's attributes with \a palettes kept in them.
 std::vector<std::pair<std::string, std::string>> saved(const Document& document, const Palettes& palettes);
+
+/// \a palette as a palette file (.phxpal): a heading, its name, then a
+/// line a color, #RRGGBBAA and its name.
+std::string toText(const Palette& palette);
+/// A palette file read into \a palette (its name and colors; its link is
+/// left alone). False when \a text is not one.
+bool fromText(const std::string& text, Palette& palette);
 
 /// How many fills, strokes and text runs are linked to each color name.
 std::vector<std::pair<std::string, int>> usage(const Document& document);

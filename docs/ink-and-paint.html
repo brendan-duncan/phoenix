@@ -33,6 +33,12 @@
 
 <p><b>Edit...</b> (or double-click a color) changes it everywhere it is linked, as one undo step. From the <b>...</b> menu beside the palette list, <b>New Palette...</b> makes a copy of the palette in use under a new name, such as <em>Night</em>: recolor its colors, and switching palettes in the list recolors the whole document. The same menu renames and deletes palettes. The colors are written into the art itself, so the file shows its last coloring anywhere it opens; the palettes and links are kept with the document for Phoenix.</p>
 
+<h3 id="shared-palettes">Sharing a palette between documents</h3>
+
+<p>A show's characters keep their colors from scene to scene when every scene's document links to the same palette file. From the <b>...</b> menu, <b>Save Palette to File...</b> writes the palette in use to a <code>.phxpal</code> file and links it; in each other document, <b>Link Palette File...</b> brings that file in (taking the place of a palette of the same name) and recolors what is linked to its colors. The panel shows the file a shared palette comes from.</p>
+
+<p>Changes go both ways. Editing, adding or removing a color in a shared palette writes the file at once. When a document opens, and whenever you work in the Palettes panel, Phoenix reads the files again: what another document changed comes in as one undo step, recoloring the art. <b>Update Linked Palettes</b> does the same on demand. Keep the palette file beside the documents (in the same folder or one near it), since the link is kept relative to the document, and the documents and the palette can move together. <b>Unlink Palette File</b> keeps the colors as the document's own. Each document still holds the colors in its art, so it opens the same where the palette file is missing.</p>
+
 <h2>Tone, highlight and glow</h2>
 
 <p>Pick the layer to shade and choose <b>Insert &gt; Effect Layer</b>: <b>Tone</b>, <b>Highlight</b> or <b>Glow</b>. An effect layer appears above it; draw the shape of the shadow or light on it with any tool. Phoenix softens the shape, colors it and composites it over the layer under it: a tone is multiplied, darkening what is beneath; a highlight is screened, lightening it; a glow is added. A tone or highlight is kept within the layer's art, so a shadow drawn roughly over a character never spills off it; a glow spreads outside.</p>

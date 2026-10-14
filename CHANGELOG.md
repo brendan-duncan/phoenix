@@ -14,6 +14,7 @@ What changed in each release of Phoenix, newest first.
 - Orient to path on the Frame tab, for classic and motion tweens
 - Pose commands for armatures: Insert, Copy, Paste and Clear Pose, from the frame menu and Edit > Timeline > Pose
 - Library > Properties... sets a symbol's type, class and 9-slice scaling; with 9-slice on, drag its guides inside the symbol
+- Palettes shared between documents: save a palette to a file and link it from other documents, and color changes in one reach the rest
 - SWF movies carry the sound, streamed with the frames, and Publish Settings chooses its compression: MP3, ADPCM, raw or none, with its quality, sample rate and channels
 
 ## 0.9.0

@@ -903,6 +903,9 @@ void MainWindow::adoptDocument(fla::FLADocument* document, const QString& filePa
         _player->setCurrentFrame(0);
     syncFontSymbols();
     warnAboutFonts();
+    // Shared palettes that other documents changed come in once it shows.
+    if (_palettes && _flaDocument)
+        QTimer::singleShot(0, _palettes, &PalettesPanel::syncFiles);
     // A document shown that has no tab yet (the first one, a recovered one)
     // gets one; a tab whose document failed to open goes.
     if (!_switchingTabs)
@@ -2108,6 +2111,10 @@ void MainWindow::createPanels()
             if (_propertiesPanel)
                 _propertiesPanel->refresh();
         };
+        links.folder = [this]() {
+            return _documentPath.isEmpty() ? QString() : QFileInfo(_documentPath).absolutePath();
+        };
+        links.message = [this](const QString& text) { statusBar()->showMessage(text, 6000); };
         _palettes = new PalettesPanel(links);
         _palettesDock = new QDockWidget("Palettes", this);
         _palettesDock->setObjectName("palettesDock");

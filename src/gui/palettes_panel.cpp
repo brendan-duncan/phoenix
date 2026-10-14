@@ -7,6 +7,12 @@
 
 #include <QColorDialog>
 #include <QComboBox>
+#include <QDir>
+#include <QFile>
+#include <QFileDialog>
+#include <QFileInfo>
+#include <QLabel>
+#include <QTimer>
 #include <QGridLayout>
 #include <QHBoxLayout>
 #include <QInputDialog>
@@ -71,10 +77,23 @@ PalettesPanel::PalettesPanel(PalettesLinks links, QWidget* parent)
     menu->addAction("New Palette...", this, &PalettesPanel::newPalette);
     menu->addAction("Rename Palette...", this, &PalettesPanel::renamePalette);
     menu->addAction("Delete Palette", this, &PalettesPanel::removePalette);
+    menu->addSeparator();
+    menu->addAction("Save Palette to File...", this, &PalettesPanel::savePaletteFile)
+        ->setToolTip("Write the palette in use to a palette file and link it, to share it with other documents");
+    menu->addAction("Link Palette File...", this, &PalettesPanel::linkPaletteFile)
+        ->setToolTip("Bring in a palette file another document shares, linked so changes go both ways");
+    menu->addAction("Unlink Palette File", this, &PalettesPanel::unlinkPaletteFile)
+        ->setToolTip("Keep the palette's colors as this document's own, no longer shared");
+    menu->addAction("Update Linked Palettes", this, &PalettesPanel::syncFiles);
+    menu->setToolTipsVisible(true);
     more->setMenu(menu);
     top->addWidget(_palettes, 1);
     top->addWidget(more);
     layout->addLayout(top);
+    _file = new QLabel(this);
+    _file->setWordWrap(true);
+    _file->hide();
+    layout->addWidget(_file);
 
     _colors = new QListWidget(this);
     _colors->setIconSize(QSize(28, 16));
@@ -127,6 +146,8 @@ void PalettesPanel::refresh()
     const int keep = _colors->currentRow();
     _palettes->clear();
     _colors->clear();
+    _file->hide();
+    bool linked = false;
     if (document)
     {
         const fla::palettes::Palettes palettes = fla::palettes::load(*document);
@@ -134,10 +155,22 @@ void PalettesPanel::refresh()
         for (const auto& [name, count] : fla::palettes::usage(*document))
             uses[name] = count;
         for (const fla::palettes::Palette& palette : palettes.list)
+        {
             _palettes->addItem(QString::fromStdString(palette.name));
+            linked = linked || !palette.file.empty();
+        }
         if (const fla::palettes::Palette* active = palettes.activePalette())
         {
             _palettes->setCurrentText(QString::fromStdString(active->name));
+            if (!active->file.empty())
+            {
+                const QString path = resolved(active->file);
+                _file->setText(QString("Shared: %1%2")
+                                   .arg(QFileInfo(path).fileName().toHtmlEscaped(),
+                                       QFileInfo::exists(path) ? QString() : QString(" (missing)")));
+                _file->setToolTip(QDir::toNativeSeparators(path));
+                _file->show();
+            }
             for (const fla::palettes::Color& color : active->colors)
             {
                 const int count = uses.count(color.name) ? uses[color.name] : 0;
@@ -155,6 +188,181 @@ void PalettesPanel::refresh()
     if (keep >= 0 && keep < _colors->count())
         _colors->setCurrentRow(keep);
     _refreshing = false;
+    // Linked files kept in step once this settles.
+    if (linked && !_syncing && !_syncQueued)
+    {
+        _syncQueued = true;
+        QTimer::singleShot(0, this, [this]() {
+            _syncQueued = false;
+            syncFiles();
+        });
+    }
+}
+
+QString PalettesPanel::resolved(const std::string& file) const
+{
+    const QString path = QString::fromStdString(file);
+    const QString folder = _links.folder ? _links.folder() : QString();
+    if (QDir::isAbsolutePath(path) || folder.isEmpty())
+        return QDir::cleanPath(path);
+    return QDir::cleanPath(QDir(folder).absoluteFilePath(path));
+}
+
+std::string PalettesPanel::kept(const QString& path) const
+{
+    const QString folder = _links.folder ? _links.folder() : QString();
+    if (folder.isEmpty())
+        return QDir::fromNativeSeparators(path).toStdString();
+    return QDir(folder).relativeFilePath(path).toStdString();
+}
+
+void PalettesPanel::syncFiles()
+{
+    fla::Document* document = _links.document ? _links.document() : nullptr;
+    if (!document || _syncing)
+        return;
+    PalettesState state{fla::palettes::load(*document)};
+    QStringList updated;
+    for (fla::palettes::Palette& palette : state.palettes.list)
+    {
+        if (palette.file.empty())
+            continue;
+        const QString path = resolved(palette.file);
+        QFile file(path);
+        // A missing file leaves the document's colors as they are.
+        if (!file.open(QIODevice::ReadOnly))
+            continue;
+        const QByteArray bytes = file.readAll();
+        file.close();
+        const std::string disk(bytes.constData(), static_cast<size_t>(bytes.size()));
+        const auto key = std::make_pair(static_cast<const void*>(document), path);
+        const auto known = _known.find(key);
+        if (known == _known.end() || known->second != disk)
+        {
+            // Changed elsewhere, or first seen: the file's colors come in.
+            fla::palettes::Palette read = palette;
+            if (!fla::palettes::fromText(disk, read))
+                continue;
+            _known[key] = disk;
+            if (fla::palettes::toText(read) == fla::palettes::toText(palette))
+                continue;
+            const bool taken = std::any_of(state.palettes.list.begin(), state.palettes.list.end(),
+                [&](const fla::palettes::Palette& other) { return &other != &palette && other.name == read.name; });
+            if (taken)
+                read.name = palette.name;
+            if (state.palettes.active == palette.name)
+                state.palettes.active = read.name;
+            palette = read;
+            updated << QString::fromStdString(palette.name);
+        }
+        else
+        {
+            // Changed here: out to the file, for the documents sharing it.
+            const std::string mine = fla::palettes::toText(palette);
+            if (mine == disk)
+                continue;
+            QFile out(path);
+            if (out.open(QIODevice::WriteOnly | QIODevice::Truncate) &&
+                out.write(mine.data(), static_cast<qint64>(mine.size())) == static_cast<qint64>(mine.size()))
+                _known[key] = mine;
+        }
+    }
+    if (updated.isEmpty())
+        return;
+    _syncing = true;
+    store(state, "Update Linked Palettes");
+    _syncing = false;
+    if (_links.message)
+        _links.message(QString("Palettes updated from their files: %1").arg(updated.join(", ")));
+}
+
+void PalettesPanel::savePaletteFile()
+{
+    fla::Document* document = _links.document ? _links.document() : nullptr;
+    if (!document)
+        return;
+    PalettesState state{fla::palettes::load(*document)};
+    fla::palettes::Palette* active = state.palettes.activePalette();
+    if (!active)
+    {
+        QMessageBox::information(this, "Save Palette to File", "There is no palette yet: Add... a color to make one.");
+        return;
+    }
+    const QString folder = _links.folder ? _links.folder() : QString();
+    const QString suggested = active->file.empty()
+        ? QDir(folder).filePath(QString::fromStdString(active->name) + ".phxpal")
+        : resolved(active->file);
+    const QString path = QFileDialog::getSaveFileName(this, "Save Palette to File", suggested,
+        "Phoenix palettes (*.phxpal)");
+    if (path.isEmpty())
+        return;
+    const std::string text = fla::palettes::toText(*active);
+    QFile out(path);
+    if (!out.open(QIODevice::WriteOnly | QIODevice::Truncate) ||
+        out.write(text.data(), static_cast<qint64>(text.size())) != static_cast<qint64>(text.size()))
+    {
+        QMessageBox::warning(this, "Save Palette to File",
+            QString("Could not write %1.").arg(QDir::toNativeSeparators(path)));
+        return;
+    }
+    out.close();
+    _known[std::make_pair(static_cast<const void*>(document), QDir::cleanPath(path))] = text;
+    active->file = kept(QDir::cleanPath(path));
+    store(state, "Link Palette File");
+}
+
+void PalettesPanel::linkPaletteFile()
+{
+    fla::Document* document = _links.document ? _links.document() : nullptr;
+    if (!document)
+        return;
+    const QString folder = _links.folder ? _links.folder() : QString();
+    const QString path = QFileDialog::getOpenFileName(this, "Link Palette File", folder, "Phoenix palettes (*.phxpal)");
+    if (path.isEmpty())
+        return;
+    QFile file(path);
+    QByteArray bytes;
+    if (file.open(QIODevice::ReadOnly))
+        bytes = file.readAll();
+    const std::string text(bytes.constData(), static_cast<size_t>(bytes.size()));
+    fla::palettes::Palette read;
+    if (!fla::palettes::fromText(text, read))
+    {
+        QMessageBox::warning(this, "Link Palette File",
+            QString("%1 is not a Phoenix palette.").arg(QDir::toNativeSeparators(path)));
+        return;
+    }
+    if (read.name.empty())
+        read.name = QFileInfo(path).completeBaseName().toStdString();
+    read.file = kept(QDir::cleanPath(path));
+    _known[std::make_pair(static_cast<const void*>(document), QDir::cleanPath(path))] = text;
+    // A palette of the same name takes the file's colors; otherwise it is
+    // a new one. Either way it is the one in use.
+    PalettesState state{fla::palettes::load(*document)};
+    bool replaced = false;
+    for (fla::palettes::Palette& palette : state.palettes.list)
+        if (palette.name == read.name)
+        {
+            palette = read;
+            replaced = true;
+        }
+    if (!replaced)
+        state.palettes.list.push_back(read);
+    state.palettes.active = read.name;
+    store(state, "Link Palette File");
+}
+
+void PalettesPanel::unlinkPaletteFile()
+{
+    fla::Document* document = _links.document ? _links.document() : nullptr;
+    if (!document)
+        return;
+    PalettesState state{fla::palettes::load(*document)};
+    fla::palettes::Palette* active = state.palettes.activePalette();
+    if (!active || active->file.empty())
+        return;
+    active->file.clear();
+    store(state, "Unlink Palette File");
 }
 
 int PalettesPanel::currentColor() const
@@ -181,6 +389,8 @@ void PalettesPanel::store(const PalettesState& state, const QString& name)
 
 void PalettesPanel::newPalette()
 {
+    // What other documents changed in a shared palette first.
+    syncFiles();
     fla::Document* document = _links.document ? _links.document() : nullptr;
     if (!document)
         return;
@@ -208,6 +418,7 @@ void PalettesPanel::newPalette()
 
 void PalettesPanel::renamePalette()
 {
+    syncFiles();
     fla::Document* document = _links.document ? _links.document() : nullptr;
     if (!document)
         return;
@@ -227,6 +438,7 @@ void PalettesPanel::renamePalette()
 
 void PalettesPanel::removePalette()
 {
+    syncFiles();
     fla::Document* document = _links.document ? _links.document() : nullptr;
     if (!document)
         return;
@@ -244,6 +456,7 @@ void PalettesPanel::removePalette()
 
 void PalettesPanel::addColor()
 {
+    syncFiles();
     fla::Document* document = _links.document ? _links.document() : nullptr;
     if (!document)
         return;
@@ -278,6 +491,7 @@ void PalettesPanel::addColor()
 
 void PalettesPanel::editColor()
 {
+    syncFiles();
     fla::Document* document = _links.document ? _links.document() : nullptr;
     const int index = currentColor();
     if (!document || index < 0)
@@ -300,6 +514,7 @@ void PalettesPanel::editColor()
 
 void PalettesPanel::removeColor()
 {
+    syncFiles();
     fla::Document* document = _links.document ? _links.document() : nullptr;
     const int index = currentColor();
     if (!document || index < 0)

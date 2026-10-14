@@ -306,6 +306,11 @@ Palettes load(const Document& document)
         palette.name = unescaped(fields[0]);
         for (size_t f = 1; f < fields.size(); ++f)
         {
+            if (!fields[f].empty() && fields[f][0] == '@')
+            {
+                palette.file = unescaped(fields[f].substr(1));
+                continue;
+            }
             const size_t equals = fields[f].find('=');
             if (equals == std::string::npos)
                 continue;
@@ -328,11 +333,51 @@ std::vector<std::pair<std::string, std::string>> saved(const Document& document,
         for (const Palette& palette : palettes.list)
         {
             text += "~" + escaped(palette.name);
+            if (!palette.file.empty())
+                text += ";@" + escaped(palette.file);
             for (const Color& color : palette.colors)
                 text += ";" + escaped(color.name) + "=" + hex(color.rgba);
         }
     }
     return withAttribute(document.extraAttributes, kKey, text);
+}
+
+std::string toText(const Palette& palette)
+{
+    std::string text = "Phoenix Palette\nName: " + palette.name + "\n";
+    for (const Color& color : palette.colors)
+        text += "#" + hex(color.rgba) + " " + color.name + "\n";
+    return text;
+}
+
+bool fromText(const std::string& text, Palette& palette)
+{
+    std::vector<std::string> lines;
+    for (std::string line : split(text, '\n'))
+    {
+        if (!line.empty() && line.back() == '\r')
+            line.pop_back();
+        lines.push_back(line);
+    }
+    if (lines.empty() || lines[0] != "Phoenix Palette")
+        return false;
+    Palette read;
+    for (size_t i = 1; i < lines.size(); ++i)
+    {
+        const std::string& line = lines[i];
+        if (line.rfind("Name: ", 0) == 0)
+            read.name = line.substr(6);
+        else if (line.size() > 10 && line[0] == '#' && line[9] == ' ')
+        {
+            Color color;
+            fromHex(line.substr(1, 8), color.rgba);
+            color.name = line.substr(10);
+            read.colors.push_back(color);
+        }
+    }
+    palette.name = read.name.empty() ? palette.name : read.name;
+    palette.colors = read.colors;
+    return true;
 }
 
 std::vector<std::pair<std::string, int>> usage(const Document& document)

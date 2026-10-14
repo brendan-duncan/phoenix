@@ -68,3 +68,37 @@ TEST(linked_palettes_recolor_what_is_linked_and_swap_whole)
     CHECK(fla::palettes::usage(*document).empty());
     CHECK(!fla::palettes::recolor(*document, palettes));
 }
+
+TEST(linked_palettes_keep_their_file_and_read_and_write_it)
+{
+    std::unique_ptr<fla::Document> document(new fla::Document(nullptr));
+    fla::palettes::Palettes palettes;
+    fla::palettes::Palette day;
+    day.name = "Day";
+    day.file = "../show palettes/Day; main=1.phxpal";
+    fla::palettes::Color skin;
+    skin.name = "skin tone";
+    skin.rgba[0] = 240;
+    skin.rgba[1] = 200;
+    skin.rgba[2] = 160;
+    day.colors.push_back(skin);
+    palettes.list.push_back(day);
+    palettes.active = "Day";
+    document->extraAttributes = fla::palettes::saved(*document, palettes);
+    // The link comes back with the palette, odd characters and all.
+    const fla::palettes::Palettes back = fla::palettes::load(*document);
+    CHECK(back.list.size() == 1 && back.list[0].file == day.file && back.list[0].colors.size() == 1);
+
+    const std::string text = fla::palettes::toText(day);
+    CHECK(text == "Phoenix Palette\nName: Day\n#F0C8A0FF skin tone\n");
+    fla::palettes::Palette read;
+    read.file = "kept";
+    // Windows line endings read the same.
+    std::string crlf;
+    for (char c : text)
+        crlf += c == '\n' ? std::string("\r\n") : std::string(1, c);
+    CHECK(fla::palettes::fromText(crlf, read));
+    CHECK(read.name == "Day" && read.file == "kept" && read.colors.size() == 1);
+    CHECK(read.colors[0].name == "skin tone" && read.colors[0].rgba[0] == 240 && read.colors[0].rgba[3] == 255);
+    CHECK(!fla::palettes::fromText("GIMP Palette\n", read));
+}
