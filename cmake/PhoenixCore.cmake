@@ -204,6 +204,13 @@ function(phoenix_add_core target src)
     # No Qt here: keep Qt's code generators off it.
     set_target_properties(${target} PROPERTIES AUTOMOC OFF AUTOUIC OFF AUTORCC OFF)
     target_compile_features(${target} PUBLIC cxx_std_17)
+    # As the app compiled these sources before they moved here, with Qt's
+    # settings: UTF-8 source text (strings with ° or × in them), the Unicode
+    # Windows API, and Qt's aligned-storage and __cplusplus settings.
+    if(MSVC)
+        target_compile_options(${target} PUBLIC /utf-8 /Zc:__cplusplus)
+        target_compile_definitions(${target} PUBLIC UNICODE _UNICODE _ENABLE_EXTENDED_ALIGNED_STORAGE)
+    endif()
     if(CORE_FILES)
         target_link_libraries(${target} PUBLIC tinyxml2 zlibstatic)
         target_include_directories(${target} PUBLIC
