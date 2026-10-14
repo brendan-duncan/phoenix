@@ -276,66 +276,100 @@ std::vector<int> regions(const uint8_t* rgba, int width, int height, const Optio
     // is a blend of two areas beside it, is the soft edge between them
     // rather than an area of its own: it goes whole to the nearer of the
     // two, which keeps the edge straight. A drawn line is not a blend of
-    // what is either side of it, and stays.
-    {
-        std::vector<char> inside(static_cast<size_t>(areaCount), 0);
-        for (int y = 1; y + 1 < height; ++y)
-            for (int x = 1; x + 1 < width; ++x)
+    // what is either side of it, and stays. Done again once the areas are
+    // split into their pieces, when strips cut off then show.
+    const auto dissolveStrips = [&](int labels) {
+        const size_t n = static_cast<size_t>(labels);
+        std::vector<double> sum(n * 3, 0.0);
+        std::vector<double> size(n, 0.0);
+        std::vector<char> inside(n, 0);
+        std::vector<std::vector<int>> around(n);
+        for (int y = 0; y < height; ++y)
+            for (int x = 0; x < width; ++x)
             {
                 const size_t at = static_cast<size_t>(y) * static_cast<size_t>(width) + static_cast<size_t>(x);
                 const int l = label[at];
-                if (l >= 0 && label[at - 1] == l && label[at + 1] == l && label[at - static_cast<size_t>(width)] == l &&
-                    label[at + static_cast<size_t>(width)] == l)
+                if (l < 0)
+                    continue;
+                for (int c = 0; c < 3; ++c)
+                    sum[static_cast<size_t>(l) * 3 + static_cast<size_t>(c)] += rgba[at * 4 + static_cast<size_t>(c)];
+                size[static_cast<size_t>(l)] += 1.0;
+                bool interior = x > 0 && y > 0 && x + 1 < width && y + 1 < height;
+                const int nx[4] = {x - 1, x + 1, x, x};
+                const int ny[4] = {y, y, y - 1, y + 1};
+                for (int k = 0; k < 4; ++k)
+                {
+                    if (nx[k] < 0 || ny[k] < 0 || nx[k] >= width || ny[k] >= height)
+                        continue;
+                    const int other = label[static_cast<size_t>(ny[k]) * static_cast<size_t>(width) + static_cast<size_t>(nx[k])];
+                    if (other != l)
+                    {
+                        interior = false;
+                        if (other >= 0)
+                            around[static_cast<size_t>(l)].push_back(other);
+                    }
+                }
+                if (interior)
                     inside[static_cast<size_t>(l)] = 1;
             }
-        std::vector<int> into(static_cast<size_t>(areaCount), -1);
-        for (int s = 0; s < areaCount; ++s)
+        const auto mean = [&](int l, int c) { return sum[static_cast<size_t>(l) * 3 + static_cast<size_t>(c)] / size[static_cast<size_t>(l)]; };
+        std::vector<int> into(n, -1);
+        for (int s = 0; s < labels; ++s)
         {
-            if (find(s) != s || inside[static_cast<size_t>(s)])
+            std::vector<int>& near = around[static_cast<size_t>(s)];
+            std::sort(near.begin(), near.end());
+            near.erase(std::unique(near.begin(), near.end()), near.end());
+            if (size[static_cast<size_t>(s)] == 0.0 || inside[static_cast<size_t>(s)] || near.size() < 2 || near.size() > 12)
                 continue;
-            compact(s);
-            const std::vector<int>& around = neighbors[static_cast<size_t>(s)];
-            if (around.size() < 2 || around.size() > 12)
-                continue;
-            const Area& strip = areas[static_cast<size_t>(s)];
-            double mean[3];
-            for (int c = 0; c < 3; ++c)
-                mean[c] = strip.sum[c] / strip.pixels;
             double best = static_cast<double>(tight) + 1.0;
             int target = -1;
-            for (size_t i = 0; i < around.size(); ++i)
-                for (size_t j = i + 1; j < around.size(); ++j)
+            for (size_t i = 0; i < near.size(); ++i)
+                for (size_t j = i + 1; j < near.size(); ++j)
                 {
-                    const Area& a = areas[static_cast<size_t>(around[i])];
-                    const Area& b = areas[static_cast<size_t>(around[j])];
-                    double ca[3], cb[3], along = 0.0, length = 0.0;
+                    double along = 0.0, length = 0.0;
                     for (int c = 0; c < 3; ++c)
                     {
-                        ca[c] = a.sum[c] / a.pixels;
-                        cb[c] = b.sum[c] / b.pixels;
-                        along += (mean[c] - cb[c]) * (ca[c] - cb[c]);
-                        length += (ca[c] - cb[c]) * (ca[c] - cb[c]);
+                        const double ab = mean(near[i], c) - mean(near[j], c);
+                        along += (mean(s, c) - mean(near[j], c)) * ab;
+                        length += ab * ab;
                     }
                     if (length < 1.0)
                         continue;
                     const double mix = std::clamp(along / length, 0.0, 1.0);
                     double off = 0.0;
                     for (int c = 0; c < 3; ++c)
-                        off += std::fabs(mean[c] - (cb[c] + mix * (ca[c] - cb[c])));
+                        off += std::fabs(mean(s, c) - (mean(near[j], c) + mix * (mean(near[i], c) - mean(near[j], c))));
                     if (off < best)
                     {
                         best = off;
-                        target = mix >= 0.5 ? around[i] : around[j];
+                        target = mix >= 0.5 ? near[i] : near[j];
                     }
                 }
+            // Not a blend, but close to one side: the light or dark halo a
+            // sharpened or compressed picture leaves along an edge.
+            if (target < 0)
+            {
+                double closest = 1.5 * options.colorThreshold;
+                for (int other : near)
+                {
+                    double d = 0.0;
+                    for (int c = 0; c < 3; ++c)
+                        d += std::fabs(mean(s, c) - mean(other, c));
+                    if (d <= closest)
+                    {
+                        closest = d;
+                        target = other;
+                    }
+                }
+            }
             into[static_cast<size_t>(s)] = target;
         }
         // A strip may go into another strip: followed a few steps.
         for (int& l : label)
             for (int step = 0; step < 4 && l >= 0 && into[static_cast<size_t>(l)] >= 0; ++step)
                 l = into[static_cast<size_t>(l)];
-    }
-
+    };
+    dissolveStrips(areaCount);
     // 3. A pixel on a border goes to whichever area beside it has the
     // clearly nearer color, so a soft edge is split where its colors cross
     // over rather than wherever the walk happened to reach first; noise in a
@@ -409,6 +443,7 @@ std::vector<int> regions(const uint8_t* rgba, int width, int height, const Optio
     for (size_t i = 0; i < pixels; ++i)
         if (label[i] >= 0)
             label[i] = piece[i];
+    dissolveStrips(count);
 
     // Small areas go into the neighbor they share the most edge with, a
     // few rounds, smallest first.
@@ -688,6 +723,45 @@ Shape* traceBitmap(const uint8_t* rgba, int width, int height, const Options& op
             std::vector<bool> marked(guide.size(), false);
             marked.front() = marked.back() = true;
             simplify(guide, 0, guide.size() - 1, options.curveFit, marked);
+            // A side that runs straight up or across for most of its length,
+            // with a jog at an end where it meets another, keeps that stretch
+            // exactly upright or level rather than leaning to meet the jog.
+            {
+                std::vector<size_t> kept;
+                for (size_t i = 0; i < guide.size(); ++i)
+                    if (marked[i])
+                        kept.push_back(i);
+                for (size_t k = 0; k + 1 < kept.size(); ++k)
+                {
+                    const size_t a = kept[k];
+                    const size_t b = kept[k + 1];
+                    const double span = std::hypot(guide[b].x - guide[a].x, guide[b].y - guide[a].y);
+                    size_t bestFrom = a, bestTo = a;
+                    double best = 0.0;
+                    for (int axis = 0; axis < 2; ++axis)
+                    {
+                        size_t from = a;
+                        for (size_t i = a + 1; i <= b; ++i)
+                        {
+                            const double along = axis == 0 ? guide[i].x - guide[from].x : guide[i].y - guide[from].y;
+                            if (std::fabs(along) > 1.0e-9)
+                                from = i;
+                            const double length = std::hypot(guide[i].x - guide[from].x, guide[i].y - guide[from].y);
+                            if (length > best)
+                            {
+                                best = length;
+                                bestFrom = from;
+                                bestTo = i;
+                            }
+                        }
+                    }
+                    if (best >= 6.0 && best >= 0.6 * span && (bestFrom != a || bestTo != b))
+                    {
+                        marked[bestFrom] = true;
+                        marked[bestTo] = true;
+                    }
+                }
+            }
             std::vector<Point> polygon;
             std::vector<size_t> at;
             for (size_t i = 0; i < guide.size(); ++i)
