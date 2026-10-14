@@ -3,6 +3,7 @@
 #include "autosave.h"
 #include "main_window.h"
 #include "output_panel.h"
+#include "script_api.h"
 #include "xul_dialog.h"
 
 #include "../data/document.h"
@@ -21,6 +22,9 @@
 #include "../python/python_engine.h"
 
 #include <QApplication>
+#include <QJsonArray>
+#include <QJsonDocument>
+#include <QJsonObject>
 #include <QClipboard>
 #include <QDesktopServices>
 #include <QDialog>
@@ -598,6 +602,39 @@ public:
         return ok;
     }
 
+    bool callOperation(const std::string& name, const std::string& argumentsJson, std::string& resultJson,
+        std::string& error) override
+    {
+        if (!_api)
+            _api = std::make_unique<ScriptApi>(_window);
+        if (name.empty())
+        {
+            // The operations there are, for fl.phoenix.operations().
+            QJsonArray list;
+            for (const ScriptApi::Operation& operation : _api->operations())
+                list.append(QJsonObject{{"name", operation.name}, {"title", operation.title},
+                    {"description", operation.description}, {"arguments", operation.schema}, {"changes", operation.writes}});
+            resultJson = QJsonDocument(list).toJson(QJsonDocument::Compact).toStdString();
+            return true;
+        }
+        const QJsonDocument arguments = QJsonDocument::fromJson(QByteArray::fromStdString(argumentsJson));
+        if (!arguments.isObject())
+        {
+            error = "An operation's arguments are an object.";
+            return false;
+        }
+        const ScriptApi::Result result = _api->call(qtext(name), arguments.object());
+        if (!result.ok())
+        {
+            error = text(result.error);
+            return false;
+        }
+        resultJson = result.value.isArray() ? QJsonDocument(result.value.toArray()).toJson(QJsonDocument::Compact).toStdString()
+            : result.value.isObject()       ? QJsonDocument(result.value.toObject()).toJson(QJsonDocument::Compact).toStdString()
+                                            : std::string("null");
+        return true;
+    }
+
 private:
     fla::FLADocument* documentAt(int index) const
     {
@@ -617,6 +654,7 @@ private:
 
     MainWindow& _window;
     OutputPanel* _output;
+    std::unique_ptr<ScriptApi> _api;
     std::string _text;
     bool _boundsStale = false;
     std::map<const fla::FLADocument*, std::unique_ptr<fla::Selection>> _selections;

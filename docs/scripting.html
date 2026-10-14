@@ -107,6 +107,16 @@ doc.getTimeline().addNewLayer("Notes")</code></pre>
 
 <p>An object a script holds stays tied to what it stands for. If the script deletes the layer, undoes the element or closes the document it came from, using it again stops the script with an error that says so, rather than acting on something else. A frame stands for a frame number on its layer, so it follows the layer as keyframes are added and cleared.</p>
 
+<h3 id="phoenix-operations">Phoenix's own operations</h3>
+
+<p>Scripts can also use the operations Phoenix gives AI assistants, which do in one call what would take many: in-betweens, pose cycles, lip sync, bounces, palettes, tidying the library, color scripts and the rest (see <a href="ai-assistants.html">AI assistants</a>). <code>fl.phoenix.call</code> takes an operation's name and an object of its arguments and gives back its result; <code>fl.phoenix.operations()</code> lists them all, with what each does and the arguments it takes. Frames count from 1 here, as they do for assistants. A change made this way is part of the script's one undo step.</p>
+
+<pre><code>fl.phoenix.call("in_betweens", {layer: "Arm", frame: 1, ease: 100, onTwos: true});
+var cycle = fl.phoenix.call("pose_cycle", {layer: "Walk", repeats: 4, advance: 120});
+fl.trace(cycle.layer + ": " + cycle.frames + " frames");</code></pre>
+
+<p>From Python, call <code>fl.phoenix_call(name, json_text)</code> with the arguments as JSON text, and read its result with <code>json.loads</code>.</p>
+
 <div class="callout">
   <span class="label">Not yet</span>
   <p>Custom tools, panels built on HTML, exporting one symbol as an SWF movie (<code>item.exportSWF</code>), drawing the filters set on layers' frames, and saving History panel steps as a command. Each run starts fresh: functions one script defines are not kept for the next.</p>

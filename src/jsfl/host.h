@@ -155,6 +155,19 @@ public:
         (void)rgba;
         return false;
     }
+    /// Runs one of Phoenix's own operations (the ones AI assistants use,
+    /// such as in_betweens or lip_sync) on the active document, its
+    /// arguments and result as JSON text; with an empty \a name, the list
+    /// of them. False with \a error when it fails or there are none.
+    virtual bool callOperation(const std::string& name, const std::string& argumentsJson, std::string& resultJson,
+        std::string& error)
+    {
+        (void)name;
+        (void)argumentsJson;
+        (void)resultJson;
+        error = "Phoenix's operations need the Phoenix window.";
+        return false;
+    }
     /// The current frame (or every frame, numbered) of the document as PNG.
     virtual bool exportPNG(fla::FLADocument* document, const std::string& path, bool currentFrameOnly,
         std::string& error) = 0;

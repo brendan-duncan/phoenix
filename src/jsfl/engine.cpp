@@ -455,6 +455,17 @@ const char* const kPrelude = R"JS(
         hidden(global, "uneval", function (value) {
             return value === undefined ? "undefined" : JSON.stringify(value);
         });
+    // Phoenix's own operations, the ones AI assistants use, by name with an
+    // object of arguments: fl.phoenix.call("in_betweens", {layer: "Arm",
+    // frame: 1, onTwos: true}).
+    fl.phoenix = {
+        call: function (name, args) {
+            return JSON.parse(fl.phoenixCall(String(name), JSON.stringify(args || {})));
+        },
+        operations: function () {
+            return JSON.parse(fl.phoenixCall("", "{}"));
+        }
+    };
     fl.Math = {
         concatMatrix: function (m, n) {
             return {a: m.a * n.a + m.b * n.c, b: m.a * n.b + m.b * n.d, c: m.c * n.a + m.d * n.c,

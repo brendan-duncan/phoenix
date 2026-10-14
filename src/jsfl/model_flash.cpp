@@ -165,6 +165,17 @@ const ClassInfo& Flash::classInfo() const
                 return Value(false);
             return saveAs(fl, document, path, false);
         });
+        // fl.phoenixCall(name, argumentsJson): one of Phoenix's operations,
+        // its result as JSON text. Scripts use fl.phoenix.call (the prelude),
+        // which takes and gives objects.
+        def.method("phoenixCall", 2, [](Flash& fl, const Args& args) {
+            std::string result;
+            std::string error;
+            if (!fl.session.host().callOperation(arg(args, 0).toString(), given(args, 1) ? arg(args, 1).toString() : "{}",
+                    result, error))
+                throw Error(error);
+            return Value(result);
+        });
         def.method("saveAll", 0, [](Flash& fl, const Args&) {
             for (fla::FLADocument* document : fl.session.host().documents())
             {
