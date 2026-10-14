@@ -16,16 +16,16 @@
 #include <QPushButton>
 #include <QScrollArea>
 #include <QSettings>
-#include <QSpinBox>
+#include "hot_text.h"
 #include <QVBoxLayout>
 
 #include <cstring>
 
 namespace {
 
-QSpinBox* spin(int low, int high, int value, QWidget* parent, const QString& suffix = QString())
+HotSpinBox* spin(int low, int high, int value, QWidget* parent, const QString& suffix = QString())
 {
-    QSpinBox* box = new QSpinBox(parent);
+    HotSpinBox* box = new HotSpinBox(parent);
     box->setRange(low, high);
     box->setValue(value);
     box->setSuffix(suffix);
@@ -153,11 +153,11 @@ SpriteSheetDialog::SpriteSheetDialog(const QString& source, int frameCount, doub
     layout->addWidget(buttons);
 
     // Drawing the frames again only when what is drawn changes.
-    for (QSpinBox* box : {_first, _last, _scale})
-        connect(box, &QSpinBox::valueChanged, this, &SpriteSheetDialog::renderFrames);
+    for (HotSpinBox* box : {_first, _last, _scale})
+        connect(box, &HotSpinBox::valueChanged, this, &SpriteSheetDialog::renderFrames);
     connect(_background, &QCheckBox::toggled, this, &SpriteSheetDialog::renderFrames);
-    for (QSpinBox* box : {_columns, _maxWidth, _padding, _border})
-        connect(box, &QSpinBox::valueChanged, this, &SpriteSheetDialog::relayout);
+    for (HotSpinBox* box : {_columns, _maxWidth, _padding, _border})
+        connect(box, &HotSpinBox::valueChanged, this, &SpriteSheetDialog::relayout);
     for (QCheckBox* box : {_trim, _dedupe, _powerOfTwo})
         connect(box, &QCheckBox::toggled, this, &SpriteSheetDialog::relayout);
     connect(_layout, &QComboBox::currentIndexChanged, this, &SpriteSheetDialog::relayout);

@@ -14,7 +14,7 @@
 #include <QPushButton>
 #include <QSettings>
 #include <QSignalBlocker>
-#include <QSpinBox>
+#include "hot_text.h"
 #include <QToolButton>
 #include <QVBoxLayout>
 
@@ -123,8 +123,8 @@ NewDocumentDialog::NewDocumentDialog(QWidget* parent)
     : QDialog(parent)
     , _categories(new QListWidget(this))
     , _tiles(new QListWidget(this))
-    , _width(new QSpinBox(this))
-    , _height(new QSpinBox(this))
+    , _width(new HotSpinBox(this))
+    , _height(new HotSpinBox(this))
     , _frameRate(new QComboBox(this))
     , _swatch(new QToolButton(this))
     , _summary(new QLabel(this))
@@ -173,8 +173,6 @@ NewDocumentDialog::NewDocumentDialog(QWidget* parent)
     _height->setRange(1, 8192);
     _height->setSuffix(" px");
     // Typed values, as Animate's fields are: no stepping arrows.
-    _width->setButtonSymbols(QAbstractSpinBox::NoButtons);
-    _height->setButtonSymbols(QAbstractSpinBox::NoButtons);
     form->addRow("Width", _width);
     form->addRow("Height", _height);
     _frameRate->setEditable(true);
@@ -220,8 +218,8 @@ NewDocumentDialog::NewDocumentDialog(QWidget* parent)
         if (!_applying)
             markMatchingPreset();
     };
-    connect(_width, &QSpinBox::valueChanged, this, edited);
-    connect(_height, &QSpinBox::valueChanged, this, edited);
+    connect(_width, &HotSpinBox::valueChanged, this, edited);
+    connect(_height, &HotSpinBox::valueChanged, this, edited);
     connect(_frameRate, &QComboBox::currentTextChanged, this, edited);
 
     // Start where the last document was made; the first time, at HD 1080p.

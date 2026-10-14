@@ -1,7 +1,6 @@
 #include "properties_panel.h"
 
 #include "../edit/filter_presets.h"
-#include <QSpinBox>
 #include "text_layout.h"
 #include "../edit/text_style.h"
 #include "theme.h"
@@ -3075,11 +3074,11 @@ void PropertiesPanel::addTextSections(QVBoxLayout* page, const fla::StaticText& 
         options->addLong(5, "Variable", variable);
         if (text.textType == fla::StaticText::TextType::Input)
         {
-            QSpinBox* maximum = new QSpinBox(this);
+            HotSpinBox* maximum = new HotSpinBox(this);
             maximum->setRange(0, 100000);
             maximum->setSpecialValueText("No limit");
             maximum->setValue(fieldSetting("maxCharacters").toInt());
-            connect(maximum, &QSpinBox::editingFinished, this, [request, maximum]() {
+            connect(maximum, &HotSpinBox::editFinished, this, [request, maximum]() {
                 request("maxCharacters", QString::number(maximum->value()));
             });
             options->addLong(6, "Max characters", maximum);

@@ -9,7 +9,7 @@
 #include <QComboBox>
 #include <QDialog>
 #include <QDialogButtonBox>
-#include <QDoubleSpinBox>
+#include "hot_text.h"
 #include <QFormLayout>
 #include <QHBoxLayout>
 #include <QHeaderView>
@@ -221,9 +221,9 @@ void ControllersPanel::bind()
     for (const std::string& name : fla::controllers::properties())
         property->addItem(propertyLabel(name), QString::fromStdString(name));
     form->addRow("Property:", property);
-    QDoubleSpinBox* from = new QDoubleSpinBox(&dialog);
-    QDoubleSpinBox* to = new QDoubleSpinBox(&dialog);
-    for (QDoubleSpinBox* box : {from, to})
+    HotDoubleSpinBox* from = new HotDoubleSpinBox(&dialog);
+    HotDoubleSpinBox* to = new HotDoubleSpinBox(&dialog);
+    for (HotDoubleSpinBox* box : {from, to})
     {
         box->setRange(-100000.0, 100000.0);
         box->setDecimals(2);

@@ -13,7 +13,7 @@ class QCheckBox;
 class QComboBox;
 class QLabel;
 class QLineEdit;
-class QSpinBox;
+class HotSpinBox;
 
 /// File > Export > Export Sprite Sheet, and Generate Sprite Sheet on a
 /// library symbol: frames laid out on one image, with a JSON description
@@ -44,14 +44,14 @@ private:
     double _frameRate = 24.0;
     Renderer _render;
     QLineEdit* _path = nullptr;
-    QSpinBox* _first = nullptr;
-    QSpinBox* _last = nullptr;
-    QSpinBox* _scale = nullptr;
+    HotSpinBox* _first = nullptr;
+    HotSpinBox* _last = nullptr;
+    HotSpinBox* _scale = nullptr;
     QComboBox* _layout = nullptr;
-    QSpinBox* _columns = nullptr;
-    QSpinBox* _maxWidth = nullptr;
-    QSpinBox* _padding = nullptr;
-    QSpinBox* _border = nullptr;
+    HotSpinBox* _columns = nullptr;
+    HotSpinBox* _maxWidth = nullptr;
+    HotSpinBox* _padding = nullptr;
+    HotSpinBox* _border = nullptr;
     QCheckBox* _trim = nullptr;
     QCheckBox* _dedupe = nullptr;
     QCheckBox* _powerOfTwo = nullptr;

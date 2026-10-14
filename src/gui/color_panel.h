@@ -7,7 +7,7 @@
 class QCheckBox;
 class QComboBox;
 class QLabel;
-class QSpinBox;
+class HotSpinBox;
 class QLineEdit;
 class QListWidget;
 class QPushButton;
@@ -102,8 +102,8 @@ private:
     QLineEdit* _solidHex = nullptr;
     QComboBox* _channelMode = nullptr;
     QLabel* _channelLabels[3] = {nullptr, nullptr, nullptr};
-    QSpinBox* _channels[3] = {nullptr, nullptr, nullptr};
-    QSpinBox* _alpha = nullptr;
+    HotSpinBox* _channels[3] = {nullptr, nullptr, nullptr};
+    HotSpinBox* _alpha = nullptr;
     GradientBar* _bar = nullptr;
     QToolButton* _stopSwatch = nullptr;
     QLineEdit* _stopHex = nullptr;

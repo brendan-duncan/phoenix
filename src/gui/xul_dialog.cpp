@@ -22,7 +22,7 @@
 #include <QPlainTextEdit>
 #include <QPushButton>
 #include <QRadioButton>
-#include <QSpinBox>
+#include "hot_text.h"
 #include <QVBoxLayout>
 
 #include <memory>
@@ -447,9 +447,9 @@ QWidget* XulDialog::makeControl(Control& control)
     }
     case Kind::Slider:
     {
-        auto* spin = new QSpinBox(this);
+        auto* spin = new HotSpinBox(this);
         spin->setRange(number(node, "minvalue", 0), number(node, "maxvalue", 100));
-        connect(spin, &QSpinBox::valueChanged, this, [this, &dialog, c](int value) {
+        connect(spin, &HotSpinBox::valueChanged, this, [this, &dialog, c](int value) {
             if (!_refreshing)
                 dialog.edit(*c, std::to_string(value));
         });
@@ -594,7 +594,7 @@ void XulDialog::refresh(Control& control)
         break;
     }
     case Kind::Slider:
-        static_cast<QSpinBox*>(widget)->setValue(qtext(control.text).toInt());
+        static_cast<HotSpinBox*>(widget)->setValue(qtext(control.text).toInt());
         break;
     case Kind::ChooseFile:
         if (auto* edit = widget->findChild<QLineEdit*>())

@@ -7,7 +7,7 @@
 class QCheckBox;
 class QComboBox;
 class QLineEdit;
-class QSpinBox;
+class HotSpinBox;
 
 /// File > Publish Settings: which formats File > Publish writes, their
 /// file names, and each format's options, kept in the document as Animate
@@ -41,16 +41,16 @@ private:
     QLineEdit* _svgFile = nullptr;
     QCheckBox* _defaultNames = nullptr;
     QCheckBox* _matchMovie = nullptr;
-    QSpinBox* _width = nullptr;
-    QSpinBox* _height = nullptr;
+    HotSpinBox* _width = nullptr;
+    HotSpinBox* _height = nullptr;
     QComboBox* _pngDepth = nullptr;
-    QSpinBox* _pngColors = nullptr;
-    QSpinBox* _jpegQuality = nullptr;
+    HotSpinBox* _pngColors = nullptr;
+    HotSpinBox* _jpegQuality = nullptr;
     QCheckBox* _jpegProgressive = nullptr;
     QCheckBox* _gifAnimated = nullptr;
     QComboBox* _gifLoop = nullptr;
-    QSpinBox* _gifLoopCount = nullptr;
-    QSpinBox* _gifColors = nullptr;
+    HotSpinBox* _gifLoopCount = nullptr;
+    HotSpinBox* _gifColors = nullptr;
     QCheckBox* _svgHidden = nullptr;
     QCheckBox* _svgEmbed = nullptr;
 };

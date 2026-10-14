@@ -7,7 +7,7 @@
 #include "../edit/timeline_edit.h"
 
 #include <QComboBox>
-#include <QDoubleSpinBox>
+#include "hot_text.h"
 #include <QFormLayout>
 #include <QHBoxLayout>
 #include <QKeyEvent>
@@ -17,7 +17,6 @@
 #include <QPainter>
 #include <QPainterPath>
 #include <QPushButton>
-#include <QSpinBox>
 #include <QVBoxLayout>
 
 #include <algorithm>
@@ -407,9 +406,9 @@ MotionEditorPanel::MotionEditorPanel(MotionEditorLinks links, QWidget* parent)
     _add->setToolTip("A keyframe at the playhead for this property, the curve as it was");
     _remove = new QPushButton("Remove", this);
     _remove->setToolTip("Take the selected keyframe away (Delete)");
-    _keyFrame = new QSpinBox(this);
+    _keyFrame = new HotSpinBox(this);
     _keyFrame->setPrefix("Frame ");
-    _keyValue = new QDoubleSpinBox(this);
+    _keyValue = new HotDoubleSpinBox(this);
     _keyValue->setRange(-1.0e6, 1.0e6);
     _keyValue->setDecimals(2);
     keyRow->addWidget(_add);
@@ -425,7 +424,7 @@ MotionEditorPanel::MotionEditorPanel(MotionEditorLinks links, QWidget* parent)
         _ease->addItem(preset.name);
     _ease->setToolTip("Ease the stretch after the selected keyframe, or the whole curve when none is selected");
     eases->addRow("Property ease", _ease);
-    _spanEase = new QDoubleSpinBox(this);
+    _spanEase = new HotDoubleSpinBox(this);
     _spanEase->setRange(-100.0, 100.0);
     _spanEase->setDecimals(0);
     _spanEase->setToolTip("Ease of the whole tween: below zero eases in, above zero eases out");
@@ -447,7 +446,7 @@ MotionEditorPanel::MotionEditorPanel(MotionEditorLinks links, QWidget* parent)
             applyEase(index - 1);
         _ease->setCurrentIndex(0);
     });
-    connect(_keyValue, &QDoubleSpinBox::valueChanged, this, [this](double value) {
+    connect(_keyValue, &HotDoubleSpinBox::valueChanged, this, [this](double value) {
         const int index = _curve->selectedKey();
         if (_updating || index < 0)
             return;
@@ -460,7 +459,7 @@ MotionEditorPanel::MotionEditorPanel(MotionEditorLinks links, QWidget* parent)
         _curve->setKeys(keys);
         writeKeys(true, "Keyframe Value");
     });
-    connect(_keyFrame, &QSpinBox::valueChanged, this, [this](int frame) {
+    connect(_keyFrame, &HotSpinBox::valueChanged, this, [this](int frame) {
         const int index = _curve->selectedKey();
         if (_updating || index <= 0 || !_frame)
             return;
@@ -478,7 +477,7 @@ MotionEditorPanel::MotionEditorPanel(MotionEditorLinks links, QWidget* parent)
         _curve->setKeys(keys);
         writeKeys(true, "Keyframe Frame");
     });
-    connect(_spanEase, &QDoubleSpinBox::valueChanged, this, [this](double value) {
+    connect(_spanEase, &HotDoubleSpinBox::valueChanged, this, [this](double value) {
         if (_updating || !_frame)
             return;
         std::vector<std::string> children = _frame->extraChildren;

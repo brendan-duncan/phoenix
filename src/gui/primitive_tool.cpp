@@ -17,7 +17,7 @@
 #include <QCheckBox>
 #include <QDialog>
 #include <QDialogButtonBox>
-#include <QDoubleSpinBox>
+#include "hot_text.h"
 #include <QFormLayout>
 #include <QSettings>
 #include <QKeyEvent>
@@ -245,9 +245,9 @@ bool PrimitiveTool::askSize(PhoenixView& view, const QPointF& at, QPointF& start
     // The last size asked for, from run to run.
     QSettings settings;
     const QString key = rectangle ? "rectangleSettings" : "ovalSettings";
-    QDoubleSpinBox* width = new QDoubleSpinBox(&dialog);
-    QDoubleSpinBox* height = new QDoubleSpinBox(&dialog);
-    for (QDoubleSpinBox* box : {width, height})
+    HotDoubleSpinBox* width = new HotDoubleSpinBox(&dialog);
+    HotDoubleSpinBox* height = new HotDoubleSpinBox(&dialog);
+    for (HotDoubleSpinBox* box : {width, height})
     {
         box->setRange(1.0, 8192.0);
         box->setDecimals(2);
@@ -257,10 +257,10 @@ bool PrimitiveTool::askSize(PhoenixView& view, const QPointF& at, QPointF& start
     height->setValue(settings.value(key + "/height", 100.0).toDouble());
     form->addRow("Width:", width);
     form->addRow("Height:", height);
-    QDoubleSpinBox* radius = nullptr;
+    HotDoubleSpinBox* radius = nullptr;
     if (rectangle)
     {
-        radius = new QDoubleSpinBox(&dialog);
+        radius = new HotDoubleSpinBox(&dialog);
         radius->setRange(-500.0, 500.0);
         radius->setDecimals(2);
         radius->setSuffix(" px");

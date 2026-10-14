@@ -3,7 +3,7 @@
 #include <QColorDialog>
 #include <QComboBox>
 #include <QDialogButtonBox>
-#include <QDoubleSpinBox>
+#include "hot_text.h"
 #include <QFile>
 #include <QFileDialog>
 #include <QFormLayout>
@@ -17,7 +17,6 @@
 #include <QPainter>
 #include <QPushButton>
 #include <QSettings>
-#include <QSpinBox>
 #include <QTreeWidget>
 #include <QVBoxLayout>
 
@@ -58,12 +57,12 @@ ThemeEditor::ThemeEditor(QWidget* parent)
     _base->addItems({"Dark", "Light"});
     _base->setToolTip("The mode the window's controls are drawn in; roles left alone take its colors");
     form->addRow("Mode:", _base);
-    _fontSize = new QSpinBox(this);
+    _fontSize = new HotSpinBox(this);
     _fontSize->setRange(0, 24);
     _fontSize->setSpecialValueText("System");
     _fontSize->setSuffix(" pt");
     form->addRow("Font size:", _fontSize);
-    _scale = new QDoubleSpinBox(this);
+    _scale = new HotDoubleSpinBox(this);
     _scale->setRange(75, 250);
     _scale->setSingleStep(25);
     _scale->setDecimals(0);
@@ -103,11 +102,11 @@ ThemeEditor::ThemeEditor(QWidget* parent)
         _theme.base = base;
         changed();
     });
-    connect(_fontSize, &QSpinBox::valueChanged, this, [this](int size) {
+    connect(_fontSize, &HotSpinBox::valueChanged, this, [this](int size) {
         _theme.fontSize = size;
         changed();
     });
-    connect(_scale, &QDoubleSpinBox::valueChanged, this, [this](double percent) { _theme.uiScale = percent / 100.0; });
+    connect(_scale, &HotDoubleSpinBox::valueChanged, this, [this](double percent) { _theme.uiScale = percent / 100.0; });
     connect(_roles, &QTreeWidget::itemDoubleClicked, this, [this](QTreeWidgetItem* item) { pick(item); });
     connect(_roles, &QTreeWidget::customContextMenuRequested, this, [this](const QPoint& at) {
         QTreeWidgetItem* item = _roles->itemAt(at);

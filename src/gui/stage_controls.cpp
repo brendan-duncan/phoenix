@@ -5,7 +5,7 @@
 
 #include <QAction>
 #include <QActionGroup>
-#include <QDoubleSpinBox>
+#include "hot_text.h"
 #include <QEvent>
 #include <QHBoxLayout>
 #include <QMenu>
@@ -22,12 +22,12 @@ namespace {
 /// fractions.
 const double kPresets[] = {0.08, 0.25, 0.5, 1.0, 2.0, 4.0, 8.0, 16.0, 32.0};
 
-/// A percentage box whose arrows (and up and down keys) go from preset to
-/// preset rather than by one percent.
-class ZoomBox : public QDoubleSpinBox
+/// A percentage field whose Up and Down keys (and the wheel) go from preset
+/// to preset rather than by one percent; dragging it still zooms freely.
+class ZoomBox : public HotDoubleSpinBox
 {
 public:
-    using QDoubleSpinBox::QDoubleSpinBox;
+    using HotDoubleSpinBox::HotDoubleSpinBox;
 
     void stepBy(int steps) override
     {
@@ -50,18 +50,6 @@ public:
             zoom = below;
         }
         setValue(zoom * 100.0);
-    }
-
-protected:
-    StepEnabled stepEnabled() const override
-    {
-        const double zoom = value() / 100.0;
-        StepEnabled enabled = StepNone;
-        if (zoom < kPresets[std::size(kPresets) - 1] * 0.999)
-            enabled |= StepUpEnabled;
-        if (zoom > kPresets[0] * 1.001)
-            enabled |= StepDownEnabled;
-        return enabled;
     }
 };
 
@@ -203,15 +191,11 @@ StageControls::StageControls(PhoenixView* view, QAction* clip, QAction* dim, std
     _zoom->setRange(5.0, 10000.0);
     _zoom->setDecimals(0);
     _zoom->setSuffix("%");
-    _zoom->setKeyboardTracking(false);
-    _zoom->setAlignment(Qt::AlignRight);
-    // Room for the widest percentage beside the arrows, however the style
-    // lays them out.
-    _zoom->setMinimumWidth(_zoom->fontMetrics().horizontalAdvance("10000%") + 16);
-    _zoom->setFixedWidth(std::max(_zoom->sizeHint().width(), _zoom->minimumWidth() + 40));
-    _zoom->setToolTip("Zoom: type a percentage, or step through the magnifications with the arrows "
-                      "(Ctrl+= and Ctrl+-)");
-    connect(_zoom, &QDoubleSpinBox::valueChanged, this, [this](double percent) {
+    // Room for the widest percentage.
+    _zoom->setFixedWidth(_zoom->fontMetrics().horizontalAdvance("10000%") + 16);
+    _zoom->setToolTip("Zoom: drag to zoom, click to type a percentage, or step through the "
+                      "magnifications with Up and Down (Ctrl+= and Ctrl+-)");
+    connect(_zoom, &HotDoubleSpinBox::valueChanged, this, [this](double percent) {
         // Only what was typed or stepped: refresh() sets it silently.
         if (std::fabs(percent / 100.0 - _view->zoom()) > 0.004)
             _view->setZoomLevel(percent / 100.0);

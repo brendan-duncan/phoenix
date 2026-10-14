@@ -5,7 +5,7 @@
 
 class QCheckBox;
 class QComboBox;
-class QSpinBox;
+class HotSpinBox;
 class QToolButton;
 
 /// Edit > Preferences: what Phoenix keeps between runs that is not set
@@ -43,7 +43,7 @@ public:
     void save();
 
 private:
-    QSpinBox* _undoLevels;
+    HotSpinBox* _undoLevels;
     QComboBox* _autoSave;
     QCheckBox* _startScreen;
     QCheckBox* _reopenDocuments;
@@ -55,5 +55,5 @@ private:
     QCheckBox* _penPreview;
     QCheckBox* _solidPoints;
     QCheckBox* _mcp;
-    QSpinBox* _mcpPort;
+    HotSpinBox* _mcpPort;
 };

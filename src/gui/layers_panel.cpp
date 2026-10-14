@@ -13,7 +13,7 @@
 #include <QLineEdit>
 #include <QMenu>
 #include <QMouseEvent>
-#include <QSpinBox>
+#include "hot_text.h"
 #include <cstdlib>
 #include <QMessageBox>
 #include <QPushButton>
@@ -1390,7 +1390,7 @@ void LayersPanel::showLayerProperties(QTreeWidgetItem* item)
     // Transparent: shown faded while editing, so what is under shows.
     QHBoxLayout* fadeRow = new QHBoxLayout();
     QCheckBox* fade = new QCheckBox("Transparent, shown at", &dialog);
-    QSpinBox* fadePercent = new QSpinBox(&dialog);
+    HotSpinBox* fadePercent = new HotSpinBox(&dialog);
     fadePercent->setRange(5, 95);
     fadePercent->setSuffix("%");
     const int transparency = fla::layers::transparencyOf(*layer);

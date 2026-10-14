@@ -5,8 +5,8 @@
 #include <QDialog>
 
 class QComboBox;
-class QDoubleSpinBox;
-class QSpinBox;
+class HotDoubleSpinBox;
+class HotSpinBox;
 class QTreeWidget;
 class QTreeWidgetItem;
 
@@ -39,7 +39,7 @@ private:
     bool _saved = false;
     QComboBox* _start;
     QComboBox* _base;
-    QSpinBox* _fontSize;
-    QDoubleSpinBox* _scale;
+    HotSpinBox* _fontSize;
+    HotDoubleSpinBox* _scale;
     QTreeWidget* _roles;
 };

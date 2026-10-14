@@ -6,7 +6,7 @@
 
 class PhoenixView;
 class QAction;
-class QDoubleSpinBox;
+class HotDoubleSpinBox;
 class QToolButton;
 
 /// The view controls at the right of the edit bar: Center Stage, the
@@ -42,6 +42,6 @@ private:
     QToolButton* _center = nullptr;
     QToolButton* _rotation = nullptr;
     QToolButton* _clipButton = nullptr;
-    QDoubleSpinBox* _zoom = nullptr;
+    HotDoubleSpinBox* _zoom = nullptr;
     QToolButton* _zoomMenu = nullptr;
 };

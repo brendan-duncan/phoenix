@@ -10,11 +10,11 @@
 
 class PhoenixView;
 class QComboBox;
-class QDoubleSpinBox;
+class HotDoubleSpinBox;
 class QLabel;
 class QListWidget;
 class QPushButton;
-class QSpinBox;
+class HotSpinBox;
 
 namespace fla {
 class CommandStack;
@@ -136,10 +136,10 @@ private:
     QLabel* _title = nullptr;
     QListWidget* _properties = nullptr;
     MotionCurveView* _curve = nullptr;
-    QSpinBox* _keyFrame = nullptr;
-    QDoubleSpinBox* _keyValue = nullptr;
+    HotSpinBox* _keyFrame = nullptr;
+    HotDoubleSpinBox* _keyValue = nullptr;
     QComboBox* _ease = nullptr;
-    QDoubleSpinBox* _spanEase = nullptr;
+    HotDoubleSpinBox* _spanEase = nullptr;
     QPushButton* _add = nullptr;
     QPushButton* _remove = nullptr;
     bool _updating = false;

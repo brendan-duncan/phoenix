@@ -12,7 +12,7 @@ class QLabel;
 class QLineEdit;
 class QPlainTextEdit;
 class QRadioButton;
-class QSpinBox;
+class HotSpinBox;
 class QTableWidget;
 
 /// Modify > Lip Sync: where the mouth shapes come from (Rhubarb Lip Sync
@@ -48,6 +48,6 @@ private:
     QPlainTextEdit* _script;
     QLineEdit* _cueFile;
     QTableWidget* _chart;
-    QSpinBox* _start;
+    HotSpinBox* _start;
     QLabel* _status;
 };

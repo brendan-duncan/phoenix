@@ -10,7 +10,7 @@ class QComboBox;
 class QLabel;
 class QListWidget;
 class QListWidgetItem;
-class QSpinBox;
+class HotSpinBox;
 class QToolButton;
 
 /// Animate's New Document dialog: categories of presets down the left
@@ -58,8 +58,8 @@ private:
 
     QListWidget* _categories;
     QListWidget* _tiles;
-    QSpinBox* _width;
-    QSpinBox* _height;
+    HotSpinBox* _width;
+    HotSpinBox* _height;
     QComboBox* _frameRate;
     QToolButton* _swatch;
     QLabel* _summary;

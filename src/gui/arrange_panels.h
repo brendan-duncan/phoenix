@@ -8,7 +8,7 @@
 class PhoenixView;
 class QCheckBox;
 class QLabel;
-class QDoubleSpinBox;
+class HotDoubleSpinBox;
 class QRadioButton;
 
 namespace fla {
@@ -78,14 +78,14 @@ private:
     void apply(bool duplicate);
 
     ArrangeLinks _links;
-    QDoubleSpinBox* _scaleX = nullptr;
-    QDoubleSpinBox* _scaleY = nullptr;
+    HotDoubleSpinBox* _scaleX = nullptr;
+    HotDoubleSpinBox* _scaleY = nullptr;
     QCheckBox* _constrain = nullptr;
     QRadioButton* _rotateChoice = nullptr;
     QRadioButton* _skewChoice = nullptr;
-    QDoubleSpinBox* _rotation = nullptr;
-    QDoubleSpinBox* _skewX = nullptr;
-    QDoubleSpinBox* _skewY = nullptr;
+    HotDoubleSpinBox* _rotation = nullptr;
+    HotDoubleSpinBox* _skewX = nullptr;
+    HotDoubleSpinBox* _skewY = nullptr;
     bool _updating = false;
 };
 

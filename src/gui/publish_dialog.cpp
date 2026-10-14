@@ -9,14 +9,14 @@
 #include <QHBoxLayout>
 #include <QLabel>
 #include <QLineEdit>
-#include <QSpinBox>
+#include "hot_text.h"
 #include <QVBoxLayout>
 
 namespace {
 
-QSpinBox* spin(int low, int high, int value, QWidget* parent)
+HotSpinBox* spin(int low, int high, int value, QWidget* parent)
 {
-    QSpinBox* box = new QSpinBox(parent);
+    HotSpinBox* box = new HotSpinBox(parent);
     box->setRange(low, high);
     box->setValue(value);
     return box;

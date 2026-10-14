@@ -13,6 +13,7 @@ What changed in each release of Phoenix, newest first.
 - Scripts can read a shape's outline (vertices, edges, contours, fills and strokes) and edit it, for exporters that walk shapes
 - Scripts can keep named data on objects, library items and the document, saved with the file
 - Scripts can copy, cut, paste and duplicate whole layers, move a layer into a folder, export SWF movies, publish, and run command lines
+- Every number field, in dialogs as well as panels, is now hot text: drag it to scrub, click to type, Tab between fields, and step with the arrow keys or the wheel; no more tiny arrow buttons
 
 ## 0.6.0 (2026-10-13)
 

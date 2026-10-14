@@ -10,7 +10,7 @@ class PhoenixView;
 class QCheckBox;
 class QComboBox;
 class QLineEdit;
-class QSpinBox;
+class HotSpinBox;
 class QToolButton;
 
 /// What File > Export > Export Image writes: one frame as a PNG, JPEG or
@@ -70,16 +70,16 @@ private:
     QSize _documentSize;
     QLineEdit* _path = nullptr;
     QComboBox* _format = nullptr;
-    QSpinBox* _width = nullptr;
-    QSpinBox* _height = nullptr;
+    HotSpinBox* _width = nullptr;
+    HotSpinBox* _height = nullptr;
     QCheckBox* _keepAspect = nullptr;
-    QSpinBox* _frame = nullptr;
+    HotSpinBox* _frame = nullptr;
     QComboBox* _matte = nullptr;
     QToolButton* _matteSwatch = nullptr;
     QColor _matteColor = Qt::white;
-    QSpinBox* _quality = nullptr;
+    HotSpinBox* _quality = nullptr;
     QComboBox* _depth = nullptr;
-    QSpinBox* _colors = nullptr;
+    HotSpinBox* _colors = nullptr;
     QCheckBox* _dither = nullptr;
     bool _syncing = false;
 };

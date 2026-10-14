@@ -10,7 +10,7 @@
 #include "../edit/transform_parts.h"
 
 #include <QCheckBox>
-#include <QDoubleSpinBox>
+#include "hot_text.h"
 #include <QElapsedTimer>
 #include <QFormLayout>
 #include <QGridLayout>
@@ -376,18 +376,20 @@ TransformPanel::TransformPanel(ArrangeLinks links, QWidget* parent)
     , _links(std::move(links))
 {
     const auto spin = [this](double minimum, double maximum, const QString& suffix) {
-        QDoubleSpinBox* box = new QDoubleSpinBox(this);
+        HotDoubleSpinBox* box = new HotDoubleSpinBox(this);
         box->setRange(minimum, maximum);
         box->setDecimals(1);
         box->setSuffix(suffix);
-        box->setKeyboardTracking(false);
         return box;
     };
     _scaleX = spin(-10000, 10000, "%");
     _scaleY = spin(-10000, 10000, "%");
+    // At rest (nothing selected yet) the scale reads 100%, not 0%.
+    _scaleX->setValue(100.0);
+    _scaleY->setValue(100.0);
     _constrain = new QCheckBox("Constrain", this);
     _constrain->setChecked(true);
-    connect(_scaleX, &QDoubleSpinBox::valueChanged, this, [this](double value) {
+    connect(_scaleX, &HotDoubleSpinBox::valueChanged, this, [this](double value) {
         if (_updating)
             return;
         if (_constrain->isChecked())
@@ -398,7 +400,7 @@ TransformPanel::TransformPanel(ArrangeLinks links, QWidget* parent)
         }
         apply(false);
     });
-    connect(_scaleY, &QDoubleSpinBox::valueChanged, this, [this](double value) {
+    connect(_scaleY, &HotDoubleSpinBox::valueChanged, this, [this](double value) {
         if (_updating)
             return;
         if (_constrain->isChecked())
@@ -415,9 +417,9 @@ TransformPanel::TransformPanel(ArrangeLinks links, QWidget* parent)
     _rotation = spin(-360, 360, QString::fromUtf8("°"));
     _skewX = spin(-360, 360, QString::fromUtf8("°"));
     _skewY = spin(-360, 360, QString::fromUtf8("°"));
-    for (QDoubleSpinBox* box : {_rotation, _skewX, _skewY})
+    for (HotDoubleSpinBox* box : {_rotation, _skewX, _skewY})
     {
-        connect(box, &QDoubleSpinBox::valueChanged, this, [this, box]() {
+        connect(box, &HotDoubleSpinBox::valueChanged, this, [this, box]() {
             if (_updating)
                 return;
             _rotateChoice->setChecked(box == _rotation);

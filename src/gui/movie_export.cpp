@@ -29,7 +29,7 @@
 #include <QProgressDialog>
 #include <QPushButton>
 #include <QSettings>
-#include <QSpinBox>
+#include "hot_text.h"
 #include <QTemporaryFile>
 #include <QVBoxLayout>
 
@@ -52,12 +52,11 @@ constexpr int kLastIndex = kSvgIndex;
 /// Each format's file extension.
 const char* const kSuffixes[8] = {"png", "mp4", "gif", "png", "wav", "png", "exr", "svg"};
 
-QSpinBox* plainSpin(int low, int high, int value, QWidget* parent)
+HotSpinBox* plainSpin(int low, int high, int value, QWidget* parent)
 {
-    QSpinBox* spin = new QSpinBox(parent);
+    HotSpinBox* spin = new HotSpinBox(parent);
     spin->setRange(low, high);
     spin->setValue(value);
-    spin->setButtonSymbols(QAbstractSpinBox::NoButtons);
     return spin;
 }
 
@@ -230,8 +229,8 @@ MovieExportDialog::MovieExportDialog(const QSize& documentSize, int frameCount, 
     connect(browse, &QPushButton::clicked, this, &MovieExportDialog::browse);
     connect(_format, &QComboBox::currentIndexChanged, this, &MovieExportDialog::formatChanged);
     connect(_codec, &QComboBox::currentIndexChanged, this, &MovieExportDialog::formatChanged);
-    connect(_width, &QSpinBox::valueChanged, this, &MovieExportDialog::widthChanged);
-    connect(_height, &QSpinBox::valueChanged, this, &MovieExportDialog::heightChanged);
+    connect(_width, &HotSpinBox::valueChanged, this, &MovieExportDialog::widthChanged);
+    connect(_height, &HotSpinBox::valueChanged, this, &MovieExportDialog::heightChanged);
 
     QSettings settings;
     _codec->setCurrentIndex(std::clamp(settings.value("export/codec", 0).toInt(), 0, 2));

@@ -21,7 +21,7 @@
 #include <QLineEdit>
 #include <QPainter>
 #include <QPushButton>
-#include <QSpinBox>
+#include "hot_text.h"
 #include <QToolButton>
 #include <QVBoxLayout>
 
@@ -109,9 +109,9 @@ ImageExportDialog::ImageExportDialog(const QSize& documentSize, int frameCount, 
             _format->setCurrentIndex(static_cast<int>(formatOf(_path->text())));
     });
 
-    _width = new QSpinBox(this);
-    _height = new QSpinBox(this);
-    for (QSpinBox* box : {_width, _height})
+    _width = new HotSpinBox(this);
+    _height = new HotSpinBox(this);
+    for (HotSpinBox* box : {_width, _height})
     {
         box->setRange(1, 16384);
         box->setSuffix(" px");
@@ -120,7 +120,7 @@ ImageExportDialog::ImageExportDialog(const QSize& documentSize, int frameCount, 
     _height->setValue(documentSize.height());
     _keepAspect = new QCheckBox("Keep proportions", this);
     _keepAspect->setChecked(true);
-    connect(_width, &QSpinBox::valueChanged, this, [this](int width) {
+    connect(_width, &HotSpinBox::valueChanged, this, [this](int width) {
         if (_syncing || !_keepAspect->isChecked() || _documentSize.width() <= 0)
             return;
         _syncing = true;
@@ -128,7 +128,7 @@ ImageExportDialog::ImageExportDialog(const QSize& documentSize, int frameCount, 
             static_cast<double>(width) * _documentSize.height() / _documentSize.width()))));
         _syncing = false;
     });
-    connect(_height, &QSpinBox::valueChanged, this, [this](int height) {
+    connect(_height, &HotSpinBox::valueChanged, this, [this](int height) {
         if (_syncing || !_keepAspect->isChecked() || _documentSize.height() <= 0)
             return;
         _syncing = true;
@@ -143,7 +143,7 @@ ImageExportDialog::ImageExportDialog(const QSize& documentSize, int frameCount, 
     sizeRow->addWidget(_keepAspect);
     sizeRow->addStretch();
 
-    _frame = new QSpinBox(this);
+    _frame = new HotSpinBox(this);
     _frame->setRange(1, std::max(1, frameCount));
     _frame->setValue(currentFrame + 1);
 
@@ -165,7 +165,7 @@ ImageExportDialog::ImageExportDialog(const QSize& documentSize, int frameCount, 
     matteRow->addWidget(_matte, 1);
     matteRow->addWidget(_matteSwatch);
 
-    _quality = new QSpinBox(this);
+    _quality = new HotSpinBox(this);
     _quality->setRange(0, 100);
     _quality->setValue(90);
     _quality->setToolTip("JPEG quality: higher is better and larger");
@@ -174,7 +174,7 @@ ImageExportDialog::ImageExportDialog(const QSize& documentSize, int frameCount, 
     _depth->addItems({"Full color (24/32-bit)", "8-bit (a palette)"});
     _depth->setToolTip("An 8-bit PNG is smaller, with at most 256 colors");
     connect(_depth, &QComboBox::currentIndexChanged, this, &ImageExportDialog::formatChanged);
-    _colors = new QSpinBox(this);
+    _colors = new HotSpinBox(this);
     _colors->setRange(2, 256);
     _colors->setValue(256);
     _colors->setToolTip("How many colors the palette has");

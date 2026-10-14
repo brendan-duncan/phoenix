@@ -7,7 +7,7 @@
 #include <QCheckBox>
 #include <QColorDialog>
 #include <QComboBox>
-#include <QSpinBox>
+#include "hot_text.h"
 #include <QHBoxLayout>
 #include <QLabel>
 #include <QLineEdit>
@@ -310,7 +310,7 @@ ColorPanel::ColorPanel(fla::DrawingStyle* style, QWidget* parent)
     for (int i = 0; i < 3; ++i)
     {
         _channelLabels[i] = new QLabel(solid);
-        _channels[i] = new QSpinBox(solid);
+        _channels[i] = new HotSpinBox(solid);
         channelRow->addWidget(_channelLabels[i]);
         channelRow->addWidget(_channels[i]);
     }
@@ -318,7 +318,7 @@ ColorPanel::ColorPanel(fla::DrawingStyle* style, QWidget* parent)
     solidPage->addLayout(channelRow);
     QHBoxLayout* alphaRow = new QHBoxLayout();
     alphaRow->addWidget(new QLabel("Alpha", solid));
-    _alpha = new QSpinBox(solid);
+    _alpha = new HotSpinBox(solid);
     _alpha->setRange(0, 100);
     _alpha->setSuffix("%");
     alphaRow->addWidget(_alpha);
@@ -339,9 +339,9 @@ ColorPanel::ColorPanel(fla::DrawingStyle* style, QWidget* parent)
         refresh();
         emit styleChanged();
     };
-    for (QSpinBox* box : _channels)
-        connect(box, &QSpinBox::valueChanged, this, fromChannels);
-    connect(_alpha, &QSpinBox::valueChanged, this, fromChannels);
+    for (HotSpinBox* box : _channels)
+        connect(box, &HotSpinBox::valueChanged, this, fromChannels);
+    connect(_alpha, &HotSpinBox::valueChanged, this, fromChannels);
     connect(_channelMode, &QComboBox::currentIndexChanged, this, [this]() {
         const bool was = _updating;
         _updating = true;

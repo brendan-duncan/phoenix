@@ -189,11 +189,10 @@
 #include <QComboBox>
 #include <QColorDialog>
 #include <QDockWidget>
-#include <QDoubleSpinBox>
+#include "hot_text.h"
 #include <QFontComboBox>
 #include <QHash>
 #include <QFormLayout>
-#include <QSpinBox>
 #include <QToolButton>
 #include <QTabBar>
 #include <QRegularExpression>
@@ -3297,12 +3296,12 @@ void MainWindow::editEffect(fla::Layer* layer)
         }
     });
     form->addRow("Color:", color);
-    QDoubleSpinBox* blur = new QDoubleSpinBox(&dialog);
+    HotDoubleSpinBox* blur = new HotDoubleSpinBox(&dialog);
     blur->setRange(0.0, 200.0);
     blur->setSuffix(" px");
     blur->setValue(effect.blur);
     form->addRow("Softness:", blur);
-    QSpinBox* opacity = new QSpinBox(&dialog);
+    HotSpinBox* opacity = new HotSpinBox(&dialog);
     opacity->setRange(0, 100);
     opacity->setSuffix(" %");
     opacity->setValue(static_cast<int>(std::lround(effect.opacity * 100.0)));
@@ -4089,9 +4088,9 @@ void MainWindow::editJointLimits(fla::Frame* frame, size_t child, int joint)
     QFormLayout* form = new QFormLayout(&dialog);
     QCheckBox* constrain = new QCheckBox("Constrain", &dialog);
     constrain->setChecked(limit.constrained);
-    QDoubleSpinBox* minimum = new QDoubleSpinBox(&dialog);
-    QDoubleSpinBox* maximum = new QDoubleSpinBox(&dialog);
-    for (QDoubleSpinBox* box : {minimum, maximum})
+    HotDoubleSpinBox* minimum = new HotDoubleSpinBox(&dialog);
+    HotDoubleSpinBox* maximum = new HotDoubleSpinBox(&dialog);
+    for (HotDoubleSpinBox* box : {minimum, maximum})
     {
         box->setRange(-180.0, 180.0);
         box->setDecimals(1);
@@ -5780,9 +5779,9 @@ void MainWindow::setupMenus()
         form->addRow(QString(), show);
         form->addRow(QString(), over);
         form->addRow(QString(), snap);
-        QSpinBox* across = new QSpinBox(&dialog);
-        QSpinBox* down = new QSpinBox(&dialog);
-        for (QSpinBox* box : {across, down})
+        HotSpinBox* across = new HotSpinBox(&dialog);
+        HotSpinBox* down = new HotSpinBox(&dialog);
+        for (HotSpinBox* box : {across, down})
         {
             box->setRange(1, 2000);
             box->setSuffix(" px");
@@ -10595,19 +10594,19 @@ void MainWindow::advancedSmooth()
     QSettings settings;
     QCheckBox* belowOn = new QCheckBox("Smooth angles below", &dialog);
     belowOn->setChecked(settings.value("advancedSmooth/belowOn", true).toBool());
-    QSpinBox* below = new QSpinBox(&dialog);
+    HotSpinBox* below = new HotSpinBox(&dialog);
     below->setRange(0, 180);
     below->setSuffix(QString::fromUtf8("\u00b0"));
     below->setValue(settings.value("advancedSmooth/below", 90).toInt());
     form->addRow(belowOn, below);
     QCheckBox* aboveOn = new QCheckBox("Smooth angles above", &dialog);
     aboveOn->setChecked(settings.value("advancedSmooth/aboveOn", true).toBool());
-    QSpinBox* above = new QSpinBox(&dialog);
+    HotSpinBox* above = new HotSpinBox(&dialog);
     above->setRange(0, 180);
     above->setSuffix(QString::fromUtf8("\u00b0"));
     above->setValue(settings.value("advancedSmooth/above", 90).toInt());
     form->addRow(aboveOn, above);
-    QSpinBox* strength = new QSpinBox(&dialog);
+    HotSpinBox* strength = new HotSpinBox(&dialog);
     strength->setRange(0, 100);
     strength->setSuffix("%");
     strength->setValue(settings.value("advancedSmooth/strength", 50).toInt());
@@ -10642,7 +10641,7 @@ void MainWindow::advancedStraighten()
     dialog.setWindowTitle("Advanced Straighten");
     QFormLayout* form = new QFormLayout(&dialog);
     QSettings settings;
-    QSpinBox* strength = new QSpinBox(&dialog);
+    HotSpinBox* strength = new HotSpinBox(&dialog);
     strength->setRange(0, 100);
     strength->setSuffix("%");
     strength->setValue(settings.value("advancedStraighten/strength", 50).toInt());
@@ -10747,17 +10746,17 @@ bool askFillOffset(QWidget* parent, const QString& title, bool withSteps,
     dialog.setWindowTitle(title);
     QFormLayout* form = new QFormLayout(&dialog);
 
-    QDoubleSpinBox* distanceBox = new QDoubleSpinBox(&dialog);
+    HotDoubleSpinBox* distanceBox = new HotDoubleSpinBox(&dialog);
     distanceBox->setRange(0.1, 1000.0);
     distanceBox->setDecimals(1);
     distanceBox->setSuffix(" px");
     distanceBox->setValue(distance);
     form->addRow("Distance:", distanceBox);
 
-    QSpinBox* stepsBox = nullptr;
+    HotSpinBox* stepsBox = nullptr;
     if (withSteps)
     {
-        stepsBox = new QSpinBox(&dialog);
+        stepsBox = new HotSpinBox(&dialog);
         stepsBox->setRange(1, 50);
         stepsBox->setValue(steps);
         form->addRow("Number of steps:", stepsBox);
@@ -10926,15 +10925,15 @@ void MainWindow::documentSettings()
         units->addItem(name, static_cast<int>(unit));
     units->setCurrentIndex(units->findData(static_cast<int>(fla::docsettings::unitOf(*document))));
     form->addRow("Units:", units);
-    QDoubleSpinBox* width = new QDoubleSpinBox(&dialog);
-    QDoubleSpinBox* height = new QDoubleSpinBox(&dialog);
+    HotDoubleSpinBox* width = new HotDoubleSpinBox(&dialog);
+    HotDoubleSpinBox* height = new HotDoubleSpinBox(&dialog);
     // The size in pixels, shown in the units chosen.
     double pixelWidth = document->width;
     double pixelHeight = document->height;
     const auto showSize = [&]() {
         const Unit unit = static_cast<Unit>(units->currentData().toInt());
         const double per = fla::docsettings::pixelsPer(unit);
-        for (QDoubleSpinBox* box : {width, height})
+        for (HotDoubleSpinBox* box : {width, height})
         {
             const QSignalBlocker blocker(box);
             box->setDecimals(unit == Unit::Pixels || unit == Unit::Points ? 0 : 2);
@@ -10949,8 +10948,8 @@ void MainWindow::documentSettings()
     showSize();
     connect(units, &QComboBox::currentIndexChanged, &dialog, [&]() { showSize(); });
     const auto perUnit = [&]() { return fla::docsettings::pixelsPer(static_cast<Unit>(units->currentData().toInt())); };
-    connect(width, &QDoubleSpinBox::valueChanged, &dialog, [&](double value) { pixelWidth = value * perUnit(); });
-    connect(height, &QDoubleSpinBox::valueChanged, &dialog, [&](double value) { pixelHeight = value * perUnit(); });
+    connect(width, &HotDoubleSpinBox::valueChanged, &dialog, [&](double value) { pixelWidth = value * perUnit(); });
+    connect(height, &HotDoubleSpinBox::valueChanged, &dialog, [&](double value) { pixelHeight = value * perUnit(); });
     QHBoxLayout* size = new QHBoxLayout();
     size->addWidget(width);
     size->addWidget(new QLabel("x", &dialog));
@@ -11424,7 +11423,7 @@ void MainWindow::bitmapProperties(const QString& name)
     kind->addItems({"Photo (JPEG)", "Lossless (PNG/GIF)"});
     kind->setCurrentIndex(compression == "lossless" ? 1 : 0);
     form->addRow("Compression", kind);
-    QSpinBox* quality = new QSpinBox(&dialog);
+    HotSpinBox* quality = new HotSpinBox(&dialog);
     quality->setRange(0, 100);
     quality->setSpecialValueText("Document default");
     quality->setValue(bitmap->quality);
@@ -11785,12 +11784,12 @@ void MainWindow::traceBitmaps()
     dialog.setWindowTitle("Trace Bitmap");
     QFormLayout* form = new QFormLayout(&dialog);
     QSettings settings;
-    QSpinBox* threshold = new QSpinBox(&dialog);
+    HotSpinBox* threshold = new HotSpinBox(&dialog);
     threshold->setRange(1, 500);
     threshold->setValue(settings.value("trace/threshold", 100).toInt());
     threshold->setToolTip("How different two colors may be and still make one area; higher makes fewer areas");
     form->addRow("Color threshold", threshold);
-    QSpinBox* area = new QSpinBox(&dialog);
+    HotSpinBox* area = new HotSpinBox(&dialog);
     area->setRange(1, 1000);
     area->setSuffix(" px");
     area->setValue(settings.value("trace/minimumArea", 8).toInt());
@@ -12476,11 +12475,11 @@ void MainWindow::scaleAndRotate()
     static double rotation = 0.0;
     QDialog dialog(this);
     dialog.setWindowTitle("Scale and Rotate");
-    QDoubleSpinBox* scaleBox = new QDoubleSpinBox(&dialog);
+    HotDoubleSpinBox* scaleBox = new HotDoubleSpinBox(&dialog);
     scaleBox->setRange(1.0, 10000.0);
     scaleBox->setSuffix(" %");
     scaleBox->setValue(scale);
-    QDoubleSpinBox* rotateBox = new QDoubleSpinBox(&dialog);
+    HotDoubleSpinBox* rotateBox = new HotDoubleSpinBox(&dialog);
     rotateBox->setRange(-360.0, 360.0);
     rotateBox->setSuffix(QString::fromUtf8(" °"));
     rotateBox->setValue(rotation);

@@ -7,7 +7,7 @@
 
 #include <QComboBox>
 #include <QDialogButtonBox>
-#include <QDoubleSpinBox>
+#include "hot_text.h"
 #include <QFormLayout>
 #include <QLabel>
 #include <QPainter>
@@ -38,19 +38,19 @@ StrokeStyleDialog::StrokeStyleDialog(const fla::StrokeLook& look, double weight,
     {
     case Style::Dashed:
     {
-        QDoubleSpinBox* dash = new QDoubleSpinBox(this);
+        HotDoubleSpinBox* dash = new HotDoubleSpinBox(this);
         dash->setRange(0.25, 300.0);
         dash->setSuffix(" pt");
         dash->setValue(_look.dash1);
-        connect(dash, &QDoubleSpinBox::valueChanged, this, [this](double value) {
+        connect(dash, &HotDoubleSpinBox::valueChanged, this, [this](double value) {
             _look.dash1 = value;
             showPreview();
         });
-        QDoubleSpinBox* gap = new QDoubleSpinBox(this);
+        HotDoubleSpinBox* gap = new HotDoubleSpinBox(this);
         gap->setRange(0.25, 300.0);
         gap->setSuffix(" pt");
         gap->setValue(_look.dash2);
-        connect(gap, &QDoubleSpinBox::valueChanged, this, [this](double value) {
+        connect(gap, &HotDoubleSpinBox::valueChanged, this, [this](double value) {
             _look.dash2 = value;
             showPreview();
         });
@@ -61,11 +61,11 @@ StrokeStyleDialog::StrokeStyleDialog(const fla::StrokeLook& look, double weight,
     }
     case Style::Dotted:
     {
-        QDoubleSpinBox* space = new QDoubleSpinBox(this);
+        HotDoubleSpinBox* space = new HotDoubleSpinBox(this);
         space->setRange(0.0, 300.0);
         space->setSuffix(" pt");
         space->setValue(_look.dotSpace);
-        connect(space, &QDoubleSpinBox::valueChanged, this, [this](double value) {
+        connect(space, &HotDoubleSpinBox::valueChanged, this, [this](double value) {
             _look.dotSpace = value;
             showPreview();
         });

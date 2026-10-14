@@ -14,7 +14,7 @@ class QCheckBox;
 class QComboBox;
 class QLabel;
 class QLineEdit;
-class QSpinBox;
+class HotSpinBox;
 class TimelineAudio;
 
 /// What File > Export > Export Movie writes.
@@ -115,17 +115,17 @@ private:
     QSize _documentSize;
     QComboBox* _format = nullptr;
     QLineEdit* _path = nullptr;
-    QSpinBox* _width = nullptr;
-    QSpinBox* _height = nullptr;
+    HotSpinBox* _width = nullptr;
+    HotSpinBox* _height = nullptr;
     QCheckBox* _keepAspect = nullptr;
-    QSpinBox* _first = nullptr;
-    QSpinBox* _last = nullptr;
+    HotSpinBox* _first = nullptr;
+    HotSpinBox* _last = nullptr;
     QCheckBox* _transparent = nullptr;
     QCheckBox* _audio = nullptr;
     QCheckBox* _loop = nullptr;
     QCheckBox* _camera = nullptr;
     QComboBox* _codec = nullptr;
-    QSpinBox* _gifColors = nullptr;
+    HotSpinBox* _gifColors = nullptr;
     QCheckBox* _gifDither = nullptr;
     QComboBox* _area = nullptr;
     QComboBox* _scenes = nullptr;

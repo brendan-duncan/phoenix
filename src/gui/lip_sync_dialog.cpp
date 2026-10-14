@@ -19,7 +19,7 @@
 #include <QPushButton>
 #include <QRadioButton>
 #include <QSettings>
-#include <QSpinBox>
+#include "hot_text.h"
 #include <QStandardPaths>
 #include <QTableWidget>
 #include <QTemporaryDir>
@@ -103,7 +103,7 @@ LipSyncDialog::LipSyncDialog(const QString& mouthName, const std::map<std::strin
     layout->addWidget(_chart, 1);
 
     QFormLayout* startForm = new QFormLayout();
-    _start = new QSpinBox(this);
+    _start = new HotSpinBox(this);
     _start->setRange(1, 100000);
     _start->setValue(startFrame + 1);
     startForm->addRow("Starts on frame:", _start);
@@ -259,7 +259,7 @@ void LipSyncDialog::fillChart()
         QTableWidgetItem* name = new QTableWidgetItem(QString::fromStdString(shape));
         name->setFlags(Qt::ItemIsEnabled);
         _chart->setItem(row, 0, name);
-        QSpinBox* frame = new QSpinBox(_chart);
+        HotSpinBox* frame = new HotSpinBox(_chart);
         frame->setRange(1, 10000);
         frame->setValue(chart[shape]);
         _chart->setCellWidget(row, 1, frame);
@@ -271,7 +271,7 @@ std::map<std::string, int> LipSyncDialog::chart() const
     std::map<std::string, int> chart;
     for (int row = 0; row < _chart->rowCount(); ++row)
     {
-        const auto* frame = qobject_cast<const QSpinBox*>(_chart->cellWidget(row, 1));
+        const auto* frame = qobject_cast<const HotSpinBox*>(_chart->cellWidget(row, 1));
         if (_chart->item(row, 0) && frame)
             chart[_chart->item(row, 0)->text().toStdString()] = frame->value();
     }

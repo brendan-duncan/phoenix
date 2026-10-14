@@ -13,7 +13,7 @@
 #include <QPainter>
 #include <QPixmap>
 #include <QSettings>
-#include <QSpinBox>
+#include "hot_text.h"
 #include <QToolButton>
 #include <QVBoxLayout>
 
@@ -96,7 +96,7 @@ PreferencesDialog::PreferencesDialog(QWidget* parent)
 
     QGroupBox* general = new QGroupBox("General", this);
     QFormLayout* generalForm = new QFormLayout(general);
-    _undoLevels = new QSpinBox(general);
+    _undoLevels = new HotSpinBox(general);
     _undoLevels->setRange(0, 9999);
     _undoLevels->setSpecialValueText("No limit");
     _undoLevels->setValue(Preferences::undoLevels());
@@ -173,11 +173,11 @@ PreferencesDialog::PreferencesDialog(QWidget* parent)
     _mcp->setToolTip("An AI assistant on this computer, such as Claude Desktop or Claude Code, can read and change "
                      "the open document. Phoenix asks before each one works, and only connections from this "
                      "computer are taken.");
-    _mcpPort = new QSpinBox(assistants);
+    _mcpPort = new HotSpinBox(assistants);
     _mcpPort->setRange(1024, 65535);
     _mcpPort->setValue(McpServer::port());
     _mcpPort->setEnabled(_mcp->isChecked());
-    connect(_mcp, &QCheckBox::toggled, _mcpPort, &QSpinBox::setEnabled);
+    connect(_mcp, &QCheckBox::toggled, _mcpPort, &HotSpinBox::setEnabled);
     assistantsForm->addRow("Connections", _mcp);
     assistantsForm->addRow("Port", _mcpPort);
     layout->addWidget(assistants);

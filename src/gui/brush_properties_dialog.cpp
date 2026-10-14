@@ -6,7 +6,7 @@
 #include <QCheckBox>
 #include <QComboBox>
 #include <QDialogButtonBox>
-#include <QDoubleSpinBox>
+#include "hot_text.h"
 #include <QEvent>
 #include <QFile>
 #include <QFileDialog>
@@ -211,12 +211,12 @@ BrushPropertiesDialog::BrushPropertiesDialog(fla::DrawingStyle& style, const std
     const auto number = [&](QFormLayout* form, const QString& label, double low, double high, int decimals,
                             const QString& suffix, const QString& tip, std::function<double()> get,
                             std::function<void(double)> set) {
-        QDoubleSpinBox* box = new QDoubleSpinBox(this);
+        HotDoubleSpinBox* box = new HotDoubleSpinBox(this);
         box->setRange(low, high);
         box->setDecimals(decimals);
         box->setSuffix(suffix);
         box->setToolTip(tip);
-        connect(box, &QDoubleSpinBox::valueChanged, this, [this, set](double value) {
+        connect(box, &HotDoubleSpinBox::valueChanged, this, [this, set](double value) {
             if (_refreshing)
                 return;
             set(value);

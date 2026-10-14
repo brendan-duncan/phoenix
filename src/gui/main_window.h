@@ -58,7 +58,7 @@
 #include <QStringList>
 
 class QDockWidget;
-class QDoubleSpinBox;
+class HotDoubleSpinBox;
 
 class Updater;
 
