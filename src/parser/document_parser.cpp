@@ -352,6 +352,14 @@ fla::FillStyle* parseFillStyle(const tinyxml2::XMLElement* element, fla::DOMElem
     }
     else if (std::strcmp(tagName, "BitmapFill") == 0)
     {
+        // Textured paint Phoenix baked for Animate: the solid fill it was.
+        const std::string solid = getAttribute(element, "phoenixSolidColor");
+        if (!solid.empty())
+        {
+            fla::SolidColor* solidFill = new fla::SolidColor(parent);
+            parseHexColor(solid, solidFill->color, getDoubleAttribute(element, "phoenixSolidAlpha", 1.0));
+            return solidFill;
+        }
         fla::BitmapFill* bitmapFill = new fla::BitmapFill(parent);
         parseFillStyle(element, bitmapFill);
         bitmapFill->bitmapPath = getAttribute(element, "bitmapPath");
@@ -2134,6 +2142,9 @@ bool parseMedia(const tinyxml2::XMLElement* element, fla::Document* document, Zi
     {
         if (std::strcmp(childElement->Name(), "DOMBitmapItem") == 0)
         {
+            // A texture tile Phoenix baked for Animate, made again on save.
+            if (getAttribute(childElement, "phoenixTextureBake") == "true")
+                continue;
             fla::Bitmap* bitmap = new fla::Bitmap(document);
 
             bitmap->name = getAttribute(childElement, "name");

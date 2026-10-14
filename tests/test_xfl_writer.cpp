@@ -24,6 +24,7 @@
 #include "../src/parser/zip_reader.h"
 
 #include <tinyxml2.h>
+#include "../src/writer/xfl_content.h"
 #include "../src/writer/xfl_folder_writer.h"
 #include "../src/writer/xfl_writer.h"
 
@@ -1542,4 +1543,65 @@ TEST(tlf_text_opens_as_classic_text)
     const std::string written = writer.writeDocument(*document);
     CHECK(written.find("DOMTLFText") == std::string::npos);
     CHECK(written.find("DOMDynamicText") != std::string::npos);
+}
+
+TEST(xfl_bakes_textured_paint_for_animate_and_reads_it_back)
+{
+    // A brush stroke painted with Phoenix's Chalk texture.
+    const char* textured =
+        "<DOMDocument xmlns='http://ns.adobe.com/xfl/2008/' width='640' height='480' currentTimeline='1'>"
+        "<timelines><DOMTimeline name='Scene 1'><layers><DOMLayer name='Layer 1'><frames>"
+        "<DOMFrame index='0' keyMode='9728'><elements>"
+        "<DOMShape phoenixTexture='Chalk' phoenixTextureScale='2' phoenixTextureStrength='0.5' "
+        "phoenixTextureRotation='90'>"
+        "<fills><FillStyle index='1'><SolidColor color='#CC3300' alpha='0.8'/></FillStyle></fills>"
+        "<edges><Edge fillStyle1='1' edges='!0 0|2000 0!2000 0|2000 2000!2000 2000|0 2000!0 2000|0 0'/></edges>"
+        "</DOMShape></elements></DOMFrame></frames></DOMLayer></layers></DOMTimeline></timelines></DOMDocument>";
+    std::unique_ptr<fla::Document> document = parseDocumentText(textured);
+    CHECK(document != nullptr);
+    if (!document)
+        return;
+    std::vector<fla::XFLEntry> entries;
+    std::vector<std::string> unsupported;
+    std::string error;
+    CHECK(fla::XFLContent::build(*document, std::string(), entries, unsupported, error));
+    // For Animate: a repeating bitmap fill of the grain, its tile in the
+    // library and under bin, the color kept beside it.
+    const std::string& xml = entries.front().text;
+    CHECK(xml.find("<BitmapFill bitmapPath=\"Phoenix Texture Chalk CC3300CC 50\"") != std::string::npos);
+    CHECK(xml.find("phoenixSolidColor=\"#CC3300\"") != std::string::npos);
+    CHECK(xml.find("phoenixTextureBake=\"true\"") != std::string::npos);
+    // Twenty to a pixel, doubled by the scale, turned a quarter.
+    CHECK(xml.find("b=\"40\"") != std::string::npos && xml.find("c=\"-40\"") != std::string::npos);
+    const fla::XFLEntry* tile = nullptr;
+    for (const fla::XFLEntry& entry : entries)
+        if (entry.path == "bin/phoenix_texture_1.dat")
+            tile = &entry;
+    CHECK(tile && tile->binary && !tile->binary->empty());
+
+    // Read back by Phoenix: the solid fill with its texture, no bitmap.
+    std::map<std::string, std::vector<uint8_t>> files;
+    for (const fla::XFLEntry& entry : entries)
+        files[entry.path] = entry.isBinary() ? *entry.binary : std::vector<uint8_t>(entry.text.begin(), entry.text.end());
+    ZipReader reader;
+    reader.openMemory(files);
+    DocumentParser parser(&reader);
+    std::unique_ptr<fla::Document> back(parser.parse(entries.front().text, nullptr));
+    CHECK(back != nullptr);
+    if (!back)
+        return;
+    CHECK(back->resources.empty());
+    const fla::Frame* frame = back->timelines[0]->layers[0]->frames[0];
+    const auto* shape = dynamic_cast<const fla::Shape*>(frame->elements.empty() ? nullptr : frame->elements[0]);
+    CHECK(shape && shape->fills.size() == 1);
+    const auto* solid = shape && !shape->fills.empty() ? dynamic_cast<const fla::SolidColor*>(shape->fills[0]) : nullptr;
+    CHECK(solid && solid->color[0] == 0xCC && solid->color[1] == 0x33 && solid->color[3] == 204);
+    // Written again, it bakes the same tile once.
+    std::vector<fla::XFLEntry> again;
+    CHECK(fla::XFLContent::build(*back, std::string(), again, unsupported, error));
+    int tiles = 0;
+    for (const fla::XFLEntry& entry : again)
+        if (entry.path.rfind("bin/phoenix_texture_", 0) == 0)
+            ++tiles;
+    CHECK(tiles == 1);
 }

@@ -21,7 +21,7 @@ namespace features {
 const std::vector<Feature>& all()
 {
     static const std::vector<Feature> list = {
-        {"textured-brushes", "Textured brushes", "plain fills, without the grain",
+        {"textured-brushes", "Textured brushes", "the grain baked into a bitmap fill, which can no longer be changed",
             {"phoenixTexture", "phoenixTextureScale", "phoenixTextureStrength", "phoenixTextureOffset",
                 "phoenixTextureRotation", "phoenixTextureFixed"}},
         {"art-and-pattern-brushes", "Art and pattern brushes", "plain strokes along the same lines",

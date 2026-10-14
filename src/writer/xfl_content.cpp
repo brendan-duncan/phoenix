@@ -69,6 +69,7 @@ bool XFLContent::buildUnguarded(const Document& document, const std::string& pro
     error.clear();
 
     XFLWriter writer;
+    writer.setBakeTextures(true);
 
     XFLEntry documentEntry;
     documentEntry.path = "DOMDocument.xml";
@@ -104,6 +105,18 @@ bool XFLContent::buildUnguarded(const Document& document, const std::string& pro
             entry.text = writer.writeSymbol(*symbol);
             entries.push_back(std::move(entry));
         }
+    }
+
+    // Textured paint baked for Animate, its tiles in the library: the
+    // document lists them once every symbol has been written.
+    entries.front().text = writer.withBakedMedia(entries.front().text);
+    for (const XFLWriter::BakedTexture& baked : writer.bakedTextures())
+    {
+        XFLEntry entry;
+        entry.path = "bin/" + baked.dataFile;
+        entry.owned = std::make_shared<const std::vector<uint8_t>>(baked.data);
+        entry.binary = entry.owned.get();
+        entries.push_back(std::move(entry));
     }
 
     for (const Resource* resource : document.resources)
@@ -149,6 +162,9 @@ bool XFLContent::buildUnguarded(const Document& document, const std::string& pro
     for (const auto& file : document.extraFiles)
     {
         if (!isSafeRelativePath(file.first))
+            continue;
+        // Tiles baked when the file was last written are made again.
+        if (file.first.rfind(std::string("bin/") + XFLWriter::kBakedDataPrefix, 0) == 0)
             continue;
         XFLEntry entry;
         entry.path = file.first;

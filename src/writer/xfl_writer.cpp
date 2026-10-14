@@ -20,6 +20,8 @@
 #include "../data/static_text.h"
 #include "../data/symbol.h"
 #include "../data/symbol_list.h"
+#include "../data/bitmap_decoder.h"
+#include "../edit/brush_texture.h"
 #include "../edit/shape_tween.h"
 
 #include "../third_party/tinyxml2/tinyxml2.h"
@@ -326,6 +328,29 @@ void XFLWriter::writeFillStyle(const FillStyle& fill, XMLElement* parent)
     case FillStyle::Type::SolidColor:
     {
         const SolidColor& solid = static_cast<const SolidColor&>(fill);
+        if (_texturedShape)
+        {
+            // Textured paint, for Animate: a repeating bitmap fill of the
+            // grain in the paint's color, its color kept for Phoenix.
+            const std::string item = bakeTexture(*_texturedShape, solid.color);
+            if (!item.empty())
+            {
+                const texture::Spec spec = texture::of(*_texturedShape);
+                XMLElement* node = doc->NewElement("BitmapFill");
+                node->SetAttribute("bitmapPath", item.c_str());
+                setColor(node, "phoenixSolidColor", "phoenixSolidAlpha", solid.color, true);
+                // Tile pixels to the shape's: scaled, turned, then moved, as
+                // Phoenix lays the grain; a bitmap fill's matrix counts
+                // twenty to a pixel.
+                const double turn = spec.rotation * 3.14159265358979323846 / 180.0;
+                const double s = 20.0 * spec.scale;
+                writeMatrix(Transform(s * std::cos(turn), s * std::sin(turn), -s * std::sin(turn), s * std::cos(turn),
+                                spec.offsetX, spec.offsetY),
+                    node);
+                parent->InsertEndChild(node);
+                break;
+            }
+        }
         XMLElement* node = doc->NewElement("SolidColor");
         // A solid fill always states its color: black is a real choice here,
         // not an absent one.
@@ -383,6 +408,122 @@ void XFLWriter::writeFillStyle(const FillStyle& fill, XMLElement* parent)
         break;
     }
     }
+}
+
+std::string XFLWriter::bakeTexture(const Shape& shape, const uint8_t rgba[4])
+{
+    const texture::Spec spec = texture::of(shape);
+    char key[96];
+    std::snprintf(key, sizeof(key), " %02X%02X%02X%02X %d", rgba[0], rgba[1], rgba[2], rgba[3],
+        static_cast<int>(std::lround(spec.strength * 100.0)));
+    const std::string item = "Phoenix Texture " + spec.name + key;
+    for (const BakedTexture& baked : _baked)
+        if (baked.item == item)
+            return item;
+
+    // The grain's coverage: a built-in tile, or a library bitmap's
+    // lightness.
+    texture::Tile tile;
+    const std::string prefix = texture::kBitmapPrefix;
+    if (spec.name.compare(0, prefix.size(), prefix) == 0)
+    {
+        const DOMElement* up = &shape;
+        while (up && up->domType() != DOMElement::DOMType::Document)
+            up = up->parent;
+        const auto* document = static_cast<const Document*>(up);
+        const std::string wanted = spec.name.substr(prefix.size());
+        for (const Resource* resource : document ? document->resources : std::vector<Resource*>())
+        {
+            if (!resource || resource->resourceType() != Resource::Type::Bitmap)
+                continue;
+            const Bitmap* bitmap = static_cast<const Bitmap*>(resource);
+            DecodedBitmap pixels;
+            if (bitmap->name != wanted || !decodeLosslessBitmap(bitmap->datData.get(), pixels) || pixels.width <= 0)
+                continue;
+            tile.size = std::min(pixels.width, pixels.height);
+            tile.coverage.resize(static_cast<size_t>(tile.size) * static_cast<size_t>(tile.size));
+            for (int y = 0; y < tile.size; ++y)
+                for (int x = 0; x < tile.size; ++x)
+                {
+                    const uint32_t p = pixels.pixels[static_cast<size_t>(y) * static_cast<size_t>(pixels.width) + x];
+                    const int a = (p >> 24) & 0xFF;
+                    // Unpremultiplied lightness, as Phoenix reads it.
+                    const auto un = [a](int c) { return a > 0 ? std::min(255, c * 255 / a) : 0; };
+                    const int light = (un((p >> 16) & 0xFF) * 299 + un((p >> 8) & 0xFF) * 587 + un(p & 0xFF) * 114) / 1000;
+                    tile.coverage[static_cast<size_t>(y) * static_cast<size_t>(tile.size) + x] = static_cast<uint8_t>(light);
+                }
+            break;
+        }
+    }
+    else
+        tile = texture::builtInTile(spec.name);
+    if (tile.size <= 0)
+    {
+        note("textured paint whose texture is a JPEG or missing bitmap (Animate shows it plain)");
+        return {};
+    }
+
+    std::vector<uint32_t> pixels(static_cast<size_t>(tile.size) * static_cast<size_t>(tile.size));
+    for (size_t i = 0; i < pixels.size(); ++i)
+    {
+        const double cover = 1.0 - spec.strength + spec.strength * tile.coverage[i] / 255.0;
+        const uint32_t a = static_cast<uint32_t>(std::lround(rgba[3] * cover));
+        const auto pre = [a](uint8_t c) { return static_cast<uint32_t>((c * a + 127) / 255); };
+        pixels[i] = (a << 24) | (pre(rgba[0]) << 16) | (pre(rgba[1]) << 8) | pre(rgba[2]);
+    }
+    if (spec.fixed)
+        note("textured paint whose grain keeps its size in the frame (Animate scales it with the art)");
+    BakedTexture baked;
+    baked.item = item;
+    baked.dataFile = std::string(kBakedDataPrefix) + std::to_string(_baked.size() + 1) + ".dat";
+    baked.size = tile.size;
+    baked.data = encodeLosslessBitmap(tile.size, tile.size, pixels);
+    _baked.push_back(std::move(baked));
+    return item;
+}
+
+std::string XFLWriter::withBakedMedia(const std::string& documentXml) const
+{
+    if (_baked.empty())
+        return documentXml;
+    XMLDocument doc;
+    if (doc.Parse(documentXml.c_str(), documentXml.size()) != tinyxml2::XML_SUCCESS || !doc.RootElement())
+        return documentXml;
+    XMLElement* root = doc.RootElement();
+    XMLElement* media = root->FirstChildElement("media");
+    if (!media)
+    {
+        // Where Animate puts it: after the folders and fonts, before the
+        // symbols and timelines.
+        media = doc.NewElement("media");
+        XMLElement* before = nullptr;
+        for (XMLElement* child = root->FirstChildElement(); child; child = child->NextSiblingElement())
+        {
+            const std::string name = child->Name();
+            if (name == "symbols" || name == "timelines" || name == "scripts" || name == "extendedSwatchLists")
+                break;
+            before = child;
+        }
+        if (before)
+            root->InsertAfterChild(before, media);
+        else
+            root->InsertFirstChild(media);
+    }
+    for (const BakedTexture& baked : _baked)
+    {
+        XMLElement* node = doc.NewElement("DOMBitmapItem");
+        node->SetAttribute("name", baked.item.c_str());
+        node->SetAttribute("allowSmoothing", "true");
+        node->SetAttribute("href", baked.item.c_str());
+        node->SetAttribute("bitmapDataHRef", baked.dataFile.c_str());
+        node->SetAttribute("frameRight", baked.size * 20);
+        node->SetAttribute("frameBottom", baked.size * 20);
+        node->SetAttribute(kBakedAttribute, "true");
+        media->InsertEndChild(node);
+    }
+    tinyxml2::XMLPrinter printer;
+    doc.Print(&printer);
+    return printer.CStr();
 }
 
 void XFLWriter::writeStrokeStyle(const StrokeStyle& stroke, XMLElement* parent)
@@ -446,6 +587,15 @@ void XFLWriter::writeShape(const Shape& shape, XMLElement* parent)
 
     writeElementCommon(shape, node);
     setBool(node, "isDrawingObject", shape.isDrawingObject, false);
+
+    // A textured shape's solid fills go out as baked grain (bakeTexture).
+    struct Texturing
+    {
+        const Shape*& current;
+        ~Texturing() { current = nullptr; }
+    } texturing{_texturedShape};
+    if (_bakeTextures && texture::of(shape).valid())
+        _texturedShape = &shape;
 
     if (!shape.fillsMap.empty())
     {

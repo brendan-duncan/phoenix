@@ -70,7 +70,39 @@ public:
 
     void clearUnsupported() { _unsupported.clear(); }
 
+    /// Textured paint (a brush texture's grain on a solid fill) written so
+    /// Animate shows it: each fill a repeating bitmap fill of a small tile,
+    /// the paint's color with the grain in its alpha, placed as the texture
+    /// is. The fill keeps its color as Phoenix attributes, so Phoenix reads
+    /// it back as the solid fill with its live texture. Off unless set:
+    /// only files written for Animate want it.
+    void setBakeTextures(bool on) { _bakeTextures = on; }
+
+    /// A tile made for textured paint: its library item, its data file
+    /// under bin and the data.
+    struct BakedTexture
+    {
+        std::string item;
+        std::string dataFile;
+        int size = 0;
+        std::vector<uint8_t> data;
+    };
+    const std::vector<BakedTexture>& bakedTextures() const { return _baked; }
+
+    /// \a documentXml (DOMDocument.xml as written) with a library bitmap for
+    /// each baked tile; unchanged when there are none.
+    std::string withBakedMedia(const std::string& documentXml) const;
+
+    /// What marks a baked tile's library bitmap and data file, which a
+    /// reader drops: Phoenix makes them again when it writes.
+    static constexpr const char* kBakedAttribute = "phoenixTextureBake";
+    static constexpr const char* kBakedDataPrefix = "phoenix_texture_";
+
 private:
+    /// The library bitmap a solid fill of \a rgba on \a shape, textured as
+    /// the shape says, is drawn with in Animate; empty when the texture's
+    /// tile cannot be made (a texture from a JPEG bitmap).
+    std::string bakeTexture(const Shape& shape, const uint8_t rgba[4]);
     void note(const std::string& description);
 
     void writeTimeline(const Timeline& timeline, tinyxml2::XMLElement* parent);
@@ -98,6 +130,10 @@ private:
     void writeElementKept(const Element& element, tinyxml2::XMLElement* node);
 
     std::vector<std::string> _unsupported;
+    bool _bakeTextures = false;
+    /// The shape whose fills are being written, when it is textured.
+    const Shape* _texturedShape = nullptr;
+    std::vector<BakedTexture> _baked;
 };
 
 } // namespace fla

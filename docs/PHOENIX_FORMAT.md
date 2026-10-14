@@ -185,7 +185,7 @@ are kept, and an FLA export lists them as possibly lost.
 
 | id | Feature | Another FLA editor shows |
 | --- | --- | --- |
-| `textured-brushes` | Textured brushes | plain fills, without the grain |
+| `textured-brushes` | Textured brushes | the grain baked into a bitmap fill, which can no longer be changed |
 | `art-and-pattern-brushes` | Art and pattern brushes | plain strokes along the same lines |
 | `bitmap-painting` | Bitmap painting | the painted canvas as an ordinary bitmap |
 | `linked-palettes` | Linked palettes | the colors as they are, without the palettes or their links |

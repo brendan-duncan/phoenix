@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstdint>
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -22,6 +23,10 @@ struct XFLEntry
 
     /// Contents for a binary entry, borrowed from the document.
     const std::vector<uint8_t>* binary = nullptr;
+
+    /// Contents made while writing (a baked texture tile), held here;
+    /// binary points into it.
+    std::shared_ptr<const std::vector<uint8_t>> owned;
 
     bool isBinary() const { return binary != nullptr; }
 };
