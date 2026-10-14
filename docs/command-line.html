@@ -110,9 +110,12 @@ Phoenix shots episode.fla --by camera</code></pre>
 Phoenix batch episode/ --convert phx --out converted/
 Phoenix batch episode/ --render --out renders/
 Phoenix batch episode/ --update-links --save
-Phoenix batch episode/ --python fix_names.py --save</code></pre>
+Phoenix batch episode/ --python fix_names.py --save
+Phoenix batch --jsfl rename_layers.jsfl episode/ extra/sh090.fla --save</code></pre>
 
 <p>Runs one operation on every <code>.fla</code> and <code>.phx</code> in the folder (add <code>--recursive</code> for subfolders). <code>--doctor</code> checks each; with <code>--save</code> or <code>--out</code> it also repairs, in place or to a copy. <code>--convert</code> writes each as <code>fla</code>, <code>phx</code> or <code>xfl</code>, beside it or in <code>--out</code>. <code>--render</code> renders each to a PNG sequence, in a folder named after it. <code>--update-links</code> brings each document's <a href="pipeline.html#linked-shared-assets">linked symbols</a> up to date from their master files, and <code>--save</code> writes the documents back. With <code>--python</code>, each document is opened out as an XFL folder and the script is run as <code>python script.py <em>xfl-folder</em> <em>document</em></code>; it can edit the XML there with any Python tools. With <code>--save</code>, what the script changed is written back to the document; with <code>--out</code>, to a copy. A script that exits with an error leaves its document alone. Set <code>PHOENIX_PYTHON</code> to choose the Python interpreter.</p>
+
+<p><code>--jsfl</code> runs a <a href="scripting.html">JSFL script</a> on each document in turn, as <code>run-script</code> does: give it documents, folders, or both. Each document is opened on its own, the script runs with it as the current document, and it is closed before the next. What the script traces goes to standard output, under a <code>== <em>document</em></code> line for each; errors go to standard error. With <code>--save</code>, what the script changed is written back to the document; with <code>--out</code>, a copy goes into that folder. A document whose script fails is not saved. <code>--timeout SECONDS</code> stops a script that runs too long, as for <code>run-script</code>.</p>
 
 <p>At the end, Phoenix says how many documents there were and how many had problems; the exit code is 2 if any did.</p>
 

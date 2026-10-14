@@ -9,6 +9,10 @@ What changed in each release of Phoenix, newest first.
 - Older scripts that use E4X XML (`x.@id`, `x..item`, XML literals) run
 - Scripts can ask for their settings in XUL dialogs (`fl.xmlPanel`, `fl.xmlPanelFromString`), with handlers and `fl.xmlui`
 - Python scripts: run `.py` files from the Commands menu or `Phoenix run-script`, with your own Python and its packages, using the same objects and names as JSFL
+- `Phoenix batch --jsfl script.jsfl` runs a script on every document in a folder, and `--save` writes back what it changed
+- Scripts can read a shape's outline (vertices, edges, contours, fills and strokes) and edit it, for exporters that walk shapes
+- Scripts can keep named data on objects, library items and the document, saved with the file
+- Scripts can copy, cut, paste and duplicate whole layers, move a layer into a folder, export SWF movies, publish, and run command lines
 
 ## 0.6.0 (2026-10-13)
 
