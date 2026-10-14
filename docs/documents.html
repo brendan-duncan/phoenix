@@ -243,7 +243,7 @@
 <p><strong>Preview</strong> traces the bitmap on the stage with the settings as they are, so you can judge the result in place, zoomed in if you like. The dialog then says how many areas and points the trace made, and suggests what to change when there are far too many or too few. Turn on <strong>Auto Preview</strong> to trace again whenever a setting changes: it waits until you stop dragging a value, so scrubbing stays smooth.</p>
 
 <figure>
-  <img src="assets/shots/trace-bitmap.webp" alt="A picture of a tree and a house traced on the stage, beside the Trace Bitmap dialog: Color threshold 30, Minimum area 8 px, Curve fit Normal, Auto Preview on, 19 areas, 174 points" width="705" height="312">
+  <img src="assets/shots/trace-bitmap.webp" alt="A picture of a tree and a house traced on the stage, beside the Trace Bitmap dialog: Color threshold 30, Minimum area 8 px, Curve fit Normal, Auto Preview on, 17 areas, 173 points" width="705" height="312">
 </figure>
 
 <p><strong>Trace</strong> keeps the result as one step you can undo, in the bitmap's place and position, and the bitmap stays in the library. <strong>Cancel</strong> puts the bitmap back and leaves nothing in the undo history. With several bitmaps selected, all of them are previewed and traced with the same settings.</p>
@@ -260,12 +260,12 @@
 </figure>
 
 <ul>
-  <li><strong>Too low (10):</strong> the noise splits every flat color into specks, 1,131 areas in all. It is slow to draw and impossible to edit.</li>
-  <li><strong>Right (30):</strong> each flat color is one area, 19 in all, and the tree's shadow side stays apart from its lit side.</li>
+  <li><strong>Too low (10):</strong> the noise splits every flat color into specks, 1,058 areas in all. It is slow to draw and impossible to edit.</li>
+  <li><strong>Right (30):</strong> each flat color is one area, 17 in all, and the tree's shadow side stays apart from its lit side.</li>
   <li><strong>Too high (100):</strong> 10 areas are left. The two blues of the sky have run together, and so have the two greens of the tree, the hills, and the lit and shaded sides of the house.</li>
 </ul>
 
-<p>For this picture, the ideal trace is Color threshold 30, Minimum area 8 px and Curve fit Normal, as shown above: 19 areas and 174 points, with the sun and the tree as smooth curves and the house as straight lines.</p>
+<p>For this picture, the ideal trace is Color threshold 30, Minimum area 8 px and Curve fit Normal, as shown above: 17 areas and 173 points, with the sun and the tree as smooth curves and the house as straight lines.</p>
 
 <p>For a picture of your own, turn on Auto Preview and zoom in on a detailed part of the stage. Raise Color threshold until the shades of each flat color become one area, and stop before colors you want to keep apart run together; the area count falls steeply as specks merge, then levels off. Then raise Minimum area if specks are left. Last, choose a Curve fit with as few points as still follow the shapes.</p>
 

@@ -10,7 +10,7 @@ What changed in each release of Phoenix, newest first.
 - Scripts can use the same operations as AI assistants: `fl.phoenix.call("in_betweens", {...})`, with `fl.phoenix.operations()` to list them
 - AI assistants can make in-betweens between two keyframes, turn poses into a walk or run cycle, lip sync a mouth to a sound or cues, recolor artwork to a palette, and show a color script of the scene
 - JSFL on macOS: saving or writing to a file that does not exist yet keeps its whole path (`/Users/...`, `/var/...`) instead of losing the first folder
-- Trace Bitmap draws cleaner edges: soft and noisy borders between colors trace as straight lines instead of steps and spikes, with far fewer specks and points
+- Trace Bitmap draws cleaner edges: soft and noisy borders between colors trace as straight lines instead of steps and spikes, upright and level edges stay exactly so, and the thin halos and slivers along edges fold away, with far fewer specks and points
 - In dialogs, Enter in a number field keeps the value typed and presses the dialog's main button, as it did before number fields became hot text; F2 opens a field for typing
 - No more faint lines of the background between fills that meet, in traced artwork and any shape with neighboring fills, on the stage and in exports
 - Trace Bitmap fits curves: rounds come out smooth, while straight sides and corners stay sharp (Curve fit Tight and smoother; Pixels and Very Tight keep the pixels' steps)
