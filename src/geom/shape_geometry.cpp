@@ -373,10 +373,14 @@ bool fillOutlinesFromMap(const Shape& shape,
     if (curves.size() > maximumCurves)
         return false;
 
+    // A shape as stored is already planar: its curves meet only at their
+    // ends. So the arrangement is built from them whole, without looking for
+    // crossings, which is most of what a full build costs. A shape that does
+    // cross itself somewhere fails the check below and is traced instead.
     PlanarMap map;
     for (size_t i = 0; i < curves.size(); ++i)
         map.addCurve(curves[i].curve, static_cast<int>(i));
-    map.build();
+    map.buildFromPlanar();
     attributeFillsFromSource(map, curves);
 
     // The file's fills have to agree with the arrangement everywhere: each

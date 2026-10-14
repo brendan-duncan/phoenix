@@ -117,6 +117,14 @@ public:
     /// the half-edges and faces.
     void build(double tolerance = kTwip / 4.0);
 
+    /// Builds from curves that already meet only at their ends, as a shape
+    /// stored in a file (or left by a merge) does: no crossings are looked
+    /// for, the ends are welded, and the half-edges and faces built. Much
+    /// faster than build() on large shapes. Curves that do cross leave faces
+    /// that disagree with the fills recorded on their sides, which a caller
+    /// checking those (fillOutlinesFromMap) finds.
+    void buildFromPlanar();
+
     void clear();
 
     const std::vector<MapVertex>& vertices() const { return _vertices; }

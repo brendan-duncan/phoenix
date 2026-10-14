@@ -496,7 +496,10 @@ void PlanarMap::sortOutgoingEdges()
 {
     for (MapVertex& vertex : _vertices)
     {
-        if (vertex.outgoing.size() < 2)
+        // Two edges have only one cyclic order, so only a vertex where three
+        // or more meet needs sorting -- and most vertices along a path have
+        // just the two.
+        if (vertex.outgoing.size() < 3)
             continue;
 
         // The direction an edge leaves in is where it first crosses a small
@@ -513,6 +516,16 @@ void PlanarMap::sortOutgoingEdges()
         const Point& center = vertex.position;
         const auto departure = [&](int edge) {
             const Curve& curve = _halfEdges[edge].curve;
+            // A line leaves along itself: where it crosses the circle is
+            // straight out along its direction, no search needed.
+            if (curve.isLine())
+            {
+                const Point end = curve.end();
+                const double dx = end.x - center.x;
+                const double dy = end.y - center.y;
+                if (std::hypot(dx, dy) > 1.0e-12)
+                    return std::atan2(dy, dx);
+            }
             const auto distanceAt = [&](double t) {
                 const Point p = curve.pointAt(t);
                 return std::hypot(p.x - center.x, p.y - center.y);
@@ -1121,6 +1134,24 @@ void PlanarMap::build(double tolerance)
     const std::vector<Input> pieces = splitAtCrossings(tolerance);
 
     buildHalfEdges(pieces);
+    sortOutgoingEdges();
+    linkFaces();
+}
+
+void PlanarMap::buildFromPlanar()
+{
+    _vertices.clear();
+    _halfEdges.clear();
+    _faces.clear();
+    _faceHalfEdges.clear();
+    _faceBounds.clear();
+    _vertexLookup.clear();
+    _unboundedFace = -1;
+
+    if (_inputs.empty())
+        return;
+
+    buildHalfEdges(_inputs);
     sortOutgoingEdges();
     linkFaces();
 }
