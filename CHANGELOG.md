@@ -2,7 +2,7 @@
 
 What changed in each release of Phoenix, newest first.
 
-## 0.8.0 (Unreleased)
+## 0.8.0
 
 - Commands > Open Claude Code opens Claude Code in a terminal, already connected to Phoenix and let in without asking
 - Themes reach more of the window: transform handles, the selection marquee, color swatch borders, the X-sheet and Motion Editor playheads, and the Outliner's icons, which now show on light themes too
@@ -15,7 +15,7 @@ What changed in each release of Phoenix, newest first.
 - No more faint lines of the background between fills that meet, in traced artwork and any shape with neighboring fills, on the stage and in exports
 - Trace Bitmap fits curves: rounds come out smooth, while straight sides and corners stay sharp (Curve fit Tight and smoother; Pixels and Very Tight keep the pixels' steps)
 
-## 0.7.0 (2026-10-13)
+## 0.7.0
 
 - JSFL scripts: run them from the new Commands menu, keep your own in a Commands folder, and see their output and errors in the Output panel (F2); each run undoes in one step
 - `Phoenix script.jsfl` runs a script in the open Phoenix, and `Phoenix run-script` runs one on documents with no window
@@ -32,7 +32,7 @@ What changed in each release of Phoenix, newest first.
 - Every number field, in dialogs as well as panels, is now hot text: drag it to scrub, click to type, Tab between fields, and step with the arrow keys or the wheel; no more tiny arrow buttons
 - Safe zones and aspect-ratio frames over the stage (View > Safe Zones, or the button on the edit bar): title and action safe, thirds, and 16:9, 4:3, 1.85:1, 2.39:1, 1:1, 4:5, 9:16 or your own frames, with presets, a default for new documents, snapping to their edges, and an option to draw them into review exports
 
-## 0.6.0 (2026-10-13)
+## 0.6.0
 
 - Closing the last document brings back the start screen
 - Document tabs: a right-click menu (Close Others, Close All, Copy Path, Show in Explorer) and Ctrl+Shift+Tab
@@ -52,12 +52,12 @@ What changed in each release of Phoenix, newest first.
 - Scale handles snap exactly onto guides, grid lines and other artwork's edges and anchor points
 - Merge drawing leaves no hairline gaps where shapes nearly share an edge, and rejoins curves an earlier merge cut once the cut is gone
 
-## 0.5.2 (2026-10-13)
+## 0.5.2
 
 - Interactive tutorials: nine guided lessons in Help > Tutorials, from your first animation to rigging
 - Install page links straight to the latest installers
 
-## 0.5.1 (2026-10-13)
+## 0.5.1
 
 - Movie clip sounds play while the document plays, with View > Mute Movie Clip Sounds
 - XFL folders open from their .xfl file
@@ -65,7 +65,7 @@ What changed in each release of Phoenix, newest first.
 - Settings move to a new location; your old settings come with them
 - Updated user guide and screenshots, showing the version they describe
 
-## 0.5.0 (2026-10-12)
+## 0.5.0
 
 - Stage controls on the edit bar: center, rotate, clip or dim outside the stage, and a zoom box
 - Frame scripts: stop(), play() and gotos work in playback with Control > Enable Simple Frame Actions
@@ -85,7 +85,7 @@ What changed in each release of Phoenix, newest first.
 - Toolbox color controls redrawn; Flow Brush renamed Brush
 - Much more stable with large documents, long sessions and damaged files
 
-## 0.4.0 (2026-10-12)
+## 0.4.0
 
 - Motion tweens you can create and edit, with the Motion Editor, motion paths and motion presets
 - Shape hints, graphic loop options, and Copy and Paste Motion
@@ -104,7 +104,7 @@ What changed in each release of Phoenix, newest first.
 - Command line tools: render, doctor, diff, batch and benchmark
 - An HTML user guide
 
-## 0.3.0 (2026-10-11)
+## 0.3.0
 
 - Export movies, animated GIFs, images, PNG sequences and sound
 - Classic, shape and object motion tweens play, with ease presets and custom eases
@@ -119,10 +119,10 @@ What changed in each release of Phoenix, newest first.
 - Start screen, autosave and crash recovery
 - Brushes with pen pressure and tilt, and the anchor point tools
 
-## 0.2.0 (2026-10-11)
+## 0.2.0
 
 - Signed and notarized macOS installer
 
-## 0.1.0 (2026-10-10)
+## 0.1.0
 
 - First release: open, edit, play and save FLA files with drawing tools, a timeline, symbols and a library
