@@ -107,8 +107,10 @@ TEST(jsfl_shape_edits_delete_edges_and_move_vertices)
 {
     Fixture f;
     redFillBlackStroke(f);
-    CHECK(f.run(std::string(kRectangle) + "s.deleteEdge(0);\n"
-                                          "fl.trace(s.edges.length + ' ' + s.contours.length + ' ' + s.contours[0].interior);\n")
+    CHECK(f.run(kRectangle).ok);
+    CHECK(f.run("var s = fl.getDocumentDOM().getTimeline().layers[0].frames[0].elements[0];\n"
+                "s.deleteEdge(0);\n"
+                "fl.trace(s.edges.length + ' ' + s.contours.length + ' ' + s.contours[0].interior);\n")
               .ok);
     // The rectangle opened up: its fill has nowhere to be.
     expectOutput(f, "3 1 false\n");

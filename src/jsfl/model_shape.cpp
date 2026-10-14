@@ -628,7 +628,43 @@ void applyEdits(Element& e, Geometry& g)
     auto* after = dynamic_cast<fla::Shape*>(copy.get());
     if (!after)
         throw Error("The shape could not be edited.");
-    fla::rebuildShapeEdges(*after, map, curves);
+    // An edge per piece of the arrangement, as rebuildShapeEdges writes
+    // them but without joining pieces that run on into one another: a
+    // vertex the script made by splitting an edge stays.
+    for (fla::Edge* old : after->edges)
+        delete old;
+    after->edges.clear();
+    const std::vector<fla::HalfEdge>& halves = map.halfEdges();
+    for (size_t h = 0; h + 1 < halves.size(); h += 2)
+    {
+        const fla::HalfEdge& half = halves[h];
+        const int left = half.leftFill;
+        const int right = halves[h + 1].leftFill;
+        const int stroke = half.source >= 0 && half.source < static_cast<int>(curves.size())
+            ? curves[static_cast<size_t>(half.source)].strokeStyle
+            : -1;
+        if (left == right && stroke == -1)
+            continue;
+        auto* edge = new fla::Edge(after);
+        edge->fillStyle1 = left;
+        edge->fillStyle0 = right;
+        edge->strokeStyle = stroke;
+        auto* path = new fla::Path(edge);
+        const fla::Curve& curve = half.curve;
+        path->segments.push_back(new fla::PathSegment(fla::PathSegment::Command::Move, {curve.start()}, path));
+        const fla::Point q = quadraticControl(curve);
+        const fla::Point& c1 = curve.controlPoint(1);
+        const bool quadratic = std::hypot((2.0 * q.x + curve.start().x) / 3.0 - c1.x, (2.0 * q.y + curve.start().y) / 3.0 - c1.y) < 1e-6;
+        if (curve.isLine())
+            path->segments.push_back(new fla::PathSegment(fla::PathSegment::Command::Line, {curve.end()}, path));
+        else if (quadratic)
+            path->segments.push_back(new fla::PathSegment(fla::PathSegment::Command::Quad, {q, curve.end()}, path));
+        else
+            path->segments.push_back(
+                new fla::PathSegment(fla::PathSegment::Command::Cubic, {c1, curve.controlPoint(2), curve.end()}, path));
+        edge->paths.push_back(path);
+        after->edges.push_back(edge);
+    }
     after->cubicEdges.clear();
     e.push(fla::CommandPtr(new fla::SetShapeContentsCommand(&shape, *after, "Edit Shape")));
 }

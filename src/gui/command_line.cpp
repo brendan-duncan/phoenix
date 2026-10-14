@@ -460,7 +460,7 @@ int updateLinks(const QString& file, bool update, bool saveBack)
 int batchScript(const QStringList& args)
 {
     const QString script = option(args, "--jsfl");
-    if (!script.endsWith(".jsfl", Qt::CaseInsensitive) || !QFileInfo(script).isFile())
+    if (!ScriptRunner::isScript(script) || !QFileInfo(script).isFile())
     {
         std::fprintf(stderr, "batch: --jsfl needs a .jsfl script\n");
         return 1;

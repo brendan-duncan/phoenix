@@ -861,7 +861,6 @@ int ScriptRunner::runBatch(const QString& script, const QStringList& documents, 
         std::fputc('\n', stdout);
         std::fflush(stdout);
     };
-    const std::string scriptPath = QFileInfo(script).absoluteFilePath().toStdString();
     int failed = 0;
     for (const QString& file : documents)
     {
@@ -880,7 +879,7 @@ int ScriptRunner::runBatch(const QString& script, const QStringList& documents, 
         jsfl::RunOptions options;
         options.undoName = QFileInfo(script).completeBaseName().toStdString();
         options.timeLimit = timeLimit;
-        const jsfl::RunResult result = _engine->runFile(scriptPath, options);
+        const jsfl::RunResult result = run(script, options);
         bool ok = result.ok;
         if (!ok)
         {
