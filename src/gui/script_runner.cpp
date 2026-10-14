@@ -714,6 +714,12 @@ jsfl::Host& ScriptRunner::jsflHost()
     return *_host;
 }
 
+void ScriptRunner::dispatchEvent(const char* type)
+{
+    if (_engine)
+        _engine->dispatch(type);
+}
+
 QString ScriptRunner::configFolder()
 {
     const QString folder = QDir(settingsBase()).filePath("Configuration");

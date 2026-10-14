@@ -417,3 +417,40 @@ TEST(jsfl_tools_preview_while_dragging_and_draw_on_release)
     // A handler the tool does not have is no error.
     CHECK(tool.call("keyDown", state).empty());
 }
+
+TEST(jsfl_listeners_hear_events_after_their_script_ends)
+{
+    Fixture f;
+    // A script that listens stays loaded once it ends.
+    CHECK(f.run("var saves = 0;\n"
+                "var id = fl.addEventListener('documentSaved', function () {\n"
+                "  saves++; fl.trace('saved ' + saves);\n"
+                "});\n"
+                "fl.addEventListener('frameChanged', function () {\n"
+                "  fl.getDocumentDOM().addNewRectangle({left: 0, top: 0, right: 10, bottom: 10}, 0);\n"
+                "});\n"
+                "fl.addEventListener('selectionChanged', function () { throw new Error('broken'); });\n")
+              .ok);
+    CHECK(f.engine.listeningScripts() == 1);
+    f.engine.dispatch("documentSaved");
+    f.engine.dispatch("documentSaved");
+    f.engine.dispatch("documentOpened");
+    CHECK(f.take() == "saved 1\nsaved 2\n");
+    // What a listener changes is one step to undo, named after its script.
+    redFillBlackStroke(f);
+    f.engine.dispatch("frameChanged");
+    CHECK(f.scene().layers[0]->frames[0]->elements.size() == 1);
+    CHECK(f.host.history(f.document).undoName() == "Test Script");
+    // A listener's error goes to the Output panel; the others still hear.
+    f.engine.dispatch("selectionChanged");
+    CHECK(f.take().find("broken") != std::string::npos);
+    // A script with no listener left is let go.
+    CHECK(f.run("fl.trace(typeof fl.addEventListener);").ok);
+    CHECK(f.take() == "function\n");
+    CHECK(f.engine.listeningScripts() == 1);
+    f.engine.forgetListeners();
+    CHECK(f.engine.listeningScripts() == 0);
+    CHECK(f.run("var id = fl.addEventListener('documentSaved', function () {});\n"
+                "fl.removeEventListener('documentSaved', id);").ok);
+    CHECK(f.engine.listeningScripts() == 0);
+}

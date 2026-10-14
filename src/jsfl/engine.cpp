@@ -583,6 +583,53 @@ std::string prepare(JSContext* ctx, const std::string& source)
     return Engine::modernize(e4x::rewrite(source));
 }
 
+/// fl.addEventListener and its kin, in every script's context.
+const char* const kListeners = R"JS(
+(function () {
+    fl.__listeners = [];
+    fl.__nextListener = 1;
+    fl.addEventListener = function (type, listener) {
+        if (typeof listener !== "function")
+            throw new TypeError("addEventListener needs a function to call.");
+        var id = fl.__nextListener++;
+        fl.__listeners.push({ type: String(type), id: id, listener: listener });
+        return id;
+    };
+    fl.removeEventListener = function (type, id) {
+        var before = fl.__listeners.length;
+        fl.__listeners = fl.__listeners.filter(function (entry) {
+            return !(entry.type == type && (id === undefined || entry.id == id));
+        });
+        return fl.__listeners.length < before;
+    };
+    fl.__dispatch = function (type) {
+        var errors = [];
+        fl.__listeners.slice().forEach(function (entry) {
+            if (entry.type != type)
+                return;
+            try {
+                entry.listener();
+            } catch (e) {
+                errors.push(type + " listener: " + e + (e && e.stack ? "\n" + e.stack : ""));
+            }
+        });
+        return errors.join("\n");
+    };
+})();
+)JS";
+
+std::string quoted(const std::string& text)
+{
+    std::string out = "\"";
+    for (const char c : text)
+    {
+        if (c == '"' || c == '\\')
+            out += '\\';
+        out += c;
+    }
+    return out + "\"";
+}
+
 /// What every script sees: fl, FLfile, the dialogs and Phoenix's prelude.
 void installGlobals(JSContext* ctx, Binding& binding, Session& session, Host& host)
 {
@@ -680,10 +727,74 @@ void installGlobals(JSContext* ctx, Binding& binding, Session& session, Host& ho
 
     JSValue prelude = JS_Eval(ctx, kPrelude, std::strlen(kPrelude), "<phoenix>", JS_EVAL_TYPE_GLOBAL);
     JS_FreeValue(ctx, prelude);
+    JS_FreeValue(ctx, JS_Eval(ctx, kListeners, std::strlen(kListeners), "<phoenix-listeners>", JS_EVAL_TYPE_GLOBAL));
     JS_FreeValue(ctx, global);
 }
 
 } // namespace
+
+/// A script's context kept after its run: one that listens for events.
+struct Engine::Kept
+{
+    std::string name;
+    std::unique_ptr<Session> session;
+    Guard guard;
+    JSRuntime* runtime = nullptr;
+    JSContext* ctx = nullptr;
+    std::unique_ptr<Binding> binding;
+
+    ~Kept()
+    {
+        if (ctx)
+        {
+            binding.reset();
+            JS_FreeContext(ctx);
+        }
+        if (runtime)
+            JS_FreeRuntime(runtime);
+        if (session)
+            session->detach();
+    }
+
+    /// Runs \a code, \a seconds at most when given; the error as
+    /// "file:line: message", or empty. \a out gets the value as text.
+    std::string evaluate(const std::string& code, std::string* out = nullptr, double seconds = 0.0)
+    {
+        guard.hasDeadline = seconds > 0.0;
+        if (guard.hasDeadline)
+            guard.deadline = Clock::now() + std::chrono::milliseconds(static_cast<long long>(seconds * 1000.0));
+        guard.timedOut = false;
+        guard.stopped = false;
+        JSValue value = JS_Eval(ctx, code.c_str(), code.size(), "<phoenix>", JS_EVAL_TYPE_GLOBAL);
+        if (JS_IsException(value))
+        {
+            JSValue error = JS_GetException(ctx);
+            std::string message = "Error";
+            try
+            {
+                message = toStd(ctx, error);
+            }
+            catch (const PendingException&)
+            {
+            }
+            JS_FreeValue(ctx, error);
+            return name + ": " + (guard.timedOut ? std::string("a listener took too long and was stopped.") : message);
+        }
+        if (out)
+        {
+            try
+            {
+                *out = JS_IsUndefined(value) || JS_IsNull(value) ? std::string() : toStd(ctx, value);
+            }
+            catch (const PendingException&)
+            {
+                out->clear();
+            }
+        }
+        JS_FreeValue(ctx, value);
+        return {};
+    }
+};
 
 std::string Engine::modernize(const std::string& s)
 {
@@ -873,10 +984,13 @@ RunResult Engine::run(const std::string& source, const std::string& name, const 
     _running = true;
     _stop = false;
 
-    Session session(_host, options.undoName);
+    auto kept = std::make_unique<Kept>();
+    kept->name = name;
+    kept->session = std::make_unique<Session>(_host, options.undoName);
+    Session& session = *kept->session;
     session.scriptPath = path;
 
-    JSRuntime* runtime = JS_NewRuntime();
+    JSRuntime* runtime = kept->runtime = JS_NewRuntime();
     JS_SetMemoryLimit(runtime, options.memoryLimit);
     JS_SetMaxStackSize(runtime, size_t(2) * 1024 * 1024);
     JS_NewClassID(runtime, &g_objectClass);
@@ -885,7 +999,7 @@ RunResult Engine::run(const std::string& source, const std::string& name, const 
     objectClass.finalizer = &finalizeObject;
     JS_NewClass(runtime, g_objectClass, &objectClass);
 
-    Guard guard;
+    Guard& guard = kept->guard;
     guard.stop = &_stop;
     guard.poll = options.poll;
     guard.lastPoll = Clock::now();
@@ -896,9 +1010,10 @@ RunResult Engine::run(const std::string& source, const std::string& name, const 
     }
     JS_SetInterruptHandler(runtime, &interrupt, &guard);
 
-    JSContext* ctx = JS_NewContext(runtime);
+    JSContext* ctx = kept->ctx = JS_NewContext(runtime);
+    kept->binding = std::make_unique<Binding>(ctx);
     {
-        Binding binding(ctx);
+        Binding& binding = *kept->binding;
         JS_SetContextOpaque(ctx, &binding);
         JSValue global = JS_GetGlobalObject(ctx);
 
@@ -966,14 +1081,89 @@ RunResult Engine::run(const std::string& source, const std::string& name, const 
         }
         JS_FreeValue(ctx, value);
         JS_FreeValue(ctx, global);
-        session.evaluate = nullptr;
     }
-    JS_FreeContext(ctx);
-    JS_FreeRuntime(runtime);
-    session.finish();
+    // A script that listens for events stays loaded to hear them, as in
+    // Animate; any other ends here.
+    std::string listening;
+    if (result.ok && !options.compileOnly)
+        kept->evaluate("String(fl.__listeners.length)", &listening);
     _running = false;
+    if (!listening.empty() && listening != "0")
+    {
+        session.settle();
+        guard.poll = nullptr;
+        guard.hasDeadline = false;
+        _kept.push_back(std::move(kept));
+    }
+    else
+    {
+        session.evaluate = nullptr;
+        session.finish();
+        kept.reset();
+    }
+    flushEvents();
     return result;
 }
+
+Engine::~Engine() = default;
+
+size_t Engine::listeningScripts() const
+{
+    return _kept.size();
+}
+
+void Engine::dispatch(const std::string& type)
+{
+    if (_kept.empty())
+        return;
+    // Events a script's own work raises wait for it to finish, so its
+    // changes and a listener's are never one tangled step.
+    if (_running || _dispatching)
+    {
+        if (_pending.empty() || _pending.back() != type)
+            _pending.push_back(type);
+        return;
+    }
+    _dispatching = true;
+    for (size_t i = 0; i < _kept.size(); ++i)
+    {
+        Kept& kept = *_kept[i];
+        std::string errors;
+        const std::string failed = kept.evaluate("fl.__dispatch(" + quoted(type) + ")", &errors, 5.0);
+        if (!failed.empty())
+            _host.trace(failed);
+        if (!errors.empty())
+            _host.trace(errors);
+        kept.session->settle();
+        // A script that took away its last listener is done.
+        std::string listening;
+        kept.evaluate("String(fl.__listeners.length)", &listening);
+        if (listening == "0")
+        {
+            _kept.erase(_kept.begin() + static_cast<std::ptrdiff_t>(i));
+            --i;
+        }
+    }
+    _dispatching = false;
+    flushEvents();
+}
+
+void Engine::flushEvents()
+{
+    while (!_pending.empty() && !_running && !_dispatching)
+    {
+        const std::string type = _pending.front();
+        _pending.erase(_pending.begin());
+        dispatch(type);
+    }
+}
+
+void Engine::forgetListeners()
+{
+    _pending.clear();
+    _kept.clear();
+}
+
 
 // ---------------------------------------------------------------------------
 // Tools
@@ -1397,6 +1587,17 @@ std::string ToolScript::call(const std::string& function, const State& state)
         failed = d.eval(function + "({x:" + numberText(state.penX) + ",y:" + numberText(state.penY) + "})", d.path);
     d.settle();
     return failed;
+}
+
+std::string ToolScript::dispatch(const std::string& type)
+{
+    Impl& d = *_impl;
+    if (!d.ctx)
+        return {};
+    std::string errors;
+    std::string failed = d.eval("fl.__dispatch(" + quoted(type) + ")", d.path, &errors);
+    d.settle();
+    return failed.empty() ? errors : failed;
 }
 
 std::vector<ToolScript::Preview> ToolScript::preview() const

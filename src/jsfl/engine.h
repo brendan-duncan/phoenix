@@ -5,7 +5,9 @@
 #include <atomic>
 #include <cstddef>
 #include <functional>
+#include <memory>
 #include <string>
+#include <vector>
 
 namespace jsfl {
 
@@ -49,6 +51,7 @@ class Engine
 {
 public:
     explicit Engine(Host& host);
+    ~Engine();
 
     RunResult runFile(const std::string& path, const RunOptions& options = RunOptions());
     RunResult runString(const std::string& source, const std::string& name, const RunOptions& options = RunOptions());
@@ -56,6 +59,17 @@ public:
     /// Ends the running script at its next check; safe from any thread.
     void stop() { _stop = true; }
     bool running() const { return _running; }
+
+    /// Tells the scripts listening (fl.addEventListener) that \a type
+    /// happened: "documentNew", "documentOpened", "documentClosed",
+    /// "documentSaved", "documentChanged", "timelineChanged",
+    /// "layerChanged", "frameChanged", "selectionChanged", "prePublish",
+    /// "postPublish". While a script runs, events wait until it ends.
+    void dispatch(const std::string& type);
+    /// How many scripts are kept loaded to hear events.
+    size_t listeningScripts() const;
+    /// Lets every listening script go (the window closing).
+    void forgetListeners();
 
     /// The source rewritten from the old JSFL dialect (for each loops,
     /// setters without a parameter) into what QuickJS compiles, line for
@@ -65,9 +79,15 @@ public:
 private:
     RunResult run(const std::string& source, const std::string& name, const std::string& path, const RunOptions& options);
 
+    void flushEvents();
+
+    struct Kept;
     Host& _host;
     std::atomic<bool> _stop{false};
     bool _running = false;
+    bool _dispatching = false;
+    std::vector<std::unique_ptr<Kept>> _kept;
+    std::vector<std::string> _pending;
 };
 
 } // namespace jsfl

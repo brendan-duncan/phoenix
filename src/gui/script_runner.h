@@ -54,6 +54,9 @@ public:
     QDockWidget* outputDock() const { return _outputDock; }
     /// The host scripts reach the window through, for JSFL tools.
     jsfl::Host& jsflHost();
+    /// Tells the JSFL scripts listening (fl.addEventListener) that \a type
+    /// happened.
+    void dispatchEvent(const char* type);
     OutputPanel* output() const { return _output; }
 
     /// The Commands menu, filled each time it opens, with \a first at its

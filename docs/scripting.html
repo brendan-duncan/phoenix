@@ -153,6 +153,32 @@ if (result.dismiss == "accept")
 
 <p>With no one to answer it (<code>Phoenix run-script</code>, or a window drawn offscreen), the dialog is not shown: its script blocks and <code>oncreate</code> handlers run, then it is accepted with the values its controls start with, and a note is printed.</p>
 
+<h2 id="events">Events</h2>
+
+<p>A script can ask to hear when something happens in Phoenix: <code>fl.addEventListener(type, listener)</code> calls the function each time, and gives back a number that <code>fl.removeEventListener(type, number)</code> takes to stop. A script that listens stays loaded after it ends, with its variables, until its last listener is removed or Phoenix quits.</p>
+
+<table>
+  <thead><tr><th>Event</th><th>When</th></tr></thead>
+  <tbody>
+    <tr><td><code>documentNew</code></td><td class="wrap">A new document is made.</td></tr>
+    <tr><td><code>documentOpened</code></td><td class="wrap">A document is opened.</td></tr>
+    <tr><td><code>documentChanged</code></td><td class="wrap">Another document is shown: opened, made, or picked from its tab.</td></tr>
+    <tr><td><code>documentSaved</code></td><td class="wrap">A document is saved.</td></tr>
+    <tr><td><code>documentClosed</code></td><td class="wrap">A document is closed.</td></tr>
+    <tr><td><code>timelineChanged</code></td><td class="wrap">You go into a symbol or back out, or to another scene.</td></tr>
+    <tr><td><code>layerChanged</code></td><td class="wrap">Another layer becomes current.</td></tr>
+    <tr><td><code>frameChanged</code></td><td class="wrap">The playhead moves, playing too.</td></tr>
+    <tr><td><code>selectionChanged</code></td><td class="wrap">The selection on the stage changes.</td></tr>
+    <tr><td><code>prePublish</code>, <code>postPublish</code></td><td class="wrap">Before and after <span class="menu-path">File &rsaquo; Publish</span> writes its files.</td></tr>
+  </tbody>
+</table>
+
+<pre><code>fl.addEventListener("documentSaved", function () {
+    fl.trace("Saved " + fl.getDocumentDOM().name);
+});</code></pre>
+
+<p>What a listener changes is one step to undo, named after its script. An error in a listener is printed in the Output panel, and the other listeners still hear the event. Events that a running script's own work causes are held until it ends. A tool script (see <a href="#tools">Your own tools</a>) can listen too; it is loaded when Phoenix starts, which makes it the place for listeners that should always be there. Python scripts cannot listen for events yet.</p>
+
 <h2 id="tools">Your own tools</h2>
 
 <p>A script in the <b>Tools</b> folder (beside the Commands folder) is a tool of its own. Phoenix loads it when it starts and adds its button at the end of the Tools panel; click it, then draw on the stage as with any tool. Unlike a command, a tool stays loaded, so its variables last from one click to the next. Phoenix calls the functions the script has:</p>

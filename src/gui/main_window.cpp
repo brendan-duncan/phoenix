@@ -417,6 +417,7 @@ MainWindow::MainWindow(const QString& initialFile, QWidget* parent, bool startup
 
     _selection.setChangedCallback([this]() {
         updateSelectionState();
+        scriptEvent("selectionChanged");
         // Selecting something on the stage makes its layer current.
         if (_timelineView && !_selection.isEmpty())
         {
@@ -828,6 +829,7 @@ void MainWindow::forgetDocument(const fla::FLADocument* document)
 {
     if (!document)
         return;
+    scriptEvent("documentClosed");
     _featuresAcknowledged.remove(document);
     // Copied layers point at this document's symbols, and only paste back
     // into it: they go with it, before another document can take its
@@ -905,6 +907,12 @@ void MainWindow::adoptDocument(fla::FLADocument* document, const QString& filePa
         _player->setCurrentFrame(0);
     syncFontSymbols();
     warnAboutFonts();
+    if (_flaDocument)
+    {
+        if (!_switchingTabs)
+            scriptEvent(filePath.isEmpty() && !_flaDocument->fromSwf ? "documentNew" : "documentOpened");
+        scriptEvent("documentChanged");
+    }
     // Shared palettes that other documents changed come in once it shows.
     if (_palettes && _flaDocument)
         QTimer::singleShot(0, _palettes, &PalettesPanel::syncFiles);
@@ -2846,6 +2854,7 @@ void MainWindow::setupUI()
         _timelineView->setTimeline(_phoenixView->scopeTimeline());
         rebuildBreadcrumb();
         updateSelectionState();
+        scriptEvent("timelineChanged");
     });
     rebuildBreadcrumb();
 
@@ -2855,6 +2864,10 @@ void MainWindow::setupUI()
             this, &MainWindow::onVisibilityChanged);
     connect(_timelineView, &TimelineView::currentLayerChanged,
             this, &MainWindow::onVisibilityChanged);
+    // Scripts listening for events (fl.addEventListener) hear of the
+    // layer, the frame and the selection changing.
+    connect(_timelineView, &TimelineView::currentLayerChanged, this, [this]() { scriptEvent("layerChanged"); });
+    connect(_player, &Player::currentFrameChanged, this, [this](int) { scriptEvent("frameChanged"); });
     connect(_timelineView, &TimelineView::layersChanged,
             this, &MainWindow::onVisibilityChanged);
 
@@ -6513,6 +6526,7 @@ bool MainWindow::saveToPath(const QString& filePath)
     updateEditState();
     addToRecentFiles(filePath);
     statusBar()->showMessage(QString("Saved %1").arg(filePath), 5000);
+    scriptEvent("documentSaved");
     return true;
 }
 
@@ -7469,6 +7483,12 @@ void MainWindow::publish()
 
 bool MainWindow::publishFiles(QStringList& written, QStringList& problems)
 {
+    scriptEvent("prePublish");
+    struct Published
+    {
+        MainWindow& window;
+        ~Published() { window.scriptEvent("postPublish"); }
+    } published{*this};
     fla::Document* document = _flaDocument ? _flaDocument->document : nullptr;
     if (!document || !_phoenixView || _documentPath.isEmpty())
     {
@@ -10735,6 +10755,14 @@ void MainWindow::chooseTool(Tool* tool)
         found->second->trigger();
     else if (_phoenixView && tool)
         _phoenixView->setActiveTool(tool);
+}
+
+void MainWindow::scriptEvent(const char* type)
+{
+    if (_scripts)
+        _scripts->dispatchEvent(type);
+    for (const auto& tool : _scriptTools)
+        tool->dispatch(type);
 }
 
 ToolIcons::Tool MainWindow::iconForTool(const Tool* tool) const

@@ -120,14 +120,14 @@ public:
     const fla::FLADocument* shownDocument() const { return _flaDocument; }
     /// Edit > Undo, whose text names the edit it undoes.
     QAction* undoAction() const { return _undoAction; }
-    /// Whether  document is open, shown or in another tab.
+    /// Whether \a document is open, shown or in another tab.
     bool hasDocument(const fla::FLADocument* document) const;
-    /// The toolbox name of  tool ("Oval", "Selection").
+    /// The toolbox name of \a tool ("Oval", "Selection").
     QString toolName(const Tool* tool) const;
     /// What is selected on the stage: "none", "shape", "instance", "text",
     /// "group" or "other" for the first selected object.
     QString selectionKind() const;
-    /// A lesson's document: a new one, or an untitled copy of  path, in a
+    /// A lesson's document: a new one, or an untitled copy of \a path, in a
     /// tab of its own.
     void newLessonDocument(int width, int height, double frameRate);
     void openLessonDocument(const QString& path);
@@ -190,6 +190,9 @@ private slots:
     /// shapes, images and what filters and blends make as bitmaps. False
     /// with \a error when it could not be written.
     bool exportSwf(const QString& path, const QSize& size, QString& error);
+    /// Tells scripts listening for \a type (fl.addEventListener), and
+    /// JSFL tools, that it happened.
+    void scriptEvent(const char* type);
     /// File > Export > Export Image: one frame as PNG, JPEG or GIF.
     void exportImage();
     /// File > Import: image and sound files into the library and, for

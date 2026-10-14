@@ -39,6 +39,9 @@ public:
     void paintOverlay(PhoenixView& view, QPainter& painter, double scale) override;
     bool showsSelectionBounds() const override { return false; }
 
+    /// Tells the tool's listeners (fl.addEventListener) of an event.
+    void dispatch(const char* type);
+
     /// Whether the tool has settings of its own (an options file), and the
     /// dialog that sets them.
     bool hasOptions() const;

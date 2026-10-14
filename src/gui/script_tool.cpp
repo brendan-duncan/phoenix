@@ -173,6 +173,13 @@ void ScriptTool::paintOverlay(PhoenixView& view, QPainter& painter, double scale
     }
 }
 
+void ScriptTool::dispatch(const char* type)
+{
+    const std::string error = _script->dispatch(type);
+    if (!error.empty())
+        _host.trace(error);
+}
+
 bool ScriptTool::hasOptions() const
 {
     return !_script->options().empty();

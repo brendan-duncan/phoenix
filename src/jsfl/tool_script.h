@@ -82,6 +82,10 @@ public:
     /// \a state says; the error it threw ("file:line: message"), or empty.
     std::string call(const std::string& function, const State& state);
 
+    /// Tells the tool's listeners (fl.addEventListener) that \a type
+    /// happened; what they threw, or empty.
+    std::string dispatch(const std::string& type);
+
     /// The preview the drawing layer holds now; empty while nothing is
     /// drawn.
     std::vector<Preview> preview() const;
