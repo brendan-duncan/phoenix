@@ -96,6 +96,9 @@ private:
     std::vector<std::string> _ignoreTimeMap;
     /// Orient to Path: the object turns as its path does.
     bool _orientToPath = false;
+
+public:
+    bool orientsToPath() const { return _orientToPath; }
     double _timeScale = 1.0;
     double _duration = 0.0;
     double _ease = 0.0;
@@ -244,5 +247,14 @@ MotionState solve(const Transform& stored, const Point& pivot, const MotionState
     const MotionState& near);
 
 } // namespace motion
+
+/// Whether the motion tween \a xml (a motionObjectXML) turns its object as
+/// its path does (Orient to Path).
+bool orientsToPath(const std::string& xml);
+
+/// \a xml with Orient to Path on or off: the Settings tag's orientToPath
+/// changed in place, the rest as Animate wrote it. As it was when it has no
+/// Settings.
+std::string withOrientToPath(const std::string& xml, bool on);
 
 } // namespace fla

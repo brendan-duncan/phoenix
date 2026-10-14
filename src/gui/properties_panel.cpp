@@ -8,6 +8,7 @@
 #include "../data/bitmap.h"
 #include "../edit/brush_texture.h"
 #include "../data/symbol_list.h"
+#include "../edit/motion_object.h"
 #include "../edit/timeline_edit.h"
 
 #include "color_panel.h"
@@ -3470,6 +3471,46 @@ void PropertiesPanel::rebuildFrameTab()
         sync->setToolTip("Keep a graphic instance's frames in step with the timeline");
         connect(sync, &QCheckBox::toggled, this, [=](bool on) { setField(frame->motionTweenSync, on, "Sync"); });
         tweening->addField(3, 1, QString(), sync);
+
+        // Orient to Path: on a guided layer, the object turns as the guide
+        // does. Kept as Animate writes it, only when on.
+        bool orients = false;
+        for (const auto& [key, value] : frame->extraAttributes)
+            orients = orients || (key == "motionTweenOrientToPath" && value == "true");
+        QCheckBox* orient = new QCheckBox("Orient to path", this);
+        orient->setChecked(orients);
+        orient->setToolTip("Turn the object as the motion guide's path turns");
+        connect(orient, &QCheckBox::toggled, this, [=](bool on) {
+            auto attributes = frame->extraAttributes;
+            attributes.erase(std::remove_if(attributes.begin(), attributes.end(),
+                                 [](const auto& a) { return a.first == "motionTweenOrientToPath"; }),
+                attributes.end());
+            if (on)
+                attributes.emplace_back("motionTweenOrientToPath", "true");
+            push(std::unique_ptr<fla::Command>(new fla::SetPropertyCommand<std::vector<std::pair<std::string, std::string>>>(
+                frame->extraAttributes, frame->extraAttributes, attributes, "Orient to Path")));
+            emit documentEdited();
+        });
+        tweening->addField(4, 1, QString(), orient);
+    }
+
+    // A motion tween's Orient to Path, kept in the tween itself.
+    if (motionObject)
+    {
+        const std::string* xml = fla::timeline::motionOf(*frame);
+        QCheckBox* orient = new QCheckBox("Orient to path", this);
+        orient->setChecked(xml && fla::orientsToPath(*xml));
+        orient->setToolTip("Turn the object as its motion path turns");
+        connect(orient, &QCheckBox::toggled, this, [=](bool on) {
+            auto children = frame->extraChildren;
+            for (std::string& child : children)
+                if (child.compare(0, 16, "<motionObjectXML") == 0)
+                    child = fla::withOrientToPath(child, on);
+            push(std::unique_ptr<fla::Command>(new fla::SetPropertyCommand<std::vector<std::string>>(
+                frame->extraChildren, frame->extraChildren, children, "Orient to Path")));
+            emit documentEdited();
+        });
+        tweening->addField(5, 0, QString(), orient);
     }
 
     // --- Sound ---

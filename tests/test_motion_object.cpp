@@ -372,3 +372,20 @@ TEST(motion_object_honors_ignore_time_map_and_orient_to_path)
     CHECK(std::fabs(start.rotation) < 1.0e-6);
     CHECK(std::fabs(later.rotation + 90.0) < 1.0e-3);
 }
+
+TEST(motion_tween_orient_to_path_turns_on_and_off)
+{
+    const std::string xml =
+        "<motionObjectXML><AnimationCore TimeScale=\"24000\" Version=\"1\" duration=\"24000\">"
+        "<TimeMap strength=\"0\" type=\"Quadratic\"/><metadata><Settings orientToPath=\"0\" xformPtXOffsetPct=\"0.5\"/>"
+        "</metadata></AnimationCore></motionObjectXML>";
+    CHECK(!fla::orientsToPath(xml));
+    const std::string on = fla::withOrientToPath(xml, true);
+    CHECK(fla::orientsToPath(on));
+    CHECK(on.find("orientToPath=\"1\" xformPtXOffsetPct=\"0.5\"") != std::string::npos);
+    CHECK(fla::withOrientToPath(on, false) == xml);
+    // A Settings tag without it gets it.
+    const std::string bare = "<motionObjectXML><AnimationCore duration=\"24000\"><metadata><Settings/></metadata>"
+                             "</AnimationCore></motionObjectXML>";
+    CHECK(fla::orientsToPath(fla::withOrientToPath(bare, true)));
+}

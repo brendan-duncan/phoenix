@@ -9605,6 +9605,21 @@ void MainWindow::setupPropertiesPanel()
         _propertiesPanel->refresh();
         refreshActions();
     });
+    // Playback runs on from one scene into the next.
+    _timelineView->timelines()->setSceneAdvance([this](bool wrap) {
+        fla::Document* document = _flaDocument ? _flaDocument->document : nullptr;
+        if (!document || document->timelines.size() < 2)
+            return false;
+        int next = document->currentSceneIndex() + 1;
+        if (next >= static_cast<int>(document->timelines.size()))
+        {
+            if (!wrap)
+                return false;
+            next = 0;
+        }
+        goToScene(next);
+        return true;
+    });
 }
 
 void MainWindow::placeLibraryItem(const QString& kind, const QString& droppedName, const QPointF& position)

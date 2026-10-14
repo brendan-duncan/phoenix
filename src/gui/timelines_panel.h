@@ -269,6 +269,10 @@ public:
     void setLoopPlayback(bool on);
     bool loopPlayback() const;
 
+    /// Moves to the next scene for playback past a scene's last frame: true
+    /// when it did. With \a wrap, from the last scene to the first.
+    void setSceneAdvance(std::function<bool(bool wrap)> advance) { _sceneAdvance = std::move(advance); }
+
     /// Simple frame actions (Control > Enable Simple Frame Actions): on,
     /// playback stops at a frame whose script calls stop() and jumps where
     /// gotoAndPlay() and gotoAndStop() send it. The frame playback starts
@@ -374,6 +378,10 @@ private:
     bool _frameActionsOn = false;
     std::shared_ptr<const fla::frameactions::TimelineActions> _frameActions;
     int _playShown = 0;
+    std::function<bool(bool)> _sceneAdvance;
+    /// Past the scene's end: on into the next scene, playing; false when
+    /// there is none to go to (a symbol's timeline, the last scene).
+    bool playIntoNextScene();
     int _playSteps = 0;
     double frameRate() const;
     void stopPlaying();

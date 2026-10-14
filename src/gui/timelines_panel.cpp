@@ -617,6 +617,10 @@ void TimelinesPanel::onTimerTick()
         return;
     }
     const int due = _playStartFrame + static_cast<int>(_playClock->elapsed() * frameRate() / 1000.0);
+    // Past a scene's end, on into the next scene, as a published movie
+    // plays them (round to the first again when the whole scene loops).
+    if (due > std::max(0, _gridContainer->frameCount() - 1) && playIntoNextScene())
+        return;
     if (_gridContainer->loopOn())
     {
         // Round the range again and again, by the clock.
@@ -626,8 +630,9 @@ void TimelinesPanel::onTimerTick()
         return;
     }
     const int last = std::max(0, _gridContainer->frameCount() - 1);
-    // Playback stops on the last frame, as Animate's does without looping.
-    if (due >= last)
+    // Playback stops on the last frame, as Animate's does without looping,
+    // once that frame has had its time.
+    if (due > last)
     {
         _player->setCurrentFrame(last);
         stopPlaying();
@@ -646,6 +651,9 @@ void TimelinesPanel::playFrameActions()
     int frame = _playShown;
     while (_playSteps < due)
     {
+        // From a scene's last frame, on into the next scene.
+        if (frame >= last && playIntoNextScene())
+            return;
         ++_playSteps;
         int next = frame + 1;
         if (looping && (frame == _gridContainer->loopLast() || next > last))
@@ -666,6 +674,26 @@ void TimelinesPanel::playFrameActions()
         _playShown = frame;
         _player->setCurrentFrame(frame);
     }
+}
+
+bool TimelinesPanel::playIntoNextScene()
+{
+    if (!_sceneAdvance || !_flaDocument || !_flaDocument->document)
+        return false;
+    // Only the scenes themselves play on; a symbol's timeline stays.
+    if (_gridContainer->shownTimeline() != _flaDocument->document->currentScene())
+        return false;
+    // A loop over part of the scene keeps playing that part.
+    const int last = std::max(0, _gridContainer->frameCount() - 1);
+    const bool loopingAll = _gridContainer->loopOn() && _gridContainer->loopFirst() == 0 && _gridContainer->loopLast() >= last;
+    if (_gridContainer->loopOn() && !loopingAll)
+        return false;
+    if (!_sceneAdvance(loopingAll))
+        return false;
+    // The new scene's first frame, playing on.
+    if (!_isPlaying)
+        onPlayStop();
+    return true;
 }
 
 void TimelinesPanel::onPlayerFrameChanged(int frame)

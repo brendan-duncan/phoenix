@@ -1392,4 +1392,34 @@ MotionState solve(const Transform& stored, const Point& pivot, const MotionState
 
 } // namespace motion
 
+bool orientsToPath(const std::string& xml)
+{
+    MotionObject motion;
+    return motion.parse(xml) && motion.orientsToPath();
+}
+
+std::string withOrientToPath(const std::string& xml, bool on)
+{
+    const size_t settings = xml.find("<Settings");
+    if (settings == std::string::npos)
+        return xml;
+    const size_t end = xml.find('>', settings);
+    if (end == std::string::npos)
+        return xml;
+    std::string tag = xml.substr(settings, end - settings);
+    const std::string value = on ? "1" : "0";
+    const size_t attribute = tag.find("orientToPath=\"");
+    if (attribute != std::string::npos)
+    {
+        const size_t start = attribute + 14;
+        const size_t close = tag.find('"', start);
+        if (close == std::string::npos)
+            return xml;
+        tag.replace(start, close - start, value);
+    }
+    else
+        tag.insert(9, " orientToPath=\"" + value + "\"");
+    return xml.substr(0, settings) + tag + xml.substr(end);
+}
+
 } // namespace fla
