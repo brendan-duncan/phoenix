@@ -64,6 +64,7 @@ const std::pair<const char*, const char*> kOptions[] = {
     {"--per-layer", "A PNG sequence per layer"},
     {"--passes", "Compositing passes"},
     {"--no-audio", "Without sound"},
+    {"--safe-zones", "Safe zones drawn over the frames (a review copy)"},
 };
 
 } // namespace

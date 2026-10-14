@@ -57,6 +57,7 @@ const std::vector<Role> kRoles = {
     {"stage.rulerLine", "Stage", "Ruler edges", QColor(70, 70, 70), QColor(180, 180, 180)},
     {"stage.onionBefore", "Stage", "Onion skin before", QColor(0, 102, 255), QColor(0, 102, 255)},
     {"stage.onionAfter", "Stage", "Onion skin after", QColor(0, 170, 60), QColor(0, 170, 60)},
+    {"stage.safeZone", "Stage", "Safe zones", QColor(255, 210, 70), QColor(214, 120, 0)},
 
     {"graph.background", "Graphs", "Background", QColor(36, 36, 36), QColor(250, 250, 250)},
     {"graph.area", "Graphs", "Unit area", QColor(48, 48, 48), QColor(238, 238, 238)},

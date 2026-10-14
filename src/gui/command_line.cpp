@@ -61,6 +61,7 @@ const char* const kHelp =
     "         [--size WxH] [--transparent] [--no-camera] [--no-audio] [--per-layer]\n"
     "         [--layers A,B] [--passes] [--exr] [--prores|--prores4444] [--everything]\n"
     "         [--scene NAME|--all-scenes|--each-scene] [--colors N] [--dither] [--link-images]\n"
+    "         [--safe-zones]\n"
     "      Renders frames: a folder gets a numbered PNG sequence, an .svg name an\n"
     "      SVG sequence. --passes adds line, color and matte sequences; --exr\n"
     "      writes one multi-layer EXR a frame holding the picture and the passes.\n"

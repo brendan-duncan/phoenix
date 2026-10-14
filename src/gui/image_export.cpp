@@ -194,6 +194,9 @@ ImageExportDialog::ImageExportDialog(const QSize& documentSize, int frameCount, 
     form->addRow("Quality:", _quality);
     form->addRow("PNG:", _depth);
     form->addRow("Colors:", colorsRow);
+    _safeZones = new QCheckBox("Include safe zones", this);
+    _safeZones->setToolTip("Draw the safe zones and aspect-ratio frames over the picture, for a review copy");
+    form->addRow("", _safeZones);
 
     QDialogButtonBox* buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, this);
     buttons->button(QDialogButtonBox::Ok)->setText("Export");
@@ -252,6 +255,7 @@ ImageExportSettings ImageExportDialog::settings() const
     settings.png8 = _depth->currentIndex() == 1;
     settings.colors = _colors->value();
     settings.dither = _dither->isChecked();
+    settings.safeZones = _safeZones->isChecked();
     return settings;
 }
 
@@ -262,7 +266,10 @@ bool run(const ImageExportSettings& settings, PhoenixView& view, QString& error)
     // Drawn on nothing, then put on the matte: the stage's own color, one
     // chosen, or left clear.
     const bool clear = settings.matte != ImageExportSettings::Matte::Stage;
+    const bool zonesWere = view.exportSafeZones();
+    view.setExportSafeZones(settings.safeZones);
     QImage picture = view.renderFrame(settings.frame, settings.size, clear);
+    view.setExportSafeZones(zonesWere);
     if (picture.isNull())
     {
         error = "The frame could not be drawn.";

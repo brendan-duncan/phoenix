@@ -44,6 +44,9 @@ struct ImageExportSettings
     /// its colors are dithered.
     int colors = 256;
     bool dither = false;
+    /// The safe zones and aspect-ratio frames drawn over it, for a review
+    /// copy.
+    bool safeZones = false;
 };
 
 /// \a picture cut down to a palette of \a colors as an 8-bit image, its
@@ -81,6 +84,7 @@ private:
     QComboBox* _depth = nullptr;
     HotSpinBox* _colors = nullptr;
     QCheckBox* _dither = nullptr;
+    QCheckBox* _safeZones = nullptr;
     bool _syncing = false;
 };
 

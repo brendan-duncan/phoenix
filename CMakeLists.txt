@@ -174,6 +174,7 @@ set(HEADERS
     src/jsfl/extensions.h
     src/gui/mcp_server.h
     src/gui/stroke_style_dialog.h
+    src/gui/safe_zones_dialog.h
     src/gui/selection_targets.h
     src/gui/navigation_tools.h
     src/gui/draw_placement.h
@@ -282,6 +283,7 @@ set(HEADERS
     src/edit/shot_breakdown.h
     src/edit/linked_assets.h
     src/edit/review_notes.h
+    src/edit/safe_zones.h
     src/edit/pegs.h
     src/edit/controllers.h
     src/edit/palettes.h
@@ -428,6 +430,7 @@ set(SOURCES
     src/gui/xul_dialog.cpp
     src/gui/mcp_server.cpp
     src/gui/stroke_style_dialog.cpp
+    src/gui/safe_zones_dialog.cpp
     src/gui/navigation_tools.cpp
     src/gui/draw_placement.cpp
     src/gui/filters.cpp
@@ -530,6 +533,7 @@ set(SOURCES
     src/edit/shot_breakdown.cpp
     src/edit/linked_assets.cpp
     src/edit/review_notes.cpp
+    src/edit/safe_zones.cpp
     src/edit/pegs.cpp
     src/edit/controllers.cpp
     src/edit/palettes.cpp

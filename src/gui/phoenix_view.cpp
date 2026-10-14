@@ -51,6 +51,7 @@
 #include "../edit/transform_blend.h"
 #include "../edit/tween_ease.h"
 #include "../edit/shape_tween.h"
+#include "../edit/safe_zones.h"
 #include "../edit/ik_pose.h"
 #include "../geom/fill_tracing.h"
 #include "../edit/frame_commands.h"
@@ -531,6 +532,9 @@ QImage PhoenixView::renderFrame(int frame, const QSize& size, bool transparent, 
     _exporting = true;
     drawDocument(painter, document);
     _exporting = false;
+    // A review copy can carry the safe zones.
+    if (_exportSafeZones)
+        drawSafeZones(painter, painter.transform(), document);
     _frameOverride = savedOverride;
     viewTransform = savedView;
     _visibleRect = savedVisible;
@@ -930,6 +934,10 @@ void PhoenixView::paintEvent(QPaintEvent *event)
         painter.fillPath(maskedPath, QColor(0, 0, 0, 180));
         painter.restore();
     }
+
+    // Safe zones and aspect-ratio frames, over the art and the dimming.
+    if (_showSafeZones && !_exporting)
+        drawSafeZones(painter, rootToWidget(), document);
 
     // Draw visible rect if debug mode is enabled
     if (_showBounds)
@@ -7130,6 +7138,141 @@ void PhoenixView::toolGuides(std::vector<double>& xs, std::vector<double>& ys)
                 ys.push_back(toScope.map(QPointF(0, y)).y());
         }
     }
+    // The safe zones' and frames' edges, while they are shown.
+    if (_showSafeZones && _flaDocument && _flaDocument->document)
+    {
+        const fla::Document* document = _flaDocument->document;
+        bool invertible = false;
+        const QTransform toScope = scopeToDocument().inverted(&invertible);
+        if (invertible && std::fabs(toScope.m12()) < 1.0e-9 && std::fabs(toScope.m21()) < 1.0e-9)
+        {
+            std::vector<double> zoneXs;
+            std::vector<double> zoneYs;
+            fla::safezones::snapLines(document->width, document->height, fla::safezones::of(*document), zoneXs, zoneYs);
+            for (double x : zoneXs)
+                xs.push_back(toScope.map(QPointF(x, 0)).x());
+            for (double y : zoneYs)
+                ys.push_back(toScope.map(QPointF(0, y)).y());
+        }
+    }
+}
+
+void PhoenixView::setShowSafeZones(bool show)
+{
+    _showSafeZones = show;
+    pushGuidesToSnapper();
+    update();
+}
+
+void PhoenixView::safeZonesChanged()
+{
+    pushGuidesToSnapper();
+    update();
+}
+
+void PhoenixView::drawSafeZones(QPainter& painter, const QTransform& toDevice, const fla::Document* document)
+{
+    namespace sz = fla::safezones;
+    if (!document || document->width <= 0 || document->height <= 0)
+        return;
+    const sz::Settings settings = sz::of(*document);
+    const double width = document->width;
+    const double height = document->height;
+    const auto polygon = [&](const sz::Rect& r) { return toDevice.map(QPolygonF(QRectF(r.x, r.y, r.width, r.height))); };
+    const auto point = [&](double x, double y) { return toDevice.map(QPointF(x, y)); };
+
+    painter.save();
+    painter.resetTransform();
+    painter.setRenderHint(QPainter::Antialiasing, true);
+    QFont font = painter.font();
+    font.setPixelSize(10);
+    painter.setFont(font);
+    // A label just inside a rectangle's top-left corner (or its bottom-left,
+    // so two close rectangles' labels do not overlap), on a dark backing so
+    // it reads over any art.
+    const auto label = [&](const QPolygonF& shape, const QString& text, const QColor& color, bool bottom) {
+        if (shape.size() < 4)
+            return;
+        const QFontMetrics metrics(font);
+        const QPointF at = bottom ? shape[3] + QPointF(4.0, -3.0 - metrics.height()) : shape[0] + QPointF(4.0, 3.0);
+        const QRectF box(at, QSizeF(metrics.horizontalAdvance(text) + 6.0, metrics.height()));
+        painter.fillRect(box, QColor(0, 0, 0, 120));
+        painter.setPen(color);
+        painter.drawText(box.adjusted(3.0, 0.0, 0.0, 0.0), Qt::AlignLeft | Qt::AlignVCenter, text);
+    };
+    const QPolygonF stage = polygon(sz::Rect{0.0, 0.0, width, height});
+
+    // Shading outside the frames that preview a crop.
+    for (const sz::AspectFrame& frame : settings.frames)
+    {
+        if (!frame.on || !frame.shade)
+            continue;
+        QPainterPath outside;
+        outside.addPolygon(stage);
+        outside.closeSubpath();
+        QPainterPath inside;
+        inside.addPolygon(polygon(sz::frameRect(width, height, frame)));
+        inside.closeSubpath();
+        painter.fillPath(outside.subtracted(inside), QColor(0, 0, 0, 110));
+    }
+
+    // The frames, each in its own color.
+    for (const sz::AspectFrame& frame : settings.frames)
+    {
+        if (!frame.on)
+            continue;
+        const QColor color(frame.color[0], frame.color[1], frame.color[2], frame.color[3]);
+        QPen pen(color, 1.0, Qt::DashLine);
+        pen.setCosmetic(true);
+        painter.setPen(pen);
+        painter.setBrush(Qt::NoBrush);
+        const QPolygonF shape = polygon(sz::frameRect(width, height, frame));
+        painter.drawPolygon(shape);
+        label(shape, QString::fromStdString(frame.name()), color, false);
+    }
+
+    // Title and action safe, the center cross and thirds, in what they
+    // follow.
+    const QColor zone = theme::color("stage.safeZone");
+    const sz::Rect area = sz::zoneArea(width, height, settings);
+    const auto zoneRect = [&](double percent, Qt::PenStyle style, const QString& name, bool bottom) {
+        QPen pen(zone, 1.0, style);
+        pen.setCosmetic(true);
+        painter.setPen(pen);
+        painter.setBrush(Qt::NoBrush);
+        const QPolygonF shape = polygon(sz::inset(area, percent));
+        painter.drawPolygon(shape);
+        label(shape, QString("%1 %2%").arg(name).arg(percent), zone, bottom);
+    };
+    if (settings.actionSafe)
+        zoneRect(settings.actionPercent, Qt::DotLine, "Action safe", false);
+    if (settings.titleSafe)
+        zoneRect(settings.titlePercent, Qt::DashLine, "Title safe", true);
+    if (settings.thirds)
+    {
+        QColor faint = zone;
+        faint.setAlpha(110);
+        QPen pen(faint, 1.0);
+        pen.setCosmetic(true);
+        painter.setPen(pen);
+        for (int i = 1; i <= 2; ++i)
+        {
+            const double x = area.x + area.width * i / 3.0;
+            const double y = area.y + area.height * i / 3.0;
+            painter.drawLine(point(x, area.y), point(x, area.y + area.height));
+            painter.drawLine(point(area.x, y), point(area.x + area.width, y));
+        }
+    }
+    if (settings.centerCross)
+    {
+        QPen pen(zone, 1.0);
+        pen.setCosmetic(true);
+        painter.setPen(pen);
+        const QPointF center = point(area.x + area.width / 2.0, area.y + area.height / 2.0);
+        painter.drawLine(center - QPointF(9.0, 0.0), center + QPointF(9.0, 0.0));
+        painter.drawLine(center - QPointF(0.0, 9.0), center + QPointF(0.0, 9.0));
+    }
+    painter.restore();
 }
 
 bool PhoenixView::beginGuideDrag(const QPointF& widgetPos)

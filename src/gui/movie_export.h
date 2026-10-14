@@ -81,6 +81,9 @@ struct MovieExportSettings
     /// embedded.
     bool svgHidden = true;
     bool svgLinked = false;
+    /// The safe zones and aspect-ratio frames drawn over every frame, for
+    /// a review copy.
+    bool safeZones = false;
     Scenes scenes = Scenes::Current;
     /// Shows scene \a index for drawing and gives its frame count; set by
     /// whoever runs the export when there is more than one scene.
@@ -121,6 +124,7 @@ private:
     HotSpinBox* _first = nullptr;
     HotSpinBox* _last = nullptr;
     QCheckBox* _transparent = nullptr;
+    QCheckBox* _safeZones = nullptr;
     QCheckBox* _audio = nullptr;
     QCheckBox* _loop = nullptr;
     QCheckBox* _camera = nullptr;

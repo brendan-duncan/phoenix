@@ -108,14 +108,32 @@ QIcon centerIcon(const QColor& color)
     return QIcon(pixmap);
 }
 
+/// Safe Zones' icon: the stage with a dashed frame inside it.
+QIcon safeZonesIcon(const QColor& color)
+{
+    QPixmap pixmap(32, 32);
+    pixmap.setDevicePixelRatio(2.0);
+    pixmap.fill(Qt::transparent);
+    QPainter painter(&pixmap);
+    painter.setRenderHint(QPainter::Antialiasing, true);
+    painter.setPen(QPen(color, 1.0));
+    painter.drawRect(QRectF(1.5, 3.5, 13.0, 9.0));
+    QPen dashed(color, 1.0, Qt::CustomDashLine);
+    dashed.setDashPattern({1.5, 1.5});
+    painter.setPen(dashed);
+    painter.drawRect(QRectF(4.0, 5.5, 8.0, 5.0));
+    return QIcon(pixmap);
+}
+
 } // namespace
 
 StageControls::StageControls(PhoenixView* view, QAction* clip, QAction* dim, std::function<void()> pickRotationTool,
-    QWidget* parent)
+    QAction* safeZones, QWidget* parent)
     : QWidget(parent)
     , _view(view)
     , _clip(clip)
     , _dim(dim)
+    , _safeZones(safeZones)
 {
     QHBoxLayout* layout = new QHBoxLayout(this);
     layout->setContentsMargins(0, 0, 4, 0);
@@ -185,6 +203,19 @@ StageControls::StageControls(PhoenixView* view, QAction* clip, QAction* dim, std
     if (_dim)
         connect(_dim, &QAction::toggled, this, &StageControls::showClipMode);
     layout->addWidget(_clipButton);
+
+    if (_safeZones)
+    {
+        _safeZonesButton = new QToolButton(this);
+        _safeZonesButton->setObjectName("stageSafeZones");
+        _safeZonesButton->setAutoRaise(true);
+        // The button follows the action, tooltip and icon too, so they are
+        // set on the action.
+        _safeZones->setToolTip("Safe Zones: show title and action safe and the aspect-ratio frames "
+                               "(View > Safe Zone Settings to choose them)");
+        _safeZonesButton->setDefaultAction(_safeZones);
+        layout->addWidget(_safeZonesButton);
+    }
 
     _zoom = new ZoomBox(this);
     _zoom->setObjectName("stageZoom");
@@ -287,4 +318,6 @@ void StageControls::drawIcons()
     const QColor color = palette().color(QPalette::ButtonText);
     _center->setIcon(centerIcon(color));
     _rotation->setIcon(ToolIcons::icon(ToolIcons::Tool::Rotation));
+    if (_safeZones)
+        _safeZones->setIcon(safeZonesIcon(color));
 }

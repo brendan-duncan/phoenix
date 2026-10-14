@@ -32,7 +32,8 @@ void writeSample(const fs::path& folder)
     writeText(folder / "DOMDocument.xml",
         "<DOMDocument xmlns=\"http://ns.adobe.com/xfl/2008/\" width=\"550\" height=\"400\" "
         "phoenixPalettes=\"Day~skin=FFCC99\" phoenixStageAlpha=\"0.5\" phoenixControllers=\"Smile\" "
-        "phoenixPerspectiveAngle=\"60\" phoenixFutureThing=\"1\">"
+        "phoenixPerspectiveAngle=\"60\" phoenixSafeZones=\"title=1,90;frames=4:3,1,00BEFFFF,c,0\" "
+        "phoenixFutureThing=\"1\">"
         "<symbols><Include href=\"Peg.xml\"/></symbols>"
         "<timelines><DOMTimeline name=\"Scene 1\"><layers>"
         "<DOMLayer name=\"Camera\" layerType=\"guide\" phoenixCamera=\"true\"><frames>"

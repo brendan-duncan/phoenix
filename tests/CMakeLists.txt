@@ -86,6 +86,7 @@ set(TEST_CORE_SOURCES
     ${PHOENIX_SRC}/edit/library_transfer.cpp
     ${PHOENIX_SRC}/edit/document_session.cpp
     ${PHOENIX_SRC}/edit/review_notes.cpp
+    ${PHOENIX_SRC}/edit/safe_zones.cpp
     ${PHOENIX_SRC}/edit/pegs.cpp
     ${PHOENIX_SRC}/edit/controllers.cpp
     ${PHOENIX_SRC}/edit/palettes.cpp
@@ -148,6 +149,7 @@ set(TEST_SOURCES
     test_library_transfer.cpp
     test_document_tabs.cpp
     test_review_notes.cpp
+    test_safe_zones.cpp
     test_pegs.cpp
     test_controllers.cpp
     test_palettes.cpp

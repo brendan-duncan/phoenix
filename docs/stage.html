@@ -115,6 +115,40 @@
 
 <p><span class="menu-path">View &rsaquo; Edit Grid...</span> (<kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>G</kbd>) sets the grid's color and its spacing across and down, saved with the document, and whether it shows, shows over the artwork instead of under it, and snaps.</p>
 
+<h2>Safe zones and aspect-ratio frames</h2>
+
+<p>When a shot has to work on several screens at once, safe zones and aspect-ratio frames show where each screen's edges fall. Turn them on with <span class="menu-path">View &rsaquo; Safe Zones</span>, or the safe zones button among the stage controls on the edit bar. Whether they show is your choice and Phoenix remembers it; what they are belongs to the document, so a show's template carries them to every shot.</p>
+
+<figure>
+  <img src="assets/shots/safe-zones.webp" alt="A 1920 by 1080 stage with title safe and action safe rectangles, thirds and a center cross, a 4:3 frame with the stage shaded outside it, and 2.39:1 and 9:16 frames in their own colors" width="805" height="472">
+  <figcaption>Title and action safe, thirds and the center cross, with 4:3 (shaded outside), 2.39:1 and 9:16 frames.</figcaption>
+</figure>
+
+<dl class="defs">
+  <dt>Title safe and action safe</dt><dd>Dashed and dotted rectangles inset about the center: 90% and 93% unless you change them. Keep text inside title safe and anything important inside action safe.</dd>
+  <dt>Center cross and thirds</dt><dd>A small cross at the center, and lines dividing the frame in thirds for composing.</dd>
+  <dt>Aspect-ratio frames</dt><dd>The largest rectangle of each shape that fits on the stage: 16:9, 4:3, 1.85:1, 2.39:1, 1:1, 4:5 and 9:16 to start with, and any shape you add. Each has its own color, sits centered or against an edge, and can shade the stage outside it to preview the crop. Turn them on and off from <span class="menu-path">View &rsaquo; Aspect Ratio Frames</span>.</dd>
+</dl>
+
+<p>The overlay is never selected, saved into the artwork or exported, unless an export asks for it. While it shows, the tools snap to its edges when <strong>Snap to Guides</strong> is on.</p>
+
+<h3>Safe Zone Settings</h3>
+
+<div class="split">
+  <figure style="margin:0"><img src="assets/shots/safe-zone-settings.webp" alt="Safe Zone Settings dialog with a preset list, title and action safe percentages, center cross and thirds, the frame the zones are measured in, and a list of aspect-ratio frames with color, placement and shading" width="576" height="659"></figure>
+  <div>
+    <p><span class="menu-path">View &rsaquo; Safe Zone Settings...</span> sets everything at once, and the stage shows each change as you make it. <strong>Cancel</strong> puts it all back; <strong>OK</strong> keeps it as one step you can undo.</p>
+    <ul>
+      <li><strong>Measured in</strong> puts the safe zones, cross and thirds inside one of the frames rather than the stage, so a 16:9 show can check 4:3 title safe too.</li>
+      <li><strong>Add...</strong> adds a frame of any shape, such as <code>3:2</code> or <code>1.66:1</code>; <strong>Remove</strong> takes one out.</li>
+      <li><strong>Preset</strong> offers HD Broadcast, Cinema, Social and Clear. <strong>Apply</strong> sets everything from the one chosen; <strong>Save As...</strong> keeps your settings as a preset of your own, and <strong>Delete</strong> removes one.</li>
+      <li><strong>Use for New Documents</strong> makes these the settings every new document starts with.</li>
+    </ul>
+  </div>
+</div>
+
+<p>To include the overlay in a review copy, check <strong>Include safe zones</strong> in <a href="export.html#export-movie">Export Movie</a> or <a href="export.html#export-image">Export Image</a>, or add <code>--safe-zones</code> to a <a href="command-line.html">render</a> or a render queue job.</p>
+
 <h2>Display options</h2>
 
 <dl class="defs">

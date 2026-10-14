@@ -378,6 +378,8 @@ private slots:
     /// Modify > Document: stage size, Match Contents, scaling the content
     /// with the stage, and ruler units.
     void documentSettings();
+    /// View > Safe Zone Settings: the dialog, previewed live, one undo step.
+    void safeZoneSettings();
     /// Modify > Bitmap > Swap Bitmap: the selected bitmaps show another
     /// library bitmap, keeping their place and size.
     void swapBitmap();
@@ -498,6 +500,7 @@ private:
     /// A window people use, rather than one a command line runs headless.
     bool _interactive = true;
     QAction* _fontMappingAction = nullptr;
+    QAction* _safeZonesAction = nullptr;
     void setupUI();
 
     void setupMenus();

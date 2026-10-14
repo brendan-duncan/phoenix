@@ -72,6 +72,16 @@ public:
 
     bool dimOutsideDocument() const { return _dimOutsideDocument; }
 
+    /// The safe zones and aspect-ratio frames drawn over the stage
+    /// (src/edit/safe_zones.h); the tools snap to their edges while shown.
+    void setShowSafeZones(bool show);
+    bool showSafeZones() const { return _showSafeZones; }
+    /// Draws them into exported frames too (renderFrame), for review copies.
+    void setExportSafeZones(bool on) { _exportSafeZones = on; }
+    bool exportSafeZones() const { return _exportSafeZones; }
+    /// The settings changed: redraw, and hand the new edges to the snapper.
+    void safeZonesChanged();
+
     void setHighQualityAntiAliasing(bool on);
 
     /// Maps document coordinates to widget coordinates: the pan, the zoom, and
@@ -773,6 +783,9 @@ private:
     /// Starts dragging a guide if \a widgetPos is on a ruler or a guide.
     bool beginGuideDrag(const QPointF& widgetPos);
     void drawRulersAndGuides(QPainter& painter);
+    /// Draws the safe zones and aspect-ratio frames, mapped to the device by
+    /// \a toDevice from the stage's space.
+    void drawSafeZones(QPainter& painter, const QTransform& toDevice, const fla::Document* document);
     /// Hands the guides to the snapper in the space the tools work in.
     void pushGuidesToSnapper();
 
@@ -955,6 +968,8 @@ private:
 
     // Dim area outside document
     bool _dimOutsideDocument = false;
+    bool _showSafeZones = false;
+    bool _exportSafeZones = false;
 
     bool _disableStaticText = false;
 

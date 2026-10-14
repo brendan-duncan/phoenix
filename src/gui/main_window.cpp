@@ -5,6 +5,8 @@
 #include "new_document_dialog.h"
 #include "start_dialog.h"
 #include "stage_controls.h"
+#include "safe_zones_dialog.h"
+#include "../edit/safe_zones.h"
 #include "tutorial_lesson.h"
 #include "tutorial_runner.h"
 #include "../edit/phoenix_features.h"
@@ -2509,6 +2511,9 @@ void MainWindow::createNewDocument(int width, int height, double frameRate, cons
         document->document->backgroundColor[1] = static_cast<uint8_t>(stage.green());
         document->document->backgroundColor[2] = static_cast<uint8_t>(stage.blue());
         document->document->backgroundColor[3] = 255;
+        // The safe zones the user starts every document with.
+        document->document->extraAttributes =
+            fla::safezones::withSettings(*document->document, SafeZonesDialog::newDocumentDefault());
     }
 
     // No path: the first Save has to ask where to put it, which saveFile()
@@ -5871,10 +5876,72 @@ void MainWindow::setupMenus()
     });
     viewMenu->addAction(dimOutsideDocumentAction);
 
+    // Safe zones and aspect-ratio frames: whether they show is the viewer's
+    // choice, remembered; what they are belongs to the document.
+    QAction* safeZonesAction = new QAction("Safe Zones", this);
+    safeZonesAction->setObjectName("viewSafeZones");
+    safeZonesAction->setCheckable(true);
+    safeZonesAction->setChecked(QSettings().value("view/safeZones", false).toBool());
+    safeZonesAction->setStatusTip("Show title and action safe and the aspect-ratio frames over the stage");
+    _phoenixView->setShowSafeZones(safeZonesAction->isChecked());
+    connect(safeZonesAction, &QAction::toggled, this, [this](bool on) {
+        _phoenixView->setShowSafeZones(on);
+        QSettings().setValue("view/safeZones", on);
+    });
+    viewMenu->addAction(safeZonesAction);
+    // New settings as one undo step; the overlay shows them.
+    const auto setSafeZones = [this, safeZonesAction](const fla::safezones::Settings& settings, const std::string& name) {
+        fla::Document* document = _flaDocument ? _flaDocument->document : nullptr;
+        if (!document)
+            return;
+        using Attributes = std::vector<std::pair<std::string, std::string>>;
+        const Attributes after = fla::safezones::withSettings(*document, settings);
+        if (after != document->extraAttributes)
+            _editContext.commandStack().push(fla::CommandPtr(
+                new fla::SetPropertyCommand<Attributes>(document->extraAttributes, document->extraAttributes, after, name)));
+        safeZonesAction->setChecked(true);
+        _phoenixView->safeZonesChanged();
+    };
+    QMenu* framesMenu = viewMenu->addMenu("Aspect Ratio Frames");
+    framesMenu->setObjectName("viewAspectRatioFrames");
+    connect(framesMenu, &QMenu::aboutToShow, this, [this, framesMenu, setSafeZones]() {
+        framesMenu->clear();
+        const fla::Document* document = _flaDocument ? _flaDocument->document : nullptr;
+        const fla::safezones::Settings settings = document ? fla::safezones::of(*document) : fla::safezones::defaults();
+        for (size_t i = 0; i < settings.frames.size(); ++i)
+        {
+            QAction* frame = framesMenu->addAction(QString::fromStdString(settings.frames[i].name()));
+            frame->setCheckable(true);
+            frame->setChecked(settings.frames[i].on);
+            frame->setEnabled(document != nullptr);
+            connect(frame, &QAction::toggled, this, [this, i, setSafeZones](bool on) {
+                const fla::Document* current = _flaDocument ? _flaDocument->document : nullptr;
+                if (!current)
+                    return;
+                fla::safezones::Settings changed = fla::safezones::of(*current);
+                if (i < changed.frames.size())
+                {
+                    changed.frames[i].on = on;
+                    setSafeZones(changed, on ? "Show Aspect Ratio Frame" : "Hide Aspect Ratio Frame");
+                }
+            });
+        }
+        framesMenu->addSeparator();
+        QAction* settingsAction = framesMenu->addAction("Safe Zone Settings...");
+        settingsAction->setEnabled(document != nullptr);
+        connect(settingsAction, &QAction::triggered, this, [this]() { safeZoneSettings(); });
+    });
+    QAction* safeZoneSettingsAction = new QAction("Safe Zone Settings...", this);
+    safeZoneSettingsAction->setObjectName("viewSafeZoneSettings");
+    safeZoneSettingsAction->setStatusTip("Choose the safe zones and aspect-ratio frames, with presets");
+    connect(safeZoneSettingsAction, &QAction::triggered, this, [this]() { safeZoneSettings(); });
+    viewMenu->addAction(safeZoneSettingsAction);
+    _safeZonesAction = safeZonesAction;
+
     // The common view controls on the edit bar, at its right.
     if (_breadcrumbRow)
         _breadcrumbRow->layout()->addWidget(new StageControls(_phoenixView, clipAction, dimOutsideDocumentAction,
-            [this]() { chooseTool(_rotationTool.get()); }, _breadcrumbRow));
+            [this]() { chooseTool(_rotationTool.get()); }, safeZonesAction, _breadcrumbRow));
 
     // Help menu
     // Control menu: playback, with Animate's keys. They act while the stage
@@ -6659,6 +6726,7 @@ int MainWindow::renderCommand(const QString& source, const QStringList& options)
 {
     // Phoenix render <document> [--range 1-240] [--out frames/|movie.mp4|anim.gif]
     // [--size 1920x1080] [--transparent] [--no-camera] [--per-layer] [--no-audio]
+    // [--safe-zones]
     if (!QFileInfo::exists(source))
     {
         std::fprintf(stderr, "No such file: %s\n", qPrintable(source));
@@ -6724,6 +6792,8 @@ int MainWindow::renderCommand(const QString& source, const QStringList& options)
             settings.transparent = true;
         else if (name == "--no-camera")
             settings.camera = false;
+        else if (name == "--safe-zones")
+            settings.safeZones = true;
         else if (name == "--no-audio")
             settings.audio = false;
         else if (name == "--per-layer")
@@ -8039,7 +8109,8 @@ void MainWindow::pruneToDocument()
     if (_phoenixView)
     {
         _phoenixView->clearCaches();
-        _phoenixView->update();
+        // The safe zones may have changed with the step: new snap edges.
+        _phoenixView->safeZonesChanged();
     }
 }
 
@@ -10907,6 +10978,42 @@ void MainWindow::convertToSymbol()
     _documentView->setDocument(_flaDocument);
     _phoenixView->clearCaches();
     _phoenixView->update();
+}
+
+void MainWindow::safeZoneSettings()
+{
+    fla::Document* document = _flaDocument ? _flaDocument->document : nullptr;
+    if (!document)
+        return;
+    using Attributes = std::vector<std::pair<std::string, std::string>>;
+    const Attributes before = document->extraAttributes;
+    // Shown as it is edited, so the overlay is on while the dialog is open.
+    const bool wasShown = _phoenixView->showSafeZones();
+    _phoenixView->setShowSafeZones(true);
+    SafeZonesDialog dialog(fla::safezones::of(*document), [this, document](const fla::safezones::Settings& settings) {
+        document->extraAttributes = fla::safezones::withSettings(*document, settings);
+        _phoenixView->safeZonesChanged();
+    }, this);
+    const bool accepted = dialog.exec() == QDialog::Accepted;
+    // The dialog may have outlived the document only if something replaced
+    // it while open; nothing does, but be safe.
+    if (!_flaDocument || _flaDocument->document != document)
+        return;
+    const Attributes after = fla::safezones::withSettings(*document, dialog.settings());
+    document->extraAttributes = before;
+    if (accepted && after != before)
+    {
+        _editContext.commandStack().push(fla::CommandPtr(
+            new fla::SetPropertyCommand<Attributes>(document->extraAttributes, before, after, "Safe Zone Settings")));
+        if (_safeZonesAction)
+            _safeZonesAction->setChecked(true);
+    }
+    else if (_safeZonesAction)
+    {
+        _phoenixView->setShowSafeZones(wasShown);
+        _safeZonesAction->setChecked(wasShown);
+    }
+    _phoenixView->safeZonesChanged();
 }
 
 void MainWindow::documentSettings()

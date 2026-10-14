@@ -142,6 +142,9 @@ MovieExportDialog::MovieExportDialog(const QSize& documentSize, int frameCount, 
 
     _transparent = new QCheckBox("Transparent background", this);
     form->addRow("", _transparent);
+    _safeZones = new QCheckBox("Include safe zones", this);
+    _safeZones->setToolTip("Draw the safe zones and aspect-ratio frames over every frame, for a review copy");
+    form->addRow("", _safeZones);
     _audio = new QCheckBox("Include sound", this);
     _audio->setChecked(true);
     form->addRow("", _audio);
@@ -337,6 +340,7 @@ MovieExportSettings MovieExportDialog::settings() const
     settings.first = std::min(_first->value(), _last->value()) - 1;
     settings.last = std::max(_first->value(), _last->value()) - 1;
     settings.transparent = _transparent->isChecked();
+    settings.safeZones = _safeZones->isChecked();
     settings.audio = _audio->isChecked();
     settings.codec = static_cast<MovieExportSettings::Codec>(_codec->currentIndex());
     settings.gifColors = _gifColors->value();
@@ -387,6 +391,15 @@ bool run(const MovieExportSettings& given, PhoenixView& view, TimelineAudio* aud
     QWidget* parent, QString& error)
 {
     error.clear();
+    // A review copy carries the safe zones on every frame; the view is put
+    // back however the export ends.
+    struct Zones
+    {
+        PhoenixView& view;
+        bool was;
+        ~Zones() { view.setExportSafeZones(was); }
+    } zones{view, view.exportSafeZones()};
+    view.setExportSafeZones(given.safeZones);
     if (given.scenes == MovieExportSettings::Scenes::Current || !given.showScene || given.sceneCount <= 1)
         return runOne(given, view, audio, frameRate, parent, error);
     // Each scene to a file named after it; the scene shown put back after.
