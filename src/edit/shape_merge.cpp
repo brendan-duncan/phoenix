@@ -9,7 +9,10 @@
 #include "../geom/planar_map.h"
 #include "../geom/shape_geometry.h"
 
+#include <algorithm>
 #include <map>
+#include <set>
+#include <type_traits>
 #include <vector>
 
 namespace fla {
@@ -515,7 +518,77 @@ bool ShapeMerger::combine(Shape& target, const Shape& addition, Operation operat
     };
 
     rebuildShapeEdges(target, merged, combined, keepStroke);
+    pruneUnusedStyles(target);
     return true;
+}
+
+void pruneUnusedStyles(Shape& shape)
+{
+    std::set<int> fillsUsed;
+    std::set<int> strokesUsed;
+    for (const Edge* edge : shape.edges)
+    {
+        if (!edge)
+            continue;
+        fillsUsed.insert(edge->fillStyle0);
+        fillsUsed.insert(edge->fillStyle1);
+        strokesUsed.insert(edge->strokeStyle);
+        for (const Path* path : edge->paths)
+        {
+            if (!path)
+                continue;
+            fillsUsed.insert(path->fillStyleIndex);
+            strokesUsed.insert(path->lineStyleIndex);
+        }
+    }
+
+    // Kept styles numbered from 1 in their old order; the rest deleted.
+    const auto compact = [](auto& map, auto& list, const std::set<int>& used) {
+        std::map<int, int> renumber;
+        std::remove_reference_t<decltype(map)> kept;
+        int next = 1;
+        for (const auto& [index, style] : map)
+        {
+            if (used.count(index))
+            {
+                renumber[index] = next;
+                kept[next] = style;
+                ++next;
+            }
+            else
+            {
+                list.erase(std::remove(list.begin(), list.end(), style), list.end());
+                delete style;
+            }
+        }
+        map = std::move(kept);
+        return renumber;
+    };
+    const std::map<int, int> fills = compact(shape.fillsMap, shape.fills, fillsUsed);
+    const std::map<int, int> strokes = compact(shape.strokesMap, shape.strokes, strokesUsed);
+
+    const auto apply = [](const std::map<int, int>& table, int& index) {
+        if (index == -1)
+            return;
+        const auto it = table.find(index);
+        // An index with no style behind it reads as none, as it always did.
+        index = it == table.end() ? -1 : it->second;
+    };
+    for (Edge* edge : shape.edges)
+    {
+        if (!edge)
+            continue;
+        apply(fills, edge->fillStyle0);
+        apply(fills, edge->fillStyle1);
+        apply(strokes, edge->strokeStyle);
+        for (Path* path : edge->paths)
+        {
+            if (!path)
+                continue;
+            apply(fills, path->fillStyleIndex);
+            apply(strokes, path->lineStyleIndex);
+        }
+    }
 }
 
 } // namespace fla

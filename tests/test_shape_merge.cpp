@@ -305,6 +305,44 @@ TEST(merging_renumbers_the_addition_styles)
     CHECK(target->fills.size() == 2);
 }
 
+TEST(a_cut_leaves_none_of_the_cutters_styles_behind)
+{
+    std::unique_ptr<Shape> target = filledRectangle(0, 0, 2000, 2000, 255, 0, 0);
+    std::unique_ptr<Shape> cutter = filledRectangle(1000, 1000, 3000, 3000, 0, 0, 255);
+    std::unique_ptr<Shape> line = strokedLine(0, 1500, 3000, 1500);
+
+    CHECK(ShapeMerger::subtract(*target, *cutter));
+    CHECK(ShapeMerger::subtract(*target, *line));
+    // Only the red the target had, still filed under 1, and no strokes.
+    CHECK(target->fills.size() == 1 && target->fillsMap.size() == 1 && target->fillsMap.count(1) == 1);
+    CHECK(target->strokes.empty() && target->strokesMap.empty());
+    CHECK(colorAt(*target, Point(25.0, 25.0)) == kRed);
+}
+
+TEST(a_fill_covered_entirely_leaves_the_table_and_the_rest_are_renumbered)
+{
+    // Blue drawn right over a smaller red: the red is gone from the picture,
+    // so it goes from the table too, and the blue becomes fill 1.
+    std::unique_ptr<Shape> target = filledRectangle(500, 500, 1500, 1500, 255, 0, 0);
+    std::unique_ptr<Shape> cover = filledRectangle(0, 0, 2000, 2000, 0, 0, 255);
+    CHECK(ShapeMerger::merge(*target, *cover));
+    CHECK(target->fills.size() == 1 && target->fillsMap.count(1) == 1);
+    CHECK(colorAt(*target, Point(50.0, 50.0)) == kBlue);
+    for (const fla::Edge* edge : target->edges)
+    {
+        CHECK(edge->fillStyle0 == -1 || edge->fillStyle0 == 1);
+        CHECK(edge->fillStyle1 == -1 || edge->fillStyle1 == 1);
+    }
+
+    // Drawn many times over, the table stays the size of what shows.
+    for (int i = 0; i < 10; ++i)
+    {
+        std::unique_ptr<Shape> again = filledRectangle(0, 0, 2000, 2000, 0, static_cast<uint8_t>(i * 20), 0);
+        CHECK(ShapeMerger::merge(*target, *again));
+    }
+    CHECK(target->fills.size() == 1);
+}
+
 TEST(the_seam_between_two_regions_of_one_color_disappears)
 {
     // Two red squares overlapping. Everything ends up red, so there is no

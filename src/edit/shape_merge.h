@@ -23,6 +23,13 @@ Shape* cloneShape(const Shape& shape, DOMElement* parent);
 /// Replaces everything in a target shape with a copy of another.
 void setShapeContents(Shape& target, const Shape& source);
 
+/// Drops the fill and stroke styles no edge uses, and numbers the rest from 1
+/// in their old order, renumbering the edges to match. A merge copies the
+/// addition's styles into the target before it knows which survive; a cut
+/// (subtract, erase, clip) copies the cutter's, which never do. Without this
+/// they stay in the tables and in the file.
+void pruneUnusedStyles(Shape& shape);
+
 /// How a merge or a cut treats what it covers. The brush and eraser modes
 /// are these rules.
 struct MergeOptions
