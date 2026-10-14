@@ -804,6 +804,17 @@ private:
 
     /// Starts dragging a guide if \a widgetPos is on a ruler or a guide.
     bool beginGuideDrag(const QPointF& widgetPos);
+    /// The 9-slice guides of the symbol being edited, when it has 9-slice
+    /// scaling on: drawn dashed, dragged with the Selection tool, each move
+    /// one step to undo.
+    fla::Symbol* sliceSymbol() const;
+    QTransform sliceToWidget() const;
+    bool beginSliceDrag(const QPointF& widgetPos);
+    void drawSliceGuides(QPainter& painter);
+    /// The guide being dragged (1 left, 2 right, 3 top, 4 bottom; 0 none)
+    /// and where it is, in the symbol's space.
+    int _sliceDrag = 0;
+    double _sliceValue = 0.0;
     void drawRulersAndGuides(QPainter& painter);
     /// Draws the safe zones and aspect-ratio frames, mapped to the device by
     /// \a toDevice from the stage's space.

@@ -9602,6 +9602,77 @@ void MainWindow::setupPropertiesPanel()
                     symbol->extraAttributes, symbol->extraAttributes, after, "Linkage")));
             afterLibraryEdit();
         });
+    // Properties...: the symbol's type, its linkage and 9-slice scaling, one
+    // step to undo.
+    connect(_libraryPanel, &LibraryPanel::symbolPropertiesRequested, this,
+        [this, symbolNamed, afterLibraryEdit](const QString& name) {
+            fla::Symbol* symbol = symbolNamed(name);
+            if (!symbol)
+                return;
+            QDialog dialog(this);
+            dialog.setWindowTitle("Symbol Properties");
+            auto* form = new QFormLayout(&dialog);
+            form->addRow("Name:", new QLabel(name, &dialog));
+            auto* type = new QComboBox(&dialog);
+            type->addItems({"Movie Clip", "Button", "Graphic"});
+            type->setCurrentIndex(static_cast<int>(symbol->symbolType));
+            type->setEnabled(symbol->otherSymbolType.empty());
+            form->addRow("Type:", type);
+            auto* className = new QLineEdit(QString::fromStdString(fla::library::linkageOf(*symbol)), &dialog);
+            className->setPlaceholderText("Not exported for ActionScript");
+            form->addRow("Class:", className);
+            auto* slices = new QCheckBox("Enable guides for 9-slice scaling", &dialog);
+            slices->setChecked(symbol->scale9);
+            slices->setToolTip("Scale a movie clip by its middle and edges, keeping its corners: edit the symbol to place the guides");
+            form->addRow(QString(), slices);
+            auto* buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, &dialog);
+            connect(buttons, &QDialogButtonBox::accepted, &dialog, &QDialog::accept);
+            connect(buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
+            form->addRow(buttons);
+            if (dialog.exec() != QDialog::Accepted)
+                return;
+
+            fla::CommandStack& stack = _editContext.commandStack();
+            stack.beginMacro("Symbol Properties");
+            const auto chosenType = static_cast<fla::SymbolType>(type->currentIndex());
+            if (chosenType != symbol->symbolType)
+                stack.push(fla::CommandPtr(new fla::SetPropertyCommand<fla::SymbolType>(
+                    symbol->symbolType, symbol->symbolType, chosenType, "Symbol Type")));
+            const std::string linkage = className->text().trimmed().toStdString();
+            if (linkage != fla::library::linkageOf(*symbol))
+            {
+                auto after = fla::library::withLinkage(symbol->extraAttributes, linkage);
+                stack.push(fla::CommandPtr(new fla::SetPropertyCommand<std::vector<std::pair<std::string, std::string>>>(
+                    symbol->extraAttributes, symbol->extraAttributes, after, "Linkage")));
+            }
+            if (slices->isChecked() != symbol->scale9)
+            {
+                stack.push(fla::CommandPtr(new fla::SetPropertyCommand<bool>(
+                    symbol->scale9, symbol->scale9, slices->isChecked(), "9-Slice Scaling")));
+                // Guides never set start a third of the way in from each
+                // edge of the art.
+                const bool unset = symbol->scaleGridLeft == 0.0 && symbol->scaleGridRight == 0.0 &&
+                    symbol->scaleGridTop == 0.0 && symbol->scaleGridBottom == 0.0;
+                const QRectF art = _phoenixView ? _phoenixView->symbolFramesBounds(symbol, 0, 0) : QRectF();
+                if (slices->isChecked() && unset && art.isValid() && !art.isEmpty())
+                {
+                    const double values[4] = {art.left() + art.width() / 3.0, art.right() - art.width() / 3.0,
+                        art.top() + art.height() / 3.0, art.bottom() - art.height() / 3.0};
+                    double* fields[4] = {&symbol->scaleGridLeft, &symbol->scaleGridRight, &symbol->scaleGridTop,
+                        &symbol->scaleGridBottom};
+                    for (int i = 0; i < 4; ++i)
+                        stack.push(fla::CommandPtr(new fla::SetPropertyCommand<double>(
+                            *fields[i], *fields[i], std::round(values[i] * 20.0) / 20.0, "9-Slice Scaling")));
+                }
+            }
+            stack.endMacro();
+            if (_phoenixView)
+            {
+                _phoenixView->clearCaches();
+                _phoenixView->update();
+            }
+            afterLibraryEdit();
+        });
     connect(_libraryPanel, &LibraryPanel::newFolderRequested, this,
         [this, afterLibraryEdit](const QString& parentPath) {
             if (!_flaDocument || !_flaDocument->document)

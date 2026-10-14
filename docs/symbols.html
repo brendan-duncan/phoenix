@@ -124,12 +124,16 @@
 
 <h2>9-slice scaling</h2>
 
-<p>A symbol with 9-slice scale guides, such as a panel or a button frame, keeps its corners at their own size when a movie clip instance of it is stretched: the edges stretch one way and the middle both. Phoenix draws this on the stage and in exports, including on instances that are rotated or skewed, or that have a color effect, filters or a blend mode. The guides come from the file; graphic instances of the symbol scale as a whole.</p>
+<p>A symbol with 9-slice scale guides, such as a panel or a button frame, keeps its corners at their own size when a movie clip instance of it is stretched: the edges stretch one way and the middle both. Phoenix draws this on the stage and in exports, including on instances that are rotated or skewed, or that have a color effect, filters or a blend mode. Graphic instances of the symbol scale as a whole.</p>
 
-<div class="callout planned">
-  <span class="label">Planned</span>
-  <p>Setting up and moving 9-slice guides in Phoenix.</p>
-</div>
+<ol class="steps">
+  <li>Right-click the symbol in the library and choose <strong>Properties...</strong>.</li>
+  <li>Check <strong>Enable guides for 9-slice scaling</strong> and click OK. The guides start a third of the way in from each edge of the art.</li>
+  <li>Edit the symbol (double-click it in the library, or an instance on the stage). The four guides show as dashed lines.</li>
+  <li>With the Selection tool, drag each guide to where the corner should end: the left and right guides across, the top and bottom ones up and down. Each move is one step to undo, and a guide stops short of its partner.</li>
+</ol>
+
+<p>The same dialog sets the symbol's type (movie clip, button or graphic) and its ActionScript class.</p>
 
 </article>
 </main>

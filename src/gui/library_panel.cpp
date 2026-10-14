@@ -558,6 +558,7 @@ void LibraryPanel::showItemMenu(QTreeWidgetItem* item, const QPoint& globalPos)
         QAction* duplicate = nullptr;
         QAction* remove = nullptr;
         QAction* linkage = nullptr;
+        QAction* symbolProperties = nullptr;
         QAction* linkMaster = nullptr;
         QAction* updateLinked = nullptr;
         QAction* unlink = nullptr;
@@ -584,6 +585,7 @@ void LibraryPanel::showItemMenu(QTreeWidgetItem* item, const QPoint& globalPos)
         if (kind == static_cast<int>(Kind::Symbol))
         {
             duplicate = menu.addAction("Duplicate");
+            symbolProperties = menu.addAction("Properties...");
             linkage = menu.addAction("Linkage...");
             spriteSheet = menu.addAction("Generate Sprite Sheet...");
             menu.addSeparator();
@@ -702,6 +704,10 @@ void LibraryPanel::showItemMenu(QTreeWidgetItem* item, const QPoint& globalPos)
         else if (chosen == linkage)
         {
             emit linkageRequested(name);
+        }
+        else if (chosen == symbolProperties)
+        {
+            emit symbolPropertiesRequested(name);
         }
         else if (chosen == unused)
         {

@@ -121,6 +121,8 @@ signals:
     void deleteItemsRequested(const QStringList& names);
     /// A symbol's linkage, to be set.
     void linkageRequested(const QString& name);
+    /// Properties... on a symbol: its type, linkage and 9-slice scaling.
+    void symbolPropertiesRequested(const QString& name);
     /// A symbol to link to a master file, to unlink, or the linked
     /// symbols (all of them when empty) to update from their masters.
     void linkToMasterRequested(const QString& name);

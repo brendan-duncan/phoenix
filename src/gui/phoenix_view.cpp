@@ -965,6 +965,7 @@ void PhoenixView::paintEvent(QPaintEvent *event)
     }
 
     // Guides over the art, rulers over everything.
+    drawSliceGuides(painter);
     drawRulersAndGuides(painter);
 }
 
@@ -5321,6 +5322,9 @@ void PhoenixView::mousePressEvent(QMouseEvent *event)
     const bool forcePan = event->button() == Qt::MiddleButton || _spaceHeld;
 
     // A ruler or a guide under the cursor takes the press, as in Animate.
+    // A 9-slice guide of the symbol being edited.
+    if (event->button() == Qt::LeftButton && !forcePan && beginSliceDrag(event->position()))
+        return;
     if (event->button() == Qt::LeftButton && !forcePan && beginGuideDrag(event->position()))
         return;
     // So does a deformer's handle.
@@ -5360,6 +5364,15 @@ void PhoenixView::mouseMoveEvent(QMouseEvent *event)
         return;
     }
     emit cursorMoved(mapToDocument(event->position()), event->position().toPoint());
+    if (_sliceDrag)
+    {
+        bool invertible = false;
+        const QPointF local = sliceToWidget().inverted(&invertible).map(event->position());
+        if (invertible)
+            _sliceValue = _sliceDrag <= 2 ? local.x() : local.y();
+        update();
+        return;
+    }
     if (_guideDrag)
     {
         bool invertible = false;
@@ -5453,6 +5466,30 @@ void PhoenixView::mouseReleaseEvent(QMouseEvent *event)
         return;
     }
 
+    if (_sliceDrag)
+    {
+        // The guide where it was let go, kept to its side of its partner.
+        const int which = _sliceDrag - 1;
+        _sliceDrag = 0;
+        fla::Symbol* symbol = sliceSymbol();
+        if (symbol && _commandStack)
+        {
+            double* fields[4] = {&symbol->scaleGridLeft, &symbol->scaleGridRight, &symbol->scaleGridTop,
+                &symbol->scaleGridBottom};
+            const double partner = *fields[which ^ 1];
+            double value = std::round(_sliceValue * 20.0) / 20.0;
+            value = which % 2 == 0 ? std::min(value, partner - 1.0) : std::max(value, partner + 1.0);
+            if (value != *fields[which])
+            {
+                _commandStack->push(fla::CommandPtr(
+                    new fla::SetPropertyCommand<double>(*fields[which], *fields[which], value, "Move 9-Slice Guide")));
+                clearCaches();
+            }
+        }
+        setCursor(_activeTool ? _activeTool->cursor() : QCursor(Qt::ArrowCursor));
+        update();
+        return;
+    }
     if (_guideDrag)
     {
         const int kind = _guideDrag;
@@ -7557,6 +7594,76 @@ void PhoenixView::drawSafeZones(QPainter& painter, const QTransform& toDevice, c
         const QPointF center = point(area.x + area.width / 2.0, area.y + area.height / 2.0);
         painter.drawLine(center - QPointF(9.0, 0.0), center + QPointF(9.0, 0.0));
         painter.drawLine(center - QPointF(0.0, 9.0), center + QPointF(0.0, 9.0));
+    }
+    painter.restore();
+}
+
+fla::Symbol* PhoenixView::sliceSymbol() const
+{
+    // The symbol open for editing itself (not a group in it), with 9-slice
+    // scaling on.
+    if (_scope.empty() || !_scope.back().symbol || _scope.back().group || !_scope.back().symbol->scale9)
+        return nullptr;
+    return const_cast<fla::Symbol*>(_scope.back().symbol);
+}
+
+QTransform PhoenixView::sliceToWidget() const
+{
+    return scopeToDocument() * rootToWidget();
+}
+
+bool PhoenixView::beginSliceDrag(const QPointF& widgetPos)
+{
+    fla::Symbol* symbol = sliceSymbol();
+    if (!symbol || _activeTool != _modifierTool)
+        return false;
+    const QTransform toWidget = sliceToWidget();
+    const double values[4] = {symbol->scaleGridLeft, symbol->scaleGridRight, symbol->scaleGridTop, symbol->scaleGridBottom};
+    for (int i = 0; i < 4; ++i)
+    {
+        // Each guide as a line across the view: near enough to it, it is
+        // picked.
+        const bool across = i < 2;
+        const QLineF line(toWidget.map(across ? QPointF(values[i], -1.0e5) : QPointF(-1.0e5, values[i])),
+            toWidget.map(across ? QPointF(values[i], 1.0e5) : QPointF(1.0e5, values[i])));
+        const QPointF d = line.p2() - line.p1();
+        const double length = std::hypot(d.x(), d.y());
+        if (length <= 0.0)
+            continue;
+        const QPointF v = widgetPos - line.p1();
+        const double distance = std::fabs(d.x() * v.y() - d.y() * v.x()) / length;
+        if (distance <= 4.0)
+        {
+            _sliceDrag = i + 1;
+            _sliceValue = values[i];
+            setCursor(across ? Qt::SplitHCursor : Qt::SplitVCursor);
+            return true;
+        }
+    }
+    return false;
+}
+
+void PhoenixView::drawSliceGuides(QPainter& painter)
+{
+    fla::Symbol* symbol = sliceSymbol();
+    if (!symbol)
+        return;
+    double values[4] = {symbol->scaleGridLeft, symbol->scaleGridRight, symbol->scaleGridTop, symbol->scaleGridBottom};
+    if (_sliceDrag)
+        values[_sliceDrag - 1] = _sliceValue;
+    const QTransform toWidget = sliceToWidget();
+    painter.save();
+    painter.resetTransform();
+    painter.setRenderHint(QPainter::Antialiasing, false);
+    QPen pen(theme::color("accent"));
+    pen.setStyle(Qt::DashLine);
+    pen.setCosmetic(true);
+    painter.setPen(pen);
+    for (int i = 0; i < 4; ++i)
+    {
+        const bool across = i < 2;
+        painter.drawLine(QLineF(toWidget.map(across ? QPointF(values[i], -1.0e5) : QPointF(-1.0e5, values[i])),
+            toWidget.map(across ? QPointF(values[i], 1.0e5) : QPointF(1.0e5, values[i]))));
     }
     painter.restore();
 }
