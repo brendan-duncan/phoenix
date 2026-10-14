@@ -69,7 +69,7 @@
 <table>
   <thead><tr><th>Object</th><th>What works</th></tr></thead>
   <tbody>
-    <tr><td><code>fl</code></td><td class="wrap">The open documents, <code>getDocumentDOM</code> (null with nothing open), opening, creating, saving and closing documents, <code>trace</code>, <code>outputPanel</code>, <code>runScript</code> (including another file, and calling a function in it), <code>scriptURI</code>, <code>configURI</code>, file and folder pickers, <code>clipCopyString</code>, <code>fl.Math</code>.</td></tr>
+    <tr><td><code>fl</code></td><td class="wrap">The open documents, <code>getDocumentDOM</code> (null with nothing open), opening, creating, saving and closing documents, <code>trace</code>, <code>outputPanel</code>, <code>runScript</code> (including another file, and calling a function in it), <code>scriptURI</code>, <code>configURI</code>, file and folder pickers, XUL dialogs and <code>fl.xmlui</code> (see <a href="#dialogs">Dialogs</a>), <code>clipCopyString</code>, <code>fl.Math</code>.</td></tr>
     <tr><td><code>FLfile</code></td><td class="wrap">Reading, writing and appending text, copying, removing, listing folders (with a <code>*.ext</code> mask), making folders, sizes, dates and attributes, and converting between <code>file:///</code> URIs and paths. Both <code>file:///C|/</code> and <code>file:///C:/</code> work.</td></tr>
     <tr><td>Document</td><td class="wrap">Stage size, frame rate and color; the selection; selecting all or none; grouping, ungrouping, breaking apart, converting to a symbol, swapping a symbol; arranging, aligning, distributing, moving, scaling, rotating and transforming the selection; deleting, duplicating, copying, cutting and pasting; new rectangles, ovals, lines and text; the toolbar's fill and stroke; editing scenes and symbols; saving and exporting PNG frames.</td></tr>
     <tr><td>Timeline</td><td class="wrap">Layers (adding, deleting, reordering, selecting), the playhead and current layer, inserting and removing frames, keyframes and blank keyframes, clearing keyframes, classic tweens, selecting, copying, cutting and pasting frames, and setting frame and layer properties in bulk.</td></tr>
@@ -87,8 +87,27 @@
 
 <div class="callout">
   <span class="label">Not yet</span>
-  <p>XML dialogs (<code>xmlPanel</code>), reading and editing shape outlines (edges, contours, vertices), custom tools, panels built on HTML, persistent data on elements and items, publishing and SWF export from scripts, and saving History panel steps as a command. Each run starts fresh: functions one script defines are not kept for the next.</p>
+  <p>Reading and editing shape outlines (edges, contours, vertices), custom tools, panels built on HTML, persistent data on elements and items, publishing and SWF export from scripts, and saving History panel steps as a command. Each run starts fresh: functions one script defines are not kept for the next.</p>
 </div>
+
+<h2 id="dialogs">Dialogs</h2>
+
+<p>A script can ask for its settings in a dialog described in XUL, the XML that JSFL dialogs use. <code>fl.xmlPanelFromString(xml)</code> takes the XML as a string; <code>fl.xmlPanel(uri)</code> and <code>document.xmlPanel(uri)</code> read it from a file. Phoenix lays it out as a dialog with OK and Cancel, waits for the person, and returns an object: <code>dismiss</code> is <code>"accept"</code> or <code>"cancel"</code>, and each control with an <code>id</code> adds its value as a string, a checkbox as <code>"true"</code> or <code>"false"</code>.</p>
+
+<pre><code>var result = fl.xmlPanelFromString(
+    '&lt;dialog title="Shake" buttons="accept, cancel"&gt;' +
+    '&lt;label value="Strength:" control="amount"/&gt;' +
+    '&lt;textbox id="amount" value="20"/&gt;' +
+    '&lt;checkbox id="taper" label="Taper off" checked="true"/&gt;' +
+    '&lt;/dialog&gt;');
+if (result.dismiss == "accept")
+    fl.trace(result.amount + " " + result.taper);</code></pre>
+
+<p>Layout: <code>vbox</code>, <code>hbox</code>, <code>grid</code> with <code>columns</code> and <code>rows</code>, <code>groupbox</code>, <code>spacer</code> and <code>separator</code>. Controls: <code>label</code>, <code>description</code>, <code>textbox</code> (<code>value</code>, <code>maxlength</code>, <code>multiline</code>, <code>size</code> or <code>width</code>), <code>checkbox</code>, <code>radiogroup</code> with <code>radio</code>, <code>menulist</code> with <code>menuitem</code> (<code>editable</code> too), <code>listbox</code> with <code>listitem</code>, <code>colorchip</code>, <code>popupslider</code>, <code>choosefile</code>, <code>targetlist</code>, <code>button</code>, and <code>property</code> for a value with no control. Embedded SWF panels are not shown.</p>
+
+<p>Handlers run in the script's own context, so they can call its functions: <code>oncreate</code> as the dialog opens, <code>onchange</code> when a text box is edited, <code>oncommand</code> when a button, checkbox, radio button or menu item is used, and <code>&lt;script&gt;</code> blocks before the dialog appears. In a handler, <code>fl.xmlui</code> reads and changes the dialog: <code>get</code>, <code>set</code>, <code>getEnabled</code>, <code>setEnabled</code>, <code>getVisible</code>, <code>setVisible</code>, <code>getControlItemElements</code>, <code>setControlItemElements</code>, <code>accept</code> and <code>cancel</code>. An error in a handler is printed in the Output panel and the dialog stays open.</p>
+
+<p>With no one to answer it (<code>Phoenix run-script</code>, or a window drawn offscreen), the dialog is not shown: its script blocks and <code>oncreate</code> handlers run, then it is accepted with the values its controls start with, and a note is printed.</p>
 
 </article>
 </main>

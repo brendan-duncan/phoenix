@@ -3,6 +3,7 @@
 
 #include "flfile.h"
 #include "model.h"
+#include "xul.h"
 
 #include "../data/document.h"
 #include "../data/fla_document.h"
@@ -970,8 +971,11 @@ const ClassInfo& Document::classInfo() const
                 throw Error(error.empty() ? "The PNG could not be written." : error);
             return Value(true);
         });
-        def.method("xmlPanel", 1, [](Document&, const Args&) -> Value {
-            throw Error("document.xmlPanel (XUL dialogs) is not supported yet.");
+        def.method("xmlPanel", 1, [](Document& d, const Args& args) {
+            return showXmlPanelFile(d.session, arg(args, 0).toString());
+        });
+        def.method("xmlPanelFromString", 1, [](Document& d, const Args& args) {
+            return showXmlPanel(d.session, arg(args, 0).toString());
         });
         return info;
     }();

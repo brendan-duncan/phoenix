@@ -250,8 +250,10 @@ if(PHOENIX_TESTS_HAVE_PARSER AND TARGET qjs)
         ${PHOENIX_SRC}/jsfl/model_timeline.cpp
         ${PHOENIX_SRC}/jsfl/object.cpp
         ${PHOENIX_SRC}/jsfl/session.cpp
+        ${PHOENIX_SRC}/jsfl/xul.cpp
+        ${PHOENIX_SRC}/jsfl/model_xul.cpp
     )
-    list(APPEND TEST_SOURCES test_jsfl.cpp test_jsfl_e4x.cpp)
+    list(APPEND TEST_SOURCES test_jsfl.cpp test_jsfl_e4x.cpp test_jsfl_xul.cpp)
     set(PHOENIX_TESTS_HAVE_JSFL TRUE)
 endif()
 

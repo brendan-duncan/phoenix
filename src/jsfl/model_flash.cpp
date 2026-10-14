@@ -2,6 +2,7 @@
 
 #include "flfile.h"
 #include "model.h"
+#include "xul.h"
 
 #include "../data/fla_document.h"
 
@@ -261,9 +262,13 @@ const ClassInfo& Flash::classInfo() const
             return Value();
         });
         def.method("closeAllPlayerDocuments", 0, [](Flash&, const Args&) { return Value(true); });
-        def.method("xmlPanel", 1, [](Flash&, const Args&) -> Value {
-            throw Error("fl.xmlPanel (XUL dialogs) is not supported yet.");
+        def.method("xmlPanel", 1, [](Flash& fl, const Args& args) {
+            return showXmlPanelFile(fl.session, arg(args, 0).toString());
         });
+        def.method("xmlPanelFromString", 1, [](Flash& fl, const Args& args) {
+            return showXmlPanel(fl.session, arg(args, 0).toString());
+        });
+        def.get("xmlui", [](Flash& fl) { return Value(makeXmlUI(fl.session)); });
         return info;
     }();
     return info;

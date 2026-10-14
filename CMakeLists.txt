@@ -169,6 +169,8 @@ set(HEADERS
     src/jsfl/model.h
     src/jsfl/object.h
     src/jsfl/session.h
+    src/jsfl/xul.h
+    src/gui/xul_dialog.h
     src/gui/mcp_server.h
     src/gui/stroke_style_dialog.h
     src/gui/selection_targets.h
@@ -416,6 +418,9 @@ set(SOURCES
     src/jsfl/model_timeline.cpp
     src/jsfl/object.cpp
     src/jsfl/session.cpp
+    src/jsfl/xul.cpp
+    src/jsfl/model_xul.cpp
+    src/gui/xul_dialog.cpp
     src/gui/mcp_server.cpp
     src/gui/stroke_style_dialog.cpp
     src/gui/navigation_tools.cpp

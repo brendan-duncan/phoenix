@@ -14,6 +14,10 @@ class Timeline;
 
 namespace jsfl {
 
+namespace xul {
+class Dialog;
+}
+
 /// A rectangle in a timeline's coordinates.
 struct Rect
 {
@@ -66,6 +70,14 @@ public:
     {
         (void)title;
         return {};
+    }
+    /// Shows an XML (XUL) dialog until the person closes it, telling
+    /// \a dialog what they change and close. False when there is no one to
+    /// show it to; the dialog is then accepted as it stands.
+    virtual bool showDialog(xul::Dialog& dialog)
+    {
+        (void)dialog;
+        return false;
     }
     /// The folder holding the user's Commands folder and other script
     /// settings, as a platform path.

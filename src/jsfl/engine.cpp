@@ -847,6 +847,29 @@ RunResult Engine::run(const std::string& source, const std::string& name, const 
             return JS_NewStringLen(c, answer.data(), answer.size());
         });
 
+        // Handler code from XML dialogs runs here, beside the script's own
+        // functions; what it throws is reported, not passed on.
+        session.evaluate = [ctx](const std::string& code) -> std::string {
+            const std::string modern = Engine::modernize(code);
+            JSValue ran = JS_Eval(ctx, modern.c_str(), modern.size(), "<dialog>", JS_EVAL_TYPE_GLOBAL);
+            if (!JS_IsException(ran))
+            {
+                JS_FreeValue(ctx, ran);
+                return {};
+            }
+            JSValue error = JS_GetException(ctx);
+            std::string message = "Error";
+            try
+            {
+                message = toStd(ctx, error);
+            }
+            catch (const PendingException&)
+            {
+            }
+            JS_FreeValue(ctx, error);
+            return message;
+        };
+
         JSValue prelude = JS_Eval(ctx, kPrelude, std::strlen(kPrelude), "<phoenix>", JS_EVAL_TYPE_GLOBAL);
         JS_FreeValue(ctx, prelude);
 
@@ -912,6 +935,7 @@ RunResult Engine::run(const std::string& source, const std::string& name, const 
         }
         JS_FreeValue(ctx, value);
         JS_FreeValue(ctx, global);
+        session.evaluate = nullptr;
     }
     JS_FreeContext(ctx);
     JS_FreeRuntime(runtime);
