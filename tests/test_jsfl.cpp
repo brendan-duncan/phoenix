@@ -653,6 +653,30 @@ TEST(jsfl_run_script_includes_share_the_global)
     CHECK_OUTPUT(f, "in lib.jsfl\ntrue 42 main.jsfl\nin lib.jsfl\n10\nin lib.jsfl\nlib.jsfl 1\n");
 }
 
+TEST(jsfl_run_script_survives_classes_first_made_inside_it)
+{
+    // An included script that is the first to reach the document, timeline,
+    // layers, frames and library makes their prototypes while runScript is
+    // still running.
+    Fixture f;
+    const std::string folder = scratchFolder("include_first_use");
+    {
+        std::ofstream lib(std::filesystem::u8path(folder + "/lib.jsfl"));
+        lib << "var d = fl.getDocumentDOM(), tl = d.getTimeline();\n"
+               "var seen = tl.layers[0].frames.length + ' ' + d.library.items.length;\n";
+    }
+    {
+        std::ofstream main(std::filesystem::u8path(folder + "/main.jsfl"));
+        main << "fl.runScript(fl.scriptURI.replace(/[^\\/]*$/, '') + 'lib.jsfl');\n"
+                "fl.trace(seen + ' ' + fl.scriptURI.replace(/^.*\\//, ''));\n";
+    }
+    const jsfl::RunResult result = f.engine.runFile(folder + "/main.jsfl");
+    CHECK(result.ok);
+    if (!result.ok)
+        std::printf("    %s\n", result.report().c_str());
+    CHECK_OUTPUT(f, "1 0 main.jsfl\n");
+}
+
 TEST(jsfl_corpus_clear_extra_blank_keyframes)
 {
     // A published command (tests/data/jsfl/SOURCES.txt): blank keyframes

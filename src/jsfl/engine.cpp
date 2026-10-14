@@ -11,6 +11,7 @@
 
 #include <chrono>
 #include <cstdio>
+#include <deque>
 #include <filesystem>
 #include <fstream>
 #include <map>
@@ -343,7 +344,9 @@ private:
         return proto;
     }
 
-    std::vector<Function> _functions;
+    /// A deque, so a function running while another is added (a class's
+    /// prototype made on first use) is not moved out from under itself.
+    std::deque<Function> _functions;
     std::map<const ClassInfo*, JSValue> _prototypes;
     std::map<const ClassInfo*, ObjectPtr> _singletons;
     std::map<std::tuple<const ClassInfo*, const void*, const void*>, JSValue> _identities;
