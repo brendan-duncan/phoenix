@@ -644,6 +644,9 @@ private:
     class TutorialRunner* _tutorial = nullptr;
     /// AI assistants' way in (MCP), in the window a person works in.
     class McpServer* _mcpServer = nullptr;
+    // Commands > Open Claude Code: made the first time it is asked for.
+    QDockWidget* _claudeDock = nullptr;
+    class ClaudeCodePanel* _claudePanel = nullptr;
     /// Edit Toolbar: the tools' slots rearranged.
     void editToolbar();
     /// The panels that open from the Window menu, made at the start.

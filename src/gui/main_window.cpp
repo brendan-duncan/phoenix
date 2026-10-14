@@ -70,6 +70,7 @@
 #include "lip_sync_dialog.h"
 #include "theme.h"
 #include "claude_code.h"
+#include "claude_code_panel.h"
 #include "theme_editor.h"
 #include "output_panel.h"
 #include "test_movie_window.h"
@@ -6105,14 +6106,37 @@ void MainWindow::setupMenus()
     // Commands: Claude Code, and JSFL scripts from a file or the user's
     // Commands folder.
     QAction* claudeAction = new QAction("Open &Claude Code", this);
-    claudeAction->setStatusTip("Open Claude Code in a terminal, connected to Phoenix so it can work on your documents");
+    claudeAction->setStatusTip("Open Claude Code in a panel, connected to Phoenix so it can work on your documents");
     connect(claudeAction, &QAction::triggered, this, [this]() {
+        if (!_mcpServer)
+            _mcpServer = new McpServer(this);
+        if (!_claudeDock)
+        {
+            _claudePanel = new ClaudeCodePanel(*_mcpServer);
+            _claudeDock = new QDockWidget("Claude Code", this);
+            _claudeDock->setObjectName("claudeCodeDock");
+            _claudeDock->setAllowedAreas(Qt::AllDockWidgetAreas);
+            _claudePanel->setParent(_claudeDock);
+            _claudeDock->setWidget(_claudePanel);
+            addDockWidget(Qt::RightDockWidgetArea, _claudeDock);
+            _claudeDock->setFloating(true);
+            _claudeDock->resize(760, 520);
+        }
+        const QString folder = _documentPath.isEmpty() ? QString() : QFileInfo(_documentPath).absolutePath();
+        _claudeDock->show();
+        _claudeDock->raise();
+        _claudePanel->start(folder);
+        _claudePanel->focusTerminal();
+    });
+    QAction* claudeWindowAction = new QAction("Open Claude Code in a Terminal &Window", this);
+    claudeWindowAction->setStatusTip("Open Claude Code in a terminal window of its own, connected to Phoenix");
+    connect(claudeWindowAction, &QAction::triggered, this, [this]() {
         if (!_mcpServer)
             _mcpServer = new McpServer(this);
         const QString folder = _documentPath.isEmpty() ? QString() : QFileInfo(_documentPath).absolutePath();
         claude_code::open(*_mcpServer, folder, this);
     });
-    _scripts->fillCommandsMenu(menuBar->addMenu("&Commands"), claudeAction);
+    _scripts->fillCommandsMenu(menuBar->addMenu("&Commands"), {claudeAction, claudeWindowAction});
 
     QMenu* helpMenu = menuBar->addMenu("&Help");
     QAction* startAction = new QAction("&Start Screen...", this);

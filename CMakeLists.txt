@@ -112,6 +112,7 @@ FetchContent_MakeAvailable(quickjs)
 set(tinyxml2_SHARED_LIBS OFF CACHE BOOL "Don't build tinyxml2 as a shared library")
 set(tinyxml2_BUILD_TESTING OFF CACHE BOOL "Don't build tinyxml2 tests")
 add_subdirectory(src/third_party/tinyxml2)
+add_subdirectory(src/third_party/libvterm)
 
 set(HEADERS
     src/gui/main_window.h
@@ -123,6 +124,9 @@ set(HEADERS
     src/gui/theme.h
     src/gui/theme_editor.h
     src/gui/claude_code.h
+    src/gui/claude_code_panel.h
+    src/gui/pty_process.h
+    src/gui/terminal_view.h
     src/gui/trace_bitmap_dialog.h
     src/gui/test_movie_window.h
     src/gui/command_line.h
@@ -374,6 +378,9 @@ set(SOURCES
     src/gui/theme.cpp
     src/gui/theme_editor.cpp
     src/gui/claude_code.cpp
+    src/gui/claude_code_panel.cpp
+    src/gui/pty_process.cpp
+    src/gui/terminal_view.cpp
     src/gui/trace_bitmap_dialog.cpp
     src/gui/test_movie_window.cpp
     src/gui/command_line.cpp
@@ -514,7 +521,7 @@ if(APPLE)
         MACOSX_BUNDLE_INFO_PLIST ${CMAKE_CURRENT_SOURCE_DIR}/cmake/Info.plist.in)
 endif()
 
-target_link_libraries(Phoenix PRIVATE phoenix_core Qt6::Widgets Qt6::Svg zlibstatic tinyxml2 libas3)
+target_link_libraries(Phoenix PRIVATE phoenix_core Qt6::Widgets Qt6::Svg zlibstatic tinyxml2 libas3 vterm)
 target_link_libraries(Phoenix PRIVATE qjs)
 if(PHOENIX_PYTHON)
     target_compile_definitions(Phoenix PRIVATE PHOENIX_PYTHON)
@@ -551,6 +558,11 @@ if(APPLE)
     target_link_libraries(Phoenix PRIVATE "-framework CoreFoundation" "-framework CoreAudio" "-framework AudioToolbox")
 elseif(UNIX)
     target_link_libraries(Phoenix PRIVATE ${CMAKE_DL_LIBS} pthread m)
+endif()
+
+# The Claude Code panel's terminal: forkpty is in libutil on Linux.
+if(UNIX AND NOT APPLE)
+    target_link_libraries(Phoenix PRIVATE util)
 endif()
 
 if(TRUE)

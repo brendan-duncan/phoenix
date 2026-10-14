@@ -144,9 +144,9 @@ QString find()
     return QString();
 }
 
-void open(McpServer& server, const QString& folder, QWidget* parent)
+bool prepare(McpServer& server, QWidget* parent, QString& claude, QString& config)
 {
-    const QString claude = find();
+    claude = find();
     if (claude.isEmpty())
     {
         QMessageBox box(QMessageBox::Information, "Open Claude Code",
@@ -157,18 +157,30 @@ void open(McpServer& server, const QString& folder, QWidget* parent)
         box.exec();
         if (box.clickedButton() == install)
             QDesktopServices::openUrl(QUrl(kInstallPage));
-        return;
+        return false;
     }
     QString token;
     const int port = server.openSession(token);
-    const QString config = port > 0 ? writeConfig(port, token) : QString();
+    config = port > 0 ? writeConfig(port, token) : QString();
     if (config.isEmpty())
     {
         QMessageBox::warning(parent, "Open Claude Code", "Phoenix could not get ready for Claude Code to connect.");
-        return;
+        return false;
     }
-    const QString start = QFileInfo(folder).isDir() ? folder : QDir::homePath();
-    if (!startInTerminal(claude, config, start))
+    return true;
+}
+
+QString startFolder(const QString& folder)
+{
+    return QFileInfo(folder).isDir() ? folder : QDir::homePath();
+}
+
+void open(McpServer& server, const QString& folder, QWidget* parent)
+{
+    QString claude, config;
+    if (!prepare(server, parent, claude, config))
+        return;
+    if (!startInTerminal(claude, config, startFolder(folder)))
         QMessageBox::warning(parent, "Open Claude Code",
             QString("No terminal window could be opened. To connect Claude Code yourself, run:\n\n%1 --mcp-config %2")
                 .arg(QDir::toNativeSeparators(claude), QDir::toNativeSeparators(config)));

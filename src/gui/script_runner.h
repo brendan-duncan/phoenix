@@ -1,5 +1,6 @@
 #pragma once
 
+#include <QList>
 #include <QObject>
 #include <QString>
 #include <QStringList>
@@ -54,7 +55,7 @@ public:
 
     /// The Commands menu, filled each time it opens, with \a first at its
     /// top when given.
-    void fillCommandsMenu(QMenu* menu, QAction* first = nullptr);
+    void fillCommandsMenu(QMenu* menu, const QList<QAction*>& first = {});
 
     /// Runs the script (.jsfl or .py) at \a path. False when it failed
     /// (the Output panel says why).

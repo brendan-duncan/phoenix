@@ -962,13 +962,13 @@ int ScriptRunner::runBatch(const QString& script, const QStringList& documents, 
     return failed;
 }
 
-void ScriptRunner::fillCommandsMenu(QMenu* menu, QAction* first)
+void ScriptRunner::fillCommandsMenu(QMenu* menu, const QList<QAction*>& first)
 {
     connect(menu, &QMenu::aboutToShow, this, [this, menu, first]() {
         menu->clear();
-        if (first)
+        if (!first.isEmpty())
         {
-            menu->addAction(first);
+            menu->addActions(first);
             menu->addSeparator();
         }
         QAction* runAction = menu->addAction("&Run Command...");
