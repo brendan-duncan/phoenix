@@ -1,12 +1,17 @@
 #include "test_movie_window.h"
 
+#include "audio_engine.h"
 #include "phoenix_view.h"
 #include "player.h"
+#include "timeline_audio.h"
 
 #include "../data/document.h"
 #include "../data/fla_document.h"
+#include "../data/symbol.h"
+#include "../data/symbol_list.h"
 #include "../data/timeline.h"
 #include "../play/movie_runtime.h"
+#include "../third_party/tinyxml2/tinyxml2.h"
 
 #include <QDesktopServices>
 #include <QHBoxLayout>
@@ -124,6 +129,56 @@ TestMovieWindow::TestMovieWindow(const fla::FLADocument& document, const QString
                 QDesktopServices::openUrl(link);
         };
         _movie->changed = [this]() { _view->update(); };
+
+        // What scripts reach by linkage: movie clips (attachMovie, new
+        // Hat()), and sounds, played from the library.
+        std::vector<const fla::Symbol*> symbols;
+        if (data.symbolList)
+            symbols.assign(data.symbolList->symbols.begin(), data.symbolList->symbols.end());
+        std::vector<std::string> soundIdentifiers;
+        std::vector<std::string> soundClasses;
+        for (const std::string& item : data.extraMedia)
+        {
+            if (item.find("<DOMSoundItem") == std::string::npos)
+                continue;
+            tinyxml2::XMLDocument xml;
+            if (xml.Parse(item.c_str(), item.size()) != tinyxml2::XML_SUCCESS || !xml.FirstChildElement())
+                continue;
+            const tinyxml2::XMLElement* sound = xml.FirstChildElement();
+            const char* name = sound->Attribute("name");
+            if (!name)
+                continue;
+            _soundNames[name] = name;
+            if (const char* identifier = sound->Attribute("linkageIdentifier"))
+            {
+                soundIdentifiers.push_back(identifier);
+                _soundNames[identifier] = name;
+            }
+            if (const char* className = sound->Attribute("linkageClassName"))
+            {
+                soundClasses.push_back(className);
+                _soundNames[className] = name;
+            }
+        }
+        _movie->setLibrary(symbols, soundIdentifiers, soundClasses);
+        _audio = new TimelineAudio(_player, this);
+        _audio->setDocument(&document);
+        _movie->playSound = [this](const std::string& linkage, double offset, int loops, double volume) {
+            const auto name = _soundNames.find(linkage);
+            if (name == _soundNames.end())
+                return -1;
+            std::shared_ptr<const PcmBuffer> buffer = _audio->librarySound(name->second);
+            if (!buffer)
+                return -1;
+            const size_t start = static_cast<size_t>(std::max(0.0, offset) * 44100.0);
+            const int voice = AudioEngine::instance().play(buffer, start, SIZE_MAX, std::max(1, loops),
+                static_cast<float>(std::clamp(volume, 0.0, 4.0)));
+            if (voice >= 0)
+                _voices.push_back(voice);
+            return voice;
+        };
+        _movie->stopSound = [](int channel) { AudioEngine::instance().stop(channel); };
+        _movie->stopAllSounds = [this]() { stopSounds(); };
         _view->setMovie(_movie.get());
     }
 
@@ -178,8 +233,16 @@ void TestMovieWindow::setPaused(bool paused)
 
 TestMovieWindow::~TestMovieWindow()
 {
+    stopSounds();
     if (_view)
         _view->setMovie(nullptr);
+}
+
+void TestMovieWindow::stopSounds()
+{
+    for (const int voice : _voices)
+        AudioEngine::instance().stop(voice);
+    _voices.clear();
 }
 
 void TestMovieWindow::resizeEvent(QResizeEvent* event)

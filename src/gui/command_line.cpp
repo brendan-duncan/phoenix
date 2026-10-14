@@ -796,6 +796,15 @@ int play(const QStringList& args)
     movie.getURL = [](const std::string& url, const std::string& window) {
         std::printf("getURL %s %s\n", url.c_str(), window.c_str());
     };
+    movie.playSound = [](const std::string& linkage, double, int loops, double) {
+        std::printf("sound %s x%d\n", linkage.c_str(), loops);
+        return -1;
+    };
+    // Clips scripts make from the library, by linkage.
+    std::vector<const fla::Symbol*> symbols;
+    if (document->document->symbolList)
+        symbols.assign(document->document->symbolList->symbols.begin(), document->document->symbolList->symbols.end());
+    movie.setLibrary(symbols, {}, {});
     movie.start();
     for (int i = 0; i < frames; ++i)
         movie.step();

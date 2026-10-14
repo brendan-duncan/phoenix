@@ -171,13 +171,26 @@
 <ul>
   <li><code>addEventListener</code> and <code>removeEventListener</code> on named movie clips and buttons and on <code>stage</code>, for <code>MouseEvent.CLICK</code>, <code>MOUSE_DOWN</code>, <code>MOUSE_UP</code>, <code>ROLL_OVER</code>, <code>ROLL_OUT</code>, <code>MOUSE_OVER</code> and <code>MOUSE_OUT</code>, <code>Event.ENTER_FRAME</code>, and <code>KeyboardEvent.KEY_DOWN</code> and <code>KEY_UP</code> (with <code>keyCode</code>). Mouse events go on up to the clips a clip is in. A movie clip with a mouse listener answers clicks as a button does.</li>
   <li>A clip's <code>x</code>, <code>y</code>, <code>visible</code>, <code>alpha</code>, <code>scaleX</code>, <code>scaleY</code>, <code>rotation</code>, <code>currentFrame</code>, <code>totalFrames</code>, <code>currentLabel</code>, <code>name</code>, <code>parent</code> and <code>root</code>, <code>MovieClip(root)</code>, and <code>import</code> lines, which are taken as read.</li>
+  <li>Movie clip symbols exported for ActionScript with a class name: <code>new Hat()</code> makes one, <code>addChild</code> puts it on the stage and <code>removeChild</code> takes it off.</li>
+</ul>
+
+<p>And in both, what games most often do:</p>
+
+<ul>
+  <li><strong>Text fields.</strong> A dynamic text field with an instance name is reached by it, and <code>score_txt.text = "Score: " + score</code> changes what it shows, in its own font and color. A field that names a variable (ActionScript 1 and 2) shows the variable's value as it changes.</li>
+  <li><strong>Dragging.</strong> <code>startDrag()</code> and <code>stopDrag()</code>, with a lock to the center and bounds, as a function or on a clip; <code>_droptarget</code> (or <code>dropTarget</code>) says where it was let go.</li>
+  <li><strong>Hit tests.</strong> <code>hitTest(x, y, shapeFlag)</code> and <code>hitTest(otherClip)</code>, and <code>hitTestPoint</code> and <code>hitTestObject</code>; with the shape flag, the clip's art counts rather than its box. Buttons and clips are clicked by their art too, so a click between two buttons finds neither.</li>
+  <li><strong>The mouse.</strong> <code>_xmouse</code> and <code>_ymouse</code> (<code>mouseX</code> and <code>mouseY</code>) in a clip's own space, and <code>onClipEvent (mouseDown)</code>, <code>(mouseUp)</code> and <code>(mouseMove)</code>.</li>
+  <li><strong>Clips from the library.</strong> <code>attachMovie("linkage", "name", depth, {_x: 10})</code>, <code>duplicateMovieClip()</code> and <code>removeMovieClip()</code>, for symbols exported for ActionScript.</li>
+  <li><strong>Sound.</strong> Library sounds exported for ActionScript: <code>new Sound()</code> with <code>attachSound("linkage")</code>, <code>start(seconds, loops)</code>, <code>stop()</code> and <code>setVolume()</code>, or a sound's class with <code>play()</code>; <code>stopAllSounds()</code> and <code>SoundMixer.stopAll()</code>.</li>
+  <li><code>getTimer()</code> counts the milliseconds since the movie started.</li>
 </ul>
 
 <p>A script error stops that script only, and is shown in the Output panel with the frame or button and the line it was on; the movie plays on. Double-click the error, once the Test Movie window is closed, to see the script in the <a href="#actions">Actions panel</a> with the caret on that line. <code>getURL()</code> opens web links in your browser.</p>
 
 <div class="callout">
   <span class="label">Not yet</span>
-  <p>ActionScript 3 classes (a document class, <code>.as</code> files, <code>new MovieClip()</code> and <code>addChild</code>), sound started from scripts, text fields and dragging.</p>
+  <p>ActionScript 3 class files (a document class and <code>.as</code> files), typing into input text fields, drawing from scripts, and sounds placed on frames, which Test Movie does not play yet.</p>
 </div>
 
 <h2>Onion skinning</h2>

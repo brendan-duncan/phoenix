@@ -1243,6 +1243,7 @@ void PhoenixView::drawStageContents(QPainter& painter, const fla::Document* docu
     if (_movie)
     {
         _buttonAreas.clear();
+        _movieArt.clear();
         _movieClips.assign(1, &_movie->root());
     }
 
@@ -1895,6 +1896,16 @@ void PhoenixView::drawTimeline(QPainter& painter, const fla::Timeline* timeline,
             if (editing)
                 drawLayer(painter, layer, loopType, firstFrame, nullptr);
         }
+    }
+
+    // In a movie playing, the clips its scripts made, over what the
+    // timeline has.
+    if (_movie && !_maskPass && !_movieClips.empty() && _movieClips.back()->timeline == timeline)
+    {
+        painter.setTransform(painterTransform);
+        for (const fla::play::Clip* made : _movie->madeChildren(*_movieClips.back()))
+            if (made->made)
+                drawElement(painter, made->made.get(), nullptr, 0.0);
     }
 }
 
@@ -3044,6 +3055,9 @@ void PhoenixView::drawElement(QPainter& painter, const fla::Element* element, co
         const auto* layer = frame ? dynamic_cast<const fla::Layer*>(frame->parent) : nullptr;
         if (layer)
             movieClip = _movie->clipOf(*_movieClips.back(), *layer, *static_cast<const fla::SymbolInstance*>(element));
+        // A clip a script made is on no frame.
+        else if (!element->parent)
+            movieClip = _movie->clipOfMade(*static_cast<const fla::SymbolInstance*>(element));
         if (movieClip)
         {
             if (!movieClip->shown())
@@ -3056,6 +3070,10 @@ void PhoenixView::drawElement(QPainter& painter, const fla::Element* element, co
                        transform.m21, transform.m22,
                        transform.tx, transform.ty);
     qTransform = qTransform * threeDTransform(element, qTransform, tweenElement, tweenProgress);
+
+    // A movie clip's parent's space on the stage, for the movie's scripts
+    // (dragging, the pointer in its space).
+    const QTransform parentToDevice = painter.transform();
 
     painter.save();
 
@@ -3117,6 +3135,32 @@ void PhoenixView::drawElement(QPainter& painter, const fla::Element* element, co
             {
                 frameOffset = movieClip->button ? _movie->buttonFrame(*movieClip) : movieClip->frame;
                 _movieClips.push_back(movieClip);
+                // Where it was drawn, for the movie's scripts: its parent's
+                // space on the stage, its box, and what its art is for an
+                // exact hit test.
+                {
+                    bool invertible = false;
+                    const QTransform toStage = viewTransform.inverted(&invertible);
+                    if (invertible)
+                    {
+                        const QTransform parentToStage = parentToDevice * toStage;
+                        const QTransform clipToStage = painter.transform() * toStage;
+                        QRectF box = symbolFramesBounds(symbol, frameOffset, frameOffset);
+                        if (box.isValid())
+                            box = clipToStage.mapRect(box);
+                        fla::play::Clip::Placement& placement = movieClip->placement;
+                        placement.parentToStage = fla::Transform(parentToStage.m11(), parentToStage.m12(),
+                            parentToStage.m21(), parentToStage.m22(), parentToStage.dx(), parentToStage.dy());
+                        placement.left = box.left();
+                        placement.top = box.top();
+                        placement.right = box.right();
+                        placement.bottom = box.bottom();
+                        placement.known = box.isValid();
+                        if (!symbol->timelines.empty())
+                            _movieArt[movieClip] = {symbol->timelines.front(),
+                                movieClip->button ? 3 : frameOffset, clipToStage};
+                    }
+                }
                 // Buttons, and movie clips ActionScript 3 listens on for the
                 // mouse, are where the pointer finds them: a button by its
                 // hit frame, a clip by what it shows.
@@ -3128,7 +3172,13 @@ void PhoenixView::drawElement(QPainter& painter, const fla::Element* element, co
                     bool invertible = false;
                     const QTransform toDocument = painter.transform() * viewTransform.inverted(&invertible);
                     if (invertible && hit.isValid())
-                        _buttonAreas.push_back({toDocument.map(QPolygonF(hit)), movieClip});
+                    {
+                        // A button is found by its hit frame's art, or
+                        // its own frame's when the hit frame is empty.
+                        const int hitFrame = movieClip->button && symbolFramesBounds(symbol, 3, 3).isValid() ? 3 : frameOffset;
+                        _buttonAreas.push_back({toDocument.map(QPolygonF(hit)), movieClip,
+                            symbol->timelines.empty() ? nullptr : symbol->timelines.front(), hitFrame, toDocument});
+                    }
                 }
             }
 
@@ -3473,7 +3523,22 @@ void PhoenixView::drawElement(QPainter& painter, const fla::Element* element, co
             return;
         }
 
-        TextLayout::draw(painter, *static_cast<const fla::StaticText*>(element));
+        const auto* text = static_cast<const fla::StaticText*>(element);
+        // In a movie playing, a field shows what its scripts put in it, in
+        // the style of its first run.
+        std::optional<std::string> shown;
+        if (_movie && !_movieClips.empty() && text->textType != fla::StaticText::TextType::Static)
+            shown = _movie->textOf(*_movieClips.back(), *text);
+        if (shown)
+        {
+            fla::StaticText replaced(*text);
+            fla::TextRun run = text->runs.empty() ? fla::TextRun() : text->runs.front();
+            run.text = *shown;
+            replaced.runs = {run};
+            TextLayout::draw(painter, replaced);
+        }
+        else
+            TextLayout::draw(painter, *text);
     }
     else if (type == fla::Element::Type::Raw && !static_cast<const fla::RawElement*>(element)->videoItem.empty())
     {
@@ -4869,7 +4934,9 @@ void PhoenixView::hitTestTimeline(const fla::Timeline& timeline, fla::LoopType l
 {
     for (const fla::Layer* layer : timeline.layers)
     {
-        if (!layer || !layer->isVisible() || layer->isLocked())
+        // In a movie playing, what is published counts: every layer but a
+        // guide, hidden or locked as it may be in the editor.
+        if (!layer || (_movie ? layer->layerType == fla::Layer::Type::Guide : !layer->isVisible() || layer->isLocked()))
             continue;
 
         // Folders hold no art. Guide layers show on the timeline being
@@ -5145,22 +5212,48 @@ void PhoenixView::setMovie(fla::play::MovieRuntime* movie)
     _movie = movie;
     _movieClips.clear();
     _buttonAreas.clear();
+    _movieArt.clear();
+    if (_movie)
+    {
+        // hitTest with the shape flag, and hitTestPoint: the clip's art as
+        // last drawn.
+        _movie->hitShape = [this](const fla::play::Clip& clip, double x, double y) {
+            const auto art = _movieArt.find(&clip);
+            if (art == _movieArt.end() || !art->second.timeline)
+                return false;
+            return movieArtAt(*art->second.timeline, art->second.frame, art->second.toStage, QPointF(x, y));
+        };
+    }
     clearCaches();
     update();
 }
 
-fla::play::Clip* PhoenixView::movieButtonAt(const QPointF& widgetPos) const
+bool PhoenixView::movieArtAt(const fla::Timeline& timeline, int frame, const QTransform& toStage, const QPointF& at)
+{
+    HitResult result;
+    hitTestTimeline(timeline, fla::LoopType::SingleFrame, frame, toStage, at, 0.0, result);
+    return !result.isEmpty();
+}
+
+fla::play::Clip* PhoenixView::movieButtonAt(const QPointF& widgetPos)
 {
     const QPointF at = mapToDocument(widgetPos);
-    // The one drawn last is on top.
+    // The one drawn last is on top; within its box, it is found by its art.
     for (auto area = _buttonAreas.rbegin(); area != _buttonAreas.rend(); ++area)
-        if (area->area.containsPoint(at, Qt::OddEvenFill))
+    {
+        if (!area->area.containsPoint(at, Qt::OddEvenFill) || !_movie->alive(area->clip))
+            continue;
+        if (!area->timeline || movieArtAt(*area->timeline, area->frame, area->toDocument, at))
             return area->clip;
+    }
     return nullptr;
 }
 
 void PhoenixView::movieMouse(QMouseEvent* event)
 {
+    // Where the pointer is, for dragging and the scripts that read it.
+    const QPointF onStage = mapToDocument(event->position());
+    _movie->pointerAt(onStage.x(), onStage.y());
     fla::play::Clip* button = movieButtonAt(event->position());
     if (event->type() == QEvent::MouseMove)
         _movie->pointerOver(button);

@@ -4,6 +4,7 @@
 #include "../src/data/frame.h"
 #include "../src/data/layer.h"
 #include "../src/data/symbol.h"
+#include "../src/data/static_text.h"
 #include "../src/data/symbol_instance.h"
 #include "../src/data/timeline.h"
 #include "../src/play/movie_runtime.h"
@@ -378,4 +379,146 @@ TEST(movie_runtime_errors_name_their_script_and_line)
     runtime.pointerDown();
     runtime.pointerUp();
     CHECK(errors.size() == 2 && errors[1].source == placed && errors[1].line == 3);
+}
+
+TEST(movie_runtime_sets_text_fields_and_shows_variables)
+{
+    Movie movie;
+    movie.root->name = "Scene 1";
+    fla::Layer* art = movie.layer(*movie.root, "art");
+    fla::Frame* first = movie.frame(*art, 0, 1);
+    auto* score = new fla::StaticText(first);
+    score->textType = fla::StaticText::TextType::Dynamic;
+    score->instanceName = "score_txt";
+    score->runs.push_back(fla::TextRun());
+    score->runs.back().text = "0";
+    first->elements.push_back(score);
+    auto* lives = new fla::StaticText(first);
+    lives->textType = fla::StaticText::TextType::Dynamic;
+    lives->extraAttributes.emplace_back("variableName", "lives");
+    first->elements.push_back(lives);
+    fla::Layer* actions = movie.layer(*movie.root, "actions");
+    movie.frame(*actions, 0, 1,
+        "stop();\ntrace(score_txt.text);\nscore_txt.text = 'Score: ' + (2 + 3);\nvar lives = 3;\n");
+
+    std::vector<std::string> traced;
+    fla::play::MovieRuntime runtime(*movie.root, 12.0);
+    runtime.trace = [&traced](const std::string& line) { traced.push_back(line); };
+    runtime.start();
+    CHECK(traced.size() == 1 && traced[0] == "0");
+    CHECK(runtime.textOf(runtime.root(), *score).value_or("") == "Score: 5");
+    CHECK(runtime.textOf(runtime.root(), *lives).value_or("") == "3");
+}
+
+TEST(movie_runtime_makes_clips_from_the_library)
+{
+    Movie movie;
+    movie.root->name = "Scene 1";
+    fla::Symbol* hat = movie.symbol("Hat", fla::SymbolType::MovieClip, 2);
+    hat->extraAttributes.emplace_back("linkageIdentifier", "hat");
+    fla::Symbol* star = movie.symbol("Star", fla::SymbolType::MovieClip, 1);
+    star->extraAttributes.emplace_back("linkageClassName", "Star");
+    fla::Layer* actions = movie.layer(*movie.root, "actions");
+    movie.frame(*actions, 0, 1,
+        "stop();\n"
+        "var h = this.attachMovie('hat', 'hat1', 1, {_x: 50});\n"
+        "trace(h._name + ' ' + h._x);\n"
+        "var s = new Star();\n"
+        "addChild(s);\n"
+        "s.x = 10;\n");
+
+    std::vector<std::string> traced;
+    std::vector<std::string> errors;
+    fla::play::MovieRuntime runtime(*movie.root, 12.0);
+    runtime.setLibrary({hat, star}, {}, {});
+    runtime.trace = [&traced](const std::string& line) { traced.push_back(line); };
+    runtime.error = [&errors](const std::string& line) { errors.push_back(line); };
+    runtime.start();
+    for (const std::string& error : errors)
+        std::printf("    %s\n", error.c_str());
+    CHECK(errors.empty());
+    CHECK(traced.size() == 1 && traced[0] == "hat1 50");
+    std::vector<fla::play::Clip*> made = runtime.madeChildren(runtime.root());
+    CHECK(made.size() == 2);
+    if (made.size() != 2)
+        return;
+    CHECK(made[0]->name == "hat1" && made[0]->symbol == hat && made[1]->symbol == star && made[1]->x.value_or(0) == 10);
+    CHECK(runtime.clipOfMade(*made[0]->made) == made[0]);
+    // They stay, and play, as the frames go on.
+    runtime.step();
+    made = runtime.madeChildren(runtime.root());
+    CHECK(made.size() == 2 && made[0]->frame == 1);
+}
+
+TEST(movie_runtime_drags_and_finds_the_drop_target)
+{
+    Movie movie;
+    movie.root->name = "Scene 1";
+    fla::Symbol* piece = movie.symbol("Piece", fla::SymbolType::MovieClip, 1);
+    fla::Symbol* bin = movie.symbol("Bin", fla::SymbolType::MovieClip, 1);
+    fla::Layer* art = movie.layer(*movie.root, "art");
+    fla::Frame* first = movie.frame(*art, 0, 1);
+    movie.place(*first, *piece, "piece")->transform.tx = 100;
+    movie.place(*first, *bin, "bin");
+    fla::Layer* actions = movie.layer(*movie.root, "actions");
+    movie.frame(*actions, 0, 1,
+        "stop();\n"
+        "piece.startDrag();\n"
+        "var keys = new Object();\n"
+        "keys.onKeyDown = function() {\n"
+        "    stopDrag();\n"
+        "    trace(piece._droptarget + ' ' + piece.hitTest(bin) + ' ' + bin.hitTest(205, 210, true));\n"
+        "};\n"
+        "Key.addListener(keys);\n");
+
+    std::vector<std::string> traced;
+    fla::play::MovieRuntime runtime(*movie.root, 12.0);
+    runtime.trace = [&traced](const std::string& line) { traced.push_back(line); };
+    // Where the drawing would have put them: the bin from (200, 200) to
+    // (300, 300) on the stage.
+    runtime.pointerAt(0, 0);
+    runtime.start();
+    fla::play::Clip* pieceClip = runtime.root().named("piece");
+    fla::play::Clip* binClip = runtime.root().named("bin");
+    CHECK(pieceClip && binClip);
+    if (!pieceClip || !binClip)
+        return;
+    binClip->placement.known = true;
+    binClip->placement.left = binClip->placement.top = 200;
+    binClip->placement.right = binClip->placement.bottom = 300;
+    runtime.pointerAt(150, 210);
+    CHECK(runtime.dragging() && pieceClip->x.value_or(0) == 250 && pieceClip->y.value_or(0) == 210);
+    pieceClip->placement.known = true;
+    pieceClip->placement.left = 250;
+    pieceClip->placement.top = 210;
+    pieceClip->placement.right = 260;
+    pieceClip->placement.bottom = 220;
+    runtime.pointerAt(250, 250);
+    runtime.keyDown(32, ' ');
+    CHECK(!runtime.dragging());
+    CHECK(traced.size() == 1 && traced[0] == "/bin true true");
+}
+
+TEST(movie_runtime_plays_library_sounds)
+{
+    Movie movie;
+    movie.root->name = "Scene 1";
+    fla::Layer* actions = movie.layer(*movie.root, "actions");
+    movie.frame(*actions, 0, 1,
+        "stop();\nvar s = new Sound();\ns.attachSound('ding');\ns.setVolume(50);\ns.start(1.5, 2);\n"
+        "var chime = new Chime();\nvar channel = chime.play();\nchannel.stop();\n");
+
+    std::vector<std::string> played;
+    std::vector<int> stopped;
+    fla::play::MovieRuntime runtime(*movie.root, 12.0);
+    runtime.setLibrary({}, {"ding"}, {"Chime"});
+    runtime.playSound = [&played](const std::string& linkage, double offset, int loops, double volume) {
+        played.push_back(linkage + " " + std::to_string(static_cast<int>(offset * 10)) + " " + std::to_string(loops) + " " +
+            std::to_string(static_cast<int>(volume * 100)));
+        return static_cast<int>(played.size());
+    };
+    runtime.stopSound = [&stopped](int channel) { stopped.push_back(channel); };
+    runtime.start();
+    CHECK(played.size() == 2 && played[0] == "ding 15 2 50" && played[1] == "Chime 0 1 100");
+    CHECK(stopped.size() == 1 && stopped[0] == 2);
 }

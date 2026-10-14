@@ -3,6 +3,7 @@
 #include "../data/transform.h"
 
 #include <algorithm>
+#include <chrono>
 #include <functional>
 #include <map>
 #include <memory>
@@ -22,6 +23,7 @@ namespace fla {
 class DOMElement;
 class Frame;
 class Layer;
+class StaticText;
 class Symbol;
 class SymbolInstance;
 class Timeline;
@@ -76,6 +78,26 @@ struct Clip
         const DOMElement* source = nullptr;
     };
     std::map<std::string, std::vector<Listener>> listeners;
+
+    /// Where it was last drawn, as whatever draws the movie tells it: from
+    /// its parent's space to the stage's, and the box its art covers on the
+    /// stage. Unknown until it has been drawn.
+    struct Placement
+    {
+        Transform parentToStage;
+        double left = 0.0, top = 0.0, right = 0.0, bottom = 0.0;
+        bool known = false;
+    };
+    Placement placement;
+
+    /// What scripts put in its text fields, by the field's instance name,
+    /// shown in place of the text as drawn.
+    std::map<std::string, std::string> texts;
+
+    /// A clip a script made (attachMovie, duplicateMovieClip, or new and
+    /// addChild in ActionScript 3), not on any frame: the instance it shows
+    /// as, its own. Drawn over what its parent's timeline has.
+    std::shared_ptr<SymbolInstance> made;
 
     /// Whether ActionScript 3 listens on it for \a type.
     bool listensFor(const std::string& type) const;
@@ -138,6 +160,38 @@ public:
     /// hear it, and ActionScript 3's keyDown and keyUp listeners.
     void keyDown(int code, int character);
     void keyUp(int code, int character);
+    /// The pointer is at (\a x, \a y) on the stage: a clip being dragged
+    /// follows it, and _xmouse and mouseX read it.
+    void pointerAt(double x, double y);
+
+    /// Library symbols and sounds scripts reach by their linkage: movie
+    /// clips for attachMovie and new, sounds for Sound.attachSound and new.
+    /// Set before start().
+    void setLibrary(const std::vector<const Symbol*>& symbols, const std::vector<std::string>& soundIdentifiers,
+        const std::vector<std::string>& soundClasses);
+
+    /// Whether \a clip's art is at (\a x, \a y) on the stage, as drawn; set
+    /// by whatever draws the movie. Without it, its box counts.
+    std::function<bool(const Clip& clip, double x, double y)> hitShape;
+    /// Plays the library sound \a linkage names from \a offset seconds in,
+    /// \a loops times, at \a volume (0 to 1); the channel, or -1.
+    std::function<int(const std::string& linkage, double offset, int loops, double volume)> playSound;
+    std::function<void(int channel)> stopSound;
+    std::function<void()> stopAllSounds;
+
+    /// The text \a field (on \a clip's timeline) shows now: what a script
+    /// put in it, or the value of the variable it shows; nothing when it
+    /// shows as drawn.
+    std::optional<std::string> textOf(Clip& clip, const StaticText& field);
+    /// The clips scripts made on \a clip, in the order they draw.
+    std::vector<Clip*> madeChildren(const Clip& clip) const;
+    /// The clip a made instance (Clip::made) is, or null.
+    Clip* clipOfMade(const SymbolInstance& instance) const;
+    /// Whether \a clip is on the stage now: a pointer kept since the movie
+    /// was last drawn may be to one a script or a frame took off.
+    bool alive(const Clip* clip) const;
+    /// Whether a clip is being dragged.
+    bool dragging() const { return _drag.clip != nullptr; }
     Clip* hovered() const { return _hovered; }
     /// The frame a button shows: down, over or up.
     int buttonFrame(const Clip& button) const;
@@ -188,6 +242,36 @@ private:
     void eachClip(const std::function<void(Clip&)>& visit);
     void runFunction(const as3::ValuePtr& function, const std::vector<as3::ValuePtr>& args, Clip& scope,
         const std::string& where, const DOMElement* source = nullptr);
+
+    /// From \a clip's own space to the stage's, as last drawn.
+    Transform toStage(const Clip& clip) const;
+    /// (\a x, \a y) on the stage in \a clip's own space.
+    void stageToClip(const Clip& clip, double& x, double& y) const;
+    /// Whether \a clip is at (\a x, \a y) on the stage: its art with
+    /// \a shape, else its box.
+    bool hits(const Clip& clip, double x, double y, bool shape) const;
+    bool overlaps(const Clip& a, const Clip& b) const;
+    /// The top clip under the pointer other than \a except and what is in
+    /// it (_droptarget), or null.
+    Clip* clipUnderPointer(const Clip* except);
+    /// A path to \a clip from the root, as Flash 4 wrote them: "/hat/bow".
+    std::string slashPath(const Clip& clip) const;
+    void startDrag(Clip& clip, bool lockCenter, const std::vector<double>& bounds);
+    void stopDrag();
+
+    /// The symbol a linkage names, or null.
+    const Symbol* linked(const std::string& linkage) const;
+    /// A new clip of \a symbol named \a name on \a parent (null: not on the
+    /// stage yet, as ActionScript 3's new makes it), its first frame
+    /// entered once the script making it is done.
+    Clip* makeClip(Clip* parent, const Symbol& symbol, const std::string& name);
+    /// Takes a made clip off its parent: forgotten, or kept off the stage
+    /// for addChild when \a keep.
+    void takeOff(Clip& clip, bool keep);
+    /// The clip a script value is (a clip's object), or null.
+    Clip* clipOfValue(const as3::ValuePtr& value);
+    as3::ValuePtr textFieldObject(Clip& clip, const std::string& name);
+    as3::ValuePtr soundObject(const std::string& linkage, bool actionScript3);
     /// Tells of an error: \a message, in the script \a source, at \a line.
     void tell(const std::string& message, const DOMElement* source, int line);
 
@@ -249,6 +333,27 @@ private:
     int _lastKey = 0;
     int _lastCharacter = 0;
     std::vector<as3::ValuePtr> _keyListeners;
+    /// The pointer on the stage, and the clip being dragged.
+    double _mouseX = 0.0;
+    double _mouseY = 0.0;
+    struct Drag
+    {
+        Clip* clip = nullptr;
+        bool lock = false;
+        double dx = 0.0, dy = 0.0;
+        bool bounded = false;
+        double left = 0.0, top = 0.0, right = 0.0, bottom = 0.0;
+    };
+    Drag _drag;
+    std::chrono::steady_clock::time_point _started;
+    std::vector<const Symbol*> _library;
+    std::vector<std::string> _soundIdentifiers;
+    std::vector<std::string> _soundClasses;
+    /// Clips made by scripts whose first frame is still to be entered, and
+    /// those ActionScript 3 made that are not on the stage.
+    std::vector<Clip*> _madeToEnter;
+    std::vector<std::unique_ptr<Clip>> _offStage;
+    int _madeCount = 0;
 };
 
 /// The script kept on an instance (a button's on handlers, a movie clip's

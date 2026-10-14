@@ -3,10 +3,14 @@
 #include <QDialog>
 
 #include <functional>
+#include <map>
 #include <memory>
+#include <string>
+#include <vector>
 
 class PhoenixView;
 class Player;
+class TimelineAudio;
 class QLabel;
 class QPushButton;
 class QTimer;
@@ -44,6 +48,7 @@ protected:
 private:
     void restart();
     void setPaused(bool paused);
+    void stopSounds();
     void tick();
     void showFrame();
 
@@ -54,6 +59,11 @@ private:
     QPushButton* _pause = nullptr;
     QPushButton* _step = nullptr;
     bool _paused = false;
+    /// The movie's sounds: decoded from the library, by linkage, and the
+    /// voices playing.
+    TimelineAudio* _audio = nullptr;
+    std::map<std::string, std::string> _soundNames;
+    std::vector<int> _voices;
     std::unique_ptr<fla::play::MovieRuntime> _movie;
     int _errors = 0;
 };

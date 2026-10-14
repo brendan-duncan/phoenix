@@ -3,6 +3,7 @@
 #include "../data/action_script.h"
 #include "../data/frame.h"
 #include "../data/layer.h"
+#include "../data/static_text.h"
 #include "../data/symbol.h"
 #include "../data/symbol_instance.h"
 #include "../data/timeline.h"
@@ -81,6 +82,69 @@ std::string keyOf(const Timeline& timeline, const Layer& layer, const Frame& fra
 double scaleOf(double a, double b)
 {
     return std::sqrt(a * a + b * b);
+}
+
+/// \a transform applied to (\a x, \a y).
+void apply(const Transform& transform, double& x, double& y)
+{
+    const double px = x;
+    x = transform.m11 * px + transform.m21 * y + transform.tx;
+    y = transform.m12 * px + transform.m22 * y + transform.ty;
+}
+
+/// The text field named \a name on \a timeline's frame \a frame: a dynamic
+/// or input one; null when there is none.
+const StaticText* fieldNamed(const Timeline* timeline, int frame, const std::string& name)
+{
+    if (!timeline || name.empty())
+        return nullptr;
+    for (const Layer* layer : timeline->layers)
+    {
+        const Frame* key = layer ? keyframeAt(*layer, frame) : nullptr;
+        for (const Element* element : key ? key->elements : std::vector<Element*>())
+        {
+            const auto* text = dynamic_cast<const StaticText*>(element);
+            if (text && text->textType != StaticText::TextType::Static && text->instanceName == name)
+                return text;
+        }
+    }
+    return nullptr;
+}
+
+/// A text field's text as drawn.
+std::string drawnText(const StaticText& field)
+{
+    std::string text;
+    for (const TextRun& run : field.runs)
+        text += run.text;
+    return text;
+}
+
+/// \a html with its tags taken out, as a field that does not render HTML
+/// shows it.
+std::string withoutTags(const std::string& html)
+{
+    std::string text;
+    bool inTag = false;
+    for (const char c : html)
+    {
+        if (c == '<')
+            inTag = true;
+        else if (c == '>')
+            inTag = false;
+        else if (!inTag)
+            text += c;
+    }
+    return text;
+}
+
+/// The value of attribute \a key among \a attributes, or empty.
+std::string attributeOf(const std::vector<std::pair<std::string, std::string>>& attributes, const std::string& key)
+{
+    for (const auto& [name, value] : attributes)
+        if (name == key)
+            return value;
+    return std::string();
 }
 
 /// The events a clip hears from the mouse in ActionScript 3.
@@ -229,6 +293,13 @@ void MovieRuntime::start()
     _keysDown.clear();
     _lastKey = _lastCharacter = 0;
     _keyListeners.clear();
+    _drag = Drag();
+    _madeToEnter.clear();
+    _offStage.clear();
+    _madeCount = 0;
+    _started = std::chrono::steady_clock::now();
+    if (stopAllSounds)
+        stopAllSounds();
     _vm = std::make_unique<as3::VM>();
     _root = std::make_unique<Clip>();
     _root->timeline = _scenes.empty() ? nullptr : _scenes.front();
@@ -351,7 +422,11 @@ void MovieRuntime::setupGlobals()
             trace("fscommand(" + arg(args, 0)->toString() + ", " + arg(args, 1)->toString() + ")");
         return Value::makeUndefined();
     });
-    vm.registerBuiltin("getTimer", [](const Args&) { return Value::makeNumber(0); });
+    // Milliseconds since the movie started.
+    vm.registerBuiltin("getTimer", [this](const Args&) {
+        return Value::makeNumber(static_cast<double>(
+            std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - _started).count()));
+    });
     vm.registerBuiltin("random", [](const Args& args) {
         const int range = args.empty() ? 0 : static_cast<int>(args[0]->toNumber());
         return Value::makeNumber(range > 0 ? std::rand() % range : 0);
@@ -419,8 +494,483 @@ void MovieRuntime::setupGlobals()
     }));
     vm.setGlobal("Key", key);
     // Casts, which change nothing here: MovieClip(root).score.
-    for (const char* cast : {"MovieClip", "SimpleButton", "Sprite", "DisplayObject", "DisplayObjectContainer"})
+    for (const char* cast : {"MovieClip", "SimpleButton", "Sprite", "DisplayObject", "DisplayObjectContainer", "TextField"})
         vm.registerBuiltin(cast, [arg](const Args& args) { return arg(args, 0); });
+
+    // Dragging, AS2's way: startDrag(target, lockCenter, left, top, right,
+    // bottom) and stopDrag().
+    vm.registerBuiltin("startDrag", [this, current, arg](const Args& args) {
+        if (Clip* clip = resolve(current(), arg(args, 0)))
+        {
+            std::vector<double> bounds;
+            if (args.size() >= 6)
+                for (size_t i = 2; i < 6; ++i)
+                    bounds.push_back(args[i]->toNumber());
+            startDrag(*clip, arg(args, 1)->toBoolean(), bounds);
+        }
+        return Value::makeUndefined();
+    });
+    vm.registerBuiltin("stopDrag", [this](const Args&) {
+        stopDrag();
+        return Value::makeUndefined();
+    });
+    vm.registerBuiltin("duplicateMovieClip", [this, current, arg](const Args& args) {
+        Clip* clip = resolve(current(), arg(args, 0));
+        if (clip && clip->symbol && clip->parent)
+        {
+            if (Value* object = objectFor(*clip).get())
+                return object->getProperty("duplicateMovieClip")->nativeFunc({arg(args, 1), arg(args, 2)});
+        }
+        return Value::makeUndefined();
+    });
+    vm.registerBuiltin("removeMovieClip", [this, current, arg](const Args& args) {
+        Clip* clip = resolve(current(), arg(args, 0));
+        if (clip && clip->made)
+            takeOff(*clip, false);
+        return Value::makeUndefined();
+    });
+    vm.registerBuiltin("updateAfterEvent", [](const Args&) { return Value::makeUndefined(); });
+    ValuePtr mouse = Value::makeObject();
+    mouse->setProperty("hide", Value::makeNativeFunction([](const Args&) { return Value::makeUndefined(); }));
+    mouse->setProperty("show", Value::makeNativeFunction([](const Args&) { return Value::makeUndefined(); }));
+    vm.setGlobal("Mouse", mouse);
+    // new Rectangle(x, y, width, height), for ActionScript 3's startDrag.
+    vm.registerBuiltin("Rectangle", [arg](const Args& args) {
+        ValuePtr rectangle = Value::makeObject();
+        const char* names[] = {"x", "y", "width", "height"};
+        for (size_t i = 0; i < 4; ++i)
+            rectangle->setProperty(names[i], Value::makeNumber(args.size() > i ? args[i]->toNumber() : 0.0));
+        return rectangle;
+    });
+
+    // Sounds: AS2's Sound with attachSound and start, ActionScript 3's
+    // classes linked to library sounds with play, and stopping them all.
+    vm.registerBuiltin("Sound", [this](const Args&) { return soundObject(std::string(), false); });
+    vm.registerBuiltin("stopAllSounds", [this](const Args&) {
+        if (stopAllSounds)
+            stopAllSounds();
+        return Value::makeUndefined();
+    });
+    ValuePtr mixer = Value::makeObject();
+    mixer->setProperty("stopAll", Value::makeNativeFunction([this](const Args&) {
+        if (stopAllSounds)
+            stopAllSounds();
+        return Value::makeUndefined();
+    }));
+    vm.setGlobal("SoundMixer", mixer);
+    for (const std::string& linkage : _soundClasses)
+        vm.registerBuiltin(linkage, [this, linkage](const Args&) { return soundObject(linkage, true); });
+
+    // ActionScript 3's classes linked to library movie clips: new Hat()
+    // makes one, off the stage until addChild puts it on.
+    for (const Symbol* symbol : _library)
+    {
+        const std::string className = attributeOf(symbol->extraAttributes, "linkageClassName");
+        if (className.empty() || symbol->symbolType == SymbolType::Graphic)
+            continue;
+        vm.registerBuiltin(className, [this, symbol](const Args&) {
+            Clip* made = makeClip(nullptr, *symbol, std::string());
+            return made ? objectFor(*made) : Value::makeNull();
+        });
+    }
+}
+
+void MovieRuntime::setLibrary(const std::vector<const Symbol*>& symbols, const std::vector<std::string>& soundIdentifiers,
+    const std::vector<std::string>& soundClasses)
+{
+    _library = symbols;
+    _soundIdentifiers = soundIdentifiers;
+    _soundClasses = soundClasses;
+}
+
+as3::ValuePtr MovieRuntime::soundObject(const std::string& linkage, bool actionScript3)
+{
+    using as3::Value;
+    using Args = std::vector<as3::ValuePtr>;
+    as3::ValuePtr sound = Value::makeObject();
+    // The object's own state, read back by its methods.
+    Value* self = sound.get();
+    sound->setProperty("__linkage", Value::makeString(linkage));
+    sound->setProperty("__volume", Value::makeNumber(100));
+    sound->setProperty("__channel", Value::makeNumber(-1));
+    const auto start = [this, self](double offset, int loops) {
+        const std::string linked = self->getProperty("__linkage")->toString();
+        if (linked.empty() || !playSound)
+            return -1;
+        const int channel = playSound(linked, offset, std::max(1, loops), self->getProperty("__volume")->toNumber() / 100.0);
+        self->setProperty("__channel", Value::makeNumber(channel));
+        return channel;
+    };
+    sound->setProperty("attachSound", Value::makeNativeFunction([self](const Args& args) {
+        self->setProperty("__linkage", Value::makeString(args.empty() ? std::string() : args[0]->toString()));
+        return Value::makeUndefined();
+    }));
+    // AS2: start(seconds in, loops).
+    sound->setProperty("start", Value::makeNativeFunction([start](const Args& args) {
+        start(args.empty() ? 0.0 : args[0]->toNumber(), args.size() > 1 ? static_cast<int>(args[1]->toNumber()) : 1);
+        return Value::makeUndefined();
+    }));
+    sound->setProperty("stop", Value::makeNativeFunction([this, self](const Args&) {
+        const int channel = static_cast<int>(self->getProperty("__channel")->toNumber());
+        if (channel >= 0 && stopSound)
+            stopSound(channel);
+        else if (channel < 0 && stopAllSounds && self->getProperty("__linkage")->toString().empty())
+            stopAllSounds();
+        return Value::makeUndefined();
+    }));
+    sound->setProperty("setVolume", Value::makeNativeFunction([self](const Args& args) {
+        self->setProperty("__volume", Value::makeNumber(args.empty() ? 100 : args[0]->toNumber()));
+        return Value::makeUndefined();
+    }));
+    sound->setProperty("getVolume", Value::makeNativeFunction([self](const Args&) {
+        return self->getProperty("__volume");
+    }));
+    // ActionScript 3: play(milliseconds in, loops), a SoundChannel back.
+    sound->setProperty("play", Value::makeNativeFunction([this, start](const Args& args) {
+        const int channel =
+            start(args.empty() ? 0.0 : args[0]->toNumber() / 1000.0, args.size() > 1 ? static_cast<int>(args[1]->toNumber()) : 1);
+        as3::ValuePtr soundChannel = Value::makeObject();
+        soundChannel->setProperty("stop", Value::makeNativeFunction([this, channel](const Args&) {
+            if (channel >= 0 && stopSound)
+                stopSound(channel);
+            return Value::makeUndefined();
+        }));
+        return soundChannel;
+    }));
+    (void)actionScript3;
+    return sound;
+}
+
+Transform MovieRuntime::toStage(const Clip& clip) const
+{
+    Transform parent = clip.placement.known ? clip.placement.parentToStage
+                                             : (clip.parent ? toStage(*clip.parent) : Transform());
+    const Transform placed = clip.placed ? clip.placed->transform : Transform();
+    return parent.concatenate(clip.transform(placed));
+}
+
+void MovieRuntime::stageToClip(const Clip& clip, double& x, double& y) const
+{
+    const Transform t = toStage(clip);
+    const double det = t.m11 * t.m22 - t.m21 * t.m12;
+    if (std::abs(det) < 1e-12)
+        return;
+    const double dx = x - t.tx;
+    const double dy = y - t.ty;
+    x = (t.m22 * dx - t.m21 * dy) / det;
+    y = (-t.m12 * dx + t.m11 * dy) / det;
+}
+
+bool MovieRuntime::hits(const Clip& clip, double x, double y, bool shape) const
+{
+    if (!clip.placement.known)
+        return false;
+    if (shape && hitShape)
+        return hitShape(clip, x, y);
+    const Clip::Placement& box = clip.placement;
+    return x >= box.left && x <= box.right && y >= box.top && y <= box.bottom;
+}
+
+bool MovieRuntime::overlaps(const Clip& a, const Clip& b) const
+{
+    if (!a.placement.known || !b.placement.known)
+        return false;
+    return a.placement.left <= b.placement.right && b.placement.left <= a.placement.right &&
+        a.placement.top <= b.placement.bottom && b.placement.top <= a.placement.bottom;
+}
+
+Clip* MovieRuntime::clipUnderPointer(const Clip* except)
+{
+    Clip* best = nullptr;
+    int bestDepth = -1;
+    eachClip([&](Clip& clip) {
+        if (&clip == _root.get() || !clip.shown())
+            return;
+        int depth = 0;
+        for (const Clip* at = &clip; at; at = at->parent)
+        {
+            if (at == except)
+                return;
+            ++depth;
+        }
+        if (depth >= bestDepth && hits(clip, _mouseX, _mouseY, true))
+        {
+            best = &clip;
+            bestDepth = depth;
+        }
+    });
+    return best;
+}
+
+std::string MovieRuntime::slashPath(const Clip& clip) const
+{
+    std::string path;
+    for (const Clip* at = &clip; at && at->parent; at = at->parent)
+        path = "/" + (at->name.empty() ? at->key : at->name) + path;
+    return path.empty() ? "/" : path;
+}
+
+void MovieRuntime::startDrag(Clip& clip, bool lockCenter, const std::vector<double>& bounds)
+{
+    _drag = Drag();
+    _drag.clip = &clip;
+    _drag.lock = lockCenter;
+    double px = _mouseX, py = _mouseY;
+    if (clip.parent)
+        stageToClip(*clip.parent, px, py);
+    const Transform shown = clip.transform(clip.placed ? clip.placed->transform : Transform());
+    if (!lockCenter)
+    {
+        _drag.dx = shown.tx - px;
+        _drag.dy = shown.ty - py;
+    }
+    if (bounds.size() == 4)
+    {
+        _drag.bounded = true;
+        _drag.left = bounds[0];
+        _drag.top = bounds[1];
+        _drag.right = bounds[2];
+        _drag.bottom = bounds[3];
+    }
+    pointerAt(_mouseX, _mouseY);
+}
+
+void MovieRuntime::stopDrag()
+{
+    Clip* dragged = _drag.clip;
+    _drag = Drag();
+    if (!dragged)
+        return;
+    // Where it was let go: the clip under it, for _droptarget.
+    Clip* under = clipUnderPointer(dragged);
+    objectFor(*dragged)->setProperty("__dropTarget", under ? objectFor(*under) : as3::Value::makeNull());
+}
+
+void MovieRuntime::pointerAt(double x, double y)
+{
+    _mouseX = x;
+    _mouseY = y;
+    if (_drag.clip)
+    {
+        Clip& clip = *_drag.clip;
+        double px = x, py = y;
+        if (clip.parent)
+            stageToClip(*clip.parent, px, py);
+        double nx = px + _drag.dx;
+        double ny = py + _drag.dy;
+        if (_drag.bounded)
+        {
+            nx = std::clamp(nx, std::min(_drag.left, _drag.right), std::max(_drag.left, _drag.right));
+            ny = std::clamp(ny, std::min(_drag.top, _drag.bottom), std::max(_drag.top, _drag.bottom));
+        }
+        clip.x = nx;
+        clip.y = ny;
+    }
+    // mouseMove: AS2's clip event, ActionScript 3's listeners.
+    eachClip([this](Clip& clip) {
+        if (!clip.clipEvents.empty())
+            runClipEvent(clip, "mouseMove");
+        if (clip.listensFor("mouseMove"))
+            dispatch(clip, "mouseMove", false);
+    });
+    settle();
+}
+
+const Symbol* MovieRuntime::linked(const std::string& linkage) const
+{
+    if (linkage.empty())
+        return nullptr;
+    for (const Symbol* symbol : _library)
+    {
+        if (attributeOf(symbol->extraAttributes, "linkageIdentifier") == linkage ||
+            attributeOf(symbol->extraAttributes, "linkageClassName") == linkage)
+            return symbol;
+    }
+    return nullptr;
+}
+
+Clip* MovieRuntime::makeClip(Clip* parent, const Symbol& symbol, const std::string& name)
+{
+    auto instance = std::make_shared<SymbolInstance>(nullptr);
+    instance->symbol = const_cast<Symbol*>(&symbol);
+    instance->libraryItemName = symbol.name;
+    instance->symbolType = symbol.symbolType;
+    instance->name = name;
+    auto made = std::make_unique<Clip>();
+    made->symbol = &symbol;
+    made->timeline = symbol.timelines.empty() ? nullptr : symbol.timelines.front();
+    made->parent = parent;
+    made->placed = instance.get();
+    made->made = instance;
+    made->name = name;
+    made->key = "@" + std::to_string(++_madeCount) + ":" + name;
+    made->button = symbol.symbolType == SymbolType::Button;
+    made->playing = !made->button;
+    made->length = lengthOf(made->timeline);
+    Clip* clip = made.get();
+    if (parent)
+        parent->children.push_back(std::move(made));
+    else
+        _offStage.push_back(std::move(made));
+    _madeToEnter.push_back(clip);
+    if (changed)
+        changed();
+    return clip;
+}
+
+void MovieRuntime::takeOff(Clip& clip, bool keep)
+{
+    std::vector<std::unique_ptr<Clip>>& from = clip.parent ? clip.parent->children : _offStage;
+    auto found = std::find_if(from.begin(), from.end(), [&clip](const std::unique_ptr<Clip>& c) { return c.get() == &clip; });
+    if (found == from.end())
+        return;
+    std::unique_ptr<Clip> owned = std::move(*found);
+    from.erase(found);
+    if (!keep)
+        forget(clip);
+    clip.parent = nullptr;
+    clip.placement.known = false;
+    // Kept, even when gone for good, so a script still running on it or
+    // holding it finds it.
+    _offStage.push_back(std::move(owned));
+    if (changed)
+        changed();
+}
+
+Clip* MovieRuntime::clipOfValue(const as3::ValuePtr& value)
+{
+    if (!value || !value->host)
+        return nullptr;
+    Clip* found = nullptr;
+    eachClip([&](Clip& clip) {
+        if (!found && clip.object == value)
+            found = &clip;
+    });
+    for (const auto& clip : _offStage)
+        if (!found && clip && clip->object == value)
+            found = clip.get();
+    return found;
+}
+
+bool MovieRuntime::alive(const Clip* clip) const
+{
+    if (!clip || !_root)
+        return false;
+    std::function<bool(const Clip&)> walk = [&](const Clip& at) {
+        if (&at == clip)
+            return true;
+        for (const auto& child : at.children)
+            if (child && walk(*child))
+                return true;
+        return false;
+    };
+    return walk(*_root);
+}
+
+std::vector<Clip*> MovieRuntime::madeChildren(const Clip& clip) const
+{
+    std::vector<Clip*> made;
+    for (const auto& child : clip.children)
+        if (child && child->made)
+            made.push_back(child.get());
+    return made;
+}
+
+Clip* MovieRuntime::clipOfMade(const SymbolInstance& instance) const
+{
+    Clip* found = nullptr;
+    std::function<void(Clip&)> walk = [&](Clip& clip) {
+        if (clip.made.get() == &instance)
+            found = &clip;
+        for (const auto& child : clip.children)
+            if (!found && child)
+                walk(*child);
+    };
+    if (_root)
+        walk(*_root);
+    return found;
+}
+
+std::optional<std::string> MovieRuntime::textOf(Clip& clip, const StaticText& field)
+{
+    if (field.textType == StaticText::TextType::Static)
+        return std::nullopt;
+    if (!field.instanceName.empty())
+    {
+        const auto set = clip.texts.find(field.instanceName);
+        if (set != clip.texts.end())
+            return set->second;
+    }
+    // AS2's variable fields show a variable's value: "score", or a path to
+    // one, "_root.score".
+    std::string variable = attributeOf(field.extraAttributes, "variableName");
+    if (variable.empty())
+        return std::nullopt;
+    Clip* owner = &clip;
+    const size_t dot = variable.find_last_of("./");
+    if (dot != std::string::npos)
+    {
+        owner = resolve(clip, variable.substr(0, dot));
+        variable = variable.substr(dot + 1);
+    }
+    if (!owner)
+        return std::nullopt;
+    const as3::ValuePtr value = objectFor(*owner)->getProperty(variable);
+    if (!value || value->isUndefined() || value->isNull())
+        return std::nullopt;
+    return value->toString();
+}
+
+/// A text field as scripts see it: its text read and set.
+class TextFieldObject : public as3::HostObject
+{
+public:
+    TextFieldObject(MovieRuntime& runtime, Clip& clip, const std::string& name)
+        : _runtime(runtime)
+        , _clip(clip)
+        , _name(name)
+    {}
+
+    as3::ValuePtr get(const std::string& property) override
+    {
+        if (property == "text" || property == "htmlText")
+        {
+            const auto set = _clip.texts.find(_name);
+            if (set != _clip.texts.end())
+                return as3::Value::makeString(set->second);
+            const StaticText* field = fieldNamed(_clip.timeline, _clip.frame, _name);
+            return as3::Value::makeString(field ? drawnText(*field) : std::string());
+        }
+        if (property == "length")
+        {
+            const as3::ValuePtr text = get("text");
+            return as3::Value::makeNumber(static_cast<double>(text->toString().size()));
+        }
+        if (property == "_name" || property == "name")
+            return as3::Value::makeString(_name);
+        return nullptr;
+    }
+
+    bool set(const std::string& property, as3::ValuePtr value) override
+    {
+        if (property != "text" && property != "htmlText")
+            return false;
+        const std::string text = value ? value->toString() : std::string();
+        _clip.texts[_name] = property == "htmlText" ? withoutTags(text) : text;
+        if (_runtime.changed)
+            _runtime.changed();
+        return true;
+    }
+
+private:
+    MovieRuntime& _runtime;
+    Clip& _clip;
+    std::string _name;
+};
+
+as3::ValuePtr MovieRuntime::textFieldObject(Clip& clip, const std::string& name)
+{
+    return as3::Value::makeHostObject(std::make_shared<TextFieldObject>(*this, clip, name));
 }
 
 void MovieRuntime::eachClip(const std::function<void(Clip&)>& visit)
@@ -614,10 +1164,15 @@ void MovieRuntime::syncChildren(Clip& clip, std::vector<Clip*>& entered)
             kept.push_back(std::move(made));
         }
     }
-    // Clips gone from the frame are let go.
+    // Clips gone from the frame are let go; those scripts made stay, over
+    // the rest.
     for (auto& gone : clip.children)
-        if (gone)
+    {
+        if (gone && gone->made)
+            kept.push_back(std::move(gone));
+        else if (gone)
             forget(*gone);
+    }
     clip.children = std::move(kept);
 }
 
@@ -628,6 +1183,8 @@ void MovieRuntime::forget(Clip& clip)
     if (_pressed && (_pressed == &clip))
         _pressed = nullptr;
     _sent.erase(std::remove(_sent.begin(), _sent.end(), &clip), _sent.end());
+    if (_drag.clip == &clip)
+        _drag = Drag();
     // Listeners whose script was on it go with it.
     Clip* gone = &clip;
     std::function<void(Clip&)> drop = [&](Clip& at) {
@@ -727,8 +1284,20 @@ void MovieRuntime::settle()
 {
     // A script sent clips to other frames: their scripts run there, which
     // may send them on again; a chain is cut short at a few.
-    for (int round = 0; round < 8 && (!_sent.empty() || _sceneMove.scene >= 0); ++round)
+    for (int round = 0; round < 8 && (!_sent.empty() || _sceneMove.scene >= 0 || !_madeToEnter.empty()); ++round)
     {
+        // Clips scripts made: their first frames, entered now.
+        if (!_madeToEnter.empty())
+        {
+            std::vector<Clip*> made;
+            made.swap(_madeToEnter);
+            for (size_t i = 0; i < made.size(); ++i)
+            {
+                syncChildren(*made[i], made);
+                if (!made[i]->button)
+                    runFrameScripts(*made[i]);
+            }
+        }
         // A move to another scene first: what it takes off the stage is
         // forgotten, and the root goes where it was sent.
         if (_sceneMove.scene >= 0)
@@ -940,6 +1509,11 @@ void MovieRuntime::pointerOver(Clip* button)
 
 void MovieRuntime::pointerDown()
 {
+    // AS2's mouseDown clip events, wherever the pointer is.
+    eachClip([this](Clip& clip) {
+        if (!clip.clipEvents.empty())
+            runClipEvent(clip, "mouseDown");
+    });
     _pressed = _hovered;
     if (_pressed)
     {
@@ -953,6 +1527,10 @@ void MovieRuntime::pointerDown()
 
 void MovieRuntime::pointerUp()
 {
+    eachClip([this](Clip& clip) {
+        if (!clip.clipEvents.empty())
+            runClipEvent(clip, "mouseUp");
+    });
     Clip* pressed = _pressed;
     _pressed = nullptr;
     Clip* hovered = _hovered;
@@ -1089,6 +1667,32 @@ as3::ValuePtr MovieRuntime::property(Clip& clip, const std::string& name)
         return Value::makeNumber(clip.length);
     if (name == "_name")
         return Value::makeString(clip.name);
+    // A text field on its timeline, by its instance name.
+    if (fieldNamed(clip.timeline, clip.frame, name))
+        return textFieldObject(clip, name);
+    // The pointer, in its space.
+    if (name == "_xmouse" || name == "_ymouse" || name == "mouseX" || name == "mouseY")
+    {
+        double px = _mouseX, py = _mouseY;
+        stageToClip(clip, px, py);
+        return Value::makeNumber(name == "_xmouse" || name == "mouseX" ? px : py);
+    }
+    if (name == "_width" || name == "width" || name == "_height" || name == "height")
+    {
+        const Clip::Placement& box = clip.placement;
+        const bool across = name == "_width" || name == "width";
+        return Value::makeNumber(box.known ? (across ? box.right - box.left : box.bottom - box.top) : 0.0);
+    }
+    if (name == "_droptarget" || name == "dropTarget")
+    {
+        const as3::ValuePtr under = objectFor(clip)->properties.count("__dropTarget")
+            ? objectFor(clip)->properties["__dropTarget"]
+            : Value::makeNull();
+        if (name == "dropTarget")
+            return under;
+        Clip* target = clipOfValue(under);
+        return Value::makeString(target ? slashPath(*target) : std::string());
+    }
     if (name == "_parent")
         return clip.parent ? objectFor(*clip.parent) : Value::makeUndefined();
     if (name == "_root")
@@ -1154,6 +1758,121 @@ as3::ValuePtr MovieRuntime::property(Clip& clip, const std::string& name)
             if (changed)
                 changed();
             return Value::makeUndefined();
+        });
+    }
+    // Dragging, and what is under a point or another clip.
+    Clip* self = &clip;
+    if (name == "startDrag")
+    {
+        return Value::makeNativeFunction([this, self](const std::vector<as3::ValuePtr>& args) {
+            std::vector<double> bounds;
+            if (args.size() >= 5)
+            {
+                // AS2: startDrag(lockCenter, left, top, right, bottom).
+                for (size_t i = 1; i < 5; ++i)
+                    bounds.push_back(args[i]->toNumber());
+            }
+            else if (args.size() >= 2 && args[1]->isObject())
+            {
+                // ActionScript 3: startDrag(lockCenter, new Rectangle(...)).
+                const double x = args[1]->getProperty("x")->toNumber();
+                const double y = args[1]->getProperty("y")->toNumber();
+                bounds = {x, y, x + args[1]->getProperty("width")->toNumber(), y + args[1]->getProperty("height")->toNumber()};
+            }
+            startDrag(*self, !args.empty() && args[0]->toBoolean(), bounds);
+            return Value::makeUndefined();
+        });
+    }
+    if (name == "stopDrag")
+        return Value::makeNativeFunction([this](const std::vector<as3::ValuePtr>&) {
+            stopDrag();
+            return Value::makeUndefined();
+        });
+    if (name == "hitTest" || name == "hitTestPoint" || name == "hitTestObject")
+    {
+        return Value::makeNativeFunction([this, self](const std::vector<as3::ValuePtr>& args) {
+            // hitTest(x, y, shapeFlag) and hitTestPoint: a point on the
+            // stage; hitTest(target) and hitTestObject: another clip.
+            if (args.size() >= 2 && args[0]->isNumber())
+                return Value::makeBoolean(
+                    hits(*self, args[0]->toNumber(), args[1]->toNumber(), args.size() > 2 && args[2]->toBoolean()));
+            Clip* other = args.empty() ? nullptr : (args[0]->host ? clipOfValue(args[0]) : resolve(*self, args[0]));
+            return Value::makeBoolean(other && overlaps(*self, *other));
+        });
+    }
+    // Clips made by scripts.
+    if (name == "attachMovie")
+    {
+        return Value::makeNativeFunction([this, self](const std::vector<as3::ValuePtr>& args) {
+            const Symbol* symbol = linked(args.empty() ? std::string() : args[0]->toString());
+            if (!symbol)
+                return Value::makeUndefined();
+            const std::string newName = args.size() > 1 ? args[1]->toString() : std::string();
+            // One of the same name is replaced.
+            if (Clip* old = self->named(newName); old && old->made)
+                takeOff(*old, false);
+            Clip* made = makeClip(self, *symbol, newName);
+            const as3::ValuePtr object = objectFor(*made);
+            if (args.size() > 3 && args[3]->isObject())
+                for (const auto& [key, value] : args[3]->properties)
+                    object->setProperty(key, value);
+            return object;
+        });
+    }
+    if (name == "duplicateMovieClip")
+    {
+        return Value::makeNativeFunction([this, self](const std::vector<as3::ValuePtr>& args) {
+            if (!self->symbol || !self->parent)
+                return Value::makeUndefined();
+            Clip* made = makeClip(self->parent, *self->symbol, args.empty() ? std::string() : args[0]->toString());
+            made->made->transform = self->placed ? self->placed->transform : Transform();
+            made->x = self->x;
+            made->y = self->y;
+            made->xscale = self->xscale;
+            made->yscale = self->yscale;
+            made->rotation = self->rotation;
+            made->alpha = self->alpha;
+            made->visible = self->visible;
+            return objectFor(*made);
+        });
+    }
+    if (name == "removeMovieClip")
+        return Value::makeNativeFunction([this, self](const std::vector<as3::ValuePtr>&) {
+            if (self->made)
+                takeOff(*self, false);
+            return Value::makeUndefined();
+        });
+    if (name == "addChild" || name == "addChildAt")
+    {
+        return Value::makeNativeFunction([this, self](const std::vector<as3::ValuePtr>& args) {
+            Clip* child = args.empty() ? nullptr : clipOfValue(args[0]);
+            if (!child || !child->made || child == self)
+                return args.empty() ? Value::makeNull() : args[0];
+            if (child->parent != self)
+            {
+                takeOff(*child, true);
+                auto found = std::find_if(_offStage.begin(), _offStage.end(),
+                    [child](const std::unique_ptr<Clip>& c) { return c.get() == child; });
+                if (found != _offStage.end())
+                {
+                    std::unique_ptr<Clip> owned = std::move(*found);
+                    _offStage.erase(found);
+                    owned->parent = self;
+                    self->children.push_back(std::move(owned));
+                }
+            }
+            if (changed)
+                changed();
+            return args[0];
+        });
+    }
+    if (name == "removeChild")
+    {
+        return Value::makeNativeFunction([this, self](const std::vector<as3::ValuePtr>& args) {
+            Clip* child = args.empty() ? nullptr : clipOfValue(args[0]);
+            if (child && child->made && child->parent == self)
+                takeOff(*child, true);
+            return args.empty() ? Value::makeNull() : args[0];
         });
     }
     if (name == "getChildByName")

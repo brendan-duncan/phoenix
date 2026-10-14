@@ -668,8 +668,12 @@ protected:
     void mousePressEvent(QMouseEvent *event) override;
     /// The mouse over a movie being played: its buttons.
     void movieMouse(QMouseEvent* event);
-    /// The button under \a widgetPos in the movie last drawn, or null.
-    fla::play::Clip* movieButtonAt(const QPointF& widgetPos) const;
+    /// The button, or movie clip listening for the mouse, under
+    /// \a widgetPos in the movie last drawn, or null.
+    fla::play::Clip* movieButtonAt(const QPointF& widgetPos);
+    /// Whether \a timeline's art on \a frame, drawn through \a toStage, is
+    /// at \a at on the stage.
+    bool movieArtAt(const fla::Timeline& timeline, int frame, const QTransform& toStage, const QPointF& at);
 
     void mouseMoveEvent(QMouseEvent *event) override;
 
@@ -822,8 +826,20 @@ private:
     {
         QPolygonF area;
         fla::play::Clip* clip;
+        /// What it is found by: its art on a frame, drawn through toDocument.
+        const fla::Timeline* timeline = nullptr;
+        int frame = 0;
+        QTransform toDocument;
     };
     std::vector<ButtonArea> _buttonAreas;
+    /// Each clip's art as last drawn, for the movie's exact hit tests.
+    struct MovieArt
+    {
+        const fla::Timeline* timeline = nullptr;
+        int frame = 0;
+        QTransform toStage;
+    };
+    std::map<const fla::play::Clip*, MovieArt> _movieArt;
     /// Drawing for export (renderFrame): locked layers show and movie clips
     /// play.
     bool _exporting = false;

@@ -9,6 +9,8 @@ What changed in each release of Phoenix, newest first.
 - Commands > Script Editor writes, opens, saves and runs JSFL and Python scripts (Ctrl+Enter), and edits ActionScript files, in the same editor: colored code, kept indents, find and replace, go to line and toggle comment
 - Test Movie plays every scene in turn and takes the keyboard (Key.isDown, keyPress handlers, key listeners), and has Pause and Step
 - Test Movie runs ActionScript 3 frame scripts with addEventListener: clicks and the other mouse events on movie clips and buttons, enterFrame, and key events on the stage
+- Test Movie runs what games most often use: text fields set from scripts and fields showing a variable, startDrag and stopDrag with the drop target, hitTest and hitTestObject, the mouse position, attachMovie and duplicateMovieClip, new and addChild for symbols with a class, library sounds from scripts, and getTimer
+- In Test Movie, buttons and clips are clicked by their art rather than their bounding box
 - Double-clicking a script error in the Output panel opens the script in the Actions panel at its line
 - The Actions panel's Target button inserts the path to a named movie clip or button
 - `Phoenix play <file>` plays a movie's scripts with no window and prints what they trace and the errors they stop on; `--click-all` clicks every button
