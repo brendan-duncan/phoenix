@@ -64,6 +64,8 @@ private:
     TimelineAudio* _audio = nullptr;
     std::map<std::string, std::string> _soundNames;
     std::vector<int> _voices;
+    /// The frames' sounds playing, by name, for start and stop syncs.
+    std::map<std::string, std::vector<int>> _frameVoices;
     std::unique_ptr<fla::play::MovieRuntime> _movie;
     int _errors = 0;
 };

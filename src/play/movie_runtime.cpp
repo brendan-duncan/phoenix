@@ -294,6 +294,7 @@ void MovieRuntime::start()
     _lastKey = _lastCharacter = 0;
     _keyListeners.clear();
     _drag = Drag();
+    _focus = TextFocus();
     _madeToEnter.clear();
     _offStage.clear();
     _madeCount = 0;
@@ -460,7 +461,8 @@ void MovieRuntime::setupGlobals()
     const auto text = [](const char* value) { return Value::makeString(value); };
     vm.setGlobal("MouseEvent", constants({{"CLICK", text("click")}, {"DOUBLE_CLICK", text("doubleClick")},
         {"MOUSE_DOWN", text("mouseDown")}, {"MOUSE_UP", text("mouseUp")}, {"MOUSE_OVER", text("mouseOver")},
-        {"MOUSE_OUT", text("mouseOut")}, {"ROLL_OVER", text("rollOver")}, {"ROLL_OUT", text("rollOut")}}));
+        {"MOUSE_OUT", text("mouseOut")}, {"MOUSE_MOVE", text("mouseMove")}, {"ROLL_OVER", text("rollOver")},
+        {"ROLL_OUT", text("rollOut")}}));
     vm.setGlobal("Event", constants({{"ENTER_FRAME", text("enterFrame")}, {"ADDED_TO_STAGE", text("addedToStage")},
         {"COMPLETE", text("complete")}}));
     vm.setGlobal("KeyboardEvent", constants({{"KEY_DOWN", text("keyDown")}, {"KEY_UP", text("keyUp")}}));
@@ -530,6 +532,26 @@ void MovieRuntime::setupGlobals()
         return Value::makeUndefined();
     });
     vm.registerBuiltin("updateAfterEvent", [](const Args&) { return Value::makeUndefined(); });
+    // AS2's Selection: setFocus("_root.name_txt") and getFocus().
+    ValuePtr selection = Value::makeObject();
+    selection->setProperty("setFocus", Value::makeNativeFunction([this, current, arg](const Args& args) {
+        const std::string path = arg(args, 0)->toString();
+        const size_t dot = path.find_last_of("./");
+        Clip* owner = dot == std::string::npos ? &current() : resolve(current(), path.substr(0, dot));
+        const std::string name = dot == std::string::npos ? path : path.substr(dot + 1);
+        focusText(owner, owner ? fieldNamed(owner->timeline, owner->frame, name) : nullptr);
+        return Value::makeBoolean(_focus.field != nullptr);
+    }));
+    selection->setProperty("getFocus", Value::makeNativeFunction([this](const Args&) {
+        if (!_focus.clip || !_focus.field)
+            return Value::makeNull();
+        const std::string path = slashPath(*_focus.clip);
+        std::string dotted = "_level0";
+        for (const char c : path == "/" ? std::string() : path)
+            dotted += c == '/' ? '.' : c;
+        return Value::makeString(dotted + "." + _focus.field->instanceName);
+    }));
+    vm.setGlobal("Selection", selection);
     ValuePtr mouse = Value::makeObject();
     mouse->setProperty("hide", Value::makeNativeFunction([](const Args&) { return Value::makeUndefined(); }));
     mouse->setProperty("show", Value::makeNativeFunction([](const Args&) { return Value::makeUndefined(); }));
@@ -931,6 +953,9 @@ public:
         , _name(name)
     {}
 
+    Clip& clip() const { return _clip; }
+    const std::string& name() const { return _name; }
+
     as3::ValuePtr get(const std::string& property) override
     {
         if (property == "text" || property == "htmlText")
@@ -971,6 +996,78 @@ private:
 as3::ValuePtr MovieRuntime::textFieldObject(Clip& clip, const std::string& name)
 {
     return as3::Value::makeHostObject(std::make_shared<TextFieldObject>(*this, clip, name));
+}
+
+void MovieRuntime::focusText(Clip* clip, const StaticText* field)
+{
+    _focus = TextFocus();
+    if (clip && field && field->textType == StaticText::TextType::Input)
+        _focus = TextFocus{clip, field};
+    if (changed)
+        changed();
+}
+
+void MovieRuntime::setFieldText(Clip& clip, const StaticText& field, const std::string& text)
+{
+    if (!field.instanceName.empty())
+        clip.texts[field.instanceName] = text;
+    std::string variable = attributeOf(field.extraAttributes, "variableName");
+    if (!variable.empty())
+    {
+        Clip* owner = &clip;
+        const size_t dot = variable.find_last_of("./");
+        if (dot != std::string::npos)
+        {
+            owner = resolve(clip, variable.substr(0, dot));
+            variable = variable.substr(dot + 1);
+        }
+        if (owner)
+            objectFor(*owner)->setProperty(variable, as3::Value::makeString(text));
+    }
+    if (changed)
+        changed();
+}
+
+void MovieRuntime::type(int code, int character)
+{
+    Clip& clip = *_focus.clip;
+    const StaticText& field = *_focus.field;
+    std::string text = textOf(clip, field).value_or(drawnText(field));
+    if (code == 8)
+    {
+        // The last character, whole: UTF-8 continuation bytes go with it.
+        while (!text.empty() && (static_cast<unsigned char>(text.back()) & 0xC0) == 0x80)
+            text.pop_back();
+        if (!text.empty())
+            text.pop_back();
+    }
+    else if (code == 13)
+    {
+        if (field.lineType.find("multiline") == std::string::npos)
+            return;
+        text += "\n";
+    }
+    else if (character >= 32)
+    {
+        // As UTF-8.
+        const unsigned int c = static_cast<unsigned int>(character);
+        if (c < 0x80)
+            text += static_cast<char>(c);
+        else if (c < 0x800)
+        {
+            text += static_cast<char>(0xC0 | (c >> 6));
+            text += static_cast<char>(0x80 | (c & 0x3F));
+        }
+        else
+        {
+            text += static_cast<char>(0xE0 | (c >> 12));
+            text += static_cast<char>(0x80 | ((c >> 6) & 0x3F));
+            text += static_cast<char>(0x80 | (c & 0x3F));
+        }
+    }
+    else
+        return;
+    setFieldText(clip, field, text);
 }
 
 void MovieRuntime::eachClip(const std::function<void(Clip&)>& visit)
@@ -1104,12 +1201,15 @@ void MovieRuntime::runFrameScripts(Clip& clip)
 {
     if (!clip.timeline)
         return;
-    // Every layer's script that starts on this frame, top layer first.
+    // Every layer's script that starts on this frame, top layer first, and
+    // the sounds of its keyframes.
     for (const Layer* layer : clip.timeline->layers)
     {
         if (!layer || !plays(*layer))
             continue;
         const Frame* frame = keyframeAt(*layer, clip.frame);
+        if (frame && frame->index == clip.frame && frameSound && !attributeOf(frame->extraAttributes, "soundName").empty())
+            frameSound(*frame);
         if (!frame || frame->index != clip.frame || !frame->actionScript || frame->actionScript->code.empty())
             continue;
         const std::string where = (clip.symbol ? clip.symbol->name : clip.timeline->name) + ", frame " +
@@ -1185,6 +1285,8 @@ void MovieRuntime::forget(Clip& clip)
     _sent.erase(std::remove(_sent.begin(), _sent.end(), &clip), _sent.end());
     if (_drag.clip == &clip)
         _drag = Drag();
+    if (_focus.clip == &clip)
+        _focus = TextFocus();
     // Listeners whose script was on it go with it.
     Clip* gone = &clip;
     std::function<void(Clip&)> drop = [&](Clip& at) {
@@ -1374,6 +1476,9 @@ void MovieRuntime::step()
 
 void MovieRuntime::keyDown(int code, int character)
 {
+    // Typing goes into the focused field first.
+    if (_focus.clip && _focus.field)
+        type(code, character);
     if (std::find(_keysDown.begin(), _keysDown.end(), code) == _keysDown.end())
         _keysDown.push_back(code);
     _lastKey = code;
@@ -1950,6 +2055,15 @@ bool MovieRuntime::setProperty(Clip& clip, const std::string& name, const as3::V
         clip.rotation = number();
     else if (name == "alpha")
         clip.alpha = number() * 100.0;
+    else if (name == "focus")
+    {
+        // ActionScript 3's stage.focus = name_txt.
+        const auto field = value && value->host ? std::dynamic_pointer_cast<TextFieldObject>(value->host) : nullptr;
+        if (field)
+            focusText(&field->clip(), fieldNamed(field->clip().timeline, field->clip().frame, field->name()));
+        else
+            focusText(nullptr, nullptr);
+    }
     else
         return false;
     if (std::isnan(clip.x.value_or(0.0)))

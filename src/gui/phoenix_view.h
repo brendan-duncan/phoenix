@@ -48,6 +48,7 @@ class QTimer;
 namespace fla {
 class Bitmap;
 class IKArmature;
+class StaticText;
 class Command;
 class CommandStack;
 class Selection;
@@ -840,6 +841,14 @@ private:
         QTransform toStage;
     };
     std::map<const fla::play::Clip*, MovieArt> _movieArt;
+    /// The input text fields as last drawn, on the stage, for clicks.
+    struct TextArea
+    {
+        QPolygonF area;
+        fla::play::Clip* clip = nullptr;
+        const fla::StaticText* field = nullptr;
+    };
+    std::vector<TextArea> _textAreas;
     /// Drawing for export (renderFrame): locked layers show and movie clips
     /// play.
     bool _exporting = false;

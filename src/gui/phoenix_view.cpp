@@ -1243,6 +1243,7 @@ void PhoenixView::drawStageContents(QPainter& painter, const fla::Document* docu
     if (_movie)
     {
         _buttonAreas.clear();
+        _textAreas.clear();
         _movieArt.clear();
         _movieClips.assign(1, &_movie->root());
     }
@@ -3525,10 +3526,30 @@ void PhoenixView::drawElement(QPainter& painter, const fla::Element* element, co
 
         const auto* text = static_cast<const fla::StaticText*>(element);
         // In a movie playing, a field shows what its scripts put in it, in
-        // the style of its first run.
+        // the style of its first run; an input field is where a click puts
+        // the typing, with a caret while it has it.
         std::optional<std::string> shown;
         if (_movie && !_movieClips.empty() && text->textType != fla::StaticText::TextType::Static)
-            shown = _movie->textOf(*_movieClips.back(), *text);
+        {
+            fla::play::Clip* clip = _movieClips.back();
+            shown = _movie->textOf(*clip, *text);
+            if (text->textType == fla::StaticText::TextType::Input)
+            {
+                bool invertible = false;
+                const QTransform toStage = painter.transform() * viewTransform.inverted(&invertible);
+                const QRectF box(text->left, text->top, std::max(text->width, 20.0), std::max(text->height, 12.0));
+                if (invertible)
+                    _textAreas.push_back({toStage.map(QPolygonF(box)), clip, text});
+                if (_movie->focused(*clip, *text))
+                {
+                    std::string typed = shown.value_or(std::string());
+                    if (!shown)
+                        for (const fla::TextRun& run : text->runs)
+                            typed += run.text;
+                    shown = typed + "|";
+                }
+            }
+        }
         if (shown)
         {
             fla::StaticText replaced(*text);
@@ -5254,6 +5275,14 @@ void PhoenixView::movieMouse(QMouseEvent* event)
     // Where the pointer is, for dragging and the scripts that read it.
     const QPointF onStage = mapToDocument(event->position());
     _movie->pointerAt(onStage.x(), onStage.y());
+    // A press on an input field puts the typing there; anywhere else takes
+    // it away.
+    const TextArea* field = nullptr;
+    for (auto area = _textAreas.rbegin(); area != _textAreas.rend() && !field; ++area)
+        if (area->area.containsPoint(onStage, Qt::OddEvenFill) && _movie->alive(area->clip))
+            field = &*area;
+    if (event->type() == QEvent::MouseButtonPress && event->button() == Qt::LeftButton)
+        _movie->focusText(field ? field->clip : nullptr, field ? field->field : nullptr);
     fla::play::Clip* button = movieButtonAt(event->position());
     if (event->type() == QEvent::MouseMove)
         _movie->pointerOver(button);
@@ -5267,7 +5296,7 @@ void PhoenixView::movieMouse(QMouseEvent* event)
         _movie->pointerOver(button);
         _movie->pointerUp();
     }
-    setCursor(button ? Qt::PointingHandCursor : Qt::ArrowCursor);
+    setCursor(button ? Qt::PointingHandCursor : field ? Qt::IBeamCursor : Qt::ArrowCursor);
     update();
     event->accept();
 }

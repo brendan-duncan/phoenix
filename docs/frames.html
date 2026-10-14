@@ -114,23 +114,9 @@
 
 <p>Turn on <strong>Loop Playback</strong> and drag the ends of the loop range in the ruler to play just part of the timeline over and over, which is ideal for polishing a cycle.</p>
 
-<h3 id="actions">Write scripts: the Actions panel</h3>
+<h3 id="actions">Scripts</h3>
 
-<p><span class="menu-path">Window &rsaquo; Actions</span> (<kbd>F9</kbd>) shows the script of the keyframe at the playhead on the current layer, ready to type into. Select a button or movie clip instance on the stage instead and it shows that instance's own script: its <code>on (release)</code> and <code>onClipEvent</code> handlers, in ActionScript 1 and 2.</p>
-
-<ul>
-  <li>What you type goes into the document as you type. Each script you work on is one step in the undo history until you move to another script or click away, so <kbd>Ctrl</kbd>+<kbd>Z</kbd> on the stage takes back the whole edit. Inside the editor, <kbd>Ctrl</kbd>+<kbd>Z</kbd> undoes typing.</li>
-  <li>The <strong>script navigator</strong> on the left lists every script in the document, scene by scene and symbol by symbol. Click one to edit it without moving the playhead. The &#9776; button shows or hides it.</li>
-  <li><strong>Pin</strong> keeps the script in the panel while you select other things and move the playhead. Picking a script in the navigator pins it; click Pin again to follow the selection.</li>
-  <li><strong>Check</strong> checks the script's syntax. It is also checked each time it goes into the document: the line with an error is marked, and the line below the editor says what is wrong.</li>
-  <li><strong>Find</strong> (<kbd>Ctrl</kbd>+<kbd>F</kbd>) finds, and <kbd>Ctrl</kbd>+<kbd>H</kbd> replaces. <kbd>Ctrl</kbd>+<kbd>G</kbd> goes to a line, and <kbd>Ctrl</kbd>+<kbd>/</kbd> comments the selected lines out or back in.</li>
-  <li><kbd>Tab</kbd> and <kbd>Shift</kbd>+<kbd>Tab</kbd> indent and outdent the selected lines. A new line keeps the indent, one step deeper after an opening brace.</li>
-  <li><strong>Code hints</strong>: type a dot and what can follow it is offered: a clip's methods and properties, <code>MouseEvent.</code>'s events, <code>Key.</code>'s keys. <kbd>Ctrl</kbd>+<kbd>Space</kbd> offers every word that fits what you have begun, the instance names on the timeline among them. Arrow to one and press <kbd>Enter</kbd> or <kbd>Tab</kbd>; <kbd>Esc</kbd> closes them.</li>
-  <li><strong>Snippets</strong> puts in ready-made code for what movies often do: stop at a frame, go to a frame on a click, show or hide, drag and drop, move with the arrow keys, count clicks in a text field, play a library sound. Those for ActionScript 2 go in a button's or clip's script; those for ActionScript 3 in a frame's. A snippet that works on an instance asks which.</li>
-  <li><strong>Target</strong> (Insert Target Path) lists the named movie clips and buttons the script can reach, those inside them too, and types the path to the one you pick at the caret: <code>this.hat.bow</code>, or from the root (<code>_root.hat.bow</code>) for a script on a scene's timeline. Only instances with a name are listed; name them in the Properties panel.</li>
-</ul>
-
-<p>To play what you wrote, use <a href="#test-movie">Test Movie</a>.</p>
+<p>Keyframes can carry ActionScript. Write it in the Actions panel (<kbd>F9</kbd>) and play it in Test Movie (<kbd>Ctrl</kbd>+<kbd>Enter</kbd>); both are described in <a href="actionscript.html">ActionScript and Test Movie</a>.</p>
 
 <h3 id="frame-scripts">Frame scripts</h3>
 
@@ -144,56 +130,13 @@
   <dt><code>nextFrame()</code>, <code>prevFrame()</code></dt><dd>Steps one frame on or back and stops.</dd>
 </dl>
 
-<p>The calls can be written with <code>this.</code> in front. A script runs when the playhead arrives at its keyframe, but not the frame you start from, so pressing <kbd>Enter</kbd> on a frame with <code>stop()</code> plays on past it. Playback on the stage does not run the scripts: anything else in them is ignored, and so is a call it cannot be sure of, such as one inside an <code>if</code>, a function or a block, one aimed at another clip, or a goto to a computed frame or another scene. Scripts on guide layers are left out. To run a movie's scripts in full, use Test Movie.</p>
+<p>The calls can be written with <code>this.</code> in front. A script runs when the playhead arrives at its keyframe, but not the frame you start from, so pressing <kbd>Enter</kbd> on a frame with <code>stop()</code> plays on past it. Playback on the stage does not run the scripts: anything else in them is ignored, and so is a call it cannot be sure of, such as one inside an <code>if</code>, a function or a block, one aimed at another clip, or a goto to a computed frame or another scene. Scripts on guide layers are left out. To run a movie's scripts in full, use <a href="actionscript.html#test-movie">Test Movie</a>.</p>
 
 <p>The setting is off by default and is remembered. While it is on, movie clips follow the same calls in their own frame scripts, both as they play on the stage during playback and in exported movies, so a clip with <code>stop()</code> on its first frame holds that frame instead of looping.</p>
 
 <h3 id="test-movie">Test Movie</h3>
 
-<p><span class="menu-path">Control &rsaquo; Test Movie</span> (<kbd>Ctrl</kbd>+<kbd>Enter</kbd>) plays the movie in a window of its own as Flash Player would, at the document's frame rate, running its ActionScript. It starts at the first scene and plays the scenes in turn, back to the first after the last. Buttons light up under the mouse and answer clicks, and keys typed in the window go to the movie, so an interactive movie, such as a dress-up game, can be played. <strong>Restart</strong> plays it again from the first frame; <strong>Pause</strong> holds it, and <strong>Step</strong> moves it on one frame at a time. Close the window to go back to editing; the document is not changed by playing it.</p>
-
-<figure>
-  <img src="assets/shots/test-movie.webp" alt="Test Movie window playing a dress-up game: a fairy dressed in blonde hair, a blue blouse and skirt and pink tights, with the buttons that chose them on the left" width="760" height="620">
-</figure>
-
-<p>Scripts in ActionScript 1 and 2, as older movies and games are written, run as Flash Player runs them:</p>
-
-<ul>
-  <li>Frame scripts run as their keyframes are reached, on the root timeline and in every movie clip, after the frame's objects are placed.</li>
-  <li><code>stop()</code>, <code>play()</code>, <code>gotoAndPlay()</code>, <code>gotoAndStop()</code>, <code>nextFrame()</code> and <code>prevFrame()</code>, on the timeline or on a named clip (<code>hat.gotoAndStop(3)</code>), and <code>tellTarget</code>.</li>
-  <li><code>nextScene()</code> and <code>prevScene()</code>, and gotos that name a scene (<code>gotoAndPlay("Ending", 1)</code>) or a label in another scene.</li>
-  <li><code>on (release)</code>, <code>on (press)</code>, <code>on (rollOver)</code> and the other button events, <code>on (keyPress "&lt;Left&gt;")</code>, and <code>onClipEvent (load)</code>, <code>onClipEvent (enterFrame)</code>, <code>onClipEvent (keyDown)</code> and <code>onClipEvent (keyUp)</code> on movie clips.</li>
-  <li>The keyboard: <code>Key.isDown(Key.LEFT)</code>, <code>Key.getCode()</code>, <code>Key.getAscii()</code> and <code>Key.addListener()</code>.</li>
-  <li>A clip's <code>_x</code>, <code>_y</code>, <code>_visible</code>, <code>_alpha</code>, <code>_xscale</code>, <code>_yscale</code>, <code>_rotation</code>, <code>_currentframe</code> and <code>_totalframes</code>, read and set by dot (<code>hat._visible = false</code>) or with <code>getProperty</code> and <code>setProperty</code>, and clips found by name or by path (<code>"/hat"</code>, <code>_root.hat</code>, <code>_parent</code>).</li>
-  <li>Variables, <code>if</code>, loops, functions, <code>ifFrameLoaded</code> (everything counts as loaded) and <code>trace()</code>, whose output goes to the Output panel (<kbd>F2</kbd>).</li>
-</ul>
-
-<p>Frame scripts in ActionScript 3 run too, with what simple games use:</p>
-
-<ul>
-  <li><code>addEventListener</code> and <code>removeEventListener</code> on named movie clips and buttons and on <code>stage</code>, for <code>MouseEvent.CLICK</code>, <code>MOUSE_DOWN</code>, <code>MOUSE_UP</code>, <code>ROLL_OVER</code>, <code>ROLL_OUT</code>, <code>MOUSE_OVER</code> and <code>MOUSE_OUT</code>, <code>Event.ENTER_FRAME</code>, and <code>KeyboardEvent.KEY_DOWN</code> and <code>KEY_UP</code> (with <code>keyCode</code>). Mouse events go on up to the clips a clip is in. A movie clip with a mouse listener answers clicks as a button does.</li>
-  <li>A clip's <code>x</code>, <code>y</code>, <code>visible</code>, <code>alpha</code>, <code>scaleX</code>, <code>scaleY</code>, <code>rotation</code>, <code>currentFrame</code>, <code>totalFrames</code>, <code>currentLabel</code>, <code>name</code>, <code>parent</code> and <code>root</code>, <code>MovieClip(root)</code>, and <code>import</code> lines, which are taken as read.</li>
-  <li>Movie clip symbols exported for ActionScript with a class name: <code>new Hat()</code> makes one, <code>addChild</code> puts it on the stage and <code>removeChild</code> takes it off.</li>
-</ul>
-
-<p>And in both, what games most often do:</p>
-
-<ul>
-  <li><strong>Text fields.</strong> A dynamic text field with an instance name is reached by it, and <code>score_txt.text = "Score: " + score</code> changes what it shows, in its own font and color. A field that names a variable (ActionScript 1 and 2) shows the variable's value as it changes.</li>
-  <li><strong>Dragging.</strong> <code>startDrag()</code> and <code>stopDrag()</code>, with a lock to the center and bounds, as a function or on a clip; <code>_droptarget</code> (or <code>dropTarget</code>) says where it was let go.</li>
-  <li><strong>Hit tests.</strong> <code>hitTest(x, y, shapeFlag)</code> and <code>hitTest(otherClip)</code>, and <code>hitTestPoint</code> and <code>hitTestObject</code>; with the shape flag, the clip's art counts rather than its box. Buttons and clips are clicked by their art too, so a click between two buttons finds neither.</li>
-  <li><strong>The mouse.</strong> <code>_xmouse</code> and <code>_ymouse</code> (<code>mouseX</code> and <code>mouseY</code>) in a clip's own space, and <code>onClipEvent (mouseDown)</code>, <code>(mouseUp)</code> and <code>(mouseMove)</code>.</li>
-  <li><strong>Clips from the library.</strong> <code>attachMovie("linkage", "name", depth, {_x: 10})</code>, <code>duplicateMovieClip()</code> and <code>removeMovieClip()</code>, for symbols exported for ActionScript.</li>
-  <li><strong>Sound.</strong> Library sounds exported for ActionScript: <code>new Sound()</code> with <code>attachSound("linkage")</code>, <code>start(seconds, loops)</code>, <code>stop()</code> and <code>setVolume()</code>, or a sound's class with <code>play()</code>; <code>stopAllSounds()</code> and <code>SoundMixer.stopAll()</code>.</li>
-  <li><code>getTimer()</code> counts the milliseconds since the movie started.</li>
-</ul>
-
-<p>A script error stops that script only, and is shown in the Output panel with the frame or button and the line it was on; the movie plays on. Double-click the error, once the Test Movie window is closed, to see the script in the <a href="#actions">Actions panel</a> with the caret on that line. <code>getURL()</code> opens web links in your browser.</p>
-
-<div class="callout">
-  <span class="label">Not yet</span>
-  <p>ActionScript 3 class files (a document class and <code>.as</code> files), typing into input text fields, drawing from scripts, and sounds placed on frames, which Test Movie does not play yet.</p>
-</div>
+<p><span class="menu-path">Control &rsaquo; Test Movie</span> (<kbd>Ctrl</kbd>+<kbd>Enter</kbd>) plays the movie in a window of its own as Flash Player would, scripts and all, with buttons that answer clicks and the keyboard. See <a href="actionscript.html#test-movie">Test Movie</a>.</p>
 
 <h2>Onion skinning</h2>
 

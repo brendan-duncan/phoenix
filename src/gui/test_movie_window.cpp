@@ -10,6 +10,7 @@
 #include "../data/symbol.h"
 #include "../data/symbol_list.h"
 #include "../data/timeline.h"
+#include "../edit/frame_sound.h"
 #include "../play/movie_runtime.h"
 #include "../third_party/tinyxml2/tinyxml2.h"
 
@@ -178,6 +179,36 @@ TestMovieWindow::TestMovieWindow(const fla::FLADocument& document, const QString
             return voice;
         };
         _movie->stopSound = [](int channel) { AudioEngine::instance().stop(channel); };
+        // The sounds on keyframes, as the frames are entered: an event
+        // sound each time, a start sound unless it is still playing, a stop
+        // sound silencing it; a stream from the keyframe on.
+        _movie->frameSound = [this](const fla::Frame& frame) {
+            const fla::frame_sound::Settings sound = fla::frame_sound::read(frame);
+            if (sound.name.empty())
+                return;
+            std::vector<int>& voices = _frameVoices[sound.name];
+            voices.erase(std::remove_if(voices.begin(), voices.end(),
+                             [](int voice) { return !AudioEngine::instance().isPlaying(voice); }),
+                voices.end());
+            if (sound.sync == "stop")
+            {
+                for (const int voice : voices)
+                    AudioEngine::instance().stop(voice);
+                voices.clear();
+                return;
+            }
+            if (sound.sync == "start" && !voices.empty())
+                return;
+            std::shared_ptr<const PcmBuffer> buffer = _audio->librarySound(sound.name);
+            if (!buffer)
+                return;
+            const int voice = AudioEngine::instance().play(buffer, 0, SIZE_MAX, sound.loop ? 0 : std::max(1, sound.loops));
+            if (voice >= 0)
+            {
+                voices.push_back(voice);
+                _voices.push_back(voice);
+            }
+        };
         _movie->stopAllSounds = [this]() { stopSounds(); };
         _view->setMovie(_movie.get());
     }
@@ -243,6 +274,7 @@ void TestMovieWindow::stopSounds()
     for (const int voice : _voices)
         AudioEngine::instance().stop(voice);
     _voices.clear();
+    _frameVoices.clear();
 }
 
 void TestMovieWindow::resizeEvent(QResizeEvent* event)

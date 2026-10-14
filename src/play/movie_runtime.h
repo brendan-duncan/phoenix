@@ -192,6 +192,19 @@ public:
     bool alive(const Clip* clip) const;
     /// Whether a clip is being dragged.
     bool dragging() const { return _drag.clip != nullptr; }
+
+    /// The input text field typing goes into: \a field on \a clip's
+    /// timeline; null for none. A click on one focuses it, as a script can.
+    void focusText(Clip* clip, const StaticText* field);
+    /// Whether \a field on \a clip has the focus.
+    bool focused(const Clip& clip, const StaticText& field) const
+    {
+        return _focus.clip == &clip && _focus.field == &field;
+    }
+
+    /// A keyframe was entered that has a sound on it (soundName...): the
+    /// player plays it as the frame's sound settings say.
+    std::function<void(const Frame& frame)> frameSound;
     Clip* hovered() const { return _hovered; }
     /// The frame a button shows: down, over or up.
     int buttonFrame(const Clip& button) const;
@@ -271,6 +284,13 @@ private:
     /// The clip a script value is (a clip's object), or null.
     Clip* clipOfValue(const as3::ValuePtr& value);
     as3::ValuePtr textFieldObject(Clip& clip, const std::string& name);
+    /// Typing into the focused field: \a character added, Backspace
+    /// (\a code 8) taking the last one off, Enter a new line where the field
+    /// has more than one.
+    void type(int code, int character);
+    /// Sets the text \a field shows: its instance name's text, or the
+    /// variable it shows.
+    void setFieldText(Clip& clip, const StaticText& field, const std::string& text);
     as3::ValuePtr soundObject(const std::string& linkage, bool actionScript3);
     /// Tells of an error: \a message, in the script \a source, at \a line.
     void tell(const std::string& message, const DOMElement* source, int line);
@@ -345,6 +365,12 @@ private:
         double left = 0.0, top = 0.0, right = 0.0, bottom = 0.0;
     };
     Drag _drag;
+    struct TextFocus
+    {
+        Clip* clip = nullptr;
+        const StaticText* field = nullptr;
+    };
+    TextFocus _focus;
     std::chrono::steady_clock::time_point _started;
     std::vector<const Symbol*> _library;
     std::vector<std::string> _soundIdentifiers;

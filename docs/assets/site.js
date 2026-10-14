@@ -38,6 +38,7 @@ const NAV = [
     { href: "bones.html", title: "Bones and inverse kinematics" },
     { href: "rigging.html", title: "Rigs and motion" },
     { href: "sound.html", title: "Sound" },
+    { href: "actionscript.html", title: "ActionScript and Test Movie" },
   ] },
   { group: "Output", pages: [
     { href: "export.html", title: "Exporting" },

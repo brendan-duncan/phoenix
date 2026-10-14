@@ -522,3 +522,55 @@ TEST(movie_runtime_plays_library_sounds)
     CHECK(played.size() == 2 && played[0] == "ding 15 2 50" && played[1] == "Chime 0 1 100");
     CHECK(stopped.size() == 1 && stopped[0] == 2);
 }
+
+TEST(movie_runtime_types_into_input_fields)
+{
+    Movie movie;
+    movie.root->name = "Scene 1";
+    fla::Layer* art = movie.layer(*movie.root, "art");
+    fla::Frame* first = movie.frame(*art, 0, 1);
+    auto* name = new fla::StaticText(first);
+    name->textType = fla::StaticText::TextType::Input;
+    name->instanceName = "name_txt";
+    first->elements.push_back(name);
+    auto* answer = new fla::StaticText(first);
+    answer->textType = fla::StaticText::TextType::Input;
+    answer->extraAttributes.emplace_back("variableName", "answer");
+    first->elements.push_back(answer);
+    fla::Layer* actions = movie.layer(*movie.root, "actions");
+    movie.frame(*actions, 0, 1, "stop();\nSelection.setFocus('name_txt');\n");
+
+    fla::play::MovieRuntime runtime(*movie.root, 12.0);
+    runtime.start();
+    CHECK(runtime.focused(runtime.root(), *name));
+    runtime.keyDown('H', 'H');
+    runtime.keyDown('I', 'i');
+    runtime.keyDown('X', 'x');
+    runtime.keyDown(8, 0);
+    CHECK(runtime.textOf(runtime.root(), *name).value_or("") == "Hi");
+    // A click on the other field moves the typing there, into its variable.
+    runtime.focusText(&runtime.root(), answer);
+    runtime.keyDown('4', '4');
+    runtime.keyDown('2', '2');
+    CHECK(runtime.textOf(runtime.root(), *answer).value_or("") == "42");
+    CHECK(runtime.textOf(runtime.root(), *name).value_or("") == "Hi");
+}
+
+TEST(movie_runtime_tells_of_frame_sounds)
+{
+    Movie movie;
+    movie.root->name = "Scene 1";
+    fla::Layer* sound = movie.layer(*movie.root, "sound");
+    movie.frame(*sound, 0, 2)->extraAttributes.emplace_back("soundName", "ding.wav");
+    movie.frame(*sound, 2, 1);
+    std::vector<std::string> heard;
+    fla::play::MovieRuntime runtime(*movie.root, 12.0);
+    runtime.frameSound = [&heard](const fla::Frame& frame) { heard.push_back(std::to_string(frame.index)); };
+    runtime.start();
+    runtime.step();
+    runtime.step();
+    // Once on its keyframe, not again on the frame after; again as it loops.
+    CHECK(heard.size() == 1 && heard[0] == "0");
+    runtime.step();
+    CHECK(heard.size() == 2);
+}
