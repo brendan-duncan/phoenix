@@ -2,6 +2,7 @@
 // found by their names with folder paths, as the library shows them.
 
 #include "flfile.h"
+#include "extensions.h"
 #include "model.h"
 
 #include "../data/bitmap.h"
@@ -676,6 +677,7 @@ void describeItem(ClassDef<Item>& def)
             },
             [name](Item& i, const Value& v) { setAttribute(i, linkageHolder(i), name, v.toBool() ? "true" : std::string()); });
     }
+    describeItemData(def);
 }
 
 void describeSymbol(ClassDef<Item>& def)

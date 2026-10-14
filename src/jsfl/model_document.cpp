@@ -2,6 +2,7 @@
 // timelines, saving and exporting.
 
 #include "flfile.h"
+#include "extensions.h"
 #include "model.h"
 #include "xul.h"
 
@@ -977,6 +978,8 @@ const ClassInfo& Document::classInfo() const
         def.method("xmlPanelFromString", 1, [](Document& d, const Args& args) {
             return showXmlPanel(d.session, arg(args, 0).toString());
         });
+        describeDocumentData(def);
+        describeDocumentPublishing(def);
         return info;
     }();
     return info;

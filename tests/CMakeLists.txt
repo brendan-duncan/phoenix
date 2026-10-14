@@ -247,13 +247,17 @@ if(PHOENIX_TESTS_HAVE_PARSER AND TARGET qjs)
         ${PHOENIX_SRC}/jsfl/model_element.cpp
         ${PHOENIX_SRC}/jsfl/model_flash.cpp
         ${PHOENIX_SRC}/jsfl/model_library.cpp
+        ${PHOENIX_SRC}/jsfl/model_data.cpp
+        ${PHOENIX_SRC}/jsfl/model_layers.cpp
+        ${PHOENIX_SRC}/jsfl/model_publish.cpp
+        ${PHOENIX_SRC}/jsfl/model_shape.cpp
         ${PHOENIX_SRC}/jsfl/model_timeline.cpp
         ${PHOENIX_SRC}/jsfl/object.cpp
         ${PHOENIX_SRC}/jsfl/session.cpp
         ${PHOENIX_SRC}/jsfl/xul.cpp
         ${PHOENIX_SRC}/jsfl/model_xul.cpp
     )
-    list(APPEND TEST_SOURCES test_jsfl.cpp test_jsfl_e4x.cpp test_jsfl_xul.cpp)
+    list(APPEND TEST_SOURCES test_jsfl.cpp test_jsfl_e4x.cpp test_jsfl_xul.cpp test_jsfl_extensions.cpp)
     set(PHOENIX_TESTS_HAVE_JSFL TRUE)
 endif()
 

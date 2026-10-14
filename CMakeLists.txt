@@ -171,6 +171,7 @@ set(HEADERS
     src/jsfl/session.h
     src/jsfl/xul.h
     src/gui/xul_dialog.h
+    src/jsfl/extensions.h
     src/gui/mcp_server.h
     src/gui/stroke_style_dialog.h
     src/gui/selection_targets.h
@@ -415,6 +416,10 @@ set(SOURCES
     src/jsfl/model_element.cpp
     src/jsfl/model_flash.cpp
     src/jsfl/model_library.cpp
+    src/jsfl/model_data.cpp
+    src/jsfl/model_layers.cpp
+    src/jsfl/model_publish.cpp
+    src/jsfl/model_shape.cpp
     src/jsfl/model_timeline.cpp
     src/jsfl/object.cpp
     src/jsfl/session.cpp

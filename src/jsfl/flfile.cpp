@@ -1,5 +1,6 @@
 #include "flfile.h"
 
+#include "extensions.h"
 #include "model.h"
 
 #include <algorithm>
@@ -394,6 +395,7 @@ const ClassInfo& FileSystem::classInfo() const
 #endif
             return Value(path);
         });
+        describeFileSystemProcesses(def);
         return info;
     }();
     return info;

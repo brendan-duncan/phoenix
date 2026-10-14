@@ -145,6 +145,24 @@ public:
     /// The current frame (or every frame, numbered) of the document as PNG.
     virtual bool exportPNG(fla::FLADocument* document, const std::string& path, bool currentFrameOnly,
         std::string& error) = 0;
+    /// The document's scene as an SWF movie.
+    virtual bool exportSWF(fla::FLADocument* document, const std::string& path, std::string& error)
+    {
+        (void)document;
+        (void)path;
+        error = "Exporting SWF needs the stage, which this host does not have.";
+        return false;
+    }
+    /// Publishes the document as its publish settings say, beside its file,
+    /// naming the files written in \a written. False with \a error when
+    /// something could not be written.
+    virtual bool publish(fla::FLADocument* document, std::vector<std::string>& written, std::string& error)
+    {
+        (void)document;
+        (void)written;
+        error = "Publishing needs the stage, which this host does not have.";
+        return false;
+    }
 };
 
 } // namespace jsfl

@@ -1,6 +1,7 @@
 // Timeline, Layer and Frame: layers and their frames, keyframes, tweens,
 // labels, and the frame and layer selections scripts work on.
 
+#include "extensions.h"
 #include "model.h"
 
 #include "../data/action_script.h"
@@ -804,6 +805,7 @@ const ClassInfo& Timeline::classInfo() const
         def.method("expandFolder", 3, [](Timeline&, const Args&) { return Value(); });
         def.method("startPlayback", 0, [](Timeline&, const Args&) { return Value(); });
         def.method("stopPlayback", 0, [](Timeline&, const Args&) { return Value(); });
+        describeTimelineLayers(def);
         return info;
     }();
     return info;
@@ -870,10 +872,13 @@ const ClassInfo& Layer::classInfo() const
             }
             return list;
         });
-        def.get("parentLayer", [](Layer& l) {
-            fla::Layer* parent = l.get().parentLayer;
-            return parent ? Value(wrapLayer(l.session, l.document, parent)) : Value::null();
-        });
+        def.prop("parentLayer",
+            [](Layer& l) {
+                fla::Layer* parent = l.get().parentLayer;
+                return parent ? Value(wrapLayer(l.session, l.document, parent)) : Value::null();
+            },
+            [](Layer& l, const Value& v) { setParentLayer(l, v); });
+        describeLayerExtras(def);
         return info;
     }();
     return info;

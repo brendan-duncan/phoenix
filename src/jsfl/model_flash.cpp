@@ -1,6 +1,7 @@
 // `fl` and its output panel; colors and the wrappers the model's files share.
 
 #include "flfile.h"
+#include "extensions.h"
 #include "model.h"
 #include "xul.h"
 
@@ -269,6 +270,7 @@ const ClassInfo& Flash::classInfo() const
             return showXmlPanel(fl.session, arg(args, 0).toString());
         });
         def.get("xmlui", [](Flash& fl) { return Value(makeXmlUI(fl.session)); });
+        describeFlashPublishing(def);
         return info;
     }();
     return info;

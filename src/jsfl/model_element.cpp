@@ -2,6 +2,7 @@
 // Shape. Transforms read and written as Animate's scale, rotation and skew,
 // color effects and filters.
 
+#include "extensions.h"
 #include "model.h"
 
 #include "../data/bitmap_instance.h"
@@ -724,6 +725,7 @@ void describeElement(ClassDef<Element>& def)
             fla::Element& element = e.get();
             e.push(fla::CommandPtr(new fla::SetPropertyCommand<bool>(element.isLocked, element.isLocked, v.toBool(), "Lock")), false);
         });
+    describeElementData(def);
 }
 
 void describeInstance(ClassDef<Element>& def)
@@ -949,6 +951,7 @@ void describeShape(ClassDef<Element>& def)
         }
         return list;
     });
+    describeShapeGeometry(def);
 }
 
 struct ElementClasses
@@ -985,6 +988,16 @@ const ElementClasses& elementClasses()
 }
 
 } // namespace
+
+Value filterToValue(const fla::Filter& filter)
+{
+    return filterValue(filter);
+}
+
+fla::Filter filterFromValue(const Value& value)
+{
+    return filterFrom(value, nullptr);
+}
 
 void setPivot(Element& e, const fla::Point& stage)
 {
