@@ -19,7 +19,15 @@
 #include "../data/symbol_instance.h"
 #include "../data/symbol_list.h"
 #include "../data/timeline.h"
+#include "audio_engine.h"
+#include "timeline_audio.h"
+
+#include "../data/solid_color.h"
+#include "../data/stroke_style.h"
 #include "../edit/command_stack.h"
+#include "../edit/element_clone.h"
+#include "../edit/frame_bake.h"
+#include "../edit/lip_sync.h"
 #include "../edit/element_commands.h"
 #include "../edit/layer_commands.h"
 #include "../edit/library_commands.h"
@@ -33,8 +41,12 @@
 #include <QFileInfo>
 #include <QJsonDocument>
 
+#include <QPainter>
+
 #include <algorithm>
+#include <array>
 #include <cmath>
+#include <functional>
 #include <set>
 #include <stdexcept>
 
@@ -1301,6 +1313,420 @@ void ScriptApi::addHelperOperations()
                 });
             context.stack().push(fla::CommandPtr(command));
             return Result{QJsonObject{{"frames", bounces * each + 1}, {"layer", QString::fromStdString(layer.name)}}};
+        });
+
+    add("lip_sync", "Lip sync",
+        "Keys a mouth to a line of dialogue: the mouth is a graphic symbol instance alone on a layer's keyframe, "
+        "whose frames are the mouth shapes. The shapes come from a library sound Phoenix listens to, or from cues "
+        "Rhubarb Lip Sync or Papagayo wrote. Each change of shape gets a keyframe showing that shape's frame of "
+        "the mouth chart.",
+        {{"symbol", kSymbolArg}, {"layer", kLayerArg},
+            {"frame", prop("integer", "The mouth's keyframe, where the line starts; 1 when left out")},
+            {"sound", prop("string", "A library sound to listen to")},
+            {"cues", prop("string", "Cues as text instead: Rhubarb's TSV (time, tab, shape a line) or a Papagayo / "
+                                    "Moho switch file")},
+            {"chart", QJsonObject{{"type", "object"},
+                          {"description", "Which frame of the mouth symbol (from 1) shows each shape, such as "
+                                          "{\"A\": 1, \"B\": 2, \"X\": 9}; the chart saved on the symbol, or one "
+                                          "frame a shape in order, when left out"},
+                          {"additionalProperties", QJsonObject{{"type", "integer"}}}}}},
+        {"layer"}, true, [this](const QJsonObject& args) {
+            ScriptContext context{_window};
+            fla::Layer& layer = context.layer(context.timeline(args), args);
+            fla::Frame& key = context.keyframe(layer, args);
+            auto* mouth = key.elements.size() == 1 ? dynamic_cast<fla::SymbolInstance*>(key.elements.front()) : nullptr;
+            if (!mouth)
+                fail("Put the mouth, a graphic symbol instance, alone on that keyframe first.");
+            if (layer.isLocked())
+                fail("That layer is locked.");
+            const double fps = context.document().frameRate > 0.0 ? context.document().frameRate : 24.0;
+            std::vector<fla::lipsync::Cue> cues;
+            if (args.contains("cues"))
+            {
+                cues = fla::lipsync::parse(args.value("cues").toString().toStdString(), fps);
+            }
+            else
+            {
+                const QString name = args.value("sound").toString();
+                if (name.isEmpty())
+                    fail("Give a library sound to listen to, or the cues.");
+                std::shared_ptr<const PcmBuffer> sound =
+                    _window._timelineAudio ? _window._timelineAudio->librarySound(name.toStdString()) : nullptr;
+                if (!sound || sound->samples.empty())
+                    fail(QString("There is no sound called %1 in the library, or it cannot be read.").arg(name));
+                std::vector<int16_t> samples(sound->samples.size());
+                for (size_t i = 0; i < samples.size(); ++i)
+                    samples[i] = static_cast<int16_t>(std::lround(std::clamp(sound->samples[i], -1.0f, 1.0f) * 32767.0f));
+                cues = fla::lipsync::listen(samples, 2, PcmBuffer::kRate, fps);
+            }
+            if (cues.empty())
+                fail("No mouth shapes came of that.");
+            // The chart given, else the one kept on the symbol, else one
+            // frame a shape in order.
+            std::map<std::string, int> chart;
+            const QJsonObject given = args.value("chart").toObject();
+            for (auto it = given.begin(); it != given.end(); ++it)
+                chart[it.key().toStdString()] = std::max(1, it.value().toInt(1));
+            if (chart.empty() && mouth->symbol)
+                for (const auto& [name, value] : mouth->symbol->extraAttributes)
+                    if (name == "phoenixMouthChart")
+                        chart = fla::lipsync::chartFrom(value);
+            if (chart.empty())
+                chart = fla::lipsync::defaultChart(fla::lipsync::shapesOf(cues));
+            fla::CommandPtr keys = fla::lipsync::apply(layer, *mouth, cues, chart, key.index, fps);
+            if (!keys)
+                fail("No mouth shapes came of that.");
+            _window._selection.clear();
+            if (fla::Symbol* symbol = mouth->symbol)
+            {
+                using Attributes = std::vector<std::pair<std::string, std::string>>;
+                Attributes after = symbol->extraAttributes;
+                after.erase(std::remove_if(after.begin(), after.end(),
+                                [](const auto& pair) { return pair.first == "phoenixMouthChart"; }),
+                    after.end());
+                after.emplace_back("phoenixMouthChart", fla::lipsync::chartText(chart));
+                context.stack().push(fla::CommandPtr(new fla::SetPropertyCommand<Attributes>(
+                    symbol->extraAttributes, symbol->extraAttributes, after, "Lip Sync")));
+            }
+            context.stack().push(std::move(keys));
+            QJsonObject used;
+            for (const auto& [shape, frame] : chart)
+                used[QString::fromStdString(shape)] = frame;
+            return Result{QJsonObject{{"cues", static_cast<int>(cues.size())}, {"chart", used}}};
+        });
+
+    add("in_betweens", "In-betweens",
+        "Draws the in-betweens between two keyframes of a layer as keyframes of their own, as an animator would: "
+        "the frames between are worked out as a tween (classic for one symbol instance, shape for shapes) with "
+        "the ease given, then each becomes a keyframe that can be redrawn by hand. On twos makes one every other "
+        "frame, each held for two.",
+        {{"symbol", kSymbolArg}, {"layer", kLayerArg}, {"frame", prop("integer", "The first keyframe")},
+            {"ease", prop("integer", "-100 (ease in, slow start) to 100 (ease out, slow end); 0 when left out")},
+            {"onTwos", prop("boolean", "One drawing every two frames; on ones when left out")}},
+        {"layer", "frame"}, true, [this](const QJsonObject& args) {
+            ScriptContext context{_window};
+            fla::Timeline& timeline = context.timeline(args);
+            fla::Layer& layer = context.layer(timeline, args);
+            fla::Frame& from = context.keyframe(layer, args);
+            const int first = from.index;
+            const int next = first + std::max(1, from.duration);
+            fla::Frame* to = keyframeAt(layer, next);
+            if (!to || to->index != next)
+                fail("There has to be a keyframe after it to work toward.");
+            if (from.duration < 2)
+                fail("The keyframes are next to each other: insert frames between them first.");
+            const auto onlyInstance = [](const fla::Frame& frame) {
+                return frame.elements.size() == 1 && frame.elements.front() &&
+                    frame.elements.front()->elementType() == fla::Element::Type::SymbolInstance;
+            };
+            const auto allShapes = [](const fla::Frame& frame) {
+                return !frame.elements.empty() && std::all_of(frame.elements.begin(), frame.elements.end(),
+                    [](const fla::Element* e) { return e && e->elementType() == fla::Element::Type::Shape; });
+            };
+            const bool classic = onlyInstance(from) && onlyInstance(*to);
+            if (!classic && !(allShapes(from) && allShapes(*to)))
+                fail("Both keyframes need one symbol instance each, or shapes only, to work out what goes between.");
+            const int ease = std::clamp(args.value("ease").toInt(0), -100, 100);
+            const bool twos = args.value("onTwos").toBool(false);
+            const double fps = context.document().frameRate > 0.0 ? context.document().frameRate : 24.0;
+            const int span = from.duration;
+            fla::Layer* target = &layer;
+            _window._selection.clear();
+            auto made = std::make_shared<bool>(true);
+            auto* command = new fla::EditFramesCommand({target}, "In-betweens",
+                [target, first, span, classic, ease, twos, fps, made](std::vector<fla::Frame*>& removed) {
+                    *made = classic ? fla::timeline::setTween(*target, first, true) : fla::timeline::setShapeTween(*target, first);
+                    if (!*made)
+                        return;
+                    if (fla::Frame* tween = fla::timeline::spanAt(*target, first))
+                        tween->acceleration = ease;
+                    fla::frames::convertToFrameByFrame(*target, first, first + span - 1, fps);
+                    // On twos: every other drawing goes, the one before held
+                    // over its frame.
+                    if (twos)
+                        for (int i = first + 1; i < first + span; i += 2)
+                            fla::timeline::clearKeyframe(*target, i, removed);
+                });
+            context.stack().push(fla::CommandPtr(command));
+            if (!*made)
+                fail("No tween could be made between those keyframes.");
+            return Result{QJsonObject{{"drawings", twos ? (span + 1) / 2 - 1 : span - 1},
+                {"timeline", timelineJson(timeline, true)}}};
+        });
+
+    add("pose_cycle", "Pose cycle",
+        "Makes a looping cycle, such as a walk or a run, from poses: the keyframes of a layer from one frame to "
+        "another, in order. The cycle goes on a new layer above, the poses' layer is hidden and kept as it was. "
+        "Each pose is held for the frames given (or as long as it is now), the cycle repeats, and it can move "
+        "across the stage as it goes, so a walk in place walks along.",
+        {{"symbol", kSymbolArg}, {"layer", kLayerArg},
+            {"from", prop("integer", "The first pose's frame; 1 when left out")},
+            {"to", prop("integer", "The last frame of the poses; the layer's end when left out")},
+            {"hold", prop("integer", "Frames each pose shows; as long as it is now when left out")},
+            {"repeats", prop("integer", "How many times the cycle plays; 4 when left out")},
+            {"advance", prop("number", "Pixels the whole cycle moves to the right each time round (negative for "
+                                       "left); 0, in place, when left out")},
+            {"tween", choice({"none", "classic", "shape"}, "Tweens between the poses; none when left out")}},
+        {"layer"}, true, [this](const QJsonObject& args) {
+            ScriptContext context{_window};
+            fla::Timeline& timeline = context.timeline(args);
+            const int index = context.layerIndex(timeline, args);
+            fla::Layer& layer = *timeline.layers[static_cast<size_t>(index)];
+            const int from = ScriptContext::frameIndex(args, "from");
+            const int to = args.contains("to") ? ScriptContext::frameIndex(args, "to")
+                                               : std::max(from, fla::timeline::layerEnd(layer) - 1);
+            struct Pose
+            {
+                const fla::Frame* frame;
+                int hold;
+            };
+            std::vector<Pose> poses;
+            for (const fla::Frame* frame : layer.frames)
+            {
+                if (!frame || frame->index < from || frame->index > to)
+                    continue;
+                const int own = std::min(frame->index + std::max(1, frame->duration), to + 1) - frame->index;
+                poses.push_back({frame, std::max(1, own)});
+            }
+            if (poses.size() < 2)
+                fail("Give a range with at least two pose keyframes.");
+            if (args.contains("hold"))
+                for (Pose& pose : poses)
+                    pose.hold = std::clamp(args.value("hold").toInt(2), 1, 240);
+            const int repeats = std::clamp(args.value("repeats").toInt(4), 1, 100);
+            const double advance = args.value("advance").toDouble(0.0);
+            const QString tween = args.value("tween").toString("none");
+            int length = 0;
+            for (const Pose& pose : poses)
+                length += pose.hold;
+
+            fla::Layer* cycle = fla::newLayerFor(timeline, false);
+            cycle->name = layer.name + " cycle";
+            cycle->autoNamed = false;
+            const int start = poses.front().frame->index;
+            int at = start;
+            std::vector<int> keys;
+            for (int round = 0; round < repeats; ++round)
+                for (const Pose& pose : poses)
+                {
+                    fla::Frame* frame = fla::timeline::insertKeyframe(*cycle, at, true);
+                    if (!frame)
+                        continue;
+                    // Moved along by how far into the whole run it is.
+                    const double shift = advance * (at - start) / length;
+                    for (const fla::Element* element : pose.frame->elements)
+                    {
+                        if (!element)
+                            continue;
+                        fla::Element* copy = fla::cloneElement(*element, frame);
+                        copy->transform.tx += shift;
+                        frame->elements.push_back(copy);
+                    }
+                    keys.push_back(at);
+                    at += pose.hold;
+                }
+            // The last pose held for its frames too.
+            if (poses.back().hold > 1)
+                fla::timeline::insertFrames(*cycle, keys.back(), poses.back().hold - 1);
+            if (tween != "none")
+                for (size_t i = 0; i + 1 < keys.size(); ++i)
+                {
+                    if (tween == "classic")
+                        fla::timeline::setTween(*cycle, keys[i], true);
+                    else
+                        fla::timeline::setShapeTween(*cycle, keys[i]);
+                }
+            _window._selection.clear();
+            context.stack().push(fla::CommandPtr(new fla::AddLayerCommand(&timeline, index, cycle, "Pose Cycle")));
+            context.stack().push(fla::CommandPtr(
+                new fla::SetPropertyCommand<bool>(layer.visible, layer.visible, false, "Pose Cycle")));
+            return Result{QJsonObject{{"layer", QString::fromStdString(cycle->name)}, {"frames", repeats * length},
+                {"cycleLength", length}}};
+        });
+
+    add("apply_palette", "Apply palette",
+        "Recolors artwork to a palette: every solid fill and stroke in the scene (or a symbol, or one layer of "
+        "it), and in the symbols it shows, takes the palette color nearest its own, keeping its transparency. "
+        "A symbol is recolored everywhere it is used. For moving a scene's colors onto a color script, or "
+        "tidying near-duplicate colors.",
+        {{"symbol", kSymbolArg}, {"layer", prop("string", "Only this layer, by name; every layer when left out")},
+            {"colors", QJsonObject{{"type", "array"}, {"items", QJsonObject{{"type", "string"}}},
+                           {"description", "The palette, as \"#RRGGBB\" colors"}}},
+            {"inSymbols", prop("boolean", "Also recolor the symbols shown; on when left out")}},
+        {"colors"}, true, [this](const QJsonObject& args) {
+            ScriptContext context{_window};
+            fla::Timeline& timeline = context.timeline(args);
+            std::vector<std::array<int, 3>> palette;
+            for (const QJsonValue& value : args.value("colors").toArray())
+            {
+                uint8_t rgba[4];
+                if (!parseColor(value.toString(), rgba))
+                    fail(QString("%1 is not a color.").arg(value.toString()));
+                palette.push_back({rgba[0], rgba[1], rgba[2]});
+            }
+            if (palette.empty())
+                fail("Give the palette's colors.");
+            // Nearest as the eye judges it, roughly: red and blue weighed by
+            // how red the pair is (the "redmean" distance).
+            const auto nearest = [&palette](uint8_t rgba[4]) {
+                double best = 1.0e300;
+                const std::array<int, 3>* chosen = &palette.front();
+                for (const auto& color : palette)
+                {
+                    const double mean = (rgba[0] + color[0]) / 2.0;
+                    const double dr = rgba[0] - color[0], dg = rgba[1] - color[1], db = rgba[2] - color[2];
+                    const double d = (2.0 + mean / 256.0) * dr * dr + 4.0 * dg * dg + (2.0 + (255.0 - mean) / 256.0) * db * db;
+                    if (d < best)
+                    {
+                        best = d;
+                        chosen = &color;
+                    }
+                }
+                bool changed = false;
+                for (int c = 0; c < 3; ++c)
+                {
+                    changed = changed || rgba[c] != (*chosen)[static_cast<size_t>(c)];
+                    rgba[c] = static_cast<uint8_t>((*chosen)[static_cast<size_t>(c)]);
+                }
+                return changed;
+            };
+            const QString only = args.value("layer").toString();
+            const bool inSymbols = args.value("inSymbols").toBool(true);
+            int shapes = 0;
+            int colors = 0;
+            std::set<const fla::Shape*> seen;
+            std::set<const fla::Symbol*> symbolsSeen;
+            std::function<void(fla::Element*)> visit;
+            const auto visitTimeline = [&](fla::Timeline& inside) {
+                for (fla::Layer* layer : inside.layers)
+                    if (layer && !layer->isLocked())
+                        for (fla::Frame* frame : layer->frames)
+                            if (frame)
+                                for (fla::Element* element : frame->elements)
+                                    visit(element);
+            };
+            visit = [&](fla::Element* element) {
+                if (!element)
+                    return;
+                if (auto* group = dynamic_cast<fla::Group*>(element))
+                {
+                    for (fla::Element* member : group->members)
+                        visit(member);
+                    return;
+                }
+                if (auto* instance = dynamic_cast<fla::SymbolInstance*>(element))
+                {
+                    if (inSymbols && instance->symbol && symbolsSeen.insert(instance->symbol).second)
+                        for (fla::Timeline* inside : instance->symbol->timelines)
+                            if (inside)
+                                visitTimeline(*inside);
+                    return;
+                }
+                auto* shape = dynamic_cast<fla::Shape*>(element);
+                if (!shape || !seen.insert(shape).second)
+                    return;
+                std::unique_ptr<fla::Element> copy(fla::cloneElement(*shape, shape->parent));
+                auto* after = dynamic_cast<fla::Shape*>(copy.get());
+                if (!after)
+                    return;
+                int changed = 0;
+                for (fla::FillStyle* fill : after->fills)
+                    if (auto* solid = dynamic_cast<fla::SolidColor*>(fill))
+                        changed += nearest(solid->color) ? 1 : 0;
+                for (fla::StrokeStyle* stroke : after->strokes)
+                    if (auto* solid = stroke ? dynamic_cast<fla::SolidColor*>(stroke->fill) : nullptr)
+                        changed += nearest(solid->color) ? 1 : 0;
+                if (changed == 0)
+                    return;
+                context.stack().push(fla::CommandPtr(new fla::SetShapeContentsCommand(shape, *after, "Apply Palette")));
+                ++shapes;
+                colors += changed;
+            };
+            bool found = only.isEmpty();
+            for (fla::Layer* layer : timeline.layers)
+            {
+                if (!layer || (!only.isEmpty() && QString::fromStdString(layer->name) != only))
+                    continue;
+                found = true;
+                if (layer->isLocked())
+                    continue;
+                for (fla::Frame* frame : layer->frames)
+                    if (frame)
+                        for (fla::Element* element : frame->elements)
+                            visit(element);
+            }
+            if (!found)
+                fail(QString("There is no layer called %1.").arg(only));
+            return Result{QJsonObject{{"shapes", shapes}, {"colorsChanged", colors},
+                {"symbols", static_cast<int>(symbolsSeen.size())}}};
+        });
+
+    add("color_script", "Color script",
+        "A strip of small pictures across the scene, one every so many frames or one at each frame label, so the "
+        "colors and light can be judged over time, as a color script shows them. Returns the picture and which "
+        "frame each one is.",
+        {{"every", prop("integer", "Frames between pictures; one a second when left out")},
+            {"labels", prop("boolean", "One picture at each frame label instead")},
+            {"width", prop("integer", "Each picture's width in pixels, 48 to 480; 160 when left out")},
+            {"columns", prop("integer", "Pictures a row; 6 when left out")}},
+        {}, false, [this](const QJsonObject& args) {
+            ScriptContext context{_window};
+            fla::Document& document = context.document();
+            fla::Timeline& timeline = context.timeline(QJsonObject());
+            PhoenixView* view = _window.phoenixView();
+            if (!view)
+                fail("There is no stage to draw with.");
+            int end = 1;
+            for (const fla::Layer* layer : timeline.layers)
+                if (layer)
+                    end = std::max(end, fla::timeline::layerEnd(*layer));
+            std::vector<int> frames;
+            if (args.value("labels").toBool(false))
+            {
+                std::set<int> labeled;
+                for (const fla::Layer* layer : timeline.layers)
+                    if (layer)
+                        for (const fla::Frame* frame : layer->frames)
+                            if (frame && !frame->name.empty() && frame->labelType != "comment")
+                                labeled.insert(frame->index);
+                frames.assign(labeled.begin(), labeled.end());
+                if (frames.empty())
+                    fail("The scene has no frame labels.");
+            }
+            else
+            {
+                const int every = std::max(1, args.value("every").toInt(static_cast<int>(std::lround(
+                    document.frameRate > 0.0 ? document.frameRate : 24.0))));
+                for (int f = 0; f < end; f += every)
+                    frames.push_back(f);
+            }
+            if (frames.size() > 60)
+                fail(QString("That would be %1 pictures; choose a larger \"every\" (60 at most).").arg(frames.size()));
+            const int width = std::clamp(args.value("width").toInt(160), 48, 480);
+            const int columns = std::clamp(args.value("columns").toInt(6), 1, 20);
+            const int height = std::max(1, static_cast<int>(std::lround(
+                width * static_cast<double>(document.height) / std::max(1, document.width))));
+            const int caption = 16;
+            const int gap = 4;
+            const int rows = (static_cast<int>(frames.size()) + columns - 1) / columns;
+            const int across = std::min(columns, static_cast<int>(frames.size()));
+            QImage strip(across * (width + gap) + gap, rows * (height + caption + gap) + gap, QImage::Format_ARGB32);
+            strip.fill(QColor(30, 30, 30));
+            QPainter painter(&strip);
+            painter.setPen(QColor(220, 220, 220));
+            QJsonArray shown;
+            for (size_t i = 0; i < frames.size(); ++i)
+            {
+                const int x = gap + static_cast<int>(i % static_cast<size_t>(columns)) * (width + gap);
+                const int y = gap + static_cast<int>(i / static_cast<size_t>(columns)) * (height + caption + gap);
+                const QImage picture = view->renderFrame(frames[i], QSize(width, height), false);
+                painter.drawImage(x, y, picture);
+                painter.drawText(QRect(x + 3, y + height, width - 3, caption), Qt::AlignLeft | Qt::AlignVCenter,
+                    QString::number(frames[i] + 1));
+                shown.append(frames[i] + 1);
+            }
+            painter.end();
+            return Result{QJsonObject{{"frames", shown}, {"width", strip.width()}, {"height", strip.height()}}, strip};
         });
 }
 

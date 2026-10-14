@@ -5,6 +5,7 @@ What changed in each release of Phoenix, newest first.
 ## 0.8.0 (Unreleased)
 
 - Commands > Open Claude Code opens Claude Code in a terminal, already connected to Phoenix and let in without asking
+- AI assistants can make in-betweens between two keyframes, turn poses into a walk or run cycle, lip sync a mouth to a sound or cues, recolor artwork to a palette, and show a color script of the scene
 - JSFL on macOS: saving or writing to a file that does not exist yet keeps its whole path (`/Users/...`, `/var/...`) instead of losing the first folder
 - Trace Bitmap draws cleaner edges: soft and noisy borders between colors trace as straight lines instead of steps and spikes, with far fewer specks and points
 - In dialogs, Enter in a number field keeps the value typed and presses the dialog's main button, as it did before number fields became hot text; F2 opens a field for typing
