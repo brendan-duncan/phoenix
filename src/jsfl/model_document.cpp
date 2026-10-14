@@ -6,6 +6,7 @@
 #include "model.h"
 #include "xul.h"
 
+#include "../data/bitmap_instance.h"
 #include "../data/document.h"
 #include "../data/fla_document.h"
 #include "../data/frame.h"
@@ -26,6 +27,7 @@
 #include "../edit/property_command.h"
 #include "../edit/selection.h"
 #include "../edit/timeline_edit.h"
+#include "../edit/trace_bitmap.h"
 #include "../edit/vector_import.h"
 
 #include <algorithm>
@@ -516,6 +518,47 @@ const ClassInfo& Document::classInfo() const
                     break;
                 }
             }
+            return Value();
+        });
+        // traceBitmap(threshold, minimumArea, curveFit, cornerThreshold): each
+        // selected bitmap becomes vector artwork, as Modify > Bitmap > Trace
+        // Bitmap. The corner threshold is taken but not used.
+        def.method("traceBitmap", 4, [](Document& d, const Args& args) {
+            fla::trace::Options options;
+            options.colorThreshold = std::clamp(given(args, 0) ? arg(args, 0).toInt() : 100, 0, 500);
+            options.minimumArea = std::clamp(given(args, 1) ? arg(args, 1).toInt() : 8, 1, 1000);
+            const std::string fit = given(args, 2) ? arg(args, 2).toString() : "normal";
+            const auto found = std::find_if(std::begin(fla::trace::kCurveFits), std::end(fla::trace::kCurveFits),
+                [&fit](const fla::trace::CurveFit& each) { return fit == each.name; });
+            if (found == std::end(fla::trace::kCurveFits))
+                throw Error("The curve fit must be \"pixels\", \"very tight\", \"tight\", \"normal\", \"smooth\" or \"very smooth\".");
+            options.curveFit = found->tolerance;
+            fla::Selection& selection = d.session.host().selection(d.document);
+            std::vector<fla::DOMElement*> traced;
+            for (fla::Element* element : needSelection(d.session, d.document))
+            {
+                fla::Frame* frame = frameOf(element);
+                if (!frame || element->elementType() != fla::Element::Type::BitmapInstance)
+                    continue;
+                auto* bitmap = static_cast<fla::BitmapInstance*>(element);
+                int width = 0;
+                int height = 0;
+                std::vector<uint8_t> rgba;
+                if (!d.session.host().bitmapPixels(d.document, bitmap->libraryItemName, width, height, rgba))
+                    throw Error("The bitmap " + bitmap->libraryItemName + " could not be read.");
+                fla::Shape* shape = fla::trace::traceBitmap(rgba.data(), width, height, options);
+                if (!shape)
+                    continue;
+                shape->parent = frame;
+                shape->transform = bitmap->transform;
+                const auto at = std::find(frame->elements.begin(), frame->elements.end(), element);
+                const int index = at == frame->elements.end() ? -1 : static_cast<int>(at - frame->elements.begin());
+                d.push(fla::CommandPtr(new fla::RemoveElementCommand(frame, element, "Trace Bitmap", &selection)));
+                d.push(fla::CommandPtr(new fla::AddElementCommand(frame, shape, "Trace Bitmap", &selection, index)));
+                traced.push_back(shape);
+            }
+            if (!traced.empty())
+                selection.select(traced);
             return Value();
         });
         def.method("convertToSymbol", 3, [](Document& d, const Args& args) {

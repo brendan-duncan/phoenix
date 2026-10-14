@@ -26,6 +26,16 @@ struct Options
     double curveFit = 1.0;
 };
 
+/// The settings Curve fit offers, from closest to smoothest, with Animate's
+/// names for them and the curveFit each gives.
+struct CurveFit
+{
+    const char* label;
+    const char* name;
+    double tolerance;
+};
+extern const CurveFit kCurveFits[6];
+
 /// Each pixel's area, or -1 for a (mostly) transparent one, row by row;
 /// \a count is how many areas there are.
 std::vector<int> regions(const uint8_t* rgba, int width, int height, const Options& options, int& count);

@@ -2,6 +2,7 @@
 // that keeps everything in memory.
 #include "test_util.h"
 
+#include "../src/data/bitmap_instance.h"
 #include "../src/data/document.h"
 #include "../src/data/fla_document.h"
 #include "../src/data/frame.h"
@@ -189,6 +190,19 @@ public:
     {
         error = "no drawing in the tests";
         return false;
+    }
+    /// Every bitmap is 4 by 2 pixels, red on the left and blue on the right.
+    bool bitmapPixels(fla::FLADocument*, const std::string&, int& width, int& height, std::vector<uint8_t>& rgba) override
+    {
+        width = 4;
+        height = 2;
+        rgba.clear();
+        for (int i = 0; i < width * height; ++i)
+        {
+            const bool red = i % width < 2;
+            rgba.insert(rgba.end(), {static_cast<uint8_t>(red ? 255 : 0), 0, static_cast<uint8_t>(red ? 0 : 255), 255});
+        }
+        return true;
     }
 };
 
@@ -539,6 +553,27 @@ TEST(jsfl_document_edits)
     f.host.history(f.document).undo();
     CHECK(f.scene().layers[0]->frames[0]->elements.empty());
     CHECK(!f.data().symbolList || f.data().symbolList->symbolMap.count("Box") == 0);
+}
+
+TEST(jsfl_trace_bitmap)
+{
+    Fixture f;
+    fla::Frame* frame = f.scene().layers[0]->frames[0];
+    fla::BitmapInstance* picture = new fla::BitmapInstance(frame);
+    picture->libraryItemName = "picture.png";
+    frame->elements.push_back(picture);
+    CHECK(f.run("var d = fl.getDocumentDOM();\n"
+                "d.selectAll(); d.traceBitmap(100, 1, 'pixels');\n"
+                "var e = d.getTimeline().layers[0].frames[0].elements;\n"
+                "fl.trace(e.length + ' ' + e[0].elementType + ' ' + d.selection.length);\n"
+                "try { d.traceBitmap(100, 1, 'wobbly'); } catch (x) { fl.trace('refused'); }\n")
+              .ok);
+    // Two areas, red and blue, as one shape in the bitmap's place.
+    CHECK_OUTPUT(f, "1 shape 1\nrefused\n");
+    const auto* shape = dynamic_cast<const fla::Shape*>(frame->elements[0]);
+    CHECK(shape && shape->fills.size() == 2);
+    f.host.history(f.document).undo();
+    CHECK(frame->elements.size() == 1 && frame->elements[0]->elementType() == fla::Element::Type::BitmapInstance);
 }
 
 TEST(jsfl_clipboard)

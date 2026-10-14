@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cstdint>
 #include <string>
 #include <vector>
 
@@ -142,6 +143,18 @@ public:
     virtual void copyText(const std::string& text) { (void)text; }
     /// \a element's bounds in its timeline, as the stage draws it.
     virtual Rect bounds(fla::FLADocument* document, const fla::Element* element) = 0;
+    /// The pixels of library bitmap \a item, straight RGBA, top row first;
+    /// false when it cannot be read.
+    virtual bool bitmapPixels(fla::FLADocument* document, const std::string& item, int& width, int& height,
+        std::vector<uint8_t>& rgba)
+    {
+        (void)document;
+        (void)item;
+        (void)width;
+        (void)height;
+        (void)rgba;
+        return false;
+    }
     /// The current frame (or every frame, numbered) of the document as PNG.
     virtual bool exportPNG(fla::FLADocument* document, const std::string& path, bool currentFrameOnly,
         std::string& error) = 0;

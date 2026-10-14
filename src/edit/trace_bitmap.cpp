@@ -15,6 +15,9 @@ namespace fla {
 
 namespace trace {
 
+const CurveFit kCurveFits[6] = {{"Pixels", "pixels", 0.25}, {"Very Tight", "very tight", 0.5},
+    {"Tight", "tight", 1.0}, {"Normal", "normal", 2.0}, {"Smooth", "smooth", 3.0}, {"Very Smooth", "very smooth", 5.0}};
+
 namespace {
 
 int distance(const uint8_t* a, const uint8_t* b)

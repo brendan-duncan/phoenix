@@ -49,6 +49,7 @@
 #include <QVBoxLayout>
 
 #include <cstdio>
+#include <cstring>
 #include <map>
 
 namespace {
@@ -496,6 +497,23 @@ public:
         if (!box.isValid())
             return {};
         return {box.left(), box.top(), box.right(), box.bottom()};
+    }
+    bool bitmapPixels(fla::FLADocument* document, const std::string& item, int& width, int& height,
+        std::vector<uint8_t>& rgba) override
+    {
+        activate(document);
+        PhoenixView* view = _window._phoenixView;
+        if (document != _window._flaDocument || !view)
+            return false;
+        const QImage image = view->libraryBitmap(qtext(item)).toImage().convertToFormat(QImage::Format_RGBA8888);
+        if (image.isNull())
+            return false;
+        width = image.width();
+        height = image.height();
+        rgba.resize(static_cast<size_t>(width) * height * 4);
+        for (int y = 0; y < height; ++y)
+            std::memcpy(rgba.data() + static_cast<size_t>(y) * width * 4, image.constScanLine(y), static_cast<size_t>(width) * 4);
+        return true;
     }
     bool exportPNG(fla::FLADocument* document, const std::string& path, bool currentFrameOnly, std::string& error) override
     {

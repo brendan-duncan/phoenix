@@ -70,6 +70,7 @@
 #include "lip_sync_dialog.h"
 #include "theme.h"
 #include "theme_editor.h"
+#include "trace_bitmap_dialog.h"
 #include "../parser/fla_doctor.h"
 #include "../edit/linked_assets.h"
 #include "command_line.h"
@@ -11887,42 +11888,16 @@ void MainWindow::traceBitmaps()
         statusBar()->showMessage("Select a bitmap on the stage to trace.", 4000);
         return;
     }
-    QDialog dialog(this);
-    dialog.setWindowTitle("Trace Bitmap");
-    QFormLayout* form = new QFormLayout(&dialog);
-    QSettings settings;
-    HotSpinBox* threshold = new HotSpinBox(&dialog);
-    threshold->setRange(1, 500);
-    threshold->setValue(settings.value("trace/threshold", 100).toInt());
-    threshold->setToolTip("How different two colors may be and still make one area; higher makes fewer areas");
-    form->addRow("Color threshold", threshold);
-    HotSpinBox* area = new HotSpinBox(&dialog);
-    area->setRange(1, 1000);
-    area->setSuffix(" px");
-    area->setValue(settings.value("trace/minimumArea", 8).toInt());
-    area->setToolTip("Areas smaller than this join their neighbors");
-    form->addRow("Minimum area", area);
-    QComboBox* fit = new QComboBox(&dialog);
-    const std::pair<const char*, double> fits[] = {{"Pixels", 0.25}, {"Very Tight", 0.5}, {"Tight", 1.0},
-        {"Normal", 2.0}, {"Smooth", 3.0}, {"Very Smooth", 5.0}};
-    for (const auto& [label, tolerance] : fits)
-        fit->addItem(label, tolerance);
-    fit->setCurrentIndex(std::clamp(settings.value("trace/curveFit", 3).toInt(), 0, 5));
-    fit->setToolTip("How closely the outlines follow the pixels; smoother outlines have fewer points");
-    form->addRow("Curve fit", fit);
-    QDialogButtonBox* buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, &dialog);
-    connect(buttons, &QDialogButtonBox::accepted, &dialog, &QDialog::accept);
-    connect(buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
-    form->addRow(buttons);
+    const QImage first = _phoenixView->libraryBitmap(QString::fromStdString(bitmaps.front()->libraryItemName)).toImage();
+    if (first.isNull())
+    {
+        statusBar()->showMessage("The bitmap could not be read.", 4000);
+        return;
+    }
+    TraceBitmapDialog dialog(first, static_cast<int>(bitmaps.size()), this);
     if (dialog.exec() != QDialog::Accepted)
         return;
-    settings.setValue("trace/threshold", threshold->value());
-    settings.setValue("trace/minimumArea", area->value());
-    settings.setValue("trace/curveFit", fit->currentIndex());
-    fla::trace::Options options;
-    options.colorThreshold = threshold->value();
-    options.minimumArea = area->value();
-    options.curveFit = fit->currentData().toDouble();
+    const fla::trace::Options options = dialog.options();
 
     QApplication::setOverrideCursor(Qt::WaitCursor);
     _phoenixView->flushPendingMerge();
