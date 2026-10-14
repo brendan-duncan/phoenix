@@ -5,6 +5,7 @@ What changed in each release of Phoenix, newest first.
 ## 0.8.0 (Unreleased)
 
 - Trace Bitmap draws cleaner edges: soft and noisy borders between colors trace as straight lines instead of steps and spikes, with far fewer specks and points
+- No more faint lines of the background between fills that meet, in traced artwork and any shape with neighboring fills, on the stage and in exports
 - Trace Bitmap fits curves: rounds come out smooth, while straight sides and corners stay sharp (Curve fit Tight and smoother; Pixels and Very Tight keep the pixels' steps)
 
 ## 0.7.0 (2026-10-13)

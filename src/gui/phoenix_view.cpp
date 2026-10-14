@@ -3607,6 +3607,12 @@ void PhoenixView::paintEntry(QPainter& painter, const PathCacheEntry& entry)
     }
     painter.setPen(penForHere(entry));
     painter.drawPath(entry.painterPath);
+    if (!entry.seamPath.isEmpty())
+    {
+        QPen seam(painter.brush(), 1.0, Qt::SolidLine, Qt::FlatCap, Qt::RoundJoin);
+        seam.setCosmetic(true);
+        painter.strokePath(entry.seamPath, seam);
+    }
 }
 
 QPen PhoenixView::penForHere(const PathCacheEntry& entry) const
@@ -4268,6 +4274,39 @@ void PhoenixView::buildShapePaths(const fla::Shape* shape, PathCacheList& cacheE
         }
     }
 
+    // Where two fills meet, each is smoothed against what is behind it and
+    // the two halves leave a faint line of the background. The fill drawn
+    // first (the lower index) also strokes the edges it shares, a pixel
+    // wide, so the other is smoothed against it instead.
+    std::map<int, QPainterPath> seams;
+    for (const fla::Edge* edge : shape->edges)
+        for (const fla::Path* path : edge->paths)
+        {
+            const int one = path->fillStyleIndex != -1 ? path->fillStyleIndex : edge->fillStyle1;
+            const int other = edge->fillStyle0;
+            if (one <= 0 || other <= 0 || one == other || path->segments.empty() || !fillPaths.count(one) ||
+                !fillPaths.count(other))
+                continue;
+            const auto [first, last] = getPathEndpoints(path);
+            (void)last;
+            QPainterPath& seam = seams[std::min(one, other)];
+            seam.moveTo(first.x, first.y);
+            addSegmentToPath(seam, path, false, shape);
+        }
+    // Only an opaque fill: a see-through one would show darker along it.
+    const auto opaque = [](const QBrush& brush) {
+        if (brush.style() == Qt::SolidPattern)
+            return brush.color().alpha() == 255;
+        if (const QGradient* gradient = brush.gradient())
+        {
+            for (const QGradientStop& stop : gradient->stops())
+                if (stop.second.alpha() != 255)
+                    return false;
+            return true;
+        }
+        return false;
+    };
+
     for (const auto& [fillIdx, compoundPath] : fillPaths)
     {
         const fla::FillStyle* fillStyle = shape->getFillStyleByIndex(fillIdx);
@@ -4285,10 +4324,15 @@ void PhoenixView::buildShapePaths(const fla::Shape* shape, PathCacheList& cacheE
                 brush = texturedBrush(brush.color(), spec);
             PathCacheEntry entry{ brush, Qt::NoPen, compoundPath, nullptr, fillIdx };
             entry.fixedGrain = spec.valid() && spec.fixed;
+            if (seams.count(fillIdx) && opaque(brush))
+                entry.seamPath = seams[fillIdx];
             cacheEntries.push_back(entry);
             continue;
         }
-        cacheEntries.push_back({ brush, Qt::NoPen, compoundPath, nullptr, fillIdx });
+        PathCacheEntry entry{ brush, Qt::NoPen, compoundPath, nullptr, fillIdx };
+        if (seams.count(fillIdx) && opaque(brush))
+            entry.seamPath = seams[fillIdx];
+        cacheEntries.push_back(entry);
     }
 
     // Whether two points are the same to a twip.

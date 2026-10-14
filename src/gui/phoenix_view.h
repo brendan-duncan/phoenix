@@ -1073,6 +1073,11 @@ private:
         /// A textured fill whose grain keeps its size in the frame: the
         /// art's own scale is taken out of it when it is painted.
         bool fixedGrain = false;
+
+        /// For a fill entry, the edges it shares with a fill drawn after it,
+        /// stroked a pixel wide in its own paint so no line of what is
+        /// behind shows between the two.
+        QPainterPath seamPath;
     };
 
     /// Paints one cached entry: its fill and stroke, or its procedural
