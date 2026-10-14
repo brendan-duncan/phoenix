@@ -9,6 +9,7 @@
 #include <cmath>
 #include <cstdlib>
 #include <map>
+#include <queue>
 #include <unordered_map>
 
 namespace fla {
@@ -19,11 +20,6 @@ const CurveFit kCurveFits[6] = {{"Pixels", "pixels", 0.25}, {"Very Tight", "very
     {"Tight", "tight", 1.0}, {"Normal", "normal", 2.0}, {"Smooth", "smooth", 3.0}, {"Very Smooth", "very smooth", 5.0}};
 
 namespace {
-
-int distance(const uint8_t* a, const uint8_t* b)
-{
-    return std::abs(a[0] - b[0]) + std::abs(a[1] - b[1]) + std::abs(a[2] - b[2]);
-}
 
 /// Points the polyline needs within \a tolerance of it (Ramer, Douglas and
 /// Peucker); the ends are kept.
@@ -69,21 +65,51 @@ std::vector<int> regions(const uint8_t* rgba, int width, int height, const Optio
     const size_t pixels = static_cast<size_t>(width) * static_cast<size_t>(height);
     std::vector<int> label(pixels, -2);
     count = 0;
+    if (pixels == 0)
+        return label;
+    const auto opaque = [&](size_t i) { return rgba[i * 4 + 3] >= 128; };
+
+    // 1. Small areas to start from: each pixel joins a neighbor's area when
+    // it is close to the area's average so far, well inside the threshold.
+    const int tight = std::max(1, options.colorThreshold / 2);
+    struct Area
+    {
+        double sum[3] = {0.0, 0.0, 0.0};
+        double pixels = 0.0;
+        int distanceTo(const uint8_t* p) const
+        {
+            return static_cast<int>(std::lround(std::fabs(sum[0] / pixels - p[0]) + std::fabs(sum[1] / pixels - p[1]) +
+                std::fabs(sum[2] / pixels - p[2])));
+        }
+        int distanceTo(const Area& other) const
+        {
+            double d = 0.0;
+            for (int c = 0; c < 3; ++c)
+                d += std::fabs(sum[c] / pixels - other.sum[c] / other.pixels);
+            return static_cast<int>(std::lround(d));
+        }
+        void add(const uint8_t* p)
+        {
+            for (int c = 0; c < 3; ++c)
+                sum[c] += p[c];
+            pixels += 1.0;
+        }
+    };
+    std::vector<Area> areas;
     std::vector<size_t> stack;
-    // Flood each unlabeled opaque pixel's like neighbors, against the
-    // color of the pixel the area started from.
     for (size_t start = 0; start < pixels; ++start)
     {
         if (label[start] != -2)
             continue;
-        if (rgba[start * 4 + 3] < 128)
+        if (!opaque(start))
         {
             label[start] = -1;
             continue;
         }
-        const int area = count++;
-        const uint8_t* seed = rgba + start * 4;
+        const int area = static_cast<int>(areas.size());
+        areas.emplace_back();
         label[start] = area;
+        areas.back().add(rgba + start * 4);
         stack.assign(1, start);
         while (!stack.empty())
         {
@@ -98,13 +124,291 @@ std::vector<int> regions(const uint8_t* rgba, int width, int height, const Optio
                 if (nx[k] < 0 || ny[k] < 0 || nx[k] >= width || ny[k] >= height)
                     continue;
                 const size_t next = static_cast<size_t>(ny[k]) * static_cast<size_t>(width) + static_cast<size_t>(nx[k]);
-                if (label[next] != -2 || rgba[next * 4 + 3] < 128 || distance(rgba + next * 4, seed) > options.colorThreshold)
+                if (label[next] != -2 || !opaque(next) || areas[static_cast<size_t>(area)].distanceTo(rgba + next * 4) > tight)
                     continue;
                 label[next] = area;
+                areas[static_cast<size_t>(area)].add(rgba + next * 4);
                 stack.push_back(next);
             }
         }
     }
+
+    // 2. Neighboring areas whose average colors are within the threshold
+    // join, the closest pair first, so how the picture was walked does not
+    // decide where the borders fall.
+    const int areaCount = static_cast<int>(areas.size());
+    std::vector<int> parent(static_cast<size_t>(areaCount));
+    for (int i = 0; i < areaCount; ++i)
+        parent[static_cast<size_t>(i)] = i;
+    const auto find = [&parent](int a) {
+        while (parent[static_cast<size_t>(a)] != a)
+        {
+            parent[static_cast<size_t>(a)] = parent[static_cast<size_t>(parent[static_cast<size_t>(a)])];
+            a = parent[static_cast<size_t>(a)];
+        }
+        return a;
+    };
+    std::vector<std::vector<int>> neighbors(static_cast<size_t>(areaCount));
+    for (int y = 0; y < height; ++y)
+        for (int x = 0; x < width; ++x)
+        {
+            const int here = label[static_cast<size_t>(y) * static_cast<size_t>(width) + static_cast<size_t>(x)];
+            if (here < 0)
+                continue;
+            const int right = x + 1 < width ? label[static_cast<size_t>(y) * static_cast<size_t>(width) + static_cast<size_t>(x + 1)] : -1;
+            const int below = y + 1 < height ? label[static_cast<size_t>(y + 1) * static_cast<size_t>(width) + static_cast<size_t>(x)] : -1;
+            for (int other : {right, below})
+                if (other >= 0 && other != here)
+                {
+                    neighbors[static_cast<size_t>(here)].push_back(other);
+                    neighbors[static_cast<size_t>(other)].push_back(here);
+                }
+        }
+    for (auto& list : neighbors)
+    {
+        std::sort(list.begin(), list.end());
+        list.erase(std::unique(list.begin(), list.end()), list.end());
+    }
+    struct Pair
+    {
+        int distance, a, b;
+        bool operator>(const Pair& other) const { return distance > other.distance; }
+    };
+    std::priority_queue<Pair, std::vector<Pair>, std::greater<Pair>> queue;
+    for (int a = 0; a < areaCount; ++a)
+        for (int b : neighbors[static_cast<size_t>(a)])
+            if (a < b)
+            {
+                const int d = areas[static_cast<size_t>(a)].distanceTo(areas[static_cast<size_t>(b)]);
+                if (d <= options.colorThreshold)
+                    queue.push({d, a, b});
+            }
+    // Lists of neighbors, joined as their areas join; compacted (roots
+    // only, once each) when one has doubled since it last was.
+    std::vector<size_t> compacted(static_cast<size_t>(areaCount));
+    for (int a = 0; a < areaCount; ++a)
+        compacted[static_cast<size_t>(a)] = neighbors[static_cast<size_t>(a)].size();
+    const auto compact = [&](int a) {
+        std::vector<int>& list = neighbors[static_cast<size_t>(a)];
+        for (int& other : list)
+            other = find(other);
+        std::sort(list.begin(), list.end());
+        list.erase(std::unique(list.begin(), list.end()), list.end());
+        list.erase(std::remove(list.begin(), list.end(), a), list.end());
+        compacted[static_cast<size_t>(a)] = list.size();
+    };
+    bool joinedAny = true;
+    while (joinedAny)
+    {
+        joinedAny = false;
+        while (!queue.empty())
+        {
+            Pair pair = queue.top();
+            queue.pop();
+            const int a = find(pair.a);
+            const int b = find(pair.b);
+            if (a == b)
+                continue;
+            // Either side may have grown since: measured again, and put
+            // back when farther now.
+            const int d = areas[static_cast<size_t>(a)].distanceTo(areas[static_cast<size_t>(b)]);
+            if (d > options.colorThreshold)
+                continue;
+            if (d > pair.distance)
+            {
+                queue.push({d, a, b});
+                continue;
+            }
+            // The smaller joins the larger, its neighbors with it. Only the
+            // pairs it brings are queued here; the larger one's others are
+            // measured again by the sweep below.
+            const int into = areas[static_cast<size_t>(a)].pixels >= areas[static_cast<size_t>(b)].pixels ? a : b;
+            const int from = into == a ? b : a;
+            Area& kept = areas[static_cast<size_t>(into)];
+            for (int c = 0; c < 3; ++c)
+                kept.sum[c] += areas[static_cast<size_t>(from)].sum[c];
+            kept.pixels += areas[static_cast<size_t>(from)].pixels;
+            parent[static_cast<size_t>(from)] = into;
+            joinedAny = true;
+            std::vector<int>& list = neighbors[static_cast<size_t>(into)];
+            for (int other : neighbors[static_cast<size_t>(from)])
+            {
+                const int root = find(other);
+                if (root == into)
+                    continue;
+                list.push_back(root);
+                const int between = kept.distanceTo(areas[static_cast<size_t>(root)]);
+                if (between <= options.colorThreshold)
+                    queue.push({between, into, root});
+            }
+            std::vector<int>().swap(neighbors[static_cast<size_t>(from)]);
+            if (list.size() > 2 * compacted[static_cast<size_t>(into)] + 16)
+                compact(into);
+        }
+        if (!joinedAny)
+            break;
+        // Areas that have grown may have come within the threshold of
+        // neighbors measured before they did.
+        joinedAny = false;
+        for (int a = 0; a < areaCount; ++a)
+        {
+            if (find(a) != a)
+                continue;
+            compact(a);
+            for (int b : neighbors[static_cast<size_t>(a)])
+            {
+                if (a >= b)
+                    continue;
+                const int d = areas[static_cast<size_t>(a)].distanceTo(areas[static_cast<size_t>(b)]);
+                if (d <= options.colorThreshold)
+                {
+                    queue.push({d, a, b});
+                    joinedAny = true;
+                }
+            }
+        }
+    }
+    for (int& l : label)
+        if (l >= 0)
+            l = find(l);
+
+    // A strip with no pixel inside it, every one on a border, whose color
+    // is a blend of two areas beside it, is the soft edge between them
+    // rather than an area of its own: it goes whole to the nearer of the
+    // two, which keeps the edge straight. A drawn line is not a blend of
+    // what is either side of it, and stays.
+    {
+        std::vector<char> inside(static_cast<size_t>(areaCount), 0);
+        for (int y = 1; y + 1 < height; ++y)
+            for (int x = 1; x + 1 < width; ++x)
+            {
+                const size_t at = static_cast<size_t>(y) * static_cast<size_t>(width) + static_cast<size_t>(x);
+                const int l = label[at];
+                if (l >= 0 && label[at - 1] == l && label[at + 1] == l && label[at - static_cast<size_t>(width)] == l &&
+                    label[at + static_cast<size_t>(width)] == l)
+                    inside[static_cast<size_t>(l)] = 1;
+            }
+        std::vector<int> into(static_cast<size_t>(areaCount), -1);
+        for (int s = 0; s < areaCount; ++s)
+        {
+            if (find(s) != s || inside[static_cast<size_t>(s)])
+                continue;
+            compact(s);
+            const std::vector<int>& around = neighbors[static_cast<size_t>(s)];
+            if (around.size() < 2 || around.size() > 12)
+                continue;
+            const Area& strip = areas[static_cast<size_t>(s)];
+            double mean[3];
+            for (int c = 0; c < 3; ++c)
+                mean[c] = strip.sum[c] / strip.pixels;
+            double best = static_cast<double>(tight) + 1.0;
+            int target = -1;
+            for (size_t i = 0; i < around.size(); ++i)
+                for (size_t j = i + 1; j < around.size(); ++j)
+                {
+                    const Area& a = areas[static_cast<size_t>(around[i])];
+                    const Area& b = areas[static_cast<size_t>(around[j])];
+                    double ca[3], cb[3], along = 0.0, length = 0.0;
+                    for (int c = 0; c < 3; ++c)
+                    {
+                        ca[c] = a.sum[c] / a.pixels;
+                        cb[c] = b.sum[c] / b.pixels;
+                        along += (mean[c] - cb[c]) * (ca[c] - cb[c]);
+                        length += (ca[c] - cb[c]) * (ca[c] - cb[c]);
+                    }
+                    if (length < 1.0)
+                        continue;
+                    const double mix = std::clamp(along / length, 0.0, 1.0);
+                    double off = 0.0;
+                    for (int c = 0; c < 3; ++c)
+                        off += std::fabs(mean[c] - (cb[c] + mix * (ca[c] - cb[c])));
+                    if (off < best)
+                    {
+                        best = off;
+                        target = mix >= 0.5 ? around[i] : around[j];
+                    }
+                }
+            into[static_cast<size_t>(s)] = target;
+        }
+        // A strip may go into another strip: followed a few steps.
+        for (int& l : label)
+            for (int step = 0; step < 4 && l >= 0 && into[static_cast<size_t>(l)] >= 0; ++step)
+                l = into[static_cast<size_t>(l)];
+    }
+
+    // 3. A pixel on a border goes to whichever area beside it has the
+    // clearly nearer color, so a soft edge is split where its colors cross
+    // over rather than wherever the walk happened to reach first; noise in a
+    // pixel halfway between is not enough to move it.
+    const int margin = std::max(1, tight / 2);
+    for (int pass = 0; pass < 2; ++pass)
+    {
+        std::vector<int> moved = label;
+        for (int y = 0; y < height; ++y)
+            for (int x = 0; x < width; ++x)
+            {
+                const size_t at = static_cast<size_t>(y) * static_cast<size_t>(width) + static_cast<size_t>(x);
+                const int here = label[at];
+                if (here < 0)
+                    continue;
+                const uint8_t* p = rgba + at * 4;
+                int best = here;
+                int nearest = areas[static_cast<size_t>(here)].distanceTo(p);
+                const int nx[4] = {x - 1, x + 1, x, x};
+                const int ny[4] = {y, y, y - 1, y + 1};
+                for (int k = 0; k < 4; ++k)
+                {
+                    if (nx[k] < 0 || ny[k] < 0 || nx[k] >= width || ny[k] >= height)
+                        continue;
+                    const int other = label[static_cast<size_t>(ny[k]) * static_cast<size_t>(width) + static_cast<size_t>(nx[k])];
+                    if (other < 0 || other == here)
+                        continue;
+                    const int d = areas[static_cast<size_t>(other)].distanceTo(p) + margin;
+                    if (d < nearest)
+                    {
+                        nearest = d;
+                        best = other;
+                    }
+                }
+                moved[at] = best;
+            }
+        label.swap(moved);
+    }
+
+    // Each connected piece an area of its own, as a pixel moved in step 3
+    // may have cut one off.
+    std::vector<int> piece(pixels, -1);
+    count = 0;
+    for (size_t start = 0; start < pixels; ++start)
+    {
+        if (label[start] < 0 || piece[start] >= 0)
+            continue;
+        const int id = count++;
+        piece[start] = id;
+        stack.assign(1, start);
+        while (!stack.empty())
+        {
+            const size_t at = stack.back();
+            stack.pop_back();
+            const int x = static_cast<int>(at % static_cast<size_t>(width));
+            const int y = static_cast<int>(at / static_cast<size_t>(width));
+            const int nx[4] = {x - 1, x + 1, x, x};
+            const int ny[4] = {y, y, y - 1, y + 1};
+            for (int k = 0; k < 4; ++k)
+            {
+                if (nx[k] < 0 || ny[k] < 0 || nx[k] >= width || ny[k] >= height)
+                    continue;
+                const size_t next = static_cast<size_t>(ny[k]) * static_cast<size_t>(width) + static_cast<size_t>(nx[k]);
+                if (piece[next] >= 0 || label[next] != label[at])
+                    continue;
+                piece[next] = id;
+                stack.push_back(next);
+            }
+        }
+    }
+    for (size_t i = 0; i < pixels; ++i)
+        if (label[i] >= 0)
+            label[i] = piece[i];
 
     // Small areas go into the neighbor they share the most edge with, a
     // few rounds, smallest first.

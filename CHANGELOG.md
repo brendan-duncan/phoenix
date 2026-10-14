@@ -2,6 +2,10 @@
 
 What changed in each release of Phoenix, newest first.
 
+## 0.8.0 (Unreleased)
+
+- Trace Bitmap draws cleaner edges: soft and noisy borders between colors trace as straight lines instead of steps and spikes, with far fewer specks and points
+
 ## 0.7.0 (2026-10-13)
 
 - JSFL scripts: run them from the new Commands menu, keep your own in a Commands folder, and see their output and errors in the Output panel (F2); each run undoes in one step
