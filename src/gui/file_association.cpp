@@ -13,6 +13,11 @@ namespace {
 const wchar_t* const kClasses = L"Software\\Classes\\";
 const wchar_t* const kDocumentProgId = L"Phoenix.Document";
 const wchar_t* const kFlaProgId = L"Phoenix.FLA";
+const wchar_t* const kViewerProgId = L"Phoenix.Viewer";
+
+/// The files the viewer (Phoenix --view) shows: documents, SWF movies and
+/// the artwork Phoenix imports.
+const wchar_t* const kViewed[] = {L".phx", L".fla", L".xfl", L".swf", L".svg", L".ai", L".pdf", L".psd", L".psb"};
 
 std::wstring exePath()
 {
@@ -41,6 +46,16 @@ void registerProgId(const wchar_t* progId, const wchar_t* description)
     setValue(std::wstring(progId) + L"\\shell\\open\\command", nullptr, L"\"" + exe + L"\" \"%1\"");
 }
 
+void deleteValue(const std::wstring& key, const wchar_t* name)
+{
+    HKEY handle = nullptr;
+    if (RegOpenKeyExW(HKEY_CURRENT_USER, (kClasses + key).c_str(), 0, KEY_SET_VALUE, &handle) == ERROR_SUCCESS)
+    {
+        RegDeleteValueW(handle, name);
+        RegCloseKey(handle);
+    }
+}
+
 } // namespace
 
 namespace FileAssociation {
@@ -56,6 +71,24 @@ void registerTypes()
     registerProgId(kFlaProgId, L"Animate Document");
     setValue(L".fla\\OpenWithProgids", kFlaProgId, L"");
 
+    // The viewer: under "Open with" for every type it shows, and "View in
+    // Phoenix" on their right-click menu, whatever opens them by default.
+    const std::wstring exe = exePath();
+    const std::wstring view = L"\"" + exe + L"\" --view \"%1\"";
+    setValue(kViewerProgId, nullptr, L"Phoenix Viewer");
+    setValue(std::wstring(kViewerProgId) + L"\\DefaultIcon", nullptr, L"\"" + exe + L"\",0");
+    setValue(std::wstring(kViewerProgId) + L"\\Application", L"ApplicationName", L"Phoenix Viewer");
+    setValue(std::wstring(kViewerProgId) + L"\\shell\\open", L"FriendlyAppName", L"Phoenix Viewer");
+    setValue(std::wstring(kViewerProgId) + L"\\shell\\open\\command", nullptr, view);
+    for (const wchar_t* extension : kViewed)
+    {
+        setValue(std::wstring(extension) + L"\\OpenWithProgids", kViewerProgId, L"");
+        const std::wstring verb = std::wstring(L"SystemFileAssociations\\") + extension + L"\\shell\\PhoenixView";
+        setValue(verb, nullptr, L"View in Phoenix");
+        setValue(verb, L"Icon", L"\"" + exe + L"\",0");
+        setValue(verb + L"\\command", nullptr, view);
+    }
+
     SHChangeNotify(SHCNE_ASSOCCHANGED, SHCNF_IDLIST, nullptr, nullptr);
 }
 
@@ -63,6 +96,13 @@ void unregisterTypes()
 {
     RegDeleteTreeW(HKEY_CURRENT_USER, (std::wstring(kClasses) + kDocumentProgId).c_str());
     RegDeleteTreeW(HKEY_CURRENT_USER, (std::wstring(kClasses) + kFlaProgId).c_str());
+    RegDeleteTreeW(HKEY_CURRENT_USER, (std::wstring(kClasses) + kViewerProgId).c_str());
+    for (const wchar_t* extension : kViewed)
+    {
+        deleteValue(std::wstring(extension) + L"\\OpenWithProgids", kViewerProgId);
+        RegDeleteTreeW(HKEY_CURRENT_USER,
+            (std::wstring(kClasses) + L"SystemFileAssociations\\" + extension + L"\\shell\\PhoenixView").c_str());
+    }
     // .phx was Phoenix's alone; from .fla only Phoenix's entry goes.
     RegDeleteTreeW(HKEY_CURRENT_USER, (std::wstring(kClasses) + L".phx").c_str());
     HKEY handle = nullptr;

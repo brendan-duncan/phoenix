@@ -141,6 +141,11 @@ public:
     /// frame after its last), and the scripts of the frames entered run.
     void step();
 
+    /// The scene playing goes to \a frame (from 0), as a script's
+    /// gotoAndPlay or gotoAndStop sends it, keeping whether it plays: a
+    /// time slider's seek.
+    void seek(int frame);
+
     Clip& root() { return *_root; }
     /// The scene playing, from 0, and how many there are.
     int scene() const { return _scene; }

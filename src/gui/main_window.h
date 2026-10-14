@@ -104,6 +104,13 @@ public:
     /// [--matte stage|transparent|#rrggbb] [--quality Q]: one frame, no
     /// window. Returns the exit code.
     int exportImageFromCommandLine(const QString& source, const QString& output, const QStringList& options);
+
+    /// Phoenix --view <file>: the file in a player window of its own, no
+    /// editor. A document (PHX, FLA, XFL, SWF) plays as Test Movie plays it;
+    /// artwork and images (SVG, AI, PDF, PSD, PNG...) show on a stage made
+    /// to fit them. Returns when the window closes; 1 when the file could
+    /// not be shown.
+    int viewFromCommandLine(const QString& path);
    
     void loadFLAFile(const QString& filePath);
 

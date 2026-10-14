@@ -218,6 +218,14 @@ int main(int argc, char *argv[])
     // every frame and exits, without showing a window.
     // Phoenix --export-image <document> <out.png|jpg|gif> [options]: one
     // frame, without a window.
+    // Phoenix --view <file>: the file in a player window, no editor: a
+    // quick viewer for documents, SWF movies, artwork and images.
+    if (arguments.size() >= 3 && (arguments.at(1) == "--view" || arguments.at(1) == "-view"))
+    {
+        MainWindow window(QString(), nullptr, false);
+        return window.viewFromCommandLine(arguments.at(2));
+    }
+
     if (arguments.size() >= 4 && arguments.at(1) == "--export-image")
     {
         MainWindow window(QString(), nullptr, false);

@@ -1641,6 +1641,12 @@ void MovieRuntime::advance(Clip& clip, std::vector<Clip*>& entered)
             advance(*child, entered);
 }
 
+void MovieRuntime::seek(int frame)
+{
+    goTo(*_root, frame, _root->playing);
+    settle();
+}
+
 void MovieRuntime::step()
 {
     std::vector<Clip*> entered;

@@ -60,6 +60,8 @@ private:
     QLabel* _status = nullptr;
     QPushButton* _pause = nullptr;
     QPushButton* _step = nullptr;
+    class QSlider* _slider = nullptr;
+    bool _seeking = false;
     bool _paused = false;
     /// The movie's sounds: decoded from the library, by linkage, and the
     /// voices playing.

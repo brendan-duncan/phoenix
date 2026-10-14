@@ -7242,6 +7242,67 @@ bool MainWindow::benchmarkRender(const QString& path, int maxFrames, double& ope
     return true;
 }
 
+int MainWindow::viewFromCommandLine(const QString& path)
+{
+    const QFileInfo info(path);
+    if (!info.exists())
+    {
+        QMessageBox::warning(nullptr, "Phoenix Viewer", QString("There is no file at %1.").arg(QDir::toNativeSeparators(path)));
+        return 1;
+    }
+    const QString suffix = info.suffix().toLower();
+    const bool document = suffix == "phx" || suffix == "fla" || suffix == "xfl" || suffix == "swf" ||
+        info.fileName() == "DOMDocument.xml" || phx::isPhx(path.toStdString());
+    if (document)
+        loadFLAFile(info.absoluteFilePath());
+    else if (MediaImport::isArtwork(path) || MediaImport::isImage(path))
+    {
+        // Artwork on a stage of its own, fitted to it: a stage of a pixel,
+        // so the bounds are the art's (and its origin's).
+        createNewDocument(1, 1, 24.0, Qt::white);
+        importMedia({info.absoluteFilePath()}, true, nullptr);
+        fla::Document* data = _flaDocument ? _flaDocument->document : nullptr;
+        fla::Timeline* scene = data ? data->currentScene() : nullptr;
+        const QRectF art = _phoenixView ? _phoenixView->framesBounds(0, 0) : QRectF();
+        if (scene && art.isValid() && !art.isEmpty())
+        {
+            data->width = std::max(1, static_cast<int>(std::ceil(art.width())));
+            data->height = std::max(1, static_cast<int>(std::ceil(art.height())));
+            for (fla::Layer* layer : scene->layers)
+                for (fla::Frame* frame : layer->frames)
+                    for (fla::Element* element : frame->elements)
+                    {
+                        element->transform.tx -= art.left();
+                        element->transform.ty -= art.top();
+                    }
+            _phoenixView->invalidateBounds();
+            _phoenixView->clearCaches();
+        }
+        // Nothing came in: the import said why.
+        if (!art.isValid() || art.isEmpty())
+            return 1;
+    }
+    else
+    {
+        QMessageBox::warning(nullptr, "Phoenix Viewer",
+            QString("%1 is not a file Phoenix shows: documents (PHX, FLA, XFL, SWF), artwork (SVG, AI, PDF, PSD) "
+                    "and images open in the viewer.")
+                .arg(info.fileName()));
+        return 1;
+    }
+    if (!_flaDocument || !_flaDocument->document)
+        return 1;
+    // Played as Test Movie plays a document, its scripts too; what they
+    // print goes to standard error, not to the person looking.
+    const auto print = [](const QString& line) { std::fprintf(stderr, "%s\n", qPrintable(line)); };
+    TestMovieWindow viewer(*_flaDocument, info.fileName(), print,
+        [print](const QString& line, const fla::DOMElement*, int) { print(line); }, nullptr, info.absolutePath());
+    viewer.setWindowTitle(QString("%1 - Phoenix Viewer").arg(info.fileName()));
+    viewer.setWindowFlag(Qt::WindowMinMaxButtonsHint, true);
+    viewer.exec();
+    return 0;
+}
+
 int MainWindow::exportImageFromCommandLine(const QString& source, const QString& output, const QStringList& options)
 {
     loadFLAFile(source);

@@ -18,7 +18,11 @@
 #include <QHBoxLayout>
 #include <QKeyEvent>
 #include <QLabel>
+#include <QPainter>
+#include <QPainterPath>
+#include <QProxyStyle>
 #include <QPushButton>
+#include <QSlider>
 #include <QTimer>
 #include <QUrl>
 #include <QVBoxLayout>
@@ -63,6 +67,83 @@ int flashKeyCode(int key)
     }
 }
 
+/// The player's buttons, drawn in the text color: restart (a bar and a
+/// triangle back), play, pause, and step (a triangle and a bar on).
+enum class Glyph
+{
+    Restart,
+    Play,
+    Pause,
+    Step
+};
+
+/// A click on the time slider goes straight to where it lands.
+class JumpingSliderStyle : public QProxyStyle
+{
+public:
+    using QProxyStyle::QProxyStyle;
+    int styleHint(StyleHint hint, const QStyleOption* option, const QWidget* widget,
+        QStyleHintReturn* returnData) const override
+    {
+        if (hint == QStyle::SH_Slider_AbsoluteSetButtons)
+            return Qt::LeftButton;
+        return QProxyStyle::styleHint(hint, option, widget, returnData);
+    }
+};
+
+QIcon glyph(Glyph which, const QColor& color)
+{
+    QIcon icon;
+    for (int size : {16, 24, 32})
+    {
+        QPixmap pixmap(size, size);
+        pixmap.fill(Qt::transparent);
+        QPainter painter(&pixmap);
+        painter.setRenderHint(QPainter::Antialiasing, true);
+        painter.scale(size / 16.0, size / 16.0);
+        painter.setPen(Qt::NoPen);
+        painter.setBrush(color);
+        const auto triangle = [&painter](double left, double right, bool pointsRight) {
+            QPainterPath path;
+            if (pointsRight)
+            {
+                path.moveTo(left, 3.0);
+                path.lineTo(right, 8.0);
+                path.lineTo(left, 13.0);
+            }
+            else
+            {
+                path.moveTo(right, 3.0);
+                path.lineTo(left, 8.0);
+                path.lineTo(right, 13.0);
+            }
+            path.closeSubpath();
+            painter.drawPath(path);
+        };
+        switch (which)
+        {
+        case Glyph::Restart:
+            painter.drawRect(QRectF(3.0, 3.0, 2.0, 10.0));
+            triangle(5.5, 13.0, false);
+            break;
+        case Glyph::Play:
+            triangle(4.5, 12.5, true);
+            break;
+        case Glyph::Pause:
+            painter.drawRect(QRectF(4.0, 3.0, 3.0, 10.0));
+            painter.drawRect(QRectF(9.0, 3.0, 3.0, 10.0));
+            break;
+        case Glyph::Step:
+            triangle(3.0, 10.5, true);
+            painter.drawRect(QRectF(11.0, 3.0, 2.0, 10.0));
+            break;
+        }
+        painter.end();
+        icon.addPixmap(pixmap);
+    }
+    return icon;
+}
+
 } // namespace
 
 TestMovieWindow::TestMovieWindow(const fla::FLADocument& document, const QString& name,
@@ -80,21 +161,28 @@ TestMovieWindow::TestMovieWindow(const fla::FLADocument& document, const QString
     _player = new Player(this);
     _view = new PhoenixView(_player, this);
     _view->setDocument(&document);
+    // The movie's frame, as a player shows it: nothing off the stage.
+    _view->setShowPasteboard(false);
+    _view->setClipOutsideStage(true);
     layout->addWidget(_view, 1);
 
     QHBoxLayout* bar = new QHBoxLayout;
     bar->setContentsMargins(8, 4, 8, 4);
-    QPushButton* restartButton = new QPushButton("Restart", this);
+    const QColor ink = palette().color(QPalette::ButtonText);
+    QPushButton* restartButton = new QPushButton(this);
+    restartButton->setIcon(glyph(Glyph::Restart, ink));
     restartButton->setToolTip("Play the movie again from its first frame");
     restartButton->setAutoDefault(false);
     connect(restartButton, &QPushButton::clicked, this, &TestMovieWindow::restart);
     bar->addWidget(restartButton);
-    _pause = new QPushButton("Pause", this);
+    _pause = new QPushButton(this);
+    _pause->setIcon(glyph(Glyph::Pause, ink));
     _pause->setToolTip("Hold the movie where it is, or play it on");
     _pause->setAutoDefault(false);
     connect(_pause, &QPushButton::clicked, this, [this]() { setPaused(!_paused); });
     bar->addWidget(_pause);
-    _step = new QPushButton("Step", this);
+    _step = new QPushButton(this);
+    _step->setIcon(glyph(Glyph::Step, ink));
     _step->setToolTip("Play one frame of the paused movie");
     _step->setAutoDefault(false);
     _step->setEnabled(false);
@@ -102,10 +190,29 @@ TestMovieWindow::TestMovieWindow(const fla::FLADocument& document, const QString
     bar->addWidget(_step);
     // The buttons never keep the keys from the movie.
     for (QPushButton* button : {restartButton, _pause, _step})
+    {
         button->setFocusPolicy(Qt::NoFocus);
+        button->setFlat(true);
+        button->setIconSize(QSize(16, 16));
+        button->setFixedSize(30, 26);
+    }
+    // The time slider: where the scene is, and dragging it seeks.
+    _slider = new QSlider(Qt::Horizontal, this);
+    _slider->setFocusPolicy(Qt::NoFocus);
+    auto* sliderStyle = new JumpingSliderStyle(_slider->style());
+    sliderStyle->setParent(_slider);
+    _slider->setStyle(sliderStyle);
+    _slider->setToolTip("Drag to go to another frame of the scene");
+    connect(_slider, &QSlider::valueChanged, this, [this](int frame) {
+        if (_seeking || !_movie)
+            return;
+        _movie->seek(frame);
+        showFrame();
+    });
+    bar->addWidget(_slider, 1);
     _status = new QLabel(this);
     _status->setForegroundRole(QPalette::PlaceholderText);
-    bar->addWidget(_status, 1);
+    bar->addWidget(_status);
     layout->addLayout(bar);
 
     // Every scene, from the first, as the published movie plays them.
@@ -259,7 +366,8 @@ bool TestMovieWindow::eventFilter(QObject* watched, QEvent* event)
 void TestMovieWindow::setPaused(bool paused)
 {
     _paused = paused;
-    _pause->setText(paused ? "Play" : "Pause");
+    _pause->setIcon(glyph(paused ? Glyph::Play : Glyph::Pause, palette().color(QPalette::ButtonText)));
+    _pause->setToolTip(paused ? "Play the movie on" : "Hold the movie where it is");
     _step->setEnabled(paused);
     if (paused)
         _timer->stop();
@@ -320,6 +428,14 @@ void TestMovieWindow::showFrame()
     const fla::play::Clip& root = _movie->root();
     if (_player->currentFrame() != root.frame)
         _player->setCurrentFrame(root.frame);
+    if (_slider && !_slider->isSliderDown())
+    {
+        _seeking = true;
+        _slider->setRange(0, std::max(0, root.length - 1));
+        _slider->setValue(root.frame);
+        _slider->setEnabled(root.length > 1);
+        _seeking = false;
+    }
     QString status = QString("Frame %1 of %2").arg(root.frame + 1).arg(root.length);
     if (_movie->sceneCount() > 1 && root.timeline)
         status = QString("%1, %2").arg(QString::fromStdString(root.timeline->name), status.toLower());
