@@ -2087,7 +2087,9 @@ bool parseSymbolInclude(const tinyxml2::XMLElement* element, fla::SymbolList* sy
         }
         else
         {
-            std::cerr << "!!!! Unhandled symbol timeline element: " << childElement->Name() << " from " << href << std::endl;
+            // Kept as read (the persistentData scripts keep on an item) and
+            // written back.
+            symbol->extraChildren.push_back(elementText(childElement));
         }
     }
 
@@ -2146,6 +2148,8 @@ bool parseMedia(const tinyxml2::XMLElement* element, fla::Document* document, Zi
             bitmap->frameBottom = getIntAttribute(childElement, "frameBottom", 0);
             keepAttributes(childElement, {"name", "itemID", "href", "bitmapDataHRef", "sourceExternalFilepath",
                 "sourceLastImported", "allowSmoothing", "quality", "frameRight", "frameBottom"}, bitmap);
+            for (const tinyxml2::XMLElement* child = childElement->FirstChildElement(); child; child = child->NextSiblingElement())
+                bitmap->extraChildren.push_back(elementText(child));
 
             // The image as imported sits under LIBRARY when Animate kept a
             // copy; the pixels in its own encoding sit under bin. Either is

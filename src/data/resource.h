@@ -2,6 +2,9 @@
 
 #include "dom_element.h"
 
+#include <string>
+#include <vector>
+
 namespace fla {
 
 class Resource : public DOMElement
@@ -13,6 +16,11 @@ public:
         Font,
         Symbol,
     };
+
+    /// Child elements of the library item read but not modeled, as XML
+    /// text, written back after the rest: the persistentData scripts keep
+    /// on an item.
+    std::vector<std::string> extraChildren;
 
     Resource(DOMElement* parent)
         : DOMElement(parent)

@@ -1088,7 +1088,7 @@ fla::Symbol* readSymbol(const Reader& field, fla::SymbolList* list, Context& con
             readRectangle(r, symbol->scaleGridLeft, symbol->scaleGridTop, symbol->scaleGridRight, symbol->scaleGridBottom);
             break;
         case s::Symbol::Timelines: symbol->timelines.push_back(readTimeline(r, symbol, context)); break;
-        case s::Symbol::Xfl: readXfl(r, *symbol); break;
+        case s::Symbol::Xfl: readXfl(r, symbol->extraAttributes, symbol->presentAttributes, &symbol->extraChildren); break;
         default: r.keep(symbol->phxUnknown); break;
         }
     }
@@ -1399,7 +1399,7 @@ fla::FLADocument* loadUnguarded(const std::string& path, std::string& error, std
                 case s::BitmapItem::IsJpeg: bitmap->isJPEG = b.boolean(); break;
                 case s::BitmapItem::DataMedia: media.give(static_cast<uint32_t>(b.uint()), bitmap->datData); break;
                 case s::BitmapItem::ImageMedia: media.give(static_cast<uint32_t>(b.uint()), bitmap->imageData); break;
-                case s::BitmapItem::Xfl: readXfl(b, *bitmap); break;
+                case s::BitmapItem::Xfl: readXfl(b, bitmap->extraAttributes, bitmap->presentAttributes, &bitmap->extraChildren); break;
                 default: b.keep(bitmap->phxUnknown); break;
                 }
             }

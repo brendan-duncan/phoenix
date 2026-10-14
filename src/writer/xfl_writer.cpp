@@ -1196,6 +1196,8 @@ std::string XFLWriter::writeDocument(const Document& document)
             setInt(node, "frameRight", bitmap->frameRight, 0);
             setInt(node, "frameBottom", bitmap->frameBottom, 0);
             writeKept(node, bitmap->extraAttributes);
+            for (const std::string& xml : bitmap->extraChildren)
+                appendRawXml(xml, node);
             media->InsertEndChild(node);
         }
         for (const std::string& xml : document.extraMedia)
@@ -1311,6 +1313,8 @@ std::string XFLWriter::writeSymbol(const Symbol& symbol)
             writeTimeline(*t, timeline);
     }
     root->InsertEndChild(timeline);
+    for (const std::string& xml : symbol.extraChildren)
+        appendRawXml(xml, root);
 
     doc.InsertEndChild(root);
     return toText(doc);

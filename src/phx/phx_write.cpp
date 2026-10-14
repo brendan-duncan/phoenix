@@ -696,7 +696,7 @@ Writer encodeSymbol(const fla::Symbol& symbol)
         if (timeline)
             w.message(s::Symbol::Timelines, encodeTimeline(*timeline));
     }
-    writeXfl(w, s::Symbol::Xfl, symbol);
+    writeXfl(w, s::Symbol::Xfl, symbol.extraAttributes, symbol.presentAttributes, &symbol.extraChildren);
     w.rawFields(symbol.phxUnknown);
     return w;
 }
@@ -1082,7 +1082,7 @@ std::shared_ptr<SaveSnapshot> snapshotUnguarded(const fla::Document& document, c
         writeBool(b, s::BitmapItem::IsJpeg, bitmap.isJPEG);
         writeInt(b, s::BitmapItem::DataMedia, media.add(bitmap.datData, s::MediaBitmap));
         writeInt(b, s::BitmapItem::ImageMedia, media.add(bitmap.imageData, s::MediaBitmap));
-        writeXfl(b, s::BitmapItem::Xfl, bitmap);
+        writeXfl(b, s::BitmapItem::Xfl, bitmap.extraAttributes, bitmap.presentAttributes, &bitmap.extraChildren);
         b.rawFields(bitmap.phxUnknown);
         w.message(s::Document::Bitmaps, b);
     }
