@@ -1,6 +1,7 @@
 #include "fla_parser.h"
 
 #include "binary_fla.h"
+#include "swf_import.h"
 #include "compound_file.h"
 #include "document_parser.h"
 #include "zip_reader.h"
@@ -47,11 +48,27 @@ fla::FLADocument* FLAParser::parseUnguarded(const std::string& filePath)
     // files of an XFL document, which are then read as any other.
     ZipReader zipReader;
     bool fromBinary = false;
+    bool fromSwf = false;
     {
         std::ifstream file(filePath, std::ios::binary);
         unsigned char magic[8] = {};
         const unsigned char compound[8] = {0xD0, 0xCF, 0x11, 0xE0, 0xA1, 0xB1, 0x1A, 0xE1};
-        if (file.read(reinterpret_cast<char*>(magic), sizeof(magic)) && std::equal(magic, magic + 8, compound))
+        const bool read = static_cast<bool>(file.read(reinterpret_cast<char*>(magic), sizeof(magic)));
+        if (read && SwfImport::isSwf(magic, sizeof(magic)))
+        {
+            // A published movie, converted to a document's files.
+            file.seekg(0, std::ios::end);
+            std::vector<uint8_t> data(static_cast<size_t>(file.tellg()));
+            file.seekg(0, std::ios::beg);
+            file.read(reinterpret_cast<char*>(data.data()), static_cast<std::streamsize>(data.size()));
+            std::map<std::string, std::vector<uint8_t>> files;
+            if (!SwfImport::convert(data, files, _errorString, &_warningString))
+                return nullptr;
+            zipReader.openMemory(std::move(files));
+            fromBinary = true;
+            fromSwf = true;
+        }
+        else if (read && std::equal(magic, magic + 8, compound))
         {
             file.seekg(0, std::ios::end);
             std::vector<uint8_t> data(static_cast<size_t>(file.tellg()));
@@ -109,7 +126,8 @@ fla::FLADocument* FLAParser::parseUnguarded(const std::string& filePath)
 
     FLADocument* flaDocument = new FLADocument(nullptr);
     flaDocument->filepath = filePath;
-    flaDocument->fromBinary = fromBinary;
+    flaDocument->fromBinary = fromBinary && !fromSwf;
+    flaDocument->fromSwf = fromSwf;
 
     DocumentParser parser(&zipReader);
     flaDocument->document = parser.parse(documentFile, flaDocument);

@@ -233,6 +233,7 @@ set(HEADERS
     src/parser/fla_doctor.h
     src/parser/fla_parser.h
     src/parser/binary_fla.h
+    src/parser/swf_import.h
     src/parser/compound_file.h
     src/parser/path_parser.h
     src/data/action_script.h

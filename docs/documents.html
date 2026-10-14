@@ -153,6 +153,7 @@
     <tr><td>FLA file (<code>.fla</code>)</td><td>Yes</td><td>Yes</td><td class="wrap">The zipped FLA format, from CS5 to the current version.</td></tr>
     <tr><td>XFL folder</td><td>Yes</td><td>Yes</td><td class="wrap">The uncompressed form of an FLA. Open its <code>.xfl</code> file or its <code>DOMDocument.xml</code>.</td></tr>
     <tr><td>Binary FLA (<code>.fla</code>)</td><td>Yes</td><td>As FLA, XFL or PHX</td><td class="wrap">The format before CS5: versions MX&nbsp;2004, 8, CS3 and CS4, converted when opened. See below.</td></tr>
+    <tr><td>SWF movie (<code>.swf</code>)</td><td>Yes</td><td>As FLA, XFL or PHX; <a href="export.html#swf">exported</a></td><td class="wrap">A published movie brought back as a document, for when the FLA is lost. See below.</td></tr>
   </tbody>
 </table>
 
@@ -169,6 +170,25 @@
   <p>FLA files saved before CS5 use a binary format that Phoenix converts when it opens them. Versions MX&nbsp;2004, 8 and CS3 open in full, with their layers, classic and shape tweens, symbols, bitmaps (on the stage too), static text and sounds. CS4 files can open with parts missing: drawing objects in them cannot be read yet. When part of a file cannot be read, Phoenix opens the rest and lists what is missing. An embedded video keeps only the name of the file it came from. Files older than MX&nbsp;2004 do not open.</p>
   <p>Phoenix saves only the current format, which the old versions cannot open, so <strong>Save</strong> on a converted file asks first: <strong>Save As...</strong> to keep the original, or <strong>Replace</strong>.</p>
 </div>
+
+<h3 id="swf-movies">Opening SWF movies</h3>
+
+<p>When only the published <code>.swf</code> of a piece survives, open it with <span class="menu-path">File &rsaquo; Open...</span> to bring it back as a document you can edit and save as FLA. Phoenix reads:</p>
+
+<ul>
+  <li>The stage size, frame rate and background color.</li>
+  <li>Shapes with their solid, gradient and bitmap fills and their strokes. A shape the movie shows only once goes on the stage as a shape; one it shows again and again becomes a graphic symbol.</li>
+  <li>Movie clips and buttons as symbols. The main timeline and each symbol get a layer for each depth of the movie, with a keyframe wherever what is at that depth changes. Instance names, color effects, filters and blend modes come back; masks come back as mask layers.</li>
+  <li>Frame labels, on a layer of their own.</li>
+  <li>Bitmaps, including JPEGs with transparency, in the library.</li>
+  <li>Sounds: those started on a frame, on their own layers, and the streamed soundtrack, on a <em>Soundtrack</em> layer.</li>
+  <li>Text. Static text comes back as the outlines of its letters, and dynamic and input text as text fields.</li>
+  <li>9-slice grids, and the names a movie exported its symbols under, which become the symbols' names and classes.</li>
+</ul>
+
+<p>A movie holds the finished frames, not how they were made, so some things cannot come back. Tweens come back as a keyframe on every frame. Layer names, library folders and symbol names are lost, so Phoenix names layers after their instance names or depths, and symbols by kind and number. Scripts were compiled when the movie was published and cannot be turned back into source, so a frame that had one gets a comment saying so. When Phoenix opens a movie, it tells you what it left out (video, for example).</p>
+
+<p>The document has no file yet: <strong>Save</strong> asks where to save it, so the movie itself is never replaced. Movies compressed with LZMA do not open yet; publish them again with ordinary compression.</p>
 
 <h3>The Phoenix format</h3>
 

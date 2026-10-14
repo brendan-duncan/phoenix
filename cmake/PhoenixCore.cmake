@@ -133,6 +133,7 @@ set(PHOENIX_CORE_FILE_SOURCES
     parser/ik_tree.cpp
     parser/fla_parser.cpp
     parser/binary_fla.cpp
+    parser/swf_import.cpp
     parser/compound_file.cpp
     parser/zip_reader.cpp
     parser/fla_doctor.cpp

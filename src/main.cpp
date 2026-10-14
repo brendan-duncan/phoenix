@@ -9,10 +9,12 @@
 #include "phx/phx_document.h"
 #include "data/fla_document.h"
 #include "parser/fla_parser.h"
+#include "parser/swf_import.h"
 #include "writer/fla_writer.h"
 #include "writer/xfl_content.h"
 #include "writer/xfl_folder_writer.h"
 #include <QApplication>
+#include <QImage>
 #include <QProxyStyle>
 #include <QStyleOptionMenuItem>
 #include <QTimer>
@@ -28,6 +30,7 @@
 #include <QStringList>
 
 #include <cstdio>
+#include <cstring>
 #include <clocale>
 #include <cstring>
 #include <cctype>
@@ -187,6 +190,20 @@ int main(int argc, char *argv[])
     // for the decimal point in printf and strtod: files would be written
     // with "0,5" and read back wrong. Numbers in files are always "C".
     std::setlocale(LC_NUMERIC, "C");
+    // SWF import decodes PNG, GIF and JPEG-with-alpha bitmaps with Qt.
+    SwfImport::setImageDecoder([](const std::vector<uint8_t>& bytes, SwfImport::Image& image) {
+        QImage decoded;
+        if (!decoded.loadFromData(bytes.data(), static_cast<int>(bytes.size())))
+            return false;
+        decoded = decoded.convertToFormat(QImage::Format_ARGB32_Premultiplied);
+        image.width = decoded.width();
+        image.height = decoded.height();
+        image.pixels.resize(static_cast<size_t>(image.width) * static_cast<size_t>(image.height));
+        for (int y = 0; y < image.height; ++y)
+            std::memcpy(image.pixels.data() + static_cast<size_t>(y) * image.width, decoded.constScanLine(y),
+                static_cast<size_t>(image.width) * 4);
+        return true;
+    });
     QApplication::setStyle(new MenuSpacingStyle);
     QApplication::setApplicationVersion(Updater::currentVersion());
 

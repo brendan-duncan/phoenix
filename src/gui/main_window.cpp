@@ -2665,6 +2665,19 @@ void MainWindow::loadFLAFile(const QString& filePath)
             displayName = fileInfo.fileName();
         }
 
+        if (document->fromSwf)
+        {
+            // A movie brought back as a document: it is saved as one, under
+            // a name of its own, never over the movie.
+            adoptDocument(document, QString(), fileInfo.completeBaseName() + ".fla");
+            addToRecentFiles(filePath);
+            if (isVisible())
+                QMessageBox::information(this, "Open SWF Movie",
+                    QString("%1\n\n%2").arg(fileInfo.fileName(), QString::fromStdString(parser.warningString()).trimmed()));
+            else
+                std::fprintf(stderr, "%s\n", parser.warningString().c_str());
+            return;
+        }
         adoptDocument(document, filePath, displayName);
         addToRecentFiles(filePath);
         if (!parser.warningString().empty())
@@ -6333,8 +6346,8 @@ void MainWindow::setupMenus()
 void MainWindow::openFile()
 {
     QString fileName = QFileDialog::getOpenFileName(this, tr("Open"), _lastDirectory,
-        tr("Documents (*.phx *.fla *.xfl DOMDocument.xml);;Phoenix Documents (*.phx);;FLA Files (*.fla);;"
-           "XFL Documents (*.xfl DOMDocument.xml);;All Files (*)"));
+        tr("Documents (*.phx *.fla *.xfl DOMDocument.xml *.swf);;Phoenix Documents (*.phx);;FLA Files (*.fla);;"
+           "XFL Documents (*.xfl DOMDocument.xml);;SWF Movies (*.swf);;All Files (*)"));
 
     if (!fileName.isEmpty())
     {

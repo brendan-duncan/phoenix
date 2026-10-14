@@ -20,6 +20,10 @@ public:
 
     ~FLADocument();
 
+    /// Converted from a published SWF movie: it has no file of its own
+    /// until it is saved as one.
+    bool fromSwf = false;
+
     std::string domTypeName() const override { return "FLADocument"; }
 
     DOMType domType() const override { return DOMType::FLADocument; }
