@@ -642,6 +642,30 @@ bool IKArmature::setPose(int frame, const std::vector<double>& angles)
     return true;
 }
 
+bool IKArmature::removePose(int frame)
+{
+    const std::vector<int> starts = poses();
+    const auto at = std::find(starts.begin(), starts.end(), frame);
+    if (frame <= 0 || at == starts.end())
+        return false;
+    const size_t k = static_cast<size_t>(at - starts.begin());
+    // The pose's span joins the one before: one IKState and one State on
+    // every node, their durations added.
+    const auto merge = [k](std::vector<tinyxml2::XMLElement*> list) {
+        if (k >= list.size())
+            return;
+        tinyxml2::XMLElement* before = list[k - 1];
+        before->SetAttribute("duration",
+            std::max(1, before->IntAttribute("duration", 1)) + std::max(1, list[k]->IntAttribute("duration", 1)));
+        list[k]->Parent()->DeleteChild(list[k]);
+    };
+    merge(states(_document->FirstChildElement("IKTree"), "IKState"));
+    for (Node& node : _nodes)
+        merge(states(node.element, "State"));
+    storeJoints();
+    return true;
+}
+
 bool IKArmature::setFrames(int count)
 {
     const std::vector<int> starts = poses();

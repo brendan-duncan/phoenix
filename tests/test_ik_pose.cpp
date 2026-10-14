@@ -737,3 +737,29 @@ TEST(the_bone_tool_bones_a_shape_and_its_poses_bend_it)
     CHECK(read.bindsAnchors() && read.binding().size() == 4 && read.poses() == std::vector<int>({0, 29}));
     CHECK(back->document->symbolList && back->document->symbolList->symbols.size() == 1);
 }
+
+TEST(clearing_a_pose_lets_the_armature_tween_past_it)
+{
+    // Poses at frames 0, 5 and 10; clearing the middle one leaves 0 and 10,
+    // and frame 5 between them.
+    fla::IKArmature armature = threeSymbols();
+    std::vector<double> turned;
+    for (const fla::IKJoint& joint : armature.jointsAt(0))
+        turned.push_back(joint.angle + 1.0);
+    CHECK(armature.setPose(10, turned));
+    std::vector<double> odd;
+    for (const fla::IKJoint& joint : armature.jointsAt(0))
+        odd.push_back(joint.angle - 2.0);
+    CHECK(armature.setPose(5, odd));
+    CHECK(armature.poses().size() == 3);
+    CHECK(!armature.removePose(0));
+    CHECK(!armature.removePose(3));
+    CHECK(armature.removePose(5));
+    CHECK(armature.poses().size() == 2 && armature.poses()[1] == 10);
+    // Halfway, about halfway round (no ease).
+    const double start = armature.jointsAt(0)[0].angle;
+    const double end = armature.jointsAt(10)[0].angle;
+    const double middle = armature.jointsAt(5)[0].angle;
+    CHECK(std::fabs(end - start - 1.0) < 1.0e-6);
+    CHECK(middle > start + 0.3 && middle < end - 0.3);
+}

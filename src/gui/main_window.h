@@ -782,6 +782,21 @@ private:
     /// The Asset Warp tool's first pin on art: the art made a puppet in its
     /// place, one undo step; its instance, or null.
     fla::SymbolInstance* makePuppet(fla::Element* art, fla::Frame* frame);
+    /// The armature pose span at the playhead on the current layer: its
+    /// IKTree's place among its kept children, and how far into the span
+    /// the playhead is; null on a layer that is not an armature's.
+    fla::Frame* currentPoseSpan(size_t& child, int& into);
+    enum class PoseCommand
+    {
+        Insert,
+        Copy,
+        Paste,
+        Clear,
+    };
+    /// The timeline's Pose commands, on the armature at the playhead.
+    void poseCommand(PoseCommand command);
+    /// The joints' angles Copy Pose took.
+    std::vector<double> _copiedPose;
     /// Window > Collapse ... Panels to Icons: the panels docked on \a area
     /// folded to a strip of their names beside the stage, each opening
     /// beside it; or put back.

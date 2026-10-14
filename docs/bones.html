@@ -83,6 +83,19 @@
   <li><strong>Springs</strong> set on bones in a file are kept when you save. Phoenix does not simulate them yet.</li>
 </ul>
 
+<h3 id="pose-commands">Pose commands</h3>
+
+<p>Right-click a frame of an armature layer, or use <span class="menu-path">Edit &rsaquo; Timeline &rsaquo; Pose</span>, to work with poses directly:</p>
+
+<dl class="defs">
+  <dt>Insert Pose</dt><dd>Makes the armature's look on that frame a pose, without moving it, so you can then change the motion from there.</dd>
+  <dt>Copy Pose</dt><dd>Remembers the armature's pose on that frame, whether or not a pose is there.</dd>
+  <dt>Paste Pose</dt><dd>Poses the armature on that frame as the copied pose, adding a pose there if there was none. It pastes onto an armature with the same bones, in the same document or another.</dd>
+  <dt>Clear Pose</dt><dd>Takes away the pose on that frame, so the armature tweens straight from the pose before to the pose after. The first pose stays.</dd>
+</dl>
+
+<p>Each is one step to undo; boned shapes bend and symbol instances move as they do when you pose by dragging.</p>
+
 <h2>Asset Warp</h2>
 
 <p><strong>Asset Warp</strong> puppets, where artwork bends around pins, are drawn deformed by their pins, vector and bitmap art alike.</p>
@@ -104,7 +117,7 @@
 
 <div class="callout planned">
   <span class="label">Planned</span>
-  <p>Spring simulation, pose commands (insert, copy and paste poses), making new puppets from artwork, and a rigging layer.</p>
+  <p>Spring simulation, and a rigging layer.</p>
 </div>
 
 </article>

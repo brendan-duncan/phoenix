@@ -4,6 +4,7 @@
 
 #include <QPointF>
 
+#include <functional>
 #include <memory>
 #include <string>
 #include <vector>
@@ -43,6 +44,14 @@ public:
 
     void finish(PhoenixView& view, fla::CommandStack& commandStack);
 
+    /// Changes the armature kept on \a frame (its IKTree, extraChildren
+    /// \a child) by \a edit, as a drag would: every frame's joints worked
+    /// out again, the shapes it bends bent and the instances it carries
+    /// moved, all one undo step named \a name. False when \a edit changes
+    /// nothing it can make.
+    bool change(PhoenixView& view, fla::CommandStack& commandStack, fla::Frame* frame, size_t child,
+        const std::function<bool(fla::IKArmature&)>& edit, const std::string& name);
+
     /// Puts everything back as it was.
     void cancel(PhoenixView& view);
 
@@ -71,6 +80,9 @@ private:
     void bend(Bent& bent, fla::Shape& shape);
 
     std::string posesOf(const fla::IKArmature& armature) const;
+    /// Gathers what posing \a frame's armature changes; false when it has
+    /// none there.
+    bool setUp(fla::Frame* frame, size_t child);
     fla::Transform toArmature(const fla::Shape& shape) const;
     void reset();
 
@@ -80,6 +92,7 @@ private:
     int _into = 0;
     QPointF _offset;
     bool _moved = false;
+    std::string _name = "Pose Armature";
     std::string _xml;
     std::string _poses;
     fla::IKArmature _original;

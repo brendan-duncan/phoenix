@@ -97,6 +97,7 @@ void IKPoser::reset()
     _rest = nullptr;
     _moved = false;
     _joint = -1;
+    _name = "Pose Armature";
 }
 
 bool IKPoser::begin(PhoenixView& view, const QPointF& documentPos)
@@ -105,14 +106,41 @@ bool IKPoser::begin(PhoenixView& view, const QPointF& documentPos)
     const PhoenixView::IKBoneHit hit = view.ikBoneAt(documentPos);
     if (!hit || hit.locked)
         return false;
-    if (!_original.parse(hit.frame->extraChildren[hit.child]))
+    if (!setUp(hit.frame, hit.child))
         return false;
-    _frame = hit.frame;
-    _child = hit.child;
     _joint = hit.joint;
     _into = hit.into;
     _offset = hit.tail - documentPos;
-    _xml = hit.frame->extraChildren[hit.child];
+    return true;
+}
+
+bool IKPoser::change(PhoenixView& view, fla::CommandStack& commandStack, fla::Frame* frame, size_t child,
+    const std::function<bool(fla::IKArmature&)>& edit, const std::string& name)
+{
+    reset();
+    if (!setUp(frame, child))
+        return false;
+    _posed = _original;
+    if (!edit(_posed))
+    {
+        reset();
+        return false;
+    }
+    _moved = true;
+    _name = name;
+    fla::PoseArmatureCommand::apply(_frame, _child, _posed.xml(), posesOf(_posed));
+    carry(_original.shownAt(0), _posed.shownAt(0));
+    finish(view, commandStack);
+    return true;
+}
+
+bool IKPoser::setUp(fla::Frame* frame, size_t child)
+{
+    if (!frame || child >= frame->extraChildren.size() || !_original.parse(frame->extraChildren[child]))
+        return false;
+    _frame = frame;
+    _child = child;
+    _xml = frame->extraChildren[child];
     _poses = posesOf(_original);
     for (const auto& attribute : _frame->extraAttributes)
     {
@@ -268,7 +296,7 @@ void IKPoser::finish(PhoenixView& view, fla::CommandStack& commandStack)
         return;
     }
 
-    std::unique_ptr<fla::CompoundCommand> compound(new fla::CompoundCommand("Pose Armature"));
+    std::unique_ptr<fla::CompoundCommand> compound(new fla::CompoundCommand(_name));
     compound->addCommand(fla::CommandPtr(new fla::PoseArmatureCommand(_frame, _child, _xml, _posed.xml(),
         _poses, posesOf(_posed))));
     for (Bent& bent : _bent)

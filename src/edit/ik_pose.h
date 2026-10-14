@@ -162,6 +162,11 @@ public:
     /// angles do not fit the joints or the frame is outside the span.
     bool setPose(int frame, const std::vector<double>& angles);
 
+    /// Takes away the pose at \a frame: the span before it runs on to the
+    /// next pose, every frame's joints worked out again. False when there is
+    /// no pose there or it is the first, which every armature keeps.
+    bool removePose(int frame);
+
     /// Makes the span \a count frames long, the last pose held longer or
     /// cut shorter, and works every frame's joints out again. False when
     /// that would leave the last pose no frames.

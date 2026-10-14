@@ -72,6 +72,7 @@
 #include "claude_code.h"
 #include "actions_panel.h"
 #include "claude_code_panel.h"
+#include "ik_poser.h"
 #include "script_window.h"
 #include "theme_editor.h"
 #include "output_panel.h"
@@ -4277,6 +4278,89 @@ fla::Frame* MainWindow::currentMotionSpan()
     return frame && fla::timeline::motionOf(*frame) ? frame : nullptr;
 }
 
+fla::Frame* MainWindow::currentPoseSpan(size_t& child, int& into)
+{
+    fla::Timeline* timeline = nullptr;
+    int index = 0;
+    if (!_timelineView || !_timelineView->currentLayer(timeline, index) || !timeline || index < 0 ||
+        index >= static_cast<int>(timeline->layers.size()))
+        return nullptr;
+    const int at = _player ? _player->currentFrame() : 0;
+    fla::Frame* frame = fla::timeline::spanAt(*timeline->layers[index], at);
+    if (!frame || frame->otherTweenType != "IK pose")
+        return nullptr;
+    for (size_t i = 0; i < frame->extraChildren.size(); ++i)
+    {
+        if (frame->extraChildren[i].compare(0, 7, "<IKTree") == 0)
+        {
+            child = i;
+            into = at - frame->index;
+            return frame;
+        }
+    }
+    return nullptr;
+}
+
+void MainWindow::poseCommand(PoseCommand command)
+{
+    size_t child = 0;
+    int into = 0;
+    fla::Frame* span = currentPoseSpan(child, into);
+    if (!span || !_phoenixView)
+    {
+        statusBar()->showMessage("Pose commands work on an armature layer's frames.", 4000);
+        return;
+    }
+    fla::IKArmature armature;
+    if (!armature.parse(span->extraChildren[child]))
+        return;
+    std::vector<double> shown;
+    for (const fla::IKJoint& joint : armature.shownAt(into))
+        shown.push_back(joint.angle);
+    if (command == PoseCommand::Copy)
+    {
+        _copiedPose = shown;
+        statusBar()->showMessage(QString("Copied the pose at frame %1.").arg(span->index + into + 1), 3000);
+        return;
+    }
+    IKPoser poser;
+    bool done = false;
+    if (command == PoseCommand::Insert)
+        done = poser.change(*_phoenixView, _editContext.commandStack(), span, child,
+            [into, shown](fla::IKArmature& posed) {
+                const std::vector<int> poses = posed.poses();
+                return std::find(poses.begin(), poses.end(), into) == poses.end() && posed.setPose(into, shown);
+            },
+            "Insert Pose");
+    else if (command == PoseCommand::Paste)
+    {
+        if (_copiedPose.size() != shown.size())
+        {
+            statusBar()->showMessage(_copiedPose.empty() ? "Copy a pose first."
+                                                         : "That pose is of an armature with other bones.", 4000);
+            return;
+        }
+        const std::vector<double> pasted = _copiedPose;
+        done = poser.change(*_phoenixView, _editContext.commandStack(), span, child,
+            [into, pasted](fla::IKArmature& posed) { return posed.setPose(into, pasted); }, "Paste Pose");
+    }
+    else if (command == PoseCommand::Clear)
+        done = poser.change(*_phoenixView, _editContext.commandStack(), span, child,
+            [into](fla::IKArmature& posed) { return posed.removePose(into); }, "Clear Pose");
+    if (!done)
+    {
+        const char* why = command == PoseCommand::Insert ? "There is a pose on this frame already."
+            : command == PoseCommand::Clear              ? "There is no pose here to clear (the first one stays)."
+                                                         : "The pose could not be pasted here.";
+        statusBar()->showMessage(why, 4000);
+        return;
+    }
+    if (_timelineView)
+        _timelineView->update();
+    _phoenixView->clearCaches();
+    _phoenixView->update();
+}
+
 void MainWindow::copyMotion()
 {
     fla::Frame* span = currentMotionSpan();
@@ -5320,6 +5404,26 @@ void MainWindow::setupMenus()
     _framesMenu->addSeparator();
     _framesMenu->addAction(reverseAction);
     _framesMenu->addAction(frameByFrameAction);
+    // An armature layer's poses.
+    QMenu* poseMenu = new QMenu("&Pose", this);
+    const auto poseAction = [this, poseMenu](const char* text, const char* tip, PoseCommand command) {
+        QAction* action = poseMenu->addAction(text);
+        action->setStatusTip(tip);
+        connect(action, &QAction::triggered, this, [this, command]() { poseCommand(command); });
+    };
+    poseAction("&Insert Pose", "Make the armature's look on this frame a pose", PoseCommand::Insert);
+    poseAction("&Copy Pose", "Copy the armature's pose on this frame", PoseCommand::Copy);
+    poseAction("&Paste Pose", "Pose the armature on this frame as the pose copied", PoseCommand::Paste);
+    poseAction("C&lear Pose", "Take away the pose on this frame; the armature tweens past it", PoseCommand::Clear);
+    _framesMenu->addSeparator();
+    QAction* poseMenuAction = _framesMenu->addMenu(poseMenu);
+    connect(_framesMenu, &QMenu::aboutToShow, this, [this, poseMenuAction]() {
+        size_t child = 0;
+        int into = 0;
+        poseMenuAction->setVisible(currentPoseSpan(child, into) != nullptr);
+    });
+    editTimelineMenu->addSeparator();
+    editTimelineMenu->addMenu(poseMenu);
 
     QMenu* modifyMenu = menuBar->addMenu("&Modify");
 
