@@ -21,6 +21,12 @@
 
 <p>Phoenix speaks the Model Context Protocol (MCP), which assistants such as Claude Desktop and Claude Code use to work with other programs. The assistant runs on your computer and talks to Phoenix there.</p>
 
+<h2>Open Claude Code from Phoenix</h2>
+
+<p>If you have <a href="https://docs.claude.com/en/docs/claude-code/setup">Claude Code</a> installed, choose <span class="menu-path">Commands &rsaquo; Open Claude Code</span>. A terminal window opens in your document's folder with Claude Code running and already connected to this Phoenix, so you can start asking it about your document straight away. You type, read its answers and sign in to your Claude account in the terminal; Phoenix only starts it.</p>
+
+<p>Phoenix lets the Claude Code it started connect without asking, and only that one: any other assistant is still asked about. <strong>Stop</strong> in the status bar disconnects it, and after that it has to be allowed like any other. You do not need to turn anything on in Preferences for this.</p>
+
 <h2>Connect Claude Desktop</h2>
 
 <p>Add Phoenix to Claude Desktop's configuration file (<span class="menu-path">Settings &rsaquo; Developer &rsaquo; Edit Config</span> in Claude Desktop) and restart it:</p>
@@ -36,7 +42,9 @@
 
 <p>On macOS the command is <code>/Applications/Phoenix.app/Contents/MacOS/Phoenix</code>. When Claude needs Phoenix, it starts it, and Phoenix asks whether to allow it.</p>
 
-<h2>Connect Claude Code</h2>
+<h2>Connect Claude Code yourself</h2>
+
+<p>To add Phoenix to Claude Code for every session rather than opening it from Phoenix:</p>
 
 <pre><code>claude mcp add phoenix -- "C:\Users\<em>you</em>\AppData\Local\Phoenix\current\Phoenix.exe" --mcp</code></pre>
 

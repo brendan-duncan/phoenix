@@ -924,10 +924,15 @@ int ScriptRunner::runBatch(const QString& script, const QStringList& documents, 
     return failed;
 }
 
-void ScriptRunner::fillCommandsMenu(QMenu* menu)
+void ScriptRunner::fillCommandsMenu(QMenu* menu, QAction* first)
 {
-    connect(menu, &QMenu::aboutToShow, this, [this, menu]() {
+    connect(menu, &QMenu::aboutToShow, this, [this, menu, first]() {
         menu->clear();
+        if (first)
+        {
+            menu->addAction(first);
+            menu->addSeparator();
+        }
         QAction* runAction = menu->addAction("&Run Command...");
         runAction->setStatusTip("Run a script (JSFL or Python) on the open document, as one step to undo");
         connect(runAction, &QAction::triggered, this, &ScriptRunner::runCommand);

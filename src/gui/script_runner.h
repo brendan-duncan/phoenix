@@ -9,6 +9,7 @@
 
 class MainWindow;
 class OutputPanel;
+class QAction;
 class QDockWidget;
 class QFileSystemWatcher;
 class QLockFile;
@@ -51,8 +52,9 @@ public:
     QDockWidget* outputDock() const { return _outputDock; }
     OutputPanel* output() const { return _output; }
 
-    /// The Commands menu, filled each time it opens.
-    void fillCommandsMenu(QMenu* menu);
+    /// The Commands menu, filled each time it opens, with \a first at its
+    /// top when given.
+    void fillCommandsMenu(QMenu* menu, QAction* first = nullptr);
 
     /// Runs the script (.jsfl or .py) at \a path. False when it failed
     /// (the Output panel says why).

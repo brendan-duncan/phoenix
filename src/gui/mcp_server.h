@@ -52,8 +52,17 @@ public:
 
     /// For `Phoenix --mcp` before any window: when a running Phoenix takes
     /// connections, relays standard input and output to it until the client
-    /// goes, and returns true; false when there is none to relay to.
-    static bool relayToRunning();
+    /// goes, and returns true; false when there is none to relay to. With
+    /// \a sessionPort, to the Phoenix that opened that port for a session
+    /// (openSession), sending the session's token from PHOENIX_MCP_TOKEN
+    /// first so the client it started is not asked about.
+    static bool relayToRunning(int sessionPort = 0);
+
+    /// Takes connections for a client this Phoenix starts itself (Claude
+    /// Code): on the Preferences port when that is on, otherwise on a free
+    /// one for as long as Phoenix runs. Gives the port, 0 when none could
+    /// be opened, and the token that client sends to be let in unasked.
+    int openSession(QString& token);
 
     /// Handles one JSON-RPC message from a client; empty for a notification.
     /// Runs on the GUI thread.
@@ -67,7 +76,9 @@ private:
         bool allowed = false;
     };
 
-    void listen();
+    /// Takes connections on \a port, or on a free one for 0; false when it
+    /// cannot.
+    bool listen(int port);
     void stopListening();
     void serveSocket(std::intptr_t socket, int client);
     /// Handles \a line from a reader thread, on the GUI thread; returns the
@@ -88,6 +99,10 @@ private:
 
     std::atomic<bool> _stopping{false};
     std::intptr_t _listener = -1;
+    int _listenPort = 0;
+    /// The token of the session openSession made; empty when there is none
+    /// or Stop ended it.
+    QString _sessionToken;
     std::thread _accepting;
     std::mutex _socketsMutex;
     std::vector<std::intptr_t> _sockets;

@@ -22,6 +22,7 @@
 #include <QStatusBar>
 #include <QTimer>
 #include <QToolButton>
+#include <QUuid>
 
 #include <algorithm>
 #include <cstdio>
@@ -231,16 +232,32 @@ void McpServer::applySettings()
     stopListening();
     _stopping = false;
     if (enabled())
-        listen();
+        listen(port());
+    else if (!_sessionToken.isEmpty())
+        listen(0);
 }
 
-void McpServer::listen()
+int McpServer::openSession(QString& token)
+{
+    if (_sessionToken.isEmpty())
+        _sessionToken = QUuid::createUuid().toString(QUuid::WithoutBraces);
+    if (_listener == -1)
+    {
+        _stopping = false;
+        if (!(enabled() && listen(port())) && !listen(0))
+            return 0;
+    }
+    token = _sessionToken;
+    return _listenPort;
+}
+
+bool McpServer::listen(int port)
 {
     if (!socketsReady())
-        return;
+        return false;
     Socket listener = socket(AF_INET, SOCK_STREAM, 0);
     if (listener == kNoSocket)
-        return;
+        return false;
 #ifdef _WIN32
     // No other program may take the port from under it.
     BOOL exclusive = TRUE;
@@ -250,15 +267,22 @@ void McpServer::listen()
     setsockopt(listener, SOL_SOCKET, SO_REUSEADDR, &reuse, sizeof(reuse));
 #endif
     // Bound to this computer only: nothing from the network reaches it.
-    const sockaddr_in address = loopback(port());
+    const sockaddr_in address = loopback(port);
     if (::bind(listener, reinterpret_cast<const sockaddr*>(&address), sizeof(address)) != 0 ||
         ::listen(listener, 4) != 0)
     {
         closeSocket(listener);
-        _window->statusBar()->showMessage(
-            QString("AI assistants cannot connect: port %1 is in use. Choose another in Preferences.").arg(port()), 8000);
-        return;
+        if (port != 0)
+            _window->statusBar()->showMessage(
+                QString("AI assistants cannot connect: port %1 is in use. Choose another in Preferences.").arg(port),
+                8000);
+        return false;
     }
+    // The port asked for, or the free one the system chose.
+    sockaddr_in bound{};
+    socklen_t length = sizeof(bound);
+    getsockname(listener, reinterpret_cast<sockaddr*>(&bound), &length);
+    _listenPort = ntohs(bound.sin_port);
     _listener = static_cast<std::intptr_t>(listener);
     _accepting = std::thread([this, listener]() {
         while (!_stopping)
@@ -277,6 +301,7 @@ void McpServer::listen()
             _readers.emplace_back([this, client, id]() { serveSocket(static_cast<std::intptr_t>(client), id); });
         }
     });
+    return true;
 }
 
 void McpServer::stopListening()
@@ -287,6 +312,7 @@ void McpServer::stopListening()
         shutdownSocket(static_cast<Socket>(_listener));
         closeSocket(static_cast<Socket>(_listener));
         _listener = -1;
+        _listenPort = 0;
     }
     if (_accepting.joinable())
         _accepting.join();
@@ -444,6 +470,14 @@ QJsonObject McpServer::handle(const QJsonObject& message, int id)
     }
     Client& client = *found;
 
+    // The client this Phoenix started, through the relay that names its
+    // session: let in without asking.
+    if (message.contains("phoenixSession"))
+    {
+        if (!_sessionToken.isEmpty() && message.value("phoenixSession").toString() == _sessionToken)
+            client.allowed = true;
+        return QJsonObject();
+    }
     if (notification)
         return QJsonObject();
     if (method == "ping")
@@ -570,6 +604,9 @@ void McpServer::stopAll()
         client.allowed = false;
     _allowedNames.clear();
     _allowedFolders.clear();
+    // Stop ends the session too: a client started for it is asked about
+    // from now on, like any other.
+    _sessionToken.clear();
     {
         std::lock_guard<std::mutex> lock(_socketsMutex);
         for (std::intptr_t socket : _sockets)
@@ -606,19 +643,25 @@ void McpServer::log(const QString& client, const QString& tool, const QJsonObjec
                    .toUtf8());
 }
 
-bool McpServer::relayToRunning()
+bool McpServer::relayToRunning(int sessionPort)
 {
-    if (!enabled() || !socketsReady())
+    if ((sessionPort == 0 && !enabled()) || !socketsReady())
         return false;
     Socket socket = ::socket(AF_INET, SOCK_STREAM, 0);
     if (socket == kNoSocket)
         return false;
-    const sockaddr_in address = loopback(port());
+    const sockaddr_in address = loopback(sessionPort != 0 ? sessionPort : port());
     if (::connect(socket, reinterpret_cast<const sockaddr*>(&address), sizeof(address)) != 0)
     {
         closeSocket(socket);
         return false;
     }
+    const QByteArray token = qgetenv("PHOENIX_MCP_TOKEN");
+    if (sessionPort != 0 && !token.isEmpty())
+        sendAll(socket, QJsonDocument(QJsonObject{{"phoenixSession", QString::fromLatin1(token)}})
+                                .toJson(QJsonDocument::Compact)
+                                .toStdString() +
+                            "\n");
 #ifdef _WIN32
     _setmode(_fileno(stdout), _O_BINARY);
     _setmode(_fileno(stdin), _O_BINARY);

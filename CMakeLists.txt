@@ -110,6 +110,7 @@ set(HEADERS
     src/gui/toolbar_editor.h
     src/gui/theme.h
     src/gui/theme_editor.h
+    src/gui/claude_code.h
     src/gui/trace_bitmap_dialog.h
     src/gui/command_line.h
     src/gui/notes_panel.h
@@ -359,6 +360,7 @@ set(SOURCES
     src/gui/toolbar_editor.cpp
     src/gui/theme.cpp
     src/gui/theme_editor.cpp
+    src/gui/claude_code.cpp
     src/gui/trace_bitmap_dialog.cpp
     src/gui/command_line.cpp
     src/gui/notes_panel.cpp

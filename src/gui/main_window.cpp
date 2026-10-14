@@ -69,6 +69,7 @@
 #include "../edit/edit_list.h"
 #include "lip_sync_dialog.h"
 #include "theme.h"
+#include "claude_code.h"
 #include "theme_editor.h"
 #include "trace_bitmap_dialog.h"
 #include "../parser/fla_doctor.h"
@@ -6050,8 +6051,17 @@ void MainWindow::setupMenus()
         QSettings().setValue("control/simpleFrameActions", on);
     });
 
-    // Commands: JSFL scripts, from a file or the user's Commands folder.
-    _scripts->fillCommandsMenu(menuBar->addMenu("&Commands"));
+    // Commands: Claude Code, and JSFL scripts from a file or the user's
+    // Commands folder.
+    QAction* claudeAction = new QAction("Open &Claude Code", this);
+    claudeAction->setStatusTip("Open Claude Code in a terminal, connected to Phoenix so it can work on your documents");
+    connect(claudeAction, &QAction::triggered, this, [this]() {
+        if (!_mcpServer)
+            _mcpServer = new McpServer(this);
+        const QString folder = _documentPath.isEmpty() ? QString() : QFileInfo(_documentPath).absolutePath();
+        claude_code::open(*_mcpServer, folder, this);
+    });
+    _scripts->fillCommandsMenu(menuBar->addMenu("&Commands"), claudeAction);
 
     QMenu* helpMenu = menuBar->addMenu("&Help");
     QAction* startAction = new QAction("&Start Screen...", this);

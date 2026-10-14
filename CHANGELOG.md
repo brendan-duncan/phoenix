@@ -4,6 +4,8 @@ What changed in each release of Phoenix, newest first.
 
 ## 0.8.0 (Unreleased)
 
+- Commands > Open Claude Code opens Claude Code in a terminal, already connected to Phoenix and let in without asking
+- JSFL on macOS: saving or writing to a file that does not exist yet keeps its whole path (`/Users/...`, `/var/...`) instead of losing the first folder
 - Trace Bitmap draws cleaner edges: soft and noisy borders between colors trace as straight lines instead of steps and spikes, with far fewer specks and points
 - In dialogs, Enter in a number field keeps the value typed and presses the dialog's main button, as it did before number fields became hot text; F2 opens a field for typing
 - No more faint lines of the background between fills that meet, in traced artwork and any shape with neighboring fills, on the stage and in exports

@@ -31,6 +31,7 @@
 #include <clocale>
 #include <cstring>
 #include <cctype>
+#include <cstdlib>
 #include <functional>
 #include <memory>
 #include <string>
@@ -163,6 +164,16 @@ int main(int argc, char *argv[])
     // this process only passes messages between the two, with no window.
     if (argc == 2 && std::strcmp(argv[1], "--mcp") == 0 && McpServer::relayToRunning())
         return 0;
+    // Phoenix --mcp --port N: started by a Phoenix for its own session (Open
+    // Claude Code); only that Phoenix will do, never a new window.
+    if (argc == 4 && std::strcmp(argv[1], "--mcp") == 0 && std::strcmp(argv[2], "--port") == 0)
+    {
+        const int port = std::atoi(argv[3]);
+        if (port > 0 && port < 65536 && McpServer::relayToRunning(port))
+            return 0;
+        std::fprintf(stderr, "The Phoenix that started this assistant is no longer running.\n");
+        return 1;
+    }
 
     // The theme's UI scale, which Qt takes only before it starts.
     {
