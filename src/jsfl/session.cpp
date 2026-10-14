@@ -28,6 +28,17 @@ void Session::finish()
     _host.refresh();
 }
 
+void Session::settle()
+{
+    closeSteps();
+    for (auto& [document, state] : _documents)
+    {
+        state.reachableValid = false;
+        state.reachable.clear();
+    }
+    _host.refresh();
+}
+
 bool Session::isOpen(const fla::FLADocument* document) const
 {
     if (!document)

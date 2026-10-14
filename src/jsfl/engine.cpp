@@ -2,6 +2,7 @@
 // prototypes, values converted both ways, and a run from start to finish.
 
 #include "engine.h"
+#include "tool_script.h"
 
 #include "e4x.h"
 #include "flfile.h"
@@ -9,7 +10,11 @@
 
 #include <quickjs.h>
 
+#include "tinyxml2.h"
+
+#include <atomic>
 #include <chrono>
+#include <cmath>
 #include <cstdio>
 #include <deque>
 #include <filesystem>
@@ -578,6 +583,106 @@ std::string prepare(JSContext* ctx, const std::string& source)
     return Engine::modernize(e4x::rewrite(source));
 }
 
+/// What every script sees: fl, FLfile, the dialogs and Phoenix's prelude.
+void installGlobals(JSContext* ctx, Binding& binding, Session& session, Host& host)
+{
+    JSValue global = JS_GetGlobalObject(ctx);
+    // fl, FLfile and the dialogs.
+    const std::shared_ptr<Flash> flash = makeFlash(session);
+    JSValue fl = binding.wrap(flash);
+    // fl.runScript works on script values directly, so a function
+    // called by name gets the caller's own objects.
+    binding.defineFunction(fl, "runScript", 2, [&binding, &session](JSContext* c, JSValueConst, int argc, JSValueConst* argv) {
+        if (argc < 1)
+            throw Error("fl.runScript needs a script URI.");
+        const std::string file = uri::toPath(toStd(c, argv[0]));
+        std::string text;
+        if (!readFile(file, text))
+            throw Error("Could not read the script " + file + ".");
+        const std::string saved = session.scriptPath;
+        session.scriptPath = file;
+        const std::string modern = prepare(c, text);
+        JSValue ran = JS_Eval(c, modern.c_str(), modern.size(), file.c_str(), JS_EVAL_TYPE_GLOBAL);
+        if (JS_IsException(ran))
+        {
+            session.scriptPath = saved;
+            throw PendingException();
+        }
+        JS_FreeValue(c, ran);
+        JSValue answer = JS_UNDEFINED;
+        if (argc > 1 && !JS_IsUndefined(argv[1]) && !JS_IsNull(argv[1]))
+        {
+            const std::string name = toStd(c, argv[1]);
+            JSValue scope = JS_GetGlobalObject(c);
+            JSValue function = JS_GetPropertyStr(c, scope, name.c_str());
+            JS_FreeValue(c, scope);
+            if (!JS_IsFunction(c, function))
+            {
+                JS_FreeValue(c, function);
+                session.scriptPath = saved;
+                throw Error("fl.runScript: " + file + " has no function " + name + ".");
+            }
+            answer = JS_Call(c, function, JS_UNDEFINED, argc - 2, argv + 2);
+            JS_FreeValue(c, function);
+            if (JS_IsException(answer))
+            {
+                session.scriptPath = saved;
+                throw PendingException();
+            }
+        }
+        session.scriptPath = saved;
+        (void)binding;
+        return answer;
+    });
+    JS_SetPropertyStr(ctx, global, "fl", fl);
+    const std::shared_ptr<FileSystem> files = makeFileSystem();
+    JS_SetPropertyStr(ctx, global, "FLfile", binding.wrap(files));
+    binding.singleton(flash);
+    binding.singleton(files);
+    binding.singleton(std::make_shared<OutputPanel>(session));
+    binding.defineFunction(global, "alert", 1, [&host](JSContext* c, JSValueConst, int argc, JSValueConst* argv) {
+        host.alert(argc > 0 ? toStd(c, argv[0]) : std::string());
+        return JS_UNDEFINED;
+    });
+    binding.defineFunction(global, "confirm", 1, [&host](JSContext* c, JSValueConst, int argc, JSValueConst* argv) {
+        return JS_NewBool(c, host.confirm(argc > 0 ? toStd(c, argv[0]) : std::string()));
+    });
+    binding.defineFunction(global, "prompt", 2, [&host](JSContext* c, JSValueConst, int argc, JSValueConst* argv) {
+        std::string answer;
+        const std::string initial = argc > 1 && !JS_IsUndefined(argv[1]) ? toStd(c, argv[1]) : std::string();
+        if (!host.prompt(argc > 0 ? toStd(c, argv[0]) : std::string(), initial, answer))
+            return JS_NULL;
+        return JS_NewStringLen(c, answer.data(), answer.size());
+    });
+
+    // Handler code from XML dialogs runs here, beside the script's own
+    // functions; what it throws is reported, not passed on.
+    session.evaluate = [ctx](const std::string& code) -> std::string {
+        const std::string modern = Engine::modernize(code);
+        JSValue ran = JS_Eval(ctx, modern.c_str(), modern.size(), "<dialog>", JS_EVAL_TYPE_GLOBAL);
+        if (!JS_IsException(ran))
+        {
+            JS_FreeValue(ctx, ran);
+            return {};
+        }
+        JSValue error = JS_GetException(ctx);
+        std::string message = "Error";
+        try
+        {
+            message = toStd(ctx, error);
+        }
+        catch (const PendingException&)
+        {
+        }
+        JS_FreeValue(ctx, error);
+        return message;
+    };
+
+    JSValue prelude = JS_Eval(ctx, kPrelude, std::strlen(kPrelude), "<phoenix>", JS_EVAL_TYPE_GLOBAL);
+    JS_FreeValue(ctx, prelude);
+    JS_FreeValue(ctx, global);
+}
+
 } // namespace
 
 std::string Engine::modernize(const std::string& s)
@@ -797,100 +902,7 @@ RunResult Engine::run(const std::string& source, const std::string& name, const 
         JS_SetContextOpaque(ctx, &binding);
         JSValue global = JS_GetGlobalObject(ctx);
 
-        // fl, FLfile and the dialogs.
-        const std::shared_ptr<Flash> flash = makeFlash(session);
-        JSValue fl = binding.wrap(flash);
-        // fl.runScript works on script values directly, so a function
-        // called by name gets the caller's own objects.
-        binding.defineFunction(fl, "runScript", 2, [&binding, &session](JSContext* c, JSValueConst, int argc, JSValueConst* argv) {
-            if (argc < 1)
-                throw Error("fl.runScript needs a script URI.");
-            const std::string file = uri::toPath(toStd(c, argv[0]));
-            std::string text;
-            if (!readFile(file, text))
-                throw Error("Could not read the script " + file + ".");
-            const std::string saved = session.scriptPath;
-            session.scriptPath = file;
-            const std::string modern = prepare(c, text);
-            JSValue ran = JS_Eval(c, modern.c_str(), modern.size(), file.c_str(), JS_EVAL_TYPE_GLOBAL);
-            if (JS_IsException(ran))
-            {
-                session.scriptPath = saved;
-                throw PendingException();
-            }
-            JS_FreeValue(c, ran);
-            JSValue answer = JS_UNDEFINED;
-            if (argc > 1 && !JS_IsUndefined(argv[1]) && !JS_IsNull(argv[1]))
-            {
-                const std::string name = toStd(c, argv[1]);
-                JSValue scope = JS_GetGlobalObject(c);
-                JSValue function = JS_GetPropertyStr(c, scope, name.c_str());
-                JS_FreeValue(c, scope);
-                if (!JS_IsFunction(c, function))
-                {
-                    JS_FreeValue(c, function);
-                    session.scriptPath = saved;
-                    throw Error("fl.runScript: " + file + " has no function " + name + ".");
-                }
-                answer = JS_Call(c, function, JS_UNDEFINED, argc - 2, argv + 2);
-                JS_FreeValue(c, function);
-                if (JS_IsException(answer))
-                {
-                    session.scriptPath = saved;
-                    throw PendingException();
-                }
-            }
-            session.scriptPath = saved;
-            (void)binding;
-            return answer;
-        });
-        JS_SetPropertyStr(ctx, global, "fl", fl);
-        const std::shared_ptr<FileSystem> files = makeFileSystem();
-        JS_SetPropertyStr(ctx, global, "FLfile", binding.wrap(files));
-        binding.singleton(flash);
-        binding.singleton(files);
-        binding.singleton(std::make_shared<OutputPanel>(session));
-        Host& host = _host;
-        binding.defineFunction(global, "alert", 1, [&host](JSContext* c, JSValueConst, int argc, JSValueConst* argv) {
-            host.alert(argc > 0 ? toStd(c, argv[0]) : std::string());
-            return JS_UNDEFINED;
-        });
-        binding.defineFunction(global, "confirm", 1, [&host](JSContext* c, JSValueConst, int argc, JSValueConst* argv) {
-            return JS_NewBool(c, host.confirm(argc > 0 ? toStd(c, argv[0]) : std::string()));
-        });
-        binding.defineFunction(global, "prompt", 2, [&host](JSContext* c, JSValueConst, int argc, JSValueConst* argv) {
-            std::string answer;
-            const std::string initial = argc > 1 && !JS_IsUndefined(argv[1]) ? toStd(c, argv[1]) : std::string();
-            if (!host.prompt(argc > 0 ? toStd(c, argv[0]) : std::string(), initial, answer))
-                return JS_NULL;
-            return JS_NewStringLen(c, answer.data(), answer.size());
-        });
-
-        // Handler code from XML dialogs runs here, beside the script's own
-        // functions; what it throws is reported, not passed on.
-        session.evaluate = [ctx](const std::string& code) -> std::string {
-            const std::string modern = Engine::modernize(code);
-            JSValue ran = JS_Eval(ctx, modern.c_str(), modern.size(), "<dialog>", JS_EVAL_TYPE_GLOBAL);
-            if (!JS_IsException(ran))
-            {
-                JS_FreeValue(ctx, ran);
-                return {};
-            }
-            JSValue error = JS_GetException(ctx);
-            std::string message = "Error";
-            try
-            {
-                message = toStd(ctx, error);
-            }
-            catch (const PendingException&)
-            {
-            }
-            JS_FreeValue(ctx, error);
-            return message;
-        };
-
-        JSValue prelude = JS_Eval(ctx, kPrelude, std::strlen(kPrelude), "<phoenix>", JS_EVAL_TYPE_GLOBAL);
-        JS_FreeValue(ctx, prelude);
+        installGlobals(ctx, binding, session, _host);
 
         const std::string modern = prepare(ctx, source);
         const int flags = JS_EVAL_TYPE_GLOBAL | (options.compileOnly ? JS_EVAL_FLAG_COMPILE_ONLY : 0);
@@ -961,6 +973,517 @@ RunResult Engine::run(const std::string& source, const std::string& name, const 
     session.finish();
     _running = false;
     return result;
+}
+
+// ---------------------------------------------------------------------------
+// Tools
+
+namespace {
+
+/// fl.tools, ToolObj and fl.drawingLayer, kept in the tool's own context.
+const char* const kToolPrelude = R"JS(
+(function () {
+    function ToolObj() {
+        this.__name = ""; this.__menu = ""; this.__tip = ""; this.__icon = ""; this.__options = "";
+        this.__pi = "shape"; this.__handles = false;
+        this.depth = 0; this.iconID = 0; this.position = 0;
+    }
+    ToolObj.prototype.setToolName = function (name) { this.__name = String(name); };
+    ToolObj.prototype.setMenuString = function (text) { this.__menu = String(text); };
+    ToolObj.prototype.setToolTip = function (text) { this.__tip = String(text); };
+    ToolObj.prototype.setIcon = function (file) { this.__icon = String(file); };
+    ToolObj.prototype.setOptionsFile = function (file) { this.__options = String(file); };
+    ToolObj.prototype.setPI = function (pi) { this.__pi = String(pi); };
+    ToolObj.prototype.showPIControl = function () {};
+    ToolObj.prototype.enablePIControl = function () {};
+    ToolObj.prototype.showTransformHandles = function (show) { this.__handles = !!show; };
+
+    var tools = {
+        activeTool: null, toolObjs: [],
+        penLoc: { x: 0, y: 0 }, penDownLoc: { x: 0, y: 0 },
+        mouseIsDown: false, altIsDown: false, ctlIsDown: false, shiftIsDown: false,
+        __key: 0, __cursor: 0,
+        getKeyDown: function () { return this.__key; },
+        setCursor: function (cursor) { this.__cursor = Number(cursor) || 0; },
+        snapPoint: function (point) { return { x: point.x, y: point.y }; },
+        // The second point moved to the nearest of the eight directions
+        // from the first, keeping its distance along that direction.
+        constrainPoint: function (from, to) {
+            var dx = to.x - from.x, dy = to.y - from.y;
+            var step = Math.PI / 4;
+            var angle = Math.round(Math.atan2(dy, dx) / step) * step;
+            var ux = Math.cos(angle), uy = Math.sin(angle);
+            if (Math.abs(ux) > 1e-9 && Math.abs(uy) > 1e-9) {
+                var d = Math.max(Math.abs(dx), Math.abs(dy));
+                return { x: from.x + (ux > 0 ? d : -d), y: from.y + (uy > 0 ? d : -d) };
+            }
+            var length = dx * ux + dy * uy;
+            return { x: from.x + ux * length, y: from.y + uy * length };
+        },
+        __set: function (x, y, dx, dy, down, alt, ctl, shift, key) {
+            this.penLoc = { x: x, y: y }; this.penDownLoc = { x: dx, y: dy };
+            this.mouseIsDown = down; this.altIsDown = alt; this.ctlIsDown = ctl; this.shiftIsDown = shift;
+            this.__key = key;
+        },
+        __configure: function () {
+            var tool = new ToolObj();
+            this.activeTool = tool;
+            this.toolObjs.push(tool);
+            if (typeof configureTool === "function")
+                configureTool();
+        }
+    };
+
+    function Path() { this.__contours = [{ pieces: [], closed: false }]; }
+    Path.prototype.__contour = function () { return this.__contours[this.__contours.length - 1]; };
+    Path.prototype.__last = function () {
+        var c = this.__contour(), p = c.pieces[c.pieces.length - 1];
+        return p ? { x: p[p.length - 2], y: p[p.length - 1] } : null;
+    };
+    Path.prototype.__start = function (x, y) {
+        var c = this.__contour(), last = this.__last();
+        if (!last) c.pieces.push(["M", x, y]);
+        else if (last.x != x || last.y != y) c.pieces.push(["L", x, y]);
+    };
+    Path.prototype.addPoint = function (x, y) {
+        var c = this.__contour();
+        c.pieces.push([c.pieces.length ? "L" : "M", Number(x), Number(y)]);
+    };
+    Path.prototype.addCurve = function (x1, y1, x2, y2, x3, y3) {
+        this.__start(Number(x1), Number(y1));
+        this.__contour().pieces.push(["Q", Number(x2), Number(y2), Number(x3), Number(y3)]);
+    };
+    Path.prototype.addCubicCurve = function (x1, y1, x2, y2, x3, y3, x4, y4) {
+        this.__start(Number(x1), Number(y1));
+        this.__contour().pieces.push(["C", Number(x2), Number(y2), Number(x3), Number(y3), Number(x4), Number(y4)]);
+    };
+    Path.prototype.close = function () { this.__contour().closed = true; };
+    Path.prototype.newContour = function () { this.__contours.push({ pieces: [], closed: false }); };
+    Path.prototype.clear = function () { this.__contours = [{ pieces: [], closed: false }]; };
+    Path.prototype.getNumberOfPoints = function () {
+        var n = 0;
+        this.__contours.forEach(function (c) { n += c.pieces.length; });
+        return n;
+    };
+    Path.prototype.__svg = function () {
+        var d = [];
+        this.__contours.forEach(function (c) {
+            c.pieces.forEach(function (p) { d.push(p.join(" ")); });
+            if (c.closed && c.pieces.length) d.push("Z");
+        });
+        return d.join(" ");
+    };
+    Path.prototype.makeShape = function (suppressFill, suppressStroke) {
+        var svg = this.__svg();
+        if (svg.length) fl.getDocumentDOM().addNewPath(svg, !suppressFill, !suppressStroke);
+    };
+
+    var drawing = {
+        __paths: [], __current: null, __color: 0x00A0FF, __persistent: false,
+        __path: function () {
+            if (!this.__current) {
+                this.__current = { color: this.__color, pieces: [] };
+                this.__paths.push(this.__current);
+            }
+            return this.__current;
+        },
+        beginDraw: function (persistent) { this.__persistent = !!persistent; this.__paths = []; this.__current = null; },
+        endDraw: function () { if (!this.__persistent) { this.__paths = []; } this.__current = null; },
+        beginFrame: function () { this.__paths = []; this.__current = null; },
+        endFrame: function () { this.__current = null; },
+        setColor: function (color) {
+            this.__color = typeof color === "string" ? parseInt(color.replace("#", "").slice(0, 6), 16) : Number(color);
+            this.__current = null;
+        },
+        moveTo: function (x, y) { this.__path().pieces.push(["M", Number(x), Number(y)]); },
+        lineTo: function (x, y) { this.__path().pieces.push(["L", Number(x), Number(y)]); },
+        curveTo: function (cx, cy, x, y) { this.__path().pieces.push(["Q", Number(cx), Number(cy), Number(x), Number(y)]); },
+        cubicCurveTo: function (x1, y1, x2, y2, x, y) {
+            this.__path().pieces.push(["C", Number(x1), Number(y1), Number(x2), Number(y2), Number(x), Number(y)]);
+        },
+        frameRect: function (r) {
+            this.moveTo(r.left, r.top); this.lineTo(r.right, r.top); this.lineTo(r.right, r.bottom);
+            this.lineTo(r.left, r.bottom); this.lineTo(r.left, r.top);
+        },
+        drawPath: function (path) {
+            var self = this;
+            path.__contours.forEach(function (c) {
+                c.pieces.forEach(function (p) { self.__path().pieces.push(p.slice()); });
+                if (c.closed && c.pieces.length) self.__path().pieces.push(["L", c.pieces[0][1], c.pieces[0][2]]);
+            });
+        },
+        newPath: function () { return new Path(); },
+        // One line a path: its color, then its pieces.
+        __flat: function () {
+            return this.__paths.map(function (p) {
+                return [p.color].concat(p.pieces.map(function (piece) { return piece.join(" "); })).join(";");
+            }).join("\n");
+        }
+    };
+
+    fl.tools = tools;
+    fl.drawingLayer = drawing;
+    this.ToolObj = ToolObj;
+})();
+)JS";
+
+std::string errorOf(JSContext* ctx)
+{
+    JSValue error = JS_GetException(ctx);
+    std::string message = "Error";
+    try
+    {
+        message = toStd(ctx, error);
+    }
+    catch (const PendingException&)
+    {
+    }
+    std::string stack;
+    if (JS_IsError(error))
+    {
+        JSValue value = JS_GetPropertyStr(ctx, error, "stack");
+        if (JS_IsString(value))
+            stack = toStd(ctx, value);
+        JS_FreeValue(ctx, value);
+    }
+    JS_FreeValue(ctx, error);
+    std::string file;
+    int line = 0;
+    locate(stack, file, line);
+    if (file.empty())
+        return message;
+    return file + (line > 0 ? ":" + std::to_string(line) : std::string()) + ": " + message;
+}
+
+std::string literal(const std::string& text)
+{
+    std::string out = "\"";
+    for (const char c : text)
+    {
+        if (c == '"' || c == '\\')
+            out += '\\';
+        if (c == '\n')
+        {
+            out += "\\n";
+            continue;
+        }
+        if (c == '\r')
+        {
+            out += "\\r";
+            continue;
+        }
+        out += c;
+    }
+    return out + "\"";
+}
+
+std::string numberText(double value)
+{
+    if (!std::isfinite(value))
+        return "0";
+    char buffer[40];
+    std::snprintf(buffer, sizeof(buffer), "%.10g", value);
+    return buffer;
+}
+
+} // namespace
+
+struct ToolScript::Impl
+{
+    Host& host;
+    std::string path;
+    std::string name, menu, tip, icon;
+    std::vector<Option> options;
+    std::unique_ptr<Session> session;
+    JSRuntime* runtime = nullptr;
+    JSContext* ctx = nullptr;
+    std::unique_ptr<Binding> binding;
+    std::atomic<bool> stop{false};
+    Guard guard;
+
+    Impl(Host& host, std::string path)
+        : host(host)
+        , path(std::move(path))
+    {}
+
+    ~Impl()
+    {
+        if (ctx)
+        {
+            binding.reset();
+            JS_FreeContext(ctx);
+        }
+        if (runtime)
+            JS_FreeRuntime(runtime);
+        // Every call settled its steps; the window may be closing now.
+        if (session)
+            session->detach();
+    }
+
+    /// Runs \a code, a call's worth of time at most; the error, or empty.
+    /// \a out, when given, gets the value as text.
+    std::string eval(const std::string& code, const std::string& file, std::string* out = nullptr)
+    {
+        guard.hasDeadline = true;
+        guard.deadline = Clock::now() + std::chrono::seconds(10);
+        guard.timedOut = false;
+        guard.stopped = false;
+        JSValue value = JS_Eval(ctx, code.c_str(), code.size(), file.c_str(), JS_EVAL_TYPE_GLOBAL);
+        if (JS_IsException(value))
+        {
+            if (guard.timedOut)
+            {
+                JS_FreeValue(ctx, JS_GetException(ctx));
+                return file + ": the tool took too long and was stopped.";
+            }
+            return errorOf(ctx);
+        }
+        if (out)
+        {
+            try
+            {
+                *out = JS_IsUndefined(value) || JS_IsNull(value) ? std::string() : toStd(ctx, value);
+            }
+            catch (const PendingException&)
+            {
+                out->clear();
+            }
+        }
+        JS_FreeValue(ctx, value);
+        return {};
+    }
+
+    std::string text(const std::string& expression)
+    {
+        std::string out;
+        eval("String(" + expression + ")", "<tool>", &out);
+        return out;
+    }
+
+    /// The step a call made ends, and the window shows it.
+    void settle()
+    {
+        session->setUndoName(name.empty() ? "Tool" : name);
+        session->settle();
+    }
+};
+
+ToolScript::ToolScript(Host& host, std::string path)
+    : _impl(std::make_unique<Impl>(host, std::move(path)))
+{}
+
+ToolScript::~ToolScript() = default;
+
+bool ToolScript::load(std::string& error)
+{
+    Impl& d = *_impl;
+    std::string source;
+    if (!readFile(d.path, source))
+    {
+        error = "Could not read " + d.path + ".";
+        return false;
+    }
+    d.session = std::make_unique<Session>(d.host, "Tool");
+    d.session->scriptPath = d.path;
+    d.runtime = JS_NewRuntime();
+    JS_SetMemoryLimit(d.runtime, size_t(256) * 1024 * 1024);
+    JS_SetMaxStackSize(d.runtime, size_t(2) * 1024 * 1024);
+    JS_NewClassID(d.runtime, &g_objectClass);
+    JSClassDef objectClass{};
+    objectClass.class_name = "PhoenixObject";
+    objectClass.finalizer = &finalizeObject;
+    JS_NewClass(d.runtime, g_objectClass, &objectClass);
+    d.guard.stop = &d.stop;
+    d.guard.lastPoll = Clock::now();
+    JS_SetInterruptHandler(d.runtime, &interrupt, &d.guard);
+    d.ctx = JS_NewContext(d.runtime);
+    d.binding = std::make_unique<Binding>(d.ctx);
+    JS_SetContextOpaque(d.ctx, d.binding.get());
+    // One session for the tool's life: each call settles it, ending the
+    // undo step the call made.
+    installGlobals(d.ctx, *d.binding, *d.session, d.host);
+    std::string failed = d.eval(kToolPrelude, "<phoenix-tools>");
+    if (failed.empty())
+        failed = d.eval(prepare(d.ctx, source), d.path);
+    if (failed.empty())
+        failed = d.eval("fl.tools.__configure()", d.path);
+    if (!failed.empty())
+    {
+        error = failed;
+        return false;
+    }
+    d.name = d.text("fl.tools.activeTool.__name");
+    d.menu = d.text("fl.tools.activeTool.__menu");
+    d.tip = d.text("fl.tools.activeTool.__tip");
+    const std::filesystem::path folder = std::filesystem::u8path(d.path).parent_path();
+    const std::string icon = d.text("fl.tools.activeTool.__icon");
+    if (!icon.empty())
+        d.icon = (folder / std::filesystem::u8path(icon)).u8string();
+    if (d.name.empty())
+        d.name = std::filesystem::u8path(d.path).stem().u8string();
+
+    // The options file: each property a setting the tool reads off its
+    // ToolObj, starting at its default.
+    const std::string optionsFile = d.text("fl.tools.activeTool.__options");
+    if (!optionsFile.empty())
+    {
+        std::string xml;
+        if (readFile((folder / std::filesystem::u8path(optionsFile)).u8string(), xml))
+        {
+            tinyxml2::XMLDocument doc;
+            if (doc.Parse(xml.c_str(), xml.size()) == tinyxml2::XML_SUCCESS && doc.RootElement())
+            {
+                for (const tinyxml2::XMLElement* p = doc.RootElement()->FirstChildElement("property"); p;
+                     p = p->NextSiblingElement("property"))
+                {
+                    Option option;
+                    option.name = p->Attribute("name") ? p->Attribute("name") : "";
+                    option.variable = p->Attribute("variable") ? p->Attribute("variable") : "";
+                    option.type = p->Attribute("type") ? p->Attribute("type") : "Number";
+                    option.value = p->Attribute("defaultValue") ? p->Attribute("defaultValue") : "";
+                    if (const char* list = p->Attribute("list"))
+                    {
+                        std::string item;
+                        std::istringstream in(list);
+                        while (std::getline(in, item, ','))
+                            option.list.push_back(item);
+                    }
+                    option.min = p->DoubleAttribute("min", option.min);
+                    option.max = p->DoubleAttribute("max", option.max);
+                    if (option.variable.empty())
+                        continue;
+                    d.options.push_back(option);
+                }
+            }
+        }
+    }
+    std::vector<std::pair<std::string, std::string>> defaults;
+    for (const Option& option : d.options)
+        defaults.emplace_back(option.variable, option.value);
+    failed = setOptions(defaults);
+    d.settle();
+    if (!failed.empty())
+    {
+        error = failed;
+        return false;
+    }
+    return true;
+}
+
+const std::string& ToolScript::toolName() const { return _impl->name; }
+const std::string& ToolScript::menuString() const { return _impl->menu; }
+const std::string& ToolScript::toolTip() const { return _impl->tip; }
+const std::string& ToolScript::iconPath() const { return _impl->icon; }
+const std::string& ToolScript::path() const { return _impl->path; }
+
+bool ToolScript::has(const std::string& function) const
+{
+    if (!_impl->ctx)
+        return false;
+    return _impl->text("typeof " + function) == "function";
+}
+
+std::string ToolScript::call(const std::string& function, const State& state)
+{
+    Impl& d = *_impl;
+    if (!d.ctx || !has(function))
+        return {};
+    std::string failed = d.eval("fl.tools.__set(" + numberText(state.penX) + "," + numberText(state.penY) + "," +
+            numberText(state.downX) + "," + numberText(state.downY) + "," + (state.mouseDown ? "true" : "false") + "," +
+            (state.alt ? "true" : "false") + "," + (state.ctrl ? "true" : "false") + "," + (state.shift ? "true" : "false") +
+            "," + std::to_string(state.key) + ")",
+        "<tool>");
+    if (failed.empty())
+        failed = d.eval(function + "({x:" + numberText(state.penX) + ",y:" + numberText(state.penY) + "})", d.path);
+    d.settle();
+    return failed;
+}
+
+std::vector<ToolScript::Preview> ToolScript::preview() const
+{
+    std::vector<Preview> paths;
+    if (!_impl->ctx)
+        return paths;
+    const std::string flat = _impl->text("fl.drawingLayer.__flat()");
+    std::istringstream lines(flat);
+    std::string line;
+    while (std::getline(lines, line))
+    {
+        std::istringstream parts(line);
+        std::string part;
+        Preview path;
+        bool first = true;
+        while (std::getline(parts, part, ';'))
+        {
+            if (first)
+            {
+                path.color = static_cast<uint32_t>(std::strtoul(part.c_str(), nullptr, 10));
+                first = false;
+                continue;
+            }
+            std::istringstream fields(part);
+            Preview::Piece piece;
+            std::string kind;
+            fields >> kind;
+            piece.kind = kind.empty() ? 'L' : kind[0];
+            double value;
+            while (fields >> value)
+                piece.points.push_back(value);
+            path.pieces.push_back(piece);
+        }
+        if (!path.pieces.empty())
+            paths.push_back(path);
+    }
+    return paths;
+}
+
+int ToolScript::cursor() const
+{
+    if (!_impl->ctx)
+        return 0;
+    return std::atoi(_impl->text("fl.tools.__cursor").c_str());
+}
+
+std::vector<ToolScript::Option> ToolScript::options() const
+{
+    std::vector<Option> options = _impl->options;
+    if (_impl->ctx)
+        for (Option& option : options)
+            option.value = _impl->text("fl.tools.activeTool[" + literal(option.variable) + "]");
+    return options;
+}
+
+std::string ToolScript::setOptions(const std::vector<std::pair<std::string, std::string>>& values)
+{
+    Impl& d = *_impl;
+    if (!d.ctx)
+        return {};
+    for (const auto& [variable, value] : values)
+    {
+        std::string type = "Number";
+        for (const Option& option : d.options)
+            if (option.variable == variable)
+                type = option.type;
+        std::string code;
+        if (type == "Boolean")
+            code = value == "true" || value == "1" ? "true" : "false";
+        else if (type == "Number" || type == "Strings")
+        {
+            char* end = nullptr;
+            const double number = std::strtod(value.c_str(), &end);
+            code = end && end != value.c_str() ? numberText(number) : literal(value);
+        }
+        else
+            code = literal(value);
+        const std::string failed = d.eval("fl.tools.activeTool[" + literal(variable) + "] = " + code, "<tool>");
+        if (!failed.empty())
+            return failed;
+    }
+    std::string failed;
+    if (has("notifySettingsChanged"))
+        failed = d.eval("notifySettingsChanged()", d.path);
+    d.settle();
+    return failed;
 }
 
 } // namespace jsfl

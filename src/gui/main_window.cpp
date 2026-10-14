@@ -94,6 +94,8 @@
 #include "../edit/property_command.h"
 #include "phoenix_view.h"
 #include "movie_export.h"
+#include "script_tool.h"
+#include "../jsfl/tool_script.h"
 #include "sprite_sheet_dialog.h"
 #include "brush_properties_dialog.h"
 #include "publish_dialog.h"
@@ -8913,6 +8915,42 @@ void MainWindow::setupToolBar()
         [this]() -> Tool* { return _zoomTool.get(); })});
 
     // The tools are all known: the default layout, then the one kept.
+    // JSFL tools from the Tools folder, in a slot of their own at the end,
+    // as Animate adds them to its Tools panel.
+    {
+        std::vector<QAction*> scriptActions;
+        const QDir folder(QDir(ScriptRunner::configFolder()).filePath("Tools"));
+        for (const QFileInfo& file : folder.entryInfoList({"*.jsfl"}, QDir::Files, QDir::Name | QDir::IgnoreCase))
+        {
+            auto script = std::make_unique<jsfl::ToolScript>(_scripts->jsflHost(), file.absoluteFilePath().toStdString());
+            std::string error;
+            if (!script->load(error))
+            {
+                _scripts->jsflHost().trace(error);
+                continue;
+            }
+            ScriptTool* tool = _scriptTools.emplace_back(std::make_unique<ScriptTool>(_scripts->jsflHost(), std::move(script))).get();
+            QAction* action = new QAction(tool->name(), this);
+            action->setIcon(tool->icon());
+            action->setCheckable(true);
+            action->setToolTip(tool->toolTip().isEmpty() ? tool->name() : tool->toolTip());
+            action->setStatusTip(QString("A tool from %1").arg(file.fileName()));
+            connect(action, &QAction::triggered, this, [this, tool]() {
+                tool->activate();
+                _phoenixView->setActiveTool(tool);
+            });
+            _toolActionList.emplace_back([tool]() -> Tool* { return tool; }, action);
+            toolGroup->addAction(action);
+            addAction(action);
+            _toolbox->addTool(action->text(), action);
+            scriptActions.push_back(action);
+        }
+        if (!scriptActions.empty())
+        {
+            addLine();
+            addSlot(scriptActions);
+        }
+    }
     _toolbox->setDefaultLayout(defaultTools);
     _toolbox->setLayout(Toolbox::Layout::fromJson(
         QJsonDocument::fromJson(QSettings().value("toolbox/layout").toByteArray()).object()));
@@ -10739,6 +10777,7 @@ ToolIcons::Tool MainWindow::iconForTool(const Tool* tool) const
     if (tool == _widthTool.get()) return IconTool::Width;
     if (tool == _paintBrushTool.get()) return IconTool::PaintBrush;
     if (tool == _textTool.get()) return IconTool::Text;
+    if (dynamic_cast<const ScriptTool*>(tool)) return IconTool::Script;
     return IconTool::Selection;
 }
 

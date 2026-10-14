@@ -947,6 +947,16 @@ const ClassInfo& Document::classInfo() const
             addShape(d, path, false, true);
             return Value();
         });
+        // Phoenix's own: a shape from SVG path data (M, L, Q, C, A, Z), in
+        // the toolbar's fill and stroke, as a JSFL tool's path.makeShape()
+        // adds one.
+        def.method("addNewPath", 3, [](Document& d, const Args& args) {
+            const std::string path = arg(args, 0).toString();
+            if (path.empty())
+                throw Error("addNewPath needs SVG path data.");
+            addShape(d, path, given(args, 1) ? arg(args, 1).toBool() : true, given(args, 2) ? arg(args, 2).toBool() : true);
+            return Value();
+        });
         def.method("addItem", 2, [](Document& d, const Args& args) {
             const auto item = arg(args, 1).as<Item>();
             if (!item)

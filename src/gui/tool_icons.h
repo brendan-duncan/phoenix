@@ -51,6 +51,8 @@ public:
         Translate3D,
         Width,
         PaintBrush,
+        /// A JSFL tool without an icon of its own.
+        Script,
         /// Not a tool: the toggle that keeps a drawing its own object.
         ObjectDrawing
     };

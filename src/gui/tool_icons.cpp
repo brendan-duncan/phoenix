@@ -579,6 +579,22 @@ void drawText(QPainter& painter)
     painter.drawPath(glyph);
 }
 
+void drawScript(QPainter& painter)
+{
+    // A tool from a script: braces around a dot, the script's own mark.
+    QFont font("Arial");
+    font.setBold(true);
+    font.setPixelSize(17);
+    QPainterPath glyph;
+    glyph.addText(QPointF(0.0, 0.0), font, "{ }");
+    const QRectF box = glyph.boundingRect();
+    glyph.translate(12.0 - box.center().x(), 12.0 - box.center().y());
+    painter.setPen(Qt::NoPen);
+    painter.setBrush(strokeColor());
+    painter.drawPath(glyph);
+    painter.drawEllipse(QPointF(12.0, 12.5), 1.6, 1.6);
+}
+
 void drawObjectDrawing(QPainter& painter)
 {
     // A shape inside its own boundary: what the mode does is keep the two
@@ -643,6 +659,7 @@ QPixmap render(ToolIcons::Tool tool, int size)
     case ToolIcons::Tool::Translate3D:   drawTranslate3D(painter); break;
     case ToolIcons::Tool::Width:         drawWidth(painter); break;
     case ToolIcons::Tool::PaintBrush:    drawPaintBrush(painter); break;
+    case ToolIcons::Tool::Script:        drawScript(painter); break;
     case ToolIcons::Tool::ObjectDrawing: drawObjectDrawing(painter); break;
     }
 

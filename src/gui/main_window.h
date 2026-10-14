@@ -674,6 +674,8 @@ private:
     /// tool: the toolbox is made before the tools, so _toolActions is filled
     /// from these once they exist.
     std::vector<std::pair<std::function<Tool*()>, QAction*>> _toolActionList;
+    /// JSFL tools from the Tools folder.
+    std::vector<std::unique_ptr<class ScriptTool>> _scriptTools;
     /// Every command with a key, with Phoenix's own keys, for Edit >
     /// Keyboard Shortcuts.
     std::vector<ShortcutEntry> _shortcuts;

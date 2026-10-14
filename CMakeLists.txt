@@ -198,6 +198,7 @@ set(HEADERS
     src/gui/output_panel.h
     src/jsfl/e4x.h
     src/jsfl/engine.h
+    src/jsfl/tool_script.h
     src/jsfl/flfile.h
     src/jsfl/host.h
     src/jsfl/model.h
@@ -217,6 +218,7 @@ set(HEADERS
     src/gui/lines_to_fills.h
     src/gui/free_transform_tool.h
     src/gui/primitive_tool.h
+    src/gui/script_tool.h
     src/gui/pen_tool.h
     src/gui/pencil_tool.h
     src/gui/text_tool.h
@@ -468,6 +470,7 @@ set(SOURCES
     src/gui/fill_offset.cpp
     src/gui/free_transform_tool.cpp
     src/gui/primitive_tool.cpp
+    src/gui/script_tool.cpp
     src/gui/pen_tool.cpp
     src/gui/pencil_tool.cpp
     src/gui/text_tool.cpp

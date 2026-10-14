@@ -709,6 +709,11 @@ ScriptRunner::ScriptRunner(MainWindow& window)
 
 ScriptRunner::~ScriptRunner() = default;
 
+jsfl::Host& ScriptRunner::jsflHost()
+{
+    return *_host;
+}
+
 QString ScriptRunner::configFolder()
 {
     const QString folder = QDir(settingsBase()).filePath("Configuration");

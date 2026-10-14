@@ -19,6 +19,7 @@ class JsflHost;
 
 namespace jsfl {
 class Engine;
+class Host;
 struct RunOptions;
 struct RunResult;
 } // namespace jsfl
@@ -51,6 +52,8 @@ public:
     static bool handToRunning(const QString& script);
 
     QDockWidget* outputDock() const { return _outputDock; }
+    /// The host scripts reach the window through, for JSFL tools.
+    jsfl::Host& jsflHost();
     OutputPanel* output() const { return _output; }
 
     /// The Commands menu, filled each time it opens, with \a first at its

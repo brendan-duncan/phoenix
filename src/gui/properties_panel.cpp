@@ -1,4 +1,5 @@
 #include "properties_panel.h"
+#include "script_tool.h"
 
 #include "../edit/filter_presets.h"
 #include "text_layout.h"
@@ -631,11 +632,14 @@ void PropertiesPanel::setActiveTool(Tool* tool, ToolIcons::Tool icon)
 {
     _tool = tool;
     _toolIcon = icon;
+    auto* script = dynamic_cast<ScriptTool*>(tool);
     if (_toolIconLabel)
-        _toolIconLabel->setPixmap(ToolIcons::icon(icon).pixmap(22, 22));
+        _toolIconLabel->setPixmap((script ? script->icon() : ToolIcons::icon(icon)).pixmap(22, 22));
     if (_toolNameLabel)
         _toolNameLabel->setText(tool ? tool->name() + " Tool" : QString("No tool"));
     applyToolVisibility();
+    if (_scriptOptions)
+        _scriptOptions->setVisible(script && script->hasOptions());
     rebuildCameraToolSections();
 }
 
@@ -695,10 +699,10 @@ void PropertiesPanel::buildToolTab()
 
     const std::vector<IconTool> fillTools = {IconTool::Rectangle, IconTool::Oval, IconTool::PolyStar,
         IconTool::RectanglePrimitive, IconTool::OvalPrimitive, IconTool::Pen, IconTool::Brush,
-        IconTool::FluidBrush, IconTool::InkBrush, IconTool::PaintBucket, IconTool::Text};
+        IconTool::FluidBrush, IconTool::InkBrush, IconTool::PaintBucket, IconTool::Text, IconTool::Script};
     const std::vector<IconTool> strokeTools = {IconTool::Rectangle, IconTool::Oval, IconTool::Line,
         IconTool::PolyStar, IconTool::RectanglePrimitive, IconTool::OvalPrimitive, IconTool::Pen,
-        IconTool::Pencil, IconTool::PaintBrush, IconTool::InkBottle};
+        IconTool::Pencil, IconTool::PaintBrush, IconTool::InkBottle, IconTool::Script};
 
     // --- Color and Style ---
     _colorSection = addSection(page, "Color and Style");
@@ -837,6 +841,15 @@ void PropertiesPanel::buildToolTab()
         _links.style->starInnerRatio = std::clamp(value, 0.0, 1.0);
     });
     addOption("Star point size", pointSize, {IconTool::PolyStar});
+
+    // A JSFL tool's own settings, from its options file.
+    _scriptOptions = new QPushButton("Tool Settings...", this);
+    _scriptOptions->setToolTip("The settings the tool's options file gives it");
+    connect(_scriptOptions, &QPushButton::clicked, this, [this]() {
+        if (auto* script = dynamic_cast<ScriptTool*>(_tool))
+            script->showOptions(this);
+    });
+    addOption(QString(), _scriptOptions, {IconTool::Script});
 
     // Free transform.
     QComboBox* transformMode = new QComboBox(this);

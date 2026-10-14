@@ -52,6 +52,15 @@ public:
 
     /// Closes the undo steps the run opened and brings the view up to date.
     void finish();
+    /// For a script that stays loaded (a tool): closes the steps one call
+    /// opened, forgets what it knew of the documents (they change between
+    /// calls) and brings the view up to date; the next change starts a new
+    /// step.
+    void settle();
+    void setUndoName(const std::string& name) { _undoName = name; }
+    /// The host is going away (the window closing with a tool loaded):
+    /// nothing more is asked of it.
+    void detach() { _finished = true; }
 
     // Documents.
     bool isOpen(const fla::FLADocument* document) const;

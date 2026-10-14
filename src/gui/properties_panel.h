@@ -269,6 +269,7 @@ private:
     Tool* _tool = nullptr;
     ToolIcons::Tool _toolIcon = ToolIcons::Tool::Selection;
     QLabel* _toolIconLabel = nullptr;
+    class QPushButton* _scriptOptions = nullptr;
     QLabel* _toolNameLabel = nullptr;
     PropertySection* _colorSection = nullptr;
     PropertySection* _optionsSection = nullptr;

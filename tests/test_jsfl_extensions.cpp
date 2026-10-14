@@ -12,6 +12,7 @@
 #include "../src/data/shape.h"
 #include "../src/data/solid_color.h"
 #include "../src/data/timeline.h"
+#include "../src/jsfl/tool_script.h"
 #include "../src/phx/phx_document.h"
 #include "../src/writer/xfl_folder_writer.h"
 
@@ -331,4 +332,88 @@ TEST(jsfl_run_command_line_gives_the_exit_code)
     Fixture f;
     CHECK(f.run("fl.trace(FLfile.runCommandLine('exit 3'));").ok);
     expectOutput(f, "3\n");
+}
+
+TEST(jsfl_tools_preview_while_dragging_and_draw_on_release)
+{
+    // A tool as Animate's PolyStar is written: an options file, a preview
+    // on the drawing layer while the mouse is down, a path made into a
+    // shape when it comes up.
+    const std::filesystem::path folder = jsfl_test::scratchFolder("tools");
+    {
+        std::FILE* script = std::fopen((folder / "Box.jsfl").u8string().c_str(), "wb");
+        std::fputs(
+            "var sides = 0;\n"
+            "function configureTool() {\n"
+            "  var t = fl.tools.activeTool;\n"
+            "  t.setToolName('box'); t.setMenuString('Box Tool'); t.setToolTip('Box Tool');\n"
+            "  t.setIcon('Box.png'); t.setOptionsFile('Box.xml'); t.setPI('shape');\n"
+            "}\n"
+            "function notifySettingsChanged() { sides = fl.tools.activeTool.nsides; }\n"
+            "function setCursor() { fl.tools.setCursor(0); }\n"
+            "function mouseDown() { fl.drawingLayer.beginDraw(); }\n"
+            "function mouseMove() {\n"
+            "  if (!fl.tools.mouseIsDown) return;\n"
+            "  var a = fl.tools.penDownLoc, b = fl.tools.penLoc;\n"
+            "  fl.drawingLayer.beginFrame();\n"
+            "  fl.drawingLayer.frameRect({left: a.x, top: a.y, right: b.x, bottom: b.y});\n"
+            "  fl.drawingLayer.endFrame();\n"
+            "}\n"
+            "function mouseUp() {\n"
+            "  fl.drawingLayer.endDraw();\n"
+            "  var a = fl.tools.penDownLoc, b = fl.tools.penLoc;\n"
+            "  var path = fl.drawingLayer.newPath();\n"
+            "  path.addPoint(a.x, a.y); path.addPoint(b.x, a.y); path.addPoint(b.x, b.y); path.addPoint(a.x, b.y);\n"
+            "  path.close();\n"
+            "  path.makeShape();\n"
+            "}\n",
+            script);
+        std::fclose(script);
+        std::FILE* options = std::fopen((folder / "Box.xml").u8string().c_str(), "wb");
+        std::fputs("<properties><property name=\"Number of Sides\" variable=\"nsides\" min=\"3\" max=\"32\" "
+                   "defaultValue=\"5\" type=\"Number\"/><property name=\"Style\" variable=\"style\" "
+                   "list=\"polygon,star\" defaultValue=\"0\" type=\"Strings\"/></properties>",
+            options);
+        std::fclose(options);
+    }
+    Fixture f;
+    redFillBlackStroke(f);
+    jsfl::ToolScript tool(f.host, (folder / "Box.jsfl").u8string());
+    std::string error;
+    CHECK(tool.load(error));
+    if (!error.empty())
+        std::printf("    %s\n", error.c_str());
+    CHECK(tool.toolName() == "box" && tool.menuString() == "Box Tool");
+    CHECK(tool.iconPath().find("Box.png") != std::string::npos);
+    // The options start at their defaults, and the tool hears of them.
+    const auto options = tool.options();
+    CHECK(options.size() == 2 && options[0].variable == "nsides" && options[0].value == "5");
+    CHECK(options.size() == 2 && options[1].list.size() == 2 && options[1].value == "0");
+    CHECK(tool.setOptions({{"nsides", "7"}}).empty());
+    CHECK(tool.options()[0].value == "7");
+
+    jsfl::ToolScript::State state;
+    state.penX = state.downX = 10;
+    state.penY = state.downY = 20;
+    state.mouseDown = true;
+    CHECK(tool.call("mouseDown", state).empty());
+    state.penX = 110;
+    state.penY = 70;
+    CHECK(tool.call("mouseMove", state).empty());
+    const auto preview = tool.preview();
+    CHECK(preview.size() == 1 && preview[0].pieces.size() == 5 && preview[0].pieces[0].kind == 'M');
+    // Nothing is in the document until the mouse comes up.
+    fla::Frame* frame = f.scene().layers[0]->frames[0];
+    CHECK(frame->elements.empty());
+    state.mouseDown = false;
+    CHECK(tool.call("mouseUp", state).empty());
+    CHECK(tool.preview().empty());
+    CHECK(frame->elements.size() == 1);
+    // One undo step, named after the tool.
+    fla::CommandStack& history = f.host.history(f.document);
+    CHECK(history.undoName() == "box");
+    history.undo();
+    CHECK(frame->elements.empty());
+    // A handler the tool does not have is no error.
+    CHECK(tool.call("keyDown", state).empty());
 }

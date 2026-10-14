@@ -131,7 +131,7 @@ fl.trace(cycle.layer + ": " + cycle.frames + " frames");</code></pre>
 
 <div class="callout">
   <span class="label">Not yet</span>
-  <p>Custom tools, panels built on HTML, exporting one symbol as an SWF movie (<code>item.exportSWF</code>), drawing the filters set on layers' frames, and saving History panel steps as a command. Each run starts fresh: functions one script defines are not kept for the next.</p>
+  <p>Panels built on HTML, exporting one symbol as an SWF movie (<code>item.exportSWF</code>), drawing the filters set on layers' frames, and saving History panel steps as a command. Each run starts fresh: functions one script defines are not kept for the next.</p>
 </div>
 
 <h2 id="dialogs">Dialogs</h2>
@@ -152,6 +152,47 @@ if (result.dismiss == "accept")
 <p>Handlers run in the script's own context, so they can call its functions: <code>oncreate</code> as the dialog opens, <code>onchange</code> when a text box is edited, <code>oncommand</code> when a button, checkbox, radio button or menu item is used, and <code>&lt;script&gt;</code> blocks before the dialog appears. In a handler, <code>fl.xmlui</code> reads and changes the dialog: <code>get</code>, <code>set</code>, <code>getEnabled</code>, <code>setEnabled</code>, <code>getVisible</code>, <code>setVisible</code>, <code>getControlItemElements</code>, <code>setControlItemElements</code>, <code>accept</code> and <code>cancel</code>. An error in a handler is printed in the Output panel and the dialog stays open.</p>
 
 <p>With no one to answer it (<code>Phoenix run-script</code>, or a window drawn offscreen), the dialog is not shown: its script blocks and <code>oncreate</code> handlers run, then it is accepted with the values its controls start with, and a note is printed.</p>
+
+<h2 id="tools">Your own tools</h2>
+
+<p>A script in the <b>Tools</b> folder (beside the Commands folder) is a tool of its own. Phoenix loads it when it starts and adds its button at the end of the Tools panel; click it, then draw on the stage as with any tool. Unlike a command, a tool stays loaded, so its variables last from one click to the next. Phoenix calls the functions the script has:</p>
+
+<ul>
+  <li><code>configureTool()</code> once, as Phoenix starts. It names the tool through <code>fl.tools.activeTool</code>: <code>setToolName</code>, <code>setMenuString</code> (the name the Tools panel shows), <code>setToolTip</code>, <code>setIcon</code> (a PNG beside the script) and <code>setOptionsFile</code>.</li>
+  <li><code>activate()</code> and <code>deactivate()</code> as the tool is picked and put down.</li>
+  <li><code>mouseDown()</code>, <code>mouseMove()</code>, <code>mouseUp()</code> and <code>mouseDoubleClick()</code> as you work, and <code>keyDown()</code> for a key. <code>fl.tools.penLoc</code> is where the pointer is, <code>fl.tools.penDownLoc</code> where the button went down, and <code>mouseIsDown</code>, <code>shiftIsDown</code>, <code>altIsDown</code> and <code>ctlIsDown</code> say what is held. <code>fl.tools.constrainPoint(from, to)</code> keeps a drag to the nearest 45&deg;, and <code>fl.tools.getKeyDown()</code> gives the key.</li>
+  <li><code>setCursor()</code>, to choose the pointer with <code>fl.tools.setCursor</code>.</li>
+  <li><code>notifySettingsChanged()</code>, when the tool's settings change.</li>
+</ul>
+
+<p>While the mouse is down, a tool shows what it will draw on <code>fl.drawingLayer</code>, which is drawn over the stage and never saved: <code>beginDraw</code> and <code>endDraw</code> around the drag, <code>beginFrame</code> and <code>endFrame</code> around each new preview, and <code>moveTo</code>, <code>lineTo</code>, <code>curveTo</code>, <code>cubicCurveTo</code>, <code>frameRect</code>, <code>drawPath</code> and <code>setColor</code> to draw it. To add the shape itself, a tool builds a path with <code>fl.drawingLayer.newPath()</code> (<code>addPoint</code>, <code>addCurve</code>, <code>addCubicCurve</code>, <code>close</code>, <code>newContour</code>) and calls its <code>makeShape()</code>: the shape takes the fill and stroke set in the Properties panel, and each such change is one step to undo, named after the tool. Phoenix's own <code>document.addNewPath(svg, fill, stroke)</code> does the same from SVG path data.</p>
+
+<p>A tool's settings come from its options file, an XML file beside the script listing each setting as a <code>&lt;property&gt;</code> with its <code>name</code>, the <code>variable</code> the tool reads it from on <code>fl.tools.activeTool</code>, its <code>type</code> (<code>Number</code>, <code>Strings</code> with a <code>list</code>, or <code>Boolean</code>), a <code>defaultValue</code> and, for numbers, <code>min</code> and <code>max</code>. <b>Tool Settings...</b> in the Properties panel sets them.</p>
+
+<pre><code>function configureTool() {
+    var tool = fl.tools.activeTool;
+    tool.setMenuString("Box Tool");
+    tool.setOptionsFile("Box.xml");
+}
+function mouseDown() { fl.drawingLayer.beginDraw(); }
+function mouseMove() {
+    if (!fl.tools.mouseIsDown) return;
+    var a = fl.tools.penDownLoc, b = fl.tools.penLoc;
+    fl.drawingLayer.beginFrame();
+    fl.drawingLayer.frameRect({left: a.x, top: a.y, right: b.x, bottom: b.y});
+    fl.drawingLayer.endFrame();
+}
+function mouseUp() {
+    fl.drawingLayer.endDraw();
+    var a = fl.tools.penDownLoc, b = fl.tools.penLoc;
+    var path = fl.drawingLayer.newPath();
+    path.addPoint(a.x, a.y); path.addPoint(b.x, a.y);
+    path.addPoint(b.x, b.y); path.addPoint(a.x, b.y);
+    path.close();
+    path.makeShape();
+}</code></pre>
+
+<p>Errors in a tool's functions are printed in the Output panel. A tool added to the folder appears the next time Phoenix starts.</p>
 
 </article>
 </main>
