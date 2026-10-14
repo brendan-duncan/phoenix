@@ -2,7 +2,7 @@
 
 What changed in each release of Phoenix, newest first.
 
-## 0.9.0 (Unreleased)
+## 0.9.0
 
 - Phoenix for Linux: a 64-bit AppImage that runs from the file and updates itself
 - Control > Test Movie (Ctrl+Enter) plays the scene with its ActionScript 1 and 2: frame scripts, button handlers and clip events run, buttons answer the mouse, and what scripts trace and the errors they stop on go to the Output panel, so old Flash games such as dress-up games can be played
