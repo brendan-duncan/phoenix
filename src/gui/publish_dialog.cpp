@@ -132,6 +132,56 @@ PublishSettingsDialog::PublishSettingsDialog(const fla::publish::Settings& setti
     svgRow->addWidget(_svgEmbed);
     svgRow->addStretch(1);
     form->addRow("SVG", svgRow);
+
+    // The SWF's soundtrack: compression, then its bit rate or bits.
+    _soundCompression = new QComboBox(options);
+    _soundCompression->addItem("MP3", "mp3");
+    _soundCompression->addItem("ADPCM", "adpcm");
+    _soundCompression->addItem("Raw", "raw");
+    _soundCompression->addItem("None", "none");
+    _soundCompression->setCurrentIndex(std::max(0, _soundCompression->findData(QString::fromStdString(settings.soundCompression))));
+    _soundCompression->setToolTip("How the SWF's sound is squeezed: MP3 smallest, ADPCM quick and plain, Raw "
+                                  "uncompressed, None silent");
+    _soundQuality = new QComboBox(options);
+    _soundRate = new QComboBox(options);
+    for (int rate : {5512, 11025, 22050, 44100})
+        _soundRate->addItem(QString("%1 kHz").arg(rate / 1000.0, 0, 'f', rate == 5512 ? 1 : 0), rate);
+    _soundRate->setCurrentIndex(std::max(0, _soundRate->findData(settings.soundRate)));
+    _soundStereo = new QCheckBox("Stereo", options);
+    _soundStereo->setChecked(settings.soundStereo);
+    const auto fillQuality = [this](int bitRate, int bits) {
+        const QString codec = _soundCompression->currentData().toString();
+        _soundQuality->clear();
+        if (codec == "mp3")
+        {
+            for (int kbps : {16, 24, 32, 48, 64, 80, 96, 112, 128, 160, 192})
+                _soundQuality->addItem(QString("%1 kbps").arg(kbps), kbps);
+            _soundQuality->setCurrentIndex(std::max(0, _soundQuality->findData(bitRate)));
+        }
+        else if (codec == "adpcm")
+        {
+            for (int b = 2; b <= 5; ++b)
+                _soundQuality->addItem(QString("%1-bit").arg(b), b);
+            _soundQuality->setCurrentIndex(std::max(0, _soundQuality->findData(bits)));
+        }
+        _soundQuality->setEnabled(_soundQuality->count() > 0);
+        _soundRate->setEnabled(codec != "none");
+        _soundStereo->setEnabled(codec != "none");
+        // MP3 has no 5.5 kHz.
+        if (codec == "mp3" && _soundRate->currentIndex() == 0)
+            _soundRate->setCurrentIndex(1);
+    };
+    fillQuality(settings.soundBitRate, settings.soundAdpcmBits);
+    connect(_soundCompression, &QComboBox::currentIndexChanged, this, [this, fillQuality]() {
+        fillQuality(_settings.soundBitRate, _settings.soundAdpcmBits);
+    });
+    QHBoxLayout* soundRow = new QHBoxLayout;
+    soundRow->addWidget(_soundCompression);
+    soundRow->addWidget(_soundQuality);
+    soundRow->addWidget(_soundRate);
+    soundRow->addWidget(_soundStereo);
+    soundRow->addStretch(1);
+    form->addRow("SWF sound", soundRow);
     layout->addWidget(options);
     QLabel* note = new QLabel("Still images show the frame labeled #Static, or the first frame. The settings "
                               "are kept in the document, so the file publishes the same wherever it goes.",
@@ -187,5 +237,12 @@ fla::publish::Settings PublishSettingsDialog::settings() const
     out.gifColors = _gifColors->value();
     out.svgHiddenLayers = _svgHidden->isChecked();
     out.svgEmbed = _svgEmbed->isChecked();
+    out.soundCompression = _soundCompression->currentData().toString().toStdString();
+    if (out.soundCompression == "mp3" && _soundQuality->count() > 0)
+        out.soundBitRate = _soundQuality->currentData().toInt();
+    else if (out.soundCompression == "adpcm" && _soundQuality->count() > 0)
+        out.soundAdpcmBits = _soundQuality->currentData().toInt();
+    out.soundRate = _soundRate->currentData().toInt();
+    out.soundStereo = _soundStereo->isChecked();
     return out;
 }

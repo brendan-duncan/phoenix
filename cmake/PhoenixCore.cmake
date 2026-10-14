@@ -145,6 +145,7 @@ set(PHOENIX_CORE_FILE_SOURCES
     edit/shortcut_sets.cpp
     edit/publish_settings.cpp
     util/swf_writer.cpp
+    util/swf_sound.cpp
     util/zip_writer.cpp
     writer/fla_writer.cpp
     writer/xfl_content.cpp

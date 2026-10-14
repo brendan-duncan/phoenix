@@ -10,6 +10,11 @@ What changed in each release of Phoenix, newest first.
 - Test Movie: click an input text field and type into it (Selection.setFocus and stage.focus too), and sounds placed on keyframes play
 - Test Movie runs ActionScript 3 class files: the document class, on the main timeline before its first frame, and symbols' linked classes on their clips
 - A new page in the guide, ActionScript and Test Movie, covers the Actions panel and what runs in Test Movie
+- Playing on the stage runs on into the next scene, and looping the whole scene wraps from the last scene to the first
+- Orient to path on the Frame tab, for classic and motion tweens
+- Pose commands for armatures: Insert, Copy, Paste and Clear Pose, from the frame menu and Edit > Timeline > Pose
+- Library > Properties... sets a symbol's type, class and 9-slice scaling; with 9-slice on, drag its guides inside the symbol
+- SWF movies carry the sound, streamed with the frames, and Publish Settings chooses its compression: MP3, ADPCM, raw or none, with its quality, sample rate and channels
 
 ## 0.9.0
 

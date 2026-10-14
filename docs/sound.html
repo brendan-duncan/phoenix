@@ -67,9 +67,20 @@
 
 <p>To cut a stream sound in two, for example to slip the second half of a line a few frames later, put the playhead inside its span on its layer and choose <span class="menu-path">Modify &rsaquo; Timeline &rsaquo; Split Audio</span>. A new keyframe starts there, playing the sound from that point on with the same settings and envelope, and the first keyframe stops where the second begins.</p>
 
-<h2>Exporting sound</h2>
+<h2 id="exporting-sound">Exporting sound</h2>
 
 <p><span class="menu-path">File &rsaquo; Export &rsaquo; Export Movie...</span> (<kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>S</kbd>) mixes every sound that plays, movie clip sounds included, into the video while <strong>Include sound</strong> is checked: as AAC in an H.264 MP4, or as uncompressed audio in a ProRes MOV. To export the mix on its own, choose the <strong>Sound (WAV)</strong> format. See <a href="export.html#export-movie">Export Movie</a>.</p>
+
+<p>SWF movies carry the same mix as a soundtrack that streams with the frames, so it stays in step with the animation. <span class="menu-path">File &rsaquo; Publish Settings...</span> sets how it is compressed under <strong>SWF sound</strong>:</p>
+
+<ul>
+  <li><strong>MP3</strong>: the smallest, at a bit rate from 16 to 192 kbps. MP3 needs the encoder in Phoenix's ffmpeg; where it has none, the movie gets ADPCM instead and the status bar says so.</li>
+  <li><strong>ADPCM</strong>: quick and plain, at 2 to 5 bits a sample (more bits, truer sound, larger file).</li>
+  <li><strong>Raw</strong>: uncompressed, for the truest sound.</li>
+  <li><strong>None</strong>: a silent movie.</li>
+</ul>
+
+<p>Each also has a sample rate (5.5, 11, 22 or 44 kHz; MP3 starts at 11) and can be stereo or mono. The settings apply to <span class="menu-path">File &rsaquo; Publish</span>, <span class="menu-path">File &rsaquo; Export &rsaquo; Export SWF Movie...</span> and SWF renders from the command line. Because the sounds are mixed into one soundtrack, a sound's own sync, envelope and loops play as they do in Phoenix.</p>
 
 <h2>Reference video</h2>
 
@@ -90,10 +101,7 @@
 
 <p>Choose <strong>Read Mouth Shapes</strong>, then set the mouth chart: the frame of your mouth graphic each shape is drawn on (Rhubarb's shapes are A to H and X for rest; Papagayo's are its phoneme names). <strong>Key the Mouth</strong> clears the mouth layer over the line and puts a keyframe wherever the mouth changes, each showing its shape's frame as a single frame, starting on the frame you chose. The chart is kept with the mouth symbol for next time, and the whole step undoes at once.</p>
 
-<div class="callout planned">
-  <span class="label">Planned</span>
-  <p>Sound compression settings for publishing, and sound in published SWF movies.</p>
-</div>
+>>>>
 
 </article>
 </main>

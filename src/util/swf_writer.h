@@ -100,6 +100,14 @@ public:
     /// blending as \a blend says.
     void place(int id, int depth, double alpha = 1.0, Blend blend = Blend::Normal);
     void remove(int depth);
+
+    /// Starts a soundtrack streamed with the movie (SoundStreamHead2): its
+    /// codec, rate and channels; frame blocks follow with soundBlock.
+    void soundStream(int codec, int rate, bool stereo, int samplesPerFrame, int latency = 0);
+    /// This frame's part of the soundtrack (SoundStreamBlock), before
+    /// showFrame; an empty block writes nothing.
+    void soundBlock(const std::vector<uint8_t>& data);
+
     void showFrame();
 
     /// The file: compressed (CWS) unless \a compress is false.

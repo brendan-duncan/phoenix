@@ -369,6 +369,7 @@ set(HEADERS
     src/util/gif_writer.h
     src/util/sprite_sheet.h
     src/util/swf_writer.h
+    src/util/swf_sound.h
 )
 
 set(SOURCES

@@ -398,6 +398,26 @@ void Writer::remove(int depth)
     tag(28, body.bytes); // RemoveObject2
 }
 
+void Writer::soundStream(int codec, int rate, bool stereo, int samplesPerFrame, int latency)
+{
+    // Rates as two-bit codes: 5.5, 11, 22 and 44 kHz.
+    const int rateCode = rate >= 44100 ? 3 : rate >= 22050 ? 2 : rate >= 11025 ? 1 : 0;
+    const int format = (rateCode << 2) | (1 << 1) | (stereo ? 1 : 0); // always 16-bit
+    Bits body;
+    body.u8(format);
+    body.u8((codec << 4) | format);
+    body.u16(samplesPerFrame & 0xFFFF);
+    if (codec == 2)
+        body.u16(latency & 0xFFFF);
+    tag(45, body.bytes); // SoundStreamHead2
+}
+
+void Writer::soundBlock(const std::vector<uint8_t>& data)
+{
+    if (!data.empty())
+        tag(19, data); // SoundStreamBlock
+}
+
 void Writer::showFrame()
 {
     tag(1, {});

@@ -55,6 +55,16 @@ struct Settings
     /// it.
     bool svgHiddenLayers = true;
     bool svgEmbed = false;
+
+    /// SWF sound: the soundtrack streamed with the movie, as "mp3",
+    /// "adpcm", "raw" or "none" (silent); an MP3's bit rate in kbps, ADPCM's
+    /// bits a sample (2 to 5), the sample rate (5512, 11025, 22050 or
+    /// 44100) and stereo or mono. Phoenix's own, kept beside Animate's.
+    std::string soundCompression = "mp3";
+    int soundBitRate = 64;
+    int soundAdpcmBits = 4;
+    int soundRate = 22050;
+    bool soundStereo = true;
 };
 
 /// The current profile of a PublishSettings.xml; the defaults for a

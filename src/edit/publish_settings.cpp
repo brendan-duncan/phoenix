@@ -185,6 +185,14 @@ Settings read(const std::string& xml, const std::string& name)
     settings.gifLoop = flagOf(gif, "Loop", true);
     settings.gifLoopCount = numberOf(gif, "LoopCount", 0);
     settings.gifColors = numberOf(gif, "MaxColors", 255);
+    const XMLElement* flash = profile->FirstChildElement("PublishFlashProperties");
+    settings.soundCompression = textOf(flash, "PhoenixSoundCompression", settings.soundCompression);
+    if (settings.soundCompression != "adpcm" && settings.soundCompression != "raw" && settings.soundCompression != "none")
+        settings.soundCompression = "mp3";
+    settings.soundBitRate = numberOf(flash, "PhoenixSoundBitRate", settings.soundBitRate);
+    settings.soundAdpcmBits = std::clamp(numberOf(flash, "PhoenixSoundAdpcmBits", settings.soundAdpcmBits), 2, 5);
+    settings.soundRate = numberOf(flash, "PhoenixSoundRate", settings.soundRate);
+    settings.soundStereo = flagOf(flash, "PhoenixSoundStereo", settings.soundStereo);
     for (const XMLElement* group = profile->FirstChildElement("PublishProperties"); group;
          group = group->NextSiblingElement("PublishProperties"))
     {
@@ -261,6 +269,14 @@ std::string write(const std::string& xml, const Settings& settings, const std::s
     setNumber(document, gif, "Loop", settings.gifLoop ? 1 : 0);
     setText(document, gif, "LoopCount", settings.gifLoopCount > 0 ? std::to_string(settings.gifLoopCount) : std::string());
     setNumber(document, gif, "MaxColors", settings.gifColors);
+    XMLElement* flash = child(document, profile, "PublishFlashProperties");
+    if (!flash->Attribute("enabled"))
+        flash->SetAttribute("enabled", "true");
+    setText(document, flash, "PhoenixSoundCompression", settings.soundCompression);
+    setNumber(document, flash, "PhoenixSoundBitRate", settings.soundBitRate);
+    setNumber(document, flash, "PhoenixSoundAdpcmBits", settings.soundAdpcmBits);
+    setNumber(document, flash, "PhoenixSoundRate", settings.soundRate);
+    setNumber(document, flash, "PhoenixSoundStereo", settings.soundStereo ? 1 : 0);
     XMLElement* svg = properties(document, profile, kSvgId, "SVG Image");
     setProperty(document, svg, "default", settings.defaultNames ? "true" : "false");
     setProperty(document, svg, "filename", settings.defaultNames ? name + ".svg" : settings.svgFile);

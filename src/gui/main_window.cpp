@@ -99,6 +99,7 @@
 #include "publish_dialog.h"
 #include "render_queue.h"
 #include "paint_recorder.h"
+#include "../util/swf_sound.h"
 #include "../util/swf_writer.h"
 #include "../edit/publish_settings.h"
 #include "../edit/brush_presets.h"
@@ -6648,8 +6649,21 @@ int MainWindow::exportFromCommandLine(const QString& source, const QString& outp
         return 1;
     }
     const fla::Document* document = _flaDocument->document;
+    if (output.endsWith(".swf", Qt::CaseInsensitive) && !perLayer)
+    {
+        // A movie of vector shapes, with its soundtrack.
+        QString error;
+        const QString path = QFileInfo(output).absoluteFilePath();
+        if (!exportSwf(path, QSize(document->width, document->height), error))
+        {
+            std::fprintf(stderr, "%s\n", qPrintable(error.isEmpty() ? QString("Export cancelled.") : error));
+            return 1;
+        }
+        std::printf("Exported %d frames to %s\n", std::max(1, _phoenixView->frameCount()), qPrintable(path));
+        return 0;
+    }
     MovieExportSettings settings;
-    settings.format = output.endsWith(".png", Qt::CaseInsensitive) ? MovieExportSettings::Format::PngSequence
+    settings.format = output.endsWith(".png", Qt::CaseInsensitive) ?MovieExportSettings::Format::PngSequence
         : output.endsWith(".gif", Qt::CaseInsensitive)               ? MovieExportSettings::Format::Gif
         : output.endsWith(".wav", Qt::CaseInsensitive)               ? MovieExportSettings::Format::Wav
         : output.endsWith(".svg", Qt::CaseInsensitive)               ? MovieExportSettings::Format::SvgSequence
@@ -7695,6 +7709,49 @@ bool MainWindow::exportSwf(const QString& path, const QSize& size, QString& erro
         bitmaps[key] = id;
         return id;
     };
+    // The soundtrack, mixed as playback mixes it, streamed a block a frame
+    // as Publish Settings say.
+    const fla::publish::Settings publish = fla::publish::read(publishXml(*document), std::string());
+    swf::SoundStream sound;
+    bool streaming = false;
+    if (_timelineAudio && publish.soundCompression != "none")
+    {
+        const std::vector<float> mixed = _timelineAudio->mixdown(0, frames - 1);
+        const bool audible = std::any_of(mixed.begin(), mixed.end(), [](float sample) { return sample != 0.0f; });
+        if (audible)
+        {
+            const int channels = publish.soundStereo ? 2 : 1;
+            int rate = publish.soundRate >= 44100 ? 44100
+                : publish.soundRate >= 22050      ? 22050
+                : publish.soundRate >= 11025      ? 11025
+                                                  : 5512;
+            if (publish.soundCompression == "mp3")
+            {
+                // MP3 has no 5.5 kHz; without an MP3 encoder, ADPCM.
+                rate = std::max(rate, 11025);
+                std::vector<uint8_t> mp3;
+                QString mp3Error;
+                if (MovieExport::canEncodeMp3() &&
+                    MovieExport::encodeMp3(mixed, rate, channels, std::clamp(publish.soundBitRate, 8, 320), mp3, mp3Error))
+                {
+                    // LAME starts with 1105 samples of its own.
+                    sound = swf::mp3Stream(mp3, channels, rate, document->frameRate, frames, 1105);
+                    streaming = true;
+                }
+                else
+                    statusBar()->showMessage("MP3 is not available here: the SWF's sound is ADPCM.", 6000);
+            }
+            if (!streaming)
+            {
+                const std::vector<int16_t> pcm = swf::pcm16(mixed, PcmBuffer::kRate, rate, channels);
+                sound = publish.soundCompression == "raw"
+                    ? swf::rawStream(pcm, channels, rate, document->frameRate, frames)
+                    : swf::adpcmStream(pcm, channels, rate, publish.soundAdpcmBits, document->frameRate, frames);
+                streaming = true;
+            }
+            writer.soundStream(sound.codec, sound.rate, sound.stereo, sound.samplesPerFrame, sound.latency);
+        }
+    }
     QProgressDialog progress("Exporting SWF...", "Cancel", 0, frames, this);
     progress.setWindowModality(Qt::WindowModal);
     progress.setMinimumDuration(400);
@@ -7810,6 +7867,8 @@ bool MainWindow::exportSwf(const QString& path, const QSize& size, QString& erro
             }
             writer.place(id, ++placed, alpha, blend);
         }
+        if (streaming && static_cast<size_t>(frame) < sound.blocks.size())
+            writer.soundBlock(sound.blocks[static_cast<size_t>(frame)]);
         writer.showFrame();
     }
     progress.setValue(frames);

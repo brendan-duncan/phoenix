@@ -384,6 +384,64 @@ QString missingFfmpeg()
         .arg(QDir::toNativeSeparators(QCoreApplication::applicationDirPath()));
 }
 
+bool canEncodeMp3()
+{
+    static int known = -1;
+    if (known < 0)
+    {
+        known = 0;
+        const QString ffmpeg = ffmpegPath();
+        QProcess process;
+        if (!ffmpeg.isEmpty())
+        {
+            process.start(ffmpeg, {"-hide_banner", "-encoders"});
+            if (process.waitForFinished(10000))
+                known = process.readAllStandardOutput().contains("libmp3lame") ? 1 : 0;
+        }
+    }
+    return known == 1;
+}
+
+bool encodeMp3(const std::vector<float>& samples, int rate, int channels, int kbps, std::vector<uint8_t>& mp3,
+    QString& error)
+{
+    const QString ffmpeg = ffmpegPath();
+    if (ffmpeg.isEmpty())
+    {
+        error = missingFfmpeg();
+        return false;
+    }
+    QTemporaryFile wav(QDir::temp().filePath("phoenix_soundXXXXXX.wav"));
+    QTemporaryFile out(QDir::temp().filePath("phoenix_soundXXXXXX.mp3"));
+    if (!wav.open() || !writeWav(wav, samples, PcmBuffer::kRate) || !out.open())
+    {
+        error = "Could not write the sound to a temporary file.";
+        return false;
+    }
+    wav.close();
+    out.close();
+    QProcess process;
+    process.start(ffmpeg, {"-y", "-hide_banner", "-loglevel", "error", "-i", wav.fileName(), "-c:a", "libmp3lame",
+                              "-ar", QString::number(rate), "-ac", QString::number(channels), "-b:a",
+                              QString("%1k").arg(kbps), "-write_xing", "0", "-id3v2_version", "0", "-f", "mp3",
+                              out.fileName()});
+    if (!process.waitForFinished(600000) || process.exitStatus() != QProcess::NormalExit || process.exitCode() != 0)
+    {
+        const QString said = QString::fromLocal8Bit(process.readAllStandardError()).trimmed();
+        error = said.isEmpty() ? QString("ffmpeg could not encode MP3.") : said;
+        return false;
+    }
+    QFile file(out.fileName());
+    if (!file.open(QIODevice::ReadOnly))
+    {
+        error = "Could not read the encoded sound.";
+        return false;
+    }
+    const QByteArray bytes = file.readAll();
+    mp3.assign(bytes.begin(), bytes.end());
+    return true;
+}
+
 bool runOne(const MovieExportSettings& settings, PhoenixView& view, TimelineAudio* audio, double frameRate,
     QWidget* parent, QString& error);
 

@@ -6,6 +6,7 @@
 #include <QString>
 #include <QStringList>
 
+#include <cstdint>
 #include <functional>
 #include <vector>
 
@@ -153,6 +154,15 @@ QString ffmpegPath();
 
 /// What to tell someone whose Phoenix has lost its ffmpeg.
 QString missingFfmpeg();
+
+/// Whether Phoenix's ffmpeg can write MP3 (some builds have no encoder).
+bool canEncodeMp3();
+
+/// Interleaved stereo float samples at 44.1 kHz as a bare MP3 stream at
+/// \a rate, \a channels and \a kbps, no tags; false with \a error set when
+/// ffmpeg is missing or cannot.
+bool encodeMp3(const std::vector<float>& samples, int rate, int channels, int kbps, std::vector<uint8_t>& mp3,
+    QString& error);
 
 /// Writes the movie, showing progress over \a parent and letting it be
 /// cancelled. False with \a error set when it could not be written; false

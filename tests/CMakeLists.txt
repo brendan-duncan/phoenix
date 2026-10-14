@@ -114,6 +114,7 @@ if(PHOENIX_TESTS_HAVE_PARSER)
         test_shortcut_sets.cpp
         test_publish_settings.cpp
         test_swf_writer.cpp
+        test_swf_sound.cpp
         test_fla_doctor.cpp
         test_exr_writer.cpp
         test_edit_list.cpp

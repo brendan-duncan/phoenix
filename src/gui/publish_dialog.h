@@ -53,4 +53,8 @@ private:
     HotSpinBox* _gifColors = nullptr;
     QCheckBox* _svgHidden = nullptr;
     QCheckBox* _svgEmbed = nullptr;
+    QComboBox* _soundCompression = nullptr;
+    QComboBox* _soundQuality = nullptr;
+    QComboBox* _soundRate = nullptr;
+    QCheckBox* _soundStereo = nullptr;
 };

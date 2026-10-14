@@ -76,3 +76,18 @@ TEST(publish_settings_are_written_back_keeping_the_rest)
     CHECK(made.find("<flash_profiles>") != std::string::npos && made.find("current=\"true\"") != std::string::npos);
     CHECK(fla::publish::read(made, "shot").jpegQuality == 55);
 }
+
+TEST(publish_settings_keep_the_movie_sound_beside_animates)
+{
+    fla::publish::Settings settings = fla::publish::read(kAnimate, "shot");
+    CHECK(settings.soundCompression == "mp3" && settings.soundStereo);
+    settings.soundCompression = "adpcm";
+    settings.soundAdpcmBits = 3;
+    settings.soundRate = 11025;
+    settings.soundStereo = false;
+    const std::string written = fla::publish::write(kAnimate, settings, "shot");
+    CHECK(written.find("<Version>17</Version>") != std::string::npos);
+    const fla::publish::Settings back = fla::publish::read(written, "shot");
+    CHECK(back.soundCompression == "adpcm" && back.soundAdpcmBits == 3);
+    CHECK(back.soundRate == 11025 && !back.soundStereo);
+}
