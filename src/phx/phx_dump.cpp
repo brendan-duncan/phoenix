@@ -5,6 +5,8 @@
 
 #include <cstdio>
 #include <sstream>
+#include <algorithm>
+#include <cstdint>
 
 namespace phx {
 

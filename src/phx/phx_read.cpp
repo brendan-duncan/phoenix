@@ -53,6 +53,7 @@
 #include <set>
 #include <stdexcept>
 #include <thread>
+#include <cstdint>
 
 namespace phx {
 

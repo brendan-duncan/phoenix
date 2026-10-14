@@ -19,6 +19,7 @@
 
 extern "C" {
 #include <vterm.h>
+#include <cstdint>
 }
 
 namespace {

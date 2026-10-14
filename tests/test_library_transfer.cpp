@@ -15,6 +15,7 @@
 #include "../src/edit/library_transfer.h"
 
 #include <algorithm>
+#include <cstdint>
 
 namespace {
 

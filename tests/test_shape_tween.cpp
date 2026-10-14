@@ -13,6 +13,8 @@
 #include <algorithm>
 #include <cmath>
 #include <memory>
+#include <cstdint>
+#include <cstdlib>
 
 using fla::Point;
 

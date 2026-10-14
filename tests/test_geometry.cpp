@@ -131,6 +131,8 @@ TEST(flatness_measures_distance_to_the_chord_segment)
 
 #include "../src/geom/intersect.h"
 
+#include <cmath>
+
 namespace {
 
 /// Crossings of a curve with itself found the slow way: a fine polyline

@@ -23,6 +23,7 @@
 #include <QTreeWidget>
 #include <QTreeWidgetItemIterator>
 #include <QVBoxLayout>
+#include <memory>
 
 namespace {
 

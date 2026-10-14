@@ -76,6 +76,7 @@ TEST(data_that_is_not_audio_is_refused)
 #include <cstdlib>
 #include <filesystem>
 #include <memory>
+#include <cstdint>
 
 TEST(real_sounds_decode_to_their_recorded_length)
 {

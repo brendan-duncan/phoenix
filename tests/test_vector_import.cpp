@@ -5,6 +5,7 @@
 #include "../src/edit/vector_import.h"
 
 #include <cmath>
+#include <cstdint>
 
 namespace {
 

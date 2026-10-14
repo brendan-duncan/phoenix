@@ -6,6 +6,8 @@
 
 #include <cmath>
 #include <cstdio>
+#include <cstdint>
+#include <utility>
 
 namespace {
 

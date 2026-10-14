@@ -1,9 +1,10 @@
-# Builds Phoenix's tests and runs them on every push to main and on pull
-# requests, on each platform, so a test that fails on only one of them shows
-# up before a release rather than in it (as jsfl_publishing_goes_to_the_host
-# did on macOS in 0.7.0). Built as the release builds them (release.yml),
-# with the Qt archive and the JSFL, Python and ActionScript parts, but not
-# packed.
+# Builds Phoenix and its tests and runs the tests on every push to main and
+# on pull requests, on each platform, so a test that fails on only one of
+# them shows up before a release rather than in it (as
+# jsfl_publishing_goes_to_the_host did on macOS in 0.7.0), and so does code
+# only one platform compiles (the Claude Code panel's terminal). Built as the
+# release builds them (release.yml), with the Qt archive and the JSFL, Python
+# and ActionScript parts, but not packed.
 #
 # Linux is tried too; Phoenix is not released for it yet, so its job may
 # fail without failing the run.
@@ -62,7 +63,7 @@ jobs:
           # A job count, always: with no number, --parallel on macOS's
           # Makefiles means `make -j` with no limit (see release.yml).
           jobs=$(getconf _NPROCESSORS_ONLN 2>/dev/null || echo "${NUMBER_OF_PROCESSORS:-4}")
-          cmake --build build --config Release --target phoenix_tests --parallel "$jobs"
+          cmake --build build --config Release --target phoenix_tests Phoenix --parallel "$jobs"
 
       # As in release.yml, the Python script tests are left off on macOS.
       - name: Run the tests

@@ -4,6 +4,7 @@
 
 #include <cstdlib>
 #include <sstream>
+#include <algorithm>
 
 namespace fla {
 

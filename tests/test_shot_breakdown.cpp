@@ -11,6 +11,7 @@
 #include "../src/edit/shot_breakdown.h"
 
 #include <memory>
+#include <algorithm>
 
 namespace {
 

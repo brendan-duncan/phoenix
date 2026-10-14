@@ -5,6 +5,7 @@
 #include "../src/edit/property_command.h"
 
 #include <memory>
+#include <cstdint>
 
 TEST(set_property_command_sets_and_restores_a_field)
 {

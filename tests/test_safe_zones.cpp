@@ -4,6 +4,7 @@
 #include "../src/edit/safe_zones.h"
 
 #include <cmath>
+#include <algorithm>
 
 namespace sz = fla::safezones;
 

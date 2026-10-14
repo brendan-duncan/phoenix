@@ -13,6 +13,8 @@
 #include <QWheelEvent>
 
 #include <cmath>
+#include <algorithm>
+#include <cstdlib>
 
 HotText::HotText(QWidget* parent)
     : QWidget(parent)

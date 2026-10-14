@@ -23,6 +23,7 @@
 #include <functional>
 #include <map>
 #include <sstream>
+#include <cstdlib>
 
 namespace fla {
 

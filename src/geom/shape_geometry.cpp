@@ -3,6 +3,7 @@
 #include "../data/shape.h"
 
 #include <cmath>
+#include <algorithm>
 
 namespace fla {
 

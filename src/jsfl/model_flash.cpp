@@ -12,6 +12,8 @@
 #include <cstdio>
 #include <filesystem>
 #include <fstream>
+#include <cstdint>
+#include <memory>
 
 namespace jsfl {
 

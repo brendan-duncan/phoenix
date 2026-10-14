@@ -5,6 +5,8 @@
 
 #include <QWidget>
 #include <QSplitter>
+#include <functional>
+#include <memory>
 
 class Player;
 class LayersPanel;

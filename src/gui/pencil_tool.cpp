@@ -20,6 +20,7 @@
 #include <QMouseEvent>
 
 #include <cmath>
+#include <algorithm>
 
 namespace {
 

@@ -4,6 +4,7 @@
 #include <cstdlib>
 #include <map>
 #include <sstream>
+#include <cstdint>
 
 namespace fla {
 

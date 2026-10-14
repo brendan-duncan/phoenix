@@ -13,6 +13,7 @@
 
 #include <cstdio>
 #include <memory>
+#include <cstdint>
 
 using fla::Point;
 using fla::RegionPick;

@@ -19,6 +19,8 @@
 #include <QVBoxLayout>
 
 #include <functional>
+#include <algorithm>
+#include <cstdint>
 
 namespace {
 

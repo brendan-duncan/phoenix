@@ -20,6 +20,7 @@
 #include "../src/edit/find_replace.h"
 
 #include <memory>
+#include <cstdint>
 
 namespace {
 

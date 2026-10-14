@@ -22,6 +22,8 @@
 #include <cstdlib>
 #include <map>
 #include <memory>
+#include <cstdint>
+#include <functional>
 
 namespace jsfl {
 

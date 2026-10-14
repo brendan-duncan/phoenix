@@ -12,6 +12,7 @@
 #include <iostream>
 #include <new>
 #include <stdexcept>
+#include <cstdint>
 
 using namespace fla;
 

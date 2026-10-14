@@ -31,6 +31,7 @@
 #endif
 #include <windows.h>
 #endif
+#include <memory>
 
 namespace python {
 

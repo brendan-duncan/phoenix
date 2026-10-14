@@ -27,6 +27,8 @@
 #include <QVBoxLayout>
 
 #include <cmath>
+#include <algorithm>
+#include <cstdint>
 
 namespace {
 

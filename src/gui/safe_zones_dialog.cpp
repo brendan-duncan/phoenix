@@ -20,6 +20,7 @@
 #include <QToolButton>
 #include <QTreeWidget>
 #include <QVBoxLayout>
+#include <cstdint>
 
 namespace sz = fla::safezones;
 

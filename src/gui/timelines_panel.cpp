@@ -36,6 +36,7 @@ constexpr int kRulerHeight = 25;
 #include <QPixmap>
 #include <QImage>
 #include <QWheelEvent>
+#include <cstdlib>
 
 #include "theme.h"
 

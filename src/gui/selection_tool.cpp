@@ -20,6 +20,7 @@
 #include <QPainterPath>
 
 #include <cmath>
+#include <cstdlib>
 
 namespace {
 

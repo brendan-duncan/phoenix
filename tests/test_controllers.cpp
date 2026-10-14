@@ -12,6 +12,7 @@
 
 #include <cmath>
 #include <memory>
+#include <cstdlib>
 
 TEST(a_controller_drives_several_layers_and_keys_them_on_the_frame)
 {

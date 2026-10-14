@@ -22,6 +22,7 @@
 #endif
 #include <windows.h>
 #endif
+#include <utility>
 
 namespace claude_code {
 

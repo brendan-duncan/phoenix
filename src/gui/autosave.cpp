@@ -21,6 +21,7 @@
 #include <csignal>
 #include <sys/types.h>
 #endif
+#include <memory>
 
 namespace {
 

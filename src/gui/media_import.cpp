@@ -11,6 +11,8 @@
 #include <QRegularExpression>
 
 #include <map>
+#include <algorithm>
+#include <cstdint>
 
 namespace MediaImport {
 

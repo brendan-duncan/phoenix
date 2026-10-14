@@ -7,6 +7,7 @@
 #include <algorithm>
 #include <cmath>
 #include <vector>
+#include <cstdint>
 
 using fla::BrushDab;
 using fla::BrushSample;

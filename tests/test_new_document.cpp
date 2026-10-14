@@ -4,6 +4,7 @@
 #include "../src/edit/new_document.h"
 
 #include <memory>
+#include <cstdint>
 
 using namespace fla;
 

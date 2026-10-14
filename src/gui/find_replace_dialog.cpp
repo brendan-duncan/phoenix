@@ -22,6 +22,7 @@
 #include <QStackedWidget>
 #include <QTreeWidget>
 #include <QVBoxLayout>
+#include <cstdint>
 
 FindReplaceDialog::FindReplaceDialog(std::function<fla::Document*()> document, QWidget* parent)
     : QDialog(parent)

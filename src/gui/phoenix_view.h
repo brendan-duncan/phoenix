@@ -43,6 +43,7 @@ class QTimer;
 
 #include <vector>
 #include <QPolygonF>
+#include <functional>
 
 namespace fla {
 class Bitmap;

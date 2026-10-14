@@ -11,6 +11,8 @@
 #include <QLineEdit>
 #include "hot_text.h"
 #include <QVBoxLayout>
+#include <algorithm>
+#include <utility>
 
 namespace {
 

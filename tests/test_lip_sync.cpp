@@ -9,6 +9,7 @@
 #include "../src/edit/lip_sync.h"
 
 #include <memory>
+#include <cstdint>
 
 TEST(lip_sync_reads_rhubarb_and_papagayo_and_keys_the_mouth)
 {

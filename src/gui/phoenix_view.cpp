@@ -92,6 +92,10 @@
 #include <QCryptographicHash>
 #include <QBuffer>
 #include <QtMath>
+#include <array>
+#include <cstdint>
+#include <cstdlib>
+#include <functional>
 
 #define MAX(a, b) ((a) > (b) ? (a) : (b))
 

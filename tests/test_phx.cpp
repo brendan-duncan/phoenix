@@ -23,6 +23,8 @@
 #include <filesystem>
 #include <fstream>
 #include <memory>
+#include <cstdint>
+#include <cstdlib>
 
 namespace {
 

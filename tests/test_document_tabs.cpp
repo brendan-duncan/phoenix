@@ -19,6 +19,7 @@
 #include "../src/edit/library_transfer.h"
 
 #include <memory>
+#include <cstdint>
 
 // What several documents open at once rely on: the files reopened next
 // time, media let go by documents waiting in tabs, and copies between

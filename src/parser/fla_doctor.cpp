@@ -26,6 +26,7 @@
 #include <map>
 #include <set>
 #include <sstream>
+#include <cstdint>
 
 namespace fla {
 

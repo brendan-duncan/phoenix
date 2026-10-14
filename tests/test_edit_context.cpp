@@ -3,6 +3,7 @@
 #include "../src/edit/edit_context.h"
 
 #include <string>
+#include <cstdint>
 
 using fla::Command;
 using fla::CommandPtr;

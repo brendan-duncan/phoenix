@@ -4,6 +4,8 @@
 
 #include "zlib.h"
 
+#include <cstdint>
+
 namespace {
 
 struct Writer

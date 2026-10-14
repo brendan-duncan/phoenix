@@ -28,6 +28,8 @@
 #include <fstream>
 #include <map>
 #include <set>
+#include <cstdint>
+#include <memory>
 
 namespace jsfl {
 

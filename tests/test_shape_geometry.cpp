@@ -15,6 +15,7 @@
 #include <map>
 #include <memory>
 #include <vector>
+#include <cmath>
 
 using fla::PlanarMap;
 using fla::Point;

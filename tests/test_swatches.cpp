@@ -2,6 +2,8 @@
 
 #include "../src/edit/swatches.h"
 
+#include <cstdint>
+
 using fla::swatches::Color;
 
 TEST(swatches_replace_sort_and_color_tables)

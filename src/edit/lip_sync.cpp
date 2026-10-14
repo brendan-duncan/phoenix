@@ -11,6 +11,7 @@
 #include <cmath>
 #include <cstdlib>
 #include <sstream>
+#include <memory>
 
 namespace fla {
 

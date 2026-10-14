@@ -19,6 +19,7 @@
 #include "e4x.h"
 
 #include <cstring>
+#include <algorithm>
 
 namespace jsfl {
 namespace e4x {

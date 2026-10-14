@@ -1,6 +1,7 @@
 #include "test_util.h"
 #include "../src/edit/transform_parts.h"
 #include <cmath>
+#include <memory>
 
 #include "../src/data/document.h"
 #include "../src/data/group.h"

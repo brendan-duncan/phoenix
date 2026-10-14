@@ -2,6 +2,8 @@
 
 #include "../src/util/sprite_sheet.h"
 
+#include <cstdint>
+
 namespace {
 
 /// A clear frame with a filled rectangle in it.

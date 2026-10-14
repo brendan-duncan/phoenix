@@ -20,6 +20,8 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdlib>
+#include <memory>
 
 namespace {
 

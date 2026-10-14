@@ -5,6 +5,7 @@
 #include "../src/edit/three_d.h"
 
 #include <cmath>
+#include <array>
 
 namespace {
 

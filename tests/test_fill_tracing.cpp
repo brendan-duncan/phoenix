@@ -14,6 +14,7 @@
 #include <cstdio>
 #include <memory>
 #include <vector>
+#include <cstdint>
 
 using fla::Point;
 

@@ -26,6 +26,7 @@
 
 #include <functional>
 #include <set>
+#include <algorithm>
 
 namespace Shortcuts {
 

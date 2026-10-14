@@ -9,6 +9,7 @@
 #include <memory>
 #include <string>
 #include <vector>
+#include <functional>
 
 namespace fla {
 class Bitmap;

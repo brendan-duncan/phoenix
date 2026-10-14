@@ -49,6 +49,7 @@
 #include <windows.h>
 #include <psapi.h>
 #endif
+#include <cstdlib>
 
 namespace commands {
 

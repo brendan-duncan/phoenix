@@ -16,6 +16,7 @@
 #include "hot_text.h"
 #include <QToolButton>
 #include <QVBoxLayout>
+#include <algorithm>
 
 namespace Preferences {
 

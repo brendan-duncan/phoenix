@@ -19,6 +19,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdlib>
 
 /// The graph itself: frames across, the property's value up.
 class FunctionGraph : public QWidget

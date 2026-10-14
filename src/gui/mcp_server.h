@@ -10,6 +10,7 @@
 #include <mutex>
 #include <thread>
 #include <vector>
+#include <cstdint>
 
 class MainWindow;
 class ScriptApi;

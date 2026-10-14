@@ -34,6 +34,7 @@
 #include <cmath>
 #include <cstdio>
 #include <memory>
+#include <cstdint>
 
 namespace jsfl {
 

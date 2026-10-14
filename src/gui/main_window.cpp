@@ -213,6 +213,8 @@
 #include <QCursor>
 #include <QDrag>
 #include <QMouseEvent>
+#include <cstdlib>
+#include <cstring>
 
 #include "tool_icons.h"
 

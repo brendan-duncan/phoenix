@@ -21,6 +21,7 @@
 #endif
 #include <windows.h>
 #endif
+#include <memory>
 
 namespace fs = std::filesystem;
 

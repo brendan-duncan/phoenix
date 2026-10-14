@@ -7,6 +7,7 @@
 #include <algorithm>
 #include <map>
 #include <sstream>
+#include <cstdlib>
 
 namespace fla {
 

@@ -9,6 +9,8 @@
 #include "../src/edit/command_stack.h"
 #include "../src/edit/document_settings.h"
 
+#include <cstdlib>
+
 TEST(document_settings_resize_scale_and_units)
 {
     fla::Document document(nullptr);

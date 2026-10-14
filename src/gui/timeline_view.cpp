@@ -10,6 +10,8 @@
 #include <QVBoxLayout>
 
 #include <algorithm>
+#include <functional>
+#include <memory>
 
 TimelineView::TimelineView(Player* player, QWidget *parent)
     : QWidget(parent)

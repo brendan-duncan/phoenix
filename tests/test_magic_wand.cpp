@@ -5,6 +5,7 @@
 #include <cmath>
 #include <cstdio>
 #include <vector>
+#include <cstdint>
 
 namespace {
 

@@ -20,6 +20,7 @@
 #include <QVBoxLayout>
 
 #include <cstring>
+#include <algorithm>
 
 namespace {
 

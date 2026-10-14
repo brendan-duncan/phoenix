@@ -7,6 +7,7 @@
 #include "../src/edit/function_curves.h"
 
 #include <cmath>
+#include <cstdlib>
 
 TEST(function_curves_read_through_tweens_and_set_keys)
 {

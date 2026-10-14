@@ -15,6 +15,7 @@
 #include <QPainter>
 
 #include <cmath>
+#include <algorithm>
 
 namespace {
 

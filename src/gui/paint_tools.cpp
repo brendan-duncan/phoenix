@@ -29,6 +29,7 @@
 #include "../data/linear_gradient.h"
 
 #include <memory>
+#include <algorithm>
 
 namespace {
 

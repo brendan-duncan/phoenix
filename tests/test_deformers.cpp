@@ -5,6 +5,8 @@
 #include "../src/edit/deformers.h"
 
 #include <cmath>
+#include <cstdlib>
+#include <optional>
 
 namespace {
 

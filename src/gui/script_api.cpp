@@ -49,6 +49,8 @@
 #include <functional>
 #include <set>
 #include <stdexcept>
+#include <cstdint>
+#include <memory>
 
 namespace {
 

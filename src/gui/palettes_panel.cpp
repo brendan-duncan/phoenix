@@ -19,6 +19,8 @@
 #include <QVBoxLayout>
 
 #include <map>
+#include <algorithm>
+#include <cstdint>
 
 struct PalettesState
 {

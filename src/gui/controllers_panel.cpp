@@ -20,6 +20,7 @@
 #include <QSlider>
 #include <QTreeWidget>
 #include <QVBoxLayout>
+#include <cmath>
 
 namespace {
 

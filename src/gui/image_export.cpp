@@ -27,6 +27,8 @@
 
 #include <cmath>
 #include <cstring>
+#include <algorithm>
+#include <cstdint>
 
 namespace {
 

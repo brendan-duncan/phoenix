@@ -4,6 +4,7 @@
 
 #include <cmath>
 #include <vector>
+#include <algorithm>
 
 using fla::Curve;
 using fla::HalfEdge;

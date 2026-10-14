@@ -46,6 +46,7 @@
 #include <sys/socket.h>
 #include <unistd.h>
 #endif
+#include <cstdint>
 
 namespace {
 

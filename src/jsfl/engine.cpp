@@ -18,6 +18,11 @@
 #include <sstream>
 #include <tuple>
 #include <vector>
+#include <algorithm>
+#include <cstdint>
+#include <cstdlib>
+#include <cstring>
+#include <memory>
 
 namespace jsfl {
 

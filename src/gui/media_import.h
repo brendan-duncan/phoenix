@@ -5,6 +5,7 @@
 #include <QImage>
 #include <QString>
 #include <QStringList>
+#include <cstdint>
 
 namespace fla {
 class Bitmap;

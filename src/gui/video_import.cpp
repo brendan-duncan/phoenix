@@ -8,6 +8,7 @@
 #include <QProgressDialog>
 #include <QRegularExpression>
 #include <QThread>
+#include <algorithm>
 
 namespace VideoImport {
 

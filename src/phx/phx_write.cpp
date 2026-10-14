@@ -42,6 +42,9 @@
 #include <map>
 #include <new>
 #include <stdexcept>
+#include <algorithm>
+#include <cstdint>
+#include <memory>
 
 namespace phx {
 
