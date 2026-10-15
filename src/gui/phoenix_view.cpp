@@ -3617,11 +3617,21 @@ int PhoenixView::symbolFrame(const fla::SymbolInstance& instance) const
         }
         return elapsed % length;
     }
+    // Responsive time: the start and the ending play as they are, and the
+    // middle stretches or squeezes to fit the span the instance is on.
+    int into = elapsed;
+    if (instance.loopType != fla::LoopType::SingleFrame && instance.symbol)
+    {
+        const fla::templates::Responsive responsive = fla::templates::responsiveOf(*instance.symbol);
+        if (responsive.any())
+            if (const fla::Frame* keyframe = owningFrame(&instance))
+                into = fla::templates::responsiveElapsed(responsive, length, std::max(1, keyframe->duration), elapsed);
+    }
     // A looping graphic's first frame can be past its end: a synced tween
     // (Sync) counts it on from keyframe to keyframe without
     // wrapping, and it plays round the loop from there rather than
     // holding the last frame.
-    return fla::graphicFrame(instance.loopType, instance.firstFrame, instance.lastFrame, length, elapsed);
+    return fla::graphicFrame(instance.loopType, instance.firstFrame, instance.lastFrame, length, into);
 }
 
 int PhoenixView::calculateLayerDuration(const fla::Layer* layer)
@@ -3662,6 +3672,9 @@ void PhoenixView::drawElement(QPainter& painter, const fla::Element* element, co
     {
         transform = interpolateTransform(element->transform, tweenElement->transform, tweenProgress);
     }
+    // Pinned to a text field of a template, it keeps up with the words.
+    if (element->elementType() == fla::Element::Type::SymbolInstance)
+        transform = pinnedTransform(*static_cast<const fla::SymbolInstance*>(element), transform);
 
     // Behaviors move, turn, scale and fade it on top of its keys; one
     // that repeats it has each copy drawn in turn.
@@ -3946,7 +3959,7 @@ void PhoenixView::drawElement(QPainter& painter, const fla::Element* element, co
                         color.tintColor[1] = rgb[1];
                         color.tintColor[2] = rgb[2];
                     }
-                    else if (fla::templates::frameOf(*value, frame))
+                    else if (fla::templates::frameIn(*symbol, *value, frame))
                     {
                         frameOffset = std::min(frame, symbolLength(symbol)) - 1;
                         loopType = fla::LoopType::SingleFrame;
@@ -4274,25 +4287,21 @@ void PhoenixView::drawElement(QPainter& painter, const fla::Element* element, co
             ~Outlines() { TextLayout::setFieldOutlines(was); }
         } outlines;
         TextLayout::setFieldOutlines(outlines.was && !_exporting && !_movie);
-        // A template's text field: the words the instance gives it.
-        if (!shown && text->textType != fla::StaticText::TextType::Static && !text->instanceName.empty())
-            if (const std::string* value = templateValue(text->instanceName))
-                shown = *value;
-        // Source Text: the words keyed for this frame.
-        if (!shown && fla::textanim::any(*text))
-            if (const fla::Frame* keyframe = owningFrame(text))
-            {
-                std::string words;
-                if (fla::textanim::sourceTextOf(fla::textanim::of(*text), keyframe->index + std::max(0, _elapsed), words) &&
-                    !words.empty())
-                    shown = words;
-            }
+        // The words being typed, or a template's words and font, or Source
+        // Text's.
+        fla::StaticText replaced(*text);
+        bool replacing = false;
         if (shown)
         {
-            fla::StaticText replaced(*text);
             fla::TextRun run = text->runs.empty() ? fla::TextRun() : text->runs.front();
             run.text = *shown;
             replaced.runs = {run};
+            replacing = true;
+        }
+        else
+            replacing = templatedText(*text, replaced);
+        if (replacing)
+        {
             if (fla::textanim::any(replaced))
                 TextLayout::drawAnimated(painter, replaced, textChanges(replaced, -1, text));
             else
@@ -5529,6 +5538,115 @@ QPixmap PhoenixView::templateImage(const QString& path)
     const QPixmap pixmap = QPixmap::fromImage(reader.read());
     _templateImages.insert(file, pixmap);
     return pixmap;
+}
+
+bool PhoenixView::templatedText(const fla::StaticText& text, fla::StaticText& out)
+{
+    std::optional<std::string> words;
+    const std::string* font = nullptr;
+    if (text.textType != fla::StaticText::TextType::Static && !text.instanceName.empty())
+    {
+        if (const std::string* value = templateValue(text.instanceName))
+            words = *value;
+        font = templateValue(fla::templates::fontKey(text.instanceName));
+        if (font && font->empty())
+            font = nullptr;
+    }
+    // Source Text: the words keyed for this frame.
+    if (!words && fla::textanim::any(text))
+        if (const fla::Frame* keyframe = owningFrame(&text))
+        {
+            std::string keyed;
+            if (fla::textanim::sourceTextOf(fla::textanim::of(text), keyframe->index + std::max(0, _elapsed), keyed) &&
+                !keyed.empty())
+                words = keyed;
+        }
+    if (!words && !font)
+        return false;
+    out = text;
+    if (words)
+    {
+        fla::TextRun run = text.runs.empty() ? fla::TextRun() : text.runs.front();
+        run.text = *words;
+        out.runs = {run};
+    }
+    if (font)
+        for (fla::TextRun& run : out.runs)
+            run.face = *font;
+    return true;
+}
+
+fla::Transform PhoenixView::pinnedTransform(const fla::SymbolInstance& instance, const fla::Transform& transform)
+{
+    const fla::templates::Pin pin = fla::templates::pinOf(instance);
+    if (!pin.any() || !instance.symbol)
+        return transform;
+    const fla::Frame* keyframe = owningFrame(&instance);
+    const fla::Layer* layer = owningLayer(&instance);
+    const fla::Timeline* timeline = layer ? dynamic_cast<const fla::Timeline*>(layer->parent) : nullptr;
+    if (!keyframe || !timeline)
+        return transform;
+    // The field it is pinned to, on the frame shown.
+    const int at = keyframe->index + std::max(0, _elapsed);
+    const fla::StaticText* text = nullptr;
+    for (const fla::Layer* each : timeline->layers)
+        for (const fla::Frame* frame : each ? each->frames : std::vector<fla::Frame*>())
+            if (!text && frame && frame->index <= at && at < frame->index + std::max(1, frame->duration))
+                for (const fla::Element* element : frame->elements)
+                    if (element && element->elementType() == fla::Element::Type::StaticText &&
+                        static_cast<const fla::StaticText*>(element)->instanceName == pin.text)
+                    {
+                        text = static_cast<const fla::StaticText*>(element);
+                        break;
+                    }
+    if (!text)
+        return transform;
+    fla::StaticText shown(*text);
+    if (!templatedText(*text, shown))
+        return transform;
+    // Where the letters reach, as drawn and as shown, on the timeline.
+    const auto inked = [text](const fla::StaticText& words) {
+        const TextLayout::Layout layout = TextLayout::layout(words);
+        QRectF reach;
+        bool first = true;
+        for (const TextLayout::Line& line : layout.lines)
+        {
+            const QRectF band(line.x, line.top, line.width, line.height);
+            reach = first ? band : reach.united(band);
+            first = false;
+        }
+        if (first)
+            reach = QRectF(layout.bounds.left(), layout.bounds.top(), 0.0, layout.bounds.height());
+        const fla::Transform& m = text->transform;
+        return QTransform(m.m11, m.m12, m.m21, m.m22, m.tx, m.ty).mapRect(reach);
+    };
+    const QRectF drawn = inked(*text);
+    const QRectF now = inked(shown);
+    const QRectF box = QTransform(transform.m11, transform.m12, transform.m21, transform.m22, transform.tx, transform.ty)
+                           .mapRect(symbolFramesBounds(instance.symbol, symbolFrame(instance), symbolFrame(instance)));
+    // Moved with an edge, or stretched to keep its room around the words.
+    double sx = 1.0, sy = 1.0, dx = 0.0, dy = 0.0;
+    const auto stretch = [](double start, double length, double from, double to, double& scale, double& shift) {
+        if (length <= 0.0)
+            return;
+        scale = std::max(0.0, length + to - from) / length;
+        shift = start + from - start * scale;
+    };
+    if (pin.mode == "left")
+        dx = now.left() - drawn.left();
+    else if (pin.mode == "right")
+        dx = now.right() - drawn.right();
+    else if (pin.mode == "top")
+        dy = now.top() - drawn.top();
+    else if (pin.mode == "bottom")
+        dy = now.bottom() - drawn.bottom();
+    if (pin.mode == "width" || pin.mode == "both")
+        stretch(box.left(), box.width(), now.left() - drawn.left(), now.right() - drawn.right(), sx, dx);
+    if (pin.mode == "height" || pin.mode == "both")
+        stretch(box.top(), box.height(), now.top() - drawn.top(), now.bottom() - drawn.bottom(), sy, dy);
+    fla::Transform pinned(sx, 0.0, 0.0, sy, dx, dy);
+    pinned.concatenate(transform);
+    return pinned;
 }
 
 void PhoenixView::setTemplateValues(const fla::templates::Values& values)

@@ -798,6 +798,60 @@ TEST(templates_find_fields_and_read_csv_rows)
     CHECK(rows.size() == 2);
     CHECK(rows[0].at("file") == "one" && rows[0].at("title") == "Hello, \"world\"" && rows[0].at("bar") == "#0000FF");
     CHECK(rows[1].at("title") == "two\nlines" && rows[1].count("bar") == 0);
+
+    // A slider's labeled frames make a list, picked by name.
+    fla::Symbol medal(nullptr);
+    clipOf(medal, 1, nullptr);
+    for (const auto& [label, at] : std::vector<std::pair<const char*, int>>{{"Bronze", 0}, {"Silver", 1}, {"Gold", 2}})
+    {
+        auto* keyed = new fla::Frame(medal.timelines.front()->layers.front());
+        keyed->index = at;
+        keyed->name = label;
+        medal.timelines.front()->layers.front()->frames.push_back(keyed);
+    }
+    medal.timelines.front()->layers.front()->frames.erase(medal.timelines.front()->layers.front()->frames.begin());
+    bar->symbol = &medal;
+    const tpl::Field list = tpl::fieldsOf(symbol)[1];
+    CHECK(list.kind == tpl::Field::Kind::Frame && list.frames == 3 && list.labels.size() == 3 &&
+          list.labels[2].first == "Gold" && list.labels[2].second == 3);
+    CHECK(tpl::frameIn(medal, "Silver", held) && held == 2);
+    CHECK(tpl::frameIn(medal, "1", held) && held == 1 && !tpl::frameIn(medal, "Platinum", held));
+    bar->symbol = nullptr;
+    CHECK(tpl::fontKey("title") == "title.font");
+
+    // Pinned to a field, kept and read back.
+    fla::SymbolInstance pinned(nullptr);
+    pinned.extraAttributes = tpl::withPin(pinned, {"title", "width"});
+    CHECK(tpl::pinOf(pinned).text == "title" && tpl::pinOf(pinned).mode == "width");
+    pinned.extraAttributes = tpl::withPin(pinned, {});
+    CHECK(pinned.extraAttributes.empty() && !tpl::pinOf(pinned).any());
+}
+
+TEST(templates_responsive_time_stretches_the_middle)
+{
+    namespace tpl = fla::templates;
+    // 30 frames: an intro of 10, a middle of 10 and an outro of 10.
+    tpl::Responsive responsive;
+    responsive.stretch = 10;
+    responsive.outro = 20;
+    // As long as the symbol: as it is.
+    for (int e = 0; e < 30; ++e)
+        CHECK(tpl::responsiveElapsed(responsive, 30, 30, e) == e);
+    // Twice as long: the intro and outro as they are, the middle at half
+    // speed.
+    CHECK(tpl::responsiveElapsed(responsive, 30, 60, 5) == 5);
+    CHECK(tpl::responsiveElapsed(responsive, 30, 60, 10) == 10);
+    CHECK(tpl::responsiveElapsed(responsive, 30, 60, 30) == 15);
+    CHECK(tpl::responsiveElapsed(responsive, 30, 60, 49) == 19);
+    CHECK(tpl::responsiveElapsed(responsive, 30, 60, 50) == 20);
+    CHECK(tpl::responsiveElapsed(responsive, 30, 60, 59) == 29);
+    // Shorter: the middle squeezed, the outro still whole at the end.
+    CHECK(tpl::responsiveElapsed(responsive, 30, 25, 12) == 14);
+    CHECK(tpl::responsiveElapsed(responsive, 30, 25, 15) == 20 && tpl::responsiveElapsed(responsive, 30, 25, 24) == 29);
+    // Too short even for both: the intro, then the end of the outro.
+    CHECK(tpl::responsiveElapsed(responsive, 30, 12, 1) == 1 && tpl::responsiveElapsed(responsive, 30, 12, 11) == 29);
+    // No labels: as it is.
+    CHECK(tpl::responsiveElapsed(tpl::Responsive(), 30, 60, 45) == 45);
 }
 
 TEST(compositing_displacement_moves_pixels)

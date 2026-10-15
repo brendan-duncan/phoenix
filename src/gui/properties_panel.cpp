@@ -51,6 +51,7 @@
 #include <QAction>
 #include <QButtonGroup>
 #include <QCheckBox>
+#include <QFontDatabase>
 #include <QColorDialog>
 #include <QComboBox>
 #include <QSettings>
@@ -2463,6 +2464,20 @@ void PropertiesPanel::addTemplateSection(QVBoxLayout* layout, fla::SymbolInstanc
             edit->setToolTip("The words this instance shows here; empty for the symbol's own");
             connect(edit, &QLineEdit::editingFinished, this, [set, name, edit]() { set(name, edit->text().toStdString()); });
             line->addWidget(edit, 1);
+            // And the font it is drawn in, on a line of its own.
+            QComboBox* font = new QComboBox(this);
+            font->setEditable(true);
+            font->addItem("");
+            font->addItems(QFontDatabase::families());
+            const auto givenFont = given.find(fla::templates::fontKey(name));
+            font->setCurrentText(givenFont == given.end() ? QString() : QString::fromStdString(givenFont->second));
+            font->lineEdit()->setPlaceholderText("as drawn");
+            font->setToolTip("The font this instance shows these words in; empty for the symbol's own");
+            connect(font, &QComboBox::currentTextChanged, this,
+                [set, name](const QString& family) { set(fla::templates::fontKey(name), family.toStdString()); });
+            section->addLong(row++, label, holder);
+            holder = nullptr;
+            section->addLong(row++, label + " font", font);
             break;
         }
         case fla::templates::Field::Kind::Color:
@@ -2485,6 +2500,41 @@ void PropertiesPanel::addTemplateSection(QVBoxLayout* layout, fla::SymbolInstanc
         }
         case fla::templates::Field::Kind::Frame:
         {
+            // Labeled frames: a list of the labels.
+            if (!field.labels.empty())
+            {
+                QComboBox* pick = new QComboBox(holder);
+                pick->addItem("as drawn", QString());
+                for (const auto& [labelName, at] : field.labels)
+                    pick->addItem(QString::fromStdString(labelName), QString::fromStdString(labelName));
+                int shown = 0;
+                for (int i = 1; i < pick->count(); ++i)
+                    if (pick->itemData(i).toString() == value)
+                        shown = i;
+                // A frame given by number shows as the label it falls under.
+                int number = 0;
+                if (shown == 0 && fla::templates::frameOf(value.toStdString(), number))
+                    for (size_t i = 0; i < field.labels.size(); ++i)
+                        if (field.labels[i].second <= number)
+                            shown = static_cast<int>(i) + 1;
+                pick->setCurrentIndex(shown);
+                pick->setToolTip("Which of the part's labeled frames this instance shows");
+                connect(pick, &QComboBox::currentIndexChanged, this,
+                    [set, name, pick](int index) { set(name, pick->itemData(index).toString().toStdString()); });
+                line->addWidget(pick, 1);
+                break;
+            }
+            // Two frames: off or on.
+            if (field.frames == 2)
+            {
+                QCheckBox* on = new QCheckBox("On", holder);
+                int number = 0;
+                on->setChecked(fla::templates::frameOf(value.toStdString(), number) && number == 2);
+                on->setToolTip("Shows the part's second frame when ticked, its first when not");
+                connect(on, &QCheckBox::toggled, this, [set, name](bool checked) { set(name, checked ? "2" : "1"); });
+                line->addWidget(on, 1);
+                break;
+            }
             QSpinBox* frame = new QSpinBox(holder);
             frame->setRange(0, field.frames);
             frame->setSpecialValueText("as drawn");
@@ -2523,7 +2573,8 @@ void PropertiesPanel::addTemplateSection(QVBoxLayout* layout, fla::SymbolInstanc
             break;
         }
         }
-        section->addLong(row++, label, holder);
+        if (holder)
+            section->addLong(row++, label, holder);
     }
 }
 

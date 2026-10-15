@@ -327,6 +327,13 @@ public:
     /// \a owner, when given, is the field \a text stands in for (a template's
     /// words in a copy), for the frame it is on.
     std::vector<fla::textanim::Change> textChanges(const fla::StaticText& text, int at = -1, const fla::StaticText* owner = nullptr);
+    /// \a text as this frame shows it, in \a out: the words a template
+    /// gives the field or Source Text keys, in the font a template gives it.
+    /// False when it shows as it is.
+    bool templatedText(const fla::StaticText& text, fla::StaticText& out);
+    /// \a transform with the instance moved or stretched as its pin to a
+    /// text field says, by how that field shows now against as drawn.
+    fla::Transform pinnedTransform(const fla::SymbolInstance& instance, const fla::Transform& transform);
 
     /// Onion skinning: \a before and \a after frames either side of the
     /// playhead drawn faded under it, those before tinted blue and those

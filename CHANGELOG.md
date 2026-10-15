@@ -4,6 +4,8 @@ What changed in each release of Phoenix, newest first.
 
 ## 0.12.0 (Unreleased)
 
+- Templates: checkbox fields (two-frame clips), lists (clips with labeled frames), a font for each text field, Pin to Text to stretch or move a part with the words, and responsive time (stretch and outro labels) so intros and outros keep their timing
+
 - Control > Motion Sketch: press and move on the stage while the movie plays, and the selected instance follows the path you draw
 
 - Layers: Echo (a trail of earlier poses) and Posterize Time; Motion Editor: Easy Ease, Ease In, Ease Out and a speed curve

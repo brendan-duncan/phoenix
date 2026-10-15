@@ -1020,6 +1020,7 @@ private:
 
     /// The Color panel's Apply to Selection: the selected shapes' fills
     /// become what new art is filled with, fitted to each.
+    void pinToText(fla::SymbolInstance* instance);
     void motionSketch();
     void applyFillToStrokes();
     void applyFillToSelection();

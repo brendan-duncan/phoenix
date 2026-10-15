@@ -14471,10 +14471,13 @@ void MainWindow::editTemplateFields()
     if (dialog.exec() != QDialog::Accepted)
         return;
 
-    fla::templates::Values after;
+    fla::templates::Values after = before;
     for (const auto& [name, edit] : edits)
+    {
+        after.erase(name);
         if (!edit->text().isEmpty())
             after[name] = edit->text().toStdString();
+    }
     using Attributes = std::vector<std::pair<std::string, std::string>>;
     fla::CommandStack& stack = _editContext.commandStack();
     bool any = false;
@@ -15297,6 +15300,8 @@ void MainWindow::showStageMenu(const QPoint& globalPos, const QPointF& documentP
                 menu.addAction(_swapSymbolAction);
             if (_templateFieldsAction && !fla::templates::fieldsOf(*instance->symbol).empty())
                 menu.addAction(_templateFieldsAction);
+            menu.addAction("Pin to Text...", this, [this, instance]() { pinToText(instance); })
+                ->setStatusTip("Move or stretch this instance with a text field beside it as a template's words change");
         }
         if (auto* group = dynamic_cast<fla::Group*>(_selection.single()))
             menu.addAction("Edit in Place", this, [this, group]() { _phoenixView->enterGroup(group); });
@@ -15320,6 +15325,75 @@ void MainWindow::showStageMenu(const QPoint& globalPos, const QPointF& documentP
         menu.addAction(_selectAllAction);
     }
     menu.exec(globalPos);
+}
+
+void MainWindow::pinToText(fla::SymbolInstance* instance)
+{
+    // The named text fields on the instance's own timeline.
+    QStringList names;
+    const fla::DOMElement* up = instance->parent;
+    while (up && up->domType() != fla::DOMElement::DOMType::Layer)
+        up = up->parent;
+    const auto* timeline = up ? dynamic_cast<const fla::Timeline*>(up->parent) : nullptr;
+    for (const fla::Layer* layer : timeline ? timeline->layers : std::vector<fla::Layer*>())
+        for (const fla::Frame* frame : layer ? layer->frames : std::vector<fla::Frame*>())
+            for (const fla::Element* element : frame ? frame->elements : std::vector<fla::Element*>())
+                if (const auto* text = dynamic_cast<const fla::StaticText*>(element))
+                    if (text->textType != fla::StaticText::TextType::Static && !text->instanceName.empty() &&
+                        !names.contains(QString::fromStdString(text->instanceName)))
+                        names << QString::fromStdString(text->instanceName);
+    const fla::templates::Pin was = fla::templates::pinOf(*instance);
+    if (names.isEmpty() && !was.any())
+    {
+        QMessageBox::information(this, "Pin to Text",
+            "There is no text field to pin to here.\n\nGive a dynamic text field beside this instance an instance name: "
+            "then this instance can move or stretch with it as a template gives it other words.");
+        return;
+    }
+    QDialog dialog(this);
+    dialog.setWindowTitle("Pin to Text");
+    auto* form = new QFormLayout(&dialog);
+    auto* field = new QComboBox(&dialog);
+    field->addItem("Not pinned", QString());
+    for (const QString& name : names)
+        field->addItem(name, name);
+    field->setCurrentIndex(std::max(0, field->findData(QString::fromStdString(was.text))));
+    auto* mode = new QComboBox(&dialog);
+    const std::vector<std::pair<QString, QString>> modes = {{"Stretch to its width", "width"},
+        {"Stretch to its height", "height"}, {"Stretch to its width and height", "both"}, {"Move with its right edge", "right"},
+        {"Move with its left edge", "left"}, {"Move with its bottom edge", "bottom"}, {"Move with its top edge", "top"}};
+    for (const auto& [label, id] : modes)
+        mode->addItem(label, id);
+    mode->setCurrentIndex(std::max(0, mode->findData(QString::fromStdString(was.mode))));
+    form->addRow("Text field", field);
+    form->addRow("This instance", mode);
+    auto* note = new QLabel("As the words a template gives the field make it longer or shorter than drawn, this instance keeps "
+                            "the same room around them: a bar behind a name that fits it.", &dialog);
+    note->setWordWrap(true);
+    form->addRow(note);
+    auto* buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, &dialog);
+    connect(buttons, &QDialogButtonBox::accepted, &dialog, &QDialog::accept);
+    connect(buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
+    form->addRow(buttons);
+    dialog.resize(420, dialog.sizeHint().height());
+    if (dialog.exec() != QDialog::Accepted)
+        return;
+    fla::templates::Pin pin;
+    pin.text = field->currentData().toString().toStdString();
+    if (!pin.text.empty())
+        pin.mode = mode->currentData().toString().toStdString();
+    using Attributes = std::vector<std::pair<std::string, std::string>>;
+    const Attributes after = fla::templates::withPin(*instance, pin);
+    if (after == instance->extraAttributes)
+        return;
+    _editContext.commandStack().push(fla::CommandPtr(
+        new fla::SetPropertyCommand<Attributes>(instance->extraAttributes, instance->extraAttributes, after, "Pin to Text")));
+    _editContext.commandStack().breakMergeChain();
+    if (_phoenixView)
+    {
+        _phoenixView->clearCaches();
+        _phoenixView->update();
+    }
 }
 
 void MainWindow::motionSketch()

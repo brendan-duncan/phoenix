@@ -123,6 +123,12 @@ struct TemplateBaker
                         run.text = value->second;
                         text->runs = {run};
                     }
+                    // And the font given it.
+                    const auto font = values.find(templates::fontKey(text->instanceName));
+                    if (text->textType != StaticText::TextType::Static && !text->instanceName.empty() && font != values.end() &&
+                        !font->second.empty())
+                        for (TextRun& run : text->runs)
+                            run.face = font->second;
                     return;
                 }
                 if (element->elementType() != Element::Type::SymbolInstance)
@@ -139,7 +145,7 @@ struct TemplateBaker
                 // A slider: a graphic held on its frame, which other apps
                 // show without a script.
                 int frame = 0;
-                if (value != values.end() && templates::frameOf(value->second, frame) &&
+                if (value != values.end() && instance->symbol && templates::frameIn(*instance->symbol, value->second, frame) &&
                     instance->symbolType == SymbolType::MovieClip)
                 {
                     instance->symbolType = SymbolType::Graphic;
