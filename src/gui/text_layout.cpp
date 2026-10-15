@@ -665,6 +665,20 @@ QRectF localBounds(const fla::StaticText& text)
     return layout(text).bounds;
 }
 
+namespace {
+bool s_fieldOutlines = true;
+} // namespace
+
+void setFieldOutlines(bool on)
+{
+    s_fieldOutlines = on;
+}
+
+bool fieldOutlines()
+{
+    return s_fieldOutlines;
+}
+
 void draw(QPainter& painter, const fla::StaticText& text)
 {
     if (isVertical(text))
@@ -673,7 +687,7 @@ void draw(QPainter& painter, const fla::StaticText& text)
         const std::vector<Cell> cells = verticalCells(text, &bounds);
         const QString joined = joinedText(text);
         painter.setBrush(Qt::NoBrush);
-        if (text.textType != fla::StaticText::TextType::Static)
+        if (text.textType != fla::StaticText::TextType::Static && s_fieldOutlines)
         {
             QPen outline(QColor(0, 0, 0), 0.0);
             outline.setStyle(Qt::DotLine);
@@ -697,7 +711,7 @@ void draw(QPainter& painter, const fla::StaticText& text)
 
     // A dynamic or input field shows its box on the stage as a dotted
     // outline, marking a field that is not plain artwork.
-    if (text.textType != fla::StaticText::TextType::Static)
+    if (text.textType != fla::StaticText::TextType::Static && s_fieldOutlines)
     {
         QPen outline(QColor(0, 0, 0), 0.0);
         outline.setStyle(Qt::DotLine);
@@ -769,7 +783,7 @@ void drawAnimated(QPainter& painter, const fla::StaticText& text, const std::vec
     const Layout laid = layout(text);
     const QString joined = joinedText(text);
     painter.setBrush(Qt::NoBrush);
-    if (text.textType != fla::StaticText::TextType::Static)
+    if (text.textType != fla::StaticText::TextType::Static && s_fieldOutlines)
     {
         QPen outline(QColor(0, 0, 0), 0.0);
         outline.setStyle(Qt::DotLine);

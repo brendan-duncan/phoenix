@@ -4,6 +4,8 @@ What changed in each release of Phoenix, newest first.
 
 ## 0.10.0 (Unreleased)
 
+- Symbol templates: named dynamic text and movie clips in a symbol become fields each instance fills with its own words and colors (Modify > Symbol > Template Fields); File > Export > Render from Data, or Phoenix --render-csv, renders a movie for each row of a CSV file
+- Dynamic and input text no longer show their dotted box in exported images and movies
 - Behaviors: Follow Sound moves, scales, turns, fades or changes the frame of an instance with how loud the scene's sound is; your own behaviors can ask ctx.loudness()
 - Track mattes: a layer can show through the layer above it, by its alpha or its lightness, soft edges and all; adjustment layers blur, color-correct or tint everything below them, with keyable settings
 - Letter animators on text: Typewriter, Cascade In, Bounce In, Fade by Word, Scramble, Wave and Animate Letters, the text staying editable; baked into a text field a letter

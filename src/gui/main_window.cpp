@@ -5561,6 +5561,10 @@ void MainWindow::setupMenus()
     exportBakedAction->setStatusTip("Save a copy with every behavior baked into keyframes, for apps that open FLA files but not Phoenix's own motion");
     connect(exportBakedAction, &QAction::triggered, this, &MainWindow::exportBakedDocument);
     exportMenu->addAction(exportBakedAction);
+    QAction* renderDataAction = new QAction("Render from &Data...", this);
+    renderDataAction->setStatusTip("Render the movie once for each row of a CSV file, its template fields filled from the row");
+    connect(renderDataAction, &QAction::triggered, this, &MainWindow::renderFromData);
+    exportMenu->addAction(renderDataAction);
     exportMenu->addSeparator();
 
     QAction* exportSvgAction = new QAction("Export to &SVG...", this);
@@ -6029,6 +6033,10 @@ void MainWindow::setupMenus()
     _swapSymbolAction->setStatusTip("Show another library symbol in the selected instances");
     connect(_swapSymbolAction, &QAction::triggered, this, &MainWindow::swapSymbol);
     symbolMenu->addAction(_swapSymbolAction);
+    _templateFieldsAction = new QAction("&Template Fields...", this);
+    _templateFieldsAction->setStatusTip("Fill in the words and colors of the selected instance's symbol, for this instance only");
+    connect(_templateFieldsAction, &QAction::triggered, this, &MainWindow::editTemplateFields);
+    symbolMenu->addAction(_templateFieldsAction);
     QMenu* bitmapMenu = modifyMenu->addMenu("&Bitmap");
     _swapBitmapAction = bitmapMenu->addAction("&Swap Bitmap...");
     _swapBitmapAction->setStatusTip("Show another library bitmap in the selected bitmaps");
@@ -13976,6 +13984,254 @@ void MainWindow::swapBitmap()
         _propertiesPanel->refresh();
 }
 
+void MainWindow::editTemplateFields()
+{
+    std::vector<fla::SymbolInstance*> instances;
+    for (fla::DOMElement* selected : _selection.elements())
+        if (auto* instance = dynamic_cast<fla::SymbolInstance*>(selected))
+            if (instance->symbol)
+                instances.push_back(instance);
+    if (instances.empty())
+        return;
+    // The fields of the first instance's symbol; others of that symbol
+    // are filled in with it.
+    const fla::Symbol* symbol = instances.front()->symbol;
+    instances.erase(std::remove_if(instances.begin(), instances.end(),
+                        [symbol](const fla::SymbolInstance* instance) { return instance->symbol != symbol; }),
+        instances.end());
+    const std::vector<fla::templates::Field> fields = fla::templates::fieldsOf(*symbol);
+    if (fields.empty())
+    {
+        QMessageBox::information(this, "Template Fields",
+            QString("%1 has no template fields.\n\nGive a dynamic text field inside it an instance name to make "
+                    "its words a field, or a movie clip inside it an instance name to make its color one.")
+                .arg(QString::fromStdString(symbol->name)));
+        return;
+    }
+    const fla::templates::Values before = fla::templates::valuesOf(*instances.front());
+
+    QDialog dialog(this);
+    dialog.setWindowTitle(QString("Template Fields: %1").arg(QString::fromStdString(symbol->name)));
+    auto* layout = new QVBoxLayout(&dialog);
+    auto* form = new QFormLayout();
+    layout->addLayout(form);
+    std::vector<std::pair<std::string, QLineEdit*>> edits;
+    for (const fla::templates::Field& field : fields)
+    {
+        auto* edit = new QLineEdit(&dialog);
+        const auto given = before.find(field.name);
+        if (given != before.end())
+            edit->setText(QString::fromStdString(given->second));
+        if (field.kind == fla::templates::Field::Kind::Text)
+        {
+            edit->setPlaceholderText(QString::fromStdString(field.value));
+            form->addRow(QString::fromStdString(field.name), edit);
+        }
+        else
+        {
+            // A color: typed as #RRGGBB, or picked.
+            edit->setPlaceholderText("as drawn (or #RRGGBB)");
+            auto* row = new QHBoxLayout();
+            row->addWidget(edit, 1);
+            auto* pick = new QPushButton("Pick...", &dialog);
+            connect(pick, &QPushButton::clicked, &dialog, [edit, &dialog]() {
+                const QColor color = QColorDialog::getColor(QColor(edit->text()), &dialog, "Color");
+                if (color.isValid())
+                    edit->setText(color.name().toUpper());
+            });
+            row->addWidget(pick);
+            form->addRow(QString::fromStdString(field.name) + " (color)", row);
+        }
+        edits.emplace_back(field.name, edit);
+    }
+    auto* note = new QLabel("Left empty, a field shows what the symbol has.", &dialog);
+    note->setWordWrap(true);
+    layout->addWidget(note);
+    auto* buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, &dialog);
+    connect(buttons, &QDialogButtonBox::accepted, &dialog, &QDialog::accept);
+    connect(buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
+    layout->addWidget(buttons);
+    dialog.resize(420, dialog.sizeHint().height());
+    if (dialog.exec() != QDialog::Accepted)
+        return;
+
+    fla::templates::Values after;
+    for (const auto& [name, edit] : edits)
+        if (!edit->text().isEmpty())
+            after[name] = edit->text().toStdString();
+    using Attributes = std::vector<std::pair<std::string, std::string>>;
+    fla::CommandStack& stack = _editContext.commandStack();
+    bool any = false;
+    for (fla::SymbolInstance* instance : instances)
+    {
+        const Attributes changed = fla::templates::withValues(*instance, after);
+        if (changed == instance->extraAttributes)
+            continue;
+        if (!any)
+            stack.beginMacro("Template Fields");
+        any = true;
+        stack.push(fla::CommandPtr(new fla::SetPropertyCommand<Attributes>(instance->extraAttributes,
+            instance->extraAttributes, changed, "Template Fields")));
+    }
+    if (!any)
+        return;
+    stack.endMacro();
+    stack.breakMergeChain();
+    if (_phoenixView)
+    {
+        _phoenixView->clearCaches();
+        _phoenixView->update();
+    }
+}
+
+bool MainWindow::renderRows(const std::vector<fla::templates::Values>& rows, const QString& folder,
+    const QString& extension, QString& error, const std::function<bool(int row, int rows)>& progress)
+{
+    if (!_flaDocument || !_flaDocument->document || !_phoenixView)
+    {
+        error = "No document is open.";
+        return false;
+    }
+    const fla::Document* document = _flaDocument->document;
+    if (!QDir().mkpath(folder))
+    {
+        error = QString("Could not make the folder %1.").arg(folder);
+        return false;
+    }
+    const QString ext = extension.toLower();
+    const QString base = _documentPath.isEmpty() ? QString("render") : QFileInfo(_documentPath).completeBaseName();
+    const fla::templates::Values was = _phoenixView->templateValues();
+    bool ok = true;
+    for (size_t r = 0; r < rows.size() && ok; ++r)
+    {
+        if (progress && !progress(static_cast<int>(r), static_cast<int>(rows.size())))
+        {
+            error = "Render cancelled.";
+            ok = false;
+            break;
+        }
+        const fla::templates::Values& row = rows[r];
+        // Named by its file column when it has one, else numbered.
+        QString name;
+        for (const char* column : {"file", "File", "filename", "output"})
+        {
+            const auto found = row.find(column);
+            if (found != row.end() && !found->second.empty())
+            {
+                name = QString::fromStdString(found->second);
+                break;
+            }
+        }
+        if (name.isEmpty())
+            name = QString("%1-%2").arg(base).arg(static_cast<int>(r) + 1, 3, 10, QChar('0'));
+        name.replace(QRegularExpression(R"([\\/:*?"<>|])"), "_");
+        if (QFileInfo(name).suffix().compare(ext, Qt::CaseInsensitive) != 0)
+            name += "." + ext;
+
+        _phoenixView->setTemplateValues(row);
+        MovieExportSettings settings;
+        settings.format = ext == "png" ? MovieExportSettings::Format::PngSequence
+            : ext == "gif"             ? MovieExportSettings::Format::Gif
+                                       : MovieExportSettings::Format::Video;
+        if (ext == "mov")
+            settings.codec = MovieExportSettings::Codec::ProRes422;
+        settings.path = QDir(folder).absoluteFilePath(name);
+        settings.size = QSize(static_cast<int>(std::lround(document->width)), static_cast<int>(std::lround(document->height)));
+        settings.first = 0;
+        settings.last = std::max(1, _phoenixView->frameCount()) - 1;
+        QString why;
+        if (!MovieExport::run(settings, *_phoenixView, _timelineAudio, document->frameRate, nullptr, why))
+        {
+            error = QString("Row %1: %2").arg(static_cast<int>(r) + 1).arg(why.isEmpty() ? QString("cancelled") : why);
+            ok = false;
+        }
+        else
+            std::printf("Rendered row %d to %s\n", static_cast<int>(r) + 1, qPrintable(settings.path));
+    }
+    _phoenixView->setTemplateValues(was);
+    return ok;
+}
+
+void MainWindow::renderFromData()
+{
+    if (!_flaDocument || !_flaDocument->document)
+        return;
+    const QString csv = QFileDialog::getOpenFileName(this, "Render from Data", QString(), "CSV files (*.csv);;All files (*)");
+    if (csv.isEmpty())
+        return;
+    QFile file(csv);
+    if (!file.open(QIODevice::ReadOnly))
+    {
+        QMessageBox::warning(this, "Render from Data", QString("Could not read %1.").arg(csv));
+        return;
+    }
+    const std::vector<fla::templates::Values> rows = fla::templates::rowsOfCsv(file.readAll().toStdString());
+    if (rows.empty())
+    {
+        QMessageBox::information(this, "Render from Data",
+            "The file has no rows to render: the first row names the template fields, and each row after it is a movie.");
+        return;
+    }
+    bool chosen = false;
+    const QString extension = QInputDialog::getItem(this, "Render from Data",
+        QString("%1 rows, each rendered as:").arg(rows.size()), {"mp4", "mov", "gif", "png"}, 0, false, &chosen);
+    if (!chosen)
+        return;
+    const QString folder = QFileDialog::getExistingDirectory(this, "Render into Folder", QFileInfo(csv).absolutePath());
+    if (folder.isEmpty())
+        return;
+    QProgressDialog progress("Rendering...", "Cancel", 0, static_cast<int>(rows.size()), this);
+    progress.setWindowModality(Qt::WindowModal);
+    progress.setMinimumDuration(0);
+    QString error;
+    const bool ok = renderRows(rows, folder, extension, error, [&progress](int row, int count) {
+        progress.setLabelText(QString("Rendering row %1 of %2...").arg(row + 1).arg(count));
+        progress.setValue(row);
+        QCoreApplication::processEvents();
+        return !progress.wasCanceled();
+    });
+    progress.setValue(static_cast<int>(rows.size()));
+    if (!ok)
+        QMessageBox::warning(this, "Render from Data", error);
+    else
+        statusBar()->showMessage(QString("Rendered %1 movies into %2").arg(rows.size()).arg(folder), 5000);
+}
+
+int MainWindow::renderDataFromCommandLine(const QString& source, const QString& data, const QString& folder,
+    const QString& extension)
+{
+    if (!QFileInfo::exists(source))
+    {
+        std::fprintf(stderr, "No such file: %s\n", qPrintable(source));
+        return 1;
+    }
+    QFile file(data);
+    if (!file.open(QIODevice::ReadOnly))
+    {
+        std::fprintf(stderr, "Could not read %s\n", qPrintable(data));
+        return 1;
+    }
+    const std::vector<fla::templates::Values> rows = fla::templates::rowsOfCsv(file.readAll().toStdString());
+    if (rows.empty())
+    {
+        std::fprintf(stderr, "%s has no rows to render\n", qPrintable(data));
+        return 1;
+    }
+    loadFLAFile(source);
+    if (!_flaDocument || !_flaDocument->document || !_phoenixView)
+    {
+        std::fprintf(stderr, "Could not open %s\n", qPrintable(source));
+        return 1;
+    }
+    QString error;
+    if (!renderRows(rows, QFileInfo(folder).absoluteFilePath(), extension, error))
+    {
+        std::fprintf(stderr, "%s\n", qPrintable(error));
+        return 1;
+    }
+    return 0;
+}
+
 void MainWindow::swapSymbol()
 {
     if (!_flaDocument || !_flaDocument->document || !_flaDocument->document->symbolList)
@@ -14641,6 +14897,8 @@ void MainWindow::showStageMenu(const QPoint& globalPos, const QPointF& documentP
             menu.addAction("Edit in Place", this, [this, instance]() { _phoenixView->enterSymbol(instance); });
             if (_swapSymbolAction)
                 menu.addAction(_swapSymbolAction);
+            if (_templateFieldsAction && !fla::templates::fieldsOf(*instance->symbol).empty())
+                menu.addAction(_templateFieldsAction);
         }
         if (auto* group = dynamic_cast<fla::Group*>(_selection.single()))
             menu.addAction("Edit in Place", this, [this, group]() { _phoenixView->enterGroup(group); });
@@ -15350,6 +15608,8 @@ void MainWindow::updateSelectionState()
         _convertToSymbolAction->setEnabled(hasElements);
     if (_swapSymbolAction)
         _swapSymbolAction->setEnabled(hasInstance);
+    if (_templateFieldsAction)
+        _templateFieldsAction->setEnabled(hasInstance);
     for (QAction* action : _transformActions)
         action->setEnabled(hasElements);
     if (_distributeAction)

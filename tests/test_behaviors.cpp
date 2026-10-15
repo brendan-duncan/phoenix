@@ -11,6 +11,9 @@
 #include "../src/edit/shape_operators.h"
 #include "../src/edit/text_animators.h"
 #include "../src/edit/adjustments.h"
+#include "../src/edit/templates.h"
+#include "../src/data/static_text.h"
+#include "../src/data/symbol.h"
 
 #include <cmath>
 #include <string>
@@ -501,6 +504,57 @@ TEST(shape_operators_trim_wiggle_and_zigzag_lines)
     Applied zigzag = fla::shapeops::defaults("zigzag", 1);
     const std::vector<Line> teeth = fla::shapeops::apply({straight}, true, {zigzag}, 0, 24.0);
     CHECK(teeth.size() == 1 && teeth[0].points.size() > 4 && teeth[0].points[0].y * teeth[0].points[1].y < 0);
+}
+
+TEST(templates_find_fields_and_read_csv_rows)
+{
+    namespace tpl = fla::templates;
+    // Values survive the trip through the attribute, odd characters too.
+    tpl::Values values{{"title", "Ada & Grace = 100%"}, {"bar", "#00C000"}};
+    CHECK(tpl::decode(tpl::encode(values)) == values);
+    fla::SymbolInstance instance(nullptr);
+    instance.extraAttributes = tpl::withValues(instance, values);
+    CHECK(tpl::any(instance) && tpl::valuesOf(instance) == values);
+    instance.extraAttributes = tpl::withValues(instance, {});
+    CHECK(!tpl::any(instance) && instance.extraAttributes.empty());
+
+    unsigned char rgb[3];
+    CHECK(tpl::colorOf("#00C0FF", rgb) && rgb[0] == 0 && rgb[1] == 0xC0 && rgb[2] == 0xFF);
+    CHECK(tpl::colorOf("ff0000", rgb) && rgb[0] == 0xFF);
+    CHECK(!tpl::colorOf("", rgb) && !tpl::colorOf("red", rgb));
+
+    // A symbol with a named dynamic text, a static text and a named clip.
+    fla::Symbol symbol(nullptr);
+    auto* timeline = new fla::Timeline(&symbol);
+    symbol.timelines.push_back(timeline);
+    auto* layer = new fla::Layer(timeline);
+    timeline->layers.push_back(layer);
+    auto* frame = new fla::Frame(layer);
+    layer->frames.push_back(frame);
+    auto* name = new fla::StaticText(frame);
+    name->textType = fla::StaticText::TextType::Dynamic;
+    name->instanceName = "title";
+    fla::TextRun run;
+    run.text = "Name Here";
+    name->runs.push_back(run);
+    auto* plain = new fla::StaticText(frame);
+    plain->runs.push_back(run);
+    auto* bar = new fla::SymbolInstance(frame);
+    bar->symbolType = fla::SymbolType::MovieClip;
+    bar->name = "bar";
+    frame->elements = {name, plain, bar};
+    const std::vector<tpl::Field> fields = tpl::fieldsOf(symbol);
+    CHECK(fields.size() == 2);
+    CHECK(fields[0].name == "title" && fields[0].kind == tpl::Field::Kind::Text && fields[0].value == "Name Here");
+    CHECK(fields[1].name == "bar" && fields[1].kind == tpl::Field::Kind::Color);
+
+    // CSV: quotes, commas and line breaks in them, a byte order mark, an
+    // empty cell left out.
+    const std::vector<tpl::Values> rows =
+        tpl::rowsOfCsv("\xEF\xBB\xBF" "file,title,bar\r\none,\"Hello, \"\"world\"\"\",#0000FF\r\ntwo,\"two\nlines\",\r\n\r\n");
+    CHECK(rows.size() == 2);
+    CHECK(rows[0].at("file") == "one" && rows[0].at("title") == "Hello, \"world\"" && rows[0].at("bar") == "#0000FF");
+    CHECK(rows[1].at("title") == "two\nlines" && rows[1].count("bar") == 0);
 }
 
 TEST(compositing_mattes_and_adjustments)

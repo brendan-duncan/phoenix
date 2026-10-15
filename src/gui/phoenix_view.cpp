@@ -2,6 +2,7 @@
 #include "behavior_library.h"
 #include "../edit/shape_operators.h"
 #include "../edit/adjustments.h"
+#include "../edit/templates.h"
 #include "../edit/text_animators.h"
 #include "../edit/vector_import.h"
 #include "../jsfl/behavior_frames.h"
@@ -3499,6 +3500,33 @@ void PhoenixView::drawElement(QPainter& painter, const fla::Element* element, co
                     static_cast<const fla::SymbolInstance*>(tweenElement)->colorTransform, tweenProgress);
             }
             color.alphaMultiplier *= behaviorDelta.alpha;
+            // A template's color field: the named clip tinted all one color.
+            if (!instance->name.empty())
+                if (const std::string* value = templateValue(instance->name))
+                {
+                    unsigned char rgb[3];
+                    if (fla::templates::colorOf(*value, rgb))
+                    {
+                        color.tintMultiplier = 1.0;
+                        color.tintColor[0] = rgb[0];
+                        color.tintColor[1] = rgb[1];
+                        color.tintColor[2] = rgb[2];
+                    }
+                }
+            // The values this instance gives its template's fields hold for
+            // everything drawn inside it.
+            struct TemplateScope
+            {
+                std::vector<fla::templates::Values>& stack;
+                bool pushed;
+                ~TemplateScope()
+                {
+                    if (pushed)
+                        stack.pop_back();
+                }
+            } templateScope{_templateStack, fla::templates::any(*instance)};
+            if (templateScope.pushed)
+                _templateStack.push_back(fla::templates::valuesOf(*instance));
             const bool alphaOnly = color.tintMultiplier == 0.0 && color.brightness == 0.0 &&
                 color.redMultiplier == 1.0 && color.greenMultiplier == 1.0 &&
                 color.blueMultiplier == 1.0 && color.redOffset == 0 &&
@@ -3652,7 +3680,7 @@ void PhoenixView::drawElement(QPainter& painter, const fla::Element* element, co
                 const int shownFrame = this->shownFrame();
                 // Onion frames are drawn once and passed over, so they are
                 // neither looked up nor kept.
-                const bool cacheable = !_maskPass && _frameOverride < 0 && !_movie;
+                const bool cacheable = !_maskPass && _frameOverride < 0 && !_movie && _templateStack.empty();
                 const auto cached = cacheable ? _filterCache.find(instance) : _filterCache.end();
                 const auto sameLinear = [](const QTransform& a, const QTransform& b) {
                     return std::fabs(a.m11() - b.m11()) < 1.0e-9 && std::fabs(a.m12() - b.m12()) < 1.0e-9 &&
@@ -3798,13 +3826,27 @@ void PhoenixView::drawElement(QPainter& painter, const fla::Element* element, co
                 }
             }
         }
+        // A field's box shows on the stage only.
+        struct Outlines
+        {
+            bool was = TextLayout::fieldOutlines();
+            ~Outlines() { TextLayout::setFieldOutlines(was); }
+        } outlines;
+        TextLayout::setFieldOutlines(outlines.was && !_exporting && !_movie);
+        // A template's text field: the words the instance gives it.
+        if (!shown && text->textType != fla::StaticText::TextType::Static && !text->instanceName.empty())
+            if (const std::string* value = templateValue(text->instanceName))
+                shown = *value;
         if (shown)
         {
             fla::StaticText replaced(*text);
             fla::TextRun run = text->runs.empty() ? fla::TextRun() : text->runs.front();
             run.text = *shown;
             replaced.runs = {run};
-            TextLayout::draw(painter, replaced);
+            if (fla::textanim::any(replaced))
+                TextLayout::drawAnimated(painter, replaced, textChanges(replaced));
+            else
+                TextLayout::draw(painter, replaced);
         }
         else if (fla::textanim::any(*text))
             TextLayout::drawAnimated(painter, *text, textChanges(*text));
@@ -4965,6 +5007,29 @@ void PhoenixView::drawShape(QPainter& painter, const fla::Shape* shape, const fl
     {
         drawOverlayPoints(painter, shape);
     }
+}
+
+const std::string* PhoenixView::templateValue(const std::string& name) const
+{
+    const auto document = _documentTemplateValues.find(name);
+    if (document != _documentTemplateValues.end())
+        return &document->second;
+    for (const fla::templates::Values& values : _templateStack)
+    {
+        const auto found = values.find(name);
+        if (found != values.end())
+            return &found->second;
+    }
+    return nullptr;
+}
+
+void PhoenixView::setTemplateValues(const fla::templates::Values& values)
+{
+    if (values == _documentTemplateValues)
+        return;
+    _documentTemplateValues = values;
+    clearCaches();
+    update();
 }
 
 std::vector<fla::textanim::Change> PhoenixView::textChanges(const fla::StaticText& text, int at)

@@ -118,6 +118,25 @@
 
 <p>Bitmaps swap the same way: select one or more bitmaps on the stage and choose <span class="menu-path">Modify &rsaquo; Bitmap &rsaquo; Swap Bitmap...</span>, or click <strong>Swap...</strong> in the Properties panel. The new bitmap takes the old one's place, scale and rotation.</p>
 
+<h2 id="templates">Templates</h2>
+
+<p>A symbol can be a template: one lower third, title card or sign that each instance fills in with its own words and colors. Its named parts are its fields:</p>
+
+<ul>
+  <li>A <b>dynamic text</b> field with an instance name is a text field. Each instance can give it other words, in the field's font, size and color.</li>
+  <li>A <b>movie clip</b> with an instance name is a color field. Each instance can tint it all one color: a bar, a badge, a background.</li>
+</ul>
+
+<p>Select an instance and choose <span class="menu-path">Modify &rsaquo; Symbol &rsaquo; Template Fields...</span> (also on the stage's right-click menu) to fill them in. A field left empty shows what the symbol has. Fields inside nested symbols count too, and an outer instance's values win over an inner one's. Letter animators on a text field animate the words an instance gives it.</p>
+
+<p>To make many versions at once, put the values in a spreadsheet saved as CSV: the first row names the fields, and each row after it is one version. A <code>file</code> column names each output. <span class="menu-path">File &rsaquo; Export &rsaquo; Render from Data...</span> renders the movie once a row, as MP4, MOV, GIF or a PNG sequence, every instance's fields filled from the row (an empty cell leaves each instance's own value). The same works from the <a href="command-line.html#render-csv">command line</a>.</p>
+
+<pre><code>file,name,role,bar
+ada,Ada Lovelace,Mathematician,#2060C0
+grace,Grace Hopper,Rear Admiral,#C02040</code></pre>
+
+<p>Templates are Phoenix's own: another app opening the FLA file shows each instance as the symbol is drawn.</p>
+
 <h2>Break apart an instance</h2>
 
 <p><span class="menu-path">Modify &rsaquo; Break Apart</span> (<kbd>Ctrl</kbd>+<kbd>B</kbd>) replaces an instance with a copy of the artwork from the frame it shows, with its color effect applied. The symbol itself is not changed.</p>

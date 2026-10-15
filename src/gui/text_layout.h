@@ -93,6 +93,11 @@ QRectF localBounds(const fla::StaticText& text);
 
 void draw(QPainter& painter, const fla::StaticText& text);
 
+/// Whether dynamic and input fields show their box as a dotted outline: on
+/// the stage, not in what is exported or played.
+void setFieldOutlines(bool on);
+bool fieldOutlines();
+
 /// The text's letters as text animators number them: each character's
 /// place among all of them, its word and its line.
 std::vector<fla::textanim::Letter> letters(const fla::StaticText& text);

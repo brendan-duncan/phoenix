@@ -1,5 +1,6 @@
 #pragma once
 
+#include "../edit/templates.h"
 #include "phoenix_view.h"
 #include "document_view.h"
 #include "timeline_view.h"
@@ -83,6 +84,11 @@ public:
     /// sequence for a .png name, a video otherwise. Returns the process exit
     /// code, writing any error to stderr.
     int exportFromCommandLine(const QString& source, const QString& output, bool perLayer = false);
+    /// Phoenix --render-csv: \a source rendered once for each row of the
+    /// CSV file \a data, its template fields filled from the row, into
+    /// \a folder as \a extension files (mp4, mov, gif or png).
+    int renderDataFromCommandLine(const QString& source, const QString& data, const QString& folder,
+        const QString& extension);
     /// Phoenix render: frames of a document to a PNG sequence, a video or
     /// a GIF, with no window. See the command line help.
     int renderCommand(const QString& source, const QStringList& options);
@@ -253,6 +259,14 @@ private slots:
     /// Modify > Symbol > Swap Symbol: the selected instances show another
     /// library symbol, keeping their transform, color and looping.
     void swapSymbol();
+    /// The selected instances' template fields, filled in.
+    void editTemplateFields();
+    /// File > Export > Render from Data.
+    void renderFromData();
+    /// Each row of \a rows rendered to \a folder; false with \a error when
+    /// one could not be.
+    bool renderRows(const std::vector<fla::templates::Values>& rows, const QString& folder, const QString& extension,
+        QString& error, const std::function<bool(int row, int rows)>& progress = {});
 
     /// Modify > Transform: the selection turned about the center of its
     /// bounds by \a change (a flip, a quarter turn, a scale and rotation).
@@ -1105,6 +1119,7 @@ private:
     QAction* _breakApartAction = nullptr;
     QAction* _convertToSymbolAction = nullptr;
     QAction* _swapSymbolAction = nullptr;
+    QAction* _templateFieldsAction = nullptr;
     QAction* _swapBitmapAction = nullptr;
     QAction* _traceBitmapAction = nullptr;
     QMenu* _transformMenu = nullptr;

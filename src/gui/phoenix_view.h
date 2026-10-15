@@ -2,6 +2,7 @@
 
 #include "../edit/behaviors.h"
 #include "../edit/adjustments.h"
+#include "../edit/templates.h"
 #include "../edit/text_animators.h"
 
 #include "../data/color_transform.h"
@@ -582,6 +583,10 @@ public:
     void clearCaches();
     /// Counts up whenever the caches are cleared: something may have changed.
     unsigned revision() const { return _revision; }
+    /// Values for template fields everywhere in the document, over what
+    /// instances give them: a row of data being rendered. Empty for none.
+    void setTemplateValues(const fla::templates::Values& values);
+    const fla::templates::Values& templateValues() const { return _documentTemplateValues; }
 
     /// Forgets what is cached for one shape (its paths and the brushes in
     /// them, its bounds), for a tool changing it live.
@@ -1186,6 +1191,11 @@ private:
     /// The timelines being drawn on a canvas of their own for their
     /// adjustment layers.
     QSet<const fla::Timeline*> _compositing;
+    /// Template values: the document's, then those of the instances being
+    /// drawn, outermost first; the first to name a field wins.
+    fla::templates::Values _documentTemplateValues;
+    std::vector<fla::templates::Values> _templateStack;
+    const std::string* templateValue(const std::string& name) const;
     typedef QList<PathCacheEntry> PathCacheList;
 
     /// A cached stroke entry's pen with its width set for the element being drawn.

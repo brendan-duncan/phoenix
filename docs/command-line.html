@@ -187,6 +187,12 @@ Phoenix --export-movie scene.fla soundtrack.wav</code></pre>
 
 <pre><code>Phoenix --export-movie scene.fla layers.png --per-layer</code></pre>
 
+<h2 id="render-csv">Render from data</h2>
+
+<pre><code>Phoenix --render-csv lower-third.fla people.csv renders mp4</code></pre>
+
+<p>Renders the document once for each row of a CSV file into a folder, the <a href="symbols.html#templates">template fields</a> of its symbols filled from the row: the first row names the fields. A <code>file</code> column names each output; without one they are numbered. The last argument is the format: <code>mp4</code> (the default), <code>mov</code>, <code>gif</code> or <code>png</code> for a numbered sequence a row.</p>
+
 <h2>Export an image</h2>
 
 <pre><code>Phoenix --export-image scene.fla poster.png --frame 48 --size 1920x1080 --matte transparent
