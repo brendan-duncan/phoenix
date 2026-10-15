@@ -347,8 +347,19 @@ void PhoenixView::onPlayerFrameChanged(int frame)
 
     // What was selected lives on the frame just left, so the selection
     // goes with it; letting go also drops a drawing that
-    // was still floating into the artwork of its own frame.
-    if (_selection && !_selection->isEmpty() && !(_commandStack && _commandStack->isExecuting()))
+    // was still floating into the artwork of its own frame. Within the
+    // keyframe it is on, playing or scrubbing keeps it, so its panels stay
+    // open on it.
+    const auto stillShown = [this, frame]() {
+        for (const fla::DOMElement* each : _selection->elements())
+        {
+            const fla::Frame* owner = owningFrame(each);
+            if (!owner || frame < owner->index || frame >= owner->index + std::max(1, owner->duration))
+                return false;
+        }
+        return true;
+    };
+    if (_selection && !_selection->isEmpty() && !(_commandStack && _commandStack->isExecuting()) && !stillShown())
         _selection->clear();
     update();
 }
@@ -2235,7 +2246,7 @@ bool PhoenixView::armatureTransform(const fla::Frame* frame, const fla::Element*
     return false;
 }
 
-fla::Transform PhoenixView::shownTransform(const LayerFrame& state, size_t elementIndex)
+fla::Transform PhoenixView::shownTransform(const LayerFrame& state, size_t elementIndex, bool behaviors)
 {
     if (!state.frame || elementIndex >= state.frame->elements.size() || !state.frame->elements[elementIndex])
         return fla::Transform();
@@ -2261,7 +2272,7 @@ fla::Transform PhoenixView::shownTransform(const LayerFrame& state, size_t eleme
         const fla::Transform tweened = interpolateTransform(element->transform, end->transform, state.tweenProgress);
         shown = guidedTransform(state, *element, *end, tweened);
     }
-    if (element->elementType() == fla::Element::Type::SymbolInstance &&
+    if (behaviors && element->elementType() == fla::Element::Type::SymbolInstance &&
         fla::behaviors::any(*static_cast<const fla::SymbolInstance*>(element)))
     {
         const auto* instance = static_cast<const fla::SymbolInstance*>(element);
@@ -2394,6 +2405,24 @@ bool PhoenixView::armatureHere(const fla::Element* element, fla::Transform& show
         return false;
     const LayerFrame state = resolveLayerFrame(layer, fla::LoopType::PlayOnce, 0);
     return state.frame == frame && armatureTransform(frame, element, state.offset, shown);
+}
+
+fla::Transform PhoenixView::drawnTransformOf(const fla::Element* element)
+{
+    // On the keyframe shown: as drawn there, behaviors and all.
+    const fla::Frame* frame = owningFrame(element);
+    const fla::Layer* layer = frame ? dynamic_cast<const fla::Layer*>(frame->parent) : nullptr;
+    if (layer)
+    {
+        const LayerFrame state = resolveLayerFrame(layer, fla::LoopType::PlayOnce, 0);
+        const auto found = std::find(frame->elements.begin(), frame->elements.end(), element);
+        if (state.frame == frame && found != frame->elements.end())
+        {
+            ElapsedScope elapsed(_elapsed, state.offset);
+            return shownTransform(state, static_cast<size_t>(found - frame->elements.begin()));
+        }
+    }
+    return shownTransformOf(element);
 }
 
 fla::Transform PhoenixView::shownTransformOf(const fla::Element* element)
@@ -7046,7 +7075,7 @@ void PhoenixView::drawToolOverlay(QPainter& painter)
             const auto* instance = dynamic_cast<const fla::SymbolInstance*>(selected);
             if (instance && owningFrame(instance))
             {
-                const fla::Transform shown = shownTransformOf(instance);
+                const fla::Transform shown = drawnTransformOf(instance);
                 crosshair(QPointF(shown.tx, shown.ty), 5.0);
             }
         }
@@ -9391,9 +9420,29 @@ QRectF PhoenixView::shownElementBounds(const fla::Element* element)
     const QRectF local = shownLocalBounds(element, 0);
     if (!local.isValid())
         return getElementBounds(element);
-    const fla::Transform t = shownTransform(state, static_cast<size_t>(found - frame->elements.begin()));
-    return (QTransform(t.m11, t.m12, t.m21, t.m22, t.tx, t.ty) *
-            parentTransform(layer, frame, fla::LoopType::PlayOnce, 0)).mapRect(local);
+    const size_t index = static_cast<size_t>(found - frame->elements.begin());
+    const QTransform parent = parentTransform(layer, frame, fla::LoopType::PlayOnce, 0);
+    // Behaviors that repeat it: the box round every copy.
+    if (element->elementType() == fla::Element::Type::SymbolInstance &&
+        fla::behaviors::any(*static_cast<const fla::SymbolInstance*>(element)))
+    {
+        const fla::Transform keyed = shownTransform(state, index, false);
+        const fla::behaviors::Copies copies = behaviorCopies(*static_cast<const fla::SymbolInstance*>(element), keyed,
+            frame->index + std::max(0, state.offset));
+        if (copies.size() > 1)
+        {
+            QRectF all;
+            for (const fla::behaviors::Delta& copy : copies)
+            {
+                const fla::Transform t = fla::behaviors::apply(keyed, element->transformationPoint, copy);
+                const QRectF placed = (QTransform(t.m11, t.m12, t.m21, t.m22, t.tx, t.ty) * parent).mapRect(local);
+                all = all.isNull() ? placed : all.united(placed);
+            }
+            return all;
+        }
+    }
+    const fla::Transform t = shownTransform(state, index);
+    return (QTransform(t.m11, t.m12, t.m21, t.m22, t.tx, t.ty) * parent).mapRect(local);
 }
 
 bool PhoenixView::isElementSelected(const fla::DOMElement* element) const

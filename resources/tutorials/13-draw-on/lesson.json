@@ -34,16 +34,8 @@
       }
     },
     {
-      "title": "Go to frame 1",
-      "text": "<p>Click frame 1 on the <i>Line</i> layer.</p>",
-      "target": "frame:Line:1",
-      "wait": {
-        "frame": 1
-      }
-    },
-    {
       "title": "Key the End at 0",
-      "text": "<p>Set <b>End (percent)</b> to 0: the line disappears. Then click the diamond beside it to key it on this frame.</p><p>A keyed setting changes over time: Phoenix goes smoothly from each key to the next.</p>",
+      "text": "<p>The playhead is on frame 1. Set <b>End (percent)</b> to 0: the line disappears. Then click the diamond beside it to key it on this frame.</p><p>A keyed setting changes over time: Phoenix goes smoothly from each key to the next.</p>",
       "target": "label:Behaviors/End (percent)",
       "wait": {
         "command": "Key Behavior Setting"

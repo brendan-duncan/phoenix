@@ -229,6 +229,32 @@ void drawLayerSheet(QPainter& painter)
     painter.drawLine(QPointF(5.5, 11.0), QPointF(8.5, 11.0));
 }
 
+void drawAdjustmentSheet(QPainter& painter)
+{
+    // An adjustment layer: a circle half filled, as for contrast.
+    painter.setPen(QPen(ink(), 1.1));
+    painter.setBrush(Qt::NoBrush);
+    painter.drawEllipse(QPointF(8.0, 8.0), 5.5, 5.5);
+    QPainterPath half;
+    half.moveTo(8.0, 2.5);
+    half.arcTo(QRectF(2.5, 2.5, 11.0, 11.0), 90.0, 180.0);
+    half.closeSubpath();
+    painter.setBrush(ink());
+    painter.drawPath(half);
+}
+
+void drawMattedSheet(QPainter& painter)
+{
+    // A layer shown through a track matte: the sheet with a window in it.
+    painter.setPen(QPen(ink(), 1.1));
+    QPainterPath sheet;
+    sheet.addRect(QRectF(3.5, 2.5, 9.0, 11.0));
+    QPainterPath window;
+    window.addEllipse(QPointF(8.0, 8.0), 2.8, 2.8);
+    painter.setBrush(theme::withAlpha(ink(), 110));
+    painter.drawPath(sheet.subtracted(window));
+}
+
 void drawFolderClosed(QPainter& painter)
 {
     painter.setPen(QPen(theme::color("folder"), 1.1));
@@ -1033,6 +1059,16 @@ void LayersPanel::refresh()
                 item->setToolTip(NameColumn, QString("Follows %1").arg(QString::fromStdString(parent->name)));
             const bool folder = layer->layerType == fla::Layer::Type::Folder;
             item->setIcon(NameColumn, folder ? _openFolderIcon : _layerIcon);
+            if (!folder && fla::compositing::isAdjustment(*layer))
+            {
+                item->setIcon(NameColumn, glyph(drawAdjustmentSheet));
+                item->setToolTip(NameColumn, "Adjustment layer: its effects change everything below it");
+            }
+            else if (!folder && fla::compositing::matteOf(*layer) != fla::compositing::Matte::None)
+            {
+                item->setIcon(NameColumn, glyph(drawMattedSheet));
+                item->setToolTip(NameColumn, "Shown through the layer above it (track matte)");
+            }
             item->setToolTip(VisibleColumn, "Show or hide the layer");
             item->setToolTip(LockColumn, "Lock or unlock the layer");
             item->setToolTip(ColorColumn, "Outline color; click to view the layer as outlines");

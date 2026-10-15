@@ -390,6 +390,8 @@ public:
     /// The transform \a element shows with now: past the start of an object
     /// motion tween, where the motion has it; otherwise its own. Tools
     /// measure and drag this.
+    /// Where \a element is drawn on the frame shown, its behaviors moving it too.
+    fla::Transform drawnTransformOf(const fla::Element* element);
     fla::Transform shownTransformOf(const fla::Element* element);
 
     /// The element's bounds where it shows now, in document space.
@@ -1355,7 +1357,8 @@ private:
     /// The transform an element of a resolved frame shows with: an object
     /// motion tween's (read from the frame's motionObjectXML), a classic
     /// tween's in-between, or its own.
-    fla::Transform shownTransform(const LayerFrame& state, size_t elementIndex);
+    /// Without \a behaviors, as keyed and tweened, before behaviors move it.
+    fla::Transform shownTransform(const LayerFrame& state, size_t elementIndex, bool behaviors = true);
     /// What \a instance's behaviors make of it on frame \a at of its
     /// timeline, given its keyed transform there: a Delta for each copy
     /// drawn (one for an instance without behaviors). Kept for each

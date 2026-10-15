@@ -141,8 +141,12 @@ BehaviorsPanel::BehaviorsPanel(BehaviorsLinks links, QWidget* parent)
     _settings = new QWidget(this);
     _form = new QFormLayout(_settings);
     _form->setContentsMargins(0, 0, 0, 0);
+    // A long label puts its controls on the line under it, rather than
+    // pushing them out of a narrow panel.
+    _form->setRowWrapPolicy(QFormLayout::WrapLongRows);
     QScrollArea* scroll = new QScrollArea(this);
     scroll->setWidgetResizable(true);
+    scroll->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
     scroll->setFrameShape(QFrame::NoFrame);
     scroll->setWidget(_settings);
 
@@ -315,6 +319,8 @@ void BehaviorsPanel::refresh()
     _up->setEnabled(any);
     _down->setEnabled(any);
     _remove->setEnabled(any);
+    // An adjustment layer's effects are drawn live; there is nothing to bake.
+    _bake->setVisible(mode() != Mode::Adjustments);
     _bake->setEnabled(any);
     _refreshing = false;
     fillSettings();
@@ -449,13 +455,15 @@ void BehaviorsPanel::fillSettings()
             const int steps = static_cast<int>(std::lround((high - low) / step));
             QSlider* slider = new QSlider(Qt::Horizontal, holder);
             slider->setRange(0, std::max(1, steps));
+            slider->setMinimumWidth(60);
             QDoubleSpinBox* box = new QDoubleSpinBox(holder);
             const int decimals = step >= 1.0 ? 0 : step >= 0.1 ? 1 : step >= 0.01 ? 2 : 3;
             box->setDecimals(decimals);
             box->setRange(low, high);
             box->setSingleStep(step);
             box->setKeyboardTracking(false);
-            box->setMaximumWidth(84);
+            box->setMinimumWidth(72);
+            box->setMaximumWidth(96);
             const double value = current.empty() ? spec.value : std::atof(current.c_str());
             box->setValue(value);
             slider->setValue(static_cast<int>(std::lround((value - low) / step)));

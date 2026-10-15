@@ -59,7 +59,7 @@
     },
     {
       "title": "Repeat it in a circle",
-      "text": "<p>Add <b>Repeat in a Circle</b>. The logo becomes a ring of copies, and each copy beats and wiggles on its own, at random.</p><p>Behaviors after a repeat run once for each copy.</p>",
+      "text": "<p>Add <b>Repeat in a Circle</b>. The logo becomes a ring of copies, all beating and wiggling together: the pulse and wiggle above it ran once, and the ring copies the result.</p>",
       "target": "widget:behaviorsAdd",
       "wait": {
         "command": "Add Behavior"
@@ -67,7 +67,7 @@
     },
     {
       "title": "Order matters",
-      "text": "<p>Click <b>Repeat in a Circle</b> in the list and use the up arrow to move it to the top, then play again. Now the whole ring is made first, and each copy gets its own pulse and wiggle.</p><p>The check box beside each behavior turns it off without losing its settings.</p>",
+      "text": "<p>Click <b>Repeat in a Circle</b> in the list and use the up arrow to move it to the top, then play again. Now the ring is made first, and the behaviors after it run once for each copy: every copy beats and wiggles on its own.</p><p>The check box beside each behavior turns it off without losing its settings.</p>",
       "target": "dock:Behaviors"
     },
     {

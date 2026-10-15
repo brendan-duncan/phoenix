@@ -3132,6 +3132,9 @@ void MainWindow::setupUI()
             _phoenixView->clearCaches();
             _phoenixView->update();
         }
+        // The layer's icon says what it is now.
+        if (_timelineView)
+            _timelineView->refresh();
         if (_behaviors && _behaviorsDock)
         {
             if (what == "adjustment:on")
@@ -5027,6 +5030,18 @@ int MainWindow::bakeShapeOperators(fla::Layer& layer, int first, int last)
         return 0;
     const double rate = _flaDocument && _flaDocument->document ? _flaDocument->document->frameRate : 24.0;
     fla::frames::convertToFrameByFrame(layer, first, last, rate);
+    // Every frame's letters worked out before any frame changes: a text's
+    // animation counts from the first of the keyframes holding it, which
+    // the frames before it must still show.
+    std::map<const fla::StaticText*, std::vector<fla::StaticText*>> letters;
+    for (fla::Frame* frame : layer.frames)
+    {
+        if (!frame || frame->index < first || frame->index > last)
+            continue;
+        for (fla::Element* element : frame->elements)
+            if (auto* text = dynamic_cast<fla::StaticText*>(element); text && fla::textanim::any(*text))
+                letters[text] = bakedText(*text, frame->index);
+    }
     int baked = 0;
     for (fla::Frame* frame : layer.frames)
     {
@@ -5036,9 +5051,9 @@ int MainWindow::bakeShapeOperators(fla::Layer& layer, int first, int last)
         {
             // A text with letter animators: a text field a letter, each as
             // its animators leave it.
-            if (auto* text = dynamic_cast<fla::StaticText*>(frame->elements[i]); text && fla::textanim::any(*text))
+            if (auto* text = dynamic_cast<fla::StaticText*>(frame->elements[i]); text && letters.count(text))
             {
-                std::vector<fla::StaticText*> made = bakedText(*text, frame->index);
+                std::vector<fla::StaticText*> made = letters[text];
                 frame->elements.erase(frame->elements.begin() + static_cast<std::ptrdiff_t>(i));
                 for (size_t k = 0; k < made.size(); ++k)
                 {
@@ -9302,7 +9317,9 @@ void MainWindow::openScriptEditor(const QString& path)
     {
         _scriptWindow = new ScriptWindow([this](const QString& script) { return _scripts && _scripts->runFile(script); },
             ScriptRunner::commandsFolder(), this);
-        _scriptWindow->newScript(CodeEditor::Language::JavaScript);
+        // A blank script to start with, unless it opens on a file.
+        if (path.isEmpty())
+            _scriptWindow->newScript(CodeEditor::Language::JavaScript);
     }
     if (!path.isEmpty())
         _scriptWindow->openFile(path);
