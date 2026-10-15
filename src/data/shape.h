@@ -25,13 +25,13 @@ public:
     /// A drawing object: a shape drawn with Object Drawing mode on. It keeps
     /// to itself -- it never merges with the artwork under it and is selected
     /// as a whole with a bounding box, like a group -- while a plain shape is
-    /// merge artwork that other shapes cut into. Animate writes it as
+    /// merge artwork that other shapes cut into. The FLA stores it as
     /// `isDrawingObject="true"` on the DOMShape.
     bool isDrawingObject = false;
 
     /// The Edge elements carrying only cubics, the curves a pen or brush
-    /// drew as Animate's editor keeps them beside the quadratic edges it
-    /// draws, as read: each with the number of edges before it. They stand
+    /// drew as FLA files keep them beside the quadratic edges
+    /// drawn, as read: each with the number of edges before it. They stand
     /// for the edges as read, so they are written back only while those are
     /// unedited (see cubicsStillMatch).
     std::vector<std::pair<size_t, std::string>> cubicEdges;

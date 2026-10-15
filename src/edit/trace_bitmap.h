@@ -26,8 +26,8 @@ struct Options
     double curveFit = 1.0;
 };
 
-/// The settings Curve fit offers, from closest to smoothest, with Animate's
-/// names for them and the curveFit each gives.
+/// The settings Curve fit offers, from closest to smoothest, with their
+/// names and the curveFit each gives.
 struct CurveFit
 {
     const char* label;

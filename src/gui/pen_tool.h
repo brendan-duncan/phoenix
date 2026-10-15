@@ -18,7 +18,7 @@ class Selection;
 class Shape;
 }
 
-/// Animate's pen tool: build a path a point at a time.
+/// The pen tool: build a path a point at a time.
 ///
 /// Click places a corner point. Press and drag pulls out handles, making a
 /// smooth point whose curve runs through it. Holding alt while dragging breaks
@@ -127,7 +127,7 @@ private:
     int _cursorKind = -1;
 
     /// With no path being drawn, the pen hovers the selected shape: over an
-    /// anchor it removes, over a segment it adds, as Animate's does.
+    /// anchor it removes, over a segment it adds.
     EdgeBender::Probe probeSelection(PhoenixView& view, const QPointF& documentPos) const;
 
     /// Carries out the add or remove the hover promised. Returns false when

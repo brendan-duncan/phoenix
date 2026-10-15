@@ -21,7 +21,7 @@ struct TextRun
 
     Alignment alignment = Alignment::Left;
     bool aliasText = false;
-    /// On unless the file says otherwise: Animate writes autoKern only when
+    /// On unless the file says otherwise: FLA files carry autoKern only when
     /// it is off.
     bool autoKern = true;
     double letterSpacing = 0.0;
@@ -49,7 +49,7 @@ public:
     double height = 0.0;
     bool autoExpand = false;
 
-    /// Animate's three kinds of text field. A static field is artwork; a
+    /// The three kinds of text field. A static field is artwork; a
     /// dynamic one can be set from a script, an input one typed into, and
     /// both are written as DOMDynamicText and DOMInputText.
     enum class TextType
@@ -61,7 +61,7 @@ public:
     TextType textType = TextType::Static;
 
     /// For dynamic and input text: the name a script reaches the field by,
-    /// and the line type Animate records (single line, multiline, multiline
+    /// and the line type the FLA records (single line, multiline, multiline
     /// no wrap, password), carried through as written.
     std::string instanceName;
     std::string lineType;

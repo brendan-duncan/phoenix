@@ -89,7 +89,7 @@ public:
     /// The preview the drawing layer holds now; empty while nothing is
     /// drawn.
     std::vector<Preview> preview() const;
-    /// The cursor setCursor() chose (Animate's numbers: 0 a plus, 1 a black
+    /// The cursor setCursor() chose (the JSFL numbers: 0 a plus, 1 a black
     /// arrow, 2 a white arrow, 3 a four-way arrow, 4 two-way horizontal, 5
     /// two-way vertical, 6 an X, 7 a hand).
     int cursor() const;

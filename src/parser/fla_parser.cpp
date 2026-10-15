@@ -175,7 +175,7 @@ void FLAParser::keepUnreadFiles(const ZipReader& zipReader, fla::Document& docum
         // The project marker is written afresh, named after the document.
         if (name.size() > 4 && name.compare(name.size() - 4, 4, ".xfl") == 0 && name.find('/') == std::string::npos)
             continue;
-        // Texture tiles baked for Animate are made again on save.
+        // Texture tiles baked for other apps are made again on save.
         if (name.rfind("bin/phoenix_texture_", 0) == 0)
             continue;
         document.extraFiles.emplace_back(name, zipReader.lazyFile(name));

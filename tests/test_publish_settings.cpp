@@ -4,7 +4,7 @@
 
 namespace {
 
-// The shape of Animate's file, cut down: two profiles, the second current.
+// The shape of an FLA's publish settings file, cut down: two profiles, the second current.
 const char* const kAnimate = R"(<flash_profiles>
 <flash_profile version="1.0" name="Old" current="false">
   <PublishFormatProperties enabled="true"><png>0</png></PublishFormatProperties>
@@ -51,7 +51,7 @@ TEST(publish_settings_are_read_from_the_current_profile)
     CHECK(settings.gifAnimated && !settings.gifLoop && settings.gifLoopCount == 3 && settings.gifColors == 64);
     CHECK(fla::publish::fileName(settings, "png", "shot") == "poster.png");
 
-    // No file: Animate's defaults, named after the document.
+    // No file: the format's defaults, named after the document.
     const fla::publish::Settings plain = fla::publish::read("", "shot");
     CHECK(plain.flash && plain.html && !plain.png && plain.defaultNames);
     CHECK(fla::publish::fileName(plain, "jpeg", "shot") == "shot.jpg");
@@ -71,7 +71,7 @@ TEST(publish_settings_are_written_back_keeping_the_rest)
     CHECK(back.jpeg && back.jpegQuality == 55 && back.svgEmbed && back.png && back.gifColors == 64);
     CHECK(back.pngFile == "poster.png");
 
-    // A new file has Animate's form.
+    // A new file has the format's usual form.
     const std::string made = fla::publish::write("", settings, "shot");
     CHECK(made.find("<flash_profiles>") != std::string::npos && made.find("current=\"true\"") != std::string::npos);
     CHECK(fla::publish::read(made, "shot").jpegQuality == 55);

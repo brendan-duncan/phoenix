@@ -209,8 +209,8 @@ bool PrimitiveTool::mouseRelease(PhoenixView& view, QMouseEvent* event, const QP
         return true;
     }
 
-    // An Alt-click with the rectangle or oval asks for the size, as Animate
-    // does, and draws it from the click.
+    // An Alt-click with the rectangle or oval asks for the size and draws
+    // it from the click.
     QPointF start = effectiveStart();
     QPointF end = _end;
     const bool click = std::hypot(_end.x() - _start.x(), _end.y() - _start.y()) < 2.0;
@@ -292,8 +292,8 @@ bool PrimitiveTool::keyPress(PhoenixView& view, QKeyEvent* event)
     if (!_dragging)
         return false;
 
-    // Up and Down change the corner radius mid-drag, as Animate's rectangle
-    // tool does; shift moves it ten at a time.
+    // Up and Down change the corner radius mid-drag with the rectangle
+    // tool; shift moves it ten at a time.
     if ((event->key() == Qt::Key_Up || event->key() == Qt::Key_Down) &&
         (_kind == Kind::Rectangle || _kind == Kind::RectanglePrimitive))
     {
@@ -376,7 +376,7 @@ fla::Element* PrimitiveTool::createElement(fla::Frame* frame, const QPointF& sta
 
     switch (_kind)
     {
-    // The rectangle and oval tools always draw shapes, as Animate's do. In
+    // The rectangle and oval tools always draw shapes. In
     // Object Drawing mode the shape is flagged as a drawing object when it is
     // placed; the editable primitive objects come only from the primitive
     // tools below.
@@ -449,7 +449,7 @@ fla::Element* PrimitiveTool::createRectangleShape(fla::Frame* frame, const QRect
     int strokeIndex = -1;
     addStylesTo(shape, _style, fillIndex, strokeIndex);
 
-    // The radius is clamped to half the shorter side, as Animate clamps it.
+    // The radius is clamped to half the shorter side.
     const double radius = std::max(0.0,
         std::min(_cornerRadius, std::min(rect.width(), rect.height()) / 2.0));
 

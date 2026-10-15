@@ -254,8 +254,8 @@ std::vector<uint8_t> channelData(Reader& in, size_t end, int width, int height, 
     return toEightBit(data, count, format.depth);
 }
 
-/// Photoshop's blend modes as Animate names them; empty for normal, and
-/// for those Animate has no like of.
+/// Photoshop's blend modes as FLA files name them; empty for normal, and
+/// for those with no like among them.
 std::string blendName(const std::string& key, bool& known)
 {
     static const std::map<std::string, std::string> names = {{"norm", ""}, {"pass", ""}, {"mul ", "multiply"},
@@ -388,7 +388,7 @@ std::vector<Record> readLayers(Reader& in, size_t end, const Format& format, Ima
         records.push_back(std::move(record));
     }
     for (const std::string& key : unknownBlends)
-        image.notes.push_back("A layer blend mode Animate has no like of (" + key + ") was drawn as Normal.");
+        image.notes.push_back("A layer blend mode Phoenix has no like of (" + key + ") was drawn as Normal.");
 
     // Each layer's channels, in the order of the records.
     for (Record& record : records)

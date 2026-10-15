@@ -419,7 +419,7 @@ bool PenTool::mousePress(PhoenixView& view, QMouseEvent* event, const QPointF& d
             return true;
     }
 
-    // Ctrl-click ends the open path being drawn, as Animate's pen does.
+    // Ctrl-click ends the open path being drawn.
     if (_active && (event->modifiers() & Qt::ControlModifier))
     {
         finish(view, false);
@@ -819,8 +819,8 @@ void PenTool::paintOverlay(PhoenixView& view, QPainter& painter, double scale)
 
 void PenTool::deactivate(PhoenixView& view)
 {
-    // Choosing another tool leaves the path drawn so far as an open path,
-    // as Animate does; a lone anchor is dropped.
+    // Choosing another tool leaves the path drawn so far as an open path;
+    // a lone anchor is dropped.
     if (_active)
         finish(view, false);
 }

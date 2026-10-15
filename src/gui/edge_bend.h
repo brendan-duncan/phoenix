@@ -17,7 +17,7 @@ class Edge;
 class Shape;
 }
 
-/// Reshaping artwork by dragging its outline, the way Animate's arrow tool
+/// Reshaping artwork by dragging its outline, the way the Selection tool
 /// does on merge-drawn shapes.
 ///
 /// Dragging a segment bends it: the curve is moved so that the point grabbed

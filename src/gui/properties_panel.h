@@ -44,7 +44,7 @@ class Document;
 }
 
 /// One collapsible group of the Properties panel: a bold title with a
-/// disclosure arrow over a grid of labeled fields, as Animate lays out
+/// disclosure arrow over a grid of labeled fields, such as
 /// "Position and Size" or "Color and Style".
 class PropertySection : public QWidget
 {
@@ -76,7 +76,7 @@ private:
     bool _expanded = true;
 };
 
-/// Animate's Properties inspector: tabs for the active tool, the selected
+/// The Properties inspector: tabs for the active tool, the selected
 /// object, the current frame and the document, each a stack of collapsible
 /// sections of hot-text fields.
 ///
@@ -210,7 +210,7 @@ private:
     void addPrimitiveSections(QVBoxLayout* layout, fla::Element* element);
 
     /// An instance's filters, each with its settings: added, removed,
-    /// switched on and off, reordered and edited, as in Animate.
+    /// switched on and off, reordered and edited.
     void addFilterSection(QVBoxLayout* layout, fla::SymbolInstance* instance);
 
     /// A HotText editing one double of the document: live while dragged, one
@@ -218,7 +218,7 @@ private:
     HotText* bindDouble(double& field, double minimum, double maximum, int decimals, const QString& suffix,
         const char* name);
 
-    /// The stroke controls Animate shows (style, cap, join, miter, scale),
+    /// The stroke controls (style, cap, join, miter, scale),
     /// in \a section from \a row on, set from \a look; \a apply gets the
     /// new look on any change. Returns the label and field of each row.
     std::vector<std::pair<QWidget*, QWidget*>> addStrokeLookFields(PropertySection* section, int& row,

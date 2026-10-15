@@ -43,7 +43,7 @@ TEST(new_document_honors_a_requested_stage)
     CHECK_NEAR(fla->document->frameRate, 30.0);
 }
 
-/// Animate puts the vanishing point at the middle of the stage, so it has to
+/// The vanishing point goes at the middle of the stage, so it has to
 /// follow the size rather than keep the model's own default.
 TEST(new_document_centers_the_vanishing_point)
 {

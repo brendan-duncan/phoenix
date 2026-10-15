@@ -13,8 +13,8 @@ namespace fla {
 
 class Bitmap;
 
-/// Bringing bitmaps and sounds into a document's library as Animate keeps
-/// them: a bitmap's pixels in a bin/*.dat of Animate's own encoding (a
+/// Bringing bitmaps and sounds into a document's library as FLA files keep
+/// them: a bitmap's pixels in a bin/*.dat of the FLA's own encoding (a
 /// lossless one, or the JPEG as it was), a sound's samples as raw PCM in
 /// one. Nothing here decodes image or sound files; the caller hands over
 /// the pixels or the samples.
@@ -24,7 +24,7 @@ namespace media {
 /// not have yet.
 std::string freeName(const Document& document, const std::string& wanted);
 
-/// A new item id in Animate's form, eight hex digits, a dash, eight more.
+/// A new item id in the FLA's form, eight hex digits, a dash, eight more.
 std::string newItemId();
 
 /// A name for a new data file under bin, "M <n> <seconds>.dat", that no
@@ -38,7 +38,7 @@ Bitmap* newBitmap(const Document& document, const std::string& name, const std::
     int width, int height, std::vector<uint8_t> data, bool jpeg);
 
 /// A sound for the library: 16-bit samples, interleaved when stereo, at
-/// one of Animate's rates (5512, 11025, 22050 or 44100).
+/// one of the FLA's rates (5512, 11025, 22050 or 44100).
 struct Sound
 {
     std::string name;
@@ -102,7 +102,7 @@ private:
     std::string _name;
 };
 
-/// Adds a sound to the library: its item, as Animate writes a
+/// Adds a sound to the library: its item, as the FLA stores a
 /// DOMSoundItem, and its data under bin.
 class AddSoundCommand : public Command
 {

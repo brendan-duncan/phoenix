@@ -16,7 +16,7 @@ class Timeline;
 
 namespace find {
 
-/// What Find and Replace looks for, as Animate's panel offers it.
+/// What Find and Replace looks for, as its panel offers it.
 enum class Kind
 {
     Text,

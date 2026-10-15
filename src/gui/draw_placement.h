@@ -17,7 +17,7 @@ class PhoenixView;
 /// The element joins the frame as its own object and becomes the selection,
 /// whichever mode is on. In object drawing mode that is the end of it.
 ///
-/// With that mode off -- the default, as in Animate -- the drawing is not part
+/// With that mode off -- the default -- the drawing is not part
 /// of the artwork yet. It floats above it, selected, and can be dragged around
 /// as one piece. Deselecting it is what commits it, through
 /// commitPendingMerge(), so the view remembers it until then.

@@ -47,8 +47,8 @@ std::vector<std::pair<std::string, std::string>> withLinkage(
 /// Whether \a name is free for a new library item or folder.
 bool nameIsFree(const Document& document, const std::string& name);
 
-/// \a base, or "base copy", "base copy 2"... whichever is free first, as
-/// Animate names a duplicate.
+/// \a base, or "base copy", "base copy 2"... whichever is free first: the
+/// name a duplicate gets.
 std::string freeCopyName(const Document& document, const std::string& base);
 
 /// A deep copy of \a symbol under \a name: its timelines, layers, frames

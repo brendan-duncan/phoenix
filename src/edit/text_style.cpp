@@ -29,7 +29,7 @@ void keep(std::vector<std::pair<std::string, std::string>>& attributes, const st
 {
     attributes.erase(std::remove_if(attributes.begin(), attributes.end(), [&key](const auto& a) { return a.first == key; }),
         attributes.end());
-    // A setting at its default is left out, as Animate leaves it out. A
+    // A setting at its default is left out, as FLA files leave it out. A
     // field is selectable unless it says not.
     const bool isDefault = key == "isSelectable" ? value == "true" || value.empty()
                                                  : value.empty() || value == "false" || value == "normal" || value == "0";

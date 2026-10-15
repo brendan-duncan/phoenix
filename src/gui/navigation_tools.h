@@ -5,7 +5,7 @@
 #include <QPointF>
 #include <QRectF>
 
-/// Animate's hand tool: drag to pan the stage.
+/// The hand tool: drag to pan the stage.
 ///
 /// The view already pans whenever a tool declines a press, so the hand is the
 /// tool that declines everything and just supplies the cursor.
@@ -17,7 +17,7 @@ public:
     QCursor cursor() const override { return Qt::OpenHandCursor; }
 };
 
-/// Animate's Rotation tool (shift+H): turns the view of the stage, as a hand
+/// The Rotation tool (shift+H): turns the view of the stage, as a hand
 /// turns paper to draw at a better angle. Click to set the pivot, marked
 /// with a crosshair; drag to turn about it, with shift in 15 degree steps;
 /// double-click to set the stage straight again. Nothing in the document
@@ -51,7 +51,7 @@ private:
     double _startRotation = 0.0;
 };
 
-/// Animate's Time Scrub tool (C): drag left or right across the stage to
+/// The Time Scrub tool (C): drag left or right across the stage to
 /// move the playhead back or forward a frame for every few pixels, to see
 /// the animation run under the hand.
 class TimeScrubTool : public Tool
@@ -80,7 +80,7 @@ private:
     QPointF _cursor;
 };
 
-/// Animate's zoom tool: click to zoom in by a step about the point, alt-click
+/// The zoom tool: click to zoom in by a step about the point, alt-click
 /// to zoom out, or drag a marquee to fill the view with it.
 class ZoomTool : public Tool
 {

@@ -14,7 +14,7 @@ public:
         return _errorString;
     }
 
-    /// Flash-style number (#hex with optional fractional hex, or decimal). Same as edge path syntax.
+    /// FLA-style number (#hex with optional fractional hex, or decimal). Same as edge path syntax.
     static double parseNumber(const std::string& data, int& pos, std::string* outStr = nullptr);
 
     static void skipWhitespace(const std::string& data, int& pos);

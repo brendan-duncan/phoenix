@@ -27,10 +27,10 @@ struct BrushSample
 /// The settings of one brush, as its Properties panel sets them. The three
 /// brushes share them and differ in which they show and their defaults:
 ///
-/// - The **Brush** (Animate's Fluid Brush) varies the width with
+/// - The **Brush** varies the width with
 ///   pressure and speed, tapers the ends, smooths the line and has an
 ///   elliptical tip with a roundness and an angle.
-/// - The **Nib Brush** (Animate's Classic Brush, Flash's brush) has a shaped
+/// - The **Nib Brush** has a shaped
 ///   nib, with Use Pressure for the width and Use Tilt turning the nib with
 ///   the pen.
 /// - Phoenix's **Ink Brush** adds what the others lack: a stabilizer that
@@ -119,7 +119,7 @@ struct BrushSettings
     double taperStart = 0.0;
     double taperEnd = 0.0;
 
-    /// Animate's smoothing, 0 to 100: how much the wobble of the hand is
+    /// The smoothing, 0 to 100: how much the wobble of the hand is
     /// taken out of the line. It works in screen pixels, so it feels the
     /// same at any zoom.
     int smoothing = 50;

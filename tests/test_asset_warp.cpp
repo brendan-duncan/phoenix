@@ -94,7 +94,7 @@ TEST(asset_warp_pins_are_written_back_as_animate_keeps_them)
     CHECK(written.find(R"({"ID":3,"children":[])") != std::string::npos);
     CHECK(written.find(R"("puppetMeshDensity":7)") != std::string::npos);
 
-    // From nothing, a document Animate would start.
+    // From nothing, a fresh document.
     const std::string fresh = fla::AssetWarp::withPins("", {added});
     CHECK(fla::AssetWarp::pins(fresh).size() == 1 && fresh.find(R"("type":1)") != std::string::npos);
 }

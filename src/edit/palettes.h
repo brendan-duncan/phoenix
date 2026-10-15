@@ -11,12 +11,12 @@ namespace fla {
 class Document;
 class Element;
 
-/// Linked palettes, as in Harmony: fills, strokes and text linked by name
+/// Linked palettes: fills, strokes and text linked by name
 /// to a palette's colors, so changing a color recolors everything that
 /// uses it, and swapping to another palette with the same color names (day
 /// and night, say) recolors the whole document at once. What is saved is
-/// the colors themselves, so Animate shows the art as last colored; the
-/// palettes and the links are kept where Animate ignores them. Free of Qt.
+/// the colors themselves, so other apps show the art as last colored; the
+/// palettes and the links are kept where other apps ignore them. Free of Qt.
 namespace palettes {
 
 struct Color

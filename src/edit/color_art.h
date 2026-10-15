@@ -10,11 +10,11 @@ class Shape;
 class Timeline;
 class Transform;
 
-/// Line and color art, as in Harmony: a drawing's clean lines on one layer
+/// Line and color art: a drawing's clean lines on one layer
 /// and its paint on the layer under it, so painting never disturbs a line
 /// and lines can be redrawn without losing the paint. The Paint Bucket on
 /// a color art layer fills the regions the line layer's strokes close,
-/// leaving the lines where they are. Both are ordinary layers to Animate.
+/// leaving the lines where they are. Both are ordinary layers in the FLA.
 /// Free of Qt.
 namespace colorart {
 

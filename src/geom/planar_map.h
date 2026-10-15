@@ -105,7 +105,7 @@ struct MapFace
 class PlanarMap
 {
 public:
-    /// One twentieth of a pixel: the grid Flash stores coordinates on.
+    /// One twentieth of a pixel: the grid FLA and SWF files store coordinates on.
     static constexpr double kTwip = 1.0 / 20.0;
 
     /// Adds a curve to be arranged. Nothing is computed until build(). A curve

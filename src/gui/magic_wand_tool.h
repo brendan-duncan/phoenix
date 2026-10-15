@@ -6,7 +6,7 @@ namespace fla {
 class DrawingStyle;
 }
 
-/// Animate's Magic Wand, in the lasso's slot: click a bitmap that has been
+/// The Magic Wand, in the lasso's slot: click a bitmap that has been
 /// broken apart into a fill, and the area of like color around the click is
 /// cut out of the fill and selected, as the lasso would cut it. Shift adds
 /// to the selection. The Properties panel sets the threshold (how far a

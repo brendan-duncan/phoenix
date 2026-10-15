@@ -14,7 +14,7 @@ class Element;
 class Frame;
 class Layer;
 
-/// Animate's frame operations on one layer. Each works on the layer in
+/// The frame operations on one layer. Each works on the layer in
 /// place and leaves its frames in index order with no gaps or overlaps; a
 /// frame taken off the layer is not deleted but handed back through
 /// \a removed, so an undoable command can keep it. Frame numbers are
@@ -80,7 +80,7 @@ std::vector<Frame*> copyFrames(const Layer& layer, int first, int last);
 /// pasted frames keeps its remaining frames, starting where they end.
 void pasteFrames(Layer& layer, int at, const std::vector<const Frame*>& copied, std::vector<Frame*>& removed);
 
-/// Dragging a block of selected frames, as in Animate: frames \a first to
+/// Dragging a block of selected frames: frames \a first to
 /// \a last of each layer in \a sources go to frame \a to of the layer at the
 /// same place in \a targets (the same layers, or as many rows up or down),
 /// replacing what was there. Unless \a copy (an Alt-drag), the frames left
@@ -115,7 +115,7 @@ void scaleSpans(Layer& layer, double factor);
 /// at \a first, and what came after them keeps its own keyframe.
 void clearFrames(Layer& layer, int first, int last, std::vector<Frame*>& removed);
 
-/// Create Motion Tween on the span at \a index, as Animate makes one: the
+/// Create Motion Tween on the span at \a index, as FLA files store one: the
 /// span's one symbol instance or text block moves by an object motion tween
 /// over the span (a span of one frame at the layer's end first grows to a
 /// second's worth at \a frameRate). \a pivotOf places an element's

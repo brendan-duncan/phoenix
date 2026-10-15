@@ -39,10 +39,10 @@ QPainterPath sweptOutline(const std::vector<fla::BrushDab>& dabs, double zoom, b
 /// fill and no outline, and merges like any other drawing, so passes of one
 /// color run together without seams.
 ///
-/// - **Brush** (Animate's Fluid Brush): width from pressure and
+/// - **Brush**: width from pressure and
 ///   speed, tapered ends, smoothing, and an elliptical tip with roundness
 ///   and angle.
-/// - **Nib Brush** (Animate's Classic Brush, Flash's brush): a shaped nib,
+/// - **Nib Brush**: a shaped nib,
 ///   with Use Pressure and Use Tilt, which turns the nib.
 /// - **Ink Brush**, Phoenix's own: a stabilizer for steady lines, a
 ///   pressure response curve, and tilt that broadens the line.
@@ -152,7 +152,7 @@ private:
     std::unique_ptr<fla::RegionSplitter> _insideRegions;
 };
 
-/// Animate's eraser: takes artwork away along the drag, as wide as the
+/// The eraser: takes artwork away along the drag, as wide as the
 /// eraser size, from merge-drawn shapes. Its modes decide what goes: lines
 /// and fills (Normal), fills only (Fills), lines only (Lines), the selected
 /// fills only (Selected Fills) or the fill the pass began in (Inside). With

@@ -27,7 +27,7 @@ fla::Point toPoint(const QPointF& point)
 
 /// The geometry is in pixels and the format stores twips, so anchors that
 /// are meant to be the same point agree to well inside half a twip. Anything
-/// further apart is a different corner, and Flash could not tell them apart
+/// further apart is a different corner, and the format could not tell them apart
 /// either.
 constexpr double kHalfTwip = 1.0 / 40.0;
 
@@ -271,7 +271,7 @@ bool SubselectionTool::mousePress(PhoenixView& view, QMouseEvent* event, const Q
     }
 
     // Off the anchors: on something else it is a pick, on empty stage it
-    // starts a marquee. Adding an anchor is the pen's job, as in Animate.
+    // starts a marquee. Adding an anchor is the pen's job.
     const HitResult hit = view.hitTest(documentPos, view.pickTolerance());
     if (hit && hit.element != shape)
     {
@@ -790,7 +790,7 @@ void SubselectionTool::paintOverlay(PhoenixView& view, QPainter& painter, double
                 }
 
                 // Every anchor is a small hollow square, filled once it is
-                // selected. Animate does not show smooth against corner by shape.
+                // selected. Smooth and corner anchors look the same.
                 const bool picked = isSelected(AnchorRef{const_cast<fla::Edge*>(edge), pathIndex, i});
 
                 painter.setPen(QPen(QColor(0, 0, 0), 1.0 * scale));

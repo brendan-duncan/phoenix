@@ -23,7 +23,7 @@ using fla::outline::shapeFromOutline;
 bool convertLinesToFills(fla::Shape& shape)
 {
     // Every stroked piece, gathered by stroke style, as one painter path
-    // each: one stroker pass per style gives the joins and caps Animate
+    // each: one stroker pass per style gives the joins and caps the stage
     // would draw, and the union of the outlines under non-zero is the area.
     std::map<int, QPainterPath> byStroke;
     for (const fla::Edge* edge : shape.edges)

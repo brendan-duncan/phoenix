@@ -4,16 +4,16 @@
 
 namespace fla {
 
-/// Animate's publish settings (PublishSettings.xml in the package): which
+/// The FLA's publish settings (PublishSettings.xml in the package): which
 /// formats File > Publish writes, their file names and their options.
 /// Phoenix reads the current profile, publishes what it can of it, and
-/// edits it in place, so every setting it does not use goes back to
-/// Animate unchanged. Free of Qt.
+/// edits it in place, so every setting it does not use goes back into the
+/// file unchanged. Free of Qt.
 namespace publish {
 
 struct Settings
 {
-    /// The profile's name, as Animate shows it.
+    /// The profile's name, as the file records it.
     std::string profile = "Default";
 
     /// The formats to publish.
@@ -59,7 +59,7 @@ struct Settings
     /// SWF sound: the soundtrack streamed with the movie, as "mp3",
     /// "adpcm", "raw" or "none" (silent); an MP3's bit rate in kbps, ADPCM's
     /// bits a sample (2 to 5), the sample rate (5512, 11025, 22050 or
-    /// 44100) and stereo or mono. Phoenix's own, kept beside Animate's.
+    /// 44100) and stereo or mono. Phoenix's own, kept beside the file's.
     std::string soundCompression = "mp3";
     int soundBitRate = 64;
     int soundAdpcmBits = 4;
@@ -72,7 +72,7 @@ struct Settings
 Settings read(const std::string& xml, const std::string& name);
 
 /// \a xml with the current profile's settings set to \a settings and all
-/// else kept; a new file of Animate's form when \a xml is empty.
+/// else kept; a new file of the usual form when \a xml is empty.
 std::string write(const std::string& xml, const Settings& settings, const std::string& name);
 
 /// A format's file name: its own, or with default names \a name and the

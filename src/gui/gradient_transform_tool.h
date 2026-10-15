@@ -15,7 +15,7 @@ class Frame;
 class Shape;
 }
 
-/// Animate's Gradient Transform tool (F), in the free transform tool's slot:
+/// The Gradient Transform tool (F), in the free transform tool's slot:
 /// click a fill painted with a gradient or a bitmap and its handles show.
 ///
 /// - The center circle moves the fill.

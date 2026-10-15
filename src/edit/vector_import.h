@@ -46,7 +46,7 @@ struct Placement
     double a = 1.0, b = 0.0, c = 0.0, d = 1.0, tx = 0.0, ty = 0.0;
 };
 
-/// A gradient fill, as Animate's are: its stops, and the placement of the
+/// A gradient fill, as FLA files keep one: its stops, and the placement of the
 /// gradient's square (x and y from -819.2 to 819.2, the color running along
 /// x for a linear one and out from the middle for a radial one) on the
 /// stage.

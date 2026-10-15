@@ -171,7 +171,7 @@ TimelinesPanel::TimelinesPanel(Player* player, QWidget *parent)
     const int btnSize = 28;
     const int iconSize = 22;
 
-    // Frame, rate and time at the left, as Animate's timeline footer has.
+    // Frame, rate and time at the left of the timeline footer.
     const QString styleStatus = "QLabel { padding: 0 6px; }";
     _frameLabel = new QLabel("1", _header);
     _fpsLabel = new QLabel("24.00 fps", _header);
@@ -228,7 +228,7 @@ TimelinesPanel::TimelinesPanel(Player* player, QWidget *parent)
     connect(stepForwardBtn, &QPushButton::clicked, this, &TimelinesPanel::onStepForward);
     headerLayout->addWidget(stepForwardBtn);
 
-    // Onion skin, beside the transport as in Animate's timeline.
+    // Onion skin, beside the transport.
     headerLayout->addSpacing(16);
     _onionButton = new QPushButton(_header);
     _onionButton->setObjectName("timelineOnionSkin");
@@ -247,7 +247,7 @@ TimelinesPanel::TimelinesPanel(Player* player, QWidget *parent)
     });
     headerLayout->addWidget(_onionButton);
 
-    // Loop Playback, beside the onion skin as in Animate.
+    // Loop Playback, beside the onion skin.
     _loopButton = new QPushButton(_header);
     _loopButton->setObjectName("timelineLoop");
     _loopButton->setFixedSize(btnSize, btnSize);
@@ -497,7 +497,7 @@ void TimelinesPanel::onPlayStop()
     }
     if (!_player)
         return;
-    // From the end, play starts over from the first frame, as in Animate;
+    // From the end, play starts over from the first frame;
     // looping, from outside the range, at its start.
     const int last = _gridContainer->frameCount() - 1;
     if (_gridContainer->loopOn())
@@ -630,7 +630,7 @@ void TimelinesPanel::onTimerTick()
         return;
     }
     const int last = std::max(0, _gridContainer->frameCount() - 1);
-    // Playback stops on the last frame, as Animate's does without looping,
+    // Playback stops on the last frame when it is not looping,
     // once that frame has had its time.
     if (due > last)
     {
@@ -1014,8 +1014,8 @@ void TimelineGrid::mousePressEvent(QMouseEvent* event)
         return;
     }
 
-    // The row under the press is a layer, which becomes current as it
-    // does in Animate. Rows are the layers list's, lane for lane.
+    // The row under the press is a layer, which becomes current. Rows are
+    // the layers list's, lane for lane.
     emit layerPressed(_rows[row].timeline, _rows[row].layerIndex);
 
     // A right-click inside the selection keeps it for the menu.
@@ -1029,7 +1029,7 @@ void TimelineGrid::mousePressEvent(QMouseEvent* event)
     const fla::Layer* layer = _rows[row].layer;
 
     // Ctrl on a span's last frame takes hold of its end: dragging stretches
-    // or shortens the span, as in Animate.
+    // or shortens the span.
     if (layer && event->button() == Qt::LeftButton && (event->modifiers() & Qt::ControlModifier))
     {
         for (const fla::Frame* span : layer->frames)
@@ -1050,7 +1050,7 @@ void TimelineGrid::mousePressEvent(QMouseEvent* event)
     }
 
     // Pressing a keyframe that is already selected on its own picks it up
-    // to drag, as Animate does.
+    // to drag.
     bool onKeyframe = false;
     if (layer && event->button() == Qt::LeftButton)
     {
@@ -1069,8 +1069,8 @@ void TimelineGrid::mousePressEvent(QMouseEvent* event)
         return;
     }
 
-    // Pressing inside the selection picks the block up to drag, as in
-    // Animate. Let go where it was pressed and it was only a click.
+    // Pressing inside the selection picks the block up to drag. Let go
+    // where it was pressed and it was only a click.
     if (event->button() == Qt::LeftButton && insideSelection && !(event->modifiers() & Qt::ShiftModifier))
     {
         _movingBlock = true;
@@ -1241,7 +1241,7 @@ void TimelineGrid::mouseReleaseEvent(QMouseEvent* event)
             if (_moveTo != _moveFrom && _moveRow < static_cast<int>(_rows.size()))
             {
                 // The selection follows the keyframe to where it lands; with
-                // Alt the keyframe is copied there, as in Animate.
+                // Alt the keyframe is copied there.
                 _anchorFrame = _focusFrame = _moveTo;
                 if (event->modifiers() & Qt::AltModifier)
                 {
@@ -1277,7 +1277,7 @@ void TimelineGrid::paintEvent(QPaintEvent* event)
     const int margin = 1;
     const int cellStride = frameWidth + margin;
 
-    // Animate's frame colors: an empty keyframe span is white, a span with
+    // Frame colors: an empty keyframe span is white, a span with
     // content gray, a classic tween lilac and a shape tween green.
     const QColor background = theme::color("timeline.background");
     const QColor cellDark = theme::color("timeline.cell");
@@ -1290,7 +1290,7 @@ void TimelineGrid::paintEvent(QPaintEvent* event)
     const QColor motionObjectSpan = theme::color("frame.motionTween");
     const QColor poseSpan = theme::color("frame.pose");
     const QColor mark = theme::color("frame.mark");
-    // Animate's time head is blue.
+    // The time head is blue.
     const QColor playheadColor = theme::color("playhead");
     const auto faded = [&playheadColor](int alpha) {
         return QColor(playheadColor.red(), playheadColor.green(), playheadColor.blue(), alpha);
@@ -1345,7 +1345,7 @@ void TimelineGrid::paintEvent(QPaintEvent* event)
                 painter.fillRect(span, spanColor);
 
                 // A sound draws its waveform along the span, from where the
-                // frame starts it, as Animate does.
+                // frame starts it.
                 size_t soundIn = 0;
                 std::shared_ptr<const PcmBuffer> sound = _soundProvider ? _soundProvider(frame, soundIn) : nullptr;
                 if (sound && sound->frames() > soundIn)
@@ -1468,8 +1468,8 @@ void TimelineGrid::paintEvent(QPaintEvent* event)
                 if (motionObject || pose)
                 {
                     // A motion tween or a pose span has no arrow; its property
-                    // keyframes are small diamonds along it, as Animate marks
-                    // them, and its last frame a hollow one.
+                    // keyframes are small diamonds along it, and its last frame a
+                    // hollow one.
                     painter.setPen(QPen(mark, 1.0));
                     painter.setBrush(mark);
                     const auto diamond = [&](double cx, bool filled) {
@@ -1517,7 +1517,7 @@ void TimelineGrid::paintEvent(QPaintEvent* event)
 
     painter.setRenderHint(QPainter::Antialiasing, false);
 
-    // The selected frames, tinted as Animate tints them.
+    // The selected frames, tinted.
     if (_hasSelection && !_rows.empty())
     {
         const int top = std::min(_anchorRow, _focusRow);
@@ -1581,8 +1581,8 @@ void TimelineGrid::paintEvent(QPaintEvent* event)
         painter.drawRect(ghost.adjusted(1, 1, -1, -1));
     }
 
-    // The ruler, pinned to the top of what shows: Animate numbers frames
-    // from one and labels every fifth.
+    // The ruler, pinned to the top of what shows: frames are numbered
+    // from one and every fifth is labeled.
     const int rulerY = rulerTop();
     painter.save();
     painter.translate(0, rulerY);

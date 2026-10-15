@@ -82,7 +82,7 @@ double shaped(double (*in)(double), const std::string& kind, double t)
 
 double presetEase(const std::string& method, double t)
 {
-    // Animate's names: a curve (quad, cubic, quart, quint, sine, back, circ,
+    // The FLA's names: a curve (quad, cubic, quart, quint, sine, back, circ,
     // bounce, elastic) and a kind (In, Out, InOut).
     std::string curve;
     std::string kind;

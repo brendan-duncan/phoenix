@@ -18,7 +18,7 @@ class Frame;
 class Timeline;
 }
 
-/// Plays a document's sounds along with its timeline, as Animate does:
+/// Plays a document's sounds along with its timeline:
 ///
 /// - **Stream** sounds are tied to their frames. They play from the point
 ///   matching the frame shown, for as long as their span lasts, and a

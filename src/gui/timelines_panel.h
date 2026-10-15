@@ -358,7 +358,7 @@ private:
     QPushButton* _playButton;
     QPushButton* _onionButton = nullptr;
     QPushButton* _loopButton = nullptr;
-    /// Animate's timeline status: the frame shown, the frame rate and the
+    /// The timeline status: the frame shown, the frame rate and the
     /// time into the animation.
     class QLabel* _frameLabel = nullptr;
     class QLabel* _fpsLabel = nullptr;

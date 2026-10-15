@@ -39,7 +39,7 @@ struct MergeOptions
     bool keepStrokes = false;
 };
 
-/// Merges one shape into another, the way Animate's default drawing mode does.
+/// Merges one shape into another, as the default drawing mode does.
 ///
 /// Drawing over an existing shape does not stack a second object on top of it.
 /// The two become one: outlines cut each other where they cross, the newer fill

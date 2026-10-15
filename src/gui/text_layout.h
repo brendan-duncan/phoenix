@@ -15,7 +15,7 @@ class StaticText;
 struct TextRun;
 }
 
-/// Lays out and draws static text the way Flash does: a box with a two pixel
+/// Lays out and draws static text: a box with a two pixel
 /// gutter, lines broken at returns and, for a fixed-width box, wrapped at
 /// spaces; an auto-expanding box grows to fit. Every run keeps its own font
 /// and color, and the caret the text tool shows is placed from the same
@@ -58,7 +58,7 @@ struct Layout
     QRectF bounds;
 };
 
-/// The font a run asks for, resolved from Animate's face names (ArialMT,
+/// The font a run asks for, resolved from the FLA's face names (ArialMT,
 /// TimesNewRomanPS-BoldItalicMT) to an installed family, at the run's size
 /// in pixels.
 QFont fontFor(const fla::TextRun& run);
@@ -73,7 +73,7 @@ void setFontMapping(const QHash<QString, QString>& mapping);
 /// text whose face is a symbol's name and a star draws in its font.
 void setFontSymbols(const QHash<QString, QString>& fonts);
 
-/// Whether a face (as Animate names it) resolves to an installed family,
+/// Whether a face (as the FLA names it) resolves to an installed family,
 /// mapped or not.
 bool isInstalled(const QString& face);
 /// The family a face is drawn in.

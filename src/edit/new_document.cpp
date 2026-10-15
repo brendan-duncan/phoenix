@@ -8,7 +8,7 @@ namespace fla {
 
 namespace {
 
-/// What Animate writes for an ordinary keyframe. The value is a bit field the
+/// What FLA files carry for an ordinary keyframe. The value is a bit field the
 /// format never documents; carrying the same one through means a new document
 /// and a loaded one are indistinguishable to anything reading frames.
 constexpr int kNormalKeyMode = 9728;
@@ -26,7 +26,7 @@ FLADocument* createEmptyDocument(int width, int height, double frameRate)
     document->height = height;
     document->frameRate = frameRate;
 
-    // Animate puts the 3D vanishing point at the middle of the stage, so it
+    // The 3D vanishing point goes at the middle of the stage, so it
     // follows the size rather than keeping the model's own default.
     document->vanishingPoint3DX = width / 2;
     document->vanishingPoint3DY = height / 2;
@@ -46,7 +46,7 @@ FLADocument* createEmptyDocument(int width, int height, double frameRate)
 
     Layer* layer = new Layer(timeline);
     layer->name = "Layer_1";
-    // Cyan, which is the color Animate gives a document's first layer.
+    // Cyan, the color a document's first layer gets.
     layer->color[0] = 0;
     layer->color[1] = 255;
     layer->color[2] = 255;

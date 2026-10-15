@@ -234,7 +234,7 @@ TEST(psd_deep_cmyk_large_and_zip_documents_are_read)
         CHECK(image.layers[0].rgba[p * 4] == ramp[p]);
     CHECK(image.layers[0].blend == "add");
 
-    // A blend Animate has no like of is drawn as Normal, and said so.
+    // A blend the FLA has no like of is drawn as Normal, and said so.
     Spec odd{"Odd", 0, 0, 1, 1, 0, false, 255, {raw(1, 255), raw(1, 1), raw(1, 2), raw(1, 3)}};
     odd.blend = "hue ";
     image = fla::psd::read(document({odd}));

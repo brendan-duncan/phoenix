@@ -9,11 +9,12 @@ namespace fla {
 
 class DOMElement;
 
-/// Textured brushes, as Harmony's: a grain the paint takes on, as chalk
+/// Textured brushes: a grain the paint takes on, as chalk
 /// takes the tooth of the paper. A texture is a tile of coverage, 255 where
 /// the paint lies fully and 0 where it misses, repeated over the stage. A
 /// shape painted with one keeps the texture's name, scale and strength as
-/// Phoenix attributes, which Animate ignores: there the shape shows plain.
+/// Phoenix attributes, which other apps that open the FLA ignore: there the
+/// shape shows plain.
 /// Free of Qt.
 namespace texture {
 

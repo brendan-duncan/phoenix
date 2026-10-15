@@ -33,8 +33,7 @@ public:
         /// drag the fit around.
         double minimumSpacing = 0.5;
 
-        /// Straighten mode: fit straight segments rather than curves, the way
-        /// Animate's pencil does.
+        /// Straighten mode: fit straight segments rather than curves.
         bool straighten = false;
 
         /// Whether a sharp turn in the input becomes a corner anchor, with the

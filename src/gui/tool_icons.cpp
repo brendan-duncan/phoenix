@@ -566,7 +566,7 @@ void drawLasso(QPainter& painter)
 
 void drawText(QPainter& painter)
 {
-    // A capital T, as on Animate's button.
+    // A capital T.
     QFont font("Arial");
     font.setBold(true);
     font.setPixelSize(20);

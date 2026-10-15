@@ -35,11 +35,11 @@ struct RegionPick
     bool isEmpty() const { return kind == Kind::None; }
 };
 
-/// Takes a merge-drawn shape apart the way Animate's arrow tool selects it:
+/// Takes a merge-drawn shape apart the way the arrow tool selects it:
 /// by region rather than as a whole.
 ///
-/// Animate selects the fill or the stroke segment you click, not the shape it
-/// is part of. Phoenix keeps one shape per layer, so selecting a region means
+/// The arrow selects the fill or the stroke segment you click, not the shape
+/// it is part of. Phoenix keeps one shape per layer, so selecting a region means
 /// lifting it out as a shape of its own -- the piece -- and leaving the rest
 /// behind as the remainder. The piece floats, selected, exactly where it was,
 /// so nothing looks different until it is moved or deleted; letting go of it

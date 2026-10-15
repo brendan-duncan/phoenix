@@ -1,5 +1,5 @@
 // Element and its kinds: Instance, SymbolInstance, BitmapInstance, Text and
-// Shape. Transforms read and written as Animate's scale, rotation and skew,
+// Shape. Transforms read and written as JSFL's scale, rotation and skew,
 // color effects and filters.
 
 #include "extensions.h"
@@ -46,7 +46,7 @@ double radians(double degrees)
     return degrees * kPi / 180.0;
 }
 
-/// A matrix as Animate describes it: scale on each axis and the turn of
+/// A matrix as JSFL describes it: scale on each axis and the turn of
 /// each axis (equal for a plain rotation).
 struct Parts
 {

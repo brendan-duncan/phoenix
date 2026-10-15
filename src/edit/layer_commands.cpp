@@ -18,7 +18,7 @@ namespace fla {
 
 namespace {
 
-/// Animate's layer outline colors, handed out in turn as layers are added.
+/// The layer outline colors, handed out in turn as layers are added.
 const uint8_t kLayerColors[][3] = {
     {0x4F, 0xFF, 0x4F}, {0xFF, 0x4F, 0xFF}, {0x4F, 0xFF, 0xFF}, {0xFF, 0xFF, 0x4F},
     {0x4F, 0x4F, 0xFF}, {0xFF, 0x4F, 0x4F}, {0xFF, 0x99, 0x33}, {0x99, 0x33, 0xFF},
@@ -45,7 +45,7 @@ int longestLayer(const Timeline& timeline)
 /// any layer of that kind already carries, and at least the count plus one.
 std::string nextName(const Timeline& timeline, bool folder)
 {
-    // Animate names them Layer_1, Layer_2... (and folders Folder_1...).
+    // Named Layer_1, Layer_2... (and folders Folder_1...).
     const std::string prefix = folder ? "Folder_" : "Layer_";
     int highest = 0;
     int count = 0;

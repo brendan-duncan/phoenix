@@ -16,8 +16,7 @@
 namespace
 {
 
-/// The last type and registration chosen, remembered across documents the
-/// way Animate remembers them.
+/// The last type and registration chosen, remembered across documents.
 const char* kTypeSetting = "convertToSymbol/type";
 const char* kRegistrationColumnSetting = "convertToSymbol/registrationColumn";
 const char* kRegistrationRowSetting = "convertToSymbol/registrationRow";

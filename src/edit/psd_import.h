@@ -29,7 +29,7 @@ struct Layer
     /// 0 to 255, applied by whoever draws it.
     uint8_t opacity = 255;
     bool hidden = false;
-    /// The blend mode as Animate names it ("multiply", "screen"...), empty
+    /// The blend mode as the FLA names it ("multiply", "screen"...), empty
     /// for normal; and whether the layer was clipped to the one below.
     std::string blend;
     bool clipped = false;

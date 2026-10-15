@@ -45,7 +45,7 @@ public:
     int gridSpacingX = 18;
     int gridSpacingY = 18;
     int snapAlignBorderSpacing = 18;
-    /// Snap to Objects and Snap to Guides, which Animate keeps in the
+    /// Snap to Objects and Snap to Guides, which the FLA keeps in the
     /// document; both on unless the file says otherwise.
     bool objectsSnapTo = true;
     bool guidesSnapTo = true;
@@ -54,7 +54,7 @@ public:
     double vanishingPoint3DX = 400.0;
     double vanishingPoint3DY = 275.0;
     int nextSceneIdentifier = 2;
-    // Animate's defaults: it writes these only when they are off.
+    // The FLA's defaults: it stores these only when they are off.
     bool playOptionsPlayLoop = true;
     bool playOptionsPlayPages = true;
     bool playOptionsPlayFrameActions = true;
@@ -71,7 +71,7 @@ public:
     /// Parts of the document the reader does not model (sound items in the
     /// library, extended swatch lists, brush definitions, embedded fonts),
     /// kept as XML text so a save writes them back as read. A section
-    /// remembers whether it came before the timelines, as Animate orders
+    /// remembers whether it came before the timelines, as FLA files order
     /// them.
     struct RawSection
     {
@@ -133,7 +133,7 @@ public:
     {}
 
     /// The index in timelines of the scene shown and edited: the one
-    /// currentTimeline names, else the first. Animate shows one scene at a
+    /// currentTimeline names, else the first. Phoenix shows one scene at a
     /// time; the scenes play one after another.
     int currentSceneIndex() const;
 

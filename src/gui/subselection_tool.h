@@ -17,7 +17,7 @@ class Selection;
 class Shape;
 }
 
-/// Animate's subselection tool: show a shape's anchors and drag them.
+/// The subselection tool: show a shape's anchors and drag them.
 ///
 /// Selecting a shape with it reveals every anchor and handle on the shape's
 /// edges. Clicking an anchor selects it, shift-click adds to or removes from
@@ -160,6 +160,6 @@ private:
     bool _dragMoved = false;
 
     /// Alt-dragging a corner point pulls handles out of it, turning it into a
-    /// curve point. That is Animate's convert gesture with this tool.
+    /// curve point. That is this tool's convert gesture.
     bool _convertDrag = false;
 };

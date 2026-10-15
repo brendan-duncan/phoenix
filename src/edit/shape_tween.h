@@ -47,7 +47,7 @@ Shape* morphedShape(const MorphShape& morph, const Shape& from, const Shape& to,
     const Transform& documentToLocal);
 
 /// The morph a new shape tween stores, worked out from its keyframes' shapes
-/// as Animate does when a tween is created or a keyframe edited.
+/// when a tween is created or a keyframe edited.
 ///
 /// Each fill's outlines are chained from the edges with the fill on their
 /// left, and each stroke's runs from the edges carrying it. Outlines pair up
@@ -71,7 +71,7 @@ MorphShape* buildMorph(const Shape& from, const Shape& to, DOMElement* parent,
     const std::vector<ShapeHint>& hints = {});
 
 /// A shape tween's hints, kept on its first keyframe as a Phoenix
-/// attribute (Animate's own list of hints is not written: the morph Phoenix
+/// attribute (the FLA's own list of hints is not written: the morph Phoenix
 /// stores carries their effect), and setting them.
 std::vector<ShapeHint> hintsOf(const Frame& start);
 void setHints(std::vector<std::pair<std::string, std::string>>& attributes, const std::vector<ShapeHint>& hints);

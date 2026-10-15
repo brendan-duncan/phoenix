@@ -45,7 +45,7 @@ TEST(three_d_projection_turns_and_pushes_clips_in_perspective)
     const double scale = focal / (focal - 50.0);
     CHECK(near(side, 200.0 + (100.0 - 200.0) * scale, 150.0 + (100.0 - 150.0) * scale, 1.0e-6));
 
-    // Tilted back about the horizontal axis (negative, as in Flash: y down,
+    // Tilted back about the horizontal axis (negative, with y down and
     // z into the stage), the top recedes and narrows.
     fla::threed::Pose tilted;
     tilted.rotationX = -30.0;

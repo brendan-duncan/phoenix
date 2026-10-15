@@ -320,7 +320,7 @@ std::vector<int> RegionSplitter::connectedStrokes(int half) const
 
         // At either end, carry on only where exactly two pieces meet: a
         // corner that nothing else touches. Where three or more meet the run
-        // stops, as it does in Animate.
+        // stops.
         const HalfEdge& edge = halves[current];
         for (const int vertex : {edge.from, edge.to})
         {

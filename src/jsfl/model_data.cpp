@@ -1,7 +1,7 @@
 // Persistent data: named values scripts keep on elements, library items and
 // the document. Each is kept as the file keeps it, a persistentData child
 // holding a PD (name, type, value) for each, so it is saved with the
-// document in every format and read back as Animate wrote it.
+// document in every format and read back as the FLA stores it.
 
 #include "extensions.h"
 

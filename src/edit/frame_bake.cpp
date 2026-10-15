@@ -24,7 +24,7 @@ namespace {
 
 /// The symbol frame a graphic shows \a framesIn frames on, as it plays:
 /// on, back or round its loop. Forward loops keep counting past the end, as
-/// Animate's synced tweens leave them.
+/// synced tweens leave them.
 int playedOn(const SymbolInstance& instance, int framesIn)
 {
     if (instance.loopType != LoopType::LoopReverse && instance.loopType != LoopType::PlayOnceReverse &&

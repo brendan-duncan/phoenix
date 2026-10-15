@@ -8,7 +8,7 @@
 
 namespace {
 
-/// A node of an IKTree as Animate writes it, with its joint at x, y.
+/// A node of an IKTree as FLA files carry it, with its joint at x, y.
 std::string node(const char* tag, const char* bone, double x, double y, const std::string& children)
 {
     std::string xml = std::string("<") + tag + " name=\"n\" boneName=\"" + bone + "\"><worldMatrix><Matrix tx=\"" +

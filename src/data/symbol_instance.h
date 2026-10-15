@@ -19,7 +19,7 @@ public:
     /// The instance name scripts address it by; movie clips and buttons.
     std::string name;
     int firstFrame = 0;
-    /// The last frame a graphic plays to (Animate's Last), or -1 for the
+    /// The last frame a graphic plays to (the Last setting), or -1 for the
     /// symbol's end.
     int lastFrame = -1;
     SymbolType symbolType = SymbolType::Graphic;
@@ -27,7 +27,7 @@ public:
     ColorTransform colorTransform;
     /// The matrix the instance had when it was read, when the file gave it
     /// a 3D center point (centerPoint3DX/Y, kept among its attributes):
-    /// saving moves the point with the instance, as Animate keeps it, by
+    /// saving moves the point with the instance, as the FLA keeps it, by
     /// how far the instance has moved since.
     bool hasReadMatrix = false;
     Transform readMatrix;

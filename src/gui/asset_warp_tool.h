@@ -23,7 +23,7 @@ class SymbolInstance;
 /// The Asset Warp tool (Shift+W), for puppets: click the art to place a pin, drag
 /// a pin to bend the art around the others, Alt-click a pin (or select it
 /// and press Delete) to take it away. Each change is one undo step, kept on
-/// the instance as Animate keeps a puppet's pins.
+/// the instance as FLA files keep a puppet's pins.
 class AssetWarpTool : public Tool
 {
 public:

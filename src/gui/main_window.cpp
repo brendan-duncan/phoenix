@@ -438,7 +438,7 @@ MainWindow::MainWindow(const QString& initialFile, QWidget* parent, bool startup
         if (_motionEditor)
             _motionEditor->refresh();
         updateFramePicker();
-        // The Properties panel follows the selection the way Animate's does:
+        // The Properties panel follows the selection:
         // an object picked with a selecting tool shows its Object tab, while
         // a drawing tool keeps its own settings in view even though what it
         // just drew is selected; nothing selected shows the tool, or the
@@ -481,7 +481,7 @@ MainWindow::MainWindow(const QString& initialFile, QWidget* parent, bool startup
         }
     });
 
-    // Object snapping on by default, grid snapping off, matching Animate.
+    // Object snapping on by default, grid snapping off.
     _snapper.setObjectSnapEnabled(true);
     _phoenixView->setSnapper(&_snapper);
     // Paste follows what other windows and applications put on the clipboard.
@@ -543,7 +543,7 @@ MainWindow::MainWindow(const QString& initialFile, QWidget* parent, bool startup
     _eraserTool = std::make_unique<EraserTool>(_selection, stack, _drawingStyle);
     _paintBucketTool = std::make_unique<PaintBucketTool>(stack, _drawingStyle);
     _inkBottleTool = std::make_unique<InkBottleTool>(stack, _drawingStyle);
-    // Sampling hands over to the bucket or the bottle, as Animate does.
+    // Sampling hands over to the bucket or the bottle.
     _eyedropperTool = std::make_unique<EyedropperTool>(_drawingStyle, [this](bool stroke) {
         refreshStyleSwatches();
         QAction* next = stroke ? _inkBottleAction : _paintBucketAction;
@@ -728,7 +728,7 @@ void MainWindow::dropEvent(QDropEvent* event)
     event->acceptProposedAction();
 
     // Files dropped on the stage land where they were dropped; anywhere else
-    // in the window they go into the library, as Animate takes them.
+    // in the window they go into the library.
     if (_phoenixView)
     {
         const QPoint local = _phoenixView->mapFrom(this, event->position().toPoint());
@@ -1759,7 +1759,7 @@ void MainWindow::revertDocument()
 void MainWindow::createPanels()
 {
     // Align, Transform and Info, closed until asked for (Ctrl+K, Ctrl+T,
-    // Ctrl+I), in a group of their own as in Animate.
+    // Ctrl+I), in a group of their own.
     ArrangeLinks arrange;
     arrange.view = _phoenixView;
     arrange.selection = &_selection;
@@ -1802,7 +1802,7 @@ void MainWindow::createPanels()
         connect(_phoenixView, &PhoenixView::cursorMoved, _infoPanel, &InfoPanel::cursorMoved);
     }
 
-    // The Motion Editor, below the stage as in Animate, closed until asked.
+    // The Motion Editor, below the stage, closed until asked.
     MotionEditorLinks motionLinks;
     motionLinks.commands = [this]() { return &_editContext.commandStack(); };
     motionLinks.span = [this]() { return currentMotionSpan(); };
@@ -2136,7 +2136,7 @@ void MainWindow::createPanels()
         _palettesDock->hide();
     }
 
-    // The X-sheet, Harmony's view of the exposures, closed until asked.
+    // The X-sheet, a view of the exposures, closed until asked.
     if (!_xsheetDock)
     {
         XSheetLinks sheet;
@@ -2180,7 +2180,7 @@ void MainWindow::createPanels()
 
 void MainWindow::setupWindowMenu()
 {
-    // Animate's Window menu: every panel, ticked when open. Choosing an
+    // The Window menu: every panel, ticked when open. Choosing an
     // open panel that is in view closes it; one that is closed, or behind
     // another tab, comes to the front.
     QMenu* windowMenu = new QMenu("&Window", this);
@@ -2281,7 +2281,7 @@ void MainWindow::setupWindowMenu()
         windowMenu->addSeparator();
     }
     QAction* motionPresetsAction = windowMenu->addAction("Motion &Presets…");
-    motionPresetsAction->setStatusTip("Saved motions to put on an object, Animate's among them");
+    motionPresetsAction->setStatusTip("Saved motions to put on an object");
     connect(motionPresetsAction, &QAction::triggered, this, &MainWindow::showMotionPresets);
     QAction* brushesAction = windowMenu->addAction("Document &Brushes…");
     brushesAction->setStatusTip("The art and pattern brushes the document's strokes are drawn with");
@@ -2419,7 +2419,7 @@ void MainWindow::togglePanels()
 
 void MainWindow::newFile()
 {
-    // Animate's New Document dialog: a preset, or a size and frame rate.
+    // The New Document dialog: a preset, or a size and frame rate.
     NewDocumentDialog dialog(this);
     if (dialog.exec() != QDialog::Accepted)
         return;
@@ -2719,7 +2719,7 @@ void MainWindow::setupUI()
     centralWidget->setLayout(mainLayout);
     setCentralWidget(centralWidget);
 
-    // As in Animate, every panel docks: the panels down the right take the
+    // Every panel docks: the panels down the right take the
     // full height, the tools down the left, and the timeline sits under the
     // stage. A group of tabs drags as one by its title; a tab drags out on
     // its own.
@@ -3047,7 +3047,7 @@ void MainWindow::insertKeyframe(bool blank)
 {
     editFrames(blank ? "Insert Blank Keyframe" : "Insert Keyframe",
         [blank](fla::Layer& layer, int first, int last, std::vector<fla::Frame*>&) {
-            // One keyframe at each selected frame, as Animate makes them.
+            // One keyframe at each selected frame.
             for (int index = first; index <= last; ++index)
                 fla::timeline::insertKeyframe(layer, index, blank);
         });
@@ -4777,7 +4777,7 @@ void MainWindow::addLayer(bool folder)
     if (!timeline)
         return;
 
-    // Above the current layer, as Animate puts it; at the top otherwise.
+    // Above the current layer; at the top otherwise.
     int index = 0;
     fla::Timeline* currentTimeline = nullptr;
     int currentIndex = 0;
@@ -4802,7 +4802,7 @@ void MainWindow::deleteCurrentLayer()
 
 bool MainWindow::removeLayers(fla::Timeline* timeline, const std::vector<int>& indices, const char* name)
 {
-    // Animate keeps at least one layer that can hold frames.
+    // A timeline keeps at least one layer that can hold frames.
     const std::vector<int> going = fla::layers::withContents(*timeline, indices);
     int remaining = 0;
     for (size_t i = 0; i < timeline->layers.size(); ++i)
@@ -4959,7 +4959,7 @@ void MainWindow::renameLayer(const fla::Timeline* timeline, int layerIndex, cons
     if (after == layer->name)
         return;
 
-    // A typed name stops being automatic, so Animate will not renumber it.
+    // A typed name stops being automatic, so it is never renumbered.
     fla::CommandStack& stack = _editContext.commandStack();
     stack.beginMacro("Rename Layer");
     stack.push(fla::CommandPtr(new fla::SetPropertyCommand<std::string>(layer->name, layer->name, after, "Rename Layer")));
@@ -5169,8 +5169,8 @@ void MainWindow::setupMenus()
     editMenu->addAction(_undoAction);
 
     _redoAction = new QAction("&Redo", this);
-    // QKeySequence::Redo is Ctrl+Y on Windows; Ctrl+Shift+Z is what anyone
-    // coming from Animate will reach for, so accept both.
+    // QKeySequence::Redo is Ctrl+Y on Windows; Ctrl+Shift+Z is what many
+    // will reach for, so accept both.
     _redoAction->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_Y));
     connect(_redoAction, &QAction::triggered, this, &MainWindow::redo);
     editMenu->addAction(_redoAction);
@@ -5275,8 +5275,8 @@ void MainWindow::setupMenus()
             _phoenixView->update();
     });
 
-    // Modify menu, with Animate's keys.
-    // Insert: Animate's timeline commands, which also live on the frames'
+    // Modify menu.
+    // Insert: the timeline commands, which also live on the frames'
     // right-click menu.
     // Edit > Edit Symbols / Edit Document, and Edit in Place.
     editMenu->addSeparator();
@@ -5523,7 +5523,7 @@ void MainWindow::setupMenus()
 
     modifyMenu->addSeparator();
 
-    // Modify > Transform, with Animate's keys.
+    // Modify > Transform.
     _transformMenu = modifyMenu->addMenu("&Transform");
     const auto addTransform = [this](const QString& text, const QKeySequence& key, std::function<void()> act) {
         QAction* action = new QAction(text, this);
@@ -5574,7 +5574,7 @@ void MainWindow::setupMenus()
     splitAudioAction->setStatusTip("Cut the stream sound on the current layer at the playhead into two keyframes");
     connect(splitAudioAction, &QAction::triggered, this, &MainWindow::splitAudio);
 
-    // Modify > Shape, as Animate groups them.
+    // Modify > Shape.
     QMenu* shapeMenu = modifyMenu->addMenu("S&hape");
 
     // Shape hints, on the first keyframe of a shape tween.
@@ -5710,7 +5710,7 @@ void MainWindow::setupMenus()
     });
     viewMenu->addSeparator();
 
-    // Animate shows one scene at a time; these pick which.
+    // The stage shows one scene at a time; these pick which.
     QMenu* sceneMenu = viewMenu->addMenu("&Scene");
     connect(sceneMenu, &QMenu::aboutToShow, this, [this, sceneMenu]() {
         sceneMenu->clear();
@@ -5767,7 +5767,7 @@ void MainWindow::setupMenus()
     QMenu* onionMenu = viewMenu->addMenu("Onion Skin &Settings");
     connect(onionMenu, &QMenu::aboutToShow, this, [this, onionMenu]() { fillOnionMenu(onionMenu); });
 
-    // Sound plays with the timeline; Animate's Control > Mute Sounds.
+    // Sound plays with the timeline; Control > Mute Sounds silences it.
     QAction* muteAction = new QAction("&Mute Sounds", this);
     muteAction->setCheckable(true);
     muteAction->setShortcut(QKeySequence(Qt::CTRL | Qt::ALT | Qt::Key_M));
@@ -5819,7 +5819,7 @@ void MainWindow::setupMenus()
     snapGuidesAction->setShortcut(QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_Semicolon));
     connect(snapGuidesAction, &QAction::toggled, this, [this](bool on) {
         _snapper.setGuideSnapEnabled(on);
-        // A setting of the document, as in Animate, saved with it.
+        // A setting of the document, saved with it.
         if (_flaDocument && _flaDocument->document)
             _flaDocument->document->guidesSnapTo = on;
     });
@@ -5898,7 +5898,7 @@ void MainWindow::setupMenus()
 
     viewMenu->addSeparator();
 
-    // Animate's View menu: Zoom In and Out step through the magnification
+    // The View menu: Zoom In and Out step through the magnification
     // presets, and the presets sit in their own submenu with the same keys.
     QAction* zoomInAction = new QAction("Zoom &In", this);
     zoomInAction->setShortcuts({QKeySequence(Qt::CTRL | Qt::Key_Equal),
@@ -5970,7 +5970,7 @@ void MainWindow::setupMenus()
     QAction* showBoundsAction = new QAction("Show Bounding Boxes", this);
     showBoundsAction->setCheckable(true);
     showBoundsAction->setChecked(false);
-    // B belongs to the brush, as in Animate; the debug toggle moves aside.
+    // B belongs to the brush; the debug toggle moves aside.
     showBoundsAction->setShortcut(QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_B));
     showBoundsAction->setStatusTip("Show element bounding boxes used for culling (Green=rendered, Red=culled, Blue=visible area)");
     connect(showBoundsAction, &QAction::toggled, _phoenixView, &PhoenixView::setShowBounds);
@@ -6185,13 +6185,13 @@ void MainWindow::setupMenus()
             [this]() { chooseTool(_rotationTool.get()); }, safeZonesAction, _breadcrumbRow));
 
     // Help menu
-    // Control menu: playback, with Animate's keys. They act while the stage
+    // Control menu: playback. They act while the stage
     // or the timeline has the focus, so Enter in a field stays the field's.
     QMenu* controlMenu = menuBar->addMenu("&Control");
     // Test Movie: the scene played with its scripts, its buttons clickable.
     QAction* testMovieAction = new QAction("&Test Movie", this);
     testMovieAction->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_Return));
-    testMovieAction->setStatusTip("Play the scene as Flash Player would, running its ActionScript, so its buttons can be clicked");
+    testMovieAction->setStatusTip("Play the scene with its ActionScript running, so its buttons can be clicked");
     connect(testMovieAction, &QAction::triggered, this, &MainWindow::testMovie);
     controlMenu->addAction(testMovieAction);
     controlMenu->addSeparator();
@@ -6476,7 +6476,7 @@ bool MainWindow::writeDocumentFile(const fla::Document& document, const QString&
     else
     {
         // Anything that is not a .fla is written as an uncompressed XFL folder,
-        // which Animate opens just as happily and which stays readable on disk.
+        // which other apps open just as happily and which stays readable on disk.
         fla::XFLFolderWriter writer;
         if (!writer.write(document, filePath.toStdString()))
             error = QString::fromStdString(writer.errorString());
@@ -7590,7 +7590,7 @@ bool MainWindow::publishFiles(QStringList& written, QStringList& problems)
     const QSize size = settings.matchMovie || settings.width <= 0 || settings.height <= 0
         ? QSize(std::max(1, document->width), std::max(1, document->height))
         : QSize(settings.width, settings.height);
-    // Still images show the frame labeled #Static, as in Animate, or the
+    // Still images show the frame labeled #Static, or the
     // first.
     int still = 0;
     if (const fla::Timeline* scene = document->currentScene())
@@ -8216,7 +8216,7 @@ void MainWindow::restoreLayout()
 
 namespace {
 
-/// The workspaces Phoenix comes with, as Animate's.
+/// The workspaces Phoenix comes with.
 const QStringList kBuiltInWorkspaces = {"Essentials", "Animator", "Designer", "Classic"};
 
 QString workspaceKey(const QString& name)
@@ -8387,7 +8387,7 @@ void MainWindow::applyBuiltInWorkspace(const QString& name)
     }
     else if (name == "Classic")
     {
-        // Flash's classic arrangement: the timeline over the stage, the
+        // The classic arrangement: the timeline over the stage, the
         // tools down the right beside Properties and the Library.
         addDockWidget(Qt::TopDockWidgetArea, _timelineDock);
         removeDockWidget(_toolsDock);
@@ -8715,7 +8715,7 @@ void MainWindow::updateEditState()
     if (_undoAction)
     {
         _undoAction->setEnabled(stack.canUndo());
-        // Name the specific edit, the way Animate does: "Undo Draw Rectangle".
+        // Name the specific edit: "Undo Draw Rectangle".
         const QString name = QString::fromStdString(stack.undoName());
         _undoAction->setText(name.isEmpty() ? QString("&Undo") : QString("&Undo %1").arg(name));
     }
@@ -8781,7 +8781,7 @@ bool MainWindow::confirmDiscardChanges()
 
 void MainWindow::setupToolBar()
 {
-    // Animate's Tools panel: a dock down the left of the stage, the tools
+    // The Tools panel: a dock down the left of the stage, the tools
     // in slots, a slot with hidden siblings opening them on a long press.
     // It docks to either side or floats, in one column or two, and its
     // slots can be rearranged (Edit Toolbar).
@@ -8858,7 +8858,7 @@ void MainWindow::setupToolBar()
     addSlot({makeTool(ToolIcons::Tool::Subselection, "Subselection", Qt::Key_A,
         "Click a path to show its anchors, then drag anchors and handles. Shift-click adds.",
         [this]() -> Tool* { return _subselectionTool.get(); })});
-    // Animate's free transform slot: Free Transform and Gradient Transform.
+    // The free transform slot: Free Transform and Gradient Transform.
     addSlot({
         makeTool(ToolIcons::Tool::FreeTransform, "Free Transform", Qt::Key_Q,
             "Scale, rotate and skew the selection by its handles.",
@@ -8867,7 +8867,7 @@ void MainWindow::setupToolBar()
             "Click a gradient or bitmap fill, then drag its handles to move, scale and turn it.",
             [this]() -> Tool* { return _gradientTransformTool.get(); }),
     });
-    // Animate's lasso slot: the Lasso, the Polygon tool and the Magic Wand.
+    // The lasso slot: the Lasso, the Polygon tool and the Magic Wand.
     addSlot({
         makeTool(ToolIcons::Tool::Lasso, "Lasso", Qt::Key_L,
             "Draw a loop round the objects to select. Shift adds to the selection.",
@@ -8896,7 +8896,7 @@ void MainWindow::setupToolBar()
             "select it and press Delete, to take it away.",
             [this]() -> Tool* { return _assetWarpTool.get(); }),
     });
-    // The 3D tools share a slot, as in Animate.
+    // The 3D tools share a slot.
     addSlot({
         makeTool(ToolIcons::Tool::Rotate3D, "3D Rotation", Qt::Key_W,
             "Drag a movie clip across to turn it about its vertical axis, up and down to tip it back or "
@@ -8910,9 +8910,9 @@ void MainWindow::setupToolBar()
 
     addLine();
 
-    // P for the pen, as in Animate. B is already the bounding-box toggle, and a
+    // P for the pen. B is already the bounding-box toggle, and a
     // clash leaves Qt firing neither.
-    // Animate's pen slot: the Pen and the anchor point tools.
+    // The pen slot: the Pen and the anchor point tools.
     addSlot({
         makeTool(ToolIcons::Tool::Pen, "Pen", Qt::Key_P,
             "Click for a corner point, drag for a smooth one. Alt-drag breaks the tangent, "
@@ -8965,8 +8965,7 @@ void MainWindow::setupToolBar()
             "in the Properties panel.",
             [this]() -> Tool* { return _paintBrushTool.get(); }),
     });
-    // The Brush, Nib and Ink brushes share a slot; Shift+B is the Brush's, as
-    // it is the brush Animate gives B.
+    // The Brush, Nib and Ink brushes share a slot; Shift+B is the Brush's.
     addSlot({
         makeTool(ToolIcons::Tool::FluidBrush, "Brush", Qt::SHIFT | Qt::Key_B,
             "Paint a fill whose width follows the pen's pressure and speed, with tapered ends "
@@ -9000,7 +8999,7 @@ void MainWindow::setupToolBar()
 
     addLine();
 
-    // Animate's hand slot: the Hand, the Rotation tool and the Time Scrub
+    // The hand slot: the Hand, the Rotation tool and the Time Scrub
     // tool.
     addSlot({
         makeTool(ToolIcons::Tool::Hand, "Hand", Qt::Key_H,
@@ -9023,8 +9022,7 @@ void MainWindow::setupToolBar()
         [this]() -> Tool* { return _zoomTool.get(); })});
 
     // The tools are all known: the default layout, then the one kept.
-    // JSFL tools from the Tools folder, in a slot of their own at the end,
-    // as Animate adds them to its Tools panel.
+    // JSFL tools from the Tools folder, in a slot of their own at the end.
     {
         std::vector<QAction*> scriptActions;
         const QDir folder(QDir(ScriptRunner::configFolder()).filePath("Tools"));
@@ -9076,7 +9074,7 @@ void MainWindow::setupToolBar()
     const auto addExtraLine = [&extras]() { extras << nullptr; };
 
     // Black and White, and Swap Colors: small, side by side, above the
-    // swatches as in Animate's toolbar.
+    // swatches.
     QWidget* colorButtons = new QWidget(toolBar);
     QHBoxLayout* colorButtonsLayout = new QHBoxLayout(colorButtons);
     colorButtonsLayout->setContentsMargins(0, 0, 0, 0);
@@ -9145,7 +9143,7 @@ void MainWindow::setupToolBar()
     colorButtonsLayout->addWidget(swap);
     addExtra(colorButtons);
 
-    // The stroke and fill colors, under the tools as in Animate's toolbox:
+    // The stroke and fill colors, under the tools:
     // the stroke drawn as an outline, the fill solid, so the two never
     // read as each other.
     _toolboxStrokeSwatch = new QToolButton(toolBar);
@@ -9296,7 +9294,7 @@ void MainWindow::setupPropertiesPanel()
     dock->setMinimumWidth(300);
     addDockWidget(Qt::RightDockWidgetArea, dock);
 
-    // The Library sits in a tab beside Properties, as in Animate.
+    // The Library sits in a tab beside Properties.
     QDockWidget* libraryDock = new QDockWidget("Library", this);
     libraryDock->setObjectName("libraryDock");
     libraryDock->setAllowedAreas(Qt::RightDockWidgetArea | Qt::LeftDockWidgetArea);
@@ -9334,7 +9332,7 @@ void MainWindow::setupPropertiesPanel()
     });
     connect(_framePickerDock, &QDockWidget::visibilityChanged, this, [this](bool) { updateFramePicker(); });
 
-    // Color and Swatches, in the same group, as Animate's workspace has them.
+    // Color and Swatches, in the same group.
     _colorDock = new QDockWidget("Color", this);
     _colorDock->setObjectName("colorDock");
     _colorDock->setAllowedAreas(Qt::AllDockWidgetAreas);
@@ -9708,7 +9706,7 @@ void MainWindow::setupPropertiesPanel()
                 return;
             fla::Document& document = *_flaDocument->document;
             // Font symbols go first; text set in one draws in its font's
-            // name, as Animate leaves it.
+            // name.
             QStringList names = chosen;
             std::vector<fla::fonts::FontItem> fonts = fla::fonts::itemsOf(document);
             const size_t before = fonts.size();
@@ -9759,7 +9757,7 @@ void MainWindow::setupPropertiesPanel()
                         QString("%1 is in use, so it cannot be deleted.").arg(kept.join(", ")));
                 return;
             }
-            // Animate asks before taking instances with the symbols.
+            // Ask before taking instances with the symbols.
             if (instances > 0)
             {
                 const QString what = symbols.size() == 1 ? QString::fromStdString(symbols.front()->name)
@@ -9974,7 +9972,7 @@ void MainWindow::setupPropertiesPanel()
             _timelineView->update();
     });
 
-    // Picking a tool shows its options, as Animate does.
+    // Picking a tool shows its options.
     connect(_phoenixView, &PhoenixView::activeToolChanged, this, [this](Tool* tool) {
         _propertiesPanel->setActiveTool(tool, iconForTool(tool));
         _propertiesPanel->setTab(PropertiesPanel::Tab::Tool);
@@ -9983,7 +9981,7 @@ void MainWindow::setupPropertiesPanel()
     // The frame shown and the current layer decide what the Frame tab shows.
     // The stage lets go of the selection when the playhead moves (it hears
     // the signal first), so with nothing left selected the frame is what
-    // the panel shows, as Animate does when a frame is clicked.
+    // the panel shows, as when a frame is clicked.
     connect(_player, &Player::currentFrameChanged, this, [this](int) {
         // Rebuilding every tab on every frame of playback costs more than
         // the frame: the panel catches up when playback stops.
@@ -10080,7 +10078,7 @@ void MainWindow::placeLibraryItem(const QString& kind, const QString& droppedNam
     if (!element)
         return;
 
-    // Centered on the drop, as Animate places a dragged item.
+    // Centered on the drop.
     const QRectF bounds = _phoenixView->elementBounds(element);
     const QPointF center = bounds.isValid() ? bounds.center() : QPointF();
     element->transform.tx = position.x() - center.x();
@@ -10116,7 +10114,7 @@ void MainWindow::importToStage()
         return;
     settings.setValue("importFolder", QFileInfo(paths.front()).absolutePath());
 
-    // One numbered image of a sequence offers the rest, as Animate asks.
+    // One numbered image of a sequence offers the rest.
     if (paths.size() == 1 && MediaImport::isImage(paths.front()))
     {
         const QStringList sequence = MediaImport::sequenceOf(paths.front());
@@ -10176,7 +10174,7 @@ void MainWindow::importVideo()
     if (ffmpeg.isEmpty())
         return;
 
-    // The choices Animate's wizard offers that matter for a reference.
+    // The video import choices that matter for a reference.
     QDialog options(this);
     options.setWindowTitle("Import Video");
     QLabel* about = new QLabel(QString("%1 goes on a guide layer of its own, a still for each frame at %2 fps, "
@@ -10498,7 +10496,7 @@ void MainWindow::importArtwork(const QString& path, bool toStage, const QPointF*
                     }
                     else if (!source.group && !layer->frames.empty())
                     {
-                        // Animate blends movie clips only: the layer's bitmap
+                        // Blends apply to movie clips only: the layer's bitmap
                         // goes in one, which takes the blend.
                         if (!document->symbolList)
                             document->symbolList = new fla::SymbolList(document);
@@ -10927,7 +10925,7 @@ void MainWindow::attachSoundTo(fla::Layer* layer, int at, const QString& name)
                 frame = fla::timeline::insertKeyframe(*layer, at, true);
             if (!frame)
                 return;
-            // A sound replaces whatever the keyframe played, with Animate's
+            // A sound replaces whatever the keyframe played, with the
             // defaults: an event sound, played once.
             static const char* const settings[] = {"soundName", "soundSync", "inPoint44", "outPoint44",
                 "soundLoop", "soundLoopMode", "soundZoomLevel", "soundEffect"};
@@ -11029,7 +11027,7 @@ void MainWindow::rebuildBreadcrumb()
 
     const int depth = _phoenixView->scopeDepth();
 
-    // Back out one level, as Animate's edit bar arrow does.
+    // Back out one level with the edit bar's arrow.
     QToolButton* back = new QToolButton(_breadcrumb);
     back->setText(QString::fromUtf8("\u2190"));
     back->setAutoRaise(true);
@@ -11438,7 +11436,7 @@ void MainWindow::tidySelectedShapes(const char* name,
 
 void MainWindow::smoothSelection()
 {
-    // Animate's Smooth is a fixed, gentle amount each time it is applied.
+    // Smooth is a fixed, gentle amount each time it is applied.
     tidySelectedShapes("Smooth", [](fla::EditablePath& path) {
         fla::smoothPath(path, 0.5);
     });
@@ -11603,7 +11601,7 @@ void MainWindow::convertLinesToFillsSelection()
 
 namespace {
 
-/// Animate's Expand Fill and Soften Fill Edges dialogs: a distance, for
+/// The Expand Fill and Soften Fill Edges dialogs: a distance, for
 /// softening a number of steps, and whether to go outward or inward.
 bool askFillOffset(QWidget* parent, const QString& title, bool withSteps,
     double& distance, int& steps, bool& inset)
@@ -11660,7 +11658,7 @@ bool askFillOffset(QWidget* parent, const QString& title, bool withSteps,
 
 void MainWindow::expandFillSelection()
 {
-    // The last settings are offered again, as Animate does.
+    // The last settings are offered again.
     static double distance = 4.0;
     static bool inset = false;
     int steps = 1;
@@ -11716,9 +11714,9 @@ void MainWindow::convertToSymbol()
         return;
 
     // A region lifted out of a shape is converted as it is, like a selected
-    // fill in Animate; flushing it would merge it back into its source first.
+    // fill; flushing it would merge it back into its source first.
 
-    // The first name not already in the library, as Animate numbers them,
+    // The first name not already in the library, numbered,
     // offered in the dialog.
     fla::Document* document = _flaDocument->document;
     std::string symbolName;
@@ -11735,7 +11733,7 @@ void MainWindow::convertToSymbol()
         if (dialog.exec() != QDialog::Accepted)
             return;
 
-        // The name has to be one the library does not have; Animate refuses
+        // The name has to be one the library does not have; Phoenix refuses
         // a clash rather than renaming behind the user's back.
         symbolName = dialog.symbolName().toStdString();
         if (symbolName.empty())
@@ -12316,7 +12314,7 @@ void MainWindow::bitmapProperties(const QString& name)
     QCheckBox* smoothing = new QCheckBox("Allow smoothing", &dialog);
     smoothing->setChecked(bitmap->allowSmoothing);
     form->addRow(QString(), smoothing);
-    // How it is compressed when published: kept for that, as Animate keeps it.
+    // How it is compressed when published: kept for that.
     std::string compression = "photo";
     for (const auto& attribute : bitmap->extraAttributes)
         if (attribute.first == "compressionType" || attribute.first == "originalCompressionType")
@@ -12715,7 +12713,7 @@ fla::SymbolInstance* MainWindow::makePuppet(fla::Element* art, fla::Frame* frame
     fla::Document* document = _flaDocument ? _flaDocument->document : nullptr;
     if (!document || !art || !frame || !_phoenixView || art->parent != frame)
         return nullptr;
-    // As Animate makes one: the art in a graphic symbol (WarpedAsset_n), in
+    // As the FLA stores one: the art in a graphic symbol (WarpedAsset_n), in
     // a puppet symbol (PuppetShape_n) whose first frame is that graphic,
     // placed where the art was. The pins go on the instance.
     const auto freeName = [document](const std::string& base) {
@@ -13383,8 +13381,8 @@ void MainWindow::swapSymbol()
     }
     names.sort(Qt::CaseInsensitive);
 
-    // A duplicate made in the dialog stays, whether or not it is chosen, as
-    // in Animate; it is its own undo step.
+    // A duplicate made in the dialog stays, whether or not it is chosen;
+    // it is its own undo step.
     SwapSymbolDialog dialog(names, QString::fromStdString(instances.front()->libraryItemName),
         [this](const QString& name, const QSize& size) {
             return _phoenixView ? _phoenixView->libraryPreview("symbol", name, size) : QImage();
@@ -13481,7 +13479,7 @@ void MainWindow::transformSelection(const char* name, const QTransform& change)
     if (elements.empty() || !bounds.isValid())
         return;
 
-    // About the middle of the selection, as Animate turns and flips it.
+    // About the middle of the selection.
     const QPointF c = bounds.center();
     const QTransform about = QTransform::fromTranslate(-c.x(), -c.y()) * change * QTransform::fromTranslate(c.x(), c.y());
     fla::CommandStack& stack = _editContext.commandStack();
@@ -13590,7 +13588,7 @@ void MainWindow::newSymbol()
     if (dialog.exec() != QDialog::Accepted)
         return;
     std::string name = dialog.symbolName().trimmed().toStdString();
-    // Into the library folder selected, as Animate puts a new symbol.
+    // Into the library folder selected.
     const QString folder = _libraryPanel ? _libraryPanel->currentFolder() : QString();
     if (!folder.isEmpty() && name.find('/') == std::string::npos && !name.empty())
         name = folder.toStdString() + "/" + name;
@@ -13603,7 +13601,7 @@ void MainWindow::newSymbol()
     if (!document->symbolList)
         document->symbolList = new fla::SymbolList(document);
 
-    // One layer with one empty keyframe, as Animate makes it.
+    // One layer with one empty keyframe.
     auto* symbol = new fla::Symbol(document->symbolList);
     symbol->name = name;
     symbol->href = name + ".xml";
@@ -13721,7 +13719,7 @@ void MainWindow::showOnionMenu(const QPoint& globalPos)
 void MainWindow::fillOnionMenu(QMenu* menu)
 {
     menu->clear();
-    // The range, as Animate's presets give it, or as dragged.
+    // The range, as the presets give it, or as dragged.
     for (const int span : {1, 2, 5})
     {
         QAction* action = menu->addAction(QString("Onion %1").arg(span));
@@ -13934,7 +13932,7 @@ void MainWindow::distributeToLayers()
     fla::CommandStack& stack = _editContext.commandStack();
     stack.beginMacro("Distribute to Layers");
     // The topmost object gets the layer just under the current one, the next
-    // the one under that, as Animate stacks them.
+    // the one under that.
     int at = current + 1;
     for (auto it = elements.rbegin(); it != elements.rend(); ++it)
     {
@@ -13944,7 +13942,7 @@ void MainWindow::distributeToLayers()
         for (fla::Frame* empty : layer->frames)
             delete empty;
         layer->frames.clear();
-        // Named for the symbol, as Animate names them, else numbered.
+        // Named for the symbol, else numbered.
         if (element->elementType() == fla::Element::Type::SymbolInstance)
         {
             const auto* instance = static_cast<const fla::SymbolInstance*>(element);

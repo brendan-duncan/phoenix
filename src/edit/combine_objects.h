@@ -7,7 +7,7 @@ namespace fla {
 
 class Shape;
 
-/// Modify > Combine Objects, as Animate does it to drawing objects.
+/// Modify > Combine Objects, on drawing objects.
 namespace combine {
 
 enum class Operation

@@ -78,7 +78,7 @@ struct Affine
     }
 };
 
-/// The turn, skew and scale part of a state, as Flash builds a matrix:
+/// The turn, skew and scale part of a state, as a matrix:
 /// the x axis turned by skewY + rotation and the y axis by skewX + rotation,
 /// each scaled.
 Affine linearPart(const MotionState& state)
@@ -757,7 +757,7 @@ bool addKeys(std::string& xml, double time)
 
 namespace {
 
-/// The tween's properties, the container Animate files each under, and the
+/// The tween's properties, the container the FLA files each under, and the
 /// state's value of each.
 struct PropertySlot
 {
@@ -880,7 +880,7 @@ std::string create(const MotionState& start, int frames, double frameRate, doubl
         tinyxml2::XMLElement* property = newProperty(document, slot.id);
         property->InsertEndChild(plainKey(document, 0.0, start.*slot.field));
         containerOf(head, slot.container)->InsertEndChild(property);
-        // Animate keeps the depth among the basic motion, after the turn.
+        // The FLA keeps the depth among the basic motion, after the turn.
         if (std::strcmp(slot.id, "Rotation_Z") == 0)
         {
             tinyxml2::XMLElement* depth = newProperty(document, "Depth");

@@ -50,7 +50,7 @@ private:
     QString folderAt(const QPoint& position) const;
 };
 
-/// Animate's Library panel: the document's symbols, bitmaps and sounds in
+/// The Library panel: the document's symbols, bitmaps and sounds in
 /// their folders, with a count, the kind of each, how many times it is
 /// used and the class a symbol is exported as. A search field above the
 /// list narrows it by name. Dragging an item to
@@ -86,7 +86,7 @@ public:
     void refreshIfStale();
 
     /// Selects every item the document does not need (see
-    /// fla::library::usedItems), as Animate's Select Unused Items does.
+    /// fla::library::usedItems): Select Unused Items.
     void selectUnused();
 
     /// The folder new symbols go into: the folder selected, or the one

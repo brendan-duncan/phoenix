@@ -4,7 +4,7 @@
 
 /// The stage cursors, drawn rather than loaded.
 ///
-/// Animate tells the user what a click will do through the cursor: the arrow
+/// The cursor tells the user what a click will do: the arrow
 /// grows a small box over something it can move, a corner or an arc over an
 /// edge it can bend; the pen carries an x before a path starts, an o when a
 /// click would close it, a + or - over a segment or an anchor. These are small

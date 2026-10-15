@@ -18,7 +18,7 @@ class Element;
 class Selection;
 }
 
-/// Animate's arrow tool.
+/// The arrow tool.
 ///
 /// Click selects the topmost object, shift-click adds or removes, dragging an
 /// object moves it, dragging empty stage sweeps out a marquee, and clicking
@@ -27,8 +27,8 @@ class Selection;
 /// outline makes a new corner. Shift constrains a move to 45 degree steps and
 /// alt-drag moves a copy.
 ///
-/// Scaling, rotating and skewing live in FreeTransformTool, the same split
-/// Animate makes between its arrow and free transform tools.
+/// Scaling, rotating and skewing live in FreeTransformTool, which keeps the
+/// arrow and free transform tools apart.
 class SelectionTool : public Tool
 {
 public:
@@ -144,7 +144,7 @@ private:
     /// What the arrow is over, so the cursor can say what a press would do.
     Cursors::Kind _hoverKind = Cursors::Kind::Arrow;
 
-    /// The snap ring: Animate draws a small ring at the grab point while
+    /// The snap ring: a small ring is drawn at the grab point while
     /// snapping is on, which grows when the drag locks onto something.
     bool _snapped = false;
     QPointF _snapRingPos;

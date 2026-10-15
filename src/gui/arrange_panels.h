@@ -33,7 +33,7 @@ struct ArrangeLinks
     std::function<void()> duplicate;
 };
 
-/// Animate's Align panel (Ctrl+K): line the selection up by an edge or its
+/// The Align panel (Ctrl+K): line the selection up by an edge or its
 /// middle, spread it out evenly, give it one width or height, to each other
 /// or to the stage.
 class AlignPanel : public QWidget
@@ -62,7 +62,7 @@ private:
     QCheckBox* _toStage = nullptr;
 };
 
-/// Animate's Transform panel (Ctrl+T): the selection's scale, rotation and
+/// The Transform panel (Ctrl+T): the selection's scale, rotation and
 /// skew as numbers, set about its transformation point.
 class TransformPanel : public QWidget
 {
@@ -89,7 +89,7 @@ private:
     bool _updating = false;
 };
 
-/// Animate's Info panel (Ctrl+I): the selection's size and place, and where
+/// The Info panel (Ctrl+I): the selection's size and place, and where
 /// the cursor is over the stage with the color under it.
 class InfoPanel : public QWidget
 {

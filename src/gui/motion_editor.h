@@ -87,7 +87,7 @@ private:
     int _dragging = 0;
 };
 
-/// Animate's Motion Editor: the property curves of the selected (or current)
+/// The Motion Editor: the property curves of the selected (or current)
 /// object motion tween, one at a time, with their keyframes and eases.
 class MotionEditorPanel : public QWidget
 {

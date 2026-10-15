@@ -115,7 +115,7 @@ void collect(const tinyxml2::XMLElement* node, const Point& joint, double frame,
 /// the art follows the eased time. A simple quadratic ease of strength s
 /// (0 to 100) mixes linear time with its square, so a positive strength
 /// starts slowly; a negative one, its mirror, ends slowly. Checked against
-/// the shapes Animate stores for every frame of ik_poses.fla.
+/// the shapes ik_poses.fla stores for every frame.
 double easedEntry(const tinyxml2::XMLElement* tree, int frame)
 {
     const tinyxml2::XMLElement* states = tree->FirstChildElement("states");

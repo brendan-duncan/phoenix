@@ -9,10 +9,10 @@ class Document;
 class Symbol;
 
 /// Linked shared assets: a symbol in a shot file kept in step with the
-/// same symbol in a master file (a character rig, a prop), as Animate's
-/// shared library items are. The link is Animate's own: the symbol's
-/// sourceFlashFilepath and sourceLibraryItemHRef, so Animate's Update
-/// works on the same files. What is written is still an ordinary embedded
+/// same symbol in a master file (a character rig, a prop), as shared
+/// library items are. The link is the FLA's own: the symbol's
+/// sourceFlashFilepath and sourceLibraryItemHRef, so other apps that
+/// update shared items work on the same files. What is written is still an ordinary embedded
 /// symbol. Free of Qt.
 namespace links {
 

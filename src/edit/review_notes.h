@@ -12,8 +12,8 @@ class Timeline;
 
 /// Review notes: written notes on frames, and whatever a reviewer draws,
 /// kept on a guide layer of their own ("Review Notes") at the top of the
-/// timeline. A guide layer never exports, from Phoenix or from Animate,
-/// so notes travel with the file and never reach the picture. Free of Qt.
+/// timeline. A guide layer never exports, from Phoenix or from any other
+/// app that opens the FLA, so notes travel with the file and never reach the picture. Free of Qt.
 namespace review {
 
 struct Note

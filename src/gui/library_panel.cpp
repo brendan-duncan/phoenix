@@ -38,7 +38,7 @@ namespace {
 constexpr int KindRole = Qt::UserRole;
 constexpr int NameRole = Qt::UserRole + 1;
 
-/// The columns, as Animate's library has them.
+/// The library's columns.
 enum Column
 {
     NameColumn,
@@ -98,7 +98,7 @@ QIcon folderIcon()
 QIcon symbolIcon(fla::SymbolType type)
 {
     return glyph([type](QPainter& painter) {
-        // Animate marks a movie clip with a reel, a graphic with shapes and a
+        // A movie clip is marked with a reel, a graphic with shapes and a
         // button with a pointer; a simple glyph for each.
         painter.setPen(QPen(ink(), 1.2));
         painter.setBrush(Qt::NoBrush);
@@ -146,7 +146,7 @@ QIcon bitmapIcon()
 
 QIcon videoIcon()
 {
-    // A film frame with its sprocket holes, as Animate marks a video.
+    // A film frame with its sprocket holes, which marks a video.
     return glyph([](QPainter& painter) {
         painter.setPen(Qt::NoPen);
         painter.setBrush(ink());
@@ -179,7 +179,7 @@ QIcon fontIcon()
 
 QIcon soundIcon()
 {
-    // A speaker with two waves, as Animate marks a sound.
+    // A speaker with two waves, which marks a sound.
     return glyph([](QPainter& painter) {
         painter.setPen(Qt::NoPen);
         painter.setBrush(ink());
@@ -336,7 +336,7 @@ LibraryPanel::LibraryPanel(QWidget* parent)
     layout->setContentsMargins(0, 0, 0, 0);
     layout->setSpacing(0);
 
-    // The preview of the selected item, at the top as in Animate.
+    // The preview of the selected item, at the top.
     _preview->setFixedHeight(150);
     _preview->setAlignment(Qt::AlignCenter);
     _preview->setStyleSheet("QLabel { background: palette(base); border-bottom: 1px solid palette(mid); }");
@@ -405,8 +405,7 @@ LibraryPanel::LibraryPanel(QWidget* parent)
 
     connect(_tree, &QTreeWidget::currentItemChanged, this, [this]() { updatePreview(); });
 
-    // The item menu: Rename, Duplicate, Delete, New Folder, as Animate's
-    // library offers them.
+    // The item menu: Rename, Duplicate, Delete, New Folder.
     _tree->setContextMenuPolicy(Qt::CustomContextMenu);
     _tree->setEditTriggers(QAbstractItemView::EditKeyPressed);
     connect(_tree, &QTreeWidget::customContextMenuRequested, this, [this](const QPoint& at) {

@@ -9,7 +9,7 @@
 
 namespace fla {
 
-/// Animate's Modify > Shape commands on one path, free of Qt.
+/// The Modify > Shape commands on one path, free of Qt.
 
 /// Smooth: every anchor's handles are pulled towards the Catmull-Rom
 /// tangent through its neighbors (a third of the way to each neighbor,

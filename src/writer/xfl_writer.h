@@ -33,8 +33,8 @@ class Rect;
 /// Writes the parsed document model back out as XFL XML, the inverse of
 /// DocumentParser.
 ///
-/// Attributes matching the reader's default are left out, the way Animate writes
-/// them; the reader restores the same value either way.
+/// Attributes matching the reader's default are left out, the way FLA files
+/// carry them; the reader restores the same value either way.
 ///
 /// Anything the writer cannot yet represent is recorded rather than dropped in
 /// silence -- see unsupported(). Callers saving a file should treat a non-empty
@@ -71,11 +71,11 @@ public:
     void clearUnsupported() { _unsupported.clear(); }
 
     /// Textured paint (a brush texture's grain on a solid fill) written so
-    /// Animate shows it: each fill a repeating bitmap fill of a small tile,
+    /// other apps show it: each fill a repeating bitmap fill of a small tile,
     /// the paint's color with the grain in its alpha, placed as the texture
     /// is. The fill keeps its color as Phoenix attributes, so Phoenix reads
     /// it back as the solid fill with its live texture. Off unless set:
-    /// only files written for Animate want it.
+    /// only files written for other apps want it.
     void setBakeTextures(bool on) { _bakeTextures = on; }
 
     /// A tile made for textured paint: its library item, its data file
@@ -100,7 +100,7 @@ public:
 
 private:
     /// The library bitmap a solid fill of \a rgba on \a shape, textured as
-    /// the shape says, is drawn with in Animate; empty when the texture's
+    /// the shape says, is drawn with in other apps; empty when the texture's
     /// tile cannot be made (a texture from a JPEG bitmap).
     std::string bakeTexture(const Shape& shape, const uint8_t rgba[4]);
     void note(const std::string& description);

@@ -12,12 +12,13 @@ namespace fla {
 
 class SymbolInstance;
 
-/// Deformers, as Harmony has them: a symbol instance's art bent by handles
+/// Deformers: a symbol instance's art bent by handles
 /// rather than redrawn. A curve deformer bends it along a spine (an arm at
 /// the elbow, a tail); an envelope deformer pulls it by a four by four grid
 /// of handles around it (a squash, a lean). Each keyframe keeps its own pose
-/// and a classic tween goes between them. Kept on the instance where Animate
-/// ignores it, so Animate shows the art as drawn. Free of Qt.
+/// and a classic tween goes between them. Kept on the instance where other
+/// apps that open the FLA ignore it, so they show the art as drawn. Free of
+/// Qt.
 namespace deform {
 
 enum class Kind

@@ -13,7 +13,7 @@ class QListWidgetItem;
 class HotSpinBox;
 class QToolButton;
 
-/// Animate's New Document dialog: categories of presets down the left
+/// The New Document dialog: categories of presets down the left
 /// (Character Animation, Social, Game, Education, Ads, Web, Advanced), the
 /// presets of the chosen category as tiles, and the details of the document
 /// to make on the right: width, height, frame rate and stage color, which a

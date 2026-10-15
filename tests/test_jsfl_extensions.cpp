@@ -336,7 +336,7 @@ TEST(jsfl_run_command_line_gives_the_exit_code)
 
 TEST(jsfl_tools_preview_while_dragging_and_draw_on_release)
 {
-    // A tool as Animate's PolyStar is written: an options file, a preview
+    // A tool as the PolyStar JSFL tool is written: an options file, a preview
     // on the drawing layer while the mouse is down, a path made into a
     // shape when it comes up.
     const std::filesystem::path folder = jsfl_test::scratchFolder("tools");

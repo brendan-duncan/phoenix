@@ -12,7 +12,7 @@ class Element;
 
 /// The matrix part way between two keyframes' matrices, as a motion tween
 /// shows it: each matrix is taken apart into translation, x and y scale and
-/// the two skew angles Animate's Transform panel shows (a rotation is both
+/// the two skew angles the Transform panel shows (a rotation is both
 /// skews equal), those are blended, each angle the short way round, and the
 /// result put back together. Blending the six entries directly shrinks a
 /// turning object and skews it on the way.
@@ -24,7 +24,7 @@ enum class TweenRotation
     Clockwise,
     CounterClockwise,
     /// Rotate None: no turning at all; the six matrix entries blend
-    /// straight, as Flash's tween did with rotation switched off.
+    /// straight.
     None
 };
 
@@ -38,13 +38,13 @@ ColorTransform blendColorTransforms(const ColorTransform& from, const ColorTrans
 /// The filters part way between two keyframes', as a classic tween shows
 /// them. Filters pair up by position and kind; one that only one keyframe
 /// has is met by the same kind at no effect (no blur, distance or
-/// strength), as Animate puts in, so it fades in or out. Amounts and colors
+/// strength), so it fades in or out. Amounts and colors
 /// blend; switches (inner, knockout, the bevel's placement) and a pair of
 /// different kinds come from the first keyframe.
 std::vector<Filter> blendFilters(const std::vector<Filter>& from, const std::vector<Filter>& to, double t);
 
 /// Which element of a classic tween's end keyframe each element of its
-/// start keyframe tweens toward, as Animate pairs them: the same symbol at
+/// start keyframe tweens toward: the same symbol at
 /// the same place in the stacking order, else the first unpaired instance
 /// of that symbol; a lone instance, group or text swapped for another
 /// symbol tweens to it. Raw shapes are not classic-tweened (that is a

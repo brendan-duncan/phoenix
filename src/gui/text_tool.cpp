@@ -263,7 +263,7 @@ bool TextTool::mouseDoubleClick(PhoenixView& view, QMouseEvent* event, const QPo
     const QPointF local = toLocal.map(documentPos);
 
     // The square handle of a fixed-width box, double-clicked, lets the box
-    // grow with its text again, as in Animate.
+    // grow with its text again.
     if (onHandle(view, local))
     {
         if (!_text->autoExpand)
@@ -398,8 +398,7 @@ void TextTool::commit(PhoenixView& view)
         _text = nullptr;
         if (TextLayout::joinedText(*text).isEmpty())
         {
-            // Everything typed away: the text goes, as Animate removes an
-            // emptied box.
+            // Everything typed away: the emptied box is removed.
             fla::setTextContents(*text, *_before);
             _commandStack.push(fla::CommandPtr(
                 new fla::RemoveElementCommand(_frame, text, "Delete Text")));
@@ -898,7 +897,7 @@ void TextTool::paintOverlay(PhoenixView& view, QPainter& painter, double scale)
             painter.drawRect(band);
     }
 
-    // Animate's edit box: a thin outline with a handle on the top right, a
+    // The edit box: a thin outline with a handle on the top right, a
     // circle for a box that grows and a square for one with a fixed width.
     const QRectF bounds = TextLayout::localBounds(*_text);
     painter.setBrush(Qt::NoBrush);

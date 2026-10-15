@@ -18,13 +18,13 @@ class SymbolInstance;
 
 class PhoenixView;
 
-/// Drags an IK armature into a new pose, as Animate's selection tool does on
+/// Drags an IK armature into a new pose, as the selection tool does on
 /// an armature layer: the bone under the cursor has its tail pulled after
 /// the cursor and the joints above it turn to follow.
 ///
 /// The frame under the playhead becomes a pose (one is added when there is
 /// none), every frame of the span has its joints worked out again, and for
-/// an armature bending a shape, the shape Animate keeps for each frame in the
+/// an armature bending a shape, the shape the FLA keeps for each frame in the
 /// armature's ik container symbol is bent from its old bones to its new ones.
 /// While dragging only the frame on show is bent; letting go bends the rest
 /// and makes it all one undo step.

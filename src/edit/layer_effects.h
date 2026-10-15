@@ -9,13 +9,13 @@ namespace fla {
 class Layer;
 class Timeline;
 
-/// Effects Harmony composites, as layers: a tone (a soft shadow multiplied
+/// Composited effects, as layers: a tone (a soft shadow multiplied
 /// over the character), a highlight (a soft light screened over it) or a
 /// glow (a soft light added round it). The effect layer's art is drawn,
 /// blurred, colored and composited over the layer under it, clipped to that
 /// layer's art unless it glows outside. It is a guide layer marked with its
-/// effect, so Animate, which cannot composite it, leaves it out rather than
-/// drawing its art flat; Phoenix renders it on the stage and in exports.
+/// effect, so other apps that open the FLA, which cannot composite it,
+/// leave it out rather than drawing its art flat; Phoenix renders it on the stage and in exports.
 /// Free of Qt.
 namespace effects {
 

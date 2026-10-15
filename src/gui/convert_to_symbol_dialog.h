@@ -10,7 +10,7 @@ class QComboBox;
 class QLineEdit;
 class RegistrationGrid;
 
-/// The dialog Modify > Convert to Symbol puts up, laid out like Animate's:
+/// The dialog Modify > Convert to Symbol puts up:
 /// a name, a type and a three-by-three grid of registration points.
 class ConvertToSymbolDialog : public QDialog
 {

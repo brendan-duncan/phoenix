@@ -10,8 +10,8 @@ namespace fla {
 class FLADocument;
 }
 
-/// Animate's Swatches panel: the document's saved colors, or Animate's
-/// default palette when it has none. A click picks the fill color for new
+/// The Swatches panel: the document's saved colors, or the default
+/// palette when it has none. A click picks the fill color for new
 /// art, or with Stroke ticked the stroke color; Add keeps the current fill
 /// color among the document's swatches, and a right-click deletes one.
 class SwatchesPanel : public QWidget

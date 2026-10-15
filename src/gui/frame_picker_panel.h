@@ -15,7 +15,7 @@ namespace fla {
 class SymbolInstance;
 }
 
-/// Animate's Frame Picker: the frames of the selected graphic instance's
+/// The Frame Picker: the frames of the selected graphic instance's
 /// symbol as pictures, one click picking the frame the instance starts on,
 /// with its looping and, optionally, a new keyframe for the choice.
 class FramePickerPanel : public QWidget

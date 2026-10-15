@@ -66,8 +66,7 @@ public:
 
     /// Whether the layer shows. A folder's eye is not inherited: hiding a
     /// folder hides each layer in it (see the layers panel), and a file
-    /// whose folder is hidden over layers that are not shows them, as
-    /// Animate does.
+    /// whose folder is hidden over layers that are not shows them.
     bool isVisible() const
     {
         return visible;

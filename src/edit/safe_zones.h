@@ -17,7 +17,7 @@ class Document;
 ///
 /// The settings belong to the document, so a show's template carries them:
 /// they are kept in one Phoenix attribute on the document (FLA keeps it and
-/// Animate ignores it). Whether the overlay is shown at all is the viewer's
+/// other apps that open it ignore it). Whether the overlay is shown at all is the viewer's
 /// choice, not the document's. Nothing here is ever drawn into the art or
 /// exported unless an export asks for it. Free of Qt.
 namespace safezones {

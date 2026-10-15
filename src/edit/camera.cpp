@@ -253,7 +253,7 @@ Layer* newCameraLayer(const Timeline& timeline, int frames, double width, double
     Layer* layer = newLayerFor(timeline, false);
     layer->name = "Camera";
     layer->autoNamed = false;
-    // A guide: Animate keeps it and never draws it.
+    // A guide: other apps that open the file keep it and never draw it.
     layer->layerType = Layer::Type::Guide;
     layer->extraAttributes.emplace_back(kMark, "true");
     for (Frame* frame : layer->frames)

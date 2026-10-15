@@ -286,7 +286,7 @@ std::string toText(const XMLDocument& doc)
     const char* text = printer.CStr();
 
     // XML turns a literal carriage return into a line feed when it is read back.
-    // Flash uses CR for the line breaks inside text runs, so those have to go out
+    // FLA files use CR for the line breaks inside text runs, so those have to go out
     // as character references or they come back changed. The printer only ever
     // emits LF for its own formatting, so every CR reaching here is data.
     std::string out;
@@ -330,7 +330,7 @@ void XFLWriter::writeFillStyle(const FillStyle& fill, XMLElement* parent)
         const SolidColor& solid = static_cast<const SolidColor&>(fill);
         if (_texturedShape)
         {
-            // Textured paint, for Animate: a repeating bitmap fill of the
+            // Textured paint, for other apps: a repeating bitmap fill of the
             // grain in the paint's color, its color kept for Phoenix.
             const std::string item = bakeTexture(*_texturedShape, solid.color);
             if (!item.empty())
@@ -459,7 +459,7 @@ std::string XFLWriter::bakeTexture(const Shape& shape, const uint8_t rgba[4])
         tile = texture::builtInTile(spec.name);
     if (tile.size <= 0)
     {
-        note("textured paint whose texture is a JPEG or missing bitmap (Animate shows it plain)");
+        note("textured paint whose texture is a JPEG or missing bitmap (other apps show it plain)");
         return {};
     }
 
@@ -472,7 +472,7 @@ std::string XFLWriter::bakeTexture(const Shape& shape, const uint8_t rgba[4])
         pixels[i] = (a << 24) | (pre(rgba[0]) << 16) | (pre(rgba[1]) << 8) | pre(rgba[2]);
     }
     if (spec.fixed)
-        note("textured paint whose grain keeps its size in the frame (Animate scales it with the art)");
+        note("textured paint whose grain keeps its size in the frame (other apps scale it with the art)");
     BakedTexture baked;
     baked.item = item;
     baked.dataFile = std::string(kBakedDataPrefix) + std::to_string(_baked.size() + 1) + ".dat";
@@ -493,7 +493,7 @@ std::string XFLWriter::withBakedMedia(const std::string& documentXml) const
     XMLElement* media = root->FirstChildElement("media");
     if (!media)
     {
-        // Where Animate puts it: after the folders and fonts, before the
+        // Where FLA files put it: after the folders and fonts, before the
         // symbols and timelines.
         media = doc.NewElement("media");
         XMLElement* before = nullptr;
@@ -648,7 +648,7 @@ void XFLWriter::writeShape(const Shape& shape, XMLElement* parent)
             // Prefer the text the file was read with: it round-trips exactly,
             // including anything the reader normalized away. Regenerating is for
             // edges that have actually been edited, and writes their cubics
-            // as Animate does, quadratics here and the cubics after.
+            // as the FLA stores them, quadratics here and the cubics after.
             std::vector<std::string> cubicRecords;
             const std::string data = edge->data.empty()
                 ? EdgeWriter::writeEdgeAsAnimate(*edge, cubicRecords)
@@ -685,12 +685,12 @@ void XFLWriter::writeSymbolInstance(const SymbolInstance& instance, XMLElement* 
     if (instance.blendMode != "normal")
         setString(node, "blendMode", instance.blendMode);
 
-    // A movie clip goes without a type, as Animate writes it.
+    // A movie clip goes without a type, as FLA files store it.
     if (!instance.otherSymbolType.empty())
         node->SetAttribute("symbolType", instance.otherSymbolType.c_str());
     else if (instance.symbolType != SymbolType::MovieClip || wasPresent(node, "symbolType"))
         node->SetAttribute("symbolType", symbolTypeName(instance.symbolType));
-    // Animate's name for it is loop, and it writes it on every graphic
+    // The FLA's name for it is loop, and FLA files carry it on every graphic
     // instance: an instance without one is not read the same way.
     if (instance.symbolType == SymbolType::Graphic && instance.otherSymbolType.empty())
         node->SetAttribute("loop", loopTypeName(instance.loopType));
@@ -871,7 +871,7 @@ void XFLWriter::writeStaticText(const StaticText& text, XMLElement* parent)
             PresentScope runPresent(attrNode, run.presentAttributes);
             if (run.alignment != TextRun::Alignment::Left || wasPresent(attrNode, "alignment"))
                 attrNode->SetAttribute("alignment", alignmentName(run.alignment));
-            // Animate writes aliasText on every run.
+            // FLA files carry aliasText on every run.
             attrNode->SetAttribute("aliasText", run.aliasText ? "true" : "false");
             setBool(attrNode, "autoKern", run.autoKern, true);
             setDouble(attrNode, "letterSpacing", run.letterSpacing, 0.0);
@@ -1113,7 +1113,7 @@ void XFLWriter::writeFrame(const Frame& frame, XMLElement* parent)
 
     // What the reader kept without modeling, back where it was.
     // An armature's pose (its IKTree and the matrices kept between frames)
-    // follows the elements, as Animate writes it; the rest goes before.
+    // follows the elements, as the FLA stores it; the rest goes before.
     writeKept(node, frame.extraAttributes);
     const auto afterElements = [](const std::string& xml) {
         const size_t at = xml.find('<');
@@ -1163,7 +1163,7 @@ void XFLWriter::writeLayer(const Layer& layer, XMLElement* parent)
     PresentScope present(node, layer.presentAttributes);
 
     setString(node, "name", layer.name);
-    // Animate writes every layer's color, black included.
+    // FLA files carry every layer's color, black included.
     setColor(node, "color", nullptr, layer.color, true);
     setString(node, "current", layer.current);
 
@@ -1213,7 +1213,7 @@ void XFLWriter::writeTimeline(const Timeline& timeline, XMLElement* parent)
     writeKept(node, timeline.extraAttributes);
     if (!timeline.guidesX.empty() || !timeline.guidesY.empty())
     {
-        // Animate's own form: XML held in the attribute, a guideline per
+        // The FLA's own form: XML held in the attribute, a guideline per
         // guide, "v" for a vertical one at its x and "h" for a horizontal
         // one at its y.
         std::string guides = "<guidelines>";
@@ -1307,7 +1307,7 @@ std::string XFLWriter::writeDocument(const Document& document)
         root->InsertEndChild(folders);
     }
 
-    // Font items go between the folders and the media, where Animate puts
+    // Font items go between the folders and the media, where FLA files put
     // them.
     const auto isFonts = [](const std::string& xml) {
         const size_t start = xml.find_first_not_of(" \t\r\n");
@@ -1385,7 +1385,7 @@ std::string XFLWriter::writeDocument(const Document& document)
     root->InsertEndChild(timelines);
 
     // Document metadata is read whole and written back as it was, in the
-    // order Animate writes it. Anything that came without its text (a
+    // order FLA files store it. Anything that came without its text (a
     // document made here) is simply left out.
     const auto appendRaw = [&doc, root](const std::string& xml, XMLElement* under) {
         if (xml.empty())

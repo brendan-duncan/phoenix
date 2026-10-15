@@ -6,8 +6,8 @@
 class QCheckBox;
 class QListWidget;
 
-/// The window Phoenix opens on when started without a file, as Animate's
-/// Home screen: new documents from a few presets or the full New Document
+/// The window Phoenix opens on when started without a file, its Home
+/// screen: new documents from a few presets or the full New Document
 /// dialog, Open, and the files worked on lately.
 class StartDialog : public QDialog
 {

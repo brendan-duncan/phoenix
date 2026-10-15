@@ -15,9 +15,9 @@ namespace fla {
 class Timeline;
 
 /// A new, empty layer or folder for \a timeline, named "Layer N" (or
-/// "Folder N") with the next free number and the next of Animate's layer
+/// "Folder N") with the next free number and the next of the layer
 /// colors. A layer gets one keyframe spanning as many frames as the
-/// timeline's longest layer, as Animate's New Layer does. The caller owns it
+/// timeline's longest layer. The caller owns it
 /// until an AddLayerCommand takes it.
 Layer* newLayerFor(const Timeline& timeline, bool folder);
 
@@ -129,7 +129,7 @@ private:
 
 namespace layers {
 
-/// What a layer is, as Animate's Layer Properties offers it: a guided layer
+/// What a layer is, as Layer Properties offers it: a guided layer
 /// is a normal one under a guide; a masked one, one under a mask.
 enum class Kind
 {

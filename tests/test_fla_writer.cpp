@@ -206,7 +206,7 @@ TEST(fla_writer_produces_a_readable_file)
 TEST(fla_writer_packs_a_new_document_as_animate_does)
 {
     // A document made here has no package files of its own: it still gets
-    // the marker Animate looks for, the media type and the metadata file.
+    // the marker FLA readers look for, the media type and the metadata file.
     std::unique_ptr<fla::FLADocument> created(fla::createEmptyDocument());
     CHECK(created && created->document);
     if (!created || !created->document)

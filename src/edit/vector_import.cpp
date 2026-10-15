@@ -71,7 +71,7 @@ void transform(Painted& painted, const Affine& m)
         painted.gradient->placement = toPlacement(m.after(toAffine(painted.gradient->placement)));
 }
 
-/// Animate's gradient square is 1638.4 pixels across.
+/// The FLA gradient square is 1638.4 pixels across.
 constexpr double kGradientSquare = 1638.4;
 
 /// The placement of a linear gradient's square running from \a from to \a

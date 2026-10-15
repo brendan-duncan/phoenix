@@ -16,7 +16,7 @@ class Frame;
 class Shape;
 }
 
-/// Animate's anchor point tools, in the pen's slot. They work on the shape
+/// The anchor point tools, in the pen's slot. They work on the shape
 /// under the cursor, whose anchors show as the cursor passes over it.
 ///
 /// - **Add Anchor Point** (=): a click on a path puts an anchor there,

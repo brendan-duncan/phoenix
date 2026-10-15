@@ -10,7 +10,7 @@ namespace fla {
 class Frame;
 class Layer;
 
-/// Inserts a keyframe at a frame index on a layer, as Animate's Insert
+/// Inserts a keyframe at a frame index on a layer, as Insert
 /// Keyframe (F6) does: the span the index falls in is cut there and the new
 /// keyframe takes over the rest of it with a copy of the span's contents;
 /// past the end of the layer, the last span is stretched up to the index and

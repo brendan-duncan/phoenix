@@ -19,7 +19,7 @@ class Selection;
 class Shape;
 }
 
-/// Animate's pencil: draw freehand and get a tidy path.
+/// The pencil: draw freehand and get a tidy path.
 ///
 /// The raw cursor positions are collected during the drag and fitted on release,
 /// so a stroke that arrives as hundreds of points becomes a handful of anchors

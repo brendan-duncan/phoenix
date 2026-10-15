@@ -27,7 +27,7 @@ SwapSymbolDialog::SwapSymbolDialog(const QStringList& symbols, const QString& cu
     const QList<QListWidgetItem*> found = _list->findItems(current, Qt::MatchExactly);
     if (!found.isEmpty())
     {
-        // The symbol the instance shows now is marked, as Animate dots it.
+        // The symbol the instance shows now is marked.
         QFont font = found.front()->font();
         font.setBold(true);
         found.front()->setFont(font);

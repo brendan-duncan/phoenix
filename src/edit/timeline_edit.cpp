@@ -668,7 +668,7 @@ const Element* motionTarget(const Frame& span)
         ? element : nullptr;
 }
 
-/// Makes \a span an object motion tween moving by \a xml, as Animate marks one.
+/// Makes \a span an object motion tween moving by \a xml, as FLA files mark one.
 void markMotion(Frame& span, const std::string& xml)
 {
     removeMotion(span);

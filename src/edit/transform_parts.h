@@ -6,7 +6,7 @@
 
 namespace fla {
 
-/// A matrix as Animate's Transform and Properties panels show it: scale in
+/// A matrix as the Transform and Properties panels show it: scale in
 /// percent on each axis and skew in degrees on each, equal skews being a
 /// rotation. A mirrored matrix shows as a negative vertical scale.
 struct TransformParts

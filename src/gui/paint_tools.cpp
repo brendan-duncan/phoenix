@@ -236,7 +236,7 @@ bool PaintBucketTool::mousePress(PhoenixView& view, QMouseEvent* event, const QP
         int face = open.faceAt(localPoint);
 
         // An outline that does not quite meet: join its loose ends across
-        // gaps up to the chosen size, as Animate does, and ask again. The
+        // gaps up to the chosen size, and ask again. The
         // joins stay in the result as fill boundaries with no stroke.
         std::unique_ptr<fla::RegionSplitter> closed;
         if (face < 0 && _style.gapSize != fla::DrawingStyle::GapSize::None)
@@ -556,7 +556,7 @@ bool EyedropperTool::mousePress(PhoenixView& view, QMouseEvent* event, const QPo
     }
     else if (fill && fill->type() == fla::FillStyle::Type::BitmapFill)
     {
-        // A bitmap fill: its bitmap tiles the next fill. Animate's eyedropper
+        // A bitmap fill: its bitmap tiles the next fill. The eyedropper
         // locks the fill, so the sample continues where it was taken.
         _style.fillBitmap = static_cast<const fla::BitmapFill*>(fill)->bitmapPath;
         _style.fillKind = fla::DrawingStyle::FillKind::Bitmap;

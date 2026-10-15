@@ -32,7 +32,7 @@ struct PalettesLinks
     std::function<void(const QString&)> message;
 };
 
-/// The Palettes panel: Harmony's linked palettes. Colors with names, in
+/// The Palettes panel: linked palettes. Colors with names, in
 /// palettes that can be swapped (day, night): pick one in the list and
 /// Fill or Stroke links the selection to it; Link Matching links every
 /// use of its color in the document; Edit changes it everywhere it is

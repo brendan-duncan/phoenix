@@ -8,7 +8,7 @@ namespace fla {
 class Shape;
 }
 
-/// Animate's Modify > Shape > Expand Fill and Soften Fill Edges.
+/// Modify > Shape > Expand Fill and Soften Fill Edges.
 ///
 /// Both work from the shape's filled regions, one painter path per fill
 /// style index as the stage stitches them (`PhoenixView::fillRegions`), so
@@ -18,8 +18,7 @@ namespace fla::filloffset {
 
 /// Grows (or with \a inset shrinks) every fill by \a distance pixels. The
 /// offset is the region unioned with (or less) a ring stroked round its
-/// outline at twice the distance, which rounds corners outward as Animate
-/// does. False when the shape has no fill to offset.
+/// outline at twice the distance, which rounds corners outward. False when the shape has no fill to offset.
 bool expandFill(fla::Shape& shape, const std::map<int, QPainterPath>& regions,
     double distance, bool inset);
 

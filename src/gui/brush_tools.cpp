@@ -330,7 +330,7 @@ fla::Shape* outlineShape(const QPainterPath& outline, double tolerance, fla::Fra
         // The resolved outline is a dense polygon: the stroker and the
         // simplification both flatten curves into short straight runs. Fitted
         // again, as the pencil fits a freehand stroke, each loop becomes a
-        // few cubics, which is what Animate's brush leaves behind.
+        // few cubics, as a brush stroke in an FLA holds them.
         std::vector<fla::Point> ring;
         const QPolygonF polygon = subpath.toFillPolygon();
         for (const QPointF& point : polygon)

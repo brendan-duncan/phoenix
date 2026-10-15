@@ -15,7 +15,7 @@ public:
     bool layerDepthEnabled = false;
 
     /// Ruler guides, in the timeline's own coordinates: the vertical ones by
-    /// their x, the horizontal ones by their y. Animate keeps them in the
+    /// their x, the horizontal ones by their y. The FLA keeps them in the
     /// DOMTimeline's guides attribute.
     std::vector<double> guidesX;
     std::vector<double> guidesY;

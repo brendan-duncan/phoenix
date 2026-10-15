@@ -106,7 +106,7 @@ TEST(ik_armature_poses_a_frame_and_stores_every_frame)
 TEST(ik_ease_out_starts_fast)
 {
     // A positive simple quadratic ease of 50 runs time as 1.5t - 0.5t^2, as
-    // the in-betweens Animate stores in ik_poses.fla show.
+    // the in-betweens stored in ik_poses.fla show.
     std::string xml = chain();
     xml.replace(xml.find("<IKState duration=\"10\"/>"), 24,
         "<IKState duration=\"10\" easeType=\"simple quadratic\" easeValue=\"50\"/>");
@@ -164,7 +164,7 @@ TEST(ik_armature_works_out_the_joints_animate_stored)
 {
     // Opt-in, with the corpus's ik_poses.fla: a shape's four bones posed at
     // frames 0 and 29 with an ease of 50. The joints worked out from the
-    // poses are the ones Animate stored for every frame, and posing a pose
+    // poses are the ones the file stores for every frame, and posing a pose
     // as it is leaves them so.
     const char* corpus = std::getenv("PHOENIX_FLA_CORPUS");
     if (!corpus)
@@ -223,7 +223,7 @@ TEST(ik_armature_works_out_the_joints_animate_stored)
 
 TEST(symbol_armatures_keep_joints_apart_from_registration_points)
 {
-    // As Animate saves ik_symbols.fla's root: the instance's registration
+    // As ik_symbols.fla stores its root: the instance's registration
     // point in xArray, the joint (its transformation point) in location.
     const std::string xml = "<IKTree name=\"Armature_1\" treeName=\"ikTreeName2\">"
         "<IKNode name=\"ikNode_1\" location=\"#1D.D8, #20.EE\"><childNodes>"

@@ -12,7 +12,7 @@ class QAction;
 class QFrame;
 class QToolButton;
 
-/// Animate's Tools panel: the tools in slots, a slot with more than one
+/// The Tools panel: the tools in slots, a slot with more than one
 /// tool showing the last one used and opening the others on a long press,
 /// sections parted by lines, and the color controls after them. The slots
 /// flow to fill the panel: down the left or right in as many columns as

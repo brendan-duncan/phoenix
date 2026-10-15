@@ -178,7 +178,7 @@ bool inverse(const Transform& m, Transform& out)
 }
 
 /// A Matrix element with only the entries that differ from the identity,
-/// as Animate writes them.
+/// as FLA files store them.
 void writeMatrix(tinyxml2::XMLElement* matrix, const Transform& m)
 {
     const auto entry = [matrix](const char* name, double value, double plain) {

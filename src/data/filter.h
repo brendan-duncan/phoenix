@@ -27,7 +27,7 @@ struct Filter
 
     Type type = Type::Blur;
 
-    /// Whether the filter is switched on. Animate keeps switched-off filters
+    /// Whether the filter is switched on. The FLA keeps switched-off filters
     /// in the file.
     bool enabled = true;
 

@@ -104,7 +104,7 @@ Bitmap* newBitmap(const Document& document, const std::string& name, const std::
     bitmap->frameRight = width * 20;
     bitmap->frameBottom = height * 20;
     bitmap->datData = std::move(data);
-    // How Animate marks the two encodings.
+    // How the FLA marks the two encodings.
     if (jpeg)
         bitmap->extraAttributes.emplace_back("isJPEG", "true");
     else

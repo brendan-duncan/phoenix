@@ -17,7 +17,7 @@ class Frame;
 class Layer;
 }
 
-/// Animate's Camera tool (C), for Phoenix's multiplane camera: drag to pan,
+/// The Camera tool (C), for Phoenix's multiplane camera: drag to pan,
 /// Shift-drag to zoom in and out, Alt-drag to turn the camera about the
 /// stage's middle. What it does is keyed on the frame shown: a keyframe of
 /// the camera there takes it, made (and tweened from the one before) when

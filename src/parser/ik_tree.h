@@ -17,7 +17,7 @@ struct IKBone
     std::string name;
 };
 
-/// The bones of an armature, read from the IKTree element Animate keeps on
+/// The bones of an armature, read from the IKTree element the FLA keeps on
 /// each pose frame (as XML text; Phoenix does not model IK yet), at \a frame
 /// frames into the pose span. Each node of the tree is a joint, and a bone
 /// runs from a joint to each of its child joints; a child at its parent's

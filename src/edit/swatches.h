@@ -12,13 +12,13 @@ namespace fla {
 class Document;
 
 /// The Swatches panel's colors: the document's own swatch list, which
-/// Animate saves in the file, and Animate's default palette for a document
+/// the FLA saves in the file, and the default palette for a document
 /// that has none.
 namespace swatches {
 
 using Color = std::array<uint8_t, 4>;
 
-/// Animate's default palette: a ramp of grays and the primaries, then the
+/// The default palette: a ramp of grays and the primaries, then the
 /// 216 web-safe colors.
 std::vector<Color> defaults();
 
@@ -36,7 +36,7 @@ struct State
 State stateOf(const Document& document);
 
 /// \a state with \a color added at the end; with no list yet, a new one
-/// named Swatches, as Animate makes it.
+/// named Swatches.
 State withAdded(const State& state, const Color& color);
 
 /// \a state without its solid swatch \a index. Swatches it does not model

@@ -7,7 +7,7 @@
 class QTreeWidget;
 class QTreeWidgetItem;
 
-/// Animate's Edit Toolbar: the Tools panel's slots as a list, each holding
+/// The Edit Toolbar: the Tools panel's slots as a list, each holding
 /// its tools, the first one shown. Drag a tool to reorder it, into another
 /// slot to group it there, or between slots to give it a slot of its own;
 /// drag it under Hidden to take it off the panel (its key still works).

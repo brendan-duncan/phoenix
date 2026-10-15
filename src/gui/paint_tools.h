@@ -15,7 +15,7 @@ class Selection;
 class Shape;
 }
 
-/// Animate's paint bucket: click inside a region to paint it with the current
+/// The paint bucket: click inside a region to paint it with the current
 /// fill.
 ///
 /// The region is a face of the shape's arrangement, so an area enclosed by
@@ -61,7 +61,7 @@ private:
     QTransform _toShape;
 };
 
-/// Animate's ink bottle: click a fill to stroke its outline with the current
+/// The ink bottle: click a fill to stroke its outline with the current
 /// stroke, or click a stroke to restyle it.
 class InkBottleTool : public Tool
 {
@@ -82,9 +82,9 @@ private:
     const fla::DrawingStyle& _style;
 };
 
-/// Animate's eyedropper: click a fill or a stroke to make it the current one.
+/// The eyedropper: click a fill or a stroke to make it the current one.
 /// Sampling a fill hands over to the paint bucket and sampling a stroke to the
-/// ink bottle, as Animate does, through \a onSampled.
+/// ink bottle, through \a onSampled.
 class EyedropperTool : public Tool
 {
 public:

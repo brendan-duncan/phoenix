@@ -16,7 +16,7 @@ class QPushButton;
 class QStackedWidget;
 class QTreeWidget;
 
-/// Animate's Find and Replace: text, a font, a color or a symbol, looked
+/// Find and Replace: text, a font, a color or a symbol, looked
 /// for on every scene and inside every symbol. Find All lists where each
 /// is, and clicking one goes there; Replace All replaces them all as one
 /// undoable step.

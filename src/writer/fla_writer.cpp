@@ -15,7 +15,7 @@ bool FLAWriter::write(const Document& document, const std::string& filePath)
     _unsupported.clear();
 
     // A zipped .fla carries the .xfl marker too, named after the file, as
-    // Animate's own do.
+    // FLA files usually do.
     std::vector<XFLEntry> entries;
     const std::string projectName = std::filesystem::path(filePath).stem().string();
     if (!XFLContent::build(document, projectName, entries, _unsupported, _errorString))

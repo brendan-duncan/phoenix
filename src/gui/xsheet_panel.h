@@ -75,7 +75,7 @@ private:
     QString _typed;
 };
 
-/// Harmony's X-sheet: the timeline turned on its side, the drawings each
+/// The X-sheet: the timeline turned on its side, the drawings each
 /// layer exposes frame by frame, typed in by number.
 class XSheetPanel : public QWidget
 {

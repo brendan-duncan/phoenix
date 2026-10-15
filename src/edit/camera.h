@@ -13,8 +13,8 @@ class Frame;
 class Layer;
 class Timeline;
 
-/// Harmony's multiplane camera, kept so that Animate opens the file: the
-/// camera is a guide layer (which Animate never draws) marked as Phoenix's,
+/// Phoenix's multiplane camera, kept so that other apps can open the file:
+/// the camera is a guide layer (which other apps never draw) marked as Phoenix's,
 /// its keyframes holding where the camera looks, how far it has moved in
 /// (zoom) and its turn; each layer may sit at a depth behind or in front of
 /// the stage's plane. Panning moves near layers more than far ones, and

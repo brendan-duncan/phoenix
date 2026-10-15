@@ -4,7 +4,7 @@
 #include <cstdint>
 #include <vector>
 
-/// Sound for SWF movies: Flash's ADPCM, and MP3 frames read for streaming.
+/// Sound for SWF movies: the SWF ADPCM codec, and MP3 frames read for streaming.
 /// Free of Qt.
 namespace swf {
 

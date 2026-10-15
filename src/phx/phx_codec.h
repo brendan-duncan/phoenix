@@ -22,7 +22,7 @@ inline void unpackColor(uint32_t packed, uint8_t color[4])
         color[i] = static_cast<uint8_t>(packed >> (8 * i));
 }
 
-/// Geometry is stored on Animate's grid, 1/256 of a twip: 5120 to a pixel.
+/// Geometry is stored on the FLA's grid, 1/256 of a twip: 5120 to a pixel.
 constexpr double kUnitsPerPixel = 5120.0;
 
 inline int64_t toUnits(double pixels)

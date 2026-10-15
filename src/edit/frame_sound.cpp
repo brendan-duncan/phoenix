@@ -89,7 +89,7 @@ std::string point(size_t mark, int left, int right)
     return xml + "/>";
 }
 
-/// The envelope of one of Animate's effects; empty for none.
+/// The envelope of one of the sound effects; empty for none.
 std::string envelopeOf(const std::string& effect, size_t length)
 {
     const int full = 32768;
@@ -160,7 +160,7 @@ void write(const Settings& settings, size_t sampleCount,
     if (settings.name.empty())
         return;
 
-    // In the order Animate writes them, leaving out its defaults.
+    // In the order FLA files use, leaving out the defaults.
     attributes.emplace_back("soundName", settings.name);
     if (settings.effect != "none" && (settings.effect != "custom" || custom))
         attributes.emplace_back("soundEffect", settings.effect);
@@ -228,7 +228,7 @@ void setEnvelope(const std::vector<EnvelopePoint>& points, size_t in, size_t out
                                  attribute.first == "outPoint44";
                          }),
         attributes.end());
-    // Next to the sound's name, as Animate orders them.
+    // Next to the sound's name, as FLA files order them.
     auto after = std::find_if(attributes.begin(), attributes.end(),
         [](const std::pair<std::string, std::string>& attribute) { return attribute.first == "soundName"; });
     std::vector<std::pair<std::string, std::string>> added;

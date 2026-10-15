@@ -119,7 +119,7 @@ TEST(real_sounds_decode_to_their_recorded_length)
 
 TEST(sound_envelopes_shape_the_volume)
 {
-    // Animate's default envelope, full volume, leaves the sound alone.
+    // The FLA's default envelope, full volume, leaves the sound alone.
     CHECK(AudioEnvelope::parse("<SoundEnvelope><SoundEnvelopePoint level0=\"32768\" level1=\"32768\"/></SoundEnvelope>") == nullptr);
     CHECK(AudioEnvelope::parse("") == nullptr);
 

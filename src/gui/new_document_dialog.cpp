@@ -25,8 +25,7 @@ namespace {
 
 constexpr int PresetRole = Qt::UserRole;
 
-/// A tile's picture: the stage's shape, landscape, square or portrait, as
-/// Animate draws its preset thumbnails.
+/// A tile's picture: the stage's shape, landscape, square or portrait.
 QIcon aspectIcon(int width, int height)
 {
     QPixmap pixmap(64, 48);
@@ -55,7 +54,7 @@ QString rateText(double rate)
 
 const std::vector<NewDocumentDialog::Preset>& NewDocumentDialog::presets()
 {
-    // Animate's presets by category, with the sizes and rates it uses.
+    // The presets by category, with their sizes and rates.
     static const std::vector<Preset> all = {
         {"Character Animation", "Full HD", 1920, 1080, 24},
         {"Character Animation", "HD", 1280, 720, 24},
@@ -136,7 +135,7 @@ NewDocumentDialog::NewDocumentDialog(QWidget* parent)
     QHBoxLayout* columns = new QHBoxLayout();
     outer->addLayout(columns, 1);
 
-    // Categories down the left, as Animate's dialog has them along its top.
+    // Categories down the left.
     _categories->addItems(categories());
     _categories->setFixedWidth(170);
     _categories->setStyleSheet("QListWidget { border: none; } QListWidget::item { padding: 6px 8px; }");
@@ -172,7 +171,7 @@ NewDocumentDialog::NewDocumentDialog(QWidget* parent)
     _width->setSuffix(" px");
     _height->setRange(1, 8192);
     _height->setSuffix(" px");
-    // Typed values, as Animate's fields are: no stepping arrows.
+    // Typed values: no stepping arrows.
     form->addRow("Width", _width);
     form->addRow("Height", _height);
     _frameRate->setEditable(true);

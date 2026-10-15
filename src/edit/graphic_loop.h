@@ -7,9 +7,9 @@
 namespace fla {
 
 /// Which frame of its symbol a graphic instance shows \a elapsed frames
-/// after its keyframe, as Animate plays its looping options: from
+/// after its keyframe, under its looping options: from
 /// \a first, within the symbol's \a length frames, and no further than
-/// \a last when it is set (Animate's Last field; -1 for none).
+/// \a last when it is set (the Last field; -1 for none).
 ///
 /// - Loop plays on and starts again, from frame 1 or, with a last frame,
 ///   from the first frame.

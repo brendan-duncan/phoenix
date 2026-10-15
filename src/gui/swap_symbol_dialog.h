@@ -12,7 +12,7 @@ class QListWidget;
 
 /// Modify > Symbol > Swap Symbol: picks the library symbol an instance
 /// shows instead of its own, keeping everything else about it, with a
-/// preview of each and a Duplicate Symbol button, as Animate's dialog has.
+/// preview of each and a Duplicate Symbol button.
 class SwapSymbolDialog : public QDialog
 {
     Q_OBJECT

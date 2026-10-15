@@ -80,7 +80,7 @@ bool TimelineAudio::soundSettings(const fla::Frame& frame, FrameSound& sound)
         if (child.find("<SoundEnvelope") != std::string::npos)
             sound.envelope = AudioEnvelope::parse(child);
     }
-    // Animate leaves the sync out for an event sound, the default.
+    // The FLA leaves the sync out for an event sound, the default.
     if (sound.sync.empty())
         sound.sync = "event";
     return !sound.name.empty();

@@ -9,7 +9,7 @@
 class QComboBox;
 
 /// The curve of a custom ease: a chain of cubic beziers from (0, 0) to
-/// (1, 1), its points stored as Animate's CustomEase keeps them (the start,
+/// (1, 1), its points stored as the FLA's CustomEase keeps them (the start,
 /// then two handles and an anchor per segment). Anchors and handles drag;
 /// a double-click on the curve adds an anchor there; Delete takes the
 /// picked anchor away.

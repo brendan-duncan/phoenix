@@ -31,7 +31,7 @@ public:
         Oval,
         Line,
         PolyStar,
-        /// Animate's separate primitive tools, which build the editable
+        /// The separate primitive tools, which build the editable
         /// rectangle and oval objects rather than shapes.
         RectanglePrimitive,
         OvalPrimitive
@@ -67,8 +67,8 @@ private:
 
     /// Where the drag counts as having started.
     ///
-    /// Normally the press point, but alt grows the shape from its center the
-    /// way Animate does, which mirrors the press point across the cursor. Going
+    /// Normally the press point, but alt grows the shape from its center,
+    /// which mirrors the press point across the cursor. Going
     /// through one accessor keeps the preview and the finished object agreeing
     /// about it.
     QPointF effectiveStart() const;

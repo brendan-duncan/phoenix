@@ -14,13 +14,13 @@ class Layer;
 /// The sound a keyframe plays, as the Frame tab's Sound section sets it.
 /// A frame keeps these among its kept attributes (soundName, soundSync,
 /// soundLoopMode, soundLoop, soundEffect) and its effect as a SoundEnvelope
-/// child, as Animate writes them.
+/// child, as FLA files store them.
 namespace frame_sound {
 
-/// Animate's effects, in the order its menu lists them.
+/// The sound effects, in the order the menu lists them.
 extern const char* const kEffects[8];
 
-/// Animate's syncs, in the order its menu lists them; "event" is the default
+/// The sound syncs, in the order the menu lists them; "event" is the default
 /// and is not written.
 extern const char* const kSyncs[4];
 
@@ -39,7 +39,7 @@ Settings read(const Frame& frame);
 
 /// \a frame's attributes and children with the sound set to \a settings,
 /// and with no sound when its name is empty. An effect other than "none"
-/// and "custom" gets the envelope Animate gives it, the fades over a sound
+/// and "custom" gets the envelope that effect stands for, the fades over a sound
 /// \a sampleCount samples long; "custom" keeps the envelope there was.
 void write(const Settings& settings, size_t sampleCount,
     std::vector<std::pair<std::string, std::string>>& attributes, std::vector<std::string>& children);
@@ -71,7 +71,7 @@ void trim(const Frame& frame, size_t& in, size_t& out);
 
 /// \a frame's attributes and children with a hand-made envelope and trim:
 /// the effect becomes "custom" (or "none" for no points), the points are
-/// written as a SoundEnvelope, the in and out points as Animate keeps them.
+/// written as a SoundEnvelope, the in and out points as the FLA keeps them.
 void setEnvelope(const std::vector<EnvelopePoint>& points, size_t in, size_t out,
     std::vector<std::pair<std::string, std::string>>& attributes, std::vector<std::string>& children);
 

@@ -301,8 +301,8 @@ bool parseEdges(const tinyxml2::XMLElement* element, fla::Shape* shape)
             }
             else if (hasAttribute(childElement, "cubics"))
             {
-                // The cubic curves a pen or brush drew, which only Animate's
-                // editor uses: kept as read, in their place among the edges.
+                // The cubic curves a pen or brush drew, which FLA files keep
+                // for editing only: kept as read, in their place among the edges.
                 shape->cubicEdges.emplace_back(shape->edges.size(), elementText(childElement));
             }
         }
@@ -352,7 +352,7 @@ fla::FillStyle* parseFillStyle(const tinyxml2::XMLElement* element, fla::DOMElem
     }
     else if (std::strcmp(tagName, "BitmapFill") == 0)
     {
-        // Textured paint Phoenix baked for Animate: the solid fill it was.
+        // Textured paint Phoenix baked for other apps: the solid fill it was.
         const std::string solid = getAttribute(element, "phoenixSolidColor");
         if (!solid.empty())
         {
@@ -555,8 +555,8 @@ bool parseElement(const tinyxml2::XMLElement* element, fla::Element* el)
     el->isSelected = getBoolAttribute(element, "isSelected", false);
     el->isFloating = getBoolAttribute(element, "isFloating", false);
     el->isLocked = getBoolAttribute(element, "lockFlag", false);
-    // Display > Visible switched off: Animate leaves the instance out of what
-    // it shows. The attribute itself is kept as read for the save.
+    // Display > Visible switched off: the instance is left out of what is
+    // shown. The attribute itself is kept as read for the save.
     el->visible = getBoolAttribute(element, "isVisible", true);
 
     // Parse transformation matrix
@@ -822,13 +822,13 @@ bool parseSymbolInstance(const tinyxml2::XMLElement* element, fla::SymbolInstanc
     keepAttributes(element, {"libraryItemName", "name", "blendMode", "firstFrame", "lastFrame", "symbolType", "loop",
         "loopType", "isSelected", "isFloating", "lockFlag"}, instance);
     instance->blendMode = getAttribute(element, "blendMode");
-    // "normal" is what no blend mode means; Animate leaves it out.
+    // "normal" is what no blend mode means; FLA files leave it out.
     if (instance->blendMode == "normal")
         instance->blendMode.clear();
     instance->firstFrame = fla::clampFrameIndex(getIntAttribute(element, "firstFrame", 0));
     instance->lastFrame = std::min(getIntAttribute(element, "lastFrame", -1), fla::kMaxFrames);
 
-    // Animate leaves the type out for a movie clip and writes it for
+    // FLA files leave the type out for a movie clip and carry it for
     // everything else, a graphic always with its loop.
     std::string symbolType = getAttribute(element, "symbolType", "movie clip");
     if (symbolType == "graphic")
@@ -1425,8 +1425,7 @@ fla::Element* parseElementByType(const tinyxml2::XMLElement* element, fla::DOMEl
         return oval;
     }
 
-    // TLF text, which Animate no longer edits, opens as classic text, as
-    // Animate converts it.
+    // TLF text, an older kind of FLA text, opens as classic text.
     if (std::strcmp(tagName, "DOMTLFText") == 0)
     {
         fla::StaticText* text = new fla::StaticText(parent);
@@ -1657,7 +1656,7 @@ bool parseFrame(const tinyxml2::XMLElement* element, fla::Frame* frame)
     frame->keyMode = getAttribute(element, "keyMode");
     frame->name = getAttribute(element, "name");
     frame->labelType = getAttribute(element, "labelType");
-    // Animate spells it motionTweenSnap; the other spelling was ours.
+    // The FLA spells it motionTweenSnap; the other spelling was ours.
     frame->motionTWeenSnap = getBoolAttribute(element, "motionTweenSnap",
         getBoolAttribute(element, "motionTWeenSnap", false));
     frame->motionTweenSync = getBoolAttribute(element, "motionTweenSync", false);
@@ -1711,7 +1710,7 @@ bool parseFrame(const tinyxml2::XMLElement* element, fla::Frame* frame)
         else if (std::strcmp(tagName, "tweens") == 0)
         {
             // An Ease repeats the acceleration attribute, or names one of
-            // Animate's ease presets (method); a CustomEase is the curve
+            // the FLA's ease presets (method); a CustomEase is the curve
             // itself. Eases for one property (a target other than all) are
             // kept as read.
             for (const tinyxml2::XMLElement* tween = childElement->FirstChildElement();
@@ -1901,7 +1900,7 @@ bool parseLayers(const tinyxml2::XMLElement* element, fla::Timeline* timeline)
             {
                 layer->parentLayer = timeline->layers[layer->parentLayerIndex];
 
-                // For whatever reason, Flash doesn't set the layer type of masked layers to "masked", it just sets the parent layer to "mask".
+                // For whatever reason, FLA files don't set the layer type of masked layers to "masked", it just sets the parent layer to "mask".
                 if (layer->parentLayer->layerType == fla::Layer::Type::Mask)
                 {
                     layer->layerType = fla::Layer::Type::Masked;
@@ -1918,7 +1917,7 @@ bool parseLayers(const tinyxml2::XMLElement* element, fla::Timeline* timeline)
     return true;
 }
 
-/// Reads Animate's ruler guides from a DOMTimeline's guides attribute, which
+/// Reads the ruler guides from a DOMTimeline's guides attribute, which
 /// holds XML of its own: <guidelines><guideline direction="v">x</guideline>
 /// ... </guidelines>, a vertical guide by its x and a horizontal one ("h")
 /// by its y. False when the text is not that.
@@ -2142,7 +2141,7 @@ bool parseMedia(const tinyxml2::XMLElement* element, fla::Document* document, Zi
     {
         if (std::strcmp(childElement->Name(), "DOMBitmapItem") == 0)
         {
-            // A texture tile Phoenix baked for Animate, made again on save.
+            // A texture tile Phoenix baked for other apps, made again on save.
             if (getAttribute(childElement, "phoenixTextureBake") == "true")
                 continue;
             fla::Bitmap* bitmap = new fla::Bitmap(document);
@@ -2163,7 +2162,7 @@ bool parseMedia(const tinyxml2::XMLElement* element, fla::Document* document, Zi
             for (const tinyxml2::XMLElement* child = childElement->FirstChildElement(); child; child = child->NextSiblingElement())
                 bitmap->extraChildren.push_back(elementText(child));
 
-            // The image as imported sits under LIBRARY when Animate kept a
+            // The image as imported sits under LIBRARY when the FLA kept a
             // copy; the pixels in its own encoding sit under bin. Either is
             // enough to draw from.
             const std::string mediaPath = "LIBRARY/" + bitmap->href;
@@ -2346,7 +2345,7 @@ bool parseDocument(fla::Document* document, const tinyxml2::XMLElement* element,
     document->buildNumber = getIntAttribute(element, "buildNumber", 0);
     document->viewAngle3D = getDoubleAttribute(element, "viewAngle3D", 0.0);
     getColorAttribute(element, "backgroundColor", document->backgroundColor);
-    // A see-through stage is Phoenix's: Animate keeps only the color.
+    // A see-through stage is Phoenix's: the FLA keeps only the color.
     if (const char* alpha = element->Attribute("phoenixStageAlpha"))
         document->backgroundColor[3] = static_cast<uint8_t>(std::clamp(std::lround(std::atof(alpha) * 255.0), 0L, 255L));
     getColorAttribute(element, "gridColor", document->gridColor);
@@ -2359,7 +2358,7 @@ bool parseDocument(fla::Document* document, const tinyxml2::XMLElement* element,
     document->vanishingPoint3DX = getDoubleAttribute(element, "vanishingPoint3DX", 0.0);
     document->vanishingPoint3DY = getDoubleAttribute(element, "vanishingPoint3DY", 0.0);
     document->nextSceneIdentifier = getIntAttribute(element, "nextSceneIdentifier", 0);
-    // Animate writes these only when they are off.
+    // FLA files carry these only when they are off.
     document->playOptionsPlayLoop = getBoolAttribute(element, "playOptionsPlayLoop", true);
     document->playOptionsPlayPages = getBoolAttribute(element, "playOptionsPlayPages", true);
     document->playOptionsPlayFrameActions = getBoolAttribute(element, "playOptionsPlayFrameActions", true);

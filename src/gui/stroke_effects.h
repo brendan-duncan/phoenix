@@ -6,7 +6,7 @@ namespace fla {
 class StrokeStyle;
 }
 
-/// Animate's procedural stroke styles drawn from a stroke's centerline:
+/// The procedural stroke styles drawn from a stroke's centerline:
 /// ragged (a wavering line), stipple (dots scattered across the stroke's
 /// width) and hatched (short marks across the line). The result is an area
 /// to fill with the stroke's color, in the same units as \a centerline.

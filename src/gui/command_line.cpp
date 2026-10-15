@@ -135,7 +135,7 @@ const char* const kHelp =
     "  benchmark <file> [--frames N] [--json <out.json>] [--against <animate.json>]\n"
     "      Times opening, drawing (first with nothing cached, then cached),\n"
     "      saving as FLA, PHX and XFL, and reopening the PHX, with peak memory.\n"
-    "      --against compares with the times docs/benchmark.jsfl took in Animate.\n"
+    "      --against compares with the times docs/benchmark.jsfl recorded.\n"
     "\n"
     "  --convert <in> <out>, --export-image, --export-movie and --roundtrip\n"
     "      work as before.\n";
@@ -724,7 +724,7 @@ int benchmark(const QStringList& args)
     std::printf("  reopen PHX       %9.1f ms\n", number("open_phx_ms"));
     std::printf("  peak memory      %9.1f MB\n", number("peak_memory_mb"));
 
-    // Side by side with Animate's times for the same file.
+    // Side by side with the times benchmark.jsfl recorded for the same file.
     const QString against = option(args, "--against");
     if (!against.isEmpty())
     {
@@ -734,7 +734,7 @@ int benchmark(const QStringList& args)
             std::fprintf(stderr, "Could not read %s\n", qPrintable(against));
         else
         {
-            std::printf("\n  against Animate   %10s %10s %8s\n", "Animate", "Phoenix", "faster");
+            std::printf("\n  against JSFL      %10s %10s %8s\n", "JSFL", "Phoenix", "faster");
             const struct
             {
                 const char* label;

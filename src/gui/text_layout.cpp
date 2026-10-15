@@ -22,7 +22,7 @@ namespace TextLayout
 namespace
 {
 
-/// Flash leaves two pixels between the box and the glyphs on every side.
+/// Text leaves two pixels between the box and the glyphs on every side.
 const double kGutter = 2.0;
 
 struct Face
@@ -61,7 +61,7 @@ QHash<QString, QString>& mapping()
     return map;
 }
 
-/// Animate writes PostScript-style names: the family run together, then a
+/// FLA files carry PostScript-style names: the family run together, then a
 /// dash and the style, with MT or PS tacked on by the foundry. Taking that
 /// apart gives a family Qt can find.
 Face resolveFace(const QString& face)
@@ -354,7 +354,7 @@ private:
         const size_t index = std::min(runIndex, _metrics.size() - 1);
         const QFontMetricsF& fm = _metrics[index];
         _ascent = std::max(_ascent, fm.ascent());
-        // A run's line spacing is the room Animate leaves between lines, on
+        // A run's line spacing is the room left between lines, on
         // top of the font's height; without one the font's own spacing
         // stands.
         double spacing = fm.lineSpacing();
@@ -625,13 +625,13 @@ QFont fontFor(const fla::TextRun& run)
 {
     const Face face = resolveFace(run.face.empty() ? QString("Arial") : QString::fromStdString(run.face));
     QFont font(face.family);
-    // The face's own style, or Animate's faux bold and italic.
+    // The face's own style, or the run's faux bold and italic.
     font.setBold(face.bold || keptAttribute(run, "bold") == "true");
     font.setItalic(face.italic || keptAttribute(run, "italic") == "true");
     font.setKerning(run.autoKern);
     if (run.letterSpacing != 0.0)
         font.setLetterSpacing(QFont::AbsoluteSpacing, run.letterSpacing);
-    // Animate's size is in pixels; a point size at the screen's dpi draws
+    // The run's size is in pixels; a point size at the screen's dpi draws
     // exactly that many. Super- and subscripts are set smaller.
     double pixels = run.size > 0.0 ? run.size : 12.0;
     const std::string position = keptAttribute(run, "characterPosition");
@@ -696,7 +696,7 @@ void draw(QPainter& painter, const fla::StaticText& text)
     painter.setBrush(Qt::NoBrush);
 
     // A dynamic or input field shows its box on the stage as a dotted
-    // outline, the way Animate marks a field that is not plain artwork.
+    // outline, marking a field that is not plain artwork.
     if (text.textType != fla::StaticText::TextType::Static)
     {
         QPen outline(QColor(0, 0, 0), 0.0);

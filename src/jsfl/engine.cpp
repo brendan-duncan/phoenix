@@ -1082,8 +1082,8 @@ RunResult Engine::run(const std::string& source, const std::string& name, const 
         JS_FreeValue(ctx, value);
         JS_FreeValue(ctx, global);
     }
-    // A script that listens for events stays loaded to hear them, as in
-    // Animate; any other ends here.
+    // A script that listens for events stays loaded to hear them; any
+    // other ends here.
     std::string listening;
     if (result.ok && !options.compileOnly)
         kept->evaluate("String(fl.__listeners.length)", &listening);

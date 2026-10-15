@@ -21,7 +21,7 @@ struct FontItem
     std::string font;
     std::string itemId;
     int id = 0;
-    /// The embedded ranges, by Animate's numbers: 1 uppercase, 2
+    /// The embedded ranges, by the FLA's numbers: 1 uppercase, 2
     /// lowercase, 3 numerals, 4 punctuation, 5 basic Latin.
     std::vector<int> ranges;
     /// Characters embedded besides the ranges.

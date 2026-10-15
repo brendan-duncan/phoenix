@@ -746,8 +746,7 @@ MorphSegment* pairSegment(const Outline& a, const Outline& b, MorphShape* morph,
 
     if (a.closed && b.closed && !hinted)
     {
-        // A starts at its leftmost anchor (then topmost), as Animate starts
-        // its outlines; B where it lines up best with that.
+        // A starts at its leftmost anchor (then topmost); B where it lines up best with that.
         const std::vector<double> anchorsA = ma.anchors();
         size_t start = 0;
         for (size_t i = 1; i < a.pieces.size(); ++i)

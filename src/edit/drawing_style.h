@@ -18,8 +18,8 @@ class Shape;
 
 /// How a stroke looks apart from its color and weight: its kind (solid,
 /// dashed, dotted, ragged, stipple, hatched), whether it is a hairline, its
-/// caps and joins and how it scales, as Animate's stroke controls set them.
-/// The empty strings are Animate's defaults (round caps and joins, normal
+/// caps and joins and how it scales.
+/// The empty strings are the defaults (round caps and joins, normal
 /// scaling).
 struct StrokeLook
 {
@@ -97,7 +97,7 @@ public:
         double ratio = 0.0;
         uint8_t color[4] = {0, 0, 0, 255};
     };
-    /// The gradient's stops, in order; Animate starts one at white to black.
+    /// The gradient's stops, in order; a new one runs white to black.
     std::vector<Stop> gradient = defaultGradient();
     /// How the colors go on past the ends: "" (extend), "reflect" or
     /// "repeat", and whether they blend in linear RGB.
@@ -124,8 +124,8 @@ public:
     /// Whether a new shape stays a separate object instead of merging into what
     /// is already there.
     ///
-    /// Animate calls this Object Drawing Mode and leaves it off, so drawing
-    /// merges by default: outlines cut each other and the newer fill replaces
+    /// This is Object Drawing Mode. It is off by default, so drawing
+    /// merges: outlines cut each other and the newer fill replaces
     /// the older. Turning it on keeps each drawing its own object.
     bool objectDrawing = false;
 
@@ -142,7 +142,7 @@ public:
 
     PencilMode pencilMode = PencilMode::Smooth;
 
-    /// Animate's smoothing amount, 0 to 100. It is applied in screen pixels,
+    /// The smoothing amount, 0 to 100. It is applied in screen pixels,
     /// so a stroke drawn zoomed in is not smoothed any harder than one drawn
     /// zoomed out.
     int pencilSmoothing = 50;
@@ -172,7 +172,7 @@ public:
     bool connectLines = true;
     bool recognizeShapes = true;
 
-    /// Animate's brush modes: where a stroke of any of the brushes lands.
+    /// The brush modes: where a stroke of any of the brushes lands.
     enum class BrushMode
     {
         /// Over everything, burying lines and fills it covers.
@@ -186,7 +186,7 @@ public:
         /// Only within the fill the stroke began in.
         Inside,
         /// Only over fills already there, recoloring them; nothing lands on
-        /// empty stage (Harmony's Repaint Brush).
+        /// empty stage.
         Repaint
     };
     BrushMode brushMode = BrushMode::Normal;
@@ -207,7 +207,7 @@ public:
     bool brushTexturePressure = false;
     bool brushTextureFixed = false;
 
-    /// Harmony's painting options: a stroke that closes on itself is
+    /// Painting options: a stroke that closes on itself is
     /// filled in (Auto Fill), and a stroke begun on a ruler guide keeps to
     /// it.
     bool brushAutoFill = false;
@@ -248,7 +248,7 @@ public:
     std::string bitmapTip;
     std::string bitmapTipTexture;
 
-    /// Animate's eraser modes: what a pass of the eraser takes away.
+    /// The eraser modes: what a pass of the eraser takes away.
     enum class EraserMode
     {
         /// Lines and fills alike.
@@ -266,7 +266,7 @@ public:
 
     /// The Magic Wand's settings: how far a color may be from the clicked
     /// pixel's, 0 to 200 on each channel, and how its area's outline is
-    /// tidied (0 Pixels, 1 Rough, 2 Normal, 3 Smooth), as Animate's are.
+    /// tidied (0 Pixels, 1 Rough, 2 Normal, 3 Smooth).
     int wandThreshold = 10;
     int wandSmoothing = 2;
 
@@ -285,7 +285,7 @@ public:
     TransformMode transformMode = TransformMode::Free;
 
     /// How far apart the ends of an outline may be for the paint bucket to
-    /// treat it as closed: Animate's gap size setting.
+    /// treat it as closed: the gap size setting.
     enum class GapSize
     {
         None,
@@ -296,7 +296,7 @@ public:
     GapSize gapSize = GapSize::Small;
 
     /// Corner radius for the rectangle tools, in pixels. The Up and Down
-    /// arrows change it while a rectangle is being dragged out, as in Animate.
+    /// arrows change it while a rectangle is being dragged out.
     double cornerRadius = 0.0;
 
     /// Oval primitive settings: the arc from the start angle clockwise to
@@ -314,7 +314,7 @@ public:
     double starInnerRatio = 0.5;
 
     /// The face and size new text is set in. The face is written the way
-    /// Animate names fonts, the family run together without spaces; the size
+    /// FLA files name fonts, the family run together without spaces; the size
     /// is in pixels. Text takes the fill color.
     std::string textFace = "ArialMT";
     double textSize = 12.0;
@@ -329,7 +329,7 @@ public:
     FillStyle* createFill(DOMElement* parent) const;
 
     /// Places a gradient or bitmap fill over the box \a left, \a top,
-    /// \a right, \a bottom as Animate places a new one: a linear gradient
+    /// \a right, \a bottom as a new one is placed: a linear gradient
     /// across the width, a radial one centered and reaching the farther
     /// side, a bitmap at the top-left corner at its own size.
     static void fitFill(FillStyle& fill, double left, double top, double right, double bottom);

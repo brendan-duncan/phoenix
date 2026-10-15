@@ -8,7 +8,7 @@
 #include <string>
 #include <vector>
 
-/// Flash's filters and blend modes, applied to an instance that has been
+/// The filters and blend modes FLA and SWF files carry, applied to an instance that has been
 /// rendered into an image on its own.
 namespace Filters {
 
@@ -36,8 +36,8 @@ bool needsIsolation(const std::string& blendModeName);
 /// coverage, and subtract inverts, adds and inverts again. Alpha and erase
 /// cut into what is under them, which only means something inside a parent
 /// with the Layer blend mode (\a insideLayerGroup): alpha keeps what is
-/// under its coverage, erase removes it. Elsewhere Flash shows nothing of
-/// them, so nothing is drawn.
+/// under its coverage, erase removes it. Elsewhere nothing of them
+/// shows, so nothing is drawn.
 void composite(QPainter& painter, const QPoint& at, const QImage& image, const std::string& blendModeName,
     bool insideLayerGroup = false);
 

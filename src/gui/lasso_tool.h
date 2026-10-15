@@ -9,10 +9,10 @@ namespace fla {
 class Selection;
 }
 
-/// Animate's lasso tools: a loop round what to select.
+/// The lasso tools: a loop round what to select.
 ///
 /// Selects every object the loop touches, and cuts merge-drawn artwork along
-/// the loop to take just the fills and strokes inside it, as Animate does.
+/// the loop to take just the fills and strokes inside it.
 /// Shift adds to the selection.
 ///
 /// - The **Lasso** draws the loop freehand, as the cursor is dragged.

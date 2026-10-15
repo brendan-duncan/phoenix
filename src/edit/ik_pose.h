@@ -40,7 +40,7 @@ struct IKJoint
 
 /// How far a joint may turn from its parent bone, in radians, when it is
 /// constrained. Kept on the joint's node for Phoenix (phoenixMinRotation,
-/// phoenixMaxRotation); the files Animate writes carry no limits there.
+/// phoenixMaxRotation); other FLA files carry no limits there.
 struct JointLimit
 {
     bool constrained = false;
@@ -85,9 +85,9 @@ struct BoneSpring
 };
 
 /// An IK armature's pose span, read from and written back to the IKTree
-/// Animate keeps on a pose frame (as XML text).
+/// the FLA keeps on a pose frame (as XML text).
 ///
-/// Animate keeps a pose as a State on every node: the node's angle relative
+/// The FLA keeps a pose as a State on every node: the node's angle relative
 /// to its parent's, and its offset in the parent's frame, in twips (absolute,
 /// for the root's child). An IKState for each pose gives its length and the
 /// ease to the next one. Every frame of the span then has its joints worked
@@ -134,7 +134,7 @@ public:
 
     /// The joints the art shows \a frame frames into the span. In a shape's
     /// armature, the stored joints read at the eased entry ikBones reads
-    /// (see ik_tree.h), where the shapes Animate stores for each frame have
+    /// (see ik_tree.h), where the shapes the FLA stores for each frame have
     /// them; in an armature of symbols, the stored joints themselves, which
     /// its instances follow (see carried).
     std::vector<IKJoint> shownAt(int frame) const;
@@ -206,7 +206,7 @@ public:
 
     /// Writes \a binding as connectionIndices and connectionData, and
     /// \a anchors (the shape's points, in the armature's space as the
-    /// span's first frame has them) as the IKContour, as Animate keeps
+    /// span's first frame has them) as the IKContour, as the FLA keeps
     /// them: for each point, each of its bones with the point's place along
     /// the bone (0 at its head, 1 at its tail), its distance to the side
     /// (signed) and from the bone, and its weight. \a contour is the
@@ -249,7 +249,7 @@ private:
 };
 
 /// Turns the joints above \a effector so it reaches for \a target, by cyclic
-/// coordinate descent from the effector's parent up to the root, as Animate's
+/// coordinate descent from the effector's parent up to the root, as the
 /// selection tool drags a bone's end. A joint with a limit in \a limits
 /// turns no further than it allows. Returns the joints posed.
 std::vector<IKJoint> solveIK(std::vector<IKJoint> joints, int effector, const Point& target, int iterations = 16,
@@ -257,14 +257,14 @@ std::vector<IKJoint> solveIK(std::vector<IKJoint> joints, int effector, const Po
 
 /// The IKTree text of a new armature of symbol instances, one pose \a
 /// frames long, posed as \a joints are (parents before children), as
-/// Animate writes one: each joint turned toward its first child joint.
+/// FLA files store one: each joint turned toward its first child joint.
 std::string symbolArmatureXml(const std::string& name, const std::string& treeName,
     const std::vector<ArmatureJoint>& joints, int frames = 1);
 
 /// The IKTree text of a new armature, of symbol instances or, when \a
 /// bendsShape, bending a shape: then its nodes are "lsd" nodes, xArray and
 /// yArray hold the joints themselves and each node has its worldMatrix, as
-/// in a boned shape Animate saves. A shape's binding is set afterwards
+/// in a boned shape an FLA stores. A shape's binding is set afterwards
 /// (IKArmature::setBinding).
 std::string armatureXml(const std::string& name, const std::string& treeName, const std::vector<ArmatureJoint>& joints,
     int frames, bool bendsShape);

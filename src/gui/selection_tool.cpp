@@ -96,8 +96,8 @@ bool SelectionTool::mousePress(PhoenixView& view, QMouseEvent* event, const QPoi
     if (!_additive && view.beginMotionPathDrag(documentPos))
         return true;
 
-    // A bone of an armature on show poses it, as on Animate's armature
-    // layers, rather than picking what is under it.
+    // A bone of an armature on show poses it, rather than picking what is
+    // under it.
     if (!_additive && _poser.begin(view, documentPos))
         return true;
 
@@ -319,7 +319,7 @@ bool SelectionTool::mouseDoubleClick(PhoenixView& view, QMouseEvent* event, cons
     if (!hit)
     {
         // Double-clicking empty stage steps back out of the symbol being
-        // edited, as in Animate.
+        // edited.
         if (view.scopeDepth() > 0)
         {
             view.exitScope();
@@ -356,7 +356,7 @@ bool SelectionTool::keyPress(PhoenixView& view, QKeyEvent* event)
         !(event->modifiers() & Qt::ControlModifier) &&
         !_moveActive && !_marqueeActive && !_bender.active() && !_selection.isEmpty())
     {
-        // One pixel, or ten with shift, as in Animate.
+        // One pixel, or ten with shift.
         const double step = (event->modifiers() & Qt::ShiftModifier) ? 10.0 : 1.0;
         const double dx = key == Qt::Key_Left ? -step : key == Qt::Key_Right ? step : 0.0;
         const double dy = key == Qt::Key_Up ? -step : key == Qt::Key_Down ? step : 0.0;

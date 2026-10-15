@@ -24,7 +24,7 @@ struct LayerRow
     const fla::Layer* layer = nullptr;
 };
 
-/// The layer list beside the timeline, laid out as Animate's: a header
+/// The layer list beside the timeline: a header
 /// whose eye, padlock and outline square toggle every layer at once, a row
 /// per layer with a pencil on the current one and the same three toggles,
 /// folders that open and close, and under the list the New Layer, New

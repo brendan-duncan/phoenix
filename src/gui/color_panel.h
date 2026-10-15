@@ -18,7 +18,7 @@ namespace fla {
 class FLADocument;
 }
 
-/// The bar of a gradient with its stops under it, as Animate's Color panel
+/// The bar of a gradient with its stops under it, as the Color panel
 /// shows one: click the bar to add a stop, drag a stop to move it, drag it
 /// off downward to take it away, double-click it for its color.
 class GradientBar : public QWidget
@@ -61,7 +61,7 @@ private:
     bool _removing = false;
 };
 
-/// Animate's Color panel, for what new art is filled with: a solid color,
+/// The Color panel, for what new art is filled with: a solid color,
 /// a linear or radial gradient with its stops, flow and blending, or a
 /// library bitmap; and Apply to Selection, which fills the selected shapes
 /// with it.

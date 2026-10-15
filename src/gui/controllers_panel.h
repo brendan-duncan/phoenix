@@ -25,7 +25,7 @@ struct ControllersLinks
     std::function<void()> changed;
 };
 
-/// The Controllers panel: Harmony's master controllers. Each controller is
+/// The Controllers panel: master controllers. Each controller is
 /// a slider; Bind adds the current layer's property to what it drives,
 /// between the values it has now and the ones typed. Moving the slider
 /// sets them all on the frame shown, keying each layer there, as one undo

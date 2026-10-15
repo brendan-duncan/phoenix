@@ -22,7 +22,7 @@ enum class LoopType
     Loop,
     PlayOnce,
     PingPong,
-    /// Animate's "loop reverse" and "play once reverse".
+    /// The FLA's "loop reverse" and "play once reverse".
     LoopReverse,
     PlayOnceReverse
 };
@@ -93,8 +93,8 @@ public:
     std::vector<std::pair<std::string, std::string>> extraAttributes;
 
     /// The modeled attributes the file wrote. They are written back even at
-    /// what Phoenix takes as their default, since Animate leaves out only its
-    /// own defaults and writes some attributes always.
+    /// what Phoenix takes as their default, since FLA files leave out only
+    /// the format's own defaults and carry some attributes always.
     std::vector<std::string> presentAttributes;
 
     /// Fields a .phx file had for this object that this Phoenix does not

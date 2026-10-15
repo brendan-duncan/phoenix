@@ -17,8 +17,8 @@ struct Parts
 {
     double scaleX = 1.0;
     double scaleY = 1.0;
-    double skewX = 0.0; // the angle of the y axis, as Animate's Skew X
-    double skewY = 0.0; // the angle of the x axis, as Animate's Skew Y
+    double skewX = 0.0; // the angle of the y axis, the Transform panel's Skew X
+    double skewY = 0.0; // the angle of the x axis, the Transform panel's Skew Y
     double tx = 0.0;
     double ty = 0.0;
 };

@@ -578,7 +578,7 @@ TEST(xfl_writes_document_metadata_back_as_read)
     CHECK(written.find("<SolidSwatchItem color=\"00FF00\"") != std::string::npos ||
           written.find("<SolidSwatchItem color=\"#00FF00\"") != std::string::npos);
     CHECK(written.find("trace(1);") != std::string::npos);
-    // Everything lands in the order Animate writes it.
+    // Everything lands in the order FLA files use.
     CHECK(written.find("<PrinterSettings") < written.find("<publishHistory"));
     CHECK(written.find("<publishHistory") < written.find("<swatchLists"));
     CHECK(written.find("<swatchLists") < written.find("<scripts"));
@@ -638,7 +638,7 @@ TEST(xfl_keeps_what_it_does_not_model)
     CHECK(written.find("<SoundEnvelopePoint level0=\"32768\"") != std::string::npos);
     CHECK(written.find("<extendedSwatchLists>") != std::string::npos);
     CHECK(written.find("<brushdefinitions>") != std::string::npos);
-    // Each where Animate puts it: brushes before the timelines, the
+    // Each where the FLA puts it: brushes before the timelines, the
     // extended swatches after, the envelope before the frame's elements.
     CHECK(written.find("<brushdefinitions>") < written.find("<timelines>"));
     CHECK(written.find("<extendedSwatchLists>") > written.find("</timelines>"));
@@ -689,7 +689,7 @@ TEST(xfl_writes_an_armature_pose_after_the_frame_elements)
 
 TEST(xfl_keeps_timeline_guides_and_attributes)
 {
-    // Animate keeps ruler guides as XML inside the DOMTimeline's guides
+    // FLA files keep ruler guides as XML inside the DOMTimeline's guides
     // attribute; other timeline attributes Phoenix does not model come back
     // as they were.
     std::unique_ptr<fla::Document> document = parseDocumentText(
@@ -1196,7 +1196,7 @@ TEST(symbol_instances_keep_their_attributes_and_write_loop_as_animate_does)
     for (const char* kept : {"referenceID=\"ABC-1\"", "centerPoint3DX=\"12.5\"", "cacheAsBitmap=\"true\"",
              "trackAsMenu=\"true\"", "loop=\"single frame\""})
         CHECK(written.find(kept) != std::string::npos);
-    // Animate's attribute is loop; a button has none.
+    // The FLA's attribute is loop; a button has none.
     CHECK(written.find("loopType") == std::string::npos);
     CHECK(written.find("libraryItemName=\"B\" symbolType=\"button\" loop") == std::string::npos);
 }
@@ -1233,8 +1233,8 @@ void countXml(const tinyxml2::XMLElement* element, std::map<std::string, int>& c
     for (; element; element = element->NextSiblingElement())
     {
         const std::string name = element->Name();
-        // An empty list carries nothing: Animate writes some, Phoenix leaves
-        // them out.
+        // An empty list carries nothing: some FLA files have them, Phoenix
+        // leaves them out.
         const bool emptyList = (name == "media" || name == "symbols" || name == "folders") &&
             !element->FirstChildElement() && !element->FirstAttribute();
         if (!emptyList)
@@ -1243,7 +1243,7 @@ void countXml(const tinyxml2::XMLElement* element, std::map<std::string, int>& c
              attribute = attribute->Next())
         {
             // A matrix entry at its identity value says nothing; Phoenix
-            // leaves those out as Animate does.
+            // leaves those out, as FLA files do.
             if (name == "Matrix")
             {
                 const std::string entry = attribute->Name();
@@ -1365,8 +1365,9 @@ TEST(xfl_save_keeps_every_element_and_attribute_of_real_documents)
 
 TEST(xfl_save_keeps_animates_defaults_and_values_as_meant)
 {
-    // Animate leaves out only its own defaults, which are not always the
-    // ones Phoenix would pick: what comes back has to mean the same to it.
+    // FLA files leave out only the format's own defaults, which are not
+    // always the ones Phoenix would pick: what comes back has to mean the
+    // same to other apps that open it.
     std::unique_ptr<fla::Document> document = parseDocumentText(
         "<DOMDocument xmlns='http://ns.adobe.com/xfl/2008/' width='550' height='400' "
         "viewAngle3D='92.3090013472118' playOptionsPlayLoop='false' objectsSnapTo='false' gridSpacingX='18' "
@@ -1415,7 +1416,7 @@ TEST(xfl_save_keeps_animates_defaults_and_values_as_meant)
             std::printf("    lost on save: %s\n", kept);
         CHECK(found);
     }
-    // The first run kerns, Animate's default, so it says nothing about it.
+    // The first run kerns, the FLA's default, so it says nothing about it.
     const size_t first = written.find("kerned");
     CHECK(first != std::string::npos && written.find("autoKern", first) > written.find("</DOMTextRun>", first));
     // The unknown element stays between the text and the shape.
@@ -1565,7 +1566,7 @@ TEST(xfl_bakes_textured_paint_for_animate_and_reads_it_back)
     std::vector<std::string> unsupported;
     std::string error;
     CHECK(fla::XFLContent::build(*document, std::string(), entries, unsupported, error));
-    // For Animate: a repeating bitmap fill of the grain, its tile in the
+    // For other apps: a repeating bitmap fill of the grain, its tile in the
     // library and under bin, the color kept beside it.
     const std::string& xml = entries.front().text;
     CHECK(xml.find("<BitmapFill bitmapPath=\"Phoenix Texture Chalk CC3300CC 50\"") != std::string::npos);

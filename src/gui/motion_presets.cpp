@@ -196,7 +196,7 @@ void MotionPresetsDialog::exportSelected()
     settings.beginGroup(kGroup);
     const QString motion = settings.value(QString::fromUtf8(QUrl::toPercentEncoding(item->text()))).toString();
     settings.endGroup();
-    // As Animate keeps a preset: the AnimationCore on its own.
+    // As a preset file keeps it: the AnimationCore on its own.
     QString core = motion;
     const int from = core.indexOf("<AnimationCore");
     const int to = core.lastIndexOf("</motionObjectXML>");

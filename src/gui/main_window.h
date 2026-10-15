@@ -185,7 +185,7 @@ private slots:
     /// The frames of the scene, or of the library symbol \a symbol, on one
     /// image with a description beside it.
     void exportSpriteSheet(const QString& symbol = QString());
-    /// File > Publish Settings and File > Publish: the formats Animate's
+    /// File > Publish Settings and File > Publish: the formats the document's
     /// publish settings ask for, written beside the document.
     void publishSettings();
     void publish();
@@ -673,8 +673,7 @@ private:
     /// somewhere other than the swatch buttons, such as the eyedropper.
     void refreshStyleSwatches();
 
-    /// The toolbox's own stroke and fill swatches, under the tools as
-    /// Animate places them.
+    /// The toolbox's own stroke and fill swatches, under the tools.
     QToolButton* _toolboxStrokeSwatch = nullptr;
 
     /// Each tool's toolbox action, so a tool can be chosen as a click on
@@ -825,7 +824,7 @@ private:
     /// Review Notes: notes on frames, kept on a guide layer.
     class NotesPanel* _notes = nullptr;
     QDockWidget* _notesDock = nullptr;
-    /// Controllers: Harmony's master controllers.
+    /// Controllers: master controllers.
     class ControllersPanel* _controllers = nullptr;
     QDockWidget* _controllersDock = nullptr;
     struct DocumentTab
@@ -924,7 +923,7 @@ private:
     /// Function Curves: any property of the current layer over time.
     class FunctionCurvesPanel* _functionCurves = nullptr;
     QDockWidget* _functionCurvesDock = nullptr;
-    /// Palettes: Harmony's linked palettes.
+    /// Palettes: linked palettes.
     class PalettesPanel* _palettes = nullptr;
     QDockWidget* _palettesDock = nullptr;
     /// JSFL scripts: the Commands menu and the Output panel.
@@ -990,7 +989,7 @@ private:
     void pickInstanceFrame(int frame, bool createKeyframe);
 
     /// Places an instance of a library item where it was dropped, centered
-    /// there, as Animate does.
+    /// there.
     void placeLibraryItem(const QString& kind, const QString& name, const QPointF& position);
 
     /// Brings image and sound files into the library as one undo step,
@@ -1016,7 +1015,7 @@ private:
     void importSequence(const QStringList& paths);
 
     /// Puts a library sound on the keyframe the playhead is in on the
-    /// current layer, as dragging one onto the stage does in Animate.
+    /// current layer, as dragging one onto the stage does.
     void attachSound(const QString& name);
     /// The same on \a layer at \a frame: where a sound dropped on the
     /// timeline goes.
@@ -1103,7 +1102,7 @@ private:
 
     /// Adds copies of \a sources to the current frame as one undo step and
     /// selects them. With \a centerInView the copies are moved so that they
-    /// sit in the middle of the view, which is where Animate pastes.
+    /// sit in the middle of the view, which is where a paste lands.
     void placeCopies(const std::vector<const fla::Element*>& sources, const char* name,
         bool centerInView);
 

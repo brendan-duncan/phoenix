@@ -275,7 +275,7 @@ QImage gradientGlow(const QImage& image, const fla::Filter& filter, double scale
 }
 
 /// Gradient bevel: the relief (how much an edge faces the light, -1 to 1)
-/// mapped through the gradient, whose middle is the flat surface. Flash's
+/// mapped through the gradient, whose middle is the flat surface. The
 /// default gradient has a transparent middle, so flat areas show nothing.
 QImage gradientBevel(const QImage& image, const fla::Filter& filter, double scale)
 {

@@ -130,7 +130,7 @@ TEST(a_locked_folder_locks_the_layers_in_it)
 TEST(a_hidden_folder_does_not_hide_layers_that_show)
 {
     // Hiding a folder hides each layer in it; a file whose folder alone is
-    // hidden shows what is inside, as Animate does.
+    // hidden shows what is inside.
     fla::Layer folder(nullptr);
     folder.layerType = fla::Layer::Type::Folder;
     folder.visible = false;

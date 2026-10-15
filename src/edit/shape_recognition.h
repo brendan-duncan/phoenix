@@ -9,7 +9,7 @@
 namespace fla {
 
 /// What the pencil's Straighten mode does to a stroke after fitting it, the
-/// way Animate's Connect Lines and Recognize Shapes settings do.
+/// way the Connect Lines and Recognize Shapes settings ask.
 struct StrokeTidyOptions
 {
     /// Close a stroke whose ends come within this distance of each other.

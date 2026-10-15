@@ -25,7 +25,7 @@ struct LayerDepthLinks
     std::function<void()> changed;
 };
 
-/// Animate's Layer Depth panel, as Harmony's top view of a multiplane: the
+/// The Layer Depth panel, a top view of a multiplane: the
 /// camera at the left looking right, the stage's plane, and each layer as a
 /// bar at its depth, dragged nearer or farther. Near layers move more when
 /// the camera pans.

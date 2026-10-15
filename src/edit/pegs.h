@@ -9,11 +9,11 @@ class Symbol;
 class SymbolList;
 class Timeline;
 
-/// Pegs, as in Harmony: a layer that holds nothing to see, only a
-/// transform, which the layers parented to it follow. Animating the peg
-/// moves, turns and scales everything under it about its pivot. Built on
-/// Animate's layer parenting: the peg layer holds one instance of an empty
-/// graphic symbol, so Animate plays the file the same and simply draws
+/// Pegs: a layer that holds nothing to see, only a transform, which the
+/// layers parented to it follow. Animating the peg moves, turns and scales
+/// everything under it about its pivot. Built on the FLA's layer
+/// parenting: the peg layer holds one instance of an empty graphic symbol,
+/// so other apps that open the file play it the same and simply draw
 /// nothing for the peg. Free of Qt.
 namespace pegs {
 

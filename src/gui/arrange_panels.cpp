@@ -300,7 +300,7 @@ void AlignPanel::matchSize(bool width, bool height)
             return element->transform;
         const double sx = width ? w / b.width() : 1.0;
         const double sy = height ? h / b.height() : 1.0;
-        // Grown from its top-left corner, as Animate does.
+        // Grown from its top-left corner.
         const QTransform about = QTransform::fromTranslate(-b.left(), -b.top()) * QTransform::fromScale(sx, sy) *
             QTransform::fromTranslate(b.left(), b.top());
         return fromQ(toQ(element->transform) * about);

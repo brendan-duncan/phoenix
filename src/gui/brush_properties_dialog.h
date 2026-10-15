@@ -18,7 +18,7 @@ class QComboBox;
 class QLabel;
 class QListWidget;
 
-/// Brush Properties, as Harmony's: the brush's presets with previews of
+/// Brush Properties: the brush's presets with previews of
 /// the stroke each paints, and every setting of the tip, its dynamics, the
 /// bitmap brush and the texture. Each brush has its own list of presets,
 /// and the bitmap brush another; they are kept between runs, and a list

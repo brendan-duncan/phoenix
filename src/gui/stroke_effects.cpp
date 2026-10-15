@@ -55,7 +55,7 @@ std::string attribute(const fla::StrokeStyle& style, const char* name, const cha
     return found == style.styleAttributes.end() ? std::string(fallback) : found->second;
 }
 
-/// Picks a value by one of Animate's named settings, in the order given.
+/// Picks a value by one of the FLA's named settings, in the order given.
 double pick(const std::string& value, std::initializer_list<const char*> names,
     std::initializer_list<double> values, double fallback)
 {

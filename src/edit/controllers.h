@@ -11,13 +11,13 @@ class Document;
 class Layer;
 class Timeline;
 
-/// Master controllers, as in Harmony: one slider driving several
+/// Master controllers: one slider driving several
 /// properties at once (a head turn moving the head, swapping the eyes'
 /// drawing and turning the nose). Moving a controller sets the properties
 /// it drives on the frame shown, keying the layers there, so what is saved
-/// is ordinary keyframes Animate plays as they are. The controllers
-/// themselves are kept in the document where Animate ignores them. Free
-/// of Qt.
+/// is ordinary keyframes any player plays as they are. The controllers
+/// themselves are kept in the document where other apps that open the
+/// FLA ignore them. Free of Qt.
 namespace controllers {
 
 /// What a controller drives: a property of the symbol instances on a

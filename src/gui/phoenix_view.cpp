@@ -132,7 +132,7 @@ const fla::Layer* owningLayer(const fla::DOMElement* element)
     return nullptr;
 }
 
-/// The color a selected element is highlighted in. Animate's default is the
+/// The color a selected element is highlighted in. The default is the
 /// outline color of the layer the element sits on, so neighboring layers
 /// read differently and the highlight is the same color as the layer's
 /// outline view.
@@ -147,10 +147,10 @@ QColor highlightColorFor(const fla::Element* element)
 
 /// An oval primitive's outline: the whole ellipse, or the sector from its
 /// start angle clockwise to its end angle, with a hole or a notch of the
-/// inner radius (a percentage of the outer). Animate measures angles
+/// inner radius (a percentage of the outer). FLA files measure angles
 /// clockwise from three o'clock; Qt's arcs run the other way.
 /// An oval primitive with Close Path switched off and a part of the oval
-/// cut away: Animate draws its arc as an open line, with no fill.
+/// cut away: its arc is drawn as an open line, with no fill.
 bool ovalIsOpen(const fla::OvalPrimitive& oval)
 {
     bool closed = true;
@@ -207,7 +207,7 @@ QPainterPath ovalPrimitivePath(const fla::OvalPrimitive& oval)
 }
 
 /// A rectangle primitive's outline with its corner radii. Each radius is
-/// clamped to half the shorter side, as Animate clamps it; a negative radius
+/// clamped to half the shorter side; a negative radius
 /// scoops the corner inwards.
 QPainterPath roundedRectanglePath(const fla::RectanglePrimitive& rectangle)
 {
@@ -270,7 +270,7 @@ QPainterPath roundedRectanglePath(const fla::RectanglePrimitive& rectangle)
     return path;
 }
 
-/// Animate's magnification presets, which Zoom In and Zoom Out step through.
+/// The magnification presets, which Zoom In and Zoom Out step through.
 constexpr double kZoomPresets[] = {0.08, 0.25, 0.5, 1.0, 2.0, 4.0, 8.0, 16.0, 32.0};
 
 } // namespace
@@ -339,7 +339,7 @@ void PhoenixView::onPlayerFrameChanged(int frame)
     _snapBoundsValid = false;
 
     // What was selected lives on the frame just left, so the selection
-    // goes with it, as in Animate; letting go also drops a drawing that
+    // goes with it; letting go also drops a drawing that
     // was still floating into the artwork of its own frame.
     if (_selection && !_selection->isEmpty() && !(_commandStack && _commandStack->isExecuting()))
         _selection->clear();
@@ -1605,7 +1605,7 @@ void PhoenixView::drawDocument(QPainter& painter, const fla::Document* document)
 
     // The clips' frame actions are read again each time, after any edit.
     _clipSequences.clear();
-    // One scene at a time, as Animate shows them; Test Movie shows the one
+    // One scene at a time; Test Movie shows the one
     // the movie is playing.
     const fla::Timeline* scene = _movie && _movie->root().timeline ? _movie->root().timeline : document->currentScene();
     if (!scene || !scene->visible)
@@ -1662,7 +1662,7 @@ void PhoenixView::drawTimeline(QPainter& painter, const fla::Timeline* timeline,
     QTransform painterTransform = painter.transform();
     const QRect deviceRect(0, 0, painter.device()->width(), painter.device()->height());
 
-    // On the timeline being edited, as on Animate's stage, guide layers show
+    // On the timeline being edited, guide layers show
     // and a mask masks only once it is locked; until then its own art shows
     // and the layers under it show whole. Anywhere else, and in an exported
     // movie, guides are left out and masks always mask.
@@ -2476,7 +2476,7 @@ void PhoenixView::endHintDrag(bool commit)
     const int index = _hintDrag.index;
     const bool start = _hintDrag.start;
     _hintDrag = HintDrag();
-    // Dropped off the stage, the hint goes, as in Animate.
+    // Dropped off the stage, the hint goes.
     const fla::Document* document = _flaDocument ? _flaDocument->document : nullptr;
     if (commit && document && index >= 0 && index < static_cast<int>(hints.size()) && !inSymbol())
     {
@@ -2752,7 +2752,7 @@ void PhoenixView::drawLayer(QPainter& painter, const fla::Layer* layer, fla::Loo
             return;
     }
 
-    // Onion skin leaves locked layers out, as Animate does, so a locked
+    // Onion skin leaves locked layers out, so a locked
     // background is not drawn again faded under every frame.
     if (_frameOverride >= 0 && !_exporting && layer->isLocked() && !inSymbol())
         return;
@@ -2864,7 +2864,7 @@ void PhoenixView::drawFrame(QPainter& painter, const fla::Frame* frame, const fl
     const bool filtered = _frameDepth == 1 && !_maskPass && _drawPhase != DrawPhase::All;
 
     int nextElementIndex = 0;
-    // What each element tweens toward, paired as Animate pairs them.
+    // What each element tweens toward, paired by fla::pairTweenElements.
     const std::vector<int> pairs = nextTweenFrame && frame->tweenType == fla::TweenType::Motion
         ? fla::pairTweenElements(frame->elements, nextTweenFrame->elements) : std::vector<int>();
     for (const fla::Element* element : frame->elements)
@@ -3003,8 +3003,8 @@ int PhoenixView::symbolFrame(const fla::SymbolInstance& instance) const
         return elapsed % length;
     }
     // A looping graphic's first frame can be past its end: a synced tween
-    // (Animate's Sync) counts it on from keyframe to keyframe without
-    // wrapping, and Animate plays it round the loop from there rather than
+    // (Sync) counts it on from keyframe to keyframe without
+    // wrapping, and it plays round the loop from there rather than
     // holding the last frame.
     return fla::graphicFrame(instance.loopType, instance.firstFrame, instance.lastFrame, length, elapsed);
 }
@@ -3114,7 +3114,7 @@ void PhoenixView::drawElement(QPainter& painter, const fla::Element* element, co
         const fla::Symbol* symbol = instance->symbol;
         if (symbol && symbol->visible)
         {
-            // A graphic plays along with the timeline it is on; on Animate's
+            // A graphic plays along with the timeline it is on; on the
             // stage a movie clip or a button shows its first frame.
             int frameOffset = symbolFrame(*instance);
             fla::LoopType loopType = fla::LoopType::SingleFrame;
@@ -3637,7 +3637,7 @@ QPen PhoenixView::getPen(const fla::StrokeStyle* strokeStyle, bool scaleForEleme
     QPen pen(QColor(0, 0, 0, 255), weight);
     pen.setCosmetic(hairline);
 
-    // Flash's defaults are round caps and round joins; the file only records
+    // The FLA's defaults are round caps and round joins; the file only records
     // them when they differ. Qt's own defaults are square and bevel, which is
     // what every pencil line and rectangle corner used to get.
     if (strokeStyle->caps == "none")
@@ -3692,7 +3692,7 @@ QPen PhoenixView::getPen(const fla::StrokeStyle* strokeStyle, bool scaleForEleme
         pen.setBrush(getFillBrush(strokeStyle->fill, fla::Rect()));
     }
 
-    // A mask is its fills' area: Animate leaves the lines out of it.
+    // A mask is its fills' area: the lines are left out of it.
     if (_maskPass)
         return QPen(Qt::NoPen);
 
@@ -4146,7 +4146,7 @@ QPixmap PhoenixView::libraryBitmap(const QString& name)
         QPixmap pixmap;
         if (!bitmap->imageData.empty())
         {
-            // The imported file as Animate kept it.
+            // The imported file as the FLA kept it.
             const QByteArray data(reinterpret_cast<const char*>(bitmap->imageData.data()),
                 static_cast<int>(bitmap->imageData.size()));
             pixmap.loadFromData(data);
@@ -4159,7 +4159,7 @@ QPixmap PhoenixView::libraryBitmap(const QString& name)
         }
         if (pixmap.isNull())
         {
-            // Animate's own lossless encoding of the pixels.
+            // The FLA's own lossless encoding of the pixels.
             fla::DecodedBitmap decoded;
             if (fla::decodeLosslessBitmap(bitmap->datData, decoded))
             {
@@ -4954,7 +4954,7 @@ HitResult PhoenixView::hitTest(const QPointF& documentPos, double tolerance) con
         return result;
 
     // Inside a symbol only its own timeline can be picked; the dimmed
-    // document behind it is out of reach, as in Animate.
+    // document behind it is out of reach.
     for (const fla::Timeline* timeline : editableTimelines())
     {
         if (!timeline->visible)
@@ -5067,7 +5067,7 @@ void PhoenixView::hitTestElement(fla::Element& element, fla::Frame* frame,
     {
     case fla::Element::Type::Group:
     {
-        // Clicking anything inside a group picks the group, as in Animate;
+        // Clicking anything inside a group picks the group;
         // editing the contents means entering the group.
         fla::Group& group = static_cast<fla::Group&>(element);
         HitResult inner;
@@ -5163,7 +5163,7 @@ void PhoenixView::hitTestElement(fla::Element& element, fla::Frame* frame,
                 isNearOutline(entry.painterPath, localPos, localTolerance))
             {
                 // Just outside an unstroked fill still counts as its outline:
-                // Animate lets the arrow grab and bend a fill's edge from
+                // The arrow can grab and bend a fill's edge from
                 // either side, stroke or no stroke.
                 part = HitResult::Part::Stroke;
             }
@@ -5340,7 +5340,7 @@ void PhoenixView::mousePressEvent(QMouseEvent *event)
     // left those silently doing nothing.
     const bool forcePan = event->button() == Qt::MiddleButton || _spaceHeld;
 
-    // A ruler or a guide under the cursor takes the press, as in Animate.
+    // A ruler or a guide under the cursor takes the press.
     // A 9-slice guide of the symbol being edited.
     if (event->button() == Qt::LeftButton && !forcePan && beginSliceDrag(event->position()))
         return;
@@ -5590,7 +5590,7 @@ void PhoenixView::tabletEvent(QTabletEvent* event)
     // The readings are kept for the brushes, and the event is left alone so
     // that Qt goes on to deliver the same movement as mouse events, which is
     // what the tools handle.
-    // Which end of the pen is in use: the eraser end erases, as in Animate.
+    // Which end of the pen is in use: the eraser end erases.
     if (event->type() != QEvent::TabletRelease)
     {
         const bool eraser = event->pointerType() == QPointingDevice::PointerType::Eraser;
@@ -5712,7 +5712,7 @@ void PhoenixView::keyPressEvent(QKeyEvent* event)
     }
 
     // Ctrl is the temporary arrow tool, and the cursor says so while it is
-    // held, the way Animate does.
+    // held.
     if (event->key() == Qt::Key_Control && _modifierTool && !_gestureTool && !_isDragging &&
         !(_activeTool && _activeTool->usesControlKey()))
     {
@@ -5775,7 +5775,7 @@ void PhoenixView::deleteSelection()
         return;
 
     // A drawing that was waiting to merge has nothing left to drop in, and a
-    // deleted region stays gone: the hole it leaves is what Animate leaves too.
+    // deleted region stays gone, leaving a hole.
     for (const Doomed& entry : doomed)
     {
         _pending.erase(std::remove_if(_pending.begin(), _pending.end(),
@@ -6569,7 +6569,7 @@ void PhoenixView::drawToolOverlay(QPainter& painter)
     const bool showFills = !_activeTool || _activeTool->showsFillHighlight();
 
     // A cross at a registration point: the symbol being edited's origin, and
-    // each selected instance's, as Animate marks them.
+    // each selected instance's.
     const auto crosshair = [&painter, scale](const QPointF& at, double reach) {
         const double r = reach * scale;
         painter.setPen(QPen(theme::color("stage.handleFill"), 3.0 * scale));
@@ -6597,7 +6597,7 @@ void PhoenixView::drawToolOverlay(QPainter& painter)
     painter.restore();
 
     // Shape hints on the keyframe shown: lettered circles, yellow at a tween's
-    // start and green at its end, as in Animate.
+    // start and green at its end.
     {
         bool start = true;
         if (fla::Frame* tween = shapeHintTween(start))
@@ -6670,7 +6670,7 @@ void PhoenixView::drawToolOverlay(QPainter& painter)
 
             const QColor color = highlightColorFor(element);
 
-            // Merge-drawn artwork is shown the way Animate shows it: a dot screen
+            // Merge-drawn artwork is shown selected with a dot screen
             // over the selected fills and strokes, not a box round the whole
             // shape.
             if (element->elementType() == fla::Element::Type::Shape)
@@ -6703,7 +6703,7 @@ void PhoenixView::drawToolOverlay(QPainter& painter)
         painter.restore();
     }
 
-    // The bones of every armature on show, as Animate shows them on an
+    // The bones of every armature on show on an
     // armature layer, ready to be dragged into a pose; and of one whose
     // shape or instances are selected, once for each pose frame.
     std::vector<const fla::Frame*> armatures;
@@ -6850,7 +6850,7 @@ void PhoenixView::drawIKBones(QPainter& painter, const fla::Frame& frame, double
     if (bones.empty())
         return;
 
-    // In the armature layer's color, as Animate draws them: a slim kite from
+    // In the armature layer's color: a slim kite from
     // the head joint, widest a fifth of the way along, to the tail joint,
     // with a round joint at each end. Sizes are in screen pixels.
     const fla::Layer* layer = dynamic_cast<const fla::Layer*>(frame.parent);
@@ -6947,7 +6947,7 @@ void PhoenixView::drawShapeHighlight(QPainter& painter, const fla::Shape* shape,
 
 void PhoenixView::wheelEvent(QWheelEvent *event)
 {
-    // As in Animate: the wheel scrolls the stage, shift scrolls it sideways,
+    // The wheel scrolls the stage, shift scrolls it sideways,
     // and ctrl zooms about the cursor.
     if (event->modifiers() & Qt::ControlModifier)
     {
@@ -7306,7 +7306,7 @@ QImage PhoenixView::libraryPreview(const QString& kind, const QString& name, con
     const fla::Document* document = _flaDocument ? _flaDocument->document : nullptr;
     if (!document || size.isEmpty())
         return image;
-    // On the stage color, as Animate's library shows it.
+    // On the stage color, as the library shows it.
     image.fill(QColor(document->backgroundColor[0], document->backgroundColor[1], document->backgroundColor[2]));
 
     QPainter painter(&image);

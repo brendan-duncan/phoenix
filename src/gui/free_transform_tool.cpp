@@ -613,7 +613,7 @@ QTransform FreeTransformTool::adjustForDrag(const QPointF& documentPos,
             }
         }
 
-        // Shift keeps the aspect ratio, as everywhere else in Animate: the
+        // Shift keeps the aspect ratio, as everywhere else in Phoenix: the
         // axis pulled further sets the scale for both.
         if (modifiers & Qt::ShiftModifier)
         {
@@ -933,7 +933,7 @@ FreeTransformTool::Grip FreeTransformTool::gripAt(PhoenixView& view, const QPoin
     if (_box.containsPoint(documentPos, Qt::OddEvenFill))
         return Grip::Body;
 
-    // Just outside a corner is the rotate band, the way Animate does it.
+    // Just outside a corner is the rotate band.
     const int nearCorner = handleAt(documentPos, handleTolerance + rotateBand);
     if (nearCorner >= 0 && nearCorner % 2 == 0)
     {
@@ -1210,8 +1210,7 @@ void FreeTransformTool::commitDistort(PhoenixView& view)
     _gripIndex = -1;
     _targets.clear();
 
-    // The box keeps the pulled-out shape until the selection changes, as
-    // Animate's does.
+    // The box keeps the pulled-out shape until the selection changes.
     rememberBoxOwners();
     view.clearCaches();
     view.update();
@@ -1425,7 +1424,7 @@ void FreeTransformTool::paintOverlay(PhoenixView& view, QPainter& painter, doubl
         }
     }
 
-    // Animate's transform box: a thin black outline, hollow white handles with
+    // The transform box: a thin black outline, hollow white handles with
     // a black border, and a white circle for the transformation point.
     painter.setBrush(Qt::NoBrush);
     painter.setPen(QPen(theme::color("stage.handleLine"), 1.0 * scale));

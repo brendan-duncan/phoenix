@@ -228,7 +228,7 @@ void EdgeWriter::writePath(const Path& path, std::string& out, std::vector<std::
         case PathSegment::Command::Cubic:
             if (segment->points.size() >= 3 && cubics)
             {
-                // Animate's way: quadratics in the edges, and the cubic with
+                // The FLA's way: quadratics in the edges, and the cubic with
                 // the same quadratics in its own record, "!start(;control
                 // control end" then the quadratics as q (on the curve) and Q
                 // (control) points, ");".
@@ -252,7 +252,7 @@ void EdgeWriter::writePath(const Path& path, std::string& out, std::vector<std::
             {
                 current = segment->points[2];
                 // The reader takes three points before the closing paren as
-                // control, control, endpoint. Flash also stores a `q`/`p`
+                // control, control, endpoint. FLA files also store a `q`/`p`
                 // quadratic approximation inside the parens, which the reader
                 // skips, so it is left out here.
                 out.push_back('(');

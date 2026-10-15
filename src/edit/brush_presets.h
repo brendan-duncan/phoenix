@@ -9,7 +9,7 @@ namespace fla {
 
 class DrawingStyle;
 
-/// Brush presets, as Harmony keeps them: a named brush a tool's list holds,
+/// Brush presets: a named brush a tool's list holds,
 /// with what it paints with besides its tip (the texture, the bitmap
 /// brush's flow and tip, Auto Fill). Each brush has its own list: the Flow,
 /// Nib and Ink brushes, and the bitmap brush. Free of Qt.

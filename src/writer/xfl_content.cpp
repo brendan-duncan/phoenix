@@ -76,7 +76,7 @@ bool XFLContent::buildUnguarded(const Document& document, const std::string& pro
     documentEntry.text = writer.writeDocument(document);
     entries.push_back(std::move(documentEntry));
 
-    // Animate recognizes a project by this marker, whose text is always
+    // An XFL project is recognized by this marker, whose text is always
     // PROXY-CS5. Callers can leave the name empty to skip it.
     if (!projectName.empty())
     {
@@ -107,7 +107,7 @@ bool XFLContent::buildUnguarded(const Document& document, const std::string& pro
         }
     }
 
-    // Textured paint baked for Animate, its tiles in the library: the
+    // Textured paint baked for other apps, its tiles in the library: the
     // document lists them once every symbol has been written.
     entries.front().text = writer.withBakedMedia(entries.front().text);
     for (const XFLWriter::BakedTexture& baked : writer.bakedTextures())
@@ -172,7 +172,7 @@ bool XFLContent::buildUnguarded(const Document& document, const std::string& pro
         entries.push_back(std::move(entry));
     }
 
-    // The files every Animate package has, for a document that came without
+    // The files every FLA package has, for a document that came without
     // them (one made here): the media type and an empty metadata file. A
     // document read from a file carries its own through extraFiles.
     const auto carried = [&document](const std::string& path) {

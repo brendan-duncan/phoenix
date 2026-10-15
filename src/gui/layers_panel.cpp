@@ -166,7 +166,7 @@ void drawFadedEye(QPainter& painter)
 
 void drawHiddenCross(QPainter& painter)
 {
-    // Animate marks a hidden layer with a red cross in the eye column.
+    // A hidden layer is marked with a red cross in the eye column.
     painter.setPen(QPen(QColor(230, 70, 70), 2.0));
     painter.drawLine(QPointF(4.0, 4.0), QPointF(12.0, 12.0));
     painter.drawLine(QPointF(12.0, 4.0), QPointF(4.0, 12.0));
@@ -203,7 +203,7 @@ void drawOutlineSquare(QPainter& painter)
 
 void drawPencil(QPainter& painter)
 {
-    // Animate's current-layer marker: a pencil leaning to the right.
+    // The current-layer marker: a pencil leaning to the right.
     painter.setPen(QPen(ink(), 1.2));
     painter.setBrush(theme::withAlpha(ink(), 90));
     QPainterPath body;
@@ -304,7 +304,7 @@ void drawTrash(QPainter& painter)
 }
 
 /// The layer's outline color: a filled square in the normal view, a hollow
-/// one when the layer is in outline view, as Animate shows it.
+/// one when the layer is in outline view.
 QIcon swatchIcon(const uint8_t rgba[4], bool outline)
 {
     QPixmap pixmap(16, 16);
@@ -1242,7 +1242,7 @@ void LayersPanel::showLayerMenu(QTreeWidgetItem* item, const QPoint& globalPos)
     const fla::layers::Kind kind = fla::layers::kindOf(now, layer);
 
     QMenu menu(this);
-    // The commands that add or remove act at the row clicked, as Animate's do.
+    // The commands that add or remove act at the row clicked.
     const auto atRow = [this, timeline, layerIndex, folder]() {
         if (!folder)
             setCurrentLayer(timeline, layerIndex);
@@ -1286,7 +1286,7 @@ void LayersPanel::showLayerMenu(QTreeWidgetItem* item, const QPoint& globalPos)
             }
             else
             {
-                // As Animate does: the layer masks the one just below it, and
+                // The layer masks the one just below it, and
                 // both are locked so the mask shows.
                 fla::layers::setKind(after, layer, fla::layers::Kind::Mask);
                 fla::Layer* below = nullptr;

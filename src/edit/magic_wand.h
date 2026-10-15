@@ -7,11 +7,11 @@
 
 namespace fla {
 
-/// Animate's Magic Wand, for a bitmap broken apart into a fill: the area of
+/// The Magic Wand, for a bitmap broken apart into a fill: the area of
 /// like color around a pixel, and its outline as loops to cut the fill by.
 namespace MagicWand {
 
-/// How the outline of the area is tidied, as Animate's Smoothing setting
+/// How the outline of the area is tidied, as the Smoothing setting
 /// offers it.
 enum class Smoothing
 {

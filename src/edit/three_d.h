@@ -15,7 +15,7 @@ class SymbolInstance;
 /// A movie clip turned and moved in 3D, as the 3D Rotation and 3D
 /// Translation tools leave it, and the perspective the stage sees it in.
 /// Kept on the instance for Phoenix (phoenixRotationX, phoenixRotationY,
-/// phoenixZ) beside its 2D matrix, which stays as Animate reads it. Free of
+/// phoenixZ) beside its 2D matrix, which stays as other apps read it. Free of
 /// Qt.
 namespace threed {
 

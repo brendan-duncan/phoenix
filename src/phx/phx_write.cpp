@@ -722,7 +722,7 @@ bool alreadyCompressed(const std::vector<uint8_t>& d)
         return true;
     };
     return starts({0x89, 'P', 'N', 'G'}) || starts({0xFF, 0xD8}) || starts({'G', 'I', 'F'}) ||
-        starts({0x03, 0x05}) /* Animate's lossless bitmap .dat, zlib inside */ || starts({'P', 'K'}) ||
+        starts({0x03, 0x05}) /* the FLA's lossless bitmap .dat, zlib inside */ || starts({'P', 'K'}) ||
         starts({'I', 'D', '3'}) || (d.size() > 1 && d[0] == 0xFF && (d[1] & 0xE0) == 0xE0) /* MPEG audio */ ||
         starts({'O', 'g', 'g', 'S'}) || starts({'f', 'L', 'a', 'C'}) || starts({'f', 't', 'y', 'p'}, 4);
 }

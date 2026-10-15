@@ -19,7 +19,7 @@ class Shape;
 class Snapper;
 }
 
-/// Animate's free transform tool: move, scale, rotate and skew whatever is
+/// The free transform tool: move, scale, rotate and skew whatever is
 /// selected.
 ///
 /// The tool keeps its own transform box rather than recomputing an axis-aligned
@@ -91,8 +91,7 @@ private:
         /// An edge between two handles: skew.
         Skew,
         /// Ctrl on a corner handle, with only shapes selected: the corner
-        /// moves on its own and the geometry is warped to follow, Animate's
-        /// Distort. Shift moves the neighboring corner the opposite way
+        /// moves on its own and the geometry is warped to follow. Shift moves the neighboring corner the opposite way
         /// along their edge, which tapers.
         Distort,
         /// An anchor or a handle of the envelope: the box's sides bend and

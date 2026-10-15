@@ -67,8 +67,8 @@ void registerTypes()
     setValue(L".phx", L"Content Type", L"application/x-phoenix-document");
     setValue(L".phx\\OpenWithProgids", kDocumentProgId, L"");
 
-    // FLA stays Animate's when it is there; Phoenix is one of the choices.
-    registerProgId(kFlaProgId, L"Animate Document");
+    // FLA stays with the app that owns it, if any; Phoenix is one of the choices.
+    registerProgId(kFlaProgId, L"FLA Document");
     setValue(L".fla\\OpenWithProgids", kFlaProgId, L"");
 
     // The viewer: under "Open with" for every type it shows, and "View in

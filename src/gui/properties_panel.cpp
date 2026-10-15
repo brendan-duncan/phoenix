@@ -221,7 +221,7 @@ QPixmap objectGlyph(const QString& kind, const QPalette& palette)
     return pixmap;
 }
 
-/// Animate's lock-aspect chain: two links, joined when locked.
+/// The lock-aspect chain: two links, joined when locked.
 QIcon chainIcon(bool linked, const QPalette& palette)
 {
     QPixmap pixmap(18, 18);
@@ -258,7 +258,7 @@ const char* const kBlendModes[] = {"normal", "layer", "multiply", "screen", "lig
 const char* const kBlendModeTitles[] = {"Normal", "Layer", "Multiply", "Screen", "Lighten", "Darken",
     "Difference", "Add", "Subtract", "Invert", "Alpha", "Erase", "Overlay", "Hard Light"};
 
-/// The Animate color effect a transform amounts to.
+/// The color effect a transform amounts to, as the FLA names them.
 enum class ColorStyle
 {
     None,
@@ -862,7 +862,7 @@ void PropertiesPanel::buildToolTab()
     });
     addOption("Mode", transformMode, {IconTool::FreeTransform});
 
-    // Magic Wand, as Animate's: threshold and smoothing.
+    // Magic Wand: threshold and smoothing.
     HotText* wandThreshold = makeHotText(0.0, 200.0, 0);
     wandThreshold->setValue(style.wandThreshold);
     wandThreshold->setToolTip("How far a color may be from the clicked one and still be taken, 0 to 200");
@@ -947,7 +947,7 @@ void PropertiesPanel::buildToolTab()
     const QString precisionTip = "How closely the finished outline follows the stroke; lower is smoother "
         "with fewer points";
 
-    // Brush (Animate's Fluid Brush).
+    // Brush (the Fluid Brush).
     const BrushMember fluid = &fla::DrawingStyle::fluidBrush;
     brushNumber(fluid, IconTool::FluidBrush, "Size", 1.0, 200.0, 1, " px", sizeTip, sizeOf, setSize);
     brushCheck(fluid, IconTool::FluidBrush, "Pressure", "Let a pen's pressure vary the width", pressureOf,
@@ -972,8 +972,7 @@ void PropertiesPanel::buildToolTab()
         "The tip's turn, clockwise", [](const Brush& b) { return b.angle; },
         [](Brush& b, double v) { b.angle = v; });
 
-    // Nib Brush (Animate's Classic Brush, Flash's): its nib shapes, Use Pressure and
-    // Use Tilt.
+    // Nib Brush (the Classic Brush): its nib shapes, Use Pressure and Use Tilt.
     const BrushMember classic = &fla::DrawingStyle::classicBrush;
     struct TipShape
     {
@@ -1089,7 +1088,7 @@ void PropertiesPanel::buildToolTab()
     });
     addOption("Grain strength", textureStrength, brushes);
 
-    // The bitmap brush: paint as pixels, Harmony's bitmap layer.
+    // The bitmap brush: paint as pixels, as on a bitmap layer.
     QCheckBox* bitmapBrush = new QCheckBox("Bitmap brush", this);
     bitmapBrush->setChecked(style.bitmapBrush);
     bitmapBrush->setToolTip("Paint pixels into the frame's paint canvas rather than vector shapes");
@@ -1159,7 +1158,7 @@ void PropertiesPanel::buildToolTab()
     QComboBox* eraserMode = new QComboBox(this);
     eraserMode->addItems({"Erase Normal", "Erase Fills", "Erase Lines", "Erase Selected Fills", "Erase Inside"});
     eraserMode->setCurrentIndex(static_cast<int>(style.eraserMode));
-    eraserMode->setToolTip("What a pass of the eraser takes away, as in Animate");
+    eraserMode->setToolTip("What a pass of the eraser takes away");
     connect(eraserMode, &QComboBox::currentIndexChanged, this, [this](int index) {
         _links.style->eraserMode = static_cast<fla::DrawingStyle::EraserMode>(index);
     });
@@ -1206,7 +1205,7 @@ void PropertiesPanel::buildToolTab()
 
     HotText* smoothing = makeHotText(0, 100, 0);
     smoothing->setValue(style.pencilSmoothing);
-    smoothing->setToolTip("How much the pencil smooths a stroke, 0 to 100, as in Animate");
+    smoothing->setToolTip("How much the pencil smooths a stroke, 0 to 100");
     connect(smoothing, &HotText::valueChanged, this, [this](double value, bool) { _links.style->pencilSmoothing = static_cast<int>(value); });
     addOption("Smoothing", smoothing, {IconTool::Pencil, IconTool::PaintBrush});
 
@@ -1222,12 +1221,12 @@ void PropertiesPanel::buildToolTab()
     connect(recognizeShapes, &QCheckBox::toggled, this, [this](bool on) { _links.style->recognizeShapes = on; });
     addOption(QString(), recognizeShapes, {IconTool::Pencil});
 
-    // Text. The face is kept the way Animate writes it, the family without
+    // Text. The face is kept the way the FLA stores it, the family without
     // its spaces.
     QFontComboBox* textFont = new QFontComboBox(this);
     textFont->setCurrentFont(QFont("Arial"));
     connect(textFont, &QFontComboBox::currentFontChanged, this, [this](const QFont& font) {
-        // Animate names a font by its PostScript name, so the common ones get
+        // The FLA names a font by its PostScript name, so the common ones get
         // the suffix their foundry gave them; the rest just lose their spaces.
         static const QHash<QString, QString> postScriptNames = {
             {"Arial", "ArialMT"},
@@ -1423,7 +1422,7 @@ std::vector<std::pair<QWidget*, QWidget*>> PropertiesPanel::addStrokeLookFields(
     };
     auto current = std::make_shared<fla::StrokeLook>(look);
 
-    // Style: the kinds Animate offers, hairline counted as one.
+    // Style: the kinds an FLA stroke can be, hairline counted as one.
     QComboBox* style = new QComboBox(this);
     style->addItems({"Solid", "Hairline", "Dashed", "Dotted", "Ragged", "Stipple", "Hatched"});
     const fla::StrokeStyle::Style kinds[7] = {fla::StrokeStyle::Style::Solid, fla::StrokeStyle::Style::Solid,
@@ -1467,7 +1466,7 @@ std::vector<std::pair<QWidget*, QWidget*>> PropertiesPanel::addStrokeLookFields(
     });
     add("Style", styleRow);
 
-    // Caps and joins as the file spells them; empty is Animate's round.
+    // Caps and joins as the file spells them; empty is the FLA default, round.
     QComboBox* cap = new QComboBox(this);
     cap->addItems({"Round", "None", "Square"});
     const char* caps[3] = {"", "none", "square"};
@@ -1634,8 +1633,7 @@ void PropertiesPanel::addPrimitiveSections(QVBoxLayout* layout, fla::Element* el
 
         PropertySection* corners = addSection(layout, "Rectangle Options");
         double* radii[4] = {&rect->topLeftRadius, &rect->topRightRadius, &rect->bottomLeftRadius, &rect->bottomRightRadius};
-        // Locked, one value sets all four corners, as Animate's lock does;
-        // it starts locked when they are all alike.
+        // Locked, one value sets all four corners; it starts locked when they are all alike.
         auto locked = std::make_shared<bool>(rect->topLeftRadius == rect->topRightRadius &&
             rect->topLeftRadius == rect->bottomLeftRadius && rect->topLeftRadius == rect->bottomRightRadius);
         auto before = std::make_shared<std::array<double, 4>>();
@@ -1793,8 +1791,8 @@ void PropertiesPanel::addPrimitiveSections(QVBoxLayout* layout, fla::Element* el
 
 void PropertiesPanel::addShapeSections(QVBoxLayout* layout, fla::Shape* shape)
 {
-    // The first solid fill and stroke stand for the shape, as Animate shows
-    // the one color when a selection has one.
+    // The first solid fill and stroke stand for the shape, showing the one
+    // color when a selection has one.
     fla::SolidColor* fill = nullptr;
     for (fla::FillStyle* style : shape->fills)
     {
@@ -2133,7 +2131,7 @@ void PropertiesPanel::addColorEffectSection(QVBoxLayout* layout, const QString& 
     effect->addLong(0, "Style", styleBox);
 
     // Choosing a style resets the transform to that style's starting point,
-    // as Animate does, keeping what carries over.
+    // keeping what carries over.
     connect(styleBox, &QComboBox::currentIndexChanged, this, [this, key, get, commit](int index) {
         _colorStyleChoice.insert(key, index);
         fla::ColorTransform after;
@@ -2292,7 +2290,7 @@ void PropertiesPanel::addInstanceDisplaySections(QVBoxLayout* layout, fla::Symbo
     display->addLong(0, "Blending", blend);
 
     // Visible: a movie clip or button that does not show, though it is
-    // there for scripts. Animate keeps it as isVisible.
+    // there for scripts. The FLA keeps it as isVisible.
     QCheckBox* visible = new QCheckBox("Visible", this);
     visible->setChecked(instance->visible);
     connect(visible, &QCheckBox::toggled, this, [this, instance](bool on) {
@@ -2380,7 +2378,7 @@ void PropertiesPanel::addInstanceDisplaySections(QVBoxLayout* layout, fla::Symbo
             });
         looping->addField(1, 0, "First", first);
 
-        // Animate's Last: where the playing stops or turns round; empty (0)
+        // Last: where the playing stops or turns round; empty (0)
         // for the symbol's end.
         HotText* last = makeHotText(0, 1.0e6, 0);
         last->setValue(instance->lastFrame + 1);
@@ -2401,8 +2399,8 @@ void PropertiesPanel::addInstanceDisplaySections(QVBoxLayout* layout, fla::Symbo
     }
 
     // --- Filters ---
-    // Animate gives filters to movie clips and buttons; a graphic shows any
-    // it has.
+    // Filters belong to movie clips and buttons; a graphic shows any it
+    // has.
     if (instance->symbolType != fla::SymbolType::Graphic || !instance->filters.empty())
         addFilterSection(layout, instance);
 }
@@ -2624,7 +2622,7 @@ void PropertiesPanel::addFilterSection(QVBoxLayout* layout, fla::SymbolInstance*
     }
 
     // Copy all the filters, and paste them onto another instance in place
-    // of its own, as Animate's filter menu does.
+    // of its own.
     QToolButton* copy = new QToolButton(this);
     copy->setText("Copy Filters");
     copy->setEnabled(!filters->empty());
@@ -2685,7 +2683,7 @@ void PropertiesPanel::addFilterSection(QVBoxLayout* layout, fla::SymbolInstance*
     clipboardLayout->addStretch();
     section->addWide(row++, clipboardRow);
 
-    // Add: each kind with Animate's starting settings.
+    // Add: each kind with its usual starting settings.
     QToolButton* add = new QToolButton(this);
     add->setText("Add Filter");
     add->setPopupMode(QToolButton::InstantPopup);
@@ -2703,7 +2701,7 @@ void PropertiesPanel::addFilterSection(QVBoxLayout* layout, fla::SymbolInstance*
             }
             if (type == T::GradientGlow || type == T::GradientBevel)
             {
-                // Animate starts these white to black, the white clear.
+                // These start white to black, the white clear.
                 filter.entries = {fla::GradientEntry{0.0, {255, 255, 255, 0}}, fla::GradientEntry{1.0, {0, 0, 0, 255}}};
             }
             std::vector<fla::Filter> after = *filters;
@@ -3345,7 +3343,7 @@ void PropertiesPanel::rebuildFrameTab()
 
     if (frame->tweenType != fla::TweenType::None)
     {
-        // The ease: the Ease value (Classic), one of Animate's presets, or a
+        // The ease: the Ease value (Classic), one of the ease presets, or a
         // custom curve, which Classic takes away again.
         static const char* const curves[] = {"quad", "cubic", "quart", "quint", "sine", "back", "circ", "bounce", "elastic"};
         static const char* const kinds[] = {"In", "Out", "InOut"};
@@ -3373,7 +3371,7 @@ void PropertiesPanel::rebuildFrameTab()
         }
         easeKind->setCurrentIndex(current);
 
-        // One undo step for the ease's fields, and Animate's attribute for a
+        // One undo step for the ease's fields, and the FLA attribute for a
         // preset kept in step.
         const auto setEase = [this, frame](bool custom, const std::string& method, const std::vector<fla::Point>& points,
                                  const std::string& customName, const char* name) {
@@ -3486,7 +3484,7 @@ void PropertiesPanel::rebuildFrameTab()
         tweening->addField(3, 1, QString(), sync);
 
         // Orient to Path: on a guided layer, the object turns as the guide
-        // does. Kept as Animate writes it, only when on.
+        // does. Kept as the FLA stores it, only when on.
         bool orients = false;
         for (const auto& [key, value] : frame->extraAttributes)
             orients = orients || (key == "motionTweenOrientToPath" && value == "true");

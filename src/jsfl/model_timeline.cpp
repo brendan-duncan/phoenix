@@ -675,7 +675,7 @@ const ClassInfo& Timeline::classInfo() const
                     if (!fla::timeline::setTween(*span.layer, start, true))
                     {
                         // With no keyframe after it to tween to, the span
-                        // still says it is tweened, as Animate keeps it.
+                        // still says it is tweened.
                         if (fla::Frame* frame = fla::timeline::spanAt(*span.layer, start))
                             frame->tweenType = fla::TweenType::Motion;
                     }

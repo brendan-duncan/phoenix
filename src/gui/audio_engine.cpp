@@ -89,7 +89,7 @@ namespace AudioDecode {
 
 bool parseFormat(const std::string& format, int& rate, int& bits, int& channels)
 {
-    // "44kHz 16bit Stereo": Flash's four rates are 5.5, 11, 22 and 44.1 kHz.
+    // "44kHz 16bit Stereo": the FLA's four rates are 5.5, 11, 22 and 44.1 kHz.
     int khz = 0;
     if (std::sscanf(format.c_str(), "%dkHz %dbit", &khz, &bits) != 2)
         return false;

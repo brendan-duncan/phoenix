@@ -25,7 +25,7 @@ void putU32(std::vector<uint8_t>& out, unsigned value)
     putU16(out, (value >> 16) & 0xffff);
 }
 
-/// A .dat as Animate writes one: the header seen in real files, then the
+/// A .dat as FLA files store one: the header seen in real files, then the
 /// rows deflated.
 std::vector<uint8_t> losslessDat(int width, int height, int bytesPerPixel,
     const std::vector<uint8_t>& rows)
@@ -124,7 +124,7 @@ TEST(lossless_bitmaps_encode_as_animate_reads_them)
     const std::vector<uint32_t> pixels = {0xff112233u, 0x80402010u, 0x00000000u, 0xffffffffu, 0xff000000u, 0x7f7f7f7fu};
     const std::vector<uint8_t> data = fla::encodeLosslessBitmap(3, 2, pixels);
     CHECK(fla::isLosslessBitmapData(data));
-    // The header as Animate writes it: size in pixels, frame in twips.
+    // The header as FLA files store it: size in pixels, frame in twips.
     CHECK(data[4] == 3 && data[6] == 2 && data[12] == 60 && data[20] == 40 && data[25] == 1);
     fla::DecodedBitmap decoded;
     CHECK(fla::decodeLosslessBitmap(data, decoded));

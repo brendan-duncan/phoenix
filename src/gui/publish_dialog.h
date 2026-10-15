@@ -10,8 +10,8 @@ class QLineEdit;
 class HotSpinBox;
 
 /// File > Publish Settings: which formats File > Publish writes, their
-/// file names, and each format's options, kept in the document as Animate
-/// keeps them.
+/// file names, and each format's options, kept in the document as FLA files
+/// keep them.
 class PublishSettingsDialog : public QDialog
 {
     Q_OBJECT

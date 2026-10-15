@@ -157,7 +157,7 @@ fla::CurveFit::Options PencilTool::fitOptions(PhoenixView& view) const
     fla::CurveFit::Options options;
     options.straighten = _style.pencilMode == fla::DrawingStyle::PencilMode::Straighten;
 
-    // Smoothing is an amount in screen pixels, as in Animate: at 100 the fit may
+    // Smoothing is an amount in screen pixels: at 100 the fit may
     // stray five screen pixels from the stroke, at 0 a quarter of one. Ink mode
     // follows the stroke closely but still fits curves rather than keeping every
     // mouse sample as a corner.

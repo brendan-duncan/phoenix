@@ -25,7 +25,7 @@ struct MotionState
     double scaleY = 100.0;
 };
 
-/// An object motion tween (Animate's Create Motion Tween), read from the
+/// An object motion tween, read from the
 /// AnimationCore document a frame keeps in motionObjectXML. Each property
 /// is a curve of keyframes over time in TimeScale units per second: a value
 /// at a time, with Bezier handles (next, previous) that are a time offset
@@ -135,14 +135,14 @@ bool truncate(std::string& xml, double time);
 bool addKeys(std::string& xml, double time);
 
 /// The turn, skew and scale of \a transform as a tween's state keeps them,
-/// as Animate does: the rotation is the x axis's angle, Skew_X the y axis's
+/// as the FLA does: the rotation is the x axis's angle, Skew_X the y axis's
 /// angle past it, Skew_Y zero. The offset is zero.
 MotionState stateOf(const Transform& transform);
 
 /// The text of a new motion tween \a frames long at \a frameRate, holding
 /// its object as \a start has it, a keyframe for every property at its
 /// start. \a pivotX and \a pivotY place the transformation point in the
-/// object's bounds (0 to 1), which Animate keeps with the tween.
+/// object's bounds (0 to 1), which the FLA keeps with the tween.
 std::string create(const MotionState& start, int frames, double frameRate, double pivotX = 0.5,
     double pivotY = 0.5);
 
@@ -168,7 +168,7 @@ bool bend(std::string& xml, double time, double end, double x, double y);
 bool rebase(std::string& xml, const MotionState& from, const MotionState& to);
 
 /// A motion as text, the motionObjectXML element, from \a text that is that
-/// or a bare AnimationCore (as Animate's motion presets keep it). Empty when
+/// or a bare AnimationCore (as motion preset files keep it). Empty when
 /// it is neither.
 std::string wrapped(const std::string& text);
 
@@ -219,7 +219,7 @@ double filterValue(const Filter& filter, const std::string& field);
 std::vector<PropertyKey> keysOf(const std::string& xml, const std::string& id);
 
 /// Puts \a keys in place of property \a id's keyframes, adding the property
-/// in Animate's container for it when the tween has none.
+/// in the container the FLA files it under when the tween has none.
 bool setKeysOf(std::string& xml, const std::string& id, const std::vector<PropertyKey>& keys);
 
 /// Shapes the stretch from keys[\a segment] to the next by an ease given as
@@ -253,7 +253,7 @@ MotionState solve(const Transform& stored, const Point& pivot, const MotionState
 bool orientsToPath(const std::string& xml);
 
 /// \a xml with Orient to Path on or off: the Settings tag's orientToPath
-/// changed in place, the rest as Animate wrote it. As it was when it has no
+/// changed in place, the rest as the file had it. As it was when it has no
 /// Settings.
 std::string withOrientToPath(const std::string& xml, bool on);
 

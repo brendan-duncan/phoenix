@@ -25,7 +25,7 @@
 
 namespace {
 
-/// The properties the editor shows, as Animate names them, their ids in
+/// The properties the editor shows, their names, their ids in
 /// the tween, units, and the value a tween without one has.
 struct PropertyRow
 {

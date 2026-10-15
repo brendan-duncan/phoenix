@@ -5,7 +5,7 @@
 class QKeyEvent;
 class QLineEdit;
 
-/// A number shown as Animate's "hot text": blue, underlined, and live. It is
+/// A number shown as "hot text": blue, underlined, and live. It is
 /// Phoenix's one numeric field, used everywhere a number is edited, in place
 /// of spin boxes and their arrow buttons.
 ///

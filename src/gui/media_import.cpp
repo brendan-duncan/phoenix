@@ -65,7 +65,7 @@ fla::Bitmap* loadImage(const fla::Document& document, const QString& path, QStri
     const std::string name = QFileInfo(path).fileName().toStdString();
     if (suffix == "jpg" || suffix == "jpeg")
     {
-        // A JPEG goes in as it is, as Animate keeps one.
+        // A JPEG goes in as it is, as the FLA keeps one.
         QFile file(path);
         if (file.open(QIODevice::ReadOnly))
         {

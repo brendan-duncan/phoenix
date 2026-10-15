@@ -826,14 +826,14 @@ ConvertToSymbolCommand::ConvertToSymbolCommand(Document* document, Frame* frame,
         }
     }
 
-    // The symbol: one timeline, one layer, one keyframe, as Animate makes it.
+    // The symbol: one timeline, one layer, one keyframe.
     if (!_document->symbolList)
         _document->symbolList = new SymbolList(_document);
 
     _symbol = new Symbol(_document->symbolList);
     _symbol->name = symbolName;
 
-    // Animate stamps each item with an id and a modification time; the
+    // The FLA stamps each item with an id and a modification time; the
     // writer carries both through, so a converted symbol gets its own.
     const std::time_t now = std::time(nullptr);
     char id[40];

@@ -11,7 +11,7 @@ class Layer;
 class SymbolInstance;
 class Timeline;
 
-/// Function curves, as Harmony's Function view shows them: any animatable
+/// Function curves, as the Function view shows them: any animatable
 /// property of a layer as a value over time, read through its keyframes
 /// and whatever tweens run between them (classic, motion, the camera's),
 /// with each keyframe's value there to change. Free of Qt.

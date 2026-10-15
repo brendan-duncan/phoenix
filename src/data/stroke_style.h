@@ -28,12 +28,12 @@ public:
     std::string scaleMode;
 
     /// "hairline" for a stroke that is always one device pixel wide whatever
-    /// the zoom or the transform. Animate writes it with no weight attribute.
+    /// the zoom or the transform. The FLA stores it with no weight attribute.
     std::string solidStyle;
 
     /// Cap and join styles as the file spells them: "none", "round" or
     /// "square" for caps; "miter", "round" or "bevel" for joints. Empty means
-    /// Flash's default, which is round for both.
+    /// the FLA default, which is round for both.
     std::string caps;
     std::string joints;
     double miterLimit = 3.0;

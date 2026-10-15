@@ -178,7 +178,7 @@ void checkContainer(const std::string& path, Report& report)
     }
     // Every part the document is built from well-formed. The rest
     // (metadata, publish settings) is carried through as it is, and
-    // Animate writes some of it in ways an XML reader balks at.
+    // FLA files store some of it in ways an XML reader balks at.
     for (const std::string& name : files)
     {
         if (name.size() < 4 || name.compare(name.size() - 4, 4, ".xml") != 0)
@@ -445,7 +445,7 @@ void checkDocument(Document& document, Report& report, bool repair)
                     else if (element->elementType() == Element::Type::BitmapInstance)
                     {
                         auto* bitmap = static_cast<BitmapInstance*>(element);
-                        // Animate keeps such an instance (it draws nothing),
+                        // FLA files can keep such an instance (it draws nothing),
                         // so it is reported and left.
                         if (!bitmaps.count(bitmap->libraryItemName))
                             add(report, Issue::Severity::Warning, at,

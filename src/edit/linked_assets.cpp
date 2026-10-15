@@ -170,7 +170,7 @@ std::vector<std::string> linkedSymbols(const Document& document)
 std::string resolve(const std::string& master, const std::string& shotFile)
 {
     namespace fs = std::filesystem;
-    // Animate writes the path with forward slashes; it may be absolute.
+    // The FLA stores the path with forward slashes; it may be absolute.
     std::string path = master;
     if (path.compare(0, 8, "file:///") == 0)
         path = path.substr(8);

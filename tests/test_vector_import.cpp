@@ -184,7 +184,7 @@ TEST(svg_gradients_classes_use_and_images_are_read)
     CHECK(near(image.placement.a, 8.0) && near(image.placement.d, 4.0) && near(image.placement.ty, 90.0));
     CHECK(art.order[3].first == fla::vectors::Artwork::Kind::Image);
 
-    // Shapes take the gradient as Animate's fill.
+    // Shapes take the gradient as an FLA fill.
     fla::Shape* shape = fla::vectors::toShape(rect);
     CHECK(shape && shape->fills.size() == 1 && shape->fills[0]->type() == fla::FillStyle::Type::LinearGradient);
     CHECK(shape->fills[0]->spreadMethod == "reflect");

@@ -8,9 +8,9 @@
 class QListWidget;
 class QPushButton;
 
-/// Animate's Motion Presets: motions saved by name to use again, kept in the
-/// settings. A preset is a motion tween's AnimationCore; Animate's own
-/// preset files (.xml) import as they are, one at a time or a folder of them.
+/// Motion Presets: motions saved by name to use again, kept in the
+/// settings. A preset is a motion tween's AnimationCore; motion preset
+/// files (.xml) import as they are, one at a time or a folder of them.
 class MotionPresetsDialog : public QDialog
 {
     Q_OBJECT

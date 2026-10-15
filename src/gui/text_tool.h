@@ -18,7 +18,7 @@ class Frame;
 class Selection;
 }
 
-/// Animate's text tool.
+/// The text tool.
 ///
 /// A click on empty stage opens an auto-expanding text box there; a drag
 /// opens a fixed-width one that wraps. Typing fills the box, Return starts a

@@ -144,7 +144,7 @@ public:
     /// its readings waiting in takeTabletSamples().
     bool penDown() const { return _penDown; }
 
-    /// Zoom steps follow Animate's magnification presets. The view center
+    /// Zoom steps follow the magnification presets. The view center
     /// stays put.
     void zoomIn();
 
@@ -174,7 +174,7 @@ public:
     ViewState viewState() const;
     void setViewState(const ViewState& state);
 
-    /// The stage's rotation on screen, in degrees clockwise, as Animate's
+    /// The stage's rotation on screen, in degrees clockwise, as the
     /// Rotation tool sets it: a view setting, not an edit. It turns about a
     /// pivot in the stage's coordinates. Changing the pivot leaves the view
     /// where it is.
@@ -203,14 +203,14 @@ public:
     /// Removes everything selected from the document as one undo step.
     void deleteSelection();
 
-    /// Symbol editing, Animate's edit-in-place. Entering an instance makes
+    /// Symbol editing, edit in place. Entering an instance makes
     /// its symbol's timeline the one the tools work on: the view's coordinate
     /// space becomes the symbol's, the rest of the document draws dimmed
     /// behind it, and the timeline panel follows. Editing a symbol changes
     /// every instance of it, since they all draw the same timeline.
     bool enterSymbol(fla::SymbolInstance* instance);
 
-    /// Edits a group in place, as double-clicking it does in Animate: its
+    /// Edits a group in place, as double-clicking it does: its
     /// members are drawn on and picked as artwork of their own, everything
     /// else stays as it is, dimmed. Leaving gathers what is there back into
     /// the group. Entering and leaving are one undo step, or none when nothing
@@ -308,17 +308,17 @@ signals:
     void libraryItemDropped(const QString& kind, const QString& name, const QPointF& position);
 
     /// The pen was turned over: its eraser end (\a eraser) or its tip is
-    /// now the one near the tablet. As in Animate, the eraser end erases.
+    /// now the one near the tablet. The eraser end erases.
     void penEndChanged(bool eraser);
 
 public:
     /// Onion skinning: \a before and \a after frames either side of the
     /// playhead drawn faded under it, those before tinted blue and those
-    /// after green, as Animate draws them.
+    /// after green.
     void setOnionSkin(bool on, int before, int after);
 
     /// Light Table: while drawing, every layer but the one drawn on shows
-    /// faded behind it, as on Harmony's light table.
+    /// faded behind it.
     void setLightTable(bool on);
 
     /// What renders for a compositing pass: everything, only the lines
@@ -344,7 +344,7 @@ public:
 
 public:
 
-    /// Selects a region of merge-drawn artwork the way Animate's arrow does:
+    /// Selects a region of merge-drawn artwork with the arrow:
     /// the fill or the stroke under the cursor, not the whole shape. The
     /// region is lifted out as a shape of its own, which floats selected
     /// exactly where it was; let go untouched it goes straight back. With
@@ -357,7 +357,7 @@ public:
     /// Whether \p element is a region lifted out of another shape.
     bool isFloatingRegion(const fla::Element* element) const;
 
-    /// Selects what a marquee or a lasso sweeps out, the way Animate's do: an
+    /// Selects what a marquee or a lasso sweeps out: an
     /// object the area touches is selected whole, while merge-drawn artwork
     /// the area only partly covers is divided along the area's outline and
     /// the fills and strokes inside it are lifted out as the selection.
@@ -389,7 +389,7 @@ public:
 
     /// The command for changing \a element's stored transform from \a before
     /// to \a after. Past the start of an object motion tween, a property
-    /// keyframe here holding what \a after shows instead, as Animate does;
+    /// keyframe here holding what \a after shows instead;
     /// at its start, the start moves and the tween's later positions stay.
     fla::CommandPtr transformCommand(fla::Element* element, const fla::Transform& before,
         const fla::Transform& after, const std::string& name);
@@ -447,7 +447,7 @@ public:
 
     /// Top-level elements of the visible frames whose bounds meet
     /// \p documentRect. Does not descend into groups or symbols: a marquee
-    /// picks whole objects at the level being edited, the way Animate does.
+    /// picks whole objects at the level being edited.
     std::vector<fla::Element*> elementsIn(const QRectF& documentRect);
 
     /// The tool receiving stage input. Null routes everything to panning.
@@ -461,8 +461,7 @@ public:
     /// The tool that takes over while ctrl is held.
     ///
     /// Holding ctrl reaches for the selection tool whatever is active, so
-    /// something can be moved without putting the drawing tool down. Animate
-    /// does the same.
+    /// something can be moved without putting the drawing tool down.
     void setModifierTool(Tool* tool) { _modifierTool = tool; }
 
     /// The command stack edits go through. Borrowed, and needed because the
@@ -500,7 +499,7 @@ public:
 
     /// Commits a waiting drawing if the selection has moved off it.
     ///
-    /// Called when the selection changes, which is the moment Animate uses: a
+    /// Called when the selection changes, which is the moment that counts: a
     /// drawing stays its own object while it is selected, and becomes part of
     /// the artwork when it is let go.
     void selectionChanged();
@@ -535,8 +534,7 @@ public:
     /// The keyframe at the frame being shown on \a frame's layer, which a
     /// drawing goes into. When the playhead sits inside \a frame's span
     /// rather than on its keyframe, a keyframe is inserted there first,
-    /// through the command stack, as Animate does when drawing on a plain
-    /// frame. Returns \a frame itself when it already is that keyframe.
+    /// through the command stack. Returns \a frame itself when it already is that keyframe.
     fla::Frame* keyframeForDrawing(fla::Frame* frame);
 
     void setShowGrid(bool show) { _showGrid = show; update(); }
@@ -731,7 +729,7 @@ private:
     bool _isDragging;
     QPoint _lastMousePos;
 
-    /// Space held turns any tool into the hand, as in Animate.
+    /// Space held turns any tool into the hand.
     bool _spaceHeld = false;
 
     /// Document-space bounds of everything on stage, united with the stage.
@@ -1279,7 +1277,7 @@ private:
     /// The frame of its symbol an instance shows, _elapsed frames into its
     /// keyframe. A graphic runs from its first frame by its loop setting,
     /// wrapping round the symbol (loop), stopping at its end (play once) or
-    /// holding (single frame). On Animate's stage a movie clip or a button
+    /// holding (single frame). On the editing stage a movie clip or a button
     /// shows its first frame; an exported movie plays its movie clips round
     /// and round from when they appear, or, with frame actions, as their
     /// frame scripts' stops and gotos lead.
@@ -1554,12 +1552,12 @@ private:
 
     void drawOverlayPoints(QPainter& painter, const fla::Shape* shape);
 
-    /// Animate's dot screen over a selected merge-drawn shape: the fills and
+    /// The dot screen over a selected merge-drawn shape: the fills and
     /// the strokes it is made of, screened in the highlight color.
     void drawShapeHighlight(QPainter& painter, const fla::Shape* shape, const QColor& color);
 
     /// The bones of the armature on a pose frame, read from the IKTree the
-    /// frame keeps, drawn as Animate draws them while its art is selected.
+    /// frame keeps, drawn while its art is selected.
     void drawIKBones(QPainter& painter, const fla::Frame& frame, double scale);
 
     /// Draws the marks that show what is selected, plus whatever the active tool

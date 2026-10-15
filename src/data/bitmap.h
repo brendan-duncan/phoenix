@@ -29,7 +29,7 @@ public:
     /// there is one; read from a Phoenix document only when first needed.
     LazyBytes imageData;
 
-    /// The bin/<bitmapDataHRef> entry as stored: Animate's own encoding of
+    /// The bin/<bitmapDataHRef> entry as stored: the FLA's own encoding of
     /// the pixels (see bitmap_decoder.h), kept so a save carries it through
     /// and so files whose LIBRARY folder holds no copy of the image still
     /// have something to draw.
