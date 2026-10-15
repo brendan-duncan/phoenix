@@ -9,6 +9,7 @@
 #include "../src/jsfl/behavior_frames.h"
 #include "../src/edit/guide_path.h"
 #include "../src/edit/shape_operators.h"
+#include "../src/edit/text_animators.h"
 
 #include <cmath>
 #include <string>
@@ -470,4 +471,45 @@ TEST(shape_operators_trim_wiggle_and_zigzag_lines)
     Applied zigzag = fla::shapeops::defaults("zigzag", 1);
     const std::vector<Line> teeth = fla::shapeops::apply({straight}, true, {zigzag}, 0, 24.0);
     CHECK(teeth.size() == 1 && teeth[0].points.size() > 4 && teeth[0].points[0].y * teeth[0].points[1].y < 0);
+}
+
+TEST(text_animators_change_letters_one_by_one)
+{
+    using fla::textanim::Change;
+    using fla::textanim::Letter;
+    // "ab cd": five characters, two words.
+    std::vector<Letter> letters;
+    const std::string text = "ab cd";
+    for (int i = 0; i < 5; ++i)
+    {
+        Letter letter;
+        letter.index = i;
+        letter.word = i < 3 ? 0 : 1;
+        letter.count = 5;
+        letter.words = 2;
+        letter.character = static_cast<unsigned char>(text[static_cast<size_t>(i)]);
+        letters.push_back(letter);
+    }
+    // Typewriter at 24 letters a second: the first at once, then one a
+    // frame, so three shown two frames on.
+    Applied type = fla::textanim::defaults("typewriter", 1);
+    type.params["rate"] = "24";
+    std::vector<Change> typed = fla::textanim::apply({type}, letters, 12, 10, 24.0);
+    CHECK(typed[0].alpha == 1.0 && typed[2].alpha == 1.0 && typed[3].alpha == 0.0);
+    // Fade by word: the second word later than the first.
+    std::vector<Change> words = fla::textanim::apply({fla::textanim::defaults("fadeword", 1)}, letters, 6, 0, 24.0);
+    CHECK(words[0].alpha > 0.0 && words[4].alpha == 0.0);
+    // A range over the first half lifts those letters only.
+    Applied range = fla::textanim::defaults("range", 1);
+    range.params["end"] = "50";
+    std::vector<Change> lifted = fla::textanim::apply({range}, letters, 0, 0, 24.0);
+    CHECK(near(lifted[0].y, -20.0) && near(lifted[1].y, -20.0) && near(lifted[4].y, 0.0));
+    // Scramble swaps letters not yet settled, never spaces, the same each time.
+    std::vector<Change> scrambled = fla::textanim::apply({fla::textanim::defaults("scramble", 2)}, letters, 0, 0, 24.0);
+    std::vector<Change> again = fla::textanim::apply({fla::textanim::defaults("scramble", 2)}, letters, 0, 0, 24.0);
+    CHECK(scrambled[1].character != 0 && scrambled[2].character == 0 && scrambled[1].character == again[1].character);
+    // Bounce: nothing yet before its time, full size long after.
+    std::vector<Change> early = fla::textanim::apply({fla::textanim::defaults("bounce", 1)}, letters, 0, 0, 24.0);
+    std::vector<Change> late = fla::textanim::apply({fla::textanim::defaults("bounce", 1)}, letters, 100, 0, 24.0);
+    CHECK(early[4].scale == 0.0 && near(late[4].scale, 1.0, 1e-6));
 }

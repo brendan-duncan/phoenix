@@ -111,12 +111,31 @@
 
 <p>Operators keep the shape's fill and stroke as they are. Clicking on the stage finds the shape by its outline as drawn.</p>
 
+<h2 id="text">Letter animators</h2>
+
+<p>A text field's letters can move one by one while the text stays text you can edit. Select a text field (with no symbol instance or shape selected), and the Behaviors panel shows its letter animators: <b>Add Animator</b> offers them. Those that play by themselves count from the first frame of the keyframes the text is on.</p>
+
+<table>
+  <thead><tr><th>Animator</th><th>What it does</th></tr></thead>
+  <tbody>
+    <tr><td>Typewriter</td><td class="wrap">Types the text out a letter at a time, so many letters a second, after a wait if you like.</td></tr>
+    <tr><td>Cascade In</td><td class="wrap">Each letter slides in from above, below, left or right, fading up, a little after the one before.</td></tr>
+    <tr><td>Bounce In</td><td class="wrap">Each letter grows from nothing, past its size and back.</td></tr>
+    <tr><td>Fade by Word</td><td class="wrap">The words fade in one after another.</td></tr>
+    <tr><td>Scramble</td><td class="wrap">Letters flicker through random letters, digits or symbols until each settles on its own, left to right.</td></tr>
+    <tr><td>Wave</td><td class="wrap">A wave runs through the letters, lifting and tilting them, for as long as the text shows.</td></tr>
+    <tr><td>Animate Letters</td><td class="wrap">Moves, turns, sizes and fades the letters (or words, or lines) a range covers, the range's edge square, ramped, rounded or in random order. Key its Offset to sweep the change from one end of the text to the other: any effect the others do, and more.</td></tr>
+  </tbody>
+</table>
+
+<p>Letters turn and grow about their middles. Several animators add up: Cascade In and then Wave, say, brings the letters in and then keeps them moving.</p>
+
 <h2 id="bake">Bake to keyframes</h2>
 
 <p>Baking turns behaviors into ordinary animation: every frame they touch becomes a keyframe holding the instance where its behaviors put it, its copies become instances of their own beside it, and the behaviors come off. What plays does not change, and you can then edit the frames by hand. Baking is one step you can undo.</p>
 
 <ul>
-  <li><b>Bake</b> in the Behaviors panel bakes the selected instances over all the keyframes they run through, and the selected shapes over their keyframes; a shape's operators are baked into drawing objects, a frame each.</li>
+  <li><b>Bake</b> in the Behaviors panel bakes the selected instances over all the keyframes they run through, and the selected shapes and text fields over their keyframes; a shape's operators are baked into drawing objects and a text's animators into a text field for each letter, a frame each.</li>
   <li><span class="menu-path">Modify &rsaquo; Timeline &rsaquo; Bake Behaviors to Keyframes</span> bakes the frames selected in the timeline.</li>
 </ul>
 

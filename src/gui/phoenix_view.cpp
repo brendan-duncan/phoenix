@@ -1,6 +1,7 @@
 #include "phoenix_view.h"
 #include "behavior_library.h"
 #include "../edit/shape_operators.h"
+#include "../edit/text_animators.h"
 #include "../edit/vector_import.h"
 #include "../jsfl/behavior_frames.h"
 #include "theme.h"
@@ -3655,6 +3656,8 @@ void PhoenixView::drawElement(QPainter& painter, const fla::Element* element, co
             replaced.runs = {run};
             TextLayout::draw(painter, replaced);
         }
+        else if (fla::textanim::any(*text))
+            TextLayout::drawAnimated(painter, *text, textChanges(*text));
         else
             TextLayout::draw(painter, *text);
     }
@@ -4812,6 +4815,37 @@ void PhoenixView::drawShape(QPainter& painter, const fla::Shape* shape, const fl
     {
         drawOverlayPoints(painter, shape);
     }
+}
+
+std::vector<fla::textanim::Change> PhoenixView::textChanges(const fla::StaticText& text, int at)
+{
+    const fla::Frame* frame = owningFrame(&text);
+    if (at < 0)
+        at = (frame ? frame->index : 0) + std::max(0, _elapsed);
+    // Counted from the start of the run of keyframes with a text in its
+    // place on the layer.
+    int start = frame ? frame->index : 0;
+    const auto* layer = frame ? dynamic_cast<const fla::Layer*>(frame->parent) : nullptr;
+    if (frame && layer)
+    {
+        const auto place = std::find(frame->elements.begin(), frame->elements.end(), &text);
+        const size_t index = static_cast<size_t>(place - frame->elements.begin());
+        for (bool found = true; found && start > 0;)
+        {
+            found = false;
+            for (const fla::Frame* before : layer->frames)
+                if (before && before->index + std::max(1, before->duration) == start && index < before->elements.size() &&
+                    before->elements[index] && before->elements[index]->elementType() == fla::Element::Type::StaticText)
+                {
+                    start = before->index;
+                    found = true;
+                    break;
+                }
+        }
+    }
+    const double rate = _flaDocument && _flaDocument->document && _flaDocument->document->frameRate > 0.0
+        ? _flaDocument->document->frameRate : 24.0;
+    return fla::textanim::apply(fla::textanim::of(text), TextLayout::letters(text), at, start, rate);
 }
 
 std::vector<fla::Shape*> PhoenixView::bakedShape(const fla::Shape& shape, int at)

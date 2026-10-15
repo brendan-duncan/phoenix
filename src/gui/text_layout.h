@@ -6,6 +6,8 @@
 #include <QRectF>
 #include <QString>
 
+#include "../edit/text_animators.h"
+
 #include <vector>
 
 class QPainter;
@@ -90,6 +92,15 @@ Layout layout(const fla::StaticText& text);
 QRectF localBounds(const fla::StaticText& text);
 
 void draw(QPainter& painter, const fla::StaticText& text);
+
+/// The text's letters as text animators number them: each character's
+/// place among all of them, its word and its line.
+std::vector<fla::textanim::Letter> letters(const fla::StaticText& text);
+
+/// Draws the text a letter at a time, each changed as \a changes says
+/// (one for each character of the joined text): moved, turned and scaled
+/// about its middle, faded, or another character shown in its place.
+void drawAnimated(QPainter& painter, const fla::StaticText& text, const std::vector<fla::textanim::Change>& changes);
 
 /// The caret position nearest a point in the text's coordinates, as an
 /// offset into the joined text.

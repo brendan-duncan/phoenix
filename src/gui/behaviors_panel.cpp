@@ -6,6 +6,8 @@
 #include "../edit/command_stack.h"
 #include "../edit/property_command.h"
 #include "../edit/shape_operators.h"
+#include "../edit/text_animators.h"
+#include "../data/static_text.h"
 #include "../data/shape.h"
 
 #include <QCheckBox>
@@ -66,8 +68,7 @@ BehaviorsPanel::BehaviorsPanel(BehaviorsLinks links, QWidget* parent)
     QMenu* menu = new QMenu(_add);
     connect(menu, &QMenu::aboutToShow, this, [this, menu]() {
         menu->clear();
-        for (const fla::behaviors::Definition& definition : shapeMode() ? fla::shapeops::definitions()
-                                                                         : BehaviorLibrary::instance().engine().definitions())
+        for (const fla::behaviors::Definition& definition : available())
         {
             QAction* action = menu->addAction(QString::fromStdString(definition.name));
             action->setToolTip(QString::fromStdString(definition.description));
@@ -146,36 +147,82 @@ BehaviorsPanel::BehaviorsPanel(BehaviorsLinks links, QWidget* parent)
     refresh();
 }
 
+BehaviorsPanel::Mode BehaviorsPanel::mode() const
+{
+    // Instances first, then shapes, then text fields.
+    const std::vector<fla::SymbolInstance*> instances = _links.instances ? _links.instances() : std::vector<fla::SymbolInstance*>();
+    if (!instances.empty())
+        return Mode::Behaviors;
+    if (_links.shapes && !_links.shapes().empty())
+        return Mode::Shapes;
+    if (_links.texts && !_links.texts().empty())
+        return Mode::Texts;
+    return Mode::Behaviors;
+}
+
 bool BehaviorsPanel::shapeMode() const
 {
-    // Instances first: with any selected, the panel shows their behaviors.
-    const std::vector<fla::SymbolInstance*> instances = _links.instances ? _links.instances() : std::vector<fla::SymbolInstance*>();
-    return instances.empty() && _links.shapes && !_links.shapes().empty();
+    return mode() == Mode::Shapes;
 }
 
 std::vector<fla::DOMElement*> BehaviorsPanel::targets() const
 {
     std::vector<fla::DOMElement*> list;
-    if (shapeMode())
+    switch (mode())
     {
+    case Mode::Shapes:
         for (fla::Shape* shape : _links.shapes())
             list.push_back(shape);
-        return list;
+        break;
+    case Mode::Texts:
+        for (fla::StaticText* text : _links.texts())
+            list.push_back(text);
+        break;
+    default:
+        if (_links.instances)
+            for (fla::SymbolInstance* instance : _links.instances())
+                list.push_back(instance);
     }
-    if (_links.instances)
-        for (fla::SymbolInstance* instance : _links.instances())
-            list.push_back(instance);
     return list;
 }
 
 const char* BehaviorsPanel::attribute() const
 {
-    return shapeMode() ? fla::shapeops::kAttribute : "phoenixBehaviors";
+    switch (mode())
+    {
+    case Mode::Shapes:
+        return fla::shapeops::kAttribute;
+    case Mode::Texts:
+        return fla::textanim::kAttribute;
+    default:
+        return "phoenixBehaviors";
+    }
 }
 
 const fla::behaviors::Definition* BehaviorsPanel::definitionOf(const std::string& id) const
 {
-    return shapeMode() ? fla::shapeops::find(id) : BehaviorLibrary::instance().engine().find(id);
+    switch (mode())
+    {
+    case Mode::Shapes:
+        return fla::shapeops::find(id);
+    case Mode::Texts:
+        return fla::textanim::find(id);
+    default:
+        return BehaviorLibrary::instance().engine().find(id);
+    }
+}
+
+std::vector<fla::behaviors::Definition> BehaviorsPanel::available() const
+{
+    switch (mode())
+    {
+    case Mode::Shapes:
+        return fla::shapeops::definitions();
+    case Mode::Texts:
+        return fla::textanim::definitions();
+    default:
+        return BehaviorLibrary::instance().engine().definitions();
+    }
 }
 
 std::vector<fla::behaviors::Applied> BehaviorsPanel::shown() const
@@ -191,12 +238,17 @@ void BehaviorsPanel::refresh()
     _refreshing = true;
     const std::vector<fla::DOMElement*> selected = targets();
     const bool shapes = shapeMode();
+    const bool texts = mode() == Mode::Texts;
     const int keep = _list->currentRow();
     _list->clear();
-    _add->setText(shapes ? "Add Operator" : "Add Behavior");
+    _add->setText(shapes ? "Add Operator" : texts ? "Add Animator" : "Add Behavior");
     if (selected.empty())
         _what->setText("Select a symbol instance to give it behaviors (motion worked out every frame, on top of its "
-                       "keys), or a drawn shape to give it operators (Trim Paths, Wiggle Path, Zig-zag).");
+                       "keys), a drawn shape to give it operators (Trim Paths, Wiggle Path, Zig-zag), or a text field "
+                       "to animate its letters.");
+    else if (texts)
+        _what->setText(selected.size() == 1 ? QString("Letter animators of the text")
+                                            : QString("Letter animators of %1 text fields (shown: the first one's)").arg(selected.size()));
     else if (shapes)
         _what->setText(selected.size() == 1 ? QString("Operators of the shape")
                                             : QString("Operators of %1 shapes (shown: the first one's)").arg(selected.size()));
@@ -418,9 +470,11 @@ void BehaviorsPanel::edit(const std::string& name, const std::function<void(std:
 
 void BehaviorsPanel::add(const std::string& id)
 {
-    const fla::behaviors::Applied applied = shapeMode() ? fla::shapeops::defaults(id, newSeed())
-                                                        : BehaviorLibrary::instance().engine().defaults(id, newSeed());
-    edit(shapeMode() ? "Add Operator" : "Add Behavior", [&applied](std::vector<fla::behaviors::Applied>& list) { list.push_back(applied); });
+    const Mode now = mode();
+    const fla::behaviors::Applied applied = now == Mode::Shapes ? fla::shapeops::defaults(id, newSeed())
+        : now == Mode::Texts                                    ? fla::textanim::defaults(id, newSeed())
+                                                                : BehaviorLibrary::instance().engine().defaults(id, newSeed());
+    edit(now == Mode::Shapes ? "Add Operator" : now == Mode::Texts ? "Add Letter Animator" : "Add Behavior", [&applied](std::vector<fla::behaviors::Applied>& list) { list.push_back(applied); });
     refresh();
     _list->setCurrentRow(_list->count() - 1);
 }

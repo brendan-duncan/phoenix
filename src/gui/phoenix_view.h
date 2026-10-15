@@ -1,6 +1,7 @@
 #pragma once
 
 #include "../edit/behaviors.h"
+#include "../edit/text_animators.h"
 
 #include "../data/color_transform.h"
 #include "../data/edge.h"
@@ -318,6 +319,9 @@ public:
     /// new drawing objects (its fills, then its strokes) in its place, for
     /// Bake to Keyframes. The caller owns them.
     std::vector<fla::Shape*> bakedShape(const fla::Shape& shape, int at);
+    /// What \a text's animators do to each of its letters on frame \a at of
+    /// its timeline (the frame drawn when -1).
+    std::vector<fla::textanim::Change> textChanges(const fla::StaticText& text, int at = -1);
 
     /// Onion skinning: \a before and \a after frames either side of the
     /// playhead drawn faded under it, those before tinted blue and those

@@ -33,6 +33,7 @@
 #include "../edit/controllers.h"
 #include "../jsfl/behavior_frames.h"
 #include "../edit/shape_operators.h"
+#include "../edit/text_animators.h"
 #include "../edit/frame_bake.h"
 #include "motion_editor.h"
 #include "motion_presets.h"
@@ -2055,6 +2056,18 @@ void MainWindow::createPanels()
                         shapes.push_back(shape);
                 }
             return shapes;
+        };
+        links.texts = [this]() {
+            std::vector<fla::StaticText*> texts;
+            for (fla::DOMElement* selected : _selection.elements())
+                if (auto* text = dynamic_cast<fla::StaticText*>(selected))
+                {
+                    fla::Frame* frame = frameOfElement(text);
+                    auto* layer = frame ? dynamic_cast<fla::Layer*>(frame->parent) : nullptr;
+                    if (!layer || !layer->isLocked())
+                        texts.push_back(text);
+                }
+            return texts;
         };
         links.bake = [this]() { bakeSelectedBehaviors(); };
         links.objectNames = [this]() {
@@ -4823,9 +4836,10 @@ void MainWindow::bakeSelectedBehaviors()
     for (fla::DOMElement* selected : _selection.elements())
     {
         auto* shape = dynamic_cast<fla::Shape*>(selected);
-        if (!shape || !fla::shapeops::any(*shape))
+        auto* text = dynamic_cast<fla::StaticText*>(selected);
+        if (!(shape && fla::shapeops::any(*shape)) && !(text && fla::textanim::any(*text)))
             continue;
-        fla::Frame* frame = frameOfElement(shape);
+        fla::Frame* frame = frameOfElement(static_cast<fla::Element*>(selected));
         auto* layer = frame ? dynamic_cast<fla::Layer*>(frame->parent) : nullptr;
         if (!layer || layer->isLocked())
             continue;
@@ -4867,6 +4881,56 @@ void MainWindow::bakeSelectedBehaviors()
         _timelineView->refreshFrames();
 }
 
+std::vector<fla::StaticText*> MainWindow::bakedText(const fla::StaticText& text, int at)
+{
+    std::vector<fla::StaticText*> made;
+    const std::vector<fla::textanim::Change> changes = _phoenixView->textChanges(text, at);
+    int offset = 0;
+    for (size_t r = 0; r < text.runs.size(); ++r)
+    {
+        const QString runText = QString::fromStdString(text.runs[r].text);
+        for (int k = 0; k < runText.size(); ++k, ++offset)
+        {
+            const fla::textanim::Change change =
+                offset < static_cast<int>(changes.size()) ? changes[static_cast<size_t>(offset)] : fla::textanim::Change();
+            if (runText[k].isSpace() || change.alpha <= 0.0 || change.scale == 0.0)
+                continue;
+            auto* letter = static_cast<fla::StaticText*>(fla::cloneElement(text, nullptr));
+            if (!letter)
+                continue;
+            letter->extraAttributes = fla::behaviors::withList(*letter, fla::textanim::kAttribute, {});
+            fla::TextRun run = text.runs[r];
+            run.text = change.character ? QString(QChar(static_cast<char16_t>(change.character))).toStdString()
+                                        : QString(runText[k]).toStdString();
+            run.alignment = fla::TextRun::Alignment::Left;
+            run.fillColor[3] = static_cast<uint8_t>(std::lround(run.fillColor[3] * std::min(1.0, change.alpha)));
+            letter->runs = {run};
+            letter->autoExpand = true;
+            letter->width = 0.0;
+            // Where the letter stood in the field, as Break Apart puts it.
+            const QRectF was = TextLayout::caretRect(text, offset);
+            const QRectF now = TextLayout::caretRect(*letter, 0);
+            letter->left += was.left() - now.left();
+            letter->top += was.top() - now.top();
+            // Then moved, turned and scaled about its middle, in the field's
+            // own space.
+            const QRectF box = TextLayout::localBounds(*letter);
+            const double cx = box.center().x();
+            const double cy = box.center().y();
+            QTransform local;
+            local.translate(cx + change.x, cy + change.y);
+            local.rotate(change.rotation);
+            local.scale(change.scale, change.scale);
+            local.translate(-cx, -cy);
+            const QTransform placed = local * QTransform(text.transform.m11, text.transform.m12, text.transform.m21,
+                                                  text.transform.m22, text.transform.tx, text.transform.ty);
+            letter->transform = fla::Transform(placed.m11(), placed.m12(), placed.m21(), placed.m22(), placed.dx(), placed.dy());
+            made.push_back(letter);
+        }
+    }
+    return made;
+}
+
 std::vector<std::pair<int, int>> MainWindow::shapeOperatorRuns(const fla::Layer& layer)
 {
     std::vector<std::pair<int, int>> runs;
@@ -4877,7 +4941,9 @@ std::vector<std::pair<int, int>> MainWindow::shapeOperatorRuns(const fla::Layer&
         bool holds = false;
         for (const fla::Element* element : frame->elements)
             holds = holds || (element && element->elementType() == fla::Element::Type::Shape &&
-                                 fla::shapeops::any(*static_cast<const fla::Shape*>(element)));
+                                 fla::shapeops::any(*static_cast<const fla::Shape*>(element))) ||
+                (element && element->elementType() == fla::Element::Type::StaticText &&
+                    fla::textanim::any(*static_cast<const fla::StaticText*>(element)));
         if (holds)
             runs.emplace_back(frame->index, frame->index + std::max(1, frame->duration) - 1);
     }
@@ -4902,6 +4968,21 @@ int MainWindow::bakeShapeOperators(fla::Layer& layer, int first, int last)
             continue;
         for (size_t i = frame->elements.size(); i-- > 0;)
         {
+            // A text with letter animators: a text field a letter, each as
+            // its animators leave it.
+            if (auto* text = dynamic_cast<fla::StaticText*>(frame->elements[i]); text && fla::textanim::any(*text))
+            {
+                std::vector<fla::StaticText*> made = bakedText(*text, frame->index);
+                frame->elements.erase(frame->elements.begin() + static_cast<std::ptrdiff_t>(i));
+                for (size_t k = 0; k < made.size(); ++k)
+                {
+                    made[k]->parent = frame;
+                    frame->elements.insert(frame->elements.begin() + static_cast<std::ptrdiff_t>(i + k), made[k]);
+                }
+                delete text;
+                ++baked;
+                continue;
+            }
             auto* shape = dynamic_cast<fla::Shape*>(frame->elements[i]);
             if (!shape || !fla::shapeops::any(*shape))
                 continue;

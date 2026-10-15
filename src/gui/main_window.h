@@ -475,6 +475,10 @@ private slots:
     /// The frames of \a layer whose keyframes hold shapes with operators,
     /// as runs (first and last frame).
     static std::vector<std::pair<int, int>> shapeOperatorRuns(const fla::Layer& layer);
+    /// \a text as its letter animators leave it on frame \a at: a text field
+    /// for each letter shown, placed, turned, scaled and faded. The caller
+    /// owns them.
+    std::vector<fla::StaticText*> bakedText(const fla::StaticText& text, int at);
     void reverseFrames();
     void showFramesMenu(const QPoint& globalPos);
     void addLayer(bool folder);

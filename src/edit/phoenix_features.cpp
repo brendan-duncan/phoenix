@@ -46,6 +46,7 @@ const std::vector<Feature>& all()
             {"phoenixBehaviors"}},
         {"shape-operators", "Shape operators", "the shapes as drawn, without Trim Paths, Wiggle Path or Zig-zag",
             {"phoenixShapeOperators"}},
+        {"text-animators", "Text animators", "the text as typed, its letters still", {"phoenixTextAnimators"}},
         {"master-controllers", "Master controllers", "the properties as keyed, without the sliders",
             {"phoenixControllers"}},
         {"3d-rotation", "3D rotation and depth", "the movie clips flat, without their 3D turn",

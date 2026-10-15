@@ -17,6 +17,7 @@ namespace fla {
 class CommandStack;
 class DOMElement;
 class Shape;
+class StaticText;
 class SymbolInstance;
 }
 
@@ -28,6 +29,9 @@ struct BehaviorsLinks
     /// The drawn shapes selected (unlocked ones), for their operators when
     /// no instance is selected.
     std::function<std::vector<fla::Shape*>()> shapes;
+    /// The text fields selected, for their letter animators when no
+    /// instance or shape is selected.
+    std::function<std::vector<fla::StaticText*>()> texts;
     /// After a change: the stage drawn again.
     std::function<void()> changed;
     /// The frame shown, on the timeline being edited: where keys go.
@@ -63,7 +67,15 @@ private:
     /// Whether it shows shapes' operators (shapes selected and no
     /// instance), the elements it changes, the attribute their list is
     /// kept in, and what an id names.
+    enum class Mode
+    {
+        Behaviors,
+        Shapes,
+        Texts
+    };
+    Mode mode() const;
     bool shapeMode() const;
+    std::vector<fla::behaviors::Definition> available() const;
     std::vector<fla::DOMElement*> targets() const;
     const char* attribute() const;
     const fla::behaviors::Definition* definitionOf(const std::string& id) const;

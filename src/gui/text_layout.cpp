@@ -720,6 +720,101 @@ void draw(QPainter& painter, const fla::StaticText& text)
     }
 }
 
+std::vector<fla::textanim::Letter> letters(const fla::StaticText& text)
+{
+    const QString joined = joinedText(text);
+    std::vector<fla::textanim::Letter> list(static_cast<size_t>(joined.length()));
+    // Which line each character is on, from the layout the stage draws.
+    std::vector<int> lineOf(static_cast<size_t>(joined.length()), 0);
+    int lines = 1;
+    if (!isVertical(text))
+    {
+        const Layout laid = layout(text);
+        lines = std::max(1, static_cast<int>(laid.lines.size()));
+        for (size_t l = 0; l < laid.lines.size(); ++l)
+            for (int i = laid.lines[l].start; i < laid.lines[l].start + laid.lines[l].length + 1 && i < joined.length(); ++i)
+                if (i >= 0)
+                    lineOf[static_cast<size_t>(i)] = static_cast<int>(l);
+    }
+    int word = -1;
+    bool inWord = false;
+    for (int i = 0; i < joined.length(); ++i)
+    {
+        const bool space = joined[i].isSpace();
+        if (!space && !inWord)
+            ++word;
+        inWord = !space;
+        fla::textanim::Letter& letter = list[static_cast<size_t>(i)];
+        letter.index = i;
+        letter.word = std::max(0, word);
+        letter.line = lineOf[static_cast<size_t>(i)];
+        letter.character = joined[i].unicode();
+    }
+    for (fla::textanim::Letter& letter : list)
+    {
+        letter.count = static_cast<int>(list.size());
+        letter.words = std::max(1, word + 1);
+        letter.lines = lines;
+    }
+    return list;
+}
+
+void drawAnimated(QPainter& painter, const fla::StaticText& text, const std::vector<fla::textanim::Change>& changes)
+{
+    if (isVertical(text))
+    {
+        draw(painter, text);
+        return;
+    }
+    const Layout laid = layout(text);
+    const QString joined = joinedText(text);
+    painter.setBrush(Qt::NoBrush);
+    if (text.textType != fla::StaticText::TextType::Static)
+    {
+        QPen outline(QColor(0, 0, 0), 0.0);
+        outline.setStyle(Qt::DotLine);
+        painter.setPen(outline);
+        painter.drawRect(laid.bounds);
+    }
+    const double opacity = painter.opacity();
+    for (const Line& line : laid.lines)
+    {
+        for (const Segment& segment : line.segments)
+        {
+            const fla::TextRun& run = text.runs[static_cast<size_t>(segment.run)];
+            QFont font = fontFor(run);
+            if (line.wordSpacing > 0.0)
+                font.setWordSpacing(line.wordSpacing);
+            const QFontMetricsF metrics(font);
+            const QString part = joined.mid(segment.start, segment.length);
+            const double baseline = line.top + line.ascent + baselineShift(run);
+            painter.setFont(font);
+            painter.setPen(QPen(colorOf(run), 1.0));
+            // Each letter on its own, where the whole run would put it.
+            for (int k = 0; k < part.length(); ++k)
+            {
+                const int index = segment.start + k;
+                const fla::textanim::Change change = index < static_cast<int>(changes.size())
+                    ? changes[static_cast<size_t>(index)] : fla::textanim::Change();
+                if (change.alpha <= 0.0 || change.scale == 0.0 || part[k].isSpace())
+                    continue;
+                const double x = segment.x + metrics.horizontalAdvance(part.left(k));
+                const double width = metrics.horizontalAdvance(part.mid(k, 1));
+                const QPointF middle(x + width / 2.0, line.top + line.height / 2.0);
+                painter.save();
+                painter.translate(middle.x() + change.x, middle.y() + change.y);
+                painter.rotate(change.rotation);
+                painter.scale(change.scale, change.scale);
+                painter.translate(-middle);
+                painter.setOpacity(opacity * std::min(1.0, change.alpha));
+                const QString shown = change.character ? QString(QChar(static_cast<char16_t>(change.character))) : part.mid(k, 1);
+                painter.drawText(QPointF(x, baseline), shown);
+                painter.restore();
+            }
+        }
+    }
+}
+
 int indexAt(const fla::StaticText& text, const QPointF& localPos)
 {
     if (isVertical(text))
