@@ -1877,6 +1877,15 @@ void PhoenixView::drawTimeline(QPainter& painter, const fla::Timeline* timeline,
                 if (bounds.isValid())
                     reach = reach.isNull() ? bounds : reach.united(bounds);
             }
+            // A shape tween morphs toward the next keyframe's shapes, so it
+            // reaches anywhere between the two.
+            if (shown.frame->tweenType == fla::TweenType::Shape && shown.tweenFrame)
+                for (const fla::Element* element : shown.tweenFrame->elements)
+                {
+                    const QRectF bounds = element ? getElementBounds(element) : QRectF();
+                    if (bounds.isValid())
+                        reach = reach.isNull() ? bounds : reach.united(bounds);
+                }
         }
         const QRect crop = reach.isNull() ? QRect()
             : painterTransform.mapRect(reach).adjusted(-2.0, -2.0, 2.0, 2.0).toAlignedRect().intersected(deviceRect);
