@@ -346,6 +346,7 @@ set(HEADERS
     src/edit/psd_import.h
     src/edit/three_d.h
     src/edit/behaviors.h
+    src/edit/shape_operators.h
     src/edit/filter_presets.h
     src/edit/library_transfer.h
     src/edit/document_session.h

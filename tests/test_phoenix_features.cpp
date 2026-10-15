@@ -47,7 +47,7 @@ void writeSample(const fs::path& folder)
         "<DOMFrame index=\"0\" phoenixShapeHints=\"0,0,10,10\"><elements>"
         "<DOMSymbolInstance libraryItemName=\"Peg\" phoenixDeformer=\"bend\" phoenixBehaviors=\"wiggle\" phoenixRotationX=\"20\" phoenixZ=\"5\" "
         "phoenixPaint=\"1\" phoenixMinRotation=\"-30\" phoenixMaxRotation=\"30\" phoenixBinding=\"anchors\"/>"
-        "<DOMShape><fills><FillStyle index=\"1\"><SolidColor color=\"#FF0000\" phoenixColor=\"skin\" "
+        "<DOMShape phoenixShapeOperators=\"trim\"><fills><FillStyle index=\"1\"><SolidColor color=\"#FF0000\" phoenixColor=\"skin\" "
         "phoenixTexture=\"Grain\" phoenixTextureScale=\"2\"/></FillStyle></fills>"
         "<strokes><StrokeStyle index=\"1\"><SolidStroke weight=\"2\" phoenixBrush=\"Rope\" phoenixBrushPattern=\"true\">"
         "<fill><SolidColor color=\"#000000\"/></fill></SolidStroke></StrokeStyle></strokes>"

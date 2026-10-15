@@ -11,6 +11,7 @@
 
 namespace fla {
 
+class DOMElement;
 class SymbolInstance;
 
 /// Behaviors: animation worked out each frame rather than keyed. A symbol
@@ -49,6 +50,38 @@ struct Applied
     void removeKey(const std::string& name, int frame, const std::string& value);
 };
 
+/// A setting a behavior offers, as its file declares it; the Behaviors
+/// panel makes a control of each.
+struct ParamSpec
+{
+    std::string name;
+    std::string label;
+    /// "number", "angle", "percent", "seed", "checkbox", "choice", "text",
+    /// "object" (another instance's name) or "controller" (a master
+    /// controller's name).
+    std::string type = "number";
+    double value = 0.0;
+    double min = 0.0;
+    double max = 100.0;
+    double step = 1.0;
+    /// A choice's options; its value is the option's text.
+    std::vector<std::string> choices;
+    std::string text;
+};
+
+/// A behavior as its file defines it.
+struct Definition
+{
+    /// The file's name without .js: what an instance's list names it by.
+    std::string id;
+    std::string name;
+    std::string description;
+    std::vector<ParamSpec> params;
+    bool builtIn = false;
+    /// Where it was read from; empty for a built-in one.
+    std::string file;
+};
+
 /// The behaviors on \a instance, in the order they apply.
 std::vector<Applied> of(const SymbolInstance& instance);
 /// Whether \a instance has any behavior that is on.
@@ -56,6 +89,13 @@ bool any(const SymbolInstance& instance);
 
 /// \a instance's attributes with \a list in them (none when empty).
 std::vector<std::pair<std::string, std::string>> withBehaviors(const SymbolInstance& instance,
+    const std::vector<Applied>& list);
+
+/// The same kind of list kept on any element under \a attribute (shape
+/// operators are kept on shapes as phoenixShapeOperators), and the
+/// element's attributes with \a list in its place.
+std::vector<Applied> listOf(const DOMElement& element, const std::string& attribute);
+std::vector<std::pair<std::string, std::string>> withList(const DOMElement& element, const std::string& attribute,
     const std::vector<Applied>& list);
 
 /// The list as the attribute keeps it, and back.

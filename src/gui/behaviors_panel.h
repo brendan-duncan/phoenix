@@ -15,6 +15,8 @@ class QToolButton;
 
 namespace fla {
 class CommandStack;
+class DOMElement;
+class Shape;
 class SymbolInstance;
 }
 
@@ -23,6 +25,9 @@ struct BehaviorsLinks
     std::function<fla::CommandStack*()> commands;
     /// The symbol instances selected (unlocked ones).
     std::function<std::vector<fla::SymbolInstance*>()> instances;
+    /// The drawn shapes selected (unlocked ones), for their operators when
+    /// no instance is selected.
+    std::function<std::vector<fla::Shape*>()> shapes;
     /// After a change: the stage drawn again.
     std::function<void()> changed;
     /// The frame shown, on the timeline being edited: where keys go.
@@ -55,6 +60,13 @@ public:
 private:
     /// The first selected instance's list, which the panel shows.
     std::vector<fla::behaviors::Applied> shown() const;
+    /// Whether it shows shapes' operators (shapes selected and no
+    /// instance), the elements it changes, the attribute their list is
+    /// kept in, and what an id names.
+    bool shapeMode() const;
+    std::vector<fla::DOMElement*> targets() const;
+    const char* attribute() const;
+    const fla::behaviors::Definition* definitionOf(const std::string& id) const;
     void fillSettings();
     /// Changes each selected instance's list with \a change, as one step
     /// named \a name; \a merge folds a run of the same change together.

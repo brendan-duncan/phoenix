@@ -32,6 +32,8 @@
 #include "behaviors_panel.h"
 #include "../edit/controllers.h"
 #include "../jsfl/behavior_frames.h"
+#include "../edit/shape_operators.h"
+#include "../edit/frame_bake.h"
 #include "motion_editor.h"
 #include "motion_presets.h"
 #include "xsheet_panel.h"
@@ -2042,6 +2044,18 @@ void MainWindow::createPanels()
             }
         };
         links.currentFrame = [this]() { return _player ? _player->currentFrame() : 0; };
+        links.shapes = [this]() {
+            std::vector<fla::Shape*> shapes;
+            for (fla::DOMElement* selected : _selection.elements())
+                if (auto* shape = dynamic_cast<fla::Shape*>(selected))
+                {
+                    fla::Frame* frame = frameOfElement(shape);
+                    auto* layer = frame ? dynamic_cast<fla::Layer*>(frame->parent) : nullptr;
+                    if (!layer || !layer->isLocked())
+                        shapes.push_back(shape);
+                }
+            return shapes;
+        };
         links.bake = [this]() { bakeSelectedBehaviors(); };
         links.objectNames = [this]() {
             QStringList names;
@@ -4770,8 +4784,9 @@ void MainWindow::bakeBehaviors()
 {
     const double rate = _flaDocument && _flaDocument->document ? _flaDocument->document->frameRate : 24.0;
     auto errors = std::make_shared<std::vector<std::string>>();
-    editFrames("Bake Behaviors", [rate, errors](fla::Layer& layer, int first, int last, std::vector<fla::Frame*>&) {
+    editFrames("Bake Behaviors", [this, rate, errors](fla::Layer& layer, int first, int last, std::vector<fla::Frame*>&) {
         fla::behaviors::bake(BehaviorLibrary::instance().engine(), layer, first, last, rate, errors.get());
+        bakeShapeOperators(layer, first, last);
     });
     for (const std::string& error : *errors)
         BehaviorLibrary::instance().reportOnce(QString::fromStdString(error));
@@ -4803,16 +4818,33 @@ void MainWindow::bakeSelectedBehaviors()
         if (std::find(layers.begin(), layers.end(), layer) == layers.end())
             layers.push_back(layer);
     }
-    if (runs.empty())
+    // Shapes with operators: the keyframe each is on.
+    std::vector<std::pair<fla::Layer*, std::pair<int, int>>> shapeRuns;
+    for (fla::DOMElement* selected : _selection.elements())
     {
-        statusBar()->showMessage("Select symbol instances with behaviors to bake them.", 3000);
+        auto* shape = dynamic_cast<fla::Shape*>(selected);
+        if (!shape || !fla::shapeops::any(*shape))
+            continue;
+        fla::Frame* frame = frameOfElement(shape);
+        auto* layer = frame ? dynamic_cast<fla::Layer*>(frame->parent) : nullptr;
+        if (!layer || layer->isLocked())
+            continue;
+        shapeRuns.push_back({layer, {frame->index, frame->index + std::max(1, frame->duration) - 1}});
+        if (std::find(layers.begin(), layers.end(), layer) == layers.end())
+            layers.push_back(layer);
+    }
+    if (runs.empty() && shapeRuns.empty())
+    {
+        statusBar()->showMessage("Select symbol instances with behaviors, or shapes with operators, to bake them.", 3000);
         return;
     }
     auto errors = std::make_shared<std::vector<std::string>>();
     _selection.clear();
-    auto* command = new fla::EditFramesCommand(layers, "Bake Behaviors", [runs, rate, errors](std::vector<fla::Frame*>&) {
+    auto* command = new fla::EditFramesCommand(layers, "Bake Behaviors", [this, runs, shapeRuns, rate, errors](std::vector<fla::Frame*>&) {
         for (const auto& [layer, range] : runs)
             fla::behaviors::bake(BehaviorLibrary::instance().engine(), *layer, range.first, range.second, rate, errors.get());
+        for (const auto& [layer, range] : shapeRuns)
+            bakeShapeOperators(*layer, range.first, range.second);
     });
     command->redo();
     if (!command->changedAnything())
@@ -4835,6 +4867,58 @@ void MainWindow::bakeSelectedBehaviors()
         _timelineView->refreshFrames();
 }
 
+std::vector<std::pair<int, int>> MainWindow::shapeOperatorRuns(const fla::Layer& layer)
+{
+    std::vector<std::pair<int, int>> runs;
+    for (const fla::Frame* frame : layer.frames)
+    {
+        if (!frame)
+            continue;
+        bool holds = false;
+        for (const fla::Element* element : frame->elements)
+            holds = holds || (element && element->elementType() == fla::Element::Type::Shape &&
+                                 fla::shapeops::any(*static_cast<const fla::Shape*>(element)));
+        if (holds)
+            runs.emplace_back(frame->index, frame->index + std::max(1, frame->duration) - 1);
+    }
+    return runs;
+}
+
+int MainWindow::bakeShapeOperators(fla::Layer& layer, int first, int last)
+{
+    if (!_phoenixView)
+        return 0;
+    bool any = false;
+    for (const auto& [from, to] : shapeOperatorRuns(layer))
+        any = any || (from <= last && to >= first);
+    if (!any)
+        return 0;
+    const double rate = _flaDocument && _flaDocument->document ? _flaDocument->document->frameRate : 24.0;
+    fla::frames::convertToFrameByFrame(layer, first, last, rate);
+    int baked = 0;
+    for (fla::Frame* frame : layer.frames)
+    {
+        if (!frame || frame->index < first || frame->index > last)
+            continue;
+        for (size_t i = frame->elements.size(); i-- > 0;)
+        {
+            auto* shape = dynamic_cast<fla::Shape*>(frame->elements[i]);
+            if (!shape || !fla::shapeops::any(*shape))
+                continue;
+            std::vector<fla::Shape*> made = _phoenixView->bakedShape(*shape, frame->index);
+            frame->elements.erase(frame->elements.begin() + static_cast<std::ptrdiff_t>(i));
+            for (size_t k = 0; k < made.size(); ++k)
+            {
+                made[k]->parent = frame;
+                frame->elements.insert(frame->elements.begin() + static_cast<std::ptrdiff_t>(i + k), made[k]);
+            }
+            delete shape;
+            ++baked;
+        }
+    }
+    return baked;
+}
+
 void MainWindow::exportBakedDocument()
 {
     if (!_flaDocument || !_flaDocument->document)
@@ -4855,7 +4939,7 @@ void MainWindow::exportBakedDocument()
     std::vector<fla::Layer*> layers;
     const auto collect = [&layers](fla::Timeline* timeline) {
         for (fla::Layer* layer : timeline ? timeline->layers : std::vector<fla::Layer*>())
-            if (layer && !fla::behaviors::runsWithBehaviors(*layer).empty())
+            if (layer && (!fla::behaviors::runsWithBehaviors(*layer).empty() || !shapeOperatorRuns(*layer).empty()))
                 layers.push_back(layer);
     };
     for (fla::Timeline* timeline : document->timelines)
@@ -4870,9 +4954,13 @@ void MainWindow::exportBakedDocument()
     if (!layers.empty())
     {
         _selection.clear();
-        baked.reset(new fla::EditFramesCommand(layers, "Bake Behaviors", [layers, rate, errors](std::vector<fla::Frame*>&) {
+        baked.reset(new fla::EditFramesCommand(layers, "Bake Behaviors", [this, layers, rate, errors](std::vector<fla::Frame*>&) {
             for (fla::Layer* layer : layers)
+            {
                 fla::behaviors::bakeAll(BehaviorLibrary::instance().engine(), *layer, rate, errors.get());
+                for (const auto& [first, last] : shapeOperatorRuns(*layer))
+                    bakeShapeOperators(*layer, first, last);
+            }
         }));
         baked->redo();
     }

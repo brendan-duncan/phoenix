@@ -5,6 +5,8 @@
 #include "../data/symbol_instance.h"
 #include "../edit/command_stack.h"
 #include "../edit/property_command.h"
+#include "../edit/shape_operators.h"
+#include "../data/shape.h"
 
 #include <QCheckBox>
 #include <QComboBox>
@@ -64,7 +66,8 @@ BehaviorsPanel::BehaviorsPanel(BehaviorsLinks links, QWidget* parent)
     QMenu* menu = new QMenu(_add);
     connect(menu, &QMenu::aboutToShow, this, [this, menu]() {
         menu->clear();
-        for (const fla::behaviors::Definition& definition : BehaviorLibrary::instance().engine().definitions())
+        for (const fla::behaviors::Definition& definition : shapeMode() ? fla::shapeops::definitions()
+                                                                         : BehaviorLibrary::instance().engine().definitions())
         {
             QAction* action = menu->addAction(QString::fromStdString(definition.name));
             action->setToolTip(QString::fromStdString(definition.description));
@@ -143,10 +146,42 @@ BehaviorsPanel::BehaviorsPanel(BehaviorsLinks links, QWidget* parent)
     refresh();
 }
 
+bool BehaviorsPanel::shapeMode() const
+{
+    // Instances first: with any selected, the panel shows their behaviors.
+    const std::vector<fla::SymbolInstance*> instances = _links.instances ? _links.instances() : std::vector<fla::SymbolInstance*>();
+    return instances.empty() && _links.shapes && !_links.shapes().empty();
+}
+
+std::vector<fla::DOMElement*> BehaviorsPanel::targets() const
+{
+    std::vector<fla::DOMElement*> list;
+    if (shapeMode())
+    {
+        for (fla::Shape* shape : _links.shapes())
+            list.push_back(shape);
+        return list;
+    }
+    if (_links.instances)
+        for (fla::SymbolInstance* instance : _links.instances())
+            list.push_back(instance);
+    return list;
+}
+
+const char* BehaviorsPanel::attribute() const
+{
+    return shapeMode() ? fla::shapeops::kAttribute : "phoenixBehaviors";
+}
+
+const fla::behaviors::Definition* BehaviorsPanel::definitionOf(const std::string& id) const
+{
+    return shapeMode() ? fla::shapeops::find(id) : BehaviorLibrary::instance().engine().find(id);
+}
+
 std::vector<fla::behaviors::Applied> BehaviorsPanel::shown() const
 {
-    const std::vector<fla::SymbolInstance*> instances = _links.instances ? _links.instances() : std::vector<fla::SymbolInstance*>();
-    return instances.empty() ? std::vector<fla::behaviors::Applied>() : fla::behaviors::of(*instances.front());
+    const std::vector<fla::DOMElement*> list = targets();
+    return list.empty() ? std::vector<fla::behaviors::Applied>() : fla::behaviors::listOf(*list.front(), attribute());
 }
 
 void BehaviorsPanel::refresh()
@@ -154,19 +189,25 @@ void BehaviorsPanel::refresh()
     if (_refreshing)
         return;
     _refreshing = true;
-    const std::vector<fla::SymbolInstance*> instances = _links.instances ? _links.instances() : std::vector<fla::SymbolInstance*>();
+    const std::vector<fla::DOMElement*> selected = targets();
+    const bool shapes = shapeMode();
     const int keep = _list->currentRow();
     _list->clear();
-    if (instances.empty())
-        _what->setText("Select a symbol instance to give it behaviors: motion worked out every frame, on top of its keys.");
-    else if (instances.size() == 1)
-        _what->setText(QString("Behaviors of %1").arg(QString::fromStdString(instances.front()->libraryItemName)));
+    _add->setText(shapes ? "Add Operator" : "Add Behavior");
+    if (selected.empty())
+        _what->setText("Select a symbol instance to give it behaviors (motion worked out every frame, on top of its "
+                       "keys), or a drawn shape to give it operators (Trim Paths, Wiggle Path, Zig-zag).");
+    else if (shapes)
+        _what->setText(selected.size() == 1 ? QString("Operators of the shape")
+                                            : QString("Operators of %1 shapes (shown: the first one's)").arg(selected.size()));
+    else if (selected.size() == 1)
+        _what->setText(QString("Behaviors of %1")
+                           .arg(QString::fromStdString(static_cast<fla::SymbolInstance*>(selected.front())->libraryItemName)));
     else
-        _what->setText(QString("Behaviors of %1 instances (shown: the first one's)").arg(instances.size()));
-    const fla::behaviors::Engine& engine = BehaviorLibrary::instance().engine();
+        _what->setText(QString("Behaviors of %1 instances (shown: the first one's)").arg(selected.size()));
     for (const fla::behaviors::Applied& applied : shown())
     {
-        const fla::behaviors::Definition* definition = engine.find(applied.type);
+        const fla::behaviors::Definition* definition = definitionOf(applied.type);
         QListWidgetItem* item = new QListWidgetItem(
             definition ? QString::fromStdString(definition->name) : QString("%1 (missing)").arg(QString::fromStdString(applied.type)),
             _list);
@@ -175,7 +216,7 @@ void BehaviorsPanel::refresh()
         if (!definition)
             item->setToolTip("No behavior of this name is known: its file may have been taken out of the Behaviors folder");
     }
-    _add->setEnabled(!instances.empty());
+    _add->setEnabled(!selected.empty());
     if (_list->count() > 0)
         _list->setCurrentRow(std::clamp(keep, 0, _list->count() - 1));
     const bool any = _list->count() > 0;
@@ -202,7 +243,7 @@ void BehaviorsPanel::fillSettings()
         return;
     }
     const fla::behaviors::Applied& applied = list[static_cast<size_t>(row)];
-    const fla::behaviors::Definition* definition = BehaviorLibrary::instance().engine().find(applied.type);
+    const fla::behaviors::Definition* definition = definitionOf(applied.type);
     if (!definition)
     {
         _description->setText("This behavior's file is missing; its settings are kept.");
@@ -348,24 +389,25 @@ void BehaviorsPanel::edit(const std::string& name, const std::function<void(std:
     bool merge)
 {
     fla::CommandStack* stack = _links.commands ? _links.commands() : nullptr;
-    const std::vector<fla::SymbolInstance*> instances = _links.instances ? _links.instances() : std::vector<fla::SymbolInstance*>();
-    if (!stack || instances.empty())
+    const std::vector<fla::DOMElement*> selected = targets();
+    const std::string key = attribute();
+    if (!stack || selected.empty())
         return;
     // The panel's own change: what it shows stays as it is while the
     // history tells the window.
     _refreshing = true;
-    const bool several = instances.size() > 1;
+    const bool several = selected.size() > 1;
     if (several)
         stack->beginMacro(name);
-    for (fla::SymbolInstance* instance : instances)
+    for (fla::DOMElement* element : selected)
     {
-        std::vector<fla::behaviors::Applied> list = fla::behaviors::of(*instance);
+        std::vector<fla::behaviors::Applied> list = fla::behaviors::listOf(*element, key);
         change(list);
-        const Attributes after = fla::behaviors::withBehaviors(*instance, list);
-        if (after == instance->extraAttributes)
+        const Attributes after = fla::behaviors::withList(*element, key, list);
+        if (after == element->extraAttributes)
             continue;
-        stack->push(fla::CommandPtr(new fla::SetPropertyCommand<Attributes>(instance->extraAttributes,
-            instance->extraAttributes, after, name, merge && !several ? kMergeSetting : -1)));
+        stack->push(fla::CommandPtr(new fla::SetPropertyCommand<Attributes>(element->extraAttributes,
+            element->extraAttributes, after, name, merge && !several ? kMergeSetting : -1)));
     }
     if (several)
         stack->endMacro();
@@ -376,8 +418,9 @@ void BehaviorsPanel::edit(const std::string& name, const std::function<void(std:
 
 void BehaviorsPanel::add(const std::string& id)
 {
-    const fla::behaviors::Applied applied = BehaviorLibrary::instance().engine().defaults(id, newSeed());
-    edit("Add Behavior", [&applied](std::vector<fla::behaviors::Applied>& list) { list.push_back(applied); });
+    const fla::behaviors::Applied applied = shapeMode() ? fla::shapeops::defaults(id, newSeed())
+                                                        : BehaviorLibrary::instance().engine().defaults(id, newSeed());
+    edit(shapeMode() ? "Add Operator" : "Add Behavior", [&applied](std::vector<fla::behaviors::Applied>& list) { list.push_back(applied); });
     refresh();
     _list->setCurrentRow(_list->count() - 1);
 }
@@ -444,7 +487,7 @@ void BehaviorsPanel::toggleKey(int row, const std::string& name)
     if (row < 0 || row >= static_cast<int>(first.size()))
         return;
     const std::string type = first[static_cast<size_t>(row)].type;
-    const fla::behaviors::Definition* definition = BehaviorLibrary::instance().engine().find(type);
+    const fla::behaviors::Definition* definition = definitionOf(type);
     std::string fallback;
     if (definition)
         for (const fla::behaviors::ParamSpec& spec : definition->params)

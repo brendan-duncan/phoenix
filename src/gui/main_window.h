@@ -468,6 +468,13 @@ private slots:
     /// File > Export > Export FLA for Other Apps: a copy with every
     /// behavior baked, the document itself left as it is.
     void exportBakedDocument();
+    /// The shapes with operators on frames \a first to \a last of
+    /// \a layer, baked: a keyframe a frame, each shape left as drawing
+    /// objects as its operators make it there. Returns how many were baked.
+    int bakeShapeOperators(fla::Layer& layer, int first, int last);
+    /// The frames of \a layer whose keyframes hold shapes with operators,
+    /// as runs (first and last frame).
+    static std::vector<std::pair<int, int>> shapeOperatorRuns(const fla::Layer& layer);
     void reverseFrames();
     void showFramesMenu(const QPoint& globalPos);
     void addLayer(bool folder);

@@ -314,6 +314,11 @@ signals:
     void penEndChanged(bool eraser);
 
 public:
+    /// \a shape as its operators leave it on frame \a at of its timeline, as
+    /// new drawing objects (its fills, then its strokes) in its place, for
+    /// Bake to Keyframes. The caller owns them.
+    std::vector<fla::Shape*> bakedShape(const fla::Shape& shape, int at);
+
     /// Onion skinning: \a before and \a after frames either side of the
     /// playhead drawn faded under it, those before tinted blue and those
     /// after green.
@@ -1160,6 +1165,9 @@ private:
     /// Paints one cached entry: its fill and stroke, or its procedural
     /// marks, or in outline view its outline.
     void paintEntry(QPainter& painter, const PathCacheEntry& entry);
+    /// \a entry as the shape's operators (Trim Paths, Wiggle Path...) leave
+    /// it on frame \a at of its timeline.
+    PathCacheEntry operatedEntry(const fla::Shape& shape, const PathCacheEntry& entry, int at) const;
     typedef QList<PathCacheEntry> PathCacheList;
 
     /// A cached stroke entry's pen with its width set for the element being drawn.

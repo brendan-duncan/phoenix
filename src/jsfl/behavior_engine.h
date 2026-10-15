@@ -10,38 +10,6 @@
 
 namespace fla::behaviors {
 
-/// A setting a behavior offers, as its file declares it; the Behaviors
-/// panel makes a control of each.
-struct ParamSpec
-{
-    std::string name;
-    std::string label;
-    /// "number", "angle", "percent", "seed", "checkbox", "choice", "text",
-    /// "object" (another instance's name) or "controller" (a master
-    /// controller's name).
-    std::string type = "number";
-    double value = 0.0;
-    double min = 0.0;
-    double max = 100.0;
-    double step = 1.0;
-    /// A choice's options; its value is the option's text.
-    std::vector<std::string> choices;
-    std::string text;
-};
-
-/// A behavior as its file defines it.
-struct Definition
-{
-    /// The file's name without .js: what an instance's list names it by.
-    std::string id;
-    std::string name;
-    std::string description;
-    std::vector<ParamSpec> params;
-    bool builtIn = false;
-    /// Where it was read from; empty for a built-in one.
-    std::string file;
-};
-
 /// What a behavior is told about the frame it works out.
 struct Moment
 {

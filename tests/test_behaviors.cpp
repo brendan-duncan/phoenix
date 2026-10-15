@@ -8,6 +8,7 @@
 #include "../src/jsfl/behavior_engine.h"
 #include "../src/jsfl/behavior_frames.h"
 #include "../src/edit/guide_path.h"
+#include "../src/edit/shape_operators.h"
 
 #include <cmath>
 #include <string>
@@ -426,4 +427,47 @@ TEST(behaviors_particles_are_born_live_and_die_by_the_clock)
     particles.params["emitFor"] = "0.5";
     CHECK(engine.evaluate({particles}, still(72)).empty());
     CHECK(!engine.evaluate({particles}, still(12)).empty());
+}
+
+TEST(shape_operators_trim_wiggle_and_zigzag_lines)
+{
+    using fla::shapeops::Line;
+    // A line 100 pixels across, and a square outline.
+    Line straight;
+    straight.points = {fla::Point(0, 0), fla::Point(100, 0)};
+    Line square;
+    square.closed = true;
+    square.points = {fla::Point(0, 0), fla::Point(10, 0), fla::Point(10, 10), fla::Point(0, 10)};
+
+    Applied trim = fla::shapeops::defaults("trim", 1);
+    trim.setKey("end", 0, "0");
+    trim.setKey("end", 10, "100");
+    // Half drawn on at frame 5.
+    std::vector<Line> half = fla::shapeops::apply({straight}, true, {trim}, 5, 24.0);
+    CHECK(half.size() == 1 && near(half[0].points.back().x, 50.0, 1e-9));
+    // Nothing drawn at frame 0, all at frame 10.
+    CHECK(fla::shapeops::apply({straight}, true, {trim}, 0, 24.0).empty());
+    CHECK(fla::shapeops::apply({straight}, true, {trim}, 10, 24.0).front().points.back().x == 100.0);
+    // Fills are not trimmed.
+    CHECK(fla::shapeops::apply({square}, false, {trim}, 5, 24.0).size() == 1);
+    // A stretch slid round past the end comes back at the start.
+    Applied window = fla::shapeops::defaults("trim", 1);
+    window.params["start"] = "0";
+    window.params["end"] = "20";
+    window.params["offset"] = "90";
+    const std::vector<Line> round = fla::shapeops::apply({straight}, true, {window}, 0, 24.0);
+    CHECK(round.size() == 2 && near(round[0].points.front().x, 90.0, 1e-9) && near(round[1].points.back().x, 10.0, 1e-9));
+
+    // Wiggle moves points, the same each time, differently on another frame.
+    Applied wiggle = fla::shapeops::defaults("wigglepath", 3);
+    wiggle.params["amount"] = "5";
+    const std::vector<Line> a = fla::shapeops::apply({straight}, true, {wiggle}, 3, 24.0);
+    const std::vector<Line> b = fla::shapeops::apply({straight}, true, {wiggle}, 3, 24.0);
+    const std::vector<Line> c = fla::shapeops::apply({straight}, true, {wiggle}, 9, 24.0);
+    CHECK(a.size() == 1 && a[0].points.size() > 10 && a[0].points[5].y == b[0].points[5].y);
+    CHECK(a[0].points[5].y != c[0].points[5].y && std::fabs(a[0].points[5].y) <= 5.0);
+    // Zig-zag teeth alternate either side.
+    Applied zigzag = fla::shapeops::defaults("zigzag", 1);
+    const std::vector<Line> teeth = fla::shapeops::apply({straight}, true, {zigzag}, 0, 24.0);
+    CHECK(teeth.size() == 1 && teeth[0].points.size() > 4 && teeth[0].points[0].y * teeth[0].points[1].y < 0);
 }

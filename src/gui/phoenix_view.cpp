@@ -1,5 +1,7 @@
 #include "phoenix_view.h"
 #include "behavior_library.h"
+#include "../edit/shape_operators.h"
+#include "../edit/vector_import.h"
 #include "../jsfl/behavior_frames.h"
 #include "theme.h"
 #include "../play/movie_runtime.h"
@@ -4790,6 +4792,17 @@ void PhoenixView::drawShape(QPainter& painter, const fla::Shape* shape, const fl
         }
     }
 
+    // Shape operators change the lines and outlines each frame.
+    if (fla::shapeops::any(*shape))
+    {
+        const int at = (frame ? frame->index : 0) + std::max(0, _elapsed);
+        for (const PathCacheEntry& entry : shapePaths(shape))
+            paintEntry(painter, operatedEntry(*shape, entry, at));
+        if (isSelected && _showBounds)
+            drawOverlayPoints(painter, shape);
+        return;
+    }
+
     for (const PathCacheEntry& entry : shapePaths(shape))
         paintEntry(painter, entry);
 
@@ -4799,6 +4812,107 @@ void PhoenixView::drawShape(QPainter& painter, const fla::Shape* shape, const fl
     {
         drawOverlayPoints(painter, shape);
     }
+}
+
+std::vector<fla::Shape*> PhoenixView::bakedShape(const fla::Shape& shape, int at)
+{
+    // Each fill and stroke as the operators leave it, as a drawing object
+    // of its own in the shape's place: fills first, then strokes over them.
+    std::vector<fla::Shape*> made;
+    for (int pass = 0; pass < 2; ++pass)
+    {
+        for (const PathCacheEntry& entry : shapePaths(&shape))
+        {
+            const bool stroke = entry.fillIndex < 0;
+            if ((pass == 0) == stroke)
+                continue;
+            const PathCacheEntry operated = operatedEntry(shape, entry, at);
+            fla::vectors::Painted painted;
+            const QList<QPolygonF> polygons = operated.painterPath.toSubpathPolygons();
+            for (const QPolygonF& polygon : polygons)
+            {
+                if (polygon.size() < 2)
+                    continue;
+                fla::vectors::Subpath subpath;
+                subpath.segments.push_back({fla::vectors::Segment::Kind::Move, {fla::Point(polygon[0].x(), polygon[0].y())}});
+                for (int i = 1; i < polygon.size(); ++i)
+                    subpath.segments.push_back({fla::vectors::Segment::Kind::Line, {fla::Point(polygon[i].x(), polygon[i].y())}});
+                subpath.closed = !stroke;
+                painted.subpaths.push_back(subpath);
+            }
+            if (painted.subpaths.empty())
+                continue;
+            const auto colorOf = [](const QColor& c) {
+                return fla::vectors::Color{static_cast<uint8_t>(c.red()), static_cast<uint8_t>(c.green()),
+                    static_cast<uint8_t>(c.blue()), static_cast<uint8_t>(c.alpha())};
+            };
+            if (stroke)
+            {
+                painted.stroke = colorOf(operated.pen.color());
+                painted.strokeWidth = std::max(0.1, operated.pen.widthF());
+            }
+            else
+            {
+                // A gradient's first color stands in for it.
+                const QGradient* gradient = operated.fillBrush.gradient();
+                painted.fill = colorOf(gradient && !gradient->stops().isEmpty() ? gradient->stops().front().second
+                                                                                 : operated.fillBrush.color());
+            }
+            if (fla::Shape* piece = fla::vectors::toShape(painted))
+            {
+                piece->transform = shape.transform;
+                piece->isDrawingObject = true;
+                made.push_back(piece);
+            }
+        }
+    }
+    return made;
+}
+
+PhoenixView::PathCacheEntry PhoenixView::operatedEntry(const fla::Shape& shape, const PathCacheEntry& entry, int at) const
+{
+    PathCacheEntry changed = entry;
+    // Flattened finely (a quarter pixel at the shape's own size), through
+    // the operators, and back.
+    const bool stroke = entry.fillIndex < 0;
+    std::vector<fla::shapeops::Line> lines;
+    const QList<QPolygonF> polygons = entry.painterPath.toSubpathPolygons(QTransform::fromScale(4.0, 4.0));
+    for (const QPolygonF& polygon : polygons)
+    {
+        fla::shapeops::Line line;
+        for (const QPointF& point : polygon)
+            line.points.push_back(fla::Point(point.x() / 4.0, point.y() / 4.0));
+        if (line.points.size() > 2 && std::hypot(line.points.front().x - line.points.back().x,
+                                          line.points.front().y - line.points.back().y) < 1e-6)
+        {
+            line.points.pop_back();
+            line.closed = true;
+        }
+        if (line.points.size() > 1)
+            lines.push_back(line);
+    }
+    const double rate = _flaDocument && _flaDocument->document && _flaDocument->document->frameRate > 0.0
+        ? _flaDocument->document->frameRate : 24.0;
+    const std::vector<fla::shapeops::Line> out = fla::shapeops::apply(lines, stroke, fla::shapeops::of(shape), at, rate);
+    QPainterPath path;
+    path.setFillRule(entry.painterPath.fillRule());
+    for (const fla::shapeops::Line& line : out)
+    {
+        if (line.points.empty())
+            continue;
+        path.moveTo(line.points.front().x, line.points.front().y);
+        for (size_t i = 1; i < line.points.size(); ++i)
+            path.lineTo(line.points[i].x, line.points[i].y);
+        if (line.closed)
+            path.closeSubpath();
+    }
+    changed.painterPath = path;
+    // What was worked out from the old geometry no longer fits it.
+    changed.effectPath = QPainterPath();
+    changed.seamPath = QPainterPath();
+    changed.strokeOutline = QPainterPath();
+    changed.strokeOutlineWidth = -1.0;
+    return changed;
 }
 
 std::vector<std::pair<QPainterPath, const fla::StrokeStyle*>> PhoenixView::strokeRuns(const fla::Shape* shape)

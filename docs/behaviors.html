@@ -96,12 +96,27 @@
 
 <p>Behaviors that are random (Wiggle, and Blink set to random) have a <b>Seed</b>. The same seed always gives the same motion, so a scene renders the same every time; <b>New</b> picks another seed for a different motion. Each behavior you add starts with a seed of its own, so two instances given the same behavior do not move in step.</p>
 
+<h2 id="shape-operators">Shape operators</h2>
+
+<p>Drawn shapes have operators of their own, which change their lines and outlines each frame. Select a shape (a drawing object, or a merge-drawn shape picked whole) with no symbol instance selected, and the Behaviors panel shows its operators: <b>Add Operator</b> offers them, and their settings key the same way.</p>
+
+<table>
+  <thead><tr><th>Operator</th><th>What it does</th></tr></thead>
+  <tbody>
+    <tr><td>Trim Paths</td><td class="wrap">Draws only part of the shape's lines, from a start to an end along them, with an offset that slides the drawn part round. Key the End from 0 to 100 and the line draws itself on; key the Start after it and it draws itself off. Fills are left whole.</td></tr>
+    <tr><td>Wiggle Path</td><td class="wrap">Shakes the outlines and lines smoothly at random: how far, how long the waves are, how fast they change. <b>Change on whole frames only</b> makes it boil like redrawn line work.</td></tr>
+    <tr><td>Zig-zag</td><td class="wrap">Puts teeth, or smooth waves, along the outlines and lines; key the shift to make them travel.</td></tr>
+  </tbody>
+</table>
+
+<p>Operators keep the shape's fill and stroke as they are. Clicking on the stage finds the shape by its outline as drawn.</p>
+
 <h2 id="bake">Bake to keyframes</h2>
 
 <p>Baking turns behaviors into ordinary animation: every frame they touch becomes a keyframe holding the instance where its behaviors put it, its copies become instances of their own beside it, and the behaviors come off. What plays does not change, and you can then edit the frames by hand. Baking is one step you can undo.</p>
 
 <ul>
-  <li><b>Bake</b> in the Behaviors panel bakes the selected instances over all the keyframes they run through.</li>
+  <li><b>Bake</b> in the Behaviors panel bakes the selected instances over all the keyframes they run through, and the selected shapes over their keyframes; a shape's operators are baked into drawing objects, a frame each.</li>
   <li><span class="menu-path">Modify &rsaquo; Timeline &rsaquo; Bake Behaviors to Keyframes</span> bakes the frames selected in the timeline.</li>
 </ul>
 

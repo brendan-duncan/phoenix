@@ -44,6 +44,8 @@ const std::vector<Feature>& all()
         {"deformers", "Deformers", "the instances without their bend", {"phoenixDeformer"}},
         {"behaviors", "Behaviors", "the instances as keyed, without the motion their behaviors add",
             {"phoenixBehaviors"}},
+        {"shape-operators", "Shape operators", "the shapes as drawn, without Trim Paths, Wiggle Path or Zig-zag",
+            {"phoenixShapeOperators"}},
         {"master-controllers", "Master controllers", "the properties as keyed, without the sliders",
             {"phoenixControllers"}},
         {"3d-rotation", "3D rotation and depth", "the movie clips flat, without their 3D turn",

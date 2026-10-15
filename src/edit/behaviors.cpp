@@ -227,6 +227,26 @@ std::vector<Applied> decode(const std::string& text)
     return list;
 }
 
+std::vector<Applied> listOf(const DOMElement& element, const std::string& attribute)
+{
+    for (const auto& each : element.extraAttributes)
+        if (each.first == attribute)
+            return decode(each.second);
+    return {};
+}
+
+std::vector<std::pair<std::string, std::string>> withList(const DOMElement& element, const std::string& attribute,
+    const std::vector<Applied>& list)
+{
+    std::vector<std::pair<std::string, std::string>> attributes;
+    for (const auto& each : element.extraAttributes)
+        if (each.first != attribute)
+            attributes.push_back(each);
+    if (!list.empty())
+        attributes.emplace_back(attribute, encode(list));
+    return attributes;
+}
+
 std::vector<Applied> of(const SymbolInstance& instance)
 {
     for (const auto& attribute : instance.extraAttributes)
