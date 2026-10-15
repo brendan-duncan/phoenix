@@ -47,6 +47,9 @@ struct BehaviorsLinks
     /// The names of the instances on the timeline being edited, and of the
     /// master controllers, for settings that name one.
     std::function<QStringList()> objectNames;
+    /// The next instance clicked on the stage, by its name (one is given
+    /// it when it has none), for \a done.
+    std::function<void(std::function<void(const QString&)> done)> pickObject;
     std::function<QStringList()> controllerNames;
 };
 

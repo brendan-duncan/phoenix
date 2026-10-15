@@ -63,7 +63,7 @@
     <tr><td>Scatter in a Shape</td><td class="wrap">Copies it at random places inside a closed line drawn on the motion guide its layer is under, kept apart, turned and sized at random if you like: a field of flowers, stars in a window, a crowd in a square. The same places every frame, from the seed.</td></tr>
     <tr><td>Follow Path</td><td class="wrap">Puts it on the motion guide's line: key how far along it is, or give it a speed, and it travels the line, turned with it if you like.</td></tr>
     <tr><td>Look At</td><td class="wrap">Turns it to face another instance, chosen by its instance name: eyes that follow, a spotlight on a dancer, an arrow that points.</td></tr>
-    <tr><td>Link to Object</td><td class="wrap">Moves, turns, scales or fades it as another instance does, from where each starts, with a lag if you like: a shadow under a bouncing ball, a wheel that turns as the car moves across.</td></tr>
+    <tr><td>Link to Object</td><td class="wrap">Moves, turns, scales or fades it as another instance does, from where each starts: a shadow under a bouncing ball, a wheel that turns as the car moves across, a needle that rises with a level. Any change can drive any other: its moving down can turn this one. Scale it by an amount, add an offset, keep it within limits, and lag it if you like. See <a href="#links">Links</a>.</td></tr>
     <tr><td>Link to Controller</td><td class="wrap">Sets its place, turn, size or fade from a master controller's slider (see <a href="rigging.html">Rigs and motion</a>), between two values.</td></tr>
     <tr><td>Effector</td><td class="wrap">Changes the copies a Repeat or Particles behavior made: each copy moves, turns, grows, fades or runs its loop on by how near it is to a point, where it is across or down, or its place in the order. Key the point or its reach to sweep the change across the copies.</td></tr>
     <tr><td>Particles</td><td class="wrap">Sends out copies as particles, born at a steady rate from a point or an area: speed and direction with a spread, gravity, turbulence, spin, size from birth to death, fading. A graphic symbol's loop can start as each particle is born. Like everything else, the same frame always shows the same particles.</td></tr>
@@ -76,6 +76,17 @@
   <img src="assets/shots/mg-jiggle.webp" alt="Four frames of a green head running right with a red-tipped antenna that leans back as the head speeds up and swings the other way as it turns back" width="1000" height="411">
   <figcaption>Jiggle on an antenna parented to a moving head: it trails, overshoots and settles with no keys of its own.</figcaption>
 </figure>
+
+<h2 id="links">Links</h2>
+
+<p>Look At and Link to Object follow another instance by its instance name. Choose it from <b>Linked to</b>, or click <b>Pick</b> and then click the instance on the stage; one with no name is given one from its symbol. Esc cancels. While an instance with a link is selected, a dashed line runs from it to the instance it follows.</p>
+
+<figure>
+  <img src="assets/shots/link-pick.webp" alt="Two stars on the stage with a dashed line from the selected one to the other, and the Behaviors panel showing Link to Object linked to logo, following its Move down to change its Turn" width="1404" height="600">
+  <figcaption>Link to Object picked on the stage: the left star turns as the right one moves down.</figcaption>
+</figure>
+
+<p><b>Follow its</b> says which change to follow, and <b>Change my</b> what it changes here: <b>Same</b> for the same kind, or any of moving across, moving down, turning, size and fade. Moving is in pixels, turning in degrees, size and fade in percent. <b>Amount</b> scales the change, <b>Offset</b> adds to it, and <b>Keep within limits</b> holds it between <b>Lowest</b> and <b>Highest</b>: a door that opens no further than 90 degrees, however far its handle goes.</p>
 
 <h2 id="animate-settings">Animate the settings</h2>
 
@@ -195,7 +206,7 @@
 
 <ul>
   <li><b>Track Matte</b> shows a layer only through the layer just above it. An <b>Alpha Matte</b> shows it where the layer above has art, a <b>Luma Matte</b> where that art is light; the inverted ones show it everywhere else. The layer above becomes the matte and is not drawn itself. Unlike a mask, a matte can be soft (a blurred or faded shape gives a soft edge) and works while you edit, and both layers animate as usual: key the matte's art to make a reveal.</li>
-  <li><b>Adjustment Layer</b> makes a layer change everything drawn below it. With nothing selected on the stage, the Behaviors panel shows the current adjustment layer's effects: <b>Add Effect</b> offers <b>Blur</b>, <b>Color Correction</b> (brightness, contrast, saturation and hue), <b>Tint</b> (toward a color, keeping light and dark), <b>Turbulent Displace</b> (smooth random swirls that change over time: heat haze, water, a dream) and <b>Wave Displace</b> (waves travelling across the picture: a flag, a reflection), and their settings key like any others. An adjustment layer with no art changes the whole picture; one with art changes only where its art is, fading at soft edges.</li>
+  <li><b>Adjustment Layer</b> makes a layer change everything drawn below it. With nothing selected on the stage, the Behaviors panel shows the current adjustment layer's effects: <b>Add Effect</b> offers <b>Blur</b>, <b>Color Correction</b> (brightness, contrast, saturation and hue), <b>Tint</b> (toward a color, keeping light and dark), <b>Turbulent Displace</b> (smooth random swirls that change over time: heat haze, water, a dream) and <b>Wave Displace</b> (waves traveling across the picture: a flag, a reflection), and their settings key like any others. An adjustment layer with no art changes the whole picture; one with art changes only where its art is, fading at soft edges.</li>
 </ul>
 
 <div class="grid-2">

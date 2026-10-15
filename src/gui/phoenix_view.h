@@ -585,6 +585,9 @@ public:
     void clearCaches();
     /// Counts up whenever the caches are cleared: something may have changed.
     unsigned revision() const { return _revision; }
+    /// The next click on the stage picks a symbol instance for \a picked
+    /// (null when it misses or Esc is pressed), instead of going to the tool.
+    void pickInstance(std::function<void(fla::SymbolInstance*)> picked);
     /// Values for template fields everywhere in the document, over what
     /// instances give them: a row of data being rendered. Empty for none.
     void setTemplateValues(const fla::templates::Values& values);
@@ -1193,6 +1196,9 @@ private:
     /// The timelines being drawn on a canvas of their own for their
     /// adjustment layers.
     QSet<const fla::Timeline*> _compositing;
+    std::function<void(fla::SymbolInstance*)> _pickInstance;
+    /// The instance named \a name on the timeline being edited, as shown now.
+    const fla::SymbolInstance* namedInstanceShown(const std::string& name);
     /// Template values: the document's, then those of the instances being
     /// drawn, outermost first; the first to name a field wins.
     fla::templates::Values _documentTemplateValues;

@@ -5061,6 +5061,32 @@ void PhoenixView::drawShape(QPainter& painter, const fla::Shape* shape, const fl
     }
 }
 
+void PhoenixView::pickInstance(std::function<void(fla::SymbolInstance*)> picked)
+{
+    _pickInstance = std::move(picked);
+    setCursor(Qt::CrossCursor);
+    setFocus();
+}
+
+const fla::SymbolInstance* PhoenixView::namedInstanceShown(const std::string& name)
+{
+    const fla::Timeline* timeline = scopeTimeline() ? scopeTimeline()
+        : _flaDocument && _flaDocument->document ? _flaDocument->document->currentScene() : nullptr;
+    if (!timeline || name.empty())
+        return nullptr;
+    for (const fla::Layer* layer : timeline->layers)
+    {
+        if (!layer)
+            continue;
+        const LayerFrame state = resolveLayerFrame(layer, fla::LoopType::PlayOnce, 0);
+        for (const fla::Element* element : state.frame ? state.frame->elements : std::vector<fla::Element*>())
+            if (element && element->elementType() == fla::Element::Type::SymbolInstance &&
+                static_cast<const fla::SymbolInstance*>(element)->name == name)
+                return static_cast<const fla::SymbolInstance*>(element);
+    }
+    return nullptr;
+}
+
 const std::string* PhoenixView::templateValue(const std::string& name) const
 {
     const auto document = _documentTemplateValues.find(name);
@@ -5837,6 +5863,17 @@ void PhoenixView::mousePressEvent(QMouseEvent *event)
         movieMouse(event);
         return;
     }
+    // Picking an instance for a link: the click goes to that, not the tool.
+    if (_pickInstance && event->button() == Qt::LeftButton)
+    {
+        const auto picked = std::move(_pickInstance);
+        _pickInstance = nullptr;
+        unsetCursor();
+        const HitResult hit = hitTest(mapToDocument(event->position()), pickTolerance());
+        picked(hit && hit.element && hit.element->elementType() == fla::Element::Type::SymbolInstance
+                ? static_cast<fla::SymbolInstance*>(hit.element) : nullptr);
+        return;
+    }
     // An undo or redo may have changed the guides since the last gesture;
     // the snapper takes them afresh before this one.
     pushGuidesToSnapper();
@@ -6201,6 +6238,14 @@ QVariant PhoenixView::inputMethodQuery(Qt::InputMethodQuery query) const
 
 void PhoenixView::keyPressEvent(QKeyEvent* event)
 {
+    if (_pickInstance && event->key() == Qt::Key_Escape)
+    {
+        const auto picked = std::move(_pickInstance);
+        _pickInstance = nullptr;
+        unsetCursor();
+        picked(nullptr);
+        return;
+    }
     if (_activeTool && _activeTool->keyPress(*this, event))
         return;
 
@@ -7093,6 +7138,34 @@ void PhoenixView::drawToolOverlay(QPainter& painter)
         crosshair(QPointF(0.0, 0.0), 9.0);
     if (_selection && showBounds)
     {
+        // A dashed line from each selected instance to the instances its
+        // behaviors look at or follow.
+        for (fla::DOMElement* selected : _selection->elements())
+        {
+            const auto* instance = dynamic_cast<const fla::SymbolInstance*>(selected);
+            if (!instance || !owningFrame(instance) || !fla::behaviors::any(*instance))
+                continue;
+            const fla::Transform from = drawnTransformOf(instance);
+            for (const fla::behaviors::Applied& applied : fla::behaviors::of(*instance))
+            {
+                if (!applied.enabled || (applied.type != "lookat" && applied.type != "linkobject"))
+                    continue;
+                const auto target = applied.params.find("target");
+                const fla::SymbolInstance* other =
+                    target == applied.params.end() ? nullptr : namedInstanceShown(target->second);
+                if (!other || other == instance)
+                    continue;
+                const fla::Transform to = drawnTransformOf(other);
+                painter.save();
+                QPen pen(theme::color("accent"), 1.5 * scale, Qt::DashLine);
+                pen.setCosmetic(false);
+                painter.setPen(pen);
+                painter.drawLine(QPointF(from.tx, from.ty), QPointF(to.tx, to.ty));
+                painter.setBrush(theme::color("accent"));
+                painter.drawEllipse(QPointF(to.tx, to.ty), 3.0 * scale, 3.0 * scale);
+                painter.restore();
+            }
+        }
         for (fla::DOMElement* selected : _selection->elements())
         {
             const auto* instance = dynamic_cast<const fla::SymbolInstance*>(selected);

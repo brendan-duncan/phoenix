@@ -421,7 +421,30 @@ void BehaviorsPanel::fillSettings()
             connect(combo, &QComboBox::activated, this, [this, row, name, combo](int) {
                 setParam(row, name, combo->currentText().toStdString(), false);
             });
-            addRow(combo);
+            if (spec.type == "object" && _links.pickObject)
+            {
+                // Or picked by clicking it on the stage.
+                QWidget* holder = new QWidget(_settings);
+                QHBoxLayout* line = new QHBoxLayout(holder);
+                line->setContentsMargins(0, 0, 0, 0);
+                combo->setParent(holder);
+                line->addWidget(combo, 1);
+                QToolButton* pick = new QToolButton(holder);
+                pick->setText("Pick");
+                pick->setToolTip("Click this, then the instance on the stage; one with no name is given one");
+                line->addWidget(pick);
+                connect(pick, &QToolButton::clicked, this, [this, row, name]() {
+                    _links.pickObject([this, row, name](const QString& picked) {
+                        if (picked.isEmpty())
+                            return;
+                        setParam(row, name, picked.toStdString(), false);
+                        refresh();
+                    });
+                });
+                addRow(holder);
+            }
+            else
+                addRow(combo);
         }
         else if (spec.type == "seed")
         {

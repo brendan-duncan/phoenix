@@ -306,11 +306,16 @@ behavior({
         {"linkobject", R"JS(
 behavior({
     name: "Link to Object",
-    description: "Moves, turns, scales or fades it as another instance does, by that instance's name, from where each starts: a shadow under a bouncing ball, a wheel turning as the car moves.",
+    description: "Moves, turns, scales or fades it as another instance does, by that instance's name, from where each starts: a shadow under a bouncing ball, a wheel turning as the car moves, a needle rising with a level. Scale, offset and limit the change as you like.",
     params: {
         target: { label: "Linked to", type: "object", value: "" },
-        what: { label: "Follow its", type: "choice", choices: ["Move", "Turn", "Size", "Fade", "Move across as turn"] },
+        what: { label: "Follow its", type: "choice", choices: ["Move", "Turn", "Size", "Fade", "Move across as turn", "Move across", "Move down"] },
+        into: { label: "Change my", type: "choice", choices: ["Same", "Move across", "Move down", "Turn", "Size", "Fade"] },
         amount: { label: "Amount (percent)", value: 100, min: -1000, max: 1000, step: 1 },
+        offset: { label: "Offset", value: 0, min: -5000, max: 5000, step: 1 },
+        limit: { label: "Keep within limits", type: "checkbox", value: false },
+        low: { label: "Lowest", value: -100, min: -5000, max: 5000, step: 1 },
+        high: { label: "Highest", value: 100, min: -5000, max: 5000, step: 1 },
         lag: { label: "Lag (frames)", value: 0, min: 0, max: 240, step: 1 }
     },
     evaluate: function (ctx, p) {
@@ -319,12 +324,32 @@ behavior({
         if (!now || !first)
             return {};
         var k = p.amount / 100;
+        var shape = function (v) {
+            v = v * k + p.offset;
+            return p.limit ? Math.max(Math.min(p.low, p.high), Math.min(Math.max(p.low, p.high), v)) : v;
+        };
+        // Moving both ways at once, as it did.
+        if (p.what === "Move" && (p.into === "Same" || !p.into))
+            return { x: shape(now.x - first.x), y: shape(now.y - first.y) };
+        // The change in what it follows, in its own units: pixels, degrees,
+        // or percent for size and fade.
+        var change;
+        var natural;
         switch (p.what) {
-        case "Turn": return { rotation: (now.rotation - first.rotation) * k };
-        case "Size": return { scaleX: 1 + (now.scaleX / first.scaleX - 1) * k, scaleY: 1 + (now.scaleY / first.scaleY - 1) * k };
-        case "Fade": return { alpha: Math.max(0, 1 + (now.alpha / Math.max(first.alpha, 0.0001) - 1) * k) };
-        case "Move across as turn": return { rotation: (now.x - first.x) * k };
-        default: return { x: (now.x - first.x) * k, y: (now.y - first.y) * k };
+        case "Turn": change = now.rotation - first.rotation; natural = "Turn"; break;
+        case "Size": change = (now.scaleX / first.scaleX - 1) * 100; natural = "Size"; break;
+        case "Fade": change = (now.alpha / Math.max(first.alpha, 0.0001) - 1) * 100; natural = "Fade"; break;
+        case "Move across as turn": change = now.x - first.x; natural = "Turn"; break;
+        case "Move down": change = now.y - first.y; natural = "Move down"; break;
+        default: change = now.x - first.x; natural = "Move across"; break;
+        }
+        var v = shape(change);
+        switch (!p.into || p.into === "Same" ? natural : p.into) {
+        case "Move down": return { y: v };
+        case "Turn": return { rotation: v };
+        case "Size": return { scale: Math.max(0, 1 + v / 100) };
+        case "Fade": return { alpha: Math.max(0, 1 + v / 100) };
+        default: return { x: v };
         }
     }
 });

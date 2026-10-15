@@ -287,7 +287,7 @@ void apply(uint32_t* pixels, int width, int height, const std::vector<Applied>& 
         else if (applied.type == "turbulent" || applied.type == "wave")
         {
             // Each pixel takes the color from a place pushed about by the
-            // field: smooth noise, or a travelling wave across its direction.
+            // field: smooth noise, or a traveling wave across its direction.
             const double scale = std::max(1e-6, pixelsPerUnit);
             const double reach = param(applied, "amount", frame, 8.0) * scale;
             const bool turbulent = applied.type == "turbulent";

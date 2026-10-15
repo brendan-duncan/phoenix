@@ -433,6 +433,20 @@ TEST(behaviors_look_at_and_link_to_other_instances_and_controllers)
     link.params["what"] = "Turn";
     link.params["amount"] = "50";
     CHECK(near(engine.evaluate({link}, moment).front().rotation, 22.5));
+    // Its moving down turns this one, plus ten degrees, kept within limits.
+    link.params["what"] = "Move down";
+    link.params["into"] = "Turn";
+    link.params["amount"] = "100";
+    link.params["offset"] = "10";
+    CHECK(near(engine.evaluate({link}, moment).front().rotation, 110.0));
+    link.params["limit"] = "true";
+    link.params["low"] = "-30";
+    link.params["high"] = "30";
+    CHECK(near(engine.evaluate({link}, moment).front().rotation, 30.0));
+    // Lagging back to where it started: no change but the offset.
+    link.params["limit"] = "false";
+    link.params["lag"] = "10";
+    CHECK(near(engine.evaluate({link}, moment).front().rotation, 10.0));
 
     Applied slider = engine.defaults("linkcontroller", 1);
     slider.params["controller"] = "Smile";

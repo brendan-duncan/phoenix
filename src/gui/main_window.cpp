@@ -2098,6 +2098,34 @@ void MainWindow::createPanels()
             names.sort(Qt::CaseInsensitive);
             return names;
         };
+        links.pickObject = [this, objectNames = links.objectNames](std::function<void(const QString&)> done) {
+            if (!_phoenixView)
+                return;
+            statusBar()->showMessage("Click the instance to link to on the stage. Esc cancels.");
+            _phoenixView->pickInstance([this, done, objectNames](fla::SymbolInstance* instance) {
+                statusBar()->clearMessage();
+                if (!instance)
+                    return;
+                std::string name = instance->name;
+                if (name.empty())
+                {
+                    // Named after its symbol, in a way scripts can use too.
+                    QString base = QFileInfo(QString::fromStdString(instance->libraryItemName)).fileName();
+                    base.remove(QRegularExpression("[^A-Za-z0-9_]"));
+                    if (base.isEmpty() || base[0].isDigit())
+                        base = "object" + base;
+                    base[0] = base[0].toLower();
+                    const QStringList taken = objectNames ? objectNames() : QStringList();
+                    QString chosen = base;
+                    for (int n = 2; taken.contains(chosen); ++n)
+                        chosen = base + QString::number(n);
+                    name = chosen.toStdString();
+                    _editContext.commandStack().push(fla::CommandPtr(new fla::SetPropertyCommand<std::string>(
+                        instance->name, instance->name, name, "Instance Name")));
+                }
+                done(QString::fromStdString(name));
+            });
+        };
         links.controllerNames = [this]() {
             QStringList names;
             if (_flaDocument && _flaDocument->document)
