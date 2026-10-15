@@ -785,6 +785,13 @@ void PropertiesPanel::buildToolTab()
     row = 0;
 
     const auto addOption = [&](const QString& label, QWidget* field, const std::vector<IconTool>& tools) {
+        // A list as wide as its longest entry (a font's name) would push
+        // its arrow out of a narrow panel.
+        if (auto* combo = qobject_cast<QComboBox*>(field))
+        {
+            combo->setSizeAdjustPolicy(QComboBox::AdjustToMinimumContentsLengthWithIcon);
+            combo->setMinimumContentsLength(6);
+        }
         QLabel* labelWidget = nullptr;
         if (!label.isEmpty())
         {

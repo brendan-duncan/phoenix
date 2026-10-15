@@ -4,6 +4,7 @@ What changed in each release of Phoenix, newest first.
 
 ## 0.12.0 (Unreleased)
 
+- The Text tool's Family and Text type lists keep their arrows in a narrow Properties panel
 - Templates: sliders (a named clip of several frames holds on the frame an instance picks) and image fields (a named clip holding a bitmap shows an image file instead)
 - Template fields are filled in under Template in the Properties panel
 - Render Queue: Add Data... renders a movie for each row of a CSV file in the background
