@@ -689,6 +689,13 @@ bool isPhxPath(const QString& path)
 
 } // namespace
 
+/// An extension package, installed rather than opened.
+static bool isExtensionPackage(const QString& path)
+{
+    const QString suffix = QFileInfo(path).suffix().toLower();
+    return suffix == "zxp";
+}
+
 void MainWindow::dragEnterEvent(QDragEnterEvent* event)
 {
     if (!event->mimeData()->hasUrls())
@@ -697,7 +704,7 @@ void MainWindow::dragEnterEvent(QDragEnterEvent* event)
     for (const QUrl& url : event->mimeData()->urls())
     {
         const QString path = url.toLocalFile();
-        if (url.isLocalFile() && (isDocumentPath(path) ||
+        if (url.isLocalFile() && (isDocumentPath(path) || isExtensionPackage(path) ||
             (open && (MediaImport::isImage(path) || MediaImport::isSound(path) || MediaImport::isArtwork(path)))))
         {
             event->acceptProposedAction();
@@ -718,6 +725,12 @@ void MainWindow::dropEvent(QDropEvent* event)
         {
             event->acceptProposedAction();
             openInTab(path);
+            return;
+        }
+        if (isExtensionPackage(path))
+        {
+            event->acceptProposedAction();
+            ScriptRunner::installExtension(path, this);
             return;
         }
         if (MediaImport::isImage(path) || MediaImport::isSound(path) || MediaImport::isArtwork(path))
@@ -2604,6 +2617,11 @@ void MainWindow::createNewDocument(int width, int height, double frameRate, cons
 
 void MainWindow::openDocumentPath(const QString& filePath)
 {
+    if (isExtensionPackage(filePath))
+    {
+        ScriptRunner::installExtension(filePath, isVisible() ? this : nullptr);
+        return;
+    }
     // The first window may have been closed while others stay open: one of
     // those takes it.
     if (!isVisible())

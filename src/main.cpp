@@ -383,6 +383,14 @@ int main(int argc, char *argv[])
         initialFile.clear();
         MainWindow::skipStartScreen();
     }
+    // Phoenix extension.zxp: installed once the window is up.
+    QString package;
+    if (initialFile.endsWith(".zxp", Qt::CaseInsensitive))
+    {
+        package = QFileInfo(initialFile).absoluteFilePath();
+        initialFile.clear();
+        MainWindow::skipStartScreen();
+    }
 
     // The theme last chosen, before any window is made.
     app_identity::apply();
@@ -391,6 +399,8 @@ int main(int argc, char *argv[])
     window.show();
     if (!script.isEmpty())
         QTimer::singleShot(300, &window, [&window, script]() { window.scripts()->runFile(script); });
+    if (!package.isEmpty())
+        QTimer::singleShot(300, &window, [&window, package]() { ScriptRunner::installExtension(package, &window); });
     if (!tutorial.isEmpty())
         QTimer::singleShot(300, &window, [&window, tutorial]() { window.startTutorial(tutorial); });
     if (mcp)

@@ -232,6 +232,7 @@ set(HEADERS
     src/parser/document_parser.h
     src/parser/ik_tree.h
     src/parser/zip_reader.h
+    src/parser/extension_package.h
     src/parser/fla_doctor.h
     src/parser/fla_parser.h
     src/parser/binary_fla.h

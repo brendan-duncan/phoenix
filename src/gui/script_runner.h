@@ -47,6 +47,13 @@ public:
     static QString configFolder();
     static QString commandsFolder();
 
+    /// Where installed extensions keep their files, beside the settings.
+    static QString extensionsFolder();
+    /// Installs the extension package (a ZXP or a folder) at \a path,
+    /// telling the person in a box over \a parent, or on the console when
+    /// there is none.
+    static bool installExtension(const QString& path, QWidget* parent);
+
     /// When another Phoenix is running and takes scripts, hands it
     /// \a script to run and returns true.
     static bool handToRunning(const QString& script);
@@ -89,6 +96,7 @@ public:
 private:
     void runCommand();
     void manageCommands();
+    void manageExtensions();
     /// Takes the scripts other processes left in the requests folder.
     void takeRequests();
     /// Runs \a path with the engine for its language.

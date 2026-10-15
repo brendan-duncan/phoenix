@@ -47,6 +47,19 @@
 
 <p>The Commands folder sits in Phoenix's script configuration folder (what scripts call <code>fl.configURI</code>), beside Phoenix's settings. Scripts often keep their own settings in that folder too.</p>
 
+<h2 id="extensions">Extensions</h2>
+
+<p>Commands and tools are often shared as an extension package, a <code>.zxp</code> file. <b>Commands &rsaquo; Manage Extensions...</b> installs one: <b>Install Package...</b> for the file, or <b>Install from Folder...</b> for one unpacked into a folder. Dragging a <code>.zxp</code> onto Phoenix, or opening one with it, installs it too.</p>
+
+<ul>
+  <li>The package's commands join the Commands menu at once; its tools join the toolbox the next time Phoenix starts.</li>
+  <li>Every file in the package is kept in the extension's own folder, beside Phoenix's settings (<b>Open Folder</b> in the dialog shows it).</li>
+  <li><b>Remove</b> takes away the files the extension added. A command or tool you have changed since it was installed is yours, and stays.</li>
+  <li>Installing an extension that is already there replaces it.</li>
+</ul>
+
+<p>Phoenix runs an extension's JSFL commands and tools. Panels made as SWF movies, and HTML panels, are installed and listed but do not show yet; the dialog says which an extension has.</p>
+
 <h2>The Output panel</h2>
 
 <p><b>Window &rsaquo; Output</b> (<kbd>F2</kbd>) shows what scripts write with <code>fl.trace</code> and the errors they stop on, in red. It opens by itself when a script writes to it. <b>Clear</b> empties it; <b>Save...</b> writes it to a text file. Scripts can do the same with <code>fl.outputPanel.clear()</code> and <code>fl.outputPanel.save()</code>.</p>

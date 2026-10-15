@@ -136,6 +136,7 @@ set(PHOENIX_CORE_FILE_SOURCES
     parser/swf_import.cpp
     parser/compound_file.cpp
     parser/zip_reader.cpp
+    parser/extension_package.cpp
     parser/fla_doctor.cpp
     writer/document_diff.cpp
     util/zip_archive.cpp

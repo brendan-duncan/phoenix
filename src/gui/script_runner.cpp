@@ -16,6 +16,7 @@
 #include "../edit/timeline_edit.h"
 #include "../jsfl/engine.h"
 #include "../jsfl/flfile.h"
+#include "../parser/extension_package.h"
 #include "../parser/fla_parser.h"
 #include "../phx/container.h"
 #include "../phx/phx_document.h"
@@ -39,6 +40,7 @@
 #include <QGuiApplication>
 #include <QHBoxLayout>
 #include <QInputDialog>
+#include <QLabel>
 #include <QListWidget>
 #include <QLockFile>
 #include <QMenu>
@@ -1003,6 +1005,9 @@ void ScriptRunner::fillCommandsMenu(QMenu* menu, const QList<QAction*>& first)
         QAction* manage = menu->addAction("&Manage Saved Commands...");
         manage->setStatusTip("Rename or delete the commands in your Commands folder");
         connect(manage, &QAction::triggered, this, &ScriptRunner::manageCommands);
+        QAction* extensionsAction = menu->addAction("Manage E&xtensions...");
+        extensionsAction->setStatusTip("Install extension packages (ZXP, or a folder) whose commands and tools join Phoenix, or remove them");
+        connect(extensionsAction, &QAction::triggered, this, &ScriptRunner::manageExtensions);
         QAction* openFolder = menu->addAction("&Open Commands Folder");
         openFolder->setStatusTip("Show the folder whose scripts this menu lists; put .jsfl or .py files there to add commands");
         connect(openFolder, &QAction::triggered, this, []() { QDesktopServices::openUrl(QUrl::fromLocalFile(commandsFolder())); });
@@ -1085,5 +1090,171 @@ void ScriptRunner::manageCommands()
     layout->addLayout(body);
     layout->addWidget(buttons);
     dialog.resize(420, 320);
+    dialog.exec();
+}
+
+QString ScriptRunner::extensionsFolder()
+{
+    const QString folder = QDir(settingsBase()).filePath("Extensions");
+    QDir().mkpath(folder);
+    return folder;
+}
+
+bool ScriptRunner::installExtension(const QString& path, QWidget* parent)
+{
+    extensions::Installed installed;
+    std::vector<std::string> notes;
+    std::string error;
+    if (!extensions::install(QDir::toNativeSeparators(path).toStdString(), configFolder().toStdString(),
+            extensionsFolder().toStdString(), installed, notes, error))
+    {
+        if (parent)
+            QMessageBox::warning(parent, "Install Extension", QString::fromStdString(error));
+        else
+            std::fprintf(stderr, "%s\n", error.c_str());
+        return false;
+    }
+    QString message = QString("%1 %2 is installed.")
+                          .arg(QString::fromStdString(installed.package.name), QString::fromStdString(installed.package.version))
+                          .simplified();
+    bool tools = false;
+    for (const std::string& placed : installed.placed)
+        tools = tools || QString::fromStdString(placed).startsWith("Tools/", Qt::CaseInsensitive);
+    if (tools)
+        notes.push_back("Its tools join the toolbox when Phoenix starts again.");
+    for (const std::string& note : notes)
+        message += "\n\n" + QString::fromStdString(note);
+    if (parent)
+        QMessageBox::information(parent, "Install Extension", message);
+    else
+        std::printf("%s\n", message.toStdString().c_str());
+    return true;
+}
+
+void ScriptRunner::manageExtensions()
+{
+    QDialog dialog(&_window);
+    dialog.setWindowTitle("Manage Extensions");
+    QListWidget* list = new QListWidget(&dialog);
+    QLabel* details = new QLabel(&dialog);
+    details->setWordWrap(true);
+    details->setTextFormat(Qt::PlainText);
+    details->setAlignment(Qt::AlignTop | Qt::AlignLeft);
+    details->setMinimumHeight(110);
+    auto installed = std::make_shared<std::vector<extensions::Installed>>();
+    const auto fill = [list, installed]() {
+        list->clear();
+        *installed = extensions::list(extensionsFolder().toStdString());
+        for (const extensions::Installed& each : *installed)
+        {
+            const extensions::Package& p = each.package;
+            QString text = QString::fromStdString(p.name);
+            if (!p.version.empty())
+                text += "  " + QString::fromStdString(p.version);
+            new QListWidgetItem(text, list);
+        }
+        if (installed->empty())
+            new QListWidgetItem("No extensions installed", list);
+        list->setCurrentRow(0);
+    };
+    connect(list, &QListWidget::currentRowChanged, &dialog, [details, installed](int row) {
+        if (row < 0 || row >= static_cast<int>(installed->size()))
+        {
+            details->setText("Install an extension from a ZXP package, or from a folder holding one "
+                             "unpacked. Its commands join the Commands menu and its tools the toolbox.");
+            return;
+        }
+        const extensions::Installed& each = (*installed)[static_cast<size_t>(row)];
+        const extensions::Package& p = each.package;
+        QStringList lines;
+        if (!p.author.empty())
+            lines << "By " + QString::fromStdString(p.author);
+        if (!p.description.empty())
+            lines << QString::fromStdString(p.description).simplified();
+        int commands = 0, tools = 0, other = 0;
+        for (const std::string& placed : each.placed)
+        {
+            const QString path = QString::fromStdString(placed);
+            if (path.startsWith("Commands/", Qt::CaseInsensitive))
+                ++commands;
+            else if (path.startsWith("Tools/", Qt::CaseInsensitive))
+                ++tools;
+            else
+                ++other;
+        }
+        QStringList adds;
+        if (commands)
+            adds << QString("%1 command%2").arg(commands).arg(commands == 1 ? "" : "s");
+        if (tools)
+            adds << QString("%1 tool%2").arg(tools).arg(tools == 1 ? "" : "s");
+        if (other)
+            adds << QString("%1 other file%2").arg(other).arg(other == 1 ? "" : "s");
+        for (const extensions::Package::Panel& panel : p.panels)
+            adds << QString("the panel %1 (HTML panels do not show in Phoenix yet)").arg(QString::fromStdString(panel.menu));
+        if (!adds.isEmpty())
+            lines << "Adds " + adds.join(", ") + ".";
+        details->setText(lines.join("\n\n"));
+    });
+    QPushButton* installPackage = new QPushButton("Install &Package...", &dialog);
+    QPushButton* installFolder = new QPushButton("Install from &Folder...", &dialog);
+    QPushButton* remove = new QPushButton("&Remove", &dialog);
+    QPushButton* openFolder = new QPushButton("&Open Folder", &dialog);
+    installPackage->setToolTip("Install a ZXP extension package");
+    installFolder->setToolTip("Install an extension unpacked into a folder: one with an .mxi file or a CSXS folder");
+    connect(installPackage, &QPushButton::clicked, &dialog, [this, &dialog, fill]() {
+        QSettings settings;
+        const QString path = QFileDialog::getOpenFileName(&dialog, "Install Extension",
+            settings.value("extensions/lastFolder").toString(), "Extension packages (*.zxp *.zip);;All files (*)");
+        if (path.isEmpty())
+            return;
+        settings.setValue("extensions/lastFolder", QFileInfo(path).absolutePath());
+        installExtension(path, &dialog);
+        fill();
+    });
+    connect(installFolder, &QPushButton::clicked, &dialog, [this, &dialog, fill]() {
+        QSettings settings;
+        const QString path = QFileDialog::getExistingDirectory(&dialog, "Install Extension from Folder",
+            settings.value("extensions/lastFolder").toString());
+        if (path.isEmpty())
+            return;
+        settings.setValue("extensions/lastFolder", path);
+        installExtension(path, &dialog);
+        fill();
+    });
+    connect(remove, &QPushButton::clicked, &dialog, [&dialog, list, installed, fill]() {
+        const int row = list->currentRow();
+        if (row < 0 || row >= static_cast<int>(installed->size()))
+            return;
+        const extensions::Installed each = (*installed)[static_cast<size_t>(row)];
+        if (QMessageBox::question(&dialog, "Remove Extension",
+                QString("Remove %1 and the commands and tools it added?").arg(QString::fromStdString(each.package.name))) !=
+            QMessageBox::Yes)
+            return;
+        std::string error;
+        if (!extensions::remove(each, configFolder().toStdString(), error))
+            QMessageBox::warning(&dialog, "Remove Extension", QString::fromStdString(error));
+        fill();
+    });
+    connect(openFolder, &QPushButton::clicked, &dialog,
+        []() { QDesktopServices::openUrl(QUrl::fromLocalFile(extensionsFolder())); });
+    QDialogButtonBox* buttons = new QDialogButtonBox(QDialogButtonBox::Close, &dialog);
+    connect(buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
+    QVBoxLayout* side = new QVBoxLayout();
+    side->addWidget(installPackage);
+    side->addWidget(installFolder);
+    side->addWidget(remove);
+    side->addStretch();
+    side->addWidget(openFolder);
+    QVBoxLayout* left = new QVBoxLayout();
+    left->addWidget(list, 1);
+    left->addWidget(details);
+    QHBoxLayout* body = new QHBoxLayout();
+    body->addLayout(left, 1);
+    body->addLayout(side);
+    QVBoxLayout* layout = new QVBoxLayout(&dialog);
+    layout->addLayout(body);
+    layout->addWidget(buttons);
+    fill();
+    dialog.resize(560, 420);
     dialog.exec();
 }
