@@ -2432,7 +2432,16 @@ fla::Transform PhoenixView::drawnTransformOf(const fla::Element* element)
         if (state.frame == frame && found != frame->elements.end())
         {
             ElapsedScope elapsed(_elapsed, state.offset);
-            return shownTransform(state, static_cast<size_t>(found - frame->elements.begin()));
+            const size_t index = static_cast<size_t>(found - frame->elements.begin());
+            // Behaviors that make copies leave it where it is keyed: the
+            // middle of the ring or row, not its first copy.
+            const fla::Transform keyed = shownTransform(state, index, false);
+            if (element->elementType() == fla::Element::Type::SymbolInstance &&
+                fla::behaviors::any(*static_cast<const fla::SymbolInstance*>(element)) &&
+                behaviorCopies(*static_cast<const fla::SymbolInstance*>(element), keyed,
+                    frame->index + std::max(0, state.offset)).size() > 1)
+                return keyed;
+            return shownTransform(state, index);
         }
     }
     return shownTransformOf(element);
