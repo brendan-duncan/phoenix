@@ -266,6 +266,12 @@ void AudioEngine::mix(float* output, unsigned frameCount)
     for (auto it = _voices.begin(); it != _voices.end();)
     {
         Voice& voice = it->second;
+        // A held voice keeps its place and adds nothing.
+        if (voice.paused)
+        {
+            ++it;
+            continue;
+        }
         const std::vector<float>& samples = voice.buffer->samples;
         unsigned written = 0;
         bool finished = false;
@@ -353,6 +359,14 @@ void AudioEngine::stopAll()
 {
     std::lock_guard<std::mutex> lock(_mutex);
     _voices.clear();
+}
+
+void AudioEngine::setPaused(int voice, bool paused)
+{
+    std::lock_guard<std::mutex> lock(_mutex);
+    const auto found = _voices.find(voice);
+    if (found != _voices.end())
+        found->second.paused = paused;
 }
 
 bool AudioEngine::isPlaying(int voice)

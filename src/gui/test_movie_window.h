@@ -52,6 +52,8 @@ private:
     void restart();
     void setPaused(bool paused);
     void stopSounds();
+    /// The movie's sounds held where they are, or played on.
+    void holdSounds(bool hold);
     void tick();
     /// Steps on to the frame the clock says is due, entering each frame on
     /// the way so its scripts and sounds run, and draws once.

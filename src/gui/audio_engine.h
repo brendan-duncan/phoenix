@@ -79,6 +79,8 @@ public:
 
     void stop(int voice);
     void stopAll();
+    /// Holds \a voice where it is, silent, or lets it play on from there.
+    void setPaused(int voice, bool paused);
     bool isPlaying(int voice);
 
     ~AudioEngine();
@@ -100,6 +102,7 @@ private:
         std::shared_ptr<const AudioEnvelope> envelope;
         /// Frames played so far, which is where the envelope is.
         size_t played = 0;
+        bool paused = false;
     };
 
     std::mutex _mutex;

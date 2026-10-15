@@ -4,6 +4,7 @@ What changed in each release of Phoenix, newest first.
 
 ## 0.10.0 (Unreleased)
 
+- Pausing Test Movie holds its sounds too, and they play on from where they were
 - Behaviors: Loop repeats keyed motion (cycle, back and forth, continue); Jiggle sways parts on a spring as they are carried, through layer parenting; Scatter in a Shape places copies at random inside a guide's outline
 - Shape operators: Offset Path, Round Corners, Pucker and Bloat and Repeater; Animate Letters can also space out, color and blur letters
 - A new lesson, A bouncy antenna

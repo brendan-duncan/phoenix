@@ -186,7 +186,16 @@ TestMovieWindow::TestMovieWindow(const fla::FLADocument& document, const QString
     _step->setToolTip("Play one frame of the paused movie");
     _step->setAutoDefault(false);
     _step->setEnabled(false);
-    connect(_step, &QPushButton::clicked, this, &TestMovieWindow::tick);
+    connect(_step, &QPushButton::clicked, this, [this]() {
+        // A frame on: the sounds play on with it for a frame's time, then
+        // hold again.
+        holdSounds(false);
+        tick();
+        QTimer::singleShot(static_cast<int>(1000.0 / std::max(1.0, _frameRate)), this, [this]() {
+            if (_paused)
+                holdSounds(true);
+        });
+    });
     bar->addWidget(_step);
     // The buttons never keep the keys from the movie.
     for (QPushButton* button : {restartButton, _pause, _step})
@@ -375,6 +384,7 @@ void TestMovieWindow::setPaused(bool paused)
     _pause->setIcon(glyph(paused ? Glyph::Play : Glyph::Pause, palette().color(QPalette::ButtonText)));
     _pause->setToolTip(paused ? "Play the movie on" : "Hold the movie where it is");
     _step->setEnabled(paused);
+    holdSounds(paused);
     if (paused)
         _timer->stop();
     else if (_movie)
@@ -390,6 +400,12 @@ TestMovieWindow::~TestMovieWindow()
     stopSounds();
     if (_view)
         _view->setMovie(nullptr);
+}
+
+void TestMovieWindow::holdSounds(bool hold)
+{
+    for (const int voice : _voices)
+        AudioEngine::instance().setPaused(voice, hold);
 }
 
 void TestMovieWindow::stopSounds()
