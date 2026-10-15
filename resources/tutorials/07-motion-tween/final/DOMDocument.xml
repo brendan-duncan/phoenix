@@ -1,0 +1,101 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<DOMDocument xmlns="http://ns.adobe.com/xfl/2008/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" width="1280" height="720" frameRate="24" currentTimeline="1" xflVersion="23.0" creatorInfo="Phoenix" platform="Windows" versionInfo="Saved by Phoenix" majorVersion="24" backgroundColor="#CCE8FF" guidesColor="#00FF00">
+    <symbols>
+        <Include href="Ball.xml" itemIcon="1" loadImmediate="false"/>
+    </symbols>
+    <timelines>
+        <DOMTimeline name="Scene 1">
+            <layers>
+                <DOMLayer name="Ball" color="#FF4FFF" current="true" isSelected="true">
+                    <frames>
+                        <DOMFrame index="0" duration="24" keyMode="8195" tweenType="motion object" motionTweenRotate="none" isMotionObject="true" visibleAnimationKeyframes="4194303">
+                            <motionObjectXML>
+                                <AnimationCore TimeScale="30000" Version="1" duration="30000">
+                                    <TimeMap strength="0" type="Quadratic"/>
+                                    <metadata>
+                                        <names>
+                                            <name langID="en_US" value=""/>
+                                        </names>
+                                        <Settings orientToPath="0" xformPtXOffsetPct="0.5" xformPtYOffsetPct="0.5" xformPtZOffsetPixels="0"/>
+                                    </metadata>
+                                    <PropertyContainer id="headContainer">
+                                        <PropertyContainer id="Basic_Motion">
+                                            <Property enabled="1" id="Motion_X" ignoreTimeMap="0" readonly="0" visible="1">
+                                                <Keyframe anchor="0,0" next="10637.5,0" previous="0,0" roving="0" timevalue="0"/>
+                                                <Keyframe anchor="0,880" next="0,880" previous="-10637.5,880" roving="0" timevalue="28750"/>
+                                            </Property>
+                                            <Property enabled="1" id="Motion_Y" ignoreTimeMap="0" readonly="0" visible="1">
+                                                <Keyframe anchor="0,0" next="9583.333333,-267.1717172" previous="0,0" roving="0" timevalue="0"/>
+                                                <Keyframe anchor="0,0" next="0,0" previous="-9583.333333,-267.1717172" roving="0" timevalue="28750"/>
+                                            </Property>
+                                            <Property enabled="1" id="Rotation_Z" ignoreTimeMap="0" readonly="0" visible="1">
+                                                <Keyframe anchor="0,0" next="0,0" previous="0,0" roving="0" timevalue="0"/>
+                                            </Property>
+                                            <Property enabled="1" id="Depth" ignoreTimeMap="0" readonly="0" visible="1">
+                                                <Keyframe anchor="0,0" next="0,0" previous="0,0" roving="0" timevalue="0"/>
+                                            </Property>
+                                        </PropertyContainer>
+                                        <PropertyContainer id="Transformation">
+                                            <Property enabled="1" id="Skew_X" ignoreTimeMap="0" readonly="0" visible="1">
+                                                <Keyframe anchor="0,0" next="0,0" previous="0,0" roving="0" timevalue="0"/>
+                                            </Property>
+                                            <Property enabled="1" id="Skew_Y" ignoreTimeMap="0" readonly="0" visible="1">
+                                                <Keyframe anchor="0,0" next="0,0" previous="0,0" roving="0" timevalue="0"/>
+                                            </Property>
+                                            <Property enabled="1" id="Scale_X" ignoreTimeMap="0" readonly="0" visible="1">
+                                                <Keyframe anchor="0,100" next="0,100" previous="0,100" roving="0" timevalue="0"/>
+                                            </Property>
+                                            <Property enabled="1" id="Scale_Y" ignoreTimeMap="0" readonly="0" visible="1">
+                                                <Keyframe anchor="0,100" next="0,100" previous="0,100" roving="0" timevalue="0"/>
+                                            </Property>
+                                        </PropertyContainer>
+                                        <PropertyContainer id="Colors"/>
+                                        <PropertyContainer id="Filters"/>
+                                    </PropertyContainer>
+                                </AnimationCore>
+                            </motionObjectXML>
+                            <elements>
+                                <DOMSymbolInstance libraryItemName="Ball" symbolType="graphic" loop="loop">
+                                    <matrix>
+                                        <Matrix tx="200" ty="480"/>
+                                    </matrix>
+                                    <transformationPoint>
+                                        <Point/>
+                                    </transformationPoint>
+                                </DOMSymbolInstance>
+                            </elements>
+                        </DOMFrame>
+                    </frames>
+                </DOMLayer>
+                <DOMLayer name="Ground" color="#4FFF4F" locked="true">
+                    <frames>
+                        <DOMFrame index="0" duration="24" keyMode="9728">
+                            <elements>
+                                <DOMShape isDrawingObject="true">
+                                    <fills>
+                                        <FillStyle index="1">
+                                            <SolidColor color="#7BC67B"/>
+                                        </FillStyle>
+                                    </fills>
+                                    <edges>
+                                        <Edge fillStyle1="1" edges="!0 11200|25600 11200|25600 14400|0 14400|0 11200"/>
+                                    </edges>
+                                </DOMShape>
+                                <DOMShape isDrawingObject="true">
+                                    <fills>
+                                        <FillStyle index="1">
+                                            <SolidColor color="#FFE066"/>
+                                        </FillStyle>
+                                    </fills>
+                                    <edges>
+                                        <Edge fillStyle1="1" edges="!23600 2200[23600 2697 23249 3049[22897 3400 22400 3400[21903 3400 21551 3049[21200 2697 21200 2200[21200 1703 21551 1351[21903 1000 22400 1000[22897 1000 23249 1351[23600 1703 23600 2200"/>
+                                    </edges>
+                                </DOMShape>
+                            </elements>
+                        </DOMFrame>
+                    </frames>
+                </DOMLayer>
+            </layers>
+        </DOMTimeline>
+    </timelines>
+</DOMDocument>

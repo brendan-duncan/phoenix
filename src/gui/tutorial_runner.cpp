@@ -1,5 +1,7 @@
 #include "tutorial_runner.h"
 
+#include "behavior_library.h"
+
 #include "main_window.h"
 #include "phoenix_view.h"
 #include "player.h"
@@ -456,6 +458,38 @@ TutorialTarget resolve(MainWindow& window, const QString& spec, bool reveal)
     return target;
 }
 
+bool showResult(MainWindow& window, const TutorialLesson& lesson, QString& error)
+{
+    if (lesson.finalDocument.isEmpty())
+    {
+        error = "this lesson has no result to show";
+        return false;
+    }
+    // A copy, out of the app, in a folder of its own, as a lesson's start is.
+    const QString root = QDir(QStandardPaths::writableLocation(QStandardPaths::TempLocation)).filePath("phoenix-lessons");
+    const QString folder = QDir(root).filePath(QString("%1-result-%2").arg(lesson.id).arg(QDateTime::currentMSecsSinceEpoch()));
+    const QFileInfo source(lesson.finalDocument);
+    const QString copy = QDir(folder).filePath(source.fileName());
+    if (!copyTree(lesson.finalDocument, copy))
+    {
+        error = QString("its result %1 could not be copied").arg(lesson.finalDocument);
+        return false;
+    }
+    // Behaviors of one's own the lesson writes live beside the result, in
+    // Behaviors; they go where Phoenix finds them, never over one already
+    // there.
+    const QDir behaviors(QDir(lesson.finalDocument).filePath("Behaviors"));
+    if (source.isDir() && behaviors.exists())
+        for (const QFileInfo& script : behaviors.entryInfoList({"*.js"}, QDir::Files))
+        {
+            const QString target = QDir(BehaviorLibrary::folder()).filePath(script.fileName());
+            if (!QFileInfo::exists(target) && QFile::copy(script.absoluteFilePath(), target))
+                QFile::setPermissions(target, QFile::permissions(target) | QFileDevice::WriteOwner);
+        }
+    window.openLessonResult(source.isDir() ? QDir(copy).filePath("DOMDocument.xml") : copy, lesson.title + " (result)");
+    return true;
+}
+
 QStringList checkLessons(MainWindow& window)
 {
     QStringList problems;
@@ -466,6 +500,8 @@ QStringList checkLessons(MainWindow& window)
     {
         if (lesson.startKind == "document" && !QFileInfo::exists(lesson.startDocument))
             problems << QString("%1: its document %2 is missing").arg(lesson.id, lesson.startDocument);
+        if (!lesson.finalDocument.isEmpty() && !QFileInfo::exists(lesson.finalDocument))
+            problems << QString("%1: its final document %2 is missing").arg(lesson.id, lesson.finalDocument);
         for (size_t i = 0; i < lesson.steps.size(); ++i)
         {
             const TutorialStep& step = lesson.steps[i];
@@ -658,6 +694,11 @@ TutorialStepWindow::TutorialStepWindow(QWidget* window)
     _next = new QPushButton("Next", card);
     connect(_next, &QPushButton::clicked, this, &TutorialStepWindow::next);
     bottom->addWidget(_next);
+    _result = new QPushButton("Show Result", card);
+    _result->setToolTip("Open how the lesson turns out, in a tab of its own, to compare with yours");
+    connect(_result, &QPushButton::clicked, this, &TutorialStepWindow::result);
+    _result->hide();
+    layout->addWidget(_result, 0, Qt::AlignLeft);
     layout->addLayout(bottom);
 
     const QVariant saved = QSettings().value("tutorials/stepWindow");
@@ -725,6 +766,12 @@ void TutorialStepWindow::paintEvent(QPaintEvent*)
     painter.fillRect(rect(), palette().color(QPalette::Window));
     painter.setPen(QPen(QColor(255, 140, 40), 2.0));
     painter.drawRect(QRectF(rect()).adjusted(1, 1, -1, -1));
+}
+
+void TutorialStepWindow::setResultShown(bool shown)
+{
+    _result->setVisible(shown);
+    adjustSize();
 }
 
 void TutorialStepWindow::setProblem(const QString& problem)
@@ -844,6 +891,11 @@ TutorialRunner::TutorialRunner(MainWindow* window)
     _stepWindow->hide();
     connect(_stepWindow, &TutorialStepWindow::next, this, &TutorialRunner::next);
     connect(_stepWindow, &TutorialStepWindow::previous, this, &TutorialRunner::previous);
+    connect(_stepWindow, &TutorialStepWindow::result, this, [this]() {
+        QString error;
+        if (!tutorials::showResult(*_window, _lesson, error))
+            _stepWindow->setProblem(QString("The result could not be shown: %1").arg(error));
+    });
     connect(_stepWindow, &TutorialStepWindow::closed, this, [this]() {
         stop();
         _window->statusBar()->showMessage("Lesson closed. Help > Tutorials starts it again.", 5000);
@@ -896,6 +948,7 @@ bool TutorialRunner::start(const TutorialLesson& lesson, QString& error)
         return false;
     }
     _stepStart.assign(_lesson.steps.size(), 0);
+    _stepWindow->setResultShown(!_lesson.finalDocument.isEmpty());
     _running = true;
     _tracker->start();
     connect(qApp, &QGuiApplication::applicationStateChanged, this, &TutorialRunner::track, Qt::UniqueConnection);
@@ -1136,6 +1189,7 @@ TutorialsDialog::TutorialsDialog(QWidget* parent)
         QListWidgetItem* item = new QListWidgetItem(QString("%1\n%2").arg(lesson.title, status), _list);
         item->setData(Qt::UserRole, lesson.id);
         item->setData(Qt::UserRole + 1, lesson.summary);
+        item->setData(Qt::UserRole + 2, !lesson.finalDocument.isEmpty());
         const QString thumbnail = QDir(lesson.folder).filePath("thumbnail.png");
         if (QFileInfo::exists(thumbnail))
             item->setIcon(QIcon(thumbnail));
@@ -1164,6 +1218,17 @@ TutorialsDialog::TutorialsDialog(QWidget* parent)
     QDialogButtonBox* buttons = new QDialogButtonBox(QDialogButtonBox::Close, this);
     QPushButton* start = buttons->addButton("Start", QDialogButtonBox::AcceptRole);
     start->setEnabled(false);
+    QPushButton* result = buttons->addButton("Show Result", QDialogButtonBox::ActionRole);
+    result->setToolTip("Open how the lesson turns out, without starting it");
+    result->setEnabled(false);
+    connect(result, &QPushButton::clicked, this, [this]() {
+        if (QListWidgetItem* item = _list->currentItem())
+        {
+            _chosen = item->data(Qt::UserRole).toString();
+            _resultChosen = true;
+            accept();
+        }
+    });
     connect(buttons, &QDialogButtonBox::rejected, this, &QDialog::reject);
     connect(buttons, &QDialogButtonBox::accepted, this, [this]() {
         if (QListWidgetItem* item = _list->currentItem())
@@ -1172,8 +1237,9 @@ TutorialsDialog::TutorialsDialog(QWidget* parent)
             accept();
         }
     });
-    connect(_list, &QListWidget::currentItemChanged, this, [this, start](QListWidgetItem* item) {
+    connect(_list, &QListWidget::currentItemChanged, this, [this, start, result](QListWidgetItem* item) {
         start->setEnabled(item != nullptr);
+        result->setEnabled(item && item->data(Qt::UserRole + 2).toBool());
         _summary->setText(item ? item->data(Qt::UserRole + 1).toString() : QString());
         if (item)
             start->setText(tutorials::finished(item->data(Qt::UserRole).toString()) ? "Start Again" : "Start");

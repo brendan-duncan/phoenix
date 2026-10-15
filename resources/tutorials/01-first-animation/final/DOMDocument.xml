@@ -1,0 +1,32 @@
+<DOMDocument xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns="http://ns.adobe.com/xfl/2008/" width="1280" height="720" frameRate="24" currentTimeline="1" xflVersion="23.0" creatorInfo="Phoenix" platform="Windows" versionInfo="Saved by Phoenix" majorVersion="24">
+  <symbols>
+    <Include href="Ball.xml" itemIcon="1" loadImmediate="false"/>
+  </symbols>
+  <timelines>
+    <DOMTimeline name="Scene 1">
+      <layers>
+        <DOMLayer name="Layer_1" color="#00FFFF" current="true" isSelected="true">
+          <frames>
+            <DOMFrame index="0" duration="23" keyMode="9728" tweenType="motion" easeMethodName="quadInOut">
+              <tweens><Ease target="all" method="quadInOut"/></tweens>
+              <elements>
+                  <DOMSymbolInstance libraryItemName="Ball" symbolType="graphic" loop="loop">
+                    <matrix><Matrix tx="60" ty="240"/></matrix>
+                    <transformationPoint><Point/></transformationPoint>
+                  </DOMSymbolInstance>
+              </elements>
+            </DOMFrame>
+            <DOMFrame index="23" keyMode="9728">
+              <elements>
+                  <DOMSymbolInstance libraryItemName="Ball" symbolType="graphic" loop="loop">
+                    <matrix><Matrix tx="900" ty="240"/></matrix>
+                    <transformationPoint><Point/></transformationPoint>
+                  </DOMSymbolInstance>
+              </elements>
+            </DOMFrame>
+          </frames>
+        </DOMLayer>
+      </layers>
+    </DOMTimeline>
+  </timelines>
+</DOMDocument>

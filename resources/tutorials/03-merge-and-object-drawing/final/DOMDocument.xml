@@ -1,0 +1,57 @@
+<DOMDocument xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns="http://ns.adobe.com/xfl/2008/" width="1280" height="720" frameRate="24" currentTimeline="1" xflVersion="23.0" creatorInfo="Phoenix" platform="Windows" versionInfo="Saved by Phoenix" majorVersion="24">
+  <timelines>
+    <DOMTimeline name="Scene 1">
+      <layers>
+        <DOMLayer name="Layer_1" color="#00FFFF" current="true" isSelected="true">
+          <frames>
+            <DOMFrame index="0" keyMode="9728">
+              <elements>
+                  <DOMShape>
+                    <fills>
+                      <FillStyle index="1"><SolidColor color="#0099FF"/></FillStyle>
+                      <FillStyle index="2"><SolidColor color="#FF9933"/></FillStyle>
+                    </fills>
+                    <strokes>
+                      <StrokeStyle index="1"><SolidStroke scaleMode="normal"><fill><SolidColor color="#000000"/></fill></SolidStroke></StrokeStyle>
+                    </strokes>
+                    <edges>
+                      <Edge fillStyle1="1" strokeStyle="1" edges="!8284.44 8800[7588.15 9915.78 6322.26 10272.53[5056.36 10629.28 3879.92 10041.27[2703.47 9453.27 2228.98 8226.63[1754.49 7000 2228.98 5773.37[2703.47 4546.73 3879.92 3958.73[5056.36 3370.72 6322.26 3727.47[7588.15 4084.22 8284.44 5200"/>
+                      <Edge fillStyle1="1" edges="!8284.44 5200|6400 5200|6400 8800|8284.44 8800"/>
+                      <Edge fillStyle1="2" strokeStyle="1" edges="!7200 10400|12400 10400|12400 14000|7200 14000|7200 10400"/>
+                      <Edge fillStyle1="1" strokeStyle="1" edges="!25400 12300[25400 12755.63 25019.24 13077.82[24638.48 13400 24100 13400[23561.52 13400 23180.76 13077.82[22800 12755.63 22800 12300[22800 11844.37 23180.76 11522.18[23561.52 11200 24100 11200[24638.48 11200 25019.24 11522.18[25400 11844.37 25400 12300"/>
+                    </edges>
+                  </DOMShape>
+                  <DOMGroup>
+                    <members>
+                      <DOMShape>
+                        <fills>
+                          <FillStyle index="1"><SolidColor color="#0099FF"/></FillStyle>
+                        </fills>
+                        <strokes>
+                          <StrokeStyle index="1"><SolidStroke scaleMode="normal"><fill><SolidColor color="#000000"/></fill></SolidStroke></StrokeStyle>
+                        </strokes>
+                        <edges>
+                          <Edge fillStyle1="1" strokeStyle="1" edges="!22000 6600[22000 8008.33 21004.16 9004.16[20008.33 10000 18600 10000[17191.67 10000 16195.84 9004.16[15200 8008.33 15200 6600[15200 5191.67 16195.84 4195.84[17191.67 3200 18600 3200[20008.33 3200 21004.16 4195.84[22000 5191.67 22000 6600"/>
+                        </edges>
+                      </DOMShape>
+                    </members>
+                  </DOMGroup>
+                  <DOMShape isDrawingObject="true">
+                    <fills>
+                      <FillStyle index="1"><SolidColor color="#FF9933"/></FillStyle>
+                    </fills>
+                    <strokes>
+                      <StrokeStyle index="1"><SolidStroke scaleMode="normal"><fill><SolidColor color="#000000"/></fill></SolidStroke></StrokeStyle>
+                    </strokes>
+                    <edges>
+                      <Edge fillStyle1="1" strokeStyle="1" edges="!19600 10400|24800 10400|24800 14000|19600 14000|19600 10400"/>
+                    </edges>
+                  </DOMShape>
+              </elements>
+            </DOMFrame>
+          </frames>
+        </DOMLayer>
+      </layers>
+    </DOMTimeline>
+  </timelines>
+</DOMDocument>

@@ -1708,11 +1708,51 @@ void MainWindow::openLessonDocument(const QString& path)
         QTimer::singleShot(0, this, [this]() { _phoenixView->zoomToFit(); });
 }
 
+void MainWindow::openLessonResult(const QString& path, const QString& name)
+{
+    // A tab of its own even beside an untouched lesson document, which
+    // the lesson goes on with.
+    if (_flaDocument)
+    {
+        settleGestures();
+        _switchingTabs = true;
+        parkActiveDocument();
+        addTab();
+        _activeTab = static_cast<int>(_tabs.size()) - 1;
+        _switchingTabs = false;
+    }
+    loadFLAFile(path);
+    forgetRecentFile(path);
+    if (_flaDocument)
+    {
+        _documentPath.clear();
+        _documentName = name;
+        _editContext.markUnsaved();
+        updateWindowTitle();
+        updateEditState();
+    }
+    if (_phoenixView)
+        QTimer::singleShot(0, this, [this]() { _phoenixView->zoomToFit(); });
+}
+
 void MainWindow::showTutorials()
 {
     TutorialsDialog dialog(this);
-    if (dialog.exec() == QDialog::Accepted && !dialog.chosen().isEmpty())
+    if (dialog.exec() != QDialog::Accepted || dialog.chosen().isEmpty())
+        return;
+    if (!dialog.resultChosen())
+    {
         startTutorial(dialog.chosen());
+        return;
+    }
+    for (const TutorialLesson& lesson : tutorials::allLessons())
+        if (lesson.id == dialog.chosen())
+        {
+            QString error;
+            if (!tutorials::showResult(*this, lesson, error))
+                QMessageBox::warning(this, "Tutorials", QString("The result could not be shown: %1").arg(error));
+            return;
+        }
 }
 
 void MainWindow::startTutorial(const QString& id)

@@ -59,6 +59,9 @@ bool readLesson(const QString& folder, TutorialLesson& lesson, QString& error)
         lesson.startDocument = QDir(folder).filePath(start.value("document").toString());
     }
 
+    if (root.contains("final"))
+        lesson.finalDocument = QDir(folder).filePath(root.value("final").toString());
+
     for (const QJsonValue& value : root.value("steps").toArray())
     {
         const QJsonObject object = value.toObject();

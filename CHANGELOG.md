@@ -4,6 +4,8 @@ What changed in each release of Phoenix, newest first.
 
 ## 0.12.0 (Unreleased)
 
+- A mask with a shape tween no longer cuts off between its keyframes
+- Tutorials: Show Result opens how a lesson turns out in a tab of its own, from the step window or the Tutorials dialog
 - A line or shape just drawn bends when dragged with the Selection tool (Ctrl adds a corner) rather than moving; click it first to move it
 - The Text tool's Family and Text type lists keep their arrows in a narrow Properties panel
 - Templates: sliders (a named clip of several frames holds on the frame an instance picks) and image fields (a named clip holding a bitmap shows an image file instead)

@@ -1,0 +1,28 @@
+<DOMDocument xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns="http://ns.adobe.com/xfl/2008/" width="1280" height="720" frameRate="24" currentTimeline="1" xflVersion="23.0" creatorInfo="Phoenix" platform="Windows" versionInfo="Saved by Phoenix" majorVersion="24">
+  <symbols>
+    <Include href="Face.xml" itemIcon="1" loadImmediate="false"/>
+  </symbols>
+  <timelines>
+    <DOMTimeline name="Scene 1">
+      <layers>
+        <DOMLayer name="Face" color="#4F80FF" current="true" isSelected="true">
+          <frames>
+            <DOMFrame index="0" keyMode="9728">
+              <elements>
+                  <DOMSymbolInstance libraryItemName="Face" symbolType="graphic" loop="loop">
+                    <matrix><Matrix tx="230" ty="230"/></matrix>
+                    <transformationPoint><Point/></transformationPoint>
+                  </DOMSymbolInstance>
+                  <DOMSymbolInstance libraryItemName="Face" symbolType="graphic" loop="single frame">
+                    <matrix><Matrix tx="790" ty="230"/></matrix>
+                    <transformationPoint><Point/></transformationPoint>
+                    <color><Color tintMultiplier="0.5" tintColor="#FF3366"/></color>
+                  </DOMSymbolInstance>
+              </elements>
+            </DOMFrame>
+          </frames>
+        </DOMLayer>
+      </layers>
+    </DOMTimeline>
+  </timelines>
+</DOMDocument>

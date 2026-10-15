@@ -1,0 +1,27 @@
+<DOMSymbolItem xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns="http://ns.adobe.com/xfl/2008/" name="Ball" symbolType="graphic">
+  <timeline>
+    <DOMTimeline name="Ball">
+      <layers>
+        <DOMLayer name="Layer_1" color="#00FFFF" current="true" isSelected="true">
+          <frames>
+            <DOMFrame index="0" keyMode="9728">
+              <elements>
+                <DOMShape>
+                  <fills>
+                    <FillStyle index="1"><SolidColor color="#FF6633"/></FillStyle>
+                  </fills>
+                  <strokes>
+                    <StrokeStyle index="1"><SolidStroke scaleMode="normal"><fill><SolidColor color="#000000"/></fill></SolidStroke></StrokeStyle>
+                  </strokes>
+                  <edges>
+                    <Edge fillStyle1="1" strokeStyle="1" edges="!6400 3200[6400 4525.48 5462.74 5462.74[4525.48 6400 3200 6400[1874.52 6400 937.26 5462.74[0 4525.48 0 3200[0 1874.52 937.26 937.26[1874.52 0 3200 0[4525.48 0 5462.74 937.26[6400 1874.52 6400 3200"/>
+                  </edges>
+                </DOMShape>
+              </elements>
+            </DOMFrame>
+          </frames>
+        </DOMLayer>
+      </layers>
+    </DOMTimeline>
+  </timeline>
+</DOMSymbolItem>

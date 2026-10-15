@@ -71,6 +71,9 @@ struct TutorialLesson
     /// "new", "document" or empty.
     QString startKind;
     QString startDocument;
+    /// The document as the lesson leaves it, to compare with: its "final"
+    /// (a file, or a folder holding DOMDocument.xml); empty when none.
+    QString finalDocument;
     int startWidth = 1280;
     int startHeight = 720;
     double startFps = 24.0;

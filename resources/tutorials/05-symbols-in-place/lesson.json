@@ -4,6 +4,7 @@
   "minutes": 7,
   "order": 5,
   "start": {"document": "start"},
+  "final": "final",
   "steps": [
     {
       "title": "Welcome",

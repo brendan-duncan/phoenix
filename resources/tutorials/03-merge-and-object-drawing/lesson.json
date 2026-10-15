@@ -4,6 +4,7 @@
   "minutes": 7,
   "order": 3,
   "start": {"new": {"width": 1280, "height": 720, "fps": 24}},
+  "final": "final",
   "steps": [
     {
       "title": "Welcome",

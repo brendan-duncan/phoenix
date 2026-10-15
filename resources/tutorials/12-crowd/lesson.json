@@ -7,6 +7,7 @@
   "start": {
     "document": "start"
   },
+  "final": "final",
   "steps": [
     {
       "title": "Welcome",

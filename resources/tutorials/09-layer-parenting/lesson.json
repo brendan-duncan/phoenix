@@ -5,6 +5,7 @@
   "order": 9,
   "guide": "timeline.html",
   "start": {"document": "start"},
+  "final": "final",
   "steps": [
     {
       "title": "Welcome",

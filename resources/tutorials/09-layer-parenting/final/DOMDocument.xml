@@ -1,0 +1,62 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<DOMDocument xmlns="http://ns.adobe.com/xfl/2008/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" width="1280" height="720" frameRate="24" currentTimeline="1" xflVersion="23.0" creatorInfo="Phoenix" platform="Windows" versionInfo="Saved by Phoenix" majorVersion="24" backgroundColor="#FFFFFF" guidesColor="#00FF00">
+    <symbols>
+        <Include href="Body.xml" itemIcon="1" loadImmediate="false"/>
+        <Include href="Arm.xml" itemIcon="1" loadImmediate="false"/>
+        <Include href="Hand.xml" itemIcon="1" loadImmediate="false"/>
+    </symbols>
+    <timelines>
+        <DOMTimeline name="Scene 1">
+            <layers>
+                <DOMLayer name="Hand" color="#FF4FFF">
+                    <frames>
+                        <DOMFrame index="0" keyMode="9728" parentLayerIndex="1">
+                            <elements>
+                                <DOMSymbolInstance libraryItemName="Hand" symbolType="graphic" loop="loop">
+                                    <matrix>
+                                        <Matrix tx="150"/>
+                                    </matrix>
+                                    <transformationPoint>
+                                        <Point/>
+                                    </transformationPoint>
+                                </DOMSymbolInstance>
+                            </elements>
+                        </DOMFrame>
+                    </frames>
+                </DOMLayer>
+                <DOMLayer name="Arm" color="#4FFFFF" layerRiggingIndex="1" phoenixParentScale="false">
+                    <frames>
+                        <DOMFrame index="0" keyMode="9728" parentLayerIndex="0">
+                            <elements>
+                                <DOMSymbolInstance libraryItemName="Arm" symbolType="graphic" loop="loop">
+                                    <matrix>
+                                        <Matrix a="0.5" b="-0.866025" c="0.866025" d="0.5" tx="50" ty="-76"/>
+                                    </matrix>
+                                    <transformationPoint>
+                                        <Point/>
+                                    </transformationPoint>
+                                </DOMSymbolInstance>
+                            </elements>
+                        </DOMFrame>
+                    </frames>
+                </DOMLayer>
+                <DOMLayer name="Body" color="#FF8000" current="true" isSelected="true" layerRiggingIndex="0">
+                    <frames>
+                        <DOMFrame index="0" keyMode="9728">
+                            <elements>
+                                <DOMSymbolInstance libraryItemName="Body" symbolType="graphic" loop="loop">
+                                    <matrix>
+                                        <Matrix a="1.28025" b="0.225743" c="-0.225743" d="1.28025" tx="540" ty="420"/>
+                                    </matrix>
+                                    <transformationPoint>
+                                        <Point/>
+                                    </transformationPoint>
+                                </DOMSymbolInstance>
+                            </elements>
+                        </DOMFrame>
+                    </frames>
+                </DOMLayer>
+            </layers>
+        </DOMTimeline>
+    </timelines>
+</DOMDocument>

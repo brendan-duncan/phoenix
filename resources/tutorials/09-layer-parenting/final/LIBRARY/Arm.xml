@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<DOMSymbolItem xmlns="http://ns.adobe.com/xfl/2008/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" name="Arm" symbolType="graphic">
+    <timeline>
+        <DOMTimeline name="Arm">
+            <layers>
+                <DOMLayer name="Layer_1" color="#4FFF4F" current="true" isSelected="true">
+                    <frames>
+                        <DOMFrame index="0" keyMode="9728">
+                            <elements>
+                                <DOMShape>
+                                    <fills>
+                                        <FillStyle index="1">
+                                            <SolidColor color="#E8554E"/>
+                                        </FillStyle>
+                                    </fills>
+                                    <edges>
+                                        <Edge fillStyle1="1" edges="!0 -280|3000 -280|3000 280|0 280|0 -280"/>
+                                    </edges>
+                                </DOMShape>
+                            </elements>
+                        </DOMFrame>
+                    </frames>
+                </DOMLayer>
+            </layers>
+        </DOMTimeline>
+    </timeline>
+</DOMSymbolItem>

@@ -5,6 +5,7 @@
   "order": 7,
   "guide": "tweens.html",
   "start": {"document": "start"},
+  "final": "final",
   "steps": [
     {
       "title": "Welcome",

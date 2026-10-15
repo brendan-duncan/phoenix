@@ -5,6 +5,7 @@
   "order": 8,
   "guide": "masks-guides.html",
   "start": {"document": "start"},
+  "final": "final",
   "steps": [
     {
       "title": "Welcome",
