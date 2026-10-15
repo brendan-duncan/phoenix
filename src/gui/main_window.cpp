@@ -10286,6 +10286,7 @@ void MainWindow::setupPropertiesPanel()
     _colorPanel->setDocument(_flaDocument);
     connect(_colorPanel, &ColorPanel::styleChanged, this, [this]() { refreshStyleSwatches(); });
     connect(_colorPanel, &ColorPanel::applyToSelectionRequested, this, &MainWindow::applyFillToSelection);
+    connect(_colorPanel, &ColorPanel::applyToStrokesRequested, this, &MainWindow::applyFillToStrokes);
     connect(_colorPanel, &ColorPanel::importBitmapRequested, this, &MainWindow::importToLibrary);
     // Properties' Edit for a gradient or bitmap fill: the Color panel takes it.
     connect(_propertiesPanel, &PropertiesPanel::editFillRequested, this, [this](const fla::FillStyle* fill) {
@@ -15222,6 +15223,48 @@ void MainWindow::showStageMenu(const QPoint& globalPos, const QPointF& documentP
         menu.addAction(_selectAllAction);
     }
     menu.exec(globalPos);
+}
+
+void MainWindow::applyFillToStrokes()
+{
+    if (!_phoenixView || !_drawingStyle.hasFill)
+        return;
+    std::vector<fla::Shape*> shapes;
+    for (fla::Element* element : selectedElements())
+        if (element && element->elementType() == fla::Element::Type::Shape)
+            shapes.push_back(static_cast<fla::Shape*>(element));
+    if (shapes.empty())
+    {
+        statusBar()->showMessage("Select shapes with strokes.", 3000);
+        return;
+    }
+    _phoenixView->flushPendingMerge();
+    fla::CommandStack& stack = _editContext.commandStack();
+    stack.beginMacro("Apply to Strokes");
+    for (fla::Shape* shape : shapes)
+    {
+        std::unique_ptr<fla::Element> copy(fla::cloneElement(*shape, shape->parent));
+        fla::Shape* after = dynamic_cast<fla::Shape*>(copy.get());
+        if (!after || after->strokesMap.empty())
+            continue;
+        // Each stroke drawn with the Color panel's fill, fitted to its lines.
+        for (auto& entry : after->strokesMap)
+        {
+            if (!entry.second)
+                continue;
+            fla::FillStyle* fill = _drawingStyle.createFill(entry.second);
+            if (!fill)
+                continue;
+            delete entry.second->fill;
+            entry.second->fill = fill;
+        }
+        fla::DrawingStyle::fitStrokes(*after);
+        stack.push(fla::CommandPtr(new fla::SetShapeContentsCommand(shape, *after, "Apply to Strokes")));
+    }
+    stack.endMacro();
+    stack.breakMergeChain();
+    _phoenixView->clearCaches();
+    _phoenixView->update();
 }
 
 void MainWindow::applyFillToSelection()

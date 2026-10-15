@@ -5465,6 +5465,33 @@ PhoenixView::PathCacheEntry PhoenixView::operatedEntry(const fla::Shape& shape, 
     changed.seamPath = QPainterPath();
     changed.strokeOutline = QPainterPath();
     changed.strokeOutlineWidth = -1.0;
+    if (stroke && entry.strokeStyle)
+    {
+        // Tapered: each line's outline, filled with the stroke's color or
+        // gradient. Otherwise the stroke's own width profile and effects,
+        // worked out again on the new lines.
+        const fla::shapeops::Taper taper = fla::shapeops::taperOf(fla::shapeops::of(shape), at);
+        if (taper.on)
+        {
+            QPainterPath outline;
+            outline.setFillRule(Qt::WindingFill);
+            for (const fla::shapeops::Line& line : out)
+            {
+                const std::vector<fla::Point> points =
+                    fla::shapeops::taperedOutline(line, entry.strokeStyle->weight, taper, at / rate);
+                if (points.size() < 3)
+                    continue;
+                QPolygonF polygon;
+                for (const fla::Point& point : points)
+                    polygon << QPointF(point.x, point.y);
+                outline.addPolygon(polygon);
+                outline.closeSubpath();
+            }
+            changed.effectPath = outline;
+        }
+        else if (StrokeEffects::isProcedural(*entry.strokeStyle))
+            changed.effectPath = StrokeEffects::outline(path, *entry.strokeStyle);
+    }
     return changed;
 }
 

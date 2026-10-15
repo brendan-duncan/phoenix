@@ -187,6 +187,33 @@ void DrawingStyle::fitFills(Element& element)
     }
 }
 
+void DrawingStyle::fitStrokes(Shape& shape)
+{
+    for (const auto& entry : shape.strokesMap)
+    {
+        if (!entry.second || !entry.second->fill || !unplaced(*entry.second->fill))
+            continue;
+        double left = std::numeric_limits<double>::max(), top = left;
+        double right = -left, bottom = -left;
+        for (const Edge* edge : shape.edges)
+        {
+            if (!edge || edge->strokeStyle != entry.first)
+                continue;
+            for (const Path* path : edge->paths)
+                for (const PathSegment* segment : path ? path->segments : std::vector<PathSegment*>())
+                    for (const Point& point : segment ? segment->points : std::vector<Point>())
+                    {
+                        left = std::min(left, point.x);
+                        top = std::min(top, point.y);
+                        right = std::max(right, point.x);
+                        bottom = std::max(bottom, point.y);
+                    }
+        }
+        if (left <= right && top <= bottom)
+            fitFill(*entry.second->fill, left, top, right, bottom);
+    }
+}
+
 StrokeLook StrokeLook::of(const StrokeStyle& stroke)
 {
     StrokeLook look;

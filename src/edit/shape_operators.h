@@ -41,6 +41,27 @@ struct Line
     bool closed = false;
 };
 
+/// A stroke's width along its lines, as the last Taper operator on the
+/// list sets it on a frame: from Start to End of the stroke's weight (in
+/// percent) along each line, and a wave travelling down it. Off when no
+/// Taper is on.
+struct Taper
+{
+    bool on = false;
+    double start = 100.0;
+    double end = 100.0;
+    /// The wave: how far it swells and thins (percent of the weight), how
+    /// long one wave is (pixels), and how many go by a second.
+    double wave = 0.0;
+    double wavelength = 40.0;
+    double speed = 0.0;
+};
+Taper taperOf(const std::vector<behaviors::Applied>& list, int frame);
+
+/// The outline of \a line stroked \a weight wide as \a taper says, at
+/// \a seconds into the movie: a closed polygon to fill.
+std::vector<Point> taperedOutline(const Line& line, double weight, const Taper& taper, double seconds);
+
 /// \a lines as \a list leaves them on \a frame (of the shape's timeline, at
 /// \a frameRate). \a stroke says whether they are a stroke's (Trim Paths
 /// trims strokes only) or a fill's outlines.

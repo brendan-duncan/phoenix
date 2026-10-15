@@ -477,6 +477,9 @@ ColorPanel::ColorPanel(fla::DrawingStyle* style, QWidget* parent)
     QPushButton* apply = new QPushButton("Apply to Selection", this);
     apply->setToolTip("Fill the selected shapes with this");
     connect(apply, &QPushButton::clicked, this, &ColorPanel::applyToSelectionRequested);
+    QPushButton* strokes = new QPushButton("Apply to Strokes", this);
+    strokes->setToolTip("Draw the selected shapes' strokes with this color, gradient or bitmap");
+    connect(strokes, &QPushButton::clicked, this, &ColorPanel::applyToStrokesRequested);
 
     QVBoxLayout* layout = new QVBoxLayout(this);
     layout->setContentsMargins(8, 8, 8, 8);
@@ -487,6 +490,7 @@ ColorPanel::ColorPanel(fla::DrawingStyle* style, QWidget* parent)
     layout->addWidget(_pages);
     QHBoxLayout* applyRow = new QHBoxLayout();
     applyRow->addStretch();
+    applyRow->addWidget(strokes);
     applyRow->addWidget(apply);
     layout->addLayout(applyRow);
 

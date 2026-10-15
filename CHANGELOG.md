@@ -4,6 +4,7 @@ What changed in each release of Phoenix, newest first.
 
 ## 0.12.0 (Unreleased)
 
+- Strokes: Dashes (with an offset to key) and Taper (start and end width, a travelling wave) shape operators; Apply to Strokes in the Color panel gives lines a gradient; width profiles now survive other shape operators
 - Time Remap behavior: key which frame of a graphic shows, for slow motion, freezes and running it backwards
 - Motion blur: turn it on for a layer from its right-click menu; the shutter angle and samples are on the Doc tab
 - Opening a SWF movie brings back its scenes, by name, instead of one long scene

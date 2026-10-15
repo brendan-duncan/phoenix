@@ -1020,6 +1020,7 @@ private:
 
     /// The Color panel's Apply to Selection: the selected shapes' fills
     /// become what new art is filled with, fitted to each.
+    void applyFillToStrokes();
     void applyFillToSelection();
 
     /// A color picked for drawing goes onto the selected shapes too: their

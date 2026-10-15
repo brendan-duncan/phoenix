@@ -81,6 +81,8 @@ signals:
     /// The style changed: the tool swatches and the like follow.
     void styleChanged();
     void applyToSelectionRequested();
+    /// The selected shapes' strokes drawn with it: a gradient along a line.
+    void applyToStrokesRequested();
     void importBitmapRequested();
 
 private:

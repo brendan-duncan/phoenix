@@ -200,6 +200,35 @@ std::vector<Line> between(const std::vector<Line>& lines, double from, double to
     return out;
 }
 
+/// \a lines cut into dashes \a dash long with gaps of \a gap between,
+/// starting \a offset along: each line on its own, a closed one round.
+std::vector<Line> dashed(const std::vector<Line>& lines, double dash, double gap, double offset)
+{
+    std::vector<Line> out;
+    const double period = dash + gap;
+    if (dash <= 0.0 || period <= 0.0)
+        return out;
+    for (const Line& line : lines)
+    {
+        const std::vector<Point> points = walked(line);
+        const double length = lengthOf(points);
+        if (length <= 0.0)
+            continue;
+        Line open;
+        open.points = points;
+        // Where the first dash starts, at or before the line's start.
+        double start = std::fmod(offset, period);
+        if (start > 0.0)
+            start -= period;
+        for (double at = start; at < length; at += period)
+        {
+            const std::vector<Line> piece = between({open}, std::max(0.0, at), std::min(length, at + dash));
+            out.insert(out.end(), piece.begin(), piece.end());
+        }
+    }
+    return out;
+}
+
 std::vector<Line> trim(const std::vector<Line>& lines, const Applied& applied, int frame)
 {
     double total = 0.0;
@@ -581,6 +610,28 @@ const std::vector<Definition>& definitions()
         bloatDef.params = {number("amount", "Amount (percent)", 30, -200, 200, 1)};
         made.push_back(bloatDef);
 
+        Definition dashesDef;
+        dashesDef.id = "dashes";
+        dashesDef.name = "Dashes";
+        dashesDef.description = "Cuts the shape's lines into dashes, each ended as the stroke's caps end it; key the "
+                                "Offset to send them marching along.";
+        dashesDef.builtIn = true;
+        dashesDef.params = {number("dash", "Dash (pixels)", 20, 0, 2000, 0.5), number("gap", "Gap (pixels)", 10, 0, 2000, 0.5),
+            number("offset", "Offset (pixels)", 0, -100000, 100000, 0.5)};
+        made.push_back(dashesDef);
+
+        Definition taperDef;
+        taperDef.id = "taper";
+        taperDef.name = "Taper";
+        taperDef.description = "Thins or swells the shape's lines along their length, from the start's width to the "
+                               "end's, with a wave that can travel down them: a brush stroke, a tail, a rope.";
+        taperDef.builtIn = true;
+        taperDef.params = {number("start", "Start width (percent)", 100, 0, 1000, 1),
+            number("end", "End width (percent)", 0, 0, 1000, 1), number("wave", "Wave (percent)", 0, 0, 1000, 1),
+            number("wavelength", "Wave length (pixels)", 40, 1, 5000, 1),
+            number("speed", "Waves a second", 0, -60, 60, 0.1)};
+        made.push_back(taperDef);
+
         Definition repeaterDef;
         repeaterDef.id = "repeater";
         repeaterDef.name = "Repeater";
@@ -594,6 +645,75 @@ const std::vector<Definition>& definitions()
         return made;
     }();
     return list;
+}
+
+Taper taperOf(const std::vector<Applied>& list, int frame)
+{
+    Taper taper;
+    for (const Applied& applied : list)
+    {
+        if (!applied.enabled || applied.type != "taper")
+            continue;
+        taper.on = true;
+        taper.start = std::max(0.0, param(applied, "start", frame, 100.0));
+        taper.end = std::max(0.0, param(applied, "end", frame, 0.0));
+        taper.wave = std::max(0.0, param(applied, "wave", frame, 0.0));
+        taper.wavelength = std::max(1.0, param(applied, "wavelength", frame, 40.0));
+        taper.speed = param(applied, "speed", frame, 0.0);
+    }
+    return taper;
+}
+
+std::vector<Point> taperedOutline(const Line& line, double weight, const Taper& taper, double seconds)
+{
+    std::vector<Point> corners = walked(line);
+    if (line.closed && corners.size() > 1)
+        corners.push_back(corners.front());
+    // Points no more than two pixels apart, so a wave swells smoothly.
+    std::vector<Point> points;
+    for (size_t i = 0; i < corners.size(); ++i)
+    {
+        if (i > 0)
+        {
+            const int steps = static_cast<int>(std::ceil(distance(corners[i - 1], corners[i]) / 2.0));
+            for (int s = 1; s < steps; ++s)
+            {
+                const double f = static_cast<double>(s) / steps;
+                points.push_back(Point(corners[i - 1].x + (corners[i].x - corners[i - 1].x) * f,
+                    corners[i - 1].y + (corners[i].y - corners[i - 1].y) * f));
+            }
+        }
+        points.push_back(corners[i]);
+    }
+    std::vector<Point> outline;
+    const double length = lengthOf(points);
+    if (points.size() < 2 || length <= 0.0)
+        return outline;
+    // Each point's half width, and its side, from the pieces either side.
+    std::vector<Point> left;
+    std::vector<Point> right;
+    double along = 0.0;
+    for (size_t i = 0; i < points.size(); ++i)
+    {
+        if (i > 0)
+            along += distance(points[i - 1], points[i]);
+        const Point& before = points[i > 0 ? i - 1 : i];
+        const Point& after = points[i + 1 < points.size() ? i + 1 : i];
+        const double dx = after.x - before.x;
+        const double dy = after.y - before.y;
+        const double span = std::max(1e-12, std::hypot(dx, dy));
+        const Point normal(-dy / span, dx / span);
+        const double t = along / length;
+        double percent = taper.start + (taper.end - taper.start) * t;
+        if (taper.wave > 0.0)
+            percent += taper.wave * std::sin(2.0 * 3.14159265358979323846 * (along / taper.wavelength - taper.speed * seconds));
+        const double half = std::max(0.0, weight * percent / 100.0) / 2.0;
+        left.push_back(Point(points[i].x + normal.x * half, points[i].y + normal.y * half));
+        right.push_back(Point(points[i].x - normal.x * half, points[i].y - normal.y * half));
+    }
+    outline = left;
+    outline.insert(outline.end(), right.rbegin(), right.rend());
+    return outline;
 }
 
 const Definition* find(const std::string& id)
@@ -640,6 +760,12 @@ std::vector<Line> apply(const std::vector<Line>& lines, bool stroke, const std::
         {
             if (stroke)
                 out = trim(out, applied, frame);
+        }
+        else if (applied.type == "dashes")
+        {
+            if (stroke)
+                out = dashed(out, std::max(0.0, param(applied, "dash", frame, 20.0)),
+                    std::max(0.0, param(applied, "gap", frame, 10.0)), param(applied, "offset", frame, 0.0));
         }
         else if (applied.type == "wigglepath")
         {

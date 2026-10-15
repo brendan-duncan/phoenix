@@ -337,6 +337,9 @@ public:
     /// Fits every unplaced gradient and bitmap fill of \a element (a shape,
     /// or a rectangle or oval primitive) to the art it fills.
     static void fitFills(Element& element);
+    /// The same for the gradients and bitmaps \a shape's strokes are drawn
+    /// with: each over the lines it strokes.
+    static void fitStrokes(Shape& shape);
     /// Places every unplaced gradient or bitmap fill of a shape over the
     /// rectangle given (in the shape's space), as Lock Fill places them
     /// over the stage.

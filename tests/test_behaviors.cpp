@@ -969,3 +969,40 @@ TEST(time_remap_holds_the_frame_keyed)
     delta.add(shift);
     CHECK(delta.hold == 3 && !delta.none());
 }
+
+TEST(shape_operators_dash_and_taper_strokes)
+{
+    using fla::shapeops::Line;
+    Line line;
+    line.points = {fla::Point(0, 0), fla::Point(100, 0)};
+    // Dashes of 20 with gaps of 10: four whole dashes and a short one.
+    Applied dashes = fla::shapeops::defaults("dashes", 1);
+    std::vector<Line> out = fla::shapeops::apply({line}, true, {dashes}, 0, 24.0);
+    CHECK(out.size() == 4);
+    CHECK(near(out[0].points.front().x, 0.0) && near(out[0].points.back().x, 20.0));
+    CHECK(near(out[1].points.front().x, 30.0));
+    // Sent 5 along: the first dash starts at 5.
+    dashes.params["offset"] = "5";
+    out = fla::shapeops::apply({line}, true, {dashes}, 0, 24.0);
+    CHECK(near(out[0].points.front().x, 5.0) && near(out[0].points.back().x, 25.0));
+    // A fill's outline is left whole.
+    CHECK(fla::shapeops::apply({line}, false, {dashes}, 0, 24.0).size() == 1);
+
+    // Taper: full width at the start, none at the end.
+    Applied taper = fla::shapeops::defaults("taper", 1);
+    const fla::shapeops::Taper look = fla::shapeops::taperOf({taper}, 0);
+    CHECK(look.on && look.start == 100.0 && look.end == 0.0);
+    const std::vector<fla::Point> outline = fla::shapeops::taperedOutline(line, 10.0, look, 0.0);
+    CHECK(!outline.empty());
+    double startWidth = 0.0;
+    double endWidth = 0.0;
+    for (const fla::Point& point : outline)
+    {
+        if (near(point.x, 0.0, 1e-6))
+            startWidth = std::max(startWidth, std::fabs(point.y) * 2.0);
+        if (near(point.x, 100.0, 1e-6))
+            endWidth = std::max(endWidth, std::fabs(point.y) * 2.0);
+    }
+    CHECK(near(startWidth, 10.0, 1e-6) && near(endWidth, 0.0, 1e-6));
+    CHECK(!fla::shapeops::taperOf({}, 0).on);
+}
