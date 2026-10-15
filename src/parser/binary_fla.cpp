@@ -193,6 +193,10 @@ struct Object
     std::string label;
     std::string script;
     bool morph = false;
+    /// Custom ease curves, one for each target (all, position, rotation,
+    /// scale, color, filters): x, y pairs of in handle, point and out
+    /// handle for each point.
+    std::vector<std::vector<double>> eases;
 
     // CPicLayer
     std::string name;
@@ -631,7 +635,21 @@ void readShapeData(Reader& r, ShapeData& shape, int shapeSchema)
         const int32_t cubics = r.s32();
         if (cubics < 0 || cubics > 1000000)
             r.fail("a bad cubic count");
-        r.skip(static_cast<size_t>(cubics) * 32);
+        // Each is the cubic the edges came from (four points). In the newer
+        // shapes, the quadratic points standing for it follow (each a point
+        // and a u16, 1 for a control point), and a byte whose two low bits
+        // each add a point (the other bits are left over from memory). Not
+        // carried into XFL.
+        for (int32_t i = 0; i < cubics; ++i)
+        {
+            r.skip(32);
+            if (shapeSchema < 3)
+                continue;
+            const uint8_t points = r.u8();
+            r.skip(static_cast<size_t>(points) * 10);
+            const uint8_t more = r.u8();
+            r.skip(8 * static_cast<size_t>((more & 1) + ((more >> 1) & 1)));
+        }
     }
 }
 
@@ -686,7 +704,29 @@ void readFrame(Reader& r, Object& o)
     r.cstring();
     r.skip(12);
     if (schema >= 24)
-        r.skip(8);
+    {
+        r.u32();
+        // A custom ease: a curve for each of six targets.
+        if (r.u32() != 0)
+        {
+            for (int target = 0; target < 6; ++target)
+            {
+                const uint32_t points = r.u32();
+                if (points > 10000)
+                    r.fail("a bad ease curve");
+                std::vector<double> curve;
+                for (uint32_t i = 0; i < points * 6; ++i)
+                {
+                    const uint32_t low = r.u32();
+                    const uint64_t bits = static_cast<uint64_t>(r.u32()) << 32 | low;
+                    double value;
+                    std::memcpy(&value, &bits, sizeof(value));
+                    curve.push_back(value);
+                }
+                o.eases.push_back(std::move(curve));
+            }
+        }
+    }
 }
 
 void readLayer(Reader& r, Object& o)
@@ -1146,7 +1186,10 @@ std::vector<Object*> readList(Reader& r)
 /// Reads into \a c as it goes, so that what came before a failure is kept.
 void readContents(Reader& r, Contents& c)
 {
-    const uint16_t version = r.u16();
+    // CS4 writes 0x43, with CS3's layout.
+    uint16_t version = r.u16();
+    if (version == 0x43)
+        version = 0x143;
     if (version != 0x129 && version != 0x138 && version != 0x143)
         r.fail("a Contents version Phoenix does not know");
     r.version = version;
@@ -1526,6 +1569,31 @@ private:
                 if (frame.soundOut > 0 && frame.soundOut != 0x3FFFFFFF)
                     node->SetAttribute("outPoint44", frame.soundOut);
             }
+        }
+        if ((motion || frame.morph) && !frame.eases.empty())
+        {
+            // XFL lists a curve's points without the first point's in
+            // handle and the last one's out handle.
+            static const char* const targets[6] = {"all", "position", "rotation", "scale", "color", "filters"};
+            tinyxml2::XMLElement* tweens = doc.NewElement("tweens");
+            for (size_t t = 0; t < frame.eases.size() && t < 6; ++t)
+            {
+                const std::vector<double>& curve = frame.eases[t];
+                if (curve.size() < 12)
+                    continue;
+                tinyxml2::XMLElement* ease = doc.NewElement("CustomEase");
+                ease->SetAttribute("target", targets[t]);
+                for (size_t i = 2; i + 2 < curve.size(); i += 2)
+                {
+                    tinyxml2::XMLElement* point = doc.NewElement("Point");
+                    point->SetAttribute("x", number(curve[i]).c_str());
+                    point->SetAttribute("y", number(curve[i + 1]).c_str());
+                    ease->InsertEndChild(point);
+                }
+                tweens->InsertEndChild(ease);
+            }
+            node->SetAttribute("hasCustomEase", "true");
+            node->InsertEndChild(tweens);
         }
         if (!frame.script.empty())
         {

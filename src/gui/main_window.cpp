@@ -2691,12 +2691,24 @@ void MainWindow::loadFLAFile(const QString& filePath)
         }
         adoptDocument(document, filePath, displayName);
         addToRecentFiles(filePath);
-        if (!parser.warningString().empty())
+        // With no window (exporting from the command line), a box would wait
+        // for a click that never comes.
+        if (!parser.warningString().empty() && !isVisible())
+        {
+            std::fprintf(stderr, "%s\n", parser.warningString().c_str());
+        }
+        else if (!parser.warningString().empty())
         {
             QMessageBox::information(this, "Open Document",
                 QString("%1\n\n%2").arg(fileInfo.fileName(),
                     QString::fromStdString(parser.warningString()).trimmed()));
         }
+    }
+    else if (!isVisible())
+    {
+        adoptDocument(nullptr, QString(), QString());
+        std::fprintf(stderr, "%s: %s\n", QFileInfo(filePath).fileName().toLocal8Bit().constData(),
+            parser.errorString().empty() ? "the file could not be read." : parser.errorString().c_str());
     }
     else
     {

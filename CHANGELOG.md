@@ -4,6 +4,8 @@ What changed in each release of Phoenix, newest first.
 
 ## 0.10.0 (Unreleased)
 
+- Flash CS3 and CS4 .fla files open whole: shapes drawn with curves and frames with custom eases no longer leave parts out
+- Exporting from the command line no longer waits on a message box when a document opens with a warning
 - Test Movie plays a button's sounds: Over on rolling over, Down on pressing, Hit on releasing, Up on rolling out; opened SWF movies keep them
 - The Asset Warp tool makes a puppet from a shape, bitmap, group or graphic: click it, and the first pin goes where you clicked
 - Window > Collapse Right (or Left) Panels to Icons folds a side's panels into a strip of their names, each opening beside it, for more stage

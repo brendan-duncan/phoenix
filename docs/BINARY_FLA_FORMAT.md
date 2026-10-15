@@ -28,7 +28,9 @@ When Flash saves, it copies unchanged Symbol streams verbatim. A single file
 can therefore mix object schemas (Freya `Symbol 14` is MX 2004 era), so a
 decoder must branch on the schema of each object, never on the file version.
 
-Contents versions: 0x129 (MX 2004), 0x138 (Flash 8), 0x143 (CS3). Only a
+Contents versions: 0x129 (MX 2004), 0x138 (Flash 8), 0x143 (CS3), 0x43 (CS4,
+with CS3's layout [S]; its streams are named `P N <time>`, `S N <time>` and
+`M N <time>`). Only a
 few Contents records follow the file version rather than a schema of their
 own (the ItemHeader tail, the profiles list); everything in the timeline
 streams branches on schemas.
@@ -140,8 +142,13 @@ u32
 ReadObject hints    CObList of CMorphHintItem (2.11): the tween's shape hints, else null [S]
 CString             always empty                     [S]
 u32 x3              (1,0,0)                          [S]
-if frameSchema >= 24: u32 x2                         [S]
+if frameSchema >= 24: u32, u32 customEase           [S]
+if customEase: 6 x (u32 n; n x 3 x (f64 x, f64 y))  [S]
 ```
+The custom ease curves are for the targets all, position, rotation, scale,
+color and filters, in that order. Each point is its in handle, the point and
+its out handle; XFL's `CustomEase` lists the same points without the first
+in handle and the last out handle.
 Tween type: shape tween when `morph` is non-null [S]; otherwise motion when
 keyMode bit0 is set [X] (26 tweens); otherwise none. Flash 8 writes
 frameSchema 23 with the 22 layout.
@@ -157,8 +164,20 @@ ShapeData:
   u16 nFills;   nFills x FillStyle
   u16 nLines;   nLines x LineStyle
   edges until a 0x00 flag byte
-  if shapeDataSchema >= 5: s32 nCubics; nCubics x 32 bytes (always 0) [S]
+  if shapeDataSchema >= 5: s32 nCubics; nCubics x Cubic             [S]
 ```
+**Cubic** (the curve the edges were made from, as drawn with a cubic tool):
+```
+4 x (s32 x, s32 y)    start, control, control, end, in 1/20 px (twips)
+if shapeSchema >= 3:
+  u8 n; n x (s32 x, s32 y, u16 kind)   the quadratic points standing for it,
+                                         starting at the cubic's start; kind 1
+                                         marks a control point
+  u8 more              bit 0 and bit 1 each add one (s32 x, s32 y) after it;
+                       the other bits vary from save to save (leftover memory)
+```
+[S] 43,958 records in the nine CS3/CS4 Gumball files parse to the end of
+their streams. Flash 8 shapes (schema 2) have the four points alone.
 **FillStyle**
 ```
 color; u16 kind: low byte is the SWF fill type [X]
@@ -379,6 +398,8 @@ applies directly (`Bitmap::datData`).
   units, the same fill0/fill1/stroke indices).
 
 ## 6. Not covered by the corpus (still unverified)
+* Which custom ease curves the frame uses (one for all, or one per
+  property): seen only on untweened frames.
 * Frame labels and ease: the Flash 8 files have labels ("wave", "Short
   bounce") and eases of -100 and 100 where 2.4 puts them, but no XFL twin
   to compare against [S].

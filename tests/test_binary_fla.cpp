@@ -13,6 +13,7 @@
 
 #include <cstdio>
 #include <cstdlib>
+#include <cstring>
 #include <filesystem>
 #include <memory>
 #include <string>
@@ -215,6 +216,64 @@ std::vector<uint8_t> emptyContents(uint16_t version = 0x129)
     return contents;
 }
 
+/// A Contents stream of CS3's layout naming one scene, "Page 1".
+std::vector<uint8_t> contentsWithScene(uint16_t version)
+{
+    std::vector<uint8_t> c = {static_cast<uint8_t>(version), static_cast<uint8_t>(version >> 8)};
+    c.insert(c.end(), 25, 0);
+    const std::string cls = "CDocumentPage";
+    c.insert(c.end(), {0xFF, 0xFF, 0, 0, static_cast<uint8_t>(cls.size()), 0});
+    c.insert(c.end(), cls.begin(), cls.end());
+    const auto u32 = [&c](uint32_t v) {
+        for (int i = 0; i < 4; ++i)
+            c.push_back(static_cast<uint8_t>(v >> (8 * i)));
+    };
+    const auto text = [&c](const std::string& s) {
+        c.push_back(static_cast<uint8_t>(s.size()));
+        c.insert(c.end(), s.begin(), s.end());
+    };
+    const auto linkage = [&]() {
+        u32(3);
+        c.push_back(0);
+        text("");
+        text("");
+        text("");
+        u32(0);
+    };
+    const auto source = [&]() {
+        text("");
+        text("");
+        c.insert(c.end(), 12 + 8, 0);
+    };
+    c.push_back(17); // schema
+    text("Page 1");
+    text("Scene 1");
+    u32(0);
+    c.push_back(0);
+    text("");
+    u32(1);
+    u32(5); // item header
+    u32(1);
+    c.insert(c.end(), 8, 0);
+    u32(1);
+    c.insert(c.end(), 8, 0);
+    u32(0);
+    linkage();
+    source();
+    u32(0); // last modified
+    text("");
+    text("");
+    u32(0);
+    c.push_back(0);
+    u32(0);
+    u32(0);
+    linkage();
+    source();
+    c.insert(c.end(), 34, 0);
+    c.insert(c.end(), 400, 0); // the end of the list and the rest, empty
+    return c;
+}
+
 /// A page stream: the page's class declared, then \a body.
 std::vector<uint8_t> pageStream(const std::vector<uint8_t>& body)
 {
@@ -288,6 +347,109 @@ TEST(binary_fla_keeps_what_comes_before_a_class_it_does_not_know)
     // A Contents version Phoenix does not know still refuses the document.
     streams["Contents"][0] = 0x99;
     CHECK(!BinaryFla::convert(streams, files, error, &warning) && error.find("version") != std::string::npos);
+}
+
+TEST(binary_fla_reads_cs4_cubics_and_custom_eases)
+{
+    std::vector<uint8_t> body = {0, 0, 0xFF, 0xFF, 0, 0, 9, 0};
+    const std::string layerClass = "CPicLayer";
+    body.insert(body.end(), layerClass.begin(), layerClass.end());
+    body.insert(body.end(), {0, 0}); // the layer's CPicObj: schema, flags
+    const auto u32 = [&body](uint32_t v) {
+        for (int i = 0; i < 4; ++i)
+            body.push_back(static_cast<uint8_t>(v >> (8 * i)));
+    };
+    const auto f64 = [&u32](double v) {
+        uint64_t bits;
+        std::memcpy(&bits, &v, sizeof(bits));
+        u32(static_cast<uint32_t>(bits));
+        u32(static_cast<uint32_t>(bits >> 32));
+    };
+    // A frame of the newer kind: CPicObj, then its shape (schema 6) with
+    // two cubics, the first followed by one extra point (flag bit 0; bit 2
+    // adds none) and the second by two.
+    const auto frame = [&](bool first, uint8_t shapeSchema, uint8_t frameSchema, const std::string& label) {
+        if (first)
+        {
+            body.insert(body.end(), {0xFF, 0xFF, 0, 0, 9, 0});
+            const std::string cls = "CPicFrame";
+            body.insert(body.end(), cls.begin(), cls.end());
+        }
+        else
+        {
+            body.insert(body.end(), {0x05, 0x80}); // the frame class, declared fifth
+        }
+        body.insert(body.end(), {0, 0, 0, 0});
+        body.insert(body.end(), 8, 0);
+        body.push_back(shapeSchema);
+        body.insert(body.end(), 24, 0); // matrix
+        body.push_back(5);              // shape data schema
+        u32(0);
+        body.insert(body.end(), {0, 0, 0, 0, 0}); // no fills, no strokes, no edges
+        if (shapeSchema >= 3)
+        {
+            u32(2);
+            body.insert(body.end(), 32, 7);
+            body.push_back(1);
+            body.insert(body.end(), 10, 7);
+            body.push_back(0x05);
+            body.insert(body.end(), 8, 7);
+            body.insert(body.end(), 32, 7);
+            body.push_back(0);
+            body.push_back(0x03);
+            body.insert(body.end(), 16, 7);
+        }
+        else
+        {
+            u32(0);
+        }
+        body.push_back(frameSchema);
+        body.insert(body.end(), {1, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}); // duration, motion, ease, sound...
+        u32(0);
+        u32(0);
+        body.insert(body.end(), {0, 0});
+        body.push_back(static_cast<uint8_t>(label.size()));
+        body.insert(body.end(), label.begin(), label.end());
+        u32(5); // actions: version 5, no script
+        body.insert(body.end(), 16, 0);
+        body.push_back(0);
+        body.insert(body.end(), 12, 0);
+        body.insert(body.end(), {0, 0, 0, 0, 0, 0, 0, 0, 0}); // no morph, u32, no hints, CString
+        body.insert(body.end(), 12, 0);
+        if (frameSchema >= 24)
+        {
+            u32(1);
+            u32(1); // custom eases follow: six curves of two points
+            for (int target = 0; target < 6; ++target)
+            {
+                u32(2);
+                for (double v : {0.0, 0.0, 0.0, 0.0, 0.5, 0.1, 0.9, 0.5, 1.0, 1.0, 1.0, 1.0})
+                    f64(v);
+            }
+        }
+    };
+    frame(true, 6, 26, "");
+    frame(false, 2, 22, "next");
+    body.insert(body.end(), {0, 0}); // no more frames
+    body.insert(body.end(), 8, 0);
+    body.push_back(11);
+    body.push_back(0);
+    body.insert(body.end(), 3 + 4 + 4 + 4 + 4, 0);
+    body.insert(body.end(), {0, 0, 0, 1, 1});
+    std::map<std::string, std::vector<uint8_t>> streams;
+    streams["Contents"] = contentsWithScene(0x43);
+    streams["Page 1"] = pageStream(body);
+    std::map<std::string, std::vector<uint8_t>> files;
+    std::string error;
+    std::string warning;
+    CHECK(BinaryFla::convert(streams, files, error, &warning));
+    CHECK(warning.empty());
+    const auto xml = files["DOMDocument.xml"];
+    const std::string text(xml.begin(), xml.end());
+    // The second frame read in place, and the first's curve kept.
+    CHECK(text.find("name=\"next\"") != std::string::npos);
+    CHECK(text.find("hasCustomEase=\"true\"") != std::string::npos);
+    CHECK(text.find("<Point x=\"0.5\" y=\"0.1\"/>") != std::string::npos);
 }
 
 TEST(binary_fla_reads_flash_8_contents_and_32_bit_tags)
