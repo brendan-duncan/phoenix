@@ -172,6 +172,8 @@ set(HEADERS
     src/gui/hot_text.h
     src/gui/convert_to_symbol_dialog.h
     src/gui/phoenix_view.h
+    src/gui/behavior_library.h
+    src/gui/behaviors_panel.h
     src/gui/tool.h
     src/gui/tool_icons.h
     src/gui/cursors.h
@@ -198,6 +200,7 @@ set(HEADERS
     src/gui/output_panel.h
     src/jsfl/e4x.h
     src/jsfl/engine.h
+    src/jsfl/behavior_engine.h
     src/jsfl/tool_script.h
     src/jsfl/flfile.h
     src/jsfl/host.h
@@ -341,6 +344,7 @@ set(HEADERS
     src/edit/postscript_import.h
     src/edit/psd_import.h
     src/edit/three_d.h
+    src/edit/behaviors.h
     src/edit/filter_presets.h
     src/edit/library_transfer.h
     src/edit/document_session.h
@@ -437,6 +441,8 @@ set(SOURCES
     src/gui/hot_text.cpp
     src/gui/convert_to_symbol_dialog.cpp
     src/gui/phoenix_view.cpp
+    src/gui/behavior_library.cpp
+    src/gui/behaviors_panel.cpp
     src/gui/selection_tool.cpp
     src/gui/tool_icons.cpp
     src/gui/cursors.cpp

@@ -37,6 +37,7 @@ const NAV = [
     { href: "masks-guides.html", title: "Masks and guides" },
     { href: "bones.html", title: "Bones and inverse kinematics" },
     { href: "rigging.html", title: "Rigs and motion" },
+    { href: "behaviors.html", title: "Behaviors" },
     { href: "sound.html", title: "Sound" },
     { href: "actionscript.html", title: "ActionScript and Test Movie" },
   ] },

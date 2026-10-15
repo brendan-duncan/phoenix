@@ -104,6 +104,7 @@ set(PHOENIX_CORE_SOURCES
     edit/swatches.cpp
     edit/text_style.cpp
     edit/three_d.cpp
+    edit/behaviors.cpp
     edit/timeline_edit.cpp
     edit/trace_bitmap.cpp
     edit/transform_blend.cpp
@@ -165,6 +166,8 @@ set(PHOENIX_CORE_FILE_SOURCES
 
 set(PHOENIX_CORE_JSFL_SOURCES
     jsfl/e4x.cpp
+    jsfl/behavior_builtins.cpp
+    jsfl/behavior_engine.cpp
     jsfl/engine.cpp
     jsfl/flfile.cpp
     jsfl/model_document.cpp

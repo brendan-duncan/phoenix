@@ -1,5 +1,7 @@
 #pragma once
 
+#include "../edit/behaviors.h"
+
 #include "../data/color_transform.h"
 #include "../data/edge.h"
 #include "../data/fla_document.h"
@@ -1203,6 +1205,9 @@ private:
     /// symbol's instance is as big as the frame it shows.
     using BoundsKey = QPair<const fla::Element*, int>;
     QHash<BoundsKey, QRectF> _boundsCache;
+    /// Behaviors worked out, by instance and frame, for _behaviorRevision.
+    QHash<QPair<const void*, int>, fla::behaviors::Delta> _behaviorCache;
+    unsigned _behaviorRevision = ~0u;
     /// Each symbol's bounds over all its frames: its visible layers'
     /// (culling, 9-slice) and all its art's (the offscreen a filtered or
     /// blended instance draws into). Walking every frame recursively is
@@ -1311,6 +1316,15 @@ private:
     /// motion tween's (read from the frame's motionObjectXML), a classic
     /// tween's in-between, or its own.
     fla::Transform shownTransform(const LayerFrame& state, size_t elementIndex);
+    /// What \a instance's behaviors add on frame \a at of its timeline,
+    /// given its keyed transform there; nothing for one without behaviors.
+    /// Kept for each instance and frame until the document changes.
+    fla::behaviors::Delta behaviorDelta(const fla::SymbolInstance& instance, const fla::Transform& keyed, int at);
+    /// The keyed place, turn, scale and alpha of the instance \a index on
+    /// \a layer's keyframe holding \a frame, tweened there; false when that
+    /// keyframe has no instance of \a symbol there.
+    bool keyedOnLayer(const fla::Layer& layer, size_t index, const std::string& symbol, int frame,
+        fla::behaviors::Keyed& keyed);
 
     /// The parsed motion of a frame with an object motion tween, kept per
     /// frame; null when it has none.

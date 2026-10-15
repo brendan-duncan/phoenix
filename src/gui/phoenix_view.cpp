@@ -1,4 +1,5 @@
 #include "phoenix_view.h"
+#include "behavior_library.h"
 #include "theme.h"
 #include "../play/movie_runtime.h"
 #include "../edit/pegs.h"
@@ -2098,13 +2099,126 @@ fla::Transform PhoenixView::shownTransform(const LayerFrame& state, size_t eleme
     const std::vector<int> pairs = state.tweenFrame && state.frame->tweenType == fla::TweenType::Motion
         ? fla::pairTweenElements(state.frame->elements, state.tweenFrame->elements) : std::vector<int>();
     const int paired = elementIndex < pairs.size() ? pairs[elementIndex] : -1;
+    fla::Transform shown = element->transform;
     if (paired >= 0 && state.tweenFrame->elements[static_cast<size_t>(paired)])
     {
         const fla::Element* end = state.tweenFrame->elements[static_cast<size_t>(paired)];
         const fla::Transform tweened = interpolateTransform(element->transform, end->transform, state.tweenProgress);
-        return guidedTransform(state, *element, *end, tweened);
+        shown = guidedTransform(state, *element, *end, tweened);
     }
-    return element->transform;
+    if (element->elementType() == fla::Element::Type::SymbolInstance &&
+        fla::behaviors::any(*static_cast<const fla::SymbolInstance*>(element)))
+    {
+        const auto* instance = static_cast<const fla::SymbolInstance*>(element);
+        shown = fla::behaviors::apply(shown, element->transformationPoint,
+            behaviorDelta(*instance, shown, state.frame->index + std::max(0, state.offset)));
+    }
+    return shown;
+}
+
+fla::behaviors::Delta PhoenixView::behaviorDelta(const fla::SymbolInstance& instance, const fla::Transform& keyed, int at)
+{
+    const auto* frame = dynamic_cast<const fla::Frame*>(instance.parent);
+    const auto* layer = frame ? dynamic_cast<const fla::Layer*>(frame->parent) : nullptr;
+    if (!frame || !layer)
+        return {};
+    if (_behaviorRevision != _revision)
+    {
+        _behaviorCache.clear();
+        _behaviorRevision = _revision;
+    }
+    const QPair<const void*, int> key(&instance, at);
+    const auto found = _behaviorCache.constFind(key);
+    if (found != _behaviorCache.constEnd())
+        return found.value();
+
+    const auto place = std::find(frame->elements.begin(), frame->elements.end(), &instance);
+    const size_t index = static_cast<size_t>(place - frame->elements.begin());
+    const std::string& symbol = instance.libraryItemName;
+    // The run of keyframes holding it: the keyframes one after another
+    // that have an instance of the same symbol in the same place.
+    const auto holds = [index, &symbol](const fla::Frame* keyframe) {
+        if (!keyframe || index >= keyframe->elements.size() || !keyframe->elements[index] ||
+            keyframe->elements[index]->elementType() != fla::Element::Type::SymbolInstance)
+            return false;
+        return static_cast<const fla::SymbolInstance*>(keyframe->elements[index])->libraryItemName == symbol;
+    };
+    const auto keyframeAt = [layer](int frameIndex) -> const fla::Frame* {
+        for (const fla::Frame* keyframe : layer->frames)
+            if (keyframe && frameIndex >= keyframe->index && frameIndex < keyframe->index + std::max(1, keyframe->duration))
+                return keyframe;
+        return nullptr;
+    };
+    int start = frame->index;
+    int end = frame->index + std::max(1, frame->duration) - 1;
+    for (const fla::Frame* before = keyframeAt(start - 1); start > 0 && holds(before); before = keyframeAt(start - 1))
+        start = before->index;
+    for (const fla::Frame* after = keyframeAt(end + 1); holds(after); after = keyframeAt(end + 1))
+        end = after->index + std::max(1, after->duration) - 1;
+
+    fla::behaviors::Moment moment;
+    moment.frame = at;
+    moment.frameRate = _flaDocument && _flaDocument->document && _flaDocument->document->frameRate > 0.0
+        ? _flaDocument->document->frameRate : 24.0;
+    moment.start = start;
+    moment.end = end;
+    moment.keyed = fla::behaviors::keyedOf(keyed, instance.transformationPoint, instance.colorTransform);
+    moment.keyedAt = [this, layer, index, &symbol](int frameIndex, fla::behaviors::Keyed& out) {
+        return keyedOnLayer(*layer, index, symbol, frameIndex, out);
+    };
+    std::string error;
+    BehaviorLibrary& library = BehaviorLibrary::instance();
+    const fla::behaviors::Delta delta = library.engine().evaluate(fla::behaviors::of(instance), moment, &error);
+    if (!error.empty())
+        library.reportOnce(QString::fromStdString(error));
+    if (_behaviorCache.size() > 200000)
+        _behaviorCache.clear();
+    _behaviorCache.insert(key, delta);
+    return delta;
+}
+
+bool PhoenixView::keyedOnLayer(const fla::Layer& layer, size_t index, const std::string& symbol, int frameIndex,
+    fla::behaviors::Keyed& keyed)
+{
+    const fla::Frame* span = nullptr;
+    for (const fla::Frame* keyframe : layer.frames)
+        if (keyframe && frameIndex >= keyframe->index && frameIndex < keyframe->index + std::max(1, keyframe->duration))
+        {
+            span = keyframe;
+            break;
+        }
+    if (!span || index >= span->elements.size() || !span->elements[index] ||
+        span->elements[index]->elementType() != fla::Element::Type::SymbolInstance)
+        return false;
+    const auto* instance = static_cast<const fla::SymbolInstance*>(span->elements[index]);
+    if (instance->libraryItemName != symbol)
+        return false;
+    fla::Transform transform = instance->transform;
+    // Part way through a classic tween, eased and turned as it plays.
+    if (span->tweenType == fla::TweenType::Motion && frameIndex > span->index)
+    {
+        const int endIndex = span->index + std::max(1, span->duration);
+        for (const fla::Frame* next : layer.frames)
+        {
+            if (!next || next->index != endIndex || index >= next->elements.size() || !next->elements[index])
+                continue;
+            const double t = fla::easeProgress(static_cast<double>(frameIndex - span->index) / std::max(1, span->duration),
+                span->acceleration, span->hasCustomEase ? span->customEase : std::vector<fla::Point>(), span->easeMethod);
+            fla::TweenRotation rotation = fla::TweenRotation::Auto;
+            if (span->motionTweenRotate == "clockwise")
+                rotation = fla::TweenRotation::Clockwise;
+            else if (span->motionTweenRotate == "counter-clockwise")
+                rotation = fla::TweenRotation::CounterClockwise;
+            else if (span->motionTweenRotate == "none")
+                rotation = fla::TweenRotation::None;
+            const int turns = rotation == fla::TweenRotation::Clockwise || rotation == fla::TweenRotation::CounterClockwise
+                ? std::max(0, span->motionTweenRotateTimes) : 0;
+            transform = fla::blendTransforms(instance->transform, next->elements[index]->transform, t, rotation, turns);
+            break;
+        }
+    }
+    keyed = fla::behaviors::keyedOf(transform, instance->transformationPoint, instance->colorTransform);
+    return true;
 }
 
 const fla::GuidePath* PhoenixView::guidePathOf(const fla::Frame* frame)
@@ -2850,7 +2964,15 @@ void PhoenixView::drawFrame(QPainter& painter, const fla::Frame* frame, const fl
     // A group's members are drawn by its frame's playhead, as it is.
     ElapsedScope elapsed(_elapsed, _drawnState && _drawnState->frame == frame ? _drawnState->offset : _elapsed);
     _drawnState = nullptr;
-    const bool culling = !nextTweenFrame && !moving && painter.device()->width() > 0;
+    bool driven = false;
+    for (const fla::Element* element : frame->elements)
+        if (element && element->elementType() == fla::Element::Type::SymbolInstance &&
+            fla::behaviors::any(*static_cast<const fla::SymbolInstance*>(element)))
+        {
+            driven = true;
+            break;
+        }
+    const bool culling = !nextTweenFrame && !moving && !driven && painter.device()->width() > 0;
 
     NestingGuard nesting(_nesting);
     if (!nesting.ok)
@@ -3046,6 +3168,19 @@ void PhoenixView::drawElement(QPainter& painter, const fla::Element* element, co
     else if (tweenElement)
     {
         transform = interpolateTransform(element->transform, tweenElement->transform, tweenProgress);
+    }
+
+    // Behaviors move, turn, scale and fade it on top of its keys.
+    fla::behaviors::Delta behaviorDelta;
+    if (element->elementType() == fla::Element::Type::SymbolInstance)
+    {
+        const auto* instance = static_cast<const fla::SymbolInstance*>(element);
+        const auto* keyframe = dynamic_cast<const fla::Frame*>(element->parent);
+        if (keyframe && fla::behaviors::any(*instance))
+        {
+            behaviorDelta = this->behaviorDelta(*instance, transform, keyframe->index + std::max(0, _elapsed));
+            transform = fla::behaviors::apply(transform, element->transformationPoint, behaviorDelta);
+        }
     }
 
     // Playing a movie (Test Movie): a movie clip or button shows as its
@@ -3252,6 +3387,7 @@ void PhoenixView::drawElement(QPainter& painter, const fla::Element* element, co
                 color = fla::blendColorTransforms(color,
                     static_cast<const fla::SymbolInstance*>(tweenElement)->colorTransform, tweenProgress);
             }
+            color.alphaMultiplier *= behaviorDelta.alpha;
             const bool alphaOnly = color.tintMultiplier == 0.0 && color.brightness == 0.0 &&
                 color.redMultiplier == 1.0 && color.greenMultiplier == 1.0 &&
                 color.blueMultiplier == 1.0 && color.redOffset == 0 &&

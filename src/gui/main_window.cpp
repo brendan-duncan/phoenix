@@ -28,6 +28,8 @@
 #include "frame_picker_panel.h"
 #include "color_panel.h"
 #include "arrange_panels.h"
+#include "behavior_library.h"
+#include "behaviors_panel.h"
 #include "motion_editor.h"
 #include "motion_presets.h"
 #include "xsheet_panel.h"
@@ -418,6 +420,8 @@ MainWindow::MainWindow(const QString& initialFile, QWidget* parent, bool startup
 
     _selection.setChangedCallback([this]() {
         updateSelectionState();
+        if (_behaviors && _behaviorsDock && _behaviorsDock->isVisible())
+            _behaviors->refresh();
         scriptEvent("selectionChanged");
         // Selecting something on the stage makes its layer current.
         if (_timelineView && !_selection.isEmpty())
@@ -2011,6 +2015,59 @@ void MainWindow::createPanels()
         _controllersDock->hide();
     }
 
+    // Behaviors, closed until asked.
+    if (!_behaviorsDock)
+    {
+        BehaviorsLinks links;
+        links.commands = [this]() { return &_editContext.commandStack(); };
+        links.instances = [this]() {
+            std::vector<fla::SymbolInstance*> instances;
+            for (fla::DOMElement* selected : _selection.elements())
+                if (auto* instance = dynamic_cast<fla::SymbolInstance*>(selected))
+                {
+                    fla::Frame* frame = frameOfElement(instance);
+                    auto* layer = frame ? dynamic_cast<fla::Layer*>(frame->parent) : nullptr;
+                    if (!layer || !layer->isLocked())
+                        instances.push_back(instance);
+                }
+            return instances;
+        };
+        links.changed = [this]() {
+            if (_phoenixView)
+            {
+                _phoenixView->clearCaches();
+                _phoenixView->update();
+            }
+        };
+        _behaviors = new BehaviorsPanel(links);
+        _behaviorsDock = new QDockWidget("Behaviors", this);
+        _behaviorsDock->setObjectName("behaviorsDock");
+        _behaviorsDock->setAllowedAreas(Qt::AllDockWidgetAreas);
+        _behaviors->setParent(_behaviorsDock);
+        _behaviorsDock->setWidget(_behaviors);
+        addDockWidget(Qt::RightDockWidgetArea, _behaviorsDock);
+        _behaviorsDock->hide();
+        // Behavior files read again redraw the stage; their errors go to
+        // the Output panel.
+        BehaviorLibrary& library = BehaviorLibrary::instance();
+        if (!library.report)
+            library.report = [](const QString& message) {
+                for (MainWindow* window : s_windows)
+                    if (window && window->_scripts && window->_scripts->output())
+                    {
+                        window->_scripts->output()->appendError(message);
+                        break;
+                    }
+            };
+        connect(&library, &BehaviorLibrary::changed, this, [this]() {
+            if (_phoenixView)
+            {
+                _phoenixView->clearCaches();
+                _phoenixView->update();
+            }
+        });
+    }
+
     // The Movie Explorer, closed until asked; filled when shown.
     if (!_movieExplorerDock)
     {
@@ -2254,6 +2311,7 @@ void MainWindow::setupWindowMenu()
             {"&Output", _scripts ? _scripts->outputDock() : nullptr, QKeySequence(Qt::Key_F2), "What scripts trace, and the errors they stop on"},
             {"&Review Notes", _notesDock, QKeySequence(), "Notes on frames from whoever reviews the shot; they never export"},
             {"Co&ntrollers", _controllersDock, QKeySequence(), "Master controllers: one slider driving properties on several layers"},
+            {"&Behaviors", _behaviorsDock, QKeySequence(), "Motion worked out every frame on the selected symbols: wiggle, oscillate, follow with lag and more"},
             {"Sc&ene", _scenesDock, QKeySequence(Qt::SHIFT | Qt::Key_F2), "The document's scenes: switch, add, duplicate, delete, rename and reorder them"},
             {"Mo&vie Explorer", _movieExplorerDock, QKeySequence(Qt::ALT | Qt::Key_F3), "The whole document as a tree: scenes, layers, frames, objects and symbols"},
             {"F&unction Curves", _functionCurvesDock, QKeySequence(), "Any property of the current layer as a curve over time, its keyframes dragged up or down"},
@@ -2351,6 +2409,10 @@ void MainWindow::setupWindowMenu()
     connect(_controllersDock, &QDockWidget::visibilityChanged, this, [this](bool shown) {
         if (shown)
             _controllers->refresh();
+    });
+    connect(_behaviorsDock, &QDockWidget::visibilityChanged, this, [this](bool shown) {
+        if (shown)
+            _behaviors->refresh();
     });
     connect(_scenesDock, &QDockWidget::visibilityChanged, this, [this](bool shown) {
         if (shown)
@@ -8838,6 +8900,8 @@ void MainWindow::updateEditState()
         _notes->refresh();
     if (_controllers && _controllersDock && _controllersDock->isVisible() && !_editContext.commandStack().isInMacro())
         _controllers->refresh();
+    if (_behaviors && _behaviorsDock && _behaviorsDock->isVisible() && !_editContext.commandStack().isInMacro())
+        _behaviors->refresh();
     if (_palettes && _palettesDock && _palettesDock->isVisible() && !_editContext.commandStack().isInMacro())
         _palettes->refresh();
     if (_functionCurves && _functionCurvesDock && _functionCurvesDock->isVisible() && !_editContext.commandStack().isInMacro())

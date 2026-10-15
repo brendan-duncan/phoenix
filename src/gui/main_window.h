@@ -827,6 +827,8 @@ private:
     /// Controllers: master controllers.
     class ControllersPanel* _controllers = nullptr;
     QDockWidget* _controllersDock = nullptr;
+    class BehaviorsPanel* _behaviors = nullptr;
+    QDockWidget* _behaviorsDock = nullptr;
     struct DocumentTab
     {
         /// Null while it is the document shown.
