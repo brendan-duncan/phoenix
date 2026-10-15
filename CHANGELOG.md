@@ -4,6 +4,7 @@ What changed in each release of Phoenix, newest first.
 
 ## 0.12.0 (Unreleased)
 
+- Adjustment layers: Turbulent Displace and Wave Displace push the picture below about, in random swirls or travelling waves
 - Baking behaviors, shape operators and letter animators keeps a keyframe only where something changes, holding the frames between
 
 ## 0.11.0

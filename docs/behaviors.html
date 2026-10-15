@@ -195,7 +195,7 @@
 
 <ul>
   <li><b>Track Matte</b> shows a layer only through the layer just above it. An <b>Alpha Matte</b> shows it where the layer above has art, a <b>Luma Matte</b> where that art is light; the inverted ones show it everywhere else. The layer above becomes the matte and is not drawn itself. Unlike a mask, a matte can be soft (a blurred or faded shape gives a soft edge) and works while you edit, and both layers animate as usual: key the matte's art to make a reveal.</li>
-  <li><b>Adjustment Layer</b> makes a layer change everything drawn below it. With nothing selected on the stage, the Behaviors panel shows the current adjustment layer's effects: <b>Add Effect</b> offers <b>Blur</b>, <b>Color Correction</b> (brightness, contrast, saturation and hue) and <b>Tint</b> (toward a color, keeping light and dark), and their settings key like any others. An adjustment layer with no art changes the whole picture; one with art changes only where its art is, fading at soft edges.</li>
+  <li><b>Adjustment Layer</b> makes a layer change everything drawn below it. With nothing selected on the stage, the Behaviors panel shows the current adjustment layer's effects: <b>Add Effect</b> offers <b>Blur</b>, <b>Color Correction</b> (brightness, contrast, saturation and hue), <b>Tint</b> (toward a color, keeping light and dark), <b>Turbulent Displace</b> (smooth random swirls that change over time: heat haze, water, a dream) and <b>Wave Displace</b> (waves travelling across the picture: a flag, a reflection), and their settings key like any others. An adjustment layer with no art changes the whole picture; one with art changes only where its art is, fading at soft edges.</li>
 </ul>
 
 <div class="grid-2">
@@ -223,7 +223,7 @@
 
 <ul>
   <li>An alpha track matte becomes a mask over the layer, hard-edged; a luma matte the same, by the matte's shape rather than its light. An inverted matte cannot be carried and is left drawn plainly.</li>
-  <li>An adjustment layer's effects go on a movie clip holding the layers below it: Blur as a blur filter, Color Correction as an Adjust Color filter, Tint as a color effect, keyed a frame at a time where they change. The movie clip plays on its own when the movie plays, and art on the adjustment layer no longer limits where the effects reach.</li>
+  <li>An adjustment layer's effects go on a movie clip holding the layers below it: Blur as a blur filter, Color Correction as an Adjust Color filter, Tint as a color effect, keyed a frame at a time where they change. Turbulent and Wave Displace have no counterpart and are left out. The movie clip plays on its own when the movie plays, and art on the adjustment layer no longer limits where the effects reach.</li>
 </ul>
 
 <p>The Output panel lists what was carried only in part.</p>

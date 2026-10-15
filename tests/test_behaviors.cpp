@@ -750,6 +750,40 @@ TEST(templates_find_fields_and_read_csv_rows)
     CHECK(rows[1].at("title") == "two\nlines" && rows[1].count("bar") == 0);
 }
 
+TEST(compositing_displacement_moves_pixels)
+{
+    namespace comp = fla::compositing;
+    // A white column on the left of a 40 by 20 image.
+    std::vector<uint32_t> image(40 * 20, 0xFF000000u);
+    for (int y = 0; y < 20; ++y)
+        image[static_cast<size_t>(y) * 40 + 5] = 0xFFFFFFFFu;
+    // A wave running down the image pushes the column sideways, more in some
+    // rows than others, and nothing with no height.
+    Applied wave = comp::defaults("wave", 1);
+    wave.params["direction"] = "90";
+    wave.params["wavelength"] = "20";
+    wave.params["amount"] = "3";
+    std::vector<uint32_t> waved = image;
+    comp::apply(waved.data(), 40, 20, {wave}, 0, 1.0, nullptr, 24.0);
+    int moved = 0;
+    for (int y = 0; y < 20; ++y)
+        moved += waved[static_cast<size_t>(y) * 40 + 5] != 0xFFFFFFFFu;
+    CHECK(moved > 0 && moved < 20);
+    wave.params["amount"] = "0";
+    std::vector<uint32_t> still = image;
+    comp::apply(still.data(), 40, 20, {wave}, 0, 1.0, nullptr, 24.0);
+    CHECK(still == image);
+    // Turbulence: the same frame twice gives the same picture; another
+    // frame, another.
+    Applied turbulent = comp::defaults("turbulent", 1);
+    turbulent.params["size"] = "8";
+    std::vector<uint32_t> one = image, again = image, later = image;
+    comp::apply(one.data(), 40, 20, {turbulent}, 3, 1.0, nullptr, 24.0);
+    comp::apply(again.data(), 40, 20, {turbulent}, 3, 1.0, nullptr, 24.0);
+    comp::apply(later.data(), 40, 20, {turbulent}, 30, 1.0, nullptr, 24.0);
+    CHECK(one == again && one != image && one != later);
+}
+
 TEST(compositing_mattes_and_adjustments)
 {
     namespace comp = fla::compositing;

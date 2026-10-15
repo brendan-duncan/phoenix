@@ -48,11 +48,12 @@ const behaviors::Definition* find(const std::string& id);
 behaviors::Applied defaults(const std::string& id, int seed);
 
 /// \a list on an image (premultiplied ARGB, a row after another) on frame
-/// \a frame; \a pixelsPerUnit is how many of its pixels a stage pixel
-/// covers, for the blur's reach. \a coverage, when given (one byte a
-/// pixel), limits the effects to where it is set, fading at its edges.
+/// \a frame of a movie at \a frameRate; \a pixelsPerUnit is how many of its
+/// pixels a stage pixel covers, for the reach of a blur or a displacement.
+/// \a coverage, when given (one byte a pixel), limits the effects to where
+/// it is set, fading at its edges.
 void apply(uint32_t* pixels, int width, int height, const std::vector<behaviors::Applied>& list, int frame,
-    double pixelsPerUnit, const uint8_t* coverage = nullptr);
+    double pixelsPerUnit, const uint8_t* coverage = nullptr, double frameRate = 24.0);
 
 /// The matte's strength at each pixel of \a matte (premultiplied ARGB),
 /// from 0 to 255, for \a kind.

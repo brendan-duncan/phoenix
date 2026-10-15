@@ -78,6 +78,55 @@ double clamp255(double v)
     return std::max(0.0, std::min(255.0, v));
 }
 
+constexpr double kPi = 3.14159265358979323846;
+
+double hash3(int seed, int x, int y, int z)
+{
+    uint32_t h = static_cast<uint32_t>(seed) * 374761393u + static_cast<uint32_t>(x) * 668265263u +
+        static_cast<uint32_t>(y) * 2246822519u + static_cast<uint32_t>(z) * 3266489917u;
+    h = (h ^ (h >> 13)) * 1274126177u;
+    h ^= h >> 16;
+    return (h & 0xFFFFFF) / static_cast<double>(0xFFFFFF) * 2.0 - 1.0;
+}
+
+/// Smooth value noise from -1 to 1 over x, y and time t.
+double noise3(int seed, double x, double y, double t)
+{
+    const int x0 = static_cast<int>(std::floor(x)), y0 = static_cast<int>(std::floor(y)), t0 = static_cast<int>(std::floor(t));
+    const auto fade = [](double v) { return v * v * (3.0 - 2.0 * v); };
+    const double fx = fade(x - x0), fy = fade(y - y0), ft = fade(t - t0);
+    double result = 0.0;
+    for (int dt = 0; dt < 2; ++dt)
+        for (int dy = 0; dy < 2; ++dy)
+            for (int dx = 0; dx < 2; ++dx)
+                result += hash3(seed, x0 + dx, y0 + dy, t0 + dt) * (dx ? fx : 1 - fx) * (dy ? fy : 1 - fy) * (dt ? ft : 1 - ft);
+    return result;
+}
+
+/// The premultiplied pixel at a place between pixels, its four
+/// neighbors mixed; transparent outside the image.
+uint32_t sample(const std::vector<uint32_t>& pixels, int width, int height, double x, double y)
+{
+    const int x0 = static_cast<int>(std::floor(x)), y0 = static_cast<int>(std::floor(y));
+    const double fx = x - x0, fy = y - y0;
+    double sum[4] = {0, 0, 0, 0};
+    for (int dy = 0; dy < 2; ++dy)
+        for (int dx = 0; dx < 2; ++dx)
+        {
+            const int px = x0 + dx, py = y0 + dy;
+            if (px < 0 || py < 0 || px >= width || py >= height)
+                continue;
+            const double w = (dx ? fx : 1 - fx) * (dy ? fy : 1 - fy);
+            const uint32_t p = pixels[static_cast<size_t>(py) * width + px];
+            for (int c = 0; c < 4; ++c)
+                sum[c] += ((p >> (c * 8)) & 0xFF) * w;
+        }
+    uint32_t out = 0;
+    for (int c = 0; c < 4; ++c)
+        out |= static_cast<uint32_t>(std::lround(clamp255(sum[c]))) << (c * 8);
+    return out;
+}
+
 } // namespace
 
 Matte matteOf(const Layer& layer)
@@ -173,6 +222,24 @@ const std::vector<Definition>& definitions()
         tint.builtIn = true;
         tint.params = {textParam("color", "Color (#RRGGBB)", "#3050A0"), number("amount", "Amount (percent)", 50, 0, 100, 1)};
         made.push_back(tint);
+        Definition turbulent;
+        turbulent.id = "turbulent";
+        turbulent.name = "Turbulent Displace";
+        turbulent.description = "Pushes everything below the layer about in smooth, random swirls that change over time: "
+                                "heat haze, water, a dream, a wobbling picture.";
+        turbulent.builtIn = true;
+        turbulent.params = {number("amount", "Amount (pixels)", 8, 0, 500, 0.5), number("size", "Size (pixels)", 60, 2, 2000, 1),
+            number("speed", "Changes per second", 1, 0, 30, 0.1), number("seed", "Seed", 1, 0, 9999, 1)};
+        made.push_back(turbulent);
+        Definition wave;
+        wave.id = "wave";
+        wave.name = "Wave Displace";
+        wave.description = "Pushes everything below the layer in waves that travel across it: a flag, a reflection, "
+                           "a shimmer.";
+        wave.builtIn = true;
+        wave.params = {number("amount", "Height (pixels)", 6, 0, 500, 0.5), number("wavelength", "Wave length (pixels)", 80, 2, 4000, 1),
+            number("direction", "Direction (degrees)", 0, -360, 360, 1), number("speed", "Waves per second", 1, -30, 30, 0.1)};
+        made.push_back(wave);
         return made;
     }();
     return list;
@@ -197,8 +264,9 @@ Applied defaults(const std::string& id, int)
 }
 
 void apply(uint32_t* pixels, int width, int height, const std::vector<Applied>& list, int frame, double pixelsPerUnit,
-    const uint8_t* coverage)
+    const uint8_t* coverage, double frameRate)
 {
+    const double seconds = frame / (frameRate > 0.0 ? frameRate : 24.0);
     if (!pixels || width <= 0 || height <= 0)
         return;
     const size_t count = static_cast<size_t>(width) * static_cast<size_t>(height);
@@ -215,6 +283,38 @@ void apply(uint32_t* pixels, int width, int height, const std::vector<Applied>& 
             const double radius = param(applied, "radius", frame, 6.0) * pixelsPerUnit;
             if (radius > 0.25)
                 boxBlur(pixels, width, height, radius * 2.0, radius * 2.0, 3);
+        }
+        else if (applied.type == "turbulent" || applied.type == "wave")
+        {
+            // Each pixel takes the color from a place pushed about by the
+            // field: smooth noise, or a travelling wave across its direction.
+            const double scale = std::max(1e-6, pixelsPerUnit);
+            const double reach = param(applied, "amount", frame, 8.0) * scale;
+            const bool turbulent = applied.type == "turbulent";
+            const double size = std::max(1.0, param(applied, turbulent ? "size" : "wavelength", frame, turbulent ? 60.0 : 80.0) * scale);
+            const double speed = param(applied, "speed", frame, 1.0);
+            const int seedValue = static_cast<int>(param(applied, "seed", frame, 1.0));
+            const double angle = param(applied, "direction", frame, 0.0) * kPi / 180.0;
+            const double ax = std::cos(angle), ay = std::sin(angle);
+            for (int y = 0; y < height; ++y)
+                for (int x = 0; x < width; ++x)
+                {
+                    double dx, dy;
+                    if (turbulent)
+                    {
+                        dx = noise3(seedValue, x / size, y / size, seconds * speed) * reach;
+                        dy = noise3(seedValue + 7919, x / size, y / size, seconds * speed) * reach;
+                    }
+                    else
+                    {
+                        // Along the direction the wave runs; the push is across it.
+                        const double along = x * ax + y * ay;
+                        const double push = std::sin((along / size - seconds * speed) * 2.0 * kPi) * reach;
+                        dx = -ay * push;
+                        dy = ax * push;
+                    }
+                    pixels[static_cast<size_t>(y) * width + x] = sample(before, width, height, x + dx, y + dy);
+                }
         }
         else
         {

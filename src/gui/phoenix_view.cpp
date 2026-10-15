@@ -1029,7 +1029,8 @@ void PhoenixView::drawAdjustmentLayer(QPainter& painter, const fla::Layer* layer
     QImage changed = canvas->copy();
     const double pixelsPerUnit = std::sqrt(std::fabs(painter.transform().determinant())) * canvas->devicePixelRatio();
     fla::compositing::apply(reinterpret_cast<uint32_t*>(changed.bits()), changed.width(), changed.height(),
-        fla::compositing::effectsOf(*layer), at, pixelsPerUnit, hasArt ? coverage.data() : nullptr);
+        fla::compositing::effectsOf(*layer), at, pixelsPerUnit, hasArt ? coverage.data() : nullptr,
+        _flaDocument && _flaDocument->document && _flaDocument->document->frameRate > 0.0 ? _flaDocument->document->frameRate : 24.0);
     painter.save();
     painter.resetTransform();
     painter.setCompositionMode(QPainter::CompositionMode_Source);
