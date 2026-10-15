@@ -5113,6 +5113,8 @@ int MainWindow::bakeShapeOperators(fla::Layer& layer, int first, int last)
             ++baked;
         }
     }
+    // A keyframe only where something changes.
+    fla::frames::mergeHeldFrames(layer, first, last);
     return baked;
 }
 

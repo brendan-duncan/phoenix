@@ -354,6 +354,8 @@ int bake(Engine& engine, Layer& layer, int first, int last, double frameRate, st
         }
         ++baked;
     }
+    // A keyframe only where something changes.
+    frames::mergeHeldFrames(layer, first, last);
     return baked;
 }
 

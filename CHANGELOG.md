@@ -4,6 +4,8 @@ What changed in each release of Phoenix, newest first.
 
 ## 0.12.0 (Unreleased)
 
+- Baking behaviors, shape operators and letter animators keeps a keyframe only where something changes, holding the frames between
+
 ## 0.11.0
 
 - Commands > Open Claude Code in a Terminal Window is gone: Claude Code opens in its panel (Commands > Open Claude Code), which can float on its own

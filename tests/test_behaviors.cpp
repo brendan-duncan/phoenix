@@ -228,6 +228,56 @@ TEST(behaviors_repeat_into_copies_that_later_behaviors_change)
     CHECK(cells.size() == 6 && near(cells[5].x, 120.0) && near(cells[5].y, 60.0));
 }
 
+TEST(behaviors_bake_keeps_a_keyframe_only_where_something_changes)
+{
+    Engine engine;
+    engine.addBuiltIns();
+    fla::Timeline timeline(nullptr);
+    auto* layer = new fla::Layer(&timeline);
+    timeline.layers.push_back(layer);
+    auto* frame = new fla::Frame(layer);
+    frame->duration = 10;
+    layer->frames.push_back(frame);
+    auto* instance = new fla::SymbolInstance(frame);
+    instance->libraryItemName = "Dot";
+    instance->symbolType = fla::SymbolType::MovieClip;
+    // Fades in over two frames, then holds.
+    Applied fade = engine.defaults("fade", 1);
+    fade.params["fadeIn"] = "2";
+    fade.params["fadeOut"] = "0";
+    instance->extraAttributes = withBehaviors(*instance, {fade});
+    frame->elements.push_back(instance);
+
+    CHECK(bake(engine, *layer, 0, 9, 24.0) == 10);
+    CHECK(layer->frames.size() == 2);
+    if (layer->frames.size() != 2)
+        return;
+    CHECK(layer->frames[0]->index == 0 && layer->frames[0]->duration == 1);
+    CHECK(layer->frames[1]->index == 1 && layer->frames[1]->duration == 9);
+    const auto* half = static_cast<const fla::SymbolInstance*>(layer->frames[0]->elements[0]);
+    const auto* full = static_cast<const fla::SymbolInstance*>(layer->frames[1]->elements[0]);
+    CHECK(near(half->colorTransform.alphaMultiplier, 0.5, 1e-9) && near(full->colorTransform.alphaMultiplier, 1.0, 1e-9));
+
+    // A graphic that plays on is held only where its loop would be anyway.
+    fla::Timeline cycle(nullptr);
+    auto* steps = new fla::Layer(&cycle);
+    cycle.layers.push_back(steps);
+    auto* key = new fla::Frame(steps);
+    key->duration = 4;
+    steps->frames.push_back(key);
+    auto* graphic = new fla::SymbolInstance(key);
+    graphic->libraryItemName = "Walk";
+    graphic->symbolType = fla::SymbolType::Graphic;
+    graphic->loopType = fla::LoopType::Loop;
+    Applied still = engine.defaults("fade", 1);
+    still.params["fadeIn"] = "0";
+    still.params["fadeOut"] = "0";
+    graphic->extraAttributes = withBehaviors(*graphic, {still});
+    key->elements.push_back(graphic);
+    CHECK(bake(engine, *steps, 0, 3, 24.0) == 4);
+    CHECK(steps->frames.size() == 1 && steps->frames[0]->duration == 4);
+}
+
 TEST(behaviors_bake_into_keyframes_with_copies_of_their_own)
 {
     Engine engine;

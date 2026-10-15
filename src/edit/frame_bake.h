@@ -25,6 +25,14 @@ std::vector<Element*> elementsAt(const Frame& span, const Frame* next, int frame
 /// holding what that frame showed; their tweens go.
 void convertToFrameByFrame(Layer& layer, int first, int last, double frameRate);
 
+/// Frames \a first to \a last of \a layer that show just what the frame
+/// before them shows (what a baked keyframe a frame often leaves) made part
+/// of that frame's span, so a keyframe stays only where something changes.
+/// A frame with a label, a script or a sound stays a keyframe. A graphic
+/// that plays on counts as unchanged only where it shows the frame its loop
+/// would reach anyway. Returns how many keyframes went.
+int mergeHeldFrames(Layer& layer, int first, int last);
+
 /// Reverse Frames: frames \a first to \a last play backward. Keyframes are
 /// made at both ends when there are none, every keyframe goes to the mirror
 /// of its place, and a tween moves to the keyframe it ran toward, so it

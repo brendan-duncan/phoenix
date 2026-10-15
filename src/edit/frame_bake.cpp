@@ -10,12 +10,17 @@
 #include "transform_blend.h"
 #include "tween_ease.h"
 
+#include "../data/bitmap_instance.h"
+#include "../data/filter.h"
 #include "../data/frame.h"
+#include "../data/group.h"
 #include "../data/layer.h"
 #include "../data/shape.h"
+#include "../data/static_text.h"
 #include "../data/symbol_instance.h"
 
 #include <algorithm>
+#include <cmath>
 #include <memory>
 
 namespace fla {
@@ -322,6 +327,160 @@ void insertFrames(Layer& layer, int at, const std::vector<const Frame*>& copied,
     if (at < timeline::layerEnd(layer))
         timeline::insertFrames(layer, at, length);
     timeline::pasteFrames(layer, at, copied, removed);
+}
+
+namespace {
+
+bool near(double a, double b)
+{
+    return std::fabs(a - b) < 1e-9;
+}
+
+bool sameTransform(const Transform& a, const Transform& b)
+{
+    return near(a.m11, b.m11) && near(a.m12, b.m12) && near(a.m21, b.m21) && near(a.m22, b.m22) && near(a.tx, b.tx) &&
+        near(a.ty, b.ty);
+}
+
+bool sameColor(const ColorTransform& a, const ColorTransform& b)
+{
+    return near(a.tintMultiplier, b.tintMultiplier) && std::equal(a.tintColor, a.tintColor + 4, b.tintColor) &&
+        near(a.brightness, b.brightness) && near(a.redMultiplier, b.redMultiplier) &&
+        near(a.greenMultiplier, b.greenMultiplier) && near(a.blueMultiplier, b.blueMultiplier) &&
+        near(a.alphaMultiplier, b.alphaMultiplier) && a.redOffset == b.redOffset && a.greenOffset == b.greenOffset &&
+        a.blueOffset == b.blueOffset && a.alphaOffset == b.alphaOffset;
+}
+
+bool sameFilters(const std::vector<Filter>& a, const std::vector<Filter>& b)
+{
+    if (a.size() != b.size())
+        return false;
+    for (size_t i = 0; i < a.size(); ++i)
+    {
+        const Filter& x = a[i];
+        const Filter& y = b[i];
+        if (x.type != y.type || x.enabled != y.enabled || !near(x.blurX, y.blurX) || !near(x.blurY, y.blurY) ||
+            x.quality != y.quality || !near(x.angle, y.angle) || !near(x.distance, y.distance) ||
+            !near(x.strength, y.strength) || !std::equal(x.color, x.color + 4, y.color) || x.inner != y.inner ||
+            x.knockout != y.knockout || x.hideObject != y.hideObject || !near(x.brightness, y.brightness) ||
+            !near(x.contrast, y.contrast) || !near(x.saturation, y.saturation) || !near(x.hue, y.hue) ||
+            x.entries.size() != y.entries.size())
+            return false;
+    }
+    return true;
+}
+
+int symbolLength(const Symbol* symbol)
+{
+    int length = 1;
+    for (const Timeline* timeline : symbol ? symbol->timelines : std::vector<Timeline*>())
+        for (const Layer* layer : timeline ? timeline->layers : std::vector<Layer*>())
+            for (const Frame* frame : layer ? layer->frames : std::vector<Frame*>())
+                if (frame)
+                    length = std::max(length, frame->index + std::max(1, frame->duration));
+    return length;
+}
+
+/// Whether \a later, \a since frames after \a earlier's keyframe, shows what
+/// \a earlier held there would.
+bool sameElement(const Element* earlier, const Element* later, int since)
+{
+    if (!earlier || !later || earlier->elementType() != later->elementType() || earlier->visible != later->visible ||
+        !sameTransform(earlier->transform, later->transform) || !near(earlier->transformationPoint.x, later->transformationPoint.x) ||
+        !near(earlier->transformationPoint.y, later->transformationPoint.y) || earlier->extraAttributes != later->extraAttributes)
+        return false;
+    switch (earlier->elementType())
+    {
+    case Element::Type::SymbolInstance:
+    {
+        const auto* a = static_cast<const SymbolInstance*>(earlier);
+        const auto* b = static_cast<const SymbolInstance*>(later);
+        if (a->libraryItemName != b->libraryItemName || a->symbol != b->symbol || a->symbolType != b->symbolType ||
+            a->loopType != b->loopType || a->lastFrame != b->lastFrame || a->name != b->name || a->blendMode != b->blendMode ||
+            !sameColor(a->colorTransform, b->colorTransform) || !sameFilters(a->filters, b->filters) ||
+            a->extraFilters != b->extraFilters)
+            return false;
+        // A graphic held on plays on: the later frame must show where the
+        // earlier one's loop has got to.
+        if (a->symbolType == SymbolType::Graphic)
+        {
+            const int length = symbolLength(a->symbol);
+            return graphicFrame(a->loopType, a->firstFrame, a->lastFrame, length, since) ==
+                graphicFrame(b->loopType, b->firstFrame, b->lastFrame, length, 0);
+        }
+        return a->firstFrame == b->firstFrame;
+    }
+    case Element::Type::Shape:
+    {
+        const auto* a = static_cast<const Shape*>(earlier);
+        const auto* b = static_cast<const Shape*>(later);
+        return morphSignature(*a, *a) == morphSignature(*b, *b);
+    }
+    case Element::Type::StaticText:
+    {
+        const auto* a = static_cast<const StaticText*>(earlier);
+        const auto* b = static_cast<const StaticText*>(later);
+        if (a->textType != b->textType || a->instanceName != b->instanceName || a->runs.size() != b->runs.size() ||
+            !near(a->left, b->left) || !near(a->top, b->top) || !near(a->width, b->width) || !near(a->height, b->height))
+            return false;
+        for (size_t i = 0; i < a->runs.size(); ++i)
+        {
+            const TextRun& x = a->runs[i];
+            const TextRun& y = b->runs[i];
+            if (x.text != y.text || x.face != y.face || !near(x.size, y.size) || !std::equal(x.fillColor, x.fillColor + 4, y.fillColor) ||
+                x.alignment != y.alignment || !near(x.letterSpacing, y.letterSpacing))
+                return false;
+        }
+        return true;
+    }
+    case Element::Type::Group:
+    {
+        const auto* a = static_cast<const Group*>(earlier);
+        const auto* b = static_cast<const Group*>(later);
+        if (a->members.size() != b->members.size())
+            return false;
+        for (size_t i = 0; i < a->members.size(); ++i)
+            if (!sameElement(a->members[i], b->members[i], since))
+                return false;
+        return true;
+    }
+    case Element::Type::BitmapInstance:
+        return static_cast<const BitmapInstance*>(earlier)->libraryItemName ==
+            static_cast<const BitmapInstance*>(later)->libraryItemName;
+    default:
+        return false;
+    }
+}
+
+} // namespace
+
+int mergeHeldFrames(Layer& layer, int first, int last)
+{
+    std::sort(layer.frames.begin(), layer.frames.end(), [](const Frame* a, const Frame* b) { return a->index < b->index; });
+    int merged = 0;
+    for (size_t i = 1; i < layer.frames.size();)
+    {
+        Frame* held = layer.frames[i - 1];
+        Frame* frame = layer.frames[i];
+        const bool inRange = frame->index > first && frame->index <= last;
+        bool same = inRange && held->index + std::max(1, held->duration) == frame->index &&
+            held->tweenType == TweenType::None && frame->tweenType == TweenType::None && held->otherTweenType.empty() &&
+            frame->otherTweenType.empty() && frame->name.empty() && !frame->actionScript && frame->extraAttributes.empty() &&
+            frame->extraChildren.empty() && !held->morphShape && !frame->morphShape &&
+            held->elements.size() == frame->elements.size();
+        for (size_t e = 0; same && e < frame->elements.size(); ++e)
+            same = sameElement(held->elements[e], frame->elements[e], frame->index - held->index);
+        if (!same)
+        {
+            ++i;
+            continue;
+        }
+        held->duration += std::max(1, frame->duration);
+        layer.frames.erase(layer.frames.begin() + static_cast<std::ptrdiff_t>(i));
+        delete frame;
+        ++merged;
+    }
+    return merged;
 }
 
 } // namespace frames
