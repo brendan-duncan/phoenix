@@ -45,22 +45,16 @@
     {
       "title": "A taller fountain",
       "text": "<p>Set <b>Speed</b> to 500 and <b>Spread</b> to 20. The sparks go higher in a narrower jet.</p>",
-      "target": "label:Behaviors/Speed (pixels per second)",
-      "wait": {
-        "command": "Behavior Settings"
-      }
+      "target": "label:Behaviors/Speed (pixels per second)"
     },
     {
       "title": "More of them",
       "text": "<p>Set <b>Born per second</b> to 80 and <b>Life</b> to 3 seconds.</p>",
-      "target": "label:Behaviors/Born per second",
-      "wait": {
-        "command": "Behavior Settings"
-      }
+      "target": "label:Behaviors/Born per second"
     },
     {
       "title": "Snow instead",
-      "text": "<p>For snow, set <b>Direction</b> to 90 (down), <b>Born across</b> to 1280, <b>Gravity</b> to 0 and <b>Turbulence</b> to 30, and move the spark to the top of the stage.</p>"
+      "text": "<p>For snow, set <b>Direction</b> to 90 (down), <b>Born across</b> to 1280, <b>Gravity</b> to 0 and <b>Turbulence</b> to 30, and move the spark to the top of the stage.</p><p>The spark itself is not drawn now, only its particles: choose <b>Edit &gt; Select All</b> to select it, and set <b>Y</b> to 20 on the Properties panel.</p>"
     },
     {
       "title": "Well done",

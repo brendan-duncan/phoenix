@@ -37,10 +37,7 @@
     {
       "title": "More rows",
       "text": "<p>Set <b>Copies across</b> to 12 and <b>Rows</b> to 5, and <b>Space across</b> to 90 and <b>Space down</b> to 80: a crowd of sixty.</p>",
-      "target": "label:Behaviors/Rows",
-      "wait": {
-        "command": "Behavior Settings"
-      }
+      "target": "label:Behaviors/Rows"
     },
     {
       "title": "Play it",
@@ -53,10 +50,7 @@
     {
       "title": "Put them out of step",
       "text": "<p>Add <b>Stagger</b>. Each copy now runs its loop a few frames after the one before.</p><p>Tick <b>In random order</b> for a crowd that hops each to its own time.</p>",
-      "target": "widget:behaviorsAdd",
-      "wait": {
-        "command": "Add Behavior"
-      }
+      "target": "widget:behaviorsAdd"
     },
     {
       "title": "Shake up the rows",

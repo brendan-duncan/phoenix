@@ -455,12 +455,13 @@ void BehaviorsPanel::fillSettings()
             seed->setRange(0, 9999);
             seed->setValue(static_cast<int>(std::lround(std::atof(current.c_str()))));
             seed->setKeyboardTracking(false);
-            seed->setMaximumWidth(84);
+            // Wide enough for four digits beside its arrows, whatever the font.
+            seed->setFixedWidth(seed->sizeHint().width());
             seed->setToolTip("Another seed gives another, equally random, result");
             QPushButton* again = new QPushButton("New", holder);
             again->setToolTip("A new seed");
-            line->addWidget(seed, 1);
-            line->addWidget(again);
+            line->addWidget(seed);
+            line->addWidget(again, 1);
             connect(seed, &QSpinBox::valueChanged, this,
                 [this, row, name](int value) { setParam(row, name, std::to_string(value), false); });
             connect(again, &QPushButton::clicked, seed, [seed]() { seed->setValue(newSeed()); });
