@@ -1,5 +1,6 @@
 #include "test_util.h"
 
+#include "../src/data/shape.h"
 #include "../src/data/document.h"
 #include "../src/data/fla_document.h"
 #include "../src/data/frame.h"
@@ -138,4 +139,45 @@ TEST(other_apps_bake_templates_mattes_and_adjustments)
     std::unique_ptr<fla::FLADocument> back(again.parse((root / "xfl").string()));
     CHECK(back && back->document && symbolNamed(*back->document, "Lower (Ada)") &&
         symbolNamed(*back->document, "Adjusted by Grade"));
+}
+
+TEST(other_apps_cut_by_inverted_mattes_and_keep_adjustment_art)
+{
+    const fs::path root = fs::temp_directory_path() / "phoenix_other_apps_tests";
+    writeSample(root / "inverted");
+    FLAParser parser;
+    std::unique_ptr<fla::FLADocument> file(parser.parse((root / "inverted").string()));
+    CHECK(file && file->document);
+    if (!file || !file->document)
+        return;
+    fla::Document& document = *file->document;
+    fla::Timeline* scene = document.timelines.front();
+    // The picture cut by its matte rather than shown through it, and art on
+    // the adjustment layer.
+    for (auto& attribute : scene->layers[2]->extraAttributes)
+        if (attribute.first == "phoenixMatte")
+            attribute.second = "alphaInverted";
+    auto* art = new fla::Shape(scene->layers[0]->frames.front());
+    scene->layers[0]->frames.front()->elements.push_back(art);
+    std::vector<std::string> notes;
+    fla::otherapps::bakeCompositing(document, notes);
+
+    // On top, the art as a mask over the adjusted clip, the clip as it is
+    // under both.
+    CHECK(scene->layers.size() == 3);
+    CHECK(scene->layers[0]->layerType == fla::Layer::Type::Mask);
+    CHECK(scene->layers[1]->layerType == fla::Layer::Type::Masked && scene->layers[1]->parentLayerIndex == 0);
+    auto* adjusted = static_cast<fla::SymbolInstance*>(scene->layers[1]->frames.front()->elements.front());
+    auto* plain = static_cast<fla::SymbolInstance*>(scene->layers[2]->frames.front()->elements.front());
+    CHECK(adjusted->symbol == plain->symbol && !adjusted->filters.empty() && plain->filters.empty());
+    // Inside, the matte and its layer in a clip with Layer blending, the
+    // matte's art erasing.
+    fla::Timeline* inside = plain->symbol->timelines.front();
+    CHECK(inside->layers.size() == 1);
+    auto* both = static_cast<fla::SymbolInstance*>(inside->layers[0]->frames.front()->elements.front());
+    CHECK(both->blendMode == "layer" && both->symbol && both->symbol->name == "Picture cut by its matte");
+    fla::Timeline* cut = both->symbol->timelines.front();
+    CHECK(cut->layers.size() == 2 && cut->layers[1]->name == "Picture");
+    auto* eraser = static_cast<fla::SymbolInstance*>(cut->layers[0]->frames.front()->elements.front());
+    CHECK(eraser->blendMode == "erase" && eraser->symbol->timelines.front()->layers.front()->name == "Spot");
 }

@@ -1286,6 +1286,12 @@ private:
     QCache<QString, QPixmap> _paddedFills{256 * 1024};
     QHash<const fla::Symbol*, QRectF> _symbolReachCache;
     QRectF symbolReach(const fla::Symbol* symbol);
+    /// Only these layers of this timeline are drawn (from, up to but not
+    /// including to), for an export that writes vectors: the layers an
+    /// adjustment layer works on go as a picture, those above as vectors.
+    const fla::Timeline* _rangeTimeline = nullptr;
+    int _rangeFrom = 0;
+    int _rangeTo = 0;
     /// Many copies of one instance drawn from a picture of it: the symbol
     /// drawn once for each frame of it the copies show, at the size the
     /// largest copy is seen, and each copy stamped from that picture with its

@@ -55,8 +55,14 @@ void eachElement(Timeline& timeline, const std::function<void(Element*)>& visit)
                 eachElement(element, visit);
 }
 
-std::string uniqueName(const Document& document, const std::string& base)
+std::string uniqueName(const Document& document, const std::string& wanted)
 {
+    // A symbol's name is also its file's in the library folder: no
+    // characters a file name cannot have, nor a slash, which makes a folder.
+    std::string base = wanted;
+    for (char& c : base)
+        if (c == '/' || c == '\\' || c == ':' || c == '*' || c == '?' || c == '"' || c == '<' || c == '>' || c == '|')
+            c = ' ';
     std::string name = base;
     for (int n = 2; document.symbolList && document.symbolList->symbolMap.count(name); ++n)
         name = base + " " + std::to_string(n);
@@ -190,7 +196,85 @@ void removeAttribute(DOMElement& element, const char* name)
         element.extraAttributes.end());
 }
 
-void bakeMattes(Timeline& timeline, std::vector<std::string>& notes)
+/// The frames \a layers run to.
+int lengthOf(const std::vector<Layer*>& layers)
+{
+    int length = 1;
+    for (const Layer* layer : layers)
+        for (const Frame* frame : layer ? layer->frames : std::vector<Frame*>())
+            if (frame)
+                length = std::max(length, frame->index + std::max(1, frame->duration));
+    return length;
+}
+
+/// Moves \a count layers of \a timeline from \a first into a new movie clip
+/// named after \a name, and puts a layer in their place showing it for as
+/// long as they ran. Returns the instance shown. The layers keep their
+/// parents among themselves; one below that followed one of them follows
+/// the new layer.
+SymbolInstance* intoClip(Document& document, Timeline& timeline, size_t first, size_t count, const std::string& name)
+{
+    auto* clip = new Symbol(nullptr);
+    clip->name = uniqueName(document, name);
+    clip->href = clip->name + ".xml";
+    clip->symbolType = SymbolType::MovieClip;
+    auto* inside = new Timeline(clip);
+    inside->name = clip->name;
+    clip->timelines.push_back(inside);
+    const std::vector<Layer*> moved(timeline.layers.begin() + static_cast<std::ptrdiff_t>(first),
+        timeline.layers.begin() + static_cast<std::ptrdiff_t>(first + count));
+    const int length = lengthOf(moved);
+    for (Layer* layer : moved)
+    {
+        if (!layer)
+            continue;
+        layer->parent = inside;
+        if (layer->parentLayerIndex >= 0)
+        {
+            const int index = layer->parentLayerIndex - static_cast<int>(first);
+            if (index >= 0 && index < static_cast<int>(count))
+                layer->parentLayerIndex = index;
+            else
+            {
+                layer->parentLayerIndex = -1;
+                layer->parentLayer = nullptr;
+            }
+        }
+        inside->layers.push_back(layer);
+    }
+    auto* holder = new Layer(&timeline);
+    holder->name = clip->name;
+    auto* frame = new Frame(holder);
+    frame->index = 0;
+    frame->duration = length;
+    auto* instance = new SymbolInstance(frame);
+    instance->libraryItemName = clip->name;
+    instance->symbol = clip;
+    instance->symbolType = SymbolType::MovieClip;
+    frame->elements.push_back(instance);
+    holder->frames.push_back(frame);
+    timeline.layers.erase(timeline.layers.begin() + static_cast<std::ptrdiff_t>(first),
+        timeline.layers.begin() + static_cast<std::ptrdiff_t>(first + count));
+    timeline.layers.insert(timeline.layers.begin() + static_cast<std::ptrdiff_t>(first), holder);
+    // The layers further down count from the new layer.
+    for (size_t i = first + 1; i < timeline.layers.size(); ++i)
+    {
+        Layer* layer = timeline.layers[i];
+        if (!layer || layer->parentLayerIndex < static_cast<int>(first))
+            continue;
+        if (layer->parentLayerIndex < static_cast<int>(first + count))
+        {
+            layer->parentLayerIndex = static_cast<int>(first);
+            layer->parentLayer = holder;
+        }
+        else
+            layer->parentLayerIndex -= static_cast<int>(count) - 1;
+    }
+    addSymbol(document, clip);
+    return instance;
+}
+
+void bakeMattes(Document& document, Timeline& timeline, std::vector<std::string>& notes)
 {
     for (size_t i = 0; i < timeline.layers.size(); ++i)
     {
@@ -201,16 +285,34 @@ void bakeMattes(Timeline& timeline, std::vector<std::string>& notes)
         if (matte == compositing::Matte::None)
             continue;
         removeAttribute(*layer, compositing::kMatte);
-        if (matte == compositing::Matte::AlphaInverted || matte == compositing::Matte::LumaInverted)
-        {
-            notes.push_back("Layer " + layer->name + ": an inverted track matte cannot be carried; its matte layer is drawn plainly.");
-            continue;
-        }
         // The nearest layer above that is not a folder holds the matte.
         int source = -1;
         for (int j = static_cast<int>(i) - 1; j >= 0 && source < 0; --j)
             if (timeline.layers[static_cast<size_t>(j)] && timeline.layers[static_cast<size_t>(j)]->layerType != Layer::Type::Folder)
                 source = j;
+        if (matte == compositing::Matte::AlphaInverted || matte == compositing::Matte::LumaInverted)
+        {
+            // Cut out of the picture: the matte and the layer it cuts in a
+            // movie clip with Layer blending, the matte's art over the layer
+            // in a clip of its own that erases what it covers.
+            Layer* cutter = source == static_cast<int>(i) - 1 ? timeline.layers[static_cast<size_t>(source)] : nullptr;
+            if (!cutter || cutter->layerType != Layer::Type::Normal || layer->layerType != Layer::Type::Normal)
+            {
+                notes.push_back("Layer " + layer->name + ": an inverted track matte with no plain layer just above it to cut by is left out; the layer is drawn plainly.");
+                continue;
+            }
+            const std::string name = layer->name;
+            SymbolInstance* both = intoClip(document, timeline, static_cast<size_t>(source), 2, name + " cut by its matte");
+            both->blendMode = "layer";
+            Timeline* inside = both->symbol->timelines.front();
+            SymbolInstance* art = intoClip(document, *inside, 0, 1, name + " matte");
+            art->blendMode = "erase";
+            notes.push_back("Layer " + name + ": its inverted track matte became the movie clip \"" + both->symbol->name +
+                "\", the matte erasing the layer with Layer and Erase blending, which plays on its own in other apps" +
+                (matte == compositing::Matte::LumaInverted ? std::string("; it cuts by the matte's shape rather than its light.") : std::string(".")));
+            i = static_cast<size_t>(source);
+            continue;
+        }
         Layer* mask = source >= 0 ? timeline.layers[static_cast<size_t>(source)] : nullptr;
         if (!mask || layer->layerType != Layer::Type::Normal ||
             (mask->layerType != Layer::Type::Normal && mask->layerType != Layer::Type::Mask))
@@ -333,10 +435,23 @@ void bakeAdjustments(Document& document, Timeline& timeline, std::vector<std::st
             for (const auto& [name, value] : applied.params)
                 keyed = keyed || applied.keyed(name);
         for (Frame* frame : adjustment->frames)
-        {
             hadArt = hadArt || (frame && !frame->elements.empty());
-            delete frame;
+        // Art on it limits where the effects reach: it becomes a mask over
+        // the adjusted clip, with the clip as it is under both.
+        Layer* art = nullptr;
+        if (hadArt)
+        {
+            art = new Layer(&timeline);
+            art->name = adjustment->name + " art";
+            art->layerType = Layer::Type::Mask;
+            art->frames = adjustment->frames;
+            for (Frame* frame : art->frames)
+                if (frame)
+                    frame->parent = art;
         }
+        else
+            for (Frame* frame : adjustment->frames)
+                delete frame;
         adjustment->frames.clear();
         adjustment->layerType = Layer::Type::Normal;
         for (int f = 0; f < (keyed ? length : 1); ++f)
@@ -352,8 +467,32 @@ void bakeAdjustments(Document& document, Timeline& timeline, std::vector<std::st
             frame->elements.push_back(instance);
             adjustment->frames.push_back(frame);
         }
+        if (art)
+        {
+            auto* plain = new Layer(&timeline);
+            plain->name = clip->name;
+            auto* frame = new Frame(plain);
+            frame->index = 0;
+            frame->duration = length;
+            auto* instance = new SymbolInstance(frame);
+            instance->libraryItemName = clip->name;
+            instance->symbol = clip;
+            instance->symbolType = SymbolType::MovieClip;
+            frame->elements.push_back(instance);
+            plain->frames.push_back(frame);
+            timeline.layers.insert(timeline.layers.begin() + static_cast<std::ptrdiff_t>(a), art);
+            timeline.layers.insert(timeline.layers.begin() + static_cast<std::ptrdiff_t>(a) + 2, plain);
+            adjustment->layerType = Layer::Type::Masked;
+            adjustment->parentLayer = art;
+            adjustment->parentLayerIndex = static_cast<int>(a);
+            // Layers above that counted past it count two more.
+            for (size_t i = 0; i < a; ++i)
+                if (timeline.layers[i] && timeline.layers[i]->parentLayerIndex >= static_cast<int>(a))
+                    timeline.layers[i]->parentLayerIndex += 2;
+        }
         notes.push_back("Adjustment layer " + adjustment->name + ": the layers below it are in the movie clip \"" + clip->name +
-            "\", which plays on its own in other apps" + (hadArt ? "; its art no longer limits where the effects reach." : "."));
+            "\", which plays on its own in other apps" +
+            (hadArt ? "; its art became a mask over the adjusted copy, so the effects reach only where it is, hard-edged." : "."));
         return bakeAdjustments(document, timeline, notes);
     }
 }
@@ -386,7 +525,7 @@ void bakeCompositing(Document& document, std::vector<std::string>& notes)
         notes.push_back(std::to_string(templated) + " template instance" + (templated == 1 ? "" : "s") +
             " now show symbols with their words and colors written in.");
     for (Timeline* timeline : allTimelines(document))
-        bakeMattes(*timeline, notes);
+        bakeMattes(document, *timeline, notes);
     for (Timeline* timeline : allTimelines(document))
         bakeAdjustments(document, *timeline, notes);
 }

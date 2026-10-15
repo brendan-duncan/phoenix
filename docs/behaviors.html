@@ -233,8 +233,8 @@
 <p>Both are Phoenix's own: another app opening the FLA file draws the matte layer plainly and the adjustment layer's art as art. Export FLA for Other Apps carries them as far as such apps allow:</p>
 
 <ul>
-  <li>An alpha track matte becomes a mask over the layer, hard-edged; a luma matte the same, by the matte's shape rather than its light. An inverted matte cannot be carried and is left drawn plainly.</li>
-  <li>An adjustment layer's effects go on a movie clip holding the layers below it: Blur as a blur filter, Color Correction as an Adjust Color filter, Tint as a color effect, keyed a frame at a time where they change. Turbulent and Wave Displace have no counterpart and are left out. The movie clip plays on its own when the movie plays, and art on the adjustment layer no longer limits where the effects reach.</li>
+  <li>An alpha track matte becomes a mask over the layer, hard-edged; a luma matte the same, by the matte's shape rather than its light. An inverted matte puts the layer and its matte in a movie clip with Layer blending, the matte's art over the layer with Erase blending, so the art cuts the layer away, soft edges and all (an inverted luma matte cuts by the art's shape); the clip plays on its own when the movie plays.</li>
+  <li>An adjustment layer's effects go on a movie clip holding the layers below it: Blur as a blur filter, Color Correction as an Adjust Color filter, Tint as a color effect, keyed a frame at a time where they change. Turbulent and Wave Displace have no counterpart and are left out. The movie clip plays on its own when the movie plays. Art on the adjustment layer becomes a mask over the filtered clip, with the clip unfiltered under both, so the effects reach only where the art is, hard-edged.</li>
 </ul>
 
 <p>The Output panel lists what was carried only in part.</p>

@@ -52,7 +52,7 @@
     <tr><td>PNG Sequence per Layer</td><td class="wrap">A separate PNG sequence for every visible layer, with masks applied, for compositing layers separately.</td></tr>
     <tr><td>Sound (WAV)</td><td class="wrap">The mixed soundtrack on its own.</td></tr>
     <tr><td>Compositing Passes (PNG), Multi-layer EXR</td><td class="wrap">Line, color and matte passes for compositing. See <a href="#compositing-passes">Compositing passes</a>.</td></tr>
-    <tr><td>SVG Sequence</td><td class="wrap">One numbered SVG per frame, its shapes, strokes, gradients and text kept as vectors. <strong>Include hidden layers</strong> draws layers you have hidden; <strong>Link images</strong> writes each bitmap once as a file beside the SVGs (<code>name_image_….png</code>) rather than inside every frame.</td></tr>
+    <tr><td>SVG Sequence</td><td class="wrap">One numbered SVG per frame, its shapes, strokes, gradients and text kept as vectors. <strong>Include hidden layers</strong> draws layers you have hidden; <strong>Link images</strong> writes each bitmap once as a file beside the SVGs (<code>name_image_….png</code>) rather than inside every frame. An adjustment layer works on pixels, so it and the layers under it go into each frame as one picture, at twice the size, with the layers above it as vectors.</td></tr>
   </tbody>
 </table>
 

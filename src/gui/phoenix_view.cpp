@@ -1758,6 +1758,65 @@ void PhoenixView::drawDocument(QPainter& painter, const fla::Document* document)
 
 void PhoenixView::drawTimeline(QPainter& painter, const fla::Timeline* timeline, fla::LoopType loopType, int firstFrame)
 {
+    // An export that writes vectors: an adjustment layer works on pixels,
+    // so it and every layer under it go as one picture, at twice the
+    // export's size, and the layers above it as vectors over that.
+    if (_vectorMasks && painter.device() && !_compositing.contains(timeline) && _rangeTimeline != timeline)
+    {
+        int top = -1;
+        for (size_t i = 0; i < timeline->layers.size() && top < 0; ++i)
+            if (timeline->layers[i] && fla::compositing::isAdjustment(*timeline->layers[i]) &&
+                (_drawHidden || timeline->layers[i]->isVisible()))
+                top = static_cast<int>(i);
+        if (top >= 0 && _visibleRect.isValid() && !_visibleRect.isEmpty())
+        {
+            struct Range
+            {
+                PhoenixView& view;
+                const fla::Timeline* timeline;
+                int from;
+                int to;
+                bool vectors;
+                ~Range()
+                {
+                    view._rangeTimeline = timeline;
+                    view._rangeFrom = from;
+                    view._rangeTo = to;
+                    view._vectorMasks = vectors;
+                }
+            } range{*this, _rangeTimeline, _rangeFrom, _rangeTo, _vectorMasks};
+            constexpr double kScale = 2.0;
+            const QRectF area = _visibleRect;
+            QImage canvas(std::max(1, qCeil(area.width() * kScale)), std::max(1, qCeil(area.height() * kScale)),
+                QImage::Format_ARGB32_Premultiplied);
+            canvas.fill(Qt::transparent);
+            {
+                QPainter canvasPainter(&canvas);
+                canvasPainter.setRenderHints(painter.renderHints());
+                // The painter's space as the export has it, onto the picture.
+                canvasPainter.setTransform(painter.transform() *
+                    QTransform::fromTranslate(-area.left(), -area.top()) * QTransform::fromScale(kScale, kScale));
+                _vectorMasks = false;
+                _rangeTimeline = timeline;
+                _rangeFrom = top;
+                _rangeTo = static_cast<int>(timeline->layers.size());
+                _compositing.insert(timeline);
+                drawTimeline(canvasPainter, timeline, loopType, firstFrame);
+                _compositing.remove(timeline);
+                _vectorMasks = true;
+            }
+            painter.save();
+            painter.resetTransform();
+            painter.drawImage(area, canvas);
+            painter.restore();
+            _rangeTimeline = timeline;
+            _rangeFrom = 0;
+            _rangeTo = top;
+            drawTimeline(painter, timeline, loopType, firstFrame);
+            return;
+        }
+    }
+
     // Adjustment layers change what is under them, so the timeline's layers
     // are drawn on an image of their own that they can work on, then that
     // image onto the painter.
@@ -1946,11 +2005,12 @@ void PhoenixView::drawTimeline(QPainter& painter, const fla::Timeline* timeline,
     };
 
     // Second pass: draw layers with masks applied
+    const bool ranged = _rangeTimeline == timeline;
     for (int i = timeline->layers.size() - 1; i >= 0; --i)
     {
         const fla::Layer* layer = timeline->layers[i];
 
-        if (!shown(layer))
+        if (!shown(layer) || (ranged && (i < _rangeFrom || i >= _rangeTo)))
             continue;
         // One layer of the scene on its own, for a sequence per layer.
         if (_onlyLayer && layer != _onlyLayer &&
