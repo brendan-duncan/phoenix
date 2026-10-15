@@ -406,3 +406,24 @@ TEST(behaviors_find_other_instances_on_the_timeline_by_name)
     const Copies settled = evaluateOn(engine, *eye, eye->transform, 3, 24.0);
     CHECK(settled.size() == 1);
 }
+
+TEST(behaviors_particles_are_born_live_and_die_by_the_clock)
+{
+    Engine engine;
+    engine.addBuiltIns();
+    Applied particles = engine.defaults("particles", 5);
+    particles.params["rate"] = "10";
+    particles.params["life"] = "1";
+    // Three seconds in, ten a second living a second: ten alive.
+    const Copies alive = engine.evaluate({particles}, still(72));
+    CHECK(alive.size() == 10);
+    // The same frame, the same particles.
+    const Copies again = engine.evaluate({particles}, still(72));
+    CHECK(again.size() == alive.size() && again.back().x == alive.back().x && again.back().y == alive.back().y);
+    // The newest is just born where it is; the oldest has fallen and faded.
+    CHECK(near(alive.back().x, 0.0, 1e-9) && alive.front().alpha < alive.back().alpha);
+    // Stopped after half a second: none left at three seconds.
+    particles.params["emitFor"] = "0.5";
+    CHECK(engine.evaluate({particles}, still(72)).empty());
+    CHECK(!engine.evaluate({particles}, still(12)).empty());
+}

@@ -336,6 +336,71 @@ behavior({
     }
 });
 )JS"},
+        {"particles", R"JS(
+behavior({
+    name: "Particles",
+    description: "Sends out copies of it as particles: sparks, smoke, rain, confetti, bubbles. They are born at a steady rate, fly off, fall, turn, grow or shrink and fade, and die. The same frame always shows the same particles.",
+    params: {
+        rate: { label: "Born per second", value: 20, min: 0, max: 500, step: 0.5 },
+        life: { label: "Life (seconds)", value: 2, min: 0.05, max: 30, step: 0.05 },
+        emitFor: { label: "Stop after (seconds, 0 never)", value: 0, min: 0, max: 600, step: 0.1 },
+        width: { label: "Born across (pixels)", value: 0, min: 0, max: 4000, step: 1 },
+        height: { label: "Born down (pixels)", value: 0, min: 0, max: 4000, step: 1 },
+        direction: { label: "Direction (degrees)", type: "angle", value: -90, min: -360, max: 360, step: 1 },
+        spread: { label: "Spread (degrees)", type: "angle", value: 30, min: 0, max: 360, step: 1 },
+        speed: { label: "Speed (pixels per second)", value: 150, min: 0, max: 5000, step: 1 },
+        speedRandom: { label: "Speed varies (percent)", value: 30, min: 0, max: 100, step: 1 },
+        gravity: { label: "Gravity (pixels per second, down)", value: 200, min: -5000, max: 5000, step: 1 },
+        turbulence: { label: "Turbulence (pixels)", value: 0, min: 0, max: 500, step: 1 },
+        spin: { label: "Spin (degrees per second, either way)", value: 90, min: 0, max: 3600, step: 1 },
+        startSize: { label: "Size at birth (percent)", value: 100, min: 0, max: 1000, step: 1 },
+        endSize: { label: "Size at death (percent)", value: 50, min: 0, max: 1000, step: 1 },
+        sizeRandom: { label: "Size varies (percent)", value: 20, min: 0, max: 100, step: 1 },
+        fade: { label: "Fade out", type: "checkbox", value: true },
+        turn: { label: "Turn to the way they fly", type: "checkbox", value: false },
+        loopFromBirth: { label: "Loops start at birth", type: "checkbox", value: true },
+        seed: { label: "Seed", type: "seed", value: 1 }
+    },
+    evaluate: function (ctx, p) {
+        var t = (ctx.frame - ctx.start) / ctx.fps;
+        var rate = Math.max(0, p.rate);
+        if (rate <= 0)
+            return { copies: [] };
+        var life = Math.max(0.05, p.life);
+        var last = Math.floor(t * rate);
+        if (p.emitFor > 0)
+            last = Math.min(last, Math.floor(p.emitFor * rate));
+        var first = Math.max(0, Math.ceil((t - life) * rate));
+        var copies = [];
+        for (var k = first; k <= last && copies.length < 2000; k++) {
+            var age = t - k / rate;
+            if (age < 0 || age >= life)
+                continue;
+            var u = age / life;
+            var r = function (n) { return ctx.random(k * 16 + n); };
+            var angle = (p.direction + (r(1) - 0.5) * p.spread) * Math.PI / 180;
+            var speed = p.speed * (1 - p.speedRandom / 100 * r(2));
+            var vx = Math.cos(angle) * speed, vy = Math.sin(angle) * speed;
+            var x = (r(3) - 0.5) * p.width + vx * age;
+            var y = (r(4) - 0.5) * p.height + vy * age + 0.5 * p.gravity * age * age;
+            if (p.turbulence > 0) {
+                x += ctx.noise(age * 2, k * 2) * p.turbulence;
+                y += ctx.noise(age * 2, k * 2 + 1) * p.turbulence;
+            }
+            var size = (p.startSize + (p.endSize - p.startSize) * u) / 100 * (1 - p.sizeRandom / 100 * r(5));
+            var rotation = (r(6) * 2 - 1) * p.spin * age;
+            if (p.turn)
+                rotation += Math.atan2(vy + p.gravity * age, vx) * 180 / Math.PI;
+            var alpha = p.fade ? Math.min(1, (1 - u) * 3) : 1;
+            var copy = { x: x, y: y, rotation: rotation, scale: Math.max(0, size), alpha: alpha };
+            if (p.loopFromBirth)
+                copy.frame = Math.round(age * ctx.fps) - (ctx.frame - ctx.start);
+            copies.push(copy);
+        }
+        return { copies: copies };
+    }
+});
+)JS"},
         {"stagger", R"JS(
 behavior({
     name: "Stagger",
