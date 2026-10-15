@@ -4,6 +4,7 @@ What changed in each release of Phoenix, newest first.
 
 ## 0.10.0 (Unreleased)
 
+- Behaviors: Look At, Link to Object and Link to Controller follow other instances by name or a master controller; Effector changes copies by distance, position or order; the Function view draws what behaviors make of a property as a dashed curve
 - Behaviors: Repeat along a Path and Follow Path place copies, or the instance, along the line on a motion guide
 - Behaviors: settings can be keyed over time; Repeat in a Circle, Repeat in a Line or Grid and Stagger draw copies; Bake to Keyframes, and File > Export > Export FLA for Other Apps writes a copy with behaviors baked
 - Behaviors: Window > Behaviors gives symbol instances motion worked out every frame, with no keyframes: Wiggle, Oscillate, Spin, Pulse, Fade In and Out, Blink and Follow with Lag; your own behaviors are JavaScript files in the Behaviors folder

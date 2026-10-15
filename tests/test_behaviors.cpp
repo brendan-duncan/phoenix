@@ -313,3 +313,96 @@ TEST(behaviors_repeat_and_follow_along_a_motion_guide)
     const Copies none = engine.evaluate({follow}, still(5), &why);
     CHECK(none.size() == 1 && none.front().none() && why.find("motion guide") != std::string::npos);
 }
+
+TEST(behaviors_look_at_and_link_to_other_instances_and_controllers)
+{
+    Engine engine;
+    engine.addBuiltIns();
+    Moment moment = still(10, 0, 20);
+    moment.keyed.x = 0;
+    moment.keyed.y = 0;
+    // "ball" starts at (100, 0) and is at (0, 100) on frame 10.
+    moment.other = [](const std::string& name, int frame, Keyed& keyed) {
+        if (name != "ball")
+            return false;
+        keyed = Keyed();
+        keyed.x = frame == 0 ? 100 : 0;
+        keyed.y = frame == 0 ? 0 : 100;
+        keyed.rotation = frame == 0 ? 0 : 45;
+        return true;
+    };
+    moment.controller = [](const std::string& name, double& value) {
+        value = 0.25;
+        return name == "Smile";
+    };
+    Applied look = engine.defaults("lookat", 1);
+    look.params["target"] = "ball";
+    CHECK(near(engine.evaluate({look}, moment).front().rotation, 90.0, 1e-9));
+    look.params["target"] = "nobody";
+    CHECK(engine.evaluate({look}, moment).front().none());
+
+    Applied link = engine.defaults("linkobject", 1);
+    link.params["target"] = "ball";
+    const Delta moved = engine.evaluate({link}, moment).front();
+    CHECK(near(moved.x, -100.0) && near(moved.y, 100.0));
+    link.params["what"] = "Turn";
+    link.params["amount"] = "50";
+    CHECK(near(engine.evaluate({link}, moment).front().rotation, 22.5));
+
+    Applied slider = engine.defaults("linkcontroller", 1);
+    slider.params["controller"] = "Smile";
+    slider.params["what"] = "Turn";
+    slider.params["from"] = "0";
+    slider.params["to"] = "40";
+    CHECK(near(engine.evaluate({slider}, moment).front().rotation, 10.0));
+
+    // An effector grows the copies near its point and leaves the far ones.
+    Applied line = engine.defaults("grid", 1);
+    line.params["columns"] = "5";
+    line.params["across"] = "100";
+    Applied effector = engine.defaults("effector", 1);
+    effector.params["size"] = "150";
+    effector.params["grow"] = "100";
+    effector.params["moveY"] = "0";
+    const Copies grown = engine.evaluate({line, effector}, still(0));
+    CHECK(grown.size() == 5 && near(grown[0].scaleX, 2.0) && near(grown[4].scaleX, 1.0) && grown[1].scaleX > 1.0 &&
+          grown[1].scaleX < 2.0);
+}
+
+TEST(behaviors_find_other_instances_on_the_timeline_by_name)
+{
+    Engine engine;
+    engine.addBuiltIns();
+    fla::Timeline timeline(nullptr);
+    const auto place = [&timeline](const char* name, double x, double y) {
+        auto* layer = new fla::Layer(&timeline);
+        timeline.layers.push_back(layer);
+        auto* frame = new fla::Frame(layer);
+        frame->duration = 10;
+        layer->frames.push_back(frame);
+        auto* instance = new fla::SymbolInstance(frame);
+        instance->libraryItemName = "Thing";
+        instance->name = name;
+        instance->transform = fla::Transform(1, 0, 0, 1, x, y);
+        frame->elements.push_back(instance);
+        return instance;
+    };
+    fla::SymbolInstance* eye = place("eye", 0, 0);
+    fla::SymbolInstance* ball = place("ball", 0, 50);
+    Applied look = engine.defaults("lookat", 1);
+    look.params["target"] = "ball";
+    eye->extraAttributes = withBehaviors(*eye, {look});
+    CHECK(near(evaluateOn(engine, *eye, eye->transform, 3, 24.0).front().rotation, 90.0, 1e-9));
+    // The ball's own behavior moves where the eye looks.
+    Applied drift = engine.defaults("oscillate", 1);
+    drift.params["motion"] = "Side to side";
+    drift.params["amount"] = "50";
+    ball->extraAttributes = withBehaviors(*ball, {drift});
+    CHECK(near(evaluateOn(engine, *eye, eye->transform, 6, 24.0).front().rotation, 45.0, 1e-6));
+    // Two that look at each other do not go round for ever.
+    Applied back = engine.defaults("lookat", 1);
+    back.params["target"] = "eye";
+    ball->extraAttributes = withBehaviors(*ball, {back});
+    const Copies settled = evaluateOn(engine, *eye, eye->transform, 3, 24.0);
+    CHECK(settled.size() == 1);
+}

@@ -56,7 +56,9 @@ function __run(id, params, m) {
     var seed = (typeof params.seed === "number" ? params.seed : 1) + m.copy * 1000003;
     var ctx = {
         frame: m.frame, fps: m.fps, time: m.frame / m.fps, start: m.start, end: m.end, keyed: m.keyed,
-        copy: m.copy, copies: m.copies,
+        copy: m.copy, copies: m.copies, current: m.current,
+        other: function (name, frame) { return name ? __other(String(name), frame === undefined ? m.frame : frame) : null; },
+        controller: function (name) { return name ? __controller(String(name)) : null; },
         // The motion guide's line: its length, and where along it a place
         // is (x, y and the line's direction in degrees).
         path: m.pathLength >= 0 ? {
@@ -122,6 +124,8 @@ struct Engine::Impl
         JSValue global = JS_GetGlobalObject(ctx);
         JS_SetPropertyStr(ctx, global, "__keyedAt", JS_NewCFunction(ctx, &Impl::keyedAt, "__keyedAt", 1));
         JS_SetPropertyStr(ctx, global, "__pathAt", JS_NewCFunction(ctx, &Impl::pathAt, "__pathAt", 1));
+        JS_SetPropertyStr(ctx, global, "__other", JS_NewCFunction(ctx, &Impl::other, "__other", 2));
+        JS_SetPropertyStr(ctx, global, "__controller", JS_NewCFunction(ctx, &Impl::controller, "__controller", 1));
         JS_FreeValue(ctx, global);
         deadline = Clock::now() + std::chrono::seconds(5);
         JS_FreeValue(ctx, JS_Eval(ctx, kPrelude, std::strlen(kPrelude), "<behaviors>", JS_EVAL_TYPE_GLOBAL));
@@ -151,6 +155,40 @@ struct Engine::Impl
         if (!self->moment->keyedAt(f, keyed))
             return JS_NULL;
         return keyedObject(ctx, keyed);
+    }
+
+    static JSValue other(JSContext* ctx, JSValueConst, int argc, JSValueConst* argv)
+    {
+        Impl* self = static_cast<Impl*>(JS_GetContextOpaque(ctx));
+        if (argc < 1 || !self->moment || !self->moment->other)
+            return JS_NULL;
+        const char* chars = JS_ToCString(ctx, argv[0]);
+        const std::string name = chars ? chars : "";
+        if (chars)
+            JS_FreeCString(ctx, chars);
+        double frame = self->moment->frame;
+        if (argc > 1)
+            JS_ToFloat64(ctx, &frame, argv[1]);
+        // A behavior asking about another instance gives the moment it is
+        // working out back after: the other's own behaviors run in between.
+        const Moment* mine = self->moment;
+        Keyed keyed;
+        const bool found = mine->other(name, static_cast<int>(std::lround(frame)), keyed);
+        self->moment = mine;
+        return found ? keyedObject(ctx, keyed) : JS_NULL;
+    }
+
+    static JSValue controller(JSContext* ctx, JSValueConst, int argc, JSValueConst* argv)
+    {
+        Impl* self = static_cast<Impl*>(JS_GetContextOpaque(ctx));
+        if (argc < 1 || !self->moment || !self->moment->controller)
+            return JS_NULL;
+        const char* chars = JS_ToCString(ctx, argv[0]);
+        const std::string name = chars ? chars : "";
+        if (chars)
+            JS_FreeCString(ctx, chars);
+        double value = 0.0;
+        return self->moment->controller(name, value) ? JS_NewFloat64(ctx, value) : JS_NULL;
     }
 
     static JSValue pathAt(JSContext* ctx, JSValueConst, int argc, JSValueConst* argv)
@@ -373,7 +411,7 @@ Copies Engine::evaluate(const std::vector<Applied>& list, const Moment& moment, 
             {
                 const std::string value = applied.valueAt(spec.name, moment.frame, spec.text);
                 JSValue v;
-                if (spec.type == "choice")
+                if (spec.type == "choice" || spec.type == "text" || spec.type == "object" || spec.type == "controller")
                     v = JS_NewString(ctx, value.c_str());
                 else if (spec.type == "checkbox")
                     v = JS_NewBool(ctx, value == "true" || value == "1");
@@ -389,6 +427,16 @@ Copies Engine::evaluate(const std::vector<Applied>& list, const Moment& moment, 
             JS_SetPropertyStr(ctx, m, "copy", JS_NewInt32(ctx, static_cast<int32_t>(c)));
             JS_SetPropertyStr(ctx, m, "copies", JS_NewInt32(ctx, static_cast<int32_t>(copies.size())));
             JS_SetPropertyStr(ctx, m, "keyed", keyedObject(ctx, moment.keyed));
+            // The copy as the behaviors before this one left it.
+            JSValue current = JS_NewObject(ctx);
+            JS_SetPropertyStr(ctx, current, "x", JS_NewFloat64(ctx, copies[c].x));
+            JS_SetPropertyStr(ctx, current, "y", JS_NewFloat64(ctx, copies[c].y));
+            JS_SetPropertyStr(ctx, current, "rotation", JS_NewFloat64(ctx, copies[c].rotation));
+            JS_SetPropertyStr(ctx, current, "scaleX", JS_NewFloat64(ctx, copies[c].scaleX));
+            JS_SetPropertyStr(ctx, current, "scaleY", JS_NewFloat64(ctx, copies[c].scaleY));
+            JS_SetPropertyStr(ctx, current, "alpha", JS_NewFloat64(ctx, copies[c].alpha));
+            JS_SetPropertyStr(ctx, current, "frame", JS_NewInt32(ctx, copies[c].frame));
+            JS_SetPropertyStr(ctx, m, "current", current);
             JS_SetPropertyStr(ctx, m, "pathLength",
                 JS_NewFloat64(ctx, moment.path && !moment.path->empty() ? moment.path->length() : -1.0));
             JSValue args[3] = {JS_NewString(ctx, definition->id.c_str()), params, m};

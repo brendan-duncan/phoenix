@@ -1,18 +1,22 @@
 #include "behavior_frames.h"
 
+#include "../data/document.h"
 #include "../data/frame.h"
 #include "../data/layer.h"
 #include "../data/shape.h"
 #include "../data/symbol.h"
 #include "../data/symbol_instance.h"
 #include "../data/timeline.h"
+#include "../edit/controllers.h"
 #include "../edit/element_clone.h"
 #include "../edit/frame_bake.h"
+#include "../edit/function_curves.h"
 #include "../edit/graphic_loop.h"
 #include "../edit/transform_blend.h"
 #include "../edit/tween_ease.h"
 
 #include <algorithm>
+#include <memory>
 
 namespace fla::behaviors {
 
@@ -123,7 +127,91 @@ Copies evaluateOn(Engine& engine, const SymbolInstance& instance, const Transfor
     }
     if (!path.empty())
         moment.path = &path;
+
+    // Other instances on the timeline, by name: as keyed, and moved by
+    // their own behaviors one level deep, so two that look at each other
+    // do not go round for ever.
+    static thread_local int depth = 0;
+    const auto* timeline = dynamic_cast<const Timeline*>(layer->parent);
+    moment.other = [&engine, timeline, frameRate](const std::string& name, int at, Keyed& out) {
+        if (!timeline || name.empty())
+            return false;
+        for (const Layer* each : timeline->layers)
+        {
+            const Frame* keyframe = each ? keyframeAt(*each, at) : nullptr;
+            if (!keyframe)
+                continue;
+            for (size_t i = 0; i < keyframe->elements.size(); ++i)
+            {
+                const Element* element = keyframe->elements[i];
+                if (!element || element->elementType() != Element::Type::SymbolInstance)
+                    continue;
+                const auto* target = static_cast<const SymbolInstance*>(element);
+                if (target->name != name)
+                    continue;
+                Transform transform;
+                if (!keyedOn(*each, i, target->libraryItemName, at, transform, out))
+                    return false;
+                if (depth == 0 && any(*target))
+                {
+                    ++depth;
+                    const Copies moved = evaluateOn(engine, *target, transform, at, frameRate);
+                    --depth;
+                    if (!moved.empty())
+                        out = keyedOf(apply(transform, target->transformationPoint, moved.front()),
+                            target->transformationPoint, target->colorTransform);
+                }
+                return true;
+            }
+        }
+        return false;
+    };
+    // The master controllers, kept in the document.
+    const Document* document = nullptr;
+    for (const DOMElement* up = layer->parent; up && !document; up = up->parent)
+        document = dynamic_cast<const Document*>(up);
+    moment.controller = [document](const std::string& name, double& value) {
+        if (!document)
+            return false;
+        for (const controllers::Controller& each : controllers::load(*document))
+            if (each.name == name)
+            {
+                value = each.value;
+                return true;
+            }
+        return false;
+    };
     return engine.evaluate(of(instance), moment, error);
+}
+
+bool drivenValue(Engine& engine, const Layer& layer, int frame, const std::string& key, double frameRate, double& value)
+{
+    const Frame* keyframe = keyframeAt(layer, frame);
+    if (!keyframe)
+        return false;
+    for (size_t i = 0; i < keyframe->elements.size(); ++i)
+    {
+        const Element* element = keyframe->elements[i];
+        if (!element || element->elementType() != Element::Type::SymbolInstance ||
+            !any(*static_cast<const SymbolInstance*>(element)))
+            continue;
+        const auto* instance = static_cast<const SymbolInstance*>(element);
+        Transform transform;
+        Keyed ignored;
+        if (!keyedOn(layer, i, instance->libraryItemName, frame, transform, ignored))
+            return false;
+        const Copies copies = evaluateOn(engine, *instance, transform, frame, frameRate);
+        if (copies.empty())
+            return false;
+        // Read off a copy left where the behaviors put it.
+        std::unique_ptr<Element> shown(cloneElement(*instance, nullptr));
+        auto* moved = static_cast<SymbolInstance*>(shown.get());
+        moved->transform = apply(transform, instance->transformationPoint, copies.front());
+        moved->colorTransform.alphaMultiplier *= copies.front().alpha;
+        value = curves::get(*moved, key);
+        return true;
+    }
+    return false;
 }
 
 int lengthOf(const Symbol* symbol)

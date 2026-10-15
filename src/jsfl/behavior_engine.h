@@ -16,7 +16,9 @@ struct ParamSpec
 {
     std::string name;
     std::string label;
-    /// "number", "angle", "percent", "seed", "checkbox" or "choice".
+    /// "number", "angle", "percent", "seed", "checkbox", "choice", "text",
+    /// "object" (another instance's name) or "controller" (a master
+    /// controller's name).
     std::string type = "number";
     double value = 0.0;
     double min = 0.0;
@@ -57,6 +59,13 @@ struct Moment
     /// The line of the motion guide the instance's layer is under, on this
     /// frame, in the same space as the instance's place; null without one.
     const GuidePath* path = nullptr;
+    /// Another instance on the same timeline, by its instance name, as it
+    /// is on \a frame (its keys and its own behaviors' first copy); false
+    /// when there is none of that name.
+    std::function<bool(const std::string& name, int frame, Keyed& keyed)> other;
+    /// A master controller's value, from 0 to 1; false when there is none
+    /// of that name.
+    std::function<bool(const std::string& name, double& value)> controller;
 };
 
 /// Runs behaviors: JavaScript files of the form

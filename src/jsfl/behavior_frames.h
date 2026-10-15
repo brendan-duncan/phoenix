@@ -30,6 +30,12 @@ bool keyedOn(const Layer& layer, size_t index, const std::string& symbol, int fr
 Copies evaluateOn(Engine& engine, const SymbolInstance& instance, const Transform& keyed, int frame, double frameRate,
     std::string* error = nullptr);
 
+/// \a key (as the Function view reads it: x, y, rotation, scaleX, alpha...)
+/// of the first instance with behaviors on \a layer's keyframe holding
+/// \a frame, as its behaviors leave it (their first copy); false when none
+/// is there, or its behaviors leave no copy.
+bool drivenValue(Engine& engine, const Layer& layer, int frame, const std::string& key, double frameRate, double& value);
+
 /// A symbol's length in frames.
 int lengthOf(const Symbol* symbol);
 

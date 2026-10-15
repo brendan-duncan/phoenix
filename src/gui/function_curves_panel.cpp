@@ -1,4 +1,6 @@
 #include "function_curves_panel.h"
+#include "behavior_library.h"
+#include "../jsfl/behavior_frames.h"
 
 #include "theme.h"
 
@@ -37,6 +39,7 @@ public:
     void load()
     {
         _samples.clear();
+        _driven.clear();
         _keys.clear();
         fla::Timeline* timeline = nullptr;
         fla::Layer* layer = _panel->_links.currentLayer ? _panel->_links.currentLayer(timeline) : nullptr;
@@ -49,6 +52,12 @@ public:
             {
                 double value = 0.0;
                 _samples.push_back(fla::curves::valueAt(*layer, frame, _key, context, value) ? value : std::nan(""));
+                // What behaviors make of it, where they change it.
+                double driven = 0.0;
+                _driven.push_back(fla::behaviors::drivenValue(BehaviorLibrary::instance().engine(), *layer, frame, _key,
+                                      context.frameRate, driven) && !std::isnan(value) && std::fabs(driven - value) > 1e-9
+                        ? driven
+                        : std::nan(""));
             }
             _keys = fla::curves::keys(*layer, _key, context);
         }
@@ -118,6 +127,29 @@ protected:
         painter.setPen(QPen(theme::color("accent"), 2.0));
         painter.setBrush(Qt::NoBrush);
         painter.drawPath(path);
+        // With behaviors, dashed, where they change the value.
+        QPainterPath driven;
+        bool on = false;
+        for (int frame = 0; frame < static_cast<int>(_driven.size()); ++frame)
+        {
+            const double value = _driven[static_cast<size_t>(frame)];
+            if (std::isnan(value))
+            {
+                on = false;
+                continue;
+            }
+            const QPointF point(xOf(frame), yOf(value));
+            if (on)
+                driven.lineTo(point);
+            else
+                driven.moveTo(point);
+            on = true;
+        }
+        if (!driven.isEmpty())
+        {
+            painter.setPen(QPen(theme::color("accent"), 1.5, Qt::DashLine));
+            painter.drawPath(driven);
+        }
         // The keyframes.
         for (size_t i = 0; i < _keys.size(); ++i)
         {
@@ -205,6 +237,12 @@ private:
     {
         double low = 1.0e300;
         double high = -1.0e300;
+        for (double value : _driven)
+            if (!std::isnan(value))
+            {
+                low = std::min(low, value);
+                high = std::max(high, value);
+            }
         for (double value : _samples)
             if (!std::isnan(value))
             {
@@ -253,6 +291,8 @@ private:
     FunctionCurvesPanel* _panel;
     std::string _key;
     std::vector<double> _samples;
+    /// The value with behaviors on, NaN where they leave it as keyed.
+    std::vector<double> _driven;
     std::vector<fla::curves::Key> _keys;
     int _frames = 1;
     double _low = 0.0;

@@ -12,6 +12,7 @@
 #include <QFormLayout>
 #include <QHBoxLayout>
 #include <QLabel>
+#include <QLineEdit>
 #include <QListWidget>
 #include <QMenu>
 #include <QPushButton>
@@ -253,6 +254,34 @@ void BehaviorsPanel::fillSettings()
             combo->setCurrentText(QString::fromStdString(current));
             connect(combo, &QComboBox::currentTextChanged, this,
                 [this, row, name](const QString& text) { setParam(row, name, text.toStdString(), false); });
+            addRow(combo);
+        }
+        else if (spec.type == "object" || spec.type == "controller" || spec.type == "text")
+        {
+            // A name: picked from the instances (or controllers) there are,
+            // or typed.
+            QComboBox* combo = new QComboBox(_settings);
+            combo->setEditable(true);
+            combo->setInsertPolicy(QComboBox::NoInsert);
+            QStringList names;
+            if (spec.type == "object" && _links.objectNames)
+                names = _links.objectNames();
+            else if (spec.type == "controller" && _links.controllerNames)
+                names = _links.controllerNames();
+            combo->addItems(names);
+            combo->setCurrentText(QString::fromStdString(current));
+            if (spec.type == "object")
+                combo->setToolTip(names.isEmpty() ? "Give the other instance a name in the Properties panel first"
+                                                  : "The instance name of another symbol instance on this timeline");
+            else if (spec.type == "controller")
+                combo->setToolTip(names.isEmpty() ? "Make a controller in the Controllers panel first"
+                                                  : "A master controller, from the Controllers panel");
+            connect(combo->lineEdit(), &QLineEdit::editingFinished, this, [this, row, name, combo]() {
+                setParam(row, name, combo->currentText().toStdString(), false);
+            });
+            connect(combo, &QComboBox::activated, this, [this, row, name, combo](int) {
+                setParam(row, name, combo->currentText().toStdString(), false);
+            });
             addRow(combo);
         }
         else if (spec.type == "seed")

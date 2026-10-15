@@ -223,6 +223,119 @@ behavior({
     }
 });
 )JS"},
+        {"lookat", R"JS(
+behavior({
+    name: "Look At",
+    description: "Turns it to face another instance, by that instance's name: eyes that follow, a spotlight on a dancer, an arrow that points.",
+    params: {
+        target: { label: "Look at", type: "object", value: "" },
+        offset: { label: "Facing (degrees)", type: "angle", value: 0, min: -360, max: 360, step: 1 },
+        amount: { label: "How much (percent)", value: 100, min: 0, max: 100, step: 1 }
+    },
+    evaluate: function (ctx, p) {
+        var target = ctx.other(p.target);
+        if (!target)
+            return {};
+        var x = ctx.keyed.x + ctx.current.x, y = ctx.keyed.y + ctx.current.y;
+        var angle = Math.atan2(target.y - y, target.x - x) * 180 / Math.PI + p.offset;
+        var now = ctx.keyed.rotation + ctx.current.rotation;
+        // The short way round.
+        var turn = ((angle - now) % 360 + 540) % 360 - 180;
+        return { rotation: turn * p.amount / 100 };
+    }
+});
+)JS"},
+        {"linkobject", R"JS(
+behavior({
+    name: "Link to Object",
+    description: "Moves, turns, scales or fades it as another instance does, by that instance's name, from where each starts: a shadow under a bouncing ball, a wheel turning as the car moves.",
+    params: {
+        target: { label: "Linked to", type: "object", value: "" },
+        what: { label: "Follow its", type: "choice", choices: ["Move", "Turn", "Size", "Fade", "Move across as turn"] },
+        amount: { label: "Amount (percent)", value: 100, min: -1000, max: 1000, step: 1 },
+        lag: { label: "Lag (frames)", value: 0, min: 0, max: 240, step: 1 }
+    },
+    evaluate: function (ctx, p) {
+        var now = ctx.other(p.target, ctx.frame - p.lag);
+        var first = ctx.other(p.target, ctx.start);
+        if (!now || !first)
+            return {};
+        var k = p.amount / 100;
+        switch (p.what) {
+        case "Turn": return { rotation: (now.rotation - first.rotation) * k };
+        case "Size": return { scaleX: 1 + (now.scaleX / first.scaleX - 1) * k, scaleY: 1 + (now.scaleY / first.scaleY - 1) * k };
+        case "Fade": return { alpha: Math.max(0, 1 + (now.alpha / Math.max(first.alpha, 0.0001) - 1) * k) };
+        case "Move across as turn": return { rotation: (now.x - first.x) * k };
+        default: return { x: (now.x - first.x) * k, y: (now.y - first.y) * k };
+        }
+    }
+});
+)JS"},
+        {"linkcontroller", R"JS(
+behavior({
+    name: "Link to Controller",
+    description: "Sets a property from a master controller's slider: as the slider goes from one end to the other, the property goes from one value to another.",
+    params: {
+        controller: { label: "Controller", type: "controller", value: "" },
+        what: { label: "Property", type: "choice", choices: ["Move across", "Move down", "Turn", "Size", "Fade"] },
+        from: { label: "At the slider's start", value: 0, min: -5000, max: 5000, step: 1 },
+        to: { label: "At the slider's end", value: 100, min: -5000, max: 5000, step: 1 }
+    },
+    evaluate: function (ctx, p) {
+        var value = ctx.controller(p.controller);
+        if (value === null)
+            return {};
+        var v = p.from + (p.to - p.from) * value;
+        switch (p.what) {
+        case "Move down": return { y: v };
+        case "Turn": return { rotation: v };
+        case "Size": return { scale: v / 100 };
+        case "Fade": return { alpha: Math.max(0, v / 100) };
+        default: return { x: v };
+        }
+    }
+});
+)JS"},
+        {"effector", R"JS(
+behavior({
+    name: "Effector",
+    description: "Changes the copies a Repeat behavior made by how near each is to a place, or by their order: copies grow, turn, move or fade as an area passes over them. Key its place or size to sweep it across.",
+    params: {
+        shape: { label: "Strength by", type: "choice", choices: ["Distance from a point", "Across, left to right", "Down, top to bottom", "Order of the copies", "Every copy alike"] },
+        cx: { label: "Point across (pixels from it)", value: 0, min: -4000, max: 4000, step: 1 },
+        cy: { label: "Point down (pixels from it)", value: 0, min: -4000, max: 4000, step: 1 },
+        size: { label: "Reach (pixels)", value: 100, min: 1, max: 4000, step: 1 },
+        invert: { label: "Strongest far away", type: "checkbox", value: false },
+        moveX: { label: "Move across (pixels)", value: 0, min: -2000, max: 2000, step: 1 },
+        moveY: { label: "Move down (pixels)", value: -20, min: -2000, max: 2000, step: 1 },
+        turn: { label: "Turn (degrees)", type: "angle", value: 0, min: -720, max: 720, step: 1 },
+        grow: { label: "Grow (percent)", value: 50, min: -100, max: 1000, step: 1 },
+        fade: { label: "Fade (percent)", value: 0, min: 0, max: 100, step: 1 },
+        frames: { label: "Frames on", value: 0, min: -240, max: 240, step: 1 }
+    },
+    evaluate: function (ctx, p) {
+        var x = ctx.current.x, y = ctx.current.y;
+        var s;
+        switch (p.shape) {
+        case "Across, left to right": s = (x - p.cx) / p.size + 0.5; break;
+        case "Down, top to bottom": s = (y - p.cy) / p.size + 0.5; break;
+        case "Order of the copies": s = ctx.copies > 1 ? ctx.copy / (ctx.copies - 1) : 1; break;
+        case "Every copy alike": s = 1; break;
+        default: s = 1 - Math.sqrt((x - p.cx) * (x - p.cx) + (y - p.cy) * (y - p.cy)) / p.size;
+        }
+        s = Math.max(0, Math.min(1, s));
+        // Smoothed at the edge of its reach.
+        s = s * s * (3 - 2 * s);
+        if (p.invert)
+            s = 1 - s;
+        return {
+            x: p.moveX * s, y: p.moveY * s, rotation: p.turn * s,
+            scale: Math.max(0, 1 + p.grow / 100 * s), alpha: 1 - p.fade / 100 * s,
+            frame: Math.round(p.frames * s)
+        };
+    }
+});
+)JS"},
         {"stagger", R"JS(
 behavior({
     name: "Stagger",

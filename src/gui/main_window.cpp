@@ -30,6 +30,7 @@
 #include "arrange_panels.h"
 #include "behavior_library.h"
 #include "behaviors_panel.h"
+#include "../edit/controllers.h"
 #include "../jsfl/behavior_frames.h"
 #include "motion_editor.h"
 #include "motion_presets.h"
@@ -2042,6 +2043,25 @@ void MainWindow::createPanels()
         };
         links.currentFrame = [this]() { return _player ? _player->currentFrame() : 0; };
         links.bake = [this]() { bakeSelectedBehaviors(); };
+        links.objectNames = [this]() {
+            QStringList names;
+            if (fla::Timeline* timeline = editedTimeline())
+                for (const fla::Layer* layer : timeline->layers)
+                    for (const fla::Frame* frame : layer ? layer->frames : std::vector<fla::Frame*>())
+                        for (const fla::Element* element : frame ? frame->elements : std::vector<fla::Element*>())
+                            if (const auto* instance = dynamic_cast<const fla::SymbolInstance*>(element))
+                                if (!instance->name.empty() && !names.contains(QString::fromStdString(instance->name)))
+                                    names << QString::fromStdString(instance->name);
+            names.sort(Qt::CaseInsensitive);
+            return names;
+        };
+        links.controllerNames = [this]() {
+            QStringList names;
+            if (_flaDocument && _flaDocument->document)
+                for (const fla::controllers::Controller& controller : fla::controllers::load(*_flaDocument->document))
+                    names << QString::fromStdString(controller.name);
+            return names;
+        };
         _behaviors = new BehaviorsPanel(links);
         _behaviorsDock = new QDockWidget("Behaviors", this);
         _behaviorsDock->setObjectName("behaviorsDock");

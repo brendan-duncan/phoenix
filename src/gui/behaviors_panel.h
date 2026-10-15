@@ -2,6 +2,7 @@
 
 #include "../edit/behaviors.h"
 
+#include <QStringList>
 #include <QWidget>
 
 #include <functional>
@@ -28,6 +29,10 @@ struct BehaviorsLinks
     std::function<int()> currentFrame;
     /// Bake to Keyframes for the selected instances.
     std::function<void()> bake;
+    /// The names of the instances on the timeline being edited, and of the
+    /// master controllers, for settings that name one.
+    std::function<QStringList()> objectNames;
+    std::function<QStringList()> controllerNames;
 };
 
 /// The Behaviors panel: the behaviors on the selected symbol instances.
