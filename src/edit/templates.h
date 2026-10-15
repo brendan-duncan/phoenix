@@ -18,6 +18,10 @@ class SymbolInstance;
 ///   instance can give it other words.
 /// - A movie clip with an instance name is a color field: an instance can
 ///   tint it all one color.
+/// - One with more than one frame is a slider instead: an instance picks
+///   the frame it holds on (a rating, a level, a pose).
+/// - One that holds just a bitmap is an image field: an instance gives an
+///   image file to draw in the bitmap's place, at its size.
 ///
 /// The fields reach into nested symbols, and an outer instance's values win
 /// over an inner one's. Kept in the instance's phoenixTemplate attribute,
@@ -32,13 +36,22 @@ struct Field
     enum class Kind
     {
         Text,
-        Color
+        Color,
+        Frame,
+        Image
     };
     std::string name;
     Kind kind = Kind::Text;
-    /// What it shows as drawn: the text, or empty for a color.
+    /// What it shows as drawn: the text, the bitmap's name for an image,
+    /// or empty for a color or a slider.
     std::string value;
+    /// A slider's frames, from 1.
+    int frames = 1;
 };
+
+/// What a movie clip of \a symbol is as a field when it is named: a color,
+/// a slider (with its \a frames) or an image.
+Field::Kind clipKind(const Symbol& symbol, int* frames = nullptr, std::string* bitmap = nullptr);
 
 /// \a symbol's fields, in the order they are first met (its layers top to
 /// bottom, then the symbols it places), each name once.
@@ -62,6 +75,10 @@ Values decode(const std::string& text);
 /// A color field's value as red, green and blue: "#RRGGBB" or "RRGGBB".
 /// False when it is not one (an empty value leaves the part as drawn).
 bool colorOf(const std::string& value, unsigned char rgb[3]);
+
+/// A slider's value as a frame from 1. False when it is not a whole number
+/// of 1 or more.
+bool frameOf(const std::string& value, int& frame);
 
 /// Rows of a CSV file (comma separated, "quoted" fields with "" for a
 /// quote, line breaks inside quotes kept), the first row being the field

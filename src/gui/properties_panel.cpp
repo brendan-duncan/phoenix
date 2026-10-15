@@ -45,6 +45,7 @@
 #include "../edit/property_command.h"
 #include "../edit/three_d.h"
 #include "../edit/selection.h"
+#include "../edit/templates.h"
 
 #include <QAction>
 #include <QButtonGroup>
@@ -69,6 +70,10 @@
 #include <QStandardItemModel>
 #include <QTimer>
 #include <QInputDialog>
+#include <QFileDialog>
+#include <QFileInfo>
+#include <QDir>
+#include <QSpinBox>
 #include <QToolButton>
 #include <QVBoxLayout>
 
@@ -2405,6 +2410,115 @@ void PropertiesPanel::addInstanceDisplaySections(QVBoxLayout* layout, fla::Symbo
         addFilterSection(layout, instance);
 }
 
+void PropertiesPanel::addTemplateSection(QVBoxLayout* layout, fla::SymbolInstance* instance)
+{
+    if (!instance->symbol)
+        return;
+    const std::vector<fla::templates::Field> fields = fla::templates::fieldsOf(*instance->symbol);
+    if (fields.empty())
+        return;
+    PropertySection* section = addSection(layout, "Template");
+    const fla::templates::Values given = fla::templates::valuesOf(*instance);
+    // A field's value for this instance, empty for as the symbol has it.
+    const auto set = [this, instance](const std::string& name, const std::string& value) {
+        fla::templates::Values values = fla::templates::valuesOf(*instance);
+        if (value.empty())
+            values.erase(name);
+        else
+            values[name] = value;
+        using Attributes = std::vector<std::pair<std::string, std::string>>;
+        const Attributes changed = fla::templates::withValues(*instance, values);
+        if (changed == instance->extraAttributes)
+            return;
+        push(std::unique_ptr<fla::Command>(new fla::SetPropertyCommand<Attributes>(
+            instance->extraAttributes, instance->extraAttributes, changed, "Template Field")));
+        if (_links.view)
+            _links.view->clearCaches();
+        emit documentEdited();
+    };
+    int row = 0;
+    for (const fla::templates::Field& field : fields)
+    {
+        const auto found = given.find(field.name);
+        const QString value = found == given.end() ? QString() : QString::fromStdString(found->second);
+        const QString label = QString::fromStdString(field.name);
+        const std::string name = field.name;
+        QWidget* holder = new QWidget(this);
+        QHBoxLayout* line = new QHBoxLayout(holder);
+        line->setContentsMargins(0, 0, 0, 0);
+        switch (field.kind)
+        {
+        case fla::templates::Field::Kind::Text:
+        {
+            QLineEdit* edit = new QLineEdit(value, holder);
+            edit->setPlaceholderText(QString::fromStdString(field.value));
+            edit->setToolTip("The words this instance shows here; empty for the symbol's own");
+            connect(edit, &QLineEdit::editingFinished, this, [set, name, edit]() { set(name, edit->text().toStdString()); });
+            line->addWidget(edit, 1);
+            break;
+        }
+        case fla::templates::Field::Kind::Color:
+        {
+            QLineEdit* edit = new QLineEdit(value, holder);
+            edit->setPlaceholderText("as drawn");
+            edit->setToolTip("A color as #RRGGBB that tints this part all over; empty for as drawn");
+            connect(edit, &QLineEdit::editingFinished, this, [set, name, edit]() { set(name, edit->text().toStdString()); });
+            QPushButton* pick = new QPushButton("Pick...", holder);
+            connect(pick, &QPushButton::clicked, this, [this, set, name, edit]() {
+                const QColor color = QColorDialog::getColor(QColor(edit->text()), this, "Color");
+                if (!color.isValid())
+                    return;
+                edit->setText(color.name().toUpper());
+                set(name, edit->text().toStdString());
+            });
+            line->addWidget(edit, 1);
+            line->addWidget(pick);
+            break;
+        }
+        case fla::templates::Field::Kind::Frame:
+        {
+            QSpinBox* frame = new QSpinBox(holder);
+            frame->setRange(0, field.frames);
+            frame->setSpecialValueText("as drawn");
+            int shown = 0;
+            frame->setValue(fla::templates::frameOf(value.toStdString(), shown) ? std::min(shown, field.frames) : 0);
+            frame->setSuffix(QString(" of %1").arg(field.frames));
+            frame->setToolTip("The frame this part holds on; as drawn plays it as the symbol does");
+            connect(frame, &QSpinBox::valueChanged, this,
+                [set, name](int at) { set(name, at > 0 ? std::to_string(at) : std::string()); });
+            line->addWidget(frame, 1);
+            break;
+        }
+        case fla::templates::Field::Kind::Image:
+        {
+            QLineEdit* edit = new QLineEdit(value, holder);
+            edit->setPlaceholderText(QString::fromStdString(field.value));
+            edit->setToolTip("An image file drawn in place of the bitmap, at its size; a path from the document's folder or a whole one");
+            connect(edit, &QLineEdit::editingFinished, this, [set, name, edit]() { set(name, edit->text().toStdString()); });
+            QPushButton* browse = new QPushButton("Browse...", holder);
+            connect(browse, &QPushButton::clicked, this, [this, set, name, edit]() {
+                const fla::FLADocument* document = _links.view ? _links.view->flaDocument() : nullptr;
+                const QDir folder = document && !document->filepath.empty()
+                    ? QFileInfo(QString::fromStdString(document->filepath)).absoluteDir() : QDir::current();
+                const QString file = QFileDialog::getOpenFileName(this, "Image", folder.absolutePath(),
+                    "Images (*.png *.jpg *.jpeg *.gif *.bmp *.webp);;All files (*)");
+                if (file.isEmpty())
+                    return;
+                // Kept from the document's folder when it is inside it, so
+                // the document and its images move together.
+                const QString relative = folder.relativeFilePath(file);
+                edit->setText(relative.startsWith("..") ? file : relative);
+                set(name, edit->text().toStdString());
+            });
+            line->addWidget(edit, 1);
+            line->addWidget(browse);
+            break;
+        }
+        }
+        section->addLong(row++, label, holder);
+    }
+}
+
 void PropertiesPanel::addFilterSection(QVBoxLayout* layout, fla::SymbolInstance* instance)
 {
     PropertySection* section = addSection(layout, "Filters");
@@ -2845,6 +2959,7 @@ void PropertiesPanel::rebuildObjectTab()
         symbol->addLong(1, "Type", kind);
 
         addPositionAndSize(page, elements);
+        addTemplateSection(page, instance);
         addInstanceSections(page, instance);
         // Movie clips turn and move in 3D (the 3D Rotation and Translation
         // tools); their depth and the document's view are set here.

@@ -224,6 +224,9 @@ private:
     std::vector<std::pair<QWidget*, QWidget*>> addStrokeLookFields(PropertySection* section, int& row,
         const fla::StrokeLook& look, std::function<void(const fla::StrokeLook&)> apply);
     void addInstanceSections(QVBoxLayout* layout, fla::SymbolInstance* instance);
+    /// The fields of \a instance's symbol when it is a template, each filled
+    /// in for this instance.
+    void addTemplateSection(QVBoxLayout* layout, fla::SymbolInstance* instance);
     /// An instance's Display and Looping sections, and the rest under its
     /// color effect.
     void addInstanceDisplaySections(QVBoxLayout* layout, fla::SymbolInstance* instance);

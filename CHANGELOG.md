@@ -4,6 +4,9 @@ What changed in each release of Phoenix, newest first.
 
 ## 0.12.0 (Unreleased)
 
+- Templates: sliders (a named clip of several frames holds on the frame an instance picks) and image fields (a named clip holding a bitmap shows an image file instead)
+- Template fields are filled in under Template in the Properties panel
+- Render Queue: Add Data... renders a movie for each row of a CSV file in the background
 - Link to Object: pick the instance by clicking it on the stage, drive any change from any other, with an amount, offset and limits; a dashed line shows each link
 - Phoenix play --image saves the frame the movie ends on as Test Movie shows it; tools/consistency_check.py compares it with exported stills and movies
 - Text no longer comes out as empty boxes from Phoenix render, play, batch and the other commands run with no window

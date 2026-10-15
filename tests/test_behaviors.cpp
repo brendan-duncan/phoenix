@@ -14,6 +14,7 @@
 #include "../src/edit/templates.h"
 #include "../src/data/static_text.h"
 #include "../src/data/symbol.h"
+#include "../src/data/bitmap_instance.h"
 
 #include <cmath>
 #include <string>
@@ -754,6 +755,38 @@ TEST(templates_find_fields_and_read_csv_rows)
     CHECK(fields.size() == 2);
     CHECK(fields[0].name == "title" && fields[0].kind == tpl::Field::Kind::Text && fields[0].value == "Name Here");
     CHECK(fields[1].name == "bar" && fields[1].kind == tpl::Field::Kind::Color);
+
+    // A clip of several frames is a slider; one holding just a bitmap is an
+    // image.
+    const auto clipOf = [](fla::Symbol& clip, int frames, fla::Element* (*make)(fla::Frame*)) {
+        auto* inner = new fla::Timeline(&clip);
+        clip.timelines.push_back(inner);
+        auto* innerLayer = new fla::Layer(inner);
+        inner->layers.push_back(innerLayer);
+        auto* innerFrame = new fla::Frame(innerLayer);
+        innerFrame->duration = frames;
+        innerLayer->frames.push_back(innerFrame);
+        if (make)
+            innerFrame->elements.push_back(make(innerFrame));
+    };
+    fla::Symbol stars(nullptr);
+    clipOf(stars, 5, nullptr);
+    int frames = 0;
+    CHECK(tpl::clipKind(stars, &frames) == tpl::Field::Kind::Frame && frames == 5);
+    fla::Symbol photo(nullptr);
+    clipOf(photo, 1, [](fla::Frame* at) -> fla::Element* {
+        auto* bitmap = new fla::BitmapInstance(at);
+        bitmap->libraryItemName = "face.png";
+        return bitmap;
+    });
+    std::string drawn;
+    CHECK(tpl::clipKind(photo, nullptr, &drawn) == tpl::Field::Kind::Image && drawn == "face.png");
+    bar->symbol = &photo;
+    CHECK(tpl::fieldsOf(symbol)[1].kind == tpl::Field::Kind::Image && tpl::fieldsOf(symbol)[1].value == "face.png");
+    bar->symbol = nullptr;
+    int held = 0;
+    CHECK(tpl::frameOf("3", held) && held == 3);
+    CHECK(!tpl::frameOf("0", held) && !tpl::frameOf("2.5", held) && !tpl::frameOf("#00FF00", held));
 
     // CSV: quotes, commas and line breaks in them, a byte order mark, an
     // empty cell left out.

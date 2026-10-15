@@ -1,5 +1,6 @@
 #include "templates.h"
 
+#include "../data/bitmap_instance.h"
 #include "../data/frame.h"
 #include "../data/group.h"
 #include "../data/layer.h"
@@ -8,6 +9,7 @@
 #include "../data/symbol_instance.h"
 #include "../data/timeline.h"
 
+#include <algorithm>
 #include <cstdio>
 #include <cstdlib>
 #include <set>
@@ -52,7 +54,7 @@ void collectElement(const Element* element, std::vector<Field>& fields, std::set
         {
             Field field;
             field.name = instance->name;
-            field.kind = Field::Kind::Color;
+            field.kind = instance->symbol ? clipKind(*instance->symbol, &field.frames, &field.value) : Field::Kind::Color;
             fields.push_back(field);
         }
         if (instance->symbol)
@@ -124,6 +126,40 @@ std::string unescaped(const std::string& text)
 }
 
 } // namespace
+
+Field::Kind clipKind(const Symbol& symbol, int* frames, std::string* bitmap)
+{
+    int length = 1;
+    int elements = 0;
+    const BitmapInstance* only = nullptr;
+    for (const Timeline* timeline : symbol.timelines)
+        for (const Layer* layer : timeline ? timeline->layers : std::vector<Layer*>())
+            for (const Frame* frame : layer ? layer->frames : std::vector<Frame*>())
+            {
+                if (!frame)
+                    continue;
+                length = std::max(length, frame->index + std::max(frame->duration, 1));
+                for (const Element* element : frame->elements)
+                {
+                    if (!element)
+                        continue;
+                    ++elements;
+                    if (element->elementType() == Element::Type::BitmapInstance)
+                        only = static_cast<const BitmapInstance*>(element);
+                }
+            }
+    if (frames)
+        *frames = length;
+    if (length > 1)
+        return Field::Kind::Frame;
+    if (elements == 1 && only)
+    {
+        if (bitmap)
+            *bitmap = only->libraryItemName;
+        return Field::Kind::Image;
+    }
+    return Field::Kind::Color;
+}
 
 std::vector<Field> fieldsOf(const Symbol& symbol)
 {
@@ -203,6 +239,23 @@ bool colorOf(const std::string& value, unsigned char rgb[3])
             return false;
     for (int i = 0; i < 3; ++i)
         rgb[i] = static_cast<unsigned char>(hexDigit(hex[i * 2]) * 16 + hexDigit(hex[i * 2 + 1]));
+    return true;
+}
+
+bool frameOf(const std::string& value, int& frame)
+{
+    if (value.empty() || value.size() > 6)
+        return false;
+    int n = 0;
+    for (const char c : value)
+    {
+        if (c < '0' || c > '9')
+            return false;
+        n = n * 10 + (c - '0');
+    }
+    if (n < 1)
+        return false;
+    frame = n;
     return true;
 }
 

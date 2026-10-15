@@ -125,9 +125,11 @@
 <ul>
   <li>A <b>dynamic text</b> field with an instance name is a text field. Each instance can give it other words, in the field's font, size and color.</li>
   <li>A <b>movie clip</b> with an instance name is a color field. Each instance can tint it all one color: a bar, a badge, a background.</li>
+  <li>A named movie clip with <b>more than one frame</b> is a slider. Each instance picks the frame it holds on: a star rating, a level, a pose, a flag.</li>
+  <li>A named movie clip that holds <b>just a bitmap</b> is an image field. Each instance gives an image file to show in the bitmap's place, at its size: a photo, a logo, a team badge. A path is read from the document's folder unless it is a whole one.</li>
 </ul>
 
-<p>Select an instance and choose <span class="menu-path">Modify &rsaquo; Symbol &rsaquo; Template Fields...</span> (also on the stage's right-click menu) to fill them in. A field left empty shows what the symbol has. Fields inside nested symbols count too, and an outer instance's values win over an inner one's. Letter animators on a text field animate the words an instance gives it.</p>
+<p>Select an instance and fill them in under <b>Template</b> in the Properties panel, where each field shows as a box, a color, a frame or an image to browse for. <span class="menu-path">Modify &rsaquo; Symbol &rsaquo; Template Fields...</span> (also on the stage's right-click menu) fills in several selected instances at once. A field left empty shows what the symbol has. Fields inside nested symbols count too, and an outer instance's values win over an inner one's. Letter animators on a text field animate the words an instance gives it.</p>
 
 <div class="grid-2">
 <figure>
@@ -140,13 +142,13 @@
 </figure>
 </div>
 
-<p>To make many versions at once, put the values in a spreadsheet saved as CSV: the first row names the fields, and each row after it is one version. A <code>file</code> column names each output. <span class="menu-path">File &rsaquo; Export &rsaquo; Render from Data...</span> renders the movie once a row, as MP4, MOV, GIF or a PNG sequence, every instance's fields filled from the row (an empty cell leaves each instance's own value). The same works from the <a href="command-line.html#render-csv">command line</a>: <code>Phoenix render lower-third.fla --data people.csv --out renders/</code>.</p>
+<p>To make many versions at once, put the values in a spreadsheet saved as CSV: the first row names the fields, and each row after it is one version. A <code>file</code> column names each output; a slider takes a frame number, and an image a path read from the CSV's folder. <span class="menu-path">File &rsaquo; Export &rsaquo; Render from Data...</span> renders the movie once a row, as MP4, MOV, GIF or a PNG sequence, every instance's fields filled from the row (an empty cell leaves each instance's own value). The same works from the <a href="command-line.html#render-csv">command line</a>: <code>Phoenix render lower-third.fla --data people.csv --out renders/</code>. To render the rows in the background while you work, click <b>Add Data...</b> in <span class="menu-path">Window &rsaquo; Render Queue</span>.</p>
 
 <pre><code>file,name,role,bar
 ada,Ada Lovelace,Mathematician,#2060C0
 grace,Grace Hopper,Rear Admiral,#C02040</code></pre>
 
-<p>Templates are Phoenix's own: another app opening the FLA file shows each instance as the symbol is drawn. <span class="menu-path">File &rsaquo; Export &rsaquo; Export FLA for Other Apps</span> writes the values in: each instance shows a copy of its symbol with its words and colors, one copy for each different set of values.</p>
+<p>Templates are Phoenix's own: another app opening the FLA file shows each instance as the symbol is drawn. <span class="menu-path">File &rsaquo; Export &rsaquo; Export FLA for Other Apps</span> writes the values in: each instance shows a copy of its symbol with its words and colors, and its sliders as graphics held on their frames, one copy for each different set of values. Image fields show the symbol's own bitmap there.</p>
 
 <h2>Break apart an instance</h2>
 

@@ -7822,7 +7822,7 @@ int MainWindow::renderCommand(const QString& source, const QStringList& options)
             std::fprintf(stderr, "Could not read %s\n", qPrintable(options.value(dataOption + 1)));
             return 1;
         }
-        const std::vector<fla::templates::Values> rows = fla::templates::rowsOfCsv(file.readAll().toStdString());
+        const std::vector<fla::templates::Values> rows = rowsOfData(file);
         if (rows.empty())
         {
             std::fprintf(stderr, "%s has no rows to render\n", qPrintable(file.fileName()));
@@ -14251,6 +14251,23 @@ void MainWindow::editTemplateFields()
     }
 }
 
+std::vector<fla::templates::Values> MainWindow::rowsOfData(QFile& file)
+{
+    std::vector<fla::templates::Values> rows = fla::templates::rowsOfCsv(file.readAll().toStdString());
+    // An image named from the file's folder is found there, wherever the
+    // document is.
+    const QDir folder = QFileInfo(file.fileName()).absoluteDir();
+    for (fla::templates::Values& row : rows)
+        for (auto& [name, value] : row)
+        {
+            const QString path = QString::fromStdString(value);
+            if (!path.isEmpty() && QFileInfo(path).isRelative() && !path.contains('\n') &&
+                QFileInfo(folder.filePath(path)).isFile())
+                value = folder.absoluteFilePath(path).toStdString();
+        }
+    return rows;
+}
+
 bool MainWindow::renderRows(const std::vector<fla::templates::Values>& rows, const QString& folder,
     const QString& extension, QString& error, const std::function<bool(int row, int rows)>& progress)
 {
@@ -14332,7 +14349,7 @@ void MainWindow::renderFromData()
         QMessageBox::warning(this, "Render from Data", QString("Could not read %1.").arg(csv));
         return;
     }
-    const std::vector<fla::templates::Values> rows = fla::templates::rowsOfCsv(file.readAll().toStdString());
+    const std::vector<fla::templates::Values> rows = rowsOfData(file);
     if (rows.empty())
     {
         QMessageBox::information(this, "Render from Data",

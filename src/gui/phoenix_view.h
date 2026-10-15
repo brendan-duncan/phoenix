@@ -1203,6 +1203,11 @@ private:
     /// drawn, outermost first; the first to name a field wins.
     fla::templates::Values _documentTemplateValues;
     std::vector<fla::templates::Values> _templateStack;
+    /// A template's image field: the file drawn in place of the bitmap
+    /// of the clip being drawn, empty when none.
+    QString _templateImage;
+    QHash<QString, QPixmap> _templateImages;
+    QPixmap templateImage(const QString& path);
     const std::string* templateValue(const std::string& name) const;
     typedef QList<PathCacheEntry> PathCacheList;
 

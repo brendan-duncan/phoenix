@@ -94,6 +94,7 @@
 #include <QBitmap>
 #include <QSvgGenerator>
 #include <QFileInfo>
+#include <QImageReader>
 #include <QDir>
 #include <QRegularExpression>
 #include <QCryptographicHash>
@@ -3553,10 +3554,20 @@ void PhoenixView::drawElement(QPainter& painter, const fla::Element* element, co
             }
             color.alphaMultiplier *= behaviorDelta.alpha;
             // A template's color field: the named clip tinted all one color.
-            if (!instance->name.empty())
+            // A slider holds the clip on a frame; an image field draws a
+            // file in place of its bitmap.
+            struct ImageScope
+            {
+                QString& image;
+                QString was;
+                ~ImageScope() { image = was; }
+            } imageScope{_templateImage, _templateImage};
+            _templateImage.clear();
+            if (!instance->name.empty() && instance->symbolType == fla::SymbolType::MovieClip)
                 if (const std::string* value = templateValue(instance->name))
                 {
                     unsigned char rgb[3];
+                    int frame = 0;
                     if (fla::templates::colorOf(*value, rgb))
                     {
                         color.tintMultiplier = 1.0;
@@ -3564,6 +3575,13 @@ void PhoenixView::drawElement(QPainter& painter, const fla::Element* element, co
                         color.tintColor[1] = rgb[1];
                         color.tintColor[2] = rgb[2];
                     }
+                    else if (fla::templates::frameOf(*value, frame))
+                    {
+                        frameOffset = std::min(frame, symbolLength(symbol)) - 1;
+                        loopType = fla::LoopType::SingleFrame;
+                    }
+                    else if (!value->empty() && fla::templates::clipKind(*symbol) == fla::templates::Field::Kind::Image)
+                        _templateImage = QString::fromStdString(*value);
                 }
             // The values this instance gives its template's fields hold for
             // everything drawn inside it.
@@ -3949,7 +3967,14 @@ void PhoenixView::drawElement(QPainter& painter, const fla::Element* element, co
 
         if (bitmap)
         {
-            const QPixmap pixmap = libraryBitmap(QString::fromStdString(bitmap->name));
+            QPixmap pixmap = libraryBitmap(QString::fromStdString(bitmap->name));
+            // A template's image field: the file given, at the bitmap's size.
+            if (!_templateImage.isEmpty() && !pixmap.isNull())
+            {
+                const QPixmap given = templateImage(_templateImage);
+                if (!given.isNull())
+                    pixmap = given.scaled(pixmap.size(), Qt::IgnoreAspectRatio, Qt::SmoothTransformation);
+            }
             if (!pixmap.isNull())
             {
                 painter.setRenderHint(QPainter::SmoothPixmapTransform, bitmap->allowSmoothing);
@@ -5099,6 +5124,22 @@ const std::string* PhoenixView::templateValue(const std::string& name) const
             return &found->second;
     }
     return nullptr;
+}
+
+QPixmap PhoenixView::templateImage(const QString& path)
+{
+    // A path that is not whole is from the document's folder.
+    QString file = path;
+    if (QFileInfo(file).isRelative() && _flaDocument && !_flaDocument->filepath.empty())
+        file = QFileInfo(QString::fromStdString(_flaDocument->filepath)).absoluteDir().filePath(path);
+    const auto found = _templateImages.find(file);
+    if (found != _templateImages.end())
+        return found.value();
+    QImageReader reader(file);
+    reader.setAutoTransform(true);
+    const QPixmap pixmap = QPixmap::fromImage(reader.read());
+    _templateImages.insert(file, pixmap);
+    return pixmap;
 }
 
 void PhoenixView::setTemplateValues(const fla::templates::Values& values)
@@ -7733,6 +7774,7 @@ void PhoenixView::clearCaches()
     _backdropCache.clear();
     _symbolBoundsCache.clear();
     _symbolReachCache.clear();
+    _templateImages.clear();
     _insideSelectedValid = false;
     ++_motionRevision;
     _staticValid = false;

@@ -130,6 +130,16 @@ struct TemplateBaker
                     for (int c = 0; c < 3; ++c)
                         instance->colorTransform.tintColor[c] = rgb[c];
                 }
+                // A slider: a graphic held on its frame, which other apps
+                // show without a script.
+                int frame = 0;
+                if (value != values.end() && templates::frameOf(value->second, frame) &&
+                    instance->symbolType == SymbolType::MovieClip)
+                {
+                    instance->symbolType = SymbolType::Graphic;
+                    instance->loopType = LoopType::SingleFrame;
+                    instance->firstFrame = frame - 1;
+                }
                 // Its own values under the ones from outside, which win.
                 templates::Values merged = templates::valuesOf(*instance);
                 for (const auto& [name, each] : values)

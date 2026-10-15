@@ -264,6 +264,9 @@ private slots:
     void renderFromData();
     /// Each row of \a rows rendered to \a folder; false with \a error when
     /// one could not be.
+    /// The rows of a CSV file of template values, image paths from its
+    /// folder made whole.
+    static std::vector<fla::templates::Values> rowsOfData(class QFile& file);
     bool renderRows(const std::vector<fla::templates::Values>& rows, const QString& folder, const QString& extension,
         QString& error, const std::function<bool(int row, int rows)>& progress = {});
 

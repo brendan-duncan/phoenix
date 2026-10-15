@@ -30,6 +30,10 @@ struct RenderJob
     /// Other options, as Phoenix render takes them ("--transparent",
     /// "--prores4444", "--everything", "--no-camera").
     QStringList options;
+    /// Rows of template values (a CSV file): a movie for each row, into
+    /// the output folder as \a format files (mp4, mov, gif or png).
+    QString data;
+    QString format;
 
     enum class State
     {
@@ -61,8 +65,9 @@ private:
     void fill();
     void save() const;
     void load();
-    void addJob(const QString& document);
+    void addJob(const QString& document, const QString& data = QString());
     bool editJob(RenderJob& job);
+    bool editDataJob(RenderJob& job, QDialog& dialog, class QFormLayout* form);
     void start();
     void runNext();
     void stop();
