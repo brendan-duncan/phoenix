@@ -4,6 +4,7 @@ What changed in each release of Phoenix, newest first.
 
 ## 0.13.1 (Unreleased)
 
+- Effects use every processor core: filters, adjustment-layer effects, mask edges and blurs draw 5 to 25 times faster, looking exactly as before
 - Motion blur draws about 15 times faster, and with echoes about 90 times: only the part of the picture the layer covers is blurred, and frames already blurred are reused
 - The Text tool types c, x and v again; they were being taken for the copy, cut and paste keys
 
