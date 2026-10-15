@@ -1,6 +1,7 @@
 #include "phoenix_view.h"
 #include "behavior_library.h"
 #include "../edit/shape_operators.h"
+#include "../edit/adjustments.h"
 #include "../edit/text_animators.h"
 #include "../edit/vector_import.h"
 #include "../jsfl/behavior_frames.h"
@@ -974,6 +975,96 @@ void PhoenixView::paintEvent(QPaintEvent *event)
     drawRulersAndGuides(painter);
 }
 
+bool PhoenixView::editingTrackMattes(bool) const
+{
+    // Track mattes work everywhere: on the stage while editing too, since
+    // there is no lock to wait for as masks have.
+    return false;
+}
+
+void PhoenixView::drawAdjustmentLayer(QPainter& painter, const fla::Layer* layer, fla::LoopType loopType, int firstFrame)
+{
+    auto* canvas = dynamic_cast<QImage*>(painter.device());
+    if (!canvas || canvas->format() != QImage::Format_ARGB32_Premultiplied)
+        return;
+    const LayerFrame state = resolveLayerFrame(layer, loopType, firstFrame);
+    const int at = state.frame ? state.frame->index + std::max(0, state.offset) : 0;
+    // Where the layer has art, its effects apply there only; with none,
+    // everywhere.
+    std::vector<uint8_t> coverage;
+    bool hasArt = false;
+    if (state.frame)
+        for (const fla::Element* element : state.frame->elements)
+            hasArt = hasArt || (element && element->visible);
+    if (hasArt)
+    {
+        QImage art(canvas->size(), QImage::Format_ARGB32_Premultiplied);
+        art.setDevicePixelRatio(canvas->devicePixelRatio());
+        art.fill(Qt::transparent);
+        QPainter artPainter(&art);
+        artPainter.setRenderHints(painter.renderHints());
+        artPainter.setTransform(painter.transform());
+        drawLayer(artPainter, layer, loopType, firstFrame, nullptr);
+        artPainter.end();
+        coverage.resize(static_cast<size_t>(art.width()) * static_cast<size_t>(art.height()));
+        for (int y = 0; y < art.height(); ++y)
+        {
+            const QRgb* line = reinterpret_cast<const QRgb*>(art.constScanLine(y));
+            for (int x = 0; x < art.width(); ++x)
+                coverage[static_cast<size_t>(y) * art.width() + x] = static_cast<uint8_t>(qAlpha(line[x]));
+        }
+    }
+    QImage changed = canvas->copy();
+    const double pixelsPerUnit = std::sqrt(std::fabs(painter.transform().determinant())) * canvas->devicePixelRatio();
+    fla::compositing::apply(reinterpret_cast<uint32_t*>(changed.bits()), changed.width(), changed.height(),
+        fla::compositing::effectsOf(*layer), at, pixelsPerUnit, hasArt ? coverage.data() : nullptr);
+    painter.save();
+    painter.resetTransform();
+    painter.setCompositionMode(QPainter::CompositionMode_Source);
+    painter.drawImage(0, 0, changed);
+    painter.restore();
+}
+
+void PhoenixView::drawMattedLayer(QPainter& painter, const fla::Layer* layer, const fla::Layer* source,
+    fla::compositing::Matte matte, fla::LoopType loopType, int firstFrame)
+{
+    const qreal ratio = painter.device()->devicePixelRatioF();
+    const QSize size(std::max(1, qRound(painter.device()->width() * ratio)), std::max(1, qRound(painter.device()->height() * ratio)));
+    const auto render = [&](const fla::Layer* which) {
+        QImage image(size, QImage::Format_ARGB32_Premultiplied);
+        image.setDevicePixelRatio(ratio);
+        image.fill(Qt::transparent);
+        QPainter imagePainter(&image);
+        imagePainter.setRenderHints(painter.renderHints());
+        imagePainter.setTransform(painter.transform());
+        drawLayer(imagePainter, which, loopType, firstFrame, nullptr);
+        imagePainter.end();
+        return image;
+    };
+    const QImage matteImage = render(source);
+    QImage content = render(layer);
+    const std::vector<uint8_t> strength = fla::compositing::matteStrength(
+        reinterpret_cast<const uint32_t*>(matteImage.constBits()), matteImage.width(), matteImage.height(), matte);
+    // The content scaled by the matte's strength, channel by channel, as
+    // its pixels are premultiplied.
+    for (int y = 0; y < content.height(); ++y)
+    {
+        QRgb* line = reinterpret_cast<QRgb*>(content.scanLine(y));
+        for (int x = 0; x < content.width(); ++x)
+        {
+            const unsigned k = strength[static_cast<size_t>(y) * content.width() + x];
+            if (k == 255)
+                continue;
+            const QRgb p = line[x];
+            line[x] = qRgba(qRed(p) * k / 255, qGreen(p) * k / 255, qBlue(p) * k / 255, qAlpha(p) * k / 255);
+        }
+    }
+    painter.save();
+    painter.resetTransform();
+    painter.drawImage(0, 0, content);
+    painter.restore();
+}
+
 void PhoenixView::drawEffectLayer(QPainter& painter, const fla::Layer* layer, const fla::Layer* target,
     fla::LoopType loopType, int firstFrame, bool editing)
 {
@@ -1653,6 +1744,33 @@ void PhoenixView::drawDocument(QPainter& painter, const fla::Document* document)
 
 void PhoenixView::drawTimeline(QPainter& painter, const fla::Timeline* timeline, fla::LoopType loopType, int firstFrame)
 {
+    // Adjustment layers change what is under them, so the timeline's layers
+    // are drawn on an image of their own that they can work on, then that
+    // image onto the painter.
+    if (!_vectorMasks && painter.device() && !_compositing.contains(timeline) &&
+        std::any_of(timeline->layers.begin(), timeline->layers.end(),
+            [](const fla::Layer* layer) { return layer && fla::compositing::isAdjustment(*layer); }))
+    {
+        // At the device's own resolution, on a high-density screen too.
+        const qreal ratio = painter.device()->devicePixelRatioF();
+        const QSize size(std::max(1, qRound(painter.device()->width() * ratio)), std::max(1, qRound(painter.device()->height() * ratio)));
+        QImage canvas(size, QImage::Format_ARGB32_Premultiplied);
+        canvas.setDevicePixelRatio(ratio);
+        canvas.fill(Qt::transparent);
+        QPainter canvasPainter(&canvas);
+        canvasPainter.setRenderHints(painter.renderHints());
+        canvasPainter.setTransform(painter.transform());
+        _compositing.insert(timeline);
+        drawTimeline(canvasPainter, timeline, loopType, firstFrame);
+        _compositing.remove(timeline);
+        canvasPainter.end();
+        painter.save();
+        painter.resetTransform();
+        painter.drawImage(0, 0, canvas);
+        painter.restore();
+        return;
+    }
+
     struct MaskData
     {
         QPixmap maskPixmap;
@@ -1802,9 +1920,41 @@ void PhoenixView::drawTimeline(QPainter& painter, const fla::Timeline* timeline,
         if (_onlyLayer && layer != _onlyLayer &&
             std::find(timeline->layers.begin(), timeline->layers.end(), _onlyLayer) != timeline->layers.end())
             continue;
+        // A layer serving as the matte of the layer below it is not drawn
+        // itself.
+        if (layer->layerType == fla::Layer::Type::Normal && !editingTrackMattes(editing))
+        {
+            const fla::Layer* below = nullptr;
+            for (int j = i + 1; j < static_cast<int>(timeline->layers.size()) && !below; ++j)
+                if (timeline->layers[j] && timeline->layers[j]->layerType != fla::Layer::Type::Folder)
+                    below = timeline->layers[j];
+            if (below && below->layerType == fla::Layer::Type::Normal &&
+                fla::compositing::matteOf(*below) != fla::compositing::Matte::None)
+                continue;
+        }
         std::optional<Faded> faded;
         if (lightTable && !layer->selected)
             faded.emplace(painter, 0.3);
+        // An adjustment layer: its effects on everything drawn under it.
+        if (fla::compositing::isAdjustment(*layer))
+        {
+            drawAdjustmentLayer(painter, layer, loopType, firstFrame);
+            continue;
+        }
+        // A track matte: the layer shown through the one above it.
+        if (layer->layerType == fla::Layer::Type::Normal && !editingTrackMattes(editing) &&
+            fla::compositing::matteOf(*layer) != fla::compositing::Matte::None)
+        {
+            const fla::Layer* source = nullptr;
+            for (int j = i - 1; j >= 0 && !source; --j)
+                if (timeline->layers[j] && timeline->layers[j]->layerType != fla::Layer::Type::Folder)
+                    source = timeline->layers[j];
+            if (source && source->layerType == fla::Layer::Type::Normal)
+            {
+                drawMattedLayer(painter, layer, source, fla::compositing::matteOf(*layer), loopType, firstFrame);
+                continue;
+            }
+        }
         // An effect composites over the layer under it, on the stage and in
         // what is exported.
         if (fla::effects::isEffect(*layer))

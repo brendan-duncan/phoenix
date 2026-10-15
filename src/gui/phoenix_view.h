@@ -1,6 +1,7 @@
 #pragma once
 
 #include "../edit/behaviors.h"
+#include "../edit/adjustments.h"
 #include "../edit/text_animators.h"
 
 #include "../data/color_transform.h"
@@ -22,6 +23,7 @@
 #include <memory>
 #include <QCache>
 #include <QHash>
+#include <QSet>
 #include <QList>
 #include <QMap>
 #include <QLineF>
@@ -1172,6 +1174,16 @@ private:
     /// \a entry as the shape's operators (Trim Paths, Wiggle Path...) leave
     /// it on frame \a at of its timeline.
     PathCacheEntry operatedEntry(const fla::Shape& shape, const PathCacheEntry& entry, int at) const;
+    /// An adjustment layer: its effects on what the painter's image holds,
+    /// where its art covers (everywhere with none).
+    void drawAdjustmentLayer(QPainter& painter, const fla::Layer* layer, fla::LoopType loopType, int firstFrame);
+    /// \a layer shown through \a source (the layer above it) as \a matte says.
+    void drawMattedLayer(QPainter& painter, const fla::Layer* layer, const fla::Layer* source,
+        fla::compositing::Matte matte, fla::LoopType loopType, int firstFrame);
+    bool editingTrackMattes(bool editing) const;
+    /// The timelines being drawn on a canvas of their own for their
+    /// adjustment layers.
+    QSet<const fla::Timeline*> _compositing;
     typedef QList<PathCacheEntry> PathCacheList;
 
     /// A cached stroke entry's pen with its width set for the element being drawn.

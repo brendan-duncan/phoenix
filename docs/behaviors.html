@@ -130,6 +130,17 @@
 
 <p>Letters turn and grow about their middles. Several animators add up: Cascade In and then Wave, say, brings the letters in and then keeps them moving.</p>
 
+<h2 id="compositing">Track mattes and adjustment layers</h2>
+
+<p>Two layer settings, on the layer's right-click menu in the timeline, change how layers combine.</p>
+
+<ul>
+  <li><b>Track Matte</b> shows a layer only through the layer just above it. An <b>Alpha Matte</b> shows it where the layer above has art, a <b>Luma Matte</b> where that art is light; the inverted ones show it everywhere else. The layer above becomes the matte and is not drawn itself. Unlike a mask, a matte can be soft (a blurred or faded shape gives a soft edge) and works while you edit, and both layers animate as usual: key the matte's art to make a reveal.</li>
+  <li><b>Adjustment Layer</b> makes a layer change everything drawn below it. With nothing selected on the stage, the Behaviors panel shows the current adjustment layer's effects: <b>Add Effect</b> offers <b>Blur</b>, <b>Color Correction</b> (brightness, contrast, saturation and hue) and <b>Tint</b> (toward a color, keeping light and dark), and their settings key like any others. An adjustment layer with no art changes the whole picture; one with art changes only where its art is, fading at soft edges.</li>
+</ul>
+
+<p>Both are Phoenix's own: another app opening the FLA file draws the matte layer plainly and the adjustment layer's art as art, and Export FLA for Other Apps does not bake them.</p>
+
 <h2 id="bake">Bake to keyframes</h2>
 
 <p>Baking turns behaviors into ordinary animation: every frame they touch becomes a keyframe holding the instance where its behaviors put it, its copies become instances of their own beside it, and the behaviors come off. What plays does not change, and you can then edit the frames by hand. Baking is one step you can undo.</p>

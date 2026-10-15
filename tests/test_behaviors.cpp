@@ -10,6 +10,7 @@
 #include "../src/edit/guide_path.h"
 #include "../src/edit/shape_operators.h"
 #include "../src/edit/text_animators.h"
+#include "../src/edit/adjustments.h"
 
 #include <cmath>
 #include <string>
@@ -471,6 +472,49 @@ TEST(shape_operators_trim_wiggle_and_zigzag_lines)
     Applied zigzag = fla::shapeops::defaults("zigzag", 1);
     const std::vector<Line> teeth = fla::shapeops::apply({straight}, true, {zigzag}, 0, 24.0);
     CHECK(teeth.size() == 1 && teeth[0].points.size() > 4 && teeth[0].points[0].y * teeth[0].points[1].y < 0);
+}
+
+TEST(compositing_mattes_and_adjustments)
+{
+    namespace comp = fla::compositing;
+    fla::Layer layer(nullptr);
+    layer.extraAttributes = comp::withMatte(layer, comp::Matte::LumaInverted);
+    CHECK(comp::matteOf(layer) == comp::Matte::LumaInverted);
+    layer.extraAttributes = comp::withMatte(layer, comp::Matte::None);
+    CHECK(comp::matteOf(layer) == comp::Matte::None && layer.extraAttributes.empty());
+    // A new adjustment layer starts with a blur; turned off, its effects stay.
+    layer.extraAttributes = comp::withAdjustment(layer, true);
+    CHECK(comp::isAdjustment(layer) && comp::effectsOf(layer).size() == 1 && comp::effectsOf(layer)[0].type == "blur");
+    layer.extraAttributes = comp::withAdjustment(layer, false);
+    CHECK(!comp::isAdjustment(layer) && comp::effectsOf(layer).size() == 1);
+
+    // Matte strength: alpha, inverted, and luma of premultiplied white at half.
+    const uint32_t matte[3] = {0xFF000000u, 0x00000000u, 0x80808080u};
+    std::vector<uint8_t> alpha = comp::matteStrength(matte, 3, 1, comp::Matte::Alpha);
+    std::vector<uint8_t> inverted = comp::matteStrength(matte, 3, 1, comp::Matte::AlphaInverted);
+    std::vector<uint8_t> luma = comp::matteStrength(matte, 3, 1, comp::Matte::Luma);
+    CHECK(alpha[0] == 255 && alpha[1] == 0 && inverted[1] == 255 && luma[0] == 0 && luma[2] == 128);
+
+    // Color: full saturation down to gray; tint keeps the alpha.
+    Applied gray = comp::defaults("color", 1);
+    gray.params["saturation"] = "-100";
+    uint32_t red = 0xFFFF0000u;
+    comp::apply(&red, 1, 1, {gray}, 0, 1.0);
+    const unsigned r = (red >> 16) & 0xFF, g = (red >> 8) & 0xFF, b = red & 0xFF;
+    CHECK(r == g && g == b && (red >> 24) == 0xFF);
+    uint32_t half = 0x80808080u;
+    comp::apply(&half, 1, 1, {comp::defaults("tint", 1)}, 0, 1.0);
+    CHECK((half >> 24) == 0x80);
+    // Blur spreads a dot; with no coverage there, nothing changes.
+    std::vector<uint32_t> dot(15 * 15, 0);
+    dot[7 * 15 + 7] = 0xFFFFFFFFu;
+    std::vector<uint32_t> blurred = dot;
+    comp::apply(blurred.data(), 15, 15, {comp::defaults("blur", 1)}, 0, 1.0);
+    CHECK(blurred[7 * 15 + 8] != 0 && blurred[7 * 15 + 7] != 0xFFFFFFFFu);
+    std::vector<uint8_t> none(15 * 15, 0);
+    std::vector<uint32_t> covered = dot;
+    comp::apply(covered.data(), 15, 15, {comp::defaults("blur", 1)}, 0, 1.0, none.data());
+    CHECK(covered == dot);
 }
 
 TEST(text_animators_change_letters_one_by_one)

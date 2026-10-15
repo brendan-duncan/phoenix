@@ -16,6 +16,7 @@ class QToolButton;
 namespace fla {
 class CommandStack;
 class DOMElement;
+class Layer;
 class Shape;
 class StaticText;
 class SymbolInstance;
@@ -32,6 +33,9 @@ struct BehaviorsLinks
     /// The text fields selected, for their letter animators when no
     /// instance or shape is selected.
     std::function<std::vector<fla::StaticText*>()> texts;
+    /// The current layer when it is an adjustment layer, for its effects
+    /// when nothing on the stage is selected.
+    std::function<fla::Layer*()> adjustmentLayer;
     /// After a change: the stage drawn again.
     std::function<void()> changed;
     /// The frame shown, on the timeline being edited: where keys go.
@@ -71,7 +75,8 @@ private:
     {
         Behaviors,
         Shapes,
-        Texts
+        Texts,
+        Adjustments
     };
     Mode mode() const;
     bool shapeMode() const;

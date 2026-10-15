@@ -4,6 +4,7 @@ What changed in each release of Phoenix, newest first.
 
 ## 0.10.0 (Unreleased)
 
+- Track mattes: a layer can show through the layer above it, by its alpha or its lightness, soft edges and all; adjustment layers blur, color-correct or tint everything below them, with keyable settings
 - Letter animators on text: Typewriter, Cascade In, Bounce In, Fade by Word, Scramble, Wave and Animate Letters, the text staying editable; baked into a text field a letter
 - Shape operators: Trim Paths draws a line on or off, Wiggle Path boils outlines, Zig-zag puts teeth or waves along them; keyed in the Behaviors panel, baked like behaviors
 - Behaviors: Particles sends out copies that are born, fly, fall, spin, grow and fade, the same on every playback

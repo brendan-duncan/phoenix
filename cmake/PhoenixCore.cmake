@@ -107,6 +107,7 @@ set(PHOENIX_CORE_SOURCES
     edit/behaviors.cpp
     edit/shape_operators.cpp
     edit/text_animators.cpp
+    edit/adjustments.cpp
     edit/timeline_edit.cpp
     edit/trace_bitmap.cpp
     edit/transform_blend.cpp

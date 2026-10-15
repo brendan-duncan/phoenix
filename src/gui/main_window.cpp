@@ -34,6 +34,7 @@
 #include "../jsfl/behavior_frames.h"
 #include "../edit/shape_operators.h"
 #include "../edit/text_animators.h"
+#include "../edit/adjustments.h"
 #include "../edit/frame_bake.h"
 #include "motion_editor.h"
 #include "motion_presets.h"
@@ -2057,6 +2058,15 @@ void MainWindow::createPanels()
                 }
             return shapes;
         };
+        links.adjustmentLayer = [this]() -> fla::Layer* {
+            fla::Timeline* timeline = nullptr;
+            int index = 0;
+            if (!_timelineView || !_timelineView->currentLayer(timeline, index) || !timeline || index < 0 ||
+                index >= static_cast<int>(timeline->layers.size()))
+                return nullptr;
+            fla::Layer* layer = timeline->layers[static_cast<size_t>(index)];
+            return layer && fla::compositing::isAdjustment(*layer) ? layer : nullptr;
+        };
         links.texts = [this]() {
             std::vector<fla::StaticText*> texts;
             for (fla::DOMElement* selected : _selection.elements())
@@ -3076,6 +3086,48 @@ void MainWindow::setupUI()
     connect(_timelineView, &TimelineView::layerEditRequested, this, &MainWindow::editLayers);
     connect(_timelineView, &TimelineView::parentLayerRequested, this, &MainWindow::setParentLayer);
     connect(_timelineView, &TimelineView::effectSettingsRequested, this, &MainWindow::editEffect);
+    connect(_timelineView, &TimelineView::compositingRequested, this, [this](fla::Layer* layer, const QString& what) {
+        if (!layer)
+            return;
+        using Attributes = std::vector<std::pair<std::string, std::string>>;
+        Attributes after;
+        QString name;
+        if (what.startsWith("matte:"))
+        {
+            const QString kind = what.mid(6);
+            const fla::compositing::Matte matte = kind == "alpha" ? fla::compositing::Matte::Alpha
+                : kind == "alphaInverted"                       ? fla::compositing::Matte::AlphaInverted
+                : kind == "luma"                                ? fla::compositing::Matte::Luma
+                : kind == "lumaInverted"                        ? fla::compositing::Matte::LumaInverted
+                                                                : fla::compositing::Matte::None;
+            after = fla::compositing::withMatte(*layer, matte);
+            name = "Track Matte";
+        }
+        else
+        {
+            after = fla::compositing::withAdjustment(*layer, what == "adjustment:on");
+            name = "Adjustment Layer";
+        }
+        if (after == layer->extraAttributes)
+            return;
+        _editContext.commandStack().push(fla::CommandPtr(new fla::SetPropertyCommand<Attributes>(layer->extraAttributes,
+            layer->extraAttributes, after, name.toStdString())));
+        _editContext.commandStack().breakMergeChain();
+        if (_phoenixView)
+        {
+            _phoenixView->clearCaches();
+            _phoenixView->update();
+        }
+        if (_behaviors && _behaviorsDock)
+        {
+            if (what == "adjustment:on")
+            {
+                _behaviorsDock->show();
+                _behaviorsDock->raise();
+            }
+            _behaviors->refresh();
+        }
+    });
     connect(_timelineView, &TimelineView::layerClipboardRequested, this, &MainWindow::layerClipboard);
     // The frame view's thumbnails: a keyframe's art alone, cropped to it,
     // or the whole stage around it.

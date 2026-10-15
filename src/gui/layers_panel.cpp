@@ -1,4 +1,5 @@
 #include "layers_panel.h"
+#include "../edit/adjustments.h"
 #include "../edit/layer_effects.h"
 
 #include "theme.h"
@@ -1318,6 +1319,28 @@ void LayersPanel::showLayerMenu(QTreeWidgetItem* item, const QPoint& globalPos)
 
         if (fla::effects::isEffect(*layer))
             menu.addAction("Effect Settings...", this, [=]() { emit effectSettingsRequested(layer); });
+
+        // Compositing: shown through the layer above, or changing all below.
+        QMenu* matteMenu = menu.addMenu("Track Matte");
+        const fla::compositing::Matte matte = fla::compositing::matteOf(*layer);
+        const std::pair<fla::compositing::Matte, const char*> mattes[] = {{fla::compositing::Matte::None, "None"},
+            {fla::compositing::Matte::Alpha, "Alpha Matte (the layer above)"},
+            {fla::compositing::Matte::AlphaInverted, "Alpha Inverted Matte"},
+            {fla::compositing::Matte::Luma, "Luma Matte (the layer above)"},
+            {fla::compositing::Matte::LumaInverted, "Luma Inverted Matte"}};
+        for (const auto& [kind, label] : mattes)
+        {
+            const QString what = QString("matte:%1").arg(kind == fla::compositing::Matte::None ? "none" : fla::compositing::matteName(kind));
+            QAction* choice = matteMenu->addAction(label, this, [=]() { emit compositingRequested(layer, what); });
+            choice->setCheckable(true);
+            choice->setChecked(kind == matte);
+        }
+        QAction* adjustment = menu.addAction("Adjustment Layer", this, [=]() {
+            emit compositingRequested(layer, fla::compositing::isAdjustment(*layer) ? "adjustment:off" : "adjustment:on");
+        });
+        adjustment->setCheckable(true);
+        adjustment->setChecked(fla::compositing::isAdjustment(*layer));
+        adjustment->setStatusTip("Blur, color-correct or tint everything below this layer; its settings are in the Behaviors panel");
 
         // Layer parenting: the layer follows another's object, as a forearm
         // its arm.

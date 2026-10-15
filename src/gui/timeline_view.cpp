@@ -62,6 +62,7 @@ TimelineView::TimelineView(Player* player, QWidget *parent)
     connect(_layersPanel, &LayersPanel::layerEditRequested, this, &TimelineView::layerEditRequested);
     connect(_layersPanel, &LayersPanel::parentLayerRequested, this, &TimelineView::parentLayerRequested);
     connect(_layersPanel, &LayersPanel::effectSettingsRequested, this, &TimelineView::effectSettingsRequested);
+    connect(_layersPanel, &LayersPanel::compositingRequested, this, &TimelineView::compositingRequested);
     connect(_layersPanel, &LayersPanel::layerClipboardRequested, this, &TimelineView::layerClipboardRequested);
     connect(_timelinesPanel, &TimelinesPanel::keyframeMoveRequested, this, &TimelineView::keyframeMoveRequested);
     connect(_timelinesPanel, &TimelinesPanel::framePicked, this, &TimelineView::framePicked);

@@ -79,6 +79,7 @@ signals:
     void layerEditRequested(fla::Timeline* timeline, const fla::LayerSnapshot& after, const QString& name);
     void parentLayerRequested(fla::Timeline* timeline, fla::Layer* layer, fla::Layer* parent);
     void effectSettingsRequested(fla::Layer* layer);
+    void compositingRequested(fla::Layer* layer, const QString& what);
     /// Cut (0), Copy (1), Paste (2) or Duplicate (3) Layers.
     void layerClipboardRequested(int action);
     void keyframeMoveRequested(const fla::Layer* layer, int from, int to);

@@ -119,6 +119,10 @@ signals:
     void parentLayerRequested(fla::Timeline* timeline, fla::Layer* layer, fla::Layer* parent);
     /// An effect layer's settings, to be edited.
     void effectSettingsRequested(fla::Layer* layer);
+    /// A track matte ("matte:alpha", "matte:alphaInverted", "matte:luma",
+    /// "matte:lumaInverted", "matte:none") or adjustment layer
+    /// ("adjustment:on", "adjustment:off") asked for \a layer.
+    void compositingRequested(fla::Layer* layer, const QString& what);
     /// Cut (0), Copy (1), Paste (2) or Duplicate (3) Layers, from the menu.
     void layerClipboardRequested(int action);
 
