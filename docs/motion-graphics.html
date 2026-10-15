@@ -67,6 +67,31 @@
   <figcaption>Shape operators and a letter animator, each a few settings on art that stays as drawn.</figcaption>
 </figure>
 
+<h2 id="recipes">Recipes</h2>
+
+<p>A few looks put together from the pieces above, each a minute or two of work:</p>
+
+<dl class="defs">
+  <dt>A neon sign</dt>
+  <dd>Put the sign's art under an <a href="behaviors.html#effects">adjustment layer</a> with <b>Glow</b>, and give the sign's instance <b>Blink</b> with <b>At random</b> ticked and a high rate for a faulty flicker. Or open <b>Add Behavior &rsaquo; Browse Presets...</b> and pick <b>Flicker</b>.</dd>
+  <dt>A comet with a trail</dt>
+  <dd>Tween a small bright shape across the stage, then on its layer turn on <b>Motion Blur</b> and, from <b>Echo and Posterize Time...</b>, 6 echoes every 2 frames keeping 60%.</dd>
+  <dt>Marching ants around a selection</dt>
+  <dd>Draw a rectangle with no fill, add the <b>Dashes</b> shape operator, and key its <b>Offset</b> from 0 at the first frame to 100 at the last.</dd>
+  <dt>A title that comes into focus</dt>
+  <dd>Add <b>Add Animator &rsaquo; Presets &rsaquo; Blur In</b> to the text field; for the whole picture, key an adjustment layer's <b>Blur</b> from 20 to 0.</dd>
+  <dt>A rack focus</dt>
+  <dd>Push movie clips to different depths with the 3D Translation tool, turn on depth of field in <b>Lights and Depth...</b>, and move the focus by keying the clips' Z, or swap which clip sits at the focus depth.</dd>
+  <dt>A music video's bars</dt>
+  <dd>Put the song on a layer, draw a bar with its registration point at its bottom, and give it <b>Audio Spectrum</b>; set <b>Laid out</b> to <b>Circle</b> for a ring round a logo.</dd>
+  <dt>One dial for a whole machine</dt>
+  <dd>Put an <b>Angle Control</b> on a marker, key it, and give each gear <b>Link to Control</b> with its own <b>Amount</b>: 100 for the big gear, -200 for one half its size turning the other way.</dd>
+  <dt>A news ticker</dt>
+  <dd>A dynamic text field with <b>Source Text</b> keyed to each headline, <b>Slide Up</b> from the letter presets, and a bar behind it pinned with <b>Pin to Text</b> so it fits each one.</dd>
+  <dt>Smooth slow motion</dt>
+  <dd>On a graphic, add <b>Time Remap</b>, key <b>Frame shown</b> from 1 to 24 over 96 frames, and tick <b>Blend between frames</b>.</dd>
+</dl>
+
 <h2>How it works</h2>
 
 <ul>
