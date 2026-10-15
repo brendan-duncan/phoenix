@@ -1138,3 +1138,26 @@ TEST(mask_edges_and_layer_modes)
     comp::shapeMask(inside, 21, 21, flip, 1.0);
     CHECK(inside[0] == 255 && inside[10 * 21 + 10] == 0);
 }
+
+TEST(shape_operators_twist_and_merge)
+{
+    using fla::shapeops::Line;
+    Line square;
+    square.closed = true;
+    square.points = {fla::Point(0, 0), fla::Point(100, 0), fla::Point(100, 100), fla::Point(0, 100)};
+    Applied twist = fla::shapeops::defaults("twist", 1);
+    const std::vector<Line> out = fla::shapeops::apply({square}, false, {twist}, 0, 24.0);
+    CHECK(out.size() == 1 && out.front().points.size() > 4);
+    // The corners, at the far edge, stay put; points nearer the middle turn.
+    bool corner = false;
+    for (const fla::Point& point : out.front().points)
+        corner = corner || (near(point.x, 100.0, 1e-6) && near(point.y, 100.0, 1e-6));
+    CHECK(corner);
+    CHECK(fla::shapeops::mergeOf({}, 0).empty());
+    Applied merge = fla::shapeops::defaults("merge", 1);
+    CHECK(fla::shapeops::mergeOf({merge}, 0) == "Add");
+    merge.params["mode"] = "Exclude";
+    CHECK(fla::shapeops::mergeOf({merge}, 0) == "Exclude");
+    // Geometry alone, merging leaves the lines as they are.
+    CHECK(fla::shapeops::apply({square}, false, {merge}, 0, 24.0).front().points.size() == 4);
+}

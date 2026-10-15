@@ -44,6 +44,17 @@ ParamSpec checkbox(const char* name, const char* label, bool value)
     return spec;
 }
 
+ParamSpec choice(const char* name, const char* label, std::vector<std::string> options)
+{
+    ParamSpec spec;
+    spec.name = name;
+    spec.label = label;
+    spec.type = "choice";
+    spec.choices = std::move(options);
+    spec.text = spec.choices.empty() ? std::string() : spec.choices.front();
+    return spec;
+}
+
 ParamSpec seed()
 {
     ParamSpec spec = number("seed", "Seed", 1, 0, 9999, 1);
@@ -632,6 +643,26 @@ const std::vector<Definition>& definitions()
             number("speed", "Waves a second", 0, -60, 60, 0.1)};
         made.push_back(taperDef);
 
+        Definition twistDef;
+        twistDef.id = "twist";
+        twistDef.name = "Twist";
+        twistDef.description = "Turns the shape about its middle, more near the middle than at the edge, curling "
+                               "straight sides into a swirl.";
+        twistDef.builtIn = true;
+        twistDef.params = {number("angle", "Angle (degrees)", 90, -3600, 3600, 1), number("centerX", "Center across (percent)", 50, -100, 200, 1),
+            number("centerY", "Center down (percent)", 50, -100, 200, 1)};
+        made.push_back(twistDef);
+
+        Definition mergeDef;
+        mergeDef.id = "merge";
+        mergeDef.name = "Merge Paths";
+        mergeDef.description = "Combines the shape's outlines into one: added together, the later ones cut out of the "
+                               "first, only where they overlap, or only where they do not. Key the other operators to "
+                               "make shapes meld and part.";
+        mergeDef.builtIn = true;
+        mergeDef.params = {choice("mode", "Merge", {"Add", "Subtract", "Intersect", "Exclude"})};
+        made.push_back(mergeDef);
+
         Definition repeaterDef;
         repeaterDef.id = "repeater";
         repeaterDef.name = "Repeater";
@@ -645,6 +676,19 @@ const std::vector<Definition>& definitions()
         return made;
     }();
     return list;
+}
+
+std::string mergeOf(const std::vector<Applied>& list, int frame)
+{
+    std::string mode;
+    for (const Applied& applied : list)
+        if (applied.enabled && applied.type == "merge")
+        {
+            mode = applied.valueAt("mode", frame, "Add");
+            if (mode.empty())
+                mode = "Add";
+        }
+    return mode;
 }
 
 Taper taperOf(const std::vector<Applied>& list, int frame)
@@ -760,6 +804,35 @@ std::vector<Line> apply(const std::vector<Line>& lines, bool stroke, const std::
         {
             if (stroke)
                 out = trim(out, applied, frame);
+        }
+        else if (applied.type == "twist")
+        {
+            // Each point turned about the middle of all the lines, most at
+            // the middle and none at the far edge.
+            const double angle = param(applied, "angle", frame, 90.0) * 3.14159265358979323846 / 180.0;
+            double left = 1e300, top = 1e300, right = -1e300, bottom = -1e300;
+            for (const Line& line : out)
+                for (const Point& point : line.points)
+                {
+                    left = std::min(left, point.x);
+                    right = std::max(right, point.x);
+                    top = std::min(top, point.y);
+                    bottom = std::max(bottom, point.y);
+                }
+            if (left > right)
+                continue;
+            const double cx = left + (right - left) * param(applied, "centerX", frame, 50.0) / 100.0;
+            const double cy = top + (bottom - top) * param(applied, "centerY", frame, 50.0) / 100.0;
+            const double reach = std::max(1e-9, std::hypot(std::max(cx - left, right - cx), std::max(cy - top, bottom - cy)));
+            // Finely, so straight sides curl.
+            out = displaced(out, 2.0, [](const Sample&, size_t) { return 0.0; });
+            for (Line& line : out)
+                for (Point& point : line.points)
+                {
+                    const double dx = point.x - cx, dy = point.y - cy;
+                    const double turn = angle * (1.0 - std::min(1.0, std::hypot(dx, dy) / reach));
+                    point = Point(cx + dx * std::cos(turn) - dy * std::sin(turn), cy + dx * std::sin(turn) + dy * std::cos(turn));
+                }
         }
         else if (applied.type == "dashes")
         {

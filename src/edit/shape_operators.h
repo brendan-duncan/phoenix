@@ -58,6 +58,11 @@ struct Taper
 };
 Taper taperOf(const std::vector<behaviors::Applied>& list, int frame);
 
+/// How the last Merge Paths operator on the list combines a shape's
+/// outlines on a frame: "Add", "Subtract", "Intersect" or "Exclude"; empty
+/// when there is none. The combining is the drawing's to do.
+std::string mergeOf(const std::vector<behaviors::Applied>& list, int frame);
+
 /// The outline of \a line stroked \a weight wide as \a taper says, at
 /// \a seconds into the movie: a closed polygon to fill.
 std::vector<Point> taperedOutline(const Line& line, double weight, const Taper& taper, double seconds);

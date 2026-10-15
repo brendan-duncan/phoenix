@@ -5598,6 +5598,37 @@ PhoenixView::PathCacheEntry PhoenixView::operatedEntry(const fla::Shape& shape, 
         if (line.closed)
             path.closeSubpath();
     }
+    // Merge Paths: the outlines combined, the first with each after it.
+    const std::string merge = stroke ? std::string() : fla::shapeops::mergeOf(fla::shapeops::of(shape), at);
+    if (!merge.empty() && out.size() > 1)
+    {
+        QPainterPath combined;
+        bool first = true;
+        for (const fla::shapeops::Line& line : out)
+        {
+            if (line.points.size() < 3)
+                continue;
+            QPainterPath piece;
+            QPolygonF polygon;
+            for (const fla::Point& point : line.points)
+                polygon << QPointF(point.x, point.y);
+            piece.addPolygon(polygon);
+            piece.closeSubpath();
+            if (first)
+                combined = piece;
+            else if (merge == "Subtract")
+                combined = combined.subtracted(piece);
+            else if (merge == "Intersect")
+                combined = combined.intersected(piece);
+            else if (merge == "Exclude")
+                combined = combined.united(piece).subtracted(combined.intersected(piece));
+            else
+                combined = combined.united(piece);
+            first = false;
+        }
+        combined.setFillRule(Qt::WindingFill);
+        path = combined;
+    }
     changed.painterPath = path;
     // What was worked out from the old geometry no longer fits it.
     changed.effectPath = QPainterPath();
