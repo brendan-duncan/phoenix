@@ -86,6 +86,10 @@ private:
         fla::EditablePath current;
         /// For a corner drag: which anchor of this path moves.
         size_t anchorIndex = 0;
+        /// What the drag works from, when not before: the path with the
+        /// corner a Ctrl-drag put in.
+        fla::EditablePath start;
+        bool started = false;
     };
 
     /// Gathers every anchor of \a shape sitting at \a position.

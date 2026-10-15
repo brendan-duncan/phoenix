@@ -4,6 +4,7 @@ What changed in each release of Phoenix, newest first.
 
 ## 0.12.0 (Unreleased)
 
+- Ctrl-dragging an outline with the Selection tool puts a new corner where you grab it and drags that, instead of moving the next corner along
 - Export FLA for Other Apps carries inverted track mattes (Layer and Erase blending) and adjustment-layer art (a mask over the filtered layers); SVG exports draw adjustment layers
 - Many copies of a graphic (crowds, grids, particles) draw from one picture of it: a thousand copies of a detailed symbol went from 433 ms a frame to 5 ms
 - Bone springs: a bone of an armature of symbols can trail, overshoot and settle as the armature moves, set with Spring and Damping when you click it with the Bone tool

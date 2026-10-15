@@ -167,6 +167,8 @@ void EdgeBender::begin(PhoenixView& view, const Probe& probe, const QPointF& doc
 
         _grab = Grab::Corner;
         _edited.push_back({probe.edge, probe.pathIndex, before, current, static_cast<size_t>(inserted)});
+        _edited.back().start = current;
+        _edited.back().started = true;
         // The drag is measured from the new corner, which sits where the
         // cursor pressed to within the pick tolerance.
         _startLocal = QPointF(probe.position.x, probe.position.y);
@@ -213,7 +215,7 @@ void EdgeBender::update(PhoenixView& view, const QPointF& documentPos)
     {
         // Rebuilt from the starting geometry every time, so a long drag does
         // not accumulate rounding error.
-        edited.current = edited.before;
+        edited.current = edited.started ? edited.start : edited.before;
 
         if (_grab == Grab::Corner)
         {
