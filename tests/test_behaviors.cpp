@@ -12,6 +12,8 @@
 #include "../src/edit/text_animators.h"
 #include "../src/edit/adjustments.h"
 #include "../src/edit/templates.h"
+#include "../src/edit/motion_blur.h"
+#include "../src/data/document.h"
 #include "../src/data/static_text.h"
 #include "../src/data/symbol.h"
 #include "../src/data/bitmap_instance.h"
@@ -913,4 +915,30 @@ TEST(text_animators_change_letters_one_by_one)
     std::vector<Change> early = fla::textanim::apply({fla::textanim::defaults("bounce", 1)}, letters, 0, 0, 24.0);
     std::vector<Change> late = fla::textanim::apply({fla::textanim::defaults("bounce", 1)}, letters, 100, 0, 24.0);
     CHECK(early[4].scale == 0.0 && near(late[4].scale, 1.0, 1e-6));
+}
+
+TEST(motion_blur_settings_and_sample_times)
+{
+    namespace mb = fla::motionblur;
+    // Centered on the frame: a half-frame shutter takes pictures from a
+    // quarter frame before to a quarter after.
+    const std::vector<double> times = mb::sampleTimes(180.0, 4);
+    CHECK(times.size() == 4 && near(times.front(), -0.1875, 1e-9) && near(times.back(), 0.1875, 1e-9));
+    CHECK(near(times[0] + times[3], 0.0, 1e-9));
+    CHECK(mb::sampleTimes(0.0, 3) == std::vector<double>({0.0, 0.0, 0.0}));
+
+    fla::Layer layer(nullptr);
+    CHECK(!mb::on(layer));
+    layer.extraAttributes = mb::withOn(layer, true);
+    CHECK(mb::on(layer));
+    layer.extraAttributes = mb::withOn(layer, false);
+    CHECK(!mb::on(layer) && layer.extraAttributes.empty());
+
+    fla::Document document(nullptr);
+    CHECK(mb::shutter(document) == 180.0 && mb::samples(document) == 16);
+    document.extraAttributes = mb::withSettings(document, 270.0, 32);
+    CHECK(mb::shutter(document) == 270.0 && mb::samples(document) == 32);
+    // Back to the defaults, nothing is kept.
+    document.extraAttributes = mb::withSettings(document, 180.0, 16);
+    CHECK(document.extraAttributes.empty());
 }

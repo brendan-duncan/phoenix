@@ -4,6 +4,7 @@ What changed in each release of Phoenix, newest first.
 
 ## 0.12.0 (Unreleased)
 
+- Motion blur: turn it on for a layer from its right-click menu; the shutter angle and samples are on the Doc tab
 - Opening a SWF movie brings back its scenes, by name, instead of one long scene
 - SWF export: the scene's event, start and stop sounds go in as event sounds of their own instead of being mixed into the stream
 - Paste in Place with frames chosen on the timeline pastes onto every keyframe they cover

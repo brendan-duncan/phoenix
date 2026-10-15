@@ -1,5 +1,6 @@
 #include "phoenix_view.h"
 #include "behavior_library.h"
+#include "../edit/motion_blur.h"
 #include "../edit/shape_operators.h"
 #include "../edit/adjustments.h"
 #include "../edit/templates.h"
@@ -1605,6 +1606,8 @@ bool PhoenixView::needsBackdrop(const fla::Element* element, int depth)
 
 int PhoenixView::shownFrame() const
 {
+    if (_sampleFrame >= 0)
+        return _sampleFrame;
     if (_frameOverride >= 0)
         return _frameOverride;
     return _player ? _player->currentFrame() : 0;
@@ -2219,9 +2222,11 @@ PhoenixView::LayerFrame PhoenixView::resolveLayerFrame(const fla::Layer* layer,
         int tweenStartIndex = currentFrame->index;
         int tweenEndIndex = currentFrame->index + currentFrame->duration;
 
-        if (currentFrameIndex > tweenStartIndex && currentFrameIndex < tweenEndIndex)
+        // Part way to the next frame, for motion blur.
+        const double at = currentFrameIndex + _subframe;
+        if (at > tweenStartIndex && currentFrameIndex < tweenEndIndex)
         {
-            tweenProgress = static_cast<double>(currentFrameIndex - tweenStartIndex) / currentFrame->duration;
+            tweenProgress = std::min(1.0, (at - tweenStartIndex) / currentFrame->duration);
             tweenProgress = fla::easeProgress(tweenProgress, currentFrame->acceleration,
                 currentFrame->hasCustomEase ? currentFrame->customEase : std::vector<fla::Point>(),
                 currentFrame->easeMethod);
@@ -2341,13 +2346,19 @@ fla::Transform PhoenixView::shownTransform(const LayerFrame& state, size_t eleme
     // An armature of symbols places its instances from its joints.
     fla::Transform posed;
     if (armatureTransform(state.frame, element, state.offset, posed))
+    {
+        // Part way to the next frame's pose, for motion blur.
+        fla::Transform next;
+        if (_subframe > 0.0 && armatureTransform(state.frame, element, state.offset + 1, next))
+            posed = interpolateTransform(posed, next, _subframe);
         return posed;
+    }
     if (const fla::MotionObject* motion = motionOf(state.frame))
     {
         const double rate = _flaDocument && _flaDocument->document && _flaDocument->document->frameRate > 0.0
             ? _flaDocument->document->frameRate : 24.0;
         return fla::applyMotion(element->transform, element->transformationPoint, motion->at(0.0, rate),
-            motion->at(state.offset, rate));
+            motion->at(state.offset + _subframe, rate));
     }
     const std::vector<int> pairs = state.tweenFrame && state.frame->tweenType == fla::TweenType::Motion
         ? fla::pairTweenElements(state.frame->elements, state.tweenFrame->elements) : std::vector<int>();
@@ -2374,6 +2385,29 @@ fla::Transform PhoenixView::shownTransform(const LayerFrame& state, size_t eleme
 
 fla::behaviors::Copies PhoenixView::behaviorCopies(const fla::SymbolInstance& instance, const fla::Transform& keyed, int at)
 {
+    // Part way to the next frame, for motion blur: each copy between where
+    // it is on this frame and the next.
+    if (_subframe > 0.0)
+    {
+        const double part = _subframe;
+        _subframe = 0.0;
+        fla::behaviors::Copies now = behaviorCopies(instance, keyed, at);
+        const fla::behaviors::Copies next = behaviorCopies(instance, keyed, at + 1);
+        _subframe = part;
+        if (next.size() == now.size())
+            for (size_t i = 0; i < now.size(); ++i)
+            {
+                fla::behaviors::Delta& d = now[i];
+                const fla::behaviors::Delta& e = next[i];
+                d.x += (e.x - d.x) * part;
+                d.y += (e.y - d.y) * part;
+                d.rotation += (e.rotation - d.rotation) * part;
+                d.scaleX += (e.scaleX - d.scaleX) * part;
+                d.scaleY += (e.scaleY - d.scaleY) * part;
+                d.alpha += (e.alpha - d.alpha) * part;
+            }
+        return now;
+    }
     if (_behaviorRevision != _revision)
     {
         _behaviorCache.clear();
@@ -3056,8 +3090,79 @@ QTransform PhoenixView::rigTransform(const fla::Layer* layer, const fla::Frame* 
     return QTransform();
 }
 
+bool PhoenixView::drawBlurredLayer(QPainter& painter, const fla::Layer* layer, fla::LoopType loopType, int firstFrame,
+    const QPixmap* maskPixmap)
+{
+    const fla::Document* document = _flaDocument ? _flaDocument->document : nullptr;
+    if (_blurring || !document || !layer || !fla::motionblur::on(*layer) || layer->parent != document->currentScene() ||
+        (_frameOverride >= 0 && !_exporting) || _maskPass || !painter.device())
+        return false;
+    const double shutter = fla::motionblur::shutter(*document);
+    const std::vector<double> times = fla::motionblur::sampleTimes(shutter, fla::motionblur::samples(*document));
+    if (shutter <= 0.0 || times.size() < 2)
+        return false;
+    // Pictures the size of what is drawn on, at its resolution.
+    const qreal ratio = painter.device()->devicePixelRatioF();
+    const QSize size(std::max(1, qRound(painter.device()->width() * ratio)), std::max(1, qRound(painter.device()->height() * ratio)));
+    std::vector<float> sum(static_cast<size_t>(size.width()) * size.height() * 4, 0.0f);
+    const int frame = shownFrame();
+    struct Restore
+    {
+        PhoenixView& view;
+        int sample;
+        double subframe;
+        ~Restore()
+        {
+            view._sampleFrame = sample;
+            view._subframe = subframe;
+            view._blurring = false;
+        }
+    } restore{*this, _sampleFrame, _subframe};
+    _blurring = true;
+    QImage picture(size, QImage::Format_ARGB32_Premultiplied);
+    picture.setDevicePixelRatio(ratio);
+    for (const double time : times)
+    {
+        // Before the first frame there is nothing earlier to show.
+        const double at = std::max(0.0, frame + time);
+        _sampleFrame = static_cast<int>(std::floor(at));
+        _subframe = at - _sampleFrame;
+        picture.fill(Qt::transparent);
+        QPainter into(&picture);
+        into.setRenderHints(painter.renderHints());
+        into.setTransform(painter.transform());
+        into.setOpacity(1.0);
+        drawLayer(into, layer, loopType, firstFrame, maskPixmap);
+        into.end();
+        const uint8_t* bytes = picture.constBits();
+        for (int y = 0; y < size.height(); ++y)
+        {
+            const uint8_t* line = bytes + static_cast<size_t>(y) * picture.bytesPerLine();
+            float* out = sum.data() + static_cast<size_t>(y) * size.width() * 4;
+            for (int x = 0; x < size.width() * 4; ++x)
+                out[x] += line[x];
+        }
+    }
+    // The average, drawn as the layer.
+    const float share = 1.0f / static_cast<float>(times.size());
+    for (int y = 0; y < size.height(); ++y)
+    {
+        uint8_t* line = picture.scanLine(y);
+        const float* in = sum.data() + static_cast<size_t>(y) * size.width() * 4;
+        for (int x = 0; x < size.width() * 4; ++x)
+            line[x] = static_cast<uint8_t>(std::min(255.0f, in[x] * share + 0.5f));
+    }
+    painter.save();
+    painter.resetTransform();
+    painter.drawImage(QRectF(0, 0, painter.device()->width(), painter.device()->height()), picture);
+    painter.restore();
+    return true;
+}
+
 void PhoenixView::drawLayer(QPainter& painter, const fla::Layer* layer, fla::LoopType loopType, int firstFrame, const QPixmap* maskPixmap)
 {
+    if (drawBlurredLayer(painter, layer, loopType, firstFrame, maskPixmap))
+        return;
     // Edit Multiple Frames draws a layer's other keyframes, one at a time.
     if (_multiKeysOnly && _frameDepth == 0)
     {
@@ -3266,8 +3371,8 @@ void PhoenixView::drawFrame(QPainter& painter, const fla::Frame* frame, const fl
                                 _flaDocument->document->frameRate > 0.0
                             ? _flaDocument->document->frameRate : 24.0;
                         _overrideStyleElement = element;
-                        _overrideColor = motion->colorAt(motionState->offset, rate, instance->colorTransform);
-                        _overrideFilters = motion->filtersAt(motionState->offset, rate, instance->filters);
+                        _overrideColor = motion->colorAt(motionState->offset + _subframe, rate, instance->colorTransform);
+                        _overrideFilters = motion->filtersAt(motionState->offset + _subframe, rate, instance->filters);
                     }
                 }
                 drawElement(painter, element, nextElement, tweenProgress);
@@ -3824,7 +3929,7 @@ void PhoenixView::drawElement(QPainter& painter, const fla::Element* element, co
                 const int shownFrame = this->shownFrame();
                 // Onion frames are drawn once and passed over, so they are
                 // neither looked up nor kept.
-                const bool cacheable = !_maskPass && _frameOverride < 0 && !_movie && _templateStack.empty();
+                const bool cacheable = !_maskPass && _frameOverride < 0 && _sampleFrame < 0 && !_movie && _templateStack.empty();
                 const auto cached = cacheable ? _filterCache.find(instance) : _filterCache.end();
                 const auto sameLinear = [](const QTransform& a, const QTransform& b) {
                     return std::fabs(a.m11() - b.m11()) < 1.0e-9 && std::fabs(a.m12() - b.m12()) < 1.0e-9 &&

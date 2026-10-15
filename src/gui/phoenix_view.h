@@ -814,6 +814,16 @@ private:
     /// drawn opaque, since a mask is coverage and its colors and alpha
     /// mean nothing.
     bool _maskPass = false;
+    /// Motion blur: the frame a picture is taken at (-1 for the frame
+    /// shown) and how far on from it toward the next, 0 to 1; and whether a
+    /// blurred layer is being drawn, so it is not blurred again inside.
+    int _sampleFrame = -1;
+    double _subframe = 0.0;
+    bool _blurring = false;
+    /// \a layer drawn with motion blur, when it has it on and is on the
+    /// scene shown; false, drawing nothing, otherwise.
+    bool drawBlurredLayer(QPainter& painter, const fla::Layer* layer, fla::LoopType loopType, int firstFrame,
+        const QPixmap* maskPixmap);
 
     static constexpr int kRulerSize = 20;
     bool _showRulers = false;

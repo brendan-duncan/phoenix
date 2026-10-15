@@ -50,6 +50,7 @@ const std::vector<Feature>& all()
         {"compositing", "Track mattes and adjustment layers",
             "matte layers drawn plainly and adjustment layers without their blur or color",
             {"phoenixMatte", "phoenixAdjustmentLayer", "phoenixAdjustments"}},
+        {"motion-blur", "Motion blur", "the layers drawn sharp", {"phoenixMotionBlur", "phoenixShutterAngle", "phoenixMotionBlurSamples"}},
         {"templates", "Template fields", "the symbols' text and colors as drawn, the same in every instance",
             {"phoenixTemplate"}},
         {"master-controllers", "Master controllers", "the properties as keyed, without the sliders",

@@ -1,6 +1,7 @@
 #include "properties_panel.h"
 #include "script_tool.h"
 
+#include "../edit/motion_blur.h"
 #include "../edit/filter_presets.h"
 #include "text_layout.h"
 #include "../edit/text_style.h"
@@ -3884,6 +3885,46 @@ void PropertiesPanel::rebuildDocTab()
     scaleSpans->setChecked(QSettings().value("document/scaleSpans", false).toBool());
     connect(scaleSpans, &QCheckBox::toggled, this, [](bool on) { QSettings().setValue("document/scaleSpans", on); });
     settings->addLong(2, "", scaleSpans);
+
+    // Motion blur: the shutter layers with it on share.
+    PropertySection* blur = addSection(page, "Motion Blur");
+    using Attributes = std::vector<std::pair<std::string, std::string>>;
+    const auto setBlur = [this, doc](double shutter, int samples) {
+        const Attributes after = fla::motionblur::withSettings(*doc, shutter, samples);
+        if (after == doc->extraAttributes)
+            return;
+        push(std::unique_ptr<fla::Command>(new fla::SetPropertyCommand<Attributes>(
+            doc->extraAttributes, doc->extraAttributes, after, "Motion Blur")));
+        if (_links.view)
+            _links.view->clearCaches();
+        emit documentEdited();
+    };
+    HotText* shutter = makeHotText(0.0, 720.0, 0, QString::fromUtf8("\xC2\xB0"));
+    shutter->setValue(fla::motionblur::shutter(*doc));
+    shutter->setToolTip("How long the shutter stays open, in degrees of a frame: 180 is half a frame, 360 a whole one");
+    connect(shutter, &HotText::valueChanged, this, [doc, setBlur](double value, bool live) {
+        if (!live)
+            setBlur(value, fla::motionblur::samples(*doc));
+    });
+    blur->addField(0, 0, "Shutter", shutter);
+    HotText* samples = makeHotText(2.0, 64.0, 0);
+    samples->setValue(fla::motionblur::samples(*doc));
+    samples->setToolTip("Pictures averaged for each frame: more is smoother, and slower to draw");
+    connect(samples, &HotText::valueChanged, this, [doc, setBlur](double value, bool live) {
+        if (!live)
+            setBlur(fla::motionblur::shutter(*doc), static_cast<int>(value));
+    });
+    // A drag is kept when it ends.
+    connect(shutter, &HotText::editFinished, this, [doc, setBlur, shutter]() {
+        setBlur(shutter->value(), fla::motionblur::samples(*doc));
+    });
+    connect(samples, &HotText::editFinished, this, [doc, setBlur, samples]() {
+        setBlur(fla::motionblur::shutter(*doc), static_cast<int>(samples->value()));
+    });
+    blur->addField(0, 1, "Samples", samples);
+    QLabel* how = fieldLabel("Turn it on for a layer from its right-click menu.", this);
+    how->setWordWrap(true);
+    blur->addLong(1, "", how);
 
     PropertySection* about = addSection(page, "Document Info");
     about->addLong(0, "Version", fieldLabel(QString::fromStdString(doc->xflVersion), this));

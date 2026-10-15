@@ -1,4 +1,5 @@
 #include "layers_panel.h"
+#include "../edit/motion_blur.h"
 #include "../edit/adjustments.h"
 #include "../edit/layer_effects.h"
 
@@ -1377,6 +1378,12 @@ void LayersPanel::showLayerMenu(QTreeWidgetItem* item, const QPoint& globalPos)
         adjustment->setCheckable(true);
         adjustment->setChecked(fla::compositing::isAdjustment(*layer));
         adjustment->setStatusTip("Blur, color-correct or tint everything below this layer; its settings are in the Behaviors panel");
+        QAction* blur = menu.addAction("Motion Blur", this, [=]() {
+            emit compositingRequested(layer, fla::motionblur::on(*layer) ? "motionblur:off" : "motionblur:on");
+        });
+        blur->setCheckable(true);
+        blur->setChecked(fla::motionblur::on(*layer));
+        blur->setStatusTip("Smear what moves fast on this layer along its path; the shutter is on the Properties panel's Doc tab");
 
         // Layer parenting: the layer follows another's object, as a forearm
         // its arm.

@@ -6,6 +6,7 @@
 #include "start_dialog.h"
 #include "stage_controls.h"
 #include "safe_zones_dialog.h"
+#include "../edit/motion_blur.h"
 #include "../edit/safe_zones.h"
 #include "tutorial_lesson.h"
 #include "tutorial_runner.h"
@@ -3211,6 +3212,11 @@ void MainWindow::setupUI()
                                                                 : fla::compositing::Matte::None;
             after = fla::compositing::withMatte(*layer, matte);
             name = "Track Matte";
+        }
+        else if (what.startsWith("motionblur:"))
+        {
+            after = fla::motionblur::withOn(*layer, what == "motionblur:on");
+            name = "Motion Blur";
         }
         else
         {
