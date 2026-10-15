@@ -239,6 +239,30 @@ TEST(postscript_programs_run_and_paint)
     }
 }
 
+TEST(postscript_text_moves_on_by_the_fonts_widths)
+{
+    // Helvetica's A is 667 thousandths of the size, Times-Roman's 722,
+    // Courier's every glyph 600; ashow adds its spacing after each glyph.
+    const std::string program =
+        "%!PS-Adobe-3.0 EPSF-3.0\n%%BoundingBox: 0 0 400 100\n"
+        "/Helvetica findfont 10 scalefont setfont 10 50 moveto (AA) show (B) show\n"
+        "/Times-Roman findfont 10 scalefont setfont 10 30 moveto (A) show (B) show\n"
+        "/Courier findfont 10 scalefont setfont 10 10 moveto 2 0 (AA) ashow (B) show\n"
+        "/Helvetica findfont 10 scalefont setfont (AA) stringwidth pop 100 mul round 10 10 moveto 0 0 rlineto "
+        "/w exch def w 1334 eq { 0 0 10 10 rectfill } if\n";
+    const double box[4] = {0, 0, 400, 100};
+    const fla::vectors::Artwork art = fla::vectors::readPostScript(program, box);
+    CHECK(art.texts.size() == 6);
+    if (art.texts.size() == 6)
+    {
+        CHECK(std::fabs(art.texts[1].placement.tx - (10 + 13.34)) < 1e-9);
+        CHECK(std::fabs(art.texts[3].placement.tx - (10 + 7.22)) < 1e-9);
+        CHECK(std::fabs(art.texts[5].placement.tx - (10 + 12 + 4)) < 1e-9);
+    }
+    // stringwidth gives the same width.
+    CHECK(art.paths.size() == 1);
+}
+
 TEST(illustrator_eps_reads_its_private_data_behind_a_binary_header)
 {
     // An Illustrator 9 EPS prints through Adobe's procedures; its own art

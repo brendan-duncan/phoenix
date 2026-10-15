@@ -2091,6 +2091,444 @@ bool pdfImage(PdfFile& file, const std::string& dictionary, const std::vector<ui
     return true;
 }
 
+// ---------------------------------------------------------------- PDF text
+
+void appendUtf8(std::string& out, uint32_t c)
+{
+    if (c < 0x80)
+        out += static_cast<char>(c);
+    else if (c < 0x800)
+    {
+        out += static_cast<char>(0xC0 | (c >> 6));
+        out += static_cast<char>(0x80 | (c & 0x3F));
+    }
+    else if (c < 0x10000)
+    {
+        out += static_cast<char>(0xE0 | (c >> 12));
+        out += static_cast<char>(0x80 | ((c >> 6) & 0x3F));
+        out += static_cast<char>(0x80 | (c & 0x3F));
+    }
+    else if (c < 0x110000)
+    {
+        out += static_cast<char>(0xF0 | (c >> 18));
+        out += static_cast<char>(0x80 | ((c >> 12) & 0x3F));
+        out += static_cast<char>(0x80 | ((c >> 6) & 0x3F));
+        out += static_cast<char>(0x80 | (c & 0x3F));
+    }
+}
+
+/// Windows' code page 1252 from 0x80 to 0x9F (0 where it has nothing).
+const uint16_t kWinAnsiHigh[32] = {0x20AC, 0, 0x201A, 0x0192, 0x201E, 0x2026, 0x2020, 0x2021, 0x02C6, 0x2030, 0x0160,
+    0x2039, 0x0152, 0, 0x017D, 0, 0, 0x2018, 0x2019, 0x201C, 0x201D, 0x2022, 0x2013, 0x2014, 0x02DC, 0x2122, 0x0161,
+    0x203A, 0x0153, 0, 0x017E, 0x0178};
+
+/// Mac OS Roman from 0x80 to 0xFF.
+const uint16_t kMacRomanHigh[128] = {0x00C4, 0x00C5, 0x00C7, 0x00C9, 0x00D1, 0x00D6, 0x00DC, 0x00E1, 0x00E0, 0x00E2,
+    0x00E4, 0x00E3, 0x00E5, 0x00E7, 0x00E9, 0x00E8, 0x00EA, 0x00EB, 0x00ED, 0x00EC, 0x00EE, 0x00EF, 0x00F1, 0x00F3,
+    0x00F2, 0x00F4, 0x00F6, 0x00F5, 0x00FA, 0x00F9, 0x00FB, 0x00FC, 0x2020, 0x00B0, 0x00A2, 0x00A3, 0x00A7, 0x2022,
+    0x00B6, 0x00DF, 0x00AE, 0x00A9, 0x2122, 0x00B4, 0x00A8, 0x2260, 0x00C6, 0x00D8, 0x221E, 0x00B1, 0x2264, 0x2265,
+    0x00A5, 0x00B5, 0x2202, 0x2211, 0x220F, 0x03C0, 0x222B, 0x00AA, 0x00BA, 0x03A9, 0x00E6, 0x00F8, 0x00BF, 0x00A1,
+    0x00AC, 0x221A, 0x0192, 0x2248, 0x2206, 0x00AB, 0x00BB, 0x2026, 0x00A0, 0x00C0, 0x00C3, 0x00D5, 0x0152, 0x0153,
+    0x2013, 0x2014, 0x201C, 0x201D, 0x2018, 0x2019, 0x00F7, 0x25CA, 0x00FF, 0x0178, 0x2044, 0x20AC, 0x2039, 0x203A,
+    0xFB01, 0xFB02, 0x2021, 0x00B7, 0x201A, 0x201E, 0x2030, 0x00C2, 0x00CA, 0x00C1, 0x00CB, 0x00C8, 0x00CD, 0x00CE,
+    0x00CF, 0x00CC, 0x00D3, 0x00D4, 0xF8FF, 0x00D2, 0x00DA, 0x00DB, 0x00D9, 0x0131, 0x02C6, 0x02DC, 0x00AF, 0x02D8,
+    0x02D9, 0x02DA, 0x00B8, 0x02DD, 0x02DB, 0x02C7};
+
+/// The text a glyph name stands for: the printable ASCII and Latin-1
+/// names, the punctuation and letters Windows' code page adds, uniXXXX and
+/// uXXXX names, ligatures joined with "_", variants after a ".".
+std::string glyphText(std::string name)
+{
+    static const std::map<std::string, uint32_t> names = [] {
+        std::map<std::string, uint32_t> m;
+        static const char* const ascii[] = {"space", "exclam", "quotedbl", "numbersign", "dollar", "percent",
+            "ampersand", "quotesingle", "parenleft", "parenright", "asterisk", "plus", "comma", "hyphen", "period",
+            "slash", "zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "colon",
+            "semicolon", "less", "equal", "greater", "question", "at"};
+        for (uint32_t i = 0; i < 33; ++i)
+            m[ascii[i]] = 0x20 + i;
+        for (uint32_t c = 'A'; c <= 'Z'; ++c)
+            m[std::string(1, static_cast<char>(c))] = c;
+        for (uint32_t c = 'a'; c <= 'z'; ++c)
+            m[std::string(1, static_cast<char>(c))] = c;
+        static const char* const brackets[] = {"bracketleft", "backslash", "bracketright", "asciicircum",
+            "underscore", "grave"};
+        for (uint32_t i = 0; i < 6; ++i)
+            m[brackets[i]] = 0x5B + i;
+        static const char* const braces[] = {"braceleft", "bar", "braceright", "asciitilde"};
+        for (uint32_t i = 0; i < 4; ++i)
+            m[braces[i]] = 0x7B + i;
+        static const char* const latin1[] = {"nbspace", "exclamdown", "cent", "sterling", "currency", "yen",
+            "brokenbar", "section", "dieresis", "copyright", "ordfeminine", "guillemotleft", "logicalnot", "sfthyphen",
+            "registered", "macron", "degree", "plusminus", "twosuperior", "threesuperior", "acute", "mu", "paragraph",
+            "periodcentered", "cedilla", "onesuperior", "ordmasculine", "guillemotright", "onequarter", "onehalf",
+            "threequarters", "questiondown", "Agrave", "Aacute", "Acircumflex", "Atilde", "Adieresis", "Aring", "AE",
+            "Ccedilla", "Egrave", "Eacute", "Ecircumflex", "Edieresis", "Igrave", "Iacute", "Icircumflex", "Idieresis",
+            "Eth", "Ntilde", "Ograve", "Oacute", "Ocircumflex", "Otilde", "Odieresis", "multiply", "Oslash", "Ugrave",
+            "Uacute", "Ucircumflex", "Udieresis", "Yacute", "Thorn", "germandbls", "agrave", "aacute", "acircumflex",
+            "atilde", "adieresis", "aring", "ae", "ccedilla", "egrave", "eacute", "ecircumflex", "edieresis", "igrave",
+            "iacute", "icircumflex", "idieresis", "eth", "ntilde", "ograve", "oacute", "ocircumflex", "otilde",
+            "odieresis", "divide", "oslash", "ugrave", "uacute", "ucircumflex", "udieresis", "yacute", "thorn",
+            "ydieresis"};
+        for (uint32_t i = 0; i < 96; ++i)
+            m[latin1[i]] = 0xA0 + i;
+        const std::pair<const char*, uint32_t> more[] = {{"quoteleft", 0x2018}, {"quoteright", 0x2019},
+            {"quotedblleft", 0x201C}, {"quotedblright", 0x201D}, {"quotesinglbase", 0x201A}, {"quotedblbase", 0x201E},
+            {"endash", 0x2013}, {"emdash", 0x2014}, {"bullet", 0x2022}, {"ellipsis", 0x2026}, {"dagger", 0x2020},
+            {"daggerdbl", 0x2021}, {"perthousand", 0x2030}, {"trademark", 0x2122}, {"Euro", 0x20AC},
+            {"florin", 0x0192}, {"circumflex", 0x02C6}, {"tilde", 0x02DC}, {"Scaron", 0x0160}, {"scaron", 0x0161},
+            {"Zcaron", 0x017D}, {"zcaron", 0x017E}, {"OE", 0x0152}, {"oe", 0x0153}, {"Ydieresis", 0x0178},
+            {"guilsinglleft", 0x2039}, {"guilsinglright", 0x203A}, {"fi", 0xFB01}, {"fl", 0xFB02}, {"ff", 0xFB00},
+            {"ffi", 0xFB03}, {"ffl", 0xFB04}, {"dotlessi", 0x0131}, {"fraction", 0x2044}, {"minus", 0x2212},
+            {"Lslash", 0x0141}, {"lslash", 0x0142}, {"breve", 0x02D8}, {"dotaccent", 0x02D9}, {"ring", 0x02DA},
+            {"hungarumlaut", 0x02DD}, {"ogonek", 0x02DB}, {"caron", 0x02C7}, {"space.alt", 0x20}};
+        for (const auto& [n, c] : more)
+            m[n] = c;
+        return m;
+    }();
+    const size_t dot = name.find('.');
+    if (dot != std::string::npos && dot > 0)
+        name = name.substr(0, dot);
+    std::string out;
+    if (name.find('_') != std::string::npos)
+    {
+        size_t from = 0;
+        while (from <= name.size())
+        {
+            const size_t to = std::min(name.find('_', from), name.size());
+            out += glyphText(name.substr(from, to - from));
+            from = to + 1;
+        }
+        return out;
+    }
+    const auto found = names.find(name);
+    if (found != names.end())
+    {
+        appendUtf8(out, found->second);
+        return out;
+    }
+    const auto hex = [](const std::string& digits) {
+        if (digits.empty() || digits.find_first_not_of("0123456789ABCDEFabcdef") != std::string::npos)
+            return 0u;
+        return static_cast<uint32_t>(std::strtoul(digits.c_str(), nullptr, 16));
+    };
+    if (name.size() >= 7 && name.compare(0, 3, "uni") == 0)
+    {
+        for (size_t k = 3; k + 4 <= name.size(); k += 4)
+            appendUtf8(out, hex(name.substr(k, 4)));
+        return out;
+    }
+    if (name.size() >= 5 && name[0] == 'u')
+    {
+        if (const uint32_t c = hex(name.substr(1)))
+            appendUtf8(out, c);
+    }
+    return out;
+}
+
+/// A font as a page's text uses it: how its codes read as text, how wide
+/// each glyph is, and its family and style.
+struct PdfFont
+{
+    /// Two bytes a code (a composite font), or one.
+    bool twoByte = false;
+    /// From its ToUnicode map, which wins.
+    std::map<uint32_t, std::string> unicode;
+    /// A simple font's codes through its encoding.
+    std::array<std::string, 256> encoded;
+    /// Widths in thousandths of the size; \a missing for the rest.
+    std::map<uint32_t, double> widths;
+    double missing = 500.0;
+    /// Glyph space to text space (a Type 3 font's own; else a thousandth).
+    double unitsPerEm = 1000.0;
+    std::string family = "Helvetica";
+    bool bold = false;
+    bool italic = false;
+
+    std::string text(uint32_t code) const
+    {
+        const auto found = unicode.find(code);
+        if (found != unicode.end())
+            return found->second;
+        if (!twoByte && code < 256)
+            return encoded[code];
+        return std::string();
+    }
+
+    double width(uint32_t code) const
+    {
+        const auto found = widths.find(code);
+        return (found != widths.end() ? found->second : missing) / unitsPerEm;
+    }
+};
+
+/// A family name from a PostScript name: "ABCDEF+TimesNewRomanPS-BoldMT"
+/// is "Times New Roman", bold. The style follows the hyphen or comma.
+void fontNameParts(std::string name, std::string& family, bool& bold, bool& italic)
+{
+    if (!name.empty() && name[0] == '/')
+        name = name.substr(1);
+    // The subset tag: six capitals and a plus.
+    if (name.size() > 7 && name[6] == '+' &&
+        std::all_of(name.begin(), name.begin() + 6, [](char c) { return c >= 'A' && c <= 'Z'; }))
+        name = name.substr(7);
+    // PDF names write a space as #20.
+    for (size_t at; (at = name.find("#20")) != std::string::npos;)
+        name.replace(at, 3, " ");
+    const size_t split = name.find_first_of("-,");
+    std::string base = name.substr(0, split);
+    const std::string style = split == std::string::npos ? std::string() : name.substr(split + 1);
+    const auto has = [&](const char* part) {
+        return style.find(part) != std::string::npos || base.find(part) != std::string::npos;
+    };
+    bold = has("Bold") || has("Black") || has("Heavy") || has("Semibold") || has("Demi");
+    // "It" as in BoldIt or SemiboldIt.
+    italic = has("Oblique") || style.find("It") != std::string::npos;
+    for (const char* suffix : {"PSMT", "PS", "MT"})
+    {
+        const size_t n = std::strlen(suffix);
+        if (base.size() > n + 1 && base.compare(base.size() - n, n, suffix) == 0 &&
+            std::islower(static_cast<unsigned char>(base[base.size() - n - 1])))
+        {
+            base.erase(base.size() - n);
+            break;
+        }
+    }
+    // Words run together: a space before each capital after a small letter.
+    std::string spaced;
+    for (size_t k = 0; k < base.size(); ++k)
+    {
+        if (k > 0 && std::isupper(static_cast<unsigned char>(base[k])) &&
+            std::islower(static_cast<unsigned char>(base[k - 1])))
+            spaced += ' ';
+        spaced += base[k];
+    }
+    family = spaced.empty() ? std::string("Helvetica") : spaced;
+}
+
+/// Reads a ToUnicode map's bfchar and bfrange entries.
+void readToUnicode(const std::string& cmap, std::map<uint32_t, std::string>& out)
+{
+    const auto code = [](const std::string& token) {
+        const std::vector<uint8_t> bytes = stringBytes(token);
+        uint32_t v = 0;
+        for (uint8_t b : bytes)
+            v = (v << 8) | b;
+        return v;
+    };
+    const auto utf16 = [](const std::string& token) {
+        const std::vector<uint8_t> bytes = stringBytes(token);
+        std::string text;
+        for (size_t k = 0; k + 1 < bytes.size(); k += 2)
+        {
+            uint32_t c = static_cast<uint32_t>(bytes[k] << 8 | bytes[k + 1]);
+            if (c >= 0xD800 && c < 0xDC00 && k + 3 < bytes.size())
+            {
+                const uint32_t low = static_cast<uint32_t>(bytes[k + 2] << 8 | bytes[k + 3]);
+                c = 0x10000 + ((c - 0xD800) << 10) + (low - 0xDC00);
+                k += 2;
+            }
+            appendUtf8(text, c);
+        }
+        return text;
+    };
+    // The tokens between a begin and its end: hex strings and arrays.
+    const auto tokens = [](const std::string& text, size_t from, size_t to) {
+        std::vector<std::string> list;
+        for (size_t k = from; k < to;)
+        {
+            if (text[k] == '<')
+            {
+                const size_t close = text.find('>', k);
+                if (close == std::string::npos || close > to)
+                    break;
+                list.push_back(text.substr(k, close - k + 1));
+                k = close + 1;
+            }
+            else if (text[k] == '[')
+            {
+                const size_t close = text.find(']', k);
+                if (close == std::string::npos || close > to)
+                    break;
+                list.push_back(text.substr(k, close - k + 1));
+                k = close + 1;
+            }
+            else
+                ++k;
+        }
+        return list;
+    };
+    for (size_t at = 0; (at = cmap.find("beginbfchar", at)) != std::string::npos;)
+    {
+        const size_t end = cmap.find("endbfchar", at);
+        if (end == std::string::npos)
+            break;
+        const std::vector<std::string> list = tokens(cmap, at + 11, end);
+        for (size_t k = 0; k + 1 < list.size(); k += 2)
+            out[code(list[k])] = utf16(list[k + 1]);
+        at = end;
+    }
+    for (size_t at = 0; (at = cmap.find("beginbfrange", at)) != std::string::npos;)
+    {
+        const size_t end = cmap.find("endbfrange", at);
+        if (end == std::string::npos)
+            break;
+        const std::vector<std::string> list = tokens(cmap, at + 12, end);
+        for (size_t k = 0; k + 2 < list.size(); k += 3)
+        {
+            const uint32_t low = code(list[k]);
+            const uint32_t high = std::min(code(list[k + 1]), low + 0xFFFF);
+            if (list[k + 2][0] == '[')
+            {
+                const std::vector<std::string> each = tokens(list[k + 2], 1, list[k + 2].size() - 1);
+                for (uint32_t c = low; c <= high && c - low < each.size(); ++c)
+                    out[c] = utf16(each[c - low]);
+            }
+            else
+            {
+                // Each code after the first adds to the last unit.
+                std::vector<uint8_t> first = stringBytes(list[k + 2]);
+                for (uint32_t c = low; c <= high && !first.empty(); ++c)
+                {
+                    std::string hex = "<";
+                    char digits[3];
+                    for (uint8_t b : first)
+                    {
+                        std::snprintf(digits, sizeof(digits), "%02X", b);
+                        hex += digits;
+                    }
+                    out[c] = utf16(hex + ">");
+                    if (++first.back() == 0 && first.size() >= 2)
+                        ++first[first.size() - 2];
+                }
+            }
+        }
+        at = end;
+    }
+}
+
+/// The font a page's text names, read from its dictionary.
+PdfFont readFont(PdfFile& file, const std::string& dictionary)
+{
+    PdfFont font;
+    const std::string subtype = valueOf(dictionary, "/Subtype");
+    std::string descriptor = resolved(file, valueOf(dictionary, "/FontDescriptor"));
+    std::string widthSource = dictionary;
+    if (subtype == "/Type0")
+    {
+        font.twoByte = true;
+        const std::vector<std::string> descendants = arrayItems(resolved(file, valueOf(dictionary, "/DescendantFonts")));
+        if (!descendants.empty())
+        {
+            const std::string descendant = resolved(file, descendants[0]);
+            descriptor = resolved(file, valueOf(descendant, "/FontDescriptor"));
+            const std::string dw = valueOf(descendant, "/DW");
+            font.missing = dw.empty() ? 1000.0 : std::atof(dw.c_str());
+            // W: "c [w1 w2 ...]" or "first last w".
+            const std::vector<std::string> w = arrayItems(resolved(file, valueOf(descendant, "/W")));
+            for (size_t k = 0; k + 1 < w.size();)
+            {
+                const uint32_t first = static_cast<uint32_t>(std::atol(w[k].c_str()));
+                if (w[k + 1][0] == '[')
+                {
+                    const std::vector<double> list = numbersOf(w[k + 1]);
+                    for (size_t g = 0; g < list.size(); ++g)
+                        font.widths[first + static_cast<uint32_t>(g)] = list[g];
+                    k += 2;
+                }
+                else if (k + 2 < w.size())
+                {
+                    const uint32_t last = std::min(static_cast<uint32_t>(std::atol(w[k + 1].c_str())), first + 0xFFFF);
+                    const double width = std::atof(w[k + 2].c_str());
+                    for (uint32_t c = first; c <= last; ++c)
+                        font.widths[c] = width;
+                    k += 3;
+                }
+                else
+                    break;
+            }
+        }
+    }
+    else
+    {
+        // A simple font: its encoding (a base and its differences).
+        const std::string encoding = resolved(file, valueOf(dictionary, "/Encoding"));
+        std::string base = encoding.compare(0, 2, "<<") == 0 ? valueOf(encoding, "/BaseEncoding") : encoding;
+        if (base.empty())
+            base = subtype == "/TrueType" ? "/WinAnsiEncoding" : "/StandardEncoding";
+        for (uint32_t c = 0x20; c < 0x7F; ++c)
+            font.encoded[c] = std::string(1, static_cast<char>(c));
+        if (base == "/StandardEncoding")
+        {
+            font.encoded[0x27] = glyphText("quoteright");
+            font.encoded[0x60] = glyphText("quoteleft");
+        }
+        for (uint32_t c = 0x80; c < 0x100; ++c)
+        {
+            uint32_t u = 0;
+            if (base == "/MacRomanEncoding")
+                u = kMacRomanHigh[c - 0x80];
+            else if (base == "/WinAnsiEncoding")
+                u = c < 0xA0 ? kWinAnsiHigh[c - 0x80] : c;
+            if (u)
+                appendUtf8(font.encoded[c] = std::string(), u);
+        }
+        if (encoding.compare(0, 2, "<<") == 0)
+        {
+            uint32_t code = 0;
+            for (const std::string& item : arrayItems(valueOf(encoding, "/Differences")))
+            {
+                if (!item.empty() && item[0] == '/')
+                {
+                    if (code < 256)
+                        font.encoded[code] = glyphText(item.substr(1));
+                    ++code;
+                }
+                else
+                    code = static_cast<uint32_t>(std::atol(item.c_str()));
+            }
+        }
+        const uint32_t first = static_cast<uint32_t>(std::atol(valueOf(dictionary, "/FirstChar").c_str()));
+        const std::vector<double> widths = numbersOf(resolved(file, valueOf(dictionary, "/Widths")));
+        for (size_t g = 0; g < widths.size(); ++g)
+            font.widths[first + static_cast<uint32_t>(g)] = widths[g];
+        if (subtype == "/Type3")
+        {
+            const std::vector<double> matrix = numbersOf(valueOf(dictionary, "/FontMatrix"));
+            if (!matrix.empty() && matrix[0] != 0.0)
+                font.unitsPerEm = 1.0 / std::fabs(matrix[0]);
+        }
+    }
+    const int toUnicode = referenceOf(valueOf(dictionary, "/ToUnicode"));
+    if (toUnicode >= 0)
+    {
+        std::string ignored;
+        std::vector<uint8_t> data;
+        bool isStream = false;
+        if (file.object(toUnicode, ignored, data, isStream) && isStream)
+            readToUnicode(std::string(data.begin(), data.end()), font.unicode);
+    }
+    const std::string missing = valueOf(descriptor, "/MissingWidth");
+    if (!missing.empty() && !font.twoByte)
+        font.missing = std::atof(missing.c_str());
+    fontNameParts(valueOf(dictionary, "/BaseFont"), font.family, font.bold, font.italic);
+    // The descriptor's family and style, where it gives them, are better
+    // than what the name suggests.
+    const std::string familyName = valueOf(descriptor, "/FontFamily");
+    if (!familyName.empty() && (familyName[0] == '(' || familyName[0] == '<'))
+    {
+        const std::vector<uint8_t> bytes = stringBytes(familyName);
+        if (!bytes.empty())
+            font.family.assign(bytes.begin(), bytes.end());
+    }
+    const int flags = std::atoi(valueOf(descriptor, "/Flags").c_str());
+    if (flags & 64)
+        font.italic = true;
+    if (std::atof(valueOf(descriptor, "/FontWeight").c_str()) >= 600)
+        font.bold = true;
+    return font;
+}
+
 struct PdfRun
 {
     PdfFile& file;
@@ -2167,6 +2605,87 @@ void runContent(const std::string& content, PdfRun& run, const std::string& reso
     const auto faded = [](Color color, double alpha) {
         color[3] = static_cast<uint8_t>(std::clamp(std::lround(color[3] * alpha), 0L, 255L));
         return color;
+    };
+    // Text: the last string read, a TJ array's strings and spacings, and
+    // the text state (which q and Q do not save here, as files rarely
+    // rely on it).
+    struct ArrayItem
+    {
+        bool isString = false;
+        double number = 0.0;
+        std::vector<uint8_t> bytes;
+    };
+    std::vector<uint8_t> textString;
+    std::vector<ArrayItem> textArray;
+    int arrayDepth = 0;
+    Affine textMatrix, lineMatrix;
+    std::string fontName;
+    double fontSize = 12.0, charSpacing = 0.0, wordSpacing = 0.0, horizontalScale = 1.0, leading = 0.0, rise = 0.0;
+    int renderMode = 0;
+    std::map<std::string, PdfFont> fonts;
+    const auto currentFont = [&]() -> const PdfFont& {
+        auto found = fonts.find(fontName);
+        if (found == fonts.end())
+            found = fonts.emplace(fontName, readFont(run.file, resolved(run.file, valueOf(resolved(run.file,
+                                                                                 valueOf(resources, "/Font")),
+                                                                         "/" + fontName))))
+                        .first;
+        return found->second;
+    };
+    // Shows a run of strings and spacings (thousandths of the size, back
+    // along the line) as one line of text where the run starts.
+    const auto showText = [&](const std::vector<ArrayItem>& items) {
+        const PdfFont& font = currentFont();
+        const Affine start = textMatrix;
+        std::string text;
+        for (const ArrayItem& item : items)
+        {
+            if (!item.isString)
+            {
+                // A wide gap reads as a space between words.
+                if (item.number < -250.0 && !text.empty() && text.back() != ' ')
+                    text += ' ';
+                textMatrix = textMatrix.after(Affine{1, 0, 0, 1, -item.number / 1000.0 * fontSize * horizontalScale, 0});
+                continue;
+            }
+            const size_t step = font.twoByte ? 2 : 1;
+            for (size_t k = 0; k + step <= item.bytes.size(); k += step)
+            {
+                const uint32_t code = font.twoByte ? static_cast<uint32_t>(item.bytes[k] << 8 | item.bytes[k + 1])
+                                                   : item.bytes[k];
+                text += font.text(code);
+                const double spacing = charSpacing + (step == 1 && code == 32 ? wordSpacing : 0.0);
+                textMatrix = textMatrix.after(
+                    Affine{1, 0, 0, 1, (font.width(code) * fontSize + spacing) * horizontalScale, 0});
+            }
+        }
+        // Invisible text (searchable text over a scan) and text that only
+        // clips are not drawn.
+        if (renderMode == 3 || renderMode == 7 || text.find_first_not_of(' ') == std::string::npos)
+            return;
+        const Affine toPage = stack.back().ctm.after(start.after(Affine{1, 0, 0, 1, 0, rise}));
+        Text item;
+        item.text = text;
+        item.family = font.family;
+        item.bold = font.bold;
+        item.italic = font.italic;
+        item.size = std::max(1.0, std::fabs(fontSize) * toPage.scale());
+        const bool stroked = renderMode == 1 || renderMode == 5;
+        item.color = stroked ? faded(stack.back().stroke, stack.back().strokeAlpha)
+                             : faded(stack.back().fill, stack.back().fillAlpha);
+        // Text space (y down, a unit a pixel) to the stage, along the
+        // line's direction on the page.
+        const double length = std::hypot(toPage.a, toPage.b);
+        const double ux = length > 0 ? toPage.a / length : 1.0;
+        const double uy = length > 0 ? toPage.b / length : 0.0;
+        const Point at = run.stage().map(toPage.map(Point(0, 0)));
+        item.placement = Placement{ux, -uy, uy, ux, at.x, at.y};
+        artwork.order.emplace_back(Artwork::Kind::Text, artwork.texts.size());
+        artwork.texts.push_back(item);
+    };
+    const auto nextLine = [&](double tx, double ty) {
+        lineMatrix = lineMatrix.after(Affine{1, 0, 0, 1, tx, ty});
+        textMatrix = lineMatrix;
     };
     const auto paint = [&](bool fill, bool stroke, bool close) {
         if (close && !path.empty())
@@ -2302,7 +2821,9 @@ void runContent(const std::string& content, PdfRun& run, const std::string& reso
         }
         if (c == '(')
         {
-            // A string, skipped with its nesting and escapes.
+            // A string, with its nesting and escapes: kept for the text
+            // operators.
+            const size_t begin = i;
             int nesting = 0;
             for (; i < n; ++i)
             {
@@ -2319,7 +2840,11 @@ void runContent(const std::string& content, PdfRun& run, const std::string& reso
                     break;
                 }
             }
-            operands.clear();
+            textString = stringBytes(content.substr(begin, i - begin));
+            if (arrayDepth == 1)
+                textArray.push_back({true, 0.0, textString});
+            else
+                operands.clear();
             continue;
         }
         if (c == '<' && i + 1 < n && content[i + 1] == '<')
@@ -2331,11 +2856,29 @@ void runContent(const std::string& content, PdfRun& run, const std::string& reso
         if (c == '<')
         {
             const size_t close = content.find('>', i);
-            i = close == std::string::npos ? n : close + 1;
-            operands.clear();
+            const size_t end = close == std::string::npos ? n : close + 1;
+            textString = stringBytes(content.substr(i, end - i));
+            i = end;
+            if (arrayDepth == 1)
+                textArray.push_back({true, 0.0, textString});
+            else
+                operands.clear();
             continue;
         }
-        if (c == '[' || c == ']' || c == '{' || c == '}' || c == '>')
+        if (c == '[')
+        {
+            if (++arrayDepth == 1)
+                textArray.clear();
+            ++i;
+            continue;
+        }
+        if (c == ']')
+        {
+            arrayDepth = std::max(0, arrayDepth - 1);
+            ++i;
+            continue;
+        }
+        if (c == '{' || c == '}' || c == '>')
         {
             ++i;
             continue;
@@ -2355,6 +2898,8 @@ void runContent(const std::string& content, PdfRun& run, const std::string& reso
             if (scan.number(value))
             {
                 operands.push_back(value);
+                if (arrayDepth == 1)
+                    textArray.push_back({false, value, {}});
                 i = static_cast<size_t>(scan.at - content.data());
                 continue;
             }
@@ -2545,6 +3090,55 @@ void runContent(const std::string& content, PdfRun& run, const std::string& reso
             else if (!gradient)
                 run.note("Some shadings are of kinds Phoenix does not read and were left out.");
         }
+        else if (op == "BT")
+        {
+            textMatrix = Affine();
+            lineMatrix = Affine();
+        }
+        else if (op == "Tf" && has(1))
+        {
+            fontName = lastName;
+            fontSize = arg(1);
+        }
+        else if (op == "Tc" && has(1))
+            charSpacing = arg(1);
+        else if (op == "Tw" && has(1))
+            wordSpacing = arg(1);
+        else if (op == "Tz" && has(1))
+            horizontalScale = arg(1) / 100.0;
+        else if (op == "TL" && has(1))
+            leading = arg(1);
+        else if (op == "Ts" && has(1))
+            rise = arg(1);
+        else if (op == "Tr" && has(1))
+            renderMode = static_cast<int>(arg(1));
+        else if (op == "Td" && has(2))
+            nextLine(arg(2), arg(1));
+        else if (op == "TD" && has(2))
+        {
+            leading = -arg(1);
+            nextLine(arg(2), arg(1));
+        }
+        else if (op == "Tm" && has(6))
+        {
+            lineMatrix = Affine{arg(6), arg(5), arg(4), arg(3), arg(2), arg(1)};
+            textMatrix = lineMatrix;
+        }
+        else if (op == "T*")
+            nextLine(0, -leading);
+        else if (op == "Tj" || op == "'" || op == "\"")
+        {
+            if (op == "\"" && has(2))
+            {
+                wordSpacing = arg(2);
+                charSpacing = arg(1);
+            }
+            if (op != "Tj")
+                nextLine(0, -leading);
+            showText({ArrayItem{true, 0.0, textString}});
+        }
+        else if (op == "TJ")
+            showText(textArray);
         else if (op == "BI")
         {
             // An inline image: skipped to its end.

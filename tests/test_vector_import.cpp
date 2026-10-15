@@ -228,3 +228,47 @@ TEST(pdf_forms_shadings_and_opacity_are_read)
     CHECK(art.paths[3].fill && (*art.paths[3].fill)[3] == 128);
     CHECK(art.notes.empty());
 }
+
+TEST(pdf_import_reads_text_through_its_fonts)
+{
+    // A simple font (its encoding's differences and widths) and a composite
+    // one read through its ToUnicode map, turned a quarter.
+    const std::string content = "BT /F1 10 Tf 1 0 0 1 10 80 Tm (AB\\222) Tj (A) Tj ET "
+                                "BT 0 0 1 rg [(A) -500 (A)] TJ ET "
+                                "BT /F2 20 Tf 0 1 -1 0 50 30 Tm <000100020003> Tj ET "
+                                "BT /F1 10 Tf 3 Tr (hidden) Tj ET";
+    const std::string cmap = "/CIDInit /ProcSet findresource begin 12 dict begin begincmap\n"
+                             "1 begincodespacerange <0000> <FFFF> endcodespacerange\n"
+                             "1 beginbfchar <0001> <0048> endbfchar\n"
+                             "1 beginbfrange <0002> <0003> <0069> endbfrange\n"
+                             "endcmap end end";
+    std::string pdf = "%PDF-1.4\n1 0 obj << /Type /Catalog /Pages 2 0 R >> endobj\n"
+                      "2 0 obj << /Type /Pages /Kids [3 0 R] /Count 1 >> endobj\n"
+                      "3 0 obj << /Type /Page /Parent 2 0 R /MediaBox [0 0 200 100] /Contents 4 0 R "
+                      "/Resources << /Font << /F1 5 0 R /F2 6 0 R >> >> >> endobj\n"
+                      "4 0 obj << /Length " + std::to_string(content.size()) + " >>\nstream\n" + content +
+        "\nendstream\nendobj\n"
+        "5 0 obj << /Type /Font /Subtype /TrueType /BaseFont /ABCDEF+ArialMT /FirstChar 65 /Widths [600 700] "
+        "/Encoding << /BaseEncoding /WinAnsiEncoding /Differences [66 /eacute] >> >> endobj\n"
+        "6 0 obj << /Type /Font /Subtype /Type0 /BaseFont /TimesNewRomanPS-BoldMT /Encoding /Identity-H "
+        "/DescendantFonts [7 0 R] /ToUnicode 8 0 R >> endobj\n"
+        "7 0 obj << /Type /Font /Subtype /CIDFontType2 /DW 1000 /W [1 [500]] >> endobj\n"
+        "8 0 obj << /Length " + std::to_string(cmap.size()) + " >>\nstream\n" + cmap + "\nendstream\nendobj\n%%EOF\n";
+    const fla::vectors::Artwork art = fla::vectors::readPdf(std::vector<uint8_t>(pdf.begin(), pdf.end()));
+    CHECK(art.texts.size() == 4);
+    if (art.texts.size() != 4)
+        return;
+    const fla::vectors::Text& first = art.texts[0];
+    CHECK(first.text == "A\xC3\xA9\xE2\x80\x99"); // A, e acute, right quote
+    CHECK(first.family == "Arial" && !first.bold && near(first.size, 10.0));
+    CHECK(near(first.placement.tx, 10.0) && near(first.placement.ty, 20.0));
+    // On by the widths: 600 and 700 thousandths, then the missing width.
+    CHECK(near(art.texts[1].placement.tx, 28.0));
+    // A wide gap in a TJ array is a space; the fill color is the text's.
+    CHECK(art.texts[2].text == "A A" && art.texts[2].color[2] == 255);
+    const fla::vectors::Text& turned = art.texts[3];
+    CHECK(turned.text == "Hij");
+    CHECK(turned.family == "Times New Roman" && turned.bold && near(turned.size, 20.0));
+    CHECK(near(turned.placement.a, 0.0) && near(turned.placement.b, -1.0));
+    CHECK(near(turned.placement.tx, 50.0) && near(turned.placement.ty, 70.0));
+}
