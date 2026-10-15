@@ -28,6 +28,8 @@
   <li>Set what it offers with the sliders, boxes and lists under the list. The stage shows the result as you drag.</li>
 </ol>
 
+<p>To see them move before you choose, click <b>Add Behavior &rsaquo; Browse Presets...</b>. It lists ready-made combinations (Float, Heartbeat, Swing, Flicker, Ring of Copies, Fountain and others) and then every behavior on its own, each playing on a sample star. Double-click one, or click <b>Add to Selection</b>, to add it; the window stays open to add another. With text selected the same command shows the letter animations, played on a sample word.</p>
+
 <figure>
   <img src="assets/shots/behaviors-panel.webp" alt="The Behaviors panel listing Repeat in a Circle and Pulse on a star logo, with the copies, radius, start angle and sweep settings, and the star drawn as a ring of eight copies on the stage" width="1100" height="454">
   <figcaption>The Behaviors panel with two behaviors on a logo. The settings shown are those of the behavior picked in the list.</figcaption>
@@ -66,6 +68,8 @@
     <tr><td>Follow Path</td><td class="wrap">Puts it on the motion guide's line: key how far along it is, or give it a speed, and it travels the line, turned with it if you like.</td></tr>
     <tr><td>Look At</td><td class="wrap">Turns it to face another instance, chosen by its instance name: eyes that follow, a spotlight on a dancer, an arrow that points.</td></tr>
     <tr><td>Link to Object</td><td class="wrap">Moves, turns, scales or fades it as another instance does, from where each starts: a shadow under a bouncing ball, a wheel that turns as the car moves across, a needle that rises with a level. Any change can drive any other: its moving down can turn this one. Scale it by an amount, add an offset, keep it within limits, and lag it if you like. See <a href="#links">Links</a>.</td></tr>
+    <tr><td>Slider, Angle, Point, Color and Checkbox Control</td><td class="wrap">Controls to key, each with a name, that do nothing to the instance holding them: other instances follow them with Link to Control (see <a href="#controls">Controls on a null</a>).</td></tr>
+    <tr><td>Link to Control</td><td class="wrap">Follows a control on another instance: an angle turns it, a point moves it, a slider sizes or fades it, a color tints it, a checkbox shows or hides it.</td></tr>
     <tr><td>Link to Controller</td><td class="wrap">Sets its place, turn, size or fade from a master controller's slider (see <a href="rigging.html">Rigs and motion</a>), between two values.</td></tr>
     <tr><td>Effector</td><td class="wrap">Changes the copies a Repeat or Particles behavior made: each copy moves, turns, grows, fades or runs its loop on by how near it is to a point, where it is across or down, or its place in the order. Key the point or its reach to sweep the change across the copies.</td></tr>
     <tr><td>Particles</td><td class="wrap">Sends out copies as particles, born at a steady rate from a point or an area: speed and direction with a spread, gravity, turbulence, spin, size from birth to death, fading. A graphic symbol's loop can start as each particle is born. Like everything else, the same frame always shows the same particles.</td></tr>
@@ -89,6 +93,14 @@
 </figure>
 
 <p><b>Follow its</b> says which change to follow, and <b>Change my</b> what it changes here: <b>Same</b> for the same kind, or any of moving across, moving down, turning, size and fade. Moving is in pixels, turning in degrees, size and fade in percent. <b>Amount</b> scales the change, <b>Offset</b> adds to it, and <b>Keep within limits</b> holds it between <b>Lowest</b> and <b>Highest</b>: a door that opens no further than 90 degrees, however far its handle goes.</p>
+
+<h2 id="controls">Controls on a null</h2>
+
+<p>When many things should move together, give the scene one place to change them from. Put controls on one instance, the "null" (a small marker on a guide layer is a good choice, as it does not show in the movie), name it, say <code>rig</code>, and add control behaviors to it: <b>Slider Control</b>, <b>Angle Control</b>, <b>Point Control</b>, <b>Color Control</b> and <b>Checkbox Control</b>. Give each a <b>Control name</b> and key its value over time like any setting.</p>
+
+<p>Then add <b>Link to Control</b> to each instance that should follow, with <b>Controls on</b> set to <code>rig</code> and the control's name. <b>Change my</b> says what it drives: <b>Same</b> turns by an angle, moves by a point, tints toward a color and shows or hides by a checkbox; or pick moving across, moving down, turning, size, fade, tint or showing. <b>Amount</b> and <b>Offset</b> scale and add to it. Turn one Angle Control and every gear in the machine turns; change one Color Control and the whole title takes the new accent color.</p>
+
+<p>Behaviors of your own read controls too: <code>ctx.control("rig", "Dial")</code> gives a number for a slider or an angle, <code>{x, y}</code> for a point, <code>"#RRGGBB"</code> for a color, and <code>true</code> or <code>false</code> for a checkbox. A behavior can tint what it moves by returning <code>color</code> and <code>tint</code> (0 to 1).</p>
 
 <h2 id="animate-settings">Animate the settings</h2>
 

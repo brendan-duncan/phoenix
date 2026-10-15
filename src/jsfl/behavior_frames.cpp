@@ -16,6 +16,7 @@
 #include "../edit/tween_ease.h"
 
 #include <algorithm>
+#include <map>
 #include <memory>
 
 namespace fla::behaviors {
@@ -196,6 +197,50 @@ Copies evaluateOn(Engine& engine, const SymbolInstance& instance, const Transfor
         }
         return false;
     };
+    // Controls on another instance (a null): its control behaviors' values.
+    moment.control = [&engine, timeline](const std::string& holder, const std::string& name, int at, std::string& kind,
+                         std::string& value) {
+        if (!timeline || holder.empty())
+            return false;
+        for (const Layer* each : timeline->layers)
+        {
+            const Frame* keyframe = each ? keyframeAt(*each, at) : nullptr;
+            for (const Element* element : keyframe ? keyframe->elements : std::vector<Element*>())
+            {
+                if (!element || element->elementType() != Element::Type::SymbolInstance ||
+                    static_cast<const SymbolInstance*>(element)->name != holder)
+                    continue;
+                for (const Applied& applied : of(*static_cast<const SymbolInstance*>(element)))
+                {
+                    static const std::map<std::string, std::string> kinds = {{"slidercontrol", "slider"},
+                        {"anglecontrol", "angle"}, {"pointcontrol", "point"}, {"colorcontrol", "color"},
+                        {"checkboxcontrol", "checkbox"}};
+                    const auto found = kinds.find(applied.type);
+                    if (!applied.enabled || found == kinds.end())
+                        continue;
+                    // Settings not set are the behavior's own defaults.
+                    const Applied defaults = engine.defaults(applied.type, 1);
+                    const auto setting = [&](const char* param) {
+                        return applied.valueAt(param, at, defaults.valueAt(param, at, ""));
+                    };
+                    if (setting("name") != name)
+                        continue;
+                    kind = found->second;
+                    if (kind == "point")
+                        value = setting("x") + "," + setting("y");
+                    else if (kind == "color")
+                        value = setting("color");
+                    else if (kind == "checkbox")
+                        value = setting("on");
+                    else
+                        value = setting(kind == "angle" ? "angle" : "value");
+                    return true;
+                }
+                return false;
+            }
+        }
+        return false;
+    };
     // The master controllers, kept in the document.
     const Document* document = nullptr;
     for (const DOMElement* up = layer->parent; up && !document; up = up->parent)
@@ -342,6 +387,12 @@ int bake(Engine& engine, Layer& layer, int first, int last, double frameRate, st
         const auto place = [&](SymbolInstance& target, const Delta& delta) {
             target.transform = apply(job.keyed, pivot, delta);
             target.colorTransform.alphaMultiplier = alpha * delta.alpha;
+            if (delta.tint > 0.0)
+            {
+                target.colorTransform.tintMultiplier = delta.tint;
+                for (int c = 0; c < 3; ++c)
+                    target.colorTransform.tintColor[c] = delta.tintColor[c];
+            }
             // A graphic's loop, moved on.
             if (delta.frame > 0 && target.symbolType == SymbolType::Graphic)
                 target.firstFrame = graphicFrame(loop, firstFrame, lastFrame, length, delta.frame);

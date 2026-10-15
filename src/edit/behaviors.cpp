@@ -304,6 +304,12 @@ void Delta::add(const Delta& other)
     frame += other.frame;
     if (other.hold >= 0)
         hold = other.hold;
+    if (other.tint > 0.0)
+    {
+        tint = other.tint;
+        for (int c = 0; c < 3; ++c)
+            tintColor[c] = other.tintColor[c];
+    }
 }
 
 Transform apply(const Transform& keyed, const Point& pivot, const Delta& delta)

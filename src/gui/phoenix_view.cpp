@@ -3931,6 +3931,12 @@ void PhoenixView::drawElement(QPainter& painter, const fla::Element* element, co
                     static_cast<const fla::SymbolInstance*>(tweenElement)->colorTransform, tweenProgress);
             }
             color.alphaMultiplier *= behaviorDelta.alpha;
+            if (behaviorDelta.tint > 0.0)
+            {
+                color.tintMultiplier = behaviorDelta.tint;
+                for (int c = 0; c < 3; ++c)
+                    color.tintColor[c] = behaviorDelta.tintColor[c];
+            }
             // Time remapping: a graphic held on the frame a behavior says.
             if (behaviorDelta.hold >= 0 && instance->symbolType == fla::SymbolType::Graphic)
             {

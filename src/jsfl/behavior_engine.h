@@ -34,6 +34,13 @@ struct Moment
     /// A master controller's value, from 0 to 1; false when there is none
     /// of that name.
     std::function<bool(const std::string& name, double& value)> controller;
+    /// A control (Slider, Angle, Point, Color or Checkbox Control) named
+    /// \a name on the instance named \a holder, on \a frame: its \a kind
+    /// ("slider", "angle", "point", "color" or "checkbox") and its value as
+    /// text (a point's as "x,y"); false when there is none.
+    std::function<bool(const std::string& holder, const std::string& name, int frame, std::string& kind,
+        std::string& value)>
+        control;
     /// How loud the scene's sound is on a frame, from 0 (silent) to 1 (its
     /// loudest); null when nothing can hear it.
     std::function<double(int frame)> loudness;
@@ -61,7 +68,11 @@ struct Moment
 /// evaluate gets ctx (frame, time, fps, start, end, keyed, keyedAt(frame),
 /// random(n) and noise(t, n), both seeded by the "seed" setting) and the
 /// settings, and returns what to add: x and y (pixels), rotation
-/// (degrees), scale, scaleX and scaleY (factors) and alpha (a factor).
+/// (degrees), scale, scaleX and scaleY (factors), alpha (a factor), and
+/// tint (0 to 1) toward color ("#RRGGBB"). ctx.control(holder, name)
+/// reads a control on another instance: a number for a slider or an
+/// angle, {x, y} for a point, "#RRGGBB" for a color, true or false for a
+/// checkbox.
 /// Every call has a time limit; nothing reaches files, the clock or the
 /// document, so a frame always comes out the same. The built-in
 /// behaviors are written the same way.

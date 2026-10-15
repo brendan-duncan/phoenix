@@ -1025,6 +1025,48 @@ TEST(time_remap_holds_the_frame_keyed)
     CHECK(delta.hold == 3 && !delta.none());
 }
 
+TEST(link_to_control_follows_controls_on_a_null)
+{
+    Engine engine;
+    engine.addBuiltIns();
+    // Controls on an instance named "rig", as the timeline would find them.
+    Moment moment = still(10);
+    moment.control = [](const std::string& holder, const std::string& name, int, std::string& kind, std::string& value) {
+        if (holder != "rig")
+            return false;
+        const std::map<std::string, std::pair<std::string, std::string>> controls = {{"Dial", {"angle", "45"}},
+            {"Aim", {"point", "30,-20"}}, {"Accent", {"color", "#FF8000"}}, {"Visible", {"checkbox", "false"}},
+            {"Level", {"slider", "50"}}};
+        const auto found = controls.find(name);
+        if (found == controls.end())
+            return false;
+        kind = found->second.first;
+        value = found->second.second;
+        return true;
+    };
+    Applied link = engine.defaults("linkcontrol", 1);
+    link.params["target"] = "rig";
+    const auto run = [&](const char* control, const char* into) {
+        link.params["control"] = control;
+        link.params["into"] = into;
+        return engine.evaluate({link}, moment).front();
+    };
+    CHECK(near(run("Dial", "Same").rotation, 45.0));
+    const Delta aim = run("Aim", "Same");
+    CHECK(near(aim.x, 30.0) && near(aim.y, -20.0));
+    CHECK(near(run("Aim", "Move down").y, -20.0));
+    const Delta accent = run("Accent", "Same");
+    CHECK(accent.tint == 1.0 && accent.tintColor[0] == 0xFF && accent.tintColor[1] == 0x80 && accent.tintColor[2] == 0);
+    CHECK(run("Visible", "Same").alpha == 0.0);
+    CHECK(near(run("Level", "Size").scaleX, 1.5));
+    // Not there: nothing changes.
+    CHECK(run("Nothing", "Same").none());
+    link.params["target"] = "elsewhere";
+    CHECK(run("Dial", "Same").none());
+    // A control on its own does nothing to the instance holding it.
+    CHECK(engine.evaluate({engine.defaults("anglecontrol", 1)}, moment).front().none());
+}
+
 TEST(recorded_motion_moves_by_the_keys_recorded)
 {
     Engine engine;

@@ -135,11 +135,15 @@ struct Delta
     /// A graphic held on this frame of its symbol, from 0, whatever its
     /// loop: time remapping. -1 for none; the last behavior to set it wins.
     int hold = -1;
+    /// Tinted toward \a tintColor (red, green, blue) by \a tint, 0 to 1;
+    /// the last behavior to tint wins.
+    double tint = 0.0;
+    unsigned char tintColor[3] = {0, 0, 0};
 
     bool none() const
     {
         return x == 0.0 && y == 0.0 && rotation == 0.0 && scaleX == 1.0 && scaleY == 1.0 && alpha == 1.0 &&
-            frame == 0 && hold < 0;
+            frame == 0 && hold < 0 && tint == 0.0;
     }
     void add(const Delta& other);
 };

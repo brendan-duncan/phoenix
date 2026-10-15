@@ -5,6 +5,7 @@
 #include <algorithm>
 #include <chrono>
 #include <cmath>
+#include <cstdio>
 #include <cstdlib>
 #include <cstring>
 
@@ -59,6 +60,22 @@ function __run(id, params, m) {
         copy: m.copy, copies: m.copies, current: m.current,
         other: function (name, frame) { return name ? __other(String(name), frame === undefined ? m.frame : frame) : null; },
         controller: function (name) { return name ? __controller(String(name)) : null; },
+        control: function (holder, name, frame) {
+            var r = holder && name ? __control(String(holder), String(name), frame === undefined ? m.frame : frame) : null;
+            if (r === null || r === undefined)
+                return null;
+            var kind = r.substring(0, r.indexOf(":"));
+            var value = r.substring(r.indexOf(":") + 1);
+            if (kind === "point") {
+                var xy = value.split(",");
+                return { x: Number(xy[0]) || 0, y: Number(xy[1]) || 0 };
+            }
+            if (kind === "color")
+                return value;
+            if (kind === "checkbox")
+                return value === "true" || value === "1";
+            return Number(value) || 0;
+        },
         loudness: function (frame) { return __loudness(frame === undefined ? m.frame : frame); },
         // Where the layers it is parented to put a point of its own on a
         // frame: the point given, moved as the parent chain moves it.
@@ -136,6 +153,7 @@ struct Engine::Impl
         JS_SetPropertyStr(ctx, global, "__other", JS_NewCFunction(ctx, &Impl::other, "__other", 2));
         JS_SetPropertyStr(ctx, global, "__controller", JS_NewCFunction(ctx, &Impl::controller, "__controller", 1));
         JS_SetPropertyStr(ctx, global, "__loudness", JS_NewCFunction(ctx, &Impl::loudness, "__loudness", 1));
+        JS_SetPropertyStr(ctx, global, "__control", JS_NewCFunction(ctx, &Impl::control, "__control", 3));
         JS_SetPropertyStr(ctx, global, "__parentAt", JS_NewCFunction(ctx, &Impl::parentAt, "__parentAt", 1));
         JS_FreeValue(ctx, global);
         deadline = Clock::now() + std::chrono::seconds(5);
@@ -187,6 +205,43 @@ struct Engine::Impl
         const bool found = mine->other(name, static_cast<int>(std::lround(frame)), keyed);
         self->moment = mine;
         return found ? keyedObject(ctx, keyed) : JS_NULL;
+    }
+
+    static JSValue control(JSContext* ctx, JSValueConst, int argc, JSValueConst* argv)
+    {
+        Impl* self = static_cast<Impl*>(JS_GetContextOpaque(ctx));
+        if (argc < 2 || !self->moment || !self->moment->control)
+            return JS_NULL;
+        const auto text = [ctx](JSValueConst value) {
+            const char* chars = JS_ToCString(ctx, value);
+            std::string out = chars ? chars : "";
+            if (chars)
+                JS_FreeCString(ctx, chars);
+            return out;
+        };
+        double frame = self->moment->frame;
+        if (argc > 2)
+            JS_ToFloat64(ctx, &frame, argv[2]);
+        const Moment* mine = self->moment;
+        std::string kind;
+        std::string value;
+        const bool found = mine->control(text(argv[0]), text(argv[1]), static_cast<int>(std::lround(frame)), kind, value);
+        self->moment = mine;
+        return found ? JS_NewString(ctx, (kind + ":" + value).c_str()) : JS_NULL;
+    }
+
+    std::string text(JSValueConst object, const char* name)
+    {
+        JSValue value = JS_GetPropertyStr(ctx, object, name);
+        std::string out;
+        if (JS_IsString(value))
+            if (const char* chars = JS_ToCString(ctx, value))
+            {
+                out = chars;
+                JS_FreeCString(ctx, chars);
+            }
+        JS_FreeValue(ctx, value);
+        return out;
     }
 
     static JSValue controller(JSContext* ctx, JSValueConst, int argc, JSValueConst* argv)
@@ -431,6 +486,16 @@ Copies Engine::evaluate(const std::vector<Applied>& list, const Moment& moment, 
         delta.frame = static_cast<int>(std::lround(d.number(value, "frame", 0.0)));
         const double hold = d.number(value, "holdFrame", -1.0);
         delta.hold = hold >= 0.0 ? static_cast<int>(std::floor(hold)) : -1;
+        // A tint toward a color.
+        const std::string color = d.text(value, "color");
+        unsigned int rgb = 0;
+        if (color.size() == 7 && color[0] == '#' && std::sscanf(color.c_str() + 1, "%6x", &rgb) == 1)
+        {
+            delta.tint = std::clamp(d.number(value, "tint", 1.0), 0.0, 1.0);
+            delta.tintColor[0] = static_cast<unsigned char>((rgb >> 16) & 0xFF);
+            delta.tintColor[1] = static_cast<unsigned char>((rgb >> 8) & 0xFF);
+            delta.tintColor[2] = static_cast<unsigned char>(rgb & 0xFF);
+        }
         return delta;
     };
     for (const Applied& applied : list)

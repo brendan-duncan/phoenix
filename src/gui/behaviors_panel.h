@@ -95,6 +95,9 @@ private:
     void edit(const std::string& name, const std::function<void(std::vector<fla::behaviors::Applied>&)>& change,
         bool merge = false);
     void add(const std::string& id);
+    /// Every behavior (or letter animator) and some made together, each
+    /// seen moving on a sample, to add to the selection.
+    void browsePresets();
     void move(int by);
     void remove();
     /// A behavior file of one's own, from an example, opened to edit.

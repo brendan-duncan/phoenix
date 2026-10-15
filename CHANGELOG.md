@@ -4,6 +4,9 @@ What changed in each release of Phoenix, newest first.
 
 ## 0.12.0 (Unreleased)
 
+- Behaviors: controls on a null (Slider, Angle, Point, Color and Checkbox Control) that Link to Control and your own behaviors follow; behaviors can tint
+- Add Behavior > Browse Presets... shows ready-made animations and every behavior or letter animator moving before you add it
+
 - Templates: checkbox fields (two-frame clips), lists (clips with labeled frames), a font for each text field, Pin to Text to stretch or move a part with the words, and responsive time (stretch and outro labels) so intros and outros keep their timing
 
 - Control > Motion Sketch: press and move on the stage while the movie plays, and the selected instance follows the path you draw

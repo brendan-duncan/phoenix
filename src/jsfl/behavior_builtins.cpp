@@ -379,6 +379,106 @@ behavior({
     }
 });
 )JS"},
+        {"slidercontrol", R"JS(
+behavior({
+    name: "Slider Control",
+    description: "A number to key, by name, for other instances to follow with Link to Control: put the controls for a scene on one instance (a null) and drive many things from them.",
+    params: {
+        name: { label: "Control name", type: "text", value: "Slider" },
+        value: { label: "Value", value: 0, min: -10000, max: 10000, step: 0.1 }
+    },
+    evaluate: function (ctx, p) { return {}; }
+});
+)JS"},
+        {"anglecontrol", R"JS(
+behavior({
+    name: "Angle Control",
+    description: "An angle to key, by name, for other instances to follow with Link to Control: one dial turning many wheels, hands or needles.",
+    params: {
+        name: { label: "Control name", type: "text", value: "Angle" },
+        angle: { label: "Angle (degrees)", type: "angle", value: 0, min: -3600, max: 3600, step: 1 }
+    },
+    evaluate: function (ctx, p) { return {}; }
+});
+)JS"},
+        {"pointcontrol", R"JS(
+behavior({
+    name: "Point Control",
+    description: "A place to key, by name, for other instances to follow with Link to Control: a target several things move toward together.",
+    params: {
+        name: { label: "Control name", type: "text", value: "Point" },
+        x: { label: "Across (pixels)", value: 0, min: -100000, max: 100000, step: 1 },
+        y: { label: "Down (pixels)", value: 0, min: -100000, max: 100000, step: 1 }
+    },
+    evaluate: function (ctx, p) { return {}; }
+});
+)JS"},
+        {"colorcontrol", R"JS(
+behavior({
+    name: "Color Control",
+    description: "A color to key, by name, for other instances to take on with Link to Control: one place to change a whole scene's accent color.",
+    params: {
+        name: { label: "Control name", type: "text", value: "Color" },
+        color: { label: "Color (#RRGGBB)", type: "text", value: "#FF8000" }
+    },
+    evaluate: function (ctx, p) { return {}; }
+});
+)JS"},
+        {"checkboxcontrol", R"JS(
+behavior({
+    name: "Checkbox Control",
+    description: "On or off, keyed, by name, for other instances to follow with Link to Control: show or hide a set of things together.",
+    params: {
+        name: { label: "Control name", type: "text", value: "Checkbox" },
+        on: { label: "On", type: "checkbox", value: true }
+    },
+    evaluate: function (ctx, p) { return {}; }
+});
+)JS"},
+        {"linkcontrol", R"JS(
+behavior({
+    name: "Link to Control",
+    description: "Follows a control (Slider, Angle, Point, Color or Checkbox Control) on another instance, by that instance's name and the control's: an angle turns it, a point moves it, a slider sizes or fades it, a color tints it, a checkbox shows or hides it.",
+    params: {
+        target: { label: "Controls on", type: "object", value: "" },
+        control: { label: "Control name", type: "text", value: "" },
+        into: { label: "Change my", type: "choice", choices: ["Same", "Move across", "Move down", "Turn", "Size", "Fade", "Tint", "Show"] },
+        amount: { label: "Amount (percent)", value: 100, min: -1000, max: 1000, step: 1 },
+        offset: { label: "Offset", value: 0, min: -5000, max: 5000, step: 1 }
+    },
+    evaluate: function (ctx, p) {
+        var v = ctx.control(p.target, p.control);
+        if (v === null || v === undefined)
+            return {};
+        var k = p.amount / 100;
+        var into = p.into || "Same";
+        // A color: tinted toward it, by the amount.
+        if (typeof v === "string")
+            return into === "Same" || into === "Tint" ? { color: v, tint: Math.max(0, Math.min(1, k)) } : {};
+        // On or off: shown or hidden, or the amount and offset on or off.
+        if (typeof v === "boolean") {
+            if (into === "Same" || into === "Show")
+                return { alpha: v ? 1 : 0 };
+            v = v ? 1 : 0;
+        }
+        // A point: moved by it, or one of its parts into one property.
+        if (typeof v === "object") {
+            if (into === "Same")
+                return { x: v.x * k + p.offset, y: v.y * k + p.offset };
+            v = into === "Move down" ? v.y : v.x;
+        }
+        var n = v * k + p.offset;
+        switch (into) {
+        case "Move across": return { x: n };
+        case "Move down": return { y: n };
+        case "Size": return { scale: Math.max(0, 1 + n / 100) };
+        case "Fade": return { alpha: Math.max(0, 1 + n / 100) };
+        case "Show": return { alpha: n > 0 ? 1 : 0 };
+        default: return { rotation: n };
+        }
+    }
+});
+)JS"},
         {"linkcontroller", R"JS(
 behavior({
     name: "Link to Controller",

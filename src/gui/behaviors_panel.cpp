@@ -1,6 +1,8 @@
 #include "behaviors_panel.h"
 
 #include "behavior_library.h"
+#include "text_layout.h"
+#include "theme.h"
 
 #include "../data/symbol_instance.h"
 #include "../edit/command_stack.h"
@@ -13,6 +15,10 @@
 #include "../data/shape.h"
 
 #include <QCheckBox>
+#include <QDialog>
+#include <QDialogButtonBox>
+#include <QPainter>
+#include <QPainterPath>
 #include <QDesktopServices>
 #include <QDir>
 #include <QFile>
@@ -40,6 +46,8 @@
 
 #include <algorithm>
 #include <cmath>
+#include <map>
+#include <set>
 
 namespace {
 
@@ -57,6 +65,149 @@ int newSeed()
 {
     return static_cast<int>(QRandomGenerator::global()->bounded(1, 10000));
 }
+
+/// One thing the presets browser offers: a behavior or letter animator on
+/// its own, or several ready made together.
+struct BrowsedPreset
+{
+    QString name;
+    QString description;
+    std::vector<fla::behaviors::Applied> list;
+};
+
+/// Behaviors ready made together, with the settings they need.
+std::vector<BrowsedPreset> behaviorPresets()
+{
+    fla::behaviors::Engine& engine = BehaviorLibrary::instance().engine();
+    const auto make = [&engine](const char* id, std::map<std::string, std::string> settings) {
+        fla::behaviors::Applied applied = engine.defaults(id, 1);
+        for (const auto& [name, value] : settings)
+            applied.params[name] = value;
+        return applied;
+    };
+    std::vector<BrowsedPreset> list = {
+        {"Float", "Drifts gently up and down and about, as if on water.",
+            {make("oscillate", {{"motion", "Up and down"}, {"amount", "8"}, {"period", "2.5"}}),
+                make("wiggle", {{"frequency", "0.6"}, {"position", "4"}, {"rotation", "4"}, {"scale", "0"}})}},
+        {"Heartbeat", "Beats bigger and back, again and again.", {make("pulse", {{"rate", "1.2"}, {"amount", "25"}})}},
+        {"Swing", "Swings to and fro like a sign on a hook.", {make("oscillate", {{"motion", "Turn"}, {"amount", "20"}, {"period", "1.5"}})}},
+        {"Bob and Turn", "Bobs up and down, tipping as it goes.",
+            {make("oscillate", {{"motion", "Up and down"}, {"amount", "12"}, {"period", "1"}}),
+                make("oscillate", {{"motion", "Turn"}, {"amount", "10"}, {"period", "1"}, {"phase", "90"}})}},
+        {"Spin Forever", "Turns round and round at a steady speed.", {make("spin", {{"speed", "180"}})}},
+        {"Flicker", "Blinks on and off at random, like a failing light.",
+            {make("blink", {{"rate", "8"}, {"shown", "70"}, {"random", "true"}})}},
+        {"Ring of Copies", "Copies of it in a ring, turning together.",
+            {make("circle", {{"count", "10"}, {"radius", "90"}}), make("spin", {{"speed", "45"}})}},
+        {"Fountain", "Copies of it spray up and fall, fading.", {make("particles", {})}},
+        {"Shaky", "Shakes about nervously.", {make("wiggle", {{"frequency", "8"}, {"position", "5"}, {"rotation", "6"}})}},
+    };
+    return list;
+}
+
+/// A sample drawn moving as a preset makes it move, round and round: a
+/// shape for behaviors, a word for letter animators.
+class PresetPreview : public QWidget
+{
+public:
+    PresetPreview(bool letters, QWidget* parent)
+        : QWidget(parent)
+        , _letters(letters)
+        , _word(nullptr)
+    {
+        setMinimumSize(320, 220);
+        fla::TextRun run;
+        run.text = "Phoenix";
+        run.size = 44;
+        run.face = "Arial-BoldMT";
+        run.fillColor[0] = run.fillColor[1] = run.fillColor[2] = 0xF0;
+        _word.runs = {run};
+        _word.autoExpand = true;
+        _word.textType = fla::StaticText::TextType::Dynamic;
+        _timer.setInterval(1000 / 24);
+        QObject::connect(&_timer, &QTimer::timeout, this, [this]() {
+            _frame = (_frame + 1) % kFrames;
+            update();
+        });
+        _timer.start();
+    }
+    void show(const std::vector<fla::behaviors::Applied>& list)
+    {
+        _list = list;
+        _frame = 0;
+        update();
+    }
+
+protected:
+    void paintEvent(QPaintEvent*) override
+    {
+        QPainter painter(this);
+        painter.setRenderHint(QPainter::Antialiasing);
+        painter.fillRect(rect(), QColor(0x20, 0x26, 0x30));
+        painter.setPen(palette().color(QPalette::PlaceholderText));
+        painter.drawText(rect().adjusted(6, 4, -6, -4), Qt::AlignRight | Qt::AlignBottom,
+            QString("%1 / %2").arg(_frame + 1).arg(kFrames));
+        if (_letters)
+        {
+            const std::vector<fla::textanim::Letter> letters = TextLayout::letters(_word);
+            const std::vector<fla::textanim::Change> changes = fla::textanim::apply(_list, letters, _frame, 0, 24.0);
+            const QRectF box = TextLayout::localBounds(_word);
+            painter.translate(width() / 2.0 - box.width() / 2.0, height() / 2.0 - box.height() / 2.0);
+            TextLayout::drawAnimated(painter, _word, changes);
+            return;
+        }
+        fla::behaviors::Moment moment;
+        moment.frame = _frame;
+        moment.frameRate = 24.0;
+        moment.start = 0;
+        moment.end = kFrames - 1;
+        const fla::behaviors::Copies copies = BehaviorLibrary::instance().engine().evaluate(_list, moment);
+        painter.translate(width() / 2.0, height() / 2.0);
+        painter.scale(0.7, 0.7);
+        const QColor accent = theme::color("accent");
+        for (const fla::behaviors::Delta& copy : copies)
+        {
+            painter.save();
+            painter.translate(copy.x, copy.y);
+            painter.rotate(copy.rotation);
+            painter.scale(copy.scaleX, copy.scaleY);
+            painter.setOpacity(std::clamp(copy.alpha, 0.0, 1.0));
+            QColor fill = accent;
+            if (copy.tint > 0.0)
+            {
+                const QColor tint(copy.tintColor[0], copy.tintColor[1], copy.tintColor[2]);
+                fill = QColor::fromRgbF(fill.redF() + (tint.redF() - fill.redF()) * copy.tint,
+                    fill.greenF() + (tint.greenF() - fill.greenF()) * copy.tint,
+                    fill.blueF() + (tint.blueF() - fill.blueF()) * copy.tint);
+            }
+            // A star, so turning shows.
+            QPainterPath star;
+            for (int i = 0; i < 10; ++i)
+            {
+                const double angle = -1.5707963267948966 + i * 0.6283185307179586;
+                const double r = i % 2 == 0 ? 26.0 : 11.0;
+                const QPointF point(std::cos(angle) * r, std::sin(angle) * r);
+                if (i == 0)
+                    star.moveTo(point);
+                else
+                    star.lineTo(point);
+            }
+            star.closeSubpath();
+            painter.setPen(QPen(fill.darker(160), 2.0));
+            painter.setBrush(fill);
+            painter.drawPath(star);
+            painter.restore();
+        }
+    }
+
+private:
+    static constexpr int kFrames = 72;
+    bool _letters;
+    fla::StaticText _word;
+    std::vector<fla::behaviors::Applied> _list;
+    int _frame = 0;
+    QTimer _timer;
+};
 
 } // namespace
 
@@ -107,6 +258,14 @@ BehaviorsPanel::BehaviorsPanel(BehaviorsLinks links, QWidget* parent)
                     _list->setCurrentRow(_list->count() - 1);
                 });
             }
+        }
+        // Every one of them and some made together, each seen moving.
+        if (mode() == Mode::Behaviors || mode() == Mode::Texts)
+        {
+            menu->addSeparator();
+            QAction* browse = menu->addAction("Browse Presets...");
+            browse->setStatusTip("See each behavior and ready-made animation moving before you add it");
+            connect(browse, &QAction::triggered, this, &BehaviorsPanel::browsePresets);
         }
         // Behaviors of one's own: a new one to write, and where they are.
         if (mode() == Mode::Behaviors)
@@ -573,6 +732,94 @@ void BehaviorsPanel::add(const std::string& id)
                                                                        : "Add Behavior", [&applied](std::vector<fla::behaviors::Applied>& list) { list.push_back(applied); });
     refresh();
     _list->setCurrentRow(_list->count() - 1);
+}
+
+void BehaviorsPanel::browsePresets()
+{
+    const bool letters = mode() == Mode::Texts;
+    std::vector<BrowsedPreset> presets;
+    if (letters)
+        for (const fla::textanim::Preset& preset : fla::textanim::presets())
+            presets.push_back({QString::fromStdString(preset.name), QString::fromStdString(preset.description), preset.animators});
+    else
+        presets = behaviorPresets();
+    const size_t made = presets.size();
+    // Then every one on its own, as it comes, but those that need another
+    // instance, a path or a sound to show anything.
+    static const std::set<std::string> needMore = {"followpath", "pathrepeat", "lookat", "linkobject", "linkcontrol",
+        "linkcontroller", "sound", "recorded", "timeremap", "slidercontrol", "anglecontrol", "pointcontrol", "colorcontrol",
+        "checkboxcontrol", "effector", "follow", "jiggle", "path", "sourcetext"};
+    for (const fla::behaviors::Definition& definition : available())
+        if (!needMore.count(definition.id))
+            presets.push_back({QString::fromStdString(definition.name), QString::fromStdString(definition.description),
+                {letters ? fla::textanim::defaults(definition.id, 1)
+                         : BehaviorLibrary::instance().engine().defaults(definition.id, 1)}});
+
+    QDialog dialog(this);
+    dialog.setWindowTitle(letters ? "Letter Animation Presets" : "Behavior Presets");
+    auto* layout = new QHBoxLayout(&dialog);
+    auto* list = new QListWidget(&dialog);
+    list->setMinimumWidth(200);
+    const auto heading = [list](const QString& text) {
+        auto* item = new QListWidgetItem(text, list);
+        item->setFlags(Qt::NoItemFlags);
+        QFont font = item->font();
+        font.setBold(true);
+        item->setFont(font);
+    };
+    heading("Ready made");
+    for (size_t i = 0; i < presets.size(); ++i)
+    {
+        if (i == made)
+            heading(letters ? "Letter animators" : "Behaviors");
+        auto* item = new QListWidgetItem(presets[i].name, list);
+        item->setData(Qt::UserRole, static_cast<int>(i));
+        item->setToolTip(presets[i].description);
+    }
+    layout->addWidget(list);
+    auto* side = new QVBoxLayout();
+    auto* preview = new PresetPreview(letters, &dialog);
+    side->addWidget(preview, 1);
+    auto* about = new QLabel(&dialog);
+    about->setWordWrap(true);
+    about->setMinimumHeight(48);
+    about->setAlignment(Qt::AlignTop | Qt::AlignLeft);
+    side->addWidget(about);
+    auto* buttons = new QDialogButtonBox(&dialog);
+    QPushButton* apply = buttons->addButton(letters ? "Add to Text" : "Add to Selection", QDialogButtonBox::AcceptRole);
+    buttons->addButton(QDialogButtonBox::Close);
+    side->addWidget(buttons);
+    layout->addLayout(side, 1);
+    connect(buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
+    connect(list, &QListWidget::currentItemChanged, &dialog, [&presets, preview, about, apply](QListWidgetItem* item) {
+        const QVariant index = item ? item->data(Qt::UserRole) : QVariant();
+        apply->setEnabled(index.isValid());
+        if (!index.isValid())
+            return;
+        const BrowsedPreset& preset = presets[static_cast<size_t>(index.toInt())];
+        preview->show(preset.list);
+        about->setText(preset.description);
+    });
+    // Added as a step of its own, and the dialog stays for another.
+    const auto addChosen = [this, &presets, list, letters]() {
+        const QVariant index = list->currentItem() ? list->currentItem()->data(Qt::UserRole) : QVariant();
+        if (!index.isValid() || targets().empty())
+            return;
+        std::vector<fla::behaviors::Applied> chosen = presets[static_cast<size_t>(index.toInt())].list;
+        for (fla::behaviors::Applied& applied : chosen)
+            if (applied.params.count("seed"))
+                applied.params["seed"] = std::to_string(newSeed());
+        edit(letters ? "Add Letter Animation" : "Add Behavior", [&chosen](std::vector<fla::behaviors::Applied>& each) {
+            each.insert(each.end(), chosen.begin(), chosen.end());
+        });
+        refresh();
+        _list->setCurrentRow(_list->count() - 1);
+    };
+    connect(apply, &QPushButton::clicked, &dialog, addChosen);
+    connect(list, &QListWidget::itemDoubleClicked, &dialog, addChosen);
+    list->setCurrentRow(1);
+    dialog.resize(640, 360);
+    dialog.exec();
 }
 
 void BehaviorsPanel::move(int by)
