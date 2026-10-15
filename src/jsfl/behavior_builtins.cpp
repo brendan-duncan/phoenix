@@ -319,12 +319,19 @@ behavior({
         {"timeremap", R"JS(
 behavior({
     name: "Time Remap",
-    description: "Says which frame of the graphic shows, frame by frame: key Frame shown from 1 to 48 over 96 frames for slow motion, hold it still for a freeze, key it from high to low to run it backwards. The graphic's own loop is set aside while it is on.",
+    description: "Says which frame of the graphic shows, frame by frame: key Frame shown from 1 to 48 over 96 frames for slow motion, hold it still for a freeze, key it from high to low to run it backwards; Blend between frames cross-fades in slow motion. The graphic's own loop is set aside while it is on.",
     params: {
-        frame: { label: "Frame shown", value: 1, min: 1, max: 100000, step: 0.1 }
+        frame: { label: "Frame shown", value: 1, min: 1, max: 100000, step: 0.1 },
+        blend: { label: "Blend between frames", type: "checkbox", value: false }
     },
     evaluate: function (ctx, p) {
-        return { holdFrame: Math.max(0, Math.floor(p.frame) - 1) };
+        var held = Math.max(0, Math.floor(p.frame) - 1);
+        // Frame blending: part way between two frames, the next faded in
+        // over this one, so slow motion runs smooth rather than stepping.
+        var part = p.frame - Math.floor(p.frame);
+        if (p.blend && part > 0.01)
+            return { copies: [{ holdFrame: held }, { holdFrame: held + 1, alpha: part }] };
+        return { holdFrame: held };
     }
 });
 )JS"},

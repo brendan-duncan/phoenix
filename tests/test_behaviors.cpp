@@ -1012,6 +1012,15 @@ TEST(time_remap_holds_the_frame_keyed)
     // Held, run backwards from 11 to 1.
     remap.params["frame"] = "@0=11;10=1";
     CHECK(engine.evaluate({remap}, still(5)).front().hold == 5);
+    // Blended: part way between frames 3 and 4, both, the later faded in.
+    Applied blended = engine.defaults("timeremap", 1);
+    blended.params["frame"] = "3.25";
+    CHECK(engine.evaluate({blended}, still(0)).size() == 1);
+    blended.params["blend"] = "true";
+    const Copies both = engine.evaluate({blended}, still(0));
+    CHECK(both.size() == 2 && both[0].hold == 2 && both[0].alpha == 1.0 && both[1].hold == 3 && near(both[1].alpha, 0.25));
+    blended.params["frame"] = "3";
+    CHECK(engine.evaluate({blended}, still(0)).size() == 1);
     // With copies, every copy is held; a later behavior's loop shift does
     // not undo it.
     Applied ring = engine.defaults("circle", 1);
