@@ -202,6 +202,64 @@ behavior({
     }
 });
 )JS"},
+        {"scatter", R"JS(
+behavior({
+    name: "Scatter in a Shape",
+    description: "Copies it at random places inside the shape drawn on the motion guide its layer is under: a field of flowers, stars in a window, a crowd in a square. Draw a closed line on the guide first.",
+    params: {
+        count: { label: "Copies", value: 30, min: 1, max: 2000, step: 1 },
+        spacing: { label: "Keep apart (pixels)", value: 20, min: 0, max: 1000, step: 1 },
+        turn: { label: "Turn at random (degrees, up to)", value: 0, min: 0, max: 180, step: 1 },
+        sizes: { label: "Sizes vary (percent)", value: 0, min: 0, max: 100, step: 1 },
+        seed: { label: "Seed", type: "seed", value: 1 }
+    },
+    evaluate: function (ctx, p) {
+        if (!ctx.path)
+            throw new Error("Scatter in a Shape needs its layer under a motion guide with a closed line drawn on it.");
+        // The guide's line as an outline, its ends joined.
+        var outline = [];
+        var steps = 240;
+        for (var s = 0; s < steps; s++)
+            outline.push(ctx.path.at(ctx.path.length * s / steps));
+        var minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+        for (var o = 0; o < outline.length; o++) {
+            minX = Math.min(minX, outline[o].x); maxX = Math.max(maxX, outline[o].x);
+            minY = Math.min(minY, outline[o].y); maxY = Math.max(maxY, outline[o].y);
+        }
+        var inside = function (x, y) {
+            var in_ = false;
+            for (var i = 0, j = outline.length - 1; i < outline.length; j = i++) {
+                var a = outline[i], b = outline[j];
+                if ((a.y > y) !== (b.y > y) && x < (b.x - a.x) * (y - a.y) / (b.y - a.y) + a.x)
+                    in_ = !in_;
+            }
+            return in_;
+        };
+        // Random places inside, tried a few times each to keep them apart;
+        // the same places every frame, from the seed.
+        var n = Math.max(1, Math.round(p.count));
+        var placed = [];
+        var copies = [];
+        var tries = 0;
+        for (var c = 0; placed.length < n && tries < n * 60; tries++) {
+            var x = minX + (maxX - minX) * ctx.random(tries * 2);
+            var y = minY + (maxY - minY) * ctx.random(tries * 2 + 1);
+            if (!inside(x, y))
+                continue;
+            var near = false;
+            for (var k = 0; k < placed.length && !near; k++)
+                near = Math.hypot(placed[k].x - x, placed[k].y - y) < p.spacing;
+            if (near && tries < n * 40)
+                continue;
+            placed.push({ x: x, y: y });
+            var size = 1 - p.sizes / 100 * ctx.random(100000 + c);
+            copies.push({ x: x - ctx.keyed.x, y: y - ctx.keyed.y, rotation: p.turn * (2 * ctx.random(200000 + c) - 1), scale: size });
+            c++;
+        }
+        return { copies: copies };
+    }
+});
+)JS"},
         {"followpath", R"JS(
 behavior({
     name: "Follow Path",
@@ -446,6 +504,97 @@ behavior({
             }
         }
         return { x: x - ctx.keyed.x, y: y - ctx.keyed.y, rotation: p.turn ? r - ctx.keyed.rotation : 0 };
+    }
+});
+)JS"},
+        {"loop", R"JS(
+behavior({
+    name: "Loop",
+    description: "Repeats the motion keyed over the first frames of its keyframes for as long as they run: round and round, back and forth, or carrying on the way it was going.",
+    params: {
+        mode: { label: "Loop", choices: ["Cycle", "Back and Forth", "Continue"] },
+        length: { label: "Loop the first (frames)", value: 24, min: 2, max: 10000, step: 1 }
+    },
+    evaluate: function (ctx, p) {
+        var n = Math.round(p.length);
+        var local = ctx.frame - ctx.start;
+        if (n < 2 || local < n)
+            return {};
+        var keyed = ctx.keyed;
+        var at;
+        if (p.mode === "Continue") {
+            // On from the last frame of the loop at the speed it ended with.
+            var last = ctx.keyedAt(ctx.start + n - 1);
+            var before = ctx.keyedAt(ctx.start + n - 2);
+            if (!last || !before)
+                return {};
+            var on = local - (n - 1);
+            at = {
+                x: last.x + (last.x - before.x) * on, y: last.y + (last.y - before.y) * on,
+                rotation: last.rotation + (last.rotation - before.rotation) * on,
+                scaleX: last.scaleX, scaleY: last.scaleY, alpha: last.alpha
+            };
+        } else {
+            var from;
+            if (p.mode === "Back and Forth") {
+                var period = 2 * (n - 1);
+                var q = local % period;
+                from = q < n ? q : period - q;
+            } else {
+                from = local % n;
+            }
+            at = ctx.keyedAt(ctx.start + from);
+            if (!at)
+                return {};
+        }
+        var ratio = function (a, b) { return Math.abs(b) > 1e-9 ? a / b : 1; };
+        return {
+            x: at.x - keyed.x, y: at.y - keyed.y, rotation: at.rotation - keyed.rotation,
+            scaleX: ratio(at.scaleX, keyed.scaleX), scaleY: ratio(at.scaleY, keyed.scaleY), alpha: ratio(at.alpha, keyed.alpha)
+        };
+    }
+});
+)JS"},
+        {"jiggle", R"JS(
+behavior({
+    name: "Jiggle",
+    description: "Makes it sway and bounce on a spring as it is carried about, turning about its transformation point: antennas, ears, a feather, a sign on a chain. Works with the layers it is parented to as well as its own keys.",
+    params: {
+        points: { label: "It points", choices: ["Up", "Down", "Left", "Right"] },
+        amount: { label: "Sway (degrees per 10 pixels of lag)", value: 6, min: 0, max: 90, step: 0.5 },
+        limit: { label: "At most (degrees)", value: 45, min: 0, max: 180, step: 1 },
+        response: { label: "Springiness (swings per second)", value: 2, min: 0.1, max: 20, step: 0.1 },
+        bounce: { label: "Bounce (percent)", value: 60, min: 0, max: 100, step: 1 }
+    },
+    evaluate: function (ctx, p) {
+        var omega = 2 * Math.PI * p.response;
+        var zeta = 1 - p.bounce / 100;
+        var dt = 1 / ctx.fps;
+        // Where its pivot is in the world on a frame: its keys moved by its
+        // parents.
+        var world = function (f) {
+            var k = ctx.keyedAt(f) || ctx.keyed;
+            return ctx.parentAt(f, k.x, k.y);
+        };
+        // A weight on a spring follows the pivot; how far it trails is the sway.
+        var history = Math.min(ctx.frame - ctx.start, Math.ceil(ctx.fps * 3));
+        var target = world(ctx.frame - history);
+        var x = target.x, y = target.y, vx = 0, vy = 0;
+        for (var f = ctx.frame - history + 1; f <= ctx.frame; f++) {
+            target = world(f);
+            for (var s = 0; s < 4; s++) {
+                var h = dt / 4;
+                vx += (omega * omega * (target.x - x) - 2 * zeta * omega * vx) * h;
+                vy += (omega * omega * (target.y - y) - 2 * zeta * omega * vy) * h;
+                x += vx * h;
+                y += vy * h;
+            }
+        }
+        // The lag across the way it points turns it toward where it trails.
+        var lagX = x - target.x, lagY = y - target.y;
+        var across = p.points === "Down" ? -lagX : p.points === "Left" ? -lagY : p.points === "Right" ? lagY : lagX;
+        var turn = across / 10 * p.amount;
+        return { rotation: Math.max(-p.limit, Math.min(p.limit, turn)) };
     }
 });
 )JS"},

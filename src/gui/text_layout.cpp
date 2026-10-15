@@ -1,16 +1,19 @@
 #include "text_layout.h"
 
 #include "../data/static_text.h"
+#include "../edit/image_blur.h"
 
 #include <QFontDatabase>
 #include <QFontMetricsF>
 #include <QGuiApplication>
 #include <QHash>
+#include <QImage>
 #include <QPainter>
 #include <QScreen>
 #include <QSettings>
 
 #include <algorithm>
+#include <cmath>
 #include <cmath>
 #include <cstdlib>
 #include <string>
@@ -773,6 +776,34 @@ std::vector<fla::textanim::Letter> letters(const fla::StaticText& text)
     return list;
 }
 
+/// \a letter drawn at \a at blurred by \a radius (in the painter's units):
+/// drawn into an image at the painter's scale, blurred, then drawn back.
+void drawBlurredLetter(QPainter& painter, const QFont& font, const QColor& ink, const QPointF& at, const QString& letter,
+    double radius)
+{
+    const QFontMetricsF metrics(font);
+    const QRectF box = metrics.boundingRect(letter).translated(at).adjusted(-radius * 2.0, -radius * 2.0, radius * 2.0,
+        radius * 2.0);
+    const QTransform toDevice = painter.worldTransform();
+    const double scale = std::max(0.05, std::sqrt(std::fabs(toDevice.determinant())));
+    const QSize size(std::clamp(static_cast<int>(std::ceil(box.width() * scale)), 1, 4096),
+        std::clamp(static_cast<int>(std::ceil(box.height() * scale)), 1, 4096));
+    QImage image(size, QImage::Format_ARGB32_Premultiplied);
+    image.fill(Qt::transparent);
+    {
+        QPainter letterPainter(&image);
+        letterPainter.setRenderHints(painter.renderHints());
+        letterPainter.scale(scale, scale);
+        letterPainter.translate(-box.topLeft());
+        letterPainter.setFont(font);
+        letterPainter.setPen(QPen(ink, 1.0));
+        letterPainter.drawText(at, letter);
+    }
+    fla::boxBlur(reinterpret_cast<uint32_t*>(image.bits()), image.width(), image.height(), radius * scale * 2.0,
+        radius * scale * 2.0, 3);
+    painter.drawImage(box, image);
+}
+
 void drawAnimated(QPainter& painter, const fla::StaticText& text, const std::vector<fla::textanim::Change>& changes)
 {
     if (isVertical(text))
@@ -822,7 +853,20 @@ void drawAnimated(QPainter& painter, const fla::StaticText& text, const std::vec
                 painter.translate(-middle);
                 painter.setOpacity(opacity * std::min(1.0, change.alpha));
                 const QString shown = change.character ? QString(QChar(static_cast<char16_t>(change.character))) : part.mid(k, 1);
-                painter.drawText(QPointF(x, baseline), shown);
+                QColor ink = colorOf(run);
+                if (change.tint > 0.0)
+                {
+                    const double u = std::min(1.0, change.tint);
+                    const QColor to(static_cast<int>((change.tintColor >> 16) & 0xFF), static_cast<int>((change.tintColor >> 8) & 0xFF),
+                        static_cast<int>(change.tintColor & 0xFF));
+                    ink = QColor::fromRgbF(ink.redF() + (to.redF() - ink.redF()) * u, ink.greenF() + (to.greenF() - ink.greenF()) * u,
+                        ink.blueF() + (to.blueF() - ink.blueF()) * u, ink.alphaF());
+                }
+                painter.setPen(QPen(ink, 1.0));
+                if (change.blur > 0.05)
+                    drawBlurredLetter(painter, font, ink, QPointF(x, baseline), shown, change.blur);
+                else
+                    painter.drawText(QPointF(x, baseline), shown);
                 painter.restore();
             }
         }

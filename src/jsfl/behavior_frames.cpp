@@ -37,6 +37,21 @@ void setHearing(Hearing given)
 
 namespace {
 
+Rigging& rigging()
+{
+    static Rigging set;
+    return set;
+}
+
+} // namespace
+
+void setRigging(Rigging given)
+{
+    rigging() = std::move(given);
+}
+
+namespace {
+
 const Frame* keyframeAt(const Layer& layer, int frame)
 {
     for (const Frame* keyframe : layer.frames)
@@ -197,6 +212,7 @@ Copies evaluateOn(Engine& engine, const SymbolInstance& instance, const Transfor
         return false;
     };
     moment.loudness = [document](int at) { return document && hearing() ? hearing()(*document, at) : 0.0; };
+    moment.parentAt = [layer](int at, double matrix[6]) { return rigging() && rigging()(*layer, at, matrix); };
     return engine.evaluate(of(instance), moment, error);
 }
 

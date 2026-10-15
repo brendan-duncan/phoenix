@@ -252,6 +252,271 @@ std::vector<Line> displaced(const std::vector<Line>& lines, double spacing, F of
     return out;
 }
 
+
+constexpr double kPi = 3.14159265358979323846;
+
+/// Twice the signed area of a closed line: positive when it runs one way
+/// round, negative the other.
+double signedArea(const std::vector<Point>& points)
+{
+    double area = 0.0;
+    for (size_t i = 0; i < points.size(); ++i)
+    {
+        const Point& a = points[i];
+        const Point& b = points[(i + 1) % points.size()];
+        area += a.x * b.y - b.x * a.y;
+    }
+    return area;
+}
+
+/// Whether \a point is inside the closed \a line (even-odd).
+bool inside(const Point& point, const Line& line)
+{
+    bool in = false;
+    const std::vector<Point>& p = line.points;
+    for (size_t i = 0, j = p.size() - 1; i < p.size(); j = i++)
+        if (((p[i].y > point.y) != (p[j].y > point.y)) &&
+            point.x < (p[j].x - p[i].x) * (point.y - p[i].y) / (p[j].y - p[i].y) + p[i].x)
+            in = !in;
+    return in;
+}
+
+/// The points of \a line without repeats (a closed line without its end
+/// back at the start).
+std::vector<Point> distinctPoints(const Line& line)
+{
+    std::vector<Point> out;
+    for (const Point& point : line.points)
+        if (out.empty() || distance(out.back(), point) > 1e-6)
+            out.push_back(point);
+    if (line.closed && out.size() > 1 && distance(out.front(), out.back()) <= 1e-6)
+        out.pop_back();
+    return out;
+}
+
+/// How far the line turns at point \a i (radians, 0 for straight on).
+double turnAt(const std::vector<Point>& p, size_t i, bool closed)
+{
+    const size_t n = p.size();
+    if (n < 3 || (!closed && (i == 0 || i + 1 >= n)))
+        return 0.0;
+    const Point& a = p[(i + n - 1) % n];
+    const Point& b = p[i];
+    const Point& c = p[(i + 1) % n];
+    const double a1 = std::atan2(b.y - a.y, b.x - a.x);
+    const double a2 = std::atan2(c.y - b.y, c.x - b.x);
+    double d = a2 - a1;
+    while (d > kPi)
+        d -= 2.0 * kPi;
+    while (d < -kPi)
+        d += 2.0 * kPi;
+    return std::fabs(d);
+}
+
+/// The lines grown outward by \a by (shrunk with less than 0): closed
+/// outlines away from their insides, holes toward theirs; an open line
+/// moved across.
+std::vector<Line> offsetLines(const std::vector<Line>& lines, double by)
+{
+    std::vector<Line> out;
+    for (size_t l = 0; l < lines.size(); ++l)
+    {
+        const std::vector<Point> p = distinctPoints(lines[l]);
+        const size_t n = p.size();
+        if (n < 2)
+        {
+            out.push_back(lines[l]);
+            continue;
+        }
+        double side = 1.0;
+        if (lines[l].closed && n > 2)
+        {
+            // The normal (-dy, dx) points to the left of the way it runs:
+            // outward for one winding, inward for the other; a hole the
+            // other way again.
+            side = signedArea(p) > 0.0 ? -1.0 : 1.0;
+            int around = 0;
+            for (size_t o = 0; o < lines.size(); ++o)
+                if (o != l && lines[o].closed && lines[o].points.size() > 2 && inside(p.front(), lines[o]))
+                    ++around;
+            if (around % 2 == 1)
+                side = -side;
+        }
+        const auto normalOf = [&](const Point& a, const Point& b) {
+            const double length = std::max(1e-12, distance(a, b));
+            return Point(-(b.y - a.y) / length * side, (b.x - a.x) / length * side);
+        };
+        Line moved;
+        moved.closed = lines[l].closed;
+        for (size_t i = 0; i < n; ++i)
+        {
+            const bool first = i == 0 && !moved.closed;
+            const bool last = i + 1 == n && !moved.closed;
+            const Point before = first ? normalOf(p[0], p[1]) : normalOf(p[(i + n - 1) % n], p[i]);
+            const Point after = last ? normalOf(p[n - 2], p[n - 1]) : normalOf(p[i], p[(i + 1) % n]);
+            // A mitered corner: along the two normals' middle, far enough
+            // to keep both sides at the distance, within a limit.
+            Point mid(before.x + after.x, before.y + after.y);
+            const double length = std::hypot(mid.x, mid.y);
+            if (length < 1e-9)
+                mid = before;
+            else
+                mid = Point(mid.x / length, mid.y / length);
+            const double cosHalf = std::max(0.25, mid.x * after.x + mid.y * after.y);
+            moved.points.push_back(Point(p[i].x + mid.x * by / cosHalf, p[i].y + mid.y * by / cosHalf));
+        }
+        out.push_back(moved);
+    }
+    return out;
+}
+
+/// Each corner sharper than a slight bend made round, cut back up to
+/// \a radius along each side.
+std::vector<Line> roundCorners(const std::vector<Line>& lines, double radius)
+{
+    std::vector<Line> out;
+    for (const Line& line : lines)
+    {
+        const std::vector<Point> p = distinctPoints(line);
+        const size_t n = p.size();
+        if (n < 3 || radius <= 0.0)
+        {
+            out.push_back(line);
+            continue;
+        }
+        Line rounded;
+        rounded.closed = line.closed;
+        for (size_t i = 0; i < n; ++i)
+        {
+            if (turnAt(p, i, line.closed) < 0.3)
+            {
+                rounded.points.push_back(p[i]);
+                continue;
+            }
+            const Point& a = p[(i + n - 1) % n];
+            const Point& b = p[i];
+            const Point& c = p[(i + 1) % n];
+            const double inLength = distance(a, b);
+            const double outLength = distance(b, c);
+            const double cut = std::min({radius, inLength / 2.0, outLength / 2.0});
+            const Point from(b.x + (a.x - b.x) / inLength * cut, b.y + (a.y - b.y) / inLength * cut);
+            const Point to(b.x + (c.x - b.x) / outLength * cut, b.y + (c.y - b.y) / outLength * cut);
+            // A curve from one cut to the other, bent toward the corner.
+            constexpr int kSteps = 8;
+            for (int s = 0; s <= kSteps; ++s)
+            {
+                const double u = static_cast<double>(s) / kSteps;
+                const double w0 = (1 - u) * (1 - u), w1 = 2 * u * (1 - u), w2 = u * u;
+                rounded.points.push_back(Point(w0 * from.x + w1 * b.x + w2 * to.x, w0 * from.y + w1 * b.y + w2 * to.y));
+            }
+        }
+        out.push_back(rounded);
+    }
+    return out;
+}
+
+/// The middle of all the lines' points.
+Point centerOf(const std::vector<Line>& lines)
+{
+    double minX = 1e300, minY = 1e300, maxX = -1e300, maxY = -1e300;
+    for (const Line& line : lines)
+        for (const Point& point : line.points)
+        {
+            minX = std::min(minX, point.x);
+            minY = std::min(minY, point.y);
+            maxX = std::max(maxX, point.x);
+            maxY = std::max(maxY, point.y);
+        }
+    return minX > maxX ? Point(0, 0) : Point((minX + maxX) / 2.0, (minY + maxY) / 2.0);
+}
+
+/// Pucker (less than 0) and Bloat: the stretches between the corners drawn
+/// toward the middle or pushed out from it, most at their halfway points.
+std::vector<Line> puckerBloat(const std::vector<Line>& lines, double amount)
+{
+    const Point center = centerOf(lines);
+    std::vector<Line> out;
+    for (const Line& line : lines)
+    {
+        const std::vector<Point> p = distinctPoints(line);
+        const size_t n = p.size();
+        if (n < 2)
+        {
+            out.push_back(line);
+            continue;
+        }
+        // The corners; a smooth outline has four, evenly round it.
+        std::vector<size_t> corners;
+        for (size_t i = 0; i < n; ++i)
+            if ((!line.closed && (i == 0 || i + 1 == n)) || turnAt(p, i, line.closed) >= 0.3)
+                corners.push_back(i);
+        if (corners.size() < 2)
+        {
+            corners.clear();
+            const size_t parts = line.closed ? 4 : 1;
+            for (size_t k = 0; k < parts; ++k)
+                corners.push_back(k * n / parts);
+            if (!line.closed)
+                corners.push_back(n - 1);
+        }
+        Line moved;
+        moved.closed = line.closed;
+        const size_t stretches = line.closed ? corners.size() : corners.size() - 1;
+        for (size_t s = 0; s < stretches; ++s)
+        {
+            // The stretch's points, closely spaced, from one corner to the next.
+            std::vector<Point> run;
+            for (size_t i = corners[s];; i = (i + 1) % n)
+            {
+                run.push_back(p[i]);
+                if (i == corners[(s + 1) % corners.size()] && run.size() > 1)
+                    break;
+            }
+            Line stretch;
+            stretch.points = run;
+            const std::vector<Sample> samples = resample(stretch, 3.0);
+            const double length = samples.empty() ? 0.0 : samples.back().along;
+            for (size_t k = 0; k + 1 < samples.size() || (k + 1 == samples.size() && s + 1 == stretches && !line.closed); ++k)
+            {
+                const double u = length > 0.0 ? samples[k].along / length : 0.0;
+                const double push = amount / 100.0 * std::sin(u * kPi);
+                const Point& at = samples[k].at;
+                moved.points.push_back(Point(at.x + (at.x - center.x) * push, at.y + (at.y - center.y) * push));
+            }
+        }
+        out.push_back(moved);
+    }
+    return out;
+}
+
+/// The lines and \a copies more of them, each moved, turned and scaled
+/// from the one before, about the middle of them all.
+std::vector<Line> repeated(const std::vector<Line>& lines, int copies, double moveX, double moveY, double turn, double scale)
+{
+    const Point center = centerOf(lines);
+    std::vector<Line> out = lines;
+    for (int k = 1; k <= copies; ++k)
+    {
+        const double angle = turn * k * kPi / 180.0;
+        const double size = std::pow(scale, k);
+        const double c = std::cos(angle) * size;
+        const double s = std::sin(angle) * size;
+        for (const Line& line : lines)
+        {
+            Line copy;
+            copy.closed = line.closed;
+            for (const Point& point : line.points)
+            {
+                const double x = point.x - center.x;
+                const double y = point.y - center.y;
+                copy.points.push_back(Point(center.x + x * c - y * s + moveX * k, center.y + x * s + y * c + moveY * k));
+            }
+            out.push_back(copy);
+        }
+    }
+    return out;
+}
+
 } // namespace
 
 const std::vector<Definition>& definitions()
@@ -289,6 +554,43 @@ const std::vector<Definition>& definitions()
         zigzagDef.params = {number("size", "Size (pixels)", 5, -200, 200, 0.5), number("ridges", "Ridges per 100 pixels", 8, 0.1, 200, 0.1),
             number("shift", "Shift (ridges)", 0, -1000, 1000, 0.05), checkbox("smooth", "Smooth waves", false)};
         made.push_back(zigzagDef);
+
+        Definition offsetDef;
+        offsetDef.id = "offset";
+        offsetDef.name = "Offset Path";
+        offsetDef.description = "Grows the shape's outlines outward, or shrinks them with less than 0, keeping their "
+                                "corners: an outline that swells, a shape that shrinks away.";
+        offsetDef.builtIn = true;
+        offsetDef.params = {number("amount", "Amount (pixels)", 6, -500, 500, 0.5)};
+        made.push_back(offsetDef);
+
+        Definition roundDef;
+        roundDef.id = "round";
+        roundDef.name = "Round Corners";
+        roundDef.description = "Rounds the shape's sharp corners, up to a radius.";
+        roundDef.builtIn = true;
+        roundDef.params = {number("radius", "Radius (pixels)", 12, 0, 1000, 0.5)};
+        made.push_back(roundDef);
+
+        Definition bloatDef;
+        bloatDef.id = "puckerbloat";
+        bloatDef.name = "Pucker and Bloat";
+        bloatDef.description = "Pushes the sides between the corners out from the shape's middle (bloat), or draws "
+                               "them in (pucker, less than 0): a square that puffs up, a star that sharpens.";
+        bloatDef.builtIn = true;
+        bloatDef.params = {number("amount", "Amount (percent)", 30, -200, 200, 1)};
+        made.push_back(bloatDef);
+
+        Definition repeaterDef;
+        repeaterDef.id = "repeater";
+        repeaterDef.name = "Repeater";
+        repeaterDef.description = "Draws the shape again and again, each copy moved, turned and scaled from the one "
+                                  "before: a trail, a spiral, a stack of rings.";
+        repeaterDef.builtIn = true;
+        repeaterDef.params = {number("copies", "Copies", 3, 0, 200, 1), number("moveX", "Move across (pixels)", 20, -2000, 2000, 1),
+            number("moveY", "Move down (pixels)", 0, -2000, 2000, 1), number("turn", "Turn (degrees)", 0, -360, 360, 1),
+            number("scale", "Scale (percent)", 100, 1, 400, 1)};
+        made.push_back(repeaterDef);
         return made;
     }();
     return list;
@@ -369,6 +671,16 @@ std::vector<Line> apply(const std::vector<Line>& lines, bool stroke, const std::
                 return std::fmod(std::floor(phase * 2.0 + 1e-9), 2.0) == 0.0 ? size : -size;
             });
         }
+        else if (applied.type == "offset")
+            out = offsetLines(out, param(applied, "amount", frame, 6.0));
+        else if (applied.type == "round")
+            out = roundCorners(out, param(applied, "radius", frame, 12.0));
+        else if (applied.type == "puckerbloat")
+            out = puckerBloat(out, param(applied, "amount", frame, 30.0));
+        else if (applied.type == "repeater")
+            out = repeated(out, std::clamp(static_cast<int>(std::lround(param(applied, "copies", frame, 3.0))), 0, 200),
+                param(applied, "moveX", frame, 20.0), param(applied, "moveY", frame, 0.0), param(applied, "turn", frame, 0.0),
+                std::max(0.01, param(applied, "scale", frame, 100.0) / 100.0));
     }
     return out;
 }

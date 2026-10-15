@@ -2988,6 +2988,31 @@ void MainWindow::setupUI()
     // Behaviors that follow sound hear the soundtrack of the scene they are
     // in, from the window that has its document open.
     s_hearing.push_back(this);
+    fla::behaviors::setRigging([](const fla::Layer& layer, int frame, double matrix[6]) {
+        const fla::Document* document = nullptr;
+        for (const fla::DOMElement* up = layer.parent; up && !document; up = up->parent)
+            document = dynamic_cast<const fla::Document*>(up);
+        for (MainWindow* window : s_hearing)
+        {
+            if (!window->_phoenixView || !window->_flaDocument || window->_flaDocument->document != document)
+                continue;
+            const fla::Frame* key = nullptr;
+            for (const fla::Frame* each : layer.frames)
+                if (each && each->index <= frame && frame < each->index + std::max(1, each->duration))
+                    key = each;
+            if (!key)
+                return false;
+            const QTransform t = window->_phoenixView->parentingAt(&layer, key, frame);
+            matrix[0] = t.m11();
+            matrix[1] = t.m12();
+            matrix[2] = t.m21();
+            matrix[3] = t.m22();
+            matrix[4] = t.dx();
+            matrix[5] = t.dy();
+            return true;
+        }
+        return false;
+    });
     fla::behaviors::setHearing([](const fla::Document& document, int frame) {
         for (MainWindow* window : s_hearing)
             if (window->_flaDocument && window->_flaDocument->document == &document)
@@ -4973,6 +4998,15 @@ std::vector<fla::StaticText*> MainWindow::bakedText(const fla::StaticText& text,
                                         : QString(runText[k]).toStdString();
             run.alignment = fla::TextRun::Alignment::Left;
             run.fillColor[3] = static_cast<uint8_t>(std::lround(run.fillColor[3] * std::min(1.0, change.alpha)));
+            if (change.tint > 0.0)
+            {
+                const double u = std::min(1.0, change.tint);
+                for (int c = 0; c < 3; ++c)
+                {
+                    const double to = (change.tintColor >> (16 - 8 * c)) & 0xFF;
+                    run.fillColor[c] = static_cast<uint8_t>(std::lround(run.fillColor[c] + (to - run.fillColor[c]) * u));
+                }
+            }
             letter->runs = {run};
             letter->autoExpand = true;
             letter->width = 0.0;

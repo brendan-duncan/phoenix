@@ -58,6 +58,16 @@ ParamSpec checkbox(const char* name, const char* label, bool value)
     return spec;
 }
 
+ParamSpec textParam(const char* name, const char* label, const char* value)
+{
+    ParamSpec spec;
+    spec.name = name;
+    spec.label = label;
+    spec.type = "text";
+    spec.text = value;
+    return spec;
+}
+
 ParamSpec seed()
 {
     ParamSpec spec = number("seed", "Seed", 1, 0, 9999, 1);
@@ -166,14 +176,17 @@ const std::vector<Definition>& definitions()
             {number("height", "Height (pixels)", 8, -500, 500, 0.5), number("length", "Letters per wave", 8, 1, 200, 0.5),
                 number("speed", "Waves per second", 1, -20, 20, 0.05), number("tilt", "Tilt (degrees)", 0, -90, 90, 1)}),
         definition("range", "Animate Letters",
-            "Changes the letters a range covers: where they are, their turn, size and opacity. Key the Offset to sweep the "
-            "range across the text, so the change passes from letter to letter.",
+            "Changes the letters a range covers: where they are, their turn, size, opacity, spacing, color and blur. Key "
+            "the Offset to sweep the range across the text, so the change passes from letter to letter.",
             {choice("unit", "By", {"Letters", "Words", "Lines"}),
                 choice("shape", "Shape", {"Square", "Ramp up", "Ramp down", "Triangle", "Round", "Random"}),
                 number("start", "Start (percent)", 0, 0, 100, 0.5), number("end", "End (percent)", 100, 0, 100, 0.5),
                 number("offset", "Offset (percent)", 0, -200, 200, 0.5), number("moveX", "Move across (pixels)", 0, -2000, 2000, 1),
                 number("moveY", "Move down (pixels)", -20, -2000, 2000, 1), number("turn", "Turn (degrees)", 0, -720, 720, 1),
-                number("scale", "Size (percent)", 100, 0, 1000, 1), number("opacity", "Opacity (percent)", 100, 0, 100, 1), seed()}),
+                number("scale", "Size (percent)", 100, 0, 1000, 1), number("opacity", "Opacity (percent)", 100, 0, 100, 1),
+                number("tracking", "Spacing (pixels)", 0, -200, 500, 0.5), textParam("color", "Color (#RRGGBB)", "#FFC000"),
+                number("colorAmount", "Color amount (percent)", 0, 0, 100, 1), number("blur", "Blur (pixels)", 0, 0, 100, 0.5),
+                seed()}),
     };
     return list;
 }
@@ -315,7 +328,16 @@ std::vector<Change> apply(const std::vector<Applied>& list, const std::vector<Le
             const double turn = param(applied, "turn", frame, 0.0);
             const double scale = param(applied, "scale", frame, 100.0) / 100.0;
             const double opacity = param(applied, "opacity", frame, 100.0) / 100.0;
+            const double tracking = param(applied, "tracking", frame, 0.0);
+            const double colorAmount = std::clamp(param(applied, "colorAmount", frame, 0.0) / 100.0, 0.0, 1.0);
+            const double blur = std::max(0.0, param(applied, "blur", frame, 0.0));
+            std::string colorText = text(applied, "color", frame, "#FFC000");
+            if (!colorText.empty() && colorText[0] == '#')
+                colorText = colorText.substr(1);
+            const unsigned color = static_cast<unsigned>(std::strtoul(colorText.c_str(), nullptr, 16)) & 0xFFFFFFu;
             const int seedValue = static_cast<int>(param(applied, "seed", frame, 1.0));
+            // Spacing pushes each letter on by the spacing of those before it.
+            double carried = 0.0;
             // In random order, each letter takes another's place.
             std::vector<double> places(letters.size());
             for (size_t i = 0; i < letters.size(); ++i)
@@ -353,6 +375,14 @@ std::vector<Change> apply(const std::vector<Applied>& list, const std::vector<Le
                 changes[i].rotation += turn * s;
                 changes[i].scale *= 1.0 + (scale - 1.0) * s;
                 changes[i].alpha *= 1.0 + (opacity - 1.0) * s;
+                changes[i].x += carried;
+                carried += tracking * s;
+                if (colorAmount * s > changes[i].tint)
+                {
+                    changes[i].tint = colorAmount * s;
+                    changes[i].tintColor = color;
+                }
+                changes[i].blur += blur * s;
             }
         }
     }

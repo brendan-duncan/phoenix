@@ -37,6 +37,9 @@ struct Moment
     /// How loud the scene's sound is on a frame, from 0 (silent) to 1 (its
     /// loudest); null when nothing can hear it.
     std::function<double(int frame)> loudness;
+    /// The transform the layers it is parented to give it on a frame (a, b,
+    /// c, d, tx, ty); false when it has none to say.
+    std::function<bool(int frame, double matrix[6])> parentAt;
 };
 
 /// Runs behaviors: JavaScript files of the form

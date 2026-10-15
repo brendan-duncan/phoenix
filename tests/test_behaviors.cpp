@@ -463,6 +463,149 @@ TEST(behaviors_particles_are_born_live_and_die_by_the_clock)
     CHECK(!engine.evaluate({particles}, still(12)).empty());
 }
 
+TEST(shape_operators_offset_round_bloat_and_repeat)
+{
+    using fla::shapeops::Line;
+    Line square;
+    square.closed = true;
+    square.points = {fla::Point(0, 0), fla::Point(100, 0), fla::Point(100, 100), fla::Point(0, 100)};
+    const auto bounds = [](const std::vector<Line>& lines, double& minX, double& maxX) {
+        minX = 1e9;
+        maxX = -1e9;
+        for (const Line& line : lines)
+            for (const fla::Point& point : line.points)
+            {
+                minX = std::min(minX, point.x);
+                maxX = std::max(maxX, point.x);
+            }
+    };
+    double minX = 0, maxX = 0;
+    // Offset grows it on every side, either way round it runs.
+    Applied grow = fla::shapeops::defaults("offset", 1);
+    grow.params["amount"] = "10";
+    bounds(fla::shapeops::apply({square}, false, {grow}, 0, 24.0), minX, maxX);
+    CHECK(near(minX, -10.0, 1e-6) && near(maxX, 110.0, 1e-6));
+    Line reversed = square;
+    std::reverse(reversed.points.begin(), reversed.points.end());
+    bounds(fla::shapeops::apply({reversed}, false, {grow}, 0, 24.0), minX, maxX);
+    CHECK(near(minX, -10.0, 1e-6) && near(maxX, 110.0, 1e-6));
+    // A hole inside it shrinks as the outline grows.
+    Line hole;
+    hole.closed = true;
+    hole.points = {fla::Point(40, 40), fla::Point(60, 40), fla::Point(60, 60), fla::Point(40, 60)};
+    const std::vector<Line> both = fla::shapeops::apply({square, hole}, false, {grow}, 0, 24.0);
+    bounds({both[1]}, minX, maxX);
+    CHECK(near(minX, 50.0, 1e-6) && near(maxX, 50.0, 1e-6));
+
+    // Round corners: no point left at a corner, the sides kept straight.
+    Applied round = fla::shapeops::defaults("round", 1);
+    round.params["radius"] = "20";
+    const std::vector<Line> rounded = fla::shapeops::apply({square}, false, {round}, 0, 24.0);
+    bool cornerLeft = false;
+    for (const fla::Point& point : rounded[0].points)
+        cornerLeft = cornerLeft || (near(point.x, 0.0, 1e-9) && near(point.y, 0.0, 1e-9));
+    CHECK(!cornerLeft && rounded[0].points.size() == 36);
+
+    // Bloat pushes the middle of each side out; pucker draws it in.
+    Applied bloat = fla::shapeops::defaults("puckerbloat", 1);
+    bloat.params["amount"] = "20";
+    bounds(fla::shapeops::apply({square}, false, {bloat}, 0, 24.0), minX, maxX);
+    CHECK(near(maxX, 110.0, 0.5) && near(minX, -10.0, 0.5));
+    bloat.params["amount"] = "-20";
+    bounds(fla::shapeops::apply({square}, false, {bloat}, 0, 24.0), minX, maxX);
+    CHECK(near(maxX, 100.0, 1e-6));
+
+    // Repeater: the shape and three copies, each 20 pixels on.
+    const std::vector<Line> repeated = fla::shapeops::apply({square}, false, {fla::shapeops::defaults("repeater", 1)}, 0, 24.0);
+    bounds(repeated, minX, maxX);
+    CHECK(repeated.size() == 4 && near(maxX, 160.0, 1e-6));
+}
+
+TEST(behaviors_loop_scatter_and_jiggle)
+{
+    Engine engine;
+    engine.addBuiltIns();
+    // Keyed: x goes 0, 10, 20... a frame.
+    const auto keyedAt = [](int frame, Keyed& keyed) {
+        keyed = Keyed();
+        keyed.x = frame * 10.0;
+        return true;
+    };
+    Applied loop = engine.defaults("loop", 1);
+    loop.params["length"] = "4";
+    Moment moment = still(6);
+    moment.keyed.x = 60.0;
+    moment.keyedAt = keyedAt;
+    // A cycle of four frames: frame 6 shows frame 2.
+    CHECK(near(one(engine, {loop}, moment).x, -40.0, 1e-9));
+    loop.params["mode"] = "Back and Forth";
+    // 0 1 2 3 2 1 0: frame 6 shows frame 0.
+    CHECK(near(one(engine, {loop}, moment).x, -60.0, 1e-9));
+    loop.params["mode"] = "Continue";
+    // On at ten a frame: where it is keyed anyway.
+    CHECK(near(one(engine, {loop}, moment).x, 0.0, 1e-9));
+    moment = still(2);
+    moment.keyedAt = keyedAt;
+    CHECK(one(engine, {loop}, moment).none());
+
+    // Scatter: every copy inside the square the guide draws.
+    fla::GuidePath square;
+    square.build(std::vector<std::vector<fla::Point>>{
+        {fla::Point(0, 0), fla::Point(100, 0), fla::Point(100, 100), fla::Point(0, 100), fla::Point(0, 0)}});
+    Applied scatter = engine.defaults("scatter", 1);
+    scatter.params["count"] = "25";
+    scatter.params["spacing"] = "5";
+    moment = still(0);
+    moment.path = &square;
+    const Copies scattered = engine.evaluate({scatter}, moment);
+    bool allInside = scattered.size() == 25;
+    for (const Delta& copy : scattered)
+        allInside = allInside && copy.x >= 0.0 && copy.x <= 100.0 && copy.y >= 0.0 && copy.y <= 100.0;
+    CHECK(allInside);
+
+    // Jiggle: still when nothing moves; swings when the parent carries it.
+    Applied jiggle = engine.defaults("jiggle", 1);
+    moment = still(12);
+    moment.keyedAt = [](int, Keyed& keyed) {
+        keyed = Keyed();
+        return true;
+    };
+    CHECK(near(one(engine, {jiggle}, moment).rotation, 0.0, 1e-9));
+    moment.parentAt = [](int frame, double m[6]) {
+        m[0] = 1;
+        m[1] = 0;
+        m[2] = 0;
+        m[3] = 1;
+        m[4] = frame < 10 ? 0.0 : 200.0;
+        m[5] = 0;
+        return true;
+    };
+    // Carried to the right, it trails to the left: it leans left.
+    CHECK(one(engine, {jiggle}, moment).rotation < -1.0);
+}
+
+TEST(text_animators_space_color_and_blur_letters)
+{
+    using fla::textanim::Letter;
+    std::vector<Letter> letters(3);
+    for (int i = 0; i < 3; ++i)
+    {
+        letters[static_cast<size_t>(i)].index = i;
+        letters[static_cast<size_t>(i)].count = 3;
+        letters[static_cast<size_t>(i)].words = 1;
+        letters[static_cast<size_t>(i)].character = 'a';
+    }
+    Applied range = fla::textanim::defaults("range", 1);
+    range.params["moveY"] = "0";
+    range.params["tracking"] = "5";
+    range.params["colorAmount"] = "50";
+    range.params["color"] = "#FF0000";
+    range.params["blur"] = "2";
+    const std::vector<fla::textanim::Change> changes = fla::textanim::apply({range}, letters, 0, 0, 24.0);
+    CHECK(near(changes[0].x, 0.0) && near(changes[1].x, 5.0) && near(changes[2].x, 10.0));
+    CHECK(near(changes[1].tint, 0.5) && changes[1].tintColor == 0xFF0000u && near(changes[2].blur, 2.0));
+}
+
 TEST(shape_operators_trim_wiggle_and_zigzag_lines)
 {
     using fla::shapeops::Line;

@@ -60,6 +60,14 @@ function __run(id, params, m) {
         other: function (name, frame) { return name ? __other(String(name), frame === undefined ? m.frame : frame) : null; },
         controller: function (name) { return name ? __controller(String(name)) : null; },
         loudness: function (frame) { return __loudness(frame === undefined ? m.frame : frame); },
+        // Where the layers it is parented to put a point of its own on a
+        // frame: the point given, moved as the parent chain moves it.
+        parentAt: function (frame, x, y) {
+            var t = __parentAt(frame === undefined ? m.frame : frame);
+            if (!t)
+                return { x: x, y: y };
+            return { x: t[0] * x + t[2] * y + t[4], y: t[1] * x + t[3] * y + t[5] };
+        },
         // The motion guide's line: its length, and where along it a place
         // is (x, y and the line's direction in degrees).
         path: m.pathLength >= 0 ? {
@@ -128,6 +136,7 @@ struct Engine::Impl
         JS_SetPropertyStr(ctx, global, "__other", JS_NewCFunction(ctx, &Impl::other, "__other", 2));
         JS_SetPropertyStr(ctx, global, "__controller", JS_NewCFunction(ctx, &Impl::controller, "__controller", 1));
         JS_SetPropertyStr(ctx, global, "__loudness", JS_NewCFunction(ctx, &Impl::loudness, "__loudness", 1));
+        JS_SetPropertyStr(ctx, global, "__parentAt", JS_NewCFunction(ctx, &Impl::parentAt, "__parentAt", 1));
         JS_FreeValue(ctx, global);
         deadline = Clock::now() + std::chrono::seconds(5);
         JS_FreeValue(ctx, JS_Eval(ctx, kPrelude, std::strlen(kPrelude), "<behaviors>", JS_EVAL_TYPE_GLOBAL));
@@ -200,6 +209,20 @@ struct Engine::Impl
         if (argc < 1 || JS_ToFloat64(ctx, &frame, argv[0]) < 0 || !self->moment || !self->moment->loudness)
             return JS_NewFloat64(ctx, 0.0);
         return JS_NewFloat64(ctx, self->moment->loudness(static_cast<int>(std::lround(frame))));
+    }
+
+    static JSValue parentAt(JSContext* ctx, JSValueConst, int argc, JSValueConst* argv)
+    {
+        Impl* self = static_cast<Impl*>(JS_GetContextOpaque(ctx));
+        double frame = 0;
+        double m[6] = {1, 0, 0, 1, 0, 0};
+        if (argc < 1 || JS_ToFloat64(ctx, &frame, argv[0]) < 0 || !self->moment || !self->moment->parentAt ||
+            !self->moment->parentAt(static_cast<int>(std::lround(frame)), m))
+            return JS_NULL;
+        JSValue array = JS_NewArray(ctx);
+        for (uint32_t i = 0; i < 6; ++i)
+            JS_SetPropertyUint32(ctx, array, i, JS_NewFloat64(ctx, m[i]));
+        return array;
     }
 
     static JSValue pathAt(JSContext* ctx, JSValueConst, int argc, JSValueConst* argv)

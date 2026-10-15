@@ -44,6 +44,12 @@ bool drivenValue(Engine& engine, const Layer& layer, int frame, const std::strin
 using Hearing = std::function<double(const Document& document, int frame)>;
 void setHearing(Hearing hearing);
 
+/// How the layers \a layer is parented to move it on a frame (a, b, c, d,
+/// tx, ty). Set by the app, which works the parent chain out; until it is,
+/// behaviors see no parents.
+using Rigging = std::function<bool(const Layer& layer, int frame, double matrix[6])>;
+void setRigging(Rigging rigging);
+
 /// A symbol's length in frames.
 int lengthOf(const Symbol* symbol);
 

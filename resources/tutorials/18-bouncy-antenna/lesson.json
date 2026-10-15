@@ -1,0 +1,65 @@
+{
+  "title": "A bouncy antenna",
+  "summary": "Give an antenna on a moving head a springy sway with the Jiggle behavior, working through layer parenting.",
+  "minutes": 5,
+  "order": 18,
+  "guide": "behaviors.html",
+  "start": {
+    "document": "start"
+  },
+  "steps": [
+    {
+      "title": "Welcome",
+      "text": "<p>Secondary motion, the follow-through of loose parts, makes animation feel alive. The <b>Jiggle</b> behavior adds it for you: the part sways and bounces on a spring as whatever carries it moves.</p><p>Here the <i>Antenna</i> layer is parented to the <i>Head</i>, which runs across the stage and back.</p>"
+    },
+    {
+      "title": "Play it",
+      "text": "<p>Press <kbd>Enter</kbd>, or click the play button in the timeline header. The antenna stays stiff as a pole.</p>",
+      "target": "widget:timelinePlay",
+      "wait": {
+        "playing": true
+      }
+    },
+    {
+      "title": "Select the antenna",
+      "text": "<p>Press <kbd>Enter</kbd> again to stop. Press <kbd>Home</kbd> to go back to frame 1, then press <kbd>V</kbd> and click the antenna.</p>",
+      "target": "stage:260,180,80,170",
+      "wait": {
+        "selection": "instance"
+      }
+    },
+    {
+      "title": "Open the Behaviors panel",
+      "text": "<p>Choose <b>Window &gt; Behaviors</b> if it is not showing. It lists what is on the selection and the settings of each.</p>",
+      "target": "dock:Behaviors"
+    },
+    {
+      "title": "Add Jiggle",
+      "text": "<p>Click <b>Add Behavior</b> and choose <b>Jiggle</b>.</p>",
+      "target": "widget:behaviorsAdd",
+      "wait": {
+        "command": "Add Behavior"
+      }
+    },
+    {
+      "title": "Play it",
+      "text": "<p>Press <kbd>Enter</kbd>, or click the play button in the timeline header. As the head starts, the antenna lags behind; as it stops, the antenna swings on past and settles.</p>",
+      "target": "widget:timelinePlay",
+      "wait": {
+        "playing": true
+      }
+    },
+    {
+      "title": "Make it springier",
+      "text": "<p>Press <kbd>Enter</kbd> again to stop. Set <b>Bounce</b> to 85 for a wobblier antenna, or <b>Springiness</b> to 1 for a slow, heavy sway. Play again to see.</p>",
+      "target": "label:Behaviors/Bounce (percent)",
+      "wait": {
+        "command": "Behavior Settings"
+      }
+    },
+    {
+      "title": "Well done",
+      "text": "<p>You added follow-through with one behavior. <b>It points</b> says which way the part sticks out from its pivot: Down for a hanging sign or earrings. Jiggle follows its own keys as well as the layers it is parented to.</p><p>As with any behavior, <b>Bake</b> turns it into keyframes.</p>"
+    }
+  ]
+}

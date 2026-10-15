@@ -50,8 +50,17 @@ struct Change
     double scale = 1.0;
     double alpha = 1.0;
     unsigned character = 0;
+    /// How far toward \a tintColor (0xRRGGBB) the letter's color goes, 0 to 1.
+    double tint = 0.0;
+    unsigned tintColor = 0;
+    /// A blur over the letter, in pixels.
+    double blur = 0.0;
 
-    bool none() const { return x == 0 && y == 0 && rotation == 0 && scale == 1.0 && alpha == 1.0 && character == 0; }
+    bool none() const
+    {
+        return x == 0 && y == 0 && rotation == 0 && scale == 1.0 && alpha == 1.0 && character == 0 && tint == 0.0 &&
+            blur == 0.0;
+    }
 };
 
 /// What \a list does to each of \a letters on frame \a frame of the text's

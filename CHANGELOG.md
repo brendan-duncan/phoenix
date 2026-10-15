@@ -4,6 +4,9 @@ What changed in each release of Phoenix, newest first.
 
 ## 0.10.0 (Unreleased)
 
+- Behaviors: Loop repeats keyed motion (cycle, back and forth, continue); Jiggle sways parts on a spring as they are carried, through layer parenting; Scatter in a Shape places copies at random inside a guide's outline
+- Shape operators: Offset Path, Round Corners, Pucker and Bloat and Repeater; Animate Letters can also space out, color and blur letters
+- A new lesson, A bouncy antenna
 - Playing or scrubbing within a keyframe keeps the selection, so panels stay on it; the layer list marks adjustment layers and layers shown through a track matte
 - Eight new lessons in Help > Tutorials: behaviors, writing your own behavior, a crowd from one cycle, draw-on lines, an animated title, particles, track mattes and adjustment layers, and lower thirds from a template
 - Add Behavior > New Behavior... starts a behavior of your own from an example and opens it in the script editor; Open Behaviors Folder shows where they are kept
