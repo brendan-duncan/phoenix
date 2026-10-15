@@ -15563,10 +15563,64 @@ bool MainWindow::pasteFromSystemClipboard(const char* name, bool centerInView)
 }
 
 void MainWindow::placeCopies(const std::vector<const fla::Element*>& sources, const char* name,
-    bool centerInView)
+    bool centerInView, bool acrossFrames)
 {
     if (!_phoenixView || sources.empty())
         return;
+
+    // Frames chosen on the timeline, the last thing worked in: the copies go
+    // onto each keyframe they cover, on every unlocked layer chosen, in
+    // place.
+    QWidget* focused = QApplication::focusWidget();
+    if (acrossFrames && _timelineView && focused && (focused == _timelineView || _timelineView->isAncestorOf(focused)))
+    {
+        const FrameSelection chosen = _timelineView->frameSelection();
+        std::vector<fla::Frame*> targets;
+        const auto add = [&targets](const fla::Layer* layer, int index) {
+            if (!layer || layer->layerType == fla::Layer::Type::Folder || layer->isLocked())
+                return;
+            for (fla::Frame* frame : layer->frames)
+                if (frame && index >= frame->index && index < frame->index + std::max(1, frame->duration))
+                {
+                    if (std::find(targets.begin(), targets.end(), frame) == targets.end())
+                        targets.push_back(frame);
+                    return;
+                }
+        };
+        for (const fla::Layer* layer : chosen.layers)
+            for (int index = chosen.first; index <= chosen.last; ++index)
+                add(layer, index);
+        for (const auto& [layer, index] : chosen.cells)
+            add(layer, index);
+        if (targets.size() > 1)
+        {
+            const fla::SymbolList* library = _flaDocument && _flaDocument->document
+                ? _flaDocument->document->symbolList : nullptr;
+            _phoenixView->flushPendingMerge();
+            fla::CommandStack& stack = _editContext.commandStack();
+            stack.beginMacro(name);
+            for (fla::Frame* target : targets)
+                for (const fla::Element* source : sources)
+                {
+                    fla::Element* copy = fla::cloneElement(*source, target);
+                    if (!copy)
+                        continue;
+                    fla::relinkSymbols(*copy, library);
+                    if (fla::placingNestsSymbol(*copy, _phoenixView->scopeSymbol()))
+                    {
+                        delete copy;
+                        continue;
+                    }
+                    stack.push(fla::CommandPtr(new fla::AddElementCommand(target, copy, name, &_selection)));
+                }
+            stack.endMacro();
+            stack.breakMergeChain();
+            _phoenixView->clearCaches();
+            _phoenixView->update();
+            statusBar()->showMessage(QString("Pasted onto %1 frames.").arg(targets.size()), 3000);
+            return;
+        }
+    }
 
     fla::Frame* frame = _phoenixView->activeFrame();
     if (!frame)
@@ -15656,10 +15710,11 @@ void MainWindow::paste()
 
 void MainWindow::pasteInPlace()
 {
-    pasteElements("Paste in Place", false);
+    // With frames chosen on the timeline, onto each of them.
+    pasteElements("Paste in Place", false, true);
 }
 
-void MainWindow::pasteElements(const char* name, bool centerInView)
+void MainWindow::pasteElements(const char* name, bool centerInView, bool acrossFrames)
 {
     if (pasteFromSystemClipboard(name, centerInView))
         return;
@@ -15706,7 +15761,7 @@ void MainWindow::pasteElements(const char* name, bool centerInView)
             }
         }
     }
-    placeCopies(sources, name, centerInView);
+    placeCopies(sources, name, centerInView, acrossFrames);
     if (macro)
         stack.endMacro();
 }

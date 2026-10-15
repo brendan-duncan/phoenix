@@ -764,7 +764,7 @@ private:
     bool bringLibraryItems(const fla::Document& source, const std::vector<std::string>& names,
         std::map<std::string, std::string>& renamed);
     /// Paste and Paste in Place from the copies Phoenix holds.
-    void pasteElements(const char* name, bool centerInView);
+    void pasteElements(const char* name, bool centerInView, bool acrossFrames = false);
     void chooseTool(Tool* tool);
     /// The tool to go back to when the pen is turned back from its eraser
     /// end.
@@ -1156,7 +1156,8 @@ private:
     /// selects them. With \a centerInView the copies are moved so that they
     /// sit in the middle of the view, which is where a paste lands.
     void placeCopies(const std::vector<const fla::Element*>& sources, const char* name,
-        bool centerInView);
+        bool centerInView,
+        bool acrossFrames = false);
 
     /// The media type the system clipboard carries copied elements under,
     /// as an XFL document, between Phoenix windows.

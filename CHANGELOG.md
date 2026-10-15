@@ -4,6 +4,7 @@ What changed in each release of Phoenix, newest first.
 
 ## 0.12.0 (Unreleased)
 
+- Paste in Place with frames chosen on the timeline pastes onto every keyframe they cover
 - Motion Editor: color and filter curves stay within what each property can be (tint channels 0 to 255, no blur below 0)
 - Ctrl-dragging an outline with the Selection tool puts a new corner where you grab it and drags that, instead of moving the next corner along
 - Export FLA for Other Apps carries inverted track mattes (Layer and Erase blending) and adjustment-layer art (a mask over the filtered layers); SVG exports draw adjustment layers
