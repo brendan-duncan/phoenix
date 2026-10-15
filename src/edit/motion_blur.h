@@ -38,6 +38,25 @@ std::vector<std::pair<std::string, std::string>> withSettings(const Document& do
 /// times spread evenly across the shutter, centered on the frame.
 std::vector<double> sampleTimes(double shutter, int samples);
 
+/// A layer's time effects, Phoenix's own: Echo draws it again as it was
+/// some frames before, each fainter (a trail of earlier poses), and
+/// Posterize Time holds each pose for a number of frames (animation on
+/// twos, a jerky stop-motion look). Kept in phoenixEcho
+/// ("count,interval,decay") and phoenixPosterize (frames a pose).
+struct LayerTime
+{
+    int echoes = 0;
+    int interval = 2;
+    /// How much of the one before each echo keeps, 0 to 1.
+    double decay = 0.6;
+    int posterize = 1;
+    bool any() const { return echoes > 0 || posterize > 1; }
+};
+LayerTime layerTimeOf(const Layer& layer);
+std::vector<std::pair<std::string, std::string>> withLayerTime(const Layer& layer, const LayerTime& time);
+/// The frame \a frame shows held as \a time holds it.
+int posterized(const LayerTime& time, int frame);
+
 } // namespace motionblur
 
 } // namespace fla

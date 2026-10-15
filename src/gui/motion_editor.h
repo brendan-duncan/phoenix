@@ -52,6 +52,8 @@ public:
     void setKeys(const std::vector<fla::motion::PropertyKey>& keys);
 
     const std::vector<fla::motion::PropertyKey>& keys() const { return _keys; }
+    /// Whether the speed of the change is drawn over the curve too.
+    void setShowSpeed(bool show);
     int selectedKey() const { return _selected; }
     void selectKey(int index);
 
@@ -82,6 +84,7 @@ private:
     double _low = 0.0;
     double _high = 1.0;
     int _selected = -1;
+    bool _showSpeed = false;
     /// What is being dragged: 0 none, 1 a keyframe, 2 its next handle, 3 its
     /// previous handle.
     int _dragging = 0;
@@ -112,6 +115,10 @@ private:
     void addKeyAtPlayhead();
     void removeKey();
     void applyEase(int preset);
+    /// Easy Ease on the selected keyframe (every keyframe when none is):
+    /// its handles flat, a third of the way to the keyframes either side;
+    /// \a in and \a out say which.
+    void easyEase(bool in, bool out);
     void updateKeyFields();
     /// The properties listed: the transform's, the color effect's and the
     /// filters' of the object.

@@ -1394,6 +1394,8 @@ void LayersPanel::showLayerMenu(QTreeWidgetItem* item, const QPoint& globalPos)
         if (layer->layerType == fla::Layer::Type::Mask)
             menu.addAction("Mask Edge...", this, [=]() { emit compositingRequested(layer, "maskedge"); })
                 ->setStatusTip("Feather, grow or shrink this mask's edge, or invert it");
+        menu.addAction("Echo and Posterize Time...", this, [=]() { emit compositingRequested(layer, "time"); })
+            ->setStatusTip("A trail of earlier poses behind the layer, or each pose held for some frames");
         QAction* blur = menu.addAction("Motion Blur", this, [=]() {
             emit compositingRequested(layer, fla::motionblur::on(*layer) ? "motionblur:off" : "motionblur:on");
         });

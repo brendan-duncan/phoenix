@@ -1195,3 +1195,22 @@ TEST(letter_flips_source_text_and_presets)
         for (const Applied& animator : preset.animators)
             CHECK(ta::find(animator.type) != nullptr);
 }
+
+TEST(layer_echo_and_posterize_time)
+{
+    namespace mb = fla::motionblur;
+    fla::Layer layer(nullptr);
+    CHECK(!mb::layerTimeOf(layer).any());
+    mb::LayerTime time;
+    time.echoes = 4;
+    time.interval = 3;
+    time.decay = 0.5;
+    time.posterize = 2;
+    layer.extraAttributes = mb::withLayerTime(layer, time);
+    const mb::LayerTime read = mb::layerTimeOf(layer);
+    CHECK(read.echoes == 4 && read.interval == 3 && near(read.decay, 0.5) && read.posterize == 2);
+    // On twos: frames 0 and 1 show 0, 2 and 3 show 2.
+    CHECK(mb::posterized(read, 1) == 0 && mb::posterized(read, 3) == 2 && mb::posterized(read, 4) == 4);
+    layer.extraAttributes = mb::withLayerTime(layer, mb::LayerTime());
+    CHECK(layer.extraAttributes.empty());
+}

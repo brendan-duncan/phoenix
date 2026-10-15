@@ -3224,6 +3224,51 @@ void MainWindow::setupUI()
             after = fla::compositing::withLayerMode(*layer, mode);
             name = "Layer Mode";
         }
+        else if (what == "time")
+        {
+            const fla::motionblur::LayerTime was = fla::motionblur::layerTimeOf(*layer);
+            QDialog dialog(this);
+            dialog.setWindowTitle("Echo and Posterize Time");
+            QFormLayout* form = new QFormLayout(&dialog);
+            QSpinBox* echoes = new QSpinBox(&dialog);
+            echoes->setRange(0, 32);
+            echoes->setValue(was.echoes);
+            echoes->setSpecialValueText("None");
+            echoes->setToolTip("How many earlier poses trail behind the layer");
+            QSpinBox* interval = new QSpinBox(&dialog);
+            interval->setRange(1, 240);
+            interval->setValue(was.interval);
+            interval->setSuffix(" frames");
+            interval->setToolTip("How far back each echo is from the one before");
+            QSpinBox* decay = new QSpinBox(&dialog);
+            decay->setRange(0, 100);
+            decay->setValue(static_cast<int>(std::lround(was.decay * 100.0)));
+            decay->setSuffix("%");
+            decay->setToolTip("How much of the one before each echo keeps: low fades fast");
+            QSpinBox* hold = new QSpinBox(&dialog);
+            hold->setRange(1, 240);
+            hold->setValue(was.posterize);
+            hold->setSpecialValueText("Every frame");
+            hold->setSuffix(" frames a pose");
+            hold->setToolTip("Holds each pose this many frames: 2 for animation on twos, more for a jerky look");
+            form->addRow("Echoes", echoes);
+            form->addRow("Each", interval);
+            form->addRow("Keeps", decay);
+            form->addRow("Posterize Time", hold);
+            QDialogButtonBox* buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, &dialog);
+            connect(buttons, &QDialogButtonBox::accepted, &dialog, &QDialog::accept);
+            connect(buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
+            form->addRow(buttons);
+            if (dialog.exec() != QDialog::Accepted)
+                return;
+            fla::motionblur::LayerTime time;
+            time.echoes = echoes->value();
+            time.interval = interval->value();
+            time.decay = decay->value() / 100.0;
+            time.posterize = hold->value();
+            after = fla::motionblur::withLayerTime(*layer, time);
+            name = "Echo and Posterize Time";
+        }
         else if (what == "maskedge")
         {
             const fla::compositing::MaskEdge was = fla::compositing::maskEdgeOf(*layer);

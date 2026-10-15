@@ -17,6 +17,7 @@
 #include <QMouseEvent>
 #include <QPainter>
 #include <QPainterPath>
+#include <QCheckBox>
 #include <QPushButton>
 #include <QVBoxLayout>
 
@@ -238,6 +239,41 @@ void MotionCurveView::paintEvent(QPaintEvent*)
         painter.setPen(QPen(pal.color(QPalette::Highlight), 1.6));
         painter.setBrush(Qt::NoBrush);
         painter.drawPath(path);
+        // The speed: how much the value changes a frame, on its own scale
+        // up the right side, so a smooth ease shows as a hill.
+        if (_showSpeed && _frames > 1)
+        {
+            std::vector<double> speeds;
+            double fastest = 0.0;
+            for (int i = 0; i <= steps; ++i)
+            {
+                const double time = span * i / steps;
+                const double step = _timePerFrame * 0.25;
+                const double speed = std::fabs(fla::motion::valueOf(_keys, std::min(span, time + step)) -
+                                         fla::motion::valueOf(_keys, std::max(0.0, time - step))) /
+                    (std::min(span, time + step) - std::max(0.0, time - step)) * _timePerFrame;
+                speeds.push_back(speed);
+                fastest = std::max(fastest, speed);
+            }
+            if (fastest > 0.0)
+            {
+                QPainterPath speedPath;
+                for (int i = 0; i <= steps; ++i)
+                {
+                    const double x = r.left() + r.width() * i / steps;
+                    const double y = r.bottom() - r.height() * speeds[static_cast<size_t>(i)] / fastest * 0.9;
+                    if (i == 0)
+                        speedPath.moveTo(x, y);
+                    else
+                        speedPath.lineTo(x, y);
+                }
+                painter.setPen(QPen(theme::color("accent"), 1.2, Qt::DashLine));
+                painter.drawPath(speedPath);
+                painter.setPen(text);
+                painter.drawText(QRectF(r.right() - 160, r.top() + 2, 156, 16), Qt::AlignRight | Qt::AlignTop,
+                    QString("Speed: up to %1 a frame").arg(fastest, 0, 'f', fastest < 10.0 ? 2 : 1));
+            }
+        }
     }
 
     // The selected keyframe's handles.
@@ -430,7 +466,26 @@ MotionEditorPanel::MotionEditorPanel(MotionEditorLinks links, QWidget* parent)
     _spanEase->setDecimals(0);
     _spanEase->setToolTip("Ease of the whole tween: below zero eases in, above zero eases out");
     eases->addRow("Tween ease", _spanEase);
+    QHBoxLayout* easyRow = new QHBoxLayout();
+    QPushButton* easy = new QPushButton("Easy Ease", this);
+    easy->setToolTip("Slow into and out of the selected keyframe (every keyframe when none is selected)");
+    QPushButton* easyIn = new QPushButton("Ease In", this);
+    easyIn->setToolTip("Slow into the selected keyframe");
+    QPushButton* easyOut = new QPushButton("Ease Out", this);
+    easyOut->setToolTip("Slow out of the selected keyframe");
+    QCheckBox* speed = new QCheckBox("Speed", this);
+    speed->setToolTip("Draw how fast the value changes, over the curve");
+    easyRow->addWidget(easy);
+    easyRow->addWidget(easyIn);
+    easyRow->addWidget(easyOut);
+    easyRow->addStretch(1);
+    easyRow->addWidget(speed);
+    eases->addRow("", easyRow);
     layout->addLayout(eases);
+    connect(easy, &QPushButton::clicked, this, [this]() { easyEase(true, true); });
+    connect(easyIn, &QPushButton::clicked, this, [this]() { easyEase(true, false); });
+    connect(easyOut, &QPushButton::clicked, this, [this]() { easyEase(false, true); });
+    connect(speed, &QCheckBox::toggled, _curve, &MotionCurveView::setShowSpeed);
 
     connect(_properties, &QListWidget::currentRowChanged, this, [this](int) {
         if (_updating)
@@ -652,6 +707,38 @@ void MotionEditorPanel::removeKey()
     _curve->selectKey(-1);
     _curve->setKeys(keys);
     writeKeys(true, "Remove Property Keyframe");
+    showProperty();
+}
+
+void MotionCurveView::setShowSpeed(bool show)
+{
+    _showSpeed = show;
+    update();
+}
+
+void MotionEditorPanel::easyEase(bool in, bool out)
+{
+    std::vector<fla::motion::PropertyKey> keys = _curve->keys();
+    const int selected = _curve->selectedKey();
+    for (size_t i = 0; i < keys.size(); ++i)
+    {
+        if (selected >= 0 && static_cast<int>(i) != selected)
+            continue;
+        fla::motion::PropertyKey& key = keys[i];
+        // Flat, a third of the way to the next and the one before.
+        if (out && i + 1 < keys.size())
+        {
+            key.nextTime = (keys[i + 1].time - key.time) / 3.0;
+            key.nextValue = key.value;
+        }
+        if (in && i > 0)
+        {
+            key.previousTime = -(key.time - keys[i - 1].time) / 3.0;
+            key.previousValue = key.value;
+        }
+    }
+    _curve->setKeys(keys);
+    writeKeys(true, in && out ? "Easy Ease" : in ? "Easy Ease In" : "Easy Ease Out");
     showProperty();
 }
 

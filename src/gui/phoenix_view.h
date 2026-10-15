@@ -822,6 +822,11 @@ private:
     int _sampleFrame = -1;
     double _subframe = 0.0;
     bool _blurring = false;
+    bool _timing = false;
+    /// \a layer drawn with its time effects (Echo, Posterize Time), when it
+    /// has any and is on the scene shown; false, drawing nothing, otherwise.
+    bool drawTimedLayer(QPainter& painter, const fla::Layer* layer, fla::LoopType loopType, int firstFrame,
+        const QPixmap* maskPixmap);
     /// \a layer drawn by its layer mode (Stencil, Silhouette, Preserve
     /// Transparency) onto what is already drawn; false, drawing nothing,
     /// when the painter is not drawing on a picture it can work on.

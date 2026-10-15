@@ -3277,8 +3277,65 @@ bool PhoenixView::drawBlurredLayer(QPainter& painter, const fla::Layer* layer, f
     return true;
 }
 
+bool PhoenixView::drawTimedLayer(QPainter& painter, const fla::Layer* layer, fla::LoopType loopType, int firstFrame,
+    const QPixmap* maskPixmap)
+{
+    const fla::Document* document = _flaDocument ? _flaDocument->document : nullptr;
+    if (_timing || !document || !layer || layer->parent != document->currentScene() || (_frameOverride >= 0 && !_exporting) ||
+        _maskPass || !painter.device())
+        return false;
+    const fla::motionblur::LayerTime time = fla::motionblur::layerTimeOf(*layer);
+    if (!time.any())
+        return false;
+    struct Restore
+    {
+        PhoenixView& view;
+        int sample;
+        ~Restore()
+        {
+            view._sampleFrame = sample;
+            view._timing = false;
+        }
+    } restore{*this, _sampleFrame};
+    _timing = true;
+    const int frame = shownFrame();
+    // The echoes first, oldest and faintest underneath, each drawn whole
+    // then laid on faded; then the layer itself.
+    if (time.echoes > 0)
+    {
+        const qreal ratio = painter.device()->devicePixelRatioF();
+        const QSize size(std::max(1, qRound(painter.device()->width() * ratio)), std::max(1, qRound(painter.device()->height() * ratio)));
+        QImage picture(size, QImage::Format_ARGB32_Premultiplied);
+        picture.setDevicePixelRatio(ratio);
+        for (int k = time.echoes; k >= 1; --k)
+        {
+            const int at = frame - k * time.interval;
+            if (at < 0)
+                continue;
+            _sampleFrame = fla::motionblur::posterized(time, at);
+            picture.fill(Qt::transparent);
+            {
+                QPainter into(&picture);
+                into.setRenderHints(painter.renderHints());
+                into.setTransform(painter.transform());
+                drawLayer(into, layer, loopType, firstFrame, maskPixmap);
+            }
+            painter.save();
+            painter.resetTransform();
+            painter.setOpacity(painter.opacity() * std::pow(time.decay, k));
+            painter.drawImage(QRectF(0, 0, painter.device()->width(), painter.device()->height()), picture);
+            painter.restore();
+        }
+    }
+    _sampleFrame = fla::motionblur::posterized(time, frame);
+    drawLayer(painter, layer, loopType, firstFrame, maskPixmap);
+    return true;
+}
+
 void PhoenixView::drawLayer(QPainter& painter, const fla::Layer* layer, fla::LoopType loopType, int firstFrame, const QPixmap* maskPixmap)
 {
+    if (drawTimedLayer(painter, layer, loopType, firstFrame, maskPixmap))
+        return;
     if (drawBlurredLayer(painter, layer, loopType, firstFrame, maskPixmap))
         return;
     // Edit Multiple Frames draws a layer's other keyframes, one at a time.
