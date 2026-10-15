@@ -4,6 +4,7 @@ What changed in each release of Phoenix, newest first.
 
 ## 0.10.0 (Unreleased)
 
+- Python scripts can listen for events with fl.addEventListener, as JSFL scripts do
 - Commands > Manage Extensions installs extension packages (.zxp, or a folder) whose commands and tools join Phoenix, and removes them; opening or dropping a .zxp installs it
 - Text in Illustrator and PDF files comes in as editable text, in its own fonts; EPS text is spaced by the fonts' widths
 - SWF movies compressed with LZMA open, and fonts of the newer embedded kind keep their names

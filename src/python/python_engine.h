@@ -3,7 +3,9 @@
 #include "../jsfl/engine.h"
 
 #include <atomic>
+#include <map>
 #include <string>
+#include <vector>
 
 namespace python {
 
@@ -37,13 +39,28 @@ public:
     /// before it is loaded.
     static std::string description();
 
+    /// Calls the listeners scripts added with fl.addEventListener for
+    /// \a type ("documentOpened"...), each with a fresh fl; their changes
+    /// are one undo step. An event during a run waits for it to end.
+    void dispatch(const std::string& type);
+    /// Whether any script still listens for events.
+    bool listening() const { return !_events.empty(); }
+    /// Drops every listener, and the scripts kept for them.
+    void forgetListeners();
+
 private:
     jsfl::RunResult run(const std::string& source, const std::string& name, const std::string& path,
         const jsfl::RunOptions& options);
+    void flushEvents();
+    /// The events listened for, and the first script listening to each,
+    /// from Python's side (its lock held).
+    void readEvents();
 
     jsfl::Host& _host;
     std::atomic<bool> _stop{false};
     bool _running = false;
+    std::map<std::string, std::string> _events;
+    std::vector<std::string> _pending;
 };
 
 /// Whether \a path names a Python script (.py).

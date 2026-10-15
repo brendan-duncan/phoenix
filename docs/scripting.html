@@ -190,7 +190,16 @@ if (result.dismiss == "accept")
     fl.trace("Saved " + fl.getDocumentDOM().name);
 });</code></pre>
 
-<p>What a listener changes is one step to undo, named after its script. An error in a listener is printed in the Output panel, and the other listeners still hear the event. Events that a running script's own work causes are held until it ends. A tool script (see <a href="#tools">Your own tools</a>) can listen too; it is loaded when Phoenix starts, which makes it the place for listeners that should always be there. Python scripts cannot listen for events yet.</p>
+<p>What a listener changes is one step to undo, named after its script. An error in a listener is printed in the Output panel, and the other listeners still hear the event. Events that a running script's own work causes are held until it ends. A tool script (see <a href="#tools">Your own tools</a>) can listen too; it is loaded when Phoenix starts, which makes it the place for listeners that should always be there.</p>
+
+<p>Python scripts listen the same way, with <code>fl.addEventListener</code> (or <code>fl.add_event_listener</code>) and any function:</p>
+
+<pre><code>def saved():
+    print("Saved", fl.getDocumentDOM().name)
+
+fl.addEventListener("documentSaved", saved)</code></pre>
+
+<p>Inside a listener, <code>fl</code> is always the one of the moment, so the documents it reaches are the ones open now.</p>
 
 <h2 id="tools">Your own tools</h2>
 

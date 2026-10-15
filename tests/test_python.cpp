@@ -302,3 +302,48 @@ TEST(python_run_script_calls_a_function_in_another_file)
     CHECK_OUTPUT(f, "5 Untitled\n");
     std::filesystem::remove_all(folder);
 }
+
+TEST(python_listeners_hear_events_until_removed)
+{
+    if (!havePython())
+        return;
+    Fixture f;
+    // A listener keeps its script's globals, and gets an fl of the moment.
+    CHECK(f.run("count = [0]\n"
+                "prefix = 'heard'\n"
+                "def heard():\n"
+                "    count[0] += 1\n"
+                "    print(prefix, count[0], fl.getDocumentDOM().name)\n"
+                "    fl.getDocumentDOM().getTimeline().addNewLayer('From listener')\n"
+                "ident = fl.addEventListener('documentChanged', heard)\n"
+                "print(ident > 0)\n")
+              .ok);
+    CHECK_OUTPUT(f, "True\n");
+    CHECK(f.engine.listening());
+    f.host.output.clear();
+    const size_t before = f.host.commands.count();
+    f.engine.dispatch("documentChanged");
+    f.engine.dispatch("somethingElse");
+    CHECK_OUTPUT(f, "heard 1 Untitled\n");
+    // Its change is a step of its own.
+    CHECK(f.host.commands.count() == before + 1);
+    bool added = false;
+    for (const fla::Layer* layer : f.scene().layers)
+        added = added || layer->name == "From listener";
+    CHECK(added);
+
+    // A listener's error is told, and the others still run.
+    f.host.output.clear();
+    CHECK(f.run("def bad():\n    raise ValueError('nope')\nfl.add_event_listener('documentChanged', bad)\n").ok);
+    f.engine.dispatch("documentChanged");
+    CHECK(f.host.output.find("heard 2") != std::string::npos);
+    CHECK(f.host.output.find("documentChanged listener") != std::string::npos &&
+          f.host.output.find("ValueError: nope") != std::string::npos);
+
+    // Removed from any script, they stop.
+    CHECK(f.run("print(fl.removeEventListener('documentChanged'))\n").ok);
+    CHECK(!f.engine.listening());
+    f.host.output.clear();
+    f.engine.dispatch("documentChanged");
+    CHECK(f.host.output.empty());
+}

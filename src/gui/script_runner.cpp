@@ -720,6 +720,8 @@ void ScriptRunner::dispatchEvent(const char* type)
 {
     if (_engine)
         _engine->dispatch(type);
+    if (_python)
+        _python->dispatch(type);
 }
 
 QString ScriptRunner::configFolder()

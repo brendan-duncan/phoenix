@@ -805,6 +805,114 @@ def describe(error, script):
     return message, file, line or 0, stack
 
 
+class Flash:
+    """fl as scripts see it: Phoenix's fl, with event listeners."""
+
+    __slots__ = ("_fl",)
+
+    def __init__(self, fl):
+        object.__setattr__(self, "_fl", fl)
+
+    def __getattr__(self, name):
+        return getattr(object.__getattribute__(self, "_fl"), name)
+
+    def __setattr__(self, name, value):
+        setattr(object.__getattribute__(self, "_fl"), name, value)
+
+    def __repr__(self):
+        return repr(object.__getattribute__(self, "_fl"))
+
+    def __dir__(self):
+        return sorted(set(dir(object.__getattribute__(self, "_fl"))) |
+                      {"addEventListener", "removeEventListener", "add_event_listener", "remove_event_listener"})
+
+    def addEventListener(self, type, listener):
+        """Calls listener() each time the event happens; returns an id for removeEventListener."""
+        return add_listener(type, listener)
+
+    def removeEventListener(self, type, id=None):
+        """Stops calling the listener with that id (or every listener for the event)."""
+        return remove_listener(type, id)
+
+    add_event_listener = addEventListener
+    remove_event_listener = removeEventListener
+
+
+# The listeners: (id, event, function, the globals of the script that added
+# it, that script's name).
+_listeners = []
+_next_listener = [1]
+_scope = [None]
+_scope_name = [""]
+
+
+def set_scope(scope, name=""):
+    _scope[0] = scope
+    _scope_name[0] = name
+
+
+def add_listener(type, listener):
+    if not callable(listener):
+        raise TypeError("addEventListener needs a function to call.")
+    ident = _next_listener[0]
+    _next_listener[0] += 1
+    _listeners.append((ident, str(type), listener, _scope[0], _scope_name[0]))
+    return ident
+
+
+def events():
+    """The events listened for, a line each: the event and the first listening script."""
+    first = {}
+    for entry in _listeners:
+        first.setdefault(entry[1], entry[4])
+    return "".join("%s\t%s\n" % (kind, name) for kind, name in first.items())
+
+
+def _release(scope):
+    """A script's globals, once nothing listens from it, let go of."""
+    if scope is not None and scope is not _scope[0] and not any(entry[3] is scope for entry in _listeners):
+        scope.clear()
+
+
+def remove_listener(type, ident=None):
+    gone = [entry for entry in _listeners if entry[1] == str(type) and (ident is None or entry[0] == ident)]
+    _listeners[:] = [entry for entry in _listeners if entry not in gone]
+    for entry in gone:
+        _release(entry[3])
+    return bool(gone)
+
+
+def keeps(scope):
+    return any(entry[3] is scope for entry in _listeners)
+
+
+def forget():
+    scopes = [entry[3] for entry in _listeners if entry[3] is not None]
+    del _listeners[:]
+    for scope in scopes:
+        scope.clear()
+
+
+def dispatch(type, fl, files):
+    """Calls the listeners for an event, each with the fl of this moment."""
+    errors = []
+    for ident, kind, listener, scope, name in list(_listeners):
+        if kind != type:
+            continue
+        if scope is not None:
+            scope["fl"] = fl
+            scope["FLfile"] = files
+        _scope[0] = scope
+        try:
+            listener()
+        except BaseException as error:
+            message, file, line, stack = describe(error, "")
+            errors.append("%s listener: %s" % (type, stack or message))
+        finally:
+            _scope[0] = None
+    return "\n".join(errors)
+
+
 def use_environment(folder, executable):
     """A virtual environment's packages, and its python for subprocesses."""
     import site
@@ -1238,8 +1346,11 @@ jsfl::RunResult Engine::run(const std::string& source, const std::string& name, 
             Ref answer = checked(PY.PyObject_CallObject(callable, tuple.get()));
             return fromPy(answer.get());
         };
-        Ref fl(wrap(flash));
+        Ref native(wrap(flash));
+        Ref fl = callSupport("Flash", {native.get()});
         Ref files(wrap(jsfl::makeFileSystem()));
+        Ref scopeName(fromStd(options.undoName));
+        callSupport("set_scope", {globals.get(), scopeName.get()});
         for (PyObject* scope : {globals.get(), moduleDict})
         {
             PY.PyDict_SetItemString(scope, "fl", fl.get());
@@ -1295,8 +1406,24 @@ jsfl::RunResult Engine::run(const std::string& source, const std::string& name, 
     PY.PyDict_SetItemString(moduleDict, "fl", PY.None);
     PY.PyDict_SetItemString(moduleDict, "FLfile", PY.None);
     // The script's functions hold its globals; emptied, they let go of
-    // what they reached.
-    if (globals)
+    // what they reached. A script that still listens for events keeps
+    // them, for its listeners.
+    bool keep = false;
+    try
+    {
+        callSupport("set_scope", {PY.None});
+        if (globals)
+        {
+            Ref kept = callSupport("keeps", {globals.get()});
+            keep = PY.PyLong_AsDouble(kept.get()) > 0;
+        }
+        readEvents();
+    }
+    catch (...)
+    {
+        PY.PyErr_Clear();
+    }
+    if (globals && !keep)
         PY.PyDict_Clear(globals.get());
     globals = Ref();
     PY.PyErr_Clear();
@@ -1306,7 +1433,138 @@ jsfl::RunResult Engine::run(const std::string& source, const std::string& name, 
     PY.PyGILState_Release(state);
     session.finish();
     _running = false;
+    flushEvents();
     return result;
+}
+
+void Engine::dispatch(const std::string& type)
+{
+    const auto listened = _events.find(type);
+    if (listened == _events.end() || !g_api)
+        return;
+    // Events a script's own work raises wait for it to finish.
+    if (_running || g_inRun)
+    {
+        if (_pending.empty() || _pending.back() != type)
+            _pending.push_back(type);
+        return;
+    }
+    _running = true;
+    _stop = false;
+    // One step to undo, named after the first script listening.
+    jsfl::Session session(_host, listened->second.empty() ? std::string("Script") : listened->second);
+    const int state = PY.PyGILState_Ensure();
+    ++g_generation;
+    g_inRun = true;
+    g_host = &_host;
+    Guard guard;
+    guard.stop = &_stop;
+    guard.hasDeadline = true;
+    guard.deadline = Clock::now() + std::chrono::seconds(5);
+    g_guard = &guard;
+    PyObject* moduleDict = PY.PyModule_GetDict(g.module);
+    bool begun = false;
+    try
+    {
+        // A fresh fl, of this moment's documents, for every listener.
+        const std::shared_ptr<jsfl::Flash> flash = jsfl::makeFlash(session);
+        Ref native(wrap(flash));
+        Ref fl = callSupport("Flash", {native.get()});
+        Ref files(wrap(jsfl::makeFileSystem()));
+        PY.PyDict_SetItemString(moduleDict, "fl", fl.get());
+        PY.PyDict_SetItemString(moduleDict, "FLfile", files.get());
+        Ref noPath(fromStd(std::string()));
+        callSupport("begin", {noPath.get(), PY.PyDict_GetItemString(moduleDict, "trace")});
+        begun = true;
+        Ref name(fromStd(type));
+        Watchdog watchdog(guard);
+        Ref errors = callSupport("dispatch", {name.get(), fl.get(), files.get()});
+        const std::string text = textOf(errors.get());
+        if (!text.empty())
+            _host.trace(text);
+    }
+    catch (...)
+    {
+        jsfl::RunResult failed;
+        capture(failed, type + " listeners");
+        _host.trace(failed.message);
+    }
+    g_guard = nullptr;
+    if (begun)
+    {
+        try
+        {
+            callSupport("end", {});
+        }
+        catch (...)
+        {
+            PY.PyErr_Clear();
+        }
+    }
+    try
+    {
+        readEvents();
+    }
+    catch (...)
+    {
+        PY.PyErr_Clear();
+    }
+    PY.PyDict_SetItemString(moduleDict, "fl", PY.None);
+    PY.PyDict_SetItemString(moduleDict, "FLfile", PY.None);
+    PY.PyErr_Clear();
+    g_inRun = false;
+    g_host = nullptr;
+    PY.PyGILState_Release(state);
+    session.finish();
+    _running = false;
+    flushEvents();
+}
+
+void Engine::flushEvents()
+{
+    while (!_pending.empty() && !_running && !g_inRun)
+    {
+        const std::string type = _pending.front();
+        _pending.erase(_pending.begin());
+        dispatch(type);
+    }
+}
+
+void Engine::forgetListeners()
+{
+    _pending.clear();
+    if (_events.empty() || !g_api || _running || g_inRun)
+        return;
+    const int state = PY.PyGILState_Ensure();
+    try
+    {
+        callSupport("forget", {});
+    }
+    catch (...)
+    {
+        PY.PyErr_Clear();
+    }
+    PY.PyGILState_Release(state);
+    _events.clear();
+}
+
+void Engine::readEvents()
+{
+    _events.clear();
+    Ref list = callSupport("events", {});
+    const std::string text = textOf(list.get());
+    size_t from = 0;
+    while (from < text.size())
+    {
+        const size_t end = text.find('\n', from);
+        const std::string line = text.substr(from, end - from);
+        const size_t tab = line.find('\t');
+        if (tab != std::string::npos)
+            _events.emplace(line.substr(0, tab), line.substr(tab + 1));
+        if (end == std::string::npos)
+            break;
+        from = end + 1;
+    }
 }
 
 } // namespace python
