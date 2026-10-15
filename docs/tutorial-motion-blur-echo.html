@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Motion blur, echo and time · Phoenix User Guide</title>
+<meta name="description" content="Smear a fast comet with motion blur, give it a trail of echoes, and hold its poses for animation on twos.">
+<meta name="keywords" content="tutorial lesson step by step motion blur echo posterize time">
+<link rel="icon" href="assets/img/logo.png">
+<link rel="stylesheet" href="assets/site.css">
+<script>try { const t = localStorage.getItem("phoenix-docs-theme"); if (t) document.documentElement.dataset.theme = t; } catch (e) {}</script>
+<script src="assets/site.js" defer></script>
+</head>
+<body>
+<main>
+<article class="content">
+
+<p class="eyebrow">Tutorials</p>
+
+<h1>Motion blur, echo and time</h1>
+
+<p class="lead">Smear a fast comet with motion blur, give it a trail of echoes, and hold its poses for animation on twos.</p>
+
+<div class="callout">
+  <span class="label">Try it in Phoenix</span>
+  <p>This page is also a lesson inside Phoenix: choose <span class="menu-path">Help &rsaquo; Tutorials...</span> and start <strong>Motion blur, echo and time</strong>, and Phoenix points at each control as you go. It takes about 6 minutes.</p>
+</div>
+
+<p>To follow along here instead, download the starting document, <a href="assets/tutorials/motion-blur-echo.fla" download>motion-blur-echo.fla</a>, and open it with <span class="menu-path">File &rsaquo; Open...</span>.</p>
+
+<figure>
+  <img src="assets/shots/mg-motion-blur-echo.webp" alt="Four frames of an orange comet streaking across a night sky, smeared and trailed by fading echoes" width="1000" height="220">
+  <figcaption>Motion blur and six echoes on twos.</figcaption>
+</figure>
+
+<p>Something that moves fast looks smeared to a camera, and a little stuttery when it is drawn by hand. Phoenix can do both to a layer: <b>Motion Blur</b>, and <b>Echo and Posterize Time</b>.</p><p>The <i>Comet</i> layer holds a comet that whips across the night sky and back.</p>
+
+<h2>1. Play it</h2>
+
+<p>Press <kbd>Enter</kbd>, or click the play button in the timeline header. The comet is sharp on every frame, so it seems to jump rather than streak.</p>
+
+<h2>2. Turn on motion blur</h2>
+
+<p>Press <kbd>Enter</kbd> again to stop. Right-click the <i>Comet</i> layer's name and choose <b>Motion Blur</b>.</p>
+
+<h2>3. Play it</h2>
+
+<p>Press <kbd>Enter</kbd>, or click the play button in the timeline header. The comet smears along its path as it flies, and is sharp again where it stops.</p>
+
+<h2>4. Open the shutter</h2>
+
+<p>Press <kbd>Enter</kbd> again to stop. Click an empty part of the stage, then the <b>Doc</b> tab of the Properties panel. Under <b>Motion Blur</b>, set <b>Shutter</b> to 360.</p><p>The shutter is how long the camera looks for each frame: 180, half a frame, is the usual; 360 makes a longer streak.</p>
+
+<h2>5. Add echoes</h2>
+
+<p>Right-click the <i>Comet</i> layer's name and choose <b>Echo and Posterize Time...</b>. Set <b>Echoes</b> to 6, <b>Each</b> to 2 frames and <b>Keeps</b> to 60%, then click <b>OK</b>.</p>
+
+<h2>6. Play it</h2>
+
+<p>Press <kbd>Enter</kbd>, or click the play button in the timeline header. A tail of fading comets follows the real one, each a little fainter than the one before.</p>
+
+<h2>7. Animate on twos</h2>
+
+<p>Press <kbd>Enter</kbd> again to stop. Choose <b>Echo and Posterize Time...</b> on the <i>Comet</i> layer again, set <b>Posterize Time</b> to 2 frames a pose, and click <b>OK</b>.</p>
+
+<h2>8. Play it</h2>
+
+<p>Press <kbd>Enter</kbd>, or click the play button in the timeline header. Each pose now holds for two frames: the snappier look of hand-drawn animation on twos.</p>
+
+<h2>What you did</h2>
+
+<p>You smeared a fast move with motion blur, gave it a trail of echoes, and held its poses on twos. These work on any layer: tweens, motion paths and behaviors alike, on the stage and in every export.</p><p>Try <b>Posterize Time</b> at 4 or more for a jerky, stop-motion look, or <b>Keeps</b> at 90% for a long, bright trail.</p>
+
+<p>For everything this tutorial touches on, see <a href="behaviors.html#compositing">Behaviors</a>.</p>
+
+</article>
+</main>
+</body>
+</html>

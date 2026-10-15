@@ -1,0 +1,123 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Controls on a null · Phoenix User Guide</title>
+<meta name="description" content="Turn a machine of gears from one keyed dial, each at its own speed, and change all their colors at once, with controls on a rig and Link to Control.">
+<meta name="keywords" content="tutorial lesson step by step controls null rig link to control angle color gears">
+<link rel="icon" href="assets/img/logo.png">
+<link rel="stylesheet" href="assets/site.css">
+<script>try { const t = localStorage.getItem("phoenix-docs-theme"); if (t) document.documentElement.dataset.theme = t; } catch (e) {}</script>
+<script src="assets/site.js" defer></script>
+</head>
+<body>
+<main>
+<article class="content">
+
+<p class="eyebrow">Tutorials</p>
+
+<h1>Controls on a null</h1>
+
+<p class="lead">Turn a machine of gears from one keyed dial, each at its own speed, and change all their colors at once, with controls on a rig and Link to Control.</p>
+
+<div class="callout">
+  <span class="label">Try it in Phoenix</span>
+  <p>This page is also a lesson inside Phoenix: choose <span class="menu-path">Help &rsaquo; Tutorials...</span> and start <strong>Controls on a null</strong>, and Phoenix points at each control as you go. It takes about 10 minutes.</p>
+</div>
+
+<p>To follow along here instead, download the starting document, <a href="assets/tutorials/controls-null.fla" download>controls-null.fla</a>, and open it with <span class="menu-path">File &rsaquo; Open...</span>.</p>
+
+<figure>
+  <img src="assets/shots/mg-controls-null.webp" alt="Four gray gears side by side with the same four gears turned and tinted blue" width="1000" height="351">
+  <figcaption>The gears before, and after: turned by one keyed angle and tinted by one color on the rig.</figcaption>
+</figure>
+
+<p>A <b>control</b> is a setting with a name, kept on an instance of its own, for other instances to follow with <b>Link to Control</b>. Put the controls for a scene on one marker, often called a null, and you change many things from one place.</p><p>The <i>Gears</i> layer holds four gears named <i>big1</i>, <i>small1</i>, <i>big2</i> and <i>small2</i>. The <i>Rig</i> layer is a guide layer, so it is never drawn in the movie; it holds a red crosshair named <i>rig</i>.</p>
+
+<h2>1. Select the rig</h2>
+
+<p>Press <kbd>V</kbd> for the Selection tool and click the red crosshair at the top left.</p>
+
+<h2>2. Open the Behaviors panel</h2>
+
+<p>Choose <b>Window &gt; Behaviors</b> if it is not showing. It lists what is on the selection and the settings of each.</p>
+
+<h2>3. Add Angle Control</h2>
+
+<p>Click <b>Add Behavior</b> and choose <b>Angle Control</b>. Nothing moves: a control only holds a value, for others to follow.</p>
+
+<h2>4. Name it</h2>
+
+<p>Set <b>Control name</b> to <b>Turn</b> and press <kbd>Enter</kbd>. The gears will find the control by this name.</p>
+
+<h2>5. Key the angle</h2>
+
+<p>The playhead is on frame 1 and <b>Angle (degrees)</b> is 0. Click the dot beside it to key it on this frame: it becomes a filled diamond.</p><p>A keyed setting changes over time: Phoenix goes smoothly from each key to the next.</p>
+
+<h2>6. Go to the end</h2>
+
+<p>Click frame 96 in the timeline's ruler, or choose <b>Control &gt; Go To End</b>.</p>
+
+<h2>7. Two turns</h2>
+
+<p>Set <b>Angle (degrees)</b> to 720. Because it is keyed, this makes a second key here: from frame 1 to 96 the control turns twice round.</p>
+
+<h2>8. Select the gears</h2>
+
+<p>Click the big gear on the left, then <kbd>Shift</kbd>-click the other three, so all four gears are selected.</p>
+
+<h2>9. Add Link to Control</h2>
+
+<p>Click <b>Add Behavior</b> and choose <b>Link to Control</b>. It goes on all four gears at once, and what you set now is set on all four.</p>
+
+<h2>10. Point it at the rig</h2>
+
+<p>Set <b>Controls on</b> to <b>rig</b>: choose it from the list, or click <b>Pick</b> and then the red crosshair.</p>
+
+<h2>11. Choose the control</h2>
+
+<p>Set <b>Control name</b> to <b>Turn</b> and press <kbd>Enter</kbd>. <b>Change my</b> is <b>Same</b>, so an angle turns each gear.</p>
+
+<h2>12. Play it</h2>
+
+<p>Press <kbd>Enter</kbd>, or click the play button in the timeline header. All four gears turn with the rig's angle, but they turn the same way, and their teeth run through each other.</p>
+
+<h2>13. Turn the small ones back</h2>
+
+<p>Press <kbd>Enter</kbd> again to stop. Click an empty part of the stage, then click the small gear in the middle and <kbd>Shift</kbd>-click the small one at the bottom.</p><p>Set <b>Amount (percent)</b> to -200. A small gear has half the teeth, so it turns twice as fast, and the minus turns it the other way.</p>
+
+<h2>14. Play it</h2>
+
+<p>Press <kbd>Enter</kbd>, or click the play button in the timeline header. Now the gears mesh. To change how the whole machine runs, you key only the rig: an ease, a pause, a turn back.</p>
+
+<h2>15. Add a color control</h2>
+
+<p>Press <kbd>Enter</kbd> again to stop. Click the red crosshair to select the rig, click <b>Add Behavior</b> and choose <b>Color Control</b>.</p>
+
+<h2>16. Name it</h2>
+
+<p>Set <b>Control name</b> to <b>Accent</b> and press <kbd>Enter</kbd>. Its color is orange to begin with.</p>
+
+<h2>17. Link the gears again</h2>
+
+<p>Select all four gears again, click <b>Add Behavior</b> and choose <b>Link to Control</b>. It goes below the first one, and the panel shows its settings.</p>
+
+<h2>18. Tint them</h2>
+
+<p>Set <b>Controls on</b> to <b>rig</b>, <b>Control name</b> to <b>Accent</b>, and <b>Change my</b> to <b>Tint</b>. Then set <b>Amount (percent)</b> to 50, so the gears keep some of their shading. They all turn orange.</p>
+
+<h2>19. Change the color</h2>
+
+<p>Click the red crosshair, click <b>Color Control</b> in the list, and set <b>Color (#RRGGBB)</b> to <b>#2E9BFF</b>. Every gear turns blue at once.</p>
+
+<h2>What you did</h2>
+
+<p>You drove a machine from one null: a keyed angle turns every gear at its own speed, and one color tints them all.</p><p>A <b>Slider Control</b> can size or fade things, a <b>Point Control</b> move them, and a <b>Checkbox Control</b> show or hide a set of them together. Key a control, and everything linked to it changes over time.</p>
+
+<p>For everything this tutorial touches on, see <a href="behaviors.html#controls">Controls on a null</a>.</p>
+
+</article>
+</main>
+</body>
+</html>

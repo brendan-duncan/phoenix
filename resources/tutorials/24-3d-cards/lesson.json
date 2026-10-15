@@ -1,0 +1,109 @@
+{
+  "title": "3D cards in the light",
+  "summary": "Fan out a row of cards in 3D, light them with a warm lamp, focus on the ace, and swing it so it catches the light.",
+  "minutes": 9,
+  "order": 24,
+  "guide": "selecting.html#lights",
+  "start": {
+    "document": "start"
+  },
+  "final": "final",
+  "steps": [
+    {
+      "title": "Welcome",
+      "text": "<p>Movie clips can turn and move in 3D, drawn in perspective. A <b>light</b> shades them by how squarely they face it, and <b>depth of field</b> blurs them the further they are from a focus depth.</p><p>Five cards lie flat on the table, each a movie clip on its own layer. The ace is in the middle, on the <i>Ace</i> layer. Click <b>Next</b> to begin.</p>"
+    },
+    {
+      "title": "Choose the 3D Rotation tool",
+      "text": "<p>Press <kbd>W</kbd>, or click the <b>3D Rotation</b> tool in the toolbox. It shares a slot with <b>3D Translation</b>: hold the button down to pick between them.</p>",
+      "target": "tool:3D Rotation",
+      "wait": {
+        "tool": "3D Rotation"
+      }
+    },
+    {
+      "title": "Turn the ace",
+      "text": "<p>Drag the ace a little to the left. It turns about its middle, its near edge growing and its far edge shrinking. Dragging up or down tips it back or forward instead.</p>",
+      "target": "stage:540,220,200,280",
+      "wait": {
+        "command": "3D Rotation"
+      }
+    },
+    {
+      "title": "Fan out the others",
+      "text": "<p>Drag the two cards on the left to the right, and the two on the right to the left, so they all turn in toward the ace.</p><p><kbd>Alt</kbd>-click a card to lay it flat again.</p>",
+      "target": "stage:100,220,1080,280",
+      "wait": {
+        "command": "3D Rotation"
+      }
+    },
+    {
+      "title": "Bring the ace forward",
+      "text": "<p>Press <kbd>V</kbd> for the Selection tool and click the ace. In the Properties panel's <b>3D Position and View</b> section, set <b>Z</b> to -60. Below 0 is nearer to you, so the ace grows a little.</p>",
+      "target": "label:Properties/Z",
+      "wait": {
+        "command": "3D Position"
+      }
+    },
+    {
+      "title": "Push the others back",
+      "text": "<p>Click each of the other cards and set its <b>Z</b>: 120 for the two beside the ace, 300 for the two at the ends. They shrink toward the middle of the stage, the vanishing point.</p>",
+      "target": "label:Properties/Z",
+      "wait": {
+        "command": "3D Position"
+      }
+    },
+    {
+      "title": "Turn on the light",
+      "text": "<p>Click <b>Lights and Depth...</b> at the bottom of the same section. Tick <b>Shade 3D movie clips by a light</b>, set <b>From</b> to -45 and <b>Height</b> to 30 for a lamp up and to the left, set <b>Color</b> to <code>#FFE0B0</code> for warm light, and click <b>OK</b>.</p><p>The cards facing the lamp brighten; those turned away from it go dark.</p>",
+      "target": "dock:Properties",
+      "wait": {
+        "command": "3D Lights and Depth"
+      }
+    },
+    {
+      "title": "Focus on the ace",
+      "text": "<p>Click <b>Lights and Depth...</b> again. Tick <b>Blur 3D movie clips away from a focus depth</b>, set <b>Focus</b> to -60, the ace's Z, and <b>Blur</b> to 3, and click <b>OK</b>.</p><p>The ace stays sharp; the cards behind it soften, the furthest the most.</p>",
+      "target": "dock:Properties",
+      "wait": {
+        "command": "3D Lights and Depth"
+      }
+    },
+    {
+      "title": "Key the swing",
+      "text": "<p>Click frame <b>48</b> of the <i>Ace</i> layer and press <kbd>F6</kbd>, or choose <b>Insert &gt; Timeline &gt; Keyframe</b>. The new keyframe starts with the ace as it is.</p>",
+      "target": "frame:Ace:48",
+      "wait": {
+        "command": "Insert Keyframe"
+      }
+    },
+    {
+      "title": "Turn it the other way",
+      "text": "<p>Press <kbd>W</kbd> again and drag the ace well to the right, so on frame 48 it faces the other way.</p>",
+      "target": "stage:540,220,200,280",
+      "wait": {
+        "command": "3D Rotation"
+      }
+    },
+    {
+      "title": "Tween the turn",
+      "text": "<p>Right-click any frame between 1 and 48 on the <i>Ace</i> layer and choose <b>Classic Tween</b>. A classic tween turns the card smoothly from one keyframe's pose to the next.</p>",
+      "target": "frame:Ace:2-47",
+      "wait": {
+        "command": "Create Classic Tween"
+      }
+    },
+    {
+      "title": "Play it",
+      "text": "<p>Press <kbd>Enter</kbd>, or click the play button in the timeline header. As the ace swings round it catches the lamp, brightest as it faces it and darker as it turns away. Press <kbd>Enter</kbd> again to stop.</p>",
+      "target": "widget:timelinePlay",
+      "wait": {
+        "playing": true
+      }
+    },
+    {
+      "title": "Well done",
+      "text": "<p>You turned movie clips in 3D, set their depth, lit them with a warm light, focused on one card, and tweened a turn so the light plays across it.</p><p>Key the cards' <b>Z</b> on keyframes to rack focus from one to another as they move. Clips lying flat on the stage are never shaded or blurred.</p>"
+    }
+  ]
+}

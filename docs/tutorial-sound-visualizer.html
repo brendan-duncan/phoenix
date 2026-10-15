@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>A sound visualizer · Phoenix User Guide</title>
+<meta name="description" content="Make bars that dance to music with the Audio Spectrum behavior, and a line that ripples with the sound wave with Audio Waveform.">
+<meta name="keywords" content="tutorial lesson step by step sound music audio spectrum waveform visualizer">
+<link rel="icon" href="assets/img/logo.png">
+<link rel="stylesheet" href="assets/site.css">
+<script>try { const t = localStorage.getItem("phoenix-docs-theme"); if (t) document.documentElement.dataset.theme = t; } catch (e) {}</script>
+<script src="assets/site.js" defer></script>
+</head>
+<body>
+<main>
+<article class="content">
+
+<p class="eyebrow">Tutorials</p>
+
+<h1>A sound visualizer</h1>
+
+<p class="lead">Make bars that dance to music with the Audio Spectrum behavior, and a line that ripples with the sound wave with Audio Waveform.</p>
+
+<div class="callout">
+  <span class="label">Try it in Phoenix</span>
+  <p>This page is also a lesson inside Phoenix: choose <span class="menu-path">Help &rsaquo; Tutorials...</span> and start <strong>A sound visualizer</strong>, and Phoenix points at each control as you go. It takes about 6 minutes.</p>
+</div>
+
+<p>To follow along here instead, download the starting document, <a href="assets/tutorials/sound-visualizer.fla" download>sound-visualizer.fla</a>, and open it with <span class="menu-path">File &rsaquo; Open...</span>.</p>
+
+<figure>
+  <img src="assets/shots/mg-sound-visualizer.webp" alt="On a dark stage, a ring of blue spectrum bars, tallest at the top right, and a wavy line of orange dots beside it" width="1000" height="483">
+  <figcaption>Audio Spectrum round a circle and Audio Waveform as a dotted line, both following the music.</figcaption>
+</figure>
+
+<p>Two behaviors turn the sound in a scene into motion. <b>Audio Spectrum</b> makes a row or ring of bars, low notes to high, each growing with how loud its notes are. <b>Audio Waveform</b> draws the sound wave itself, like an oscilloscope.</p><p>The <i>Music</i> layer holds four seconds of music. On the <i>Visuals</i> layer are a blue bar, with its registration point at its bottom, and an orange dot.</p>
+
+<h2>1. Play it</h2>
+
+<p>Turn your sound up, then press <kbd>Enter</kbd>, or click the play button in the timeline header. You hear drums, a bass and a little tune; nothing moves yet.</p>
+
+<h2>2. Select the bar</h2>
+
+<p>Press <kbd>Enter</kbd> again to stop. Press <kbd>V</kbd> for the Selection tool and click the blue bar on the left.</p>
+
+<h2>3. Open the Behaviors panel</h2>
+
+<p>Choose <b>Window &gt; Behaviors</b> if it is not showing. It lists what is on the selection and the settings of each.</p>
+
+<h2>4. Add Audio Spectrum</h2>
+
+<p>Click <b>Add Behavior</b> and choose <b>Audio Spectrum</b>. The bar becomes a row of 32 bars: low notes on the left, high notes on the right.</p>
+
+<h2>5. Play it</h2>
+
+<p>Press <kbd>Enter</kbd>, or click the play button in the timeline header. The bars jump with the music: the kick drum and bass on the left, the tune in the middle, the hi-hats to the right.</p><p>They follow the sound while you edit too: step through the frames and the bars change on each.</p>
+
+<h2>6. Round a circle</h2>
+
+<p>Press <kbd>Enter</kbd> again to stop. Set <b>Laid out</b> to <b>Circle</b>. The bars now stand round a ring, pointing outward, with the low notes at the top.</p>
+
+<h2>7. More bars</h2>
+
+<p>Set <b>Bars</b> to 48 to fill the ring more closely.</p>
+
+<h2>8. A softer fall</h2>
+
+<p><b>Fall off</b> is how many frames a bar takes to drop back after a peak. Set it to 8 for a smooth, floaty look, or to 0 for a sharp, jumpy one. Play again to see the difference.</p>
+
+<h2>9. Select the dot</h2>
+
+<p>Press <kbd>Enter</kbd> to stop if it is playing, then click the orange dot on the right.</p>
+
+<h2>10. Add Audio Waveform</h2>
+
+<p>Click <b>Add Behavior</b> and choose <b>Audio Waveform</b>. The dot becomes a line of 64 dots, each moved up or down by the sound wave on this frame.</p>
+
+<h2>11. Play it</h2>
+
+<p>Press <kbd>Enter</kbd>, or click the play button in the timeline header. The ring of bars pulses and the line of dots wriggles, both in time with the music.</p>
+
+<h2>What you did</h2>
+
+<p>You made a sound visualizer with two instances and two behaviors. They follow any sound in the scene, so import your own song, put it on a layer, and they dance to it.</p><p>Try <b>Grow</b> set to <b>Fade</b> for bars that glow instead of growing, <b>Height</b> on the waveform for a bigger wave, or <b>Laid out</b> set to <b>Circle</b> on the waveform too, inside the ring.</p>
+
+<p>For everything this tutorial touches on, see <a href="behaviors.html">Behaviors</a>.</p>
+
+</article>
+</main>
+</body>
+</html>

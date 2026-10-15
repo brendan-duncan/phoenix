@@ -1,0 +1,106 @@
+{
+  "title": "A sound visualizer",
+  "summary": "Make bars that dance to music with the Audio Spectrum behavior, and a line that ripples with the sound wave with Audio Waveform.",
+  "minutes": 6,
+  "order": 22,
+  "guide": "behaviors.html",
+  "start": {
+    "document": "start"
+  },
+  "final": "final",
+  "steps": [
+    {
+      "title": "Welcome",
+      "text": "<p>Two behaviors turn the sound in a scene into motion. <b>Audio Spectrum</b> makes a row or ring of bars, low notes to high, each growing with how loud its notes are. <b>Audio Waveform</b> draws the sound wave itself, like an oscilloscope.</p><p>The <i>Music</i> layer holds four seconds of music. On the <i>Visuals</i> layer are a blue bar, with its registration point at its bottom, and an orange dot.</p>"
+    },
+    {
+      "title": "Play it",
+      "text": "<p>Turn your sound up, then press <kbd>Enter</kbd>, or click the play button in the timeline header. You hear drums, a bass and a little tune; nothing moves yet.</p>",
+      "target": "widget:timelinePlay",
+      "wait": {
+        "playing": true
+      }
+    },
+    {
+      "title": "Select the bar",
+      "text": "<p>Press <kbd>Enter</kbd> again to stop. Press <kbd>V</kbd> for the Selection tool and click the blue bar on the left.</p>",
+      "target": "stage:340,360,40,50",
+      "wait": {
+        "selection": "instance"
+      }
+    },
+    {
+      "title": "Open the Behaviors panel",
+      "text": "<p>Choose <b>Window &gt; Behaviors</b> if it is not showing. It lists what is on the selection and the settings of each.</p>",
+      "target": "dock:Behaviors"
+    },
+    {
+      "title": "Add Audio Spectrum",
+      "text": "<p>Click <b>Add Behavior</b> and choose <b>Audio Spectrum</b>. The bar becomes a row of 32 bars: low notes on the left, high notes on the right.</p>",
+      "target": "widget:behaviorsAdd",
+      "wait": {
+        "command": "Add Behavior"
+      }
+    },
+    {
+      "title": "Play it",
+      "text": "<p>Press <kbd>Enter</kbd>, or click the play button in the timeline header. The bars jump with the music: the kick drum and bass on the left, the tune in the middle, the hi-hats to the right.</p><p>They follow the sound while you edit too: step through the frames and the bars change on each.</p>",
+      "target": "widget:timelinePlay",
+      "wait": {
+        "playing": true
+      }
+    },
+    {
+      "title": "Round a circle",
+      "text": "<p>Press <kbd>Enter</kbd> again to stop. Set <b>Laid out</b> to <b>Circle</b>. The bars now stand round a ring, pointing outward, with the low notes at the top.</p>",
+      "target": "label:Behaviors/Laid out",
+      "wait": {
+        "command": "Behavior Settings"
+      }
+    },
+    {
+      "title": "More bars",
+      "text": "<p>Set <b>Bars</b> to 48 to fill the ring more closely.</p>",
+      "target": "label:Behaviors/Bars",
+      "wait": {
+        "command": "Behavior Settings"
+      }
+    },
+    {
+      "title": "A softer fall",
+      "text": "<p><b>Fall off</b> is how many frames a bar takes to drop back after a peak. Set it to 8 for a smooth, floaty look, or to 0 for a sharp, jumpy one. Play again to see the difference.</p>",
+      "target": "label:Behaviors/Fall off (frames)",
+      "wait": {
+        "command": "Behavior Settings"
+      }
+    },
+    {
+      "title": "Select the dot",
+      "text": "<p>Press <kbd>Enter</kbd> to stop if it is playing, then click the orange dot on the right.</p>",
+      "target": "stage:900,360,40,40",
+      "wait": {
+        "selection": "instance"
+      }
+    },
+    {
+      "title": "Add Audio Waveform",
+      "text": "<p>Click <b>Add Behavior</b> and choose <b>Audio Waveform</b>. The dot becomes a line of 64 dots, each moved up or down by the sound wave on this frame.</p>",
+      "target": "widget:behaviorsAdd",
+      "wait": {
+        "command": "Add Behavior"
+      }
+    },
+    {
+      "title": "Play it",
+      "text": "<p>Press <kbd>Enter</kbd>, or click the play button in the timeline header. The ring of bars pulses and the line of dots wriggles, both in time with the music.</p>",
+      "target": "widget:timelinePlay",
+      "wait": {
+        "playing": true
+      }
+    },
+    {
+      "title": "Well done",
+      "text": "<p>You made a sound visualizer with two instances and two behaviors. They follow any sound in the scene, so import your own song, put it on a layer, and they dance to it.</p><p>Try <b>Grow</b> set to <b>Fade</b> for bars that glow instead of growing, <b>Height</b> on the waveform for a bigger wave, or <b>Laid out</b> set to <b>Circle</b> on the waveform too, inside the ring.</p>"
+    }
+  ]
+}

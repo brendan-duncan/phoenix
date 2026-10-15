@@ -1,0 +1,107 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Dashes and text on a path · Phoenix User Guide</title>
+<meta name="description" content="Turn a line into marching dashes, taper a brush stroke, and send words traveling along a curve.">
+<meta name="keywords" content="tutorial lesson step by step dashes taper shape operators text on a path">
+<link rel="icon" href="assets/img/logo.png">
+<link rel="stylesheet" href="assets/site.css">
+<script>try { const t = localStorage.getItem("phoenix-docs-theme"); if (t) document.documentElement.dataset.theme = t; } catch (e) {}</script>
+<script src="assets/site.js" defer></script>
+</head>
+<body>
+<main>
+<article class="content">
+
+<p class="eyebrow">Tutorials</p>
+
+<h1>Dashes and text on a path</h1>
+
+<p class="lead">Turn a line into marching dashes, taper a brush stroke, and send words traveling along a curve.</p>
+
+<div class="callout">
+  <span class="label">Try it in Phoenix</span>
+  <p>This page is also a lesson inside Phoenix: choose <span class="menu-path">Help &rsaquo; Tutorials...</span> and start <strong>Dashes and text on a path</strong>, and Phoenix points at each control as you go. It takes about 10 minutes.</p>
+</div>
+
+<p>To follow along here instead, download the starting document, <a href="assets/tutorials/dashes-and-text-path.fla" download>dashes-and-text-path.fla</a>, and open it with <span class="menu-path">File &rsaquo; Open...</span>.</p>
+
+<figure>
+  <img src="assets/shots/mg-dashes-text-path.webp" alt="Four frames of words riding along a wavy dashed orange line, above a tapered green brush stroke" width="1000" height="470">
+  <figcaption>Words on a path over marching dashes and a tapered swash.</figcaption>
+</figure>
+
+<p>Shape operators change how a drawn line looks each frame without redrawing it, and letter animators move a text field's letters while it stays editable.</p><p>The orange <i>Track</i> and the green <i>Swash</i> are plain lines. The <i>Words</i> layer sits under the <i>Path</i> motion guide, the thin gray curve, which is never drawn in the movie.</p>
+
+<h2>1. Select the track</h2>
+
+<p>Press <kbd>V</kbd> and click the orange line. It is a drawing object, so one click picks it whole.</p>
+
+<h2>2. Open the Behaviors panel</h2>
+
+<p>Choose <b>Window &gt; Behaviors</b> if it is not showing. It lists what is on the selection and the settings of each.</p>
+
+<h2>3. Add Dashes</h2>
+
+<p>With a shape selected the button reads <b>Add Operator</b>. Click it and choose <b>Dashes</b>. The line is cut into dashes 20 pixels long with gaps of 10.</p>
+
+<h2>4. Key the offset</h2>
+
+<p>The playhead is on frame 1. Click the diamond beside <b>Offset (pixels)</b> to key it at 0 on this frame.</p>
+
+<h2>5. Go to frame 120</h2>
+
+<p>Click frame 120 on the <i>Track</i> layer, the last one.</p>
+
+<h2>6. Offset at 600</h2>
+
+<p>Set <b>Offset (pixels)</b> to 600. Since the setting is keyed, this makes a second key here.</p>
+
+<h2>7. Play it</h2>
+
+<p>Press <kbd>Enter</kbd>, or click the play button in the timeline header. The dashes march along the line, like ants or a route on a map.</p>
+
+<h2>8. Select the swash</h2>
+
+<p>Press <kbd>Enter</kbd> again to stop. Click the thick green line.</p>
+
+<h2>9. Taper it</h2>
+
+<p>Click <b>Add Operator</b> and choose <b>Taper</b>. The line thins from its start to a point at its end, like a stroke of a brush.</p><p>Set <b>Start width</b> and <b>End width</b> to taper it the way you like.</p>
+
+<h2>10. Select the words</h2>
+
+<p>Press <kbd>Shift</kbd>+<kbd>,</kbd> (<b>Control &gt; Rewind</b>) to go back to frame 1, then click the words at the top.</p>
+
+<h2>11. Put them on the path</h2>
+
+<p>With text selected the button reads <b>Add Animator</b>. Click it and choose <b>Text on a Path</b>. The letters jump onto the gray guide and turn with its curve.</p>
+
+<h2>12. Key the margin</h2>
+
+<p>Set <b>First margin (pixels)</b> to -700: the words slide back off the start of the line, out of sight. Then click the diamond beside it to key it on this frame.</p>
+
+<h2>13. Go to frame 120</h2>
+
+<p>Click frame 120 on the <i>Words</i> layer.</p>
+
+<h2>14. Margin at 1300</h2>
+
+<p>Set <b>First margin (pixels)</b> to 1300, past the end of the line.</p>
+
+<h2>15. Play it</h2>
+
+<p>Press <kbd>Enter</kbd>, or click the play button in the timeline header. The words ride in along the curve, over the marching dashes, and off the far end.</p>
+
+<h2>What you did</h2>
+
+<p>You made marching dashes, a tapered brush stroke and text that travels along a path, and every one stays editable: reshape the guide and the words follow it.</p><p>Try <b>Above the line</b> to lift the words off the curve, or <b>Wrap round past the end</b> for words that go round and round a closed path.</p>
+
+<p>For everything this tutorial touches on, see <a href="behaviors.html#shape-operators">Behaviors</a>.</p>
+
+</article>
+</main>
+</body>
+</html>

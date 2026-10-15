@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>3D cards in the light · Phoenix User Guide</title>
+<meta name="description" content="Fan out a row of cards in 3D, light them with a warm lamp, focus on the ace, and swing it so it catches the light.">
+<meta name="keywords" content="tutorial lesson step by step 3d cards light depth of field">
+<link rel="icon" href="assets/img/logo.png">
+<link rel="stylesheet" href="assets/site.css">
+<script>try { const t = localStorage.getItem("phoenix-docs-theme"); if (t) document.documentElement.dataset.theme = t; } catch (e) {}</script>
+<script src="assets/site.js" defer></script>
+</head>
+<body>
+<main>
+<article class="content">
+
+<p class="eyebrow">Tutorials</p>
+
+<h1>3D cards in the light</h1>
+
+<p class="lead">Fan out a row of cards in 3D, light them with a warm lamp, focus on the ace, and swing it so it catches the light.</p>
+
+<div class="callout">
+  <span class="label">Try it in Phoenix</span>
+  <p>This page is also a lesson inside Phoenix: choose <span class="menu-path">Help &rsaquo; Tutorials...</span> and start <strong>3D cards in the light</strong>, and Phoenix points at each control as you go. It takes about 9 minutes.</p>
+</div>
+
+<p>To follow along here instead, download the starting document, <a href="assets/tutorials/3d-cards.fla" download>3d-cards.fla</a>, and open it with <span class="menu-path">File &rsaquo; Open...</span>.</p>
+
+<figure>
+  <img src="assets/shots/mg-3d-cards.webp" alt="Five cards fanned out in 3D on a dark blue stage, the ace in the middle sharp and the others blurred behind it; on the left the ace is turned away from a warm light and dark, on the right it faces the light and glows" width="960" height="188">
+  <figcaption>The ace swinging round: dark as it turns from the lamp, bright as it faces it.</figcaption>
+</figure>
+
+<p>Movie clips can turn and move in 3D, drawn in perspective. A <b>light</b> shades them by how squarely they face it, and <b>depth of field</b> blurs them the further they are from a focus depth.</p><p>Five cards lie flat on the table, each a movie clip on its own layer. The ace is in the middle, on the <i>Ace</i> layer.</p>
+
+<h2>1. Choose the 3D Rotation tool</h2>
+
+<p>Press <kbd>W</kbd>, or click the <b>3D Rotation</b> tool in the toolbox. It shares a slot with <b>3D Translation</b>: hold the button down to pick between them.</p>
+
+<h2>2. Turn the ace</h2>
+
+<p>Drag the ace a little to the left. It turns about its middle, its near edge growing and its far edge shrinking. Dragging up or down tips it back or forward instead.</p>
+
+<h2>3. Fan out the others</h2>
+
+<p>Drag the two cards on the left to the right, and the two on the right to the left, so they all turn in toward the ace.</p><p><kbd>Alt</kbd>-click a card to lay it flat again.</p>
+
+<h2>4. Bring the ace forward</h2>
+
+<p>Press <kbd>V</kbd> for the Selection tool and click the ace. In the Properties panel's <b>3D Position and View</b> section, set <b>Z</b> to -60. Below 0 is nearer to you, so the ace grows a little.</p>
+
+<h2>5. Push the others back</h2>
+
+<p>Click each of the other cards and set its <b>Z</b>: 120 for the two beside the ace, 300 for the two at the ends. They shrink toward the middle of the stage, the vanishing point.</p>
+
+<h2>6. Turn on the light</h2>
+
+<p>Click <b>Lights and Depth...</b> at the bottom of the same section. Tick <b>Shade 3D movie clips by a light</b>, set <b>From</b> to -45 and <b>Height</b> to 30 for a lamp up and to the left, set <b>Color</b> to <code>#FFE0B0</code> for warm light, and click <b>OK</b>.</p><p>The cards facing the lamp brighten; those turned away from it go dark.</p>
+
+<h2>7. Focus on the ace</h2>
+
+<p>Click <b>Lights and Depth...</b> again. Tick <b>Blur 3D movie clips away from a focus depth</b>, set <b>Focus</b> to -60, the ace's Z, and <b>Blur</b> to 3, and click <b>OK</b>.</p><p>The ace stays sharp; the cards behind it soften, the furthest the most.</p>
+
+<h2>8. Key the swing</h2>
+
+<p>Click frame <b>48</b> of the <i>Ace</i> layer and press <kbd>F6</kbd>, or choose <b>Insert &gt; Timeline &gt; Keyframe</b>. The new keyframe starts with the ace as it is.</p>
+
+<h2>9. Turn it the other way</h2>
+
+<p>Press <kbd>W</kbd> again and drag the ace well to the right, so on frame 48 it faces the other way.</p>
+
+<h2>10. Tween the turn</h2>
+
+<p>Right-click any frame between 1 and 48 on the <i>Ace</i> layer and choose <b>Classic Tween</b>. A classic tween turns the card smoothly from one keyframe's pose to the next.</p>
+
+<h2>11. Play it</h2>
+
+<p>Press <kbd>Enter</kbd>, or click the play button in the timeline header. As the ace swings round it catches the lamp, brightest as it faces it and darker as it turns away. Press <kbd>Enter</kbd> again to stop.</p>
+
+<h2>What you did</h2>
+
+<p>You turned movie clips in 3D, set their depth, lit them with a warm light, focused on one card, and tweened a turn so the light plays across it.</p><p>Key the cards' <b>Z</b> on keyframes to rack focus from one to another as they move. Clips lying flat on the stage are never shaded or blurred.</p>
+
+<p>For everything this tutorial touches on, see <a href="selecting.html#lights">Lights and depth of field</a>.</p>
+
+</article>
+</main>
+</body>
+</html>

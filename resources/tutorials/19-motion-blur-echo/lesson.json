@@ -1,0 +1,85 @@
+{
+  "title": "Motion blur, echo and time",
+  "summary": "Smear a fast comet with motion blur, give it a trail of echoes, and hold its poses for animation on twos.",
+  "minutes": 6,
+  "order": 19,
+  "guide": "behaviors.html",
+  "start": {
+    "document": "start"
+  },
+  "final": "final",
+  "steps": [
+    {
+      "title": "Welcome",
+      "text": "<p>Something that moves fast looks smeared to a camera, and a little stuttery when it is drawn by hand. Phoenix can do both to a layer: <b>Motion Blur</b>, and <b>Echo and Posterize Time</b>.</p><p>The <i>Comet</i> layer holds a comet that whips across the night sky and back.</p>"
+    },
+    {
+      "title": "Play it",
+      "text": "<p>Press <kbd>Enter</kbd>, or click the play button in the timeline header. The comet is sharp on every frame, so it seems to jump rather than streak.</p>",
+      "target": "widget:timelinePlay",
+      "wait": {
+        "playing": true
+      }
+    },
+    {
+      "title": "Turn on motion blur",
+      "text": "<p>Press <kbd>Enter</kbd> again to stop. Right-click the <i>Comet</i> layer's name and choose <b>Motion Blur</b>.</p>",
+      "target": "layer:Comet",
+      "wait": {
+        "command": "Motion Blur"
+      }
+    },
+    {
+      "title": "Play it",
+      "text": "<p>Press <kbd>Enter</kbd>, or click the play button in the timeline header. The comet smears along its path as it flies, and is sharp again where it stops.</p>",
+      "target": "widget:timelinePlay",
+      "wait": {
+        "playing": true
+      }
+    },
+    {
+      "title": "Open the shutter",
+      "text": "<p>Press <kbd>Enter</kbd> again to stop. Click an empty part of the stage, then the <b>Doc</b> tab of the Properties panel. Under <b>Motion Blur</b>, set <b>Shutter</b> to 360.</p><p>The shutter is how long the camera looks for each frame: 180, half a frame, is the usual; 360 makes a longer streak.</p>",
+      "target": "tab:Properties/Doc",
+      "wait": {
+        "command": "Motion Blur"
+      }
+    },
+    {
+      "title": "Add echoes",
+      "text": "<p>Right-click the <i>Comet</i> layer's name and choose <b>Echo and Posterize Time...</b>. Set <b>Echoes</b> to 6, <b>Each</b> to 2 frames and <b>Keeps</b> to 60%, then click <b>OK</b>.</p>",
+      "target": "layer:Comet",
+      "wait": {
+        "command": "Echo and Posterize Time"
+      }
+    },
+    {
+      "title": "Play it",
+      "text": "<p>Press <kbd>Enter</kbd>, or click the play button in the timeline header. A tail of fading comets follows the real one, each a little fainter than the one before.</p>",
+      "target": "widget:timelinePlay",
+      "wait": {
+        "playing": true
+      }
+    },
+    {
+      "title": "Animate on twos",
+      "text": "<p>Press <kbd>Enter</kbd> again to stop. Choose <b>Echo and Posterize Time...</b> on the <i>Comet</i> layer again, set <b>Posterize Time</b> to 2 frames a pose, and click <b>OK</b>.</p>",
+      "target": "layer:Comet",
+      "wait": {
+        "command": "Echo and Posterize Time"
+      }
+    },
+    {
+      "title": "Play it",
+      "text": "<p>Press <kbd>Enter</kbd>, or click the play button in the timeline header. Each pose now holds for two frames: the snappier look of hand-drawn animation on twos.</p>",
+      "target": "widget:timelinePlay",
+      "wait": {
+        "playing": true
+      }
+    },
+    {
+      "title": "Well done",
+      "text": "<p>You smeared a fast move with motion blur, gave it a trail of echoes, and held its poses on twos. These work on any layer: tweens, motion paths and behaviors alike, on the stage and in every export.</p><p>Try <b>Posterize Time</b> at 4 or more for a jerky, stop-motion look, or <b>Keeps</b> at 90% for a long, bright trail.</p>"
+    }
+  ]
+}

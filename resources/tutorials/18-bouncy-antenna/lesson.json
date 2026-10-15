@@ -23,7 +23,7 @@
     },
     {
       "title": "Select the antenna",
-      "text": "<p>Press <kbd>Enter</kbd> again to stop. Press <kbd>Home</kbd> to go back to frame 1, then press <kbd>V</kbd> and click the antenna.</p>",
+      "text": "<p>Press <kbd>Enter</kbd> again to stop. Press <kbd>Shift</kbd>+<kbd>,</kbd> (<b>Control &gt; Rewind</b>) to go back to frame 1, then press <kbd>V</kbd> and click the antenna.</p>",
       "target": "stage:260,180,80,170",
       "wait": {
         "selection": "instance"

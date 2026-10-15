@@ -1,0 +1,167 @@
+{
+  "title": "Controls on a null",
+  "summary": "Turn a machine of gears from one keyed dial, each at its own speed, and change all their colors at once, with controls on a rig and Link to Control.",
+  "minutes": 10,
+  "order": 23,
+  "guide": "behaviors.html#controls",
+  "start": {
+    "document": "start"
+  },
+  "final": "final",
+  "steps": [
+    {
+      "title": "Welcome",
+      "text": "<p>A <b>control</b> is a setting with a name, kept on an instance of its own, for other instances to follow with <b>Link to Control</b>. Put the controls for a scene on one marker, often called a null, and you change many things from one place.</p><p>The <i>Gears</i> layer holds four gears named <i>big1</i>, <i>small1</i>, <i>big2</i> and <i>small2</i>. The <i>Rig</i> layer is a guide layer, so it is never drawn in the movie; it holds a red crosshair named <i>rig</i>.</p>"
+    },
+    {
+      "title": "Select the rig",
+      "text": "<p>Press <kbd>V</kbd> for the Selection tool and click the red crosshair at the top left.</p>",
+      "target": "stage:130,90,60,60",
+      "wait": {
+        "selection": "instance"
+      }
+    },
+    {
+      "title": "Open the Behaviors panel",
+      "text": "<p>Choose <b>Window &gt; Behaviors</b> if it is not showing. It lists what is on the selection and the settings of each.</p>",
+      "target": "dock:Behaviors"
+    },
+    {
+      "title": "Add Angle Control",
+      "text": "<p>Click <b>Add Behavior</b> and choose <b>Angle Control</b>. Nothing moves: a control only holds a value, for others to follow.</p>",
+      "target": "widget:behaviorsAdd",
+      "wait": {
+        "command": "Add Behavior"
+      }
+    },
+    {
+      "title": "Name it",
+      "text": "<p>Set <b>Control name</b> to <b>Turn</b> and press <kbd>Enter</kbd>. The gears will find the control by this name.</p>",
+      "target": "label:Behaviors/Control name",
+      "wait": {
+        "command": "Behavior Settings"
+      }
+    },
+    {
+      "title": "Key the angle",
+      "text": "<p>The playhead is on frame 1 and <b>Angle (degrees)</b> is 0. Click the dot beside it to key it on this frame: it becomes a filled diamond.</p><p>A keyed setting changes over time: Phoenix goes smoothly from each key to the next.</p>",
+      "target": "label:Behaviors/Angle (degrees)",
+      "wait": {
+        "command": "Key Behavior Setting"
+      }
+    },
+    {
+      "title": "Go to the end",
+      "text": "<p>Click frame 96 in the timeline's ruler, or choose <b>Control &gt; Go To End</b>.</p>",
+      "target": "ruler:96",
+      "wait": {
+        "frame": 96
+      }
+    },
+    {
+      "title": "Two turns",
+      "text": "<p>Set <b>Angle (degrees)</b> to 720. Because it is keyed, this makes a second key here: from frame 1 to 96 the control turns twice round.</p>",
+      "target": "label:Behaviors/Angle (degrees)",
+      "wait": {
+        "command": "Behavior Settings"
+      }
+    },
+    {
+      "title": "Select the gears",
+      "text": "<p>Click the big gear on the left, then <kbd>Shift</kbd>-click the other three, so all four gears are selected.</p>",
+      "target": "stage:340,190,620,440",
+      "wait": {
+        "selection": "instance"
+      }
+    },
+    {
+      "title": "Add Link to Control",
+      "text": "<p>Click <b>Add Behavior</b> and choose <b>Link to Control</b>. It goes on all four gears at once, and what you set now is set on all four.</p>",
+      "target": "widget:behaviorsAdd",
+      "wait": {
+        "command": "Add Behavior"
+      }
+    },
+    {
+      "title": "Point it at the rig",
+      "text": "<p>Set <b>Controls on</b> to <b>rig</b>: choose it from the list, or click <b>Pick</b> and then the red crosshair.</p>",
+      "target": "label:Behaviors/Controls on",
+      "wait": {
+        "command": "Behavior Settings"
+      }
+    },
+    {
+      "title": "Choose the control",
+      "text": "<p>Set <b>Control name</b> to <b>Turn</b> and press <kbd>Enter</kbd>. <b>Change my</b> is <b>Same</b>, so an angle turns each gear.</p>",
+      "target": "label:Behaviors/Control name",
+      "wait": {
+        "command": "Behavior Settings"
+      }
+    },
+    {
+      "title": "Play it",
+      "text": "<p>Press <kbd>Enter</kbd>, or click the play button in the timeline header. All four gears turn with the rig's angle, but they turn the same way, and their teeth run through each other.</p>",
+      "target": "widget:timelinePlay",
+      "wait": {
+        "playing": true
+      }
+    },
+    {
+      "title": "Turn the small ones back",
+      "text": "<p>Press <kbd>Enter</kbd> again to stop. Click an empty part of the stage, then click the small gear in the middle and <kbd>Shift</kbd>-click the small one at the bottom.</p><p>Set <b>Amount (percent)</b> to -200. A small gear has half the teeth, so it turns twice as fast, and the minus turns it the other way.</p>",
+      "target": "label:Behaviors/Amount (percent)",
+      "wait": {
+        "command": "Behavior Settings"
+      }
+    },
+    {
+      "title": "Play it",
+      "text": "<p>Press <kbd>Enter</kbd>, or click the play button in the timeline header. Now the gears mesh. To change how the whole machine runs, you key only the rig: an ease, a pause, a turn back.</p>",
+      "target": "widget:timelinePlay",
+      "wait": {
+        "playing": true
+      }
+    },
+    {
+      "title": "Add a color control",
+      "text": "<p>Press <kbd>Enter</kbd> again to stop. Click the red crosshair to select the rig, click <b>Add Behavior</b> and choose <b>Color Control</b>.</p>",
+      "target": "widget:behaviorsAdd",
+      "wait": {
+        "command": "Add Behavior"
+      }
+    },
+    {
+      "title": "Name it",
+      "text": "<p>Set <b>Control name</b> to <b>Accent</b> and press <kbd>Enter</kbd>. Its color is orange to begin with.</p>",
+      "target": "label:Behaviors/Control name",
+      "wait": {
+        "command": "Behavior Settings"
+      }
+    },
+    {
+      "title": "Link the gears again",
+      "text": "<p>Select all four gears again, click <b>Add Behavior</b> and choose <b>Link to Control</b>. It goes below the first one, and the panel shows its settings.</p>",
+      "target": "widget:behaviorsAdd",
+      "wait": {
+        "command": "Add Behavior"
+      }
+    },
+    {
+      "title": "Tint them",
+      "text": "<p>Set <b>Controls on</b> to <b>rig</b>, <b>Control name</b> to <b>Accent</b>, and <b>Change my</b> to <b>Tint</b>. Then set <b>Amount (percent)</b> to 50, so the gears keep some of their shading. They all turn orange.</p>",
+      "target": "label:Behaviors/Change my"
+    },
+    {
+      "title": "Change the color",
+      "text": "<p>Click the red crosshair, click <b>Color Control</b> in the list, and set <b>Color (#RRGGBB)</b> to <b>#2E9BFF</b>. Every gear turns blue at once.</p>",
+      "target": "label:Behaviors/Color (#RRGGBB)",
+      "wait": {
+        "command": "Behavior Settings"
+      }
+    },
+    {
+      "title": "Well done",
+      "text": "<p>You drove a machine from one null: a keyed angle turns every gear at its own speed, and one color tints them all.</p><p>A <b>Slider Control</b> can size or fade things, a <b>Point Control</b> move them, and a <b>Checkbox Control</b> show or hide a set of them together. Key a control, and everything linked to it changes over time.</p>"
+    }
+  ]
+}

@@ -1,0 +1,116 @@
+{
+  "title": "A template that fits",
+  "summary": "Pin a lower third's plate to its name so it stretches to fit, fill in a font, a checkbox and a list, and keep its timing on a longer span.",
+  "minutes": 9,
+  "order": 26,
+  "guide": "symbols.html#template-fit",
+  "start": {
+    "document": "start"
+  },
+  "final": "final",
+  "steps": [
+    {
+      "title": "Welcome",
+      "text": "<p><i>Lower Third</i> is a template, a symbol whose named parts each instance can fill in. Its fields are the dynamic text <i>name</i>, the movie clip <i>live</i>, a light with two frames (off and on), and the movie clip <i>medal</i>, whose frames are labeled <i>Bronze</i>, <i>Silver</i> and <i>Gold</i>.</p><p>Behind the name is a dark plate. In this lesson you will make the plate fit any name, and keep the lower third's wipe on and wipe off at their own speed however long it stays up. Click <b>Next</b> to begin.</p>"
+    },
+    {
+      "title": "Go to frame 24",
+      "text": "<p>The lower third wipes on over its first half second, so on frame 1 there is nothing to see yet. Click frame <b>24</b> of the <i>Lower Third</i> layer.</p>",
+      "target": "frame:Lower Third:24",
+      "wait": {
+        "frame": 24
+      }
+    },
+    {
+      "title": "Edit the symbol",
+      "text": "<p>Press <kbd>V</kbd> for the Selection tool and double-click the lower third. You are now inside the symbol, and the edit bar above the stage reads <b>Scene 1 &rsaquo; Lower Third</b>.</p>",
+      "target": "stage:110,550,360,90",
+      "wait": {
+        "scope": "symbol"
+      }
+    },
+    {
+      "title": "Pin the plate to the name",
+      "text": "<p>Right-click the dark plate behind the name and choose <b>Pin to Text...</b>. Set <b>Text field</b> to <i>name</i> and <b>This instance</b> to <b>Stretch to its width</b>, and click <b>OK</b>.</p><p>Nothing changes yet: the name is as drawn. When an instance gives it longer or shorter words, the plate keeps the same room around them.</p>",
+      "target": "stage:160,560,300,72",
+      "wait": {
+        "command": "Pin to Text"
+      }
+    },
+    {
+      "title": "Back to the scene",
+      "text": "<p>Double-click an empty part of the stage. You can also click <b>Scene 1</b> at the left of the edit bar, or press <kbd>Ctrl</kbd>+<kbd>E</kbd>.</p>",
+      "wait": {
+        "scope": "scene"
+      }
+    },
+    {
+      "title": "Select the lower third",
+      "text": "<p>Click the lower third. The Properties panel's <b>Template</b> section lists its fields.</p>",
+      "target": "stage:110,550,360,90",
+      "wait": {
+        "selection": "instance"
+      }
+    },
+    {
+      "title": "A longer name",
+      "text": "<p>In the <b>name</b> box, type <code>Ada Lovelace, Countess</code> and press <kbd>Enter</kbd>. The plate stretches to fit the longer name.</p>",
+      "target": "label:Properties/name",
+      "wait": {
+        "command": "Template Field"
+      }
+    },
+    {
+      "title": "Pick a font",
+      "text": "<p>Under it, in <b>name font</b>, type or choose <code>Georgia</code>. The name is drawn in that font for this instance only, and the plate fits it again.</p>",
+      "target": "label:Properties/name font",
+      "wait": {
+        "command": "Template Field"
+      }
+    },
+    {
+      "title": "Go live",
+      "text": "<p><i>live</i> has two frames, so it shows as a checkbox. Tick <b>On</b>: the light turns red.</p>",
+      "target": "label:Properties/live",
+      "wait": {
+        "command": "Template Field"
+      }
+    },
+    {
+      "title": "Give a medal",
+      "text": "<p><i>medal</i> has labeled frames, so it shows as a list of the labels. Choose <b>Gold</b>.</p>",
+      "target": "label:Properties/medal",
+      "wait": {
+        "command": "Template Field"
+      }
+    },
+    {
+      "title": "Play it",
+      "text": "<p>Press <kbd>Enter</kbd>, or click the play button in the timeline header. The lower third wipes on, holds, and wipes off, all in two seconds. Press <kbd>Enter</kbd> again to stop.</p>",
+      "target": "widget:timelinePlay",
+      "wait": {
+        "playing": true
+      }
+    },
+    {
+      "title": "Keep it up longer",
+      "text": "<p>Click frame <b>120</b> of the <i>Lower Third</i> layer and press <kbd>F5</kbd>, or choose <b>Insert &gt; Timeline &gt; Frame</b>. The span now runs five seconds.</p>",
+      "target": "frame:Lower Third:120",
+      "wait": {
+        "command": "Insert Frame"
+      }
+    },
+    {
+      "title": "Responsive time",
+      "text": "<p>Press <kbd>Enter</kbd> to play it again. The wipe on and the wipe off keep their speed, and only the hold in the middle is longer.</p><p>That is because the symbol's <i>Labels</i> layer marks the frame where the middle starts <code>stretch</code> and the frame where the ending starts <code>outro</code>. On a longer or shorter span, the middle stretches or squeezes to fit.</p>",
+      "target": "widget:timelinePlay",
+      "wait": {
+        "playing": true
+      }
+    },
+    {
+      "title": "Well done",
+      "text": "<p>You pinned a plate to a text field so it fits any name, filled in a font, a checkbox and a list, and saw the lower third keep its timing on a longer span.</p><p>Pinned parts can also move with an edge of the text instead: a light that sits just after the name, however long it is. <b>File &gt; Export &gt; Render from Data...</b> renders one version for each row of a spreadsheet.</p>"
+    }
+  ]
+}

@@ -1,0 +1,138 @@
+{
+  "title": "Dashes and text on a path",
+  "summary": "Turn a line into marching dashes, taper a brush stroke, and send words traveling along a curve.",
+  "minutes": 10,
+  "order": 21,
+  "guide": "behaviors.html",
+  "start": {
+    "document": "start"
+  },
+  "final": "final",
+  "steps": [
+    {
+      "title": "Welcome",
+      "text": "<p>Shape operators change how a drawn line looks each frame without redrawing it, and letter animators move a text field's letters while it stays editable.</p><p>The orange <i>Track</i> and the green <i>Swash</i> are plain lines. The <i>Words</i> layer sits under the <i>Path</i> motion guide, the thin gray curve, which is never drawn in the movie.</p>"
+    },
+    {
+      "title": "Select the track",
+      "text": "<p>Press <kbd>V</kbd> and click the orange line. It is a drawing object, so one click picks it whole.</p>",
+      "target": "stage:560,390,160,60",
+      "wait": {
+        "selection": "shape"
+      }
+    },
+    {
+      "title": "Open the Behaviors panel",
+      "text": "<p>Choose <b>Window &gt; Behaviors</b> if it is not showing. It lists what is on the selection and the settings of each.</p>",
+      "target": "dock:Behaviors"
+    },
+    {
+      "title": "Add Dashes",
+      "text": "<p>With a shape selected the button reads <b>Add Operator</b>. Click it and choose <b>Dashes</b>. The line is cut into dashes 20 pixels long with gaps of 10.</p>",
+      "target": "widget:behaviorsAdd",
+      "wait": {
+        "command": "Add Operator"
+      }
+    },
+    {
+      "title": "Key the offset",
+      "text": "<p>The playhead is on frame 1. Click the diamond beside <b>Offset (pixels)</b> to key it at 0 on this frame.</p>",
+      "target": "label:Behaviors/Offset (pixels)",
+      "wait": {
+        "command": "Key Behavior Setting"
+      }
+    },
+    {
+      "title": "Go to frame 120",
+      "text": "<p>Click frame 120 on the <i>Track</i> layer, the last one.</p>",
+      "target": "frame:Track:120",
+      "wait": {
+        "frame": 120
+      }
+    },
+    {
+      "title": "Offset at 600",
+      "text": "<p>Set <b>Offset (pixels)</b> to 600. Since the setting is keyed, this makes a second key here.</p>",
+      "target": "label:Behaviors/Offset (pixels)",
+      "wait": {
+        "command": "Behavior Settings"
+      }
+    },
+    {
+      "title": "Play it",
+      "text": "<p>Press <kbd>Enter</kbd>, or click the play button in the timeline header. The dashes march along the line, like ants or a route on a map.</p>",
+      "target": "widget:timelinePlay",
+      "wait": {
+        "playing": true
+      }
+    },
+    {
+      "title": "Select the swash",
+      "text": "<p>Press <kbd>Enter</kbd> again to stop. Click the thick green line.</p>",
+      "target": "stage:300,560,680,80",
+      "wait": {
+        "selection": "shape"
+      }
+    },
+    {
+      "title": "Taper it",
+      "text": "<p>Click <b>Add Operator</b> and choose <b>Taper</b>. The line thins from its start to a point at its end, like a stroke of a brush.</p><p>Set <b>Start width</b> and <b>End width</b> to taper it the way you like.</p>",
+      "target": "widget:behaviorsAdd",
+      "wait": {
+        "command": "Add Operator"
+      }
+    },
+    {
+      "title": "Select the words",
+      "text": "<p>Press <kbd>Shift</kbd>+<kbd>,</kbd> (<b>Control &gt; Rewind</b>) to go back to frame 1, then click the words at the top.</p>",
+      "target": "stage:240,110,760,62",
+      "wait": {
+        "selection": "text"
+      }
+    },
+    {
+      "title": "Put them on the path",
+      "text": "<p>With text selected the button reads <b>Add Animator</b>. Click it and choose <b>Text on a Path</b>. The letters jump onto the gray guide and turn with its curve.</p>",
+      "target": "widget:behaviorsAdd",
+      "wait": {
+        "command": "Add Letter Animator"
+      }
+    },
+    {
+      "title": "Key the margin",
+      "text": "<p>Set <b>First margin (pixels)</b> to -700: the words slide back off the start of the line, out of sight. Then click the diamond beside it to key it on this frame.</p>",
+      "target": "label:Behaviors/First margin (pixels)",
+      "wait": {
+        "command": "Key Behavior Setting"
+      }
+    },
+    {
+      "title": "Go to frame 120",
+      "text": "<p>Click frame 120 on the <i>Words</i> layer.</p>",
+      "target": "frame:Words:120",
+      "wait": {
+        "frame": 120
+      }
+    },
+    {
+      "title": "Margin at 1300",
+      "text": "<p>Set <b>First margin (pixels)</b> to 1300, past the end of the line.</p>",
+      "target": "label:Behaviors/First margin (pixels)",
+      "wait": {
+        "command": "Behavior Settings"
+      }
+    },
+    {
+      "title": "Play it",
+      "text": "<p>Press <kbd>Enter</kbd>, or click the play button in the timeline header. The words ride in along the curve, over the marching dashes, and off the far end.</p>",
+      "target": "widget:timelinePlay",
+      "wait": {
+        "playing": true
+      }
+    },
+    {
+      "title": "Well done",
+      "text": "<p>You made marching dashes, a tapered brush stroke and text that travels along a path, and every one stays editable: reshape the guide and the words follow it.</p><p>Try <b>Above the line</b> to lift the words off the curve, or <b>Wrap round past the end</b> for words that go round and round a closed path.</p>"
+    }
+  ]
+}

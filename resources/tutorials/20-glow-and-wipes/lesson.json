@@ -1,0 +1,105 @@
+{
+  "title": "Glow and wipes",
+  "summary": "Make a title glow with an adjustment layer, then wipe it on with a keyed Linear Wipe.",
+  "minutes": 8,
+  "order": 20,
+  "guide": "behaviors.html",
+  "start": {
+    "document": "start"
+  },
+  "final": "final",
+  "steps": [
+    {
+      "title": "Welcome",
+      "text": "<p>An <b>adjustment layer</b> changes everything below it, and it can hold many effects: glows, wipes, color, blurs. Each one's settings can be keyed, so they change over time.</p><p>The <i>Title</i> layer holds a white title with a blue line under it.</p>"
+    },
+    {
+      "title": "Add a layer",
+      "text": "<p>Click the <i>Title</i> layer's name, then click the <b>New Layer</b> button under the layers, or choose <b>Insert &gt; Timeline &gt; Layer</b>. The new layer goes above it.</p>",
+      "target": "widget:layerNew",
+      "wait": {
+        "command": "New Layer"
+      }
+    },
+    {
+      "title": "Make it an adjustment layer",
+      "text": "<p>Right-click the new layer's name and choose <b>Adjustment Layer</b>. Everything below it blurs: a new adjustment layer starts with a <b>Blur</b>.</p>",
+      "wait": {
+        "command": "Adjustment Layer"
+      }
+    },
+    {
+      "title": "Take the blur away",
+      "text": "<p>Click an empty part of the stage so nothing is selected. The Behaviors panel shows the layer's effects. With <b>Blur</b> picked in its list, click <b>Remove</b>.</p>",
+      "target": "dock:Behaviors",
+      "wait": {
+        "command": "Remove Behavior"
+      }
+    },
+    {
+      "title": "Add a glow",
+      "text": "<p>Click <b>Add Effect</b> and choose <b>Glow</b>. The bright parts of the picture, the white letters and the blue line, spread their light around them.</p>",
+      "target": "widget:behaviorsAdd",
+      "wait": {
+        "command": "Add Effect"
+      }
+    },
+    {
+      "title": "Make it brighter",
+      "text": "<p>Set <b>Radius (pixels)</b> to 24 and <b>Intensity (percent)</b> to 150 for a bigger, stronger glow.</p><p><b>Threshold</b> says how bright a part must be to glow; <b>Glow color</b> tints the light, such as #38D8FF for neon.</p>",
+      "target": "label:Behaviors/Radius (pixels)"
+    },
+    {
+      "title": "Add a wipe",
+      "text": "<p>Click <b>Add Effect</b> again and choose <b>Linear Wipe</b>. It wipes the picture away behind a moving edge.</p>",
+      "target": "widget:behaviorsAdd",
+      "wait": {
+        "command": "Add Effect"
+      }
+    },
+    {
+      "title": "Wipe from the left",
+      "text": "<p>Set <b>Direction (degrees)</b> to 180. The wipe now runs the other way, so the title will be uncovered from its left, the way it reads.</p>",
+      "target": "label:Behaviors/Direction (degrees)",
+      "wait": {
+        "command": "Behavior Settings"
+      }
+    },
+    {
+      "title": "Key it wiped away",
+      "text": "<p>The playhead is on frame 1. Set <b>Completion (percent)</b> to 100: the title is wiped away. Then click the diamond beside it to key it on this frame.</p>",
+      "target": "label:Behaviors/Completion (percent)",
+      "wait": {
+        "command": "Key Behavior Setting"
+      }
+    },
+    {
+      "title": "Go to frame 24",
+      "text": "<p>Click 24 in the frame numbers above the layers.</p>",
+      "target": "ruler:24",
+      "wait": {
+        "frame": 24
+      }
+    },
+    {
+      "title": "Uncover it",
+      "text": "<p>Set <b>Completion (percent)</b> to 0. Since the setting is keyed, this makes a second key here.</p>",
+      "target": "label:Behaviors/Completion (percent)",
+      "wait": {
+        "command": "Behavior Settings"
+      }
+    },
+    {
+      "title": "Play it",
+      "text": "<p>Press <kbd>Enter</kbd>, or click the play button in the timeline header. The glowing title is wiped on from the left, with a soft edge.</p>",
+      "target": "widget:timelinePlay",
+      "wait": {
+        "playing": true
+      }
+    },
+    {
+      "title": "Well done",
+      "text": "<p>You made a title glow and wiped it on with keyed effects on an adjustment layer. Effects apply in the order of the list: the wipe here wipes the glow too.</p><p>Try <b>Radial Wipe</b> or <b>Venetian Blinds</b> in place of the Linear Wipe, and <b>Feather</b> for a softer or harder edge.</p>"
+    }
+  ]
+}

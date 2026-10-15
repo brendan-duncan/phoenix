@@ -4,6 +4,10 @@ What changed in each release of Phoenix, newest first.
 
 ## 0.12.0 (Unreleased)
 
+- Eight new motion graphics lessons: motion blur and echo, glow and wipes, dashes and text on a path, a sound visualizer, controls on a null, 3D cards in the light, Motion Sketch, and a template that fits
+- Vignette darkens the edges of the whole picture, empty stage included, not just what is drawn
+- Lessons 18 and 21 say Shift+, (Control > Rewind) to go back to frame 1, instead of Home
+
 - Opening a SWF movie keeps the stacking inside a shape drawn in several style groups: a nose no longer shows the outline of the mouth behind it
 
 - Time Remap: Blend between frames cross-fades between a graphic's frames in slow motion

@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>A template that fits · Phoenix User Guide</title>
+<meta name="description" content="Pin a lower third's plate to its name so it stretches to fit, fill in a font, a checkbox and a list, and keep its timing on a longer span.">
+<meta name="keywords" content="tutorial lesson step by step template pin to text responsive time lower third">
+<link rel="icon" href="assets/img/logo.png">
+<link rel="stylesheet" href="assets/site.css">
+<script>try { const t = localStorage.getItem("phoenix-docs-theme"); if (t) document.documentElement.dataset.theme = t; } catch (e) {}</script>
+<script src="assets/site.js" defer></script>
+</head>
+<body>
+<main>
+<article class="content">
+
+<p class="eyebrow">Tutorials</p>
+
+<h1>A template that fits</h1>
+
+<p class="lead">Pin a lower third's plate to its name so it stretches to fit, fill in a font, a checkbox and a list, and keep its timing on a longer span.</p>
+
+<div class="callout">
+  <span class="label">Try it in Phoenix</span>
+  <p>This page is also a lesson inside Phoenix: choose <span class="menu-path">Help &rsaquo; Tutorials...</span> and start <strong>A template that fits</strong>, and Phoenix points at each control as you go. It takes about 9 minutes.</p>
+</div>
+
+<p>To follow along here instead, download the starting document, <a href="assets/tutorials/template-fit.fla" download>template-fit.fla</a>, and open it with <span class="menu-path">File &rsaquo; Open...</span>.</p>
+
+<figure>
+  <img src="assets/shots/mg-template-fit.webp" alt="Two lower thirds from one symbol: Your Name on a short dark plate with a bronze medal, and Ada Lovelace, Countess in Georgia on a plate stretched to fit, with a gold medal and a red live light" width="900" height="320">
+  <figcaption>The plate pinned to the name stretches to fit; the lower one has a font, Gold and Live.</figcaption>
+</figure>
+
+<p><i>Lower Third</i> is a template, a symbol whose named parts each instance can fill in. Its fields are the dynamic text <i>name</i>, the movie clip <i>live</i>, a light with two frames (off and on), and the movie clip <i>medal</i>, whose frames are labeled <i>Bronze</i>, <i>Silver</i> and <i>Gold</i>.</p><p>Behind the name is a dark plate. In this lesson you will make the plate fit any name, and keep the lower third's wipe on and wipe off at their own speed however long it stays up.</p>
+
+<h2>1. Go to frame 24</h2>
+
+<p>The lower third wipes on over its first half second, so on frame 1 there is nothing to see yet. Click frame <b>24</b> of the <i>Lower Third</i> layer.</p>
+
+<h2>2. Edit the symbol</h2>
+
+<p>Press <kbd>V</kbd> for the Selection tool and double-click the lower third. You are now inside the symbol, and the edit bar above the stage reads <b>Scene 1 &rsaquo; Lower Third</b>.</p>
+
+<h2>3. Pin the plate to the name</h2>
+
+<p>Right-click the dark plate behind the name and choose <b>Pin to Text...</b>. Set <b>Text field</b> to <i>name</i> and <b>This instance</b> to <b>Stretch to its width</b>, and click <b>OK</b>.</p><p>Nothing changes yet: the name is as drawn. When an instance gives it longer or shorter words, the plate keeps the same room around them.</p>
+
+<h2>4. Back to the scene</h2>
+
+<p>Double-click an empty part of the stage. You can also click <b>Scene 1</b> at the left of the edit bar, or press <kbd>Ctrl</kbd>+<kbd>E</kbd>.</p>
+
+<h2>5. Select the lower third</h2>
+
+<p>Click the lower third. The Properties panel's <b>Template</b> section lists its fields.</p>
+
+<h2>6. A longer name</h2>
+
+<p>In the <b>name</b> box, type <code>Ada Lovelace, Countess</code> and press <kbd>Enter</kbd>. The plate stretches to fit the longer name.</p>
+
+<h2>7. Pick a font</h2>
+
+<p>Under it, in <b>name font</b>, type or choose <code>Georgia</code>. The name is drawn in that font for this instance only, and the plate fits it again.</p>
+
+<h2>8. Go live</h2>
+
+<p><i>live</i> has two frames, so it shows as a checkbox. Tick <b>On</b>: the light turns red.</p>
+
+<h2>9. Give a medal</h2>
+
+<p><i>medal</i> has labeled frames, so it shows as a list of the labels. Choose <b>Gold</b>.</p>
+
+<h2>10. Play it</h2>
+
+<p>Press <kbd>Enter</kbd>, or click the play button in the timeline header. The lower third wipes on, holds, and wipes off, all in two seconds. Press <kbd>Enter</kbd> again to stop.</p>
+
+<h2>11. Keep it up longer</h2>
+
+<p>Click frame <b>120</b> of the <i>Lower Third</i> layer and press <kbd>F5</kbd>, or choose <b>Insert &gt; Timeline &gt; Frame</b>. The span now runs five seconds.</p>
+
+<h2>12. Responsive time</h2>
+
+<p>Press <kbd>Enter</kbd> to play it again. The wipe on and the wipe off keep their speed, and only the hold in the middle is longer.</p><p>That is because the symbol's <i>Labels</i> layer marks the frame where the middle starts <code>stretch</code> and the frame where the ending starts <code>outro</code>. On a longer or shorter span, the middle stretches or squeezes to fit.</p>
+
+<h2>What you did</h2>
+
+<p>You pinned a plate to a text field so it fits any name, filled in a font, a checkbox and a list, and saw the lower third keep its timing on a longer span.</p><p>Pinned parts can also move with an edge of the text instead: a light that sits just after the name, however long it is. <b>File &gt; Export &gt; Render from Data...</b> renders one version for each row of a spreadsheet.</p>
+
+<p>For everything this tutorial touches on, see <a href="symbols.html#template-fit">Fit what it is given</a>.</p>
+
+</article>
+</main>
+</body>
+</html>

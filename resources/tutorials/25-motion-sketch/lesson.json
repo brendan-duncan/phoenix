@@ -1,0 +1,79 @@
+{
+  "title": "Motion Sketch",
+  "summary": "Fly a bee round a meadow by moving the pointer while the movie plays, then make it buzz with a wiggle on top.",
+  "minutes": 6,
+  "order": 25,
+  "guide": "tweens.html#motion-sketch",
+  "start": {
+    "document": "start"
+  },
+  "final": "final",
+  "steps": [
+    {
+      "title": "Welcome",
+      "text": "<p><b>Motion Sketch</b> moves an instance the way your hand moves: press on the stage and move the pointer, and the movie plays while the instance follows you. No keyframes to set, no path to draw.</p><p>The bee is a graphic symbol with flapping wings, on the <i>Bee</i> layer above a meadow. Click <b>Next</b> to begin.</p>"
+    },
+    {
+      "title": "Select the bee",
+      "text": "<p>Press <kbd>V</kbd> for the Selection tool and click the bee. Leave the playhead on frame 1: the sketch starts from there.</p>",
+      "target": "stage:570,270,140,110",
+      "wait": {
+        "selection": "instance"
+      }
+    },
+    {
+      "title": "Choose Motion Sketch",
+      "text": "<p>Choose <b>Control &gt; Motion Sketch</b>. Nothing moves yet: Phoenix waits for you to press on the stage.</p>",
+      "target": "menu:Control/Motion Sketch",
+      "wait": {
+        "action": "Control/Motion Sketch"
+      }
+    },
+    {
+      "title": "Fly it",
+      "text": "<p>Press on the bee and, holding the button down, move the pointer in loops round the flowers. The movie plays as you go, and the bee follows where you point.</p><p>Let go when you are done. The recording also stops by itself when the movie comes round to the start again, after four seconds.</p>",
+      "target": "stage:200,140,880,400",
+      "wait": {
+        "command": "Motion Sketch"
+      }
+    },
+    {
+      "title": "Play it",
+      "text": "<p>Press <kbd>Enter</kbd>, or click the play button in the timeline header. The bee flies your path, wobbles and all, at the speed you drew it. Press <kbd>Enter</kbd> again to stop.</p>",
+      "target": "widget:timelinePlay",
+      "wait": {
+        "playing": true
+      }
+    },
+    {
+      "title": "Where the path is kept",
+      "text": "<p>With the bee selected, look at the Behaviors panel. The path is a <b>Recorded Motion</b> behavior, with a key a frame for how far the bee has moved <b>Across</b> and <b>Down</b> from where you pressed.</p><p>Change a key to nudge the path, or choose <b>Motion Sketch</b> again to record a new one in its place.</p>",
+      "target": "dock:Behaviors"
+    },
+    {
+      "title": "Add a buzz",
+      "text": "<p>Click <b>Add Behavior</b> and choose <b>Wiggle</b>. Behaviors add up: the bee follows your path and shakes about on top of it.</p>",
+      "target": "widget:behaviorsAdd",
+      "wait": {
+        "command": "Add Behavior"
+      }
+    },
+    {
+      "title": "Make it quick",
+      "text": "<p>A bee buzzes fast and small. Set <b>Wiggles per second</b> to 8, <b>Move (pixels)</b> to 4 and <b>Turn (degrees)</b> to 10.</p>",
+      "target": "label:Behaviors/Wiggles per second"
+    },
+    {
+      "title": "Play it again",
+      "text": "<p>Press <kbd>Enter</kbd>. The bee loops round the meadow along your path, buzzing as it goes. Press <kbd>Enter</kbd> again to stop.</p>",
+      "target": "widget:timelinePlay",
+      "wait": {
+        "playing": true
+      }
+    },
+    {
+      "title": "Well done",
+      "text": "<p>You recorded a path by hand with Motion Sketch, found it as keys on a Recorded Motion behavior, and added a wiggle on top.</p><p>To end where you began, so the movie loops smoothly, finish your sketch near the place you pressed. <b>Bake</b> in the Behaviors panel turns the path into ordinary keyframes.</p>"
+    }
+  ]
+}
