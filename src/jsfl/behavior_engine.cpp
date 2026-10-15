@@ -429,6 +429,8 @@ Copies Engine::evaluate(const std::vector<Applied>& list, const Moment& moment, 
         delta.scaleY = scale * d.number(value, "scaleY", 1.0);
         delta.alpha = std::max(0.0, d.number(value, "alpha", 1.0));
         delta.frame = static_cast<int>(std::lround(d.number(value, "frame", 0.0)));
+        const double hold = d.number(value, "holdFrame", -1.0);
+        delta.hold = hold >= 0.0 ? static_cast<int>(std::floor(hold)) : -1;
         return delta;
     };
     for (const Applied& applied : list)

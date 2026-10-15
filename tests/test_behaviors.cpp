@@ -942,3 +942,30 @@ TEST(motion_blur_settings_and_sample_times)
     document.extraAttributes = mb::withSettings(document, 180.0, 16);
     CHECK(document.extraAttributes.empty());
 }
+
+TEST(time_remap_holds_the_frame_keyed)
+{
+    Engine engine;
+    engine.addBuiltIns();
+    Applied remap = engine.defaults("timeremap", 1);
+    // Frames 1 to 11 of the graphic over frames 0 to 20: half speed.
+    remap.params["frame"] = "@0=1;20=11";
+    CHECK(engine.evaluate({remap}, still(0)).front().hold == 0);
+    CHECK(engine.evaluate({remap}, still(10)).front().hold == 5);
+    CHECK(engine.evaluate({remap}, still(20)).front().hold == 10);
+    // Held, run backwards from 11 to 1.
+    remap.params["frame"] = "@0=11;10=1";
+    CHECK(engine.evaluate({remap}, still(5)).front().hold == 5);
+    // With copies, every copy is held; a later behavior's loop shift does
+    // not undo it.
+    Applied ring = engine.defaults("circle", 1);
+    remap.params["frame"] = "4";
+    const Copies copies = engine.evaluate({ring, remap}, still(3));
+    CHECK(copies.size() > 1 && copies.front().hold == 3 && copies.back().hold == 3);
+    fla::behaviors::Delta delta;
+    delta.add(copies.front());
+    fla::behaviors::Delta shift;
+    shift.frame = 2;
+    delta.add(shift);
+    CHECK(delta.hold == 3 && !delta.none());
+}

@@ -302,6 +302,8 @@ void Delta::add(const Delta& other)
     scaleY *= other.scaleY;
     alpha *= other.alpha;
     frame += other.frame;
+    if (other.hold >= 0)
+        hold = other.hold;
 }
 
 Transform apply(const Transform& keyed, const Point& pivot, const Delta& delta)

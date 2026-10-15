@@ -3732,6 +3732,12 @@ void PhoenixView::drawElement(QPainter& painter, const fla::Element* element, co
                     static_cast<const fla::SymbolInstance*>(tweenElement)->colorTransform, tweenProgress);
             }
             color.alphaMultiplier *= behaviorDelta.alpha;
+            // Time remapping: a graphic held on the frame a behavior says.
+            if (behaviorDelta.hold >= 0 && instance->symbolType == fla::SymbolType::Graphic)
+            {
+                frameOffset = std::min(behaviorDelta.hold, symbolLength(symbol) - 1);
+                loopType = fla::LoopType::SingleFrame;
+            }
             // A template's color field: the named clip tinted all one color.
             // A slider holds the clip on a frame; an image field draws a
             // file in place of its bitmap.
@@ -5539,6 +5545,8 @@ bool PhoenixView::stampCopies(QPainter& painter, const fla::SymbolInstance& inst
                     clips = clips || (element && element->elementType() == fla::Element::Type::SymbolInstance &&
                                          static_cast<const fla::SymbolInstance*>(element)->symbolType != fla::SymbolType::Graphic);
     const auto keyOf = [&](const fla::behaviors::Delta& copy) {
+        if (copy.hold >= 0)
+            return -1 - std::min(copy.hold, symbolLength(symbol) - 1);
         if (clips)
             return copy.frame;
         const int elapsed = _elapsed;
@@ -5567,6 +5575,7 @@ bool PhoenixView::stampCopies(QPainter& painter, const fla::SymbolInstance& inst
         // frame on it and nothing else.
         fla::behaviors::Delta frameOnly;
         frameOnly.frame = copy.frame;
+        frameOnly.hold = copy.hold;
         _overrideElement = &instance;
         _overrideTransform = none;
         _copyElement = &instance;

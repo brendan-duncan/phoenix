@@ -132,11 +132,14 @@ struct Delta
     double scaleY = 1.0;
     double alpha = 1.0;
     int frame = 0;
+    /// A graphic held on this frame of its symbol, from 0, whatever its
+    /// loop: time remapping. -1 for none; the last behavior to set it wins.
+    int hold = -1;
 
     bool none() const
     {
         return x == 0.0 && y == 0.0 && rotation == 0.0 && scaleX == 1.0 && scaleY == 1.0 && alpha == 1.0 &&
-            frame == 0;
+            frame == 0 && hold < 0;
     }
     void add(const Delta& other);
 };

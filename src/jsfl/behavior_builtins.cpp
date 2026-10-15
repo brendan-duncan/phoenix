@@ -303,6 +303,18 @@ behavior({
     }
 });
 )JS"},
+        {"timeremap", R"JS(
+behavior({
+    name: "Time Remap",
+    description: "Says which frame of the graphic shows, frame by frame: key Frame shown from 1 to 48 over 96 frames for slow motion, hold it still for a freeze, key it from high to low to run it backwards. The graphic's own loop is set aside while it is on.",
+    params: {
+        frame: { label: "Frame shown", value: 1, min: 1, max: 100000, step: 0.1 }
+    },
+    evaluate: function (ctx, p) {
+        return { holdFrame: Math.max(0, Math.floor(p.frame) - 1) };
+    }
+});
+)JS"},
         {"linkobject", R"JS(
 behavior({
     name: "Link to Object",

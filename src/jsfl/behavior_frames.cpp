@@ -345,6 +345,12 @@ int bake(Engine& engine, Layer& layer, int first, int last, double frameRate, st
             // A graphic's loop, moved on.
             if (delta.frame > 0 && target.symbolType == SymbolType::Graphic)
                 target.firstFrame = graphicFrame(loop, firstFrame, lastFrame, length, delta.frame);
+            // Time remapped: held on its frame.
+            if (delta.hold >= 0 && target.symbolType == SymbolType::Graphic)
+            {
+                target.firstFrame = std::min(delta.hold, std::max(1, length) - 1);
+                target.loopType = LoopType::SingleFrame;
+            }
         };
         place(*instance, copies.front());
         for (size_t c = 1; c < copies.size(); ++c)
