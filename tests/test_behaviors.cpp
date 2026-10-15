@@ -1161,3 +1161,37 @@ TEST(shape_operators_twist_and_merge)
     // Geometry alone, merging leaves the lines as they are.
     CHECK(fla::shapeops::apply({square}, false, {merge}, 0, 24.0).front().points.size() == 4);
 }
+
+TEST(letter_flips_source_text_and_presets)
+{
+    namespace ta = fla::textanim;
+    std::vector<ta::Letter> letters(3);
+    for (int i = 0; i < 3; ++i)
+    {
+        letters[i].index = i;
+        letters[i].count = 3;
+    }
+    // Flip In: at the start the letters are turned edge-on; once in, flat.
+    Applied flip = ta::defaults("flipin", 1);
+    CHECK(near(ta::apply({flip}, letters, 0, 0, 24.0)[0].turnX, 90.0));
+    CHECK(near(ta::apply({flip}, letters, 48, 0, 24.0)[2].turnX, 0.0));
+    flip.params["axis"] = "Swing";
+    CHECK(near(ta::apply({flip}, letters, 0, 0, 24.0)[0].turnY, 90.0));
+    // Animate Letters turns them in depth too.
+    Applied range = ta::defaults("range", 1);
+    range.params["turnX"] = "30";
+    range.params["moveY"] = "0";
+    CHECK(near(ta::apply({range}, letters, 0, 0, 24.0)[1].turnX, 30.0));
+    // Source Text: the words keyed for each frame, held between keys.
+    Applied source = ta::defaults("sourcetext", 1);
+    source.params["text"] = "@0=Three;24=Two;48=One";
+    std::string words;
+    CHECK(ta::sourceTextOf({source}, 30, words) && words == "Two");
+    CHECK(ta::sourceTextOf({source}, 60, words) && words == "One");
+    CHECK(!ta::sourceTextOf({range}, 0, words));
+    // The presets are made of animators there are.
+    CHECK(ta::presets().size() >= 10);
+    for (const ta::Preset& preset : ta::presets())
+        for (const Applied& animator : preset.animators)
+            CHECK(ta::find(animator.type) != nullptr);
+}

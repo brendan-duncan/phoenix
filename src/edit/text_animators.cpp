@@ -3,6 +3,7 @@
 #include "../data/static_text.h"
 
 #include <algorithm>
+#include <map>
 #include <cmath>
 #include <cstdint>
 #include <cstdio>
@@ -172,6 +173,18 @@ const std::vector<Definition>& definitions()
             {number("rate", "Letters settled per second", 10, 0.1, 500, 0.5), number("delay", "Wait first (seconds)", 0, 0, 600, 0.05),
                 number("changes", "Flickers per second", 12, 1, 60, 1), choice("set", "Random characters", {"Letters", "Digits", "Symbols"}),
                 seed()}),
+        definition("flipin", "Flip In",
+            "Each letter turns in from edge-on, in depth, a little after the one before, fading up.",
+            {choice("axis", "Turn", {"Tip", "Swing"}), number("angle", "From (degrees)", 90, -360, 360, 1),
+                number("duration", "Each letter takes (seconds)", 0.5, 0.01, 10, 0.01),
+                number("stagger", "Between letters (seconds)", 0.05, 0, 5, 0.01), number("delay", "Wait first (seconds)", 0, 0, 600, 0.05)}),
+        definition("blurin", "Blur In", "Each letter comes into focus and fades up, a little after the one before.",
+            {number("blur", "Blur from (pixels)", 12, 0, 200, 0.5), number("duration", "Each letter takes (seconds)", 0.5, 0.01, 10, 0.01),
+                number("stagger", "Between letters (seconds)", 0.04, 0, 5, 0.01), number("delay", "Wait first (seconds)", 0, 0, 600, 0.05)}),
+        definition("sourcetext", "Source Text",
+            "Changes the words the field shows: key Text to other words at other frames, for a countdown, a list, "
+            "a caption that changes.",
+            {textParam("text", "Text", "")}),
         definition("path", "Text on a Path",
             "Lays the letters along the line of the motion guide the text's layer is under, turned with it; key the First "
             "margin to send them along the line.",
@@ -194,10 +207,49 @@ const std::vector<Definition>& definitions()
                 number("offset", "Offset (percent)", 0, -200, 200, 0.5), number("moveX", "Move across (pixels)", 0, -2000, 2000, 1),
                 number("moveY", "Move down (pixels)", -20, -2000, 2000, 1), number("turn", "Turn (degrees)", 0, -720, 720, 1),
                 number("scale", "Size (percent)", 100, 0, 1000, 1), number("opacity", "Opacity (percent)", 100, 0, 100, 1),
-                number("tracking", "Spacing (pixels)", 0, -200, 500, 0.5), textParam("color", "Color (#RRGGBB)", "#FFC000"),
+                number("tracking", "Spacing (pixels)", 0, -200, 500, 0.5), number("turnX", "Tip in depth (degrees)", 0, -360, 360, 1),
+                number("turnY", "Swing in depth (degrees)", 0, -360, 360, 1), textParam("color", "Color (#RRGGBB)", "#FFC000"),
                 number("colorAmount", "Color amount (percent)", 0, 0, 100, 1), number("blur", "Blur (pixels)", 0, 0, 100, 0.5),
                 seed()}),
     };
+    return list;
+}
+
+bool sourceTextOf(const std::vector<Applied>& list, int frame, std::string& out)
+{
+    bool found = false;
+    for (const Applied& applied : list)
+        if (applied.enabled && applied.type == "sourcetext")
+        {
+            out = applied.valueAt("text", frame, std::string());
+            found = true;
+        }
+    return found;
+}
+
+const std::vector<Preset>& presets()
+{
+    static const std::vector<Preset> list = [] {
+        const auto make = [](const char* id, std::map<std::string, std::string> settings) {
+            Applied applied = defaults(id, 1);
+            for (const auto& [name, value] : settings)
+                applied.params[name] = value;
+            return applied;
+        };
+        return std::vector<Preset>{
+            {"Typewriter", "Types the text out a letter at a time.", {make("typewriter", {})}},
+            {"Pop In", "Letters grow in past their size and settle.", {make("bounce", {})}},
+            {"Slide Up", "Letters slide up into place, fading in.", {make("cascade", {{"from", "Below"}, {"distance", "30"}})}},
+            {"Drop In", "Letters drop in from above and bounce.", {make("cascade", {{"from", "Above"}, {"distance", "80"}}), make("bounce", {{"overshoot", "20"}})}},
+            {"Words Fade In", "The words fade in one after another.", {make("fadeword", {})}},
+            {"Flip In", "Letters tip in from edge-on, one after another.", {make("flipin", {})}},
+            {"Swing In", "Letters swing round into place like doors.", {make("flipin", {{"axis", "Swing"}, {"angle", "-90"}})}},
+            {"Blur In", "Letters come into focus one after another.", {make("blurin", {})}},
+            {"Decode", "Letters flicker through random characters, then settle.", {make("scramble", {})}},
+            {"Wavy Arrival", "Letters slide in, then ride a wave.", {make("cascade", {{"from", "Below"}}), make("wave", {})}},
+            {"Jitter", "Letters shake about nervously on their own.", {make("wiggly", {{"move", "2"}, {"turn", "6"}, {"frequency", "6"}})}},
+        };
+    }();
     return list;
 }
 
@@ -313,6 +365,34 @@ std::vector<Change> apply(const std::vector<Applied>& list, const std::vector<Le
                 changes[i].character = static_cast<unsigned char>(pool[static_cast<size_t>(pick * pool.size()) % pool.size()]);
             }
         }
+        else if (type == "flipin" || type == "blurin")
+        {
+            // Each letter in, one after another: turned in from edge-on, or
+            // coming into focus, fading up.
+            const double duration = std::max(0.01, param(applied, "duration", frame, 0.5));
+            const double stagger = param(applied, "stagger", frame, 0.05);
+            const double delay = param(applied, "delay", frame, 0.0);
+            const bool flip = type == "flipin";
+            const double from = flip ? param(applied, "angle", frame, 90.0) : param(applied, "blur", frame, 12.0);
+            const std::string axis = text(applied, "axis", frame, "Tip");
+            for (size_t i = 0; i < letters.size(); ++i)
+            {
+                const double t = clamp01((time - delay - stagger * letters[i].index) / duration);
+                const double eased = easeOutCubic(t);
+                if (flip)
+                {
+                    if (axis == "Swing")
+                        changes[i].turnY += from * (1.0 - eased);
+                    else
+                        changes[i].turnX += from * (1.0 - eased);
+                }
+                else
+                    changes[i].blur += from * (1.0 - eased);
+                changes[i].alpha *= std::min(1.0, t * 2.0);
+            }
+        }
+        else if (type == "sourcetext")
+            continue;
         else if (type == "path")
         {
             // Each letter's middle on the guide's line, as far along as the
@@ -407,6 +487,8 @@ std::vector<Change> apply(const std::vector<Applied>& list, const std::vector<Le
             const double moveX = param(applied, "moveX", frame, 0.0);
             const double moveY = param(applied, "moveY", frame, -20.0);
             const double turn = param(applied, "turn", frame, 0.0);
+            const double turnX = param(applied, "turnX", frame, 0.0);
+            const double turnY = param(applied, "turnY", frame, 0.0);
             const double scale = param(applied, "scale", frame, 100.0) / 100.0;
             const double opacity = param(applied, "opacity", frame, 100.0) / 100.0;
             const double tracking = param(applied, "tracking", frame, 0.0);
@@ -454,6 +536,8 @@ std::vector<Change> apply(const std::vector<Applied>& list, const std::vector<Le
                 changes[i].x += moveX * s;
                 changes[i].y += moveY * s;
                 changes[i].rotation += turn * s;
+                changes[i].turnX += turnX * s;
+                changes[i].turnY += turnY * s;
                 changes[i].scale *= 1.0 + (scale - 1.0) * s;
                 changes[i].alpha *= 1.0 + (opacity - 1.0) * s;
                 changes[i].x += carried;

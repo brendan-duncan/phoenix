@@ -5166,7 +5166,9 @@ std::vector<fla::StaticText*> MainWindow::bakedText(const fla::StaticText& text,
             QTransform local;
             local.translate(cx + change.x, cy + change.y);
             local.rotate(change.rotation);
-            local.scale(change.scale, change.scale);
+            // A turn in depth flattens the letter the way it would look face on.
+            local.scale(change.scale * std::cos(change.turnY * 3.14159265358979323846 / 180.0),
+                change.scale * std::cos(change.turnX * 3.14159265358979323846 / 180.0));
             local.translate(-cx, -cy);
             const QTransform placed = local * QTransform(text.transform.m11, text.transform.m12, text.transform.m21,
                                                   text.transform.m22, text.transform.tx, text.transform.ty);

@@ -872,6 +872,14 @@ void drawAnimated(QPainter& painter, const fla::StaticText& text, const std::vec
                 painter.save();
                 painter.translate(middle.x() + change.x, middle.y() + change.y);
                 painter.rotate(change.rotation);
+                // Turned in depth, seen in perspective from in front.
+                if (change.turnX != 0.0 || change.turnY != 0.0)
+                {
+                    QTransform depth;
+                    depth.rotate(change.turnX, Qt::XAxis, 1024.0);
+                    depth.rotate(change.turnY, Qt::YAxis, 1024.0);
+                    painter.setTransform(depth, true);
+                }
                 painter.scale(change.scale, change.scale);
                 painter.translate(-middle);
                 painter.setOpacity(opacity * std::min(1.0, change.alpha));

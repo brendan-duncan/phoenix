@@ -71,11 +71,16 @@ struct Change
     unsigned tintColor = 0;
     /// A blur over the letter, in pixels.
     double blur = 0.0;
+    /// Turns in depth, in degrees: about the letter's level line (tipping
+    /// it toward or away) and about its upright line (swinging it round),
+    /// seen in perspective.
+    double turnX = 0.0;
+    double turnY = 0.0;
 
     bool none() const
     {
         return x == 0 && y == 0 && rotation == 0 && scale == 1.0 && alpha == 1.0 && character == 0 && tint == 0.0 &&
-            blur == 0.0;
+            blur == 0.0 && turnX == 0.0 && turnY == 0.0;
     }
 };
 
@@ -84,6 +89,20 @@ struct Change
 /// field is on.
 std::vector<Change> apply(const std::vector<behaviors::Applied>& list, const std::vector<Letter>& letters, int frame,
     int start, double frameRate, const PathInText* path = nullptr);
+
+/// The words a Source Text animator on \a list gives the field on
+/// \a frame (its Text setting, keyed to change); false when there is none.
+bool sourceTextOf(const std::vector<behaviors::Applied>& list, int frame, std::string& text);
+
+/// Letter animations made of animators, ready to add: Typewriter, Pop In,
+/// Flip In and the rest.
+struct Preset
+{
+    std::string name;
+    std::string description;
+    std::vector<behaviors::Applied> animators;
+};
+const std::vector<Preset>& presets();
 
 } // namespace textanim
 

@@ -87,6 +87,27 @@ BehaviorsPanel::BehaviorsPanel(BehaviorsLinks links, QWidget* parent)
             const std::string id = definition.id;
             connect(action, &QAction::triggered, this, [this, id]() { add(id); });
         }
+        // Letter animations ready made, of one or more animators.
+        if (mode() == Mode::Texts)
+        {
+            menu->addSeparator();
+            QMenu* presets = menu->addMenu("Presets");
+            presets->setToolTipsVisible(true);
+            for (const fla::textanim::Preset& preset : fla::textanim::presets())
+            {
+                QAction* action = presets->addAction(QString::fromStdString(preset.name));
+                action->setToolTip(QString::fromStdString(preset.description));
+                action->setStatusTip(QString::fromStdString(preset.description));
+                const std::vector<fla::behaviors::Applied> animators = preset.animators;
+                connect(action, &QAction::triggered, this, [this, animators]() {
+                    edit("Add Letter Animation", [&animators](std::vector<fla::behaviors::Applied>& list) {
+                        list.insert(list.end(), animators.begin(), animators.end());
+                    });
+                    refresh();
+                    _list->setCurrentRow(_list->count() - 1);
+                });
+            }
+        }
         // Behaviors of one's own: a new one to write, and where they are.
         if (mode() == Mode::Behaviors)
         {

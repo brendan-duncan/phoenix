@@ -4210,6 +4210,15 @@ void PhoenixView::drawElement(QPainter& painter, const fla::Element* element, co
         if (!shown && text->textType != fla::StaticText::TextType::Static && !text->instanceName.empty())
             if (const std::string* value = templateValue(text->instanceName))
                 shown = *value;
+        // Source Text: the words keyed for this frame.
+        if (!shown && fla::textanim::any(*text))
+            if (const fla::Frame* keyframe = owningFrame(text))
+            {
+                std::string words;
+                if (fla::textanim::sourceTextOf(fla::textanim::of(*text), keyframe->index + std::max(0, _elapsed), words) &&
+                    !words.empty())
+                    shown = words;
+            }
         if (shown)
         {
             fla::StaticText replaced(*text);
@@ -4217,7 +4226,7 @@ void PhoenixView::drawElement(QPainter& painter, const fla::Element* element, co
             run.text = *shown;
             replaced.runs = {run};
             if (fla::textanim::any(replaced))
-                TextLayout::drawAnimated(painter, replaced, textChanges(replaced));
+                TextLayout::drawAnimated(painter, replaced, textChanges(replaced, -1, text));
             else
                 TextLayout::draw(painter, replaced);
         }
@@ -5454,9 +5463,9 @@ void PhoenixView::setTemplateValues(const fla::templates::Values& values)
     update();
 }
 
-std::vector<fla::textanim::Change> PhoenixView::textChanges(const fla::StaticText& text, int at)
+std::vector<fla::textanim::Change> PhoenixView::textChanges(const fla::StaticText& text, int at, const fla::StaticText* owner)
 {
-    const fla::Frame* frame = owningFrame(&text);
+    const fla::Frame* frame = owningFrame(owner ? owner : &text);
     if (at < 0)
         at = (frame ? frame->index : 0) + std::max(0, _elapsed);
     // Counted from the start of the run of keyframes with a text in its
@@ -5465,7 +5474,7 @@ std::vector<fla::textanim::Change> PhoenixView::textChanges(const fla::StaticTex
     const auto* layer = frame ? dynamic_cast<const fla::Layer*>(frame->parent) : nullptr;
     if (frame && layer)
     {
-        const auto place = std::find(frame->elements.begin(), frame->elements.end(), &text);
+        const auto place = std::find(frame->elements.begin(), frame->elements.end(), owner ? owner : &text);
         const size_t index = static_cast<size_t>(place - frame->elements.begin());
         for (bool found = true; found && start > 0;)
         {

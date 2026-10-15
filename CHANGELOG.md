@@ -4,6 +4,7 @@ What changed in each release of Phoenix, newest first.
 
 ## 0.12.0 (Unreleased)
 
+- Letter animators: Flip In, Blur In and Source Text (keyed words); Animate Letters tips and swings letters in depth; Add Animator > Presets
 - Shape operators: Twist, and Merge Paths (add, subtract, intersect, exclude)
 - Masks: Mask Edge feathers, grows, shrinks or inverts a mask; Layer Mode sets a layer to Stencil, Silhouette or Preserve Transparency
 - Adjustment layers: 25 new effects: directional, radial and lens blur, Glow, Gradient Ramp, 4-Color Gradient, Fill, Outline, Fractal Noise, Bulge, Ripple, Bend, Displacement Map, Levels, Curves, Hue/Saturation, Tritone, Vignette, Grain, Chromatic Aberration, and linear, radial, blinds and dissolve wipes

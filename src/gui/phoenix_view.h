@@ -324,7 +324,9 @@ public:
     std::vector<fla::Shape*> bakedShape(const fla::Shape& shape, int at);
     /// What \a text's animators do to each of its letters on frame \a at of
     /// its timeline (the frame drawn when -1).
-    std::vector<fla::textanim::Change> textChanges(const fla::StaticText& text, int at = -1);
+    /// \a owner, when given, is the field \a text stands in for (a template's
+    /// words in a copy), for the frame it is on.
+    std::vector<fla::textanim::Change> textChanges(const fla::StaticText& text, int at = -1, const fla::StaticText* owner = nullptr);
 
     /// Onion skinning: \a before and \a after frames either side of the
     /// playhead drawn faded under it, those before tinted blue and those
