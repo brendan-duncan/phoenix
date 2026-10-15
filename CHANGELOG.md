@@ -2,7 +2,7 @@
 
 What changed in each release of Phoenix, newest first.
 
-## 0.13.0 (Unreleased)
+## 0.13.0
 
 - Eight new motion graphics lessons: motion blur and echo, glow and wipes, dashes and text on a path, a sound visualizer, controls on a null, 3D cards in the light, Motion Sketch, and a template that fits
 - Vignette darkens the edges of the whole picture, empty stage included, not just what is drawn
