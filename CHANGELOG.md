@@ -2,7 +2,9 @@
 
 What changed in each release of Phoenix, newest first.
 
-## 0.10.0 (Unreleased)
+## 0.12.0 (Unreleased)
+
+## 0.11.0
 
 - Commands > Open Claude Code in a Terminal Window is gone: Claude Code opens in its panel (Commands > Open Claude Code), which can float on its own
 - Asset Warp: turned pins, frozen pins and bones between pins in files are drawn as they bend the art; with the Asset Warp tool, Shift-drag turns a pin, F freezes it and Ctrl-click joins two pins with a bone
@@ -28,6 +30,9 @@ What changed in each release of Phoenix, newest first.
 - Behaviors: Repeat along a Path and Follow Path place copies, or the instance, along the line on a motion guide
 - Behaviors: settings can be keyed over time; Repeat in a Circle, Repeat in a Line or Grid and Stagger draw copies; Bake to Keyframes, and File > Export > Export FLA for Other Apps writes a copy with behaviors baked
 - Behaviors: Window > Behaviors gives symbol instances motion worked out every frame, with no keyframes: Wiggle, Oscillate, Spin, Pulse, Fade In and Out, Blink and Follow with Lag; your own behaviors are JavaScript files in the Behaviors folder
+
+## 0.10.0
+
 - Default keys follow the standard FLA-editing layout: B for the Brush and Shift+B for the Nib Brush; new Modify > Align and Text menus (Ctrl+Alt+1 to 8, Ctrl+Shift+B/I/L/C/R/J); Close All, Find Next, Hide Edges, Show Shape Hints and Phoenix Help (F1); keys for Pasteboard and Snap to Objects
 - The Update Ready message shows over the start screen instead of hiding behind it
 - Python scripts can listen for events with fl.addEventListener, as JSFL scripts do
