@@ -13,6 +13,14 @@
 #include "../data/shape.h"
 
 #include <QCheckBox>
+#include <QDesktopServices>
+#include <QDir>
+#include <QFile>
+#include <QFileInfo>
+#include <QInputDialog>
+#include <QMessageBox>
+#include <QRegularExpression>
+#include <QUrl>
 #include <QComboBox>
 #include <QDoubleSpinBox>
 #include <QFormLayout>
@@ -64,6 +72,7 @@ BehaviorsPanel::BehaviorsPanel(BehaviorsLinks links, QWidget* parent)
     _list->setToolTip("The behaviors on the selection, applied top to bottom; the box turns one on or off");
 
     _add = new QToolButton(this);
+    _add->setObjectName("behaviorsAdd");
     _add->setText("Add Behavior");
     _add->setToolButtonStyle(Qt::ToolButtonTextOnly);
     _add->setPopupMode(QToolButton::InstantPopup);
@@ -77,6 +86,19 @@ BehaviorsPanel::BehaviorsPanel(BehaviorsLinks links, QWidget* parent)
             action->setStatusTip(QString::fromStdString(definition.description));
             const std::string id = definition.id;
             connect(action, &QAction::triggered, this, [this, id]() { add(id); });
+        }
+        // Behaviors of one's own: a new one to write, and where they are.
+        if (mode() == Mode::Behaviors)
+        {
+            menu->addSeparator();
+            QAction* write = menu->addAction("New Behavior...");
+            write->setStatusTip("Write a behavior of your own in JavaScript, starting from an example");
+            connect(write, &QAction::triggered, this, &BehaviorsPanel::newBehavior);
+            QAction* folder = menu->addAction("Open Behaviors Folder");
+            folder->setStatusTip("Show the folder your own behaviors are kept in");
+            connect(folder, &QAction::triggered, this, []() {
+                QDesktopServices::openUrl(QUrl::fromLocalFile(BehaviorLibrary::folder()));
+            });
         }
         menu->setToolTipsVisible(true);
     });
@@ -94,6 +116,7 @@ BehaviorsPanel::BehaviorsPanel(BehaviorsLinks links, QWidget* parent)
     connect(_down, &QToolButton::clicked, this, [this]() { move(1); });
     connect(_remove, &QToolButton::clicked, this, &BehaviorsPanel::remove);
     _bake = new QToolButton(this);
+    _bake->setObjectName("behaviorsBake");
     _bake->setText("Bake");
     _bake->setToolTip("Bake to Keyframes: leave the selected instances' behaviors as keyframes, a keyframe a frame, "
                       "their copies as instances of their own");
@@ -588,4 +611,57 @@ void BehaviorsPanel::toggleKey(int row, const std::string& name)
 int BehaviorsPanel::frame() const
 {
     return _links.currentFrame ? _links.currentFrame() : 0;
+}
+
+void BehaviorsPanel::newBehavior()
+{
+    bool ok = false;
+    const QString name = QInputDialog::getText(this, "New Behavior", "Name:", QLineEdit::Normal, "My Behavior", &ok).trimmed();
+    if (!ok || name.isEmpty())
+        return;
+    // The file is named after it, in letters and digits.
+    QString base = name;
+    base.remove(QRegularExpression("[^A-Za-z0-9_ -]"));
+    base = base.simplified().replace(' ', '-');
+    if (base.isEmpty())
+        base = "behavior";
+    const QString path = QDir(BehaviorLibrary::folder()).filePath(base + ".js");
+    if (!QFileInfo::exists(path))
+    {
+        QString quoted = name;
+        quoted.replace("\\", "\\\\").replace("\"", "\\\"");
+        const QString source = QString(
+            "// A behavior of your own. Phoenix calls evaluate for each frame the\n"
+            "// instance is on, and adds what it returns to the keyed motion: x and y in\n"
+            "// pixels, rotation in degrees, scale and alpha as factors, frame to run a\n"
+            "// graphic's loop on. Save, and the behavior is in Add Behavior at once.\n"
+            "behavior({\n"
+            "    name: \"%1\",\n"
+            "    description: \"Drifts sideways and bobs up and down.\",\n"
+            "    params: {\n"
+            "        speed: { label: \"Speed (pixels a second)\", value: 40, min: -500, max: 500 },\n"
+            "        bob: { label: \"Bob (pixels)\", value: 4, min: 0, max: 50 }\n"
+            "    },\n"
+            "    evaluate: function (ctx, p) {\n"
+            "        return {\n"
+            "            x: p.speed * (ctx.frame - ctx.start) / ctx.fps,\n"
+            "            y: Math.sin(ctx.time * 2) * p.bob\n"
+            "        };\n"
+            "    }\n"
+            "});\n").arg(quoted);
+        QFile out(path);
+        if (!out.open(QIODevice::WriteOnly | QIODevice::Truncate))
+        {
+            QMessageBox::warning(this, "New Behavior", QString("Could not write %1.").arg(QDir::toNativeSeparators(path)));
+            return;
+        }
+        out.write(source.toUtf8());
+        out.close();
+        BehaviorLibrary::instance().reload();
+        refresh();
+    }
+    if (_links.openScript)
+        _links.openScript(path);
+    else
+        QDesktopServices::openUrl(QUrl::fromLocalFile(path));
 }

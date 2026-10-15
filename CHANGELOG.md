@@ -4,7 +4,9 @@ What changed in each release of Phoenix, newest first.
 
 ## 0.10.0 (Unreleased)
 
-- Symbol templates: named dynamic text and movie clips in a symbol become fields each instance fills with its own words and colors (Modify > Symbol > Template Fields); File > Export > Render from Data, or Phoenix --render-csv, renders a movie for each row of a CSV file
+- Eight new lessons in Help > Tutorials: behaviors, writing your own behavior, a crowd from one cycle, draw-on lines, an animated title, particles, track mattes and adjustment layers, and lower thirds from a template
+- Add Behavior > New Behavior... starts a behavior of your own from an example and opens it in the script editor; Open Behaviors Folder shows where they are kept
+- Symbol templates: named dynamic text and movie clips in a symbol become fields each instance fills with its own words and colors (Modify > Symbol > Template Fields); File > Export > Render from Data, or Phoenix render --data, renders a movie for each row of a CSV file
 - Dynamic and input text no longer show their dotted box in exported images and movies
 - Behaviors: Follow Sound moves, scales, turns, fades or changes the frame of an instance with how loud the scene's sound is; your own behaviors can ask ctx.loudness()
 - Track mattes: a layer can show through the layer above it, by its alpha or its lightness, soft edges and all; adjustment layers blur, color-correct or tint everything below them, with keyable settings

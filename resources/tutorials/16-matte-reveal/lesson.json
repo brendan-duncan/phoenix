@@ -1,0 +1,74 @@
+{
+  "title": "Track mattes and adjustment layers",
+  "summary": "Reveal a title through an animated track matte, then soften the picture with an adjustment layer.",
+  "minutes": 7,
+  "order": 16,
+  "guide": "behaviors.html",
+  "start": {
+    "document": "start"
+  },
+  "steps": [
+    {
+      "title": "Welcome",
+      "text": "<p>A <b>track matte</b> shows a layer only through the layer above it. Unlike a mask it can be soft, and it shows while you edit. An <b>adjustment layer</b> changes everything below it: blur, color, tint.</p><p>The <i>Reveal</i> layer holds a black bar that slides across the stage; under it is the <i>Title</i>.</p>"
+    },
+    {
+      "title": "Play it",
+      "text": "<p>Press <kbd>Enter</kbd>, or click the play button in the timeline header. The black bar slides across the title.</p>",
+      "target": "widget:timelinePlay",
+      "wait": {
+        "playing": true
+      }
+    },
+    {
+      "title": "Use it as a matte",
+      "text": "<p>Press <kbd>Enter</kbd> again to stop. Right-click the <i>Title</i> layer's name and choose <b>Track Matte &gt; Alpha Matte</b>.</p><p>The bar above is no longer drawn: the title shows only where the bar is.</p>",
+      "target": "layer:Title",
+      "wait": {
+        "command": "Track Matte"
+      }
+    },
+    {
+      "title": "Play it",
+      "text": "<p>Press <kbd>Enter</kbd>, or click the play button in the timeline header. The title is wiped on as the bar slides in.</p>",
+      "target": "widget:timelinePlay",
+      "wait": {
+        "playing": true
+      }
+    },
+    {
+      "title": "Add a layer",
+      "text": "<p>Press <kbd>Enter</kbd> again to stop. Click the <i>Reveal</i> layer's name, then click the <b>New Layer</b> button under the layers, or choose <b>Insert &gt; Timeline &gt; Layer</b>. The new layer goes above it, on top.</p>",
+      "wait": {
+        "command": "New Layer"
+      }
+    },
+    {
+      "title": "Make it an adjustment layer",
+      "text": "<p>Right-click the new layer's name and choose <b>Adjustment Layer</b>. Everything below it blurs, and the Behaviors panel shows its <b>Blur</b> effect.</p>",
+      "wait": {
+        "command": "Adjustment Layer"
+      }
+    },
+    {
+      "title": "Set the blur",
+      "text": "<p>Click an empty part of the stage so nothing is selected. Set <b>Radius (pixels)</b> to 2 for a soft glow, or key it from 20 down to 0 for a title that comes into focus.</p>",
+      "target": "dock:Behaviors",
+      "wait": {
+        "command": "Behavior Settings"
+      }
+    },
+    {
+      "title": "Color too",
+      "text": "<p>Click <b>Add Effect</b> and choose <b>Tint</b> or <b>Color Correction</b>: a night look, a flashback, a faded picture. Draw a shape on the adjustment layer and the effects apply only under it.</p>",
+      "target": "widget:behaviorsAdd",
+      "wait": {
+        "command": "Add Effect"
+      }
+    },
+    {
+      "title": "Well done",
+      "text": "<p>You revealed a title through a track matte and changed the picture with an adjustment layer.</p><p>A <b>Luma Matte</b> uses the light of the layer above instead of its shape: a soft gradient makes a soft wipe.</p>"
+    }
+  ]
+}

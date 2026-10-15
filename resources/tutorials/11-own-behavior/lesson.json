@@ -1,0 +1,59 @@
+{
+  "title": "Write your own behavior",
+  "summary": "Write a behavior in JavaScript from an example, see it update as you save, and give it settings of its own.",
+  "minutes": 10,
+  "order": 11,
+  "guide": "behaviors.html",
+  "start": {
+    "document": "start"
+  },
+  "steps": [
+    {
+      "title": "Welcome",
+      "text": "<p>The behaviors in the Behaviors panel are small JavaScript files, and you can write your own the same way: a name, its settings, and a function that says how to move the instance on each frame.</p><p>You don't need to know much JavaScript; you will start from a working example. Click <b>Next</b> to begin.</p>"
+    },
+    {
+      "title": "Select the ball",
+      "text": "<p>Press <kbd>V</kbd> for the Selection tool and click the ball on the stage.</p>",
+      "target": "stage:160,320,80,80",
+      "wait": {
+        "selection": "instance"
+      }
+    },
+    {
+      "title": "Open the Behaviors panel",
+      "text": "<p>Choose <b>Window &gt; Behaviors</b> if it is not showing. It lists what is on the selection and the settings of each.</p>",
+      "target": "dock:Behaviors"
+    },
+    {
+      "title": "Start a new behavior",
+      "text": "<p>Click <b>Add Behavior</b> and choose <b>New Behavior...</b> at the bottom. Call it <i>Drift</i>.</p><p>Phoenix writes an example behavior into your Behaviors folder and opens it in the script editor.</p>",
+      "target": "widget:behaviorsAdd"
+    },
+    {
+      "title": "Read the example",
+      "text": "<p>The file calls <code>behavior({...})</code> with:</p><ul><li><code>name</code> and <code>description</code>, as the panel shows them;</li><li><code>params</code>, its settings, each becoming a slider;</li><li><code>evaluate(ctx, p)</code>, run for each frame: <code>ctx</code> says which frame and time it is, <code>p</code> holds the settings.</li></ul><p>It returns what to add to the instance: here <code>x</code> grows with time, and <code>y</code> bobs up and down.</p>"
+    },
+    {
+      "title": "Add it",
+      "text": "<p>Back in Phoenix, click <b>Add Behavior</b> and choose <b>Drift</b>, now in the list. Play: the ball drifts right, bobbing.</p>",
+      "target": "widget:behaviorsAdd",
+      "wait": {
+        "command": "Add Behavior"
+      }
+    },
+    {
+      "title": "Change the code",
+      "text": "<p>In the script editor, change <code>Math.sin(ctx.time * 2)</code> to <code>Math.sin(ctx.time * 6)</code> and save with <kbd>Ctrl</kbd>+<kbd>S</kbd>.</p><p>Phoenix reads the file again as soon as it is saved: the ball bobs faster. An error shows in the Output panel, and the ball stays where its keys put it.</p>"
+    },
+    {
+      "title": "Give it a setting",
+      "text": "<p>Add a setting for how fast it bobs. In <code>params</code>, after <code>bob</code>, add:</p><pre>rate: { label: \"Bobs per second\", value: 1, min: 0, max: 10, step: 0.1 }</pre><p>and use it: <code>Math.sin(ctx.time * 2 * Math.PI * p.rate)</code>. Save, and a <b>Bobs per second</b> slider appears in the panel.</p>",
+      "target": "dock:Behaviors"
+    },
+    {
+      "title": "Well done",
+      "text": "<p>You wrote a behavior, changed it live, and gave it a setting.</p><p><code>ctx</code> has more: <code>random()</code> and <code>noise()</code> for steady randomness, <code>keyedAt()</code> for the keyed motion on other frames, <code>other()</code> for other instances, <code>loudness()</code> for the soundtrack. Return <code>{copies: [...]}</code> to make copies. See <b>Help</b> and the <i>Behaviors</i> page for the whole list. Your behaviors are in <b>Add Behavior &gt; Open Behaviors Folder</b>.</p>"
+    }
+  ]
+}

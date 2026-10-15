@@ -1,0 +1,61 @@
+{
+  "title": "An animated title",
+  "summary": "Bring a title in letter by letter with letter animators, keep it moving with a wave, and keep the text editable.",
+  "minutes": 6,
+  "order": 14,
+  "guide": "behaviors.html",
+  "start": {
+    "document": "start"
+  },
+  "steps": [
+    {
+      "title": "Welcome",
+      "text": "<p>Letter animators move a text field's letters one by one while it stays text you can edit: type a new word and the animation follows.</p>"
+    },
+    {
+      "title": "Select the title",
+      "text": "<p>Press <kbd>V</kbd> and click the title.</p>",
+      "target": "stage:240,280,800,140",
+      "wait": {
+        "selection": "text"
+      }
+    },
+    {
+      "title": "Open the Behaviors panel",
+      "text": "<p>Choose <b>Window &gt; Behaviors</b> if it is not showing. It lists what is on the selection and the settings of each.</p>",
+      "target": "dock:Behaviors"
+    },
+    {
+      "title": "Cascade it in",
+      "text": "<p>With text selected the button reads <b>Add Animator</b>. Click it and choose <b>Cascade In</b>.</p>",
+      "target": "widget:behaviorsAdd",
+      "wait": {
+        "command": "Add Letter Animator"
+      }
+    },
+    {
+      "title": "Play it",
+      "text": "<p>Press <kbd>Enter</kbd>, or click the play button in the timeline header. Each letter slides in and fades up, a little after the one before.</p>",
+      "target": "widget:timelinePlay",
+      "wait": {
+        "playing": true
+      }
+    },
+    {
+      "title": "Keep it moving",
+      "text": "<p>Add <b>Wave</b> too. Once in, the letters ride a wave for as long as the title shows.</p>",
+      "target": "widget:behaviorsAdd",
+      "wait": {
+        "command": "Add Letter Animator"
+      }
+    },
+    {
+      "title": "Change the words",
+      "text": "<p>Press <kbd>T</kbd> for the Text tool, click in the title and change the words. Press <kbd>Esc</kbd> and play again: the new words animate the same way.</p>"
+    },
+    {
+      "title": "Well done",
+      "text": "<p>You animated a title letter by letter and kept it editable.</p><p>Try <b>Typewriter</b>, <b>Scramble</b> or <b>Animate Letters</b>, whose range can move, turn, scale and fade any part of the text. <b>Bake</b> makes a text field of each letter, a frame each.</p>"
+    }
+  ]
+}

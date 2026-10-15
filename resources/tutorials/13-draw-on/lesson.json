@@ -1,0 +1,89 @@
+{
+  "title": "Draw-on lines",
+  "summary": "Make a line draw itself on with Trim Paths, keying its End, then make it boil with Wiggle Path.",
+  "minutes": 7,
+  "order": 13,
+  "guide": "behaviors.html",
+  "start": {
+    "document": "start"
+  },
+  "steps": [
+    {
+      "title": "Welcome",
+      "text": "<p>Shape operators change a drawn shape each frame. <b>Trim Paths</b> draws only part of a line: animate it and the line draws itself on, like a signature or a route on a map.</p>"
+    },
+    {
+      "title": "Select the line",
+      "text": "<p>Press <kbd>V</kbd> and click the blue line. It is a drawing object, so one click picks it whole.</p>",
+      "target": "stage:200,240,880,240",
+      "wait": {
+        "selection": "shape"
+      }
+    },
+    {
+      "title": "Open the Behaviors panel",
+      "text": "<p>Choose <b>Window &gt; Behaviors</b> if it is not showing. It lists what is on the selection and the settings of each.</p>",
+      "target": "dock:Behaviors"
+    },
+    {
+      "title": "Add Trim Paths",
+      "text": "<p>With a shape selected the button reads <b>Add Operator</b>. Click it and choose <b>Trim Paths</b>.</p>",
+      "target": "widget:behaviorsAdd",
+      "wait": {
+        "command": "Add Operator"
+      }
+    },
+    {
+      "title": "Go to frame 1",
+      "text": "<p>Click frame 1 on the <i>Line</i> layer.</p>",
+      "target": "frame:Line:1",
+      "wait": {
+        "frame": 1
+      }
+    },
+    {
+      "title": "Key the End at 0",
+      "text": "<p>Set <b>End (percent)</b> to 0: the line disappears. Then click the diamond beside it to key it on this frame.</p><p>A keyed setting changes over time: Phoenix goes smoothly from each key to the next.</p>",
+      "target": "label:Behaviors/End (percent)",
+      "wait": {
+        "command": "Key Behavior Setting"
+      }
+    },
+    {
+      "title": "Go to frame 36",
+      "text": "<p>Click frame 36 on the <i>Line</i> layer.</p>",
+      "target": "frame:Line:36",
+      "wait": {
+        "frame": 36
+      }
+    },
+    {
+      "title": "End at 100",
+      "text": "<p>Set <b>End (percent)</b> to 100. Since the setting is keyed, this makes a second key here.</p>",
+      "target": "label:Behaviors/End (percent)",
+      "wait": {
+        "command": "Behavior Settings"
+      }
+    },
+    {
+      "title": "Play it",
+      "text": "<p>Press <kbd>Enter</kbd>, or click the play button in the timeline header. The line draws itself on from left to right.</p>",
+      "target": "widget:timelinePlay",
+      "wait": {
+        "playing": true
+      }
+    },
+    {
+      "title": "Make it boil",
+      "text": "<p>Click <b>Add Operator</b> and choose <b>Wiggle Path</b>, then tick <b>Change on whole frames only</b>. The line shakes a little each frame, like hand-drawn line work.</p>",
+      "target": "widget:behaviorsAdd",
+      "wait": {
+        "command": "Add Operator"
+      }
+    },
+    {
+      "title": "Well done",
+      "text": "<p>You keyed Trim Paths to draw a line on and made it boil. Key <b>Start</b> after it to draw it off again, or use <b>Offset</b> to send a short dash along the line.</p><p><b>Bake</b> turns operators into drawing objects, a frame each, when you need plain frames.</p>"
+    }
+  ]
+}

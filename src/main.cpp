@@ -140,7 +140,6 @@ int main(int argc, char *argv[])
     // folder rather than from Windows, and Qt's own folder has none: text
     // would come out as empty boxes. Point it at the system's.
     if (argc > 1 && (std::strcmp(argv[1], "--export-movie") == 0 || std::strcmp(argv[1], "--export-image") == 0 ||
-                     std::strcmp(argv[1], "--render-csv") == 0 ||
                      std::strcmp(argv[1], "--roundtrip") == 0 || std::strcmp(argv[1], "run-script") == 0) &&
         qEnvironmentVariableIsEmpty("QT_QPA_FONTDIR"))
     {
@@ -342,15 +341,6 @@ int main(int argc, char *argv[])
     {
         MainWindow window(QString(), nullptr, false);
         return window.exportFromCommandLine(arguments.at(2), arguments.at(3), true);
-    }
-
-    // Phoenix --render-csv <document> <data.csv> <folder> [mp4|mov|gif|png]:
-    // a movie a row, its template fields filled from the row.
-    if ((arguments.size() == 5 || arguments.size() == 6) && arguments.at(1) == "--render-csv")
-    {
-        MainWindow window(QString(), nullptr, false);
-        return window.renderDataFromCommandLine(arguments.at(2), arguments.at(3), arguments.at(4),
-            arguments.size() == 6 ? arguments.at(5) : QString("mp4"));
     }
 
     if (arguments.size() == 4 && arguments.at(1) == "--export-movie")

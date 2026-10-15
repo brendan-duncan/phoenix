@@ -1,0 +1,52 @@
+{
+  "title": "Lower thirds from a template",
+  "summary": "Fill in a lower-third template's name, role and color for each instance, and render one for each row of a spreadsheet.",
+  "minutes": 7,
+  "order": 17,
+  "guide": "symbols.html",
+  "start": {
+    "document": "start"
+  },
+  "steps": [
+    {
+      "title": "Welcome",
+      "text": "<p><i>Lower Third</i> is a template: a symbol whose named parts each instance can fill in. Its dynamic text fields <i>name</i> and <i>role</i> are text fields, and its movie clip <i>bar</i> is a color field.</p>"
+    },
+    {
+      "title": "Select the lower third",
+      "text": "<p>Press <kbd>V</kbd> for the Selection tool and click the lower third on the stage.</p>",
+      "target": "stage:80,560,520,104",
+      "wait": {
+        "selection": "instance"
+      }
+    },
+    {
+      "title": "Fill it in",
+      "text": "<p>Choose <b>Modify &gt; Symbol &gt; Template Fields...</b> (also on the right-click menu). Type a name and a role, set <b>bar</b> to <code>#30A060</code>, and click <b>OK</b>.</p>",
+      "target": "menu:Modify/Symbol/Template Fields",
+      "wait": {
+        "command": "Template Fields"
+      }
+    },
+    {
+      "title": "Another one",
+      "text": "<p>Press <kbd>Ctrl</kbd>+<kbd>D</kbd> to duplicate the instance, drag the copy up the stage, and give it other words and another color. The symbol is the same; each instance keeps its own.</p>",
+      "wait": {
+        "command": "Template Fields"
+      }
+    },
+    {
+      "title": "Edit the design once",
+      "text": "<p>Double-click either instance to edit the symbol in place and change its design: move the bar, change the font. Both lower thirds change, each keeping its own words. Go back to the scene when done.</p>"
+    },
+    {
+      "title": "Render from data",
+      "text": "<p>For many at once, save a spreadsheet as CSV: the first row names the fields (<code>file,name,role,bar</code>), and each row after it is one lower third. <b>File &gt; Export &gt; Render from Data...</b> renders the movie once a row.</p>",
+      "target": "menu:File/Export/Render from Data"
+    },
+    {
+      "title": "Well done",
+      "text": "<p>You filled in a template two ways and saw how one design serves them all. Add behaviors or letter animators to the template, and every version animates the same way. From the command line, <code>Phoenix render --data</code> renders a spreadsheet without opening a window.</p>"
+    }
+  ]
+}

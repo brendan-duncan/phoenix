@@ -42,6 +42,8 @@ struct BehaviorsLinks
     std::function<int()> currentFrame;
     /// Bake to Keyframes for the selected instances.
     std::function<void()> bake;
+    /// Opens a behavior file to edit.
+    std::function<void(const QString& path)> openScript;
     /// The names of the instances on the timeline being edited, and of the
     /// master controllers, for settings that name one.
     std::function<QStringList()> objectNames;
@@ -92,6 +94,8 @@ private:
     void add(const std::string& id);
     void move(int by);
     void remove();
+    /// A behavior file of one's own, from an example, opened to edit.
+    void newBehavior();
     void setParam(int row, const std::string& name, const std::string& value, bool merge);
     /// Keys the setting on the frame shown, or takes its key there away.
     void toggleKey(int row, const std::string& name);

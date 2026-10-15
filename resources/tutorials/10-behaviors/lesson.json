@@ -1,0 +1,86 @@
+{
+  "title": "Motion with behaviors",
+  "summary": "Make a logo pulse, wiggle and multiply with behaviors, change them as it plays, and bake them into keyframes.",
+  "minutes": 8,
+  "order": 10,
+  "guide": "behaviors.html",
+  "start": {
+    "document": "start"
+  },
+  "steps": [
+    {
+      "title": "Welcome",
+      "text": "<p>Behaviors give an instance motion that Phoenix works out every frame, with no keyframes: a pulse, a wiggle, a ring of copies. You choose them and set them; there is no code to write.</p><p>The document holds a star logo, a graphic symbol, on a timeline three seconds long. Click <b>Next</b> to begin.</p>"
+    },
+    {
+      "title": "Select the logo",
+      "text": "<p>Press <kbd>V</kbd> for the Selection tool and click the logo on the stage.</p>",
+      "target": "stage:540,260,200,200",
+      "wait": {
+        "selection": "instance"
+      }
+    },
+    {
+      "title": "Open the Behaviors panel",
+      "text": "<p>Choose <b>Window &gt; Behaviors</b> if it is not showing. It lists what is on the selection and the settings of each.</p>",
+      "target": "dock:Behaviors"
+    },
+    {
+      "title": "Add Pulse",
+      "text": "<p>Click <b>Add Behavior</b> and choose <b>Pulse</b>. The logo now grows and shrinks like a heartbeat.</p>",
+      "target": "widget:behaviorsAdd",
+      "wait": {
+        "command": "Add Behavior"
+      }
+    },
+    {
+      "title": "Play it",
+      "text": "<p>Press <kbd>Enter</kbd>, or click the play button in the timeline header. The logo beats; there is still only one keyframe.</p>",
+      "target": "widget:timelinePlay",
+      "wait": {
+        "playing": true
+      }
+    },
+    {
+      "title": "Change it as it plays",
+      "text": "<p>Drag <b>Grows by (percent)</b> to about 40, or type it. Changes show at once, even while playing.</p><p>Press <kbd>Enter</kbd> again to stop.</p>",
+      "target": "label:Behaviors/Grows by (percent)",
+      "wait": {
+        "command": "Behavior Settings"
+      }
+    },
+    {
+      "title": "Add Wiggle",
+      "text": "<p>Click <b>Add Behavior</b> again and choose <b>Wiggle</b>. Behaviors add up, top to bottom: the logo now beats and shakes about.</p>",
+      "target": "widget:behaviorsAdd",
+      "wait": {
+        "command": "Add Behavior"
+      }
+    },
+    {
+      "title": "Repeat it in a circle",
+      "text": "<p>Add <b>Repeat in a Circle</b>. The logo becomes a ring of copies, and each copy beats and wiggles on its own, at random.</p><p>Behaviors after a repeat run once for each copy.</p>",
+      "target": "widget:behaviorsAdd",
+      "wait": {
+        "command": "Add Behavior"
+      }
+    },
+    {
+      "title": "Order matters",
+      "text": "<p>Click <b>Repeat in a Circle</b> in the list and use the up arrow to move it to the top, then play again. Now the whole ring is made first, and each copy gets its own pulse and wiggle.</p><p>The check box beside each behavior turns it off without losing its settings.</p>",
+      "target": "dock:Behaviors"
+    },
+    {
+      "title": "Bake to keyframes",
+      "text": "<p>Click <b>Bake</b>. Every frame becomes a keyframe holding the instances where the behaviors put them, and the behaviors come off. What plays does not change.</p><p>Baking is one step: <b>Edit &gt; Undo</b> brings the behaviors back.</p>",
+      "target": "widget:behaviorsBake",
+      "wait": {
+        "command": "Bake Behaviors"
+      }
+    },
+    {
+      "title": "Well done",
+      "text": "<p>You added behaviors, changed them while playing, saw how their order matters, and baked them.</p><p>Behaviors are saved with the document. <b>File &gt; Export &gt; Export FLA for Other Apps</b> writes a copy with them baked, for apps that do not know them. Next, try <i>Write your own behavior</i>.</p>"
+    }
+  ]
+}

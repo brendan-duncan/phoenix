@@ -2084,6 +2084,7 @@ void MainWindow::createPanels()
             return texts;
         };
         links.bake = [this]() { bakeSelectedBehaviors(); };
+        links.openScript = [this](const QString& path) { openScriptEditor(path); };
         links.objectNames = [this]() {
             QStringList names;
             if (fla::Timeline* timeline = editedTimeline())
@@ -7674,6 +7675,35 @@ int MainWindow::renderCommand(const QString& source, const QStringList& options)
             return 1;
         }
         goToScene(found);
+    }
+    // --data rows.csv: a movie for each row, its template fields filled
+    // from the row, into the --out folder as --format files.
+    const int dataOption = static_cast<int>(options.indexOf("--data"));
+    if (dataOption >= 0)
+    {
+        QFile file(options.value(dataOption + 1));
+        if (!file.open(QIODevice::ReadOnly))
+        {
+            std::fprintf(stderr, "Could not read %s\n", qPrintable(options.value(dataOption + 1)));
+            return 1;
+        }
+        const std::vector<fla::templates::Values> rows = fla::templates::rowsOfCsv(file.readAll().toStdString());
+        if (rows.empty())
+        {
+            std::fprintf(stderr, "%s has no rows to render\n", qPrintable(file.fileName()));
+            return 1;
+        }
+        const int outOption = static_cast<int>(options.indexOf("--out"));
+        const int formatOption = static_cast<int>(options.indexOf("--format"));
+        const QString folder = outOption >= 0 ? options.value(outOption + 1)
+                                              : QFileInfo(source).absoluteDir().filePath(QFileInfo(source).completeBaseName() + "_renders");
+        QString error;
+        if (!renderRows(rows, QFileInfo(folder).absoluteFilePath(), formatOption >= 0 ? options.value(formatOption + 1) : QString("mp4"), error))
+        {
+            std::fprintf(stderr, "%s\n", qPrintable(error));
+            return 1;
+        }
+        return 0;
     }
     const int count = std::max(1, _phoenixView->frameCount());
     MovieExportSettings settings;
@@ -14195,41 +14225,6 @@ void MainWindow::renderFromData()
         QMessageBox::warning(this, "Render from Data", error);
     else
         statusBar()->showMessage(QString("Rendered %1 movies into %2").arg(rows.size()).arg(folder), 5000);
-}
-
-int MainWindow::renderDataFromCommandLine(const QString& source, const QString& data, const QString& folder,
-    const QString& extension)
-{
-    if (!QFileInfo::exists(source))
-    {
-        std::fprintf(stderr, "No such file: %s\n", qPrintable(source));
-        return 1;
-    }
-    QFile file(data);
-    if (!file.open(QIODevice::ReadOnly))
-    {
-        std::fprintf(stderr, "Could not read %s\n", qPrintable(data));
-        return 1;
-    }
-    const std::vector<fla::templates::Values> rows = fla::templates::rowsOfCsv(file.readAll().toStdString());
-    if (rows.empty())
-    {
-        std::fprintf(stderr, "%s has no rows to render\n", qPrintable(data));
-        return 1;
-    }
-    loadFLAFile(source);
-    if (!_flaDocument || !_flaDocument->document || !_phoenixView)
-    {
-        std::fprintf(stderr, "Could not open %s\n", qPrintable(source));
-        return 1;
-    }
-    QString error;
-    if (!renderRows(rows, QFileInfo(folder).absoluteFilePath(), extension, error))
-    {
-        std::fprintf(stderr, "%s\n", qPrintable(error));
-        return 1;
-    }
-    return 0;
 }
 
 void MainWindow::swapSymbol()

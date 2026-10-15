@@ -84,11 +84,6 @@ public:
     /// sequence for a .png name, a video otherwise. Returns the process exit
     /// code, writing any error to stderr.
     int exportFromCommandLine(const QString& source, const QString& output, bool perLayer = false);
-    /// Phoenix --render-csv: \a source rendered once for each row of the
-    /// CSV file \a data, its template fields filled from the row, into
-    /// \a folder as \a extension files (mp4, mov, gif or png).
-    int renderDataFromCommandLine(const QString& source, const QString& data, const QString& folder,
-        const QString& extension);
     /// Phoenix render: frames of a document to a PNG sequence, a video or
     /// a GIF, with no window. See the command line help.
     int renderCommand(const QString& source, const QStringList& options);

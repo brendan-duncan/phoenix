@@ -1,0 +1,69 @@
+{
+  "title": "Particles",
+  "summary": "Make a fountain of sparks with the Particles behavior: how many, how fast, which way, and how they fall and fade.",
+  "minutes": 6,
+  "order": 15,
+  "guide": "behaviors.html",
+  "start": {
+    "document": "start"
+  },
+  "steps": [
+    {
+      "title": "Welcome",
+      "text": "<p>The <b>Particles</b> behavior sends out copies of an instance that are born, fly, fall, spin and fade: sparks, snow, bubbles, confetti. It plays the same every time, so it renders the same as it previews.</p>"
+    },
+    {
+      "title": "Select the spark",
+      "text": "<p>Press <kbd>V</kbd> for the Selection tool and click the spark on the stage.</p>",
+      "target": "stage:620,600,40,40",
+      "wait": {
+        "selection": "instance"
+      }
+    },
+    {
+      "title": "Open the Behaviors panel",
+      "text": "<p>Choose <b>Window &gt; Behaviors</b> if it is not showing. It lists what is on the selection and the settings of each.</p>",
+      "target": "dock:Behaviors"
+    },
+    {
+      "title": "Add Particles",
+      "text": "<p>Click <b>Add Behavior</b> and choose <b>Particles</b>.</p>",
+      "target": "widget:behaviorsAdd",
+      "wait": {
+        "command": "Add Behavior"
+      }
+    },
+    {
+      "title": "Play it",
+      "text": "<p>Press <kbd>Enter</kbd>, or click the play button in the timeline header. Sparks shoot up, slow, and fall back as they shrink and fade.</p>",
+      "target": "widget:timelinePlay",
+      "wait": {
+        "playing": true
+      }
+    },
+    {
+      "title": "A taller fountain",
+      "text": "<p>Set <b>Speed</b> to 500 and <b>Spread</b> to 20. The sparks go higher in a narrower jet.</p>",
+      "target": "label:Behaviors/Speed (pixels per second)",
+      "wait": {
+        "command": "Behavior Settings"
+      }
+    },
+    {
+      "title": "More of them",
+      "text": "<p>Set <b>Born per second</b> to 80 and <b>Life</b> to 3 seconds.</p>",
+      "target": "label:Behaviors/Born per second",
+      "wait": {
+        "command": "Behavior Settings"
+      }
+    },
+    {
+      "title": "Snow instead",
+      "text": "<p>For snow, set <b>Direction</b> to 90 (down), <b>Born across</b> to 1280, <b>Gravity</b> to 0 and <b>Turbulence</b> to 30, and move the spark to the top of the stage.</p>"
+    },
+    {
+      "title": "Well done",
+      "text": "<p>You made a fountain with one instance and one behavior. A movie clip or a graphic with a loop works as a particle too: each one plays its loop from when it is born.</p><p><b>Effector</b> after Particles changes them by where they are: brighten those near a point, say.</p>"
+    }
+  ]
+}

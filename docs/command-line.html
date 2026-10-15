@@ -56,7 +56,10 @@ Phoenix run-script check.jsfl shot_010.fla [--timeout SECONDS]</code></pre>
 Phoenix render shot.fla --out shot.mp4 --size 1920x1080
 Phoenix render shot.fla --range 12 --out still/ --transparent
 Phoenix render shot.fla --out comp/shot.mov --prores4444 --transparent
-Phoenix render shot.fla --out vector/shot.svg --link-images</code></pre>
+Phoenix render shot.fla --out vector/shot.svg --link-images
+Phoenix render lower-third.fla --data people.csv --out renders/ --format mp4</code></pre>
+
+<p id="render-csv"><code>--data</code> renders the document once for each row of a CSV file into the <code>--out</code> folder, the <a href="symbols.html#templates">template fields</a> of its symbols filled from the row: the first row names the fields. A <code>file</code> column names each output; without one they are numbered. <code>--format</code> is <code>mp4</code> (the default), <code>mov</code>, <code>gif</code> or <code>png</code> for a numbered sequence a row.</p>
 
 <p>Renders without a window, for render nodes and pipelines. The <code>--out</code> name decides what you get: a folder gets a numbered PNG sequence named after the document, and a name ending in <code>.png</code> a numbered sequence with that name; <code>.mp4</code> or <code>.mov</code> makes a video (H.264 with AAC sound unless you ask for ProRes), <code>.gif</code> an animated GIF, <code>.svg</code> a numbered SVG sequence, and <code>.swf</code> an SWF movie. Without <code>--out</code>, frames go to a folder next to the document called <code><em>name</em>_frames</code>. Every frame of the scene the document opens on is rendered at the stage's size unless you say otherwise. An option Phoenix does not know stops the render with an error.</p>
 
@@ -186,12 +189,6 @@ Phoenix --export-movie scene.fla soundtrack.wav</code></pre>
 <p>Add <code>--per-layer</code> after the output name to write a separate PNG sequence for each layer:</p>
 
 <pre><code>Phoenix --export-movie scene.fla layers.png --per-layer</code></pre>
-
-<h2 id="render-csv">Render from data</h2>
-
-<pre><code>Phoenix --render-csv lower-third.fla people.csv renders mp4</code></pre>
-
-<p>Renders the document once for each row of a CSV file into a folder, the <a href="symbols.html#templates">template fields</a> of its symbols filled from the row: the first row names the fields. A <code>file</code> column names each output; without one they are numbered. The last argument is the format: <code>mp4</code> (the default), <code>mov</code>, <code>gif</code> or <code>png</code> for a numbered sequence a row.</p>
 
 <h2>Export an image</h2>
 

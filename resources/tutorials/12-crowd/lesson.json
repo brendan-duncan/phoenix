@@ -1,0 +1,73 @@
+{
+  "title": "A crowd from one cycle",
+  "summary": "Turn one hopping cycle into a crowd with Repeat in a Line or Grid, then put them out of step with Stagger.",
+  "minutes": 7,
+  "order": 12,
+  "guide": "behaviors.html",
+  "start": {
+    "document": "start"
+  },
+  "steps": [
+    {
+      "title": "Welcome",
+      "text": "<p><i>Hopper</i> is a graphic symbol with a 12-frame hop that loops. In this lesson one instance of it becomes a whole crowd, with no copying and pasting.</p>"
+    },
+    {
+      "title": "Select the hopper",
+      "text": "<p>Press <kbd>V</kbd> for the Selection tool and click the hopper on the stage.</p>",
+      "target": "stage:120,180,80,100",
+      "wait": {
+        "selection": "instance"
+      }
+    },
+    {
+      "title": "Open the Behaviors panel",
+      "text": "<p>Choose <b>Window &gt; Behaviors</b> if it is not showing. It lists what is on the selection and the settings of each.</p>",
+      "target": "dock:Behaviors"
+    },
+    {
+      "title": "Make a grid of copies",
+      "text": "<p>Click <b>Add Behavior</b> and choose <b>Repeat in a Line or Grid</b>. Five copies stand in a row.</p>",
+      "target": "widget:behaviorsAdd",
+      "wait": {
+        "command": "Add Behavior"
+      }
+    },
+    {
+      "title": "More rows",
+      "text": "<p>Set <b>Copies across</b> to 12 and <b>Rows</b> to 5, and <b>Space across</b> to 90 and <b>Space down</b> to 80: a crowd of sixty.</p>",
+      "target": "label:Behaviors/Rows",
+      "wait": {
+        "command": "Behavior Settings"
+      }
+    },
+    {
+      "title": "Play it",
+      "text": "<p>Press <kbd>Enter</kbd>, or click the play button in the timeline header. All sixty hop together, like a drill team.</p>",
+      "target": "widget:timelinePlay",
+      "wait": {
+        "playing": true
+      }
+    },
+    {
+      "title": "Put them out of step",
+      "text": "<p>Add <b>Stagger</b>. Each copy now runs its loop a few frames after the one before.</p><p>Tick <b>In random order</b> for a crowd that hops each to its own time.</p>",
+      "target": "widget:behaviorsAdd",
+      "wait": {
+        "command": "Add Behavior"
+      }
+    },
+    {
+      "title": "Shake up the rows",
+      "text": "<p>Add <b>Wiggle</b> too, with a small amount, so no two stand in quite the same place. Each copy wiggles on its own.</p>",
+      "target": "widget:behaviorsAdd",
+      "wait": {
+        "command": "Add Behavior"
+      }
+    },
+    {
+      "title": "Well done",
+      "text": "<p>One cycle made a crowd. The same works for grass, rain, a stadium or a field of flowers: any graphic with a loop.</p><p><b>Effector</b> changes copies by where they are, for a wave through the crowd; try it next.</p>"
+    }
+  ]
+}
