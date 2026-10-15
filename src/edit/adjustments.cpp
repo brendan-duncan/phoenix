@@ -240,6 +240,9 @@ const std::vector<Definition>& definitions()
         wave.params = {number("amount", "Height (pixels)", 6, 0, 500, 0.5), number("wavelength", "Wave length (pixels)", 80, 2, 4000, 1),
             number("direction", "Direction (degrees)", 0, -360, 360, 1), number("speed", "Waves per second", 1, -30, 30, 0.1)};
         made.push_back(wave);
+        // The rest: blurs, generators, distortions, color and transitions.
+        for (const Definition& each : effects::definitions())
+            made.push_back(each);
         return made;
     }();
     return list;
@@ -264,7 +267,7 @@ Applied defaults(const std::string& id, int)
 }
 
 void apply(uint32_t* pixels, int width, int height, const std::vector<Applied>& list, int frame, double pixelsPerUnit,
-    const uint8_t* coverage, double frameRate)
+    const uint8_t* coverage, double frameRate, const effects::LayerPictures* layers)
 {
     const double seconds = frame / (frameRate > 0.0 ? frameRate : 24.0);
     if (!pixels || width <= 0 || height <= 0)
@@ -284,6 +287,8 @@ void apply(uint32_t* pixels, int width, int height, const std::vector<Applied>& 
             if (radius > 0.25)
                 boxBlur(pixels, width, height, radius * 2.0, radius * 2.0, 3);
         }
+        else if (effects::handles(applied.type))
+            effects::apply(applied, pixels, before, width, height, frame, seconds, pixelsPerUnit, layers);
         else if (applied.type == "turbulent" || applied.type == "wave")
         {
             // Each pixel takes the color from a place pushed about by the

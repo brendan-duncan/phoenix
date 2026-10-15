@@ -1030,9 +1030,35 @@ void PhoenixView::drawAdjustmentLayer(QPainter& painter, const fla::Layer* layer
     }
     QImage changed = canvas->copy();
     const double pixelsPerUnit = std::sqrt(std::fabs(painter.transform().determinant())) * canvas->devicePixelRatio();
+    // Other layers an effect draws from (Displacement Map's map), each drawn
+    // as a picture the size of the canvas, by name, hidden or not.
+    const std::vector<fla::behaviors::Applied> list = fla::compositing::effectsOf(*layer);
+    std::map<std::string, std::vector<uint32_t>> pictures;
+    const auto* timeline = dynamic_cast<const fla::Timeline*>(layer->parent);
+    for (const std::string& name : fla::compositing::effects::layersNeeded(list, at))
+        for (const fla::Layer* other : timeline ? timeline->layers : std::vector<fla::Layer*>())
+            if (other && other != layer && other->name == name)
+            {
+                QImage picture(canvas->size(), QImage::Format_ARGB32_Premultiplied);
+                picture.setDevicePixelRatio(canvas->devicePixelRatio());
+                picture.fill(Qt::transparent);
+                QPainter into(&picture);
+                into.setRenderHints(painter.renderHints());
+                into.setTransform(painter.transform());
+                drawLayer(into, other, loopType, firstFrame, nullptr);
+                into.end();
+                const uint32_t* bits = reinterpret_cast<const uint32_t*>(picture.constBits());
+                pictures[name].assign(bits, bits + static_cast<size_t>(picture.width()) * picture.height());
+                break;
+            }
+    const fla::compositing::effects::LayerPictures lookup = [&pictures](const std::string& name) -> const std::vector<uint32_t>* {
+        const auto found = pictures.find(name);
+        return found == pictures.end() ? nullptr : &found->second;
+    };
     fla::compositing::apply(reinterpret_cast<uint32_t*>(changed.bits()), changed.width(), changed.height(),
-        fla::compositing::effectsOf(*layer), at, pixelsPerUnit, hasArt ? coverage.data() : nullptr,
-        _flaDocument && _flaDocument->document && _flaDocument->document->frameRate > 0.0 ? _flaDocument->document->frameRate : 24.0);
+        list, at, pixelsPerUnit, hasArt ? coverage.data() : nullptr,
+        _flaDocument && _flaDocument->document && _flaDocument->document->frameRate > 0.0 ? _flaDocument->document->frameRate : 24.0,
+        &lookup);
     painter.save();
     painter.resetTransform();
     painter.setCompositionMode(QPainter::CompositionMode_Source);

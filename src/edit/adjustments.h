@@ -1,5 +1,6 @@
 #pragma once
 
+#include "adjustment_effects.h"
 #include "behaviors.h"
 
 #include <cstdint>
@@ -52,8 +53,10 @@ behaviors::Applied defaults(const std::string& id, int seed);
 /// pixels a stage pixel covers, for the reach of a blur or a displacement.
 /// \a coverage, when given (one byte a pixel), limits the effects to where
 /// it is set, fading at its edges.
+/// \a layers gives other layers' pictures, for Displacement Map.
 void apply(uint32_t* pixels, int width, int height, const std::vector<behaviors::Applied>& list, int frame,
-    double pixelsPerUnit, const uint8_t* coverage = nullptr, double frameRate = 24.0);
+    double pixelsPerUnit, const uint8_t* coverage = nullptr, double frameRate = 24.0,
+    const effects::LayerPictures* layers = nullptr);
 
 /// The matte's strength at each pixel of \a matte (premultiplied ARGB),
 /// from 0 to 255, for \a kind.

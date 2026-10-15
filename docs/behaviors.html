@@ -212,7 +212,7 @@
 <ul>
   <li><b>Track Matte</b> shows a layer only through the layer just above it. An <b>Alpha Matte</b> shows it where the layer above has art, a <b>Luma Matte</b> where that art is light; the inverted ones show it everywhere else. The layer above becomes the matte and is not drawn itself. Unlike a mask, a matte can be soft (a blurred or faded shape gives a soft edge) and works while you edit, and both layers animate as usual: key the matte's art to make a reveal.</li>
   <li><b>Motion Blur</b> smears what moves fast on the layer along its path, as a camera would: tweens, motion paths, bones and behaviors alike, on the stage, in Test Movie and in every export. The shutter is on the Properties panel's <b>Doc</b> tab: <b>Shutter</b> is how long it stays open in degrees of a frame (180, the default, is half a frame, centered on it; 360 a whole frame), and <b>Samples</b> how many pictures of the layer are averaged for each frame (16 by default; more is smoother and slower to draw).</li>
-  <li><b>Adjustment Layer</b> makes a layer change everything drawn below it. With nothing selected on the stage, the Behaviors panel shows the current adjustment layer's effects: <b>Add Effect</b> offers <b>Blur</b>, <b>Color Correction</b> (brightness, contrast, saturation and hue), <b>Tint</b> (toward a color, keeping light and dark), <b>Turbulent Displace</b> (smooth random swirls that change over time: heat haze, water, a dream) and <b>Wave Displace</b> (waves traveling across the picture: a flag, a reflection), and their settings key like any others. An adjustment layer with no art changes the whole picture; one with art changes only where its art is, fading at soft edges.</li>
+  <li><b>Adjustment Layer</b> makes a layer change everything drawn below it. With nothing selected on the stage, the Behaviors panel shows the current adjustment layer's effects: <b>Add Effect</b> offers <b>Blur</b>, <b>Color Correction</b> (brightness, contrast, saturation and hue), <b>Tint</b> (toward a color, keeping light and dark), <b>Turbulent Displace</b> (smooth random swirls that change over time: heat haze, water, a dream) and <b>Wave Displace</b> (waves traveling across the picture: a flag, a reflection), and many more (see <a href="#effects">Adjustment effects</a>); their settings key like any others. An adjustment layer with no art changes the whole picture; one with art changes only where its art is, fading at soft edges.</li>
 </ul>
 
 <div class="grid-2">
@@ -244,6 +244,55 @@
 </ul>
 
 <p>The Output panel lists what was carried only in part.</p>
+
+<h3 id="effects">Adjustment effects</h3>
+
+<p>An adjustment layer can have any number of these, applied top to bottom, each with an <b>Amount</b> where it makes sense. Generators and transitions are at their most useful with art on the layer: a Gradient Ramp then fills just that art, and a wipe takes away just what is under it.</p>
+
+<table>
+  <thead><tr><th>Effect</th><th>What it does</th></tr></thead>
+  <tbody>
+    <tr><td colspan="2"><b>Blurs</b></td></tr>
+    <tr><td>Blur</td><td class="wrap">Blurs everything below evenly.</td></tr>
+    <tr><td>Directional Blur</td><td class="wrap">Smears it along one direction, as fast motion would.</td></tr>
+    <tr><td>Radial Blur</td><td class="wrap">Spins it about a point, or zooms it out from the point.</td></tr>
+    <tr><td>Lens Blur</td><td class="wrap">Blurs as an out-of-focus lens does, bright points opening into round discs.</td></tr>
+    <tr><td>Glow</td><td class="wrap">Makes the bright parts glow, in their own color or one you give.</td></tr>
+    <tr><td colspan="2"><b>Generators</b></td></tr>
+    <tr><td>Gradient Ramp</td><td class="wrap">A gradient between two points, linear or radial, painted over the picture or blended into it.</td></tr>
+    <tr><td>4-Color Gradient</td><td class="wrap">A soft blend of four colors, one at each corner.</td></tr>
+    <tr><td>Fill</td><td class="wrap">Everything drawn below in one color, keeping its shape and soft edges.</td></tr>
+    <tr><td>Outline</td><td class="wrap">An outline round everything drawn below, outside its edges.</td></tr>
+    <tr><td>Fractal Noise</td><td class="wrap">Clouds of soft noise that can churn over time: smoke, fog, water, a texture, or a map for Displacement Map.</td></tr>
+    <tr><td colspan="2"><b>Distortion</b></td></tr>
+    <tr><td>Turbulent Displace</td><td class="wrap">Smooth random swirls that change over time: heat haze, water, a dream.</td></tr>
+    <tr><td>Wave Displace</td><td class="wrap">Waves traveling across the picture: a flag, a reflection.</td></tr>
+    <tr><td>Bulge</td><td class="wrap">Swells the picture round a point, or pinches it in.</td></tr>
+    <tr><td>Ripple</td><td class="wrap">Rings of waves spreading from a point, as on water.</td></tr>
+    <tr><td>Bend</td><td class="wrap">Bends the picture into a curve, across or down.</td></tr>
+    <tr><td>Displacement Map</td><td class="wrap">Pushes the picture about by another layer, by name: its lighter parts push one way, darker the other. Hide the map layer to keep it out of sight; it still drives the push.</td></tr>
+    <tr><td colspan="2"><b>Color</b></td></tr>
+    <tr><td>Color Correction</td><td class="wrap">Brightness, contrast, saturation and hue.</td></tr>
+    <tr><td>Tint</td><td class="wrap">Toward a color, keeping light and dark.</td></tr>
+    <tr><td>Levels</td><td class="wrap">Black point, white point, gamma and the range shown.</td></tr>
+    <tr><td>Curves</td><td class="wrap">Tones through a curve of input,output points, for all channels or one.</td></tr>
+    <tr><td>Hue/Saturation</td><td class="wrap">Turns the hues, and sets how strong and how light the colors are; Colorize makes it all one hue.</td></tr>
+    <tr><td>Tritone</td><td class="wrap">Darks, middles and lights mapped to three colors.</td></tr>
+    <tr><td>Vignette</td><td class="wrap">Darkens toward the edges.</td></tr>
+    <tr><td>Grain</td><td class="wrap">Film grain, still or changing every frame.</td></tr>
+    <tr><td>Chromatic Aberration</td><td class="wrap">Pulls the red and blue apart, as a cheap lens or a glitch does.</td></tr>
+    <tr><td colspan="2"><b>Transitions</b></td></tr>
+    <tr><td>Linear Wipe</td><td class="wrap">Wipes the picture away behind a moving edge; key Completion from 0 to 100.</td></tr>
+    <tr><td>Radial Wipe</td><td class="wrap">Wipes it away round a point like a clock hand.</td></tr>
+    <tr><td>Venetian Blinds</td><td class="wrap">Wipes it away in stripes.</td></tr>
+    <tr><td>Block Dissolve</td><td class="wrap">Dissolves it in random blocks.</td></tr>
+  </tbody>
+</table>
+
+<figure>
+  <img src="assets/shots/mg-effects.webp" alt="A contact sheet of the adjustment effects on a striped picture with a title: blurs, generators, distortions, color changes and wipes" width="1600" height="900">
+  <figcaption>Each effect on the same picture, in the order of the table.</figcaption>
+</figure>
 
 <h2 id="bake">Bake to keyframes</h2>
 

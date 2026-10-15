@@ -4,6 +4,7 @@ What changed in each release of Phoenix, newest first.
 
 ## 0.12.0 (Unreleased)
 
+- Adjustment layers: 25 new effects: directional, radial and lens blur, Glow, Gradient Ramp, 4-Color Gradient, Fill, Outline, Fractal Noise, Bulge, Ripple, Bend, Displacement Map, Levels, Curves, Hue/Saturation, Tritone, Vignette, Grain, Chromatic Aberration, and linear, radial, blinds and dissolve wipes
 - Letter animators: Text on a Path lays text along a motion guide with a margin to key; Wiggly shakes each letter on its own
 - Strokes: Dashes (with an offset to key) and Taper (start and end width, a travelling wave) shape operators; Apply to Strokes in the Color panel gives lines a gradient; width profiles now survive other shape operators
 - Time Remap behavior: key which frame of a graphic shows, for slow motion, freezes and running it backwards

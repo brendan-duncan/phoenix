@@ -383,10 +383,12 @@ void bakeAdjustments(Document& document, Timeline& timeline, std::vector<std::st
             continue;
         const std::vector<behaviors::Applied> effects = compositing::effectsOf(*adjustment);
         for (const behaviors::Applied& applied : effects)
-            if (applied.enabled && (applied.type == "turbulent" || applied.type == "wave"))
+            if (applied.enabled && applied.type != "blur" && applied.type != "color" && applied.type != "tint")
+            {
+                const behaviors::Definition* definition = compositing::find(applied.type);
                 notes.push_back("Adjustment layer " + adjustment->name + ": " +
-                    (applied.type == "turbulent" ? std::string("Turbulent Displace") : std::string("Wave Displace")) +
-                    " has no filter in other apps and is left out.");
+                    (definition ? definition->name : applied.type) + " has no filter in other apps and is left out.");
+            }
         removeAttribute(*adjustment, compositing::kAdjustmentLayer);
         removeAttribute(*adjustment, compositing::kAdjustments);
         if (a + 1 >= timeline.layers.size())

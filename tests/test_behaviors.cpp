@@ -19,6 +19,7 @@
 #include "../src/data/bitmap_instance.h"
 
 #include <cmath>
+#include <map>
 #include <string>
 #include <vector>
 
@@ -1049,4 +1050,43 @@ TEST(text_on_a_path_and_wiggly_letters)
     wiggly.params["together"] = "100";
     changes = ta::apply({wiggly}, letters, 7, 0, 24.0);
     CHECK(near(changes[0].x, changes[2].x) && near(changes[0].rotation, changes[1].rotation));
+}
+
+TEST(adjustment_effects_color_generate_distort_and_wipe)
+{
+    namespace comp = fla::compositing;
+    // A 20 by 10 picture, a mid-gray left half and a clear right half.
+    std::vector<uint32_t> image(200, 0u);
+    for (int y = 0; y < 10; ++y)
+        for (int x = 0; x < 10; ++x)
+            image[static_cast<size_t>(y) * 20 + x] = 0xFF808080u;
+    const auto run = [&](const char* id, std::map<std::string, std::string> params) {
+        Applied effect = comp::defaults(id, 1);
+        for (const auto& [name, value] : params)
+            effect.params[name] = value;
+        std::vector<uint32_t> out = image;
+        comp::apply(out.data(), 20, 10, {effect}, 0, 1.0, nullptr, 24.0);
+        return out;
+    };
+    // Every effect is listed, with its settings.
+    CHECK(comp::find("glow") && comp::find("dissolve") && comp::find("fractalnoise") && comp::find("levels"));
+    // Fill: the gray goes red, the clear stays clear.
+    std::vector<uint32_t> out = run("fill", {{"color", "#FF0000"}});
+    CHECK(out[0] == 0xFFFF0000u && out[15] == 0u);
+    // Levels: white pulled down to the gray makes it white.
+    out = run("levels", {{"inWhite", "128"}});
+    CHECK(((out[0] >> 16) & 0xFF) == 255);
+    // A ramp, replacing: black at the left edge, white at the right.
+    out = run("ramp", {});
+    CHECK((out[0] & 0xFF) < 20 && (out[19] & 0xFF) > 235 && (out[19] >> 24) == 255);
+    // Wipes: nothing left at 100, all of it at 0.
+    CHECK(run("linearwipe", {{"completion", "100"}})[0] == 0u);
+    CHECK(run("linearwipe", {{"completion", "0"}})[0] == image[0]);
+    CHECK(run("dissolve", {{"completion", "100"}})[5] == 0u);
+    // Fractal noise the same twice, and changing with the seed.
+    CHECK(run("fractalnoise", {}) == run("fractalnoise", {}));
+    CHECK(run("fractalnoise", {{"seed", "2"}}) != run("fractalnoise", {}));
+    // Displacement Map with no map: nothing moves.
+    CHECK(run("displace", {{"layer", "Nowhere"}}) == image);
+    CHECK(comp::effects::layersNeeded({comp::defaults("displace", 1)}, 0).empty());
 }
