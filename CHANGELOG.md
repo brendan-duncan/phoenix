@@ -4,6 +4,7 @@ What changed in each release of Phoenix, newest first.
 
 ## 0.12.0 (Unreleased)
 
+- Shape hints steer a shape tween's outline along with its fill, so the two stay together through the morph
 - A mask with a shape tween no longer cuts off between its keyframes
 - Tutorials: Show Result opens how a lesson turns out in a tab of its own, from the step window or the Tutorials dialog
 - A line or shape just drawn bends when dragged with the Selection tool (Ctrl adds a corner) rather than moving; click it first to move it

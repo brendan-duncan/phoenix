@@ -325,6 +325,44 @@ TEST(shape_hints_pin_points_of_the_morph)
     CHECK(read.size() == 2 && near(read[1].end.y, 100.0, 1.0e-6));
 }
 
+TEST(shape_hints_steer_the_stroke_with_the_fill)
+{
+    // Outlined squares, the outline drawn on the fill's own edge, one running
+    // the other way round. A quarter turn hint turns the outline with the
+    // fill, so the two never part.
+    std::unique_ptr<fla::Shape> a = filled(255, 0, 0, 1.0);
+    std::unique_ptr<fla::Shape> b = filled(0, 0, 255, 1.0);
+    addSquare(*a, 0.0, 0.0, 100.0, true);
+    addSquare(*b, 0.0, 0.0, 100.0, false);
+    a->edges.front()->strokeStyle = 1;
+    b->edges.front()->strokeStyle = 1;
+    fla::ShapeHint quarter;
+    quarter.start = Point(0.0, 0.0);
+    quarter.end = Point(100.0, 0.0);
+    std::unique_ptr<fla::MorphShape> morph(fla::buildMorph(*a, *b, nullptr, {quarter}));
+    const auto pinned = [](const fla::MorphSegment* segment) {
+        bool found = near(segment->startPointA.x, 0.0, 1.0e-3) && near(segment->startPointA.y, 0.0, 1.0e-3) &&
+            near(segment->startPointB.x, 100.0, 1.0e-3) && near(segment->startPointB.y, 0.0, 1.0e-3);
+        for (const fla::MorphCurves* curve : segment->curves)
+            found = found || (near(curve->anchorPointA.x, 0.0, 1.0e-3) && near(curve->anchorPointA.y, 0.0, 1.0e-3) &&
+                                 near(curve->anchorPointB.x, 100.0, 1.0e-3) && near(curve->anchorPointB.y, 0.0, 1.0e-3));
+        return found;
+    };
+    int strokes = 0;
+    for (const fla::MorphSegment* segment : morph->segments)
+        if (segment->strokeIndex1 == 1 && segment->fillIndex1 == 0 && segment->fillIndex2 == 0)
+        {
+            ++strokes;
+            CHECK(pinned(segment));
+            // And round the same way as the fill: the next corner of A goes
+            // to the next corner of B.
+            for (const fla::MorphCurves* curve : segment->curves)
+                if (near(curve->anchorPointA.x, 100.0, 1.0e-3) && near(curve->anchorPointA.y, 0.0, 1.0e-3))
+                    CHECK(near(curve->anchorPointB.x, 100.0, 1.0e-3) && near(curve->anchorPointB.y, 100.0, 1.0e-3));
+        }
+    CHECK(strokes == 1);
+}
+
 TEST(built_morph_pairs_outlines_of_thousands_of_pieces)
 {
     // Two round fills of thousands of straight pieces each, the pieces listed

@@ -996,43 +996,46 @@ MorphShape* buildMorph(const Shape& from, const Shape& to, DOMElement* parent, c
     outlinesOf(from, fillsA, strokesA);
     outlinesOf(to, fillsB, strokesB);
 
-    // Hinted outlines first: each hint pairs the fill outline its start lies
-    // on with the one its end lies on, and pins the two points together.
-    if (!hints.empty() && !fillsA.empty() && !fillsB.empty())
-    {
-        const auto nearestOutline = [](const std::vector<Outline>& outlines, const Point& p, double& fraction) {
-            size_t best = 0;
-            double bestDistance = -1.0;
-            for (size_t i = 0; i < outlines.size(); ++i)
+    // Hinted outlines first: each hint pairs the outline its start lies on
+    // with the one its end lies on, and pins the two points together. The
+    // fill outlines take the hints, and the strokes along them take them too,
+    // so the outline keeps to the fill all the way.
+    const auto local = [](const Shape& shape, const Point& p) {
+        const Transform& m = shape.transform;
+        const double det = m.m11 * m.m22 - m.m12 * m.m21;
+        if (std::abs(det) < 1.0e-12)
+            return p;
+        const double x = p.x - m.tx;
+        const double y = p.y - m.ty;
+        return Point((m.m22 * x - m.m21 * y) / det, (-m.m12 * x + m.m11 * y) / det);
+    };
+    const auto nearestOutline = [](const std::vector<Outline>& outlines, const Point& p, double& fraction) {
+        size_t best = 0;
+        double bestDistance = -1.0;
+        for (size_t i = 0; i < outlines.size(); ++i)
+        {
+            const Measured measured(outlines[i]);
+            const double u = measured.nearest(p);
+            const double d = distance(measured.at(u), p);
+            if (bestDistance < 0.0 || d < bestDistance)
             {
-                const Measured measured(outlines[i]);
-                const double u = measured.nearest(p);
-                const double d = distance(measured.at(u), p);
-                if (bestDistance < 0.0 || d < bestDistance)
-                {
-                    bestDistance = d;
-                    best = i;
-                    fraction = u;
-                }
+                bestDistance = d;
+                best = i;
+                fraction = u;
             }
-            return best;
-        };
-        const auto local = [](const Shape& shape, const Point& p) {
-            const Transform& m = shape.transform;
-            const double det = m.m11 * m.m22 - m.m12 * m.m21;
-            if (std::abs(det) < 1.0e-12)
-                return p;
-            const double x = p.x - m.tx;
-            const double y = p.y - m.ty;
-            return Point((m.m22 * x - m.m21 * y) / det, (-m.m12 * x + m.m11 * y) / det);
-        };
+        }
+        return best;
+    };
+    const auto hinted = [&](std::vector<Outline>& as, std::vector<Outline>& bs) {
+        if (hints.empty() || as.empty() || bs.empty())
+            return;
         std::map<std::pair<size_t, size_t>, std::vector<Knot>> pairs;
         for (const ShapeHint& hint : hints)
         {
             double ua = 0.0;
             double ub = 0.0;
-            const size_t ia = nearestOutline(fillsA, local(from, hint.start), ua);
-            const size_t ib = nearestOutline(fillsB, local(to, hint.end), ub);
+            const size_t ia = nearestOutline(as, local(from, hint.start), ua);
+            const size_t ib = nearestOutline(bs, local(to, hint.end), ub);
             pairs[{ia, ib}].push_back({ua, ub});
         }
         std::set<size_t> usedA;
@@ -1045,10 +1048,10 @@ MorphShape* buildMorph(const Shape& from, const Shape& to, DOMElement* parent, c
                 continue;
             usedA.insert(ia);
             usedB.insert(ib);
-            Outline b = fillsB[ib];
-            b.fill = fillsA[ia].fill;
-            b.stroke = fillsA[ia].stroke;
-            morph->segments.push_back(pairSegment(fillsA[ia], b, morph, entry.second));
+            Outline b = bs[ib];
+            b.fill = as[ia].fill;
+            b.stroke = as[ia].stroke;
+            morph->segments.push_back(pairSegment(as[ia], b, morph, entry.second));
         }
         const auto without = [](std::vector<Outline>& outlines, const std::set<size_t>& used) {
             std::vector<Outline> kept;
@@ -1057,9 +1060,24 @@ MorphShape* buildMorph(const Shape& from, const Shape& to, DOMElement* parent, c
                     kept.push_back(outlines[i]);
             outlines = std::move(kept);
         };
-        without(fillsA, usedA);
-        without(fillsB, usedB);
-    }
+        without(as, usedA);
+        without(bs, usedB);
+    };
+    hinted(fillsA, fillsB);
+    // A stroke runs whichever way its edges were chained; a closed one is
+    // turned to go round the same way in both keyframes, so the hints'
+    // fractions of the way round mean the same on each.
+    if (!hints.empty())
+        for (std::vector<Outline>* strokes : {&strokesA, &strokesB})
+            for (Outline& outline : *strokes)
+                if (outline.closed && signedArea(outline) < 0.0)
+                {
+                    std::vector<Curve> back;
+                    for (auto piece = outline.pieces.rbegin(); piece != outline.pieces.rend(); ++piece)
+                        back.push_back(reversed(*piece));
+                    outline.pieces = std::move(back);
+                }
+    hinted(strokesA, strokesB);
 
     // Fills group by fill and by which way they run, so holes pair with
     // holes. A fill only the last keyframe has takes the first one's first
