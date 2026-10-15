@@ -223,7 +223,7 @@
   <tbody>
     <tr><td>Images</td><td>PNG, JPEG, GIF, BMP</td></tr>
     <tr><td>Layered images</td><td>Photoshop (PSD and PSB), RGB, CMYK or grayscale, 8, 16 or 32 bits</td></tr>
-    <tr><td>Vector artwork</td><td>SVG, Illustrator (AI), PDF</td></tr>
+    <tr><td>Vector artwork</td><td>SVG, Illustrator (AI), EPS and PostScript, PDF</td></tr>
     <tr><td>Sound</td><td>WAV, AIFF, MP3, FLAC, Ogg</td></tr>
     <tr><td>Video (reference)</td><td>MP4, MOV, M4V, AVI, MKV, WebM, FLV, WMV, MPEG</td></tr>
   </tbody>
@@ -237,16 +237,20 @@
 
 <p>Large documents (PSB), 16- and 32-bit documents and CMYK documents are read too; their colors are brought to 8-bit RGB. Adjustment and fill layers have no pixels of their own and are left out, and layers clipped to the layer below come in unclipped.</p>
 
-<h3>SVG, Illustrator and PDF files</h3>
+<h3>SVG, Illustrator, EPS and PDF files</h3>
 
 <p>Each filled or stroked path becomes a drawing object with its fill and stroke color and stroke width, images become bitmaps in the library placed where they were, and text becomes static text. On the stage they are grouped as one piece of artwork, in the order they were drawn; Import to Library makes a graphic symbol named after the file instead.</p>
 
 <ul>
   <li><strong>SVG:</strong> paths, rectangles, circles, ellipses, lines, polylines and polygons, with their groups, transforms and opacity, styled by attributes, the <code>style</code> attribute or the style sheet's classes; linear and radial gradients, which become gradient fills; <code>use</code> and symbols; images, embedded or in files beside the SVG; and text, with its font, size, weight and color.</li>
-  <li><strong>Illustrator and PDF:</strong> an Illustrator file is read through the PDF copy it carries, which Illustrator saves by default; for a PDF, the first page is read. Paths with their colors and opacity, grouped and placed artwork, gradients (Illustrator's linear and radial ones), and images. Text in these files is left out: convert it to outlines before you save.</li>
+  <li><strong>Illustrator and PDF:</strong> an Illustrator file is read through the PDF copy it carries, which Illustrator saves by default; for a PDF, the first page is read. Paths with their colors and opacity, spot (Pantone) colors, clipping masks, grouped and placed artwork, gradients, repeating pattern fills (drawn tile by tile), and images, palette images among them. Text in these files is left out: convert it to outlines before you save.</li>
+  <li><strong>Illustrator files without a PDF copy:</strong> a file saved with <strong>Create PDF Compatible File</strong> turned off, and files from Illustrator 8 and older, are read in Illustrator's own format: paths and compound paths, colors (process and spot), gradients, clipping masks and point text; hidden layers are left out.</li>
+  <li><strong>EPS and PostScript:</strong> an EPS that Illustrator saved is read through the Illustrator artwork inside it. Any other EPS or PostScript file (from FreeHand, Photoshop, CorelDRAW and the like) is run as a PostScript program, and what it paints comes in: paths, fills and strokes in gray, RGB, CMYK and spot colors, clipping, images and text. The page is the file's bounding box.</li>
 </ul>
 
-<p>You can also drag images, sounds, PSD, SVG and Illustrator files from your desktop. Dropped on the stage, they are placed where you drop them; dropped elsewhere, they go into the library.</p>
+<p>When a file uses something Phoenix cannot bring in, such as a kind of image it does not read, the import says what was left out.</p>
+
+<p>You can also drag images, sounds, PSD, SVG, Illustrator and EPS files from your desktop. Dropped on the stage, they are placed where you drop them; dropped elsewhere, they go into the library.</p>
 
 <p><span class="menu-path">Edit &rsaquo; Paste in Center</span> (<kbd>Ctrl</kbd>+<kbd>V</kbd>) also takes what other applications copy: an image, vector artwork copied as SVG or PDF, which comes in as it would from a file, or files copied in your file manager, which are imported to the stage. Copying in Phoenix puts an image and an SVG of the selection on the clipboard, for pasting into other applications.</p>
 

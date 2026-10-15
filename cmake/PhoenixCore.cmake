@@ -143,6 +143,9 @@ set(PHOENIX_CORE_FILE_SOURCES
     edit/edit_list.cpp
     edit/font_items.cpp
     edit/vector_import.cpp
+    edit/pdf_objects.cpp
+    edit/postscript_import.cpp
+    edit/postscript_interpreter.cpp
     edit/shortcut_sets.cpp
     edit/publish_settings.cpp
     util/swf_writer.cpp

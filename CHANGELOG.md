@@ -14,6 +14,9 @@ What changed in each release of Phoenix, newest first.
 - Orient to path on the Frame tab, for classic and motion tweens
 - Pose commands for armatures: Insert, Copy, Paste and Clear Pose, from the frame menu and Edit > Timeline > Pose
 - Library > Properties... sets a symbol's type, class and 9-slice scaling; with 9-slice on, drag its guides inside the symbol
+- Import reads EPS and PostScript files: Illustrator EPS through the artwork inside, and any other EPS (FreeHand, Photoshop and the rest) by running its PostScript
+- Illustrator import reads many more files: ones saved without PDF content and ones from Illustrator 8 and older (Illustrator's own format, with gradients, clipping masks and text), and in PDF-based files spot colors, clipping masks, repeating patterns and palette images
+- Phoenix --export-image draws artwork files (SVG, Illustrator, EPS, PDF) to an image
 - Phoenix --view opens a file in a player window without the editor: documents, FLA, XFL and SWF movies play, SVG, Illustrator, PDF, Photoshop files and images show; on Windows, View in Phoenix in the right-click menu and Phoenix Viewer under Open with
 - Test Movie has a time slider, icon buttons, and shows only the stage
 - Textured brush strokes look the same in Animate: FLA and XFL files carry the grain as a repeating bitmap fill, and Phoenix reads them back as live textures

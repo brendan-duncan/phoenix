@@ -336,6 +336,8 @@ set(HEADERS
     src/edit/text_style.h
     src/edit/font_items.h
     src/edit/vector_import.h
+    src/edit/pdf_objects.h
+    src/edit/postscript_import.h
     src/edit/psd_import.h
     src/edit/three_d.h
     src/edit/filter_presets.h

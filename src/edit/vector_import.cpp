@@ -7,6 +7,9 @@
 #include "../data/solid_color.h"
 #include "../data/stroke_style.h"
 
+#include "pdf_objects.h"
+#include "postscript_import.h"
+
 #include "tinyxml2.h"
 #include "zlib.h"
 
@@ -1225,113 +1228,6 @@ std::vector<uint8_t> inflate(const uint8_t* data, size_t size)
     return out;
 }
 
-struct PdfStream
-{
-    std::string dictionary;
-    std::vector<uint8_t> data;
-};
-
-/// The object \a number's dictionary and stream, if it is one.
-bool findObject(const std::string& file, int number, std::string& dictionary, std::vector<uint8_t>& data, bool& isStream)
-{
-    const std::string key = std::to_string(number) + " 0 obj";
-    size_t at = 0;
-    while ((at = file.find(key, at)) != std::string::npos)
-    {
-        // Not the tail of a longer number.
-        if (at > 0 && std::isdigit(static_cast<unsigned char>(file[at - 1])))
-        {
-            at += key.size();
-            continue;
-        }
-        const size_t end = file.find("endobj", at);
-        const size_t streamAt = file.find("stream", at);
-        isStream = streamAt != std::string::npos && streamAt < end;
-        dictionary = file.substr(at + key.size(), (isStream ? streamAt : end) - at - key.size());
-        if (isStream)
-        {
-            size_t begin = streamAt + 6;
-            if (begin < file.size() && file[begin] == '\r')
-                ++begin;
-            if (begin < file.size() && file[begin] == '\n')
-                ++begin;
-            const size_t stop = file.find("endstream", begin);
-            if (stop == std::string::npos)
-                return false;
-            std::vector<uint8_t> raw(file.begin() + static_cast<std::ptrdiff_t>(begin), file.begin() + static_cast<std::ptrdiff_t>(stop));
-            data = dictionary.find("/FlateDecode") != std::string::npos ? inflate(raw.data(), raw.size()) : raw;
-        }
-        return true;
-    }
-    return false;
-}
-
-/// Every Flate stream of the file, decompressed: where a page's dictionary
-/// may hide in an object stream.
-std::vector<std::string> objectStreams(const std::string& file)
-{
-    std::vector<std::string> texts;
-    size_t at = 0;
-    while ((at = file.find("/ObjStm", at)) != std::string::npos)
-    {
-        const size_t streamAt = file.find("stream", at);
-        if (streamAt == std::string::npos)
-            break;
-        size_t begin = streamAt + 6;
-        if (begin < file.size() && file[begin] == '\r')
-            ++begin;
-        if (begin < file.size() && file[begin] == '\n')
-            ++begin;
-        const size_t stop = file.find("endstream", begin);
-        if (stop == std::string::npos)
-            break;
-        const std::vector<uint8_t> data = inflate(reinterpret_cast<const uint8_t*>(file.data()) + begin, stop - begin);
-        texts.emplace_back(data.begin(), data.end());
-        at = stop;
-    }
-    return texts;
-}
-
-/// The first page dictionary in \a text, if any.
-bool pageDictionary(const std::string& text, std::string& page)
-{
-    size_t at = 0;
-    while ((at = text.find("/Type", at)) != std::string::npos)
-    {
-        size_t value = text.find_first_not_of(" \r\n\t", at + 5);
-        if (value != std::string::npos && text.compare(value, 5, "/Page") == 0 &&
-            (value + 5 >= text.size() || !std::isalpha(static_cast<unsigned char>(text[value + 5]))))
-        {
-            // The dictionary around it.
-            const size_t open = text.rfind("<<", at);
-            size_t depth = 0;
-            size_t close = open;
-            for (size_t i = open; i + 1 < text.size(); ++i)
-            {
-                if (text.compare(i, 2, "<<") == 0)
-                {
-                    ++depth;
-                    ++i;
-                }
-                else if (text.compare(i, 2, ">>") == 0)
-                {
-                    --depth;
-                    ++i;
-                    if (depth == 0)
-                    {
-                        close = i;
-                        break;
-                    }
-                }
-            }
-            page = text.substr(open, close - open + 1);
-            return true;
-        }
-        at += 5;
-    }
-    return false;
-}
-
 std::vector<int> contentRefs(const std::string& page)
 {
     std::vector<int> refs;
@@ -1358,26 +1254,31 @@ std::vector<int> contentRefs(const std::string& page)
     return refs;
 }
 
-/// A PDF file's objects, found by number: plain ones by their "N 0 obj",
-/// and those packed in object streams by the streams' tables.
+/// A PDF file's objects, by number, as text the content reader takes
+/// apart: a dictionary (or value) as PDF writes it, a stream's data
+/// through its filters.
 struct PdfFile
 {
-    std::string text;
-    std::map<int, std::string> packed;
-    bool unpacked = false;
+    pdf::File file;
 
     /// An object's dictionary (or value) and, for a stream, its data.
     bool object(int number, std::string& dictionary, std::vector<uint8_t>& data, bool& isStream)
     {
-        if (findObject(text, number, dictionary, data, isStream))
-            return true;
-        unpack();
-        const auto found = packed.find(number);
-        if (found == packed.end())
+        const pdf::Object* found = file.object(number);
+        if (!found)
             return false;
-        dictionary = found->second;
-        data.clear();
-        isStream = false;
+        isStream = found->type == pdf::Object::Type::Stream;
+        if (isStream)
+        {
+            std::string remaining;
+            data = file.decoded(*found, &remaining);
+            dictionary = pdf::File::text(*found, &remaining);
+        }
+        else
+        {
+            data.clear();
+            dictionary = pdf::File::text(*found);
+        }
         return true;
     }
 
@@ -1387,52 +1288,6 @@ struct PdfFile
         std::vector<uint8_t> data;
         bool isStream = false;
         return object(number, dictionary, data, isStream) ? dictionary : std::string();
-    }
-
-    void unpack()
-    {
-        if (unpacked)
-            return;
-        unpacked = true;
-        size_t at = 0;
-        while ((at = text.find("/ObjStm", at)) != std::string::npos)
-        {
-            const size_t open = text.rfind("<<", at);
-            const size_t streamAt = text.find("stream", at);
-            if (open == std::string::npos || streamAt == std::string::npos)
-                break;
-            const std::string head = text.substr(open, streamAt - open);
-            const auto value = [&head](const char* key) {
-                const size_t k = head.find(key);
-                return k == std::string::npos ? 0 : std::atoi(head.c_str() + k + std::strlen(key));
-            };
-            const int count = value("/N");
-            const int first = value("/First");
-            size_t begin = streamAt + 6;
-            if (begin < text.size() && text[begin] == '\r')
-                ++begin;
-            if (begin < text.size() && text[begin] == '\n')
-                ++begin;
-            const size_t stop = text.find("endstream", begin);
-            if (stop == std::string::npos)
-                break;
-            const std::vector<uint8_t> data =
-                inflate(reinterpret_cast<const uint8_t*>(text.data()) + begin, stop - begin);
-            const std::string body(data.begin(), data.end());
-            Scanner scan{body.data(), body.data() + std::min(body.size(), static_cast<size_t>(std::max(first, 0)))};
-            std::vector<std::pair<int, size_t>> table;
-            double number = 0, offset = 0;
-            for (int i = 0; i < count && scan.number(number) && scan.number(offset); ++i)
-                table.emplace_back(static_cast<int>(number), static_cast<size_t>(first) + static_cast<size_t>(offset));
-            for (size_t i = 0; i < table.size(); ++i)
-            {
-                const size_t from = table[i].second;
-                const size_t to = i + 1 < table.size() ? table[i + 1].second : body.size();
-                if (from < body.size() && to <= body.size() && to > from)
-                    packed[table[i].first] = body.substr(from, to - from);
-            }
-            at = stop;
-        }
     }
 };
 
@@ -1552,6 +1407,380 @@ Color colorOf(const std::vector<double>& values)
     return Color{0, 0, 0, 255};
 }
 
+/// The top-level items of an array's text ("[ /Separation /Spot /DeviceCMYK
+/// 12 0 R ]"): names, numbers, references as one item, nested arrays and
+/// dictionaries whole.
+std::vector<std::string> arrayItems(const std::string& text)
+{
+    std::vector<std::string> items;
+    size_t i = text.find('[');
+    if (i == std::string::npos)
+        return items;
+    ++i;
+    while (i < text.size())
+    {
+        while (i < text.size() && std::isspace(static_cast<unsigned char>(text[i])))
+            ++i;
+        if (i >= text.size() || text[i] == ']')
+            break;
+        const size_t start = i;
+        if (text.compare(i, 2, "<<") == 0 || text[i] == '[' || text[i] == '(')
+        {
+            int depth = 0;
+            for (; i < text.size(); ++i)
+            {
+                if (text.compare(i, 2, "<<") == 0)
+                {
+                    ++depth;
+                    ++i;
+                }
+                else if (text.compare(i, 2, ">>") == 0)
+                {
+                    ++i;
+                    if (--depth == 0)
+                    {
+                        ++i;
+                        break;
+                    }
+                }
+                else if (text[i] == '[' || text[i] == '(')
+                    ++depth;
+                else if ((text[i] == ']' || text[i] == ')') && --depth == 0)
+                {
+                    ++i;
+                    break;
+                }
+            }
+        }
+        else
+        {
+            ++i;
+            while (i < text.size() && !std::isspace(static_cast<unsigned char>(text[i])) &&
+                   std::strchr("/[]<>()", text[i]) == nullptr)
+                ++i;
+            // "N G R" stays one item.
+            if (std::isdigit(static_cast<unsigned char>(text[start])))
+            {
+                size_t j = i;
+                while (j < text.size() && std::isspace(static_cast<unsigned char>(text[j])))
+                    ++j;
+                size_t k = j;
+                while (k < text.size() && std::isdigit(static_cast<unsigned char>(text[k])))
+                    ++k;
+                size_t r = k;
+                while (r < text.size() && std::isspace(static_cast<unsigned char>(text[r])))
+                    ++r;
+                if (k > j && r < text.size() && text[r] == 'R')
+                    i = r + 1;
+            }
+        }
+        items.push_back(text.substr(start, i - start));
+    }
+    return items;
+}
+
+/// A PostScript calculator function (type 4) run on \a in.
+std::vector<double> calculate(const std::string& program, std::vector<double> stack)
+{
+    // Procedures as nested lists of tokens.
+    struct Node
+    {
+        std::string token;
+        std::vector<Node> body;
+        bool block = false;
+    };
+    size_t at = program.find('{');
+    if (at == std::string::npos)
+        return stack;
+    std::function<Node(size_t&)> parse = [&](size_t& i) {
+        Node node;
+        node.block = true;
+        ++i;
+        while (i < program.size())
+        {
+            const char c = program[i];
+            if (std::isspace(static_cast<unsigned char>(c)))
+            {
+                ++i;
+                continue;
+            }
+            if (c == '{')
+            {
+                node.body.push_back(parse(i));
+                continue;
+            }
+            if (c == '}')
+            {
+                ++i;
+                break;
+            }
+            const size_t start = i;
+            while (i < program.size() && !std::isspace(static_cast<unsigned char>(program[i])) && program[i] != '{' &&
+                   program[i] != '}')
+                ++i;
+            Node word;
+            word.token = program.substr(start, i - start);
+            node.body.push_back(word);
+        }
+        return node;
+    };
+    const Node root = parse(at);
+    int steps = 0;
+    std::function<void(const Node&)> run = [&](const Node& proc) {
+        std::vector<const Node*> pending;
+        for (size_t k = 0; k < proc.body.size(); ++k)
+        {
+            if (++steps > 100000)
+                return;
+            const Node& n = proc.body[k];
+            if (n.block)
+            {
+                pending.push_back(&n);
+                continue;
+            }
+            const std::string& w = n.token;
+            const auto pop = [&stack]() {
+                if (stack.empty())
+                    return 0.0;
+                const double v = stack.back();
+                stack.pop_back();
+                return v;
+            };
+            char* end = nullptr;
+            const double number = std::strtod(w.c_str(), &end);
+            if (end && *end == '\0' && !w.empty())
+            {
+                stack.push_back(number);
+                continue;
+            }
+            const double pi = 3.14159265358979323846;
+            if (w == "add") { const double b = pop(), a = pop(); stack.push_back(a + b); }
+            else if (w == "sub") { const double b = pop(), a = pop(); stack.push_back(a - b); }
+            else if (w == "mul") { const double b = pop(), a = pop(); stack.push_back(a * b); }
+            else if (w == "div") { const double b = pop(), a = pop(); stack.push_back(b != 0 ? a / b : 0); }
+            else if (w == "idiv") { const double b = pop(), a = pop(); stack.push_back(b != 0 ? std::trunc(a / b) : 0); }
+            else if (w == "mod") { const double b = pop(), a = pop(); stack.push_back(b != 0 ? std::fmod(a, b) : 0); }
+            else if (w == "neg") stack.push_back(-pop());
+            else if (w == "abs") stack.push_back(std::fabs(pop()));
+            else if (w == "ceiling") stack.push_back(std::ceil(pop()));
+            else if (w == "floor") stack.push_back(std::floor(pop()));
+            else if (w == "round") stack.push_back(std::floor(pop() + 0.5));
+            else if (w == "truncate" || w == "cvi") stack.push_back(std::trunc(pop()));
+            else if (w == "cvr") {}
+            else if (w == "sqrt") stack.push_back(std::sqrt(std::max(0.0, pop())));
+            else if (w == "sin") stack.push_back(std::sin(pop() * pi / 180.0));
+            else if (w == "cos") stack.push_back(std::cos(pop() * pi / 180.0));
+            else if (w == "atan") { const double b = pop(), a = pop(); double d = std::atan2(a, b) * 180.0 / pi; stack.push_back(d < 0 ? d + 360 : d); }
+            else if (w == "exp") { const double b = pop(), a = pop(); stack.push_back(std::pow(a, b)); }
+            else if (w == "ln") stack.push_back(std::log(std::max(1e-300, pop())));
+            else if (w == "log") stack.push_back(std::log10(std::max(1e-300, pop())));
+            else if (w == "dup") { const double a = pop(); stack.push_back(a); stack.push_back(a); }
+            else if (w == "pop") pop();
+            else if (w == "exch") { const double b = pop(), a = pop(); stack.push_back(b); stack.push_back(a); }
+            else if (w == "index") { const int n2 = static_cast<int>(pop()); stack.push_back(n2 >= 0 && static_cast<size_t>(n2) < stack.size() ? stack[stack.size() - 1 - static_cast<size_t>(n2)] : 0); }
+            else if (w == "copy") { const int n2 = static_cast<int>(pop()); if (n2 > 0 && static_cast<size_t>(n2) <= stack.size()) { const size_t s = stack.size() - static_cast<size_t>(n2); for (int q = 0; q < n2; ++q) stack.push_back(stack[s + static_cast<size_t>(q)]); } }
+            else if (w == "roll")
+            {
+                int j = static_cast<int>(pop());
+                const int n2 = static_cast<int>(pop());
+                if (n2 > 0 && static_cast<size_t>(n2) <= stack.size())
+                {
+                    j = ((j % n2) + n2) % n2;
+                    std::rotate(stack.end() - n2, stack.end() - j, stack.end());
+                }
+            }
+            else if (w == "true") stack.push_back(1);
+            else if (w == "false") stack.push_back(0);
+            else if (w == "eq") { const double b = pop(), a = pop(); stack.push_back(a == b); }
+            else if (w == "ne") { const double b = pop(), a = pop(); stack.push_back(a != b); }
+            else if (w == "gt") { const double b = pop(), a = pop(); stack.push_back(a > b); }
+            else if (w == "ge") { const double b = pop(), a = pop(); stack.push_back(a >= b); }
+            else if (w == "lt") { const double b = pop(), a = pop(); stack.push_back(a < b); }
+            else if (w == "le") { const double b = pop(), a = pop(); stack.push_back(a <= b); }
+            else if (w == "and") { const double b = pop(), a = pop(); stack.push_back((a != 0) && (b != 0)); }
+            else if (w == "or") { const double b = pop(), a = pop(); stack.push_back((a != 0) || (b != 0)); }
+            else if (w == "not") stack.push_back(pop() == 0);
+            else if (w == "if")
+            {
+                const Node* body = pending.empty() ? nullptr : pending.back();
+                if (!pending.empty())
+                    pending.pop_back();
+                if (pop() != 0 && body)
+                    run(*body);
+            }
+            else if (w == "ifelse")
+            {
+                const Node* no = pending.size() >= 1 ? pending[pending.size() - 1] : nullptr;
+                const Node* yes = pending.size() >= 2 ? pending[pending.size() - 2] : nullptr;
+                pending.resize(pending.size() >= 2 ? pending.size() - 2 : 0);
+                const bool test = pop() != 0;
+                if (test && yes)
+                    run(*yes);
+                else if (!test && no)
+                    run(*no);
+            }
+        }
+    };
+    run(root);
+    return stack;
+}
+
+/// A PDF function (types 0, 2, 3 and 4, or an array of one-output ones)
+/// at \a in.
+std::vector<double> evaluate(PdfFile& file, const std::string& value, const std::vector<double>& in, int depth = 0)
+{
+    if (depth > 8)
+        return in;
+    std::string dictionary = value;
+    std::vector<uint8_t> data;
+    const int reference = referenceOf(value);
+    if (reference >= 0)
+    {
+        bool isStream = false;
+        if (!file.object(reference, dictionary, data, isStream))
+            return in;
+    }
+    // An array of functions, one an output.
+    if (!dictionary.empty() && dictionary.front() == '[')
+    {
+        std::vector<double> out;
+        for (const std::string& item : arrayItems(dictionary))
+        {
+            const std::vector<double> part = evaluate(file, item, in, depth + 1);
+            if (!part.empty())
+                out.push_back(part.front());
+        }
+        return out;
+    }
+    const int type = std::atoi(valueOf(dictionary, "/FunctionType").c_str());
+    const std::vector<double> domain = numbersOf(valueOf(dictionary, "/Domain"));
+    const double x = in.empty() ? 0.0
+        : domain.size() >= 2 ? std::clamp(in[0], std::min(domain[0], domain[1]), std::max(domain[0], domain[1]))
+                             : in[0];
+    if (type == 2)
+    {
+        std::vector<double> c0 = numbersOf(valueOf(dictionary, "/C0"));
+        std::vector<double> c1 = numbersOf(valueOf(dictionary, "/C1"));
+        if (c0.empty())
+            c0 = {0.0};
+        if (c1.empty())
+            c1 = {1.0};
+        const double n = valueOf(dictionary, "/N").empty() ? 1.0 : std::atof(valueOf(dictionary, "/N").c_str());
+        const double f = std::pow(std::max(0.0, x), n);
+        std::vector<double> out;
+        for (size_t i = 0; i < c0.size() && i < c1.size(); ++i)
+            out.push_back(c0[i] + f * (c1[i] - c0[i]));
+        return out;
+    }
+    if (type == 3)
+    {
+        const std::vector<std::string> functions = arrayItems(valueOf(dictionary, "/Functions"));
+        const std::vector<double> bounds = numbersOf(valueOf(dictionary, "/Bounds"));
+        const std::vector<double> encode = numbersOf(valueOf(dictionary, "/Encode"));
+        if (functions.empty())
+            return in;
+        const double low = domain.size() >= 2 ? domain[0] : 0.0, high = domain.size() >= 2 ? domain[1] : 1.0;
+        size_t k = 0;
+        while (k < bounds.size() && x >= bounds[k])
+            ++k;
+        k = std::min(k, functions.size() - 1);
+        const double from = k == 0 ? low : bounds[k - 1];
+        const double to = k < bounds.size() ? bounds[k] : high;
+        double e0 = 0.0, e1 = 1.0;
+        if (encode.size() >= 2 * (k + 1))
+        {
+            e0 = encode[2 * k];
+            e1 = encode[2 * k + 1];
+        }
+        const double mapped = to > from ? e0 + (x - from) / (to - from) * (e1 - e0) : e0;
+        return evaluate(file, functions[k], {mapped}, depth + 1);
+    }
+    if (type == 0 && !data.empty())
+    {
+        // Sampled: one input, linear between samples.
+        const std::vector<double> size = numbersOf(valueOf(dictionary, "/Size"));
+        const int bits = std::atoi(valueOf(dictionary, "/BitsPerSample").c_str());
+        const std::vector<double> range = numbersOf(valueOf(dictionary, "/Range"));
+        std::vector<double> decode = numbersOf(valueOf(dictionary, "/Decode"));
+        if (decode.empty())
+            decode = range;
+        const size_t outputs = range.size() / 2;
+        if (size.empty() || outputs == 0 || (bits != 8 && bits != 16))
+            return in;
+        const int samples = static_cast<int>(size[0]);
+        const double low = domain.size() >= 2 ? domain[0] : 0.0, high = domain.size() >= 2 ? domain[1] : 1.0;
+        const double position = high > low ? (x - low) / (high - low) * (samples - 1) : 0.0;
+        const int i0 = std::clamp(static_cast<int>(std::floor(position)), 0, samples - 1);
+        const int i1 = std::min(samples - 1, i0 + 1);
+        const double f = position - i0;
+        const size_t bytes = static_cast<size_t>(bits / 8);
+        const auto sample = [&](int index, size_t output) {
+            const size_t at = (static_cast<size_t>(index) * outputs + output) * bytes;
+            if (at + bytes > data.size())
+                return 0.0;
+            const double raw = bytes == 1 ? data[at] : (data[at] << 8 | data[at + 1]);
+            const double maxValue = bytes == 1 ? 255.0 : 65535.0;
+            return decode[2 * output] + raw / maxValue * (decode[2 * output + 1] - decode[2 * output]);
+        };
+        std::vector<double> out;
+        for (size_t o = 0; o < outputs; ++o)
+            out.push_back(sample(i0, o) + f * (sample(i1, o) - sample(i0, o)));
+        return out;
+    }
+    if (type == 4 && !data.empty())
+        return calculate(std::string(data.begin(), data.end()), in);
+    return in;
+}
+
+/// How many components a color space's values have.
+int componentsOf(PdfFile& file, const std::string& space)
+{
+    const std::string text = resolved(file, space);
+    if (text.find("CMYK") != std::string::npos)
+        return 4;
+    if (text.find("RGB") != std::string::npos || text.find("/Lab") != std::string::npos)
+        return 3;
+    if (text.find("ICCBased") != std::string::npos)
+    {
+        const std::vector<std::string> items = arrayItems(text);
+        if (items.size() >= 2)
+        {
+            const std::vector<double> n = numbersOf(valueOf(resolved(file, items[1]), "/N"));
+            if (!n.empty())
+                return static_cast<int>(n.front());
+        }
+    }
+    return 1;
+}
+
+/// A color in \a space (a color space resource, or a device space's name)
+/// from \a values: a separation's or DeviceN's tint through its tint
+/// transform into its alternate space.
+Color colorIn(PdfFile& file, const std::string& space, const std::vector<double>& values)
+{
+    const std::string text = resolved(file, space);
+    if (!text.empty() && text.front() == '[')
+    {
+        const std::vector<std::string> items = arrayItems(text);
+        if (items.size() >= 4 && (items[0] == "/Separation" || items[0] == "/DeviceN"))
+        {
+            if (items[1] == "/None")
+                return Color{0, 0, 0, 0};
+            const std::vector<double> out = evaluate(file, items[3], values);
+            const int n = componentsOf(file, items[2]);
+            std::vector<double> alternate(out.begin(), out.begin() + std::min(out.size(), static_cast<size_t>(n)));
+            if (n == 3 && resolved(file, items[2]).find("/Lab") != std::string::npos && alternate.size() == 3)
+            {
+                // Lab, roughly: lightness as gray.
+                const double l = std::clamp(alternate[0] / 100.0, 0.0, 1.0);
+                alternate = {l, l, l};
+            }
+            return colorOf(alternate);
+        }
+    }
+    return colorOf(values);
+}
+
 /// A shading's colors, from its function: an exponential one between two
 /// colors, or stitched ones end to end. Empty for ones not read.
 std::vector<Gradient::Stop> shadingStops(PdfFile& file, const std::string& function, int depth = 0)
@@ -1662,6 +1891,59 @@ std::optional<Gradient> shadingGradient(PdfFile& file, const std::string& value,
 }
 
 /// An image XObject as pixels or its JPEG file; false for kinds not read.
+/// A PDF string's bytes from its text: "(...)" with its escapes, or
+/// "<hex>".
+std::vector<uint8_t> stringBytes(const std::string& text)
+{
+    std::vector<uint8_t> out;
+    if (text.empty())
+        return out;
+    if (text.front() == '<')
+    {
+        int high = -1;
+        for (size_t i = 1; i < text.size() && text[i] != '>'; ++i)
+        {
+            const char c = text[i];
+            const int v = c >= '0' && c <= '9' ? c - '0' : c >= 'a' && c <= 'f' ? c - 'a' + 10
+                : c >= 'A' && c <= 'F'                                       ? c - 'A' + 10
+                                                                             : -1;
+            if (v < 0)
+                continue;
+            if (high < 0)
+                high = v;
+            else
+            {
+                out.push_back(static_cast<uint8_t>(high * 16 + v));
+                high = -1;
+            }
+        }
+        return out;
+    }
+    for (size_t i = 1; i + 1 < text.size(); ++i)
+    {
+        char c = text[i];
+        if (c == '\\' && i + 2 < text.size())
+        {
+            c = text[++i];
+            if (c == 'n')
+                c = '\n';
+            else if (c == 'r')
+                c = '\r';
+            else if (c == 't')
+                c = '\t';
+            else if (c >= '0' && c <= '7')
+            {
+                int value = c - '0';
+                for (int k = 0; k < 2 && i + 1 < text.size() && text[i + 1] >= '0' && text[i + 1] <= '7'; ++k)
+                    value = value * 8 + (text[++i] - '0');
+                c = static_cast<char>(value & 0xFF);
+            }
+        }
+        out.push_back(static_cast<uint8_t>(c));
+    }
+    return out;
+}
+
 bool pdfImage(PdfFile& file, const std::string& dictionary, const std::vector<uint8_t>& data, Image& image)
 {
     const std::string filter = valueOf(dictionary, "/Filter");
@@ -1674,45 +1956,124 @@ bool pdfImage(PdfFile& file, const std::string& dictionary, const std::vector<ui
         image.encoded = data;
         return !image.encoded.empty();
     }
-    // Flate (already undone) or none: 8-bit gray, RGB or CMYK samples.
+    // Decoded samples (Flate and the rest already undone): gray, RGB, CMYK,
+    // a separation, or indices into a palette, 1 to 8 bits each.
     if (!filter.empty() && filter.find("FlateDecode") == std::string::npos)
         return false;
-    if (std::atoi(valueOf(dictionary, "/BitsPerComponent").c_str()) != 8)
+    const int bits = std::atoi(valueOf(dictionary, "/BitsPerComponent").c_str());
+    if (bits != 1 && bits != 2 && bits != 4 && bits != 8)
         return false;
     const std::string space = resolved(file, valueOf(dictionary, "/ColorSpace"));
-    int components = space.find("RGB") != std::string::npos ? 3 : space.find("CMYK") != std::string::npos ? 4
-        : space.find("Gray") != std::string::npos                                                    ? 1
-                                                                                                     : 0;
-    if (components == 0)
+    // A palette: each index's color, worked out once.
+    std::vector<Color> palette;
+    std::string base = space;
+    int components = 0;
+    if (space.find("/Indexed") != std::string::npos && !space.empty() && space.front() == '[')
     {
-        // An ICC profile's channels.
-        const std::vector<double> n = numbersOf(valueOf(resolved(file, valueOf(space, "/ICCBased")), "/N"));
-        components = n.empty() ? 3 : static_cast<int>(n.front());
-    }
-    const size_t pixels = static_cast<size_t>(image.width) * static_cast<size_t>(image.height);
-    if (data.size() < pixels * static_cast<size_t>(components))
-        return false;
-    image.rgba.assign(pixels * 4, 255);
-    for (size_t p = 0; p < pixels; ++p)
-    {
-        const uint8_t* in = &data[p * static_cast<size_t>(components)];
-        uint8_t* out = &image.rgba[p * 4];
-        if (components == 1)
-            out[0] = out[1] = out[2] = in[0];
-        else if (components == 4)
+        const std::vector<std::string> items = arrayItems(space);
+        if (items.size() < 4)
+            return false;
+        base = resolved(file, items[1]);
+        const int high = std::atoi(items[2].c_str());
+        std::vector<uint8_t> lookup;
+        const int reference = referenceOf(items[3]);
+        if (reference >= 0)
         {
-            const int k = 255 - in[3];
-            out[0] = static_cast<uint8_t>((255 - in[0]) * k / 255);
-            out[1] = static_cast<uint8_t>((255 - in[1]) * k / 255);
-            out[2] = static_cast<uint8_t>((255 - in[2]) * k / 255);
+            std::string table;
+            bool isStream = false;
+            if (!file.object(reference, table, lookup, isStream))
+                return false;
+            if (!isStream)
+                lookup = stringBytes(table);
         }
         else
+            lookup = stringBytes(items[3]);
+        const int n = std::max(1, componentsOf(file, base));
+        for (int i = 0; i <= high; ++i)
         {
-            out[0] = in[0];
-            out[1] = in[1];
-            out[2] = in[2];
+            std::vector<double> values;
+            for (int c = 0; c < n; ++c)
+            {
+                const size_t at = static_cast<size_t>(i * n + c);
+                values.push_back(at < lookup.size() ? lookup[at] / 255.0 : 0.0);
+            }
+            palette.push_back(colorIn(file, base, values));
         }
+        components = 1;
     }
+    else if (space.find("/Separation") != std::string::npos || space.find("/DeviceN") != std::string::npos)
+    {
+        const std::vector<std::string> items = arrayItems(space);
+        components = items.size() >= 2 && items[0] == "/DeviceN" ? static_cast<int>(arrayItems(items[1]).size()) : 1;
+    }
+    else
+        components = componentsOf(file, space);
+    components = std::max(1, components);
+    const std::vector<double> decode = numbersOf(valueOf(dictionary, "/Decode"));
+    const bool inverted = palette.empty() && components == 1 && decode.size() >= 2 && decode[0] > decode[1];
+    const size_t row = (static_cast<size_t>(image.width) * static_cast<size_t>(components) * static_cast<size_t>(bits) + 7) / 8;
+    if (data.size() < row * static_cast<size_t>(image.height))
+        return false;
+    const size_t sourcePixels = static_cast<size_t>(image.width) * static_cast<size_t>(image.height);
+    const int maxValue = (1 << bits) - 1;
+    const auto sample = [&](size_t y, size_t index) {
+        const size_t bit = index * static_cast<size_t>(bits);
+        const uint8_t byte = data[y * row + bit / 8];
+        const int shift = 8 - bits - static_cast<int>(bit % 8);
+        return (byte >> shift) & maxValue;
+    };
+    // A very large image comes in at a step of its pixels, so a page of
+    // them fits in memory; it covers the same place.
+    const int sourceWidth = image.width, sourceHeight = image.height;
+    const double megapixels = static_cast<double>(sourceWidth) * sourceHeight / 1.0e6;
+    const int step = megapixels > 16.0 ? static_cast<int>(std::ceil(std::sqrt(megapixels / 16.0))) : 1;
+    image.width = (sourceWidth + step - 1) / step;
+    image.height = (sourceHeight + step - 1) / step;
+    const size_t pixels = static_cast<size_t>(image.width) * static_cast<size_t>(image.height);
+    image.rgba.assign(pixels * 4, 255);
+    const bool special = space.find("/Separation") != std::string::npos || space.find("/DeviceN") != std::string::npos;
+    std::map<uint32_t, Color> cache;
+    for (size_t oy = 0; oy < static_cast<size_t>(image.height); ++oy)
+        for (size_t ox = 0; ox < static_cast<size_t>(image.width); ++ox)
+        {
+            const size_t p = oy * static_cast<size_t>(image.width) + ox;
+            const size_t y = oy * static_cast<size_t>(step), x = ox * static_cast<size_t>(step);
+            uint8_t* out = &image.rgba[p * 4];
+            Color color;
+            if (!palette.empty())
+            {
+                const int index = sample(y, x);
+                color = index < static_cast<int>(palette.size()) ? palette[static_cast<size_t>(index)] : Color{0, 0, 0, 255};
+            }
+            else
+            {
+                std::vector<double> values;
+                uint32_t key = 0;
+                for (int c = 0; c < components; ++c)
+                {
+                    const int v = sample(y, x * static_cast<size_t>(components) + static_cast<size_t>(c));
+                    key = key * 257u + static_cast<uint32_t>(v);
+                    values.push_back(static_cast<double>(v) / maxValue);
+                }
+                if (inverted)
+                    values[0] = 1.0 - values[0];
+                if (special)
+                {
+                    const auto found = cache.find(key);
+                    if (found != cache.end())
+                        color = found->second;
+                    else if (cache.size() < 4096)
+                        color = cache[key] = colorIn(file, space, values);
+                    else
+                        color = colorIn(file, space, values);
+                }
+                else
+                    color = colorOf(values);
+            }
+            out[0] = color[0];
+            out[1] = color[1];
+            out[2] = color[2];
+        }
     // A soft mask: the alpha, 8-bit gray.
     const int mask = referenceOf(valueOf(dictionary, "/SMask"));
     if (mask >= 0)
@@ -1720,10 +2081,12 @@ bool pdfImage(PdfFile& file, const std::string& dictionary, const std::vector<ui
         std::string maskDictionary;
         std::vector<uint8_t> alpha;
         bool isStream = false;
-        if (file.object(mask, maskDictionary, alpha, isStream) && isStream && alpha.size() >= pixels &&
-            std::atoi(valueOf(maskDictionary, "/Width").c_str()) == image.width)
-            for (size_t p = 0; p < pixels; ++p)
-                image.rgba[p * 4 + 3] = alpha[p];
+        if (file.object(mask, maskDictionary, alpha, isStream) && isStream && alpha.size() >= sourcePixels &&
+            std::atoi(valueOf(maskDictionary, "/Width").c_str()) == sourceWidth)
+            for (size_t oy = 0; oy < static_cast<size_t>(image.height); ++oy)
+                for (size_t ox = 0; ox < static_cast<size_t>(image.width); ++ox)
+                    image.rgba[(oy * static_cast<size_t>(image.width) + ox) * 4 + 3] =
+                        alpha[oy * static_cast<size_t>(step) * static_cast<size_t>(sourceWidth) + ox * static_cast<size_t>(step)];
     }
     return true;
 }
@@ -1735,6 +2098,11 @@ struct PdfRun
     double pageTop = 0.0;
     Artwork& artwork;
     std::vector<std::string> notes;
+    /// Clips from outside the content being run (a tiling pattern's tiles
+    /// are cut to the shape they fill).
+    std::vector<std::vector<Subpath>> outerClips;
+    /// Tiles drawn so far, to keep a pattern from growing past reason.
+    size_t tiles = 0;
 
     void note(const std::string& text)
     {
@@ -1762,6 +2130,23 @@ void runContent(const std::string& content, PdfRun& run, const std::string& reso
         double lineWidth = 1.0;
         std::optional<Gradient> fillGradient;
         std::vector<Subpath> clip;
+        /// The color spaces cs and CS set (a resource's value, or a device
+        /// space's name).
+        std::string fillSpace;
+        std::string strokeSpace;
+        /// The clipping paths in force, each cutting what is painted.
+        std::vector<std::vector<Subpath>> clips;
+        /// A tiling pattern fill: its cell's content and resources, its
+        /// space onto the page, and the step between tiles.
+        struct Tiling
+        {
+            std::string content;
+            std::string resources;
+            Affine toPage;
+            double xStep = 0, yStep = 0;
+            double box[4] = {0, 0, 0, 0};
+        };
+        std::optional<Tiling> fillTiling;
     };
     std::vector<State> stack(1);
     stack.back().ctm = start;
@@ -1789,12 +2174,95 @@ void runContent(const std::string& content, PdfRun& run, const std::string& reso
         if (clipNext)
         {
             stack.back().clip = path;
+            std::vector<Subpath> area = path;
+            for (Subpath& s : area)
+                s.closed = true;
+            if (!area.empty())
+                stack.back().clips.push_back(area);
             clipNext = false;
+        }
+        if (fill && stack.back().fillTiling && !path.empty())
+        {
+            // A tiling pattern: its cell drawn wherever the shape reaches,
+            // each tile cut to the shape.
+            const auto& tiling = *stack.back().fillTiling;
+            std::vector<Subpath> area = path;
+            for (Subpath& s : area)
+                s.closed = true;
+            double left = 1e300, top = 1e300, right = -1e300, bottom = -1e300;
+            for (const Subpath& s : area)
+                for (const Segment& seg : s.segments)
+                    for (const Point& pt : seg.points)
+                    {
+                        left = std::min(left, pt.x);
+                        right = std::max(right, pt.x);
+                        top = std::min(top, pt.y);
+                        bottom = std::max(bottom, pt.y);
+                    }
+            // The shape's box in the pattern's space.
+            const Affine toStage = run.stage().after(tiling.toPage);
+            const double det = toStage.a * toStage.d - toStage.b * toStage.c;
+            bool drawn = false;
+            if (std::fabs(det) > 1e-12 && tiling.xStep != 0 && tiling.yStep != 0)
+            {
+                const Affine inverse{toStage.d / det, -toStage.b / det, -toStage.c / det, toStage.a / det,
+                    (toStage.c * toStage.f - toStage.d * toStage.e) / det, (toStage.b * toStage.e - toStage.a * toStage.f) / det};
+                double px0 = 1e300, py0 = 1e300, px1 = -1e300, py1 = -1e300;
+                for (const Point& corner : {Point(left, top), Point(right, top), Point(left, bottom), Point(right, bottom)})
+                {
+                    const Point q = inverse.map(corner);
+                    px0 = std::min(px0, q.x);
+                    px1 = std::max(px1, q.x);
+                    py0 = std::min(py0, q.y);
+                    py1 = std::max(py1, q.y);
+                }
+                const double xs = std::fabs(tiling.xStep), ys = std::fabs(tiling.yStep);
+                const long i0 = static_cast<long>(std::floor((px0 - tiling.box[2]) / xs));
+                const long i1 = static_cast<long>(std::ceil((px1 - tiling.box[0]) / xs));
+                const long j0 = static_cast<long>(std::floor((py0 - tiling.box[3]) / ys));
+                const long j1 = static_cast<long>(std::ceil((py1 - tiling.box[1]) / ys));
+                const long count = (i1 - i0 + 1) * (j1 - j0 + 1);
+                if (count > 0 && count <= 2500 && run.tiles + static_cast<size_t>(count) <= 20000 && depth < 8)
+                {
+                    run.tiles += static_cast<size_t>(count);
+                    const std::vector<std::vector<Subpath>> saved = run.outerClips;
+                    for (const std::vector<Subpath>& clip : stack.back().clips)
+                        run.outerClips.push_back(clip);
+                    run.outerClips.push_back(area);
+                    for (long i = i0; i <= i1; ++i)
+                        for (long j = j0; j <= j1; ++j)
+                            runContent(tiling.content, run, tiling.resources,
+                                tiling.toPage.after(Affine{1, 0, 0, 1, i * xs, j * ys}), depth + 1);
+                    run.outerClips = saved;
+                    drawn = true;
+                }
+            }
+            if (!drawn)
+                run.note("Pattern fills too large to draw tile by tile came in as plain colors.");
+            if (drawn)
+            {
+                if (stroke)
+                {
+                    Painted outline;
+                    outline.subpaths = path;
+                    outline.stroke = faded(stack.back().stroke, stack.back().strokeAlpha);
+                    outline.strokeWidth = std::max(0.1, stack.back().lineWidth * stack.back().ctm.scale());
+                    outline.clips = run.outerClips;
+                    for (const std::vector<Subpath>& clip : stack.back().clips)
+                        outline.clips.push_back(clip);
+                    addPath(artwork, std::move(outline));
+                }
+                path.clear();
+                return;
+            }
         }
         if (!path.empty() && (fill || stroke))
         {
             Painted painted;
             painted.subpaths = path;
+            painted.clips = run.outerClips;
+            for (const std::vector<Subpath>& clip : stack.back().clips)
+                painted.clips.push_back(clip);
             if (fill)
             {
                 painted.fill = faded(stack.back().fill, stack.back().fillAlpha);
@@ -1994,19 +2462,59 @@ void runContent(const std::string& content, PdfRun& run, const std::string& reso
             if (matrix.size() >= 6)
                 placed = Affine{matrix[0], matrix[1], matrix[2], matrix[3], matrix[4], matrix[5]};
             state.fillGradient.reset();
-            if (std::atoi(valueOf(pattern, "/PatternType").c_str()) == 2)
+            state.fillTiling.reset();
+            const int patternType = std::atoi(valueOf(pattern, "/PatternType").c_str());
+            if (patternType == 2)
                 state.fillGradient = shadingGradient(run.file, valueOf(pattern, "/Shading"), run.stage().after(start.after(placed)));
             if (state.fillGradient)
                 state.fill = state.fillGradient->stops.front().color;
+            else if (patternType == 1)
+            {
+                // A tiling pattern: its cell is a stream of content.
+                const int number = referenceOf(resource("/Pattern", lastName));
+                std::string dictionary;
+                std::vector<uint8_t> data;
+                bool isStream = false;
+                if (number >= 0 && run.file.object(number, dictionary, data, isStream) && isStream)
+                {
+                    State::Tiling tiling;
+                    tiling.content.assign(data.begin(), data.end());
+                    tiling.resources = resolved(run.file, valueOf(dictionary, "/Resources"));
+                    tiling.toPage = start.after(placed);
+                    tiling.xStep = std::atof(valueOf(dictionary, "/XStep").c_str());
+                    tiling.yStep = std::atof(valueOf(dictionary, "/YStep").c_str());
+                    const std::vector<double> box = numbersOf(valueOf(dictionary, "/BBox"));
+                    for (size_t k = 0; k < 4 && k < box.size(); ++k)
+                        tiling.box[k] = box[k];
+                    state.fillTiling = tiling;
+                }
+            }
             else
-                run.note("Pattern fills other than gradients came in as plain colors.");
+                run.note("Pattern fills other than gradients and tiles came in as plain colors.");
         }
-        else if (op == "g" || op == "rg" || op == "k" || op == "sc" || op == "scn")
+        else if (op == "cs" || op == "CS")
+        {
+            const std::string space = lastName == "DeviceGray" || lastName == "DeviceRGB" || lastName == "DeviceCMYK" ||
+                    lastName == "Pattern"
+                ? "/" + lastName
+                : resource("/ColorSpace", lastName);
+            (op == "cs" ? state.fillSpace : state.strokeSpace) = space;
+        }
+        else if (op == "sc" || op == "scn")
+        {
+            state.fill = colorIn(run.file, state.fillSpace, operands);
+            state.fillGradient.reset();
+            state.fillTiling.reset();
+        }
+        else if (op == "SC" || op == "SCN")
+            state.stroke = colorIn(run.file, state.strokeSpace, operands);
+        else if (op == "g" || op == "rg" || op == "k")
         {
             state.fill = colorOf(operands);
             state.fillGradient.reset();
+            state.fillTiling.reset();
         }
-        else if (op == "G" || op == "RG" || op == "K" || op == "SC" || op == "SCN")
+        else if (op == "G" || op == "RG" || op == "K")
             state.stroke = colorOf(operands);
         else if (op == "gs" && !lastName.empty())
         {
@@ -2213,23 +2721,25 @@ Artwork readSvg(const std::string& text)
 Artwork readPdf(const std::vector<uint8_t>& bytes)
 {
     Artwork artwork;
-    const std::string file(bytes.begin(), bytes.end());
-    if (file.find("%PDF") == std::string::npos)
+    PdfFile pdf;
+    std::string error;
+    if (!pdf.file.open(bytes, error))
     {
-        artwork.notes.push_back("The file has no PDF page: Illustrator files are read from the PDF they carry, which "
-                                "Illustrator 9 and later save by default.");
+        // An Illustrator file older than version 9 is PostScript, not PDF.
+        if (looksLikePostScript(bytes))
+            return readPostScriptArt(bytes);
+        artwork.notes.push_back(error == "This is not a PDF file."
+                ? std::string("The file is neither PDF nor PostScript (nor an Illustrator file).")
+                : error);
         return artwork;
     }
-    std::string page;
-    if (!pageDictionary(file, page))
-        for (const std::string& objects : objectStreams(file))
-            if (pageDictionary(objects, page))
-                break;
-    if (page.empty())
+    const std::vector<pdf::Object> pages = pdf.file.pages();
+    if (pages.empty())
     {
         artwork.notes.push_back("No page was found in the file.");
         return artwork;
     }
+    const std::string page = pdf::File::text(pages.front());
     // The page's box: what its top and left are.
     double left = 0.0, bottom = 0.0, right = 612.0, top = 792.0;
     for (const char* box : {"/ArtBox", "/TrimBox", "/CropBox", "/MediaBox"})
@@ -2257,7 +2767,6 @@ Artwork readPdf(const std::vector<uint8_t>& bytes)
     }
     artwork.width = right - left;
     artwork.height = top - bottom;
-    PdfFile pdf{file};
     std::string content;
     for (int ref : contentRefs(page))
     {
@@ -2267,13 +2776,24 @@ Artwork readPdf(const std::vector<uint8_t>& bytes)
         if (pdf.object(ref, dictionary, data, isStream) && isStream)
             content.append(data.begin(), data.end()).push_back('\n');
     }
-    if (content.empty())
-    {
-        artwork.notes.push_back("The page's content could not be read.");
-        return artwork;
-    }
     PdfRun run{pdf, left, top, artwork, {}};
-    runContent(content, run, resolved(pdf, valueOf(page, "/Resources")), Affine(), 0);
+    if (!content.empty())
+        runContent(content, run, resolved(pdf, valueOf(page, "/Resources")), Affine(), 0);
+    // An Illustrator file saved without PDF content draws only a note on
+    // its page; its art is in the private data Illustrator keeps beside it.
+    if (artwork.paths.empty() && artwork.images.empty())
+    {
+        std::vector<uint8_t> privateData = illustratorPrivateData(pdf.file, pages.front());
+        if (!privateData.empty())
+        {
+            Artwork own = readIllustratorPrivateData(privateData);
+            if (!own.paths.empty() || !own.images.empty() || !own.texts.empty())
+                return own;
+            artwork.notes.insert(artwork.notes.end(), own.notes.begin(), own.notes.end());
+        }
+    }
+    if (content.empty())
+        artwork.notes.push_back("The page's content could not be read.");
     artwork.notes.insert(artwork.notes.end(), run.notes.begin(), run.notes.end());
     return artwork;
 }

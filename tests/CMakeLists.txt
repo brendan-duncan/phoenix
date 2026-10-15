@@ -116,6 +116,7 @@ if(PHOENIX_TESTS_HAVE_PARSER)
         test_swf_writer.cpp
         test_swf_sound.cpp
         test_swf_import.cpp
+        test_postscript_import.cpp
         test_fla_doctor.cpp
         test_exr_writer.cpp
         test_edit_list.cpp

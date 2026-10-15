@@ -997,7 +997,12 @@ private:
     /// placing the images on the current frame with \a toStage: their
     /// top-left at the stage's, or centered on \a at when given. Sounds go on
     /// the current keyframe when dropped on the stage.
-    void importMedia(const QStringList& paths, bool toStage, const QPointF* at = nullptr);
+    /// \a problems, when given, gets what went wrong rather than a message.
+    void importMedia(const QStringList& paths, bool toStage, const QPointF* at = nullptr, QStringList* problems = nullptr);
+    /// Artwork or an image on a new stage of its own, fitted to it, for the
+    /// viewer and the command line. False when nothing came in; \a problems
+    /// gets what the import said.
+    bool openArtwork(const QString& path, QStringList& problems);
 
     /// One SVG, Illustrator or PDF file, as drawing objects grouped on the
     /// stage (or a graphic symbol in the library), or a Photoshop document,

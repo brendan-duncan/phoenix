@@ -192,6 +192,7 @@
 #include <QPixmap>
 #include <QPainter>
 #include <QPainterPath>
+#include <QPainterPathStroker>
 #include <QLinearGradient>
 #include <QRadialGradient>
 #include <QToolBar>
@@ -7242,6 +7243,34 @@ bool MainWindow::benchmarkRender(const QString& path, int maxFrames, double& ope
     return true;
 }
 
+bool MainWindow::openArtwork(const QString& path, QStringList& problems)
+{
+    // A stage of a pixel, so the bounds are the art's (and its origin's).
+    createNewDocument(1, 1, 24.0, Qt::white);
+    importMedia({path}, true, nullptr, &problems);
+    fla::Document* data = _flaDocument ? _flaDocument->document : nullptr;
+    fla::Timeline* scene = data ? data->currentScene() : nullptr;
+    bool any = false;
+    for (fla::Layer* layer : scene ? scene->layers : std::vector<fla::Layer*>())
+        for (fla::Frame* frame : layer->frames)
+            any = any || !frame->elements.empty();
+    const QRectF art = _phoenixView && any ? _phoenixView->framesBounds(0, 0) : QRectF();
+    if (!scene || !art.isValid() || art.isEmpty())
+        return false;
+    data->width = std::max(1, static_cast<int>(std::ceil(art.width())));
+    data->height = std::max(1, static_cast<int>(std::ceil(art.height())));
+    for (fla::Layer* layer : scene->layers)
+        for (fla::Frame* frame : layer->frames)
+            for (fla::Element* element : frame->elements)
+            {
+                element->transform.tx -= art.left();
+                element->transform.ty -= art.top();
+            }
+    _phoenixView->invalidateBounds();
+    _phoenixView->clearCaches();
+    return true;
+}
+
 int MainWindow::viewFromCommandLine(const QString& path)
 {
     const QFileInfo info(path);
@@ -7257,35 +7286,19 @@ int MainWindow::viewFromCommandLine(const QString& path)
         loadFLAFile(info.absoluteFilePath());
     else if (MediaImport::isArtwork(path) || MediaImport::isImage(path))
     {
-        // Artwork on a stage of its own, fitted to it: a stage of a pixel,
-        // so the bounds are the art's (and its origin's).
-        createNewDocument(1, 1, 24.0, Qt::white);
-        importMedia({info.absoluteFilePath()}, true, nullptr);
-        fla::Document* data = _flaDocument ? _flaDocument->document : nullptr;
-        fla::Timeline* scene = data ? data->currentScene() : nullptr;
-        const QRectF art = _phoenixView ? _phoenixView->framesBounds(0, 0) : QRectF();
-        if (scene && art.isValid() && !art.isEmpty())
+        QStringList problems;
+        if (!openArtwork(info.absoluteFilePath(), problems))
         {
-            data->width = std::max(1, static_cast<int>(std::ceil(art.width())));
-            data->height = std::max(1, static_cast<int>(std::ceil(art.height())));
-            for (fla::Layer* layer : scene->layers)
-                for (fla::Frame* frame : layer->frames)
-                    for (fla::Element* element : frame->elements)
-                    {
-                        element->transform.tx -= art.left();
-                        element->transform.ty -= art.top();
-                    }
-            _phoenixView->invalidateBounds();
-            _phoenixView->clearCaches();
-        }
-        // Nothing came in: the import said why.
-        if (!art.isValid() || art.isEmpty())
+            QMessageBox::warning(nullptr, "Phoenix Viewer",
+                problems.isEmpty() ? QString("%1 has nothing Phoenix can show.").arg(info.fileName())
+                                   : problems.join("\n"));
             return 1;
+        }
     }
     else
     {
         QMessageBox::warning(nullptr, "Phoenix Viewer",
-            QString("%1 is not a file Phoenix shows: documents (PHX, FLA, XFL, SWF), artwork (SVG, AI, PDF, PSD) "
+            QString("%1 is not a file Phoenix shows: documents (PHX, FLA, XFL, SWF), artwork (SVG, AI, EPS, PDF, PSD) "
                     "and images open in the viewer.")
                 .arg(info.fileName()));
         return 1;
@@ -7305,7 +7318,21 @@ int MainWindow::viewFromCommandLine(const QString& path)
 
 int MainWindow::exportImageFromCommandLine(const QString& source, const QString& output, const QStringList& options)
 {
-    loadFLAFile(source);
+    // Artwork (SVG, Illustrator, EPS, PDF...) on a stage fitted to it.
+    if (MediaImport::isArtwork(source))
+    {
+        QStringList problems;
+        const bool opened = openArtwork(QFileInfo(source).absoluteFilePath(), problems);
+        for (const QString& problem : problems)
+            std::fprintf(stderr, "%s\n", qPrintable(problem));
+        if (!opened)
+        {
+            std::fprintf(stderr, "Nothing could be read from %s\n", qPrintable(source));
+            return 1;
+        }
+    }
+    else
+        loadFLAFile(source);
     if (!_flaDocument || !_flaDocument->document || !_phoenixView)
     {
         std::fprintf(stderr, "Could not open %s\n", qPrintable(source));
@@ -10069,10 +10096,10 @@ void MainWindow::placeLibraryItem(const QString& kind, const QString& droppedNam
 namespace {
 
 const char* const kImportFilter =
-    "All importable files (*.png *.jpg *.jpeg *.gif *.bmp *.psd *.psb *.svg *.ai *.pdf *.wav *.aif *.aiff *.mp3 *.flac *.ogg);;"
+    "All importable files (*.png *.jpg *.jpeg *.gif *.bmp *.psd *.psb *.svg *.ai *.eps *.ps *.pdf *.wav *.aif *.aiff *.mp3 *.flac *.ogg);;"
     "Images (*.png *.jpg *.jpeg *.gif *.bmp);;"
     "Photoshop documents (*.psd *.psb);;"
-    "Vector artwork (*.svg *.ai *.pdf);;"
+    "Vector artwork (*.svg *.ai *.eps *.ps *.pdf);;"
     "Sounds (*.wav *.aif *.aiff *.mp3 *.flac *.ogg);;"
     "All files (*)";
 
@@ -10284,7 +10311,7 @@ void MainWindow::importVideo()
         QMessageBox::warning(this, "Import Video", problems.join("\n"));
 }
 
-void MainWindow::importMedia(const QStringList& paths, bool toStage, const QPointF* at)
+void MainWindow::importMedia(const QStringList& paths, bool toStage, const QPointF* at, QStringList* problemsOut)
 {
     if (!_phoenixView || !_flaDocument || !_flaDocument->document)
         return;
@@ -10358,7 +10385,9 @@ void MainWindow::importMedia(const QStringList& paths, bool toStage, const QPoin
     _phoenixView->update();
     if (!soundOnStage.isEmpty())
         attachSound(soundOnStage);
-    if (!problems.isEmpty())
+    if (problemsOut)
+        *problemsOut << problems;
+    else if (!problems.isEmpty())
         QMessageBox::warning(this, name, problems.join("\n"));
 }
 
@@ -10553,6 +10582,120 @@ void MainWindow::importArtwork(const QString& path, bool toStage, const QPointF*
             {
                 painted.gradient->placement.tx += dx;
                 painted.gradient->placement.ty += dy;
+            }
+            // Clips that hold the whole path (a page-sized one, as
+            // Illustrator writes first) cut nothing.
+            if (!painted.clips.empty())
+            {
+                double left = 1e300, top = 1e300, right = -1e300, bottom = -1e300;
+                for (const fla::vectors::Subpath& subpath : painted.subpaths)
+                    for (const fla::vectors::Segment& segment : subpath.segments)
+                        for (const fla::Point& point : segment.points)
+                        {
+                            left = std::min(left, point.x);
+                            right = std::max(right, point.x);
+                            top = std::min(top, point.y);
+                            bottom = std::max(bottom, point.y);
+                        }
+                const double margin = painted.stroke ? painted.strokeWidth / 2.0 : 0.0;
+                const QRectF reach(left - margin, top - margin, right - left + 2 * margin, bottom - top + 2 * margin);
+                std::vector<std::vector<fla::vectors::Subpath>> cutting;
+                for (const std::vector<fla::vectors::Subpath>& clip : painted.clips)
+                {
+                    QPainterPath shape;
+                    shape.setFillRule(Qt::OddEvenFill);
+                    for (const fla::vectors::Subpath& subpath : clip)
+                    {
+                        for (const fla::vectors::Segment& segment : subpath.segments)
+                        {
+                            const QPointF p0(segment.points[0].x + dx, segment.points[0].y + dy);
+                            if (segment.kind == fla::vectors::Segment::Kind::Move)
+                                shape.moveTo(p0);
+                            else if (segment.kind == fla::vectors::Segment::Kind::Line)
+                                shape.lineTo(p0);
+                            else if (segment.points.size() >= 3)
+                                shape.cubicTo(p0, QPointF(segment.points[1].x + dx, segment.points[1].y + dy),
+                                    QPointF(segment.points[2].x + dx, segment.points[2].y + dy));
+                        }
+                        shape.closeSubpath();
+                    }
+                    if (!shape.contains(reach))
+                        cutting.push_back(clip);
+                }
+                painted.clips = cutting;
+            }
+            if (!painted.clips.empty())
+            {
+                // Cut to its clipping paths: a stroke first becomes the area
+                // it covers, filled in its color.
+                const auto toPath = [dx, dy](const std::vector<fla::vectors::Subpath>& subpaths, bool shift) {
+                    QPainterPath out;
+                    out.setFillRule(Qt::OddEvenFill);
+                    for (const fla::vectors::Subpath& subpath : subpaths)
+                    {
+                        for (const fla::vectors::Segment& segment : subpath.segments)
+                        {
+                            const auto at = [&](size_t i) {
+                                return QPointF(segment.points[i].x + (shift ? dx : 0.0), segment.points[i].y + (shift ? dy : 0.0));
+                            };
+                            if (segment.kind == fla::vectors::Segment::Kind::Move)
+                                out.moveTo(at(0));
+                            else if (segment.kind == fla::vectors::Segment::Kind::Line)
+                                out.lineTo(at(0));
+                            else if (segment.points.size() >= 3)
+                                out.cubicTo(at(0), at(1), at(2));
+                        }
+                        if (subpath.closed)
+                            out.closeSubpath();
+                    }
+                    return out;
+                };
+                QPainterPath area = toPath(painted.subpaths, false);
+                if (!painted.fill && painted.stroke)
+                {
+                    QPainterPathStroker stroker;
+                    stroker.setWidth(painted.strokeWidth);
+                    stroker.setCapStyle(Qt::RoundCap);
+                    stroker.setJoinStyle(Qt::RoundJoin);
+                    area = stroker.createStroke(area).simplified();
+                    painted.fill = painted.stroke;
+                    painted.stroke.reset();
+                }
+                for (const std::vector<fla::vectors::Subpath>& clip : painted.clips)
+                    area = area.intersected(toPath(clip, true));
+                painted.subpaths.clear();
+                fla::vectors::Subpath current;
+                for (int i = 0; i < area.elementCount(); ++i)
+                {
+                    const QPainterPath::Element e = area.elementAt(i);
+                    if (e.type == QPainterPath::MoveToElement)
+                    {
+                        if (current.segments.size() > 1)
+                        {
+                            current.closed = true;
+                            painted.subpaths.push_back(current);
+                        }
+                        current = fla::vectors::Subpath();
+                        current.segments.push_back({fla::vectors::Segment::Kind::Move, {fla::Point(e.x, e.y)}});
+                    }
+                    else if (e.type == QPainterPath::LineToElement)
+                        current.segments.push_back({fla::vectors::Segment::Kind::Line, {fla::Point(e.x, e.y)}});
+                    else if (e.type == QPainterPath::CurveToElement && i + 2 < area.elementCount())
+                    {
+                        const QPainterPath::Element c2 = area.elementAt(i + 1);
+                        const QPainterPath::Element end = area.elementAt(i + 2);
+                        current.segments.push_back({fla::vectors::Segment::Kind::Cubic,
+                            {fla::Point(e.x, e.y), fla::Point(c2.x, c2.y), fla::Point(end.x, end.y)}});
+                        i += 2;
+                    }
+                }
+                if (current.segments.size() > 1)
+                {
+                    current.closed = true;
+                    painted.subpaths.push_back(current);
+                }
+                if (painted.subpaths.empty())
+                    continue;
             }
             if (fla::Shape* shape = fla::vectors::toShape(painted))
                 shapes.push_back(shape);

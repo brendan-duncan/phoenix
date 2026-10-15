@@ -49,7 +49,8 @@ bool isSound(const QString& path)
 bool isArtwork(const QString& path)
 {
     const QString suffix = QFileInfo(path).suffix().toLower();
-    return suffix == "svg" || suffix == "ai" || suffix == "pdf" || suffix == "psd" || suffix == "psb";
+    return suffix == "svg" || suffix == "ai" || suffix == "pdf" || suffix == "eps" || suffix == "ps" || suffix == "psd" ||
+        suffix == "psb";
 }
 
 fla::Bitmap* loadImage(const fla::Document& document, const QString& path, QString& error)

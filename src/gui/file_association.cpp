@@ -17,7 +17,7 @@ const wchar_t* const kViewerProgId = L"Phoenix.Viewer";
 
 /// The files the viewer (Phoenix --view) shows: documents, SWF movies and
 /// the artwork Phoenix imports.
-const wchar_t* const kViewed[] = {L".phx", L".fla", L".xfl", L".swf", L".svg", L".ai", L".pdf", L".psd", L".psb"};
+const wchar_t* const kViewed[] = {L".phx", L".fla", L".xfl", L".swf", L".svg", L".ai", L".eps", L".ps", L".pdf", L".psd", L".psb"};
 
 std::wstring exePath()
 {

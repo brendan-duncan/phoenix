@@ -29,7 +29,7 @@
 
 <pre><code>Phoenix --view movie.swf</code></pre>
 
-<p>Shows the file in a player window of its own, without the editor: a quick viewer. Phoenix documents, FLA and XFL files and SWF movies play as <a href="actionscript.html#test-movie">Test Movie</a> plays them, scripts and sound included, with a time slider; SVG, Illustrator (<code>.ai</code>), PDF and Photoshop files and images show on a stage fitted to the art. Only the stage is drawn. On Windows, Phoenix adds <strong>View in Phoenix</strong> to the right-click menu of these files and <strong>Phoenix Viewer</strong> under <strong>Open with</strong>, so any of them opens in the viewer from File Explorer.</p>
+<p>Shows the file in a player window of its own, without the editor: a quick viewer. Phoenix documents, FLA and XFL files and SWF movies play as <a href="actionscript.html#test-movie">Test Movie</a> plays them, scripts and sound included, with a time slider; SVG, Illustrator (<code>.ai</code>), EPS, PDF and Photoshop files and images show on a stage fitted to the art. Only the stage is drawn. On Windows, Phoenix adds <strong>View in Phoenix</strong> to the right-click menu of these files and <strong>Phoenix Viewer</strong> under <strong>Open with</strong>, so any of them opens in the viewer from File Explorer.</p>
 
 <pre><code>Phoenix --mcp</code></pre>
 
@@ -189,7 +189,10 @@ Phoenix --export-movie scene.fla soundtrack.wav</code></pre>
 
 <h2>Export an image</h2>
 
-<pre><code>Phoenix --export-image scene.fla poster.png --frame 48 --size 1920x1080 --matte transparent</code></pre>
+<pre><code>Phoenix --export-image scene.fla poster.png --frame 48 --size 1920x1080 --matte transparent
+Phoenix --export-image logo.eps logo.png</code></pre>
+
+<p>The source can also be artwork: an SVG, Illustrator, EPS, PDF or Photoshop file is drawn on a stage fitted to it, a quick way to turn vector art into an image.</p>
 
 <table>
   <thead><tr><th>Option</th><th>Meaning</th></tr></thead>

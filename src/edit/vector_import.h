@@ -84,6 +84,9 @@ struct Painted
     std::optional<Gradient> gradient;
     std::optional<Color> stroke;
     double strokeWidth = 1.0;
+    /// The clipping paths in force, each an area (its subpaths, filled by
+    /// nesting) the paint is cut to; empty when nothing clips it.
+    std::vector<std::vector<Subpath>> clips;
 };
 
 /// An image in the artwork: its file's bytes (PNG or JPEG) or its pixels,
