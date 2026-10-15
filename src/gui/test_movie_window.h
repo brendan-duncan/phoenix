@@ -1,6 +1,7 @@
 #pragma once
 
 #include <QDialog>
+#include <QElapsedTimer>
 
 #include <functional>
 #include <map>
@@ -52,11 +53,22 @@ private:
     void setPaused(bool paused);
     void stopSounds();
     void tick();
+    /// Steps on to the frame the clock says is due, entering each frame on
+    /// the way so its scripts and sounds run, and draws once.
+    void advance();
+    /// Counts time from now (playing started, resumed, or the movie sent
+    /// somewhere else).
+    void startClock();
     void showFrame();
 
     PhoenixView* _view = nullptr;
     Player* _player = nullptr;
     QTimer* _timer = nullptr;
+    /// Playing goes by the clock, as sound does: frames are due by the time
+    /// gone since it started, not by how many ticks there were.
+    QElapsedTimer _clock;
+    qint64 _stepsDone = 0;
+    double _frameRate = 24.0;
     QLabel* _status = nullptr;
     QPushButton* _pause = nullptr;
     QPushButton* _step = nullptr;

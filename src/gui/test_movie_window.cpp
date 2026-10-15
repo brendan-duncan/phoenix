@@ -209,6 +209,7 @@ TestMovieWindow::TestMovieWindow(const fla::FLADocument& document, const QString
         if (_seeking || !_movie)
             return;
         _movie->seek(frame);
+        startClock();
         showFrame();
     });
     bar->addWidget(_slider, 1);
@@ -328,10 +329,13 @@ TestMovieWindow::TestMovieWindow(const fla::FLADocument& document, const QString
         _view->setMovie(_movie.get());
     }
 
+    // Wakes twice a frame; which frame is due comes from the clock, so the
+    // picture keeps time with the sound however long drawing takes.
+    _frameRate = data.frameRate > 0.0 ? data.frameRate : 24.0;
     _timer = new QTimer(this);
     _timer->setTimerType(Qt::PreciseTimer);
-    _timer->setInterval(std::max(1, static_cast<int>(std::lround(1000.0 / (data.frameRate > 0.0 ? data.frameRate : 24.0)))));
-    connect(_timer, &QTimer::timeout, this, &TestMovieWindow::tick);
+    _timer->setInterval(std::max(1, static_cast<int>(1000.0 / _frameRate / 2.0)));
+    connect(_timer, &QTimer::timeout, this, &TestMovieWindow::advance);
 
     // The stage at its own size, as far as the screen allows.
     resize(std::clamp(data.width + 40, 320, 1600), std::clamp(data.height + 80, 240, 1000));
@@ -374,7 +378,10 @@ void TestMovieWindow::setPaused(bool paused)
     if (paused)
         _timer->stop();
     else if (_movie)
+    {
+        startClock();
         _timer->start();
+    }
     showFrame();
 }
 
@@ -411,8 +418,37 @@ void TestMovieWindow::restart()
     _errors = 0;
     _movie->start();
     showFrame();
+    startClock();
     if (!_paused)
         _timer->start();
+}
+
+void TestMovieWindow::startClock()
+{
+    _clock.start();
+    _stepsDone = 0;
+}
+
+void TestMovieWindow::advance()
+{
+    if (!_movie || _paused)
+        return;
+    if (!_clock.isValid())
+        startClock();
+    const qint64 due = static_cast<qint64>(static_cast<double>(_clock.elapsed()) * _frameRate / 1000.0);
+    if (due <= _stepsDone)
+        return;
+    // Every frame due is entered, so its scripts run and its sounds start;
+    // far behind (drawing much slower than the frame rate), the clock is
+    // let go of rather than chased.
+    constexpr qint64 kMostSteps = 8;
+    const qint64 steps = std::min(due - _stepsDone, kMostSteps);
+    for (qint64 i = 0; i < steps; ++i)
+        _movie->step();
+    _stepsDone += steps;
+    if (due - _stepsDone > kMostSteps)
+        _stepsDone = due;
+    showFrame();
 }
 
 void TestMovieWindow::tick()
