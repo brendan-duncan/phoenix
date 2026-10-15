@@ -139,8 +139,8 @@ int main(int argc, char *argv[])
     // Exporting headless (QT_QPA_PLATFORM=offscreen) reads fonts from a
     // folder rather than from Windows, and Qt's own folder has none: text
     // would come out as empty boxes. Point it at the system's.
-    if (argc > 1 && (std::strcmp(argv[1], "--export-movie") == 0 || std::strcmp(argv[1], "--export-image") == 0 ||
-                     std::strcmp(argv[1], "--roundtrip") == 0 || std::strcmp(argv[1], "run-script") == 0) &&
+    if (argc > 1 && (command || std::strcmp(argv[1], "--export-movie") == 0 || std::strcmp(argv[1], "--export-image") == 0 ||
+                     std::strcmp(argv[1], "--roundtrip") == 0 || std::strcmp(argv[1], "--convert") == 0) &&
         qEnvironmentVariableIsEmpty("QT_QPA_FONTDIR"))
     {
         const QByteArray windows = qgetenv("WINDIR");

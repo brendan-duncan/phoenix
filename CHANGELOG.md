@@ -4,6 +4,8 @@ What changed in each release of Phoenix, newest first.
 
 ## 0.12.0 (Unreleased)
 
+- Phoenix play --image saves the frame the movie ends on as Test Movie shows it; tools/consistency_check.py compares it with exported stills and movies
+- Text no longer comes out as empty boxes from Phoenix render, play, batch and the other commands run with no window
 - Adjustment layers: Turbulent Displace and Wave Displace push the picture below about, in random swirls or travelling waves
 - Baking behaviors, shape operators and letter animators keeps a keyframe only where something changes, holding the frames between
 

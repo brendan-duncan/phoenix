@@ -4,6 +4,9 @@
 #include "script_runner.h"
 #include "shortcuts_dialog.h"
 #include "updater.h"
+#include "phoenix_view.h"
+#include "player.h"
+#include "../jsfl/behavior_frames.h"
 
 #include "../data/action_script.h"
 #include "../data/document.h"
@@ -124,12 +127,13 @@ const char* const kHelp =
     "      document. Exits 1 when the script fails. The script stops after\n"
     "      --timeout seconds (600 unless given; 0 for no limit).\n"
     "\n"
-    "  play <file> [--frames N] [--tree] [--click-all]\n"
+    "  play <file> [--frames N] [--tree] [--click-all] [--image <out.png>]\n"
     "      Plays the movie as Control > Test Movie does, scripts and all, for N\n"
     "      frames (120 unless given), printing what its scripts trace and the\n"
     "      errors they stop on. --tree lists the clips playing then, with\n"
     "      their scripts. --click-all then clicks each button it finds,\n"
-    "      one after another, playing a few frames after each. Exits 1 when a\n"
+    "      one after another, playing a few frames after each. --image draws\n"
+    "      the frame it is then on, as Test Movie shows it. Exits 1 when a\n"
     "      script stopped on an error.\n"
     "\n"
     "  benchmark <file> [--frames N] [--json <out.json>] [--against <animate.json>]\n"
@@ -882,6 +886,44 @@ int play(const QStringList& args)
         }
         std::printf("after clicking: root on frame %d, %s\n", movie.root().frame + 1,
             movie.root().playing ? "playing" : "stopped");
+    }
+    // --image: the frame the movie is on, drawn as Test Movie draws it, for
+    // comparing with what exports draw.
+    const QString imagePath = option(args, "--image");
+    if (!imagePath.isEmpty())
+    {
+        Player player;
+        PhoenixView view(&player);
+        view.setDocument(document.get());
+        view.setShowPasteboard(false);
+        view.setClipOutsideStage(true);
+        view.setMovie(&movie);
+        // Behaviors that follow layer parents (Jiggle) see them through
+        // this view, as they do through the window's.
+        fla::behaviors::setRigging([&view](const fla::Layer& layer, int frame, double matrix[6]) {
+            const fla::Frame* key = nullptr;
+            for (const fla::Frame* each : layer.frames)
+                if (each && each->index <= frame && frame < each->index + std::max(1, each->duration))
+                    key = each;
+            if (!key)
+                return false;
+            const QTransform placed = view.parentingAt(&layer, key, frame);
+            const double values[6] = {placed.m11(), placed.m12(), placed.m21(), placed.m22(), placed.dx(), placed.dy()};
+            std::copy(values, values + 6, matrix);
+            return true;
+        });
+        player.setCurrentFrame(movie.root().frame);
+        const QSize size(std::max(1, static_cast<int>(std::lround(document->document->width))),
+            std::max(1, static_cast<int>(std::lround(document->document->height))));
+        const QImage image = view.renderFrame(movie.root().frame, size, false);
+        view.setMovie(nullptr);
+        fla::behaviors::setRigging(nullptr);
+        if (image.isNull() || !image.save(imagePath))
+        {
+            std::fprintf(stderr, "play: %s could not be written\n", qPrintable(imagePath));
+            return 1;
+        }
+        std::printf("frame %d drawn to %s\n", movie.root().frame + 1, qPrintable(imagePath));
     }
     std::printf("%d errors\n", errors);
     return errors > 0 ? 1 : 0;
