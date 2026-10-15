@@ -226,6 +226,8 @@ private:
     void addInstanceSections(QVBoxLayout* layout, fla::SymbolInstance* instance);
     /// The fields of \a instance's symbol when it is a template, each filled
     /// in for this instance.
+    /// The document's 3D light and depth of field, in a dialog.
+    void editLightsAndDepth(fla::Document* document);
     void addTemplateSection(QVBoxLayout* layout, fla::SymbolInstance* instance);
     /// An instance's Display and Looping sections, and the rest under its
     /// color effect.

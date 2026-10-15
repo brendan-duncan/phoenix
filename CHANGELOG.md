@@ -4,6 +4,8 @@ What changed in each release of Phoenix, newest first.
 
 ## 0.12.0 (Unreleased)
 
+- 3D: a light that shades movie clips as they turn, and depth of field that blurs them away from a focus depth (Lights and Depth... in the 3D section of the Properties panel)
+
 - Audio Spectrum and Audio Waveform behaviors: bars and dots that dance to the scene's sound, in a row or round a circle; ctx.spectrum() and ctx.waveform() for your own behaviors
 
 - Behaviors: controls on a null (Slider, Angle, Point, Color and Checkbox Control) that Link to Control and your own behaviors follow; behaviors can tint

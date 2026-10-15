@@ -57,7 +57,7 @@ const std::vector<Feature>& all()
         {"master-controllers", "Master controllers", "the properties as keyed, without the sliders",
             {"phoenixControllers"}},
         {"3d-rotation", "3D rotation and depth", "the movie clips flat, without their 3D turn",
-            {"phoenixRotationX", "phoenixRotationY", "phoenixZ", "phoenixPerspectiveAngle"}},
+            {"phoenixRotationX", "phoenixRotationY", "phoenixZ", "phoenixPerspectiveAngle", "phoenixLight", "phoenixDepthOfField"}},
         {"parenting-options", "Layer parenting options", "child layers taking on all of the parent's transform",
             {"phoenixParentScale", "phoenixParentSkew", "phoenixParentFlip"}},
         {"joint-limits", "Bone joint limits", "bones that turn freely when posed",

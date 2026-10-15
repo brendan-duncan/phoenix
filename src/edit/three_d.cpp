@@ -70,6 +70,102 @@ Pose blend(const Pose& a, const Pose& b, double t)
     return pose;
 }
 
+namespace {
+
+const std::string* attributeOf(const Document& document, const char* name)
+{
+    for (const auto& attribute : document.extraAttributes)
+        if (attribute.first == name)
+            return &attribute.second;
+    return nullptr;
+}
+
+std::vector<std::pair<std::string, std::string>> withAttribute(const Document& document, const char* name,
+    const std::string* value)
+{
+    std::vector<std::pair<std::string, std::string>> attributes;
+    for (const auto& attribute : document.extraAttributes)
+        if (attribute.first != name)
+            attributes.push_back(attribute);
+    if (value)
+        attributes.emplace_back(name, *value);
+    return attributes;
+}
+
+} // namespace
+
+Light lightOf(const Document& document)
+{
+    Light light;
+    if (const std::string* text = attributeOf(document, "phoenixLight"))
+    {
+        unsigned int rgb = 0xFFFFFF;
+        const int read = std::sscanf(text->c_str(), "%lf,%lf,%lf,%lf,#%6x", &light.azimuth, &light.elevation,
+            &light.ambient, &light.intensity, &rgb);
+        light.on = read >= 2;
+        light.elevation = std::clamp(light.elevation, -90.0, 90.0);
+        light.ambient = std::clamp(light.ambient, 0.0, 1.0);
+        light.intensity = std::clamp(light.intensity, 0.0, 10.0);
+        light.color[0] = static_cast<unsigned char>((rgb >> 16) & 0xFF);
+        light.color[1] = static_cast<unsigned char>((rgb >> 8) & 0xFF);
+        light.color[2] = static_cast<unsigned char>(rgb & 0xFF);
+    }
+    return light;
+}
+
+std::vector<std::pair<std::string, std::string>> withLight(const Document& document, const Light& light)
+{
+    if (!light.on)
+        return withAttribute(document, "phoenixLight", nullptr);
+    char text[128];
+    std::snprintf(text, sizeof(text), "%g,%g,%g,%g,#%02X%02X%02X", light.azimuth, light.elevation, light.ambient,
+        light.intensity, light.color[0], light.color[1], light.color[2]);
+    const std::string value = text;
+    return withAttribute(document, "phoenixLight", &value);
+}
+
+double shading(const Pose& pose, const Light& light)
+{
+    if (!light.on)
+        return 1.0;
+    // The card's face, turned: it starts facing the viewer.
+    const double a = pose.rotationX * kPi / 180.0;
+    const double b = pose.rotationY * kPi / 180.0;
+    const double nx = -std::cos(a) * std::sin(b);
+    const double ny = std::sin(a);
+    const double nz = -std::cos(a) * std::cos(b);
+    // Toward the light.
+    const double az = light.azimuth * kPi / 180.0;
+    const double el = light.elevation * kPi / 180.0;
+    const double lx = std::cos(el) * std::sin(az);
+    const double ly = -std::cos(el) * std::cos(az);
+    const double lz = -std::sin(el);
+    const double facing = std::fabs(nx * lx + ny * ly + nz * lz);
+    return std::clamp(light.ambient + (1.0 - light.ambient) * light.intensity * facing, 0.0, 1.0);
+}
+
+DepthOfField depthOfFieldOf(const Document& document)
+{
+    DepthOfField depth;
+    if (const std::string* text = attributeOf(document, "phoenixDepthOfField"))
+        depth.on = std::sscanf(text->c_str(), "%lf,%lf", &depth.focus, &depth.aperture) >= 1;
+    depth.aperture = std::clamp(depth.aperture, 0.0, 1000.0);
+    return depth;
+}
+
+std::vector<std::pair<std::string, std::string>> withDepthOfField(const Document& document, const DepthOfField& depth)
+{
+    if (!depth.on)
+        return withAttribute(document, "phoenixDepthOfField", nullptr);
+    const std::string value = numberText(depth.focus) + "," + numberText(depth.aperture);
+    return withAttribute(document, "phoenixDepthOfField", &value);
+}
+
+double blurAt(const DepthOfField& depth, double z)
+{
+    return depth.on ? std::fabs(z - depth.focus) * depth.aperture / 100.0 : 0.0;
+}
+
 double perspectiveAngle(const Document& document)
 {
     for (const auto& attribute : document.extraAttributes)

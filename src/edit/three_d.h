@@ -57,6 +57,42 @@ std::array<double, 9> projection(const Pose& pose, const Point& center, const Po
 
 Point project(const std::array<double, 9>& map, const Point& point);
 
+/// The document's light, Phoenix's own (phoenixLight): when on, each clip
+/// turned in 3D is shaded by how squarely it faces the light, so a card
+/// turning away darkens. The light comes from \a azimuth (degrees round
+/// from above: 90 from the right, -90 from the left) and \a elevation
+/// (degrees out toward the viewer: 90 straight from the front, 0 grazing).
+/// \a ambient is the light everywhere (0 to 1), \a intensity the light's
+/// own strength, and \a color its color.
+struct Light
+{
+    bool on = false;
+    double azimuth = -45.0;
+    double elevation = 45.0;
+    double ambient = 0.3;
+    double intensity = 1.0;
+    unsigned char color[3] = {255, 255, 255};
+};
+Light lightOf(const Document& document);
+std::vector<std::pair<std::string, std::string>> withLight(const Document& document, const Light& light);
+/// How brightly \a light lights a clip turned by \a pose: 0 (dark) to 1.
+/// Either face of a card catches the light.
+double shading(const Pose& pose, const Light& light);
+
+/// Depth of field, Phoenix's own (phoenixDepthOfField): when on, clips
+/// moved in 3D blur the further they are from the \a focus depth (their
+/// Z), by \a aperture pixels of blur for each hundred pixels away.
+struct DepthOfField
+{
+    bool on = false;
+    double focus = 0.0;
+    double aperture = 4.0;
+};
+DepthOfField depthOfFieldOf(const Document& document);
+std::vector<std::pair<std::string, std::string>> withDepthOfField(const Document& document, const DepthOfField& depth);
+/// The blur, in pixels, for a clip at depth \a z.
+double blurAt(const DepthOfField& depth, double z);
+
 } // namespace threed
 
 } // namespace fla

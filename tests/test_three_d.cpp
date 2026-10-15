@@ -82,3 +82,62 @@ TEST(three_d_poses_are_kept_on_the_instance_and_tween)
     document.extraAttributes.emplace_back("phoenixPerspectiveAngle", "90");
     CHECK(fla::threed::perspectiveAngle(document) == 90.0);
 }
+
+TEST(three_d_light_shades_turned_clips_and_depth_blurs_them)
+{
+    namespace td = fla::threed;
+    fla::Document document(nullptr);
+    CHECK(!td::lightOf(document).on && !td::depthOfFieldOf(document).on);
+    // Straight from the front, no ambient: face on is fully lit, edge on
+    // is dark, and either face of the card catches it.
+    td::Light light;
+    light.on = true;
+    light.azimuth = 0.0;
+    light.elevation = 90.0;
+    light.ambient = 0.0;
+    td::Pose pose;
+    CHECK(std::fabs(td::shading(pose, light) - 1.0) < 1e-9);
+    pose.rotationY = 90.0;
+    CHECK(td::shading(pose, light) < 1e-9);
+    pose.rotationY = 180.0;
+    CHECK(std::fabs(td::shading(pose, light) - 1.0) < 1e-9);
+    pose.rotationY = 60.0;
+    CHECK(std::fabs(td::shading(pose, light) - 0.5) < 1e-9);
+    // Ambient keeps a floor.
+    light.ambient = 0.4;
+    pose.rotationY = 90.0;
+    CHECK(std::fabs(td::shading(pose, light) - 0.4) < 1e-9);
+    // Grazing from the right: a card swung round to face the side is lit
+    // full on, and one facing the viewer is edge on to the light.
+    light.azimuth = 90.0;
+    light.elevation = 0.0;
+    light.ambient = 0.0;
+    pose.rotationY = 90.0;
+    CHECK(std::fabs(td::shading(pose, light) - 1.0) < 1e-9);
+    pose.rotationY = 0.0;
+    CHECK(td::shading(pose, light) < 1e-9);
+    // Off: no shading.
+    light.on = false;
+    CHECK(td::shading(pose, light) == 1.0);
+
+    // Kept in the document and read back.
+    light.on = true;
+    light.color[0] = 255;
+    light.color[1] = 200;
+    light.color[2] = 100;
+    document.extraAttributes = td::withLight(document, light);
+    const td::Light read = td::lightOf(document);
+    CHECK(read.on && read.azimuth == 90.0 && read.color[1] == 200 && read.color[2] == 100);
+    td::DepthOfField depth;
+    depth.on = true;
+    depth.focus = 100.0;
+    depth.aperture = 5.0;
+    document.extraAttributes = td::withDepthOfField(document, depth);
+    CHECK(td::depthOfFieldOf(document).on && td::depthOfFieldOf(document).focus == 100.0);
+    CHECK(td::blurAt(depth, 100.0) == 0.0 && std::fabs(td::blurAt(depth, 300.0) - 10.0) < 1e-9 &&
+          std::fabs(td::blurAt(depth, -100.0) - 10.0) < 1e-9);
+    // Both off: nothing kept.
+    document.extraAttributes = td::withLight(document, td::Light());
+    document.extraAttributes = td::withDepthOfField(document, td::DepthOfField());
+    CHECK(document.extraAttributes.empty());
+}

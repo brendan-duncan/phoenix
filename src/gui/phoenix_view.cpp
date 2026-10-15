@@ -3937,6 +3937,32 @@ void PhoenixView::drawElement(QPainter& painter, const fla::Element* element, co
                 for (int c = 0; c < 3; ++c)
                     color.tintColor[c] = behaviorDelta.tintColor[c];
             }
+            // A clip turned in 3D: shaded by the document's light, and
+            // blurred by its depth of field.
+            fla::threed::Pose pose;
+            bool turned = false;
+            const fla::Document* lit = _flaDocument ? _flaDocument->document : nullptr;
+            if (lit && instance->symbolType == fla::SymbolType::MovieClip)
+            {
+                pose = fla::threed::of(*instance);
+                if (const auto* other = dynamic_cast<const fla::SymbolInstance*>(tweenElement))
+                    pose = fla::threed::blend(pose, fla::threed::of(*other), tweenProgress);
+                turned = !pose.flat();
+            }
+            if (turned)
+            {
+                const fla::threed::Light light = fla::threed::lightOf(*lit);
+                if (light.on)
+                {
+                    const double shade = fla::threed::shading(pose, light);
+                    color.redMultiplier *= shade * light.color[0] / 255.0;
+                    color.greenMultiplier *= shade * light.color[1] / 255.0;
+                    color.blueMultiplier *= shade * light.color[2] / 255.0;
+                    color.redOffset = static_cast<int>(std::lround(color.redOffset * shade));
+                    color.greenOffset = static_cast<int>(std::lround(color.greenOffset * shade));
+                    color.blueOffset = static_cast<int>(std::lround(color.blueOffset * shade));
+                }
+            }
             // Time remapping: a graphic held on the frame a behavior says.
             if (behaviorDelta.hold >= 0 && instance->symbolType == fla::SymbolType::Graphic)
             {
@@ -4003,6 +4029,18 @@ void PhoenixView::drawElement(QPainter& painter, const fla::Element* element, co
             {
                 if (filter.enabled)
                     filters.push_back(filter);
+            }
+            if (turned)
+            {
+                const double blur = fla::threed::blurAt(fla::threed::depthOfFieldOf(*lit), pose.z);
+                if (blur >= 0.5)
+                {
+                    fla::Filter focus;
+                    focus.type = fla::Filter::Type::Blur;
+                    focus.blurX = focus.blurY = std::min(blur, 255.0);
+                    focus.quality = 2;
+                    filters.push_back(focus);
+                }
             }
 
             // Anything but a plain alpha change needs the instance rendered
