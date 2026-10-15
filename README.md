@@ -1,6 +1,6 @@
 # Phoenix
 
-Phoenix is an open source 2D vector animation app for Windows and macOS. It has the drawing tools, timeline and symbols animators already know, and it opens and saves Adobe Animate FLA files without losing anything.
+Phoenix is an open source vector animation app for Windows and macOS. It has the drawing tools, timeline and symbols animators already know, and it opens and saves Adobe Animate FLA files without losing anything.
 
 ![Phoenix](docs/assets/shots/hero.webp)
 

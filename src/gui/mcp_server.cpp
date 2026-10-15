@@ -505,7 +505,7 @@ QJsonObject McpServer::handle(const QJsonObject& message, int id)
                 {"serverInfo", QJsonObject{{"name", "phoenix"}, {"title", "Phoenix"},
                                    {"version", QCoreApplication::applicationVersion()}}},
                 {"instructions",
-                    "Phoenix is a 2D animation app. These tools read and change the document open in it. Frames "
+                    "Phoenix is a vector animation software. These tools read and change the document open in it. Frames "
                     "count from 1; layers are named or counted from 0 at the top. Look with get_document, "
                     "get_timeline, get_elements and render_frame before changing things, and wrap a request that "
                     "takes several changes in begin_edit and end_edit so it undoes in one step."}});

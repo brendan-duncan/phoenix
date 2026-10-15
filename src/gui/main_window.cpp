@@ -8099,7 +8099,7 @@ void MainWindow::quit()
 void MainWindow::showAbout()
 {
     QMessageBox::about(this, "About Phoenix",
-        QString("<b>Phoenix</b> %1<br><br>2D Vector Animation Production Software.<br><br>"
+        QString("<b>Phoenix</b> %1<br><br>Vector Animation Production Software.<br><br>"
                 "<a href=\"https://github.com/brendan-duncan/phoenix\">github.com/brendan-duncan/phoenix</a>")
             .arg(Updater::currentVersion()));
 }
