@@ -2,7 +2,7 @@
 
 What changed in each release of Phoenix, newest first.
 
-## 0.12.0 (Unreleased)
+## 0.13.0 (Unreleased)
 
 - Eight new motion graphics lessons: motion blur and echo, glow and wipes, dashes and text on a path, a sound visualizer, controls on a null, 3D cards in the light, Motion Sketch, and a template that fits
 - Vignette darkens the edges of the whole picture, empty stage included, not just what is drawn
@@ -36,6 +36,9 @@ What changed in each release of Phoenix, newest first.
 - SWF export: the scene's event, start and stop sounds go in as event sounds of their own instead of being mixed into the stream
 - Paste in Place with frames chosen on the timeline pastes onto every keyframe they cover
 - Motion Editor: color and filter curves stay within what each property can be (tint channels 0 to 255, no blur below 0)
+
+## 0.12.0
+
 - Ctrl-dragging an outline with the Selection tool puts a new corner where you grab it and drags that, instead of moving the next corner along
 - Export FLA for Other Apps carries inverted track mattes (Layer and Erase blending) and adjustment-layer art (a mask over the filtered layers); SVG exports draw adjustment layers
 - Many copies of a graphic (crowds, grids, particles) draw from one picture of it: a thousand copies of a detailed symbol went from 433 ms a frame to 5 ms
