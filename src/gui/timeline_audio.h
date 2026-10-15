@@ -60,7 +60,25 @@ public:
     /// interleaved stereo at 44.1 kHz, for a video's soundtrack: event and
     /// start sounds from their keyframes (a start sound not again while it
     /// plays, a stop sound cutting them off), streams for their spans.
-    std::vector<float> mixdown(int first, int last);
+    /// With \a sceneEvents false, the scene's own event, start and stop
+    /// sounds with no envelope are left out, for a SWF that plays them as
+    /// events (see eventCues).
+    std::vector<float> mixdown(int first, int last, bool sceneEvents = true);
+
+    /// The scene's own event, start and stop sounds with no envelope, frame
+    /// by frame from \a first to \a last: what mixdown leaves out when
+    /// asked to. \a in and \a out are sample positions at 44.1 kHz, loops 0
+    /// for until stopped.
+    struct EventCue
+    {
+        int frame = 0;
+        std::string name;
+        std::string sync;
+        size_t in = 0;
+        size_t out = 0;
+        int loops = 1;
+    };
+    std::vector<EventCue> eventCues(int first, int last);
 
 public slots:
     void onPlayingChanged(bool playing);

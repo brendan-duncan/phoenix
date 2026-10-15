@@ -162,3 +162,45 @@ TEST(swf_movies_stream_their_sound_before_each_frame)
     const std::vector<int> expected = {69, 9, 45, 19, 1, 19, 1, 1, 0};
     CHECK(codes == expected);
 }
+
+TEST(swf_movies_start_and_stop_event_sounds)
+{
+    swf::Writer writer(100, 100, 12.0, {255, 255, 255, 255});
+    const std::vector<int16_t> samples = tone(11025, 1, 1102);
+    const int id = writer.defineSound(1, 11025, false, 1102, swf::encodeAdpcm(samples, 1, 4));
+    writer.startSound(id, 3, true, false);
+    writer.showFrame();
+    writer.startSound(id, 1, false, true);
+    writer.showFrame();
+    const std::vector<uint8_t> file = writer.finish(false);
+    const std::vector<int> codes = tagCodes(file);
+    // The sound defined once, started (three times round, not over itself),
+    // then stopped.
+    const std::vector<int> expected = {69, 9, 14, 15, 1, 15, 1, 0};
+    CHECK(codes == expected);
+    // DefineSound: its id, then ADPCM, 11 kHz, 16-bit, mono, and the samples;
+    // StartSound: the id, then no multiple and a loop count of 3, or stop.
+    size_t at = 8;
+    at += static_cast<size_t>((5 + 4 * (file[at] >> 3) + 7) / 8) + 4;
+    std::vector<std::vector<uint8_t>> bodies;
+    while (at + 2 <= file.size())
+    {
+        const int header = file[at] | (file[at + 1] << 8);
+        at += 2;
+        size_t length = static_cast<size_t>(header & 0x3F);
+        if (length == 0x3F)
+        {
+            length = file[at] | (file[at + 1] << 8) | (file[at + 2] << 16) | (static_cast<size_t>(file[at + 3]) << 24);
+            at += 4;
+        }
+        bodies.emplace_back(file.begin() + static_cast<std::ptrdiff_t>(at), file.begin() + static_cast<std::ptrdiff_t>(at + length));
+        at += length;
+    }
+    const std::vector<uint8_t>& define = bodies[2];
+    CHECK((define[0] | (define[1] << 8)) == id);
+    CHECK(define[2] == ((1 << 4) | (1 << 2) | (1 << 1)));
+    CHECK((define[3] | (define[4] << 8)) == 1102);
+    const std::vector<uint8_t> start = {static_cast<uint8_t>(id), 0, 0x14, 3, 0};
+    const std::vector<uint8_t> stop = {static_cast<uint8_t>(id), 0, 0x20};
+    CHECK(bodies[3] == start && bodies[5] == stop);
+}

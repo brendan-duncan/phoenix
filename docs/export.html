@@ -87,7 +87,7 @@
 
 <h2 id="swf">SWF movies</h2>
 
-<p><span class="menu-path">File &rsaquo; Export &rsaquo; Export SWF Movie...</span> writes the scene as an SWF movie, for players and pipelines that read SWF. Each frame's shapes, strokes, gradients and text go in as vector shapes, written once and placed again in every frame that shows them; masks clip their art; bitmaps, and what filters make, go in as images; blend modes are kept. The sound goes in as a soundtrack streamed with the frames, compressed as Publish Settings say (see <a href="sound.html#exporting-sound">Exporting sound</a>); ActionScript is not written. From the command line, <code>Phoenix render shot.fla --out shot.swf</code> does the same.</p>
+<p><span class="menu-path">File &rsaquo; Export &rsaquo; Export SWF Movie...</span> writes the scene as an SWF movie, for players and pipelines that read SWF. Each frame's shapes, strokes, gradients and text go in as vector shapes, written once and placed again in every frame that shows them; masks clip their art; bitmaps, and what filters make, go in as images; blend modes are kept. Stream sounds go in as a soundtrack streamed with the frames; the scene's event, start and stop sounds go in as sounds of their own, started and stopped on their frames, so they play to the end and loop as set; both compressed as Publish Settings say (see <a href="sound.html#exporting-sound">Exporting sound</a>); ActionScript is not written. From the command line, <code>Phoenix render shot.fla --out shot.swf</code> does the same.</p>
 
 <h2 id="publish">Publish</h2>
 

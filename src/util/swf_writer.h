@@ -107,6 +107,14 @@ public:
     /// This frame's part of the soundtrack (SoundStreamBlock), before
     /// showFrame; an empty block writes nothing.
     void soundBlock(const std::vector<uint8_t>& data);
+    /// A sound the movie plays as an event (DefineSound): its codec (1
+    /// ADPCM, 2 MP3, 3 raw), rate, channels, samples a channel, and data
+    /// (for MP3, starting with its seek). Returns its id.
+    int defineSound(int codec, int rate, bool stereo, uint32_t samples, const std::vector<uint8_t>& data);
+    /// Starts sound \a id on this frame (StartSound): \a loops times round
+    /// (at least once), not again while it plays with \a noMultiple, or
+    /// stops it with \a stop.
+    void startSound(int id, int loops, bool noMultiple, bool stop);
 
     void showFrame();
 

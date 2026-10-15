@@ -4,6 +4,7 @@ What changed in each release of Phoenix, newest first.
 
 ## 0.12.0 (Unreleased)
 
+- SWF export: the scene's event, start and stop sounds go in as event sounds of their own instead of being mixed into the stream
 - Paste in Place with frames chosen on the timeline pastes onto every keyframe they cover
 - Motion Editor: color and filter curves stay within what each property can be (tint channels 0 to 255, no blur below 0)
 - Ctrl-dragging an outline with the Selection tool puts a new corner where you grab it and drags that, instead of moving the next corner along

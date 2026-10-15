@@ -418,6 +418,33 @@ void Writer::soundBlock(const std::vector<uint8_t>& data)
         tag(19, data); // SoundStreamBlock
 }
 
+int Writer::defineSound(int codec, int rate, bool stereo, uint32_t samples, const std::vector<uint8_t>& data)
+{
+    const int id = _nextId++;
+    const int rateCode = rate >= 44100 ? 3 : rate >= 22050 ? 2 : rate >= 11025 ? 1 : 0;
+    Bits body;
+    body.u16(id);
+    body.u8((codec << 4) | (rateCode << 2) | (1 << 1) | (stereo ? 1 : 0)); // always 16-bit
+    body.u16(samples & 0xFFFF);
+    body.u16((samples >> 16) & 0xFFFF);
+    body.bytes.insert(body.bytes.end(), data.begin(), data.end());
+    tag(14, body.bytes); // DefineSound
+    return id;
+}
+
+void Writer::startSound(int id, int loops, bool noMultiple, bool stop)
+{
+    Bits body;
+    body.u16(id);
+    // SOUNDINFO: stop, no multiple, then envelope, loops, out and in point
+    // flags; the loop count follows when there is one.
+    const bool looped = !stop && loops != 1;
+    body.u8((stop ? 0x20 : 0) | (noMultiple ? 0x10 : 0) | (looped ? 0x04 : 0));
+    if (looped)
+        body.u16(loops <= 0 ? 0xFFFF : std::min(loops, 0xFFFF));
+    tag(15, body.bytes); // StartSound
+}
+
 void Writer::showFrame()
 {
     tag(1, {});
