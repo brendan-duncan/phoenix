@@ -199,7 +199,9 @@ TestMovieWindow::TestMovieWindow(const fla::FLADocument& document, const QString
     // The time slider: where the scene is, and dragging it seeks.
     _slider = new QSlider(Qt::Horizontal, this);
     _slider->setFocusPolicy(Qt::NoFocus);
-    auto* sliderStyle = new JumpingSliderStyle(_slider->style());
+    // No base given: the proxy then uses the application's style without
+    // owning it (given one, it would delete it with the slider).
+    auto* sliderStyle = new JumpingSliderStyle();
     sliderStyle->setParent(_slider);
     _slider->setStyle(sliderStyle);
     _slider->setToolTip("Drag to go to another frame of the scene");
