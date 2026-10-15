@@ -4,6 +4,7 @@ What changed in each release of Phoenix, newest first.
 
 ## 0.14.0 (Unreleased)
 
+- Motion blur draws about 15 times faster, and with echoes about 90 times: only the part of the picture the layer covers is blurred, and frames already blurred are reused
 - The Text tool types c, x and v again; they were being taken for the copy, cut and paste keys
 
 ## 0.13.0

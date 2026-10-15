@@ -3219,6 +3219,64 @@ QTransform PhoenixView::rigTransform(const fla::Layer* layer, const fla::Frame* 
     return QTransform();
 }
 
+namespace {
+
+/// The box round the pixels of \a image that are not clear; empty when
+/// none are.
+QRect drawnRect(const QImage& image)
+{
+    const int width = image.width();
+    const int height = image.height();
+    const auto rowUsed = [&image, width](int y, int& left, int& right) {
+        const uint32_t* line = reinterpret_cast<const uint32_t*>(image.constScanLine(y));
+        int first = 0;
+        while (first < width && line[first] == 0)
+            ++first;
+        if (first == width)
+            return false;
+        int last = width - 1;
+        while (line[last] == 0)
+            --last;
+        left = first;
+        right = last;
+        return true;
+    };
+    int top = 0;
+    int left = 0;
+    int right = 0;
+    while (top < height && !rowUsed(top, left, right))
+        ++top;
+    if (top == height)
+        return QRect();
+    int bottom = height - 1;
+    int l = 0;
+    int r = 0;
+    while (!rowUsed(bottom, l, r))
+        --bottom;
+    left = std::min(left, l);
+    right = std::max(right, r);
+    // The rows between, only where they could reach further out.
+    for (int y = top + 1; y < bottom; ++y)
+    {
+        const uint32_t* line = reinterpret_cast<const uint32_t*>(image.constScanLine(y));
+        for (int x = 0; x < left; ++x)
+            if (line[x] != 0)
+            {
+                left = x;
+                break;
+            }
+        for (int x = width - 1; x > right; --x)
+            if (line[x] != 0)
+            {
+                right = x;
+                break;
+            }
+    }
+    return QRect(QPoint(left, top), QPoint(right, bottom));
+}
+
+} // namespace
+
 bool PhoenixView::drawBlurredLayer(QPainter& painter, const fla::Layer* layer, fla::LoopType loopType, int firstFrame,
     const QPixmap* maskPixmap)
 {
@@ -3227,14 +3285,34 @@ bool PhoenixView::drawBlurredLayer(QPainter& painter, const fla::Layer* layer, f
         (_frameOverride >= 0 && !_exporting) || _maskPass || !painter.device())
         return false;
     const double shutter = fla::motionblur::shutter(*document);
-    const std::vector<double> times = fla::motionblur::sampleTimes(shutter, fla::motionblur::samples(*document));
+    const int sampleCount = fla::motionblur::samples(*document);
+    const std::vector<double> times = fla::motionblur::sampleTimes(shutter, sampleCount);
     if (shutter <= 0.0 || times.size() < 2)
         return false;
     // Pictures the size of what is drawn on, at its resolution.
     const qreal ratio = painter.device()->devicePixelRatioF();
     const QSize size(std::max(1, qRound(painter.device()->width() * ratio)), std::max(1, qRound(painter.device()->height() * ratio)));
-    std::vector<float> sum(static_cast<size_t>(size.width()) * size.height() * 4, 0.0f);
     const int frame = shownFrame();
+    const QTransform transform = painter.transform();
+    const auto drawBlurred = [&painter, ratio](const QImage& image, const QPoint& at) {
+        if (image.isNull())
+            return;
+        painter.save();
+        painter.resetTransform();
+        painter.drawImage(QPointF(at.x() / ratio, at.y() / ratio), image);
+        painter.restore();
+    };
+    // Worked out before, playing or for an echo of an earlier frame. While
+    // the frame shown is being edited it is worked out afresh.
+    const bool playing = _exporting || (_player && _player->isPlaying());
+    const bool reuse = playing || _sampleFrame >= 0;
+    for (const BlurredLayer& done : _blurCache)
+        if (reuse && done.layer == layer && done.frame == frame && done.transform == transform && done.size == size &&
+            done.revision == _revision && done.shutter == shutter && done.samples == sampleCount)
+        {
+            drawBlurred(done.image, done.at);
+            return true;
+        }
     struct Restore
     {
         PhoenixView& view;
@@ -3250,41 +3328,58 @@ bool PhoenixView::drawBlurredLayer(QPainter& painter, const fla::Layer* layer, f
     _blurring = true;
     QImage picture(size, QImage::Format_ARGB32_Premultiplied);
     picture.setDevicePixelRatio(ratio);
+    picture.fill(Qt::transparent);
+    // Sums of the samples (64 of 255 at most fit), touched only where
+    // something was drawn: the box round each sample's pixels.
+    std::vector<uint16_t> sum(static_cast<size_t>(size.width()) * size.height() * 4, 0);
+    QRect reach;
     for (const double time : times)
     {
         // Before the first frame there is nothing earlier to show.
         const double at = std::max(0.0, frame + time);
         _sampleFrame = static_cast<int>(std::floor(at));
         _subframe = at - _sampleFrame;
-        picture.fill(Qt::transparent);
-        QPainter into(&picture);
-        into.setRenderHints(painter.renderHints());
-        into.setTransform(painter.transform());
-        into.setOpacity(1.0);
-        drawLayer(into, layer, loopType, firstFrame, maskPixmap);
-        into.end();
-        const uint8_t* bytes = picture.constBits();
-        for (int y = 0; y < size.height(); ++y)
         {
-            const uint8_t* line = bytes + static_cast<size_t>(y) * picture.bytesPerLine();
-            float* out = sum.data() + static_cast<size_t>(y) * size.width() * 4;
-            for (int x = 0; x < size.width() * 4; ++x)
-                out[x] += line[x];
+            QPainter into(&picture);
+            into.setRenderHints(painter.renderHints());
+            into.setTransform(transform);
+            into.setOpacity(1.0);
+            drawLayer(into, layer, loopType, firstFrame, maskPixmap);
+        }
+        const QRect drawn = drawnRect(picture);
+        if (drawn.isEmpty())
+            continue;
+        reach = reach.united(drawn);
+        for (int y = drawn.top(); y <= drawn.bottom(); ++y)
+        {
+            uint8_t* line = picture.scanLine(y) + static_cast<size_t>(drawn.left()) * 4;
+            uint16_t* out = sum.data() + (static_cast<size_t>(y) * size.width() + drawn.left()) * 4;
+            const int count = drawn.width() * 4;
+            for (int x = 0; x < count; ++x)
+                out[x] = static_cast<uint16_t>(out[x] + line[x]);
+            // Cleared for the next sample: nothing was drawn outside.
+            std::memset(line, 0, static_cast<size_t>(count));
         }
     }
-    // The average, drawn as the layer.
-    const float share = 1.0f / static_cast<float>(times.size());
-    for (int y = 0; y < size.height(); ++y)
+    // The average over the part drawn, kept and drawn as the layer.
+    BlurredLayer done{layer, frame, transform, size, _revision, shutter, sampleCount, QImage(), reach.topLeft()};
+    if (!reach.isEmpty())
     {
-        uint8_t* line = picture.scanLine(y);
-        const float* in = sum.data() + static_cast<size_t>(y) * size.width() * 4;
-        for (int x = 0; x < size.width() * 4; ++x)
-            line[x] = static_cast<uint8_t>(std::min(255.0f, in[x] * share + 0.5f));
+        done.image = QImage(reach.size(), QImage::Format_ARGB32_Premultiplied);
+        done.image.setDevicePixelRatio(ratio);
+        const unsigned count = static_cast<unsigned>(times.size());
+        for (int y = 0; y < reach.height(); ++y)
+        {
+            uint8_t* line = done.image.scanLine(y);
+            const uint16_t* in = sum.data() + (static_cast<size_t>(y + reach.top()) * size.width() + reach.left()) * 4;
+            for (int x = 0; x < reach.width() * 4; ++x)
+                line[x] = static_cast<uint8_t>((in[x] + count / 2) / count);
+        }
     }
-    painter.save();
-    painter.resetTransform();
-    painter.drawImage(QRectF(0, 0, painter.device()->width(), painter.device()->height()), picture);
-    painter.restore();
+    drawBlurred(done.image, done.at);
+    _blurCache.push_back(std::move(done));
+    while (_blurCache.size() > 96)
+        _blurCache.pop_front();
     return true;
 }
 
@@ -8558,6 +8653,7 @@ void PhoenixView::clearCaches()
     _symbolBoundsCache.clear();
     _symbolReachCache.clear();
     _templateImages.clear();
+    _blurCache.clear();
     _insideSelectedValid = false;
     ++_motionRevision;
     _staticValid = false;

@@ -21,6 +21,7 @@
 #include "../edit/deformers.h"
 #include "../edit/frame_actions.h"
 
+#include <deque>
 #include <memory>
 #include <QCache>
 #include <QHash>
@@ -834,6 +835,22 @@ private:
     int _sampleFrame = -1;
     double _subframe = 0.0;
     bool _blurring = false;
+    /// Motion-blurred layers already worked out, by layer and frame, as the
+    /// part of the picture they cover: echoes of earlier frames and frames
+    /// played again reuse them.
+    struct BlurredLayer
+    {
+        const fla::Layer* layer = nullptr;
+        int frame = 0;
+        QTransform transform;
+        QSize size;
+        unsigned revision = 0;
+        double shutter = 0.0;
+        int samples = 0;
+        QImage image;
+        QPoint at;
+    };
+    std::deque<BlurredLayer> _blurCache;
     bool _timing = false;
     /// \a layer drawn with its time effects (Echo, Posterize Time), when it
     /// has any and is on the scene shown; false, drawing nothing, otherwise.
