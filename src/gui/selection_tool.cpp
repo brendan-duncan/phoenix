@@ -66,8 +66,9 @@ Cursors::Kind SelectionTool::hoverKindAt(PhoenixView& view, const QPointF& docum
         return Cursors::Kind::Arrow;
 
     // An unselected shape's outline can be bent or its corner moved; anything
-    // else, and anything selected, moves as a whole.
-    if (!_selection.contains(hit.element))
+    // else, and anything selected, moves as a whole. A drawing just made is
+    // selected only because it was drawn, and bends too.
+    if (!_selection.contains(hit.element) || hit.element == view.justDrawn())
     {
         const EdgeBender::Probe probe = EdgeBender::probe(view, hit, documentPos);
         if (probe.grab == EdgeBender::Grab::Corner)
@@ -102,10 +103,12 @@ bool SelectionTool::mousePress(PhoenixView& view, QMouseEvent* event, const QPoi
         return true;
 
     const HitResult hit = view.hitTest(documentPos, view.pickTolerance());
+    const fla::Element* justDrawn = view.justDrawn();
+    view.setJustDrawn(nullptr);
 
     if (hit)
     {
-        const bool alreadySelected = _selection.contains(hit.element);
+        const bool alreadySelected = _selection.contains(hit.element) && hit.element != justDrawn;
 
         // The outline of something not yet selected bends under the arrow
         // rather than moving. Ctrl here, with this tool active in its own
@@ -123,6 +126,7 @@ bool SelectionTool::mousePress(PhoenixView& view, QMouseEvent* event, const QPoi
                 {
                     _bendHit = hit;
                     _bendPress = documentPos;
+                    _bendingJustDrawn = hit.element == justDrawn;
                     return true;
                 }
             }
@@ -248,6 +252,11 @@ bool SelectionTool::mouseRelease(PhoenixView& view, QMouseEvent* event, const QP
         const bool bent = _bender.moved();
         _bender.commit(view, _commandStack);
 
+        // Bent, a drawing just made is let go, as anything else bent is
+        // not selected.
+        if (bent && _bendingJustDrawn)
+            _selection.clear();
+        _bendingJustDrawn = false;
         // A press on an outline that never moved is a click, and a click on
         // merge artwork selects the stroke or fill it landed on.
         if (!bent)

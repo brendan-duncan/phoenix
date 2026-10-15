@@ -487,6 +487,11 @@ public:
     /// Remembers a drawing that has been placed but not yet merged into the
     /// artwork under it. Deselecting it is what commits it.
     void setPendingMerge(fla::Shape* shape, fla::Frame* frame, bool keepStrokes = false);
+    /// What a drawing tool has just drawn, selected only for that: the
+    /// Selection tool still bends its outline rather than moving it. Only
+    /// compared, never followed.
+    void setJustDrawn(const fla::Element* element) { _justDrawn = element; }
+    const fla::Element* justDrawn() const { return _justDrawn; }
 
     /// Remembers a shape that has just been moved or reshaped.
     ///
@@ -1206,6 +1211,7 @@ private:
     /// A template's image field: the file drawn in place of the bitmap
     /// of the clip being drawn, empty when none.
     QString _templateImage;
+    const fla::Element* _justDrawn = nullptr;
     QHash<QString, QPixmap> _templateImages;
     QPixmap templateImage(const QString& path);
     const std::string* templateValue(const std::string& name) const;

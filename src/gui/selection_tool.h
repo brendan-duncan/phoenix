@@ -140,6 +140,7 @@ private:
     /// never moves can turn into a click that selects the stroke or fill.
     HitResult _bendHit;
     QPointF _bendPress;
+    bool _bendingJustDrawn = false;
 
     /// What the arrow is over, so the cursor can say what a press would do.
     Cursors::Kind _hoverKind = Cursors::Kind::Arrow;

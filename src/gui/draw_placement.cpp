@@ -142,6 +142,7 @@ void placeDrawnElement(PhoenixView& view, fla::CommandStack& commandStack,
 
     view.clearCaches();
     selection.select(element);
+    view.setJustDrawn(element);
     view.update();
 }
 
