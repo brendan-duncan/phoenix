@@ -1,6 +1,7 @@
 #include "swf_import.h"
 
 #include "../data/bitmap_decoder.h"
+#include "../util/lzma.h"
 #include "../util/swf_sound.h"
 
 #include "tinyxml2.h"
@@ -775,9 +776,15 @@ public:
         }
         else
         {
-            error = "This SWF movie is compressed with LZMA, which Phoenix cannot read yet. Publish it again "
-                    "with ordinary (zlib) compression, or none.";
-            return false;
+            // LZMA: the compressed length, the five property bytes, then the
+            // data, which decodes to the movie less its 8-byte header.
+            const size_t size = length > 8 ? length - 8 : 0;
+            if (file.size() < 17 || size > (size_t(1) << 30) ||
+                !lzma::decode(&file[12], file.data() + 17, file.size() - 17, size, body) || body.size() != size)
+            {
+                error = "This SWF movie is damaged: its compressed data cannot be read.";
+                return false;
+            }
         }
         Reader in(body.data(), body.size());
         const Rect stage = readRect(in);
@@ -941,9 +948,6 @@ private:
             return;
         case 87:
             leftOut("binary data");
-            return;
-        case 91:
-            leftOut("embedded fonts of the newer kind (DefineFont4)");
             return;
         default:
             leftOut("tag " + std::to_string(code));
@@ -1315,6 +1319,19 @@ private:
         case 33:
             defineText(tag, code == 33);
             return true;
+        case 91:
+        {
+            // DefineFont4, for text laid out by ActionScript: its name and
+            // style are kept for text that names it; its outlines (CFF) are
+            // not drawn.
+            Character& c = _characters[tag.u16()];
+            c.kind = Character::Kind::Font;
+            const uint8_t flags = tag.u8();
+            c.font.italic = flags & 0x02;
+            c.font.bold = flags & 0x01;
+            c.font.name = tag.string();
+            return true;
+        }
         case 37:
             defineEditText(tag);
             return true;

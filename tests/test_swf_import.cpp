@@ -216,7 +216,7 @@ TEST(swf_import_turns_down_what_is_not_a_movie)
     std::map<std::string, std::vector<uint8_t>> files;
     std::string error;
     CHECK(!SwfImport::convert({'P', 'K', 3, 4, 0, 0, 0, 0}, files, error) && !error.empty());
-    // LZMA movies are named as such.
+    // An LZMA movie cut short is damaged.
     CHECK(!SwfImport::convert({'Z', 'W', 'S', 13, 0, 0, 0, 0, 0, 0}, files, error) &&
-          error.find("LZMA") != std::string::npos);
+          error.find("damaged") != std::string::npos);
 }
