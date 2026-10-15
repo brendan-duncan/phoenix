@@ -1239,6 +1239,11 @@ TEST(adjustment_effects_color_generate_distort_and_wipe)
     CHECK(run("linearwipe", {{"completion", "100"}})[0] == 0u);
     CHECK(run("linearwipe", {{"completion", "0"}})[0] == image[0]);
     CHECK(run("dissolve", {{"completion", "100"}})[5] == 0u);
+    // Vignette: the corners darken, the clear part of the stage too (as
+    // black laid over it), and the middle stays.
+    out = run("vignette", {{"darkness", "100"}, {"size", "0"}, {"softness", "1"}});
+    CHECK((out[0] >> 24) == 255 && (out[0] & 0xFF) < 10);
+    CHECK((out[19] >> 24) > 200 && (out[19] & 0xFFFFFF) == 0u);
     // Fractal noise the same twice, and changing with the seed.
     CHECK(run("fractalnoise", {}) == run("fractalnoise", {}));
     CHECK(run("fractalnoise", {{"seed", "2"}}) != run("fractalnoise", {}));

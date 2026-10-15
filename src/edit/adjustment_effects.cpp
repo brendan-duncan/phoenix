@@ -929,12 +929,17 @@ void apply(const Applied& applied, uint32_t* pixels, const std::vector<uint32_t>
                 const double k = darkness * smoothstep(size * 0.7, size * 0.7 + softness, d);
                 if (k <= 0.0)
                     continue;
+                // The color laid over the picture, empty parts of the stage
+                // too, so the edges darken whatever is there.
                 Rgb c;
                 double a = 0.0;
                 unpack(before[i], c, a);
-                if (a <= 0.0)
-                    continue;
-                pixels[i] = pack(Rgb{c.r + (color.r - c.r) * k, c.g + (color.g - c.g) * k, c.b + (color.b - c.b) * k}, a);
+                const double cover = a / 255.0;
+                const double out = cover + (1.0 - cover) * k;
+                const auto over = [cover, k, out](double under, double tint) {
+                    return (under * cover * (1.0 - k) + tint * k) / out;
+                };
+                pixels[i] = pack(Rgb{over(c.r, color.r), over(c.g, color.g), over(c.b, color.b)}, out * 255.0);
             }
     }
     else if (type == "grain")
