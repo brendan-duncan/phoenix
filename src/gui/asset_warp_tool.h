@@ -64,5 +64,9 @@ private:
     QTransform _toDocument;
     int _selected = -1;
     bool _dragging = false;
+    /// A Shift-drag turns the pin; the angle the cursor started at, less
+    /// the pin's turn then.
+    bool _turning = false;
+    double _turnStart = 0.0;
     Attributes _before;
 };

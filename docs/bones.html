@@ -98,7 +98,7 @@
 
 <h2>Asset Warp</h2>
 
-<p><strong>Asset Warp</strong> puppets, where artwork bends around pins, are drawn deformed by their pins, vector and bitmap art alike.</p>
+<p><strong>Asset Warp</strong> puppets, where artwork bends around pins, are drawn deformed by their pins, vector and bitmap art alike. A turned pin turns the art right round it, a frozen pin keeps the art round it at its own angle, and a bone between two pins keeps the art along it on the line between them.</p>
 
 <h3>Asset Warp tool</h3>
 
@@ -108,6 +108,9 @@
   <li>Click a shape, a bitmap, a group or a graphic symbol instance to make it a puppet, with the first pin where you clicked. Its art goes into a graphic symbol (<em>WarpedAsset_1</em>) inside a puppet symbol (<em>PuppetShape_1</em>), both in the library, and the puppet takes its place. Movie clips and buttons cannot be warped.</li>
   <li>Click the puppet to show its pins. A click on the art where there is no pin adds one there.</li>
   <li>Drag a pin. The art bends around the other pins, which hold their places.</li>
+  <li><kbd>Shift</kbd>-drag a pin to turn it, and the art right round it, without moving it. A turned pin shows a tick the way it turned.</li>
+  <li>Click a pin and press <kbd>F</kbd> to freeze it, or again to let it go: the art round a frozen pin keeps its angle while the pins about it move. A frozen pin is square.</li>
+  <li>Click a pin, then <kbd>Ctrl</kbd>-click another to join them with a bone, or to take away the bone between them. The art along a bone stays on the line between its pins, like a stiff limb.</li>
   <li><kbd>Alt</kbd>-click a pin, or click it and press <kbd>Delete</kbd>, to take it away.</li>
 </ul>
 

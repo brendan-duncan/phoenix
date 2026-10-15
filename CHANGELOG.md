@@ -4,6 +4,7 @@ What changed in each release of Phoenix, newest first.
 
 ## 0.10.0 (Unreleased)
 
+- Asset Warp: turned pins, frozen pins and bones between pins in files are drawn as they bend the art; with the Asset Warp tool, Shift-drag turns a pin, F freezes it and Ctrl-click joins two pins with a bone
 - Export FLA for Other Apps also carries track mattes (as masks), adjustment layers (as filters on a movie clip) and template values (as symbol copies); Phoenix --convert in out --for-other-apps does the same from the command line
 - A mask that moves with a classic tween masks where it has moved to, rather than only where it started
 - AI assistants can set behaviors, shape operators and letter animators, make track mattes and adjustment layers, fill in template fields and render from data, and rename layers, symbols or instances to a naming convention

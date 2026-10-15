@@ -95,6 +95,26 @@ std::string pointText(const Point& point)
     return "{\"x\":" + numberText(point.x) + ",\"y\":" + numberText(point.y) + "}";
 }
 
+/// \a object with the plain value after "key": (a number or true/false)
+/// replaced by \a value, or added at its end when it has none.
+std::string withValue(std::string object, const std::string& key, const std::string& value)
+{
+    const std::string label = "\"" + key + "\":";
+    const size_t at = object.find(label);
+    if (at == std::string::npos)
+    {
+        const size_t close = object.rfind('}');
+        if (close == std::string::npos)
+            return object;
+        return object.insert(close, (close > 1 ? "," : "") + label + value);
+    }
+    const size_t start = at + label.size();
+    size_t end = start;
+    while (end < object.size() && object[end] != ',' && object[end] != '}')
+        ++end;
+    return object.replace(start, end - start, value);
+}
+
 /// \a object with the object after "key": replaced by \a value.
 std::string replaced(std::string object, const std::string& key, const std::string& value)
 {
@@ -135,7 +155,15 @@ std::string withPins(const std::string& puppetHandles, const std::vector<WarpPin
         std::string object;
         const auto found = written.find(pin.id);
         if (found != written.end())
+        {
             object = replaced(found->second, "newLocation", pointText(to));
+            // A turn is kept in turning mode; a pin turned back is left in
+            // the mode it had.
+            if (pin.rotation != 0.0)
+                object = withValue(object, "mode", "2");
+            object = withValue(object, "rotationAngle", numberText(pin.rotation));
+            object = withValue(object, "pointFreeze", pin.frozen ? "true" : "false");
+        }
         else
         {
             object = "{\"ID\":" + std::to_string(pin.id) +
@@ -144,32 +172,42 @@ std::string withPins(const std::string& puppetHandles, const std::vector<WarpPin
                 ",\"newStartControlPt\":{\"x\":0,\"y\":0},\"orgEndControlPt\":{\"x\":0,\"y\":0},\"orgLocation\":" +
                 pointText(pin.from) +
                 ",\"orgStartControlPt\":{\"x\":0,\"y\":0},\"pointFreeze\":false,\"rotationAngle\":0,\"selected\":false}";
+            if (pin.rotation != 0.0 || pin.frozen)
+            {
+                object = withValue(object, "mode", pin.rotation != 0.0 ? "2" : "1");
+                object = withValue(object, "rotationAngle", numberText(pin.rotation));
+                object = withValue(object, "pointFreeze", pin.frozen ? "true" : "false");
+            }
         }
         points += (points.empty() ? "" : ",") + object;
-        tree += std::string(tree.empty() ? "" : ",") + "{\"ID\":" + std::to_string(pin.id) +
-            ",\"children\":[],\"connectionType\":\"smooth\"}";
     }
     if (arrayOf(json, "puppetPoints", open, close))
         json.replace(open + 1, close - open - 1, points);
 
-    // The rig tree as read while it names the same pins; else a flat one.
+    // The rig tree from the pins' bones, each node's connection kept.
+    std::map<int, std::string> connection;
     if (arrayOf(json, "rigTree", open, close))
-    {
-        std::vector<int> listed;
-        for (const std::string& object : objectsIn(json, open, close))
+        for (const std::string& node : objectsIn(json, open, close))
         {
             double id = 0.0;
-            if (number(object, "ID", 0, object.size(), id))
-                listed.push_back(static_cast<int>(id));
+            const size_t type = node.find("\"connectionType\":\"");
+            if (number(node, "ID", 0, node.size(), id) && type != std::string::npos)
+            {
+                const size_t start = type + 18;
+                connection[static_cast<int>(id)] = node.substr(start, node.find('"', start) - start);
+            }
         }
-        std::vector<int> wanted;
-        for (const WarpPin& pin : pins)
-            wanted.push_back(pin.id);
-        std::sort(listed.begin(), listed.end());
-        std::sort(wanted.begin(), wanted.end());
-        if (listed != wanted)
-            json.replace(open + 1, close - open - 1, tree);
+    for (const WarpPin& pin : pins)
+    {
+        std::string children;
+        for (const int child : pin.children)
+            children += (children.empty() ? "" : ",") + std::to_string(child);
+        const auto kind = connection.find(pin.id);
+        tree += std::string(tree.empty() ? "" : ",") + "{\"ID\":" + std::to_string(pin.id) + ",\"children\":[" + children +
+            "],\"connectionType\":\"" + (kind == connection.end() ? std::string("smooth") : kind->second) + "\"}";
     }
+    if (arrayOf(json, "rigTree", open, close))
+        json.replace(open + 1, close - open - 1, tree);
     return json;
 }
 
@@ -219,9 +257,74 @@ std::vector<WarpPin> pins(const std::string& json)
         {
             pin.id = static_cast<int>(id);
             pin.to = Point(to.x / 20.0, to.y / 20.0);
+            double mode = 1.0;
+            double angle = 0.0;
+            // Turned only in turning mode (2).
+            if (number(json, "mode", at, close, mode) && std::lround(mode) == 2 && number(json, "rotationAngle", at, close, angle))
+                pin.rotation = angle;
+            const size_t freeze = json.find("\"pointFreeze\":", at);
+            pin.frozen = freeze != std::string::npos && freeze < close && json.compare(freeze + 14, 4, "true") == 0;
             result.push_back(pin);
         }
         at = json.find('{', close + 1);
+    }
+    // The bones: each rig tree entry's children.
+    size_t open = 0, shut = 0;
+    if (arrayOf(json, "rigTree", open, shut))
+    {
+        std::map<int, WarpPin*> byId;
+        for (WarpPin& pin : result)
+            byId[pin.id] = &pin;
+        for (const std::string& node : objectsIn(json, open, shut))
+        {
+            double nodeId = 0.0;
+            if (!number(node, "ID", 0, node.size(), nodeId))
+                continue;
+            const auto parent = byId.find(static_cast<int>(nodeId));
+            const size_t list = node.find("\"children\":[");
+            if (parent == byId.end() || list == std::string::npos)
+                continue;
+            // Children are IDs, or objects with an ID, in the list.
+            const size_t start = node.find('[', list);
+            int depth = 0;
+            size_t end = start;
+            for (size_t i = start; i < node.size(); ++i)
+            {
+                if (node[i] == '[' || node[i] == '{')
+                    ++depth;
+                else if ((node[i] == ']' || node[i] == '}') && --depth == 0)
+                {
+                    end = i;
+                    break;
+                }
+            }
+            const std::string children = node.substr(start + 1, end - start - 1);
+            if (children.find('{') != std::string::npos)
+            {
+                for (const std::string& child : objectsIn(children, 0, children.size()))
+                {
+                    double childId = 0.0;
+                    if (number(child, "ID", 0, child.size(), childId) && byId.count(static_cast<int>(childId)))
+                        parent->second->children.push_back(static_cast<int>(childId));
+                }
+            }
+            else
+            {
+                const char* text = children.c_str();
+                char* stop = nullptr;
+                for (;;)
+                {
+                    while (*text == ',' || *text == ' ')
+                        ++text;
+                    const double childId = std::strtod(text, &stop);
+                    if (stop == text)
+                        break;
+                    if (byId.count(static_cast<int>(childId)))
+                        parent->second->children.push_back(static_cast<int>(childId));
+                    text = stop;
+                }
+            }
+        }
     }
     return result;
 }
@@ -239,14 +342,73 @@ std::vector<WarpPin> blend(const std::vector<WarpPin>& a, const std::vector<Warp
             continue;
         pin.to.x += (found->second->to.x - pin.to.x) * t;
         pin.to.y += (found->second->to.y - pin.to.y) * t;
+        // The short way round.
+        double turn = found->second->rotation - pin.rotation;
+        turn = std::remainder(turn, 2.0 * 3.14159265358979323846);
+        pin.rotation += turn * t;
     }
     return result;
 }
 
-Point warp(const std::vector<WarpPin>& pins, const Point& point)
+namespace {
+
+/// The handles the warp pulls on: each pin, two close beside a turned or
+/// frozen pin to hold the art round it at its angle, and a few along each
+/// bone to keep the art there on the line between its pins.
+std::vector<WarpPin> handlesOf(const std::vector<WarpPin>& pins)
 {
-    if (pins.empty())
+    bool plain = true;
+    for (const WarpPin& pin : pins)
+        plain = plain && pin.rotation == 0.0 && !pin.frozen && pin.children.empty();
+    if (plain)
+        return pins;
+    std::vector<WarpPin> handles = pins;
+    std::map<int, const WarpPin*> byId;
+    for (const WarpPin& pin : pins)
+        byId[pin.id] = &pin;
+    constexpr double kNear = 6.0;
+    for (const WarpPin& pin : pins)
+    {
+        if (pin.rotation != 0.0 || pin.frozen)
+        {
+            // A frozen pin keeps its turn; the art about it no other.
+            const double c = std::cos(pin.rotation);
+            const double s = std::sin(pin.rotation);
+            for (const Point& offset : {Point(kNear, 0.0), Point(0.0, kNear)})
+            {
+                WarpPin side;
+                side.id = -1;
+                side.from = Point(pin.from.x + offset.x, pin.from.y + offset.y);
+                side.to = Point(pin.to.x + offset.x * c - offset.y * s, pin.to.y + offset.x * s + offset.y * c);
+                handles.push_back(side);
+            }
+        }
+        for (const int child : pin.children)
+        {
+            const auto other = byId.find(child);
+            if (other == byId.end())
+                continue;
+            for (const double u : {0.25, 0.5, 0.75})
+            {
+                WarpPin along;
+                along.id = -1;
+                along.from = Point(pin.from.x + (other->second->from.x - pin.from.x) * u,
+                    pin.from.y + (other->second->from.y - pin.from.y) * u);
+                along.to = Point(pin.to.x + (other->second->to.x - pin.to.x) * u, pin.to.y + (other->second->to.y - pin.to.y) * u);
+                handles.push_back(along);
+            }
+        }
+    }
+    return handles;
+}
+
+} // namespace
+
+Point warp(const std::vector<WarpPin>& given, const Point& point)
+{
+    if (given.empty())
         return point;
+    const std::vector<WarpPin> pins = handlesOf(given);
     if (pins.size() == 1)
         return Point(point.x + pins[0].to.x - pins[0].from.x, point.y + pins[0].to.y - pins[0].from.y);
 

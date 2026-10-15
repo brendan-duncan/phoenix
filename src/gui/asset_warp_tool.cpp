@@ -107,8 +107,45 @@ bool AssetWarpTool::mousePress(PhoenixView& view, QMouseEvent* event, const QPoi
     const int pin = _puppet ? pinAt(view, documentPos) : -1;
     if (pin >= 0)
     {
+        // Ctrl-click another pin: a bone from the one selected to it, or
+        // the bone between them taken away.
+        if ((event->modifiers() & Qt::ControlModifier) && _selected >= 0 && _selected != pin)
+        {
+            std::vector<fla::WarpPin> pins = pinsOf();
+            if (_selected < static_cast<int>(pins.size()))
+            {
+                _before = _puppet->extraAttributes;
+                fla::WarpPin& from = pins[static_cast<size_t>(_selected)];
+                fla::WarpPin& to = pins[static_cast<size_t>(pin)];
+                const auto joined = [](fla::WarpPin& a, int id) {
+                    const auto found = std::find(a.children.begin(), a.children.end(), id);
+                    if (found == a.children.end())
+                        return false;
+                    a.children.erase(found);
+                    return true;
+                };
+                const bool parted = joined(from, to.id) || joined(to, from.id);
+                if (!parted)
+                    from.children.push_back(to.id);
+                apply(view, pins);
+                commit(view, _before, parted ? "Remove Bone" : "Add Bone");
+            }
+            _selected = pin;
+            view.update();
+            return true;
+        }
         _selected = pin;
         _before = _puppet->extraAttributes;
+        // Shift-drag turns the pin, and the art right round it, instead.
+        _turning = (event->modifiers() & Qt::ShiftModifier) != 0;
+        if (_turning)
+        {
+            const std::vector<fla::WarpPin> pins = pinsOf();
+            bool invertible = false;
+            const QPointF local = _toDocument.inverted(&invertible).map(documentPos);
+            const fla::WarpPin& turned = pins[static_cast<size_t>(pin)];
+            _turnStart = std::atan2(local.y() - turned.to.y, local.x() - turned.to.x) - turned.rotation;
+        }
         if (event->modifiers() & Qt::AltModifier)
         {
             std::vector<fla::WarpPin> pins = pinsOf();
@@ -207,7 +244,11 @@ bool AssetWarpTool::mouseMove(PhoenixView& view, QMouseEvent* event, const QPoin
     const QPointF local = _toDocument.inverted(&invertible).map(documentPos);
     if (!invertible)
         return true;
-    pins[static_cast<size_t>(_selected)].to = fla::Point(local.x(), local.y());
+    fla::WarpPin& moved = pins[static_cast<size_t>(_selected)];
+    if (_turning)
+        moved.rotation = std::atan2(local.y() - moved.to.y, local.x() - moved.to.x) - _turnStart;
+    else
+        moved.to = fla::Point(local.x(), local.y());
     apply(view, pins);
     return true;
 }
@@ -219,17 +260,34 @@ bool AssetWarpTool::mouseRelease(PhoenixView& view, QMouseEvent* event, const QP
     if (!_dragging)
         return false;
     _dragging = false;
-    commit(view, _before, "Move Pin");
+    commit(view, _before, _turning ? "Turn Pin" : "Move Pin");
+    _turning = false;
     return true;
 }
 
 bool AssetWarpTool::keyPress(PhoenixView& view, QKeyEvent* event)
 {
-    if (!_puppet || _selected < 0 || (event->key() != Qt::Key_Delete && event->key() != Qt::Key_Backspace))
+    if (!_puppet || _selected < 0)
         return false;
     std::vector<fla::WarpPin> pins = pinsOf();
     if (_selected >= static_cast<int>(pins.size()))
         return false;
+    // F freezes the pin: the art round it keeps its angle.
+    if (event->key() == Qt::Key_F && event->modifiers() == Qt::NoModifier)
+    {
+        _before = _puppet->extraAttributes;
+        fla::WarpPin& pin = pins[static_cast<size_t>(_selected)];
+        pin.frozen = !pin.frozen;
+        apply(view, pins);
+        commit(view, _before, pin.frozen ? "Freeze Pin" : "Unfreeze Pin");
+        return true;
+    }
+    if (event->key() != Qt::Key_Delete && event->key() != Qt::Key_Backspace)
+        return false;
+    // Bones to the pin go with it.
+    const int gone = pins[static_cast<size_t>(_selected)].id;
+    for (fla::WarpPin& each : pins)
+        each.children.erase(std::remove(each.children.begin(), each.children.end(), gone), each.children.end());
     _before = _puppet->extraAttributes;
     pins.erase(pins.begin() + _selected);
     apply(view, pins);
@@ -246,13 +304,34 @@ void AssetWarpTool::paintOverlay(PhoenixView& view, QPainter& painter, double sc
     const std::vector<fla::WarpPin> pins = pinsOf();
     painter.save();
     painter.setRenderHint(QPainter::Antialiasing, true);
+    // The bones first, under the pins.
+    for (const fla::WarpPin& pin : pins)
+        for (const int child : pin.children)
+            for (const fla::WarpPin& other : pins)
+                if (other.id == child)
+                {
+                    painter.setPen(QPen(QColor(20, 20, 20), 3.5 * scale, Qt::SolidLine, Qt::RoundCap));
+                    painter.drawLine(_toDocument.map(QPointF(pin.to.x, pin.to.y)), _toDocument.map(QPointF(other.to.x, other.to.y)));
+                    painter.setPen(QPen(QColor(255, 200, 0), 1.5 * scale, Qt::SolidLine, Qt::RoundCap));
+                    painter.drawLine(_toDocument.map(QPointF(pin.to.x, pin.to.y)), _toDocument.map(QPointF(other.to.x, other.to.y)));
+                }
     for (size_t i = 0; i < pins.size(); ++i)
     {
         const QPointF at = _toDocument.map(QPointF(pins[i].to.x, pins[i].to.y));
         const bool selected = static_cast<int>(i) == _selected;
         painter.setPen(QPen(QColor(20, 20, 20), 1.5 * scale));
         painter.setBrush(selected ? QColor(255, 200, 0) : QColor(255, 255, 255));
-        painter.drawEllipse(at, 5.0 * scale, 5.0 * scale);
+        // A frozen pin is square.
+        if (pins[i].frozen)
+            painter.drawRect(QRectF(at.x() - 5.0 * scale, at.y() - 5.0 * scale, 10.0 * scale, 10.0 * scale));
+        else
+            painter.drawEllipse(at, 5.0 * scale, 5.0 * scale);
+        // A turned pin shows which way it turned.
+        if (pins[i].rotation != 0.0)
+        {
+            const QPointF way(std::cos(pins[i].rotation), std::sin(pins[i].rotation));
+            painter.drawLine(at, at + way * 12.0 * scale);
+        }
         painter.setBrush(QColor(20, 20, 20));
         painter.drawEllipse(at, 1.5 * scale, 1.5 * scale);
     }
