@@ -5364,7 +5364,28 @@ std::vector<fla::textanim::Change> PhoenixView::textChanges(const fla::StaticTex
     }
     const double rate = _flaDocument && _flaDocument->document && _flaDocument->document->frameRate > 0.0
         ? _flaDocument->document->frameRate : 24.0;
-    return fla::textanim::apply(fla::textanim::of(text), TextLayout::letters(text), at, start, rate);
+    // The motion guide's line, for Text on a Path, in the field's own space.
+    fla::textanim::PathInText inText;
+    const fla::textanim::PathInText* path = nullptr;
+    if (const fla::GuidePath* guide = guidePathOf(frame))
+    {
+        const fla::Transform& t = text.transform;
+        const double det = t.m11 * t.m22 - t.m12 * t.m21;
+        if (std::fabs(det) > 1e-12 && !guide->empty())
+        {
+            inText.length = guide->length();
+            inText.at = [guide, t, det](double distance) {
+                const fla::Point p = guide->at(distance);
+                const double x = p.x - t.tx;
+                const double y = p.y - t.ty;
+                return fla::Point((t.m22 * x - t.m21 * y) / det, (-t.m12 * x + t.m11 * y) / det);
+            };
+            const double turned = std::atan2(t.m12, t.m11) * 180.0 / 3.14159265358979323846;
+            inText.angleAt = [guide, turned](double distance) { return guide->angleAt(distance) - turned; };
+            path = &inText;
+        }
+    }
+    return fla::textanim::apply(fla::textanim::of(text), TextLayout::letters(text), at, start, rate, path);
 }
 
 std::vector<fla::Shape*> PhoenixView::bakedShape(const fla::Shape& shape, int at)

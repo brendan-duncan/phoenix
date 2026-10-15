@@ -172,6 +172,16 @@ const std::vector<Definition>& definitions()
             {number("rate", "Letters settled per second", 10, 0.1, 500, 0.5), number("delay", "Wait first (seconds)", 0, 0, 600, 0.05),
                 number("changes", "Flickers per second", 12, 1, 60, 1), choice("set", "Random characters", {"Letters", "Digits", "Symbols"}),
                 seed()}),
+        definition("path", "Text on a Path",
+            "Lays the letters along the line of the motion guide the text's layer is under, turned with it; key the First "
+            "margin to send them along the line.",
+            {number("margin", "First margin (pixels)", 0, -100000, 100000, 1), number("shift", "Above the line (pixels)", 0, -2000, 2000, 0.5),
+                checkbox("turn", "Turn letters with the line", true), checkbox("wrap", "Wrap round past the end", false)}),
+        definition("wiggly", "Wiggly",
+            "Shakes each letter about on its own, smoothly at random: moving, turning, growing and fading as you set.",
+            {number("frequency", "Wiggles per second", 2, 0, 30, 0.1), number("move", "Move (pixels)", 6, 0, 500, 0.5),
+                number("turn", "Turn (degrees)", 10, 0, 360, 0.5), number("size", "Size (percent)", 0, 0, 200, 1),
+                number("fade", "Fade (percent)", 0, 0, 100, 1), number("together", "Together (percent)", 0, 0, 100, 1), seed()}),
         definition("wave", "Wave", "A wave runs through the letters, lifting and tilting them.",
             {number("height", "Height (pixels)", 8, -500, 500, 0.5), number("length", "Letters per wave", 8, 1, 200, 0.5),
                 number("speed", "Waves per second", 1, -20, 20, 0.05), number("tilt", "Tilt (degrees)", 0, -90, 90, 1)}),
@@ -223,7 +233,7 @@ bool any(const StaticText& field)
 }
 
 std::vector<Change> apply(const std::vector<Applied>& list, const std::vector<Letter>& letters, int frame, int start,
-    double frameRate)
+    double frameRate, const PathInText* path)
 {
     std::vector<Change> changes(letters.size());
     const double rate = frameRate > 0.0 ? frameRate : 24.0;
@@ -301,6 +311,77 @@ std::vector<Change> apply(const std::vector<Applied>& list, const std::vector<Le
                     continue;
                 const double pick = hash(seedValue, tick * 7919 + letters[i].index);
                 changes[i].character = static_cast<unsigned char>(pool[static_cast<size_t>(pick * pool.size()) % pool.size()]);
+            }
+        }
+        else if (type == "path")
+        {
+            // Each letter's middle on the guide's line, as far along as the
+            // margin plus its own place across the field.
+            if (!path || !path->at || path->length <= 0.0)
+                continue;
+            const double margin = param(applied, "margin", frame, 0.0);
+            const double shift = param(applied, "shift", frame, 0.0);
+            const bool turn = flag(applied, "turn", frame, true);
+            const bool wrap = flag(applied, "wrap", frame, false);
+            const double first = letters.empty() ? 0.0 : letters.front().middleX;
+            for (size_t i = 0; i < letters.size(); ++i)
+            {
+                double along = margin + letters[i].middleX - first;
+                if (wrap)
+                    along -= path->length * std::floor(along / path->length);
+                else if (along < 0.0 || along > path->length)
+                {
+                    // Off the line's ends: not shown.
+                    changes[i].alpha = 0.0;
+                    continue;
+                }
+                const double angle = path->angleAt ? path->angleAt(along) : 0.0;
+                const double radians = angle * kPi / 180.0;
+                const Point on = path->at(along);
+                // Lifted off the line by the shift, across it.
+                const double x = on.x + std::sin(radians) * shift;
+                const double y = on.y - std::cos(radians) * shift;
+                changes[i].x += x - letters[i].middleX;
+                changes[i].y += y - letters[i].middleY;
+                if (turn)
+                    changes[i].rotation += angle;
+            }
+        }
+        else if (type == "wiggly")
+        {
+            // Each letter shaken about on its own, smoothly, as Wiggle shakes
+            // an instance.
+            const double frequency = param(applied, "frequency", frame, 2.0);
+            const double move = param(applied, "move", frame, 6.0);
+            const double turn = param(applied, "turn", frame, 10.0);
+            const double size = param(applied, "size", frame, 0.0);
+            const double fade = std::clamp(param(applied, "fade", frame, 0.0) / 100.0, 0.0, 1.0);
+            const double together = std::clamp(param(applied, "together", frame, 0.0) / 100.0, 0.0, 1.0);
+            const int seedValue = static_cast<int>(param(applied, "seed", frame, 1.0));
+            const double t = time * frequency;
+            const auto noise = [&](double at, int64_t n) {
+                const double i0 = std::floor(at);
+                const double f = at - i0;
+                const double a = hash(seedValue, static_cast<int64_t>(i0) * 131 + n * 7919) * 2.0 - 1.0;
+                const double b = hash(seedValue, static_cast<int64_t>(i0 + 1) * 131 + n * 7919) * 2.0 - 1.0;
+                const double s = f * f * (3.0 - 2.0 * f);
+                return a + (b - a) * s;
+            };
+            for (size_t i = 0; i < letters.size(); ++i)
+            {
+                // Together blends each letter's own wiggle with one they all
+                // share.
+                const auto wobble = [&](int channel) {
+                    const auto of = [&](int64_t who) {
+                        return (noise(t, who * 8 + channel) * 2.0 + noise(t * 2.3, who * 8 + channel + 50)) / 3.0;
+                    };
+                    return of(letters[i].index + 1) * (1.0 - together) + of(0) * together;
+                };
+                changes[i].x += wobble(1) * move;
+                changes[i].y += wobble(2) * move;
+                changes[i].rotation += wobble(3) * turn;
+                changes[i].scale *= std::max(0.0, 1.0 + wobble(4) * size / 100.0);
+                changes[i].alpha *= 1.0 - fade * (wobble(5) * 0.5 + 0.5);
             }
         }
         else if (type == "wave")

@@ -1006,3 +1006,47 @@ TEST(shape_operators_dash_and_taper_strokes)
     CHECK(near(startWidth, 10.0, 1e-6) && near(endWidth, 0.0, 1e-6));
     CHECK(!fla::shapeops::taperOf({}, 0).on);
 }
+
+TEST(text_on_a_path_and_wiggly_letters)
+{
+    namespace ta = fla::textanim;
+    // Three letters 10 apart along x, middles on y = 5.
+    std::vector<ta::Letter> letters(3);
+    for (int i = 0; i < 3; ++i)
+    {
+        letters[i].index = i;
+        letters[i].count = 3;
+        letters[i].middleX = 5.0 + 10.0 * i;
+        letters[i].middleY = 5.0;
+    }
+    // A line going straight down from (100, 0), 50 long.
+    ta::PathInText path;
+    path.length = 50.0;
+    path.at = [](double d) { return fla::Point(100.0, d); };
+    path.angleAt = [](double) { return 90.0; };
+    Applied onPath = ta::defaults("path", 1);
+    onPath.params["margin"] = "10";
+    std::vector<ta::Change> changes = ta::apply({onPath}, letters, 0, 0, 24.0, &path);
+    // The first letter's middle at 10 along, the next at 20, turned down.
+    CHECK(near(letters[0].middleX + changes[0].x, 100.0) && near(letters[0].middleY + changes[0].y, 10.0));
+    CHECK(near(letters[1].middleY + changes[1].y, 20.0) && near(changes[1].rotation, 90.0));
+    // Past the end, not shown; with Wrap, round to the start.
+    onPath.params["margin"] = "40";
+    changes = ta::apply({onPath}, letters, 0, 0, 24.0, &path);
+    CHECK(changes[2].alpha == 0.0 && changes[0].alpha == 1.0);
+    onPath.params["wrap"] = "true";
+    changes = ta::apply({onPath}, letters, 0, 0, 24.0, &path);
+    CHECK(changes[2].alpha == 1.0 && near(letters[2].middleY + changes[2].y, 10.0));
+    // No guide: the letters stay put.
+    CHECK(ta::apply({onPath}, letters, 0, 0, 24.0, nullptr)[1].none());
+
+    // Wiggly: each letter its own way, the same on the same frame, and all
+    // alike when wholly together.
+    Applied wiggly = ta::defaults("wiggly", 3);
+    changes = ta::apply({wiggly}, letters, 7, 0, 24.0);
+    CHECK(!changes[0].none() && (changes[0].x != changes[1].x || changes[0].y != changes[1].y));
+    CHECK(ta::apply({wiggly}, letters, 7, 0, 24.0)[1].x == changes[1].x);
+    wiggly.params["together"] = "100";
+    changes = ta::apply({wiggly}, letters, 7, 0, 24.0);
+    CHECK(near(changes[0].x, changes[2].x) && near(changes[0].rotation, changes[1].rotation));
+}

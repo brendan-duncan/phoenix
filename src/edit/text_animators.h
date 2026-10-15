@@ -1,8 +1,10 @@
 #pragma once
 
 #include "behaviors.h"
+#include "../data/point.h"
 
 #include <string>
+#include <functional>
 #include <vector>
 
 namespace fla {
@@ -37,6 +39,20 @@ struct Letter
     int words = 1;
     int lines = 1;
     unsigned character = 0;
+    /// The middle its moves, turns and scales are about, in the field's
+    /// own space (the middle of its advance, across; of its line, down).
+    double middleX = 0.0;
+    double middleY = 0.0;
+};
+
+/// The line of the motion guide the field's layer is under, for Text on a
+/// Path: where it is and which way it runs, a distance along it, in the
+/// field's own space. Null functions when there is none.
+struct PathInText
+{
+    double length = 0.0;
+    std::function<Point(double distance)> at;
+    std::function<double(double distance)> angleAt;
 };
 
 /// What the animators do to a letter: a move (pixels), a turn (degrees) and
@@ -67,7 +83,7 @@ struct Change
 /// timeline, \a start being the first frame of the run of keyframes the
 /// field is on.
 std::vector<Change> apply(const std::vector<behaviors::Applied>& list, const std::vector<Letter>& letters, int frame,
-    int start, double frameRate);
+    int start, double frameRate, const PathInText* path = nullptr);
 
 } // namespace textanim
 

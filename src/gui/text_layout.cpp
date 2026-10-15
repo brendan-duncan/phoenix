@@ -749,9 +749,32 @@ std::vector<fla::textanim::Letter> letters(const fla::StaticText& text)
         const Layout laid = layout(text);
         lines = std::max(1, static_cast<int>(laid.lines.size()));
         for (size_t l = 0; l < laid.lines.size(); ++l)
-            for (int i = laid.lines[l].start; i < laid.lines[l].start + laid.lines[l].length + 1 && i < joined.length(); ++i)
+        {
+            const Line& line = laid.lines[l];
+            for (int i = line.start; i < line.start + line.length + 1 && i < joined.length(); ++i)
                 if (i >= 0)
                     lineOf[static_cast<size_t>(i)] = static_cast<int>(l);
+            // Each letter's middle, as drawAnimated finds it.
+            for (const Segment& segment : line.segments)
+            {
+                const fla::TextRun& run = text.runs[static_cast<size_t>(segment.run)];
+                QFont font = fontFor(run);
+                if (line.wordSpacing > 0.0)
+                    font.setWordSpacing(line.wordSpacing);
+                const QFontMetricsF metrics(font);
+                const QString part = joined.mid(segment.start, segment.length);
+                for (int k = 0; k < part.length(); ++k)
+                {
+                    const int index = segment.start + k;
+                    if (index < 0 || index >= joined.length())
+                        continue;
+                    const double x = segment.x + metrics.horizontalAdvance(part.left(k));
+                    const double width = metrics.horizontalAdvance(part.mid(k, 1));
+                    list[static_cast<size_t>(index)].middleX = x + width / 2.0;
+                    list[static_cast<size_t>(index)].middleY = line.top + line.height / 2.0;
+                }
+            }
+        }
     }
     int word = -1;
     bool inWord = false;
