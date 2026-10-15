@@ -123,6 +123,9 @@ private:
         std::string id;
         QString unit;
         double fallback = 0.0;
+        /// The values it can take; keys are kept within them.
+        double lowest = -1.0e6;
+        double highest = 1.0e6;
     };
     const Row& currentRow() const;
     std::vector<Row> _rows;

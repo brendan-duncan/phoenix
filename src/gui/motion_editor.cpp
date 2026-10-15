@@ -584,11 +584,21 @@ void MotionEditorPanel::writeKeys(bool done, const char* name)
         _editing = true;
     }
     const Row& row = currentRow();
+    // Kept to what the property can be: a tint channel from 0 to 255, a
+    // blur never below 0. A key held at a limit takes its handles with it.
+    std::vector<fla::motion::PropertyKey> keys = _curve->keys();
+    for (fla::motion::PropertyKey& key : keys)
+    {
+        const double kept = std::clamp(key.value, row.lowest, row.highest);
+        key.nextValue += kept - key.value;
+        key.previousValue += kept - key.value;
+        key.value = kept;
+    }
     std::vector<std::string> children = _before;
     for (std::string& child : children)
     {
         if (child.compare(0, 16, "<motionObjectXML") == 0)
-            fla::motion::setKeysOf(child, row.id, _curve->keys());
+            fla::motion::setKeysOf(child, row.id, keys);
     }
     _frame->extraChildren = children;
     if (done)
@@ -682,8 +692,18 @@ void MotionEditorPanel::buildRows()
         {
             const std::string id = fla::motion::kColorChannels[i].id;
             const bool percent = std::find(std::begin(percents), std::end(percents), id) != std::end(percents);
-            rows.push_back({fla::motion::kColorChannels[i].label, id, percent ? "%" : "",
-                fla::motion::colorValue(instance->colorTransform, id)});
+            Row row{fla::motion::kColorChannels[i].label, id, percent ? "%" : "",
+                fla::motion::colorValue(instance->colorTransform, id)};
+            // The ranges the color effect has in the Properties panel.
+            if (id == "Alpha_Amount" || id == "Tint_Amount")
+                row.lowest = 0.0, row.highest = 100.0;
+            else if (id.compare(0, 11, "Tint_Color_") == 0)
+                row.lowest = 0.0, row.highest = 255.0;
+            else if (percent)
+                row.lowest = -100.0, row.highest = 100.0;
+            else if (id.find("_Offset") != std::string::npos)
+                row.lowest = -255.0, row.highest = 255.0;
+            rows.push_back(row);
         }
         for (size_t f = 0; f < instance->filters.size(); ++f)
         {
@@ -693,9 +713,19 @@ void MotionEditorPanel::buildRows()
             {
                 QString label = QString::fromStdString(field);
                 label[0] = label[0].toUpper();
-                rows.push_back({(name + " " + label).toStdString(), fla::motion::filterPropertyId(filter, f, field),
+                Row row{(name + " " + label).toStdString(), fla::motion::filterPropertyId(filter, f, field),
                     field == "angle" || field == "hue" ? "\u00b0" : (field == "strength" ? "%" : ""),
-                    fla::motion::filterValue(filter, field)});
+                    fla::motion::filterValue(filter, field)};
+                // The ranges the Filters section has.
+                if (field == "blurX" || field == "blurY")
+                    row.lowest = 0.0, row.highest = 255.0;
+                else if (field == "strength")
+                    row.lowest = 0.0, row.highest = 1000.0;
+                else if (field == "hue")
+                    row.lowest = -180.0, row.highest = 180.0;
+                else if (field == "brightness" || field == "contrast" || field == "saturation")
+                    row.lowest = -100.0, row.highest = 100.0;
+                rows.push_back(row);
             }
         }
     }
