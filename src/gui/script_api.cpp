@@ -25,6 +25,12 @@
 #include "../data/solid_color.h"
 #include "../data/stroke_style.h"
 #include "../edit/command_stack.h"
+#include "../edit/adjustments.h"
+#include "../edit/behaviors.h"
+#include "../edit/shape_operators.h"
+#include "../edit/templates.h"
+#include "../edit/text_animators.h"
+#include "behavior_library.h"
 #include "../edit/element_clone.h"
 #include "../edit/frame_bake.h"
 #include "../edit/lip_sync.h"
@@ -37,6 +43,7 @@
 #include "../parser/fla_doctor.h"
 
 #include <QBuffer>
+#include <QRandomGenerator>
 #include <QDir>
 #include <QFileInfo>
 #include <QJsonDocument>
@@ -50,6 +57,7 @@
 #include <set>
 #include <stdexcept>
 #include <cstdint>
+#include <cstdio>
 #include <memory>
 
 namespace {
@@ -332,6 +340,29 @@ QJsonObject elementJson(MainWindow& window, const fla::Element& element, int ind
     default:
         break;
     }
+    // What changes it over time with no keyframes, by type (set_effects
+    // changes them), and the template fields an instance fills in.
+    for (const char* attribute : {"phoenixBehaviors", fla::shapeops::kAttribute, fla::textanim::kAttribute})
+    {
+        const std::vector<fla::behaviors::Applied> list = fla::behaviors::listOf(element, attribute);
+        if (list.empty())
+            continue;
+        QJsonArray types;
+        for (const fla::behaviors::Applied& applied : list)
+            types.append(QString::fromStdString(applied.type) + (applied.enabled ? "" : " (off)"));
+        json["effects"] = types;
+    }
+    if (element.elementType() == fla::Element::Type::SymbolInstance)
+    {
+        const fla::templates::Values values = fla::templates::valuesOf(static_cast<const fla::SymbolInstance&>(element));
+        if (!values.empty())
+        {
+            QJsonObject fields;
+            for (const auto& [name, value] : values)
+                fields[QString::fromStdString(name)] = QString::fromStdString(value);
+            json["templateValues"] = fields;
+        }
+    }
     return json;
 }
 
@@ -385,6 +416,10 @@ QJsonObject timelineJson(const fla::Timeline& timeline, bool frames)
             {"type", layerTypeName(*layer)}, {"visible", layer->visible}, {"locked", layer->locked}};
         if (layer->parentLayer)
             json["in"] = QString::fromStdString(layer->parentLayer->name);
+        if (fla::compositing::matteOf(*layer) != fla::compositing::Matte::None)
+            json["matte"] = fla::compositing::matteName(fla::compositing::matteOf(*layer));
+        if (fla::compositing::isAdjustment(*layer))
+            json["adjustment"] = true;
         int length = 0;
         QJsonArray keyframes;
         for (const fla::Frame* frame : layer->frames)
@@ -459,6 +494,7 @@ ScriptApi::ScriptApi(MainWindow& window)
     addReadOperations();
     addWriteOperations();
     addHelperOperations();
+    addMotionGraphicsOperations();
 }
 
 void ScriptApi::add(const QString& name, const QString& title, const QString& description,
@@ -1186,6 +1222,471 @@ void ScriptApi::addWriteOperations()
             if (image.isNull() || !image.save(path, "PNG"))
                 fail(QString("%1 could not be written.").arg(path));
             return Result{QJsonObject{{"written", path}, {"width", image.width()}, {"height", image.height()}}};
+        });
+}
+
+namespace {
+
+/// The kinds of list an element or layer can keep: behaviors on instances,
+/// operators on shapes, letter animators on text, effects on adjustment
+/// layers.
+struct EffectKind
+{
+    const char* name;
+    const char* attribute;
+};
+
+const EffectKind kEffectKinds[] = {{"behaviors", "phoenixBehaviors"}, {"shape operators", fla::shapeops::kAttribute},
+    {"letter animators", fla::textanim::kAttribute}, {"adjustments", fla::compositing::kAdjustments}};
+
+const fla::behaviors::Definition* effectDefinition(const QString& kind, const std::string& id)
+{
+    if (kind == "behaviors")
+        return BehaviorLibrary::instance().engine().find(id);
+    if (kind == "shape operators")
+        return fla::shapeops::find(id);
+    if (kind == "letter animators")
+        return fla::textanim::find(id);
+    return fla::compositing::find(id);
+}
+
+std::vector<fla::behaviors::Definition> effectDefinitions(const QString& kind)
+{
+    if (kind == "behaviors")
+        return BehaviorLibrary::instance().engine().definitions();
+    if (kind == "shape operators")
+        return fla::shapeops::definitions();
+    if (kind == "letter animators")
+        return fla::textanim::definitions();
+    return fla::compositing::definitions();
+}
+
+fla::behaviors::Applied effectDefaults(const QString& kind, const std::string& id)
+{
+    const int seed = 1 + static_cast<int>(QRandomGenerator::global()->bounded(9998));
+    if (kind == "behaviors")
+        return BehaviorLibrary::instance().engine().defaults(id, seed);
+    if (kind == "shape operators")
+        return fla::shapeops::defaults(id, seed);
+    if (kind == "letter animators")
+        return fla::textanim::defaults(id, seed);
+    return fla::compositing::defaults(id, seed);
+}
+
+std::string settingText(const QJsonValue& value)
+{
+    if (value.isBool())
+        return value.toBool() ? "true" : "false";
+    if (value.isDouble())
+    {
+        char text[32];
+        std::snprintf(text, sizeof(text), "%.10g", value.toDouble());
+        return text;
+    }
+    return value.toString().toStdString();
+}
+
+/// A list given as JSON ([{type, enabled, settings, keys}]) as the element
+/// keeps it, each unknown type or setting refused by name.
+std::vector<fla::behaviors::Applied> effectList(const QString& kind, const QJsonArray& given)
+{
+    std::vector<fla::behaviors::Applied> list;
+    for (const QJsonValue& value : given)
+    {
+        const QJsonObject entry = value.toObject();
+        const std::string type = entry.value("type").toString().toStdString();
+        const fla::behaviors::Definition* definition = effectDefinition(kind, type);
+        if (!definition)
+            fail(QString("There are no %1 called %2; list_effects names them.").arg(kind, QString::fromStdString(type)));
+        fla::behaviors::Applied applied = effectDefaults(kind, type);
+        applied.enabled = entry.value("enabled").toBool(true);
+        const auto known = [&](const QString& name) {
+            for (const fla::behaviors::ParamSpec& spec : definition->params)
+                if (QString::fromStdString(spec.name) == name)
+                    return true;
+            fail(QString("%1 has no setting called %2.").arg(QString::fromStdString(definition->name), name));
+        };
+        const QJsonObject settings = entry.value("settings").toObject();
+        for (auto it = settings.begin(); it != settings.end(); ++it)
+            if (known(it.key()))
+                applied.params[it.key().toStdString()] = settingText(it.value());
+        const QJsonObject keys = entry.value("keys").toObject();
+        for (auto it = keys.begin(); it != keys.end(); ++it)
+        {
+            known(it.key());
+            const QJsonObject frames = it.value().toObject();
+            for (auto key = frames.begin(); key != frames.end(); ++key)
+            {
+                const int frame = key.key().toInt() - 1;
+                if (frame < 0)
+                    fail(QString("Keys are at frames counted from 1, not %1.").arg(key.key()));
+                applied.setKey(it.key().toStdString(), frame, settingText(key.value()));
+            }
+        }
+        list.push_back(applied);
+    }
+    return list;
+}
+
+QJsonArray effectListJson(const std::vector<fla::behaviors::Applied>& list)
+{
+    QJsonArray out;
+    for (const fla::behaviors::Applied& applied : list)
+    {
+        QJsonObject settings;
+        for (const auto& [name, value] : applied.params)
+            settings[QString::fromStdString(name)] = QString::fromStdString(value);
+        out.append(QJsonObject{{"type", QString::fromStdString(applied.type)}, {"enabled", applied.enabled}, {"settings", settings}});
+    }
+    return out;
+}
+
+QStringList wordsOf(const QString& name)
+{
+    // Words split at spaces, dashes, underscores, dots and lower-to-upper
+    // changes ("walkCycle", "Walk_cycle 2").
+    QStringList words;
+    QString word;
+    for (int i = 0; i < name.size(); ++i)
+    {
+        const QChar c = name[i];
+        if (c.isSpace() || c == '_' || c == '-' || c == '.')
+        {
+            if (!word.isEmpty())
+                words << word;
+            word.clear();
+            continue;
+        }
+        if (c.isUpper() && !word.isEmpty() && (word.back().isLower() || (i + 1 < name.size() && name[i + 1].isLower() && word.back().isUpper())))
+        {
+            words << word;
+            word.clear();
+        }
+        word += c;
+    }
+    if (!word.isEmpty())
+        words << word;
+    return words;
+}
+
+QString styled(const QString& name, const QString& style, const QString& prefix)
+{
+    QStringList words = wordsOf(name);
+    QString out;
+    if (style == "snake_case" || style == "kebab-case")
+    {
+        for (QString& word : words)
+            word = word.toLower();
+        out = words.join(style == "snake_case" ? "_" : "-");
+    }
+    else if (style == "camelCase" || style == "PascalCase")
+    {
+        for (int i = 0; i < words.size(); ++i)
+        {
+            QString word = words[i].toLower();
+            if (i > 0 || style == "PascalCase")
+                word[0] = word[0].toUpper();
+            out += word;
+        }
+    }
+    else
+    {
+        // Title Case: each word capitalized, spaced.
+        for (QString& word : words)
+        {
+            word = word.toLower();
+            word[0] = word[0].toUpper();
+        }
+        out = words.join(' ');
+    }
+    if (!prefix.isEmpty() && !out.startsWith(prefix))
+        out = prefix + out;
+    return out;
+}
+
+} // namespace
+
+void ScriptApi::addMotionGraphicsOperations()
+{
+    const QJsonObject listArg{{"type", "array"},
+        {"description", "In the order they apply: [{\"type\": \"wiggle\", \"settings\": {\"amount\": 20}, \"keys\": "
+                        "{\"radius\": {\"1\": 50, \"48\": 200}}, \"enabled\": true}]; settings left out keep their "
+                        "defaults, keys are by frame from 1"},
+        {"items", QJsonObject{{"type", "object"}}}};
+
+    add("list_effects", "List effects",
+        "What Phoenix can do to elements over time with no keyframes: behaviors for symbol instances (wiggle, "
+        "repeat in a circle, particles, follow sound...), operators for drawn shapes (trim paths, wiggle path...), "
+        "letter animators for text, and effects for adjustment layers; each with its settings.",
+        {{"kind", choice({"behaviors", "shape operators", "letter animators", "adjustments"}, "One kind; all when left out")}},
+        {}, false, [](const QJsonObject& args) {
+            QJsonObject out;
+            for (const EffectKind& kind : kEffectKinds)
+            {
+                if (args.contains("kind") && args.value("kind").toString() != kind.name)
+                    continue;
+                QJsonArray list;
+                for (const fla::behaviors::Definition& definition : effectDefinitions(kind.name))
+                {
+                    QJsonArray params;
+                    for (const fla::behaviors::ParamSpec& spec : definition.params)
+                    {
+                        QJsonObject param{{"name", QString::fromStdString(spec.name)}, {"label", QString::fromStdString(spec.label)},
+                            {"type", QString::fromStdString(spec.type)}, {"default", QString::fromStdString(spec.text)}};
+                        if (spec.type == "number" || spec.type == "angle")
+                        {
+                            param["min"] = spec.min;
+                            param["max"] = spec.max;
+                        }
+                        if (!spec.choices.empty())
+                        {
+                            QJsonArray choices;
+                            for (const std::string& each : spec.choices)
+                                choices.append(QString::fromStdString(each));
+                            param["choices"] = choices;
+                        }
+                        params.append(param);
+                    }
+                    list.append(QJsonObject{{"type", QString::fromStdString(definition.id)},
+                        {"name", QString::fromStdString(definition.name)},
+                        {"description", QString::fromStdString(definition.description)}, {"settings", params}});
+                }
+                out[kind.name] = list;
+            }
+            return Result{out};
+        });
+
+    add("set_effects", "Set effects",
+        "Gives an element its behaviors (a symbol instance), operators (a drawn shape) or letter animators (a text "
+        "field), replacing those it had, or adding to them with append. Settings can be keyed to change over time. "
+        "An empty list takes them all off.",
+        {{"symbol", kSymbolArg}, {"layer", kLayerArg}, {"frame", kFrameArg}, {"index", prop("integer", "The element")},
+            {"list", listArg}, {"append", prop("boolean", "Add after those it has rather than replacing them")}},
+        {"layer", "frame", "index", "list"}, true, [this](const QJsonObject& args) {
+            ScriptContext context{_window};
+            fla::Layer& layer = context.layer(context.timeline(args), args);
+            fla::Frame& frame = context.keyframe(layer, args);
+            fla::Element& element = context.element(frame, args);
+            const QString kind = element.elementType() == fla::Element::Type::SymbolInstance ? "behaviors"
+                : element.elementType() == fla::Element::Type::Shape                         ? "shape operators"
+                : element.elementType() == fla::Element::Type::StaticText                    ? "letter animators"
+                                                                                               : QString();
+            if (kind.isEmpty())
+                fail("Behaviors are for symbol instances, operators for shapes and letter animators for text.");
+            const std::string attribute = kind == "behaviors" ? "phoenixBehaviors"
+                : kind == "shape operators"                    ? fla::shapeops::kAttribute
+                                                               : fla::textanim::kAttribute;
+            std::vector<fla::behaviors::Applied> list = args.value("append").toBool()
+                ? fla::behaviors::listOf(element, attribute) : std::vector<fla::behaviors::Applied>();
+            for (const fla::behaviors::Applied& applied : effectList(kind, args.value("list").toArray()))
+                list.push_back(applied);
+            using Attributes = std::vector<std::pair<std::string, std::string>>;
+            const Attributes after = fla::behaviors::withList(element, attribute, list);
+            if (after != element.extraAttributes)
+                context.stack().push(fla::CommandPtr(new fla::SetPropertyCommand<Attributes>(element.extraAttributes,
+                    element.extraAttributes, after, kind == "behaviors" ? "Behaviors" : kind == "shape operators" ? "Operators" : "Letter Animators")));
+            context.refresh();
+            return Result{QJsonObject{{"kind", kind}, {"list", effectListJson(list)}}};
+        });
+
+    add("set_layer_compositing", "Set layer compositing",
+        "Makes a layer show only through the layer above it (a track matte: by its alpha or its lightness, or the "
+        "inverse), or an adjustment layer whose effects (blur, color, tint) change everything below it.",
+        {{"symbol", kSymbolArg}, {"layer", kLayerArg},
+            {"matte", choice({"none", "alpha", "alphaInverted", "luma", "lumaInverted"}, "The track matte; unchanged when left out")},
+            {"adjustment", prop("boolean", "Whether it is an adjustment layer; unchanged when left out")},
+            {"effects", listArg}},
+        {"layer"}, true, [this](const QJsonObject& args) {
+            ScriptContext context{_window};
+            fla::Layer& layer = context.layer(context.timeline(args), args);
+            using Attributes = std::vector<std::pair<std::string, std::string>>;
+            fla::Layer scratch(nullptr);
+            scratch.extraAttributes = layer.extraAttributes;
+            if (args.contains("matte"))
+            {
+                const QString matte = args.value("matte").toString();
+                const fla::compositing::Matte kind = matte == "alpha" ? fla::compositing::Matte::Alpha
+                    : matte == "alphaInverted"                         ? fla::compositing::Matte::AlphaInverted
+                    : matte == "luma"                                  ? fla::compositing::Matte::Luma
+                    : matte == "lumaInverted"                          ? fla::compositing::Matte::LumaInverted
+                                                                       : fla::compositing::Matte::None;
+                scratch.extraAttributes = fla::compositing::withMatte(scratch, kind);
+            }
+            if (args.contains("adjustment"))
+                scratch.extraAttributes = fla::compositing::withAdjustment(scratch, args.value("adjustment").toBool());
+            if (args.contains("effects"))
+                scratch.extraAttributes = fla::behaviors::withList(scratch, fla::compositing::kAdjustments,
+                    effectList("adjustments", args.value("effects").toArray()));
+            const Attributes after = scratch.extraAttributes;
+            if (after != layer.extraAttributes)
+                context.stack().push(fla::CommandPtr(new fla::SetPropertyCommand<Attributes>(layer.extraAttributes,
+                    layer.extraAttributes, after, "Layer Compositing")));
+            context.refresh();
+            const fla::compositing::Matte matte = fla::compositing::matteOf(scratch);
+            return Result{QJsonObject{{"matte", matte == fla::compositing::Matte::None ? "none" : fla::compositing::matteName(matte)},
+                {"adjustment", fla::compositing::isAdjustment(scratch)},
+                {"effects", effectListJson(fla::compositing::effectsOf(scratch))}}};
+        });
+
+    add("set_template_values", "Set template values",
+        "Fills in a symbol instance's template fields: the words of the named dynamic text fields inside its symbol "
+        "and the colors (\"#RRGGBB\") of its named movie clips. An empty value shows what the symbol has. Returns "
+        "the fields there are.",
+        {{"symbol", kSymbolArg}, {"layer", kLayerArg}, {"frame", kFrameArg}, {"index", prop("integer", "The instance")},
+            {"values", QJsonObject{{"type", "object"}, {"description", "Field name to its words or color"},
+                           {"additionalProperties", QJsonObject{{"type", "string"}}}}}},
+        {"layer", "frame", "index"}, true, [this](const QJsonObject& args) {
+            ScriptContext context{_window};
+            fla::Layer& layer = context.layer(context.timeline(args), args);
+            fla::Frame& frame = context.keyframe(layer, args);
+            fla::Element& element = context.element(frame, args);
+            if (element.elementType() != fla::Element::Type::SymbolInstance || !static_cast<fla::SymbolInstance&>(element).symbol)
+                fail("Template fields are on symbol instances.");
+            auto& instance = static_cast<fla::SymbolInstance&>(element);
+            const std::vector<fla::templates::Field> fields = fla::templates::fieldsOf(*instance.symbol);
+            fla::templates::Values values = fla::templates::valuesOf(instance);
+            const QJsonObject given = args.value("values").toObject();
+            for (auto it = given.begin(); it != given.end(); ++it)
+            {
+                const std::string name = it.key().toStdString();
+                if (std::none_of(fields.begin(), fields.end(), [&](const fla::templates::Field& f) { return f.name == name; }))
+                    fail(QString("%1 has no field called %2.").arg(QString::fromStdString(instance.symbol->name), it.key()));
+                const std::string value = it.value().toString().toStdString();
+                if (value.empty())
+                    values.erase(name);
+                else
+                    values[name] = value;
+            }
+            using Attributes = std::vector<std::pair<std::string, std::string>>;
+            const Attributes after = fla::templates::withValues(instance, values);
+            if (after != instance.extraAttributes)
+                context.stack().push(fla::CommandPtr(new fla::SetPropertyCommand<Attributes>(instance.extraAttributes,
+                    instance.extraAttributes, after, "Template Fields")));
+            context.refresh();
+            QJsonArray list;
+            for (const fla::templates::Field& field : fields)
+            {
+                const auto set = values.find(field.name);
+                list.append(QJsonObject{{"name", QString::fromStdString(field.name)},
+                    {"kind", field.kind == fla::templates::Field::Kind::Text ? "text" : "color"},
+                    {"asDrawn", QString::fromStdString(field.value)},
+                    {"value", set == values.end() ? QString() : QString::fromStdString(set->second)}});
+            }
+            return Result{QJsonObject{{"fields", list}}};
+        });
+
+    add("rename_to_convention", "Rename to a convention",
+        "Renames layers, library symbols or instance names to one naming style (Title Case, camelCase, PascalCase, "
+        "snake_case or kebab-case), with a prefix if given; instances follow renamed symbols. Returns what changed.",
+        {{"what", choice({"layers", "symbols", "instances"}, "What to rename")},
+            {"style", choice({"Title Case", "camelCase", "PascalCase", "snake_case", "kebab-case"}, "The style")},
+            {"prefix", prop("string", "Put before each name that does not have it yet, such as \"mc_\"")}},
+        {"what", "style"}, true, [this](const QJsonObject& args) {
+            ScriptContext context{_window};
+            fla::Document& document = context.document();
+            const QString what = args.value("what").toString();
+            const QString style = args.value("style").toString();
+            const QString prefix = args.value("prefix").toString();
+            QJsonArray changed;
+            const auto note = [&](const std::string& from, const QString& to) {
+                changed.append(QJsonObject{{"from", QString::fromStdString(from)}, {"to", to}});
+            };
+            // Every timeline: the scenes and the symbols'.
+            std::vector<fla::Timeline*> timelines(document.timelines.begin(), document.timelines.end());
+            if (document.symbolList)
+                for (fla::Symbol* symbol : document.symbolList->symbols)
+                    for (fla::Timeline* timeline : symbol ? symbol->timelines : std::vector<fla::Timeline*>())
+                        timelines.push_back(timeline);
+            if (what == "layers" || what == "instances")
+            {
+                for (fla::Timeline* timeline : timelines)
+                    for (fla::Layer* layer : timeline ? timeline->layers : std::vector<fla::Layer*>())
+                    {
+                        if (!layer)
+                            continue;
+                        if (what == "layers")
+                        {
+                            const QString to = styled(QString::fromStdString(layer->name), style, prefix);
+                            if (!to.isEmpty() && to.toStdString() != layer->name)
+                            {
+                                note(layer->name, to);
+                                context.stack().push(fla::CommandPtr(new fla::SetPropertyCommand<std::string>(
+                                    layer->name, layer->name, to.toStdString(), "Rename Layer")));
+                            }
+                            continue;
+                        }
+                        for (fla::Frame* frame : layer->frames)
+                            for (fla::Element* element : frame ? frame->elements : std::vector<fla::Element*>())
+                            {
+                                auto* instance = dynamic_cast<fla::SymbolInstance*>(element);
+                                if (!instance || instance->name.empty())
+                                    continue;
+                                const QString to = styled(QString::fromStdString(instance->name), style, prefix);
+                                if (!to.isEmpty() && to.toStdString() != instance->name)
+                                {
+                                    note(instance->name, to);
+                                    context.stack().push(fla::CommandPtr(new fla::SetPropertyCommand<std::string>(
+                                        instance->name, instance->name, to.toStdString(), "Instance Name")));
+                                }
+                            }
+                    }
+            }
+            else if (what == "symbols" && document.symbolList)
+            {
+                std::vector<std::string> names;
+                for (const fla::Symbol* symbol : document.symbolList->symbols)
+                    if (symbol)
+                        names.push_back(symbol->name);
+                for (const std::string& name : names)
+                {
+                    // The folder path stays; the last part is renamed.
+                    const QString full = QString::fromStdString(name);
+                    const int slash = static_cast<int>(full.lastIndexOf('/'));
+                    const QString folder = slash >= 0 ? full.left(slash + 1) : QString();
+                    const QString to = folder + styled(full.mid(slash + 1), style, prefix);
+                    if (to == full || to.endsWith('/'))
+                        continue;
+                    std::string problem;
+                    const fla::library::Renames renames = fla::library::pathRenames(document, name, to.toStdString(), &problem);
+                    if (renames.empty())
+                        continue;
+                    note(name, to);
+                    context.stack().push(fla::CommandPtr(new fla::RenameLibraryCommand(&document, renames, "Rename")));
+                }
+            }
+            context.refresh();
+            return Result{QJsonObject{{"renamed", changed}}};
+        });
+
+    add("render_from_data", "Render from data",
+        "Renders the movie once for each row, its symbols' template fields filled from the row, into a folder: "
+        "one file a row, named by its \"file\" value or numbered. Phoenix asks the person before writing there.",
+        {{"rows", QJsonObject{{"type", "array"}, {"items", QJsonObject{{"type", "object"}}},
+                      {"description", "Field name to value, one object a movie: [{\"file\": \"ada\", \"name\": \"Ada Lovelace\"}]"}}},
+            {"folder", prop("string", "Where to write the movies")},
+            {"format", choice({"mp4", "mov", "gif", "png"}, "mp4 when left out")}},
+        {"rows", "folder"}, false, [this](const QJsonObject& args) {
+            ScriptContext context{_window};
+            context.document();
+            const QString folder = QDir::cleanPath(args.value("folder").toString());
+            if (!approveWrite || !approveWrite(folder))
+                fail("The person did not allow writing there.");
+            std::vector<fla::templates::Values> rows;
+            for (const QJsonValue& value : args.value("rows").toArray())
+            {
+                fla::templates::Values row;
+                const QJsonObject object = value.toObject();
+                for (auto it = object.begin(); it != object.end(); ++it)
+                    if (!settingText(it.value()).empty())
+                        row[it.key().toStdString()] = settingText(it.value());
+                rows.push_back(row);
+            }
+            if (rows.empty())
+                fail("Give at least one row.");
+            QString error;
+            if (!_window.renderRows(rows, folder, args.value("format").toString("mp4"), error))
+                fail(error);
+            return Result{QJsonObject{{"rendered", static_cast<int>(rows.size())}, {"folder", folder}}};
         });
 }
 

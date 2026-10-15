@@ -67,6 +67,7 @@ private:
     void addReadOperations();
     void addWriteOperations();
     void addHelperOperations();
+    void addMotionGraphicsOperations();
 
     MainWindow& _window;
     std::vector<Operation> _operations;
