@@ -289,6 +289,28 @@ void FindReplaceDialog::findAll()
                                             .arg(_matches.size() == 1 ? "" : "s"));
 }
 
+bool FindReplaceDialog::findNext()
+{
+    // A new search starts from the first match; the same one goes on to
+    // the next, round to the first after the last.
+    const fla::find::Query asked = query();
+    const std::string key = std::to_string(static_cast<int>(asked.kind)) + "\n" + asked.find + "\n" +
+        std::to_string(asked.color[0] << 16 | asked.color[1] << 8 | asked.color[2]);
+    if (key != _nextKey)
+    {
+        _nextKey = key;
+        _next = 0;
+    }
+    findAll();
+    if (_matches.empty())
+        return false;
+    const size_t index = _next % _matches.size();
+    _next = index + 1;
+    _results->setCurrentItem(_results->topLevelItem(static_cast<int>(index)));
+    emit goToRequested(_matches[index]);
+    return true;
+}
+
 void FindReplaceDialog::pickColor(QPushButton* button, QColor& color)
 {
     const QColor chosen = QColorDialog::getColor(color, this, "Color");

@@ -5059,6 +5059,10 @@ void MainWindow::setupMenus()
         if (_activeTab >= 0)
             closeTab(_activeTab);
     });
+    QAction* closeAllAction = fileMenu->addAction("Close A&ll");
+    closeAllAction->setShortcut(QKeySequence(Qt::CTRL | Qt::ALT | Qt::Key_W));
+    closeAllAction->setStatusTip("Close every document in this window, asking about unsaved changes");
+    connect(closeAllAction, &QAction::triggered, this, [this]() { closeAllTabs(); });
     QAction* nextTabAction = new QAction(this);
     nextTabAction->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_Tab));
     connect(nextTabAction, &QAction::triggered, this, [this]() { cycleTabs(1); });
@@ -5277,6 +5281,18 @@ void MainWindow::setupMenus()
     findAction->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_F));
     findAction->setStatusTip("Find text, a font, a color or a symbol anywhere in the document, and replace it");
     connect(findAction, &QAction::triggered, this, &MainWindow::showFindReplace);
+    QAction* findNextAction = editMenu->addAction("Find &Next");
+    findNextAction->setShortcut(QKeySequence(Qt::Key_F3));
+    findNextAction->setStatusTip("Go to the next place what Find and Replace looks for is found");
+    connect(findNextAction, &QAction::triggered, this, [this]() {
+        if (!_findReplace)
+        {
+            showFindReplace();
+            return;
+        }
+        if (!_findReplace->findNext())
+            statusBar()->showMessage("Nothing found.", 3000);
+    });
     _fontMappingAction = editMenu->addAction("&Font Mapping...");
     _fontMappingAction->setStatusTip("Choose the installed fonts missing ones are shown in");
     connect(_fontMappingAction, &QAction::triggered, this, [this]() { fontMappingDialog(false); });
@@ -5725,6 +5741,84 @@ void MainWindow::setupMenus()
     repeatable(modifyMenu);
     repeatable(editTimelineMenu);
 
+    // Modify > Align: the Align panel's buttons, with keys.
+    {
+        QMenu* alignMenu = modifyMenu->addMenu("A&lign");
+        const auto alignItem = [this, alignMenu](const char* name, const QKeySequence& key,
+                                   std::function<void(AlignPanel&)> act) {
+            QAction* action = alignMenu->addAction(name);
+            action->setShortcut(key);
+            connect(action, &QAction::triggered, this, [this, act]() {
+                if (_alignPanel)
+                    act(*_alignPanel);
+            });
+            return action;
+        };
+        alignItem("&Left", QKeySequence(Qt::CTRL | Qt::ALT | Qt::Key_1), [](AlignPanel& p) { p.align(AlignPanel::Edge::Left); });
+        alignItem("&Horizontal Center", QKeySequence(Qt::CTRL | Qt::ALT | Qt::Key_2), [](AlignPanel& p) { p.align(AlignPanel::Edge::HCenter); });
+        alignItem("&Right", QKeySequence(Qt::CTRL | Qt::ALT | Qt::Key_3), [](AlignPanel& p) { p.align(AlignPanel::Edge::Right); });
+        alignItem("&Top", QKeySequence(Qt::CTRL | Qt::ALT | Qt::Key_4), [](AlignPanel& p) { p.align(AlignPanel::Edge::Top); });
+        alignItem("&Vertical Center", QKeySequence(Qt::CTRL | Qt::ALT | Qt::Key_5), [](AlignPanel& p) { p.align(AlignPanel::Edge::VCenter); });
+        alignItem("&Bottom", QKeySequence(Qt::CTRL | Qt::ALT | Qt::Key_6), [](AlignPanel& p) { p.align(AlignPanel::Edge::Bottom); });
+        alignMenu->addSeparator();
+        alignItem("Make Same &Width", QKeySequence(Qt::CTRL | Qt::ALT | Qt::SHIFT | Qt::Key_7), [](AlignPanel& p) { p.matchSize(true, false); });
+        alignItem("Make Same H&eight", QKeySequence(Qt::CTRL | Qt::ALT | Qt::SHIFT | Qt::Key_9), [](AlignPanel& p) { p.matchSize(false, true); });
+        alignMenu->addSeparator();
+        QAction* toStage = alignItem("To &Stage", QKeySequence(Qt::CTRL | Qt::ALT | Qt::Key_8),
+            [](AlignPanel& p) { p.setAlignToStage(!p.alignToStage()); });
+        toStage->setCheckable(true);
+        toStage->setStatusTip("Line up with the stage rather than with each other, as the Align panel's box does");
+        connect(alignMenu, &QMenu::aboutToShow, this, [this, toStage]() {
+            toStage->setChecked(_alignPanel && _alignPanel->alignToStage());
+        });
+    }
+
+    // Text: the style and alignment of the text being typed, or of the
+    // text fields selected.
+    {
+        QMenu* textMenu = menuBar->addMenu("&Text");
+        // The setting where the caret is, or of the first field selected.
+        const auto current = [this](const std::string& key) -> std::string {
+            const fla::StaticText* text = _textTool && _textTool->isEditing() ? _textTool->editedText() : nullptr;
+            if (text && !text->runs.empty())
+            {
+                int at = _textTool->caretIndex();
+                for (const fla::TextRun& run : text->runs)
+                {
+                    const int length = static_cast<int>(QString::fromStdString(run.text).size());
+                    if (at < length)
+                        return fla::textstyle::get(run, key);
+                    at -= length;
+                }
+                return fla::textstyle::get(text->runs.back(), key);
+            }
+            for (fla::DOMElement* selected : _selection.elements())
+                if (auto* field = dynamic_cast<fla::StaticText*>(selected); field && !field->runs.empty())
+                    return fla::textstyle::get(field->runs.front(), key);
+            return std::string();
+        };
+        QMenu* styleMenu = textMenu->addMenu("&Style");
+        const auto toggle = [this, styleMenu, current](const char* name, const char* key, Qt::Key letter) {
+            QAction* action = styleMenu->addAction(name);
+            action->setShortcut(QKeySequence(Qt::CTRL | Qt::SHIFT | letter));
+            connect(action, &QAction::triggered, this, [this, key, current]() {
+                applyTextStyle(key, current(key) == "true" ? "false" : "true");
+            });
+        };
+        toggle("&Bold", "bold", Qt::Key_B);
+        toggle("&Italic", "italic", Qt::Key_I);
+        QMenu* paragraphMenu = textMenu->addMenu("&Align");
+        const auto aligned = [this, paragraphMenu](const char* name, const char* value, Qt::Key letter) {
+            QAction* action = paragraphMenu->addAction(name);
+            action->setShortcut(QKeySequence(Qt::CTRL | Qt::SHIFT | letter));
+            connect(action, &QAction::triggered, this, [this, value]() { applyTextStyle("alignment", value); });
+        };
+        aligned("Align &Left", "left", Qt::Key_L);
+        aligned("&Center", "center", Qt::Key_C);
+        aligned("Align &Right", "right", Qt::Key_R);
+        aligned("&Justify", "justify", Qt::Key_J);
+    }
+
     QMenu* viewMenu = menuBar->addMenu("&View");
 
     QAction* lightTableAction = viewMenu->addAction("&Light Table");
@@ -6005,11 +6099,23 @@ void MainWindow::setupMenus()
     QAction* showBoundsAction = new QAction("Show Bounding Boxes", this);
     showBoundsAction->setCheckable(true);
     showBoundsAction->setChecked(false);
-    // B belongs to the brush; the debug toggle moves aside.
-    showBoundsAction->setShortcut(QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_B));
+    // B belongs to the brush and Ctrl+Shift+B to Text > Bold.
+    showBoundsAction->setShortcut(QKeySequence(Qt::CTRL | Qt::ALT | Qt::SHIFT | Qt::Key_B));
     showBoundsAction->setStatusTip("Show element bounding boxes used for culling (Green=rendered, Red=culled, Blue=visible area)");
     connect(showBoundsAction, &QAction::toggled, _phoenixView, &PhoenixView::setShowBounds);
     viewMenu->addAction(showBoundsAction);
+
+    QAction* hideEdgesAction = viewMenu->addAction("Hide &Edges");
+    hideEdgesAction->setCheckable(true);
+    hideEdgesAction->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_H));
+    hideEdgesAction->setStatusTip("Hide the selection's highlight, to see the art as it is while it stays selected");
+    connect(hideEdgesAction, &QAction::toggled, _phoenixView, &PhoenixView::setHideEdges);
+    QAction* shapeHintsAction = viewMenu->addAction("Show Shape &Hints");
+    shapeHintsAction->setCheckable(true);
+    shapeHintsAction->setChecked(true);
+    shapeHintsAction->setShortcut(QKeySequence(Qt::CTRL | Qt::ALT | Qt::Key_H));
+    shapeHintsAction->setStatusTip("Show the lettered shape hints of a shape tween on its keyframes");
+    connect(shapeHintsAction, &QAction::toggled, _phoenixView, &PhoenixView::setShowShapeHints);
 
     viewMenu->addSeparator();
 
@@ -6105,6 +6211,7 @@ void MainWindow::setupMenus()
     QAction* pasteboardAction = viewMenu->addAction("&Pasteboard");
     pasteboardAction->setCheckable(true);
     pasteboardAction->setChecked(QSettings().value("view/pasteboard", true).toBool());
+    pasteboardAction->setShortcut(QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_W));
     pasteboardAction->setStatusTip("Show the area round the stage and what is on it");
     _phoenixView->setShowPasteboard(pasteboardAction->isChecked());
     connect(pasteboardAction, &QAction::toggled, this, [this](bool on) {
@@ -6119,6 +6226,7 @@ void MainWindow::setupMenus()
     _snapToObjectsAction = snapToObjectsAction;
     snapToObjectsAction->setCheckable(true);
     snapToObjectsAction->setChecked(true);
+    snapToObjectsAction->setShortcut(QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_Slash));
     snapToObjectsAction->setStatusTip("Line dragged objects up with other objects and the stage");
     connect(snapToObjectsAction, &QAction::toggled, this, [this](bool on) {
         _snapper.setObjectSnapEnabled(on);
@@ -6370,6 +6478,12 @@ void MainWindow::setupMenus()
     _scripts->fillCommandsMenu(menuBar->addMenu("&Commands"), {claudeAction, claudeWindowAction, scriptEditorAction});
 
     QMenu* helpMenu = menuBar->addMenu("&Help");
+    QAction* guideAction = helpMenu->addAction("Phoenix &Help");
+    guideAction->setShortcut(QKeySequence(Qt::Key_F1));
+    guideAction->setStatusTip("Open Phoenix's user guide in your browser");
+    connect(guideAction, &QAction::triggered, this,
+        []() { QDesktopServices::openUrl(QUrl("https://brendan-duncan.github.io/phoenix/")); });
+    helpMenu->addSeparator();
     QAction* startAction = new QAction("&Start Screen...", this);
     startAction->setStatusTip("New from a preset, or open a recent file");
     connect(startAction, &QAction::triggered, this, &MainWindow::showStartDialog);
@@ -9000,13 +9114,14 @@ void MainWindow::setupToolBar()
             "in the Properties panel.",
             [this]() -> Tool* { return _paintBrushTool.get(); }),
     });
-    // The Brush, Nib and Ink brushes share a slot; Shift+B is the Brush's.
+    // The Brush, Nib and Ink brushes share a slot; B is the Brush's and
+    // Shift+B the Nib Brush's.
     addSlot({
-        makeTool(ToolIcons::Tool::FluidBrush, "Brush", Qt::SHIFT | Qt::Key_B,
+        makeTool(ToolIcons::Tool::FluidBrush, "Brush", Qt::Key_B,
             "Paint a fill whose width follows the pen's pressure and speed, with tapered ends "
             "and a smoothed line. Settings are in the Properties panel.",
             [this]() -> Tool* { return _brushTool.get(); }),
-        makeTool(ToolIcons::Tool::Brush, "Nib Brush", Qt::Key_B,
+        makeTool(ToolIcons::Tool::Brush, "Nib Brush", Qt::SHIFT | Qt::Key_B,
             "Paint a fill with a shaped nib: round, oval, square or slanted. Use Pressure varies "
             "the width; Use Tilt turns the nib with the pen.",
             [this]() -> Tool* { return _classicBrushTool.get(); }),

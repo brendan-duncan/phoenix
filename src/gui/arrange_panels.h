@@ -43,7 +43,6 @@ class AlignPanel : public QWidget
 public:
     AlignPanel(ArrangeLinks links, QWidget* parent = nullptr);
 
-private:
     enum class Edge
     {
         Left,
@@ -53,9 +52,18 @@ private:
         VCenter,
         Bottom
     };
+    /// What the panel's buttons do, for Modify > Align too.
     void align(Edge edge);
-    void distribute(Edge edge);
     void matchSize(bool width, bool height);
+    /// Whether it lines things up with the stage rather than each other.
+    bool alignToStage() const;
+    void setAlignToStage(bool on);
+
+signals:
+    void alignToStageChanged(bool on);
+
+private:
+    void distribute(Edge edge);
     void space(bool horizontal);
 
     ArrangeLinks _links;

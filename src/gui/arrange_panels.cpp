@@ -183,12 +183,23 @@ AlignPanel::AlignPanel(ArrangeLinks links, QWidget* parent)
 
     _toStage = new QCheckBox("Align to stage", this);
     _toStage->setToolTip("Line up with the stage rather than with each other");
+    connect(_toStage, &QCheckBox::toggled, this, &AlignPanel::alignToStageChanged);
 
     QVBoxLayout* layout = new QVBoxLayout(this);
     layout->setContentsMargins(8, 8, 8, 8);
     layout->addLayout(grid);
     layout->addWidget(_toStage);
     layout->addStretch();
+}
+
+bool AlignPanel::alignToStage() const
+{
+    return _toStage->isChecked();
+}
+
+void AlignPanel::setAlignToStage(bool on)
+{
+    _toStage->setChecked(on);
 }
 
 void AlignPanel::align(Edge edge)

@@ -6600,7 +6600,7 @@ void PhoenixView::drawToolOverlay(QPainter& painter)
     // start and green at its end.
     {
         bool start = true;
-        if (fla::Frame* tween = shapeHintTween(start))
+        if (fla::Frame* tween = _showShapeHints ? shapeHintTween(start) : nullptr)
         {
             const std::vector<fla::ShapeHint> hints = fla::hintsOf(*tween);
             const double r = 8.0 * scale;
@@ -6655,7 +6655,8 @@ void PhoenixView::drawToolOverlay(QPainter& painter)
         painter.restore();
     }
 
-    if (_selection && !_selection->isEmpty())
+    // View > Hide Edges: the selection stays selected, unmarked.
+    if (_selection && !_selection->isEmpty() && !_hideEdges)
     {
         painter.save();
 

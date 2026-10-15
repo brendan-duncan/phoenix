@@ -16,6 +16,8 @@ const std::map<std::string, std::string>& aliases()
     static const std::map<std::string, std::string> table = [] {
         const std::pair<const char*, const char*> pairs[] = {
             {"Tools > Fluid Brush", "Tools > Brush"},
+            {"Help > Animate Help", "Help > Phoenix Help"},
+            {"Control > Test Movie > Test", "Control > Test Movie"},
             // Its name before it was Brush, in sets saved then.
             {"Tools > Flow Brush", "Tools > Brush"},
             {"Tools > Classic Brush", "Tools > Nib Brush"},

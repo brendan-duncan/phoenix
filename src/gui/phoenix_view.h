@@ -538,6 +538,10 @@ public:
     fla::Frame* keyframeForDrawing(fla::Frame* frame);
 
     void setShowGrid(bool show) { _showGrid = show; update(); }
+    /// View > Hide Edges: the selection's highlight not drawn.
+    void setHideEdges(bool hide) { _hideEdges = hide; update(); }
+    /// View > Show Shape Hints.
+    void setShowShapeHints(bool show) { _showShapeHints = show; update(); }
     /// The grid over the art rather than under it.
     void setGridOver(bool over) { _gridOver = over; update(); }
     bool gridOver() const { return _gridOver; }
@@ -1106,6 +1110,8 @@ private:
     bool _committingMerge = false;
     fla::Snapper* _snapper = nullptr;
     bool _showGrid = false;
+    bool _hideEdges = false;
+    bool _showShapeHints = true;
     bool _drawHidden = false;
     /// Masks clip what they mask to their area as a path, for exports that
     /// write vectors, rather than compositing pixels.

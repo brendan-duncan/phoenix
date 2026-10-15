@@ -6,6 +6,7 @@
 #include <QDialog>
 
 #include <functional>
+#include <string>
 #include <vector>
 
 class QCheckBox;
@@ -34,6 +35,11 @@ public:
 
     /// Starts the color search from \a color.
     void setFindColor(const QColor& color);
+
+    /// Edit > Find Next: goes to the next place what the dialog asks for is
+    /// found, from the first when the search has changed. False when there
+    /// is none.
+    bool findNext();
 
 signals:
     /// Replace All, to be carried out undoably.
@@ -69,4 +75,7 @@ private:
     QTreeWidget* _results;
     QLabel* _status;
     std::vector<fla::find::Match> _matches;
+    /// Where Find Next goes on from, and the search it was for.
+    size_t _next = 0;
+    std::string _nextKey;
 };
