@@ -3,6 +3,7 @@
 #include "../src/data/document.h"
 #include "../src/data/fla_document.h"
 #include "../src/data/frame.h"
+#include "../src/data/group.h"
 #include "../src/data/layer.h"
 #include "../src/data/resource.h"
 #include "../src/data/shape.h"
@@ -50,6 +51,49 @@ Parsed parse(const std::map<std::string, std::vector<uint8_t>>& files)
     parsed.document = parser.parse(std::string(xml.begin(), xml.end()), parsed.root.get());
     static_cast<fla::FLADocument*>(parsed.root.get())->document = parsed.document;
     return parsed;
+}
+
+/// Bits written most significant first, as SWF shape records are.
+struct Bits
+{
+    std::vector<uint8_t> bytes;
+    int used = 8;
+    void put(uint32_t value, int count)
+    {
+        for (int i = count - 1; i >= 0; --i)
+        {
+            if (used == 8)
+            {
+                bytes.push_back(0);
+                used = 0;
+            }
+            if ((value >> i) & 1u)
+                bytes.back() |= static_cast<uint8_t>(0x80u >> used);
+            ++used;
+        }
+    }
+    void signedBits(int value, int count) { put(static_cast<uint32_t>(value) & ((1u << count) - 1u), count); }
+    void align() { used = 8; }
+    void byte(uint8_t value)
+    {
+        align();
+        bytes.push_back(value);
+    }
+};
+
+/// A square's four edges from where the pen is, \a size twips a side.
+void squareEdges(Bits& bits, int size)
+{
+    const int deltas[4][2] = {{size, 0}, {0, size}, {-size, 0}, {0, -size}};
+    for (const auto& delta : deltas)
+    {
+        bits.put(1, 1); // an edge
+        bits.put(1, 1); // straight
+        bits.put(15 - 2, 4);
+        bits.put(0, 1); // not both ways
+        bits.put(delta[0] == 0 ? 1 : 0, 1); // up and down
+        bits.signedBits(delta[0] == 0 ? delta[1] : delta[0], 15);
+    }
 }
 
 } // namespace
@@ -285,4 +329,92 @@ TEST(swf_import_cuts_the_main_timeline_into_its_scenes)
         for (const fla::Frame* frame : layer->frames)
             labeled = labeled || (frame->name == "end" && frame->index == 1);
     CHECK(labeled);
+}
+
+TEST(swf_import_stacks_each_style_chunk_of_a_shape)
+{
+    // One DefineShape2 drawn in two style chunks: a blue square with a
+    // black outline, then new styles and a red square over its corner.
+    // Flash draws the first chunk's fill and outline before the second
+    // chunk's fill, so the red covers the outline there.
+    Bits bits;
+    bits.byte(1);
+    bits.byte(0); // id 1
+    bits.put(15, 5);
+    for (int v : {0, 2000, 0, 2000})
+        bits.signedBits(v, 15);
+    bits.byte(1); // fills
+    bits.byte(0x00);
+    for (uint8_t c : {0, 0, 255})
+        bits.byte(c);
+    bits.byte(1); // lines
+    bits.byte(200);
+    bits.byte(0);
+    for (uint8_t c : {0, 0, 0})
+        bits.byte(c);
+    bits.align();
+    bits.put(1, 4);
+    bits.put(1, 4);
+    // Move to the first square, fill 1 and line 1.
+    bits.put(0, 1);
+    bits.put(0, 1); // new styles
+    bits.put(1, 1); // line
+    bits.put(1, 1); // fill 1
+    bits.put(0, 1); // fill 0
+    bits.put(1, 1); // move
+    bits.put(15, 5);
+    bits.signedBits(0, 15);
+    bits.signedBits(0, 15);
+    bits.put(1, 1);
+    bits.put(1, 1);
+    squareEdges(bits, 1000);
+    // New styles: a red fill, no line.
+    bits.put(0, 1);
+    bits.put(1, 1);
+    bits.put(0, 1);
+    bits.put(0, 1);
+    bits.put(0, 1);
+    bits.put(0, 1);
+    bits.byte(1);
+    bits.byte(0x00);
+    for (uint8_t c : {255, 0, 0})
+        bits.byte(c);
+    bits.byte(0);
+    bits.align();
+    bits.put(1, 4);
+    bits.put(0, 4);
+    bits.put(0, 1);
+    bits.put(0, 1);
+    bits.put(0, 1);
+    bits.put(1, 1); // fill 1
+    bits.put(0, 1);
+    bits.put(1, 1); // move
+    bits.put(15, 5);
+    bits.signedBits(500, 15);
+    bits.signedBits(500, 15);
+    bits.put(1, 1);
+    squareEdges(bits, 1000);
+    bits.put(0, 6); // the end
+    swf::Writer writer(100, 100, 24.0, {255, 255, 255, 255});
+    writer.tag(22, bits.bytes);
+    writer.place(1, 1);
+    writer.showFrame();
+    std::map<std::string, std::vector<uint8_t>> files;
+    std::string error;
+    CHECK(SwfImport::convert(writer.finish(false), files, error));
+    Parsed parsed = parse(files);
+    CHECK(parsed.document && parsed.document->timelines.size() == 1);
+    if (!parsed.document)
+        return;
+    const fla::Frame* frame = parsed.document->timelines[0]->layers[0]->frames[0];
+    CHECK(frame->elements.size() == 1);
+    // A group of the two, the outlined square underneath.
+    const auto* group = dynamic_cast<const fla::Group*>(frame->elements.empty() ? nullptr : frame->elements[0]);
+    CHECK(group && group->members.size() == 2);
+    if (!group || group->members.size() != 2)
+        return;
+    const auto* below = dynamic_cast<const fla::Shape*>(group->members[0]);
+    const auto* above = dynamic_cast<const fla::Shape*>(group->members[1]);
+    CHECK(below && below->fills.size() == 1 && below->strokes.size() == 1);
+    CHECK(above && above->fills.size() == 1 && above->strokes.empty());
 }

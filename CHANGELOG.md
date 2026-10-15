@@ -4,6 +4,8 @@ What changed in each release of Phoenix, newest first.
 
 ## 0.12.0 (Unreleased)
 
+- Opening a SWF movie keeps the stacking inside a shape drawn in several style groups: a nose no longer shows the outline of the mouth behind it
+
 - Time Remap: Blend between frames cross-fades between a graphic's frames in slow motion
 
 - 3D: a light that shades movie clips as they turn, and depth of field that blurs them away from a focus depth (Lights and Depth... in the 3D section of the Properties panel)

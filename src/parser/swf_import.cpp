@@ -491,6 +491,8 @@ struct Run
 {
     int fill0 = 0, fill1 = 0, line = 0;
     std::vector<Command> commands;
+    /// The style chunk the run is drawn in (new styles start another).
+    int chunk = 0;
 };
 
 struct ShapeData
@@ -498,7 +500,54 @@ struct ShapeData
     std::vector<Fill> fills;
     std::vector<Line> lines;
     std::vector<Run> runs;
+    /// Where each style chunk's fills and lines start in the lists. Flash
+    /// draws a chunk's fills and then its lines before the next chunk, so
+    /// a later chunk's fills cover an earlier one's lines.
+    std::vector<int> fillBase, lineBase;
 };
+
+/// \a shape as one shape for each style chunk it draws in, bottom first,
+/// each with only that chunk's styles; just \a shape when it has one.
+std::vector<ShapeData> chunksOf(const ShapeData& shape)
+{
+    int last = 0;
+    for (const Run& run : shape.runs)
+        last = std::max(last, run.chunk);
+    if (last == 0)
+        return {shape};
+    std::vector<ShapeData> out;
+    for (int chunk = 0; chunk <= last; ++chunk)
+    {
+        ShapeData part;
+        const auto range = [chunk](const std::vector<int>& base, size_t total) {
+            const size_t from = chunk < static_cast<int>(base.size()) ? static_cast<size_t>(base[static_cast<size_t>(chunk)]) : total;
+            const size_t to = chunk + 1 < static_cast<int>(base.size()) ? static_cast<size_t>(base[static_cast<size_t>(chunk) + 1]) : total;
+            return std::make_pair(std::min(from, total), std::min(std::max(from, to), total));
+        };
+        const auto [fillFrom, fillTo] = range(shape.fillBase, shape.fills.size());
+        const auto [lineFrom, lineTo] = range(shape.lineBase, shape.lines.size());
+        part.fills.assign(shape.fills.begin() + static_cast<long>(fillFrom), shape.fills.begin() + static_cast<long>(fillTo));
+        part.lines.assign(shape.lines.begin() + static_cast<long>(lineFrom), shape.lines.begin() + static_cast<long>(lineTo));
+        const auto local = [](int index, size_t from, size_t to) {
+            return index > static_cast<int>(from) && index <= static_cast<int>(to) ? index - static_cast<int>(from) : 0;
+        };
+        for (const Run& run : shape.runs)
+        {
+            if (run.chunk != chunk)
+                continue;
+            Run moved = run;
+            moved.chunk = 0;
+            moved.fill0 = local(run.fill0, fillFrom, fillTo);
+            moved.fill1 = local(run.fill1, fillFrom, fillTo);
+            moved.line = local(run.line, lineFrom, lineTo);
+            if (moved.fill0 || moved.fill1 || moved.line)
+                part.runs.push_back(std::move(moved));
+        }
+        if (!part.runs.empty())
+            out.push_back(std::move(part));
+    }
+    return out;
+}
 
 /// Records as runs of edges with their styles, the style chunks flattened
 /// into one list each.
@@ -517,6 +566,8 @@ ShapeData buildShape(const std::vector<Record>& records, const std::vector<std::
         lineBase.push_back(static_cast<int>(shape.lines.size()));
         shape.lines.insert(shape.lines.end(), chunk.begin(), chunk.end());
     }
+    shape.fillBase = fillBase;
+    shape.lineBase = lineBase;
     int chunk = 0;
     int fill0 = 0, fill1 = 0, line = 0;
     double x = 0, y = 0;
@@ -533,7 +584,7 @@ ShapeData buildShape(const std::vector<Record>& records, const std::vector<std::
         {
             if (!run)
             {
-                shape.runs.push_back(Run{fill0, fill1, line, {}});
+                shape.runs.push_back(Run{fill0, fill1, line, {}, chunk});
                 run = &shape.runs.back();
                 run->commands.push_back(Command{'M', 0, 0, x, y});
             }
@@ -2176,8 +2227,23 @@ private:
         return text;
     }
 
-    /// A DOMShape of \a shape, its points taken through \a place.
+    /// A DOMShape of \a shape, its points taken through \a place; a group
+    /// of them, one for each style chunk, bottom first, when it has
+    /// several, so they stack as Flash draws them.
     tinyxml2::XMLElement* shapeElement(tinyxml2::XMLDocument& doc, const ShapeData& shape, const Matrix& place)
+    {
+        const std::vector<ShapeData> chunks = chunksOf(shape);
+        if (chunks.size() == 1)
+            return chunkElement(doc, chunks.front(), place);
+        tinyxml2::XMLElement* group = doc.NewElement("DOMGroup");
+        tinyxml2::XMLElement* members = doc.NewElement("members");
+        for (const ShapeData& chunk : chunks)
+            members->InsertEndChild(chunkElement(doc, chunk, place));
+        group->InsertEndChild(members);
+        return group;
+    }
+
+    tinyxml2::XMLElement* chunkElement(tinyxml2::XMLDocument& doc, const ShapeData& shape, const Matrix& place)
     {
         tinyxml2::XMLElement* element = doc.NewElement("DOMShape");
         const double scale = std::sqrt(std::fabs(place.a * place.d - place.b * place.c));
