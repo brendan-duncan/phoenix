@@ -3335,6 +3335,8 @@ void PhoenixView::drawElement(QPainter& painter, const fla::Element* element, co
             if (copies.size() > 1)
             {
                 const fla::Transform keyed = transform;
+                if (stampCopies(painter, *instance, tweenElement, tweenProgress, keyed, copies))
+                    return;
                 for (const fla::behaviors::Delta& copy : copies)
                 {
                     _overrideElement = element;
@@ -5306,6 +5308,128 @@ std::vector<std::pair<QPainterPath, const fla::StrokeStyle*>> PhoenixView::strok
             runs.emplace_back(entry.painterPath, entry.strokeStyle);
     }
     return runs;
+}
+
+bool PhoenixView::stampCopies(QPainter& painter, const fla::SymbolInstance& instance,
+    const fla::Element* tweenElement, double tweenProgress, const fla::Transform& keyed,
+    const fla::behaviors::Copies& copies)
+{
+    // A handful draw as quickly one by one, and exactly.
+    constexpr size_t kFewest = 16;
+    const fla::Symbol* symbol = instance.symbol;
+    // Graphics only: a movie clip in a movie playing is where its scripts
+    // leave it, so its copies are drawn one by one there, and so everywhere
+    // else too, for the movie and the exports to look the same.
+    if (copies.size() < kFewest || !symbol || instance.symbolType != fla::SymbolType::Graphic || _maskPass || _warping || _outlineColor.isValid() ||
+        !_templateStack.empty() || symbol->scale9 || !instance.otherSymbolType.empty())
+        return false;
+    // Only what a picture of it, faded, shows the same.
+    for (const fla::Filter& filter : instance.filters)
+        if (filter.enabled)
+            return false;
+    if (!instance.blendMode.empty() && instance.blendMode != "normal")
+        return false;
+    const fla::ColorTransform& color = instance.colorTransform;
+    if (color.tintMultiplier != 0.0 || color.brightness != 0.0 || color.redMultiplier != 1.0 ||
+        color.greenMultiplier != 1.0 || color.blueMultiplier != 1.0 || color.redOffset != 0 ||
+        color.greenOffset != 0 || color.blueOffset != 0 || color.alphaOffset != 0)
+        return false;
+    if (tweenElement && tweenElement->elementType() == fla::Element::Type::SymbolInstance)
+    {
+        const auto* other = static_cast<const fla::SymbolInstance*>(tweenElement);
+        if (other->colorTransform.alphaMultiplier != color.alphaMultiplier || !other->filters.empty())
+            return false;
+    }
+    const QTransform keyedQ(keyed.m11, keyed.m12, keyed.m21, keyed.m22, keyed.tx, keyed.ty);
+    if (!threeDTransform(&instance, keyedQ, tweenElement, tweenProgress).isIdentity())
+        return false;
+    const QRectF local = symbolReach(symbol);
+    if (!local.isValid() || local.isEmpty())
+        return false;
+
+    // The size the largest copy is seen at, on the device.
+    const QTransform device = painter.transform();
+    double largest = 0.0;
+    for (const fla::behaviors::Delta& copy : copies)
+    {
+        const fla::Transform placed = fla::behaviors::apply(keyed, instance.transformationPoint, copy);
+        const QTransform seen = QTransform(placed.m11, placed.m12, placed.m21, placed.m22, 0.0, 0.0) * device;
+        largest = std::max({largest, std::hypot(seen.m11(), seen.m12()), std::hypot(seen.m21(), seen.m22())});
+    }
+    const double scale = std::max(largest, 0.01);
+    const QSize size(static_cast<int>(std::ceil(local.width() * scale)) + 4, static_cast<int>(std::ceil(local.height() * scale)) + 4);
+    // Too big a picture to be worth it, or nothing to see.
+    if (size.width() > 2048 || size.height() > 2048 || static_cast<qint64>(size.width()) * size.height() > 2048 * 1024)
+        return false;
+
+    // A picture for each frame of the symbol the copies show.
+    // Copies on the same frame of the symbol look the same, however far
+    // apart their loops run; a symbol with movie clips inside, which play
+    // on their own clock, is told apart by the copy's own offset instead.
+    bool clips = false;
+    for (const fla::Timeline* timeline : symbol->timelines)
+        for (const fla::Layer* layer : timeline ? timeline->layers : std::vector<fla::Layer*>())
+            for (const fla::Frame* frame : layer ? layer->frames : std::vector<fla::Frame*>())
+                for (const fla::Element* element : frame ? frame->elements : std::vector<fla::Element*>())
+                    clips = clips || (element && element->elementType() == fla::Element::Type::SymbolInstance &&
+                                         static_cast<const fla::SymbolInstance*>(element)->symbolType != fla::SymbolType::Graphic);
+    const auto keyOf = [&](const fla::behaviors::Delta& copy) {
+        if (clips)
+            return copy.frame;
+        const int elapsed = _elapsed;
+        _elapsed = std::max(0, _elapsed + copy.frame);
+        const int inner = symbolFrame(instance);
+        _elapsed = elapsed;
+        return inner;
+    };
+    std::vector<int> keys;
+    keys.reserve(copies.size());
+    for (const fla::behaviors::Delta& copy : copies)
+        keys.push_back(keyOf(copy));
+    std::map<int, QImage> pictures;
+    const fla::Transform none;
+    for (const fla::behaviors::Delta& copy : copies)
+    {
+        const int key = keys[static_cast<size_t>(&copy - copies.data())];
+        if (pictures.count(key) || copy.alpha <= 0.0)
+            continue;
+        QImage picture(size, QImage::Format_ARGB32_Premultiplied);
+        picture.fill(Qt::transparent);
+        QPainter into(&picture);
+        into.setRenderHints(painter.renderHints());
+        into.setTransform(QTransform::fromTranslate(-local.left() * scale + 2.0, -local.top() * scale + 2.0).scale(scale, scale));
+        // Drawn as the instance would be, at its own origin, the copy's
+        // frame on it and nothing else.
+        fla::behaviors::Delta frameOnly;
+        frameOnly.frame = copy.frame;
+        _overrideElement = &instance;
+        _overrideTransform = none;
+        _copyElement = &instance;
+        _copyDelta = &frameOnly;
+        drawElement(into, &instance, tweenElement, tweenProgress);
+        _copyElement = nullptr;
+        _copyDelta = nullptr;
+        into.end();
+        pictures.emplace(key, std::move(picture));
+    }
+
+    // Each copy, stamped.
+    const QRectF target(local.left() - 2.0 / scale, local.top() - 2.0 / scale, size.width() / scale, size.height() / scale);
+    painter.save();
+    painter.setRenderHint(QPainter::SmoothPixmapTransform, true);
+    const double opacity = painter.opacity();
+    for (const fla::behaviors::Delta& copy : copies)
+    {
+        const auto picture = pictures.find(keys[static_cast<size_t>(&copy - copies.data())]);
+        if (picture == pictures.end())
+            continue;
+        const fla::Transform placed = fla::behaviors::apply(keyed, instance.transformationPoint, copy);
+        painter.setTransform(QTransform(placed.m11, placed.m12, placed.m21, placed.m22, placed.tx, placed.ty) * device, false);
+        painter.setOpacity(opacity * std::clamp(copy.alpha, 0.0, 1.0));
+        painter.drawImage(target, picture->second);
+    }
+    painter.restore();
+    return true;
 }
 
 QTransform PhoenixView::threeDTransform(const fla::Element* element, const QTransform& placed,

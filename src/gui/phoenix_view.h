@@ -1286,6 +1286,15 @@ private:
     QCache<QString, QPixmap> _paddedFills{256 * 1024};
     QHash<const fla::Symbol*, QRectF> _symbolReachCache;
     QRectF symbolReach(const fla::Symbol* symbol);
+    /// Many copies of one instance drawn from a picture of it: the symbol
+    /// drawn once for each frame of it the copies show, at the size the
+    /// largest copy is seen, and each copy stamped from that picture with its
+    /// own place, turn, size and fade. False, drawing nothing, when the
+    /// instance needs more than that (filters, blends, color effects, 3D,
+    /// 9-slice, a movie clip, a mask or outline pass); the copies are then
+    /// drawn one by one.
+    bool stampCopies(QPainter& painter, const fla::SymbolInstance& instance, const fla::Element* tweenElement,
+        double tweenProgress, const fla::Transform& keyed, const fla::behaviors::Copies& copies);
     /// An element's bounds in the space of what holds it, over every frame
     /// of a symbol it places: for symbol bounds, culling and offscreens.
     QRectF memberReach(const fla::Element* element);
