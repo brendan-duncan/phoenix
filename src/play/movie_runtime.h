@@ -252,6 +252,8 @@ private:
     void syncChildren(Clip& clip, std::vector<Clip*>& entered);
     /// Runs the scripts of the frame \a clip is on.
     void runFrameScripts(Clip& clip);
+    /// Plays the sounds on button state frame \a state (0 Up to 3 Hit).
+    void buttonSound(const Clip& button, int state);
     /// Goes on with the frames clips were sent to while scripts ran.
     void settle();
     void advance(Clip& clip, std::vector<Clip*>& entered);

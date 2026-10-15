@@ -115,8 +115,10 @@ public:
 
     int frames() const { return _frames; }
 
-private:
+    /// A tag this writer has no call for, its body as given.
     void tag(int code, const std::vector<uint8_t>& body);
+
+private:
 
     int _width;
     int _height;

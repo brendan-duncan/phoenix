@@ -1786,7 +1786,11 @@ void MovieRuntime::pointerOver(Clip* button)
         dispatch(*left, "mouseOut", true);
         dispatch(*left, "rollOut", false);
         if (left->button)
+        {
+            if (_pressed != left)
+                buttonSound(*left, 0);
             runButtonEvent(*left, _pressed == left ? "dragOut" : "rollOut");
+        }
     }
     // What the pointer moved onto may be gone once those settled.
     if (button && _hovered == button)
@@ -1794,7 +1798,11 @@ void MovieRuntime::pointerOver(Clip* button)
         dispatch(*button, "mouseOver", true);
         dispatch(*button, "rollOver", false);
         if (button->button)
+        {
+            if (_pressed != button)
+                buttonSound(*button, 1);
             runButtonEvent(*button, _pressed == button ? "dragOver" : "rollOver");
+        }
     }
     settle();
 }
@@ -1812,7 +1820,10 @@ void MovieRuntime::pointerDown()
         Clip& pressed = *_pressed;
         dispatch(pressed, "mouseDown", true);
         if (pressed.button)
+        {
+            buttonSound(pressed, 2);
             runButtonEvent(pressed, "press");
+        }
     }
     settle();
 }
@@ -1834,8 +1845,29 @@ void MovieRuntime::pointerUp()
             dispatch(*hovered, "click", true);
     }
     if (pressed && pressed->button)
+    {
+        if (pressed == hovered)
+            buttonSound(*pressed, 3);
         runButtonEvent(*pressed, pressed == hovered ? "release" : "releaseOutside");
+    }
     settle();
+}
+
+void MovieRuntime::buttonSound(const Clip& button, int state)
+{
+    // A sound on a button's state frame plays as the button changes: Up's
+    // on rolling out, Over's on rolling over, Down's on pressing and Hit's
+    // on releasing.
+    if (!button.button || !button.timeline || !frameSound)
+        return;
+    for (const Layer* layer : button.timeline->layers)
+    {
+        if (!layer || !plays(*layer))
+            continue;
+        const Frame* frame = keyframeAt(*layer, state);
+        if (frame && frame->index == state && !attributeOf(frame->extraAttributes, "soundName").empty())
+            frameSound(*frame);
+    }
 }
 
 int MovieRuntime::buttonFrame(const Clip& button) const

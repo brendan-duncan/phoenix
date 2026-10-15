@@ -580,6 +580,43 @@ TEST(movie_runtime_tells_of_frame_sounds)
     CHECK(heard.size() == 2);
 }
 
+TEST(movie_runtime_plays_button_state_sounds)
+{
+    Movie movie;
+    movie.root->name = "Scene 1";
+    fla::Symbol* button = movie.symbol("Button", fla::SymbolType::Button, 4);
+    fla::Layer* states = button->timelines[0]->layers[0];
+    const char* names[4] = {"up.wav", "over.wav", "down.wav", "hit.wav"};
+    for (int i = 0; i < 4; ++i)
+        states->frames[static_cast<size_t>(i)]->extraAttributes.emplace_back("soundName", names[i]);
+    fla::Layer* layer = movie.layer(*movie.root, "buttons");
+    fla::Frame* frame = movie.frame(*layer, 0, 1, "stop();");
+    movie.place(*frame, *button, "");
+    std::vector<int> heard;
+    fla::play::MovieRuntime runtime(*movie.root, 12.0);
+    runtime.frameSound = [&heard](const fla::Frame& f) { heard.push_back(f.index); };
+    runtime.start();
+    // Placing the button plays nothing.
+    CHECK(heard.empty());
+    fla::play::Clip* clip = runtime.clipOf(runtime.root(), *layer, *static_cast<fla::SymbolInstance*>(frame->elements[0]));
+    CHECK(clip != nullptr);
+    if (!clip)
+        return;
+    runtime.pointerOver(clip);
+    runtime.pointerDown();
+    runtime.pointerUp();
+    runtime.pointerOver(nullptr);
+    // Over, Down, Hit (released on it), then Up on rolling out.
+    CHECK(heard == (std::vector<int>{1, 2, 3, 0}));
+    // Pressed and dragged off: no Up sound and no Hit sound.
+    heard.clear();
+    runtime.pointerOver(clip);
+    runtime.pointerDown();
+    runtime.pointerOver(nullptr);
+    runtime.pointerUp();
+    CHECK(heard == (std::vector<int>{1, 2}));
+}
+
 TEST(movie_runtime_runs_a_document_class_and_symbol_classes)
 {
     Movie movie;

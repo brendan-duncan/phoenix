@@ -877,21 +877,7 @@ private:
                     break;
                 }
                 use.sound = tag.u16();
-                tag.align();
-                tag.ub(2);
-                use.stop = tag.ub(1) != 0;
-                use.noMultiple = tag.ub(1) != 0;
-                const bool envelope = tag.ub(1) != 0;
-                const bool loops = tag.ub(1) != 0;
-                const bool outPoint = tag.ub(1) != 0;
-                const bool inPoint = tag.ub(1) != 0;
-                (void)envelope;
-                if (inPoint)
-                    tag.u32();
-                if (outPoint)
-                    tag.u32();
-                if (loops)
-                    use.loops = tag.u16();
+                readSoundInfo(tag, use);
                 timeline.sounds[frame].push_back(use);
                 break;
             }
@@ -946,7 +932,6 @@ private:
         case 88: // DefineFontName
         case 86: // DefineSceneAndFrameLabelData
         case 23: // DefineButtonCxform
-        case 17: // DefineButtonSound
         case 13:
         case 62: // DefineFontInfo, read in define
             return;
@@ -1221,10 +1206,61 @@ private:
     }
 
     /// A definition tag: true when it was one.
+    /// A SOUNDINFO record: how a sound starts, stops and loops.
+    static void readSoundInfo(Reader& tag, SoundUse& use)
+    {
+        tag.align();
+        tag.ub(2);
+        use.stop = tag.ub(1) != 0;
+        use.noMultiple = tag.ub(1) != 0;
+        const bool envelope = tag.ub(1) != 0;
+        const bool loops = tag.ub(1) != 0;
+        const bool outPoint = tag.ub(1) != 0;
+        const bool inPoint = tag.ub(1) != 0;
+        if (inPoint)
+            tag.u32();
+        if (outPoint)
+            tag.u32();
+        if (loops)
+            use.loops = tag.u16();
+        if (envelope)
+        {
+            const int points = tag.u8();
+            for (int i = 0; i < points && !tag.atEnd(); ++i)
+            {
+                tag.u32();
+                tag.u16();
+                tag.u16();
+            }
+        }
+    }
+
+    /// A button's sounds, one for each change of state, each kept on the
+    /// state frame that plays it: rolling out on Up, over on Over,
+    /// pressing on Down and releasing on Hit.
+    void defineButtonSound(Reader& tag)
+    {
+        const auto found = _characters.find(tag.u16());
+        if (found == _characters.end() || found->second.kind != Character::Kind::Button || !found->second.timeline)
+            return;
+        for (int state = 0; state < 4 && !tag.atEnd(); ++state)
+        {
+            SoundUse use;
+            use.sound = tag.u16();
+            if (use.sound == 0)
+                continue;
+            readSoundInfo(tag, use);
+            found->second.timeline->sounds[state].push_back(use);
+        }
+    }
+
     bool define(Reader& tag, int code, size_t length)
     {
         switch (code)
         {
+        case 17:
+            defineButtonSound(tag);
+            return true;
         case 2:
         case 22:
         case 32:

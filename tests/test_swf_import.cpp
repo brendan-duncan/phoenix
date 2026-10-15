@@ -173,6 +173,44 @@ TEST(swf_import_keeps_bitmaps_and_the_soundtrack)
     CHECK(parsed.document != nullptr);
 }
 
+TEST(swf_import_keeps_button_sounds_on_their_state_frames)
+{
+    swf::Writer writer(64, 64, 12.0, {255, 255, 255, 255});
+    swf::Fill red;
+    red.color = {255, 0, 0, 255};
+    const int shape = writer.defineShape(red, square(10));
+    // Sound 50: a tenth of a second of raw 16-bit mono at 11 kHz.
+    std::vector<uint8_t> sound = {50, 0, 0x36, 0x4D, 0x04, 0, 0};
+    sound.resize(sound.size() + 1101 * 2, 0);
+    writer.tag(14, sound);
+    // Button 60: the shape in every state.
+    writer.tag(7, {60, 0, 0x0F, static_cast<uint8_t>(shape), 0, 1, 0, 0x00, 0x00, 0x00});
+    // Its sounds: none on rolling out, sound 50 on rolling over and on
+    // pressing, none on releasing.
+    writer.tag(17, {60, 0, 0, 0, 50, 0, 0x00, 50, 0, 0x00, 0, 0});
+    writer.place(60, 1);
+    writer.showFrame();
+    std::map<std::string, std::vector<uint8_t>> files;
+    std::string error;
+    CHECK(SwfImport::convert(writer.finish(false), files, error));
+    std::string button;
+    for (const auto& [path, bytes] : files)
+    {
+        const std::string text(bytes.begin(), bytes.end());
+        if (text.find("symbolType=\"button\"") != std::string::npos && text.find("<DOMTimeline") != std::string::npos)
+            button = text;
+    }
+    CHECK(!button.empty());
+    // The sound on the Over and Down frames, and on no other.
+    size_t count = 0;
+    for (size_t at = button.find("soundName="); at != std::string::npos; at = button.find("soundName=", at + 1))
+        ++count;
+    CHECK(count == 2);
+    const size_t first = button.find("soundName=");
+    const size_t start = button.rfind("<DOMFrame", first);
+    CHECK(start != std::string::npos && button.find("index=\"1\"", start) < first);
+}
+
 TEST(swf_import_turns_down_what_is_not_a_movie)
 {
     std::map<std::string, std::vector<uint8_t>> files;
