@@ -460,6 +460,14 @@ private slots:
     /// Modify > Timeline > Convert to Frame-by-Frame Animation and Reverse
     /// Frames.
     void convertToFrameByFrame();
+    /// Bake to Keyframes: the selected frames' behaviors left as keyframes
+    /// (Modify > Timeline), or the whole runs of the selected instances
+    /// (the Behaviors panel).
+    void bakeBehaviors();
+    void bakeSelectedBehaviors();
+    /// File > Export > Export FLA for Other Apps: a copy with every
+    /// behavior baked, the document itself left as it is.
+    void exportBakedDocument();
     void reverseFrames();
     void showFramesMenu(const QPoint& globalPos);
     void addLayer(bool folder);

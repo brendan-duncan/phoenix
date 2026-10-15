@@ -24,6 +24,10 @@ struct BehaviorsLinks
     std::function<std::vector<fla::SymbolInstance*>()> instances;
     /// After a change: the stage drawn again.
     std::function<void()> changed;
+    /// The frame shown, on the timeline being edited: where keys go.
+    std::function<int()> currentFrame;
+    /// Bake to Keyframes for the selected instances.
+    std::function<void()> bake;
 };
 
 /// The Behaviors panel: the behaviors on the selected symbol instances.
@@ -55,6 +59,9 @@ private:
     void move(int by);
     void remove();
     void setParam(int row, const std::string& name, const std::string& value, bool merge);
+    /// Keys the setting on the frame shown, or takes its key there away.
+    void toggleKey(int row, const std::string& name);
+    int frame() const;
 
     BehaviorsLinks _links;
     QLabel* _what;
@@ -63,6 +70,7 @@ private:
     QToolButton* _up;
     QToolButton* _down;
     QToolButton* _remove;
+    QToolButton* _bake;
     QLabel* _description;
     QWidget* _settings;
     QFormLayout* _form;

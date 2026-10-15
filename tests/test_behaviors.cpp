@@ -2,7 +2,11 @@
 
 #include "../src/data/symbol_instance.h"
 #include "../src/edit/behaviors.h"
+#include "../src/data/frame.h"
+#include "../src/data/layer.h"
+#include "../src/data/timeline.h"
 #include "../src/jsfl/behavior_engine.h"
+#include "../src/jsfl/behavior_frames.h"
 
 #include <cmath>
 #include <string>
@@ -26,6 +30,13 @@ Moment still(int frame, int start = 0, int end = 100)
     moment.start = start;
     moment.end = end;
     return moment;
+}
+
+/// The first copy behaviors make.
+Delta one(Engine& engine, const std::vector<Applied>& list, const Moment& moment, std::string* error = nullptr)
+{
+    const Copies copies = engine.evaluate(list, moment, error);
+    return copies.empty() ? Delta() : copies.front();
 }
 
 } // namespace
@@ -82,26 +93,26 @@ TEST(behaviors_built_in_ones_run_the_same_every_time)
 
     const Applied applied = engine.defaults("wiggle", 7);
     CHECK(applied.params.at("seed") == "7" && applied.params.at("position") == "10");
-    const Delta a = engine.evaluate({applied}, still(30));
-    const Delta b = engine.evaluate({applied}, still(30));
-    const Delta c = engine.evaluate({applied}, still(31));
+    const Delta a = one(engine, {applied}, still(30));
+    const Delta b = one(engine, {applied}, still(30));
+    const Delta c = one(engine, {applied}, still(31));
     CHECK(a.x == b.x && a.y == b.y && (a.x != c.x || a.y != c.y));
     CHECK(std::fabs(a.x) <= 10.0 && std::fabs(a.y) <= 10.0);
     // Another seed wiggles differently.
-    const Delta other = engine.evaluate({engine.defaults("wiggle", 8)}, still(30));
+    const Delta other = one(engine, {engine.defaults("wiggle", 8)}, still(30));
     CHECK(other.x != a.x);
 
     // Oscillate a quarter of the way through a one-second swing: the top.
     Applied swing = engine.defaults("oscillate", 1);
     swing.params["amount"] = "20";
-    CHECK(near(engine.evaluate({swing}, still(6)).y, 20.0, 1e-6));
+    CHECK(near(one(engine, {swing}, still(6)).y, 20.0, 1e-6));
     // Fade in over 12 frames from the start of its keyframes.
-    const Delta fading = engine.evaluate({engine.defaults("fade", 1)}, still(15, 10, 100));
+    const Delta fading = one(engine, {engine.defaults("fade", 1)}, still(15, 10, 100));
     CHECK(near(fading.alpha, 6.0 / 12.0));
     // Turned off, it does nothing.
     Applied off = swing;
     off.enabled = false;
-    CHECK(engine.evaluate({off}, still(6)).none());
+    CHECK(one(engine, {off}, still(6)).none());
 }
 
 TEST(behaviors_follow_lags_behind_the_keyed_motion)
@@ -118,7 +129,7 @@ TEST(behaviors_follow_lags_behind_the_keyed_motion)
     };
     Applied follow = engine.defaults("follow", 1);
     follow.params["bounce"] = "0";
-    const Delta delta = engine.evaluate({follow}, moment);
+    const Delta delta = one(engine, {follow}, moment);
     CHECK(delta.x < -1.0 && delta.x > -200.0);
     // Standing still from the start, nothing to trail.
     Moment resting = still(20);
@@ -126,7 +137,7 @@ TEST(behaviors_follow_lags_behind_the_keyed_motion)
         keyed = Keyed();
         return true;
     };
-    CHECK(near(engine.evaluate({follow}, resting).x, 0.0, 1e-9));
+    CHECK(near(one(engine, {follow}, resting).x, 0.0, 1e-9));
 }
 
 TEST(behaviors_of_ones_own_report_errors_and_stop_when_too_slow)
@@ -137,17 +148,122 @@ TEST(behaviors_of_ones_own_report_errors_and_stop_when_too_slow)
                               "evaluate: function (ctx, p) { return { x: ctx.frame * p.speed }; } });",
         "drift.js", false, error));
     Applied drift = engine.defaults("drift", 1);
-    CHECK(near(engine.evaluate({drift}, still(4)).x, 12.0));
+    CHECK(near(one(engine, {drift}, still(4)).x, 12.0));
     CHECK(!engine.add("broken", "behavior({ name: 'Broken' });", "broken.js", false, error) && !error.empty());
     CHECK(!engine.add("syntax", "behavior({", "syntax.js", false, error) && !error.empty());
 
     CHECK(engine.add("thrower", "behavior({ evaluate: function () { throw new Error('nope'); } });", "t.js", false, error));
     std::string why;
-    const Delta thrown = engine.evaluate({drift, engine.defaults("thrower", 1)}, still(4), &why);
+    const Delta thrown = one(engine, {drift, engine.defaults("thrower", 1)}, still(4), &why);
     CHECK(near(thrown.x, 12.0) && why.find("nope") != std::string::npos);
 
     CHECK(engine.add("forever", "behavior({ evaluate: function () { for (;;) {} } });", "f.js", false, error));
     why.clear();
-    const Delta stuck = engine.evaluate({engine.defaults("forever", 1)}, still(1), &why);
+    const Delta stuck = one(engine, {engine.defaults("forever", 1)}, still(1), &why);
     CHECK(stuck.none() && why.find("too long") != std::string::npos);
+}
+
+TEST(behaviors_settings_can_be_keyed)
+{
+    Applied applied;
+    applied.type = "circle";
+    applied.params["radius"] = "10";
+    applied.params["align"] = "true";
+    CHECK(!applied.keyed("radius") && applied.valueAt("radius", 5, "0") == "10");
+    applied.setKey("radius", 24, "50");
+    applied.setKey("radius", 0, "10");
+    CHECK(applied.keyed("radius") && applied.keys("radius").size() == 2);
+    // In a straight line between keys, held past them.
+    CHECK(applied.valueAt("radius", 12, "0") == "30");
+    CHECK(applied.valueAt("radius", -5, "0") == "10" && applied.valueAt("radius", 99, "0") == "50");
+    // Text holds until the next key.
+    applied.setKey("align", 0, "true");
+    applied.setKey("align", 10, "false");
+    CHECK(applied.valueAt("align", 9, "") == "true" && applied.valueAt("align", 10, "") == "false");
+    // Kept through the attribute's text.
+    CHECK(decode(encode({applied})).front() == applied);
+    applied.removeKey("radius", 24, "10");
+    applied.removeKey("radius", 0, "10");
+    CHECK(!applied.keyed("radius") && applied.params["radius"] == "10");
+}
+
+TEST(behaviors_repeat_into_copies_that_later_behaviors_change)
+{
+    Engine engine;
+    engine.addBuiltIns();
+    Applied circle = engine.defaults("circle", 1);
+    circle.params["count"] = "4";
+    circle.params["radius"] = "100";
+    const Copies ring = engine.evaluate({circle}, still(0));
+    CHECK(ring.size() == 4);
+    if (ring.size() == 4)
+    {
+        CHECK(near(ring[0].x, 100.0, 1e-9) && near(ring[1].y, 100.0, 1e-9) && near(ring[2].x, -100.0, 1e-9));
+        CHECK(near(ring[1].rotation, 90.0) && near(ring[3].rotation, 270.0));
+    }
+    // Stagger runs each copy's loop on further.
+    Applied stagger = engine.defaults("stagger", 1);
+    stagger.params["frames"] = "3";
+    const Copies staggered = engine.evaluate({circle, stagger}, still(0));
+    CHECK(staggered.size() == 4 && staggered[3].frame == 9 && near(staggered[3].y, -100.0, 1e-9));
+    // A wiggle after the ring wiggles each copy its own way.
+    const Copies wiggled = engine.evaluate({circle, engine.defaults("wiggle", 3)}, still(10));
+    CHECK(wiggled.size() == 4 && wiggled[0].x - 100.0 != wiggled[2].x + 100.0);
+    // A keyed radius grows the ring over time.
+    circle.setKey("radius", 0, "0");
+    circle.setKey("radius", 10, "100");
+    CHECK(near(engine.evaluate({circle}, still(5)).front().x, 50.0, 1e-9));
+    // A grid of 3 by 2.
+    Applied grid = engine.defaults("grid", 1);
+    grid.params["columns"] = "3";
+    grid.params["rows"] = "2";
+    const Copies cells = engine.evaluate({grid}, still(0));
+    CHECK(cells.size() == 6 && near(cells[5].x, 120.0) && near(cells[5].y, 60.0));
+}
+
+TEST(behaviors_bake_into_keyframes_with_copies_of_their_own)
+{
+    Engine engine;
+    engine.addBuiltIns();
+    fla::Timeline timeline(nullptr);
+    auto* layer = new fla::Layer(&timeline);
+    timeline.layers.push_back(layer);
+    auto* frame = new fla::Frame(layer);
+    frame->index = 0;
+    frame->duration = 3;
+    layer->frames.push_back(frame);
+    auto* instance = new fla::SymbolInstance(frame);
+    instance->libraryItemName = "Dot";
+    instance->transform = fla::Transform(1, 0, 0, 1, 50, 50);
+    Applied circle = engine.defaults("circle", 1);
+    circle.params["count"] = "2";
+    circle.params["align"] = "false";
+    circle.setKey("radius", 0, "10");
+    circle.setKey("radius", 2, "30");
+    instance->extraAttributes = withBehaviors(*instance, {circle});
+    frame->elements.push_back(instance);
+    // A plain instance beside it is left as it is.
+    auto* plain = new fla::SymbolInstance(frame);
+    plain->libraryItemName = "Other";
+    frame->elements.push_back(plain);
+
+    CHECK(bake(engine, *layer, 0, 2, 24.0) == 3);
+    CHECK(layer->frames.size() == 3);
+    if (layer->frames.size() != 3)
+        return;
+    for (int f = 0; f < 3; ++f)
+    {
+        const fla::Frame* keyframe = layer->frames[static_cast<size_t>(f)];
+        CHECK(keyframe->index == f && keyframe->elements.size() == 3);
+        if (keyframe->elements.size() != 3)
+            continue;
+        const auto* first = static_cast<const fla::SymbolInstance*>(keyframe->elements[0]);
+        const auto* second = static_cast<const fla::SymbolInstance*>(keyframe->elements[1]);
+        const double radius = 10.0 + 10.0 * f;
+        CHECK(near(first->transform.tx, 50.0 + radius, 1e-9) && near(second->transform.tx, 50.0 - radius, 1e-9));
+        CHECK(!any(*first) && !any(*second) && second->libraryItemName == "Dot");
+        CHECK(static_cast<const fla::SymbolInstance*>(keyframe->elements[2])->libraryItemName == "Other");
+    }
+    // Nothing left to bake.
+    CHECK(bake(engine, *layer, 0, 2, 24.0) == 0);
 }

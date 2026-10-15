@@ -2,6 +2,7 @@
 
 #include "../data/symbol_instance.h"
 
+#include <algorithm>
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
@@ -77,6 +78,98 @@ double Applied::number(const std::string& name, double fallback) const
 bool Applied::operator==(const Applied& other) const
 {
     return type == other.type && enabled == other.enabled && params == other.params;
+}
+
+bool Applied::keyed(const std::string& name) const
+{
+    const auto found = params.find(name);
+    return found != params.end() && !found->second.empty() && found->second[0] == '@';
+}
+
+std::vector<std::pair<int, std::string>> Applied::keys(const std::string& name) const
+{
+    std::vector<std::pair<int, std::string>> list;
+    if (!keyed(name))
+        return list;
+    for (const std::string& key : split(params.at(name).substr(1), ';'))
+    {
+        const size_t equals = key.find('=');
+        if (equals == std::string::npos)
+            continue;
+        list.emplace_back(std::atoi(key.substr(0, equals).c_str()), key.substr(equals + 1));
+    }
+    std::stable_sort(list.begin(), list.end(), [](const auto& a, const auto& b) { return a.first < b.first; });
+    return list;
+}
+
+std::string Applied::valueAt(const std::string& name, int frame, const std::string& fallback) const
+{
+    const auto found = params.find(name);
+    if (found == params.end())
+        return fallback;
+    if (!keyed(name))
+        return found->second;
+    const std::vector<std::pair<int, std::string>> list = keys(name);
+    if (list.empty())
+        return fallback;
+    if (frame <= list.front().first)
+        return list.front().second;
+    if (frame >= list.back().first)
+        return list.back().second;
+    for (size_t i = 0; i + 1 < list.size(); ++i)
+    {
+        const auto& [from, a] = list[i];
+        const auto& [to, b] = list[i + 1];
+        if (frame < from || frame >= to)
+            continue;
+        char* endA = nullptr;
+        char* endB = nullptr;
+        const double va = std::strtod(a.c_str(), &endA);
+        const double vb = std::strtod(b.c_str(), &endB);
+        // Numbers in a line between the keys; anything else holds.
+        if (endA == a.c_str() || endB == b.c_str() || *endA || *endB || to == from)
+            return a;
+        const double value = va + (vb - va) * (frame - from) / static_cast<double>(to - from);
+        char text[32];
+        std::snprintf(text, sizeof(text), "%.10g", value);
+        return text;
+    }
+    return list.back().second;
+}
+
+void Applied::setKey(const std::string& name, int frame, const std::string& value)
+{
+    std::vector<std::pair<int, std::string>> list = keys(name);
+    bool replaced = false;
+    for (auto& key : list)
+        if (key.first == frame)
+        {
+            key.second = value;
+            replaced = true;
+        }
+    if (!replaced)
+        list.emplace_back(frame, value);
+    std::stable_sort(list.begin(), list.end(), [](const auto& a, const auto& b) { return a.first < b.first; });
+    std::string text = "@";
+    for (size_t i = 0; i < list.size(); ++i)
+        text += (i ? ";" : "") + std::to_string(list[i].first) + "=" + list[i].second;
+    params[name] = text;
+}
+
+void Applied::removeKey(const std::string& name, int frame, const std::string& value)
+{
+    std::vector<std::pair<int, std::string>> list = keys(name);
+    list.erase(std::remove_if(list.begin(), list.end(), [frame](const auto& key) { return key.first == frame; }),
+        list.end());
+    if (list.empty())
+    {
+        params[name] = value;
+        return;
+    }
+    std::string text = "@";
+    for (size_t i = 0; i < list.size(); ++i)
+        text += (i ? ";" : "") + std::to_string(list[i].first) + "=" + list[i].second;
+    params[name] = text;
 }
 
 std::string encode(const std::vector<Applied>& list)
@@ -188,6 +281,7 @@ void Delta::add(const Delta& other)
     scaleX *= other.scaleX;
     scaleY *= other.scaleY;
     alpha *= other.alpha;
+    frame += other.frame;
 }
 
 Transform apply(const Transform& keyed, const Point& pivot, const Delta& delta)

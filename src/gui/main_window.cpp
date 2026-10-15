@@ -30,6 +30,7 @@
 #include "arrange_panels.h"
 #include "behavior_library.h"
 #include "behaviors_panel.h"
+#include "../jsfl/behavior_frames.h"
 #include "motion_editor.h"
 #include "motion_presets.h"
 #include "xsheet_panel.h"
@@ -2039,6 +2040,8 @@ void MainWindow::createPanels()
                 _phoenixView->update();
             }
         };
+        links.currentFrame = [this]() { return _player ? _player->currentFrame() : 0; };
+        links.bake = [this]() { bakeSelectedBehaviors(); };
         _behaviors = new BehaviorsPanel(links);
         _behaviorsDock = new QDockWidget("Behaviors", this);
         _behaviorsDock->setObjectName("behaviorsDock");
@@ -2046,6 +2049,9 @@ void MainWindow::createPanels()
         _behaviors->setParent(_behaviorsDock);
         _behaviorsDock->setWidget(_behaviors);
         addDockWidget(Qt::RightDockWidgetArea, _behaviorsDock);
+        // A tab beside Properties, where its settings have room.
+        if (QDockWidget* properties = findChild<QDockWidget*>("propertiesDock"))
+            tabifyDockWidget(properties, _behaviorsDock);
         _behaviorsDock->hide();
         // Behavior files read again redraw the stage; their errors go to
         // the Output panel.
@@ -2965,7 +2971,12 @@ void MainWindow::setupUI()
     // Scripts listening for events (fl.addEventListener) hear of the
     // layer, the frame and the selection changing.
     connect(_timelineView, &TimelineView::currentLayerChanged, this, [this]() { scriptEvent("layerChanged"); });
-    connect(_player, &Player::currentFrameChanged, this, [this](int) { scriptEvent("frameChanged"); });
+    connect(_player, &Player::currentFrameChanged, this, [this](int) {
+        scriptEvent("frameChanged");
+        // Keyed behavior settings show their value on the frame shown.
+        if (_behaviors && _behaviorsDock && _behaviorsDock->isVisible() && !_player->isPlaying())
+            _behaviors->refresh();
+    });
     connect(_timelineView, &TimelineView::layersChanged,
             this, &MainWindow::onVisibilityChanged);
 
@@ -4735,6 +4746,135 @@ void MainWindow::convertToFrameByFrame()
     });
 }
 
+void MainWindow::bakeBehaviors()
+{
+    const double rate = _flaDocument && _flaDocument->document ? _flaDocument->document->frameRate : 24.0;
+    auto errors = std::make_shared<std::vector<std::string>>();
+    editFrames("Bake Behaviors", [rate, errors](fla::Layer& layer, int first, int last, std::vector<fla::Frame*>&) {
+        fla::behaviors::bake(BehaviorLibrary::instance().engine(), layer, first, last, rate, errors.get());
+    });
+    for (const std::string& error : *errors)
+        BehaviorLibrary::instance().reportOnce(QString::fromStdString(error));
+}
+
+void MainWindow::bakeSelectedBehaviors()
+{
+    if (!_flaDocument || !_flaDocument->document)
+        return;
+    const double rate = _flaDocument->document->frameRate;
+    // The run of keyframes each selected instance with behaviors is on.
+    std::vector<std::pair<fla::Layer*, std::pair<int, int>>> runs;
+    std::vector<fla::Layer*> layers;
+    for (fla::DOMElement* selected : _selection.elements())
+    {
+        auto* instance = dynamic_cast<fla::SymbolInstance*>(selected);
+        if (!instance || !fla::behaviors::any(*instance))
+            continue;
+        auto* frame = dynamic_cast<fla::Frame*>(instance->parent);
+        auto* layer = frame ? dynamic_cast<fla::Layer*>(frame->parent) : nullptr;
+        if (!layer || layer->isLocked())
+            continue;
+        const auto place = std::find(frame->elements.begin(), frame->elements.end(), instance);
+        int start = 0;
+        int end = 0;
+        fla::behaviors::runOf(*layer, *frame, static_cast<size_t>(place - frame->elements.begin()),
+            instance->libraryItemName, start, end);
+        runs.push_back({layer, {start, end}});
+        if (std::find(layers.begin(), layers.end(), layer) == layers.end())
+            layers.push_back(layer);
+    }
+    if (runs.empty())
+    {
+        statusBar()->showMessage("Select symbol instances with behaviors to bake them.", 3000);
+        return;
+    }
+    auto errors = std::make_shared<std::vector<std::string>>();
+    _selection.clear();
+    auto* command = new fla::EditFramesCommand(layers, "Bake Behaviors", [runs, rate, errors](std::vector<fla::Frame*>&) {
+        for (const auto& [layer, range] : runs)
+            fla::behaviors::bake(BehaviorLibrary::instance().engine(), *layer, range.first, range.second, rate, errors.get());
+    });
+    command->redo();
+    if (!command->changedAnything())
+    {
+        command->undo();
+        delete command;
+        return;
+    }
+    command->undo();
+    _editContext.commandStack().push(fla::CommandPtr(command));
+    _editContext.commandStack().breakMergeChain();
+    for (const std::string& error : *errors)
+        BehaviorLibrary::instance().reportOnce(QString::fromStdString(error));
+    if (_phoenixView)
+    {
+        _phoenixView->clearCaches();
+        _phoenixView->update();
+    }
+    if (_timelineView)
+        _timelineView->refreshFrames();
+}
+
+void MainWindow::exportBakedDocument()
+{
+    if (!_flaDocument || !_flaDocument->document)
+        return;
+    fla::Document* document = _flaDocument->document;
+    QSettings settings;
+    const QString start = QDir(settings.value("export/bakedFolder", QDir::homePath()).toString())
+                              .filePath(QFileInfo(_documentPath.isEmpty() ? QString("Untitled") : _documentPath)
+                                            .completeBaseName() + ".fla");
+    const QString path = QFileDialog::getSaveFileName(this, "Export FLA for Other Apps", start,
+        "FLA documents (*.fla);;XFL folders (*.xfl)");
+    if (path.isEmpty())
+        return;
+    settings.setValue("export/bakedFolder", QFileInfo(path).absolutePath());
+
+    // Every timeline's layers with behaviors, baked for the copy and put
+    // back afterward.
+    std::vector<fla::Layer*> layers;
+    const auto collect = [&layers](fla::Timeline* timeline) {
+        for (fla::Layer* layer : timeline ? timeline->layers : std::vector<fla::Layer*>())
+            if (layer && !fla::behaviors::runsWithBehaviors(*layer).empty())
+                layers.push_back(layer);
+    };
+    for (fla::Timeline* timeline : document->timelines)
+        collect(timeline);
+    if (document->symbolList)
+        for (fla::Symbol* symbol : document->symbolList->symbols)
+            for (fla::Timeline* timeline : symbol ? symbol->timelines : std::vector<fla::Timeline*>())
+                collect(timeline);
+    const double rate = document->frameRate;
+    auto errors = std::make_shared<std::vector<std::string>>();
+    std::unique_ptr<fla::EditFramesCommand> baked;
+    if (!layers.empty())
+    {
+        _selection.clear();
+        baked.reset(new fla::EditFramesCommand(layers, "Bake Behaviors", [layers, rate, errors](std::vector<fla::Frame*>&) {
+            for (fla::Layer* layer : layers)
+                fla::behaviors::bakeAll(BehaviorLibrary::instance().engine(), *layer, rate, errors.get());
+        }));
+        baked->redo();
+    }
+    QString error;
+    const bool written = writeDocumentFile(*document, path, error);
+    if (baked)
+        baked->undo();
+    for (const std::string& each : *errors)
+        BehaviorLibrary::instance().reportOnce(QString::fromStdString(each));
+    if (_phoenixView)
+    {
+        _phoenixView->clearCaches();
+        _phoenixView->update();
+    }
+    if (!written)
+        QMessageBox::warning(this, "Export FLA for Other Apps", QString("The copy could not be written: %1").arg(error));
+    else
+        statusBar()->showMessage(QString("Exported %1%2").arg(QFileInfo(path).fileName(),
+                                     layers.empty() ? QString(" (no behaviors to bake)") : QString(" with behaviors baked")),
+            4000);
+}
+
 void MainWindow::reverseFrames()
 {
     editFrames("Reverse Frames", [](fla::Layer& layer, int first, int last, std::vector<fla::Frame*>& removed) {
@@ -5163,6 +5303,12 @@ void MainWindow::setupMenus()
 
     QMenu* exportMenu = fileMenu->addMenu("Export");
 
+    QAction* exportBakedAction = new QAction("Export FLA for Other &Apps...", this);
+    exportBakedAction->setStatusTip("Save a copy with every behavior baked into keyframes, for apps that open FLA files but not Phoenix's own motion");
+    connect(exportBakedAction, &QAction::triggered, this, &MainWindow::exportBakedDocument);
+    exportMenu->addAction(exportBakedAction);
+    exportMenu->addSeparator();
+
     QAction* exportSvgAction = new QAction("Export to &SVG...", this);
     exportSvgAction->setStatusTip("Export the current frame to an SVG file");
     connect(exportSvgAction, &QAction::triggered, this, &MainWindow::exportSvg);
@@ -5528,6 +5674,9 @@ void MainWindow::setupMenus()
     QAction* frameByFrameAction = editTimelineMenu->addAction("Convert to &Frame-by-Frame Animation");
     frameByFrameAction->setStatusTip("Make every frame of the selected tweens a keyframe of its own");
     connect(frameByFrameAction, &QAction::triggered, this, &MainWindow::convertToFrameByFrame);
+    QAction* bakeBehaviorsAction = editTimelineMenu->addAction("&Bake Behaviors to Keyframes");
+    bakeBehaviorsAction->setStatusTip("Leave the selected frames' behaviors as keyframes, a keyframe a frame, their copies as instances");
+    connect(bakeBehaviorsAction, &QAction::triggered, this, &MainWindow::bakeBehaviors);
     editMenu->addSeparator();
     editMenu->addMenu(editTimelineMenu);
 

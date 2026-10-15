@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Behaviors · Phoenix User Guide</title>
 <meta name="description" content="Give symbol instances motion that is worked out every frame: wiggle, oscillate, spin, pulse, fade, blink and follow with lag, with no keyframes, and write your own behaviors in JavaScript.">
-<meta name="keywords" content="behaviors procedural animation motion graphics wiggle oscillate spin pulse fade blink follow with lag secondary motion spring overshoot seed random noise javascript behavior file">
+<meta name="keywords" content="behaviors procedural animation motion graphics wiggle oscillate spin pulse fade blink follow with lag secondary motion spring overshoot seed random noise javascript behavior file repeat copies circle ring grid line stagger crowd keyed settings animate bake keyframes export other apps">
 <link rel="icon" href="assets/img/logo.png">
 <link rel="stylesheet" href="assets/site.css">
 <script>try { const t = localStorage.getItem("phoenix-docs-theme"); if (t) document.documentElement.dataset.theme = t; } catch (e) {}</script>
@@ -50,16 +50,47 @@
     <tr><td>Fade In and Out</td><td class="wrap">Fades it in at the start of its keyframes and out at their end.</td></tr>
     <tr><td>Blink</td><td class="wrap">Makes it disappear and come back, on a beat or at random.</td></tr>
     <tr><td>Follow with Lag</td><td class="wrap">Makes it trail its own keyed motion on a spring: it lags behind, catches up and overshoots. Use it for hair, antennas, tails and props, keyed with the part they hang from.</td></tr>
+    <tr><td>Repeat in a Circle</td><td class="wrap">Copies it round a circle about where it is, each copy turned to follow the circle if you like: the number of copies, the radius, the start angle and how far round they go.</td></tr>
+    <tr><td>Repeat in a Line or Grid</td><td class="wrap">Copies it in a row, or in rows and columns, from where it is or centered on it.</td></tr>
+    <tr><td>Stagger</td><td class="wrap">Runs each copy's graphic loop a few frames after the one before, in order or at random, so copies of one cycle move out of step: a crowd, a field of grass, a wave. Put it after a Repeat behavior.</td></tr>
   </tbody>
 </table>
+
+<h2 id="animate-settings">Animate the settings</h2>
+
+<p>Any setting can change over time. The small button at the right of a setting keys it on the frame the playhead is on:</p>
+
+<ol>
+  <li>Move the playhead to where the change starts and click the setting's key button. It fills in (&#9670;): the setting is keyed there.</li>
+  <li>Move the playhead on and change the setting. A keyed setting is keyed again wherever you change it.</li>
+</ol>
+
+<p>Between keys a number runs in a straight line from one value to the next; a choice or a checkbox holds until the next key. The button is hollow (&#9671;) on frames between keys; clicking it there keys the setting at the value it has, and clicking a filled one takes that key away. With its last key gone, the setting keeps the value it had.</p>
+
+<p>Key the radius of Repeat in a Circle from 0 to 100, say, and the copies burst out from the middle; key its start angle and the ring turns; key the number of copies and they appear one by one.</p>
+
+<h2 id="repeat">Copies</h2>
+
+<p>A Repeat behavior draws the instance many times. The behaviors below it in the list then work on every copy, each in its own way: a Wiggle after Repeat in a Circle wiggles each copy differently, and Stagger sets each copy's loop apart. The copies are drawn, played and exported like the instance itself; on the stage, clicking selects the instance through its first copy.</p>
 
 <p>Turns and scales happen about the instance's transformation point, the same point the Free Transform tool turns it about.</p>
 
 <p>Behaviors that are random (Wiggle, and Blink set to random) have a <b>Seed</b>. The same seed always gives the same motion, so a scene renders the same every time; <b>New</b> picks another seed for a different motion. Each behavior you add starts with a seed of its own, so two instances given the same behavior do not move in step.</p>
 
+<h2 id="bake">Bake to keyframes</h2>
+
+<p>Baking turns behaviors into ordinary animation: every frame they touch becomes a keyframe holding the instance where its behaviors put it, its copies become instances of their own beside it, and the behaviors come off. What plays does not change, and you can then edit the frames by hand. Baking is one step you can undo.</p>
+
+<ul>
+  <li><b>Bake</b> in the Behaviors panel bakes the selected instances over all the keyframes they run through.</li>
+  <li><span class="menu-path">Modify &rsaquo; Timeline &rsaquo; Bake Behaviors to Keyframes</span> bakes the frames selected in the timeline.</li>
+</ul>
+
 <h2>Behaviors in saved files</h2>
 
 <p>Behaviors are Phoenix's own. They are saved with the instance in .phx and .fla files and come back when Phoenix opens the file. Another app that opens the FLA file shows the instances as they are keyed, without the motion behaviors add; when you save, Phoenix lists behaviors among the things such an app leaves out.</p>
+
+<p>To hand the file to someone using another app, choose <span class="menu-path">File &rsaquo; Export &rsaquo; Export FLA for Other Apps</span>. It writes a copy (an .fla file or an XFL folder) with every behavior in the document baked into keyframes, so the other app plays the same motion. Your document itself keeps its behaviors.</p>
 
 <h2 id="your-own">Write your own behavior</h2>
 
@@ -91,11 +122,12 @@
     <tr><td><code>start</code>, <code>end</code></td><td class="wrap">The first and last frames of the run of keyframes the instance is on.</td></tr>
     <tr><td><code>keyed</code></td><td class="wrap">What its keys give it now: <code>x</code>, <code>y</code> (its transformation point), <code>rotation</code>, <code>scaleX</code>, <code>scaleY</code> and <code>alpha</code>.</td></tr>
     <tr><td><code>keyedAt(frame)</code></td><td class="wrap">The same on another frame of the run, or <code>null</code>.</td></tr>
-    <tr><td><code>random(n)</code>, <code>noise(t, n)</code></td><td class="wrap">A number from 0 to 1, and a smooth one from -1 to 1 that changes with <code>t</code>; both follow the seed, and <code>n</code> picks a separate stream.</td></tr>
+    <tr><td><code>random(n)</code>, <code>noise(t, n)</code></td><td class="wrap">A number from 0 to 1, and a smooth one from -1 to 1 that changes with <code>t</code>; both follow the seed and differ from copy to copy, and <code>n</code> picks a separate stream.</td></tr>
+    <tr><td><code>copy</code>, <code>copies</code></td><td class="wrap">Which copy this is, from 0, and how many there are, after the behaviors above it made them.</td></tr>
   </tbody>
 </table>
 
-<p>It returns what to add: <code>x</code> and <code>y</code> in pixels, <code>rotation</code> in degrees, <code>scale</code>, <code>scaleX</code> and <code>scaleY</code> as factors (1 is no change) and <code>alpha</code> as a factor. Leave out what it does not change. A file named like a built-in one (<code>wiggle.js</code>) takes its place.</p>
+<p>It returns what to add: <code>x</code> and <code>y</code> in pixels, <code>rotation</code> in degrees, <code>scale</code>, <code>scaleX</code> and <code>scaleY</code> as factors (1 is no change), <code>alpha</code> as a factor, and <code>frame</code>, the frames a graphic's loop runs on by. Leave out what it does not change. To make copies, return <code>{ copies: [...] }</code>, a list of those, one for each copy. Settings can be keyed in the panel, and <code>p</code> always holds their values on the frame being worked out. A file named like a built-in one (<code>wiggle.js</code>) takes its place.</p>
 
 <p>Behaviors run on their own, away from the document: they cannot read files, the clock or other objects, and one that takes too long is stopped. That keeps every frame the same each time it is drawn. An error is shown in the Output panel, and the behavior adds nothing until it is fixed.</p>
 

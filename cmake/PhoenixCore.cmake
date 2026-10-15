@@ -168,6 +168,7 @@ set(PHOENIX_CORE_JSFL_SOURCES
     jsfl/e4x.cpp
     jsfl/behavior_builtins.cpp
     jsfl/behavior_engine.cpp
+    jsfl/behavior_frames.cpp
     jsfl/engine.cpp
     jsfl/flfile.cpp
     jsfl/model_document.cpp

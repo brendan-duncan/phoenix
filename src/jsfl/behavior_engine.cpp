@@ -52,9 +52,11 @@ function __describe(definition) {
 }
 function __run(id, params, m) {
     var definition = __behaviors[id];
-    var seed = typeof params.seed === "number" ? params.seed : 1;
+    // Each copy has randomness of its own.
+    var seed = (typeof params.seed === "number" ? params.seed : 1) + m.copy * 1000003;
     var ctx = {
         frame: m.frame, fps: m.fps, time: m.frame / m.fps, start: m.start, end: m.end, keyed: m.keyed,
+        copy: m.copy, copies: m.copies,
         keyedAt: function (frame) { return __keyedAt(frame); },
         random: function (n) { return __hash(seed, n === undefined ? 0 : n); },
         noise: function (t, n) { return __noise(seed, t, n === undefined ? 0 : n); }
@@ -311,65 +313,103 @@ Applied Engine::defaults(const std::string& id, int seed) const
     return applied;
 }
 
-Delta Engine::evaluate(const std::vector<Applied>& list, const Moment& moment, std::string* error)
+Copies Engine::evaluate(const std::vector<Applied>& list, const Moment& moment, std::string* error)
 {
-    Delta total;
+    // Most behaviors change each copy there is; one that repeats makes
+    // copies of each, and those after it work on every copy.
+    constexpr size_t kMostCopies = 5000;
+    Copies copies(1);
     Impl& d = *_impl;
     JSContext* ctx = d.ctx;
     d.moment = &moment;
-    d.deadline = Clock::now() + std::chrono::milliseconds(200);
+    d.deadline = Clock::now() + std::chrono::milliseconds(400);
     JSValue global = JS_GetGlobalObject(ctx);
     JSValue run = JS_GetPropertyStr(ctx, global, "__run");
+    const auto readDelta = [&d](JSValueConst value) {
+        Delta delta;
+        delta.x = d.number(value, "x", 0.0);
+        delta.y = d.number(value, "y", 0.0);
+        delta.rotation = d.number(value, "rotation", 0.0);
+        const double scale = d.number(value, "scale", 1.0);
+        delta.scaleX = scale * d.number(value, "scaleX", 1.0);
+        delta.scaleY = scale * d.number(value, "scaleY", 1.0);
+        delta.alpha = std::max(0.0, d.number(value, "alpha", 1.0));
+        delta.frame = static_cast<int>(std::lround(d.number(value, "frame", 0.0)));
+        return delta;
+    };
     for (const Applied& applied : list)
     {
         const Definition* definition = applied.enabled ? find(applied.type) : nullptr;
         if (!definition)
             continue;
-        JSValue params = JS_NewObject(ctx);
-        for (const ParamSpec& spec : definition->params)
+        Copies next;
+        bool failed = false;
+        for (size_t c = 0; c < copies.size() && !failed; ++c)
         {
-            const auto found = applied.params.find(spec.name);
-            const std::string value = found != applied.params.end() ? found->second : spec.text;
-            JSValue v;
-            if (spec.type == "choice")
-                v = JS_NewString(ctx, value.c_str());
-            else if (spec.type == "checkbox")
-                v = JS_NewBool(ctx, value == "true" || value == "1");
+            JSValue params = JS_NewObject(ctx);
+            for (const ParamSpec& spec : definition->params)
+            {
+                const std::string value = applied.valueAt(spec.name, moment.frame, spec.text);
+                JSValue v;
+                if (spec.type == "choice")
+                    v = JS_NewString(ctx, value.c_str());
+                else if (spec.type == "checkbox")
+                    v = JS_NewBool(ctx, value == "true" || value == "1");
+                else
+                    v = JS_NewFloat64(ctx, value.empty() ? spec.value : std::atof(value.c_str()));
+                JS_SetPropertyStr(ctx, params, spec.name.c_str(), v);
+            }
+            JSValue m = JS_NewObject(ctx);
+            JS_SetPropertyStr(ctx, m, "frame", JS_NewInt32(ctx, moment.frame));
+            JS_SetPropertyStr(ctx, m, "fps", JS_NewFloat64(ctx, moment.frameRate > 0 ? moment.frameRate : 24.0));
+            JS_SetPropertyStr(ctx, m, "start", JS_NewInt32(ctx, moment.start));
+            JS_SetPropertyStr(ctx, m, "end", JS_NewInt32(ctx, moment.end));
+            JS_SetPropertyStr(ctx, m, "copy", JS_NewInt32(ctx, static_cast<int32_t>(c)));
+            JS_SetPropertyStr(ctx, m, "copies", JS_NewInt32(ctx, static_cast<int32_t>(copies.size())));
+            JS_SetPropertyStr(ctx, m, "keyed", keyedObject(ctx, moment.keyed));
+            JSValue args[3] = {JS_NewString(ctx, definition->id.c_str()), params, m};
+            JSValue result = JS_Call(ctx, run, global, 3, args);
+            for (JSValue& arg : args)
+                JS_FreeValue(ctx, arg);
+            if (JS_IsException(result))
+            {
+                if (error)
+                    *error = definition->name + ": " + d.error();
+                failed = true;
+                break;
+            }
+            JSValue made = JS_GetPropertyStr(ctx, result, "copies");
+            if (JS_IsArray(made))
+            {
+                // A copy of this copy for each one returned.
+                int64_t length = 0;
+                JS_GetLength(ctx, made, &length);
+                for (int64_t i = 0; i < length && next.size() < kMostCopies; ++i)
+                {
+                    JSValue item = JS_GetPropertyInt64(ctx, made, i);
+                    Delta each = copies[c];
+                    each.add(readDelta(item));
+                    next.push_back(each);
+                    JS_FreeValue(ctx, item);
+                }
+            }
             else
-                v = JS_NewFloat64(ctx, value.empty() ? spec.value : std::atof(value.c_str()));
-            JS_SetPropertyStr(ctx, params, spec.name.c_str(), v);
+            {
+                Delta each = copies[c];
+                each.add(readDelta(result));
+                next.push_back(each);
+            }
+            JS_FreeValue(ctx, made);
+            JS_FreeValue(ctx, result);
         }
-        JSValue m = JS_NewObject(ctx);
-        JS_SetPropertyStr(ctx, m, "frame", JS_NewInt32(ctx, moment.frame));
-        JS_SetPropertyStr(ctx, m, "fps", JS_NewFloat64(ctx, moment.frameRate > 0 ? moment.frameRate : 24.0));
-        JS_SetPropertyStr(ctx, m, "start", JS_NewInt32(ctx, moment.start));
-        JS_SetPropertyStr(ctx, m, "end", JS_NewInt32(ctx, moment.end));
-        JS_SetPropertyStr(ctx, m, "keyed", keyedObject(ctx, moment.keyed));
-        JSValue args[3] = {JS_NewString(ctx, definition->id.c_str()), params, m};
-        JSValue result = JS_Call(ctx, run, global, 3, args);
-        for (JSValue& arg : args)
-            JS_FreeValue(ctx, arg);
-        if (JS_IsException(result))
-        {
-            if (error)
-                *error = definition->name + ": " + d.error();
-            continue;
-        }
-        Delta delta;
-        delta.x = d.number(result, "x", 0.0);
-        delta.y = d.number(result, "y", 0.0);
-        delta.rotation = d.number(result, "rotation", 0.0);
-        const double scale = d.number(result, "scale", 1.0);
-        delta.scaleX = scale * d.number(result, "scaleX", 1.0);
-        delta.scaleY = scale * d.number(result, "scaleY", 1.0);
-        delta.alpha = std::max(0.0, d.number(result, "alpha", 1.0));
-        JS_FreeValue(ctx, result);
-        total.add(delta);
+        // A behavior that fails adds nothing.
+        if (!failed)
+            copies = std::move(next);
     }
     JS_FreeValue(ctx, run);
     JS_FreeValue(ctx, global);
     d.moment = nullptr;
-    return total;
+    return copies;
 }
 
 } // namespace fla::behaviors

@@ -98,10 +98,11 @@ public:
     /// when it has one, is \a seed.
     Applied defaults(const std::string& id, int seed) const;
 
-    /// What \a list adds on \a moment: the behaviors that are on, in order.
-    /// One that fails (an error, or too slow) adds nothing, and \a error
-    /// says why.
-    Delta evaluate(const std::vector<Applied>& list, const Moment& moment, std::string* error = nullptr);
+    /// What \a list makes of the instance on \a moment: the behaviors that
+    /// are on, in order, each working on every copy the ones before it
+    /// made (one, unless one repeats it). One that fails (an error, or too
+    /// slow) adds nothing, and \a error says why.
+    Copies evaluate(const std::vector<Applied>& list, const Moment& moment, std::string* error = nullptr);
 
     /// The sources of the built-in behaviors, by id.
     static const std::vector<std::pair<std::string, std::string>>& builtInSources();

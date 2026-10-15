@@ -1206,7 +1206,11 @@ private:
     using BoundsKey = QPair<const fla::Element*, int>;
     QHash<BoundsKey, QRectF> _boundsCache;
     /// Behaviors worked out, by instance and frame, for _behaviorRevision.
-    QHash<QPair<const void*, int>, fla::behaviors::Delta> _behaviorCache;
+    QHash<QPair<const void*, int>, fla::behaviors::Copies> _behaviorCache;
+    /// The copy of an instance being drawn, while drawElement draws each of
+    /// the copies its behaviors make.
+    const fla::Element* _copyElement = nullptr;
+    const fla::behaviors::Delta* _copyDelta = nullptr;
     unsigned _behaviorRevision = ~0u;
     /// Each symbol's bounds over all its frames: its visible layers'
     /// (culling, 9-slice) and all its art's (the offscreen a filtered or
@@ -1316,15 +1320,11 @@ private:
     /// motion tween's (read from the frame's motionObjectXML), a classic
     /// tween's in-between, or its own.
     fla::Transform shownTransform(const LayerFrame& state, size_t elementIndex);
-    /// What \a instance's behaviors add on frame \a at of its timeline,
-    /// given its keyed transform there; nothing for one without behaviors.
-    /// Kept for each instance and frame until the document changes.
-    fla::behaviors::Delta behaviorDelta(const fla::SymbolInstance& instance, const fla::Transform& keyed, int at);
-    /// The keyed place, turn, scale and alpha of the instance \a index on
-    /// \a layer's keyframe holding \a frame, tweened there; false when that
-    /// keyframe has no instance of \a symbol there.
-    bool keyedOnLayer(const fla::Layer& layer, size_t index, const std::string& symbol, int frame,
-        fla::behaviors::Keyed& keyed);
+    /// What \a instance's behaviors make of it on frame \a at of its
+    /// timeline, given its keyed transform there: a Delta for each copy
+    /// drawn (one for an instance without behaviors). Kept for each
+    /// instance and frame until the document changes.
+    fla::behaviors::Copies behaviorCopies(const fla::SymbolInstance& instance, const fla::Transform& keyed, int at);
 
     /// The parsed motion of a frame with an object motion tween, kept per
     /// frame; null when it has none.

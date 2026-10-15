@@ -117,6 +117,72 @@ behavior({
     }
 });
 )JS"},
+        {"circle", R"JS(
+behavior({
+    name: "Repeat in a Circle",
+    description: "Copies it round a circle about where it is, each turned to follow the circle if you like. Key the radius, the number of copies or the angles to animate the ring.",
+    params: {
+        count: { label: "Copies", value: 8, min: 1, max: 360, step: 1 },
+        radius: { label: "Radius (pixels)", value: 100, min: 0, max: 4000, step: 1 },
+        start: { label: "Start angle (degrees)", type: "angle", value: 0, min: -720, max: 720, step: 1 },
+        sweep: { label: "Sweep (degrees)", type: "angle", value: 360, min: -720, max: 720, step: 1 },
+        align: { label: "Turn copies with the circle", type: "checkbox", value: true }
+    },
+    evaluate: function (ctx, p) {
+        var n = Math.max(1, Math.round(p.count));
+        // A full circle spaces them evenly round it; part of one puts
+        // copies at both ends.
+        var whole = Math.abs(p.sweep) >= 360;
+        var copies = [];
+        for (var i = 0; i < n; i++) {
+            var t = whole ? i / n : (n > 1 ? i / (n - 1) : 0);
+            var degrees = p.start + p.sweep * t;
+            var a = degrees * Math.PI / 180;
+            copies.push({ x: Math.cos(a) * p.radius, y: Math.sin(a) * p.radius, rotation: p.align ? degrees : 0 });
+        }
+        return { copies: copies };
+    }
+});
+)JS"},
+        {"grid", R"JS(
+behavior({
+    name: "Repeat in a Line or Grid",
+    description: "Copies it in a row, or in rows and columns, from where it is. Key the spacing or the counts to animate the layout.",
+    params: {
+        columns: { label: "Copies across", value: 5, min: 1, max: 200, step: 1 },
+        rows: { label: "Rows", value: 1, min: 1, max: 200, step: 1 },
+        across: { label: "Space across (pixels)", value: 60, min: -2000, max: 2000, step: 1 },
+        down: { label: "Space down (pixels)", value: 60, min: -2000, max: 2000, step: 1 },
+        centered: { label: "Centered on it", type: "checkbox", value: false }
+    },
+    evaluate: function (ctx, p) {
+        var columns = Math.max(1, Math.round(p.columns));
+        var rows = Math.max(1, Math.round(p.rows));
+        var ox = p.centered ? -(columns - 1) * p.across / 2 : 0;
+        var oy = p.centered ? -(rows - 1) * p.down / 2 : 0;
+        var copies = [];
+        for (var r = 0; r < rows; r++)
+            for (var c = 0; c < columns; c++)
+                copies.push({ x: ox + c * p.across, y: oy + r * p.down });
+        return { copies: copies };
+    }
+});
+)JS"},
+        {"stagger", R"JS(
+behavior({
+    name: "Stagger",
+    description: "Puts each copy's graphic loop a few frames after the one before, so copies of one cycle move out of step: crowds, grass, waves. Use it after a Repeat behavior.",
+    params: {
+        frames: { label: "Frames between copies", value: 2, min: -240, max: 240, step: 1 },
+        random: { label: "In random order", type: "checkbox", value: false },
+        seed: { label: "Seed", type: "seed", value: 1 }
+    },
+    evaluate: function (ctx, p) {
+        var place = p.random ? Math.floor(ctx.random(1) * ctx.copies) : ctx.copy;
+        return { frame: Math.round(place * p.frames) };
+    }
+});
+)JS"},
         {"follow", R"JS(
 behavior({
     name: "Follow with Lag",

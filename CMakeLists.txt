@@ -201,6 +201,7 @@ set(HEADERS
     src/jsfl/e4x.h
     src/jsfl/engine.h
     src/jsfl/behavior_engine.h
+    src/jsfl/behavior_frames.h
     src/jsfl/tool_script.h
     src/jsfl/flfile.h
     src/jsfl/host.h

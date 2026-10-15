@@ -33,6 +33,20 @@ struct Applied
     /// A setting as a number, or \a fallback when it is not set.
     double number(const std::string& name, double fallback) const;
     bool operator==(const Applied& other) const;
+
+    /// A setting can be keyed: its text is then "@frame=value;frame=value"
+    /// (frames on the instance's own timeline, from 0). Numbers run in a
+    /// straight line from key to key and hold past the first and last;
+    /// anything else holds until the next key.
+    bool keyed(const std::string& name) const;
+    std::vector<std::pair<int, std::string>> keys(const std::string& name) const;
+    /// The setting's value on \a frame, or \a fallback when it is not set.
+    std::string valueAt(const std::string& name, int frame, const std::string& fallback) const;
+    /// Keys \a value on \a frame, making the setting keyed when it was not.
+    void setKey(const std::string& name, int frame, const std::string& value);
+    /// Takes the key on \a frame away; with no key left, the setting is
+    /// \a value from then on.
+    void removeKey(const std::string& name, int frame, const std::string& value);
 };
 
 /// The behaviors on \a instance, in the order they apply.
@@ -66,8 +80,9 @@ struct Keyed
 Keyed keyedOf(const Transform& transform, const Point& pivot, const ColorTransform& color);
 
 /// What the behaviors add: a move, a turn about the transformation point,
-/// a scale about it, and an alpha factor. Several add up: moves and turns
-/// sum, scales and alphas multiply.
+/// a scale about it, an alpha factor, and frames on for a graphic's loop.
+/// Several add up: moves, turns and frames sum, scales and alphas
+/// multiply.
 struct Delta
 {
     double x = 0.0;
@@ -76,13 +91,21 @@ struct Delta
     double scaleX = 1.0;
     double scaleY = 1.0;
     double alpha = 1.0;
+    int frame = 0;
 
     bool none() const
     {
-        return x == 0.0 && y == 0.0 && rotation == 0.0 && scaleX == 1.0 && scaleY == 1.0 && alpha == 1.0;
+        return x == 0.0 && y == 0.0 && rotation == 0.0 && scaleX == 1.0 && scaleY == 1.0 && alpha == 1.0 &&
+            frame == 0;
     }
     void add(const Delta& other);
 };
+
+/// What behaviors make of an instance on a frame: one Delta for each copy
+/// drawn. Most behaviors leave one; a behavior that repeats (in a circle,
+/// along a line or a path) makes several, and the behaviors after it work
+/// on each.
+using Copies = std::vector<Delta>;
 
 /// \a keyed with \a delta on it: turned and scaled about \a pivot (in the
 /// instance's own space, so a turned instance scales along its own axes),

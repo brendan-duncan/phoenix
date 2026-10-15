@@ -19,6 +19,7 @@
 #include <QScrollArea>
 #include <QSlider>
 #include <QSpinBox>
+#include <QTimer>
 #include <QToolButton>
 #include <QVBoxLayout>
 
@@ -85,6 +86,14 @@ BehaviorsPanel::BehaviorsPanel(BehaviorsLinks links, QWidget* parent)
     connect(_up, &QToolButton::clicked, this, [this]() { move(-1); });
     connect(_down, &QToolButton::clicked, this, [this]() { move(1); });
     connect(_remove, &QToolButton::clicked, this, &BehaviorsPanel::remove);
+    _bake = new QToolButton(this);
+    _bake->setText("Bake");
+    _bake->setToolTip("Bake to Keyframes: leave the selected instances' behaviors as keyframes, a keyframe a frame, "
+                      "their copies as instances of their own");
+    connect(_bake, &QToolButton::clicked, this, [this]() {
+        if (_links.bake)
+            _links.bake();
+    });
 
     QHBoxLayout* buttons = new QHBoxLayout();
     buttons->setContentsMargins(0, 0, 0, 0);
@@ -93,6 +102,7 @@ BehaviorsPanel::BehaviorsPanel(BehaviorsLinks links, QWidget* parent)
     buttons->addWidget(_up);
     buttons->addWidget(_down);
     buttons->addWidget(_remove);
+    buttons->addWidget(_bake);
 
     _description = new QLabel(this);
     _description->setWordWrap(true);
@@ -171,6 +181,7 @@ void BehaviorsPanel::refresh()
     _up->setEnabled(any);
     _down->setEnabled(any);
     _remove->setEnabled(any);
+    _bake->setEnabled(any);
     _refreshing = false;
     fillSettings();
 }
@@ -197,19 +208,42 @@ void BehaviorsPanel::fillSettings()
         return;
     }
     _description->setText(QString::fromStdString(definition->description));
+    const int now = frame();
     for (const fla::behaviors::ParamSpec& spec : definition->params)
     {
-        const auto found = applied.params.find(spec.name);
-        const std::string current = found != applied.params.end() ? found->second : spec.text;
+        // Keyed settings show their value on the frame shown.
+        const std::string current = applied.valueAt(spec.name, now, spec.text);
         const QString label = QString::fromStdString(spec.label);
         const std::string name = spec.name;
+        // The key button: filled with a key on this frame, hollow when keyed
+        // on other frames, and plain when not keyed.
+        QToolButton* key = new QToolButton(_settings);
+        key->setAutoRaise(true);
+        bool keyedHere = false;
+        for (const auto& each : applied.keys(spec.name))
+            keyedHere = keyedHere || each.first == now;
+        key->setText(QString(QChar(keyedHere ? 0x25C6 : applied.keyed(spec.name) ? 0x25C7 : 0x00B7)));
+        key->setToolTip(keyedHere ? "Keyed on this frame: click to take the key away"
+                : applied.keyed(spec.name) ? "Keyed on other frames: click to key it here"
+                                           : "Click to key this setting on the frame shown, so it can change over time");
+        connect(key, &QToolButton::clicked, this, [this, row, name]() { toggleKey(row, name); });
+        const auto addRow = [this, key, &label](QWidget* control) {
+            QWidget* holder = new QWidget(_settings);
+            QHBoxLayout* line = new QHBoxLayout(holder);
+            line->setContentsMargins(0, 0, 0, 0);
+            line->addWidget(control, 1);
+            line->addWidget(key);
+            _form->addRow(label, holder);
+        };
+        if (spec.type == "seed")
+            key->hide();
         if (spec.type == "checkbox")
         {
             QCheckBox* box = new QCheckBox(_settings);
             box->setChecked(current == "true" || current == "1");
             connect(box, &QCheckBox::toggled, this,
                 [this, row, name](bool on) { setParam(row, name, on ? "true" : "false", false); });
-            _form->addRow(label, box);
+            addRow(box);
         }
         else if (spec.type == "choice")
         {
@@ -219,7 +253,7 @@ void BehaviorsPanel::fillSettings()
             combo->setCurrentText(QString::fromStdString(current));
             connect(combo, &QComboBox::currentTextChanged, this,
                 [this, row, name](const QString& text) { setParam(row, name, text.toStdString(), false); });
-            _form->addRow(label, combo);
+            addRow(combo);
         }
         else if (spec.type == "seed")
         {
@@ -230,6 +264,7 @@ void BehaviorsPanel::fillSettings()
             seed->setRange(0, 9999);
             seed->setValue(static_cast<int>(std::lround(std::atof(current.c_str()))));
             seed->setKeyboardTracking(false);
+            seed->setMaximumWidth(84);
             seed->setToolTip("Another seed gives another, equally random, result");
             QPushButton* again = new QPushButton("New", holder);
             again->setToolTip("A new seed");
@@ -238,7 +273,7 @@ void BehaviorsPanel::fillSettings()
             connect(seed, &QSpinBox::valueChanged, this,
                 [this, row, name](int value) { setParam(row, name, std::to_string(value), false); });
             connect(again, &QPushButton::clicked, seed, [seed]() { seed->setValue(newSeed()); });
-            _form->addRow(label, holder);
+            addRow(holder);
         }
         else
         {
@@ -258,6 +293,7 @@ void BehaviorsPanel::fillSettings()
             box->setRange(low, high);
             box->setSingleStep(step);
             box->setKeyboardTracking(false);
+            box->setMaximumWidth(84);
             const double value = current.empty() ? spec.value : std::atof(current.c_str());
             box->setValue(value);
             slider->setValue(static_cast<int>(std::lround((value - low) / step)));
@@ -274,7 +310,7 @@ void BehaviorsPanel::fillSettings()
                 slider->setValue(static_cast<int>(std::lround((v - low) / step)));
                 setParam(row, name, numberText(v), true);
             });
-            _form->addRow(label, holder);
+            addRow(holder);
         }
     }
 }
@@ -349,11 +385,61 @@ void BehaviorsPanel::setParam(int row, const std::string& name, const std::strin
     if (row < 0 || row >= static_cast<int>(first.size()))
         return;
     const std::string type = first[static_cast<size_t>(row)].type;
-    // On each selected instance that has this behavior in this place.
+    // On each selected instance that has this behavior in this place; a
+    // keyed setting is keyed on the frame shown.
+    const int now = frame();
     edit("Behavior Settings",
-        [row, &type, &name, &value](std::vector<fla::behaviors::Applied>& list) {
-            if (row < static_cast<int>(list.size()) && list[static_cast<size_t>(row)].type == type)
-                list[static_cast<size_t>(row)].params[name] = value;
+        [row, &type, &name, &value, now](std::vector<fla::behaviors::Applied>& list) {
+            if (row >= static_cast<int>(list.size()) || list[static_cast<size_t>(row)].type != type)
+                return;
+            fla::behaviors::Applied& applied = list[static_cast<size_t>(row)];
+            if (applied.keyed(name))
+                applied.setKey(name, now, value);
+            else
+                applied.params[name] = value;
         },
         merge);
+    // The key button shows the key now made.
+    if (!first[static_cast<size_t>(row)].keyed(name))
+        return;
+    bool keyedHere = false;
+    for (const auto& each : first[static_cast<size_t>(row)].keys(name))
+        keyedHere = keyedHere || each.first == now;
+    if (!keyedHere)
+        QTimer::singleShot(0, this, [this]() { fillSettings(); });
+}
+
+void BehaviorsPanel::toggleKey(int row, const std::string& name)
+{
+    const std::vector<fla::behaviors::Applied> first = shown();
+    if (row < 0 || row >= static_cast<int>(first.size()))
+        return;
+    const std::string type = first[static_cast<size_t>(row)].type;
+    const fla::behaviors::Definition* definition = BehaviorLibrary::instance().engine().find(type);
+    std::string fallback;
+    if (definition)
+        for (const fla::behaviors::ParamSpec& spec : definition->params)
+            if (spec.name == name)
+                fallback = spec.text;
+    const int now = frame();
+    bool keyedHere = false;
+    for (const auto& each : first[static_cast<size_t>(row)].keys(name))
+        keyedHere = keyedHere || each.first == now;
+    edit(keyedHere ? "Remove Behavior Key" : "Key Behavior Setting",
+        [row, &type, &name, now, keyedHere, &fallback](std::vector<fla::behaviors::Applied>& list) {
+            if (row >= static_cast<int>(list.size()) || list[static_cast<size_t>(row)].type != type)
+                return;
+            fla::behaviors::Applied& applied = list[static_cast<size_t>(row)];
+            const std::string value = applied.valueAt(name, now, fallback);
+            if (keyedHere)
+                applied.removeKey(name, now, value);
+            else
+                applied.setKey(name, now, value);
+        });
+    fillSettings();
+}
+
+int BehaviorsPanel::frame() const
+{
+    return _links.currentFrame ? _links.currentFrame() : 0;
 }
