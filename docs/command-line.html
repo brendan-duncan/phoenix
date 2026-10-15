@@ -219,6 +219,10 @@ Phoenix --convert scene.fla scene_xfl</code></pre>
 
 <p>Converts between Phoenix documents, FLA files and XFL folders. A name ending in <code>.phx</code> or <code>.fla</code> chooses that format; any other name makes an XFL folder. If something in the document cannot be written to the chosen format, Phoenix lists it after <em>Not written:</em>.</p>
 
+<pre><code>Phoenix --convert scene.phx for-studio.fla --for-other-apps</code></pre>
+
+<p>With <code>--for-other-apps</code>, the copy is written as <span class="menu-path">File &rsaquo; Export &rsaquo; Export FLA for Other Apps</span> writes it: behaviors, shape operators and letter animators baked into keyframes, track mattes, adjustment layers and template values made into what any app that opens FLA files shows.</p>
+
 <h2>Inspect a Phoenix document</h2>
 
 <pre><code>Phoenix --phx-dump scene.phx</code></pre>

@@ -84,6 +84,10 @@ public:
     /// sequence for a .png name, a video otherwise. Returns the process exit
     /// code, writing any error to stderr.
     int exportFromCommandLine(const QString& source, const QString& output, bool perLayer = false);
+    /// Phoenix --convert <in> <out> --for-other-apps: \a source written to
+    /// \a output with everything Phoenix's own baked, as Export FLA for
+    /// Other Apps writes it.
+    int exportForOtherAppsFromCommandLine(const QString& source, const QString& output);
     /// Phoenix render: frames of a document to a PNG sequence, a video or
     /// a GIF, with no window. See the command line help.
     int renderCommand(const QString& source, const QStringList& options);
@@ -477,6 +481,10 @@ private slots:
     /// File > Export > Export FLA for Other Apps: a copy with every
     /// behavior baked, the document itself left as it is.
     void exportBakedDocument();
+    /// The document written to \a path with behaviors, operators, mattes,
+    /// adjustment layers and templates baked; the document itself is left
+    /// as it was. \a bakedLayers says how many layers had behaviors.
+    bool writeForOtherApps(const QString& path, QString& error, int* bakedLayers);
     /// The shapes with operators on frames \a first to \a last of
     /// \a layer, baked: a keyframe a frame, each shape left as drawing
     /// objects as its operators make it there. Returns how many were baked.

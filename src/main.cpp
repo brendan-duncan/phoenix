@@ -343,6 +343,14 @@ int main(int argc, char *argv[])
         return window.exportFromCommandLine(arguments.at(2), arguments.at(3), true);
     }
 
+    // Phoenix --convert <in> <out> --for-other-apps: written as Export FLA
+    // for Other Apps writes it, everything Phoenix's own baked.
+    if (arguments.size() == 5 && arguments.at(1) == "--convert" && arguments.at(4) == "--for-other-apps")
+    {
+        MainWindow window(QString(), nullptr, false);
+        return window.exportForOtherAppsFromCommandLine(arguments.at(2), arguments.at(3));
+    }
+
     if (arguments.size() == 4 && arguments.at(1) == "--export-movie")
     {
         MainWindow window(QString(), nullptr, false);

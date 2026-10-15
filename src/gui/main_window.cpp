@@ -35,6 +35,7 @@
 #include "../edit/shape_operators.h"
 #include "../edit/text_animators.h"
 #include "../edit/adjustments.h"
+#include "../edit/other_apps.h"
 #include "../edit/frame_bake.h"
 #include "motion_editor.h"
 #include "motion_presets.h"
@@ -5119,7 +5120,6 @@ void MainWindow::exportBakedDocument()
 {
     if (!_flaDocument || !_flaDocument->document)
         return;
-    fla::Document* document = _flaDocument->document;
     QSettings settings;
     const QString start = QDir(settings.value("export/bakedFolder", QDir::homePath()).toString())
                               .filePath(QFileInfo(_documentPath.isEmpty() ? QString("Untitled") : _documentPath)
@@ -5129,7 +5129,48 @@ void MainWindow::exportBakedDocument()
     if (path.isEmpty())
         return;
     settings.setValue("export/bakedFolder", QFileInfo(path).absolutePath());
+    QString error;
+    int bakedLayers = 0;
+    const bool written = writeForOtherApps(path, error, &bakedLayers);
+    if (!written)
+        QMessageBox::warning(this, "Export FLA for Other Apps", QString("The copy could not be written: %1").arg(error));
+    else
+        statusBar()->showMessage(QString("Exported %1%2").arg(QFileInfo(path).fileName(),
+                                     bakedLayers == 0 ? QString(" (no behaviors to bake)") : QString(" with behaviors baked")),
+            4000);
+}
 
+int MainWindow::exportForOtherAppsFromCommandLine(const QString& source, const QString& output)
+{
+    if (!QFileInfo::exists(source))
+    {
+        std::fprintf(stderr, "No such file: %s\n", qPrintable(source));
+        return 1;
+    }
+    loadFLAFile(source);
+    if (!_flaDocument || !_flaDocument->document)
+    {
+        std::fprintf(stderr, "Could not open %s\n", qPrintable(source));
+        return 1;
+    }
+    QString error;
+    if (!writeForOtherApps(QFileInfo(output).absoluteFilePath(), error, nullptr))
+    {
+        std::fprintf(stderr, "%s\n", qPrintable(error));
+        return 1;
+    }
+    std::printf("Wrote %s for other apps\n", qPrintable(output));
+    return 0;
+}
+
+bool MainWindow::writeForOtherApps(const QString& path, QString& error, int* bakedLayers)
+{
+    if (!_flaDocument || !_flaDocument->document)
+    {
+        error = "No document is open.";
+        return false;
+    }
+    fla::Document* document = _flaDocument->document;
     // Every timeline's layers with behaviors, baked for the copy and put
     // back afterward.
     std::vector<fla::Layer*> layers;
@@ -5160,23 +5201,46 @@ void MainWindow::exportBakedDocument()
         }));
         baked->redo();
     }
-    QString error;
-    const bool written = writeDocumentFile(*document, path, error);
+    if (bakedLayers)
+        *bakedLayers = static_cast<int>(layers.size());
+    bool written = false;
+    std::vector<std::string> notes;
+    if (fla::otherapps::needsBaking(*document))
+    {
+        // Mattes, adjustment layers and template values are baked into a
+        // copy read back from a temporary file, so the document stays as
+        // it is.
+        QTemporaryDir folder;
+        const QString temporary = folder.filePath("copy.fla");
+        if (!folder.isValid())
+            error = "There is no room for a temporary copy.";
+        else if (writeDocumentFile(*document, temporary, error))
+        {
+            FLAParser parser;
+            std::unique_ptr<fla::FLADocument> copy(parser.parse(temporary.toStdString()));
+            if (copy && copy->document)
+            {
+                fla::otherapps::bakeCompositing(*copy->document, notes);
+                written = writeDocumentFile(*copy->document, path, error);
+            }
+            else
+                error = QString::fromStdString(parser.errorString());
+        }
+    }
+    else
+        written = writeDocumentFile(*document, path, error);
     if (baked)
         baked->undo();
     for (const std::string& each : *errors)
         BehaviorLibrary::instance().reportOnce(QString::fromStdString(each));
+    for (const std::string& each : notes)
+        BehaviorLibrary::instance().reportOnce(QString("Export FLA for Other Apps: %1").arg(QString::fromStdString(each)));
     if (_phoenixView)
     {
         _phoenixView->clearCaches();
         _phoenixView->update();
     }
-    if (!written)
-        QMessageBox::warning(this, "Export FLA for Other Apps", QString("The copy could not be written: %1").arg(error));
-    else
-        statusBar()->showMessage(QString("Exported %1%2").arg(QFileInfo(path).fileName(),
-                                     layers.empty() ? QString(" (no behaviors to bake)") : QString(" with behaviors baked")),
-            4000);
+    return written;
 }
 
 void MainWindow::reverseFrames()

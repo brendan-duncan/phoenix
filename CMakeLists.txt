@@ -350,6 +350,7 @@ set(HEADERS
     src/edit/text_animators.h
     src/edit/adjustments.h
     src/edit/templates.h
+    src/edit/other_apps.h
     src/edit/filter_presets.h
     src/edit/library_transfer.h
     src/edit/document_session.h

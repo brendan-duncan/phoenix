@@ -109,6 +109,7 @@ set(PHOENIX_CORE_SOURCES
     edit/text_animators.cpp
     edit/adjustments.cpp
     edit/templates.cpp
+    edit/other_apps.cpp
     edit/timeline_edit.cpp
     edit/trace_bitmap.cpp
     edit/transform_blend.cpp

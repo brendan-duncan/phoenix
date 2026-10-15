@@ -1850,15 +1850,28 @@ void PhoenixView::drawTimeline(QPainter& painter, const fla::Timeline* timeline,
         if (shown.frame)
         {
             ElapsedScope elapsed(_elapsed, shown.offset);
-            for (const fla::Element* element : shown.frame->elements)
+            for (size_t index = 0; index < shown.frame->elements.size(); ++index)
             {
+                const fla::Element* element = shown.frame->elements[index];
                 if (!element || !element->visible)
                     continue;
                 // An instance by everything its symbol draws over all its
                 // frames, as culling has it.
-                const QRectF bounds = element->elementType() == fla::Element::Type::SymbolInstance
+                QRectF bounds = element->elementType() == fla::Element::Type::SymbolInstance
                     ? memberReach(element)
                     : getElementBounds(element);
+                // Where a tween (or behaviors) has moved it to on this frame.
+                if (element->elementType() != fla::Element::Type::Group)
+                {
+                    const fla::Transform& kept = element->transform;
+                    const fla::Transform now = shownTransform(shown, index);
+                    const QTransform from(kept.m11, kept.m12, kept.m21, kept.m22, kept.tx, kept.ty);
+                    const QTransform to(now.m11, now.m12, now.m21, now.m22, now.tx, now.ty);
+                    bool invertible = false;
+                    const QTransform back = from.inverted(&invertible);
+                    if (invertible && from != to)
+                        bounds = (back * to).mapRect(bounds);
+                }
                 if (bounds.isValid())
                     reach = reach.isNull() ? bounds : reach.united(bounds);
             }

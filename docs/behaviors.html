@@ -147,7 +147,14 @@
   <li><b>Adjustment Layer</b> makes a layer change everything drawn below it. With nothing selected on the stage, the Behaviors panel shows the current adjustment layer's effects: <b>Add Effect</b> offers <b>Blur</b>, <b>Color Correction</b> (brightness, contrast, saturation and hue) and <b>Tint</b> (toward a color, keeping light and dark), and their settings key like any others. An adjustment layer with no art changes the whole picture; one with art changes only where its art is, fading at soft edges.</li>
 </ul>
 
-<p>Both are Phoenix's own: another app opening the FLA file draws the matte layer plainly and the adjustment layer's art as art, and Export FLA for Other Apps does not bake them.</p>
+<p>Both are Phoenix's own: another app opening the FLA file draws the matte layer plainly and the adjustment layer's art as art. Export FLA for Other Apps carries them as far as such apps allow:</p>
+
+<ul>
+  <li>An alpha track matte becomes a mask over the layer, hard-edged; a luma matte the same, by the matte's shape rather than its light. An inverted matte cannot be carried and is left drawn plainly.</li>
+  <li>An adjustment layer's effects go on a movie clip holding the layers below it: Blur as a blur filter, Color Correction as an Adjust Color filter, Tint as a color effect, keyed a frame at a time where they change. The movie clip plays on its own when the movie plays, and art on the adjustment layer no longer limits where the effects reach.</li>
+</ul>
+
+<p>The Output panel lists what was carried only in part.</p>
 
 <h2 id="bake">Bake to keyframes</h2>
 
