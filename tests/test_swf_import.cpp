@@ -220,3 +220,69 @@ TEST(swf_import_turns_down_what_is_not_a_movie)
     CHECK(!SwfImport::convert({'Z', 'W', 'S', 13, 0, 0, 0, 0, 0, 0}, files, error) &&
           error.find("damaged") != std::string::npos);
 }
+
+TEST(swf_import_cuts_the_main_timeline_into_its_scenes)
+{
+    // Four frames, a square on each; DefineSceneAndFrameLabelData says
+    // frames 1-2 are "Intro" and 3-4 "Main", and labels frame 4 "end".
+    swf::Writer writer(100, 100, 24.0, {255, 255, 255, 255});
+    swf::Fill green;
+    green.color = {0, 255, 0, 255};
+    const int shape = writer.defineShape(green, square(10));
+    for (int f = 0; f < 4; ++f)
+    {
+        if (f > 0)
+            writer.remove(1);
+        writer.place(shape, 1);
+        writer.showFrame();
+    }
+    std::vector<uint8_t> movie = writer.finish(false);
+    std::vector<uint8_t> body = {2, 0};
+    for (const char c : std::string("Intro"))
+        body.push_back(static_cast<uint8_t>(c));
+    body.push_back(0);
+    body.push_back(2);
+    for (const char c : std::string("Main"))
+        body.push_back(static_cast<uint8_t>(c));
+    body.push_back(0);
+    body.push_back(1);
+    body.push_back(3);
+    for (const char c : std::string("end"))
+        body.push_back(static_cast<uint8_t>(c));
+    body.push_back(0);
+    std::vector<uint8_t> tag = {static_cast<uint8_t>((86 << 6) | 0x3F), static_cast<uint8_t>(86 >> 2)};
+    for (int i = 0; i < 4; ++i)
+        tag.push_back(static_cast<uint8_t>((body.size() >> (8 * i)) & 0xFF));
+    tag.insert(tag.end(), body.begin(), body.end());
+    // After the header and FileAttributes, the first tag.
+    size_t at = 8;
+    at += static_cast<size_t>((5 + 4 * (movie[at] >> 3) + 7) / 8) + 4;
+    at += 2 + static_cast<size_t>((movie[at] | (movie[at + 1] << 8)) & 0x3F);
+    movie.insert(movie.begin() + static_cast<std::ptrdiff_t>(at), tag.begin(), tag.end());
+    const uint32_t length = static_cast<uint32_t>(movie.size());
+    for (int i = 0; i < 4; ++i)
+        movie[4 + i] = static_cast<uint8_t>((length >> (8 * i)) & 0xFF);
+
+    std::map<std::string, std::vector<uint8_t>> files;
+    std::string error;
+    CHECK(SwfImport::convert(movie, files, error));
+    Parsed parsed = parse(files);
+    CHECK(parsed.document && parsed.document->timelines.size() == 2);
+    if (!parsed.document || parsed.document->timelines.size() != 2)
+        return;
+    CHECK(parsed.document->timelines[0]->name == "Intro" && parsed.document->timelines[1]->name == "Main");
+    // Two frames each, and the label on the second scene's second frame.
+    const auto length2 = [](const fla::Timeline* timeline) {
+        int frames = 0;
+        for (const fla::Layer* layer : timeline->layers)
+            for (const fla::Frame* frame : layer->frames)
+                frames = std::max(frames, frame->index + frame->duration);
+        return frames;
+    };
+    CHECK(length2(parsed.document->timelines[0]) == 2 && length2(parsed.document->timelines[1]) == 2);
+    bool labeled = false;
+    for (const fla::Layer* layer : parsed.document->timelines[1]->layers)
+        for (const fla::Frame* frame : layer->frames)
+            labeled = labeled || (frame->name == "end" && frame->index == 1);
+    CHECK(labeled);
+}

@@ -81,6 +81,19 @@ public:
         _at += count;
         return out;
     }
+    /// EncodedU32: seven bits a byte, low first, while the top bit is set.
+    uint32_t encodedU32()
+    {
+        uint32_t value = 0;
+        for (int shift = 0; shift < 35; shift += 7)
+        {
+            const uint8_t byte = u8();
+            value |= static_cast<uint32_t>(byte & 0x7F) << shift;
+            if (!(byte & 0x80))
+                break;
+        }
+        return value;
+    }
     std::string string()
     {
         align();
@@ -805,6 +818,47 @@ private:
     int _width = 550, _height = 400;
     Rgba _background{255, 255, 255, 255};
     std::shared_ptr<TimelineData> _main;
+    /// The main timeline's scenes, by first frame and name, as
+    /// DefineSceneAndFrameLabelData gives them; none or one for a single
+    /// scene.
+    std::vector<std::pair<uint32_t, std::string>> _scenes;
+
+    /// Frames \a first up to \a end of \a t, counted from \a first: one
+    /// scene of the main timeline. A streamed soundtrack goes with the scene
+    /// it starts in.
+    static TimelineData sliceOf(const TimelineData& t, int first, int end)
+    {
+        TimelineData slice;
+        first = std::clamp(first, 0, t.frameCount);
+        end = std::clamp(end, first, t.frameCount);
+        slice.frames.assign(t.frames.begin() + first, t.frames.begin() + end);
+        slice.frameCount = end - first;
+        if (slice.frameCount == 0)
+        {
+            slice.frames.emplace_back();
+            slice.frameCount = 1;
+        }
+        const auto shift = [first, end](const auto& from, auto& to) {
+            for (const auto& [frame, value] : from)
+                if (frame >= first && frame < end)
+                    to[frame - first] = value;
+        };
+        shift(t.labels, slice.labels);
+        shift(t.sounds, slice.sounds);
+        shift(t.scripts, slice.scripts);
+        if (t.streamCodec >= 0 && t.streamFirst >= first && t.streamFirst < end)
+        {
+            slice.streamCodec = t.streamCodec;
+            slice.streamRate = t.streamRate;
+            slice.streamStereo = t.streamStereo;
+            slice.stream16 = t.stream16;
+            slice.streamFirst = t.streamFirst - first;
+            slice.streamLast = t.streamLast - first;
+            slice.streamData = t.streamData;
+            slice.streamMp3 = t.streamMp3;
+        }
+        return slice;
+    }
     std::map<int, Character> _characters;
     std::vector<uint8_t> _jpegTables;
     std::map<std::string, int> _unread; // tag names left out, counted
@@ -859,6 +913,24 @@ private:
                 break;
             case 43: // FrameLabel
                 timeline.labels[frame] = tag.string();
+                break;
+            case 86: // DefineSceneAndFrameLabelData: the scenes, by first frame
+                if (root)
+                {
+                    const uint32_t scenes = std::min<uint32_t>(tag.encodedU32(), 1000);
+                    for (uint32_t s = 0; s < scenes && tag.left() > 0; ++s)
+                    {
+                        const uint32_t offset = tag.encodedU32();
+                        _scenes.emplace_back(offset, tag.string());
+                    }
+                    const uint32_t labels = std::min<uint32_t>(tag.encodedU32(), 100000);
+                    for (uint32_t l = 0; l < labels && tag.left() > 0; ++l)
+                    {
+                        const uint32_t at = tag.encodedU32();
+                        std::string name = tag.string();
+                        timeline.labels.emplace(static_cast<int>(at), std::move(name));
+                    }
+                }
                 break;
             case 12: // DoAction
                 timeline.scripts[frame] += "// ActionScript compiled into the SWF (" + std::to_string(length) +
@@ -2851,7 +2923,25 @@ private:
         // The main timeline first: it names what it uses, which writes the
         // symbols as it goes.
         tinyxml2::XMLElement* timelines = doc.NewElement("timelines");
-        timelines->InsertEndChild(timelineElement(doc, "Scene 1", *_main, false));
+        if (_scenes.size() > 1)
+        {
+            // A scene each, as the SWF's scene list cuts the main timeline.
+            std::vector<std::pair<uint32_t, std::string>> scenes = _scenes;
+            std::stable_sort(scenes.begin(), scenes.end(),
+                [](const auto& a, const auto& b) { return a.first < b.first; });
+            for (size_t s = 0; s < scenes.size(); ++s)
+            {
+                const int first = static_cast<int>(scenes[s].first);
+                const int end = s + 1 < scenes.size() ? static_cast<int>(scenes[s + 1].first) : _main->frameCount;
+                if (end <= first && s + 1 < scenes.size())
+                    continue;
+                const TimelineData slice = sliceOf(*_main, first, end);
+                const std::string name = scenes[s].second.empty() ? "Scene " + std::to_string(s + 1) : scenes[s].second;
+                timelines->InsertEndChild(timelineElement(doc, name, slice, false));
+            }
+        }
+        else
+            timelines->InsertEndChild(timelineElement(doc, "Scene 1", *_main, false));
         // Symbols nothing on a timeline uses still come back, exported ones
         // above all.
         for (auto& [id, c] : _characters)
