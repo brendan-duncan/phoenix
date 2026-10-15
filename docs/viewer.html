@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Phoenix Viewer and Open with · Phoenix User Guide</title>
+<meta name="description" content="Play a document, SWF movie, artwork or image in the Phoenix Viewer without opening the editor, and open files in Phoenix from File Explorer with Open with and View in Phoenix.">
+<meta name="keywords" content="viewer view player swf preview open with file explorer right-click context menu default app association windows double-click --view quick look">
+<link rel="icon" href="assets/img/logo.png">
+<link rel="stylesheet" href="assets/site.css">
+<script>try { const t = localStorage.getItem("phoenix-docs-theme"); if (t) document.documentElement.dataset.theme = t; } catch (e) {}</script>
+<script src="assets/site.js" defer></script>
+</head>
+<body>
+<main>
+<article class="content">
+
+<p class="eyebrow">Get started</p>
+<h1>Phoenix Viewer and Open with</h1>
+<p class="lead">Look at a file without opening the editor: the Phoenix Viewer plays documents and SWF movies and shows artwork and images in a window of its own. On Windows you can reach it, and Phoenix itself, straight from File Explorer.</p>
+
+<h2 id="viewer">The Phoenix Viewer</h2>
+
+<p>The viewer is Phoenix with only the stage: no panels, no timeline, nothing to edit. It opens quickly and leaves the file just as it was, which makes it handy for going through a folder of old movies, checking a published SWF, or showing a file to someone.</p>
+
+<table>
+  <thead><tr><th>File</th><th>What the viewer does</th></tr></thead>
+  <tbody>
+    <tr><td>Phoenix documents (<code>.phx</code>), FLA files, XFL folders (<code>DOMDocument.xml</code> or <code>.xfl</code>)</td><td class="wrap">Plays the document as <a href="actionscript.html#test-movie">Test Movie</a> does: at its frame rate, with its sound, its ActionScript running and its buttons answering the mouse.</td></tr>
+    <tr><td>SWF movies (<code>.swf</code>)</td><td class="wrap">Plays the movie the same way, scenes, sounds and scripts included.</td></tr>
+    <tr><td>Artwork: SVG, Illustrator (<code>.ai</code>), EPS and PostScript, PDF, Photoshop (<code>.psd</code>, <code>.psb</code>)</td><td class="wrap">Shows the art on a stage fitted to it.</td></tr>
+    <tr><td>Images: PNG, JPEG, GIF and BMP</td><td class="wrap">Shows the image on a stage its size.</td></tr>
+  </tbody>
+</table>
+
+<p>In the viewer window:</p>
+
+<ul>
+  <li><b>Restart</b> plays the movie again from its first frame.</li>
+  <li><b>Pause</b> holds the movie where it is, and plays it on when you click it again. While it is paused, <b>Step</b> plays one frame.</li>
+  <li>Drag the <b>time slider</b> to go to another frame of the scene.</li>
+  <li>Keys you type go to the movie, so games and interactive pieces work as they would in a player. <kbd>Esc</kbd> closes the viewer.</li>
+  <li>The window can be resized and maximized; the stage scales to fit it.</li>
+</ul>
+
+<p>To change the file, open it in Phoenix itself: the viewer never saves anything.</p>
+
+<h2 id="windows">From File Explorer (Windows)</h2>
+
+<p>When Phoenix is installed, and again each time it updates, it tells Windows about the files it opens. It does this for your user account only, so no administrator rights are needed, and it only takes over the files that are its own: <code>.phx</code>. For everything else it adds itself as a choice and leaves your default apps alone.</p>
+
+<h3 id="open-with">Open with</h3>
+
+<p>Right-click a file in File Explorer and choose <strong>Open with</strong>:</p>
+
+<ul>
+  <li><strong>Phoenix</strong> opens the file in the editor. It is listed for <code>.phx</code> and <code>.fla</code> files.</li>
+  <li><strong>Phoenix Viewer</strong> opens the file in the viewer. It is listed for every file the viewer shows: <code>.phx</code>, <code>.fla</code>, <code>.xfl</code>, <code>.swf</code>, <code>.svg</code>, <code>.ai</code>, <code>.eps</code>, <code>.ps</code>, <code>.pdf</code>, <code>.psd</code> and <code>.psb</code>.</li>
+</ul>
+
+<p>If Phoenix is not in the short list, choose <strong>Open with &rsaquo; Choose another app</strong> and look under <strong>More apps</strong>.</p>
+
+<h3 id="view-in-phoenix">View in Phoenix</h3>
+
+<p>The same files also get <strong>View in Phoenix</strong> on their right-click menu, which opens the viewer in one click. On Windows 11 it is in the full menu: right-click the file and choose <strong>Show more options</strong> (or hold <kbd>Shift</kbd> as you right-click).</p>
+
+<h3 id="default-app">Make Phoenix the default</h3>
+
+<p>Double-clicking a <code>.phx</code> file opens it in Phoenix. For other files Phoenix does not change which app opens them, but you can:</p>
+
+<ol>
+  <li>Right-click a file of that kind, for example a <code>.swf</code> movie, and choose <strong>Open with &rsaquo; Choose another app</strong>.</li>
+  <li>Pick <strong>Phoenix Viewer</strong> to view files of that kind with a double-click, or <strong>Phoenix</strong> (for <code>.fla</code>) to edit them.</li>
+  <li>Click <strong>Always</strong> (on Windows 10, tick <strong>Always use this app</strong>, then click <strong>OK</strong>).</li>
+</ol>
+
+<p>To undo it, choose another app the same way, or change it in <span class="menu-path">Settings &rsaquo; Apps &rsaquo; Default apps</span>.</p>
+
+<p>Uninstalling Phoenix takes all of these entries away again.</p>
+
+<div class="callout">
+  <span class="label">Built Phoenix yourself?</span>
+  <p>The entries are made by the installer and its updates. A copy of Phoenix built from source or copied to a folder does not add them; run it with <code>--view</code> instead, as below.</p>
+</div>
+
+<h2 id="command-line">From the command line</h2>
+
+<pre><code>Phoenix --view movie.swf
+Phoenix --view logo.svg</code></pre>
+
+<p>Opens the file in the viewer, on any system. This is the command <strong>Open with &rsaquo; Phoenix Viewer</strong> and <strong>View in Phoenix</strong> run, so you can use it in your own scripts, file manager actions or launchers too: on macOS and Linux, point an "open with" entry of your file manager at <code>Phoenix --view</code>. Anything the movie's scripts print with <code>trace()</code> goes to standard error. See <a href="command-line.html">Command line</a> for the rest of what Phoenix does without a window.</p>
+
+<pre><code>Phoenix drawing.fla</code></pre>
+
+<p>Opens the file in the editor, as <strong>Open with &rsaquo; Phoenix</strong> does.</p>
+
+</article>
+</main>
+</body>
+</html>

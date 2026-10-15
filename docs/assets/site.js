@@ -9,6 +9,7 @@ const NAV = [
   { group: "Get started", pages: [
     { href: "index.html", title: "Welcome to Phoenix" },
     { href: "get-started.html", title: "Install and update" },
+    { href: "viewer.html", title: "Phoenix Viewer and Open with" },
     { href: "tutorials.html", title: "Interactive tutorials" },
   ] },
   { group: "Tutorials", pages: [
