@@ -13,6 +13,7 @@
 #include "../src/edit/adjustments.h"
 #include "../src/edit/templates.h"
 #include "../src/edit/motion_blur.h"
+#include "../src/edit/audio_analysis.h"
 #include "../src/data/document.h"
 #include "../src/data/static_text.h"
 #include "../src/data/symbol.h"
@@ -1065,6 +1066,42 @@ TEST(link_to_control_follows_controls_on_a_null)
     CHECK(run("Dial", "Same").none());
     // A control on its own does nothing to the instance holding it.
     CHECK(engine.evaluate({engine.defaults("anglecontrol", 1)}, moment).front().none());
+}
+
+TEST(audio_spectrum_finds_a_tone_and_draws_its_wave)
+{
+    // One second of 440 Hz then one of 4 kHz, at 24 frames a second.
+    const int rate = 48000;
+    std::vector<float> stereo;
+    for (int i = 0; i < rate * 2; ++i)
+    {
+        const double hz = i < rate ? 440.0 : 4000.0;
+        const float s = static_cast<float>(0.5 * std::sin(2.0 * 3.14159265358979 * hz * i / rate));
+        stereo.push_back(s);
+        stereo.push_back(s);
+    }
+    const fla::audio::Analysis analysis = fla::audio::analyze(stereo, rate, 24.0, 48, 32, 64);
+    CHECK(analysis.frames == 48 && analysis.spectrum.size() == 48u * 32u && analysis.wave.size() == 48u * 64u);
+    const auto loudestBand = [&](int frame) {
+        std::vector<double> bands, wave;
+        analysis.at(frame, bands, wave);
+        return static_cast<int>(std::max_element(bands.begin(), bands.end()) - bands.begin());
+    };
+    // 440 Hz is a third of the way up from 40 Hz to 16 kHz; 4 kHz three
+    // quarters.
+    const int low = loudestBand(10);
+    const int high = loudestBand(36);
+    CHECK(low >= 11 && low <= 14);
+    CHECK(high >= 23 && high <= 26);
+    std::vector<double> bands, wave;
+    CHECK(analysis.at(10, bands, wave) && bands[static_cast<size_t>(low)] > 0.95);
+    // A frame of 440 Hz holds over 18 cycles: the wave swings to both
+    // sides, as loud as the loudest sample.
+    CHECK(*std::max_element(wave.begin(), wave.end()) > 0.9 && *std::min_element(wave.begin(), wave.end()) < -0.9);
+    CHECK(!analysis.at(48, bands, wave) && !analysis.at(-1, bands, wave));
+    // Silence analyzes as nothing.
+    const fla::audio::Analysis quiet = fla::audio::analyze(std::vector<float>(9600, 0.0f), rate, 24.0, 2);
+    CHECK(quiet.at(0, bands, wave) && *std::max_element(bands.begin(), bands.end()) == 0.0);
 }
 
 TEST(recorded_motion_moves_by_the_keys_recorded)

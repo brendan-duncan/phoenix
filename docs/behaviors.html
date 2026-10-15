@@ -75,8 +75,15 @@
     <tr><td>Particles</td><td class="wrap">Sends out copies as particles, born at a steady rate from a point or an area: speed and direction with a spread, gravity, turbulence, spin, size from birth to death, fading. A graphic symbol's loop can start as each particle is born. Like everything else, the same frame always shows the same particles.</td></tr>
     <tr><td>Stagger</td><td class="wrap">Runs each copy's graphic loop a few frames after the one before, in order or at random, so copies of one cycle move out of step: a crowd, a field of grass, a wave. Put it after a Repeat behavior.</td></tr>
     <tr><td>Follow Sound</td><td class="wrap">Moves it with how loud the scene's sound is: it grows, jumps, turns, shows or changes frame on the beats, falling back gently after each. Ignore the quiet parts, and nudge it a frame or two early or late to taste. For lip sync proper, see <a href="sound.html#lip-sync">Lip sync</a>.</td></tr>
+    <tr><td>Audio Spectrum</td><td class="wrap">Copies of it as the bars of an audio spectrum, low notes on the left to high on the right (or round a circle), each growing taller, bigger or brighter with how much of the scene's sound is in its band, and falling back gently after a peak. Draw a bar with its registration point at its bottom so it grows upward. Choose which part of the range to show with <b>Lowest band</b> and <b>Highest band</b>.</td></tr>
+    <tr><td>Audio Waveform</td><td class="wrap">Copies of it along the wave of the scene's sound over each frame, in a line or round a circle, like an oscilloscope. Use a small dot for a dotted line, or a short dash.</td></tr>
   </tbody>
 </table>
+
+<figure>
+  <img src="assets/shots/mg-audio.webp" alt="On a dark stage, a row of blue spectrum bars tall at the low end, a ring of pink bars round a circle, and a dotted orange waveform below the row" width="800" height="343">
+  <figcaption>Audio Spectrum as a row and as a ring, and Audio Waveform as a dotted line, all from one beat on the sound layer.</figcaption>
+</figure>
 
 <figure>
   <img src="assets/shots/mg-jiggle.webp" alt="Four frames of a green head running right with a red-tipped antenna that leans back as the head speeds up and swings the other way as it turns back" width="1000" height="411">
@@ -368,6 +375,9 @@
     <tr><td><code>controller(name)</code></td><td class="wrap">A master controller's value from 0 to 1, or <code>null</code>.</td></tr>
     <tr><td><code>parentAt(frame, x, y)</code></td><td class="wrap">Where the layers it is parented to put the point (x, y) on a frame, as <code>{x, y}</code>: the world its keys live in.</td></tr>
     <tr><td><code>loudness(frame)</code></td><td class="wrap">How loud the scene's sound is on this frame (or <code>frame</code>), from 0 for silence to 1 for its loudest moment.</td></tr>
+    <tr><td><code>spectrum(frame)</code></td><td class="wrap">The scene's sound on this frame as 32 bands from low notes to high, each from 0 to 1.</td></tr>
+    <tr><td><code>waveform(frame)</code></td><td class="wrap">The scene's sound's wave over this frame as 64 points, each from -1 to 1.</td></tr>
+    <tr><td><code>control(holder, name)</code></td><td class="wrap">A control on the instance named <code>holder</code> (see <a href="#controls">Controls on a null</a>): a number, <code>{x, y}</code>, <code>"#RRGGBB"</code>, or <code>true</code> or <code>false</code>; <code>null</code> when there is none.</td></tr>
     <tr><td><code>current</code></td><td class="wrap">What the behaviors above it have done so far to this copy.</td></tr>
     <tr><td><code>copy</code>, <code>copies</code></td><td class="wrap">Which copy this is, from 0, and how many there are, after the behaviors above it made them.</td></tr>
   </tbody>

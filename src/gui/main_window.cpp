@@ -3091,6 +3091,13 @@ void MainWindow::setupUI()
                 return window->loudnessAt(document, frame);
         return 0.0;
     });
+    fla::behaviors::setListening(
+        [](const fla::Document& document, int frame, std::vector<double>& bands, std::vector<double>& wave) {
+            for (MainWindow* window : s_hearing)
+                if (window->_flaDocument && window->_flaDocument->document == &document)
+                    return window->spectrumAt(document, frame, bands, wave);
+            return false;
+        });
 
     addDockWidget(Qt::LeftDockWidgetArea, _outlinerDock);
     _outlinerDock->hide();
@@ -16616,6 +16623,13 @@ QIcon MainWindow::createPhoenixIcon()
     return icon;
 }
 
+bool MainWindow::spectrumAt(const fla::Document& document, int frame, std::vector<double>& bands, std::vector<double>& wave)
+{
+    // Worked out with the loudness, and kept as long as it is.
+    loudnessAt(document, frame);
+    return _spectrum.at(frame, bands, wave);
+}
+
 double MainWindow::loudnessAt(const fla::Document& document, int frame)
 {
     if (!_timelineAudio || !_flaDocument || _flaDocument->document != &document)
@@ -16675,6 +16689,8 @@ double MainWindow::loudnessAt(const fla::Document& document, int frame)
             // From 0 to 1 against the loudest frame; silence stays silent.
             for (double& each : _loudness)
                 each = loudest > 1e-4 ? each / loudest : 0.0;
+            // And its spectrum and wave, frame by frame.
+            _spectrum = loudest > 1e-4 ? fla::audio::analyze(mixed, PcmBuffer::kRate, rate, length) : fla::audio::Analysis();
         }
     }
     return frame >= 0 && frame < static_cast<int>(_loudness.size()) ? _loudness[static_cast<size_t>(frame)] : 0.0;

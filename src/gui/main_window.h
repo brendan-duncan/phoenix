@@ -1,5 +1,6 @@
 #pragma once
 
+#include "../edit/audio_analysis.h"
 #include "../edit/templates.h"
 #include "phoenix_view.h"
 #include "document_view.h"
@@ -1123,6 +1124,9 @@ private:
     /// The scene's loudness a frame, for behaviors that follow sound:
     /// worked out from its sounds when they change.
     double loudnessAt(const fla::Document& document, int frame);
+    /// The scene's sound's spectrum and wave on a frame, for behaviors.
+    bool spectrumAt(const fla::Document& document, int frame, std::vector<double>& bands, std::vector<double>& wave);
+    fla::audio::Analysis _spectrum;
     std::vector<double> _loudness;
     std::string _loudnessSounds;
     unsigned _loudnessRevision = 0;

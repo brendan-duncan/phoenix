@@ -111,6 +111,7 @@ set(PHOENIX_CORE_SOURCES
     edit/templates.cpp
     edit/motion_blur.cpp
     edit/adjustment_effects.cpp
+    edit/audio_analysis.cpp
     edit/other_apps.cpp
     edit/timeline_edit.cpp
     edit/trace_bitmap.cpp

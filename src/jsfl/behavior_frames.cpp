@@ -31,6 +31,17 @@ Hearing& hearing()
 
 } // namespace
 
+Listening& listening()
+{
+    static Listening given;
+    return given;
+}
+
+void setListening(Listening given)
+{
+    listening() = std::move(given);
+}
+
 void setHearing(Hearing given)
 {
     hearing() = std::move(given);
@@ -257,6 +268,9 @@ Copies evaluateOn(Engine& engine, const SymbolInstance& instance, const Transfor
         return false;
     };
     moment.loudness = [document](int at) { return document && hearing() ? hearing()(*document, at) : 0.0; };
+    moment.spectrum = [document](int at, std::vector<double>& bands, std::vector<double>& wave) {
+        return document && listening() && listening()(*document, at, bands, wave);
+    };
     moment.parentAt = [layer](int at, double matrix[6]) { return rigging() && rigging()(*layer, at, matrix); };
     return engine.evaluate(of(instance), moment, error);
 }

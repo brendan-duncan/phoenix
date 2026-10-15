@@ -43,6 +43,10 @@ bool drivenValue(Engine& engine, const Layer& layer, int frame, const std::strin
 /// is, behaviors hear silence.
 using Hearing = std::function<double(const Document& document, int frame)>;
 void setHearing(Hearing hearing);
+/// The same, as a spectrum (bands low to high, 0 to 1) and a wave (-1 to
+/// 1) on a frame; false when there is no sound to hear.
+using Listening = std::function<bool(const Document& document, int frame, std::vector<double>& bands, std::vector<double>& wave)>;
+void setListening(Listening listening);
 
 /// How the layers \a layer is parented to move it on a frame (a, b, c, d,
 /// tx, ty). Set by the app, which works the parent chain out; until it is,

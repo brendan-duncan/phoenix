@@ -379,6 +379,95 @@ behavior({
     }
 });
 )JS"},
+        {"spectrum", R"JS(
+behavior({
+    name: "Audio Spectrum",
+    description: "Copies of it as the bars of an audio spectrum, low notes to high, each growing with how much of the scene's sound is in its band: in a row or round a circle. Draw a bar with its registration point at the bottom.",
+    params: {
+        count: { label: "Bars", value: 32, min: 2, max: 256, step: 1 },
+        layout: { label: "Laid out", choices: ["Row", "Circle"] },
+        spacing: { label: "Spacing (pixels)", value: 14, min: 0, max: 500, step: 0.5 },
+        radius: { label: "Circle radius (pixels)", value: 120, min: 0, max: 4000, step: 1 },
+        change: { label: "Grow", choices: ["Height", "Size", "Fade"] },
+        low: { label: "Quiet (percent)", value: 5, min: 0, max: 1000, step: 1 },
+        high: { label: "Loud (percent)", value: 400, min: 0, max: 5000, step: 1 },
+        fall: { label: "Fall off (frames)", value: 4, min: 0, max: 48, step: 1 },
+        from: { label: "Lowest band (percent)", value: 0, min: 0, max: 99, step: 1 },
+        to: { label: "Highest band (percent)", value: 85, min: 1, max: 100, step: 1 }
+    },
+    evaluate: function (ctx, p) {
+        var n = Math.max(2, Math.round(p.count));
+        // Each bar's level: its share of the bands, held and falling away
+        // after a peak.
+        var levels = [];
+        for (var i = 0; i < n; i++)
+            levels.push(0);
+        for (var back = 0; back <= p.fall; back++) {
+            var bands = ctx.spectrum(ctx.frame - back);
+            if (!bands.length)
+                continue;
+            var fade = 1 - back / (p.fall + 1);
+            var first = bands.length * p.from / 100;
+            var span = Math.max(1, bands.length * (p.to - p.from) / 100);
+            for (var b = 0; b < n; b++) {
+                var at = Math.min(bands.length - 1, Math.floor(first + span * b / n));
+                levels[b] = Math.max(levels[b], bands[at] * fade);
+            }
+        }
+        var copies = [];
+        for (var c = 0; c < n; c++) {
+            var size = (p.low + (p.high - p.low) * levels[c]) / 100;
+            var copy = {};
+            if (p.layout === "Circle") {
+                var degrees = 360 * c / n - 90;
+                var a = degrees * Math.PI / 180;
+                copy.x = Math.cos(a) * p.radius;
+                copy.y = Math.sin(a) * p.radius;
+                copy.rotation = degrees + 90;
+            } else {
+                copy.x = (c - (n - 1) / 2) * p.spacing;
+            }
+            if (p.change === "Size")
+                copy.scale = size;
+            else if (p.change === "Fade")
+                copy.alpha = Math.min(1, size);
+            else
+                copy.scaleY = size;
+            copies.push(copy);
+        }
+        return { copies: copies };
+    }
+});
+)JS"},
+        {"waveform", R"JS(
+behavior({
+    name: "Audio Waveform",
+    description: "Copies of it along the wave of the scene's sound over each frame, moved up and down as the wave goes: in a line or round a circle, like an oscilloscope.",
+    params: {
+        count: { label: "Copies", value: 64, min: 2, max: 512, step: 1 },
+        layout: { label: "Laid out", choices: ["Line", "Circle"] },
+        spacing: { label: "Spacing (pixels)", value: 8, min: 0, max: 500, step: 0.5 },
+        radius: { label: "Circle radius (pixels)", value: 120, min: 0, max: 4000, step: 1 },
+        height: { label: "Height (pixels)", value: 80, min: 0, max: 4000, step: 1 }
+    },
+    evaluate: function (ctx, p) {
+        var n = Math.max(2, Math.round(p.count));
+        var wave = ctx.waveform(ctx.frame);
+        var copies = [];
+        for (var c = 0; c < n; c++) {
+            var v = wave.length ? wave[Math.min(wave.length - 1, Math.floor(wave.length * c / n))] : 0;
+            if (p.layout === "Circle") {
+                var a = 2 * Math.PI * c / n - Math.PI / 2;
+                var r = p.radius + v * p.height;
+                copies.push({ x: Math.cos(a) * r, y: Math.sin(a) * r });
+            } else {
+                copies.push({ x: (c - (n - 1) / 2) * p.spacing, y: -v * p.height });
+            }
+        }
+        return { copies: copies };
+    }
+});
+)JS"},
         {"slidercontrol", R"JS(
 behavior({
     name: "Slider Control",

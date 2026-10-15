@@ -77,6 +77,8 @@ function __run(id, params, m) {
             return Number(value) || 0;
         },
         loudness: function (frame) { return __loudness(frame === undefined ? m.frame : frame); },
+        spectrum: function (frame) { return __spectrum(frame === undefined ? m.frame : frame, 0); },
+        waveform: function (frame) { return __spectrum(frame === undefined ? m.frame : frame, 1); },
         // Where the layers it is parented to put a point of its own on a
         // frame: the point given, moved as the parent chain moves it.
         parentAt: function (frame, x, y) {
@@ -154,6 +156,7 @@ struct Engine::Impl
         JS_SetPropertyStr(ctx, global, "__controller", JS_NewCFunction(ctx, &Impl::controller, "__controller", 1));
         JS_SetPropertyStr(ctx, global, "__loudness", JS_NewCFunction(ctx, &Impl::loudness, "__loudness", 1));
         JS_SetPropertyStr(ctx, global, "__control", JS_NewCFunction(ctx, &Impl::control, "__control", 3));
+        JS_SetPropertyStr(ctx, global, "__spectrum", JS_NewCFunction(ctx, &Impl::spectrum, "__spectrum", 2));
         JS_SetPropertyStr(ctx, global, "__parentAt", JS_NewCFunction(ctx, &Impl::parentAt, "__parentAt", 1));
         JS_FreeValue(ctx, global);
         deadline = Clock::now() + std::chrono::seconds(5);
@@ -205,6 +208,26 @@ struct Engine::Impl
         const bool found = mine->other(name, static_cast<int>(std::lround(frame)), keyed);
         self->moment = mine;
         return found ? keyedObject(ctx, keyed) : JS_NULL;
+    }
+
+    static JSValue spectrum(JSContext* ctx, JSValueConst, int argc, JSValueConst* argv)
+    {
+        Impl* self = static_cast<Impl*>(JS_GetContextOpaque(ctx));
+        JSValue array = JS_NewArray(ctx);
+        if (argc < 2 || !self->moment || !self->moment->spectrum)
+            return array;
+        double frame = 0.0;
+        int which = 0;
+        JS_ToFloat64(ctx, &frame, argv[0]);
+        JS_ToInt32(ctx, &which, argv[1]);
+        std::vector<double> bands;
+        std::vector<double> wave;
+        if (!self->moment->spectrum(static_cast<int>(std::lround(frame)), bands, wave))
+            return array;
+        const std::vector<double>& values = which == 1 ? wave : bands;
+        for (size_t i = 0; i < values.size(); ++i)
+            JS_SetPropertyUint32(ctx, array, static_cast<uint32_t>(i), JS_NewFloat64(ctx, values[i]));
+        return array;
     }
 
     static JSValue control(JSContext* ctx, JSValueConst, int argc, JSValueConst* argv)

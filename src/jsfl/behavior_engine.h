@@ -44,6 +44,9 @@ struct Moment
     /// How loud the scene's sound is on a frame, from 0 (silent) to 1 (its
     /// loudest); null when nothing can hear it.
     std::function<double(int frame)> loudness;
+    /// The sound's spectrum on a frame (bands low to high, 0 to 1) and its
+    /// wave over the frame (-1 to 1); false when nothing can hear it.
+    std::function<bool(int frame, std::vector<double>& bands, std::vector<double>& wave)> spectrum;
     /// The transform the layers it is parented to give it on a frame (a, b,
     /// c, d, tx, ty); false when it has none to say.
     std::function<bool(int frame, double matrix[6])> parentAt;
@@ -69,7 +72,9 @@ struct Moment
 /// random(n) and noise(t, n), both seeded by the "seed" setting) and the
 /// settings, and returns what to add: x and y (pixels), rotation
 /// (degrees), scale, scaleX and scaleY (factors), alpha (a factor), and
-/// tint (0 to 1) toward color ("#RRGGBB"). ctx.control(holder, name)
+/// tint (0 to 1) toward color ("#RRGGBB"). ctx.spectrum(frame) and
+/// ctx.waveform(frame) give the scene's sound as bands from low to high
+/// (0 to 1) and as its wave over the frame (-1 to 1); ctx.control(holder, name)
 /// reads a control on another instance: a number for a slider or an
 /// angle, {x, y} for a point, "#RRGGBB" for a color, true or false for a
 /// checkbox.
