@@ -245,6 +245,9 @@ bool s_skipStartScreen = false;
 bool s_openingSecondary = false;
 /// Every window people work in, in the order they opened.
 QList<MainWindow*> s_windows;
+// Every window, shown or not (exports from the command line too), for the
+// sound behaviors hear.
+QList<MainWindow*> s_hearing;
 /// What a tab dragged between windows carries: its index in its window.
 constexpr const char* kTabMime = "application/x-phoenix-document-tab";
 }
@@ -647,6 +650,7 @@ MainWindow::MainWindow(const QString& initialFile, QWidget* parent, bool startup
 MainWindow::~MainWindow()
 {
     s_windows.removeAll(this);
+    s_hearing.removeAll(this);
     if (!_secondary)
         return;
     // A window opened for tabs lets its documents go as it goes; the first
@@ -2979,6 +2983,15 @@ void MainWindow::setupUI()
     connect(_player, &Player::currentFrameChanged, _timelineAudio, &TimelineAudio::onFrameChanged);
     _timelineView->setSoundProvider([this](const fla::Frame* frame, size_t& in) {
         return _timelineAudio->soundOf(frame, &in);
+    });
+    // Behaviors that follow sound hear the soundtrack of the scene they are
+    // in, from the window that has its document open.
+    s_hearing.push_back(this);
+    fla::behaviors::setHearing([](const fla::Document& document, int frame) {
+        for (MainWindow* window : s_hearing)
+            if (window->_flaDocument && window->_flaDocument->document == &document)
+                return window->loudnessAt(document, frame);
+        return 0.0;
     });
 
     addDockWidget(Qt::LeftDockWidgetArea, _outlinerDock);
@@ -15719,4 +15732,68 @@ QIcon MainWindow::createPhoenixIcon()
     }
 
     return icon;
+}
+
+double MainWindow::loudnessAt(const fla::Document& document, int frame)
+{
+    if (!_timelineAudio || !_flaDocument || _flaDocument->document != &document)
+        return 0.0;
+    // What the scene's sounds are, checked again only after an edit, and
+    // the loudness worked out again only when they have changed.
+    const unsigned revision = _phoenixView ? _phoenixView->revision() : 0;
+    if (!_loudnessChecked || revision != _loudnessRevision)
+    {
+        _loudnessChecked = true;
+        _loudnessRevision = revision;
+        std::string sounds;
+        const fla::Timeline* scene = document.currentScene();
+        int length = 1;
+        if (scene)
+        {
+            sounds = std::to_string(reinterpret_cast<uintptr_t>(scene));
+            for (const fla::Layer* layer : scene->layers)
+            {
+                if (!layer)
+                    continue;
+                sounds += layer->visible ? "|v" : "|h";
+                for (const fla::Frame* key : layer->frames)
+                {
+                    if (!key)
+                        continue;
+                    length = std::max(length, key->index + std::max(key->duration, 1));
+                    for (const auto& [name, value] : key->extraAttributes)
+                        if (name.rfind("sound", 0) == 0 || name.rfind("inPoint", 0) == 0 || name.rfind("outPoint", 0) == 0)
+                            sounds += ";" + std::to_string(key->index) + ":" + std::to_string(key->duration) + name + "=" + value;
+                }
+            }
+            sounds += "#" + std::to_string(length);
+        }
+        for (const fla::Document::SoundInfo& sound : document.sounds)
+            sounds += "/" + sound.name;
+        if (sounds != _loudnessSounds)
+        {
+            _loudnessSounds = sounds;
+            _loudness.clear();
+            const std::vector<float> mixed = scene ? _timelineAudio->mixdown(0, length - 1) : std::vector<float>();
+            const double rate = document.frameRate > 0.0 ? document.frameRate : 24.0;
+            const double perFrame = PcmBuffer::kRate / rate;
+            double loudest = 0.0;
+            for (int f = 0; f < length; ++f)
+            {
+                // The sound's power over the frame (stereo, interleaved).
+                const size_t from = static_cast<size_t>(std::llround(f * perFrame)) * 2;
+                const size_t to = std::min(mixed.size(), static_cast<size_t>(std::llround((f + 1) * perFrame)) * 2);
+                double sum = 0.0;
+                for (size_t i = from; i < to; ++i)
+                    sum += static_cast<double>(mixed[i]) * mixed[i];
+                const double power = to > from ? std::sqrt(sum / static_cast<double>(to - from)) : 0.0;
+                _loudness.push_back(power);
+                loudest = std::max(loudest, power);
+            }
+            // From 0 to 1 against the loudest frame; silence stays silent.
+            for (double& each : _loudness)
+                each = loudest > 1e-4 ? each / loudest : 0.0;
+        }
+    }
+    return frame >= 0 && frame < static_cast<int>(_loudness.size()) ? _loudness[static_cast<size_t>(frame)] : 0.0;
 }

@@ -1094,6 +1094,13 @@ private:
 
     /// Plays the document's sounds with the timeline.
     class TimelineAudio* _timelineAudio = nullptr;
+    /// The scene's loudness a frame, for behaviors that follow sound:
+    /// worked out from its sounds when they change.
+    double loudnessAt(const fla::Document& document, int frame);
+    std::vector<double> _loudness;
+    std::string _loudnessSounds;
+    unsigned _loudnessRevision = 0;
+    bool _loudnessChecked = false;
     QAction* _ungroupAction = nullptr;
     QAction* _breakApartAction = nullptr;
     QAction* _convertToSymbolAction = nullptr;

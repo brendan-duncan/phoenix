@@ -59,6 +59,7 @@ function __run(id, params, m) {
         copy: m.copy, copies: m.copies, current: m.current,
         other: function (name, frame) { return name ? __other(String(name), frame === undefined ? m.frame : frame) : null; },
         controller: function (name) { return name ? __controller(String(name)) : null; },
+        loudness: function (frame) { return __loudness(frame === undefined ? m.frame : frame); },
         // The motion guide's line: its length, and where along it a place
         // is (x, y and the line's direction in degrees).
         path: m.pathLength >= 0 ? {
@@ -126,6 +127,7 @@ struct Engine::Impl
         JS_SetPropertyStr(ctx, global, "__pathAt", JS_NewCFunction(ctx, &Impl::pathAt, "__pathAt", 1));
         JS_SetPropertyStr(ctx, global, "__other", JS_NewCFunction(ctx, &Impl::other, "__other", 2));
         JS_SetPropertyStr(ctx, global, "__controller", JS_NewCFunction(ctx, &Impl::controller, "__controller", 1));
+        JS_SetPropertyStr(ctx, global, "__loudness", JS_NewCFunction(ctx, &Impl::loudness, "__loudness", 1));
         JS_FreeValue(ctx, global);
         deadline = Clock::now() + std::chrono::seconds(5);
         JS_FreeValue(ctx, JS_Eval(ctx, kPrelude, std::strlen(kPrelude), "<behaviors>", JS_EVAL_TYPE_GLOBAL));
@@ -189,6 +191,15 @@ struct Engine::Impl
             JS_FreeCString(ctx, chars);
         double value = 0.0;
         return self->moment->controller(name, value) ? JS_NewFloat64(ctx, value) : JS_NULL;
+    }
+
+    static JSValue loudness(JSContext* ctx, JSValueConst, int argc, JSValueConst* argv)
+    {
+        Impl* self = static_cast<Impl*>(JS_GetContextOpaque(ctx));
+        double frame = 0;
+        if (argc < 1 || JS_ToFloat64(ctx, &frame, argv[0]) < 0 || !self->moment || !self->moment->loudness)
+            return JS_NewFloat64(ctx, 0.0);
+        return JS_NewFloat64(ctx, self->moment->loudness(static_cast<int>(std::lround(frame))));
     }
 
     static JSValue pathAt(JSContext* ctx, JSValueConst, int argc, JSValueConst* argv)

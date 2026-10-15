@@ -317,6 +317,35 @@ TEST(behaviors_repeat_and_follow_along_a_motion_guide)
     CHECK(none.size() == 1 && none.front().none() && why.find("motion guide") != std::string::npos);
 }
 
+TEST(behaviors_follow_sound_by_its_loudness)
+{
+    Engine engine;
+    engine.addBuiltIns();
+    // A beat on frame 10, silence elsewhere.
+    const auto beat = [](int frame) { return frame == 10 ? 1.0 : 0.0; };
+    Applied sound = engine.defaults("sound", 1);
+    sound.params["quiet"] = "0";
+    sound.params["smoothing"] = "2";
+    Moment moment = still(10);
+    moment.loudness = beat;
+    CHECK(near(engine.evaluate({sound}, moment).front().scaleX, 1.3, 1e-9));
+    // It falls away after the beat, and is still before it.
+    moment = still(11);
+    moment.loudness = beat;
+    const double after = engine.evaluate({sound}, moment).front().scaleX;
+    CHECK(after > 1.0 && after < 1.3);
+    moment = still(9);
+    moment.loudness = beat;
+    CHECK(near(engine.evaluate({sound}, moment).front().scaleX, 1.0, 1e-9));
+    // As a jump, delayed a frame; with nothing to hear, nothing moves.
+    sound.params["change"] = "Move Up";
+    sound.params["delay"] = "1";
+    moment = still(11);
+    moment.loudness = beat;
+    CHECK(near(engine.evaluate({sound}, moment).front().y, -30.0, 1e-9));
+    CHECK(engine.evaluate({sound}, still(11)).front().none());
+}
+
 TEST(behaviors_look_at_and_link_to_other_instances_and_controllers)
 {
     Engine engine;

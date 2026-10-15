@@ -2,11 +2,13 @@
 
 #include "behavior_engine.h"
 
+#include <functional>
 #include <string>
 #include <vector>
 
 namespace fla {
 
+class Document;
 class Layer;
 class Frame;
 class Symbol;
@@ -35,6 +37,12 @@ Copies evaluateOn(Engine& engine, const SymbolInstance& instance, const Transfor
 /// \a frame, as its behaviors leave it (their first copy); false when none
 /// is there, or its behaviors leave no copy.
 bool drivenValue(Engine& engine, const Layer& layer, int frame, const std::string& key, double frameRate, double& value);
+
+/// Where behaviors hear sound: how loud \a document's scene sounds on a
+/// frame, from 0 to 1. Set by the app, which can decode sounds; until it
+/// is, behaviors hear silence.
+using Hearing = std::function<double(const Document& document, int frame)>;
+void setHearing(Hearing hearing);
 
 /// A symbol's length in frames.
 int lengthOf(const Symbol* symbol);

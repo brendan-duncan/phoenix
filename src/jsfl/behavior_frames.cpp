@@ -22,6 +22,21 @@ namespace fla::behaviors {
 
 namespace {
 
+Hearing& hearing()
+{
+    static Hearing set;
+    return set;
+}
+
+} // namespace
+
+void setHearing(Hearing given)
+{
+    hearing() = std::move(given);
+}
+
+namespace {
+
 const Frame* keyframeAt(const Layer& layer, int frame)
 {
     for (const Frame* keyframe : layer.frames)
@@ -181,6 +196,7 @@ Copies evaluateOn(Engine& engine, const SymbolInstance& instance, const Transfor
             }
         return false;
     };
+    moment.loudness = [document](int at) { return document && hearing() ? hearing()(*document, at) : 0.0; };
     return engine.evaluate(of(instance), moment, error);
 }
 

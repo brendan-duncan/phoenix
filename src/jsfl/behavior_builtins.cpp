@@ -449,6 +449,40 @@ behavior({
     }
 });
 )JS"},
+        {"sound", R"JS(
+behavior({
+    name: "Follow Sound",
+    description: "Moves with how loud the scene's sound is: grows, jumps, turns, shows or changes frame on the beats.",
+    params: {
+        change: { label: "Change", choices: ["Scale", "Move Up", "Move Right", "Turn", "Opacity", "Symbol Frame"] },
+        amount: { label: "Amount (percent, pixels or degrees)", value: 30, min: 0, max: 1000, step: 1 },
+        frames: { label: "Frames at the loudest (Symbol Frame)", value: 8, min: 1, max: 1000, step: 1 },
+        quiet: { label: "Ignore below (percent)", value: 10, min: 0, max: 99, step: 1 },
+        smoothing: { label: "Fall off (frames)", value: 3, min: 0, max: 48, step: 1 },
+        delay: { label: "Delay (frames)", value: 0, min: -48, max: 48, step: 1 }
+    },
+    evaluate: function (ctx, p) {
+        // The loudness now, falling away slowly after a beat rather than
+        // dropping at once: the loudest of the last few frames, faded.
+        var now = ctx.frame - p.delay;
+        var level = 0;
+        for (var back = 0; back <= p.smoothing; back++) {
+            var heard = ctx.loudness(now - back) * (1 - back / (p.smoothing + 1));
+            level = Math.max(level, heard);
+        }
+        var floor = p.quiet / 100;
+        level = Math.max(0, (level - floor) / (1 - floor));
+        switch (p.change) {
+        case "Move Up": return { y: -level * p.amount };
+        case "Move Right": return { x: level * p.amount };
+        case "Turn": return { rotation: level * p.amount };
+        case "Opacity": return { alpha: Math.min(1, level * p.amount / 100) };
+        case "Symbol Frame": return { frame: Math.round(level * (p.frames - 1)) };
+        default: return { scale: 1 + level * p.amount / 100 };
+        }
+    }
+});
+)JS"},
     };
     return sources;
 }

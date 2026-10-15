@@ -34,6 +34,9 @@ struct Moment
     /// A master controller's value, from 0 to 1; false when there is none
     /// of that name.
     std::function<bool(const std::string& name, double& value)> controller;
+    /// How loud the scene's sound is on a frame, from 0 (silent) to 1 (its
+    /// loudest); null when nothing can hear it.
+    std::function<double(int frame)> loudness;
 };
 
 /// Runs behaviors: JavaScript files of the form

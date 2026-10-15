@@ -580,6 +580,8 @@ public:
     bool highQualityAntiAliasing() const { return _highQualityAntiAliasing; }
 
     void clearCaches();
+    /// Counts up whenever the caches are cleared: something may have changed.
+    unsigned revision() const { return _revision; }
 
     /// Forgets what is cached for one shape (its paths and the brushes in
     /// them, its bounds), for a tool changing it live.

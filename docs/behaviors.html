@@ -60,6 +60,7 @@
     <tr><td>Effector</td><td class="wrap">Changes the copies a Repeat or Particles behavior made: each copy moves, turns, grows, fades or runs its loop on by how near it is to a point, where it is across or down, or its place in the order. Key the point or its reach to sweep the change across the copies.</td></tr>
     <tr><td>Particles</td><td class="wrap">Sends out copies as particles, born at a steady rate from a point or an area: speed and direction with a spread, gravity, turbulence, spin, size from birth to death, fading. A graphic symbol's loop can start as each particle is born. Like everything else, the same frame always shows the same particles.</td></tr>
     <tr><td>Stagger</td><td class="wrap">Runs each copy's graphic loop a few frames after the one before, in order or at random, so copies of one cycle move out of step: a crowd, a field of grass, a wave. Put it after a Repeat behavior.</td></tr>
+    <tr><td>Follow Sound</td><td class="wrap">Moves it with how loud the scene's sound is: it grows, jumps, turns, shows or changes frame on the beats, falling back gently after each. Ignore the quiet parts, and nudge it a frame or two early or late to taste. For lip sync proper, see <a href="sound.html#lip-sync">Lip sync</a>.</td></tr>
   </tbody>
 </table>
 
@@ -187,13 +188,18 @@
     <tr><td><code>keyed</code></td><td class="wrap">What its keys give it now: <code>x</code>, <code>y</code> (its transformation point), <code>rotation</code>, <code>scaleX</code>, <code>scaleY</code> and <code>alpha</code>.</td></tr>
     <tr><td><code>keyedAt(frame)</code></td><td class="wrap">The same on another frame of the run, or <code>null</code>.</td></tr>
     <tr><td><code>random(n)</code>, <code>noise(t, n)</code></td><td class="wrap">A number from 0 to 1, and a smooth one from -1 to 1 that changes with <code>t</code>; both follow the seed and differ from copy to copy, and <code>n</code> picks a separate stream.</td></tr>
+    <tr><td><code>path</code></td><td class="wrap">The motion guide's line, or <code>null</code>: its <code>length</code>, and <code>at(distance)</code>, the <code>x</code>, <code>y</code> and <code>angle</code> there.</td></tr>
+    <tr><td><code>other(name, frame)</code></td><td class="wrap">Another instance on the timeline, by its instance name, as its keys and its own behaviors leave it (on this frame, or <code>frame</code>), or <code>null</code>.</td></tr>
+    <tr><td><code>controller(name)</code></td><td class="wrap">A master controller's value from 0 to 1, or <code>null</code>.</td></tr>
+    <tr><td><code>loudness(frame)</code></td><td class="wrap">How loud the scene's sound is on this frame (or <code>frame</code>), from 0 for silence to 1 for its loudest moment.</td></tr>
+    <tr><td><code>current</code></td><td class="wrap">What the behaviors above it have done so far to this copy.</td></tr>
     <tr><td><code>copy</code>, <code>copies</code></td><td class="wrap">Which copy this is, from 0, and how many there are, after the behaviors above it made them.</td></tr>
   </tbody>
 </table>
 
 <p>It returns what to add: <code>x</code> and <code>y</code> in pixels, <code>rotation</code> in degrees, <code>scale</code>, <code>scaleX</code> and <code>scaleY</code> as factors (1 is no change), <code>alpha</code> as a factor, and <code>frame</code>, the frames a graphic's loop runs on by. Leave out what it does not change. To make copies, return <code>{ copies: [...] }</code>, a list of those, one for each copy. Settings can be keyed in the panel, and <code>p</code> always holds their values on the frame being worked out. A file named like a built-in one (<code>wiggle.js</code>) takes its place.</p>
 
-<p>Behaviors run on their own, away from the document: they cannot read files, the clock or other objects, and one that takes too long is stopped. That keeps every frame the same each time it is drawn. An error is shown in the Output panel, and the behavior adds nothing until it is fixed.</p>
+<p>Behaviors run on their own, away from the document: they cannot read files, the clock or anything but what <code>ctx</code> offers, and one that takes too long is stopped. That keeps every frame the same each time it is drawn. An error is shown in the Output panel, and the behavior adds nothing until it is fixed.</p>
 
 </article>
 </main>
