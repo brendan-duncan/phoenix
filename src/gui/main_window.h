@@ -145,7 +145,7 @@ public:
     void openLessonDocument(const QString& path);
     /// Opens a lesson's result at \a path, untitled as \a name, always in a
     /// tab of its own beside the lesson's document.
-    void openLessonResult(const QString& path, const QString& name);
+    void openLessonFinal(const QString& path, const QString& name);
     /// Help > Tutorials, and starting a lesson by its id.
     void showTutorials();
     void startTutorial(const QString& id);

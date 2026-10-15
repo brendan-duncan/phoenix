@@ -458,11 +458,11 @@ TutorialTarget resolve(MainWindow& window, const QString& spec, bool reveal)
     return target;
 }
 
-bool showResult(MainWindow& window, const TutorialLesson& lesson, QString& error)
+bool showFinal(MainWindow& window, const TutorialLesson& lesson, QString& error)
 {
     if (lesson.finalDocument.isEmpty())
     {
-        error = "this lesson has no result to show";
+        error = "this lesson has no final to show";
         return false;
     }
     // A copy, out of the app, in a folder of its own, as a lesson's start is.
@@ -472,7 +472,7 @@ bool showResult(MainWindow& window, const TutorialLesson& lesson, QString& error
     const QString copy = QDir(folder).filePath(source.fileName());
     if (!copyTree(lesson.finalDocument, copy))
     {
-        error = QString("its result %1 could not be copied").arg(lesson.finalDocument);
+        error = QString("its final %1 could not be copied").arg(lesson.finalDocument);
         return false;
     }
     // Behaviors of one's own the lesson writes live beside the result, in
@@ -486,7 +486,7 @@ bool showResult(MainWindow& window, const TutorialLesson& lesson, QString& error
             if (!QFileInfo::exists(target) && QFile::copy(script.absoluteFilePath(), target))
                 QFile::setPermissions(target, QFile::permissions(target) | QFileDevice::WriteOwner);
         }
-    window.openLessonResult(source.isDir() ? QDir(copy).filePath("DOMDocument.xml") : copy, lesson.title + " (result)");
+    window.openLessonFinal(source.isDir() ? QDir(copy).filePath("DOMDocument.xml") : copy, lesson.title + " (final)");
     return true;
 }
 
@@ -694,11 +694,11 @@ TutorialStepWindow::TutorialStepWindow(QWidget* window)
     _next = new QPushButton("Next", card);
     connect(_next, &QPushButton::clicked, this, &TutorialStepWindow::next);
     bottom->addWidget(_next);
-    _result = new QPushButton("Show Result", card);
-    _result->setToolTip("Open how the lesson turns out, in a tab of its own, to compare with yours");
-    connect(_result, &QPushButton::clicked, this, &TutorialStepWindow::result);
-    _result->hide();
-    layout->addWidget(_result, 0, Qt::AlignLeft);
+    _final = new QPushButton("Show Final", card);
+    _final->setToolTip("Open how the lesson turns out, in a tab of its own, to compare with yours");
+    connect(_final, &QPushButton::clicked, this, &TutorialStepWindow::finalAsked);
+    _final->hide();
+    layout->addWidget(_final, 0, Qt::AlignLeft);
     layout->addLayout(bottom);
 
     const QVariant saved = QSettings().value("tutorials/stepWindow");
@@ -768,9 +768,9 @@ void TutorialStepWindow::paintEvent(QPaintEvent*)
     painter.drawRect(QRectF(rect()).adjusted(1, 1, -1, -1));
 }
 
-void TutorialStepWindow::setResultShown(bool shown)
+void TutorialStepWindow::setFinalShown(bool shown)
 {
-    _result->setVisible(shown);
+    _final->setVisible(shown);
     adjustSize();
 }
 
@@ -891,10 +891,10 @@ TutorialRunner::TutorialRunner(MainWindow* window)
     _stepWindow->hide();
     connect(_stepWindow, &TutorialStepWindow::next, this, &TutorialRunner::next);
     connect(_stepWindow, &TutorialStepWindow::previous, this, &TutorialRunner::previous);
-    connect(_stepWindow, &TutorialStepWindow::result, this, [this]() {
+    connect(_stepWindow, &TutorialStepWindow::finalAsked, this, [this]() {
         QString error;
-        if (!tutorials::showResult(*_window, _lesson, error))
-            _stepWindow->setProblem(QString("The result could not be shown: %1").arg(error));
+        if (!tutorials::showFinal(*_window, _lesson, error))
+            _stepWindow->setProblem(QString("The final could not be shown: %1").arg(error));
     });
     connect(_stepWindow, &TutorialStepWindow::closed, this, [this]() {
         stop();
@@ -948,7 +948,7 @@ bool TutorialRunner::start(const TutorialLesson& lesson, QString& error)
         return false;
     }
     _stepStart.assign(_lesson.steps.size(), 0);
-    _stepWindow->setResultShown(!_lesson.finalDocument.isEmpty());
+    _stepWindow->setFinalShown(!_lesson.finalDocument.isEmpty());
     _running = true;
     _tracker->start();
     connect(qApp, &QGuiApplication::applicationStateChanged, this, &TutorialRunner::track, Qt::UniqueConnection);
@@ -1218,14 +1218,14 @@ TutorialsDialog::TutorialsDialog(QWidget* parent)
     QDialogButtonBox* buttons = new QDialogButtonBox(QDialogButtonBox::Close, this);
     QPushButton* start = buttons->addButton("Start", QDialogButtonBox::AcceptRole);
     start->setEnabled(false);
-    QPushButton* result = buttons->addButton("Show Result", QDialogButtonBox::ActionRole);
+    QPushButton* result = buttons->addButton("Show Final", QDialogButtonBox::ActionRole);
     result->setToolTip("Open how the lesson turns out, without starting it");
     result->setEnabled(false);
     connect(result, &QPushButton::clicked, this, [this]() {
         if (QListWidgetItem* item = _list->currentItem())
         {
             _chosen = item->data(Qt::UserRole).toString();
-            _resultChosen = true;
+            _finalChosen = true;
             accept();
         }
     });

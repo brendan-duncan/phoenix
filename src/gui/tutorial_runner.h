@@ -70,7 +70,7 @@ QStringList checkLessons(MainWindow& window);
 /// Opens a copy of \a lesson's final document in a tab of its own, to see
 /// how the lesson is meant to turn out. False, with \a error saying why,
 /// when it has none or it cannot be opened.
-bool showResult(MainWindow& window, const TutorialLesson& lesson, QString& error);
+bool showFinal(MainWindow& window, const TutorialLesson& lesson, QString& error);
 
 } // namespace tutorials
 
@@ -119,8 +119,8 @@ public:
     void show(const QString& lesson, const TutorialStep& step, int index, int count, bool waits);
     /// A line under the text, for when the target cannot be found.
     void setProblem(const QString& problem);
-    /// Whether Show Result is offered: the lesson has a final document.
-    void setResultShown(bool shown);
+    /// Whether Show Final is offered: the lesson has a final document.
+    void setFinalShown(bool shown);
     /// Puts the window beside \a target (global), clear of it, unless it was
     /// dragged somewhere of the reader's choosing.
     void placeBeside(const QRect& target);
@@ -129,7 +129,7 @@ signals:
     void previous();
     void next();
     void closed();
-    void result();
+    void finalAsked();
 
 protected:
     void mousePressEvent(QMouseEvent* event) override;
@@ -147,7 +147,7 @@ private:
     QLabel* _count = nullptr;
     QPushButton* _previous = nullptr;
     QPushButton* _next = nullptr;
-    QPushButton* _result = nullptr;
+    QPushButton* _final = nullptr;
     QPoint _dragOffset;
     bool _dragging = false;
     bool _placedByHand = false;
@@ -206,12 +206,12 @@ public:
     explicit TutorialsDialog(QWidget* parent = nullptr);
     /// The lesson chosen, by id.
     QString chosen() const { return _chosen; }
-    /// Whether its result was asked for rather than the lesson.
-    bool resultChosen() const { return _resultChosen; }
+    /// Whether its final was asked for rather than the lesson.
+    bool finalChosen() const { return _finalChosen; }
 
 private:
     QListWidget* _list = nullptr;
     QLabel* _summary = nullptr;
     QString _chosen;
-    bool _resultChosen = false;
+    bool _finalChosen = false;
 };

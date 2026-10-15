@@ -1708,7 +1708,7 @@ void MainWindow::openLessonDocument(const QString& path)
         QTimer::singleShot(0, this, [this]() { _phoenixView->zoomToFit(); });
 }
 
-void MainWindow::openLessonResult(const QString& path, const QString& name)
+void MainWindow::openLessonFinal(const QString& path, const QString& name)
 {
     // A tab of its own even beside an untouched lesson document, which
     // the lesson goes on with.
@@ -1740,7 +1740,7 @@ void MainWindow::showTutorials()
     TutorialsDialog dialog(this);
     if (dialog.exec() != QDialog::Accepted || dialog.chosen().isEmpty())
         return;
-    if (!dialog.resultChosen())
+    if (!dialog.finalChosen())
     {
         startTutorial(dialog.chosen());
         return;
@@ -1749,8 +1749,8 @@ void MainWindow::showTutorials()
         if (lesson.id == dialog.chosen())
         {
             QString error;
-            if (!tutorials::showResult(*this, lesson, error))
-                QMessageBox::warning(this, "Tutorials", QString("The result could not be shown: %1").arg(error));
+            if (!tutorials::showFinal(*this, lesson, error))
+                QMessageBox::warning(this, "Tutorials", QString("The final could not be shown: %1").arg(error));
             return;
         }
 }
