@@ -775,6 +775,8 @@ bool TextTool::keyPress(PhoenixView& view, QKeyEvent* event)
     case Qt::Key_End:
         moveTo(total);
         break;
+    case Qt::Key_Tab:
+        return true;
     case Qt::Key_C:
     case Qt::Key_X:
     case Qt::Key_V:
@@ -800,9 +802,8 @@ bool TextTool::keyPress(PhoenixView& view, QKeyEvent* event)
             }
             break;
         }
+        // fall through: a plain letter is typed
         [[fallthrough]];
-    case Qt::Key_Tab:
-        return true;
     case Qt::Key_A:
         if (control)
         {
