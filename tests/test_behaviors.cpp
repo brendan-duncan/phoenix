@@ -1090,3 +1090,51 @@ TEST(adjustment_effects_color_generate_distort_and_wipe)
     CHECK(run("displace", {{"layer", "Nowhere"}}) == image);
     CHECK(comp::effects::layersNeeded({comp::defaults("displace", 1)}, 0).empty());
 }
+
+TEST(mask_edges_and_layer_modes)
+{
+    namespace comp = fla::compositing;
+    fla::Layer layer(nullptr);
+    CHECK(comp::maskEdgeOf(layer).plain() && comp::layerModeOf(layer) == comp::LayerMode::Normal);
+    comp::MaskEdge edge;
+    edge.feather = 12.0;
+    edge.expand = -3.0;
+    edge.invert = true;
+    layer.extraAttributes = comp::withMaskEdge(layer, edge);
+    const comp::MaskEdge read = comp::maskEdgeOf(layer);
+    CHECK(read.feather == 12.0 && read.expand == -3.0 && read.invert);
+    layer.extraAttributes = comp::withMaskEdge(layer, comp::MaskEdge());
+    CHECK(layer.extraAttributes.empty());
+    layer.extraAttributes = comp::withLayerMode(layer, comp::LayerMode::Silhouette);
+    CHECK(comp::layerModeOf(layer) == comp::LayerMode::Silhouette);
+
+    // A 21 by 21 square mask, 7 wide in the middle.
+    std::vector<uint8_t> mask(21 * 21, 0);
+    for (int y = 7; y < 14; ++y)
+        for (int x = 7; x < 14; ++x)
+            mask[static_cast<size_t>(y) * 21 + x] = 255;
+    // Grown by 2: covers from 5 to 15 along the middle row.
+    std::vector<uint8_t> grown = mask;
+    comp::MaskEdge grow;
+    grow.expand = 2.0;
+    comp::shapeMask(grown, 21, 21, grow, 1.0);
+    CHECK(grown[10 * 21 + 5] == 255 && grown[10 * 21 + 4] == 0 && grown[10 * 21 + 15] == 255);
+    // Shrunk by 2: from 9 to 11.
+    std::vector<uint8_t> shrunk = mask;
+    comp::MaskEdge shrink;
+    shrink.expand = -2.0;
+    comp::shapeMask(shrunk, 21, 21, shrink, 1.0);
+    CHECK(shrunk[10 * 21 + 9] == 255 && shrunk[10 * 21 + 8] == 0);
+    // Feathered: the edge between in and out; inverted, the outside in.
+    std::vector<uint8_t> soft = mask;
+    comp::MaskEdge feather;
+    feather.feather = 4.0;
+    comp::shapeMask(soft, 21, 21, feather, 1.0);
+    CHECK(soft[10 * 21 + 7] > 0 && soft[10 * 21 + 7] < 255 && soft[10 * 21 + 10] > soft[10 * 21 + 7] &&
+        soft[10 * 21 + 5] < soft[10 * 21 + 7]);
+    std::vector<uint8_t> inside = mask;
+    comp::MaskEdge flip;
+    flip.invert = true;
+    comp::shapeMask(inside, 21, 21, flip, 1.0);
+    CHECK(inside[0] == 255 && inside[10 * 21 + 10] == 0);
+}

@@ -1066,6 +1066,61 @@ void PhoenixView::drawAdjustmentLayer(QPainter& painter, const fla::Layer* layer
     painter.restore();
 }
 
+bool PhoenixView::drawLayerMode(QPainter& painter, const fla::Layer* layer, fla::compositing::LayerMode mode,
+    fla::LoopType loopType, int firstFrame)
+{
+    auto* canvas = dynamic_cast<QImage*>(painter.device());
+    if (!canvas || canvas->format() != QImage::Format_ARGB32_Premultiplied)
+        return false;
+    QImage art(canvas->size(), QImage::Format_ARGB32_Premultiplied);
+    art.setDevicePixelRatio(canvas->devicePixelRatio());
+    art.fill(Qt::transparent);
+    {
+        QPainter artPainter(&art);
+        artPainter.setRenderHints(painter.renderHints());
+        artPainter.setTransform(painter.transform());
+        drawLayer(artPainter, layer, loopType, firstFrame, nullptr);
+    }
+    QImage changed = canvas->copy();
+    const auto scaled = [](uint32_t p, double k) {
+        uint32_t out = 0;
+        for (int shift = 0; shift < 32; shift += 8)
+            out |= static_cast<uint32_t>(std::lround(((p >> shift) & 0xFF) * k)) << shift;
+        return out;
+    };
+    for (int y = 0; y < changed.height(); ++y)
+    {
+        uint32_t* below = reinterpret_cast<uint32_t*>(changed.scanLine(y));
+        const uint32_t* over = reinterpret_cast<const uint32_t*>(art.constScanLine(y));
+        for (int x = 0; x < changed.width(); ++x)
+        {
+            const double overAlpha = ((over[x] >> 24) & 0xFF) / 255.0;
+            if (mode == fla::compositing::LayerMode::Stencil)
+                below[x] = scaled(below[x], overAlpha);
+            else if (mode == fla::compositing::LayerMode::Silhouette)
+                below[x] = scaled(below[x], 1.0 - overAlpha);
+            else
+            {
+                // The layer over what is there, only as much as it is there.
+                const double belowAlpha = ((below[x] >> 24) & 0xFF) / 255.0;
+                const uint32_t top = scaled(over[x], belowAlpha);
+                const uint32_t kept = scaled(below[x], 1.0 - overAlpha);
+                uint32_t out = 0;
+                for (int shift = 0; shift < 32; shift += 8)
+                    out |= std::min<uint32_t>(255, ((top >> shift) & 0xFF) + ((kept >> shift) & 0xFF)) << shift;
+                out = (out & 0x00FFFFFFu) | (below[x] & 0xFF000000u);
+                below[x] = out;
+            }
+        }
+    }
+    painter.save();
+    painter.resetTransform();
+    painter.setCompositionMode(QPainter::CompositionMode_Source);
+    painter.drawImage(0, 0, changed);
+    painter.restore();
+    return true;
+}
+
 void PhoenixView::drawMattedLayer(QPainter& painter, const fla::Layer* layer, const fla::Layer* source,
     fla::compositing::Matte matte, fla::LoopType loopType, int firstFrame)
 {
@@ -1794,7 +1849,8 @@ void PhoenixView::drawTimeline(QPainter& painter, const fla::Timeline* timeline,
     {
         int top = -1;
         for (size_t i = 0; i < timeline->layers.size() && top < 0; ++i)
-            if (timeline->layers[i] && fla::compositing::isAdjustment(*timeline->layers[i]) &&
+            if (timeline->layers[i] && (fla::compositing::isAdjustment(*timeline->layers[i]) ||
+                    fla::compositing::layerModeOf(*timeline->layers[i]) != fla::compositing::LayerMode::Normal) &&
                 (_drawHidden || timeline->layers[i]->isVisible()))
                 top = static_cast<int>(i);
         if (top >= 0 && _visibleRect.isValid() && !_visibleRect.isEmpty())
@@ -1850,8 +1906,10 @@ void PhoenixView::drawTimeline(QPainter& painter, const fla::Timeline* timeline,
     // are drawn on an image of their own that they can work on, then that
     // image onto the painter.
     if (!_vectorMasks && painter.device() && !_compositing.contains(timeline) &&
-        std::any_of(timeline->layers.begin(), timeline->layers.end(),
-            [](const fla::Layer* layer) { return layer && fla::compositing::isAdjustment(*layer); }))
+        std::any_of(timeline->layers.begin(), timeline->layers.end(), [](const fla::Layer* layer) {
+            return layer && (fla::compositing::isAdjustment(*layer) ||
+                                fla::compositing::layerModeOf(*layer) != fla::compositing::LayerMode::Normal);
+        }))
     {
         // At the device's own resolution, on a high-density screen too.
         const qreal ratio = painter.device()->devicePixelRatioF();
@@ -1975,7 +2033,14 @@ void PhoenixView::drawTimeline(QPainter& painter, const fla::Timeline* timeline,
                         reach = reach.isNull() ? bounds : reach.united(bounds);
                 }
         }
-        const QRect crop = reach.isNull() ? QRect()
+        const fla::compositing::MaskEdge edge = fla::compositing::maskEdgeOf(*layer);
+        if (!reach.isNull())
+        {
+            const double grow = edge.feather + std::max(0.0, edge.expand);
+            reach.adjust(-grow, -grow, grow, grow);
+        }
+        const QRect crop = edge.invert ? deviceRect
+            : reach.isNull() ? QRect()
             : painterTransform.mapRect(reach).adjusted(-2.0, -2.0, 2.0, 2.0).toAlignedRect().intersected(deviceRect);
         if (crop.isEmpty())
         {
@@ -2013,7 +2078,29 @@ void PhoenixView::drawTimeline(QPainter& painter, const fla::Timeline* timeline,
             for (int x = 0; x < coverage.width(); ++x)
                 line[x] = qAlpha(line[x]) >= 128 ? qRgba(255, 255, 255, 255) : qRgba(0, 0, 0, 0);
         }
-        maskPixmap = QPixmap::fromImage(coverage);
+        // Feathered, grown or turned inside out: coverage by degrees.
+        if (!edge.plain())
+        {
+            std::vector<uint8_t> amount(static_cast<size_t>(coverage.width()) * coverage.height());
+            for (int y = 0; y < coverage.height(); ++y)
+            {
+                const QRgb* line = reinterpret_cast<const QRgb*>(coverage.constScanLine(y));
+                for (int x = 0; x < coverage.width(); ++x)
+                    amount[static_cast<size_t>(y) * coverage.width() + x] = static_cast<uint8_t>(qAlpha(line[x]));
+            }
+            fla::compositing::shapeMask(amount, coverage.width(), coverage.height(), edge,
+                std::sqrt(std::fabs(painterTransform.determinant())));
+            for (int y = 0; y < coverage.height(); ++y)
+            {
+                QRgb* line = reinterpret_cast<QRgb*>(coverage.scanLine(y));
+                for (int x = 0; x < coverage.width(); ++x)
+                {
+                    const int a = amount[static_cast<size_t>(y) * coverage.width() + x];
+                    line[x] = qRgba(255, 255, 255, a);
+                }
+            }
+        }
+        maskPixmap = QPixmap::fromImage(coverage.convertToFormat(QImage::Format_ARGB32_Premultiplied));
 
         maskCache[i] = { maskPixmap, crop };
     }
@@ -2060,6 +2147,11 @@ void PhoenixView::drawTimeline(QPainter& painter, const fla::Timeline* timeline,
         std::optional<Faded> faded;
         if (lightTable && !layer->selected)
             faded.emplace(painter, 0.3);
+        // Stencil, Silhouette and Preserve Transparency work on what is
+        // drawn under the layer.
+        const fla::compositing::LayerMode layerMode = fla::compositing::layerModeOf(*layer);
+        if (layerMode != fla::compositing::LayerMode::Normal && drawLayerMode(painter, layer, layerMode, loopType, firstFrame))
+            continue;
         // An adjustment layer: its effects on everything drawn under it.
         if (fla::compositing::isAdjustment(*layer))
         {

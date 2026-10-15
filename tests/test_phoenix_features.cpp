@@ -42,7 +42,7 @@ void writeSample(const fs::path& folder)
         "<DOMStaticText phoenixTextAnimators=\"wave\" phoenixNote=\"true\" phoenixNoteAuthor=\"Sam\" phoenixNoteDone=\"false\"><textRuns><DOMTextRun>"
         "<characters>Fix the arm</characters><textAttrs><DOMTextAttrs face=\"Arial\" size=\"12\" phoenixColor=\"ink\"/>"
         "</textAttrs></DOMTextRun></textRuns></DOMStaticText></elements></DOMFrame></frames></DOMLayer>"
-        "<DOMLayer name=\"Grade\" phoenixMotionBlur=\"true\" phoenixAdjustmentLayer=\"true\" phoenixAdjustments=\"blur\"><frames>"
+        "<DOMLayer name=\"Grade\" phoenixMotionBlur=\"true\" phoenixLayerMode=\"stencil\" phoenixAdjustmentLayer=\"true\" phoenixAdjustments=\"blur\"><frames>"
         "<DOMFrame index=\"0\"><elements/></DOMFrame></frames></DOMLayer>"
         "<DOMLayer name=\"Glow\" phoenixEffect=\"glow\" phoenixTransparency=\"50\" phoenixLineArt=\"Ink\" phoenixMatte=\"alpha\" "
         "phoenixParentScale=\"false\"><frames>"

@@ -43,6 +43,39 @@ bool isAdjustment(const Layer& layer);
 std::vector<behaviors::Applied> effectsOf(const Layer& layer);
 std::vector<std::pair<std::string, std::string>> withAdjustment(const Layer& layer, bool on);
 
+/// A mask layer's edge: how far it is feathered and grown (shrunk, less
+/// than 0), in pixels, and whether it shows what is outside it instead.
+/// Kept in phoenixMaskFeather, phoenixMaskExpand and phoenixMaskInvert.
+struct MaskEdge
+{
+    double feather = 0.0;
+    double expand = 0.0;
+    bool invert = false;
+    bool plain() const { return feather <= 0.0 && expand == 0.0 && !invert; }
+};
+MaskEdge maskEdgeOf(const Layer& layer);
+std::vector<std::pair<std::string, std::string>> withMaskEdge(const Layer& layer, const MaskEdge& edge);
+
+/// How a layer works with what is drawn under it: Stencil shows what is
+/// under only where the layer has art, Silhouette only where it has none,
+/// Preserve Transparency draws the layer only where there is something
+/// under it. Kept in phoenixLayerMode.
+enum class LayerMode
+{
+    Normal,
+    Stencil,
+    Silhouette,
+    Preserve
+};
+LayerMode layerModeOf(const Layer& layer);
+std::vector<std::pair<std::string, std::string>> withLayerMode(const Layer& layer, LayerMode mode);
+const char* layerModeName(LayerMode mode);
+
+/// \a coverage (one byte a pixel, \a width by \a height) with \a edge on
+/// it, \a pixelsPerUnit pixels to a stage pixel: grown or shrunk, softened,
+/// turned inside out.
+void shapeMask(std::vector<uint8_t>& coverage, int width, int height, const MaskEdge& edge, double pixelsPerUnit);
+
 /// The effects an adjustment layer can have, with their settings.
 const std::vector<behaviors::Definition>& definitions();
 const behaviors::Definition* find(const std::string& id);

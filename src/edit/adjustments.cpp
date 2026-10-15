@@ -129,6 +129,120 @@ uint32_t sample(const std::vector<uint32_t>& pixels, int width, int height, doub
 
 } // namespace
 
+MaskEdge maskEdgeOf(const Layer& layer)
+{
+    MaskEdge edge;
+    edge.feather = std::max(0.0, std::atof(attribute(layer, "phoenixMaskFeather").c_str()));
+    edge.expand = std::atof(attribute(layer, "phoenixMaskExpand").c_str());
+    edge.invert = attribute(layer, "phoenixMaskInvert") == "true";
+    return edge;
+}
+
+std::vector<std::pair<std::string, std::string>> withMaskEdge(const Layer& layer, const MaskEdge& edge)
+{
+    Layer copy(nullptr);
+    copy.extraAttributes = layer.extraAttributes;
+    copy.extraAttributes = without(copy, "phoenixMaskFeather");
+    copy.extraAttributes = without(copy, "phoenixMaskExpand");
+    copy.extraAttributes = without(copy, "phoenixMaskInvert");
+    const auto number = [](double v) {
+        char text[32];
+        std::snprintf(text, sizeof(text), "%.10g", v);
+        return std::string(text);
+    };
+    if (edge.feather > 0.0)
+        copy.extraAttributes.emplace_back("phoenixMaskFeather", number(edge.feather));
+    if (edge.expand != 0.0)
+        copy.extraAttributes.emplace_back("phoenixMaskExpand", number(edge.expand));
+    if (edge.invert)
+        copy.extraAttributes.emplace_back("phoenixMaskInvert", "true");
+    return copy.extraAttributes;
+}
+
+LayerMode layerModeOf(const Layer& layer)
+{
+    const std::string value = attribute(layer, "phoenixLayerMode");
+    if (value == "stencil")
+        return LayerMode::Stencil;
+    if (value == "silhouette")
+        return LayerMode::Silhouette;
+    if (value == "preserve")
+        return LayerMode::Preserve;
+    return LayerMode::Normal;
+}
+
+const char* layerModeName(LayerMode mode)
+{
+    switch (mode)
+    {
+    case LayerMode::Stencil: return "stencil";
+    case LayerMode::Silhouette: return "silhouette";
+    case LayerMode::Preserve: return "preserve";
+    case LayerMode::Normal: break;
+    }
+    return "";
+}
+
+std::vector<std::pair<std::string, std::string>> withLayerMode(const Layer& layer, LayerMode mode)
+{
+    std::vector<std::pair<std::string, std::string>> out = without(layer, "phoenixLayerMode");
+    if (mode != LayerMode::Normal)
+        out.emplace_back("phoenixLayerMode", layerModeName(mode));
+    return out;
+}
+
+void shapeMask(std::vector<uint8_t>& coverage, int width, int height, const MaskEdge& edge, double pixelsPerUnit)
+{
+    const size_t count = static_cast<size_t>(width) * static_cast<size_t>(height);
+    if (coverage.size() != count || count == 0)
+        return;
+    const double scale = std::max(1e-6, pixelsPerUnit);
+    // Grown or shrunk a pixel at a time: each step takes the most (to grow)
+    // or least (to shrink) of a pixel's neighbors, squares and crosses in
+    // turn so the edge keeps near round. Rounded to whole pixels.
+    const int steps = static_cast<int>(std::lround(std::fabs(edge.expand * scale)));
+    if (steps > 0)
+    {
+        const bool grow = edge.expand > 0.0;
+        std::vector<uint8_t> next(count);
+        for (int step = 0; step < steps; ++step)
+        {
+            const bool square = step % 2 == 0;
+            for (int y = 0; y < height; ++y)
+                for (int x = 0; x < width; ++x)
+                {
+                    int best = coverage[static_cast<size_t>(y) * width + x];
+                    for (int dy = -1; dy <= 1; ++dy)
+                        for (int dx = -1; dx <= 1; ++dx)
+                        {
+                            if ((dx == 0 && dy == 0) || (!square && dx != 0 && dy != 0))
+                                continue;
+                            const int nx = x + dx, ny = y + dy;
+                            // Outside the picture counts as empty.
+                            const int value = nx < 0 || ny < 0 || nx >= width || ny >= height
+                                ? 0 : coverage[static_cast<size_t>(ny) * width + nx];
+                            best = grow ? std::max(best, value) : std::min(best, value);
+                        }
+                    next[static_cast<size_t>(y) * width + x] = static_cast<uint8_t>(best);
+                }
+            coverage.swap(next);
+        }
+    }
+    const double feather = edge.feather * scale;
+    if (feather >= 0.5)
+    {
+        std::vector<uint32_t> soft(count);
+        for (size_t i = 0; i < count; ++i)
+            soft[i] = static_cast<uint32_t>(coverage[i]) << 24;
+        boxBlur(soft.data(), width, height, feather, feather, 3);
+        for (size_t i = 0; i < count; ++i)
+            coverage[i] = static_cast<uint8_t>((soft[i] >> 24) & 0xFF);
+    }
+    if (edge.invert)
+        for (uint8_t& value : coverage)
+            value = static_cast<uint8_t>(255 - value);
+}
+
 Matte matteOf(const Layer& layer)
 {
     const std::string value = attribute(layer, kMatte);

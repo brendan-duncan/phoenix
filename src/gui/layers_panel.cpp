@@ -1378,6 +1378,22 @@ void LayersPanel::showLayerMenu(QTreeWidgetItem* item, const QPoint& globalPos)
         adjustment->setCheckable(true);
         adjustment->setChecked(fla::compositing::isAdjustment(*layer));
         adjustment->setStatusTip("Blur, color-correct or tint everything below this layer; its settings are in the Behaviors panel");
+        QMenu* modeMenu = menu.addMenu("Layer Mode");
+        const fla::compositing::LayerMode mode = fla::compositing::layerModeOf(*layer);
+        const std::pair<fla::compositing::LayerMode, const char*> modes[] = {{fla::compositing::LayerMode::Normal, "Normal"},
+            {fla::compositing::LayerMode::Stencil, "Stencil (show what is under only where this has art)"},
+            {fla::compositing::LayerMode::Silhouette, "Silhouette (cut what is under out where this has art)"},
+            {fla::compositing::LayerMode::Preserve, "Preserve Transparency (draw only over what is under)"}};
+        for (const auto& [kind, label] : modes)
+        {
+            const QString what = QString("mode:%1").arg(kind == fla::compositing::LayerMode::Normal ? "normal" : fla::compositing::layerModeName(kind));
+            QAction* choice = modeMenu->addAction(label, this, [=]() { emit compositingRequested(layer, what); });
+            choice->setCheckable(true);
+            choice->setChecked(kind == mode);
+        }
+        if (layer->layerType == fla::Layer::Type::Mask)
+            menu.addAction("Mask Edge...", this, [=]() { emit compositingRequested(layer, "maskedge"); })
+                ->setStatusTip("Feather, grow or shrink this mask's edge, or invert it");
         QAction* blur = menu.addAction("Motion Blur", this, [=]() {
             emit compositingRequested(layer, fla::motionblur::on(*layer) ? "motionblur:off" : "motionblur:on");
         });

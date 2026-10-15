@@ -820,6 +820,11 @@ private:
     int _sampleFrame = -1;
     double _subframe = 0.0;
     bool _blurring = false;
+    /// \a layer drawn by its layer mode (Stencil, Silhouette, Preserve
+    /// Transparency) onto what is already drawn; false, drawing nothing,
+    /// when the painter is not drawing on a picture it can work on.
+    bool drawLayerMode(QPainter& painter, const fla::Layer* layer, fla::compositing::LayerMode mode, fla::LoopType loopType,
+        int firstFrame);
     /// \a layer drawn with motion blur, when it has it on and is on the
     /// scene shown; false, drawing nothing, otherwise.
     bool drawBlurredLayer(QPainter& painter, const fla::Layer* layer, fla::LoopType loopType, int firstFrame,

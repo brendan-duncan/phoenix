@@ -42,6 +42,25 @@
   <li>On the stage, a mask masks only while its layer is locked. Unlock it to see and edit the mask's own artwork, with the layers under it shown whole; lock it again to see the result. Exports always mask.</li>
 </ul>
 
+<h3 id="mask-edge">Soft, grown and inverted masks</h3>
+
+<p>Right-click a mask layer and choose <strong>Mask Edge...</strong> to change how it masks: <strong>Feather</strong> fades its edge softly over that many pixels, <strong>Expand</strong> grows it (or shrinks it, below 0) by that many pixels, and <strong>Invert</strong> shows what is outside the mask instead of inside, for a hole cut in a picture or a vignette. The mask's art keeps its shape; the edge is worked out as it draws, on the stage and in every export. Other apps that open the FLA draw the mask hard-edged and not inverted.</p>
+
+<figure>
+  <img src="assets/shots/mg-masks.webp" alt="Five stripes pictures: a soft-edged circle mask, a shrunk inverted mask making a hole, a stencil showing stripes only in a circle, a silhouette cutting a circle out, and a circle with the stripes kept inside it" width="1600" height="180">
+  <figcaption>A feathered mask, a shrunk inverted one, then the layer modes Stencil, Silhouette and Preserve Transparency.</figcaption>
+</figure>
+
+<h3 id="layer-modes">Layer modes</h3>
+
+<p>A layer's right-click menu has <strong>Layer Mode</strong>, for working with everything drawn under the layer rather than a single layer below:</p>
+
+<ul>
+  <li><strong>Stencil</strong> shows what is under the layer only where the layer has art; the layer's own art is not drawn. A shape on top of a whole scene becomes a window onto it.</li>
+  <li><strong>Silhouette</strong> is the reverse: it cuts what is under out where the layer has art.</li>
+  <li><strong>Preserve Transparency</strong> draws the layer only where something is already drawn under it: a texture, a gradient or a light sweep that stays inside the art below.</li>
+</ul>
+
 <h2>Guide layers</h2>
 
 <p>Right-click a layer and choose <strong>Guide</strong> to turn it into a guide layer. Use guide layers for sketches, layout drawings, reference images and notes. They are drawn while you work but left out of every export.</p>

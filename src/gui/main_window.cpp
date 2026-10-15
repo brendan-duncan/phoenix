@@ -211,6 +211,7 @@
 #include <QHBoxLayout>
 #include <QLabel>
 #include <QCheckBox>
+#include <QDoubleSpinBox>
 #include <QTemporaryDir>
 #include <QComboBox>
 #include <QColorDialog>
@@ -3212,6 +3213,50 @@ void MainWindow::setupUI()
                                                                 : fla::compositing::Matte::None;
             after = fla::compositing::withMatte(*layer, matte);
             name = "Track Matte";
+        }
+        else if (what.startsWith("mode:"))
+        {
+            const QString kind = what.mid(5);
+            const fla::compositing::LayerMode mode = kind == "stencil" ? fla::compositing::LayerMode::Stencil
+                : kind == "silhouette"                                 ? fla::compositing::LayerMode::Silhouette
+                : kind == "preserve"                                   ? fla::compositing::LayerMode::Preserve
+                                                                       : fla::compositing::LayerMode::Normal;
+            after = fla::compositing::withLayerMode(*layer, mode);
+            name = "Layer Mode";
+        }
+        else if (what == "maskedge")
+        {
+            const fla::compositing::MaskEdge was = fla::compositing::maskEdgeOf(*layer);
+            QDialog dialog(this);
+            dialog.setWindowTitle("Mask Edge");
+            QFormLayout* form = new QFormLayout(&dialog);
+            QDoubleSpinBox* feather = new QDoubleSpinBox(&dialog);
+            feather->setRange(0.0, 1000.0);
+            feather->setSuffix(" px");
+            feather->setValue(was.feather);
+            feather->setToolTip("How far the edge fades, softly, either side");
+            QDoubleSpinBox* expand = new QDoubleSpinBox(&dialog);
+            expand->setRange(-1000.0, 1000.0);
+            expand->setSuffix(" px");
+            expand->setValue(was.expand);
+            expand->setToolTip("Grows the mask out, or shrinks it in with less than 0");
+            QCheckBox* invert = new QCheckBox("Show what is outside the mask instead", &dialog);
+            invert->setChecked(was.invert);
+            form->addRow("Feather", feather);
+            form->addRow("Expand", expand);
+            form->addRow("Invert", invert);
+            QDialogButtonBox* buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, &dialog);
+            connect(buttons, &QDialogButtonBox::accepted, &dialog, &QDialog::accept);
+            connect(buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
+            form->addRow(buttons);
+            if (dialog.exec() != QDialog::Accepted)
+                return;
+            fla::compositing::MaskEdge edge;
+            edge.feather = feather->value();
+            edge.expand = expand->value();
+            edge.invert = invert->isChecked();
+            after = fla::compositing::withMaskEdge(*layer, edge);
+            name = "Mask Edge";
         }
         else if (what.startsWith("motionblur:"))
         {
