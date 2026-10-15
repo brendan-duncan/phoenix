@@ -22,7 +22,7 @@
 <h2>What carries over</h2>
 
 <ul>
-  <li><strong>Your files.</strong> Phoenix opens FLA and XFL files, and binary FLA files from Flash MX&nbsp;2004 to CS4 (a CS4 file can open with its drawing objects missing), and saves FLA files that Animate opens again. TLF text opens as classic text, as Animate converts it. Data Phoenix does not use itself, such as ActionScript, is kept as it was. Publish settings are read and written by Phoenix's own <a href="export.html#publish">Publish</a>, and the settings it does not use are kept.</li>
+  <li><strong>Your files.</strong> Phoenix opens FLA and XFL files, and binary FLA files from Flash MX&nbsp;2004 to CS4, and saves FLA files that Animate opens again. TLF text opens as classic text, as Animate converts it. Data Phoenix does not use itself, such as ActionScript, is kept as it was. Publish settings are read and written by Phoenix's own <a href="export.html#publish">Publish</a>, and the settings it does not use are kept.</li>
   <li><strong>The drawing model.</strong> Merge and object drawing, primitives, groups, and how strokes and fills interact all behave as you expect.</li>
   <li><strong>The timeline.</strong> Layers, folders, keyframes, classic, shape and motion tweens, eases, masks, guides and motion guides, and layer parenting. In Layer Properties, <strong>Follow parent's</strong> Scale, Skew and Flip can each be turned off for a child layer; see <a href="timeline.html#layer-parenting">Layer parenting</a>.</li>
   <li><strong>Symbols.</strong> Graphics, movie clips and buttons, editing in place, looping options, color effects, blend modes and filters. 9-slice scaling draws on the stage and in exports, also on rotated or skewed instances and those with color effects, filters or blend modes.</li>
@@ -79,7 +79,9 @@
   <dt>Render queue</dt><dd>Renders lined up and run in the background while you work. See <a href="export.html#render-queue">Render queue</a>.</dd>
   <dt>Studio pipeline</dt><dd>Split an episode into shots, link rigs to master files and update every shot, and leave review notes on frames. See <a href="pipeline.html">Shots, assets and review</a>.</dd>
   <dt>Command-line rendering</dt><dd>Render, convert, check and repair, compare versions and process whole folders without opening a window. See <a href="command-line.html">Command line</a> and <a href="version-control.html">Version control</a>.</dd>
-  <dt>Free and open source</dt><dd>On Windows and macOS, with Linux on the way.</dd>
+  <dt>Motion graphics</dt><dd>Behaviors that move instances with no keyframes (wiggle, pulse, loop, jiggle, follow), rings, grids and crowds of copies, particles, shape operators such as Trim Paths, letter-by-letter text animation, track mattes, adjustment layers and templates. All bake to keyframes, and Export FLA for Other Apps writes a copy Animate plays the same way. See <a href="motion-graphics.html">Motion graphics</a>.</dd>
+  <dt>Python and AI assistants</dt><dd>Scripts in Python as well as JSFL, and AI assistants such as Claude that can read and change your document. See <a href="scripting.html">Scripting</a> and <a href="ai-assistants.html">AI assistants</a>.</dd>
+  <dt>Free and open source</dt><dd>On Windows, macOS and Linux.</dd>
 </dl>
 
 <h2>Not in Phoenix yet</h2>
@@ -91,8 +93,8 @@
   <li>Spring simulation on bones (springs are kept). Armatures, boned shapes and warps play, and the Asset Warp tool turns artwork into a new puppet; Animate also stores rendered images of a puppet, which Phoenix does not make, so check a puppet made in Phoenix in Animate before relying on it there.</li>
   <li>Animate's built-in art and pattern brush library. Phoenix's Paint Brush draws art and pattern brushes made from your own graphic symbols; Animate shows those strokes as plain lines.</li>
   <li>Running HTML5 Canvas JavaScript, and the larger parts of ActionScript 3 (interfaces, getters and setters, the drawing API). ActionScript 1 and 2, ActionScript 3 frame scripts with their event listeners, and document and symbol class files run in Test Movie.</li>
-  <li>Setting up and moving 9-slice guides. Guides already in the file work.</li>
-  <li>HTML5 Canvas documents, and publishing to AIR or projectors. Published SWF movies have no sound or ActionScript.</li>
+  <li>Animate's camera layer: a file that has one opens, but its pan and zoom do not play. Phoenix's own camera (<span class="menu-path">Insert &rsaquo; Camera</span>) does.</li>
+  <li>HTML5 Canvas documents, and publishing to AIR or projectors. Published SWF movies have no ActionScript.</li>
 </ul>
 
 </article>

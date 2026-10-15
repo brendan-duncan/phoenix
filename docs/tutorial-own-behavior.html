@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Write your own behavior · Phoenix User Guide</title>
+<meta name="description" content="Write a behavior in JavaScript from an example, see it update as you save, and give it settings of its own.">
+<meta name="keywords" content="tutorial lesson step by step own behavior">
+<link rel="icon" href="assets/img/logo.png">
+<link rel="stylesheet" href="assets/site.css">
+<script>try { const t = localStorage.getItem("phoenix-docs-theme"); if (t) document.documentElement.dataset.theme = t; } catch (e) {}</script>
+<script src="assets/site.js" defer></script>
+</head>
+<body>
+<main>
+<article class="content">
+
+<p class="eyebrow">Tutorials</p>
+
+<h1>Write your own behavior</h1>
+
+<p class="lead">Write a behavior in JavaScript from an example, see it update as you save, and give it settings of its own.</p>
+
+<div class="callout">
+  <span class="label">Try it in Phoenix</span>
+  <p>This page is also a lesson inside Phoenix: choose <span class="menu-path">Help &rsaquo; Tutorials...</span> and start <strong>Write your own behavior</strong>, and Phoenix points at each control as you go. It takes about 10 minutes.</p>
+</div>
+
+<p>To follow along here instead, download the starting document, <a href="assets/tutorials/own-behavior.fla" download>own-behavior.fla</a>, and open it with <span class="menu-path">File &rsaquo; Open...</span>.</p>
+
+<figure class="narrow">
+  <img src="assets/shots/behaviors-add-menu.webp" alt="The Add Behavior menu listing the built-in behaviors, then New Behavior and Open Behaviors Folder" width="145" height="561">
+  <figcaption>New Behavior... is at the bottom of the Add Behavior menu.</figcaption>
+</figure>
+
+<p>The behaviors in the Behaviors panel are small JavaScript files, and you can write your own the same way: a name, its settings, and a function that says how to move the instance on each frame.</p><p>You don't need to know much JavaScript; you will start from a working example.</p>
+
+<h2>1. Select the ball</h2>
+
+<p>Press <kbd>V</kbd> for the Selection tool and click the ball on the stage.</p>
+
+<h2>2. Open the Behaviors panel</h2>
+
+<p>Choose <b>Window &gt; Behaviors</b> if it is not showing. It lists what is on the selection and the settings of each.</p>
+
+<h2>3. Start a new behavior</h2>
+
+<p>Click <b>Add Behavior</b> and choose <b>New Behavior...</b> at the bottom. Call it <i>Drift</i>.</p><p>Phoenix writes an example behavior into your Behaviors folder and opens it in the script editor.</p>
+
+<h2>4. Read the example</h2>
+
+<p>The file calls <code>behavior({...})</code> with:</p><ul><li><code>name</code> and <code>description</code>, as the panel shows them;</li><li><code>params</code>, its settings, each becoming a slider;</li><li><code>evaluate(ctx, p)</code>, run for each frame: <code>ctx</code> says which frame and time it is, <code>p</code> holds the settings.</li></ul><p>It returns what to add to the instance: here <code>x</code> grows with time, and <code>y</code> bobs up and down.</p>
+
+<h2>5. Add it</h2>
+
+<p>Back in Phoenix, click <b>Add Behavior</b> and choose <b>Drift</b>, now in the list. Play: the ball drifts right, bobbing.</p>
+
+<h2>6. Change the code</h2>
+
+<p>In the script editor, change <code>Math.sin(ctx.time * 2)</code> to <code>Math.sin(ctx.time * 6)</code> and save with <kbd>Ctrl</kbd>+<kbd>S</kbd>.</p><p>Phoenix reads the file again as soon as it is saved: the ball bobs faster. An error shows in the Output panel, and the ball stays where its keys put it.</p>
+
+<h2>7. Give it a setting</h2>
+
+<p>Add a setting for how fast it bobs. In <code>params</code>, after <code>bob</code>, add:</p><pre>rate: { label: "Bobs per second", value: 1, min: 0, max: 10, step: 0.1 }</pre><p>and use it: <code>Math.sin(ctx.time * 2 * Math.PI * p.rate)</code>. Save, and a <b>Bobs per second</b> slider appears in the panel.</p>
+
+<h2>What you did</h2>
+
+<p>You wrote a behavior, changed it live, and gave it a setting.</p><p><code>ctx</code> has more: <code>random()</code> and <code>noise()</code> for steady randomness, <code>keyedAt()</code> for the keyed motion on other frames, <code>other()</code> for other instances, <code>loudness()</code> for the soundtrack. Return <code>{copies: [...]}</code> to make copies. See <b>Help</b> and the <i>Behaviors</i> page for the whole list. Your behaviors are in <b>Add Behavior &gt; Open Behaviors Folder</b>.</p>
+
+<p>For everything this tutorial touches on, see <a href="behaviors.html">Behaviors</a>.</p>
+
+</article>
+</main>
+</body>
+</html>

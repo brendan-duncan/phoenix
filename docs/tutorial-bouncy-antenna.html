@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>A bouncy antenna · Phoenix User Guide</title>
+<meta name="description" content="Give an antenna on a moving head a springy sway with the Jiggle behavior, working through layer parenting.">
+<meta name="keywords" content="tutorial lesson step by step bouncy antenna">
+<link rel="icon" href="assets/img/logo.png">
+<link rel="stylesheet" href="assets/site.css">
+<script>try { const t = localStorage.getItem("phoenix-docs-theme"); if (t) document.documentElement.dataset.theme = t; } catch (e) {}</script>
+<script src="assets/site.js" defer></script>
+</head>
+<body>
+<main>
+<article class="content">
+
+<p class="eyebrow">Tutorials</p>
+
+<h1>A bouncy antenna</h1>
+
+<p class="lead">Give an antenna on a moving head a springy sway with the Jiggle behavior, working through layer parenting.</p>
+
+<div class="callout">
+  <span class="label">Try it in Phoenix</span>
+  <p>This page is also a lesson inside Phoenix: choose <span class="menu-path">Help &rsaquo; Tutorials...</span> and start <strong>A bouncy antenna</strong>, and Phoenix points at each control as you go. It takes about 5 minutes.</p>
+</div>
+
+<p>To follow along here instead, download the starting document, <a href="assets/tutorials/bouncy-antenna.fla" download>bouncy-antenna.fla</a>, and open it with <span class="menu-path">File &rsaquo; Open...</span>.</p>
+
+<figure>
+  <img src="assets/shots/mg-jiggle.webp" alt="Four frames of a green head running right with an antenna that trails, overshoots and settles" width="1000" height="411">
+  <figcaption>Jiggle on the antenna.</figcaption>
+</figure>
+
+<p>Secondary motion, the follow-through of loose parts, makes animation feel alive. The <b>Jiggle</b> behavior adds it for you: the part sways and bounces on a spring as whatever carries it moves.</p><p>Here the <i>Antenna</i> layer is parented to the <i>Head</i>, which runs across the stage and back.</p>
+
+<h2>1. Play it</h2>
+
+<p>Press <kbd>Enter</kbd>, or click the play button in the timeline header. The antenna stays stiff as a pole.</p>
+
+<h2>2. Select the antenna</h2>
+
+<p>Press <kbd>Enter</kbd> again to stop. Press <kbd>Home</kbd> to go back to frame 1, then press <kbd>V</kbd> and click the antenna.</p>
+
+<h2>3. Open the Behaviors panel</h2>
+
+<p>Choose <b>Window &gt; Behaviors</b> if it is not showing. It lists what is on the selection and the settings of each.</p>
+
+<h2>4. Add Jiggle</h2>
+
+<p>Click <b>Add Behavior</b> and choose <b>Jiggle</b>.</p>
+
+<h2>5. Play it</h2>
+
+<p>Press <kbd>Enter</kbd>, or click the play button in the timeline header. As the head starts, the antenna lags behind; as it stops, the antenna swings on past and settles.</p>
+
+<h2>6. Make it springier</h2>
+
+<p>Press <kbd>Enter</kbd> again to stop. Set <b>Bounce</b> to 85 for a wobblier antenna, or <b>Springiness</b> to 1 for a slow, heavy sway. Play again to see.</p>
+
+<h2>What you did</h2>
+
+<p>You added follow-through with one behavior. <b>It points</b> says which way the part sticks out from its pivot: Down for a hanging sign or earrings. Jiggle follows its own keys as well as the layers it is parented to.</p><p>As with any behavior, <b>Bake</b> turns it into keyframes.</p>
+
+<p>For everything this tutorial touches on, see <a href="behaviors.html">Behaviors</a>.</p>
+
+</article>
+</main>
+</body>
+</html>

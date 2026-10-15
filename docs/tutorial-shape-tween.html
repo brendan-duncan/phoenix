@@ -1,0 +1,107 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Shape tweens · Phoenix User Guide</title>
+<meta name="description" content="Morph a square into a circle with a shape tween, play it, and steer the morph with shape hints.">
+<meta name="keywords" content="tutorial lesson step by step shape tween">
+<link rel="icon" href="assets/img/logo.png">
+<link rel="stylesheet" href="assets/site.css">
+<script>try { const t = localStorage.getItem("phoenix-docs-theme"); if (t) document.documentElement.dataset.theme = t; } catch (e) {}</script>
+<script src="assets/site.js" defer></script>
+</head>
+<body>
+<main>
+<article class="content">
+
+<p class="eyebrow">Tutorials</p>
+
+<h1>Shape tweens</h1>
+
+<p class="lead">Morph a square into a circle with a shape tween, play it, and steer the morph with shape hints.</p>
+
+<div class="callout">
+  <span class="label">Try it in Phoenix</span>
+  <p>This page is also a lesson inside Phoenix: choose <span class="menu-path">Help &rsaquo; Tutorials...</span> and start <strong>Shape tweens</strong>, and Phoenix points at each control as you go. It takes about 8 minutes.</p>
+</div>
+
+<p>To follow along here instead, start a new document with <span class="menu-path">File &rsaquo; New...</span>: 1280 by 720 pixels at 24 frames per second.</p>
+
+<figure>
+  <img src="assets/shots/timeline-tweens.webp" alt="Timeline rows with lilac classic tween spans, each ending in a keyframe" width="1266" height="195">
+  <figcaption>Tween spans in the timeline.</figcaption>
+</figure>
+
+<p>In this tutorial you will turn a square into a circle with a <b>shape tween</b>. A shape tween morphs one drawn shape into another: its outline, its position and its colors.</p><p>Phoenix has opened a new document for it.</p>
+
+<h2>1. Pick the Rectangle tool</h2>
+
+<p>Press <kbd>R</kbd>, or click the Rectangle tool in the toolbox. It shares a slot with the Oval: press and hold the slot to choose between them.</p>
+
+<h2>2. Draw a square</h2>
+
+<p>Hold <kbd>Shift</kbd> and drag on the left of the stage to draw a square.</p><p>Shape tweens work on shapes, not on symbols or groups, so draw it straight onto the stage as it is.</p>
+
+<h2>3. Go to frame 30</h2>
+
+<p>In the timeline, click the cell under frame <b>30</b>.</p>
+
+<h2>4. Insert a blank keyframe</h2>
+
+<p>Press <kbd>F7</kbd>, or choose <b>Insert &gt; Timeline &gt; Blank Keyframe</b>. The square holds up to frame 29, and frame 30 starts empty, ready for the shape it should become.</p>
+
+<h2>5. Pick the Oval tool</h2>
+
+<p>Press <kbd>O</kbd>, or hold the Rectangle's slot and choose the Oval tool. Pick another fill color too, if you like: colors tween along with the shape.</p>
+
+<h2>6. Draw a circle</h2>
+
+<p>Hold <kbd>Shift</kbd> and drag on the right of the stage to draw a circle.</p>
+
+<h2>7. Make the shape tween</h2>
+
+<p>Right-click any frame between 1 and 29 and choose <b>Shape Tween</b>, or click one and choose <b>Insert &gt; Shape Tween</b>.</p><p>The span turns green with an arrow.</p>
+
+<h2>8. The Frame tab</h2>
+
+<p>With a frame of the tween selected, the Properties panel's <b>Frame</b> tab shows <b>Shape Tween</b> in its <b>Tween</b> list. You can make or remove a tween from that list too, and set its <b>Ease</b> there.</p>
+
+<h2>9. Play it</h2>
+
+<p>Press <kbd>Enter</kbd>, or click the play button in the timeline header. The square slides across and rounds into a circle. Press it again to stop.</p>
+
+<h2>10. Back to frame 1</h2>
+
+<p>Stop playback and click frame <b>1</b>. Shape hints, which steer a morph, go on the first keyframe of a shape tween.</p>
+
+<h2>11. Add a shape hint</h2>
+
+<p>Press <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>H</kbd>, or choose <b>Modify &gt; Shape &gt; Add Shape Hint</b>. A circle lettered <b>a</b> appears in the middle of the square.</p>
+
+<h2>12. Pin it to a corner</h2>
+
+<p>Press <kbd>V</kbd> for the Selection tool, then drag the hint onto the square's top-left corner. Hints on the first keyframe are yellow.</p>
+
+<h2>13. Go to the end keyframe</h2>
+
+<p>Click frame <b>30</b>. The same hint waits there in the middle of the circle.</p>
+
+<h2>14. Say where the corner goes</h2>
+
+<p>Drag the hint onto the top of the circle's outline. The square's top-left corner will now travel to that point as it morphs.</p>
+
+<h2>15. Play it again</h2>
+
+<p>Press <kbd>Enter</kbd> and watch how the corner now sweeps to the top of the circle. Add more hints, up to 26, for more control; <b>Modify &gt; Shape &gt; Remove All Hints</b> clears them.</p>
+
+<h2>What you did</h2>
+
+<p>You morphed a square into a circle with a shape tween and steered it with a shape hint.</p><p>There are more tutorials, such as <i>Motion tweens and the Motion Editor</i> and <i>Masks</i>.</p>
+
+<p>For everything this tutorial touches on, see <a href="tweens.html">Tweens and easing</a>.</p>
+
+</article>
+</main>
+</body>
+</html>

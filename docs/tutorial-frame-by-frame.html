@@ -1,0 +1,125 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Frame-by-frame and onion skinning · Phoenix User Guide</title>
+<meta name="description" content="Draw a bouncing ball one keyframe at a time with F6 and F7, use onion skinning to see the frames around the one you draw, step through it, and play it on a loop.">
+<meta name="keywords" content="tutorial lesson step by step frame by frame">
+<link rel="icon" href="assets/img/logo.png">
+<link rel="stylesheet" href="assets/site.css">
+<script>try { const t = localStorage.getItem("phoenix-docs-theme"); if (t) document.documentElement.dataset.theme = t; } catch (e) {}</script>
+<script src="assets/site.js" defer></script>
+</head>
+<body>
+<main>
+<article class="content">
+
+<p class="eyebrow">Tutorials</p>
+
+<h1>Frame-by-frame and onion skinning</h1>
+
+<p class="lead">Draw a bouncing ball one keyframe at a time with F6 and F7, use onion skinning to see the frames around the one you draw, step through it, and play it on a loop.</p>
+
+<div class="callout">
+  <span class="label">Try it in Phoenix</span>
+  <p>This page is also a lesson inside Phoenix: choose <span class="menu-path">Help &rsaquo; Tutorials...</span> and start <strong>Frame-by-frame and onion skinning</strong>, and Phoenix points at each control as you go. It takes about 8 minutes.</p>
+</div>
+
+<p>To follow along here instead, start a new document with <span class="menu-path">File &rsaquo; New...</span>: 1280 by 720 pixels at 12 frames per second.</p>
+
+<figure>
+  <img src="assets/shots/onion-skin-stage.webp" alt="A spinning square shown with faint copies of earlier frames in blue and later frames in green" width="820" height="330">
+  <figcaption>Onion skinning shows the frames before in blue and after in green.</figcaption>
+</figure>
+
+<p>In this tutorial you will animate a ball bouncing across the stage by drawing it again on each frame, the way hand-drawn animation is made.</p><p>The new document runs at 12 frames per second, so each drawing stays up a little longer.</p>
+
+<h2>1. Pick the Oval tool</h2>
+
+<p>Press <kbd>O</kbd>, or choose the Oval tool from the Rectangle slot.</p>
+
+<h2>2. Frame 1: the ball up high</h2>
+
+<p>Hold <kbd>Shift</kbd> and draw a ball near the top left of the stage. This is the top of its fall.</p>
+
+<h2>3. Go to frame 2</h2>
+
+<p>Click the cell under frame <b>2</b> in the timeline.</p>
+
+<h2>4. A blank keyframe</h2>
+
+<p>Press <kbd>F7</kbd>, or choose <b>Insert &gt; Timeline &gt; Blank Keyframe</b>. Frame 2 is now a keyframe of its own, with nothing on it: the stage is empty.</p>
+
+<h2>5. Turn on onion skinning</h2>
+
+<p>Click this button, or press <kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>O</kbd>. The ball from frame 1 shows faintly, so you can place the next drawing against it. Frames before the playhead show in blue, frames after it in green.</p>
+
+<h2>6. Frame 2: falling</h2>
+
+<p>Draw the ball again, lower down and a little to the right of the faint one.</p>
+
+<h2>7. Go to frame 3</h2>
+
+<p>Click the cell under frame <b>3</b>.</p>
+
+<h2>8. A keyframe with a copy</h2>
+
+<p>This time press <kbd>F6</kbd>, or choose <b>Insert &gt; Timeline &gt; Keyframe</b>. A keyframe starts with a copy of the frame before it, so the ball is already there to move.</p>
+
+<h2>9. Pick the Selection tool</h2>
+
+<p>Press <kbd>V</kbd>.</p>
+
+<h2>10. Frame 3: hitting the ground</h2>
+
+<p>Double-click the ball to select its fill and outline, then drag it down to the bottom of the stage, a little further right.</p>
+
+<h2>11. Squash it (if you like)</h2>
+
+<p>A ball squashes as it lands. Press <kbd>Q</kbd> for the <b>Free Transform</b> tool and drag the handles to make the ball a little wider and shorter.</p><p>Click <b>Next</b> when you are happy with it.</p>
+
+<h2>12. Frame 4: bouncing up</h2>
+
+<p>Click the cell under frame <b>4</b>, then press <kbd>F7</kbd> for a blank keyframe, so you can draw the ball fresh.</p>
+
+<h2>13. Draw the rising ball</h2>
+
+<p>Press <kbd>O</kbd> and draw the ball rising again, up and to the right of where it landed. The onion skin shows the frames before it.</p>
+
+<h2>14. Frame 5: up high again</h2>
+
+<p>Click the cell under frame <b>5</b> and press <kbd>F7</kbd>.</p>
+
+<h2>15. Draw the top of the bounce</h2>
+
+<p>Draw the ball near the top of the stage, further right again.</p>
+
+<h2>16. The onion skin markers</h2>
+
+<p>The markers in the ruler above the frames show which frames the onion skin covers, a few each side of the playhead. Drag a marker to show more frames or fewer. Right-click the onion skin button for more settings.</p>
+
+<h2>17. Back to the start</h2>
+
+<p>Click the <b>Step back</b> button, or press <kbd>,</kbd> (comma), until the playhead is on frame 1.</p>
+
+<h2>18. Step through the drawings</h2>
+
+<p>Now step forward with this button, or <kbd>.</kbd> (period), to frame 3. Flipping between drawings like this is the best way to check the motion.</p><p><kbd>Alt</kbd>+<kbd>.</kbd> and <kbd>Alt</kbd>+<kbd>,</kbd> jump to the next and previous keyframe.</p>
+
+<h2>19. Loop playback</h2>
+
+<p>Click the <b>Loop</b> button, or press <kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>L</kbd>, so playback goes round and round. Drag the ends of the loop range in the ruler to loop only part of the timeline.</p>
+
+<h2>20. Play it</h2>
+
+<p>Press <kbd>Enter</kbd>, or click <b>Play</b>. Turn the onion skin off to see the ball move cleanly. Press <kbd>Enter</kbd> again to stop.</p>
+
+<h2>What you did</h2>
+
+<p>You drew an animation frame by frame, with <kbd>F7</kbd> for empty keyframes and <kbd>F6</kbd> for copies, checked it with onion skinning and stepping, and played it on a loop.</p><p>To keep the ball bouncing, add more keyframes after frame 5. Then try <i>Symbols and editing in place</i>.</p>
+
+</article>
+</main>
+</body>
+</html>

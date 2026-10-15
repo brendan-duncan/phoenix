@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Motion graphics · Phoenix User Guide</title>
+<meta name="description" content="Animation Phoenix works out for you: behaviors, copies and particles, shape operators, letter animators, track mattes, adjustment layers and templates, all tuned from panels and baked to keyframes when you need them.">
+<meta name="keywords" content="motion graphics procedural animation behaviors copies cloner particles shape operators trim paths letter animators text animation track matte adjustment layer templates lower thirds render from data bake export other apps explainer titles">
+<link rel="icon" href="assets/img/logo.png">
+<link rel="stylesheet" href="assets/site.css">
+<script>try { const t = localStorage.getItem("phoenix-docs-theme"); if (t) document.documentElement.dataset.theme = t; } catch (e) {}</script>
+<script src="assets/site.js" defer></script>
+</head>
+<body>
+<main>
+<article class="content">
+
+<p class="eyebrow">Animation</p>
+<h1>Motion graphics</h1>
+<p class="lead">Some animation is better worked out than drawn: a logo that pulses, a crowd hopping out of step, a line drawing itself on, a title arriving letter by letter, sparks, a wipe. Phoenix does these for you, frame after frame, from settings you choose in panels. There is no code to write, and nothing is fixed until you want it to be.</p>
+
+<figure>
+  <img src="assets/shots/behaviors-panel.webp" alt="The Behaviors panel listing Repeat in a Circle and Pulse on a star logo, with the copies, radius, start angle and sweep settings, and the star drawn as a ring of eight copies on the stage" width="1100" height="454">
+  <figcaption>Most of it happens in one panel, <span class="menu-path">Window &rsaquo; Behaviors</span>, which shows what the selection can do.</figcaption>
+</figure>
+
+<h2>What you can do</h2>
+
+<table>
+  <thead><tr><th>To</th><th>Use</th><th>On</th></tr></thead>
+  <tbody>
+    <tr><td class="wrap">Move, turn, scale or fade something by itself: wiggle, oscillate, spin, pulse, blink, loop, follow with lag, jiggle</td><td><a href="behaviors.html">Behaviors</a></td><td>A symbol instance</td></tr>
+    <tr><td class="wrap">Make many from one: rings, rows and grids, along a path, scattered in a shape, a crowd out of step</td><td><a href="behaviors.html#repeat">Repeat behaviors, Effector, Stagger</a></td><td>A symbol instance</td></tr>
+    <tr><td class="wrap">Sparks, snow, bubbles, confetti</td><td><a href="behaviors.html">Particles</a></td><td>A symbol instance</td></tr>
+    <tr><td class="wrap">Follow another object, a master controller's slider, or the loudness of the soundtrack</td><td><a href="behaviors.html">Look At, Link to Object, Link to Controller, Follow Sound</a></td><td>A symbol instance</td></tr>
+    <tr><td class="wrap">Draw a line on or off; make outlines boil, wave, puff up, round off or repeat</td><td><a href="behaviors.html#shape-operators">Shape operators</a></td><td>A drawn shape</td></tr>
+    <tr><td class="wrap">Bring a title in letter by letter, scramble it, wave it, space it out, color or blur its letters</td><td><a href="behaviors.html#text">Letter animators</a></td><td>A text field</td></tr>
+    <tr><td class="wrap">Show a layer through the one above it, soft edges and all; blur, color-correct or tint everything below</td><td><a href="behaviors.html#compositing">Track mattes and adjustment layers</a></td><td>A layer</td></tr>
+    <tr><td class="wrap">Make one design serve many names and colors, and render a movie for each row of a spreadsheet</td><td><a href="symbols.html#templates">Templates</a></td><td>A symbol</td></tr>
+  </tbody>
+</table>
+
+<div class="grid-2">
+<figure>
+  <img src="assets/shots/mg-ring.webp" alt="Eight orange stars in a ring, each turned to follow the circle" width="640" height="480">
+  <figcaption>Repeat in a Circle and Pulse.</figcaption>
+</figure>
+<figure>
+  <img src="assets/shots/mg-particles.webp" alt="A fountain of small yellow sparks rising from a point on a dark blue stage" width="800" height="450">
+  <figcaption>Particles.</figcaption>
+</figure>
+</div>
+
+<figure>
+  <img src="assets/shots/mg-shape-operators.webp" alt="Five shapes changed by Bloat, Round Corners, Pucker, Repeater and Offset Path, and text spaced out, colored and blurred more toward its end" width="900" height="377">
+  <figcaption>Shape operators and a letter animator, each a few settings on art that stays as drawn.</figcaption>
+</figure>
+
+<h2>How it works</h2>
+
+<ul>
+  <li><b>Settings, not keyframes.</b> Each effect has a few settings. Change them and the stage shows the result at once, even while the timeline plays.</li>
+  <li><b>Key the settings</b> when they should change over time: the diamond beside a setting keys it on the frame shown, and Phoenix goes smoothly from each key to the next. A Trim Paths End keyed from 0 to 100 draws a line on; a Repeat radius keyed outward opens a ring. See <a href="behaviors.html#animate-settings">Animate the settings</a>.</li>
+  <li><b>Effects add up</b>, top to bottom in the panel's list, and their order matters: a Wiggle after a Repeat wiggles each copy its own way; before it, the whole ring wiggles together.</li>
+  <li><b>The same every time.</b> Random effects have a seed, so a scene plays, renders and exports the same on every machine.</li>
+  <li><b>Your own behaviors.</b> If something is missing, a behavior is a short JavaScript file; <b>Add Behavior &rsaquo; New Behavior...</b> starts one from an example. See <a href="behaviors.html#your-own">Write your own behavior</a>.</li>
+</ul>
+
+<h2>Keep it live, or bake it</h2>
+
+<p>Everything here is kept in your document as settings, so you can change it until the end. When you need ordinary animation instead:</p>
+
+<ul>
+  <li><b>Bake</b> in the Behaviors panel, or <span class="menu-path">Modify &rsaquo; Timeline &rsaquo; Bake Behaviors to Keyframes</span>, turns the effects on the selection into keyframes you can edit by hand. Undo brings them back.</li>
+  <li>Videos, image sequences, GIFs and SWF movies always show the effects as Phoenix draws them.</li>
+  <li><span class="menu-path">File &rsaquo; Export &rsaquo; Export FLA for Other Apps</span> writes a copy that other apps opening FLA files play the same way: behaviors and operators as keyframes, templates as symbol copies, mattes as masks, adjustment layers as filters. See <a href="behaviors.html#bake">Bake to keyframes</a>.</li>
+</ul>
+
+<h2>Learn it step by step</h2>
+
+<p>Each part has a short lesson, inside Phoenix under <span class="menu-path">Help &rsaquo; Tutorials...</span> and as a page here:</p>
+
+<ul>
+  <li><a href="tutorial-behaviors.html">Motion with behaviors</a> and <a href="tutorial-own-behavior.html">Write your own behavior</a></li>
+  <li><a href="tutorial-crowd.html">A crowd from one cycle</a> and <a href="tutorial-particles.html">Particles</a></li>
+  <li><a href="tutorial-draw-on.html">Draw-on lines</a> and <a href="tutorial-animated-title.html">An animated title</a></li>
+  <li><a href="tutorial-matte-reveal.html">Track mattes and adjustment layers</a></li>
+  <li><a href="tutorial-bouncy-antenna.html">A bouncy antenna</a></li>
+  <li><a href="tutorial-lower-thirds.html">Lower thirds from a template</a></li>
+</ul>
+
+<p>AI assistants can set all of this up too; see <a href="ai-assistants.html">AI assistants</a>.</p>
+
+</article>
+</main>
+</body>
+</html>

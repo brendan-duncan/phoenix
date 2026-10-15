@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Motion tweens and the Motion Editor · Phoenix User Guide</title>
+<meta name="description" content="Send a ball across the sky with a motion tween, bend its motion path, and ease it in the Motion Editor.">
+<meta name="keywords" content="tutorial lesson step by step motion tween">
+<link rel="icon" href="assets/img/logo.png">
+<link rel="stylesheet" href="assets/site.css">
+<script>try { const t = localStorage.getItem("phoenix-docs-theme"); if (t) document.documentElement.dataset.theme = t; } catch (e) {}</script>
+<script src="assets/site.js" defer></script>
+</head>
+<body>
+<main>
+<article class="content">
+
+<p class="eyebrow">Tutorials</p>
+
+<h1>Motion tweens and the Motion Editor</h1>
+
+<p class="lead">Send a ball across the sky with a motion tween, bend its motion path, and ease it in the Motion Editor.</p>
+
+<div class="callout">
+  <span class="label">Try it in Phoenix</span>
+  <p>This page is also a lesson inside Phoenix: choose <span class="menu-path">Help &rsaquo; Tutorials...</span> and start <strong>Motion tweens and the Motion Editor</strong>, and Phoenix points at each control as you go. It takes about 10 minutes.</p>
+</div>
+
+<p>To follow along here instead, download the starting document, <a href="assets/tutorials/motion-tween.fla" download>motion-tween.fla</a>, and open it with <span class="menu-path">File &rsaquo; Open...</span>.</p>
+
+<figure>
+  <img src="assets/shots/tut-start-motion-tween.webp" alt="A pale blue sky over green ground with an orange ball at the left and a yellow sun at the top right" width="800" height="450">
+  <figcaption>The starting document: a ball to send across the sky.</figcaption>
+</figure>
+
+<p>In this tutorial you will send a ball across the sky with a <b>motion tween</b>, bend its path into an arc, and ease it in the <b>Motion Editor</b>.</p><p>The document is ready: the ball is an instance of the <i>Ball</i> symbol, alone on its layer, with the ground on a locked layer below.</p>
+
+<h2>1. Make a motion tween</h2>
+
+<p>Click frame <b>1</b> of the <i>Ball</i> layer, then choose <b>Insert &gt; Motion Tween</b>, or right-click the frame and choose <b>Motion Tween</b>.</p><p>The span turns blue and grows to one second, 24 frames. A motion tween needs a symbol instance or a text block alone on its frame.</p>
+
+<h2>2. Go to frame 24</h2>
+
+<p>Click frame <b>24</b> of the <i>Ball</i> layer, the last frame of the tween.</p>
+
+<h2>3. Move the ball</h2>
+
+<p>Press <kbd>V</kbd> for the Selection tool and drag the ball to the right side of the stage.</p><p>There is no need to add a keyframe first: changing the object inside a motion tween keys it there by itself.</p>
+
+<h2>4. The motion path</h2>
+
+<p>With the ball selected, its <b>motion path</b> shows on the stage: a line with a dot for each frame and a square at each keyframe.</p><p>Drag a dot in the middle of the path, between the squares, upward. The path bends into an arc, and the ball will follow it.</p>
+
+<h2>5. Play it</h2>
+
+<p>Press <kbd>Enter</kbd>, or click the play button in the timeline header. The ball arcs across the sky. Press it again to stop.</p>
+
+<h2>6. Open the Motion Editor</h2>
+
+<p>Choose <b>Window &gt; Motion Editor</b>. It opens as a tab beside the timeline and shows the tween's properties as curves over time.</p>
+
+<h2>7. Pick a property</h2>
+
+<p>Click <b>X</b> in the list on the left. Its curve shows how the ball's position across the stage changes from frame 1 to 24. You can drag the points and their handles to reshape it.</p>
+
+<h2>8. Choose an ease</h2>
+
+<p>Open the <b>Property ease</b> list and choose <b>Sine In Out</b>, or another ease you like. With no point selected, it eases the whole curve.</p><p><b>Tween ease</b> below it eases the whole tween at once, from -100 to 100.</p>
+
+<h2>9. Play it again</h2>
+
+<p>Click the <b>Timeline</b> tab and press <kbd>Enter</kbd>. The ball now starts gently, speeds up across the middle and settles at the end.</p>
+
+<h2>What you did</h2>
+
+<p>You made a motion tween, keyed it by moving the ball, bent its motion path, and eased it in the Motion Editor.</p><p>There are more tutorials, such as <i>Masks</i> and <i>Rigging with layer parenting</i>.</p>
+
+<p>For everything this tutorial touches on, see <a href="tweens.html">Tweens and easing</a>.</p>
+
+</article>
+</main>
+</body>
+</html>

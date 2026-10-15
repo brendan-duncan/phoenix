@@ -1,0 +1,106 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Symbols and editing in place · Phoenix User Guide</title>
+<meta name="description" content="Turn a drawing into a graphic symbol, place it twice, edit it in place and watch both copies change, then tint one and set how a graphic loops.">
+<meta name="keywords" content="tutorial lesson step by step symbols in place">
+<link rel="icon" href="assets/img/logo.png">
+<link rel="stylesheet" href="assets/site.css">
+<script>try { const t = localStorage.getItem("phoenix-docs-theme"); if (t) document.documentElement.dataset.theme = t; } catch (e) {}</script>
+<script src="assets/site.js" defer></script>
+</head>
+<body>
+<main>
+<article class="content">
+
+<p class="eyebrow">Tutorials</p>
+
+<h1>Symbols and editing in place</h1>
+
+<p class="lead">Turn a drawing into a graphic symbol, place it twice, edit it in place and watch both copies change, then tint one and set how a graphic loops.</p>
+
+<div class="callout">
+  <span class="label">Try it in Phoenix</span>
+  <p>This page is also a lesson inside Phoenix: choose <span class="menu-path">Help &rsaquo; Tutorials...</span> and start <strong>Symbols and editing in place</strong>, and Phoenix points at each control as you go. It takes about 7 minutes.</p>
+</div>
+
+<p>To follow along here instead, download the starting document, <a href="assets/tutorials/symbols-in-place.fla" download>symbols-in-place.fla</a>, and open it with <span class="menu-path">File &rsaquo; Open...</span>.</p>
+
+<figure>
+  <img src="assets/shots/tut-start-symbols-in-place.webp" alt="A plain yellow face on a white stage" width="800" height="450">
+  <figcaption>The starting document: a plain face.</figcaption>
+</figure>
+
+<p>In this tutorial you will turn this plain face into a <b>symbol</b>, put two of it on the stage, and give both a face by drawing on just one of them.</p><p>A symbol is drawn once and kept in the Library; each copy on the stage is an <b>instance</b> of it. Change the symbol and every instance changes.</p>
+
+<h2>1. Pick the Selection tool</h2>
+
+<p>Press <kbd>V</kbd>, or click the arrow at the top of the toolbox.</p>
+
+<h2>2. Select the face</h2>
+
+<p>Double-click the yellow face to select its fill and its outline together.</p>
+
+<h2>3. Convert it to a symbol</h2>
+
+<p>Press <kbd>F8</kbd>, or choose <b>Modify &gt; Convert to Symbol</b>. Name it <i>Face</i>, set <b>Type</b> to <b>Graphic</b>, and click <b>OK</b>.</p><p>The face is now an instance, shown with a box around it when selected.</p>
+
+<h2>4. Place a second face</h2>
+
+<p><i>Face</i> is now in the <b>Library</b>. Drag it from the Library onto the right side of the stage to place a second instance.</p><p>You can also press <kbd>Ctrl</kbd>+<kbd>D</kbd> (<b>Edit &gt; Duplicate</b></p>
+
+<h2>5. Edit in place</h2>
+
+<p>Double-click the face on the left. You are now inside the symbol: the rest of the stage is dimmed, and the edit bar above the stage reads <b>Scene 1 &rsaquo; Face</b>.</p>
+
+<h2>6. Pick the Oval tool</h2>
+
+<p>Press <kbd>O</kbd>, and choose a dark fill color with the fill swatch at the bottom of the toolbox.</p>
+
+<h2>7. Draw an eye</h2>
+
+<p>Draw a small oval for the left eye.</p>
+
+<figure>
+  <img src="assets/shots/edit-in-place.webp" alt="A flower character symbol open for editing in place, with the other characters dimmed and the edit bar reading Scene 1 then fLOWER_01" width="1256" height="664">
+  <figcaption>Editing a symbol in place: the rest of the scene dims.</figcaption>
+</figure>
+
+<h2>8. And another</h2>
+
+<p>Draw the right eye. Watch the other face as you let go.</p>
+
+<h2>9. Both faces changed</h2>
+
+<p>The face on the right has eyes too, though you never touched it. Both instances show the same symbol, so editing it once changes them all.</p>
+
+<h2>10. Back to the scene</h2>
+
+<p>Press <kbd>V</kbd> for the Selection tool, then double-click an empty part of the stage. You can also click <b>Scene 1</b> at the left of the edit bar, or press <kbd>Ctrl</kbd>+<kbd>E</kbd>.</p>
+
+<h2>11. Select one face</h2>
+
+<p>Click the face on the right. A single click selects the whole instance; its settings show on the Properties panel's <b>Object</b> tab.</p>
+
+<h2>12. Tint it</h2>
+
+<p>Under <b>Color Effect</b>, open the <b>Style</b> list and choose <b>Tint</b>.</p><p>A color effect belongs to the instance, not the symbol, so only this face changes.</p>
+
+<h2>13. Choose the tint</h2>
+
+<p>Click the <b>Tint</b> swatch to pick the color, and drag the percentage beside it to set how strongly it is applied. <b>Red</b>, <b>Green</b> and <b>Blue</b> set the color by numbers.</p>
+
+<h2>14. Looping</h2>
+
+<p>A graphic symbol's timeline plays in step with the timeline it sits on. The <b>Looping</b> options say how: <b>Loop</b> repeats it, <b>Play Once</b> stops at its end, and <b>Single Frame</b> holds one frame, set by <b>First</b>. Reverse and ping-pong options play it backward.</p><p>Choose <b>Single Frame</b> now. With one frame in <i>Face</i> it looks the same, but on a symbol of mouth shapes or poses, this is how you pick the one to show.</p>
+
+<h2>What you did</h2>
+
+<p>You made a graphic symbol, placed it twice, edited it in place to change both instances, tinted one, and set how it loops.</p><p>Save with <kbd>Ctrl</kbd>+<kbd>S</kbd> if you want to keep it. There are more tutorials; if you have not animated a symbol yet, try <i>Your first animation</i>.</p>
+
+</article>
+</main>
+</body>
+</html>

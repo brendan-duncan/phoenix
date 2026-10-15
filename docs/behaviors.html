@@ -28,6 +28,11 @@
   <li>Set what it offers with the sliders, boxes and lists under the list. The stage shows the result as you drag.</li>
 </ol>
 
+<figure>
+  <img src="assets/shots/behaviors-panel.webp" alt="The Behaviors panel listing Repeat in a Circle and Pulse on a star logo, with the copies, radius, start angle and sweep settings, and the star drawn as a ring of eight copies on the stage" width="1100" height="454">
+  <figcaption>The Behaviors panel with two behaviors on a logo. The settings shown are those of the behavior picked in the list.</figcaption>
+</figure>
+
 <p>Play the timeline, or use Test Movie, to see the motion. Behaviors show the same way on the stage, in Test Movie and in every export.</p>
 
 <ul>
@@ -67,6 +72,11 @@
   </tbody>
 </table>
 
+<figure>
+  <img src="assets/shots/mg-jiggle.webp" alt="Four frames of a green head running right with a red-tipped antenna that leans back as the head speeds up and swings the other way as it turns back" width="1000" height="411">
+  <figcaption>Jiggle on an antenna parented to a moving head: it trails, overshoots and settles with no keys of its own.</figcaption>
+</figure>
+
 <h2 id="animate-settings">Animate the settings</h2>
 
 <p>Any setting can change over time. The small button at the right of a setting keys it on the frame the playhead is on:</p>
@@ -96,6 +106,22 @@
 
 <p>A Repeat behavior draws the instance many times. The behaviors below it in the list then work on every copy, each in its own way: a Wiggle after Repeat in a Circle wiggles each copy differently, and Stagger sets each copy's loop apart. The copies are drawn, played and exported like the instance itself; on the stage, clicking selects the instance through its first copy.</p>
 
+<div class="grid-2">
+<figure>
+  <img src="assets/shots/mg-ring.webp" alt="Eight orange stars in a ring, each turned to follow the circle" width="640" height="480">
+  <figcaption>Repeat in a Circle, eight copies, with Pulse after it.</figcaption>
+</figure>
+<figure>
+  <img src="assets/shots/mg-crowd.webp" alt="Sixty small red figures in five rows, each at a different point of a hop" width="800" height="379">
+  <figcaption>Repeat in a Line or Grid, then Stagger in random order: one hop cycle, sixty hoppers out of step.</figcaption>
+</figure>
+</div>
+
+<figure>
+  <img src="assets/shots/mg-particles.webp" alt="A fountain of small yellow sparks rising from a point on a dark blue stage, slowing, spreading and falling as they fade" width="800" height="450">
+  <figcaption>Particles from one small spark symbol.</figcaption>
+</figure>
+
 <p>Turns and scales happen about the instance's transformation point, the same point the Free Transform tool turns it about.</p>
 
 <p>Behaviors that are random (Wiggle, and Blink set to random) have a <b>Seed</b>. The same seed always gives the same motion, so a scene renders the same every time; <b>New</b> picks another seed for a different motion. Each behavior you add starts with a seed of its own, so two instances given the same behavior do not move in step.</p>
@@ -117,6 +143,21 @@
   </tbody>
 </table>
 
+<figure>
+  <img src="assets/shots/shape-operators-panel.webp" alt="The Behaviors panel titled Operators of the shape, with Trim Paths and its Start, End and Offset settings, and a blue wavy line selected on the stage" width="1100" height="403">
+  <figcaption>With a shape selected, the panel shows its operators.</figcaption>
+</figure>
+
+<figure>
+  <img src="assets/shots/mg-shape-operators.webp" alt="Five shapes: a square puffed out by Bloat, a square with rounded corners, a star sharpened by Pucker, a green square repeated in a curving trail of turning, shrinking copies, and a rectangle grown by Offset Path; beside them text that is spaced out, colored and blurred more toward its end" width="900" height="377">
+  <figcaption>Pucker and Bloat, Round Corners, Repeater and Offset Path, and on the right Animate Letters spacing, coloring and blurring the letters more toward the end.</figcaption>
+</figure>
+
+<figure>
+  <img src="assets/shots/mg-draw-on.webp" alt="Four frames of a blue wavy line: nothing at frame 1, a quarter drawn at frame 12, two thirds at frame 24, all of it at frame 36" width="1000" height="336">
+  <figcaption>Trim Paths with its End keyed from 0 at frame 1 to 100 at frame 36: the line draws itself on.</figcaption>
+</figure>
+
 <p>Operators keep the shape's fill and stroke as they are. Clicking on the stage finds the shape by its outline as drawn.</p>
 
 <h2 id="text">Letter animators</h2>
@@ -136,6 +177,16 @@
   </tbody>
 </table>
 
+<figure>
+  <img src="assets/shots/letter-animators-panel.webp" alt="The Behaviors panel titled Letter animators of the text, with Cascade In and its From, Distance, Each letter takes, Between letters, Wait first and Fade in settings, and the title Hello, Phoenix on the stage" width="1100" height="454">
+  <figcaption>With a text field selected, the panel shows its letter animators.</figcaption>
+</figure>
+
+<figure>
+  <img src="assets/shots/mg-title.webp" alt="Four frames of the title Hello, Phoenix: two letters fading in at frame 3, more at frame 8 and 14, and the whole title at frame 30" width="1000" height="253">
+  <figcaption>Cascade In brings the letters in one after another.</figcaption>
+</figure>
+
 <p>Letters turn and grow about their middles. Several animators add up: Cascade In and then Wave, say, brings the letters in and then keeps them moving.</p>
 
 <h2 id="compositing">Track mattes and adjustment layers</h2>
@@ -146,6 +197,27 @@
   <li><b>Track Matte</b> shows a layer only through the layer just above it. An <b>Alpha Matte</b> shows it where the layer above has art, a <b>Luma Matte</b> where that art is light; the inverted ones show it everywhere else. The layer above becomes the matte and is not drawn itself. Unlike a mask, a matte can be soft (a blurred or faded shape gives a soft edge) and works while you edit, and both layers animate as usual: key the matte's art to make a reveal.</li>
   <li><b>Adjustment Layer</b> makes a layer change everything drawn below it. With nothing selected on the stage, the Behaviors panel shows the current adjustment layer's effects: <b>Add Effect</b> offers <b>Blur</b>, <b>Color Correction</b> (brightness, contrast, saturation and hue) and <b>Tint</b> (toward a color, keeping light and dark), and their settings key like any others. An adjustment layer with no art changes the whole picture; one with art changes only where its art is, fading at soft edges.</li>
 </ul>
+
+<div class="grid-2">
+<figure>
+  <img src="assets/shots/track-matte-menu.webp" alt="A layer's right-click menu with Track Matte open on None, Alpha Matte, Alpha Inverted Matte, Luma Matte and Luma Inverted Matte, and Adjustment Layer below it" width="343" height="402">
+  <figcaption>Track Matte and Adjustment Layer on a layer's right-click menu.</figcaption>
+</figure>
+<figure>
+  <img src="assets/shots/mg-matte.webp" alt="Four frames of a red title card NOW SHOWING appearing from left to right as a bar slides across it" width="1000" height="262">
+  <figcaption>The title shown through an alpha matte: a black bar on the layer above slides across it.</figcaption>
+</figure>
+</div>
+
+<figure>
+  <img src="assets/shots/adjustment-layer.webp" alt="Phoenix with a blurred title on the stage, the timeline showing an adjustment layer on top with a half-filled circle icon and the Title layer with a matte icon, and the Behaviors panel showing the Blur effect of the adjustment layer" width="1200" height="584">
+  <figcaption>An adjustment layer blurring everything under it. Its icon in the timeline is a half-filled circle; a layer shown through a matte has a page with a window in it.</figcaption>
+</figure>
+
+<figure>
+  <img src="assets/shots/mg-adjustment.webp" alt="The red title card twice: plain above, and below blurred and tinted toward blue" width="800" height="421">
+  <figcaption>Above, the layers as drawn; below, with an adjustment layer of Blur and Tint over them.</figcaption>
+</figure>
 
 <p>Both are Phoenix's own: another app opening the FLA file draws the matte layer plainly and the adjustment layer's art as art. Export FLA for Other Apps carries them as far as such apps allow:</p>
 

@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Track mattes and adjustment layers · Phoenix User Guide</title>
+<meta name="description" content="Reveal a title through an animated track matte, then soften the picture with an adjustment layer.">
+<meta name="keywords" content="tutorial lesson step by step matte reveal">
+<link rel="icon" href="assets/img/logo.png">
+<link rel="stylesheet" href="assets/site.css">
+<script>try { const t = localStorage.getItem("phoenix-docs-theme"); if (t) document.documentElement.dataset.theme = t; } catch (e) {}</script>
+<script src="assets/site.js" defer></script>
+</head>
+<body>
+<main>
+<article class="content">
+
+<p class="eyebrow">Tutorials</p>
+
+<h1>Track mattes and adjustment layers</h1>
+
+<p class="lead">Reveal a title through an animated track matte, then soften the picture with an adjustment layer.</p>
+
+<div class="callout">
+  <span class="label">Try it in Phoenix</span>
+  <p>This page is also a lesson inside Phoenix: choose <span class="menu-path">Help &rsaquo; Tutorials...</span> and start <strong>Track mattes and adjustment layers</strong>, and Phoenix points at each control as you go. It takes about 7 minutes.</p>
+</div>
+
+<p>To follow along here instead, download the starting document, <a href="assets/tutorials/matte-reveal.fla" download>matte-reveal.fla</a>, and open it with <span class="menu-path">File &rsaquo; Open...</span>.</p>
+
+<figure>
+  <img src="assets/shots/mg-matte.webp" alt="Four frames of a red title card appearing from left to right as a bar slides across it" width="1000" height="262">
+  <figcaption>The title shown through an alpha matte.</figcaption>
+</figure>
+
+<p>A <b>track matte</b> shows a layer only through the layer above it. Unlike a mask it can be soft, and it shows while you edit. An <b>adjustment layer</b> changes everything below it: blur, color, tint.</p><p>The <i>Reveal</i> layer holds a black bar that slides across the stage; under it is the <i>Title</i>.</p>
+
+<h2>1. Play it</h2>
+
+<p>Press <kbd>Enter</kbd>, or click the play button in the timeline header. The black bar slides across the title.</p>
+
+<h2>2. Use it as a matte</h2>
+
+<p>Press <kbd>Enter</kbd> again to stop. Right-click the <i>Title</i> layer's name and choose <b>Track Matte &gt; Alpha Matte</b>.</p><p>The bar above is no longer drawn: the title shows only where the bar is.</p>
+
+<h2>3. Play it</h2>
+
+<p>Press <kbd>Enter</kbd>, or click the play button in the timeline header. The title is wiped on as the bar slides in.</p>
+
+<figure>
+  <img src="assets/shots/adjustment-layer.webp" alt="Phoenix with a blurred title, an adjustment layer in the timeline and its Blur effect in the Behaviors panel" width="1200" height="584">
+  <figcaption>An adjustment layer blurring what is under it.</figcaption>
+</figure>
+
+<h2>4. Add a layer</h2>
+
+<p>Press <kbd>Enter</kbd> again to stop. Click the <i>Reveal</i> layer's name, then click the <b>New Layer</b> button under the layers, or choose <b>Insert &gt; Timeline &gt; Layer</b>. The new layer goes above it, on top.</p>
+
+<h2>5. Make it an adjustment layer</h2>
+
+<p>Right-click the new layer's name and choose <b>Adjustment Layer</b>. Everything below it blurs, and the Behaviors panel shows its <b>Blur</b> effect.</p>
+
+<h2>6. Set the blur</h2>
+
+<p>Click an empty part of the stage so nothing is selected. Set <b>Radius (pixels)</b> to 2 for a soft glow, or key it from 20 down to 0 for a title that comes into focus.</p>
+
+<h2>7. Color too</h2>
+
+<p>Click <b>Add Effect</b> and choose <b>Tint</b> or <b>Color Correction</b>: a night look, a flashback, a faded picture. Draw a shape on the adjustment layer and the effects apply only under it.</p>
+
+<h2>What you did</h2>
+
+<p>You revealed a title through a track matte and changed the picture with an adjustment layer.</p><p>A <b>Luma Matte</b> uses the light of the layer above instead of its shape: a soft gradient makes a soft wipe.</p>
+
+<p>For everything this tutorial touches on, see <a href="behaviors.html">Behaviors</a>.</p>
+
+</article>
+</main>
+</body>
+</html>

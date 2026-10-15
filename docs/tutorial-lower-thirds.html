@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Lower thirds from a template · Phoenix User Guide</title>
+<meta name="description" content="Fill in a lower-third template&#x27;s name, role and color for each instance, and render one for each row of a spreadsheet.">
+<meta name="keywords" content="tutorial lesson step by step lower thirds">
+<link rel="icon" href="assets/img/logo.png">
+<link rel="stylesheet" href="assets/site.css">
+<script>try { const t = localStorage.getItem("phoenix-docs-theme"); if (t) document.documentElement.dataset.theme = t; } catch (e) {}</script>
+<script src="assets/site.js" defer></script>
+</head>
+<body>
+<main>
+<article class="content">
+
+<p class="eyebrow">Tutorials</p>
+
+<h1>Lower thirds from a template</h1>
+
+<p class="lead">Fill in a lower-third template's name, role and color for each instance, and render one for each row of a spreadsheet.</p>
+
+<div class="callout">
+  <span class="label">Try it in Phoenix</span>
+  <p>This page is also a lesson inside Phoenix: choose <span class="menu-path">Help &rsaquo; Tutorials...</span> and start <strong>Lower thirds from a template</strong>, and Phoenix points at each control as you go. It takes about 7 minutes.</p>
+</div>
+
+<p>To follow along here instead, download the starting document, <a href="assets/tutorials/lower-thirds.fla" download>lower-thirds.fla</a>, and open it with <span class="menu-path">File &rsaquo; Open...</span>.</p>
+
+<figure class="narrow">
+  <img src="assets/shots/template-fields.webp" alt="The Template Fields dialog with a name, a role and a bar color" width="420" height="182">
+  <figcaption>Template Fields for one instance.</figcaption>
+</figure>
+
+<p><i>Lower Third</i> is a template: a symbol whose named parts each instance can fill in. Its dynamic text fields <i>name</i> and <i>role</i> are text fields, and its movie clip <i>bar</i> is a color field.</p>
+
+<h2>1. Select the lower third</h2>
+
+<p>Press <kbd>V</kbd> for the Selection tool and click the lower third on the stage.</p>
+
+<h2>2. Fill it in</h2>
+
+<p>Choose <b>Modify &gt; Symbol &gt; Template Fields...</b> (also on the right-click menu). Type a name and a role, set <b>bar</b> to <code>#30A060</code>, and click <b>OK</b>.</p>
+
+<figure>
+  <img src="assets/shots/mg-lower-thirds.webp" alt="Two lower thirds from one symbol, each with its own name, role and bar color" width="800" height="450">
+  <figcaption>One symbol, two instances.</figcaption>
+</figure>
+
+<h2>3. Another one</h2>
+
+<p>Press <kbd>Ctrl</kbd>+<kbd>D</kbd> to duplicate the instance, drag the copy up the stage, and give it other words and another color. The symbol is the same; each instance keeps its own.</p>
+
+<h2>4. Edit the design once</h2>
+
+<p>Double-click either instance to edit the symbol in place and change its design: move the bar, change the font. Both lower thirds change, each keeping its own words. Go back to the scene when done.</p>
+
+<h2>5. Render from data</h2>
+
+<p>For many at once, save a spreadsheet as CSV: the first row names the fields (<code>file,name,role,bar</code>), and each row after it is one lower third. <b>File &gt; Export &gt; Render from Data...</b> renders the movie once a row.</p>
+
+<h2>What you did</h2>
+
+<p>You filled in a template two ways and saw how one design serves them all. Add behaviors or letter animators to the template, and every version animates the same way. From the command line, <code>Phoenix render --data</code> renders a spreadsheet without opening a window.</p>
+
+<p>For everything this tutorial touches on, see <a href="symbols.html">Symbols and instances</a>.</p>
+
+</article>
+</main>
+</body>
+</html>

@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Masks · Phoenix User Guide</title>
+<meta name="description" content="Shine a spotlight on a picture with a mask layer, then tween the mask to sweep the light across it.">
+<meta name="keywords" content="tutorial lesson step by step masks">
+<link rel="icon" href="assets/img/logo.png">
+<link rel="stylesheet" href="assets/site.css">
+<script>try { const t = localStorage.getItem("phoenix-docs-theme"); if (t) document.documentElement.dataset.theme = t; } catch (e) {}</script>
+<script src="assets/site.js" defer></script>
+</head>
+<body>
+<main>
+<article class="content">
+
+<p class="eyebrow">Tutorials</p>
+
+<h1>Masks</h1>
+
+<p class="lead">Shine a spotlight on a picture with a mask layer, then tween the mask to sweep the light across it.</p>
+
+<div class="callout">
+  <span class="label">Try it in Phoenix</span>
+  <p>This page is also a lesson inside Phoenix: choose <span class="menu-path">Help &rsaquo; Tutorials...</span> and start <strong>Masks</strong>, and Phoenix points at each control as you go. It takes about 8 minutes.</p>
+</div>
+
+<p>To follow along here instead, download the starting document, <a href="assets/tutorials/masks.fla" download>masks.fla</a>, and open it with <span class="menu-path">File &rsaquo; Open...</span>.</p>
+
+<figure>
+  <img src="assets/shots/tut-start-masks.webp" alt="A blue stage with colorful circles, rectangles and a ring" width="800" height="450">
+  <figcaption>The picture the spotlight will reveal.</figcaption>
+</figure>
+
+<p>In this tutorial you will make a spotlight: a circle on a <b>mask</b> layer that lets a picture show through only where it is, then sweeps across it.</p><p>The document is ready: the colorful <i>Picture</i> layer, and an empty <i>Spotlight</i> layer above it.</p>
+
+<h2>1. Pick the Oval tool</h2>
+
+<p>Press <kbd>O</kbd>, or click the Oval tool in the toolbox.</p>
+
+<h2>2. Draw the spotlight</h2>
+
+<p>Make sure the <i>Spotlight</i> layer is the current one, with the pencil beside its name; click its name if not. Then hold <kbd>Shift</kbd> and drag a circle on the left of the stage.</p><p>Its color doesn't matter: a mask only uses the shape of its fills.</p>
+
+<h2>3. Make it a mask</h2>
+
+<p>Right-click the <i>Spotlight</i> layer's name and choose <b>Mask</b>.</p><p>The <i>Picture</i> layer below becomes masked by it, and both layers are locked.</p>
+
+<h2>4. See the result</h2>
+
+<p>The picture now shows only through the circle, and the rest of the stage is empty.</p><p>On the stage a mask masks only while its layer is locked. Unlocked, it shows its own art and the picture whole, so you can edit it. Exports always mask.</p>
+
+<h2>5. Unlock the mask</h2>
+
+<p>Click the lock icon on the <i>Spotlight</i> layer's row to unlock it, so you can animate the circle. Leave the <i>Picture</i> layer locked.</p>
+
+<h2>6. Go to frame 48</h2>
+
+<p>Click frame <b>48</b> of the <i>Spotlight</i> layer, the last frame. At 24 frames per second that is two seconds in.</p>
+
+<h2>7. Insert a keyframe</h2>
+
+<p>Press <kbd>F6</kbd>, or choose <b>Insert &gt; Timeline &gt; Keyframe</b>. Frame 48 starts with a copy of the circle.</p>
+
+<h2>8. Move the spotlight</h2>
+
+<p>Press <kbd>V</kbd> for the Selection tool. Double-click the circle to select all of it, then drag it to the right side of the stage.</p>
+
+<h2>9. Tween the mask</h2>
+
+<p>Click any frame between 1 and 47 on the <i>Spotlight</i> layer, then choose <b>Insert &gt; Shape Tween</b>, or right-click the frame and choose <b>Shape Tween</b>.</p>
+
+<h2>10. Lock it again</h2>
+
+<p>Click the lock icon on the <i>Spotlight</i> row again, so the mask masks on the stage.</p>
+
+<h2>11. Play it</h2>
+
+<p>Press <kbd>Enter</kbd>, or click the play button in the timeline header. The spotlight sweeps across and reveals the picture as it goes.</p>
+
+<h2>What you did</h2>
+
+<p>You made a mask layer, saw how locking it shows the result, and tweened the mask to make a moving spotlight.</p><p>To mask more layers with the same mask, drag them in just under it, or set their type to <b>Masked</b> in <b>Layer Properties</b>. There are more tutorials, such as <i>Rigging with layer parenting</i>.</p>
+
+<p>For everything this tutorial touches on, see <a href="masks-guides.html">Masks and guides</a>.</p>
+
+</article>
+</main>
+</body>
+</html>

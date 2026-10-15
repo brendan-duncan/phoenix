@@ -129,6 +129,17 @@
 
 <p>Select an instance and choose <span class="menu-path">Modify &rsaquo; Symbol &rsaquo; Template Fields...</span> (also on the stage's right-click menu) to fill them in. A field left empty shows what the symbol has. Fields inside nested symbols count too, and an outer instance's values win over an inner one's. Letter animators on a text field animate the words an instance gives it.</p>
 
+<div class="grid-2">
+<figure>
+  <img src="assets/shots/template-fields.webp" alt="The Template Fields dialog with name set to Ada Lovelace, role to Mathematician, and bar (color) to #30A060, with a Pick button" width="420" height="182">
+  <figcaption>Template Fields for one instance of a lower third.</figcaption>
+</figure>
+<figure>
+  <img src="assets/shots/mg-lower-thirds.webp" alt="Two lower thirds on a blue stage from the same symbol: Ada Lovelace, Mathematician with a green bar, and Grace Hopper, Computer scientist with an orange bar" width="800" height="450">
+  <figcaption>One symbol, two instances, each with its own words and color.</figcaption>
+</figure>
+</div>
+
 <p>To make many versions at once, put the values in a spreadsheet saved as CSV: the first row names the fields, and each row after it is one version. A <code>file</code> column names each output. <span class="menu-path">File &rsaquo; Export &rsaquo; Render from Data...</span> renders the movie once a row, as MP4, MOV, GIF or a PNG sequence, every instance's fields filled from the row (an empty cell leaves each instance's own value). The same works from the <a href="command-line.html#render-csv">command line</a>: <code>Phoenix render lower-third.fla --data people.csv --out renders/</code>.</p>
 
 <pre><code>file,name,role,bar

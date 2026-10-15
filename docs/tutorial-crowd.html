@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>A crowd from one cycle · Phoenix User Guide</title>
+<meta name="description" content="Turn one hopping cycle into a crowd with Repeat in a Line or Grid, then put them out of step with Stagger.">
+<meta name="keywords" content="tutorial lesson step by step crowd">
+<link rel="icon" href="assets/img/logo.png">
+<link rel="stylesheet" href="assets/site.css">
+<script>try { const t = localStorage.getItem("phoenix-docs-theme"); if (t) document.documentElement.dataset.theme = t; } catch (e) {}</script>
+<script src="assets/site.js" defer></script>
+</head>
+<body>
+<main>
+<article class="content">
+
+<p class="eyebrow">Tutorials</p>
+
+<h1>A crowd from one cycle</h1>
+
+<p class="lead">Turn one hopping cycle into a crowd with Repeat in a Line or Grid, then put them out of step with Stagger.</p>
+
+<div class="callout">
+  <span class="label">Try it in Phoenix</span>
+  <p>This page is also a lesson inside Phoenix: choose <span class="menu-path">Help &rsaquo; Tutorials...</span> and start <strong>A crowd from one cycle</strong>, and Phoenix points at each control as you go. It takes about 7 minutes.</p>
+</div>
+
+<p>To follow along here instead, download the starting document, <a href="assets/tutorials/crowd.fla" download>crowd.fla</a>, and open it with <span class="menu-path">File &rsaquo; Open...</span>.</p>
+
+<figure>
+  <img src="assets/shots/mg-crowd.webp" alt="Sixty small red figures in five rows, each at a different point of a hop" width="800" height="379">
+  <figcaption>The finished crowd: one hop cycle, sixty hoppers out of step.</figcaption>
+</figure>
+
+<p><i>Hopper</i> is a graphic symbol with a 12-frame hop that loops. In this tutorial one instance of it becomes a whole crowd, with no copying and pasting.</p>
+
+<h2>1. Select the hopper</h2>
+
+<p>Press <kbd>V</kbd> for the Selection tool and click the hopper on the stage.</p>
+
+<h2>2. Open the Behaviors panel</h2>
+
+<p>Choose <b>Window &gt; Behaviors</b> if it is not showing. It lists what is on the selection and the settings of each.</p>
+
+<h2>3. Make a grid of copies</h2>
+
+<p>Click <b>Add Behavior</b> and choose <b>Repeat in a Line or Grid</b>. Five copies stand in a row.</p>
+
+<h2>4. More rows</h2>
+
+<p>Set <b>Copies across</b> to 12 and <b>Rows</b> to 5, and <b>Space across</b> to 90 and <b>Space down</b> to 80: a crowd of sixty.</p>
+
+<h2>5. Play it</h2>
+
+<p>Press <kbd>Enter</kbd>, or click the play button in the timeline header. All sixty hop together, like a drill team.</p>
+
+<h2>6. Put them out of step</h2>
+
+<p>Add <b>Stagger</b>. Each copy now runs its loop a few frames after the one before.</p><p>Tick <b>In random order</b> for a crowd that hops each to its own time.</p>
+
+<h2>7. Shake up the rows</h2>
+
+<p>Add <b>Wiggle</b> too, with a small amount, so no two stand in quite the same place. Each copy wiggles on its own.</p>
+
+<h2>What you did</h2>
+
+<p>One cycle made a crowd. The same works for grass, rain, a stadium or a field of flowers: any graphic with a loop.</p><p><b>Effector</b> changes copies by where they are, for a wave through the crowd; try it next.</p>
+
+<p>For everything this tutorial touches on, see <a href="behaviors.html">Behaviors</a>.</p>
+
+</article>
+</main>
+</body>
+</html>

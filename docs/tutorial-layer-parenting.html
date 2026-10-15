@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Rigging with layer parenting · Phoenix User Guide</title>
+<meta name="description" content="Rig a character&#x27;s arm and hand to its body with layer parenting, pose the rig, and choose what the children take on from their parents.">
+<meta name="keywords" content="tutorial lesson step by step layer parenting">
+<link rel="icon" href="assets/img/logo.png">
+<link rel="stylesheet" href="assets/site.css">
+<script>try { const t = localStorage.getItem("phoenix-docs-theme"); if (t) document.documentElement.dataset.theme = t; } catch (e) {}</script>
+<script src="assets/site.js" defer></script>
+</head>
+<body>
+<main>
+<article class="content">
+
+<p class="eyebrow">Tutorials</p>
+
+<h1>Rigging with layer parenting</h1>
+
+<p class="lead">Rig a character's arm and hand to its body with layer parenting, pose the rig, and choose what the children take on from their parents.</p>
+
+<div class="callout">
+  <span class="label">Try it in Phoenix</span>
+  <p>This page is also a lesson inside Phoenix: choose <span class="menu-path">Help &rsaquo; Tutorials...</span> and start <strong>Rigging with layer parenting</strong>, and Phoenix points at each control as you go. It takes about 8 minutes.</p>
+</div>
+
+<p>To follow along here instead, download the starting document, <a href="assets/tutorials/layer-parenting.fla" download>layer-parenting.fla</a>, and open it with <span class="menu-path">File &rsaquo; Open...</span>.</p>
+
+<figure>
+  <img src="assets/shots/tut-start-layer-parenting.webp" alt="A simple character: a blue body, a head, and a red arm held out with a hand at its end" width="800" height="450">
+  <figcaption>The character to rig: body, arm and hand on layers of their own.</figcaption>
+</figure>
+
+<p>In this tutorial you will rig a simple character with <b>layer parenting</b>: the hand follows the arm and the arm follows the body, the way a forearm follows the upper arm.</p><p>The document is ready: the body, the arm and the hand are symbol instances on layers of their own.</p>
+
+<h2>1. Parent the arm to the body</h2>
+
+<p>Right-click the <i>Arm</i> layer's name and choose <b>Parent Layer &gt; Body</b>.</p><p>Nothing moves yet: the arm stays where it is, but from now on it follows the body.</p>
+
+<h2>2. Parent the hand to the arm</h2>
+
+<p>Right-click the <i>Hand</i> layer's name and choose <b>Parent Layer &gt; Arm</b>. The hand now follows the arm, and through it the body.</p><p>The linked-circles button at the top right of the layer list shows the links as lines, and lets you drag a layer's handle onto its parent instead.</p>
+
+<h2>3. Move the body</h2>
+
+<p>Press <kbd>V</kbd> for the Selection tool and drag the body across the stage. The arm and the hand come along.</p>
+
+<h2>4. Pick the Free Transform tool</h2>
+
+<p>Press <kbd>Q</kbd>, or click the Free Transform tool in the toolbox.</p>
+
+<h2>5. Raise the arm</h2>
+
+<p>Click the arm to select it. Then drag from just outside a corner handle of its box to rotate it, so the arm points up. It turns at the shoulder, where its transformation point is, and the hand turns with it.</p>
+
+<h2>6. Lean the body</h2>
+
+<p>Click the body and rotate it a little the same way. The whole rig leans together: the arm keeps its pose and the hand stays on the end of it.</p>
+
+<h2>7. Scale the body</h2>
+
+<p>With the body selected, drag a corner handle outward to make it bigger. The arm and the hand grow with it, as children take on their parent's scale by default.</p>
+
+<h2>8. Choose what the arm follows</h2>
+
+<p>Right-click the <i>Arm</i> layer's name and choose <b>Properties...</b>. Under <b>Follow parent's</b>, uncheck <b>Scale</b> and click <b>OK</b>.</p><p>A child always follows its parent's position and rotation; <b>Scale</b>, <b>Skew</b> and <b>Flip</b> are yours to choose. The arm may change size on the stage, as it no longer takes on the body's scale.</p>
+
+<h2>9. Scale the body again</h2>
+
+<p>Select the body and scale it again. Now the arm and the hand still move and turn with it, but keep their size.</p>
+
+<h2>What you did</h2>
+
+<p>You rigged a body, arm and hand with layer parenting, posed the rig by moving and rotating the parents, and chose which parts of a parent's transform a child follows.</p><p>To set a layer free, choose <b>Parent Layer &gt; None</b>. There are more tutorials, such as <i>Motion tweens and the Motion Editor</i>.</p>
+
+<p>For everything this tutorial touches on, see <a href="timeline.html">Timeline and layers</a>.</p>
+
+</article>
+</main>
+</body>
+</html>

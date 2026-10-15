@@ -1,0 +1,121 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Merge and object drawing · Phoenix User Guide</title>
+<meta name="description" content="See how shapes drawn in merge mode cut into each other, keep shapes apart with Object Drawing, and use Break Apart and Group to move between the two.">
+<meta name="keywords" content="tutorial lesson step by step merge and object drawing">
+<link rel="icon" href="assets/img/logo.png">
+<link rel="stylesheet" href="assets/site.css">
+<script>try { const t = localStorage.getItem("phoenix-docs-theme"); if (t) document.documentElement.dataset.theme = t; } catch (e) {}</script>
+<script src="assets/site.js" defer></script>
+</head>
+<body>
+<main>
+<article class="content">
+
+<p class="eyebrow">Tutorials</p>
+
+<h1>Merge and object drawing</h1>
+
+<p class="lead">See how shapes drawn in merge mode cut into each other, keep shapes apart with Object Drawing, and use Break Apart and Group to move between the two.</p>
+
+<div class="callout">
+  <span class="label">Try it in Phoenix</span>
+  <p>This page is also a lesson inside Phoenix: choose <span class="menu-path">Help &rsaquo; Tutorials...</span> and start <strong>Merge and object drawing</strong>, and Phoenix points at each control as you go. It takes about 7 minutes.</p>
+</div>
+
+<p>To follow along here instead, start a new document with <span class="menu-path">File &rsaquo; New...</span>: 1280 by 720 pixels at 24 frames per second.</p>
+
+<figure>
+  <img src="assets/shots/merge-drawing.webp" alt="Left: a pink square selected on top of a teal square. Right: after dragging the pink square away, the teal square has a notch cut out of it" width="1716" height="520">
+  <figcaption>Merge drawing: the shape on top cuts into the one under it.</figcaption>
+</figure>
+
+<p>Phoenix has two ways of drawing. In <b>merge</b> mode, shapes on the same layer join up and cut into each other, like wet paint. In <b>Object Drawing</b> mode, each shape stays a separate object.</p><p>In this tutorial you will draw a few overlapping shapes both ways and see the difference.</p>
+
+<h2>1. Start in merge mode</h2>
+
+<p>This is the <b>Object Drawing</b> button. For now it should be off, not highlighted. If it is on, click it or press <kbd>J</kbd>.</p>
+
+<h2>2. Pick the Oval tool</h2>
+
+<p>Press <kbd>O</kbd>, or choose the Oval tool from the Rectangle slot.</p>
+
+<h2>3. Draw a circle</h2>
+
+<p>Hold <kbd>Shift</kbd> and drag on the left of the stage to draw a large circle.</p>
+
+<h2>4. Pick the Rectangle tool</h2>
+
+<p>Press <kbd>R</kbd> for the Rectangle tool. To tell the shapes apart, pick a different fill color with the fill swatch at the bottom of the toolbox.</p>
+
+<h2>5. Overlap the circle</h2>
+
+<p>Draw a rectangle that covers the right side of the circle and reaches past it.</p>
+
+<h2>6. Pick the Selection tool</h2>
+
+<p>Press <kbd>V</kbd>, or click the arrow at the top of the toolbox.</p>
+
+<h2>7. Pull the rectangle away</h2>
+
+<p>The rectangle you just drew is still selected. Drag it down and away from the circle.</p><p>If it is not selected, double-click its fill first: that selects the fill with its outline.</p>
+
+<h2>8. A bite out of the circle</h2>
+
+<p>The circle has a piece missing. Where the rectangle covered it, the rectangle's fill replaced the circle's, and its outline cut the circle's outline. Merge shapes really are one drawing.</p><p>This is handy for sketching and cutting shapes, but easy to do by accident. <kbd>Ctrl</kbd>+<kbd>Z</kbd> undoes it.</p>
+
+<h2>9. Turn on Object Drawing</h2>
+
+<p>Click the <b>Object Drawing</b> button, or press <kbd>J</kbd>, so it is highlighted. New shapes will now each be an object of their own.</p>
+
+<h2>10. Pick the Oval tool again</h2>
+
+<p>Press <kbd>O</kbd>.</p>
+
+<h2>11. Draw a circle object</h2>
+
+<p>With <kbd>Shift</kbd> held, draw a circle on the right of the stage. When you let go it shows a box around it: it is a <b>drawing object</b>.</p>
+
+<h2>12. And a rectangle object</h2>
+
+<p>Press <kbd>R</kbd> and draw a rectangle over the right side of this circle, as before.</p>
+
+<h2>13. Move it away</h2>
+
+<p>Press <kbd>V</kbd>, then drag the rectangle away from the circle. A single click selects a whole object.</p>
+
+<h2>14. Nothing was cut</h2>
+
+<p>This circle is whole. Drawing objects sit on top of one another without merging, like cut-out paper.</p><p>To turn one back into merge artwork, break it apart, as you will do next.</p>
+
+<h2>15. Break it apart</h2>
+
+<p>Click the circle object to select it, then press <kbd>Ctrl</kbd>+<kbd>B</kbd>, or choose <b>Modify &gt; Break Apart</b>. It becomes plain merge artwork again.</p>
+
+<h2>16. Group it</h2>
+
+<p>With the shape still selected, press <kbd>Ctrl</kbd>+<kbd>G</kbd>, or choose <b>Modify &gt; Group</b>.</p><p>A group keeps merge artwork safe from what is drawn around it, like a drawing object, and can hold several things at once. Double-click a group to edit inside it.</p>
+
+<h2>17. Back to merge mode</h2>
+
+<p>Click the <b>Object Drawing</b> button or press <kbd>J</kbd> again, so it is off.</p>
+
+<h2>18. Draw over an object</h2>
+
+<p>Press <kbd>O</kbd> and draw an oval that overlaps the rectangle object you moved, away from the other shapes.</p>
+
+<h2>19. Merge artwork goes underneath</h2>
+
+<p>The oval went <b>under</b> the rectangle, although you drew it last. On a layer, merge artwork always sits below the layer's drawing objects, groups and symbols.</p><p>To put a shape over an object, draw it on a layer above, or make it an object too.</p>
+
+<h2>What you did</h2>
+
+<p>You saw merge shapes cut into each other, kept shapes apart with Object Drawing, and used <b>Break Apart</b> and <b>Group</b> to change one into the other.</p><p>Next, try <i>Frame-by-frame and onion skinning</i> to draw an animation by hand.</p>
+
+</article>
+</main>
+</body>
+</html>
