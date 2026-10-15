@@ -329,14 +329,17 @@ and end point. After `q`/`Q`/`p`/`P` come the quadratic points it was
 approximated with. `)` closes the run, optionally followed by an end point,
 then `;`.
 
-**Phoenix today:**
-- Reads only `edges`, skips `cubics` and doesn't write them back. A save
-  drops the cubic curves, which Animate would need to edit the artwork as
-  cubics again
-- Writes edited cubic geometry into `edges` in the `(...)` form, which
-  Animate's `edges` strings never contain
+Animate writes the start point inside the run (`(873,-1566;...`) or leaves
+it out (`(;...`); across the corpus the short form is about four times as
+common.
 
-Both are open compatibility problems.
+**Phoenix today:**
+- Draws from `edges` and keeps each shape's `cubics` edges as they were
+  read, writing them back in place while the shape's edges are unchanged
+- Writes edited cubic geometry as Animate does: quadratics in `edges`
+  (each cubic split until the quadratics are within half a twip of it), and
+  the cubic in an `<Edge cubics>` of its own after its edge, in the short
+  form
 
 ### Fill styles
 

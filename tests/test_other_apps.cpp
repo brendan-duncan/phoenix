@@ -1,6 +1,7 @@
 #include "test_util.h"
 
 #include "../src/data/shape.h"
+#include "../src/data/edge.h"
 #include "../src/data/document.h"
 #include "../src/data/fla_document.h"
 #include "../src/data/frame.h"
@@ -180,4 +181,43 @@ TEST(other_apps_cut_by_inverted_mattes_and_keep_adjustment_art)
     CHECK(cut->layers.size() == 2 && cut->layers[1]->name == "Picture");
     auto* eraser = static_cast<fla::SymbolInstance*>(cut->layers[0]->frames.front()->elements.front());
     CHECK(eraser->blendMode == "erase" && eraser->symbol->timelines.front()->layers.front()->name == "Spot");
+}
+
+TEST(edited_cubics_save_as_quadratics_and_a_cubics_edge)
+{
+    // A straight edge of a symbol's shape bent into a cubic, as the pen or
+    // the selection tool leaves it, then saved as an XFL folder.
+    const fs::path root = fs::temp_directory_path() / "phoenix_other_apps_tests";
+    writeSample(root / "cubics");
+    FLAParser parser;
+    std::unique_ptr<fla::FLADocument> file(parser.parse((root / "cubics").string()));
+    CHECK(file && file->document);
+    fla::Symbol* bar = file && file->document ? symbolNamed(*file->document, "Bar") : nullptr;
+    CHECK(bar != nullptr);
+    if (!bar)
+        return;
+    auto* shape = static_cast<fla::Shape*>(bar->timelines.front()->layers.front()->frames.front()->elements.front());
+    fla::Edge* edge = shape->edges.front();
+    fla::Path* path = edge->paths.front();
+    CHECK(path->segments.size() >= 2 && path->segments[1]->command == fla::PathSegment::Command::Line);
+    path->segments[1]->command = fla::PathSegment::Command::Cubic;
+    path->segments[1]->points = {fla::Point(100, -50), fla::Point(300, -50), fla::Point(400, 0)};
+    edge->data.clear();
+
+    fs::remove_all(root / "cubics_out");
+    fla::XFLFolderWriter writer;
+    CHECK(writer.write(*file->document, (root / "cubics_out").string()));
+    std::ifstream in(root / "cubics_out" / "LIBRARY" / "Bar.xml", std::ios::binary);
+    const std::string xml((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+    // The edges hold quadratics only; the cubic goes in an edge of its own,
+    // in the form Animate writes: start, then control, control and end in
+    // twips, then the quadratics.
+    const size_t edges = xml.find("edges=\"");
+    CHECK(edges != std::string::npos && xml.find('(', edges) > xml.find('"', edges + 7));
+    CHECK(xml.find("<Edge cubics=\"!0 0(;2000,-1000 6000,-1000 8000,0q0 0Q") != std::string::npos);
+
+    // And it reads back as the same curve.
+    FLAParser again;
+    std::unique_ptr<fla::FLADocument> back(again.parse((root / "cubics_out").string()));
+    CHECK(back && back->document && symbolNamed(*back->document, "Bar"));
 }
