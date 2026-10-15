@@ -13,7 +13,7 @@
     }
     var out = folder + "animate/";
     FLfile.createFolder(out);
-    var names = list.replace(/\r/g, "").split("\n");
+    var names = list.replace(/\r/g, "").split("\n").filter(function (name) { return name.length > 0; });
     var results = [];
     var quote = function (text) {
         return '"' + String(text).replace(/\\/g, "\\\\").replace(/"/g, '\\"') + '"';
