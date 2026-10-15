@@ -303,6 +303,19 @@ behavior({
     }
 });
 )JS"},
+        {"recorded", R"JS(
+behavior({
+    name: "Recorded Motion",
+    description: "A path recorded with Control > Motion Sketch, as keys on how far it moves across and down; change the keys, or record again.",
+    params: {
+        dx: { label: "Across (pixels)", value: 0, min: -100000, max: 100000, step: 0.5 },
+        dy: { label: "Down (pixels)", value: 0, min: -100000, max: 100000, step: 0.5 }
+    },
+    evaluate: function (ctx, p) {
+        return { x: p.dx, y: p.dy };
+    }
+});
+)JS"},
         {"timeremap", R"JS(
 behavior({
     name: "Time Remap",

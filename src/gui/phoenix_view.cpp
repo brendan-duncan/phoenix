@@ -341,7 +341,18 @@ PhoenixView::~PhoenixView()
 
 void PhoenixView::onPlayerFrameChanged(int frame)
 {
-    (void)frame;
+    // Motion Sketch: where the pointer is on this frame. Once round the end
+    // and back to the start, the recording stops.
+    if (_sketching)
+    {
+        if (!_sketch.empty() && frame <= _sketch.back().first)
+        {
+            QMouseEvent release(QEvent::MouseButtonRelease, QPointF(), QPointF(), Qt::LeftButton, Qt::NoButton, Qt::NoModifier);
+            mouseReleaseEvent(&release);
+        }
+        else
+            _sketch.emplace_back(frame, _sketchAt);
+    }
 
     // An animated instance is as big as the frame it shows, so what
     // snapping lines up with is gathered again.
@@ -5455,6 +5466,15 @@ void PhoenixView::drawShape(QPainter& painter, const fla::Shape* shape, const fl
     }
 }
 
+void PhoenixView::beginMotionSketch(std::function<void()> started,
+    std::function<void(const std::vector<std::pair<int, QPointF>>&)> done)
+{
+    _sketchStarted = std::move(started);
+    _sketchDone = std::move(done);
+    setCursor(Qt::CrossCursor);
+    setFocus();
+}
+
 void PhoenixView::pickInstance(std::function<void(fla::SymbolInstance*)> picked)
 {
     _pickInstance = std::move(picked);
@@ -6477,6 +6497,18 @@ void PhoenixView::mousePressEvent(QMouseEvent *event)
         movieMouse(event);
         return;
     }
+    // Motion Sketch: the press starts the movie, and the pointer is recorded.
+    if (_sketchDone && event->button() == Qt::LeftButton && _player)
+    {
+        _sketching = true;
+        _sketchAt = mapToDocument(event->position());
+        _sketch.clear();
+        _sketch.emplace_back(_player->currentFrame(), _sketchAt);
+        if (const auto started = std::move(_sketchStarted))
+            started();
+        _sketchStarted = nullptr;
+        return;
+    }
     // Picking an instance for a link: the click goes to that, not the tool.
     if (_pickInstance && event->button() == Qt::LeftButton)
     {
@@ -6540,6 +6572,11 @@ void PhoenixView::mouseMoveEvent(QMouseEvent *event)
     if (_movie)
     {
         movieMouse(event);
+        return;
+    }
+    if (_sketching)
+    {
+        _sketchAt = mapToDocument(event->position());
         return;
     }
     emit cursorMoved(mapToDocument(event->position()), event->position().toPoint());
@@ -6621,6 +6658,17 @@ void PhoenixView::mouseReleaseEvent(QMouseEvent *event)
     if (_movie)
     {
         movieMouse(event);
+        return;
+    }
+    if (_sketching && event->button() == Qt::LeftButton)
+    {
+        _sketching = false;
+        const auto done = std::move(_sketchDone);
+        _sketchDone = nullptr;
+        unsetCursor();
+        if (done)
+            done(_sketch);
+        _sketch.clear();
         return;
     }
     if (_deformerDrag.instance)

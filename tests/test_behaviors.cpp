@@ -971,6 +971,20 @@ TEST(time_remap_holds_the_frame_keyed)
     CHECK(delta.hold == 3 && !delta.none());
 }
 
+TEST(recorded_motion_moves_by_the_keys_recorded)
+{
+    Engine engine;
+    engine.addBuiltIns();
+    // As Motion Sketch writes it: how far from the press, a key a frame.
+    Applied recorded = engine.defaults("recorded", 1);
+    recorded.params["dx"] = "@0=0.00;1=10.00;2=30.00";
+    recorded.params["dy"] = "@0=0.00;1=-5.00;2=-20.00";
+    const Copies at0 = engine.evaluate({recorded}, still(0));
+    CHECK(near(at0.front().x, 0.0) && near(at0.front().y, 0.0));
+    const Copies at2 = engine.evaluate({recorded}, still(2));
+    CHECK(near(at2.front().x, 30.0) && near(at2.front().y, -20.0));
+}
+
 TEST(shape_operators_dash_and_taper_strokes)
 {
     using fla::shapeops::Line;

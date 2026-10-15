@@ -595,6 +595,11 @@ public:
     /// The next click on the stage picks a symbol instance for \a picked
     /// (null when it misses or Esc is pressed), instead of going to the tool.
     void pickInstance(std::function<void(fla::SymbolInstance*)> picked);
+    /// Motion Sketch: the next press on the stage plays the movie and
+    /// records where the pointer is on each frame until the button comes
+    /// up; \a started plays the movie when the press comes, and then
+    /// \a done has each frame and the place (in the document).
+    void beginMotionSketch(std::function<void()> started, std::function<void(const std::vector<std::pair<int, QPointF>>&)> done);
     /// Values for template fields everywhere in the document, over what
     /// instances give them: a row of data being rendered. Empty for none.
     void setTemplateValues(const fla::templates::Values& values);
@@ -1224,6 +1229,11 @@ private:
     /// adjustment layers.
     QSet<const fla::Timeline*> _compositing;
     std::function<void(fla::SymbolInstance*)> _pickInstance;
+    std::function<void()> _sketchStarted;
+    std::function<void(const std::vector<std::pair<int, QPointF>>&)> _sketchDone;
+    std::vector<std::pair<int, QPointF>> _sketch;
+    bool _sketching = false;
+    QPointF _sketchAt;
     /// The instance named \a name on the timeline being edited, as shown now.
     const fla::SymbolInstance* namedInstanceShown(const std::string& name);
     /// Template values: the document's, then those of the instances being

@@ -7115,6 +7115,11 @@ void MainWindow::setupMenus()
     testMovieAction->setStatusTip("Play the scene with its ActionScript running, so its buttons can be clicked");
     connect(testMovieAction, &QAction::triggered, this, &MainWindow::testMovie);
     controlMenu->addAction(testMovieAction);
+    // Motion Sketch: the selected instance follows a path drawn in time.
+    QAction* sketchAction = new QAction("Motion &Sketch", this);
+    sketchAction->setStatusTip("Press on the stage and move: the movie plays and the selected instance follows where you point");
+    connect(sketchAction, &QAction::triggered, this, &MainWindow::motionSketch);
+    controlMenu->addAction(sketchAction);
     controlMenu->addSeparator();
     const auto addControl = [this, controlMenu](const QString& text, const QKeySequence& key,
                                 std::function<void()> act) {
@@ -15315,6 +15320,59 @@ void MainWindow::showStageMenu(const QPoint& globalPos, const QPointF& documentP
         menu.addAction(_selectAllAction);
     }
     menu.exec(globalPos);
+}
+
+void MainWindow::motionSketch()
+{
+    auto* instance = dynamic_cast<fla::SymbolInstance*>(_selection.single());
+    if (!_phoenixView || !instance)
+    {
+        statusBar()->showMessage("Select one symbol instance to sketch its motion.", 4000);
+        return;
+    }
+    statusBar()->showMessage("Press on the stage and move: the movie plays, and the instance follows where you point until you let go.");
+    // The timeline plays from the press, and stops when the button comes up.
+    const auto playStop = [this](bool play) {
+        TimelinesPanel* panel = _timelineView ? _timelineView->timelines() : nullptr;
+        if (panel && _player && _player->isPlaying() != play)
+            panel->playStop();
+    };
+    _phoenixView->beginMotionSketch([playStop]() { playStop(true); },
+        [this, instance, playStop](const std::vector<std::pair<int, QPointF>>& points) {
+        playStop(false);
+        statusBar()->clearMessage();
+        if (points.size() < 2)
+            return;
+        // How far from where the press began, as keys a frame on the
+        // Recorded Motion behavior, which replaces one recorded before.
+        std::string dx;
+        std::string dy;
+        for (const auto& [frame, at] : points)
+        {
+            const auto add = [frame](std::string& keys, double value) {
+                char text[64];
+                std::snprintf(text, sizeof(text), "%s%d=%.2f", keys.empty() ? "@" : ";", frame, value);
+                keys += text;
+            };
+            add(dx, at.x() - points.front().second.x());
+            add(dy, at.y() - points.front().second.y());
+        }
+        fla::behaviors::Applied recorded = BehaviorLibrary::instance().engine().defaults("recorded", 1);
+        recorded.params["dx"] = dx;
+        recorded.params["dy"] = dy;
+        std::vector<fla::behaviors::Applied> list = fla::behaviors::of(*instance);
+        list.erase(std::remove_if(list.begin(), list.end(), [](const fla::behaviors::Applied& each) { return each.type == "recorded"; }),
+            list.end());
+        list.push_back(recorded);
+        using Attributes = std::vector<std::pair<std::string, std::string>>;
+        const Attributes after = fla::behaviors::withBehaviors(*instance, list);
+        _editContext.commandStack().push(fla::CommandPtr(new fla::SetPropertyCommand<Attributes>(
+            instance->extraAttributes, instance->extraAttributes, after, "Motion Sketch")));
+        _editContext.commandStack().breakMergeChain();
+        _phoenixView->clearCaches();
+        _phoenixView->update();
+        statusBar()->showMessage(QString("Recorded %1 frames of motion.").arg(points.size()), 4000);
+    });
 }
 
 void MainWindow::applyFillToStrokes()
