@@ -60,7 +60,11 @@
 
 <h3>Joint limits</h3>
 
-<p>Click a bone with the Bone tool, without dragging, to set how far the joint at its head may turn. In the <strong>Joint Rotation</strong> dialog, turn on <strong>Constrain</strong> and give the <strong>Min</strong> and <strong>Max</strong> angles, measured from the bone above. When you drag the armature into a pose, a limited joint stops at its limit and the other joints turn further to make up the difference.</p>
+<p>Click a bone with the Bone tool, without dragging, to set how far the joint at its head may turn. In the <strong>Joint Rotation and Spring</strong> dialog, turn on <strong>Constrain</strong> and give the <strong>Min</strong> and <strong>Max</strong> angles, measured from the bone above. When you drag the armature into a pose, a limited joint stops at its limit and the other joints turn further to make up the difference.</p>
+
+<h3 id="springs">Springs</h3>
+
+<p>The same dialog gives a bone a spring, for a tail, an antenna, ears or a ponytail that swings on its own. With <strong>Spring</strong> above None, the bone trails behind as the bones above it move and as its own poses change, swings past and settles back where its pose has it. A low spring swings wide and slow, a high one quick and small; <strong>Damping</strong> says how quickly the swinging dies away, from 0 (it goes on bouncing) to 100 (it settles at once). Springs move the instances of an armature of symbols, the same every time it plays, on the stage, in Test Movie and in exports; the bones themselves show the pose.</p>
 
 <h2>Armature layers</h2>
 

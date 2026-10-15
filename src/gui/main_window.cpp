@@ -196,6 +196,7 @@
 #include <QVBoxLayout>
 #include <QKeySequence>
 #include <QSettings>
+#include <QSpinBox>
 #include <QDir>
 #include <QIcon>
 #include <QPixmap>
@@ -4545,7 +4546,7 @@ void MainWindow::editJointLimits(fla::Frame* frame, size_t child, int joint)
     const fla::JointLimit limit = limits[static_cast<size_t>(joint)];
 
     QDialog dialog(this);
-    dialog.setWindowTitle("Joint Rotation");
+    dialog.setWindowTitle("Joint Rotation and Spring");
     QFormLayout* form = new QFormLayout(&dialog);
     QCheckBox* constrain = new QCheckBox("Constrain", &dialog);
     constrain->setChecked(limit.constrained);
@@ -4568,6 +4569,22 @@ void MainWindow::editJointLimits(fla::Frame* frame, size_t child, int joint)
     form->addRow("Rotation", constrain);
     form->addRow("Min", minimum);
     form->addRow("Max", maximum);
+    // The bone's spring: it trails the motion above it and of its own poses,
+    // overshoots and settles.
+    const fla::BoneSpring spring = armature.spring(joint);
+    QSpinBox* strength = new QSpinBox(&dialog);
+    strength->setRange(0, 100);
+    strength->setValue(static_cast<int>(std::lround(spring.strength)));
+    strength->setSpecialValueText("None");
+    strength->setToolTip("How stiffly the bone springs back to its pose: low swings wide and slow, high quick and small; None for no spring");
+    QSpinBox* damping = new QSpinBox(&dialog);
+    damping->setRange(0, 100);
+    damping->setValue(spring.present ? static_cast<int>(std::lround(spring.damping)) : 30);
+    damping->setToolTip("How quickly its swinging dies away: 0 goes on bouncing, 100 settles at once");
+    damping->setEnabled(strength->value() > 0);
+    connect(strength, &QSpinBox::valueChanged, &dialog, [damping](int value) { damping->setEnabled(value > 0); });
+    form->addRow("Spring", strength);
+    form->addRow("Damping", damping);
     QDialogButtonBox* buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, &dialog);
     connect(buttons, &QDialogButtonBox::accepted, &dialog, &QDialog::accept);
     connect(buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
@@ -4580,6 +4597,12 @@ void MainWindow::editJointLimits(fla::Frame* frame, size_t child, int joint)
     chosen.min = minimum->value() / kDegrees;
     chosen.max = maximum->value() / kDegrees;
     armature.setLimit(joint, chosen);
+    fla::BoneSpring springChosen;
+    springChosen.present = strength->value() > 0;
+    springChosen.strength = strength->value();
+    springChosen.damping = damping->value();
+    if (springChosen.strength != spring.strength || (springChosen.present && springChosen.damping != spring.damping))
+        armature.setSpring(joint, springChosen);
     const std::string before = frame->extraChildren[child];
     const std::string after = armature.xml();
     if (before == after)

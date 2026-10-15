@@ -4,6 +4,7 @@ What changed in each release of Phoenix, newest first.
 
 ## 0.12.0 (Unreleased)
 
+- Bone springs: a bone of an armature of symbols can trail, overshoot and settle as the armature moves, set with Spring and Damping when you click it with the Bone tool
 - Lessons: steps that ask for several settings wait for Next, and the Behaviors panel's Seed box shows its whole number
 - Shape hints steer a shape tween's outline along with its fill, so the two stay together through the morph
 - A mask with a shape tween no longer cuts off between its keyframes

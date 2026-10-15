@@ -254,6 +254,7 @@ IKArmature& IKArmature::operator=(const IKArmature& other)
 
 bool IKArmature::parse(const std::string& xml)
 {
+    _sprung.clear();
     _document.reset(new tinyxml2::XMLDocument);
     _nodes.clear();
     _bendsShape = false;
@@ -538,6 +539,7 @@ std::vector<IKJoint> IKArmature::posedAt(int frame) const
 
 void IKArmature::storeJoints()
 {
+    _sprung.clear();
     const int count = frames();
     std::vector<std::vector<double>> xs(_nodes.size()), ys(_nodes.size()), angles(_nodes.size());
     for (int frame = 0; frame < count; ++frame)
@@ -775,6 +777,19 @@ Transform IKArmature::carried(int joint, const Transform& stored, int frame) con
     double nowAngle = 0.0;
     if (_bendsShape || frame <= 0 || !storedAt(joint, 0, first, firstAngle) || !storedAt(joint, frame, now, nowAngle))
         return stored;
+    // Springs swing the joint from where its poses have it: its sprung
+    // angle, and the registration point that hangs off it.
+    if (hasSprings())
+    {
+        const std::vector<IKJoint> sprung = sprungAt(frame);
+        if (joint >= 0 && static_cast<size_t>(joint) < sprung.size())
+        {
+            nowAngle = sprung[static_cast<size_t>(joint)].angle;
+            const Point offset = rotated(_nodes[static_cast<size_t>(joint)].registration, nowAngle);
+            now = Point(sprung[static_cast<size_t>(joint)].position.x + offset.x,
+                sprung[static_cast<size_t>(joint)].position.y + offset.y);
+        }
+    }
     // Off the first frame's registration point, turned, onto this frame's.
     Transform moved = stored;
     moved.tx -= first.x;
@@ -815,6 +830,117 @@ std::string IKArmature::betweenFrameMatrixList(const std::vector<const Transform
     tinyxml2::XMLPrinter printer(nullptr, true);
     document.Print(&printer);
     return printer.CStr();
+}
+
+void IKArmature::setSpring(int joint, const BoneSpring& spring)
+{
+    if (joint < 0 || static_cast<size_t>(joint) >= _nodes.size())
+        return;
+    tinyxml2::XMLElement* element = _nodes[static_cast<size_t>(joint)].element;
+    for (const char* name : {"springStrength", "springDamping", "strength", "damping"})
+        element->DeleteAttribute(name);
+    if (spring.strength > 0.0)
+    {
+        element->SetAttribute("springStrength", std::clamp(spring.strength, 0.0, 100.0));
+        element->SetAttribute("springDamping", std::clamp(spring.damping, 0.0, 100.0));
+    }
+    _sprung.clear();
+}
+
+bool IKArmature::hasSprings() const
+{
+    if (_bendsShape)
+        return false;
+    for (size_t i = 0; i < _nodes.size(); ++i)
+        if (spring(static_cast<int>(i)).strength > 0.0)
+            return true;
+    return false;
+}
+
+void IKArmature::setFrameRate(double fps)
+{
+    if (fps > 0.0 && fps != _fps)
+    {
+        _fps = fps;
+        _sprung.clear();
+    }
+}
+
+std::vector<IKJoint> IKArmature::sprungAt(int frame) const
+{
+    if (!hasSprings())
+        return jointsAt(frame);
+    const int count = std::max(1, frames());
+    if (_sprung.empty())
+    {
+        // Each joint's spring: how fast it swings (a stiffer one swings
+        // faster and lags less) and how much of each swing it loses.
+        constexpr double kTau = 6.28318530717958647692;
+        std::vector<double> omega(_nodes.size(), 0.0);
+        std::vector<double> zeta(_nodes.size(), 1.0);
+        for (size_t i = 0; i < _nodes.size(); ++i)
+        {
+            const BoneSpring each = spring(static_cast<int>(i));
+            if (each.strength <= 0.0)
+                continue;
+            omega[i] = kTau * (0.5 + 4.5 * std::min(each.strength, 100.0) / 100.0);
+            zeta[i] = 0.05 + 0.9 * std::clamp(each.damping, 0.0, 100.0) / 100.0;
+        }
+        std::vector<double> angle(_nodes.size(), 0.0);
+        std::vector<double> speed(_nodes.size(), 0.0);
+        std::vector<double> target(_nodes.size(), 0.0);
+        constexpr int kSteps = 8;
+        const double dt = 1.0 / (_fps * kSteps);
+        _sprung.assign(static_cast<size_t>(count), {});
+        for (int f = 0; f < count; ++f)
+        {
+            const std::vector<IKJoint> posed = jointsAt(f);
+            std::vector<IKJoint> joints = posed;
+            // Parents come before their children, so each joint hangs off
+            // its parent as the springs have already moved it.
+            for (size_t i = 0; i < joints.size(); ++i)
+            {
+                const int parent = posed[i].parent;
+                if (parent < 0 || static_cast<size_t>(parent) >= i)
+                {
+                    angle[i] = posed[i].angle;
+                    speed[i] = 0.0;
+                    continue;
+                }
+                const IKJoint& above = posed[static_cast<size_t>(parent)];
+                const IKJoint& moved = joints[static_cast<size_t>(parent)];
+                // Its place and turn from its parent, as posed.
+                const Point offset = rotated(Point(posed[i].position.x - above.position.x,
+                    posed[i].position.y - above.position.y), -above.angle);
+                const Point placed = rotated(offset, moved.angle);
+                joints[i].position = Point(moved.position.x + placed.x, moved.position.y + placed.y);
+                double wanted = moved.angle + (posed[i].angle - above.angle);
+                if (omega[i] <= 0.0 || f == 0)
+                {
+                    angle[i] = wanted;
+                    speed[i] = 0.0;
+                    target[i] = wanted;
+                    joints[i].angle = wanted;
+                    continue;
+                }
+                // The nearest turn of the angle wanted, so a pose that
+                // crosses half a turn does not send it the long way round.
+                wanted += kTau * std::round((angle[i] - wanted) / kTau);
+                const double from = target[i];
+                for (int s = 1; s <= kSteps; ++s)
+                {
+                    const double goal = from + (wanted - from) * s / kSteps;
+                    const double pull = omega[i] * omega[i] * (goal - angle[i]) - 2.0 * zeta[i] * omega[i] * speed[i];
+                    speed[i] += pull * dt;
+                    angle[i] += speed[i] * dt;
+                }
+                target[i] = wanted;
+                joints[i].angle = angle[i];
+            }
+            _sprung[static_cast<size_t>(f)] = std::move(joints);
+        }
+    }
+    return _sprung[static_cast<size_t>(std::clamp(frame, 0, count - 1))];
 }
 
 BoneSpring IKArmature::spring(int joint) const

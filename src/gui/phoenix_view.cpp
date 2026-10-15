@@ -2240,6 +2240,9 @@ const PhoenixView::CachedArmature* PhoenixView::symbolArmatureOf(const fla::Fram
             entry.xml = *xml;
             entry.joints.clear();
             entry.armature = armature->parse(*xml) && !armature->bendsShape() && armature->frames() > 1 ? armature : nullptr;
+            // Springs swing at the document's own pace.
+            if (entry.armature && _flaDocument && _flaDocument->document)
+                armature->setFrameRate(_flaDocument->document->frameRate);
             for (int joint = 0; entry.armature && joint < static_cast<int>(armature->jointsAt(0).size()); ++joint)
             {
                 const std::string reference = armature->referenceOf(joint);

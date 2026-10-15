@@ -75,8 +75,10 @@ struct BoneWeight
 /// number (see shapeAnchors); a point with none stays where it is.
 using ShapeBinding = std::vector<std::vector<BoneWeight>>;
 
-/// A bone's spring, as a node may carry one: how strongly it pulls back to
-/// its pose and how quickly that dies away. Kept, not simulated.
+/// A bone's spring, as a node may carry one (0 to 100 each): how stiffly it
+/// pulls back to its pose, 0 for no spring at all, and how quickly its
+/// swinging dies away. With a spring, the bone lags behind the motion of the
+/// bones above it and of its own poses, overshoots and settles (see sprungAt).
 struct BoneSpring
 {
     bool present = false;
@@ -139,6 +141,21 @@ public:
     /// its instances follow (see carried).
     std::vector<IKJoint> shownAt(int frame) const;
 
+    /// The joints \a frame frames into the span with their springs at work:
+    /// from the root down, each joint with a spring turns toward the angle
+    /// its pose gives it from its parent as the parent now is, on a damped
+    /// spring, so it trails, overshoots and settles; a joint without one
+    /// keeps its pose from its parent. The stored joints (jointsAt) when no
+    /// joint has a spring or the armature bends a shape. Worked out for the
+    /// whole span at once and kept until the armature changes.
+    std::vector<IKJoint> sprungAt(int frame) const;
+
+    /// Whether any joint has a spring that moves it.
+    bool hasSprings() const;
+
+    /// The frame rate springs are worked out at (24 unless set).
+    void setFrameRate(double fps);
+
     /// Where the instance a joint of an armature of symbols moves shows \a
     /// frame frames into the span, given \a stored, its matrix as saved,
     /// which is where the span's first frame has it. It turns with its joint
@@ -188,6 +205,9 @@ public:
     /// A joint's spring, read from its node (springStrength and
     /// springDamping, or strength and damping).
     BoneSpring spring(int joint) const;
+    /// Sets a joint's spring (springStrength and springDamping); a strength
+    /// of 0 takes it away.
+    void setSpring(int joint, const BoneSpring& spring);
 
     /// Copies onto this armature's nodes, matched by name, the attributes
     /// of \a other's that this one's lack (springs, limits and the rest
@@ -246,6 +266,9 @@ private:
     std::unique_ptr<tinyxml2::XMLDocument> _document;
     std::vector<Node> _nodes;
     bool _bendsShape = false;
+    double _fps = 24.0;
+    /// The span's joints with their springs, by frame, once worked out.
+    mutable std::vector<std::vector<IKJoint>> _sprung;
 };
 
 /// Turns the joints above \a effector so it reaches for \a target, by cyclic

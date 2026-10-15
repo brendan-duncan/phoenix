@@ -464,6 +464,54 @@ TEST(boned_shapes_bind_points_to_their_nearest_bones)
     CHECK(near(fla::shapeAnchors(*other)[1], 200.0, 0.0, 0.01));
 }
 
+TEST(sprung_bones_trail_overshoot_and_settle)
+{
+    // An arm of three joints that swings a quarter turn up over ten frames
+    // and holds there, its last bone on a spring.
+    std::vector<fla::ArmatureJoint> joints(3);
+    const char* names[3] = {"ikNode_1", "ikNode_2", "ikNode_3"};
+    const char* references[3] = {"A", "B", "C"};
+    for (int i = 0; i < 3; ++i)
+    {
+        joints[i].position = fla::Point(100.0 * i, 0.0);
+        joints[i].registration = joints[i].position;
+        joints[i].parent = i - 1;
+        joints[i].node = names[i];
+        joints[i].reference = references[i];
+    }
+    fla::IKArmature armature;
+    CHECK(armature.parse(fla::symbolArmatureXml("Armature_1", "ikTreeName1", joints, 60)));
+    CHECK(armature.setPose(10, {kPi / 2.0, kPi / 2.0, kPi / 2.0}));
+    // No spring: the joints as posed.
+    CHECK(!armature.hasSprings());
+    CHECK(std::fabs(armature.sprungAt(5)[2].angle - armature.jointsAt(5)[2].angle) < 1.0e-9);
+
+    fla::BoneSpring spring;
+    spring.present = true;
+    spring.strength = 20.0;
+    spring.damping = 20.0;
+    armature.setSpring(2, spring);
+    CHECK(armature.hasSprings() && armature.spring(2).strength == 20.0);
+    // It trails the swing, then overshoots it, then settles where posed.
+    CHECK(armature.sprungAt(10)[2].angle < kPi / 2.0 - 0.05);
+    double most = 0.0;
+    for (int frame = 10; frame < 40; ++frame)
+        most = std::max(most, armature.sprungAt(frame)[2].angle);
+    CHECK(most > kPi / 2.0 + 0.02);
+    CHECK(std::fabs(armature.sprungAt(59)[2].angle - kPi / 2.0) < 0.02);
+    // It hangs where its parent puts it, and the joints above it keep
+    // their pose.
+    const std::vector<fla::IKJoint> mid = armature.sprungAt(10);
+    CHECK(std::fabs(mid[1].angle - armature.jointsAt(10)[1].angle) < 1.0e-9);
+    CHECK(near(mid[2].position, armature.jointsAt(10)[2].position.x, armature.jointsAt(10)[2].position.y));
+    // Its instance turns with the sprung joint.
+    const fla::Transform carried = armature.carried(2, fla::Transform(1, 0, 0, 1, 200, 0), 10);
+    CHECK(std::fabs(std::atan2(carried.m12, carried.m11) - mid[2].angle) < 1.0e-6);
+    // Taken away: the pose again.
+    armature.setSpring(2, fla::BoneSpring());
+    CHECK(!armature.hasSprings());
+}
+
 TEST(rebuilt_armatures_keep_springs_and_other_attributes)
 {
     const std::string xml = "<IKTree name=\"Armature_1\" treeName=\"ikTreeName2\" physicsEnabled=\"true\" custom=\"1\">"
