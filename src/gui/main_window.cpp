@@ -2561,6 +2561,11 @@ bool MainWindow::offerRecovery()
 void MainWindow::showStartDialog()
 {
     StartDialog dialog(_recentFiles, this);
+    // An update offer already up goes over the dialog rather than under it.
+    QTimer::singleShot(0, &dialog, [this, &dialog]() {
+        if (_updater)
+            _updater->placeOffer(&dialog);
+    });
     const int result = dialog.exec();
     QSettings().setValue("showStartDialog", dialog.showAtStartup());
     if (result != QDialog::Accepted)

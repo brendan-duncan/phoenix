@@ -3,6 +3,7 @@
 
 #include <mutex>
 #include <QApplication>
+#include <QDialog>
 #include <QMessageBox>
 #include <QPushButton>
 #include <QWidget>
@@ -254,7 +255,34 @@ void Updater::offerRestart(const QString& version)
         if (_window && _window->isVisible())
             _restart = false;
     });
-    box->show();
+    _offer = box;
+    // A modal dialog up now (the start screen) would cover it and take
+    // its clicks: it goes over that instead.
+    if (QWidget* modal = QApplication::activeModalWidget(); modal && modal != box)
+        placeOffer(modal);
+    else
+        box->show();
+}
+
+void Updater::placeOffer(QWidget* over)
+{
+    if (!_offer || !over)
+        return;
+    _offer->setParent(over, _offer->windowFlags());
+    _offer->show();
+    _offer->raise();
+    _offer->activateWindow();
+    // Back to the window before the dialog goes, which would take it along.
+    if (QDialog* dialog = qobject_cast<QDialog*>(over))
+    {
+        connect(dialog, &QDialog::finished, this, [this]() {
+            if (_offer && _window && _offer->parentWidget() != _window)
+            {
+                _offer->setParent(_window, _offer->windowFlags());
+                _offer->show();
+            }
+        }, Qt::SingleShotConnection);
+    }
 }
 
 void Updater::applyOnExit()

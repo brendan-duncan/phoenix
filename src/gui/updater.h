@@ -40,6 +40,12 @@ public:
     /// starts Phoenix again when the restart was asked for.
     void applyOnExit();
 
+    /// Puts the restart offer, when one is waiting, over \a over (a modal
+    /// dialog such as the start screen), so it is neither hidden behind
+    /// it nor blocked by it; it goes back to the window when \a over
+    /// closes.
+    void placeOffer(QWidget* over);
+
 signals:
     /// A line for the status bar.
     void statusMessage(const QString& message);
@@ -51,6 +57,7 @@ private:
     void offerRestart(const QString& version);
 
     QPointer<QWidget> _window;
+    QPointer<QWidget> _offer;
     std::shared_ptr<State> _state;
     bool _busy = false;
     bool _restart = false;
