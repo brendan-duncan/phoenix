@@ -7051,18 +7051,10 @@ void MainWindow::setupMenus()
         _claudePanel->start(folder);
         _claudePanel->focusTerminal();
     });
-    QAction* claudeWindowAction = new QAction("Open Claude Code in a Terminal &Window", this);
-    claudeWindowAction->setStatusTip("Open Claude Code in a terminal window of its own, connected to Phoenix");
-    connect(claudeWindowAction, &QAction::triggered, this, [this]() {
-        if (!_mcpServer)
-            _mcpServer = new McpServer(this);
-        const QString folder = _documentPath.isEmpty() ? QString() : QFileInfo(_documentPath).absolutePath();
-        claude_code::open(*_mcpServer, folder, this);
-    });
     QAction* scriptEditorAction = new QAction("&Script Editor...", this);
     scriptEditorAction->setStatusTip("Write, open and run JSFL and Python scripts, and edit ActionScript files");
     connect(scriptEditorAction, &QAction::triggered, this, [this]() { openScriptEditor(); });
-    _scripts->fillCommandsMenu(menuBar->addMenu("&Commands"), {claudeAction, claudeWindowAction, scriptEditorAction});
+    _scripts->fillCommandsMenu(menuBar->addMenu("&Commands"), {claudeAction, scriptEditorAction});
 
     QMenu* helpMenu = menuBar->addMenu("&Help");
     QAction* guideAction = helpMenu->addAction("Phoenix &Help");

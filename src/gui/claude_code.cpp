@@ -11,34 +11,16 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QMessageBox>
-#include <QProcess>
 #include <QPushButton>
 #include <QStandardPaths>
 #include <QUrl>
 
-#ifdef _WIN32
-#ifndef NOMINMAX
-#define NOMINMAX
-#endif
-#include <windows.h>
-#endif
-#include <utility>
 
 namespace claude_code {
 
 namespace {
 
 const char* const kInstallPage = "https://docs.claude.com/en/docs/claude-code/setup";
-
-#ifndef _WIN32
-/// \a text quoted for a POSIX shell.
-QString shellQuoted(const QString& text)
-{
-    QString quoted = text;
-    quoted.replace("'", "'\\''");
-    return "'" + quoted + "'";
-}
-#endif
 
 /// The MCP configuration Claude Code is started with: this Phoenix's
 /// executable as a relay to the session's port, the token in its
@@ -66,58 +48,6 @@ QString writeConfig(int port, const QString& token)
         QObject::connect(qApp, &QCoreApplication::aboutToQuit, [path]() { QFile::remove(path); });
     }
     return path;
-}
-
-/// Starts \a claude with \a config in a new terminal window in \a folder.
-bool startInTerminal(const QString& claude, const QString& config, const QString& folder)
-{
-#ifdef _WIN32
-    // A console of its own, which Windows opens in the terminal chosen as
-    // the default (Windows Terminal on Windows 11).
-    QProcess process;
-    process.setWorkingDirectory(folder);
-    process.setCreateProcessArgumentsModifier([](QProcess::CreateProcessArguments* arguments) {
-        arguments->flags |= CREATE_NEW_CONSOLE;
-        arguments->startupInfo->dwFlags &= ~STARTF_USESTDHANDLES;
-    });
-    if (claude.endsWith(".exe", Qt::CaseInsensitive))
-    {
-        process.setProgram(claude);
-        process.setArguments({"--mcp-config", config});
-    }
-    else
-    {
-        // An npm install's claude.cmd runs through cmd; the outer quotes are
-        // the ones cmd takes off.
-        process.setProgram(qEnvironmentVariable("COMSPEC", "cmd.exe"));
-        process.setNativeArguments(QString("/k \"\"%1\" --mcp-config \"%2\"\"")
-                                       .arg(QDir::toNativeSeparators(claude), QDir::toNativeSeparators(config)));
-    }
-    return process.startDetached();
-#elif defined(__APPLE__)
-    const QString command =
-        QString("cd %1 && %2 --mcp-config %3").arg(shellQuoted(folder), shellQuoted(claude), shellQuoted(config));
-    QString script = command;
-    script.replace("\\", "\\\\").replace("\"", "\\\"");
-    return QProcess::startDetached("osascript", {"-e", QString("tell application \"Terminal\" to do script \"%1\"").arg(script),
-                                                    "-e", "tell application \"Terminal\" to activate"});
-#else
-    const QString command = QString("cd %1 && exec %2 --mcp-config %3")
-                                .arg(shellQuoted(folder), shellQuoted(claude), shellQuoted(config));
-    const std::pair<const char*, QStringList> terminals[] = {
-        {"x-terminal-emulator", {"-e", "sh", "-c", command}},
-        {"gnome-terminal", {"--", "sh", "-c", command}},
-        {"konsole", {"-e", "sh", "-c", command}},
-        {"xfce4-terminal", {"-x", "sh", "-c", command}},
-        {"xterm", {"-e", "sh", "-c", command}},
-    };
-    for (const auto& [name, arguments] : terminals)
-    {
-        if (!QStandardPaths::findExecutable(name).isEmpty() && QProcess::startDetached(name, arguments, folder))
-            return true;
-    }
-    return false;
-#endif
 }
 
 } // namespace
@@ -174,17 +104,6 @@ bool prepare(McpServer& server, QWidget* parent, QString& claude, QString& confi
 QString startFolder(const QString& folder)
 {
     return QFileInfo(folder).isDir() ? folder : QDir::homePath();
-}
-
-void open(McpServer& server, const QString& folder, QWidget* parent)
-{
-    QString claude, config;
-    if (!prepare(server, parent, claude, config))
-        return;
-    if (!startInTerminal(claude, config, startFolder(folder)))
-        QMessageBox::warning(parent, "Open Claude Code",
-            QString("No terminal window could be opened. To connect Claude Code yourself, run:\n\n%1 --mcp-config %2")
-                .arg(QDir::toNativeSeparators(claude), QDir::toNativeSeparators(config)));
 }
 
 } // namespace claude_code

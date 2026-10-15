@@ -24,8 +24,4 @@ bool prepare(McpServer& server, QWidget* parent, QString& claude, QString& confi
 /// Where Claude Code starts: \a folder when there is one, else home.
 QString startFolder(const QString& folder);
 
-/// Opens a terminal window in \a folder running Claude Code with this
-/// Phoenix's tools. Says what to do when no terminal opens.
-void open(McpServer& server, const QString& folder, QWidget* parent);
-
 } // namespace claude_code
