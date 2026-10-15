@@ -1,6 +1,7 @@
 #pragma once
 
 #include "../edit/behaviors.h"
+#include "../edit/guide_path.h"
 
 #include <functional>
 #include <memory>
@@ -53,6 +54,9 @@ struct Moment
     /// it is not there).
     Keyed keyed;
     std::function<bool(int frame, Keyed& keyed)> keyedAt;
+    /// The line of the motion guide the instance's layer is under, on this
+    /// frame, in the same space as the instance's place; null without one.
+    const GuidePath* path = nullptr;
 };
 
 /// Runs behaviors: JavaScript files of the form

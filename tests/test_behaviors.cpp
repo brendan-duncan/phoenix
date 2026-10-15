@@ -7,6 +7,7 @@
 #include "../src/data/timeline.h"
 #include "../src/jsfl/behavior_engine.h"
 #include "../src/jsfl/behavior_frames.h"
+#include "../src/edit/guide_path.h"
 
 #include <cmath>
 #include <string>
@@ -266,4 +267,49 @@ TEST(behaviors_bake_into_keyframes_with_copies_of_their_own)
     }
     // Nothing left to bake.
     CHECK(bake(engine, *layer, 0, 2, 24.0) == 0);
+}
+
+TEST(behaviors_repeat_and_follow_along_a_motion_guide)
+{
+    Engine engine;
+    engine.addBuiltIns();
+    fla::GuidePath path;
+    path.build(std::vector<std::vector<fla::Point>>{{fla::Point(0, 0), fla::Point(100, 0), fla::Point(100, 100)}});
+    Moment moment = still(0);
+    moment.keyed.x = 10;
+    moment.keyed.y = 10;
+    moment.path = &path;
+
+    // Three copies from end to end of a 200-pixel path, not wrapped.
+    Applied repeat = engine.defaults("pathrepeat", 1);
+    repeat.params["count"] = "3";
+    repeat.params["wrap"] = "false";
+    const Copies along = engine.evaluate({repeat}, moment);
+    CHECK(along.size() == 3);
+    if (along.size() == 3)
+    {
+        CHECK(near(along[0].x, -10.0) && near(along[0].y, -10.0) && near(along[0].rotation, 0.0));
+        CHECK(near(along[1].x, 90.0) && near(along[1].y, -10.0));
+        CHECK(near(along[2].x, 90.0) && near(along[2].y, 90.0) && near(along[2].rotation, 90.0));
+    }
+    // Slid along off the end, unwrapped: those copies go.
+    repeat.params["offset"] = "60";
+    CHECK(engine.evaluate({repeat}, moment).size() == 1);
+    // Wrapped, they come round to the start.
+    repeat.params["wrap"] = "true";
+    CHECK(engine.evaluate({repeat}, moment).size() == 3);
+
+    // Follow Path, keyed from start to end over 10 frames.
+    Applied follow = engine.defaults("followpath", 1);
+    follow.setKey("progress", 0, "0");
+    follow.setKey("progress", 10, "100");
+    Moment halfway = moment;
+    halfway.frame = 5;
+    const Delta middle = engine.evaluate({follow}, halfway).front();
+    CHECK(near(middle.x, 90.0) && near(middle.y, -10.0));
+
+    // Without a guide, it says so and changes nothing.
+    std::string why;
+    const Copies none = engine.evaluate({follow}, still(5), &why);
+    CHECK(none.size() == 1 && none.front().none() && why.find("motion guide") != std::string::npos);
 }

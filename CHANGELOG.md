@@ -4,6 +4,7 @@ What changed in each release of Phoenix, newest first.
 
 ## 0.10.0 (Unreleased)
 
+- Behaviors: Repeat along a Path and Follow Path place copies, or the instance, along the line on a motion guide
 - Behaviors: settings can be keyed over time; Repeat in a Circle, Repeat in a Line or Grid and Stagger draw copies; Bake to Keyframes, and File > Export > Export FLA for Other Apps writes a copy with behaviors baked
 - Behaviors: Window > Behaviors gives symbol instances motion worked out every frame, with no keyframes: Wiggle, Oscillate, Spin, Pulse, Fade In and Out, Blink and Follow with Lag; your own behaviors are JavaScript files in the Behaviors folder
 - Default keys follow the standard FLA-editing layout: B for the Brush and Shift+B for the Nib Brush; new Modify > Align and Text menus (Ctrl+Alt+1 to 8, Ctrl+Shift+B/I/L/C/R/J); Close All, Find Next, Hide Edges, Show Shape Hints and Phoenix Help (F1); keys for Pasteboard and Snap to Objects

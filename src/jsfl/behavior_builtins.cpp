@@ -168,6 +168,61 @@ behavior({
     }
 });
 )JS"},
+        {"pathrepeat", R"JS(
+behavior({
+    name: "Repeat along a Path",
+    description: "Copies it along the line drawn on the motion guide its layer is under, spaced evenly from one place to another; slide them along, or key any setting, to animate them. Put the layer under a motion guide first.",
+    params: {
+        count: { label: "Copies", value: 10, min: 1, max: 1000, step: 1 },
+        from: { label: "From (percent of the path)", value: 0, min: 0, max: 100, step: 0.5 },
+        to: { label: "To (percent of the path)", value: 100, min: 0, max: 100, step: 0.5 },
+        offset: { label: "Slide along (percent)", value: 0, min: -1000, max: 1000, step: 0.5 },
+        wrap: { label: "Wrap round to the start", type: "checkbox", value: true },
+        align: { label: "Turn copies with the path", type: "checkbox", value: true }
+    },
+    evaluate: function (ctx, p) {
+        if (!ctx.path)
+            throw new Error("Repeat along a Path needs its layer under a motion guide with a line drawn on it.");
+        var n = Math.max(1, Math.round(p.count));
+        // The whole path wrapped round spaces them evenly round it, with
+        // none on top of another at the join.
+        var whole = p.wrap && p.to - p.from >= 100;
+        var copies = [];
+        for (var i = 0; i < n; i++) {
+            var t = n > 1 ? i / (whole ? n : n - 1) : 0;
+            var percent = p.from + (p.to - p.from) * t + p.offset;
+            if (p.wrap)
+                percent = ((percent % 100) + 100) % 100;
+            else if (percent < 0 || percent > 100)
+                continue;
+            var at = ctx.path.at(ctx.path.length * percent / 100);
+            copies.push({ x: at.x - ctx.keyed.x, y: at.y - ctx.keyed.y, rotation: p.align ? at.angle : 0 });
+        }
+        return { copies: copies };
+    }
+});
+)JS"},
+        {"followpath", R"JS(
+behavior({
+    name: "Follow Path",
+    description: "Puts it on the line drawn on the motion guide its layer is under: key how far along it is, or give it a speed, and it travels the line, turned with it if you like.",
+    params: {
+        progress: { label: "Along the path (percent)", value: 0, min: -1000, max: 1000, step: 0.5 },
+        speed: { label: "Then on, percent per second", value: 0, min: -1000, max: 1000, step: 0.5 },
+        loop: { label: "Loop round", type: "checkbox", value: true },
+        align: { label: "Turn with the path", type: "checkbox", value: true }
+    },
+    evaluate: function (ctx, p) {
+        if (!ctx.path)
+            throw new Error("Follow Path needs its layer under a motion guide with a line drawn on it.");
+        var percent = p.progress + p.speed * (ctx.frame - ctx.start) / ctx.fps;
+        if (percent < 0 || percent > 100)
+            percent = p.loop ? ((percent % 100) + 100) % 100 : Math.max(0, Math.min(100, percent));
+        var at = ctx.path.at(ctx.path.length * percent / 100);
+        return { x: at.x - ctx.keyed.x, y: at.y - ctx.keyed.y, rotation: p.align ? at.angle : 0 };
+    }
+});
+)JS"},
         {"stagger", R"JS(
 behavior({
     name: "Stagger",

@@ -57,6 +57,12 @@ function __run(id, params, m) {
     var ctx = {
         frame: m.frame, fps: m.fps, time: m.frame / m.fps, start: m.start, end: m.end, keyed: m.keyed,
         copy: m.copy, copies: m.copies,
+        // The motion guide's line: its length, and where along it a place
+        // is (x, y and the line's direction in degrees).
+        path: m.pathLength >= 0 ? {
+            length: m.pathLength,
+            at: function (distance) { var p = __pathAt(distance); return { x: p[0], y: p[1], angle: p[2] }; }
+        } : null,
         keyedAt: function (frame) { return __keyedAt(frame); },
         random: function (n) { return __hash(seed, n === undefined ? 0 : n); },
         noise: function (t, n) { return __noise(seed, t, n === undefined ? 0 : n); }
@@ -115,6 +121,7 @@ struct Engine::Impl
         JS_SetContextOpaque(ctx, this);
         JSValue global = JS_GetGlobalObject(ctx);
         JS_SetPropertyStr(ctx, global, "__keyedAt", JS_NewCFunction(ctx, &Impl::keyedAt, "__keyedAt", 1));
+        JS_SetPropertyStr(ctx, global, "__pathAt", JS_NewCFunction(ctx, &Impl::pathAt, "__pathAt", 1));
         JS_FreeValue(ctx, global);
         deadline = Clock::now() + std::chrono::seconds(5);
         JS_FreeValue(ctx, JS_Eval(ctx, kPrelude, std::strlen(kPrelude), "<behaviors>", JS_EVAL_TYPE_GLOBAL));
@@ -144,6 +151,21 @@ struct Engine::Impl
         if (!self->moment->keyedAt(f, keyed))
             return JS_NULL;
         return keyedObject(ctx, keyed);
+    }
+
+    static JSValue pathAt(JSContext* ctx, JSValueConst, int argc, JSValueConst* argv)
+    {
+        Impl* self = static_cast<Impl*>(JS_GetContextOpaque(ctx));
+        double distance = 0;
+        if (argc > 0)
+            JS_ToFloat64(ctx, &distance, argv[0]);
+        const GuidePath* path = self->moment ? self->moment->path : nullptr;
+        JSValue out = JS_NewArray(ctx);
+        const Point point = path ? path->at(distance) : Point();
+        JS_SetPropertyUint32(ctx, out, 0, JS_NewFloat64(ctx, point.x));
+        JS_SetPropertyUint32(ctx, out, 1, JS_NewFloat64(ctx, point.y));
+        JS_SetPropertyUint32(ctx, out, 2, JS_NewFloat64(ctx, path ? path->angleAt(distance) : 0.0));
+        return out;
     }
 
     std::string text(JSValueConst value)
@@ -367,6 +389,8 @@ Copies Engine::evaluate(const std::vector<Applied>& list, const Moment& moment, 
             JS_SetPropertyStr(ctx, m, "copy", JS_NewInt32(ctx, static_cast<int32_t>(c)));
             JS_SetPropertyStr(ctx, m, "copies", JS_NewInt32(ctx, static_cast<int32_t>(copies.size())));
             JS_SetPropertyStr(ctx, m, "keyed", keyedObject(ctx, moment.keyed));
+            JS_SetPropertyStr(ctx, m, "pathLength",
+                JS_NewFloat64(ctx, moment.path && !moment.path->empty() ? moment.path->length() : -1.0));
             JSValue args[3] = {JS_NewString(ctx, definition->id.c_str()), params, m};
             JSValue result = JS_Call(ctx, run, global, 3, args);
             for (JSValue& arg : args)

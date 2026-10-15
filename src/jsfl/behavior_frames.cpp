@@ -2,6 +2,7 @@
 
 #include "../data/frame.h"
 #include "../data/layer.h"
+#include "../data/shape.h"
 #include "../data/symbol.h"
 #include "../data/symbol_instance.h"
 #include "../data/timeline.h"
@@ -104,6 +105,24 @@ Copies evaluateOn(Engine& engine, const SymbolInstance& instance, const Transfor
         Transform ignored;
         return keyedOn(*layer, index, symbol, at, ignored, out);
     };
+    // The motion guide the layer is under: the strokes on its keyframe at
+    // this frame.
+    GuidePath path;
+    const Layer* guide = layer->parentLayer;
+    if (guide && guide->layerType == Layer::Type::Guide)
+    {
+        if (const Frame* guideFrame = keyframeAt(*guide, frame))
+        {
+            std::vector<const Shape*> shapes;
+            for (const Element* element : guideFrame->elements)
+                if (element && element->elementType() == Element::Type::Shape)
+                    shapes.push_back(static_cast<const Shape*>(element));
+            if (!shapes.empty())
+                path.build(shapes);
+        }
+    }
+    if (!path.empty())
+        moment.path = &path;
     return engine.evaluate(of(instance), moment, error);
 }
 
@@ -180,8 +199,16 @@ int bake(Engine& engine, Layer& layer, int first, int last, double frameRate, st
             keyframe->elements[job.index]->elementType() != Element::Type::SymbolInstance)
             continue;
         auto* instance = static_cast<SymbolInstance*>(keyframe->elements[job.index]);
+        // No copies left (all slid off a path): it is not shown there.
+        if (job.copies.empty())
+        {
+            keyframe->elements.erase(keyframe->elements.begin() + static_cast<std::ptrdiff_t>(job.index));
+            delete instance;
+            ++baked;
+            continue;
+        }
         instance->extraAttributes = withBehaviors(*instance, {});
-        const Copies copies = job.copies.empty() ? Copies(1) : job.copies;
+        const Copies& copies = job.copies;
         // The copies start as the instance is, before it is placed.
         std::vector<SymbolInstance*> made;
         for (size_t c = 1; c < copies.size(); ++c)

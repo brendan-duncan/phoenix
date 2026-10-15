@@ -52,6 +52,8 @@
     <tr><td>Follow with Lag</td><td class="wrap">Makes it trail its own keyed motion on a spring: it lags behind, catches up and overshoots. Use it for hair, antennas, tails and props, keyed with the part they hang from.</td></tr>
     <tr><td>Repeat in a Circle</td><td class="wrap">Copies it round a circle about where it is, each copy turned to follow the circle if you like: the number of copies, the radius, the start angle and how far round they go.</td></tr>
     <tr><td>Repeat in a Line or Grid</td><td class="wrap">Copies it in a row, or in rows and columns, from where it is or centered on it.</td></tr>
+    <tr><td>Repeat along a Path</td><td class="wrap">Copies it along the line drawn on the motion guide its layer is under, spaced evenly from one place on the line to another, each copy turned with the line if you like. Key <b>Slide along</b> to send the copies flowing down the line; with <b>Wrap round</b> off, copies that slide past an end disappear.</td></tr>
+    <tr><td>Follow Path</td><td class="wrap">Puts it on the motion guide's line: key how far along it is, or give it a speed, and it travels the line, turned with it if you like.</td></tr>
     <tr><td>Stagger</td><td class="wrap">Runs each copy's graphic loop a few frames after the one before, in order or at random, so copies of one cycle move out of step: a crowd, a field of grass, a wave. Put it after a Repeat behavior.</td></tr>
   </tbody>
 </table>
@@ -68,6 +70,18 @@
 <p>Between keys a number runs in a straight line from one value to the next; a choice or a checkbox holds until the next key. The button is hollow (&#9671;) on frames between keys; clicking it there keys the setting at the value it has, and clicking a filled one takes that key away. With its last key gone, the setting keeps the value it had.</p>
 
 <p>Key the radius of Repeat in a Circle from 0 to 100, say, and the copies burst out from the middle; key its start angle and the ring turns; key the number of copies and they appear one by one.</p>
+
+<h2 id="paths">Along a path</h2>
+
+<p>Repeat along a Path and Follow Path use the line on a motion guide, the same guide a classic tween can follow (see <a href="masks-guides.html">Masks and guides</a>):</p>
+
+<ol>
+  <li>Right-click the instance's layer and choose <b>Add Motion Guide</b>, or drag the layer under a guide layer you have.</li>
+  <li>Draw the line on the guide layer with the Pen, Pencil or Line tool: a curve, a spiral, a closed loop.</li>
+  <li>Give the instance Repeat along a Path or Follow Path.</li>
+</ol>
+
+<p>Change the line and the copies follow it. A guide with keyframes of its own changes the line over time too. Guide layers are never drawn in exports, so only the copies show.</p>
 
 <h2 id="repeat">Copies</h2>
 

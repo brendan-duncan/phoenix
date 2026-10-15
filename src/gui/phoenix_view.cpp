@@ -3110,6 +3110,9 @@ void PhoenixView::drawElement(QPainter& painter, const fla::Element* element, co
         {
             const fla::behaviors::Copies copies =
                 behaviorCopies(*instance, transform, keyframe->index + std::max(0, _elapsed));
+            // Every copy slid off a path: nothing to draw.
+            if (copies.empty())
+                return;
             if (copies.size() > 1)
             {
                 const fla::Transform keyed = transform;
