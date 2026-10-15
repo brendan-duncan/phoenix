@@ -1,6 +1,8 @@
 #include "adjustments.h"
 
 #include "image_blur.h"
+#include "pixel_math.h"
+#include "../util/parallel.h"
 
 #include "../data/layer.h"
 
@@ -107,24 +109,7 @@ double noise3(int seed, double x, double y, double t)
 /// neighbors mixed; transparent outside the image.
 uint32_t sample(const std::vector<uint32_t>& pixels, int width, int height, double x, double y)
 {
-    const int x0 = static_cast<int>(std::floor(x)), y0 = static_cast<int>(std::floor(y));
-    const double fx = x - x0, fy = y - y0;
-    double sum[4] = {0, 0, 0, 0};
-    for (int dy = 0; dy < 2; ++dy)
-        for (int dx = 0; dx < 2; ++dx)
-        {
-            const int px = x0 + dx, py = y0 + dy;
-            if (px < 0 || py < 0 || px >= width || py >= height)
-                continue;
-            const double w = (dx ? fx : 1 - fx) * (dy ? fy : 1 - fy);
-            const uint32_t p = pixels[static_cast<size_t>(py) * width + px];
-            for (int c = 0; c < 4; ++c)
-                sum[c] += ((p >> (c * 8)) & 0xFF) * w;
-        }
-    uint32_t out = 0;
-    for (int c = 0; c < 4; ++c)
-        out |= static_cast<uint32_t>(std::lround(clamp255(sum[c]))) << (c * 8);
-    return out;
+    return samplePixel(pixels.data(), width, height, x, y);
 }
 
 } // namespace
@@ -208,7 +193,7 @@ void shapeMask(std::vector<uint8_t>& coverage, int width, int height, const Mask
         for (int step = 0; step < steps; ++step)
         {
             const bool square = step % 2 == 0;
-            for (int y = 0; y < height; ++y)
+            parallelRows(height, width, [&](int y) {
                 for (int x = 0; x < width; ++x)
                 {
                     int best = coverage[static_cast<size_t>(y) * width + x];
@@ -225,6 +210,7 @@ void shapeMask(std::vector<uint8_t>& coverage, int width, int height, const Mask
                         }
                     next[static_cast<size_t>(y) * width + x] = static_cast<uint8_t>(best);
                 }
+            });
             coverage.swap(next);
         }
     }
@@ -232,11 +218,15 @@ void shapeMask(std::vector<uint8_t>& coverage, int width, int height, const Mask
     if (feather >= 0.5)
     {
         std::vector<uint32_t> soft(count);
-        for (size_t i = 0; i < count; ++i)
-            soft[i] = static_cast<uint32_t>(coverage[i]) << 24;
+        parallelPixels(count, [&](size_t from, size_t to) {
+            for (size_t i = from; i < to; ++i)
+                soft[i] = static_cast<uint32_t>(coverage[i]) << 24;
+        });
         boxBlur(soft.data(), width, height, feather, feather, 3);
-        for (size_t i = 0; i < count; ++i)
-            coverage[i] = static_cast<uint8_t>((soft[i] >> 24) & 0xFF);
+        parallelPixels(count, [&](size_t from, size_t to) {
+            for (size_t i = from; i < to; ++i)
+                coverage[i] = static_cast<uint8_t>((soft[i] >> 24) & 0xFF);
+        });
     }
     if (edge.invert)
         for (uint8_t& value : coverage)
@@ -415,7 +405,7 @@ void apply(uint32_t* pixels, int width, int height, const std::vector<Applied>& 
             const int seedValue = static_cast<int>(param(applied, "seed", frame, 1.0));
             const double angle = param(applied, "direction", frame, 0.0) * kPi / 180.0;
             const double ax = std::cos(angle), ay = std::sin(angle);
-            for (int y = 0; y < height; ++y)
+            parallelRows(height, width, [&](int y) {
                 for (int x = 0; x < width; ++x)
                 {
                     double dx, dy;
@@ -434,6 +424,7 @@ void apply(uint32_t* pixels, int width, int height, const std::vector<Applied>& 
                     }
                     pixels[static_cast<size_t>(y) * width + x] = sample(before, width, height, x + dx, y + dy);
                 }
+            });
         }
         else
         {
@@ -452,66 +443,70 @@ void apply(uint32_t* pixels, int width, int height, const std::vector<Applied>& 
                     text = text.substr(1);
                 tint = static_cast<unsigned>(std::strtoul(text.c_str(), nullptr, 16));
             }
-            for (size_t i = 0; i < count; ++i)
-            {
-                const uint32_t p = pixels[i];
-                const double a = (p >> 24) & 0xFF;
-                if (a <= 0)
-                    continue;
-                double r = ((p >> 16) & 0xFF) * 255.0 / a;
-                double g = ((p >> 8) & 0xFF) * 255.0 / a;
-                double b = (p & 0xFF) * 255.0 / a;
-                if (applied.type == "tint")
+            parallelPixels(count, [&](size_t from, size_t to) {
+                for (size_t i = from; i < to; ++i)
                 {
-                    // The tint's color at the pixel's lightness.
-                    const double light = (0.299 * r + 0.587 * g + 0.114 * b) / 255.0;
-                    r = ((tint >> 16) & 0xFF) * light * 1.6;
-                    g = ((tint >> 8) & 0xFF) * light * 1.6;
-                    b = (tint & 0xFF) * light * 1.6;
-                }
-                else
-                {
-                    r = (r - 128.0) * contrast + 128.0 + brightness;
-                    g = (g - 128.0) * contrast + 128.0 + brightness;
-                    b = (b - 128.0) * contrast + 128.0 + brightness;
-                    const double gray = 0.299 * r + 0.587 * g + 0.114 * b;
-                    r = gray + (r - gray) * saturation;
-                    g = gray + (g - gray) * saturation;
-                    b = gray + (b - gray) * saturation;
-                    if (hue != 0.0)
+                    const uint32_t p = pixels[i];
+                    const double a = (p >> 24) & 0xFF;
+                    if (a <= 0)
+                        continue;
+                    double r = ((p >> 16) & 0xFF) * 255.0 / a;
+                    double g = ((p >> 8) & 0xFF) * 255.0 / a;
+                    double b = (p & 0xFF) * 255.0 / a;
+                    if (applied.type == "tint")
                     {
-                        // Turned round the gray axis, in YIQ.
-                        const double y = 0.299 * r + 0.587 * g + 0.114 * b;
-                        const double iq = 0.596 * r - 0.274 * g - 0.322 * b;
-                        const double q = 0.211 * r - 0.523 * g + 0.312 * b;
-                        const double i2 = iq * cosH - q * sinH;
-                        const double q2 = iq * sinH + q * cosH;
-                        r = y + 0.956 * i2 + 0.621 * q2;
-                        g = y - 0.272 * i2 - 0.647 * q2;
-                        b = y - 1.106 * i2 + 1.703 * q2;
+                        // The tint's color at the pixel's lightness.
+                        const double light = (0.299 * r + 0.587 * g + 0.114 * b) / 255.0;
+                        r = ((tint >> 16) & 0xFF) * light * 1.6;
+                        g = ((tint >> 8) & 0xFF) * light * 1.6;
+                        b = (tint & 0xFF) * light * 1.6;
                     }
+                    else
+                    {
+                        r = (r - 128.0) * contrast + 128.0 + brightness;
+                        g = (g - 128.0) * contrast + 128.0 + brightness;
+                        b = (b - 128.0) * contrast + 128.0 + brightness;
+                        const double gray = 0.299 * r + 0.587 * g + 0.114 * b;
+                        r = gray + (r - gray) * saturation;
+                        g = gray + (g - gray) * saturation;
+                        b = gray + (b - gray) * saturation;
+                        if (hue != 0.0)
+                        {
+                            // Turned round the gray axis, in YIQ.
+                            const double y = 0.299 * r + 0.587 * g + 0.114 * b;
+                            const double iq = 0.596 * r - 0.274 * g - 0.322 * b;
+                            const double q = 0.211 * r - 0.523 * g + 0.312 * b;
+                            const double i2 = iq * cosH - q * sinH;
+                            const double q2 = iq * sinH + q * cosH;
+                            r = y + 0.956 * i2 + 0.621 * q2;
+                            g = y - 0.272 * i2 - 0.647 * q2;
+                            b = y - 1.106 * i2 + 1.703 * q2;
+                        }
+                    }
+                    const auto premultiplied = [a](double v) { return static_cast<uint32_t>(std::lround(clamp255(v) * a / 255.0)); };
+                    pixels[i] = (p & 0xFF000000u) | (premultiplied(r) << 16) | (premultiplied(g) << 8) | premultiplied(b);
                 }
-                const auto premultiplied = [a](double v) { return static_cast<uint32_t>(std::lround(clamp255(v) * a / 255.0)); };
-                pixels[i] = (p & 0xFF000000u) | (premultiplied(r) << 16) | (premultiplied(g) << 8) | premultiplied(b);
-            }
+            });
         }
         // Part way, and only where the layer's own art covers.
         if (amount < 1.0 || coverage)
         {
-            for (size_t i = 0; i < count; ++i)
-            {
-                const double k = amount * (coverage ? coverage[i] / 255.0 : 1.0);
-                if (k >= 1.0)
-                    continue;
-                uint32_t mixed = 0;
-                for (int shift = 0; shift < 32; shift += 8)
+            parallelPixels(count, [&](size_t from, size_t to) {
+                for (size_t i = from; i < to; ++i)
                 {
-                    const double from = (before[i] >> shift) & 0xFF;
-                    const double to = (pixels[i] >> shift) & 0xFF;
-                    mixed |= static_cast<uint32_t>(std::lround(from + (to - from) * k)) << shift;
+                    const double k = amount * (coverage ? coverage[i] / 255.0 : 1.0);
+                    if (k >= 1.0)
+                        continue;
+                    uint32_t mixed = 0;
+                    for (int shift = 0; shift < 32; shift += 8)
+                    {
+                        const double from = (before[i] >> shift) & 0xFF;
+                        const double to = (pixels[i] >> shift) & 0xFF;
+                        mixed |= static_cast<uint32_t>(std::lround(from + (to - from) * k)) << shift;
+                    }
+                    pixels[i] = mixed;
                 }
-                pixels[i] = mixed;
-            }
+            });
         }
     }
 }
@@ -520,22 +515,24 @@ std::vector<uint8_t> matteStrength(const uint32_t* matte, int width, int height,
 {
     const size_t count = static_cast<size_t>(std::max(0, width)) * static_cast<size_t>(std::max(0, height));
     std::vector<uint8_t> out(count, 0);
-    for (size_t i = 0; i < count; ++i)
-    {
-        const uint32_t p = matte[i];
-        const double a = (p >> 24) & 0xFF;
-        double strength = a;
-        if (kind == Matte::Luma || kind == Matte::LumaInverted)
+    parallelPixels(count, [&](size_t from, size_t to) {
+        for (size_t i = from; i < to; ++i)
         {
-            // Premultiplied: the light already scaled by the alpha.
-            strength = 0.299 * ((p >> 16) & 0xFF) + 0.587 * ((p >> 8) & 0xFF) + 0.114 * (p & 0xFF);
+            const uint32_t p = matte[i];
+            const double a = (p >> 24) & 0xFF;
+            double strength = a;
+            if (kind == Matte::Luma || kind == Matte::LumaInverted)
+            {
+                // Premultiplied: the light already scaled by the alpha.
+                strength = 0.299 * ((p >> 16) & 0xFF) + 0.587 * ((p >> 8) & 0xFF) + 0.114 * (p & 0xFF);
+            }
+            if (kind == Matte::AlphaInverted)
+                strength = 255.0 - a;
+            else if (kind == Matte::LumaInverted)
+                strength = 255.0 - strength;
+            out[i] = static_cast<uint8_t>(std::lround(clamp255(strength)));
         }
-        if (kind == Matte::AlphaInverted)
-            strength = 255.0 - a;
-        else if (kind == Matte::LumaInverted)
-            strength = 255.0 - strength;
-        out[i] = static_cast<uint8_t>(std::lround(clamp255(strength)));
-    }
+    });
     return out;
 }
 

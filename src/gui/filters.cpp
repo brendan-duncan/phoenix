@@ -1,6 +1,7 @@
 #include "filters.h"
 
 #include "../edit/image_blur.h"
+#include "../util/parallel.h"
 
 #include <QRegion>
 
@@ -9,6 +10,9 @@
 #include <cmath>
 
 namespace Filters {
+
+using fla::parallelRows;
+using fla::parallelPixels;
 
 namespace {
 
@@ -25,8 +29,7 @@ int passesOf(const fla::Filter& filter)
 QImage silhouette(const QImage& image, const uint8_t rgb[3], double alpha, bool inverted)
 {
     QImage out(image.size(), QImage::Format_ARGB32_Premultiplied);
-    for (int y = 0; y < image.height(); ++y)
-    {
+    parallelRows(image.height(), image.width(), [&](int y) {
         const QRgb* in = reinterpret_cast<const QRgb*>(image.constScanLine(y));
         QRgb* line = reinterpret_cast<QRgb*>(out.scanLine(y));
         for (int x = 0; x < image.width(); ++x)
@@ -40,7 +43,7 @@ QImage silhouette(const QImage& image, const uint8_t rgb[3], double alpha, bool 
                             static_cast<int>(rgb[2] * coverage + 0.5),
                             static_cast<int>(255.0 * coverage + 0.5));
         }
-    }
+    });
     return out;
 }
 
@@ -56,8 +59,9 @@ void strengthen(QImage& image, double strength)
 {
     if (strength == 1.0)
         return;
-    for (int y = 0; y < image.height(); ++y)
-    {
+    // Its own copy before the threads write rows of it.
+    image.bits();
+    parallelRows(image.height(), image.width(), [&](int y) {
         QRgb* line = reinterpret_cast<QRgb*>(image.scanLine(y));
         for (int x = 0; x < image.width(); ++x)
         {
@@ -65,7 +69,7 @@ void strengthen(QImage& image, double strength)
             const int a = std::max(0, std::min(255, static_cast<int>(qAlpha(straight) * strength + 0.5)));
             line[x] = qPremultiply(qRgba(qRed(straight), qGreen(straight), qBlue(straight), a));
         }
-    }
+    });
 }
 
 QImage shifted(const QImage& image, int dx, int dy)
@@ -144,8 +148,7 @@ QImage bevel(const QImage& image, const fla::Filter& filter, double scale)
     QImage shadow(image.size(), QImage::Format_ARGB32_Premultiplied);
     const double highlightAlpha = filter.highlightColor[3] / 255.0 * filter.strength;
     const double shadowAlpha = filter.shadowColor[3] / 255.0 * filter.strength;
-    for (int y = 0; y < image.height(); ++y)
-    {
+    parallelRows(image.height(), image.width(), [&](int y) {
         const QRgb* t = reinterpret_cast<const QRgb*>(towards.constScanLine(y));
         const QRgb* a = reinterpret_cast<const QRgb*>(away.constScanLine(y));
         QRgb* h = reinterpret_cast<QRgb*>(highlight.scanLine(y));
@@ -164,7 +167,7 @@ QImage bevel(const QImage& image, const fla::Filter& filter, double scale)
                          static_cast<int>(filter.shadowColor[2] * dark + 0.5),
                          static_cast<int>(255.0 * dark + 0.5));
         }
-    }
+    });
 
     const bool inner = filter.bevelType.empty() || filter.bevelType == "inner";
     const bool outer = filter.bevelType == "outer";
@@ -232,12 +235,12 @@ void mapThroughGradient(QImage& image, const std::vector<fla::GradientEntry>& en
     QRgb table[256];
     for (int i = 0; i < 256; ++i)
         table[i] = qPremultiply(gradientAt(entries, i / 255.0));
-    for (int y = 0; y < image.height(); ++y)
-    {
+    image.bits();
+    parallelRows(image.height(), image.width(), [&](int y) {
         QRgb* line = reinterpret_cast<QRgb*>(image.scanLine(y));
         for (int x = 0; x < image.width(); ++x)
             line[x] = table[qAlpha(line[x])];
-    }
+    });
 }
 
 /// Gradient glow: the glow's blurred coverage colored through the gradient
@@ -294,8 +297,7 @@ QImage gradientBevel(const QImage& image, const fla::Filter& filter, double scal
         table[i] = qPremultiply(gradientAt(filter.entries, i / 255.0));
 
     QImage relief(image.size(), QImage::Format_ARGB32_Premultiplied);
-    for (int y = 0; y < image.height(); ++y)
-    {
+    parallelRows(image.height(), image.width(), [&](int y) {
         const QRgb* t = reinterpret_cast<const QRgb*>(towards.constScanLine(y));
         const QRgb* a = reinterpret_cast<const QRgb*>(away.constScanLine(y));
         QRgb* r = reinterpret_cast<QRgb*>(relief.scanLine(y));
@@ -305,7 +307,7 @@ QImage gradientBevel(const QImage& image, const fla::Filter& filter, double scal
             const double position = std::max(0.0, std::min(1.0, 0.5 + difference / 2.0));
             r[x] = table[static_cast<int>(position * 255.0 + 0.5)];
         }
-    }
+    });
 
     const bool inner = filter.bevelType.empty() || filter.bevelType == "inner";
     const bool outer = filter.bevelType == "outer";
@@ -359,8 +361,7 @@ QImage adjustColor(const QImage& image, const fla::Filter& filter)
             full[r][c] = h[r][0] * m[0][c] + h[r][1] * m[1][c] + h[r][2] * m[2][c];
 
     QImage out(image.size(), QImage::Format_ARGB32_Premultiplied);
-    for (int y = 0; y < image.height(); ++y)
-    {
+    parallelRows(image.height(), image.width(), [&](int y) {
         const QRgb* in = reinterpret_cast<const QRgb*>(image.constScanLine(y));
         QRgb* line = reinterpret_cast<QRgb*>(out.scanLine(y));
         for (int x = 0; x < image.width(); ++x)
@@ -377,7 +378,7 @@ QImage adjustColor(const QImage& image, const fla::Filter& filter)
             }
             line[x] = qPremultiply(qRgba(result[0], result[1], result[2], qAlpha(straight)));
         }
-    }
+    });
     return out;
 }
 

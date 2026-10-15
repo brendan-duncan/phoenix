@@ -1,6 +1,8 @@
 #include "adjustment_effects.h"
 
 #include "image_blur.h"
+#include "pixel_math.h"
+#include "../util/parallel.h"
 
 #include <algorithm>
 #include <cmath>
@@ -171,46 +173,20 @@ double luma(const Rgb& c)
 
 uint32_t sample(const std::vector<uint32_t>& pixels, int width, int height, double x, double y)
 {
-    const int x0 = static_cast<int>(std::floor(x)), y0 = static_cast<int>(std::floor(y));
-    const double fx = x - x0, fy = y - y0;
-    double sum[4] = {0, 0, 0, 0};
-    for (int dy = 0; dy < 2; ++dy)
-        for (int dx = 0; dx < 2; ++dx)
-        {
-            const int px = x0 + dx, py = y0 + dy;
-            if (px < 0 || py < 0 || px >= width || py >= height)
-                continue;
-            const double w = (dx ? fx : 1 - fx) * (dy ? fy : 1 - fy);
-            const uint32_t p = pixels[static_cast<size_t>(py) * width + px];
-            for (int c = 0; c < 4; ++c)
-                sum[c] += ((p >> (c * 8)) & 0xFF) * w;
-        }
-    uint32_t out = 0;
-    for (int c = 0; c < 4; ++c)
-        out |= static_cast<uint32_t>(std::lround(clamp255(sum[c]))) << (c * 8);
-    return out;
+    return samplePixel(pixels.data(), width, height, x, y);
 }
 
 /// The average of several premultiplied pixels, each with a weight.
 struct Average
 {
-    double sum[4] = {0, 0, 0, 0};
+    ChannelSum sum;
     double weight = 0.0;
     void add(uint32_t p, double w = 1.0)
     {
-        for (int c = 0; c < 4; ++c)
-            sum[c] += ((p >> (c * 8)) & 0xFF) * w;
+        sum.add(p, w);
         weight += w;
     }
-    uint32_t result() const
-    {
-        if (weight <= 0.0)
-            return 0;
-        uint32_t out = 0;
-        for (int c = 0; c < 4; ++c)
-            out |= static_cast<uint32_t>(std::lround(clamp255(sum[c] / weight))) << (c * 8);
-        return out;
-    }
+    uint32_t result() const { return weight <= 0.0 ? 0 : sum.pixel(weight); }
 };
 
 double hash3(int seed, int x, int y, int z)
@@ -262,7 +238,7 @@ Rgb blend(const Rgb& base, const Rgb& top, const std::string& mode)
 template <typename Make>
 void generate(uint32_t* pixels, const std::vector<uint32_t>& before, int width, int height, const std::string& mode, Make make)
 {
-    for (int y = 0; y < height; ++y)
+    parallelRows(height, width, [&](int y) {
         for (int x = 0; x < width; ++x)
         {
             const size_t i = static_cast<size_t>(y) * width + x;
@@ -279,21 +255,24 @@ void generate(uint32_t* pixels, const std::vector<uint32_t>& before, int width, 
                 continue;
             pixels[i] = pack(blend(base, made, mode), a);
         }
+    });
 }
 
 /// A per-color lookup applied to every pixel's color, keeping its alpha.
 template <typename Change>
 void recolor(uint32_t* pixels, const std::vector<uint32_t>& before, size_t count, Change change)
 {
-    for (size_t i = 0; i < count; ++i)
-    {
-        Rgb c;
-        double a = 0.0;
-        unpack(before[i], c, a);
-        if (a <= 0.0)
-            continue;
-        pixels[i] = pack(change(c), a);
-    }
+    parallelPixels(count, [&](size_t from, size_t to) {
+        for (size_t i = from; i < to; ++i)
+        {
+            Rgb c;
+            double a = 0.0;
+            unpack(before[i], c, a);
+            if (a <= 0.0)
+                continue;
+            pixels[i] = pack(change(c), a);
+        }
+    });
 }
 
 void toHsl(const Rgb& c, double& h, double& s, double& l)
@@ -572,7 +551,7 @@ void apply(const Applied& applied, uint32_t* pixels, const std::vector<uint32_t>
         const double dx = std::cos(angle) * length, dy = std::sin(angle) * length;
         if (length < 0.5)
             return;
-        for (int y = 0; y < height; ++y)
+        parallelRows(height, width, [&](int y) {
             for (int x = 0; x < width; ++x)
             {
                 Average average;
@@ -583,6 +562,7 @@ void apply(const Applied& applied, uint32_t* pixels, const std::vector<uint32_t>
                 }
                 pixels[static_cast<size_t>(y) * width + x] = average.result();
             }
+        });
     }
     else if (type == "radialblur")
     {
@@ -591,7 +571,7 @@ void apply(const Applied& applied, uint32_t* pixels, const std::vector<uint32_t>
         const bool spin = text(applied, "kind", frame, "Spin") == "Spin";
         const double strength = param(applied, "strength", frame, 10.0);
         const int taps = 32;
-        for (int y = 0; y < height; ++y)
+        parallelRows(height, width, [&](int y) {
             for (int x = 0; x < width; ++x)
             {
                 Average average;
@@ -613,6 +593,7 @@ void apply(const Applied& applied, uint32_t* pixels, const std::vector<uint32_t>
                 }
                 pixels[static_cast<size_t>(y) * width + x] = average.result();
             }
+        });
     }
     else if (type == "lensblur")
     {
@@ -629,7 +610,7 @@ void apply(const Applied& applied, uint32_t* pixels, const std::vector<uint32_t>
             const double a = k * 2.399963229728653;
             disc.emplace_back(r * std::cos(a), r * std::sin(a));
         }
-        for (int y = 0; y < height; ++y)
+        parallelRows(height, width, [&](int y) {
             for (int x = 0; x < width; ++x)
             {
                 Average average;
@@ -644,6 +625,7 @@ void apply(const Applied& applied, uint32_t* pixels, const std::vector<uint32_t>
                 }
                 pixels[static_cast<size_t>(y) * width + x] = average.result();
             }
+        });
     }
     else if (type == "glow")
     {
@@ -653,28 +635,32 @@ void apply(const Applied& applied, uint32_t* pixels, const std::vector<uint32_t>
         const std::string tint = text(applied, "color", frame, "");
         const Rgb tintColor = colorParam(applied, "color", frame, "#FFFFFF");
         std::vector<uint32_t> bright(count, 0);
-        for (size_t i = 0; i < count; ++i)
-        {
-            Rgb c;
-            double a = 0.0;
-            unpack(before[i], c, a);
-            const double over = (luma(c) - threshold) / (1.0 - threshold);
-            if (a <= 0.0 || over <= 0.0)
-                continue;
-            bright[i] = pack(tint.empty() ? c : tintColor, a * std::min(1.0, over));
-        }
+        parallelPixels(count, [&](size_t from, size_t to) {
+            for (size_t i = from; i < to; ++i)
+            {
+                Rgb c;
+                double a = 0.0;
+                unpack(before[i], c, a);
+                const double over = (luma(c) - threshold) / (1.0 - threshold);
+                if (a <= 0.0 || over <= 0.0)
+                    continue;
+                bright[i] = pack(tint.empty() ? c : tintColor, a * std::min(1.0, over));
+            }
+        });
         if (radius > 0.25)
             boxBlur(bright.data(), width, height, radius * 2.0, radius * 2.0, 3);
-        for (size_t i = 0; i < count; ++i)
-        {
-            uint32_t out = 0;
-            for (int shift = 0; shift < 32; shift += 8)
+        parallelPixels(count, [&](size_t from, size_t to) {
+            for (size_t i = from; i < to; ++i)
             {
-                const double v = ((before[i] >> shift) & 0xFF) + ((bright[i] >> shift) & 0xFF) * intensity;
-                out |= static_cast<uint32_t>(std::lround(clamp255(v))) << shift;
+                uint32_t out = 0;
+                for (int shift = 0; shift < 32; shift += 8)
+                {
+                    const double v = ((before[i] >> shift) & 0xFF) + ((bright[i] >> shift) & 0xFF) * intensity;
+                    out |= static_cast<uint32_t>(std::lround(clamp255(v))) << shift;
+                }
+                pixels[i] = out;
             }
-            pixels[i] = out;
-        }
+        });
     }
     else if (type == "ramp")
     {
@@ -721,26 +707,30 @@ void apply(const Applied& applied, uint32_t* pixels, const std::vector<uint32_t>
             return;
         // How near each pixel is to the art: its alpha spread out.
         std::vector<uint32_t> spread(count);
-        for (size_t i = 0; i < count; ++i)
-            spread[i] = before[i] & 0xFF000000u;
+        parallelPixels(count, [&](size_t from, size_t to) {
+            for (size_t i = from; i < to; ++i)
+                spread[i] = before[i] & 0xFF000000u;
+        });
         boxBlur(spread.data(), width, height, widthPx * 2.0, widthPx * 2.0, 3);
-        for (size_t i = 0; i < count; ++i)
-        {
-            const double near = std::min(1.0, ((spread[i] >> 24) & 0xFF) / 255.0 * 3.0);
-            const double own = ((before[i] >> 24) & 0xFF) / 255.0;
-            const double line = near * (1.0 - own);
-            if (line <= 0.0)
-                continue;
-            // The outline under the art.
-            const uint32_t under = pack(color, line * 255.0);
-            uint32_t out = 0;
-            for (int shift = 0; shift < 32; shift += 8)
+        parallelPixels(count, [&](size_t from, size_t to) {
+            for (size_t i = from; i < to; ++i)
             {
-                const double v = ((before[i] >> shift) & 0xFF) + ((under >> shift) & 0xFF) * (1.0 - own);
-                out |= static_cast<uint32_t>(std::lround(clamp255(v))) << shift;
+                const double near = std::min(1.0, ((spread[i] >> 24) & 0xFF) / 255.0 * 3.0);
+                const double own = ((before[i] >> 24) & 0xFF) / 255.0;
+                const double line = near * (1.0 - own);
+                if (line <= 0.0)
+                    continue;
+                // The outline under the art.
+                const uint32_t under = pack(color, line * 255.0);
+                uint32_t out = 0;
+                for (int shift = 0; shift < 32; shift += 8)
+                {
+                    const double v = ((before[i] >> shift) & 0xFF) + ((under >> shift) & 0xFF) * (1.0 - own);
+                    out |= static_cast<uint32_t>(std::lround(clamp255(v))) << shift;
+                }
+                pixels[i] = out;
             }
-            pixels[i] = out;
-        }
+        });
     }
     else if (type == "fractalnoise")
     {
@@ -774,7 +764,7 @@ void apply(const Applied& applied, uint32_t* pixels, const std::vector<uint32_t>
         centerOf(cx, cy);
         const double radius = std::max(1.0, param(applied, "radius", frame, 150.0) * scale);
         const double height2 = param(applied, "height", frame, 50.0) / 100.0;
-        for (int y = 0; y < height; ++y)
+        parallelRows(height, width, [&](int y) {
             for (int x = 0; x < width; ++x)
             {
                 const double dx = x - cx, dy = y - cy;
@@ -785,6 +775,7 @@ void apply(const Applied& applied, uint32_t* pixels, const std::vector<uint32_t>
                 const double s = 1.0 - height2 * fall * fall;
                 pixels[static_cast<size_t>(y) * width + x] = sample(before, width, height, cx + dx * s, cy + dy * s);
             }
+        });
     }
     else if (type == "ripple")
     {
@@ -793,7 +784,7 @@ void apply(const Applied& applied, uint32_t* pixels, const std::vector<uint32_t>
         const double wavelength = std::max(1.0, param(applied, "wavelength", frame, 40.0) * scale);
         const double reach = param(applied, "height", frame, 6.0) * scale;
         const double speed = param(applied, "speed", frame, 1.0);
-        for (int y = 0; y < height; ++y)
+        parallelRows(height, width, [&](int y) {
             for (int x = 0; x < width; ++x)
             {
                 const double dx = x - cx, dy = y - cy;
@@ -804,12 +795,13 @@ void apply(const Applied& applied, uint32_t* pixels, const std::vector<uint32_t>
                 pixels[static_cast<size_t>(y) * width + x] =
                     sample(before, width, height, x + dx / d * push, y + dy / d * push);
             }
+        });
     }
     else if (type == "bend")
     {
         const bool across = text(applied, "direction", frame, "Across") == "Across";
         const double strength = param(applied, "strength", frame, 30.0) / 100.0;
-        for (int y = 0; y < height; ++y)
+        parallelRows(height, width, [&](int y) {
             for (int x = 0; x < width; ++x)
             {
                 // A parabola: the middle stays, the ends move most.
@@ -818,6 +810,7 @@ void apply(const Applied& applied, uint32_t* pixels, const std::vector<uint32_t>
                 pixels[static_cast<size_t>(y) * width + x] =
                     across ? sample(before, width, height, x, y - push) : sample(before, width, height, x - push, y);
             }
+        });
     }
     else if (type == "displace")
     {
@@ -828,7 +821,7 @@ void apply(const Applied& applied, uint32_t* pixels, const std::vector<uint32_t>
         const double pushX = param(applied, "pushX", frame, 20.0) * scale;
         const double pushY = param(applied, "pushY", frame, 20.0) * scale;
         const bool channels = text(applied, "by", frame, "Brightness") == "Red and green";
-        for (int y = 0; y < height; ++y)
+        parallelRows(height, width, [&](int y) {
             for (int x = 0; x < width; ++x)
             {
                 const size_t i = static_cast<size_t>(y) * width + x;
@@ -843,6 +836,7 @@ void apply(const Applied& applied, uint32_t* pixels, const std::vector<uint32_t>
                 const double dy = ((v - 0.5) * k) * 2.0 * pushY;
                 pixels[i] = sample(before, width, height, x + dx, y + dy);
             }
+        });
     }
     else if (type == "levels")
     {
@@ -918,7 +912,7 @@ void apply(const Applied& applied, uint32_t* pixels, const std::vector<uint32_t>
         const double size = param(applied, "size", frame, 60.0) / 100.0;
         const double softness = std::max(0.01, param(applied, "softness", frame, 50.0) / 100.0);
         const Rgb color = colorParam(applied, "color", frame, "#000000");
-        for (int y = 0; y < height; ++y)
+        parallelRows(height, width, [&](int y) {
             for (int x = 0; x < width; ++x)
             {
                 const size_t i = static_cast<size_t>(y) * width + x;
@@ -941,6 +935,7 @@ void apply(const Applied& applied, uint32_t* pixels, const std::vector<uint32_t>
                 };
                 pixels[i] = pack(Rgb{over(c.r, color.r), over(c.g, color.g), over(c.b, color.b)}, out * 255.0);
             }
+        });
     }
     else if (type == "grain")
     {
@@ -948,7 +943,7 @@ void apply(const Applied& applied, uint32_t* pixels, const std::vector<uint32_t>
         const double size = std::max(0.5, param(applied, "size", frame, 1.0) * scale);
         const bool animated = flag(applied, "animated", frame, true);
         const int seedValue = static_cast<int>(param(applied, "seed", frame, 1.0)) + (animated ? frame * 7919 : 0);
-        for (int y = 0; y < height; ++y)
+        parallelRows(height, width, [&](int y) {
             for (int x = 0; x < width; ++x)
             {
                 const size_t i = static_cast<size_t>(y) * width + x;
@@ -961,13 +956,14 @@ void apply(const Applied& applied, uint32_t* pixels, const std::vector<uint32_t>
                 const double push = n * strength * 255.0;
                 pixels[i] = pack(Rgb{c.r + push, c.g + push, c.b + push}, a);
             }
+        });
     }
     else if (type == "chromatic")
     {
         const double distance = param(applied, "distance", frame, 4.0) * scale;
         const double angle = param(applied, "angle", frame, 0.0) * kPi / 180.0;
         const double dx = std::cos(angle) * distance, dy = std::sin(angle) * distance;
-        for (int y = 0; y < height; ++y)
+        parallelRows(height, width, [&](int y) {
             for (int x = 0; x < width; ++x)
             {
                 const size_t i = static_cast<size_t>(y) * width + x;
@@ -977,6 +973,7 @@ void apply(const Applied& applied, uint32_t* pixels, const std::vector<uint32_t>
                 const uint32_t a = std::max({(red >> 24) & 0xFF, (green >> 24) & 0xFF, (blue >> 24) & 0xFF});
                 pixels[i] = (a << 24) | (red & 0x00FF0000u) | (green & 0x0000FF00u) | (blue & 0x000000FFu);
             }
+        });
     }
     else if (type == "linearwipe" || type == "blinds")
     {
@@ -984,7 +981,7 @@ void apply(const Applied& applied, uint32_t* pixels, const std::vector<uint32_t>
         const Across across(param(applied, "angle", frame, type == "blinds" ? 90.0 : 0.0), width, height);
         const double feather = std::max(0.0, param(applied, "feather", frame, type == "blinds" ? 2.0 : 20.0) * scale);
         const double stripe = std::max(1.0, param(applied, "width", frame, 40.0) * scale);
-        for (int y = 0; y < height; ++y)
+        parallelRows(height, width, [&](int y) {
             for (int x = 0; x < width; ++x)
             {
                 const size_t i = static_cast<size_t>(y) * width + x;
@@ -1007,6 +1004,7 @@ void apply(const Applied& applied, uint32_t* pixels, const std::vector<uint32_t>
                 }
                 pixels[i] = scaled(before[i], keep);
             }
+        });
     }
     else if (type == "radialwipe")
     {
@@ -1017,7 +1015,7 @@ void apply(const Applied& applied, uint32_t* pixels, const std::vector<uint32_t>
         const bool clockwise = flag(applied, "clockwise", frame, true);
         const double feather = std::max(0.0, param(applied, "feather", frame, 5.0));
         const double sweep = completion * (360.0 + feather);
-        for (int y = 0; y < height; ++y)
+        parallelRows(height, width, [&](int y) {
             for (int x = 0; x < width; ++x)
             {
                 const size_t i = static_cast<size_t>(y) * width + x;
@@ -1028,19 +1026,21 @@ void apply(const Applied& applied, uint32_t* pixels, const std::vector<uint32_t>
                 const double keep = feather > 0.0 ? smoothstep(sweep - feather, sweep, angle) : (angle >= sweep ? 1.0 : 0.0);
                 pixels[i] = scaled(before[i], completion >= 1.0 ? 0.0 : keep);
             }
+        });
     }
     else if (type == "dissolve")
     {
         const double completion = std::clamp(param(applied, "completion", frame, 0.0) / 100.0, 0.0, 1.0);
         const double block = std::max(1.0, param(applied, "block", frame, 16.0) * scale);
         const int seedValue = static_cast<int>(param(applied, "seed", frame, 1.0));
-        for (int y = 0; y < height; ++y)
+        parallelRows(height, width, [&](int y) {
             for (int x = 0; x < width; ++x)
             {
                 const size_t i = static_cast<size_t>(y) * width + x;
                 const double pick = hash3(seedValue, static_cast<int>(x / block), static_cast<int>(y / block), 0);
                 pixels[i] = pick < completion ? 0u : before[i];
             }
+        });
     }
 }
 

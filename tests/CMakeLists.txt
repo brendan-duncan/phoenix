@@ -116,6 +116,7 @@ if(PHOENIX_TESTS_HAVE_PARSER)
         test_swf_writer.cpp
         test_extension_package.cpp
         test_behaviors.cpp
+        test_parallel.cpp
         test_lzma.cpp
         test_swf_sound.cpp
         test_swf_import.cpp

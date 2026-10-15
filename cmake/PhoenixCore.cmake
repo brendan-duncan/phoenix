@@ -128,6 +128,7 @@ set(PHOENIX_CORE_SOURCES
     gui/miniaudio_impl.c
     parser/path_parser.cpp
     util/gif_writer.cpp
+    util/parallel.cpp
     util/sprite_sheet.cpp
     writer/edge_writer.cpp
 )
