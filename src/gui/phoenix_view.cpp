@@ -6427,7 +6427,29 @@ void PhoenixView::hitTestTimeline(const fla::Timeline& timeline, fla::LoopType l
         for (size_t index = state.frame->elements.size(); index-- > 0;)
         {
             fla::Element* element = state.frame->elements[index];
-            if (element)
+            if (element && element->elementType() == fla::Element::Type::SymbolInstance &&
+                fla::behaviors::any(*static_cast<const fla::SymbolInstance*>(element)))
+            {
+                // Behaviors that make copies (rings, rows, particles): any
+                // copy that shows picks the instance, the last drawn first,
+                // and so does the place it is keyed, between bursts.
+                const auto* instance = static_cast<const fla::SymbolInstance*>(element);
+                const fla::Transform keyed = shownTransform(state, index, false);
+                const fla::behaviors::Copies copies =
+                    behaviorCopies(*instance, keyed, state.frame->index + std::max(0, state.offset));
+                for (size_t c = copies.size(); c-- > 0 && !result;)
+                {
+                    if (copies[c].alpha < 0.05)
+                        continue;
+                    const fla::Transform shown = fla::behaviors::apply(keyed, element->transformationPoint, copies[c]);
+                    hitTestElement(*element, const_cast<fla::Frame*>(state.frame), loopType, layerToDocument, documentPos,
+                        tolerance, result, &shown);
+                }
+                if (!result && copies.size() > 1)
+                    hitTestElement(*element, const_cast<fla::Frame*>(state.frame), loopType, layerToDocument, documentPos,
+                        tolerance, result, &keyed);
+            }
+            else if (element)
             {
                 const fla::Transform shown = shownTransform(state, index);
                 hitTestElement(*element, const_cast<fla::Frame*>(state.frame), loopType,
