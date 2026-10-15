@@ -2566,8 +2566,11 @@ void PropertiesPanel::addTemplateSection(QVBoxLayout* layout, fla::SymbolInstanc
             font->setCurrentText(givenFont == given.end() ? QString() : QString::fromStdString(givenFont->second));
             font->lineEdit()->setPlaceholderText("as drawn");
             font->setToolTip("The font this instance shows these words in; empty for the symbol's own");
-            connect(font, &QComboBox::currentTextChanged, this,
-                [set, name](const QString& family) { set(fla::templates::fontKey(name), family.toStdString()); });
+            // Kept when a family is picked or typed and Enter pressed, not
+            // at each letter.
+            const auto keepFont = [set, name, font]() { set(fla::templates::fontKey(name), font->currentText().toStdString()); };
+            connect(font, &QComboBox::activated, this, keepFont);
+            connect(font->lineEdit(), &QLineEdit::editingFinished, this, keepFont);
             section->addLong(row++, label, holder);
             holder = nullptr;
             section->addLong(row++, label + " font", font);
