@@ -2,6 +2,12 @@
 
 What changed in each release of Phoenix, newest first.
 
+## 0.14.0 (Unreleased)
+
+- Python as a module: `import phoenix` from your own Python opens, changes, renders and saves documents in a windowless Phoenix
+- Python scripts: keyword arguments (`timeline.insert_frames(5, all_layers=True)`), and `fl.runScript` runs JSFL scripts too; `Phoenix batch --python` runs scripts inside Phoenix, like `--jsfl`
+- SWF export: sounds inside movie clips play, sounds keep their envelopes, in and out points and loops, and each library sound keeps its own compression; Animate's stream and event sound settings are read from the file
+
 ## 0.13.3
 
 - Tutorials: each lesson has a picture of how it turns out, which plays when you pick it, and tags (Animation, Motion Graphics, Rigging and more) to show only the lessons about one thing
