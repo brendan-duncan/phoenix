@@ -1988,6 +1988,12 @@ bool pdfImage(PdfFile& file, const std::string& dictionary, const std::vector<ui
     if (filter.find("DCTDecode") != std::string::npos)
     {
         image.encoded = data;
+        // CMYK read as ink unless Decode inverts it.
+        const std::vector<double> decode = numbersOf(valueOf(dictionary, "/Decode"));
+        const std::string space = resolved(file, valueOf(dictionary, "/ColorSpace"));
+        const bool cmyk = space.rfind("/DeviceCMYK", 0) == 0 ||
+            (space.find("ICCBased") != std::string::npos && componentsOf(file, space) == 4);
+        image.inkCmyk = cmyk && !(decode.size() >= 2 && decode[0] > decode[1]);
         return !image.encoded.empty();
     }
     // Decoded samples (Flate and the rest already undone): gray, RGB, CMYK,

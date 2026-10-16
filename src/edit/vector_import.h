@@ -95,6 +95,10 @@ struct Image
 {
     /// The encoded file, as embedded; or empty, with \a rgba.
     std::vector<uint8_t> encoded;
+    /// A CMYK JPEG whose samples are amounts of ink, as PostScript and PDF
+    /// read them unless a Decode array inverts them; JPEG files keep CMYK
+    /// inverted, and decoders read it so.
+    bool inkCmyk = false;
     /// Straight RGBA, row by row, when there is no file.
     std::vector<uint8_t> rgba;
     int width = 0;

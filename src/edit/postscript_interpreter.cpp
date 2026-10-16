@@ -1049,6 +1049,13 @@ bool Scanner::next(Obj& out, Interp& interp)
         out = Obj::name("", false);
         return true;
     }
+    // The white space ending the token is part of it: data an operator
+    // reads from the program starts past it (a CR LF counts as one).
+    if (!done() && white(peek()))
+    {
+        const bool crlf = peek() == '\r' && src->at + 1 < src->bytes.size() && src->bytes[src->at + 1] == '\n';
+        src->at += crlf ? 2 : 1;
+    }
     bool ok = false, integer = false;
     const double v = toNumber(w, ok, integer);
     if (ok)
@@ -1372,12 +1379,6 @@ void ready(Interp& I, Source& s)
     s.pending = false;
     Source& in = *s.upstream;
     ready(I, in);
-    // The program's data starts past the white space after the operator.
-    if (in.program && in.at < in.bytes.size() && Scanner::white(in.bytes[in.at]))
-    {
-        const bool crlf = in.bytes[in.at] == '\r' && in.at + 1 < in.bytes.size() && in.bytes[in.at + 1] == '\n';
-        in.at += crlf ? 2 : 1;
-    }
     const Obj end = Obj::string(s.end);
     const std::shared_ptr<Source> decoded = makeFilter(I, s.upstream, s.filter, s.end.empty() ? nullptr : &end);
     s.bytes = std::move(decoded->bytes);
@@ -3526,9 +3527,6 @@ void opReadstring(Interp& I)
     Obj file = I.pop();
     Source& src = fileOperand(file);
     ready(I, src);
-    // After the operator's own white space, the data.
-    if (src.program && src.at < src.bytes.size() && Scanner::white(src.bytes[src.at]))
-        ++src.at;
     const size_t n = std::min(buffer.str->size(), src.bytes.size() - std::min(src.at, src.bytes.size()));
     std::string out(src.bytes.begin() + static_cast<std::ptrdiff_t>(src.at),
         src.bytes.begin() + static_cast<std::ptrdiff_t>(src.at + n));
@@ -3684,6 +3682,8 @@ void Interp::image(ImageSpec spec)
         src.at = src.bytes.size();
         image.width = width;
         image.height = height;
+        // CMYK read as ink unless Decode inverts it.
+        image.inkCmyk = components == 4 && !(spec.decode.size() >= 2 && spec.decode[0] > spec.decode[1]);
         placeImage(std::move(image), spec.matrix);
         return;
     }
@@ -3693,8 +3693,37 @@ void Interp::image(ImageSpec spec)
     if (total > (size_t(1) << 29))
         throw PsError{"limitcheck"};
     std::vector<std::vector<uint8_t>> planes;
+    const bool procedures = spec.multiple &&
+        std::any_of(spec.sources.begin(), spec.sources.end(), [](const Obj& o) { return o.isProc(); });
     if (spec.data)
         planes.push_back(std::move(*spec.data));
+    else if (procedures)
+    {
+        // Procedures that read the same file take turns, a piece each.
+        planes.resize(static_cast<size_t>(components));
+        for (int rounds = 0; rounds < (1 << 24); ++rounds)
+        {
+            bool short_ = false, grew = false;
+            for (size_t c = 0; c < planes.size(); ++c)
+            {
+                if (planes[c].size() >= total)
+                    continue;
+                short_ = true;
+                const size_t before = ops.size();
+                run(spec.sources[c]);
+                if (ops.size() > before && top().t == Obj::T::String && top().str && !top().str->empty())
+                {
+                    const std::string& piece = *top().str;
+                    planes[c].insert(planes[c].end(), piece.begin(),
+                        piece.begin() + static_cast<std::ptrdiff_t>(std::min(piece.size(), total - planes[c].size())));
+                    grew = true;
+                }
+                ops.resize(std::min(ops.size(), before));
+            }
+            if (!short_ || !grew)
+                break;
+        }
+    }
     else
         for (const Obj& source : spec.sources)
             planes.push_back(imageData(*this, source, total));

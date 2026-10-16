@@ -11776,7 +11776,17 @@ void MainWindow::importArtwork(const QString& path, bool toStage, const QPointF*
             const fla::vectors::Image& source = art.images[index];
             QImage pixels;
             if (!source.encoded.empty())
+            {
                 pixels.loadFromData(source.encoded.data(), static_cast<int>(source.encoded.size()));
+                // Ink where the decoder read inverted CMYK.
+                if (source.inkCmyk && pixels.format() == QImage::Format_CMYK8888)
+                    for (int y = 0; y < pixels.height(); ++y)
+                    {
+                        uchar* line = pixels.scanLine(y);
+                        for (int x = 0; x < pixels.width() * 4; ++x)
+                            line[x] = static_cast<uchar>(255 - line[x]);
+                    }
+            }
             else if (!source.rgba.empty())
             {
                 pixels = QImage(source.width, source.height, QImage::Format_RGBA8888);
