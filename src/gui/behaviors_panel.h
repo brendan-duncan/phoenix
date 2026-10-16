@@ -59,7 +59,9 @@ struct BehaviorsLinks
 /// it offers with sliders, boxes and lists; every change is a step to undo,
 /// and a slider dragged is one step. With several instances selected, a
 /// behavior added goes on each, and a setting changed changes on each that
-/// has that behavior in that place.
+/// has that behavior in that place. A selected instance's effects (the
+/// adjustment layers' blurs, glows, distortions, color and wipes, on its
+/// own picture) are on the panel's Effects side, worked the same way.
 class BehaviorsPanel : public QWidget
 {
     Q_OBJECT
@@ -81,7 +83,8 @@ private:
         Behaviors,
         Shapes,
         Texts,
-        Adjustments
+        Adjustments,
+        InstanceEffects
     };
     Mode mode() const;
     bool shapeMode() const;
@@ -109,6 +112,11 @@ private:
 
     BehaviorsLinks _links;
     QLabel* _what;
+    /// For instances: their behaviors, or their effects.
+    QWidget* _sides;
+    QToolButton* _behaviorsSide;
+    QToolButton* _effectsSide;
+    bool _effectsShown = false;
     QListWidget* _list;
     QToolButton* _add;
     QToolButton* _up;

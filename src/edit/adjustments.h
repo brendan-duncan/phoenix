@@ -9,6 +9,7 @@
 
 namespace fla {
 
+class DOMElement;
 class Layer;
 
 /// Compositing on layers, Phoenix's own: a track matte (a layer shown
@@ -42,6 +43,17 @@ const char* matteName(Matte matte);
 bool isAdjustment(const Layer& layer);
 std::vector<behaviors::Applied> effectsOf(const Layer& layer);
 std::vector<std::pair<std::string, std::string>> withAdjustment(const Layer& layer, bool on);
+
+/// The same effects on one symbol instance, on its own picture rather than
+/// on everything below: kept in its phoenixEffects attribute.
+extern const char* const kInstanceEffects;
+std::vector<behaviors::Applied> instanceEffectsOf(const DOMElement& element);
+/// Whether \a element has an effect that is on.
+bool hasInstanceEffects(const DOMElement& element);
+
+/// How far past the picture \a list may draw on \a frame, in stage pixels:
+/// the spread of a blur or a glow, an outline's width, a smear's length.
+double reach(const std::vector<behaviors::Applied>& list, int frame);
 
 /// A mask layer's edge: how far it is feathered and grown (shrunk, less
 /// than 0), in pixels, and whether it shows what is outside it instead.
@@ -87,9 +99,11 @@ behaviors::Applied defaults(const std::string& id, int seed);
 /// \a coverage, when given (one byte a pixel), limits the effects to where
 /// it is set, fading at its edges.
 /// \a layers gives other layers' pictures, for Displacement Map.
+/// With \a ownPicture the image is one instance's own picture: what
+/// generators paint stays on its art rather than filling the image.
 void apply(uint32_t* pixels, int width, int height, const std::vector<behaviors::Applied>& list, int frame,
     double pixelsPerUnit, const uint8_t* coverage = nullptr, double frameRate = 24.0,
-    const effects::LayerPictures* layers = nullptr);
+    const effects::LayerPictures* layers = nullptr, bool ownPicture = false);
 
 /// The matte's strength at each pixel of \a matte (premultiplied ARGB),
 /// from 0 to 255, for \a kind.

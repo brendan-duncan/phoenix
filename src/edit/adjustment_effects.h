@@ -25,9 +25,10 @@ bool handles(const std::string& type);
 
 /// \a applied on \a pixels (premultiplied ARGB, \a before a copy of them as
 /// they were), on \a frame, \a seconds into the movie, \a pixelsPerUnit
-/// pixels to a stage pixel.
+/// pixels to a stage pixel. With \a ownPicture the image is one
+/// instance's own picture: generators and Vignette paint only on its art.
 void apply(const behaviors::Applied& applied, uint32_t* pixels, const std::vector<uint32_t>& before, int width, int height,
-    int frame, double seconds, double pixelsPerUnit, const LayerPictures* layers);
+    int frame, double seconds, double pixelsPerUnit, const LayerPictures* layers, bool ownPicture = false);
 
 /// The layers \a list's effects draw from (Displacement Map's map), by name.
 std::vector<std::string> layersNeeded(const std::vector<behaviors::Applied>& list, int frame);

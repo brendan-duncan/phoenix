@@ -353,6 +353,16 @@ QJsonObject elementJson(MainWindow& window, const fla::Element& element, int ind
             types.append(QString::fromStdString(applied.type) + (applied.enabled ? "" : " (off)"));
         json["effects"] = types;
     }
+    // An instance's effects on its own picture.
+    if (element.elementType() == fla::Element::Type::SymbolInstance)
+    {
+        const std::vector<fla::behaviors::Applied> list = fla::compositing::instanceEffectsOf(element);
+        QJsonArray types;
+        for (const fla::behaviors::Applied& applied : list)
+            types.append(QString::fromStdString(applied.type) + (applied.enabled ? "" : " (off)"));
+        if (!types.isEmpty())
+            json["pictureEffects"] = types;
+    }
     if (element.elementType() == fla::Element::Type::SymbolInstance)
     {
         const fla::templates::Values values = fla::templates::valuesOf(static_cast<const fla::SymbolInstance&>(element));
@@ -1464,7 +1474,8 @@ void ScriptApi::addMotionGraphicsOperations()
     add("list_effects", "List effects",
         "What Phoenix can do to elements over time with no keyframes: behaviors for symbol instances (wiggle, "
         "repeat in a circle, particles, follow sound...), operators for drawn shapes (trim paths, wiggle path...), "
-        "letter animators for text, and effects for adjustment layers; each with its settings.",
+        "letter animators for text, and effects for adjustment layers and for symbol instances' own pictures; each "
+        "with its settings.",
         {{"kind", choice({"behaviors", "shape operators", "letter animators", "adjustments"}, "One kind; all when left out")}},
         {}, false, [](const QJsonObject& args) {
             QJsonObject out;
@@ -1505,24 +1516,32 @@ void ScriptApi::addMotionGraphicsOperations()
 
     add("set_effects", "Set effects",
         "Gives an element its behaviors (a symbol instance), operators (a drawn shape) or letter animators (a text "
-        "field), replacing those it had, or adding to them with append. Settings can be keyed to change over time. "
-        "An empty list takes them all off.",
+        "field), replacing those it had, or adding to them with append. With picture set, a symbol instance's "
+        "effects on its own picture instead (the adjustments list_effects names: blur, glow, outline, wipes...). "
+        "Settings can be keyed to change over time. An empty list takes them all off.",
         {{"symbol", kSymbolArg}, {"layer", kLayerArg}, {"frame", kFrameArg}, {"index", prop("integer", "The element")},
-            {"list", listArg}, {"append", prop("boolean", "Add after those it has rather than replacing them")}},
+            {"list", listArg}, {"append", prop("boolean", "Add after those it has rather than replacing them")},
+            {"picture", prop("boolean", "For a symbol instance: set the effects on its picture rather than its behaviors")}},
         {"layer", "frame", "index", "list"}, true, [this](const QJsonObject& args) {
             ScriptContext context{_window};
             fla::Layer& layer = context.layer(context.timeline(args), args);
             fla::Frame& frame = context.keyframe(layer, args);
             fla::Element& element = context.element(frame, args);
-            const QString kind = element.elementType() == fla::Element::Type::SymbolInstance ? "behaviors"
+            const bool picture = args.value("picture").toBool();
+            const bool instance = element.elementType() == fla::Element::Type::SymbolInstance;
+            if (picture && !instance)
+                fail("Effects on a picture are for symbol instances; an adjustment layer's are set with set_layer_compositing.");
+            const QString kind = picture                                                     ? "adjustments"
+                : instance                                                                   ? "behaviors"
                 : element.elementType() == fla::Element::Type::Shape                         ? "shape operators"
                 : element.elementType() == fla::Element::Type::StaticText                    ? "letter animators"
                                                                                                : QString();
             if (kind.isEmpty())
                 fail("Behaviors are for symbol instances, operators for shapes and letter animators for text.");
-            const std::string attribute = kind == "behaviors" ? "phoenixBehaviors"
-                : kind == "shape operators"                    ? fla::shapeops::kAttribute
-                                                               : fla::textanim::kAttribute;
+            const std::string attribute = picture ? fla::compositing::kInstanceEffects
+                : kind == "behaviors"              ? "phoenixBehaviors"
+                : kind == "shape operators"        ? fla::shapeops::kAttribute
+                                                   : fla::textanim::kAttribute;
             std::vector<fla::behaviors::Applied> list = args.value("append").toBool()
                 ? fla::behaviors::listOf(element, attribute) : std::vector<fla::behaviors::Applied>();
             for (const fla::behaviors::Applied& applied : effectList(kind, args.value("list").toArray()))
@@ -1531,9 +1550,10 @@ void ScriptApi::addMotionGraphicsOperations()
             const Attributes after = fla::behaviors::withList(element, attribute, list);
             if (after != element.extraAttributes)
                 context.stack().push(fla::CommandPtr(new fla::SetPropertyCommand<Attributes>(element.extraAttributes,
-                    element.extraAttributes, after, kind == "behaviors" ? "Behaviors" : kind == "shape operators" ? "Operators" : "Letter Animators")));
+                    element.extraAttributes, after, picture ? "Effects" : kind == "behaviors" ? "Behaviors"
+                        : kind == "shape operators" ? "Operators" : "Letter Animators")));
             context.refresh();
-            return Result{QJsonObject{{"kind", kind}, {"list", effectListJson(list)}}};
+            return Result{QJsonObject{{"kind", picture ? QString("picture effects") : kind}, {"list", effectListJson(list)}}};
         });
 
     add("set_layer_compositing", "Set layer compositing",

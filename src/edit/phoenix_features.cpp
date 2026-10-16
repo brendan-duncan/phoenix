@@ -50,6 +50,8 @@ const std::vector<Feature>& all()
         {"compositing", "Track mattes and adjustment layers",
             "matte layers drawn plainly and adjustment layers without their blur or color",
             {"phoenixMatte", "phoenixAdjustmentLayer", "phoenixAdjustments"}},
+        {"instance-effects", "Effects on instances", "the instances without their blurs, glows, distortions and wipes",
+            {"phoenixEffects"}},
         {"node-graph", "Node graphs", "the layers stacked as usual, without the graph's effects, merges and mattes",
             {"phoenixNodeGraph"}},
         {"mask-edges", "Mask edges and layer modes", "masks hard-edged and not inverted, layers drawn normally", {"phoenixMaskFeather", "phoenixMaskExpand", "phoenixMaskInvert", "phoenixLayerMode"}},

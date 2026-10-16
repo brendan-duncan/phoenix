@@ -3903,7 +3903,8 @@ void PhoenixView::drawFrame(QPainter& painter, const fla::Frame* frame, const fl
     bool driven = false;
     for (const fla::Element* element : frame->elements)
         if (element && element->elementType() == fla::Element::Type::SymbolInstance &&
-            fla::behaviors::any(*static_cast<const fla::SymbolInstance*>(element)))
+            (fla::behaviors::any(*static_cast<const fla::SymbolInstance*>(element)) ||
+                fla::compositing::hasInstanceEffects(*element)))
         {
             driven = true;
             break;
@@ -4547,13 +4548,23 @@ void PhoenixView::drawElement(QPainter& painter, const fla::Element* element, co
                 }
             }
 
+            // Its effects (the adjustment layers' blurs, glows, distortions
+            // and wipes) work on its own picture, after its color effect
+            // and before its filters. Keyed settings are keyed on the frames
+            // of the timeline it is on, as behaviors are.
+            const std::vector<fla::behaviors::Applied> pictureEffects = !_outlineColor.isValid() &&
+                    fla::compositing::hasInstanceEffects(*instance)
+                ? fla::compositing::instanceEffectsOf(*instance) : std::vector<fla::behaviors::Applied>();
+            const auto* placedOn = dynamic_cast<const fla::Frame*>(element->parent);
+            const int effectsFrame = (placedOn ? placedOn->index : 0) + std::max(0, _elapsed);
+
             // Anything but a plain alpha change needs the instance rendered
             // on its own first: a color transform of its pixels, a filter
-            // over them, or a blend mode against what is under it.
+            // over them, an effect, or a blend mode against what is under it.
             // Outline view shows the instance's lines plainly: no color
             // effect, filter or blend, which would wash the lines out.
             const bool isolate = !_outlineColor.isValid() &&
-                ((!color.isIdentity() && !alphaOnly) || !filters.empty() ||
+                ((!color.isIdentity() && !alphaOnly) || !filters.empty() || !pictureEffects.empty() ||
                     Filters::needsIsolation(instance->blendMode));
 
             // 9-slice scaling: a movie clip with scale guides, stretched,
@@ -4669,12 +4680,22 @@ void PhoenixView::drawElement(QPainter& painter, const fla::Element* element, co
                 const double fullScale = std::sqrt(std::fabs(full.determinant()));
                 const double ownScale = std::sqrt(std::fabs(qTransform.determinant()));
                 const double filterScale = ownScale > 1.0e-9 ? fullScale / ownScale : fullScale;
-                const double reach = Filters::margin(filters, filterScale);
+                const double reach = Filters::margin(filters, filterScale) +
+                    fla::compositing::reach(pictureEffects, effectsFrame) * filterScale;
 
                 const QRectF wanted = full.mapRect(local).adjusted(-2.0 - reach, -2.0 - reach, 2.0 + reach, 2.0 + reach);
                 const QRectF deviceArea(0, 0, painter.device()->width(), painter.device()->height());
-                const QRect crop = wanted.intersected(deviceArea).toAlignedRect();
-                const bool clipped = !deviceArea.contains(wanted);
+                QRect crop = wanted.intersected(deviceArea).toAlignedRect();
+                bool clipped = !deviceArea.contains(wanted);
+                // Effects work on the whole picture of the instance, not
+                // the part on screen, so a gradient or a wipe across it stays
+                // put as it is panned; unless that picture is huge.
+                if (!pictureEffects.empty() && !crop.isEmpty() && clipped &&
+                    wanted.width() * wanted.height() <= 16.0 * 1024.0 * 1024.0)
+                {
+                    crop = wanted.toAlignedRect();
+                    clipped = false;
+                }
 
                 // The rendering is kept between paints: the same instance
                 // placed the same way, apart from a shift, on the same
@@ -4727,6 +4748,12 @@ void PhoenixView::drawElement(QPainter& painter, const fla::Element* element, co
 
                     if (!color.isIdentity() && !alphaOnly)
                         applyColorTransform(symbolImage, color);
+                    if (!pictureEffects.empty())
+                        fla::compositing::apply(reinterpret_cast<uint32_t*>(symbolImage.bits()), symbolImage.width(),
+                            symbolImage.height(), pictureEffects, effectsFrame, filterScale, nullptr,
+                            _flaDocument && _flaDocument->document && _flaDocument->document->frameRate > 0.0
+                                ? _flaDocument->document->frameRate : 24.0,
+                            nullptr, true);
                     if (!filters.empty())
                         symbolImage = Filters::apply(symbolImage, filters, filterScale);
 

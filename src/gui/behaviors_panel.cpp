@@ -219,6 +219,38 @@ BehaviorsPanel::BehaviorsPanel(BehaviorsLinks links, QWidget* parent)
     _what = new QLabel(this);
     _what->setWordWrap(true);
 
+    // A selected instance has two lists: behaviors that move it, and
+    // effects on its picture.
+    _sides = new QWidget(this);
+    QHBoxLayout* sides = new QHBoxLayout(_sides);
+    sides->setContentsMargins(0, 0, 0, 0);
+    sides->setSpacing(0);
+    _behaviorsSide = new QToolButton(_sides);
+    _behaviorsSide->setObjectName("behaviorsSideBehaviors");
+    _behaviorsSide->setText("Behaviors");
+    _behaviorsSide->setToolTip("Motion worked out every frame, on top of the instance's keys");
+    _effectsSide = new QToolButton(_sides);
+    _effectsSide->setObjectName("behaviorsSideEffects");
+    _effectsSide->setText("Effects");
+    _effectsSide->setToolTip("Effects on the instance's own picture: blurs, glows, outlines, distortions, color and wipes");
+    for (QToolButton* side : {_behaviorsSide, _effectsSide})
+    {
+        side->setCheckable(true);
+        side->setAutoRaise(true);
+        side->setToolButtonStyle(Qt::ToolButtonTextOnly);
+        sides->addWidget(side);
+    }
+    sides->addStretch();
+    _behaviorsSide->setChecked(true);
+    connect(_behaviorsSide, &QToolButton::clicked, this, [this]() {
+        _effectsShown = false;
+        refresh();
+    });
+    connect(_effectsSide, &QToolButton::clicked, this, [this]() {
+        _effectsShown = true;
+        refresh();
+    });
+
     _list = new QListWidget(this);
     _list->setMaximumHeight(130);
     _list->setToolTip("The behaviors on the selection, applied top to bottom; the box turns one on or off");
@@ -333,6 +365,7 @@ BehaviorsPanel::BehaviorsPanel(BehaviorsLinks links, QWidget* parent)
 
     QVBoxLayout* layout = new QVBoxLayout(this);
     layout->setContentsMargins(6, 6, 6, 6);
+    layout->addWidget(_sides);
     layout->addWidget(_what);
     layout->addWidget(_list);
     layout->addLayout(buttons);
@@ -362,7 +395,7 @@ BehaviorsPanel::Mode BehaviorsPanel::mode() const
     // Instances first, then shapes, then text fields.
     const std::vector<fla::SymbolInstance*> instances = _links.instances ? _links.instances() : std::vector<fla::SymbolInstance*>();
     if (!instances.empty())
-        return Mode::Behaviors;
+        return _effectsShown ? Mode::InstanceEffects : Mode::Behaviors;
     if (_links.shapes && !_links.shapes().empty())
         return Mode::Shapes;
     if (_links.texts && !_links.texts().empty())
@@ -393,6 +426,7 @@ std::vector<fla::DOMElement*> BehaviorsPanel::targets() const
     case Mode::Adjustments:
         list.push_back(_links.adjustmentLayer());
         break;
+    case Mode::InstanceEffects:
     default:
         if (_links.instances)
             for (fla::SymbolInstance* instance : _links.instances())
@@ -411,6 +445,8 @@ const char* BehaviorsPanel::attribute() const
         return fla::textanim::kAttribute;
     case Mode::Adjustments:
         return fla::compositing::kAdjustments;
+    case Mode::InstanceEffects:
+        return fla::compositing::kInstanceEffects;
     default:
         return "phoenixBehaviors";
     }
@@ -425,6 +461,7 @@ const fla::behaviors::Definition* BehaviorsPanel::definitionOf(const std::string
     case Mode::Texts:
         return fla::textanim::find(id);
     case Mode::Adjustments:
+    case Mode::InstanceEffects:
         return fla::compositing::find(id);
     default:
         return BehaviorLibrary::instance().engine().find(id);
@@ -440,6 +477,7 @@ std::vector<fla::behaviors::Definition> BehaviorsPanel::available() const
     case Mode::Texts:
         return fla::textanim::definitions();
     case Mode::Adjustments:
+    case Mode::InstanceEffects:
         return fla::compositing::definitions();
     default:
         return BehaviorLibrary::instance().engine().definitions();
@@ -461,16 +499,27 @@ void BehaviorsPanel::refresh()
     const bool shapes = shapeMode();
     const bool texts = mode() == Mode::Texts;
     const bool adjusting = mode() == Mode::Adjustments;
+    const bool effects = mode() == Mode::InstanceEffects;
     const int keep = _list->currentRow();
     _list->clear();
-    _add->setText(shapes ? "Add Operator" : texts ? "Add Animator" : adjusting ? "Add Effect" : "Add Behavior");
+    _add->setText(shapes ? "Add Operator" : texts ? "Add Animator" : adjusting || effects ? "Add Effect" : "Add Behavior");
+    // The two sides show while instances are selected.
+    const bool instances = mode() == Mode::Behaviors || effects;
+    _sides->setVisible(instances && !selected.empty());
+    _behaviorsSide->setChecked(!effects);
+    _effectsSide->setChecked(effects);
     if (selected.empty())
         _what->setText("Select a symbol instance to give it behaviors (motion worked out every frame, on top of its "
-                       "keys), a drawn shape to give it operators (Trim Paths, Wiggle Path, Zig-zag), or a text field "
+                       "keys) or effects on its picture, a drawn shape to give it operators (Trim Paths, Wiggle Path, Zig-zag), or a text field "
                        "to animate its letters.");
     else if (adjusting)
         _what->setText(QString("Effects of the adjustment layer %1, on everything below it")
                            .arg(QString::fromStdString(static_cast<fla::Layer*>(selected.front())->name)));
+    else if (effects)
+        _what->setText(selected.size() == 1
+                ? QString("Effects of %1, on its own picture")
+                      .arg(QString::fromStdString(static_cast<fla::SymbolInstance*>(selected.front())->libraryItemName))
+                : QString("Effects of %1 instances (shown: the first one's)").arg(selected.size()));
     else if (texts)
         _what->setText(selected.size() == 1 ? QString("Letter animators of the text")
                                             : QString("Letter animators of %1 text fields (shown: the first one's)").arg(selected.size()));
@@ -500,8 +549,8 @@ void BehaviorsPanel::refresh()
     _up->setEnabled(any);
     _down->setEnabled(any);
     _remove->setEnabled(any);
-    // An adjustment layer's effects are drawn live; there is nothing to bake.
-    _bake->setVisible(mode() != Mode::Adjustments);
+    // Effects are drawn live; there is nothing to bake.
+    _bake->setVisible(mode() != Mode::Adjustments && !effects);
     _bake->setEnabled(any);
     _refreshing = false;
     fillSettings();
@@ -737,10 +786,10 @@ void BehaviorsPanel::add(const std::string& id)
     const Mode now = mode();
     const fla::behaviors::Applied applied = now == Mode::Shapes ? fla::shapeops::defaults(id, newSeed())
         : now == Mode::Texts                                    ? fla::textanim::defaults(id, newSeed())
-        : now == Mode::Adjustments                              ? fla::compositing::defaults(id, newSeed())
+        : now == Mode::Adjustments || now == Mode::InstanceEffects ? fla::compositing::defaults(id, newSeed())
                                                                 : BehaviorLibrary::instance().engine().defaults(id, newSeed());
     edit(now == Mode::Shapes ? "Add Operator" : now == Mode::Texts ? "Add Letter Animator"
-            : now == Mode::Adjustments                                 ? "Add Effect"
+            : now == Mode::Adjustments || now == Mode::InstanceEffects ? "Add Effect"
                                                                        : "Add Behavior", [&applied](std::vector<fla::behaviors::Applied>& list) { list.push_back(applied); });
     refresh();
     _list->setCurrentRow(_list->count() - 1);

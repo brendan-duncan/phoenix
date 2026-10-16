@@ -240,14 +240,17 @@ Rgb blend(const Rgb& base, const Rgb& top, const std::string& mode)
 /// The picture with \a make's color on every pixel, blended as \a mode
 /// says: Replace paints it solid; the others work it into what is there.
 template <typename Make>
-void generate(uint32_t* pixels, const std::vector<uint32_t>& before, int width, int height, const std::string& mode, Make make)
+void generate(uint32_t* pixels, const std::vector<uint32_t>& before, int width, int height, const std::string& mode, Make make,
+    bool ownPicture = false)
 {
     parallelRows(height, width, [&](int y) {
         for (int x = 0; x < width; ++x)
         {
             const size_t i = static_cast<size_t>(y) * width + x;
             const Rgb made = make(x, y);
-            if (mode == "Replace")
+            // Replacing fills the whole picture, but an instance's own
+            // picture keeps the shape of its art.
+            if (mode == "Replace" && !ownPicture)
             {
                 pixels[i] = pack(made, 255.0);
                 continue;
@@ -257,7 +260,7 @@ void generate(uint32_t* pixels, const std::vector<uint32_t>& before, int width, 
             unpack(before[i], base, a);
             if (a <= 0.0)
                 continue;
-            pixels[i] = pack(blend(base, made, mode), a);
+            pixels[i] = pack(mode == "Replace" ? made : blend(base, made, mode), a);
         }
     });
 }
@@ -537,7 +540,7 @@ std::vector<std::string> layersNeeded(const std::vector<Applied>& list, int fram
 }
 
 void apply(const Applied& applied, uint32_t* pixels, const std::vector<uint32_t>& before, int width, int height, int frame,
-    double seconds, double pixelsPerUnit, const LayerPictures* layers)
+    double seconds, double pixelsPerUnit, const LayerPictures* layers, bool ownPicture)
 {
     const std::string& type = applied.type;
     const size_t count = static_cast<size_t>(width) * static_cast<size_t>(height);
@@ -681,7 +684,7 @@ void apply(const Applied& applied, uint32_t* pixels, const std::vector<uint32_t>
             const double t = radial ? std::clamp(std::hypot(x - sx, y - sy) / std::sqrt(length2), 0.0, 1.0)
                                     : std::clamp(((x - sx) * vx + (y - sy) * vy) / length2, 0.0, 1.0);
             return Rgb{from.r + (to.r - from.r) * t, from.g + (to.g - from.g) * t, from.b + (to.b - from.b) * t};
-        });
+        }, ownPicture);
     }
     else if (type == "fourcolor")
     {
@@ -696,7 +699,7 @@ void apply(const Applied& applied, uint32_t* pixels, const std::vector<uint32_t>
                 return (a * (1 - u) + b * u) * (1 - v) + (c * (1 - u) + d * u) * v;
             };
             return Rgb{mix(tl.r, tr.r, bl.r, br.r), mix(tl.g, tr.g, bl.g, br.g), mix(tl.b, tr.b, bl.b, br.b)};
-        });
+        }, ownPicture);
     }
     else if (type == "fill")
     {
@@ -760,7 +763,7 @@ void apply(const Applied& applied, uint32_t* pixels, const std::vector<uint32_t>
             }
             const double v = std::clamp((value / total - 0.5) * contrast * 1.6 + 0.5 + brightness, 0.0, 1.0);
             return Rgb{dark.r + (light.r - dark.r) * v, dark.g + (light.g - dark.g) * v, dark.b + (light.b - dark.b) * v};
-        });
+        }, ownPicture);
     }
     else if (type == "bulge")
     {
@@ -928,10 +931,17 @@ void apply(const Applied& applied, uint32_t* pixels, const std::vector<uint32_t>
                 if (k <= 0.0)
                     continue;
                 // The color laid over the picture, empty parts of the stage
-                // too, so the edges darken whatever is there.
+                // too, so the edges darken whatever is there; an
+                // instance's own picture only where it has art.
                 Rgb c;
                 double a = 0.0;
                 unpack(before[i], c, a);
+                if (ownPicture)
+                {
+                    if (a > 0.0)
+                        pixels[i] = pack(Rgb{c.r + (color.r - c.r) * k, c.g + (color.g - c.g) * k, c.b + (color.b - c.b) * k}, a);
+                    continue;
+                }
                 const double cover = a / 255.0;
                 const double out = cover + (1.0 - cover) * k;
                 const auto over = [cover, k, out](double under, double tint) {

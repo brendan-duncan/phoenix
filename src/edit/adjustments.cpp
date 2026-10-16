@@ -16,6 +16,7 @@ namespace fla::compositing {
 const char* const kMatte = "phoenixMatte";
 const char* const kAdjustmentLayer = "phoenixAdjustmentLayer";
 const char* const kAdjustments = "phoenixAdjustments";
+const char* const kInstanceEffects = "phoenixEffects";
 
 namespace {
 
@@ -287,6 +288,60 @@ std::vector<Applied> effectsOf(const Layer& layer)
     return behaviors::listOf(layer, kAdjustments);
 }
 
+std::vector<Applied> instanceEffectsOf(const DOMElement& element)
+{
+    return behaviors::listOf(element, kInstanceEffects);
+}
+
+bool hasInstanceEffects(const DOMElement& element)
+{
+    for (const auto& each : element.extraAttributes)
+        if (each.first == kInstanceEffects)
+        {
+            for (const Applied& applied : behaviors::decode(each.second))
+                if (applied.enabled && find(applied.type))
+                    return true;
+            return false;
+        }
+    return false;
+}
+
+double reach(const std::vector<Applied>& list, int frame)
+{
+    double total = 0.0;
+    for (const Applied& applied : list)
+    {
+        if (!applied.enabled)
+            continue;
+        const std::string& type = applied.type;
+        double far = 0.0;
+        // A box blur run three times spreads about three times its radius.
+        if (type == "blur")
+            far = 3.0 * param(applied, "radius", frame, 6.0);
+        else if (type == "glow")
+            far = 3.0 * param(applied, "radius", frame, 12.0);
+        else if (type == "outline")
+            far = 3.0 * param(applied, "width", frame, 4.0);
+        else if (type == "lensblur")
+            far = param(applied, "radius", frame, 8.0);
+        else if (type == "dirblur")
+            far = param(applied, "length", frame, 20.0) / 2.0;
+        else if (type == "chromatic")
+            far = param(applied, "distance", frame, 4.0);
+        else if (type == "turbulent" || type == "wave")
+            far = param(applied, "amount", frame, type == "wave" ? 6.0 : 8.0);
+        else if (type == "ripple")
+            far = param(applied, "height", frame, 6.0);
+        else if (type == "displace")
+            far = std::max(std::fabs(param(applied, "pushX", frame, 20.0)), std::fabs(param(applied, "pushY", frame, 20.0)));
+        else if (type == "bulge")
+            far = param(applied, "radius", frame, 150.0) * std::fabs(param(applied, "height", frame, 50.0)) / 200.0;
+        // Each works on what the ones before left, so their reaches add up.
+        total += std::clamp(std::fabs(far), 0.0, 2000.0);
+    }
+    return std::min(total, 4000.0);
+}
+
 std::vector<std::pair<std::string, std::string>> withAdjustment(const Layer& layer, bool on)
 {
     std::vector<std::pair<std::string, std::string>> out = without(layer, kAdjustmentLayer);
@@ -376,7 +431,7 @@ Applied defaults(const std::string& id, int)
 }
 
 void apply(uint32_t* pixels, int width, int height, const std::vector<Applied>& list, int frame, double pixelsPerUnit,
-    const uint8_t* coverage, double frameRate, const effects::LayerPictures* layers)
+    const uint8_t* coverage, double frameRate, const effects::LayerPictures* layers, bool ownPicture)
 {
     const double seconds = frame / (frameRate > 0.0 ? frameRate : 24.0);
     if (!pixels || width <= 0 || height <= 0)
@@ -397,7 +452,7 @@ void apply(uint32_t* pixels, int width, int height, const std::vector<Applied>& 
                 boxBlur(pixels, width, height, radius * 2.0, radius * 2.0, 3);
         }
         else if (effects::handles(applied.type))
-            effects::apply(applied, pixels, before, width, height, frame, seconds, pixelsPerUnit, layers);
+            effects::apply(applied, pixels, before, width, height, frame, seconds, pixelsPerUnit, layers, ownPicture);
         else if (applied.type == "turbulent" || applied.type == "wave")
         {
             // Each pixel takes the color from a place pushed about by the
