@@ -96,6 +96,39 @@ BitmapFilter BitmapFilter::colorMatrix(const std::vector<double>& matrix)
     return filter;
 }
 
+BitmapFilter BitmapFilter::adjustColor(double brightness, double contrast, double saturation, double hue)
+{
+    const double b = limit(brightness, -100.0, 100.0) * 2.55;
+    const double c = 1.0 + limit(contrast, -100.0, 100.0) / 100.0;
+    const double s = 1.0 + limit(saturation, -100.0, 100.0) / 100.0;
+    const double h = limit(hue, -180.0, 180.0) * kPi / 180.0;
+    // Saturation about the luminance axis, then the hue turned about it,
+    // then contrast about the middle gray and the brightness added.
+    constexpr double lum[3] = {0.3086, 0.6094, 0.0820};
+    double sat[3][3];
+    for (int r = 0; r < 3; ++r)
+        for (int k = 0; k < 3; ++k)
+            sat[r][k] = lum[k] * (1.0 - s) + (r == k ? s : 0.0);
+    const double cosH = std::cos(h);
+    const double sinH = std::sin(h);
+    const double w = 1.0 / 3.0;
+    const double s3 = std::sqrt(1.0 / 3.0);
+    double turn[3][3];
+    for (int r = 0; r < 3; ++r)
+        for (int k = 0; k < 3; ++k)
+            turn[r][k] = w + cosH * ((r == k ? 1.0 : 0.0) - w) +
+                sinH * s3 * (((k - r + 3) % 3 == 1) ? 1.0 : ((k - r + 3) % 3 == 2) ? -1.0 : 0.0);
+    std::vector<double> m(20, 0.0);
+    for (int r = 0; r < 3; ++r)
+    {
+        for (int k = 0; k < 3; ++k)
+            m[r * 5 + k] = c * (turn[r][0] * sat[0][k] + turn[r][1] * sat[1][k] + turn[r][2] * sat[2][k]);
+        m[r * 5 + 4] = 128.0 * (1.0 - c) + b;
+    }
+    m[18] = 1.0;
+    return colorMatrix(m);
+}
+
 BitmapFilter BitmapFilter::convolution(int matrixX, int matrixY, const std::vector<double>& matrix, double divisor,
     double bias, bool preserveAlpha, bool clamp, uint32_t color, double alpha)
 {

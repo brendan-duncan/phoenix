@@ -29,6 +29,12 @@ class Symbol;
 class SymbolInstance;
 class Timeline;
 
+namespace display {
+class DisplayObject;
+class Stage;
+class TextField;
+} // namespace display
+
 /// A movie played as Flash Player plays it, scripts and all: Control > Test
 /// Movie. Free of Qt.
 namespace play {
@@ -70,11 +76,18 @@ struct Clip
     bool playing = true;
     int length = 1;
 
-    /// What scripts have set: _visible, _x and _y (in the parent's
-    /// pixels), _xscale, _yscale (percent), _rotation (degrees) and _alpha
-    /// (0 to 100).
-    std::optional<bool> visible;
-    std::optional<double> x, y, xscale, yscale, rotation, alpha;
+    /// It on the display list: a display::MovieClip, or a
+    /// display::SimpleButton for a button. What scripts set (_visible, _x,
+    /// _xscale, alpha...) is kept there, over what the timeline places.
+    std::shared_ptr<display::DisplayObject> display;
+    /// What the timeline has placed in it on the frame it is on, in depth
+    /// order: its movie clips' and buttons' display objects, its text
+    /// fields and the rest of its art (as display::TimelineArt). A script
+    /// may have taken some off the display list.
+    std::vector<std::shared_ptr<display::DisplayObject>> timelineObjects;
+    /// The keyframes timelineObjects were made for, to tell when they need
+    /// making again.
+    std::vector<const Frame*> timelineFrames;
 
     std::vector<std::unique_ptr<Clip>> children;
     /// What scripts see it as.
@@ -128,11 +141,14 @@ struct Clip
     Clip* named(const std::string& name) const;
 
     /// Whether it shows: _visible unless a script hid it.
-    bool shown() const { return visible.value_or(true); }
+    bool shown() const;
     /// Its transform in its parent: the timeline's, with what scripts set.
     Transform transform(const Transform& placedTransform) const;
     /// Its opacity from 0 to 1, as scripts set it; 1 when they have not.
-    double opacity() const { return alpha ? std::max(0.0, std::min(1.0, *alpha / 100.0)) : 1.0; }
+    double opacity() const;
+    /// What a script set _x and _y to; none when it has not.
+    std::optional<double> scriptedX() const;
+    std::optional<double> scriptedY() const;
 };
 
 class MovieRuntime
@@ -153,6 +169,14 @@ public:
     /// One frame on: every clip that plays moves on (round to its first
     /// frame after its last), and the scripts of the frames entered run.
     void step();
+
+    /// The display list the movie's scripts and the pointer work with: the
+    /// stage, the root clip's display object its first child.
+    display::Stage& stage() { return *_stage; }
+    /// After the pointer or a key went to the stage's display objects
+    /// (their listeners may have sent clips to other frames): goes on with
+    /// what they did.
+    void afterEvents() { settle(); }
 
     /// The scene playing goes to \a frame (from 0), as a script's
     /// gotoAndPlay or gotoAndStop sends it, keeping whether it plays: a
@@ -180,8 +204,10 @@ public:
     /// them (Key.LEFT 37, "A" 65...), \a character what it types, 0 for
     /// none. AS2 keyPress handlers, onClipEvent(keyDown) and Key listeners
     /// hear it, and ActionScript 3's keyDown and keyUp listeners.
-    void keyDown(int code, int character);
-    void keyUp(int code, int character);
+    /// The stage's display objects hear them too (keyDown and keyUp to
+    /// the focus), with the modifier keys held.
+    void keyDown(int code, int character, bool shift = false, bool ctrl = false, bool alt = false);
+    void keyUp(int code, int character, bool shift = false, bool ctrl = false, bool alt = false);
     /// The pointer is at (\a x, \a y) on the stage: a clip being dragged
     /// follows it, and _xmouse and mouseX read it.
     void pointerAt(double x, double y);
@@ -218,6 +244,8 @@ public:
     std::optional<std::string> textOf(Clip& clip, const StaticText& field);
     /// The clips scripts made on \a clip, in the order they draw.
     std::vector<Clip*> madeChildren(const Clip& clip) const;
+    /// The display text field for \a field on \a clip's frame, or null.
+    display::TextField* displayField(const Clip& clip, const StaticText& field) const;
     /// The clip a made instance (Clip::made) is, or null.
     Clip* clipOfMade(const SymbolInstance& instance) const;
     /// Whether \a clip is on the stage now: a pointer kept since the movie
@@ -269,13 +297,20 @@ private:
     /// Brings \a clip's children up to its current frame: new ones made
     /// (their first frame entered), gone ones dropped.
     void syncChildren(Clip& clip, std::vector<Clip*>& entered);
+    /// Brings \a clip's display list up to its current frame: what the
+    /// timeline places put in by depth, what it no longer places taken off.
+    void syncDisplay(Clip& clip);
+    /// Gives \a clip its display object.
+    void attachDisplay(Clip& clip);
     /// Runs the scripts of the frame \a clip is on.
     void runFrameScripts(Clip& clip);
     /// Plays the sounds on button state frame \a state (0 Up to 3 Hit).
     void buttonSound(const Clip& button, int state);
     /// Goes on with the frames clips were sent to while scripts ran.
     void settle();
-    void advance(Clip& clip, std::vector<Clip*>& entered);
+    /// Moves \a clip and what is in it on a frame; the clips whose new
+    /// frames' scripts are to run are added to \a scripts.
+    void advance(Clip& clip, std::vector<Clip*>& entered, std::vector<Clip*>& scripts);
     void enter(std::vector<Clip*>& entered);
     void runClipEvent(Clip& clip, const std::string& event);
     void runButtonEvent(Clip& button, const std::string& event);
@@ -379,6 +414,7 @@ private:
     SceneMove _sceneMove;
     double _frameRate;
     std::unique_ptr<as3::VM> _vm;
+    std::shared_ptr<display::Stage> _stage;
     std::unique_ptr<Clip> _root;
     /// The clip whose script runs: what a bare stop() or gotoAndPlay()
     /// moves (tellTarget changes it).

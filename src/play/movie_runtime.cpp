@@ -10,6 +10,10 @@
 #include "../data/symbol_list.h"
 #include "../data/timeline.h"
 #include "../edit/script_edit.h"
+#include "display/bitmap_filter.h"
+#include "display/display_object.h"
+#include "display/stage.h"
+#include "display/text_field.h"
 
 #include "bytecode/compiler.h"
 #include "bytecode/vm.h"
@@ -153,6 +157,111 @@ std::string attributeOf(const std::vector<std::pair<std::string, std::string>>& 
 }
 
 /// The events a clip hears from the mouse in ActionScript 3.
+display::Matrix toMatrix(const Transform& t)
+{
+    return display::Matrix(t.m11, t.m12, t.m21, t.m22, t.tx, t.ty);
+}
+
+Transform toTransform(const display::Matrix& m)
+{
+    return Transform(m.a, m.b, m.c, m.d, m.tx, m.ty);
+}
+
+/// An instance's color effect as a color transform: a tint, a brightness,
+/// or multipliers and offsets.
+display::ColorTransform toColor(const ColorTransform& color)
+{
+    display::ColorTransform out;
+    if (color.tintMultiplier != 0.0)
+    {
+        const double t = color.tintMultiplier;
+        out.redMultiplier = out.greenMultiplier = out.blueMultiplier = 1.0 - t;
+        out.redOffset = color.tintColor[0] * t;
+        out.greenOffset = color.tintColor[1] * t;
+        out.blueOffset = color.tintColor[2] * t;
+    }
+    else if (color.brightness != 0.0)
+    {
+        const double b = color.brightness;
+        out.redMultiplier = out.greenMultiplier = out.blueMultiplier = 1.0 - std::fabs(b);
+        if (b > 0.0)
+            out.redOffset = out.greenOffset = out.blueOffset = 255.0 * b;
+    }
+    else
+    {
+        out.redMultiplier = color.redMultiplier;
+        out.greenMultiplier = color.greenMultiplier;
+        out.blueMultiplier = color.blueMultiplier;
+        out.redOffset = color.redOffset;
+        out.greenOffset = color.greenOffset;
+        out.blueOffset = color.blueOffset;
+    }
+    out.alphaMultiplier = color.alphaMultiplier;
+    out.alphaOffset = color.alphaOffset;
+    return out;
+}
+
+uint32_t rgbOf(const uint8_t color[4])
+{
+    return (uint32_t(color[0]) << 16) | (uint32_t(color[1]) << 8) | color[2];
+}
+
+/// An instance's filters as the display engine has them, as Flash Player
+/// makes them of a movie's: Adjust Color becomes a color matrix.
+std::vector<display::BitmapFilter> toFilters(const std::vector<Filter>& filters)
+{
+    using display::BitmapFilter;
+    std::vector<BitmapFilter> out;
+    for (const Filter& f : filters)
+    {
+        if (!f.enabled)
+            continue;
+        switch (f.type)
+        {
+        case Filter::Type::Blur:
+            out.push_back(BitmapFilter::blur(f.blurX, f.blurY, f.quality));
+            break;
+        case Filter::Type::DropShadow:
+            out.push_back(BitmapFilter::dropShadow(f.distance, f.angle, rgbOf(f.color), f.color[3] / 255.0, f.blurX,
+                f.blurY, f.strength, f.quality, f.inner, f.knockout, f.hideObject));
+            break;
+        case Filter::Type::Glow:
+            out.push_back(BitmapFilter::glow(rgbOf(f.color), f.color[3] / 255.0, f.blurX, f.blurY, f.strength, f.quality,
+                f.inner, f.knockout));
+            break;
+        case Filter::Type::Bevel:
+            out.push_back(BitmapFilter::bevel(f.distance, f.angle, rgbOf(f.highlightColor), f.highlightColor[3] / 255.0,
+                rgbOf(f.shadowColor), f.shadowColor[3] / 255.0, f.blurX, f.blurY, f.strength, f.quality,
+                f.bevelType.empty() ? std::string("inner") : f.bevelType, f.knockout));
+            break;
+        case Filter::Type::GradientGlow:
+        case Filter::Type::GradientBevel:
+        {
+            BitmapFilter g = BitmapFilter::bevel(f.distance, f.angle, 0xffffff, 1.0, 0, 1.0, f.blurX, f.blurY, f.strength,
+                f.quality, f.bevelType.empty() ? std::string(f.type == Filter::Type::GradientGlow ? "outer" : "inner")
+                                               : f.bevelType,
+                f.knockout);
+            g.type = f.type == Filter::Type::GradientGlow ? BitmapFilter::Type::GradientGlow
+                                                          : BitmapFilter::Type::GradientBevel;
+            for (const GradientEntry& entry : f.entries)
+            {
+                display::Gradient::Stop stop;
+                stop.color = rgbOf(entry.color);
+                stop.alpha = entry.color[3] / 255.0;
+                stop.ratio = static_cast<int>(std::lround(std::max(0.0, std::min(1.0, entry.ratio)) * 255.0));
+                g.stops.push_back(stop);
+            }
+            out.push_back(g);
+            break;
+        }
+        case Filter::Type::AdjustColor:
+            out.push_back(BitmapFilter::adjustColor(f.brightness, f.contrast, f.saturation, f.hue));
+            break;
+        }
+    }
+    return out;
+}
+
 bool isMouseEvent(const std::string& type)
 {
     return type == "click" || type == "mouseDown" || type == "mouseUp" || type == "mouseOver" ||
@@ -318,24 +427,31 @@ Clip* Clip::named(const std::string& wanted) const
 
 Transform Clip::transform(const Transform& placedTransform) const
 {
-    Transform shown = placedTransform;
-    if (xscale || yscale || rotation)
-    {
-        // Built again from scale and rotation, as Flash does once a script
-        // sets one of them (any skew is dropped).
-        const double sx = xscale ? *xscale / 100.0 : scaleOf(shown.m11, shown.m12);
-        const double sy = yscale ? *yscale / 100.0 : scaleOf(shown.m21, shown.m22);
-        const double turn = (rotation ? *rotation : std::atan2(shown.m12, shown.m11) * 180.0 / kPi) * kPi / 180.0;
-        shown.m11 = sx * std::cos(turn);
-        shown.m12 = sx * std::sin(turn);
-        shown.m21 = -sy * std::sin(turn);
-        shown.m22 = sy * std::cos(turn);
-    }
-    if (x)
-        shown.tx = *x;
-    if (y)
-        shown.ty = *y;
-    return shown;
+    if (!display)
+        return placedTransform;
+    return toTransform(display->matrixOver(toMatrix(placedTransform)));
+}
+
+bool Clip::shown() const
+{
+    return !display || display->visible();
+}
+
+double Clip::opacity() const
+{
+    if (!display || !display->alphaScripted())
+        return 1.0;
+    return std::max(0.0, std::min(1.0, display->alpha()));
+}
+
+std::optional<double> Clip::scriptedX() const
+{
+    return display ? display->scriptedX() : std::nullopt;
+}
+
+std::optional<double> Clip::scriptedY() const
+{
+    return display ? display->scriptedY() : std::nullopt;
 }
 
 /// A clip as scripts see it: its properties worked out from the clip, its
@@ -368,6 +484,8 @@ private:
 Clip::~Clip()
 {
     *life = nullptr;
+    if (display)
+        display->clip = nullptr;
 }
 
 MovieRuntime::MovieRuntime(const Timeline& root, double frameRate)
@@ -406,10 +524,20 @@ void MovieRuntime::start()
     if (stopAllSounds)
         stopAllSounds();
     _vm = std::make_unique<as3::VM>();
+    if (!_stage)
+        _stage = std::make_shared<display::Stage>();
+    _stage->setFrameRate(_frameRate);
+    _stage->stopDrag();
+    _stage->setFocus(nullptr);
+    if (_root && _root->display)
+        _stage->removeChild(_root->display.get());
     _root = std::make_unique<Clip>();
     _root->timeline = _scenes.empty() ? nullptr : _scenes.front();
     _root->length = lengthOf(_root->timeline);
     _root->name = "_level0";
+    attachDisplay(*_root);
+    _stage->addChildAt(_root->display, 0);
+    _stage->setRootObject(_root->display.get());
     setupGlobals();
     loadClasses();
     std::vector<Clip*> entered{_root.get()};
@@ -987,8 +1115,11 @@ void MovieRuntime::pointerAt(double x, double y)
             nx = std::clamp(nx, std::min(_drag.left, _drag.right), std::max(_drag.left, _drag.right));
             ny = std::clamp(ny, std::min(_drag.top, _drag.bottom), std::max(_drag.top, _drag.bottom));
         }
-        clip.x = nx;
-        clip.y = ny;
+        if (clip.display)
+        {
+            clip.display->setX(nx);
+            clip.display->setY(ny);
+        }
     }
     // mouseMove: AS2's clip event, ActionScript 3's listeners.
     eachClip([this](Clip& clip) {
@@ -1031,9 +1162,14 @@ Clip* MovieRuntime::makeClip(Clip* parent, const Symbol& symbol, const std::stri
     made->button = symbol.symbolType == SymbolType::Button;
     made->playing = !made->button;
     made->length = lengthOf(made->timeline);
+    attachDisplay(*made);
     Clip* clip = made.get();
     if (parent)
+    {
         parent->children.push_back(std::move(made));
+        if (parent->display && parent->display->isContainer())
+            static_cast<display::DisplayObjectContainer*>(parent->display.get())->addChild(clip->display);
+    }
     else
         _offStage.push_back(std::move(made));
     _madeToEnter.push_back(clip);
@@ -1052,6 +1188,8 @@ void MovieRuntime::takeOff(Clip& clip, bool keep)
     from.erase(found);
     if (!keep)
         forget(clip);
+    if (clip.display && clip.display->parent())
+        clip.display->parent()->removeChild(clip.display.get());
     clip.parent = nullptr;
     clip.placement.known = false;
     // Kept, even when gone for good, so a script still running on it or
@@ -1191,6 +1329,12 @@ public:
             return true;
         const std::string text = value ? value->toString() : std::string();
         clip->texts[_name] = property == "htmlText" ? withoutTags(text) : text;
+        if (const StaticText* field = fieldNamed(clip->timeline, clip->frame, _name))
+            if (display::TextField* shown = _runtime.displayField(*clip, *field))
+            {
+                shown->setText(clip->texts[_name]);
+                shown->timelineRevision = shown->layoutRevision();
+            }
         if (_runtime.changed)
             _runtime.changed();
         return true;
@@ -1220,6 +1364,11 @@ void MovieRuntime::setFieldText(Clip& clip, const StaticText& field, const std::
 {
     if (!field.instanceName.empty())
         clip.texts[field.instanceName] = text;
+    if (display::TextField* shown = displayField(clip, field))
+    {
+        shown->setText(text);
+        shown->timelineRevision = shown->layoutRevision();
+    }
     std::string variable = attributeOf(field.extraAttributes, "variableName");
     if (!variable.empty())
     {
@@ -1468,6 +1617,7 @@ void MovieRuntime::syncChildren(Clip& clip, std::vector<Clip*>& entered)
             made->button = instance->symbolType == SymbolType::Button;
             made->playing = !made->button;
             made->length = lengthOf(made->timeline);
+            attachDisplay(*made);
             entered.push_back(made.get());
             // Its own children are placed now too, so a script anywhere
             // finds the whole of what is on the stage.
@@ -1488,10 +1638,171 @@ void MovieRuntime::syncChildren(Clip& clip, std::vector<Clip*>& entered)
         }
     }
     clip.children = std::move(kept);
+    syncDisplay(clip);
+}
+
+void MovieRuntime::attachDisplay(Clip& clip)
+{
+    if (clip.button)
+    {
+        // A button's states are its frames: up, over, down and hit (the
+        // up frame when the hit frame is empty).
+        auto button = std::make_shared<display::SimpleButton>();
+        const auto state = [&clip](int frame) {
+            auto art = std::make_shared<display::TimelineArt>();
+            art->frameOf = clip.timeline;
+            art->frame = frame;
+            return art;
+        };
+        bool hitFrame = false;
+        for (const Layer* layer : clip.timeline ? clip.timeline->layers : std::vector<Layer*>())
+            if (const Frame* frame = layer && plays(*layer) ? keyframeAt(*layer, 3) : nullptr)
+                hitFrame = hitFrame || (frame->index == 3 && !frame->elements.empty());
+        button->upState = state(0);
+        button->overState = state(clip.length > 1 ? 1 : 0);
+        button->downState = state(clip.length > 2 ? 2 : 0);
+        button->hitTestState = state(hitFrame ? 3 : 0);
+        clip.display = button;
+    }
+    else
+        clip.display = std::make_shared<display::MovieClip>();
+    clip.display->clip = &clip;
+    clip.display->setName(clip.name);
+    if (clip.placed)
+    {
+        clip.display->setPlacedMatrix(toMatrix(clip.placed->transform));
+        clip.display->setPlacedColorTransform(toColor(clip.placed->colorTransform));
+        clip.display->setPlacedFilters(toFilters(clip.placed->filters));
+        display::BlendMode mode = display::BlendMode::Normal;
+        display::blendModeNamed(clip.placed->blendMode, mode);
+        clip.display->setPlacedBlendMode(mode);
+        clip.display->setVisible(clip.placed->visible);
+    }
+}
+
+void MovieRuntime::syncDisplay(Clip& clip)
+{
+    if (!clip.display || !clip.display->isContainer() || !clip.timeline)
+        return;
+    auto* container = static_cast<display::DisplayObjectContainer*>(clip.display.get());
+    // The keyframes showing: when they are the ones there were, so is what
+    // they place, but for the children clips made since.
+    std::vector<const Frame*> frames;
+    for (const Layer* layer : clip.timeline->layers)
+        frames.push_back(layer && plays(*layer) ? keyframeAt(*layer, clip.frame) : nullptr);
+    bool same = frames == clip.timelineFrames;
+    if (same)
+        for (const auto& child : clip.children)
+            if (child && !child->made && child->display &&
+                std::find(clip.timelineObjects.begin(), clip.timelineObjects.end(), child->display) ==
+                    clip.timelineObjects.end())
+                same = false;
+    if (same)
+        return;
+    clip.timelineFrames = frames;
+
+    std::vector<std::shared_ptr<display::DisplayObject>> now;
+    const auto had = [&clip](const std::string& key) -> std::shared_ptr<display::DisplayObject> {
+        for (const auto& object : clip.timelineObjects)
+            if (object && object->timeline && object->timeline->key == key)
+                return object;
+        return nullptr;
+    };
+    int depth = 0;
+    // Bottom layer first, as they draw.
+    for (size_t li = clip.timeline->layers.size(); li-- > 0;)
+    {
+        const Layer* layer = clip.timeline->layers[li];
+        const Frame* frame = frames[li];
+        if (!layer || !frame)
+            continue;
+        for (size_t ei = 0; ei < frame->elements.size(); ++ei)
+        {
+            const Element* element = frame->elements[ei];
+            if (!element)
+                continue;
+            ++depth;
+            std::shared_ptr<display::DisplayObject> object;
+            std::string key;
+            const auto* instance = dynamic_cast<const SymbolInstance*>(element);
+            const auto* text = dynamic_cast<const StaticText*>(element);
+            if (instance && instance->symbol && instance->symbolType != SymbolType::Graphic)
+            {
+                key = keyOf(*clip.timeline, *layer, *frame, *instance);
+                Clip* child = clip.child(key);
+                if (!child || !child->display)
+                    continue;
+                object = child->display;
+                object->setPlacedMatrix(toMatrix(instance->transform));
+                object->setPlacedColorTransform(toColor(instance->colorTransform));
+                object->setPlacedFilters(toFilters(instance->filters));
+                display::BlendMode mode = display::BlendMode::Normal;
+                display::blendModeNamed(instance->blendMode, mode);
+                object->setPlacedBlendMode(mode);
+            }
+            else if (text && text->textType != StaticText::TextType::Static)
+            {
+                key = text->instanceName.empty() ? "#" + std::to_string(li) + ":" + std::to_string(ei) + ":text"
+                                                 : text->instanceName;
+                object = had(key);
+                auto* field = object && object->kind() == display::ObjectKind::TextField
+                    ? static_cast<display::TextField*>(object.get()) : nullptr;
+                if (!field)
+                {
+                    auto made = std::make_shared<display::TextField>();
+                    made->setFromElement(*text);
+                    made->setName(text->instanceName);
+                    // What a script put in it already.
+                    const auto set = text->instanceName.empty() ? clip.texts.end() : clip.texts.find(text->instanceName);
+                    if (set != clip.texts.end())
+                        made->setText(set->second);
+                    made->timelineRevision = made->layoutRevision();
+                    object = made;
+                }
+            }
+            else
+            {
+                key = "#" + std::to_string(li) + ":" + std::to_string(ei);
+                object = had(key);
+                if (!object || object->kind() != display::ObjectKind::TimelineArt)
+                    object = std::make_shared<display::TimelineArt>();
+                static_cast<display::TimelineArt*>(object.get())->element = element;
+            }
+            object->timeline = display::TimelinePlacement{element, layer, depth, key};
+            now.push_back(object);
+        }
+    }
+    // What the frame no longer places comes off; what it places now goes
+    // on, unless a script took it off since it was placed.
+    for (const auto& object : clip.timelineObjects)
+        if (object && object->parent() == container && std::find(now.begin(), now.end(), object) == now.end())
+            container->removeTimelineChild(object.get());
+    const std::vector<std::shared_ptr<display::DisplayObject>> before = clip.timelineObjects;
+    clip.timelineObjects = now;
+    for (const auto& object : now)
+    {
+        if (object->parent() == container)
+            continue;
+        if (!object->parent() && std::find(before.begin(), before.end(), object) == before.end())
+            container->placeTimelineChild(object);
+    }
+}
+
+display::TextField* MovieRuntime::displayField(const Clip& clip, const StaticText& field) const
+{
+    for (const auto& object : clip.timelineObjects)
+        if (object && object->kind() == display::ObjectKind::TextField && object->timeline &&
+            (object->timeline->element == &field ||
+                (!field.instanceName.empty() && object->timeline->key == field.instanceName)))
+            return static_cast<display::TextField*>(object.get());
+    return nullptr;
 }
 
 void MovieRuntime::forget(Clip& clip)
 {
+    // Off the display list with it.
+    if (clip.display && clip.display->parent())
+        clip.display->parent()->removeChild(clip.display.get());
     std::vector<Clip*> going;
     std::function<void(Clip&)> mark = [&](Clip& at) {
         at.gone = true;
@@ -1700,7 +2011,7 @@ void MovieRuntime::settle()
         changed();
 }
 
-void MovieRuntime::advance(Clip& clip, std::vector<Clip*>& entered)
+void MovieRuntime::advance(Clip& clip, std::vector<Clip*>& entered, std::vector<Clip*>& scripts)
 {
     // Children already about go on; new ones are entered after.
     std::vector<Clip*> before;
@@ -1712,7 +2023,7 @@ void MovieRuntime::advance(Clip& clip, std::vector<Clip*>& entered)
     {
         applyScene((_scene + 1) % sceneCount(), 0, true);
         syncChildren(clip, entered);
-        runFrameScripts(clip);
+        scripts.push_back(&clip);
         return;
     }
     // Time remapped: on the frame its behavior says, whatever it would play.
@@ -1724,13 +2035,13 @@ void MovieRuntime::advance(Clip& clip, std::vector<Clip*>& entered)
         clip.frame = to;
         syncChildren(clip, entered);
         if (moved)
-            runFrameScripts(clip);
+            scripts.push_back(&clip);
     }
     else if (clip.playing && !clip.button && clip.length > 1)
     {
         clip.frame = (clip.frame + 1) % clip.length;
         syncChildren(clip, entered);
-        runFrameScripts(clip);
+        scripts.push_back(&clip);
     }
     else
     {
@@ -1744,7 +2055,7 @@ void MovieRuntime::advance(Clip& clip, std::vector<Clip*>& entered)
             now.push_back(child.get());
     for (Clip* child : now)
         if (!child->gone && child->parent == &clip)
-            advance(*child, entered);
+            advance(*child, entered, scripts);
 }
 
 void MovieRuntime::seek(int frame)
@@ -1755,20 +2066,33 @@ void MovieRuntime::seek(int frame)
 
 void MovieRuntime::step()
 {
+    // Every playhead on a frame, what the frames place on the display list.
     std::vector<Clip*> entered;
-    advance(*_root, entered);
-    // enterFrame for every clip about, AS2's handlers and AS3's listeners.
+    std::vector<Clip*> scripts;
+    advance(*_root, entered, scripts);
+    // enterFrame for every clip about, AS2's handlers and AS3's listeners,
+    // before the frames' scripts.
+    _stage->enterFrame();
     eachClip([this](Clip& clip) {
         if (!clip.clipEvents.empty())
             runClipEvent(clip, "enterFrame");
         if (clip.listensFor("enterFrame"))
             dispatch(clip, "enterFrame", false);
     });
+    _stage->frameConstructed();
+    for (Clip* clip : scripts)
+        if (!clip->gone)
+            runFrameScripts(*clip);
     enter(entered);
+    _stage->exitFrame();
+    _stage->render();
 }
 
-void MovieRuntime::keyDown(int code, int character)
+void MovieRuntime::keyDown(int code, int character, bool shift, bool ctrl, bool alt)
 {
+    // The display list's: to the focus, and on into a field typed in.
+    _stage->keyDown(static_cast<uint32_t>(code), static_cast<uint32_t>(std::max(0, character)),
+        display::Modifiers{shift, ctrl, alt});
     // Typing goes into the focused field first.
     if (_focus.clip && _focus.field)
         type(code, character);
@@ -1804,8 +2128,10 @@ void MovieRuntime::keyDown(int code, int character)
     settle();
 }
 
-void MovieRuntime::keyUp(int code, int character)
+void MovieRuntime::keyUp(int code, int character, bool shift, bool ctrl, bool alt)
 {
+    _stage->keyUp(static_cast<uint32_t>(code), static_cast<uint32_t>(std::max(0, character)),
+        display::Modifiers{shift, ctrl, alt});
     _keysDown.erase(std::remove(_keysDown.begin(), _keysDown.end(), code), _keysDown.end());
     eachClip([&](Clip& clip) {
         if (!clip.clipEvents.empty())
@@ -2083,8 +2409,9 @@ as3::ValuePtr MovieRuntime::property(Clip& clip, const std::string& name)
     if (name == "_visible")
         return Value::makeBoolean(clip.shown());
     if (name == "_alpha")
-        return Value::makeNumber(clip.alpha ? *clip.alpha
-                                            : (clip.placed ? clip.placed->colorTransform.alphaMultiplier * 100.0 : 100.0));
+        return Value::makeNumber(clip.display && clip.display->alphaScripted()
+                ? clip.display->alpha() * 100.0
+                : (clip.placed ? clip.placed->colorTransform.alphaMultiplier * 100.0 : 100.0));
     if (name == "_xscale")
         return Value::makeNumber(scaleOf(shown.m11, shown.m12) * 100.0);
     if (name == "_yscale")
@@ -2136,8 +2463,9 @@ as3::ValuePtr MovieRuntime::property(Clip& clip, const std::string& name)
     if (name == "visible")
         return Value::makeBoolean(clip.shown());
     if (name == "alpha")
-        return Value::makeNumber(clip.alpha ? *clip.alpha / 100.0
-                                            : (clip.placed ? clip.placed->colorTransform.alphaMultiplier : 1.0));
+        return Value::makeNumber(clip.display && clip.display->alphaScripted()
+                ? clip.display->alpha()
+                : (clip.placed ? clip.placed->colorTransform.alphaMultiplier : 1.0));
     if (name == "scaleX")
         return Value::makeNumber(scaleOf(shown.m11, shown.m12));
     if (name == "scaleY")
@@ -2270,13 +2598,15 @@ as3::ValuePtr MovieRuntime::property(Clip& clip, const std::string& name)
                 return Value::makeUndefined();
             Clip* made = makeClip(self->parent, *self->symbol, args.empty() ? std::string() : args[0]->toString());
             made->made->transform = self->placed ? self->placed->transform : Transform();
-            made->x = self->x;
-            made->y = self->y;
-            made->xscale = self->xscale;
-            made->yscale = self->yscale;
-            made->rotation = self->rotation;
-            made->alpha = self->alpha;
-            made->visible = self->visible;
+            if (made->display && self->display)
+            {
+                made->display->setPlacedMatrix(toMatrix(made->made->transform));
+                if (self->display->transformScripted())
+                    made->display->setMatrix(self->display->matrix());
+                if (self->display->alphaScripted())
+                    made->display->setAlpha(self->display->alpha());
+                made->display->setVisible(self->display->visible());
+            }
             return objectFor(*made);
         });
     }
@@ -2309,6 +2639,16 @@ as3::ValuePtr MovieRuntime::property(Clip& clip, const std::string& name)
                     owned->parent = self;
                     self->children.push_back(std::move(owned));
                 }
+            }
+            // On the display list, on top (or at the index asked).
+            if (self->display && self->display->isContainer() && child->display)
+            {
+                auto* container = static_cast<display::DisplayObjectContainer*>(self->display.get());
+                if (args.size() > 1 && args[1]->isNumber())
+                    container->addChildAt(child->display,
+                        std::max(0, std::min(container->numChildren(), static_cast<int>(args[1]->toNumber()))));
+                else
+                    container->addChild(child->display);
             }
             if (changed)
                 changed();
@@ -2369,37 +2709,47 @@ as3::ValuePtr MovieRuntime::property(Clip& clip, const std::string& name)
 bool MovieRuntime::setProperty(Clip& clip, const std::string& name, const as3::ValuePtr& value)
 {
     const auto number = [&value]() { return value ? value->toNumber() : 0.0; };
+    if (!clip.display)
+        return false;
+    display::DisplayObject& shown = *clip.display;
+    // A NaN _x or _y lets the timeline place it again.
+    const auto setX = [&](double x) {
+        if (std::isnan(x))
+            shown.clearScriptedX();
+        else
+            shown.setX(x);
+    };
+    const auto setY = [&](double y) {
+        if (std::isnan(y))
+            shown.clearScriptedY();
+        else
+            shown.setY(y);
+    };
     if (name == "_visible")
     {
         // "0" and "1", as Flash 4 scripts give it, are numbers here.
-        clip.visible = value && (value->isBoolean() ? value->boolValue : !std::isnan(number()) && number() != 0.0);
+        shown.setVisible(value && (value->isBoolean() ? value->boolValue : !std::isnan(number()) && number() != 0.0));
     }
-    else if (name == "_x")
-        clip.x = number();
-    else if (name == "_y")
-        clip.y = number();
+    else if (name == "_x" || name == "x")
+        setX(number());
+    else if (name == "_y" || name == "y")
+        setY(number());
     else if (name == "_xscale")
-        clip.xscale = number();
+        shown.setScaleX(number() / 100.0);
     else if (name == "_yscale")
-        clip.yscale = number();
-    else if (name == "_rotation")
-        clip.rotation = number();
+        shown.setScaleY(number() / 100.0);
+    else if (name == "_rotation" || name == "rotation")
+        shown.setRotation(number());
     else if (name == "_alpha")
-        clip.alpha = number();
+        shown.setAlpha(number() / 100.0);
     else if (name == "visible")
-        clip.visible = value && value->toBoolean();
-    else if (name == "x")
-        clip.x = number();
-    else if (name == "y")
-        clip.y = number();
+        shown.setVisible(value && value->toBoolean());
     else if (name == "scaleX")
-        clip.xscale = number() * 100.0;
+        shown.setScaleX(number());
     else if (name == "scaleY")
-        clip.yscale = number() * 100.0;
-    else if (name == "rotation")
-        clip.rotation = number();
+        shown.setScaleY(number());
     else if (name == "alpha")
-        clip.alpha = number() * 100.0;
+        shown.setAlpha(number());
     else if (name == "focus")
     {
         // ActionScript 3's stage.focus = name_txt.
@@ -2411,10 +2761,6 @@ bool MovieRuntime::setProperty(Clip& clip, const std::string& name, const as3::V
     }
     else
         return false;
-    if (std::isnan(clip.x.value_or(0.0)))
-        clip.x.reset();
-    if (std::isnan(clip.y.value_or(0.0)))
-        clip.y.reset();
     if (changed)
         changed();
     return true;

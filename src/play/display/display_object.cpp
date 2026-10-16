@@ -393,6 +393,40 @@ void DisplayObject::setFilters(std::vector<BitmapFilter> filters)
     invalidate();
 }
 
+void DisplayObject::setPlacedFilters(std::vector<BitmapFilter> filters)
+{
+    if (_filtersSet)
+        return;
+    _filters = std::move(filters);
+    invalidate();
+}
+
+void DisplayObject::setPlacedBlendMode(BlendMode mode)
+{
+    if (_blendModeSet || _blendMode == mode)
+        return;
+    _blendMode = mode;
+    invalidate();
+}
+
+bool DisplayObject::effectsScripted() const
+{
+    return _filtersSet || _blendModeSet || (_colorSet && !_colorSet->alphaOnly()) || mask() || _scrollRect ||
+        _opaqueBackground;
+}
+
+void DisplayObject::clearScriptedX()
+{
+    _xSet.reset();
+    invalidate();
+}
+
+void DisplayObject::clearScriptedY()
+{
+    _ySet.reset();
+    invalidate();
+}
+
 void DisplayObject::setBlendMode(BlendMode mode)
 {
     _blendMode = mode;

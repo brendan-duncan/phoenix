@@ -9,6 +9,9 @@
 #include "../src/data/symbol_instance.h"
 #include "../src/data/symbol_list.h"
 #include "../src/data/timeline.h"
+#include "../src/data/shape.h"
+#include "../src/play/display/display_object.h"
+#include "../src/play/display/stage.h"
 #include "../src/play/movie_runtime.h"
 
 #include <cstdio>
@@ -161,7 +164,7 @@ TEST(movie_runtime_runs_a_dress_up_game)
     CHECK(runtime.buttonFrame(*buttonClip) == 2);
     runtime.pointerUp();
     CHECK(hatClip->shown());
-    CHECK(hatClip->x && *hatClip->x == 20.0);
+    CHECK(hatClip->scriptedX() && *hatClip->scriptedX() == 20.0);
     // Clicked again, hidden again.
     runtime.pointerDown();
     runtime.pointerUp();
@@ -447,7 +450,7 @@ TEST(movie_runtime_makes_clips_from_the_library)
     CHECK(made.size() == 2);
     if (made.size() != 2)
         return;
-    CHECK(made[0]->name == "hat1" && made[0]->symbol == hat && made[1]->symbol == star && made[1]->x.value_or(0) == 10);
+    CHECK(made[0]->name == "hat1" && made[0]->symbol == hat && made[1]->symbol == star && made[1]->scriptedX().value_or(0) == 10);
     CHECK(runtime.clipOfMade(*made[0]->made) == made[0]);
     // They stay, and play, as the frames go on.
     runtime.step();
@@ -492,7 +495,7 @@ TEST(movie_runtime_drags_and_finds_the_drop_target)
     binClip->placement.left = binClip->placement.top = 200;
     binClip->placement.right = binClip->placement.bottom = 300;
     runtime.pointerAt(150, 210);
-    CHECK(runtime.dragging() && pieceClip->x.value_or(0) == 250 && pieceClip->y.value_or(0) == 210);
+    CHECK(runtime.dragging() && pieceClip->scriptedX().value_or(0) == 250 && pieceClip->scriptedY().value_or(0) == 210);
     pieceClip->placement.known = true;
     pieceClip->placement.left = 250;
     pieceClip->placement.top = 210;
@@ -909,4 +912,67 @@ TEST(movie_runtime_holds_a_clip_where_its_time_remap_says)
     runtime.heldFrame = nullptr;
     runtime.step();
     CHECK(clip->frame == 6);
+}
+
+TEST(movie_runtime_puts_timeline_and_script_children_on_the_display_list)
+{
+    // A shape on the bottom layer for two frames, a clip over it on the
+    // first only, and a sprite a script adds.
+    Movie movie;
+    movie.root->name = "Scene 1";
+    fla::Symbol* hat = movie.symbol("Hat", fla::SymbolType::MovieClip, 1);
+    fla::Layer* front = movie.layer(*movie.root, "front");
+    fla::Layer* back = movie.layer(*movie.root, "back");
+    movie.place(*movie.frame(*front, 0, 1), *hat, "hat");
+    movie.frame(*front, 1, 1, "trace('frame 2 script');");
+    fla::Frame* backFrame = movie.frame(*back, 0, 2);
+    backFrame->elements.push_back(new fla::Shape(backFrame));
+
+    std::vector<std::string> heard;
+    fla::play::MovieRuntime runtime(*movie.root, 12.0);
+    runtime.trace = [&heard](const std::string& line) { heard.push_back(line); };
+    runtime.start();
+    auto* root = static_cast<fla::display::DisplayObjectContainer*>(runtime.root().display.get());
+    CHECK(root && root->stage() == &runtime.stage());
+    CHECK(root && root->numChildren() == 2);
+    if (!root || root->numChildren() != 2)
+        return;
+    const std::shared_ptr<fla::display::DisplayObject> art = root->getChildAt(0);
+    CHECK(art->kind() == fla::display::ObjectKind::TimelineArt);
+    fla::play::Clip* hatClip = runtime.root().named("hat");
+    CHECK(hatClip && root->getChildAt(1) == hatClip->display && hatClip->display->name() == "hat");
+    if (!hatClip)
+        return;
+    CHECK(root->getChildByName("hat") == hatClip->display);
+
+    // A script's child goes over the timeline's.
+    auto sprite = std::make_shared<fla::display::Sprite>();
+    root->addChild(sprite);
+    CHECK(root->getChildIndex(sprite.get()) == 2);
+    int removed = 0;
+    hatClip->display->addEventListener(fla::display::events::kRemovedFromStage,
+        [&removed](fla::display::Event&) { ++removed; });
+    runtime.stage().addEventListener(fla::display::events::kEnterFrame,
+        [&heard](fla::display::Event&) { heard.push_back("enterFrame"); });
+
+    // The next frame drops the clip; enterFrame comes before its script.
+    runtime.step();
+    CHECK(removed == 1);
+    CHECK(root->numChildren() == 2 && root->getChildAt(0) == art && root->getChildAt(1) == sprite);
+    CHECK(heard.size() == 2 && heard[0] == "enterFrame" && heard[1] == "frame 2 script");
+
+    // Taken off by a script, the shape stays off while its keyframe lasts;
+    // the clip, placed again, goes on top.
+    root->removeChild(art.get());
+    runtime.step();
+    CHECK(root->numChildren() == 2 && root->getChildAt(0) == sprite);
+    fla::play::Clip* again = runtime.root().named("hat");
+    CHECK(again && root->getChildAt(1) == again->display);
+    // What a script sets is kept over where the timeline places it.
+    if (again)
+    {
+        again->display->setX(42);
+        CHECK(again->transform(fla::Transform()).tx == 42.0);
+        CHECK(again->scriptedX().value_or(0) == 42.0);
+    }
 }

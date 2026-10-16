@@ -83,6 +83,10 @@ struct BitmapFilter
         bool knockout = false);
     /// The identity unless \a matrix has twenty values.
     static BitmapFilter colorMatrix(const std::vector<double>& matrix = {});
+    /// The color matrix Adjust Color (fl.motion.AdjustColor) makes of
+    /// brightness, contrast and saturation (-100 to 100) and hue (-180 to
+    /// 180 degrees).
+    static BitmapFilter adjustColor(double brightness, double contrast, double saturation, double hue);
     static BitmapFilter convolution(int matrixX = 0, int matrixY = 0, const std::vector<double>& matrix = {},
         double divisor = 1.0, double bias = 0.0, bool preserveAlpha = true, bool clamp = true, uint32_t color = 0,
         double alpha = 0.0);

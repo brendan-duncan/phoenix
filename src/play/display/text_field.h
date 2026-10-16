@@ -208,6 +208,11 @@ public:
     /// Bumped as its text or formats change, for its lines to be laid out
     /// again.
     uint64_t layoutRevision() const { return _layoutRevision; }
+    /// For a field a timeline placed: layoutRevision when the movie runtime
+    /// last set it (to its words, or what a script or typing put in it).
+    /// Changed past that, something else has changed it, and it is drawn
+    /// from here rather than as the runtime shows it.
+    uint64_t timelineRevision = 0;
 
 private:
     void textChanged();

@@ -134,6 +134,13 @@ public:
     const Matrix& placedMatrix() const { return _placed; }
     /// Whether a script has set any of its transform.
     bool transformScripted() const;
+    /// What a script set x and y to; none when it has not.
+    std::optional<double> scriptedX() const { return _xSet; }
+    std::optional<double> scriptedY() const { return _ySet; }
+    /// A script's x or y let go (as a NaN _x does in ActionScript 2): where
+    /// the timeline places it shows again.
+    void clearScriptedX();
+    void clearScriptedY();
     /// From its own space to the stage's (transform.concatenatedMatrix):
     /// through every parent, to the topmost when it is not on the stage.
     Matrix concatenatedMatrix() const;
@@ -161,6 +168,14 @@ public:
     BlendMode blendMode() const { return _blendMode; }
     void setBlendMode(BlendMode mode);
     bool blendModeScripted() const { return _blendModeSet; }
+    /// The filters and blend mode the timeline gives it, shown until a
+    /// script sets its own.
+    void setPlacedFilters(std::vector<BitmapFilter> filters);
+    void setPlacedBlendMode(BlendMode mode);
+    /// Whether a script has given it what only drawing it on its own can
+    /// show: filters, a blend mode, a color transform (more than alpha), a
+    /// mask, a scroll rect or an opaque background.
+    bool effectsScripted() const;
     /// mask: the object whose shape it shows through; null for none. A
     /// mask does not draw itself.
     DisplayObject* mask() const;
