@@ -511,7 +511,9 @@ TEST(illustrator_11_text_comes_in_where_the_text_engine_laid_it)
         "/DocumentResources << /FontSet << /Resources [ << /Resource << /Identifier << /Name (" + utf16("Times-Roman") +
         ") /Type 0 >> >> >> ] >> /StyleSheetSet << /Resources [ << /Resource << /Features << /Font 0 /FontSize 12.0 "
         ">> >> >> ] >> /TextFrameSet << /Resources [ << /Resource << /Bezier << /Points [ 0.0 0.0 ] >> /Data << /Type 0 "
-        "/FrameMatrix [ 1.0 0.0 0.0 1.0 1010.0 1020.0 ] >> >> >> ] >> >> "
+        "/FrameMatrix [ 1.0 0.0 0.0 1.0 1010.0 1020.0 ] >> >> >> "
+        "<< /Resource << /Bezier << /Points [ 0.0 0.0 ] >> /Data << /Type 2 /FrameMatrix [ 1.0 0.0 0.0 1.0 0.0 0.0 ] "
+        ">> >> >> ] >> >> "
         "/DocumentObjects << /TextObjects [ << /Model << /Text (" + utf16("Hi\tX\rYo\r") + ") "
         "/StyleRun << /RunArray [ << /RunData << /StyleSheet << /Parent 0 /Features << /FontSize 10.0 /FillColor << "
         "/StreamTag /SimplePaint /Color << /Type 1 /Values [ 1.0 1.0 0.0 0.0 ] >> >> >> >> >> /Length 8 >> ] >> "
@@ -522,19 +524,28 @@ TEST(illustrator_11_text_comes_in_where_the_text_engine_laid_it)
         "<< /StreamTag /LineStrike /Transform << /Origin [ 0.0 0.0 ] >> /Children [ << /StreamTag /Segment "
         "/Mapping << /CharacterCount 5 >> >> ] >> "
         "<< /StreamTag /LineStrike /Transform << /Origin [ 0.0 12.0 ] >> /Children [ << /StreamTag /Segment "
-        "/Mapping << /CharacterCount 3 >> >> ] >> ] >> ] >> ] >> >> ] >>";
+        "/Mapping << /CharacterCount 3 >> >> ] >> ] >> ] >> ] >> >> "
+        // A story along a path, in the standard style.
+        "<< /Model << /Text (" + utf16("AB") + ") >> /View << /Frames [ << /Resource 1 >> ] >> >> ] >>";
     const std::string encoded = ascii85(std::vector<uint8_t>(doc.begin(), doc.end()));
     std::string text = "%!PS-Adobe-3.0\r%%BoundingBox: 0 0 100 100\r%AI5_FileFormat 14.0\r%AI11_BeginTextDocument\r"
                        "/AI11TextDocument : /ASCII85Decode ,\r";
     for (size_t i = 0; i < encoded.size(); i += 80)
         text += "%" + encoded.substr(i, 80) + "\r";
     text += "1000 1100 /RulerOrigin ,\r;\r%AI11_EndTextDocument\r%%EndSetup\r"
-            "/AI11Text :\r0 /FreeUndo ,\r0 /FrameIndex ,\r0 /StoryIndex ,\r;\r";
+            "/AI11Text :\r0 /FreeUndo ,\r0 /FrameIndex ,\r0 /StoryIndex ,\r;\r"
+            "/AI11Text :\r0 /FrameIndex ,\r1 /StoryIndex ,\r/Art :\rX=\r10 50 m\r90 50 L\rN\rX+\r; /ConfiningPath ,\r;\r";
     const fla::vectors::Artwork art = fla::vectors::readIllustrator(text);
     CHECK(art.notes.empty());
-    CHECK(art.texts.size() == 3);
-    if (art.texts.size() == 3)
+    // The path it runs along is not drawn.
+    CHECK(art.paths.empty());
+    CHECK(art.texts.size() == 5);
+    if (art.texts.size() == 5)
     {
+        // Along the path: Helvetica 12, its A 667 thousandths.
+        CHECK(art.texts[3].text == "A" && art.texts[3].placement.tx == 10 && art.texts[3].placement.ty == 50);
+        CHECK(art.texts[4].text == "B");
+        CHECK_NEAR(art.texts[4].placement.tx, 10 + 8.004);
         CHECK(art.texts[0].text == "Hi" && art.texts[0].family == "Times" && art.texts[0].size == 10);
         CHECK(art.texts[0].color[0] == 255 && art.texts[0].color[1] == 0);
         CHECK(art.texts[0].placement.tx == 10 && art.texts[0].placement.ty == 20 && art.texts[0].placement.d == 1);
