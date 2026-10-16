@@ -1,0 +1,74 @@
+{
+  "title": "Glow through a node graph",
+  "summary": "Composite a title through a node graph: a Glow and a hue shift wired between its layers and the output, each step shown as a picture.",
+  "minutes": 8,
+  "order": 27,
+  "guide": "node-graph.html",
+  "tags": ["Motion Graphics", "Effects"],
+  "start": {
+    "document": "start"
+  },
+  "final": "final",
+  "steps": [
+    {
+      "title": "Welcome",
+      "text": "<p>A <b>node graph</b> composites a timeline's layers through nodes rather than stacking them: pictures flow from node to node, through effects and merges, into the <b>Output</b>, which is what the timeline shows.</p><p>The <i>Title</i> layer holds a white title with a blue line under it.</p>"
+    },
+    {
+      "title": "Open the Node Graph",
+      "text": "<p>Choose <b>Window &gt; Node Graph</b>. The panel opens beside the Timeline.</p>",
+      "wait": {"action": "Window/Node Graph"}
+    },
+    {
+      "title": "Make a graph",
+      "text": "<p>Click <b>Create Node Graph</b>. Two nodes appear: <b>Other Layers</b>, which brings in the layers stacked as usual, linked to the <b>Output</b>. The stage looks the same, since nothing is in between yet.</p><p>Each node shows a picture of what it gives.</p>",
+      "target": "widget:nodeGraphCreate",
+      "wait": {"command": "Create Node Graph"}
+    },
+    {
+      "title": "Add a Glow",
+      "text": "<p>Click an empty part of the graph, press <kbd>Tab</kbd>, type <b>glow</b> and press <kbd>Enter</kbd>. A <b>Glow</b> node appears where the pointer is, not linked to anything yet.</p>",
+      "target": "widget:nodeGraphView",
+      "wait": {"command": "Add Node"}
+    },
+    {
+      "title": "Put it in the link",
+      "text": "<p>Drag the Glow node by its title onto the link between Other Layers and the Output. The link lights up; let go, and the Glow goes in between. The title glows on the stage.</p><p>Dragging from a node's output dot to another's input links them by hand.</p>",
+      "target": "widget:nodeGraphView",
+      "wait": {"command": "Insert Node"}
+    },
+    {
+      "title": "Make it brighter",
+      "text": "<p>With the Glow selected, its settings show beside the graph. Drag <b>Radius</b> to about 24, or click it and type 24.</p><p>The diamond beside a setting keys it on the current frame, so it can change over time.</p>",
+      "target": "label:Node Graph/Radius",
+      "wait": {"command": "Set radius"}
+    },
+    {
+      "title": "Add a color shift",
+      "text": "<p>Press <kbd>Tab</kbd> again, type <b>hue</b> and press <kbd>Enter</kbd> to add a <b>Hue/Saturation</b> node. Drag it onto the link between the Glow and the Output, as before.</p>",
+      "target": "widget:nodeGraphView",
+      "wait": {"command": "Insert Node"}
+    },
+    {
+      "title": "Turn the hue",
+      "text": "<p>Set <b>Hue</b> to 90. The light blue line and its glow turn purple.</p>",
+      "target": "label:Node Graph/Hue",
+      "wait": {"command": "Set hue"}
+    },
+    {
+      "title": "Look at one node",
+      "text": "<p>Click the eye at the right of the Glow node's title. The stage now shows what the Glow gives, before the color shift. Click the eye again to see the Output.</p><p>Select a node and press <kbd>V</kbd> to do the same from the keyboard.</p>",
+      "target": "widget:nodeGraphView"
+    },
+    {
+      "title": "Bypass it",
+      "text": "<p>Click the Hue/Saturation node, then press <kbd>D</kbd>. It is bypassed: drawn faded with a line through it, it passes the glowing title through unchanged. Press <kbd>D</kbd> again to turn it back on.</p>",
+      "target": "widget:nodeGraphView",
+      "wait": {"command": "Bypass Nodes"}
+    },
+    {
+      "title": "Well done",
+      "text": "<p>You composited a title through a node graph: a Glow and a color shift between its layers and the output, each one seen as a picture.</p><p>Try a <b>Layer</b> node to take one layer out of the stack, and a <b>Merge</b> to put it back over the rest by a blend mode such as Screen.</p>"
+    }
+  ]
+}

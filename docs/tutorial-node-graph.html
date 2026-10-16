@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Glow through a node graph · Phoenix User Guide</title>
+<meta name="description" content="Composite a title through a node graph: a Glow and a hue shift wired between its layers and the output, each step shown as a picture.">
+<meta name="keywords" content="tutorial lesson step by step node graph glow hue saturation bypass compositing nodes">
+<link rel="icon" href="assets/img/logo.png">
+<link rel="stylesheet" href="assets/site.css">
+<script>try { const t = localStorage.getItem("phoenix-docs-theme"); if (t) document.documentElement.dataset.theme = t; } catch (e) {}</script>
+<script src="assets/site.js" defer></script>
+</head>
+<body>
+<main>
+<article class="content">
+
+<p class="eyebrow">Tutorials</p>
+
+<h1>Glow through a node graph</h1>
+
+<p class="lead">Composite a title through a node graph: a Glow and a hue shift wired between its layers and the output, each step shown as a picture.</p>
+
+<div class="callout">
+  <span class="label">Try it in Phoenix</span>
+  <p>This page is also a lesson inside Phoenix: choose <span class="menu-path">Help &rsaquo; Tutorials...</span> and start <strong>Glow through a node graph</strong>, and Phoenix points at each control as you go. It takes about 8 minutes.</p>
+</div>
+
+<p>To follow along here instead, download the starting document, <a href="assets/tutorials/node-graph.fla" download>node-graph.fla</a>, and open it with <span class="menu-path">File &rsaquo; Open...</span>.</p>
+
+<figure>
+  <img src="assets/shots/tutorial-node-graph.webp" alt="The white title After Dark glowing, its line turned purple by the graph's Hue/Saturation node" width="1000" height="562">
+  <figcaption>The title through a Glow and a hue shift in a node graph.</figcaption>
+</figure>
+
+<p>A <b>node graph</b> composites a timeline's layers through nodes rather than stacking them: pictures flow from node to node, through effects and merges, into the <b>Output</b>, which is what the timeline shows.</p><p>The <i>Title</i> layer holds a white title with a blue line under it.</p>
+
+<h2>1. Open the Node Graph</h2>
+
+<p>Choose <b>Window &gt; Node Graph</b>. The panel opens beside the Timeline.</p>
+
+<h2>2. Make a graph</h2>
+
+<p>Click <b>Create Node Graph</b>. Two nodes appear: <b>Other Layers</b>, which brings in the layers stacked as usual, linked to the <b>Output</b>. The stage looks the same, since nothing is in between yet.</p><p>Each node shows a picture of what it gives.</p>
+
+<h2>3. Add a Glow</h2>
+
+<p>Click an empty part of the graph, press <kbd>Tab</kbd>, type <b>glow</b> and press <kbd>Enter</kbd>. A <b>Glow</b> node appears where the pointer is, not linked to anything yet.</p>
+
+<h2>4. Put it in the link</h2>
+
+<p>Drag the Glow node by its title onto the link between Other Layers and the Output. The link lights up; let go, and the Glow goes in between. The title glows on the stage.</p><p>Dragging from a node's output dot to another's input links them by hand.</p>
+
+<h2>5. Make it brighter</h2>
+
+<p>With the Glow selected, its settings show beside the graph. Drag <b>Radius</b> to about 24, or click it and type 24.</p><p>The diamond beside a setting keys it on the current frame, so it can change over time.</p>
+
+<h2>6. Add a color shift</h2>
+
+<p>Press <kbd>Tab</kbd> again, type <b>hue</b> and press <kbd>Enter</kbd> to add a <b>Hue/Saturation</b> node. Drag it onto the link between the Glow and the Output, as before.</p>
+
+<h2>7. Turn the hue</h2>
+
+<p>Set <b>Hue</b> to 90. The light blue line and its glow turn purple.</p>
+
+<h2>8. Look at one node</h2>
+
+<p>Click the eye at the right of the Glow node's title. The stage now shows what the Glow gives, before the color shift. Click the eye again to see the Output.</p><p>Select a node and press <kbd>V</kbd> to do the same from the keyboard.</p>
+
+<h2>9. Bypass it</h2>
+
+<p>Click the Hue/Saturation node, then press <kbd>D</kbd>. It is bypassed: drawn faded with a line through it, it passes the glowing title through unchanged. Press <kbd>D</kbd> again to turn it back on.</p>
+
+<h2>What you did</h2>
+
+<p>You composited a title through a node graph: a Glow and a color shift between its layers and the output, each one seen as a picture.</p><p>Try a <b>Layer</b> node to take one layer out of the stack, and a <b>Merge</b> to put it back over the rest by a blend mode such as Screen.</p>
+
+<p>For everything this tutorial touches on, see <a href="node-graph.html">Node graphs</a>.</p>
+
+</article>
+</main>
+</body>
+</html>

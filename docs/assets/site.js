@@ -38,6 +38,7 @@ const NAV = [
     { href: "tutorial-3d-cards.html", title: "3D cards in the light" },
     { href: "tutorial-motion-sketch.html", title: "Motion Sketch" },
     { href: "tutorial-template-fit.html", title: "A template that fits" },
+    { href: "tutorial-node-graph.html", title: "Glow through a node graph" },
   ] },
   { group: "Workspace", pages: [
     { href: "workspace.html", title: "The workspace" },

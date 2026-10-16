@@ -112,6 +112,8 @@ NodeGraphPanel::NodeGraphPanel(NodeGraphLinks links, QWidget* parent)
     _more->setMenu(moreMenu);
     for (QToolButton* button : {_add, _frame, _tidy, _pictures, _minimap, _more})
         bar->addWidget(button);
+    _enabled->setObjectName("nodeGraphOn");
+    _add->setObjectName("nodeGraphAdd");
     layout->addLayout(bar);
     auto* line = new QFrame(this);
     line->setFrameShape(QFrame::HLine);
@@ -122,6 +124,7 @@ NodeGraphPanel::NodeGraphPanel(NodeGraphLinks links, QWidget* parent)
     _split = new QSplitter(Qt::Horizontal, this);
     _split->setChildrenCollapsible(true);
     _view = new NodeGraphView(_split);
+    _view->setObjectName("nodeGraphView");
     _inspectorScroll = new QScrollArea(_split);
     _inspectorScroll->setWidgetResizable(true);
     _inspectorScroll->setFrameShape(QFrame::NoFrame);
@@ -248,6 +251,8 @@ void NodeGraphPanel::updateBar()
                                       .arg(theme::color("nodes.border").name()));
     for (QToolButton* button : {_add, _frame, _tidy, _pictures, _minimap, _more})
         button->setEnabled(has);
+    // With no graph, the view's own invitation is all there is to show.
+    _inspectorScroll->setVisible(has);
 }
 
 void NodeGraphPanel::apply(const fla::nodegraph::Graph* graph, const QString& name, bool merge)

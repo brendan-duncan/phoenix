@@ -142,6 +142,7 @@ NodeGraphView::NodeGraphView(QWidget* parent)
     auto* create = new QPushButton("Create Node Graph", this);
     create->setCursor(Qt::PointingHandCursor);
     create->setToolTip("Composite this timeline's layers through a graph of nodes");
+    create->setObjectName("nodeGraphCreate");
     connect(create, &QPushButton::clicked, this, &NodeGraphView::createRequested);
     _createButton = create;
 
@@ -985,6 +986,39 @@ void NodeGraphView::insertIntoLink(int id, int index)
     _graph.links.erase(_graph.links.begin() + index);
     _graph.connect(link.from, id, 0);
     _graph.connect(id, link.to, link.input);
+
+    // Room made for it: in line with what feeds it, and what it feeds
+    // (with all that follows) moved right as far as it needs to be.
+    Node* placed = _graph.node(id);
+    const Node* source = _graph.node(link.from);
+    const Node* target = _graph.node(link.to);
+    if (!placed || !source || !target)
+        return;
+    const QRectF from = nodeRect(*source);
+    if (placed->x < from.right() + kColumn / 2)
+        placed->x = std::round((from.right() + kColumn) / 10.0) * 10.0;
+    if (std::fabs(placed->y - source->y) < kHeader * 2)
+        placed->y = source->y;
+    const double push = nodeRect(*placed).right() + kColumn - target->x;
+    if (push <= 0)
+        return;
+    QSet<int> downstream;
+    std::vector<int> stack{link.to};
+    while (!stack.empty())
+    {
+        const int at = stack.back();
+        stack.pop_back();
+        if (at == id || downstream.contains(at))
+            continue;
+        downstream.insert(at);
+        for (const fla::nodegraph::Link& each : _graph.links)
+            if (each.from == at)
+                stack.push_back(each.to);
+    }
+    const double shift = std::ceil(push / 10.0) * 10.0;
+    for (Node& node : _graph.nodes)
+        if (downstream.contains(node.id))
+            node.x += shift;
 }
 
 void NodeGraphView::openSearch(const QPoint& screen, int fromNode, int toNode, int toInput)
