@@ -19,10 +19,14 @@
 #include "../src/data/static_text.h"
 #include "../src/data/symbol.h"
 #include "../src/data/bitmap_instance.h"
+#include "../src/data/linear_gradient.h"
+#include "../src/data/shape.h"
+#include "../src/data/stroke_style.h"
 
 #include <chrono>
 #include <cmath>
 #include <map>
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -1187,6 +1191,32 @@ TEST(shape_operators_dash_and_taper_strokes)
     }
     CHECK(near(startWidth, 10.0, 1e-6) && near(endWidth, 0.0, 1e-6));
     CHECK(!fla::shapeops::taperOf({}, 0).on);
+
+    // Baked for other apps: a gradient stroke tapered is its outline filled
+    // with the gradient, placed as it was.
+    fla::SolidStroke stroke(nullptr);
+    stroke.weight = 10.0;
+    stroke.caps = "square";
+    auto* gradient = new fla::LinearGradient(&stroke);
+    gradient->entries.push_back({0.0, {255, 0, 0, 255}});
+    gradient->entries.push_back({1.0, {0, 0, 255, 255}});
+    gradient->transform = fla::Transform(0.061, 0.0, 0.0, 0.061, 50.0, 0.0);
+    stroke.fill = gradient;
+    Line ring;
+    ring.closed = true;
+    ring.points = outline;
+    std::unique_ptr<fla::Shape> filled(fla::shapeops::bakedFill({ring}, *gradient));
+    CHECK(filled && filled->strokesMap.empty() && filled->fillsMap.size() == 1);
+    const auto* bakedGradient = dynamic_cast<const fla::LinearGradient*>(filled->getFillStyleByIndex(1));
+    CHECK(bakedGradient && bakedGradient->entries.size() == 2 && near(bakedGradient->transform.tx, 50.0) &&
+        bakedGradient->entries[1].color[2] == 255);
+    CHECK(near(filled->localBounds.width(), 100.0, 1e-6));
+    // Dashes: each dash its own line, stroked as the shape's stroke is, its
+    // gradient and caps kept.
+    std::unique_ptr<fla::Shape> stroked(fla::shapeops::bakedStroke(fla::shapeops::apply({line}, true, {dashes}, 0, 24.0), stroke));
+    CHECK(stroked && stroked->fillsMap.empty() && stroked->edges.size() == 4);
+    const fla::StrokeStyle* kept = stroked->getStrokeStyleByIndex(1);
+    CHECK(kept && kept->weight == 10.0 && kept->caps == "square" && dynamic_cast<const fla::LinearGradient*>(kept->fill));
 }
 
 TEST(text_on_a_path_and_wiggly_letters)

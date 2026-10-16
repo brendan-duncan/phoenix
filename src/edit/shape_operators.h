@@ -9,7 +9,9 @@
 
 namespace fla {
 
+class FillStyle;
 class Shape;
+class StrokeStyle;
 
 /// Shape operators: a drawn shape's lines and fills changed each frame,
 /// as behaviors change an instance. Trim Paths draws only part of the
@@ -66,6 +68,17 @@ std::string mergeOf(const std::vector<behaviors::Applied>& list, int frame);
 /// The outline of \a line stroked \a weight wide as \a taper says, at
 /// \a seconds into the movie: a closed polygon to fill.
 std::vector<Point> taperedOutline(const Line& line, double weight, const Taper& taper, double seconds);
+
+/// Baking, for apps without shape operators: \a outlines, closed rings
+/// that make one area by nesting (a hole inside an outline), as a drawing
+/// object filled with a copy of \a paint, a gradient kept as it is placed.
+/// A tapered stroke bakes this way, its outline filled with the stroke's
+/// own fill. Null when nothing is left to draw.
+Shape* bakedFill(const std::vector<Line>& outlines, const FillStyle& paint);
+/// \a lines (each dash its own) as a drawing object stroked with a copy of
+/// \a stroke: its width, caps, joins and fill, a gradient along the stroke
+/// kept as the stroke's own. Null when nothing is left to draw.
+Shape* bakedStroke(const std::vector<Line>& lines, const StrokeStyle& stroke);
 
 /// \a lines as \a list leaves them on \a frame (of the shape's timeline, at
 /// \a frameRate). \a stroke says whether they are a stroke's (Trim Paths

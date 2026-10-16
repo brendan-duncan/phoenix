@@ -1,6 +1,10 @@
 #include "shape_operators.h"
 
+#include "shape_merge.h"
+#include "vector_import.h"
+
 #include "../data/shape.h"
+#include "../data/stroke_style.h"
 
 #include <algorithm>
 #include <cmath>
@@ -758,6 +762,70 @@ std::vector<Point> taperedOutline(const Line& line, double weight, const Taper& 
     outline = left;
     outline.insert(outline.end(), right.rbegin(), right.rend());
     return outline;
+}
+
+namespace {
+
+// \a lines as the subpaths of a drawing to bake, closed or open.
+vectors::Painted paintedOf(const std::vector<Line>& lines, bool closed)
+{
+    vectors::Painted painted;
+    for (const Line& line : lines)
+    {
+        if (line.points.size() < (closed ? 3u : 2u))
+            continue;
+        vectors::Subpath subpath;
+        subpath.segments.push_back({vectors::Segment::Kind::Move, {line.points.front()}});
+        for (size_t i = 1; i < line.points.size(); ++i)
+            subpath.segments.push_back({vectors::Segment::Kind::Line, {line.points[i]}});
+        subpath.closed = closed || line.closed;
+        painted.subpaths.push_back(subpath);
+    }
+    return painted;
+}
+
+} // namespace
+
+Shape* bakedFill(const std::vector<Line>& outlines, const FillStyle& paint)
+{
+    vectors::Painted painted = paintedOf(outlines, true);
+    // Any color: the shape's one fill is swapped for a copy of the paint.
+    painted.fill = vectors::Color{0, 0, 0, 255};
+    Shape* shape = vectors::toShape(painted);
+    if (!shape)
+        return nullptr;
+    FillStyle* copy = cloneFill(&paint, shape);
+    if (!copy)
+        return shape;
+    for (FillStyle*& fill : shape->fills)
+        if (fill == shape->fillsMap[1])
+        {
+            delete fill;
+            fill = copy;
+        }
+    shape->fillsMap[1] = copy;
+    return shape;
+}
+
+Shape* bakedStroke(const std::vector<Line>& lines, const StrokeStyle& stroke)
+{
+    vectors::Painted painted = paintedOf(lines, false);
+    painted.stroke = vectors::Color{0, 0, 0, 255};
+    painted.strokeWidth = stroke.weight;
+    Shape* shape = vectors::toShape(painted);
+    if (!shape)
+        return nullptr;
+    StrokeStyle* copy = cloneStroke(&stroke, shape);
+    if (!copy)
+        return shape;
+    for (StrokeStyle*& each : shape->strokes)
+        if (each == shape->strokesMap[1])
+        {
+            delete each;
+            each = copy;
+        }
+    shape->strokesMap[1] = copy;
+    return shape;
 }
 
 const Definition* find(const std::string& id)

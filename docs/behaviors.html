@@ -361,7 +361,7 @@
 <p>Baking turns behaviors into ordinary animation: each frame they touch becomes a keyframe holding the instance where its behaviors put it (frames where nothing changes are held from the keyframe before, so a keyframe stays only where something moves), its copies become instances of their own beside it, and the behaviors come off. What plays does not change, and you can then edit the frames by hand. Baking is one step you can undo.</p>
 
 <ul>
-  <li><b>Bake</b> in the Behaviors panel bakes the selected instances over all the keyframes they run through, and the selected shapes and text fields over their keyframes; a shape's operators are baked into drawing objects and a text's animators into a text field for each letter, a frame each.</li>
+  <li><b>Bake</b> in the Behaviors panel bakes the selected instances over all the keyframes they run through, and the selected shapes and text fields over their keyframes; a shape's operators are baked into drawing objects and a text's animators into a text field for each letter, a frame each. Baked shapes keep their look: a tapered line becomes its outline filled with the stroke's color or gradient, each dash stays a stroke of its own with the stroke's caps, and a gradient on a stroke or fill stays as it is placed.</li>
   <li><span class="menu-path">Modify &rsaquo; Timeline &rsaquo; Bake Behaviors to Keyframes</span> bakes the frames selected in the timeline.</li>
 </ul>
 
