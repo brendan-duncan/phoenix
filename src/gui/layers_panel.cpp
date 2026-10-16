@@ -2,6 +2,8 @@
 #include "../edit/motion_blur.h"
 #include "../edit/adjustments.h"
 #include "../edit/layer_effects.h"
+#include "../edit/node_graph.h"
+#include "node_graph_style.h"
 
 #include "theme.h"
 
@@ -23,6 +25,11 @@
 #include <QFont>
 #include <QHBoxLayout>
 #include <QHeaderView>
+#include <QHelpEvent>
+#include <QRadialGradient>
+#include <QStyledItemDelegate>
+#include <QToolTip>
+#include <QApplication>
 #include <QIcon>
 #include <QPainter>
 #include <QPainterPath>
@@ -133,6 +140,255 @@ QColor ink()
 {
     return theme::color("icon");
 }
+
+// Badges: small chips at the end of a layer's name, one for each effect the
+// layer has on (motion blur, echo, a layer mode...), each with its tip.
+const int kBadgeKinds = Qt::UserRole + 2;
+const int kBadgeTips = Qt::UserRole + 3;
+constexpr int kBadgeSize = 14;
+constexpr int kBadgeGap = 3;
+
+struct Badge
+{
+    QString kind;
+    QString tip;
+};
+
+std::vector<Badge> badgesOf(const fla::Layer& layer, const fla::Timeline* timeline)
+{
+    std::vector<Badge> badges;
+    if (layer.layerType == fla::Layer::Type::Folder)
+        return badges;
+    if (fla::motionblur::on(layer))
+        badges.push_back({"blur", "Motion blur: what moves fast on this layer smears along its path"});
+    const fla::motionblur::LayerTime time = fla::motionblur::layerTimeOf(layer);
+    if (time.any())
+    {
+        QStringList parts;
+        if (time.echoes > 0)
+            parts << QString("echo, %1 earlier pose%2 every %3 frame%4")
+                         .arg(time.echoes)
+                         .arg(time.echoes == 1 ? "" : "s")
+                         .arg(time.interval)
+                         .arg(time.interval == 1 ? "" : "s");
+        if (time.posterize > 1)
+            parts << QString("posterize time, each pose held %1 frames").arg(time.posterize);
+        badges.push_back({"time", "Time: " + parts.join("; ") + ". Click to change it"});
+    }
+    const fla::compositing::LayerMode mode = fla::compositing::layerModeOf(layer);
+    if (mode != fla::compositing::LayerMode::Normal)
+    {
+        const char* what = mode == fla::compositing::LayerMode::Stencil      ? "Stencil: what is under shows only where this has art"
+                           : mode == fla::compositing::LayerMode::Silhouette ? "Silhouette: what is under is cut out where this has art"
+                                                                             : "Preserve Transparency: drawn only over what is under";
+        badges.push_back({"mode", QString("Layer mode, ") + what});
+    }
+    if (layer.layerType == fla::Layer::Type::Mask)
+    {
+        const fla::compositing::MaskEdge edge = fla::compositing::maskEdgeOf(layer);
+        if (!edge.plain())
+        {
+            QStringList parts;
+            if (edge.feather > 0.0)
+                parts << QString("feathered %1 px").arg(edge.feather);
+            if (edge.expand > 0.0)
+                parts << QString("grown %1 px").arg(edge.expand);
+            else if (edge.expand < 0.0)
+                parts << QString("shrunk %1 px").arg(-edge.expand);
+            if (edge.invert)
+                parts << "inverted";
+            badges.push_back({"edge", "Mask edge: " + parts.join(", ") + ". Click to change it"});
+        }
+    }
+    if (fla::effects::isEffect(layer))
+        badges.push_back({"effect", "Effect layer: a tone, highlight or glow over the layer below. Click for its settings"});
+    if (timeline && fla::nodegraph::active(*timeline))
+        if (const std::shared_ptr<const fla::nodegraph::Graph> graph = fla::nodegraph::of(*timeline))
+            for (int id : graph->reaching())
+            {
+                const fla::nodegraph::Node* node = graph->node(id);
+                if (node && node->type() == "layer" && node->applied.valueAt("layer", 0, std::string()) == layer.name)
+                {
+                    badges.push_back({"graph", "In the node graph: a Layer node takes this layer out of the stack"});
+                    break;
+                }
+            }
+    return badges;
+}
+
+/// Room kept in a name cell for its icon and the start of the name.
+constexpr int kNameRoom = 72;
+
+/// How far apart badges are in \a cell: side by side when they fit, or
+/// overlapping like a fanned hand, the name keeping its room.
+int badgeStep(const QRect& cell, int count)
+{
+    if (count <= 1)
+        return kBadgeSize + kBadgeGap;
+    const int room = cell.width() - kNameRoom - 4 - kBadgeSize;
+    return std::clamp(room / (count - 1), 6, kBadgeSize + kBadgeGap);
+}
+
+/// Where each of \a count badges sits at the right end of a name cell.
+std::vector<QRect> badgeRects(const QRect& cell, int count)
+{
+    std::vector<QRect> rects;
+    const int step = badgeStep(cell, count);
+    int right = cell.right() - 4;
+    const int top = cell.top() + (cell.height() - kBadgeSize) / 2;
+    for (int i = 0; i < count; ++i)
+    {
+        rects.insert(rects.begin(), QRect(right - kBadgeSize + 1, top, kBadgeSize, kBadgeSize));
+        right -= step;
+    }
+    return rects;
+}
+
+void drawBadge(QPainter& painter, const QRectF& box, const QString& kind)
+{
+    static const std::map<QString, const char*> categories = {{"blur", "Blur"}, {"time", "Transition"},
+        {"mode", "Combine"}, {"edge", "Input"}, {"effect", "Generate"}, {"graph", "Output"}};
+    const auto found = categories.find(kind);
+    painter.save();
+    painter.setRenderHint(QPainter::Antialiasing, true);
+    painter.setPen(Qt::NoPen);
+    painter.setBrush(nodestyle::categoryColor(found == categories.end() ? "Utility" : found->second));
+    painter.drawRoundedRect(box, 3.5, 3.5);
+    const QColor white(255, 255, 255, 240);
+    const QPointF c = box.center();
+    const double u = box.width() / 14.0;
+    const auto at = [&](double x, double y) { return QPointF(c.x() + x * u, c.y() + y * u); };
+    QPen pen(white, 1.3 * u, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin);
+    if (kind == "blur")
+    {
+        // Speed lines behind a ball.
+        painter.setPen(pen);
+        painter.drawLine(at(-4.5, -2.5), at(-0.5, -2.5));
+        painter.drawLine(at(-5.0, 0.0), at(-0.5, 0.0));
+        painter.drawLine(at(-4.5, 2.5), at(-0.5, 2.5));
+        painter.setPen(Qt::NoPen);
+        painter.setBrush(white);
+        painter.drawEllipse(at(2.3, 0.0), 2.6 * u, 2.6 * u);
+    }
+    else if (kind == "time")
+    {
+        // Poses one after another, fading.
+        painter.setPen(Qt::NoPen);
+        for (int i = 0; i < 3; ++i)
+        {
+            QColor faded = white;
+            faded.setAlphaF(0.3 + 0.35 * i);
+            painter.setBrush(faded);
+            painter.drawEllipse(at(-3.2 + i * 3.2, 0.0), 2.2 * u, 2.2 * u);
+        }
+    }
+    else if (kind == "mode")
+    {
+        painter.setPen(pen);
+        painter.setBrush(Qt::NoBrush);
+        painter.drawRect(QRectF(at(-4.0, -4.0), at(4.0, 4.0)));
+        painter.setPen(Qt::NoPen);
+        painter.setBrush(white);
+        painter.drawRect(QRectF(at(-1.6, -1.6), at(1.6, 1.6)));
+    }
+    else if (kind == "edge")
+    {
+        // A soft-edged spot.
+        QRadialGradient soft(c, 5.0 * u);
+        soft.setColorAt(0.0, white);
+        soft.setColorAt(0.45, white);
+        soft.setColorAt(1.0, QColor(255, 255, 255, 0));
+        painter.setPen(Qt::NoPen);
+        painter.setBrush(soft);
+        painter.drawEllipse(c, 5.0 * u, 5.0 * u);
+    }
+    else if (kind == "effect")
+    {
+        QPainterPath star;
+        star.moveTo(at(0, -5));
+        star.quadTo(at(0.6, -0.6), at(5, 0));
+        star.quadTo(at(0.6, 0.6), at(0, 5));
+        star.quadTo(at(-0.6, 0.6), at(-5, 0));
+        star.quadTo(at(-0.6, -0.6), at(0, -5));
+        painter.setPen(Qt::NoPen);
+        painter.setBrush(white);
+        painter.drawPath(star);
+    }
+    else if (kind == "graph")
+    {
+        // Two nodes, linked.
+        painter.setPen(QPen(white, 1.1 * u));
+        QPainterPath link(at(-1.5, -2.0));
+        link.cubicTo(at(1.0, -2.0), at(-1.0, 2.0), at(1.5, 2.0));
+        painter.drawPath(link);
+        painter.setPen(Qt::NoPen);
+        painter.setBrush(white);
+        painter.drawRoundedRect(QRectF(at(-5.0, -3.6), at(-1.5, -0.4)), u, u);
+        painter.drawRoundedRect(QRectF(at(1.5, 0.4), at(5.0, 3.6)), u, u);
+    }
+    painter.restore();
+}
+
+/// The name column: the name, cut short where it would run under the
+/// layer's badges, and the badges.
+class BadgeDelegate : public QStyledItemDelegate
+{
+public:
+    using QStyledItemDelegate::QStyledItemDelegate;
+
+    void paint(QPainter* painter, const QStyleOptionViewItem& option, const QModelIndex& index) const override
+    {
+        const QStringList kinds = index.data(kBadgeKinds).toStringList();
+        if (kinds.isEmpty())
+        {
+            QStyledItemDelegate::paint(painter, option, index);
+            return;
+        }
+        QStyleOptionViewItem o(option);
+        initStyleOption(&o, index);
+        const QWidget* widget = option.widget;
+        QStyle* style = widget ? widget->style() : QApplication::style();
+        const QRect text = style->subElementRect(QStyle::SE_ItemViewItemText, &o, widget);
+        const std::vector<QRect> rects = badgeRects(option.rect, static_cast<int>(kinds.size()));
+        const int room = std::max(0, std::min(text.width(), rects.front().left() - 4 - text.left()));
+        o.text = o.fontMetrics.elidedText(o.text, Qt::ElideRight, room);
+        style->drawControl(QStyle::CE_ItemViewItem, &o, painter, widget);
+        // Overlapping, each is edged so the one under it still reads.
+        const bool overlapping = badgeStep(option.rect, static_cast<int>(kinds.size())) < kBadgeSize + kBadgeGap;
+        for (int i = 0; i < kinds.size(); ++i)
+        {
+            const QRect& box = rects[static_cast<size_t>(i)];
+            if (overlapping)
+            {
+                painter->save();
+                painter->setRenderHint(QPainter::Antialiasing, true);
+                painter->setPen(Qt::NoPen);
+                painter->setBrush(QColor(0, 0, 0, 110));
+                painter->drawRoundedRect(QRectF(box).adjusted(-1.2, -1.2, 1.2, 1.2), 4.5, 4.5);
+                painter->restore();
+            }
+            drawBadge(*painter, box, kinds[i]);
+        }
+    }
+
+    bool helpEvent(QHelpEvent* event, QAbstractItemView* view, const QStyleOptionViewItem& option,
+        const QModelIndex& index) override
+    {
+        const QStringList kinds = index.data(kBadgeKinds).toStringList();
+        const QStringList tips = index.data(kBadgeTips).toStringList();
+        const std::vector<QRect> rects = badgeRects(option.rect, static_cast<int>(kinds.size()));
+        // Overlapping, any of them tells of all of them.
+        const bool overlapping = badgeStep(option.rect, static_cast<int>(kinds.size())) < kBadgeSize + kBadgeGap;
+        for (int i = static_cast<int>(rects.size()) - 1; i >= 0 && i < tips.size(); --i)
+            if (rects[static_cast<size_t>(i)].adjusted(-1, -1, 1, 1).contains(event->pos()))
+            {
+                const QRect area = overlapping ? rects.front().united(rects.back()) : rects[static_cast<size_t>(i)];
+                QToolTip::showText(event->globalPos(), overlapping ? tips.join("\n") : tips[i], view, area);
+                return true;
+            }
+        return QStyledItemDelegate::helpEvent(event, view, option, index);
+    }
+};
 
 /// A drawn glyph, so the panel does not depend on an emoji font.
 QIcon glyph(void (*draw)(QPainter&))
@@ -454,6 +710,7 @@ LayersPanel::LayersPanel(QWidget *parent)
         _treeWidget->header()->resizeSection(column, column == CurrentColumn ? 20 : column == ParentColumn ? 32 : 24);
     }
     _treeWidget->header()->setHidden(true);
+    _treeWidget->setItemDelegateForColumn(NameColumn, new BadgeDelegate(_treeWidget));
     _treeWidget->setSelectionMode(QAbstractItemView::ExtendedSelection);
     _treeWidget->viewport()->installEventFilter(this);
     _treeWidget->setEditTriggers(QAbstractItemView::NoEditTriggers);
@@ -833,6 +1090,32 @@ bool LayersPanel::eventFilter(QObject* watched, QEvent* event)
             _treeWidget->viewport()->update();
             return true;
         }
+        // A badge clicked: the settings of its effect, where it has some.
+        if (layer && column == NameColumn)
+        {
+            const QStringList kinds = item->data(NameColumn, kBadgeKinds).toStringList();
+            QRect cell = _treeWidget->visualItemRect(item);
+            cell.setLeft(_treeWidget->header()->sectionViewportPosition(NameColumn));
+            cell.setWidth(_treeWidget->header()->sectionSize(NameColumn));
+            const std::vector<QRect> rects = badgeRects(cell, static_cast<int>(kinds.size()));
+            // The topmost first, where they overlap.
+            for (int i = static_cast<int>(rects.size()) - 1; i >= 0; --i)
+            {
+                if (!rects[static_cast<size_t>(i)].adjusted(-1, -1, 1, 1).contains(at))
+                    continue;
+                const QString kind = kinds[i];
+                if (kind == "time")
+                    emit compositingRequested(layer, "time");
+                else if (kind == "edge")
+                    emit compositingRequested(layer, "maskedge");
+                else if (kind == "effect")
+                    emit effectSettingsRequested(layer);
+                else
+                    break;
+                _pressTaken = true;
+                return true;
+            }
+        }
         if (!layer || (column != VisibleColumn && column != LockColumn && column != ColorColumn))
             return false;
         _pressTaken = true;
@@ -998,8 +1281,14 @@ std::vector<LayersPanel::Built> LayersPanel::snapshot() const
     for (const fla::Timeline* timeline : shownTimelines())
     {
         for (const fla::Layer* layer : timeline->layers)
+        {
+            std::string badges;
+            if (layer)
+                for (const Badge& badge : badgesOf(*layer, timeline))
+                    badges += badge.tip.toStdString() + "\n";
             built.push_back({layer, layer ? layer->name : std::string(), layer && layer->selected,
-                layer ? layer->parentLayer : nullptr, layer ? layer->layerType : fla::Layer::Type::Normal});
+                layer ? layer->parentLayer : nullptr, layer ? layer->layerType : fla::Layer::Type::Normal, badges});
+        }
     }
     return built;
 }
@@ -1012,7 +1301,7 @@ void LayersPanel::refreshIfStale()
     {
         same = now[i].layer == _built[i].layer && now[i].name == _built[i].name &&
             now[i].selected == _built[i].selected && now[i].parent == _built[i].parent &&
-            now[i].type == _built[i].type;
+            now[i].type == _built[i].type && now[i].badges == _built[i].badges;
     }
     if (!same)
         refresh();
@@ -1070,6 +1359,14 @@ void LayersPanel::refresh()
                 item->setIcon(NameColumn, glyph(drawMattedSheet));
                 item->setToolTip(NameColumn, "Shown through the layer above it (track matte)");
             }
+            QStringList kinds, tips;
+            for (const Badge& badge : badgesOf(*layer, timeline))
+            {
+                kinds << badge.kind;
+                tips << badge.tip;
+            }
+            item->setData(NameColumn, kBadgeKinds, kinds);
+            item->setData(NameColumn, kBadgeTips, tips);
             item->setToolTip(VisibleColumn, "Show or hide the layer");
             item->setToolTip(LockColumn, "Lock or unlock the layer");
             item->setToolTip(ColorColumn, "Outline color; click to view the layer as outlines");

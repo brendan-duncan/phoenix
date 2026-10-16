@@ -186,6 +186,8 @@ private:
         bool selected;
         const fla::Layer* parent;
         fla::Layer::Type type;
+        /// The tips of its badges (motion blur, echo...), one a line.
+        std::string badges;
     };
     std::vector<Built> _built;
     std::vector<Built> snapshot() const;
