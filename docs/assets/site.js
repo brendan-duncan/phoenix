@@ -214,7 +214,7 @@ function buildPager(content, page) {
 
   const footer = document.createElement("footer");
   footer.className = "site-footer";
-  footer.innerHTML = `This guide describes Phoenix ${VERSION} (<a href="${REPO}/blob/main/CHANGELOG.md">what's new</a>). Phoenix is open source. Found a mistake in this guide? <a href="${REPO}/issues">Open an issue</a>.`;
+  footer.innerHTML = `Phoenix ${VERSION} (<a href="${REPO}/blob/main/CHANGELOG.md">what's new</a>). Found a mistake in this guide? <a href="${REPO}/issues">Open an issue</a>.`;
   content.append(footer);
 }
 
