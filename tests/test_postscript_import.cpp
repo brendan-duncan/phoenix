@@ -123,6 +123,56 @@ TEST(pdf_objects_read_compact_dictionaries_and_streams)
     }
 }
 
+TEST(pdf_objects_survive_damaged_tables_lengths_and_filters)
+{
+    const auto bytes = [](const std::string& text) { return std::vector<uint8_t>(text.begin(), text.end()); };
+    const std::string catalog = "%PDF-1.5\n1 0 obj <</Type/Catalog/Pages 2 0 R>> endobj\n"
+                                "2 0 obj <</Type/Pages/Kids[3 0 R 3 0 R 3 0 R]/Count 1>> endobj\n"
+                                "3 0 obj <</Type/Page/MediaBox[0 0 10 10]>> endobj\n";
+    fla::pdf::File pdf;
+    std::string error;
+    // A table claiming two billion entries, cut off by the end of the file.
+    std::string file = catalog;
+    file += "xref\n0 2000000000\n";
+    CHECK(pdf.open(bytes(file + "startxref\n" + std::to_string(catalog.size()) + "\n"), error));
+    // A cross-reference stream whose rows are no bytes wide.
+    file = catalog + "4 0 obj <</Type/XRef/W[0 0 0]/Size 2000000000/Root 1 0 R/Length 1>>stream\nx\nendstream endobj\n";
+    CHECK(pdf.open(bytes(file + "startxref\n" + std::to_string(catalog.size()) + "\n"), error));
+    // Two tables each naming the other as XRefStm and Prev.
+    file = catalog;
+    const size_t first = file.size();
+    file += "xref\n0 1\n0000000000 65535 f \ntrailer <</Root 1 0 R/Prev SECOND____/XRefStm SECOND____>>\n";
+    const size_t second = file.size();
+    file += "xref\n0 1\n0000000000 65535 f \ntrailer <</Root 1 0 R/Prev FIRST_____/XRefStm FIRST_____>>\n";
+    // Ten digits, so the offsets stay where they were.
+    for (const auto& [mark, at] : {std::pair<std::string, size_t>{"SECOND____", second}, {"FIRST_____", first}})
+        for (size_t p; (p = file.find(mark)) != std::string::npos;)
+        {
+            char digits[16];
+            std::snprintf(digits, sizeof(digits), "%010zu", at);
+            file.replace(p, mark.size(), digits);
+        }
+    CHECK(pdf.open(bytes(file + "startxref\n" + std::to_string(first) + "\n"), error));
+    // The same page listed three times is one page.
+    CHECK(pdf.open(bytes(catalog), error) && pdf.pages().size() == 1);
+
+    // A length near 2^64, and predictor parameters past reason.
+    const std::string data = "hello";
+    file = catalog + "4 0 obj <</Length 18446744073709551615>>stream\n" + data + "\nendstream endobj\n" +
+        "5 0 obj <</Filter/FlateDecode/DecodeParms<</Predictor 12/Colors 1000000000/Columns 1000000000"
+        "/BitsPerComponent 1000>>/Length 5>>stream\nhello\nendstream endobj\n";
+    CHECK(pdf.open(bytes(file), error));
+    const fla::pdf::Object* stream = pdf.object(4);
+    CHECK(stream && stream->type == fla::pdf::Object::Type::Stream);
+    if (stream)
+    {
+        const std::vector<uint8_t> decoded = pdf.decoded(*stream);
+        CHECK(std::string(decoded.begin(), decoded.end()) == data);
+    }
+    if (const fla::pdf::Object* predicted = pdf.object(5))
+        CHECK(pdf.decoded(*predicted).empty());
+}
+
 TEST(illustrator_files_without_pdf_content_come_in_from_their_private_data)
 {
     // The page draws only Illustrator's note; the art is in its private

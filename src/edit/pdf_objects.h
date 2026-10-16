@@ -3,6 +3,7 @@
 #include <cstdint>
 #include <map>
 #include <memory>
+#include <set>
 #include <string>
 #include <utility>
 #include <vector>
@@ -71,6 +72,8 @@ public:
     /// JBIG2) are left on: \a remaining gets the filter still to apply,
     /// empty when none.
     std::vector<uint8_t> decoded(const Object& stream, std::string* remaining = nullptr);
+    /// The filter decoded() would leave on \a stream, without decoding it.
+    std::string remainingFilter(const Object& stream);
 
     /// The pages, in order, each with what it inherits from the page tree
     /// (Resources, MediaBox, CropBox, Rotate) set on it.
@@ -102,6 +105,11 @@ private:
     std::map<int, bool> _loading;
     std::map<int, std::vector<std::pair<int, size_t>>> _streamTables;
     std::map<int, std::vector<uint8_t>> _streamData;
+    // Guards against damaged files: the tables already read, how deep
+    // objects are being loaded through others, and the bytes decoded.
+    std::set<size_t> _tablesRead;
+    int _loadDepth = 0;
+    size_t _decodedTotal = 0;
     Object _trailer;
     Object _null;
 };

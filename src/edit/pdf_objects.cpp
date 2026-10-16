@@ -311,6 +311,11 @@ private:
     size_t _size;
 };
 
+// A filter's output past this is damage, or a bomb; past the second, all a
+// file's streams together.
+constexpr size_t kMaxDecoded = size_t(1) << 28;
+constexpr size_t kMaxDecodedTotal = size_t(1) << 31;
+
 std::vector<uint8_t> inflateData(const std::vector<uint8_t>& data, bool raw)
 {
     std::vector<uint8_t> out;
@@ -328,7 +333,7 @@ std::vector<uint8_t> inflateData(const std::vector<uint8_t>& data, bool raw)
         stream.avail_out = sizeof(buffer);
         const int status = ::inflate(&stream, Z_NO_FLUSH);
         out.insert(out.end(), buffer, buffer + (sizeof(buffer) - stream.avail_out));
-        if (status == Z_STREAM_END || (status != Z_OK && status != Z_BUF_ERROR))
+        if (status == Z_STREAM_END || (status != Z_OK && status != Z_BUF_ERROR) || out.size() > kMaxDecoded)
             break;
         if (status == Z_BUF_ERROR && stream.avail_in == 0)
             break;
@@ -352,19 +357,25 @@ std::vector<uint8_t> unpredict(const std::vector<uint8_t>& data, const Object* p
 {
     if (!parms || !parms->isDictionary())
         return data;
-    const auto value = [parms](const char* key, int fallback) {
+    // Held to sane ranges: 32 colors of 16 bits at most, and no more
+    // columns than the data could hold.
+    const auto value = [parms](const char* key, int fallback, int low, int high) {
         const Object* v = parms->get(key);
-        return v && v->type == Object::Type::Number ? static_cast<int>(v->number) : fallback;
+        if (!v || v->type != Object::Type::Number || !(v->number == v->number))
+            return fallback;
+        return static_cast<int>(std::clamp(v->number, static_cast<double>(low), static_cast<double>(high)));
     };
-    const int predictor = value("Predictor", 1);
+    const int predictor = value("Predictor", 1, 0, 100);
     if (predictor < 2)
         return data;
-    const int colors = std::max(1, value("Colors", 1));
-    const int bits = std::max(1, value("BitsPerComponent", 8));
-    const int columns = std::max(1, value("Columns", 1));
+    const int colors = value("Colors", 1, 1, 32);
+    const int bits = value("BitsPerComponent", 8, 1, 16);
+    const int columns = value("Columns", 1, 1, 1 << 24);
     const size_t bpp = std::max<size_t>(1, static_cast<size_t>(colors * bits + 7) / 8);
     const size_t row = (static_cast<size_t>(colors) * bits * columns + 7) / 8;
     std::vector<uint8_t> out;
+    if (predictor > 2 && row + 1 > data.size())
+        return out;
     if (predictor == 2)
     {
         // TIFF: each byte after the first pixel adds the one a pixel back
@@ -520,7 +531,11 @@ std::vector<uint8_t> lzw(const std::vector<uint8_t>& data, bool early)
             else
                 return out;
             out.insert(out.end(), entry.begin(), entry.end());
-            if (previous >= 0)
+            if (out.size() > kMaxDecoded)
+                return out;
+            // Twelve-bit codes reach 4096 entries; past that the table
+            // stays as it is until a clear.
+            if (previous >= 0 && table.size() < 4096)
             {
                 std::vector<uint8_t> added = table[static_cast<size_t>(previous)];
                 added.push_back(entry.front());
@@ -552,6 +567,8 @@ std::vector<uint8_t> runLength(const std::vector<uint8_t>& data)
         }
         else if (i < data.size())
             out.insert(out.end(), static_cast<size_t>(257 - length), data[i++]);
+        if (out.size() > kMaxDecoded)
+            break;
     }
     return out;
 }
@@ -704,6 +721,7 @@ bool File::open(std::vector<uint8_t> bytes, std::string& error)
 
 bool File::readTables(std::string& error)
 {
+    _tablesRead.clear();
     // startxref, near the end.
     const size_t tail = _bytes.size() > 2048 ? _bytes.size() - 2048 : 0;
     size_t found = std::string::npos;
@@ -730,8 +748,15 @@ bool File::readTables(std::string& error)
 
 bool File::readTable(size_t offset, int depth)
 {
-    if (offset >= _bytes.size() || depth > 32)
+    // Each table once: saves can point back at one another.
+    if (offset >= _bytes.size() || depth > 32 || !_tablesRead.insert(offset).second)
         return false;
+    // An offset from the file: a number within it, or nowhere.
+    const auto offsetOf = [this](const Object* value) {
+        return value && value->number >= 0 && value->number < static_cast<double>(_bytes.size())
+            ? static_cast<size_t>(value->number)
+            : _bytes.size();
+    };
     Lexer lex(_bytes.data(), _bytes.size(), offset);
     if (lex.peekWord("xref"))
     {
@@ -750,6 +775,9 @@ bool File::readTable(size_t offset, int depth)
             for (int i = 0; i < count; ++i)
             {
                 const std::string where = lex.word();
+                // A count past the end of the file stops there.
+                if (where.empty())
+                    break;
                 lex.word(); // generation
                 const std::string kind = lex.word();
                 const int number = start + i;
@@ -768,9 +796,9 @@ bool File::readTable(size_t offset, int depth)
         if (_trailer.entries.empty())
             _trailer = trailer;
         if (const Object* hybrid = trailer.get("XRefStm"))
-            readTable(static_cast<size_t>(hybrid->number), depth + 1);
+            readTable(offsetOf(hybrid), depth + 1);
         if (const Object* previous = trailer.get("Prev"))
-            readTable(static_cast<size_t>(previous->number), depth + 1);
+            readTable(offsetOf(previous), depth + 1);
         return true;
     }
     // A cross-reference stream.
@@ -784,8 +812,10 @@ bool File::readTable(size_t offset, int depth)
     std::vector<int> widths;
     if (const Object* w = stream.get("W"))
         for (const Object& item : w->items)
-            widths.push_back(static_cast<int>(item.number));
-    if (widths.size() < 3)
+            widths.push_back(item.number >= 0 && item.number <= 8 ? static_cast<int>(item.number) : -1);
+    // Each field fits eight bytes, and a row holds something.
+    if (widths.size() < 3 || widths[0] < 0 || widths[1] < 0 || widths[2] < 0 ||
+        widths[0] + widths[1] + widths[2] == 0)
         return false;
     std::vector<int> index;
     if (const Object* list = stream.get("Index"))
@@ -824,7 +854,7 @@ bool File::readTable(size_t offset, int depth)
         _trailer.raw.clear();
     }
     if (const Object* previous = stream.get("Prev"))
-        readTable(static_cast<size_t>(previous->number), depth + 1);
+        readTable(offsetOf(previous), depth + 1);
     return true;
 }
 
@@ -911,21 +941,24 @@ bool File::parseAt(size_t offset, Object& out)
         ++start;
     size_t length = 0;
     bool known = false;
+    // A length that runs past the end of the file is not trusted.
+    const size_t left = start < _bytes.size() ? _bytes.size() - start : 0;
+    const auto take = [&length, &known, left](double value) {
+        if (value >= 0 && value <= static_cast<double>(left))
+        {
+            length = static_cast<size_t>(value);
+            known = true;
+        }
+    };
     if (const Object* given = out.get("Length"))
     {
         if (given->type == Object::Type::Number)
-        {
-            length = static_cast<size_t>(std::max(0.0, given->number));
-            known = true;
-        }
+            take(given->number);
         else if (given->type == Object::Type::Reference && !_loading[given->reference])
         {
             const Object* resolvedLength = object(given->reference);
             if (resolvedLength && resolvedLength->type == Object::Type::Number)
-            {
-                length = static_cast<size_t>(std::max(0.0, resolvedLength->number));
-                known = true;
-            }
+                take(resolvedLength->number);
         }
     }
     if (known && start + length <= _bytes.size())
@@ -959,7 +992,10 @@ bool File::fromObjectStream(int stream, int index, int number, Object& out)
             return false;
         std::vector<uint8_t> data = decoded(*holder);
         const int count = static_cast<int>(this->number(holder->get("N"), 0));
-        const size_t first = static_cast<size_t>(this->number(holder->get("First"), 0));
+        const double firstValue = this->number(holder->get("First"), 0);
+        const size_t first = firstValue >= 0 && firstValue < static_cast<double>(data.size())
+            ? static_cast<size_t>(firstValue)
+            : data.size();
         Lexer lex(data.data(), std::min(first, data.size()));
         std::vector<std::pair<int, size_t>> table;
         for (int i = 0; i < count; ++i)
@@ -994,12 +1030,16 @@ const Object* File::object(int number)
     if (cached != _cache.end())
         return cached->second.get();
     const auto entry = _entries.find(number);
-    if (entry == _entries.end() || entry->second.type == 0 || _loading[number])
+    // Objects load others (a length, the object stream holding them): a
+    // chain of them past reason is damage.
+    if (entry == _entries.end() || entry->second.type == 0 || _loading[number] || _loadDepth >= 64)
         return nullptr;
     _loading[number] = true;
+    ++_loadDepth;
     auto made = std::make_unique<Object>();
     bool ok = entry->second.type == 1 ? parseAt(entry->second.offset, *made)
                                       : fromObjectStream(entry->second.stream, entry->second.index, number, *made);
+    --_loadDepth;
     _loading[number] = false;
     if (!ok)
         return nullptr;
@@ -1029,10 +1069,32 @@ double File::number(const Object* value, double fallback)
     return v.type == Object::Type::Number ? v.number : fallback;
 }
 
+std::string File::remainingFilter(const Object& stream)
+{
+    if (const Object* filter = stream.get("Filter"))
+    {
+        const Object& f = resolve(*filter);
+        std::vector<std::string> filters;
+        if (f.type == Object::Type::Name)
+            filters.push_back(canonicalFilter(f.text));
+        else
+            for (const Object& item : f.items)
+                filters.push_back(canonicalFilter(resolve(item).text));
+        for (const std::string& name : filters)
+            if (name != "FlateDecode" && name != "LZWDecode" && name != "ASCIIHexDecode" &&
+                name != "ASCII85Decode" && name != "RunLengthDecode")
+                return name;
+    }
+    return std::string();
+}
+
 std::vector<uint8_t> File::decoded(const Object& stream, std::string* remaining)
 {
     if (remaining)
         remaining->clear();
+    // Past the budget for the whole file, nothing more is decoded.
+    if (_decodedTotal > kMaxDecodedTotal)
+        return {};
     std::vector<uint8_t> data = stream.raw;
     std::vector<std::string> filters;
     std::vector<const Object*> parms;
@@ -1079,6 +1141,7 @@ std::vector<uint8_t> File::decoded(const Object& stream, std::string* remaining)
                 *remaining = name;
             break;
         }
+        _decodedTotal += data.size();
     }
     return data;
 }
@@ -1094,41 +1157,46 @@ std::vector<Object> File::pages()
     if (!tree)
         return list;
     // Depth first, carrying what pages inherit.
+    // A node is visited once however often it is listed, and its kids share
+    // what they inherit rather than each holding a copy.
     struct Pending
     {
         const Object* node;
-        Object inherited;
+        std::shared_ptr<const Object> inherited;
         int depth;
     };
-    std::vector<Pending> stack{{&resolve(*tree), Object(), 0}};
-    std::vector<const Object*> seen;
+    const Object* first = &resolve(*tree);
+    std::vector<Pending> stack{{first, std::make_shared<Object>(), 0}};
+    std::set<const Object*> seen{first};
     while (!stack.empty() && list.size() < 10000)
     {
         Pending pending = stack.back();
         stack.pop_back();
         const Object& node = *pending.node;
-        if (!node.isDictionary() || pending.depth > 64 ||
-            std::find(seen.begin(), seen.end(), &node) != seen.end())
+        if (!node.isDictionary() || pending.depth > 64)
             continue;
-        seen.push_back(&node);
-        Object inherited = pending.inherited;
-        inherited.type = Object::Type::Dictionary;
+        auto inherited = std::make_shared<Object>(*pending.inherited);
+        inherited->type = Object::Type::Dictionary;
         for (const char* key : {"Resources", "MediaBox", "CropBox", "Rotate"})
             if (const Object* value = node.get(key))
-                inherited.set(key, resolve(*value));
+                inherited->set(key, resolve(*value));
         const Object* kids = node.get("Kids");
         const Object* type = node.get("Type");
         if (kids && (!type || type->text != "Page"))
         {
             const Object& array = resolve(*kids);
             for (auto it = array.items.rbegin(); it != array.items.rend(); ++it)
-                stack.push_back({&resolve(*it), inherited, pending.depth + 1});
+            {
+                const Object* kid = &resolve(*it);
+                if (seen.insert(kid).second)
+                    stack.push_back({kid, inherited, pending.depth + 1});
+            }
             continue;
         }
         Object page = node;
         page.type = Object::Type::Dictionary;
         page.raw.clear();
-        for (const auto& [key, value] : inherited.entries)
+        for (const auto& [key, value] : inherited->entries)
             if (!page.get(key))
                 page.set(key, value);
         list.push_back(std::move(page));
