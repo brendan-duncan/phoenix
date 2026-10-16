@@ -11672,8 +11672,18 @@ void MainWindow::importArtwork(const QString& path, bool toStage, const QPointF*
     }
 
     const bool svg = QFileInfo(path).suffix().toLower() == "svg";
-    const fla::vectors::Artwork art = svg ? fla::vectors::readSvg(std::string(data.constData(), static_cast<size_t>(data.size())))
-                                          : fla::vectors::readPdf(bytes);
+    fla::vectors::Artwork art;
+    try
+    {
+        art = svg ? fla::vectors::readSvg(std::string(data.constData(), static_cast<size_t>(data.size())))
+                  : fla::vectors::readPdf(bytes);
+    }
+    catch (const std::exception&)
+    {
+        // Damaged past what the readers guard against (out of memory, say).
+        problems << QString("%1 could not be read.").arg(fileName);
+        return;
+    }
     note(art.notes);
     const double dx = at ? at->x() - art.width / 2.0 : 0.0;
     const double dy = at ? at->y() - art.height / 2.0 : 0.0;
