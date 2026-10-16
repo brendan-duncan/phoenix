@@ -102,12 +102,40 @@ doc.getTimeline().addNewLayer("Notes")</code></pre>
 <ul>
   <li><code>fl</code>, <code>FLfile</code>, <code>alert</code>, <code>confirm</code> and <code>prompt</code> are ready in every script. Modules your script imports reach them with <code>import phoenix</code> (<code>phoenix.fl</code>, <code>phoenix.FLfile</code>).</li>
   <li>Every property and method also has a snake_case name: <code>fl.get_document_dom()</code>, <code>layer.frame_count</code>, <code>timeline.add_new_layer("Notes")</code>.</li>
+  <li>Methods take keyword arguments for the settings the JSFL reference names: <code>timeline.insert_frames(5, all_layers=True)</code>. A setting left out is left as the method's default.</li>
+  <li><code>fl.runScript("tools/rename.jsfl", "renameAll", "bg_")</code> runs a JSFL script, or one function in it, and gives back what it returns.</li>
   <li><code>print</code> writes to the Output panel, or to standard output with <code>run-script</code>. Lists come back as Python lists, plain objects as dicts, whole numbers as <code>int</code>, and nothing as <code>None</code>.</li>
   <li>A run is one step to undo, Stop ends it, and an error names the file and line, as with JSFL. Errors from Phoenix are <code>phoenix.Error</code>, which a script can catch. A misspelled property is an <code>AttributeError</code> rather than a new property.</li>
   <li>Each run starts with fresh globals, and the objects it got from <code>fl</code> stop working when it ends: get them again in the next run. Modules stay imported between runs, so a pipeline library loads once.</li>
 </ul>
 
 <p>Phoenix uses your own Python, 3.8 or later, so the packages you installed for it are there to import: your studio's ShotGrid, ftrack or Kitsu library, or anything else. Phoenix finds the newest Python installed for you or for everyone, then one on your <code>PATH</code>. To pick one, set the <code>PHOENIX_PYTHON</code> environment variable to its <code>python</code> program, its folder, or a virtual environment; scripts then import the environment's packages, and <code>sys.executable</code> is its <code>python</code>, so a script can run tools with it. <code>PHOENIX_PYTHON=off</code> turns Python scripts off. Phoenix itself starts and runs JSFL scripts with no Python installed.</p>
+
+<h2 id="python-module">Python as a module</h2>
+
+<p>Your own Python programs, pipeline tools, notebooks and tests can drive Phoenix too. The <code>phoenix</code> module, in the <code>python</code> folder beside Phoenix, starts Phoenix with no window and hands you its documents as Python objects, under the same names (and snake_case names) scripts inside Phoenix use. Add that folder to <code>PYTHONPATH</code>, or to <code>sys.path</code>:</p>
+
+<pre><code>import phoenix
+
+doc = phoenix.open("episode/sh010.fla")
+tl = doc.get_timeline()
+for layer in tl.layers:
+    print(layer.name, layer.frame_count)
+tl.add_new_layer(name="Notes", add_above=True)
+tl.insert_frames(12, all_layers=True)
+phoenix.export_png(doc, "sh010_first.png", frame=0)
+phoenix.save(doc, "episode/sh010_long.fla")
+print(phoenix.jsfl("fl.getDocumentDOM().getTimeline().frameCount"))</code></pre>
+
+<ul>
+  <li>Phoenix is found from the <code>PHOENIX_EXE</code> environment variable, the Phoenix the module came with, or where Phoenix installs. It runs your own Python inside it, so use Python 3.8 or later, as for Phoenix's Python scripts.</li>
+  <li>Each property and call is a request to that Phoenix, which keeps running until the session ends: <code>with phoenix.Session() as ph:</code>, or <code>phoenix.shutdown()</code> (it also ends when your program does).</li>
+  <li><code>ph.python(code)</code> and <code>ph.jsfl(code)</code> run code inside Phoenix and give back its last value; <code>ph.run_script(path)</code> runs a <code>.jsfl</code> or <code>.py</code> file there; <code>ph.call(name, **settings)</code> runs one of Phoenix's own <a href="#phoenix-operations">operations</a>.</li>
+  <li>What Phoenix prints, traces or alerts is printed by your program (or kept in <code>ph.output</code> with <code>Session(echo=False)</code>). Python's own errors come back as themselves (<code>AttributeError</code>, <code>TypeError</code>); others are <code>phoenix.Error</code>.</li>
+  <li><code>phoenix.export_movie(document, "out.mp4")</code> renders a movie in a Phoenix of its own.</li>
+</ul>
+
+<p>Another Python package called <code>phoenix</code> (from a different project) installs a module of the same name; if you have it, use a virtual environment or put Phoenix's folder first on the path.</p>
 
 <h2>What scripts can reach</h2>
 
