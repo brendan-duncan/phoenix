@@ -348,9 +348,18 @@ public:
         const int index = tabOf(document);
         if (index < 0)
             return false;
+        // What is kept for it goes once it is closed (forget), not before:
+        // asked to save, the person may keep it open, and its history still
+        // points at its selection.
+        return _window.closeTab(index, askToSave && !noOneToAsk(_window));
+    }
+    /// Lets go of what was kept for \a document, which is closing.
+    void forget(const fla::FLADocument* document)
+    {
         _selections.erase(document);
         _edited.erase(document);
-        return _window.closeTab(index, askToSave && !noOneToAsk(_window));
+        _frames.erase(document);
+        _layers.erase(document);
     }
     std::string path(fla::FLADocument* document) override
     {
@@ -376,9 +385,10 @@ public:
     // Editing.
     fla::CommandStack& history(fla::FLADocument* document) override
     {
-        if (document == _window._flaDocument)
+        const int index = tabOf(document);
+        if (document == _window._flaDocument || index < 0)
             return _window._editContext.commandStack();
-        return _window._tabs[static_cast<size_t>(tabOf(document))]->history;
+        return _window._tabs[static_cast<size_t>(index)]->history;
     }
     fla::Selection& selection(fla::FLADocument* document) override
     {
@@ -714,6 +724,12 @@ ScriptRunner::~ScriptRunner() = default;
 jsfl::Host& ScriptRunner::jsflHost()
 {
     return *_host;
+}
+
+void ScriptRunner::forgetDocument(const fla::FLADocument* document)
+{
+    if (_host)
+        _host->forget(document);
 }
 
 void ScriptRunner::dispatchEvent(const char* type)

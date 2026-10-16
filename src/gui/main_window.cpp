@@ -775,9 +775,16 @@ void MainWindow::dropEvent(QDropEvent* event)
 
 void MainWindow::releaseDocument()
 {
-    // Nothing a tool is in the middle of may outlive the document.
+    // Nothing a tool is in the middle of may outlive the document, nor a
+    // field being typed in a panel.
     if (_flaDocument)
+    {
+        finishPanelEdits();
+        // A script being typed is kept in the frame it was typed for.
+        if (_actionsPanel)
+            _actionsPanel->commit();
         settleGestures();
+    }
     // Playback stops with the document it was playing.
     if (_player && _player->isPlaying())
         _player->setPlaying(false);
@@ -854,6 +861,8 @@ void MainWindow::releaseDocument()
         _transformPanel->refresh();
     if (_infoPanel)
         _infoPanel->refresh();
+    if (_actionsPanel)
+        _actionsPanel->refresh();
     _shownScene = nullptr;
 }
 
@@ -862,6 +871,8 @@ void MainWindow::forgetDocument(const fla::FLADocument* document)
     if (!document)
         return;
     scriptEvent("documentClosed");
+    if (_scripts)
+        _scripts->forgetDocument(document);
     _featuresAcknowledged.remove(document);
     // Copied layers point at this document's symbols, and only paste back
     // into it: they go with it, before another document can take its
@@ -991,11 +1002,28 @@ void MainWindow::warnAboutFonts()
     });
 }
 
+void MainWindow::finishPanelEdits()
+{
+    // A field losing focus finishes its edit, now, while its document and
+    // history are still the ones in hand.
+    QWidget* focused = QApplication::focusWidget();
+    if (!focused)
+        return;
+    for (QWidget* panel : std::initializer_list<QWidget*>{_propertiesPanel, _behaviors})
+        if (panel && panel->isAncestorOf(focused))
+        {
+            focused->clearFocus();
+            return;
+        }
+}
+
 void MainWindow::parkActiveDocument()
 {
     if (!_flaDocument || _activeTab < 0 || _activeTab >= static_cast<int>(_tabs.size()))
         return;
-    // Text being typed goes into the document it was typed in.
+    // Text being typed goes into the document it was typed in, in a panel's
+    // field too.
+    finishPanelEdits();
     settleGestures();
     DocumentTab& tab = *_tabs[static_cast<size_t>(_activeTab)];
     if (_phoenixView)
@@ -1179,7 +1207,17 @@ bool MainWindow::closeTab(int index, bool ask)
     }
     if (index != _activeTab)
         activateTab(index);
+    // Asking spins the event loop, where tabs can come and go: the one to
+    // close is found again after, and must still be the one shown.
+    const DocumentTab* closing = _tabs[static_cast<size_t>(index)].get();
     if (ask && !confirmDiscardChanges())
+        return false;
+    const auto still = std::find_if(_tabs.begin(), _tabs.end(),
+        [closing](const std::unique_ptr<DocumentTab>& tab) { return tab.get() == closing; });
+    if (still == _tabs.end())
+        return true;
+    index = static_cast<int>(still - _tabs.begin());
+    if (index != _activeTab)
         return false;
     _switchingTabs = true;
     releaseDocument();
@@ -3494,8 +3532,9 @@ void MainWindow::clearFrames()
 void MainWindow::pickFrameContents(const fla::Layer* layer, int frame)
 {
     // After the playhead has moved there, which lets go of the selection.
-    QTimer::singleShot(0, this, [this, layer, frame]() {
-        if (!layer || !layer->isVisible() || layer->isLocked() || !_phoenixView)
+    const fla::FLADocument* document = _flaDocument;
+    QTimer::singleShot(0, this, [this, layer, frame, document]() {
+        if (!stillInDocument(document, layer) || !layer->isVisible() || layer->isLocked() || !_phoenixView)
             return;
         fla::Frame* span = fla::timeline::spanAt(*const_cast<fla::Layer*>(layer), frame);
         if (!span)
@@ -5752,7 +5791,8 @@ void MainWindow::editLayers(fla::Timeline* timeline, const fla::LayerSnapshot& a
 
 void MainWindow::renameLayer(const fla::Timeline* timeline, int layerIndex, const QString& name)
 {
-    if (!timeline || layerIndex < 0 || layerIndex >= static_cast<int>(timeline->layers.size()))
+    // Asked for a moment ago: the timeline may have gone since.
+    if (!stillInDocument(_flaDocument, timeline) || layerIndex < 0 || layerIndex >= static_cast<int>(timeline->layers.size()))
         return;
     fla::Layer* layer = timeline->layers[layerIndex];
     if (!layer)
@@ -9725,6 +9765,24 @@ void MainWindow::openScriptEditor(const QString& path)
 
 void MainWindow::updateEditState()
 {
+    // An edit that took out what is selected (a cleared keyframe, a deleted
+    // layer) leaves it to the history: the selection lets go of it, so the
+    // next edit is not made on it. Not part way through an edit, which may
+    // put it back.
+    {
+        const fla::CommandStack& history = _editContext.commandStack();
+        if (!_selection.elements().empty() && !history.isInMacro() && !history.isExecuting() && _flaDocument &&
+            _flaDocument->document)
+        {
+            const std::unordered_set<const fla::DOMElement*> reachable = _flaDocument->document->reachable();
+            std::vector<fla::DOMElement*> kept;
+            for (fla::DOMElement* element : _selection.elements())
+                if (reachable.count(element))
+                    kept.push_back(element);
+            if (kept.size() != _selection.elements().size())
+                _selection.select(kept);
+        }
+    }
     emit editStateChanged();
     refreshActions();
     const fla::CommandStack& stack = _editContext.commandStack();
@@ -11974,7 +12032,8 @@ void MainWindow::attachSound(const QString& name)
 
 void MainWindow::attachSoundTo(fla::Layer* layer, int at, const QString& name)
 {
-    if (!layer || !_flaDocument || !_flaDocument->document)
+    // Dropped a moment ago: the layer may have gone since.
+    if (!stillInDocument(_flaDocument, layer))
         return;
     if (layer->isLocked())
     {
@@ -13175,9 +13234,17 @@ std::vector<fla::StaticText*> MainWindow::allTexts() const
 std::vector<fla::StrokeStyle*> MainWindow::allStrokes() const
 {
     std::vector<fla::StrokeStyle*> strokes;
+    for (fla::Shape* shape : allShapes())
+        strokes.insert(strokes.end(), shape->strokes.begin(), shape->strokes.end());
+    return strokes;
+}
+
+std::vector<fla::Shape*> MainWindow::allShapes() const
+{
+    std::vector<fla::Shape*> shapes;
     fla::Document* document = _flaDocument ? _flaDocument->document : nullptr;
     if (!document)
-        return strokes;
+        return shapes;
     std::vector<fla::Timeline*> timelines(document->timelines.begin(), document->timelines.end());
     if (document->symbolList)
         for (fla::Symbol* symbol : document->symbolList->symbols)
@@ -13185,7 +13252,7 @@ std::vector<fla::StrokeStyle*> MainWindow::allStrokes() const
                 timelines.insert(timelines.end(), symbol->timelines.begin(), symbol->timelines.end());
     std::function<void(fla::Element*)> visit = [&](fla::Element* element) {
         if (auto* shape = dynamic_cast<fla::Shape*>(element))
-            strokes.insert(strokes.end(), shape->strokes.begin(), shape->strokes.end());
+            shapes.push_back(shape);
         if (auto* group = dynamic_cast<fla::Group*>(element))
             for (fla::Element* member : group->members)
                 visit(member);
@@ -13195,7 +13262,7 @@ std::vector<fla::StrokeStyle*> MainWindow::allStrokes() const
             for (fla::Frame* frame : layer ? layer->frames : std::vector<fla::Frame*>())
                 for (fla::Element* element : frame ? frame->elements : std::vector<fla::Element*>())
                     visit(element);
-    return strokes;
+    return shapes;
 }
 
 void MainWindow::manageBrushes()
@@ -13271,17 +13338,21 @@ void MainWindow::manageBrushes()
         using Attributes = std::vector<std::pair<std::string, std::string>>;
         fla::CommandStack& stack = _editContext.commandStack();
         stack.beginMacro("Take Off Brush");
-        for (fla::StrokeStyle* stroke : allStrokes())
-        {
-            if (brushOf(stroke) != name)
-                continue;
-            Attributes after;
-            for (const auto& attribute : stroke->extraAttributes)
-                if (attribute.first != "phoenixBrush" && attribute.first != "phoenixBrushPattern")
-                    after.push_back(attribute);
-            stack.push(fla::CommandPtr(new fla::SetPropertyCommand<Attributes>(stroke->extraAttributes,
-                stroke->extraAttributes, after, "Take Off Brush")));
-        }
+        // By shape and place, as a later edit of the shape replaces its
+        // stroke styles.
+        for (fla::Shape* shape : allShapes())
+            for (size_t index = 0; index < shape->strokes.size(); ++index)
+            {
+                const fla::StrokeStyle* stroke = shape->strokes[index];
+                if (!stroke || brushOf(stroke) != name)
+                    continue;
+                Attributes after;
+                for (const auto& attribute : stroke->extraAttributes)
+                    if (attribute.first != "phoenixBrush" && attribute.first != "phoenixBrushPattern")
+                        after.push_back(attribute);
+                stack.push(fla::CommandPtr(new fla::StrokeFieldCommand<Attributes>(shape, index,
+                    &fla::StrokeStyle::extraAttributes, stroke->extraAttributes, after, "Take Off Brush")));
+            }
         stack.endMacro();
         stack.breakMergeChain();
         if (_phoenixView)

@@ -1,5 +1,7 @@
 #include "width_tool.h"
 
+#include "../edit/element_commands.h"
+
 #include "phoenix_view.h"
 #include "stroke_effects.h"
 
@@ -75,7 +77,7 @@ bool WidthTool::mousePress(PhoenixView& view, QMouseEvent* event, const QPointF&
     if (!shape)
     {
         _shape = nullptr;
-        _style = nullptr;
+        _haveStroke = false;
         view.update();
         return false;
     }
@@ -111,18 +113,22 @@ bool WidthTool::mousePress(PhoenixView& view, QMouseEvent* event, const QPointF&
     if (!found)
     {
         _shape = nullptr;
-        _style = nullptr;
+        _haveStroke = false;
         view.update();
         return false;
     }
     _shape = shape;
-    _style = const_cast<fla::StrokeStyle*>(found);
+    _strokeIndex = static_cast<size_t>(std::find(shape->strokes.begin(), shape->strokes.end(), found) - shape->strokes.begin());
+    _haveStroke = _strokeIndex < shape->strokes.size();
+    fla::StrokeStyle* const style = stroke();
+    if (!style)
+        return false;
     _run = run;
     _toDocument = hit.elementToDocument;
-    _before = _style->widthProfile;
+    _before = style->widthProfile;
 
     // A width point near the press, or a new one there.
-    std::vector<fla::StrokeStyle::WidthMarker>& profile = _style->widthProfile;
+    std::vector<fla::StrokeStyle::WidthMarker>& profile = style->widthProfile;
     const double length = run.length();
     for (size_t i = 0; i < profile.size(); ++i)
     {
@@ -142,8 +148,8 @@ bool WidthTool::mousePress(PhoenixView& view, QMouseEvent* event, const QPointF&
         fla::StrokeStyle::WidthMarker marker;
         marker.position = along;
         double left = 0.0, right = 0.0;
-        StrokeEffects::widthAt(*_style, along, left, right);
-        const double weight = std::max(_style->weight, 0.1);
+        StrokeEffects::widthAt(*style, along, left, right);
+        const double weight = std::max(style->weight, 0.1);
         marker.left = left / weight;
         marker.right = right / weight;
         const auto at = std::upper_bound(profile.begin(), profile.end(), along,
@@ -158,13 +164,14 @@ bool WidthTool::mousePress(PhoenixView& view, QMouseEvent* event, const QPointF&
 
 bool WidthTool::mouseMove(PhoenixView& view, QMouseEvent* event, const QPointF& documentPos)
 {
-    if (!_dragging || !_style || _selected < 0 || _selected >= static_cast<int>(_style->widthProfile.size()))
+    fla::StrokeStyle* const style = stroke();
+    if (!_dragging || !style || _selected < 0 || _selected >= static_cast<int>(style->widthProfile.size()))
         return false;
     bool invertible = false;
     const QPointF local = _toDocument.inverted(&invertible).map(documentPos);
     if (!invertible)
         return true;
-    fla::StrokeStyle::WidthMarker& marker = _style->widthProfile[static_cast<size_t>(_selected)];
+    fla::StrokeStyle::WidthMarker& marker = style->widthProfile[static_cast<size_t>(_selected)];
     // How far out from the centerline, on the side the cursor is: that side
     // takes it, and the other with it unless Alt is held.
     const QPointF center = _run.pointAtPercent(marker.position);
@@ -174,7 +181,7 @@ bool WidthTool::mouseMove(PhoenixView& view, QMouseEvent* event, const QPointF& 
     const QPointF normal(tangent.y(), -tangent.x());
     const QPointF offset = local - center;
     const double out = offset.x() * normal.x() + offset.y() * normal.y();
-    const double weight = std::max(_style->weight, 0.1);
+    const double weight = std::max(style->weight, 0.1);
     const double reach = std::min(std::fabs(out) / weight, 50.0);
     if (event->modifiers() & Qt::AltModifier)
     {
@@ -194,16 +201,17 @@ bool WidthTool::mouseMove(PhoenixView& view, QMouseEvent* event, const QPointF& 
 
 bool WidthTool::mouseRelease(PhoenixView& view, QMouseEvent* event, const QPointF& documentPos)
 {
+    fla::StrokeStyle* const style = stroke();
     (void)event;
     (void)documentPos;
     if (!_dragging)
         return false;
     _dragging = false;
-    if (_style && _style->widthProfile != _before)
+    if (style && style->widthProfile != _before)
     {
-        const std::vector<fla::StrokeStyle::WidthMarker> after = _style->widthProfile;
-        _commands.push(fla::CommandPtr(new fla::SetPropertyCommand<std::vector<fla::StrokeStyle::WidthMarker>>(
-            _style->widthProfile, _before, after, "Width")));
+        const std::vector<fla::StrokeStyle::WidthMarker> after = style->widthProfile;
+        _commands.push(fla::CommandPtr(new fla::StrokeFieldCommand<std::vector<fla::StrokeStyle::WidthMarker>>(
+            _shape, _strokeIndex, &fla::StrokeStyle::widthProfile, _before, after, "Width")));
         _commands.breakMergeChain();
     }
     refresh(view);
@@ -212,9 +220,10 @@ bool WidthTool::mouseRelease(PhoenixView& view, QMouseEvent* event, const QPoint
 
 bool WidthTool::keyPress(PhoenixView& view, QKeyEvent* event)
 {
-    if (!_style || _selected < 0 || (event->key() != Qt::Key_Delete && event->key() != Qt::Key_Backspace))
+    fla::StrokeStyle* const style = stroke();
+    if (!style || _selected < 0 || (event->key() != Qt::Key_Delete && event->key() != Qt::Key_Backspace))
         return false;
-    std::vector<fla::StrokeStyle::WidthMarker> profile = _style->widthProfile;
+    std::vector<fla::StrokeStyle::WidthMarker> profile = style->widthProfile;
     if (_selected >= static_cast<int>(profile.size()))
         return false;
     profile.erase(profile.begin() + _selected);
@@ -224,8 +233,8 @@ bool WidthTool::keyPress(PhoenixView& view, QKeyEvent* event)
     });
     if (even)
         profile.clear();
-    _commands.push(fla::CommandPtr(new fla::SetPropertyCommand<std::vector<fla::StrokeStyle::WidthMarker>>(
-        _style->widthProfile, _style->widthProfile, profile, "Remove Width Point")));
+    _commands.push(fla::CommandPtr(new fla::StrokeFieldCommand<std::vector<fla::StrokeStyle::WidthMarker>>(
+        _shape, _strokeIndex, &fla::StrokeStyle::widthProfile, style->widthProfile, profile, "Remove Width Point")));
     _commands.breakMergeChain();
     _selected = -1;
     refresh(view);
@@ -234,17 +243,18 @@ bool WidthTool::keyPress(PhoenixView& view, QKeyEvent* event)
 
 void WidthTool::paintOverlay(PhoenixView& view, QPainter& painter, double scale)
 {
+    fla::StrokeStyle* const style = stroke();
     (void)view;
-    if (!_style || _run.isEmpty())
+    if (!style || _run.isEmpty())
         return;
     painter.save();
     painter.setRenderHint(QPainter::Antialiasing, true);
     painter.setTransform(_toDocument, true);
     const double unit = scale / std::max(std::sqrt(std::fabs(_toDocument.determinant())), 1.0e-9);
-    const double weight = std::max(_style->weight, 0.1);
-    for (size_t i = 0; i < _style->widthProfile.size(); ++i)
+    const double weight = std::max(style->weight, 0.1);
+    for (size_t i = 0; i < style->widthProfile.size(); ++i)
     {
-        const fla::StrokeStyle::WidthMarker& marker = _style->widthProfile[i];
+        const fla::StrokeStyle::WidthMarker& marker = style->widthProfile[i];
         const QPointF center = _run.pointAtPercent(marker.position);
         const double angle = _run.angleAtPercent(marker.position) * 3.14159265358979323846 / 180.0;
         const QPointF tangent(std::cos(angle), -std::sin(angle));
@@ -266,7 +276,12 @@ void WidthTool::deactivate(PhoenixView& view)
 {
     _dragging = false;
     _shape = nullptr;
-    _style = nullptr;
+    _haveStroke = false;
     _selected = -1;
     view.update();
+}
+
+fla::StrokeStyle* WidthTool::stroke() const
+{
+    return _haveStroke && _shape && _strokeIndex < _shape->strokes.size() ? _shape->strokes[_strokeIndex] : nullptr;
 }

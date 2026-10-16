@@ -17,6 +17,10 @@ class QLockFile;
 class QMenu;
 class JsflHost;
 
+namespace fla {
+class FLADocument;
+}
+
 namespace jsfl {
 class Engine;
 class Host;
@@ -64,6 +68,8 @@ public:
     /// Tells the JSFL scripts listening (fl.addEventListener) that \a type
     /// happened.
     void dispatchEvent(const char* type);
+    /// Lets go of what scripts kept for \a document, which is closing.
+    void forgetDocument(const fla::FLADocument* document);
     OutputPanel* output() const { return _output; }
 
     /// The Commands menu, filled each time it opens, with \a first at its

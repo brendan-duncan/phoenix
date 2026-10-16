@@ -45,7 +45,11 @@ private:
 
     fla::CommandStack& _commands;
     fla::Shape* _shape = nullptr;
-    fla::StrokeStyle* _style = nullptr;
+    /// The stroke worked on, by its place among the shape's strokes, found
+    /// again each time (a restyle replaces the shape's stroke styles).
+    size_t _strokeIndex = 0;
+    bool _haveStroke = false;
+    fla::StrokeStyle* stroke() const;
     QPainterPath _run;
     QTransform _toDocument;
     int _selected = -1;

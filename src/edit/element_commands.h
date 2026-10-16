@@ -563,6 +563,46 @@ private:
 
 /// Removes an element from a frame, and puts it back on undo. The mirror of
 /// AddElementCommand, with the same ownership rules.
+/// Sets one field of a shape's stroke style, the stroke found by its place
+/// among the shape's strokes each time: a shape whose contents are replaced
+/// (painted on, erased, restyled) gets new stroke styles in the same order,
+/// so a pointer to the old one would dangle.
+template <typename T>
+class StrokeFieldCommand : public Command
+{
+public:
+    StrokeFieldCommand(Shape* shape, size_t index, T StrokeStyle::*field, T before, T after, const std::string& name)
+        : _shape(shape)
+        , _index(index)
+        , _field(field)
+        , _before(std::move(before))
+        , _after(std::move(after))
+        , _name(name)
+    {}
+
+    void redo() override
+    {
+        if (StrokeStyle* style = stroke())
+            style->*_field = _after;
+    }
+    void undo() override
+    {
+        if (StrokeStyle* style = stroke())
+            style->*_field = _before;
+    }
+    std::string name() const override { return _name; }
+
+private:
+    StrokeStyle* stroke() const { return _shape && _index < _shape->strokes.size() ? _shape->strokes[_index] : nullptr; }
+
+    Shape* _shape;
+    size_t _index;
+    T StrokeStyle::*_field;
+    T _before;
+    T _after;
+    std::string _name;
+};
+
 /// Moves an element from one frame to another (onto the end of its
 /// elements), and back on undo. The element is always in one frame or the
 /// other, which owns it: the command never does, so nothing frees it twice.

@@ -349,6 +349,8 @@ private slots:
     /// Every stroke style in the document's shapes, main timelines and
     /// symbols alike.
     std::vector<fla::StrokeStyle*> allStrokes() const;
+    /// Every shape in the document, its scenes and its symbols, in groups too.
+    std::vector<fla::Shape*> allShapes() const;
 
     /// Window > Document Brushes: the art and pattern brushes the
     /// document's strokes are drawn with, how many strokes use each, and
@@ -893,6 +895,8 @@ private:
     class DocumentTabBar* _tabBar = nullptr;
     bool _switchingTabs = false;
     /// Takes the document shown off the window, keeping it whole.
+    /// A field being typed in the Properties or Behaviors panel, finished.
+    void finishPanelEdits();
     void parkActiveDocument();
     /// What the window keeps about a document beyond the panels (copied
     /// layers, bitmaps out in an editor), let go as the document closes.
