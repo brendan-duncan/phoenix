@@ -852,6 +852,9 @@ private:
     int _sampleFrame = -1;
     double _subframe = 0.0;
     bool _blurring = false;
+    /// The frame motion blur is drawing, its samples taken about it; -1
+    /// when it is not.
+    int _blurBase = -1;
     /// Motion-blurred layers already worked out, by layer and frame, as the
     /// part of the picture they cover: echoes of earlier frames and frames
     /// played again reuse them.

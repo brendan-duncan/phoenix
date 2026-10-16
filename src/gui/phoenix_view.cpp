@@ -3658,12 +3658,14 @@ bool PhoenixView::drawBlurredLayer(QPainter& painter, const fla::Layer* layer, f
             view._sampleFrame = sample;
             view._subframe = subframe;
             view._blurring = false;
+            view._blurBase = -1;
         }
     } restore{*this, _sampleFrame, _subframe};
     QImage picture(size, QImage::Format_ARGB32_Premultiplied);
     if (picture.isNull())
         return false;
     _blurring = true;
+    _blurBase = frame;
     picture.setDevicePixelRatio(ratio);
     picture.fill(Qt::transparent);
     // Sums of the samples (64 of 255 at most fit), touched only where
@@ -4244,6 +4246,9 @@ void PhoenixView::drawElement(QPainter& painter, const fla::Element* element, co
                 _elapsed = elapsed;
             }
             fla::LoopType loopType = fla::LoopType::SingleFrame;
+            // Held on one frame, whatever the time: by Time Remap, or a
+            // template's slider.
+            bool held = false;
 
             // In a movie playing, the frame its clip is on (a button's up,
             // over or down frame), and the clip is what the instances
@@ -4419,6 +4424,7 @@ void PhoenixView::drawElement(QPainter& painter, const fla::Element* element, co
             {
                 frameOffset = std::min(behaviorDelta.hold, symbolLength(symbol) - 1);
                 loopType = fla::LoopType::SingleFrame;
+                held = true;
             }
             // A boned shape on springs: its container's shapes bent again
             // where the springs swing its bones.
@@ -4457,10 +4463,46 @@ void PhoenixView::drawElement(QPainter& painter, const fla::Element* element, co
                     {
                         frameOffset = std::min(frame, symbolLength(symbol)) - 1;
                         loopType = fla::LoopType::SingleFrame;
+                        held = true;
                     }
                     else if (!value->empty() && fla::templates::clipKind(*symbol) == fla::templates::Field::Kind::Image)
                         _templateImage = QString::fromStdString(*value);
                 }
+            // Motion blur samples between frames, and the symbol's own
+            // timeline with them: part way on to the frame it shows next,
+            // or not at all where it does not move on (stopped, held, or a
+            // movie clip on the stage while editing, which shows its first
+            // frame).
+            struct SubframeScope
+            {
+                double& slot;
+                double was;
+                ~SubframeScope() { slot = was; }
+            } subframeScope{_subframe, _subframe};
+            if (_subframe > 0.0)
+            {
+                bool moves = !held && instance->otherSymbolType != "puppet";
+                if (moves && movieClip)
+                {
+                    // A movie playing: the clip's own frame, moved on or
+                    // back by as many frames as the sample is from the frame
+                    // drawn, so its samples run about that frame as the
+                    // stage's do.
+                    moves = !movieClip->button && movieClip->playing && movieClip->length > 1;
+                    if (moves && _blurBase >= 0 && _sampleFrame >= 0)
+                        frameOffset = ((movieClip->frame + _sampleFrame - _blurBase) % movieClip->length +
+                                          movieClip->length) % movieClip->length;
+                }
+                else if (moves)
+                {
+                    const int elapsed = _elapsed;
+                    _elapsed = std::max(0, _elapsed + behaviorDelta.frame + 1);
+                    moves = symbolFrame(*instance) != frameOffset;
+                    _elapsed = elapsed;
+                }
+                if (!moves)
+                    _subframe = 0.0;
+            }
             // The values this instance gives its template's fields hold for
             // everything drawn inside it.
             struct TemplateScope
