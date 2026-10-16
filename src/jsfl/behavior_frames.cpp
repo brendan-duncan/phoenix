@@ -64,6 +64,20 @@ void setRigging(Rigging given)
 
 namespace {
 
+/// How deep behaviors are running inside others: one asking about another
+/// instance, or about the layers it is parented to, runs theirs.
+thread_local int nesting = 0;
+/// A parent chain is followed this deep at most.
+constexpr int kDeepestParents = 16;
+
+struct Nested
+{
+    Nested() { ++nesting; }
+    ~Nested() { --nesting; }
+    Nested(const Nested&) = delete;
+    Nested& operator=(const Nested&) = delete;
+};
+
 const Frame* keyframeAt(const Layer& layer, int frame)
 {
     for (const Frame* keyframe : layer.frames)
@@ -173,7 +187,6 @@ Copies evaluateOn(Engine& engine, const SymbolInstance& instance, const Transfor
     // Other instances on the timeline, by name: as keyed, and moved by
     // their own behaviors one level deep, so two that look at each other
     // do not go round for ever.
-    static thread_local int depth = 0;
     const auto* timeline = dynamic_cast<const Timeline*>(layer->parent);
     moment.other = [&engine, timeline, frameRate](const std::string& name, int at, Keyed& out) {
         if (!timeline || name.empty())
@@ -194,11 +207,10 @@ Copies evaluateOn(Engine& engine, const SymbolInstance& instance, const Transfor
                 Transform transform;
                 if (!keyedOn(*each, i, target->libraryItemName, at, transform, out))
                     return false;
-                if (depth == 0 && any(*target))
+                if (nesting == 0 && any(*target))
                 {
-                    ++depth;
+                    const Nested nested;
                     const Copies moved = evaluateOn(engine, *target, transform, at, frameRate);
-                    --depth;
                     if (!moved.empty())
                         out = keyedOf(apply(transform, target->transformationPoint, moved.front()),
                             target->transformationPoint, target->colorTransform);
@@ -271,7 +283,14 @@ Copies evaluateOn(Engine& engine, const SymbolInstance& instance, const Transfor
     moment.spectrum = [document](int at, std::vector<double>& bands, std::vector<double>& wave) {
         return document && listening() && listening()(*document, at, bands, wave);
     };
-    moment.parentAt = [layer](int at, double matrix[6]) { return rigging() && rigging()(*layer, at, matrix); };
+    // The parents may have behaviors of their own, run in between: as deep
+    // as a parent chain goes, but not round for ever.
+    moment.parentAt = [layer](int at, double matrix[6]) {
+        if (nesting >= kDeepestParents || !rigging())
+            return false;
+        const Nested nested;
+        return rigging()(*layer, at, matrix);
+    };
     return engine.evaluate(of(instance), moment, error);
 }
 

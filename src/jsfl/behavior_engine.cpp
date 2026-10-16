@@ -294,8 +294,13 @@ struct Engine::Impl
         Impl* self = static_cast<Impl*>(JS_GetContextOpaque(ctx));
         double frame = 0;
         double m[6] = {1, 0, 0, 1, 0, 0};
-        if (argc < 1 || JS_ToFloat64(ctx, &frame, argv[0]) < 0 || !self->moment || !self->moment->parentAt ||
-            !self->moment->parentAt(static_cast<int>(std::lround(frame)), m))
+        if (argc < 1 || JS_ToFloat64(ctx, &frame, argv[0]) < 0 || !self->moment || !self->moment->parentAt)
+            return JS_NULL;
+        // The parents' own behaviors may run in between, as for other().
+        const Moment* mine = self->moment;
+        const bool found = mine->parentAt(static_cast<int>(std::lround(frame)), m);
+        self->moment = mine;
+        if (!found)
             return JS_NULL;
         JSValue array = JS_NewArray(ctx);
         for (uint32_t i = 0; i < 6; ++i)
@@ -493,8 +498,14 @@ Copies Engine::evaluate(const std::vector<Applied>& list, const Moment& moment, 
     Copies copies(1);
     Impl& d = *_impl;
     JSContext* ctx = d.ctx;
+    // Run inside another behavior (one asking about another instance or its
+    // parents), it has only the time the outer one has left: a behavior
+    // asking over and over still stops. Both come back after.
+    const Moment* outerMoment = d.moment;
+    const Clock::time_point outerDeadline = d.deadline;
+    const Clock::time_point own = Clock::now() + std::chrono::milliseconds(400);
     d.moment = &moment;
-    d.deadline = Clock::now() + std::chrono::milliseconds(400);
+    d.deadline = outerMoment ? std::min(outerDeadline, own) : own;
     JSValue global = JS_GetGlobalObject(ctx);
     JSValue run = JS_GetPropertyStr(ctx, global, "__run");
     const auto readDelta = [&d](JSValueConst value) {
@@ -604,7 +615,9 @@ Copies Engine::evaluate(const std::vector<Applied>& list, const Moment& moment, 
     }
     JS_FreeValue(ctx, run);
     JS_FreeValue(ctx, global);
-    d.moment = nullptr;
+    d.moment = outerMoment;
+    if (outerMoment)
+        d.deadline = outerDeadline;
     return copies;
 }
 

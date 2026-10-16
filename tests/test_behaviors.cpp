@@ -19,6 +19,7 @@
 #include "../src/data/symbol.h"
 #include "../src/data/bitmap_instance.h"
 
+#include <chrono>
 #include <cmath>
 #include <map>
 #include <string>
@@ -173,6 +174,29 @@ TEST(behaviors_of_ones_own_report_errors_and_stop_when_too_slow)
     why.clear();
     const Delta stuck = one(engine, {engine.defaults("forever", 1)}, still(1), &why);
     CHECK(stuck.none() && why.find("too long") != std::string::npos);
+
+    // One asking about another for ever, whose behaviors run each time,
+    // still stops: the other's run does not give it more time.
+    CHECK(engine.add("asker", "behavior({ evaluate: function (ctx) { for (;;) ctx.other('ball'); } });", "a.js", false,
+        error));
+    const auto started = std::chrono::steady_clock::now();
+    bool ranOver = false;
+    Moment asking = still(1);
+    asking.other = [&](const std::string&, int, Keyed& keyed) {
+        if (std::chrono::steady_clock::now() - started > std::chrono::seconds(5))
+        {
+            ranOver = true;
+            return false;
+        }
+        keyed = Keyed();
+        engine.evaluate({drift}, still(2));
+        return true;
+    };
+    why.clear();
+    const Delta asked = one(engine, {engine.defaults("asker", 1)}, asking, &why);
+    CHECK(!ranOver && asked.none() && why.find("too long") != std::string::npos);
+    // The engine goes on as before after.
+    CHECK(near(one(engine, {drift}, still(4)).x, 12.0));
 }
 
 TEST(behaviors_settings_can_be_keyed)
