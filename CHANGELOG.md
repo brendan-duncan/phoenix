@@ -2,7 +2,7 @@
 
 What changed in each release of Phoenix, newest first.
 
-## 0.14.0 (Unreleased)
+## 0.14.0
 
 - Native extensions: C and C++ libraries in the External Libraries folder, written for the `mm_jsapi.h` extension API, add functions scripts can call
 - Illustrator and EPS import: area and path text (Illustrator 11 and later too), patterns, placed images, Zstandard-compressed Illustrator files, shadings as gradients, image masks, and the widths of fonts the file carries; Photoshop EPS images and CMYK JPEGs come in with the right colors
