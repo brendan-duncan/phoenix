@@ -753,7 +753,7 @@ public:
 
 std::shared_ptr<Element> ownerOf(Element& e)
 {
-    return std::make_shared<Element>(e.session, e.document, e.element);
+    return std::make_shared<Element>(e.session, e.document, e.element, e.classInfo());
 }
 
 Value edgeValue(const std::shared_ptr<Element>& owner, const GeometryPtr& geometry, int index)

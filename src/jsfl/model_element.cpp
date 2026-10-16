@@ -1025,7 +1025,9 @@ fla::Element& Element::get() const
     return *element;
 }
 
-const ClassInfo& Element::classInfo() const
+namespace {
+
+const ClassInfo& classOf(const fla::Element* element)
 {
     const ElementClasses& classes = elementClasses();
     switch (element ? element->elementType() : fla::Element::Type::Raw)
@@ -1045,6 +1047,12 @@ const ClassInfo& Element::classInfo() const
         return classes.element;
     }
 }
+
+} // namespace
+
+Element::Element(Session& session, fla::FLADocument* document, fla::Element* element)
+    : DocumentPart(session, document), element(element), _info(&classOf(element))
+{}
 
 std::shared_ptr<Element> wrapElement(Session& session, fla::FLADocument* document, fla::Element* element)
 {

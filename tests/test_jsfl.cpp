@@ -412,6 +412,19 @@ TEST(jsfl_stale_objects_fail_clearly)
     const jsfl::RunResult closed = f.run("var d = fl.getDocumentDOM(); fl.closeDocument(d, false); d.width;", "Test Script", true);
     CHECK(!closed.ok);
     CHECK(closed.message.find("closed") != std::string::npos);
+
+    // An element kept past its document's closing knows its class, and
+    // fails on use rather than reading freed memory.
+    f.host.add(fla::createEmptyDocument(550, 400, 24.0));
+    const jsfl::RunResult element = f.run("var d = fl.getDocumentDOM();\n"
+                                          "d.addNewRectangle({left: 0, top: 0, right: 40, bottom: 20}, 0);\n"
+                                          "var e = d.getTimeline().layers[0].frames[0].elements[0];\n"
+                                          "fl.closeDocument(d, false);\n"
+                                          "e.x;\n",
+        "Test Script", true);
+    CHECK(!element.ok);
+    CHECK(element.line == 5);
+    CHECK(element.message.find("closed") != std::string::npos);
 }
 
 TEST(jsfl_timeline_layers_and_frames)

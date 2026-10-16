@@ -165,13 +165,19 @@ public:
 class Element final : public DocumentPart
 {
 public:
-    Element(Session& session, fla::FLADocument* document, fla::Element* element)
-        : DocumentPart(session, document), element(element)
+    ///  element must be alive: its kind is taken now, so the object
+    /// still knows its class once the element is gone.
+    Element(Session& session, fla::FLADocument* document, fla::Element* element);
+    Element(Session& session, fla::FLADocument* document, fla::Element* element, const ClassInfo& info)
+        : DocumentPart(session, document), element(element), _info(&info)
     {}
-    const ClassInfo& classInfo() const override;
+    const ClassInfo& classInfo() const override { return *_info; }
     const void* identity() const override { return element; }
     fla::Element* element;
     fla::Element& get() const;
+
+private:
+    const ClassInfo* _info;
 };
 
 /// The objects scripts start from.
