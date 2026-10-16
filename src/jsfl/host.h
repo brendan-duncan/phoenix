@@ -168,6 +168,18 @@ public:
         error = "Phoenix's operations need the Phoenix window.";
         return false;
     }
+    /// Imports the file at \a path (an image, sound, vector artwork or
+    /// Photoshop document) into \a document's library and, unless
+    /// \a toLibrary, onto the current frame, pushing its changes on the
+    /// document's history. False with \a error when nothing came in.
+    virtual bool importFile(fla::FLADocument* document, const std::string& path, bool toLibrary, std::string& error)
+    {
+        (void)document;
+        (void)path;
+        (void)toLibrary;
+        error = "Importing files needs the Phoenix window.";
+        return false;
+    }
     /// The current frame (or every frame, numbered) of the document as PNG.
     virtual bool exportPNG(fla::FLADocument* document, const std::string& path, bool currentFrameOnly,
         std::string& error) = 0;

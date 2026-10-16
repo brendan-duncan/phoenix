@@ -74,6 +74,9 @@ public:
     // Changes.
     /// An error when the document must not change.
     void checkWritable(fla::FLADocument* document);
+    /// Opens the run's undo step on the document, for a host call that
+    /// pushes its own commands (an import); push() opens it too.
+    void beginStep(fla::FLADocument* document);
     /// Applies \a command as part of the run's undo step. \a structural
     /// changes add or take away objects, which liveness checks must see.
     void push(fla::FLADocument* document, fla::CommandPtr command, bool structural = true);

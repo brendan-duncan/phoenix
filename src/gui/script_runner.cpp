@@ -1,6 +1,7 @@
 #include "script_runner.h"
 
 #include "autosave.h"
+#include "media_import.h"
 #include "main_window.h"
 #include "output_panel.h"
 #include "script_api.h"
@@ -10,6 +11,7 @@
 #include "../data/fla_document.h"
 #include "../data/layer.h"
 #include "../data/symbol.h"
+#include "../data/symbol_list.h"
 #include "../data/timeline.h"
 #include "../edit/new_document.h"
 #include "../edit/selection.h"
@@ -433,7 +435,12 @@ public:
         {
             if (_window._phoenixView)
                 _window._phoenixView->exitToDepth(0);
-            _window.goToScene(static_cast<int>(scene - data.timelines.begin()));
+            const int index = static_cast<int>(scene - data.timelines.begin());
+            // Already current after a change to the scenes, but not shown yet.
+            if (index == data.currentSceneIndex() && _window._shownScene != timeline)
+                _window.goToScene(-1);
+            else
+                _window.goToScene(index);
         }
         else if (auto* symbol = dynamic_cast<fla::Symbol*>(timeline ? timeline->parent : nullptr))
         {
@@ -578,6 +585,38 @@ public:
                 error = text(file) + " could not be written.";
                 return false;
             }
+        }
+        return true;
+    }
+    bool importFile(fla::FLADocument* document, const std::string& path, bool toLibrary, std::string& error) override
+    {
+        if (document != _window._flaDocument || !_window._phoenixView || !document->document)
+        {
+            error = "Only a document that can be shown can import.";
+            return false;
+        }
+        const QString file = QFileInfo(qtext(path)).absoluteFilePath();
+        if (!MediaImport::isImage(file) && !MediaImport::isSound(file) && !MediaImport::isArtwork(file))
+        {
+            error = text(QFileInfo(file).fileName()) + " is not a file Phoenix imports.";
+            return false;
+        }
+        // Whatever came in went into the library.
+        const fla::Document& data = *document->document;
+        const auto items = [&data]() {
+            return data.resources.size() + data.sounds.size() + data.videos.size() + data.folders.size() +
+                (data.symbolList ? data.symbolList->symbols.size() : 0);
+        };
+        const size_t before = items();
+        QStringList problems;
+        _window.importMedia(QStringList{file}, !toLibrary, nullptr, &problems);
+        // Notes on what could not be brought across exactly go to the output.
+        for (const QString& problem : problems)
+            trace(text(problem));
+        if (items() == before)
+        {
+            error = problems.isEmpty() ? text(QFileInfo(file).fileName()) + " could not be imported." : std::string();
+            return false;
         }
         return true;
     }

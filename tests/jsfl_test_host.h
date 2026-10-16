@@ -8,6 +8,7 @@
 #include "../src/data/fla_document.h"
 #include "../src/edit/command_stack.h"
 #include "../src/edit/drawing_style.h"
+#include "../src/edit/library_media.h"
 #include "../src/edit/new_document.h"
 #include "../src/edit/selection.h"
 #include "../src/jsfl/engine.h"
@@ -163,6 +164,25 @@ public:
         const fla::Transform& m = element->transform;
         return {m.tx, m.ty, m.tx + 10, m.ty + 10};
     }
+    /// Imports a .wav as a short sound of silence (nothing here decodes
+    /// files); anything else is refused.
+    bool importFile(fla::FLADocument* document, const std::string& path, bool toLibrary, std::string& error) override
+    {
+        imports.push_back(path + (toLibrary ? " library" : " stage"));
+        const std::filesystem::path file = std::filesystem::u8path(path);
+        if (file.extension() != ".wav")
+        {
+            error = file.filename().u8string() + " is not a file Phoenix imports.";
+            return false;
+        }
+        fla::media::Sound sound;
+        sound.name = file.filename().u8string();
+        sound.sourcePath = path;
+        sound.samples.assign(8, 0);
+        history(document).push(fla::CommandPtr(new fla::AddSoundCommand(document->document, sound, "Import")));
+        return true;
+    }
+    std::vector<std::string> imports;
     bool exportPNG(fla::FLADocument*, const std::string&, bool, std::string& error) override
     {
         error = "no drawing in the tests";

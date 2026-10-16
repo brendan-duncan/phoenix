@@ -25,6 +25,7 @@
 #include "../edit/element_commands.h"
 #include "../edit/library_commands.h"
 #include "../edit/property_command.h"
+#include "../edit/scene_commands.h"
 #include "../edit/selection.h"
 #include "../edit/timeline_edit.h"
 #include "../edit/trace_bitmap.h"
@@ -33,7 +34,9 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
+#include <filesystem>
 #include <memory>
+#include <system_error>
 #include <cstdint>
 
 namespace jsfl {
@@ -228,6 +231,50 @@ void setOnSelection(Document& doc, const std::string& name, const Value& value)
     }
 }
 
+bool sceneNamed(const fla::Document& data, const std::string& name)
+{
+    return std::any_of(data.timelines.begin(), data.timelines.end(),
+        [&name](const fla::Timeline* scene) { return scene && scene->name == name; });
+}
+
+/// A new order of the scenes and the one current in it.
+struct SceneList
+{
+    std::vector<fla::Timeline*> scenes;
+    int current = 0;
+};
+
+/// The scene being edited, or the one a symbol being edited was entered
+/// from.
+int sceneIndex(Document& d)
+{
+    const fla::Document& data = d.data();
+    if (data.timelines.empty())
+        throw Error("The document has no scenes.");
+    const fla::Timeline* edited = d.session.host().editedTimeline(d.document);
+    const auto found = std::find(data.timelines.begin(), data.timelines.end(), edited);
+    return found != data.timelines.end() ? static_cast<int>(found - data.timelines.begin()) : data.currentSceneIndex();
+}
+
+/// The scenes with \a added after the current one, and current.
+SceneList sceneAdded(Document& d, fla::Timeline* added)
+{
+    const fla::Document& data = d.data();
+    SceneList list{data.timelines, sceneIndex(d) + 1};
+    list.scenes.insert(list.scenes.begin() + list.current, added);
+    return list;
+}
+
+/// Puts the scenes in \a list's order as one step, and edits the current
+/// one: the window shows it, its timeline and its scene list follow.
+void pushScenes(Document& d, SceneList list, const char* name)
+{
+    // Undone, the scene edited now is current again.
+    d.data().setCurrentScene(sceneIndex(d));
+    d.push(fla::CommandPtr(new fla::SceneListCommand(&d.data(), std::move(list.scenes), list.current, name)));
+    d.session.host().editTimeline(d.document, d.data().currentScene());
+}
+
 } // namespace
 
 const ClassInfo& Document::classInfo() const
@@ -284,7 +331,7 @@ const ClassInfo& Document::classInfo() const
                 list.items.emplace_back(wrapTimeline(d.session, d.document, scene));
             return list;
         });
-        def.prop("currentTimeline", [](Document& d) { return Value(d.data().currentSceneIndex()); },
+        def.prop("currentTimeline", [](Document& d) { return Value(sceneIndex(d)); },
             [](Document& d, const Value& v) {
                 const int index = v.toInt();
                 if (index < 0 || index >= static_cast<int>(d.data().timelines.size()))
@@ -300,6 +347,76 @@ const ClassInfo& Document::classInfo() const
             if (index < 0 || index >= static_cast<int>(d.data().timelines.size()))
                 throw Error("There is no scene " + arg(args, 0).toString() + ".");
             d.session.host().editTimeline(d.document, d.data().timelines[static_cast<size_t>(index)]);
+            return Value();
+        });
+
+        // The scenes: each change one step of the script's undo, the scene
+        // it leaves current then edited.
+        def.method("addNewScene", 1, [](Document& d, const Args& args) {
+            fla::Document& data = d.data();
+            std::string name = given(args, 0) ? arg(args, 0).toString() : std::string();
+            if (name.empty())
+                name = fla::scenes::freeName(data);
+            else if (sceneNamed(data, name))
+                return Value(false);
+            pushScenes(d, sceneAdded(d, fla::scenes::newScene(data, name)), "Add Scene");
+            return Value(true);
+        });
+        def.method("duplicateScene", 0, [](Document& d, const Args&) {
+            fla::Document& data = d.data();
+            const fla::Timeline* original = data.timelines[static_cast<size_t>(sceneIndex(d))];
+            if (!original)
+                return Value(false);
+            const std::string name = fla::scenes::freeName(data, original->name + " copy");
+            pushScenes(d, sceneAdded(d, fla::scenes::duplicate(*original, data, name)), "Duplicate Scene");
+            return Value(true);
+        });
+        def.method("deleteScene", 0, [](Document& d, const Args&) {
+            fla::Document& data = d.data();
+            // A document keeps at least one scene.
+            if (data.timelines.size() <= 1)
+                return Value(false);
+            const int current = sceneIndex(d);
+            std::vector<fla::Timeline*> scenes = data.timelines;
+            scenes.erase(scenes.begin() + current);
+            // The next scene becomes current, or the first after the last.
+            const int next = current < static_cast<int>(scenes.size()) ? current : 0;
+            pushScenes(d, {std::move(scenes), next}, "Delete Scene");
+            return Value(true);
+        });
+        def.method("renameScene", 1, [](Document& d, const Args& args) {
+            fla::Document& data = d.data();
+            fla::Timeline* scene = data.timelines[static_cast<size_t>(sceneIndex(d))];
+            const std::string name = arg(args, 0).toString();
+            if (!scene || name.empty())
+                return Value(false);
+            if (name == scene->name)
+                return Value(true);
+            if (sceneNamed(data, name))
+                return Value(false);
+            d.push(fla::CommandPtr(new fla::SetPropertyCommand<std::string>(scene->name, scene->name, name, "Rename Scene")), false);
+            return Value(true);
+        });
+        def.method("reorderScene", 2, [](Document& d, const Args& args) {
+            fla::Document& data = d.data();
+            const int count = static_cast<int>(data.timelines.size());
+            const int from = arg(args, 0).toInt();
+            const int before = given(args, 1) ? arg(args, 1).toInt() : -1;
+            if (from < 0 || from >= count)
+                throw Error("There is no scene " + arg(args, 0).toString() + ".");
+            if (before >= count || before < -1)
+                throw Error("There is no scene " + arg(args, 1).toString() + ".");
+            if (before == from || before == from + 1 || (before == -1 && from == count - 1))
+                return Value();
+            std::vector<fla::Timeline*> scenes = data.timelines;
+            fla::Timeline* moving = scenes[static_cast<size_t>(from)];
+            fla::Timeline* target = before < 0 ? nullptr : scenes[static_cast<size_t>(before)];
+            scenes.erase(scenes.begin() + from);
+            scenes.insert(target ? std::find(scenes.begin(), scenes.end(), target) : scenes.end(), moving);
+            // The scene being edited stays the one being edited.
+            const fla::Timeline* current = data.timelines[static_cast<size_t>(sceneIndex(d))];
+            const int at = static_cast<int>(std::find(scenes.begin(), scenes.end(), current) - scenes.begin());
+            pushScenes(d, {std::move(scenes), at}, "Reorder Scenes");
             return Value();
         });
         def.method("exitEditMode", 0, [](Document& d, const Args&) {
@@ -1025,6 +1142,26 @@ const ClassInfo& Document::classInfo() const
             if (!d.session.host().exportPNG(d.document, path, arg(args, 2).toBool(), error))
                 throw Error(error.empty() ? "The PNG could not be written." : error);
             return Value(true);
+        });
+        def.method("importFile", 4, [](Document& d, const Args& args) {
+            d.data();
+            const std::string path = uri::toPath(arg(args, 0).toString());
+            std::error_code missing;
+            if (path.empty() || !std::filesystem::is_regular_file(std::filesystem::u8path(path), missing))
+                return Value(false);
+            if (d.document != d.session.host().activeDocument())
+            {
+                d.session.beforeSwitch();
+                d.session.host().activate(d.document);
+            }
+            // What the import pushes is part of the script's undo step.
+            d.session.beginStep(d.document);
+            std::string error;
+            const bool imported = d.session.host().importFile(d.document, path, arg(args, 1).toBool(), error);
+            d.session.invalidate(d.document);
+            if (!imported && !error.empty())
+                d.session.host().trace(error);
+            return Value(imported);
         });
         def.method("xmlPanel", 1, [](Document& d, const Args& args) {
             return showXmlPanelFile(d.session, arg(args, 0).toString());

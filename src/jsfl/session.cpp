@@ -101,19 +101,23 @@ void Session::checkWritable(fla::FLADocument* document)
         throw Error("This document is read-only: it came from a newer Phoenix. Save a copy to change it.");
 }
 
-void Session::push(fla::FLADocument* document, fla::CommandPtr command, bool structural)
+void Session::beginStep(fla::FLADocument* document)
 {
     checkWritable(document);
     DocumentState& here = state(document);
-    fla::CommandStack& history = _host.history(document);
     if (!here.stepOpen)
     {
-        history.beginMacro(_undoName);
+        _host.history(document).beginMacro(_undoName);
         here.stepOpen = true;
     }
-    history.push(std::move(command));
+}
+
+void Session::push(fla::FLADocument* document, fla::CommandPtr command, bool structural)
+{
+    beginStep(document);
+    _host.history(document).push(std::move(command));
     if (structural)
-        here.reachableValid = false;
+        state(document).reachableValid = false;
     _host.changed(document);
 }
 

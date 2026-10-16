@@ -1647,6 +1647,11 @@ void MainWindow::serveMcpOnStdio()
 
 void MainWindow::refreshAfterScript()
 {
+    // A script may have renamed scenes, or undone a change to them.
+    fla::Document* document = _flaDocument ? _flaDocument->document : nullptr;
+    if (document && _shownScene && _shownScene != document->currentScene())
+        goToScene(-1);
+    rebuildBreadcrumb();
     if (_timelineView)
         _timelineView->refresh();
     if (_documentView)
