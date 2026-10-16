@@ -37,6 +37,8 @@
 
 #include <map>
 #include <set>
+#include <unordered_map>
+#include <unordered_set>
 #include <QWidget>
 #include <QPainter>
 #include <QPainterPath>
@@ -982,7 +984,13 @@ private:
     struct DisplayDraw
     {
         fla::play::Clip* clip = nullptr;
-        std::set<const fla::display::DisplayObject*> inPlace;
+        /// The timeline's objects still in its order, and each object's
+        /// place in the display list.
+        std::unordered_set<const fla::display::DisplayObject*> inPlace;
+        std::unordered_map<const fla::Element*, const fla::display::DisplayObject*> objects;
+        std::unordered_map<const fla::display::DisplayObject*, int> index;
+        /// The display list is the timeline's, as it has it: nothing to do.
+        bool plain = false;
         int next = 0;
     };
     std::vector<DisplayDraw> _displayDraws;

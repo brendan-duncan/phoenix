@@ -4816,6 +4816,17 @@ void PhoenixView::drawElement(QPainter& painter, const fla::Element* element, co
         {
             if (!movieClip->shown())
                 return;
+            // A button is up, over or down as the movie's pointer has it;
+            // its display object says what each state shows.
+            if (movieClip->button && movieClip->display &&
+                movieClip->display->kind() == fla::display::ObjectKind::SimpleButton)
+            {
+                const int state = _movie->buttonFrame(*movieClip);
+                static_cast<fla::display::SimpleButton*>(movieClip->display.get())
+                    ->setState(state == 2 ? fla::display::SimpleButton::State::Down
+                            : state == 1  ? fla::display::SimpleButton::State::Over
+                                          : fla::display::SimpleButton::State::Up);
+            }
             // Where the timeline has it now, a tween's in-between, for what
             // reads its place.
             if (movieClip->display)
@@ -8237,16 +8248,39 @@ void PhoenixView::beginDisplayDraw(QPainter& painter, fla::play::Clip* clip)
     // as the timeline meets them; the rest where the list has them.
     if (clip->display && clip->display->isContainer())
     {
-        const auto& children = static_cast<const fla::display::DisplayObjectContainer*>(clip->display.get())->children();
-        int last = std::numeric_limits<int>::min();
-        for (const auto& child : children)
-            if (child && child->timeline && child->timeline->depth > last &&
-                std::find(clip->timelineObjects.begin(), clip->timelineObjects.end(), child) != clip->timelineObjects.end())
+        const auto* container = static_cast<const fla::display::DisplayObjectContainer*>(clip->display.get());
+        std::unordered_set<const fla::display::DisplayObject*> placed;
+        bool asPlaced = true;
+        for (const auto& object : clip->timelineObjects)
+            if (object && object->timeline)
             {
-                draw.inPlace.insert(child.get());
+                placed.insert(object.get());
+                draw.objects[object->timeline->element] = object.get();
+                // Taken off, hidden or changed by a script: not as placed.
+                asPlaced = asPlaced && object->parent() == container && object->visible() &&
+                    (object->kind() == fla::display::ObjectKind::MovieClip ||
+                        object->kind() == fla::display::ObjectKind::SimpleButton ||
+                        !(object->effectsScripted() || object->transformScripted() || object->alphaScripted() ||
+                            object->colorScripted()));
+            }
+        const auto& children = container->children();
+        int last = std::numeric_limits<int>::min();
+        for (size_t i = 0; i < children.size(); ++i)
+        {
+            const fla::display::DisplayObject* child = children[i].get();
+            draw.index[child] = static_cast<int>(i);
+            if (child && child->timeline && child->timeline->depth > last && placed.count(child))
+            {
+                draw.inPlace.insert(child);
                 last = child->timeline->depth;
             }
+            else
+                asPlaced = false;
+        }
+        draw.plain = asPlaced;
     }
+    else
+        draw.plain = true;
     _displayDraws.push_back(std::move(draw));
 }
 
@@ -8269,14 +8303,11 @@ void PhoenixView::endDisplayDraw(QPainter& painter)
 bool PhoenixView::displayBefore(QPainter& painter, const fla::Element* element)
 {
     DisplayDraw& draw = _displayDraws.back();
+    if (draw.plain)
+        return true;
     const fla::play::Clip* clip = draw.clip;
-    const fla::display::DisplayObject* object = nullptr;
-    for (const auto& each : clip->timelineObjects)
-        if (each && each->timeline && each->timeline->element == element)
-        {
-            object = each.get();
-            break;
-        }
+    const auto found = draw.objects.find(element);
+    const fla::display::DisplayObject* object = found == draw.objects.end() ? nullptr : found->second;
     // Not one of the timeline's own (inside a graphic, say): as it is.
     if (!object || !clip->display || !clip->display->isContainer())
         return true;
@@ -8289,9 +8320,9 @@ bool PhoenixView::displayBefore(QPainter& painter, const fla::Element* element)
     const bool scriptedArt = object->kind() != fla::display::ObjectKind::MovieClip &&
         object->kind() != fla::display::ObjectKind::SimpleButton &&
         (object->effectsScripted() || object->transformScripted() || object->alphaScripted() || object->colorScripted());
-    const int index = container->getChildIndex(object);
-    const std::vector<std::shared_ptr<fla::display::DisplayObject>> children = container->children();
-    for (; draw.next < index; ++draw.next)
+    const int index = draw.index.count(object) ? draw.index[object] : container->getChildIndex(object);
+    const std::vector<std::shared_ptr<fla::display::DisplayObject>>& children = container->children();
+    for (; draw.next < index && draw.next < static_cast<int>(children.size()); ++draw.next)
     {
         const fla::display::DisplayObject* under = children[static_cast<size_t>(draw.next)].get();
         if (under && !draw.inPlace.count(under))

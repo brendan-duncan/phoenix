@@ -307,6 +307,9 @@ void Stage::updateButtons()
     }
     for (SimpleButton* button : buttons)
     {
+        // A timeline's button is in the state the movie runtime gives it.
+        if (button->clip)
+            continue;
         SimpleButton::State state = SimpleButton::State::Up;
         if (button->enabled && _over.get() == button)
             state = _buttonDown ? (_pressed.get() == button ? SimpleButton::State::Down : SimpleButton::State::Up)
