@@ -40,7 +40,6 @@
 #include <QFile>
 #include <QFileInfo>
 #include <QImage>
-#include <QProcess>
 #include <QTemporaryDir>
 
 #include <algorithm>
@@ -95,18 +94,15 @@ const char* const kHelp =
     "      frames compared pixel by pixel (images of what differs in --out).\n"
     "      Exits 2 when they differ.\n"
     "\n"
-    "  batch <folder> --doctor | --convert fla|phx|xfl | --render | --python <script.py>\n"
+    "  batch <folder> --doctor | --convert fla|phx|xfl | --render\n"
     "        [--save] [--recursive] [--out <folder>]\n"
-    "      Runs one of those on every .fla and .phx in the folder. --python\n"
-    "      runs the script on each document opened out as an XFL folder\n"
-    "      (python script.py <xfl folder> <document>); with --save, what the\n"
-    "      script changed is written back.\n"
+    "      Runs one of those on every .fla and .phx in the folder.\n"
     "\n"
-    "  batch --jsfl <script.jsfl> <files or folders> [--save] [--out <folder>]\n"
-    "        [--recursive] [--timeout SECONDS]\n"
-    "      Runs a JSFL script on each document (every .fla and .phx in a\n"
-    "      folder), opened alone, as run-script does. --save writes what the\n"
-    "      script changed back; --out writes a copy into a folder instead.\n"
+    "  batch --jsfl <script.jsfl> | --python <script.py> <files or folders>\n"
+    "        [--save] [--out <folder>] [--recursive] [--timeout SECONDS]\n"
+    "      Runs a JSFL or Python script on each document (every .fla and .phx\n"
+    "      in a folder), opened alone, as run-script does. --save writes what\n"
+    "      the script changed back; --out writes a copy into a folder instead.\n"
     "\n"
     "  shots <episode> [--by scene|label|camera] [--out <folder>] [--format fla|phx|xfl]\n"
     "      Splits an episode into shot files: one per scene, per frame label, or\n"
@@ -475,21 +471,22 @@ int updateLinks(const QString& file, bool update, bool saveBack)
     return failed ? 2 : 0;
 }
 
-/// batch --jsfl script.jsfl <files or folders>: the script run on each
-/// document, every .fla and .phx in a folder.
-int batchScript(const QStringList& args)
+/// batch --jsfl script.jsfl <files or folders> (or --python script.py): the
+/// script run on each document, every .fla and .phx in a folder, in this
+/// process.
+int batchScript(const QStringList& args, const QString& flag)
 {
-    const QString script = option(args, "--jsfl");
+    const QString script = option(args, flag);
     if (!ScriptRunner::isScript(script) || !QFileInfo(script).isFile())
     {
-        std::fprintf(stderr, "batch: --jsfl needs a .jsfl or .py script\n");
+        std::fprintf(stderr, "batch: %s needs a .jsfl or .py script\n", qPrintable(flag));
         return 1;
     }
     QStringList files;
     for (int i = 0; i < args.size(); ++i)
     {
         const QString& each = args.at(i);
-        if (each == "--jsfl" || each == "--out" || each == "--timeout")
+        if (each == flag || each == "--out" || each == "--timeout")
         {
             ++i;
             continue;
@@ -525,7 +522,9 @@ int batchScript(const QStringList& args)
 int batch(const QStringList& args)
 {
     if (args.contains("--jsfl"))
-        return batchScript(args);
+        return batchScript(args, "--jsfl");
+    if (args.contains("--python"))
+        return batchScript(args, "--python");
     if (args.isEmpty() || !QFileInfo(args.at(0)).isDir())
     {
         std::fprintf(stderr, "batch: which folder?\n");
@@ -578,43 +577,6 @@ int batch(const QStringList& args)
             const QString folder = out.isEmpty() ? QFileInfo(file).absoluteDir().filePath(QFileInfo(file).completeBaseName() + "_frames")
                                                  : QDir(out).filePath(QFileInfo(file).completeBaseName());
             result = window->renderCommand(file, {"--out", folder});
-        }
-        else if (args.contains("--python"))
-        {
-            // The document opened out as an XFL folder for the script, and
-            // read back from it.
-            QTemporaryDir temporary;
-            const QString folder = QDir(temporary.path()).filePath(QFileInfo(file).completeBaseName());
-            std::string error;
-            if (!convert(file.toStdString(), folder.toStdString(), error))
-            {
-                std::fprintf(stderr, "%s\n", error.c_str());
-                result = 1;
-            }
-            else
-            {
-                const QString python = qEnvironmentVariableIsSet("PHOENIX_PYTHON") ? qEnvironmentVariable("PHOENIX_PYTHON")
-                                                                                   : QString("python");
-                QProcess process;
-                process.setProcessChannelMode(QProcess::ForwardedChannels);
-                process.start(python, {option(args, "--python"), folder, file});
-                if (!process.waitForStarted())
-                {
-                    std::fprintf(stderr, "Could not start %s\n", qPrintable(python));
-                    return 1;
-                }
-                process.waitForFinished(-1);
-                result = process.exitStatus() == QProcess::NormalExit ? process.exitCode() : 1;
-                if (result == 0 && (saveBack || !out.isEmpty()))
-                {
-                    const QString target = saveBack ? file : outputFor(file, "." + QFileInfo(file).suffix());
-                    if (!convert(folder.toStdString(), target.toStdString(), error))
-                    {
-                        std::fprintf(stderr, "%s\n", error.c_str());
-                        result = 1;
-                    }
-                }
-            }
         }
         else
         {
