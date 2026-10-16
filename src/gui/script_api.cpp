@@ -26,6 +26,7 @@
 #include "../data/stroke_style.h"
 #include "../edit/command_stack.h"
 #include "../edit/adjustments.h"
+#include "../edit/node_graph.h"
 #include "../edit/behaviors.h"
 #include "../edit/shape_operators.h"
 #include "../edit/templates.h"
@@ -1574,6 +1575,153 @@ void ScriptApi::addMotionGraphicsOperations()
                 {"effects", effectListJson(fla::compositing::effectsOf(scratch))}}};
         });
 
+    add("list_node_types", "List node graph nodes",
+        "The kinds of node a timeline's node graph can have: id, name, category, inputs and settings (with their "
+        "type, range and default), for get_node_graph and set_node_graph.",
+        {}, {}, false, [](const QJsonObject&) {
+            QJsonArray types;
+            for (const fla::nodegraph::Type& type : fla::nodegraph::types())
+            {
+                QJsonArray inputs;
+                for (const std::string& input : type.inputs)
+                    inputs.append(QString::fromStdString(input));
+                QJsonArray settings;
+                for (const fla::behaviors::ParamSpec& spec : type.params)
+                {
+                    QJsonObject setting{{"name", QString::fromStdString(spec.name)},
+                        {"label", QString::fromStdString(spec.label)}, {"type", QString::fromStdString(spec.type)},
+                        {"default", QString::fromStdString(spec.text)}};
+                    if (spec.type == "number" || spec.type == "angle" || spec.type == "percent" || spec.type == "seed")
+                    {
+                        setting["min"] = spec.min;
+                        setting["max"] = spec.max;
+                    }
+                    if (!spec.choices.empty())
+                    {
+                        QJsonArray choices;
+                        for (const std::string& choice : spec.choices)
+                            choices.append(QString::fromStdString(choice));
+                        setting["choices"] = choices;
+                    }
+                    settings.append(setting);
+                }
+                types.append(QJsonObject{{"id", QString::fromStdString(type.id)}, {"name", QString::fromStdString(type.name)},
+                    {"category", QString::fromStdString(type.category)},
+                    {"description", QString::fromStdString(type.description)}, {"inputs", inputs},
+                    {"growingInputs", type.growing}, {"hasOutput", type.hasOutput}, {"settings", settings}});
+            }
+            return Result{QJsonObject{{"types", types}}};
+        });
+
+    const auto graphJson = [](const fla::nodegraph::Graph& graph) {
+        QJsonArray nodes;
+        for (const fla::nodegraph::Node& node : graph.nodes)
+        {
+            QJsonObject settings;
+            for (const auto& [name, value] : node.applied.params)
+                settings[QString::fromStdString(name)] = QString::fromStdString(value);
+            QJsonObject entry{{"id", node.id}, {"type", QString::fromStdString(node.type())}, {"x", node.x}, {"y", node.y},
+                {"settings", settings}};
+            if (!node.label.empty())
+                entry["label"] = QString::fromStdString(node.label);
+            if (node.bypassed())
+                entry["bypass"] = true;
+            nodes.append(entry);
+        }
+        QJsonArray links;
+        for (const fla::nodegraph::Link& link : graph.links)
+            links.append(QJsonObject{{"from", link.from}, {"to", link.to}, {"input", link.input}});
+        return QJsonObject{{"enabled", graph.enabled}, {"nodes", nodes}, {"links", links}};
+    };
+
+    add("get_node_graph", "Get a node graph",
+        "A timeline's node graph, which composites its layers through nodes: whether it is on, its nodes (id, "
+        "type, place, settings; keyed settings read \"@frame=value;frame=value\") and the links between them (a "
+        "node's picture into another's input, counted from 0). hasGraph is false when the timeline has none.",
+        {{"symbol", kSymbolArg}}, {}, false, [this, graphJson](const QJsonObject& args) {
+            ScriptContext context{_window};
+            fla::Timeline& timeline = context.timeline(args);
+            const std::shared_ptr<const fla::nodegraph::Graph> graph = fla::nodegraph::of(timeline);
+            QJsonObject result = graph ? graphJson(*graph) : QJsonObject();
+            result["hasGraph"] = graph != nullptr;
+            return Result{result};
+        });
+
+    add("set_node_graph", "Set a node graph",
+        "Sets a timeline's node graph, as get_node_graph gives it: nodes with an id, a type from list_node_types, "
+        "a place and settings by name (left-out settings take their defaults), and links. It must have one node "
+        "of type output. remove true takes the graph away, so the layers stack as usual again; a timeline "
+        "without one gets a starting graph (Other Layers into the Output) when only enabled is given.",
+        {{"symbol", kSymbolArg}, {"enabled", prop("boolean", "Whether the graph composites the timeline")},
+            {"nodes", QJsonObject{{"type", "array"}, {"description", "The nodes"}, {"items", QJsonObject{{"type", "object"}}}}},
+            {"links", QJsonObject{{"type", "array"}, {"description", "The links"}, {"items", QJsonObject{{"type", "object"}}}}},
+            {"remove", prop("boolean", "Take the graph away")}},
+        {}, true, [this, graphJson](const QJsonObject& args) {
+            ScriptContext context{_window};
+            fla::Timeline& timeline = context.timeline(args);
+            using Attributes = std::vector<std::pair<std::string, std::string>>;
+            const std::shared_ptr<const fla::nodegraph::Graph> current = fla::nodegraph::of(timeline);
+            fla::nodegraph::Graph graph = current ? *current : fla::nodegraph::starter();
+            Attributes after;
+            if (args.value("remove").toBool())
+                after = fla::nodegraph::withGraph(timeline, nullptr);
+            else
+            {
+                if (args.contains("nodes"))
+                {
+                    graph.nodes.clear();
+                    graph.links.clear();
+                    for (const QJsonValue& value : args.value("nodes").toArray())
+                    {
+                        const QJsonObject entry = value.toObject();
+                        const std::string type = entry.value("type").toString().toStdString();
+                        if (!fla::nodegraph::type(type))
+                            fail(QString("There is no kind of node called %1; list_node_types names them.")
+                                                  .arg(QString::fromStdString(type)));
+                        fla::nodegraph::Node node = fla::nodegraph::make(type, entry.value("id").toInt(), entry.value("x").toDouble(),
+                            entry.value("y").toDouble());
+                        if (node.id <= 0 || graph.node(node.id))
+                            fail("Each node needs an id of its own, above 0.");
+                        node.label = entry.value("label").toString().toStdString();
+                        node.applied.enabled = !entry.value("bypass").toBool();
+                        const QJsonObject settings = entry.value("settings").toObject();
+                        for (auto it = settings.begin(); it != settings.end(); ++it)
+                            node.applied.params[it.key().toStdString()] =
+                                it.value().isString() ? it.value().toString().toStdString()
+                                : it.value().isBool() ? std::string(it.value().toBool() ? "true" : "false")
+                                                      : QString::number(it.value().toDouble(), 'g', 10).toStdString();
+                        graph.nodes.push_back(node);
+                    }
+                    if (!graph.output())
+                        fail("A node graph needs one node of type output.");
+                }
+                if (args.contains("links"))
+                {
+                    graph.links.clear();
+                    for (const QJsonValue& value : args.value("links").toArray())
+                    {
+                        const QJsonObject link = value.toObject();
+                        if (!graph.connect(link.value("from").toInt(), link.value("to").toInt(), link.value("input").toInt()))
+                            fail(QString("Node %1 cannot be linked into input %2 of node %3.")
+                                                  .arg(link.value("from").toInt())
+                                                  .arg(link.value("input").toInt())
+                                                  .arg(link.value("to").toInt()));
+                    }
+                }
+                if (args.contains("enabled"))
+                    graph.enabled = args.value("enabled").toBool();
+                after = fla::nodegraph::withGraph(timeline, &graph);
+            }
+            if (after != timeline.extraAttributes)
+                context.stack().push(fla::CommandPtr(new fla::SetPropertyCommand<Attributes>(timeline.extraAttributes,
+                    timeline.extraAttributes, after, "Node Graph")));
+            context.refresh();
+            const std::shared_ptr<const fla::nodegraph::Graph> now = fla::nodegraph::of(timeline);
+            QJsonObject result = now ? graphJson(*now) : QJsonObject();
+            result["hasGraph"] = now != nullptr;
+            return Result{result};
+        });
+
     add("set_template_values", "Set template values",
         "Fills in a symbol instance's template fields: the words of the named dynamic text fields inside its symbol "
         "and the colors (\"#RRGGBB\") of its named movie clips. An empty value shows what the symbol has. Returns "
@@ -1656,6 +1804,14 @@ void ScriptApi::addMotionGraphicsOperations()
                             if (!to.isEmpty() && to.toStdString() != layer->name)
                             {
                                 note(layer->name, to);
+                                // Its timeline's node graph follows it.
+                                const auto graphAfter =
+                                    fla::nodegraph::withLayerRenamed(*timeline, layer->name, to.toStdString());
+                                if (graphAfter != timeline->extraAttributes)
+                                    context.stack().push(fla::CommandPtr(
+                                        new fla::SetPropertyCommand<std::vector<std::pair<std::string, std::string>>>(
+                                            timeline->extraAttributes, timeline->extraAttributes, graphAfter,
+                                            "Rename Layer")));
                                 context.stack().push(fla::CommandPtr(new fla::SetPropertyCommand<std::string>(
                                     layer->name, layer->name, to.toStdString(), "Rename Layer")));
                             }

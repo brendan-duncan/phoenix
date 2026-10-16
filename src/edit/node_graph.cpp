@@ -601,6 +601,56 @@ Graph starter()
     return graph;
 }
 
+bool renameLayer(Graph& graph, const std::string& from, const std::string& to)
+{
+    bool any = false;
+    for (Node& node : graph.nodes)
+    {
+        if (node.type() != "layer")
+            continue;
+        auto found = node.applied.params.find("layer");
+        if (found == node.applied.params.end())
+            continue;
+        std::string& value = found->second;
+        if (value == from)
+        {
+            value = to;
+            any = true;
+        }
+        else if (node.applied.keyed("layer"))
+        {
+            // Keyed from layer to layer: each key naming it.
+            std::vector<std::pair<int, std::string>> keys = node.applied.keys("layer");
+            bool renamed = false;
+            for (auto& key : keys)
+                if (key.second == from)
+                {
+                    key.second = to;
+                    renamed = true;
+                }
+            if (renamed)
+            {
+                for (const auto& key : keys)
+                    node.applied.setKey("layer", key.first, key.second);
+                any = true;
+            }
+        }
+    }
+    return any;
+}
+
+std::vector<std::pair<std::string, std::string>> withLayerRenamed(const Timeline& timeline, const std::string& from,
+    const std::string& to)
+{
+    const std::shared_ptr<const Graph> graph = of(timeline);
+    if (!graph || from.empty() || from == to)
+        return timeline.extraAttributes;
+    Graph renamed = *graph;
+    if (!renameLayer(renamed, from, to))
+        return timeline.extraAttributes;
+    return withGraph(timeline, &renamed);
+}
+
 // ---------------------------------------------------------------------------
 // Kinds of node
 

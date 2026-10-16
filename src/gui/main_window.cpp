@@ -5894,9 +5894,16 @@ void MainWindow::renameLayer(const fla::Timeline* timeline, int layerIndex, cons
 
     // A typed name stops being automatic, so it is never renumbered.
     fla::CommandStack& stack = _editContext.commandStack();
+    const std::string before = layer->name;
     stack.beginMacro("Rename Layer");
     stack.push(fla::CommandPtr(new fla::SetPropertyCommand<std::string>(layer->name, layer->name, after, "Rename Layer")));
     stack.push(fla::CommandPtr(new fla::SetPropertyCommand<bool>(layer->autoNamed, layer->autoNamed, false, "Rename Layer")));
+    // The timeline's node graph follows the layer by its new name.
+    auto* owner = const_cast<fla::Timeline*>(timeline);
+    const std::vector<std::pair<std::string, std::string>> graphAfter = fla::nodegraph::withLayerRenamed(*owner, before, after);
+    if (graphAfter != owner->extraAttributes)
+        stack.push(fla::CommandPtr(new fla::SetPropertyCommand<std::vector<std::pair<std::string, std::string>>>(
+            owner->extraAttributes, owner->extraAttributes, graphAfter, "Rename Layer")));
     stack.endMacro();
     stack.breakMergeChain();
     _timelineView->refresh();

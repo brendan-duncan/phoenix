@@ -260,3 +260,22 @@ TEST(effect_nodes_run_the_adjustment_effects)
     for (const Type& each : types())
         CHECK(std::find(categories().begin(), categories().end(), each.category) != categories().end());
 }
+
+TEST(layer_nodes_follow_a_renamed_layer)
+{
+    fla::Timeline timeline(nullptr);
+    Graph graph = starter();
+    graph.nodes.push_back(make("layer", 3, 0, 0));
+    graph.node(3)->applied.params["layer"] = "Hero";
+    graph.nodes.push_back(make("layer", 4, 0, 0));
+    graph.node(4)->applied.setKey("layer", 0, "Hero");
+    graph.node(4)->applied.setKey("layer", 12, "Sidekick");
+    timeline.extraAttributes = withGraph(timeline, &graph);
+    // A layer no node names leaves the graph as it is.
+    CHECK(withLayerRenamed(timeline, "Background", "Sky") == timeline.extraAttributes);
+    timeline.extraAttributes = withLayerRenamed(timeline, "Hero", "Hero Walk");
+    const std::shared_ptr<const Graph> renamed = of(timeline);
+    CHECK(renamed && renamed->node(3)->applied.params.at("layer") == "Hero Walk");
+    CHECK(renamed->node(4)->applied.valueAt("layer", 0, "") == "Hero Walk");
+    CHECK(renamed->node(4)->applied.valueAt("layer", 12, "") == "Sidekick");
+}

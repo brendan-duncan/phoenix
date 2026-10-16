@@ -118,6 +118,15 @@ std::vector<std::pair<std::string, std::string>> withGraph(const Timeline& timel
 /// Output, which shows them as they were.
 Graph starter();
 
+/// Layer nodes naming \a from name \a to instead, keys too; false when
+/// none did.
+bool renameLayer(Graph& graph, const std::string& from, const std::string& to);
+/// \a timeline's attributes with its graph's Layer nodes following a layer
+/// renamed from \a from to \a to; its attributes as they are when its graph
+/// names no such layer.
+std::vector<std::pair<std::string, std::string>> withLayerRenamed(const Timeline& timeline, const std::string& from,
+    const std::string& to);
+
 /// A kind of node.
 struct Type
 {

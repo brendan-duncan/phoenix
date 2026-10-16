@@ -14,6 +14,7 @@
 #include "../edit/command_stack.h"
 #include "../edit/frame_bake.h"
 #include "../edit/layer_commands.h"
+#include "../edit/node_graph.h"
 #include "../edit/property_command.h"
 #include "../edit/selection.h"
 #include "../edit/timeline_edit.h"
@@ -871,10 +872,21 @@ const ClassInfo& Layer::classInfo() const
         ClassDef<Layer> def(info, "Layer");
         def.prop("name", [](Layer& l) { return Value(l.get().name); },
             [](Layer& l, const Value& v) {
+                const std::string before = l.get().name;
                 editLayer(l, "Rename Layer", [&v](fla::LayerSnapshot&, fla::LayerState& state) {
                     state.name = v.toString();
                     state.autoNamed = false;
                 });
+                // The timeline's node graph follows the layer by its new name.
+                if (fla::Timeline* timeline = timelineOf(l.get()))
+                {
+                    using Attributes = std::vector<std::pair<std::string, std::string>>;
+                    const Attributes after = fla::nodegraph::withLayerRenamed(*timeline, before, l.get().name);
+                    if (after != timeline->extraAttributes)
+                        l.push(fla::CommandPtr(new fla::SetPropertyCommand<Attributes>(timeline->extraAttributes,
+                                   timeline->extraAttributes, after, "Rename Layer")),
+                            false);
+                }
             });
         def.prop("layerType",
             [](Layer& l) {
