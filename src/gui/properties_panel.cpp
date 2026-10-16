@@ -2066,6 +2066,23 @@ void PropertiesPanel::addThreeDSection(QVBoxLayout* layout, fla::SymbolInstance*
     }
     section->addField(0, 0, "Z", z);
 
+    // How deep the clip is: its edges carried back behind its face.
+    HotText* extrude = makeHotText(0, 10000, 1);
+    extrude->setValue(fla::threed::extrusionOf(*instance));
+    extrude->setToolTip("Extrusion: how thick the movie clip is, its edges drawn back that far behind it and shaded by the lights");
+    {
+        std::shared_ptr<Attributes> before = std::make_shared<Attributes>();
+        bindLive(extrude, [=]() { *before = instance->extraAttributes; },
+            [=](double value) {
+                instance->extraAttributes = fla::threed::withExtrusion(*instance, value);
+                emit documentEdited();
+            },
+            [=]() {
+                push(std::make_unique<fla::SetPropertyCommand<Attributes>>(instance->extraAttributes, *before,
+                    instance->extraAttributes, "Extrusion"));
+            });
+    }
+
     // The view every 3D movie clip in the document shares.
     HotText* angle = makeHotText(1, 179, 1, QString::fromUtf8("\u00b0"));
     angle->setValue(fla::threed::perspectiveAngle(*document));
@@ -2103,6 +2120,7 @@ void PropertiesPanel::addThreeDSection(QVBoxLayout* layout, fla::SymbolInstance*
     bindPoint(vanishY, document->vanishingPoint3DY, "Vanishing Point");
     section->addField(1, 0, "Vanish X", vanishX);
     section->addField(1, 1, "Y", vanishY);
+    section->addField(2, 0, "Depth", extrude);
 
     QPushButton* reset = new QPushButton("Reset View", this);
     reset->setToolTip(QString::fromUtf8("The vanishing point back to the middle of the stage, and the angle to 55\u00b0"));
@@ -2121,24 +2139,39 @@ void PropertiesPanel::addThreeDSection(QVBoxLayout* layout, fla::SymbolInstance*
         emit documentEdited();
         refresh();
     });
-    section->addWide(2, reset);
+    section->addWide(3, reset);
 
     // The light 3D clips are shaded by and the depth they are sharp at.
     QPushButton* lights = new QPushButton("Lights and Depth...", this);
-    lights->setToolTip("A light that shades 3D movie clips as they turn, and depth of field that blurs them away from a focus depth");
+    lights->setToolTip("Lights that shade 3D movie clips as they turn, the shadows clips cast on those behind them, "
+                       "and depth of field that blurs them away from a focus depth");
     connect(lights, &QPushButton::clicked, this, [this, document]() { editLightsAndDepth(document); });
-    section->addWide(3, lights);
+    section->addWide(4, lights);
 }
 
 void PropertiesPanel::editLightsAndDepth(fla::Document* document)
 {
-    const fla::threed::Light light = fla::threed::lightOf(*document);
+    // Up to four lights, each on or off; the first as one light was kept.
+    constexpr int kLights = 4;
+    std::vector<fla::threed::Light> lights = fla::threed::lightsOf(*document);
+    lights.resize(kLights);
+    if (!lights.front().on)
+        lights.front() = fla::threed::Light();
+    for (int i = 1; i < kLights; ++i)
+        if (!lights[static_cast<size_t>(i)].on)
+        {
+            // A light more starts from the other side, with no light of
+            // its own everywhere.
+            lights[static_cast<size_t>(i)] = fla::threed::Light();
+            lights[static_cast<size_t>(i)].azimuth = i % 2 ? 60.0 : 180.0;
+            lights[static_cast<size_t>(i)].ambient = 0.0;
+            lights[static_cast<size_t>(i)].intensity = 0.6;
+        }
+    const fla::threed::Shadows shadows = fla::threed::shadowsOf(*document);
     const fla::threed::DepthOfField depth = fla::threed::depthOfFieldOf(*document);
     QDialog dialog(this);
     dialog.setWindowTitle("3D Lights and Depth of Field");
     auto* form = new QFormLayout(&dialog);
-    auto* lightOn = new QCheckBox("Shade 3D movie clips by a light", &dialog);
-    lightOn->setChecked(light.on);
     const auto spin = [&dialog](double low, double high, double value, const QString& suffix, int decimals = 0) {
         auto* box = new HotDoubleSpinBox(&dialog);
         box->setRange(low, high);
@@ -2147,28 +2180,75 @@ void PropertiesPanel::editLightsAndDepth(fla::Document* document)
         box->setSuffix(suffix);
         return box;
     };
-    HotDoubleSpinBox* azimuth = spin(-180, 180, light.azimuth, QString::fromUtf8("\u00b0"));
+    auto* which = new QComboBox(&dialog);
+    for (int i = 0; i < kLights; ++i)
+        which->addItem(QString("Light %1").arg(i + 1));
+    which->setToolTip("The light to set: each shades 3D movie clips by how squarely they face it, in its color");
+    auto* lightOn = new QCheckBox("On", &dialog);
+    HotDoubleSpinBox* azimuth = spin(-180, 180, 0, QString::fromUtf8("\u00b0"));
     azimuth->setToolTip(QString::fromUtf8("Where the light comes from, round from above: 90\u00b0 from the right, -90\u00b0 from the left"));
-    HotDoubleSpinBox* elevation = spin(-90, 90, light.elevation, QString::fromUtf8("\u00b0"));
+    HotDoubleSpinBox* elevation = spin(-90, 90, 0, QString::fromUtf8("\u00b0"));
     elevation->setToolTip(QString::fromUtf8("How far out toward you the light is: 90\u00b0 straight from the front, 0\u00b0 grazing"));
-    HotDoubleSpinBox* ambient = spin(0, 100, light.ambient * 100.0, "%");
+    HotDoubleSpinBox* ambient = spin(0, 100, 0, "%");
     ambient->setToolTip("Light everywhere: how bright a clip turned away from the light still is");
-    HotDoubleSpinBox* intensity = spin(0, 1000, light.intensity * 100.0, "%");
+    HotDoubleSpinBox* intensity = spin(0, 1000, 0, "%");
     intensity->setToolTip("How strong the light is");
-    auto* color = new QLineEdit(QColor(light.color[0], light.color[1], light.color[2]).name().toUpper(), &dialog);
+    auto* color = new QLineEdit(&dialog);
     color->setToolTip("The light's color as #RRGGBB");
+    // The fields show the light picked and change it as they are edited.
+    const auto show = [&]() {
+        const fla::threed::Light& light = lights[static_cast<size_t>(which->currentIndex())];
+        lightOn->setChecked(light.on);
+        azimuth->setValue(light.azimuth);
+        elevation->setValue(light.elevation);
+        ambient->setValue(light.ambient * 100.0);
+        intensity->setValue(light.intensity * 100.0);
+        color->setText(QColor(light.color[0], light.color[1], light.color[2]).name().toUpper());
+    };
+    const auto keep = [&](int index) {
+        fla::threed::Light& light = lights[static_cast<size_t>(index)];
+        light.on = lightOn->isChecked();
+        light.azimuth = azimuth->value();
+        light.elevation = elevation->value();
+        light.ambient = ambient->value() / 100.0;
+        light.intensity = intensity->value() / 100.0;
+        const QColor picked(color->text());
+        if (picked.isValid())
+        {
+            light.color[0] = static_cast<unsigned char>(picked.red());
+            light.color[1] = static_cast<unsigned char>(picked.green());
+            light.color[2] = static_cast<unsigned char>(picked.blue());
+        }
+    };
+    int shownLight = 0;
+    connect(which, QOverload<int>::of(&QComboBox::currentIndexChanged), &dialog, [&](int index) {
+        keep(shownLight);
+        shownLight = index;
+        show();
+    });
+    show();
+    auto* shadowsOn = new QCheckBox("Clips cast shadows on turned clips behind them", &dialog);
+    shadowsOn->setChecked(shadows.on);
+    HotDoubleSpinBox* strength = spin(0, 100, shadows.strength * 100.0, "%");
+    strength->setToolTip("How dark the shadows are");
+    HotDoubleSpinBox* softness = spin(0, 1000, shadows.softness, " px per 100", 1);
+    softness->setToolTip("How soft a shadow is for each hundred pixels between the clip that casts it and the one it falls on");
     auto* depthOn = new QCheckBox("Blur 3D movie clips away from a focus depth", &dialog);
     depthOn->setChecked(depth.on);
     HotDoubleSpinBox* focus = spin(-10000, 10000, depth.focus, " Z");
     focus->setToolTip("The depth (Z) that is sharp");
     HotDoubleSpinBox* aperture = spin(0, 1000, depth.aperture, " px per 100", 1);
     aperture->setToolTip("How much blur for each hundred pixels nearer or further than the focus");
+    form->addRow("Light", which);
     form->addRow(lightOn);
     form->addRow("From", azimuth);
     form->addRow("Height", elevation);
     form->addRow("Ambient", ambient);
     form->addRow("Strength", intensity);
     form->addRow("Color", color);
+    form->addRow(shadowsOn);
+    form->addRow("Darkness", strength);
+    form->addRow("Softness", softness);
     form->addRow(depthOn);
     form->addRow("Focus", focus);
     form->addRow("Blur", aperture);
@@ -2178,32 +2258,28 @@ void PropertiesPanel::editLightsAndDepth(fla::Document* document)
     form->addRow(buttons);
     if (dialog.exec() != QDialog::Accepted)
         return;
-    fla::threed::Light after;
-    after.on = lightOn->isChecked();
-    after.azimuth = azimuth->value();
-    after.elevation = elevation->value();
-    after.ambient = ambient->value() / 100.0;
-    after.intensity = intensity->value() / 100.0;
-    const QColor picked(color->text());
-    if (picked.isValid())
-    {
-        after.color[0] = static_cast<unsigned char>(picked.red());
-        after.color[1] = static_cast<unsigned char>(picked.green());
-        after.color[2] = static_cast<unsigned char>(picked.blue());
-    }
+    keep(shownLight);
+    fla::threed::Shadows afterShadows;
+    afterShadows.on = shadowsOn->isChecked();
+    afterShadows.strength = strength->value() / 100.0;
+    afterShadows.softness = softness->value();
     fla::threed::DepthOfField afterDepth;
     afterDepth.on = depthOn->isChecked();
     afterDepth.focus = focus->value();
     afterDepth.aperture = aperture->value();
     using Attributes = std::vector<std::pair<std::string, std::string>>;
-    // The light's attributes, with the depth of field's put in.
-    Attributes changed = fla::threed::withLight(*document, after);
-    changed.erase(std::remove_if(changed.begin(), changed.end(),
-                      [](const auto& each) { return each.first == "phoenixDepthOfField"; }),
-        changed.end());
-    for (const auto& each : fla::threed::withDepthOfField(*document, afterDepth))
-        if (each.first == "phoenixDepthOfField")
-            changed.push_back(each);
+    // The lights' attributes, with the shadows' and the depth of field's
+    // put in.
+    Attributes changed = fla::threed::withLights(*document, lights);
+    const auto put = [&changed](const Attributes& from, const char* name) {
+        changed.erase(std::remove_if(changed.begin(), changed.end(), [name](const auto& each) { return each.first == name; }),
+            changed.end());
+        for (const auto& each : from)
+            if (each.first == name)
+                changed.push_back(each);
+    };
+    put(fla::threed::withShadows(*document, afterShadows), "phoenixShadows");
+    put(fla::threed::withDepthOfField(*document, afterDepth), "phoenixDepthOfField");
     if (changed == document->extraAttributes)
         return;
     push(std::make_unique<fla::SetPropertyCommand<Attributes>>(document->extraAttributes, document->extraAttributes,

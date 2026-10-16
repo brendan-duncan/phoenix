@@ -114,14 +114,15 @@
 
 <p>The 3D turn and depth are keyed on keyframes like any other property, and a classic tween between two keyframes turns and moves the clip smoothly from one to the other. Each drag is a single step to undo.</p>
 
-<p>With a movie clip selected, the Object tab's <strong>3D Position and View</strong> section sets its depth (<strong>Z</strong>) exactly, and the view every 3D clip in the document shares: the <strong>Angle</strong> of perspective (55&deg; unless you change it; wider exaggerates depth) and the <strong>Vanish X</strong> and <strong>Y</strong> point that depth recedes to. <strong>Reset View</strong> puts the vanishing point back in the middle of the stage and the angle at 55&deg;.</p>
+<p>With a movie clip selected, the Object tab's <strong>3D Position and View</strong> section sets its depth (<strong>Z</strong>) exactly, how thick it is (<strong>Depth</strong>: its edges drawn back that far behind its face and shaded by the lights, a card with a visible edge or a solid block of a logo), and the view every 3D clip in the document shares: the <strong>Angle</strong> of perspective (55&deg; unless you change it; wider exaggerates depth) and the <strong>Vanish X</strong> and <strong>Y</strong> point that depth recedes to. <strong>Reset View</strong> puts the vanishing point back in the middle of the stage and the angle at 55&deg;.</p>
 
 <h3 id="lights">Lights and depth of field</h3>
 
-<p><strong>Lights and Depth...</strong> in the same section sets two things for every clip turned or moved in 3D in the document:</p>
+<p><strong>Lights and Depth...</strong> in the same section sets three things for every clip turned or moved in 3D in the document:</p>
 
 <ul>
-  <li><strong>A light.</strong> Each clip is shaded by how squarely it faces the light, so a card swinging round catches the light and darkens as it turns edge on. <strong>From</strong> says where the light comes from (round from above: 90&deg; from the right, -90&deg; from the left), <strong>Height</strong> how far out toward you it is (90&deg; straight from the front), <strong>Ambient</strong> how bright a clip turned away still is, and <strong>Color</strong> tints the light, warm or cool. Clips lying flat on the stage are not shaded.</li>
+  <li><strong>A light.</strong> Each clip is shaded by how squarely it faces the light, so a card swinging round catches the light and darkens as it turns edge on. <strong>From</strong> says where the light comes from (round from above: 90&deg; from the right, -90&deg; from the left), <strong>Height</strong> how far out toward you it is (90&deg; straight from the front), <strong>Ambient</strong> how bright a clip turned away still is, and <strong>Color</strong> tints the light, warm or cool. Clips lying flat on the stage are not shaded. Pick <strong>Light 2</strong>, <strong>3</strong> or <strong>4</strong> and tick <strong>On</strong> for more lights: a warm key light and a cool one from the other side, each shading the clips in its color, added up.</li>
+  <li><strong>Shadows.</strong> With <strong>Clips cast shadows</strong> ticked, a movie clip nearer the viewer (a lower Z) casts a soft shadow on a turned clip behind it, thrown away from each light: further and softer the further apart the two are. <strong>Darkness</strong> sets how dark, <strong>Softness</strong> how much blur for each hundred pixels between them.</li>
   <li><strong>Depth of field.</strong> Clips blur the further they are from the <strong>Focus</strong> depth (a Z), by <strong>Blur</strong> pixels for each hundred pixels nearer or further: a sharp title with a soft background pushed back behind it. Key the clips' Z to rack focus as they move.</li>
 </ul>
 
@@ -130,7 +131,7 @@
   <figcaption>A warm light from the upper left, and depth of field focused on the stage.</figcaption>
 </figure>
 
-<p>Both are Phoenix's own: another app opening the FLA file shows the clips unshaded and sharp.</p>
+<p>All of these are Phoenix's own: another app opening the FLA file shows the clips flat, unshaded, sharp, without shadows or depth.</p>
 
 <h2>Cut, copy and paste</h2>
 

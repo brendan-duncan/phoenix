@@ -2347,6 +2347,19 @@ QString PhoenixView::resolveSoftMasks(const QString& svg) const
 
 void PhoenixView::drawTimeline(QPainter& painter, const fla::Timeline* timeline, fla::LoopType loopType, int firstFrame)
 {
+    // With lights casting shadows, the movie clips it shows now, for the
+    // turned ones behind them to find.
+    struct ShadowScope
+    {
+        std::vector<std::vector<ShadowCaster>>& scopes;
+        bool pushed;
+        ~ShadowScope()
+        {
+            if (pushed)
+                scopes.pop_back();
+        }
+    } shadowScope{_shadowCasters, gatherShadowCasters(timeline, loopType, firstFrame)};
+
     // An export that writes vectors, of a timeline with a node graph: the
     // graph works on pixels, so what it makes goes as one picture, at twice
     // the export's size.
@@ -4664,6 +4677,7 @@ void PhoenixView::drawElement(QPainter& painter, const fla::Element* element, co
     QTransform qTransform(transform.m11, transform.m12,
                        transform.m21, transform.m22,
                        transform.tx, transform.ty);
+    const QTransform placedTransform = qTransform;
     qTransform = qTransform * threeDTransform(element, qTransform, tweenElement, tweenProgress);
 
     // A movie clip's parent's space on the stage, for the movie's scripts
@@ -4881,19 +4895,30 @@ void PhoenixView::drawElement(QPainter& painter, const fla::Element* element, co
                     pose = fla::threed::blend(pose, fla::threed::of(*other), tweenProgress);
                 turned = !pose.flat();
             }
-            if (turned)
+            const std::vector<fla::threed::Light> lights =
+                turned && !_castingShadow ? fla::threed::lightsOf(*lit) : std::vector<fla::threed::Light>();
+            if (!lights.empty())
             {
-                const fla::threed::Light light = fla::threed::lightOf(*lit);
-                if (light.on)
-                {
-                    const double shade = fla::threed::shading(pose, light);
-                    color.redMultiplier *= shade * light.color[0] / 255.0;
-                    color.greenMultiplier *= shade * light.color[1] / 255.0;
-                    color.blueMultiplier *= shade * light.color[2] / 255.0;
-                    color.redOffset = static_cast<int>(std::lround(color.redOffset * shade));
-                    color.greenOffset = static_cast<int>(std::lround(color.greenOffset * shade));
-                    color.blueOffset = static_cast<int>(std::lround(color.blueOffset * shade));
-                }
+                // Each light's shading in its color, added up.
+                double shade[3];
+                fla::threed::shade(pose, lights, shade);
+                color.redMultiplier *= shade[0];
+                color.greenMultiplier *= shade[1];
+                color.blueMultiplier *= shade[2];
+                color.redOffset = static_cast<int>(std::lround(color.redOffset * shade[0]));
+                color.greenOffset = static_cast<int>(std::lround(color.greenOffset * shade[1]));
+                color.blueOffset = static_cast<int>(std::lround(color.blueOffset * shade[2]));
+            }
+            // Shadows cast on it by the clips in front of it, toward the
+            // lights; and how deep it is, its edges drawn back that far.
+            const std::vector<const ShadowCaster*> casters = lights.empty() ? std::vector<const ShadowCaster*>()
+                                                                            : shadowCasters(instance, pose.z);
+            double extrusion = 0.0;
+            if (lit && instance->symbolType == fla::SymbolType::MovieClip && !_castingShadow)
+            {
+                extrusion = fla::threed::extrusionOf(*instance);
+                if (const auto* other = dynamic_cast<const fla::SymbolInstance*>(tweenElement))
+                    extrusion += (fla::threed::extrusionOf(*other) - extrusion) * tweenProgress;
             }
             // Time remapping: a graphic or a movie clip held on the frame a
             // behavior says, a clip's own playing set aside (a movie playing
@@ -5042,7 +5067,7 @@ void PhoenixView::drawElement(QPainter& painter, const fla::Element* element, co
             // Outline view shows the instance's lines plainly: no color
             // effect, filter or blend, which would wash the lines out.
             const bool isolate = !_outlineColor.isValid() &&
-                ((!color.isIdentity() && !alphaOnly) || !filters.empty() || !pictureEffects.empty() ||
+                ((!color.isIdentity() && !alphaOnly) || !filters.empty() || !pictureEffects.empty() || !casters.empty() ||
                     Filters::needsIsolation(instance->blendMode));
 
             // 9-slice scaling: a movie clip with scale guides, stretched,
@@ -5127,6 +5152,26 @@ void PhoenixView::drawElement(QPainter& painter, const fla::Element* element, co
                 }
             };
 
+            const bool backFirst = std::cos(pose.rotationX * 3.14159265358979323846 / 180.0) *
+                    std::cos(pose.rotationY * 3.14159265358979323846 / 180.0) >= 0.0;
+            if (extrusion > 0.0 && backFirst && !_maskPass && !_outlineColor.isValid())
+                drawExtrusion(painter, *instance, tweenElement, tweenProgress, parentToDevice, placedTransform, pose, extrusion,
+                    frameOffset, loopType);
+            struct ExtrusionAfter
+            {
+                std::function<void()> draw;
+                ~ExtrusionAfter()
+                {
+                    if (draw)
+                        draw();
+                }
+            } extrusionAfter;
+            if (extrusion > 0.0 && !backFirst && !_maskPass && !_outlineColor.isValid())
+                extrusionAfter.draw = [&, this]() {
+                    drawExtrusion(painter, *instance, tweenElement, tweenProgress, parentToDevice, placedTransform, pose, extrusion,
+                    frameOffset, loopType);
+                };
+
             if (!isolate)
             {
                 // Flash scales every shape's own alpha, so overlapping
@@ -5183,8 +5228,8 @@ void PhoenixView::drawElement(QPainter& painter, const fla::Element* element, co
                 // neither looked up nor kept.
                 // A behavior's copies look different from one another, so
                 // none is kept for the next paint.
-                const bool cacheable =
-                    !_maskPass && _frameOverride < 0 && _sampleFrame < 0 && !_movie && _templateStack.empty() && !asCopy;
+                const bool cacheable = !_maskPass && _frameOverride < 0 && _sampleFrame < 0 && !_movie &&
+                    _templateStack.empty() && !asCopy && casters.empty();
                 const auto cached = cacheable ? _filterCache.find(instance) : _filterCache.end();
                 const auto sameLinear = [](const QTransform& a, const QTransform& b) {
                     return std::fabs(a.m11() - b.m11()) < 1.0e-9 && std::fabs(a.m12() - b.m12()) < 1.0e-9 &&
@@ -5192,7 +5237,7 @@ void PhoenixView::drawElement(QPainter& painter, const fla::Element* element, co
                 };
                 // One of many copies: a picture an earlier copy that looks
                 // the same made, moved by whole pixels.
-                const bool sharing = asCopy && _copyPicturesOf == instance && !_maskPass && !turned;
+                const bool sharing = asCopy && _copyPicturesOf == instance && !_maskPass && !turned && casters.empty();
                 const CopyPicture* alike = nullptr;
                 const auto samePhase = [](double a, double b) {
                     const double apart = a - b;
@@ -5273,6 +5318,8 @@ void PhoenixView::drawElement(QPainter& painter, const fla::Element* element, co
                             _flaDocument && _flaDocument->document && _flaDocument->document->frameRate > 0.0
                                 ? _flaDocument->document->frameRate : 24.0,
                             nullptr, true);
+                    if (!casters.empty())
+                        castShadows(symbolImage, crop.topLeft(), instance, parentToDevice, casters, lights, pose.z);
                     if (!filters.empty())
                         symbolImage = Filters::apply(symbolImage, filters, filterScale);
 
@@ -7149,7 +7196,7 @@ bool PhoenixView::stampCopies(QPainter& painter, const fla::SymbolInstance& inst
 }
 
 QTransform PhoenixView::threeDTransform(const fla::Element* element, const QTransform& placed,
-    const fla::Element* tweenElement, double progress) const
+    const fla::Element* tweenElement, double progress, double depth) const
 {
     const auto* instance = dynamic_cast<const fla::SymbolInstance*>(element);
     const fla::Document* document = _flaDocument ? _flaDocument->document : nullptr;
@@ -7158,15 +7205,228 @@ QTransform PhoenixView::threeDTransform(const fla::Element* element, const QTran
     fla::threed::Pose pose = fla::threed::of(*instance);
     if (const auto* other = dynamic_cast<const fla::SymbolInstance*>(tweenElement))
         pose = fla::threed::blend(pose, fla::threed::of(*other), progress);
-    if (pose.flat())
+    if (pose.flat() && depth == 0.0)
         return QTransform();
     // Turned about its transformation point, seen from in front of the
     // stage's middle.
     const QPointF center = placed.map(QPointF(instance->transformationPoint.x, instance->transformationPoint.y));
     const double focal = fla::threed::focalLength(fla::threed::perspectiveAngle(*document), document->width);
     const std::array<double, 9> m = fla::threed::projection(pose, fla::Point(center.x(), center.y()),
-        fla::Point(document->width / 2.0, document->height / 2.0), focal);
+        fla::Point(document->width / 2.0, document->height / 2.0), focal, depth);
     return QTransform(m[0], m[3], m[6], m[1], m[4], m[7], m[2], m[5], m[8]);
+}
+
+bool PhoenixView::gatherShadowCasters(const fla::Timeline* timeline, fla::LoopType loopType, int firstFrame)
+{
+    const fla::Document* document = _flaDocument ? _flaDocument->document : nullptr;
+    if (!timeline || !document || _castingShadow || _maskPass || _outlineColor.isValid() ||
+        !fla::threed::shadowsOf(*document).on || fla::threed::lightsOf(*document).empty())
+        return false;
+    std::vector<ShadowCaster> casters;
+    bool receiver = false;
+    for (const fla::Layer* layer : timeline->layers)
+    {
+        if (!layer || (layer->layerType != fla::Layer::Type::Normal && layer->layerType != fla::Layer::Type::Masked) ||
+            !(_drawHidden || layer->isVisible()))
+            continue;
+        const LayerFrame state = resolveLayerFrame(layer, loopType, firstFrame);
+        if (!state.frame || !state.frame->visible)
+            continue;
+        const QTransform parent = parentTransform(layer, state.frame, loopType, firstFrame);
+        for (size_t i = 0; i < state.frame->elements.size(); ++i)
+        {
+            const auto* instance = dynamic_cast<const fla::SymbolInstance*>(state.frame->elements[i]);
+            if (!instance || instance->symbolType != fla::SymbolType::MovieClip || !instance->visible)
+                continue;
+            ShadowCaster caster;
+            caster.instance = instance;
+            // What it tweens to: the element in the same place on the next
+            // keyframe, as drawFrame pairs them.
+            if (state.tweenFrame && i < state.tweenFrame->elements.size())
+            {
+                caster.tween = state.tweenFrame->elements[i];
+                caster.progress = state.tweenProgress;
+            }
+            fla::threed::Pose pose = fla::threed::of(*instance);
+            if (const auto* other = dynamic_cast<const fla::SymbolInstance*>(caster.tween))
+                pose = fla::threed::blend(pose, fla::threed::of(*other), caster.progress);
+            caster.z = pose.z;
+            caster.offset = state.offset;
+            caster.layerParent = parent;
+            receiver = receiver || !pose.flat();
+            casters.push_back(caster);
+        }
+    }
+    if (!receiver || casters.size() < 2)
+        return false;
+    _shadowCasters.push_back(std::move(casters));
+    return true;
+}
+
+std::vector<const PhoenixView::ShadowCaster*> PhoenixView::shadowCasters(const fla::SymbolInstance* receiver, double z) const
+{
+    std::vector<const ShadowCaster*> found;
+    if (_shadowCasters.empty())
+        return found;
+    const std::vector<ShadowCaster>& casters = _shadowCasters.back();
+    if (std::none_of(casters.begin(), casters.end(), [receiver](const ShadowCaster& each) { return each.instance == receiver; }))
+        return found;
+    for (const ShadowCaster& caster : casters)
+        if (caster.instance != receiver && caster.z < z - 0.5)
+            found.push_back(&caster);
+    return found;
+}
+
+void PhoenixView::castShadows(QImage& picture, const QPoint& origin, const fla::SymbolInstance* receiver,
+    const QTransform& parentToDevice, const std::vector<const ShadowCaster*>& casters,
+    const std::vector<fla::threed::Light>& lights, double z)
+{
+    const fla::Document* document = _flaDocument ? _flaDocument->document : nullptr;
+    const auto self = std::find_if(_shadowCasters.back().begin(), _shadowCasters.back().end(),
+        [receiver](const ShadowCaster& each) { return each.instance == receiver; });
+    if (!document || picture.isNull() || casters.empty() || self == _shadowCasters.back().end())
+        return;
+    const fla::threed::Shadows shadows = fla::threed::shadowsOf(*document);
+    // The timeline's space on the device: the receiver's parent space less
+    // its layer's parent transform.
+    bool invertible = false;
+    const QTransform timelineToDevice = self->layerParent.inverted(&invertible) * parentToDevice;
+    if (!invertible)
+        return;
+    const QTransform linear(timelineToDevice.m11(), timelineToDevice.m12(), timelineToDevice.m21(), timelineToDevice.m22(), 0.0, 0.0);
+    const double deviceScale = std::sqrt(std::fabs(linear.determinant()));
+    // Each light darkens by its share of the strength.
+    double total = 0.0;
+    for (const fla::threed::Light& light : lights)
+        total += light.intensity;
+    if (total <= 0.0)
+        return;
+    QImage dark(picture.size(), QImage::Format_ARGB32_Premultiplied);
+    dark.fill(Qt::transparent);
+    for (const fla::threed::Light& light : lights)
+    {
+        QImage mask(picture.size(), QImage::Format_ARGB32_Premultiplied);
+        mask.fill(Qt::transparent);
+        double blur = 0.0;
+        {
+            QPainter into(&mask);
+            into.setRenderHint(QPainter::Antialiasing, true);
+            into.setRenderHint(QPainter::SmoothPixmapTransform, true);
+            const bool was = _castingShadow;
+            _castingShadow = true;
+            for (const ShadowCaster* caster : casters)
+            {
+                const double depth = z - caster->z;
+                fla::Point offset;
+                if (!fla::threed::shadowOffset(light, depth, offset))
+                    continue;
+                const QPointF shift = linear.map(QPointF(offset.x, offset.y));
+                into.setTransform(caster->layerParent * timelineToDevice *
+                    QTransform::fromTranslate(shift.x() - origin.x(), shift.y() - origin.y()));
+                ElapsedScope elapsed(_elapsed, caster->offset);
+                drawElement(into, caster->instance, caster->tween, caster->progress);
+                blur = std::max(blur, fla::threed::shadowBlur(shadows, depth) * deviceScale);
+            }
+            _castingShadow = was;
+        }
+        if (blur >= 0.5)
+            fla::boxBlur(reinterpret_cast<uint32_t*>(mask.bits()), mask.width(), mask.height(), blur, blur, 3);
+        // The darkness this light leaves, kept where it is darkest.
+        const double strength = shadows.strength * light.intensity / total * std::min(1.0, total);
+        for (int y = 0; y < mask.height(); ++y)
+        {
+            const QRgb* from = reinterpret_cast<const QRgb*>(mask.constScanLine(y));
+            QRgb* to = reinterpret_cast<QRgb*>(dark.scanLine(y));
+            for (int x = 0; x < mask.width(); ++x)
+            {
+                const int amount = static_cast<int>(std::lround(qAlpha(from[x]) * strength));
+                to[x] = qRgba(0, 0, 0, std::min(255, qAlpha(to[x]) + amount));
+            }
+        }
+    }
+    // Only on the receiver's own pixels, its alpha kept.
+    for (int y = 0; y < picture.height(); ++y)
+    {
+        QRgb* line = reinterpret_cast<QRgb*>(picture.scanLine(y));
+        const QRgb* shade = reinterpret_cast<const QRgb*>(dark.constScanLine(y));
+        for (int x = 0; x < picture.width(); ++x)
+        {
+            const int keep = 255 - qAlpha(shade[x]);
+            if (keep == 255)
+                continue;
+            line[x] = qRgba(qRed(line[x]) * keep / 255, qGreen(line[x]) * keep / 255, qBlue(line[x]) * keep / 255, qAlpha(line[x]));
+        }
+    }
+}
+
+void PhoenixView::drawExtrusion(QPainter& painter, const fla::SymbolInstance& instance, const fla::Element* tween,
+    double progress, const QTransform& parentToDevice, const QTransform& placed, const fla::threed::Pose& pose, double depth,
+    int frame, fla::LoopType loop)
+{
+    const fla::Document* document = _flaDocument ? _flaDocument->document : nullptr;
+    const fla::Symbol* symbol = instance.symbol;
+    if (!document || !symbol || depth <= 0.0)
+        return;
+    const QRectF local = symbolReach(symbol);
+    if (!local.isValid() || local.isEmpty())
+        return;
+    // The clip drawn once, flat, at the size it is seen at, and darkened
+    // for its sides as the lights catch them (a default light when the
+    // document has none).
+    const QTransform front = placed * threeDTransform(&instance, placed, tween, progress) * parentToDevice;
+    const QTransform back = placed * threeDTransform(&instance, placed, tween, progress, depth) * parentToDevice;
+    const double scale = std::clamp(std::sqrt(std::fabs(front.determinant())), 0.05, 8.0);
+    const QSize size(static_cast<int>(std::ceil(local.width() * scale)) + 2, static_cast<int>(std::ceil(local.height() * scale)) + 2);
+    if (size.width() > 4096 || size.height() > 4096)
+        return;
+    QImage picture(size, QImage::Format_ARGB32_Premultiplied);
+    picture.fill(Qt::transparent);
+    {
+        QPainter into(&picture);
+        into.setRenderHints(painter.renderHints());
+        into.setTransform(QTransform::fromTranslate(-local.left() * scale + 1.0, -local.top() * scale + 1.0).scale(scale, scale));
+        const bool was = _castingShadow;
+        _castingShadow = true;
+        for (const fla::Timeline* timeline : symbol->timelines)
+            if (timeline && timeline->visible)
+            {
+                into.save();
+                drawTimeline(into, timeline, loop, frame);
+                into.restore();
+            }
+        _castingShadow = was;
+    }
+    std::vector<fla::threed::Light> lights = fla::threed::lightsOf(*document);
+    if (lights.empty())
+    {
+        fla::threed::Light light;
+        light.on = true;
+        lights.push_back(light);
+    }
+    double side[3];
+    fla::threed::shade(pose, lights, side, true);
+    for (int y = 0; y < picture.height(); ++y)
+    {
+        QRgb* line = reinterpret_cast<QRgb*>(picture.scanLine(y));
+        for (int x = 0; x < picture.width(); ++x)
+            line[x] = qRgba(static_cast<int>(qRed(line[x]) * side[0]), static_cast<int>(qGreen(line[x]) * side[1]),
+                static_cast<int>(qBlue(line[x]) * side[2]), qAlpha(line[x]));
+    }
+    // Slices from the back to the face, a pixel or so apart on the device.
+    const QPointF middle = local.center();
+    const double reach = QLineF(front.map(middle), back.map(middle)).length() + depth * scale * 0.25;
+    const int slices = std::clamp(static_cast<int>(std::ceil(reach)), 2, 96);
+    const QTransform fromPicture = QTransform::fromTranslate(1.0, 1.0).inverted() *
+        QTransform::fromScale(1.0 / scale, 1.0 / scale) * QTransform::fromTranslate(local.left(), local.top());
+    painter.save();
+    painter.setRenderHint(QPainter::SmoothPixmapTransform, true);
+    for (int i = slices; i >= 1; --i)
+    {
+        const double at = depth * i / slices;
+        painter.setTransform(fromPicture * placed * threeDTransform(&instance, placed, tween, progress, at) * parentToDevice);
+        painter.drawImage(QPointF(0.0, 0.0), picture);
+    }
+    painter.restore();
 }
 
 const fla::Symbol* PhoenixView::brushOf(const fla::StrokeStyle& stroke) const

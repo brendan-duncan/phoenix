@@ -141,3 +141,89 @@ TEST(three_d_light_shades_turned_clips_and_depth_blurs_them)
     document.extraAttributes = td::withDepthOfField(document, td::DepthOfField());
     CHECK(document.extraAttributes.empty());
 }
+
+TEST(three_d_several_lights_shadows_and_extrusion)
+{
+    namespace td = fla::threed;
+    fla::Document document(nullptr);
+    CHECK(td::lightsOf(document).empty());
+
+    // A white light from the front and a red one grazing from the right,
+    // kept one after the other; the first is the one light read before.
+    td::Light front;
+    front.on = true;
+    front.azimuth = 0.0;
+    front.elevation = 90.0;
+    front.ambient = 0.0;
+    td::Light side = front;
+    side.azimuth = 90.0;
+    side.elevation = 0.0;
+    side.color[1] = side.color[2] = 0;
+    document.extraAttributes = td::withLights(document, {front, side});
+    const std::vector<td::Light> lights = td::lightsOf(document);
+    CHECK(lights.size() == 2 && lights[1].azimuth == 90.0 && lights[1].color[1] == 0);
+    CHECK(td::lightOf(document).elevation == 90.0);
+
+    // Face on, only the front light reaches it; turned to the right, only
+    // the red one.
+    td::Pose pose;
+    double rgb[3];
+    td::shade(pose, lights, rgb);
+    CHECK(std::fabs(rgb[0] - 1.0) < 1e-9 && std::fabs(rgb[1] - 1.0) < 1e-9);
+    pose.rotationY = 90.0;
+    td::shade(pose, lights, rgb);
+    CHECK(std::fabs(rgb[0] - 1.0) < 1e-9 && rgb[1] < 1e-9 && rgb[2] < 1e-9);
+    // Half way, both add up (clipped at full).
+    pose.rotationY = 60.0;
+    td::shade(pose, lights, rgb);
+    CHECK(std::fabs(rgb[1] - 0.5) < 1e-9 && std::fabs(rgb[0] - 1.0) < 1e-9);
+    // One light: its shading in its color, as before.
+    td::shade(pose, {front}, rgb);
+    CHECK(std::fabs(rgb[0] - td::shading(pose, front)) < 1e-9);
+    // The edges catch what the face does not.
+    pose.rotationY = 0.0;
+    td::shade(pose, {front}, rgb, true);
+    CHECK(rgb[0] < 1e-9);
+    // None: nothing changes.
+    td::shade(pose, {}, rgb);
+    CHECK(rgb[0] == 1.0 && rgb[2] == 1.0);
+
+    // Shadows: thrown away from the light, further the further behind.
+    td::Shadows shadows;
+    CHECK(!td::shadowsOf(document).on);
+    shadows.on = true;
+    shadows.strength = 0.4;
+    shadows.softness = 5.0;
+    document.extraAttributes = td::withShadows(document, shadows);
+    CHECK(td::shadowsOf(document).on && td::shadowsOf(document).strength == 0.4);
+    CHECK(std::fabs(td::shadowBlur(shadows, 200.0) - 10.0) < 1e-9);
+    fla::Point offset;
+    CHECK(td::shadowOffset(front, 100.0, offset) && std::fabs(offset.x) < 1e-9 && std::fabs(offset.y) < 1e-9);
+    td::Light upperLeft = front;
+    upperLeft.azimuth = -45.0;
+    upperLeft.elevation = 30.0;
+    CHECK(td::shadowOffset(upperLeft, 100.0, offset) && offset.x > 0.0 && offset.y > 0.0);
+    CHECK(std::fabs(std::hypot(offset.x, offset.y) - 100.0 * std::cos(0.5235987755982988) / 0.5) < 1e-6);
+    // A light behind casts none forward.
+    td::Light behind = front;
+    behind.elevation = -30.0;
+    CHECK(!td::shadowOffset(behind, 100.0, offset));
+
+    // Extrusion is kept on the instance; its back is pushed along the
+    // clip's facing: straight in for a flat clip, toward the vanishing point.
+    fla::SymbolInstance instance(nullptr);
+    CHECK(td::extrusionOf(instance) == 0.0);
+    instance.extraAttributes = td::withExtrusion(instance, 12.0);
+    CHECK(td::extrusionOf(instance) == 12.0);
+    instance.extraAttributes = td::withExtrusion(instance, 0.0);
+    CHECK(instance.extraAttributes.empty());
+    const double focal = 100.0;
+    const fla::Point vanishing(0.0, 0.0);
+    const std::array<double, 9> back = td::projection(td::Pose(), fla::Point(50.0, 0.0), vanishing, focal, focal);
+    CHECK(near(td::project(back, fla::Point(50.0, 0.0)), 25.0, 0.0));
+    // Turned a quarter, the depth runs across the stage instead.
+    td::Pose quarter;
+    quarter.rotationY = 90.0;
+    const std::array<double, 9> across = td::projection(quarter, fla::Point(0.0, 0.0), vanishing, focal, 10.0);
+    CHECK(near(td::project(across, fla::Point(0.0, 0.0)), 10.0, 0.0));
+}

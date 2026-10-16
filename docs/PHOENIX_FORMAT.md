@@ -206,7 +206,7 @@ are kept, and an FLA export lists them as possibly lost.
 | `motion-blur` | Motion blur, echo and posterize time | the layers drawn sharp, every frame, without echoes |
 | `templates` | Template fields | the symbols' text and colors as drawn, the same in every instance, nothing pinned to the text |
 | `master-controllers` | Master controllers | the properties as keyed, without the sliders |
-| `3d-rotation` | 3D rotation and depth | the movie clips flat, without their 3D turn |
+| `3d-rotation` | 3D rotation and depth | the movie clips flat, without their 3D turn, lighting, shadows or depth |
 | `parenting-options` | Layer parenting options | child layers taking on all of the parent's transform |
 | `joint-limits` | Bone joint limits | bones that turn freely when posed |
 | `shape-binding` | Bones bound in Phoenix | boned shapes as drawn; posing them may bend them differently |

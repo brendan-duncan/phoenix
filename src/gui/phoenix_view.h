@@ -4,6 +4,7 @@
 #include "../edit/adjustments.h"
 #include "../edit/node_graph.h"
 #include "../edit/templates.h"
+#include "../edit/three_d.h"
 #include "../edit/text_animators.h"
 
 #include "../data/color_transform.h"
@@ -1740,8 +1741,48 @@ public:
     /// space it is placed in, to follow its 2D transform \a placed; the
     /// identity for a flat clip. Part way to \a tweenElement's at
     /// \a progress.
+    /// \a depth pushes it back along its own facing: where its extruded
+    /// back is (an extruded clip has one even when flat).
     QTransform threeDTransform(const fla::Element* element, const QTransform& placed,
-        const fla::Element* tweenElement = nullptr, double progress = 0.0) const;
+        const fla::Element* tweenElement = nullptr, double progress = 0.0, double depth = 0.0) const;
+
+private:
+    /// A movie clip a timeline shows now, which can cast a shadow on a
+    /// turned clip behind it: how far into the stage it is (its Z), what it
+    /// tweens to, and its layer's parent transform in the timeline's space.
+    struct ShadowCaster
+    {
+        const fla::SymbolInstance* instance = nullptr;
+        const fla::Element* tween = nullptr;
+        double progress = 0.0;
+        int offset = 0;
+        double z = 0.0;
+        QTransform layerParent;
+    };
+    /// The casters of each timeline being drawn, innermost last, gathered
+    /// as a timeline starts to draw when the document has lights and
+    /// shadows; false when there are none to gather.
+    std::vector<std::vector<ShadowCaster>> _shadowCasters;
+    bool gatherShadowCasters(const fla::Timeline* timeline, fla::LoopType loopType, int firstFrame);
+    /// Those in front of \a receiver, at depth \a z, on its timeline.
+    std::vector<const ShadowCaster*> shadowCasters(const fla::SymbolInstance* receiver, double z) const;
+    /// \a picture of \a receiver (its device pixels from \a origin, the
+    /// receiver's parent space mapped there by \a parentToDevice) darkened
+    /// by each caster's shadow from each light.
+    void castShadows(QImage& picture, const QPoint& origin, const fla::SymbolInstance* receiver,
+        const QTransform& parentToDevice, const std::vector<const ShadowCaster*>& casters,
+        const std::vector<fla::threed::Light>& lights, double z);
+    /// While a caster is drawn for its shadow: no lights, shadows or
+    /// extrusion of its own.
+    bool _castingShadow = false;
+    /// An extruded clip's edges: the clip drawn again at depths behind its
+    /// face, back to front, shaded for its sides by the lights. \a placed
+    /// is its 2D transform in its parent's space.
+    void drawExtrusion(QPainter& painter, const fla::SymbolInstance& instance, const fla::Element* tween, double progress,
+        const QTransform& parentToDevice, const QTransform& placed, const fla::threed::Pose& pose, double depth, int frame,
+        fla::LoopType loop);
+
+public:
 
     /// A shape's strokes as drawn: each run of joined edges of one stroke
     /// style, its centerline in the shape's own space, from its start.

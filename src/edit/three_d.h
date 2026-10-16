@@ -53,7 +53,10 @@ double focalLength(double angle, double width);
 /// \a center by \a pose and draws it in perspective as seen from straight
 /// in front of \a vanishing at \a focal: a 3x3 matrix, row-major, taking
 /// (x, y, 1) to (X, Y, W) for the point (X / W, Y / W).
-std::array<double, 9> projection(const Pose& pose, const Point& center, const Point& vanishing, double focal);
+/// \a depth pushes the clip that far back along its own facing before it
+/// is turned: where its extruded back is.
+std::array<double, 9> projection(const Pose& pose, const Point& center, const Point& vanishing, double focal,
+    double depth = 0.0);
 
 Point project(const std::array<double, 9>& map, const Point& point);
 
@@ -78,6 +81,45 @@ std::vector<std::pair<std::string, std::string>> withLight(const Document& docum
 /// How brightly \a light lights a clip turned by \a pose: 0 (dark) to 1.
 /// Either face of a card catches the light.
 double shading(const Pose& pose, const Light& light);
+
+/// Several lights: phoenixLight holds each, one after another, separated by
+/// ";" (the first as lightOf reads it). Those that are on, in order; none
+/// when the document has no light.
+std::vector<Light> lightsOf(const Document& document);
+/// The document's attributes with \a lights in them (those that are on).
+std::vector<std::pair<std::string, std::string>> withLights(const Document& document, const std::vector<Light>& lights);
+/// What \a lights make of a clip turned by \a pose, a factor for each of
+/// red, green and blue (0 to 1) in \a rgb: each light's shading in its
+/// color, added up. With one light, its shading times its color. With
+/// \a sides, for the clip's extruded edges, which face across the card and
+/// so catch the light the face does not.
+void shade(const Pose& pose, const std::vector<Light>& lights, double rgb[3], bool sides = false);
+
+/// Shadows, Phoenix's own (phoenixShadows): when on, with the lights on,
+/// a movie clip in front of a turned one (nearer the viewer, by Z) casts a
+/// soft shadow on it, away from each light. \a strength is how dark (0 to
+/// 1), \a softness the blur, in pixels for each hundred pixels between the
+/// two.
+struct Shadows
+{
+    bool on = false;
+    double strength = 0.5;
+    double softness = 6.0;
+};
+Shadows shadowsOf(const Document& document);
+std::vector<std::pair<std::string, std::string>> withShadows(const Document& document, const Shadows& shadows);
+/// Where \a light casts the shadow of a clip \a depth pixels in front of
+/// what it falls on, from where the clip is, in the stage's directions;
+/// false when the light is behind (it lights only the backs).
+bool shadowOffset(const Light& light, double depth, Point& offset);
+/// The blur of a shadow cast across \a depth pixels.
+double shadowBlur(const Shadows& shadows, double depth);
+
+/// Extrusion, Phoenix's own (phoenixExtrude, on a movie clip instance):
+/// how deep the clip is, in pixels, drawn as its edges carried back that
+/// far behind its face, shaded by the lights. 0 for a flat card.
+double extrusionOf(const SymbolInstance& instance);
+std::vector<std::pair<std::string, std::string>> withExtrusion(const SymbolInstance& instance, double depth);
 
 /// Depth of field, Phoenix's own (phoenixDepthOfField): when on, clips
 /// moved in 3D blur the further they are from the \a focus depth (their

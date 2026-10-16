@@ -13,6 +13,7 @@ What changed in each release of Phoenix, newest first.
 - Masks: objects on a mask layer can each have their own feather, kept by keyframe and blended through tweens; a masked layer can be masked by other mask layers too, added, subtracted or intersected (Also Masked By); and SVG exports write feathered masks as soft SVG masks instead of hard clips
 - Vertical text takes letter animators, and Text on a Path runs it along a motion guide, its letters standing as they do in the column
 - Bake to Keyframes and Export FLA for Other Apps keep tapered lines (as filled outlines), dashes with their caps, and gradients on strokes and fills, so other apps show shape operators as Phoenix does
+- 3D: up to four lights in their own colors, soft shadows that clips nearer the viewer cast on turned clips behind them, and extrusion (a Depth for a movie clip, its edges drawn back and shaded by the lights)
 - Many behavior copies of movie clips, and of instances with filters, blend modes or color effects, draw from shared pictures instead of one by one, with the same result
 - Browse Presets shows shape operators on sample shapes and adjustment effects on a sample picture, each with a still in the list and playing beside it
 - Export FLA for Other Apps bakes templates further: parts pinned to text are moved and stretched to fit each instance's words, and symbols with responsive time play with their middle stretched to the span, as in Phoenix

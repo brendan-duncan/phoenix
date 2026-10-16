@@ -94,54 +94,178 @@ std::vector<std::pair<std::string, std::string>> withAttribute(const Document& d
 
 } // namespace
 
-Light lightOf(const Document& document)
+namespace {
+
+/// One light as phoenixLight keeps it: "azimuth,elevation,ambient,intensity,#RRGGBB".
+Light lightFrom(const std::string& text)
 {
     Light light;
-    if (const std::string* text = attributeOf(document, "phoenixLight"))
-    {
-        unsigned int rgb = 0xFFFFFF;
-        const int read = std::sscanf(text->c_str(), "%lf,%lf,%lf,%lf,#%6x", &light.azimuth, &light.elevation,
-            &light.ambient, &light.intensity, &rgb);
-        light.on = read >= 2;
-        light.elevation = std::clamp(light.elevation, -90.0, 90.0);
-        light.ambient = std::clamp(light.ambient, 0.0, 1.0);
-        light.intensity = std::clamp(light.intensity, 0.0, 10.0);
-        light.color[0] = static_cast<unsigned char>((rgb >> 16) & 0xFF);
-        light.color[1] = static_cast<unsigned char>((rgb >> 8) & 0xFF);
-        light.color[2] = static_cast<unsigned char>(rgb & 0xFF);
-    }
+    unsigned int rgb = 0xFFFFFF;
+    const int read = std::sscanf(text.c_str(), "%lf,%lf,%lf,%lf,#%6x", &light.azimuth, &light.elevation, &light.ambient,
+        &light.intensity, &rgb);
+    light.on = read >= 2;
+    light.elevation = std::clamp(light.elevation, -90.0, 90.0);
+    light.ambient = std::clamp(light.ambient, 0.0, 1.0);
+    light.intensity = std::clamp(light.intensity, 0.0, 10.0);
+    light.color[0] = static_cast<unsigned char>((rgb >> 16) & 0xFF);
+    light.color[1] = static_cast<unsigned char>((rgb >> 8) & 0xFF);
+    light.color[2] = static_cast<unsigned char>(rgb & 0xFF);
     return light;
 }
 
-std::vector<std::pair<std::string, std::string>> withLight(const Document& document, const Light& light)
+std::string textOf(const Light& light)
 {
-    if (!light.on)
-        return withAttribute(document, "phoenixLight", nullptr);
     char text[128];
     std::snprintf(text, sizeof(text), "%g,%g,%g,%g,#%02X%02X%02X", light.azimuth, light.elevation, light.ambient,
         light.intensity, light.color[0], light.color[1], light.color[2]);
-    const std::string value = text;
-    return withAttribute(document, "phoenixLight", &value);
+    return text;
 }
 
-double shading(const Pose& pose, const Light& light)
+/// Toward \a light, as a direction with z into the stage.
+void towardLight(const Light& light, double& lx, double& ly, double& lz)
 {
-    if (!light.on)
-        return 1.0;
+    const double az = light.azimuth * kPi / 180.0;
+    const double el = light.elevation * kPi / 180.0;
+    lx = std::cos(el) * std::sin(az);
+    ly = -std::cos(el) * std::cos(az);
+    lz = -std::sin(el);
+}
+
+/// How squarely a clip turned by \a pose faces \a light: 0 edge on to 1.
+double facing(const Pose& pose, const Light& light)
+{
     // The card's face, turned: it starts facing the viewer.
     const double a = pose.rotationX * kPi / 180.0;
     const double b = pose.rotationY * kPi / 180.0;
     const double nx = -std::cos(a) * std::sin(b);
     const double ny = std::sin(a);
     const double nz = -std::cos(a) * std::cos(b);
-    // Toward the light.
-    const double az = light.azimuth * kPi / 180.0;
-    const double el = light.elevation * kPi / 180.0;
-    const double lx = std::cos(el) * std::sin(az);
-    const double ly = -std::cos(el) * std::cos(az);
-    const double lz = -std::sin(el);
-    const double facing = std::fabs(nx * lx + ny * ly + nz * lz);
-    return std::clamp(light.ambient + (1.0 - light.ambient) * light.intensity * facing, 0.0, 1.0);
+    double lx, ly, lz;
+    towardLight(light, lx, ly, lz);
+    return std::min(1.0, std::fabs(nx * lx + ny * ly + nz * lz));
+}
+
+double lit(const Light& light, double faces)
+{
+    return std::clamp(light.ambient + (1.0 - light.ambient) * light.intensity * faces, 0.0, 1.0);
+}
+
+} // namespace
+
+Light lightOf(const Document& document)
+{
+    const std::vector<Light> lights = lightsOf(document);
+    return lights.empty() ? Light() : lights.front();
+}
+
+std::vector<std::pair<std::string, std::string>> withLight(const Document& document, const Light& light)
+{
+    return withLights(document, light.on ? std::vector<Light>{light} : std::vector<Light>());
+}
+
+std::vector<Light> lightsOf(const Document& document)
+{
+    std::vector<Light> lights;
+    const std::string* text = attributeOf(document, "phoenixLight");
+    for (size_t start = 0; text && start <= text->size();)
+    {
+        const size_t end = std::min(text->find(';', start), text->size());
+        const Light light = lightFrom(text->substr(start, end - start));
+        if (light.on)
+            lights.push_back(light);
+        start = end + 1;
+    }
+    return lights;
+}
+
+std::vector<std::pair<std::string, std::string>> withLights(const Document& document, const std::vector<Light>& lights)
+{
+    std::string value;
+    for (const Light& light : lights)
+        if (light.on)
+            value += (value.empty() ? "" : ";") + textOf(light);
+    return withAttribute(document, "phoenixLight", value.empty() ? nullptr : &value);
+}
+
+double shading(const Pose& pose, const Light& light)
+{
+    if (!light.on)
+        return 1.0;
+    return lit(light, facing(pose, light));
+}
+
+void shade(const Pose& pose, const std::vector<Light>& lights, double rgb[3], bool sides)
+{
+    rgb[0] = rgb[1] = rgb[2] = lights.empty() ? 1.0 : 0.0;
+    for (const Light& light : lights)
+    {
+        if (!light.on)
+            continue;
+        const double faces = facing(pose, light);
+        // The edges stand across the face: as much of the light as it does
+        // not catch.
+        const double amount = lit(light, sides ? std::sqrt(std::max(0.0, 1.0 - faces * faces)) : faces);
+        for (int c = 0; c < 3; ++c)
+            rgb[c] += amount * light.color[c] / 255.0;
+    }
+    for (int c = 0; c < 3; ++c)
+        rgb[c] = std::min(rgb[c], 1.0);
+}
+
+Shadows shadowsOf(const Document& document)
+{
+    Shadows shadows;
+    if (const std::string* text = attributeOf(document, "phoenixShadows"))
+        shadows.on = std::sscanf(text->c_str(), "%lf,%lf", &shadows.strength, &shadows.softness) >= 1;
+    shadows.strength = std::clamp(shadows.strength, 0.0, 1.0);
+    shadows.softness = std::clamp(shadows.softness, 0.0, 1000.0);
+    return shadows;
+}
+
+std::vector<std::pair<std::string, std::string>> withShadows(const Document& document, const Shadows& shadows)
+{
+    if (!shadows.on)
+        return withAttribute(document, "phoenixShadows", nullptr);
+    const std::string value = numberText(shadows.strength) + "," + numberText(shadows.softness);
+    return withAttribute(document, "phoenixShadows", &value);
+}
+
+bool shadowOffset(const Light& light, double depth, Point& offset)
+{
+    double lx, ly, lz;
+    towardLight(light, lx, ly, lz);
+    if (!light.on || lz >= 0.0)
+        return false;
+    // Along the light's rays, away from it, until the shadow has gone
+    // \a depth further in; a grazing light throws it no further than five
+    // times the depth.
+    const double along = depth / std::max(-lz, 0.2);
+    offset = Point(-lx * along, -ly * along);
+    return true;
+}
+
+double shadowBlur(const Shadows& shadows, double depth)
+{
+    return std::fabs(depth) * shadows.softness / 100.0;
+}
+
+double extrusionOf(const SymbolInstance& instance)
+{
+    for (const auto& attribute : instance.extraAttributes)
+        if (attribute.first == "phoenixExtrude")
+            return std::clamp(std::atof(attribute.second.c_str()), 0.0, 10000.0);
+    return 0.0;
+}
+
+std::vector<std::pair<std::string, std::string>> withExtrusion(const SymbolInstance& instance, double depth)
+{
+    std::vector<std::pair<std::string, std::string>> attributes;
+    for (const auto& attribute : instance.extraAttributes)
+        if (attribute.first != "phoenixExtrude")
+            attributes.push_back(attribute);
+    if (depth > 0.0)
+        attributes.emplace_back("phoenixExtrude", numberText(depth));
+    return attributes;
 }
 
 DepthOfField depthOfFieldOf(const Document& document)
@@ -195,7 +319,8 @@ double focalLength(double angle, double width)
     return (std::max(width, 1.0) / 2.0) / std::tan(std::clamp(angle, 1.0, 179.0) * kPi / 360.0);
 }
 
-std::array<double, 9> projection(const Pose& pose, const Point& center, const Point& vanishing, double focal)
+std::array<double, 9> projection(const Pose& pose, const Point& center, const Point& vanishing, double focal,
+    double depth)
 {
     // A point of the clip, d from the center on the flat plane, turned
     // about the x axis and then the y axis:
@@ -208,9 +333,12 @@ std::array<double, 9> projection(const Pose& pose, const Point& center, const Po
     const double b = pose.rotationY * kPi / 180.0;
     const double f = std::max(focal, 1.0);
     // Rows over (d.x, d.y, 1).
-    const std::array<double, 3> x = {std::cos(b), std::sin(a) * std::sin(b), 0.0};
-    const std::array<double, 3> y = {0.0, std::cos(a), 0.0};
-    const std::array<double, 3> w = {-std::sin(b), std::sin(a) * std::cos(b), f + pose.z};
+    // A depth e behind the face, (0, 0, e) on the flat clip, turns to
+    // (e cos a sin b, -e sin a, e cos a cos b).
+    const double e = depth;
+    const std::array<double, 3> x = {std::cos(b), std::sin(a) * std::sin(b), e * std::cos(a) * std::sin(b)};
+    const std::array<double, 3> y = {0.0, std::cos(a), -e * std::sin(a)};
+    const std::array<double, 3> w = {-std::sin(b), std::sin(a) * std::cos(b), f + pose.z + e * std::cos(a) * std::cos(b)};
     std::array<double, 3> nx, ny;
     for (int i = 0; i < 3; ++i)
     {
