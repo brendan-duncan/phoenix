@@ -92,7 +92,11 @@ double param(const Applied& applied, const char* name, int frame, double fallbac
         return fallback;
     char* end = nullptr;
     const double value = std::strtod(text.c_str(), &end);
-    return end == text.c_str() ? fallback : value;
+    // Not a number, or past any sensible setting (from a file, typed in):
+    // kept to where the arithmetic on it stays sound.
+    if (end == text.c_str() || !std::isfinite(value))
+        return fallback;
+    return std::clamp(value, -1.0e6, 1.0e6);
 }
 
 std::string text(const Applied& applied, const char* name, int frame, const std::string& fallback)

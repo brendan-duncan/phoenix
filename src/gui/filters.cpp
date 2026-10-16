@@ -29,9 +29,13 @@ int passesOf(const fla::Filter& filter)
 QImage silhouette(const QImage& image, const uint8_t rgb[3], double alpha, bool inverted)
 {
     QImage out(image.size(), QImage::Format_ARGB32_Premultiplied);
+    uchar* const outRows = out.bits();
+    const qsizetype outStride = out.bytesPerLine();
     parallelRows(image.height(), image.width(), [&](int y) {
+        if (!outRows)
+            return;
         const QRgb* in = reinterpret_cast<const QRgb*>(image.constScanLine(y));
-        QRgb* line = reinterpret_cast<QRgb*>(out.scanLine(y));
+        QRgb* line = reinterpret_cast<QRgb*>(outRows + y * outStride);
         for (int x = 0; x < image.width(); ++x)
         {
             int a = qAlpha(in[x]);
@@ -59,10 +63,12 @@ void strengthen(QImage& image, double strength)
 {
     if (strength == 1.0)
         return;
-    // Its own copy before the threads write rows of it.
-    image.bits();
+    uchar* const imageRows = image.bits();
+    const qsizetype imageStride = image.bytesPerLine();
     parallelRows(image.height(), image.width(), [&](int y) {
-        QRgb* line = reinterpret_cast<QRgb*>(image.scanLine(y));
+        if (!imageRows)
+            return;
+        QRgb* line = reinterpret_cast<QRgb*>(imageRows + y * imageStride);
         for (int x = 0; x < image.width(); ++x)
         {
             const QRgb straight = qUnpremultiply(line[x]);
@@ -148,11 +154,17 @@ QImage bevel(const QImage& image, const fla::Filter& filter, double scale)
     QImage shadow(image.size(), QImage::Format_ARGB32_Premultiplied);
     const double highlightAlpha = filter.highlightColor[3] / 255.0 * filter.strength;
     const double shadowAlpha = filter.shadowColor[3] / 255.0 * filter.strength;
+    uchar* const highlightRows = highlight.bits();
+    const qsizetype highlightStride = highlight.bytesPerLine();
+    uchar* const shadowRows = shadow.bits();
+    const qsizetype shadowStride = shadow.bytesPerLine();
     parallelRows(image.height(), image.width(), [&](int y) {
+        if (!highlightRows || !shadowRows)
+            return;
         const QRgb* t = reinterpret_cast<const QRgb*>(towards.constScanLine(y));
         const QRgb* a = reinterpret_cast<const QRgb*>(away.constScanLine(y));
-        QRgb* h = reinterpret_cast<QRgb*>(highlight.scanLine(y));
-        QRgb* s = reinterpret_cast<QRgb*>(shadow.scanLine(y));
+        QRgb* h = reinterpret_cast<QRgb*>(highlightRows + y * highlightStride);
+        QRgb* s = reinterpret_cast<QRgb*>(shadowRows + y * shadowStride);
         for (int x = 0; x < image.width(); ++x)
         {
             const int difference = qAlpha(a[x]) - qAlpha(t[x]);
@@ -235,9 +247,12 @@ void mapThroughGradient(QImage& image, const std::vector<fla::GradientEntry>& en
     QRgb table[256];
     for (int i = 0; i < 256; ++i)
         table[i] = qPremultiply(gradientAt(entries, i / 255.0));
-    image.bits();
+    uchar* const imageRows = image.bits();
+    const qsizetype imageStride = image.bytesPerLine();
     parallelRows(image.height(), image.width(), [&](int y) {
-        QRgb* line = reinterpret_cast<QRgb*>(image.scanLine(y));
+        if (!imageRows)
+            return;
+        QRgb* line = reinterpret_cast<QRgb*>(imageRows + y * imageStride);
         for (int x = 0; x < image.width(); ++x)
             line[x] = table[qAlpha(line[x])];
     });
@@ -297,10 +312,14 @@ QImage gradientBevel(const QImage& image, const fla::Filter& filter, double scal
         table[i] = qPremultiply(gradientAt(filter.entries, i / 255.0));
 
     QImage relief(image.size(), QImage::Format_ARGB32_Premultiplied);
+    uchar* const reliefRows = relief.bits();
+    const qsizetype reliefStride = relief.bytesPerLine();
     parallelRows(image.height(), image.width(), [&](int y) {
+        if (!reliefRows)
+            return;
         const QRgb* t = reinterpret_cast<const QRgb*>(towards.constScanLine(y));
         const QRgb* a = reinterpret_cast<const QRgb*>(away.constScanLine(y));
-        QRgb* r = reinterpret_cast<QRgb*>(relief.scanLine(y));
+        QRgb* r = reinterpret_cast<QRgb*>(reliefRows + y * reliefStride);
         for (int x = 0; x < image.width(); ++x)
         {
             const double difference = (qAlpha(a[x]) - qAlpha(t[x])) / 255.0 * filter.strength;
@@ -361,9 +380,13 @@ QImage adjustColor(const QImage& image, const fla::Filter& filter)
             full[r][c] = h[r][0] * m[0][c] + h[r][1] * m[1][c] + h[r][2] * m[2][c];
 
     QImage out(image.size(), QImage::Format_ARGB32_Premultiplied);
+    uchar* const outRows = out.bits();
+    const qsizetype outStride = out.bytesPerLine();
     parallelRows(image.height(), image.width(), [&](int y) {
+        if (!outRows)
+            return;
         const QRgb* in = reinterpret_cast<const QRgb*>(image.constScanLine(y));
-        QRgb* line = reinterpret_cast<QRgb*>(out.scanLine(y));
+        QRgb* line = reinterpret_cast<QRgb*>(outRows + y * outStride);
         for (int x = 0; x < image.width(); ++x)
         {
             const QRgb straight = qUnpremultiply(in[x]);

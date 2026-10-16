@@ -55,7 +55,11 @@ double param(const Applied& applied, const char* name, int frame, double fallbac
         return fallback;
     char* end = nullptr;
     const double value = std::strtod(text.c_str(), &end);
-    return end == text.c_str() ? fallback : value;
+    // Not a number, or past any sensible setting (from a file, typed in):
+    // kept to where the arithmetic on it stays sound.
+    if (end == text.c_str() || !std::isfinite(value))
+        return fallback;
+    return std::clamp(value, -1.0e6, 1.0e6);
 }
 
 std::string attribute(const Layer& layer, const char* name)
@@ -185,7 +189,8 @@ void shapeMask(std::vector<uint8_t>& coverage, int width, int height, const Mask
     // Grown or shrunk a pixel at a time: each step takes the most (to grow)
     // or least (to shrink) of a pixel's neighbors, squares and crosses in
     // turn so the edge keeps near round. Rounded to whole pixels.
-    const int steps = static_cast<int>(std::lround(std::fabs(edge.expand * scale)));
+    const double reach = std::fabs(edge.expand * scale);
+    const int steps = static_cast<int>(std::lround(std::isfinite(reach) ? std::min<double>(reach, std::max(width, height)) : 0.0));
     if (steps > 0)
     {
         const bool grow = edge.expand > 0.0;

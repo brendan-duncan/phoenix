@@ -87,8 +87,11 @@ void boxBlur(uint32_t* pixels, int width, int height, double widthX, double widt
 
     // A box of width N reaches N/2 either side, rounded down: a width of
     // five is the five pixels centered on each one.
-    const int radiusX = static_cast<int>(std::floor(std::max(0.0, widthX) / 2.0));
-    const int radiusY = static_cast<int>(std::floor(std::max(0.0, widthY) / 2.0));
+    // Kept to a width that still means something (a file or a setting may
+    // ask for any), so the sums and tables stay sound; not a number is none.
+    constexpr double kWidest = 4096.0;
+    const int radiusX = static_cast<int>(std::floor(std::clamp(std::isfinite(widthX) ? widthX : 0.0, 0.0, kWidest) / 2.0));
+    const int radiusY = static_cast<int>(std::floor(std::clamp(std::isfinite(widthY) ? widthY : 0.0, 0.0, kWidest) / 2.0));
     passes = std::max(1, std::min(15, passes));
     if (radiusX == 0 && radiusY == 0)
         return;

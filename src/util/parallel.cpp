@@ -4,6 +4,7 @@
 #include <atomic>
 #include <condition_variable>
 #include <cstdlib>
+#include <exception>
 #include <memory>
 #include <mutex>
 #include <thread>
@@ -57,11 +58,21 @@ public:
         }
         _wake.notify_all();
         take(*job);
-        std::unique_lock<std::mutex> lock(job->mutex);
-        job->finished.wait(lock, [&job]() { return job->pending == 0; });
-        std::lock_guard<std::mutex> clear(_mutex);
-        if (_job == job)
-            _job.reset();
+        std::exception_ptr failed;
+        {
+            std::unique_lock<std::mutex> lock(job->mutex);
+            job->finished.wait(lock, [&job]() { return job->pending == 0; });
+            failed = job->failed;
+        }
+        {
+            std::lock_guard<std::mutex> clear(_mutex);
+            if (_job == job)
+                _job.reset();
+        }
+        // What went wrong in a range, thrown here once every range is done
+        // with the caller's data.
+        if (failed)
+            std::rethrow_exception(failed);
     }
 
 private:
@@ -75,24 +86,41 @@ private:
         std::mutex mutex;
         std::condition_variable finished;
         size_t pending = 0;
+        /// The first exception a range threw.
+        std::exception_ptr failed;
     };
 
     /// Works through \a job's chunks until none are left.
     static void take(Job& job)
     {
-        const bool was = tl_inside;
-        tl_inside = true;
+        struct Inside
+        {
+            bool was = tl_inside;
+            Inside() { tl_inside = true; }
+            ~Inside() { tl_inside = was; }
+        } inside;
         for (;;)
         {
             const size_t from = job.next.fetch_add(job.chunkSize);
             if (from >= job.count)
                 break;
-            (*job.body)(from, std::min(job.count, from + job.chunkSize));
+            // A range that throws still counts as done, so the caller is
+            // never left waiting; the caller throws it again.
+            std::exception_ptr failed;
+            try
+            {
+                (*job.body)(from, std::min(job.count, from + job.chunkSize));
+            }
+            catch (...)
+            {
+                failed = std::current_exception();
+            }
             std::lock_guard<std::mutex> lock(job.mutex);
+            if (failed && !job.failed)
+                job.failed = failed;
             if (--job.pending == 0)
                 job.finished.notify_all();
         }
-        tl_inside = was;
     }
 
     void work()

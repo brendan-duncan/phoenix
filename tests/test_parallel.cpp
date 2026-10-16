@@ -7,6 +7,7 @@
 #include <atomic>
 #include <cstdint>
 #include <random>
+#include <stdexcept>
 #include <vector>
 
 namespace {
@@ -98,4 +99,30 @@ TEST(box_blur_matches_a_pixel_at_a_time)
         referenceBlur(image, width, height, bx, by, passes);
         CHECK(fast == image);
     }
+}
+
+TEST(parallel_for_passes_an_exception_back_after_every_range)
+{
+    // One range throws: every other range still runs, the caller gets the
+    // exception, and the pool works on afterwards.
+    std::vector<std::atomic<int>> seen(10000);
+    bool caught = false;
+    try
+    {
+        fla::parallelFor(seen.size(), 100, [&](size_t from, size_t to) {
+            for (size_t i = from; i < to; ++i)
+                ++seen[i];
+            if (from == 0)
+                throw std::runtime_error("out of room");
+        });
+    }
+    catch (const std::runtime_error&)
+    {
+        caught = true;
+    }
+    CHECK(caught);
+    CHECK(std::all_of(seen.begin(), seen.end(), [](const std::atomic<int>& n) { return n == 1; }));
+    std::atomic<int> again{0};
+    fla::parallelFor(1000, 10, [&](size_t from, size_t to) { again += static_cast<int>(to - from); });
+    CHECK(again == 1000);
 }
