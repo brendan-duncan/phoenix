@@ -643,6 +643,18 @@ qt_generate_deploy_app_script(
     ${PHOENIX_DEPLOY_OPTIONS})
 install(SCRIPT ${PHOENIX_DEPLOY_SCRIPT} COMPONENT Phoenix)
 
+# The phoenix Python module (python/phoenix), for driving Phoenix from your
+# own Python, ships beside it and finds the Phoenix it came with.
+if(PHOENIX_PYTHON)
+    if(APPLE)
+        set(PHOENIX_PYTHON_MODULE_DIR Phoenix.app/Contents/Resources/python)
+    else()
+        set(PHOENIX_PYTHON_MODULE_DIR ${PHOENIX_INSTALL_BINDIR}/python)
+    endif()
+    install(DIRECTORY python/phoenix DESTINATION ${PHOENIX_PYTHON_MODULE_DIR} COMPONENT Phoenix
+        PATTERN __pycache__ EXCLUDE)
+endif()
+
 # The ffmpeg Phoenix encodes and reads video with ships beside it: see
 # cmake/PhoenixFfmpeg.cmake.
 include(cmake/PhoenixFfmpeg.cmake)
