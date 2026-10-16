@@ -669,6 +669,58 @@ void readShapeBody(Reader& r, Object& o)
     readShapeData(r, o.shape, schema);
 }
 
+/// MX and MX 2004 scripts written in normal mode are kept as a list of
+/// actions rather than text: a u32 (0), a count, then each action, a u32
+/// naming it and fields of its own (u32s and CStrings: 'u' and 's' below).
+/// Phoenix reads past them. [S]
+void readActionList(Reader& r)
+{
+    static const std::map<uint32_t, const char*> fields = {
+        {0x00, "uussu"},      // go to a frame
+        {0x01, ""},           // next frame
+        {0x02, ""},           // stop
+        {0x04, ""},           // play
+        {0x05, "ussu"},       // get a URL
+        {0x08, "usu"},        // tell target
+        {0x09, ""},           // end of a block
+        {0x0A, "ussu"},       // if frame is loaded
+        {0x0B, "uuu"},        // on a button event
+        {0x0C, ""},           // end of the event
+        {0x0F, "us"},         // if
+        {0x10, ""},           // end of an if
+        {0x11, "us"},         // else if
+        {0x12, ""},           // else
+        {0x13, ""},           // end of if frame is loaded
+        {0x17, "uususu"},     // set a property
+        {0x18, "ususu"},      // set a variable
+        {0x1A, "usuuuuu"},    // with
+        {0x1C, "us"},         // comment
+        {0x1D, ""},           // end of a block
+        {0x29, "us"},         // expression
+        {0x2C, "usss"},       // for loop
+        {0x2D, ""},           // end of the loop
+        {0x2E, ""},           // end of a block
+        {0x3E, "usss"},       // call a function
+    };
+    r.u32();
+    const uint32_t count = r.u32();
+    if (count > 100000)
+        r.fail("a bad action count");
+    for (uint32_t i = 0; i < count; ++i)
+    {
+        const auto action = fields.find(r.u32());
+        if (action == fields.end())
+            r.fail("an action Phoenix does not know");
+        for (const char* field = action->second; *field; ++field)
+        {
+            if (*field == 'u')
+                r.u32();
+            else
+                r.cstring();
+        }
+    }
+}
+
 std::string readActions(Reader& r)
 {
     const uint32_t version = r.u32();
@@ -678,7 +730,7 @@ std::string readActions(Reader& r)
     if (version == 0)
     {
         if (kind == 0)
-            r.skip(8);
+            readActionList(r);
         return kind == 1 ? r.cstring() : std::string();
     }
     r.u32();
@@ -698,7 +750,7 @@ std::string readActions(Reader& r)
     if (version >= 4 || kind == 1)
         return r.cstring();
     if (kind == 0)
-        r.skip(8);
+        readActionList(r);
     return std::string();
 }
 
@@ -1019,6 +1071,8 @@ void readButton(Reader& r, Object& o)
     }
     o.script = readActions(r);
     r.u8();
+    if (schema < 6)
+        return; // MX [S]
     const std::string name = r.cstring();
     if (!name.empty())
         o.instanceName = name;

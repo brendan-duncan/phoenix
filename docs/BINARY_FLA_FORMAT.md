@@ -314,8 +314,19 @@ version 0: nothing more, but as below for kind 0 and 1 [S]
 otherwise: u32 id/hash, u32 n (0 but once, a CS4 button with 1)
 if version >= 5: n x u32 [G], u32 0, CString script [X]
 if version == 4: CString script               [S]
-if version <= 1: kind 1: CString script; kind 2: nothing; kind 0: u32 0, u32 0 [S]
+if version <= 1: kind 1: CString script; kind 2: nothing; kind 0: action list [S]
 ```
+**Action list** (MX and MX 2004 scripts written in normal mode) [S]: `u32 0,
+u32 n`, then n actions, each a u32 naming it and its fields (u = u32,
+s = CString): 0x00 go to (uussu), 0x01 next frame, 0x02 stop, 0x04 play,
+0x05 get URL (ussu), 0x08 tell target (usu), 0x0A if frame is loaded
+(ussu), 0x0B on a button event (uuu), 0x0C end of the event, 0x0F if (us),
+0x10 end of the if, 0x11 else if (us), 0x12 else, 0x13 end of if frame is
+loaded, 0x17 set property (uususu), 0x18 set variable (ususu), 0x1A with
+(usuuuuu), 0x1C comment (us), 0x29 expression (us), 0x2C for (usss),
+0x3E call (usss); 0x09, 0x1D, 0x2D and 0x2E end blocks. Blocks nest by
+their end actions. Read from 700 lists; an action not in the table stops
+the stream.
 **Flash 5 actions** (frame schema 18, button schema 4) are records rather
 than script text [S]: `u32 n`, then n x (`u8 9`, `u32` action, 5 bytes,
 3 x CString, 32 bytes, `u32 -1`, `u16`, 2 x CString, 67 bytes). The strings
@@ -500,8 +511,10 @@ applies directly (`Bitmap::datData`).
 * Flash 5 actions as scripts: the records are read past (2.9), not turned
   into ActionScript.
 * Some objects in the older files: of the 1,616 binary FLAs surveyed, all
-  open and 1,281 read with nothing missing; in the rest, about 1,200
-  streams (mostly Flash 5 and MX 2004) still stop early.
+  open and 1,397 read with nothing missing; in the rest, about 560
+  streams (mostly Flash 5) still stop early.
+* Normal-mode action lists as scripts: read past, not turned into
+  ActionScript.
 
 A class not described here ends the stream it is in: MFC objects carry no
 length, so nothing after it can be found. Phoenix keeps what came before it

@@ -642,3 +642,75 @@ TEST(binary_fla_reads_flash_5_layers_frames_and_actions)
     CHECK(document.find("name=\"Upper\"") != std::string::npos);
     CHECK(document.find("name=\"go\"") != std::string::npos);
 }
+
+TEST(binary_fla_reads_mx_normal_mode_actions)
+{
+    // An MX 2004 frame whose script was written in normal mode: an action
+    // list (set a property, if frame is loaded holding a go to, its end)
+    // rather than text. A misread list would stop the page with a warning.
+    std::vector<uint8_t> body = {0, 0};
+    const auto u32 = [&body](uint32_t v) {
+        for (int i = 0; i < 4; ++i)
+            body.push_back(static_cast<uint8_t>(v >> (8 * i)));
+    };
+    const auto text = [&body](const std::string& s) {
+        body.push_back(static_cast<uint8_t>(s.size()));
+        body.insert(body.end(), s.begin(), s.end());
+    };
+    const auto declare = [&body](const std::string& cls) {
+        body.insert(body.end(), {0xFF, 0xFF, 1, 0, static_cast<uint8_t>(cls.size()), 0});
+        body.insert(body.end(), cls.begin(), cls.end());
+    };
+    declare("CPicLayer");
+    body.insert(body.end(), {0, 0});
+    declare("CPicFrame");
+    body.insert(body.end(), {0, 0, 0, 0});
+    body.insert(body.end(), 8, 0);
+    body.push_back(2);              // shape schema
+    body.insert(body.end(), 24, 0); // matrix
+    body.push_back(5);              // shape data schema
+    u32(0);
+    body.insert(body.end(), {0, 0, 0, 0, 0});
+    u32(0); // no cubics
+    body.push_back(22); // frame schema
+    body.insert(body.end(), {1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0});
+    u32(0);
+    u32(0);
+    body.insert(body.end(), {0, 0});
+    text(""); // label
+    u32(1);   // actions: version 1, kind 0 (a list)
+    u32(0);
+    u32(0);
+    u32(0);
+    u32(0);
+    u32(3);
+    u32(0x17); // set a property
+    u32(0);
+    u32(7);
+    text("1");
+    u32(0);
+    text("lips01");
+    u32(0);
+    u32(0x0A); // if frame is loaded
+    u32(0);
+    text("");
+    text("30");
+    u32(0);
+    u32(0x13); // its end
+    body.insert(body.end(), 12, 0);
+    body.insert(body.end(), {0, 0, 0, 0, 0, 0, 0, 0, 0}); // no morph, u32, no hints, CString
+    body.insert(body.end(), 12, 0);
+    body.insert(body.end(), {0, 0}); // no more frames
+    body.insert(body.end(), 8, 0);
+    body.push_back(11);
+    body.push_back(0);
+    body.insert(body.end(), 3 + 4 + 4 + 4 + 4, 0);
+    body.insert(body.end(), {0, 0, 0, 1, 1});
+    std::map<std::string, std::vector<uint8_t>> streams;
+    streams["Contents"] = emptyContents();
+    streams["Page 1"] = pageStream(body);
+    std::map<std::string, std::vector<uint8_t>> files;
+    std::string error;
+    std::string warning;
+    CHECK(BinaryFla::convert(streams, files, error, &warning) && warning.empty());
+}
